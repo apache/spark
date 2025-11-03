@@ -19,13 +19,13 @@ package org.apache.spark.kafka010
 
 import java.{util => ju}
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.kafka.clients.CommonClientConfigs
 import org.apache.kafka.common.config.SaslConfigs
 import org.apache.kafka.common.security.auth.SecurityProtocol.SASL_PLAINTEXT
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkException, SparkFunSuite}
 
 class KafkaConfigUpdaterSuite extends SparkFunSuite with KafkaDelegationTokenTest {
   private val testModule = "testModule"
@@ -160,5 +160,17 @@ class KafkaConfigUpdaterSuite extends SparkFunSuite with KafkaDelegationTokenTes
 
     assert(updatedParams.size() === 1)
     assert(updatedParams.get(CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG) === bootStrapServers)
+  }
+
+  test("setAuthenticationConfigIfNeeded handles missing bootstrap servers config") {
+    val ex = intercept[SparkException] {
+      KafkaConfigUpdater(testModule, kafkaParams = Map.empty[String, String])
+        .setAuthenticationConfigIfNeeded()
+    }
+
+    checkError(
+      exception = ex,
+      condition = "MISSING_KAFKA_OPTION",
+      parameters = Map("option" -> CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG))
   }
 }

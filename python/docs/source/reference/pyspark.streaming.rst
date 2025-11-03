@@ -16,9 +16,9 @@
     under the License.
 
 
-===============
-Spark Streaming
-===============
+========================
+Spark Streaming (Legacy)
+========================
 
 Core Classes
 ------------

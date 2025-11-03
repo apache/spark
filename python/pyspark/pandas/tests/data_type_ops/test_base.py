@@ -52,7 +52,7 @@ from pyspark.sql.types import (
 )
 
 
-class BaseTest(unittest.TestCase):
+class BaseTestsMixin:
     def test_data_type_ops(self):
         _mock_spark_type = DataType()
         _mock_dtype = ExtensionDtype()
@@ -91,11 +91,18 @@ class BaseTest(unittest.TestCase):
             self.assertIsInstance(DataTypeOps(ExtensionDtype(), BooleanType()), BooleanOps)
 
 
+class BaseTests(
+    BaseTestsMixin,
+    unittest.TestCase,
+):
+    pass
+
+
 if __name__ == "__main__":
     from pyspark.pandas.tests.data_type_ops.test_base import *  # noqa: F401
 
     try:
-        import xmlrunner  # type: ignore[import]
+        import xmlrunner
 
         testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:

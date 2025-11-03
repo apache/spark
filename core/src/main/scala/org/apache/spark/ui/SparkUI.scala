@@ -18,12 +18,14 @@
 package org.apache.spark.ui
 
 import java.util.Date
-import javax.servlet.http.{HttpServlet, HttpServletRequest, HttpServletResponse}
 
+import jakarta.servlet.http.{HttpServlet, HttpServletRequest, HttpServletResponse}
 import org.eclipse.jetty.servlet.ServletContextHandler
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkContext}
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.LogKeys.{CLASS_NAME, WEB_URL}
+import org.apache.spark.internal.config.DRIVER_LOG_LOCAL_DIR
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.scheduler._
 import org.apache.spark.status.AppStatusStore
@@ -67,15 +69,31 @@ private[spark] class SparkUI private (
     createServletHandler("/", servlet, basePath)
   }
 
+  private var readyToAttachHandlers = false
+
   /**
    * Attach all existing handlers to ServerInfo.
    */
-  def attachAllHandler(): Unit = {
+  def attachAllHandlers(): Unit = {
+    // Attach all handlers that have been added already, but not yet attached.
     serverInfo.foreach { server =>
       server.removeHandler(initHandler)
       handlers.foreach(server.addHandler(_, securityManager))
     }
+    // Handlers attached after this can be directly started.
+    readyToAttachHandlers = true
   }
+
+  /** Attaches a handler to this UI.
+   *  Note: The handler will not be attached until readyToAttachHandlers is true,
+   *  handlers added before that will be attached by attachAllHandlers */
+  override def attachHandler(handler: ServletContextHandler): Unit = synchronized {
+    handlers += handler
+    if (readyToAttachHandlers) {
+      serverInfo.foreach(_.addHandler(handler, securityManager))
+    }
+  }
+
   /** Initialize all components of the server. */
   def initialize(): Unit = {
     val jobsTab = new JobsTab(this, store)
@@ -84,6 +102,13 @@ private[spark] class SparkUI private (
     attachTab(stagesTab)
     attachTab(new StorageTab(this, store))
     attachTab(new EnvironmentTab(this, store))
+    if (sc.map(_.conf.get(DRIVER_LOG_LOCAL_DIR).nonEmpty).getOrElse(false)) {
+      val driverLogTab = new DriverLogTab(this)
+      attachTab(driverLogTab)
+      attachHandler(createServletHandler("/log",
+        (request: HttpServletRequest) => driverLogTab.getPage.renderLog(request),
+        sc.get.conf))
+    }
     attachTab(new ExecutorsTab(this))
     addStaticHandler(SparkUI.STATIC_RESOURCE_DIR)
     attachHandler(createRedirectHandler("/", "/jobs/", basePath = basePath))
@@ -131,7 +156,7 @@ private[spark] class SparkUI private (
       serverInfo = Some(server)
     } catch {
       case e: Exception =>
-        logError(s"Failed to bind $className", e)
+        logError(log"Failed to bind ${MDC(CLASS_NAME, className)}", e)
         System.exit(1)
     }
   }
@@ -139,7 +164,7 @@ private[spark] class SparkUI private (
   /** Stop the server behind this web interface. Only valid after bind(). */
   override def stop(): Unit = {
     super.stop()
-    logInfo(s"Stopped Spark web UI at $webUrl")
+    logInfo(log"Stopped Spark web UI at ${MDC(WEB_URL, webUrl)}")
   }
 
   override def withSparkUI[T](appId: String, attemptId: Option[String])(fn: SparkUI => T): T = {
@@ -167,13 +192,18 @@ private[spark] class SparkUI private (
         attemptId = None,
         startTime = new Date(startTime),
         endTime = new Date(-1),
-        duration = 0,
+        duration = System.currentTimeMillis() - startTime,
         lastUpdated = new Date(startTime),
         sparkUser = getSparkUser,
         completed = false,
         appSparkVersion = appSparkVersion
       ))
     ))
+  }
+
+  override def getApplicationInfoList(max: Int)(
+      filter: ApplicationInfo => Boolean): Iterator[ApplicationInfo] = {
+    getApplicationInfoList.filter(filter).take(max)
   }
 
   def getApplicationInfo(appId: String): Option[ApplicationInfo] = {

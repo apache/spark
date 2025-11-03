@@ -17,8 +17,9 @@
 
 package org.apache.spark.sql
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
+import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{StringType, StructType}
@@ -250,7 +251,7 @@ class DataFrameNaFunctionsSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  def createDFsWithSameFieldsName(): (DataFrame, DataFrame) = {
+  def createDFsWithSameFieldsName(): (classic.DataFrame, classic.DataFrame) = {
     val df1 = Seq(
       ("f1-1", "f2", null),
       ("f1-2", null, null),
@@ -279,10 +280,16 @@ class DataFrameNaFunctionsSuite extends QueryTest with SharedSparkSession {
     val (df1, df2) = createDFsWithSameFieldsName()
     val joined_df = df1.join(df2, Seq("f1"), joinType = "left_outer")
 
-    val message = intercept[AnalysisException] {
-      joined_df.na.fill("", cols = Seq("f2"))
-    }.getMessage
-    assert(message.contains("Reference 'f2' is ambiguous"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        joined_df.na.fill("", cols = Seq("f2"))
+      },
+      condition = "AMBIGUOUS_REFERENCE",
+      parameters = Map(
+        "name" -> "`f2`",
+        "referenceNames" -> "[`f2`, `f2`]"
+      )
+    )
   }
 
   test("fill with col(*)") {
@@ -293,10 +300,13 @@ class DataFrameNaFunctionsSuite extends QueryTest with SharedSparkSession {
 
   test("drop with col(*)") {
     val df = createDF()
-    val exception = intercept[AnalysisException] {
-      df.na.drop("any", Seq("*"))
-    }
-    assert(exception.getMessage.contains("Cannot resolve column name \"*\""))
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.na.drop("any", Seq("*"))
+      },
+      condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+      parameters = Map("objectName" -> "`*`", "proposal" -> "`name`, `age`, `height`")
+    )
   }
 
   test("fill with nested columns") {
@@ -310,7 +320,7 @@ class DataFrameNaFunctionsSuite extends QueryTest with SharedSparkSession {
     val df = createDFWithNestedColumns
 
     // Rows with the specified nested columns whose null values are dropped.
-    assert(df.count == 3)
+    assert(df.count() == 3)
     checkAnswer(
       df.na.drop("any", Seq("c1.c1-1")),
       Seq(Row(Row("b1", "b2"))))
@@ -397,10 +407,16 @@ class DataFrameNaFunctionsSuite extends QueryTest with SharedSparkSession {
     val df = left.join(right, Seq("col1"))
 
     // If column names are specified, the following fails due to ambiguity.
-    val exception = intercept[AnalysisException] {
-      df.na.fill("hello", Seq("col2"))
-    }
-    assert(exception.getMessage.contains("Reference 'col2' is ambiguous"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.na.fill("hello", Seq("col2"))
+      },
+      condition = "AMBIGUOUS_REFERENCE",
+      parameters = Map(
+        "name" -> "`col2`",
+        "referenceNames" -> "[`col2`, `col2`]"
+      )
+    )
 
     // If column names are not specified, fill() is applied to all the eligible columns.
     checkAnswer(
@@ -414,10 +430,16 @@ class DataFrameNaFunctionsSuite extends QueryTest with SharedSparkSession {
     val df = left.join(right, Seq("col1"))
 
     // If column names are specified, the following fails due to ambiguity.
-    val exception = intercept[AnalysisException] {
-      df.na.drop("any", Seq("col2"))
-    }
-    assert(exception.getMessage.contains("Reference 'col2' is ambiguous"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.na.drop("any", Seq("col2"))
+      },
+      condition = "AMBIGUOUS_REFERENCE",
+      parameters = Map(
+        "name" -> "`col2`",
+        "referenceNames" -> "[`col2`, `col2`]"
+      )
+    )
 
     // If column names are not specified, drop() is applied to all the eligible rows.
     checkAnswer(
@@ -516,14 +538,21 @@ class DataFrameNaFunctionsSuite extends QueryTest with SharedSparkSession {
     val exception = intercept[AnalysisException] {
       df.na.replace("aa", Map( "n/a" -> "unknown"))
     }
-    assert(exception.getMessage.equals("Cannot resolve column name \"aa\" among (Col.1, Col.2)"))
+    checkError(
+      exception = exception,
+      condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+      parameters = Map("objectName" -> "`aa`", "proposal" -> "`Col`.`1`, `Col`.`2`")
+    )
   }
 
   test("SPARK-34649: replace value of a nested column") {
     val df = createDFWithNestedColumns
-    val exception = intercept[UnsupportedOperationException] {
-      df.na.replace("c1.c1-1", Map("b1" ->"a1"))
-    }
-    assert(exception.getMessage.equals("Nested field c1.c1-1 is not supported."))
+    checkError(
+      exception = intercept[SparkUnsupportedOperationException] {
+        df.na.replace("c1.c1-1", Map("b1" ->"a1"))
+      },
+      condition = "UNSUPPORTED_FEATURE.REPLACE_NESTED_COLUMN",
+      parameters = Map("colName" -> "`c1`.`c1-1`")
+    )
   }
 }

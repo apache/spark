@@ -172,7 +172,10 @@ Profiling Memory Usage (Memory Profiler)
 ----------------------------------------
 
 `memory_profiler <https://github.com/pythonprofilers/memory_profiler>`_ is one of the profilers that allow you to
-check the memory usage line by line. This method documented here *only works for the driver side*.
+check the memory usage line by line.
+
+Driver Side
+~~~~~~~~~~~
 
 Unless you are running your driver program in another machine (e.g., YARN cluster mode), this useful tool can be used
 to debug the memory usage on driver side easily. Suppose your PySpark script name is ``profile_memory.py``.
@@ -208,6 +211,73 @@ You can profile it as below.
          8     51.5 MiB      0.0 MiB       df = session.range(10000)
          9     54.4 MiB      2.8 MiB       return df.collect()
 
+Python/Pandas/Arrow UDF
+~~~~~~~~~~~~~~~~~~~~~~~
+
+PySpark provides remote `memory_profiler <https://github.com/pythonprofilers/memory_profiler>`_ for
+Python/Pandas/Arrow UDFs. That can be used on editors with line numbers such as Jupyter notebooks. UDFs that are generator functions are not supported.
+
+SparkSession-based memory profiler can be enabled by setting the `Runtime SQL configuration <https://spark.apache.org/docs/latest/configuration.html#runtime-sql-configuration>`_
+``spark.sql.pyspark.udf.profiler`` to ``memory``. An example on a Jupyter notebook is as shown below.
+
+.. code-block:: python
+
+    from pyspark.sql.functions import pandas_udf
+    df = spark.range(10)
+
+    @pandas_udf("long")
+    def add1(x):
+      return x + 1
+
+    spark.conf.set("spark.sql.pyspark.udf.profiler", "memory")
+
+    added = df.select(add1("id"))
+    added.show()
+    spark.profile.show(type="memory")
+
+The result profile is as shown below.
+
+.. code-block:: text
+
+    ============================================================
+    Profile of UDF<id=2>
+    ============================================================
+    Filename: ...
+
+    Line #    Mem usage    Increment  Occurrences   Line Contents
+    =============================================================
+         4    974.0 MiB    974.0 MiB          10   @pandas_udf("long")
+         5                                         def add1(x):
+         6    974.4 MiB      0.4 MiB          10     return x + 1
+
+The UDF IDs can be seen in the query plan, for example, ``add1(...)#2L`` in ``ArrowEvalPython`` as shown below.
+
+.. code-block:: python
+
+    added.explain()
+
+.. code-block:: text
+
+    == Physical Plan ==
+    *(2) Project [pythonUDF0#11L AS add1(id)#3L]
+    +- ArrowEvalPython [add1(id#0L)#2L], [pythonUDF0#11L], 200
+       +- *(1) Range (0, 10, step=1, splits=16)
+
+We can render the result with an arbitrary renderer function as shown below.
+
+.. code-block:: python
+
+    def do_render(codemap):
+        # Your custom rendering logic
+        ...
+
+    spark.profile.render(id=2, type="memory", renderer=do_render)
+
+We can clear the result memory profile as shown below.
+
+.. code-block:: python
+
+    spark.profile.clear(id=2, type="memory")
 
 Identifying Hot Loops (Python Profilers)
 ----------------------------------------
@@ -246,47 +316,14 @@ regular Python process unless you are running your driver program in another mac
           276    0.000    0.000    0.002    0.000 <frozen importlib._bootstrap>:147(__enter__)
     ...
 
-Executor Side
-~~~~~~~~~~~~~
+Python/Pandas/Arrow UDF
+~~~~~~~~~~~~~~~~~~~~~~~
 
-To use this on executor side, PySpark provides remote `Python Profilers <https://docs.python.org/3/library/profile.html>`_ for
-executor side, which can be enabled by setting ``spark.python.profile`` configuration to ``true``.
+PySpark provides remote `Python Profilers <https://docs.python.org/3/library/profile.html>`_ for
+Python/Pandas/Arrow UDFs. UDFs that are generator functions are not supported.
 
-.. code-block:: bash
-
-    pyspark --conf spark.python.profile=true
-
-
-.. code-block:: python
-
-    >>> rdd = sc.parallelize(range(100)).map(str)
-    >>> rdd.count()
-    100
-    >>> sc.show_profiles()
-    ============================================================
-    Profile of RDD<id=1>
-    ============================================================
-             728 function calls (692 primitive calls) in 0.004 seconds
-
-       Ordered by: internal time, cumulative time
-
-       ncalls  tottime  percall  cumtime  percall filename:lineno(function)
-           12    0.001    0.000    0.001    0.000 serializers.py:210(load_stream)
-           12    0.000    0.000    0.000    0.000 {built-in method _pickle.dumps}
-           12    0.000    0.000    0.001    0.000 serializers.py:252(dump_stream)
-           12    0.000    0.000    0.001    0.000 context.py:506(f)
-    ...
-
-Python/Pandas UDF
-~~~~~~~~~~~~~~~~~
-
-To use this on Python/Pandas UDFs, PySpark provides remote `Python Profilers <https://docs.python.org/3/library/profile.html>`_ for
-Python/Pandas UDFs, which can be enabled by setting ``spark.python.profile`` configuration to ``true``.
-
-.. code-block:: bash
-
-    pyspark --conf spark.python.profile=true
-
+SparkSession-based performance profiler can be enabled by setting the `Runtime SQL configuration <https://spark.apache.org/docs/latest/configuration.html#runtime-sql-configuration>`_
+``spark.sql.pyspark.udf.profiler`` to ``perf``. An example is as shown below.
 
 .. code-block:: python
 
@@ -298,6 +335,7 @@ Python/Pandas UDFs, which can be enabled by setting ``spark.python.profile`` con
     ...
     >>> added = df.select(add1("id"))
 
+    >>> spark.conf.set("spark.sql.pyspark.udf.profiler", "perf")
     >>> added.show()
     +--------+
     |add1(id)|
@@ -305,7 +343,7 @@ Python/Pandas UDFs, which can be enabled by setting ``spark.python.profile`` con
     ...
     +--------+
 
-    >>> sc.show_profiles()
+    >>> spark.profile.show(type="perf")
     ============================================================
     Profile of UDF<id=2>
     ============================================================
@@ -330,5 +368,309 @@ The UDF IDs can be seen in the query plan, for example, ``add1(...)#2L`` in ``Ar
     +- ArrowEvalPython [add1(id#0L)#2L], [pythonUDF0#11L], 200
        +- *(1) Range (0, 10, step=1, splits=16)
 
+We can render the result with a preregistered renderer as shown below.
 
-This feature is not supported with registered UDFs.
+.. code-block:: python
+
+    >>> spark.profile.render(id=2, type="perf")  # renderer="flameprof" by default
+
+.. image:: ../../../../docs/img/pyspark-udf-profile.png
+    :alt: PySpark UDF profile
+
+Or with an arbitrary renderer function as shown below.
+
+.. code-block:: python
+
+    >>> def do_render(stats):
+    ...     # Your custom rendering logic
+    ...     ...
+    ...
+    >>> spark.profile.render(id=2, type="perf", renderer=do_render)
+
+We can clear the result performance profile as shown below.
+
+.. code-block:: python
+
+    >>> spark.profile.clear(id=2, type="perf")
+
+Common Exceptions / Errors
+--------------------------
+
+PySpark SQL
+~~~~~~~~~~~
+
+**AnalysisException**
+
+``AnalysisException`` is raised when failing to analyze a SQL query plan.
+
+Example:
+
+.. code-block:: python
+
+    >>> df = spark.range(1)
+    >>> df['bad_key']
+    Traceback (most recent call last):
+    ...
+    pyspark.errors.exceptions.AnalysisException: Cannot resolve column name "bad_key" among (id)
+
+Solution:
+
+.. code-block:: python
+
+    >>> df['id']
+    Column<'id'>
+
+**ParseException**
+
+``ParseException`` is raised when failing to parse a SQL command.
+
+Example:
+
+.. code-block:: python
+
+    >>> spark.sql("select * 1")
+    Traceback (most recent call last):
+    ...
+    pyspark.errors.exceptions.ParseException:
+    [PARSE_SYNTAX_ERROR] Syntax error at or near '1': extra input '1'.(line 1, pos 9)
+
+    == SQL ==
+    select * 1
+    ---------^^^
+
+Solution:
+
+.. code-block:: python
+
+    >>> spark.sql("select *")
+    DataFrame[]
+
+**IllegalArgumentException**
+
+``IllegalArgumentException`` is raised when passing an illegal or inappropriate argument.
+
+Example:
+
+.. code-block:: python
+
+    >>> spark.range(1).sample(-1.0)
+    Traceback (most recent call last):
+    ...
+    pyspark.errors.exceptions.IllegalArgumentException: requirement failed: Sampling fraction (-1.0) must be on interval [0, 1] without replacement
+
+Solution:
+
+.. code-block:: python
+
+    >>> spark.range(1).sample(1.0)
+    DataFrame[id: bigint]
+
+**PythonException**
+
+``PythonException`` is thrown from Python workers.
+
+You can see the type of exception that was thrown from the Python worker and its stack trace, as ``TypeError`` below.
+
+Example:
+
+.. code-block:: python
+
+    >>> import pyspark.sql.functions as sf
+    >>> from pyspark.sql.functions import udf
+    >>> def f(x):
+    ...   return sf.abs(x)
+    ...
+    >>> spark.range(-1, 1).withColumn("abs", udf(f)("id")).collect()
+    22/04/12 14:52:31 ERROR Executor: Exception in task 7.0 in stage 37.0 (TID 232)
+    org.apache.spark.api.python.PythonException: Traceback (most recent call last):
+    ...
+    TypeError: Invalid argument, not a string or column: -1 of type <class 'int'>. For column literals, use 'lit', 'array', 'struct' or 'create_map' function.
+
+Solution:
+
+.. code-block:: python
+
+    >>> def f(x):
+    ...   return abs(x)
+    ...
+    >>> spark.range(-1, 1).withColumn("abs", udf(f)("id")).collect()
+    [Row(id=-1, abs='1'), Row(id=0, abs='0')]
+
+**StreamingQueryException**
+
+``StreamingQueryException`` is raised when failing a StreamingQuery. Most often, it is thrown from Python workers, that wrap it as a ``PythonException``.
+
+Example:
+
+.. code-block:: python
+
+    >>> sdf = spark.readStream.format("text").load("python/test_support/sql/streaming")
+    >>> from pyspark.sql.functions import col, udf
+    >>> bad_udf = udf(lambda x: 1 / 0)
+    >>> (sdf.select(bad_udf(col("value"))).writeStream.format("memory").queryName("q1").start()).processAllAvailable()
+    Traceback (most recent call last):
+    ...
+    org.apache.spark.api.python.PythonException: Traceback (most recent call last):
+      File "<stdin>", line 1, in <lambda>
+    ZeroDivisionError: division by zero
+    ...
+    pyspark.errors.exceptions.StreamingQueryException: [STREAM_FAILED] Query [id = 74eb53a8-89bd-49b0-9313-14d29eed03aa, runId = 9f2d5cf6-a373-478d-b718-2c2b6d8a0f24] terminated with exception: Job aborted
+
+Solution:
+
+Fix the StreamingQuery and re-execute the workflow.
+
+**SparkUpgradeException**
+
+``SparkUpgradeException`` is thrown because of Spark upgrade.
+
+Example:
+
+.. code-block:: python
+
+    >>> from pyspark.sql.functions import to_date, unix_timestamp, from_unixtime
+    >>> df = spark.createDataFrame([("2014-31-12",)], ["date_str"])
+    >>> df2 = df.select("date_str", to_date(from_unixtime(unix_timestamp("date_str", "yyyy-dd-aa"))))
+    >>> df2.collect()
+    Traceback (most recent call last):
+    ...
+    pyspark.sql.utils.SparkUpgradeException: You may get a different result due to the upgrading to Spark >= 3.0: Fail to recognize 'yyyy-dd-aa' pattern in the DateTimeFormatter. 1) You can set spark.sql.legacy.timeParserPolicy to LEGACY to restore the behavior before Spark 3.0. 2) You can form a valid datetime pattern with the guide from https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html
+
+Solution:
+
+.. code-block:: python
+
+    >>> spark.conf.set("spark.sql.legacy.timeParserPolicy", "LEGACY")
+    >>> df2 = df.select("date_str", to_date(from_unixtime(unix_timestamp("date_str", "yyyy-dd-aa"))))
+    >>> df2.collect()
+    [Row(date_str='2014-31-12', to_date(from_unixtime(unix_timestamp(date_str, yyyy-dd-aa), yyyy-MM-dd HH:mm:ss))=None)]
+
+pandas API on Spark
+~~~~~~~~~~~~~~~~~~~
+
+There are specific common exceptions / errors in pandas API on Spark.
+
+**ValueError: Cannot combine the series or dataframe because it comes from a different dataframe**
+
+Operations involving more than one series or dataframes raises a ``ValueError`` if ``compute.ops_on_diff_frames`` is disabled (disabled by default). Such operations may be expensive due to joining of underlying Spark frames. So users should be aware of the cost and enable that flag only when necessary.
+
+Exception:
+
+.. code-block:: python
+
+    >>> ps.Series([1, 2]) + ps.Series([3, 4])
+    Traceback (most recent call last):
+    ...
+    ValueError: Cannot combine the series or dataframe because it comes from a different dataframe. In order to allow this operation, enable 'compute.ops_on_diff_frames' option.
+
+
+Solution:
+
+.. code-block:: python
+
+    >>> with ps.option_context('compute.ops_on_diff_frames', True):
+    ...     ps.Series([1, 2]) + ps.Series([3, 4])
+    ...
+    0    4
+    1    6
+    dtype: int64
+
+**RuntimeError: Result vector from pandas_udf was not the required length**
+
+Exception:
+
+.. code-block:: python
+
+    >>> def f(x) -> ps.Series[np.int32]:
+    ...   return x[:-1]
+    ...
+    >>> ps.DataFrame({"x":[1, 2], "y":[3, 4]}).transform(f)
+    22/04/12 13:46:39 ERROR Executor: Exception in task 2.0 in stage 16.0 (TID 88)
+    org.apache.spark.api.python.PythonException: Traceback (most recent call last):
+    ...
+    RuntimeError: Result vector from pandas_udf was not the required length: expected 1, got 0
+
+Solution:
+
+.. code-block:: python
+
+    >>> def f(x) -> ps.Series[np.int32]:
+    ...   return x
+    ...
+    >>> ps.DataFrame({"x":[1, 2], "y":[3, 4]}).transform(f)
+       x  y
+    0  1  3
+    1  2  4
+
+Py4j
+~~~~
+
+**Py4JJavaError**
+
+``Py4JJavaError`` is raised when an exception occurs in the Java client code.
+You can see the type of exception that was thrown on the Java side and its stack trace, as ``java.lang.NullPointerException`` below.
+
+Example:
+
+.. code-block:: python
+
+    >>> spark.sparkContext._jvm.java.lang.String(None)
+    Traceback (most recent call last):
+    ...
+    py4j.protocol.Py4JJavaError: An error occurred while calling None.java.lang.String.
+    : java.lang.NullPointerException
+    ..
+
+Solution:
+
+.. code-block:: python
+
+    >>> spark.sparkContext._jvm.java.lang.String("x")
+    'x'
+
+**Py4JError**
+
+``Py4JError`` is raised when any other error occurs such as when the Python client program tries to access an object that no longer exists on the Java side.
+
+Example:
+
+.. code-block:: python
+
+    >>> from pyspark.ml.linalg import Vectors
+    >>> from pyspark.ml.regression import LinearRegression
+    >>> df = spark.createDataFrame(
+    ...             [(1.0, 2.0, Vectors.dense(1.0)), (0.0, 2.0, Vectors.sparse(1, [], []))],
+    ...             ["label", "weight", "features"],
+    ...         )
+    >>> lr = LinearRegression(
+    ...             maxIter=1, regParam=0.0, solver="normal", weightCol="weight", fitIntercept=False
+    ...         )
+    >>> model = lr.fit(df)
+    >>> model
+    LinearRegressionModel: uid=LinearRegression_eb7bc1d4bf25, numFeatures=1
+    >>> model.__del__()
+    >>> model
+    Traceback (most recent call last):
+    ...
+    py4j.protocol.Py4JError: An error occurred while calling o531.toString. Trace:
+    py4j.Py4JException: Target Object ID does not exist for this gateway :o531
+    ...
+
+Solution:
+
+Access an object that exists on the Java side.
+
+**Py4JNetworkError**
+
+``Py4JNetworkError`` is raised when a problem occurs during network transfer (e.g., connection lost). In this case, we shall debug the network and rebuild the connection.
+
+Stack Traces
+------------
+
+There are Spark configurations to control stack traces:
+
+- ``spark.sql.execution.pyspark.udf.simplifiedTraceback.enabled`` is true by default to simplify traceback from Python UDFs and Data Sources.
+
+- ``spark.sql.pyspark.jvmStacktrace.enabled`` is false by default to hide JVM stacktrace and to show a Python-friendly exception only.
+
+Spark configurations above are independent from log level settings. Control log levels through :meth:`pyspark.SparkContext.setLogLevel`.

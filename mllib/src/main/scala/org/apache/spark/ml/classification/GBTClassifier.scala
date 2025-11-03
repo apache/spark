@@ -22,14 +22,13 @@ import org.json4s.JsonDSL._
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
-import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.linalg.{BLAS, DenseVector, SparseVector, Vector, Vectors}
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.regression.DecisionTreeRegressionModel
 import org.apache.spark.ml.tree._
 import org.apache.spark.ml.tree.impl.GradientBoostedTrees
 import org.apache.spark.ml.util._
-import org.apache.spark.ml.util.DatasetUtils._
+import org.apache.spark.ml.util.DatasetUtils.extractInstances
 import org.apache.spark.ml.util.DefaultParamsReader.Metadata
 import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo}
@@ -169,21 +168,12 @@ class GBTClassifier @Since("1.4.0") (
 
   override protected def train(
       dataset: Dataset[_]): GBTClassificationModel = instrumented { instr =>
-
-    def extractInstances(df: Dataset[_]) = {
-      df.select(
-        checkClassificationLabels($(labelCol), Some(2)),
-        checkNonNegativeWeights(get(weightCol)),
-        checkNonNanVectors($(featuresCol))
-      ).rdd.map { case Row(l: Double, w: Double, v: Vector) => Instance(l, w, v) }
-    }
-
     val withValidation = isDefined(validationIndicatorCol) && $(validationIndicatorCol).nonEmpty
     val (trainDataset, validationDataset) = if (withValidation) {
-      (extractInstances(dataset.filter(not(col($(validationIndicatorCol))))),
-        extractInstances(dataset.filter(col($(validationIndicatorCol)))))
+      (extractInstances(this, dataset.filter(not(col($(validationIndicatorCol)))), Some(2)),
+        extractInstances(this, dataset.filter(col($(validationIndicatorCol))), Some(2)))
     } else {
-      (extractInstances(dataset), null)
+      (extractInstances(this, dataset, Some(2)), null)
     }
 
     val numClasses = 2
@@ -281,6 +271,12 @@ class GBTClassificationModel private[ml](
   @Since("1.6.0")
   def this(uid: String, _trees: Array[DecisionTreeRegressionModel], _treeWeights: Array[Double]) =
     this(uid, _trees, _treeWeights, -1, 2)
+
+  // For ml connect only
+  private[ml] def this() = this("",
+    Array(new DecisionTreeRegressionModel), Array(Double.NaN), -1, -1)
+
+  override def estimatedSize: Long = getEstimatedSize()
 
   @Since("1.4.0")
   override def trees: Array[DecisionTreeRegressionModel] = _trees
@@ -390,7 +386,7 @@ class GBTClassificationModel private[ml](
    */
   @Since("2.4.0")
   def evaluateEachIteration(dataset: Dataset[_]): Array[Double] = {
-    val data = extractInstances(dataset)
+    val data = extractInstances(this, dataset, Some(2))
     GradientBoostedTrees.evaluateEachIteration(data, trees, treeWeights, loss,
       OldAlgo.Classification)
   }

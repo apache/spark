@@ -25,9 +25,9 @@ import org.apache.spark.benchmark.Benchmark
  * {{{
  *   1. without sbt:
  *      bin/spark-submit --class <this class> --jars <spark core test jar> <sql core test jar>
- *   2. build/sbt "sql/test:runMain <this class>"
+ *   2. build/sbt "sql/Test/runMain <this class>"
  *   3. generate result:
- *      SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "sql/test:runMain <this class>"
+ *      SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "sql/Test/runMain <this class>"
  *      Results will be written to "benchmarks/Base64Benchmark-results.txt".
  * }}}
  */
@@ -36,14 +36,14 @@ object Base64Benchmark extends SqlBasedBenchmark {
   private val N = 20L * 1000 * 1000
 
   private def doEncode(len: Int, f: Array[Byte] => Array[Byte]): Unit = {
-    spark.range(N).map(_ => "Spark" * len).foreach { s =>
+    spark.range(N).map(_ => "Spark".repeat(len)).foreach { s =>
       f(s.getBytes)
       ()
     }
   }
 
   private def doDecode(len: Int, f: Array[Byte] => Array[Byte]): Unit = {
-    spark.range(N).map(_ => "Spark" * len).map { s =>
+    spark.range(N).map(_ => "Spark".repeat(len)).map { s =>
       // using the same encode func
       java.util.Base64.getMimeEncoder.encode(s.getBytes)
     }.foreach { s =>
@@ -52,6 +52,7 @@ object Base64Benchmark extends SqlBasedBenchmark {
     }
   }
 
+  // scalastyle:off commonscodecbase64
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
     Seq(1, 3, 5, 7).map { len =>
       val benchmark = new Benchmark(s"encode for $len", N, output = output)
@@ -75,4 +76,5 @@ object Base64Benchmark extends SqlBasedBenchmark {
       benchmark
     }.foreach(_.run())
   }
+  // scalastyle:on commonscodecbase64
 }

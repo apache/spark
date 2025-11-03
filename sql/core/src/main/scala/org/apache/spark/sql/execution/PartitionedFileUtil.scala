@@ -19,14 +19,13 @@ package org.apache.spark.sql.execution
 
 import org.apache.hadoop.fs.{BlockLocation, FileStatus, LocatedFileStatus, Path}
 
-import org.apache.spark.sql.SparkSession
+import org.apache.spark.paths.SparkPath
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.datasources._
 
 object PartitionedFileUtil {
   def splitFiles(
-      sparkSession: SparkSession,
-      file: FileStatus,
+      file: FileStatusWithMetadata,
       filePath: Path,
       isSplitable: Boolean,
       maxSplitBytes: Long,
@@ -35,28 +34,29 @@ object PartitionedFileUtil {
       (0L until file.getLen by maxSplitBytes).map { offset =>
         val remaining = file.getLen - offset
         val size = if (remaining > maxSplitBytes) maxSplitBytes else remaining
-        val hosts = getBlockHosts(getBlockLocations(file), offset, size)
-        PartitionedFile(partitionValues, filePath.toUri.toString, offset, size, hosts,
-          file.getModificationTime, file.getLen)
+        getPartitionedFile(file, filePath, partitionValues, offset, size)
       }
     } else {
-      Seq(getPartitionedFile(file, filePath, partitionValues))
+      Seq(getPartitionedFile(file, filePath, partitionValues, 0, file.getLen))
     }
   }
 
   def getPartitionedFile(
-      file: FileStatus,
+      file: FileStatusWithMetadata,
       filePath: Path,
-      partitionValues: InternalRow): PartitionedFile = {
-    val hosts = getBlockHosts(getBlockLocations(file), 0, file.getLen)
-    PartitionedFile(partitionValues, filePath.toUri.toString, 0, file.getLen, hosts,
-      file.getModificationTime, file.getLen)
+      partitionValues: InternalRow,
+      start: Long,
+      length: Long): PartitionedFile = {
+    val hosts = getBlockHosts(getBlockLocations(file.fileStatus), start, length)
+    PartitionedFile(partitionValues, SparkPath.fromPath(filePath), start, length, hosts,
+      file.getModificationTime, file.getLen, file.metadata)
   }
 
   private def getBlockLocations(file: FileStatus): Array[BlockLocation] = file match {
     case f: LocatedFileStatus => f.getBlockLocations
     case f => Array.empty[BlockLocation]
   }
+
   // Given locations of all blocks of a single file, `blockLocations`, and an `(offset, length)`
   // pair that represents a segment of the same file, find out the block that contains the largest
   // fraction the segment, and returns location hosts of that block. If no such block can be found,

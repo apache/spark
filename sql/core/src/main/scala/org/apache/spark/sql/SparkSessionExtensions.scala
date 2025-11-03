@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.expressions.ExpressionInfo
 import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.classic.Strategy
 import org.apache.spark.sql.execution.{ColumnarRule, SparkPlan}
 
 /**
@@ -40,13 +41,17 @@ import org.apache.spark.sql.execution.{ColumnarRule, SparkPlan}
  * <ul>
  * <li>Analyzer Rules.</li>
  * <li>Check Analysis Rules.</li>
+ * <li>Cache Plan Normalization Rules.</li>
  * <li>Optimizer Rules.</li>
  * <li>Pre CBO Rules.</li>
  * <li>Planning Strategies.</li>
  * <li>Customized Parser.</li>
  * <li>(External) Catalog listeners.</li>
  * <li>Columnar Rules.</li>
+ * <li>Adaptive Query Post Planner Strategy Rules.</li>
  * <li>Adaptive Query Stage Preparation Rules.</li>
+ * <li>Adaptive Query Execution Runtime Optimizer Rules.</li>
+ * <li>Adaptive Query Stage Optimizer Rules.</li>
  * </ul>
  *
  * The extensions can be used by calling `withExtensions` on the [[SparkSession.Builder]], for
@@ -109,16 +114,31 @@ class SparkSessionExtensions {
   type FunctionDescription = (FunctionIdentifier, ExpressionInfo, FunctionBuilder)
   type TableFunctionDescription = (FunctionIdentifier, ExpressionInfo, TableFunctionBuilder)
   type ColumnarRuleBuilder = SparkSession => ColumnarRule
+  type QueryPostPlannerStrategyBuilder = SparkSession => Rule[SparkPlan]
   type QueryStagePrepRuleBuilder = SparkSession => Rule[SparkPlan]
+  type QueryStageOptimizerRuleBuilder = SparkSession => Rule[SparkPlan]
 
   private[this] val columnarRuleBuilders = mutable.Buffer.empty[ColumnarRuleBuilder]
+  private[this] val queryPostPlannerStrategyRuleBuilders =
+    mutable.Buffer.empty[QueryPostPlannerStrategyBuilder]
   private[this] val queryStagePrepRuleBuilders = mutable.Buffer.empty[QueryStagePrepRuleBuilder]
+  private[this] val runtimeOptimizerRules = mutable.Buffer.empty[RuleBuilder]
+  private[this] val queryStageOptimizerRuleBuilders =
+    mutable.Buffer.empty[QueryStageOptimizerRuleBuilder]
 
   /**
    * Build the override rules for columnar execution.
    */
   private[sql] def buildColumnarRules(session: SparkSession): Seq[ColumnarRule] = {
     columnarRuleBuilders.map(_.apply(session)).toSeq
+  }
+
+  /**
+   * Build the override rules for the query post planner strategy phase of adaptive query execution.
+   */
+  private[sql] def buildQueryPostPlannerStrategyRules(
+      session: SparkSession): Seq[Rule[SparkPlan]] = {
+    queryPostPlannerStrategyRuleBuilders.map(_.apply(session)).toSeq
   }
 
   /**
@@ -129,10 +149,33 @@ class SparkSessionExtensions {
   }
 
   /**
+   * Build the override rules for the optimizer of adaptive query execution.
+   */
+  private[sql] def buildRuntimeOptimizerRules(session: SparkSession): Seq[Rule[LogicalPlan]] = {
+    runtimeOptimizerRules.map(_.apply(session)).toSeq
+  }
+
+  /**
+   * Build the override rules for the query stage optimizer phase of adaptive query execution.
+   */
+  private[sql] def buildQueryStageOptimizerRules(session: SparkSession): Seq[Rule[SparkPlan]] = {
+    queryStageOptimizerRuleBuilders.map(_.apply(session)).toSeq
+  }
+
+  /**
    * Inject a rule that can override the columnar execution of an executor.
    */
   def injectColumnar(builder: ColumnarRuleBuilder): Unit = {
     columnarRuleBuilders += builder
+  }
+
+  /**
+   * Inject a rule that applied between `plannerStrategy` and `queryStagePrepRules`, so
+   * it can get the whole plan before injecting exchanges.
+   * Note, these rules can only be applied within AQE.
+   */
+  def injectQueryPostPlannerStrategyRule(builder: QueryPostPlannerStrategyBuilder): Unit = {
+    queryPostPlannerStrategyRuleBuilders += builder
   }
 
   /**
@@ -141,6 +184,27 @@ class SparkSessionExtensions {
    */
   def injectQueryStagePrepRule(builder: QueryStagePrepRuleBuilder): Unit = {
     queryStagePrepRuleBuilders += builder
+  }
+
+  /**
+   * Inject a runtime `Rule` builder into the [[SparkSession]].
+   * The injected rules will be executed after built-in
+   * [[org.apache.spark.sql.execution.adaptive.AQEOptimizer]] rules are applied.
+   * A runtime optimizer rule is used to improve the quality of a logical plan during execution
+   * which can leverage accurate statistics from shuffle.
+   *
+   * Note that, it does not work if adaptive query execution is disabled.
+   */
+  def injectRuntimeOptimizerRule(builder: RuleBuilder): Unit = {
+    runtimeOptimizerRules += builder
+  }
+
+  /**
+   * Inject a rule that can override the query stage optimizer phase of adaptive query
+   * execution.
+   */
+  def injectQueryStageOptimizerRule(builder: QueryStageOptimizerRuleBuilder): Unit = {
+    queryStageOptimizerRuleBuilders += builder
   }
 
   private[this] val resolutionRuleBuilders = mutable.Buffer.empty[RuleBuilder]
@@ -158,6 +222,24 @@ class SparkSessionExtensions {
    */
   def injectResolutionRule(builder: RuleBuilder): Unit = {
     resolutionRuleBuilders += builder
+  }
+
+  private[this] val hintResolutionRuleBuilders = mutable.Buffer.empty[RuleBuilder]
+
+  /**
+   * Build the analyzer hint resolution rules using the given [[SparkSession]].
+   */
+  private[sql] def buildHintResolutionRules(session: SparkSession): Seq[Rule[LogicalPlan]] = {
+    hintResolutionRuleBuilders.map(_.apply(session)).toSeq
+  }
+
+  /**
+   * Inject an analyzer hint resolution rule builder into the [[SparkSession]]. These analyzer
+   * rules will be executed as part of the early resolution phase of the analyzer, together with
+   * other hint resolution rules.
+   */
+  def injectHintResolutionRule(builder: RuleBuilder): Unit = {
+    hintResolutionRuleBuilders += builder
   }
 
   private[this] val postHocResolutionRuleBuilders = mutable.Buffer.empty[RuleBuilder]
@@ -193,6 +275,22 @@ class SparkSessionExtensions {
    */
   def injectCheckRule(builder: CheckRuleBuilder): Unit = {
     checkRuleBuilders += builder
+  }
+
+  private[this] val planNormalizationRules = mutable.Buffer.empty[RuleBuilder]
+
+  def buildPlanNormalizationRules(session: SparkSession): Seq[Rule[LogicalPlan]] = {
+    planNormalizationRules.map(_.apply(session)).toSeq
+  }
+
+  /**
+   * Inject a plan normalization `Rule` builder into the [[SparkSession]]. The injected rules will
+   * be executed just before query caching decisions are made. Such rules can be used to improve the
+   * cache hit rate by normalizing different plans to the same form. These rules should never modify
+   * the result of the LogicalPlan.
+   */
+  def injectPlanNormalizationRule(builder: RuleBuilder): Unit = {
+    planNormalizationRules += builder
   }
 
   private[this] val optimizerRules = mutable.Buffer.empty[RuleBuilder]

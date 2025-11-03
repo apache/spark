@@ -30,32 +30,22 @@ def _unsupported_property(property_name, deprecated=False, reason=""):
 
 
 class MissingPandasLikeSeries:
+    # NOTE: Please update the pandas-on-Spark reference document when implementing the new API.
+    # Documentation path: `python/docs/source/reference/pyspark.pandas/`.
 
     # Functions
     asfreq = _unsupported_function("asfreq")
-    autocorr = _unsupported_function("autocorr")
     combine = _unsupported_function("combine")
     convert_dtypes = _unsupported_function("convert_dtypes")
-    ewm = _unsupported_function("ewm")
     infer_objects = _unsupported_function("infer_objects")
-    interpolate = _unsupported_function("interpolate")
     reorder_levels = _unsupported_function("reorder_levels")
-    resample = _unsupported_function("resample")
-    searchsorted = _unsupported_function("searchsorted")
     set_axis = _unsupported_function("set_axis")
-    to_hdf = _unsupported_function("to_hdf")
     to_period = _unsupported_function("to_period")
     to_sql = _unsupported_function("to_sql")
     to_timestamp = _unsupported_function("to_timestamp")
     tz_convert = _unsupported_function("tz_convert")
     tz_localize = _unsupported_function("tz_localize")
     view = _unsupported_function("view")
-
-    # Deprecated functions
-    slice_shift = _unsupported_function(
-        "slice_shift", deprecated=True, reason="Use DataFrame/Series.shift instead."
-    )
-    tshift = _unsupported_function("tshift", deprecated=True, reason="Use `shift` instead.")
 
     # Properties we won't support.
     array = common.array(_unsupported_property)

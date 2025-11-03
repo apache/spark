@@ -30,9 +30,9 @@ class PhysicalAggregationSuite extends PlanTest {
 
   test("SPARK-35014: a foldable expression should not be replaced by an AttributeReference") {
     val query = testRelation
-      .groupBy($"a", Literal.create(1) as Symbol("k"))(
-        $"a", Round(Literal.create(1.2), Literal.create(1)) as Symbol("r"),
-        count($"b") as Symbol("c"))
+      .groupBy($"a", Literal.create(1) as "k")(
+        $"a", Round(Literal.create(1.2), Literal.create(1)) as "r",
+        count($"b") as "c")
     val analyzedQuery = SimpleAnalyzer.execute(query)
 
     val PhysicalAggregation(
@@ -48,7 +48,7 @@ class PhysicalAggregationSuite extends PlanTest {
 
     // Verify that Round's scale parameter is a Literal.
     resultExpressions(1) match {
-      case Alias(Round(_, _: Literal), _) =>
+      case Alias(Round(_, _: Literal, _), _) =>
       case other => fail("unexpected result expression: " + other)
     }
   }

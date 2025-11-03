@@ -23,7 +23,7 @@ import java.time.{Instant, LocalDateTime, ZoneId}
 import java.util.{Locale, TimeZone}
 import java.util.concurrent.TimeUnit
 
-import org.apache.spark.{SparkConf, SparkException, SparkUpgradeException}
+import org.apache.spark.{SPARK_DOC_ROOT, SparkConf, SparkRuntimeException, SparkUpgradeException}
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{CEST, LA}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.functions._
@@ -45,13 +45,36 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
     val d1 = DateTimeUtils.fromJavaDate(df1.select(current_date()).collect().head.getDate(0))
     val d2 = DateTimeUtils.fromJavaDate(
       sql("""SELECT CURRENT_DATE()""").collect().head.getDate(0))
-    val d3 = DateTimeUtils.currentDate(ZoneId.systemDefault())
-    assert(d0 <= d1 && d1 <= d2 && d2 <= d3 && d3 - d0 <= 1)
+    val d3 = DateTimeUtils.fromJavaDate(
+      sql("""SELECT CURDATE()""").collect().head.getDate(0))
+    val d4 = DateTimeUtils.currentDate(ZoneId.systemDefault())
+    assert(d0 <= d1 && d1 <= d2 && d2 <= d3 && d3 <= d4 && d4 - d0 <= 1)
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("SELECT CURDATE(1)")
+      },
+      condition = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+      parameters = Map(
+        "functionName" -> "`curdate`",
+        "expectedNum" -> "0",
+        "actualNum" -> "1",
+        "docroot" -> SPARK_DOC_ROOT
+      ),
+      context = ExpectedContext("", "", 7, 16, "CURDATE(1)")
+    )
+  }
+
+  test("function current_timezone") {
+    val df = Seq((1, 2), (3, 1)).toDF("a", "b")
+
+    checkAnswer(df.selectExpr("CURRENT_TIMEZONE()"), df.select(current_timezone()))
   }
 
   test("function current_timestamp and now") {
     val df1 = Seq((1, 2), (3, 1)).toDF("a", "b")
     checkAnswer(df1.select(count_distinct(current_timestamp())), Row(1))
+    checkAnswer(df1.select(count_distinct(now())), Row(1))
 
     // Execution in one query should return the same value
     checkAnswer(sql("""SELECT CURRENT_TIMESTAMP() = CURRENT_TIMESTAMP()"""), Row(true))
@@ -63,6 +86,7 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
     assert(got >= before && got <= after)
 
     // Now alias
+    checkAnswer(df1.select(current_timestamp().equalTo(now())), Seq(Row(true), Row(true)))
     checkAnswer(sql("""SELECT CURRENT_TIMESTAMP() = NOW()"""), Row(true))
   }
 
@@ -155,11 +179,15 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
       Row(4, 4, 4))
   }
 
-  test("dayofmonth") {
+  test("dayofmonth & day") {
     val df = Seq((d, sdfDate.format(d), ts)).toDF("a", "b", "c")
 
     checkAnswer(
       df.select(dayofmonth($"a"), dayofmonth($"b"), dayofmonth($"c")),
+      Row(8, 8, 8))
+
+    checkAnswer(
+      df.select(day($"a"), day($"b"), day($"c")),
       Row(8, 8, 8))
 
     checkAnswer(
@@ -227,7 +255,111 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
       Row(15, 15, 15))
   }
 
-  test("function date_add") {
+  test("weekday") {
+    val df = Seq((d, sdfDate.format(d), ts)).toDF("a", "b", "c")
+
+    checkAnswer(
+      df.select(weekday($"a"), weekday($"b"), weekday($"c")),
+      Row(2, 2, 0))
+
+    checkAnswer(
+      df.selectExpr("weekday(a)", "weekday(b)", "weekday(c)"),
+      Row(2, 2, 0))
+  }
+
+  test("monthname") {
+    val df = Seq((d, sdfDate.format(d), ts)).toDF("a", "b", "c")
+
+    checkAnswer(
+      df.select(monthname($"a"), monthname($"b"), monthname($"c")),
+      Row("Apr", "Apr", "Apr"))
+
+    checkAnswer(
+      df.selectExpr("monthname(a)", "monthname(b)", "monthname(c)"),
+      Row("Apr", "Apr", "Apr"))
+  }
+
+  test("dayname") {
+    val df = Seq((d, sdfDate.format(d), ts)).toDF("a", "b", "c")
+
+    checkAnswer(
+      df.select(dayname($"a"), dayname($"b"), dayname($"c")),
+      Row("Wed", "Wed", "Mon"))
+
+    checkAnswer(
+      df.selectExpr("dayname(a)", "dayname(b)", "dayname(c)"),
+      Row("Wed", "Wed", "Mon"))
+  }
+
+  test("extract") {
+    val df = Seq((d, sdf.format(d), ts)).toDF("a", "b", "c")
+
+    checkAnswer(
+      df.select(
+        extract(lit("YEAR"), $"a"),
+        extract(lit("MONTH"), $"a"),
+        extract(lit("week"), $"b"),
+        extract(lit("day"), $"b"),
+        extract(lit("MINUTE"), $"c"),
+        extract(lit("SECONDS"), $"c")),
+      Row(2015, 4, 15, 8, 10, 15.000000))
+
+    checkAnswer(
+      df.selectExpr(
+        "extract(YEAR FROM a)",
+        "extract(MONTH FROM a)",
+        "extract(week FROM b)",
+        "extract(day FROM b)",
+        "extract(MINUTE FROM c)",
+        "extract(SECONDS FROM c)"),
+      Row(2015, 4, 15, 8, 10, 15.000000))
+  }
+
+  test("date_part & datepart") {
+    val df = Seq((d, sdf.format(d), ts)).toDF("a", "b", "c")
+
+    checkAnswer(
+      df.select(
+        date_part(lit("YEAR"), $"a"),
+        date_part(lit("MONTH"), $"a"),
+        date_part(lit("week"), $"b"),
+        date_part(lit("day"), $"b"),
+        date_part(lit("MINUTE"), $"c"),
+        date_part(lit("SECONDS"), $"c")),
+      Row(2015, 4, 15, 8, 10, 15.000000))
+
+    checkAnswer(
+      df.select(
+        datepart(lit("YEAR"), $"a"),
+        datepart(lit("MONTH"), $"a"),
+        datepart(lit("week"), $"b"),
+        datepart(lit("day"), $"b"),
+        datepart(lit("MINUTE"), $"c"),
+        datepart(lit("SECONDS"), $"c")),
+      Row(2015, 4, 15, 8, 10, 15.000000))
+
+    checkAnswer(
+      df.selectExpr(
+        "date_part('YEAR', a)",
+        "date_part('MONTH', a)",
+        "date_part('week', b)",
+        "date_part('day', b)",
+        "date_part('MINUTE', c)",
+        "date_part('SECONDS', c)"),
+      Row(2015, 4, 15, 8, 10, 15.000000))
+
+    checkAnswer(
+      df.selectExpr(
+        "datepart('YEAR', a)",
+        "datepart('MONTH', a)",
+        "datepart('week', b)",
+        "datepart('day', b)",
+        "datepart('MINUTE', c)",
+        "datepart('SECONDS', c)"),
+      Row(2015, 4, 15, 8, 10, 15.000000))
+  }
+
+  test("function date_add & dateadd") {
     val st1 = "2015-06-01 12:34:56"
     val st2 = "2015-06-02 12:34:56"
     val t1 = Timestamp.valueOf(st1)
@@ -249,14 +381,32 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
     checkAnswer(
       df.select(date_add(col("ss"), 7)),
       Seq(Row(Date.valueOf("2015-06-08")), Row(Date.valueOf("2015-06-09"))))
+    checkAnswer(
+      df.select(dateadd(col("d"), lit(1))),
+      Seq(Row(Date.valueOf("2015-06-02")), Row(Date.valueOf("2015-06-03"))))
+    checkAnswer(
+      df.select(dateadd(col("t"), lit(3))),
+      Seq(Row(Date.valueOf("2015-06-04")), Row(Date.valueOf("2015-06-05"))))
+    checkAnswer(
+      df.select(dateadd(col("s"), lit(5))),
+      Seq(Row(Date.valueOf("2015-06-06")), Row(Date.valueOf("2015-06-07"))))
+    checkAnswer(
+      df.select(dateadd(col("ss"), lit(7))),
+      Seq(Row(Date.valueOf("2015-06-08")), Row(Date.valueOf("2015-06-09"))))
 
     checkAnswer(
       df.withColumn("x", lit(1)).select(date_add(col("d"), col("x"))),
+      Seq(Row(Date.valueOf("2015-06-02")), Row(Date.valueOf("2015-06-03"))))
+    checkAnswer(
+      df.withColumn("x", lit(1)).select(dateadd(col("d"), col("x"))),
       Seq(Row(Date.valueOf("2015-06-02")), Row(Date.valueOf("2015-06-03"))))
 
     checkAnswer(df.selectExpr("DATE_ADD(null, 1)"), Seq(Row(null), Row(null)))
     checkAnswer(
       df.selectExpr("""DATE_ADD(d, 1)"""),
+      Seq(Row(Date.valueOf("2015-06-02")), Row(Date.valueOf("2015-06-03"))))
+    checkAnswer(
+      df.selectExpr("""DATEADD(d, 1)"""),
       Seq(Row(Date.valueOf("2015-06-02")), Row(Date.valueOf("2015-06-03"))))
   }
 
@@ -444,9 +594,9 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
   }
 
   def checkExceptionMessage(df: DataFrame): Unit = {
-    val message = intercept[SparkException] {
+    val message = intercept[SparkUpgradeException] {
       df.collect()
-    }.getCause.getMessage
+    }.getMessage
     assert(message.contains("Fail to parse"))
   }
 
@@ -524,6 +674,50 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
     val df1 = Seq(x1, x2).toDF("x")
     checkAnswer(
       df1.select(to_date(col("x"))), Row(Date.valueOf("2016-02-29")) :: Row(null) :: Nil)
+  }
+
+  test("function unix_date") {
+    val d1 = Date.valueOf("2015-07-22")
+    val d2 = Date.valueOf("2015-07-01")
+    val d3 = Date.valueOf("2014-12-31")
+    val df = Seq(d1, d2, d3).toDF("d")
+
+    val result1 = df.selectExpr("unix_date(d)")
+    val result2 = df.select(unix_date(col("d")))
+    checkAnswer(result1, result2)
+  }
+
+  test("function unix_micros") {
+    val t1 = Timestamp.valueOf("2015-07-22 10:00:00")
+    val t2 = Timestamp.valueOf("2014-12-31 23:59:59")
+    val t3 = Timestamp.valueOf("2014-12-31 23:59:59")
+    val df = Seq(t1, t2, t3).toDF("t")
+
+    val result1 = df.selectExpr("unix_micros(t)")
+    val result2 = df.select(unix_micros(col("t")))
+    checkAnswer(result1, result2)
+  }
+
+  test("function unix_millis") {
+    val t1 = Timestamp.valueOf("2015-07-22 10:00:00")
+    val t2 = Timestamp.valueOf("2014-12-31 23:59:59")
+    val t3 = Timestamp.valueOf("2014-12-31 23:59:59")
+    val df = Seq(t1, t2, t3).toDF("t")
+
+    val result1 = df.selectExpr("unix_millis(t)")
+    val result2 = df.select(unix_millis(col("t")))
+    checkAnswer(result1, result2)
+  }
+
+  test("function unix_seconds") {
+    val t1 = Timestamp.valueOf("2015-07-22 10:00:00")
+    val t2 = Timestamp.valueOf("2014-12-31 23:59:59")
+    val t3 = Timestamp.valueOf("2014-12-31 23:59:59")
+    val df = Seq(t1, t2, t3).toDF("t")
+
+    val result1 = df.selectExpr("unix_seconds(t)")
+    val result2 = df.select(unix_seconds(col("t")))
+    checkAnswer(result1, result2)
   }
 
   test("function trunc") {
@@ -733,11 +927,22 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
         val df = Seq((date1, ts1, s1, ss1), (date2, ts2, s2, ss2)).toDF("d", "ts", "s", "ss")
         checkAnswer(df.selectExpr("to_unix_timestamp(ts)"), Seq(
           Row(secs(ts1.getTime)), Row(secs(ts2.getTime))))
+        checkAnswer(df.select(to_unix_timestamp(col("ts"))), Seq(
+          Row(secs(ts1.getTime)), Row(secs(ts2.getTime))))
+
         checkAnswer(df.selectExpr("to_unix_timestamp(ss)"), Seq(
           Row(secs(ts1.getTime)), Row(secs(ts2.getTime))))
+        checkAnswer(df.select(to_unix_timestamp(col("ss"))), Seq(
+          Row(secs(ts1.getTime)), Row(secs(ts2.getTime))))
+
         checkAnswer(df.selectExpr(s"to_unix_timestamp(d, '$fmt')"), Seq(
           Row(secs(date1.getTime)), Row(secs(date2.getTime))))
+        checkAnswer(df.select(to_unix_timestamp(col("d"), lit("$fmt"))), Seq(
+          Row(secs(date1.getTime)), Row(secs(date2.getTime))))
+
         checkAnswer(df.selectExpr(s"to_unix_timestamp(s, '$fmt')"), Seq(
+          Row(secs(ts1.getTime)), Row(secs(ts2.getTime))))
+        checkAnswer(df.select(to_unix_timestamp(col("s"), lit(fmt))), Seq(
           Row(secs(ts1.getTime)), Row(secs(ts2.getTime))))
 
         val x1 = "2015-07-24 10:00:00"
@@ -762,13 +967,17 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
           Row(secs(ts5.getTime)), Row(null)))
 
         // invalid format
+        // Intercept to SparkRuntimeException to check for proper exception handling
         val invalid = df1.selectExpr(s"to_unix_timestamp(x, 'yyyy-MM-dd bb:HH:ss')")
-        val e = intercept[IllegalArgumentException](invalid.collect())
+        val e = intercept[SparkRuntimeException](invalid.collect())
         assert(e.getMessage.contains('b'))
+
+        val df3 = Seq("2016-04-08").toDF("a")
+        checkAnswer(df3.selectExpr("unix_timestamp(a)"), Seq(Row(null)))
+        checkAnswer(df3.select(unix_timestamp(col("a"))), Seq(Row(null)))
       }
     }
   }
-
 
   test("to_timestamp") {
     Seq("legacy", "corrected").foreach { legacyParserPolicy =>
@@ -810,7 +1019,7 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("datediff") {
+  test("datediff & date_diff") {
     val df = Seq(
       (Date.valueOf("2015-07-24"), Timestamp.valueOf("2015-07-24 01:00:00"),
         "2015-07-23", "2015-07-23 03:00:00"),
@@ -820,7 +1029,20 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
     checkAnswer(df.select(datediff(col("a"), col("b"))), Seq(Row(0), Row(0)))
     checkAnswer(df.select(datediff(col("a"), col("c"))), Seq(Row(1), Row(1)))
     checkAnswer(df.select(datediff(col("d"), col("b"))), Seq(Row(-1), Row(-1)))
+    checkAnswer(df.select(date_diff(col("a"), col("b"))), Seq(Row(0), Row(0)))
+    checkAnswer(df.select(date_diff(col("a"), col("c"))), Seq(Row(1), Row(1)))
+    checkAnswer(df.select(date_diff(col("d"), col("b"))), Seq(Row(-1), Row(-1)))
     checkAnswer(df.selectExpr("datediff(a, d)"), Seq(Row(1), Row(1)))
+    checkAnswer(df.selectExpr("date_diff(a, d)"), Seq(Row(1), Row(1)))
+  }
+
+  test("date_from_unix_date") {
+    val df = spark.range(1).select(
+      date_from_unix_date(lit(1)).cast("string"),
+      date_from_unix_date(lit(20)).cast("string"),
+      date_from_unix_date(lit(300)).cast("string"))
+
+    checkAnswer(df, Seq(Row("1970-01-02", "1970-01-21", "1970-10-28")))
   }
 
   test("to_timestamp with microseconds precision") {
@@ -909,6 +1131,32 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
         Row(Timestamp.valueOf("2015-07-24 22:00:00"))))
   }
 
+  test("timestamp_millis") {
+    val df = Seq((123456789, 1230219000123L)).toDF("a", "b")
+    checkAnswer(
+      df.select(timestamp_millis(col("a")), timestamp_millis(col("b"))),
+      Row(Timestamp.valueOf("1970-01-02 02:17:36.789"),
+        Timestamp.valueOf("2008-12-25 07:30:00.123")))
+
+    checkAnswer(
+      df.selectExpr("timestamp_millis(a)", "timestamp_millis(b)"),
+      Row(Timestamp.valueOf("1970-01-02 02:17:36.789"),
+        Timestamp.valueOf("2008-12-25 07:30:00.123")))
+  }
+
+  test("timestamp_micros") {
+    val df = Seq((123456789, 1230219000123L)).toDF("a", "b")
+    checkAnswer(
+      df.select(timestamp_micros(col("a")), timestamp_micros(col("b"))),
+      Row(Timestamp.valueOf("1969-12-31 16:02:03.456789"),
+        Timestamp.valueOf("1970-01-14 21:43:39.000123")))
+
+    checkAnswer(
+      df.selectExpr("timestamp_micros(a)", "timestamp_micros(b)"),
+      Row(Timestamp.valueOf("1969-12-31 16:02:03.456789"),
+        Timestamp.valueOf("1970-01-14 21:43:39.000123")))
+  }
+
   test("SPARK-30668: use legacy timestamp parser in to_timestamp") {
     val confKey = SQLConf.LEGACY_TIME_PARSER_POLICY.key
     val df = Seq("2020-01-27T20:06:11.847-0800").toDF("ts")
@@ -974,5 +1222,253 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
 
     checkTrunc("SECOND", "1961-04-12 00:01:02")
     checkTrunc("MINUTE", "1961-04-12 00:01:00")
+  }
+
+  test("to_timestamp_ltz") {
+    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+      val df = Seq("2012-11-30").toDF("d")
+      checkAnswer(
+        df.selectExpr("to_timestamp_ltz(d, 'yyyy-MM-dd')"),
+        df.select(to_timestamp_ltz(col("d"), lit("yyyy-MM-dd")))
+      )
+    }
+  }
+
+  test("to_timestamp_ntz") {
+    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+      val df = Seq("1990-11-22").toDF("d")
+      checkAnswer(
+        df.selectExpr("to_timestamp_ntz(d, 'yyyy-MM-dd')"),
+        df.select(to_timestamp_ntz(col("d"), lit("yyyy-MM-dd")))
+      )
+    }
+  }
+
+  test("convert_timezone") {
+    val df = Seq("1990-11-22").toDF("d")
+    checkAnswer(
+      df.selectExpr(s"convert_timezone('${CEST.getId}', '${LA.getId}', d)"),
+      df.select(convert_timezone(lit(CEST.getId), lit(LA.getId), col("d")))
+    )
+
+    checkAnswer(
+      df.selectExpr(s"convert_timezone('${LA.getId}', d)"),
+      df.select(convert_timezone(lit(LA.getId), col("d")))
+    )
+  }
+
+  test("make_dt_interval") {
+    val df = Seq((1, 12, 30, 01.001001)).toDF("day", "hour", "min", "sec")
+
+    val result1 = df.selectExpr(s"make_dt_interval(day, hour, min, sec)")
+    val result2 = df.select(make_dt_interval(col("day"), col("hour"), col("min"), col("sec")))
+    checkAnswer(result1, result2)
+
+    val result3 = df.selectExpr(s"make_dt_interval(day, hour, min)")
+    val result4 = df.select(make_dt_interval(col("day"), col("hour"), col("min")))
+    checkAnswer(result3, result4)
+
+    val result5 = df.selectExpr(s"make_dt_interval(day, hour)")
+    val result6 = df.select(make_dt_interval(col("day"), col("hour")))
+    checkAnswer(result5, result6)
+
+    val result7 = df.selectExpr(s"make_dt_interval(day)")
+    val result8 = df.select(make_dt_interval(col("day")))
+    checkAnswer(result7, result8)
+
+    val result9 = df.selectExpr(s"make_dt_interval()")
+    val result10 = df.select(make_dt_interval())
+    checkAnswer(result9, result10)
+  }
+
+  test("make_interval") {
+    val df = Seq((100, 11, 1, 1, 12, 30, 01.001001)).
+      toDF("year", "month", "week", "day", "hour", "min", "sec")
+
+    val result1 = df.selectExpr(s"make_interval(year, month, week, day, hour, min, sec)")
+    val result2 = df.select(make_interval(
+      col("year"), col("month"), col("week"), col("day"), col("hour"), col("min"), col("sec")))
+    checkAnswer(result1, result2)
+
+    val result3 = df.selectExpr(s"make_interval(year, month, week, day, hour, min)")
+    val result4 = df.select(make_interval(
+      col("year"), col("month"), col("week"), col("day"), col("hour"), col("min")))
+    checkAnswer(result3, result4)
+
+    val result5 = df.selectExpr(s"make_interval(year, month, week, day, hour)")
+    val result6 = df.select(make_interval(
+      col("year"), col("month"), col("week"), col("day"), col("hour")))
+    checkAnswer(result5, result6)
+
+    val result7 = df.selectExpr(s"make_interval(year, month, week, day)")
+    val result8 = df.select(make_interval(
+      col("year"), col("month"), col("week"), col("day")))
+    checkAnswer(result7, result8)
+
+    val result9 = df.selectExpr(s"make_interval(year, month, week)")
+    val result10 = df.select(make_interval(col("year"), col("month"), col("week")))
+    checkAnswer(result9, result10)
+
+    val result11 = df.selectExpr(s"make_interval(year, month)")
+    val result12 = df.select(make_interval(col("year"), col("month")))
+    checkAnswer(result11, result12)
+
+    val result13 = df.selectExpr(s"make_interval(year)")
+    val result14 = df.select(make_interval(col("year")))
+    checkAnswer(result13, result14)
+
+    val result15 = df.selectExpr(s"make_interval()")
+    val result16 = df.select(make_interval())
+    checkAnswer(result15, result16)
+  }
+
+  test("make_timestamp") {
+    val df = Seq((100, 11, 1, 12, 30, 01.001001, "UTC")).
+      toDF("year", "month", "day", "hour", "min", "sec", "timezone")
+
+    val result1 = df.selectExpr(s"make_timestamp(year, month, day, hour, min, sec, timezone)")
+    val result2 = df.select(make_timestamp(
+      col("year"), col("month"), col("day"), col("hour"),
+      col("min"), col("sec"), col("timezone")))
+    checkAnswer(result1, result2)
+
+    val result3 = df.selectExpr(s"make_timestamp(year, month, day, hour, min, sec)")
+    val result4 = df.select(make_timestamp(
+      col("year"), col("month"), col("day"), col("hour"),
+      col("min"), col("sec")))
+    checkAnswer(result3, result4)
+  }
+
+  test("make_timestamp_ltz") {
+    val df = Seq((100, 11, 1, 12, 30, 01.001001, "UTC")).
+      toDF("year", "month", "day", "hour", "min", "sec", "timezone")
+
+    val result1 = df.selectExpr(s"make_timestamp_ltz(year, month, day, hour, min, sec, timezone)")
+    val result2 = df.select(make_timestamp_ltz(
+      col("year"), col("month"), col("day"), col("hour"),
+      col("min"), col("sec"), col("timezone")))
+    checkAnswer(result1, result2)
+
+    val result3 = df.selectExpr(s"make_timestamp_ltz(year, month, day, hour, min, sec)")
+    val result4 = df.select(make_timestamp_ltz(
+      col("year"), col("month"), col("day"), col("hour"),
+      col("min"), col("sec")))
+    checkAnswer(result3, result4)
+  }
+
+  test("make_timestamp_ntz") {
+    val df = Seq((100, 11, 1, 12, 30, 01.001001)).
+      toDF("year", "month", "day", "hour", "min", "sec")
+
+    val result1 = df.selectExpr(s"make_timestamp_ntz(year, month, day, hour, min, sec)")
+    val result2 = df.select(make_timestamp_ntz(
+      col("year"), col("month"), col("day"), col("hour"),
+      col("min"), col("sec")))
+    checkAnswer(result1, result2)
+  }
+
+  test("try_make_timestamp") {
+    val df = Seq((100, 11, 1, 12, 30, 01.001001, "UTC")).
+      toDF("year", "month", "day", "hour", "min", "sec", "timezone")
+
+    val result1 = df.selectExpr("try_make_timestamp(year, month, day, hour, min, sec, timezone)")
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+      val result2 = df.select(make_timestamp(
+        col("year"), col("month"), col("day"), col("hour"),
+        col("min"), col("sec"), col("timezone")))
+      checkAnswer(result1, result2)
+    }
+
+    val result3 = df.selectExpr("try_make_timestamp(year, month, day, hour, min, sec)")
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+      val result4 = df.select(make_timestamp(
+        col("year"), col("month"), col("day"), col("hour"),
+        col("min"), col("sec")))
+      checkAnswer(result3, result4)
+    }
+
+    val result5 = df.selectExpr("try_make_timestamp(year, month, day, hour, min, sec)")
+    val result6 = df.select(try_make_timestamp(
+      col("year"), col("month"), col("day"), col("hour"),
+      col("min"), col("sec")))
+    checkAnswer(result5, result6)
+  }
+
+  test("try_make_timestamp_ntz") {
+    val df = Seq((100, 11, 1, 12, 30, 01.001001)).
+      toDF("year", "month", "day", "hour", "min", "sec")
+
+    val result1 = df.selectExpr(
+      "try_make_timestamp_ntz(year, month, day, hour, min, sec)")
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+      val result2 = df.select(make_timestamp_ntz(
+        col("year"), col("month"), col("day"), col("hour"),
+        col("min"), col("sec")))
+      checkAnswer(result1, result2)
+    }
+
+    val result3 = df.selectExpr(
+    "try_make_timestamp_ntz(year, month, day, hour, min, sec)")
+    val result4 = df.select(try_make_timestamp_ntz(
+      col("year"), col("month"), col("day"), col("hour"),
+      col("min"), col("sec")))
+    checkAnswer(result3, result4)
+  }
+
+  test("try_make_timestamp_ltz") {
+    val df = Seq((100, 11, 1, 12, 30, 01.001001, "UTC")).
+      toDF("year", "month", "day", "hour", "min", "sec", "timezone")
+
+    val result1 = df.selectExpr(
+      "try_make_timestamp_ltz(year, month, day, hour, min, sec, timezone)")
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+      val result2 = df.select(make_timestamp_ltz(
+        col("year"), col("month"), col("day"), col("hour"),
+        col("min"), col("sec"), col("timezone")))
+      checkAnswer(result1, result2)
+    }
+
+    val result3 = df.selectExpr(
+      "try_make_timestamp_ltz(year, month, day, hour, min, sec)")
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+      val result4 = df.select(make_timestamp_ltz(
+        col("year"), col("month"), col("day"), col("hour"),
+        col("min"), col("sec")))
+      checkAnswer(result3, result4)
+    }
+
+    val result5 = df.selectExpr(
+    "try_make_timestamp_ltz(year, month, day, hour, min, sec)")
+    val result6 = df.select(try_make_timestamp_ltz(
+      col("year"), col("month"), col("day"), col("hour"),
+      col("min"), col("sec")))
+    checkAnswer(result5, result6)
+  }
+
+  test("make_ym_interval") {
+    val df = Seq((100, 11)).toDF("year", "month")
+
+    val result1 = df.selectExpr(s"make_ym_interval(year, month)")
+    val result2 = df.select(make_ym_interval(col("year"), col("month")))
+    checkAnswer(result1, result2)
+
+    val result3 = df.selectExpr(s"make_ym_interval(year)")
+    val result4 = df.select(make_ym_interval(col("year")))
+    checkAnswer(result3, result4)
+
+    val result5 = df.selectExpr(s"make_ym_interval()")
+    val result6 = df.select(make_ym_interval())
+    checkAnswer(result5, result6)
+  }
+
+  test("try_to_timestamp") {
+    val df = Seq(("2016-12-31", "yyyy-MM-dd")).toDF("a", "b")
+    val ts = Timestamp.valueOf("2016-12-31 00:00:00")
+
+    checkAnswer(df.selectExpr("try_to_timestamp(a, b)"), Seq(Row(ts)))
+    checkAnswer(df.select(try_to_timestamp(col("a"), col("b"))), Seq(Row(ts)))
+
+    checkAnswer(df.selectExpr("try_to_timestamp(a)"), Seq(Row(ts)))
+    checkAnswer(df.select(try_to_timestamp(col("a"))), Seq(Row(ts)))
   }
 }

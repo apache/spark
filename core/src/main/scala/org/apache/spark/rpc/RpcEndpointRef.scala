@@ -30,8 +30,6 @@ import org.apache.spark.util.RpcUtils
 private[spark] abstract class RpcEndpointRef(conf: SparkConf)
   extends Serializable with Logging {
 
-  private[this] val maxRetries = RpcUtils.numRetries(conf)
-  private[this] val retryWaitMs = RpcUtils.retryWaitMs(conf)
   private[this] val defaultAskTimeout = RpcUtils.askRpcTimeout(conf)
 
   /**
@@ -104,11 +102,6 @@ private[spark] abstract class RpcEndpointRef(conf: SparkConf)
   }
 
 }
-
-/**
- * An exception thrown if the RPC is aborted.
- */
-private[spark] class RpcAbortException(message: String) extends Exception(message)
 
 /**
  * A wrapper for [[Future]] but add abort method.

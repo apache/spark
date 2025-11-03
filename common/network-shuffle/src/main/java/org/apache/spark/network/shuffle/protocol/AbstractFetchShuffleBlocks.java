@@ -17,7 +17,8 @@
 
 package org.apache.spark.network.shuffle.protocol;
 
-import com.google.common.base.Objects;
+import java.util.Objects;
+
 import io.netty.buffer.ByteBuf;
 
 import org.apache.commons.lang3.builder.ToStringBuilder;
@@ -43,12 +44,14 @@ public abstract class AbstractFetchShuffleBlocks extends BlockTransferMessage {
     this.shuffleId = shuffleId;
   }
 
+  // checkstyle.off: RegexpSinglelineJava
   public ToStringBuilder toStringHelper() {
     return new ToStringBuilder(this, ToStringStyle.SHORT_PREFIX_STYLE)
       .append("appId", appId)
       .append("execId", execId)
       .append("shuffleId", shuffleId);
   }
+  // checkstyle.on: RegexpSinglelineJava
 
   /**
    * Returns number of blocks in the request.
@@ -61,7 +64,7 @@ public abstract class AbstractFetchShuffleBlocks extends BlockTransferMessage {
     if (o == null || getClass() != o.getClass()) return false;
     AbstractFetchShuffleBlocks that = (AbstractFetchShuffleBlocks) o;
     return shuffleId == that.shuffleId
-      && Objects.equal(appId, that.appId) && Objects.equal(execId, that.execId);
+      && Objects.equals(appId, that.appId) && Objects.equals(execId, that.execId);
   }
 
   @Override

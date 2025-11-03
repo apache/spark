@@ -19,9 +19,11 @@ package org.apache.spark.sql.execution.streaming.sources
 
 import org.scalatest.concurrent.PatienceConfiguration.Timeout
 
+import org.apache.spark.{SparkThrowable, SparkUnsupportedOperationException}
+import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.functions.spark_partition_id
-import org.apache.spark.sql.streaming.{StreamTest, Trigger}
+import org.apache.spark.sql.streaming.{StreamingQueryException, StreamTest, Trigger}
 import org.apache.spark.sql.streaming.util.StreamManualClock
 
 class RatePerMicroBatchProviderSuite extends StreamTest {
@@ -29,7 +31,8 @@ class RatePerMicroBatchProviderSuite extends StreamTest {
   import testImplicits._
 
   test("RatePerMicroBatchProvider in registry") {
-    val ds = DataSource.lookupDataSource("rate-micro-batch", spark.sqlContext.conf).newInstance()
+    val ds = DataSource.lookupDataSource("rate-micro-batch", spark.sessionState.conf)
+      .getConstructor().newInstance()
     assert(ds.isInstanceOf[RatePerMicroBatchProvider], "Could not find rate-micro-batch source")
   }
 
@@ -84,6 +87,7 @@ class RatePerMicroBatchProviderSuite extends StreamTest {
   }
 
   test("Trigger.Once") {
+    // NOTE: the test uses the deprecated Trigger.Once() by intention, do not change.
     testTrigger(Trigger.Once())
   }
 
@@ -128,7 +132,7 @@ class RatePerMicroBatchProviderSuite extends StreamTest {
 
   private def waitUntilBatchProcessed(clock: StreamManualClock) = AssertOnQuery { q =>
     eventually(Timeout(streamingTimeout)) {
-      if (!q.exception.isDefined) {
+      if (q.exception.isEmpty) {
         assert(clock.isStreamWaitingAt(clock.getTimeMillis()))
       }
     }
@@ -191,14 +195,60 @@ class RatePerMicroBatchProviderSuite extends StreamTest {
   }
 
   test("user-specified schema given") {
-    val exception = intercept[UnsupportedOperationException] {
-      spark.readStream
-        .format("rate-micro-batch")
-        .option("rowsPerBatch", "10")
-        .schema(spark.range(1).schema)
-        .load()
+    checkError(
+      exception = intercept[SparkUnsupportedOperationException] {
+        spark.readStream
+          .format("rate-micro-batch")
+          .option("rowsPerBatch", "10")
+          .schema(spark.range(1).schema)
+          .load()
+      },
+      condition = "_LEGACY_ERROR_TEMP_2242",
+      parameters = Map("provider" -> "RatePerMicroBatchProvider"))
+  }
+
+  test("malformed state when the query is restarted with a newer" +
+    " timestamp and reprocess batch 0") {
+    withTempDir { ckpt =>
+      var firstFailure = true
+      def foreachBatchFn(df: DataFrame, batchId: Long): Unit = {
+        if (firstFailure) {
+          firstFailure = false
+          throw new Exception("fail this run")
+        }
+      }
+
+      try {
+        spark.readStream
+          .format("rate-micro-batch")
+          .option("rowsPerBatch", "1")
+          .load()
+          .writeStream
+          .option("checkpointLocation", ckpt.getAbsolutePath)
+          .foreachBatch(foreachBatchFn _)
+          .start()
+          .awaitTermination()
+      } catch {
+        case _: Throwable =>
+        // ignore
+      }
+
+      val ex = intercept[StreamingQueryException] {
+        spark.readStream
+         .format("rate-micro-batch")
+         .option("rowsPerBatch", "1")
+         .option("startTimestamp", System.currentTimeMillis().toString)
+         .load()
+         .writeStream
+         .option("checkpointLocation", ckpt.getAbsolutePath)
+         .foreachBatch(foreachBatchFn _)
+         .start()
+         .awaitTermination()
+      }
+      assert(
+        ex.getCause.asInstanceOf[SparkThrowable].getCondition ==
+        "MALFORMED_STATE_IN_RATE_PER_MICRO_BATCH_SOURCE.INVALID_TIMESTAMP"
+      )
     }
-    assert(exception.getMessage.contains(
-      "RatePerMicroBatchProvider source does not support user-specified schema"))
   }
 }

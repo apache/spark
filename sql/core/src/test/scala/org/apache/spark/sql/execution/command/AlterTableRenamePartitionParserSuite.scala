@@ -32,8 +32,7 @@ class AlterTableRenamePartitionParserSuite extends AnalysisTest with SharedSpark
     val expected = RenamePartitions(
       UnresolvedTable(
         Seq("a", "b", "c"),
-        "ALTER TABLE ... RENAME TO PARTITION",
-        Some("Please use ALTER VIEW instead.")),
+        "ALTER TABLE ... RENAME TO PARTITION"),
       UnresolvedPartitionSpec(Map("ds" -> "2017-06-10")),
       UnresolvedPartitionSpec(Map("ds" -> "2018-06-10")))
     comparePlans(parsed, expected)
@@ -48,8 +47,7 @@ class AlterTableRenamePartitionParserSuite extends AnalysisTest with SharedSpark
     val expected = RenamePartitions(
       UnresolvedTable(
         Seq("table_name"),
-        "ALTER TABLE ... RENAME TO PARTITION",
-        Some("Please use ALTER VIEW instead.")),
+        "ALTER TABLE ... RENAME TO PARTITION"),
       UnresolvedPartitionSpec(Map("dt" -> "2008-08-08", "country" -> "us")),
       UnresolvedPartitionSpec(Map("dt" -> "2008-09-09", "country" -> "uk")))
     comparePlans(parsed, expected)

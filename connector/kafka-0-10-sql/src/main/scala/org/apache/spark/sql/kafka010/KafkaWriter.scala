@@ -20,9 +20,10 @@ package org.apache.spark.sql.kafka010
 import java.{util => ju}
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{AnalysisException, SparkSession}
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.types.{BinaryType, DataType, IntegerType, StringType}
 import org.apache.spark.util.Utils
@@ -47,7 +48,6 @@ private[kafka010] object KafkaWriter extends Logging {
 
   def validateQuery(
       schema: Seq[Attribute],
-      kafkaParameters: ju.Map[String, Object],
       topic: Option[String] = None): Unit = {
     try {
       topicExpression(schema, topic)
@@ -56,17 +56,19 @@ private[kafka010] object KafkaWriter extends Logging {
       headersExpression(schema)
       partitionExpression(schema)
     } catch {
-      case e: IllegalStateException => throw new AnalysisException(e.getMessage)
+      case e: IllegalStateException =>
+        throw new AnalysisException(
+          errorClass = "_LEGACY_ERROR_TEMP_3080",
+          messageParameters = Map("msg" -> e.getMessage))
     }
   }
 
   def write(
-      sparkSession: SparkSession,
       queryExecution: QueryExecution,
       kafkaParameters: ju.Map[String, Object],
       topic: Option[String] = None): Unit = {
     val schema = queryExecution.analyzed.output
-    validateQuery(schema, kafkaParameters, topic)
+    validateQuery(schema, topic)
     queryExecution.toRdd.foreachPartition { iter =>
       val writeTask = new KafkaWriteTask(kafkaParameters, schema, topic)
       Utils.tryWithSafeFinally(block = writeTask.execute(iter))(
@@ -115,7 +117,7 @@ private[kafka010] object KafkaWriter extends Logging {
       desired: Seq[DataType])(
       default: => Expression): Expression = {
     val expr = schema.find(_.name == attrName).getOrElse(default)
-    if (!desired.exists(_.sameType(expr.dataType))) {
+    if (!desired.exists(e => DataTypeUtils.sameType(e, expr.dataType))) {
       throw new IllegalStateException(s"$attrName attribute unsupported type " +
         s"${expr.dataType.catalogString}. $attrName must be a(n) " +
         s"${desired.map(_.catalogString).mkString(" or ")}")

@@ -31,6 +31,7 @@ import org.apache.spark.sql.{DataFrame, Dataset, ForeachWriter}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.{StreamTest, Trigger}
 import org.apache.spark.sql.test.{SharedSparkSession, TestSparkSession}
+import org.apache.spark.util.ResetSystemProperties
 
 /**
  * This is a basic test trait which will set up a Kafka cluster that keeps only several records in
@@ -43,11 +44,11 @@ import org.apache.spark.sql.test.{SharedSparkSession, TestSparkSession}
  * does see missing offsets, you can check the earliest offset in `eventually` and make sure it's
  * not 0 rather than sleeping a hard-code duration.
  */
-trait KafkaMissingOffsetsTest extends SharedSparkSession {
+trait KafkaMissingOffsetsTest extends SharedSparkSession with ResetSystemProperties {
 
   protected var testUtils: KafkaTestUtils = _
 
-  override def createSparkSession(): TestSparkSession = {
+  override def createSparkSession: TestSparkSession = {
     // Set maxRetries to 3 to handle NPE from `poll` when deleting a topic
     new TestSparkSession(new SparkContext("local[2,3]", "test-sql-context", sparkConf))
   }

@@ -17,21 +17,22 @@
 
 package org.apache.spark.sql.hive.execution
 
-import scala.collection.JavaConverters._
 import scala.util.Random
 
 import test.org.apache.spark.sql.MyDoubleAvg
 import test.org.apache.spark.sql.MyDoubleSum
 
-import org.apache.spark.sql._
+import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, RandomDataGenerator, Row}
 import org.apache.spark.sql.catalyst.expressions.{CodegenObjectFactoryMode, UnsafeRow}
+import org.apache.spark.sql.classic.ClassicConversions.castToImpl
+import org.apache.spark.sql.classic.Dataset
 import org.apache.spark.sql.expressions.{MutableAggregationBuffer, UserDefinedAggregateFunction}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.types.DataTypeTestUtils.dayTimeIntervalTypes
+import org.apache.spark.sql.types.DataTypeTestUtils.{dayTimeIntervalTypes, timeTypes, unsafeRowMutableFieldTypes}
 import org.apache.spark.tags.SlowHiveTest
 import org.apache.spark.unsafe.UnsafeAlignedOffset
 
@@ -518,16 +519,21 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
   }
 
   test("non-deterministic children expressions of UDAF") {
-    val e = intercept[AnalysisException] {
-      spark.sql(
-        """
-          |SELECT mydoublesum(value + 1.5 * key + rand())
-          |FROM agg1
-          |GROUP BY key
-        """.stripMargin)
-    }.getMessage
-    assert(Seq("nondeterministic expression",
-      "should not appear in the arguments of an aggregate function").forall(e.contains))
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.sql(
+          """
+            |SELECT mydoublesum(value + 1.5 * key + rand())
+            |FROM agg1
+            |GROUP BY key
+          """.stripMargin)
+      },
+      condition = "AGGREGATE_FUNCTION_WITH_NONDETERMINISTIC_EXPRESSION",
+      parameters = Map("sqlExpr" -> "\"mydoublesum(((value + (1.5 * key)) + rand()))\""),
+      context = ExpectedContext(
+        fragment = "value + 1.5 * key + rand()",
+        start = 20,
+        stop = 45))
   }
 
   test("interpreted aggregate function") {
@@ -751,9 +757,9 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
 
   test("pearson correlation") {
     val df = Seq.tabulate(10)(i => (1.0 * i, 2.0 * i, i * -1.0)).toDF("a", "b", "c")
-    val corr1 = df.repartition(2).groupBy().agg(corr("a", "b")).collect()(0).getDouble(0)
+    val corr1 = df.repartition(2).agg(corr("a", "b")).collect()(0).getDouble(0)
     assert(math.abs(corr1 - 1.0) < 1e-12)
-    val corr2 = df.groupBy().agg(corr("a", "c")).collect()(0).getDouble(0)
+    val corr2 = df.agg(corr("a", "c")).collect()(0).getDouble(0)
     assert(math.abs(corr2 + 1.0) < 1e-12)
     // non-trivial example. To reproduce in python, use:
     // >>> from scipy.stats import pearsonr
@@ -768,17 +774,17 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
     // > cor(a, b)
     // [1] 0.957233913947585835
     val df2 = Seq.tabulate(20)(x => (1.0 * x, x * x - 2 * x + 3.5)).toDF("a", "b")
-    val corr3 = df2.groupBy().agg(corr("a", "b")).collect()(0).getDouble(0)
+    val corr3 = df2.agg(corr("a", "b")).collect()(0).getDouble(0)
     assert(math.abs(corr3 - 0.95723391394758572) < 1e-12)
 
     val df3 = Seq.tabulate(0)(i => (1.0 * i, 2.0 * i)).toDF("a", "b")
-    val corr4 = df3.groupBy().agg(corr("a", "b")).collect()(0)
+    val corr4 = df3.agg(corr("a", "b")).collect()(0)
     assert(corr4 == Row(null))
 
     val df4 = Seq.tabulate(10)(i => (1 * i, 2 * i, i * -1)).toDF("a", "b", "c")
-    val corr5 = df4.repartition(2).groupBy().agg(corr("a", "b")).collect()(0).getDouble(0)
+    val corr5 = df4.repartition(2).agg(corr("a", "b")).collect()(0).getDouble(0)
     assert(math.abs(corr5 - 1.0) < 1e-12)
-    val corr6 = df4.groupBy().agg(corr("a", "c")).collect()(0).getDouble(0)
+    val corr6 = df4.agg(corr("a", "c")).collect()(0).getDouble(0)
     assert(math.abs(corr6 + 1.0) < 1e-12)
 
     // Test for udaf_corr in HiveCompatibilitySuite
@@ -855,23 +861,23 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
     // >>> np.cov(a, b, bias = 1)[0][1]
     // 565.25
     val df = Seq.tabulate(20)(x => (1.0 * x, x * x - 2 * x + 3.5)).toDF("a", "b")
-    val cov_samp = df.groupBy().agg(covar_samp("a", "b")).collect()(0).getDouble(0)
+    val cov_samp = df.agg(covar_samp("a", "b")).collect()(0).getDouble(0)
     assert(math.abs(cov_samp - 595.0) < 1e-12)
 
-    val cov_pop = df.groupBy().agg(covar_pop("a", "b")).collect()(0).getDouble(0)
+    val cov_pop = df.agg(covar_pop("a", "b")).collect()(0).getDouble(0)
     assert(math.abs(cov_pop - 565.25) < 1e-12)
 
     val df2 = Seq.tabulate(20)(x => (1 * x, x * x * x - 2)).toDF("a", "b")
-    val cov_samp2 = df2.groupBy().agg(covar_samp("a", "b")).collect()(0).getDouble(0)
+    val cov_samp2 = df2.agg(covar_samp("a", "b")).collect()(0).getDouble(0)
     assert(math.abs(cov_samp2 - 11564.0) < 1e-12)
 
-    val cov_pop2 = df2.groupBy().agg(covar_pop("a", "b")).collect()(0).getDouble(0)
+    val cov_pop2 = df2.agg(covar_pop("a", "b")).collect()(0).getDouble(0)
     assert(math.abs(cov_pop2 - 10985.799999999999) < 1e-12)
 
     // one row test
     val df3 = Seq.tabulate(1)(x => (1 * x, x * x * x - 2)).toDF("a", "b")
-    checkAnswer(df3.groupBy().agg(covar_samp("a", "b")), Row(null))
-    checkAnswer(df3.groupBy().agg(covar_pop("a", "b")), Row(0.0))
+    checkAnswer(df3.agg(covar_samp("a", "b")), Row(null))
+    checkAnswer(df3.agg(covar_pop("a", "b")), Row(0.0))
   }
 
   test("no aggregation function (SPARK-11486)") {
@@ -891,12 +897,17 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
       FloatType, DoubleType, DecimalType(25, 5), DecimalType(6, 5),
       DateType, TimestampType,
       ArrayType(IntegerType), MapType(StringType, LongType), struct,
-      new TestUDT.MyDenseVectorUDT()) ++ dayTimeIntervalTypes
-    // Right now, we will use SortAggregate to handle UDAFs.
-    // UnsafeRow.mutableFieldTypes.asScala.toSeq will trigger SortAggregate to use
-    // UnsafeRow as the aggregation buffer. While, dataTypes will trigger
-    // SortAggregate to use a safe row as the aggregation buffer.
-    Seq(dataTypes, UnsafeRow.mutableFieldTypes.asScala.toSeq).foreach { dataTypes =>
+      new TestUDT.MyDenseVectorUDT()) ++ dayTimeIntervalTypes ++ unsafeRowMutableFieldTypes ++
+      timeTypes
+    // A schema that contains only data types where UnsafeRow.isMutable is true
+    // will trigger the aggregator to use unsafe row as the aggregation buffer.
+    // Other dataTypes will trigger the aggregator to use a safe row as the
+    // aggregation buffer.
+    //
+    // Below we want to test with *both* UnsafeRow and safe row as the underlying
+    // buffer.
+    val mutableDataTypes = dataTypes.filter(UnsafeRow.isMutable)
+    Seq(dataTypes, mutableDataTypes).foreach { dataTypes =>
       val fields = dataTypes.zipWithIndex.map { case (dataType, index) =>
         StructField(s"col$index", dataType, nullable = true)
       }
@@ -937,8 +948,10 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
         data
           .find(r => r.getInt(0) == 50)
           .getOrElse(fail("A row with id 50 should be the expected answer."))
+
+      import org.apache.spark.util.ArrayImplicits._
       checkAnswer(
-        df.groupBy().agg(udaf(allColumns: _*)),
+        df.agg(udaf(allColumns.toImmutableArraySeq: _*)),
         // udaf returns a Row as the output value.
         Row(expectedAnswer)
       )
@@ -1023,7 +1036,7 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
       ("a", BigDecimal("11.9999999988"))).toDF("text", "number")
     val agg1 = df.groupBy($"text").agg(avg($"number").as("avg_res"))
     val agg2 = agg1.groupBy($"text").agg(sum($"avg_res"))
-    checkAnswer(agg2, Row("a", BigDecimal("11.9999999994857142860000")))
+    checkAnswer(agg2, Row("a", BigDecimal("11.9999999994857142857143")))
   }
 
   test("SPARK-29122: hash-based aggregates for unfixed-length decimals in the interpreter mode") {

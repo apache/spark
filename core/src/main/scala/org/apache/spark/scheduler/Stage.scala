@@ -70,6 +70,19 @@ private[scheduler] abstract class Stage(
 
   /** The ID to use for the next new attempt for this stage. */
   private var nextAttemptId: Int = 0
+  private[scheduler] def getNextAttemptId: Int = nextAttemptId
+
+  /**
+   * Whether checksum mismatches have been detected across different attempt of the stage, where
+   * checksum mismatches typically indicates that different stage attempts have produced different
+   * data.
+   */
+  private[scheduler] var isChecksumMismatched: Boolean = false
+
+  /**
+   * The maximum of task attempt id where checksum mismatches are detected.
+   */
+  private[scheduler] var maxChecksumMismatchedId: Int = nextAttemptId
 
   val name: String = callSite.shortForm
   val details: String = callSite.longForm
@@ -129,5 +142,15 @@ private[scheduler] abstract class Stage(
 
   def isIndeterminate: Boolean = {
     rdd.outputDeterministicLevel == DeterministicLevel.INDETERMINATE
+  }
+
+  // Returns true if any parents of this stage are indeterminate.
+  def isParentIndeterminate: Boolean = {
+    parents.exists(_.isStageIndeterminate)
+  }
+
+  // Returns true if the stage itself is indeterminate.
+  def isStageIndeterminate: Boolean = {
+    !rdd.isReliablyCheckpointed && isChecksumMismatched
   }
 }

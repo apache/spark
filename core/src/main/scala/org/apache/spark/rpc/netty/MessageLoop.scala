@@ -23,6 +23,7 @@ import scala.util.control.NonFatal
 
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.LogKeys.ERROR
 import org.apache.spark.internal.config.EXECUTOR_ID
 import org.apache.spark.internal.config.Network._
 import org.apache.spark.rpc.{IsolatedRpcEndpoint, RpcEndpoint}
@@ -74,7 +75,7 @@ private sealed abstract class MessageLoop(dispatcher: Dispatcher) extends Loggin
           }
           inbox.process(dispatcher)
         } catch {
-          case NonFatal(e) => logError(e.getMessage, e)
+          case NonFatal(e) => logError(log"${MDC(ERROR, e.getMessage)}", e)
         }
       }
     } catch {
@@ -171,7 +172,11 @@ private class DedicatedMessageLoop(
   }
 
   (1 to endpoint.threadCount()).foreach { _ =>
-    threadpool.submit(receiveLoopRunnable)
+    /**
+     * We need to be careful not to use [[ExecutorService#submit]].
+     * `submit` api will swallow uncaught exceptions in [[FutureTask#setException]].
+     * */
+    threadpool.execute(receiveLoopRunnable)
   }
 
   // Mark active to handle the OnStart message.

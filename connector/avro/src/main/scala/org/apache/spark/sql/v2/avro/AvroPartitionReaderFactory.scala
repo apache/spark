@@ -16,14 +16,11 @@
  */
 package org.apache.spark.sql.v2.avro
 
-import java.net.URI
-
 import scala.util.control.NonFatal
 
 import org.apache.avro.file.DataFileReader
 import org.apache.avro.generic.{GenericDatumReader, GenericRecord}
 import org.apache.avro.mapred.FsInput
-import org.apache.hadoop.fs.Path
 
 import org.apache.spark.TaskContext
 import org.apache.spark.broadcast.Broadcast
@@ -46,7 +43,7 @@ import org.apache.spark.util.SerializableConfiguration
  * @param dataSchema Schema of AVRO files.
  * @param readDataSchema Required data schema of AVRO files.
  * @param partitionSchema Schema of partitions.
- * @param parsedOptions Options for parsing AVRO files.
+ * @param options Options for parsing AVRO files.
  */
 case class AvroPartitionReaderFactory(
     sqlConf: SQLConf,
@@ -54,17 +51,17 @@ case class AvroPartitionReaderFactory(
     dataSchema: StructType,
     readDataSchema: StructType,
     partitionSchema: StructType,
-    parsedOptions: AvroOptions,
+    options: AvroOptions,
     filters: Seq[Filter]) extends FilePartitionReaderFactory with Logging {
-  private val datetimeRebaseModeInRead = parsedOptions.datetimeRebaseModeInRead
+  private val datetimeRebaseModeInRead = options.datetimeRebaseModeInRead
 
   override def buildReader(partitionedFile: PartitionedFile): PartitionReader[InternalRow] = {
     val conf = broadcastedConf.value.value
-    val userProvidedSchema = parsedOptions.schema
+    val userProvidedSchema = options.schema
 
-    if (parsedOptions.ignoreExtension || partitionedFile.filePath.endsWith(".avro")) {
+    if (options.ignoreExtension || partitionedFile.urlEncodedPath.endsWith(".avro")) {
       val reader = {
-        val in = new FsInput(new Path(new URI(partitionedFile.filePath)), conf)
+        val in = new FsInput(partitionedFile.toPath, conf)
         try {
           val datumReader = userProvidedSchema match {
             case Some(userSchema) => new GenericDatumReader[GenericRecord](userSchema)
@@ -104,9 +101,12 @@ case class AvroPartitionReaderFactory(
         override val deserializer = new AvroDeserializer(
           userProvidedSchema.getOrElse(reader.getSchema),
           readDataSchema,
-          parsedOptions.positionalFieldMatching,
+          options.positionalFieldMatching,
           datetimeRebaseMode,
-          avroFilters)
+          avroFilters,
+          options.useStableIdForUnionType,
+          options.stableIdPrefixForUnionType,
+          options.recursiveFieldMaxDepth)
         override val stopPosition = partitionedFile.start + partitionedFile.length
 
         override def next(): Boolean = hasNextRow

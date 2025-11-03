@@ -69,7 +69,12 @@ Generic Spark I/O
    :toctree: api/
 
    read_spark_io
-   DataFrame.to_spark_io
+
+.. autosummary::
+   :toctree: api/
+   :template: autosummary/accessor_method.rst
+
+   DataFrame.spark.to_spark_io
 
 Flat File / CSV
 ---------------
@@ -100,6 +105,7 @@ JSON
 .. autosummary::
    :toctree: api/
 
+   json_normalize
    read_json
    DataFrame.to_json
 

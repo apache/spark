@@ -22,6 +22,7 @@ import java.util.Locale
 import scala.collection.immutable.HashMap
 
 import org.apache.spark.sql.catalyst.SQLConfHelper
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.types._
 
 object SchemaPruning extends SQLConfHelper {
@@ -126,7 +127,7 @@ object SchemaPruning extends SQLConfHelper {
           val rootFieldType = StructType(Array(root.field))
           val optFieldType = StructType(Array(opt.field))
           val merged = optFieldType.merge(rootFieldType)
-          merged.sameType(optFieldType)
+          DataTypeUtils.sameType(merged, optFieldType)
         }
       }
     } ++ rootFields
@@ -152,6 +153,10 @@ object SchemaPruning extends SQLConfHelper {
         RootField(field, derivedFromAtt = false, prunedIfAnyChildAccessed = true) :: Nil
       case IsNotNull(_: Attribute) | IsNull(_: Attribute) =>
         expr.children.flatMap(getRootFields).map(_.copy(prunedIfAnyChildAccessed = true))
+      case s: SubqueryExpression =>
+        // use subquery references that only include outer attrs and
+        // ignore join conditions as those may include attributes from other tables
+        s.references.toSeq.flatMap(getRootFields)
       case _ =>
         expr.children.flatMap(getRootFields)
     }

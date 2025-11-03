@@ -19,16 +19,19 @@ package org.apache.spark.sql
 
 import java.math.BigDecimal
 import java.sql.Timestamp
-import java.time.{Instant, LocalDate}
+import java.time.{Instant, LocalDate, LocalTime}
 import java.time.format.DateTimeFormatter
 
-import scala.collection.mutable.{ArrayBuffer, WrappedArray}
+import scala.collection.immutable
+import scala.collection.mutable
+import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SPARK_DOC_ROOT, SparkException}
 import org.apache.spark.sql.api.java._
 import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.encoders.{ExpressionEncoder, OuterScopes}
 import org.apache.spark.sql.catalyst.expressions.{Literal, ScalaUDF}
+import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.plans.logical.Project
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.{QueryExecution, SimpleMode}
@@ -37,7 +40,7 @@ import org.apache.spark.sql.execution.columnar.InMemoryRelation
 import org.apache.spark.sql.execution.command.{CreateDataSourceTableAsSelectCommand, ExplainCommand}
 import org.apache.spark.sql.execution.datasources.InsertIntoHadoopFsRelationCommand
 import org.apache.spark.sql.expressions.{Aggregator, MutableAggregationBuffer, SparkUserDefinedFunction, UserDefinedAggregateFunction}
-import org.apache.spark.sql.functions.{lit, struct, udaf, udf}
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.test.SQLTestData._
@@ -52,6 +55,24 @@ private case class TimestampInstantType(t: Timestamp, instant: Instant)
 
 class UDFSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
+
+  test("udf") {
+    val foo = udf((a: Int, b: String) => a.toString + b)
+
+    checkAnswer(
+      // SELECT *, foo(key, value) FROM testData
+      testData.select($"*", foo($"key", $"value")).limit(3),
+      Row(1, "1", "11") :: Row(2, "2", "22") :: Row(3, "3", "33") :: Nil
+    )
+  }
+
+  test("callUDF without Hive Support") {
+    val df = Seq(("id1", 1), ("id2", 4), ("id3", 5)).toDF("id", "value")
+    df.sparkSession.udf.register("simpleUDF", (v: Int) => v * v)
+    checkAnswer(
+      df.select($"id", callUDF("simpleUDF", $"value")), // test deprecated one
+      Row("id1", 1) :: Row("id2", 16) :: Row("id3", 25) :: Nil)
+  }
 
   test("built-in fixed arity expressions") {
     val df = spark.emptyDataFrame
@@ -100,28 +121,59 @@ class UDFSuite extends QueryTest with SharedSparkSession {
 
   test("error reporting for incorrect number of arguments - builtin function") {
     val df = spark.emptyDataFrame
-    val e = intercept[AnalysisException] {
-      df.selectExpr("substr('abcd', 2, 3, 4)")
-    }
-    assert(e.getMessage.contains("Invalid number of arguments for function substr. Expected:"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.selectExpr("substr('abcd', 2, 3, 4)")
+      },
+      condition = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+      parameters = Map(
+        "functionName" -> toSQLId("substr"),
+        "expectedNum" -> "[2, 3]",
+        "actualNum" -> "4",
+        "docroot" -> SPARK_DOC_ROOT
+      ),
+      context = ExpectedContext(
+        fragment = "substr('abcd', 2, 3, 4)",
+        start = 0,
+        stop = 22)
+    )
   }
 
   test("error reporting for incorrect number of arguments - udf") {
     val df = spark.emptyDataFrame
-    val e = intercept[AnalysisException] {
-      spark.udf.register("foo", (_: String).length)
-      df.selectExpr("foo(2, 3, 4)")
-    }
-    assert(e.getMessage.contains("Invalid number of arguments for function foo. Expected:"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.udf.register("foo", (_: String).length)
+        df.selectExpr("foo(2, 3, 4)")
+      },
+      condition = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+      parameters = Map(
+        "functionName" -> toSQLId("foo"),
+        "expectedNum" -> "1",
+        "actualNum" -> "3",
+        "docroot" -> SPARK_DOC_ROOT
+      ),
+      context = ExpectedContext(
+        fragment = "foo(2, 3, 4)",
+        start = 0,
+        stop = 11)
+    )
   }
 
   test("error reporting for undefined functions") {
-    val df = spark.emptyDataFrame
-    val e = intercept[AnalysisException] {
-      df.selectExpr("a_function_that_does_not_exist()")
-    }
-    assert(e.getMessage.contains("Undefined function"))
-    assert(e.getMessage.contains("a_function_that_does_not_exist"))
+    val sqlText = "a_function_that_does_not_exist()"
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.emptyDataFrame.selectExpr(sqlText)
+      },
+      condition = "UNRESOLVED_ROUTINE",
+      parameters = Map(
+        "routineName" -> "`a_function_that_does_not_exist`",
+        "searchPath" -> "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"),
+      context = ExpectedContext(
+        fragment = sqlText,
+        start = 0,
+        stop = 31))
   }
 
   test("Simple UDF") {
@@ -344,7 +396,7 @@ class UDFSuite extends QueryTest with SharedSparkSession {
       spark.udf.register("f", (a: Int) => a)
       val outputStream = new java.io.ByteArrayOutputStream()
       Console.withOut(outputStream) {
-        spark.sql("SELECT f(a._1) FROM x").show
+        spark.sql("SELECT f(a._1) FROM x").show()
       }
       assert(outputStream.toString.contains("f(a._1)"))
     }
@@ -409,7 +461,7 @@ class UDFSuite extends QueryTest with SharedSparkSession {
       Seq((1, "2"), (2, "4")).toDF("a", "b").write.format("json").saveAsTable("x")
       sql("insert into table x values(3, null)")
       sql("insert into table x values(null, '4')")
-      spark.udf.register("f", (a: Int, b: String) => a + b)
+      spark.udf.register("f", (a: Int, b: String) => s"$a$b")
       val df = spark.sql("SELECT f(a, b) FROM x")
       val plan = spark.sessionState.executePlan(df.logicalPlan).analyzed
       comparePlans(df.logicalPlan, plan)
@@ -471,11 +523,6 @@ class UDFSuite extends QueryTest with SharedSparkSession {
 
   }
 
-  test("use untyped Scala UDF should fail by default") {
-    val e = intercept[AnalysisException](udf((x: Int) => x, IntegerType))
-    assert(e.getMessage.contains("You're using untyped Scala UDF"))
-  }
-
   test("SPARK-26308: udf with decimal") {
     val df1 = spark.createDataFrame(
       sparkContext.parallelize(Seq(Row(new BigDecimal("2011000000000002456556")))),
@@ -499,7 +546,7 @@ class UDFSuite extends QueryTest with SharedSparkSession {
       sparkContext.parallelize(Seq(Row(Map("a" -> new BigDecimal("2011000000000002456556"))))),
       StructType(Seq(StructField("col1", MapType(StringType, DecimalType(30, 0))))))
     val udf2 = org.apache.spark.sql.functions.udf((map: Map[String, BigDecimal]) => {
-      map.mapValues(value => if (value == null) null else value.toBigInteger.toString).toMap
+      map.transform((_, value) => if (value == null) null else value.toBigInteger.toString)
     })
     checkAnswer(df2.select(udf2($"col1")), Seq(Row(Map("a" -> "2011000000000002456556"))))
   }
@@ -619,13 +666,6 @@ class UDFSuite extends QueryTest with SharedSparkSession {
     assert(spark.range(2).select(nonDeterministicJavaUDF()).distinct().count() == 2)
   }
 
-  test("SPARK-28521 error message for CAST(parameter types contains DataType)") {
-    val e = intercept[AnalysisException] {
-      spark.sql("SELECT CAST(1)")
-    }
-    assert(e.getMessage.contains("Invalid arguments for function cast"))
-  }
-
   test("only one case class parameter") {
     val f = (d: TestData) => d.key * d.value.toInt
     val myUdf = udf(f)
@@ -729,9 +769,14 @@ class UDFSuite extends QueryTest with SharedSparkSession {
     val df = spark.range(1)
       .select(lit(50).as("a"))
       .select(struct("a").as("col"))
-    val error = intercept[AnalysisException](df.select(myUdf(Column("col"))))
-    assert(error.getErrorClass == "MISSING_COLUMN")
-    assert(error.messageParameters.sameElements(Array("b", "a")))
+    checkError(
+      exception =
+        intercept[AnalysisException](df.select(myUdf(Column("col")))),
+      condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+      parameters = Map(
+        "objectName" -> "`b`",
+        "proposal" -> "`a`"),
+      context = ExpectedContext("apply", ".*"))
   }
 
   test("wrong order of input fields for case class") {
@@ -776,12 +821,16 @@ class UDFSuite extends QueryTest with SharedSparkSession {
     val e1 = intercept[SparkException] {
       Seq("20").toDF("col").select(udf(f1).apply(Column("col"))).collect()
     }
-    assert(e1.getMessage.contains("UDFSuite$MalformedClassObject$MalformedNonPrimitiveFunction"))
+    assert(e1.getCondition == "FAILED_EXECUTE_UDF")
+    assert(e1.getCause.getStackTrace.head.toString.contains(
+      "UDFSuite$MalformedClassObject$MalformedNonPrimitiveFunction"))
 
     val e2 = intercept[SparkException] {
       Seq(20).toDF("col").select(udf(f2).apply(Column("col"))).collect()
     }
-    assert(e2.getMessage.contains("UDFSuite$MalformedClassObject$MalformedPrimitiveFunction"))
+    assert(e2.getCondition == "FAILED_EXECUTE_UDF")
+    assert(e2.getCause.getStackTrace.head.toString.contains(
+      "UDFSuite$MalformedClassObject$MalformedPrimitiveFunction"))
   }
 
   test("SPARK-32307: Aggregation that use map type input UDF as group expression") {
@@ -796,13 +845,29 @@ class UDFSuite extends QueryTest with SharedSparkSession {
     checkAnswer(sql("SELECT key(a) AS k FROM t GROUP BY key(a)"), Row(1) :: Nil)
   }
 
-  test("SPARK-32459: UDF should not fail on WrappedArray") {
-    val myUdf = udf((a: WrappedArray[Int]) =>
-      WrappedArray.make[Int](Array(a.head + 99)))
+  test("SPARK-32459: UDF should not fail on mutable.ArraySeq") {
+    val myUdf = udf((a: mutable.ArraySeq[Int]) =>
+      mutable.ArraySeq.make[Int](Array(a.head + 99)))
     checkAnswer(Seq(Array(1))
       .toDF("col")
       .select(myUdf(Column("col"))),
       Row(ArrayBuffer(100)))
+  }
+
+  test("SPARK-46586: UDF should not fail on immutable.ArraySeq") {
+    val myUdf1 = udf((a: immutable.ArraySeq[Int]) =>
+      immutable.ArraySeq.unsafeWrapArray[Int](Array(a.head + 99)))
+    checkAnswer(Seq(Array(1))
+      .toDF("col")
+      .select(myUdf1(Column("col"))),
+    Row(ArrayBuffer(100)))
+
+    val myUdf2 = udf((a: immutable.ArraySeq[Int]) =>
+      immutable.ArraySeq.unsafeWrapArray[Int]((a :+ 5 :+ 6).toArray))
+    checkAnswer(Seq(Array(1, 2, 3))
+      .toDF("col")
+      .select(myUdf2(Column("col"))),
+    Row(ArrayBuffer(1, 2, 3, 5, 6)))
   }
 
   test("SPARK-34388: UDF name is propagated with registration for ScalaUDF") {
@@ -872,8 +937,9 @@ class UDFSuite extends QueryTest with SharedSparkSession {
     val overflowFunc = udf((l: java.time.LocalDateTime) => l.plusDays(Long.MaxValue))
     val e = intercept[SparkException] {
       input.select(overflowFunc($"dateTime")).collect()
-    }.getCause.getCause
-    assert(e.isInstanceOf[java.lang.ArithmeticException])
+    }
+    assert(e.getCondition == "FAILED_EXECUTE_UDF")
+    assert(e.getCause.isInstanceOf[java.lang.ArithmeticException])
   }
 
   test("SPARK-34663, SPARK-35730: using java.time.Duration in UDF") {
@@ -986,8 +1052,9 @@ class UDFSuite extends QueryTest with SharedSparkSession {
     val overflowFunc = udf((d: java.time.Duration) => d.plusDays(Long.MaxValue))
     val e = intercept[SparkException] {
       input.select(overflowFunc($"d")).collect()
-    }.getCause.getCause
-    assert(e.isInstanceOf[java.lang.ArithmeticException])
+    }
+    assert(e.getCondition == "FAILED_EXECUTE_UDF")
+    assert(e.getCause.isInstanceOf[java.lang.ArithmeticException])
   }
 
   test("SPARK-34663, SPARK-35777: using java.time.Period in UDF") {
@@ -1033,7 +1100,153 @@ class UDFSuite extends QueryTest with SharedSparkSession {
     val overflowFunc = udf((p: java.time.Period) => p.plusYears(Long.MaxValue))
     val e = intercept[SparkException] {
       input.select(overflowFunc($"p")).collect()
-    }.getCause.getCause
-    assert(e.isInstanceOf[java.lang.ArithmeticException])
+    }
+    assert(e.getCondition == "FAILED_EXECUTE_UDF")
+    assert(e.getCause.isInstanceOf[java.lang.ArithmeticException])
+  }
+
+  test("SPARK-43099: UDF className is correctly populated") {
+    spark.udf.register("dummyUDF", (x: Int) => x + 1)
+    val expressionInfo = spark.sessionState.catalog
+      .lookupFunctionInfo(FunctionIdentifier("dummyUDF"))
+    assert(expressionInfo.getClassName.contains(
+      "org.apache.spark.sql.classic.UDFRegistration$$Lambda"))
+  }
+
+  test("SPARK-11725: correctly handle null inputs for ScalaUDF") {
+    val df = sparkContext.parallelize(Seq(
+      java.lang.Integer.valueOf(22) -> "John",
+      null.asInstanceOf[java.lang.Integer] -> "Lucy")).toDF("age", "name")
+
+    // passing null into the UDF that could handle it
+    val boxedUDF = udf[java.lang.Integer, java.lang.Integer] {
+      (i: java.lang.Integer) => if (i == null) -10 else null
+    }
+    checkAnswer(df.select(boxedUDF($"age")), Row(null) :: Row(-10) :: Nil)
+
+    spark.udf.register("boxedUDF",
+      (i: java.lang.Integer) => (if (i == null) -10 else null): java.lang.Integer)
+    checkAnswer(sql("select boxedUDF(null), boxedUDF(-1)"), Row(-10, null) :: Nil)
+
+    val primitiveUDF = udf((i: Int) => i * 2)
+    checkAnswer(df.select(primitiveUDF($"age")), Row(44) :: Row(null) :: Nil)
+  }
+
+  test("SPARK-34829: Multiple applications of typed ScalaUDFs in higher order functions work") {
+    val reverse = udf((s: String) => s.reverse)
+    val reverse2 = udf((b: Bar2) => Bar2(b.s.reverse))
+
+    val df = Seq(Array("abc", "def")).toDF("array")
+    val test = df.select(transform(col("array"), s => reverse(s)))
+    checkAnswer(test, Row(Array("cba", "fed")) :: Nil)
+
+    val df2 = Seq(Array(Bar2("abc"), Bar2("def"))).toDF("array")
+    val test2 = df2.select(transform(col("array"), b => reverse2(b)))
+    checkAnswer(test2, Row(Array(Row("cba"), Row("fed"))) :: Nil)
+
+    val df3 = Seq(Map("abc" -> 1, "def" -> 2)).toDF("map")
+    val test3 = df3.select(transform_keys(col("map"), (s, _) => reverse(s)))
+    checkAnswer(test3, Row(Map("cba" -> 1, "fed" -> 2)) :: Nil)
+
+    val df4 = Seq(Map(Bar2("abc") -> 1, Bar2("def") -> 2)).toDF("map")
+    val test4 = df4.select(transform_keys(col("map"), (b, _) => reverse2(b)))
+    checkAnswer(test4, Row(Map(Row("cba") -> 1, Row("fed") -> 2)) :: Nil)
+
+    val df5 = Seq(Map(1 -> "abc", 2 -> "def")).toDF("map")
+    val test5 = df5.select(transform_values(col("map"), (_, s) => reverse(s)))
+    checkAnswer(test5, Row(Map(1 -> "cba", 2 -> "fed")) :: Nil)
+
+    val df6 = Seq(Map(1 -> Bar2("abc"), 2 -> Bar2("def"))).toDF("map")
+    val test6 = df6.select(transform_values(col("map"), (_, b) => reverse2(b)))
+    checkAnswer(test6, Row(Map(1 -> Row("cba"), 2 -> Row("fed"))) :: Nil)
+
+    val reverseThenConcat = udf((s1: String, s2: String) => s1.reverse ++ s2.reverse)
+    val reverseThenConcat2 = udf((b1: Bar2, b2: Bar2) => Bar2(b1.s.reverse ++ b2.s.reverse))
+
+    val df7 = Seq((Map(1 -> "abc", 2 -> "def"), Map(1 -> "ghi", 2 -> "jkl"))).toDF("map1", "map2")
+    val test7 =
+      df7.select(map_zip_with(col("map1"), col("map2"), (_, s1, s2) => reverseThenConcat(s1, s2)))
+    checkAnswer(test7, Row(Map(1 -> "cbaihg", 2 -> "fedlkj")) :: Nil)
+
+    val df8 = Seq((Map(1 -> Bar2("abc"), 2 -> Bar2("def")),
+      Map(1 -> Bar2("ghi"), 2 -> Bar2("jkl")))).toDF("map1", "map2")
+    val test8 =
+      df8.select(map_zip_with(col("map1"), col("map2"), (_, b1, b2) => reverseThenConcat2(b1, b2)))
+    checkAnswer(test8, Row(Map(1 -> Row("cbaihg"), 2 -> Row("fedlkj"))) :: Nil)
+
+    val df9 = Seq((Array("abc", "def"), Array("ghi", "jkl"))).toDF("array1", "array2")
+    val test9 =
+      df9.select(zip_with(col("array1"), col("array2"), (s1, s2) => reverseThenConcat(s1, s2)))
+    checkAnswer(test9, Row(Array("cbaihg", "fedlkj")) :: Nil)
+
+    val df10 = Seq((Array(Bar2("abc"), Bar2("def")), Array(Bar2("ghi"), Bar2("jkl"))))
+      .toDF("array1", "array2")
+    val test10 =
+      df10.select(zip_with(col("array1"), col("array2"), (b1, b2) => reverseThenConcat2(b1, b2)))
+    checkAnswer(test10, Row(Array(Row("cbaihg"), Row("fedlkj"))) :: Nil)
+  }
+
+  test("SPARK-47927: Correctly pass null values derived from join to UDF") {
+    val f = udf[Tuple1[Option[Int]], Tuple1[Option[Int]]](identity)
+    val ds1 = Seq(1).toDS()
+    val ds2 = Seq[Int]().toDS()
+
+    checkAnswer(
+      ds1.join(ds2, ds1("value") === ds2("value"), "left_outer")
+        .select(f(struct(ds2("value").as("_1")))),
+      Row(Row(null)))
+  }
+
+  test("SPARK-51402: Test TimeType in UDF") {
+    // Mocks
+    val mockTimeStr = "00:00:00.000000"
+    val input = Seq(LocalTime.parse(mockTimeStr)).toDF("currentTime")
+    // Regular case
+    val plusHour = udf((l: LocalTime) => l.plusHours(1))
+    val result = input.select(plusHour($"currentTime").as("newTime"))
+    checkAnswer(result, Row(LocalTime.parse("01:00:00.000000")) :: Nil)
+    assert(result.schema === new StructType().add("newTime", TimeType()))
+    // UDF produces `null`
+    val nullFunc = udf((_: LocalTime) => null.asInstanceOf[LocalTime])
+    val nullResult = input.select(nullFunc($"currentTime").as("nullTime"))
+    checkAnswer(nullResult, Row(null) :: Nil)
+    assert(nullResult.schema === new StructType().add("nullTime", TimeType()))
+    // Input parameter of UDF is null
+    val nullInput = Seq(null.asInstanceOf[LocalTime]).toDF("nullTime")
+    val constTime = udf((_: LocalTime) =>
+      LocalTime.parse(mockTimeStr))
+    val constResult = nullInput.select(constTime($"nullTime").as("zeroHour"))
+    checkAnswer(constResult, Row(LocalTime.parse(mockTimeStr)) :: Nil)
+    assert(constResult.schema === new StructType().add("zeroHour", TimeType()))
+    // Error in the conversion of UDF result to the internal representation of time
+    val invalidFunc = udf((l: LocalTime) => "Zero".toLong)
+    val e = intercept[SparkException] {
+      input.select(invalidFunc($"currentTime")).collect()
+    }
+    assert(e.getCause.isInstanceOf[java.lang.NumberFormatException])
+  }
+
+  test("char/varchar as UDF return type") {
+    Seq(CharType(5), VarcharType(5)).foreach { dt =>
+      val f = udf(
+        new UDF0[String] {
+          override def call(): String = "a"
+        },
+        dt
+      )
+      checkError(
+        intercept[AnalysisException](spark.range(1).select(f()).encoder),
+        condition = "UNSUPPORTED_DATA_TYPE_FOR_ENCODER",
+        sqlState = "0A000",
+        parameters = Map("dataType" -> s"\"${dt.sql}\"")
+      )
+    }
+  }
+
+  test("SPARK-47927: ScalaUDF null handling") {
+    val f = udf[Int, Int](_ + 1)
+    val df = Seq(Some(1), None).toDF("c")
+      .select(f($"c").as("f"), f($"f"))
+    checkAnswer(df, Seq(Row(2, 3), Row(null, null)))
   }
 }

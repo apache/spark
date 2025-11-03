@@ -18,6 +18,8 @@
 package org.apache.spark.sql.connector.write;
 
 import org.apache.spark.annotation.Evolving;
+import org.apache.spark.sql.connector.expressions.filter.Predicate;
+import org.apache.spark.sql.internal.connector.PredicateUtils;
 import org.apache.spark.sql.sources.AlwaysTrue$;
 import org.apache.spark.sql.sources.Filter;
 
@@ -30,7 +32,24 @@ import org.apache.spark.sql.sources.Filter;
  * @since 3.0.0
  */
 @Evolving
-public interface SupportsOverwrite extends WriteBuilder, SupportsTruncate {
+public interface SupportsOverwrite extends SupportsOverwriteV2 {
+
+  /**
+   * Checks whether it is possible to overwrite data from a data source table that matches filter
+   * expressions.
+   * <p>
+   * Rows should be overwritten from the data source iff all of the filter expressions match.
+   * That is, the expressions must be interpreted as a set of filters that are ANDed together.
+   *
+   * @param filters V2 filter expressions, used to match data to overwrite
+   * @return true if the delete operation can be performed
+   *
+   * @since 3.4.0
+   */
+  default boolean canOverwrite(Filter[] filters) {
+    return true;
+  }
+
   /**
    * Configures a write to replace data matching the filters with data committed in the write.
    * <p>
@@ -41,6 +60,16 @@ public interface SupportsOverwrite extends WriteBuilder, SupportsTruncate {
    * @return this write builder for method chaining
    */
   WriteBuilder overwrite(Filter[] filters);
+
+  default boolean canOverwrite(Predicate[] predicates) {
+    Filter[] v1Filters = PredicateUtils.toV1(predicates);
+    if (v1Filters.length < predicates.length) return false;
+    return this.canOverwrite(v1Filters);
+  }
+
+  default WriteBuilder overwrite(Predicate[] predicates) {
+    return this.overwrite(PredicateUtils.toV1(predicates));
+  }
 
   @Override
   default WriteBuilder truncate() {

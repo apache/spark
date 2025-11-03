@@ -1,0 +1,22 @@
+{
+  "common": {
+    "planId": "1"
+  },
+  "withColumnsRenamed": {
+    "input": {
+      "common": {
+        "planId": "0"
+      },
+      "localRelation": {
+        "schema": "struct\u003cid:bigint,a:int,b:double\u003e"
+      }
+    },
+    "renames": [{
+      "colName": "a",
+      "newColName": "alpha"
+    }, {
+      "colName": "b",
+      "newColName": "beta"
+    }]
+  }
+}

@@ -99,6 +99,11 @@ class SparkSessionTestCase(PySparkTestCase):
 
 
 class MockDataset(DataFrame):
+    def __new__(cls) -> "DataFrame":
+        self = object.__new__(cls)
+        self.__init__()
+        return self
+
     def __init__(self):
         self.index = 0
 
@@ -124,7 +129,6 @@ class MockTransformer(Transformer, HasFake):
 
 
 class MockUnaryTransformer(UnaryTransformer, DefaultParamsReadable, DefaultParamsWritable):
-
     shift = Param(
         Params._dummy(),
         "shift",

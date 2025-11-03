@@ -23,10 +23,11 @@ import com.google.common.primitives.{Doubles, Ints}
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{TypeCheckFailure, TypeCheckSuccess}
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionDescription, ImplicitCastInputTypes}
 import org.apache.spark.sql.catalyst.trees.BinaryLike
 import org.apache.spark.sql.catalyst.util.GenericArrayData
+import org.apache.spark.sql.errors.QueryErrorsBase
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.NumericHistogram
@@ -63,7 +64,7 @@ case class HistogramNumeric(
     override val mutableAggBufferOffset: Int,
     override val inputAggBufferOffset: Int)
   extends TypedImperativeAggregate[NumericHistogram] with ImplicitCastInputTypes
-  with BinaryLike[Expression] {
+  with BinaryLike[Expression] with QueryErrorsBase {
 
   def this(child: Expression, nBins: Expression) = {
     this(child, nBins, 0, 0)
@@ -89,11 +90,26 @@ case class HistogramNumeric(
     if (defaultCheck.isFailure) {
       defaultCheck
     } else if (!nBins.foldable) {
-      TypeCheckFailure(s"${this.prettyName} needs the nBins provided must be a constant literal.")
+      DataTypeMismatch(
+        errorSubClass = "NON_FOLDABLE_INPUT",
+        messageParameters = Map(
+          "inputName" -> toSQLId("nb"),
+          "inputType" -> toSQLType(nBins.dataType),
+          "inputExpr" -> toSQLExpr(nBins))
+      )
     } else if (nb == null) {
-      TypeCheckFailure(s"${this.prettyName} needs nBins value must not be null.")
+      DataTypeMismatch(
+        errorSubClass = "UNEXPECTED_NULL",
+        messageParameters = Map("exprName" -> "nb"))
     } else if (nb.asInstanceOf[Int] < 2) {
-      TypeCheckFailure(s"${this.prettyName} needs nBins to be at least 2, but you supplied $nb.")
+      DataTypeMismatch(
+        errorSubClass = "VALUE_OUT_OF_RANGE",
+        messageParameters = Map(
+          "exprName" -> "nb",
+          "valueRange" -> s"[2, ${Int.MaxValue}]",
+          "currentValue" -> toSQLValue(nb, IntegerType)
+        )
+      )
     } else {
       TypeCheckSuccess
     }
@@ -110,7 +126,10 @@ case class HistogramNumeric(
     // Ignore empty rows, for example: histogram_numeric(null)
     if (value != null) {
       // Convert the value to a double value
-      val doubleValue = value.asInstanceOf[Number].doubleValue
+      val doubleValue = value match {
+        case d: Decimal => d.toDouble
+        case o => o.asInstanceOf[Number].doubleValue()
+      }
       buffer.add(doubleValue)
     }
     buffer
@@ -127,7 +146,8 @@ case class HistogramNumeric(
     if (buffer.getUsedBins < 1) {
       null
     } else {
-      val result = (0 until buffer.getUsedBins).map { index =>
+      val array = new Array[AnyRef](buffer.getUsedBins)
+      (0 until buffer.getUsedBins).foreach { index =>
         // Note that the 'coord.x' and 'coord.y' have double-precision floating point type here.
         val coord = buffer.getBin(index)
         if (propagateInputType) {
@@ -145,18 +165,23 @@ case class HistogramNumeric(
             case ShortType => coord.x.toShort
             case _: DayTimeIntervalType | LongType | TimestampType | TimestampNTZType =>
               coord.x.toLong
+            case d: DecimalType =>
+              val bigDecimal = BigDecimal
+                .decimal(coord.x, new java.math.MathContext(d.precision))
+                .setScale(d.scale, BigDecimal.RoundingMode.HALF_UP)
+              Decimal(bigDecimal)
             case _ => coord.x
           }
-          InternalRow.apply(result, coord.y)
+          array(index) = InternalRow.apply(result, coord.y)
         } else {
           // Otherwise, just apply the double-precision values in 'coord.x' and 'coord.y' to the
           // output row directly. In this case: 'SELECT histogram_numeric(val, 3)
           // FROM VALUES (0L), (1L), (2L), (10L) AS tab(col)' returns an array of structs where the
           // first field has DoubleType.
-          InternalRow.apply(coord.x, coord.y)
+          array(index) = InternalRow.apply(coord.x, coord.y)
         }
       }
-      new GenericArrayData(result)
+      new GenericArrayData(array)
     }
   }
 

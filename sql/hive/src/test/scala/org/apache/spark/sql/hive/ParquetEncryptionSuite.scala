@@ -91,6 +91,32 @@ class ParquetEncryptionSuite extends QueryTest with TestHiveSingleton {
     }
   }
 
+  test("SPARK-42114: Test of uniform parquet encryption") {
+    withTempDir { dir =>
+      withSQLConf(
+        "parquet.crypto.factory.class" ->
+          "org.apache.parquet.crypto.keytools.PropertiesDrivenCryptoFactory",
+        "parquet.encryption.kms.client.class" ->
+          "org.apache.parquet.crypto.keytools.mocks.InMemoryKMS",
+        "parquet.encryption.key.list" ->
+          s"key1: ${key1}") {
+
+        val inputDF = Seq((1, 22, 333)).toDF("a", "b", "c")
+        val parquetDir = new File(dir, "parquet").getCanonicalPath
+        inputDF.write
+          .option("parquet.encryption.uniform.key", "key1")
+          .parquet(parquetDir)
+
+        verifyParquetEncrypted(parquetDir)
+
+        val parquetDF = spark.read.parquet(parquetDir)
+        assert(parquetDF.inputFiles.nonEmpty)
+        val readDataset = parquetDF.select("a", "b", "c")
+        checkAnswer(readDataset, inputDF)
+      }
+    }
+  }
+
   /**
    * Verify that the directory contains an encrypted parquet in
    * encrypted footer mode by means of checking for all the parquet part files

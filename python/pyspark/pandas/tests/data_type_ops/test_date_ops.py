@@ -21,10 +21,11 @@ import pandas as pd
 from pandas.api.types import CategoricalDtype
 
 from pyspark import pandas as ps
+from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.pandas.tests.data_type_ops.testing_utils import OpsTestBase
 
 
-class DateOpsTest(OpsTestBase):
+class DateOpsTestsMixin:
     @property
     def pser(self):
         return pd.Series(
@@ -65,17 +66,21 @@ class DateOpsTest(OpsTestBase):
         self.assertRaises(TypeError, lambda: self.psser - "x")
         self.assertRaises(TypeError, lambda: self.psser - 1)
         self.assert_eq(
-            (self.pser - self.some_date).dt.days,
+            (self.pser - self.some_date).apply(lambda x: x.days),
             self.psser - self.some_date,
         )
         pdf, psdf = self.pdf, self.psdf
         for col in self.df_cols:
             if col == "date":
-                self.assert_eq((pdf["date"] - pdf[col]).dt.days, psdf["date"] - psdf[col])
+                self.assert_eq(
+                    (pdf["date"] - pdf[col]).apply(lambda x: x.days), psdf["date"] - psdf[col]
+                )
             else:
                 self.assertRaises(TypeError, lambda: psdf["date"] - psdf[col])
         pdf, psdf = self.date_pdf, self.date_psdf
-        self.assert_eq((pdf["this"] - pdf["that"]).dt.days, psdf["this"] - psdf["that"])
+        self.assert_eq(
+            (pdf["this"] - pdf["that"]).apply(lambda x: x.days), psdf["this"] - psdf["that"]
+        )
 
     def test_mul(self):
         self.assertRaises(TypeError, lambda: self.psser * "x")
@@ -111,11 +116,11 @@ class DateOpsTest(OpsTestBase):
 
     def test_pow(self):
         self.assertRaises(TypeError, lambda: self.psser ** "x")
-        self.assertRaises(TypeError, lambda: self.psser ** 1)
-        self.assertRaises(TypeError, lambda: self.psser ** self.some_date)
+        self.assertRaises(TypeError, lambda: self.psser**1)
+        self.assertRaises(TypeError, lambda: self.psser**self.some_date)
 
         for psser in self.pssers:
-            self.assertRaises(TypeError, lambda: self.psser ** psser)
+            self.assertRaises(TypeError, lambda: self.psser**psser)
 
     def test_radd(self):
         self.assertRaises(TypeError, lambda: "x" + self.psser)
@@ -126,7 +131,7 @@ class DateOpsTest(OpsTestBase):
         self.assertRaises(TypeError, lambda: "x" - self.psser)
         self.assertRaises(TypeError, lambda: 1 - self.psser)
         self.assert_eq(
-            (self.some_date - self.pser).dt.days,
+            (self.some_date - self.pser).apply(lambda x: x.days),
             self.some_date - self.psser,
         )
 
@@ -151,8 +156,8 @@ class DateOpsTest(OpsTestBase):
 
     def test_rpow(self):
         self.assertRaises(TypeError, lambda: "x" ** self.psser)
-        self.assertRaises(TypeError, lambda: 1 ** self.psser)
-        self.assertRaises(TypeError, lambda: self.some_date ** self.psser)
+        self.assertRaises(TypeError, lambda: 1**self.psser)
+        self.assertRaises(TypeError, lambda: self.some_date**self.psser)
 
     def test_and(self):
         self.assertRaises(TypeError, lambda: self.psser & True)
@@ -176,7 +181,7 @@ class DateOpsTest(OpsTestBase):
         data = [datetime.date(1994, 1, 31), datetime.date(1994, 2, 1), datetime.date(1994, 2, 2)]
         pser = pd.Series(data)
         psser = ps.Series(data)
-        self.assert_eq(pser, psser.to_pandas())
+        self.assert_eq(pser, psser._to_pandas())
         self.assert_eq(ps.from_pandas(pser), psser)
 
     def test_isnull(self):
@@ -203,31 +208,45 @@ class DateOpsTest(OpsTestBase):
         pdf, psdf = self.date_pdf, self.date_psdf
         self.assert_eq(pdf["this"] == pdf["that"], psdf["this"] == psdf["that"])
         self.assert_eq(pdf["this"] == pdf["this"], psdf["this"] == psdf["this"])
+        self.assertRaises(TypeError, lambda: psdf["this"] == pdf["this"])
 
     def test_ne(self):
         pdf, psdf = self.date_pdf, self.date_psdf
         self.assert_eq(pdf["this"] != pdf["that"], psdf["this"] != psdf["that"])
         self.assert_eq(pdf["this"] != pdf["this"], psdf["this"] != psdf["this"])
+        self.assertRaises(TypeError, lambda: psdf["this"] != pdf["this"])
 
     def test_lt(self):
         pdf, psdf = self.date_pdf, self.date_psdf
         self.assert_eq(pdf["this"] < pdf["that"], psdf["this"] < psdf["that"])
         self.assert_eq(pdf["this"] < pdf["this"], psdf["this"] < psdf["this"])
+        self.assertRaises(TypeError, lambda: psdf["this"] < pdf["this"])
 
     def test_le(self):
         pdf, psdf = self.date_pdf, self.date_psdf
         self.assert_eq(pdf["this"] <= pdf["that"], psdf["this"] <= psdf["that"])
         self.assert_eq(pdf["this"] <= pdf["this"], psdf["this"] <= psdf["this"])
+        self.assertRaises(TypeError, lambda: psdf["this"] <= pdf["this"])
 
     def test_gt(self):
         pdf, psdf = self.date_pdf, self.date_psdf
         self.assert_eq(pdf["this"] > pdf["that"], psdf["this"] > psdf["that"])
         self.assert_eq(pdf["this"] > pdf["this"], psdf["this"] > psdf["this"])
+        self.assertRaises(TypeError, lambda: psdf["this"] > pdf["this"])
 
     def test_ge(self):
         pdf, psdf = self.date_pdf, self.date_psdf
         self.assert_eq(pdf["this"] >= pdf["that"], psdf["this"] >= psdf["that"])
         self.assert_eq(pdf["this"] >= pdf["this"], psdf["this"] >= psdf["this"])
+        self.assertRaises(TypeError, lambda: psdf["this"] >= pdf["this"])
+
+
+class DateOpsTests(
+    DateOpsTestsMixin,
+    OpsTestBase,
+    PandasOnSparkTestCase,
+):
+    pass
 
 
 if __name__ == "__main__":
@@ -235,7 +254,7 @@ if __name__ == "__main__":
     from pyspark.pandas.tests.data_type_ops.test_date_ops import *  # noqa: F401
 
     try:
-        import xmlrunner  # type: ignore[import]
+        import xmlrunner
 
         testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:

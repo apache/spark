@@ -19,25 +19,23 @@ package org.apache.spark.sql.execution.streaming.state
 
 import java.io.File
 
-import org.apache.commons.io.FileUtils
-
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.sql.catalyst.plans.PlanTestBase
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes.Update
-import org.apache.spark.sql.execution.streaming.MemoryStream
+import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.functions.count
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.StreamTest
 import org.apache.spark.util.Utils
 
 class StateStoreCompatibilitySuite extends StreamTest with StateStoreCodecsTest {
-   testWithAllCodec(
-      "SPARK-33263: Recovery from checkpoint before codec config introduced") {
+   testWithAllCodec("SPARK-33263: Recovery from checkpoint before codec config introduced") {
+     colFamiliesEnabled =>
      val resourceUri = this.getClass.getResource(
        "/structured-streaming/checkpoint-version-3.0.0-streaming-statestore-codec/").toURI
      val checkpointDir = Utils.createTempDir().getCanonicalFile
-     FileUtils.copyDirectory(new File(resourceUri), checkpointDir)
+     Utils.copyDirectory(new File(resourceUri), checkpointDir)
 
      import testImplicits._
 
@@ -61,22 +59,24 @@ class StateStoreCompatibilitySuite extends StreamTest with StateStoreCodecsTest 
 }
 
 trait StateStoreCodecsTest extends SparkFunSuite with PlanTestBase {
-  private val codecsInShortName =
+  protected val codecsInShortName =
     CompressionCodec.ALL_COMPRESSION_CODECS.map { c => CompressionCodec.getShortName(c) }
 
-  protected def testWithAllCodec(name: String)(func: => Any): Unit = {
-    codecsInShortName.foreach { codecShortName =>
-      test(s"$name - with codec $codecShortName") {
-        withSQLConf(SQLConf.STATE_STORE_COMPRESSION_CODEC.key -> codecShortName) {
-          func
+  protected def testWithAllCodec(name: String)(func: Boolean => Any): Unit = {
+    Seq(true, false).foreach { colFamiliesEnabled =>
+      codecsInShortName.foreach { codecShortName =>
+        test(s"$name - with codec $codecShortName - with colFamiliesEnabled=$colFamiliesEnabled") {
+          withSQLConf(SQLConf.STATE_STORE_COMPRESSION_CODEC.key -> codecShortName) {
+            func(colFamiliesEnabled)
+          }
         }
       }
-    }
 
-    CompressionCodec.ALL_COMPRESSION_CODECS.foreach { codecShortName =>
-      test(s"$name - with codec $codecShortName") {
-        withSQLConf(SQLConf.STATE_STORE_COMPRESSION_CODEC.key -> codecShortName) {
-          func
+      CompressionCodec.ALL_COMPRESSION_CODECS.foreach { codecShortName =>
+        test(s"$name - with codec $codecShortName - with colFamiliesEnabled=$colFamiliesEnabled") {
+          withSQLConf(SQLConf.STATE_STORE_COMPRESSION_CODEC.key -> codecShortName) {
+            func(colFamiliesEnabled)
+          }
         }
       }
     }

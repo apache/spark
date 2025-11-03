@@ -30,6 +30,7 @@ import com.esotericsoftware.kryo.KryoSerializable;
 import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
 
+import org.apache.spark.SparkUnsupportedOperationException;
 import org.apache.spark.sql.catalyst.util.ArrayData;
 import org.apache.spark.sql.types.*;
 import org.apache.spark.unsafe.Platform;
@@ -38,6 +39,9 @@ import org.apache.spark.unsafe.bitset.BitSetMethods;
 import org.apache.spark.unsafe.hash.Murmur3_x86_32;
 import org.apache.spark.unsafe.types.CalendarInterval;
 import org.apache.spark.unsafe.types.UTF8String;
+import org.apache.spark.unsafe.types.VariantVal;
+import org.apache.spark.unsafe.types.GeographyVal;
+import org.apache.spark.unsafe.types.GeometryVal;
 
 import static org.apache.spark.unsafe.Platform.BYTE_ARRAY_OFFSET;
 
@@ -98,8 +102,9 @@ public final class UnsafeArrayData extends ArrayData implements Externalizable, 
     assert ordinal < numElements : "ordinal (" + ordinal + ") should < " + numElements;
   }
 
+  @Override
   public Object[] array() {
-    throw new UnsupportedOperationException("Not supported on UnsafeArrayData.");
+    throw SparkUnsupportedOperationException.apply();
   }
 
   /**
@@ -220,14 +225,33 @@ public final class UnsafeArrayData extends ArrayData implements Externalizable, 
   }
 
   @Override
+  public GeographyVal getGeography(int ordinal) {
+    byte[] bytes = getBinary(ordinal);
+    return (bytes == null) ? null : GeographyVal.fromBytes(bytes);
+  }
+
+  @Override
+  public GeometryVal getGeometry(int ordinal) {
+    byte[] bytes = getBinary(ordinal);
+    return (bytes == null) ? null : GeometryVal.fromBytes(bytes);
+  }
+
+  @Override
   public CalendarInterval getInterval(int ordinal) {
     if (isNullAt(ordinal)) return null;
     final long offsetAndSize = getLong(ordinal);
     final int offset = (int) (offsetAndSize >> 32);
-    final int months = Platform.getInt(baseObject, baseOffset + offset);
-    final int days = Platform.getInt(baseObject, baseOffset + offset + 4);
+    final long monthAndDays = Platform.getLong(baseObject, baseOffset + offset);
+    final int months = (int) (0xFFFFFFFFL & monthAndDays);
+    final int days = (int) ((0xFFFFFFFF00000000L & monthAndDays) >> 32);
     final long microseconds = Platform.getLong(baseObject, baseOffset + offset + 8);
     return new CalendarInterval(months, days, microseconds);
+  }
+
+  @Override
+  public VariantVal getVariant(int ordinal) {
+    if (isNullAt(ordinal)) return null;
+    return VariantVal.readFromUnsafeRow(getLong(ordinal), baseObject, baseOffset);
   }
 
   @Override
@@ -264,7 +288,9 @@ public final class UnsafeArrayData extends ArrayData implements Externalizable, 
   }
 
   @Override
-  public void update(int ordinal, Object value) { throw new UnsupportedOperationException(); }
+  public void update(int ordinal, Object value) {
+    throw SparkUnsupportedOperationException.apply();
+  }
 
   @Override
   public void setNullAt(int ordinal) {
@@ -328,8 +354,7 @@ public final class UnsafeArrayData extends ArrayData implements Externalizable, 
 
   @Override
   public boolean equals(Object other) {
-    if (other instanceof UnsafeArrayData) {
-      UnsafeArrayData o = (UnsafeArrayData) other;
+    if (other instanceof UnsafeArrayData o) {
       return (sizeInBytes == o.sizeInBytes) &&
         ByteArrayMethods.arrayEquals(baseObject, baseOffset, o.baseObject, o.baseOffset,
           sizeInBytes);
@@ -422,8 +447,7 @@ public final class UnsafeArrayData extends ArrayData implements Externalizable, 
     final long valueRegionInBytes = (long)elementSize * length;
     final long totalSizeInLongs = (headerInBytes + valueRegionInBytes + 7) / 8;
     if (totalSizeInLongs > Integer.MAX_VALUE / 8) {
-      throw new UnsupportedOperationException("Cannot convert this array to unsafe format as " +
-        "it's too big.");
+      throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3129");
     }
 
     final long[] data = new long[(int)totalSizeInLongs];
@@ -444,8 +468,7 @@ public final class UnsafeArrayData extends ArrayData implements Externalizable, 
     final long valueRegionInBytes = (long)elementSize * length;
     final long totalSizeInLongs = (headerInBytes + valueRegionInBytes + 7) / 8;
     if (totalSizeInLongs > Integer.MAX_VALUE / 8) {
-      throw new UnsupportedOperationException("Cannot convert this array to unsafe format as " +
-        "it's too big.");
+      throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3129");
     }
 
     final long[] data = new long[(int)totalSizeInLongs];

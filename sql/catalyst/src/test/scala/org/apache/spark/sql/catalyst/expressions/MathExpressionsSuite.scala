@@ -23,7 +23,7 @@ import java.time.temporal.ChronoUnit
 
 import com.google.common.math.LongMath
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkArithmeticException, SparkFunSuite}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCoercion.implicitCast
 import org.apache.spark.sql.catalyst.dsl.expressions._
@@ -158,22 +158,45 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("conv") {
-    checkEvaluation(Conv(Literal("3"), Literal(10), Literal(2)), "11")
-    checkEvaluation(Conv(Literal("-15"), Literal(10), Literal(-16)), "-F")
-    checkEvaluation(Conv(Literal("-15"), Literal(10), Literal(16)), "FFFFFFFFFFFFFFF1")
-    checkEvaluation(Conv(Literal("big"), Literal(36), Literal(16)), "3A48")
-    checkEvaluation(Conv(Literal.create(null, StringType), Literal(36), Literal(16)), null)
-    checkEvaluation(Conv(Literal("3"), Literal.create(null, IntegerType), Literal(16)), null)
-    checkEvaluation(Conv(Literal("3"), Literal(16), Literal.create(null, IntegerType)), null)
-    checkEvaluation(
-      Conv(Literal("1234"), Literal(10), Literal(37)), null)
-    checkEvaluation(
-      Conv(Literal(""), Literal(10), Literal(16)), null)
-    checkEvaluation(
-      Conv(Literal("9223372036854775807"), Literal(36), Literal(16)), "FFFFFFFFFFFFFFFF")
-    // If there is an invalid digit in the number, the longest valid prefix should be converted.
-    checkEvaluation(
-      Conv(Literal("11abc"), Literal(10), Literal(16)), "B")
+    Seq(true, false).foreach { ansiEnabled =>
+      checkEvaluation(Conv(Literal("3"), Literal(10), Literal(2), ansiEnabled), "11")
+      checkEvaluation(Conv(Literal("-15"), Literal(10), Literal(-16), ansiEnabled), "-F")
+      checkEvaluation(
+        Conv(Literal("-15"), Literal(10), Literal(16), ansiEnabled), "FFFFFFFFFFFFFFF1")
+      checkEvaluation(Conv(Literal("big"), Literal(36), Literal(16), ansiEnabled), "3A48")
+      checkEvaluation(Conv(Literal.create(null, StringType), Literal(36), Literal(16), ansiEnabled),
+        null)
+      checkEvaluation(
+        Conv(Literal("3"), Literal.create(null, IntegerType), Literal(16), ansiEnabled), null)
+      checkEvaluation(
+        Conv(Literal("3"), Literal(16), Literal.create(null, IntegerType), ansiEnabled), null)
+      checkEvaluation(
+        Conv(Literal("1234"), Literal(10), Literal(37), ansiEnabled), null)
+      checkEvaluation(
+        Conv(Literal(""), Literal(10), Literal(16), ansiEnabled), null)
+
+      // If there is an invalid digit in the number, the longest valid prefix should be converted.
+      checkEvaluation(
+        Conv(Literal("11abc"), Literal(10), Literal(16), ansiEnabled), "B")
+    }
+  }
+
+  test("conv overflow") {
+    Seq(
+      ("9223372036854775807", 36, 16, "FFFFFFFFFFFFFFFF"),
+      ("92233720368547758070", 10, 16, "FFFFFFFFFFFFFFFF"),
+      ("-92233720368547758070", 10, 16, "FFFFFFFFFFFFFFFF"),
+      ("100000000000000000000000000000000000000000000000000000000000000000", 2, 10,
+        "18446744073709551615"),
+      ("100000000000000000000000000000000000000000000000000000000000000000", 2, 8,
+        "1777777777777777777777")
+    ).foreach { case (numExpr, fromBase, toBase, expected) =>
+      checkEvaluation(
+       Conv(Literal(numExpr), Literal(fromBase), Literal(toBase), ansiEnabled = false), expected)
+      checkExceptionInExpression[SparkArithmeticException](
+        Conv(Literal(numExpr), Literal(fromBase), Literal(toBase), ansiEnabled = true),
+        "Overflow in function conv()")
+    }
   }
 
   test("e") {
@@ -590,12 +613,17 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Unhex(Literal("F")), Array[Byte](15))
     checkEvaluation(Unhex(Literal("ff")), Array[Byte](-1))
     checkEvaluation(Unhex(Literal("GG")), null)
+    checkEvaluation(Unhex(Literal("123")), Array[Byte](1, 35))
+    checkEvaluation(Unhex(Literal("12345")), Array[Byte](1, 35, 69))
+
+    // failOnError
+    checkEvaluation(Unhex(Literal("12345"), true), Array[Byte](1, 35, 69))
     // scalastyle:off
     // Turn off scala style for non-ascii chars
     checkEvaluation(Unhex(Literal("E4B889E9878DE79A84")), "三重的".getBytes(StandardCharsets.UTF_8))
     checkEvaluation(Unhex(Literal("三重的")), null)
     // scalastyle:on
-    checkConsistencyBetweenInterpretedAndCodegen(Unhex, StringType)
+    checkConsistencyBetweenInterpretedAndCodegen((e: Expression) => Unhex(e), StringType)
   }
 
   test("hypot") {
@@ -806,12 +834,14 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Round(-3.5, 0), -4.0)
     checkEvaluation(Round(-0.35, 1), -0.4)
     checkEvaluation(Round(-35, -1), -40)
+    checkEvaluation(Round(BigDecimal("45.00"), -1), BigDecimal(50))
     checkEvaluation(BRound(2.5, 0), 2.0)
     checkEvaluation(BRound(3.5, 0), 4.0)
     checkEvaluation(BRound(-2.5, 0), -2.0)
     checkEvaluation(BRound(-3.5, 0), -4.0)
     checkEvaluation(BRound(-0.35, 1), -0.4)
     checkEvaluation(BRound(-35, -1), -40)
+    checkEvaluation(BRound(BigDecimal("45.00"), -1), BigDecimal(40))
     checkEvaluation(checkDataTypeAndCast(RoundFloor(Literal(2.5), Literal(0))), Decimal(2))
     checkEvaluation(checkDataTypeAndCast(RoundFloor(Literal(3.5), Literal(0))), Decimal(3))
     checkEvaluation(checkDataTypeAndCast(RoundFloor(Literal(-2.5), Literal(0))), Decimal(-3L))
@@ -832,6 +862,24 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(checkDataTypeAndCast(RoundCeil(Literal(5), Literal(0))), Decimal(5))
     checkEvaluation(checkDataTypeAndCast(RoundCeil(Literal(3.1411), Literal(-3))), Decimal(1000))
     checkEvaluation(checkDataTypeAndCast(RoundCeil(Literal(135.135), Literal(-2))), Decimal(200))
+  }
+
+  test("SPARK-42045: integer overflow in round/bround") {
+    Seq(
+      (Byte.MaxValue, ByteType, -1, -126.toByte),
+      (Short.MaxValue, ShortType, -1, -32766.toShort),
+      (Int.MaxValue, IntegerType, -1, -2147483646),
+      (Long.MaxValue, LongType, -1, -9223372036854775806L)
+    ).foreach { case (input, dt, scale, expected) =>
+      Seq(Round(Literal(input, dt), scale, ansiEnabled = true),
+        BRound(Literal(input, dt), scale, ansiEnabled = true)).foreach { expr =>
+        checkExceptionInExpression[SparkArithmeticException](expr, "Overflow")
+      }
+      Seq(Round(Literal(input, dt), scale, ansiEnabled = false),
+        BRound(Literal(input, dt), scale, ansiEnabled = false)).foreach { expr =>
+        checkEvaluation(expr, expected)
+      }
+    }
   }
 
   test("SPARK-36922: Support ANSI intervals for SIGN/SIGNUM") {
@@ -914,5 +962,52 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(WidthBucket(5.35, 0.024, Double.NaN, 5L), null)
     checkEvaluation(WidthBucket(5.35, 0.024, Double.NegativeInfinity, 5L), null)
     checkEvaluation(WidthBucket(5.35, 0.024, Double.PositiveInfinity, 5L), null)
+  }
+
+  test("context independent foldable math expressions") {
+    // Create some base literals
+    val intLit = Literal(5)
+    val doubleLit = Literal(10.5)
+    val decimalLit = Literal(Decimal(7.5))
+
+    // Create math expressions using these literals
+    val expressions = Seq(
+      // Basic arithmetic
+      Add(intLit, Literal(10)),
+      Subtract(doubleLit, Literal(2.5)),
+      Multiply(intLit, Literal(2)),
+      Divide(decimalLit, Literal(Decimal(2.5))),
+      Remainder(intLit, Literal(2)),
+
+      // Unary operations
+      UnaryMinus(intLit),
+      Abs(Literal(-10)),
+
+      // Math functions
+      Log(doubleLit),
+      Log10(doubleLit),
+      Log2(doubleLit),
+      Exp(doubleLit),
+      Sqrt(doubleLit),
+      Floor(doubleLit),
+      Ceil(doubleLit),
+
+      // Trig functions
+      Sin(doubleLit),
+      Cos(doubleLit),
+      Tan(doubleLit),
+      Asin(Literal(0.5)),
+      Acos(Literal(0.5)),
+      Atan(doubleLit),
+
+      // Nested expressions
+      Add(Multiply(intLit, Literal(2)), Divide(doubleLit, Literal(2.0)))
+    )
+
+    expressions.foreach { expr =>
+      assert(expr.foldable, s"Expression $expr should be foldable")
+      assert(expr.contextIndependentFoldable,
+        s"Expression $expr should be context independent foldable")
+    }
   }
 }

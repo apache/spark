@@ -17,23 +17,20 @@
 
 package org.apache.spark.sql.hive
 
-import org.apache.hadoop.conf.Configuration
+import java.io.File
+import java.net.URI
+
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{SparkConf, TestUtils}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.sql.QueryTest
+import org.apache.spark.sql.catalyst.catalog.CatalogDatabase
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.test.SQLTestUtils
-import org.apache.spark.util.ChildFirstURLClassLoader
+import org.apache.spark.util.{ChildFirstURLClassLoader, MutableURLClassLoader}
 
 class HiveUtilsSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
-
-  private def testFormatTimeVarsForHiveClient(key: String, value: String, expected: Long): Unit = {
-    val conf = new Configuration
-    conf.set(key, value)
-    assert(HiveUtils.formatTimeVarsForHiveClient(conf)(key) === expected.toString)
-  }
 
   test("newTemporaryConfiguration overwrites listener configurations") {
     Seq(true, false).foreach { useInMemoryDerby =>
@@ -77,16 +74,29 @@ class HiveUtilsSuite extends QueryTest with SQLTestUtils with TestHiveSingleton 
     }
   }
 
-  test("SPARK-27349: Dealing with TimeVars removed in Hive 2.x") {
-    // Test default value
-    val defaultConf = new Configuration
-    assert(HiveUtils.formatTimeVarsForHiveClient(defaultConf)("hive.stats.jdbc.timeout") === "30")
-    assert(HiveUtils.formatTimeVarsForHiveClient(defaultConf)("hive.stats.retries.wait") === "3000")
+  test("SPARK-42539: User-provided JARs should not take precedence over builtin Hive JARs") {
+    withTempDir { tmpDir =>
+        val classFile = TestUtils.createCompiledClass(
+          "Hive", tmpDir, packageName = Some("org.apache.hadoop.hive.ql.metadata"))
 
-    testFormatTimeVarsForHiveClient("hive.stats.jdbc.timeout", "40s", 40)
-    testFormatTimeVarsForHiveClient("hive.stats.jdbc.timeout", "1d", 1 * 24 * 60 * 60)
+      val jarFile = new File(tmpDir, "hive-fake.jar")
+      TestUtils.createJar(Seq(classFile), jarFile, Some("org/apache/hadoop/hive/ql/metadata"))
 
-    testFormatTimeVarsForHiveClient("hive.stats.retries.wait", "4000ms", 4000)
-    testFormatTimeVarsForHiveClient("hive.stats.retries.wait", "1d", 1 * 24 * 60 * 60 * 1000)
+      val conf = new SparkConf
+      val contextClassLoader = Thread.currentThread().getContextClassLoader
+      val loader = new MutableURLClassLoader(Array(jarFile.toURI.toURL), contextClassLoader)
+      try {
+        Thread.currentThread().setContextClassLoader(loader)
+        val client = HiveUtils.newClientForMetadata(
+          conf,
+          SparkHadoopUtil.newConfiguration(conf),
+          HiveUtils.newTemporaryConfiguration(useInMemoryDerby = true))
+        client.createDatabase(
+          CatalogDatabase("foo", "", URI.create(s"file://${tmpDir.getAbsolutePath}/foo.db"), Map()),
+          ignoreIfExists = true)
+      } finally {
+        Thread.currentThread().setContextClassLoader(contextClassLoader)
+      }
+    }
   }
 }

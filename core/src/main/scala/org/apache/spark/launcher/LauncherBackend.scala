@@ -67,13 +67,13 @@ private[spark] abstract class LauncherBackend {
   }
 
   def setAppId(appId: String): Unit = {
-    if (connection != null && isConnected) {
+    if (connection != null && isConnected()) {
       connection.send(new SetAppId(appId))
     }
   }
 
   def setState(state: SparkAppHandle.State): Unit = {
-    if (connection != null && isConnected && lastState != state) {
+    if (connection != null && isConnected() && lastState != state) {
       connection.send(new SetState(state))
       lastState = state
     }

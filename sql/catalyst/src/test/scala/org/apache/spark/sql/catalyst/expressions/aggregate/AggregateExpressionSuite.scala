@@ -19,33 +19,131 @@ package org.apache.spark.sql.catalyst.expressions.aggregate
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, UnresolvedAttribute}
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.{Add, AttributeSet, Literal}
+import org.apache.spark.sql.catalyst.util.TypeUtils.ordinalNumber
 
 class AggregateExpressionSuite extends SparkFunSuite {
 
   test("test references from unresolved aggregate functions") {
     val x = UnresolvedAttribute("x")
     val y = UnresolvedAttribute("y")
-    val actual = AggregateExpression(Sum(Add(x, y)), mode = Complete, isDistinct = false).references
+    val actual = Sum(Add(x, y)).toAggregateExpression().references
     val expected = AttributeSet(x :: y :: Nil)
     assert(expected == actual, s"Expected: $expected. Actual: $actual")
   }
 
   test("test regr_r2 input types") {
-    val checkResult1 = RegrR2(Literal("a"), Literal(1d)).checkInputDataTypes()
-    assert(checkResult1.isInstanceOf[TypeCheckResult.TypeCheckFailure])
-    assert(checkResult1.asInstanceOf[TypeCheckResult.TypeCheckFailure].message
-      .contains("argument 1 requires double type, however, ''a'' is of string type"))
-    val checkResult2 = RegrR2(Literal(3.0D), Literal('b')).checkInputDataTypes()
-    assert(checkResult2.isInstanceOf[TypeCheckResult.TypeCheckFailure])
-    assert(checkResult2.asInstanceOf[TypeCheckResult.TypeCheckFailure].message
-      .contains("argument 2 requires double type, however, ''b'' is of string type"))
-    val checkResult3 = RegrR2(Literal(3.0D), Literal(Array(0))).checkInputDataTypes()
-    assert(checkResult3.isInstanceOf[TypeCheckResult.TypeCheckFailure])
-    assert(checkResult3.asInstanceOf[TypeCheckResult.TypeCheckFailure].message
-      .contains("argument 2 requires double type, however, '[0]' is of array<int> type"))
+    assert(RegrR2(Literal("a"), Literal(1d)).checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "UNEXPECTED_INPUT_TYPE",
+        messageParameters = Map(
+          "paramIndex" -> ordinalNumber(0),
+          "requiredType" -> "\"DOUBLE\"",
+          "inputSql" -> "\"a\"",
+          "inputType" -> "\"STRING\""
+        )
+      )
+    )
+    assert(RegrR2(Literal(3.0D), Literal('b')).checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "UNEXPECTED_INPUT_TYPE",
+        messageParameters = Map(
+          "paramIndex" -> ordinalNumber(1),
+          "requiredType" -> "\"DOUBLE\"",
+          "inputSql" -> "\"b\"",
+          "inputType" -> "\"STRING\""
+        )
+      )
+    )
+    assert(RegrR2(Literal(3.0D), Literal(Array(0))).checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "UNEXPECTED_INPUT_TYPE",
+        messageParameters = Map(
+          "paramIndex" -> ordinalNumber(1),
+          "requiredType" -> "\"DOUBLE\"",
+          "inputSql" -> "\"ARRAY(0)\"",
+          "inputType" -> "\"ARRAY<INT>\""
+        )
+      )
+    )
     assert(RegrR2(Literal(3.0D), Literal(1d)).checkInputDataTypes() ===
       TypeCheckResult.TypeCheckSuccess)
   }
 
+  test("test regr_slope input types") {
+    assert(RegrSlope(Literal("a"), Literal(1)).checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "UNEXPECTED_INPUT_TYPE",
+        messageParameters = Map(
+          "paramIndex" -> ordinalNumber(0),
+          "requiredType" -> "\"DOUBLE\"",
+          "inputSql" -> "\"a\"",
+          "inputType" -> "\"STRING\""
+        )
+      )
+    )
+    assert(RegrSlope(Literal(3.0D), Literal('b')).checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "UNEXPECTED_INPUT_TYPE",
+        messageParameters = Map(
+          "paramIndex" -> ordinalNumber(1),
+          "requiredType" -> "\"DOUBLE\"",
+          "inputSql" -> "\"b\"",
+          "inputType" -> "\"STRING\""
+        )
+      )
+    )
+    assert(RegrSlope(Literal(3.0D), Literal(Array(0))).checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "UNEXPECTED_INPUT_TYPE",
+        messageParameters = Map(
+          "paramIndex" -> ordinalNumber(1),
+          "requiredType" -> "\"DOUBLE\"",
+          "inputSql" -> "\"ARRAY(0)\"",
+          "inputType" -> "\"ARRAY<INT>\""
+        )
+      )
+    )
+    assert(RegrSlope(Literal(3.0D), Literal(1D)).checkInputDataTypes() ===
+      TypeCheckResult.TypeCheckSuccess)
+  }
+
+  test("test regr_intercept input types") {
+    assert(RegrIntercept(Literal("a"), Literal(1)).checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "UNEXPECTED_INPUT_TYPE",
+        messageParameters = Map(
+          "paramIndex" -> ordinalNumber(0),
+          "requiredType" -> "\"DOUBLE\"",
+          "inputSql" -> "\"a\"",
+          "inputType" -> "\"STRING\""
+        )
+      )
+    )
+    assert(RegrIntercept(Literal(3.0D), Literal('b')).checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "UNEXPECTED_INPUT_TYPE",
+        messageParameters = Map(
+          "paramIndex" -> ordinalNumber(1),
+          "requiredType" -> "\"DOUBLE\"",
+          "inputSql" -> "\"b\"",
+          "inputType" -> "\"STRING\""
+        )
+      )
+    )
+    assert(RegrIntercept(Literal(3.0D), Literal(Array(0))).checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "UNEXPECTED_INPUT_TYPE",
+        messageParameters = Map(
+          "paramIndex" -> ordinalNumber(1),
+          "requiredType" -> "\"DOUBLE\"",
+          "inputSql" -> "\"ARRAY(0)\"",
+          "inputType" -> "\"ARRAY<INT>\""
+        )
+      )
+    )
+    assert(RegrIntercept(Literal(3.0D), Literal(1D)).checkInputDataTypes() ===
+      TypeCheckResult.TypeCheckSuccess)
+  }
 }

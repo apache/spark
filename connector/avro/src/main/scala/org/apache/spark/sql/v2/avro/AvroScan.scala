@@ -16,7 +16,7 @@
  */
 package org.apache.spark.sql.v2.avro
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.hadoop.fs.Path
 
@@ -29,6 +29,7 @@ import org.apache.spark.sql.execution.datasources.v2.FileScan
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.SerializableConfiguration
 
 case class AvroScan(
@@ -47,19 +48,18 @@ case class AvroScan(
     val caseSensitiveMap = options.asCaseSensitiveMap.asScala.toMap
     // Hadoop Configurations are case sensitive.
     val hadoopConf = sparkSession.sessionState.newHadoopConfWithOptions(caseSensitiveMap)
-    val broadcastedConf = sparkSession.sparkContext.broadcast(
-      new SerializableConfiguration(hadoopConf))
+    val broadcastedConf = SerializableConfiguration.broadcast(sparkSession.sparkContext, hadoopConf)
     val parsedOptions = new AvroOptions(caseSensitiveMap, hadoopConf)
     // The partition values are already truncated in `FileScan.partitions`.
     // We should use `readPartitionSchema` as the partition schema here.
     AvroPartitionReaderFactory(
-      sparkSession.sessionState.conf,
+      conf,
       broadcastedConf,
       dataSchema,
       readDataSchema,
       readPartitionSchema,
       parsedOptions,
-      pushedFilters)
+      pushedFilters.toImmutableArraySeq)
   }
 
   override def equals(obj: Any): Boolean = obj match {
@@ -70,11 +70,7 @@ case class AvroScan(
 
   override def hashCode(): Int = super.hashCode()
 
-  override def description(): String = {
-    super.description() + ", PushedFilters: " + pushedFilters.mkString("[", ", ", "]")
-  }
-
   override def getMetaData(): Map[String, String] = {
-    super.getMetaData() ++ Map("PushedFilters" -> seqToString(pushedFilters))
+    super.getMetaData() ++ Map("PushedFilters" -> seqToString(pushedFilters.toImmutableArraySeq))
   }
 }

@@ -18,41 +18,47 @@
 package org.apache.spark.util.kvstore;
 
 import java.io.File;
+import java.lang.ref.Reference;
+import java.lang.ref.WeakReference;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Iterator;
 import java.util.List;
 import java.util.NoSuchElementException;
+import java.util.Set;
+import java.util.Spliterators;
 import java.util.stream.Collectors;
 import java.util.stream.StreamSupport;
 
-import com.google.common.collect.ImmutableSet;
-import org.apache.commons.io.FileUtils;
-import org.apache.commons.lang3.SystemUtils;
 import org.iq80.leveldb.DBIterator;
-import org.junit.After;
-import org.junit.Before;
-import org.junit.Test;
-import static org.junit.Assert.*;
-import static org.junit.Assume.assumeFalse;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+
+import org.apache.spark.network.util.JavaUtils;
+import org.apache.spark.util.SparkSystemUtils$;
+
+import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assumptions.assumeFalse;
 
 public class LevelDBSuite {
 
   private LevelDB db;
   private File dbpath;
 
-  @After
+  @AfterEach
   public void cleanup() throws Exception {
     if (db != null) {
       db.close();
     }
     if (dbpath != null) {
-      FileUtils.deleteQuietly(dbpath);
+      JavaUtils.deleteQuietly(dbpath);
     }
   }
 
-  @Before
+  @BeforeEach
   public void setup() throws Exception {
-    assumeFalse(SystemUtils.IS_OS_MAC_OSX && SystemUtils.OS_ARCH.equals("aarch64"));
+    assumeFalse(SparkSystemUtils$.MODULE$.isMacOnAppleSilicon());
     dbpath = File.createTempFile("test.", ".ldb");
     dbpath.delete();
     db = new LevelDB(dbpath);
@@ -214,19 +220,19 @@ public class LevelDBSuite {
     db.removeAllByIndexValues(
       ArrayKeyIndexType.class,
       KVIndex.NATURAL_INDEX_NAME,
-      ImmutableSet.of(new int[] {0, 0, 0}, new int[] { 2, 2, 2 }));
+      Set.of(new int[] {0, 0, 0}, new int[] { 2, 2, 2 }));
     assertEquals(7, db.count(ArrayKeyIndexType.class));
 
     db.removeAllByIndexValues(
       ArrayKeyIndexType.class,
       "id",
-      ImmutableSet.of(new String[] { "things" }));
+      Set.<String[]>of(new String[] { "things" }));
     assertEquals(4, db.count(ArrayKeyIndexType.class));
 
     db.removeAllByIndexValues(
       ArrayKeyIndexType.class,
       "id",
-      ImmutableSet.of(new String[] { "more things" }));
+      Set.<String[]>of(new String[] { "more things" }));
     assertEquals(0, db.count(ArrayKeyIndexType.class));
   }
 
@@ -236,13 +242,14 @@ public class LevelDBSuite {
       db.write(createCustomType1(i));
     }
 
-    KVStoreIterator<CustomType1> it = db.view(CustomType1.class).closeableIterator();
-    assertTrue(it.hasNext());
-    assertTrue(it.skip(5));
-    assertEquals("key5", it.next().key);
-    assertTrue(it.skip(3));
-    assertEquals("key9", it.next().key);
-    assertFalse(it.hasNext());
+    try (KVStoreIterator<CustomType1> it = db.view(CustomType1.class).closeableIterator()) {
+      assertTrue(it.hasNext());
+      assertTrue(it.skip(5));
+      assertEquals("key5", it.next().key);
+      assertTrue(it.skip(3));
+      assertEquals("key9", it.next().key);
+      assertFalse(it.hasNext());
+    }
   }
 
   @Test
@@ -257,12 +264,15 @@ public class LevelDBSuite {
       }
     });
 
-    List<Integer> results = StreamSupport
-      .stream(db.view(CustomType1.class).index("int").spliterator(), false)
-      .map(e -> e.num)
-      .collect(Collectors.toList());
+    try (KVStoreIterator<CustomType1> iterator =
+      db.view(CustomType1.class).index("int").closeableIterator()) {
+      List<Integer> results = StreamSupport
+        .stream(Spliterators.spliteratorUnknownSize(iterator, 0), false)
+        .map(e -> e.num)
+        .collect(Collectors.toList());
 
-    assertEquals(expected, results);
+      assertEquals(expected, results);
+    }
   }
 
   @Test
@@ -296,9 +306,154 @@ public class LevelDBSuite {
     }
     dbForCloseTest.close();
     assertTrue(dbPathForCloseTest.exists());
-    FileUtils.deleteQuietly(dbPathForCloseTest);
+    JavaUtils.deleteQuietly(dbPathForCloseTest);
     assertTrue(!dbPathForCloseTest.exists());
   }
+
+  @Test
+  public void testHasNextAfterIteratorClose() throws Exception {
+    db.write(createCustomType1(0));
+    KVStoreIterator<CustomType1> iter =
+      db.view(CustomType1.class).closeableIterator();
+    // iter should be true
+    assertTrue(iter.hasNext());
+    // close iter
+    iter.close();
+    // iter.hasNext should be false after iter close
+    assertFalse(iter.hasNext());
+  }
+
+  @Test
+  public void testHasNextAfterDBClose() throws Exception {
+    db.write(createCustomType1(0));
+    KVStoreIterator<CustomType1> iter =
+      db.view(CustomType1.class).closeableIterator();
+    // iter should be true
+    assertTrue(iter.hasNext());
+    // close db
+    db.close();
+    // iter.hasNext should be false after db close
+    assertFalse(iter.hasNext());
+  }
+
+  @Test
+  public void testNextAfterIteratorClose() throws Exception {
+    db.write(createCustomType1(0));
+    KVStoreIterator<CustomType1> iter =
+      db.view(CustomType1.class).closeableIterator();
+    // iter should be true
+    assertTrue(iter.hasNext());
+    // close iter
+    iter.close();
+    // iter.next should throw NoSuchElementException after iter close
+    assertThrows(NoSuchElementException.class, iter::next);
+  }
+
+  @Test
+  public void testNextAfterDBClose() throws Exception {
+    db.write(createCustomType1(0));
+    KVStoreIterator<CustomType1> iter =
+      db.view(CustomType1.class).closeableIterator();
+    // iter should be true
+    assertTrue(iter.hasNext());
+    // close db
+    iter.close();
+    // iter.next should throw NoSuchElementException after db close
+    assertThrows(NoSuchElementException.class, iter::next);
+  }
+
+  @Test
+  public void testSkipAfterIteratorClose() throws Exception {
+    db.write(createCustomType1(0));
+    KVStoreIterator<CustomType1> iter =
+      db.view(CustomType1.class).closeableIterator();
+    // close iter
+    iter.close();
+    // skip should always return false after iter close
+    assertFalse(iter.skip(0));
+    assertFalse(iter.skip(1));
+  }
+
+  @Test
+  public void testSkipAfterDBClose() throws Exception {
+    db.write(createCustomType1(0));
+    KVStoreIterator<CustomType1> iter =
+      db.view(CustomType1.class).closeableIterator();
+    // iter should be true
+    assertTrue(iter.hasNext());
+    // close db
+    db.close();
+    // skip should always return false after db close
+    assertFalse(iter.skip(0));
+    assertFalse(iter.skip(1));
+  }
+
+  @Test
+  public void testResourceCleaner() throws Exception {
+    File dbPathForCleanerTest = File.createTempFile(
+      "test_db_cleaner.", ".rdb");
+    dbPathForCleanerTest.delete();
+
+    LevelDB dbForCleanerTest = new LevelDB(dbPathForCleanerTest);
+    try {
+      for (int i = 0; i < 8192; i++) {
+        dbForCleanerTest.write(createCustomType1(i));
+      }
+      LevelDBIterator<CustomType1> levelDBIterator =
+        (LevelDBIterator<CustomType1>) dbForCleanerTest.view(CustomType1.class).iterator();
+      Reference<LevelDBIterator<?>> reference = new WeakReference<>(levelDBIterator);
+      assertNotNull(reference);
+      LevelDBIterator.ResourceCleaner resourceCleaner = levelDBIterator.getResourceCleaner();
+      assertFalse(resourceCleaner.isCompleted());
+      // Manually set levelDBIterator to null, to be GC.
+      levelDBIterator = null;
+      // 100 times gc, the levelDBIterator should be GCed.
+      int count = 0;
+      while (count < 100 && !reference.refersTo(null)) {
+        System.gc();
+        count++;
+        Thread.sleep(100);
+      }
+      // check rocksDBIterator should be GCed
+      assertTrue(reference.refersTo(null));
+      // Verify that the Cleaner will be executed after a period of time, isAllocated is true.
+      assertTrue(resourceCleaner.isCompleted());
+    } finally {
+      dbForCleanerTest.close();
+      JavaUtils.deleteQuietly(dbPathForCleanerTest);
+    }
+  }
+
+  @Test
+  public void testMultipleTypesWriteAll() throws Exception {
+
+    List<CustomType1> type1List = Arrays.asList(
+      createCustomType1(1),
+      createCustomType1(2),
+      createCustomType1(3),
+      createCustomType1(4)
+    );
+
+    List<CustomType2> type2List = Arrays.asList(
+      createCustomType2(10),
+      createCustomType2(11),
+      createCustomType2(12),
+      createCustomType2(13)
+    );
+
+    List fullList = new ArrayList();
+    fullList.addAll(type1List);
+    fullList.addAll(type2List);
+
+    db.writeAll(fullList);
+    for (CustomType1 value : type1List) {
+      assertEquals(value, db.read(value.getClass(), value.key));
+    }
+    for (CustomType2 value : type2List) {
+      assertEquals(value, db.read(value.getClass(), value.key));
+    }
+  }
+
 
   private CustomType1 createCustomType1(int i) {
     CustomType1 t = new CustomType1();
@@ -307,6 +462,14 @@ public class LevelDBSuite {
     t.name = "name" + i;
     t.num = i;
     t.child = "child" + i;
+    return t;
+  }
+
+  private CustomType2 createCustomType2(int i) {
+    CustomType2 t = new CustomType2();
+    t.key = "key" + i;
+    t.id = "id" + i;
+    t.parentId = "parent_id" + (i / 2);
     return t;
   }
 

@@ -507,8 +507,8 @@ final class OnlineLDAOptimizer extends LDAOptimizer with Logging {
     }
 
     val (statsSum: BDM[Double], logphatOption: Option[BDV[Double]], nonEmptyDocsN: Long) = stats
-      .treeAggregate((null.asInstanceOf[BDM[Double]], logphatPartOptionBase(), 0L))(
-        elementWiseSum, elementWiseSum
+      .treeAggregate((null.asInstanceOf[BDM[Double]], logphatPartOptionBase(), 0L),
+        elementWiseSum, elementWiseSum, 2, true
       )
 
     expElogbetaBc.destroy()
@@ -525,7 +525,7 @@ final class OnlineLDAOptimizer extends LDAOptimizer with Logging {
     updateLambda(batchResult, batchSize)
 
     logphatOption.foreach(_ /= nonEmptyDocsN.toDouble)
-    logphatOption.foreach(updateAlpha(_, nonEmptyDocsN))
+    logphatOption.foreach(updateAlpha(_, nonEmptyDocsN.toDouble))
 
     this
   }

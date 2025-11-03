@@ -100,12 +100,15 @@ class RateStreamTable(
 
     override def toContinuousStream(checkpointLocation: String): ContinuousStream =
       new RateStreamContinuousStream(rowsPerSecond, numPartitions)
+
+    override def columnarSupportMode(): Scan.ColumnarSupportMode =
+      Scan.ColumnarSupportMode.UNSUPPORTED
   }
 }
 
 object RateStreamProvider {
   val SCHEMA =
-    StructType(StructField("timestamp", TimestampType) :: StructField("value", LongType) :: Nil)
+    StructType(Array(StructField("timestamp", TimestampType), StructField("value", LongType)))
 
   val VERSION = 1
 

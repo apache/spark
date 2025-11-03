@@ -26,8 +26,10 @@ The `INSERT` statement inserts new rows into a table or overwrites the existing 
 ### Syntax
 
 ```sql
-INSERT [ INTO | OVERWRITE ] [ TABLE ] table_identifier [ partition_spec ] [ ( column_list ) ]
+INSERT [ INTO | OVERWRITE ] [ TABLE ] table_identifier [ partition_spec ] [ ( column_list ) | [BY NAME] ]
     { VALUES ( { value | NULL } [ , ... ] ) [ , ( ... ) ] | query }
+
+INSERT INTO [ TABLE ] table_identifier REPLACE WHERE boolean_expression query
 ```
 
 ### Parameters
@@ -57,6 +59,12 @@ INSERT [ INTO | OVERWRITE ] [ TABLE ] table_identifier [ partition_spec ] [ ( co
 
     Specifies the values to be inserted. Either an explicitly specified value or a NULL can be inserted.
     A comma must be used to separate each value in the clause. More than one set of values can be specified to insert multiple rows.
+
+* **boolean_expression**
+
+  Specifies any expression that evaluates to a result type `boolean`. Two or
+  more expressions may be combined together using the logical
+  operators ( `AND`, `OR` ).
 
 * **query**
 
@@ -184,7 +192,7 @@ SELECT * FROM applicants;
 +-----------+--------------------------+----------+---------+
 
 INSERT INTO students
-     FROM applicants SELECT name, address, id applicants WHERE qualified = true;
+     FROM applicants SELECT name, address, student_id WHERE qualified = true;
 
 SELECT * FROM students;
 +-------------+--------------------------+----------+
@@ -310,6 +318,79 @@ SELECT * FROM students;
 +-------------+--------------------------+----------+
 ```
 
+##### Insert By Name Using a SELECT Statement
+
+```sql
+-- Assuming the persons table has already been created and populated.
+SELECT * FROM persons;
++-------------+--------------------------+---------+
+|         name|                   address|      ssn|
++-------------+--------------------------+---------+
+|Dora Williams|134 Forest Ave, Menlo Park|123456789|
++-------------+--------------------------+---------+
+|  Eddie Davis|   245 Market St, Milpitas|345678901|
++-------------+--------------------------+---------+
+
+-- Spark will reorder the fields of the query according to the order of the fields in the table,
+-- so don't worry about the field order mismatch
+INSERT INTO students PARTITION (student_id = 222222) BY NAME
+    SELECT address, name FROM persons WHERE name = "Dora Williams";
+
+SELECT * FROM students;
++-------------+--------------------------+----------+
+|         name|                   address|student_id|
++-------------+--------------------------+----------+
+|   Ashua Hill|   456 Erica Ct, Cupertino|    111111|
++-------------+--------------------------+----------+
+|Dora Williams|134 Forest Ave, Menlo Park|    222222|
++-------------+--------------------------+----------+
+    
+INSERT OVERWRITE students PARTITION (student_id = 222222) BY NAME
+    SELECT 'Unknown' as address, name FROM persons WHERE name = "Dora Williams";
+
+SELECT * FROM students;
++-------------+--------------------------+----------+
+|         name|                   address|student_id|
++-------------+--------------------------+----------+
+|   Ashua Hill|   456 Erica Ct, Cupertino|    111111|
++-------------+--------------------------+----------+
+|Dora Williams|                   Unknown|    222222|
++-------------+--------------------------+----------+
+```
+
+##### Insert Using a REPLACE WHERE Statement
+
+```sql
+-- Assuming the persons and persons2 table has already been created and populated.
+SELECT * FROM persons;
++-------------+--------------------------+---------+
+|         name|                   address|      ssn|
++-------------+--------------------------+---------+
+|Dora Williams|134 Forest Ave, Menlo Park|123456789|
++-------------+--------------------------+---------+
+|  Eddie Davis|   245 Market St, Milpitas|345678901|
++-------------+--------------------------+---------+
+    
+SELECT * FROM persons2;
++-------------+--------------------------+---------+
+|         name|                   address|      ssn|
++-------------+--------------------------+---------+
+|   Ashua Hill|   456 Erica Ct, Cupertino|432795921|
++-------------+--------------------------+---------+
+
+-- in an atomic operation, 1) delete rows with ssn = 123456789 and 2) insert rows from persons2 
+INSERT INTO persons REPLACE WHERE ssn = 123456789 SELECT * FROM persons2;
+
+SELECT * FROM persons;
++-------------+--------------------------+---------+
+|         name|                   address|      ssn|
++-------------+--------------------------+---------+
+|  Eddie Davis|   245 Market St, Milpitas|345678901|
++-------------+--------------------------+---------+
+|   Ashua Hill|   456 Erica Ct, Cupertino|432795921|
++-------------+--------------------------+---------+
+```
+
 ##### Insert Using a TABLE Statement
 
 ```sql
@@ -351,7 +432,7 @@ SELECT * FROM applicants;
 +-----------+--------------------------+----------+---------+
 
 INSERT OVERWRITE students
-    FROM applicants SELECT name, address, id applicants WHERE qualified = true;
+    FROM applicants SELECT name, address, student_id WHERE qualified = true;
 
 SELECT * FROM students;
 +-----------+-------------------------+----------+
@@ -378,7 +459,7 @@ SELECT * FROM students;
 |    Amy Smith|   123 Park Ave, San Jose| 2019-01-02|
 +-------------+-------------------------+-----------+
 
-INSERT INTO students PARTITION (birthday = date'2019-01-02')
+INSERT OVERWRITE students PARTITION (birthday = date'2019-01-02')
     VALUES('Jason Wang', '908 Bird St, Saratoga');
 
 SELECT * FROM students;

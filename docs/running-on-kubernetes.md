@@ -44,8 +44,8 @@ Cluster administrators should use [Pod Security Policies](https://kubernetes.io/
 
 # Prerequisites
 
-* A running Kubernetes cluster at version >= 1.20 with access configured to it using
-[kubectl](https://kubernetes.io/docs/user-guide/prereqs/).  If you do not already have a working Kubernetes cluster,
+* A running Kubernetes cluster at version >= 1.32 with access configured to it using
+[kubectl](https://kubernetes.io/docs/reference/kubectl/).  If you do not already have a working Kubernetes cluster,
 you may set up a test cluster on your local machine using
 [minikube](https://kubernetes.io/docs/getting-started-guides/minikube/).
   * We recommend using the latest release of minikube with the DNS addon enabled.
@@ -54,7 +54,7 @@ you may set up a test cluster on your local machine using
   executor.
   * Check [kubernetes-client library](https://github.com/fabric8io/kubernetes-client)'s version of your Spark environment, and its compatibility with your Kubernetes cluster's version.
 * You must have appropriate permissions to list, create, edit and delete
-[pods](https://kubernetes.io/docs/user-guide/pods/) in your cluster. You can verify that you can list these resources
+[pods](https://kubernetes.io/docs/concepts/workloads/pods/) in your cluster. You can verify that you can list these resources
 by running `kubectl auth can-i <list|create|edit|delete> pods`.
   * The service account credentials used by the driver pods must be allowed to create pods, services and configmaps.
 * You must have [Kubernetes DNS](https://kubernetes.io/docs/concepts/services-networking/dns-pod-service/) configured in your cluster.
@@ -112,6 +112,8 @@ $ ./bin/docker-image-tool.sh -r <repo> -t my-tag -p ./kubernetes/dockerfiles/spa
 # To build additional SparkR docker image
 $ ./bin/docker-image-tool.sh -r <repo> -t my-tag -R ./kubernetes/dockerfiles/spark/bindings/R/Dockerfile build
 ```
+
+You can also use the [Apache Spark Docker images](https://hub.docker.com/r/apache/spark) (such as `apache/spark:<version>`) directly.
 
 ## Cluster Mode
 
@@ -202,6 +204,26 @@ When this property is set, it's highly recommended to make it unique across all 
 
 Use the exact prefix `spark.kubernetes.authenticate` for Kubernetes authentication parameters in client mode.
 
+## IPv4 and IPv6
+
+Starting with 3.4.0, Spark supports additionally IPv6-only environment via
+[IPv4/IPv6 dual-stack network](https://kubernetes.io/docs/concepts/services-networking/dual-stack/)
+feature which enables the allocation of both IPv4 and IPv6 addresses to Pods and Services.
+According to the K8s cluster capability, `spark.kubernetes.driver.service.ipFamilyPolicy` and
+`spark.kubernetes.driver.service.ipFamilies` can be one of `SingleStack`, `PreferDualStack`,
+and `RequireDualStack` and one of `IPv4`, `IPv6`, `IPv4,IPv6`, and `IPv6,IPv4` respectively.
+By default, Spark uses `spark.kubernetes.driver.service.ipFamilyPolicy=SingleStack` and
+`spark.kubernetes.driver.service.ipFamilies=IPv4`.
+
+To use only `IPv6`, you can submit your jobs with the following.
+```bash
+...
+    --conf spark.kubernetes.driver.service.ipFamilies=IPv6 \
+```
+
+In `DualStack` environment, you may need `java.net.preferIPv6Addresses=true` for JVM
+and `SPARK_PREFER_IPV6=true` for Python additionally to use `IPv6`.
+
 ## Dependency Management
 
 If your application's dependencies are all hosted in remote locations like HDFS or HTTP servers, they may be referred to
@@ -214,7 +236,7 @@ A typical example of this using S3 is via passing the following options:
 
 ```
 ...
---packages org.apache.hadoop:hadoop-aws:3.2.2
+--packages org.apache.hadoop:hadoop-aws:3.4.1
 --conf spark.kubernetes.file.upload.path=s3a://<s3-bucket>/path
 --conf spark.hadoop.fs.s3a.access.key=...
 --conf spark.hadoop.fs.s3a.impl=org.apache.hadoop.fs.s3a.S3AFileSystem
@@ -332,6 +354,27 @@ spark.kubernetes.executor.volumes.persistentVolumeClaim.data.mount.readOnly=fals
 
 For a complete list of available options for each supported type of volumes, please refer to the [Spark Properties](#spark-properties) section below.
 
+### PVC-oriented executor pod allocation
+
+Since disks are one of the important resource types, Spark driver provides a fine-grained control
+via a set of configurations. For example, by default, on-demand PVCs are owned by executors and
+the lifecycle of PVCs are tightly coupled with its owner executors.
+However, on-demand PVCs can be owned by driver and reused by another executors during the Spark job's
+lifetime with the following options. This reduces the overhead of PVC creation and deletion.
+
+```
+spark.kubernetes.driver.ownPersistentVolumeClaim=true
+spark.kubernetes.driver.reusePersistentVolumeClaim=true
+```
+
+In addition, since Spark 3.4, Spark driver is able to do PVC-oriented executor allocation which means
+Spark counts the total number of created PVCs which the job can have, and holds on a new executor creation
+if the driver owns the maximum number of PVCs. This helps the transition of the existing PVC from one executor
+to another executor.
+```
+spark.kubernetes.driver.waitToReusePersistentVolumeClaim=true
+```
+
 ## Local Storage
 
 Spark supports using volumes to spill data during shuffles and other operations. To use a volume as local storage, the volume's name should starts with `spark-local-dir-`, for example:
@@ -349,6 +392,13 @@ spark.kubernetes.executor.volumes.persistentVolumeClaim.spark-local-dir-1.option
 spark.kubernetes.executor.volumes.persistentVolumeClaim.spark-local-dir-1.options.sizeLimit=500Gi
 spark.kubernetes.executor.volumes.persistentVolumeClaim.spark-local-dir-1.mount.path=/data
 spark.kubernetes.executor.volumes.persistentVolumeClaim.spark-local-dir-1.mount.readOnly=false
+```
+
+To enable shuffle data recovery feature via the built-in `KubernetesLocalDiskShuffleDataIO` plugin, we need to have the following. You may want to enable `spark.kubernetes.driver.waitToReusePersistentVolumeClaim` additionally.
+
+```
+spark.kubernetes.executor.volumes.persistentVolumeClaim.spark-local-dir-1.mount.path=/data/spark-x/executor-x
+spark.shuffle.sort.io.plugin.class=org.apache.spark.shuffle.KubernetesLocalDiskShuffleDataIO
 ```
 
 If no volume is set as local storage, Spark uses temporary scratch space to spill data to disk during shuffles and other operations. When using Kubernetes as the resource manager the pods will be created with an [emptyDir](https://kubernetes.io/docs/concepts/storage/volumes/#emptydir) volume mounted for each directory listed in `spark.local.dir` or the environment variable `SPARK_LOCAL_DIRS` .  If no directories are explicitly specified then a default directory is created and configured appropriately.
@@ -380,6 +430,19 @@ The same logs can also be accessed through the
 [Kubernetes dashboard](https://kubernetes.io/docs/tasks/access-application-cluster/web-ui-dashboard/) if installed on
 the cluster.
 
+When there exists a log collection system, you can expose it at Spark Driver `Executors` tab UI. For example,
+
+```
+spark.ui.custom.executor.log.url='https://log-server/log?appId={{APP_ID}}&execId={{EXECUTOR_ID}}'
+```
+
+You can add additional custom variables to this url template, populated with the values of existing executor environment variables like
+
+```
+spark.executorEnv.SPARK_EXECUTOR_ATTRIBUTE_YOUR_VAR='$(EXISTING_EXECUTOR_ENV_VAR)'
+spark.ui.custom.executor.log.url='https://log-server/log?appId={{APP_ID}}&execId={{EXECUTOR_ID}}&your_var={{YOUR_VAR}}'
+```
+
 ### Accessing Driver UI
 
 The UI associated with any application can be accessed locally using
@@ -390,6 +453,19 @@ $ kubectl port-forward <driver-pod-name> 4040:4040
 ```
 
 Then, the Spark driver UI can be accessed on `http://localhost:4040`.
+
+Since Apache Spark 4.0.0, Driver UI provides a way to see driver logs via a new configuration.
+
+```
+spark.driver.log.localDir=/tmp
+```
+
+Then, the Spark driver UI can be accessed on `http://localhost:4040/logs/`.
+Optionally, the layout of log is configured by the following.
+
+```
+spark.driver.log.layout="%m%n%ex"
+```
 
 ### Debugging
 
@@ -437,20 +513,20 @@ administrator to control sharing and resource allocation in a Kubernetes cluster
 
 ### RBAC
 
-In Kubernetes clusters with [RBAC](https://kubernetes.io/docs/admin/authorization/rbac/) enabled, users can configure
+In Kubernetes clusters with [RBAC](https://kubernetes.io/docs/reference/access-authn-authz/rbac/) enabled, users can configure
 Kubernetes RBAC roles and service accounts used by the various Spark on Kubernetes components to access the Kubernetes
 API server.
 
 The Spark driver pod uses a Kubernetes service account to access the Kubernetes API server to create and watch executor
 pods. The service account used by the driver pod must have the appropriate permission for the driver to be able to do
 its work. Specifically, at minimum, the service account must be granted a
-[`Role` or `ClusterRole`](https://kubernetes.io/docs/admin/authorization/rbac/#role-and-clusterrole) that allows driver
+[`Role` or `ClusterRole`](https://kubernetes.io/docs/reference/access-authn-authz/rbac/#role-and-clusterrole) that allows driver
 pods to create pods and services. By default, the driver pod is automatically assigned the `default` service account in
 the namespace specified by `spark.kubernetes.namespace`, if no service account is specified when the pod gets created.
 
 Depending on the version and setup of Kubernetes deployed, this `default` service account may or may not have the role
 that allows driver pods to create pods and services under the default Kubernetes
-[RBAC](https://kubernetes.io/docs/admin/authorization/rbac/) policies. Sometimes users may need to specify a custom
+[RBAC](https://kubernetes.io/docs/reference/access-authn-authz/rbac/) policies. Sometimes users may need to specify a custom
 service account that has the right role granted. Spark on Kubernetes supports specifying a custom service account to
 be used by the driver pod through the configuration property
 `spark.kubernetes.authenticate.driver.serviceAccountName=<service account name>`. For example, to make the driver pod
@@ -481,7 +557,7 @@ Note that a `Role` can only be used to grant access to resources (like pods) wit
 (like pods) across all namespaces. For Spark on Kubernetes, since the driver always creates executor pods in the
 same namespace, a `Role` is sufficient, although users may use a `ClusterRole` instead. For more information on
 RBAC authorization and how to configure Kubernetes service accounts for pods, please refer to
-[Using RBAC Authorization](https://kubernetes.io/docs/admin/authorization/rbac/) and
+[Using RBAC Authorization](https://kubernetes.io/docs/reference/access-authn-authz/rbac/) and
 [Configure Service Accounts for Pods](https://kubernetes.io/docs/tasks/configure-pod-container/configure-service-account/).
 
 ## Spark Application Management
@@ -520,7 +596,7 @@ There are several Spark on Kubernetes features that are currently being worked o
 
 Some of these include:
 
-* Dynamic Resource Allocation and External Shuffle Service
+* External Shuffle Service
 * Job Queues and Resource Management
 
 # Configuration
@@ -529,8 +605,8 @@ See the [configuration page](configuration.html) for information on Spark config
 
 #### Spark Properties
 
-<table class="table">
-<tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr>
+<table class="spark-config">
+<thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
 <tr>
   <td><code>spark.kubernetes.context</code></td>
   <td><code>(none)</code></td>
@@ -547,7 +623,8 @@ See the [configuration page](configuration.html) for information on Spark config
   <td><code>spark.kubernetes.driver.master</code></td>
   <td><code>https://kubernetes.default.svc</code></td>
   <td>
-    The internal Kubernetes master (API server) address to be used for driver to request executors.
+    The internal Kubernetes master (API server) address to be used for driver to request executors or
+    'local[*]' for driver-pod-only mode.
   </td>
   <td>3.0.0</td>
 </tr>
@@ -566,7 +643,8 @@ See the [configuration page](configuration.html) for information on Spark config
     Container image to use for the Spark application.
     This is usually of the form <code>example.com/repo/spark:v1.0.0</code>.
     This configuration is required and must be provided by the user, unless explicit
-    images are provided for each different container type.
+    images are provided for each different container type. Note that <code>{{SPARK_VERSION}}</code> 
+    is the built-in variable that will be substituted with current Spark's version.
   </td>
   <td>2.3.0</td>
 </tr>
@@ -574,7 +652,8 @@ See the [configuration page](configuration.html) for information on Spark config
   <td><code>spark.kubernetes.driver.container.image</code></td>
   <td><code>(value of spark.kubernetes.container.image)</code></td>
   <td>
-    Custom container image to use for the driver.
+    Custom container image to use for the driver. Note that <code>{{SPARK_VERSION}}</code> 
+    is the built-in variable that will be substituted with current Spark's version.
   </td>
   <td>2.3.0</td>
 </tr>
@@ -582,7 +661,8 @@ See the [configuration page](configuration.html) for information on Spark config
   <td><code>spark.kubernetes.executor.container.image</code></td>
   <td><code>(value of spark.kubernetes.container.image)</code></td>
   <td>
-    Custom container image to use for executors.
+    Custom container image to use for executors. Note that <code>{{SPARK_VERSION}}</code> 
+    is the built-in variable that will be substituted with current Spark's version.
   </td>
   <td>2.3.0</td>
 </tr>
@@ -605,7 +685,7 @@ See the [configuration page](configuration.html) for information on Spark config
 </tr>
 <tr>
   <td><code>spark.kubernetes.allocation.batch.size</code></td>
-  <td><code>5</code></td>
+  <td><code>10</code></td>
   <td>
     Number of pods to launch at once in each round of executor pod allocation.
   </td>
@@ -619,6 +699,26 @@ See the [configuration page](configuration.html) for information on Spark config
     excessive CPU usage on the spark driver.
   </td>
   <td>2.3.0</td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.allocation.maximum</code></td>
+  <td><code>Int.MaxValue</code></td>
+  <td>
+    The maximum number of executor pods to try to create during the whole job lifecycle.
+  </td>
+  <td>4.1.0</td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.jars.avoidDownloadSchemes</code></td>
+  <td><code>(none)</code></td>
+  <td>
+    Comma-separated list of schemes for which jars will NOT be downloaded to the 
+    driver local disk prior to be distributed to executors, only for kubernetes deployment. 
+    For use in cases when the jars are big and executor counts are high, 
+    concurrent download causes network saturation and timeouts. 
+    Wildcard '*' is denoted to not downloading jars for any the schemes.
+  </td>
+  <td>4.0.0</td>
 </tr>
 <tr>
   <td><code>spark.kubernetes.authenticate.submission.caCertFile</code></td>
@@ -855,6 +955,17 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>2.3.0</td>
 </tr>
 <tr>
+  <td><code>spark.kubernetes.driver.service.label.[LabelName]</code></td>
+  <td>(none)</td>
+  <td>
+    Add the Kubernetes <a href="https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/">label</a> specified by <code>LabelName</code> to the driver service.
+    For example, <code>spark.kubernetes.driver.service.label.something=true</code>.
+    Note that Spark also adds its own labels to the driver service
+    for bookkeeping purposes.
+  </td>
+  <td>3.4.0</td>
+</tr>
+<tr>
   <td><code>spark.kubernetes.driver.service.annotation.[AnnotationName]</code></td>
   <td>(none)</td>
   <td>
@@ -901,18 +1012,8 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>
     Prefix to use in front of the executor pod names. It must conform the rules defined by the Kubernetes
     <a href="https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#dns-label-names">DNS Label Names</a>.
-    The prefix will be used to generate executor pod names in the form of <code>$podNamePrefix-exec-$id</code>, where the `id` is
+    The prefix will be used to generate executor pod names in the form of <code>\$podNamePrefix-exec-\$id</code>, where the `id` is
     a positive int value, so the length of the `podNamePrefix` needs to be less than or equal to 47(= 63 - 10 - 6).
-  </td>
-  <td>2.3.0</td>
-</tr>
-<tr>
-  <td><code>spark.kubernetes.executor.lostCheck.maxAttempts</code></td>
-  <td><code>10</code></td>
-  <td>
-    Number of times that the driver will try to ascertain the loss reason for a specific executor.
-    The loss reason is used to ascertain whether the executor failure is due to a framework or an application error
-    which in turn decides whether the executor is removed and replaced, or placed into a failed state for debugging.
   </td>
   <td>2.3.0</td>
 </tr>
@@ -1093,6 +1194,24 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>2.4.0</td>
 </tr>
 <tr>
+  <td><code>spark.kubernetes.driver.volumes.[VolumeType].[VolumeName].label.[LabelName]</code></td>
+  <td>(none)</td>
+  <td>
+   Configure <a href="https://kubernetes.io/docs/concepts/storage/volumes/">Kubernetes Volume</a> labels passed to the Kubernetes with <code>LabelName</code> as key having specified value, must conform with Kubernetes label format. For example,
+   <code>spark.kubernetes.driver.volumes.persistentVolumeClaim.checkpointpvc.label.foo=bar</code>.
+  </td>
+  <td>4.0.0</td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.driver.volumes.[VolumeType].[VolumeName].annotation.[AnnotationName]</code></td>
+  <td>(none)</td>
+  <td>
+   Configure <a href="https://kubernetes.io/docs/concepts/storage/volumes/">Kubernetes Volume</a> annotations passed to the Kubernetes with <code>AnnotationName</code> as key having specified value, must conform with Kubernetes annotations format. For example,
+   <code>spark.kubernetes.driver.volumes.persistentVolumeClaim.checkpointpvc.annotation.foo=bar</code>.
+  </td>
+  <td>4.0.0</td>
+</tr>
+<tr>
   <td><code>spark.kubernetes.executor.volumes.[VolumeType].[VolumeName].mount.path</code></td>
   <td>(none)</td>
   <td>
@@ -1129,6 +1248,24 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>2.4.0</td>
 </tr>
 <tr>
+  <td><code>spark.kubernetes.executor.volumes.[VolumeType].[VolumeName].label.[LabelName]</code></td>
+  <td>(none)</td>
+  <td>
+   Configure <a href="https://kubernetes.io/docs/concepts/storage/volumes/">Kubernetes Volume</a> labels passed to the Kubernetes with <code>LabelName</code> as key having specified value, must conform with Kubernetes label format. For example,
+   <code>spark.kubernetes.executor.volumes.persistentVolumeClaim.checkpointpvc.label.foo=bar</code>.
+  </td>
+  <td>4.0.0</td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.executor.volumes.[VolumeType].[VolumeName].annotation.[AnnotationName]</code></td>
+  <td>(none)</td>
+  <td>
+   Configure <a href="https://kubernetes.io/docs/concepts/storage/volumes/">Kubernetes Volume</a> annotations passed to the Kubernetes with <code>AnnotationName</code> as key having specified value, must conform with Kubernetes annotations format. For example,
+   <code>spark.kubernetes.executor.volumes.persistentVolumeClaim.checkpointpvc.annotation.foo=bar</code>.
+  </td>
+  <td>4.0.0</td>
+</tr>
+<tr>
   <td><code>spark.kubernetes.local.dirs.tmpfs</code></td>
   <td><code>false</code></td>
   <td>
@@ -1136,6 +1273,16 @@ See the [configuration page](configuration.html) for information on Spark config
    for more discussion of this.
   </td>
   <td>3.0.0</td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.memoryOverheadFactor</code></td>
+  <td><code>0.1</code></td>
+  <td>
+    This sets the Memory Overhead Factor that will allocate memory to non-JVM memory, which includes off-heap memory allocations, non-JVM tasks, various systems processes, and <code>tmpfs</code>-based local directories when <code>spark.kubernetes.local.dirs.tmpfs</code> is <code>true</code>. For JVM-based jobs this value will default to 0.10 and 0.40 for non-JVM jobs.
+    This is done as non-JVM tasks need more non-JVM heap space and such tasks commonly fail with "Memory Overhead Exceeded" errors. This preempts this error with a higher default.
+    This will be overridden by the value set by <code>spark.driver.memoryOverheadFactor</code> and <code>spark.executor.memoryOverheadFactor</code> explicitly.
+  </td>
+  <td>2.4.0</td>
 </tr>
 <tr>
   <td><code>spark.kubernetes.pyspark.pythonVersion</code></td>
@@ -1239,8 +1386,16 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>3.0.0</td>
 </tr>
 <tr>
+  <td><code>spark.kubernetes.executor.terminationGracePeriodSeconds</code></td>
+  <td>30s</td>
+  <td>
+    Time to wait for graceful termination of executor pods.
+  </td>
+  <td>4.1.0</td>
+</tr>
+<tr>
   <td><code>spark.kubernetes.executor.checkAllContainers</code></td>
-  <td><code>false</code></td>
+  <td><code>true</code></td>
   <td>
   Specify whether executor pods should be check all containers (including sidecars) or only the executor container when determining the pod status.
   </td>
@@ -1261,6 +1416,14 @@ See the [configuration page](configuration.html) for information on Spark config
     Request timeout in milliseconds for the kubernetes client to use for starting the driver.
   </td>
   <td>3.0.0</td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.trust.certificates</code></td>
+  <td><code>false</code></td>
+  <td>
+    If set to true then client can submit to kubernetes cluster only with token.
+  </td>
+  <td>3.2.0</td>
 </tr>
 <tr>
   <td><code>spark.kubernetes.driver.connectionTimeout</code></td>
@@ -1326,7 +1489,7 @@ See the [configuration page](configuration.html) for information on Spark config
   <td><code>spark.kubernetes.executor.scheduler.name</code></td>
   <td>(none)</td>
   <td>
-	Specify the scheduler name for each executor pod.
+    Specify the scheduler name for each executor pod.
   </td>
   <td>3.0.0</td>
 </tr>
@@ -1349,7 +1512,7 @@ See the [configuration page](configuration.html) for information on Spark config
 </tr>
 <tr>
   <td><code>spark.kubernetes.configMap.maxSize</code></td>
-  <td><code>1572864</code></td>
+  <td><code>1048576</code></td>
   <td>
     Max size limit for a config map.
     This is configurable as per <a href="https://etcd.io/docs/latest/dev-guide/limit/">limit</a> on k8s server end.
@@ -1384,8 +1547,26 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>3.2.0</td>
 </tr>
 <tr>
+  <td><code>spark.kubernetes.driver.service.ipFamilyPolicy</code></td>
+  <td><code>SingleStack</code></td>
+  <td>
+    K8s IP Family Policy for Driver Service. Valid values are
+    <code>SingleStack</code>, <code>PreferDualStack</code>, and <code>RequireDualStack</code>.
+  </td>
+  <td>3.4.0</td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.driver.service.ipFamilies</code></td>
+  <td><code>IPv4</code></td>
+  <td>
+    A list of IP families for K8s Driver Service. Valid values are
+    <code>IPv4</code> and <code>IPv6</code>.
+  </td>
+  <td>3.4.0</td>
+</tr>
+<tr>
   <td><code>spark.kubernetes.driver.ownPersistentVolumeClaim</code></td>
-  <td><code>false</code></td>
+  <td><code>true</code></td>
   <td>
     If true, driver pod becomes the owner of on-demand persistent volume claims instead of the executor pods
   </td>
@@ -1393,7 +1574,7 @@ See the [configuration page](configuration.html) for information on Spark config
 </tr>
 <tr>
   <td><code>spark.kubernetes.driver.reusePersistentVolumeClaim</code></td>
-  <td><code>false</code></td>
+  <td><code>true</code></td>
   <td>
     If true, driver pod tries to reuse driver-owned on-demand persistent volume claims
     of the deleted executor pods if exists. This can be useful to reduce executor pod
@@ -1405,6 +1586,18 @@ See the [configuration page](configuration.html) for information on Spark config
     sometimes. This config requires <code>spark.kubernetes.driver.ownPersistentVolumeClaim=true.</code>
   </td>
   <td>3.2.0</td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.driver.waitToReusePersistentVolumeClaim</code></td>
+  <td><code>false</code></td>
+  <td>
+    If true, driver pod counts the number of created on-demand persistent volume claims
+    and wait if the number is greater than or equal to the total number of volumes which
+    the Spark job is able to have. This config requires both
+    <code>spark.kubernetes.driver.ownPersistentVolumeClaim=true</code> and
+    <code>spark.kubernetes.driver.reusePersistentVolumeClaim=true.</code>
+  </td>
+  <td>3.4.0</td>
 </tr>
 <tr>
   <td><code>spark.kubernetes.executor.disableConfigMap</code></td>
@@ -1427,6 +1620,15 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>3.2.0</td>
 </tr>
 <tr>
+  <td><code>spark.kubernetes.driver.pod.excludedFeatureSteps</code></td>
+  <td>(none)</td>
+  <td>
+    Class names of a driver pod feature step to exclude.
+    This is a developer API. Comma separated.
+  </td>
+  <td>4.1.0</td>
+</tr>
+<tr>
   <td><code>spark.kubernetes.executor.pod.featureSteps</code></td>
   <td>(none)</td>
   <td>
@@ -1437,6 +1639,15 @@ See the [configuration page](configuration.html) for information on Spark config
     is also available.
   </td>
   <td>3.2.0</td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.executor.pod.excludedFeatureSteps</code></td>
+  <td>(none)</td>
+  <td>
+    Class names of an executor pod feature step to exclude.
+    This is a developer API. Comma separated.
+  </td>
+  <td>4.1.0</td>
 </tr>
 <tr>
   <td><code>spark.kubernetes.allocation.maxPendingPods</code></td>
@@ -1490,6 +1701,14 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>3.3.0</td>
 </tr>
 <tr>
+  <td><code>spark.kubernetes.executor.eventProcessingInterval</code></td>
+  <td><code>1s</code></td>
+  <td>
+    Interval between successive inspection of executor events sent from the Kubernetes API.
+  </td>
+  <td>2.4.0</td>
+</tr>
+<tr>
   <td><code>spark.kubernetes.executor.rollInterval</code></td>
   <td><code>0s</code></td>
   <td>
@@ -1511,7 +1730,7 @@ See the [configuration page](configuration.html) for information on Spark config
   <td><code>spark.kubernetes.executor.rollPolicy</code></td>
   <td><code>OUTLIER</code></td>
   <td>
-    Executor roll policy: Valid values are ID, ADD_TIME, TOTAL_GC_TIME, 
+    Executor roll policy: Valid values are ID, ADD_TIME, TOTAL_GC_TIME,
     TOTAL_DURATION, FAILED_TASKS, and OUTLIER (default).
     When executor roll happens, Spark uses this policy to choose
     an executor and decommission it. The built-in policies are based on executor summary
@@ -1537,8 +1756,8 @@ See the below table for the full list of pod specifications that will be overwri
 
 ### Pod Metadata
 
-<table class="table">
-<tr><th>Pod metadata key</th><th>Modified value</th><th>Description</th></tr>
+<table>
+<thead><tr><th>Pod metadata key</th><th>Modified value</th><th>Description</th></tr></thead>
 <tr>
   <td>name</td>
   <td>Value of <code>spark.kubernetes.driver.pod.name</code></td>
@@ -1573,8 +1792,8 @@ See the below table for the full list of pod specifications that will be overwri
 
 ### Pod Spec
 
-<table class="table">
-<tr><th>Pod spec key</th><th>Modified value</th><th>Description</th></tr>
+<table>
+<thead><tr><th>Pod spec key</th><th>Modified value</th><th>Description</th></tr></thead>
 <tr>
   <td>imagePullSecrets</td>
   <td>Adds image pull secrets from <code>spark.kubernetes.container.image.pullSecrets</code></td>
@@ -1626,8 +1845,8 @@ See the below table for the full list of pod specifications that will be overwri
 
 The following affect the driver and executor containers. All other containers in the pod spec will be unaffected.
 
-<table class="table">
-<tr><th>Container spec key</th><th>Modified value</th><th>Description</th></tr>
+<table>
+<thead><tr><th>Container spec key</th><th>Modified value</th><th>Description</th></tr></thead>
 <tr>
   <td>env</td>
   <td>Adds env variables from <code>spark.kubernetes.driverEnv.[EnvironmentVariableName]</code></td>
@@ -1699,14 +1918,14 @@ Kubernetes supports [Pod priority](https://kubernetes.io/docs/concepts/schedulin
 
 Spark on Kubernetes allows defining the priority of jobs by [Pod template](#pod-template). The user can specify the <code>priorityClassName</code> in driver or executor Pod template <code>spec</code> section. Below is an example to show how to specify it:
 
-```
+```yaml
 apiVersion: v1
 Kind: Pod
 metadata:
   labels:
     template-label-key: driver-template-label-value
 spec:
-  # Specify the priority in here 
+  # Specify the priority in here
   priorityClassName: system-node-critical
   containers:
   - name: test-driver-container
@@ -1729,26 +1948,20 @@ Spark allows users to specify a custom Kubernetes schedulers.
 3. Specify scheduler feature step.
 
    Users may also consider to use <code>spark.kubernetes.{driver/executor}.pod.featureSteps</code> to support more complex requirements, including but not limited to:
-  - Create additional Kubernetes custom resources for driver/executor scheduling.
-  - Set scheduler hints according to configuration or existing Pod info dynamically.
+   - Create additional Kubernetes custom resources for driver/executor scheduling.
+   - Set scheduler hints according to configuration or existing Pod info dynamically.
 
 #### Using Volcano as Customized Scheduler for Spark on Kubernetes
 
-**This feature is currently experimental. In future versions, there may be behavioral changes around configuration, feature step improvement.**
-
 ##### Prerequisites
-* Spark on Kubernetes with [Volcano](https://volcano.sh/en) as a custom scheduler is supported since Spark v3.3.0 and Volcano v1.5.1. Below is an example to install Volcano 1.5.1:
+* Spark on Kubernetes with [Volcano](https://volcano.sh/en) as a custom scheduler is supported since Spark v3.3.0 and Volcano v1.7.0. Below is an example to install Volcano 1.7.0:
 
   ```bash
-  # x86_64
-  kubectl apply -f https://raw.githubusercontent.com/volcano-sh/volcano/v1.5.1/installer/volcano-development.yaml
-
-  # arm64:
-  kubectl apply -f https://raw.githubusercontent.com/volcano-sh/volcano/v1.5.1/installer/volcano-development-arm64.yaml
+  kubectl apply -f https://raw.githubusercontent.com/volcano-sh/volcano/v1.7.0/installer/volcano-development.yaml
   ```
 
 ##### Build
-To create a Spark distribution along with Volcano suppport like those distributed by the Spark [Downloads page](https://spark.apache.org/downloads.html), also see more in ["Building Spark"](https://spark.apache.org/docs/latest/building-spark.html):
+To create a Spark distribution along with Volcano support like those distributed by the Spark [Downloads page](https://spark.apache.org/downloads.html), also see more in ["Building Spark"](https://spark.apache.org/docs/latest/building-spark.html):
 
 ```bash
 ./dev/make-distribution.sh --name custom-spark --pip --r --tgz -Psparkr -Phive -Phive-thriftserver -Pkubernetes -Pvolcano
@@ -1766,7 +1979,7 @@ To use Volcano as a custom scheduler the user needs to specify the following con
 --conf spark.kubernetes.scheduler.volcano.podGroupTemplateFile=/path/to/podgroup-template.yaml
 # Specify driver/executor VolcanoFeatureStep
 --conf spark.kubernetes.driver.pod.featureSteps=org.apache.spark.deploy.k8s.features.VolcanoFeatureStep
---conf spark.kubernetes.executor.pod.featureSteps=org.apache.spark.deploy.k8s.features.VolcanoFeatureStep```
+--conf spark.kubernetes.executor.pod.featureSteps=org.apache.spark.deploy.k8s.features.VolcanoFeatureStep
 ```
 
 ##### Volcano Feature Step
@@ -1799,7 +2012,42 @@ spec:
   queue: default
 ```
 
+#### Using Apache YuniKorn as Customized Scheduler for Spark on Kubernetes
+
+[Apache YuniKorn](https://yunikorn.apache.org/) is a resource scheduler for Kubernetes that provides advanced batch scheduling
+capabilities, such as job queuing, resource fairness, min/max queue capacity and flexible job ordering policies.
+For available Apache YuniKorn features, please refer to [core features](https://yunikorn.apache.org/docs/get_started/core_features).
+
+##### Prerequisites
+
+Install Apache YuniKorn:
+
+```bash
+helm repo add yunikorn https://apache.github.io/yunikorn-release
+helm repo update
+helm install yunikorn yunikorn/yunikorn --namespace yunikorn --version 1.7.0 --create-namespace --set embedAdmissionController=false
+```
+
+The above steps will install YuniKorn v1.7.0 on an existing Kubernetes cluster.
+
+##### Get started
+
+Submit Spark jobs with the following extra options:
+
+```bash
+--conf spark.kubernetes.scheduler.name=yunikorn
+--conf spark.kubernetes.driver.label.queue=root.default
+--conf spark.kubernetes.executor.label.queue=root.default
+--conf spark.kubernetes.driver.annotation.yunikorn.apache.org/app-id={% raw %}{{APP_ID}}{% endraw %}
+--conf spark.kubernetes.executor.annotation.yunikorn.apache.org/app-id={% raw %}{{APP_ID}}{% endraw %}
+```
+
+Note that {% raw %}{{APP_ID}}{% endraw %} is the built-in variable that will be substituted with Spark job ID automatically.
+With the above configuration, the job will be scheduled by YuniKorn scheduler instead of the default Kubernetes scheduler.
+
 ### Stage Level Scheduling Overview
 
-Stage level scheduling is supported on Kubernetes when dynamic allocation is enabled. This also requires <code>spark.dynamicAllocation.shuffleTracking.enabled</code> to be enabled since Kubernetes doesn't support an external shuffle service at this time. The order in which containers for different profiles is requested from Kubernetes is not guaranteed. Note that since dynamic allocation on Kubernetes requires the shuffle tracking feature, this means that executors from previous stages that used a different ResourceProfile may not idle timeout due to having shuffle data on them. This could result in using more cluster resources and in the worst case if there are no remaining resources on the Kubernetes cluster then Spark could potentially hang. You may consider looking at config <code>spark.dynamicAllocation.shuffleTracking.timeout</code> to set a timeout, but that could result in data having to be recomputed if the shuffle data is really needed.
+Stage level scheduling is supported on Kubernetes:
+- When dynamic allocation is disabled: It allows users to specify different task resource requirements at the stage level and will use the same executors requested at startup.
+- When dynamic allocation is enabled: It allows users to specify task and executor resource requirements at the stage level and will request the extra executors. This also requires <code>spark.dynamicAllocation.shuffleTracking.enabled</code> to be enabled since Kubernetes doesn't support an external shuffle service at this time. The order in which containers for different profiles is requested from Kubernetes is not guaranteed. Note that since dynamic allocation on Kubernetes requires the shuffle tracking feature, this means that executors from previous stages that used a different ResourceProfile may not idle timeout due to having shuffle data on them. This could result in using more cluster resources and in the worst case if there are no remaining resources on the Kubernetes cluster then Spark could potentially hang. You may consider looking at config <code>spark.dynamicAllocation.shuffleTracking.timeout</code> to set a timeout, but that could result in data having to be recomputed if the shuffle data is really needed.
 Note, there is a difference in the way pod template resources are handled between the base default profile and custom ResourceProfiles. Any resources specified in the pod template file will only be used with the base default profile. If you create custom ResourceProfiles be sure to include all necessary resources there since the resources from the template file will not be propagated to custom ResourceProfiles.

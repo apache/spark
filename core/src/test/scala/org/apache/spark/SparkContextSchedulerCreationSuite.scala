@@ -19,15 +19,14 @@ package org.apache.spark
 
 import org.scalatest.PrivateMethodTester
 
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config
 import org.apache.spark.scheduler.{SchedulerBackend, TaskScheduler, TaskSchedulerImpl}
 import org.apache.spark.scheduler.cluster.StandaloneSchedulerBackend
 import org.apache.spark.scheduler.local.LocalSchedulerBackend
 import org.apache.spark.util.Utils
 
-
 class SparkContextSchedulerCreationSuite
-  extends SparkFunSuite with LocalSparkContext with PrivateMethodTester with Logging {
+  extends SparkFunSuite with LocalSparkContext with PrivateMethodTester {
 
   def noOp(taskSchedulerImpl: TaskSchedulerImpl): Unit = {}
 
@@ -125,7 +124,7 @@ class SparkContextSchedulerCreationSuite
   }
 
   test("local-default-parallelism") {
-    val conf = new SparkConf().set("spark.default.parallelism", "16")
+    val conf = new SparkConf().set(config.DEFAULT_PARALLELISM.key, "16")
 
     val sched = createTaskScheduler("local", conf) { sched =>
       sched.backend match {

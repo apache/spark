@@ -30,7 +30,7 @@ import org.json4s.jackson.JsonMethods._
 import org.apache.spark.SparkContext
 import org.apache.spark.annotation.Since
 import org.apache.spark.api.java.{JavaPairRDD, JavaRDD}
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.mllib.linalg.BLAS
 import org.apache.spark.mllib.rdd.MLPairRDDFunctions._
 import org.apache.spark.mllib.util.{Loader, Saveable}
@@ -66,11 +66,12 @@ class MatrixFactorizationModel @Since("0.8.0") (
     require(features.first()._2.length == rank,
       s"$name feature dimension does not match the rank $rank.")
     if (features.partitioner.isEmpty) {
-      logWarning(s"$name factor does not have a partitioner. "
-        + "Prediction on individual records could be slow.")
+      logWarning(log"${MDC(LogKeys.FEATURE_NAME, name)} factor does not have a partitioner. " +
+        log"Prediction on individual records could be slow.")
     }
     if (features.getStorageLevel == StorageLevel.NONE) {
-      logWarning(s"$name factor is not cached. Prediction could be slow.")
+      logWarning(log"${MDC(LogKeys.FEATURE_NAME, name)} factor is not cached. " +
+        log"Prediction could be slow.")
     }
   }
 
@@ -295,7 +296,7 @@ object MatrixFactorizationModel extends Loader[MatrixFactorizationModel] {
       srcFeatures: RDD[(Int, Array[Double])],
       dstFeatures: RDD[(Int, Array[Double])],
       num: Int): RDD[(Int, Array[(Int, Double)])] = {
-    import scala.collection.JavaConverters._
+    import scala.jdk.CollectionConverters._
     val srcBlocks = blockify(srcFeatures)
     val dstBlocks = blockify(dstFeatures)
 
@@ -386,13 +387,13 @@ object MatrixFactorizationModel extends Loader[MatrixFactorizationModel] {
       import spark.implicits._
       val metadata = compact(render(
         ("class" -> thisClassName) ~ ("version" -> thisFormatVersion) ~ ("rank" -> model.rank)))
-      sc.parallelize(Seq(metadata), 1).saveAsTextFile(metadataPath(path))
+      spark.createDataFrame(Seq(Tuple1(metadata))).write.text(metadataPath(path))
       model.userFeatures.toDF("id", "features").write.parquet(userPath(path))
       model.productFeatures.toDF("id", "features").write.parquet(productPath(path))
     }
 
     def load(sc: SparkContext, path: String): MatrixFactorizationModel = {
-      implicit val formats = DefaultFormats
+      implicit val formats: Formats = DefaultFormats
       val spark = SparkSession.builder().sparkContext(sc).getOrCreate()
       val (className, formatVersion, metadata) = loadMetadata(sc, path)
       assert(className == thisClassName)

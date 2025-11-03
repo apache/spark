@@ -37,10 +37,11 @@ import org.apache.spark.sql.execution.command
  */
 trait AlterTableRecoverPartitionsSuiteBase extends command.AlterTableRecoverPartitionsSuiteBase {
   test("table does not exist") {
-    val errMsg = intercept[AnalysisException] {
+    val e = intercept[AnalysisException] {
       sql("ALTER TABLE does_not_exist RECOVER PARTITIONS")
-    }.getMessage
-    assert(errMsg.contains("Table not found"))
+    }
+    checkErrorTableNotFound(e, "`does_not_exist`",
+      ExpectedContext("does_not_exist", 12, 11 + "does_not_exist".length))
   }
 
   test("valid locations") {
@@ -111,6 +112,22 @@ trait AlterTableRecoverPartitionsSuiteBase extends command.AlterTableRecoverPart
       val expected = (0 to 100)
         .map(a => Map("a" -> a.toString, "b" -> "5", "c" -> "42")) :+ initPart
       checkPartitions(t, expected: _*)
+    }
+  }
+
+  test("ALTER TABLE .. RECOVER PARTITIONS is not allowed for non-partitioned table") {
+    withTable("tbl") {
+      sql("CREATE TABLE tbl(col1 int, col2 string) USING parquet")
+      val exception = intercept[AnalysisException] {
+        sql("ALTER TABLE tbl RECOVER PARTITIONS")
+      }
+      checkError(
+        exception = exception,
+        condition = "NOT_A_PARTITIONED_TABLE",
+        parameters = Map(
+          "operation" -> "ALTER TABLE RECOVER PARTITIONS",
+          "tableIdentWithDB" -> "`spark_catalog`.`default`.`tbl`")
+      )
     }
   }
 }

@@ -17,9 +17,10 @@
 
 package org.apache.spark.sql.hive.thriftserver.ui
 
+import java.io.File
 import java.util.{Calendar, Locale}
-import javax.servlet.http.HttpServletRequest
 
+import jakarta.servlet.http.HttpServletRequest
 import org.mockito.Mockito.{mock, when, RETURNS_SMART_NULLS}
 import org.scalatest.BeforeAndAfter
 
@@ -27,12 +28,22 @@ import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.scheduler.SparkListenerJobStart
 import org.apache.spark.sql.hive.thriftserver._
 import org.apache.spark.status.ElementTrackingStore
+import org.apache.spark.util.Utils
 import org.apache.spark.util.kvstore.InMemoryStore
 
 
 class ThriftServerPageSuite extends SparkFunSuite with BeforeAndAfter {
 
   private var kvstore: ElementTrackingStore = _
+
+  protected override def beforeAll(): Unit = {
+    val tmpDirName = System.getProperty("java.io.tmpdir")
+    val tmpDir = new File(tmpDirName)
+    if (!tmpDir.exists()) {
+      Utils.createDirectory(tmpDir)
+    }
+    super.beforeAll()
+  }
 
   after {
     if (kvstore != null) {

@@ -24,15 +24,15 @@ import java.util.{Map => JMap, Properties}
 import java.util.concurrent.{TimeoutException, TimeUnit}
 
 import scala.annotation.tailrec
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
-import kafka.api.Request
 import kafka.server.{KafkaConfig, KafkaServer}
 import kafka.zk.{AdminZkClient, KafkaZkClient}
 import org.apache.kafka.clients.producer.{KafkaProducer, ProducerRecord}
 import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.network.ListenerName
+import org.apache.kafka.common.requests.FetchRequest
 import org.apache.kafka.common.serialization.StringSerializer
 import org.apache.kafka.common.utils.{Time => KTime}
 import org.apache.zookeeper.client.ZKClientConfig
@@ -50,9 +50,10 @@ import org.apache.spark.util.{ShutdownHookManager, Utils}
  * The reason to put Kafka test utility class in src is to test Python related Kafka APIs.
  */
 private[kafka010] class KafkaTestUtils extends Logging {
+  private val localHostNameForURI = Utils.localHostNameForURI()
 
   // Zookeeper related configurations
-  private val zkHost = "127.0.0.1"
+  private val zkHost = localHostNameForURI
   private var zkPort: Int = 0
   private val zkConnectionTimeout = 60000
   private val zkSessionTimeout = 10000
@@ -63,7 +64,7 @@ private[kafka010] class KafkaTestUtils extends Logging {
   private var admClient: AdminZkClient = _
 
   // Kafka broker related configurations
-  private val brokerHost = "127.0.0.1"
+  private val brokerHost = localHostNameForURI
   private var brokerPort = 0
   private var brokerConf: KafkaConfig = _
 
@@ -205,7 +206,7 @@ private[kafka010] class KafkaTestUtils extends Logging {
 
   /** Java-friendly function for sending messages to the Kafka broker */
   def sendMessages(topic: String, messageToFreq: JMap[String, JInt]): Unit = {
-    sendMessages(topic, Map(messageToFreq.asScala.mapValues(_.intValue()).toSeq: _*))
+    sendMessages(topic, messageToFreq.asScala.toMap.transform((_, v) => v.intValue()))
   }
 
   /** Send the messages to the Kafka broker */
@@ -239,9 +240,7 @@ private[kafka010] class KafkaTestUtils extends Logging {
   private def brokerConfiguration: Properties = {
     val props = new Properties()
     props.put("broker.id", "0")
-    props.put("host.name", "127.0.0.1")
-    props.put("advertised.host.name", "127.0.0.1")
-    props.put("port", brokerPort.toString)
+    props.put("listeners", s"PLAINTEXT://$localHostNameForURI:$brokerPort")
     props.put("log.dir", brokerLogDir)
     props.put("zookeeper.connect", zkAddress)
     props.put("zookeeper.connection.timeout.ms", "60000")
@@ -262,6 +261,8 @@ private[kafka010] class KafkaTestUtils extends Logging {
     props.put("key.serializer", classOf[StringSerializer].getName)
     // wait for all in-sync replicas to ack sends
     props.put("acks", "all")
+    props.put("partitioner.class",
+      classOf[org.apache.kafka.clients.producer.internals.DefaultPartitioner].getName)
     props
   }
 
@@ -303,7 +304,7 @@ private[kafka010] class KafkaTestUtils extends Logging {
         val leader = partitionState.leader
         val isr = partitionState.isr
         zkClient.getLeaderForPartition(new TopicPartition(topic, partition)).isDefined &&
-          Request.isValidBrokerId(leader) && !isr.isEmpty
+          FetchRequest.isValidBrokerId(leader) && !isr.isEmpty
       case _ =>
         false
     }
@@ -319,7 +320,8 @@ private[kafka010] class KafkaTestUtils extends Logging {
     val zookeeper = new ZooKeeperServer(snapshotDir, logDir, 500)
     val (ip, port) = {
       val splits = zkConnect.split(":")
-      (splits(0), splits(1).toInt)
+      val port = splits(splits.length - 1)
+      (zkConnect.substring(0, zkConnect.length - port.length - 1), port.toInt)
     }
     val factory = new NIOServerCnxnFactory()
     factory.configure(new InetSocketAddress(ip, port), 16)
@@ -329,9 +331,6 @@ private[kafka010] class KafkaTestUtils extends Logging {
 
     def shutdown(): Unit = {
       factory.shutdown()
-      // The directories are not closed even if the ZooKeeper server is shut down.
-      // Please see ZOOKEEPER-1844, which is fixed in 3.4.6+. It leads to test failures
-      // on Windows if the directory deletion failure throws an exception.
       try {
         Utils.deleteRecursively(snapshotDir)
       } catch {

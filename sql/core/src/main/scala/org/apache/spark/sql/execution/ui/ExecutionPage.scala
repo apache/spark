@@ -17,16 +17,16 @@
 
 package org.apache.spark.sql.execution.ui
 
-import javax.servlet.http.HttpServletRequest
-
 import scala.xml.Node
 
+import jakarta.servlet.http.HttpServletRequest
 import org.json4s.JNull
 import org.json4s.JsonAST.{JBool, JString}
 import org.json4s.jackson.JsonMethods.parse
 
 import org.apache.spark.JobExecutionStatus
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.UI.UI_SQL_GROUP_SUB_EXECUTION_ENABLED
 import org.apache.spark.ui.{UIUtils, WebUIPage}
 
 class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging {
@@ -34,6 +34,8 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
   private val pandasOnSparkConfPrefix = "pandas_on_Spark."
 
   private val sqlStore = parent.sqlStore
+  private val groupSubExecutionEnabled = parent.conf.get(UI_SQL_GROUP_SUB_EXECUTION_ENABLED)
+
 
   override def render(request: HttpServletRequest): Seq[Node] = {
     val parameterExecutionId = request.getParameter("id")
@@ -72,27 +74,59 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
             <li>
               <strong>Duration: </strong>{UIUtils.formatDuration(duration)}
             </li>
+            {
+              if (executionUIData.rootExecutionId != executionId) {
+                <li>
+                  <strong>Parent Execution: </strong>
+                  <a href={"?id=" + executionUIData.rootExecutionId}>
+                    {executionUIData.rootExecutionId}
+                  </a>
+                </li>
+              }
+            }
+            {
+              if (groupSubExecutionEnabled) {
+                val subExecutions = sqlStore.executionsList()
+                  .filter(e => e.rootExecutionId == executionId && e.executionId != executionId)
+                if (subExecutions.nonEmpty) {
+                  <li>
+                    <strong>Sub Executions: </strong>
+                    {
+                      subExecutions.map { e =>
+                        <a href={"?id=" + e.executionId}>{e.executionId}</a><span>&nbsp;</span>
+                      }
+                    }
+                  </li>
+                }
+              }
+            }
             {jobLinks(JobExecutionStatus.RUNNING, "Running Jobs:")}
             {jobLinks(JobExecutionStatus.SUCCEEDED, "Succeeded Jobs:")}
             {jobLinks(JobExecutionStatus.FAILED, "Failed Jobs:")}
           </ul>
-        </div>
-        <div>
-          <input type="checkbox" id="stageId-and-taskId-checkbox"></input>
-          <span>Show the Stage ID and Task ID that corresponds to the max metric</span>
+          <div id="plan-viz-download-btn-container">
+            <select id="plan-viz-format-select">
+              <option value="svg">SVG</option>
+              <option value="dot">DOT</option>
+              <option value="txt">TXT</option>
+            </select>
+            <label for="plan-viz-format-select">
+              <a id="plan-viz-download-btn" class="downloadbutton">Download</a>
+            </label>
+          </div>
         </div>
 
       val metrics = sqlStore.executionMetrics(executionId)
       val graph = sqlStore.planGraph(executionId)
+      val configs = Option(executionUIData.modifiedConfigs).getOrElse(Map.empty)
 
       summary ++
         planVisualization(request, metrics, graph) ++
         physicalPlanDescription(executionUIData.physicalPlanDescription) ++
-        modifiedConfigs(
-          executionUIData.modifiedConfigs.filterKeys(
-            !_.startsWith(pandasOnSparkConfPrefix)).toMap) ++
+        modifiedConfigs(configs.filter { case (k, _) => !k.startsWith(pandasOnSparkConfPrefix) }) ++
         modifiedPandasOnSparkConfigs(
-          executionUIData.modifiedConfigs.filterKeys(_.startsWith(pandasOnSparkConfPrefix)).toMap)
+          configs.filter { case (k, _) => k.startsWith(pandasOnSparkConfPrefix) }) ++
+        <br/>
     }.getOrElse {
       <div>No information to display for query {executionId}</div>
     }
@@ -116,22 +150,29 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
       request: HttpServletRequest,
       metrics: Map[Long, String],
       graph: SparkPlanGraph): Seq[Node] = {
-    val metadata = graph.allNodes.flatMap { node =>
-      val nodeId = s"plan-meta-data-${node.id}"
-      <div id={nodeId}>{node.desc}</div>
-    }
 
     <div>
-      <div id="plan-viz-graph"></div>
+      <div>
+        <span style="cursor: pointer;" onclick="togglePlanViz();">
+          <h4>
+            <span id="plan-viz-graph-arrow" class="arrow-open"></span>
+            <a>Plan Visualization</a>
+          </h4>
+        </span>
+      </div>
+
+      <div id="plan-viz-graph">
+        <div>
+          <input type="checkbox" id="stageId-and-taskId-checkbox"></input>
+          <span>Show the Stage ID and Task ID that corresponds to the max metric</span>
+        </div>
+      </div>
       <div id="plan-viz-metadata" style="display:none">
         <div class="dot-file">
           {graph.makeDotFile(metrics)}
         </div>
-        <div id="plan-viz-metadata-size">{graph.allNodes.size.toString}</div>
-        {metadata}
       </div>
       {planVisualizationResources(request)}
-      <script>$(function() {{ if (shouldRenderPlanViz()) {{ renderPlanViz(); }} }})</script>
     </div>
   }
 
@@ -141,20 +182,15 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
   private def physicalPlanDescription(physicalPlanDescription: String): Seq[Node] = {
     <div>
       <span style="cursor: pointer;" onclick="clickPhysicalPlanDetails();">
-        <span id="physical-plan-details-arrow" class="arrow-closed"></span>
-        <a>Details</a>
+        <h4>
+          <span id="physical-plan-details-arrow" class="arrow-closed"></span>
+          <a>Plan Details</a>
+        </h4>
       </span>
     </div>
     <div id="physical-plan-details" style="display: none;">
       <pre>{physicalPlanDescription}</pre>
     </div>
-    <script>
-      function clickPhysicalPlanDetails() {{
-        $('#physical-plan-details').toggle();
-        $('#physical-plan-details-arrow').toggleClass('arrow-open').toggleClass('arrow-closed');
-      }}
-    </script>
-    <br/>
   }
 
   private def modifiedConfigs(modifiedConfigs: Map[String, String]): Seq[Node] = {
@@ -170,14 +206,15 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
     <div>
       <span class="collapse-sql-properties collapse-table"
             onClick="collapseTable('collapse-sql-properties', 'sql-properties')">
-        <span class="collapse-table-arrow arrow-closed"></span>
-        <a>SQL / DataFrame Properties</a>
+        <h4>
+          <span class="collapse-table-arrow arrow-closed"></span>
+          <a>SQL / DataFrame Properties</a>
+        </h4>
       </span>
       <div class="sql-properties collapsible-table collapsed">
         {configs}
       </div>
     </div>
-    <br/>
   }
 
   private def modifiedPandasOnSparkConfigs(
@@ -209,14 +246,15 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
       <span class="collapse-pandas-on-spark-properties collapse-table"
             onClick="collapseTable('collapse-pandas-on-spark-properties',
              'pandas-on-spark-properties')">
-        <span class="collapse-table-arrow arrow-closed"></span>
-        <a>Pandas API Properties</a>
+        <h4>
+          <span class="collapse-table-arrow arrow-closed"></span>
+          <a>Pandas API Properties</a>
+        </h4>
       </span>
       <div class="pandas-on-spark-properties collapsible-table collapsed">
         {configs}
       </div>
     </div>
-    <br/>
   }
 
   private def propertyHeader = Seq("Name", "Value")

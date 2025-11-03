@@ -17,14 +17,45 @@
 
 package org.apache.spark
 
-import org.scalatest.BeforeAndAfterAll
+import org.scalactic.source.Position
+import org.scalatest.{BeforeAndAfterAll, Tag}
 
-class ShuffleNettySuite extends ShuffleSuite with BeforeAndAfterAll {
+import org.apache.spark.network.util.IOMode
+import org.apache.spark.util.Utils
+
+abstract class ShuffleNettySuite extends ShuffleSuite with BeforeAndAfterAll {
 
   // This test suite should run all tests in ShuffleSuite with Netty shuffle mode.
 
+  def ioMode: IOMode = IOMode.NIO
+  def shouldRunTests: Boolean = true
   override def beforeAll(): Unit = {
     super.beforeAll()
-    conf.set("spark.shuffle.blockTransferService", "netty")
+    conf.set("spark.shuffle.io.mode", ioMode.toString)
   }
+
+  override protected def test(testName: String, testTags: Tag*)(testBody: => Any)(
+    implicit pos: Position): Unit = {
+    if (!shouldRunTests) {
+      ignore(s"$testName [disabled on ${Utils.osName} with $ioMode]")(testBody)
+    } else {
+      super.test(testName, testTags: _*) {testBody}
+    }
+  }
+}
+
+class ShuffleNettyNioSuite extends ShuffleNettySuite
+
+class ShuffleNettyEpollSuite extends ShuffleNettySuite {
+  override def shouldRunTests: Boolean = Utils.isLinux
+  override def ioMode: IOMode = IOMode.EPOLL
+}
+
+class ShuffleNettyKQueueSuite extends ShuffleNettySuite {
+  override def shouldRunTests: Boolean = Utils.isMac
+  override def ioMode: IOMode = IOMode.KQUEUE
+}
+
+class ShuffleNettyAutoSuite extends ShuffleNettySuite {
+  override def ioMode: IOMode = IOMode.AUTO
 }

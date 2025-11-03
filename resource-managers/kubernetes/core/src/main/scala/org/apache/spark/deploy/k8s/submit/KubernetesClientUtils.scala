@@ -19,30 +19,44 @@ package org.apache.spark.deploy.k8s.submit
 
 import java.io.{File, StringWriter}
 import java.nio.charset.MalformedInputException
+import java.util.{List => JList, Map => JMap}
 import java.util.Properties
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.io.{Codec, Source}
+import scala.jdk.CollectionConverters._
 
 import io.fabric8.kubernetes.api.model.{ConfigMap, ConfigMapBuilder, KeyToPath}
 
 import org.apache.spark.SparkConf
+import org.apache.spark.annotation.{DeveloperApi, Since, Unstable}
 import org.apache.spark.deploy.k8s.{Config, Constants, KubernetesUtils}
-import org.apache.spark.deploy.k8s.Config.{KUBERNETES_DNSNAME_MAX_LENGTH, KUBERNETES_NAMESPACE}
+import org.apache.spark.deploy.k8s.Config.{KUBERNETES_DNS_SUBDOMAIN_NAME_MAX_LENGTH, KUBERNETES_NAMESPACE}
 import org.apache.spark.deploy.k8s.Constants.ENV_SPARK_CONF_DIR
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.LogKeys.{CONFIG, PATH, PATHS}
+import org.apache.spark.util.ArrayImplicits._
 
-private[spark] object KubernetesClientUtils extends Logging {
+/**
+ * :: DeveloperApi ::
+ *
+ * A utility class used for K8s operations internally and Spark K8s operator.
+ */
+@Unstable
+@DeveloperApi
+object KubernetesClientUtils extends Logging {
 
-  // Config map name can be 63 chars at max.
+  // Config map name can be KUBERNETES_DNS_SUBDOMAIN_NAME_MAX_LENGTH chars at max.
+  @Since("3.3.0")
   def configMapName(prefix: String): String = {
     val suffix = "-conf-map"
-    s"${prefix.take(KUBERNETES_DNSNAME_MAX_LENGTH - suffix.length)}$suffix"
+    s"${prefix.take(KUBERNETES_DNS_SUBDOMAIN_NAME_MAX_LENGTH - suffix.length)}$suffix"
   }
 
+  @Since("3.1.0")
   val configMapNameExecutor: String = configMapName(s"spark-exec-${KubernetesUtils.uniqueID()}")
 
+  @Since("3.1.0")
   val configMapNameDriver: String = configMapName(s"spark-drv-${KubernetesUtils.uniqueID()}")
 
   private def buildStringFromPropertiesMap(configMapName: String,
@@ -59,7 +73,20 @@ private[spark] object KubernetesClientUtils extends Logging {
 
   /**
    * Build, file -> 'file's content' map of all the selected files in SPARK_CONF_DIR.
+   * (Java-friendly)
    */
+  @Since("4.1.0")
+  def buildSparkConfDirFilesMapJava(
+      configMapName: String,
+      sparkConf: SparkConf,
+      resolvedPropertiesMap: JMap[String, String]): JMap[String, String] = synchronized {
+    buildSparkConfDirFilesMap(configMapName, sparkConf, resolvedPropertiesMap.asScala.toMap).asJava
+  }
+
+  /**
+   * Build, file -> 'file's content' map of all the selected files in SPARK_CONF_DIR.
+   */
+  @Since("3.1.1")
   def buildSparkConfDirFilesMap(
       configMapName: String,
       sparkConf: SparkConf,
@@ -75,6 +102,12 @@ private[spark] object KubernetesClientUtils extends Logging {
     }
   }
 
+  @Since("4.1.0")
+  def buildKeyToPathObjectsJava(confFilesMap: JMap[String, String]): JList[KeyToPath] = {
+    buildKeyToPathObjects(confFilesMap.asScala.toMap).asJava
+  }
+
+  @Since("3.1.0")
   def buildKeyToPathObjects(confFilesMap: Map[String, String]): Seq[KeyToPath] = {
     confFilesMap.map {
       case (fileName: String, _: String) =>
@@ -84,9 +117,20 @@ private[spark] object KubernetesClientUtils extends Logging {
   }
 
   /**
+   * Build a ConfigMap that will hold the content for environment variable SPARK_CONF_DIR
+   * on remote pods. (Java-friendly)
+   */
+  @Since("4.1.0")
+  def buildConfigMapJava(configMapName: String, confFileMap: JMap[String, String],
+      withLabels: JMap[String, String]): ConfigMap = {
+    buildConfigMap(configMapName, confFileMap.asScala.toMap, withLabels.asScala.toMap)
+  }
+
+  /**
    * Build a Config Map that will hold the content for environment variable SPARK_CONF_DIR
    * on remote pods.
    */
+  @Since("3.1.0")
   def buildConfigMap(configMapName: String, confFileMap: Map[String, String],
       withLabels: Map[String, String] = Map()): ConfigMap = {
     val configMapNameSpace =
@@ -132,20 +176,20 @@ private[spark] object KubernetesClientUtils extends Logging {
           }
         } catch {
           case e: MalformedInputException =>
-            logWarning(
-              s"Unable to read a non UTF-8 encoded file ${file.getAbsolutePath}. Skipping...", e)
-            None
+            logWarning(log"Unable to read a non UTF-8 encoded file " +
+              log"${MDC(PATH, file.getAbsolutePath)}. Skipping...", e)
         } finally {
           source.close()
         }
       }
       if (truncatedMap.nonEmpty) {
-        logInfo(s"Spark configuration files loaded from $confDir :" +
-          s" ${truncatedMap.keys.mkString(",")}")
+        logInfo(log"Spark configuration files loaded from ${MDC(PATH, confDir)} : " +
+          log"${MDC(PATHS, truncatedMap.keys.mkString(","))}")
       }
       if (skippedFiles.nonEmpty) {
-        logWarning(s"Skipped conf file(s) ${skippedFiles.mkString(",")}, due to size constraint." +
-          s" Please see, config: `${Config.CONFIG_MAP_MAXSIZE.key}` for more details.")
+        logWarning(log"Skipped conf file(s) ${MDC(PATHS, skippedFiles.mkString(","))}, due to " +
+          log"size constraint. Please see, config: " +
+          log"`${MDC(CONFIG, Config.CONFIG_MAP_MAXSIZE.key)}` for more details.")
       }
       truncatedMap.toMap
     } else {
@@ -171,7 +215,7 @@ private[spark] object KubernetesClientUtils extends Logging {
     val confFiles: Seq[File] = {
       val dir = new File(confDir)
       if (dir.isDirectory) {
-        dir.listFiles.filter(x => fileFilter(x)).toSeq
+        dir.listFiles.filter(x => fileFilter(x)).toImmutableArraySeq
       } else {
         Nil
       }

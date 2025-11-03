@@ -19,27 +19,28 @@ package org.apache.spark.network.server;
 
 import java.util.Iterator;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Random;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.Preconditions;
 import io.netty.channel.Channel;
-import org.apache.commons.lang3.tuple.ImmutablePair;
-import org.apache.commons.lang3.tuple.Pair;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
+import org.apache.spark.internal.SparkLogger;
+import org.apache.spark.internal.SparkLoggerFactory;
 import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.client.TransportClient;
+import org.apache.spark.network.util.JavaUtils;
+import org.apache.spark.util.Pair;
 
 /**
  * StreamManager which allows registration of an Iterator&lt;ManagedBuffer&gt;, which are
  * individually fetched as chunks by the client. Each registered buffer is one chunk.
  */
 public class OneForOneStreamManager extends StreamManager {
-  private static final Logger logger = LoggerFactory.getLogger(OneForOneStreamManager.class);
+  private static final SparkLogger logger =
+    SparkLoggerFactory.getLogger(OneForOneStreamManager.class);
 
   private final AtomicLong nextStreamId;
   private final ConcurrentHashMap<Long, StreamState> streams;
@@ -71,7 +72,7 @@ public class OneForOneStreamManager extends StreamManager {
         Channel channel,
         boolean isBufferMaterializedOnNext) {
       this.appId = appId;
-      this.buffers = Preconditions.checkNotNull(buffers);
+      this.buffers = Objects.requireNonNull(buffers);
       this.associatedChannel = channel;
       this.isBufferMaterializedOnNext = isBufferMaterializedOnNext;
     }
@@ -126,7 +127,7 @@ public class OneForOneStreamManager extends StreamManager {
       "Stream id and chunk index should be specified.";
     long streamId = Long.valueOf(array[0]);
     int chunkIndex = Integer.valueOf(array[1]);
-    return ImmutablePair.of(streamId, chunkIndex);
+    return Pair.of(streamId, chunkIndex);
   }
 
   @Override
@@ -166,7 +167,7 @@ public class OneForOneStreamManager extends StreamManager {
   public void checkAuthorization(TransportClient client, long streamId) {
     if (client.getClientId() != null) {
       StreamState state = streams.get(streamId);
-      Preconditions.checkArgument(state != null, "Unknown stream ID.");
+      JavaUtils.checkArgument(state != null, "Unknown stream ID.");
       if (!client.getClientId().equals(state.appId)) {
         throw new SecurityException(String.format(
           "Client %s not authorized to read stream %d (app %s).",

@@ -20,15 +20,15 @@ package org.apache.spark.sql.hive
 import java.io.File
 import java.util.Locale
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.hadoop.fs.Path
 import org.apache.orc.OrcConf.COMPRESS
 import org.apache.parquet.hadoop.ParquetOutputFormat
 import org.scalatest.BeforeAndAfterAll
 
-import org.apache.spark.sql.execution.datasources.orc.OrcOptions
-import org.apache.spark.sql.execution.datasources.parquet.{ParquetOptions, ParquetTest}
+import org.apache.spark.sql.execution.datasources.orc.{OrcCompressionCodec, OrcOptions}
+import org.apache.spark.sql.execution.datasources.parquet.{ParquetCompressionCodec, ParquetOptions, ParquetTest}
 import org.apache.spark.sql.hive.orc.OrcFileOperator
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
@@ -288,20 +288,41 @@ class CompressionCodecSuite extends TestHiveSingleton with ParquetTest with Befo
 
   test("both table-level and session-level compression are set") {
     checkForTableWithCompressProp("parquet",
-      tableCompressCodecs = List("UNCOMPRESSED", "SNAPPY", "GZIP"),
-      sessionCompressCodecs = List("SNAPPY", "GZIP", "SNAPPY"))
+      tableCompressCodecs = List(
+        ParquetCompressionCodec.UNCOMPRESSED.name,
+        ParquetCompressionCodec.SNAPPY.name,
+        ParquetCompressionCodec.GZIP.name),
+      sessionCompressCodecs = List(
+        ParquetCompressionCodec.SNAPPY.name,
+        ParquetCompressionCodec.GZIP.name,
+        ParquetCompressionCodec.SNAPPY.name))
     checkForTableWithCompressProp("orc",
-      tableCompressCodecs = List("NONE", "SNAPPY", "ZLIB"),
-      sessionCompressCodecs = List("SNAPPY", "ZLIB", "SNAPPY"))
+      tableCompressCodecs =
+        List(
+          OrcCompressionCodec.NONE.name,
+          OrcCompressionCodec.SNAPPY.name,
+          OrcCompressionCodec.ZLIB.name),
+      sessionCompressCodecs =
+        List(
+          OrcCompressionCodec.SNAPPY.name,
+          OrcCompressionCodec.ZLIB.name,
+          OrcCompressionCodec.SNAPPY.name))
   }
 
   test("table-level compression is not set but session-level compressions is set ") {
     checkForTableWithCompressProp("parquet",
       tableCompressCodecs = List.empty,
-      sessionCompressCodecs = List("UNCOMPRESSED", "SNAPPY", "GZIP"))
+      sessionCompressCodecs = List(
+        ParquetCompressionCodec.UNCOMPRESSED.name,
+        ParquetCompressionCodec.SNAPPY.name,
+        ParquetCompressionCodec.GZIP.name))
     checkForTableWithCompressProp("orc",
       tableCompressCodecs = List.empty,
-      sessionCompressCodecs = List("NONE", "SNAPPY", "ZLIB"))
+      sessionCompressCodecs =
+        List(
+          OrcCompressionCodec.NONE.name,
+          OrcCompressionCodec.SNAPPY.name,
+          OrcCompressionCodec.ZLIB.name))
   }
 
   def checkTableWriteWithCompressionCodecs(format: String, compressCodecs: List[String]): Unit = {
@@ -335,7 +356,16 @@ class CompressionCodecSuite extends TestHiveSingleton with ParquetTest with Befo
   }
 
   test("test table containing mixed compression codec") {
-    checkTableWriteWithCompressionCodecs("parquet", List("UNCOMPRESSED", "SNAPPY", "GZIP"))
-    checkTableWriteWithCompressionCodecs("orc", List("NONE", "SNAPPY", "ZLIB"))
+    checkTableWriteWithCompressionCodecs("parquet",
+      List(
+        ParquetCompressionCodec.UNCOMPRESSED.name,
+        ParquetCompressionCodec.SNAPPY.name,
+        ParquetCompressionCodec.GZIP.name))
+    checkTableWriteWithCompressionCodecs(
+      "orc",
+      List(
+        OrcCompressionCodec.NONE.name,
+        OrcCompressionCodec.SNAPPY.name,
+        OrcCompressionCodec.ZLIB.name))
   }
 }

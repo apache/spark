@@ -17,15 +17,16 @@
 
 package org.apache.spark.ml.regression
 
+import java.io.{DataInputStream, DataOutputStream}
+
 import scala.collection.mutable
 
 import breeze.linalg.{DenseVector => BDV}
 import breeze.optimize.{CachedDiffFunction, LBFGS => BreezeLBFGS}
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.SparkException
 import org.apache.spark.annotation.Since
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.ml.PredictorParams
 import org.apache.spark.ml.feature._
 import org.apache.spark.ml.linalg._
@@ -207,8 +208,8 @@ class AFTSurvivalRegression @Since("1.6.0") (@Since("1.6.0") override val uid: S
     instr.logNamedValue("quantileProbabilities.size", $(quantileProbabilities).length)
 
     if (dataset.storageLevel != StorageLevel.NONE) {
-      instr.logWarning(s"Input instances will be standardized, blockified to blocks, and " +
-        s"then cached during training. Be careful of double caching!")
+      instr.logWarning("Input instances will be standardized, blockified to blocks, and " +
+        "then cached during training. Be careful of double caching!")
     }
 
     val validatedCensorCol = {
@@ -271,9 +272,7 @@ class AFTSurvivalRegression @Since("1.6.0") (@Since("1.6.0") override val uid: S
         optimizer, initialSolution)
 
     if (rawCoefficients == null) {
-      val msg = s"${optimizer.getClass.getName} failed."
-      instr.logError(msg)
-      throw new SparkException(msg)
+      MLUtils.optimizerFailed(instr, optimizer.getClass)
     }
 
     val coefficientArray = Array.tabulate(numFeatures) { i =>
@@ -312,7 +311,7 @@ class AFTSurvivalRegression @Since("1.6.0") (@Since("1.6.0") override val uid: S
     val costFun = new RDDLossFunction(blocks, getAggregatorFunc, None, $(aggregationDepth))
 
     if ($(fitIntercept)) {
-      // orginal `initialSolution` is for problem:
+      // original `initialSolution` is for problem:
       // y = f(w1 * x1 / std_x1, w2 * x2 / std_x2, ..., intercept)
       // we should adjust it to the initial solution for problem:
       // y = f(w1 * (x1 - avg_x1) / std_x1, w2 * (x2 - avg_x2) / std_x2, ..., intercept)
@@ -343,7 +342,7 @@ class AFTSurvivalRegression @Since("1.6.0") (@Since("1.6.0") override val uid: S
       val adapt = BLAS.getBLAS(numFeatures).ddot(numFeatures, solution, 1, scaledMean, 1)
       solution(numFeatures) -= adapt
     }
-    (solution, arrayBuilder.result)
+    (solution, arrayBuilder.result())
   }
 
   @Since("1.6.0")
@@ -353,6 +352,14 @@ class AFTSurvivalRegression @Since("1.6.0") (@Since("1.6.0") override val uid: S
 
   @Since("1.6.0")
   override def copy(extra: ParamMap): AFTSurvivalRegression = defaultCopy(extra)
+
+  private[spark] override def estimateModelSize(dataset: Dataset[_]): Long = {
+    val numFeatures = DatasetUtils.getNumFeatures(dataset, $(featuresCol))
+
+    var size = this.estimateMatadataSize
+    size += Vectors.getDenseSize(numFeatures) // coefficients
+    size
+  }
 }
 
 @Since("1.6.0")
@@ -374,30 +381,37 @@ class AFTSurvivalRegressionModel private[ml] (
   extends RegressionModel[Vector, AFTSurvivalRegressionModel] with AFTSurvivalRegressionParams
   with MLWritable {
 
+  // For ml connect only
+  private[ml] def this() = this("", Vectors.empty, Double.NaN, Double.NaN)
+
   @Since("3.0.0")
   override def numFeatures: Int = coefficients.size
 
   /** @group setParam */
   @Since("1.6.0")
-  def setQuantileProbabilities(value: Array[Double]): this.type = {
-    set(quantileProbabilities, value)
-    _quantiles(0) = $(quantileProbabilities).map(q => math.exp(math.log(-math.log1p(-q)) * scale))
-    this
-  }
+  def setQuantileProbabilities(value: Array[Double]): this.type = set(quantileProbabilities, value)
 
   /** @group setParam */
   @Since("1.6.0")
   def setQuantilesCol(value: String): this.type = set(quantilesCol, value)
 
-  private lazy val _quantiles = {
-    Array($(quantileProbabilities).map(q => math.exp(math.log(-math.log1p(-q)) * scale)))
+  private var _quantiles: Vector = _
+
+  private[ml] override def onParamChange(param: Param[_]): Unit = {
+    if (param.name == "quantileProbabilities") {
+      if (isDefined(quantileProbabilities)) {
+        _quantiles = Vectors.dense(
+          $(quantileProbabilities).map(q => math.exp(math.log(-math.log1p(-q)) * scale)))
+      } else {
+        _quantiles = null
+      }
+    }
   }
 
   private def lambda2Quantiles(lambda: Double): Vector = {
-    val quantiles = _quantiles(0).clone()
-    var i = 0
-    while (i < quantiles.length) { quantiles(i) *= lambda; i += 1 }
-    Vectors.dense(quantiles)
+    val quantiles = _quantiles.copy
+    BLAS.scal(lambda, quantiles)
+    quantiles
   }
 
   @Since("2.0.0")
@@ -440,8 +454,8 @@ class AFTSurvivalRegressionModel private[ml] (
     if (predictionColNames.nonEmpty) {
       dataset.withColumns(predictionColNames, predictionColumns)
     } else {
-      this.logWarning(s"$uid: AFTSurvivalRegressionModel.transform() does nothing" +
-        " because no output columns were set.")
+      this.logWarning(log"${MDC(LogKeys.UUID, uid)}: AFTSurvivalRegressionModel.transform() " +
+        log"does nothing because no output columns were set.")
       dataset.toDF()
     }
   }
@@ -465,6 +479,14 @@ class AFTSurvivalRegressionModel private[ml] (
       .setParent(parent)
   }
 
+  private[spark] override def estimatedSize: Long = {
+    var size = this.estimateMatadataSize
+    if (this.coefficients != null) {
+      size += this.coefficients.getSizeInBytes
+    }
+    size
+  }
+
   @Since("1.6.0")
   override def write: MLWriter =
     new AFTSurvivalRegressionModel.AFTSurvivalRegressionModelWriter(this)
@@ -477,6 +499,22 @@ class AFTSurvivalRegressionModel private[ml] (
 
 @Since("1.6.0")
 object AFTSurvivalRegressionModel extends MLReadable[AFTSurvivalRegressionModel] {
+  private[ml] case class Data(coefficients: Vector, intercept: Double, scale: Double)
+
+  private[ml] def serializeData(data: Data, dos: DataOutputStream): Unit = {
+    import ReadWriteUtils._
+    serializeVector(data.coefficients, dos)
+    dos.writeDouble(data.intercept)
+    dos.writeDouble(data.scale)
+  }
+
+  private[ml] def deserializeData(dis: DataInputStream): Data = {
+    import ReadWriteUtils._
+    val coefficients = deserializeVector(dis)
+    val intercept = dis.readDouble()
+    val scale = dis.readDouble()
+    Data(coefficients, intercept, scale)
+  }
 
   @Since("1.6.0")
   override def read: MLReader[AFTSurvivalRegressionModel] = new AFTSurvivalRegressionModelReader
@@ -489,15 +527,13 @@ object AFTSurvivalRegressionModel extends MLReadable[AFTSurvivalRegressionModel]
       instance: AFTSurvivalRegressionModel
     ) extends MLWriter with Logging {
 
-    private case class Data(coefficients: Vector, intercept: Double, scale: Double)
-
     override protected def saveImpl(path: String): Unit = {
       // Save metadata and Params
-      DefaultParamsWriter.saveMetadata(instance, path, sc)
+      DefaultParamsWriter.saveMetadata(instance, path, sparkSession)
       // Save model data: coefficients, intercept, scale
       val data = Data(instance.coefficients, instance.intercept, instance.scale)
       val dataPath = new Path(path, "data").toString
-      sparkSession.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
+      ReadWriteUtils.saveObject[Data](dataPath, data, sparkSession, serializeData)
     }
   }
 
@@ -507,15 +543,13 @@ object AFTSurvivalRegressionModel extends MLReadable[AFTSurvivalRegressionModel]
     private val className = classOf[AFTSurvivalRegressionModel].getName
 
     override def load(path: String): AFTSurvivalRegressionModel = {
-      val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
+      val metadata = DefaultParamsReader.loadMetadata(path, sparkSession, className)
 
       val dataPath = new Path(path, "data").toString
-      val data = sparkSession.read.parquet(dataPath)
-      val Row(coefficients: Vector, intercept: Double, scale: Double) =
-        MLUtils.convertVectorColumnsToML(data, "coefficients")
-          .select("coefficients", "intercept", "scale")
-          .head()
-      val model = new AFTSurvivalRegressionModel(metadata.uid, coefficients, intercept, scale)
+      val data = ReadWriteUtils.loadObject[Data](dataPath, sparkSession, deserializeData)
+      val model = new AFTSurvivalRegressionModel(
+        metadata.uid, data.coefficients, data.intercept, data.scale
+      )
 
       metadata.getAndSetParams(model)
       model

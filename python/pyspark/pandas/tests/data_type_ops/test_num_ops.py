@@ -15,16 +15,15 @@
 # limitations under the License.
 #
 
-import datetime
 import unittest
-from distutils.version import LooseVersion
 
 import pandas as pd
 import numpy as np
-from pandas.api.types import CategoricalDtype
 
 from pyspark import pandas as ps
 from pyspark.pandas.config import option_context
+from pyspark.testing.pandasutils import PandasOnSparkTestCase
+from pyspark.testing.utils import is_ansi_mode_test
 from pyspark.pandas.tests.data_type_ops.testing_utils import OpsTestBase
 from pyspark.pandas.typedef.typehints import (
     extension_dtypes_available,
@@ -34,230 +33,13 @@ from pyspark.pandas.typedef.typehints import (
 from pyspark.sql.types import DecimalType, IntegralType
 
 
-class NumOpsTest(OpsTestBase):
+class NumOpsTestsMixin:
     """Unit tests for arithmetic operations of numeric data types.
 
     A few test cases are disabled because pandas-on-Spark returns float64 whereas pandas
     returns float32.
     The underlying reason is the respective Spark operations return DoubleType always.
     """
-
-    @property
-    def float_pser(self):
-        return pd.Series([1, 2, 3], dtype=float)
-
-    @property
-    def float_psser(self):
-        return ps.from_pandas(self.float_pser)
-
-    def test_add(self):
-        pdf, psdf = self.pdf, self.psdf
-        for col in self.numeric_df_cols:
-            pser, psser = pdf[col], psdf[col]
-            self.assert_eq(pser + pser, psser + psser)
-            self.assert_eq(pser + 1, psser + 1)
-            # self.assert_eq(pser + 0.1, psser + 0.1)
-            self.assert_eq(pser + pser.astype(bool), psser + psser.astype(bool))
-            self.assert_eq(pser + True, psser + True)
-            self.assert_eq(pser + False, psser + False)
-
-            for n_col in self.non_numeric_df_cols:
-                if n_col == "bool":
-                    self.assert_eq(pser + pdf[n_col], psser + psdf[n_col])
-                else:
-                    self.assertRaises(TypeError, lambda: psser + psdf[n_col])
-
-    def test_sub(self):
-        pdf, psdf = self.pdf, self.psdf
-        for col in self.numeric_df_cols:
-            pser, psser = pdf[col], psdf[col]
-            self.assert_eq(pser - pser, psser - psser)
-            self.assert_eq(pser - 1, psser - 1)
-            # self.assert_eq(pser - 0.1, psser - 0.1)
-            self.assert_eq(pser - pser.astype(bool), psser - psser.astype(bool))
-            self.assert_eq(pser - True, psser - True)
-            self.assert_eq(pser - False, psser - False)
-
-            for n_col in self.non_numeric_df_cols:
-                if n_col == "bool":
-                    self.assert_eq(pser - pdf[n_col], psser - psdf[n_col])
-                else:
-                    self.assertRaises(TypeError, lambda: psser - psdf[n_col])
-
-    def test_mul(self):
-        pdf, psdf = self.pdf, self.psdf
-        for col in self.numeric_df_cols:
-            pser, psser = pdf[col], psdf[col]
-            self.assert_eq(pser * pser, psser * psser)
-            self.assert_eq(pser * pser.astype(bool), psser * psser.astype(bool))
-            self.assert_eq(pser * True, psser * True)
-            self.assert_eq(pser * False, psser * False)
-
-            if psser.dtype in [int, np.int32]:
-                self.assert_eq(pser * pdf["string"], psser * psdf["string"])
-            else:
-                self.assertRaises(TypeError, lambda: psser * psdf["string"])
-
-            self.assert_eq(pser * pdf["bool"], psser * psdf["bool"])
-
-            self.assertRaises(TypeError, lambda: psser * psdf["datetime"])
-            self.assertRaises(TypeError, lambda: psser * psdf["date"])
-            self.assertRaises(TypeError, lambda: psser * psdf["categorical"])
-
-    def test_truediv(self):
-        pdf, psdf = self.pdf, self.psdf
-        for col in self.numeric_df_cols:
-            pser, psser = pdf[col], psdf[col]
-            if psser.dtype in [float, int, np.int32]:
-                self.assert_eq(pser / pser, psser / psser)
-                self.assert_eq(pser / pser.astype(bool), psser / psser.astype(bool))
-                self.assert_eq(pser / True, psser / True)
-                self.assert_eq(pser / False, psser / False)
-
-            for n_col in self.non_numeric_df_cols:
-                if n_col == "bool":
-                    self.assert_eq(pdf["float"] / pdf[n_col], psdf["float"] / psdf[n_col])
-                else:
-                    self.assertRaises(TypeError, lambda: psser / psdf[n_col])
-
-    def test_floordiv(self):
-        pdf, psdf = self.pdf, self.psdf
-        pser, psser = pdf["float"], psdf["float"]
-        self.assert_eq(pser // pser, psser // psser)
-        self.assert_eq(pser // pser.astype(bool), psser // psser.astype(bool))
-        self.assert_eq(pser // True, psser // True)
-        self.assert_eq(pser // False, psser // False)
-
-        for n_col in self.non_numeric_df_cols:
-            if n_col == "bool":
-                self.assert_eq(pdf["float"] // pdf["bool"], psdf["float"] // psdf["bool"])
-            else:
-                for col in self.numeric_df_cols:
-                    psser = psdf[col]
-                    self.assertRaises(TypeError, lambda: psser // psdf[n_col])
-
-    def test_mod(self):
-        pdf, psdf = self.pdf, self.psdf
-        for col in self.numeric_df_cols:
-            pser, psser = pdf[col], psdf[col]
-            self.assert_eq(pser % pser, psser % psser)
-            self.assert_eq(pser % pser.astype(bool), psser % psser.astype(bool))
-            self.assert_eq(pser % True, psser % True)
-            if col in ["int", "int32"]:
-                self.assert_eq(
-                    pd.Series([np.nan, np.nan, np.nan], dtype=float, name=col), psser % False
-                )
-            else:
-                self.assert_eq(
-                    pd.Series([np.nan, np.nan, np.nan], dtype=pser.dtype, name=col), psser % False
-                )
-
-            for n_col in self.non_numeric_df_cols:
-                if n_col == "bool":
-                    self.assert_eq(pdf["float"] % pdf[n_col], psdf["float"] % psdf[n_col])
-                else:
-                    self.assertRaises(TypeError, lambda: psser % psdf[n_col])
-
-    def test_pow(self):
-        pdf, psdf = self.pdf, self.psdf
-        for col in self.numeric_df_cols:
-            pser, psser = pdf[col], psdf[col]
-            if col in ["float", "float_w_nan"]:
-                self.assert_eq(pser ** pser, psser ** psser)
-                self.assert_eq(pser ** pser.astype(bool), psser ** psser.astype(bool))
-                self.assert_eq(pser ** True, psser ** True)
-                self.assert_eq(pser ** False, psser ** False)
-                self.assert_eq(pser ** 1, psser ** 1)
-                self.assert_eq(pser ** 0, psser ** 0)
-
-            for n_col in self.non_numeric_df_cols:
-                if n_col == "bool":
-                    self.assert_eq(pdf["float"] ** pdf[n_col], psdf["float"] ** psdf[n_col])
-                else:
-                    self.assertRaises(TypeError, lambda: psser ** psdf[n_col])
-
-    def test_radd(self):
-        pdf, psdf = self.pdf, self.psdf
-        for col in self.numeric_df_cols:
-            pser, psser = pdf[col], psdf[col]
-            self.assert_eq(1 + pser, 1 + psser)
-            # self.assert_eq(0.1 + pser, 0.1 + psser)
-            self.assertRaises(TypeError, lambda: "x" + psser)
-            self.assert_eq(True + pser, True + psser)
-            self.assert_eq(False + pser, False + psser)
-            self.assertRaises(TypeError, lambda: datetime.date(1994, 1, 1) + psser)
-            self.assertRaises(TypeError, lambda: datetime.datetime(1994, 1, 1) + psser)
-
-    def test_rsub(self):
-        pdf, psdf = self.pdf, self.psdf
-        for col in self.numeric_df_cols:
-            pser, psser = pdf[col], psdf[col]
-            self.assert_eq(1 - pser, 1 - psser)
-            # self.assert_eq(0.1 - pser, 0.1 - psser)
-            self.assertRaises(TypeError, lambda: "x" - psser)
-            self.assert_eq(True - pser, True - psser)
-            self.assert_eq(False - pser, False - psser)
-            self.assertRaises(TypeError, lambda: datetime.date(1994, 1, 1) - psser)
-            self.assertRaises(TypeError, lambda: datetime.datetime(1994, 1, 1) - psser)
-
-    def test_rmul(self):
-        pdf, psdf = self.pdf, self.psdf
-        for col in self.numeric_df_cols:
-            pser, psser = pdf[col], psdf[col]
-            self.assert_eq(1 * pser, 1 * psser)
-            # self.assert_eq(0.1 * pser, 0.1 * psser)
-            self.assertRaises(TypeError, lambda: "x" * psser)
-            self.assert_eq(True * pser, True * psser)
-            self.assert_eq(False * pser, False * psser)
-            self.assertRaises(TypeError, lambda: datetime.date(1994, 1, 1) * psser)
-            self.assertRaises(TypeError, lambda: datetime.datetime(1994, 1, 1) * psser)
-
-    def test_rtruediv(self):
-        pdf, psdf = self.pdf, self.psdf
-        for col in self.numeric_df_cols:
-            pser, psser = pdf[col], psdf[col]
-            # self.assert_eq(5 / pser, 5 / psser)
-            # self.assert_eq(0.1 / pser, 0.1 / psser)
-            self.assertRaises(TypeError, lambda: "x" / psser)
-            self.assert_eq((True / pser).astype(float), True / psser, check_exact=False)
-            self.assert_eq((False / pser).astype(float), False / psser)
-            self.assertRaises(TypeError, lambda: datetime.date(1994, 1, 1) / psser)
-            self.assertRaises(TypeError, lambda: datetime.datetime(1994, 1, 1) / psser)
-
-    def test_rfloordiv(self):
-        pdf, psdf = self.pdf, self.psdf
-        for col in self.numeric_df_cols:
-            pser, psser = pdf[col], psdf[col]
-            # self.assert_eq(5 // pser, 5 // psser)
-            # self.assert_eq(0.1 // pser, 0.1 // psser)
-            self.assertRaises(TypeError, lambda: "x" // psser)
-            self.assert_eq((True // pser).astype(float), True // psser)
-            self.assert_eq((False // pser).astype(float), False // psser)
-            self.assertRaises(TypeError, lambda: datetime.date(1994, 1, 1) // psser)
-            self.assertRaises(TypeError, lambda: datetime.datetime(1994, 1, 1) // psser)
-
-    def test_rpow(self):
-        pdf, psdf = self.pdf, self.psdf
-        for col in self.numeric_df_cols:
-            pser, psser = pdf[col], psdf[col]
-            # self.assert_eq(1 ** pser, 1 ** psser)
-            # self.assert_eq(0.1 ** pser, 0.1 ** psser)
-            self.assertRaises(TypeError, lambda: "x" ** psser)
-            self.assert_eq((True ** pser).astype(float), True ** psser)
-            self.assert_eq((False ** pser).astype(float), False ** psser)
-            self.assertRaises(TypeError, lambda: datetime.date(1994, 1, 1) ** psser)
-            self.assertRaises(TypeError, lambda: datetime.datetime(1994, 1, 1) ** psser)
-
-    def test_rmod(self):
-        pdf, psdf = self.pdf, self.psdf
-        for col in self.numeric_df_cols:
-            pser, psser = pdf[col], psdf[col]
-            self.assert_eq(1 % pser, 1 % psser)
-            # self.assert_eq(0.1 % pser, 0.1 % psser)
-            self.assert_eq(True % pser, True % psser)
-            self.assert_eq(False % pser, False % psser)
-            self.assertRaises(TypeError, lambda: datetime.date(1994, 1, 1) % psser)
-            self.assertRaises(TypeError, lambda: datetime.datetime(1994, 1, 1) % psser)
 
     def test_and(self):
         psdf = self.psdf
@@ -320,7 +102,7 @@ class NumOpsTest(OpsTestBase):
         pdf, psdf = self.pdf, self.psdf
         for col in self.numeric_df_cols:
             pser, psser = pdf[col], psdf[col]
-            self.assert_eq(pser, psser.to_pandas())
+            self.assert_eq(pser, psser._to_pandas(), check_exact=False)
             self.assert_eq(ps.from_pandas(pser), psser)
 
     def test_isnull(self):
@@ -328,65 +110,15 @@ class NumOpsTest(OpsTestBase):
         for col in self.numeric_df_cols:
             self.assert_eq(pdf[col].isnull(), psdf[col].isnull())
 
-    def test_astype(self):
-        pdf, psdf = self.pdf, self.psdf
-        for col in self.numeric_df_cols:
-            pser, psser = pdf[col], psdf[col]
-
-            for int_type in [int, np.int32, np.int16, np.int8]:
-                if not pser.hasnans:
-                    self.assert_eq(pser.astype(int_type), psser.astype(int_type))
-                else:
-                    self.assertRaisesRegex(
-                        ValueError,
-                        "Cannot convert %s with missing "
-                        "values to integer" % psser._dtype_op.pretty_name,
-                        lambda: psser.astype(int_type),
-                    )
-
-            # TODO(SPARK-37039): the np.nan series.astype(bool) should be True
-            if not pser.hasnans:
-                self.assert_eq(pser.astype(bool), psser.astype(bool))
-
-            self.assert_eq(pser.astype(float), psser.astype(float))
-            self.assert_eq(pser.astype(np.float32), psser.astype(np.float32))
-            self.assert_eq(pser.astype(str), psser.astype(str))
-            self.assert_eq(pser.astype("category"), psser.astype("category"))
-            cat_type = CategoricalDtype(categories=[2, 1, 3])
-            self.assert_eq(pser.astype(cat_type), psser.astype(cat_type))
-        if extension_object_dtypes_available and extension_float_dtypes_available:
-            pser = pd.Series(pd.Categorical([1.0, 2.0, 3.0]), dtype=pd.Float64Dtype())
-            psser = ps.from_pandas(pser)
-            self.assert_eq(pser.astype(pd.BooleanDtype()), psser.astype(pd.BooleanDtype()))
-
-    def test_astype_eager_check(self):
-        psser = self.psdf["float_nan"]
-        with ps.option_context("compute.eager_check", True), self.assertRaisesRegex(
-            ValueError, "Cannot convert"
-        ):
-            psser.astype(int)
-        with ps.option_context("compute.eager_check", False):
-            psser.astype(int)
-
-        # Skip decimal_nan test before v1.3.0, it not supported by pandas on spark yet.
-        if LooseVersion(pd.__version__) >= LooseVersion("1.3"):
-            psser = self.psdf["decimal_nan"]
-            with ps.option_context("compute.eager_check", True), self.assertRaisesRegex(
-                ValueError, "Cannot convert"
-            ):
-                psser.astype(int)
-            with ps.option_context("compute.eager_check", False):
-                psser.astype(int)
-
     def test_neg(self):
         pdf, psdf = self.pdf, self.psdf
         for col in self.numeric_df_cols:
-            self.assert_eq(-pdf[col], -psdf[col])
+            self.assert_eq(-pdf[col], -psdf[col], check_exact=False)
 
     def test_abs(self):
         pdf, psdf = self.pdf, self.psdf
         for col in self.numeric_df_cols:
-            self.assert_eq(abs(pdf[col]), abs(psdf[col]))
+            self.assert_eq(abs(pdf[col]), abs(psdf[col]), check_exact=False)
 
     def test_invert(self):
         pdf, psdf = self.pdf, self.psdf
@@ -397,15 +129,30 @@ class NumOpsTest(OpsTestBase):
             else:
                 self.assertRaises(TypeError, lambda: ~psser)
 
+    def test_comparison_dtype_compatibility(self):
+        pdf = pd.DataFrame(
+            {"int": [1, 2], "bool": [True, False], "float": [0.1, 0.2], "str": ["1", "2"]}
+        )
+        psdf = ps.from_pandas(pdf)
+        self.assert_eq(pdf["int"] == pdf["bool"], psdf["int"] == psdf["bool"])
+        self.assert_eq(pdf["bool"] == pdf["int"], psdf["bool"] == psdf["int"])
+        self.assert_eq(pdf["int"] == pdf["float"], psdf["int"] == psdf["float"])
+        if is_ansi_mode_test:  # TODO: match non-ansi behavior with pandas
+            self.assert_eq(pdf["int"] == pdf["str"], psdf["int"] == psdf["str"])
+        self.assert_eq(pdf["float"] == pdf["bool"], psdf["float"] == psdf["bool"])
+        self.assert_eq(pdf["str"] == "x", psdf["str"] == "x")
+
     def test_eq(self):
         pdf, psdf = self.pdf, self.psdf
         for col in self.numeric_df_cols:
             self.assert_eq(pdf[col] == pdf[col], psdf[col] == psdf[col])
+            self.assert_eq(pdf[col] == np.nan, psdf[col] == np.nan)
 
     def test_ne(self):
         pdf, psdf = self.pdf, self.psdf
         for col in self.numeric_df_cols:
             self.assert_eq(pdf[col] != pdf[col], psdf[col] != psdf[col])
+            self.assert_eq(pdf[col] != np.nan, psdf[col] != np.nan)
 
     def test_lt(self):
         pdf, psdf = self.pdf, self.psdf
@@ -464,7 +211,7 @@ class IntegralExtensionOpsTest(OpsTestBase):
 
     def test_from_to_pandas(self):
         for pser, psser in self.intergral_extension_pser_psser_pairs:
-            self.check_extension(pser, psser.to_pandas())
+            self.check_extension(pser, psser._to_pandas())
             self.check_extension(ps.from_pandas(pser), psser)
 
     def test_isnull(self):
@@ -475,10 +222,7 @@ class IntegralExtensionOpsTest(OpsTestBase):
         for pser, psser in self.intergral_extension_pser_psser_pairs:
             for dtype in self.extension_dtypes:
                 if dtype in self.string_extension_dtype:
-                    if LooseVersion(pd.__version__) >= LooseVersion("1.1.0"):
-                        # Limit pandas version due to
-                        # https://github.com/pandas-dev/pandas/issues/31204
-                        self.check_extension(pser.astype(dtype), psser.astype(dtype))
+                    self.check_extension(pser.astype(dtype), psser.astype(dtype))
                 else:
                     self.check_extension(pser.astype(dtype), psser.astype(dtype))
         for pser, psser in self.intergral_extension_pser_psser_pairs:
@@ -507,14 +251,7 @@ class IntegralExtensionOpsTest(OpsTestBase):
 
     def test_neg(self):
         for pser, psser in self.intergral_extension_pser_psser_pairs:
-            if LooseVersion(pd.__version__) < LooseVersion("1.1.3"):
-                # pandas < 1.1.0: object dtype is returned after negation
-                # pandas 1.1.1 and 1.1.2:
-                #   a TypeError "bad operand type for unary -: 'IntegerArray'" is raised
-                # Please refer to https://github.com/pandas-dev/pandas/issues/36063.
-                self.check_extension(pd.Series([-1, -2, -3, None], dtype=pser.dtype), -psser)
-            else:
-                self.check_extension(-pser, -psser)
+            self.check_extension(-pser, -psser)
 
     def test_abs(self):
         for pser, psser in self.intergral_extension_pser_psser_pairs:
@@ -607,7 +344,7 @@ class FractionalExtensionOpsTest(OpsTestBase):
 
     def test_from_to_pandas(self):
         for pser, psser in self.fractional_extension_pser_psser_pairs:
-            self.check_extension(pser, psser.to_pandas())
+            self.check_extension(pser, psser._to_pandas())
             self.check_extension(ps.from_pandas(pser), psser)
 
     def test_isnull(self):
@@ -620,6 +357,7 @@ class FractionalExtensionOpsTest(OpsTestBase):
                 self.check_extension(pser.astype(dtype), psser.astype(dtype))
         for pser, psser in self.fractional_extension_pser_psser_pairs:
             self.assert_eq(pser.astype(float), psser.astype(float))
+            self.assert_eq(pser.astype("category"), psser.astype("category"))
             self.assert_eq(pser.astype(np.float32), psser.astype(np.float32))
             with ps.option_context("compute.eager_check", True):
                 self.assertRaisesRegex(
@@ -689,11 +427,19 @@ class FractionalExtensionOpsTest(OpsTestBase):
                 self.check_extension(pser >= pser, (psser >= psser).sort_index())
 
 
+class NumOpsTests(
+    NumOpsTestsMixin,
+    OpsTestBase,
+    PandasOnSparkTestCase,
+):
+    pass
+
+
 if __name__ == "__main__":
     from pyspark.pandas.tests.data_type_ops.test_num_ops import *  # noqa: F401
 
     try:
-        import xmlrunner  # type: ignore[import]
+        import xmlrunner
 
         testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:

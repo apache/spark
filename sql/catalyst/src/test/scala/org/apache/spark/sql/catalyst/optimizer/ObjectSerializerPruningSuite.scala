@@ -22,12 +22,13 @@ import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.encoders.{ExpressionEncoder, RowEncoder}
+import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.objects.Invoke
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
@@ -39,7 +40,8 @@ class ObjectSerializerPruningSuite extends PlanTest {
       RemoveNoopOperators) :: Nil
   }
 
-  implicit private def productEncoder[T <: Product : TypeTag] = ExpressionEncoder[T]()
+  implicit private def productEncoder[T <: Product : TypeTag]: ExpressionEncoder[T] =
+    ExpressionEncoder[T]()
 
   test("collect struct types") {
     val dataTypes = Seq(
@@ -96,7 +98,8 @@ class ObjectSerializerPruningSuite extends PlanTest {
           CreateNamedStruct(children.take(2))
       }.transformUp {
         // Aligns null literal in `If` expression to make it resolvable.
-        case i @ If(_: IsNull, Literal(null, dt), ser) if !dt.sameType(ser.dataType) =>
+        case i @ If(_: IsNull, Literal(null, dt), ser)
+          if !DataTypeUtils.sameType(dt, ser.dataType) =>
           i.copy(trueValue = Literal(null, ser.dataType))
       }.asInstanceOf[NamedExpression]
 
@@ -113,7 +116,7 @@ class ObjectSerializerPruningSuite extends PlanTest {
   test("SPARK-32652: Prune nested serializers: RowEncoder") {
     withSQLConf(SQLConf.SERIALIZER_NESTED_SCHEMA_PRUNING_ENABLED.key -> "true") {
       val testRelation = LocalRelation($"i".struct(StructType.fromDDL("a int, b string")), $"j".int)
-      val rowEncoder = RowEncoder(new StructType()
+      val rowEncoder = ExpressionEncoder(new StructType()
         .add("i", new StructType().add("a", "int").add("b", "string"))
         .add("j", "int"))
       val serializerObject = CatalystSerde.serialize(
@@ -126,7 +129,7 @@ class ObjectSerializerPruningSuite extends PlanTest {
       }.transformUp {
         // Aligns null literal in `If` expression to make it resolvable.
         case i @ If(invoke: Invoke, Literal(null, dt), ser) if invoke.functionName == "isNullAt" &&
-            !dt.sameType(ser.dataType) =>
+            !DataTypeUtils.sameType(dt, ser.dataType) =>
           i.copy(trueValue = Literal(null, ser.dataType))
       }.asInstanceOf[NamedExpression]
 

@@ -23,12 +23,8 @@ import numpy as np
 
 from pyspark import pandas as ps
 from pyspark.pandas.config import set_option, reset_option
-from pyspark.testing.pandasutils import (
-    have_plotly,
-    plotly_requirement_message,
-    PandasOnSparkTestCase,
-    TestUtils,
-)
+from pyspark.testing.pandasutils import PandasOnSparkTestCase, TestUtils
+from pyspark.testing.utils import have_plotly, plotly_requirement_message
 from pyspark.pandas.utils import name_like_string
 
 if have_plotly:
@@ -37,7 +33,7 @@ if have_plotly:
 
 
 @unittest.skipIf(not have_plotly, plotly_requirement_message)
-class DataFramePlotPlotlyTest(PandasOnSparkTestCase, TestUtils):
+class DataFramePlotPlotlyTestsMixin:
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
@@ -105,9 +101,10 @@ class DataFramePlotPlotlyTest(PandasOnSparkTestCase, TestUtils):
             self.assertEqual(pdf.plot.barh(x=x, y=y), psdf.plot.barh(x=x, y=y))
 
         # this is testing plot with specified x and y
-        pdf1 = pd.DataFrame({"lab": ["A", "B", "C"], "val": [10, 30, 20]})
+        pdf1 = pd.DataFrame({"lab": ["A", "B", "C"], "val": [10, 30, 20], "val2": [1.1, 2.2, 3.3]})
         psdf1 = ps.from_pandas(pdf1)
-        check_barh_plot_with_x_y(pdf1, psdf1, x="lab", y="val")
+        check_barh_plot_with_x_y(pdf1, psdf1, x="val", y="lab")
+        check_barh_plot_with_x_y(pdf1, psdf1, x=["val", "val2"], y="lab")
 
     def test_barh_plot(self):
         def check_barh_plot(pdf, psdf):
@@ -157,7 +154,7 @@ class DataFramePlotPlotlyTest(PandasOnSparkTestCase, TestUtils):
 
     def test_pie_plot(self):
         def check_pie_plot(psdf):
-            pdf = psdf.to_pandas()
+            pdf = psdf._to_pandas()
             self.assertEqual(
                 psdf.plot(kind="pie", y=psdf.columns[0]),
                 express.pie(pdf, values="a", names=pdf.index),
@@ -269,11 +266,15 @@ class DataFramePlotPlotlyTest(PandasOnSparkTestCase, TestUtils):
         self.assertEqual(pprint.pformat(actual.to_dict()), pprint.pformat(expected.to_dict()))
 
 
+class DataFramePlotPlotlyTests(DataFramePlotPlotlyTestsMixin, PandasOnSparkTestCase, TestUtils):
+    pass
+
+
 if __name__ == "__main__":
     from pyspark.pandas.tests.plot.test_frame_plot_plotly import *  # noqa: F401
 
     try:
-        import xmlrunner  # type: ignore[import]
+        import xmlrunner
 
         testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:

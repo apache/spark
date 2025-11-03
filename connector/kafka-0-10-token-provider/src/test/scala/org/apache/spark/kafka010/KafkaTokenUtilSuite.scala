@@ -20,7 +20,7 @@ package org.apache.spark.kafka010
 import java.{util => ju}
 import java.security.PrivilegedExceptionAction
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.hadoop.io.Text
 import org.apache.hadoop.security.UserGroupInformation

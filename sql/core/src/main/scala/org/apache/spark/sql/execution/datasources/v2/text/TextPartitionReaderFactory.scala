@@ -27,7 +27,7 @@ import org.apache.spark.sql.execution.datasources.text.TextOptions
 import org.apache.spark.sql.execution.datasources.v2._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.util.SerializableConfiguration
+import org.apache.spark.util.{SerializableConfiguration, Utils}
 
 /**
  * A factory used to create Text readers.
@@ -36,21 +36,23 @@ import org.apache.spark.util.SerializableConfiguration
  * @param broadcastedConf Broadcasted serializable Hadoop Configuration.
  * @param readDataSchema Required schema in the batch scan.
  * @param partitionSchema Schema of partitions.
- * @param textOptions Options for reading a text file.
+ * @param options Options for reading a text file.
  * */
 case class TextPartitionReaderFactory(
     sqlConf: SQLConf,
     broadcastedConf: Broadcast[SerializableConfiguration],
     readDataSchema: StructType,
     partitionSchema: StructType,
-    textOptions: TextOptions) extends FilePartitionReaderFactory {
+    options: TextOptions) extends FilePartitionReaderFactory {
 
   override def buildReader(file: PartitionedFile): PartitionReader[InternalRow] = {
     val confValue = broadcastedConf.value.value
-    val reader = if (!textOptions.wholeText) {
-      new HadoopFileLinesReader(file, textOptions.lineSeparatorInRead, confValue)
-    } else {
-      new HadoopFileWholeTextReader(file, confValue)
+    val reader = Utils.createResourceUninterruptiblyIfInTaskThread {
+      if (!options.wholeText) {
+        new HadoopFileLinesReader(file, options.lineSeparatorInRead, confValue)
+      } else {
+        new HadoopFileWholeTextReader(file, confValue)
+      }
     }
     Option(TaskContext.get()).foreach(_.addTaskCompletionListener[Unit](_ => reader.close()))
     val iter = if (readDataSchema.isEmpty) {

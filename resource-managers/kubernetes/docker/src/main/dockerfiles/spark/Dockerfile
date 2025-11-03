@@ -14,9 +14,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-ARG java_image_tag=11-jre-slim
+ARG java_image_name=azul/zulu-openjdk
+ARG java_image_tag=21
 
-FROM openjdk:${java_image_tag}
+FROM ${java_image_name}:${java_image_tag}
+LABEL org.opencontainers.image.authors="Apache Spark project <dev@spark.apache.org>"
+LABEL org.opencontainers.image.licenses="Apache-2.0"
+LABEL org.opencontainers.image.ref.name="Apache Spark Scala/Java Image"
+# Overwrite this label to avoid exposing the underlying Ubuntu OS version label
+LABEL org.opencontainers.image.version=""
 
 ARG spark_uid=185
 
@@ -28,10 +34,9 @@ ARG spark_uid=185
 # docker build -t spark:latest -f kubernetes/dockerfiles/spark/Dockerfile .
 
 RUN set -ex && \
-    sed -i 's/http:\/\/deb.\(.*\)/https:\/\/deb.\1/g' /etc/apt/sources.list && \
     apt-get update && \
     ln -s /lib /lib64 && \
-    apt install -y bash tini libc6 libpam-modules krb5-user libnss3 procps && \
+    apt install -y bash tini libc6 libpam-modules krb5-user libnss3 procps net-tools logrotate libssl-dev && \
     mkdir -p /opt/spark && \
     mkdir -p /opt/spark/examples && \
     mkdir -p /opt/spark/work-dir && \
@@ -40,18 +45,21 @@ RUN set -ex && \
     ln -sv /bin/bash /bin/sh && \
     echo "auth required pam_wheel.so use_uid" >> /etc/pam.d/su && \
     chgrp root /etc/passwd && chmod ug+rw /etc/passwd && \
-    rm -rf /var/cache/apt/*
+    rm -rf /var/cache/apt/* && rm -rf /var/lib/apt/lists/*
 
 COPY jars /opt/spark/jars
+# Copy RELEASE file if exists
+COPY RELEAS[E] /opt/spark/RELEASE
 COPY bin /opt/spark/bin
 COPY sbin /opt/spark/sbin
 COPY kubernetes/dockerfiles/spark/entrypoint.sh /opt/
 COPY kubernetes/dockerfiles/spark/decom.sh /opt/
 COPY examples /opt/spark/examples
+RUN ln -s $(basename /opt/spark/examples/jars/spark-examples_*.jar) /opt/spark/examples/jars/spark-examples.jar
 COPY kubernetes/tests /opt/spark/tests
 COPY data /opt/spark/data
 
-ENV SPARK_HOME /opt/spark
+ENV SPARK_HOME=/opt/spark
 
 WORKDIR /opt/spark/work-dir
 RUN chmod g+w /opt/spark/work-dir

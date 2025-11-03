@@ -141,7 +141,7 @@ class TableScanSuite extends DataSourceTest with SharedSparkSession {
       Date.valueOf("1970-01-01"),
       new Timestamp(20000 + i),
       s"varchar_$i",
-      s"char_$i",
+      s"char_$i".padTo(18, ' '),
       Seq(i, i + 1),
       Seq(Map(s"str_$i" -> Row(i.toLong))),
       Map(i -> i.toString),

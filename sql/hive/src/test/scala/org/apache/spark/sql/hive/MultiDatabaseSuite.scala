@@ -268,22 +268,26 @@ class MultiDatabaseSuite extends QueryTest with SQLTestUtils with TestHiveSingle
 
   test("invalid database name and table names") {
     {
-      val message = intercept[AnalysisException] {
+      val e = intercept[AnalysisException] {
         df.write.format("parquet").saveAsTable("`d:b`.`t:a`")
-      }.getMessage
-      assert(message.contains("Database 'd:b' not found"))
+      }
+      checkError(e,
+        condition = "SCHEMA_NOT_FOUND",
+        parameters = Map("schemaName" -> "`spark_catalog`.`d:b`"))
     }
 
     {
-      val message = intercept[AnalysisException] {
+      val e = intercept[AnalysisException] {
         df.write.format("parquet").saveAsTable("`d:b`.`table`")
-      }.getMessage
-      assert(message.contains("Database 'd:b' not found"))
+      }
+      checkError(e,
+        condition = "SCHEMA_NOT_FOUND",
+        parameters = Map("schemaName" -> "`spark_catalog`.`d:b`"))
     }
 
     withTempDir { dir =>
       {
-        val message = intercept[AnalysisException] {
+        val e = intercept[AnalysisException] {
           sql(
             s"""
             |CREATE TABLE `d:b`.`t:a` (a int)
@@ -292,13 +296,13 @@ class MultiDatabaseSuite extends QueryTest with SQLTestUtils with TestHiveSingle
             |  path '${dir.toURI}'
             |)
             """.stripMargin)
-        }.getMessage
-        assert(message.contains("`t:a` is not a valid name for tables/databases. " +
-          "Valid names only contain alphabet characters, numbers and _."))
+        }
+        checkError(e, condition = "INVALID_SCHEMA_OR_RELATION_NAME",
+          parameters = Map("name" -> "`t:a`"))
       }
 
       {
-        val message = intercept[AnalysisException] {
+        val e = intercept[AnalysisException] {
           sql(
             s"""
               |CREATE TABLE `d:b`.`table` (a int)
@@ -307,8 +311,10 @@ class MultiDatabaseSuite extends QueryTest with SQLTestUtils with TestHiveSingle
               |  path '${dir.toURI}'
               |)
               """.stripMargin)
-        }.getMessage
-        assert(message.contains("Database 'd:b' not found"))
+        }
+        checkError(e,
+          condition = "SCHEMA_NOT_FOUND",
+          parameters = Map("schemaName" -> "`spark_catalog`.`d:b`"))
       }
     }
   }

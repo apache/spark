@@ -42,6 +42,9 @@ trait ShowNamespacesSuiteBase extends QueryTest with DDLCommandTestUtils {
 
   protected def builtinTopNamespaces: Seq[String] = Seq.empty
   protected def isCasePreserving: Boolean = true
+  protected def createNamespaceWithSpecialName(ns: String): Unit = {
+    sql(s"CREATE NAMESPACE $catalog.`$ns`")
+  }
 
   test("default namespace") {
     withSQLConf(SQLConf.DEFAULT_CATALOG.key -> catalog) {
@@ -121,6 +124,20 @@ trait ShowNamespacesSuiteBase extends QueryTest with DDLCommandTestUtils {
   test("SPARK-34359: keep the legacy output schema") {
     withSQLConf(SQLConf.LEGACY_KEEP_COMMAND_OUTPUT_SCHEMA.key -> "true") {
       assert(sql("SHOW NAMESPACES").schema.fieldNames.toSeq == Seq("databaseName"))
+    }
+  }
+
+  test("SPARK-39149: keep the legacy no-quote behavior") {
+    Seq(true, false).foreach { legacy =>
+      withSQLConf(SQLConf.LEGACY_KEEP_COMMAND_OUTPUT_SCHEMA.key -> legacy.toString) {
+        withNamespace(s"$catalog.`123`") {
+          createNamespaceWithSpecialName("123")
+          val res = if (legacy) "123" else "`123`"
+          checkAnswer(
+            sql(s"SHOW NAMESPACES IN $catalog"),
+            (res +: builtinTopNamespaces).map(Row(_)))
+        }
+      }
     }
   }
 

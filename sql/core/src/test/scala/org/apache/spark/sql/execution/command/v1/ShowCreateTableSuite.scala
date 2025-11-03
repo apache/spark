@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.command.v1
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.execution.command
+import org.apache.spark.sql.execution.command.DDLCommandTestUtils.V1_COMMAND_VERSION
 
 /**
  * This base suite contains unified tests for the `SHOW CREATE TABLE` command that checks V1
@@ -31,7 +32,10 @@ import org.apache.spark.sql.execution.command
  */
 trait ShowCreateTableSuiteBase extends command.ShowCreateTableSuiteBase
     with command.TestsV1AndV2Commands {
-  override def fullName: String = s"$ns.$table"
+  override def fullName: String = commandVersion match {
+    case V1_COMMAND_VERSION => s"$ns.$table"
+    case _ => s"$catalog.$ns.$table"
+  }
 
   test("show create table[simple]") {
     // todo After SPARK-37517 unify the testcase both v1 and v2
@@ -154,11 +158,38 @@ trait ShowCreateTableSuiteBase extends command.ShowCreateTableSuiteBase
          """.stripMargin
       )
 
-      val cause = intercept[AnalysisException] {
-        getShowCreateDDL(t, true)
-      }
+      checkError(
+        exception = intercept[AnalysisException] {
+          getShowCreateDDL(t, true)
+        },
+        condition = "UNSUPPORTED_SHOW_CREATE_TABLE.ON_DATA_SOURCE_TABLE_WITH_AS_SERDE",
+        sqlState = "0A000",
+        parameters = Map("tableName" -> "`spark_catalog`.`ns1`.`tbl`")
+      )
+    }
+  }
 
-      assert(cause.getMessage.contains("Use `SHOW CREATE TABLE` without `AS SERDE` instead"))
+  test("show create table with default column values") {
+    withNamespaceAndTable(ns, table) { t =>
+      sql(
+        s"""
+           |CREATE TABLE $t (
+           |  a bigint NOT NULL,
+           |  b bigint DEFAULT 42,
+           |  c string DEFAULT 'abc, "def"' COMMENT 'comment'
+           |)
+           |USING parquet
+           |COMMENT 'This is a comment'
+        """.stripMargin)
+      val showDDL = getShowCreateDDL(t)
+      assert(showDDL === Array(
+        s"CREATE TABLE $fullName (",
+        "a BIGINT,",
+        "b BIGINT DEFAULT 42,",
+        "c STRING DEFAULT 'abc, \"def\"' COMMENT 'comment')",
+        "USING parquet",
+        "COMMENT 'This is a comment'"
+      ))
     }
   }
 }

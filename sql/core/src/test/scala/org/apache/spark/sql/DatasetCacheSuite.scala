@@ -17,16 +17,22 @@
 
 package org.apache.spark.sql
 
+import java.time.LocalTime
+
 import org.scalatest.concurrent.TimeLimits
 import org.scalatest.time.SpanSugar._
 
+import org.apache.spark.sql.execution.ColumnarToRowExec
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.columnar.{InMemoryRelation, InMemoryTableScanExec}
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.types.Metadata
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.tags.SlowSQLTest
 
-
+@SlowSQLTest
 class DatasetCacheSuite extends QueryTest
   with SharedSparkSession
   with TimeLimits
@@ -271,5 +277,64 @@ class DatasetCacheSuite extends QueryTest
             df.sparkSession.sessionState.conf.defaultSizeInBytes)
       }
     }
+  }
+
+  test("SPARK-44653: non-trivial DataFrame unions should not break caching") {
+    val df1 = Seq(1 -> 1).toDF("i", "j")
+    val df2 = Seq(2 -> 2).toDF("i", "j")
+    val df3 = Seq(3 -> 3).toDF("i", "j")
+
+    withSQLConf(SQLConf.CAN_CHANGE_CACHED_PLAN_OUTPUT_PARTITIONING.key -> "false") {
+      withClue("positive: union by position") {
+        val unionDf = df1.union(df2).select($"i")
+        unionDf.cache()
+        val finalDf = unionDf.union(df3.select($"i"))
+        assert(finalDf.queryExecution.executedPlan.exists(_.isInstanceOf[InMemoryTableScanExec]))
+      }
+
+      withClue("positive: union by name") {
+        val unionDf = df1.unionByName(df2).select($"i")
+        unionDf.cache()
+        val finalDf = unionDf.unionByName(df3.select($"i"))
+        assert(finalDf.queryExecution.executedPlan.exists(_.isInstanceOf[InMemoryTableScanExec]))
+      }
+
+      withClue("negative: union by position") {
+        val unionDf = df1.union(df2)
+        unionDf.cache()
+        val finalDf = unionDf.union(df3)
+        // It's by design to break caching here.
+        assert(!finalDf.queryExecution.executedPlan.exists(_.isInstanceOf[InMemoryTableScanExec]))
+      }
+
+      withClue("negative: union by name") {
+        val unionDf = df1.unionByName(df2)
+        unionDf.cache()
+        val finalDf = unionDf.unionByName(df3)
+        // It's by design to break caching here.
+        assert(!finalDf.queryExecution.executedPlan.exists(_.isInstanceOf[InMemoryTableScanExec]))
+      }
+    }
+  }
+
+  test("SPARK-50682: inner Alias should be canonicalized") {
+    // Put a metadata in the Alias so that it won't be removed by the analyzer.
+    val metadata = Metadata.fromJson("""{"k": "v"}""")
+    val df1 = spark.range(5).select(struct($"id".as("name", metadata)))
+    df1.cache()
+    // This is exactly the same as df1.
+    val df2 = spark.range(5).select(struct($"id".as("name", metadata)))
+    assert(df2.queryExecution.executedPlan.exists(_.isInstanceOf[InMemoryTableScanExec]))
+
+    val metadata2 = Metadata.fromJson("""{"k2": "v2"}""")
+    // Same with df1 except for the Alias metadata
+    val df3 = spark.range(5).select(struct($"id".as("name", metadata2)))
+    assert(!df3.queryExecution.executedPlan.exists(_.isInstanceOf[InMemoryTableScanExec]))
+  }
+
+  test("SPARK-53418: Handle TimeType in ColumnAccessor") {
+    val plan = spark.sql("SELECT TIME '13:33:33'").cache().queryExecution.sparkPlan
+    val value = ColumnarToRowExec(plan).executeCollectPublic().head.get(0)
+    assert(value == LocalTime.of(13, 33, 33))
   }
 }

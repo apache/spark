@@ -17,14 +17,16 @@
 
 package org.apache.spark
 
+import java.io.Closeable
 import java.util.{Properties, Stack}
 import javax.annotation.concurrent.GuardedBy
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.internal.{config, Logging}
+import org.apache.spark.internal.LogKeys.LISTENER
 import org.apache.spark.memory.TaskMemoryManager
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.metrics.source.Source
@@ -76,10 +78,17 @@ private[spark] class TaskContextImpl(
    *
    * `invokeListeners()` uses this to ensure listeners are called sequentially.
    */
-  @transient private var listenerInvocationThread: Option[Thread] = None
+  @transient @volatile private var listenerInvocationThread: Option[Thread] = None
 
   // If defined, the corresponding task has been killed and this option contains the reason.
   @volatile private var reasonIfKilled: Option[String] = None
+
+  // The pending interruption request, which is blocked by uninterruptible resource creation.
+  // Should be protected by `TaskContext.synchronized`.
+  private var pendingInterruptRequest: Option[(Option[Thread], String)] = None
+
+  // Whether this task is able to be interrupted. Should be protected by `TaskContext.synchronized`.
+  private var _interruptible = true
 
   // Whether the task has completed.
   private var completed: Boolean = false
@@ -191,7 +200,7 @@ private[spark] class TaskContextImpl(
       }
     }
 
-    val errorMsgs = new ArrayBuffer[String](2)
+    val listenerExceptions = new ArrayBuffer[Throwable](2)
     var listenerOption: Option[T] = None
     while ({listenerOption = getNextListenerOrDeregisterThread(); listenerOption.nonEmpty}) {
       val listener = listenerOption.get
@@ -199,12 +208,61 @@ private[spark] class TaskContextImpl(
         callback(listener)
       } catch {
         case e: Throwable =>
-          errorMsgs += e.getMessage
-          logError(s"Error in $name", e)
+          // A listener failed. Temporarily clear the listenerInvocationThread and markTaskFailed.
+          //
+          // One of the following cases applies (#3 being the interesting one):
+          //
+          // 1. [[Task.doRunTask]] is currently calling [[markTaskFailed]] because the task body
+          //    failed, and now a failure listener has failed here (not necessarily the first to
+          //    fail). Then calling [[markTaskFailed]] again here is a no-op, and we simply resume
+          //    running the remaining failure listeners. [[Task.doRunTask]] will then call
+          //    [[markTaskCompleted]] after this method returns.
+          //
+          // 2. The task body failed, [[Task.doRunTask]] already called [[markTaskFailed]],
+          //    [[Task.doRunTask]] is currently calling [[markTaskCompleted]], and now a completion
+          //    listener has failed here (not necessarily the first one to fail). Then calling
+          //    [[markTaskFailed]] it again here is a no-op, and we simply resume running the
+          //    remaining completion listeners.
+          //
+          // 3. [[Task.doRunTask]] is currently calling [[markTaskCompleted]] because the task body
+          //    succeeded, and now a completion listener has failed here (the first one to
+          //    fail). Then our call to [[markTaskFailed]] here will run all failure listeners
+          //    before returning, after which we will resume running the remaining completion
+          //    listeners.
+          //
+          // 4. [[Task.doRunTask]] is currently calling [[markTaskCompleted]] because the task body
+          //    succeeded, but [[markTaskFailed]] is currently running because a completion listener
+          //    has failed, and now a failure listener has failed (not necessarily the first one to
+          //    fail). Then calling [[markTaskFailed]] again here will have no effect, and we simply
+          //    resume running the remaining failure listeners; we will resume running the remaining
+          //    completion listeners after this call returns.
+          //
+          // 5. [[Task.doRunTask]] is currently calling [[markTaskCompleted]] because the task body
+          //    succeeded, [[markTaskFailed]] already ran because a completion listener previously
+          //    failed, and now another completion listener has failed. Then our call to
+          //    [[markTaskFailed]] here will have no effect and we simply resume running the
+          //    remaining completion handlers.
+          try {
+            listenerInvocationThread = None
+            markTaskFailed(e)
+          } catch {
+            case t: Throwable => e.addSuppressed(t)
+          } finally {
+            synchronized {
+              if (listenerInvocationThread.isEmpty) {
+                listenerInvocationThread = Some(Thread.currentThread())
+              }
+            }
+          }
+          listenerExceptions += e
+          logError(log"Error in ${MDC(LISTENER, name)}", e)
       }
     }
-    if (errorMsgs.nonEmpty) {
-      throw new TaskCompletionListenerException(errorMsgs.toSeq, error)
+    if (listenerExceptions.nonEmpty) {
+      val exception = new TaskCompletionListenerException(
+        listenerExceptions.map(_.getMessage).toSeq, error)
+      listenerExceptions.foreach(exception.addSuppressed)
+      throw exception
     }
   }
 
@@ -226,6 +284,8 @@ private[spark] class TaskContextImpl(
   @GuardedBy("this")
   override def isCompleted(): Boolean = synchronized(completed)
 
+  override def isFailed(): Boolean = synchronized(failureCauseOpt.isDefined)
+
   override def isInterrupted(): Boolean = reasonIfKilled.isDefined
 
   override def getLocalProperty(key: String): String = localProperties.getProperty(key)
@@ -243,5 +303,40 @@ private[spark] class TaskContextImpl(
 
   private[spark] override def fetchFailed: Option[FetchFailedException] = _fetchFailedException
 
-  private[spark] override def getLocalProperties(): Properties = localProperties
+  private[spark] override def getLocalProperties: Properties = localProperties
+
+
+  override def interruptible(): Boolean = TaskContext.synchronized(_interruptible)
+
+  override def pendingInterrupt(threadToInterrupt: Option[Thread], reason: String): Unit = {
+    TaskContext.synchronized {
+      pendingInterruptRequest = Some((threadToInterrupt, reason))
+    }
+  }
+
+  def createResourceUninterruptibly[T <: Closeable](resourceBuilder: => T): T = {
+
+    @inline def interruptIfRequired(): Unit = {
+      pendingInterruptRequest.foreach { case (threadToInterrupt, reason) =>
+        markInterrupted(reason)
+        threadToInterrupt.foreach(_.interrupt())
+      }
+      killTaskIfInterrupted()
+    }
+
+    TaskContext.synchronized {
+      interruptIfRequired()
+      _interruptible = false
+    }
+    try {
+      val resource = resourceBuilder
+      addTaskCompletionListener[Unit](_ => resource.close())
+      resource
+    } finally {
+      TaskContext.synchronized {
+        _interruptible = true
+        interruptIfRequired()
+      }
+    }
+  }
 }

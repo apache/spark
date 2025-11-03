@@ -22,17 +22,18 @@ import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.mutable.ListBuffer
 
-import org.json4s.NoTypeHints
+import org.json4s.{Formats, NoTypeHints}
 import org.json4s.jackson.Serialization
 
 import org.apache.spark.{SparkEnv, TaskContext}
 import org.apache.spark.rpc.RpcEndpointRef
-import org.apache.spark.sql.{Encoder, SQLContext}
+import org.apache.spark.sql.{Encoder, SparkSession, SQLContext}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.connector.read.InputPartition
 import org.apache.spark.sql.connector.read.streaming.{ContinuousPartitionReader, ContinuousPartitionReaderFactory, ContinuousStream, Offset, PartitionOffset}
-import org.apache.spark.sql.execution.streaming.{Offset => _, _}
+import org.apache.spark.sql.execution.streaming.{Offset => _}
+import org.apache.spark.sql.execution.streaming.runtime.{ContinuousRecordEndpoint, ContinuousRecordPartitionOffset, GetRecord, MemoryStreamBase}
 import org.apache.spark.util.RpcUtils
 
 /**
@@ -43,10 +44,13 @@ import org.apache.spark.util.RpcUtils
  *    ContinuousMemoryStreamInputPartitionReader instances to poll. It returns the record at
  *    the specified offset within the list, or null if that offset doesn't yet have a record.
  */
-class ContinuousMemoryStream[A : Encoder](id: Int, sqlContext: SQLContext, numPartitions: Int = 2)
-  extends MemoryStreamBase[A](sqlContext) with ContinuousStream {
+class ContinuousMemoryStream[A : Encoder](
+    id: Int,
+    sparkSession: SparkSession,
+    numPartitions: Int = 2)
+  extends MemoryStreamBase[A](sparkSession) with ContinuousStream {
 
-  private implicit val formats = Serialization.formats(NoTypeHints)
+  private implicit val formats: Formats = Serialization.formats(NoTypeHints)
 
   // ContinuousReader implementation
 
@@ -56,9 +60,9 @@ class ContinuousMemoryStream[A : Encoder](id: Int, sqlContext: SQLContext, numPa
   private val recordEndpoint = new ContinuousRecordEndpoint(records, this)
   @volatile private var endpointRef: RpcEndpointRef = _
 
-  def addData(data: TraversableOnce[A]): Offset = synchronized {
+  def addData(data: IterableOnce[A]): Offset = synchronized {
     // Distribute data evenly among partition lists.
-    data.toSeq.zipWithIndex.map {
+    data.iterator.to(Seq).zipWithIndex.map {
       case (item, index) =>
         records(index % numPartitions) += toRow(item).copy().asInstanceOf[UnsafeRow]
     }
@@ -108,14 +112,47 @@ class ContinuousMemoryStream[A : Encoder](id: Int, sqlContext: SQLContext, numPa
   override def commit(end: Offset): Unit = {}
 }
 
-object ContinuousMemoryStream {
+object ContinuousMemoryStream extends LowPriorityContinuousMemoryStreamImplicits {
   protected val memoryStreamId = new AtomicInteger(0)
 
-  def apply[A : Encoder](implicit sqlContext: SQLContext): ContinuousMemoryStream[A] =
-    new ContinuousMemoryStream[A](memoryStreamId.getAndIncrement(), sqlContext)
+  def apply[A : Encoder](implicit sparkSession: SparkSession): ContinuousMemoryStream[A] =
+    new ContinuousMemoryStream[A](memoryStreamId.getAndIncrement(), sparkSession)
 
-  def singlePartition[A : Encoder](implicit sqlContext: SQLContext): ContinuousMemoryStream[A] =
-    new ContinuousMemoryStream[A](memoryStreamId.getAndIncrement(), sqlContext, 1)
+  def apply[A : Encoder](numPartitions: Int)(implicit sparkSession: SparkSession):
+  ContinuousMemoryStream[A] =
+    new ContinuousMemoryStream[A](memoryStreamId.getAndIncrement(), sparkSession, numPartitions)
+
+  def singlePartition[A : Encoder](implicit sparkSession: SparkSession): ContinuousMemoryStream[A] =
+    new ContinuousMemoryStream[A](memoryStreamId.getAndIncrement(), sparkSession, 1)
+}
+
+/**
+ * Provides lower-priority implicits for ContinuousMemoryStream to prevent ambiguity when both
+ * SparkSession and SQLContext are in scope. The implicits in the companion object,
+ * which use SparkSession, take higher precedence.
+ */
+trait LowPriorityContinuousMemoryStreamImplicits {
+  this: ContinuousMemoryStream.type =>
+
+  // Deprecated: Used when an implicit SQLContext is in scope
+  @deprecated("Use ContinuousMemoryStream with an implicit SparkSession " +
+    "instead of SQLContext", "4.1.0")
+  def apply[A: Encoder]()(implicit sqlContext: SQLContext): ContinuousMemoryStream[A] =
+    new ContinuousMemoryStream[A](memoryStreamId.getAndIncrement(), sqlContext.sparkSession)
+
+  @deprecated("Use ContinuousMemoryStream with an implicit SparkSession " +
+    "instead of SQLContext", "4.1.0")
+  def apply[A: Encoder](numPartitions: Int)(implicit sqlContext: SQLContext):
+  ContinuousMemoryStream[A] =
+    new ContinuousMemoryStream[A](
+      memoryStreamId.getAndIncrement(),
+      sqlContext.sparkSession,
+      numPartitions)
+
+  @deprecated("Use ContinuousMemoryStream.singlePartition with an implicit SparkSession " +
+    "instead of SQLContext", "4.1.0")
+  def singlePartition[A: Encoder]()(implicit sqlContext: SQLContext): ContinuousMemoryStream[A] =
+    new ContinuousMemoryStream[A](memoryStreamId.getAndIncrement(), sqlContext.sparkSession, 1)
 }
 
 /**
@@ -182,6 +219,6 @@ class ContinuousMemoryStreamPartitionReader(
 
 case class ContinuousMemoryStreamOffset(partitionNums: Map[Int, Int])
   extends Offset {
-  private implicit val formats = Serialization.formats(NoTypeHints)
+  private implicit val formats: Formats = Serialization.formats(NoTypeHints)
   override def json(): String = Serialization.write(partitionNums)
 }

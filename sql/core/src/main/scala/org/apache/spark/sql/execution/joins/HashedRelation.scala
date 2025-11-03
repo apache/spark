@@ -22,7 +22,7 @@ import java.io._
 import com.esotericsoftware.kryo.{Kryo, KryoSerializable}
 import com.esotericsoftware.kryo.io.{Input, Output}
 
-import org.apache.spark.{SparkConf, SparkEnv, SparkException}
+import org.apache.spark.{SparkConf, SparkEnv, SparkException, SparkUnsupportedOperationException}
 import org.apache.spark.internal.config.{BUFFER_PAGESIZE, MEMORY_OFFHEAP_ENABLED}
 import org.apache.spark.memory._
 import org.apache.spark.sql.catalyst.InternalRow
@@ -52,7 +52,7 @@ private[execution] sealed trait HashedRelation extends KnownSizeEstimation {
    * Returns null if there is no matched rows.
    */
   def get(key: Long): Iterator[InternalRow] = {
-    throw new UnsupportedOperationException
+    throw SparkUnsupportedOperationException()
   }
 
   /**
@@ -64,7 +64,7 @@ private[execution] sealed trait HashedRelation extends KnownSizeEstimation {
    * Returns the matched single row with key that have only one column of LongType.
    */
   def getValue(key: Long): InternalRow = {
-    throw new UnsupportedOperationException
+    throw SparkUnsupportedOperationException()
   }
 
   /**
@@ -73,7 +73,7 @@ private[execution] sealed trait HashedRelation extends KnownSizeEstimation {
    * Returns null if there is no matched rows.
    */
   def getWithKeyIndex(key: InternalRow): Iterator[ValueRowWithKeyIndex] = {
-    throw new UnsupportedOperationException
+    throw SparkUnsupportedOperationException()
   }
 
   /**
@@ -83,21 +83,21 @@ private[execution] sealed trait HashedRelation extends KnownSizeEstimation {
    * Returns null if there is no matched rows.
    */
   def getValueWithKeyIndex(key: InternalRow): ValueRowWithKeyIndex = {
-    throw new UnsupportedOperationException
+    throw SparkUnsupportedOperationException()
   }
 
   /**
    * Returns an iterator for keys index and rows of InternalRow type.
    */
   def valuesWithKeyIndex(): Iterator[ValueRowWithKeyIndex] = {
-    throw new UnsupportedOperationException
+    throw SparkUnsupportedOperationException()
   }
 
   /**
    * Returns the maximum number of allowed keys index.
    */
   def maxNumKeysIndex: Int = {
-    throw new UnsupportedOperationException
+    throw SparkUnsupportedOperationException()
   }
 
   /**
@@ -109,11 +109,6 @@ private[execution] sealed trait HashedRelation extends KnownSizeEstimation {
    * Returns an iterator for keys of InternalRow type.
    */
   def keys(): Iterator[InternalRow]
-
-  /**
-   * Returns the average number of hash probes per key lookup.
-   */
-  def getAvgHashProbesPerKey(): Double
 
   /**
    * Returns a read-only copy of this, to be safely used in current thread.
@@ -132,7 +127,6 @@ private[execution] object HashedRelation {
    * Create a HashedRelation from an Iterator of InternalRow.
    *
    * @param allowsNullKey        Allow NULL keys in HashedRelation.
-   *                             This is used for full outer join in `ShuffledHashJoinExec` only.
    * @param ignoresDuplicatedKey Ignore rows with duplicated keys in HashedRelation.
    *                             This is only used for semi and anti join without join condition in
    *                             `ShuffledHashJoinExec` only.
@@ -159,7 +153,7 @@ private[execution] object HashedRelation {
       EmptyHashedRelation
     } else if (key.length == 1 && key.head.dataType == LongType && !allowsNullKey) {
       // NOTE: LongHashedRelation does not support NULL keys.
-      LongHashedRelation(input, key, sizeEstimate, mm, isNullAware)
+      LongHashedRelation(input, key, sizeEstimate, mm, isNullAware, ignoresDuplicatedKey)
     } else {
       UnsafeHashedRelation(input, key, sizeEstimate, mm, isNullAware, allowsNullKey,
         ignoresDuplicatedKey)
@@ -225,8 +219,6 @@ private[joins] class UnsafeHashedRelation(
   }
 
   override def estimatedSize: Long = binaryMap.getTotalMemoryConsumption
-
-  override def getAvgHashProbesPerKey(): Double = binaryMap.getAvgHashProbesPerKey
 
   // re-used in get()/getValue()/getWithKeyIndex()/getValueWithKeyIndex()/valuesWithKeyIndex()
   var resultRow = new UnsafeRow(numFields)
@@ -539,7 +531,10 @@ private[joins] object UnsafeHashedRelation {
  *
  * see http://java-performance.info/implementing-world-fastest-java-int-to-int-hash-map/
  */
-private[execution] final class LongToUnsafeRowMap(val mm: TaskMemoryManager, capacity: Int)
+private[execution] final class LongToUnsafeRowMap(
+    val mm: TaskMemoryManager,
+    capacity: Int,
+    ignoresDuplicatedKey: Boolean = false)
   extends MemoryConsumer(mm, MemoryMode.ON_HEAP) with Externalizable with KryoSerializable {
 
   // Whether the keys are stored in dense mode or not.
@@ -574,12 +569,6 @@ private[execution] final class LongToUnsafeRowMap(val mm: TaskMemoryManager, cap
 
   // The number of unique keys.
   private var numKeys = 0L
-
-  // The number of hash probes for keys.
-  private var numProbes = 0L
-
-  // The number of keys lookups.
-  private var numKeyLookups = 0L
 
   // needed by serializer
   def this() = {
@@ -630,11 +619,6 @@ private[execution] final class LongToUnsafeRowMap(val mm: TaskMemoryManager, cap
   def getTotalMemoryConsumption: Long = array.length * 8L + page.length * 8L
 
   /**
-   * Returns the average number of hash probes per key lookup.
-   */
-  def getAvgHashProbesPerKey: Double = (1.0 * numProbes) / numKeyLookups
-
-  /**
    * Returns the first slot of array that store the keys (sparse mode).
    */
   private def firstSlot(key: Long): Int = {
@@ -668,9 +652,7 @@ private[execution] final class LongToUnsafeRowMap(val mm: TaskMemoryManager, cap
    * Returns the single UnsafeRow for given key, or null if not found.
    */
   def getValue(key: Long, resultRow: UnsafeRow): UnsafeRow = {
-    numKeyLookups += 1
     if (isDense) {
-      numProbes += 1
       if (key >= minKey && key <= maxKey) {
         val value = array((key - minKey).toInt)
         if (value > 0) {
@@ -678,14 +660,12 @@ private[execution] final class LongToUnsafeRowMap(val mm: TaskMemoryManager, cap
         }
       }
     } else {
-      numProbes += 1
       var pos = firstSlot(key)
       while (array(pos + 1) != 0) {
         if (array(pos) == key) {
           return getRow(array(pos + 1), resultRow)
         }
         pos = nextSlot(pos)
-        numProbes += 1
       }
     }
     null
@@ -712,9 +692,7 @@ private[execution] final class LongToUnsafeRowMap(val mm: TaskMemoryManager, cap
    * Returns an iterator for all the values for the given key, or null if no value found.
    */
   def get(key: Long, resultRow: UnsafeRow): Iterator[UnsafeRow] = {
-    numKeyLookups += 1
     if (isDense) {
-      numProbes += 1
       if (key >= minKey && key <= maxKey) {
         val value = array((key - minKey).toInt)
         if (value > 0) {
@@ -722,14 +700,12 @@ private[execution] final class LongToUnsafeRowMap(val mm: TaskMemoryManager, cap
         }
       }
     } else {
-      numProbes += 1
       var pos = firstSlot(key)
       while (array(pos + 1) != 0) {
         if (array(pos) == key) {
           return valueIter(array(pos + 1), resultRow)
         }
         pos = nextSlot(pos)
-        numProbes += 1
       }
     }
     null
@@ -785,6 +761,11 @@ private[execution] final class LongToUnsafeRowMap(val mm: TaskMemoryManager, cap
       throw QueryExecutionErrors.rowLargerThan256MUnsupportedError()
     }
 
+    val pos = findKeyPosition(key)
+    if (ignoresDuplicatedKey && array(pos + 1) != 0) {
+      return
+    }
+
     if (key < minKey) {
       minKey = key
     }
@@ -801,21 +782,22 @@ private[execution] final class LongToUnsafeRowMap(val mm: TaskMemoryManager, cap
     Platform.putLong(page, cursor, 0)
     cursor += 8
     numValues += 1
-    updateIndex(key, toAddress(offset, row.getSizeInBytes))
+    updateIndex(key, pos, toAddress(offset, row.getSizeInBytes))
+  }
+
+  private def findKeyPosition(key: Long): Int = {
+    var pos = firstSlot(key)
+    assert(numKeys < array.length / 2)
+    while (array(pos) != key && array(pos + 1) != 0) {
+      pos = nextSlot(pos)
+    }
+    pos
   }
 
   /**
    * Update the address in array for given key.
    */
-  private def updateIndex(key: Long, address: Long): Unit = {
-    numKeyLookups += 1
-    numProbes += 1
-    var pos = firstSlot(key)
-    assert(numKeys < array.length / 2)
-    while (array(pos) != key && array(pos + 1) != 0) {
-      pos = nextSlot(pos)
-      numProbes += 1
-    }
+  private def updateIndex(key: Long, pos: Int, address: Long): Unit = {
     if (array(pos + 1) == 0) {
       // this is the first value for this key, put the address in array.
       array(pos) = key
@@ -867,7 +849,8 @@ private[execution] final class LongToUnsafeRowMap(val mm: TaskMemoryManager, cap
     var i = 0
     while (i < old_array.length) {
       if (old_array(i + 1) > 0) {
-        updateIndex(old_array(i), old_array(i + 1))
+        val key = old_array(i)
+        updateIndex(key, findKeyPosition(key), old_array(i + 1))
       }
       i += 2
     }
@@ -1017,8 +1000,6 @@ class LongHashedRelation(
 
   override def estimatedSize: Long = map.getTotalMemoryConsumption
 
-  override def getAvgHashProbesPerKey(): Double = map.getAvgHashProbesPerKey
-
   override def get(key: InternalRow): Iterator[InternalRow] = {
     if (key.isNullAt(0)) {
       null
@@ -1062,19 +1043,19 @@ class LongHashedRelation(
   override def keys(): Iterator[InternalRow] = map.keys()
 
   override def getWithKeyIndex(key: InternalRow): Iterator[ValueRowWithKeyIndex] = {
-    throw new UnsupportedOperationException
+    throw SparkUnsupportedOperationException()
   }
 
   override def getValueWithKeyIndex(key: InternalRow): ValueRowWithKeyIndex = {
-    throw new UnsupportedOperationException
+    throw SparkUnsupportedOperationException()
   }
 
   override def valuesWithKeyIndex(): Iterator[ValueRowWithKeyIndex] = {
-    throw new UnsupportedOperationException
+    throw SparkUnsupportedOperationException()
   }
 
   override def maxNumKeysIndex: Int = {
-    throw new UnsupportedOperationException
+    throw SparkUnsupportedOperationException()
   }
 }
 
@@ -1087,9 +1068,10 @@ private[joins] object LongHashedRelation {
       key: Seq[Expression],
       sizeEstimate: Int,
       taskMemoryManager: TaskMemoryManager,
-      isNullAware: Boolean = false): HashedRelation = {
+      isNullAware: Boolean = false,
+      ignoresDuplicatedKey: Boolean = false): HashedRelation = {
 
-    val map = new LongToUnsafeRowMap(taskMemoryManager, sizeEstimate)
+    val map = new LongToUnsafeRowMap(taskMemoryManager, sizeEstimate, ignoresDuplicatedKey)
     val keyGenerator = UnsafeProjection.create(key)
 
     // Create a mapping of key -> rows
@@ -1136,8 +1118,6 @@ case object EmptyHashedRelation extends HashedRelation {
   override def close(): Unit = {}
 
   override def estimatedSize: Long = 0
-
-  override def getAvgHashProbesPerKey(): Double = 0
 }
 
 /**
@@ -1146,11 +1126,11 @@ case object EmptyHashedRelation extends HashedRelation {
  */
 case object HashedRelationWithAllNullKeys extends HashedRelation {
   override def get(key: InternalRow): Iterator[InternalRow] = {
-    throw new UnsupportedOperationException
+    throw SparkUnsupportedOperationException()
   }
 
   override def getValue(key: InternalRow): InternalRow = {
-    throw new UnsupportedOperationException
+    throw SparkUnsupportedOperationException()
   }
 
   override def asReadOnlyCopy(): HashedRelationWithAllNullKeys.type = this
@@ -1158,14 +1138,12 @@ case object HashedRelationWithAllNullKeys extends HashedRelation {
   override def keyIsUnique: Boolean = true
 
   override def keys(): Iterator[InternalRow] = {
-    throw new UnsupportedOperationException
+    throw SparkUnsupportedOperationException()
   }
 
   override def close(): Unit = {}
 
   override def estimatedSize: Long = 0
-
-  override def getAvgHashProbesPerKey(): Double = 0
 }
 
 /** The HashedRelationBroadcastMode requires that rows are broadcasted as a HashedRelation. */

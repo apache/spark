@@ -19,12 +19,11 @@ package org.apache.spark.sql.kafka010
 
 import java.{util => ju}
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 
 import org.apache.kafka.clients.admin.Admin
 import org.apache.kafka.clients.consumer.{Consumer, KafkaConsumer}
-import org.apache.kafka.clients.consumer.internals.NoOpConsumerRebalanceListener
 import org.apache.kafka.common.TopicPartition
 
 import org.apache.spark.internal.Logging
@@ -63,14 +62,15 @@ private[kafka010] sealed trait ConsumerStrategy extends Logging {
       .build()
 
   protected def retrieveAllPartitions(admin: Admin, topics: Set[String]): Set[TopicPartition] = {
-    admin.describeTopics(topics.asJava).all().get().asScala.filterNot(_._2.isInternal).flatMap {
-      case (topic, topicDescription) =>
-        topicDescription.partitions().asScala.map { topicPartitionInfo =>
-          val partition = topicPartitionInfo.partition()
-          logDebug(s"Partition found: $topic:$partition")
-          new TopicPartition(topic, partition)
-        }
-    }.toSet
+    admin.describeTopics(topics.asJava).allTopicNames().get().asScala.filterNot(_._2.isInternal)
+      .flatMap {
+        case (topic, topicDescription) =>
+          topicDescription.partitions().asScala.map { topicPartitionInfo =>
+            val partition = topicPartitionInfo.partition()
+            logDebug(s"Partition found: $topic:$partition")
+            new TopicPartition(topic, partition)
+          }
+      }.toSet
   }
 }
 
@@ -127,7 +127,7 @@ private[kafka010] case class SubscribePatternStrategy(topicPattern: String)
       kafkaParams: ju.Map[String, Object]): Consumer[Array[Byte], Array[Byte]] = {
     val updatedKafkaParams = setAuthenticationConfigIfNeeded(kafkaParams)
     val consumer = new KafkaConsumer[Array[Byte], Array[Byte]](updatedKafkaParams)
-    consumer.subscribe(ju.regex.Pattern.compile(topicPattern), new NoOpConsumerRebalanceListener())
+    consumer.subscribe(ju.regex.Pattern.compile(topicPattern))
     consumer
   }
 

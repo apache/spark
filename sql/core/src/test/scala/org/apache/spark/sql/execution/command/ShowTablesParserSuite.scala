@@ -17,9 +17,9 @@
 
 package org.apache.spark.sql.execution.command
 
-import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedNamespace, UnresolvedPartitionSpec}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, CurrentNamespace, UnresolvedNamespace, UnresolvedPartitionSpec, UnresolvedTable}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser.parsePlan
-import org.apache.spark.sql.catalyst.plans.logical.{ShowTableExtended, ShowTables}
+import org.apache.spark.sql.catalyst.plans.logical.{ShowTablePartition, ShowTables, ShowTablesExtended}
 import org.apache.spark.sql.test.SharedSparkSession
 
 class ShowTablesParserSuite extends AnalysisTest with SharedSparkSession {
@@ -28,13 +28,13 @@ class ShowTablesParserSuite extends AnalysisTest with SharedSparkSession {
   test("show tables") {
     comparePlans(
       parsePlan("SHOW TABLES"),
-      ShowTables(UnresolvedNamespace(Seq.empty[String]), None))
+      ShowTables(CurrentNamespace, None))
     comparePlans(
       parsePlan("SHOW TABLES '*test*'"),
-      ShowTables(UnresolvedNamespace(Seq.empty[String]), Some("*test*")))
+      ShowTables(CurrentNamespace, Some("*test*")))
     comparePlans(
       parsePlan("SHOW TABLES LIKE '*test*'"),
-      ShowTables(UnresolvedNamespace(Seq.empty[String]), Some("*test*")))
+      ShowTables(CurrentNamespace, Some("*test*")))
     comparePlans(
       parsePlan(s"SHOW TABLES FROM $catalog.ns1.ns2.tbl"),
       ShowTables(UnresolvedNamespace(Seq(catalog, "ns1", "ns2", "tbl")), None))
@@ -52,32 +52,32 @@ class ShowTablesParserSuite extends AnalysisTest with SharedSparkSession {
   test("show table extended") {
     comparePlans(
       parsePlan("SHOW TABLE EXTENDED LIKE '*test*'"),
-      ShowTableExtended(UnresolvedNamespace(Seq.empty[String]), "*test*", None))
+      ShowTablesExtended(CurrentNamespace, "*test*"))
     comparePlans(
       parsePlan(s"SHOW TABLE EXTENDED FROM $catalog.ns1.ns2 LIKE '*test*'"),
-      ShowTableExtended(UnresolvedNamespace(Seq(catalog, "ns1", "ns2")), "*test*", None))
+      ShowTablesExtended(UnresolvedNamespace(Seq(catalog, "ns1", "ns2")), "*test*"))
     comparePlans(
       parsePlan(s"SHOW TABLE EXTENDED IN $catalog.ns1.ns2 LIKE '*test*'"),
-      ShowTableExtended(UnresolvedNamespace(Seq(catalog, "ns1", "ns2")), "*test*", None))
+      ShowTablesExtended(UnresolvedNamespace(Seq(catalog, "ns1", "ns2")), "*test*"))
+
     comparePlans(
       parsePlan("SHOW TABLE EXTENDED LIKE '*test*' PARTITION(ds='2008-04-09', hr=11)"),
-      ShowTableExtended(
-        UnresolvedNamespace(Seq.empty[String]),
-        "*test*",
-        Some(UnresolvedPartitionSpec(Map("ds" -> "2008-04-09", "hr" -> "11")))))
+      ShowTablePartition(
+        UnresolvedTable(Seq("*test*"), "SHOW TABLE EXTENDED ... PARTITION ..."),
+        UnresolvedPartitionSpec(Map("ds" -> "2008-04-09", "hr" -> "11"))))
     comparePlans(
       parsePlan(s"SHOW TABLE EXTENDED FROM $catalog.ns1.ns2 LIKE '*test*' " +
         "PARTITION(ds='2008-04-09')"),
-      ShowTableExtended(
-        UnresolvedNamespace(Seq(catalog, "ns1", "ns2")),
-        "*test*",
-        Some(UnresolvedPartitionSpec(Map("ds" -> "2008-04-09")))))
+      ShowTablePartition(
+        UnresolvedTable(Seq(catalog, "ns1", "ns2", "*test*"),
+          "SHOW TABLE EXTENDED ... PARTITION ..."),
+        UnresolvedPartitionSpec(Map("ds" -> "2008-04-09"))))
     comparePlans(
       parsePlan(s"SHOW TABLE EXTENDED IN $catalog.ns1.ns2 LIKE '*test*' " +
         "PARTITION(ds='2008-04-09')"),
-      ShowTableExtended(
-        UnresolvedNamespace(Seq(catalog, "ns1", "ns2")),
-        "*test*",
-        Some(UnresolvedPartitionSpec(Map("ds" -> "2008-04-09")))))
+      ShowTablePartition(
+        UnresolvedTable(Seq(catalog, "ns1", "ns2", "*test*"),
+          "SHOW TABLE EXTENDED ... PARTITION ..."),
+        UnresolvedPartitionSpec(Map("ds" -> "2008-04-09"))))
   }
 }

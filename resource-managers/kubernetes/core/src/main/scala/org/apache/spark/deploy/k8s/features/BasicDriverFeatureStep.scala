@@ -16,20 +16,16 @@
  */
 package org.apache.spark.deploy.k8s.features
 
-import javax.ws.rs.core.UriBuilder
-
-import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 
 import io.fabric8.kubernetes.api.model._
 
-import org.apache.spark.SparkException
 import org.apache.spark.deploy.k8s._
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.submit._
 import org.apache.spark.internal.config._
-import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.ui.SparkUI
 import org.apache.spark.util.Utils
 
@@ -40,9 +36,7 @@ private[spark] class BasicDriverFeatureStep(conf: KubernetesDriverConf)
     .get(KUBERNETES_DRIVER_POD_NAME)
     .getOrElse(s"${conf.resourceNamePrefix}-driver")
 
-  private val driverContainerImage = conf
-    .get(DRIVER_CONTAINER_IMAGE)
-    .getOrElse(throw new SparkException("Must specify the driver container image"))
+  private val driverContainerImage = conf.image
 
   // CPU settings
   private val driverCpuCores = conf.get(DRIVER_CORES)
@@ -69,6 +63,8 @@ private[spark] class BasicDriverFeatureStep(conf: KubernetesDriverConf)
       conf.get(MEMORY_OVERHEAD_FACTOR)
     }
 
+  private val driverMinimumMemoryOverhead = conf.get(DRIVER_MIN_MEMORY_OVERHEAD)
+
   // Prefer the driver memory overhead factor if set explicitly
   private val memoryOverheadFactor = if (conf.contains(DRIVER_MEMORY_OVERHEAD_FACTOR)) {
     conf.get(DRIVER_MEMORY_OVERHEAD_FACTOR)
@@ -76,23 +72,15 @@ private[spark] class BasicDriverFeatureStep(conf: KubernetesDriverConf)
     defaultOverheadFactor
   }
 
-  private val memoryOverheadMiB = conf
+  private val memoryOverheadMiB: Long = conf
     .get(DRIVER_MEMORY_OVERHEAD)
     .getOrElse(math.max((memoryOverheadFactor * driverMemoryMiB).toInt,
-      ResourceProfile.MEMORY_OVERHEAD_MIN_MIB))
+      driverMinimumMemoryOverhead))
   private val driverMemoryWithOverheadMiB = driverMemoryMiB + memoryOverheadMiB
 
   override def configurePod(pod: SparkPod): SparkPod = {
-    val driverCustomEnvs = (Seq(
-      (ENV_APPLICATION_ID, conf.appId)
-    ) ++ conf.environment)
-      .map { env =>
-        new EnvVarBuilder()
-          .withName(env._1)
-          .withValue(env._2)
-          .build()
-      }
-
+    val driverCustomEnvs = KubernetesUtils.buildEnvVars(
+      Seq(ENV_APPLICATION_ID -> conf.appId) ++ conf.environment)
     val driverCpuQuantity = new Quantity(driverCoresRequest)
     val driverMemoryQuantity = new Quantity(s"${driverMemoryWithOverheadMiB}Mi")
     val maybeCpuLimitQuantity = driverLimitCores.map { limitCores =>
@@ -108,6 +96,8 @@ private[spark] class BasicDriverFeatureStep(conf: KubernetesDriverConf)
       conf.sparkConf.getInt(BLOCK_MANAGER_PORT.key, DEFAULT_BLOCKMANAGER_PORT)
     )
     val driverUIPort = SparkUI.getUIPort(conf.sparkConf)
+    val driverSparkConnectServerPort =
+      conf.sparkConf.getInt(CONNECT_GRPC_BINDING_PORT, DEFAULT_SPARK_CONNECT_SERVER_PORT)
     val driverContainer = new ContainerBuilder(pod.container)
       .withName(Option(pod.container.getName).getOrElse(DEFAULT_DRIVER_CONTAINER_NAME))
       .withImage(driverContainerImage)
@@ -125,6 +115,11 @@ private[spark] class BasicDriverFeatureStep(conf: KubernetesDriverConf)
       .addNewPort()
         .withName(UI_PORT_NAME)
         .withContainerPort(driverUIPort)
+        .withProtocol("TCP")
+        .endPort()
+      .addNewPort()
+        .withName(SPARK_CONNECT_SERVER_PORT_NAME)
+        .withContainerPort(driverSparkConnectServerPort)
         .withProtocol("TCP")
         .endPort()
       .addNewEnv()
@@ -151,8 +146,7 @@ private[spark] class BasicDriverFeatureStep(conf: KubernetesDriverConf)
       .editOrNewMetadata()
         .withName(driverPodName)
         .addToLabels(conf.labels.asJava)
-        .addToAnnotations(conf.annotations.map { case (k, v) =>
-          (k, Utils.substituteAppNExecIds(v, conf.appId, "")) }.asJava)
+        .addToAnnotations(conf.annotations.asJava)
         .endMetadata()
       .editOrNewSpec()
         .withRestartPolicy("Never")
@@ -176,27 +170,27 @@ private[spark] class BasicDriverFeatureStep(conf: KubernetesDriverConf)
       MEMORY_OVERHEAD_FACTOR.key -> defaultOverheadFactor.toString)
     // try upload local, resolvable files to a hadoop compatible file system
     Seq(JARS, FILES, ARCHIVES, SUBMIT_PYTHON_FILES).foreach { key =>
-      val uris = conf.get(key).filter(uri => KubernetesUtils.isLocalAndResolvable(uri))
+      val (localUris, remoteUris) =
+        conf.get(key).partition(uri => KubernetesUtils.isLocalAndResolvable(uri))
       val value = {
         if (key == ARCHIVES) {
-          uris.map(UriBuilder.fromUri(_).fragment(null).build()).map(_.toString)
+          localUris.map(Utils.getUriBuilder(_).fragment(null).build()).map(_.toString)
         } else {
-          uris
+          localUris
         }
       }
       val resolved = KubernetesUtils.uploadAndTransformFileUris(value, Some(conf.sparkConf))
       if (resolved.nonEmpty) {
         val resolvedValue = if (key == ARCHIVES) {
-          uris.zip(resolved).map { case (uri, r) =>
-            UriBuilder.fromUri(r).fragment(new java.net.URI(uri).getFragment).build().toString
+          localUris.zip(resolved).map { case (uri, r) =>
+            Utils.getUriBuilder(r).fragment(new java.net.URI(uri).getFragment).build().toString
           }
         } else {
           resolved
         }
-        additionalProps.put(key.key, resolvedValue.mkString(","))
+        additionalProps.put(key.key, (resolvedValue ++ remoteUris).mkString(","))
       }
     }
     additionalProps.toMap
   }
 }
-

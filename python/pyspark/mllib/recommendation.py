@@ -20,7 +20,7 @@ import sys
 from typing import Any, List, NamedTuple, Optional, Tuple, Type, Union
 
 from pyspark import SparkContext, since
-from pyspark.rdd import RDD
+from pyspark.core.rdd import RDD
 from pyspark.mllib.common import JavaModelWrapper, callMLlibFunc, inherit_doc
 from pyspark.mllib.util import JavaLoader, JavaSaveable
 from pyspark.sql import DataFrame
@@ -208,7 +208,7 @@ class MatrixFactorizationModel(
         """
         return self.call("wrappedRecommendUsersForProducts", num)
 
-    @property  # type: ignore[misc]
+    @property
     @since("1.4.0")
     def rank(self) -> int:
         """Rank for the features in this model"""

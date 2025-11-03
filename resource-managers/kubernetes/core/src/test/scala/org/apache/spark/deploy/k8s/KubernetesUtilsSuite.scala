@@ -19,11 +19,12 @@ package org.apache.spark.deploy.k8s
 
 import java.io.File
 import java.nio.charset.StandardCharsets
+import java.nio.file.Files
+import java.nio.file.StandardOpenOption._
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
-import io.fabric8.kubernetes.api.model.{ContainerBuilder, PodBuilder}
-import org.apache.commons.io.FileUtils
+import io.fabric8.kubernetes.api.model.{ContainerBuilder, EnvVarBuilder, EnvVarSourceBuilder, PodBuilder}
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.scalatest.PrivateMethodTester
@@ -91,7 +92,7 @@ class KubernetesUtilsSuite extends SparkFunSuite with PrivateMethodTester {
         }
 
         def appendFileAndUpload(content: String, delSrc: Boolean, overwrite: Boolean): Unit = {
-          FileUtils.write(srcFile, content, StandardCharsets.UTF_8, true)
+          Files.writeString(srcFile.toPath, content, StandardCharsets.UTF_8, CREATE, WRITE, APPEND)
           KubernetesUtils.invokePrivate(upload(src, dest, fs, delSrc, overwrite))
         }
 
@@ -121,10 +122,42 @@ class KubernetesUtilsSuite extends SparkFunSuite with PrivateMethodTester {
 
         // Rewrite a new file, upload file with delSrc = true and overwrite = false.
         // Upload failed because dest exists, src still exists.
-        FileUtils.write(srcFile, "re-init-content", StandardCharsets.UTF_8, true)
+        Files.writeString(srcFile.toPath, "re-init-content")
         checkUploadException(delSrc = true, overwrite = false)
         assert(fs.exists(src))
       }
     }
+  }
+
+  test("SPARK-38582: verify that envVars is built with kv env as expected") {
+    val input = for (i <- 9 to 1 by -1) yield (s"testEnvKey.$i", s"testEnvValue.$i")
+    val expectedEnvVars = (input :+ ("testKeyWithEmptyValue" -> "")).map { case(k, v) =>
+      new EnvVarBuilder()
+        .withName(k)
+        .withValue(v).build()
+    }
+    val outputEnvVars =
+      KubernetesUtils.buildEnvVars(input ++
+        Seq("testKeyWithNullValue" -> null, "testKeyWithEmptyValue" -> ""))
+    assert(outputEnvVars.toSet == expectedEnvVars.toSet)
+  }
+
+  test("SPARK-38582: verify that envVars is built with field ref env as expected") {
+    val input = for (i <- 9 to 1 by -1) yield (s"testEnvKey.$i", s"v$i", s"testEnvValue.$i")
+    val expectedEnvVars = input.map { env =>
+      new EnvVarBuilder()
+        .withName(env._1)
+        .withValueFrom(new EnvVarSourceBuilder()
+          .withNewFieldRef(env._2, env._3)
+          .build())
+        .build()
+    }
+    val outputEnvVars =
+      KubernetesUtils.buildEnvVarsWithFieldRef(
+        input ++ Seq(
+          ("testKey1", null, "testValue1"),
+          ("testKey2", "v1", null),
+          ("testKey3", null, null)))
+    assert(outputEnvVars == expectedEnvVars)
   }
 }

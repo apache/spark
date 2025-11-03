@@ -18,11 +18,11 @@
 package org.apache.spark.ui
 
 import java.util.{Enumeration, Map => JMap}
-import javax.servlet._
-import javax.servlet.http.{HttpServletRequest, HttpServletRequestWrapper, HttpServletResponse}
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
+import jakarta.servlet._
+import jakarta.servlet.http.{HttpServletRequest, HttpServletRequestWrapper, HttpServletResponse}
 import org.apache.commons.text.StringEscapeUtils
 
 import org.apache.spark.{SecurityManager, SparkConf}
@@ -43,10 +43,6 @@ import org.apache.spark.internal.config.UI._
 private class HttpSecurityFilter(
     conf: SparkConf,
     securityMgr: SecurityManager) extends Filter {
-
-  override def destroy(): Unit = { }
-
-  override def init(config: FilterConfig): Unit = { }
 
   override def doFilter(req: ServletRequest, res: ServletResponse, chain: FilterChain): Unit = {
     val hreq = req.asInstanceOf[HttpServletRequest]

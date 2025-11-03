@@ -49,9 +49,9 @@ public class KVStoreSerializer {
     this.mapper = new ObjectMapper();
   }
 
-  public final byte[] serialize(Object o) throws Exception {
-    if (o instanceof String) {
-      return ((String) o).getBytes(UTF_8);
+  public byte[] serialize(Object o) throws Exception {
+    if (o instanceof String str) {
+      return str.getBytes(UTF_8);
     } else {
       ByteArrayOutputStream bytes = new ByteArrayOutputStream();
       try (GZIPOutputStream out = new GZIPOutputStream(bytes)) {
@@ -62,7 +62,7 @@ public class KVStoreSerializer {
   }
 
   @SuppressWarnings("unchecked")
-  public final <T> T deserialize(byte[] data, Class<T> klass) throws Exception {
+  public <T> T deserialize(byte[] data, Class<T> klass) throws Exception {
     if (klass.equals(String.class)) {
       return (T) new String(data, UTF_8);
     } else {

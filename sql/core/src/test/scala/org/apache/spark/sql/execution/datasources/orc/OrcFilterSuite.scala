@@ -22,12 +22,12 @@ import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
 import java.time.{Duration, LocalDateTime, Period}
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
-import org.apache.hadoop.hive.ql.io.sarg.{PredicateLeaf, SearchArgument}
+import org.apache.hadoop.hive.ql.io.sarg.{PredicateLeaf, SearchArgument, SearchArgumentImpl}
 import org.apache.hadoop.hive.ql.io.sarg.SearchArgumentFactory.newBuilder
 
-import org.apache.spark.{SparkConf, SparkException}
+import org.apache.spark.{SparkConf, SparkException, SparkRuntimeException}
 import org.apache.spark.sql.{AnalysisException, Column, DataFrame, Row}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
@@ -38,11 +38,15 @@ import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
+import org.apache.spark.tags.ExtendedSQLTest
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * A test suite that tests Apache ORC filter API based filter pushdown optimization.
  */
+@ExtendedSQLTest
 class OrcFilterSuite extends OrcTest with SharedSparkSession {
+  import testImplicits.{toRichColumn, ColumnConstructorExt}
 
   override protected def sparkConf: SparkConf =
     super
@@ -59,15 +63,15 @@ class OrcFilterSuite extends OrcTest with SharedSparkSession {
       .where(Column(predicate))
 
     query.queryExecution.optimizedPlan match {
-      case PhysicalOperation(_, filters, DataSourceV2ScanRelation(_, o: OrcScan, _, _)) =>
+      case PhysicalOperation(_, filters, DataSourceV2ScanRelation(_, o: OrcScan, _, _, _)) =>
         assert(filters.nonEmpty, "No filter is analyzed from the given query")
         assert(o.pushedFilters.nonEmpty, "No filter is pushed down")
-        val maybeFilter = OrcFilters.createFilter(query.schema, o.pushedFilters)
-        assert(maybeFilter.isDefined, s"Couldn't generate filter predicate for ${o.pushedFilters}")
+        val maybeFilter = OrcFilters.createFilter(query.schema, o.pushedFilters.toImmutableArraySeq)
+        assert(maybeFilter.isDefined, s"Couldn't generate filter predicate for " +
+          s"${o.pushedFilters.mkString("pushedFilters(", ", ", ")")}")
         checker(maybeFilter.get)
 
-      case _ =>
-        throw new AnalysisException("Can not match OrcTable in the query.")
+      case _ => assert(false, "Can not match OrcTable in the query.")
     }
   }
 
@@ -85,7 +89,8 @@ class OrcFilterSuite extends OrcTest with SharedSparkSession {
       (predicate: Predicate, stringExpr: String)
       (implicit df: DataFrame): Unit = {
     def checkLogicalOperator(filter: SearchArgument) = {
-      assert(filter.toString == stringExpr)
+      // HIVE-24458 changes toString output and provides `toOldString` for old style.
+      assert(filter.asInstanceOf[SearchArgumentImpl].toOldString == stringExpr)
     }
     checkFilterPredicate(df, predicate, checkLogicalOperator)
   }
@@ -542,7 +547,7 @@ class OrcFilterSuite extends OrcTest with SharedSparkSession {
       OrcFilters.createFilter(schema, Array(
         LessThan("a", 10),
         StringContains("b", "prefix")
-      )).get.toString
+      ).toImmutableArraySeq).get.asInstanceOf[SearchArgumentImpl].toOldString
     }
 
     // The `LessThan` should be converted while the whole inner `And` shouldn't
@@ -553,7 +558,7 @@ class OrcFilterSuite extends OrcTest with SharedSparkSession {
           GreaterThan("a", 1),
           StringContains("b", "prefix")
         ))
-      )).get.toString
+      ).toImmutableArraySeq).get.asInstanceOf[SearchArgumentImpl].toOldString
     }
 
     // Safely remove unsupported `StringContains` predicate and push down `LessThan`
@@ -563,7 +568,7 @@ class OrcFilterSuite extends OrcTest with SharedSparkSession {
           LessThan("a", 10),
           StringContains("b", "prefix")
         )
-      )).get.toString
+      ).toImmutableArraySeq).get.asInstanceOf[SearchArgumentImpl].toOldString
     }
 
     // Safely remove unsupported `StringContains` predicate, push down `LessThan` and `GreaterThan`.
@@ -577,7 +582,7 @@ class OrcFilterSuite extends OrcTest with SharedSparkSession {
           ),
           GreaterThan("a", 1)
         )
-      )).get.toString
+      ).toImmutableArraySeq).get.asInstanceOf[SearchArgumentImpl].toOldString
     }
   }
 
@@ -600,7 +605,7 @@ class OrcFilterSuite extends OrcTest with SharedSparkSession {
             LessThan("a", 1)
           )
         )
-      )).get.toString
+      ).toImmutableArraySeq).get.asInstanceOf[SearchArgumentImpl].toOldString
     }
 
     assertResult("leaf-0 = (LESS_THAN_EQUALS a 10), leaf-1 = (LESS_THAN a 1)," +
@@ -616,7 +621,7 @@ class OrcFilterSuite extends OrcTest with SharedSparkSession {
             LessThan("a", 1)
           )
         )
-      )).get.toString
+      ).toImmutableArraySeq).get.asInstanceOf[SearchArgumentImpl].toOldString
     }
 
     assert(OrcFilters.createFilter(schema, Array(
@@ -627,7 +632,7 @@ class OrcFilterSuite extends OrcTest with SharedSparkSession {
           LessThan("a", 1)
         )
       )
-    )).isEmpty)
+    ).toImmutableArraySeq).isEmpty)
   }
 
   test("SPARK-27160: Fix casting of the DecimalType literal") {
@@ -637,8 +642,8 @@ class OrcFilterSuite extends OrcTest with SharedSparkSession {
       OrcFilters.createFilter(schema, Array(
         LessThan(
           "a",
-          new java.math.BigDecimal(3.14, MathContext.DECIMAL64).setScale(2)))
-      ).get.toString
+          new java.math.BigDecimal(3.14, MathContext.DECIMAL64).setScale(2))).toImmutableArraySeq
+      ).get.asInstanceOf[SearchArgumentImpl].toOldString
     }
   }
 
@@ -646,7 +651,7 @@ class OrcFilterSuite extends OrcTest with SharedSparkSession {
     withTempPath { dir =>
       val count = 10
       val tableName = "spark_32622"
-      val tableDir1 = dir.getAbsoluteFile + "/table1"
+      val tableDir1 = s"${dir.getAbsoluteFile}/table1"
 
       // Physical ORC files have both `A` and `a` fields.
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
@@ -673,11 +678,21 @@ class OrcFilterSuite extends OrcTest with SharedSparkSession {
 
         // Exception thrown for ambiguous case.
         withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
-          val e = intercept[AnalysisException] {
-            sql(s"select a from $tableName where a < 0").collect()
-          }
-          assert(e.getMessage.contains(
-            "Reference 'a' is ambiguous"))
+          checkError(
+            exception = intercept[AnalysisException] {
+              sql(s"select a from $tableName where a < 0").collect()
+            },
+            condition = "AMBIGUOUS_REFERENCE",
+            parameters = Map(
+              "name" -> "`a`",
+              "referenceNames" -> ("[`spark_catalog`.`default`.`spark_32622`.`a`, " +
+                "`spark_catalog`.`default`.`spark_32622`.`a`]")),
+            context = ExpectedContext(
+              fragment = "a",
+              start = 32,
+              stop = 32
+            )
+          )
         }
       }
 
@@ -689,16 +704,18 @@ class OrcFilterSuite extends OrcTest with SharedSparkSession {
                |CREATE TABLE $tableName (A LONG) USING ORC LOCATION '$tableDir1'
              """.stripMargin)
 
-          val e = intercept[SparkException] {
+          val ex = intercept[SparkException] {
             sql(s"select A from $tableName where A < 0").collect()
           }
-          assert(e.getCause.isInstanceOf[RuntimeException] && e.getCause.getMessage.contains(
+          assert(ex.getCondition.startsWith("FAILED_READ_FILE"))
+          assert(ex.getCause.isInstanceOf[SparkRuntimeException])
+          assert(ex.getCause.getMessage.contains(
             """Found duplicate field(s) "A": [A, a] in case-insensitive mode"""))
         }
       }
 
       // Physical ORC files have only `A` field.
-      val tableDir2 = dir.getAbsoluteFile + "/table2"
+      val tableDir2 = s"${dir.getAbsoluteFile}/table2"
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
         spark.range(count).repartition(count).selectExpr("id - 1 as A")
           .write.mode("overwrite").orc(tableDir2)

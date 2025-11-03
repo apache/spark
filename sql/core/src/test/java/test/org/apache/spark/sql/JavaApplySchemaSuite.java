@@ -23,10 +23,10 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
@@ -46,7 +46,7 @@ public class JavaApplySchemaSuite implements Serializable {
   private transient SparkSession spark;
   private transient JavaSparkContext jsc;
 
-  @Before
+  @BeforeEach
   public void setUp() {
     spark = SparkSession.builder()
       .master("local[*]")
@@ -55,7 +55,7 @@ public class JavaApplySchemaSuite implements Serializable {
     jsc = new JavaSparkContext(spark.sparkContext());
   }
 
-  @After
+  @AfterEach
   public void tearDown() {
     spark.stop();
     spark = null;
@@ -110,7 +110,7 @@ public class JavaApplySchemaSuite implements Serializable {
     expected.add(RowFactory.create("Michael", 29));
     expected.add(RowFactory.create("Yin", 28));
 
-    Assert.assertEquals(expected, actual);
+    Assertions.assertEquals(expected, actual);
   }
 
   @Test
@@ -142,7 +142,7 @@ public class JavaApplySchemaSuite implements Serializable {
     expected.add("Michael_29");
     expected.add("Yin_28");
 
-    Assert.assertEquals(expected, actual);
+    Assertions.assertEquals(expected, actual);
   }
 
   @Test
@@ -186,16 +186,16 @@ public class JavaApplySchemaSuite implements Serializable {
 
     Dataset<Row> df1 = spark.read().json(jsonDS);
     StructType actualSchema1 = df1.schema();
-    Assert.assertEquals(expectedSchema, actualSchema1);
+    Assertions.assertEquals(expectedSchema, actualSchema1);
     df1.createOrReplaceTempView("jsonTable1");
     List<Row> actual1 = spark.sql("select * from jsonTable1").collectAsList();
-    Assert.assertEquals(expectedResult, actual1);
+    Assertions.assertEquals(expectedResult, actual1);
 
     Dataset<Row> df2 = spark.read().schema(expectedSchema).json(jsonDS);
     StructType actualSchema2 = df2.schema();
-    Assert.assertEquals(expectedSchema, actualSchema2);
+    Assertions.assertEquals(expectedSchema, actualSchema2);
     df2.createOrReplaceTempView("jsonTable2");
     List<Row> actual2 = spark.sql("select * from jsonTable2").collectAsList();
-    Assert.assertEquals(expectedResult, actual2);
+    Assertions.assertEquals(expectedResult, actual2);
   }
 }

@@ -17,13 +17,17 @@
 
 import shutil
 import tempfile
+import uuid
+import os
 
 from pyspark.sql import Row
+from pyspark.sql.datasource import InputPartition, DataSource
 from pyspark.sql.types import IntegerType, StructField, StructType, LongType, StringType
+from pyspark.errors import PySparkNotImplementedError
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 
-class DataSourcesTests(ReusedSQLTestCase):
+class DataSourcesTestsMixin:
     def test_linesep_text(self):
         df = self.spark.read.text("python/test_support/sql/ages_newlines.csv", lineSep=",")
         expected = [
@@ -112,6 +116,54 @@ class DataSourcesTests(ReusedSQLTestCase):
         self.assertEqual(readback.collect(), expected)
         shutil.rmtree(tmpPath)
 
+    def test_xml(self):
+        tmpPath = tempfile.mkdtemp()
+        shutil.rmtree(tmpPath)
+        xsdPath = tempfile.mkdtemp()
+        xsdString = """<?xml version="1.0" encoding="UTF-8" ?>
+          <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+            <xs:element name="person">
+              <xs:complexType>
+                <xs:sequence>
+                  <xs:element name="name" type="xs:string" />
+                  <xs:element name="age" type="xs:long" />
+                </xs:sequence>
+              </xs:complexType>
+            </xs:element>
+          </xs:schema>"""
+        try:
+            with open(os.path.join(xsdPath, "people.xsd"), "w") as f:
+                _ = f.write(xsdString)
+            df = self.spark.createDataFrame([("Hyukjin", 100), ("Aria", 101), ("Arin", 102)]).toDF(
+                "name", "age"
+            )
+            df.write.xml(tmpPath, rootTag="people", rowTag="person")
+            people = self.spark.read.xml(
+                tmpPath, rowTag="person", rowValidationXSDPath=os.path.join(xsdPath, "people.xsd")
+            )
+            expected = [
+                Row(age=100, name="Hyukjin"),
+                Row(age=101, name="Aria"),
+                Row(age=102, name="Arin"),
+            ]
+            self.assertEqual(people.sort("age").collect(), expected)
+            self.assertEqual(
+                people.schema,
+                StructType(
+                    [StructField("age", LongType(), True), StructField("name", StringType(), True)]
+                ),
+            )
+        finally:
+            shutil.rmtree(tmpPath)
+            shutil.rmtree(xsdPath)
+
+    def test_xml_sampling_ratio(self):
+        rdd = self.spark.sparkContext.range(0, 100, 1, 1).map(
+            lambda x: "<p><a>0.1</a></p>" if x == 1 else "<p><a>%s</a></p>" % str(x)
+        )
+        schema = self.spark.read.option("samplingRatio", 0.5).xml(rdd).schema
+        self.assertEqual(schema, StructType([StructField("a", LongType(), True)]))
+
     def test_read_multiple_orc_file(self):
         df = self.spark.read.orc(
             [
@@ -160,6 +212,7 @@ class DataSourcesTests(ReusedSQLTestCase):
             )
             df = (
                 self.spark.read.option("header", "true")
+                .option("quote", None)
                 .schema(schema)
                 .csv(path, enforceSchema=False)
             )
@@ -192,13 +245,106 @@ class DataSourcesTests(ReusedSQLTestCase):
         finally:
             shutil.rmtree(path)
 
+    def test_jdbc(self):
+        db = f"memory:{uuid.uuid4()}"
+        url = f"jdbc:derby:{db}"
+        dbtable = "test_table"
+
+        try:
+            df = self.spark.range(10)
+            df.write.jdbc(url=f"{url};create=true", table=dbtable)
+
+            readback = self.spark.read.jdbc(url=url, table=dbtable)
+            self.assertEqual(sorted(df.collect()), sorted(readback.collect()))
+
+            additional_arguments = dict(column="id", lowerBound=3, upperBound=8, numPartitions=10)
+            readback = self.spark.read.jdbc(url=url, table=dbtable, **additional_arguments)
+            self.assertEqual(sorted(df.collect()), sorted(readback.collect()))
+
+            additional_arguments = dict(predicates=['"id" < 5'])
+            readback = self.spark.read.jdbc(url=url, table=dbtable, **additional_arguments)
+            self.assertEqual(sorted(df.filter("id < 5").collect()), sorted(readback.collect()))
+        finally:
+            # Clean up.
+            with self.assertRaisesRegex(Exception, f"Database '{db}' dropped."):
+                self.spark.read.jdbc(url=f"{url};drop=true", table=dbtable).collect()
+
+    def test_jdbc_format(self):
+        db = f"memory:{uuid.uuid4()}"
+        url = f"jdbc:derby:{db}"
+        dbtable = "test_table"
+
+        try:
+            df = self.spark.range(10)
+            df.write.format("jdbc").options(url=f"{url};create=true", dbtable=dbtable).save()
+            readback = self.spark.read.format("jdbc").options(url=url, dbtable=dbtable).load()
+            self.assertEqual(sorted(df.collect()), sorted(readback.collect()))
+        finally:
+            # Clean up.
+            with self.assertRaisesRegex(Exception, f"Database '{db}' dropped."):
+                self.spark.read.format("jdbc").options(
+                    url=f"{url};drop=true", dbtable=dbtable
+                ).load().collect()
+
+    def test_custom_data_source(self):
+        class MyCustomDataSource(DataSource):
+            pass
+
+        custom_data_source = MyCustomDataSource(options={"path": "/path/to/custom/data"})
+
+        with self.assertRaises(PySparkNotImplementedError) as pe:
+            custom_data_source.schema()
+
+        self.check_error(
+            exception=pe.exception,
+            errorClass="NOT_IMPLEMENTED",
+            messageParameters={"feature": "schema"},
+        )
+
+        with self.assertRaises(PySparkNotImplementedError) as pe:
+            custom_data_source.reader(schema=None)
+
+        self.check_error(
+            exception=pe.exception,
+            errorClass="NOT_IMPLEMENTED",
+            messageParameters={"feature": "reader"},
+        )
+
+        with self.assertRaises(PySparkNotImplementedError) as pe:
+            custom_data_source.writer(schema=None, overwrite=False)
+
+        self.check_error(
+            exception=pe.exception,
+            errorClass="NOT_IMPLEMENTED",
+            messageParameters={"feature": "writer"},
+        )
+
+    def test_input_partition(self):
+        partition = InputPartition(1)
+        expected_repr = "InputPartition(value=1)"
+        actual_repr = repr(partition)
+        self.assertEqual(expected_repr, actual_repr)
+
+        class RangeInputPartition(InputPartition):
+            def __init__(self, start, end):
+                super().__init__((start, end))
+
+        partition = RangeInputPartition(1, 3)
+        expected_repr = "RangeInputPartition(value=(1, 3))"
+        actual_repr = repr(partition)
+        self.assertEqual(expected_repr, actual_repr)
+
+
+class DataSourcesTests(DataSourcesTestsMixin, ReusedSQLTestCase):
+    pass
+
 
 if __name__ == "__main__":
     import unittest
     from pyspark.sql.tests.test_datasources import *  # noqa: F401
 
     try:
-        import xmlrunner  # type: ignore[import]
+        import xmlrunner
 
         testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:

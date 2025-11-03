@@ -20,11 +20,10 @@ package org.apache.spark.ui.jobs
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets.UTF_8
 import java.util.Date
-import javax.servlet.http.HttpServletRequest
 
 import scala.xml._
 
-import org.apache.commons.text.StringEscapeUtils
+import jakarta.servlet.http.HttpServletRequest
 
 import org.apache.spark.status.AppStatusStore
 import org.apache.spark.status.api.v1
@@ -91,13 +90,6 @@ private[ui] class StageTableRowData(
     val shuffleReadWithUnit: String,
     val shuffleWrite: Long,
     val shuffleWriteWithUnit: String)
-
-private[ui] class MissingStageTableRowData(
-    stageInfo: v1.StageData,
-    stageId: Int,
-    attemptId: Int) extends StageTableRowData(
-  stageInfo, None, stageId, attemptId, "", None, new Date(0), "", -1, "", 0, "", 0, "", 0, "", 0,
-    "")
 
 /** Page showing list of all ongoing and recently finished stages */
 private[ui] class StagePagedTable(
@@ -217,26 +209,12 @@ private[ui] class StagePagedTable(
         <td>{data.shuffleWriteWithUnit}</td> ++
         {
           if (isFailedStage) {
-            failureReasonHtml(info)
+            UIUtils.errorMessageCell(info.failureReason.getOrElse(""))
           } else {
             Seq.empty
           }
         }
     }
-  }
-
-  private def failureReasonHtml(s: v1.StageData): Seq[Node] = {
-    val failureReason = s.failureReason.getOrElse("")
-    val isMultiline = failureReason.indexOf('\n') >= 0
-    // Display the first line by default
-    val failureReasonSummary = StringEscapeUtils.escapeHtml4(
-      if (isMultiline) {
-        failureReason.substring(0, failureReason.indexOf('\n'))
-      } else {
-        failureReason
-      })
-    val details = UIUtils.detailsUINode(isMultiline, failureReason)
-    <td valign="middle">{failureReasonSummary}{details}</td>
   }
 
   private def makeDescription(s: v1.StageData, descriptionOption: Option[String]): Seq[Node] = {

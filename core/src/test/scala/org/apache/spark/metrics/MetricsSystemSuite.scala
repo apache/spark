@@ -30,7 +30,7 @@ import org.apache.spark.internal.config._
 import org.apache.spark.metrics.sink.Sink
 import org.apache.spark.metrics.source.{Source, StaticSources}
 
-class MetricsSystemSuite extends SparkFunSuite with BeforeAndAfter with PrivateMethodTester{
+class MetricsSystemSuite extends SparkFunSuite with BeforeAndAfter with PrivateMethodTester {
   var filePath: String = _
   var conf: SparkConf = null
   var securityMgr: SecurityManager = null

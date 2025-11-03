@@ -20,6 +20,7 @@ from typing import (
     Any,
     Callable,
     Iterable,
+    Iterator,
     NewType,
     Tuple,
     Type,
@@ -30,11 +31,14 @@ from typing_extensions import Protocol, Literal
 from types import FunctionType
 
 from pyspark.sql._typing import LiteralType
+from pyspark.sql.streaming.state import GroupState
 from pandas.core.frame import DataFrame as PandasDataFrame
 from pandas.core.series import Series as PandasSeries
+from numpy import ndarray as NDArray
 
 import pyarrow
 
+ArrayLike = NDArray
 DataFrameLike = PandasDataFrame
 SeriesLike = PandasSeries
 DataFrameOrSeriesLike = Union[DataFrameLike, SeriesLike]
@@ -49,6 +53,97 @@ PandasScalarIterUDFType = Literal[204]
 PandasMapIterUDFType = Literal[205]
 PandasCogroupedMapUDFType = Literal[206]
 ArrowMapIterUDFType = Literal[207]
+PandasGroupedMapUDFWithStateType = Literal[208]
+ArrowGroupedMapUDFType = Literal[209]
+ArrowCogroupedMapUDFType = Literal[210]
+PandasGroupedMapUDFTransformWithStateType = Literal[211]
+PandasGroupedMapUDFTransformWithStateInitStateType = Literal[212]
+GroupedMapUDFTransformWithStateType = Literal[213]
+GroupedMapUDFTransformWithStateInitStateType = Literal[214]
+ArrowGroupedMapIterUDFType = Literal[215]
+
+# Arrow UDFs
+ArrowScalarUDFType = Literal[250]
+ArrowScalarIterUDFType = Literal[251]
+ArrowGroupedAggUDFType = Literal[252]
+ArrowWindowAggUDFType = Literal[253]
+
+class ArrowVariadicScalarToScalarFunction(Protocol):
+    def __call__(self, *_: pyarrow.Array) -> pyarrow.Array: ...
+
+ArrowScalarToScalarFunction = Union[
+    ArrowVariadicScalarToScalarFunction,
+    Callable[[pyarrow.Array], pyarrow.Array],
+    Callable[[pyarrow.Array, pyarrow.Array], pyarrow.Array],
+    Callable[[pyarrow.Array, pyarrow.Array, pyarrow.Array], pyarrow.Array],
+    Callable[[pyarrow.Array, pyarrow.Array, pyarrow.Array, pyarrow.Array], pyarrow.Array],
+    Callable[
+        [pyarrow.Array, pyarrow.Array, pyarrow.Array, pyarrow.Array, pyarrow.Array], pyarrow.Array
+    ],
+    Callable[
+        [pyarrow.Array, pyarrow.Array, pyarrow.Array, pyarrow.Array, pyarrow.Array, pyarrow.Array],
+        pyarrow.Array,
+    ],
+    Callable[
+        [
+            pyarrow.Array,
+            pyarrow.Array,
+            pyarrow.Array,
+            pyarrow.Array,
+            pyarrow.Array,
+            pyarrow.Array,
+            pyarrow.Array,
+        ],
+        pyarrow.Array,
+    ],
+    Callable[
+        [
+            pyarrow.Array,
+            pyarrow.Array,
+            pyarrow.Array,
+            pyarrow.Array,
+            pyarrow.Array,
+            pyarrow.Array,
+            pyarrow.Array,
+            pyarrow.Array,
+        ],
+        pyarrow.Array,
+    ],
+    Callable[
+        [
+            pyarrow.Array,
+            pyarrow.Array,
+            pyarrow.Array,
+            pyarrow.Array,
+            pyarrow.Array,
+            pyarrow.Array,
+            pyarrow.Array,
+            pyarrow.Array,
+            pyarrow.Array,
+        ],
+        pyarrow.Array,
+    ],
+    Callable[
+        [
+            pyarrow.Array,
+            pyarrow.Array,
+            pyarrow.Array,
+            pyarrow.Array,
+            pyarrow.Array,
+            pyarrow.Array,
+            pyarrow.Array,
+            pyarrow.Array,
+            pyarrow.Array,
+            pyarrow.Array,
+        ],
+        pyarrow.Array,
+    ],
+]
+
+ArrowScalarIterFunction = Union[
+    Callable[[Iterable[pyarrow.Array]], Iterable[pyarrow.Array]],
+    Callable[[Tuple[pyarrow.Array, ...]], Iterable[pyarrow.Array]],
+]
 
 class PandasVariadicScalarToScalarFunction(Protocol):
     def __call__(self, *_: DataFrameOrSeriesLike_) -> DataFrameOrSeriesLike_: ...
@@ -254,6 +349,10 @@ PandasGroupedMapFunction = Union[
     Callable[[Any, DataFrameLike], DataFrameLike],
 ]
 
+PandasGroupedMapFunctionWithState = Callable[
+    [Any, Iterable[DataFrameLike], GroupState], Iterable[DataFrameLike]
+]
+
 class PandasVariadicGroupedAggFunction(Protocol):
     def __call__(self, *_: SeriesLike) -> LiteralType: ...
 
@@ -328,6 +427,26 @@ PandasMapIterFunction = Callable[[Iterable[DataFrameLike]], Iterable[DataFrameLi
 
 ArrowMapIterFunction = Callable[[Iterable[pyarrow.RecordBatch]], Iterable[pyarrow.RecordBatch]]
 
-PandasCogroupedMapFunction = Callable[[DataFrameLike, DataFrameLike], DataFrameLike]
+PandasCogroupedMapFunction = Union[
+    Callable[[DataFrameLike, DataFrameLike], DataFrameLike],
+    Callable[[Any, DataFrameLike, DataFrameLike], DataFrameLike],
+]
+
+ArrowGroupedMapTableFunction = Union[
+    Callable[[pyarrow.Table], pyarrow.Table],
+    Callable[[Tuple[pyarrow.Scalar, ...], pyarrow.Table], pyarrow.Table],
+]
+ArrowGroupedMapIterFunction = Union[
+    Callable[[Iterator[pyarrow.RecordBatch]], Iterator[pyarrow.RecordBatch]],
+    Callable[
+        [Tuple[pyarrow.Scalar, ...], Iterator[pyarrow.RecordBatch]], Iterator[pyarrow.RecordBatch]
+    ],
+]
+ArrowGroupedMapFunction = Union[ArrowGroupedMapTableFunction, ArrowGroupedMapIterFunction]
+
+ArrowCogroupedMapFunction = Union[
+    Callable[[pyarrow.Table, pyarrow.Table], pyarrow.Table],
+    Callable[[Tuple[pyarrow.Scalar, ...], pyarrow.Table, pyarrow.Table], pyarrow.Table],
+]
 
 GroupedMapPandasUserDefinedFunction = NewType("GroupedMapPandasUserDefinedFunction", FunctionType)

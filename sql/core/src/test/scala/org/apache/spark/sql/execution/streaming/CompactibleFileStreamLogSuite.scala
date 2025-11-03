@@ -20,12 +20,14 @@ package org.apache.spark.sql.execution.streaming
 import java.io._
 import java.nio.charset.StandardCharsets._
 
+import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.execution.streaming.runtime.CompactibleFileStreamLog
 import org.apache.spark.sql.test.SharedSparkSession
 
 class CompactibleFileStreamLogSuite extends SharedSparkSession {
 
-  import CompactibleFileStreamLog._
+  import org.apache.spark.sql.execution.streaming.runtime.CompactibleFileStreamLog._
 
   /** -- testing of `object CompactibleFileStreamLog` begins -- */
 
@@ -242,10 +244,12 @@ class CompactibleFileStreamLogSuite extends SharedSparkSession {
         compactibleLog.add(1, Array("some_path_1"))
         compactibleLog.add(2, Array("some_path_2"))
 
-        val exc = intercept[UnsupportedOperationException] {
-          compactibleLog.purge(2)
-        }
-        assert(exc.getMessage.contains("Cannot purge as it might break internal state"))
+        checkError(
+          exception = intercept[SparkUnsupportedOperationException] {
+            compactibleLog.purge(2)
+          },
+          condition = "_LEGACY_ERROR_TEMP_2260",
+          parameters = Map.empty)
 
         // Below line would fail with IllegalStateException if we don't prevent purge:
         // - purge(2) would delete batch 0 and 1 which batch 1 is compaction batch

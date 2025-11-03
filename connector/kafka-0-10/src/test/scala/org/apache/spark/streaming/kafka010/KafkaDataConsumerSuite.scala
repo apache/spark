@@ -19,19 +19,18 @@ package org.apache.spark.streaming.kafka010
 
 import java.util.concurrent.{Executors, TimeUnit}
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.util.Random
 
 import org.apache.kafka.clients.consumer.ConsumerConfig._
 import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.serialization.ByteArrayDeserializer
 import org.mockito.Mockito.when
-import org.scalatest.BeforeAndAfterAll
 import org.scalatestplus.mockito.MockitoSugar
 
 import org.apache.spark._
 
-class KafkaDataConsumerSuite extends SparkFunSuite with MockitoSugar with BeforeAndAfterAll {
+class KafkaDataConsumerSuite extends SparkFunSuite with MockitoSugar {
   private var testUtils: KafkaTestUtils = _
   private val topic = "topic" + Random.nextInt()
   private val topicPartition = new TopicPartition(topic, 0)
@@ -124,8 +123,8 @@ class KafkaDataConsumerSuite extends SparkFunSuite with MockitoSugar with Before
     @volatile var error: Throwable = null
 
     def consume(i: Int): Unit = {
-      val useCache = Random.nextBoolean
-      val taskContext = if (Random.nextBoolean) {
+      val useCache = Random.nextBoolean()
+      val taskContext = if (Random.nextBoolean()) {
         new TaskContextImpl(0, 0, 0, 0, attemptNumber = Random.nextInt(2), 1, null, null, null)
       } else {
         null
@@ -133,7 +132,7 @@ class KafkaDataConsumerSuite extends SparkFunSuite with MockitoSugar with Before
       val consumer = KafkaDataConsumer.acquire[Array[Byte], Array[Byte]](
         topicPartition, kafkaParams, taskContext, useCache)
       try {
-        val rcvd = (0 until data.length).map { offset =>
+        val rcvd = data.indices.map { offset =>
           val bytes = consumer.get(offset, 10000).value()
           new String(bytes)
         }

@@ -20,12 +20,13 @@ package org.apache.spark.sql.kafka010
 import java.{util => ju}
 import java.util.Optional
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.kafka.common.TopicPartition
 
 import org.apache.spark.SparkEnv
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.LogKeys.{ERROR, OFFSETS, TIP}
 import org.apache.spark.internal.config.Network.NETWORK_TIMEOUT
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReaderFactory}
@@ -33,7 +34,8 @@ import org.apache.spark.sql.connector.read.streaming._
 import org.apache.spark.sql.kafka010.KafkaSourceProvider._
 import org.apache.spark.sql.kafka010.MockedSystemClock.currentMockSystemTime
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
-import org.apache.spark.util.{Clock, ManualClock, SystemClock, UninterruptibleThread, Utils}
+import org.apache.spark.util.{Clock, ManualClock, SystemClock, Utils}
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * A [[MicroBatchStream]] that reads data from Kafka.
@@ -85,11 +87,11 @@ private[kafka010] class KafkaMicroBatchStream(
 
   private val includeHeaders = options.getBoolean(INCLUDE_HEADERS, false)
 
-  private var endPartitionOffsets: KafkaSourceOffset = _
-
   private var latestPartitionOffsets: PartitionOffsetMap = _
 
   private var allDataForTriggerAvailableNow: PartitionOffsetMap = _
+
+  private var isTriggerAvailableNow: Boolean = false
 
   /**
    * Lazily initialize `initialPartitionOffsets` to make sure that `KafkaConsumer.poll` is only
@@ -114,7 +116,7 @@ private[kafka010] class KafkaMicroBatchStream(
   }
 
   override def reportLatestOffset(): Offset = {
-    KafkaSourceOffset(latestPartitionOffsets)
+    Option(KafkaSourceOffset(latestPartitionOffsets)).filterNot(_.partitionToOffsets.isEmpty).orNull
   }
 
   override def latestOffset(): Offset = {
@@ -126,14 +128,20 @@ private[kafka010] class KafkaMicroBatchStream(
     val startPartitionOffsets = start.asInstanceOf[KafkaSourceOffset].partitionToOffsets
 
     // Use the pre-fetched list of partition offsets when Trigger.AvailableNow is enabled.
-    latestPartitionOffsets = if (allDataForTriggerAvailableNow != null) {
-      allDataForTriggerAvailableNow
+    latestPartitionOffsets = if (isTriggerAvailableNow) {
+      if (allDataForTriggerAvailableNow != null) {
+        allDataForTriggerAvailableNow
+      } else {
+        allDataForTriggerAvailableNow =
+          kafkaOffsetReader.fetchLatestOffsets(Some(startPartitionOffsets))
+        allDataForTriggerAvailableNow
+      }
     } else {
       kafkaOffsetReader.fetchLatestOffsets(Some(startPartitionOffsets))
     }
 
     val limits: Seq[ReadLimit] = readLimit match {
-      case rows: CompositeReadLimit => rows.getReadLimits
+      case rows: CompositeReadLimit => rows.getReadLimits.toImmutableArraySeq
       case rows => Seq(rows)
     }
 
@@ -163,8 +171,7 @@ private[kafka010] class KafkaMicroBatchStream(
       }.getOrElse(latestPartitionOffsets)
     }
 
-    endPartitionOffsets = KafkaSourceOffset(offsets)
-    endPartitionOffsets
+    Option(KafkaSourceOffset(offsets)).filterNot(_.partitionToOffsets.isEmpty).orNull
   }
 
   /** Checks if we need to skip this trigger based on minOffsetsPerTrigger & maxTriggerDelay */
@@ -193,6 +200,10 @@ private[kafka010] class KafkaMicroBatchStream(
   override def planInputPartitions(start: Offset, end: Offset): Array[InputPartition] = {
     val startPartitionOffsets = start.asInstanceOf[KafkaSourceOffset].partitionToOffsets
     val endPartitionOffsets = end.asInstanceOf[KafkaSourceOffset].partitionToOffsets
+
+    if (allDataForTriggerAvailableNow != null) {
+      verifyEndOffsetForTriggerAvailableNow(endPartitionOffsets)
+    }
 
     val offsetRanges = kafkaOffsetReader.getOffsetRangesFromResolvedOffsets(
       startPartitionOffsets,
@@ -232,11 +243,6 @@ private[kafka010] class KafkaMicroBatchStream(
    * the checkpoint.
    */
   private def getOrCreateInitialPartitionOffsets(): PartitionOffsetMap = {
-    // Make sure that `KafkaConsumer.poll` is only called in StreamExecutionThread.
-    // Otherwise, interrupting a thread while running `KafkaConsumer.poll` may hang forever
-    // (KAFKA-1894).
-    assert(Thread.currentThread().isInstanceOf[UninterruptibleThread])
-
     // SparkSession is required for getting Hadoop configuration for writing to checkpoints
     assert(SparkSession.getActiveSession.nonEmpty)
 
@@ -258,7 +264,7 @@ private[kafka010] class KafkaMicroBatchStream(
             isStartingOffsets = true, strategy)
       }
       metadataLog.add(0, offsets)
-      logInfo(s"Initial offsets: $offsets")
+      logInfo(log"Initial offsets: ${MDC(OFFSETS, offsets)}")
       offsets
     }.partitionToOffsets
   }
@@ -305,20 +311,63 @@ private[kafka010] class KafkaMicroBatchStream(
   }
 
   /**
-   * If `failOnDataLoss` is true, this method will throw an `IllegalStateException`.
+   * If `failOnDataLoss` is true, this method will throw the exception.
    * Otherwise, just log a warning.
    */
-  private def reportDataLoss(message: String): Unit = {
+  private def reportDataLoss(message: String, getException: () => Throwable): Unit = {
     if (failOnDataLoss) {
-      throw new IllegalStateException(message + s". $INSTRUCTION_FOR_FAIL_ON_DATA_LOSS_TRUE")
+      throw getException()
     } else {
-      logWarning(message + s". $INSTRUCTION_FOR_FAIL_ON_DATA_LOSS_FALSE")
+      logWarning(log"${MDC(ERROR, message)}. ${MDC(TIP, INSTRUCTION_FOR_FAIL_ON_DATA_LOSS_FALSE)}")
+    }
+  }
+
+  private def verifyEndOffsetForTriggerAvailableNow(
+      endPartitionOffsets: Map[TopicPartition, Long]): Unit = {
+    val tpsForPrefetched = allDataForTriggerAvailableNow.keySet
+    val tpsForEndOffset = endPartitionOffsets.keySet
+
+    if (tpsForPrefetched != tpsForEndOffset) {
+      throw KafkaExceptions.mismatchedTopicPartitionsBetweenEndOffsetAndPrefetched(
+        tpsForPrefetched, tpsForEndOffset)
+    }
+
+    val endOffsetHasGreaterThanPrefetched = {
+      allDataForTriggerAvailableNow.keySet.exists { tp =>
+        val offsetFromPrefetched = allDataForTriggerAvailableNow(tp)
+        val offsetFromEndOffset = endPartitionOffsets(tp)
+        offsetFromEndOffset > offsetFromPrefetched
+      }
+    }
+    if (endOffsetHasGreaterThanPrefetched) {
+      throw KafkaExceptions.endOffsetHasGreaterOffsetForTopicPartitionThanPrefetched(
+        allDataForTriggerAvailableNow, endPartitionOffsets)
+    }
+
+    val latestOffsets = kafkaOffsetReader.fetchLatestOffsets(Some(endPartitionOffsets))
+    val tpsForLatestOffsets = latestOffsets.keySet
+
+    if (!tpsForEndOffset.subsetOf(tpsForLatestOffsets)) {
+      throw KafkaExceptions.lostTopicPartitionsInEndOffsetWithTriggerAvailableNow(
+        tpsForLatestOffsets, tpsForEndOffset)
+    }
+
+    val endOffsetHasGreaterThenLatest = {
+      tpsForEndOffset.exists { tp =>
+        val offsetFromLatest = latestOffsets(tp)
+        val offsetFromEndOffset = endPartitionOffsets(tp)
+        offsetFromEndOffset > offsetFromLatest
+      }
+    }
+    if (endOffsetHasGreaterThenLatest) {
+      throw KafkaExceptions
+        .endOffsetHasGreaterOffsetForTopicPartitionThanLatestWithTriggerAvailableNow(
+          latestOffsets, endPartitionOffsets)
     }
   }
 
   override def prepareForTriggerAvailableNow(): Unit = {
-    allDataForTriggerAvailableNow = kafkaOffsetReader.fetchLatestOffsets(
-      Some(getOrCreateInitialPartitionOffsets()))
+    isTriggerAvailableNow = true
   }
 }
 

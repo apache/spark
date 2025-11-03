@@ -17,10 +17,12 @@
 
 package org.apache.spark.ml.util
 
+import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.ml.attribute._
 import org.apache.spark.ml.linalg.VectorUDT
+import org.apache.spark.sql.catalyst.util.{AttributeNameParser, QuotingUtils}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
-
 
 /**
  * Utils for handling schemas.
@@ -39,7 +41,7 @@ private[spark] object SchemaUtils {
       colName: String,
       dataType: DataType,
       msg: String = ""): Unit = {
-    val actualDataType = schema(colName).dataType
+    val actualDataType = SchemaUtils.getSchemaField(schema, colName).dataType
     val message = if (msg != null && msg.trim.length > 0) " " + msg else ""
     require(actualDataType.equals(dataType),
       s"Column $colName must be of type ${dataType.getClass}:${dataType.catalogString} " +
@@ -72,7 +74,7 @@ private[spark] object SchemaUtils {
       schema: StructType,
       colName: String,
       msg: String = ""): Unit = {
-    val actualDataType = schema(colName).dataType
+    val actualDataType = getSchemaFieldType(schema, colName)
     val message = if (msg != null && msg.trim.length > 0) " " + msg else ""
     require(actualDataType.isInstanceOf[NumericType],
       s"Column $colName must be of type ${NumericType.simpleString} but was actually of type " +
@@ -120,7 +122,7 @@ private[spark] object SchemaUtils {
       size: Int): StructType = {
     require(size > 0)
     val attrGroup = new AttributeGroup(colName, size)
-    val field = attrGroup.toStructField
+    val field = attrGroup.toStructField()
     updateField(schema, field, true)
   }
 
@@ -138,7 +140,7 @@ private[spark] object SchemaUtils {
     val attr = NominalAttribute.defaultAttr
       .withName(colName)
       .withNumValues(numValues)
-    val field = attr.toStructField
+    val field = attr.toStructField()
     updateField(schema, field, true)
   }
 
@@ -153,7 +155,7 @@ private[spark] object SchemaUtils {
       colName: String): StructType = {
     val attr = NumericAttribute.defaultAttr
       .withName(colName)
-    val field = attr.toStructField
+    val field = attr.toStructField()
     updateField(schema, field, true)
   }
 
@@ -203,5 +205,48 @@ private[spark] object SchemaUtils {
       new ArrayType(DoubleType, false),
       new ArrayType(FloatType, false))
     checkColumnTypes(schema, colName, typeCandidates)
+  }
+
+  def toSQLId(parts: String): String = {
+    AttributeNameParser.parseAttributeName(parts).map(QuotingUtils.quoteIdentifier).mkString(".")
+  }
+
+  /**
+   * Get schema field.
+   * @param schema input schema
+   * @param colName column name, nested column name is supported.
+   */
+  def getSchemaField(schema: StructType, colName: String): StructField = {
+    val colSplits = AttributeNameParser.parseAttributeName(colName)
+    val fieldOpt = schema.findNestedField(colSplits, resolver = SQLConf.get.resolver)
+    if (fieldOpt.isEmpty) {
+      throw new SparkIllegalArgumentException(
+        errorClass = "FIELD_NOT_FOUND",
+        messageParameters = Map(
+          "fieldName" -> toSQLId(colName),
+          "fields" -> schema.fields.map(f => toSQLId(f.name)).mkString(", "))
+      )
+    }
+    fieldOpt.get._2
+  }
+
+  /**
+   * Get schema field type.
+   * @param schema input schema
+   * @param colName column name, nested column name is supported.
+   */
+  def getSchemaFieldType(schema: StructType, colName: String): DataType = {
+    getSchemaField(schema, colName).dataType
+  }
+
+  /**
+   * Check whether a certain column name exists in the schema.
+   * @param schema input schema
+   * @param colName column name, nested column name is supported.
+   */
+  def checkSchemaFieldExist(schema: StructType, colName: String): Boolean = {
+    val colSplits = AttributeNameParser.parseAttributeName(colName)
+    val fieldOpt = schema.findNestedField(colSplits, resolver = SQLConf.get.resolver)
+    fieldOpt.isDefined
   }
 }

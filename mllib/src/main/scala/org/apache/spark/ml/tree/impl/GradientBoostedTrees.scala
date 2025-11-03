@@ -19,6 +19,8 @@ package org.apache.spark.ml.tree.impl
 
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.LogKeys.TIMER
+import org.apache.spark.ml.EstimatorUtils
 import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.ml.regression.DecisionTreeRegressionModel
@@ -272,6 +274,9 @@ private[spark] object GradientBoostedTrees extends Logging {
     errSum.map(_ / weightSum)
   }
 
+  // This member is only for testing code.
+  private[spark] var lastEarlyStoppedModelSize: Long = 0
+
   /**
    * Internal method for performing regression using trees as base learners.
    * @param input training dataset
@@ -291,6 +296,8 @@ private[spark] object GradientBoostedTrees extends Logging {
       featureSubsetStrategy: String,
       instr: Option[Instrumentation] = None):
         (Array[DecisionTreeRegressionModel], Array[Double]) = {
+    val earlyStopModelSizeThresholdInBytes = TreeConfig.trainingEarlyStopModelSizeThresholdInBytes
+    lastEarlyStoppedModelSize = 0
     val timer = new TimeTracker()
     timer.start("total")
     timer.start("init")
@@ -317,7 +324,7 @@ private[spark] object GradientBoostedTrees extends Logging {
     // Prepare periodic checkpointers
     // Note: this is checkpointing the unweighted training error
     val predErrorCheckpointer = new PeriodicRDDCheckpointer[(Double, Double)](
-      treeStrategy.getCheckpointInterval, sc, StorageLevel.MEMORY_AND_DISK)
+      treeStrategy.getCheckpointInterval(), sc, StorageLevel.MEMORY_AND_DISK)
 
     timer.stop("init")
 
@@ -364,7 +371,8 @@ private[spark] object GradientBoostedTrees extends Logging {
     val firstTreeModel = RandomForest.runBagged(baggedInput = firstBagged,
       metadata = metadata, bcSplits = bcSplits, strategy = treeStrategy, numTrees = 1,
       featureSubsetStrategy = featureSubsetStrategy, seed = seed, instr = instr,
-      parentUID = None)
+      parentUID = None,
+      earlyStopModelSizeThresholdInBytes = earlyStopModelSizeThresholdInBytes)
       .head.asInstanceOf[DecisionTreeRegressionModel]
 
     firstCounts.unpersist()
@@ -393,17 +401,26 @@ private[spark] object GradientBoostedTrees extends Logging {
       validatePredError = computeInitialPredictionAndError(
         validationTreePoints, firstTreeWeight, firstTreeModel, loss, bcSplits)
       validatePredErrorCheckpointer = new PeriodicRDDCheckpointer[(Double, Double)](
-        treeStrategy.getCheckpointInterval, sc, StorageLevel.MEMORY_AND_DISK)
+        treeStrategy.getCheckpointInterval(), sc, StorageLevel.MEMORY_AND_DISK)
       validatePredErrorCheckpointer.update(validatePredError)
       bestValidateError = computeWeightedError(validationTreePoints, validatePredError)
       timer.stop("init validation")
     }
 
-    var bestM = 1
+    var accTreeSize = firstTreeModel.estimatedSize
+
+    var validM = 1
 
     var m = 1
-    var doneLearning = false
-    while (m < numIterations && !doneLearning) {
+    var earlyStop = false
+    if (
+        earlyStopModelSizeThresholdInBytes > 0
+        && accTreeSize > earlyStopModelSizeThresholdInBytes
+    ) {
+      lastEarlyStoppedModelSize = accTreeSize
+      earlyStop = true
+    }
+    while (m < numIterations && !earlyStop) {
       timer.start(s"building tree $m")
       logDebug("###################################################")
       logDebug("Gradient boosting tree iteration " + m)
@@ -433,7 +450,8 @@ private[spark] object GradientBoostedTrees extends Logging {
       val model = RandomForest.runBagged(baggedInput = bagged,
         metadata = metadata, bcSplits = bcSplits, strategy = treeStrategy,
         numTrees = 1, featureSubsetStrategy = featureSubsetStrategy,
-        seed = seed + m, instr = None, parentUID = None)
+        seed = seed + m, instr = None, parentUID = None,
+        earlyStopModelSizeThresholdInBytes = earlyStopModelSizeThresholdInBytes - accTreeSize)
         .head.asInstanceOf[DecisionTreeRegressionModel]
 
       labelWithCounts.unpersist()
@@ -441,6 +459,7 @@ private[spark] object GradientBoostedTrees extends Logging {
       timer.stop(s"building tree $m")
       // Update partial model
       baseLearners(m) = model
+      accTreeSize += model.estimatedSize
       // Note: The setting of baseLearnerWeights is incorrect for losses other than SquaredError.
       //       Technically, the weight should be optimized for the particular loss.
       //       However, the behavior should be reasonable, though not optimal.
@@ -465,10 +484,20 @@ private[spark] object GradientBoostedTrees extends Logging {
         val currentValidateError = computeWeightedError(validationTreePoints, validatePredError)
         if (bestValidateError - currentValidateError < validationTol * Math.max(
           currentValidateError, 0.01)) {
-          doneLearning = true
+          earlyStop = true
         } else if (currentValidateError < bestValidateError) {
           bestValidateError = currentValidateError
-          bestM = m + 1
+          validM = m + 1
+        }
+      }
+      if (!earlyStop) {
+        if (
+            earlyStopModelSizeThresholdInBytes > 0
+            && accTreeSize > earlyStopModelSizeThresholdInBytes
+        ) {
+          earlyStop = true
+          validM = m + 1
+          lastEarlyStoppedModelSize = accTreeSize
         }
       }
       m += 1
@@ -477,7 +506,7 @@ private[spark] object GradientBoostedTrees extends Logging {
     timer.stop("total")
 
     logInfo("Internal timing for DecisionTree:")
-    logInfo(s"$timer")
+    logInfo(log"${MDC(TIMER, timer)}")
 
     bcSplits.destroy()
     treePoints.unpersist()
@@ -489,8 +518,22 @@ private[spark] object GradientBoostedTrees extends Logging {
       validatePredErrorCheckpointer.deleteAllCheckpoints()
     }
 
-    if (validate) {
-      (baseLearners.slice(0, bestM), baseLearnerWeights.slice(0, bestM))
+    if (earlyStop) {
+      // Early stop occurs in one of the 2 cases:
+      //  - validation error increases
+      //  - the accumulated size of trees exceeds the value of `earlyStopModelSizeThresholdInBytes`
+      if (accTreeSize > earlyStopModelSizeThresholdInBytes) {
+        val warningMessage = "The boosting tree training stops early because the GBT accumulated " +
+          "tree models size " +
+          s"($accTreeSize bytes) exceeds threshold " +
+          s"($earlyStopModelSizeThresholdInBytes bytes)."
+        logWarning(warningMessage)
+        val msgBuffer = EstimatorUtils.warningMessagesBuffer.get()
+        if (msgBuffer != null) {
+          msgBuffer.append(warningMessage)
+        }
+      }
+      (baseLearners.slice(0, validM), baseLearnerWeights.slice(0, validM))
     } else {
       (baseLearners, baseLearnerWeights)
     }

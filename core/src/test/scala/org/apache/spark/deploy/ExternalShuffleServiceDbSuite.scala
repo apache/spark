@@ -17,15 +17,13 @@
 
 package org.apache.spark.deploy
 
-import java.io._
 import java.nio.charset.StandardCharsets
-
-import com.google.common.io.CharStreams
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
 import org.apache.spark.internal.config._
 import org.apache.spark.network.shuffle.{ExternalBlockHandler, ExternalShuffleBlockResolver}
 import org.apache.spark.network.shuffle.TestShuffleDataContext
+import org.apache.spark.network.shuffledb.DBBackend
 import org.apache.spark.tags.ExtendedLevelDBTest
 import org.apache.spark.util.Utils
 
@@ -34,8 +32,7 @@ import org.apache.spark.util.Utils
  * with #spark.shuffle.service.db.enabled = true or false
  * Note that failures in this suite may arise when#spark.shuffle.service.db.enabled = false
  */
-@ExtendedLevelDBTest
-class ExternalShuffleServiceDbSuite extends SparkFunSuite {
+abstract class ExternalShuffleServiceDbSuite extends SparkFunSuite {
   val sortBlock0 = "Hello!"
   val sortBlock1 = "World!"
   val SORT_MANAGER = "org.apache.spark.shuffle.sort.SortShuffleManager"
@@ -47,6 +44,8 @@ class ExternalShuffleServiceDbSuite extends SparkFunSuite {
   var externalShuffleService: ExternalShuffleService = _
   var blockHandler: ExternalBlockHandler = _
   var blockResolver: ExternalShuffleBlockResolver = _
+
+  protected def shuffleDBBackend(): DBBackend
 
   override def beforeAll(): Unit = {
     super.beforeAll()
@@ -78,6 +77,7 @@ class ExternalShuffleServiceDbSuite extends SparkFunSuite {
   def registerExecutor(): Unit = {
     try {
       sparkConf.set("spark.shuffle.service.db.enabled", "true")
+      sparkConf.set(SHUFFLE_SERVICE_DB_BACKEND.key, shuffleDBBackend().name())
       externalShuffleService = new ExternalShuffleService(shuffleServiceConf, securityManager)
 
       // external Shuffle Service start
@@ -99,6 +99,7 @@ class ExternalShuffleServiceDbSuite extends SparkFunSuite {
     "shuffle service restart") {
     try {
       sparkConf.set("spark.shuffle.service.db.enabled", "true")
+      sparkConf.set(SHUFFLE_SERVICE_DB_BACKEND.key, shuffleDBBackend().name())
       externalShuffleService = new ExternalShuffleService(shuffleServiceConf, securityManager)
       // externalShuffleService restart
       externalShuffleService.start()
@@ -106,7 +107,7 @@ class ExternalShuffleServiceDbSuite extends SparkFunSuite {
       blockResolver = blockHandler.getBlockResolver
 
       val block0Stream = blockResolver.getBlockData("app0", "exec0", 0, 0, 0).createInputStream
-      val block0 = CharStreams.toString(new InputStreamReader(block0Stream, StandardCharsets.UTF_8))
+      val block0 = Utils.toString(block0Stream)
       block0Stream.close()
       assert(sortBlock0 == block0)
       // pass
@@ -142,4 +143,13 @@ class ExternalShuffleServiceDbSuite extends SparkFunSuite {
       externalShuffleService.stop()
     }
   }
+}
+
+@ExtendedLevelDBTest
+class ExternalShuffleServiceLevelDBSuite extends ExternalShuffleServiceDbSuite {
+  override protected def shuffleDBBackend(): DBBackend = DBBackend.LEVELDB
+}
+
+class ExternalShuffleServiceRocksDBSuite extends ExternalShuffleServiceDbSuite {
+  override protected def shuffleDBBackend(): DBBackend = DBBackend.ROCKSDB
 }

@@ -238,17 +238,17 @@ SELECT TRANSFORM(zip_code, name, age)
     USING 'cat'
 FROM person
 WHERE zip_code > 94500;
-+-------+---------------------+
-|    key|                value|
-+-------+---------------------+
-|  94588|	  Anil K    27|
-|  94588|	  John V    \N|
-|  94511|	Aryan B.    18|
-|  94511|	 David K    42|
-|  94588|	 Zen Hui    50|
-|  94588|	  Dan Li    18|
-|  94511|	Lalit B.    \N|
-+-------+---------------------+
++-------+----------------+
+|    key|           value|
++-------+----------------+
+|  94588|    Anil K    27|
+|  94588|    John V    \N|
+|  94511|  Aryan B.    18|
+|  94511|   David K    42|
+|  94588|   Zen Hui    50|
+|  94588|    Dan Li    18|
+|  94511|  Lalit B.    \N|
++-------+----------------+
 ```
 
 ### Related Statements
@@ -261,6 +261,8 @@ WHERE zip_code > 94500;
 * [SORT BY Clause](sql-ref-syntax-qry-select-sortby.html)
 * [DISTRIBUTE BY Clause](sql-ref-syntax-qry-select-distribute-by.html)
 * [LIMIT Clause](sql-ref-syntax-qry-select-limit.html)
+* [OFFSET Clause](sql-ref-syntax-qry-select-offset.html)
 * [CASE Clause](sql-ref-syntax-qry-select-case.html)
 * [PIVOT Clause](sql-ref-syntax-qry-select-pivot.html)
+* [UNPIVOT Clause](sql-ref-syntax-qry-select-unpivot.html)
 * [LATERAL VIEW Clause](sql-ref-syntax-qry-select-lateral-view.html)

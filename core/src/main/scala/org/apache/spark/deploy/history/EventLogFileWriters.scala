@@ -21,7 +21,7 @@ import java.io._
 import java.net.URI
 import java.nio.charset.StandardCharsets
 
-import org.apache.commons.compress.utils.CountingOutputStream
+import org.apache.commons.io.output.CountingOutputStream
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, FileSystem, FSDataOutputStream, Path}
 import org.apache.hadoop.fs.permission.FsPermission
@@ -29,6 +29,8 @@ import org.apache.hadoop.fs.permission.FsPermission
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.LogKeys
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config._
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.util.Utils
@@ -41,6 +43,7 @@ import org.apache.spark.util.Utils
  *   spark.eventLog.compression.codec - The codec to compress logged events
  *   spark.eventLog.overwrite - Whether to overwrite any existing files
  *   spark.eventLog.buffer.kb - Buffer size to use when writing to output streams
+ *   spark.eventLog.excludedPatterns - Specifes a comma-separated event names to be excluded
  *
  * Note that descendant classes can maintain its own parameters: refer the javadoc of each class
  * for more details.
@@ -54,9 +57,12 @@ abstract class EventLogFileWriter(
     sparkConf: SparkConf,
     hadoopConf: Configuration) extends Logging {
 
-  protected val shouldCompress = sparkConf.get(EVENT_LOG_COMPRESS)
+  protected val shouldCompress = sparkConf.get(EVENT_LOG_COMPRESS) &&
+      !sparkConf.get(EVENT_LOG_COMPRESSION_CODEC).equalsIgnoreCase("none")
+  protected val excludedPatterns = sparkConf.get(EVENT_LOG_EXCLUDED_PATTERNS)
+      .map(name => s"""{"Event":"$name"""")
   protected val shouldOverwrite = sparkConf.get(EVENT_LOG_OVERWRITE)
-  protected val outputBufferSize = sparkConf.get(EVENT_LOG_OUTPUT_BUFFER_SIZE).toInt
+  protected val outputBufferSize = sparkConf.get(EVENT_LOG_OUTPUT_BUFFER_SIZE).toInt * 1024
   protected val fileSystem = Utils.getHadoopFileSystem(logBaseDir, hadoopConf)
   protected val compressionCodec =
     if (shouldCompress) {
@@ -81,7 +87,7 @@ abstract class EventLogFileWriter(
 
   protected def initLogFile(path: Path)(fnSetupWriter: OutputStream => PrintWriter): Unit = {
     if (shouldOverwrite && fileSystem.delete(path, true)) {
-      logWarning(s"Event log $path already exists. Overwriting...")
+      logWarning(log"Event log ${MDC(LogKeys.PATH, path)} already exists. Overwriting...")
     }
 
     val defaultFs = FileSystem.getDefaultUri(hadoopConf).getScheme
@@ -104,7 +110,7 @@ abstract class EventLogFileWriter(
         .getOrElse(dstream)
       val bstream = new BufferedOutputStream(cstream, outputBufferSize)
       fileSystem.setPermission(path, EventLogFileWriter.LOG_FILE_PERMISSIONS)
-      logInfo(s"Logging events to $path")
+      logInfo(log"Logging events to ${MDC(PATH, path)}")
       writer = Some(fnSetupWriter(bstream))
     } catch {
       case e: Exception =>
@@ -114,6 +120,7 @@ abstract class EventLogFileWriter(
   }
 
   protected def writeLine(line: String, flushLogger: Boolean = false): Unit = {
+    if (excludedPatterns.exists(line.startsWith(_))) return
     // scalastyle:off println
     writer.foreach(_.println(line))
     // scalastyle:on println
@@ -130,9 +137,10 @@ abstract class EventLogFileWriter(
   protected def renameFile(src: Path, dest: Path, overwrite: Boolean): Unit = {
     if (fileSystem.exists(dest)) {
       if (overwrite) {
-        logWarning(s"Event log $dest already exists. Overwriting...")
+        logWarning(log"Event log ${MDC(EVENT_LOG_DESTINATION, dest)} already exists. " +
+          log"Overwriting...")
         if (!fileSystem.delete(dest, true)) {
-          logWarning(s"Error deleting $dest")
+          logWarning(log"Error deleting ${MDC(EVENT_LOG_DESTINATION, dest)}")
         }
       } else {
         throw new IOException(s"Target log file already exists ($dest)")
@@ -183,12 +191,7 @@ object EventLogFileWriter {
   }
 
   def nameForAppAndAttempt(appId: String, appAttemptId: Option[String]): String = {
-    val base = Utils.sanitizeDirName(appId)
-    if (appAttemptId.isDefined) {
-      base + "_" + Utils.sanitizeDirName(appAttemptId.get)
-    } else {
-      base
-    }
+    Utils.nameForAppAndAttempt(appId, appAttemptId)
   }
 
   def codecName(log: Path): Option[String] = {
@@ -326,7 +329,7 @@ class RollingEventLogFilesWriter(
 
   override def writeEvent(eventJson: String, flushLogger: Boolean = false): Unit = {
     writer.foreach { w =>
-      val currentLen = countingOutputStream.get.getBytesWritten
+      val currentLen = countingOutputStream.get.getByteCount
       if (currentLen + eventJson.length > eventFileMaxLength) {
         rollEventLogFile()
       }

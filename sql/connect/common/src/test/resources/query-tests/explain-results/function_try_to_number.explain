@@ -1,0 +1,2 @@
+Project [try_to_number(g#0, 99,999) AS try_to_number(g, 99,999)#0]
++- LocalRelation <empty>, [id#0L, a#0, b#0, d#0, e#0, f#0, g#0]

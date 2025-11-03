@@ -36,7 +36,6 @@ Properties
 .. autosummary::
    :toctree: api/
 
-   Index.is_monotonic
    Index.is_monotonic_increasing
    Index.is_monotonic_decreasing
    Index.is_unique
@@ -44,7 +43,6 @@ Properties
    Index.hasnans
    Index.dtype
    Index.inferred_type
-   Index.is_all_dates
    Index.shape
    Index.name
    Index.names
@@ -107,7 +105,9 @@ Missing Values
    Index.fillna
    Index.dropna
    Index.isna
+   Index.isnull
    Index.notna
+   Index.notnull
 
 Conversion
 ~~~~~~~~~~
@@ -129,8 +129,14 @@ in Spark. These can be accessed by ``Index.spark.<function/property>``.
 
 .. autosummary::
    :toctree: api/
+   :template: autosummary/accessor_attribute.rst
 
    Index.spark.column
+
+.. autosummary::
+   :toctree: api/
+   :template: autosummary/accessor_method.rst
+
    Index.spark.transform
 
 Sorting
@@ -166,16 +172,6 @@ Selecting
    Index.asof
    Index.isin
 
-.. _api.numeric:
-
-Numeric Index
--------------
-.. autosummary::
-   :toctree: api/
-
-   Int64Index
-   Float64Index
-
 .. _api.categorical:
 
 CategoricalIndex
@@ -202,6 +198,10 @@ Categorical components
    CategoricalIndex.as_ordered
    CategoricalIndex.as_unordered
    CategoricalIndex.map
+   CategoricalIndex.equals
+   CategoricalIndex.max
+   CategoricalIndex.min
+   CategoricalIndex.tolist
 
 .. _api.multiindex:
 
@@ -230,7 +230,6 @@ MultiIndex Properties
    MultiIndex.has_duplicates
    MultiIndex.hasnans
    MultiIndex.inferred_type
-   MultiIndex.is_all_dates
    MultiIndex.shape
    MultiIndex.names
    MultiIndex.ndim
@@ -315,9 +314,15 @@ in Spark. These can be accessed by ``MultiIndex.spark.<function/property>``.
 
 .. autosummary::
    :toctree: api/
+   :template: autosummary/accessor_attribute.rst
 
    MultiIndex.spark.data_type
    MultiIndex.spark.column
+
+.. autosummary::
+   :toctree: api/
+   :template: autosummary/accessor_method.rst
+
    MultiIndex.spark.transform
 
 MultiIndex Sorting
@@ -348,8 +353,7 @@ Time/date components
    DatetimeIndex.minute
    DatetimeIndex.second
    DatetimeIndex.microsecond
-   DatetimeIndex.week
-   DatetimeIndex.weekofyear
+   DatetimeIndex.isocalendar
    DatetimeIndex.dayofweek
    DatetimeIndex.day_of_week
    DatetimeIndex.weekday

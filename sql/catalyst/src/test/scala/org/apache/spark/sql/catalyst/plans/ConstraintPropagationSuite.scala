@@ -128,11 +128,11 @@ class ConstraintPropagationSuite extends SparkFunSuite with PlanTest {
   test("propagating constraints in aliases") {
     val tr = LocalRelation($"a".int, $"b".string, $"c".int)
 
-    assert(tr.where($"c".attr > 10).select($"a".as(Symbol("x")), $"b".as(Symbol("y")))
+    assert(tr.where($"c".attr > 10).select($"a".as("x"), $"b".as("y"))
       .analyze.constraints.isEmpty)
 
-    val aliasedRelation = tr.where($"a".attr > 10).select($"a".as(Symbol("x")), $"b",
-      $"b".as(Symbol("y")), $"a".as(Symbol("z")))
+    val aliasedRelation = tr.where($"a".attr > 10).select($"a".as("x"), $"b",
+      $"b".as("y"), $"a".as("z"))
 
     verifyConstraints(aliasedRelation.analyze.constraints,
       ExpressionSet(Seq(resolveColumn(aliasedRelation.analyze, "x") > 10,
@@ -142,7 +142,7 @@ class ConstraintPropagationSuite extends SparkFunSuite with PlanTest {
         resolveColumn(aliasedRelation.analyze, "z") > 10,
         IsNotNull(resolveColumn(aliasedRelation.analyze, "z")))))
 
-    val multiAlias = tr.where($"a" === $"c" + 10).select($"a".as(Symbol("x")), $"c".as(Symbol("y")))
+    val multiAlias = tr.where($"a" === $"c" + 10).select($"a".as("x"), $"c".as("y"))
     verifyConstraints(multiAlias.analyze.constraints,
       ExpressionSet(Seq(IsNotNull(resolveColumn(multiAlias.analyze, "x")),
         IsNotNull(resolveColumn(multiAlias.analyze, "y")),
@@ -210,8 +210,8 @@ class ConstraintPropagationSuite extends SparkFunSuite with PlanTest {
   }
 
   test("propagating constraints in inner join") {
-    val tr1 = LocalRelation($"a".int, $"b".int, $"c".int).subquery(Symbol("tr1"))
-    val tr2 = LocalRelation($"a".int, $"d".int, $"e".int).subquery(Symbol("tr2"))
+    val tr1 = LocalRelation($"a".int, $"b".int, $"c".int).subquery("tr1")
+    val tr2 = LocalRelation($"a".int, $"d".int, $"e".int).subquery("tr2")
     verifyConstraints(tr1
       .where($"a".attr > 10)
       .join(tr2.where($"d".attr < 100), Inner, Some("tr1.a".attr === "tr2.a".attr))
@@ -227,8 +227,8 @@ class ConstraintPropagationSuite extends SparkFunSuite with PlanTest {
   }
 
   test("propagating constraints in left-semi join") {
-    val tr1 = LocalRelation($"a".int, $"b".int, $"c".int).subquery(Symbol("tr1"))
-    val tr2 = LocalRelation($"a".int, $"d".int, $"e".int).subquery(Symbol("tr2"))
+    val tr1 = LocalRelation($"a".int, $"b".int, $"c".int).subquery("tr1")
+    val tr2 = LocalRelation($"a".int, $"d".int, $"e".int).subquery("tr2")
     verifyConstraints(tr1
       .where($"a".attr > 10)
       .join(tr2.where($"d".attr < 100), LeftSemi, Some("tr1.a".attr === "tr2.a".attr))
@@ -238,8 +238,8 @@ class ConstraintPropagationSuite extends SparkFunSuite with PlanTest {
   }
 
   test("propagating constraints in left-outer join") {
-    val tr1 = LocalRelation($"a".int, $"b".int, $"c".int).subquery(Symbol("tr1"))
-    val tr2 = LocalRelation($"a".int, $"d".int, $"e".int).subquery(Symbol("tr2"))
+    val tr1 = LocalRelation($"a".int, $"b".int, $"c".int).subquery("tr1")
+    val tr2 = LocalRelation($"a".int, $"d".int, $"e".int).subquery("tr2")
     verifyConstraints(tr1
       .where($"a".attr > 10)
       .join(tr2.where($"d".attr < 100), LeftOuter, Some("tr1.a".attr === "tr2.a".attr))
@@ -249,8 +249,8 @@ class ConstraintPropagationSuite extends SparkFunSuite with PlanTest {
   }
 
   test("propagating constraints in right-outer join") {
-    val tr1 = LocalRelation($"a".int, $"b".int, $"c".int).subquery(Symbol("tr1"))
-    val tr2 = LocalRelation($"a".int, $"d".int, $"e".int).subquery(Symbol("tr2"))
+    val tr1 = LocalRelation($"a".int, $"b".int, $"c".int).subquery("tr1")
+    val tr2 = LocalRelation($"a".int, $"d".int, $"e".int).subquery("tr2")
     verifyConstraints(tr1
       .where($"a".attr > 10)
       .join(tr2.where($"d".attr < 100), RightOuter, Some("tr1.a".attr === "tr2.a".attr))
@@ -260,8 +260,8 @@ class ConstraintPropagationSuite extends SparkFunSuite with PlanTest {
   }
 
   test("propagating constraints in full-outer join") {
-    val tr1 = LocalRelation($"a".int, $"b".int, $"c".int).subquery(Symbol("tr1"))
-    val tr2 = LocalRelation($"a".int, $"d".int, $"e".int).subquery(Symbol("tr2"))
+    val tr1 = LocalRelation($"a".int, $"b".int, $"c".int).subquery("tr1")
+    val tr2 = LocalRelation($"a".int, $"d".int, $"e".int).subquery("tr2")
     assert(tr1.where($"a".attr > 10)
       .join(tr2.where($"d".attr < 100), FullOuter, Some("tr1.a".attr === "tr2.a".attr))
       .analyze.constraints.isEmpty)

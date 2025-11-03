@@ -22,7 +22,7 @@ import java.io.Serializable
 import scala.reflect.ClassTag
 
 import org.apache.spark.SparkException
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.util.Utils
 
 /**
@@ -106,7 +106,8 @@ abstract class Broadcast[T: ClassTag](val id: Long) extends Serializable with Lo
     assertValid()
     _isValid = false
     _destroySite = Utils.getCallSite().shortForm
-    logInfo("Destroying %s (from %s)".format(toString, _destroySite))
+    logInfo(log"Destroying ${MDC(LogKeys.BROADCAST, toString)} " +
+      log"(from ${MDC(LogKeys.CALL_SITE_SHORT_FORM, _destroySite)})")
     doDestroy(blocking)
   }
 
@@ -140,8 +141,9 @@ abstract class Broadcast[T: ClassTag](val id: Long) extends Serializable with Lo
   /** Check if this broadcast is valid. If not valid, exception is thrown. */
   protected def assertValid(): Unit = {
     if (!_isValid) {
-      throw new SparkException(
-        "Attempted to use %s after it was destroyed (%s) ".format(toString, _destroySite))
+      throw SparkException.internalError(
+        "Attempted to use %s after it was destroyed (%s) ".format(toString, _destroySite),
+        category = "BROADCAST")
     }
   }
 

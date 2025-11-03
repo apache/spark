@@ -22,15 +22,17 @@ import java.util.Optional
 
 import scala.util.control.NonFatal
 
-import org.json4s.DefaultFormats
+import org.json4s.{DefaultFormats, Formats}
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.api.resource.ResourceDiscoveryPlugin
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config.{EXECUTOR_CORES, RESOURCES_DISCOVERY_PLUGIN, SPARK_TASK_PREFIX}
-import org.apache.spark.internal.config.Tests.{RESOURCES_WARNING_TESTING}
+import org.apache.spark.internal.config.Tests.RESOURCES_WARNING_TESTING
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
 /**
@@ -87,8 +89,8 @@ class ResourceRequest(
     obj match {
       case that: ResourceRequest =>
         that.getClass == this.getClass &&
-          that.id == id && that.amount == amount && discoveryScript == discoveryScript &&
-          vendor == vendor
+          that.id == id && that.amount == amount && that.discoveryScript == discoveryScript &&
+          that.vendor == vendor
       case _ =>
         false
     }
@@ -155,7 +157,7 @@ private[spark] object ResourceUtils extends Logging {
           s"config: $componentName.$RESOURCE_PREFIX.$key")
       }
       key.substring(0, index)
-    }.distinct.map(name => new ResourceID(componentName, name))
+    }.distinct.map(name => new ResourceID(componentName, name)).toImmutableArraySeq
   }
 
   def parseAllResourceRequests(
@@ -168,18 +170,17 @@ private[spark] object ResourceUtils extends Logging {
 
   // Used to take a fraction amount from a task resource requirement and split into a real
   // integer amount and the number of slots per address. For instance, if the amount is 0.5,
-  // the we get (1, 2) back out. This indicates that for each 1 address, it has 2 slots per
-  // address, which allows you to put 2 tasks on that address. Note if amount is greater
-  // than 1, then the number of slots per address has to be 1. This would indicate that a
-  // would have multiple addresses assigned per task. This can be used for calculating
-  // the number of tasks per executor -> (executorAmount * numParts) / (integer amount).
+  // the we get (1, 2) back out. This indicates that for each 1 address, it allows you to
+  // put 2 tasks on that address. Note if amount is greater than 1, then the number of
+  // running tasks per address has to be 1. This can be used for calculating
+  // the number of tasks per executor = (executorAmount * numParts) / (integer amount).
   // Returns tuple of (integer amount, numParts)
   def calculateAmountAndPartsForFraction(doubleAmount: Double): (Int, Int) = {
-    val parts = if (doubleAmount <= 0.5) {
+    val parts = if (doubleAmount <= 1.0) {
       Math.floor(1.0 / doubleAmount).toInt
     } else if (doubleAmount % 1 != 0) {
       throw new SparkException(
-        s"The resource amount ${doubleAmount} must be either <= 0.5, or a whole number.")
+        s"The resource amount ${doubleAmount} must be either <= 1.0, or a whole number.")
     } else {
       1
     }
@@ -190,12 +191,15 @@ private[spark] object ResourceUtils extends Logging {
   def addTaskResourceRequests(
       sparkConf: SparkConf,
       treqs: TaskResourceRequests): Unit = {
-    listResourceIds(sparkConf, SPARK_TASK_PREFIX).map { resourceId =>
+    val nonZeroTaskReqs = listResourceIds(sparkConf, SPARK_TASK_PREFIX).map { resourceId =>
       val settings = sparkConf.getAllWithPrefix(resourceId.confPrefix).toMap
       val amountDouble = settings.getOrElse(AMOUNT,
         throw new SparkException(s"You must specify an amount for ${resourceId.resourceName}")
       ).toDouble
-      treqs.resource(resourceId.resourceName, amountDouble)
+      (resourceId.resourceName, amountDouble)
+    }.toMap.filter { case (_, amount) => amount > 0.0 }
+    nonZeroTaskReqs.foreach { case (resourceName, amount) =>
+      treqs.resource(resourceName, amount)
     }
   }
 
@@ -222,6 +226,12 @@ private[spark] object ResourceUtils extends Logging {
     }
   }
 
+  def executorResourceRequestToRequirement(resourceRequest: Seq[ExecutorResourceRequest])
+    : Seq[ResourceRequirement] = {
+    resourceRequest.map(request =>
+      ResourceRequirement(request.resourceName, request.amount.toInt, 1))
+  }
+
   def resourcesMeetRequirements(
       resourcesFree: Map[String, Int],
       resourceRequirements: Seq[ResourceRequirement])
@@ -243,7 +253,7 @@ private[spark] object ResourceUtils extends Logging {
 
   def parseAllocatedFromJsonFile(resourcesFile: String): Seq[ResourceAllocation] = {
     withResourcesJson[ResourceAllocation](resourcesFile) { json =>
-      implicit val formats = DefaultFormats
+      implicit val formats: Formats = DefaultFormats
       parse(json).extract[Seq[ResourceAllocation]]
     }
   }
@@ -264,7 +274,8 @@ private[spark] object ResourceUtils extends Logging {
     val otherResources = otherResourceIds.flatMap { id =>
       val request = parseResourceRequest(sparkConf, id)
       if (request.amount > 0) {
-        Some(ResourceAllocation(id, discoverResource(sparkConf, request).addresses))
+        Some(ResourceAllocation(id,
+          discoverResource(sparkConf, request).addresses.toImmutableArraySeq))
       } else {
         None
       }
@@ -292,7 +303,7 @@ private[spark] object ResourceUtils extends Logging {
       allocations: Map[String, ResourceInformation],
       execReqs: Map[String, ExecutorResourceRequest]): Unit = {
     execReqs.foreach { case (rName, req) =>
-      require(allocations.contains(rName) && allocations(rName).addresses.size >= req.amount,
+      require(allocations.contains(rName) && allocations(rName).addresses.length >= req.amount,
         s"Resource: ${rName}, with addresses: " +
           s"${allocations(rName).addresses.mkString(",")} " +
           s"is less than what the user requested: ${req.amount})")
@@ -350,7 +361,7 @@ private[spark] object ResourceUtils extends Logging {
     val fileAllocated = parseAllocated(resourcesFileOpt, componentName)
     val fileAllocResMap = fileAllocated.map(a => (a.id.resourceName, a.toResourceInformation)).toMap
     // only want to look at the ResourceProfile for resources not in the resources file
-    val execReq = ResourceProfile.getCustomExecutorResources(resourceProfile)
+    val execReq = resourceProfile.getCustomExecutorResources()
     val filteredExecreq = execReq.filterNot { case (rname, _) => fileAllocResMap.contains(rname) }
     val rpAllocations = filteredExecreq.map { case (rName, execRequest) =>
       val resourceId = new ResourceID(componentName, rName)
@@ -438,19 +449,21 @@ private[spark] object ResourceUtils extends Logging {
         maxTaskPerExec = numTasksPerExecCores
       }
     }
-    val taskReq = ResourceProfile.getCustomTaskResources(rp)
-    val execReq = ResourceProfile.getCustomExecutorResources(rp)
+    val taskReq = rp.getCustomTaskResources()
+    val execReq = rp.getCustomExecutorResources()
 
     if (limitingResource.nonEmpty && !limitingResource.equals(ResourceProfile.CPUS)) {
       if ((taskCpus * maxTaskPerExec) < cores) {
         val resourceNumSlots = Math.floor(cores/taskCpus).toInt
-        val message = s"The configuration of cores (exec = ${cores} " +
-          s"task = ${taskCpus}, runnable tasks = ${resourceNumSlots}) will " +
-          s"result in wasted resources due to resource ${limitingResource} limiting the " +
-          s"number of runnable tasks per executor to: ${maxTaskPerExec}. Please adjust " +
-          "your configuration."
+        val message = log"The configuration of cores (exec = ${MDC(NUM_CORES, cores)} " +
+          log"task = ${MDC(NUM_TASK_CPUS, taskCpus)}, runnable tasks = " +
+          log"${MDC(NUM_RESOURCE_SLOTS, resourceNumSlots)}) will " +
+          log"result in wasted resources due to resource ${MDC(RESOURCE, limitingResource)} " +
+          log"limiting the number of runnable tasks per executor to: " +
+          log"${MDC(NUM_TASKS, maxTaskPerExec)}. Please adjust " +
+          log"your configuration."
         if (sparkConf.get(RESOURCES_WARNING_TESTING)) {
-          throw new SparkException(message)
+          throw new SparkException(message.message)
         } else {
           logWarning(message)
         }
@@ -465,15 +478,17 @@ private[spark] object ResourceUtils extends Logging {
       if (maxTaskPerExec < (execAmount * numParts / taskAmount)) {
         val origTaskAmount = treq.amount
         val taskReqStr = s"${origTaskAmount}/${numParts}"
-        val resourceNumSlots = Math.floor(execAmount * numParts / taskAmount).toInt
-        val message = s"The configuration of resource: ${treq.resourceName} " +
-          s"(exec = ${execAmount}, task = ${taskReqStr}, " +
-          s"runnable tasks = ${resourceNumSlots}) will " +
-          s"result in wasted resources due to resource ${limitingResource} limiting the " +
-          s"number of runnable tasks per executor to: ${maxTaskPerExec}. Please adjust " +
-          "your configuration."
+        val resourceNumSlots = (execAmount * numParts / taskAmount).toInt
+        val message = log"The configuration of resource: " +
+          log"${MDC(RESOURCE_NAME, treq.resourceName)} " +
+          log"(exec = ${MDC(EXEC_AMOUNT, execAmount)}, " +
+          log"task = ${MDC(TASK_REQUIREMENTS, taskReqStr)}, " +
+          log"runnable tasks = ${MDC(NUM_RESOURCE_SLOTS, resourceNumSlots)}) will " +
+          log"result in wasted resources due to resource ${MDC(RESOURCE, limitingResource)} " +
+          log"limiting the number of runnable tasks per executor to: " +
+          log"${MDC(NUM_TASKS, maxTaskPerExec)}. Please adjust your configuration."
         if (sparkConf.get(RESOURCES_WARNING_TESTING)) {
-          throw new SparkException(message)
+          throw new SparkException(message.message)
         } else {
           logWarning(message)
         }

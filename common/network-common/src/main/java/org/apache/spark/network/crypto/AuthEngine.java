@@ -21,10 +21,10 @@ import javax.crypto.spec.SecretKeySpec;
 import java.io.Closeable;
 import java.security.GeneralSecurityException;
 import java.util.Arrays;
+import java.util.Objects;
 import java.util.Properties;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.Preconditions;
 import com.google.common.primitives.Bytes;
 import com.google.crypto.tink.subtle.AesGcmJce;
 import com.google.crypto.tink.subtle.Hkdf;
@@ -33,6 +33,8 @@ import com.google.crypto.tink.subtle.X25519;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import static java.nio.charset.StandardCharsets.UTF_8;
+
+import org.apache.spark.network.util.JavaUtils;
 import org.apache.spark.network.util.TransportConf;
 
 /**
@@ -41,27 +43,33 @@ import org.apache.spark.network.util.TransportConf;
  * Exchange, using a pre-shared key to derive an AES-GCM key encrypting key.
  */
 class AuthEngine implements Closeable {
+  public static final byte[] DERIVED_KEY_INFO = "derivedKey".getBytes(UTF_8);
   public static final byte[] INPUT_IV_INFO = "inputIv".getBytes(UTF_8);
   public static final byte[] OUTPUT_IV_INFO = "outputIv".getBytes(UTF_8);
   private static final String MAC_ALGORITHM = "HMACSHA256";
+  private static final String LEGACY_CIPHER_ALGORITHM = "AES/CTR/NoPadding";
+  private static final String CIPHER_ALGORITHM = "AES/GCM/NoPadding";
   private static final int AES_GCM_KEY_SIZE_BYTES = 16;
   private static final byte[] EMPTY_TRANSCRIPT = new byte[0];
+  private static final int UNSAFE_SKIP_HKDF_VERSION = 1;
 
   private final String appId;
   private final byte[] preSharedSecret;
   private final TransportConf conf;
   private final Properties cryptoConf;
+  private final boolean unsafeSkipFinalHkdf;
 
   private byte[] clientPrivateKey;
   private TransportCipher sessionCipher;
 
   AuthEngine(String appId, String preSharedSecret, TransportConf conf) {
-    Preconditions.checkNotNull(appId);
-    Preconditions.checkNotNull(preSharedSecret);
-    this.appId = appId;
-    this.preSharedSecret = preSharedSecret.getBytes(UTF_8);
+    this.appId = Objects.requireNonNull(appId);
+    this.preSharedSecret = Objects.requireNonNull(preSharedSecret).getBytes(UTF_8);
     this.conf = conf;
     this.cryptoConf = conf.cryptoConf();
+    // This is for backward compatibility with version 1.0 of this protocol,
+    // which did not perform a final HKDF round.
+    this.unsafeSkipFinalHkdf = conf.authEngineVersion() == UNSAFE_SKIP_HKDF_VERSION;
   }
 
   @VisibleForTesting
@@ -118,20 +126,20 @@ class AuthEngine implements Closeable {
   private byte[] decryptEphemeralPublicKey(
       AuthMessage encryptedPublicKey,
       byte[] transcript) throws GeneralSecurityException {
-    Preconditions.checkArgument(appId.equals(encryptedPublicKey.appId));
+    JavaUtils.checkArgument(appId.equals(encryptedPublicKey.appId()), "appID is different.");
     // Mix in the app ID, salt, and transcript into HKDF and use it as AES-GCM AAD
-    byte[] aadState = Bytes.concat(appId.getBytes(UTF_8), encryptedPublicKey.salt, transcript);
+    byte[] aadState = Bytes.concat(appId.getBytes(UTF_8), encryptedPublicKey.salt(), transcript);
     // Use HKDF to derive an AES_GCM key from the pre-shared key, non-secret salt, and AAD state
     byte[] derivedKeyEncryptingKey = Hkdf.computeHkdf(
         MAC_ALGORITHM,
         preSharedSecret,
-        encryptedPublicKey.salt,
+        encryptedPublicKey.salt(),
         aadState,
         AES_GCM_KEY_SIZE_BYTES);
     // If the AES-GCM payload is modified at all or if the AAD state does not match, decryption
     // will throw a GeneralSecurityException.
     return new AesGcmJce(derivedKeyEncryptingKey)
-        .decrypt(encryptedPublicKey.ciphertext, aadState);
+        .decrypt(encryptedPublicKey.ciphertext(), aadState);
   }
 
   /**
@@ -154,7 +162,7 @@ class AuthEngine implements Closeable {
    * @return An encrypted server ephemeral public key to be sent to the client.
    */
   AuthMessage response(AuthMessage encryptedClientPublicKey) throws GeneralSecurityException {
-    Preconditions.checkArgument(appId.equals(encryptedClientPublicKey.appId));
+    JavaUtils.checkArgument(appId.equals(encryptedClientPublicKey.appId()), "appId is different.");
     // Compute a shared secret given the client public key and the server private key
     byte[] clientPublicKey =
         decryptEphemeralPublicKey(encryptedClientPublicKey, EMPTY_TRANSCRIPT);
@@ -182,8 +190,7 @@ class AuthEngine implements Closeable {
    */
   void deriveSessionCipher(AuthMessage encryptedClientPublicKey,
                            AuthMessage encryptedServerPublicKey) throws GeneralSecurityException {
-    Preconditions.checkArgument(appId.equals(encryptedClientPublicKey.appId));
-    Preconditions.checkArgument(appId.equals(encryptedServerPublicKey.appId));
+    JavaUtils.checkArgument(appId.equals(encryptedClientPublicKey.appId()), "appId is different.");
     // Compute a shared secret given the server public key and the client private key,
     // mixing in the protocol transcript.
     byte[] serverPublicKey = decryptEphemeralPublicKey(
@@ -201,6 +208,13 @@ class AuthEngine implements Closeable {
       byte[] sharedSecret,
       boolean isClient,
       byte[] transcript) throws GeneralSecurityException {
+    byte[] derivedKey = unsafeSkipFinalHkdf ? sharedSecret :  // This is for backwards compatibility
+      Hkdf.computeHkdf(
+        MAC_ALGORITHM,
+        sharedSecret,
+        transcript,
+        DERIVED_KEY_INFO,
+        AES_GCM_KEY_SIZE_BYTES);
     byte[] clientIv = Hkdf.computeHkdf(
         MAC_ALGORITHM,
         sharedSecret,
@@ -213,13 +227,20 @@ class AuthEngine implements Closeable {
         transcript,  // Passing this as the HKDF salt
         OUTPUT_IV_INFO,  // This is the HKDF info field used to differentiate IV values
         AES_GCM_KEY_SIZE_BYTES);
-    SecretKeySpec sessionKey = new SecretKeySpec(sharedSecret, "AES");
-    return new TransportCipher(
-        cryptoConf,
-        conf.cipherTransformation(),
-        sessionKey,
-        isClient ? clientIv : serverIv,  // If it's the client, use the client IV first
-        isClient ? serverIv : clientIv);
+    SecretKeySpec sessionKey = new SecretKeySpec(derivedKey, "AES");
+    if (LEGACY_CIPHER_ALGORITHM.equalsIgnoreCase(conf.cipherTransformation())) {
+      return new CtrTransportCipher(
+          cryptoConf,
+          sessionKey,
+          isClient ? clientIv : serverIv,  // If it's the client, use the client IV first
+          isClient ? serverIv : clientIv);
+    } else if (CIPHER_ALGORITHM.equalsIgnoreCase(conf.cipherTransformation())) {
+      return new GcmTransportCipher(sessionKey);
+    } else {
+      throw new IllegalArgumentException(
+              String.format("Unsupported cipher mode: %s. %s and %s are supported.",
+                      conf.cipherTransformation(), CIPHER_ALGORITHM, LEGACY_CIPHER_ALGORITHM));
+    }
   }
 
   private byte[] getTranscript(AuthMessage... encryptedPublicKeys) {
@@ -230,7 +251,7 @@ class AuthEngine implements Closeable {
   }
 
   TransportCipher sessionCipher() {
-    Preconditions.checkState(sessionCipher != null);
+    JavaUtils.checkState(sessionCipher != null, "sessionCipher is null.");
     return sessionCipher;
   }
 

@@ -17,8 +17,9 @@
 
 package org.apache.spark.sql.catalyst
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.util.BoundedPriorityQueue
 
 
@@ -89,8 +90,42 @@ object QueryPlanningTracker {
   }
 }
 
+/**
+ * Callbacks after planning phase completion.
+ */
+abstract class QueryPlanningTrackerCallback {
+  /**
+   * Called when query fails analysis
+   *
+   * @param tracker      tracker that triggered the callback.
+   * @param parsedPlan   The plan prior to analysis
+   *                     see @org.apache.spark.sql.catalyst.analysis.Analyzer
+   */
+  def analysisFailed(tracker: QueryPlanningTracker, parsedPlan: LogicalPlan): Unit = {
+    // Noop by default for backward compatibility
+  }
+  /**
+   * Called when query has been analyzed.
+   *
+   * @param tracker tracker that triggered the callback.
+   * @param analyzedPlan The plan after analysis,
+   *                     see @org.apache.spark.sql.catalyst.analysis.Analyzer
+   */
+  def analyzed(tracker: QueryPlanningTracker, analyzedPlan: LogicalPlan): Unit
 
-class QueryPlanningTracker {
+  /**
+   * Called when query is ready for execution.
+   * This is after analysis for eager commands and after planning for other queries.
+   * @param tracker tracker that triggered the callback.
+   */
+  def readyForExecution(tracker: QueryPlanningTracker): Unit
+}
+
+/**
+ * @param trackerCallback Callback to be notified of planning phase completion.
+ */
+class QueryPlanningTracker(
+    trackerCallback: Option[QueryPlanningTrackerCallback] = None) {
 
   import QueryPlanningTracker._
 
@@ -100,6 +135,8 @@ class QueryPlanningTracker {
 
   // From a phase to its start time and end time, in ms.
   private val phasesMap = new java.util.HashMap[String, PhaseSummary]
+
+  private var readyForExecution = false
 
   /**
    * Measure the start and end time of a phase. Note that if this function is called multiple
@@ -118,6 +155,40 @@ class QueryPlanningTracker {
       phasesMap.put(phase, new PhaseSummary(startTime, endTime))
     }
     ret
+  }
+
+  /**
+   * Set when the query has been parsed but failed to be analyzed.
+   * Can be called multiple times upon plan change.
+   *
+   * @param parsedPlan The plan prior analysis
+   *                   see @org.apache.spark.sql.catalyst.analysis.Analyzer
+   */
+  private[sql] def setAnalysisFailed(parsedPlan: LogicalPlan): Unit = {
+    trackerCallback.foreach(_.analysisFailed(this, parsedPlan))
+  }
+
+  /**
+   * Set when the query has been analysed.
+   * Can be called multiple times upon plan change.
+   * @param analyzedPlan The plan after analysis,
+   *                     see @org.apache.spark.sql.catalyst.analysis.Analyzer
+   */
+  private[sql] def setAnalyzed(analyzedPlan: LogicalPlan): Unit = {
+    trackerCallback.foreach(_.analyzed(this, analyzedPlan))
+  }
+
+  /**
+   * Set when the query is ready for execution. This is after analysis for
+   * eager commands and after planning for other queries.
+   * see @link org.apache.spark.sql.execution.CommandExecutionMode
+   * When called multiple times, ignores subsequent call.
+   */
+  private[sql] def setReadyForExecution(): Unit = {
+    if (!readyForExecution) {
+      readyForExecution = true
+      trackerCallback.foreach(_.readyForExecution(this))
+    }
   }
 
   /**

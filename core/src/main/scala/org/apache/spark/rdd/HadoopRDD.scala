@@ -18,18 +18,20 @@
 package org.apache.spark.rdd
 
 import java.io.{FileNotFoundException, IOException}
-import java.text.SimpleDateFormat
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 import java.util.{Date, Locale}
 
-import scala.collection.immutable.Map
 import scala.reflect.ClassTag
 
-import org.apache.hadoop.conf.{Configurable, Configuration}
+import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.hdfs.BlockMissingException
 import org.apache.hadoop.io.compress.CompressionCodecFactory
 import org.apache.hadoop.mapred._
 import org.apache.hadoop.mapred.lib.CombineFileSplit
 import org.apache.hadoop.mapreduce.TaskType
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat
+import org.apache.hadoop.security.AccessControlException
 import org.apache.hadoop.util.ReflectionUtils
 
 import org.apache.spark._
@@ -38,11 +40,13 @@ import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config._
 import org.apache.spark.rdd.HadoopRDD.HadoopMapPartitionsWithSplitRDD
 import org.apache.spark.scheduler.{HDFSCacheTaskLocation, HostTaskLocation}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.{NextIterator, SerializableConfiguration, ShutdownHookManager, Utils}
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * A Spark split class that wraps around a Hadoop InputSplit.
@@ -89,6 +93,8 @@ private[spark] class HadoopPartition(rddId: Int, override val index: Int, s: Inp
  * @param keyClass Class of the key associated with the inputFormatClass.
  * @param valueClass Class of the value associated with the inputFormatClass.
  * @param minPartitions Minimum number of HadoopRDD partitions (Hadoop Splits) to generate.
+ * @param ignoreCorruptFiles Whether to ignore corrupt files.
+ * @param ignoreMissingFiles Whether to ignore missing files.
  *
  * @note Instantiating this class directly is not recommended, please use
  * `org.apache.spark.SparkContext.hadoopRDD()`
@@ -101,11 +107,34 @@ class HadoopRDD[K, V](
     inputFormatClass: Class[_ <: InputFormat[K, V]],
     keyClass: Class[K],
     valueClass: Class[V],
-    minPartitions: Int)
+    minPartitions: Int,
+    ignoreCorruptFiles: Boolean,
+    ignoreMissingFiles: Boolean)
   extends RDD[(K, V)](sc, Nil) with Logging {
 
   if (initLocalJobConfFuncOpt.isDefined) {
     sparkContext.clean(initLocalJobConfFuncOpt.get)
+  }
+
+  def this(
+      sc: SparkContext,
+      broadcastedConf: Broadcast[SerializableConfiguration],
+      initLocalJobConfFuncOpt: Option[JobConf => Unit],
+      inputFormatClass: Class[_ <: InputFormat[K, V]],
+      keyClass: Class[K],
+      valueClass: Class[V],
+      minPartitions: Int) = {
+    this(
+      sc,
+      broadcastedConf,
+      initLocalJobConfFuncOpt,
+      inputFormatClass,
+      keyClass,
+      valueClass,
+      minPartitions,
+      ignoreCorruptFiles = sc.conf.get(IGNORE_CORRUPT_FILES),
+      ignoreMissingFiles = sc.conf.get(IGNORE_MISSING_FILES)
+    )
   }
 
   def this(
@@ -117,8 +146,7 @@ class HadoopRDD[K, V](
       minPartitions: Int) = {
     this(
       sc,
-      sc.broadcast(new SerializableConfiguration(conf))
-        .asInstanceOf[Broadcast[SerializableConfiguration]],
+      SerializableConfiguration.broadcast(sc, conf),
       initLocalJobConfFuncOpt = None,
       inputFormatClass,
       keyClass,
@@ -134,10 +162,6 @@ class HadoopRDD[K, V](
   private val createTime = new Date()
 
   private val shouldCloneJobConf = sparkContext.conf.getBoolean("spark.hadoop.cloneConf", false)
-
-  private val ignoreCorruptFiles = sparkContext.conf.get(IGNORE_CORRUPT_FILES)
-
-  private val ignoreMissingFiles = sparkContext.conf.get(IGNORE_MISSING_FILES)
 
   private val ignoreEmptySplits = sparkContext.conf.get(HADOOP_RDD_IGNORE_EMPTY_SPLITS)
 
@@ -190,14 +214,13 @@ class HadoopRDD[K, V](
     }
   }
 
-  protected def getInputFormat(conf: JobConf): InputFormat[K, V] = {
-    val newInputFormat = ReflectionUtils.newInstance(inputFormatClass.asInstanceOf[Class[_]], conf)
+  protected def getInputFormat(conf: JobConf): InputFormat[K, V] = try {
+    ReflectionUtils.newInstance(inputFormatClass.asInstanceOf[Class[_]], conf)
       .asInstanceOf[InputFormat[K, V]]
-    newInputFormat match {
-      case c: Configurable => c.setConf(conf)
-      case _ =>
-    }
-    newInputFormat
+  } catch {
+    case r: RuntimeException
+      if r.getCause != null && r.getCause.isInstanceOf[InstantiationException] =>
+      throw new RuntimeException(s"Failed to instantiate ${inputFormatClass.getName}", r.getCause)
   }
 
   override def getPartitions: Array[Partition] = {
@@ -217,11 +240,13 @@ class HadoopRDD[K, V](
         if (fileSplit.getLength > conf.get(IO_WARNING_LARGEFILETHRESHOLD)) {
           val codecFactory = new CompressionCodecFactory(jobConf)
           if (Utils.isFileSplittable(path, codecFactory)) {
-            logWarning(s"Loading one large file ${path.toString} with only one partition, " +
-              s"we can increase partition numbers for improving performance.")
+            logWarning(log"Loading one large file ${MDC(PATH, path.toString)} " +
+              log"with only one partition, " +
+              log"we can increase partition numbers for improving performance.")
           } else {
-            logWarning(s"Loading one large unsplittable file ${path.toString} with only one " +
-              s"partition, because the file is compressed by unsplittable compression codec.")
+            logWarning(log"Loading one large unsplittable file ${MDC(PATH, path.toString)} " +
+              log"with only one " +
+              log"partition, because the file is compressed by unsplittable compression codec.")
           }
         }
       }
@@ -232,8 +257,8 @@ class HadoopRDD[K, V](
       array
     } catch {
       case e: InvalidInputException if ignoreMissingFiles =>
-        logWarning(s"${jobConf.get(FileInputFormat.INPUT_DIR)} doesn't exist and no" +
-            s" partitions returned from this path.", e)
+        logWarning(log"${MDC(PATH, jobConf.get(FileInputFormat.INPUT_DIR))} " +
+          log"doesn't exist and no partitions returned from this path.", e)
         Array.empty[Partition]
       case e: IOException if e.getMessage.startsWith("Not a file:") =>
         val path = e.getMessage.split(":").map(_.trim).apply(2)
@@ -245,7 +270,8 @@ class HadoopRDD[K, V](
     val iter = new NextIterator[(K, V)] {
 
       private val split = theSplit.asInstanceOf[HadoopPartition]
-      logInfo("Input split: " + split.inputSplit)
+      logInfo(log"Task (TID ${MDC(TASK_ID, context.taskAttemptId())}) input split: " +
+        log"${MDC(INPUT_SPLIT, split.inputSplit)}")
       private val jobConf = getJobConf()
 
       private val inputMetrics = context.taskMetrics().inputMetrics
@@ -280,21 +306,23 @@ class HadoopRDD[K, V](
       private var reader: RecordReader[K, V] = null
       private val inputFormat = getInputFormat(jobConf)
       HadoopRDD.addLocalConfiguration(
-        new SimpleDateFormat("yyyyMMddHHmmss", Locale.US).format(createTime),
-        context.stageId, theSplit.index, context.attemptNumber, jobConf)
+        HadoopRDD.DATE_TIME_FORMATTER.format(createTime.toInstant),
+        context.stageId(), theSplit.index, context.attemptNumber(), jobConf)
 
       reader =
         try {
           inputFormat.getRecordReader(split.inputSplit.value, jobConf, Reporter.NULL)
         } catch {
           case e: FileNotFoundException if ignoreMissingFiles =>
-            logWarning(s"Skipped missing file: ${split.inputSplit}", e)
+            logWarning(log"Skipped missing file: ${MDC(PATH, split.inputSplit)}", e)
             finished = true
             null
           // Throw FileNotFoundException even if `ignoreCorruptFiles` is true
           case e: FileNotFoundException if !ignoreMissingFiles => throw e
+          case e @ (_ : AccessControlException | _ : BlockMissingException) => throw e
           case e: IOException if ignoreCorruptFiles =>
-            logWarning(s"Skipped the rest content in the corrupted file: ${split.inputSplit}", e)
+            logWarning(log"Skipped the rest content in the corrupted file: " +
+              log"${MDC(PATH, split.inputSplit)}", e)
             finished = true
             null
         }
@@ -314,12 +342,14 @@ class HadoopRDD[K, V](
           finished = !reader.next(key, value)
         } catch {
           case e: FileNotFoundException if ignoreMissingFiles =>
-            logWarning(s"Skipped missing file: ${split.inputSplit}", e)
+            logWarning(log"Skipped missing file: ${MDC(PATH, split.inputSplit)}", e)
             finished = true
           // Throw FileNotFoundException even if `ignoreCorruptFiles` is true
           case e: FileNotFoundException if !ignoreMissingFiles => throw e
+          case e @ (_ : AccessControlException | _ : BlockMissingException) => throw e
           case e: IOException if ignoreCorruptFiles =>
-            logWarning(s"Skipped the rest content in the corrupted file: ${split.inputSplit}", e)
+            logWarning(log"Skipped the rest content in the corrupted file: " +
+              log"${MDC(PATH, split.inputSplit)}", e)
             finished = true
         }
         if (!finished) {
@@ -378,7 +408,7 @@ class HadoopRDD[K, V](
         HadoopRDD.convertSplitLocationInfo(lsplit.getLocationInfo)
       case _ => None
     }
-    locs.getOrElse(hsplit.getLocations.filter(_ != "localhost"))
+    locs.getOrElse(hsplit.getLocations.filter(_ != "localhost").toImmutableArraySeq)
   }
 
   override def checkpoint(): Unit = {
@@ -404,8 +434,10 @@ private[spark] object HadoopRDD extends Logging {
    */
   val CONFIGURATION_INSTANTIATION_LOCK = new Object()
 
-  /** Update the input bytes read metric each time this number of records has been read */
-  val RECORDS_BETWEEN_BYTES_READ_METRIC_UPDATES = 256
+  private val DATE_TIME_FORMATTER =
+    DateTimeFormatter
+      .ofPattern("yyyyMMddHHmmss", Locale.US)
+      .withZone(ZoneId.systemDefault())
 
   /**
    * The three methods below are helpers for accessing the local map, a property of the SparkEnv of
@@ -454,7 +486,7 @@ private[spark] object HadoopRDD extends Logging {
        infos: Array[SplitLocationInfo]): Option[Seq[String]] = {
     Option(infos).map(_.flatMap { loc =>
       val locationStr = loc.getLocation
-      if (locationStr != "localhost") {
+      if (locationStr != null && locationStr != "localhost") {
         if (loc.isInMemory) {
           logDebug(s"Partition $locationStr is cached by Hadoop.")
           Some(HDFSCacheTaskLocation(locationStr).toString)
@@ -464,6 +496,6 @@ private[spark] object HadoopRDD extends Logging {
       } else {
         None
       }
-    })
+    }.toImmutableArraySeq)
   }
 }

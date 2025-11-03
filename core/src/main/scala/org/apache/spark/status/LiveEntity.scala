@@ -20,9 +20,9 @@ package org.apache.spark.status
 import java.util.Date
 import java.util.concurrent.atomic.AtomicInteger
 
-import scala.collection.JavaConverters._
 import scala.collection.immutable.{HashSet, TreeSet}
 import scala.collection.mutable.HashMap
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.JobExecutionStatus
 import org.apache.spark.executor.{ExecutorMetrics, TaskMetrics}
@@ -66,6 +66,7 @@ private class LiveJob(
     val submissionTime: Option[Date],
     val stageIds: Seq[Int],
     jobGroup: Option[String],
+    jobTags: Seq[String],
     numTasks: Int,
     sqlExecutionId: Option[Long]) extends LiveEntity {
 
@@ -98,6 +99,7 @@ private class LiveJob(
       completionTime,
       stageIds,
       jobGroup,
+      jobTags,
       status,
       numTasks,
       activeTasks,
@@ -159,6 +161,16 @@ private class LiveTask(
         metrics.shuffleReadMetrics.remoteBytesReadToDisk,
         metrics.shuffleReadMetrics.localBytesRead,
         metrics.shuffleReadMetrics.recordsRead,
+        metrics.shuffleReadMetrics.corruptMergedBlockChunks,
+        metrics.shuffleReadMetrics.mergedFetchFallbackCount,
+        metrics.shuffleReadMetrics.remoteMergedBlocksFetched,
+        metrics.shuffleReadMetrics.localMergedBlocksFetched,
+        metrics.shuffleReadMetrics.remoteMergedChunksFetched,
+        metrics.shuffleReadMetrics.localMergedChunksFetched,
+        metrics.shuffleReadMetrics.remoteMergedBytesRead,
+        metrics.shuffleReadMetrics.localMergedBytesRead,
+        metrics.shuffleReadMetrics.remoteReqsDuration,
+        metrics.shuffleReadMetrics.remoteMergedReqsDuration,
         metrics.shuffleWriteMetrics.bytesWritten,
         metrics.shuffleWriteMetrics.writeTime,
         metrics.shuffleWriteMetrics.recordsWritten)
@@ -235,6 +247,16 @@ private class LiveTask(
       taskMetrics.shuffleReadMetrics.remoteBytesReadToDisk,
       taskMetrics.shuffleReadMetrics.localBytesRead,
       taskMetrics.shuffleReadMetrics.recordsRead,
+      taskMetrics.shuffleReadMetrics.shufflePushReadMetrics.corruptMergedBlockChunks,
+      taskMetrics.shuffleReadMetrics.shufflePushReadMetrics.mergedFetchFallbackCount,
+      taskMetrics.shuffleReadMetrics.shufflePushReadMetrics.remoteMergedBlocksFetched,
+      taskMetrics.shuffleReadMetrics.shufflePushReadMetrics.localMergedBlocksFetched,
+      taskMetrics.shuffleReadMetrics.shufflePushReadMetrics.remoteMergedChunksFetched,
+      taskMetrics.shuffleReadMetrics.shufflePushReadMetrics.localMergedChunksFetched,
+      taskMetrics.shuffleReadMetrics.shufflePushReadMetrics.remoteMergedBytesRead,
+      taskMetrics.shuffleReadMetrics.shufflePushReadMetrics.localMergedBytesRead,
+      taskMetrics.shuffleReadMetrics.remoteReqsDuration,
+      taskMetrics.shuffleReadMetrics.shufflePushReadMetrics.remoteMergedReqsDuration,
       taskMetrics.shuffleWriteMetrics.bytesWritten,
       taskMetrics.shuffleWriteMetrics.writeTime,
       taskMetrics.shuffleWriteMetrics.recordsWritten,
@@ -342,7 +364,7 @@ private[spark] class LiveExecutor(val executorId: String, _addTime: Long) extend
       executorLogs,
       memoryMetrics,
       excludedInStages,
-      Some(peakExecutorMetrics).filter(_.isSet),
+      Some(peakExecutorMetrics).filter(_.isSet()),
       attributes,
       resources,
       resourceProfileId,
@@ -386,7 +408,7 @@ private class LiveExecutorStageSummary(
       metrics.memoryBytesSpilled,
       metrics.diskBytesSpilled,
       isExcluded,
-      Some(peakExecutorMetrics).filter(_.isSet),
+      Some(peakExecutorMetrics).filter(_.isSet()),
       isExcluded)
     new ExecutorStageSummaryWrapper(stageId, attemptId, executorId, info)
   }
@@ -450,7 +472,7 @@ private class LiveStage(var info: StageInfo) extends LiveEntity {
   val peakExecutorMetrics = new ExecutorMetrics()
 
   lazy val speculationStageSummary: LiveSpeculationStageSummary =
-    new LiveSpeculationStageSummary(info.stageId, info.attemptNumber)
+    new LiveSpeculationStageSummary(info.stageId, info.attemptNumber())
 
   // Used for cleanup of tasks after they reach the configured limit. Not written to the store.
   @volatile var cleaning = false
@@ -458,14 +480,14 @@ private class LiveStage(var info: StageInfo) extends LiveEntity {
 
   def executorSummary(executorId: String): LiveExecutorStageSummary = {
     executorSummaries.getOrElseUpdate(executorId,
-      new LiveExecutorStageSummary(info.stageId, info.attemptNumber, executorId))
+      new LiveExecutorStageSummary(info.stageId, info.attemptNumber(), executorId))
   }
 
   def toApi(): v1.StageData = {
     new v1.StageData(
       status = status,
       stageId = info.stageId,
-      attemptId = info.attemptNumber,
+      attemptId = info.attemptNumber(),
       numTasks = info.numTasks,
       numActiveTasks = activeTasks,
       numCompleteTasks = completedTasks,
@@ -502,6 +524,25 @@ private class LiveStage(var info: StageInfo) extends LiveEntity {
       shuffleReadBytes =
         metrics.shuffleReadMetrics.localBytesRead + metrics.shuffleReadMetrics.remoteBytesRead,
       shuffleReadRecords = metrics.shuffleReadMetrics.recordsRead,
+      shuffleCorruptMergedBlockChunks =
+        metrics.shuffleReadMetrics.shufflePushReadMetrics.corruptMergedBlockChunks,
+      shuffleMergedFetchFallbackCount =
+        metrics.shuffleReadMetrics.shufflePushReadMetrics.mergedFetchFallbackCount,
+      shuffleMergedRemoteBlocksFetched =
+        metrics.shuffleReadMetrics.shufflePushReadMetrics.remoteMergedBlocksFetched,
+      shuffleMergedLocalBlocksFetched =
+        metrics.shuffleReadMetrics.shufflePushReadMetrics.localMergedBlocksFetched,
+      shuffleMergedRemoteChunksFetched =
+        metrics.shuffleReadMetrics.shufflePushReadMetrics.remoteMergedChunksFetched,
+      shuffleMergedLocalChunksFetched =
+        metrics.shuffleReadMetrics.shufflePushReadMetrics.localMergedChunksFetched,
+      shuffleMergedRemoteBytesRead =
+        metrics.shuffleReadMetrics.shufflePushReadMetrics.remoteMergedBytesRead,
+      shuffleMergedLocalBytesRead =
+        metrics.shuffleReadMetrics.shufflePushReadMetrics.localMergedBytesRead,
+      shuffleRemoteReqsDuration = metrics.shuffleReadMetrics.remoteReqsDuration,
+      shuffleMergedRemoteReqsDuration =
+        metrics.shuffleReadMetrics.shufflePushReadMetrics.remoteMergedReqsDuration,
       shuffleWriteBytes = metrics.shuffleWriteMetrics.bytesWritten,
       shuffleWriteTime = metrics.shuffleWriteMetrics.writeTime,
       shuffleWriteRecords = metrics.shuffleWriteMetrics.recordsWritten,
@@ -518,9 +559,11 @@ private class LiveStage(var info: StageInfo) extends LiveEntity {
       speculationSummary = None,
       killedTasksSummary = killedSummary,
       resourceProfileId = info.resourceProfileId,
-      peakExecutorMetrics = Some(peakExecutorMetrics).filter(_.isSet),
+      peakExecutorMetrics = Some(peakExecutorMetrics).filter(_.isSet()),
       taskMetricsDistributions = None,
-      executorMetricsDistributions = None)
+      executorMetricsDistributions = None,
+      isShufflePushEnabled = info.isShufflePushEnabled,
+      shuffleMergersCount = info.shuffleMergerCount)
   }
 
   override protected def doUpdate(): Any = {
@@ -543,14 +586,14 @@ private class LiveRDDPartition(val blockName: String, rddLevel: StorageLevel) {
 
   var value: v1.RDDPartitionInfo = null
 
-  def executors: Seq[String] = value.executors
+  def executors: collection.Seq[String] = value.executors
 
   def memoryUsed: Long = value.memoryUsed
 
   def diskUsed: Long = value.diskUsed
 
   def update(
-      executors: Seq[String],
+      executors: collection.Seq[String],
       memoryUsed: Long,
       diskUsed: Long): Unit = {
     val level = StorageLevel(diskUsed > 0, memoryUsed > 0, rddLevel.useOffHeap,
@@ -730,6 +773,16 @@ private[spark] object LiveEntityHelpers {
       shuffleRemoteBytesReadToDisk: Long,
       shuffleLocalBytesRead: Long,
       shuffleRecordsRead: Long,
+      shuffleCorruptMergedBlockChunks: Long,
+      shuffleMergedFetchFallbackCount: Long,
+      shuffleMergedRemoteBlocksFetched: Long,
+      shuffleMergedLocalBlocksFetched: Long,
+      shuffleMergedRemoteChunksFetched: Long,
+      shuffleMergedLocalChunksFetched: Long,
+      shuffleMergedRemoteBytesRead: Long,
+      shuffleMergedLocalBytesRead: Long,
+      shuffleRemoteReqsDuration: Long,
+      shuffleMergedRemoteReqsDuration: Long,
       shuffleBytesWritten: Long,
       shuffleWriteTime: Long,
       shuffleRecordsWritten: Long): v1.TaskMetrics = {
@@ -757,7 +810,19 @@ private[spark] object LiveEntityHelpers {
         shuffleRemoteBytesRead,
         shuffleRemoteBytesReadToDisk,
         shuffleLocalBytesRead,
-        shuffleRecordsRead),
+        shuffleRecordsRead,
+        shuffleRemoteReqsDuration,
+        new v1.ShufflePushReadMetrics(
+          shuffleCorruptMergedBlockChunks,
+          shuffleMergedFetchFallbackCount,
+          shuffleMergedRemoteBlocksFetched,
+          shuffleMergedLocalBlocksFetched,
+          shuffleMergedRemoteChunksFetched,
+          shuffleMergedLocalChunksFetched,
+          shuffleMergedRemoteBytesRead,
+          shuffleMergedLocalBytesRead,
+          shuffleMergedRemoteReqsDuration
+        )),
       new v1.ShuffleWriteMetrics(
         shuffleBytesWritten,
         shuffleWriteTime,
@@ -767,7 +832,8 @@ private[spark] object LiveEntityHelpers {
 
   def createMetrics(default: Long): v1.TaskMetrics = {
     createMetrics(default, default, default, default, default, default, default, default,
-      default, default, default, default, default, default, default, default,
+      default, default, default, default, default, default, default, default, default,
+      default, default, default, default, default, default, default, default, default,
       default, default, default, default, default, default, default, default)
   }
 
@@ -805,6 +871,16 @@ private[spark] object LiveEntityHelpers {
       updateMetricValue(m.peakExecutionMemory),
       updateMetricValue(m.inputMetrics.bytesRead),
       updateMetricValue(m.inputMetrics.recordsRead),
+      updateMetricValue(m.shuffleReadMetrics.shufflePushReadMetrics.corruptMergedBlockChunks),
+      updateMetricValue(m.shuffleReadMetrics.shufflePushReadMetrics.mergedFetchFallbackCount),
+      updateMetricValue(m.shuffleReadMetrics.shufflePushReadMetrics.remoteMergedBlocksFetched),
+      updateMetricValue(m.shuffleReadMetrics.shufflePushReadMetrics.localMergedBlocksFetched),
+      updateMetricValue(m.shuffleReadMetrics.shufflePushReadMetrics.remoteMergedChunksFetched),
+      updateMetricValue(m.shuffleReadMetrics.shufflePushReadMetrics.localMergedChunksFetched),
+      updateMetricValue(m.shuffleReadMetrics.shufflePushReadMetrics.remoteMergedBytesRead),
+      updateMetricValue(m.shuffleReadMetrics.shufflePushReadMetrics.localMergedBytesRead),
+      updateMetricValue(m.shuffleReadMetrics.remoteReqsDuration),
+      updateMetricValue(m.shuffleReadMetrics.shufflePushReadMetrics.remoteMergedReqsDuration),
       updateMetricValue(m.outputMetrics.bytesWritten),
       updateMetricValue(m.outputMetrics.recordsWritten),
       updateMetricValue(m.shuffleReadMetrics.remoteBlocksFetched),
@@ -843,6 +919,25 @@ private[spark] object LiveEntityHelpers {
         m2.shuffleReadMetrics.remoteBytesReadToDisk * mult,
       m1.shuffleReadMetrics.localBytesRead + m2.shuffleReadMetrics.localBytesRead * mult,
       m1.shuffleReadMetrics.recordsRead + m2.shuffleReadMetrics.recordsRead * mult,
+      m1.shuffleReadMetrics.shufflePushReadMetrics.corruptMergedBlockChunks +
+        m2.shuffleReadMetrics.shufflePushReadMetrics.corruptMergedBlockChunks * mult,
+      m1.shuffleReadMetrics.shufflePushReadMetrics.mergedFetchFallbackCount +
+        m2.shuffleReadMetrics.shufflePushReadMetrics.mergedFetchFallbackCount * mult,
+      m1.shuffleReadMetrics.shufflePushReadMetrics.remoteMergedBlocksFetched +
+        m2.shuffleReadMetrics.shufflePushReadMetrics.remoteMergedBlocksFetched * mult,
+      m1.shuffleReadMetrics.shufflePushReadMetrics.localMergedBlocksFetched +
+        m2.shuffleReadMetrics.shufflePushReadMetrics.localMergedBlocksFetched * mult,
+      m1.shuffleReadMetrics.shufflePushReadMetrics.remoteMergedChunksFetched +
+        m2.shuffleReadMetrics.shufflePushReadMetrics.remoteMergedChunksFetched * mult,
+      m1.shuffleReadMetrics.shufflePushReadMetrics.localMergedChunksFetched +
+        m2.shuffleReadMetrics.shufflePushReadMetrics.localMergedChunksFetched * mult,
+      m1.shuffleReadMetrics.shufflePushReadMetrics.remoteMergedBytesRead +
+        m2.shuffleReadMetrics.shufflePushReadMetrics.remoteMergedBytesRead * mult,
+      m1.shuffleReadMetrics.shufflePushReadMetrics.localMergedBytesRead +
+        m2.shuffleReadMetrics.shufflePushReadMetrics.localMergedBytesRead * mult,
+      m1.shuffleReadMetrics.remoteReqsDuration + m2.shuffleReadMetrics.remoteReqsDuration * mult,
+      m1.shuffleReadMetrics.shufflePushReadMetrics.remoteMergedReqsDuration +
+        m2.shuffleReadMetrics.shufflePushReadMetrics.remoteMergedReqsDuration * mult,
       m1.shuffleWriteMetrics.bytesWritten + m2.shuffleWriteMetrics.bytesWritten * mult,
       m1.shuffleWriteMetrics.writeTime + m2.shuffleWriteMetrics.writeTime * mult,
       m1.shuffleWriteMetrics.recordsWritten + m2.shuffleWriteMetrics.recordsWritten * mult)

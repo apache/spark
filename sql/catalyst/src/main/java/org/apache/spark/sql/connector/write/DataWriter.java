@@ -19,6 +19,7 @@ package org.apache.spark.sql.connector.write;
 
 import java.io.Closeable;
 import java.io.IOException;
+import java.util.Iterator;
 
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.connector.metric.CustomTaskMetric;
@@ -63,6 +64,23 @@ import org.apache.spark.sql.connector.metric.CustomTaskMetric;
  */
 @Evolving
 public interface DataWriter<T> extends Closeable {
+  /**
+   * Writes one record with metadata.
+   * <p>
+   * This method is used by group-based row-level operations to pass back metadata for records
+   * that are updated or copied. New records added during a MERGE operation are written using
+   * {@link #write(Object)} as there is no metadata associated with those records.
+   * <p>
+   * If this method fails (by throwing an exception), {@link #abort()} will be called and this
+   * data writer is considered to have been failed.
+   *
+   * @throws IOException if failure happens during disk/network IO like writing files.
+   *
+   * @since 4.0.0
+   */
+  default void write(T metadata, T record) throws IOException {
+    write(record);
+  }
 
   /**
    * Writes one record.
@@ -73,6 +91,23 @@ public interface DataWriter<T> extends Closeable {
    * @throws IOException if failure happens during disk/network IO like writing files.
    */
   void write(T record) throws IOException;
+
+  /**
+   * Writes all records provided by the given iterator. By default, it calls the {@link #write}
+   * method for each record in the iterator.
+   * <p>
+   * If this method fails (by throwing an exception), {@link #abort()} will be called and this
+   * data writer is considered to have been failed.
+   *
+   * @throws IOException if failure happens during disk/network IO like writing files.
+   *
+   * @since 4.0.0
+   */
+  default void writeAll(Iterator<T> records) throws IOException {
+    while (records.hasNext()) {
+      write(records.next());
+    }
+  }
 
   /**
    * Commits this writer after all records are written successfully, returns a commit message which

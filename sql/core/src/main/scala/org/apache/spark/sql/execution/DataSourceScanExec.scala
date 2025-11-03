@@ -19,31 +19,33 @@ package org.apache.spark.sql.execution
 
 import java.util.concurrent.TimeUnit._
 
-import scala.collection.mutable.HashMap
-
-import org.apache.commons.lang3.StringUtils
 import org.apache.hadoop.fs.Path
 
+import org.apache.spark.internal.LogKeys.{COUNT, MAX_SPLIT_BYTES, OPEN_COST_IN_BYTES}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
+import org.apache.spark.sql.catalyst.{FileSourceOptions, InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, UnknownPartitioning}
-import org.apache.spark.sql.catalyst.util.truncatedString
+import org.apache.spark.sql.catalyst.util.{truncatedString, CaseInsensitiveMap}
+import org.apache.spark.sql.connector.read.streaming.SparkDataStream
+import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.execution
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.parquet.{ParquetFileFormat => ParquetSource}
-import org.apache.spark.sql.execution.datasources.v2.PushedDownOperators
+import org.apache.spark.sql.execution.datasources.v2.{PushedDownOperators, TableSampleInfo}
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.execution.vectorized.ConstantColumnVector
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.{SessionStateHelper, SQLConf}
 import org.apache.spark.sql.sources.{BaseRelation, Filter}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.vectorized.ColumnarBatch
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 import org.apache.spark.util.collection.BitSet
 
-trait DataSourceScanExec extends LeafExecNode {
+trait DataSourceScanExec extends LeafExecNode with StreamSourceAwareSparkPlan {
   def relation: BaseRelation
   def tableIdentifier: Option[TableIdentifier]
 
@@ -61,7 +63,7 @@ trait DataSourceScanExec extends LeafExecNode {
   override def simpleString(maxFields: Int): String = {
     val metadataEntries = metadata.toSeq.sorted.map {
       case (key, value) =>
-        key + ": " + StringUtils.abbreviate(redact(value), maxMetadataValueLength)
+        key + ": " + Utils.abbreviate(redact(value), maxMetadataValueLength)
     }
     val metadataStr = truncatedString(metadataEntries, " ", ", ", "", maxFields)
     redact(
@@ -98,6 +100,10 @@ trait DataSourceScanExec extends LeafExecNode {
   def inputRDDs(): Seq[RDD[InternalRow]]
 }
 
+object DataSourceScanExec {
+  val numOutputRowsKey = "numOutputRows"
+}
+
 /** Physical plan node for scanning data from a relation. */
 case class RowDataSourceScanExec(
     output: Seq[Attribute],
@@ -107,11 +113,31 @@ case class RowDataSourceScanExec(
     pushedDownOperators: PushedDownOperators,
     rdd: RDD[InternalRow],
     @transient relation: BaseRelation,
+    @transient stream: Option[SparkDataStream],
     tableIdentifier: Option[TableIdentifier])
   extends DataSourceScanExec with InputRDDCodegen {
 
-  override lazy val metrics =
-    Map("numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
+  override lazy val metrics: Map[String, SQLMetric] = {
+    val metrics = Map(
+      DataSourceScanExec.numOutputRowsKey ->
+        SQLMetrics.createMetric(sparkContext, "number of output rows")
+    )
+
+    rdd match {
+      case rddWithDSMetrics: DataSourceMetricsMixin => metrics ++ rddWithDSMetrics.getMetrics
+      case _ => metrics
+    }
+  }
+
+  override def verboseStringWithOperatorId(): String = {
+    super.verboseStringWithOperatorId() + (rdd match {
+      case externalEngineDatasourceRdd: ExternalEngineDatasourceRDD =>
+        "External engine query: " +
+          externalEngineDatasourceRdd.getExternalEngineQuery +
+          System.lineSeparator()
+      case _ => ""
+    })
+  }
 
   protected override def doExecute(): RDD[InternalRow] = {
     val numOutputRows = longMetric("numOutputRows")
@@ -131,10 +157,12 @@ case class RowDataSourceScanExec(
 
   override def inputRDD: RDD[InternalRow] = rdd
 
+  private def seqToString(seq: Seq[Any]): String = seq.mkString("[", ", ", "]")
+
+  private def pushedSampleMetadataString(s: TableSampleInfo): String =
+    s"SAMPLE (${(s.upperBound - s.lowerBound) * 100}) ${s.withReplacement} SEED(${s.seed})"
+
   override val metadata: Map[String, String] = {
-
-    def seqToString(seq: Seq[Any]): String = seq.mkString("[", ", ", "]")
-
     val markedFilters = if (filters.nonEmpty) {
       for (filter <- filters) yield {
         if (handledFilters.contains(filter)) s"*$filter" else s"$filter"
@@ -149,9 +177,11 @@ case class RowDataSourceScanExec(
           s"ORDER BY ${seqToString(pushedDownOperators.sortValues.map(_.describe()))}" +
           s" LIMIT ${pushedDownOperators.limit.get}"
         Some("PushedTopN" -> pushedTopN)
-    } else {
-      pushedDownOperators.limit.map(value => "PushedLimit" -> s"LIMIT $value")
-    }
+      } else {
+        pushedDownOperators.limit.map(value => "PushedLimit" -> s"LIMIT $value")
+      }
+
+    val offsetInfo = pushedDownOperators.offset.map(value => "PushedOffset" -> s"OFFSET $value")
 
     val pushedFilters = if (pushedDownOperators.pushedPredicates.nonEmpty) {
       seqToString(pushedDownOperators.pushedPredicates.map(_.describe()))
@@ -159,110 +189,203 @@ case class RowDataSourceScanExec(
       seqToString(markedFilters.toSeq)
     }
 
+    val pushedJoins = if (pushedDownOperators.joinedRelationPushedDownOperators.nonEmpty) {
+      Map("PushedJoins" ->
+        s"\n${getPushedJoinString(
+          pushedDownOperators.joinedRelationPushedDownOperators(0),
+          pushedDownOperators.joinedRelationPushedDownOperators(1))}\n")
+    } else {
+      Map()
+    }
+
     Map("ReadSchema" -> requiredSchema.catalogString,
       "PushedFilters" -> pushedFilters) ++
       pushedDownOperators.aggregation.fold(Map[String, String]()) { v =>
-        Map("PushedAggregates" -> seqToString(v.aggregateExpressions.map(_.describe())),
-          "PushedGroupByColumns" -> seqToString(v.groupByColumns.map(_.describe())))} ++
+        Map("PushedAggregates" -> seqToString(
+          v.aggregateExpressions.map(_.describe()).toImmutableArraySeq),
+          "PushedGroupByExpressions" ->
+            seqToString(v.groupByExpressions.map(_.describe()).toImmutableArraySeq))} ++
       topNOrLimitInfo ++
-      pushedDownOperators.sample.map(v => "PushedSample" ->
-        s"SAMPLE (${(v.upperBound - v.lowerBound) * 100}) ${v.withReplacement} SEED(${v.seed})"
-      )
+      offsetInfo ++
+      pushedDownOperators.sample.map(v => "PushedSample" -> pushedSampleMetadataString(v)) ++
+      pushedJoins
   }
 
-  // Don't care about `rdd` and `tableIdentifier` when canonicalizing.
+  /**
+   * Build string for all the pushed down join operators. The method is recursive, so if there is
+   * join on top of 2 already joined relations, all of these will be present in string.
+   *
+   * The exmaple of resulting string is the following:
+   *
+   * PushedFilters: [id_3 = (id_4 + 1)], PushedJoins:
+   * [L]: PushedFilters: [ID_1 = (id_3 + 1)]
+   *      PushedJoins:
+   *      [L]: PushedFilters: [ID = (ID_1 + 1)]
+   *           PushedJoins:
+   *           [L]: Relation: join_pushdown_catalog.JOIN_SCHEMA.JOIN_TABLE_1
+   *                PushedFilters: [ID IS NOT NULL]
+   *           [R]: Relation: join_pushdown_catalog.JOIN_SCHEMA.JOIN_TABLE_2
+   *                PushedFilters: [ID IS NOT NULL]
+   *      [R]: Relation: join_pushdown_catalog.JOIN_SCHEMA.JOIN_TABLE_3
+   *           PushedFilters: [id IS NOT NULL]
+   * [R]: Relation: join_pushdown_catalog.JOIN_SCHEMA.JOIN_TABLE_4
+   *      PushedFilters: [id IS NOT NULL]
+   */
+  private def getPushedJoinString(
+      leftSidePushedDownOperators: PushedDownOperators,
+      rightSidePushedDownOperators: PushedDownOperators,
+      indent: Int = 0): String = {
+    val indentStr = " ".repeat(indent)
+
+    val leftSideOperators = buildOperatorParts(leftSidePushedDownOperators, indent)
+    val leftSideMetadataStr = formatMetadata(leftSideOperators, indentStr + " ".repeat(5))
+
+    val rightSideOperators = buildOperatorParts(rightSidePushedDownOperators, indent)
+    val rightSideMetadataStr = formatMetadata(rightSideOperators, indentStr + " ".repeat(5))
+
+    val leftSideString = s"$indentStr[L]: $leftSideMetadataStr"
+    val rightSideString = s"$indentStr[R]: $rightSideMetadataStr"
+    Seq(leftSideString, rightSideString).mkString("\n")
+  }
+
+  private def buildOperatorParts(operators: PushedDownOperators, indent: Int): List[String] = {
+    val parts = List.newBuilder[String]
+
+    // Add relation name for leaf nodes (nodes without further joins)
+    if (operators.joinedRelationPushedDownOperators.isEmpty) {
+      operators.relationName.foreach(name => parts += s"Relation: $name")
+    }
+
+    if (operators.pushedPredicates.nonEmpty) {
+      parts += s"PushedFilters: ${seqToString(operators.pushedPredicates.map(_.describe()))}"
+    }
+
+    operators.sample.foreach { sample =>
+      parts += s"PushedSample: ${pushedSampleMetadataString(sample)}"
+    }
+
+    // Recursively get the pushed join string for child with correct indentation.
+    if (operators.joinedRelationPushedDownOperators.nonEmpty) {
+      val nestedJoins = getPushedJoinString(
+        operators.joinedRelationPushedDownOperators(0),
+        operators.joinedRelationPushedDownOperators(1),
+        indent + 5)
+      parts += s"PushedJoins:\n$nestedJoins"
+    }
+
+    parts.result()
+  }
+
+  private def formatMetadata(parts: List[String], indentStr: String): String = {
+    val (basicParts, nestedJoinsParts) = parts.partition(!_.startsWith("PushedJoins:"))
+    (basicParts ++ nestedJoinsParts).mkString("\n" + indentStr)
+  }
+
+  // Don't care about `rdd` and `tableIdentifier`, and `stream` when canonicalizing.
   override def doCanonicalize(): SparkPlan =
     copy(
       output.map(QueryPlan.normalizeExpressions(_, output)),
       rdd = null,
-      tableIdentifier = None)
+      tableIdentifier = None,
+      stream = None)
+
+  override def getStream: Option[SparkDataStream] = stream
 }
 
 /**
- * Physical plan node for scanning data from HadoopFsRelations.
- *
- * @param relation The file-based relation to scan.
- * @param output Output attributes of the scan, including data attributes and partition attributes.
- * @param requiredSchema Required schema of the underlying relation, excluding partition columns.
- * @param partitionFilters Predicates to use for partition pruning.
- * @param optionalBucketSet Bucket ids for bucket pruning.
- * @param optionalNumCoalescedBuckets Number of coalesced buckets.
- * @param dataFilters Filters on non-partition columns.
- * @param tableIdentifier Identifier for the table in the metastore.
- * @param disableBucketedScan Disable bucketed scan based on physical query plan, see rule
- *                            [[DisableUnnecessaryBucketedScan]] for details.
+ * A base trait for file scans containing file listing and metrics code.
  */
-case class FileSourceScanExec(
-    @transient relation: HadoopFsRelation,
-    output: Seq[Attribute],
-    requiredSchema: StructType,
-    partitionFilters: Seq[Expression],
-    optionalBucketSet: Option[BitSet],
-    optionalNumCoalescedBuckets: Option[Int],
-    dataFilters: Seq[Expression],
-    tableIdentifier: Option[TableIdentifier],
-    disableBucketedScan: Boolean = false)
-  extends DataSourceScanExec {
+trait FileSourceScanLike extends DataSourceScanExec with SessionStateHelper {
 
-  lazy val metadataColumns: Seq[AttributeReference] =
-    output.collect { case FileSourceMetadataAttribute(attr) => attr }
+  // Filters on non-partition columns.
+  def dataFilters: Seq[Expression]
+  // Disable bucketed scan based on physical query plan, see rule
+  // [[DisableUnnecessaryBucketedScan]] for details.
+  def disableBucketedScan: Boolean
+  // Bucket ids for bucket pruning.
+  def optionalBucketSet: Option[BitSet]
+  // Number of coalesced buckets.
+  def optionalNumCoalescedBuckets: Option[Int]
+  // Output attributes of the scan, including data attributes and partition attributes.
+  def output: Seq[Attribute]
+  // Predicates to use for partition pruning.
+  def partitionFilters: Seq[Expression]
+  // The file-based relation to scan.
+  def relation: HadoopFsRelation
+  // Required schema of the underlying relation, excluding partition columns.
+  def requiredSchema: StructType
+  // Identifier for the table in the metastore.
+  def tableIdentifier: Option[TableIdentifier]
 
-  // Note that some vals referring the file-based relation are lazy intentionally
-  // so that this plan can be canonicalized on executor side too. See SPARK-23731.
-  override lazy val supportsColumnar: Boolean = {
-    relation.fileFormat.supportBatch(relation.sparkSession, schema)
-  }
 
-  private lazy val needsUnsafeRowConversion: Boolean = {
-    if (relation.fileFormat.isInstanceOf[ParquetSource]) {
-      conf.parquetVectorizedReaderEnabled
-    } else {
-      false
-    }
+  lazy val fileConstantMetadataColumns: Seq[AttributeReference] = output.collect {
+    // Collect metadata columns to be handled outside of the scan by appending constant columns.
+    case FileSourceConstantMetadataAttribute(attr) => attr
   }
 
   override def vectorTypes: Option[Seq[String]] =
     relation.fileFormat.vectorTypes(
       requiredSchema = requiredSchema,
       partitionSchema = relation.partitionSchema,
-      relation.sparkSession.sessionState.conf).map { vectorTypes =>
-        // for column-based file format, append metadata column's vector type classes if any
-        vectorTypes ++ Seq.fill(metadataColumns.size)(classOf[ConstantColumnVector].getName)
+      getSqlConf(relation.sparkSession)).map { vectorTypes =>
+        vectorTypes ++
+          // for column-based file format, append metadata column's vector type classes if any
+          fileConstantMetadataColumns.map { _ => classOf[ConstantColumnVector].getName }
       }
 
-  private lazy val driverMetrics: HashMap[String, Long] = HashMap.empty
+  lazy val driverMetrics = Map(
+    "numFiles" -> SQLMetrics.createMetric(sparkContext, "number of files read"),
+    "metadataTime" -> SQLMetrics.createTimingMetric(sparkContext, "metadata time"),
+    "filesSize" -> SQLMetrics.createSizeMetric(sparkContext, "size of files read")
+  ) ++ {
+    if (relation.partitionSchema.nonEmpty) {
+      Map(
+        "numPartitions" -> SQLMetrics.createMetric(sparkContext, "number of partitions read"),
+        "pruningTime" ->
+          SQLMetrics.createTimingMetric(sparkContext, "dynamic partition pruning time"))
+    } else {
+      Map.empty[String, SQLMetric]
+    }
+  } ++ staticMetrics
 
   /**
    * Send the driver-side metrics. Before calling this function, selectedPartitions has
    * been initialized. See SPARK-26327 for more details.
    */
-  private def sendDriverMetrics(): Unit = {
-    driverMetrics.foreach(e => metrics(e._1).add(e._2))
+  protected def sendDriverMetrics(): Unit = {
     val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
-    SQLMetrics.postDriverMetricUpdates(sparkContext, executionId,
-      metrics.filter(e => driverMetrics.contains(e._1)).values.toSeq)
+    SQLMetrics.postDriverMetricUpdates(sparkContext, executionId, driverMetrics.values.toSeq)
   }
 
   private def isDynamicPruningFilter(e: Expression): Boolean =
     e.exists(_.isInstanceOf[PlanExpression[_]])
 
-  @transient lazy val selectedPartitions: Array[PartitionDirectory] = {
+
+  // This field will be accessed during planning (e.g., `outputPartitioning` relies on it), and can
+  // only use static filters.
+  @transient lazy val selectedPartitions: ScanFileListing = {
     val optimizerMetadataTimeNs = relation.location.metadataOpsTimeNs.getOrElse(0L)
     val startTime = System.nanoTime()
-    val ret =
-      relation.location.listFiles(
-        partitionFilters.filterNot(isDynamicPruningFilter), dataFilters)
-    setFilesNumAndSizeMetric(ret, true)
+    // The filters may contain subquery expressions which can't be evaluated during planning.
+    // Here we filter out subquery expressions and get the static data/partition filters, so that
+    // they can be used to do pruning at the planning phase.
+    val staticDataFilters = dataFilters.filterNot(isDynamicPruningFilter)
+    val staticPartitionFilters = partitionFilters.filterNot(isDynamicPruningFilter)
+    val partitionDirectories = relation.location.listFiles(
+      staticPartitionFilters, staticDataFilters)
+    val fileListing = GenericScanFileListing(partitionDirectories.toArray)
+    setFilesNumAndSizeMetric(fileListing, static = true)
     val timeTakenMs = NANOSECONDS.toMillis(
       (System.nanoTime() - startTime) + optimizerMetadataTimeNs)
-    driverMetrics("metadataTime") = timeTakenMs
-    ret
-  }.toArray
+    driverMetrics("metadataTime").set(timeTakenMs)
+    fileListing
+  }
 
   // We can only determine the actual partitions at runtime when a dynamic partition filter is
   // present. This is because such a filter relies on information that is only available at run
   // time (for instance the keys used in the other side of a join).
-  @transient private lazy val dynamicallySelectedPartitions: Array[PartitionDirectory] = {
+  @transient protected lazy val dynamicallySelectedPartitions: ScanFileListing = {
+    val dynamicDataFilters = dataFilters.filter(isDynamicPruningFilter)
     val dynamicPartitionFilters = partitionFilters.filter(isDynamicPruningFilter)
 
     if (dynamicPartitionFilters.nonEmpty) {
@@ -275,22 +398,15 @@ case class FileSourceScanExec(
           val index = partitionColumns.indexWhere(a.name == _.name)
           BoundReference(index, partitionColumns(index).dataType, nullable = true)
       }, Nil)
-      val ret = selectedPartitions.filter(p => boundPredicate.eval(p.values))
-      setFilesNumAndSizeMetric(ret, false)
-      val timeTakenMs = (System.nanoTime() - startTime) / 1000 / 1000
-      driverMetrics("pruningTime") = timeTakenMs
-      ret
+      val returnedFiles = selectedPartitions.filterAndPruneFiles(
+          boundPredicate, dynamicDataFilters)
+      setFilesNumAndSizeMetric(returnedFiles, false)
+      val timeTakenMs = NANOSECONDS.toMillis(System.nanoTime() - startTime)
+      driverMetrics("pruningTime").set(timeTakenMs)
+      returnedFiles
     } else {
       selectedPartitions
     }
-  }
-
-  /**
-   * [[partitionFilters]] can contain subqueries whose results are available only at runtime so
-   * accessing [[selectedPartitions]] should be guarded by this method during planning
-   */
-  private def hasPartitionsAvailableAtRunTime: Boolean = {
-    partitionFilters.exists(ExecSubqueryExpression.hasSubquery)
   }
 
   private def toAttribute(colName: String): Option[Attribute] =
@@ -298,7 +414,7 @@ case class FileSourceScanExec(
 
   // exposed for testing
   lazy val bucketedScan: Boolean = {
-    if (relation.sparkSession.sessionState.conf.bucketingEnabled && relation.bucketSpec.isDefined
+    if (getSqlConf(relation.sparkSession).bucketingEnabled && relation.bucketSpec.isDefined
       && !disableBucketedScan) {
       val spec = relation.bucketSpec.get
       val bucketColumns = spec.bucketColumnNames.flatMap(n => toAttribute(n))
@@ -336,8 +452,7 @@ case class FileSourceScanExec(
         spec.sortColumnNames.map(x => toAttribute(x)).takeWhile(x => x.isDefined).map(_.get)
       val shouldCalculateSortOrder =
         conf.getConf(SQLConf.LEGACY_BUCKETED_TABLE_SCAN_OUTPUT_ORDERING) &&
-          sortColumns.nonEmpty &&
-          !hasPartitionsAvailableAtRunTime
+          sortColumns.nonEmpty
 
       val sortOrder = if (shouldCalculateSortOrder) {
         // In case of bucketing, its possible to have multiple files belonging to the
@@ -345,11 +460,7 @@ case class FileSourceScanExec(
         // but those files combined together are not globally sorted. Given that,
         // the RDD partition will not be sorted even if the relation has sort columns set
         // Current solution is to check if all the buckets have a single file in it
-
-        val files = selectedPartitions.flatMap(partition => partition.files)
-        val bucketToFilesGrouping =
-          files.map(_.getPath.getName).groupBy(file => BucketingUtils.getBucketId(file))
-        val singleFilePartitions = bucketToFilesGrouping.forall(p => p._2.length <= 1)
+        val singleFilePartitions = selectedPartitions.bucketsContainSingleFile
 
         // TODO SPARK-24528 Sort order is currently ignored if buckets are coalesced.
         if (singleFilePartitions && optionalNumCoalescedBuckets.isEmpty) {
@@ -368,17 +479,29 @@ case class FileSourceScanExec(
     }
   }
 
-  @transient
-  private lazy val pushedDownFilters = {
+  private def translateToV1Filters(
+      dataFilters: Seq[Expression],
+      scalarSubqueryToLiteral: execution.ScalarSubquery => Literal): Seq[Filter] = {
+    val scalarSubqueryReplaced = dataFilters.map(_.transform {
+      // Replace scalar subquery to literal so that `DataSourceStrategy.translateFilter` can
+      // support translating it.
+      case scalarSubquery: execution.ScalarSubquery => scalarSubqueryToLiteral(scalarSubquery)
+    })
+
     val supportNestedPredicatePushdown = DataSourceUtils.supportNestedPredicatePushdown(relation)
-    // `dataFilters` should not include any metadata col filters
+    // `dataFilters` should not include any constant metadata col filters
     // because the metadata struct has been flatted in FileSourceStrategy
-    // and thus metadata col filters are invalid to be pushed down
-    dataFilters.filterNot(_.references.exists {
-      case FileSourceMetadataAttribute(_) => true
+    // and thus metadata col filters are invalid to be pushed down. Metadata that is generated
+    // during the scan can be used for filters.
+    scalarSubqueryReplaced.filterNot(_.references.exists {
+      case FileSourceConstantMetadataAttribute(_) => true
       case _ => false
     }).flatMap(DataSourceStrategy.translateFilter(_, supportNestedPredicatePushdown))
   }
+
+  // This field may execute subquery expressions and should not be accessed during planning.
+  @transient
+  protected lazy val pushedDownFilters: Seq[Filter] = translateToV1Filters(dataFilters, _.toLiteral)
 
   override lazy val metadata: Map[String, String] = {
     def seqToString(seq: Seq[Any]) = seq.mkString("[", ", ", "]")
@@ -386,13 +509,17 @@ case class FileSourceScanExec(
     val locationDesc =
       location.getClass.getSimpleName +
         Utils.buildLocationMetadata(location.rootPaths, maxMetadataValueLength)
+    // `metadata` is accessed during planning and the scalar subquery is not executed yet. Here
+    // we get the pretty string of the scalar subquery, for display purpose only.
+    val pushedFiltersForDisplay = translateToV1Filters(
+      dataFilters, s => Literal("ScalarSubquery#" + s.exprId.id))
     val metadata =
       Map(
         "Format" -> relation.fileFormat.toString,
         "ReadSchema" -> requiredSchema.catalogString,
         "Batched" -> supportsColumnar.toString,
         "PartitionFilters" -> seqToString(partitionFilters),
-        "PushedFilters" -> seqToString(pushedDownFilters),
+        "PushedFilters" -> seqToString(pushedFiltersForDisplay),
         "DataFilters" -> seqToString(dataFilters),
         "Location" -> locationDesc)
 
@@ -408,7 +535,7 @@ case class FileSourceScanExec(
           bucketedKey -> "true",
           "SelectedBucketsCount" -> (s"$numSelectedBuckets out of ${spec.numBuckets}" +
             optionalNumCoalescedBuckets.map { b => s" (Coalesced to $b)"}.getOrElse("")))
-      } else if (!relation.sparkSession.sessionState.conf.bucketingEnabled) {
+      } else if (!getSqlConf(relation.sparkSession).bucketingEnabled) {
         metadata + (bucketedKey -> "false (disabled by configuration)")
       } else if (disableBucketedScan) {
         metadata + (bucketedKey -> "false (disabled by query planner)")
@@ -445,33 +572,10 @@ case class FileSourceScanExec(
        |""".stripMargin
   }
 
-  lazy val inputRDD: RDD[InternalRow] = {
-    val readFile: (PartitionedFile) => Iterator[InternalRow] =
-      relation.fileFormat.buildReaderWithPartitionValues(
-        sparkSession = relation.sparkSession,
-        dataSchema = relation.dataSchema,
-        partitionSchema = relation.partitionSchema,
-        requiredSchema = requiredSchema,
-        filters = pushedDownFilters,
-        options = relation.options,
-        hadoopConf = relation.sparkSession.sessionState.newHadoopConfWithOptions(relation.options))
-
-    val readRDD = if (bucketedScan) {
-      createBucketedReadRDD(relation.bucketSpec.get, readFile, dynamicallySelectedPartitions,
-        relation)
-    } else {
-      createReadRDD(readFile, dynamicallySelectedPartitions, relation)
-    }
-    sendDriverMetrics()
-    readRDD
-  }
-
-  override def inputRDDs(): Seq[RDD[InternalRow]] = {
-    inputRDD :: Nil
-  }
+  override def metrics: Map[String, SQLMetric] = scanMetrics
 
   /** SQL metrics generated only for scans using dynamic partition pruning. */
-  private lazy val staticMetrics = if (partitionFilters.exists(isDynamicPruningFilter)) {
+  protected lazy val staticMetrics = if (partitionFilters.exists(isDynamicPruningFilter)) {
     Map("staticFilesNum" -> SQLMetrics.createMetric(sparkContext, "static number of files read"),
       "staticFilesSize" -> SQLMetrics.createSizeMetric(sparkContext, "static size of files read"))
   } else {
@@ -479,28 +583,23 @@ case class FileSourceScanExec(
   }
 
   /** Helper for computing total number and size of files in selected partitions. */
-  private def setFilesNumAndSizeMetric(
-      partitions: Seq[PartitionDirectory],
-      static: Boolean): Unit = {
-    val filesNum = partitions.map(_.files.size.toLong).sum
-    val filesSize = partitions.map(_.files.map(_.getLen).sum).sum
+  private def setFilesNumAndSizeMetric(partitions: ScanFileListing, static: Boolean): Unit = {
+    val filesNum = partitions.totalNumberOfFiles
+    val filesSize = partitions.totalFileSize
     if (!static || !partitionFilters.exists(isDynamicPruningFilter)) {
-      driverMetrics("numFiles") = filesNum
-      driverMetrics("filesSize") = filesSize
+      driverMetrics("numFiles").set(filesNum)
+      driverMetrics("filesSize").set(filesSize)
     } else {
-      driverMetrics("staticFilesNum") = filesNum
-      driverMetrics("staticFilesSize") = filesSize
+      driverMetrics("staticFilesNum").set(filesNum)
+      driverMetrics("staticFilesSize").set(filesSize)
     }
     if (relation.partitionSchema.nonEmpty) {
-      driverMetrics("numPartitions") = partitions.length
+      driverMetrics("numPartitions").set(partitions.partitionCount)
     }
   }
 
-  override lazy val metrics = Map(
-    "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
-    "numFiles" -> SQLMetrics.createMetric(sparkContext, "number of files read"),
-    "metadataTime" -> SQLMetrics.createTimingMetric(sparkContext, "metadata time"),
-    "filesSize" -> SQLMetrics.createSizeMetric(sparkContext, "size of files read")
+  private lazy val scanMetrics = Map(
+    "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows")
   ) ++ {
     // Tracking scan time has overhead, we can't afford to do it for each row, and can only do
     // it for each batch.
@@ -509,16 +608,137 @@ case class FileSourceScanExec(
     } else {
       None
     }
-  } ++ {
-    if (relation.partitionSchema.nonEmpty) {
-      Map(
-        "numPartitions" -> SQLMetrics.createMetric(sparkContext, "number of partitions read"),
-        "pruningTime" ->
-          SQLMetrics.createTimingMetric(sparkContext, "dynamic partition pruning time"))
-    } else {
-      Map.empty[String, SQLMetric]
+  } ++ driverMetrics
+
+  /**
+   * A file listing that represents a file list as an array of [[PartitionDirectory]]. This extends
+   * [[ScanFileListing]] in order to access methods for computing partition sizes and so forth.
+   * This is the default file listing class used for all table formats.
+   */
+  private case class GenericScanFileListing(partitionDirectories: Array[PartitionDirectory])
+    extends ScanFileListing {
+
+    override def partitionCount: Int = partitionDirectories.length
+
+    override def totalFileSize: Long = partitionDirectories.map(_.files.map(_.getLen).sum).sum
+
+    override def totalNumberOfFiles: Long = partitionDirectories.map(_.files.length).sum.toLong
+
+    override def filterAndPruneFiles(
+        boundPredicate: BasePredicate,
+        dynamicFileFilters: Seq[Expression]): ScanFileListing = {
+      val filteredPartitions = partitionDirectories.filter(p => boundPredicate.eval(p.values))
+      val prunedPartitions = if (dynamicFileFilters.nonEmpty) {
+        val filePruningRunner = new FilePruningRunner(dynamicFileFilters)
+        filteredPartitions.map(filePruningRunner.prune)
+      } else {
+        filteredPartitions
+      }
+      GenericScanFileListing(prunedPartitions)
     }
-  } ++ staticMetrics
+
+    override def toPartitionArray: Array[PartitionedFile] = {
+      partitionDirectories.flatMap { p =>
+        p.files.map { f =>
+          PartitionedFileUtil.getPartitionedFile(f, f.getPath, p.values, 0, f.getLen)
+        }
+      }
+    }
+
+    override def calculateTotalPartitionBytes: Long = {
+      val openCostInBytes = getSqlConf(relation.sparkSession).filesOpenCostInBytes
+      partitionDirectories.flatMap(_.files.map(_.getLen + openCostInBytes)).sum
+    }
+
+    override def filePartitionIterator: Iterator[ListingPartition] = {
+      partitionDirectories.iterator.map { partitionDirectory =>
+        ListingPartition(
+          partitionDirectory.values,
+          partitionDirectory.files.size,
+          partitionDirectory.files.iterator)
+      }
+    }
+
+    override def bucketsContainSingleFile: Boolean = {
+      val files = partitionDirectories.flatMap(_.files)
+      val bucketToFilesGrouping =
+        files.map(_.getPath.getName).groupBy(file => BucketingUtils.getBucketId(file))
+      bucketToFilesGrouping.forall(p => p._2.length <= 1)
+    }
+  }
+}
+
+/**
+ * Physical plan node for scanning data from HadoopFsRelations.
+ *
+ * @param relation The file-based relation to scan.
+ * @param output Output attributes of the scan, including data attributes and partition attributes.
+ * @param requiredSchema Required schema of the underlying relation, excluding partition columns.
+ * @param partitionFilters Predicates to use for partition pruning.
+ * @param optionalBucketSet Bucket ids for bucket pruning.
+ * @param optionalNumCoalescedBuckets Number of coalesced buckets.
+ * @param dataFilters Filters on non-partition columns.
+ * @param tableIdentifier Identifier for the table in the metastore.
+ * @param disableBucketedScan Disable bucketed scan based on physical query plan, see rule
+ *                            [[DisableUnnecessaryBucketedScan]] for details.
+ */
+case class FileSourceScanExec(
+    @transient override val relation: HadoopFsRelation,
+    @transient stream: Option[SparkDataStream],
+    override val output: Seq[Attribute],
+    override val requiredSchema: StructType,
+    override val partitionFilters: Seq[Expression],
+    override val optionalBucketSet: Option[BitSet],
+    override val optionalNumCoalescedBuckets: Option[Int],
+    override val dataFilters: Seq[Expression],
+    override val tableIdentifier: Option[TableIdentifier],
+    override val disableBucketedScan: Boolean = false)
+  extends FileSourceScanLike {
+
+  // Note that some vals referring the file-based relation are lazy intentionally
+  // so that this plan can be canonicalized on executor side too. See SPARK-23731.
+  override lazy val supportsColumnar: Boolean = {
+    val conf = getSqlConf(relation.sparkSession)
+    // Only output columnar if there is WSCG to read it.
+    val requiredWholeStageCodegenSettings =
+      conf.wholeStageEnabled && !WholeStageCodegenExec.isTooManyFields(conf, schema)
+    requiredWholeStageCodegenSettings &&
+      relation.fileFormat.supportBatch(relation.sparkSession, schema)
+  }
+
+  private lazy val needsUnsafeRowConversion: Boolean = {
+    if (relation.fileFormat.isInstanceOf[ParquetSource]) {
+      conf.parquetVectorizedReaderEnabled
+    } else {
+      false
+    }
+  }
+
+  lazy val inputRDD: RDD[InternalRow] = {
+    val options = relation.options +
+      (FileFormat.OPTION_RETURNING_BATCH -> supportsColumnar.toString)
+    val readFile: (PartitionedFile) => Iterator[InternalRow] =
+      relation.fileFormat.buildReaderWithPartitionValues(
+        sparkSession = relation.sparkSession,
+        dataSchema = relation.dataSchema,
+        partitionSchema = relation.partitionSchema,
+        requiredSchema = requiredSchema,
+        filters = pushedDownFilters,
+        options = options,
+        hadoopConf = getHadoopConf(relation.sparkSession, relation.options))
+
+    val readRDD = if (bucketedScan) {
+      createBucketedReadRDD(relation.bucketSpec.get, readFile, dynamicallySelectedPartitions)
+    } else {
+      createReadRDD(readFile, dynamicallySelectedPartitions)
+    }
+    sendDriverMetrics()
+    readRDD
+  }
+
+  override def inputRDDs(): Seq[RDD[InternalRow]] = {
+    inputRDD :: Nil
+  }
 
   protected override def doExecute(): RDD[InternalRow] = {
     val numOutputRows = longMetric("numOutputRows")
@@ -576,24 +796,18 @@ case class FileSourceScanExec(
    * @param bucketSpec the bucketing spec.
    * @param readFile a function to read each (part of a) file.
    * @param selectedPartitions Hive-style partition that are part of the read.
-   * @param fsRelation [[HadoopFsRelation]] associated with the read.
    */
   private def createBucketedReadRDD(
       bucketSpec: BucketSpec,
       readFile: (PartitionedFile) => Iterator[InternalRow],
-      selectedPartitions: Array[PartitionDirectory],
-      fsRelation: HadoopFsRelation): RDD[InternalRow] = {
-    logInfo(s"Planning with ${bucketSpec.numBuckets} buckets")
-    val filesGroupedToBuckets =
-      selectedPartitions.flatMap { p =>
-        p.files.map { f =>
-          PartitionedFileUtil.getPartitionedFile(f, f.getPath, p.values)
-        }
-      }.groupBy { f =>
-        BucketingUtils
-          .getBucketId(new Path(f.filePath).getName)
-          .getOrElse(throw new IllegalStateException(s"Invalid bucket file ${f.filePath}"))
-      }
+      selectedPartitions: ScanFileListing): RDD[InternalRow] = {
+    logInfo(log"Planning with ${MDC(COUNT, bucketSpec.numBuckets)} buckets")
+    val partitionArray = selectedPartitions.toPartitionArray
+    val filesGroupedToBuckets = partitionArray.groupBy { f =>
+      BucketingUtils
+        .getBucketId(f.toPath.getName)
+        .getOrElse(throw QueryExecutionErrors.invalidBucketFile(f.urlEncodedPath))
+    }
 
     val prunedFilesGroupedToBuckets = if (optionalBucketSet.isDefined) {
       val bucketSet = optionalBucketSet.get
@@ -605,7 +819,7 @@ case class FileSourceScanExec(
     }
 
     val filePartitions = optionalNumCoalescedBuckets.map { numCoalescedBuckets =>
-      logInfo(s"Coalescing to ${numCoalescedBuckets} buckets")
+      logInfo(log"Coalescing to ${MDC(COUNT, numCoalescedBuckets)} buckets")
       val coalescedBuckets = prunedFilesGroupedToBuckets.groupBy(_._1 % numCoalescedBuckets)
       Seq.tabulate(numCoalescedBuckets) { bucketId =>
         val partitionedFiles = coalescedBuckets.get(bucketId).map {
@@ -619,8 +833,10 @@ case class FileSourceScanExec(
       }
     }
 
-    new FileScanRDD(fsRelation.sparkSession, readFile, filePartitions,
-      requiredSchema, metadataColumns)
+    new FileScanRDD(relation.sparkSession, readFile, filePartitions,
+      new StructType(requiredSchema.fields ++ relation.partitionSchema.fields),
+      fileConstantMetadataColumns, relation.fileFormat.fileConstantMetadataExtractors,
+      new FileSourceOptions(CaseInsensitiveMap(relation.options)))
   }
 
   /**
@@ -629,20 +845,19 @@ case class FileSourceScanExec(
    *
    * @param readFile a function to read each (part of a) file.
    * @param selectedPartitions Hive-style partition that are part of the read.
-   * @param fsRelation [[HadoopFsRelation]] associated with the read.
    */
   private def createReadRDD(
-      readFile: (PartitionedFile) => Iterator[InternalRow],
-      selectedPartitions: Array[PartitionDirectory],
-      fsRelation: HadoopFsRelation): RDD[InternalRow] = {
-    val openCostInBytes = fsRelation.sparkSession.sessionState.conf.filesOpenCostInBytes
+      readFile: PartitionedFile => Iterator[InternalRow],
+      selectedPartitions: ScanFileListing): RDD[InternalRow] = {
+    val openCostInBytes = getSqlConf(relation.sparkSession).filesOpenCostInBytes
     val maxSplitBytes =
-      FilePartition.maxSplitBytes(fsRelation.sparkSession, selectedPartitions)
-    logInfo(s"Planning scan with bin packing, max size: $maxSplitBytes bytes, " +
-      s"open cost is considered as scanning $openCostInBytes bytes.")
+      FilePartition.maxSplitBytes(relation.sparkSession, selectedPartitions)
+    logInfo(log"Planning scan with bin packing, max size: ${MDC(MAX_SPLIT_BYTES, maxSplitBytes)} " +
+      log"bytes, open cost is considered as scanning ${MDC(OPEN_COST_IN_BYTES, openCostInBytes)} " +
+      log"bytes.")
 
     // Filter files with bucket pruning if possible
-    val bucketingEnabled = fsRelation.sparkSession.sessionState.conf.bucketingEnabled
+    val bucketingEnabled = getSqlConf(relation.sparkSession).bucketingEnabled
     val shouldProcess: Path => Boolean = optionalBucketSet match {
       case Some(bucketSet) if bucketingEnabled =>
         // Do not prune the file if bucket file name is invalid
@@ -651,33 +866,34 @@ case class FileSourceScanExec(
         _ => true
     }
 
-    val splitFiles = selectedPartitions.flatMap { partition =>
-      partition.files.flatMap { file =>
+    val splitFiles = selectedPartitions.filePartitionIterator.flatMap { partition =>
+      val ListingPartition(partitionVals, _, fileStatusIterator) = partition
+      fileStatusIterator.flatMap { file =>
         // getPath() is very expensive so we only want to call it once in this block:
         val filePath = file.getPath
-
         if (shouldProcess(filePath)) {
           val isSplitable = relation.fileFormat.isSplitable(
-            relation.sparkSession, relation.options, filePath)
+              relation.sparkSession, relation.options, filePath)
           PartitionedFileUtil.splitFiles(
-            sparkSession = relation.sparkSession,
             file = file,
             filePath = filePath,
             isSplitable = isSplitable,
             maxSplitBytes = maxSplitBytes,
-            partitionValues = partition.values
+            partitionValues = partitionVals
           )
         } else {
           Seq.empty
         }
       }
-    }.sortBy(_.length)(implicitly[Ordering[Long]].reverse)
+    }.toArray.sortBy(_.length)(implicitly[Ordering[Long]].reverse)
 
-    val partitions =
-      FilePartition.getFilePartitions(relation.sparkSession, splitFiles, maxSplitBytes)
+    val partitions = FilePartition
+      .getFilePartitions(relation.sparkSession, splitFiles.toImmutableArraySeq, maxSplitBytes)
 
-    new FileScanRDD(fsRelation.sparkSession, readFile, partitions,
-      requiredSchema, metadataColumns)
+    new FileScanRDD(relation.sparkSession, readFile, partitions,
+      new StructType(requiredSchema.fields ++ relation.partitionSchema.fields),
+      fileConstantMetadataColumns, relation.fileFormat.fileConstantMetadataExtractors,
+      new FileSourceOptions(CaseInsensitiveMap(relation.options)))
   }
 
   // Filters unused DynamicPruningExpression expressions - one which has been replaced
@@ -690,6 +906,9 @@ case class FileSourceScanExec(
   override def doCanonicalize(): FileSourceScanExec = {
     FileSourceScanExec(
       relation,
+      // remove stream on canonicalization; this is needed for reused shuffle to be effective in
+      // self-join
+      None,
       output.map(QueryPlan.normalizeExpressions(_, output)),
       requiredSchema,
       QueryPlan.normalizePredicates(
@@ -700,4 +919,6 @@ case class FileSourceScanExec(
       None,
       disableBucketedScan)
   }
+
+  override def getStream: Option[SparkDataStream] = stream
 }

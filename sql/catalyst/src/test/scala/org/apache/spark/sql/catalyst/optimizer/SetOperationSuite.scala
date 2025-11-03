@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.expressions.{And, GreaterThan, GreaterThanO
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{BooleanType, DecimalType}
 
 class SetOperationSuite extends PlanTest {
@@ -81,11 +82,11 @@ class SetOperationSuite extends PlanTest {
 
   test("Remove unnecessary distincts in multiple unions") {
     val query1 = OneRowRelation()
-      .select(Literal(1).as(Symbol("a")))
+      .select(Literal(1).as("a"))
     val query2 = OneRowRelation()
-      .select(Literal(2).as(Symbol("b")))
+      .select(Literal(2).as("b"))
     val query3 = OneRowRelation()
-      .select(Literal(3).as(Symbol("c")))
+      .select(Literal(3).as("c"))
 
     // D - U - D - U - query1
     //     |       |
@@ -113,13 +114,13 @@ class SetOperationSuite extends PlanTest {
 
   test("Keep necessary distincts in multiple unions") {
     val query1 = OneRowRelation()
-      .select(Literal(1).as(Symbol("a")))
+      .select(Literal(1).as("a"))
     val query2 = OneRowRelation()
-      .select(Literal(2).as(Symbol("b")))
+      .select(Literal(2).as("b"))
     val query3 = OneRowRelation()
-      .select(Literal(3).as(Symbol("c")))
+      .select(Literal(3).as("c"))
     val query4 = OneRowRelation()
-      .select(Literal(4).as(Symbol("d")))
+      .select(Literal(4).as("d"))
 
     // U - D - U - query1
     // |       |
@@ -148,11 +149,11 @@ class SetOperationSuite extends PlanTest {
 
   test("SPARK-34283: Remove unnecessary deduplicate in multiple unions") {
     val query1 = OneRowRelation()
-      .select(Literal(1).as(Symbol("a")))
+      .select(Literal(1).as("a"))
     val query2 = OneRowRelation()
-      .select(Literal(2).as(Symbol("b")))
+      .select(Literal(2).as("b"))
     val query3 = OneRowRelation()
-      .select(Literal(3).as(Symbol("c")))
+      .select(Literal(3).as("c"))
 
     // D - U - D - U - query1
     //     |       |
@@ -195,13 +196,13 @@ class SetOperationSuite extends PlanTest {
 
   test("SPARK-34283: Keep necessary deduplicate in multiple unions") {
     val query1 = OneRowRelation()
-      .select(Literal(1).as(Symbol("a")))
+      .select(Literal(1).as("a"))
     val query2 = OneRowRelation()
-      .select(Literal(2).as(Symbol("b")))
+      .select(Literal(2).as("b"))
     val query3 = OneRowRelation()
-      .select(Literal(3).as(Symbol("c")))
+      .select(Literal(3).as("c"))
     val query4 = OneRowRelation()
-      .select(Literal(4).as(Symbol("d")))
+      .select(Literal(4).as("d"))
 
     // U - D - U - query1
     // |       |
@@ -311,6 +312,27 @@ class SetOperationSuite extends PlanTest {
     val unionOptimized = Optimize.execute(unionQuery.analyze)
     val unionCorrectAnswer = unionQuery.analyze
     comparePlans(unionOptimized, unionCorrectAnswer)
+  }
+
+  test("SPARK-52686: no pushdown if project has duplicate expression IDs") {
+    val unionQuery = testUnion.select($"a", $"a")
+    val unionCorrectAnswerWithConfOn = unionQuery.analyze
+    val unionCorrectAnswerWithConfOff = Union(
+      testRelation.select($"a", $"a").analyze ::
+      testRelation2.select($"d", $"d").analyze ::
+      testRelation3.select($"g", $"g").analyze ::
+      Nil
+    )
+
+    withSQLConf(SQLConf.UNION_IS_RESOLVED_WHEN_DUPLICATES_PER_CHILD_RESOLVED.key -> "true") {
+      val unionOptimized = Optimize.execute(unionQuery.analyze)
+      comparePlans(unionOptimized, unionCorrectAnswerWithConfOn)
+    }
+
+    withSQLConf(SQLConf.UNION_IS_RESOLVED_WHEN_DUPLICATES_PER_CHILD_RESOLVED.key -> "false") {
+      val unionOptimized = Optimize.execute(unionQuery.analyze)
+      comparePlans(unionOptimized, unionCorrectAnswerWithConfOff)
+    }
   }
 
   test("CombineUnions only flatten the unions with same byName and allowMissingCol") {

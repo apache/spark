@@ -38,7 +38,7 @@ class CoalescedPartitioner(val parent: Partitioner, val partitionStartIndices: A
   @transient private lazy val parentPartitionMapping: Array[Int] = {
     val n = parent.numPartitions
     val result = new Array[Int](n)
-    for (i <- 0 until partitionStartIndices.length) {
+    for (i <- partitionStartIndices.indices) {
       val start = partitionStartIndices(i)
       val end = if (i < partitionStartIndices.length - 1) partitionStartIndices(i + 1) else n
       for (j <- start until end) {
@@ -48,7 +48,7 @@ class CoalescedPartitioner(val parent: Partitioner, val partitionStartIndices: A
     result
   }
 
-  override def numPartitions: Int = partitionStartIndices.size
+  override def numPartitions: Int = partitionStartIndices.length
 
   override def getPartition(key: Any): Int = {
     parentPartitionMapping(parent.getPartition(key))

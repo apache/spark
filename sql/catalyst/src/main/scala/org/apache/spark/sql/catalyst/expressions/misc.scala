@@ -17,15 +17,17 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.{SPARK_REVISION, SPARK_VERSION_SHORT}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.UnresolvedSeed
+import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, FunctionRegistry, UnresolvedSeed}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.trees.TreePattern.{CURRENT_LIKE, TreePattern}
-import org.apache.spark.sql.catalyst.util.RandomUUIDGenerator
+import org.apache.spark.sql.catalyst.util.{toPrettySQL, MapData, RandomUUIDGenerator}
+import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.errors.QueryExecutionErrors.raiseError
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.types.{AbstractMapType, StringTypeWithCollation}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -60,65 +62,106 @@ case class PrintToStderr(child: Expression) extends UnaryExpression {
 
 /**
  * Throw with the result of an expression (used for debugging).
+ * Caller can specify the errorClass to be thrown and parameters to be passed to this error class.
+ * Default is to throw USER_RAISED_EXCEPTION with provided string literal.
  */
-@ExpressionDescription(
-  usage = "_FUNC_(expr) - Throws an exception with `expr`.",
-  examples = """
-    Examples:
-      > SELECT _FUNC_('custom error message');
-       java.lang.RuntimeException
-       custom error message
-  """,
-  since = "3.1.0",
-  group = "misc_funcs")
-case class RaiseError(child: Expression, dataType: DataType)
-  extends UnaryExpression with ImplicitCastInputTypes {
+case class RaiseError(errorClass: Expression, errorParms: Expression, dataType: DataType)
+  extends BinaryExpression with ImplicitCastInputTypes {
 
-  def this(child: Expression) = this(child, NullType)
+  def this(str: Expression) = {
+    this(Literal(
+      if (SQLConf.get.getConf(SQLConf.LEGACY_RAISE_ERROR_WITHOUT_ERROR_CLASS)) {
+        "_LEGACY_ERROR_USER_RAISED_EXCEPTION"
+      } else {
+        "USER_RAISED_EXCEPTION"
+      }),
+      CreateMap(Seq(Literal("errorMessage"), str)), NullType)
+  }
+
+  def this(errorClass: Expression, errorParms: Expression) = {
+    this(errorClass, errorParms, NullType)
+  }
 
   override def foldable: Boolean = false
   override def nullable: Boolean = true
-  override def inputTypes: Seq[AbstractDataType] = Seq(StringType)
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(
+      StringTypeWithCollation(supportsTrimCollation = true),
+      AbstractMapType(
+        StringTypeWithCollation(supportsTrimCollation = true),
+        StringTypeWithCollation(supportsTrimCollation = true)
+      ))
+
+  override def left: Expression = errorClass
+  override def right: Expression = errorParms
 
   override def prettyName: String = "raise_error"
 
   override def eval(input: InternalRow): Any = {
-    val value = child.eval(input)
-    if (value == null) {
-      throw new RuntimeException()
-    }
-    throw new RuntimeException(value.toString)
+    val error = errorClass.eval(input).asInstanceOf[UTF8String]
+    val parms: MapData = errorParms.eval(input).asInstanceOf[MapData]
+    throw raiseError(error, parms)
   }
 
   // if (true) is to avoid codegen compilation exception that statement is unreachable
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val eval = child.genCode(ctx)
+    val error = errorClass.genCode(ctx)
+    val parms = errorParms.genCode(ctx)
     ExprCode(
-      code = code"""${eval.code}
+      code = code"""${error.code}
+        |${parms.code}
         |if (true) {
-        |  if (${eval.isNull}) {
-        |    throw new RuntimeException();
-        |  }
-        |  throw new RuntimeException(${eval.value}.toString());
+        |  throw QueryExecutionErrors.raiseError(
+        |    ${error.value},
+        |    ${parms.value});
         |}""".stripMargin,
       isNull = TrueLiteral,
       value = JavaCode.defaultLiteral(dataType)
     )
   }
 
-  override protected def withNewChildInternal(newChild: Expression): RaiseError =
-    copy(child = newChild)
+  override protected def withNewChildrenInternal(
+    newLeft: Expression, newRight: Expression): RaiseError = {
+    copy(errorClass = newLeft, errorParms = newRight)
+  }
 }
 
 object RaiseError {
-  def apply(child: Expression): RaiseError = new RaiseError(child)
+  def apply(str: Expression): RaiseError = new RaiseError(str)
+
+  def apply(errorClass: Expression, parms: Expression): RaiseError =
+    new RaiseError(errorClass, parms)
+}
+
+/**
+ * Throw with the result of an expression (used for debugging).
+ */
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_( expr ) - Throws a USER_RAISED_EXCEPTION with `expr` as message.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_('custom error message');
+       [USER_RAISED_EXCEPTION] custom error message
+  """,
+  since = "3.1.0",
+  group = "misc_funcs")
+// scalastyle:on line.size.limit
+object RaiseErrorExpressionBuilder extends ExpressionBuilder {
+  override def build(funcName: String, expressions: Seq[Expression]): Expression = {
+    if (expressions.length != 1) {
+      throw QueryCompilationErrors.wrongNumArgsError(funcName, Seq(1), expressions.length)
+    } else {
+      RaiseError(expressions.head)
+    }
+  }
 }
 
 /**
  * A function that throws an exception if 'condition' is not true.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(expr) - Throws an exception if `expr` is not true.",
+  usage = "_FUNC_(expr [, message]) - Throws an exception if `expr` is not true.",
   examples = """
     Examples:
       > SELECT _FUNC_(0 < 1);
@@ -136,7 +179,7 @@ case class AssertTrue(left: Expression, right: Expression, replacement: Expressi
   }
 
   def this(left: Expression) = {
-    this(left, Literal(s"'${left.simpleString(SQLConf.get.maxToStringFields)}' is not true!"))
+    this(left, Literal(s"'${toPrettySQL(left)}' is not true!"))
   }
 
   override def parameters: Seq[Expression] = Seq(left, right)
@@ -161,10 +204,12 @@ object AssertTrue {
   """,
   since = "1.6.0",
   group = "misc_funcs")
-case class CurrentDatabase() extends LeafExpression with Unevaluable {
-  override def dataType: DataType = StringType
+case class CurrentDatabase()
+  extends LeafExpression
+  with DefaultStringProducingExpression
+  with Unevaluable {
   override def nullable: Boolean = false
-  override def prettyName: String = "current_database"
+  override def prettyName: String = "current_schema"
   final override val nodePatterns: Seq[TreePattern] = Seq(CURRENT_LIKE)
 }
 
@@ -180,8 +225,10 @@ case class CurrentDatabase() extends LeafExpression with Unevaluable {
   """,
   since = "3.1.0",
   group = "misc_funcs")
-case class CurrentCatalog() extends LeafExpression with Unevaluable {
-  override def dataType: DataType = StringType
+case class CurrentCatalog()
+  extends LeafExpression
+  with DefaultStringProducingExpression
+  with Unevaluable {
   override def nullable: Boolean = false
   override def prettyName: String = "current_catalog"
   final override val nodePatterns: Seq[TreePattern] = Seq(CURRENT_LIKE)
@@ -201,20 +248,25 @@ case class CurrentCatalog() extends LeafExpression with Unevaluable {
   since = "2.3.0",
   group = "misc_funcs")
 // scalastyle:on line.size.limit
-case class Uuid(randomSeed: Option[Long] = None) extends LeafExpression with Stateful
-    with ExpressionWithRandomSeed {
+case class Uuid(randomSeed: Option[Long] = None) extends LeafExpression with Nondeterministic
+  with DefaultStringProducingExpression
+  with ExpressionWithRandomSeed {
 
   def this() = this(None)
+
+  def this(seed: Expression) = this(ExpressionWithRandomSeed.expressionToSeed(seed, "UUID"))
 
   override def seedExpression: Expression = randomSeed.map(Literal.apply).getOrElse(UnresolvedSeed)
 
   override def withNewSeed(seed: Long): Uuid = Uuid(Some(seed))
 
+  override def withShiftedSeed(shift: Long): Uuid = Uuid(randomSeed.map(_ + shift))
+
   override lazy val resolved: Boolean = randomSeed.isDefined
 
   override def nullable: Boolean = false
 
-  override def dataType: DataType = StringType
+  override def stateful: Boolean = true
 
   @transient private[this] var randomGenerator: RandomUUIDGenerator = _
 
@@ -235,8 +287,6 @@ case class Uuid(randomSeed: Option[Long] = None) extends LeafExpression with Sta
     ev.copy(code = code"final UTF8String ${ev.value} = $randomGen.getNextUUIDUTF8String();",
       isNull = FalseLiteral)
   }
-
-  override def freshCopy(): Uuid = Uuid(randomSeed)
 }
 
 // scalastyle:off line.size.limit
@@ -250,14 +300,17 @@ case class Uuid(randomSeed: Option[Long] = None) extends LeafExpression with Sta
   since = "3.0.0",
   group = "misc_funcs")
 // scalastyle:on line.size.limit
-case class SparkVersion() extends LeafExpression with CodegenFallback {
-  override def nullable: Boolean = false
-  override def foldable: Boolean = true
-  override def dataType: DataType = StringType
+case class SparkVersion()
+  extends LeafExpression
+  with RuntimeReplaceable
+  with DefaultStringProducingExpression {
   override def prettyName: String = "version"
-  override def eval(input: InternalRow): Any = {
-    UTF8String.fromString(SPARK_VERSION_SHORT + " " + SPARK_REVISION)
-  }
+
+  override lazy val replacement: Expression = StaticInvoke(
+    classOf[ExpressionImplUtils],
+    dataType,
+    "getSparkVersion",
+    returnNullable = false)
 }
 
 @ExpressionDescription(
@@ -271,10 +324,10 @@ case class SparkVersion() extends LeafExpression with CodegenFallback {
   """,
   since = "3.0.0",
   group = "misc_funcs")
-case class TypeOf(child: Expression) extends UnaryExpression {
+case class TypeOf(child: Expression) extends UnaryExpression with DefaultStringProducingExpression {
   override def nullable: Boolean = false
   override def foldable: Boolean = true
-  override def dataType: DataType = StringType
+  override def contextIndependentFoldable: Boolean = true
   override def eval(input: InternalRow): Any = UTF8String.fromString(child.dataType.catalogString)
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -295,25 +348,28 @@ case class TypeOf(child: Expression) extends UnaryExpression {
   since = "3.2.0",
   group = "misc_funcs")
 // scalastyle:on line.size.limit
-case class CurrentUser() extends LeafExpression with Unevaluable {
+case class CurrentUser()
+  extends LeafExpression
+  with DefaultStringProducingExpression
+  with Unevaluable {
   override def nullable: Boolean = false
-  override def dataType: DataType = StringType
-  override def prettyName: String = "current_user"
+  override def prettyName: String =
+    getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("current_user")
   final override val nodePatterns: Seq[TreePattern] = Seq(CURRENT_LIKE)
 }
 
 /**
  * A function that encrypts input using AES. Key lengths of 128, 192 or 256 bits can be used.
- * For versions prior to JDK 8u161, 192 and 256 bits keys can be used
- * if Java Cryptography Extension (JCE) Unlimited Strength Jurisdiction Policy Files are installed.
  * If either argument is NULL or the key length is not one of the permitted values,
  * the return value is NULL.
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = """
-    _FUNC_(expr, key[, mode[, padding]]) - Returns an encrypted value of `expr` using AES in given `mode` with the specified `padding`.
-      Key lengths of 16, 24 and 32 bits are supported. Supported combinations of (`mode`, `padding`) are ('ECB', 'PKCS') and ('GCM', 'NONE').
+    _FUNC_(expr, key[, mode[, padding[, iv[, aad]]]]) - Returns an encrypted value of `expr` using AES in given `mode` with the specified `padding`.
+      Key lengths of 16, 24 and 32 bits are supported. Supported combinations of (`mode`, `padding`) are ('ECB', 'PKCS'), ('GCM', 'NONE') and ('CBC', 'PKCS').
+      Optional initialization vectors (IVs) are only supported for CBC and GCM modes. These must be 16 bytes for CBC and 12 bytes for GCM. If not provided, a random vector will be generated and prepended to the output.
+      Optional additional authenticated data (AAD) is only supported for GCM. If provided for encryption, the identical AAD value must be provided for decryption.
       The default mode is GCM.
   """,
   arguments = """
@@ -321,9 +377,13 @@ case class CurrentUser() extends LeafExpression with Unevaluable {
       * expr - The binary value to encrypt.
       * key - The passphrase to use to encrypt the data.
       * mode - Specifies which block cipher mode should be used to encrypt messages.
-               Valid modes: ECB, GCM.
+               Valid modes: ECB, GCM, CBC.
       * padding - Specifies how to pad messages whose length is not a multiple of the block size.
-                  Valid values: PKCS, NONE, DEFAULT. The DEFAULT padding means PKCS for ECB and NONE for GCM.
+                  Valid values: PKCS, NONE, DEFAULT. The DEFAULT padding means PKCS for ECB, NONE for GCM and PKCS for CBC.
+      * iv - Optional initialization vector. Only supported for CBC and GCM modes.
+             Valid values: None or ''. 16-byte array for CBC mode. 12-byte array for GCM mode.
+      * aad - Optional additional authenticated data. Only supported for GCM mode. This can be any free-form input and
+              must be provided for both encryption and decryption.
   """,
   examples = """
     Examples:
@@ -333,6 +393,12 @@ case class CurrentUser() extends LeafExpression with Unevaluable {
        6E7CA17BBB468D3084B5744BCA729FB7B2B7BCB8E4472847D02670489D95FA97DBBA7D3210
       > SELECT base64(_FUNC_('Spark SQL', '1234567890abcdef', 'ECB', 'PKCS'));
        3lmwu+Mw0H3fi5NDvcu9lg==
+      > SELECT base64(_FUNC_('Apache Spark', '1234567890abcdef', 'CBC', 'DEFAULT'));
+       2NYmDCjgXTbbxGA3/SnJEfFC/JQ7olk2VQWReIAAFKo=
+      > SELECT base64(_FUNC_('Spark', 'abcdefghijklmnop12345678ABCDEFGH', 'CBC', 'DEFAULT', unhex('00000000000000000000000000000000')));
+       AAAAAAAAAAAAAAAAAAAAAPSd4mWyMZ5mhvjiAPQJnfg=
+      > SELECT base64(_FUNC_('Spark', 'abcdefghijklmnop12345678ABCDEFGH', 'GCM', 'DEFAULT', unhex('000000000000000000000000'), 'This is an AAD mixed into the input'));
+       AAAAAAAAAAAAAAAAQiYi+sTLm7KD9UcZ2nlRdYDe/PX4
   """,
   since = "3.3.0",
   group = "misc_funcs")
@@ -340,16 +406,22 @@ case class AesEncrypt(
     input: Expression,
     key: Expression,
     mode: Expression,
-    padding: Expression)
+    padding: Expression,
+    iv: Expression,
+    aad: Expression)
   extends RuntimeReplaceable with ImplicitCastInputTypes {
 
   override lazy val replacement: Expression = StaticInvoke(
     classOf[ExpressionImplUtils],
     BinaryType,
     "aesEncrypt",
-    Seq(input, key, mode, padding),
+    Seq(input, key, mode, padding, iv, aad),
     inputTypes)
 
+  def this(input: Expression, key: Expression, mode: Expression, padding: Expression, iv: Expression) =
+    this(input, key, mode, padding, iv, Literal(""))
+  def this(input: Expression, key: Expression, mode: Expression, padding: Expression) =
+    this(input, key, mode, padding, Literal(""))
   def this(input: Expression, key: Expression, mode: Expression) =
     this(input, key, mode, Literal("DEFAULT"))
   def this(input: Expression, key: Expression) =
@@ -357,27 +429,30 @@ case class AesEncrypt(
 
   override def prettyName: String = "aes_encrypt"
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(BinaryType, BinaryType, StringType, StringType)
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(BinaryType, BinaryType,
+      StringTypeWithCollation(supportsTrimCollation = true),
+      StringTypeWithCollation(supportsTrimCollation = true),
+      BinaryType, BinaryType)
 
-  override def children: Seq[Expression] = Seq(input, key, mode, padding)
+  override def children: Seq[Expression] = Seq(input, key, mode, padding, iv, aad)
 
   override protected def withNewChildrenInternal(
       newChildren: IndexedSeq[Expression]): Expression = {
-    copy(newChildren(0), newChildren(1), newChildren(2), newChildren(3))
+    copy(newChildren(0), newChildren(1), newChildren(2), newChildren(3), newChildren(4), newChildren(5))
   }
 }
 
 /**
  * A function that decrypts input using AES. Key lengths of 128, 192 or 256 bits can be used.
- * For versions prior to JDK 8u161, 192 and 256 bits keys can be used
- * if Java Cryptography Extension (JCE) Unlimited Strength Jurisdiction Policy Files are installed.
  * If either argument is NULL or the key length is not one of the permitted values,
  * the return value is NULL.
  */
 @ExpressionDescription(
   usage = """
-    _FUNC_(expr, key[, mode[, padding]]) - Returns a decrypted value of `expr` using AES in `mode` with `padding`.
-      Key lengths of 16, 24 and 32 bits are supported. Supported combinations of (`mode`, `padding`) are ('ECB', 'PKCS') and ('GCM', 'NONE').
+    _FUNC_(expr, key[, mode[, padding[, aad]]]) - Returns a decrypted value of `expr` using AES in `mode` with `padding`.
+      Key lengths of 16, 24 and 32 bits are supported. Supported combinations of (`mode`, `padding`) are ('ECB', 'PKCS'), ('GCM', 'NONE') and ('CBC', 'PKCS').
+      Optional additional authenticated data (AAD) is only supported for GCM. If provided for encryption, the identical AAD value must be provided for decryption.
       The default mode is GCM.
   """,
   arguments = """
@@ -385,9 +460,11 @@ case class AesEncrypt(
       * expr - The binary value to decrypt.
       * key - The passphrase to use to decrypt the data.
       * mode - Specifies which block cipher mode should be used to decrypt messages.
-               Valid modes: ECB, GCM.
+               Valid modes: ECB, GCM, CBC.
       * padding - Specifies how to pad messages whose length is not a multiple of the block size.
-                  Valid values: PKCS, NONE, DEFAULT. The DEFAULT padding means PKCS for ECB and NONE for GCM.
+                  Valid values: PKCS, NONE, DEFAULT. The DEFAULT padding means PKCS for ECB, NONE for GCM and PKCS for CBC.
+      * aad - Optional additional authenticated data. Only supported for GCM mode. This can be any free-form input and
+              must be provided for both encryption and decryption.
   """,
   examples = """
     Examples:
@@ -397,6 +474,12 @@ case class AesEncrypt(
        Spark SQL
       > SELECT _FUNC_(unbase64('3lmwu+Mw0H3fi5NDvcu9lg=='), '1234567890abcdef', 'ECB', 'PKCS');
        Spark SQL
+      > SELECT _FUNC_(unbase64('2NYmDCjgXTbbxGA3/SnJEfFC/JQ7olk2VQWReIAAFKo='), '1234567890abcdef', 'CBC');
+       Apache Spark
+      > SELECT _FUNC_(unbase64('AAAAAAAAAAAAAAAAAAAAAPSd4mWyMZ5mhvjiAPQJnfg='), 'abcdefghijklmnop12345678ABCDEFGH', 'CBC', 'DEFAULT');
+       Spark
+      > SELECT _FUNC_(unbase64('AAAAAAAAAAAAAAAAQiYi+sTLm7KD9UcZ2nlRdYDe/PX4'), 'abcdefghijklmnop12345678ABCDEFGH', 'GCM', 'DEFAULT', 'This is an AAD mixed into the input');
+       Spark
   """,
   since = "3.3.0",
   group = "misc_funcs")
@@ -404,32 +487,79 @@ case class AesDecrypt(
     input: Expression,
     key: Expression,
     mode: Expression,
-    padding: Expression)
+    padding: Expression,
+    aad: Expression)
   extends RuntimeReplaceable with ImplicitCastInputTypes {
 
   override lazy val replacement: Expression = StaticInvoke(
     classOf[ExpressionImplUtils],
     BinaryType,
     "aesDecrypt",
-    Seq(input, key, mode, padding),
+    Seq(input, key, mode, padding, aad),
     inputTypes)
 
+  def this(input: Expression, key: Expression, mode: Expression, padding: Expression) =
+    this(input, key, mode, padding, Literal(""))
   def this(input: Expression, key: Expression, mode: Expression) =
     this(input, key, mode, Literal("DEFAULT"))
   def this(input: Expression, key: Expression) =
     this(input, key, Literal("GCM"))
 
   override def inputTypes: Seq[AbstractDataType] = {
-    Seq(BinaryType, BinaryType, StringType, StringType)
+    Seq(BinaryType,
+      BinaryType,
+      StringTypeWithCollation(supportsTrimCollation = true),
+      StringTypeWithCollation(supportsTrimCollation = true), BinaryType)
   }
 
   override def prettyName: String = "aes_decrypt"
 
-  override def children: Seq[Expression] = Seq(input, key, mode, padding)
+  override def children: Seq[Expression] = Seq(input, key, mode, padding, aad)
 
   override protected def withNewChildrenInternal(
       newChildren: IndexedSeq[Expression]): Expression = {
-    copy(newChildren(0), newChildren(1), newChildren(2), newChildren(3))
+    copy(newChildren(0), newChildren(1), newChildren(2), newChildren(3), newChildren(4))
   }
+}
+
+@ExpressionDescription(
+  usage = "_FUNC_(expr, key[, mode[, padding[, aad]]]) - This is a special version of `aes_decrypt` that performs the same operation, but returns a NULL value instead of raising an error if the decryption cannot be performed.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(unhex('6E7CA17BBB468D3084B5744BCA729FB7B2B7BCB8E4472847D02670489D95FA97DBBA7D3210'), '0000111122223333', 'GCM');
+       Spark SQL
+      > SELECT _FUNC_(unhex('----------468D3084B5744BCA729FB7B2B7BCB8E4472847D02670489D95FA97DBBA7D3210'), '0000111122223333', 'GCM');
+       NULL
+  """,
+  since = "3.5.0",
+  group = "misc_funcs")
+// scalastyle:on line.size.limit
+case class TryAesDecrypt(
+    input: Expression,
+    key: Expression,
+    mode: Expression,
+    padding: Expression,
+    aad: Expression,
+    replacement: Expression) extends RuntimeReplaceable with InheritAnalysisRules {
+
+  def this(input: Expression,
+           key: Expression,
+           mode: Expression,
+           padding: Expression,
+           aad: Expression) =
+    this(input, key, mode, padding, aad, TryEval(AesDecrypt(input, key, mode, padding, aad)))
+  def this(input: Expression, key: Expression, mode: Expression, padding: Expression) =
+    this(input, key, mode, padding, Literal(""))
+  def this(input: Expression, key: Expression, mode: Expression) =
+    this(input, key, mode, Literal("DEFAULT"))
+  def this(input: Expression, key: Expression) =
+    this(input, key, Literal("GCM"))
+
+  override def prettyName: String = "try_aes_decrypt"
+
+  override def parameters: Seq[Expression] = Seq(input, key, mode, padding, aad)
+
+  override protected def withNewChildInternal(newChild: Expression): Expression =
+    this.copy(replacement = newChild)
 }
 // scalastyle:on line.size.limit

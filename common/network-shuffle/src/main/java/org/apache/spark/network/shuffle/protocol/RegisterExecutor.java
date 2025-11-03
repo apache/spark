@@ -20,8 +20,6 @@ package org.apache.spark.network.shuffle.protocol;
 import java.util.Objects;
 
 import io.netty.buffer.ByteBuf;
-import org.apache.commons.lang3.builder.ToStringBuilder;
-import org.apache.commons.lang3.builder.ToStringStyle;
 
 import org.apache.spark.network.protocol.Encoders;
 
@@ -56,17 +54,13 @@ public class RegisterExecutor extends BlockTransferMessage {
 
   @Override
   public String toString() {
-    return new ToStringBuilder(this, ToStringStyle.SHORT_PREFIX_STYLE)
-      .append("appId", appId)
-      .append("execId", execId)
-      .append("executorInfo", executorInfo)
-      .toString();
+    return "RegisterExecutor[appId=" + appId + ", execId=" + execId +
+        ",executorInfo=" + executorInfo + "]";
   }
 
   @Override
   public boolean equals(Object other) {
-    if (other instanceof RegisterExecutor) {
-      RegisterExecutor o = (RegisterExecutor) other;
+    if (other instanceof RegisterExecutor o) {
       return Objects.equals(appId, o.appId)
         && Objects.equals(execId, o.execId)
         && Objects.equals(executorInfo, o.executorInfo);

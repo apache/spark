@@ -40,12 +40,19 @@ private[spark] class Heartbeater(
   /** Schedules a task to report a heartbeat. */
   def start(): Unit = {
     // Wait a random interval so the heartbeats don't end up in sync
-    val initialDelay = intervalMs + (math.random * intervalMs).asInstanceOf[Int]
+    val initialDelay = intervalMs + (math.random() * intervalMs).asInstanceOf[Int]
 
     val heartbeatTask = new Runnable() {
       override def run(): Unit = Utils.logUncaughtExceptions(reportHeartbeat())
     }
     heartbeater.scheduleAtFixedRate(heartbeatTask, initialDelay, intervalMs, TimeUnit.MILLISECONDS)
+  }
+
+  /**
+   * Reports a heartbeat.
+   */
+  def doReportHeartbeat(): Unit = {
+    reportHeartbeat()
   }
 
   /** Stops the heartbeat thread. */

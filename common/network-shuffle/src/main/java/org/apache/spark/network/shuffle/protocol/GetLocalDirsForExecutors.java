@@ -21,8 +21,6 @@ import java.util.Arrays;
 import java.util.Objects;
 
 import io.netty.buffer.ByteBuf;
-import org.apache.commons.lang3.builder.ToStringBuilder;
-import org.apache.commons.lang3.builder.ToStringStyle;
 
 import org.apache.spark.network.protocol.Encoders;
 
@@ -49,16 +47,12 @@ public class GetLocalDirsForExecutors extends BlockTransferMessage {
 
   @Override
   public String toString() {
-    return new ToStringBuilder(this, ToStringStyle.SHORT_PREFIX_STYLE)
-      .append("appId", appId)
-      .append("execIds", Arrays.toString(execIds))
-      .toString();
+    return "GetLocalDirsForExecutors[appId=" + appId + ",execIds=" + Arrays.toString(execIds) + "]";
   }
 
   @Override
   public boolean equals(Object other) {
-    if (other instanceof GetLocalDirsForExecutors) {
-      GetLocalDirsForExecutors o = (GetLocalDirsForExecutors) other;
+    if (other instanceof GetLocalDirsForExecutors o) {
       return appId.equals(o.appId) && Arrays.equals(execIds, o.execIds);
     }
     return false;

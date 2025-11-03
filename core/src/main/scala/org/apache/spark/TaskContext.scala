@@ -17,7 +17,7 @@
 
 package org.apache.spark
 
-import java.io.Serializable
+import java.io.Closeable
 import java.util.Properties
 
 import org.apache.spark.annotation.{DeveloperApi, Evolving, Since}
@@ -25,6 +25,7 @@ import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.memory.TaskMemoryManager
 import org.apache.spark.metrics.source.Source
 import org.apache.spark.resource.ResourceInformation
+import org.apache.spark.scheduler.Task
 import org.apache.spark.shuffle.FetchFailedException
 import org.apache.spark.util.{AccumulatorV2, TaskCompletionListener, TaskFailureListener}
 
@@ -46,6 +47,15 @@ object TaskContext {
       0
     } else {
       tc.partitionId()
+    }
+  }
+
+  def withTaskContext[T](context: TaskContext)(task: => T): T = {
+    try {
+      TaskContext.setTaskContext(context)
+      task
+    } finally {
+      TaskContext.unset()
     }
   }
 
@@ -94,6 +104,11 @@ abstract class TaskContext extends Serializable {
   def isCompleted(): Boolean
 
   /**
+   * Returns true if the task has failed.
+   */
+  def isFailed(): Boolean
+
+  /**
    * Returns true if the task has been killed.
    */
   def isInterrupted(): Boolean
@@ -133,19 +148,56 @@ abstract class TaskContext extends Serializable {
   }
 
   /**
-   * Adds a listener to be executed on task failure. Adding a listener to an already failed task
-   * will result in that listener being called immediately.
+   * Adds a listener to be executed on task failure (which includes completion listener failure, if
+   * the task body did not already fail). Adding a listener to an already failed task will result in
+   * that listener being called immediately.
+   *
+   * Note: Prior to Spark 3.4.0, failure listeners were only invoked if the main task body failed.
    */
   def addTaskFailureListener(listener: TaskFailureListener): TaskContext
 
   /**
-   * Adds a listener to be executed on task failure.  Adding a listener to an already failed task
-   * will result in that listener being called immediately.
+   * Adds a listener to be executed on task failure (which includes completion listener failure, if
+   * the task body did not already fail). Adding a listener to an already failed task will result in
+   * that listener being called immediately.
+   *
+   * Note: Prior to Spark 3.4.0, failure listeners were only invoked if the main task body failed.
    */
   def addTaskFailureListener(f: (TaskContext, Throwable) => Unit): TaskContext = {
     addTaskFailureListener(new TaskFailureListener {
       override def onTaskFailure(context: TaskContext, error: Throwable): Unit = f(context, error)
     })
+  }
+
+  /** Runs a task with this context, ensuring failure and completion listeners get triggered. */
+  private[spark] def runTaskWithListeners[T](task: Task[T]): T = {
+    try {
+      // SPARK-44818 - Its possible that taskThread has not been initialized when kill is initially
+      // called with interruptThread=true. We do set the reason and eventually will set it on the
+      // context too within run(). If that's the case, kill the thread before it starts executing
+      // the actual task.
+      killTaskIfInterrupted()
+      task.runTask(this)
+    } catch {
+      case e: Throwable =>
+        // Catch all errors; run task failure and completion callbacks, and rethrow the exception.
+        try {
+          markTaskFailed(e)
+        } catch {
+          case t: Throwable =>
+            e.addSuppressed(t)
+        }
+        try {
+          markTaskCompleted(Some(e))
+        } catch {
+          case t: Throwable =>
+            e.addSuppressed(t)
+        }
+        throw e
+    } finally {
+      // Call the task completion callbacks. No-op if "markTaskCompleted" was already called.
+      markTaskCompleted(None)
+    }
   }
 
   /**
@@ -262,4 +314,24 @@ abstract class TaskContext extends Serializable {
 
   /** Gets local properties set upstream in the driver. */
   private[spark] def getLocalProperties: Properties
+
+  /** Whether the current task is allowed to interrupt. */
+  private[spark] def interruptible(): Boolean
+
+  /**
+   * Pending the interruption request until the task is able to
+   * interrupt after creating the resource uninterruptibly.
+   */
+  private[spark] def pendingInterrupt(threadToInterrupt: Option[Thread], reason: String): Unit
+
+  /**
+   * Creating a closeable resource uninterruptibly. A task is not allowed to interrupt in this
+   * state until the resource creation finishes. E.g.,
+   * {{{
+   *  val linesReader = TaskContext.get().createResourceUninterruptibly {
+   *    new HadoopFileLinesReader(file, parser.options.lineSeparatorInRead, conf)
+   *  }
+   * }}}
+   */
+  private[spark] def createResourceUninterruptibly[T <: Closeable](resourceBuilder: => T): T
 }

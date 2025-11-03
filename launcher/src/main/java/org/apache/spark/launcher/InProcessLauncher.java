@@ -37,7 +37,7 @@ import java.util.logging.Logger;
  * driver memory or configs which modify the driver's class path) do not take effect. Logging
  * configuration is also inherited from the parent application.
  *
- * @since Spark 2.3.0
+ * @since 2.3.0
  */
 public class InProcessLauncher extends AbstractLauncher<InProcessLauncher> {
 

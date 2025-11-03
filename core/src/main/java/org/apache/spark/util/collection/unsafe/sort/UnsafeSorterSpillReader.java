@@ -17,14 +17,16 @@
 
 package org.apache.spark.util.collection.unsafe.sort;
 
-import com.google.common.io.ByteStreams;
 import com.google.common.io.Closeables;
 import org.apache.spark.SparkEnv;
 import org.apache.spark.TaskContext;
 import org.apache.spark.internal.config.package$;
 import org.apache.spark.internal.config.ConfigEntry;
+import org.apache.spark.internal.SparkLogger;
+import org.apache.spark.internal.SparkLoggerFactory;
 import org.apache.spark.io.NioBufferedFileInputStream;
 import org.apache.spark.io.ReadAheadInputStream;
+import org.apache.spark.network.util.JavaUtils;
 import org.apache.spark.serializer.SerializerManager;
 import org.apache.spark.storage.BlockId;
 import org.apache.spark.unsafe.Platform;
@@ -36,6 +38,8 @@ import java.io.*;
  * of the file format).
  */
 public final class UnsafeSorterSpillReader extends UnsafeSorterIterator implements Closeable {
+  private static final SparkLogger logger =
+    SparkLoggerFactory.getLogger(UnsafeSorterSpillReader.class);
   public static final int MAX_BUFFER_SIZE_BYTES = 16777216; // 16 mb
 
   private InputStream in;
@@ -82,6 +86,15 @@ public final class UnsafeSorterSpillReader extends UnsafeSorterIterator implemen
       Closeables.close(bs, /* swallowIOException = */ true);
       throw e;
     }
+    if (taskContext != null) {
+      taskContext.addTaskCompletionListener(context -> {
+        try {
+          close();
+        } catch (IOException e) {
+          logger.info("error while closing UnsafeSorterSpillReader", e);
+        }
+      });
+    }
   }
 
   @Override
@@ -115,7 +128,7 @@ public final class UnsafeSorterSpillReader extends UnsafeSorterIterator implemen
       arr = new byte[recordLength];
       baseObject = arr;
     }
-    ByteStreams.readFully(in, arr, 0, recordLength);
+    JavaUtils.readFully(in, arr, 0, recordLength);
     numRecordsRemaining--;
     if (numRecordsRemaining == 0) {
       close();

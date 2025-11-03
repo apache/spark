@@ -20,8 +20,6 @@ package org.apache.spark.network.shuffle.protocol;
 import java.util.Objects;
 
 import io.netty.buffer.ByteBuf;
-import org.apache.commons.lang3.builder.ToStringBuilder;
-import org.apache.commons.lang3.builder.ToStringStyle;
 
 // Needed by ScalaDoc. See SPARK-7726
 import static org.apache.spark.network.shuffle.protocol.BlockTransferMessage.Type;
@@ -44,15 +42,12 @@ public class BlocksRemoved extends BlockTransferMessage {
 
   @Override
   public String toString() {
-    return new ToStringBuilder(this, ToStringStyle.SHORT_PREFIX_STYLE)
-      .append("numRemovedBlocks", numRemovedBlocks)
-      .toString();
+    return "BlocksRemoved[numRemovedBlocks=" + numRemovedBlocks + "]";
   }
 
   @Override
   public boolean equals(Object other) {
-    if (other instanceof BlocksRemoved) {
-      BlocksRemoved o = (BlocksRemoved) other;
+    if (other instanceof BlocksRemoved o) {
       return numRemovedBlocks == o.numRemovedBlocks;
     }
     return false;

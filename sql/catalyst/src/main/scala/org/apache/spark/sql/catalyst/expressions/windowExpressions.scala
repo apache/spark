@@ -19,14 +19,17 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.util.Locale
 
+import org.apache.spark.SparkException
+import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, UnresolvedException}
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{TypeCheckFailure, TypeCheckSuccess}
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.dsl.expressions._
-import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateFunction, DeclarativeAggregate, NoOp}
+import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateFunction, DeclarativeAggregate, NoOp, PandasAggregate}
 import org.apache.spark.sql.catalyst.trees.{BinaryLike, LeafLike, TernaryLike, UnaryLike}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{TreePattern, UNRESOLVED_WINDOW_EXPRESSION, WINDOW_EXPRESSION}
-import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.errors.{DataTypeErrorsBase, QueryCompilationErrors, QueryErrorsBase, QueryExecutionErrors}
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.DayTimeIntervalType.DAY
 
 /**
  * The trait of the Window Specification (specified in the OVER clause or WINDOW clause) for
@@ -44,7 +47,8 @@ sealed trait WindowSpec
 case class WindowSpecDefinition(
     partitionSpec: Seq[Expression],
     orderSpec: Seq[SortOrder],
-    frameSpecification: WindowFrame) extends Expression with WindowSpec with Unevaluable {
+    frameSpecification: WindowFrame)
+  extends Expression with WindowSpec with Unevaluable with DataTypeErrorsBase {
 
   override def children: Seq[Expression] = partitionSpec ++ orderSpec :+ frameSpecification
 
@@ -56,33 +60,37 @@ case class WindowSpecDefinition(
       frameSpecification = newChildren.last.asInstanceOf[WindowFrame])
 
   override lazy val resolved: Boolean =
-    childrenResolved && checkInputDataTypes().isSuccess &&
-      frameSpecification.isInstanceOf[SpecifiedWindowFrame]
+    childrenResolved && frameSpecification.isInstanceOf[SpecifiedWindowFrame] &&
+      checkInputDataTypes().isSuccess
 
   override def nullable: Boolean = true
-  override def dataType: DataType = throw QueryExecutionErrors.dataTypeOperationUnsupportedError
+  override def dataType: DataType = throw QueryCompilationErrors.dataTypeOperationUnsupportedError()
 
   override def checkInputDataTypes(): TypeCheckResult = {
     frameSpecification match {
       case UnspecifiedFrame =>
-        TypeCheckFailure(
-          "Cannot use an UnspecifiedFrame. This should have been converted during analysis. " +
-            "Please file a bug report.")
+        throw SparkException.internalError("Cannot use an UnspecifiedFrame. " +
+          "This should have been converted during analysis.")
       case f: SpecifiedWindowFrame if f.frameType == RangeFrame && !f.isUnbounded &&
           orderSpec.isEmpty =>
-        TypeCheckFailure(
-          "A range window frame cannot be used in an unordered window specification.")
+        DataTypeMismatch(errorSubClass = "RANGE_FRAME_WITHOUT_ORDER")
       case f: SpecifiedWindowFrame if f.frameType == RangeFrame && f.isValueBound &&
           orderSpec.size > 1 =>
-        TypeCheckFailure(
-          s"A range window frame with value boundaries cannot be used in a window specification " +
-            s"with multiple order by expressions: ${orderSpec.mkString(",")}")
+        DataTypeMismatch(
+          errorSubClass = "RANGE_FRAME_MULTI_ORDER",
+          messageParameters = Map(
+            "orderSpec" -> orderSpec.mkString(",")
+          )
+        )
       case f: SpecifiedWindowFrame if f.frameType == RangeFrame && f.isValueBound &&
           !isValidFrameType(f.valueBoundary.head.dataType) =>
-        TypeCheckFailure(
-          s"The data type '${orderSpec.head.dataType.catalogString}' used in the order " +
-            "specification does not match the data type " +
-            s"'${f.valueBoundary.head.dataType.catalogString}' which is used in the range frame.")
+        DataTypeMismatch(
+          errorSubClass = "RANGE_FRAME_INVALID_TYPE",
+          messageParameters = Map(
+            "orderSpecType" -> toSQLType(orderSpec.head.dataType),
+            "valueBoundaryType" -> toSQLType(f.valueBoundary.head.dataType)
+          )
+        )
       case _ => TypeCheckSuccess
     }
   }
@@ -102,6 +110,7 @@ case class WindowSpecDefinition(
   private def isValidFrameType(ft: DataType): Boolean = (orderSpec.head.dataType, ft) match {
     case (DateType, IntegerType) => true
     case (DateType, _: YearMonthIntervalType) => true
+    case (DateType, DayTimeIntervalType(DAY, DAY)) => true
     case (TimestampType | TimestampNTZType, CalendarIntervalType) => true
     case (TimestampType | TimestampNTZType, _: YearMonthIntervalType) => true
     case (TimestampType | TimestampNTZType, _: DayTimeIntervalType) => true
@@ -176,7 +185,7 @@ case object CurrentRow extends SpecialFrameBoundary {
  * Represents a window frame.
  */
 sealed trait WindowFrame extends Expression with Unevaluable {
-  override def dataType: DataType = throw QueryExecutionErrors.dataTypeOperationUnsupportedError
+  override def dataType: DataType = throw QueryCompilationErrors.dataTypeOperationUnsupportedError()
   override def nullable: Boolean = false
 }
 
@@ -191,7 +200,7 @@ case class SpecifiedWindowFrame(
     frameType: FrameType,
     lower: Expression,
     upper: Expression)
-  extends WindowFrame with BinaryLike[Expression] {
+  extends WindowFrame with BinaryLike[Expression] with QueryErrorsBase {
 
   override def left: Expression = lower
   override def right: Expression = upper
@@ -215,17 +224,32 @@ case class SpecifiedWindowFrame(
     // Check combination (of expressions).
     (lower, upper) match {
       case (l: Expression, u: Expression) if !isValidFrameBoundary(l, u) =>
-        TypeCheckFailure(s"Window frame upper bound '$upper' does not follow the lower bound " +
-          s"'$lower'.")
+        DataTypeMismatch(
+          errorSubClass = "SPECIFIED_WINDOW_FRAME_INVALID_BOUND",
+          messageParameters = Map(
+            "upper" -> toSQLExpr(upper),
+            "lower" -> toSQLExpr(lower)
+          )
+        )
       case (l: SpecialFrameBoundary, _) => TypeCheckSuccess
       case (_, u: SpecialFrameBoundary) => TypeCheckSuccess
       case (l: Expression, u: Expression) if l.dataType != u.dataType =>
-        TypeCheckFailure(
-          s"Window frame bounds '$lower' and '$upper' do no not have the same data type: " +
-            s"'${l.dataType.catalogString}' <> '${u.dataType.catalogString}'")
+        DataTypeMismatch(
+          errorSubClass = "SPECIFIED_WINDOW_FRAME_DIFF_TYPES",
+          messageParameters = Map(
+            "lower" -> toSQLExpr(lower),
+            "upper" -> toSQLExpr(upper),
+            "lowerType" -> toSQLType(l.dataType),
+            "upperType" -> toSQLType(u.dataType)
+          )
+        )
       case (l: Expression, u: Expression) if isGreaterThan(l, u) =>
-        TypeCheckFailure(
-          "The lower bound of a window frame must be less than or equal to the upper bound")
+        DataTypeMismatch(
+          errorSubClass = "SPECIFIED_WINDOW_FRAME_WRONG_COMPARISON",
+          messageParameters = Map(
+            "comparison" -> "less than or equal"
+          )
+        )
       case _ => TypeCheckSuccess
     }
   }
@@ -262,11 +286,22 @@ case class SpecifiedWindowFrame(
   private def checkBoundary(b: Expression, location: String): TypeCheckResult = b match {
     case _: SpecialFrameBoundary => TypeCheckSuccess
     case e: Expression if !e.foldable =>
-      TypeCheckFailure(s"Window frame $location bound '$e' is not a literal.")
+      DataTypeMismatch(
+        errorSubClass = "SPECIFIED_WINDOW_FRAME_WITHOUT_FOLDABLE",
+        messageParameters = Map(
+          "location" -> location,
+          "expression" -> toSQLExpr(e)
+        )
+      )
     case e: Expression if !frameType.inputType.acceptsType(e.dataType) =>
-      TypeCheckFailure(
-        s"The data type of the $location bound '${e.dataType.catalogString}' does not match " +
-          s"the expected data type '${frameType.inputType.simpleString}'.")
+      DataTypeMismatch(
+        errorSubClass = "SPECIFIED_WINDOW_FRAME_UNACCEPTED_TYPE",
+        messageParameters = Map(
+          "location" -> location,
+          "exprType" -> toSQLType(e.dataType),
+          "expectedType" -> toSQLType(frameType.inputType)
+        )
+      )
     case _ => TypeCheckSuccess
   }
 
@@ -295,6 +330,17 @@ case class UnresolvedWindowExpression(
     copy(child = newChild)
 
   override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_WINDOW_EXPRESSION)
+}
+
+object WindowExpression {
+  def hasWindowExpression(e: Expression): Boolean = {
+    e.find(_.isInstanceOf[WindowExpression]).isDefined
+  }
+
+  def expressionToIngnoreNulls(e: Expression, source: String): Boolean = e match {
+    case BooleanLiteral(ignoreNulls) => ignoreNulls
+    case _ => throw QueryCompilationErrors.invalidIgnoreNullsParameter(source, e)
+  }
 }
 
 case class WindowExpression(
@@ -338,8 +384,10 @@ object WindowFunctionType {
 
   def functionType(windowExpression: NamedExpression): WindowFunctionType = {
     val t = windowExpression.collectFirst {
+      case udf: PythonFuncExpression if PythonUDF.isWindowPandasUDF(udf) => Python
+      // We should match `AggregateFunction` after the python function, as `PythonUDAF` extends
+      // `AggregateFunction` but the function type should be Python.
       case _: WindowFunction | _: AggregateFunction => SQL
-      case udf: PythonUDF if PythonUDF.isWindowPandasUDF(udf) => Python
     }
 
     // Normally a window expression would either have a SQL window function, a SQL
@@ -353,6 +401,16 @@ object WindowFunctionType {
     // To handle this case, if a window expression doesn't have a regular window function, we
     // consider its type to be SQL as literal(0) is also a SQL expression.
     t.getOrElse(SQL)
+  }
+
+  def pythonEvalType(windowExpression: NamedExpression): Option[Int] = {
+    windowExpression.collectFirst {
+      case udf: PythonUDAF => udf.evalType match {
+        // Infer the eval type of window operation, from the input aggregation type
+        case PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF => PythonEvalType.SQL_WINDOW_AGG_PANDAS_UDF
+        case PythonEvalType.SQL_GROUPED_AGG_ARROW_UDF => PythonEvalType.SQL_WINDOW_AGG_ARROW_UDF
+      }
+    }
   }
 }
 
@@ -399,7 +457,10 @@ trait OffsetWindowFunction extends WindowFunction {
  * will get the value of x 2 rows back from the current row in the partition.
  */
 sealed abstract class FrameLessOffsetWindowFunction
-  extends OffsetWindowFunction with Unevaluable with ImplicitCastInputTypes {
+  extends OffsetWindowFunction
+  with Unevaluable
+  with ImplicitCastInputTypes
+  with QueryErrorsBase {
 
   /*
    * The result of an OffsetWindowFunction is dependent on the frame in which the
@@ -421,7 +482,14 @@ sealed abstract class FrameLessOffsetWindowFunction
     if (check.isFailure) {
       check
     } else if (!offset.foldable) {
-      TypeCheckFailure(s"Offset expression '$offset' must be a literal.")
+      DataTypeMismatch(
+        errorSubClass = "NON_FOLDABLE_INPUT",
+        messageParameters = Map(
+          "inputName" -> toSQLId("offset"),
+          "inputType" -> toSQLType(offset.dataType),
+          "inputExpr" -> toSQLExpr(offset)
+        )
+      )
     } else {
       TypeCheckSuccess
     }
@@ -474,6 +542,9 @@ case class Lead(
 
   def this(input: Expression, offset: Expression, default: Expression) =
     this(input, offset, default, false)
+
+  def this(input: Expression, offset: Expression, default: Expression, ignoreNulls: Expression) =
+    this(input, offset, default, WindowExpression.expressionToIngnoreNulls(ignoreNulls, "lead"))
 
   def this(input: Expression, offset: Expression) = this(input, offset, Literal(null))
 
@@ -529,6 +600,9 @@ case class Lag(
   def this(input: Expression, inputOffset: Expression, default: Expression) =
     this(input, inputOffset, default, false)
 
+  def this(input: Expression, offset: Expression, default: Expression, ignoreNulls: Expression) =
+    this(input, offset, default, WindowExpression.expressionToIngnoreNulls(ignoreNulls, "lag"))
+
   def this(input: Expression, inputOffset: Expression) = this(input, inputOffset, Literal(null))
 
   def this(input: Expression) = this(input, Literal(1))
@@ -555,7 +629,7 @@ abstract class AggregateWindowFunction extends DeclarativeAggregate with WindowF
   override def dataType: DataType = IntegerType
   override def nullable: Boolean = true
   override lazy val mergeExpressions =
-    throw QueryExecutionErrors.mergeUnsupportedByWindowFunctionError
+    throw QueryExecutionErrors.mergeUnsupportedByWindowFunctionError(prettyName)
 }
 
 abstract class RowNumberLike extends AggregateWindowFunction {
@@ -674,8 +748,10 @@ case class CumeDist() extends RowNumberLike with SizeBasedWindowFunction with Le
 // scalastyle:on line.size.limit line.contains.tab
 case class NthValue(input: Expression, offset: Expression, ignoreNulls: Boolean)
     extends AggregateWindowFunction with OffsetWindowFunction with ImplicitCastInputTypes
-    with BinaryLike[Expression] {
+    with BinaryLike[Expression] with QueryErrorsBase {
 
+  def this(input: Expression, offset: Expression, ignoreNulls: Expression) =
+    this(input, offset, WindowExpression.expressionToIngnoreNulls(ignoreNulls, "nth_value"))
   def this(child: Expression, offset: Expression) = this(child, offset, false)
 
   override lazy val default = Literal.create(null, input.dataType)
@@ -694,10 +770,23 @@ case class NthValue(input: Expression, offset: Expression, ignoreNulls: Boolean)
     if (check.isFailure) {
       check
     } else if (!offset.foldable) {
-      TypeCheckFailure(s"Offset expression '$offset' must be a literal.")
+      DataTypeMismatch(
+        errorSubClass = "NON_FOLDABLE_INPUT",
+        messageParameters = Map(
+          "inputName" -> toSQLId("offset"),
+          "inputType" -> toSQLType(offset.dataType),
+          "inputExpr" -> toSQLExpr(offset)
+        )
+      )
     } else if (offsetVal <= 0) {
-      TypeCheckFailure(
-        s"The 'offset' argument of nth_value must be greater than zero but it is $offsetVal.")
+      DataTypeMismatch(
+        errorSubClass = "VALUE_OUT_OF_RANGE",
+        messageParameters = Map(
+          "exprName" -> "offset",
+          "valueRange" -> s"(0, ${Long.MaxValue}]",
+          "currentValue" -> toSQLValue(offsetVal, LongType)
+        )
+      )
     } else {
       TypeCheckSuccess
     }
@@ -780,7 +869,7 @@ case class NthValue(input: Expression, offset: Expression, ignoreNulls: Boolean)
   group = "window_funcs")
 // scalastyle:on line.size.limit line.contains.tab
 case class NTile(buckets: Expression) extends RowNumberLike with SizeBasedWindowFunction
-  with UnaryLike[Expression] {
+  with UnaryLike[Expression] with QueryErrorsBase {
 
   def this() = this(Literal(1))
 
@@ -790,18 +879,39 @@ case class NTile(buckets: Expression) extends RowNumberLike with SizeBasedWindow
   // for each partition.
   override def checkInputDataTypes(): TypeCheckResult = {
     if (!buckets.foldable) {
-      return TypeCheckFailure(s"Buckets expression must be foldable, but got $buckets")
+      return DataTypeMismatch(
+        errorSubClass = "NON_FOLDABLE_INPUT",
+        messageParameters = Map(
+          "inputName" -> toSQLId("buckets"),
+          "inputType" -> toSQLType(buckets.dataType),
+          "inputExpr" -> toSQLExpr(buckets)
+        )
+      )
     }
 
     if (buckets.dataType != IntegerType) {
-      return TypeCheckFailure(s"Buckets expression must be integer type, but got $buckets")
+      return DataTypeMismatch(
+        errorSubClass = "UNEXPECTED_INPUT_TYPE",
+        messageParameters = Map(
+          "paramIndex" -> ordinalNumber(0),
+          "requiredType" -> toSQLType(IntegerType),
+          "inputSql" -> toSQLExpr(buckets),
+          "inputType" -> toSQLType(buckets.dataType))
+      )
     }
 
     val i = buckets.eval().asInstanceOf[Int]
     if (i > 0) {
       TypeCheckSuccess
     } else {
-      TypeCheckFailure(s"Buckets expression must be positive, but got: $i")
+      DataTypeMismatch(
+        errorSubClass = "VALUE_OUT_OF_RANGE",
+        messageParameters = Map(
+          "exprName" -> "buckets",
+          "valueRange" -> s"(0, ${Int.MaxValue}]",
+          "currentValue" -> toSQLValue(i, IntegerType)
+        )
+      )
     }
   }
 
@@ -1013,4 +1123,106 @@ case class PercentRank(children: Seq[Expression]) extends RankLike with SizeBase
   override def prettyName: String = "percent_rank"
   override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): PercentRank =
     copy(children = newChildren)
+}
+
+/**
+ * Exponential Weighted Moment. This expression is dedicated only for Pandas API on Spark.
+ * An exponentially weighted window is similar to an expanding window but with each prior point
+ * being exponentially weighted down relative to the current point.
+ * See https://pandas.pydata.org/docs/user_guide/window.html#exponentially-weighted-window
+ * for details.
+ * Currently, only weighted moving average is supported. In general, it is calculated as
+ *    y_t = \frac{\sum_{i=0}^t w_i x_{t-i}}{\sum_{i=0}^t w_i},
+ * where x_t is the input, y_t is the result and the w_i are the weights.
+ */
+case class EWM(input: Expression, alpha: Double, ignoreNA: Boolean)
+  extends AggregateWindowFunction with UnaryLike[Expression] {
+  assert(0 < alpha && alpha <= 1)
+
+  def this(input: Expression, alpha: Expression, ignoreNA: Expression) =
+    this(input, EWM.expressionToAlpha(alpha), PandasAggregate.expressionToIgnoreNA(ignoreNA, "ewm"))
+
+  override def dataType: DataType = DoubleType
+
+  private val numerator = AttributeReference("numerator", DoubleType, nullable = false)()
+  private val denominator = AttributeReference("denominator", DoubleType, nullable = false)()
+  private val result = AttributeReference("result", DoubleType, nullable = true)()
+
+  override def aggBufferAttributes: Seq[AttributeReference] =
+    numerator :: denominator :: result :: Nil
+
+  override val initialValues: Seq[Expression] =
+    Literal(0.0) :: Literal(0.0) :: Literal.create(null, DoubleType) :: Nil
+
+  override val updateExpressions: Seq[Expression] = {
+    val beta = Literal(1.0 - alpha)
+    val casted = input.cast(DoubleType)
+    val isNA = IsNull(casted)
+    val newNumerator = numerator * beta + casted
+    val newDenominator = denominator * beta + Literal(1.0)
+
+    if (ignoreNA) {
+      /* numerator = */ If(isNA, numerator, newNumerator) ::
+      /* denominator = */ If(isNA, denominator, newDenominator) ::
+      /* result = */ If(isNA, result, newNumerator / newDenominator) :: Nil
+    } else {
+      /* numerator = */ If(isNA, numerator * beta, newNumerator) ::
+      /* denominator = */ If(isNA, denominator * beta, newDenominator) ::
+      /* result = */ If(isNA, result, newNumerator / newDenominator) :: Nil
+    }
+  }
+
+  override val evaluateExpression: Expression = result
+
+  override def prettyName: String = "ewm"
+
+  override def sql: String = s"$prettyName(${input.sql}, $alpha, $ignoreNA)"
+
+  override def child: Expression = input
+
+  override protected def withNewChildInternal(newChild: Expression): EWM = copy(input = newChild)
+}
+
+private[expressions] object EWM {
+  def expressionToAlpha(e: Expression): Double = e.eval() match {
+    case d: Double => d
+    case f: Float => f.toDouble
+    case _ => throw QueryCompilationErrors.invalidAlphaParameter(e)
+  }
+}
+
+/**
+ * Return the indices for consecutive null values, for non-null values, it returns 0.
+ * This expression is dedicated only for Pandas API on Spark.
+ * For example,
+ *  Input: null, 1, 2, 3, null, null, null, 5, null, null
+ *  Output: 1, 0, 0, 0, 1, 2, 3, 0, 1, 2
+ */
+case class NullIndex(input: Expression)
+  extends AggregateWindowFunction with UnaryLike[Expression] {
+
+  override def dataType: DataType = IntegerType
+
+  private val index = AttributeReference("index", IntegerType, nullable = false)()
+
+  override def aggBufferAttributes: Seq[AttributeReference] = index :: Nil
+
+  override val initialValues: Seq[Expression] = Seq(Literal(0))
+
+  override val updateExpressions: Seq[Expression] = {
+    Seq(
+      /* index = */ If(IsNull(input), index + Literal(1), Literal(0))
+    )
+  }
+
+  override val evaluateExpression: Expression = index
+
+  override def prettyName: String = "null_index"
+
+  override def sql: String = s"$prettyName(${input.sql})"
+
+  override def child: Expression = input
+
+  override protected def withNewChildInternal(newChild: Expression): NullIndex =
+    copy(input = newChild)
 }

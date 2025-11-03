@@ -23,6 +23,7 @@ import org.apache.spark.{SparkContext, SparkException, SparkFunSuite, TaskContex
 import org.apache.spark.LocalSparkContext._
 import org.apache.spark.partial.CountEvaluator
 import org.apache.spark.rdd.RDD
+import org.apache.spark.util.ArrayImplicits._
 
 class ClosureCleanerSuite extends SparkFunSuite {
   test("closures inside an object") {
@@ -140,7 +141,7 @@ object TestObject {
     var nonSer = new NonSerializable
     val x = 5
     withSpark(new SparkContext("local", "test")) { sc =>
-      val nums = sc.parallelize(Array(1, 2, 3, 4))
+      val nums = sc.parallelize(Array(1, 2, 3, 4).toImmutableArraySeq)
       nums.map(_ + x).reduce(_ + _)
     }
   }
@@ -154,7 +155,7 @@ class TestClass extends Serializable {
   def run(): Int = {
     var nonSer = new NonSerializable
     withSpark(new SparkContext("local", "test")) { sc =>
-      val nums = sc.parallelize(Array(1, 2, 3, 4))
+      val nums = sc.parallelize(Array(1, 2, 3, 4).toImmutableArraySeq)
       nums.map(_ + getX).reduce(_ + _)
     }
   }
@@ -166,7 +167,7 @@ class TestClassWithoutDefaultConstructor(x: Int) extends Serializable {
   def run(): Int = {
     var nonSer = new NonSerializable
     withSpark(new SparkContext("local", "test")) { sc =>
-      val nums = sc.parallelize(Array(1, 2, 3, 4))
+      val nums = sc.parallelize(Array(1, 2, 3, 4).toImmutableArraySeq)
       nums.map(_ + getX).reduce(_ + _)
     }
   }
@@ -181,7 +182,7 @@ class TestClassWithoutFieldAccess {
     var nonSer2 = new NonSerializable
     val x = 5
     withSpark(new SparkContext("local", "test")) { sc =>
-      val nums = sc.parallelize(Array(1, 2, 3, 4))
+      val nums = sc.parallelize(Array(1, 2, 3, 4).toImmutableArraySeq)
       nums.map(_ + x).reduce(_ + _)
     }
   }
@@ -190,7 +191,7 @@ class TestClassWithoutFieldAccess {
 object TestObjectWithBogusReturns {
   def run(): Int = {
     withSpark(new SparkContext("local", "test")) { sc =>
-      val nums = sc.parallelize(Array(1, 2, 3, 4))
+      val nums = sc.parallelize(Array(1, 2, 3, 4).toImmutableArraySeq)
       // this return is invalid since it will transfer control outside the closure
       nums.map {x => return 1 ; x * 2}
       1
@@ -201,7 +202,7 @@ object TestObjectWithBogusReturns {
 object TestObjectWithNestedReturns {
   def run(): Int = {
     withSpark(new SparkContext("local", "test")) { sc =>
-      val nums = sc.parallelize(Array(1, 2, 3, 4))
+      val nums = sc.parallelize(Array(1, 2, 3, 4).toImmutableArraySeq)
       nums.map {x =>
         // this return is fine since it will not transfer control outside the closure
         def foo(): Int = { return 5; 1 }
@@ -217,7 +218,7 @@ object TestObjectWithNesting {
     var nonSer = new NonSerializable
     var answer = 0
     withSpark(new SparkContext("local", "test")) { sc =>
-      val nums = sc.parallelize(Array(1, 2, 3, 4))
+      val nums = sc.parallelize(Array(1, 2, 3, 4).toImmutableArraySeq)
       val y = 1
       for (i <- 1 to 4) {
         var nonSer2 = new NonSerializable
@@ -236,7 +237,7 @@ class TestClassWithNesting(val y: Int) extends Serializable {
     var nonSer = new NonSerializable
     var answer = 0
     withSpark(new SparkContext("local", "test")) { sc =>
-      val nums = sc.parallelize(Array(1, 2, 3, 4))
+      val nums = sc.parallelize(Array(1, 2, 3, 4).toImmutableArraySeq)
       for (i <- 1 to 4) {
         var nonSer2 = new NonSerializable
         val x = i
@@ -373,7 +374,7 @@ class TestCreateNullValue {
         println(getX)
       }
       // scalastyle:on println
-      ClosureCleaner.clean(closure)
+      SparkClosureCleaner.clean(closure)
     }
     nestedClosure()
   }

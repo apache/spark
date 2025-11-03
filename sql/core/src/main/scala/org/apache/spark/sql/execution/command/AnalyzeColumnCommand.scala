@@ -17,13 +17,15 @@
 
 package org.apache.spark.sql.execution.command
 
-import org.apache.spark.sql._
+import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogStatistics, CatalogTableType}
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.classic.ClassicConversions.castToImpl
+import org.apache.spark.sql.classic.Dataset
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.{DatetimeType, _}
 
 
 /**
@@ -42,7 +44,7 @@ case class AnalyzeColumnCommand(
     val sessionState = sparkSession.sessionState
 
     tableIdent.database match {
-      case Some(db) if db == sparkSession.sharedState.globalTempViewManager.database =>
+      case Some(db) if db == sparkSession.sharedState.globalTempDB =>
         val plan = sessionState.catalog.getGlobalTempView(tableIdent.identifier).getOrElse {
           throw QueryCompilationErrors.noSuchTableError(db, tableIdent.identifier)
         }
@@ -61,8 +63,8 @@ case class AnalyzeColumnCommand(
 
   private def analyzeColumnInCachedData(plan: LogicalPlan, sparkSession: SparkSession): Boolean = {
     val cacheManager = sparkSession.sharedState.cacheManager
-    val planToLookup = sparkSession.sessionState.executePlan(plan).analyzed
-    cacheManager.lookupCachedData(planToLookup).map { cachedData =>
+    val df = Dataset.ofRows(sparkSession, plan)
+    cacheManager.lookupCachedData(df).map { cachedData =>
       val columnsToAnalyze = getColumnsToAnalyze(
         tableIdent, cachedData.cachedRepresentation, columnNames, allColumns)
       cacheManager.analyzeColumnCacheQuery(sparkSession, cachedData, columnsToAnalyze)
@@ -86,7 +88,7 @@ case class AnalyzeColumnCommand(
     } else {
       columnNames.get.map { col =>
         val exprOption = relation.output.find(attr => conf.resolver(attr.name, col))
-        exprOption.getOrElse(throw QueryCompilationErrors.columnDoesNotExistError(col))
+        exprOption.getOrElse(throw QueryCompilationErrors.columnNotFoundError(col))
       }
     }
     // Make sure the column types are supported for stats gathering.
@@ -109,7 +111,7 @@ case class AnalyzeColumnCommand(
         throw QueryCompilationErrors.analyzeTableNotSupportedOnViewsError()
       }
     } else {
-      val sizeInBytes = CommandUtils.calculateTotalSize(sparkSession, tableMeta)
+      val (sizeInBytes, _) = CommandUtils.calculateTotalSize(sparkSession, tableMeta)
       val relation = sparkSession.table(tableIdent).logicalPlan
       val columnsToAnalyze = getColumnsToAnalyze(tableIdent, relation, columnNames, allColumns)
 
@@ -139,9 +141,9 @@ case class AnalyzeColumnCommand(
     case _: DecimalType => true
     case DoubleType | FloatType => true
     case BooleanType => true
-    case DateType => true
-    case TimestampType => true
-    case BinaryType | StringType => true
+    case _: DatetimeType => true
+    case CharType(_) | VarcharType(_) => false
+    case BinaryType | _: StringType => true
     case _ => false
   }
 }

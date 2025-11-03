@@ -33,10 +33,11 @@ import org.scalatest.time.SpanSugar._
 
 import org.apache.spark._
 import org.apache.spark.TaskState._
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.internal.config.SCHEDULER_REVIVE_INTERVAL
 import org.apache.spark.rdd.RDD
 import org.apache.spark.resource.ResourceProfile
+import org.apache.spark.status.api.v1.ThreadStackTrace
 import org.apache.spark.util.{CallSite, ThreadUtils, Utils}
 
 /**
@@ -321,7 +322,8 @@ private[spark] abstract class MockBackend(
   def taskSuccess(task: TaskDescription, result: Any): Unit = {
     val ser = env.serializer.newInstance()
     val resultBytes = ser.serialize(result)
-    val directResult = new DirectTaskResult(resultBytes, Seq(), Array()) // no accumulator updates
+    // no accumulator updates
+    val directResult = new DirectTaskResult(resultBytes, Seq(), Array[Long]())
     taskUpdate(task, TaskState.FINISHED, directResult)
   }
 
@@ -430,6 +432,8 @@ private[spark] abstract class MockBackend(
     // And in fact its reasonably simulating a case where a real backend finishes tasks in between
     // the time when the scheduler sends the msg to kill tasks, and the backend receives the msg.
   }
+
+  override def getTaskThreadDump(taskId: Long, executorId: String): Option[ThreadStackTrace] = None
 }
 
 /**
@@ -441,7 +445,7 @@ private[spark] class SingleCoreMockBackend(
 
   val cores = 1
 
-  override def defaultParallelism(): Int = conf.getInt("spark.default.parallelism", cores)
+  override def defaultParallelism(): Int = conf.getInt(config.DEFAULT_PARALLELISM.key, cores)
 
   freeCores = cores
   val localExecutorId = SparkContext.DRIVER_IDENTIFIER

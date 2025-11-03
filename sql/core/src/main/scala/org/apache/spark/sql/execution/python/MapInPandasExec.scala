@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.python
 
 import org.apache.spark.api.python.PythonEvalType
+import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.SparkPlan
 
@@ -28,7 +29,9 @@ import org.apache.spark.sql.execution.SparkPlan
 case class MapInPandasExec(
     func: Expression,
     output: Seq[Attribute],
-    child: SparkPlan)
+    child: SparkPlan,
+    override val isBarrier: Boolean,
+    override val profile: Option[ResourceProfile])
   extends MapInBatchExec {
 
   override protected val pythonEvalType: Int = PythonEvalType.SQL_MAP_PANDAS_ITER_UDF

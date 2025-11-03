@@ -117,6 +117,16 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(ExtractIntervalSeconds("61 seconds 1 microseconds"), Decimal(1000001, 8, 6))
   }
 
+  test("cast large seconds to decimal") {
+    checkEvaluation(
+      Cast(
+        Cast(Literal(Decimal("9223372036854.775807")), DayTimeIntervalType(3, 3)),
+        DecimalType(19, 6)
+      ),
+      Decimal("9223372036854.775807")
+    )
+  }
+
   test("multiply") {
     def check(
         interval: String,
@@ -146,7 +156,7 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     check("2 months 4 seconds", -0.5, "-1 months -2 seconds")
     check("1 month 2 microseconds", 1.5, "1 months 3 microseconds")
     check("2 months", Int.MaxValue, "integer overflow", Some(true))
-    check("2 months", Int.MaxValue, Int.MaxValue + " months", Some(false))
+    check("2 months", Int.MaxValue, s"${Int.MaxValue} months", Some(false))
   }
 
   test("divide") {
@@ -176,10 +186,10 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     check("2 years -8 seconds", 0.5, "4 years -16 seconds")
     check("-1 month 2 microseconds", -0.25, "4 months -8 microseconds")
     check("1 month 3 microsecond", 1.5, "2 microseconds")
-    check("1 second", 0, "divide by zero", Some(true))
+    check("1 second", 0, "Division by zero", Some(true))
     check("1 second", 0, null, Some(false))
     check(s"${Int.MaxValue} months", 0.9, "integer overflow", Some(true))
-    check(s"${Int.MaxValue} months", 0.9, Int.MaxValue + " months", Some(false))
+    check(s"${Int.MaxValue} months", 0.9, s"${Int.MaxValue} months", Some(false))
   }
 
   test("make interval") {
@@ -256,7 +266,7 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       val intervalExpr = MakeInterval(Literal(years), Literal(months), Literal(weeks),
         Literal(days), Literal(hours), Literal(minutes),
         Literal(Decimal(secFrac, Decimal.MAX_LONG_DIGITS, 6)))
-      checkExceptionInExpression[ArithmeticException](intervalExpr, EmptyRow, "")
+      checkExceptionInExpression[ArithmeticException](intervalExpr, EmptyRow, "ARITHMETIC_OVERFLOW")
     }
 
     withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
@@ -306,7 +316,8 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       val secFrac = DateTimeTestUtils.secFrac(seconds, millis, micros)
       val durationExpr = MakeDTInterval(Literal(days), Literal(hours), Literal(minutes),
         Literal(Decimal(secFrac, Decimal.MAX_LONG_DIGITS, 6)))
-      checkExceptionInExpression[ArithmeticException](durationExpr, EmptyRow, "")
+      checkExceptionInExpression[ArithmeticException](
+        durationExpr, "INTERVAL_ARITHMETIC_OVERFLOW.WITHOUT_SUGGESTION")
     }
 
     check(millis = -123)
@@ -341,7 +352,7 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     Seq(
       (Period.ofMonths(2), Int.MaxValue) -> "overflow",
-      (Period.ofMonths(Int.MinValue), 10d) -> "not in range",
+      (Period.ofMonths(Int.MinValue), 10d) -> "out of range",
       (Period.ofMonths(-100), Float.NaN) -> "input is infinite or NaN",
       (Period.ofMonths(200), Double.PositiveInfinity) -> "input is infinite or NaN",
       (Period.ofMonths(-200), Float.NegativeInfinity) -> "input is infinite or NaN"
@@ -412,8 +423,8 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
 
     Seq(
-      (Period.ofMonths(1), 0) -> "divide by zero",
-      (Period.ofMonths(Int.MinValue), 0d) -> "divide by zero",
+      (Period.ofMonths(1), 0) -> "Division by zero",
+      (Period.ofMonths(Int.MinValue), 0d) -> "Division by zero",
       (Period.ofMonths(-100), Float.NaN) -> "input is infinite or NaN"
     ).foreach { case ((period, num), expectedErrMsg) =>
       checkExceptionInExpression[ArithmeticException](
@@ -447,8 +458,8 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
 
     Seq(
-      (Duration.ofDays(1), 0) -> "divide by zero",
-      (Duration.ofMillis(Int.MinValue), 0d) -> "divide by zero",
+      (Duration.ofDays(1), 0) -> "Division by zero",
+      (Duration.ofMillis(Int.MinValue), 0d) -> "Division by zero",
       (Duration.ofSeconds(-100), Float.NaN) -> "input is infinite or NaN"
     ).foreach { case ((period, num), expectedErrMsg) =>
       checkExceptionInExpression[ArithmeticException](
@@ -518,7 +529,8 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     Seq(MakeYMInterval(Literal(178956970), Literal(8)),
       MakeYMInterval(Literal(-178956970), Literal(-9)))
       .foreach { ym =>
-        checkExceptionInExpression[ArithmeticException](ym, "integer overflow")
+        checkExceptionInExpression[ArithmeticException](
+          ym, "INTERVAL_ARITHMETIC_OVERFLOW.WITHOUT_SUGGESTION")
       }
 
     def checkImplicitEvaluation(expr: Expression, value: Any): Unit = {

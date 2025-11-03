@@ -101,7 +101,7 @@ object PowerIterationClusteringExample {
       .setInitializationMode("degree")
       .run(circlesRdd)
 
-    val clusters = model.assignments.collect().groupBy(_.cluster).mapValues(_.map(_.id))
+    val clusters = model.assignments.collect().groupBy(_.cluster).transform((_, v) => v.map(_.id))
     val assignments = clusters.toList.sortBy { case (k, v) => v.length }
     val assignmentsStr = assignments
       .map { case (k, v) =>

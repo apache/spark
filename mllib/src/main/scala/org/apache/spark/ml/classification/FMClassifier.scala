@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml.classification
 
+import java.io.{DataInputStream, DataOutputStream}
+
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.annotation.Since
@@ -39,12 +41,13 @@ private[classification] trait FMClassifierParams extends ProbabilisticClassifier
   with FactorizationMachinesParams {
 }
 
+// scalastyle:off line.size.limit
 /**
  * Factorization Machines learning algorithm for classification.
  * It supports normal gradient descent and AdamW solver.
  *
- * The implementation is based upon:
- * <a href="https://www.csie.ntu.edu.tw/~b97053/paper/Rendle2010FM.pdf">
+ * The implementation is based on:
+ * <a href="https://web.archive.org/web/20191225211603/https://www.csie.ntu.edu.tw/~b97053/paper/Rendle2010FM.pdf">
  * S. Rendle. "Factorization machines" 2010</a>.
  *
  * FM is able to estimate interactions even in problems with huge sparsity
@@ -67,6 +70,7 @@ private[classification] trait FMClassifierParams extends ProbabilisticClassifier
  *
  * @note Multiclass labels are not currently supported.
  */
+// scalastyle:on line.size.limit
 @Since("3.0.0")
 class FMClassifier @Since("3.0.0") (
     @Since("3.0.0") override val uid: String)
@@ -190,7 +194,7 @@ class FMClassifier @Since("3.0.0") (
       miniBatchFraction, initStd, maxIter, stepSize, tol, solver, thresholds)
     instr.logNumClasses(numClasses)
 
-    val numFeatures = MetadataUtils.getNumFeatures(dataset, $(featuresCol))
+    val numFeatures = getNumFeatures(dataset, $(featuresCol))
     instr.logNumFeatures(numFeatures)
 
     val handlePersistence = dataset.storageLevel == StorageLevel.NONE
@@ -220,21 +224,21 @@ class FMClassifier @Since("3.0.0") (
     factors: Matrix,
     objectiveHistory: Array[Double]): FMClassificationModel = {
     val model = copyValues(new FMClassificationModel(uid, intercept, linear, factors))
-    val weightColName = if (!isDefined(weightCol)) "weightCol" else $(weightCol)
-
-    val (summaryModel, probabilityColName, predictionColName) = model.findSummaryModel()
-    val summary = new FMClassificationTrainingSummaryImpl(
-      summaryModel.transform(dataset),
-      probabilityColName,
-      predictionColName,
-      $(labelCol),
-      weightColName,
-      objectiveHistory)
-    model.setSummary(Some(summary))
+    model.createSummary(dataset, objectiveHistory)
+    model
   }
 
   @Since("3.0.0")
   override def copy(extra: ParamMap): FMClassifier = defaultCopy(extra)
+
+  override def estimateModelSize(dataset: Dataset[_]): Long = {
+    val numFeatures = DatasetUtils.getNumFeatures(dataset, $(featuresCol))
+
+    var size = this.estimateMatadataSize
+    size += Vectors.getDenseSize(numFeatures) // linear
+    size += Matrices.getDenseSize(numFeatures, $(factorSize)) // factors
+    size
+  }
 }
 
 @Since("3.0.0")
@@ -256,6 +260,9 @@ class FMClassificationModel private[classification] (
   extends ProbabilisticClassificationModel[Vector, FMClassificationModel]
     with FMClassifierParams with MLWritable
     with HasTrainingSummary[FMClassificationTrainingSummary]{
+
+  // For ml connect only
+  private[ml] def this() = this("", Double.NaN, Vectors.empty, Matrices.empty)
 
   @Since("3.0.0")
   override val numClasses: Int = 2
@@ -307,6 +314,17 @@ class FMClassificationModel private[classification] (
     copyValues(new FMClassificationModel(uid, intercept, linear, factors), extra)
   }
 
+  override def estimatedSize: Long = {
+    var size = this.estimateMatadataSize
+    if (this.linear != null) {
+      size += this.linear.getSizeInBytes
+    }
+    if (this.factors != null) {
+      size += this.factors.getSizeInBytes
+    }
+    size
+  }
+
   @Since("3.0.0")
   override def write: MLWriter =
     new FMClassificationModel.FMClassificationModelWriter(this)
@@ -316,10 +334,66 @@ class FMClassificationModel private[classification] (
       s"uid=${super.toString}, numClasses=$numClasses, numFeatures=$numFeatures, " +
       s"factorSize=${$(factorSize)}, fitLinear=${$(fitLinear)}, fitIntercept=${$(fitIntercept)}"
   }
+
+  private[spark] def createSummary(
+    dataset: Dataset[_], objectiveHistory: Array[Double]
+  ): Unit = {
+    val weightColName = if (!isDefined(weightCol)) "weightCol" else $(weightCol)
+
+    val (summaryModel, probabilityColName, predictionColName) = findSummaryModel()
+    val summary = new FMClassificationTrainingSummaryImpl(
+      summaryModel.transform(dataset),
+      probabilityColName,
+      predictionColName,
+      $(labelCol),
+      weightColName,
+      objectiveHistory)
+    setSummary(Some(summary))
+  }
+
+  override private[spark] def saveSummary(path: String): Unit = {
+    ReadWriteUtils.saveObjectToLocal[Tuple1[Array[Double]]](
+      path, Tuple1(summary.objectiveHistory),
+      (data, dos) => {
+        ReadWriteUtils.serializeDoubleArray(data._1, dos)
+      }
+    )
+  }
+
+  override private[spark] def loadSummary(path: String, dataset: DataFrame): Unit = {
+    val Tuple1(objectiveHistory: Array[Double])
+    = ReadWriteUtils.loadObjectFromLocal[Tuple1[Array[Double]]](
+      path,
+      dis => {
+        Tuple1(ReadWriteUtils.deserializeDoubleArray(dis))
+      }
+    )
+    createSummary(dataset, objectiveHistory)
+  }
 }
 
 @Since("3.0.0")
 object FMClassificationModel extends MLReadable[FMClassificationModel] {
+  private[ml] case class Data(
+    intercept: Double,
+    linear: Vector,
+    factors: Matrix
+  )
+
+  private[ml] def serializeData(data: Data, dos: DataOutputStream): Unit = {
+    import ReadWriteUtils._
+    dos.writeDouble(data.intercept)
+    serializeVector(data.linear, dos)
+    serializeMatrix(data.factors, dos)
+  }
+
+  private[ml] def deserializeData(dis: DataInputStream): Data = {
+    import ReadWriteUtils._
+    val intercept = dis.readDouble()
+    val linear = deserializeVector(dis)
+    val factors = deserializeMatrix(dis)
+    Data(intercept, linear, factors)
+  }
 
   @Since("3.0.0")
   override def read: MLReader[FMClassificationModel] = new FMClassificationModelReader
@@ -331,16 +405,11 @@ object FMClassificationModel extends MLReadable[FMClassificationModel] {
   private[FMClassificationModel] class FMClassificationModelWriter(
     instance: FMClassificationModel) extends MLWriter with Logging {
 
-    private case class Data(
-      intercept: Double,
-      linear: Vector,
-      factors: Matrix)
-
     override protected def saveImpl(path: String): Unit = {
-      DefaultParamsWriter.saveMetadata(instance, path, sc)
+      DefaultParamsWriter.saveMetadata(instance, path, sparkSession)
       val data = Data(instance.intercept, instance.linear, instance.factors)
       val dataPath = new Path(path, "data").toString
-      sparkSession.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
+      ReadWriteUtils.saveObject[Data](dataPath, data, sparkSession, serializeData)
     }
   }
 
@@ -349,13 +418,13 @@ object FMClassificationModel extends MLReadable[FMClassificationModel] {
     private val className = classOf[FMClassificationModel].getName
 
     override def load(path: String): FMClassificationModel = {
-      val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
+      val metadata = DefaultParamsReader.loadMetadata(path, sparkSession, className)
       val dataPath = new Path(path, "data").toString
-      val data = sparkSession.read.format("parquet").load(dataPath)
 
-      val Row(intercept: Double, linear: Vector, factors: Matrix) =
-        data.select("intercept", "linear", "factors").head()
-      val model = new FMClassificationModel(metadata.uid, intercept, linear, factors)
+      val data = ReadWriteUtils.loadObject[Data](dataPath, sparkSession, deserializeData)
+      val model = new FMClassificationModel(
+        metadata.uid, data.intercept, data.linear, data.factors
+      )
       metadata.getAndSetParams(model)
       model
     }

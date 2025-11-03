@@ -24,13 +24,13 @@ import org.apache.avro.generic.GenericDatumReader
 import org.apache.avro.io.{BinaryDecoder, DecoderFactory}
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions.{ExpectsInputTypes, Expression, SpecificInternalRow, UnaryExpression}
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode}
 import org.apache.spark.sql.catalyst.util.{FailFastMode, ParseMode, PermissiveMode}
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types._
 
-private[avro] case class AvroDataToCatalyst(
+case class AvroDataToCatalyst(
     child: Expression,
     jsonFormatSchema: String,
     options: Map[String, String])
@@ -39,7 +39,11 @@ private[avro] case class AvroDataToCatalyst(
   override def inputTypes: Seq[AbstractDataType] = Seq(BinaryType)
 
   override lazy val dataType: DataType = {
-    val dt = SchemaConverters.toSqlType(expectedSchema).dataType
+    val dt = SchemaConverters.toSqlType(
+      expectedSchema,
+      avroOptions.useStableIdForUnionType,
+      avroOptions.stableIdPrefixForUnionType,
+      avroOptions.recursiveFieldMaxDepth).dataType
     parseMode match {
       // With PermissiveMode, the output Catalyst row might contain columns of null values for
       // corrupt records, even if some of the columns are not nullable in the user-provided schema.
@@ -53,14 +57,21 @@ private[avro] case class AvroDataToCatalyst(
 
   private lazy val avroOptions = AvroOptions(options)
 
-  @transient private lazy val actualSchema = new Schema.Parser().parse(jsonFormatSchema)
+  @transient private lazy val actualSchema =
+    new Schema.Parser().setValidateDefaults(false).parse(jsonFormatSchema)
 
   @transient private lazy val expectedSchema = avroOptions.schema.getOrElse(actualSchema)
 
   @transient private lazy val reader = new GenericDatumReader[Any](actualSchema, expectedSchema)
 
   @transient private lazy val deserializer =
-    new AvroDeserializer(expectedSchema, dataType, avroOptions.datetimeRebaseModeInRead)
+    new AvroDeserializer(
+      expectedSchema,
+      dataType,
+      avroOptions.datetimeRebaseModeInRead,
+      avroOptions.useStableIdForUnionType,
+      avroOptions.stableIdPrefixForUnionType,
+      avroOptions.recursiveFieldMaxDepth)
 
   @transient private var decoder: BinaryDecoder = _
 
@@ -69,20 +80,17 @@ private[avro] case class AvroDataToCatalyst(
   @transient private lazy val parseMode: ParseMode = {
     val mode = avroOptions.parseMode
     if (mode != PermissiveMode && mode != FailFastMode) {
-      throw new AnalysisException(unacceptableModeMessage(mode.name))
+      throw QueryCompilationErrors.parseModeUnsupportedError(
+        prettyName, mode
+      )
     }
     mode
-  }
-
-  private def unacceptableModeMessage(name: String): String = {
-    s"from_avro() doesn't support the $name mode. " +
-      s"Acceptable modes are ${PermissiveMode.name} and ${FailFastMode.name}."
   }
 
   @transient private lazy val nullResultRow: Any = dataType match {
       case st: StructType =>
         val resultRow = new SpecificInternalRow(st.map(_.dataType))
-        for(i <- 0 until st.length) {
+        for (i <- 0 until st.length) {
           resultRow.setNullAt(i)
         }
         resultRow
@@ -112,7 +120,9 @@ private[avro] case class AvroDataToCatalyst(
             s"Current parse Mode: ${FailFastMode.name}. To process malformed records as null " +
             "result, try setting the option 'mode' as 'PERMISSIVE'.", e)
         case _ =>
-          throw new AnalysisException(unacceptableModeMessage(parseMode.name))
+          throw QueryCompilationErrors.parseModeUnsupportedError(
+            prettyName, parseMode
+          )
       }
     }
   }

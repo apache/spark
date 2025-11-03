@@ -17,15 +17,43 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.sql.catalyst.expressions.{Literal, NonFoldableLiteral}
+import org.apache.spark.sql.catalyst.optimizer.EliminateWindowPartitions
+import org.apache.spark.sql.catalyst.plans.logical.{Window => WindowNode}
+import org.apache.spark.sql.classic.ExpressionColumnNode
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.types.CalendarIntervalType
 
 /**
  * Window frame testing for DataFrame API.
  */
 class DataFrameWindowFramesSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
+
+  test("reuse window partitionBy") {
+    val df = Seq((1, "1"), (2, "2"), (1, "1"), (2, "2")).toDF("key", "value")
+    val w = Window.partitionBy("key").orderBy("value")
+
+    checkAnswer(
+      df.select(
+        lead("key", 1).over(w),
+        lead("value", 1).over(w)),
+      Row(1, "1") :: Row(2, "2") :: Row(null, null) :: Row(null, null) :: Nil)
+  }
+
+  test("reuse window orderBy") {
+    val df = Seq((1, "1"), (2, "2"), (1, "1"), (2, "2")).toDF("key", "value")
+    val w = Window.orderBy("value").partitionBy("key")
+
+    checkAnswer(
+      df.select(
+        lead("key", 1).over(w),
+        lead("value", 1).over(w)),
+      Row(1, "1") :: Row(2, "2") :: Row(null, null) :: Row(null, null) :: Nil)
+  }
 
   test("lead/lag with empty data frame") {
     val df = Seq.empty[(Int, String)].toDF("key", "value")
@@ -62,6 +90,18 @@ class DataFrameWindowFramesSuite extends QueryTest with SharedSparkSession {
       Row(1, "1", null) :: Row(1, null, "3") :: Row(2, "2", null) :: Row(2, null, "4") :: Nil)
   }
 
+  test("lead/lag with positive offset that greater than window group size") {
+    val df = Seq((1, "1"), (2, "2"), (1, "3"), (2, "4")).toDF("key", "value")
+    val window = Window.partitionBy($"key").orderBy($"value")
+
+    checkAnswer(
+      df.select(
+        $"key",
+        lead("value", 3).over(window),
+        lag("value", 3).over(window)),
+      Row(1, null, null) :: Row(1, null, null) :: Row(2, null, null) :: Row(2, null, null) :: Nil)
+  }
+
   test("lead/lag with negative offset") {
     val df = Seq((1, "1"), (2, "2"), (1, "3"), (2, "4")).toDF("key", "value")
     val window = Window.partitionBy($"key").orderBy($"value")
@@ -72,6 +112,18 @@ class DataFrameWindowFramesSuite extends QueryTest with SharedSparkSession {
         lead("value", -1).over(window),
         lag("value", -1).over(window)),
       Row(1, null, "3") :: Row(1, "1", null) :: Row(2, null, "4") :: Row(2, "2", null) :: Nil)
+  }
+
+  test("lead/lag with negative offset that absolute value greater than window group size") {
+    val df = Seq((1, "1"), (2, "2"), (1, "3"), (2, "4")).toDF("key", "value")
+    val window = Window.partitionBy($"key").orderBy($"value")
+
+    checkAnswer(
+      df.select(
+        $"key",
+        lead("value", -3).over(window),
+        lag("value", -3).over(window)),
+      Row(1, null, null) :: Row(1, null, null) :: Row(2, null, null) :: Row(2, null, null) :: Nil)
   }
 
   test("reverse lead/lag with negative offset") {
@@ -103,6 +155,37 @@ class DataFrameWindowFramesSuite extends QueryTest with SharedSparkSession {
         Row(2, default, default, default, default) :: Nil)
   }
 
+  test("lead/lag with column reference as default when offset exceeds window group size") {
+    val df = spark.range(0, 10, 1, 1).toDF("id")
+    val window = Window.partitionBy(expr("div(id, 2)")).orderBy($"id")
+
+    val result = df.select(
+      $"id",
+      lead($"id", 1, $"id").over(window).as("lead_1"),
+      lead($"id", 3, $"id").over(window).as("lead_3"),
+      lag($"id", 1, $"id").over(window).as("lag_1"),
+      lag($"id", 3, $"id").over(window).as("lag_3")
+    ).orderBy("id")
+
+    // check the output in one table
+    // col0: id, col1: lead_1 result, col2: lead_3 result,
+    // col3: lag_1 result, col4: lag_3 result
+    val expected = Seq(
+      Row(0, 1, 0, 0, 0),
+      Row(1, 1, 1, 0, 1),
+      Row(2, 3, 2, 2, 2),
+      Row(3, 3, 3, 2, 3),
+      Row(4, 5, 4, 4, 4),
+      Row(5, 5, 5, 4, 5),
+      Row(6, 7, 6, 6, 6),
+      Row(7, 7, 7, 6, 7),
+      Row(8, 9, 8, 8, 8),
+      Row(9, 9, 9, 8, 9)
+    )
+
+    checkAnswer(result, expected)
+  }
+
   test("rows/range between with empty data frame") {
     val df = Seq.empty[(String, Int)].toDF("key", "value")
     val window = Window.partitionBy($"key").orderBy($"value")
@@ -129,12 +212,33 @@ class DataFrameWindowFramesSuite extends QueryTest with SharedSparkSession {
       Seq(Row(1, 3), Row(1, 4), Row(2, 2), Row(3, 2), Row(2147483650L, 1), Row(2147483650L, 1))
     )
 
-    val e = intercept[AnalysisException](
-      df.select(
-        $"key",
-        count("key").over(
-          Window.partitionBy($"value").orderBy($"key").rowsBetween(0, 2147483648L))))
-    assert(e.message.contains("Boundary end is not a valid integer: 2147483648"))
+    checkError(
+      exception = intercept[AnalysisException](
+        df.select(
+          $"key",
+          count("key").over(
+            Window.partitionBy($"value").orderBy($"key").rowsBetween(2147483648L, 0)))),
+      condition = "INVALID_BOUNDARY.START",
+      parameters = Map(
+        "invalidValue" -> "2147483648L",
+        "boundary" -> "`start`",
+        "intMaxValue" -> "2147483647",
+        "intMinValue" -> "-2147483648",
+        "longMinValue" -> "-9223372036854775808L"))
+
+    checkError(
+      exception = intercept[AnalysisException](
+        df.select(
+          $"key",
+          count("key").over(
+            Window.partitionBy($"value").orderBy($"key").rowsBetween(0, 2147483648L)))),
+      condition = "INVALID_BOUNDARY.END",
+      parameters = Map(
+        "invalidValue" -> "2147483648L",
+        "boundary" -> "`end`",
+        "intMaxValue" -> "2147483647",
+        "intMinValue" -> "-2147483648",
+        "longMaxValue" -> "9223372036854775807L"))
   }
 
   test("range between should accept at most one ORDER BY expression when unbounded") {
@@ -149,23 +253,54 @@ class DataFrameWindowFramesSuite extends QueryTest with SharedSparkSession {
       Seq(Row(1, 1))
     )
 
-    val e1 = intercept[AnalysisException](
-      df.select(
-        min("key").over(window.rangeBetween(Window.unboundedPreceding, 1))))
-    assert(e1.message.contains("A range window frame with value boundaries cannot be used in a " +
-      "window specification with multiple order by expressions"))
+    checkError(
+      exception = intercept[AnalysisException](
+        df.select(
+          min("key").over(window.rangeBetween(Window.unboundedPreceding, 1)))
+      ),
+      condition = "DATATYPE_MISMATCH.RANGE_FRAME_MULTI_ORDER",
+      parameters = Map(
+        "orderSpec" -> """key#\d+ ASC NULLS FIRST,value#\d+ ASC NULLS FIRST""",
+        "sqlExpr" -> (""""\(ORDER BY key ASC NULLS FIRST, value ASC NULLS FIRST RANGE """ +
+          """BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING\)"""")
+      ),
+      matchPVals = true,
+      queryContext =
+        Array(ExpectedContext(fragment = "over", callSitePattern = getCurrentClassCallSitePattern))
+    )
 
-    val e2 = intercept[AnalysisException](
-      df.select(
-        min("key").over(window.rangeBetween(-1, Window.unboundedFollowing))))
-    assert(e2.message.contains("A range window frame with value boundaries cannot be used in a " +
-      "window specification with multiple order by expressions"))
+    checkError(
+      exception = intercept[AnalysisException](
+        df.select(
+          min("key").over(window.rangeBetween(-1, Window.unboundedFollowing)))
+      ),
+      condition = "DATATYPE_MISMATCH.RANGE_FRAME_MULTI_ORDER",
+      parameters = Map(
+        "orderSpec" -> """key#\d+ ASC NULLS FIRST,value#\d+ ASC NULLS FIRST""",
+        "sqlExpr" -> (""""\(ORDER BY key ASC NULLS FIRST, value ASC NULLS FIRST RANGE """ +
+          """BETWEEN -1 FOLLOWING AND UNBOUNDED FOLLOWING\)"""")
+      ),
+      matchPVals = true,
+      queryContext =
+        Array(ExpectedContext(fragment = "over", callSitePattern = getCurrentClassCallSitePattern))
+    )
 
-    val e3 = intercept[AnalysisException](
-      df.select(
-        min("key").over(window.rangeBetween(-1, 1))))
-    assert(e3.message.contains("A range window frame with value boundaries cannot be used in a " +
-      "window specification with multiple order by expressions"))
+    checkError(
+      exception = intercept[AnalysisException](
+        df.select(
+          min("key").over(window.rangeBetween(-1, 1)))
+      ),
+      condition = "DATATYPE_MISMATCH.RANGE_FRAME_MULTI_ORDER",
+      parameters = Map(
+        "orderSpec" -> """key#\d+ ASC NULLS FIRST,value#\d+ ASC NULLS FIRST""",
+        "sqlExpr" -> (""""\(ORDER BY key ASC NULLS FIRST, value ASC NULLS FIRST RANGE """ +
+          """BETWEEN -1 FOLLOWING AND 1 FOLLOWING\)"""")
+      ),
+      matchPVals = true,
+      queryContext =
+        Array(ExpectedContext(fragment = "over", callSitePattern = getCurrentClassCallSitePattern))
+    )
+
   }
 
   test("range between should accept numeric values only when bounded") {
@@ -179,23 +314,53 @@ class DataFrameWindowFramesSuite extends QueryTest with SharedSparkSession {
           window.rangeBetween(Window.unboundedPreceding, Window.unboundedFollowing))),
       Row("non_numeric", "non_numeric") :: Nil)
 
-    val e1 = intercept[AnalysisException](
-      df.select(
-        min("value").over(window.rangeBetween(Window.unboundedPreceding, 1))))
-    assert(e1.message.contains("The data type of the upper bound 'string' " +
-      "does not match the expected data type"))
+    checkError(
+      exception = intercept[AnalysisException](
+        df.select(
+          min("value").over(window.rangeBetween(Window.unboundedPreceding, 1)))
+      ),
+      condition = "DATATYPE_MISMATCH.SPECIFIED_WINDOW_FRAME_UNACCEPTED_TYPE",
+      parameters = Map(
+        "location" -> "upper",
+        "exprType" -> "\"STRING\"",
+        "expectedType" -> ("(\"NUMERIC\" or \"INTERVAL DAY TO SECOND\" or \"INTERVAL YEAR " +
+          "TO MONTH\" or \"INTERVAL\")"),
+        "sqlExpr" -> "\"RANGE BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING\""
+      ),
+      context = ExpectedContext(fragment = "over", callSitePattern = getCurrentClassCallSitePattern)
+    )
 
-    val e2 = intercept[AnalysisException](
-      df.select(
-        min("value").over(window.rangeBetween(-1, Window.unboundedFollowing))))
-    assert(e2.message.contains("The data type of the lower bound 'string' " +
-      "does not match the expected data type"))
+    checkError(
+      exception = intercept[AnalysisException](
+        df.select(
+          min("value").over(window.rangeBetween(-1, Window.unboundedFollowing)))
+      ),
+      condition = "DATATYPE_MISMATCH.SPECIFIED_WINDOW_FRAME_UNACCEPTED_TYPE",
+      parameters = Map(
+        "location" -> "lower",
+        "exprType" -> "\"STRING\"",
+        "expectedType" -> ("(\"NUMERIC\" or \"INTERVAL DAY TO SECOND\" or \"INTERVAL YEAR " +
+          "TO MONTH\" or \"INTERVAL\")"),
+        "sqlExpr" -> "\"RANGE BETWEEN -1 FOLLOWING AND UNBOUNDED FOLLOWING\""
+      ),
+      context = ExpectedContext(fragment = "over", callSitePattern = getCurrentClassCallSitePattern)
+    )
 
-    val e3 = intercept[AnalysisException](
-      df.select(
-        min("value").over(window.rangeBetween(-1, 1))))
-    assert(e3.message.contains("The data type of the lower bound 'string' " +
-      "does not match the expected data type"))
+    checkError(
+      exception = intercept[AnalysisException](
+        df.select(
+          min("value").over(window.rangeBetween(-1, 1)))
+      ),
+      condition = "DATATYPE_MISMATCH.SPECIFIED_WINDOW_FRAME_UNACCEPTED_TYPE",
+      parameters = Map(
+        "location" -> "lower",
+        "exprType" -> "\"STRING\"",
+        "expectedType" -> ("(\"NUMERIC\" or \"INTERVAL DAY TO SECOND\" or \"INTERVAL YEAR " +
+          "TO MONTH\" or \"INTERVAL\")"),
+        "sqlExpr" -> "\"RANGE BETWEEN -1 FOLLOWING AND 1 FOLLOWING\""
+      ),
+      context = ExpectedContext(fragment = "over", callSitePattern = getCurrentClassCallSitePattern)
+    )
   }
 
   test("range between should accept int/long values as boundary") {
@@ -366,5 +531,122 @@ class DataFrameWindowFramesSuite extends QueryTest with SharedSparkSession {
       ds.withColumn("m",
         lag("i", 1).over(Window.partitionBy("n").orderBy("i").rowsBetween(-1, -1))),
       res)
+  }
+
+  test("Window frame bounds lower and upper do not have the same type") {
+    val df = Seq((1L, "1"), (1L, "1")).toDF("key", "value")
+
+    val windowSpec = Window.partitionBy($"value").orderBy($"key".asc).withFrame(
+      internal.WindowFrame.Range,
+      internal.WindowFrame.Value(ExpressionColumnNode(Literal.create(null, CalendarIntervalType))),
+      internal.WindowFrame.Value(lit(2).node))
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.select($"key", count("key").over(windowSpec)).collect()
+      },
+      condition = "DATATYPE_MISMATCH.SPECIFIED_WINDOW_FRAME_DIFF_TYPES",
+      parameters = Map(
+        "sqlExpr" -> "\"RANGE BETWEEN NULL FOLLOWING AND 2 FOLLOWING\"",
+        "lower" -> "\"NULL\"",
+        "upper" -> "\"2\"",
+        "lowerType" -> "\"INTERVAL\"",
+        "upperType" -> "\"BIGINT\""
+      ),
+      context = ExpectedContext(fragment = "over", callSitePattern = getCurrentClassCallSitePattern)
+    )
+  }
+
+  test("Window frame lower bound is not a literal") {
+    val df = Seq((1L, "1"), (1L, "1")).toDF("key", "value")
+    val windowSpec = Window.partitionBy($"value").orderBy($"key".asc).withFrame(
+      internal.WindowFrame.Range,
+      internal.WindowFrame.Value(ExpressionColumnNode(NonFoldableLiteral(1))),
+      internal.WindowFrame.Value(lit(2).node))
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.select($"key", count("key").over(windowSpec)).collect()
+      },
+      condition = "DATATYPE_MISMATCH.SPECIFIED_WINDOW_FRAME_WITHOUT_FOLDABLE",
+      parameters = Map(
+        "sqlExpr" -> "\"RANGE BETWEEN nonfoldableliteral() FOLLOWING AND 2 FOLLOWING\"",
+        "location" -> "lower",
+        "expression" -> "\"nonfoldableliteral()\""),
+      context = ExpectedContext(fragment = "over", callSitePattern = getCurrentClassCallSitePattern)
+    )
+  }
+
+  test("SPARK-41805: Reuse expressions in WindowSpecDefinition") {
+    val ds = Seq((1, 1), (1, 2), (1, 3), (2, 1), (2, 2)).toDF("n", "i")
+    val window = Window.partitionBy($"n").orderBy($"n".cast("string").asc)
+    val df = ds.select(sum("i").over(window), avg("i").over(window))
+    val ws = df.queryExecution.analyzed.collect { case w: WindowNode => w }
+    assert(ws.size === 1)
+    checkAnswer(df,
+      Row(3, 1.5) :: Row(3, 1.5) :: Row(6, 2.0) :: Row(6, 2.0) :: Row(6, 2.0) :: Nil)
+  }
+
+  test("SPARK-41793: Incorrect result for window frames defined by a range clause on large " +
+    "decimals") {
+    val window = Window.partitionBy($"a").orderBy($"b".asc).withFrame(
+      internal.WindowFrame.Range,
+      internal.WindowFrame.Value((-lit(BigDecimal(10.2345))).node),
+      internal.WindowFrame.Value(lit(BigDecimal(10.2345)).node))
+
+    val df = Seq(
+      1 -> "11342371013783243717493546650944543.47",
+      1 -> "999999999999999999999999999999999999.99"
+    ).toDF("a", "b")
+      .select($"a", $"b".cast("decimal(38, 2)"))
+      .select(count("*").over(window))
+
+    checkAnswer(
+      df,
+      Row(1) :: Row(1) :: Nil)
+  }
+
+  test("SPARK-45352: Eliminate foldable window partitions") {
+    val df = Seq((1, 1), (1, 2), (1, 3), (2, 1), (2, 2)).toDF("a", "b")
+
+    Seq(true, false).foreach { eliminateWindowPartitionsEnabled =>
+      val excludedRules =
+        if (eliminateWindowPartitionsEnabled) "" else EliminateWindowPartitions.ruleName
+      withSQLConf(SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> excludedRules) {
+        val window1 = Window.partitionBy(lit(1)).orderBy($"b")
+        checkAnswer(
+          df.select($"a", $"b", row_number().over(window1)),
+          Seq(Row(1, 1, 1), Row(1, 2, 3), Row(1, 3, 5), Row(2, 1, 2), Row(2, 2, 4)))
+
+        val window2 = Window.partitionBy($"a", lit(1)).orderBy($"b")
+        checkAnswer(
+          df.select($"a", $"b", row_number().over(window2)),
+          Seq(Row(1, 1, 1), Row(1, 2, 2), Row(1, 3, 3), Row(2, 1, 1), Row(2, 2, 2)))
+      }
+    }
+  }
+
+  test("SPARK-34227: WindowFunctionFrame should clear its states during preparation") {
+    // This creates a single partition dataframe with 3 records:
+    //   "a", 0, null
+    //   "a", 1, "x"
+    //   "b", 0, null
+    val df = spark.range(0, 3, 1, 1).select(
+      when($"id" < 2, lit("a")).otherwise(lit("b")).as("key"),
+      ($"id" % 2).cast("int").as("order"),
+      when($"id" % 2 === 0, lit(null)).otherwise(lit("x")).as("value"))
+
+    val window1 = Window.partitionBy($"key").orderBy($"order")
+      .rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing)
+    val window2 = Window.partitionBy($"key").orderBy($"order")
+      .rowsBetween(Window.unboundedPreceding, Window.currentRow)
+    checkAnswer(
+      df.select(
+        $"key",
+        $"order",
+        nth_value($"value", 1, ignoreNulls = true).over(window1),
+        nth_value($"value", 1, ignoreNulls = true).over(window2)),
+      Seq(
+        Row("a", 0, "x", null),
+        Row("a", 1, "x", "x"),
+        Row("b", 0, null, null)))
   }
 }

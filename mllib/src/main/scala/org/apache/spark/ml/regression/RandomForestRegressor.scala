@@ -21,6 +21,7 @@ import org.json4s.{DefaultFormats, JObject}
 import org.json4s.JsonDSL._
 
 import org.apache.spark.annotation.Since
+import org.apache.spark.internal.{LogKeys}
 import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.ml.param.ParamMap
@@ -161,7 +162,7 @@ class RandomForestRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: S
     trees.foreach(copyValues(_))
 
     val numFeatures = trees.head.numFeatures
-    instr.logNamedValue(Instrumentation.loggerTags.numFeatures, numFeatures)
+    instr.logNumFeatures(numFeatures)
     new RandomForestRegressionModel(uid, trees, numFeatures)
   }
 
@@ -211,6 +212,11 @@ class RandomForestRegressionModel private[ml] (
   private[ml] def this(trees: Array[DecisionTreeRegressionModel], numFeatures: Int) =
     this(Identifiable.randomUID("rfr"), trees, numFeatures)
 
+  // For ml connect only
+  private[ml] def this() = this("", Array(new DecisionTreeRegressionModel), -1)
+
+  override def estimatedSize: Long = getEstimatedSize()
+
   @Since("1.4.0")
   override def trees: Array[DecisionTreeRegressionModel] = _trees
 
@@ -254,8 +260,8 @@ class RandomForestRegressionModel private[ml] (
     if (predictionColNames.nonEmpty) {
       dataset.withColumns(predictionColNames, predictionColumns)
     } else {
-      this.logWarning(s"$uid: RandomForestRegressionModel.transform() does nothing" +
-        " because no output columns were set.")
+      this.logWarning(log"${MDC(LogKeys.UUID, uid)}: RandomForestRegressionModel.transform() " +
+        log"does nothing because no output columns were set.")
       dataset.toDF()
     }
   }

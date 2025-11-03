@@ -19,41 +19,55 @@ package org.apache.spark.sql
 
 import java.io.{File, FilenameFilter}
 import java.nio.file.{Files, Paths}
-import java.time.{Duration, LocalDateTime, Period}
+import java.time.{Duration, LocalDateTime, LocalTime, Period}
+import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.collection.mutable.HashSet
 import scala.concurrent.duration._
 
-import org.apache.commons.io.FileUtils
-
-import org.apache.spark.CleanerListener
+import org.apache.spark.{CleanerListener, SparkRuntimeException}
+import org.apache.spark.SparkConf
 import org.apache.spark.executor.DataReadMethod._
 import org.apache.spark.executor.DataReadMethod.DataReadMethod
-import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
+import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent, SparkListenerJobStart}
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.analysis.AsOfVersion
 import org.apache.spark.sql.catalyst.analysis.TempTableAlreadyExistsException
 import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
 import org.apache.spark.sql.catalyst.plans.logical.{BROADCAST, Join, JoinStrategyHint, SHUFFLE_HASH}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants
-import org.apache.spark.sql.execution.{ColumnarToRowExec, ExecSubqueryExpression, RDDScanExec, SparkPlan}
-import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
+import org.apache.spark.sql.connector.catalog.BasicInMemoryTableCatalog
+import org.apache.spark.sql.connector.catalog.CatalogPlugin
+import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.CatalogHelper
+import org.apache.spark.sql.connector.catalog.Identifier
+import org.apache.spark.sql.connector.catalog.InMemoryCatalog
+import org.apache.spark.sql.execution.{ColumnarToRowExec, ExecSubqueryExpression, RDDScanExec, SparkPlan, SparkPlanInfo}
+import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper, AQEPropagateEmptyRelation}
 import org.apache.spark.sql.execution.columnar._
+import org.apache.spark.sql.execution.command.CommandUtils
+import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
+import org.apache.spark.sql.execution.ui.SparkListenerSQLAdaptiveExecutionUpdate
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
 import org.apache.spark.sql.types.{StringType, StructField, StructType}
 import org.apache.spark.storage.{RDDBlockId, StorageLevel}
 import org.apache.spark.storage.StorageLevel.{MEMORY_AND_DISK_2, MEMORY_ONLY}
+import org.apache.spark.tags.SlowSQLTest
 import org.apache.spark.unsafe.types.CalendarInterval
 import org.apache.spark.util.{AccumulatorContext, Utils}
 
 private case class BigData(s: String)
 
+@SlowSQLTest
 class CachedTableSuite extends QueryTest with SQLTestUtils
   with SharedSparkSession
   with AdaptiveSparkPlanHelper {
   import testImplicits._
+
+  override def sparkConf: SparkConf = super.sparkConf
+    .set("spark.sql.catalog.testcat", classOf[InMemoryCatalog].getName)
 
   setupTestData()
 
@@ -88,7 +102,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
     maybeBlock.nonEmpty && isExpectLevel
   }
 
-  private def getNumInMemoryRelations(ds: Dataset[_]): Int = {
+  private def getNumInMemoryRelations(ds: classic.Dataset[_]): Int = {
     val plan = ds.queryExecution.withCachedData
     var sum = plan.collect { case _: InMemoryRelation => 1 }.sum
     plan.transformAllExpressions {
@@ -153,7 +167,9 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
       val e = intercept[TempTableAlreadyExistsException] {
         sql("CACHE TABLE tempView AS SELECT 1")
       }
-      assert(e.getMessage.contains("Temporary view 'tempView' already exists"))
+      checkError(e,
+        condition = "TEMP_TABLE_OR_VIEW_ALREADY_EXISTS",
+        parameters = Map("relationName" -> "`tempView`"))
     }
   }
 
@@ -176,7 +192,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
 
   test("too big for memory") {
     withTempView("bigData") {
-      val data = "*" * 1000
+      val data = "*".repeat(1000)
       sparkContext.parallelize(1 to 200000, 1).map(_ => BigData(data)).toDF()
         .createOrReplaceTempView("bigData")
       spark.table("bigData").persist(StorageLevel.MEMORY_AND_DISK)
@@ -502,159 +518,168 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
           |join abc c on a.key=c.key""".stripMargin).queryExecution.sparkPlan
 
       assert(sparkPlan.collect { case e: InMemoryTableScanExec => e }.size === 3)
-      assert(sparkPlan.collect { case e: RDDScanExec => e }.size === 0)
+      assert(sparkPlan.collectFirst { case e: RDDScanExec => e }.isEmpty)
     }
   }
 
   /**
    * Verifies that the plan for `df` contains `expected` number of Exchange operators.
    */
-  private def verifyNumExchanges(df: DataFrame, expected: Int): Unit = {
+  private def verifyNumExchanges(df: classic.DataFrame, expected: Int): Unit = {
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      df.collect()
+    }
     assert(
       collect(df.queryExecution.executedPlan) { case e: ShuffleExchangeExec => e }.size == expected)
   }
 
   test("A cached table preserves the partitioning and ordering of its cached SparkPlan") {
-    val table3x = testData.union(testData).union(testData)
-    table3x.createOrReplaceTempView("testData3x")
+    // Set MAX_SINGLE_PARTITION_BYTES to Long.MaxValue to avoid inserting Exchange node
+    withSQLConf(SQLConf.MAX_SINGLE_PARTITION_BYTES.key -> Long.MaxValue.toString) {
+      val table3x = testData.union(testData).union(testData)
+      table3x.createOrReplaceTempView("testData3x")
 
-    sql("SELECT key, value FROM testData3x ORDER BY key").createOrReplaceTempView("orderedTable")
-    spark.catalog.cacheTable("orderedTable")
-    assertCached(spark.table("orderedTable"))
-    // Should not have an exchange as the query is already sorted on the group by key.
-    verifyNumExchanges(sql("SELECT key, count(*) FROM orderedTable GROUP BY key"), 0)
-    checkAnswer(
-      sql("SELECT key, count(*) FROM orderedTable GROUP BY key ORDER BY key"),
-      sql("SELECT key, count(*) FROM testData3x GROUP BY key ORDER BY key").collect())
-    uncacheTable("orderedTable")
-    spark.catalog.dropTempView("orderedTable")
+      sql("SELECT key, value FROM testData3x ORDER BY key").createOrReplaceTempView("orderedTable")
+      spark.catalog.cacheTable("orderedTable")
+      assertCached(spark.table("orderedTable"))
+      // Should not have an exchange as the query is already sorted on the group by key.
+      verifyNumExchanges(sql("SELECT key, count(*) FROM orderedTable GROUP BY key"), 0)
+      checkAnswer(
+        sql("SELECT key, count(*) FROM orderedTable GROUP BY key ORDER BY key"),
+        sql("SELECT key, count(*) FROM testData3x GROUP BY key ORDER BY key").collect())
+      uncacheTable("orderedTable")
+      spark.catalog.dropTempView("orderedTable")
 
-    // Set up two tables distributed in the same way. Try this with the data distributed into
-    // different number of partitions.
-    for (numPartitions <- 1 until 10 by 4) {
+      // Set up two tables distributed in the same way. Try this with the data distributed into
+      // different number of partitions.
+      for (numPartitions <- 1 until 10 by 4) {
+        withTempView("t1", "t2") {
+          testData.repartition(numPartitions, $"key").createOrReplaceTempView("t1")
+          testData2.repartition(numPartitions, $"a").createOrReplaceTempView("t2")
+          spark.catalog.cacheTable("t1")
+          spark.catalog.cacheTable("t2")
+
+          // Joining them should result in no exchanges.
+          verifyNumExchanges(sql("SELECT * FROM t1 t1 JOIN t2 t2 ON t1.key = t2.a"), 0)
+          checkAnswer(sql("SELECT * FROM t1 t1 JOIN t2 t2 ON t1.key = t2.a"),
+            sql("SELECT * FROM testData t1 JOIN testData2 t2 ON t1.key = t2.a"))
+
+          // Grouping on the partition key should result in no exchanges
+          verifyNumExchanges(sql("SELECT count(*) FROM t1 GROUP BY key"), 0)
+          checkAnswer(sql("SELECT count(*) FROM t1 GROUP BY key"),
+            sql("SELECT count(*) FROM testData GROUP BY key"))
+
+          uncacheTable("t1")
+          uncacheTable("t2")
+        }
+      }
+
+      // Distribute the tables into non-matching number of partitions. Need to shuffle one side.
       withTempView("t1", "t2") {
-        testData.repartition(numPartitions, $"key").createOrReplaceTempView("t1")
-        testData2.repartition(numPartitions, $"a").createOrReplaceTempView("t2")
+        testData.repartition(6, $"key").createOrReplaceTempView("t1")
+        testData2.repartition(3, $"a").createOrReplaceTempView("t2")
         spark.catalog.cacheTable("t1")
         spark.catalog.cacheTable("t2")
 
-        // Joining them should result in no exchanges.
-        verifyNumExchanges(sql("SELECT * FROM t1 t1 JOIN t2 t2 ON t1.key = t2.a"), 0)
-        checkAnswer(sql("SELECT * FROM t1 t1 JOIN t2 t2 ON t1.key = t2.a"),
-          sql("SELECT * FROM testData t1 JOIN testData2 t2 ON t1.key = t2.a"))
-
-        // Grouping on the partition key should result in no exchanges
-        verifyNumExchanges(sql("SELECT count(*) FROM t1 GROUP BY key"), 0)
-        checkAnswer(sql("SELECT count(*) FROM t1 GROUP BY key"),
-          sql("SELECT count(*) FROM testData GROUP BY key"))
-
+        val query = sql("SELECT key, value, a, b FROM t1 t1 JOIN t2 t2 ON t1.key = t2.a")
+        verifyNumExchanges(query, 1)
+        assert(
+          stripAQEPlan(query.queryExecution.executedPlan).outputPartitioning.numPartitions === 6)
+        checkAnswer(
+          query,
+          testData.join(testData2, $"key" === $"a").select($"key", $"value", $"a", $"b"))
         uncacheTable("t1")
         uncacheTable("t2")
       }
-    }
 
-    // Distribute the tables into non-matching number of partitions. Need to shuffle one side.
-    withTempView("t1", "t2") {
-      testData.repartition(6, $"key").createOrReplaceTempView("t1")
-      testData2.repartition(3, $"a").createOrReplaceTempView("t2")
-      spark.catalog.cacheTable("t1")
-      spark.catalog.cacheTable("t2")
+      // One side of join is not partitioned in the desired way. Need to shuffle one side.
+      withTempView("t1", "t2") {
+        testData.repartition(6, $"value").createOrReplaceTempView("t1")
+        testData2.repartition(6, $"a").createOrReplaceTempView("t2")
+        spark.catalog.cacheTable("t1")
+        spark.catalog.cacheTable("t2")
 
-      val query = sql("SELECT key, value, a, b FROM t1 t1 JOIN t2 t2 ON t1.key = t2.a")
-      verifyNumExchanges(query, 1)
-      assert(stripAQEPlan(query.queryExecution.executedPlan).outputPartitioning.numPartitions === 6)
-      checkAnswer(
-        query,
-        testData.join(testData2, $"key" === $"a").select($"key", $"value", $"a", $"b"))
-      uncacheTable("t1")
-      uncacheTable("t2")
-    }
+        val query = sql("SELECT key, value, a, b FROM t1 t1 JOIN t2 t2 ON t1.key = t2.a")
+        verifyNumExchanges(query, 1)
+        assert(
+          stripAQEPlan(query.queryExecution.executedPlan).outputPartitioning.numPartitions === 6)
+        checkAnswer(
+          query,
+          testData.join(testData2, $"key" === $"a").select($"key", $"value", $"a", $"b"))
+        uncacheTable("t1")
+        uncacheTable("t2")
+      }
 
-    // One side of join is not partitioned in the desired way. Need to shuffle one side.
-    withTempView("t1", "t2") {
-      testData.repartition(6, $"value").createOrReplaceTempView("t1")
-      testData2.repartition(6, $"a").createOrReplaceTempView("t2")
-      spark.catalog.cacheTable("t1")
-      spark.catalog.cacheTable("t2")
+      withTempView("t1", "t2") {
+        testData.repartition(6, $"value").createOrReplaceTempView("t1")
+        testData2.repartition(12, $"a").createOrReplaceTempView("t2")
+        spark.catalog.cacheTable("t1")
+        spark.catalog.cacheTable("t2")
 
-      val query = sql("SELECT key, value, a, b FROM t1 t1 JOIN t2 t2 ON t1.key = t2.a")
-      verifyNumExchanges(query, 1)
-      assert(stripAQEPlan(query.queryExecution.executedPlan).outputPartitioning.numPartitions === 6)
-      checkAnswer(
-        query,
-        testData.join(testData2, $"key" === $"a").select($"key", $"value", $"a", $"b"))
-      uncacheTable("t1")
-      uncacheTable("t2")
-    }
+        val query = sql("SELECT key, value, a, b FROM t1 t1 JOIN t2 t2 ON t1.key = t2.a")
+        verifyNumExchanges(query, 1)
+        assert(
+          stripAQEPlan(query.queryExecution.executedPlan).outputPartitioning.numPartitions === 12)
+        checkAnswer(
+          query,
+          testData.join(testData2, $"key" === $"a").select($"key", $"value", $"a", $"b"))
+        uncacheTable("t1")
+        uncacheTable("t2")
+      }
 
-    withTempView("t1", "t2") {
-      testData.repartition(6, $"value").createOrReplaceTempView("t1")
-      testData2.repartition(12, $"a").createOrReplaceTempView("t2")
-      spark.catalog.cacheTable("t1")
-      spark.catalog.cacheTable("t2")
+      // One side of join is not partitioned in the desired way. We'll only shuffle this side.
+      withTempView("t1", "t2") {
+        testData.repartition(6, $"value").createOrReplaceTempView("t1")
+        testData2.repartition(3, $"a").createOrReplaceTempView("t2")
+        spark.catalog.cacheTable("t1")
+        spark.catalog.cacheTable("t2")
 
-      val query = sql("SELECT key, value, a, b FROM t1 t1 JOIN t2 t2 ON t1.key = t2.a")
-      verifyNumExchanges(query, 1)
-      assert(stripAQEPlan(query.queryExecution.executedPlan).
-        outputPartitioning.numPartitions === 12)
-      checkAnswer(
-        query,
-        testData.join(testData2, $"key" === $"a").select($"key", $"value", $"a", $"b"))
-      uncacheTable("t1")
-      uncacheTable("t2")
-    }
+        val query = sql("SELECT key, value, a, b FROM t1 t1 JOIN t2 t2 ON t1.key = t2.a")
+        verifyNumExchanges(query, 1)
+        checkAnswer(
+          query,
+          testData.join(testData2, $"key" === $"a").select($"key", $"value", $"a", $"b"))
+        uncacheTable("t1")
+        uncacheTable("t2")
+      }
 
-    // One side of join is not partitioned in the desired way. We'll only shuffle this side.
-    withTempView("t1", "t2") {
-      testData.repartition(6, $"value").createOrReplaceTempView("t1")
-      testData2.repartition(3, $"a").createOrReplaceTempView("t2")
-      spark.catalog.cacheTable("t1")
-      spark.catalog.cacheTable("t2")
+      // repartition's column ordering is different from group by column ordering.
+      // But they use the same set of columns.
+      withTempView("t1") {
+        testData.repartition(6, $"value", $"key").createOrReplaceTempView("t1")
+        spark.catalog.cacheTable("t1")
 
-      val query = sql("SELECT key, value, a, b FROM t1 t1 JOIN t2 t2 ON t1.key = t2.a")
-      verifyNumExchanges(query, 1)
-      checkAnswer(
-        query,
-        testData.join(testData2, $"key" === $"a").select($"key", $"value", $"a", $"b"))
-      uncacheTable("t1")
-      uncacheTable("t2")
-    }
+        val query = sql("SELECT value, key from t1 group by key, value")
+        verifyNumExchanges(query, 0)
+        checkAnswer(
+          query,
+          testData.distinct().select($"value", $"key"))
+        uncacheTable("t1")
+      }
 
-    // repartition's column ordering is different from group by column ordering.
-    // But they use the same set of columns.
-    withTempView("t1") {
-      testData.repartition(6, $"value", $"key").createOrReplaceTempView("t1")
-      spark.catalog.cacheTable("t1")
+      // repartition's column ordering is different from join condition's column ordering.
+      // We will still shuffle because hashcodes of a row depend on the column ordering.
+      // If we do not shuffle, we may actually partition two tables in totally two different way.
+      // See PartitioningSuite for more details.
+      withTempView("t1", "t2") {
+        val df1 = testData
+        df1.repartition(6, $"value", $"key").createOrReplaceTempView("t1")
+        val df2 = testData2.select($"a", $"b".cast("string"))
+        df2.repartition(6, $"a", $"b").createOrReplaceTempView("t2")
+        spark.catalog.cacheTable("t1")
+        spark.catalog.cacheTable("t2")
 
-      val query = sql("SELECT value, key from t1 group by key, value")
-      verifyNumExchanges(query, 0)
-      checkAnswer(
-        query,
-        testData.distinct().select($"value", $"key"))
-      uncacheTable("t1")
-    }
-
-    // repartition's column ordering is different from join condition's column ordering.
-    // We will still shuffle because hashcodes of a row depend on the column ordering.
-    // If we do not shuffle, we may actually partition two tables in totally two different way.
-    // See PartitioningSuite for more details.
-    withTempView("t1", "t2") {
-      val df1 = testData
-      df1.repartition(6, $"value", $"key").createOrReplaceTempView("t1")
-      val df2 = testData2.select($"a", $"b".cast("string"))
-      df2.repartition(6, $"a", $"b").createOrReplaceTempView("t2")
-      spark.catalog.cacheTable("t1")
-      spark.catalog.cacheTable("t2")
-
-      val query =
-        sql("SELECT key, value, a, b FROM t1 t1 JOIN t2 t2 ON t1.key = t2.a and t1.value = t2.b")
-      verifyNumExchanges(query, 1)
-      assert(stripAQEPlan(query.queryExecution.executedPlan).outputPartitioning.numPartitions === 6)
-      checkAnswer(
-        query,
-        df1.join(df2, $"key" === $"a" && $"value" === $"b").select($"key", $"value", $"a", $"b"))
-      uncacheTable("t1")
-      uncacheTable("t2")
+        val query =
+          sql("SELECT key, value, a, b FROM t1 t1 JOIN t2 t2 ON t1.key = t2.a and t1.value = t2.b")
+        verifyNumExchanges(query, 1)
+        assert(
+          stripAQEPlan(query.queryExecution.executedPlan).outputPartitioning.numPartitions === 6)
+        checkAnswer(
+          query,
+          df1.join(df2, $"key" === $"a" && $"value" === $"b").select($"key", $"value", $"a", $"b"))
+        uncacheTable("t1")
+        uncacheTable("t2")
+      }
     }
   }
 
@@ -821,21 +846,33 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
 
   test("SPARK-19993 subquery with cached underlying relation") {
     withTempView("t1") {
-      Seq(1).toDF("c1").createOrReplaceTempView("t1")
-      spark.catalog.cacheTable("t1")
+      Seq(false, true).foreach { enabled =>
+        withSQLConf(
+          SQLConf.CAN_CHANGE_CACHED_PLAN_OUTPUT_PARTITIONING.key -> enabled.toString,
+          SQLConf.ADAPTIVE_OPTIMIZER_EXCLUDED_RULES.key ->
+            AQEPropagateEmptyRelation.ruleName) {
 
-      // underlying table t1 is cached as well as the query that refers to it.
-      val sqlText =
-        """
-          |SELECT * FROM t1
-          |WHERE
-          |NOT EXISTS (SELECT * FROM t1)
-        """.stripMargin
-      val ds = sql(sqlText)
-      assert(getNumInMemoryRelations(ds) == 2)
+          Seq(1).toDF("c1").createOrReplaceTempView("t1")
+          spark.catalog.cacheTable("t1")
 
-      val cachedDs = sql(sqlText).cache()
-      assert(getNumInMemoryTablesRecursively(cachedDs.queryExecution.sparkPlan) == 3)
+          // underlying table t1 is cached as well as the query that refers to it.
+          val sqlText =
+            """
+              |SELECT * FROM t1
+              |WHERE
+              |NOT EXISTS (SELECT * FROM t1)
+            """.stripMargin
+          val ds = sql(sqlText)
+          assert(getNumInMemoryRelations(ds) == 2)
+
+          val cachedDs = sql(sqlText).cache()
+          cachedDs.collect()
+          assert(getNumInMemoryTablesRecursively(cachedDs.queryExecution.executedPlan) == 3)
+
+          cachedDs.unpersist()
+          spark.catalog.uncacheTable("t1")
+        }
+      }
     }
   }
 
@@ -896,7 +933,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
       withSQLConf(SQLConf.CACHE_VECTORIZED_READER_ENABLED.key -> vectorized.toString) {
         val cache = spark.range(10).cache()
         val df = cache.filter($"id" > 0)
-        val columnarToRow = df.queryExecution.executedPlan.collect {
+        val columnarToRow = df.queryExecution.executedPlan.collectFirst {
           case c: ColumnarToRowExec => c
         }
         assert(columnarToRow.isEmpty)
@@ -926,7 +963,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
     val cachedData = checkIfNoJobTriggered {
       spark.range(1002).filter($"id" > 1000).orderBy($"id".desc).cache()
     }
-    assert(cachedData.collect === Seq(1001))
+    assert(cachedData.collect() === Seq(1001))
   }
 
   test("SPARK-24596 Non-cascading Cache Invalidation - uncache temporary view") {
@@ -962,7 +999,8 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
           if (!storeAnalyzed) {
             // t2 should become invalid after t1 is dropped
             val e = intercept[AnalysisException](spark.catalog.isCached("t2"))
-            assert(e.message.contains(s"Table or view not found"))
+            checkErrorTableNotFound(e, "`t1`",
+              ExpectedContext("VIEW", "t2", 14, 15, "t1"))
           }
         }
       }
@@ -993,7 +1031,8 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
               if (!storeAnalyzed) {
                 // t2 should become invalid after t1 is dropped
                 val e = intercept[AnalysisException](spark.catalog.isCached("t2"))
-                assert(e.message.contains(s"Table or view not found"))
+                checkErrorTableNotFound(e, "`t1`",
+                  ExpectedContext("VIEW", "t2", 14, 15, "t1"))
               }
             }
           }
@@ -1023,7 +1062,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
   }
 
   test("Cache should respect the hint") {
-    def testHint(df: Dataset[_], expectedHint: JoinStrategyHint): Unit = {
+    def testHint(df: classic.Dataset[_], expectedHint: JoinStrategyHint): Unit = {
       val df2 = spark.range(2000).cache()
       df2.count()
 
@@ -1068,18 +1107,18 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
   }
 
   test("analyzes column statistics in cached query") {
-    def query(): DataFrame = {
+    def query(): classic.DataFrame = {
       spark.range(100)
         .selectExpr("id % 3 AS c0", "id % 5 AS c1", "2 AS c2")
         .groupBy("c0")
         .agg(avg("c1").as("v1"), sum("c2").as("v2"))
     }
     // First, checks if there is no column statistic in cached query
-    val queryStats1 = query().cache.queryExecution.optimizedPlan.stats.attributeStats
+    val queryStats1 = query().cache().queryExecution.optimizedPlan.stats.attributeStats
     assert(queryStats1.map(_._1.name).isEmpty)
 
     val cacheManager = spark.sharedState.cacheManager
-    val cachedData = cacheManager.lookupCachedData(query().logicalPlan)
+    val cachedData = cacheManager.lookupCachedData(query())
     assert(cachedData.isDefined)
     val queryAttrs = cachedData.get.plan.output
     assert(queryAttrs.size === 3)
@@ -1376,7 +1415,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
         .filter(_.startsWith("Location:"))
         .head
         .replace("Location: file:", "")
-      FileUtils.copyDirectory(
+      Utils.copyDirectory(
         new File(part0Loc),
         new File(part0Loc.replace("part=0", "part=1")))
 
@@ -1408,7 +1447,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
       withSQLConf(SQLConf.STORE_ANALYZED_PLAN_FOR_VIEW.key -> storeAnalyzed.toString) {
         withGlobalTempView("view1") {
           withTempView("view2") {
-            val db = spark.sharedState.globalTempViewManager.database
+            val db = spark.sharedState.globalTempDB
             sql("CREATE GLOBAL TEMPORARY VIEW view1 AS SELECT * FROM testData WHERE key > 1")
             sql(s"CACHE TABLE view2 AS SELECT * FROM ${db}.view1 WHERE value > 1")
             assert(spark.catalog.isCached("view2"))
@@ -1431,7 +1470,8 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
       checkAnswer(sql("SELECT * FROM v"), Row(1) :: Nil)
       sql(s"DROP TABLE $t")
       val e = intercept[AnalysisException](sql("SELECT * FROM v"))
-      assert(e.message.contains(s"Table or view not found: $t"))
+      checkErrorTableNotFound(e, s"`$t`",
+        ExpectedContext("VIEW", "v", 14, 13 + t.length, t))
     }
   }
 
@@ -1444,7 +1484,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
           assert(spark.catalog.isCached("view2"))
 
           val oldView = spark.table("view2")
-          spark.sqlContext.uncacheTable("view1")
+          spark.catalog.uncacheTable("view1")
           assert(storeAnalyzed ==
             spark.sharedState.cacheManager.lookupCachedData(oldView).isDefined,
             s"when storeAnalyzed = $storeAnalyzed")
@@ -1458,13 +1498,13 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
       withSQLConf(SQLConf.STORE_ANALYZED_PLAN_FOR_VIEW.key -> storeAnalyzed.toString) {
         withGlobalTempView("view1") {
           withTempView("view2") {
-            val db = spark.sharedState.globalTempViewManager.database
+            val db = spark.sharedState.globalTempDB
             sql("CREATE GLOBAL TEMPORARY VIEW view1 AS SELECT * FROM testData WHERE key > 1")
             sql(s"CACHE TABLE view2 AS SELECT * FROM $db.view1 WHERE value > 1")
             assert(spark.catalog.isCached("view2"))
 
             val oldView = spark.table("view2")
-            spark.sqlContext.uncacheTable(s"$db.view1")
+            spark.catalog.uncacheTable(s"$db.view1")
             assert(storeAnalyzed ==
               spark.sharedState.cacheManager.lookupCachedData(oldView).isDefined,
               s"when storeAnalyzed = $storeAnalyzed")
@@ -1488,7 +1528,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
     Seq(true, false).foreach { storeAnalyzed =>
       withSQLConf(SQLConf.STORE_ANALYZED_PLAN_FOR_VIEW.key -> storeAnalyzed.toString) {
         withGlobalTempView("global_tv") {
-          val db = spark.sharedState.globalTempViewManager.database
+          val db = spark.sharedState.globalTempDB
           testAlterTemporaryViewAsWithCache(TableIdentifier("global_tv", Some(db)), storeAnalyzed)
         }
       }
@@ -1546,7 +1586,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
 
   test("SPARK-34699: CREATE GLOBAL TEMP VIEW USING should uncache correctly") {
     withGlobalTempView("global_tv") {
-      val db = spark.sharedState.globalTempViewManager.database
+      val db = spark.sharedState.globalTempDB
       testCreateTemporaryViewUsingWithCache(TableIdentifier("global_tv", Some(db)))
     }
   }
@@ -1568,8 +1608,8 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
     withTempDir { dir =>
       val path1 = new File(dir, "t1").getCanonicalPath
       val path2 = new File(dir, "t2").getCanonicalPath
-      Seq(1).toDF.write.parquet(path1)
-      Seq(1).toDF.write.parquet(path2)
+      Seq(1).toDF().write.parquet(path1)
+      Seq(1).toDF().write.parquet(path2)
 
       val (tempViewStr, viewName) = if (ident.database.nonEmpty) {
         ("GLOBAL TEMPORARY VIEW", s"${ident.database.get}.${ident.table}")
@@ -1601,23 +1641,63 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
       SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_NUM.key -> "1",
       SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
 
-      withTempView("t1", "t2", "t3") {
-        withSQLConf(SQLConf.CAN_CHANGE_CACHED_PLAN_OUTPUT_PARTITIONING.key -> "false") {
-          sql("CACHE TABLE t1 as SELECT /*+ REPARTITION */ * FROM values(1) as t(c)")
-          assert(spark.table("t1").rdd.partitions.length == 2)
+      var finalPlan: SparkPlanInfo = null
+      val listener = new SparkListener {
+        override def onOtherEvent(event: SparkListenerEvent): Unit = {
+          event match {
+            case SparkListenerSQLAdaptiveExecutionUpdate(_, _, sparkPlanInfo) =>
+              if (sparkPlanInfo.simpleString.startsWith(
+                  "AdaptiveSparkPlan isFinalPlan=true")) {
+                finalPlan = sparkPlanInfo
+              }
+            case _ => // ignore other events
+          }
         }
+      }
 
-        withSQLConf(SQLConf.CAN_CHANGE_CACHED_PLAN_OUTPUT_PARTITIONING.key -> "true") {
-          assert(spark.table("t1").rdd.partitions.length == 2)
-          sql("CACHE TABLE t2 as SELECT /*+ REPARTITION */ * FROM values(2) as t(c)")
-          assert(spark.table("t2").rdd.partitions.length == 1)
+      def findNodeInSparkPlanInfo(root: SparkPlanInfo, cond: SparkPlanInfo => Boolean):
+      Option[SparkPlanInfo] = {
+        if (cond(root)) {
+          Some(root)
+        } else {
+          root.children.flatMap(findNodeInSparkPlanInfo(_, cond)).headOption
         }
+      }
 
-        withSQLConf(SQLConf.CAN_CHANGE_CACHED_PLAN_OUTPUT_PARTITIONING.key -> "false") {
-          assert(spark.table("t1").rdd.partitions.length == 2)
-          assert(spark.table("t2").rdd.partitions.length == 1)
-          sql("CACHE TABLE t3 as SELECT /*+ REPARTITION */ * FROM values(3) as t(c)")
-          assert(spark.table("t3").rdd.partitions.length == 2)
+      def cachedFinalStageCoalesced(sparkPlanInfo: SparkPlanInfo): Boolean = {
+        val inMemoryScanNode = findNodeInSparkPlanInfo(sparkPlanInfo,
+          _.nodeName.contains("TableCacheQueryStage"))
+        val aqeNode = findNodeInSparkPlanInfo(inMemoryScanNode.get,
+          _.nodeName.contains("AdaptiveSparkPlan"))
+        val aqePlanRoot = findNodeInSparkPlanInfo(inMemoryScanNode.get,
+          _.nodeName.contains("ResultQueryStage"))
+        aqePlanRoot.get.children.head.nodeName == "AQEShuffleRead"
+      }
+
+      withTempView("t0", "t1", "t2") {
+        try {
+          spark.range(10).write.saveAsTable("t0")
+          spark.sparkContext.listenerBus.waitUntilEmpty()
+          spark.sparkContext.addSparkListener(listener)
+
+          withSQLConf(SQLConf.CAN_CHANGE_CACHED_PLAN_OUTPUT_PARTITIONING.key -> "false") {
+            sql("CACHE TABLE t1 as SELECT /*+ REPARTITION */ * FROM (" +
+              "SELECT distinct (id+1) FROM t0)")
+            assert(spark.table("t1").rdd.partitions.length == 2)
+            spark.sparkContext.listenerBus.waitUntilEmpty()
+            assert(finalPlan != null && !cachedFinalStageCoalesced(finalPlan))
+          }
+
+          finalPlan = null // reset finalPlan
+          withSQLConf(SQLConf.CAN_CHANGE_CACHED_PLAN_OUTPUT_PARTITIONING.key -> "true") {
+            sql("CACHE TABLE t2 as SELECT /*+ REPARTITION */ * FROM (" +
+              "SELECT distinct (id-1) FROM t0)")
+            assert(spark.table("t2").rdd.partitions.length == 1)
+            spark.sparkContext.listenerBus.waitUntilEmpty()
+            assert(finalPlan != null && cachedFinalStageCoalesced(finalPlan))
+          }
+        } finally {
+          spark.sparkContext.removeSparkListener(listener)
         }
       }
     }
@@ -1643,12 +1723,12 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
           withSQLConf(SQLConf.CAN_CHANGE_CACHED_PLAN_OUTPUT_PARTITIONING.key -> "true") {
             assert(spark.table("t1").rdd.partitions.length == 2)
             sql("CACHE TABLE t2")
-            assert(spark.table("t2").rdd.partitions.length == 1)
+            assert(spark.table("t2").rdd.partitions.length == 2)
           }
 
           withSQLConf(SQLConf.CAN_CHANGE_CACHED_PLAN_OUTPUT_PARTITIONING.key -> "false") {
             assert(spark.table("t1").rdd.partitions.length == 2)
-            assert(spark.table("t2").rdd.partitions.length == 1)
+            assert(spark.table("t2").rdd.partitions.length == 2)
             sql("CACHE TABLE t3")
             assert(spark.table("t3").rdd.partitions.length == 2)
           }
@@ -1665,5 +1745,763 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
         checkAnswer(sql("SELECT * FROM cached_t"), Row(2) :: Row(3) :: Nil)
       }
     }
+  }
+
+  test("SPARK-45451: Make the default storage level of dataset cache configurable") {
+    def validateStorageLevel(expected: StorageLevel): Unit = {
+      withTempView("t") {
+        spark.range(10).createOrReplaceTempView("t")
+
+        Seq(() => spark.table("t").cache(),
+          () => spark.catalog.cacheTable("t"),
+          () => spark.sql("CACHE TABLE t")).foreach { f =>
+          withCache("t") {
+            f()
+            val cached = spark.table("t")
+            val tableCache = collect(cached.queryExecution.executedPlan) {
+              case i: InMemoryTableScanExec => i
+            }
+            if (expected == StorageLevel.NONE) {
+              assert(tableCache.isEmpty)
+            } else {
+              assert(tableCache.size == 1)
+              assert(tableCache.head.relation.cacheBuilder.storageLevel == expected)
+            }
+          }
+        }
+      }
+    }
+
+    validateStorageLevel(StorageLevel.MEMORY_AND_DISK)
+    withSQLConf(SQLConf.DEFAULT_CACHE_STORAGE_LEVEL.key -> "NONE") {
+      validateStorageLevel(StorageLevel.NONE)
+    }
+    withSQLConf(SQLConf.DEFAULT_CACHE_STORAGE_LEVEL.key -> "MEMORY_AND_DISK_2") {
+      validateStorageLevel(StorageLevel.MEMORY_AND_DISK_2)
+    }
+    intercept[IllegalArgumentException] {
+      withSQLConf(SQLConf.DEFAULT_CACHE_STORAGE_LEVEL.key -> "DISK") {}
+    }
+  }
+
+  test("SPARK-47633: Cache hit for lateral join with join condition") {
+    withTempView("t", "q1") {
+      sql("create or replace temp view t(c1, c2) as values (0, 1), (1, 2)")
+      val query = """select *
+                    |from t
+                    |join lateral (
+                    |  select c1 as a, c2 as b
+                    |  from t)
+                    |on c1 = a;
+                    |""".stripMargin
+      sql(s"cache table q1 as $query")
+      val df = sql(query)
+      checkAnswer(df,
+        Row(0, 1, 0, 1) :: Row(1, 2, 1, 2) :: Nil)
+      assert(getNumInMemoryRelations(df) == 1)
+    }
+  }
+
+  test("SPARK-52692: Support cache/uncache table with Time type") {
+    val tableName = "timeCache"
+    withTable(tableName) {
+      sql(s"CACHE TABLE $tableName AS SELECT TIME'22:00:00'")
+      checkAnswer(spark.table(tableName), Row(LocalTime.parse("22:00:00")))
+      spark.table(tableName).queryExecution.withCachedData.collect {
+        case cached: InMemoryRelation =>
+          assert(cached.stats.sizeInBytes === 8)
+      }
+      sql(s"UNCACHE TABLE $tableName")
+    }
+  }
+
+  Seq(true, false).foreach { callerEnableAQE =>
+    test(s"SPARK-49982: AQE negative caching with in memory table cache - callerEnableAQE=" +
+      callerEnableAQE) {
+      val triggered = new AtomicBoolean(false)
+      val func: Long => Boolean = (i: Long) => {
+        if (!triggered.get()) {
+          throw new Exception("SPARK-49982")
+        }
+        i % 2 == 0
+      }
+      withUserDefinedFunction("func" -> true) {
+        spark.udf.register("func", func)
+        // make sure the cached plan is AQE plan
+        withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
+          val df1 = spark.range(1024).select($"id".as("key1"))
+          val df2 = spark.range(2048).select($"id".as("key2"))
+            .withColumn("group_key", $"key2" % 1024)
+          val df = df1.filter(expr("func(key1)")).hint("MERGE").join(df2, $"key1" === $"key2")
+          df.cache()
+          try {
+            withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> callerEnableAQE.toString) {
+              val finalDf1 = df.groupBy($"group_key").agg("key1" -> "count")
+              val finalDf2 = df.groupBy($"group_key").agg("key1" -> "avg")
+              intercept[Throwable] {
+                finalDf1.collect()
+              }
+              triggered.set(true)
+              // Collect again on the same df will trigger AQE negative caching
+              intercept[Throwable] {
+                finalDf1.collect()
+              }
+              // Collect on a different df will use the refreshed InMemoryRelation
+              finalDf2.collect()
+            }
+          } finally {
+            df.unpersist(blocking = true)
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-52684: Atomicity of cache table on error") {
+    withTempView("SPARK_52684") {
+      intercept[SparkRuntimeException] {
+        spark.sql("CACHE TABLE SPARK_52684 AS SELECT raise_error('SPARK-52684') AS c1")
+      }
+      assert(!spark.catalog.tableExists("SPARK_52684"))
+    }
+  }
+
+  test("uncache DSv2 table via cache manager correctly uncaches views with logical plans") {
+    val t = "testcat.tbl"
+    withTable(t, "v") {
+      sql(s"CREATE TABLE $t (id int, data string) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 'a'), (2, 'b')")
+
+      // cache table
+      sql(s"CACHE TABLE $t")
+      assertCached(sql(s"SELECT * FROM $t"))
+      checkAnswer(sql(s"SELECT * FROM $t"), Seq(Row(1, "a"), Row(2, "b")))
+
+      // create and cache view
+      spark.table(t).select("id").createOrReplaceTempView("v")
+      sql("SELECT * FROM v").cache()
+      assertCached(sql("SELECT * FROM v"))
+      checkAnswer(sql("SELECT * FROM v"), Seq(Row(1), Row(2)))
+
+      // must invalidate only table, view must remain cached (cascade = false)
+      spark.sharedState.cacheManager.uncacheTableOrView(
+        spark,
+        Seq("testcat", "tbl"),
+        cascade = false)
+      assertNotCached(sql(s"SELECT * FROM $t"))
+      assertCached(sql("SELECT * FROM v"))
+
+      // must invalidate view (cascade = true)
+      spark.sharedState.cacheManager.uncacheTableOrView(
+        spark,
+        Seq("testcat", "tbl"),
+        cascade = true)
+
+      // verify view is not cached anymore
+      assertNotCached(sql("SELECT * FROM v"))
+    }
+  }
+
+  test("cache DSv2 table with time travel") {
+    val t = "testcat.tbl"
+    val version = "v1"
+    withTable(t, "cached_tt") {
+      sql(s"CREATE TABLE $t (id int, data string) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 'a'), (2, 'b')")
+
+      // pin current version
+      pinTable("testcat", Identifier.of(Array(), "tbl"), version)
+
+      // cache pinned version
+      sql(s"CACHE TABLE cached_tt AS SELECT * FROM $t VERSION AS OF '$version'")
+      assertCached(sql("SELECT * FROM cached_tt"))
+      assertCached(sql(s"SELECT * FROM $t VERSION AS OF '$version'"))
+      checkAnswer(sql("SELECT * FROM cached_tt"), Seq(Row(1, "a"), Row(2, "b")))
+
+      // add more data to base table
+      sql(s"INSERT INTO $t VALUES (3, 'c'), (4, 'd')")
+
+      // verify lookupCachedData finds time travel cache
+      val timeTravelDF = sql(s"SELECT * FROM $t VERSION AS OF '$version'")
+      assert(cacheManager.lookupCachedData(timeTravelDF).isDefined)
+
+      // verify base table is not cached
+      assertNotCached(sql(s"SELECT * FROM $t"))
+      assert(!spark.catalog.isCached(t))
+
+      // verify lookupCachedData does NOT match base table with time travel cache
+      val baseDF = sql(s"SELECT * FROM $t")
+      assert(cacheManager.lookupCachedData(baseDF).isEmpty)
+    }
+  }
+
+  test("uncache DSv2 table by name to invalidate base and time travel plans") {
+    val t = "testcat.tbl"
+    val version = "v1"
+    withTable(t, "cached_tt") {
+      sql(s"CREATE TABLE $t (id int, data string) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 'a'), (2, 'b')")
+
+      // pin current version
+      pinTable("testcat", Identifier.of(Array(), "tbl"), version)
+
+      // insert more data to base table
+      sql(s"INSERT INTO $t VALUES (3, 'c'), (2, 'b')")
+
+      // cache base table
+      sql(s"CACHE TABLE $t")
+      assertCached(sql(s"SELECT * FROM $t"))
+      assert(spark.catalog.isCached(t))
+
+      // cache pinned version
+      sql(s"CACHE TABLE cached_tt AS SELECT * FROM $t VERSION AS OF '$version'")
+      assertCached(sql("SELECT * FROM cached_tt"))
+      assertCached(sql(s"SELECT * FROM $t VERSION AS OF '$version'"))
+
+      // verify lookupCachedData finds separate entries for base and time travel plans
+      val baseDF = sql(s"SELECT * FROM $t")
+      val timeTravelDF = sql(s"SELECT * FROM $t VERSION AS OF '$version'")
+      assert(cacheManager.lookupCachedData(baseDF).isDefined)
+      assert(cacheManager.lookupCachedData(timeTravelDF).isDefined)
+      assert(cacheManager.lookupCachedData(baseDF) != cacheManager.lookupCachedData(timeTravelDF))
+
+      // uncaching base table by name should affect ALL time-traveled cache entries
+      spark.catalog.uncacheTable(t)
+      assertNotCached(sql(s"SELECT * FROM $t"))
+      assertNotCached(sql("SELECT * FROM cached_tt"))
+
+      // verify lookupCachedData returns None after uncaching
+      assert(cacheManager.lookupCachedData(baseDF).isEmpty)
+      assert(cacheManager.lookupCachedData(timeTravelDF).isEmpty)
+    }
+  }
+
+  test("uncache DSv2 table with time travel by plan") {
+    val t = "testcat.tbl"
+    val version = "v1"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id int, data string) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 'a'), (2, 'b')")
+
+      // pin current version
+      pinTable("testcat", Identifier.of(Array(), "tbl"), version)
+
+      // insert more data to base table
+      sql(s"INSERT INTO $t VALUES (3, 'c'), (2, 'b')")
+
+      // cache pinned version
+      val timeTravelDF = sql(s"SELECT * FROM $t VERSION AS OF '$version'")
+      timeTravelDF.cache()
+      assertCached(sql(s"SELECT * FROM $t VERSION AS OF '$version'"))
+
+      // verify base table is not affected
+      assertNotCached(sql(s"SELECT * FROM $t"))
+
+      // verify lookupCachedData finds the cache before uncaching
+      assert(cacheManager.lookupCachedData(timeTravelDF).isDefined)
+
+      // uncache pinned version by plan
+      cacheManager.uncacheQuery(timeTravelDF, cascade = false)
+      assertNotCached(sql(s"SELECT * FROM $t VERSION AS OF '$version'"))
+
+      // verify lookupCachedData returns None after uncaching
+      assert(cacheManager.lookupCachedData(timeTravelDF).isEmpty)
+    }
+  }
+
+  test("uncache DSv2 table by plan should not affect time travel") {
+    val t = "testcat.tbl"
+    val version = "v1"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id int, data string) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 'a'), (2, 'b')")
+
+      // pin current version
+      pinTable("testcat", Identifier.of(Array(), "tbl"), version)
+
+      // insert more data to base table
+      sql(s"INSERT INTO $t VALUES (3, 'c'), (2, 'b')")
+
+      // cache base table
+      val baseDF = sql(s"SELECT * FROM $t")
+      baseDF.cache()
+      assertCached(sql(s"SELECT * FROM $t"))
+
+      // cache pinned version
+      val timeTravelDF = sql(s"SELECT * FROM $t VERSION AS OF '$version'")
+      timeTravelDF.cache()
+      assertCached(sql(s"SELECT * FROM $t VERSION AS OF '$version'"))
+
+      // uncache base table by plan
+      baseDF.unpersist(blocking = true)
+
+      // verify only base table plan is affected
+      assertNotCached(baseDF)
+      assertNotCached(sql(s"SELECT * FROM $t"))
+      assertCached(timeTravelDF)
+      assertCached(sql(s"SELECT * FROM $t VERSION AS OF '$version'"))
+    }
+  }
+
+  test("look up DSv2 table by relation with multiple time travel versions") {
+    val t = "testcat.tbl"
+    val ident = Identifier.of(Array(), "tbl")
+    val version1 = "v1"
+    val version2 = "v2"
+    withTable(t, "cached_tt1", "cached_tt2") {
+      sql(s"CREATE TABLE $t (id int, data string) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 'a'), (2, 'b')")
+
+      // pin v1
+      pinTable("testcat", ident, version1)
+
+      sql(s"INSERT INTO $t VALUES (3, 'c'), (4, 'd')")
+
+      // pin v2
+      pinTable("testcat", ident, version2)
+
+      sql(s"INSERT INTO $t VALUES (5, 'e'), (6, 'f')")
+
+      // cache base
+      sql(s"CACHE TABLE $t")
+      assertCached(sql(s"SELECT * FROM $t"))
+      checkAnswer(
+        sql(s"SELECT * FROM $t"),
+        Seq(Row(1, "a"), Row(2, "b"), Row(3, "c"), Row(4, "d"), Row(5, "e"), Row(6, "f")))
+
+      // cache v1
+      sql(s"CACHE TABLE cached_tt1 AS SELECT * FROM $t VERSION AS OF '$version1'")
+      assertCached(sql(s"SELECT * FROM $t VERSION AS OF '$version1'"))
+      checkAnswer(
+        sql(s"SELECT * FROM $t VERSION AS OF '$version1'"),
+        Seq(Row(1, "a"), Row(2, "b")))
+
+      // cache v2
+      sql(s"CACHE TABLE cached_tt2 AS SELECT * FROM $t VERSION AS OF '$version2'")
+      assertCached(sql(s"SELECT * FROM $t VERSION AS OF '$version2'"))
+      checkAnswer(
+        sql(s"SELECT * FROM $t VERSION AS OF '$version2'"),
+        Seq(Row(1, "a"), Row(2, "b"), Row(3, "c"), Row(4, "d")))
+
+      // verify lookupCachedData finds distinct entries for each version
+      val baseDF = sql(s"SELECT * FROM $t")
+      assert(cacheManager.lookupCachedData(baseDF).isDefined)
+      val v1DF = sql(s"SELECT * FROM $t VERSION AS OF '$version1'")
+      assert(cacheManager.lookupCachedData(v1DF).isDefined)
+      val v2DF = sql(s"SELECT * FROM $t VERSION AS OF '$version2'")
+      assert(cacheManager.lookupCachedData(v2DF).isDefined)
+
+      // look up cache using DataSourceV2Relation directly
+      val cat = catalog("testcat").asTableCatalog
+      val baseTable = cat.loadTable(ident)
+      val baseRelation = DataSourceV2Relation.create(baseTable, Some(cat), Some(ident))
+      assert(cacheManager.lookupCachedData(spark, baseRelation).isDefined)
+      val v1Table = cat.loadTable(ident, version1)
+      val v1Relation = baseRelation.copy(
+        table = v1Table,
+        timeTravelSpec = Some(AsOfVersion(version1)))
+      assert(cacheManager.lookupCachedData(spark, v1Relation).isDefined)
+      val v2Table = cat.loadTable(ident, version2)
+      val v2Relation = baseRelation.copy(
+        table = v2Table,
+        timeTravelSpec = Some(AsOfVersion(version2)))
+      assert(cacheManager.lookupCachedData(spark, v2Relation).isDefined)
+
+      // uncache using DataSourceV2Relation directly
+      CommandUtils.uncacheTableOrView(spark, baseRelation, cascade = true)
+      assert(cacheManager.lookupCachedData(spark, baseRelation).isEmpty)
+      assert(cacheManager.lookupCachedData(spark, v1Relation).isEmpty)
+      assert(cacheManager.lookupCachedData(spark, v2Relation).isEmpty)
+
+      // verify queries don't use cache
+      assertNotCached(sql(s"SELECT * FROM $t"))
+      assertNotCached(sql(s"SELECT * FROM $t VERSION AS OF '$version1'"))
+      assertNotCached(sql(s"SELECT * FROM $t VERSION AS OF '$version2'"))
+    }
+  }
+
+  test("uncache DSv2 table using SQL") {
+    val t = "testcat.tbl"
+    val ident = Identifier.of(Array(), "tbl")
+    val version1 = "v1"
+    val version2 = "v2"
+    withTable(t, "cached_tt1", "cached_tt2") {
+      sql(s"CREATE TABLE $t (id int, data string) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 'a'), (2, 'b')")
+
+      // pin v1
+      pinTable("testcat", ident, version1)
+
+      sql(s"INSERT INTO $t VALUES (3, 'c'), (4, 'd')")
+
+      // pin v2
+      pinTable("testcat", ident, version2)
+
+      sql(s"INSERT INTO $t VALUES (5, 'e'), (6, 'f')")
+
+      // cache base and both pinned versions
+      sql(s"CACHE TABLE $t")
+      assertCached(sql(s"SELECT * FROM $t"))
+      sql(s"CACHE TABLE cached_tt1 AS SELECT * FROM $t VERSION AS OF '$version1'")
+      assertCached(sql(s"SELECT * FROM $t VERSION AS OF '$version1'"))
+      sql(s"CACHE TABLE cached_tt2 AS SELECT * FROM $t VERSION AS OF '$version2'")
+      assertCached(sql(s"SELECT * FROM $t VERSION AS OF '$version2'"))
+
+      // uncache all plans using SQL
+      sql(s"UNCACHE TABLE $t")
+
+      // verify queries don't use cache
+      assertNotCached(sql(s"SELECT * FROM $t"))
+      assertNotCached(sql(s"SELECT * FROM $t VERSION AS OF '$version1'"))
+      assertNotCached(sql(s"SELECT * FROM $t VERSION AS OF '$version2'"))
+    }
+  }
+
+  test("uncache DSv2 table using uncacheTableOrView") {
+    val t = "testcat.tbl"
+    val ident = Identifier.of(Array(), "tbl")
+    val version1 = "v1"
+    val version2 = "v2"
+    withTable(t, "cached_tt1", "cached_tt2") {
+      sql(s"CREATE TABLE $t (id int, data string) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 'a'), (2, 'b')")
+
+      // pin v1
+      pinTable("testcat", ident, version1)
+
+      sql(s"INSERT INTO $t VALUES (3, 'c'), (4, 'd')")
+
+      // pin v2
+      pinTable("testcat", ident, version2)
+
+      sql(s"INSERT INTO $t VALUES (5, 'e'), (6, 'f')")
+
+      // cache base and both pinned versions
+      sql(s"CACHE TABLE $t")
+      assertCached(sql(s"SELECT * FROM $t"))
+      sql(s"CACHE TABLE cached_tt1 AS SELECT * FROM $t VERSION AS OF '$version1'")
+      assertCached(sql(s"SELECT * FROM $t VERSION AS OF '$version1'"))
+      sql(s"CACHE TABLE cached_tt2 AS SELECT * FROM $t VERSION AS OF '$version2'")
+      assertCached(sql(s"SELECT * FROM $t VERSION AS OF '$version2'"))
+
+      // uncache all plans using uncacheTableOrView
+      cacheManager.uncacheTableOrView(spark, Seq("testcat", "tbl"), cascade = true)
+
+      // verify queries don't use cache
+      assertNotCached(sql(s"SELECT * FROM $t"))
+      assertNotCached(sql(s"SELECT * FROM $t VERSION AS OF '$version1'"))
+      assertNotCached(sql(s"SELECT * FROM $t VERSION AS OF '$version2'"))
+    }
+  }
+
+  test("REFRESH TABLE refreshes time travel plans correctly") {
+    val t = "testcat.tbl"
+    val ident = Identifier.of(Array(), "tbl")
+    val version1 = "v1"
+    val version2 = "v2"
+    withTable(t, "cached_tt1", "cached_tt2") {
+      sql(s"CREATE TABLE $t (id int, data string) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 'a'), (2, 'b')")
+
+      // pin v1
+      pinTable("testcat", ident, version1)
+
+      sql(s"INSERT INTO $t VALUES (3, 'c'), (4, 'd')")
+
+      // pin v2
+      pinTable("testcat", ident, version2)
+
+      sql(s"INSERT INTO $t VALUES (5, 'e'), (6, 'f')")
+
+      // cache base and both versions
+      sql(s"CACHE TABLE $t")
+      assertCached(sql(s"SELECT * FROM $t"))
+      sql(s"CACHE TABLE cached_tt1 AS SELECT * FROM $t VERSION AS OF '$version1'")
+      assertCached(sql(s"SELECT * FROM $t VERSION AS OF '$version1'"))
+      sql(s"CACHE TABLE cached_tt2 AS SELECT * FROM $t VERSION AS OF '$version2'")
+      assertCached(sql(s"SELECT * FROM $t VERSION AS OF '$version2'"))
+
+      // must have 3 cache entries
+      assert(cacheManager.numCachedEntries == 3)
+      checkCacheLoading(sql(s"SELECT * FROM $t"), isLoaded = true)
+      checkCacheLoading(sql(s"SELECT * FROM cached_tt1"), isLoaded = true)
+      checkCacheLoading(sql(s"SELECT * FROM cached_tt2"), isLoaded = true)
+
+      // refresh table by name to invalidate all plans
+      sql(s"REFRESH TABLE $t")
+
+      // all entries must be refreshed
+      checkCacheLoading(sql(s"SELECT * FROM $t"), isLoaded = false)
+      checkCacheLoading(sql(s"SELECT * FROM cached_tt1"), isLoaded = false)
+      checkCacheLoading(sql(s"SELECT * FROM cached_tt2"), isLoaded = false)
+    }
+  }
+
+  test("recacheByTableName with time travel plans") {
+    val t = "testcat.tbl"
+    val ident = Identifier.of(Array(), "tbl")
+    val version1 = "v1"
+    val version2 = "v2"
+    withTable(t, "cached_tt1", "cached_tt2") {
+      sql(s"CREATE TABLE $t (id int, data string) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 'a'), (2, 'b')")
+
+      // pin v1
+      pinTable("testcat", ident, version1)
+
+      sql(s"INSERT INTO $t VALUES (5, 'e'), (6, 'f')")
+
+      // pin v2
+      pinTable("testcat", ident, version2)
+
+      sql(s"INSERT INTO $t VALUES (3, 'c'), (4, 'd')")
+
+      // cache base and both versions
+      sql(s"CACHE TABLE $t")
+      assertCached(sql(s"SELECT * FROM $t"))
+      sql(s"CACHE TABLE cached_tt1 AS SELECT * FROM $t VERSION AS OF '$version1'")
+      assertCached(sql(s"SELECT * FROM $t VERSION AS OF '$version1'"))
+      sql(s"CACHE TABLE cached_tt2 AS SELECT * FROM $t VERSION AS OF '$version2'")
+      assertCached(sql(s"SELECT * FROM $t VERSION AS OF '$version2'"))
+
+      // must have 3 cache entries
+      assert(cacheManager.numCachedEntries == 3)
+      checkCacheLoading(sql(s"SELECT * FROM $t"), isLoaded = true)
+      checkCacheLoading(sql(s"SELECT * FROM cached_tt1"), isLoaded = true)
+      checkCacheLoading(sql(s"SELECT * FROM cached_tt2"), isLoaded = true)
+
+      // refresh base, keep pinned versions cached
+      cacheManager.recacheTableOrView(spark, Seq("testcat", "tbl"), includeTimeTravel = false)
+
+      // time travel entries must NOT be refreshed
+      checkCacheLoading(sql(s"SELECT * FROM $t"), isLoaded = false)
+      checkCacheLoading(sql(s"SELECT * FROM cached_tt1"), isLoaded = true)
+      checkCacheLoading(sql(s"SELECT * FROM cached_tt2"), isLoaded = true)
+
+      // refresh all
+      cacheManager.recacheTableOrView(spark, Seq("testcat", "tbl"))
+
+      // all plans must be refreshed
+      checkCacheLoading(sql(s"SELECT * FROM $t"), isLoaded = false)
+      checkCacheLoading(sql(s"SELECT * FROM cached_tt1"), isLoaded = false)
+      checkCacheLoading(sql(s"SELECT * FROM cached_tt2"), isLoaded = false)
+    }
+  }
+
+  private def checkCacheLoading(ds: Dataset[_], isLoaded: Boolean): Unit = {
+    cacheManager.lookupCachedData(ds) match {
+      case Some(entry) =>
+        assert(entry.cachedRepresentation.cacheBuilder.isCachedColumnBuffersLoaded == isLoaded)
+      case _ =>
+        fail("dataset is not cached")
+    }
+  }
+
+  test("RENAME TABLE manages cache with time travel plans correctly") {
+    val t = "testcat.tbl"
+    val tRenamed = "testcat.tbl_renamed"
+    val ident = Identifier.of(Array(), "tbl")
+    val version1 = "v1"
+    val version2 = "v2"
+    withTable(t, tRenamed, "cached_tt1", "cached_tt2") {
+      sql(s"CREATE TABLE $t (id int, data string) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 'a'), (2, 'b')")
+
+      // pin v1
+      pinTable("testcat", ident, version1)
+
+      sql(s"INSERT INTO $t VALUES (3, 'c'), (4, 'd')")
+
+      // pin v2
+      pinTable("testcat", ident, version2)
+
+      sql(s"INSERT INTO $t VALUES (4, 'e'), (5, 'f')")
+
+      // cache base and both versions
+      sql(s"CACHE TABLE $t")
+      assertCached(sql(s"SELECT * FROM $t"))
+      sql(s"CACHE TABLE cached_tt1 AS SELECT * FROM $t VERSION AS OF '$version1'")
+      assertCached(sql(s"SELECT * FROM $t VERSION AS OF '$version1'"))
+      sql(s"CACHE TABLE cached_tt2 AS SELECT * FROM $t VERSION AS OF '$version2'")
+      assertCached(sql(s"SELECT * FROM $t VERSION AS OF '$version2'"))
+
+      // must have 3 cache entries
+      assert(cacheManager.numCachedEntries == 3)
+
+      // rename base table
+      sql(s"ALTER TABLE $t RENAME TO tbl_renamed")
+
+      // assert cache was cleared and renamed table (current version) was cached again
+      assert(cacheManager.numCachedEntries == 1)
+      assertCached(sql(s"SELECT * FROM $tRenamed"))
+    }
+  }
+
+  test("DROP TABLE invalidates time travel cache entries") {
+    checkTimeTravelPlanInvalidation { t =>
+      sql(s"DROP TABLE $t")
+    }
+  }
+
+  test("REPLACE TABLE invalidates time travel cache entries") {
+    checkTimeTravelPlanInvalidation { t =>
+      sql(s"REPLACE TABLE $t (a INT COMMENT 'test', b STRING NOT NULL)")
+    }
+  }
+
+  private def checkTimeTravelPlanInvalidation(action: String => Unit): Unit = {
+    val t = "testcat.tbl"
+    val ident = Identifier.of(Array(), "tbl")
+    val version1 = "v1"
+    val version2 = "v2"
+    withTable(t, "cached_tt1", "cached_tt2") {
+      sql(s"CREATE TABLE $t (id int, data string) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 'a'), (2, 'b')")
+
+      // pin v1
+      pinTable("testcat", ident, version1)
+
+      sql(s"INSERT INTO $t VALUES (3, 'c'), (4, 'd')")
+
+      // pin v2
+      pinTable("testcat", ident, version2)
+
+      sql(s"INSERT INTO $t VALUES (5, 'e'), (6, 'f')")
+
+      sql(s"CACHE TABLE $t")
+      assertCached(sql(s"SELECT * FROM $t"))
+      sql(s"CACHE TABLE cached_tt1 AS SELECT * FROM $t VERSION AS OF '$version1'")
+      assertCached(sql(s"SELECT * FROM $t VERSION AS OF '$version1'"))
+      sql(s"CACHE TABLE cached_tt2 AS SELECT * FROM $t VERSION AS OF '$version2'")
+      assertCached(sql(s"SELECT * FROM $t VERSION AS OF '$version2'"))
+
+      assert(cacheManager.numCachedEntries == 3)
+
+      action(t)
+
+      assert(cacheManager.isEmpty)
+    }
+  }
+
+  test("recache views with logical plans on top of DSv2 tables on changes to table") {
+    val t = "testcat.tbl"
+    withTable(t, "v") {
+      sql(s"CREATE TABLE $t (id int, data string) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 'a'), (2, 'b')")
+
+      // create and cache view
+      spark.table(t).select("id").createOrReplaceTempView("v")
+      sql("SELECT * FROM v").cache()
+
+      // verify view is cached
+      assertCached(sql("SELECT * FROM v"))
+      checkAnswer(sql("SELECT * FROM v"), Seq(Row(1), Row(2)))
+
+      // insert data into base table
+      sql(s"INSERT INTO $t VALUES (3, 'c'), (4, 'd')")
+
+      // verify cache was refreshed and will pick up new data
+      checkCacheLoading(sql(s"SELECT * FROM v"), isLoaded = false)
+
+      // verify view is recached correctly
+      assertCached(sql("SELECT * FROM v"))
+      checkAnswer(
+        sql("SELECT * FROM v"),
+        Seq(Row(1), Row(2), Row(3), Row(4)))
+    }
+  }
+
+  test("uncache DSv2 table using SQL triggers uncaching of views with logical plans") {
+    val t = "testcat.tbl"
+    withTable(t, "v") {
+      sql(s"CREATE TABLE $t (id int, data string) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 'a'), (2, 'b')")
+
+      // cache table
+      sql(s"CACHE TABLE $t")
+      assertCached(sql(s"SELECT * FROM $t"))
+      checkAnswer(sql(s"SELECT * FROM $t"), Seq(Row(1, "a"), Row(2, "b")))
+
+      // create and cache view
+      spark.table(t).select("id").createOrReplaceTempView("v")
+      sql("SELECT * FROM v").cache()
+      assertCached(sql("SELECT * FROM v"))
+      checkAnswer(sql("SELECT * FROM v"), Seq(Row(1), Row(2)))
+
+      // uncache table must invalidate view cache (cascading)
+      sql(s"UNCACHE TABLE $t")
+
+      // verify view is not cached anymore
+      assertNotCached(sql("SELECT * FROM v"))
+    }
+  }
+
+  test("uncache DSv2 table must qualify table names") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id int, data string) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 'a'), (2, 'b')")
+
+      sql(s"CACHE TABLE $t")
+      assertCached(sql(s"SELECT * FROM $t"))
+      sql("USE testcat")
+      sql("USE NAMESPACE ns1.ns2")
+      sql("UNCACHE TABLE tbl")
+      assertNotCached(sql(s"SELECT * FROM $t"))
+
+      sql(s"CACHE TABLE $t")
+      assertCached(sql(s"SELECT * FROM $t"))
+      sql("USE testcat.ns1.ns2")
+      spark.catalog.uncacheTable("tbl")
+      assertNotCached(sql(s"SELECT * FROM $t"))
+    }
+  }
+
+  test("uncache persistent table via catalog API") {
+    withTable("tbl1") {
+      sql("CREATE TABLE tbl1 (name STRING, age INT) USING parquet")
+      sql("INSERT INTO tbl1 VALUES ('Alice', 30), ('Bob', 25)")
+
+      // cache the table
+      spark.catalog.cacheTable("tbl1")
+      assert(spark.catalog.isCached("tbl1"))
+      assertCached(spark.table("tbl1"))
+
+      // uncache the table using catalog API
+      spark.catalog.uncacheTable("tbl1")
+
+      // verify it's actually uncached
+      assert(!spark.catalog.isCached("tbl1"))
+      assertNotCached(spark.table("tbl1"))
+    }
+  }
+
+  test("uncache non-existent table") {
+    checkError(
+      exception = intercept[AnalysisException] { spark.catalog.uncacheTable("non_existent") },
+      condition = "TABLE_OR_VIEW_NOT_FOUND",
+      parameters = Map("relationName" -> "`non_existent`"))
+
+    checkError(
+      exception = intercept[AnalysisException] { sql("UNCACHE TABLE non_existent") },
+      condition = "TABLE_OR_VIEW_NOT_FOUND",
+      parameters = Map("relationName" -> "`non_existent`"),
+      context = ExpectedContext("non_existent", 14, 25))
+  }
+
+  private def cacheManager = spark.sharedState.cacheManager
+
+  private def pinTable(
+      catalogName: String,
+      ident: Identifier,
+      version: String): Unit = {
+    catalog(catalogName) match {
+      case inMemory: BasicInMemoryTableCatalog => inMemory.pinTable(ident, version)
+      case _ => fail(s"can't pin $ident in $catalogName")
+    }
+  }
+
+  private def catalog(name: String): CatalogPlugin = {
+    spark.sessionState.catalogManager.catalog(name)
   }
 }

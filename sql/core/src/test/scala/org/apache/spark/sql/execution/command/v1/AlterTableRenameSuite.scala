@@ -17,7 +17,9 @@
 
 package org.apache.spark.sql.execution.command.v1
 
+import org.apache.spark.SparkRuntimeException
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.errors.QueryErrorsBase
 import org.apache.spark.sql.execution.command
 
 /**
@@ -28,17 +30,20 @@ import org.apache.spark.sql.execution.command
  *   - V1 In-Memory catalog: `org.apache.spark.sql.execution.command.v1.AlterTableRenameSuite`
  *   - V1 Hive External catalog: `org.apache.spark.sql.hive.execution.command.AlterTableRenameSuite`
  */
-trait AlterTableRenameSuiteBase extends command.AlterTableRenameSuiteBase {
+trait AlterTableRenameSuiteBase extends command.AlterTableRenameSuiteBase with QueryErrorsBase {
   test("destination database is different") {
     withNamespaceAndTable("dst_ns", "dst_tbl") { dst =>
       withNamespace("src_ns") {
         sql(s"CREATE NAMESPACE $catalog.src_ns")
         val src = dst.replace("dst", "src")
         sql(s"CREATE TABLE $src (c0 INT) $defaultUsing")
-        val errMsg = intercept[AnalysisException] {
-          sql(s"ALTER TABLE $src RENAME TO dst_ns.dst_tbl")
-        }.getMessage
-        assert(errMsg.contains("source and destination databases do not match"))
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql(s"ALTER TABLE $src RENAME TO dst_ns.dst_tbl")
+          },
+          condition = "_LEGACY_ERROR_TEMP_1073",
+          parameters = Map("db" -> "src_ns", "newDb" -> "dst_ns")
+        )
       }
     }
   }
@@ -66,11 +71,14 @@ trait AlterTableRenameSuiteBase extends command.AlterTableRenameSuiteBase {
       withTableDir(dst) { (fs, dst_dir) =>
         sql(s"DROP TABLE $dst")
         fs.mkdirs(dst_dir)
-        val errMsg = intercept[AnalysisException] {
-          sql(s"ALTER TABLE $src RENAME TO ns.dst_tbl")
-        }.getMessage
-        assert(errMsg.matches("Can not rename the managed table(.+). " +
-          "The associated location(.+) already exists."))
+        checkError(
+          exception = intercept[SparkRuntimeException] {
+            sql(s"ALTER TABLE $src RENAME TO ns.dst_tbl")
+          },
+          condition = "LOCATION_ALREADY_EXISTS",
+          parameters = Map(
+            "location" -> s"'$dst_dir'",
+            "identifier" -> toSQLId(dst)))
       }
     }
   }

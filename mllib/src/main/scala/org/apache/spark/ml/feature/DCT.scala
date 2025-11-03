@@ -79,7 +79,9 @@ class DCT @Since("1.5.0") (@Since("1.5.0") override val uid: String)
   override def transformSchema(schema: StructType): StructType = {
     var outputSchema = super.transformSchema(schema)
     if ($(inputCol).nonEmpty && $(outputCol).nonEmpty) {
-      val size = AttributeGroup.fromStructField(schema($(inputCol))).size
+      val size = AttributeGroup.fromStructField(
+        SchemaUtils.getSchemaField(schema, $(inputCol))
+      ).size
       if (size >= 0) {
         outputSchema = SchemaUtils.updateAttributeGroupSize(outputSchema,
           $(outputCol), size)

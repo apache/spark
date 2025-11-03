@@ -19,6 +19,7 @@ package org.apache.spark.mllib.linalg
 
 import org.apache.spark.benchmark.{Benchmark, BenchmarkBase}
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
+import org.apache.spark.util.collection.Utils.createArray
 
 /**
  * Serialization benchmark for VectorUDT.
@@ -27,8 +28,8 @@ import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
  * 1. without sbt:
  *    bin/spark-submit --class <this class>
  *      --jars <spark core test jar> <spark mllib test jar>
- * 2. build/sbt "mllib/test:runMain <this class>"
- * 3. generate result: SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "mllib/test:runMain <this class>"
+ * 2. build/sbt "mllib/Test/runMain <this class>"
+ * 3. generate result: SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "mllib/Test/runMain <this class>"
  *    Results will be written to "benchmarks/UDTSerializationBenchmark-results.txt".
  * }}}
  */
@@ -45,7 +46,7 @@ object UDTSerializationBenchmark extends BenchmarkBase {
       val fromRow = encoder.createDeserializer()
 
       val vectors = (1 to numRows).map { i =>
-        Vectors.dense(Array.fill(1e5.toInt)(1.0 * i))
+        Vectors.dense(createArray(1e5.toInt, 1.0 * i))
       }.toArray
       val rows = vectors.map(toRow)
 

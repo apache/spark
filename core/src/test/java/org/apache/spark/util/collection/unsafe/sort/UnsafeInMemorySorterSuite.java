@@ -21,8 +21,8 @@ import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 
 import org.apache.spark.unsafe.array.LongArray;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import org.apache.spark.HashPartitioner;
 import org.apache.spark.SparkConf;
@@ -33,8 +33,8 @@ import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.memory.MemoryBlock;
 import org.apache.spark.internal.config.package$;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 
 public class UnsafeInMemorySorterSuite {
@@ -60,7 +60,7 @@ public class UnsafeInMemorySorterSuite {
       100,
       shouldUseRadixSort());
     final UnsafeSorterIterator iter = sorter.getSortedIterator();
-    Assert.assertFalse(iter.hasNext());
+    Assertions.assertFalse(iter.hasNext());
   }
 
   @Test
@@ -172,21 +172,21 @@ public class UnsafeInMemorySorterSuite {
             recordComparator, prefixComparator, 100, shouldUseRadixSort());
 
     // Ensure that the sorter does not OOM while freeing its memory.
-    testMemoryManager.markconsequentOOM(Integer.MAX_VALUE);
+    testMemoryManager.markConsequentOOM(Integer.MAX_VALUE);
     sorter.freeMemory();
     testMemoryManager.resetConsequentOOM();
-    Assert.assertFalse(sorter.hasSpaceForAnotherRecord());
+    Assertions.assertFalse(sorter.hasSpaceForAnotherRecord());
 
     // Get the sorter in an usable state again by allocating a new pointer array.
     LongArray array = consumer.allocateArray(1000);
     sorter.expandPointerArray(array);
 
     // Ensure that it is safe to call freeMemory() multiple times.
-    testMemoryManager.markconsequentOOM(Integer.MAX_VALUE);
+    testMemoryManager.markConsequentOOM(Integer.MAX_VALUE);
     sorter.freeMemory();
     sorter.freeMemory();
     testMemoryManager.resetConsequentOOM();
-    Assert.assertFalse(sorter.hasSpaceForAnotherRecord());
+    Assertions.assertFalse(sorter.hasSpaceForAnotherRecord());
 
     assertEquals(0L, memoryManager.cleanUpAllAllocatedMemory());
   }

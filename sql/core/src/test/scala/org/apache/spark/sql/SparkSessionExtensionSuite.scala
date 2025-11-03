@@ -18,6 +18,7 @@ package org.apache.spark.sql
 
 import java.util.{Locale, UUID}
 
+import scala.collection.mutable.ListBuffer
 import scala.concurrent.Future
 
 import org.apache.spark.{MapOutputStatistics, SparkFunSuite, TaskContext}
@@ -25,16 +26,26 @@ import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, InternalRow, TableIdentifier}
+import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
+import org.apache.spark.sql.catalyst.catalog.BucketSpec
+import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, Final, Max, Partial}
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParserInterface}
-import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, Statistics, UnresolvedHint}
-import org.apache.spark.sql.catalyst.plans.physical.Partitioning
+import org.apache.spark.sql.catalyst.plans.{PlanTest, SQLHelper}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, AggregateHint, ColumnStat, Limit, LocalRelation, LogicalPlan, Sort, SortHint, Statistics, UnresolvedHint}
+import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, SinglePartition}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
+import org.apache.spark.sql.classic.ClassicConversions._
+import org.apache.spark.sql.connector.write.WriterCommitMessage
 import org.apache.spark.sql.execution._
-import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, QueryStageExec}
+import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, AdaptiveSparkPlanHelper, AQEShuffleReadExec, QueryStageExec, ShuffleQueryStageExec}
+import org.apache.spark.sql.execution.aggregate.HashAggregateExec
+import org.apache.spark.sql.execution.datasources.{FileFormat, WriteFilesExec, WriteFilesExecBase, WriteFilesSpec}
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, BroadcastExchangeLike, ShuffleExchangeExec, ShuffleExchangeLike, ShuffleOrigin}
 import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.COLUMN_BATCH_SIZE
 import org.apache.spark.sql.internal.StaticSQLConf.SPARK_SESSION_EXTENSIONS
@@ -45,7 +56,8 @@ import org.apache.spark.unsafe.types.UTF8String
 /**
  * Test cases for the [[SparkSessionExtensions]].
  */
-class SparkSessionExtensionSuite extends SparkFunSuite {
+class SparkSessionExtensionSuite extends SparkFunSuite with SQLHelper with AdaptiveSparkPlanHelper
+  with PlanTest {
   private def create(
       builder: SparkSessionExtensionsProvider): Seq[SparkSessionExtensionsProvider] = Seq(builder)
 
@@ -62,6 +74,14 @@ class SparkSessionExtensionSuite extends SparkFunSuite {
     val spark = builder.getOrCreate()
     try f(spark) finally {
       stop(spark)
+    }
+  }
+
+  private def withTable(spark: SparkSession, tableNames: String*)(f: => Unit): Unit = {
+    try f finally {
+      tableNames.foreach { name =>
+        spark.sql(s"DROP TABLE IF EXISTS $name")
+      }
     }
   }
 
@@ -151,7 +171,7 @@ class SparkSessionExtensionSuite extends SparkFunSuite {
   }
 
   test("inject custom hint rule") {
-    withSession(Seq(_.injectPostHocResolutionRule(MyHintRule))) { session =>
+    withSession(Seq(_.injectHintResolutionRule(MyHintRule))) { session =>
       assert(
         session.range(1).hint("CONVERT_TO_EMPTY").logicalPlan.isInstanceOf[LocalRelation],
         "plan is expected to be a local relation"
@@ -170,11 +190,12 @@ class SparkSessionExtensionSuite extends SparkFunSuite {
         MyColumnarRule(MyNewQueryStageRule(), MyNewQueryStageRule()))
     }
     withSession(extensions) { session =>
-      session.conf.set(SQLConf.ADAPTIVE_EXECUTION_ENABLED, true)
-      assert(session.sessionState.queryStagePrepRules.contains(MyQueryStagePrepRule()))
+      session.conf.set(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, true)
+      assert(session.sessionState.adaptiveRulesHolder.queryStagePrepRules
+        .contains(MyQueryStagePrepRule()))
       assert(session.sessionState.columnarRules.contains(
         MyColumnarRule(MyNewQueryStageRule(), MyNewQueryStageRule())))
-      import session.sqlContext.implicits._
+      import session.implicits._
       val data = Seq((100L), (200L), (300L)).toDF("vals").repartition(1)
       val df = data.selectExpr("vals + 1")
       df.collect()
@@ -187,6 +208,68 @@ class SparkSessionExtensionSuite extends SparkFunSuite {
 
   test("inject columnar AQE off") {
     testInjectColumnar(false)
+  }
+
+  test("inject plan normalization rules") {
+    val extensions = create { extensions =>
+      extensions.injectPlanNormalizationRule { session =>
+        org.apache.spark.sql.catalyst.optimizer.PushDownPredicates
+      }
+    }
+    withSession(extensions) { session =>
+      import session.implicits._
+      val df = Seq((1, "a"), (2, "b")).toDF("i", "s")
+      df.select("i").filter($"i" > 1).cache()
+      assert(find(df.filter($"i" > 1).select("i").queryExecution.executedPlan) {
+        case _: org.apache.spark.sql.execution.columnar.InMemoryTableScanExec => true
+        case _ => false
+      }.isDefined)
+    }
+  }
+
+  test("SPARK-39991: AQE should retain column statistics from completed query stages") {
+    val extensions = create { extensions =>
+      extensions.injectColumnar(_ =>
+        MyColumnarRule(PreRuleReplaceAddWithBrokenVersion(), MyPostRule()))
+    }
+    withSession(extensions) { session =>
+      session.conf.set(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, true)
+      session.conf.set(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key, "-1")
+      assert(session.sessionState.columnarRules.contains(
+        MyColumnarRule(PreRuleReplaceAddWithBrokenVersion(), MyPostRule())))
+      import session.implicits._
+      // perform a join to inject a shuffle exchange
+      val left = Seq((1, 50L), (2, 100L), (3, 150L)).toDF("l1", "l2")
+      val right = Seq((1, 50L), (2, 100L), (3, 150L)).toDF("r1", "r2")
+      val data = left.join(right, $"l1" === $"r1")
+        // repartitioning avoids having the add operation pushed up into the LocalTableScan
+        .repartition(1)
+      val df = data.selectExpr("l2 + r2")
+      // execute the plan so that the final adaptive plan is available
+      df.collect()
+
+      // check that column stats exist
+      def findColumnStats(plan: SparkPlan,
+          columnStats: ListBuffer[AttributeMap[ColumnStat]]): Unit = {
+        plan match {
+          case a: AdaptiveSparkPlanExec =>
+            findColumnStats(stripAQEPlan(a), columnStats)
+          case qs: ShuffleQueryStageExec =>
+            columnStats += qs.computeStats().get.attributeStats
+            findColumnStats(qs.plan, columnStats)
+          case _ =>
+            plan.children.foreach(findColumnStats(_, columnStats))
+        }
+      }
+
+      // check for expected column stats (hard-coded in MyShuffleExchangeExec)
+      val columnStats = ListBuffer[AttributeMap[ColumnStat]]()
+      findColumnStats(df.queryExecution.executedPlan, columnStats)
+      assert(columnStats.length == 3)
+      assert(columnStats.forall(s => s.forall {
+        case (_, columnStat) => columnStat.distinctCount.contains(BigInt(123))
+      }))
+    }
   }
 
   private def testInjectColumnar(enableAQE: Boolean): Unit = {
@@ -209,10 +292,10 @@ class SparkSessionExtensionSuite extends SparkFunSuite {
         MyColumnarRule(PreRuleReplaceAddWithBrokenVersion(), MyPostRule()))
     }
     withSession(extensions) { session =>
-      session.conf.set(SQLConf.ADAPTIVE_EXECUTION_ENABLED, enableAQE)
+      session.conf.set(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, enableAQE)
       assert(session.sessionState.columnarRules.contains(
         MyColumnarRule(PreRuleReplaceAddWithBrokenVersion(), MyPostRule())))
-      import session.sqlContext.implicits._
+      import session.implicits._
       // perform a join to inject a broadcast exchange
       val left = Seq((1, 50L), (2, 100L), (3, 150L)).toDF("l1", "l2")
       val right = Seq((1, 50L), (2, 100L), (3, 150L)).toDF("r1", "r2")
@@ -236,6 +319,11 @@ class SparkSessionExtensionSuite extends SparkFunSuite {
       assert(result(0).getLong(0) == 101L) // Check that broken columnar Add was used.
       assert(result(1).getLong(0) == 201L)
       assert(result(2).getLong(0) == 301L)
+
+      withTempPath { path =>
+        val e = intercept[Exception](df.write.parquet(path.getCanonicalPath))
+        assert(e.getMessage == "columnar write")
+      }
     }
   }
 
@@ -251,7 +339,7 @@ class SparkSessionExtensionSuite extends SparkFunSuite {
     try {
       assert(session.sessionState.columnarRules.contains(
         MyColumnarRule(PreRuleReplaceAddWithBrokenVersion(), MyPostRule())))
-      import session.sqlContext.implicits._
+      import session.implicits._
 
       val input = Seq((100L), (200L), (300L))
       val data = input.toDF("vals").repartition(1)
@@ -406,6 +494,114 @@ class SparkSessionExtensionSuite extends SparkFunSuite {
       session.sql("SELECT * FROM v")
     }
   }
+
+  test("SPARK-38697: Extend SparkSessionExtensions to inject rules into AQE Optimizer") {
+    def executedPlan(df: Dataset[java.lang.Long]): SparkPlan = {
+      assert(df.queryExecution.executedPlan.isInstanceOf[AdaptiveSparkPlanExec])
+      stripAQEPlan(df.queryExecution.executedPlan)
+    }
+    val extensions = create { extensions =>
+      extensions.injectRuntimeOptimizerRule(_ => AddLimit)
+    }
+    withSession(extensions) { session =>
+      assert(session.sessionState.adaptiveRulesHolder.runtimeOptimizerRules.contains(AddLimit))
+
+      withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
+        val df = session.range(2).repartition()
+        assert(!executedPlan(df).isInstanceOf[CollectLimitExec])
+        df.collect()
+        assert(executedPlan(df).isInstanceOf[CollectLimitExec])
+      }
+    }
+  }
+
+  test("SPARK-42963: Extend SparkSessionExtensions to inject rules into AQE query stage " +
+    "optimizer") {
+    val extensions = create { extensions =>
+      extensions.injectQueryStageOptimizerRule(_ => RequireAtLeaseTwoPartitions)
+    }
+    withSession(extensions) { session =>
+      assert(session.sessionState.adaptiveRulesHolder.queryStageOptimizerRules
+        .contains(RequireAtLeaseTwoPartitions))
+      withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "3") {
+        val df = session.range(1).repartition()
+        df.collect()
+        assert(df.rdd.partitions.length == 3)
+      }
+    }
+  }
+
+  test("SPARK-46170: Support inject adaptive query post planner strategy rules in " +
+    "SparkSessionExtensions") {
+    val extensions = create { extensions =>
+      extensions.injectQueryPostPlannerStrategyRule(_ => MyQueryPostPlannerStrategyRule)
+    }
+    withSession(extensions) { session =>
+      assert(session.sessionState.adaptiveRulesHolder.queryPostPlannerStrategyRules
+        .contains(MyQueryPostPlannerStrategyRule))
+      import session.implicits._
+      withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "3",
+          SQLConf.COALESCE_PARTITIONS_ENABLED.key -> "false") {
+        val input = Seq(10, 20, 10).toDF("c1")
+        val df = input.groupBy("c1").count()
+        df.collect()
+        assert(df.rdd.partitions.length == 1)
+        assert(collectFirst(df.queryExecution.executedPlan) {
+          case s: ShuffleExchangeExec if s.outputPartitioning == SinglePartition => true
+        }.isDefined)
+        assert(collectFirst(df.queryExecution.executedPlan) {
+          case _: SortExec => true
+        }.isDefined)
+      }
+    }
+  }
+
+  test("custom aggregate hint") {
+    // The custom hint allows us to replace the aggregate (without grouping keys) with just
+    // Literal.
+    withSession(Seq(_.injectHintResolutionRule(CustomAggregateHintResolutionRule),
+      _.injectOptimizerRule(CustomAggregateRule))) { session =>
+      val res = session.range(10).agg(max("id")).as("max_id")
+        .hint("MAX_VALUE", "id", 10)
+        .queryExecution.optimizedPlan
+      assert(res.isInstanceOf[Aggregate])
+      val expectedAlias = Alias(Literal(10L), "max(id)")()
+      compareExpressions(expectedAlias, res.asInstanceOf[Aggregate].aggregateExpressions.head)
+    }
+  }
+
+  test("custom sort hint") {
+    // The custom hint allows us to replace the sort with its input
+    withSession(Seq(_.injectHintResolutionRule(CustomSortHintResolutionRule),
+      _.injectOptimizerRule(CustomSortRule))) { session =>
+      val res = session.range(10).sort("id")
+        .hint("INPUT_SORTED")
+        .queryExecution.optimizedPlan
+      assert(res.collect {case s: Sort => s}.isEmpty)
+    }
+  }
+
+  test("early batch rule is applied on resolved IDENTIFIER") {
+    var ruleApplied = false
+
+    case class UnresolvedRelationRule(spark: SparkSession) extends Rule[LogicalPlan] {
+      override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperators {
+        case r: UnresolvedRelation =>
+          ruleApplied = true
+          r
+      }
+    }
+
+    withSession(Seq(_.injectHintResolutionRule(UnresolvedRelationRule))) { session =>
+      withTable(session, "my_table") {
+        session.sql("CREATE TABLE IF NOT EXISTS my_table (col1 INT)")
+        ruleApplied = false
+
+        session.sql("SELECT * FROM IDENTIFIER('my_' || 'table')").collect()
+        assert(ruleApplied)
+      }
+    }
+  }
 }
 
 case class MyRule(spark: SparkSession) extends Rule[LogicalPlan] {
@@ -444,6 +640,10 @@ case class MyParser(spark: SparkSession, delegate: ParserInterface) extends Pars
 
   override def parseQuery(sqlText: String): LogicalPlan =
     delegate.parseQuery(sqlText)
+
+  override def parseRoutineParam(sqlText: String): StructType = {
+    delegate.parseRoutineParam(sqlText)
+  }
 }
 
 object MyExtensions {
@@ -580,7 +780,7 @@ trait ColumnarExpression extends Expression with Serializable {
     if (!super.equals(other)) {
       return false
     }
-    return other.isInstanceOf[ColumnarExpression]
+    other.isInstanceOf[ColumnarExpression]
   }
 
   override def hashCode(): Int = super.hashCode()
@@ -696,13 +896,33 @@ class ColumnarProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
     if (!super.equals(other)) {
       return false
     }
-    return other.isInstanceOf[ColumnarProjectExec]
+    other.isInstanceOf[ColumnarProjectExec]
   }
 
   override def hashCode(): Int = super.hashCode()
 
   override def withNewChildInternal(newChild: SparkPlan): ColumnarProjectExec =
     new ColumnarProjectExec(projectList, newChild)
+}
+
+case class ColumnarWriteExec(
+    child: SparkPlan,
+    fileFormat: FileFormat,
+    partitionColumns: Seq[Attribute],
+    bucketSpec: Option[BucketSpec],
+    options: Map[String, String],
+    staticPartitions: TablePartitionSpec) extends WriteFilesExecBase {
+
+  override def supportsColumnar: Boolean = true
+
+  override def doExecuteWrite(writeFilesSpec: WriteFilesSpec): RDD[WriterCommitMessage] = {
+    assert(child.supportsColumnar)
+    throw new Exception("columnar write")
+  }
+
+  override protected def withNewChildInternal(newChild: SparkPlan): ColumnarWriteExec =
+    ColumnarWriteExec(
+      newChild, fileFormat, partitionColumns, bucketSpec, options, staticPartitions)
 }
 
 /**
@@ -713,9 +933,10 @@ class BrokenColumnarAdd(
     left: ColumnarExpression,
     right: ColumnarExpression,
     failOnError: Boolean = false)
-  extends Add(left, right, failOnError) with ColumnarExpression {
+  extends Add(left, right, NumericEvalContext(EvalMode.fromBoolean(failOnError)))
+    with ColumnarExpression {
 
-  override def supportsColumnar(): Boolean = left.supportsColumnar && right.supportsColumnar
+  override def supportsColumnar: Boolean = left.supportsColumnar && right.supportsColumnar
 
   override def columnarEval(batch: ColumnarBatch): Any = {
     var lhs: Any = null
@@ -812,6 +1033,14 @@ case class PreRuleReplaceAddWithBrokenVersion() extends Rule[SparkPlan] {
           new ColumnarProjectExec(plan.projectList.map((exp) =>
             replaceWithColumnarExpression(exp).asInstanceOf[NamedExpression]),
             replaceWithColumnarPlan(plan.child))
+        case write: WriteFilesExec =>
+          ColumnarWriteExec(
+            replaceWithColumnarPlan(write.child),
+            write.fileFormat,
+            write.partitionColumns,
+            write.bucketSpec,
+            write.options,
+            write.staticPartitions)
         case p =>
           logWarning(s"Columnar processing for ${p.getClass} is not currently supported.")
           p.withNewChildren(p.children.map(replaceWithColumnarPlan))
@@ -833,14 +1062,22 @@ case class PreRuleReplaceAddWithBrokenVersion() extends Rule[SparkPlan] {
 case class MyShuffleExchangeExec(delegate: ShuffleExchangeExec) extends ShuffleExchangeLike {
   override def numMappers: Int = delegate.numMappers
   override def numPartitions: Int = delegate.numPartitions
+  override def advisoryPartitionSize: Option[Long] = delegate.advisoryPartitionSize
   override def shuffleOrigin: ShuffleOrigin = {
     delegate.shuffleOrigin
   }
   override def mapOutputStatisticsFuture: Future[MapOutputStatistics] =
-    delegate.submitShuffleJob
+    delegate.submitShuffleJob()
   override def getShuffleRDD(partitionSpecs: Array[ShufflePartitionSpec]): RDD[_] =
     delegate.getShuffleRDD(partitionSpecs)
-  override def runtimeStatistics: Statistics = delegate.runtimeStatistics
+  override def runtimeStatistics: Statistics = {
+    val stats = delegate.runtimeStatistics
+    // add some mock column stats so we can test that AQE retains them in SPARK-39991
+    val columnStats = ColumnStat(distinctCount = Some(BigInt(123)))
+    val attributeStats = AttributeMap(Seq((child.output.head, columnStats)))
+    Statistics(stats.sizeInBytes, stats.rowCount, attributeStats)
+  }
+  override def shuffleId: Int = delegate.shuffleId
   override def child: SparkPlan = delegate.child
   override protected def doExecute(): RDD[InternalRow] = delegate.execute()
   override def outputPartitioning: Partitioning = delegate.outputPartitioning
@@ -853,10 +1090,10 @@ case class MyShuffleExchangeExec(delegate: ShuffleExchangeExec) extends ShuffleE
  * whether AQE is enabled.
  */
 case class MyBroadcastExchangeExec(delegate: BroadcastExchangeExec) extends BroadcastExchangeLike {
-  override def runId: UUID = delegate.runId
+  override val runId: UUID = delegate.runId
   override def relationFuture: java.util.concurrent.Future[Broadcast[Any]] =
     delegate.relationFuture
-  override def completionFuture: Future[Broadcast[Any]] = delegate.submitBroadcastJob
+  override def completionFuture: Future[Broadcast[Any]] = delegate.submitBroadcastJob()
   override def runtimeStatistics: Statistics = delegate.runtimeStatistics
   override def child: SparkPlan = delegate.child
   override protected def doPrepare(): Unit = delegate.prepare()
@@ -879,7 +1116,7 @@ class ReplacedRowToColumnarExec(override val child: SparkPlan)
     if (!super.equals(other)) {
       return false
     }
-    return other.isInstanceOf[ReplacedRowToColumnarExec]
+    other.isInstanceOf[ReplacedRowToColumnarExec]
   }
 
   override def hashCode(): Int = super.hashCode()
@@ -1022,5 +1259,115 @@ class YourExtensions extends SparkSessionExtensionsProvider {
 
   override def apply(v1: SparkSessionExtensions): Unit = {
     v1.injectFunction(getAppName)
+  }
+}
+
+object AddLimit extends Rule[LogicalPlan] {
+  override def apply(plan: LogicalPlan): LogicalPlan = plan match {
+    case Limit(_, _) => plan
+    case _ => Limit(Literal(1), plan)
+  }
+}
+
+object RequireAtLeaseTwoPartitions extends Rule[SparkPlan] {
+  override def apply(plan: SparkPlan): SparkPlan = {
+    val readOpt = plan.find(_.isInstanceOf[AQEShuffleReadExec])
+    if (readOpt.exists(_.outputPartitioning.numPartitions == 1)) {
+      plan.transform {
+        case read: AQEShuffleReadExec => read.child
+      }
+    } else {
+      plan
+    }
+  }
+}
+
+object MyQueryPostPlannerStrategyRule extends Rule[SparkPlan] {
+  override def apply(plan: SparkPlan): SparkPlan = {
+    plan.transformUp {
+      case h: HashAggregateExec if h.aggregateExpressions.map(_.mode).contains(Partial) =>
+        ShuffleExchangeExec(SinglePartition, h)
+      case h: HashAggregateExec if h.aggregateExpressions.map(_.mode).contains(Final) =>
+        SortExec(h.groupingExpressions.map(k => SortOrder.apply(k, Ascending)), false, h)
+    }
+  }
+}
+
+
+// Example of an Aggregate hint that tells that 'attribute' values are no larger than 'max'.
+// We will use them to rewrite MAX(attribute) with 'max' constant.
+case class CustomAggHint(attribute: AttributeReference, max: Int) extends AggregateHint
+
+// Attaches the CustomAggHint to the aggregate node without grouping keys if the aggregate
+// function is MAX over the specified column.
+case class CustomAggregateHintResolutionRule(spark: SparkSession) extends Rule[LogicalPlan] {
+  val MY_HINT_NAME = Set("MAX_VALUE")
+
+  def isMax(expr: NamedExpression, attribute: String): Option[AttributeReference] = {
+    expr match {
+      case Alias(AggregateExpression(Max(a @ AttributeReference(name, _, _, _)), _, _, _, _), _)
+        if name.equalsIgnoreCase(attribute) =>
+        Some(a)
+      case _ => None
+    }
+  }
+
+  private def applyMaxValueHint(
+      plan: LogicalPlan,
+      attribute: String,
+      max: Int): LogicalPlan = {
+    val newPlan = plan match {
+      case a @ Aggregate(keys, aggs, _, None) if keys.isEmpty && aggs.size == 1 =>
+        isMax(aggs.head, attribute) match {
+          case Some(attr) => a.copy(hint = Some(CustomAggHint(attr, max)))
+          case None => a
+        }
+      case _ => plan
+    }
+    newPlan.mapChildren { child =>
+      applyMaxValueHint(child, attribute, max)
+    }
+  }
+
+  override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperators {
+    case h: UnresolvedHint if MY_HINT_NAME.contains(h.name.toUpperCase(Locale.ROOT)) =>
+      applyMaxValueHint(h.child, "id", 10)
+  }
+}
+
+// Logical rule that replaces the MAX aggregation function (in Aggregates with CustomAggHint)
+// with just the constant from the hint.
+case class CustomAggregateRule(spark: SparkSession) extends Rule[LogicalPlan] {
+  override def apply(plan: LogicalPlan): LogicalPlan = {
+    plan transformDown {
+      case a @ Aggregate(groupingKeys, aggregates, _, Some(CustomAggHint(_, max)))
+        if groupingKeys.isEmpty && aggregates.size == 1 =>
+        a.copy(aggregateExpressions = Seq(Alias(Cast(Literal(max), aggregates.head.dataType),
+          aggregates.head.name)()), hint = None)
+    }
+  }
+}
+
+// Example of a Sort hint that tells that the input is already sorted,
+// and the rule that removes all Sort nodes based on such hint.
+case class CustomSortHint(inputSorted: Boolean) extends SortHint
+
+// Attaches the CustomSortHint to the sort node.
+case class CustomSortHintResolutionRule(spark: SparkSession) extends Rule[LogicalPlan] {
+  val MY_HINT_NAME = Set("INPUT_SORTED")
+
+  private def applySortHint(plan: LogicalPlan): LogicalPlan = plan.transformDown {
+    case s @ Sort(_, _, _, None) => s.copy(hint = Some(CustomSortHint(true)))
+  }
+
+  override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperators {
+    case h: UnresolvedHint if MY_HINT_NAME.contains(h.name.toUpperCase(Locale.ROOT)) =>
+      applySortHint(h.child)
+  }
+}
+
+case class CustomSortRule(spark: SparkSession) extends Rule[LogicalPlan] {
+  override def apply(plan: LogicalPlan): LogicalPlan = plan transformDown {
+    case s @ Sort(_, _, _, Some(CustomSortHint(true))) => s.child
   }
 }

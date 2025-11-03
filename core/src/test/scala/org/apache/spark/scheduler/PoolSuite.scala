@@ -45,7 +45,7 @@ class PoolSuite extends SparkFunSuite with LocalSparkContext {
       new FakeTask(stageId, i, Nil)
     }
     new TaskSetManager(taskScheduler, new TaskSet(tasks, stageId, 0, 0, null,
-      ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID), 0)
+      ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID, None), 0)
   }
 
   def scheduleTaskAndVerifyId(taskId: Int, rootPool: Pool, expectedStageId: Int): Unit = {
@@ -353,7 +353,7 @@ class PoolSuite extends SparkFunSuite with LocalSparkContext {
       Utils.getSparkClassLoader.getResource("fairscheduler-with-valid-data.xml").getFile)
     TestUtils.withHttpServer(xmlPath.getParent.toUri.getPath) { baseURL =>
       val conf = new SparkConf().set(SCHEDULER_ALLOCATION_FILE,
-        baseURL + "fairscheduler-with-valid-data.xml")
+        baseURL.toString + "fairscheduler-with-valid-data.xml")
       sc = new SparkContext(LOCAL, APP_NAME, conf)
 
       val rootPool = new Pool("", SchedulingMode.FAIR, 0, 0)

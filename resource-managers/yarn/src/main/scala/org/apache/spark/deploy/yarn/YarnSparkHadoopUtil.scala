@@ -17,15 +17,12 @@
 
 package org.apache.spark.deploy.yarn
 
-import java.util.regex.{Matcher, Pattern}
-
 import scala.collection.immutable.{Map => IMap}
 import scala.collection.mutable.{HashMap, ListBuffer}
 import scala.util.matching.Regex
 
 import org.apache.hadoop.yarn.api.ApplicationConstants
 import org.apache.hadoop.yarn.api.records.{ApplicationAccessType, ContainerId, Priority}
-import org.apache.hadoop.yarn.util.ConverterUtils
 
 import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.launcher.YarnCommandBuilderUtils
@@ -60,60 +57,12 @@ object YarnSparkHadoopUtil {
   }
 
   /**
-   * Set zero or more environment variables specified by the given input string.
-   * The input string is expected to take the form "KEY1=VAL1,KEY2=VAL2,KEY3=VAL3".
-   */
-  def setEnvFromInputString(env: HashMap[String, String], inputString: String): Unit = {
-    if (inputString != null && inputString.length() > 0) {
-      val childEnvs = inputString.split(",")
-      val p = Pattern.compile(environmentVariableRegex)
-      for (cEnv <- childEnvs) {
-        val parts = cEnv.split("=") // split on '='
-        val m = p.matcher(parts(1))
-        val sb = new StringBuffer
-        while (m.find()) {
-          val variable = m.group(1)
-          var replace = ""
-          if (env.contains(variable)) {
-            replace = env(variable)
-          } else {
-            // if this key is not configured for the child .. get it from the env
-            replace = System.getenv(variable)
-            if (replace == null) {
-            // the env key is note present anywhere .. simply set it
-              replace = ""
-            }
-          }
-          m.appendReplacement(sb, Matcher.quoteReplacement(replace))
-        }
-        m.appendTail(sb)
-        // This treats the environment variable as path variable delimited by `File.pathSeparator`
-        // This is kept for backward compatibility and consistency with Hadoop's behavior
-        addPathToEnvironment(env, parts(0), sb.toString)
-      }
-    }
-  }
-
-  /**
    * Regex pattern to match the name of an environment variable. Note that Unix variable naming
    * conventions (alphanumeric plus underscore, case-sensitive, can't start with a digit)
    * are used for both Unix and Windows, following the convention of Hadoop's `Shell` class
    * (see specifically [[org.apache.hadoop.util.Shell.getEnvironmentVariableRegex]]).
    */
   private val envVarNameRegex: String = "[A-Za-z_][A-Za-z0-9_]*"
-
-  /**
-   * Note that this regex only supports the `$VAR_NAME` and `%VAR_NAME%` syntax, for Unix and
-   * Windows respectively, and does not perform any handling of escapes. The Unix `${VAR_NAME}`
-   * syntax is not supported.
-   */
-  private val environmentVariableRegex: String = {
-    if (Utils.isWindows) {
-      s"%($envVarNameRegex)%"
-    } else {
-      s"\\$$($envVarNameRegex)"
-    }
-  }
 
   // scalastyle:off line.size.limit
   /**
@@ -249,7 +198,7 @@ object YarnSparkHadoopUtil {
 
   def getContainerId: ContainerId = {
     val containerIdString = System.getenv(ApplicationConstants.Environment.CONTAINER_ID.name())
-    ConverterUtils.toContainerId(containerIdString)
+    ContainerId.fromString(containerIdString)
   }
 
   /**

@@ -18,8 +18,8 @@ package org.apache.spark.scheduler.cluster.k8s
 
 import java.util.concurrent.TimeUnit
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 
 import io.fabric8.kubernetes.api.model.{PersistentVolumeClaim,
   PersistentVolumeClaimBuilder, PodSpec, PodSpecBuilder, PodTemplateSpec}
@@ -42,24 +42,25 @@ class StatefulSetPodsAllocator(
     snapshotsStore: ExecutorPodsSnapshotsStore,
     clock: Clock) extends AbstractPodsAllocator() with Logging {
 
-  private val rpIdToResourceProfile = new mutable.HashMap[Int, ResourceProfile]
+  protected val rpIdToResourceProfile = new mutable.HashMap[Int, ResourceProfile]
 
-  private val driverPodReadinessTimeout = conf.get(KUBERNETES_ALLOCATION_DRIVER_READINESS_TIMEOUT)
+  protected val driverPodReadinessTimeout = conf.get(KUBERNETES_ALLOCATION_DRIVER_READINESS_TIMEOUT)
 
-  private val namespace = conf.get(KUBERNETES_NAMESPACE)
+  protected val namespace = conf.get(KUBERNETES_NAMESPACE)
 
-  private val kubernetesDriverPodName = conf
+  protected val kubernetesDriverPodName = conf
     .get(KUBERNETES_DRIVER_POD_NAME)
 
   val driverPod = kubernetesDriverPodName
     .map(name => Option(kubernetesClient.pods()
+      .inNamespace(namespace)
       .withName(name)
       .get())
       .getOrElse(throw new SparkException(
         s"No pod was found named $name in the cluster in the " +
           s"namespace $namespace (this was supposed to be the driver pod.).")))
 
-  private var appId: String = _
+  protected var appId: String = _
 
   def start(applicationId: String, schedulerBackend: KubernetesClusterSchedulerBackend): Unit = {
     appId = applicationId
@@ -69,6 +70,7 @@ class StatefulSetPodsAllocator(
       Utils.tryLogNonFatalError {
         kubernetesClient
           .pods()
+          .inNamespace(namespace)
           .withName(pod.getMetadata.getName)
           .waitUntilReady(driverPodReadinessTimeout, TimeUnit.SECONDS)
       }
@@ -90,16 +92,16 @@ class StatefulSetPodsAllocator(
   // For now just track the sets created, in the future maybe track requested value too.
   val setsCreated = new mutable.HashSet[Int]()
 
-  private def setName(applicationId: String, rpid: Int): String = {
+  protected def setName(applicationId: String, rpid: Int): String = {
     s"spark-s-${applicationId}-${rpid}"
   }
 
-  private def setTargetExecutorsReplicaset(
+  protected def setTargetExecutorsReplicaset(
       expected: Int,
       applicationId: String,
       resourceProfileId: Int): Unit = {
     if (setsCreated.contains(resourceProfileId)) {
-      val statefulset = kubernetesClient.apps().statefulSets().withName(
+      val statefulset = kubernetesClient.apps().statefulSets().inNamespace(namespace).withName(
         setName(applicationId, resourceProfileId: Int))
       statefulset.scale(expected, false /* wait */)
     } else {
@@ -169,7 +171,7 @@ class StatefulSetPodsAllocator(
       val statefulSet = new io.fabric8.kubernetes.api.model.apps.StatefulSetBuilder()
         .withNewMetadata()
           .withName(setName(applicationId, resourceProfileId))
-          .withNamespace(conf.get(KUBERNETES_NAMESPACE))
+          .withNamespace(namespace)
         .endMetadata()
         .withNewSpec()
           .withPodManagementPolicy("Parallel")
@@ -185,7 +187,7 @@ class StatefulSetPodsAllocator(
         .build()
 
       addOwnerReference(driverPod.get, Seq(statefulSet))
-      kubernetesClient.apps().statefulSets().create(statefulSet)
+      kubernetesClient.apps().statefulSets().inNamespace(namespace).resource(statefulSet).create()
       setsCreated += (resourceProfileId)
     }
   }
@@ -194,7 +196,12 @@ class StatefulSetPodsAllocator(
     // Cleanup the statefulsets when we stop
     setsCreated.foreach { rpid =>
       Utils.tryLogNonFatalError {
-        kubernetesClient.apps().statefulSets().withName(setName(applicationId, rpid)).delete()
+        kubernetesClient
+          .apps()
+          .statefulSets()
+          .inNamespace(namespace)
+          .withName(setName(applicationId, rpid))
+          .delete()
       }
     }
   }

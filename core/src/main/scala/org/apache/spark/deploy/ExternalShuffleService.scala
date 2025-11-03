@@ -20,10 +20,11 @@ package org.apache.spark.deploy
 import java.io.File
 import java.util.concurrent.CountDownLatch
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.internal.{config, Logging}
+import org.apache.spark.internal.LogKeys.{AUTH_ENABLED, PORT, SHUFFLE_DB_BACKEND_KEY, SHUFFLE_DB_BACKEND_NAME}
 import org.apache.spark.metrics.{MetricsSystem, MetricsSystemInstances}
 import org.apache.spark.network.TransportContext
 import org.apache.spark.network.crypto.AuthServerBootstrap
@@ -49,10 +50,14 @@ class ExternalShuffleService(sparkConf: SparkConf, securityManager: SecurityMana
   private val enabled = sparkConf.get(config.SHUFFLE_SERVICE_ENABLED)
   private val port = sparkConf.get(config.SHUFFLE_SERVICE_PORT)
 
-  private val registeredExecutorsDB = "registeredExecutors.ldb"
+  private val registeredExecutorsDB = "registeredExecutors"
 
   private val transportConf =
-    SparkTransportConf.fromSparkConf(sparkConf, "shuffle", numUsableCores = 0)
+    SparkTransportConf.fromSparkConf(
+      sparkConf,
+      "shuffle",
+      numUsableCores = 0,
+      sslOptions = Some(securityManager.getRpcSSLOptions()))
   private val blockHandler = newShuffleBlockHandler(transportConf)
   private var transportContext: TransportContext = _
 
@@ -65,8 +70,8 @@ class ExternalShuffleService(sparkConf: SparkConf, securityManager: SecurityMana
     if (localDirs.length >= 1) {
       new File(localDirs.find(new File(_, dbName).exists()).getOrElse(localDirs(0)), dbName)
     } else {
-      logWarning(s"'spark.local.dir' should be set first when we use db in " +
-        s"ExternalShuffleService. Note that this only affects standalone mode.")
+      logWarning("'spark.local.dir' should be set first when we use db in " +
+        "ExternalShuffleService. Note that this only affects standalone mode.")
       null
     }
   }
@@ -79,7 +84,12 @@ class ExternalShuffleService(sparkConf: SparkConf, securityManager: SecurityMana
   /** Create a new shuffle block handler. Factored out for subclasses to override. */
   protected def newShuffleBlockHandler(conf: TransportConf): ExternalBlockHandler = {
     if (sparkConf.get(config.SHUFFLE_SERVICE_DB_ENABLED) && enabled) {
-      new ExternalBlockHandler(conf, findRegisteredExecutorsDBFile(registeredExecutorsDB))
+      val shuffleDBName = sparkConf.get(config.SHUFFLE_SERVICE_DB_BACKEND)
+      logInfo(
+        log"Use ${MDC(SHUFFLE_DB_BACKEND_NAME, shuffleDBName.name())} as the implementation of " +
+        log"${MDC(SHUFFLE_DB_BACKEND_KEY, config.SHUFFLE_SERVICE_DB_BACKEND.key)}")
+      new ExternalBlockHandler(conf,
+        findRegisteredExecutorsDBFile(shuffleDBName.fileName(registeredExecutorsDB)))
     } else {
       new ExternalBlockHandler(conf, null)
     }
@@ -96,7 +106,8 @@ class ExternalShuffleService(sparkConf: SparkConf, securityManager: SecurityMana
   def start(): Unit = {
     require(server == null, "Shuffle server already started")
     val authEnabled = securityManager.isAuthenticationEnabled()
-    logInfo(s"Starting shuffle service on port $port (auth enabled = $authEnabled)")
+    logInfo(log"Starting shuffle service on port ${MDC(PORT, port)}" +
+      log" (auth enabled = ${MDC(AUTH_ENABLED, authEnabled)})")
     val bootstraps: Seq[TransportServerBootstrap] =
       if (authEnabled) {
         Seq(new AuthServerBootstrap(transportConf, securityManager))
@@ -153,9 +164,13 @@ object ExternalShuffleService extends Logging {
   private[spark] def main(
       args: Array[String],
       newShuffleService: (SparkConf, SecurityManager) => ExternalShuffleService): Unit = {
+    Utils.resetStructuredLogging()
     Utils.initDaemon(log)
     val sparkConf = new SparkConf
     Utils.loadDefaultSparkProperties(sparkConf)
+    // Initialize logging system again after `spark.log.structuredLogging.enabled` takes effect
+    Utils.resetStructuredLogging(sparkConf)
+    Logging.uninitialize()
     val securityManager = new SecurityManager(sparkConf)
 
     // we override this value since this service is started from the command line

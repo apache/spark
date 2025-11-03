@@ -17,7 +17,7 @@
 
 package org.apache.spark.ml.classification
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.util.Random
 import scala.util.control.Breaks._
 
@@ -160,20 +160,20 @@ class LogisticRegressionSuite extends MLTest with DefaultReadWriteTest {
    */
   ignore("export test data into CSV format") {
     binaryDataset.rdd.map { case Row(l: Double, f: Vector, w: Double) =>
-      l + "," + w + "," + f.toArray.mkString(",")
+      s"$l,$w,${f.toArray.mkString(",")}"
     }.repartition(1).saveAsTextFile("target/tmp/LogisticRegressionSuite/binaryDataset")
     binaryDatasetWithSmallVar.rdd.map { case Row(l: Double, f: Vector, w: Double) =>
-      l + "," + w + "," + f.toArray.mkString(",")
+      s"$l,$w,${f.toArray.mkString(",")}"
     }.repartition(1).saveAsTextFile("target/tmp/LogisticRegressionSuite/binaryDatasetWithSmallVar")
     multinomialDataset.rdd.map { case Row(l: Double, f: Vector, w: Double) =>
-      l + "," + w + "," + f.toArray.mkString(",")
+      s"$l,$w,${f.toArray.mkString(",")}"
     }.repartition(1).saveAsTextFile("target/tmp/LogisticRegressionSuite/multinomialDataset")
     multinomialDatasetWithSmallVar.rdd.map { case Row(l: Double, f: Vector, w: Double) =>
-      l + "," + w + "," + f.toArray.mkString(",")
+        s"$l,$w,${f.toArray.mkString(",")}"
     }.repartition(1)
      .saveAsTextFile("target/tmp/LogisticRegressionSuite/multinomialDatasetWithSmallVar")
     multinomialDatasetWithZeroVar.rdd.map { case Row(l: Double, f: Vector, w: Double) =>
-        l + "," + w + "," + f.toArray.mkString(",")
+        s"$l,$w,${f.toArray.mkString(",")}"
     }.repartition(1)
      .saveAsTextFile("target/tmp/LogisticRegressionSuite/multinomialDatasetWithZeroVar")
   }
@@ -550,8 +550,8 @@ class LogisticRegressionSuite extends MLTest with DefaultReadWriteTest {
   }
 
   test("multinomial logistic regression: Predictor, Classifier methods") {
-    val sqlContext = smallMultinomialDataset.sqlContext
-    import sqlContext.implicits._
+    val session = smallMultinomialDataset.sparkSession
+    import session.implicits._
     val mlr = new LogisticRegression().setFamily("multinomial")
 
     val model = mlr.fit(smallMultinomialDataset)
@@ -590,8 +590,8 @@ class LogisticRegressionSuite extends MLTest with DefaultReadWriteTest {
   }
 
   test("binary logistic regression: Predictor, Classifier methods") {
-    val sqlContext = smallBinaryDataset.sqlContext
-    import sqlContext.implicits._
+    val session = smallBinaryDataset.sparkSession
+    import session.implicits._
     val lr = new LogisticRegression().setFamily("binomial")
 
     val model = lr.fit(smallBinaryDataset)
@@ -1427,8 +1427,8 @@ class LogisticRegressionSuite extends MLTest with DefaultReadWriteTest {
     val trainer2 = (new LogisticRegression).setFitIntercept(true).setWeightCol("weight")
       .setElasticNetParam(1.0).setRegParam(6.0).setStandardization(false)
 
-    val sqlContext = multinomialDataset.sqlContext
-    import sqlContext.implicits._
+    val session = multinomialDataset.sparkSession
+    import session.implicits._
     val model1 = trainer1.fit(multinomialDataset)
     val model2 = trainer2.fit(multinomialDataset)
 
@@ -2587,7 +2587,7 @@ class LogisticRegressionSuite extends MLTest with DefaultReadWriteTest {
       blorModel.evaluate(smallBinaryDataset).asInstanceOf[BinaryLogisticRegressionSummary]
     assert(blorSummary.areaUnderROC === sameBlorSummary.areaUnderROC)
     assert(blorSummary.roc.collect() === sameBlorSummary.roc.collect())
-    assert(blorSummary.pr.collect === sameBlorSummary.pr.collect())
+    assert(blorSummary.pr.collect() === sameBlorSummary.pr.collect())
     assert(
       blorSummary.fMeasureByThreshold.collect() === sameBlorSummary.fMeasureByThreshold.collect())
     assert(
@@ -2994,6 +2994,133 @@ class LogisticRegressionSuite extends MLTest with DefaultReadWriteTest {
     val expected = "LogisticRegressionModel: uid=logReg, numClasses=2, numFeatures=3"
     assert(model.toString === expected)
   }
+
+  test("test internal thresholds") {
+    val df = Seq(
+      (1.0, 1.0, Vectors.dense(0.0, 5.0)),
+      (0.0, 2.0, Vectors.dense(1.0, 2.0)),
+      (1.0, 3.0, Vectors.dense(2.0, 1.0)),
+      (0.0, 4.0, Vectors.dense(3.0, 3.0))
+    ).toDF("label", "weight", "features")
+
+    val lor = new LogisticRegression().setWeightCol("weight")
+    val model = lor.fit(df)
+    val vec = Vectors.dense(0.0, 5.0)
+
+    val p0 = model.predict(vec)
+    model.setThreshold(0.05)
+    val p1 = model.set(model.threshold, 0.5).predict(vec)
+    val p2 = model.clear(model.threshold).predict(vec)
+
+    assert(p0 === p1)
+    assert(p0 === p2)
+  }
+
+  test("model size estimation: dense binary logistic regression") {
+    val rng = new Random(1)
+
+    Seq(10, 100, 1000, 10000, 100000).foreach { n =>
+      val df = Seq(
+        (Vectors.dense(Array.fill(n)(rng.nextDouble())), 0.0),
+        (Vectors.dense(Array.fill(n)(rng.nextDouble())), 1.0)
+      ).toDF("features", "label")
+
+      val lor = new LogisticRegression().setMaxIter(1)
+      val size1 = lor.estimateModelSize(df)
+      val model = lor.fit(df)
+      assert(model.coefficientMatrix.isInstanceOf[DenseMatrix])
+      val size2 = model.estimatedSize
+
+      // the model is dense, the estimation should be relatively accurate
+      //      (n, size1, size2)
+      //      (10,7030,7030) <- when the model is small, model.params matters
+      //      (100,7750,7750)
+      //      (1000,14950,14950)
+      //      (10000,86950,86950)
+      //      (100000,806950,806950)
+      val rel = (size1 - size2).toDouble / size2
+      assert(math.abs(rel) < 0.05, (n, size1, size2))
+    }
+  }
+
+  test("model size estimation: sparse binary logistic regression") {
+    val rng = new Random(1)
+
+    Seq(100, 1000, 10000, 100000).foreach { n =>
+      val df = Seq(
+        (Vectors.sparse(n, Array.range(0, 10), Array.fill(10)(rng.nextDouble())), 0.0),
+        (Vectors.sparse(n, Array.range(0, 10), Array.fill(10)(rng.nextDouble())), 1.0)
+      ).toDF("features", "label")
+
+      val lor = new LogisticRegression().setMaxIter(1).setRegParam(10.0)
+      val size1 = lor.estimateModelSize(df)
+      val model = lor.fit(df)
+      assert(model.coefficientMatrix.isInstanceOf[SparseMatrix])
+      val size2 = model.estimatedSize
+
+      // the model is sparse, the estimated size is likely larger
+      //      (n, size1, size2)
+      //      (100,7750,7102)
+      //      (1000,14950,7102)
+      //      (10000,86950,7102)
+      //      (100000,806950,7102)
+      assert(size1 > size2, (n, size1, size2))
+    }
+  }
+
+  test("model size estimation: dense multinomial logistic regression") {
+    val rng = new Random(1)
+
+    Seq(10, 100, 1000, 10000, 100000).foreach { n =>
+      val df = Seq(
+        (Vectors.dense(Array.fill(n)(rng.nextDouble())), 0.0),
+        (Vectors.dense(Array.fill(n)(rng.nextDouble())), 1.0),
+        (Vectors.dense(Array.fill(n)(rng.nextDouble())), 2.0)
+      ).toDF("features", "label")
+
+      val lor = new LogisticRegression().setMaxIter(1)
+      val size1 = lor.estimateModelSize(df)
+      val model = lor.fit(df)
+      assert(model.coefficientMatrix.isInstanceOf[DenseMatrix])
+      val size2 = model.estimatedSize
+
+      // the model is dense, the estimation should be relatively accurate
+      //      (n, size1, size2)
+      //      (10,7206,7206) <- when the model is small, model.params matters
+      //      (100,9366,9366)
+      //      (1000,30966,30966)
+      //      (10000,246966,246966)
+      //      (100000,2406966,2406966)
+      val rel = (size1 - size2).toDouble / size2
+      assert(math.abs(rel) < 0.05, (n, size1, size2))
+    }
+  }
+
+  test("model size estimation: sparse multinomial logistic regression") {
+    val rng = new Random(1)
+
+    Seq(100, 1000, 10000, 100000).foreach { n =>
+      val df = Seq(
+        (Vectors.sparse(n, Array.range(0, 10), Array.fill(10)(rng.nextDouble())), 0.0),
+        (Vectors.sparse(n, Array.range(0, 10), Array.fill(10)(rng.nextDouble())), 1.0),
+        (Vectors.sparse(n, Array.range(0, 10), Array.fill(10)(rng.nextDouble())), 2.0)
+      ).toDF("features", "label")
+
+      val lor = new LogisticRegression().setMaxIter(1).setRegParam(10.0)
+      val size1 = lor.estimateModelSize(df)
+      val model = lor.fit(df)
+      assert(model.coefficientMatrix.isInstanceOf[SparseMatrix])
+      val size2 = model.estimatedSize
+
+      // the model is sparse, the estimated size is likely larger
+      //      (n, size1, size2)
+      //      (100,9366,7366)
+      //      (1000,30966,7366)
+      //      (10000,246966,7366)
+      //      (100000,2406966,7366)
+      assert(size1 > size2, (n, size1, size2))
+    }
+  }
 }
 
 object LogisticRegressionSuite {
@@ -3122,7 +3249,7 @@ object LogisticRegressionSuite {
         for (i <- 0 until nClasses) {
           if (p < probs(i)) {
             y = i
-            break
+            break()
           }
         }
       }

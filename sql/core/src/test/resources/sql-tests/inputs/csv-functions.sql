@@ -4,6 +4,7 @@ select from_csv('26/08/2015', 'time Timestamp', map('timestampFormat', 'dd/MM/yy
 -- Check if errors handled
 select from_csv('1', 1);
 select from_csv('1', 'a InvalidType');
+select from_csv('1', 'Array<int>');
 select from_csv('1', 'a INT', named_struct('mode', 'PERMISSIVE'));
 select from_csv('1', 'a INT', map('mode', 1));
 select from_csv();
@@ -11,6 +12,7 @@ select from_csv();
 select from_csv('1,abc', schema_of_csv('1,abc'));
 select schema_of_csv('1|abc', map('delimiter', '|'));
 select schema_of_csv(null);
+select schema_of_csv(42);
 CREATE TEMPORARY VIEW csvTable(csvField, a) AS SELECT * FROM VALUES ('1,abc', 'a');
 SELECT schema_of_csv(csvField) FROM csvTable;
 -- Clean up

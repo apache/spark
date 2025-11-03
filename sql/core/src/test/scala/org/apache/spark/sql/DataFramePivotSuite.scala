@@ -302,14 +302,17 @@ class DataFramePivotSuite extends QueryTest with SharedSparkSession {
   }
 
   test("SPARK-24722: aggregate as the pivot column") {
-    val exception = intercept[AnalysisException] {
-      trainingSales
-        .groupBy($"sales.year")
-        .pivot(min($"training"), Seq("Experts"))
-        .agg(sum($"sales.earnings"))
-    }
-
-    assert(exception.getMessage.contains("aggregate functions are not allowed"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        trainingSales
+          .groupBy($"sales.year")
+          .pivot(min($"training"), Seq("Experts"))
+          .agg(sum($"sales.earnings"))
+      },
+      condition = "GROUP_BY_AGGREGATE",
+      parameters = Map("sqlExpr" -> "min(training)"),
+      context = ExpectedContext(fragment = "min", callSitePattern = getCurrentClassCallSitePattern)
+    )
   }
 
   test("pivoting column list with values") {
@@ -330,7 +333,7 @@ class DataFramePivotSuite extends QueryTest with SharedSparkSession {
       (2, Seq("a", "x")),
       (3, Seq.empty[String]),
       (3, Seq("a", "x"))).toDF("x", "s")
-    val expected = Seq((3, 1, 1), (2, 1, 1)).toDF
+    val expected = Seq((3, 1, 1), (2, 1, 1)).toDF()
     val actual = df.groupBy("x").pivot("s").count()
     checkAnswer(actual, expected)
   }
@@ -353,5 +356,20 @@ class DataFramePivotSuite extends QueryTest with SharedSparkSession {
       Row(LocalDateTime.of(2012, 1, 1, 0, 0, 0, 0), 15000.0, 20000.0) ::
         Row(LocalDateTime.of(2013, 1, 1, 0, 0, 0, 0), 48000.0, 30000.0) :: Nil
     )
+  }
+
+  test("using pivot in streaming is not supported") {
+    val df = spark
+      .readStream
+      .format("rate")
+      .load()
+      .withColumn("key", expr(s"MOD(value, 10)"))
+      .groupBy($"key")
+
+    val e = intercept[AnalysisException] {
+      df.pivot("value").count()
+    }
+
+    assert(e.getMessage.contains("pivot is not supported on a streaming DataFrames/Datasets"))
   }
 }

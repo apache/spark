@@ -16,8 +16,9 @@
  */
 package org.apache.spark.sql.catalyst.parser
 
+import scala.jdk.CollectionConverters._
+
 import org.antlr.v4.runtime.{CharStreams, CommonTokenStream, ParserRuleContext}
-import scala.collection.JavaConverters._
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
@@ -28,7 +29,7 @@ class ParserUtilsSuite extends SparkFunSuite {
   import ParserUtils._
 
   val setConfContext = buildContext("set example.setting.name=setting.value") { parser =>
-    parser.statement().asInstanceOf[SetConfigurationContext]
+    parser.setResetStatement().asInstanceOf[SetConfigurationContext]
   }
 
   val showFuncContext = buildContext("show functions foo.bar") { parser =>
@@ -130,6 +131,28 @@ class ParserUtilsSuite extends SparkFunSuite {
         |cd\ef"""".stripMargin) ==
       """ab
         |cdef""".stripMargin)
+
+    // String with an invalid '\' as the last character.
+    assert(unescapeSQLString(""""abc\"""") == "abc\\")
+
+    // Strings containing invalid Unicode escapes with non-hex characters.
+    assert(unescapeSQLString("\"abc\\uXXXXa\"") == "abcuXXXXa")
+    assert(unescapeSQLString("\"abc\\uxxxxa\"") == "abcuxxxxa")
+    assert(unescapeSQLString("\"abc\\UXXXXXXXXa\"") == "abcUXXXXXXXXa")
+    assert(unescapeSQLString("\"abc\\Uxxxxxxxxa\"") == "abcUxxxxxxxxa")
+    // Guard against off-by-one errors in the "all chars are hex" routine:
+    assert(unescapeSQLString("\"abc\\uAAAXa\"") == "abcuAAAXa")
+
+    // Double-quote escaping ("", '')
+    assert(unescapeSQLString(""" "a""a" """.trim) == """ a"a """.trim)
+    assert(unescapeSQLString(""" "a""a" """.trim, true) == "aa")
+    assert(unescapeSQLString(""" 'a''a' """.trim) == "a'a")
+    assert(unescapeSQLString(""" 'a''a' """.trim, true) == "aa")
+    // Single-quoted double quote string or double-quoted single quote string isn't affected
+    assert(unescapeSQLString(""" 'a""a' """.trim) == """ a""a """.trim)
+    assert(unescapeSQLString(""" 'a""a' """.trim, true) == """ a""a """.trim)
+    assert(unescapeSQLString(""" "a''a" """.trim) == "a''a")
+    assert(unescapeSQLString(""" "a''a" """.trim, true) == "a''a")
     // scalastyle:on nonascii
   }
 
@@ -142,11 +165,12 @@ class ParserUtilsSuite extends SparkFunSuite {
 
   test("operationNotAllowed") {
     val errorMessage = "parse.fail.operation.not.allowed.error.message"
-    val e = intercept[ParseException] {
-      operationNotAllowed(errorMessage, showFuncContext)
-    }.getMessage
-    assert(e.contains("Operation not allowed"))
-    assert(e.contains(errorMessage))
+    checkError(
+      exception = intercept[ParseException] {
+        operationNotAllowed(errorMessage, showFuncContext)
+      },
+      condition = "_LEGACY_ERROR_TEMP_0035",
+      parameters = Map("message" -> errorMessage))
   }
 
   test("checkDuplicateKeys") {
@@ -154,10 +178,12 @@ class ParserUtilsSuite extends SparkFunSuite {
     checkDuplicateKeys[String](properties, createDbContext)
 
     val properties2 = Seq(("a", "a"), ("b", "b"), ("a", "c"))
-    val e = intercept[ParseException] {
-      checkDuplicateKeys(properties2, createDbContext)
-    }.getMessage
-    assert(e.contains("Found duplicate keys"))
+    checkError(
+      exception = intercept[ParseException] {
+        checkDuplicateKeys(properties2, createDbContext)
+      },
+      condition = "DUPLICATE_KEY",
+      parameters = Map("keyColumn" -> "`a`"))
   }
 
   test("source") {
@@ -180,10 +206,22 @@ class ParserUtilsSuite extends SparkFunSuite {
   }
 
   test("string") {
-    assert(string(showDbsContext.pattern) == "identifier_with_wildcards")
-    assert(string(createDbContext.commentSpec().get(0).STRING()) == "database_comment")
+    val dataTypeBuilder = new org.apache.spark.sql.catalyst.parser.DataTypeAstBuilder()
+    val token1 = dataTypeBuilder.visitStringLit(showDbsContext.pattern)
+    if (token1 != null) {
+      assert(string(token1) == "identifier_with_wildcards")
+    }
 
-    assert(string(createDbContext.locationSpec.asScala.head.STRING) == "/home/user/db")
+    val token2 = dataTypeBuilder.visitStringLit(createDbContext.commentSpec().get(0).stringLit())
+    if (token2 != null) {
+      assert(string(token2) == "database_comment")
+    }
+
+    val token3 = dataTypeBuilder.visitStringLit(
+      createDbContext.locationSpec.asScala.head.stringLit())
+    if (token3 != null) {
+      assert(string(token3) == "/home/user/db")
+    }
   }
 
   test("position") {
@@ -201,17 +239,20 @@ class ParserUtilsSuite extends SparkFunSuite {
     val message = "ParserRuleContext should not be empty."
     validate(f1(showFuncContext), message, showFuncContext)
 
-    val e = intercept[ParseException] {
-      validate(f1(emptyContext), message, emptyContext)
-    }.getMessage
-    assert(e.contains(message))
+    checkError(
+      exception = intercept[ParseException] {
+        validate(f1(emptyContext), message, emptyContext)
+      },
+      condition = "_LEGACY_ERROR_TEMP_0064",
+      parameters = Map("msg" -> message))
   }
 
   test("withOrigin") {
     val ctx = createDbContext.locationSpec.asScala.head
     val current = CurrentOrigin.get
     val (location, origin) = withOrigin(ctx) {
-      (string(ctx.STRING), CurrentOrigin.get)
+      (Option(new org.apache.spark.sql.catalyst.parser.DataTypeAstBuilder()
+        .visitStringLit(ctx.stringLit())).map(string).getOrElse(""), CurrentOrigin.get)
     }
     assert(location == "/home/user/db")
     assert(origin == Origin(Some(3), Some(27)))
@@ -224,7 +265,7 @@ class ParserUtilsSuite extends SparkFunSuite {
         Some(context)
       case _ =>
         val it = ctx.children.iterator()
-        while(it.hasNext) {
+        while (it.hasNext) {
           it.next() match {
             case p: ParserRuleContext =>
               val childResult = findCastContext(p)

@@ -82,8 +82,9 @@ class SortSuite extends SparkPlanTest with SharedSparkSession {
   test("sorting does not crash for large inputs") {
     val sortOrder = $"a".asc :: Nil
     val stringLength = 1024 * 1024 * 2
+    val df = Seq(Tuple1("a".repeat(stringLength)), Tuple1("b".repeat(stringLength))).toDF("a")
     checkThatPlansAgree(
-      Seq(Tuple1("a" * stringLength), Tuple1("b" * stringLength)).toDF("a").repartition(1),
+      df.repartition(1),
       SortExec(sortOrder, global = true, _: SparkPlan, testSpillFrequency = 1),
       ReferenceSort(sortOrder, global = true, _: SparkPlan),
       sortAnswers = false
@@ -108,10 +109,29 @@ class SortSuite extends SparkPlanTest with SharedSparkSession {
     )
     checkAnswer(
       input.toDF("a", "b", "c"),
-      (child: SparkPlan) => SortExec(Stream($"a".asc, $"b".asc, $"c".asc),
+      (child: SparkPlan) => SortExec(LazyList($"a".asc, $"b".asc, $"c".asc),
         global = true, child = child),
       input.sortBy(t => (t._1, t._2, t._3)).map(Row.fromTuple),
       sortAnswers = false)
+  }
+
+  test("SPARK-40089: decimal values sort correctly") {
+    val input = Seq(
+      BigDecimal("999999999999999999.50"),
+      BigDecimal("1.11"),
+      BigDecimal("999999999999999999.49")
+    )
+    // The range partitioner does the right thing. If there are too many
+    // shuffle partitions the error might not always show up.
+    withSQLConf("spark.sql.shuffle.partitions" -> "1") {
+      val inputDf = spark.createDataFrame(sparkContext.parallelize(input.map(v => Row(v)), 1),
+        StructType(StructField("a", DecimalType(20, 2)) :: Nil))
+      checkAnswer(
+        inputDf,
+        (child: SparkPlan) => SortExec(Symbol("a").asc :: Nil, global = true, child = child),
+        input.sorted.map(Row(_)),
+        sortAnswers = false)
+    }
   }
 
   // Test sorting on different data types

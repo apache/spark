@@ -28,11 +28,11 @@ import org.apache.commons.crypto.stream.CryptoInputStream;
 import org.apache.commons.crypto.stream.CryptoOutputStream;
 import org.apache.spark.network.util.MapConfigProvider;
 import org.apache.spark.network.util.TransportConf;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.mock;
@@ -41,10 +41,10 @@ import static org.mockito.Mockito.when;
 public class TransportCipherSuite {
 
   @Test
-  public void testBufferNotLeaksOnInternalError() throws IOException {
+  public void testCtrBufferNotLeaksOnInternalError() throws IOException {
     String algorithm = "TestAlgorithm";
     TransportConf conf = new TransportConf("Test", MapConfigProvider.EMPTY);
-    TransportCipher cipher = new TransportCipher(conf.cryptoConf(), conf.cipherTransformation(),
+    CtrTransportCipher cipher = new CtrTransportCipher(conf.cryptoConf(),
       new SecretKeySpec(new byte[256], algorithm), new byte[0], new byte[0]) {
 
       @Override

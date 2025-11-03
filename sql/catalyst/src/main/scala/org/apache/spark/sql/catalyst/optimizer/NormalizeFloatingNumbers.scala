@@ -17,13 +17,15 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
-import org.apache.spark.sql.catalyst.expressions.{Alias, And, ArrayTransform, CaseWhen, Coalesce, CreateArray, CreateMap, CreateNamedStruct, EqualTo, ExpectsInputTypes, Expression, GetStructField, If, IsNull, KnownFloatingPointNormalized, LambdaFunction, Literal, NamedLambdaVariable, UnaryExpression}
+import org.apache.spark.SparkException
+import org.apache.spark.sql.catalyst.expressions.{Alias, And, ArrayTransform, CaseWhen, Coalesce, CreateArray, CreateMap, CreateNamedStruct, EqualTo, ExpectsInputTypes, Expression, GetStructField, If, IsNull, KnownFloatingPointNormalized, LambdaFunction, Literal, NamedLambdaVariable, TransformValues, UnaryExpression}
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Window}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.types._
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * We need to take care of special floating numbers (NaN and -0.0) in several places:
@@ -96,9 +98,7 @@ object NormalizeFloatingNumbers extends Rule[LogicalPlan] {
     case FloatType | DoubleType => true
     case StructType(fields) => fields.exists(f => needNormalize(f.dataType))
     case ArrayType(et, _) => needNormalize(et)
-    // Currently MapType is not comparable and analyzer should fail earlier if this case happens.
-    case _: MapType =>
-      throw new IllegalStateException("grouping/join/window partition keys cannot be map type.")
+    case MapType(_, vt, _) => needNormalize(vt)
     case _ => false
   }
 
@@ -133,8 +133,18 @@ object NormalizeFloatingNumbers extends Rule[LogicalPlan] {
       val fields = expr.dataType.asInstanceOf[StructType].fieldNames.zipWithIndex.map {
         case (name, i) => Seq(Literal(name), normalize(GetStructField(expr, i)))
       }
-      val struct = CreateNamedStruct(fields.flatten.toSeq)
-      KnownFloatingPointNormalized(If(IsNull(expr), Literal(null, struct.dataType), struct))
+      val struct = CreateNamedStruct(fields.flatten.toImmutableArraySeq)
+      // For nested structs (and other complex types), this branch is called again with either a
+      // `GetStructField` or a `NamedLambdaVariable` expression. Even if the field for which this
+      // has been recursively called might have `nullable = false`, directly creating an `If`
+      // predicate would end up creating an expression with `nullable = true` (as the trueBranch is
+      // nullable). Hence, use the `expr.nullable` to create an `If` predicate only when the column
+      // is nullable.
+      if (expr.nullable) {
+        KnownFloatingPointNormalized(If(IsNull(expr), Literal(null, struct.dataType), struct))
+      } else {
+        KnownFloatingPointNormalized(struct)
+      }
 
     case _ if expr.dataType.isInstanceOf[ArrayType] =>
       val ArrayType(et, containsNull) = expr.dataType
@@ -142,7 +152,15 @@ object NormalizeFloatingNumbers extends Rule[LogicalPlan] {
       val function = normalize(lv)
       KnownFloatingPointNormalized(ArrayTransform(expr, LambdaFunction(function, Seq(lv))))
 
-    case _ => throw new IllegalStateException(s"fail to normalize $expr")
+    case _ if expr.dataType.isInstanceOf[MapType] =>
+      val MapType(kt, vt, containsNull) = expr.dataType
+      val keys = NamedLambdaVariable("arg", kt, containsNull)
+      val values = NamedLambdaVariable("arg", vt, containsNull)
+      val function = normalize(values)
+      KnownFloatingPointNormalized(TransformValues(expr,
+        LambdaFunction(function, Seq(keys, values))))
+
+    case _ => throw SparkException.internalError(s"fail to normalize $expr")
   }
 
   val FLOAT_NORMALIZER: Any => Any = (input: Any) => {

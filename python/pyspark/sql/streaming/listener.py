@@ -14,17 +14,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-import pickle
 import uuid
-from typing import Optional, Dict, List
+import json
+from typing import Any, Dict, List, Optional, Set, TYPE_CHECKING
 from abc import ABC, abstractmethod
 
-from py4j.java_gateway import JavaObject
-
 from pyspark.sql import Row
-
+from pyspark import cloudpickle
 
 __all__ = ["StreamingQueryListener"]
+
+if TYPE_CHECKING:
+    from py4j.java_gateway import JavaObject
 
 
 class StreamingQueryListener(ABC):
@@ -51,12 +52,34 @@ class StreamingQueryListener(ABC):
     ...        # Do something with event.
     ...        pass
     ...
+    ...    def onQueryIdle(self, event: QueryIdleEvent) -> None:
+    ...        # Do something with event.
+    ...        pass
+    ...
     ...    def onQueryTerminated(self, event: QueryTerminatedEvent) -> None:
     ...        # Do something with event.
     ...        pass
     ...
     >>> spark.streams.addListener(MyListener())
     """
+
+    def _set_spark_session(
+        self, session: "SparkSession"  # type: ignore[name-defined] # noqa: F821
+    ) -> None:
+        if self.spark is None:
+            self.spark = session
+
+    @property
+    def spark(self) -> Optional["SparkSession"]:  # type: ignore[name-defined] # noqa: F821
+        return getattr(self, "_sparkSession", None)
+
+    @spark.setter
+    def spark(self, session: "SparkSession") -> None:  # type: ignore[name-defined] # noqa: F821
+        # For backward compatibility
+        self._sparkSession = session
+
+    def _init_listener_id(self) -> None:
+        self._id = str(uuid.uuid4())
 
     @abstractmethod
     def onQueryStarted(self, event: "QueryStartedEvent") -> None:
@@ -67,7 +90,7 @@ class StreamingQueryListener(ABC):
         -----
         This is called synchronously with :py:meth:`~pyspark.sql.streaming.DataStreamWriter.start`,
         that is, `onQueryStart` will be called on all listeners before `DataStreamWriter.start()`
-        returns the corresponding :class:`~pyspark.streaming.StreamingQuery`.
+        returns the corresponding :class:`~pyspark.sql.streaming.StreamingQuery`.
         Please don't block this method as it will block your query.
         """
         pass
@@ -79,12 +102,21 @@ class StreamingQueryListener(ABC):
 
         Notes
         -----
-        This method is asynchronous. The status in :class:`~pyspark.streaming.StreamingQuery`
+        This method is asynchronous. The status in :class:`~pyspark.sql.streaming.StreamingQuery`
         will always be latest no matter when this method is called. Therefore, the status of
-        :class:`~pyspark.streaming.StreamingQuery`.
+        :class:`~pyspark.sql.streaming.StreamingQuery`.
         may be changed before/when you process the event. E.g., you may find
-        :class:`~pyspark.streaming.StreamingQuery` is terminated when you are
+        :class:`~pyspark.sql.streaming.StreamingQuery` is terminated when you are
         processing `QueryProgressEvent`.
+        """
+        pass
+
+    # NOTE: Do not mark this as abstract method, since we released this abstract class without
+    # this method in prior version and marking this as abstract method would break existing
+    # implementations.
+    def onQueryIdle(self, event: "QueryIdleEvent") -> None:
+        """
+        Called when the query is idle and waiting for new data to process.
         """
         pass
 
@@ -95,6 +127,20 @@ class StreamingQueryListener(ABC):
         """
         pass
 
+    @property
+    def _jlistener(self) -> "JavaObject":
+        from pyspark import SparkContext
+
+        if hasattr(self, "_jlistenerobj"):
+            return self._jlistenerobj
+
+        self._jlistenerobj: "JavaObject" = (
+            SparkContext._jvm.PythonStreamingQueryListenerWrapper(  # type: ignore[union-attr]
+                JStreamingQueryListener(self)
+            )
+        )
+        return self._jlistenerobj
+
 
 class JStreamingQueryListener:
     """
@@ -104,14 +150,17 @@ class JStreamingQueryListener:
     def __init__(self, pylistener: StreamingQueryListener) -> None:
         self.pylistener = pylistener
 
-    def onQueryStarted(self, jevent: JavaObject) -> None:
-        self.pylistener.onQueryStarted(QueryStartedEvent(jevent))
+    def onQueryStarted(self, jevent: "JavaObject") -> None:
+        self.pylistener.onQueryStarted(QueryStartedEvent.fromJObject(jevent))
 
-    def onQueryProgress(self, jevent: JavaObject) -> None:
-        self.pylistener.onQueryProgress(QueryProgressEvent(jevent))
+    def onQueryProgress(self, jevent: "JavaObject") -> None:
+        self.pylistener.onQueryProgress(QueryProgressEvent.fromJObject(jevent))
 
-    def onQueryTerminated(self, jevent: JavaObject) -> None:
-        self.pylistener.onQueryTerminated(QueryTerminatedEvent(jevent))
+    def onQueryIdle(self, jevent: "JavaObject") -> None:
+        self.pylistener.onQueryIdle(QueryIdleEvent.fromJObject(jevent))
+
+    def onQueryTerminated(self, jevent: "JavaObject") -> None:
+        self.pylistener.onQueryTerminated(QueryTerminatedEvent.fromJObject(jevent))
 
     class Java:
         implements = ["org.apache.spark.sql.streaming.PythonStreamingQueryListener"]
@@ -128,17 +177,52 @@ class QueryStartedEvent:
     This API is evolving.
     """
 
-    def __init__(self, jevent: JavaObject) -> None:
-        self._id: uuid.UUID = uuid.UUID(jevent.id().toString())
-        self._runId: uuid.UUID = uuid.UUID(jevent.runId().toString())
-        self._name: Optional[str] = jevent.name()
-        self._timestamp: str = jevent.timestamp()
+    def __init__(
+        self,
+        id: uuid.UUID,
+        runId: uuid.UUID,
+        name: Optional[str],
+        timestamp: str,
+        jobTags: Set[str],
+    ) -> None:
+        self._id: uuid.UUID = id
+        self._runId: uuid.UUID = runId
+        self._name: Optional[str] = name
+        self._timestamp: str = timestamp
+        self._jobTags: Set[str] = jobTags
+
+    @classmethod
+    def fromJObject(cls, jevent: "JavaObject") -> "QueryStartedEvent":
+        job_tags = set()
+        java_iterator = jevent.jobTags().iterator()
+        while java_iterator.hasNext():
+            job_tags.add(java_iterator.next().toString())
+
+        return cls(
+            id=uuid.UUID(jevent.id().toString()),
+            runId=uuid.UUID(jevent.runId().toString()),
+            name=jevent.name(),
+            timestamp=jevent.timestamp(),
+            jobTags=job_tags,
+        )
+
+    @classmethod
+    def fromJson(cls, j: Dict[str, Any]) -> "QueryStartedEvent":
+        # Json4s will convert jobTags to a list, so we need to convert it back to a set.
+        job_tags = j["jobTags"] if "jobTags" in j else []
+        return cls(
+            id=uuid.UUID(j["id"]),
+            runId=uuid.UUID(j["runId"]),
+            name=j["name"],
+            timestamp=j["timestamp"],
+            jobTags=set(job_tags),
+        )
 
     @property
     def id(self) -> uuid.UUID:
         """
         A unique query id that persists across restarts. See
-        py:meth:`~pyspark.streaming.StreamingQuery.id`.
+        py:meth:`~pyspark.sql.streaming.StreamingQuery.id`.
         """
         return self._id
 
@@ -146,7 +230,7 @@ class QueryStartedEvent:
     def runId(self) -> uuid.UUID:
         """
         A query id that is unique for every start/restart. See
-        py:meth:`~pyspark.streaming.StreamingQuery.runId`.
+        py:meth:`~pyspark.sql.streaming.StreamingQuery.runId`.
         """
         return self._runId
 
@@ -163,6 +247,13 @@ class QueryStartedEvent:
         The timestamp to start a query.
         """
         return self._timestamp
+
+    @property
+    def jobTags(self) -> Set[str]:
+        """
+        The job tags of the query.
+        """
+        return self._jobTags
 
 
 class QueryProgressEvent:
@@ -176,8 +267,16 @@ class QueryProgressEvent:
     This API is evolving.
     """
 
-    def __init__(self, jevent: JavaObject) -> None:
-        self._progress: StreamingQueryProgress = StreamingQueryProgress(jevent.progress())
+    def __init__(self, progress: "StreamingQueryProgress") -> None:
+        self._progress: StreamingQueryProgress = progress
+
+    @classmethod
+    def fromJObject(cls, jevent: "JavaObject") -> "QueryProgressEvent":
+        return cls(progress=StreamingQueryProgress.fromJObject(jevent.progress()))
+
+    @classmethod
+    def fromJson(cls, j: Dict[str, Any]) -> "QueryProgressEvent":
+        return cls(progress=StreamingQueryProgress.fromJson(j["progress"]))
 
     @property
     def progress(self) -> "StreamingQueryProgress":
@@ -185,6 +284,58 @@ class QueryProgressEvent:
         The query progress updates.
         """
         return self._progress
+
+
+class QueryIdleEvent:
+    """
+    Event representing that query is idle and waiting for new data to process.
+
+    .. versionadded:: 3.5.0
+
+    Notes
+    -----
+    This API is evolving.
+    """
+
+    def __init__(self, id: uuid.UUID, runId: uuid.UUID, timestamp: str) -> None:
+        self._id: uuid.UUID = id
+        self._runId: uuid.UUID = runId
+        self._timestamp: str = timestamp
+
+    @classmethod
+    def fromJObject(cls, jevent: "JavaObject") -> "QueryIdleEvent":
+        return cls(
+            id=uuid.UUID(jevent.id().toString()),
+            runId=uuid.UUID(jevent.runId().toString()),
+            timestamp=jevent.timestamp(),
+        )
+
+    @classmethod
+    def fromJson(cls, j: Dict[str, Any]) -> "QueryIdleEvent":
+        return cls(id=uuid.UUID(j["id"]), runId=uuid.UUID(j["runId"]), timestamp=j["timestamp"])
+
+    @property
+    def id(self) -> uuid.UUID:
+        """
+        A unique query id that persists across restarts. See
+        py:meth:`~pyspark.sql.streaming.StreamingQuery.id`.
+        """
+        return self._id
+
+    @property
+    def runId(self) -> uuid.UUID:
+        """
+        A query id that is unique for every start/restart. See
+        py:meth:`~pyspark.sql.streaming.StreamingQuery.runId`.
+        """
+        return self._runId
+
+    @property
+    def timestamp(self) -> str:
+        """
+        The timestamp when the latest no-batch trigger happened.
+        """
+        return self._timestamp
 
 
 class QueryTerminatedEvent:
@@ -198,17 +349,43 @@ class QueryTerminatedEvent:
     This API is evolving.
     """
 
-    def __init__(self, jevent: JavaObject) -> None:
-        self._id: uuid.UUID = uuid.UUID(jevent.id().toString())
-        self._runId: uuid.UUID = uuid.UUID(jevent.runId().toString())
+    def __init__(
+        self,
+        id: uuid.UUID,
+        runId: uuid.UUID,
+        exception: Optional[str],
+        errorClassOnException: Optional[str],
+    ) -> None:
+        self._id: uuid.UUID = id
+        self._runId: uuid.UUID = runId
+        self._exception: Optional[str] = exception
+        self._errorClassOnException: Optional[str] = errorClassOnException
+
+    @classmethod
+    def fromJObject(cls, jevent: "JavaObject") -> "QueryTerminatedEvent":
         jexception = jevent.exception()
-        self._exception: Optional[str] = jexception.get() if jexception.isDefined() else None
+        jerrorclass = jevent.errorClassOnException()
+        return cls(
+            id=uuid.UUID(jevent.id().toString()),
+            runId=uuid.UUID(jevent.runId().toString()),
+            exception=jexception.get() if jexception.isDefined() else None,
+            errorClassOnException=jerrorclass.get() if jerrorclass.isDefined() else None,
+        )
+
+    @classmethod
+    def fromJson(cls, j: Dict[str, Any]) -> "QueryTerminatedEvent":
+        return cls(
+            id=uuid.UUID(j["id"]),
+            runId=uuid.UUID(j["runId"]),
+            exception=j["exception"],
+            errorClassOnException=j["errorClassOnException"],
+        )
 
     @property
     def id(self) -> uuid.UUID:
         """
         A unique query id that persists across restarts. See
-        py:meth:`~pyspark.streaming.StreamingQuery.id`.
+        py:meth:`~pyspark.sql.streaming.StreamingQuery.id`.
         """
         return self._id
 
@@ -216,7 +393,7 @@ class QueryTerminatedEvent:
     def runId(self) -> uuid.UUID:
         """
         A query id that is unique for every start/restart. See
-        py:meth:`~pyspark.streaming.StreamingQuery.runId`.
+        py:meth:`~pyspark.sql.streaming.StreamingQuery.runId`.
         """
         return self._runId
 
@@ -228,71 +405,165 @@ class QueryTerminatedEvent:
         """
         return self._exception
 
+    @property
+    def errorClassOnException(self) -> Optional[str]:
+        """
+        The error class from the exception if the query was terminated
+        with an exception which is a part of error class framework.
+        If the query was terminated without an exception, or the
+        exception is not a part of error class framework, it will be
+        `None`.
 
-class StreamingQueryProgress:
+        .. versionadded:: 3.5.0
+        """
+        return self._errorClassOnException
+
+
+class StreamingQueryProgress(dict):
     """
     .. versionadded:: 3.4.0
+
+    .. versionchanged:: 4.0.0
+        Becomes a subclass of dict
 
     Notes
     -----
     This API is evolving.
     """
 
-    def __init__(self, jprogress: JavaObject) -> None:
+    def __init__(
+        self,
+        id: uuid.UUID,
+        runId: uuid.UUID,
+        name: Optional[str],
+        timestamp: str,
+        batchId: int,
+        batchDuration: int,
+        durationMs: Dict[str, int],
+        eventTime: Dict[str, str],
+        stateOperators: List["StateOperatorProgress"],
+        sources: List["SourceProgress"],
+        sink: "SinkProgress",
+        numInputRows: int,
+        inputRowsPerSecond: float,
+        processedRowsPerSecond: float,
+        observedMetrics: Dict[str, Row],
+        jprogress: Optional["JavaObject"] = None,
+        jdict: Optional[Dict[str, Any]] = None,
+    ):
+        super().__init__(
+            id=id,
+            runId=runId,
+            name=name,
+            timestamp=timestamp,
+            batchId=batchId,
+            batchDuration=batchDuration,
+            durationMs=durationMs,
+            eventTime=eventTime,
+            stateOperators=stateOperators,
+            sources=sources,
+            sink=sink,
+            numInputRows=numInputRows,
+            inputRowsPerSecond=inputRowsPerSecond,
+            processedRowsPerSecond=processedRowsPerSecond,
+            observedMetrics=observedMetrics,
+        )
+        self._jprogress: Optional["JavaObject"] = jprogress
+        self._jdict: Optional[Dict[str, Any]] = jdict
+
+    @classmethod
+    def fromJObject(cls, jprogress: "JavaObject") -> "StreamingQueryProgress":
         from pyspark import SparkContext
 
-        self._jprogress: JavaObject = jprogress
-        self._id: uuid.UUID = uuid.UUID(jprogress.id().toString())
-        self._runId: uuid.UUID = uuid.UUID(jprogress.runId().toString())
-        self._name: Optional[str] = jprogress.name()
-        self._timestamp: str = jprogress.timestamp()
-        self._batchId: int = jprogress.batchId()
-        self._batchDuration: int = jprogress.batchDuration()
-        self._durationMs: Dict[str, int] = dict(jprogress.durationMs())
-        self._eventTime: Dict[str, str] = dict(jprogress.eventTime())
-        self._stateOperators: List[StateOperatorProgress] = [
-            StateOperatorProgress(js) for js in jprogress.stateOperators()
-        ]
-        self._sources: List[SourceProgress] = [SourceProgress(js) for js in jprogress.sources()]
-        self._sink: SinkProgress = SinkProgress(jprogress.sink())
+        return cls(
+            jprogress=jprogress,
+            id=uuid.UUID(jprogress.id().toString()),
+            runId=uuid.UUID(jprogress.runId().toString()),
+            name=jprogress.name(),
+            timestamp=jprogress.timestamp(),
+            batchId=jprogress.batchId(),
+            batchDuration=jprogress.batchDuration(),
+            durationMs=dict(jprogress.durationMs()),
+            eventTime=dict(jprogress.eventTime()),
+            stateOperators=[
+                StateOperatorProgress.fromJObject(js) for js in jprogress.stateOperators()
+            ],
+            sources=[SourceProgress.fromJObject(js) for js in jprogress.sources()],
+            sink=SinkProgress.fromJObject(jprogress.sink()),
+            numInputRows=jprogress.numInputRows(),
+            inputRowsPerSecond=jprogress.inputRowsPerSecond(),
+            processedRowsPerSecond=jprogress.processedRowsPerSecond(),
+            observedMetrics={
+                k: cloudpickle.loads(
+                    SparkContext._jvm.PythonSQLUtils.toPyRow(jr)  # type: ignore[union-attr]
+                )
+                for k, jr in dict(jprogress.observedMetrics()).items()
+            },
+        )
 
-        # TODO(SPARK-38760): Write a test with DataFrame.observe API implementation.
-        self._observedMetrics: Dict[str, Row] = {
-            k: pickle.loads(
-                SparkContext._jvm.PythonSQLUtils.toPyRow(jr)  # type: ignore[union-attr]
-            )
-            for k, jr in dict(jprogress.observedMetrics()).items()
-        }
+    @classmethod
+    def fromJson(cls, j: Dict[str, Any]) -> "StreamingQueryProgress":
+        return cls(
+            jdict=j,
+            id=uuid.UUID(j["id"]),
+            runId=uuid.UUID(j["runId"]),
+            name=j["name"],
+            timestamp=j["timestamp"],
+            batchId=j["batchId"],
+            batchDuration=j["batchDuration"],
+            durationMs=dict(j["durationMs"]) if "durationMs" in j else {},
+            eventTime=dict(j["eventTime"]) if "eventTime" in j else {},
+            stateOperators=[StateOperatorProgress.fromJson(s) for s in j["stateOperators"]],
+            sources=[SourceProgress.fromJson(s) for s in j["sources"]],
+            sink=SinkProgress.fromJson(j["sink"]),
+            numInputRows=j["numInputRows"] if "numInputRows" in j else None,
+            inputRowsPerSecond=j["inputRowsPerSecond"] if "inputRowsPerSecond" in j else None,
+            processedRowsPerSecond=j["processedRowsPerSecond"]
+            if "processedRowsPerSecond" in j
+            else None,
+            observedMetrics={
+                k: Row(*row_dict.keys())(*row_dict.values())  # Assume no nested rows
+                for k, row_dict in j["observedMetrics"].items()
+            }
+            if "observedMetrics" in j
+            else {},
+        )
 
     @property
     def id(self) -> uuid.UUID:
         """
         A unique query id that persists across restarts. See
-        py:meth:`~pyspark.streaming.StreamingQuery.id`.
+        py:meth:`~pyspark.sql.streaming.StreamingQuery.id`.
         """
-        return self._id
+        # Before Spark 4.0, StreamingQuery.lastProgress returns a dict, which casts id and runId
+        # to string. But here they are UUID.
+        # To prevent breaking change, do not cast them to string when accessed with attribute.
+        return super().__getitem__("id")
 
     @property
     def runId(self) -> uuid.UUID:
         """
         A query id that is unique for every start/restart. See
-        py:meth:`~pyspark.streaming.StreamingQuery.runId`.
+        py:meth:`~pyspark.sql.streaming.StreamingQuery.runId`.
         """
-        return self._runId
+        # Before Spark 4.0, StreamingQuery.lastProgress returns a dict, which casts id and runId
+        # to string. But here they are UUID.
+        # To prevent breaking change, do not cast them to string when accessed with attribute.
+        return super().__getitem__("runId")
 
     @property
     def name(self) -> Optional[str]:
         """
         User-specified name of the query, `None` if not specified.
         """
-        return self._name
+        return self["name"]
 
     @property
     def timestamp(self) -> str:
         """
         The timestamp to start a query.
         """
-        return self._timestamp
+        return self["timestamp"]
 
     @property
     def batchId(self) -> int:
@@ -302,21 +573,21 @@ class StreamingQueryProgress:
         Similarly, when there is no data to be processed, the batchId will not be
         incremented.
         """
-        return self._batchId
+        return self["batchId"]
 
     @property
     def batchDuration(self) -> int:
         """
         The process duration of each batch.
         """
-        return self._batchDuration
+        return self["batchDuration"]
 
     @property
     def durationMs(self) -> Dict[str, int]:
         """
         The amount of time taken to perform various operations in milliseconds.
         """
-        return self._durationMs
+        return self["durationMs"]
 
     @property
     def eventTime(self) -> Dict[str, str]:
@@ -334,275 +605,461 @@ class StreamingQueryProgress:
 
         All timestamps are in ISO8601 format, i.e. UTC timestamps.
         """
-        return self._eventTime
+        return self["eventTime"]
 
     @property
     def stateOperators(self) -> List["StateOperatorProgress"]:
         """
         Information about operators in the query that store state.
         """
-        return self._stateOperators
+        return self["stateOperators"]
 
     @property
     def sources(self) -> List["SourceProgress"]:
         """
         detailed statistics on data being read from each of the streaming sources.
         """
-        return self._sources
+        return self["sources"]
 
     @property
     def sink(self) -> "SinkProgress":
         """
         A unique query id that persists across restarts. See
-        py:meth:`~pyspark.streaming.StreamingQuery.id`.
+        py:meth:`~pyspark.sql.streaming.StreamingQuery.id`.
         """
-        return self._sink
+        return self["sink"]
 
     @property
     def observedMetrics(self) -> Dict[str, Row]:
-        return self._observedMetrics
+        return self["observedMetrics"]
 
     @property
-    def numInputRows(self) -> Optional[str]:
+    def numInputRows(self) -> int:
         """
         The aggregate (across all sources) number of records processed in a trigger.
         """
-        return self._jprogress.numInputRows()
+        if self["numInputRows"] is not None:
+            return self["numInputRows"]
+        else:
+            return sum(s.numInputRows for s in self.sources)
 
     @property
-    def inputRowsPerSecond(self) -> str:
+    def inputRowsPerSecond(self) -> float:
         """
         The aggregate (across all sources) rate of data arriving.
         """
-        return self._jprogress.inputRowsPerSecond()
+        if self["inputRowsPerSecond"] is not None:
+            return self["inputRowsPerSecond"]
+        else:
+            return sum(s.inputRowsPerSecond for s in self.sources)
 
     @property
-    def processedRowsPerSecond(self) -> str:
+    def processedRowsPerSecond(self) -> float:
         """
-        The aggregate (across all sources) rate at which Spark is processing data..
+        The aggregate (across all sources) rate at which Spark is processing data.
         """
-        return self._jprogress.processedRowsPerSecond()
+        if self["processedRowsPerSecond"] is not None:
+            return self["processedRowsPerSecond"]
+        else:
+            return sum(s.processedRowsPerSecond for s in self.sources)
 
     @property
     def json(self) -> str:
         """
         The compact JSON representation of this progress.
         """
-        return self._jprogress.json()
+        assert self._jdict is not None or self._jprogress is not None
+        if self._jprogress:
+            return self._jprogress.json()
+        else:
+            return json.dumps(self._jdict)
 
     @property
     def prettyJson(self) -> str:
         """
         The pretty (i.e. indented) JSON representation of this progress.
         """
-        return self._jprogress.prettyJson()
+        assert self._jdict is not None or self._jprogress is not None
+        if self._jprogress:
+            return self._jprogress.prettyJson()
+        else:
+            return json.dumps(self._jdict, indent=4)
+
+    def __getitem__(self, key: str) -> Any:
+        # Before Spark 4.0, StreamingQuery.lastProgress returns a dict, which casts id and runId
+        # to string. But here they are UUID.
+        # To prevent breaking change, also cast them to string when accessed with __getitem__.
+        if key == "id" or key == "runId":
+            return str(super().__getitem__(key))
+        else:
+            return super().__getitem__(key)
 
     def __str__(self) -> str:
         return self.prettyJson
 
+    def __repr__(self) -> str:
+        return self.prettyJson
 
-class StateOperatorProgress:
+
+class StateOperatorProgress(dict):
     """
     .. versionadded:: 3.4.0
+
+    .. versionchanged:: 4.0.0
+        Becomes a subclass of dict
 
     Notes
     -----
     This API is evolving.
     """
 
-    def __init__(self, jprogress: JavaObject) -> None:
-        self._jprogress: JavaObject = jprogress
-        self._operatorName: str = jprogress.operatorName()
-        self._numRowsTotal: int = jprogress.numRowsTotal()
-        self._numRowsUpdated: int = jprogress.numRowsUpdated()
-        self._allUpdatesTimeMs: int = jprogress.allUpdatesTimeMs()
-        self._numRowsRemoved: int = jprogress.numRowsRemoved()
-        self._allRemovalsTimeMs: int = jprogress.allRemovalsTimeMs()
-        self._commitTimeMs: int = jprogress.commitTimeMs()
-        self._memoryUsedBytes: int = jprogress.memoryUsedBytes()
-        self._numRowsDroppedByWatermark: int = jprogress.numRowsDroppedByWatermark()
-        self._numShufflePartitions: int = jprogress.numShufflePartitions()
-        self._numStateStoreInstances: int = jprogress.numStateStoreInstances()
-        self._customMetrics: Dict[str, int] = dict(jprogress.customMetrics())
+    def __init__(
+        self,
+        operatorName: str,
+        numRowsTotal: int,
+        numRowsUpdated: int,
+        numRowsRemoved: int,
+        allUpdatesTimeMs: int,
+        allRemovalsTimeMs: int,
+        commitTimeMs: int,
+        memoryUsedBytes: int,
+        numRowsDroppedByWatermark: int,
+        numShufflePartitions: int,
+        numStateStoreInstances: int,
+        customMetrics: Dict[str, int],
+        jprogress: Optional["JavaObject"] = None,
+        jdict: Optional[Dict[str, Any]] = None,
+    ):
+        super().__init__(
+            operatorName=operatorName,
+            numRowsTotal=numRowsTotal,
+            numRowsUpdated=numRowsUpdated,
+            numRowsRemoved=numRowsRemoved,
+            allUpdatesTimeMs=allUpdatesTimeMs,
+            allRemovalsTimeMs=allRemovalsTimeMs,
+            commitTimeMs=commitTimeMs,
+            memoryUsedBytes=memoryUsedBytes,
+            numRowsDroppedByWatermark=numRowsDroppedByWatermark,
+            numShufflePartitions=numShufflePartitions,
+            numStateStoreInstances=numStateStoreInstances,
+            customMetrics=customMetrics,
+        )
+        self._jprogress: Optional["JavaObject"] = jprogress
+        self._jdict: Optional[Dict[str, Any]] = jdict
+
+    @classmethod
+    def fromJObject(cls, jprogress: "JavaObject") -> "StateOperatorProgress":
+        return cls(
+            jprogress=jprogress,
+            operatorName=jprogress.operatorName(),
+            numRowsTotal=jprogress.numRowsTotal(),
+            numRowsUpdated=jprogress.numRowsUpdated(),
+            allUpdatesTimeMs=jprogress.allUpdatesTimeMs(),
+            numRowsRemoved=jprogress.numRowsRemoved(),
+            allRemovalsTimeMs=jprogress.allRemovalsTimeMs(),
+            commitTimeMs=jprogress.commitTimeMs(),
+            memoryUsedBytes=jprogress.memoryUsedBytes(),
+            numRowsDroppedByWatermark=jprogress.numRowsDroppedByWatermark(),
+            numShufflePartitions=jprogress.numShufflePartitions(),
+            numStateStoreInstances=jprogress.numStateStoreInstances(),
+            customMetrics=dict(jprogress.customMetrics()),
+        )
+
+    @classmethod
+    def fromJson(cls, j: Dict[str, Any]) -> "StateOperatorProgress":
+        return cls(
+            jdict=j,
+            operatorName=j["operatorName"],
+            numRowsTotal=j["numRowsTotal"],
+            numRowsUpdated=j["numRowsUpdated"],
+            numRowsRemoved=j["numRowsRemoved"],
+            allUpdatesTimeMs=j["allUpdatesTimeMs"],
+            allRemovalsTimeMs=j["allRemovalsTimeMs"],
+            commitTimeMs=j["commitTimeMs"],
+            memoryUsedBytes=j["memoryUsedBytes"],
+            numRowsDroppedByWatermark=j["numRowsDroppedByWatermark"],
+            numShufflePartitions=j["numShufflePartitions"],
+            numStateStoreInstances=j["numStateStoreInstances"],
+            customMetrics=dict(j["customMetrics"]) if "customMetrics" in j else {},
+        )
 
     @property
     def operatorName(self) -> str:
-        return self._operatorName
+        return self["operatorName"]
 
     @property
     def numRowsTotal(self) -> int:
-        return self._numRowsTotal
+        return self["numRowsTotal"]
 
     @property
     def numRowsUpdated(self) -> int:
-        return self._numRowsUpdated
+        return self["numRowsUpdated"]
 
     @property
     def allUpdatesTimeMs(self) -> int:
-        return self._allUpdatesTimeMs
+        return self["allUpdatesTimeMs"]
 
     @property
     def numRowsRemoved(self) -> int:
-        return self._numRowsRemoved
+        return self["numRowsRemoved"]
 
     @property
     def allRemovalsTimeMs(self) -> int:
-        return self._allRemovalsTimeMs
+        return self["allRemovalsTimeMs"]
 
     @property
     def commitTimeMs(self) -> int:
-        return self._commitTimeMs
+        return self["commitTimeMs"]
 
     @property
     def memoryUsedBytes(self) -> int:
-        return self._memoryUsedBytes
+        return self["memoryUsedBytes"]
 
     @property
     def numRowsDroppedByWatermark(self) -> int:
-        return self._numRowsDroppedByWatermark
+        return self["numRowsDroppedByWatermark"]
 
     @property
     def numShufflePartitions(self) -> int:
-        return self._numShufflePartitions
+        return self["numShufflePartitions"]
 
     @property
     def numStateStoreInstances(self) -> int:
-        return self._numStateStoreInstances
+        return self["numStateStoreInstances"]
 
     @property
-    def customMetrics(self) -> Dict[str, int]:
-        return self._customMetrics
+    def customMetrics(self) -> dict:
+        return self["customMetrics"]
 
     @property
     def json(self) -> str:
         """
         The compact JSON representation of this progress.
         """
-        return self._jprogress.json()
+        assert self._jdict is not None or self._jprogress is not None
+        if self._jprogress:
+            return self._jprogress.json()
+        else:
+            return json.dumps(self._jdict)
 
     @property
     def prettyJson(self) -> str:
         """
         The pretty (i.e. indented) JSON representation of this progress.
         """
-        return self._jprogress.prettyJson()
+        assert self._jdict is not None or self._jprogress is not None
+        if self._jprogress:
+            return self._jprogress.prettyJson()
+        else:
+            return json.dumps(self._jdict, indent=4)
 
     def __str__(self) -> str:
         return self.prettyJson
 
+    def __repr__(self) -> str:
+        return self.prettyJson
 
-class SourceProgress:
+
+class SourceProgress(dict):
     """
     .. versionadded:: 3.4.0
+
+    .. versionchanged:: 4.0.0
+        Becomes a subclass of dict
 
     Notes
     -----
     This API is evolving.
     """
 
-    def __init__(self, jprogress: JavaObject) -> None:
-        self._jprogress: JavaObject = jprogress
-        self._description: str = jprogress.description()
-        self._startOffset: str = jprogress.startOffset()
-        self._endOffset: str = jprogress.endOffset()
-        self._latestOffset: str = jprogress.latestOffset()
-        self._numInputRows: int = jprogress.numInputRows()
-        self._inputRowsPerSecond: float = jprogress.inputRowsPerSecond()
-        self._processedRowsPerSecond: float = jprogress.processedRowsPerSecond()
-        self._metrics: Dict[str, str] = dict(jprogress.metrics())
+    def __init__(
+        self,
+        description: str,
+        startOffset: str,
+        endOffset: str,
+        latestOffset: str,
+        numInputRows: int,
+        inputRowsPerSecond: float,
+        processedRowsPerSecond: float,
+        metrics: Dict[str, str],
+        jprogress: Optional["JavaObject"] = None,
+        jdict: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        super().__init__(
+            description=description,
+            startOffset=startOffset,
+            endOffset=endOffset,
+            latestOffset=latestOffset,
+            numInputRows=numInputRows,
+            inputRowsPerSecond=inputRowsPerSecond,
+            processedRowsPerSecond=processedRowsPerSecond,
+            metrics=metrics,
+        )
+        self._jprogress: Optional["JavaObject"] = jprogress
+        self._jdict: Optional[Dict[str, Any]] = jdict
+
+    @classmethod
+    def fromJObject(cls, jprogress: "JavaObject") -> "SourceProgress":
+        return cls(
+            jprogress=jprogress,
+            description=jprogress.description(),
+            startOffset=str(jprogress.startOffset()),
+            endOffset=str(jprogress.endOffset()),
+            latestOffset=str(jprogress.latestOffset()),
+            numInputRows=jprogress.numInputRows(),
+            inputRowsPerSecond=jprogress.inputRowsPerSecond(),
+            processedRowsPerSecond=jprogress.processedRowsPerSecond(),
+            metrics=dict(jprogress.metrics()),
+        )
+
+    @classmethod
+    def fromJson(cls, j: Dict[str, Any]) -> "SourceProgress":
+        return cls(
+            jdict=j,
+            description=j["description"],
+            startOffset=str(j["startOffset"]),
+            endOffset=str(j["endOffset"]),
+            latestOffset=str(j["latestOffset"]),
+            numInputRows=j["numInputRows"],
+            inputRowsPerSecond=j["inputRowsPerSecond"],
+            processedRowsPerSecond=j["processedRowsPerSecond"],
+            metrics=dict(j["metrics"]) if "metrics" in j else {},
+        )
 
     @property
     def description(self) -> str:
         """
         Description of the source.
         """
-        return self._description
+        return self["description"]
 
     @property
     def startOffset(self) -> str:
         """
         The starting offset for data being read.
         """
-        return self._startOffset
+        return self["startOffset"]
 
     @property
     def endOffset(self) -> str:
         """
         The ending offset for data being read.
         """
-        return self._endOffset
+        return self["endOffset"]
 
     @property
     def latestOffset(self) -> str:
         """
         The latest offset from this source.
         """
-        return self._latestOffset
+        return self["latestOffset"]
 
     @property
     def numInputRows(self) -> int:
         """
         The number of records read from this source.
         """
-        return self._numInputRows
+        return self["numInputRows"]
 
     @property
     def inputRowsPerSecond(self) -> float:
         """
         The rate at which data is arriving from this source.
         """
-        return self._inputRowsPerSecond
+        return self["inputRowsPerSecond"]
 
     @property
     def processedRowsPerSecond(self) -> float:
         """
         The rate at which data from this source is being processed by Spark.
         """
-        return self._processedRowsPerSecond
+        return self["processedRowsPerSecond"]
 
     @property
-    def metrics(self) -> Dict[str, str]:
-        return self._metrics
+    def metrics(self) -> dict:
+        return self["metrics"]
 
     @property
     def json(self) -> str:
         """
         The compact JSON representation of this progress.
         """
-        return self._jprogress.json()
+        assert self._jdict is not None or self._jprogress is not None
+        if self._jprogress:
+            return self._jprogress.json()
+        else:
+            return json.dumps(self._jdict)
 
     @property
     def prettyJson(self) -> str:
         """
         The pretty (i.e. indented) JSON representation of this progress.
         """
-        return self._jprogress.prettyJson()
+        assert self._jdict is not None or self._jprogress is not None
+        if self._jprogress:
+            return self._jprogress.prettyJson()
+        else:
+            return json.dumps(self._jdict, indent=4)
 
     def __str__(self) -> str:
         return self.prettyJson
 
+    def __repr__(self) -> str:
+        return self.prettyJson
 
-class SinkProgress:
+
+class SinkProgress(dict):
     """
     .. versionadded:: 3.4.0
+
+    .. versionchanged:: 4.0.0
+        Becomes a subclass of dict
 
     Notes
     -----
     This API is evolving.
     """
 
-    def __init__(self, jprogress: JavaObject) -> None:
-        self._jprogress: JavaObject = jprogress
-        self._description: str = jprogress.description()
-        self._numOutputRows: int = jprogress.numOutputRows()
-        self._metrics: Dict[str, str] = dict(jprogress.metrics())
+    def __init__(
+        self,
+        description: str,
+        numOutputRows: int,
+        metrics: Dict[str, str],
+        jprogress: Optional["JavaObject"] = None,
+        jdict: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        super().__init__(
+            description=description,
+            numOutputRows=numOutputRows,
+            metrics=metrics,
+        )
+        self._jprogress: Optional["JavaObject"] = jprogress
+        self._jdict: Optional[Dict[str, Any]] = jdict
+
+    @classmethod
+    def fromJObject(cls, jprogress: "JavaObject") -> "SinkProgress":
+        return cls(
+            jprogress=jprogress,
+            description=jprogress.description(),
+            numOutputRows=jprogress.numOutputRows(),
+            metrics=dict(jprogress.metrics()),
+        )
+
+    @classmethod
+    def fromJson(cls, j: Dict[str, Any]) -> "SinkProgress":
+        return cls(
+            jdict=j,
+            description=j["description"],
+            numOutputRows=j["numOutputRows"],
+            metrics=dict(j["metrics"]) if "metrics" in j else {},
+        )
 
     @property
     def description(self) -> str:
         """
         Description of the source.
         """
-        return self._description
+        return self["description"]
 
     @property
     def numOutputRows(self) -> int:
@@ -610,27 +1067,38 @@ class SinkProgress:
         Number of rows written to the sink or -1 for Continuous Mode (temporarily)
         or Sink V1 (until decommissioned).
         """
-        return self._numOutputRows
+        return self["numOutputRows"]
 
     @property
     def metrics(self) -> Dict[str, str]:
-        return self._metrics
+        return self["metrics"]
 
     @property
     def json(self) -> str:
         """
         The compact JSON representation of this progress.
         """
-        return self._jprogress.json()
+        assert self._jdict is not None or self._jprogress is not None
+        if self._jprogress:
+            return self._jprogress.json()
+        else:
+            return json.dumps(self._jdict)
 
     @property
     def prettyJson(self) -> str:
         """
         The pretty (i.e. indented) JSON representation of this progress.
         """
-        return self._jprogress.prettyJson()
+        assert self._jdict is not None or self._jprogress is not None
+        if self._jprogress:
+            return self._jprogress.prettyJson()
+        else:
+            return json.dumps(self._jdict, indent=4)
 
     def __str__(self) -> str:
+        return self.prettyJson
+
+    def __repr__(self) -> str:
         return self.prettyJson
 
 

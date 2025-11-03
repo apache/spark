@@ -20,6 +20,8 @@ package org.apache.spark.sql.hive.execution
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType, HiveTableRelation}
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
+import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.execution.SQLViewSuite
 import org.apache.spark.sql.hive.{HiveExternalCatalog, HiveUtils}
 import org.apache.spark.sql.hive.test.TestHiveSingleton
@@ -82,9 +84,15 @@ class HiveSQLViewSuite extends SQLViewSuite with TestHiveSingleton {
             // permanent view
             val e = intercept[AnalysisException] {
               sql(s"CREATE VIEW view1 AS SELECT $tempFunctionName(id) from tab1")
-            }.getMessage
-            assert(e.contains("Not allowed to create a permanent view `default`.`view1` by " +
-              s"referencing a temporary function `$tempFunctionName`"))
+            }
+            checkError(
+              exception = e,
+              condition = "INVALID_TEMP_OBJ_REFERENCE",
+              parameters = Map(
+                "obj" -> "VIEW",
+                "objName" -> s"`$SESSION_CATALOG_NAME`.`default`.`view1`",
+                "tempObj" -> "FUNCTION",
+                "tempObjName" -> s"`$tempFunctionName`"))
           }
         }
       }
@@ -136,7 +144,7 @@ class HiveSQLViewSuite extends SQLViewSuite with TestHiveSingleton {
         // Check the output rows.
         checkAnswer(df, Row(1, 2))
         // Check the output schema.
-        assert(df.schema.sameType(view.schema))
+        assert(DataTypeUtils.sameType(df.schema, view.schema))
       }
     }
   }
@@ -201,17 +209,28 @@ class HiveSQLViewSuite extends SQLViewSuite with TestHiveSingleton {
            """.stripMargin
         )
 
-        val cause = intercept[AnalysisException] {
-          sql("SHOW CREATE TABLE v1")
-        }
-
-        assert(cause.getMessage.contains(" - partitioned view"))
-
-        val causeForSpark = intercept[AnalysisException] {
-          sql("SHOW CREATE TABLE v1 AS SERDE")
-        }
-
-        assert(causeForSpark.getMessage.contains(" - partitioned view"))
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql("SHOW CREATE TABLE v1")
+          },
+          condition = "UNSUPPORTED_SHOW_CREATE_TABLE.WITH_UNSUPPORTED_FEATURE",
+          sqlState = "0A000",
+          parameters = Map(
+            "tableName" -> s"`$SESSION_CATALOG_NAME`.`default`.`v1`",
+            "unsupportedFeatures" -> " - partitioned view"
+          )
+        )
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql("SHOW CREATE TABLE v1 AS SERDE")
+          },
+          condition = "UNSUPPORTED_SHOW_CREATE_TABLE.WITH_UNSUPPORTED_FEATURE",
+          sqlState = "0A000",
+          parameters = Map(
+            "tableName" -> s"`$SESSION_CATALOG_NAME`.`default`.`v1`",
+            "unsupportedFeatures" -> " - partitioned view"
+          )
+        )
       }
     }
   }

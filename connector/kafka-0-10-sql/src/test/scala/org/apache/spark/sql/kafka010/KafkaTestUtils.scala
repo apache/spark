@@ -18,18 +18,16 @@
 package org.apache.spark.sql.kafka010
 
 import java.io.{File, IOException}
-import java.net.{InetAddress, InetSocketAddress}
-import java.nio.charset.StandardCharsets
+import java.net.InetSocketAddress
+import java.nio.file.Files
 import java.util.{Collections, Properties, UUID}
 import java.util.concurrent.TimeUnit
 import javax.security.auth.login.Configuration
 
-import scala.collection.JavaConverters._
 import scala.io.Source
-import scala.util.control.NonFatal
+import scala.jdk.CollectionConverters._
 
-import com.google.common.io.Files
-import kafka.api.Request
+import kafka.log.LogManager
 import kafka.server.{HostedPartition, KafkaConfig, KafkaServer}
 import kafka.server.checkpoints.OffsetCheckpointFile
 import kafka.zk.KafkaZkClient
@@ -41,20 +39,24 @@ import org.apache.kafka.clients.producer._
 import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.config.SaslConfigs
 import org.apache.kafka.common.network.ListenerName
+import org.apache.kafka.common.requests.FetchRequest
 import org.apache.kafka.common.security.auth.SecurityProtocol.{PLAINTEXT, SASL_PLAINTEXT}
 import org.apache.kafka.common.serialization.StringSerializer
-import org.apache.kafka.common.utils.SystemTime
+import org.apache.kafka.common.utils.Time
 import org.apache.zookeeper.client.ZKClientConfig
 import org.apache.zookeeper.server.{NIOServerCnxnFactory, ZooKeeperServer}
 import org.apache.zookeeper.server.auth.SASLAuthenticationProvider
 import org.scalatest.Assertions._
+import org.scalatest.PrivateMethodTester
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.LogKeys
 import org.apache.spark.kafka010.KafkaTokenUtil
 import org.apache.spark.util.{SecurityUtils, ShutdownHookManager, Utils}
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * This is a helper class for Kafka test suites. This has the functionality to set up
@@ -64,17 +66,22 @@ import org.apache.spark.util.{SecurityUtils, ShutdownHookManager, Utils}
  */
 class KafkaTestUtils(
     withBrokerProps: Map[String, Object] = Map.empty,
-    secure: Boolean = false) extends Logging {
+    secure: Boolean = false) extends PrivateMethodTester with Logging {
 
   private val JAVA_AUTH_CONFIG = "java.security.auth.login.config"
 
-  private val localCanonicalHostName = InetAddress.getLoopbackAddress().getCanonicalHostName()
-  logInfo(s"Local host name is $localCanonicalHostName")
+  private val localHostNameForURI = Utils.localHostNameForURI()
+  logInfo(log"Local host name is ${MDC(LogKeys.URI, localHostNameForURI)}")
+
+  // MiniKDC uses canonical host name on host part, hence we need to provide canonical host name
+  // on the 'host' part of the principal.
+  private val localCanonicalHostName = Utils.localCanonicalHostName()
+  logInfo(s"Local canonical host name is $localCanonicalHostName")
 
   private var kdc: MiniKdc = _
 
   // Zookeeper related configurations
-  private val zkHost = localCanonicalHostName
+  private val zkHost = localHostNameForURI
   private var zkPort: Int = 0
   private val zkConnectionTimeout = 60000
   private val zkSessionTimeout = 10000
@@ -83,7 +90,7 @@ class KafkaTestUtils(
   private var zkClient: KafkaZkClient = _
 
   // Kafka broker related configurations
-  private val brokerHost = localCanonicalHostName
+  private val brokerHost = localHostNameForURI
   private var brokerPort = 0
   private var brokerConf: KafkaConfig = _
 
@@ -134,30 +141,8 @@ class KafkaTestUtils(
     val kdcDir = Utils.createTempDir()
     val kdcConf = MiniKdc.createConf()
     kdcConf.setProperty(MiniKdc.DEBUG, "true")
-    // The port for MiniKdc service gets selected in the constructor, but will be bound
-    // to it later in MiniKdc.start() -> MiniKdc.initKDCServer() -> KdcServer.start().
-    // In meantime, when some other service might capture the port during this progress, and
-    // cause BindException.
-    // This makes our tests which have dedicated JVMs and rely on MiniKDC being flaky
-    //
-    // https://issues.apache.org/jira/browse/HADOOP-12656 get fixed in Hadoop 2.8.0.
-    //
-    // The workaround here is to periodically repeat this process with a timeout , since we are
-    // using Hadoop 2.7.4 as default.
-    // https://issues.apache.org/jira/browse/SPARK-31631
-    eventually(timeout(60.seconds), interval(1.second)) {
-      try {
-        kdc = new MiniKdc(kdcConf, kdcDir)
-        kdc.start()
-      } catch {
-        case NonFatal(e) =>
-          if (kdc != null) {
-            kdc.stop()
-            kdc = null
-          }
-          throw e
-      }
-    }
+    kdc = new MiniKdc(kdcConf, kdcDir)
+    kdc.start()
     // TODO https://issues.apache.org/jira/browse/SPARK-30037
     // Need to build spark's own MiniKDC and customize krb5.conf like Kafka
     rewriteKrb5Conf()
@@ -190,7 +175,7 @@ class KafkaTestUtils(
     }
 
     kdc.getKrb5conf.delete()
-    Files.write(krb5confStr, kdc.getKrb5conf, StandardCharsets.UTF_8)
+    Files.writeString(kdc.getKrb5conf.toPath, krb5confStr)
     logDebug(s"krb5.conf file content: $krb5confStr")
   }
 
@@ -254,7 +239,7 @@ class KafkaTestUtils(
       |  principal="$kafkaServerUser@$realm";
       |};
       """.stripMargin.trim
-    Files.write(content, file, StandardCharsets.UTF_8)
+    Files.writeString(file.toPath, content)
     logDebug(s"Created JAAS file: ${file.getPath}")
     logDebug(s"JAAS file content: $content")
     file.getAbsolutePath()
@@ -267,7 +252,7 @@ class KafkaTestUtils(
     // Get the actual zookeeper binding port
     zkPort = zookeeper.actualPort
     zkClient = KafkaZkClient(s"$zkHost:$zkPort", isSecure = false, zkSessionTimeout,
-      zkConnectionTimeout, 1, new SystemTime(), "test", new ZKClientConfig)
+      zkConnectionTimeout, 1, Time.SYSTEM, "test", new ZKClientConfig)
     zkReady = true
   }
 
@@ -349,7 +334,7 @@ class KafkaTestUtils(
         Utils.deleteRecursively(new File(f))
       } catch {
         case e: IOException if Utils.isWindows =>
-          logWarning(e.getMessage)
+          logWarning(log"${MDC(LogKeys.ERROR, e.getMessage)}")
       }
     }
 
@@ -395,7 +380,8 @@ class KafkaTestUtils(
   }
 
   def getAllTopicsAndPartitionSize(): Seq[(String, Int)] = {
-    zkClient.getPartitionsForTopics(zkClient.getAllTopicsInCluster()).mapValues(_.size).toSeq
+    zkClient.getPartitionsForTopics(zkClient.getAllTopicsInCluster())
+      .map { case (k, v) => (k, v.size) }.toSeq
   }
 
   /** Create a Kafka topic and wait until it is propagated to the whole cluster */
@@ -458,12 +444,17 @@ class KafkaTestUtils(
     offsets
   }
 
+  def sendMessages(msgs: Array[ProducerRecord[String, String]]): Seq[(String, RecordMetadata)] = {
+    sendMessages(msgs.toImmutableArraySeq)
+  }
+
+  private val cleanupLogsPrivateMethod = PrivateMethod[LogManager](Symbol("cleanupLogs"))
   def cleanupLogs(): Unit = {
-    server.logManager.cleanupLogs()
+    server.logManager.invokePrivate(cleanupLogsPrivateMethod())
   }
 
   private def getOffsets(topics: Set[String], offsetSpec: OffsetSpec): Map[TopicPartition, Long] = {
-    val listOffsetsParams = adminClient.describeTopics(topics.asJava).all().get().asScala
+    val listOffsetsParams = adminClient.describeTopics(topics.asJava).allTopicNames().get().asScala
       .flatMap { topicDescription =>
         topicDescription._2.partitions().asScala.map { topicPartitionInfo =>
           new TopicPartition(topicDescription._1, topicPartitionInfo.partition())
@@ -489,7 +480,7 @@ class KafkaTestUtils(
   protected def brokerConfiguration: Properties = {
     val props = new Properties()
     props.put("broker.id", "0")
-    props.put("listeners", s"PLAINTEXT://127.0.0.1:$brokerPort")
+    props.put("listeners", s"PLAINTEXT://$localHostNameForURI:$brokerPort")
     props.put("log.dir", Utils.createTempDir().getAbsolutePath)
     props.put("zookeeper.connect", zkAddress)
     props.put("zookeeper.connection.timeout.ms", "60000")
@@ -505,16 +496,14 @@ class KafkaTestUtils(
     props.put("transaction.state.log.min.isr", "1")
 
     if (secure) {
-      props.put("listeners", "SASL_PLAINTEXT://127.0.0.1:0")
-      props.put("advertised.listeners", "SASL_PLAINTEXT://127.0.0.1:0")
+      props.put("listeners", s"SASL_PLAINTEXT://$localHostNameForURI:0")
+      props.put("advertised.listeners", s"SASL_PLAINTEXT://$localHostNameForURI:0")
       props.put("inter.broker.listener.name", "SASL_PLAINTEXT")
       props.put("delegation.token.master.key", UUID.randomUUID().toString)
       props.put("sasl.enabled.mechanisms", "GSSAPI,SCRAM-SHA-512")
     }
 
-    // Can not use properties.putAll(propsMap.asJava) in scala-2.12
-    // See https://github.com/scala/bug/issues/10418
-    withBrokerProps.foreach { case (k, v) => props.put(k, v) }
+    props.putAll(withBrokerProps.asJava)
     props
   }
 
@@ -532,6 +521,8 @@ class KafkaTestUtils(
     props.put("key.serializer", classOf[StringSerializer].getName)
     // wait for all in-sync replicas to ack sends
     props.put("acks", "all")
+    props.put("partitioner.class",
+      classOf[org.apache.kafka.clients.producer.internals.DefaultPartitioner].getName)
     setAuthenticationConfigIfNeeded(props)
     props
   }
@@ -613,7 +604,7 @@ class KafkaTestUtils(
         .getPartitionInfo(topic, partition) match {
       case Some(partitionState) =>
         zkClient.getLeaderForPartition(new TopicPartition(topic, partition)).isDefined &&
-          Request.isValidBrokerId(partitionState.leader) &&
+          FetchRequest.isValidBrokerId(partitionState.leader) &&
           !partitionState.replicas.isEmpty
 
       case _ =>
@@ -648,7 +639,8 @@ class KafkaTestUtils(
     val zookeeper = new ZooKeeperServer(snapshotDir, logDir, 500)
     val (ip, port) = {
       val splits = zkConnect.split(":")
-      (splits(0), splits(1).toInt)
+      val port = splits(splits.length - 1)
+      (zkConnect.substring(0, zkConnect.length - port.length - 1), port.toInt)
     }
     val factory = new NIOServerCnxnFactory()
     factory.configure(new InetSocketAddress(ip, port), 16)
@@ -658,20 +650,17 @@ class KafkaTestUtils(
 
     def shutdown(): Unit = {
       factory.shutdown()
-      // The directories are not closed even if the ZooKeeper server is shut down.
-      // Please see ZOOKEEPER-1844, which is fixed in 3.4.6+. It leads to test failures
-      // on Windows if the directory deletion failure throws an exception.
       try {
         Utils.deleteRecursively(snapshotDir)
       } catch {
         case e: IOException if Utils.isWindows =>
-          logWarning(e.getMessage)
+          logWarning(log"${MDC(LogKeys.ERROR, e.getMessage)}")
       }
       try {
         Utils.deleteRecursively(logDir)
       } catch {
         case e: IOException if Utils.isWindows =>
-          logWarning(e.getMessage)
+          logWarning(log"${MDC(LogKeys.ERROR, e.getMessage)}")
       }
       System.clearProperty(ZOOKEEPER_AUTH_PROVIDER)
     }

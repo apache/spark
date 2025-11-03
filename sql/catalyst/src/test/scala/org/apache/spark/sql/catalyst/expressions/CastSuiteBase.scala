@@ -18,17 +18,15 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.sql.{Date, Timestamp}
-import java.time.{Duration, LocalDate, LocalDateTime, Period}
+import java.time.{Duration, LocalDate, LocalDateTime, LocalTime, Period}
 import java.time.temporal.ChronoUnit
 import java.util.{Calendar, Locale, TimeZone}
 
-import scala.collection.parallel.immutable.ParVector
-
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkFunSuite, SparkIllegalArgumentException}
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.TypeCheckFailure
-import org.apache.spark.sql.catalyst.analysis.TypeCoercion.numericPrecedence
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
+import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
@@ -39,15 +37,25 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.DataTypeTestUtils.{dayTimeIntervalTypes, yearMonthIntervalTypes}
 import org.apache.spark.sql.types.DayTimeIntervalType.{DAY, HOUR, MINUTE, SECOND}
+import org.apache.spark.sql.types.UpCastRule.numericPrecedence
 import org.apache.spark.sql.types.YearMonthIntervalType.{MONTH, YEAR}
 import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.util.ThreadUtils
 
 /**
- * Common test suite for [[Cast]], [[AnsiCast]] and [[TryCast]] expressions.
+ * Common test suite for [[Cast]] with ansi mode on and off. It only includes test cases that work
+ * for both ansi on and off.
  */
 abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
 
-  protected def cast(v: Any, targetType: DataType, timeZoneId: Option[String] = None): CastBase
+  protected def evalMode: EvalMode.Value
+
+  protected def cast(v: Any, targetType: DataType, timeZoneId: Option[String] = None): Cast = {
+    v match {
+      case lit: Expression => Cast(lit, targetType, timeZoneId, evalMode)
+      case _ => Cast(Literal(v), targetType, timeZoneId, evalMode)
+    }
+  }
 
   // expected cannot be null
   protected def checkCast(v: Any, expected: Any): Unit = {
@@ -58,27 +66,13 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(cast(Literal.create(null, from), to, UTC_OPT), null)
   }
 
-  protected def verifyCastFailure(c: CastBase, optionalExpectedMsg: Option[String] = None): Unit = {
+  protected def verifyCastFailure(c: Cast, expected: DataTypeMismatch): Unit = {
     val typeCheckResult = c.checkInputDataTypes()
     assert(typeCheckResult.isFailure)
-    assert(typeCheckResult.isInstanceOf[TypeCheckFailure])
-    val message = typeCheckResult.asInstanceOf[TypeCheckFailure].message
-
-    if (optionalExpectedMsg.isDefined) {
-      assert(message.contains(optionalExpectedMsg.get))
-    } else if (setConfigurationHint.nonEmpty) {
-      assert(message.contains("with ANSI mode on"))
-      assert(message.contains(setConfigurationHint))
-    } else {
-      assert("cannot cast [a-zA-Z]+ to [a-zA-Z]+".r.findFirstIn(message).isDefined)
-    }
+    assert(typeCheckResult.isInstanceOf[DataTypeMismatch])
+    val mismatch = typeCheckResult.asInstanceOf[DataTypeMismatch]
+    assert(mismatch === expected)
   }
-
-  // Whether the test suite is for TryCast. If yes, there is no exceptions and the result is
-  // always nullable.
-  protected def isTryCast: Boolean = false
-
-  protected def setConfigurationHint: String = ""
 
   test("null cast") {
     import DataTypeTestUtils._
@@ -88,7 +82,7 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     }
 
     atomicTypes.foreach(dt => checkNullCast(NullType, dt))
-    atomicTypes.foreach(dt => checkNullCast(dt, StringType))
+    (atomicTypes ++ timeTypes).foreach(dt => checkNullCast(dt, StringType))
     checkNullCast(StringType, BinaryType)
     checkNullCast(StringType, BooleanType)
     numericTypes.foreach(dt => checkNullCast(dt, BooleanType))
@@ -131,7 +125,11 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("cast string to timestamp") {
-    new ParVector(ALL_TIMEZONES.toVector).foreach { zid =>
+    ThreadUtils.parmap(
+      ALL_TIMEZONES,
+      prefix = "CastSuiteBase-cast-string-to-timestamp",
+      maxThreads = Runtime.getRuntime.availableProcessors
+    ) { zid =>
       def checkCastStringToTimestamp(str: String, expected: Timestamp): Unit = {
         checkEvaluation(cast(Literal(str), TimestampType, Option(zid.getId)), expected)
       }
@@ -281,8 +279,8 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("cast from string") {
-    assert(cast("abcdef", StringType).nullable === isTryCast)
-    assert(cast("abcdef", BinaryType).nullable === isTryCast)
+    assert(!cast("abcdef", StringType).nullable)
+    assert(!cast("abcdef", BinaryType).nullable)
     assert(cast("abcdef", BooleanType).nullable)
     assert(cast("abcdef", TimestampType).nullable)
     assert(cast("abcdef", LongType).nullable)
@@ -547,20 +545,57 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     checkCast("0", false)
   }
 
-  protected def checkInvalidCastFromNumericType(to: DataType): Unit = {
-    assert(cast(1.toByte, to).checkInputDataTypes().isFailure)
-    assert(cast(1.toShort, to).checkInputDataTypes().isFailure)
-    assert(cast(1, to).checkInputDataTypes().isFailure)
-    assert(cast(1L, to).checkInputDataTypes().isFailure)
-    assert(cast(1.0.toFloat, to).checkInputDataTypes().isFailure)
-    assert(cast(1.0, to).checkInputDataTypes().isFailure)
+  protected def createCastMismatch(
+      srcType: DataType,
+      targetType: DataType,
+      errorSubClass: String,
+      extraParams: Map[String, String] = Map.empty): DataTypeMismatch = {
+    val baseParams = Map(
+      "srcType" -> toSQLType(srcType),
+      "targetType" -> toSQLType(targetType)
+    )
+    DataTypeMismatch(errorSubClass, baseParams ++ extraParams)
+  }
+
+  protected def checkInvalidCastFromNumericTypeToDateType(): Unit = {
+    val errorSubClass = if (evalMode == EvalMode.LEGACY) {
+      "CAST_WITHOUT_SUGGESTION"
+    } else {
+      "CAST_WITH_FUNC_SUGGESTION"
+    }
+    val funcParams = if (evalMode == EvalMode.LEGACY) {
+      Map.empty[String, String]
+    } else {
+      Map("functionNames" -> "`DATE_FROM_UNIX_DATE`")
+    }
+    Seq(1.toByte, 1.toShort, 1, 1L, 1.0.toFloat, 1.0).foreach { testValue =>
+      val expectedError =
+        createCastMismatch(Literal(testValue).dataType, DateType, errorSubClass, funcParams)
+      assert(cast(testValue, DateType).checkInputDataTypes() == expectedError)
+    }
+  }
+  protected def checkInvalidCastFromNumericTypeToTimestampNTZType(): Unit = {
+    // All numeric types: `CAST_WITHOUT_SUGGESTION`
+    Seq(1.toByte, 1.toShort, 1, 1L, 1.0.toFloat, 1.0).foreach { testValue =>
+      val expectedError =
+        createCastMismatch(Literal(testValue).dataType, TimestampNTZType, "CAST_WITHOUT_SUGGESTION")
+      assert(cast(testValue, TimestampNTZType).checkInputDataTypes() == expectedError)
+    }
   }
 
   test("SPARK-16729 type checking for casting to date type") {
     assert(cast("1234", DateType).checkInputDataTypes().isSuccess)
     assert(cast(new Timestamp(1), DateType).checkInputDataTypes().isSuccess)
-    assert(cast(false, DateType).checkInputDataTypes().isFailure)
-    checkInvalidCastFromNumericType(DateType)
+    assert(cast(false, DateType).checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "CAST_WITHOUT_SUGGESTION",
+        messageParameters = Map(
+          "srcType" -> "\"BOOLEAN\"",
+          "targetType" -> "\"DATE\""
+        )
+      )
+    )
+    checkInvalidCastFromNumericTypeToDateType()
   }
 
   test("SPARK-20302 cast with same structure") {
@@ -669,6 +704,26 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
         assert(Cast.canUpCast(from, to))
       }
     }
+
+    {
+      assert(Cast.canUpCast(DateType, TimestampType))
+      assert(Cast.canUpCast(DateType, TimestampNTZType))
+      assert(Cast.canUpCast(TimestampType, TimestampNTZType))
+      assert(Cast.canUpCast(TimestampNTZType, TimestampType))
+      assert(Cast.canUpCast(IntegerType, StringType("UTF8_LCASE")))
+      assert(Cast.canUpCast(CalendarIntervalType, StringType("UTF8_LCASE")))
+      assert(!Cast.canUpCast(TimestampType, DateType))
+      assert(!Cast.canUpCast(TimestampNTZType, DateType))
+    }
+  }
+
+  test("SPARK-40389: canUpCast: return false if casting decimal to integral types can cause" +
+    " overflow") {
+    Seq(ByteType, ShortType, IntegerType, LongType).foreach { integralType =>
+      val decimalType = DecimalType.forType(integralType)
+      assert(!Cast.canUpCast(decimalType, integralType))
+      assert(Cast.canUpCast(integralType, decimalType))
+    }
   }
 
   test("SPARK-27671: cast from nested null type in struct") {
@@ -757,9 +812,10 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
         val ret1 = cast(Literal.create(Map(1 -> "a", 2 -> "b", 3 -> "c")), StringType)
         checkEvaluation(ret1, s"${lb}1 -> a, 2 -> b, 3 -> c$rb")
         val ret2 = cast(
-          Literal.create(Map("1" -> "a".getBytes, "2" -> null, "3" -> "c".getBytes)),
+          Literal.create(Map("1" -> null, "2" -> "a".getBytes, "3" -> null, "4" -> "c".getBytes)),
           StringType)
-        checkEvaluation(ret2, s"${lb}1 -> a, 2 ->${if (legacyCast) "" else " null"}, 3 -> c$rb")
+        val nullStr = if (legacyCast) "" else " null"
+        checkEvaluation(ret2, s"${lb}1 ->$nullStr, 2 -> a, 3 ->$nullStr, 4 -> c$rb")
         val ret3 = cast(
           Literal.create(Map(
             1 -> Date.valueOf("2014-12-03"),
@@ -923,14 +979,27 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
 
   test("disallow type conversions between Numeric types and Timestamp without time zone type") {
     import DataTypeTestUtils.numericTypes
-    checkInvalidCastFromNumericType(TimestampNTZType)
-    var errorMsg = "cannot cast bigint to timestamp_ntz"
-    verifyCastFailure(cast(Literal(0L), TimestampNTZType), Some(errorMsg))
+    checkInvalidCastFromNumericTypeToTimestampNTZType()
+    verifyCastFailure(
+      cast(Literal(0L), TimestampNTZType),
+      DataTypeMismatch(
+        "CAST_WITHOUT_SUGGESTION",
+        Map("srcType" -> "\"BIGINT\"", "targetType" -> "\"TIMESTAMP_NTZ\"")))
 
     val timestampNTZLiteral = Literal.create(LocalDateTime.now(), TimestampNTZType)
-    errorMsg = "cannot cast timestamp_ntz to"
     numericTypes.foreach { numericType =>
-      verifyCastFailure(cast(timestampNTZLiteral, numericType), Some(errorMsg))
+      verifyCastFailure(
+        cast(timestampNTZLiteral, numericType),
+        DataTypeMismatch(
+          "CAST_WITHOUT_SUGGESTION",
+          Map("srcType" -> "\"TIMESTAMP_NTZ\"", "targetType" -> s""""${numericType.sql}"""")))
+    }
+  }
+
+  test("allow type conversions between calendar interval type and char/varchar types") {
+    Seq(CharType(10), VarcharType(10))
+      .foreach { typ =>
+        assert(cast(Literal.default(CalendarIntervalType), typ).checkInputDataTypes().isSuccess)
     }
   }
 
@@ -981,14 +1050,11 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
         DayTimeIntervalType()), StringType), ansiInterval)
     }
 
-    if (!isTryCast) {
-      Seq("INTERVAL '-106751991 04:00:54.775809' DAY TO SECOND",
-        "INTERVAL '106751991 04:00:54.775808' DAY TO SECOND").foreach { interval =>
-        val e = intercept[ArithmeticException] {
-          cast(Literal.create(interval), DayTimeIntervalType()).eval()
-        }.getMessage
-        assert(e.contains("long overflow"))
-      }
+    Seq("INTERVAL '-106751991 04:00:54.775809' DAY TO SECOND",
+      "INTERVAL '106751991 04:00:54.775808' DAY TO SECOND").foreach { interval =>
+      checkExceptionInExpression[ArithmeticException](
+        cast(Literal.create(interval), DayTimeIntervalType()),
+        "long overflow")
     }
 
     Seq(Byte.MaxValue, Short.MaxValue, Int.MaxValue, Long.MaxValue, Long.MinValue + 1,
@@ -1027,15 +1093,15 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
         YearMonthIntervalType()), StringType), ansiInterval)
     }
 
-    if (!isTryCast) {
-      Seq("INTERVAL '-178956970-9' YEAR TO MONTH", "INTERVAL '178956970-8' YEAR TO MONTH")
-        .foreach { interval =>
-          val e = intercept[IllegalArgumentException] {
-            cast(Literal.create(interval), YearMonthIntervalType()).eval()
-          }.getMessage
-          assert(e.contains("Error parsing interval year-month string: integer overflow"))
-        }
-    }
+    Seq("INTERVAL '-178956970-9' YEAR TO MONTH", "INTERVAL '178956970-8' YEAR TO MONTH")
+      .foreach { interval =>
+        checkErrorInExpression[SparkIllegalArgumentException](
+          cast(Literal.create(interval), YearMonthIntervalType()),
+          "INVALID_INTERVAL_FORMAT.INTERVAL_PARSING",
+          Map(
+            "interval" -> "year-month",
+            "input" -> interval))
+      }
 
     Seq(Byte.MaxValue, Short.MaxValue, Int.MaxValue, Int.MinValue + 1, Int.MinValue)
       .foreach { period =>
@@ -1098,37 +1164,40 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
         }
       }
 
-    if (!isTryCast) {
-      Seq("INTERVAL '1-1' YEAR", "INTERVAL '1-1' MONTH").foreach { interval =>
-        val dataType = YearMonthIntervalType()
-        val e = intercept[IllegalArgumentException] {
-          cast(Literal.create(interval), dataType).eval()
-        }.getMessage
-        assert(e.contains(s"Interval string does not match year-month format of " +
-          s"${IntervalUtils.supportedFormat((dataType.startField, dataType.endField))
-            .map(format => s"`$format`").mkString(", ")} " +
-          s"when cast to ${dataType.typeName}: $interval"))
-      }
-      Seq(("1", YearMonthIntervalType(YEAR, MONTH)),
-        ("1", YearMonthIntervalType(YEAR, MONTH)),
-        ("1-1", YearMonthIntervalType(YEAR)),
-        ("1-1", YearMonthIntervalType(MONTH)),
-        ("INTERVAL '1-1' YEAR TO MONTH", YearMonthIntervalType(YEAR)),
-        ("INTERVAL '1-1' YEAR TO MONTH", YearMonthIntervalType(MONTH)),
-        ("INTERVAL '1' YEAR", YearMonthIntervalType(YEAR, MONTH)),
-        ("INTERVAL '1' YEAR", YearMonthIntervalType(MONTH)),
-        ("INTERVAL '1' MONTH", YearMonthIntervalType(YEAR)),
-        ("INTERVAL '1' MONTH", YearMonthIntervalType(YEAR, MONTH)))
-        .foreach { case (interval, dataType) =>
-          val e = intercept[IllegalArgumentException] {
-            cast(Literal.create(interval), dataType).eval()
-          }.getMessage
-          assert(e.contains(s"Interval string does not match year-month format of " +
-            s"${IntervalUtils.supportedFormat((dataType.startField, dataType.endField))
-              .map(format => s"`$format`").mkString(", ")} " +
-            s"when cast to ${dataType.typeName}: $interval"))
-        }
+    Seq("INTERVAL '1-1' YEAR", "INTERVAL '1-1' MONTH").foreach { interval =>
+      val dataType = YearMonthIntervalType()
+      checkErrorInExpression[SparkIllegalArgumentException](
+        cast(Literal.create(interval), dataType),
+        "INVALID_INTERVAL_FORMAT.UNMATCHED_FORMAT_STRING",
+        Map(
+          "typeName" -> "interval year to month",
+          "intervalStr" -> "year-month",
+          "supportedFormat" -> "`[+|-]y-m`, `INTERVAL [+|-]'[+|-]y-m' YEAR TO MONTH`",
+          "input" -> interval)
+      )
     }
+    Seq(("1", YearMonthIntervalType(YEAR, MONTH)),
+      ("1", YearMonthIntervalType(YEAR, MONTH)),
+      ("1-1", YearMonthIntervalType(YEAR)),
+      ("1-1", YearMonthIntervalType(MONTH)),
+      ("INTERVAL '1-1' YEAR TO MONTH", YearMonthIntervalType(YEAR)),
+      ("INTERVAL '1-1' YEAR TO MONTH", YearMonthIntervalType(MONTH)),
+      ("INTERVAL '1' YEAR", YearMonthIntervalType(YEAR, MONTH)),
+      ("INTERVAL '1' YEAR", YearMonthIntervalType(MONTH)),
+      ("INTERVAL '1' MONTH", YearMonthIntervalType(YEAR)),
+      ("INTERVAL '1' MONTH", YearMonthIntervalType(YEAR, MONTH)))
+      .foreach { case (interval, dataType) =>
+        checkErrorInExpression[SparkIllegalArgumentException](
+          cast(Literal.create(interval), dataType),
+          "INVALID_INTERVAL_FORMAT.UNMATCHED_FORMAT_STRING",
+          Map(
+            "typeName" -> dataType.typeName,
+            "intervalStr" -> "year-month",
+            "supportedFormat" ->
+              IntervalUtils.supportedFormat(("year-month", dataType.startField, dataType.endField))
+                .map(format => s"`$format`").mkString(", "),
+            "input" -> interval))
+      }
   }
 
   test("SPARK-35735: Take into account day-time interval fields in cast") {
@@ -1218,63 +1287,496 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
         checkEvaluation(cast(Literal.create(interval), dataType), dt)
       }
 
-    if (!isTryCast) {
-      Seq(
-        ("INTERVAL '1 01:01:01.12345' DAY TO SECOND", DayTimeIntervalType(DAY, HOUR)),
-        ("INTERVAL '1 01:01:01.12345' DAY TO HOUR", DayTimeIntervalType(DAY, SECOND)),
-        ("INTERVAL '1 01:01:01.12345' DAY TO MINUTE", DayTimeIntervalType(DAY, MINUTE)),
-        ("1 01:01:01.12345", DayTimeIntervalType(DAY, DAY)),
-        ("1 01:01:01.12345", DayTimeIntervalType(DAY, HOUR)),
-        ("1 01:01:01.12345", DayTimeIntervalType(DAY, MINUTE)),
+    Seq(
+      ("INTERVAL '1 01:01:01.12345' DAY TO SECOND", DayTimeIntervalType(DAY, HOUR)),
+      ("INTERVAL '1 01:01:01.12345' DAY TO HOUR", DayTimeIntervalType(DAY, SECOND)),
+      ("INTERVAL '1 01:01:01.12345' DAY TO MINUTE", DayTimeIntervalType(DAY, MINUTE)),
+      ("1 01:01:01.12345", DayTimeIntervalType(DAY, DAY)),
+      ("1 01:01:01.12345", DayTimeIntervalType(DAY, HOUR)),
+      ("1 01:01:01.12345", DayTimeIntervalType(DAY, MINUTE)),
 
-        ("INTERVAL '01:01:01.12345' HOUR TO SECOND", DayTimeIntervalType(DAY, HOUR)),
-        ("INTERVAL '01:01:01.12345' HOUR TO HOUR", DayTimeIntervalType(DAY, SECOND)),
-        ("INTERVAL '01:01:01.12345' HOUR TO MINUTE", DayTimeIntervalType(DAY, MINUTE)),
-        ("01:01:01.12345", DayTimeIntervalType(DAY, DAY)),
-        ("01:01:01.12345", DayTimeIntervalType(HOUR, HOUR)),
-        ("01:01:01.12345", DayTimeIntervalType(DAY, MINUTE)),
-        ("INTERVAL '1.23' DAY", DayTimeIntervalType(DAY)),
-        ("INTERVAL '1.23' HOUR", DayTimeIntervalType(HOUR)),
-        ("INTERVAL '1.23' MINUTE", DayTimeIntervalType(MINUTE)),
-        ("INTERVAL '1.23' SECOND", DayTimeIntervalType(MINUTE)),
-        ("1.23", DayTimeIntervalType(DAY)),
-        ("1.23", DayTimeIntervalType(HOUR)),
-        ("1.23", DayTimeIntervalType(MINUTE)),
-        ("1.23", DayTimeIntervalType(MINUTE)))
-        .foreach { case (interval, dataType) =>
-          val e = intercept[IllegalArgumentException] {
-            cast(Literal.create(interval), dataType).eval()
-          }.getMessage
-          assert(e.contains(s"Interval string does not match day-time format of " +
-            s"${IntervalUtils.supportedFormat((dataType.startField, dataType.endField))
-              .map(format => s"`$format`").mkString(", ")} " +
-            s"when cast to ${dataType.typeName}: $interval, " +
-            s"set ${SQLConf.LEGACY_FROM_DAYTIME_STRING.key} to true " +
-            "to restore the behavior before Spark 3.0."))
-        }
+      ("INTERVAL '01:01:01.12345' HOUR TO SECOND", DayTimeIntervalType(DAY, HOUR)),
+      ("INTERVAL '01:01:01.12345' HOUR TO HOUR", DayTimeIntervalType(DAY, SECOND)),
+      ("INTERVAL '01:01:01.12345' HOUR TO MINUTE", DayTimeIntervalType(DAY, MINUTE)),
+      ("01:01:01.12345", DayTimeIntervalType(DAY, DAY)),
+      ("01:01:01.12345", DayTimeIntervalType(HOUR, HOUR)),
+      ("01:01:01.12345", DayTimeIntervalType(DAY, MINUTE)),
+      ("INTERVAL '1.23' DAY", DayTimeIntervalType(DAY)),
+      ("INTERVAL '1.23' HOUR", DayTimeIntervalType(HOUR)),
+      ("INTERVAL '1.23' MINUTE", DayTimeIntervalType(MINUTE)),
+      ("INTERVAL '1.23' SECOND", DayTimeIntervalType(MINUTE)),
+      ("1.23", DayTimeIntervalType(DAY)),
+      ("1.23", DayTimeIntervalType(HOUR)),
+      ("1.23", DayTimeIntervalType(MINUTE)),
+      ("1.23", DayTimeIntervalType(MINUTE)))
+      .foreach { case (interval, dataType) =>
+        checkErrorInExpression[SparkIllegalArgumentException](
+          cast(Literal.create(interval), dataType),
+          "INVALID_INTERVAL_FORMAT.UNMATCHED_FORMAT_STRING_WITH_NOTICE",
+          Map("intervalStr" -> "day-time",
+            "typeName" -> dataType.typeName,
+            "input" -> interval,
+            "supportedFormat" ->
+              IntervalUtils.supportedFormat(("day-time", dataType.startField, dataType.endField))
+                .map(format => s"`$format`").mkString(", "))
+        )
+      }
 
-      // Check first field outof bound
-      Seq(("INTERVAL '1067519911' DAY", DayTimeIntervalType(DAY)),
-        ("INTERVAL '10675199111 04' DAY TO HOUR", DayTimeIntervalType(DAY, HOUR)),
-        ("INTERVAL '1067519911 04:00' DAY TO MINUTE", DayTimeIntervalType(DAY, MINUTE)),
-        ("INTERVAL '1067519911 04:00:54.775807' DAY TO SECOND", DayTimeIntervalType()),
-        ("INTERVAL '25620477881' HOUR", DayTimeIntervalType(HOUR)),
-        ("INTERVAL '25620477881:00' HOUR TO MINUTE", DayTimeIntervalType(HOUR, MINUTE)),
-        ("INTERVAL '25620477881:00:54.775807' HOUR TO SECOND", DayTimeIntervalType(HOUR, SECOND)),
-        ("INTERVAL '1537228672801' MINUTE", DayTimeIntervalType(MINUTE)),
-        ("INTERVAL '1537228672801:54.7757' MINUTE TO SECOND", DayTimeIntervalType(MINUTE, SECOND)),
-        ("INTERVAL '92233720368541.775807' SECOND", DayTimeIntervalType(SECOND)))
-        .foreach { case (interval, dataType) =>
-          val e = intercept[IllegalArgumentException] {
-            cast(Literal.create(interval), dataType).eval()
-          }.getMessage
-          assert(e.contains(s"Interval string does not match day-time format of " +
-            s"${IntervalUtils.supportedFormat((dataType.startField, dataType.endField))
-              .map(format => s"`$format`").mkString(", ")} " +
-            s"when cast to ${dataType.typeName}: $interval, " +
-            s"set ${SQLConf.LEGACY_FROM_DAYTIME_STRING.key} to true " +
-            "to restore the behavior before Spark 3.0."))
-        }
+    // Check first field outof bound
+    Seq(("INTERVAL '1067519911' DAY", DayTimeIntervalType(DAY)),
+      ("INTERVAL '10675199111 04' DAY TO HOUR", DayTimeIntervalType(DAY, HOUR)),
+      ("INTERVAL '1067519911 04:00' DAY TO MINUTE", DayTimeIntervalType(DAY, MINUTE)),
+      ("INTERVAL '1067519911 04:00:54.775807' DAY TO SECOND", DayTimeIntervalType()),
+      ("INTERVAL '25620477881' HOUR", DayTimeIntervalType(HOUR)),
+      ("INTERVAL '25620477881:00' HOUR TO MINUTE", DayTimeIntervalType(HOUR, MINUTE)),
+      ("INTERVAL '25620477881:00:54.775807' HOUR TO SECOND", DayTimeIntervalType(HOUR, SECOND)),
+      ("INTERVAL '1537228672801' MINUTE", DayTimeIntervalType(MINUTE)),
+      ("INTERVAL '1537228672801:54.7757' MINUTE TO SECOND", DayTimeIntervalType(MINUTE, SECOND)),
+      ("INTERVAL '92233720368541.775807' SECOND", DayTimeIntervalType(SECOND)))
+      .foreach { case (interval, dataType) =>
+        checkErrorInExpression[SparkIllegalArgumentException](
+          cast(Literal.create(interval), dataType),
+          "INVALID_INTERVAL_FORMAT.UNMATCHED_FORMAT_STRING_WITH_NOTICE",
+          Map("intervalStr" -> "day-time",
+            "typeName" -> dataType.typeName,
+            "input" -> interval,
+            "supportedFormat" ->
+              IntervalUtils.supportedFormat(("day-time", dataType.startField, dataType.endField))
+                .map(format => s"`$format`").mkString(", ")))
+      }
+  }
+
+  test("cast ANSI intervals to/from decimals") {
+    Seq(
+      (Duration.ZERO, DayTimeIntervalType(DAY), DecimalType(10, 3)) -> Decimal(0, 10, 3),
+      (Duration.ofHours(-1), DayTimeIntervalType(HOUR), DecimalType(10, 1)) -> Decimal(-10, 10, 1),
+      (Duration.ofMinutes(1), DayTimeIntervalType(MINUTE), DecimalType(8, 2)) -> Decimal(100, 8, 2),
+      (Duration.ofSeconds(59), DayTimeIntervalType(SECOND), DecimalType(6, 0)) -> Decimal(59, 6, 0),
+      (Duration.ofSeconds(-60).minusMillis(1), DayTimeIntervalType(SECOND),
+        DecimalType(10, 3)) -> Decimal(-60.001, 10, 3),
+      (Duration.ZERO, DayTimeIntervalType(DAY, SECOND), DecimalType(10, 6)) -> Decimal(0, 10, 6),
+      (Duration.ofHours(-23).minusMinutes(59).minusSeconds(59).minusNanos(123456000),
+        DayTimeIntervalType(HOUR, SECOND), DecimalType(18, 6)) -> Decimal(-86399.123456, 18, 6),
+      (Period.ZERO, YearMonthIntervalType(YEAR), DecimalType(5, 2)) -> Decimal(0, 5, 2),
+      (Period.ofMonths(-1), YearMonthIntervalType(MONTH),
+        DecimalType(8, 0)) -> Decimal(-1, 8, 0),
+      (Period.ofYears(-1).minusMonths(1), YearMonthIntervalType(YEAR, MONTH),
+        DecimalType(8, 3)) -> Decimal(-13000, 8, 3)
+    ).foreach { case ((duration, intervalType, targetType), expected) =>
+      checkEvaluation(
+        Cast(Literal.create(duration, intervalType), targetType),
+        expected)
+      checkEvaluation(
+        Cast(Literal.create(expected, targetType), intervalType),
+        duration)
     }
+
+    dayTimeIntervalTypes.foreach { it =>
+      checkConsistencyBetweenInterpretedAndCodegenAllowingException((child: Expression) =>
+        Cast(child, DecimalType.USER_DEFAULT), it)
+      checkConsistencyBetweenInterpretedAndCodegenAllowingException((child: Expression) =>
+        Cast(child, it), DecimalType.USER_DEFAULT)
+    }
+
+    yearMonthIntervalTypes.foreach { it =>
+      checkConsistencyBetweenInterpretedAndCodegenAllowingException((child: Expression) =>
+        Cast(child, DecimalType.USER_DEFAULT), it)
+      checkConsistencyBetweenInterpretedAndCodegenAllowingException((child: Expression) =>
+        Cast(child, it), DecimalType.USER_DEFAULT)
+    }
+  }
+
+  test("SPARK-39865: toString() and sql() methods of CheckOverflowInTableInsert") {
+    val cast = Cast(Literal(1.0), IntegerType)
+    val expr = CheckOverflowInTableInsert(cast, "column_1")
+    assert(expr.sql == cast.sql)
+    assert(expr.toString == cast.toString)
+  }
+
+  test("SPARK-43336: Casting between Timestamp and TimestampNTZ requires timezone") {
+    val timestampLiteral = Literal.create(1L, TimestampType)
+    val timestampNTZLiteral = Literal.create(1L, TimestampNTZType)
+    assert(!Cast(timestampLiteral, TimestampNTZType).resolved)
+    assert(!Cast(timestampNTZLiteral, TimestampType).resolved)
+  }
+
+  test("Casting between TimestampType and StringType requires timezone") {
+    val timestampLiteral = Literal.create(1L, TimestampType)
+    assert(!Cast(timestampLiteral, StringType).resolved)
+    assert(!Cast(timestampLiteral, StringType("UTF8_LCASE")).resolved)
+  }
+
+  test(s"Casting from char/varchar") {
+    Seq(CharType(10), VarcharType(10)).foreach { typ =>
+      Seq(
+        IntegerType -> ("123", 123),
+        LongType -> ("123 ", 123L),
+        BooleanType -> ("true ", true),
+        BooleanType -> ("false", false),
+        DoubleType -> ("1.2", 1.2)
+      ).foreach { case (toType, (from, to)) =>
+        checkEvaluation(cast(Literal.create(from, typ), toType), to)
+      }
+    }
+  }
+
+  test("Casting to char/varchar") {
+    Seq(CharType(10), VarcharType(10)).foreach { typ =>
+      Seq(
+        IntegerType -> (123, "123"),
+        LongType -> (123L, "123"),
+        BooleanType -> (true, "true"),
+        BooleanType -> (false, "false"),
+        DoubleType -> (1.2, "1.2")
+      ).foreach { case (fromType, (from, to)) =>
+        val paddedTo = if (typ.isInstanceOf[CharType]) {
+          to.padTo(10, ' ')
+        } else {
+          to
+        }
+        checkEvaluation(cast(Literal.create(from, fromType), typ), paddedTo)
+      }
+    }
+  }
+
+  test("cast time to string") {
+    Seq(
+      LocalTime.MIDNIGHT -> "00:00:00",
+      LocalTime.NOON -> "12:00:00",
+      LocalTime.of(23, 59, 59) -> "23:59:59",
+      LocalTime.of(23, 59, 59, 1000000) -> "23:59:59.001",
+      LocalTime.of(23, 59, 59, 999999000) -> "23:59:59.999999"
+    ).foreach { case (time, expectedStr) =>
+      checkEvaluation(Cast(Literal(time), StringType), expectedStr)
+    }
+
+    checkConsistencyBetweenInterpretedAndCodegen(
+      (child: Expression) => Cast(child, StringType), TimeType())
+  }
+
+  test("cast string to time") {
+    checkEvaluation(cast(Literal.create("0:0:0"), TimeType()), 0L)
+    checkEvaluation(cast(Literal.create(" 01:2:3.01   "), TimeType(2)), localTime(1, 2, 3, 10000))
+    checkEvaluation(cast(Literal.create(" 12:13:14.999"),
+      TimeType(3)), localTime(12, 13, 14, 999 * 1000))
+    checkEvaluation(cast(Literal.create("23:0:59.0001 "), TimeType(4)), localTime(23, 0, 59, 100))
+    checkEvaluation(cast(Literal.create("23:59:0.99999"),
+      TimeType(5)), localTime(23, 59, 0, 999990))
+    checkEvaluation(cast(Literal.create("23:59:59.000001     "),
+      TimeType(6)), localTime(23, 59, 59, 1))
+  }
+
+  test("context independent foldable") {
+    val array = Literal.create(Seq(1, 2, 3), ArrayType(IntegerType))
+    val targetArrayType = ArrayType(StringType, containsNull = true)
+    val map = Literal.create(
+      Map("a" -> "123", "b" -> "true", "c" -> "f"),
+      MapType(StringType, StringType, valueContainsNull = true))
+    val targetMapType = MapType(StringType, StringType, valueContainsNull = false)
+    val struct = Literal.create(
+      Row(1, "2", true, null),
+      StructType(Seq(
+        StructField("a", IntegerType),
+        StructField("b", StringType),
+        StructField("c", BooleanType),
+        StructField("d", NullType))))
+    val targetStructType = StructType(Seq(
+      StructField("a", StringType),
+      StructField("b", IntegerType),
+      StructField("c", BooleanType),
+      StructField("d", BooleanType)))
+    Seq(
+      cast(Literal(1), StringType),
+      cast(Literal(1), DateType),
+      cast(Literal(1L), TimestampNTZType),
+      cast(Literal("1"), IntegerType),
+      cast(Literal("true"), BooleanType),
+      cast(Literal("false"), BooleanType),
+      cast(Literal(1.5), IntegerType),
+      cast(Literal(1.5), LongType),
+      cast(Literal(100), ByteType),
+      cast(Literal(1000), ShortType),
+      cast(Literal(1), DoubleType),
+      cast(Literal(2.5), FloatType),
+      cast(Literal(123), DecimalType(10, 2)),
+      cast(Literal("1.5"), DoubleType),
+      cast(Literal("2023-01-01"), DateType),
+      cast(Literal(true), StringType),
+      cast(Literal(false), IntegerType),
+      cast(Literal(Duration.ofDays(1)), StringType),
+      cast(Literal(Period.ofMonths(1)), StringType),
+      cast(Literal(Decimal(10.5)), IntegerType),
+      cast(Literal(null, NullType), BooleanType),
+      cast(array, targetArrayType),
+      cast(map, targetMapType),
+      cast(struct, targetStructType)
+    ).foreach { expr =>
+      assert(expr.foldable, s"Expression $expr should be foldable")
+      assert(expr.contextIndependentFoldable,
+        s"Expression $expr should be context independent foldable")
+    }
+  }
+
+  test("context dependent foldable") {
+    val array = Literal.create(Seq("1", "2", "3"), ArrayType(StringType))
+    val dateArray = Literal.create(Seq(
+      Date.valueOf("2023-01-01"),
+      Date.valueOf("2023-01-02"),
+      Date.valueOf("2023-01-03")), ArrayType(DateType))
+    val targetArrayType = ArrayType(TimestampType, containsNull = true)
+
+    val map = Literal.create(
+      Map("a" -> "123", "b" -> "true", "c" -> "f"),
+      MapType(StringType, StringType, valueContainsNull = true))
+    val dateMap = Literal.create(
+      Map("a" -> Date.valueOf("2023-01-01"),
+        "b" -> Date.valueOf("2023-01-02"),
+        "c" -> Date.valueOf("2023-01-03")),
+      MapType(StringType, DateType, valueContainsNull = true))
+    val targetMapType = MapType(StringType, TimestampType, valueContainsNull = true)
+    val struct = Literal.create(
+      Row(1, "2", true, null),
+      StructType(Seq(
+        StructField("a", IntegerType),
+        StructField("b", StringType),
+        StructField("c", BooleanType),
+        StructField("d", NullType))))
+    val dateStruct = Literal.create(
+      Row(1, Date.valueOf("2023-01-02"), true, null),
+      StructType(Seq(
+        StructField("a", IntegerType),
+        StructField("b", DateType),
+        StructField("c", BooleanType),
+        StructField("d", NullType))))
+    val targetStructType = StructType(Seq(
+      StructField("a", StringType),
+      StructField("b", TimestampType),
+      StructField("c", BooleanType),
+      StructField("d", BooleanType)))
+    Seq(
+      cast(Literal("abc"), TimestampType),
+      cast(Literal(Date.valueOf("2023-01-01")), TimestampType),
+      cast(array, targetArrayType),
+      cast(dateArray, targetArrayType),
+      cast(map, targetMapType),
+      cast(dateMap, targetMapType),
+      cast(struct, targetStructType),
+      cast(dateStruct, targetStructType)
+    ).foreach { expr =>
+      assert(expr.foldable, s"Expression $expr should be foldable")
+      assert(!expr.contextIndependentFoldable,
+        s"Expression $expr should not be context independent foldable")
+    }
+  }
+
+  test("SPARK-51562: cast alias - time function") {
+    import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
+    import org.apache.spark.sql.catalyst.FunctionIdentifier
+    // Test that time() function is registered and works correctly.
+    val registry = FunctionRegistry.builtin
+    val timeFunction = registry.lookupFunctionBuilder(FunctionIdentifier("time"))
+    assert(timeFunction.isDefined, "time function should be registered in FunctionRegistry")
+    // Test that time() function creates a proper Cast expression.
+    val stringInput = Literal("12:34:56")
+    val timeExpr = timeFunction.get(Seq(stringInput))
+    assert(timeExpr.isInstanceOf[Cast])
+    // The return type of the cast expression should be TimeType().
+    val castExpr = timeExpr.asInstanceOf[Cast]
+    assert(castExpr.dataType === TimeType())
+
+    // Test basic string to time conversions using the alias.
+    checkEvaluation(timeExpr, localTime(12, 34, 56))
+    val timeExprWithMillis = timeFunction.get(Seq(Literal("12:34:56.789")))
+    checkEvaluation(timeExprWithMillis, localTime(12, 34, 56, 789000))
+    val timeExprWithMicros = timeFunction.get(Seq(Literal("12:34:56.789012")))
+    checkEvaluation(timeExprWithMicros, localTime(12, 34, 56, 789012))
+
+    // Test null inputs.
+    val timeExprNull = timeFunction.get(Seq(Literal.create(null, StringType)))
+    checkEvaluation(timeExprNull, null)
+  }
+
+  test("cast time to time") {
+    checkEvaluation(cast(Literal(localTime(), TimeType(0)), TimeType(0)), 0L)
+    checkEvaluation(cast(Literal(localTime(0, 0, 0, 1), TimeType(6)), TimeType(6)),
+      localTime(0, 0, 0, 1))
+    checkEvaluation(cast(Literal(localTime(0, 0, 0, 19), TimeType(6)), TimeType(5)),
+      localTime(0, 0, 0, 10))
+    checkEvaluation(cast(Literal(localTime(23, 59, 59, 999990), TimeType(5)), TimeType(6)),
+      localTime(23, 59, 59, 999990))
+    checkEvaluation(cast(Literal(localTime(23, 59, 59, 999999), TimeType(6)), TimeType(5)),
+      localTime(23, 59, 59, 999990))
+    checkEvaluation(cast(Literal(localTime(11, 58, 59, 123400), TimeType(4)), TimeType(5)),
+      localTime(11, 58, 59, 123400))
+    checkEvaluation(cast(Literal(localTime(19, 2, 3, 765000), TimeType(3)), TimeType(2)),
+      localTime(19, 2, 3, 760000))
+
+    for (sp <- TimeType.MIN_PRECISION to TimeType.MAX_PRECISION) {
+      for (tp <- TimeType.MIN_PRECISION to TimeType.MAX_PRECISION) {
+        checkConsistencyBetweenInterpretedAndCodegen(
+          (child: Expression) => Cast(child, TimeType(sp)), TimeType(tp))
+      }
+    }
+  }
+
+  test("SPARK-52620: cast time to decimal with sufficient precision and scale") {
+    // Test various TIME values converted to DecimalType(14, 9), which always has sufficient
+    // precision and scale to represent the number of (nano)seconds since midnight. Note that
+    // 5 decimal places are sufficient to represent the maximum number of seconds in any TIME
+    // value, while 9 decimal places are needed to account for nanosecond fractional values.
+    Seq(
+      // 00:00:00 -> 0
+      (LocalTime.MIDNIGHT, Decimal(0)),
+      // 01:00:00 -> 3600
+      (LocalTime.of(1, 0, 0), Decimal(3600)),
+      // 01:01:00 -> 3660
+      (LocalTime.of(1, 1, 0), Decimal(3660)),
+      // 01:01:01 -> 3661
+      (LocalTime.of(1, 1, 1), Decimal(3661)),
+      // 01:02:03 -> 3723
+      (LocalTime.of(1, 2, 3), Decimal(3723)),
+      // 12:00:00 -> 43200
+      (LocalTime.NOON, Decimal(43200)),
+      // 23:59:59 -> 86399
+      (LocalTime.of(23, 59, 59), Decimal(86399)),
+      // 23:59:59.1 -> 86399.1
+      (LocalTime.of(23, 59, 59, 100000000), Decimal(86399.1)),
+      // 23:59:59.01 -> 86399.01
+      (LocalTime.of(23, 59, 59, 10000000), Decimal(86399.01)),
+      // 23:59:59.001 -> 86399.001
+      (LocalTime.of(23, 59, 59, 1000000), Decimal(86399.001)),
+      // 23:59:59.0001 -> 86399.0001
+      (LocalTime.of(23, 59, 59, 100000), Decimal(86399.0001)),
+      // 23:59:59.00001 -> 86399.00001
+      (LocalTime.of(23, 59, 59, 10000), Decimal(86399.00001)),
+      // 23:59:59.000001 -> 86399.000001
+      (LocalTime.of(23, 59, 59, 1000), Decimal(86399.000001)),
+      // 23:59:59.0000001 -> 86399.0000001
+      (LocalTime.of(23, 59, 59, 100), Decimal(86399.0000001)),
+      // 23:59:59.00000001 -> 86399.00000001
+      (LocalTime.of(23, 59, 59, 10), Decimal(86399.00000001)),
+      // 23:59:59.000000001 -> 86399.000000001
+      (LocalTime.of(23, 59, 59, 1), Decimal(86399.000000001))
+    ).foreach { case (time, expectedDecimal) =>
+      checkEvaluation(Cast(Literal(time), DecimalType(14, 9)), expectedDecimal)
+    }
+
+    // Test with different decimal precision and scale. The precision and scale of the
+    // DecimalType should be sufficient to represent the number of seconds since midnight.
+    // However, if the scale of the DecimalType is larger than necessary, the fractional
+    // seconds will be padded with zeros - which is the correct and expected behavior.
+    checkEvaluation(Cast(Literal(LocalTime.NOON), DecimalType(5, 0)), Decimal(43200, 5, 0))
+    checkEvaluation(Cast(Literal(LocalTime.NOON), DecimalType(6, 1)), Decimal(43200.0, 6, 1))
+    checkEvaluation(Cast(Literal(LocalTime.NOON), DecimalType(7, 2)), Decimal(43200.00, 7, 2))
+    checkEvaluation(Cast(Literal(LocalTime.NOON), DecimalType(8, 3)), Decimal(43200.000, 8, 3))
+    checkEvaluation(Cast(Literal(LocalTime.NOON), DecimalType(9, 4)), Decimal(43200.0000, 9, 4))
+    checkEvaluation(Cast(Literal(LocalTime.NOON), DecimalType(10, 5)), Decimal(43200.00000, 10, 5))
+    checkEvaluation(Cast(Literal(LocalTime.NOON), DecimalType(11, 6)), Decimal(43200.000000, 11, 6))
+  }
+
+  test("SPARK-52620: cast time to decimal with insufficient scale") {
+    // Decimal time precision loss happens if the scale of the target the DecimalType is not
+    // sufficient to represent the fractional seconds of the TIME value. The following tests
+    // check that the cast operation correctly rounds the fractional seconds to the nearest
+    // decimal value that can be represented by the DecimalType, as limited by its scale.
+
+    // The following test cases will test DecimalType(1,0). Here, the scale is 0, meaning
+    // that the fractional seconds will be ignored, and rounded to the nearest whole second.
+    var precision = 1
+    var scale = 0
+    Seq(
+      // 00:00:00.1 -> 0 (when scale is: 0)
+      (LocalTime.of(0, 0, 0, 100000000), 0),
+      // 00:00:00.4 -> 0 (when scale is: 0)
+      (LocalTime.of(0, 0, 0, 400000000), 0),
+      // 00:00:00.49 -> 0 (when scale is: 0)
+      (LocalTime.of(0, 0, 0, 490000000), 0),
+      // 00:00:00.499999999 -> 0 (when scale is: 0)
+      (LocalTime.of(0, 0, 0, 499999999), 0),
+      // 00:00:00.5 -> 0 (when scale is: 0)
+      (LocalTime.of(0, 0, 0, 500000000), 1),
+      // 00:00:00.500000001 -> 1 (when scale is: 0)
+      (LocalTime.of(0, 0, 0, 500000001), 1),
+      // 00:00:00.599999999 -> 1 (when scale is: 0)
+      (LocalTime.of(0, 0, 0, 599999999), 1),
+      // 00:00:00.999999999 -> 1 (when scale is: 0)
+      (LocalTime.of(0, 0, 0, 999999999), 1)
+    ).foreach { case (timeValue, decimalValue) =>
+      checkEvaluation(
+        expression = Cast(Literal(timeValue), DecimalType(precision, scale)),
+        expected = Decimal(decimalValue, precision, scale)
+      )
+    }
+
+    // The following test cases will test DecimalType(2,1). Here, the scale is 1, meaning
+    // that the fractional seconds will be rounded to the nearest tenth of a second.
+    precision = 2
+    scale = 1
+    Seq(
+      // 00:00:00.1 -> 0.1 (when scale is: 1)
+      (LocalTime.of(0, 0, 0, 100000000), 0.1),
+      // 00:00:00.4 -> 0.4 (when scale is: 1)
+      (LocalTime.of(0, 0, 0, 400000000), 0.4),
+      // 00:00:00.49 -> 0.5 (when scale is: 1)
+      (LocalTime.of(0, 0, 0, 490000000), 0.5),
+      // 00:00:00.499999999 -> 0.5 (when scale is: 1)
+      (LocalTime.of(0, 0, 0, 499999999), 0.5),
+      // 00:00:00.5 -> 0.5 (when scale is: 1)
+      (LocalTime.of(0, 0, 0, 500000000), 0.5),
+      // 00:00:00.500000001 -> 0.5 (when scale is: 1)
+      (LocalTime.of(0, 0, 0, 500000001), 0.5),
+      // 00:00:00.599999999 -> 0.6 (when scale is: 1)
+      (LocalTime.of(0, 0, 0, 599999999), 0.6),
+      // 00:00:00.999999999 -> 1.0 (when scale is: 1)
+      (LocalTime.of(0, 0, 0, 999999999), 1.0)
+    ).foreach { case (timeValue, decimalValue) =>
+      checkEvaluation(
+        expression = Cast(Literal(timeValue), DecimalType(precision, scale)),
+        expected = Decimal(decimalValue, precision, scale)
+      )
+    }
+  }
+
+  test("SPARK-52619: cast time to integral types") {
+    // Test normal cases that should work with a small number like 112 seconds after midnight
+    val smallTime = Literal.create(LocalTime.of(0, 1, 52), TimeType(6))
+    checkEvaluation(cast(smallTime, ByteType), 112.toByte)
+    checkEvaluation(cast(smallTime, ShortType), 112.toShort)
+    checkEvaluation(cast(smallTime, IntegerType), 112)
+    checkEvaluation(cast(smallTime, LongType), 112L)
+
+    // Test midnight to all integral types
+    val midnight = Literal.create(LocalTime.MIDNIGHT, TimeType(6))
+    checkEvaluation(cast(midnight, ByteType), 0.toByte)
+    checkEvaluation(cast(midnight, ShortType), 0.toShort)
+    checkEvaluation(cast(midnight, IntegerType), 0)
+    checkEvaluation(cast(midnight, LongType), 0L)
+
+    // Precision rounding/truncation tests with fractional seconds
+    val time0 = Literal.create(LocalTime.NOON, TimeType(0))
+    val time2 = Literal.create(LocalTime.of(12, 0, 0, 120000000), TimeType(2))
+    val time4 = Literal.create(LocalTime.of(12, 0, 0, 345600000), TimeType(4))
+    val oneTwoThreeTime5 = Literal.create(LocalTime.of(1, 2, 3, 555550000), TimeType(5))
+    val maxTime4 = Literal.create(LocalTime.of(23, 59, 59, 999900000), TimeType(4))
+    val fractional5 = Literal.create(LocalTime.of(0, 0, 17, 500000000), TimeType(1))
+    val fractional000001 = Literal.create(LocalTime.of(0, 0, 17, 1000), TimeType(6))
+    val fractional999999 = Literal.create(LocalTime.of(0, 0, 17, 999999000), TimeType(6))
+    val fractional6 = Literal.create(LocalTime.of(0, 0, 17, 600000000), TimeType(1))
+    val fractional4 = Literal.create(LocalTime.of(0, 0, 17, 400000000), TimeType(1))
+    val fractional555 = Literal.create(LocalTime.of(0, 0, 17, 555000000), TimeType(3))
+    checkEvaluation(cast(fractional5, IntegerType), 17)
+    checkEvaluation(cast(fractional5, LongType), 17L)
+    checkEvaluation(cast(fractional000001, IntegerType), 17)
+    checkEvaluation(cast(fractional999999, IntegerType), 17)
+    checkEvaluation(cast(fractional6, IntegerType), 17)
+    checkEvaluation(cast(fractional4, IntegerType), 17)
+    checkEvaluation(cast(fractional555, IntegerType), 17)
+    checkEvaluation(cast(time0, IntegerType), 43200)
+    checkEvaluation(cast(time2, IntegerType), 43200)
+    checkEvaluation(cast(time4, IntegerType), 43200)
+    checkEvaluation(cast(oneTwoThreeTime5, IntegerType), 3723)
+    checkEvaluation(cast(oneTwoThreeTime5, LongType), 3723L)
+    checkEvaluation(cast(maxTime4, IntegerType), 86399)
+    checkEvaluation(cast(maxTime4, LongType), 86399L)
   }
 }

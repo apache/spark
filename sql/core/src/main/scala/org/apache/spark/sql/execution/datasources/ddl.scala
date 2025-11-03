@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.datasources
 
 import java.util.Locale
 
-import org.apache.spark.sql._
+import org.apache.spark.sql.{Row, SaveMode, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.catalyst.expressions.Attribute
@@ -59,6 +59,15 @@ case class CreateTable(
   override protected def withNewChildrenInternal(
       newChildren: IndexedSeq[LogicalPlan]): LogicalPlan =
     copy(query = if (query.isDefined) Some(newChildren.head) else None)
+
+  /**
+   * Identifies the underlying table's location is qualified or absent.
+   *
+   * @return true if the location is absolute or absent, false otherwise.
+   */
+  def locationQualifiedOrAbsent: Boolean = {
+    tableDesc.storage.locationUri.map(_.isAbsolute).getOrElse(true)
+  }
 }
 
 /**
@@ -78,7 +87,7 @@ case class CreateTempViewUsing(
 
   override def argString(maxFields: Int): String = {
     s"[tableIdent:$tableIdent " +
-      userSpecifiedSchema.map(_ + " ").getOrElse("") +
+      userSpecifiedSchema.map(_.toString() + " ").getOrElse("") +
       s"replace:$replace " +
       s"provider:$provider " +
       conf.redactOptions(options)
@@ -90,7 +99,7 @@ case class CreateTempViewUsing(
     }
 
     val catalog = sparkSession.sessionState.catalog
-    val analyzedPlan = DataSource.lookupDataSourceV2(provider, sparkSession.sessionState.conf)
+    val unresolvedPlan = DataSource.lookupDataSourceV2(provider, sparkSession.sessionState.conf)
       .flatMap { tblProvider =>
         DataSourceV2Utils.loadV2Source(sparkSession, tblProvider, userSpecifiedSchema,
           CaseInsensitiveMap(options), provider)
@@ -100,13 +109,12 @@ case class CreateTempViewUsing(
           userSpecifiedSchema = userSpecifiedSchema,
           className = provider,
           options = options)
-
-        Dataset.ofRows(
-          sparkSession, LogicalRelation(dataSource.resolveRelation()))
-      }.logicalPlan
+        LogicalRelation(dataSource.resolveRelation())
+      }
+    val analyzedPlan = sparkSession.sessionState.analyzer.execute(unresolvedPlan)
 
     if (global) {
-      val db = sparkSession.conf.get(StaticSQLConf.GLOBAL_TEMP_DATABASE)
+      val db = sparkSession.sessionState.conf.getConf(StaticSQLConf.GLOBAL_TEMP_DATABASE)
       val viewIdent = TableIdentifier(tableIdent.table, Option(db))
       val viewDefinition = createTemporaryViewRelation(
         viewIdent,

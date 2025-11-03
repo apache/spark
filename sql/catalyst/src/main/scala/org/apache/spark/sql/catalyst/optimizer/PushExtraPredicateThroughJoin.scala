@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.expressions.{And, Expression, PredicateHelper}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, Join, LogicalPlan}
@@ -71,7 +72,7 @@ object PushExtraPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHel
           case LeftOuter | LeftAnti | ExistenceJoin(_) =>
             Join(left, newRight, joinType, Some(joinCondition), hint)
           case other =>
-            throw new IllegalStateException(s"Unexpected join type: $other")
+            throw SparkException.internalError(s"Unexpected join type: $other")
         }
         newJoin.setTagValue(processedJoinConditionTag, joinCondition)
         newJoin

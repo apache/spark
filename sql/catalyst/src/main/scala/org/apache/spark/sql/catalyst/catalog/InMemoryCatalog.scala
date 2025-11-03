@@ -25,7 +25,6 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.SparkConf
-import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils._
 import org.apache.spark.sql.catalyst.expressions.Expression
@@ -91,7 +90,7 @@ class InMemoryCatalog(
       specs: Seq[TablePartitionSpec]): Unit = {
     specs.foreach { s =>
       if (partitionExists(db, table, s)) {
-        throw new PartitionAlreadyExistsException(db = db, table = table, spec = s)
+        throw new PartitionsAlreadyExistException(db = db, table = table, spec = s)
       }
     }
   }
@@ -127,7 +126,7 @@ class InMemoryCatalog(
             dbDefinition, e)
       }
       val newDb = dbDefinition.copy(
-        properties = dbDefinition.properties ++ Map(PROP_OWNER -> Utils.getCurrentUserName))
+        properties = dbDefinition.properties ++ Map(PROP_OWNER -> Utils.getCurrentUserName()))
       catalog.put(dbDefinition.name, new DatabaseDesc(newDb))
     }
   }
@@ -281,7 +280,7 @@ class InMemoryCatalog(
     requireTableExists(db, oldName)
     requireTableNotExists(db, newName)
     val oldDesc = catalog(db).tables(oldName)
-    oldDesc.table = oldDesc.table.copy(identifier = TableIdentifier(newName, Some(db)))
+    oldDesc.table = oldDesc.table.copy(identifier = oldDesc.table.identifier.copy(table = newName))
 
     if (oldDesc.table.tableType == CatalogTableType.MANAGED) {
       assert(oldDesc.table.storage.locationUri.isDefined,
@@ -329,6 +328,21 @@ class InMemoryCatalog(
     requireTableExists(db, table)
     val origTable = catalog(db).tables(table).table
     val newSchema = StructType(newDataSchema ++ origTable.partitionSchema)
+    catalog(db).tables(table).table = origTable.copy(schema = newSchema)
+  }
+
+  override def alterTableSchema(
+      db: String,
+      table: String,
+      newSchema: StructType): Unit = synchronized {
+    requireTableExists(db, table)
+    val origTable = catalog(db).tables(table).table
+
+    val partCols = origTable.partitionColumnNames
+    assert(newSchema.map(_.name).takeRight(partCols.length) == partCols,
+      s"Partition columns ${partCols.mkString("[", ", ", "]")} are only supported at the end of " +
+        s"the new schema ${newSchema.catalogString} for now.")
+
     catalog(db).tables(table).table = origTable.copy(schema = newSchema)
   }
 
@@ -510,7 +524,7 @@ class InMemoryCatalog(
         try {
           val fs = tablePath.getFileSystem(hadoopConfig)
           fs.mkdirs(newPartPath)
-          if(!fs.rename(oldPartPath, newPartPath)) {
+          if (!fs.rename(oldPartPath, newPartPath)) {
             throw new IOException(s"Renaming partition path from $oldPartPath to " +
               s"$newPartPath returned false")
           }
@@ -632,7 +646,8 @@ class InMemoryCatalog(
       newName: String): Unit = synchronized {
     requireFunctionExists(db, oldName)
     requireFunctionNotExists(db, newName)
-    val newFunc = getFunction(db, oldName).copy(identifier = FunctionIdentifier(newName, Some(db)))
+    val oldFunc = getFunction(db, oldName)
+    val newFunc = oldFunc.copy(identifier = oldFunc.identifier.copy(funcName = newName))
     catalog(db).functions.remove(oldName)
     catalog(db).functions.put(newName, newFunc)
   }

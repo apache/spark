@@ -25,7 +25,8 @@ import org.apache.spark.SparkContext
 import org.apache.spark.ml.feature._
 import org.apache.spark.ml.stat.Summarizer
 import org.apache.spark.ml.util.TempDirectory
-import org.apache.spark.sql.{SparkSession, SQLContext, SQLImplicits}
+import org.apache.spark.sql.classic.{SparkSession, SQLImplicits}
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
 trait MLlibTestSparkContext extends TempDirectory { self: Suite =>
@@ -35,7 +36,7 @@ trait MLlibTestSparkContext extends TempDirectory { self: Suite =>
 
   override def beforeAll(): Unit = {
     super.beforeAll()
-    spark = SparkSession.builder
+    spark = SparkSession.builder()
       .master("local[2]")
       .appName("MLlibUnitTest")
       .getOrCreate()
@@ -64,16 +65,16 @@ trait MLlibTestSparkContext extends TempDirectory { self: Suite =>
    * A helper object for importing SQL implicits.
    *
    * Note that the alternative of importing `spark.implicits._` is not possible here.
-   * This is because we create the `SQLContext` immediately before the first test is run,
+   * This is because we create the `SparkSession` immediately before the first test is run,
    * but the implicits import is needed in the constructor.
    */
   protected object testImplicits extends SQLImplicits {
-    protected override def _sqlContext: SQLContext = self.spark.sqlContext
+    protected override def session: SparkSession = self.spark
   }
 
   private[spark] def standardize(instances: Array[Instance]): Array[Instance] = {
     val (featuresSummarizer, _) =
-      Summarizer.getClassificationSummarizers(sc.parallelize(instances))
+      Summarizer.getClassificationSummarizers(sc.parallelize(instances.toImmutableArraySeq))
     val inverseStd = featuresSummarizer.std.toArray
       .map { std => if (std != 0) 1.0 / std else 0.0 }
     val func = StandardScalerModel.getTransformFunc(Array.empty, inverseStd, false, true)

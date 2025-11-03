@@ -1,19 +1,16 @@
 Package: SparkR
 Type: Package
-Version: 3.4.0
+Version: 4.1.0
 Title: R Front End for 'Apache Spark'
 Description: Provides an R Front end for 'Apache Spark' <https://spark.apache.org>.
-Authors@R: c(person("Shivaram", "Venkataraman", role = "aut",
-                    email = "shivaram@cs.berkeley.edu"),
-             person("Xiangrui", "Meng", role = "aut",
-                    email = "meng@databricks.com"),
-             person("Felix", "Cheung", role = c("aut", "cre"),
-                    email = "felixcheung@apache.org"),
-             person(family = "The Apache Software Foundation", role = c("aut", "cph")))
+Authors@R:
+    person(family = "The Apache Software Foundation",
+           email = "dev@spark.apache.org",
+           role = c("aut", "cre", "cph"))
 License: Apache License (== 2.0)
 URL: https://www.apache.org https://spark.apache.org
 BugReports: https://spark.apache.org/contributing.html
-SystemRequirements: Java (>= 8, < 18)
+SystemRequirements: Java (>= 17, < 22)
 Depends:
     R (>= 3.5),
     methods
@@ -24,7 +21,7 @@ Suggests:
     testthat,
     e1071,
     survival,
-    arrow (>= 1.0.0)
+    arrow (>= 10.0.0)
 Collate:
     'schema.R'
     'generics.R'
@@ -60,6 +57,7 @@ Collate:
     'types.R'
     'utils.R'
     'window.R'
+    'zzz.R'
 RoxygenNote: 7.1.2
 VignetteBuilder: knitr
 NeedsCompilation: no

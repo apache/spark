@@ -24,18 +24,20 @@ import org.apache.kafka.common.TopicPartition
 
 import org.apache.spark.{Partition, SparkContext, TaskContext}
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.LogKeys.{FROM_OFFSET, PARTITION_ID, TOPIC, UNTIL_OFFSET}
 import org.apache.spark.internal.config.Network._
 import org.apache.spark.partial.{BoundedDouble, PartialResult}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.scheduler.ExecutorCacheTaskLocation
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * A batch-oriented interface for consuming from Kafka.
  * Starting and ending offsets are specified in advance,
  * so that you can control exactly-once semantics.
  * @param kafkaParams Kafka
- * <a href="http://kafka.apache.org/documentation.html#newconsumerconfigs">
+ * <a href="https://kafka.apache.org/documentation.html#consumerconfigs">
  * configuration parameters</a>. Requires "bootstrap.servers" to be set
  * with Kafka broker(s) specified in host1:port1,host2:port2 form.
  * @param offsetRanges offset ranges that define the Kafka data belonging to this RDD
@@ -87,7 +89,7 @@ private[spark] class KafkaRDD[K, V](
     if (compacted) {
       super.count()
     } else {
-      offsetRanges.map(_.count).sum
+      offsetRanges.map(_.count()).sum
     }
 
   override def countApprox(
@@ -97,7 +99,7 @@ private[spark] class KafkaRDD[K, V](
     if (compacted) {
       super.countApprox(timeout, confidence)
     } else {
-      val c = count
+      val c = count().toDouble
       new PartialResult(new BoundedDouble(c, 1.0, c, c), true)
     }
 
@@ -105,7 +107,7 @@ private[spark] class KafkaRDD[K, V](
     if (compacted) {
       super.isEmpty()
     } else {
-      count == 0L
+      count() == 0L
     }
 
   override def take(num: Int): Array[ConsumerRecord[K, V]] =
@@ -116,7 +118,7 @@ private[spark] class KafkaRDD[K, V](
     } else {
       val nonEmptyPartitions = this.partitions
         .map(_.asInstanceOf[KafkaRDDPartition])
-        .filter(_.count > 0)
+        .filter(_.count() > 0)
 
       if (nonEmptyPartitions.isEmpty) {
         Array.empty[ConsumerRecord[K, V]]
@@ -125,7 +127,7 @@ private[spark] class KafkaRDD[K, V](
         val parts = nonEmptyPartitions.foldLeft(Map[Int, Int]()) { (result, part) =>
           val remain = num - result.values.sum
           if (remain > 0) {
-            val taken = Math.min(remain, part.count)
+            val taken = Math.min(remain, part.count())
             result + (part.index -> taken.toInt)
           } else {
             result
@@ -135,7 +137,7 @@ private[spark] class KafkaRDD[K, V](
         context.runJob(
           this,
           (tc: TaskContext, it: Iterator[ConsumerRecord[K, V]]) =>
-          it.take(parts(tc.partitionId)).toArray, parts.keys.toArray
+          it.take(parts(tc.partitionId())).toArray, parts.keys.toArray.toImmutableArraySeq
         ).flatten
       }
     }
@@ -162,7 +164,7 @@ private[spark] class KafkaRDD[K, V](
     // TODO what about hosts specified by ip vs name
     val part = thePart.asInstanceOf[KafkaRDDPartition]
     val allExecs = executors()
-    val tp = part.topicPartition
+    val tp = part.topicPartition()
     val prefHost = preferredHosts.get(tp)
     val prefExecs = if (null == prefHost) allExecs else allExecs.filter(_.host == prefHost)
     val execs = if (prefExecs.isEmpty) allExecs else prefExecs
@@ -185,12 +187,13 @@ private[spark] class KafkaRDD[K, V](
     val part = thePart.asInstanceOf[KafkaRDDPartition]
     require(part.fromOffset <= part.untilOffset, errBeginAfterEnd(part))
     if (part.fromOffset == part.untilOffset) {
-      logInfo(s"Beginning offset ${part.fromOffset} is the same as ending offset " +
-        s"skipping ${part.topic} ${part.partition}")
+      logInfo(log"Beginning offset ${MDC(FROM_OFFSET, part.fromOffset)} is the same as ending " +
+        log"offset skipping ${MDC(TOPIC, part.topic)} ${MDC(PARTITION_ID, part.partition)}")
       Iterator.empty
     } else {
-      logInfo(s"Computing topic ${part.topic}, partition ${part.partition} " +
-        s"offsets ${part.fromOffset} -> ${part.untilOffset}")
+      logInfo(log"Computing topic ${MDC(TOPIC, part.topic)}, partition " +
+        log"${MDC(PARTITION_ID, part.partition)} offsets ${MDC(FROM_OFFSET, part.fromOffset)} " +
+        log"-> ${MDC(UNTIL_OFFSET, part.untilOffset)}")
       if (compacted) {
         new CompactedKafkaRDDIterator[K, V](
           part,

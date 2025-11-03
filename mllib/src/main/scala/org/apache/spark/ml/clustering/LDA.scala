@@ -17,12 +17,13 @@
 
 package org.apache.spark.ml.clustering
 
+import java.io.{DataInputStream, DataOutputStream}
 import java.util.Locale
 
 import breeze.linalg.normalize
 import breeze.numerics.exp
 import org.apache.hadoop.fs.Path
-import org.json4s.DefaultFormats
+import org.json4s.{DefaultFormats, Formats}
 import org.json4s.JsonAST.JObject
 import org.json4s.jackson.JsonMethods._
 
@@ -43,12 +44,12 @@ import org.apache.spark.mllib.clustering.{DistributedLDAModel => OldDistributedL
 import org.apache.spark.mllib.linalg.{Vector => OldVector, Vectors => OldVectors}
 import org.apache.spark.mllib.linalg.MatrixImplicits._
 import org.apache.spark.mllib.linalg.VectorImplicits._
-import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
 import org.apache.spark.sql.functions.{monotonically_increasing_id, udf}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.PeriodicCheckpointer
 import org.apache.spark.util.VersionUtils
 
@@ -384,7 +385,7 @@ private object LDAParams {
   def getAndSetParams(model: LDAParams, metadata: Metadata): Unit = {
     VersionUtils.majorMinorVersion(metadata.sparkVersion) match {
       case (1, 6) =>
-        implicit val format = DefaultFormats
+        implicit val format: Formats = DefaultFormats
         metadata.params match {
           case JObject(pairs) =>
             pairs.foreach { case (paramName, jsonValue) =>
@@ -591,9 +592,10 @@ abstract class LDAModel private[ml] (
   def describeTopics(maxTermsPerTopic: Int): DataFrame = {
     val topics = getModel.describeTopics(maxTermsPerTopic).zipWithIndex.map {
       case ((termIndices, termWeights), topic) =>
-        (topic, termIndices.toSeq, termWeights.toSeq)
+        (topic, termIndices.toImmutableArraySeq, termWeights.toImmutableArraySeq)
     }
-    sparkSession.createDataFrame(topics).toDF("topic", "termIndices", "termWeights")
+    sparkSession.createDataFrame(topics.toImmutableArraySeq)
+      .toDF("topic", "termIndices", "termWeights")
   }
 
   @Since("1.6.0")
@@ -614,6 +616,9 @@ class LocalLDAModel private[ml] (
     private[clustering] val oldLocalModel : OldLocalLDAModel,
     sparkSession: SparkSession)
   extends LDAModel(uid, vocabSize, sparkSession) {
+
+  // For ml connect only
+  private[ml] def this() = this("", -1, null, null)
 
   oldLocalModel.setSeed(getSeed)
 
@@ -637,27 +642,46 @@ class LocalLDAModel private[ml] (
   }
 }
 
-
 @Since("1.6.0")
 object LocalLDAModel extends MLReadable[LocalLDAModel] {
+  private[ml] case class LocalModelData(
+    vocabSize: Int,
+    topicsMatrix: Matrix,
+    docConcentration: Vector,
+    topicConcentration: Double,
+    gammaShape: Double)
+
+  private[ml] def serializeData(data: LocalModelData, dos: DataOutputStream): Unit = {
+    import ReadWriteUtils._
+    dos.writeInt(data.vocabSize)
+    serializeMatrix(data.topicsMatrix, dos)
+    serializeVector(data.docConcentration, dos)
+    dos.writeDouble(data.topicConcentration)
+    dos.writeDouble(data.gammaShape)
+  }
+
+  private[ml] def deserializeData(dis: DataInputStream): LocalModelData = {
+    import ReadWriteUtils._
+    val vocabSize = dis.readInt()
+    val topicsMatrix = deserializeMatrix(dis)
+    val docConcentration = deserializeVector(dis)
+    val topicConcentration = dis.readDouble()
+    val gammaShape = dis.readDouble()
+    LocalModelData(vocabSize, topicsMatrix, docConcentration, topicConcentration, gammaShape)
+  }
 
   private[LocalLDAModel]
   class LocalLDAModelWriter(instance: LocalLDAModel) extends MLWriter {
 
-    private case class Data(
-        vocabSize: Int,
-        topicsMatrix: Matrix,
-        docConcentration: Vector,
-        topicConcentration: Double,
-        gammaShape: Double)
-
     override protected def saveImpl(path: String): Unit = {
-      DefaultParamsWriter.saveMetadata(instance, path, sc)
+      DefaultParamsWriter.saveMetadata(instance, path, sparkSession)
       val oldModel = instance.oldLocalModel
-      val data = Data(instance.vocabSize, oldModel.topicsMatrix, oldModel.docConcentration,
-        oldModel.topicConcentration, oldModel.gammaShape)
+      val data = LocalModelData(
+        instance.vocabSize, oldModel.topicsMatrix, oldModel.docConcentration,
+        oldModel.topicConcentration, oldModel.gammaShape
+      )
       val dataPath = new Path(path, "data").toString
-      sparkSession.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
+      ReadWriteUtils.saveObject[LocalModelData](dataPath, data, sparkSession, serializeData)
     }
   }
 
@@ -666,18 +690,19 @@ object LocalLDAModel extends MLReadable[LocalLDAModel] {
     private val className = classOf[LocalLDAModel].getName
 
     override def load(path: String): LocalLDAModel = {
-      val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
+      val metadata = DefaultParamsReader.loadMetadata(path, sparkSession, className)
       val dataPath = new Path(path, "data").toString
-      val data = sparkSession.read.parquet(dataPath)
-      val vectorConverted = MLUtils.convertVectorColumnsToML(data, "docConcentration")
-      val matrixConverted = MLUtils.convertMatrixColumnsToML(vectorConverted, "topicsMatrix")
-      val Row(vocabSize: Int, topicsMatrix: Matrix, docConcentration: Vector,
-          topicConcentration: Double, gammaShape: Double) =
-        matrixConverted.select("vocabSize", "topicsMatrix", "docConcentration",
-          "topicConcentration", "gammaShape").head()
-      val oldModel = new OldLocalLDAModel(topicsMatrix, docConcentration, topicConcentration,
-        gammaShape)
-      val model = new LocalLDAModel(metadata.uid, vocabSize, oldModel, sparkSession)
+
+      val data = ReadWriteUtils.loadObject[LocalModelData](
+        dataPath, sparkSession, deserializeData
+      )
+      val oldModel = new OldLocalLDAModel(
+        data.topicsMatrix,
+        data.docConcentration,
+        data.topicConcentration,
+        data.gammaShape
+      )
+      val model = new LocalLDAModel(metadata.uid, data.vocabSize, oldModel, sparkSession)
       LDAParams.getAndSetParams(model, metadata)
       model
     }
@@ -710,6 +735,9 @@ class DistributedLDAModel private[ml] (
     sparkSession: SparkSession,
     private var oldLocalModelOption: Option[OldLocalLDAModel])
   extends LDAModel(uid, vocabSize, sparkSession) {
+
+  // For ml connect only
+  private[ml] def this() = this("", -1, null, null, None)
 
   override private[clustering] def oldLocalModel: OldLocalLDAModel = {
     if (oldLocalModelOption.isEmpty) {
@@ -797,6 +825,11 @@ class DistributedLDAModel private[ml] (
   override def toString: String = {
     s"DistributedLDAModel: uid=$uid, k=${$(k)}, numFeatures=$vocabSize"
   }
+
+  override def estimatedSize: Long = {
+    // TODO: Implement this method.
+    throw new UnsupportedOperationException
+  }
 }
 
 
@@ -807,7 +840,12 @@ object DistributedLDAModel extends MLReadable[DistributedLDAModel] {
   class DistributedWriter(instance: DistributedLDAModel) extends MLWriter {
 
     override protected def saveImpl(path: String): Unit = {
-      DefaultParamsWriter.saveMetadata(instance, path, sc)
+      if (ReadWriteUtils.localSavingModeState.get()) {
+        throw new UnsupportedOperationException(
+          "DistributedLDAModel does not support saving to local filesystem path."
+        )
+      }
+      DefaultParamsWriter.saveMetadata(instance, path, sparkSession)
       val modelPath = new Path(path, "oldModel").toString
       instance.oldDistributedModel.save(sc, modelPath)
     }
@@ -818,7 +856,12 @@ object DistributedLDAModel extends MLReadable[DistributedLDAModel] {
     private val className = classOf[DistributedLDAModel].getName
 
     override def load(path: String): DistributedLDAModel = {
-      val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
+      if (ReadWriteUtils.localSavingModeState.get()) {
+        throw new UnsupportedOperationException(
+          "DistributedLDAModel does not support loading from local filesystem path."
+        )
+      }
+      val metadata = DefaultParamsReader.loadMetadata(path, sparkSession, className)
       val modelPath = new Path(path, "oldModel").toString
       val oldModel = OldDistributedLDAModel.load(sc, modelPath)
       val model = new DistributedLDAModel(metadata.uid, oldModel.vocabSize,
@@ -1006,7 +1049,7 @@ object LDA extends MLReadable[LDA] {
     private val className = classOf[LDA].getName
 
     override def load(path: String): LDA = {
-      val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
+      val metadata = DefaultParamsReader.loadMetadata(path, sparkSession, className)
       val model = new LDA(metadata.uid)
       LDAParams.getAndSetParams(model, metadata)
       model

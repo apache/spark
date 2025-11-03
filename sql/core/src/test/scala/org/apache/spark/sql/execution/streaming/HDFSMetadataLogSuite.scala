@@ -25,6 +25,7 @@ import scala.language.implicitConversions
 import org.scalatest.concurrent.Waiters._
 import org.scalatest.time.SpanSugar._
 
+import org.apache.spark.sql.execution.streaming.checkpointing.{FileContextBasedCheckpointFileManager, FileSystemBasedCheckpointFileManager, HDFSMetadataLog}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.util.UninterruptibleThread
@@ -32,6 +33,18 @@ import org.apache.spark.util.UninterruptibleThread
 class HDFSMetadataLogSuite extends SharedSparkSession {
 
   private implicit def toOption[A](a: A): Option[A] = Option(a)
+
+  test("SPARK-46339: Directory with number name should not be treated as metadata log") {
+    withTempDir { temp =>
+      val dir = new File(temp, "dir")
+      val metadataLog = new HDFSMetadataLog[String](spark, dir.getAbsolutePath)
+      assert(metadataLog.metadataPath.toString.endsWith("/dir"))
+
+      // Create a directory with batch id 0
+      new File(dir, "0").mkdir()
+      assert(metadataLog.getLatest() === None)
+    }
+  }
 
   test("HDFSMetadataLog: basic") {
     withTempDir { temp =>

@@ -16,7 +16,7 @@
  */
 package org.apache.spark.sql.execution.datasources.v2.json
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.hadoop.fs.Path
 
@@ -32,6 +32,7 @@ import org.apache.spark.sql.execution.datasources.v2.TextBasedFileScan
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.SerializableConfiguration
 
 case class JsonScan(
@@ -48,8 +49,8 @@ case class JsonScan(
 
   private val parsedOptions = new JSONOptionsInRead(
     CaseInsensitiveMap(options.asScala.toMap),
-    sparkSession.sessionState.conf.sessionLocalTimeZone,
-    sparkSession.sessionState.conf.columnNameOfCorruptRecord)
+    conf.sessionLocalTimeZone,
+    conf.columnNameOfCorruptRecord)
 
   override def isSplitable(path: Path): Boolean = {
     JsonDataSource(parsedOptions).isSplitable && super.isSplitable(path)
@@ -75,12 +76,13 @@ case class JsonScan(
     val caseSensitiveMap = options.asCaseSensitiveMap.asScala.toMap
     // Hadoop Configurations are case sensitive.
     val hadoopConf = sparkSession.sessionState.newHadoopConfWithOptions(caseSensitiveMap)
-    val broadcastedConf = sparkSession.sparkContext.broadcast(
-      new SerializableConfiguration(hadoopConf))
+    val broadcastedConf =
+      SerializableConfiguration.broadcast(sparkSession.sparkContext, hadoopConf)
     // The partition values are already truncated in `FileScan.partitions`.
     // We should use `readPartitionSchema` as the partition schema here.
-    JsonPartitionReaderFactory(sparkSession.sessionState.conf, broadcastedConf,
-      dataSchema, readDataSchema, readPartitionSchema, parsedOptions, pushedFilters)
+    JsonPartitionReaderFactory(conf, broadcastedConf,
+      dataSchema, readDataSchema, readPartitionSchema, parsedOptions,
+      pushedFilters.toImmutableArraySeq)
   }
 
   override def equals(obj: Any): Boolean = obj match {
@@ -91,7 +93,7 @@ case class JsonScan(
 
   override def hashCode(): Int = super.hashCode()
 
-  override def description(): String = {
-    super.description() + ", PushedFilters: " + pushedFilters.mkString("[", ", ", "]")
+  override def getMetaData(): Map[String, String] = {
+    super.getMetaData() ++ Map("PushedFilters" -> pushedFilters.mkString("[", ", ", "]"))
   }
 }

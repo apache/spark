@@ -187,6 +187,25 @@ class BroadcastSuite extends SparkFunSuite with LocalSparkContext with Encryptio
     assert(instances.size === 1)
   }
 
+  test("SPARK-39983 - Broadcasted value not cached on driver") {
+    // Use distributed cluster as in local mode the broabcast value is actually cached.
+    val conf = new SparkConf()
+      .setMaster("local-cluster[2,1,1024]")
+      .setAppName("test")
+    sc = new SparkContext(conf)
+
+    sc.broadcastInternal(value = 1234, serializedOnly = false) match {
+      case tb: TorrentBroadcast[Int] =>
+        assert(tb.hasCachedValue)
+        assert(1234 === tb.value)
+    }
+    sc.broadcastInternal(value = 1234, serializedOnly = true) match {
+      case tb: TorrentBroadcast[Int] =>
+        assert(!tb.hasCachedValue)
+        assert(1234 === tb.value)
+    }
+  }
+
   /**
    * Verify the persistence of state associated with a TorrentBroadcast in a local-cluster.
    *
@@ -296,9 +315,15 @@ class BroadcastSuite extends SparkFunSuite with LocalSparkContext with Encryptio
     if (removeFromDriver) {
       // Using this variable on the executors crashes them, which hangs the test.
       // Instead, crash the driver by directly accessing the broadcast value.
-      intercept[SparkException] { broadcast.value }
-      intercept[SparkException] { broadcast.unpersist(blocking = true) }
-      intercept[SparkException] { broadcast.destroy(blocking = true) }
+      val e1 = intercept[SparkException] { broadcast.value }
+      assert(e1.isInternalError)
+      assert(e1.getCondition == "INTERNAL_ERROR_BROADCAST")
+      val e2 = intercept[SparkException] { broadcast.unpersist(blocking = true) }
+      assert(e2.isInternalError)
+      assert(e2.getCondition == "INTERNAL_ERROR_BROADCAST")
+      val e3 = intercept[SparkException] { broadcast.destroy(blocking = true) }
+      assert(e3.isInternalError)
+      assert(e3.getCondition == "INTERNAL_ERROR_BROADCAST")
     } else {
       val results = sc.parallelize(1 to partitions, partitions).map(x => (x, broadcast.value.sum))
       assert(results.collect().toSet === (1 to partitions).map(x => (x, list.sum)).toSet)
@@ -313,6 +338,8 @@ package object testPackage extends Assertions {
     broadcast.destroy(blocking = true)
     val thrown = intercept[SparkException] { broadcast.value }
     assert(thrown.getMessage.contains("BroadcastSuite.scala"))
+    assert(thrown.isInternalError)
+    assert(thrown.getCondition == "INTERNAL_ERROR_BROADCAST")
   }
 
 }

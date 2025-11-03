@@ -23,6 +23,7 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.util.{LinearDataGenerator, LocalClusterSparkContext,
   MLlibTestSparkContext}
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
 private object LinearRegressionSuite {
@@ -62,7 +63,8 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
     val validationRDD = sc.parallelize(validationData, 2).cache()
 
     // Test prediction on RDD.
-    validatePrediction(model.predict(validationRDD.map(_.features)).collect(), validationData)
+    validatePrediction(
+      model.predict(validationRDD.map(_.features)).collect().toImmutableArraySeq, validationData)
 
     // Test prediction on Array.
     validatePrediction(validationData.map(row => model.predict(row.features)), validationData)
@@ -89,7 +91,8 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
     val validationRDD = sc.parallelize(validationData, 2).cache()
 
     // Test prediction on RDD.
-    validatePrediction(model.predict(validationRDD.map(_.features)).collect(), validationData)
+    validatePrediction(
+      model.predict(validationRDD.map(_.features)).collect().toImmutableArraySeq, validationData)
 
     // Test prediction on Array.
     validatePrediction(validationData.map(row => model.predict(row.features)), validationData)
@@ -124,7 +127,8 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
 
       // Test prediction on RDD.
     validatePrediction(
-      model.predict(sparseValidationRDD.map(_.features)).collect(), sparseValidationData)
+      model.predict(
+        sparseValidationRDD.map(_.features)).collect().toImmutableArraySeq, sparseValidationData)
 
     // Test prediction on Array.
     validatePrediction(

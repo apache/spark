@@ -15,17 +15,13 @@
 # limitations under the License.
 #
 
-import datetime
-
-from distutils.version import LooseVersion
-
 import pandas as pd
 
 import pyspark.pandas as ps
 from pyspark.testing.pandasutils import PandasOnSparkTestCase, TestUtils
 
 
-class DatetimeIndexTest(PandasOnSparkTestCase, TestUtils):
+class DatetimeIndexTestingFuncMixin:
     @property
     def fixed_freqs(self):
         return [
@@ -64,55 +60,15 @@ class DatetimeIndexTest(PandasOnSparkTestCase, TestUtils):
         self.assertRaises(ValueError, lambda: f(freq="ns"))
         self.assertRaises(ValueError, lambda: f(freq="N"))
 
-    def test_properties(self):
-        for psidx, pidx in self.idx_pairs:
-            self.assert_eq(psidx.year, pidx.year)
-            self.assert_eq(psidx.month, pidx.month)
-            self.assert_eq(psidx.day, pidx.day)
-            self.assert_eq(psidx.hour, pidx.hour)
-            self.assert_eq(psidx.minute, pidx.minute)
-            self.assert_eq(psidx.second, pidx.second)
-            self.assert_eq(psidx.microsecond, pidx.microsecond)
-            self.assert_eq(psidx.week, pidx.week)
-            self.assert_eq(psidx.weekofyear, pidx.weekofyear)
-            self.assert_eq(psidx.dayofweek, pidx.dayofweek)
-            self.assert_eq(psidx.weekday, pidx.weekday)
-            self.assert_eq(psidx.dayofyear, pidx.dayofyear)
-            self.assert_eq(psidx.quarter, pidx.quarter)
-            self.assert_eq(psidx.daysinmonth, pidx.daysinmonth)
-            self.assert_eq(psidx.days_in_month, pidx.days_in_month)
-            self.assert_eq(psidx.is_month_start, pd.Index(pidx.is_month_start))
-            self.assert_eq(psidx.is_month_end, pd.Index(pidx.is_month_end))
-            self.assert_eq(psidx.is_quarter_start, pd.Index(pidx.is_quarter_start))
-            self.assert_eq(psidx.is_quarter_end, pd.Index(pidx.is_quarter_end))
-            self.assert_eq(psidx.is_year_start, pd.Index(pidx.is_year_start))
-            self.assert_eq(psidx.is_year_end, pd.Index(pidx.is_year_end))
-            self.assert_eq(psidx.is_leap_year, pd.Index(pidx.is_leap_year))
 
-            if LooseVersion(pd.__version__) >= LooseVersion("1.2.0"):
-                self.assert_eq(psidx.day_of_year, pidx.day_of_year)
-                self.assert_eq(psidx.day_of_week, pidx.day_of_week)
-
-    def test_ceil(self):
-        for psidx, pidx in self.idx_pairs:
-            for freq in self.fixed_freqs:
-                self.assert_eq(psidx.ceil(freq), pidx.ceil(freq))
-
-        self._disallow_nanoseconds(self.psidxs[0].ceil)
-
-    def test_floor(self):
-        for psidx, pidx in self.idx_pairs:
-            for freq in self.fixed_freqs:
-                self.assert_eq(psidx.floor(freq), pidx.floor(freq))
-
-        self._disallow_nanoseconds(self.psidxs[0].floor)
-
-    def test_round(self):
-        for psidx, pidx in self.idx_pairs:
-            for freq in self.fixed_freqs:
-                self.assert_eq(psidx.round(freq), pidx.round(freq))
-
-        self._disallow_nanoseconds(self.psidxs[0].round)
+class DatetimeIndexTestsMixin(DatetimeIndexTestingFuncMixin):
+    def test_datetime_index(self):
+        with self.assertRaisesRegex(TypeError, "Index.name must be a hashable type"):
+            ps.DatetimeIndex(["2004-01-01", "2002-12-31", "2000-04-01"], name=[(1, 2)])
+        with self.assertRaisesRegex(
+            TypeError, "Cannot perform 'all' with this index type: DatetimeIndex"
+        ):
+            ps.DatetimeIndex(["2004-01-01", "2002-12-31", "2000-04-01"]).all()
 
     def test_day_name(self):
         for psidx, pidx in self.idx_pairs:
@@ -131,62 +87,6 @@ class DatetimeIndexTest(PandasOnSparkTestCase, TestUtils):
             self.assert_eq(
                 psidx.strftime(date_format="%B %d, %Y"), pidx.strftime(date_format="%B %d, %Y")
             )
-
-    def test_indexer_between_time(self):
-        for psidx, pidx in self.idx_pairs:
-            self.assert_eq(
-                psidx.indexer_between_time("00:00:00", "00:01:00").sort_values(),
-                pd.Index(pidx.indexer_between_time("00:00:00", "00:01:00")),
-            )
-
-            self.assert_eq(
-                psidx.indexer_between_time(
-                    datetime.time(0, 0, 0), datetime.time(0, 1, 0)
-                ).sort_values(),
-                pd.Index(pidx.indexer_between_time(datetime.time(0, 0, 0), datetime.time(0, 1, 0))),
-            )
-
-            self.assert_eq(
-                psidx.indexer_between_time("00:00:00", "00:01:00", True, False).sort_values(),
-                pd.Index(pidx.indexer_between_time("00:00:00", "00:01:00", True, False)),
-            )
-
-            self.assert_eq(
-                psidx.indexer_between_time("00:00:00", "00:01:00", False, True).sort_values(),
-                pd.Index(pidx.indexer_between_time("00:00:00", "00:01:00", False, True)),
-            )
-
-            self.assert_eq(
-                psidx.indexer_between_time("00:00:00", "00:01:00", False, False).sort_values(),
-                pd.Index(pidx.indexer_between_time("00:00:00", "00:01:00", False, False)),
-            )
-
-            self.assert_eq(
-                psidx.indexer_between_time("00:00:00", "00:01:00", True, True).sort_values(),
-                pd.Index(pidx.indexer_between_time("00:00:00", "00:01:00", True, True)),
-            )
-
-    def test_indexer_at_time(self):
-        for psidx, pidx in self.idx_pairs:
-            self.assert_eq(
-                psidx.indexer_at_time("00:00:00").sort_values(),
-                pd.Index(pidx.indexer_at_time("00:00:00")),
-            )
-
-            self.assert_eq(
-                psidx.indexer_at_time(datetime.time(0, 1, 0)).sort_values(),
-                pd.Index(pidx.indexer_at_time(datetime.time(0, 1, 0))),
-            )
-
-            self.assert_eq(
-                psidx.indexer_at_time("00:00:01").sort_values(),
-                pd.Index(pidx.indexer_at_time("00:00:01")),
-            )
-
-        self.assertRaises(
-            NotImplementedError,
-            lambda: ps.DatetimeIndex([0]).indexer_at_time("00:00:00", asof=True),
-        )
 
     def test_arithmetic_op_exceptions(self):
         for psidx, pidx in self.idx_pairs:
@@ -221,24 +121,13 @@ class DatetimeIndexTest(PandasOnSparkTestCase, TestUtils):
             self.assertRaisesRegex(TypeError, expected_err_msg, lambda: psidx - other)
             self.assertRaises(NotImplementedError, lambda: py_datetime - psidx)
 
-    def test_map(self):
-        for psidx, pidx in self.idx_pairs:
-            self.assert_eq(psidx.map(lambda x: x.normalize()), pidx.map(lambda x: x.normalize()))
-            self.assert_eq(
-                psidx.map(lambda x: x.strftime("%B %d, %Y, %r")),
-                pidx.map(lambda x: x.strftime("%B %d, %Y, %r")),
-            )
 
-        pidx = pd.date_range(start="2020-08-08", end="2020-08-10")
-        psidx = ps.from_pandas(pidx)
-        mapper_dict = {
-            datetime.datetime(2020, 8, 8): datetime.datetime(2021, 8, 8),
-            datetime.datetime(2020, 8, 9): datetime.datetime(2021, 8, 9),
-        }
-        self.assert_eq(psidx.map(mapper_dict), pidx.map(mapper_dict))
-
-        mapper_pser = pd.Series([1, 2, 3], index=pidx)
-        self.assert_eq(psidx.map(mapper_pser), pidx.map(mapper_pser))
+class DatetimeIndexTests(
+    DatetimeIndexTestsMixin,
+    PandasOnSparkTestCase,
+    TestUtils,
+):
+    pass
 
 
 if __name__ == "__main__":
@@ -246,7 +135,7 @@ if __name__ == "__main__":
     from pyspark.pandas.tests.indexes.test_datetime import *  # noqa: F401
 
     try:
-        import xmlrunner  # type: ignore[import]
+        import xmlrunner
 
         testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:

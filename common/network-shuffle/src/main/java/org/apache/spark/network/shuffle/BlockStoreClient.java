@@ -26,9 +26,11 @@ import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
 import com.codahale.metrics.MetricSet;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
+import org.apache.spark.internal.SparkLogger;
+import org.apache.spark.internal.SparkLoggerFactory;
+import org.apache.spark.internal.LogKeys;
+import org.apache.spark.internal.MDC;
 import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.client.RpcResponseCallback;
 import org.apache.spark.network.client.TransportClient;
@@ -42,7 +44,7 @@ import org.apache.spark.network.util.TransportConf;
  * or external service.
  */
 public abstract class BlockStoreClient implements Closeable {
-  protected final Logger logger = LoggerFactory.getLogger(this.getClass());
+  protected final SparkLogger logger = SparkLoggerFactory.getLogger(this.getClass());
 
   protected volatile TransportClientFactory clientFactory;
   protected String appId;
@@ -170,16 +172,16 @@ public abstract class BlockStoreClient implements Closeable {
             hostLocalDirsCompletable.complete(
               ((LocalDirsForExecutors) msgObj).getLocalDirsByExec());
           } catch (Throwable t) {
-            logger.warn("Error while trying to get the host local dirs for " +
-              Arrays.toString(getLocalDirsMessage.execIds), t.getCause());
+            logger.warn("Error while trying to get the host local dirs for {}", t.getCause(),
+              MDC.of(LogKeys.EXECUTOR_IDS, Arrays.toString(getLocalDirsMessage.execIds)));
             hostLocalDirsCompletable.completeExceptionally(t);
           }
         }
 
         @Override
         public void onFailure(Throwable t) {
-          logger.warn("Error while trying to get the host local dirs for " +
-            Arrays.toString(getLocalDirsMessage.execIds), t.getCause());
+          logger.warn("Error while trying to get the host local dirs for {}", t.getCause(),
+            MDC.of(LogKeys.EXECUTOR_IDS, Arrays.toString(getLocalDirsMessage.execIds)));
           hostLocalDirsCompletable.completeExceptionally(t);
         }
       });
@@ -253,6 +255,20 @@ public abstract class BlockStoreClient implements Closeable {
       int shuffleMergeId,
       int reduceId,
       MergedBlocksMetaListener listener) {
+    throw new UnsupportedOperationException();
+  }
+
+  /**
+   * Remove the shuffle merge data in shuffle services
+   *
+   * @param host the host of the remote node.
+   * @param port the port of the remote node.
+   * @param shuffleId shuffle id.
+   * @param shuffleMergeId shuffle merge id.
+   *
+   * @since 3.4.0
+   */
+  public boolean removeShuffleMerge(String host, int port, int shuffleId, int shuffleMergeId) {
     throw new UnsupportedOperationException();
   }
 }

@@ -17,14 +17,17 @@
 
 package org.apache.spark.util.kvstore;
 
-import com.google.common.base.Preconditions;
-import org.rocksdb.RocksDBException;
-import org.rocksdb.WriteBatch;
-
 import java.lang.reflect.Array;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Objects;
+
+import org.rocksdb.RocksDBException;
+import org.rocksdb.WriteBatch;
+
+import org.apache.spark.network.util.JavaUtils;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
 
@@ -164,7 +167,7 @@ class RocksDBTypeInfo {
 
   Index index(String name) {
     Index i = indices.get(name);
-    Preconditions.checkArgument(i != null, "Index %s does not exist for type %s.", name,
+    JavaUtils.checkArgument(i != null, "Index %s does not exist for type %s.", name,
       type.getName());
     return i;
   }
@@ -253,7 +256,7 @@ class RocksDBTypeInfo {
      * same parent index exist.
      */
     byte[] childPrefix(Object value) {
-      Preconditions.checkState(parent == null, "Not a parent index.");
+      JavaUtils.checkState(parent == null, "Not a parent index.");
       return buildKey(name, toParentKey(value));
     }
 
@@ -268,9 +271,9 @@ class RocksDBTypeInfo {
 
     private void checkParent(byte[] prefix) {
       if (prefix != null) {
-        Preconditions.checkState(parent != null, "Parent prefix provided for parent index.");
+        JavaUtils.checkState(parent != null, "Parent prefix provided for parent index.");
       } else {
-        Preconditions.checkState(parent == null, "Parent prefix missing for child index.");
+        JavaUtils.checkState(parent == null, "Parent prefix missing for child index.");
       }
     }
 
@@ -307,8 +310,9 @@ class RocksDBTypeInfo {
     /** The full key in the index that identifies the given entity. */
     byte[] entityKey(byte[] prefix, Object entity) throws Exception {
       Object indexValue = getValue(entity);
-      Preconditions.checkNotNull(indexValue, "Null index value for %s in type %s.",
-        name, type.getName());
+      Objects.requireNonNull(indexValue, () ->
+        String.format(
+          "Null index value for %s in type %s.", Arrays.toString(name), type.getName()));
       byte[] entityKey = start(prefix, indexValue);
       if (!isNatural) {
         entityKey = buildKey(false, entityKey, toKey(naturalIndex().getValue(entity)));
@@ -333,8 +337,9 @@ class RocksDBTypeInfo {
         byte[] naturalKey,
         byte[] prefix) throws Exception {
       Object indexValue = getValue(entity);
-      Preconditions.checkNotNull(indexValue, "Null index value for %s in type %s.",
-        name, type.getName());
+      Objects.requireNonNull(indexValue, () ->
+        String.format(
+          "Null index value for %s in type %s.", Arrays.toString(name), type.getName()));
 
       byte[] entityKey = start(prefix, indexValue);
       if (!isNatural) {
@@ -461,13 +466,13 @@ class RocksDBTypeInfo {
     byte[] toKey(Object value, byte prefix) {
       final byte[] result;
 
-      if (value instanceof String) {
-        byte[] str = ((String) value).getBytes(UTF_8);
-        result = new byte[str.length + 1];
+      if (value instanceof String str) {
+        byte[] bytes = str.getBytes(UTF_8);
+        result = new byte[bytes.length + 1];
         result[0] = prefix;
-        System.arraycopy(str, 0, result, 1, str.length);
-      } else if (value instanceof Boolean) {
-        result = new byte[] { prefix, (Boolean) value ? TRUE : FALSE };
+        System.arraycopy(bytes, 0, result, 1, bytes.length);
+      } else if (value instanceof Boolean bool) {
+        result = new byte[] { prefix, bool ? TRUE : FALSE };
       } else if (value.getClass().isArray()) {
         int length = Array.getLength(value);
         byte[][] components = new byte[length][];

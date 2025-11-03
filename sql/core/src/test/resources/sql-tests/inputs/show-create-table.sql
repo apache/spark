@@ -7,7 +7,7 @@ DROP TABLE tbl;
 
 -- options
 CREATE TABLE tbl (a INT, b STRING, c INT) USING parquet
-OPTIONS ('a' 1);
+OPTIONS ('a' 1, 'password' = 'password');
 
 SHOW CREATE TABLE tbl;
 DROP TABLE tbl;
@@ -45,6 +45,14 @@ SHOW CREATE TABLE tbl;
 DROP TABLE tbl;
 
 
+-- default column values
+CREATE TABLE tbl (a INT DEFAULT 42, b STRING DEFAULT 'abc, def', c INT DEFAULT 42) USING parquet
+COMMENT 'This is a comment';
+
+SHOW CREATE TABLE tbl;
+DROP TABLE tbl;
+
+
 -- comment
 CREATE TABLE tbl (a INT, b STRING, c INT) USING parquet
 COMMENT 'This is a comment';
@@ -55,7 +63,7 @@ DROP TABLE tbl;
 
 -- tblproperties
 CREATE TABLE tbl (a INT, b STRING, c INT) USING parquet
-TBLPROPERTIES ('a' = '1');
+TBLPROPERTIES ('a' = '1', 'password' = 'password');
 
 SHOW CREATE TABLE tbl;
 DROP TABLE tbl;

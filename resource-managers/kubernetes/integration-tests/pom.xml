@@ -19,15 +19,13 @@
   <modelVersion>4.0.0</modelVersion>
   <parent>
     <groupId>org.apache.spark</groupId>
-    <artifactId>spark-parent_2.12</artifactId>
-    <version>3.4.0-SNAPSHOT</version>
+    <artifactId>spark-parent_2.13</artifactId>
+    <version>4.1.0-SNAPSHOT</version>
     <relativePath>../../../pom.xml</relativePath>
   </parent>
 
-  <artifactId>spark-kubernetes-integration-tests_2.12</artifactId>
+  <artifactId>spark-kubernetes-integration-tests_2.13</artifactId>
   <properties>
-    <download-maven-plugin.version>1.3.0</download-maven-plugin.version>
-    <extraScalaTestArgs></extraScalaTestArgs>
     <sbt.project.name>kubernetes-integration-tests</sbt.project.name>
 
     <!-- Integration Test Configuration Properties -->
@@ -43,11 +41,11 @@
     <spark.kubernetes.test.master></spark.kubernetes.test.master>
     <spark.kubernetes.test.namespace></spark.kubernetes.test.namespace>
     <spark.kubernetes.test.serviceAccountName></spark.kubernetes.test.serviceAccountName>
-    <spark.kubernetes.test.dockerFile>Dockerfile.java17</spark.kubernetes.test.dockerFile>
+    <spark.kubernetes.test.dockerFile>Dockerfile</spark.kubernetes.test.dockerFile>
 
     <test.exclude.tags></test.exclude.tags>
+    <test.default.exclude.tags>org.apache.spark.deploy.k8s.integrationtest.YuniKornTag</test.default.exclude.tags>
     <test.include.tags></test.include.tags>
-    <volcano.exclude>**/*Volcano*.scala</volcano.exclude>
   </properties>
   <packaging>jar</packaging>
   <name>Spark Project Kubernetes Integration Tests</name>
@@ -81,22 +79,15 @@
       <version>${project.version}</version>
       <scope>test</scope>
     </dependency>
+    <dependency>
+      <groupId>software.amazon.awssdk</groupId>
+      <artifactId>bundle</artifactId>
+      <version>${aws.java.sdk.v2.version}</version>
+      <scope>test</scope>
+    </dependency>
   </dependencies>
 
   <build>
-    <pluginManagement>
-      <plugins>
-        <plugin>
-          <groupId>net.alchim31.maven</groupId>
-          <artifactId>scala-maven-plugin</artifactId>
-          <configuration>
-            <excludes>
-              <exclude>${volcano.exclude}</exclude>
-            </excludes>
-          </configuration>
-        </plugin>
-      </plugins>
-    </pluginManagement>
     <plugins>
       <plugin>
         <groupId>org.codehaus.mojo</groupId>
@@ -137,7 +128,7 @@
                 <argument>${spark.kubernetes.test.dockerFile}</argument>
 
                 <argument>--test-exclude-tags</argument>
-                <argument>"${test.exclude.tags}"</argument>
+                <argument>"${test.exclude.tags},${test.default.exclude.tags}"</argument>
               </arguments>
             </configuration>
           </execution>
@@ -162,7 +153,7 @@
           <reportsDirectory>${project.build.directory}/surefire-reports</reportsDirectory>
           <junitxml>.</junitxml>
           <filereports>SparkTestSuite.txt</filereports>
-          <argLine>-ea -Xmx4g -XX:ReservedCodeCacheSize=1g ${extraScalaTestArgs}</argLine>
+          <argLine>-ea -Xmx4g -XX:ReservedCodeCacheSize=1g</argLine>
           <stderr/>
           <systemProperties>
             <log4j.configurationFile>file:src/test/resources/log4j2.properties</log4j.configurationFile>
@@ -179,7 +170,7 @@
             <spark.kubernetes.test.pythonImage>${spark.kubernetes.test.pythonImage}</spark.kubernetes.test.pythonImage>
             <spark.kubernetes.test.rImage>${spark.kubernetes.test.rImage}</spark.kubernetes.test.rImage>
           </systemProperties>
-          <tagsToExclude>${test.exclude.tags}</tagsToExclude>
+          <tagsToExclude>${test.exclude.tags},${test.default.exclude.tags}</tagsToExclude>
           <tagsToInclude>${test.include.tags}</tagsToInclude>
         </configuration>
         <executions>
@@ -205,35 +196,7 @@
 
   <profiles>
     <profile>
-      <id>hadoop-2</id>
-      <dependencies>
-        <dependency>
-          <groupId>com.amazonaws</groupId>
-          <artifactId>aws-java-sdk</artifactId>
-          <version>1.7.4</version>
-          <scope>test</scope>
-        </dependency>
-      </dependencies>
-    </profile>
-    <profile>
-      <id>hadoop-3</id>
-      <activation>
-        <activeByDefault>true</activeByDefault>
-      </activation>
-      <dependencies>
-        <dependency>
-          <groupId>com.amazonaws</groupId>
-          <artifactId>aws-java-sdk-bundle</artifactId>
-          <version>1.11.375</version>
-          <scope>test</scope>
-        </dependency>
-      </dependencies>
-    </profile>
-    <profile>
       <id>volcano</id>
-      <properties>
-        <volcano.exclude></volcano.exclude>
-      </properties>
       <dependencies>
         <dependency>
           <groupId>io.fabric8</groupId>
@@ -241,6 +204,28 @@
           <version>${kubernetes-client.version}</version>
         </dependency>
       </dependencies>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.codehaus.mojo</groupId>
+            <artifactId>build-helper-maven-plugin</artifactId>
+            <executions>
+              <execution>
+                <id>add-volcano-test-sources</id>
+                <phase>generate-test-sources</phase>
+                <goals>
+                  <goal>add-test-source</goal>
+                </goals>
+                <configuration>
+                  <sources>
+                    <source>volcano/src/test/scala</source>
+                  </sources>
+                </configuration>
+              </execution>
+            </executions>
+          </plugin>
+        </plugins>
+      </build>
     </profile>
   </profiles>
 </project>

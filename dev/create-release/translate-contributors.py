@@ -47,11 +47,43 @@ from releaseutils import (
 JIRA_API_BASE = os.environ.get("JIRA_API_BASE", "https://issues.apache.org/jira")
 JIRA_USERNAME = os.environ.get("JIRA_USERNAME", None)
 JIRA_PASSWORD = os.environ.get("JIRA_PASSWORD", None)
+# ASF JIRA access token
+# If it is configured, username and password are dismissed
+# Go to https://issues.apache.org/jira/secure/ViewProfile.jspa -> Personal Access Tokens for
+# your own token management.
+JIRA_ACCESS_TOKEN = os.environ.get("JIRA_ACCESS_TOKEN")
+
 GITHUB_OAUTH_KEY = os.environ.get("GITHUB_OAUTH_KEY", os.environ.get("GITHUB_API_TOKEN", None))
-if not JIRA_USERNAME or not JIRA_PASSWORD:
-    sys.exit("Both JIRA_USERNAME and JIRA_PASSWORD must be set")
+
 if not GITHUB_OAUTH_KEY:
     sys.exit("GITHUB_OAUTH_KEY must be set")
+
+# Setup JIRA client
+jira_options = {"server": JIRA_API_BASE}
+if JIRA_ACCESS_TOKEN:
+    client = JIRA(jira_options, token_auth=JIRA_ACCESS_TOKEN)
+    try:
+        # Eagerly check if the token is valid to align with the behavior of username/password
+        # authn
+        client.current_user()
+        jira_client = client
+    except Exception as e:
+        if e.__class__.__name__ == "JIRAError" and getattr(e, "status_code", None) == 401:
+            msg = (
+                "ASF JIRA could not authenticate with the invalid or expired token '%s'"
+                % JIRA_ACCESS_TOKEN
+            )
+            sys.exit(msg)
+        else:
+            raise e
+elif JIRA_USERNAME and JIRA_PASSWORD:
+    print("You can use JIRA_ACCESS_TOKEN instead of JIRA_USERNAME/JIRA_PASSWORD.")
+    print("Visit https://issues.apache.org/jira/secure/ViewProfile.jspa ")
+    print("and click 'Personal Access Tokens' menu to manage your own tokens.")
+    jira_client = JIRA(jira_options, basic_auth=(JIRA_USERNAME, JIRA_PASSWORD))
+else:
+    sys.exit("JIRA_ACCESS_TOKEN must be set.")
+
 
 # Write new contributors list to <old_file_name>.final
 if not os.path.isfile(contributors_file_name):
@@ -70,9 +102,7 @@ if len(sys.argv) > 1:
 if INTERACTIVE_MODE:
     print("Running in interactive mode. To disable this, provide the --non-interactive flag.")
 
-# Setup GitHub and JIRA clients
-jira_options = {"server": JIRA_API_BASE}
-jira_client = JIRA(options=jira_options, basic_auth=(JIRA_USERNAME, JIRA_PASSWORD))
+# Setup GitHub client
 github_client = Github(GITHUB_OAUTH_KEY)
 
 # Load known author translations that are cached locally

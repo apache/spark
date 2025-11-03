@@ -113,3 +113,79 @@ select array_size(array(true));
 select array_size(array(2, 1));
 select array_size(NULL);
 select array_size(map('a', 1, 'b', 2));
+
+-- size(arrays_zip)
+select size(arrays_zip(array(1, 2, 3), array(4), array(7, 8, 9, 10)));
+select size(arrays_zip(array(), array(1, 2, 3), array(4), array(7, 8, 9, 10)));
+select size(arrays_zip(array(1, 2, 3), array(4), null, array(7, 8, 9, 10)));
+
+-- isnotnull(arrays_zip)
+select isnotnull(arrays_zip(array(), array(4), array(7, 8, 9, 10)));
+select isnotnull(arrays_zip(array(1, 2, 3), array(4), array(7, 8, 9, 10)));
+select isnotnull(arrays_zip(array(1, 2, 3), NULL, array(4), array(7, 8, 9, 10)));
+
+-- function get()
+select get(array(1, 2, 3), 0);
+select get(array(1, 2, 3), 3);
+select get(array(1, 2, 3), null);
+select get(array(1, 2, 3), -1);
+select get(1, 0);
+select get(1, -1);
+select get('1', 0);
+select get('1', -1);
+select get(null, 0);
+select get(null, -1);
+select get(null, null);
+select get(CAST (null AS string), 0);
+
+-- function array_insert()
+select array_insert(array(1, 2, 3), 3, 4);
+select array_insert(array(2, 3, 4), 0, 1);
+select array_insert(array(2, 3, 4), 1, 1);
+select array_insert(array(1, 3, 4), -2, 2);
+select array_insert(array(1, 2, 3), 3, "4");
+select array_insert(cast(NULL as ARRAY<INT>), 1, 1);
+select array_insert(array(1, 2, 3, NULL), cast(NULL as INT), 4);
+select array_insert(array(1, 2, 3, NULL), 4, cast(NULL as INT));
+select array_insert(array(2, 3, NULL, 4), 5, 5);
+select array_insert(array(2, 3, NULL, 4), -5, 1);
+select array_insert(array(1), 2, cast(2 as tinyint));
+
+set spark.sql.legacy.negativeIndexInArrayInsert=true;
+select array_insert(array(1, 3, 4), -2, 2);
+select array_insert(array(2, 3, NULL, 4), -5, 1);
+set spark.sql.legacy.negativeIndexInArrayInsert=false;
+
+-- function array_compact
+select array_compact(id) from values (1) as t(id);
+select array_compact(array("1", null, "2", null));
+select array_compact(array("a", "b", "c"));
+select array_compact(array(1D, null, 2D, null));
+select array_compact(array(array(1, 2, 3, null), null, array(4, null, 6)));
+select array_compact(array(null));
+
+-- function array_append
+select array_append(array(1, 2, 3), 4);
+select array_append(array('a', 'b', 'c'), 'd');
+select array_append(array(1, 2, 3, NULL), NULL);
+select array_append(array('a', 'b', 'c', NULL), NULL);
+select array_append(CAST(null AS ARRAY<String>), 'a');
+select array_append(CAST(null AS ARRAY<String>), CAST(null as String));
+select array_append(array(), 1);
+select array_append(CAST(array() AS ARRAY<String>), CAST(NULL AS String));
+select array_append(array(CAST(NULL AS String)), CAST(NULL AS String));
+
+-- function array_prepend
+select array_prepend(array(1, 2, 3), 4);
+select array_prepend(array('a', 'b', 'c'), 'd');
+select array_prepend(array(1, 2, 3, NULL), NULL);
+select array_prepend(array('a', 'b', 'c', NULL), NULL);
+select array_prepend(CAST(null AS ARRAY<String>), 'a');
+select array_prepend(CAST(null AS ARRAY<String>), CAST(null as String));
+select array_prepend(array(), 1);
+select array_prepend(CAST(array() AS ARRAY<String>), CAST(NULL AS String));
+select array_prepend(array(CAST(NULL AS String)), CAST(NULL AS String));
+
+-- SPARK-45599: Confirm 0.0, -0.0, and NaN are handled appropriately.
+select array_union(array(0.0, -0.0, DOUBLE("NaN")), array(0.0, -0.0, DOUBLE("NaN")));
+select array_distinct(array(0.0, -0.0, -0.0, DOUBLE("NaN"), DOUBLE("NaN")));

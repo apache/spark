@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml.classification
 
+import scala.util.Random
+
 import org.apache.spark.ml.classification.LogisticRegressionSuite.generateLogisticInput
 import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.param.ParamsSuite
@@ -24,6 +26,7 @@ import org.apache.spark.ml.regression.FMRegressorSuite._
 import org.apache.spark.ml.util._
 import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.util.ArrayImplicits._
 
 class FMClassifierSuite extends MLTest with DefaultReadWriteTest {
 
@@ -51,8 +54,8 @@ class FMClassifierSuite extends MLTest with DefaultReadWriteTest {
   }
 
   test("FMClassifier: Predictor, Classifier methods") {
-    val sqlContext = smallBinaryDataset.sqlContext
-    import sqlContext.implicits._
+    val session = smallBinaryDataset.sparkSession
+    import session.implicits._
     val fm = new FMClassifier()
 
     val model = fm.fit(smallBinaryDataset)
@@ -122,7 +125,7 @@ class FMClassifierSuite extends MLTest with DefaultReadWriteTest {
       (0.0, Vectors.sparse(3, Array(0, 2), Array(-1.0, 2.0))),
       (0.0, Vectors.sparse(3, Array.emptyIntArray, Array.emptyDoubleArray)),
       (1.0, Vectors.sparse(3, Array(0, 1), Array(2.0, 3.0)))
-    )).toDF("label", "features")
+    ).toImmutableArraySeq).toDF("label", "features")
     val fm = new FMClassifier().setMaxIter(10)
     fm.fit(dataset)
   }
@@ -241,6 +244,58 @@ class FMClassifierSuite extends MLTest with DefaultReadWriteTest {
       .withColumnRenamed("label", allParamSettings("labelCol").toString)
     testEstimatorAndModelReadWrite(fm, data, allParamSettings,
       allParamSettings, checkModelData)
+  }
+
+  test("model size estimation: dense data") {
+    val rng = new Random(1)
+
+    Seq(10, 100, 1000, 10000, 100000).foreach { n =>
+      val df = Seq(
+        (Vectors.dense(Array.fill(n)(rng.nextDouble())), 0.0),
+        (Vectors.dense(Array.fill(n)(rng.nextDouble())), 1.0)
+      ).toDF("features", "label")
+
+      val fm = new FMClassifier().setMaxIter(1)
+      val size1 = fm.estimateModelSize(df)
+      val model = fm.fit(df)
+      assert(model.linear.isInstanceOf[DenseVector])
+      assert(model.factors.isInstanceOf[DenseMatrix])
+      val size2 = model.estimatedSize
+
+      // the model is dense, the estimation should be relatively accurate
+      //      (n, size1, size2)
+      //      (10,6329,6329) <- when the model is small, model.params matters
+      //      (100,12809,12809)
+      //      (1000,77609,77609)
+      //      (10000,725609,725609)
+      //      (100000,7205609,7205609)
+      val rel = (size1 - size2).toDouble / size2
+      assert(math.abs(rel) < 0.05, (n, size1, size2))
+    }
+  }
+
+  test("model size estimation: sparse data") {
+    val rng = new Random(1)
+
+    Seq(100, 1000, 10000, 100000).foreach { n =>
+      val df = Seq(
+        (Vectors.sparse(n, Array.range(0, 10), Array.fill(10)(rng.nextDouble())), 0.0),
+        (Vectors.sparse(n, Array.range(0, 10), Array.fill(10)(rng.nextDouble())), 1.0)
+      ).toDF("features", "label")
+
+      val fm = new FMClassifier().setMaxIter(1).setRegParam(10.0)
+      val size1 = fm.estimateModelSize(df)
+      val model = fm.fit(df)
+      val size2 = model.estimatedSize
+
+      // the model is sparse, the estimated size is likely larger
+      //      (n, size1, size2)
+      //      (100,12809,12145)
+      //      (1000,77609,69745)
+      //      (10000,725609,645745)
+      //      (100000,7205609,6405745)
+      assert(size1 > size2, (n, size1, size2))
+    }
   }
 }
 

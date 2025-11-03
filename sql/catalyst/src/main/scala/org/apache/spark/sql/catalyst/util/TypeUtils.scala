@@ -17,29 +17,39 @@
 
 package org.apache.spark.sql.catalyst.util
 
-import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion}
-import org.apache.spark.sql.catalyst.expressions.RowOrdering
-import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.catalyst.analysis.{AnalysisErrorAt, TypeCheckResult, TypeCoercion}
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
+import org.apache.spark.sql.catalyst.expressions.{Expression, RowOrdering}
+import org.apache.spark.sql.catalyst.types.{PhysicalDataType, PhysicalNumericType}
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
 import org.apache.spark.sql.types._
 
 /**
  * Functions to help with checking for valid data types and value comparison of various types.
  */
-object TypeUtils {
-  def checkForNumericExpr(dt: DataType, caller: String): TypeCheckResult = {
-    if (dt.isInstanceOf[NumericType] || dt == NullType) {
-      TypeCheckResult.TypeCheckSuccess
-    } else {
-      TypeCheckResult.TypeCheckFailure(s"$caller requires numeric types, not ${dt.catalogString}")
-    }
-  }
+object TypeUtils extends QueryErrorsBase {
 
   def checkForOrderingExpr(dt: DataType, caller: String): TypeCheckResult = {
     if (RowOrdering.isOrderable(dt)) {
       TypeCheckResult.TypeCheckSuccess
     } else {
-      TypeCheckResult.TypeCheckFailure(
-        s"$caller does not support ordering on type ${dt.catalogString}")
+      DataTypeMismatch(
+        errorSubClass = "INVALID_ORDERING_TYPE",
+        Map(
+          "functionName" -> toSQLId(caller),
+          "dataType" -> toSQLType(dt)
+        )
+      )
+    }
+  }
+
+  def tryThrowNotOrderableExpression(expression: Expression): Unit = {
+    if (!RowOrdering.isOrderable(expression.dataType)) {
+      expression.failAnalysis(
+        errorClass = "EXPRESSION_TYPE_IS_NOT_ORDERABLE",
+        messageParameters =
+          Map("expr" -> toSQLExpr(expression), "exprType" -> toSQLType(expression.dataType))
+      )
     }
   }
 
@@ -47,44 +57,56 @@ object TypeUtils {
     if (TypeCoercion.haveSameType(types)) {
       TypeCheckResult.TypeCheckSuccess
     } else {
-      TypeCheckResult.TypeCheckFailure(
-        s"input to $caller should all be the same type, but it's " +
-          types.map(_.catalogString).mkString("[", ", ", "]"))
+      DataTypeMismatch(
+        errorSubClass = "DATA_DIFF_TYPES",
+        messageParameters = Map(
+          "functionName" -> toSQLId(caller),
+          "dataType" -> types.map(toSQLType).mkString("(", " or ", ")")
+        )
+      )
     }
   }
 
   def checkForMapKeyType(keyType: DataType): TypeCheckResult = {
-    if (keyType.existsRecursively(_.isInstanceOf[MapType])) {
-      TypeCheckResult.TypeCheckFailure("The key of map cannot be/contain map.")
+    if (keyType.existsRecursively(dt => dt.isInstanceOf[MapType] || dt.isInstanceOf[VariantType])) {
+      DataTypeMismatch(
+        errorSubClass = "INVALID_MAP_KEY_TYPE",
+        messageParameters = Map(
+          "keyType" -> toSQLType(keyType)
+        )
+      )
     } else {
       TypeCheckResult.TypeCheckSuccess
     }
   }
 
-  def checkForAnsiIntervalOrNumericType(
-      dt: DataType, funcName: String): TypeCheckResult = dt match {
+  def checkForAnsiIntervalOrNumericType(input: Expression): TypeCheckResult = input.dataType match {
     case _: AnsiIntervalType | NullType =>
       TypeCheckResult.TypeCheckSuccess
     case dt if dt.isInstanceOf[NumericType] => TypeCheckResult.TypeCheckSuccess
-    case other => TypeCheckResult.TypeCheckFailure(
-      s"function $funcName requires numeric or interval types, not ${other.catalogString}")
+    case other =>
+      DataTypeMismatch(
+        errorSubClass = "UNEXPECTED_INPUT_TYPE",
+        messageParameters = Map(
+          "paramIndex" -> ordinalNumber(0),
+          "requiredType" -> Seq(NumericType, AnsiIntervalType).map(toSQLType).mkString(" or "),
+          "inputSql" -> toSQLExpr(input),
+          "inputType" -> toSQLType(other)))
   }
 
   def getNumeric(t: DataType, exactNumericRequired: Boolean = false): Numeric[Any] = {
     if (exactNumericRequired) {
-      t.asInstanceOf[NumericType].exactNumeric.asInstanceOf[Numeric[Any]]
+      PhysicalNumericType.exactNumeric(t.asInstanceOf[NumericType])
     } else {
-      t.asInstanceOf[NumericType].numeric.asInstanceOf[Numeric[Any]]
+      PhysicalNumericType.numeric(t.asInstanceOf[NumericType])
     }
   }
 
   @scala.annotation.tailrec
   def getInterpretedOrdering(t: DataType): Ordering[Any] = {
     t match {
-      case i: AtomicType => i.ordering.asInstanceOf[Ordering[Any]]
-      case a: ArrayType => a.interpretedOrdering.asInstanceOf[Ordering[Any]]
-      case s: StructType => s.interpretedOrdering.asInstanceOf[Ordering[Any]]
       case udt: UserDefinedType[_] => getInterpretedOrdering(udt.sqlType)
+      case other => PhysicalDataType.ordering(other)
     }
   }
 
@@ -95,6 +117,7 @@ object TypeUtils {
    */
   def typeWithProperEquals(dataType: DataType): Boolean = dataType match {
     case BinaryType => false
+    case s: StringType => s.supportsBinaryEquality
     case _: AtomicType => true
     case _ => false
   }

@@ -19,22 +19,26 @@ package org.apache.spark.sql.execution
 
 import java.util.concurrent.{CountDownLatch, TimeUnit}
 
-import org.apache.spark.SparkException
+import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext, SparkException, SparkFunSuite}
+import org.apache.spark.broadcast.TorrentBroadcast
 import org.apache.spark.scheduler._
+import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.exchange.BroadcastExchangeExec
 import org.apache.spark.sql.execution.joins.HashedRelation
 import org.apache.spark.sql.functions.broadcast
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.tags.ExtendedSQLTest
 
+@ExtendedSQLTest
 class BroadcastExchangeSuite extends SparkPlanTest
   with SharedSparkSession
   with AdaptiveSparkPlanHelper {
 
   import testImplicits._
 
-  test("BroadcastExchange should cancel the job group if timeout") {
+  test("BroadcastExchange should cancel the job tag if timeout") {
     val startLatch = new CountDownLatch(1)
     val endLatch = new CountDownLatch(1)
     var jobEvents: Seq[SparkListenerEvent] = Seq.empty[SparkListenerEvent]
@@ -78,7 +82,8 @@ class BroadcastExchangeSuite extends SparkPlanTest
       val events = jobEvents.toArray
       val hasStart = events(0).isInstanceOf[SparkListenerJobStart]
       val hasCancelled = events(1).asInstanceOf[SparkListenerJobEnd].jobResult
-        .asInstanceOf[JobFailed].exception.getMessage.contains("cancelled job group")
+        .asInstanceOf[JobFailed]
+        .exception.getMessage.contains("The corresponding broadcast query has failed.")
       events.length == 2 && hasStart && hasCancelled
     }
   }
@@ -92,5 +97,46 @@ class BroadcastExchangeSuite extends SparkPlanTest
       assert(broadcastExchangeExec.size == 1, "one and only BroadcastExchangeExec")
       assert(joinDF.collect().length == 1)
     }
+  }
+
+  test("SPARK-52962: broadcast exchange should not reset metrics") {
+    val df = spark.range(1).toDF()
+    val joinDF = df.join(broadcast(df), "id")
+    joinDF.collect()
+    val broadcastExchangeExec = collect(
+      joinDF.queryExecution.executedPlan) { case p: BroadcastExchangeExec => p }
+    assert(broadcastExchangeExec.size == 1, "one and only BroadcastExchangeExec")
+
+    val broadcastExchangeNode = broadcastExchangeExec.head
+    val metrics = broadcastExchangeNode.metrics
+    assert(metrics("numOutputRows").value == 1)
+    broadcastExchangeNode.resetMetrics()
+    assert(metrics("numOutputRows").value == 1)
+  }
+}
+
+// Additional tests run in 'local-cluster' mode.
+@ExtendedSQLTest
+class BroadcastExchangeExecSparkSuite
+  extends SparkFunSuite with LocalSparkContext with AdaptiveSparkPlanHelper {
+
+  test("SPARK-39983 - Broadcasted relation is not cached on the driver") {
+    // Use distributed cluster as in local mode the broabcast value is actually cached.
+    val conf = new SparkConf()
+      .setMaster("local-cluster[2,1,1024]")
+      .setAppName("test")
+    sc = new SparkContext(conf)
+    val spark = new SparkSession(sc)
+
+    val df = spark.range(1).toDF()
+    val joinDF = df.join(broadcast(df), "id")
+    val broadcastExchangeExec = collect(
+      joinDF.queryExecution.executedPlan) { case p: BroadcastExchangeExec => p }
+    assert(broadcastExchangeExec.size == 1, "one and only BroadcastExchangeExec")
+
+    // The broadcasted relation should not be cached on the driver.
+    val broadcasted =
+      broadcastExchangeExec(0).relationFuture.get().asInstanceOf[TorrentBroadcast[Any]]
+    assert(!broadcasted.hasCachedValue)
   }
 }

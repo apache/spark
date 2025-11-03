@@ -88,10 +88,10 @@ class TypedImperativeAggregateSuite extends QueryTest with SharedSparkSession {
 
   test("dataframe aggregate with object aggregate buffer, should not use HashAggregate") {
     val df = data.toDF("a", "b")
-    val max = TypedMax($"a".expr)
+    val max = Column(TypedMax($"a".expr))
 
     // Always uses SortAggregateExec
-    val sparkPlan = df.select(Column(max.toAggregateExpression())).queryExecution.sparkPlan
+    val sparkPlan = df.select(max).queryExecution.sparkPlan
     assert(!sparkPlan.isInstanceOf[HashAggregateExec])
   }
 
@@ -211,15 +211,10 @@ class TypedImperativeAggregateSuite extends QueryTest with SharedSparkSession {
     checkAnswer(query, expected)
   }
 
-  private def typedMax(column: Column): Column = {
-    val max = TypedMax(column.expr, nullable = false)
-    Column(max.toAggregateExpression())
-  }
+  private def typedMax(column: Column): Column = Column(TypedMax(column.expr))
 
-  private def nullableTypedMax(column: Column): Column = {
-    val max = TypedMax(column.expr, nullable = true)
-    Column(max.toAggregateExpression())
-  }
+  private def nullableTypedMax(column: Column): Column =
+    Column(TypedMax(column.expr, nullable = true))
 }
 
 object TypedImperativeAggregateSuite {

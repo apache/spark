@@ -1,0 +1,2 @@
+Aggregate [hll_sketch_agg(bytes#0, 0, 0, 0) AS hll_sketch_agg(bytes, 0)#0]
++- LocalRelation <empty>, [id#0L, bytes#0]

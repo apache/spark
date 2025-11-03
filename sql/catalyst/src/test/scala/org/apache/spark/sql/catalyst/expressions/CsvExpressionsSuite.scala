@@ -25,13 +25,12 @@ import org.scalatest.exceptions.TestFailedException
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.plans.PlanTestBase
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{PST, UTC_OPT}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
-class CsvExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with PlanTestBase {
+class CsvExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   val badCsv = "\u0000\u0000\u0000A\u0001AAA"
 
   test("from_csv") {
@@ -149,12 +148,17 @@ class CsvExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with P
   test("unsupported mode") {
     val csvData = "---"
     val schema = StructType(StructField("a", DoubleType) :: Nil)
-    val exception = intercept[TestFailedException] {
-      checkEvaluation(
-        CsvToStructs(schema, Map("mode" -> DropMalformedMode.name), Literal(csvData), UTC_OPT),
-        InternalRow(null))
-    }.getCause
-    assert(exception.getMessage.contains("from_csv() doesn't support the DROPMALFORMED mode"))
+
+    checkError(
+      exception = intercept[TestFailedException] {
+        checkEvaluation(
+          CsvToStructs(schema, Map("mode" -> DropMalformedMode.name), Literal(csvData), UTC_OPT),
+          InternalRow(null))
+      }.getCause.asInstanceOf[AnalysisException],
+      condition = "PARSE_MODE_UNSUPPORTED",
+      parameters = Map(
+        "funcName" -> "`from_csv`",
+        "mode" -> "DROPMALFORMED"))
   }
 
   test("infer schema of CSV strings") {
@@ -228,13 +232,13 @@ class CsvExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with P
   }
 
   test("verify corrupt column") {
-    checkExceptionInExpression[AnalysisException](
+    checkErrorInExpression[AnalysisException](
       CsvToStructs(
         schema = StructType.fromDDL("i int, _unparsed boolean"),
         options = Map("columnNameOfCorruptRecord" -> "_unparsed"),
         child = Literal.create("a"),
-        timeZoneId = UTC_OPT),
-      expectedErrMsg = "The field for corrupt records must be string type and nullable")
+        timeZoneId = UTC_OPT), null, "INVALID_CORRUPT_RECORD_TYPE",
+      Map("columnName" -> "`_unparsed`", "actualType" -> "\"BOOLEAN\""))
   }
 
   test("from/to csv with intervals") {
@@ -245,5 +249,12 @@ class CsvExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with P
     checkEvaluation(
       CsvToStructs(schema, Map.empty, Literal.create("1 day")),
       InternalRow(new CalendarInterval(0, 1, 0)))
+  }
+
+  test("StructsToCsv should not generate codes beyond 64KB") {
+    val range = Range.inclusive(1, 5000)
+    val struct = CreateStruct.create(range.map(Literal.apply))
+    val expected = range.mkString(",")
+    checkEvaluation(StructsToCsv(Map.empty, struct), expected)
   }
 }

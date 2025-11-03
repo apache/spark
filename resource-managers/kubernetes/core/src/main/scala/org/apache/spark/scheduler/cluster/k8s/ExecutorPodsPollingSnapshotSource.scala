@@ -18,10 +18,11 @@ package org.apache.spark.scheduler.cluster.k8s
 
 import java.util.concurrent.{Future, ScheduledExecutorService, TimeUnit}
 
+import scala.jdk.CollectionConverters._
+
 import com.google.common.primitives.UnsignedLong
 import io.fabric8.kubernetes.api.model.ListOptionsBuilder
 import io.fabric8.kubernetes.client.KubernetesClient
-import scala.collection.JavaConverters._
 
 import org.apache.spark.SparkConf
 import org.apache.spark.annotation.{DeveloperApi, Since, Stable}
@@ -45,15 +46,18 @@ class ExecutorPodsPollingSnapshotSource(
     pollingExecutor: ScheduledExecutorService) extends Logging {
 
   private val pollingInterval = conf.get(KUBERNETES_EXECUTOR_API_POLLING_INTERVAL)
+  private val pollingEnabled = conf.get(KUBERNETES_EXECUTOR_ENABLE_API_POLLING)
 
   private var pollingFuture: Future[_] = _
 
   @Since("3.1.3")
   def start(applicationId: String): Unit = {
-    require(pollingFuture == null, "Cannot start polling more than once.")
-    logDebug(s"Starting to check for executor pod state every $pollingInterval ms.")
-    pollingFuture = pollingExecutor.scheduleWithFixedDelay(
-      new PollRunnable(applicationId), pollingInterval, pollingInterval, TimeUnit.MILLISECONDS)
+    if (pollingEnabled) {
+      require(pollingFuture == null, "Cannot start polling more than once.")
+      logDebug(s"Starting to check for executor pod state every $pollingInterval ms.")
+      pollingFuture = pollingExecutor.scheduleWithFixedDelay(
+        new PollRunnable(applicationId), pollingInterval, pollingInterval, TimeUnit.MILLISECONDS)
+    }
   }
 
   @Since("3.1.3")

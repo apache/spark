@@ -17,7 +17,12 @@
 
 ARG base_img
 
-FROM $base_img
+FROM ${base_img:-spark}
+LABEL org.opencontainers.image.authors="Apache Spark project <dev@spark.apache.org>"
+LABEL org.opencontainers.image.licenses="Apache-2.0"
+LABEL org.opencontainers.image.ref.name="Apache Spark Python Image"
+# Overwrite this label to avoid exposing the underlying Ubuntu OS version label
+LABEL org.opencontainers.image.version=""
 WORKDIR /
 
 # Reset to root to run installation tasks
@@ -28,7 +33,7 @@ RUN apt-get update && \
     apt install -y python3 python3-pip && \
     pip3 install --upgrade pip setuptools && \
     # Removed the .cache to save space
-    rm -r /root/.cache && rm -rf /var/cache/apt/*
+    rm -rf /root/.cache && rm -rf /var/cache/apt/* && rm -rf /var/lib/apt/lists/*
 
 COPY python/pyspark ${SPARK_HOME}/python/pyspark
 COPY python/lib ${SPARK_HOME}/python/lib

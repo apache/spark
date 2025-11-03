@@ -24,6 +24,7 @@ import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.feature.{IDFModel => OldIDFModel}
 import org.apache.spark.mllib.linalg.VectorImplicits._
 import org.apache.spark.sql.Row
+import org.apache.spark.util.ArrayImplicits._
 
 class IDFSuite extends MLTest with DefaultReadWriteTest {
 
@@ -38,7 +39,7 @@ class IDFSuite extends MLTest with DefaultReadWriteTest {
         val res = data.indices.zip(data.values).map { case (id, value) =>
           (id, value * model(id))
         }
-        Vectors.sparse(data.size, res)
+        Vectors.sparse(data.size, res.toImmutableArraySeq)
     }
   }
 
@@ -119,9 +120,12 @@ class IDFSuite extends MLTest with DefaultReadWriteTest {
       new OldIDFModel(Vectors.dense(1.0, 2.0), Array(1, 2), 2))
       .setInputCol("myInputCol")
       .setOutputCol("myOutputCol")
-    val newInstance = testDefaultReadWrite(instance)
-    assert(newInstance.idf === instance.idf)
-    assert(newInstance.docFreq === instance.docFreq)
-    assert(newInstance.numDocs === instance.numDocs)
+
+    for (testSaveToLocal <- Seq(false, true)) {
+      val newInstance = testDefaultReadWrite(instance, testSaveToLocal = testSaveToLocal)
+      assert(newInstance.idf === instance.idf)
+      assert(newInstance.docFreq === instance.docFreq)
+      assert(newInstance.numDocs === instance.numDocs)
+    }
   }
 }

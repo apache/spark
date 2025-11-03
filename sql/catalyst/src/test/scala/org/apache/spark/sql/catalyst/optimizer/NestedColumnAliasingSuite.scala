@@ -20,14 +20,14 @@ package org.apache.spark.sql.catalyst.optimizer
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.catalyst.SchemaPruningTest
-import org.apache.spark.sql.catalyst.analysis.SimpleAnalyzer
+import org.apache.spark.sql.catalyst.analysis.{SimpleAnalyzer, UnresolvedExtractValue}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.Cross
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
-import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
+import org.apache.spark.sql.types.{ArrayType, IntegerType, StringType, StructField, StructType}
 
 class NestedColumnAliasingSuite extends SchemaPruningTest {
 
@@ -498,7 +498,7 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
     val spec = windowSpec($"address" :: Nil, $"id".asc :: Nil, UnspecifiedFrame)
     val winExpr = windowExpr(RowNumber(), spec)
     val query = contact
-      .select($"name.first", winExpr.as(Symbol("window")))
+      .select($"name.first", winExpr.as("window"))
       .orderBy($"name.last".asc)
       .analyze
     val optimized = Optimize.execute(query)
@@ -516,7 +516,7 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
   test("Nested field pruning for Filter with other supported operators") {
     val spec = windowSpec($"address" :: Nil, $"id".asc :: Nil, UnspecifiedFrame)
     val winExpr = windowExpr(RowNumber(), spec)
-    val query1 = contact.select($"name.first", winExpr.as(Symbol("window")))
+    val query1 = contact.select($"name.first", winExpr.as("window"))
       .where($"window" === 1 && $"name.first" === "a")
       .analyze
     val optimized1 = Optimize.execute(query1)
@@ -812,6 +812,77 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
     val optimized3 = Optimize.execute(plan3)
     val expected3 = contact.select($"name").rebalance($"name").select($"name.first").analyze
     comparePlans(optimized3, expected3)
+  }
+
+  test("SPARK-38530: Do not push down nested ExtractValues with other expressions") {
+    val inputType = StructType.fromDDL(
+      "a int, b struct<c: array<int>, c2: int>")
+    val simpleStruct = StructType.fromDDL(
+      "b struct<c: struct<d: int, e: int>, c2 int>"
+    )
+    val input = LocalRelation(
+      Symbol("id").int,
+      Symbol("col1").array(ArrayType(inputType)))
+
+    val query = input
+      .generate(Explode(Symbol("col1")))
+      .select(
+        UnresolvedExtractValue(
+          UnresolvedExtractValue(
+            CaseWhen(Seq((Symbol("col").getField("a") === 1,
+              Literal.default(simpleStruct)))),
+            Literal("b")),
+          Literal("c")).as("result"))
+      .analyze
+    val optimized = Optimize.execute(query)
+
+    val aliases = collectGeneratedAliases(optimized)
+
+    // Only the inner-most col.a should be pushed down.
+    val expected = input
+      .select(Symbol("col1").getField("a").as(aliases(0)))
+      .generate(Explode($"${aliases(0)}"), unrequiredChildIndex = Seq(0))
+      .select(UnresolvedExtractValue(UnresolvedExtractValue(
+        CaseWhen(Seq((Symbol("col") === 1,
+          Literal.default(simpleStruct)))), Literal("b")), Literal("c")).as("result"))
+      .analyze
+
+    comparePlans(optimized, expected)
+  }
+
+  test("SPARK-38529: GeneratorNestedColumnAliasing does not pushdown for non-Explode") {
+    val employer = StructType.fromDDL("id int, company struct<name:string, address:string>")
+    val input = LocalRelation(
+      Symbol("col1").int,
+      Symbol("col2").array(
+        ArrayType(StructType.fromDDL("field1 struct<col1: int, col2: int>, field2 int")))
+    )
+    val plan = input.generate(
+      Inline(Symbol("col2"))).select(Symbol("field1").getField("col1")).analyze
+    val optimized = GeneratorNestedColumnAliasing.unapply(plan)
+    // The plan is expected to be unchanged.
+    comparePlans(plan, RemoveNoopOperators.apply(optimized.get))
+  }
+
+  test("SPARK-48428: Do not pushdown when attr is used in expression with mutliple references") {
+    val query = contact
+      .limit(5)
+      .select(
+        GetStructField(GetStructField(CreateStruct(Seq($"id", $"employer")), 1), 0),
+        $"employer.id")
+      .analyze
+
+    val optimized = Optimize.execute(query)
+
+    val expected = contact
+      .select($"id", $"employer")
+      .limit(5)
+      .select(
+        GetStructField(GetStructField(CreateStruct(Seq($"id", $"employer")), 1), 0),
+        $"employer.id")
+      .analyze
+
+    comparePlans(optimized, expected)
   }
 }
 

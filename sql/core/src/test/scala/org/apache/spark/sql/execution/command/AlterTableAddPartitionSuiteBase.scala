@@ -19,8 +19,11 @@ package org.apache.spark.sql.execution.command
 
 import java.time.{Duration, Period}
 
+import org.apache.spark.SparkNumberFormatException
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
-import org.apache.spark.sql.catalyst.analysis.PartitionsAlreadyExistException
+import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
+import org.apache.spark.sql.catalyst.util.quoteIdentifier
+import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -39,6 +42,7 @@ import org.apache.spark.sql.internal.SQLConf
  */
 trait AlterTableAddPartitionSuiteBase extends QueryTest with DDLCommandTestUtils {
   override val command = "ALTER TABLE .. ADD PARTITION"
+  def defaultPartitionName: String
 
   test("one partition") {
     withNamespaceAndTable("ns", "tbl") { t =>
@@ -81,10 +85,12 @@ trait AlterTableAddPartitionSuiteBase extends QueryTest with DDLCommandTestUtils
 
   test("table to alter does not exist") {
     withNamespaceAndTable("ns", "does_not_exist") { t =>
-      val errMsg = intercept[AnalysisException] {
+      val parsed = CatalystSqlParser.parseMultipartIdentifier(t)
+        .map(part => quoteIdentifier(part)).mkString(".")
+      val e = intercept[AnalysisException] {
         sql(s"ALTER TABLE $t ADD IF NOT EXISTS PARTITION (a='4', b='9')")
-      }.getMessage
-      assert(errMsg.contains("Table not found"))
+      }
+      checkErrorTableNotFound(e, parsed, ExpectedContext(t, 12, 11 + t.length))
     }
   }
 
@@ -92,10 +98,20 @@ trait AlterTableAddPartitionSuiteBase extends QueryTest with DDLCommandTestUtils
     withNamespaceAndTable("ns", "tbl") { t =>
       spark.sql(s"CREATE TABLE $t (id bigint, data string) $defaultUsing PARTITIONED BY (id)")
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
-        val errMsg = intercept[AnalysisException] {
-          spark.sql(s"ALTER TABLE $t ADD PARTITION (ID=1) LOCATION 'loc1'")
-        }.getMessage
-        assert(errMsg.contains("ID is not a valid partition column"))
+        val expectedTableName = if (commandVersion == DDLCommandTestUtils.V1_COMMAND_VERSION) {
+          s"`$SESSION_CATALOG_NAME`.`ns`.`tbl`"
+        } else {
+          "`test_catalog`.`ns`.`tbl`"
+        }
+        checkError(
+          exception = intercept[AnalysisException] {
+            spark.sql(s"ALTER TABLE $t ADD PARTITION (ID=1) LOCATION 'loc1'")
+          },
+          condition = "PARTITIONS_NOT_FOUND",
+          parameters = Map(
+            "partitionList" -> "`ID`",
+            "tableName" -> expectedTableName)
+        )
       }
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
         spark.sql(s"ALTER TABLE $t ADD PARTITION (ID=1) LOCATION 'loc1'")
@@ -167,23 +183,6 @@ trait AlterTableAddPartitionSuiteBase extends QueryTest with DDLCommandTestUtils
     }
   }
 
-  test("partition already exists") {
-    withNamespaceAndTable("ns", "tbl") { t =>
-      sql(s"CREATE TABLE $t (id bigint, data string) $defaultUsing PARTITIONED BY (id)")
-      sql(s"ALTER TABLE $t ADD PARTITION (id=2) LOCATION 'loc1'")
-
-      val errMsg = intercept[PartitionsAlreadyExistException] {
-        sql(s"ALTER TABLE $t ADD PARTITION (id=1) LOCATION 'loc'" +
-          " PARTITION (id=2) LOCATION 'loc1'")
-      }.getMessage
-      assert(errMsg.contains("The following partitions already exists"))
-
-      sql(s"ALTER TABLE $t ADD IF NOT EXISTS PARTITION (id=1) LOCATION 'loc'" +
-        " PARTITION (id=2) LOCATION 'loc1'")
-      checkPartitions(t, Map("id" -> "1"), Map("id" -> "2"))
-    }
-  }
-
   test("SPARK-33474: Support typed literals as partition spec values") {
     withNamespaceAndTable("ns", "tbl") { t =>
       sql(s"CREATE TABLE $t(name STRING, part DATE) USING PARQUET PARTITIONED BY (part)")
@@ -225,6 +224,70 @@ trait AlterTableAddPartitionSuiteBase extends QueryTest with DDLCommandTestUtils
         Seq(
           Row(Period.ofYears(100), Duration.ofDays(10), "aaa"),
           Row(Period.ofYears(1), Duration.ofDays(-1), "bbb")))
+    }
+  }
+
+  test("SPARK-40798: Alter partition should verify partition value") {
+    def shouldThrowException(policy: SQLConf.StoreAssignmentPolicy.Value): Boolean = policy match {
+      case SQLConf.StoreAssignmentPolicy.ANSI | SQLConf.StoreAssignmentPolicy.STRICT =>
+        true
+      case SQLConf.StoreAssignmentPolicy.LEGACY =>
+        false
+    }
+
+    SQLConf.StoreAssignmentPolicy.values.foreach { policy =>
+      withNamespaceAndTable("ns", "tbl") { t =>
+        sql(s"CREATE TABLE $t (c int) $defaultUsing PARTITIONED BY (p int)")
+
+        withSQLConf(SQLConf.STORE_ASSIGNMENT_POLICY.key -> policy.toString) {
+          if (shouldThrowException(policy)) {
+            checkError(
+              exception = intercept[SparkNumberFormatException] {
+                sql(s"ALTER TABLE $t ADD PARTITION (p='aaa')")
+              },
+              condition = "CAST_INVALID_INPUT",
+              parameters = Map(
+                "expression" -> "'aaa'",
+                "sourceType" -> "\"STRING\"",
+                "targetType" -> "\"INT\"",
+                "ansiConfig" -> "\"spark.sql.ansi.enabled\""),
+              context = ExpectedContext(
+                fragment = s"ALTER TABLE $t ADD PARTITION (p='aaa')",
+                start = 0,
+                stop = 35 + t.length))
+          } else {
+            sql(s"ALTER TABLE $t ADD PARTITION (p='aaa')")
+            checkPartitions(t, Map("p" -> defaultPartitionName))
+            sql(s"ALTER TABLE $t DROP PARTITION (p=null)")
+          }
+
+          sql(s"ALTER TABLE $t ADD PARTITION (p=null)")
+          checkPartitions(t, Map("p" -> defaultPartitionName))
+          sql(s"ALTER TABLE $t DROP PARTITION (p=null)")
+        }
+      }
+    }
+  }
+
+  test("SPARK-41982: add partition when keepPartitionSpecAsString set `true`") {
+    withSQLConf(SQLConf.LEGACY_KEEP_PARTITION_SPEC_AS_STRING_LITERAL.key -> "true") {
+      withNamespaceAndTable("ns", "tbl") { t =>
+        sql(s"CREATE TABLE $t(name STRING, age INT) USING PARQUET PARTITIONED BY (dt STRING)")
+        sql(s"ALTER TABLE $t ADD PARTITION(dt = 08)")
+        checkPartitions(t, Map("dt" -> "08"))
+        sql(s"ALTER TABLE $t ADD PARTITION(dt = '09')")
+        checkPartitions(t, Map("dt" -> "09"), Map("dt" -> "08"))
+      }
+    }
+
+    withSQLConf(SQLConf.LEGACY_KEEP_PARTITION_SPEC_AS_STRING_LITERAL.key -> "false") {
+      withNamespaceAndTable("ns", "tb2") { t =>
+        sql(s"CREATE TABLE $t(name STRING, age INT) USING PARQUET PARTITIONED BY (dt STRING)")
+        sql(s"ALTER TABLE $t ADD PARTITION(dt = 08)")
+        checkPartitions(t, Map("dt" -> "8"))
+        sql(s"ALTER TABLE $t ADD PARTITION(dt = '09')")
+        checkPartitions(t, Map("dt" -> "09"), Map("dt" -> "8"))
+      }
     }
   }
 }

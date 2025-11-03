@@ -17,16 +17,18 @@
 
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
-import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult._
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.Cast.{toSQLExpr, toSQLId, toSQLType, toSQLValue}
 import org.apache.spark.sql.catalyst.trees.TernaryLike
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.SQLConf.{RUNTIME_BLOOM_FILTER_MAX_NUM_BITS, RUNTIME_BLOOM_FILTER_MAX_NUM_ITEMS}
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.sketch.BloomFilter
 
 /**
@@ -55,6 +57,13 @@ case class BloomFilterAggregate(
       Multiply(estimatedNumItemsExpression, Literal(8L)))
   }
 
+  def this(child: Expression, estimatedNumItems: Long) = {
+    this(child, Literal(estimatedNumItems),
+      Literal(BloomFilter.optimalNumOfBits(estimatedNumItems,
+        SQLConf.get.getConf(RUNTIME_BLOOM_FILTER_MAX_NUM_ITEMS),
+        SQLConf.get.getConf(RUNTIME_BLOOM_FILTER_MAX_NUM_BITS))))
+  }
+
   def this(child: Expression) = {
     this(child, Literal(SQLConf.get.getConf(SQLConf.RUNTIME_BLOOM_FILTER_EXPECTED_NUM_ITEMS)),
       Literal(SQLConf.get.getConf(SQLConf.RUNTIME_BLOOM_FILTER_NUM_BITS)))
@@ -63,28 +72,66 @@ case class BloomFilterAggregate(
   override def checkInputDataTypes(): TypeCheckResult = {
     (first.dataType, second.dataType, third.dataType) match {
       case (_, NullType, _) | (_, _, NullType) =>
-        TypeCheckResult.TypeCheckFailure("Null typed values cannot be used as size arguments")
-      case (LongType, LongType, LongType) =>
+        DataTypeMismatch(
+          errorSubClass = "UNEXPECTED_NULL",
+          messageParameters = Map(
+            "exprName" -> "estimatedNumItems or numBits"
+          )
+        )
+      case (LongType | IntegerType | ShortType | ByteType | _: StringType, LongType, LongType) =>
         if (!estimatedNumItemsExpression.foldable) {
-          TypeCheckFailure("The estimated number of items provided must be a constant literal")
+          DataTypeMismatch(
+            errorSubClass = "NON_FOLDABLE_INPUT",
+            messageParameters = Map(
+              "inputName" -> toSQLId("estimatedNumItems"),
+              "inputType" -> toSQLType(estimatedNumItemsExpression.dataType),
+              "inputExpr" -> toSQLExpr(estimatedNumItemsExpression)
+            )
+          )
         } else if (estimatedNumItems <= 0L) {
-          TypeCheckFailure("The estimated number of items must be a positive value " +
-            s" (current value = $estimatedNumItems)")
+          DataTypeMismatch(
+            errorSubClass = "VALUE_OUT_OF_RANGE",
+            messageParameters = Map(
+              "exprName" -> "estimatedNumItems",
+              "valueRange" -> s"[0, positive]",
+              "currentValue" -> toSQLValue(estimatedNumItems, LongType)
+            )
+          )
         } else if (!numBitsExpression.foldable) {
-          TypeCheckFailure("The number of bits provided must be a constant literal")
+          DataTypeMismatch(
+            errorSubClass = "NON_FOLDABLE_INPUT",
+            messageParameters = Map(
+              "inputName" -> toSQLId("numBitsExpression"),
+              "inputType" -> toSQLType(numBitsExpression.dataType),
+              "inputExpr" -> toSQLExpr(numBitsExpression)
+            )
+          )
         } else if (numBits <= 0L) {
-          TypeCheckFailure("The number of bits must be a positive value " +
-            s" (current value = $numBits)")
+          DataTypeMismatch(
+            errorSubClass = "VALUE_OUT_OF_RANGE",
+            messageParameters = Map(
+              "exprName" -> "numBits",
+              "valueRange" -> s"[0, positive]",
+              "currentValue" -> toSQLValue(numBits, LongType)
+            )
+          )
         } else {
           require(estimatedNumItems <=
-            SQLConf.get.getConf(SQLConf.RUNTIME_BLOOM_FILTER_MAX_NUM_ITEMS))
-          require(numBits <= SQLConf.get.getConf(SQLConf.RUNTIME_BLOOM_FILTER_MAX_NUM_BITS))
+            SQLConf.get.getConf(RUNTIME_BLOOM_FILTER_MAX_NUM_ITEMS))
+          require(numBits <= SQLConf.get.getConf(RUNTIME_BLOOM_FILTER_MAX_NUM_BITS))
           TypeCheckSuccess
         }
-      case _ => TypeCheckResult.TypeCheckFailure(s"Input to function $prettyName should have " +
-        s"been a ${LongType.simpleString} value followed with two ${LongType.simpleString} size " +
-        s"arguments, but it's [${first.dataType.catalogString}, " +
-        s"${second.dataType.catalogString}, ${third.dataType.catalogString}]")
+      case _ =>
+        DataTypeMismatch(
+          errorSubClass = "BLOOM_FILTER_WRONG_TYPE",
+          messageParameters = Map(
+            "functionName" -> toSQLId(prettyName),
+            "expectedLeft" -> toSQLType(BinaryType),
+            "expectedRight" -> toSQLType(LongType),
+            "actual" -> Seq(first.dataType, second.dataType, third.dataType)
+              .map(toSQLType).mkString(", ")
+          )
+        )
     }
   }
   override def nullable: Boolean = true
@@ -96,12 +143,21 @@ case class BloomFilterAggregate(
   // Mark as lazy so that `estimatedNumItems` is not evaluated during tree transformation.
   private lazy val estimatedNumItems: Long =
     Math.min(estimatedNumItemsExpression.eval().asInstanceOf[Number].longValue,
-      SQLConf.get.getConf(SQLConf.RUNTIME_BLOOM_FILTER_MAX_NUM_ITEMS))
+      SQLConf.get.getConf(RUNTIME_BLOOM_FILTER_MAX_NUM_ITEMS))
 
   // Mark as lazy so that `numBits` is not evaluated during tree transformation.
   private lazy val numBits: Long =
     Math.min(numBitsExpression.eval().asInstanceOf[Number].longValue,
-      SQLConf.get.getConf(SQLConf.RUNTIME_BLOOM_FILTER_MAX_NUM_BITS))
+      SQLConf.get.getConf(RUNTIME_BLOOM_FILTER_MAX_NUM_BITS))
+
+  // Mark as lazy so that `updater` is not evaluated during tree transformation.
+  private lazy val updater: BloomFilterUpdater = child.dataType match {
+    case LongType => LongUpdater
+    case IntegerType => IntUpdater
+    case ShortType => ShortUpdater
+    case ByteType => ByteUpdater
+    case _: StringType => BinaryUpdater
+  }
 
   override def first: Expression = child
 
@@ -127,7 +183,7 @@ case class BloomFilterAggregate(
     if (value == null) {
       return buffer
     }
-    buffer.putLong(value.asInstanceOf[Long])
+    updater.update(buffer, value)
     buffer
   }
 
@@ -170,10 +226,34 @@ object BloomFilterAggregate {
     out.toByteArray
   }
 
-  final def deserialize(bytes: Array[Byte]): BloomFilter = {
-    val in = new ByteArrayInputStream(bytes)
-    val bloomFilter = BloomFilter.readFrom(in)
-    in.close()
-    bloomFilter
-  }
+  final def deserialize(bytes: Array[Byte]): BloomFilter = BloomFilter.readFrom(bytes)
+}
+
+private trait BloomFilterUpdater {
+  def update(bf: BloomFilter, v: Any): Boolean
+}
+
+private object LongUpdater extends BloomFilterUpdater with Serializable {
+  override def update(bf: BloomFilter, v: Any): Boolean =
+    bf.putLong(v.asInstanceOf[Long])
+}
+
+private object IntUpdater extends BloomFilterUpdater with Serializable {
+  override def update(bf: BloomFilter, v: Any): Boolean =
+    bf.putLong(v.asInstanceOf[Int])
+}
+
+private object ShortUpdater extends BloomFilterUpdater with Serializable {
+  override def update(bf: BloomFilter, v: Any): Boolean =
+    bf.putLong(v.asInstanceOf[Short])
+}
+
+private object ByteUpdater extends BloomFilterUpdater with Serializable {
+  override def update(bf: BloomFilter, v: Any): Boolean =
+    bf.putLong(v.asInstanceOf[Byte])
+}
+
+private object BinaryUpdater extends BloomFilterUpdater with Serializable {
+  override def update(bf: BloomFilter, v: Any): Boolean =
+    bf.putBinary(v.asInstanceOf[UTF8String].getBytes)
 }

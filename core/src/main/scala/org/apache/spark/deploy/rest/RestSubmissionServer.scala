@@ -17,19 +17,24 @@
 
 package org.apache.spark.deploy.rest
 
-import javax.servlet.http.{HttpServlet, HttpServletRequest, HttpServletResponse}
+import java.util.EnumSet
+import java.util.concurrent.{Executors, ExecutorService}
 
 import scala.io.Source
 
 import com.fasterxml.jackson.core.JsonProcessingException
-import org.eclipse.jetty.server.{HttpConnectionFactory, Server, ServerConnector}
-import org.eclipse.jetty.servlet.{ServletContextHandler, ServletHolder}
+import jakarta.servlet.DispatcherType
+import jakarta.servlet.http.{HttpServlet, HttpServletRequest, HttpServletResponse}
+import org.eclipse.jetty.server.{HttpConfiguration, HttpConnectionFactory, Server, ServerConnector}
+import org.eclipse.jetty.servlet.{FilterHolder, ServletContextHandler, ServletHolder}
 import org.eclipse.jetty.util.thread.{QueuedThreadPool, ScheduledExecutorScheduler}
 import org.json4s._
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.{SPARK_VERSION => sparkVersion, SparkConf}
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.LogKeys._
+import org.apache.spark.internal.config.{MASTER_REST_SERVER_FILTERS, MASTER_REST_SERVER_MAX_THREADS, MASTER_REST_SERVER_VIRTUAL_THREADS}
 import org.apache.spark.util.Utils
 
 /**
@@ -54,16 +59,23 @@ private[spark] abstract class RestSubmissionServer(
 
   protected val submitRequestServlet: SubmitRequestServlet
   protected val killRequestServlet: KillRequestServlet
+  protected val killAllRequestServlet: KillAllRequestServlet
   protected val statusRequestServlet: StatusRequestServlet
+  protected val clearRequestServlet: ClearRequestServlet
+  protected val readyzRequestServlet: ReadyzRequestServlet
 
-  private var _server: Option[Server] = None
+  // Visible for testing
+  private[rest] var _server: Option[Server] = None
 
   // A mapping from URL prefixes to servlets that serve them. Exposed for testing.
   protected val baseContext = s"/${RestSubmissionServer.PROTOCOL_VERSION}/submissions"
   protected lazy val contextToServlet = Map[String, RestServlet](
     s"$baseContext/create/*" -> submitRequestServlet,
     s"$baseContext/kill/*" -> killRequestServlet,
+    s"$baseContext/killall/*" -> killAllRequestServlet,
     s"$baseContext/status/*" -> statusRequestServlet,
+    s"$baseContext/clear/*" -> clearRequestServlet,
+    s"$baseContext/readyz/*" -> readyzRequestServlet,
     "/*" -> new ErrorServlet // default handler
   )
 
@@ -71,7 +83,8 @@ private[spark] abstract class RestSubmissionServer(
   def start(): Int = {
     val (server, boundPort) = Utils.startServiceOnPort[Server](requestedPort, doStart, masterConf)
     _server = Some(server)
-    logInfo(s"Started REST server for submitting applications on port $boundPort")
+    logInfo(log"Started REST server for submitting applications on ${MDC(HOST, host)}" +
+      log" with port ${MDC(PORT, boundPort)}")
     boundPort
   }
 
@@ -80,9 +93,23 @@ private[spark] abstract class RestSubmissionServer(
    * Return a 2-tuple of the started server and the bound port.
    */
   private def doStart(startPort: Int): (Server, Int) = {
-    val threadPool = new QueuedThreadPool
+    val threadPool = new QueuedThreadPool(masterConf.get(MASTER_REST_SERVER_MAX_THREADS))
+    threadPool.setName(getClass().getSimpleName())
+    if (Utils.isJavaVersionAtLeast21 && masterConf.get(MASTER_REST_SERVER_VIRTUAL_THREADS)) {
+      val newVirtualThreadPerTaskExecutor =
+        classOf[Executors].getMethod("newVirtualThreadPerTaskExecutor")
+      val service = newVirtualThreadPerTaskExecutor.invoke(null).asInstanceOf[ExecutorService]
+      threadPool.setVirtualThreadsExecutor(service)
+    }
     threadPool.setDaemon(true)
     val server = new Server(threadPool)
+
+    // Hide information.
+    val httpConfig = new HttpConfiguration()
+    logDebug("Using setSendServerVersion: false")
+    httpConfig.setSendServerVersion(false)
+    logDebug("Using setSendXPoweredBy: false")
+    httpConfig.setSendXPoweredBy(false)
 
     val connector = new ServerConnector(
       server,
@@ -92,7 +119,7 @@ private[spark] abstract class RestSubmissionServer(
       null,
       -1,
       -1,
-      new HttpConnectionFactory())
+      new HttpConnectionFactory(httpConfig))
     connector.setHost(host)
     connector.setPort(startPort)
     connector.setReuseAddress(!Utils.isWindows)
@@ -104,10 +131,24 @@ private[spark] abstract class RestSubmissionServer(
     contextToServlet.foreach { case (prefix, servlet) =>
       mainHandler.addServlet(new ServletHolder(servlet), prefix)
     }
+    addFilters(mainHandler)
     server.setHandler(mainHandler)
     server.start()
     val boundPort = connector.getLocalPort
     (server, boundPort)
+  }
+
+  /**
+   * Add filters, if any, to the given ServletContextHandlers.
+   */
+  private def addFilters(handler: ServletContextHandler): Unit = {
+    masterConf.get(MASTER_REST_SERVER_FILTERS).foreach { filter =>
+      val params = masterConf.getAllWithPrefix(s"spark.$filter.param.").toMap
+      val holder = new FilterHolder()
+      holder.setClassName(filter)
+      params.foreach { case (k, v) => holder.setInitParameter(k, v) }
+      handler.addFilter(holder, "/*", EnumSet.allOf(classOf[DispatcherType]))
+    }
   }
 
   def stop(): Unit = {
@@ -228,6 +269,68 @@ private[rest] abstract class KillRequestServlet extends RestServlet {
 }
 
 /**
+ * A servlet for handling killAll requests passed to the [[RestSubmissionServer]].
+ */
+private[rest] abstract class KillAllRequestServlet extends RestServlet {
+
+  /**
+   * Have the Master kill all drivers and return an appropriate response to the client.
+   * Otherwise, return error.
+   */
+  protected override def doPost(
+      request: HttpServletRequest,
+      response: HttpServletResponse): Unit = {
+    val responseMessage = handleKillAll()
+    sendResponse(responseMessage, response)
+  }
+
+  protected def handleKillAll(): KillAllSubmissionResponse
+}
+
+/**
+ * A servlet for handling clear requests passed to the [[RestSubmissionServer]].
+ */
+private[rest] abstract class ClearRequestServlet extends RestServlet {
+
+  /**
+   * Clear the completed drivers and apps.
+   */
+  protected override def doPost(
+      request: HttpServletRequest,
+      response: HttpServletResponse): Unit = {
+    val responseMessage = handleClear()
+    sendResponse(responseMessage, response)
+  }
+
+  protected def handleClear(): ClearResponse
+}
+
+/**
+ * A servlet for handling readyz requests passed to the [[RestSubmissionServer]].
+ */
+private[rest] abstract class ReadyzRequestServlet extends RestServlet {
+
+  /**
+   * Return the status of master is ready or not.
+   */
+  protected override def doGet(
+      request: HttpServletRequest,
+      response: HttpServletResponse): Unit = {
+    val readyzResponse = handleReadyz()
+    val responseMessage = if (readyzResponse.success) {
+      response.setStatus(HttpServletResponse.SC_OK)
+      readyzResponse
+    } else {
+      response.setStatus(HttpServletResponse.SC_SERVICE_UNAVAILABLE)
+      handleError("Master is not ready.")
+    }
+    sendResponse(responseMessage, response)
+  }
+
+  protected def handleReadyz(): ReadyzResponse
+}
+
+/**
  * A servlet for handling status requests passed to the [[RestSubmissionServer]].
  */
 private[rest] abstract class StatusRequestServlet extends RestServlet {
@@ -311,7 +414,8 @@ private class ErrorServlet extends RestServlet {
           "Missing the /submissions prefix."
         case `serverVersion` :: "submissions" :: tail =>
           // http://host:port/correct-version/submissions/*
-          "Missing an action: please specify one of /create, /kill, or /status."
+          "Missing an action: please specify one of /create, /kill, /killall, /clear, /status, " +
+            "or /readyz."
         case unknownVersion :: tail =>
           // http://host:port/unknown-version/*
           versionMismatch = true

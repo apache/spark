@@ -32,16 +32,14 @@ import java.util.concurrent.Future;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 
-import com.google.common.collect.ImmutableMap;
-import com.google.common.collect.Sets;
 import org.apache.spark.network.buffer.FileSegmentManagedBuffer;
 import org.apache.spark.network.server.OneForOneStreamManager;
-import org.junit.After;
-import org.junit.AfterClass;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.*;
 
 import org.apache.spark.network.TestUtils;
 import org.apache.spark.network.TransportContext;
@@ -57,11 +55,11 @@ public class ExternalShuffleIntegrationSuite {
   private static final String APP_ID = "app-id";
   private static final String SORT_MANAGER = "org.apache.spark.shuffle.sort.SortShuffleManager";
 
-  private static final int RDD_ID = 1;
-  private static final int SPLIT_INDEX_VALID_BLOCK = 0;
+  protected static final int RDD_ID = 1;
+  protected static final int SPLIT_INDEX_VALID_BLOCK = 0;
   private static final int SPLIT_INDEX_MISSING_FILE = 1;
-  private static final int SPLIT_INDEX_CORRUPT_LENGTH = 2;
-  private static final int SPLIT_INDEX_VALID_BLOCK_TO_RM = 3;
+  protected static final int SPLIT_INDEX_CORRUPT_LENGTH = 2;
+  protected static final int SPLIT_INDEX_VALID_BLOCK_TO_RM = 3;
   private static final int SPLIT_INDEX_MISSING_BLOCK_TO_RM = 4;
 
   // Executor 0 is sort-based
@@ -86,8 +84,20 @@ public class ExternalShuffleIntegrationSuite {
     new byte[54321],
   };
 
-  @BeforeClass
+  private static TransportConf createTransportConf(int maxRetries, boolean rddEnabled) {
+    HashMap<String, String> config = new HashMap<>();
+    config.put("spark.shuffle.io.maxRetries", String.valueOf(maxRetries));
+    config.put(Constants.SHUFFLE_SERVICE_FETCH_RDD_ENABLED, String.valueOf(rddEnabled));
+    return new TransportConf("shuffle", new MapConfigProvider(config));
+  }
+
+  // This is split out so it can be invoked in a subclass with a different config
+  @BeforeAll
   public static void beforeAll() throws IOException {
+    doBeforeAllWithConfig(createTransportConf(0, true));
+  }
+
+  public static void doBeforeAllWithConfig(TransportConf transportConf) throws IOException {
     Random rand = new Random();
 
     for (byte[] block : exec0Blocks) {
@@ -105,10 +115,7 @@ public class ExternalShuffleIntegrationSuite {
     dataContext0.insertCachedRddData(RDD_ID, SPLIT_INDEX_VALID_BLOCK, exec0RddBlockValid);
     dataContext0.insertCachedRddData(RDD_ID, SPLIT_INDEX_VALID_BLOCK_TO_RM, exec0RddBlockToRemove);
 
-    HashMap<String, String> config = new HashMap<>();
-    config.put("spark.shuffle.io.maxRetries", "0");
-    config.put(Constants.SHUFFLE_SERVICE_FETCH_RDD_ENABLED, "true");
-    conf = new TransportConf("shuffle", new MapConfigProvider(config));
+    conf = transportConf;
     handler = new ExternalBlockHandler(
       new OneForOneStreamManager(),
       new ExternalShuffleBlockResolver(conf, null) {
@@ -116,12 +123,10 @@ public class ExternalShuffleIntegrationSuite {
         public ManagedBuffer getRddBlockData(String appId, String execId, int rddId, int splitIdx) {
           ManagedBuffer res;
           if (rddId == RDD_ID) {
-            switch (splitIdx) {
-              case SPLIT_INDEX_CORRUPT_LENGTH:
-                res = new FileSegmentManagedBuffer(conf, new File("missing.file"), 0, 12);
-                break;
-              default:
-                res = super.getRddBlockData(appId, execId, rddId, splitIdx);
+            if (splitIdx == SPLIT_INDEX_CORRUPT_LENGTH) {
+              res = new FileSegmentManagedBuffer(conf, new File("missing.file"), 0, 12);
+            } else {
+              res = super.getRddBlockData(appId, execId, rddId, splitIdx);
             }
           } else {
             res = super.getRddBlockData(appId, execId, rddId, splitIdx);
@@ -133,14 +138,14 @@ public class ExternalShuffleIntegrationSuite {
     server = transportContext.createServer();
   }
 
-  @AfterClass
+  @AfterAll
   public static void afterAll() {
     dataContext0.cleanup();
     server.close();
     transportContext.close();
   }
 
-  @After
+  @AfterEach
   public void afterEach() {
     handler.applicationRemoved(APP_ID, false /* cleanupLocalDirs */);
   }
@@ -213,126 +218,154 @@ public class ExternalShuffleIntegrationSuite {
 
   @Test
   public void testFetchOneSort() throws Exception {
-    registerExecutor("exec-0", dataContext0.createExecutorInfo(SORT_MANAGER));
-    FetchResult exec0Fetch = fetchBlocks("exec-0", new String[] { "shuffle_0_0_0" });
-    assertEquals(Sets.newHashSet("shuffle_0_0_0"), exec0Fetch.successBlocks);
-    assertTrue(exec0Fetch.failedBlocks.isEmpty());
-    assertBufferListsEqual(exec0Fetch.buffers, Arrays.asList(exec0Blocks[0]));
-    exec0Fetch.releaseBuffers();
+    try (ExternalBlockStoreClient client = createExternalBlockStoreClient()) {
+      registerExecutor(client, "exec-0", dataContext0.createExecutorInfo(SORT_MANAGER));
+      FetchResult exec0Fetch = fetchBlocks("exec-0", new String[] { "shuffle_0_0_0" });
+      assertEquals(Set.of("shuffle_0_0_0"), exec0Fetch.successBlocks);
+      assertTrue(exec0Fetch.failedBlocks.isEmpty());
+      assertBufferListsEqual(exec0Fetch.buffers, Arrays.asList(exec0Blocks[0]));
+      exec0Fetch.releaseBuffers();
+    }
   }
 
   @Test
   public void testFetchThreeSort() throws Exception {
-    registerExecutor("exec-0", dataContext0.createExecutorInfo(SORT_MANAGER));
-    FetchResult exec0Fetch = fetchBlocks("exec-0",
-      new String[] { "shuffle_0_0_0", "shuffle_0_0_1", "shuffle_0_0_2" });
-    assertEquals(Sets.newHashSet("shuffle_0_0_0", "shuffle_0_0_1", "shuffle_0_0_2"),
-      exec0Fetch.successBlocks);
-    assertTrue(exec0Fetch.failedBlocks.isEmpty());
-    assertBufferListsEqual(exec0Fetch.buffers, Arrays.asList(exec0Blocks));
-    exec0Fetch.releaseBuffers();
+    try (ExternalBlockStoreClient client = createExternalBlockStoreClient()) {
+      registerExecutor(client,"exec-0", dataContext0.createExecutorInfo(SORT_MANAGER));
+      FetchResult exec0Fetch = fetchBlocks("exec-0",
+        new String[]{"shuffle_0_0_0", "shuffle_0_0_1", "shuffle_0_0_2"});
+      assertEquals(Set.of("shuffle_0_0_0", "shuffle_0_0_1", "shuffle_0_0_2"),
+        exec0Fetch.successBlocks);
+      assertTrue(exec0Fetch.failedBlocks.isEmpty());
+      assertBufferListsEqual(exec0Fetch.buffers, Arrays.asList(exec0Blocks));
+      exec0Fetch.releaseBuffers();
+    }
   }
 
   @Test
   public void testRegisterWithCustomShuffleManager() throws Exception {
-    registerExecutor("exec-1", dataContext0.createExecutorInfo("custom shuffle manager"));
+    try (ExternalBlockStoreClient client = createExternalBlockStoreClient()) {
+      registerExecutor(client,"exec-1", dataContext0.createExecutorInfo("custom shuffle manager"));
+    }
   }
 
   @Test
   public void testFetchWrongBlockId() throws Exception {
-    registerExecutor("exec-1", dataContext0.createExecutorInfo(SORT_MANAGER));
-    FetchResult execFetch = fetchBlocks("exec-1", new String[] { "broadcast_1" });
-    assertTrue(execFetch.successBlocks.isEmpty());
-    assertEquals(Sets.newHashSet("broadcast_1"), execFetch.failedBlocks);
+    try (ExternalBlockStoreClient client = createExternalBlockStoreClient()) {
+      registerExecutor(client, "exec-1", dataContext0.createExecutorInfo(SORT_MANAGER));
+      FetchResult execFetch = fetchBlocks("exec-1", new String[]{"broadcast_1"});
+      assertTrue(execFetch.successBlocks.isEmpty());
+      assertEquals(Set.of("broadcast_1"), execFetch.failedBlocks);
+    }
   }
 
   @Test
   public void testFetchValidRddBlock() throws Exception {
-    registerExecutor("exec-1", dataContext0.createExecutorInfo(SORT_MANAGER));
-    String validBlockId = "rdd_" + RDD_ID +"_" + SPLIT_INDEX_VALID_BLOCK;
-    FetchResult execFetch = fetchBlocks("exec-1", new String[] { validBlockId });
-    assertTrue(execFetch.failedBlocks.isEmpty());
-    assertEquals(Sets.newHashSet(validBlockId), execFetch.successBlocks);
-    assertBuffersEqual(new NioManagedBuffer(ByteBuffer.wrap(exec0RddBlockValid)),
-      execFetch.buffers.get(0));
+    try (ExternalBlockStoreClient client = createExternalBlockStoreClient()) {
+      registerExecutor(client, "exec-1", dataContext0.createExecutorInfo(SORT_MANAGER));
+      String validBlockId = "rdd_" + RDD_ID + "_" + SPLIT_INDEX_VALID_BLOCK;
+      FetchResult execFetch = fetchBlocks("exec-1", new String[]{validBlockId});
+      assertTrue(execFetch.failedBlocks.isEmpty());
+      assertEquals(Set.of(validBlockId), execFetch.successBlocks);
+      assertBuffersEqual(new NioManagedBuffer(ByteBuffer.wrap(exec0RddBlockValid)),
+        execFetch.buffers.get(0));
+    }
   }
 
   @Test
   public void testFetchDeletedRddBlock() throws Exception {
-    registerExecutor("exec-1", dataContext0.createExecutorInfo(SORT_MANAGER));
-    String missingBlockId = "rdd_" + RDD_ID +"_" + SPLIT_INDEX_MISSING_FILE;
-    FetchResult execFetch = fetchBlocks("exec-1", new String[] { missingBlockId });
-    assertTrue(execFetch.successBlocks.isEmpty());
-    assertEquals(Sets.newHashSet(missingBlockId), execFetch.failedBlocks);
+    try (ExternalBlockStoreClient client = createExternalBlockStoreClient()) {
+      registerExecutor(client, "exec-1", dataContext0.createExecutorInfo(SORT_MANAGER));
+      String missingBlockId = "rdd_" + RDD_ID + "_" + SPLIT_INDEX_MISSING_FILE;
+      FetchResult execFetch = fetchBlocks("exec-1", new String[]{missingBlockId});
+      assertTrue(execFetch.successBlocks.isEmpty());
+      assertEquals(Set.of(missingBlockId), execFetch.failedBlocks);
+    }
   }
 
   @Test
   public void testRemoveRddBlocks() throws Exception {
-    registerExecutor("exec-1", dataContext0.createExecutorInfo(SORT_MANAGER));
-    String validBlockIdToRemove = "rdd_" + RDD_ID +"_" + SPLIT_INDEX_VALID_BLOCK_TO_RM;
-    String missingBlockIdToRemove = "rdd_" + RDD_ID +"_" + SPLIT_INDEX_MISSING_BLOCK_TO_RM;
+    try (ExternalBlockStoreClient blockStoreClient = createExternalBlockStoreClient()) {
+      registerExecutor(blockStoreClient, "exec-1", dataContext0.createExecutorInfo(SORT_MANAGER));
+      String validBlockIdToRemove = "rdd_" + RDD_ID + "_" + SPLIT_INDEX_VALID_BLOCK_TO_RM;
+      String missingBlockIdToRemove = "rdd_" + RDD_ID + "_" + SPLIT_INDEX_MISSING_BLOCK_TO_RM;
 
-    try (ExternalBlockStoreClient client = new ExternalBlockStoreClient(conf, null, false, 5000)) {
-      client.init(APP_ID);
-      Future<Integer> numRemovedBlocks = client.removeBlocks(
-        TestUtils.getLocalHost(),
-        server.getPort(),
-        "exec-1",
-          new String[] { validBlockIdToRemove, missingBlockIdToRemove });
-      assertEquals(1, numRemovedBlocks.get().intValue());
+      try (ExternalBlockStoreClient client = createExternalBlockStoreClient()) {
+        client.init(APP_ID);
+        Future<Integer> numRemovedBlocks = client.removeBlocks(
+          TestUtils.getLocalHost(),
+          server.getPort(),
+          "exec-1",
+          new String[]{validBlockIdToRemove, missingBlockIdToRemove});
+        assertEquals(1, numRemovedBlocks.get().intValue());
+      }
     }
   }
 
   @Test
   public void testFetchCorruptRddBlock() throws Exception {
-    registerExecutor("exec-1", dataContext0.createExecutorInfo(SORT_MANAGER));
-    String corruptBlockId = "rdd_" + RDD_ID +"_" + SPLIT_INDEX_CORRUPT_LENGTH;
-    FetchResult execFetch = fetchBlocks("exec-1", new String[] { corruptBlockId });
-    assertTrue(execFetch.successBlocks.isEmpty());
-    assertEquals(Sets.newHashSet(corruptBlockId), execFetch.failedBlocks);
+    try (ExternalBlockStoreClient client = createExternalBlockStoreClient()) {
+      registerExecutor(client, "exec-1", dataContext0.createExecutorInfo(SORT_MANAGER));
+      String corruptBlockId = "rdd_" + RDD_ID + "_" + SPLIT_INDEX_CORRUPT_LENGTH;
+      FetchResult execFetch = fetchBlocks("exec-1", new String[]{corruptBlockId});
+      assertTrue(execFetch.successBlocks.isEmpty());
+      assertEquals(Set.of(corruptBlockId), execFetch.failedBlocks);
+    }
   }
 
   @Test
   public void testFetchNonexistent() throws Exception {
-    registerExecutor("exec-0", dataContext0.createExecutorInfo(SORT_MANAGER));
-    FetchResult execFetch = fetchBlocks("exec-0",
-      new String[] { "shuffle_2_0_0" });
-    assertTrue(execFetch.successBlocks.isEmpty());
-    assertEquals(Sets.newHashSet("shuffle_2_0_0"), execFetch.failedBlocks);
+    try (ExternalBlockStoreClient client = createExternalBlockStoreClient()) {
+      registerExecutor(client,"exec-0", dataContext0.createExecutorInfo(SORT_MANAGER));
+      FetchResult execFetch = fetchBlocks("exec-0",
+        new String[]{"shuffle_2_0_0"});
+      assertTrue(execFetch.successBlocks.isEmpty());
+      assertEquals(Set.of("shuffle_2_0_0"), execFetch.failedBlocks);
+    }
   }
 
   @Test
   public void testFetchWrongExecutor() throws Exception {
-    registerExecutor("exec-0", dataContext0.createExecutorInfo(SORT_MANAGER));
-    FetchResult execFetch0 = fetchBlocks("exec-0", new String[] { "shuffle_0_0_0" /* right */});
-    FetchResult execFetch1 = fetchBlocks("exec-0", new String[] { "shuffle_1_0_0" /* wrong */ });
-    assertEquals(Sets.newHashSet("shuffle_0_0_0"), execFetch0.successBlocks);
-    assertEquals(Sets.newHashSet("shuffle_1_0_0"), execFetch1.failedBlocks);
+    try (ExternalBlockStoreClient client = createExternalBlockStoreClient()) {
+      registerExecutor(client,"exec-0", dataContext0.createExecutorInfo(SORT_MANAGER));
+      FetchResult execFetch0 = fetchBlocks("exec-0", new String[]{"shuffle_0_0_0" /* right */});
+      FetchResult execFetch1 = fetchBlocks("exec-0", new String[]{"shuffle_1_0_0" /* wrong */});
+      assertEquals(Set.of("shuffle_0_0_0"), execFetch0.successBlocks);
+      assertEquals(Set.of("shuffle_1_0_0"), execFetch1.failedBlocks);
+    }
   }
 
   @Test
   public void testFetchUnregisteredExecutor() throws Exception {
-    registerExecutor("exec-0", dataContext0.createExecutorInfo(SORT_MANAGER));
-    FetchResult execFetch = fetchBlocks("exec-2",
-      new String[] { "shuffle_0_0_0", "shuffle_1_0_0" });
-    assertTrue(execFetch.successBlocks.isEmpty());
-    assertEquals(Sets.newHashSet("shuffle_0_0_0", "shuffle_1_0_0"), execFetch.failedBlocks);
+    try (ExternalBlockStoreClient client = createExternalBlockStoreClient()) {
+      registerExecutor(client, "exec-0", dataContext0.createExecutorInfo(SORT_MANAGER));
+      FetchResult execFetch = fetchBlocks("exec-2",
+        new String[]{"shuffle_0_0_0", "shuffle_1_0_0"});
+      assertTrue(execFetch.successBlocks.isEmpty());
+      assertEquals(Set.of("shuffle_0_0_0", "shuffle_1_0_0"), execFetch.failedBlocks);
+    }
   }
 
   @Test
   public void testFetchNoServer() throws Exception {
-    TransportConf clientConf = new TransportConf("shuffle",
-      new MapConfigProvider(ImmutableMap.of("spark.shuffle.io.maxRetries", "0")));
-    registerExecutor("exec-0", dataContext0.createExecutorInfo(SORT_MANAGER));
-    FetchResult execFetch = fetchBlocks("exec-0",
-      new String[]{"shuffle_1_0_0", "shuffle_1_0_1"}, clientConf, 1 /* port */);
-    assertTrue(execFetch.successBlocks.isEmpty());
-    assertEquals(Sets.newHashSet("shuffle_1_0_0", "shuffle_1_0_1"), execFetch.failedBlocks);
+    try (ExternalBlockStoreClient client = createExternalBlockStoreClient()) {
+      TransportConf clientConf = createTransportConf(0, false);
+      registerExecutor(client,"exec-0", dataContext0.createExecutorInfo(SORT_MANAGER));
+      FetchResult execFetch = fetchBlocks("exec-0",
+        new String[]{"shuffle_1_0_0", "shuffle_1_0_1"}, clientConf, 1 /* port */);
+      assertTrue(execFetch.successBlocks.isEmpty());
+      assertEquals(Set.of("shuffle_1_0_0", "shuffle_1_0_1"), execFetch.failedBlocks);
+    }
   }
 
-  private static void registerExecutor(String executorId, ExecutorShuffleInfo executorInfo)
-      throws IOException, InterruptedException {
-    ExternalBlockStoreClient client = new ExternalBlockStoreClient(conf, null, false, 5000);
+  private static ExternalBlockStoreClient createExternalBlockStoreClient() {
+    return new ExternalBlockStoreClient(conf, null, false, 5000);
+  }
+
+  private static void registerExecutor(
+      ExternalBlockStoreClient client,
+      String executorId,
+      ExecutorShuffleInfo executorInfo) throws IOException, InterruptedException {
     client.init(APP_ID);
     client.registerWithShuffleServer(TestUtils.getLocalHost(), server.getPort(),
       executorId, executorInfo);

@@ -17,31 +17,33 @@
 
 package test.org.apache.spark.sql;
 
+import java.util.*;
+
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+
 import org.apache.spark.api.java.function.FilterFunction;
+import org.apache.spark.sql.AnalysisException;
 import org.apache.spark.sql.Column;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.RowFactory;
 import org.apache.spark.sql.test.TestSparkSession;
 import org.apache.spark.sql.types.StructType;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
-
-import java.util.*;
 
 import static org.apache.spark.sql.types.DataTypes.*;
 
 public class JavaColumnExpressionSuite {
   private transient TestSparkSession spark;
 
-  @Before
+  @BeforeEach
   public void setUp() {
     spark = new TestSparkSession();
   }
 
-  @After
+  @AfterEach
   public void tearDown() {
     spark.stop();
     spark = null;
@@ -58,13 +60,13 @@ public class JavaColumnExpressionSuite {
       createStructField("b", StringType, false)));
     Dataset<Row> df = spark.createDataFrame(rows, schema);
     // Test with different types of collections
-    Assert.assertArrayEquals(
+    Assertions.assertArrayEquals(
       (Row[]) df.filter(df.col("a").isInCollection(Arrays.asList(1, 2))).collect(),
       (Row[]) df.filter((FilterFunction<Row>) r -> r.getInt(0) == 1 || r.getInt(0) == 2).collect());
-    Assert.assertArrayEquals(
+    Assertions.assertArrayEquals(
       (Row[]) df.filter(df.col("a").isInCollection(new HashSet<>(Arrays.asList(1, 2)))).collect(),
       (Row[]) df.filter((FilterFunction<Row>) r -> r.getInt(0) == 1 || r.getInt(0) == 2).collect());
-    Assert.assertArrayEquals(
+    Assertions.assertArrayEquals(
       (Row[]) df.filter(df.col("a").isInCollection(new ArrayList<>(Arrays.asList(3, 1)))).collect(),
       (Row[]) df.filter((FilterFunction<Row>) r -> r.getInt(0) == 3 || r.getInt(0) == 1).collect());
   }
@@ -79,12 +81,13 @@ public class JavaColumnExpressionSuite {
       createStructField("a", IntegerType, false),
       createStructField("b", createArrayType(IntegerType, false), false)));
     Dataset<Row> df = spark.createDataFrame(rows, schema);
-    Exception e = Assert.assertThrows(Exception.class,
+    AnalysisException e = Assertions.assertThrows(AnalysisException.class,
       () -> df.filter(df.col("a").isInCollection(Arrays.asList(new Column("b")))));
-    Arrays.asList("cannot resolve",
-      "due to data type mismatch: Arguments must be same type but were")
-        .forEach(s ->
-          Assert.assertTrue(e.getMessage().toLowerCase(Locale.ROOT)
-            .contains(s.toLowerCase(Locale.ROOT))));
+    Assertions.assertTrue(e.getCondition().equals("DATATYPE_MISMATCH.DATA_DIFF_TYPES"));
+    Map<String, String> messageParameters = new HashMap<>();
+    messageParameters.put("functionName", "`in`");
+    messageParameters.put("dataType", "[\"INT\", \"ARRAY<INT>\"]");
+    messageParameters.put("sqlExpr", "\"(a IN (b))\"");
+    Assertions.assertTrue(e.getMessageParameters().equals(messageParameters));
   }
 }

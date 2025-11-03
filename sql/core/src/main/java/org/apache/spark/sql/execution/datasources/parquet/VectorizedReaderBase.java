@@ -18,6 +18,7 @@ package org.apache.spark.sql.execution.datasources.parquet;
 
 import org.apache.parquet.column.values.ValuesReader;
 import org.apache.parquet.io.api.Binary;
+import org.apache.spark.SparkUnsupportedOperationException;
 import org.apache.spark.sql.execution.vectorized.WritableColumnVector;
 
 /**
@@ -28,129 +29,129 @@ public class VectorizedReaderBase extends ValuesReader implements VectorizedValu
 
   @Override
   public void skip() {
-    throw new UnsupportedOperationException();
+    throw SparkUnsupportedOperationException.apply();
   }
 
   @Override
   public byte readByte() {
-    throw new UnsupportedOperationException();
+    throw SparkUnsupportedOperationException.apply();
   }
 
   @Override
   public short readShort() {
-    throw new UnsupportedOperationException();
+    throw SparkUnsupportedOperationException.apply();
   }
 
   @Override
   public Binary readBinary(int len) {
-    throw new UnsupportedOperationException();
+    throw SparkUnsupportedOperationException.apply();
   }
 
   @Override
   public void readBooleans(int total, WritableColumnVector c, int rowId) {
-    throw new UnsupportedOperationException();
+    throw SparkUnsupportedOperationException.apply();
   }
 
   @Override
   public void readBytes(int total, WritableColumnVector c, int rowId) {
-    throw new UnsupportedOperationException();
+    throw SparkUnsupportedOperationException.apply();
   }
 
   @Override
   public void readShorts(int total, WritableColumnVector c, int rowId) {
-    throw new UnsupportedOperationException();
+    throw SparkUnsupportedOperationException.apply();
   }
 
   @Override
   public void readIntegers(int total, WritableColumnVector c, int rowId) {
-    throw new UnsupportedOperationException();
+    throw SparkUnsupportedOperationException.apply();
   }
 
   @Override
   public void readIntegersWithRebase(int total, WritableColumnVector c, int rowId,
       boolean failIfRebase) {
-    throw new UnsupportedOperationException();
+    throw SparkUnsupportedOperationException.apply();
   }
 
   @Override
   public void readUnsignedIntegers(int total, WritableColumnVector c, int rowId) {
-    throw new UnsupportedOperationException();
+    throw SparkUnsupportedOperationException.apply();
   }
 
   @Override
   public void readUnsignedLongs(int total, WritableColumnVector c, int rowId) {
-    throw new UnsupportedOperationException();
+    throw SparkUnsupportedOperationException.apply();
   }
 
   @Override
   public void readLongs(int total, WritableColumnVector c, int rowId) {
-    throw new UnsupportedOperationException();
+    throw SparkUnsupportedOperationException.apply();
   }
 
   @Override
   public void readLongsWithRebase(int total, WritableColumnVector c, int rowId,
       boolean failIfRebase, String timeZone) {
-    throw new UnsupportedOperationException();
+    throw SparkUnsupportedOperationException.apply();
   }
 
   @Override
   public void readFloats(int total, WritableColumnVector c, int rowId) {
-    throw new UnsupportedOperationException();
+    throw SparkUnsupportedOperationException.apply();
   }
 
   @Override
   public void readDoubles(int total, WritableColumnVector c, int rowId) {
-    throw new UnsupportedOperationException();
+    throw SparkUnsupportedOperationException.apply();
   }
 
   @Override
   public void readBinary(int total, WritableColumnVector c, int rowId) {
-    throw new UnsupportedOperationException();
+    throw SparkUnsupportedOperationException.apply();
   }
 
   @Override
   public void skipBooleans(int total) {
-    throw new UnsupportedOperationException();
+    throw SparkUnsupportedOperationException.apply();
   }
 
   @Override
   public void skipBytes(int total) {
-    throw new UnsupportedOperationException();
+    throw SparkUnsupportedOperationException.apply();
   }
 
   @Override
   public void skipShorts(int total) {
-    throw new UnsupportedOperationException();
+    throw SparkUnsupportedOperationException.apply();
   }
 
   @Override
   public void skipIntegers(int total) {
-    throw new UnsupportedOperationException();
+    throw SparkUnsupportedOperationException.apply();
   }
 
   @Override
   public void skipLongs(int total) {
-    throw new UnsupportedOperationException();
+    throw SparkUnsupportedOperationException.apply();
   }
 
   @Override
   public void skipFloats(int total) {
-    throw new UnsupportedOperationException();
+    throw SparkUnsupportedOperationException.apply();
   }
 
   @Override
   public void skipDoubles(int total) {
-    throw new UnsupportedOperationException();
+    throw SparkUnsupportedOperationException.apply();
   }
 
   @Override
   public void skipBinary(int total) {
-    throw new UnsupportedOperationException();
+    throw SparkUnsupportedOperationException.apply();
   }
 
   @Override
   public void skipFixedLenByteArray(int total, int len) {
-    throw new UnsupportedOperationException();
+    throw SparkUnsupportedOperationException.apply();
   }
 
 }

@@ -24,12 +24,16 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
-import com.google.common.collect.Sets;
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.util.concurrent.Uninterruptibles;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
+import org.apache.spark.internal.SparkLogger;
+import org.apache.spark.internal.SparkLoggerFactory;
+import org.apache.spark.internal.LogKeys;
+import org.apache.spark.internal.MDC;
 import org.apache.spark.network.buffer.ManagedBuffer;
+import org.apache.spark.network.sasl.SaslTimeoutException;
+import org.apache.spark.network.util.JavaUtils;
 import org.apache.spark.network.util.NettyUtils;
 import org.apache.spark.network.util.TransportConf;
 
@@ -65,7 +69,8 @@ public class RetryingBlockTransferor {
   private static final ExecutorService executorService = Executors.newCachedThreadPool(
     NettyUtils.createThreadFactory("Block Transfer Retry"));
 
-  private static final Logger logger = LoggerFactory.getLogger(RetryingBlockTransferor.class);
+  private static final SparkLogger logger =
+    SparkLoggerFactory.getLogger(RetryingBlockTransferor.class);
 
   /** Used to initiate new Block transfer on our remaining blocks. */
   private final BlockTransferStarter transferStarter;
@@ -85,6 +90,17 @@ public class RetryingBlockTransferor {
   /** Number of times we've attempted to retry so far. */
   private int retryCount = 0;
 
+  // Number of times SASL timeout has been retried without success.
+  // If we see maxRetries consecutive failures, the request is failed.
+  // On the other hand, if sasl succeeds and we are able to send other requests subsequently,
+  // we reduce the SASL failures from retryCount (since SASL failures were part of
+  // connection bootstrap - which ended up being successful).
+  // spark.network.auth.rpcTimeout is much lower than spark.network.timeout and others -
+  // and so sasl is more susceptible to failures when remote service
+  // (like external shuffle service) is under load: but once it succeeds, we do not want to
+  // include it as part of request retries.
+  private int saslRetryCount = 0;
+
   /**
    * Set of all block ids which have not been transferred successfully or with a non-IO Exception.
    * A retry involves requesting every outstanding block. Note that since this is a LinkedHashSet,
@@ -99,6 +115,9 @@ public class RetryingBlockTransferor {
    */
   private RetryingBlockTransferListener currentListener;
 
+  /** Whether sasl retries are enabled. */
+  private final boolean enableSaslRetries;
+
   private final ErrorHandler errorHandler;
 
   public RetryingBlockTransferor(
@@ -111,10 +130,12 @@ public class RetryingBlockTransferor {
     this.listener = listener;
     this.maxRetries = conf.maxIORetries();
     this.retryWaitTime = conf.ioRetryWaitTimeMs();
-    this.outstandingBlocksIds = Sets.newLinkedHashSet();
+    this.outstandingBlocksIds = new LinkedHashSet<>();
     Collections.addAll(outstandingBlocksIds, blockIds);
     this.currentListener = new RetryingBlockTransferListener();
     this.errorHandler = errorHandler;
+    this.enableSaslRetries = conf.enableSaslRetries();
+    this.saslRetryCount = 0;
   }
 
   public RetryingBlockTransferor(
@@ -123,6 +144,11 @@ public class RetryingBlockTransferor {
       String[] blockIds,
       BlockFetchingListener listener) {
     this(conf, transferStarter, blockIds, listener, ErrorHandler.NOOP_ERROR_HANDLER);
+  }
+
+  @VisibleForTesting
+  synchronized void setCurrentListener(RetryingBlockTransferListener listener) {
+    this.currentListener = listener;
   }
 
   /**
@@ -153,16 +179,24 @@ public class RetryingBlockTransferor {
     try {
       transferStarter.createAndStart(blockIdsToTransfer, myListener);
     } catch (Exception e) {
-      logger.error(String.format("Exception while beginning %s of %s outstanding blocks %s",
-        listener.getTransferType(), blockIdsToTransfer.length,
-        numRetries > 0 ? "(after " + numRetries + " retries)" : ""), e);
-
-      if (shouldRetry(e)) {
-        initiateRetry();
+      if (numRetries > 0) {
+        logger.error("Exception while beginning {} of {} outstanding blocks (after {} retries)", e,
+          MDC.of(LogKeys.TRANSFER_TYPE, listener.getTransferType()),
+          MDC.of(LogKeys.NUM_BLOCKS, blockIdsToTransfer.length),
+          MDC.of(LogKeys.NUM_RETRY, numRetries));
       } else {
-        for (String bid : blockIdsToTransfer) {
-          listener.onBlockTransferFailure(bid, e);
-        }
+        logger.error("Exception while beginning {} of {} outstanding blocks", e,
+          MDC.of(LogKeys.TRANSFER_TYPE, listener.getTransferType()),
+          MDC.of(LogKeys.NUM_BLOCKS, blockIdsToTransfer.length));
+      }
+      if (shouldRetry(e) && initiateRetry(e)) {
+        // successfully initiated a retry
+        return;
+      }
+
+      // retry is not possible, so fail remaining blocks
+      for (String bid : blockIdsToTransfer) {
+        listener.onBlockTransferFailure(bid, e);
       }
     }
   }
@@ -170,30 +204,62 @@ public class RetryingBlockTransferor {
   /**
    * Lightweight method which initiates a retry in a different thread. The retry will involve
    * calling transferAllOutstanding() after a configured wait time.
+   * Returns true if the retry was successfully initiated, false otherwise.
    */
-  private synchronized void initiateRetry() {
+  @VisibleForTesting
+  synchronized boolean initiateRetry(Throwable e) {
+    if (enableSaslRetries && e instanceof SaslTimeoutException) {
+      saslRetryCount += 1;
+    }
     retryCount += 1;
     currentListener = new RetryingBlockTransferListener();
 
     logger.info("Retrying {} ({}/{}) for {} outstanding blocks after {} ms",
-      listener.getTransferType(), retryCount, maxRetries, outstandingBlocksIds.size(),
-      retryWaitTime);
+      MDC.of(LogKeys.TRANSFER_TYPE, listener.getTransferType()),
+      MDC.of(LogKeys.NUM_RETRY, retryCount),
+      MDC.of(LogKeys.MAX_ATTEMPTS, maxRetries),
+      MDC.of(LogKeys.NUM_BLOCKS, outstandingBlocksIds.size()),
+      MDC.of(LogKeys.RETRY_WAIT_TIME, retryWaitTime));
 
-    executorService.submit(() -> {
-      Uninterruptibles.sleepUninterruptibly(retryWaitTime, TimeUnit.MILLISECONDS);
-      transferAllOutstanding();
-    });
+    try {
+      executorService.execute(() -> {
+        Uninterruptibles.sleepUninterruptibly(retryWaitTime, TimeUnit.MILLISECONDS);
+        transferAllOutstanding();
+      });
+    } catch (Throwable t) {
+      logger.error("Exception while trying to initiate retry", t);
+      return false;
+    }
+
+    return true;
   }
 
   /**
    * Returns true if we should retry due a block transfer failure. We will retry if and only if
-   * the exception was an IOException and we haven't retried 'maxRetries' times already.
+   * the exception was an IOException or SaslTimeoutException and we haven't retried
+   * 'maxRetries' times already.
    */
   private synchronized boolean shouldRetry(Throwable e) {
     boolean isIOException = e instanceof IOException
       || e.getCause() instanceof IOException;
+    boolean isSaslTimeout = enableSaslRetries && e instanceof SaslTimeoutException;
+    // If this is a non SASL request failure, reduce earlier SASL failures from retryCount
+    // since some subsequent SASL attempt was successful
+    if (!isSaslTimeout && saslRetryCount > 0) {
+      JavaUtils.checkState(retryCount >= saslRetryCount,
+        "retryCount must be greater than or equal to saslRetryCount");
+      retryCount -= saslRetryCount;
+      saslRetryCount = 0;
+    }
     boolean hasRemainingRetries = retryCount < maxRetries;
-    return isIOException && hasRemainingRetries && errorHandler.shouldRetryError(e);
+    boolean shouldRetry =  (isSaslTimeout || isIOException) &&
+        hasRemainingRetries && errorHandler.shouldRetryError(e);
+    return shouldRetry;
+  }
+
+  @VisibleForTesting
+  public int getRetryCount() {
+    return retryCount;
   }
 
   /**
@@ -201,7 +267,8 @@ public class RetryingBlockTransferor {
    * listener. Note that in the event of a retry, we will immediately replace the 'currentListener'
    * field, indicating that any responses from non-current Listeners should be ignored.
    */
-  private class RetryingBlockTransferListener implements
+  @VisibleForTesting
+  class RetryingBlockTransferListener implements
       BlockFetchingListener, BlockPushingListener {
     private void handleBlockTransferSuccess(String blockId, ManagedBuffer data) {
       // We will only forward this success message to our parent listener if this block request is
@@ -211,6 +278,14 @@ public class RetryingBlockTransferor {
         if (this == currentListener && outstandingBlocksIds.contains(blockId)) {
           outstandingBlocksIds.remove(blockId);
           shouldForwardSuccess = true;
+          // If there were SASL failures earlier, remove them from retryCount, as there was
+          // a SASL success (and some other request post bootstrap was also successful).
+          if (saslRetryCount > 0) {
+            JavaUtils.checkState(retryCount >= saslRetryCount,
+              "retryCount must be greater than or equal to saslRetryCount");
+            retryCount -= saslRetryCount;
+            saslRetryCount = 0;
+          }
         }
       }
 
@@ -227,12 +302,17 @@ public class RetryingBlockTransferor {
       synchronized (RetryingBlockTransferor.this) {
         if (this == currentListener && outstandingBlocksIds.contains(blockId)) {
           if (shouldRetry(exception)) {
-            initiateRetry();
+            if (!initiateRetry(exception)) {
+              // failed to initiate a retry, so fail this block
+              outstandingBlocksIds.remove(blockId);
+              shouldForwardFailure = true;
+            }
           } else {
             if (errorHandler.shouldLogError(exception)) {
-              logger.error(
-                String.format("Failed to %s block %s, and will not retry (%s retries)",
-                  listener.getTransferType(), blockId, retryCount), exception);
+              logger.error("Failed to {} block {}, and will not retry ({} retries)", exception,
+                MDC.of(LogKeys.TRANSFER_TYPE, listener.getTransferType()),
+                MDC.of(LogKeys.BLOCK_ID, blockId),
+                MDC.of(LogKeys.NUM_RETRY,retryCount));
             } else {
               logger.debug(
                 String.format("Failed to %s block %s, and will not retry (%s retries)",

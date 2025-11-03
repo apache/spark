@@ -17,15 +17,18 @@
 
 package org.apache.spark.sql.execution.python
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
-import org.apache.spark.TaskContext
-import org.apache.spark.api.python.ChainedPythonFunctions
+import org.apache.spark.{JobArtifactSet, SparkException, TaskContext}
+import org.apache.spark.api.python.{ChainedPythonFunctions, PythonEvalType}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.SparkPlan
-import org.apache.spark.sql.types.StructType
-import org.apache.spark.sql.util.ArrowUtils
+import org.apache.spark.sql.execution.metric.SQLMetric
+import org.apache.spark.sql.execution.python.EvalPythonExec.ArgumentMetadata
+import org.apache.spark.sql.types.{StructType, UserDefinedType}
+import org.apache.spark.sql.types.DataType.equalsIgnoreCompatibleCollation
 
 /**
  * Grouped a iterator into batches.
@@ -57,44 +60,103 @@ private[spark] class BatchIterator[T](iter: Iterator[T], batchSize: Int)
 }
 
 /**
- * A physical plan that evaluates a [[PythonUDF]].
+ * A physical plan that evaluates a vectorized UDF.
+ * Following eval types are supported:
+ *
+ * <ul>
+ *   <li> SQL_ARROW_BATCHED_UDF for Arrow Optimized Python UDF
+ *   <li> SQL_SCALAR_ARROW_UDF for Scalar Arrow UDF
+ *   <li> SQL_SCALAR_ARROW_ITER_UDF for Scalar Iterator Arrow UDF
+ *   <li> SQL_SCALAR_PANDAS_UDF for Scalar Pandas UDF
+ *   <li> SQL_SCALAR_PANDAS_ITER_UDF for Scalar Iterator Pandas UDF
+ * </ul>
+ *
  */
-case class ArrowEvalPythonExec(udfs: Seq[PythonUDF], resultAttrs: Seq[Attribute], child: SparkPlan,
-    evalType: Int)
-  extends EvalPythonExec {
+case class ArrowEvalPythonExec(
+    udfs: Seq[PythonUDF],
+    resultAttrs: Seq[Attribute],
+    child: SparkPlan,
+    evalType: Int) extends EvalPythonExec with PythonSQLMetrics {
+  if (!supportedPythonEvalTypes.contains(evalType)) {
+    throw SparkException.internalError(s"Unexpected eval type $evalType")
+  }
 
-  private val batchSize = conf.arrowMaxRecordsPerBatch
-  private val sessionLocalTimeZone = conf.sessionLocalTimeZone
-  private val pythonRunnerConf = ArrowUtils.getPythonRunnerConfMap(conf)
+  private[this] val jobArtifactUUID = JobArtifactSet.getCurrentJobArtifactState.map(_.uuid)
 
-  protected override def evaluate(
-      funcs: Seq[ChainedPythonFunctions],
-      argOffsets: Array[Array[Int]],
-      iter: Iterator[InternalRow],
-      schema: StructType,
-      context: TaskContext): Iterator[InternalRow] = {
-
-    val outputTypes = output.drop(child.output.length).map(_.dataType)
-
-    // DO NOT use iter.grouped(). See BatchIterator.
-    val batchIter = if (batchSize > 0) new BatchIterator(iter, batchSize) else Iterator(iter)
-
-    val columnarBatchIter = new ArrowPythonRunner(
-      funcs,
+  override protected def evaluatorFactory: EvalPythonEvaluatorFactory = {
+    new ArrowEvalPythonEvaluatorFactory(
+      child.output,
+      udfs,
+      output,
+      conf.arrowMaxRecordsPerBatch,
       evalType,
-      argOffsets,
-      schema,
-      sessionLocalTimeZone,
-      pythonRunnerConf).compute(batchIter, context.partitionId(), context)
-
-    columnarBatchIter.flatMap { batch =>
-      val actualDataTypes = (0 until batch.numCols()).map(i => batch.column(i).dataType())
-      assert(outputTypes == actualDataTypes, "Invalid schema from pandas_udf: " +
-        s"expected ${outputTypes.mkString(", ")}, got ${actualDataTypes.mkString(", ")}")
-      batch.rowIterator.asScala
-    }
+      conf.sessionLocalTimeZone,
+      conf.arrowUseLargeVarTypes,
+      ArrowPythonRunner.getPythonRunnerConfMap(conf),
+      pythonMetrics,
+      jobArtifactUUID,
+      conf.pythonUDFProfiler)
   }
 
   override protected def withNewChildInternal(newChild: SparkPlan): SparkPlan =
     copy(child = newChild)
+
+  private def supportedPythonEvalTypes: Array[Int] =
+    Array(
+      PythonEvalType.SQL_ARROW_BATCHED_UDF,
+      PythonEvalType.SQL_SCALAR_ARROW_UDF,
+      PythonEvalType.SQL_SCALAR_ARROW_ITER_UDF,
+      PythonEvalType.SQL_SCALAR_PANDAS_UDF,
+      PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF)
+}
+
+class ArrowEvalPythonEvaluatorFactory(
+    childOutput: Seq[Attribute],
+    udfs: Seq[PythonUDF],
+    output: Seq[Attribute],
+    batchSize: Int,
+    evalType: Int,
+    sessionLocalTimeZone: String,
+    largeVarTypes: Boolean,
+    pythonRunnerConf: Map[String, String],
+    pythonMetrics: Map[String, SQLMetric],
+    jobArtifactUUID: Option[String],
+    profiler: Option[String])
+  extends EvalPythonEvaluatorFactory(childOutput, udfs, output) {
+
+  override def evaluate(
+      funcs: Seq[(ChainedPythonFunctions, Long)],
+      argMetas: Array[Array[ArgumentMetadata]],
+      iter: Iterator[InternalRow],
+      schema: StructType,
+      context: TaskContext): Iterator[InternalRow] = {
+
+    val outputTypes = output.drop(childOutput.length).map(_.dataType.transformRecursively {
+      case udt: UserDefinedType[_] => udt.sqlType
+    })
+
+    val batchIter = Iterator(iter)
+
+    val pyRunner = new ArrowPythonWithNamedArgumentRunner(
+      funcs,
+      evalType,
+      argMetas,
+      schema,
+      sessionLocalTimeZone,
+      largeVarTypes,
+      pythonRunnerConf,
+      pythonMetrics,
+      jobArtifactUUID,
+      profiler) with BatchedPythonArrowInput
+    val columnarBatchIter = pyRunner.compute(batchIter, context.partitionId(), context)
+
+    columnarBatchIter.flatMap { batch =>
+      val actualDataTypes = (0 until batch.numCols()).map(i => batch.column(i).dataType())
+      if (!equalsIgnoreCompatibleCollation(outputTypes, actualDataTypes)) {
+        throw QueryExecutionErrors.arrowDataTypeMismatchError(
+          "pandas_udf()", outputTypes, actualDataTypes)
+      }
+      batch.rowIterator.asScala
+    }
+  }
 }

@@ -22,12 +22,13 @@ import org.apache.hadoop.hive.common.StatsSetupConst
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.analysis.CastSupport
 import org.apache.spark.sql.catalyst.catalog._
-import org.apache.spark.sql.catalyst.expressions.{And, AttributeSet, Expression, ExpressionSet, PredicateHelper, SubqueryExpression}
+import org.apache.spark.sql.catalyst.expressions.{And, AttributeSet, Expression, ExpressionSet, PredicateHelper, PythonUDF, SubqueryExpression}
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.FilterEstimation
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.datasources.DataSourceStrategy
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * Prune hive table partitions using partition filters on [[HiveTableRelation]]. The pruned
@@ -43,6 +44,8 @@ import org.apache.spark.sql.execution.datasources.DataSourceStrategy
 private[sql] class PruneHiveTablePartitions(session: SparkSession)
   extends Rule[LogicalPlan] with CastSupport with PredicateHelper {
 
+  override def conf: SQLConf = session.sessionState.conf
+
   /**
    * Extract the partition filters from the filters on the table.
    */
@@ -50,7 +53,12 @@ private[sql] class PruneHiveTablePartitions(session: SparkSession)
       filters: Seq[Expression],
       relation: HiveTableRelation): ExpressionSet = {
     val normalizedFilters = DataSourceStrategy.normalizeExprs(
-      filters.filter(f => f.deterministic && !SubqueryExpression.hasSubquery(f)), relation.output)
+      filters.filter { f =>
+        f.deterministic &&
+          !SubqueryExpression.hasSubquery(f) &&
+          // Python UDFs might exist because this rule is applied before ``ExtractPythonUDFs``.
+          !f.exists(_.isInstanceOf[PythonUDF])
+      }, relation.output)
     val partitionColumnSet = AttributeSet(relation.partitionCols)
     ExpressionSet(
       normalizedFilters.flatMap(extractPredicatesWithinOutputSet(_, partitionColumnSet)))
@@ -80,10 +88,15 @@ private[sql] class PruneHiveTablePartitions(session: SparkSession)
       val colStats = filteredStats.map(_.attributeStats.map { case (attr, colStat) =>
         (attr.name, colStat.toCatalogColumnStat(attr.name, attr.dataType))
       })
+      val rowCount = if (prunedPartitions.forall(_.stats.flatMap(_.rowCount).exists(_ > 0))) {
+        Option(prunedPartitions.map(_.stats.get.rowCount.get).sum)
+      } else {
+        filteredStats.flatMap(_.rowCount)
+      }
       relation.tableMeta.copy(
         stats = Some(CatalogStatistics(
           sizeInBytes = BigInt(sizeOfPartitions.sum),
-          rowCount = filteredStats.flatMap(_.rowCount),
+          rowCount = rowCount,
           colStats = colStats.getOrElse(Map.empty))))
     } else {
       relation.tableMeta

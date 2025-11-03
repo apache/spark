@@ -35,7 +35,7 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
  *
  * @param database The system preserved virtual database that keeps all the global temporary views.
  */
-class GlobalTempViewManager(val database: String) {
+class GlobalTempViewManager(database: String) {
 
   /** List of view definitions, mapping from view name to logical plan. */
   @GuardedBy("this")
@@ -91,7 +91,7 @@ class GlobalTempViewManager(val database: String) {
   def rename(oldName: String, newName: String): Boolean = synchronized {
     if (viewDefinitions.contains(oldName)) {
       if (viewDefinitions.contains(newName)) {
-        throw QueryCompilationErrors.renameTempViewToExistingViewError(oldName, newName)
+        throw QueryCompilationErrors.renameTempViewToExistingViewError(newName)
       }
 
       val viewDefinition = viewDefinitions(oldName)

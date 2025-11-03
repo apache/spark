@@ -17,15 +17,16 @@
 package org.apache.spark.sql.internal.connector
 
 import org.apache.spark.sql.catalyst.expressions.Expression
-import org.apache.spark.sql.sources.Filter
+import org.apache.spark.sql.connector.expressions.filter.Predicate
+import org.apache.spark.sql.connector.read.ScanBuilder
 
 /**
- * A mix-in interface for {@link FileScanBuilder}. File sources can implement this interface to
- * push down filters to the file source. The pushed down filters will be separated into partition
+ * A mix-in interface for {@link ScanBuilder}. Data sources can implement this interface to
+ * push down filters to the data source. The pushed down filters will be separated into partition
  * filters and data filters. Partition filters are used for partition pruning and data filters are
  * used to reduce the size of the data to be read.
  */
-trait SupportsPushDownCatalystFilters {
+trait SupportsPushDownCatalystFilters extends ScanBuilder {
 
   /**
    * Pushes down catalyst Expression filters (which will be separated into partition filters and
@@ -35,7 +36,7 @@ trait SupportsPushDownCatalystFilters {
 
   /**
    * Returns the data filters that are pushed to the data source via
-   * {@link #pushFilters(Expression[])}.
+   * {@link #pushFilters(Seq[Expression])}.
    */
-  def pushedFilters: Array[Filter]
+  def pushedFilters: Array[Predicate]
 }

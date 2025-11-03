@@ -47,7 +47,7 @@ abstract class MaxMinBy extends DeclarativeAggregate with BinaryLike[Expression]
   override def dataType: DataType = valueExpr.dataType
 
   override def checkInputDataTypes(): TypeCheckResult =
-    TypeUtils.checkForOrderingExpr(orderingExpr.dataType, s"function $prettyName")
+    TypeUtils.checkForOrderingExpr(orderingExpr.dataType, prettyName)
 
   // The attributes used to keep extremum (max or min) and associated aggregated values.
   private lazy val extremumOrdering =
@@ -96,8 +96,12 @@ abstract class MaxMinBy extends DeclarativeAggregate with BinaryLike[Expression]
   usage = "_FUNC_(x, y) - Returns the value of `x` associated with the maximum value of `y`.",
   examples = """
     Examples:
-      > SELECT _FUNC_(x, y) FROM VALUES (('a', 10)), (('b', 50)), (('c', 20)) AS tab(x, y);
+      > SELECT _FUNC_(x, y) FROM VALUES ('a', 10), ('b', 50), ('c', 20) AS tab(x, y);
        b
+  """,
+  note = """
+    The function is non-deterministic so the output order can be different for
+    those associated the same values of `x`.
   """,
   group = "agg_funcs",
   since = "3.0.0")
@@ -119,8 +123,12 @@ case class MaxBy(valueExpr: Expression, orderingExpr: Expression) extends MaxMin
   usage = "_FUNC_(x, y) - Returns the value of `x` associated with the minimum value of `y`.",
   examples = """
     Examples:
-      > SELECT _FUNC_(x, y) FROM VALUES (('a', 10)), (('b', 50)), (('c', 20)) AS tab(x, y);
+      > SELECT _FUNC_(x, y) FROM VALUES ('a', 10), ('b', 50), ('c', 20) AS tab(x, y);
        a
+  """,
+  note = """
+    The function is non-deterministic so the output order can be different for
+    those associated the same values of `x`.
   """,
   group = "agg_funcs",
   since = "3.0.0")

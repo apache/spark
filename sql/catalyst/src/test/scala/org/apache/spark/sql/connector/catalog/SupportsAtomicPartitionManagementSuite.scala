@@ -19,11 +19,11 @@ package org.apache.spark.sql.connector.catalog
 
 import java.util
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkFunSuite, SparkUnsupportedOperationException}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{NoSuchPartitionException, PartitionsAlreadyExistException}
-import org.apache.spark.sql.connector.expressions.{LogicalExpressions, NamedReference}
-import org.apache.spark.sql.types.{IntegerType, StringType, StructType}
+import org.apache.spark.sql.connector.expressions.{LogicalExpressions, NamedReference, Transform}
+import org.apache.spark.sql.types.{IntegerType, StringType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 class SupportsAtomicPartitionManagementSuite extends SparkFunSuite {
@@ -37,11 +37,11 @@ class SupportsAtomicPartitionManagementSuite extends SparkFunSuite {
     newCatalog.initialize("test", CaseInsensitiveStringMap.empty())
     newCatalog.createTable(
       ident,
-      new StructType()
-        .add("id", IntegerType)
-        .add("data", StringType)
-        .add("dt", StringType),
-      Array(LogicalExpressions.identity(ref("dt"))),
+      Array(
+        Column.create("id", IntegerType),
+        Column.create("data", StringType),
+        Column.create("dt", StringType)),
+      Array[Transform](LogicalExpressions.identity(ref("dt"))),
       util.Collections.emptyMap[String, String])
     newCatalog
   }
@@ -53,7 +53,7 @@ class SupportsAtomicPartitionManagementSuite extends SparkFunSuite {
   test("createPartitions") {
     val table = catalog.loadTable(ident)
     val partTable = new InMemoryAtomicPartitionTable(
-      table.name(), table.schema(), table.partitioning(), table.properties())
+      table.name(), table.columns(), table.partitioning(), table.properties())
     assert(!hasPartitions(partTable))
 
     val partIdents = Array(InternalRow.apply("3"), InternalRow.apply("4"))
@@ -72,7 +72,7 @@ class SupportsAtomicPartitionManagementSuite extends SparkFunSuite {
   test("createPartitions failed if partition already exists") {
     val table = catalog.loadTable(ident)
     val partTable = new InMemoryAtomicPartitionTable(
-      table.name(), table.schema(), table.partitioning(), table.properties())
+      table.name(), table.columns(), table.partitioning(), table.properties())
     assert(!hasPartitions(partTable))
 
     val partIdent = InternalRow.apply("4")
@@ -94,7 +94,7 @@ class SupportsAtomicPartitionManagementSuite extends SparkFunSuite {
   test("dropPartitions") {
     val table = catalog.loadTable(ident)
     val partTable = new InMemoryAtomicPartitionTable(
-      table.name(), table.schema(), table.partitioning(), table.properties())
+      table.name(), table.columns(), table.partitioning(), table.properties())
     assert(!hasPartitions(partTable))
 
     val partIdents = Array(InternalRow.apply("3"), InternalRow.apply("4"))
@@ -112,21 +112,24 @@ class SupportsAtomicPartitionManagementSuite extends SparkFunSuite {
   test("purgePartitions") {
     val table = catalog.loadTable(ident)
     val partTable = new InMemoryAtomicPartitionTable(
-      table.name(), table.schema(), table.partitioning(), table.properties())
+      table.name(), table.columns(), table.partitioning(), table.properties())
     val partIdents = Array(InternalRow.apply("3"), InternalRow.apply("4"))
     partTable.createPartitions(
       partIdents,
       Array(new util.HashMap[String, String](), new util.HashMap[String, String]()))
-    val errMsg = intercept[UnsupportedOperationException] {
-      partTable.purgePartitions(partIdents)
-    }.getMessage
-    assert(errMsg.contains("purge is not supported"))
+    checkError(
+      exception = intercept[SparkUnsupportedOperationException] {
+        partTable.purgePartitions(partIdents)
+      },
+      condition = "UNSUPPORTED_FEATURE.PURGE_PARTITION",
+      parameters = Map.empty
+    )
   }
 
   test("dropPartitions failed if partition not exists") {
     val table = catalog.loadTable(ident)
     val partTable = new InMemoryAtomicPartitionTable(
-      table.name(), table.schema(), table.partitioning(), table.properties())
+      table.name(), table.columns(), table.partitioning(), table.properties())
     assert(!hasPartitions(partTable))
 
     val partIdent = InternalRow.apply("4")
@@ -144,7 +147,7 @@ class SupportsAtomicPartitionManagementSuite extends SparkFunSuite {
   test("truncatePartitions") {
     val table = catalog.loadTable(ident)
     val partTable = new InMemoryAtomicPartitionTable(
-      table.name(), table.schema(), table.partitioning(), table.properties())
+      table.name(), table.columns(), table.partitioning(), table.properties())
     assert(!hasPartitions(partTable))
 
     partTable.createPartitions(
@@ -153,9 +156,9 @@ class SupportsAtomicPartitionManagementSuite extends SparkFunSuite {
     assert(partTable.listPartitionIdentifiers(Array.empty, InternalRow.empty).length == 3)
 
     partTable.withData(Array(
-      new BufferedRows("3").withRow(InternalRow(0, "abc", "3")),
-      new BufferedRows("4").withRow(InternalRow(1, "def", "4")),
-      new BufferedRows("5").withRow(InternalRow(2, "zyx", "5"))
+      BufferedRows("3", partTable.columns()).withRow(InternalRow(0, "abc", "3")),
+      BufferedRows("4", partTable.columns()).withRow(InternalRow(1, "def", "4")),
+      BufferedRows("5", partTable.columns()).withRow(InternalRow(2, "zyx", "5"))
     ))
 
     partTable.truncatePartitions(Array(InternalRow("3"), InternalRow("4")))
@@ -163,10 +166,13 @@ class SupportsAtomicPartitionManagementSuite extends SparkFunSuite {
     assert(partTable.rows === InternalRow(2, "zyx", "5") :: Nil)
 
     // Truncate non-existing partition
-    val errMsg = intercept[NoSuchPartitionException] {
+    val e = intercept[NoSuchPartitionException] {
       partTable.truncatePartitions(Array(InternalRow("5"), InternalRow("6")))
-    }.getMessage
-    assert(errMsg.contains("Partition not found in table test.ns.test_table: 6 -> dt"))
+    }
+    checkError(e,
+      condition = "PARTITIONS_NOT_FOUND",
+      parameters = Map("partitionList" -> "PARTITION (`dt` = 6)",
+      "tableName" -> "`test`.`ns`.`test_table`"))
     assert(partTable.rows === InternalRow(2, "zyx", "5") :: Nil)
   }
 }

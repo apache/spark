@@ -36,7 +36,7 @@ import org.apache.spark._
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.input.FixedLengthBinaryInputFormat
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.rdd.{RDD, RDDOperationScope}
 import org.apache.spark.scheduler.LiveListenerBus
 import org.apache.spark.serializer.SerializationDebugger
@@ -59,7 +59,13 @@ import org.apache.spark.util.{CallSite, ShutdownHookManager, ThreadUtils, Utils}
  * using `context.start()` and `context.stop()`, respectively.
  * `context.awaitTermination()` allows the current thread to wait for the termination
  * of the context by `stop()` or by an exception.
+ * @deprecated This is deprecated as of Spark 3.4.0.
+ *             There are no longer updates to DStream and it's a legacy project.
+ *             There is a newer and easier to use streaming engine
+ *             in Spark called Structured Streaming.
+ *             You should use Spark Structured Streaming for your streaming applications.
  */
+@deprecated("DStream is deprecated. Migrate to Structured Streaming.", "Spark 3.4.0")
 class StreamingContext private[streaming] (
     _sc: SparkContext,
     _cp: Checkpoint,
@@ -86,7 +92,7 @@ class StreamingContext private[streaming] (
 
   /**
    * Create a StreamingContext by providing the details necessary for creating a new SparkContext.
-   * @param master cluster URL to connect to (e.g. mesos://host:port, spark://host:port, local[4]).
+   * @param master cluster URL to connect to (e.g. spark://host:port, local[4]).
    * @param appName a name for your job, to display on the cluster web UI
    * @param batchDuration the time interval at which streaming data will be divided into batches
    */
@@ -739,7 +745,8 @@ class StreamingContext private[streaming] (
 
   private def stopOnShutdown(): Unit = {
     val stopGracefully = conf.get(STOP_GRACEFULLY_ON_SHUTDOWN)
-    logInfo(s"Invoking stop(stopGracefully=$stopGracefully) from shutdown hook")
+    logInfo(log"Invoking stop(stopGracefully=" +
+      log"${MDC(LogKeys.VALUE, stopGracefully)}) from shutdown hook")
     // Do not stop SparkContext, let its own shutdown hook stop it
     stop(stopSparkContext = false, stopGracefully = stopGracefully)
   }
@@ -760,13 +767,20 @@ class StreamingContext private[streaming] (
 /**
  * StreamingContext object contains a number of utility functions related to the
  * StreamingContext class.
+ *
+ * @deprecated This is deprecated as of Spark 3.4.0.
+ *             There are no longer updates to DStream and it's a legacy project.
+ *             There is a newer and easier to use streaming engine
+ *             in Spark called Structured Streaming.
+ *             You should use Spark Structured Streaming for your streaming applications.
  */
-
+@deprecated("DStream is deprecated. Migrate to Structured Streaming.", "Spark 3.4.0")
 object StreamingContext extends Logging {
 
   /**
    * Lock that guards activation of a StreamingContext as well as access to the singleton active
    * StreamingContext in getActiveOrCreate().
+   *
    */
   private val ACTIVATION_LOCK = new Object()
 

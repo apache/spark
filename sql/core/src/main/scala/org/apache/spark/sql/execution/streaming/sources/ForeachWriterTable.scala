@@ -19,15 +19,19 @@ package org.apache.spark.sql.execution.streaming.sources
 
 import java.util
 
+import scala.util.control.NonFatal
+
+import org.apache.spark.{SparkException, SparkThrowable}
 import org.apache.spark.sql.{ForeachWriter, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
+import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.connector.catalog.{SupportsWrite, Table, TableCapability}
 import org.apache.spark.sql.connector.write.{DataWriter, LogicalWriteInfo, PhysicalWriteInfo, SupportsTruncate, Write, WriteBuilder, WriterCommitMessage}
 import org.apache.spark.sql.connector.write.streaming.{StreamingDataWriterFactory, StreamingWrite}
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.execution.python.PythonForeachWriter
+import org.apache.spark.sql.execution.python.streaming.PythonForeachWriter
 import org.apache.spark.sql.internal.connector.SupportsStreamingUpdateAsAppend
 import org.apache.spark.sql.types.StructType
 
@@ -81,7 +85,7 @@ class ForeachWrite[T](
         val rowConverter: InternalRow => T = converter match {
           case Left(enc) =>
             val boundEnc = enc.resolveAndBind(
-              inputSchema.toAttributes,
+              toAttributes(inputSchema),
               SparkSession.getActiveSession.get.sessionState.analyzer)
             boundEnc.createDeserializer()
           case Right(func) =>
@@ -145,6 +149,9 @@ class ForeachDataWriter[T](
     try {
       writer.process(rowConverter(record))
     } catch {
+      case NonFatal(e) if !e.isInstanceOf[SparkThrowable] =>
+        errorOrNull = e
+        throw ForeachUserFuncException(e)
       case t: Throwable =>
         errorOrNull = t
         throw t
@@ -171,3 +178,12 @@ class ForeachDataWriter[T](
  * An empty [[WriterCommitMessage]]. [[ForeachWriter]] implementations have no global coordination.
  */
 case object ForeachWriterCommitMessage extends WriterCommitMessage
+
+/**
+ * Exception that wraps the exception thrown in the user provided function in Foreach sink.
+ */
+private[sql] case class ForeachUserFuncException(cause: Throwable)
+  extends SparkException(
+    errorClass = "FOREACH_USER_FUNCTION_ERROR",
+    messageParameters = Map("reason" -> Option(cause.getMessage).getOrElse("")),
+    cause = cause)

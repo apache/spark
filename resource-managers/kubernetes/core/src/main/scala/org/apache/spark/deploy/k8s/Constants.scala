@@ -16,7 +16,16 @@
  */
 package org.apache.spark.deploy.k8s
 
-private[spark] object Constants {
+import org.apache.spark.annotation.{DeveloperApi, Stable}
+
+/**
+ * :: DeveloperApi ::
+ *
+ * This is used in both K8s module and Spark K8s Operator.
+ */
+@Stable
+@DeveloperApi
+object Constants {
 
   // Labels
   val SPARK_VERSION_LABEL = "spark-version"
@@ -49,11 +58,14 @@ private[spark] object Constants {
   // Default and fixed ports
   val DEFAULT_DRIVER_PORT = 7078
   val DEFAULT_BLOCKMANAGER_PORT = 7079
+  val DEFAULT_SPARK_CONNECT_SERVER_PORT = 15002
   val DRIVER_PORT_NAME = "driver-rpc-port"
   val BLOCK_MANAGER_PORT_NAME = "blockmanager"
   val UI_PORT_NAME = "spark-ui"
+  val SPARK_CONNECT_SERVER_PORT_NAME = "spark-connect"
 
   // Environment Variables
+  val ENV_DRIVER_POD_IP = "SPARK_DRIVER_POD_IP"
   val ENV_DRIVER_URL = "SPARK_DRIVER_URL"
   val ENV_EXECUTOR_CORES = "SPARK_EXECUTOR_CORES"
   val ENV_EXECUTOR_MEMORY = "SPARK_EXECUTOR_MEMORY"
@@ -62,6 +74,8 @@ private[spark] object Constants {
   val ENV_EXECUTOR_ID = "SPARK_EXECUTOR_ID"
   val ENV_EXECUTOR_POD_IP = "SPARK_EXECUTOR_POD_IP"
   val ENV_EXECUTOR_POD_NAME = "SPARK_EXECUTOR_POD_NAME"
+  val ENV_EXECUTOR_ATTRIBUTE_APP_ID = "SPARK_EXECUTOR_ATTRIBUTE_APP_ID"
+  val ENV_EXECUTOR_ATTRIBUTE_EXECUTOR_ID = "SPARK_EXECUTOR_ATTRIBUTE_EXECUTOR_ID"
   val ENV_JAVA_OPT_PREFIX = "SPARK_JAVA_OPT_"
   val ENV_CLASSPATH = "SPARK_CLASSPATH"
   val ENV_DRIVER_BIND_ADDRESS = "SPARK_DRIVER_BIND_ADDRESS"
@@ -92,6 +106,8 @@ private[spark] object Constants {
   val DEFAULT_DRIVER_CONTAINER_NAME = "spark-kubernetes-driver"
   val DEFAULT_EXECUTOR_CONTAINER_NAME = "spark-kubernetes-executor"
   val NON_JVM_MEMORY_OVERHEAD_FACTOR = 0.4d
+  val CONNECT_GRPC_BINDING_PORT = "spark.connect.grpc.binding.port"
+  val EXIT_EXCEPTION_ANNOTATION = "spark.exit-exception"
 
   // Hadoop Configuration
   val HADOOP_CONF_VOLUME = "hadoop-properties"

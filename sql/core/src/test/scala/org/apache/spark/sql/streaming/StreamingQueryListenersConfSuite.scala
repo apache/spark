@@ -20,7 +20,7 @@ package org.apache.spark.sql.streaming
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.SparkConf
-import org.apache.spark.sql.execution.streaming._
+import org.apache.spark.sql.execution.streaming.runtime._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.STREAMING_QUERY_LISTENERS
 import org.apache.spark.sql.streaming.StreamingQueryListener._
@@ -38,7 +38,7 @@ class StreamingQueryListenersConfSuite extends StreamTest with BeforeAndAfter {
       .set("spark.bbb", "bbb")
 
   test("test if the configured query listener is loaded") {
-    testStream(MemoryStream[Int].toDS)(
+    testStream(MemoryStream[Int].toDS())(
       StartStream(),
       StopStream
     )
@@ -64,6 +64,8 @@ class TestListener(sparkConf: SparkConf) extends StreamingQueryListener {
 
   override def onQueryProgress(event: QueryProgressEvent): Unit = {}
 
+  override def onQueryIdle(event: QueryIdleEvent): Unit = {}
+
   override def onQueryTerminated(event: QueryTerminatedEvent): Unit = {
     TestListener.queryTerminatedEvent = event
   }
@@ -79,6 +81,8 @@ class TestSQLConfStreamingQueryListener extends StreamingQueryListener {
   override def onQueryStarted(event: QueryStartedEvent): Unit = {}
 
   override def onQueryProgress(event: QueryProgressEvent): Unit = {}
+
+  override def onQueryIdle(event: QueryIdleEvent): Unit = {}
 
   override def onQueryTerminated(event: QueryTerminatedEvent): Unit = {}
 }

@@ -18,28 +18,28 @@
 package org.apache.spark.deploy.yarn
 
 import java.io.File
-import java.nio.charset.StandardCharsets
+import java.nio.file.Files
 
-import com.google.common.io.Files
-import org.apache.commons.io.FileUtils
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.scalatest.matchers.must.Matchers
 import org.scalatest.matchers.should.Matchers._
 
 import org.apache.spark._
-import org.apache.spark.deploy.yarn.config._
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Network._
 import org.apache.spark.network.shuffle.ShuffleTestAccessor
+import org.apache.spark.network.shuffledb.DBBackend
 import org.apache.spark.network.yarn.{YarnShuffleService, YarnTestAccessor}
-import org.apache.spark.tags.ExtendedYarnTest
+import org.apache.spark.tags.{ExtendedLevelDBTest, ExtendedYarnTest}
+import org.apache.spark.util.Utils
 
 /**
  * Integration test for the external shuffle service with a yarn mini-cluster
  */
-@ExtendedYarnTest
-class YarnShuffleIntegrationSuite extends BaseYarnClusterSuite {
+abstract class YarnShuffleIntegrationSuite extends BaseYarnClusterSuite {
+
+  protected def dbBackend: DBBackend
 
   override def newYarnConfig(): YarnConfiguration = {
     val yarnConfig = new YarnConfiguration()
@@ -47,6 +47,8 @@ class YarnShuffleIntegrationSuite extends BaseYarnClusterSuite {
     yarnConfig.set(YarnConfiguration.NM_AUX_SERVICE_FMT.format("spark_shuffle"),
       classOf[YarnShuffleService].getCanonicalName)
     yarnConfig.set(SHUFFLE_SERVICE_PORT.key, "0")
+    yarnConfig.set(SHUFFLE_SERVICE_DB_BACKEND.key, dbBackend.name())
+    yarnConfig.set(YarnTestAccessor.shuffleServiceIntegrationTestingKey, "true")
     yarnConfig
   }
 
@@ -58,7 +60,8 @@ class YarnShuffleIntegrationSuite extends BaseYarnClusterSuite {
     Map(
       SHUFFLE_SERVICE_ENABLED.key -> "true",
       SHUFFLE_SERVICE_PORT.key -> shuffleServicePort.toString,
-      MAX_EXECUTOR_FAILURES.key -> "1"
+      MAX_EXECUTOR_FAILURES.key -> "1",
+      SHUFFLE_SERVICE_DB_BACKEND.key -> dbBackend.name()
     )
   }
 
@@ -67,32 +70,38 @@ class YarnShuffleIntegrationSuite extends BaseYarnClusterSuite {
     val shuffleService = YarnTestAccessor.getShuffleServiceInstance
 
     val registeredExecFile = YarnTestAccessor.getRegisteredExecutorFile(shuffleService)
+    assert(registeredExecFile != null)
 
     val result = File.createTempFile("result", null, tempDir)
     val finalState = runSpark(
       false,
       mainClassName(YarnExternalShuffleDriver.getClass),
-      appArgs = if (registeredExecFile != null) {
-        Seq(result.getAbsolutePath, registeredExecFile.getAbsolutePath)
-      } else {
-        Seq(result.getAbsolutePath)
-      },
+      appArgs = Seq(result.getAbsolutePath, registeredExecFile.getAbsolutePath),
       extraConf = extraSparkConf()
     )
     checkResult(finalState, result)
 
-    if (registeredExecFile != null) {
-      assert(YarnTestAccessor.getRegisteredExecutorFile(shuffleService).exists())
-    }
+    assert(YarnTestAccessor.getRegisteredExecutorFile(shuffleService).exists())
   }
+}
+
+@ExtendedLevelDBTest
+@ExtendedYarnTest
+class YarnShuffleIntegrationWithLevelDBBackendSuite
+  extends YarnShuffleIntegrationSuite {
+  override protected def dbBackend: DBBackend = DBBackend.LEVELDB
+}
+
+@ExtendedYarnTest
+class YarnShuffleIntegrationWithRocksDBBackendSuite
+  extends YarnShuffleIntegrationSuite {
+  override protected def dbBackend: DBBackend = DBBackend.ROCKSDB
 }
 
 /**
  * Integration test for the external shuffle service with auth on.
  */
-@ExtendedYarnTest
-class YarnShuffleAuthSuite extends YarnShuffleIntegrationSuite {
-
+abstract class YarnShuffleAuthSuite extends YarnShuffleIntegrationSuite {
   override def newYarnConfig(): YarnConfiguration = {
     val yarnConfig = super.newYarnConfig()
     yarnConfig.set(NETWORK_AUTH_ENABLED.key, "true")
@@ -106,7 +115,17 @@ class YarnShuffleAuthSuite extends YarnShuffleIntegrationSuite {
       NETWORK_CRYPTO_ENABLED.key -> "true"
     )
   }
+}
 
+@ExtendedLevelDBTest
+@ExtendedYarnTest
+class YarnShuffleAuthWithLevelDBBackendSuite extends YarnShuffleAuthSuite {
+  override protected def dbBackend: DBBackend = DBBackend.LEVELDB
+}
+
+@ExtendedYarnTest
+class YarnShuffleAuthWithRocksDBBackendSuite extends YarnShuffleAuthSuite {
+  override protected def dbBackend: DBBackend = DBBackend.ROCKSDB
 }
 
 private object YarnExternalShuffleDriver extends Logging with Matchers {
@@ -148,15 +167,20 @@ private object YarnExternalShuffleDriver extends Logging with Matchers {
       result = "success"
       // only one process can open a leveldb file at a time, so we copy the files
       if (registeredExecFile != null && execStateCopy != null) {
-        FileUtils.copyDirectory(registeredExecFile, execStateCopy)
-        assert(!ShuffleTestAccessor.reloadRegisteredExecutors(execStateCopy).isEmpty)
+        val dbBackendName = conf.get(SHUFFLE_SERVICE_DB_BACKEND.key)
+        val dbBackend = DBBackend.byName(dbBackendName)
+        logWarning(s"Use ${dbBackend.name()} as the implementation of " +
+          s"${SHUFFLE_SERVICE_DB_BACKEND.key}")
+        Utils.copyDirectory(registeredExecFile, execStateCopy)
+        assert(!ShuffleTestAccessor
+          .reloadRegisteredExecutors(dbBackend, execStateCopy).isEmpty)
       }
     } finally {
       sc.stop()
       if (execStateCopy != null) {
-        FileUtils.deleteDirectory(execStateCopy)
+        Utils.deleteRecursively(execStateCopy)
       }
-      Files.write(result, status, StandardCharsets.UTF_8)
+      Files.writeString(status.toPath, result)
     }
   }
 

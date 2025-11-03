@@ -24,7 +24,10 @@ import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.array.ByteArrayMethods;
 import org.apache.spark.unsafe.bitset.BitSetMethods;
 import org.apache.spark.unsafe.types.CalendarInterval;
+import org.apache.spark.unsafe.types.GeographyVal;
+import org.apache.spark.unsafe.types.GeometryVal;
 import org.apache.spark.unsafe.types.UTF8String;
+import org.apache.spark.unsafe.types.VariantVal;
 
 /**
  * Base class for writing Unsafe* structures.
@@ -110,6 +113,14 @@ public abstract class UnsafeWriter {
     writeUnalignedBytes(ordinal, input.getBaseObject(), input.getBaseOffset(), input.numBytes());
   }
 
+  public final void write(int ordinal, GeographyVal input) {
+    write(ordinal, input.getBytes());
+  }
+
+  public final void write(int ordinal, GeometryVal input) {
+    write(ordinal, input.getBytes());
+  }
+
   public final void write(int ordinal, byte[] input) {
     write(ordinal, input, 0, input.length);
   }
@@ -131,7 +142,7 @@ public abstract class UnsafeWriter {
     increaseCursor(roundedSize);
   }
 
-  public final void write(int ordinal, CalendarInterval input) {
+  public void write(int ordinal, CalendarInterval input) {
     // grow the global buffer before writing data.
     grow(16);
 
@@ -139,14 +150,36 @@ public abstract class UnsafeWriter {
       BitSetMethods.set(getBuffer(), startingOffset, ordinal);
     } else {
       // Write the months, days and microseconds fields of interval to the variable length portion.
-      Platform.putInt(getBuffer(), cursor(), input.months);
-      Platform.putInt(getBuffer(), cursor() + 4, input.days);
+      long longVal =
+        ((long) input.months & 0xFFFFFFFFL) | (((long) input.days << 32) & 0xFFFFFFFF00000000L);
+      Platform.putLong(getBuffer(), cursor(), longVal);
       Platform.putLong(getBuffer(), cursor() + 8, input.microseconds);
     }
     // we need to reserve the space so that we can update it later.
     setOffsetAndSize(ordinal, 16);
     // move the cursor forward.
     increaseCursor(16);
+  }
+
+  public void write(int ordinal, VariantVal input) {
+    // See the class comment of VariantVal for the format of the binary content.
+    byte[] value = input.getValue();
+    byte[] metadata = input.getMetadata();
+    int totalSize = 4 + value.length + metadata.length;
+    int roundedSize = ByteArrayMethods.roundNumberOfBytesToNearestWord(totalSize);
+    grow(roundedSize);
+    zeroOutPaddingBytes(totalSize);
+    Platform.putInt(getBuffer(), cursor(), value.length);
+    Platform.copyMemory(value, Platform.BYTE_ARRAY_OFFSET, getBuffer(), cursor() + 4, value.length);
+    Platform.copyMemory(
+        metadata,
+        Platform.BYTE_ARRAY_OFFSET,
+        getBuffer(),
+        cursor() + 4 + value.length,
+        metadata.length
+    );
+    setOffsetAndSize(ordinal, totalSize);
+    increaseCursor(roundedSize);
   }
 
   public final void write(int ordinal, UnsafeRow row) {

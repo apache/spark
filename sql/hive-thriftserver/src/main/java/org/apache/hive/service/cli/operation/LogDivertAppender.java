@@ -17,6 +17,7 @@
 
 package org.apache.hive.service.cli.operation;
 import java.io.CharArrayWriter;
+import java.io.Serializable;
 import java.util.Map;
 import java.util.regex.Pattern;
 
@@ -37,7 +38,6 @@ import org.apache.logging.log4j.core.Appender;
 import org.apache.logging.log4j.core.appender.ConsoleAppender;
 import org.apache.logging.log4j.core.appender.AbstractWriterAppender;
 import org.apache.logging.log4j.core.appender.WriterManager;
-import com.google.common.base.Joiner;
 import org.apache.logging.log4j.core.config.Property;
 import org.apache.logging.log4j.message.Message;
 
@@ -48,7 +48,6 @@ public class LogDivertAppender extends AbstractWriterAppender<WriterManager> {
   private static final Logger LOG = LogManager.getLogger(LogDivertAppender.class.getName());
   private final OperationManager operationManager;
   private boolean isVerbose;
-  private Layout verboseLayout;
 
   /**
    * A log filter that filters messages coming from the logger with the given names.
@@ -67,17 +66,17 @@ public class LogDivertAppender extends AbstractWriterAppender<WriterManager> {
     /* Patterns that are excluded in verbose logging level.
      * Filter out messages coming from log processing classes, or we'll run an infinite loop.
      */
-    private static final Pattern verboseExcludeNamePattern = Pattern.compile(Joiner.on("|")
-      .join(new String[] {LOG.getName(), OperationLog.class.getName(),
-      OperationManager.class.getName()}));
+    private static final Pattern verboseExcludeNamePattern = Pattern.compile(String.join("|",
+      LOG.getName(), OperationLog.class.getName(),
+      OperationManager.class.getName()));
 
     /* Patterns that are included in execution logging level.
      * In execution mode, show only select logger messages.
      */
-    private static final Pattern executionIncludeNamePattern = Pattern.compile(Joiner.on("|")
-      .join(new String[] {"org.apache.hadoop.mapreduce.JobSubmitter",
+    private static final Pattern executionIncludeNamePattern = Pattern.compile(String.join("|",
+      "org.apache.hadoop.mapreduce.JobSubmitter",
       "org.apache.hadoop.mapreduce.Job", "SessionState", Task.class.getName(),
-      "org.apache.hadoop.hive.ql.exec.spark.status.SparkJobMonitor"}));
+      "org.apache.hadoop.hive.ql.exec.spark.status.SparkJobMonitor"));
 
     /* Patterns that are included in performance logging level.
      * In performance mode, show execution and performance logger messages.
@@ -242,7 +241,7 @@ public class LogDivertAppender extends AbstractWriterAppender<WriterManager> {
   }
 
   /** This is where the log message will go to */
-  private final CharArrayWriter writer = new CharArrayWriter();
+  private final CharArrayWriter writer;
 
   private static StringLayout getLayout(boolean isVerbose, StringLayout lo) {
     if (isVerbose) {
@@ -264,10 +263,9 @@ public class LogDivertAppender extends AbstractWriterAppender<WriterManager> {
     StringLayout layout = null;
 
     Map<String, Appender> appenders = root.getAppenders();
-    for (Map.Entry<String, Appender> entry : appenders.entrySet()) {
-      Appender ap = entry.getValue();
+    for (Appender ap : appenders.values()) {
       if (ap.getClass().equals(ConsoleAppender.class)) {
-        Layout l = ap.getLayout();
+        Layout<? extends Serializable> l = ap.getLayout();
         if (l instanceof StringLayout) {
           layout = (StringLayout) l;
           break;
@@ -277,15 +275,21 @@ public class LogDivertAppender extends AbstractWriterAppender<WriterManager> {
     return getLayout(isVerbose, layout);
   }
 
-  public LogDivertAppender(OperationManager operationManager,
+  public static LogDivertAppender create(OperationManager operationManager,
     OperationLog.LoggingLevel loggingMode) {
+    CharArrayWriter writer = new CharArrayWriter();
+    return new LogDivertAppender(operationManager, loggingMode, writer);
+  }
+
+  private LogDivertAppender(OperationManager operationManager,
+    OperationLog.LoggingLevel loggingMode, CharArrayWriter writer) {
     super("LogDivertAppender", initLayout(loggingMode), null, false, true, Property.EMPTY_ARRAY,
-            new WriterManager(new CharArrayWriter(), "LogDivertAppender",
+            new WriterManager(writer, "LogDivertAppender",
                     initLayout(loggingMode), true));
 
+    this.writer = writer;
     this.isVerbose = (loggingMode == OperationLog.LoggingLevel.VERBOSE);
     this.operationManager = operationManager;
-    this.verboseLayout = isVerbose ? getLayout() : CLIServiceUtils.verboseLayout;
     addFilter(new NameFilter(loggingMode, operationManager));
   }
 
@@ -301,10 +305,9 @@ public class LogDivertAppender extends AbstractWriterAppender<WriterManager> {
       // the last subAppend call, change the layout to preserve consistency.
       if (isCurrModeVerbose != isVerbose) {
         isVerbose = isCurrModeVerbose;
-        // setLayout(isVerbose, verboseLayout);
       }
     }
-
+    super.append(event);
 
     // That should've gone into our writer. Notify the LogContext.
     String logOutput = writer.toString();

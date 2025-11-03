@@ -24,7 +24,8 @@ import unittest
 from collections import namedtuple
 
 from pyspark import SparkConf, SparkFiles, SparkContext
-from pyspark.testing.utils import ReusedPySparkTestCase, PySparkTestCase, QuietTest, SPARK_HOME
+from pyspark.testing.sqlutils import SPARK_HOME
+from pyspark.testing.utils import ReusedPySparkTestCase, PySparkTestCase, QuietTest
 
 
 class CheckpointTests(ReusedPySparkTestCase):
@@ -97,7 +98,7 @@ class AddFileTests(PySparkTestCase):
         # this job fails due to `userlibrary` not being on the Python path:
         # disable logging in log4j temporarily
         def func(x):
-            from userlibrary import UserClass  # type: ignore
+            from userlibrary import UserClass
 
             return UserClass().hello()
 
@@ -145,7 +146,7 @@ class AddFileTests(PySparkTestCase):
         # To ensure that we're actually testing addPyFile's effects, check that
         # this fails due to `userlibrary` not being on the Python path:
         def func():
-            from userlib import UserClass  # type: ignore[import]
+            from userlib import UserClass
 
             UserClass()
 
@@ -159,7 +160,7 @@ class AddFileTests(PySparkTestCase):
     def test_overwrite_system_module(self):
         self.sc.addPyFile(os.path.join(SPARK_HOME, "python/test_support/SimpleHTTPServer.py"))
 
-        import SimpleHTTPServer  # type: ignore[import]
+        import SimpleHTTPServer
 
         self.assertEqual("My Server", SimpleHTTPServer.__name__)
 
@@ -287,7 +288,7 @@ class ContextTests(unittest.TestCase):
             with self.assertRaises(Exception) as context:
                 sc.range(2).foreach(lambda _: SparkContext())
             self.assertIn(
-                "SparkContext should only be created and accessed on the driver.",
+                "CONTEXT_ONLY_VALID_ON_DRIVER",
                 str(context.exception),
             )
 
@@ -338,7 +339,7 @@ if __name__ == "__main__":
     from pyspark.tests.test_context import *  # noqa: F401
 
     try:
-        import xmlrunner  # type: ignore[import]
+        import xmlrunner
 
         testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:

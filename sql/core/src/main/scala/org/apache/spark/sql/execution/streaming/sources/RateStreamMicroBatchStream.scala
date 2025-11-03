@@ -21,18 +21,18 @@ import java.io._
 import java.nio.charset.StandardCharsets
 import java.util.concurrent.TimeUnit
 
-import org.apache.commons.io.IOUtils
-
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader, PartitionReaderFactory}
 import org.apache.spark.sql.connector.read.streaming.{MicroBatchStream, Offset}
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.execution.streaming._
+import org.apache.spark.sql.execution.streaming.checkpointing.HDFSMetadataLog
+import org.apache.spark.sql.execution.streaming.runtime._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
-import org.apache.spark.util.{ManualClock, SystemClock}
+import org.apache.spark.util.{ManualClock, SystemClock, Utils}
 
 class RateStreamMicroBatchStream(
     rowsPerSecond: Long,
@@ -52,9 +52,8 @@ class RateStreamMicroBatchStream(
   private val maxSeconds = Long.MaxValue / rowsPerSecond
 
   if (rampUpTimeSeconds > maxSeconds) {
-    throw QueryExecutionErrors.integerOverflowError(
-      s"Max offset with $rowsPerSecond rowsPerSecond" +
-        s" is $maxSeconds, but 'rampUpTimeSeconds' is $rampUpTimeSeconds.")
+    throw QueryExecutionErrors.incorrectRampUpRate(
+      rowsPerSecond, maxSeconds, rampUpTimeSeconds)
   }
 
   private[sources] val creationTimeMs = {
@@ -71,7 +70,7 @@ class RateStreamMicroBatchStream(
         }
 
         override def deserialize(in: InputStream): LongOffset = {
-          val content = IOUtils.toString(new InputStreamReader(in, StandardCharsets.UTF_8))
+          val content = Utils.toString(in)
           // HDFSMetadataLog guarantees that it never creates a partial file.
           assert(content.length != 0)
           if (content(0) == 'v') {
@@ -93,7 +92,7 @@ class RateStreamMicroBatchStream(
     metadataLog.get(0).getOrElse {
       val offset = LongOffset(clock.getTimeMillis())
       metadataLog.add(0, offset)
-      logInfo(s"Start time: $offset")
+      logInfo(log"Start time: ${MDC(TIME_UNITS, offset)}")
       offset
     }.offset
   }
@@ -120,8 +119,7 @@ class RateStreamMicroBatchStream(
     val endSeconds = end.asInstanceOf[LongOffset].offset
     assert(startSeconds <= endSeconds, s"startSeconds($startSeconds) > endSeconds($endSeconds)")
     if (endSeconds > maxSeconds) {
-      throw QueryExecutionErrors.integerOverflowError("Max offset with " +
-        s"$rowsPerSecond rowsPerSecond is $maxSeconds, but it's $endSeconds now.")
+      throw QueryExecutionErrors.incorrectEndOffset(rowsPerSecond, maxSeconds, endSeconds)
     }
     // Fix "lastTimeMs" for recovery
     if (lastTimeMs < TimeUnit.SECONDS.toMillis(endSeconds) + creationTimeMs) {

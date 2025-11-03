@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.json
 
 import java.io.CharArrayWriter
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkFunSuite, SparkUnsupportedOperationException}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, DateTimeUtils, GenericArrayData}
 import org.apache.spark.sql.types._
@@ -122,7 +122,7 @@ class JacksonGeneratorSuite extends SparkFunSuite {
     val input = ArrayBasedMapData(Map("a" -> 1))
     val writer = new CharArrayWriter()
     val gen = new JacksonGenerator(dataType, writer, option)
-    intercept[UnsupportedOperationException] {
+    intercept[SparkUnsupportedOperationException] {
       gen.write(input)
     }
   }
@@ -132,7 +132,7 @@ class JacksonGeneratorSuite extends SparkFunSuite {
     val input = InternalRow(1)
     val writer = new CharArrayWriter()
     val gen = new JacksonGenerator(dataType, writer, option)
-    intercept[UnsupportedOperationException] {
+    intercept[SparkUnsupportedOperationException] {
       gen.write(input)
     }
   }

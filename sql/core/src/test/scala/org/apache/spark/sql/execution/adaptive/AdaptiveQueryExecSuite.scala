@@ -22,29 +22,44 @@ import java.net.URI
 
 import org.apache.logging.log4j.Level
 import org.scalatest.PrivateMethodTester
+import org.scalatest.time.SpanSugar._
 
+import org.apache.spark.SparkException
+import org.apache.spark.rdd.RDD
 import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent, SparkListenerJobStart}
-import org.apache.spark.sql.{Dataset, QueryTest, Row, SparkSession, Strategy}
+import org.apache.spark.shuffle.sort.SortShuffleManager
+import org.apache.spark.sql.{DataFrame, Dataset, QueryTest, Row, SparkSession}
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan}
-import org.apache.spark.sql.execution.{CollectLimitExec, CommandResultExec, LocalTableScanExec, PartialReducerPartitionSpec, QueryExecution, ReusedSubqueryExec, ShuffledRowRDD, SortExec, SparkPlan, UnaryExecNode, UnionExec}
+import org.apache.spark.sql.classic.Strategy
+import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.aggregate.BaseAggregateExec
+import org.apache.spark.sql.execution.columnar.{InMemoryTableScanExec, InMemoryTableScanLike}
 import org.apache.spark.sql.execution.command.DataWritingCommandExec
 import org.apache.spark.sql.execution.datasources.noop.NoopDataSource
 import org.apache.spark.sql.execution.datasources.v2.V2TableWriteExec
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ENSURE_REQUIREMENTS, Exchange, REPARTITION_BY_COL, REPARTITION_BY_NUM, ReusedExchangeExec, ShuffleExchangeExec, ShuffleExchangeLike, ShuffleOrigin}
-import org.apache.spark.sql.execution.joins.{BaseJoinExec, BroadcastHashJoinExec, ShuffledHashJoinExec, ShuffledJoin, SortMergeJoinExec}
+import org.apache.spark.sql.execution.joins.{BaseJoinExec, BroadcastHashJoinExec, BroadcastNestedLoopJoinExec, ShuffledHashJoinExec, ShuffledJoin, SortMergeJoinExec}
 import org.apache.spark.sql.execution.metric.SQLShuffleReadMetricsReporter
-import org.apache.spark.sql.execution.ui.SparkListenerSQLAdaptiveExecutionUpdate
+import org.apache.spark.sql.execution.streaming.runtime.{MemoryStream, StreamingQueryWrapper}
+import org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider
+import org.apache.spark.sql.execution.ui.{SparkListenerSQLAdaptiveExecutionUpdate, SparkListenerSQLAdaptiveSQLMetricUpdates, SparkListenerSQLExecutionStart}
+import org.apache.spark.sql.execution.window.WindowExec
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.PartitionOverwriteMode
+import org.apache.spark.sql.streaming.{OutputMode, StatefulProcessor, TimeMode, TimerValues, TTLConfig, ValueState}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.test.SQLTestData.TestData
 import org.apache.spark.sql.types.{IntegerType, StructType}
 import org.apache.spark.sql.util.QueryExecutionListener
+import org.apache.spark.tags.SlowSQLTest
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
+@SlowSQLTest
 class AdaptiveQueryExecSuite
   extends QueryTest
   with SharedSparkSession
@@ -55,8 +70,10 @@ class AdaptiveQueryExecSuite
 
   setupTestData()
 
-  private def runAdaptiveAndVerifyResult(query: String): (SparkPlan, SparkPlan) = {
+  private def runAdaptiveAndVerifyResult(query: String,
+      skipCheckAnswer: Boolean = false): (SparkPlan, SparkPlan) = {
     var finalPlanCnt = 0
+    var hasMetricsEvent = false
     val listener = new SparkListener {
       override def onOtherEvent(event: SparkListenerEvent): Unit = {
         event match {
@@ -65,6 +82,8 @@ class AdaptiveQueryExecSuite
               "AdaptiveSparkPlan isFinalPlan=true")) {
               finalPlanCnt += 1
             }
+          case _: SparkListenerSQLAdaptiveSQLMetricUpdates =>
+            hasMetricsEvent = true
           case _ => // ignore other events
         }
       }
@@ -76,19 +95,22 @@ class AdaptiveQueryExecSuite
     assert(planBefore.toString.startsWith("AdaptiveSparkPlan isFinalPlan=false"))
     val result = dfAdaptive.collect()
     withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
-      val df = sql(query)
-      checkAnswer(df, result)
+      if (!skipCheckAnswer) {
+        val df = sql(query)
+        checkAnswer(df, result.toImmutableArraySeq)
+      }
     }
     val planAfter = dfAdaptive.queryExecution.executedPlan
     assert(planAfter.toString.startsWith("AdaptiveSparkPlan isFinalPlan=true"))
-    val adaptivePlan = planAfter.asInstanceOf[AdaptiveSparkPlanExec].executedPlan
+    val adaptivePlan = stripAQEPlan(planAfter)
 
     spark.sparkContext.listenerBus.waitUntilEmpty()
-    // AQE will post `SparkListenerSQLAdaptiveExecutionUpdate` twice in case of subqueries that
-    // exist out of query stages.
-    val expectedFinalPlanCnt = adaptivePlan.find(_.subqueries.nonEmpty).map(_ => 2).getOrElse(1)
-    assert(finalPlanCnt == expectedFinalPlanCnt)
+    assert(finalPlanCnt == 1)
     spark.sparkContext.removeSparkListener(listener)
+
+    val expectedMetrics = findInMemoryTable(planAfter).nonEmpty ||
+      subqueriesAll(planAfter).nonEmpty
+    assert(hasMetricsEvent == expectedMetrics)
 
     val exchanges = adaptivePlan.collect {
       case e: Exchange => e
@@ -100,6 +122,12 @@ class AdaptiveQueryExecSuite
   private def findTopLevelBroadcastHashJoin(plan: SparkPlan): Seq[BroadcastHashJoinExec] = {
     collect(plan) {
       case j: BroadcastHashJoinExec => j
+    }
+  }
+
+  def findTopLevelBroadcastNestedLoopJoin(plan: SparkPlan): Seq[BaseJoinExec] = {
+    collect(plan) {
+      case j: BroadcastNestedLoopJoinExec => j
     }
   }
 
@@ -139,6 +167,12 @@ class AdaptiveQueryExecSuite
     }
   }
 
+  private def findTopLevelUnion(plan: SparkPlan): Seq[UnionExec] = {
+    collect(plan) {
+      case l: UnionExec => l
+    }
+  }
+
   private def findReusedExchange(plan: SparkPlan): Seq[ReusedExchangeExec] = {
     collectWithSubqueries(plan) {
       case ShuffleQueryStageExec(_, e: ReusedExchangeExec, _) => e
@@ -149,6 +183,13 @@ class AdaptiveQueryExecSuite
   private def findReusedSubquery(plan: SparkPlan): Seq[ReusedSubqueryExec] = {
     collectWithSubqueries(plan) {
       case e: ReusedSubqueryExec => e
+    }
+  }
+
+  private def findInMemoryTable(plan: SparkPlan): Seq[InMemoryTableScanExec] = {
+    collect(plan) {
+      case c: InMemoryTableScanExec
+          if c.relation.cachedPlan.isInstanceOf[AdaptiveSparkPlanExec] => c
     }
   }
 
@@ -703,18 +744,24 @@ class AdaptiveQueryExecSuite
 
   test("SPARK-37753: Inhibit broadcast in left outer join when there are many empty" +
     " partitions on outer/left side") {
-    withSQLConf(
-      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
-      SQLConf.NON_EMPTY_PARTITION_RATIO_FOR_BROADCAST_JOIN.key -> "0.5") {
-      // `testData` is small enough to be broadcast but has empty partition ratio over the config.
-      withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "200") {
-        val (plan, adaptivePlan) = runAdaptiveAndVerifyResult(
-          "SELECT * FROM (select * from testData where value = '1') td" +
-            " left outer join testData2 ON key = a")
-        val smj = findTopLevelSortMergeJoin(plan)
-        assert(smj.size == 1)
-        val bhj = findTopLevelBroadcastHashJoin(adaptivePlan)
-        assert(bhj.isEmpty)
+    // if the right side is completed first and the left side is still being executed,
+    // the right side does not know whether there are many empty partitions on the left side,
+    // so there is no demote, and then the right side is broadcast in the planning stage.
+    // so retry several times here to avoid unit test failure.
+    eventually(timeout(15.seconds), interval(500.milliseconds)) {
+      withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+        SQLConf.NON_EMPTY_PARTITION_RATIO_FOR_BROADCAST_JOIN.key -> "0.5") {
+        // `testData` is small enough to be broadcast but has empty partition ratio over the config.
+        withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "200") {
+          val (plan, adaptivePlan) = runAdaptiveAndVerifyResult(
+            "SELECT * FROM (select * from testData where value = '1') td" +
+              " left outer join testData2 ON key = a")
+          val smj = findTopLevelSortMergeJoin(plan)
+          assert(smj.size == 1)
+          val bhj = findTopLevelBroadcastHashJoin(adaptivePlan)
+          assert(bhj.isEmpty)
+        }
       }
     }
   }
@@ -856,17 +903,75 @@ class AdaptiveQueryExecSuite
         df1.write.parquet(tableDir.getAbsolutePath)
 
         val aggregated = spark.table("bucketed_table").groupBy("i").count()
-        val error = intercept[Exception] {
+        val error = intercept[SparkException] {
           aggregated.count()
         }
-        assert(error.toString contains "Invalid bucket file")
-        assert(error.getSuppressed.size === 0)
+        assert(error.getCondition === "INVALID_BUCKET_FILE")
+        assert(error.getMessage contains "Invalid bucket file")
+      }
+    }
+  }
+
+  test("SPARK-47148: AQE should avoid to submit shuffle job on cancellation") {
+    def createJoinedDF(): DataFrame = {
+      // Use subquery expression containing `slow_udf` to delay the submission of shuffle jobs.
+      val df = sql("SELECT id, (SELECT slow_udf() FROM range(2)) FROM range(5)")
+      val df2 = sql("SELECT id FROM range(10)").coalesce(2)
+      val df3 = sql("SELECT id, (SELECT slow_udf() FROM range(2)) FROM range(15) WHERE id > 2")
+      df.join(df2, Seq("id")).join(df3, Seq("id"))
+    }
+
+    withUserDefinedFunction("slow_udf" -> true) {
+      spark.udf.register("slow_udf", () => {
+        Thread.sleep(3000)
+        1
+      })
+
+      try {
+        spark.experimental.extraStrategies = TestProblematicCoalesceStrategy :: Nil
+        withSQLConf(
+          SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+          SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+          val joined = createJoinedDF()
+
+          val error = intercept[SparkException] {
+            joined.collect()
+          }
+          val errMsgList = (error :: error.getCause :: error.getSuppressed.toList)
+            .filter(e => e != null && e.getMessage != null)
+            .map(_.getMessage)
+
+          assert(errMsgList.exists(_.contains("coalesce test error")),
+            s"""
+               |The error message should contain 'coalesce test error', but got:
+               |${errMsgList.mkString("======\n", "\n", "\n======")}
+               |""".stripMargin)
+          val adaptivePlan = joined.queryExecution.executedPlan.asInstanceOf[AdaptiveSparkPlanExec]
+
+          // All QueryStages should be based on ShuffleQueryStageExec
+          val shuffleQueryStageExecs = collect(adaptivePlan) {
+            case sqse: ShuffleQueryStageExec => sqse
+          }
+          assert(shuffleQueryStageExecs.length == 3, s"Physical Plan should include " +
+            s"3 ShuffleQueryStages. Physical Plan: $adaptivePlan")
+          // First ShuffleQueryStage is cancelled before shuffle job is submitted.
+          assert(shuffleQueryStageExecs(0).shuffle.futureAction.get.isEmpty)
+          // Second ShuffleQueryStage has submitted the shuffle job but it failed.
+          assert(shuffleQueryStageExecs(1).shuffle.futureAction.get.isDefined,
+            "Materialization should be started but it is failed.")
+          // Third ShuffleQueryStage is cancelled before shuffle job is submitted.
+          assert(shuffleQueryStageExecs(2).shuffle.futureAction.get.isEmpty)
+        }
+      } finally {
+        spark.experimental.extraStrategies = Nil
       }
     }
   }
 
   test("SPARK-30403: AQE should handle InSubquery") {
-    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.DECORRELATE_PREDICATE_SUBQUERIES_IN_JOIN_CONDITION.key -> "false") {
       runAdaptiveAndVerifyResult("SELECT * FROM testData LEFT OUTER join testData2" +
         " ON key = a  AND key NOT IN (select a from testData3) where value = '1'"
       )
@@ -943,6 +1048,163 @@ class AdaptiveQueryExecSuite
     }
   }
 
+  test("aqe in stateless streaming query") {
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.ADAPTIVE_EXECUTION_FORCE_APPLY.key -> "true") {
+      withTempView("test") {
+        val input = MemoryStream[Int]
+        val stream = input.toDF().select(col("value"), (col("value") * 3) as "three")
+
+        // join a table with a stream
+        val joined = spark.table("testData").join(stream, Seq("value")).where("three > 40")
+        val query = joined.writeStream.format("memory").queryName("test").start()
+        input.addData(1, 10, 20, 40, 50)
+        try {
+          query.processAllAvailable()
+        } finally {
+          query.stop()
+        }
+
+        // aqe should be enabled in a stateless streaming query
+        val plan = query.asInstanceOf[StreamingQueryWrapper]
+          .streamingQuery.lastExecution.executedPlan
+        val ret = plan.find {
+          case _: AdaptiveSparkPlanExec | _: QueryStageExec => true
+          case _ => false
+        }
+        assert(ret.nonEmpty,
+          s"expected AQE to take effect but can't find AQE node, plan: $plan")
+        // aqe config should still be enabled
+        assert(query.sparkSession.sessionState.conf.adaptiveExecutionEnabled)
+      }
+    }
+  }
+
+  test("no aqe in stateless streaming query if stateless streaming config is disabled") {
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.ADAPTIVE_EXECUTION_FORCE_APPLY.key -> "true",
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED_IN_STATELESS_STREAMING.key -> "false") {
+      withTempView("test") {
+        val input = MemoryStream[Int]
+        val stream = input.toDF().select(col("value"), (col("value") * 3) as "three")
+
+        // join a table with a stream
+        val joined = spark.table("testData").join(stream, Seq("value")).where("three > 40")
+        val query = joined.writeStream.format("memory").queryName("test").start()
+        input.addData(1, 10, 20, 40, 50)
+        try {
+          query.processAllAvailable()
+        } finally {
+          query.stop()
+        }
+
+        // aqe should not be enabled in a stateless streaming query
+        val plan = query.asInstanceOf[StreamingQueryWrapper]
+          .streamingQuery.lastExecution.executedPlan
+        val ret = plan.find {
+          case _: AdaptiveSparkPlanExec | _: QueryStageExec => true
+          case _ => false
+        }
+        assert(ret.isEmpty,
+          s"expected AQE to not in effect but AQE node exists, plan: $plan")
+      }
+    }
+  }
+
+  test("no aqe in stateful streaming query - aggregation") {
+    testNoAqeInStatefulStreamingQuery(OutputMode.Update()) { input =>
+      val stream = input.toDF().select(col("value"), (col("value") * 3) as "three")
+      stream.groupBy("value").agg(sum("three"))
+    }
+  }
+
+  test("no aqe in stateful streaming query - deduplication") {
+    testNoAqeInStatefulStreamingQuery(OutputMode.Append()) { input =>
+      val stream = input.toDF().select(col("value"), (col("value") * 3) as "three")
+      stream.dropDuplicates("value", "three")
+    }
+  }
+
+  test("no aqe in stateful streaming query - stream-stream join") {
+    testNoAqeInStatefulStreamingQuery(OutputMode.Append()) { input =>
+      val inputDf = input.toDF()
+      val stream1 = inputDf.select(col("value") as "left", (col("value") * 2) as "two")
+      val stream2 = inputDf.select(col("value") as "right", (col("value") * 3) as "three")
+
+      stream1.join(stream2, expr("left = right"))
+    }
+  }
+
+  test("no aqe in stateful streaming query - transformWithState") {
+    class RunningCountStatefulProcessorInt
+      extends StatefulProcessor[Int, Int, (Int, Long)] {
+
+      import implicits._
+      @transient protected var _countState: ValueState[Long] = _
+
+      override def init(
+          outputMode: OutputMode,
+          timeMode: TimeMode): Unit = {
+        _countState = getHandle.getValueState[Long]("countState", TTLConfig.NONE)
+      }
+
+      override def handleInputRows(
+          key: Int,
+          inputRows: Iterator[Int],
+          timerValues: TimerValues): Iterator[(Int, Long)] = {
+        val count = Option(_countState.get()).getOrElse(0L) + 1
+
+        if (count == 3) {
+          _countState.clear()
+          Iterator.empty
+        } else {
+          _countState.update(count)
+          Iterator((key, count))
+        }
+      }
+    }
+
+    testNoAqeInStatefulStreamingQuery(OutputMode.Append()) { input =>
+      input.toDS()
+        .groupByKey(x => x)
+        .transformWithState(new RunningCountStatefulProcessorInt,
+          TimeMode.None(),
+          OutputMode.Append()
+        ).toDF()
+    }
+  }
+
+  private def testNoAqeInStatefulStreamingQuery(
+      outputMode: OutputMode)(fn: MemoryStream[Int] => DataFrame): Unit = {
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.ADAPTIVE_EXECUTION_FORCE_APPLY.key -> "true",
+      SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[RocksDBStateStoreProvider].getName) {
+
+      val input = MemoryStream[Int]
+
+      val df = fn(input)
+      val query = df.writeStream.format("noop").outputMode(outputMode).start()
+      input.addData(1, 2, 3, 4, 5)
+      try {
+        query.processAllAvailable()
+      } finally {
+        query.stop()
+      }
+
+      // aqe should not be enabled in a stateful streaming query
+      val plan = query.asInstanceOf[StreamingQueryWrapper]
+        .streamingQuery.lastExecution.executedPlan
+      val ret = plan.find {
+        case _: AdaptiveSparkPlanExec | _: QueryStageExec => true
+        case _ => false
+      }
+      assert(ret.isEmpty)
+    }
+  }
+
   test("tree string output") {
     withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
       val df = sql("SELECT * FROM testData join testData2 ON key = a where value = '1'")
@@ -980,11 +1242,13 @@ class AdaptiveQueryExecSuite
       val read = reads.head
       val c = read.canonicalized.asInstanceOf[AQEShuffleReadExec]
       // we can't just call execute() because that has separate checks for canonicalized plans
-      val ex = intercept[IllegalStateException] {
-        val doExecute = PrivateMethod[Unit](Symbol("doExecute"))
-        c.invokePrivate(doExecute())
-      }
-      assert(ex.getMessage === "operating on canonicalized plan")
+      checkError(
+        exception = intercept[SparkException] {
+          val doExecute = PrivateMethod[Unit](Symbol("doExecute"))
+          c.invokePrivate(doExecute())
+        },
+        condition = "INTERNAL_ERROR",
+        parameters = Map("message" -> "operating on canonicalized plan"))
     }
   }
 
@@ -1001,7 +1265,7 @@ class AdaptiveQueryExecSuite
       assert(!read.hasSkewedPartition)
       assert(read.hasCoalescedPartition)
       assert(read.metrics.keys.toSeq.sorted == Seq(
-        "numCoalescedPartitions", "numPartitions", "partitionDataSize"))
+        "numCoalescedPartitions", "numEmptyPartitions", "numPartitions", "partitionDataSize"))
       assert(read.metrics("numCoalescedPartitions").value == 1)
       assert(read.metrics("numPartitions").value == read.partitionSpecs.length)
       assert(read.metrics("partitionDataSize").value > 0)
@@ -1020,7 +1284,7 @@ class AdaptiveQueryExecSuite
         assert(reads.length == 1)
         val read = reads.head
         assert(read.isLocalRead)
-        assert(read.metrics.keys.toSeq == Seq("numPartitions"))
+        assert(read.metrics.keys.toSeq == Seq("numPartitions", "numEmptyPartitions"))
         assert(read.metrics("numPartitions").value == read.partitionSpecs.length)
       }
 
@@ -1028,7 +1292,7 @@ class AdaptiveQueryExecSuite
         SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
         SQLConf.SHUFFLE_PARTITIONS.key -> "100",
         SQLConf.SKEW_JOIN_SKEWED_PARTITION_THRESHOLD.key -> "800",
-        SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "1000") {
+        SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "900") {
         withTempView("skewData1", "skewData2") {
           spark
             .range(0, 1000, 1, 10)
@@ -1105,16 +1369,66 @@ class AdaptiveQueryExecSuite
     }
   }
 
-  test("SPARK-30953: InsertAdaptiveSparkPlan should apply AQE on child plan of write commands") {
+  test("SPARK-30953: InsertAdaptiveSparkPlan should apply AQE on child plan of v2 write commands") {
     withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
       SQLConf.ADAPTIVE_EXECUTION_FORCE_APPLY.key -> "true") {
+      var plan: SparkPlan = null
+      val listener = new QueryExecutionListener {
+        override def onSuccess(funcName: String, qe: QueryExecution, durationNs: Long): Unit = {
+          plan = qe.executedPlan
+        }
+        override def onFailure(
+          funcName: String, qe: QueryExecution, exception: Exception): Unit = {}
+      }
+      spark.listenerManager.register(listener)
       withTable("t1") {
-        val plan = sql("CREATE TABLE t1 USING parquet AS SELECT 1 col").queryExecution.executedPlan
-        assert(plan.isInstanceOf[CommandResultExec])
-        val commandResultExec = plan.asInstanceOf[CommandResultExec]
-        assert(commandResultExec.commandPhysicalPlan.isInstanceOf[DataWritingCommandExec])
-        assert(commandResultExec.commandPhysicalPlan.asInstanceOf[DataWritingCommandExec]
-          .child.isInstanceOf[AdaptiveSparkPlanExec])
+        val format = classOf[NoopDataSource].getName
+        Seq((0, 1)).toDF("x", "y").write.format(format).mode("overwrite").save()
+
+        sparkContext.listenerBus.waitUntilEmpty()
+        assert(plan.isInstanceOf[V2TableWriteExec])
+        assert(plan.asInstanceOf[V2TableWriteExec].child.isInstanceOf[AdaptiveSparkPlanExec])
+
+        spark.listenerManager.unregister(listener)
+      }
+    }
+  }
+
+  test("SPARK-37287: apply AQE on child plan of a v1 write command") {
+    Seq(true, false).foreach { enabled =>
+      withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+        SQLConf.ADAPTIVE_EXECUTION_FORCE_APPLY.key -> "true",
+        SQLConf.PLANNED_WRITE_ENABLED.key -> enabled.toString) {
+        withTable("t1") {
+          var checkDone = false
+          val listener = new SparkListener {
+            override def onOtherEvent(event: SparkListenerEvent): Unit = {
+              event match {
+                case SparkListenerSQLAdaptiveExecutionUpdate(_, _, planInfo) =>
+                  if (enabled) {
+                    assert(planInfo.nodeName == "AdaptiveSparkPlan")
+                    assert(planInfo.children.size == 1)
+                    assert(planInfo.children.head.nodeName == "ResultQueryStage")
+                    assert(planInfo.children.head.children.size == 1)
+                    assert(planInfo.children.head.children.head.nodeName ==
+                      "Execute InsertIntoHadoopFsRelationCommand")
+                  } else {
+                    assert(planInfo.nodeName == "Execute InsertIntoHadoopFsRelationCommand")
+                  }
+                  checkDone = true
+                case _ => // ignore other events
+              }
+            }
+          }
+          spark.sparkContext.addSparkListener(listener)
+          try {
+            sql("CREATE TABLE t1 USING parquet AS SELECT 1 col").collect()
+            spark.sparkContext.listenerBus.waitUntilEmpty()
+            assert(checkDone)
+          } finally {
+            spark.sparkContext.removeSparkListener(listener)
+          }
+        }
       }
     }
   }
@@ -1160,13 +1474,12 @@ class AdaptiveQueryExecSuite
     withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
       SQLConf.ADAPTIVE_EXECUTION_FORCE_APPLY.key -> "true") {
       withTable("t1") {
-        var checkDone = false
+        var commands: Seq[SparkPlanInfo] = Seq.empty
         val listener = new SparkListener {
           override def onOtherEvent(event: SparkListenerEvent): Unit = {
             event match {
-              case SparkListenerSQLAdaptiveExecutionUpdate(_, _, planInfo) =>
-                assert(planInfo.nodeName == "Execute CreateDataSourceTableAsSelectCommand")
-                checkDone = true
+              case start: SparkListenerSQLExecutionStart =>
+                commands = commands ++ Seq(start.sparkPlanInfo)
               case _ => // ignore other events
             }
           }
@@ -1175,7 +1488,12 @@ class AdaptiveQueryExecSuite
         try {
           sql("CREATE TABLE t1 USING parquet AS SELECT 1 col").collect()
           spark.sparkContext.listenerBus.waitUntilEmpty()
-          assert(checkDone)
+          assert(commands.size == 3)
+          assert(commands.head.nodeName == "Execute CreateDataSourceTableAsSelectCommand")
+          assert(commands(1).nodeName == "AdaptiveSparkPlan")
+          assert(commands(1).children.size == 1)
+          assert(commands(1).children.head.nodeName == "Execute InsertIntoHadoopFsRelationCommand")
+          assert(commands(2).nodeName == "CommandResult")
         } finally {
           spark.sparkContext.removeSparkListener(listener)
         }
@@ -1226,8 +1544,8 @@ class AdaptiveQueryExecSuite
         SQLConf.COALESCE_PARTITIONS_INITIAL_PARTITION_NUM.key -> "10",
         SQLConf.SHUFFLE_PARTITIONS.key -> "10") {
 
-        val df1 = spark.range(10).toDF.repartitionByRange($"id".asc)
-        val df2 = spark.range(10).toDF.repartitionByRange(($"id" + 1).asc)
+        val df1 = spark.range(10).toDF().repartitionByRange($"id".asc)
+        val df2 = spark.range(10).toDF().repartitionByRange(($"id" + 1).asc)
 
         val partitionsNum1 = df1.rdd.collectPartitions().length
         val partitionsNum2 = df2.rdd.collectPartitions().length
@@ -1259,7 +1577,7 @@ class AdaptiveQueryExecSuite
           SQLConf.COALESCE_PARTITIONS_INITIAL_PARTITION_NUM.key -> "10",
           SQLConf.SHUFFLE_PARTITIONS.key -> "10") {
 
-          spark.range(10).toDF.createTempView("test")
+          spark.range(10).toDF().createTempView("test")
 
           val df1 = spark.sql("SELECT /*+ REPARTITION(id) */ * from test")
           val df2 = spark.sql("SELECT /*+ REPARTITION_BY_RANGE(id) */ * from test")
@@ -1457,19 +1775,56 @@ class AdaptiveQueryExecSuite
     }
   }
 
+  test("SPARK-49460: NPE in EmptyRelationExec.cleanupResources") {
+    withTable("t1left", "t1right", "t1empty") {
+      spark.sql("create table t1left (a int, b int);")
+      spark.sql("insert into t1left values (1, 1), (2,2), (3,3);")
+      spark.sql("create table t1right (a int, b int);")
+      spark.sql("create table t1empty (a int, b int);")
+      spark.sql("insert into t1right values (2,20), (4, 40);")
+
+      spark.sql("""
+                  |with leftT as (
+                  |  with erp as (
+                  |    select
+                  |      *
+                  |    from
+                  |      t1left
+                  |      join t1empty on t1left.a = t1empty.a
+                  |      join t1right on t1left.a = t1right.a
+                  |  )
+                  |  SELECT
+                  |    CASE
+                  |      WHEN COUNT(*) = 0 THEN 4
+                  |      ELSE NULL
+                  |    END AS a
+                  |  FROM
+                  |    erp
+                  |  HAVING
+                  |    COUNT(*) = 0
+                  |)
+                  |select
+                  |  /*+ MERGEJOIN(t1right) */
+                  |  *
+                  |from
+                  |  leftT
+                  |  join t1right on leftT.a = t1right.a""".stripMargin).collect()
+    }
+  }
+
   test("SPARK-35585: Support propagate empty relation through project/filter") {
     withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
       val (plan1, adaptivePlan1) = runAdaptiveAndVerifyResult(
         "SELECT key FROM testData WHERE key = 0 ORDER BY key, value")
       assert(findTopLevelSort(plan1).size == 1)
-      assert(stripAQEPlan(adaptivePlan1).isInstanceOf[LocalTableScanExec])
+      assert(stripAQEPlan(adaptivePlan1).isInstanceOf[EmptyRelationExec])
 
       val (plan2, adaptivePlan2) = runAdaptiveAndVerifyResult(
        "SELECT key FROM (SELECT * FROM testData WHERE value = 'no_match' ORDER BY key)" +
          " WHERE key > rand()")
       assert(findTopLevelSort(plan2).size == 1)
-      assert(stripAQEPlan(adaptivePlan2).isInstanceOf[LocalTableScanExec])
+      assert(stripAQEPlan(adaptivePlan2).isInstanceOf[EmptyRelationExec])
     }
   }
 
@@ -1477,18 +1832,18 @@ class AdaptiveQueryExecSuite
     withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
       val (plan1, adaptivePlan1) = runAdaptiveAndVerifyResult(
         "SELECT key, count(*) FROM testData WHERE value = 'no_match' GROUP BY key")
-      assert(!plan1.isInstanceOf[LocalTableScanExec])
-      assert(stripAQEPlan(adaptivePlan1).isInstanceOf[LocalTableScanExec])
+      assert(!plan1.isInstanceOf[EmptyRelationExec])
+      assert(stripAQEPlan(adaptivePlan1).isInstanceOf[EmptyRelationExec])
 
       val (plan2, adaptivePlan2) = runAdaptiveAndVerifyResult(
         "SELECT key, count(*) FROM testData WHERE value = 'no_match' GROUP BY key limit 1")
-      assert(!plan2.isInstanceOf[LocalTableScanExec])
-      assert(stripAQEPlan(adaptivePlan2).isInstanceOf[LocalTableScanExec])
+      assert(!plan2.isInstanceOf[EmptyRelationExec])
+      assert(stripAQEPlan(adaptivePlan2).isInstanceOf[EmptyRelationExec])
 
       val (plan3, adaptivePlan3) = runAdaptiveAndVerifyResult(
         "SELECT count(*) FROM testData WHERE value = 'no_match'")
-      assert(!plan3.isInstanceOf[LocalTableScanExec])
-      assert(!stripAQEPlan(adaptivePlan3).isInstanceOf[LocalTableScanExec])
+      assert(!plan3.isInstanceOf[EmptyRelationExec])
+      assert(!stripAQEPlan(adaptivePlan3).isInstanceOf[EmptyRelationExec])
     }
   }
 
@@ -1509,7 +1864,7 @@ class AdaptiveQueryExecSuite
           |""".stripMargin)
       checkNumUnion(plan1, 1)
       checkNumUnion(adaptivePlan1, 0)
-      assert(!stripAQEPlan(adaptivePlan1).isInstanceOf[LocalTableScanExec])
+      assert(!stripAQEPlan(adaptivePlan1).isInstanceOf[EmptyRelationExec])
 
       val (plan2, adaptivePlan2) = runAdaptiveAndVerifyResult(
         """
@@ -1519,7 +1874,7 @@ class AdaptiveQueryExecSuite
           |""".stripMargin)
       checkNumUnion(plan2, 1)
       checkNumUnion(adaptivePlan2, 0)
-      assert(stripAQEPlan(adaptivePlan2).isInstanceOf[LocalTableScanExec])
+      assert(stripAQEPlan(adaptivePlan2).isInstanceOf[EmptyRelationExec])
     }
   }
 
@@ -1550,7 +1905,8 @@ class AdaptiveQueryExecSuite
       Seq("=== Result of Batch AQE Preparations ===",
           "=== Result of Batch AQE Post Stage Creation ===",
           "=== Result of Batch AQE Replanning ===",
-          "=== Result of Batch AQE Query Stage Optimization ===").foreach { expectedMsg =>
+          "=== Result of Batch AQE Query Stage Optimization ===",
+          "Output Information:").foreach { expectedMsg =>
         assert(testAppender.loggingEvents.exists(
           _.getMessage.getFormattedMessage.contains(expectedMsg)))
       }
@@ -1570,9 +1926,8 @@ class AdaptiveQueryExecSuite
       var noLocalread: Boolean = false
       val listener = new QueryExecutionListener {
         override def onSuccess(funcName: String, qe: QueryExecution, durationNs: Long): Unit = {
-          qe.executedPlan match {
-            case plan@(_: DataWritingCommandExec | _: V2TableWriteExec) =>
-              assert(plan.asInstanceOf[UnaryExecNode].child.isInstanceOf[AdaptiveSparkPlanExec])
+          stripAQEPlan(qe.executedPlan) match {
+            case plan @ (_: DataWritingCommandExec | _: V2TableWriteExec) =>
               noLocalread = collect(plan) {
                 case exec: AQEShuffleReadExec if exec.isLocalRead => exec
               }.isEmpty
@@ -1676,7 +2031,9 @@ class AdaptiveQueryExecSuite
     }
 
     withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
-      SQLConf.SHUFFLE_PARTITIONS.key -> "5") {
+      SQLConf.SHUFFLE_PARTITIONS.key -> "5",
+      // Disabling cleanup as the test assertions depend on them
+      SQLConf.CLASSIC_SHUFFLE_DEPENDENCY_FILE_CLEANUP_ENABLED.key -> "false") {
       val df = sql(
         """
           |SELECT * FROM (
@@ -1789,8 +2146,8 @@ class AdaptiveQueryExecSuite
       .map(_.getMessage.getFormattedMessage)
       .filter(_.startsWith("Materialize query stage"))
       .toArray
-    assert(materializeLogs(0).startsWith("Materialize query stage BroadcastQueryStageExec"))
-    assert(materializeLogs(1).startsWith("Materialize query stage ShuffleQueryStageExec"))
+    assert(materializeLogs(0).startsWith("Materialize query stage: BroadcastQueryStageExec-1"))
+    assert(materializeLogs(1).startsWith("Materialize query stage: ShuffleQueryStageExec-0"))
   }
 
   test("SPARK-34899: Use origin plan if we can not coalesce shuffle partition") {
@@ -1894,7 +2251,15 @@ class AdaptiveQueryExecSuite
               """.stripMargin),
             numUnion = if (combineUnionEnabled) 1 else 2,
             numShuffleReader = 3,
-            numPartition = 1 + 1 + 2)
+            // SPARK-52921
+            // If `combineUnionEnabled` is false, there are 2 unions.
+            // The inner union has 1 partition because its children have the same partitioning:
+            // CoalescedHashPartitioning(HashPartitioning(key, 10), CoalescedBoundary(0,10)).
+            // The outer union has 1 (inner union) + 2 (t1) partitions.
+            //
+            // If `combineUnionEnabled` is true, there is only 1 union. As the children have
+            // different partitioning, the union will have sum of children partitions.
+            numPartition = if (combineUnionEnabled) 1 + 1 + 2 else 1 + 2)
 
           // negative test
           checkResultPartition(
@@ -2076,8 +2441,8 @@ class AdaptiveQueryExecSuite
         withSQLConf(SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "150") {
           // partition size [0,258,72,72,72]
           checkPartitionNumber("SELECT /*+ REBALANCE(c1) */ * FROM v", 2, 4)
-          // partition size [72,216,216,144,72]
-          checkPartitionNumber("SELECT /*+ REBALANCE */ * FROM v", 4, 7)
+          // partition size [144,72,144,72,72,144,72]
+          checkPartitionNumber("SELECT /*+ REBALANCE */ * FROM v", 6, 7)
         }
 
         // no skewed partition should be optimized
@@ -2319,6 +2684,28 @@ class AdaptiveQueryExecSuite
         )
         assert(findTopLevelLimit(origin3).size == 1)
         assert(findTopLevelLimit(adaptive3).isEmpty)
+      }
+    }
+  }
+
+  test("SPARK-48037: Fix SortShuffleWriter lacks shuffle write related metrics " +
+    "resulting in potentially inaccurate data") {
+    withTable("t3") {
+      withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+        SQLConf.SHUFFLE_PARTITIONS.key -> (SortShuffleManager
+          .MAX_SHUFFLE_OUTPUT_PARTITIONS_FOR_SERIALIZED_MODE + 1).toString) {
+        sql("CREATE TABLE t3 USING PARQUET AS SELECT id FROM range(2)")
+        val (plan, adaptivePlan) = runAdaptiveAndVerifyResult(
+          """
+            |SELECT id, count(*)
+            |FROM t3
+            |GROUP BY id
+            |LIMIT 1
+            |""".stripMargin, skipCheckAnswer = true)
+        // The shuffle stage produces two rows and the limit operator should not been optimized out.
+        assert(findTopLevelLimit(plan).size == 1)
+        assert(findTopLevelLimit(adaptivePlan).size == 1)
       }
     }
   }
@@ -2575,6 +2962,486 @@ class AdaptiveQueryExecSuite
       assert(findTopLevelAggregate(adaptive5).size == 4)
     }
   }
+
+  test("SPARK-39551: Invalid plan check - invalid broadcast query stage") {
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
+      val (_, adaptivePlan) = runAdaptiveAndVerifyResult(
+        """
+          |SELECT /*+ BROADCAST(t3) */ t3.b, count(t3.a) FROM testData2 t1
+          |INNER JOIN testData2 t2
+          |ON t1.b = t2.b AND t1.a = 0
+          |RIGHT OUTER JOIN testData2 t3
+          |ON t1.a > t3.a
+          |GROUP BY t3.b
+        """.stripMargin
+      )
+      assert(findTopLevelBroadcastNestedLoopJoin(adaptivePlan).size == 1)
+    }
+  }
+
+  test("SPARK-48155: AQEPropagateEmptyRelation check remained child for join") {
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
+      // Before SPARK-48155, since the AQE will call ValidateSparkPlan,
+      // all AQE optimize rule won't work and return the origin plan.
+      // After SPARK-48155, Spark avoid invalid propagate of empty relation.
+      // Then the UNION first child empty relation can be propagate correctly
+      // and the JOIN won't be propagated since will generated a invalid plan.
+      val (_, adaptivePlan) = runAdaptiveAndVerifyResult(
+        """
+          |SELECT /*+ BROADCAST(t3) */ t3.b, count(t3.a) FROM testData2 t1
+          |INNER JOIN (
+          |  SELECT * FROM testData2
+          |  WHERE b = 0
+          |  UNION ALL
+          |  SELECT * FROM testData2
+          |  WHErE b != 0
+          |) t2
+          |ON t1.b = t2.b AND t1.a = 0
+          |RIGHT OUTER JOIN testData2 t3
+          |ON t1.a > t3.a
+          |GROUP BY t3.b
+        """.stripMargin
+      )
+      assert(findTopLevelBroadcastNestedLoopJoin(adaptivePlan).size == 1)
+      assert(findTopLevelUnion(adaptivePlan).size == 0)
+    }
+
+    withSQLConf(
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "100") {
+      withTempView("t1", "t2", "t3", "t4") {
+        Seq(1).toDF().createOrReplaceTempView("t1")
+        spark.range(100).createOrReplaceTempView("t2")
+        spark.range(2).createOrReplaceTempView("t3")
+        spark.range(2).createOrReplaceTempView("t4")
+        val (_, adaptivePlan) = runAdaptiveAndVerifyResult(
+          """
+            |SELECT tt2.value
+            |FROM (
+            |  SELECT value
+            |  FROM t1
+            |  WHERE NOT EXISTS (
+            |      SELECT 1
+            |      FROM (
+            |        SELECT t2.id
+            |        FROM t2
+            |          JOIN t3 ON t2.id = t3.id
+            |        AND t2.id > 100
+            |      ) tt
+            |      WHERE t1.value = tt.id
+            |    )
+            |    AND t1.value = 1
+            |) tt2
+            |  LEFT JOIN t4 ON tt2.value = t4.id
+            |""".stripMargin
+        )
+        assert(findTopLevelBroadcastNestedLoopJoin(adaptivePlan).size == 1)
+      }
+    }
+  }
+
+  test("SPARK-39915: Dataset.repartition(N) may not create N partitions") {
+    withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "6") {
+      // partitioning:  HashPartitioning
+      // shuffleOrigin: REPARTITION_BY_NUM
+      assert(spark.range(0).repartition(5, $"id").rdd.getNumPartitions == 5)
+      // shuffleOrigin: REPARTITION_BY_COL
+      // The minimum partition number after AQE coalesce is 1
+      assert(spark.range(0).repartition($"id").rdd.getNumPartitions == 1)
+      // through project
+      assert(spark.range(0).selectExpr("id % 3 as c1", "id % 7 as c2")
+        .repartition(5, $"c1").select($"c2").rdd.getNumPartitions == 5)
+
+      // partitioning:  RangePartitioning
+      // shuffleOrigin: REPARTITION_BY_NUM
+      // The minimum partition number of RangePartitioner is 1
+      assert(spark.range(0).repartitionByRange(5, $"id").rdd.getNumPartitions == 1)
+      // shuffleOrigin: REPARTITION_BY_COL
+      assert(spark.range(0).repartitionByRange($"id").rdd.getNumPartitions == 1)
+
+      // partitioning:  RoundRobinPartitioning
+      // shuffleOrigin: REPARTITION_BY_NUM
+      assert(spark.range(0).repartition(5).rdd.getNumPartitions == 5)
+      // shuffleOrigin: REBALANCE_PARTITIONS_BY_NONE
+      assert(spark.range(0).repartition().rdd.getNumPartitions == 1)
+      // through project
+      assert(spark.range(0).selectExpr("id % 3 as c1", "id % 7 as c2")
+        .repartition(5).select($"c2").rdd.getNumPartitions == 5)
+
+      // partitioning:  SinglePartition
+      assert(spark.range(0).repartition(1).rdd.getNumPartitions == 1)
+    }
+  }
+
+  test("SPARK-39915: Ensure the output partitioning is user-specified") {
+    withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "3",
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      val df1 = spark.range(1).selectExpr("id as c1")
+      val df2 = spark.range(1).selectExpr("id as c2")
+      val df = df1.join(df2, col("c1") === col("c2")).repartition(3, col("c1"))
+      assert(df.rdd.getNumPartitions == 3)
+    }
+  }
+
+  test("SPARK-42778: QueryStageExec should respect supportsRowBased") {
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_FORCE_APPLY.key -> "true") {
+      withTempView("t") {
+        Seq(1).toDF("c1").createOrReplaceTempView("t")
+        spark.catalog.cacheTable("t")
+        val df = spark.table("t")
+        df.collect()
+        assert(collect(df.queryExecution.executedPlan) {
+          case c: ColumnarToRowExec => c
+        }.isEmpty)
+      }
+    }
+  }
+
+  test("SPARK-42101: Apply AQE if contains nested AdaptiveSparkPlanExec") {
+    withSQLConf(SQLConf.CAN_CHANGE_CACHED_PLAN_OUTPUT_PARTITIONING.key -> "true") {
+      val df = spark.range(3).repartition().cache()
+      assert(df.sortWithinPartitions("id")
+        .queryExecution.executedPlan.isInstanceOf[AdaptiveSparkPlanExec])
+    }
+  }
+
+  test("SPARK-42101: Make AQE support InMemoryTableScanExec") {
+    withSQLConf(
+        SQLConf.CAN_CHANGE_CACHED_PLAN_OUTPUT_PARTITIONING.key -> "true",
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      val df1 = spark.range(10).selectExpr("cast(id as string) c1")
+      val df2 = spark.range(10).selectExpr("cast(id as string) c2")
+      val cached = df1.join(df2, $"c1" === $"c2").cache()
+
+      def checkShuffleAndSort(firstAccess: Boolean): Unit = {
+        val df = cached.groupBy("c1").agg(max($"c2"))
+        val initialExecutedPlan = df.queryExecution.executedPlan
+        assert(collect(initialExecutedPlan) {
+          case s: ShuffleExchangeLike => s
+        }.size == (if (firstAccess) 1 else 0))
+        assert(collect(initialExecutedPlan) {
+          case s: SortExec => s
+        }.size == (if (firstAccess) 2 else 0))
+        assert(collect(initialExecutedPlan) {
+          case i: InMemoryTableScanLike => i
+        }.head.isMaterialized != firstAccess)
+
+        df.collect()
+        val finalExecutedPlan = df.queryExecution.executedPlan
+        assert(collect(finalExecutedPlan) {
+          case s: ShuffleExchangeLike => s
+        }.isEmpty)
+        assert(collect(finalExecutedPlan) {
+          case s: SortExec => s
+        }.isEmpty)
+        assert(collect(initialExecutedPlan) {
+          case i: InMemoryTableScanLike => i
+        }.head.isMaterialized)
+      }
+
+      // first access cache
+      checkShuffleAndSort(firstAccess = true)
+
+      // access a materialized cache
+      checkShuffleAndSort(firstAccess = false)
+    }
+  }
+
+  test("SPARK-42101: Do not coalesce shuffle partition if other side is TableCacheQueryStage") {
+    withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "3",
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+        SQLConf.CAN_CHANGE_CACHED_PLAN_OUTPUT_PARTITIONING.key -> "true",
+        SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_NUM.key -> "1") {
+      withTempView("v1", "v2") {
+        Seq(1, 2).toDF("c1").repartition(3, $"c1").cache().createOrReplaceTempView("v1")
+        Seq(1, 2).toDF("c2").createOrReplaceTempView("v2")
+
+        val df = spark.sql("SELECT * FROM v1 JOIN v2 ON v1.c1 = v2.c2")
+        df.collect()
+        val finalPlan = df.queryExecution.executedPlan
+        assert(collect(finalPlan) {
+          case q: ShuffleQueryStageExec => q
+        }.size == 1)
+        assert(collect(finalPlan) {
+          case r: AQEShuffleReadExec => r
+        }.isEmpty)
+      }
+    }
+  }
+
+  test("SPARK-42101: Coalesce shuffle partition with union even if exists TableCacheQueryStage") {
+    withSQLConf(SQLConf.CAN_CHANGE_CACHED_PLAN_OUTPUT_PARTITIONING.key -> "true",
+        SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_NUM.key -> "1") {
+      val cached = Seq(1).toDF("c").cache()
+      val df = Seq(2).toDF("c").repartition($"c").unionAll(cached)
+      df.collect()
+      assert(collect(df.queryExecution.executedPlan) {
+        case r @ AQEShuffleReadExec(_: ShuffleQueryStageExec, _) => r
+      }.size == 1)
+      assert(collect(df.queryExecution.executedPlan) {
+        case c: TableCacheQueryStageExec => c
+      }.size == 1)
+    }
+  }
+
+  test("SPARK-43026: Apply AQE with non-exchange table cache") {
+    Seq(true, false).foreach { canChangeOP =>
+      withSQLConf(SQLConf.CAN_CHANGE_CACHED_PLAN_OUTPUT_PARTITIONING.key -> canChangeOP.toString) {
+        // No exchange, no need for AQE
+        val df = spark.range(0).cache()
+        df.collect()
+        assert(!df.queryExecution.executedPlan.isInstanceOf[AdaptiveSparkPlanExec])
+        // Has exchange, apply AQE
+        val df2 = spark.range(0).repartition(1).cache()
+        df2.collect()
+        assert(df2.queryExecution.executedPlan.isInstanceOf[AdaptiveSparkPlanExec])
+      }
+    }
+  }
+
+  test("SPARK-43376: Improve reuse subquery with table cache") {
+    withSQLConf(SQLConf.CAN_CHANGE_CACHED_PLAN_OUTPUT_PARTITIONING.key -> "true") {
+      withTable("t1", "t2") {
+        withCache("t1") {
+          Seq(1).toDF("c1").cache().createOrReplaceTempView("t1")
+          Seq(2).toDF("c2").createOrReplaceTempView("t2")
+
+          val (_, adaptive) = runAdaptiveAndVerifyResult(
+            "SELECT * FROM t1 WHERE c1 < (SELECT c2 FROM t2)")
+          assert(findReusedSubquery(adaptive).size == 1)
+        }
+      }
+    }
+  }
+
+  test("SPARK-44040: Fix compute stats when AggregateExec nodes above QueryStageExec") {
+    val emptyDf = spark.range(1).where("false")
+    val aggDf1 = emptyDf.agg(sum("id").as("id")).withColumn("name", lit("df1"))
+    val aggDf2 = emptyDf.agg(sum("id").as("id")).withColumn("name", lit("df2"))
+    val unionDF = aggDf1.union(aggDf2)
+    checkAnswer(unionDF.select("id").distinct(), Seq(Row(null)))
+  }
+
+  test("Collect twice on the same dataframe with no AQE plan changes") {
+    val df = spark.sql("SELECT * FROM testData join testData2 ON key = a")
+    df.collect()
+    val plan1 = df.queryExecution.executedPlan.asInstanceOf[AdaptiveSparkPlanExec].executedPlan
+    df.collect()
+    val plan2 = df.queryExecution.executedPlan.asInstanceOf[AdaptiveSparkPlanExec].executedPlan
+    assert(plan1.isInstanceOf[ResultQueryStageExec])
+    assert(plan2.isInstanceOf[ResultQueryStageExec])
+    assert(plan1 ne plan2)
+    assert(plan1.asInstanceOf[ResultQueryStageExec].plan
+      .fastEquals(plan2.asInstanceOf[ResultQueryStageExec].plan))
+  }
+
+  test("Two different collect actions on same dataframe") {
+    val df = spark.sql("SELECT * FROM testData join testData2 ON key = a")
+    val adaptivePlan = df.queryExecution.executedPlan.asInstanceOf[AdaptiveSparkPlanExec]
+    val res1 = adaptivePlan.execute().collect()
+    val plan1 = adaptivePlan.executedPlan
+    val res2 = adaptivePlan.executeTake(1)
+    val plan2 = adaptivePlan.executedPlan
+    assert (res1.length != res2.length)
+    assert(plan1.isInstanceOf[ResultQueryStageExec])
+    assert(plan2.isInstanceOf[ResultQueryStageExec])
+    assert(plan1 ne plan2)
+    assert(plan1.asInstanceOf[ResultQueryStageExec].plan
+      .fastEquals(plan2.asInstanceOf[ResultQueryStageExec].plan))
+  }
+
+  test("SPARK-47247: coalesce differently for BNLJ") {
+    Seq(true, false).foreach { expectCoalesce =>
+      val minPartitionSize = if (expectCoalesce) "64MB" else "1B"
+      withSQLConf(
+        SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "64MB",
+        SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_SIZE.key -> minPartitionSize) {
+        val (_, adaptivePlan) = runAdaptiveAndVerifyResult(
+          "SELECT /*+ broadcast(testData2) */ * " +
+            "FROM (SELECT value v, max(key) k from testData group by value) " +
+            "JOIN testData2 ON k + a > 0")
+        val bnlj = findTopLevelBroadcastNestedLoopJoin(adaptivePlan)
+        assert(bnlj.size == 1)
+        val coalescedReads = collect(adaptivePlan) {
+          case read: AQEShuffleReadExec if read.isCoalescedRead => read
+        }
+        assert(coalescedReads.nonEmpty == expectCoalesce)
+      }
+    }
+  }
+
+  test("SPARK-49979: AQE hang forever when collecting twice on a failed AQE plan") {
+    val func: Long => Boolean = (i : Long) => {
+      throw new Exception("SPARK-49979")
+    }
+    withUserDefinedFunction("func" -> true) {
+      spark.udf.register("func", func)
+      val df1 = spark.range(1024).select($"id".as("key1"))
+      val df2 = spark.range(2048).select($"id".as("key2"))
+        .withColumn("group_key", $"key2" % 1024)
+      val df = df1.filter(expr("func(key1)")).hint("MERGE").join(df2, $"key1" === $"key2")
+        .groupBy($"group_key").agg("key1" -> "count")
+      intercept[Throwable] {
+        df.collect()
+      }
+      // second collect should not hang forever
+      intercept[Throwable] {
+        df.collect()
+      }
+    }
+  }
+
+  test("SPARK-50258: Fix output column order changed issue after AQE optimization") {
+    withTable("t") {
+      sql("SELECT course, year, earnings FROM courseSales").write.saveAsTable("t")
+      val df = sql(
+        """
+          |SELECT year, course, earnings, SUM(earnings) OVER (ORDER BY year, course) AS balance
+          |FROM t ORDER BY year, course
+          |LIMIT 100
+          |""".stripMargin)
+      df.collect()
+
+      val plan = df.queryExecution.executedPlan.asInstanceOf[AdaptiveSparkPlanExec]
+      assert(plan.inputPlan.isInstanceOf[TakeOrderedAndProjectExec])
+      assert(plan.finalPhysicalPlan.isInstanceOf[WindowExec])
+      plan.inputPlan.output.zip(plan.finalPhysicalPlan.output).foreach { case (o1, o2) =>
+        assert(o1.semanticEquals(o2), "Different output column order after AQE optimization")
+      }
+    }
+  }
+
+  test("SPARK-42322: STAGE_MATERIALIZATION_MULTIPLE_FAILURES error class validation") {
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
+
+      withTempView("test_table1", "test_table2") {
+        import java.lang.reflect.InvocationTargetException
+
+        // Create datasets
+        spark.range(100).selectExpr("id", "id % 10 as group_col")
+          .createOrReplaceTempView("test_table1")
+        spark.range(100).selectExpr("id", "id % 5 as group_col")
+          .createOrReplaceTempView("test_table2")
+
+        // Create a simple query to get the plan
+        val df = spark.sql("""
+          SELECT t1.group_col, COUNT(*) as cnt
+          FROM test_table1 t1
+          JOIN test_table2 t2 ON t1.group_col = t2.group_col
+          GROUP BY t1.group_col
+        """)
+
+        // Instead of trying to trigger actual failures, let's directly test the error creation
+        val adaptivePlan = df.queryExecution.executedPlan.asInstanceOf[AdaptiveSparkPlanExec]
+
+        // Access the private method to test error creation logic
+        val errors = Seq(
+          new RuntimeException("Stage 1 materialization failed"),
+          new RuntimeException("Stage 2 materialization failed")
+        )
+
+        // Use reflection to access and test the cleanUpAndThrowException method
+        val cleanUpMethod = classOf[AdaptiveSparkPlanExec].getDeclaredMethod(
+          "cleanUpAndThrowException", classOf[Seq[Throwable]], classOf[Option[Int]])
+        cleanUpMethod.setAccessible(true)
+
+        val exception = intercept[InvocationTargetException] {
+          cleanUpMethod.invoke(adaptivePlan, errors, None)
+        }
+
+        // Verify that we get the expected error class for multiple stage failures
+        val cause = exception.getCause.asInstanceOf[SparkException]
+        assert(cause.getCondition == "STAGE_MATERIALIZATION_MULTIPLE_FAILURES",
+          s"Expected STAGE_MATERIALIZATION_MULTIPLE_FAILURES, " +
+            s"got: ${cause.getCondition}")
+        val errorMessage = cause.getMessage
+        assert(errorMessage.contains("Multiple failures (2) in stage materialization:"),
+          s"Error message should contain failure count, got: $errorMessage")
+        assert(errorMessage.contains("1. RuntimeException: Stage 1 materialization failed"),
+          s"Error message should contain first error details, got: $errorMessage")
+        assert(errorMessage.contains("2. RuntimeException: Stage 2 materialization failed"),
+          s"Error message should contain second error details, got: $errorMessage")
+      }
+    }
+  }
+
+  test("SPARK-52921: Specify outputPartitioning for UnionExec for same output partitoning") {
+    def checkResultPartition(
+        df: Dataset[Row],
+        numUnion: Int,
+        numShuffleReader: Int,
+        numPartition: Int): Unit = {
+      df.collect()
+      assert(collect(df.queryExecution.executedPlan) {
+        case u: UnionExec => u
+      }.size == numUnion)
+      assert(collect(df.queryExecution.executedPlan) {
+        case r: AQEShuffleReadExec => r
+      }.size === numShuffleReader)
+      assert(df.rdd.partitions.length === numPartition)
+    }
+
+    Seq(true, false).foreach { combineUnionEnabled =>
+      val combineUnionConfig = if (combineUnionEnabled) {
+        SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> ""
+      } else {
+        SQLConf.OPTIMIZER_EXCLUDED_RULES.key ->
+          "org.apache.spark.sql.catalyst.optimizer.CombineUnions"
+      }
+      // advisory partition size 1048576 has no special meaning, just a big enough value
+      withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+        SQLConf.COALESCE_PARTITIONS_ENABLED.key -> "true",
+        SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "1048576",
+        SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_NUM.key -> "1",
+        SQLConf.SHUFFLE_PARTITIONS.key -> "10",
+        combineUnionConfig) {
+        withTempView("t1", "t2") {
+          spark.sparkContext.parallelize((1 to 10).map(i => TestData(i, i.toString)), 2)
+            .toDF().createOrReplaceTempView("t1")
+          spark.sparkContext.parallelize((1 to 10).map(i => TestData(i, i.toString)), 4)
+            .toDF().createOrReplaceTempView("t2")
+
+          val query =
+            """
+              |SELECT /*+ merge(t2) */ t1.key, t2.key FROM t1 JOIN t2 ON t1.key = t2.key
+              |UNION ALL
+              |SELECT key, count(*) FROM t2 GROUP BY key
+              |UNION ALL
+              |SELECT * FROM t1
+              |""".stripMargin
+
+          val correctResults = withSQLConf(SQLConf.UNION_OUTPUT_PARTITIONING.key -> "false") {
+            checkResultPartition(
+              sql(query),
+              numUnion = if (combineUnionEnabled) 1 else 2,
+              numShuffleReader = 3,
+              numPartition = 1 + 1 + 2)
+
+            sql(query).collect()
+          }
+
+          withSQLConf(SQLConf.UNION_OUTPUT_PARTITIONING.key -> "true") {
+            checkResultPartition(
+              sql(query),
+              numUnion = if (combineUnionEnabled) 1 else 2,
+              numShuffleReader = 3,
+              // If `combineUnionEnabled` is false, there are 2 unions.
+              // The inner union has 1 partition because its children have the same partitioning:
+              // CoalescedHashPartitioning(HashPartitioning(key, 10), CoalescedBoundary(0,10)).
+              // The outer union has 1 (inner union) + 2 (t1) partitions.
+              //
+              // If `combineUnionEnabled` is true, there is only 1 union. As the children have
+              // different partitioning, the union will have sum of children partitions.
+              numPartition = if (combineUnionEnabled) 1 + 1 + 2 else 1 + 2)
+
+            checkAnswer(sql(query), correctResults)
+          }
+        }
+      }
+    }
+  }
 }
 
 /**
@@ -2592,5 +3459,31 @@ private case class SimpleShuffleSortCostEvaluator() extends CostEvaluator {
       case s: SortExec => s
     }.size
     SimpleCost(cost)
+  }
+}
+
+/**
+ * Helps to simulate ExchangeQueryStageExec materialization failure.
+ */
+private object TestProblematicCoalesceStrategy extends Strategy {
+  private case class TestProblematicCoalesceExec(numPartitions: Int, child: SparkPlan)
+    extends UnaryExecNode {
+    override protected def doExecute(): RDD[InternalRow] = {
+      child.execute().mapPartitions { _ =>
+        throw new RuntimeException("coalesce test error")
+      }
+    }
+    override def output: Seq[Attribute] = child.output
+    override protected def withNewChildInternal(newChild: SparkPlan): TestProblematicCoalesceExec =
+      copy(child = newChild)
+  }
+
+  override def apply(plan: LogicalPlan): Seq[SparkPlan] = {
+    plan match {
+      case org.apache.spark.sql.catalyst.plans.logical.Repartition(
+      numPartitions, false, child) =>
+        TestProblematicCoalesceExec(numPartitions, planLater(child)) :: Nil
+      case _ => Nil
+    }
   }
 }

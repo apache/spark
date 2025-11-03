@@ -29,7 +29,9 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
 import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
+import org.apache.spark.tags.SlowSQLTest
 
+@SlowSQLTest
 class BucketedWriteWithoutHiveSupportSuite extends BucketedWriteSuite with SharedSparkSession {
   protected override def beforeAll(): Unit = {
     super.beforeAll()
@@ -85,10 +87,12 @@ abstract class BucketedWriteSuite extends QueryTest with SQLTestUtils {
 
   test("specify sorting columns without bucketing columns") {
     val df = Seq(1 -> "a", 2 -> "b").toDF("i", "j")
-    val e = intercept[AnalysisException] {
-      df.write.sortBy("j").saveAsTable("tt")
-    }
-    assert(e.getMessage == "sortBy must be used together with bucketBy")
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.write.sortBy("j").saveAsTable("tt")
+      },
+      condition = "SORT_BY_WITHOUT_BUCKETING",
+      parameters = Map.empty)
   }
 
   test("sorting by non-orderable column") {
@@ -98,38 +102,42 @@ abstract class BucketedWriteSuite extends QueryTest with SQLTestUtils {
 
   test("write bucketed data using save()") {
     val df = Seq(1 -> "a", 2 -> "b").toDF("i", "j")
-
-    val e = intercept[AnalysisException] {
-      df.write.bucketBy(2, "i").parquet("/tmp/path")
-    }
-    assert(e.getMessage == "'save' does not support bucketBy right now")
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.write.bucketBy(2, "i").parquet("/tmp/path")
+      },
+      condition = "_LEGACY_ERROR_TEMP_1312",
+      parameters = Map("operation" -> "save"))
   }
 
   test("write bucketed and sorted data using save()") {
     val df = Seq(1 -> "a", 2 -> "b").toDF("i", "j")
-
-    val e = intercept[AnalysisException] {
-      df.write.bucketBy(2, "i").sortBy("i").parquet("/tmp/path")
-    }
-    assert(e.getMessage == "'save' does not support bucketBy and sortBy right now")
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.write.bucketBy(2, "i").sortBy("i").parquet("/tmp/path")
+      },
+      condition = "_LEGACY_ERROR_TEMP_1313",
+      parameters = Map("operation" -> "save"))
   }
 
   test("write bucketed data using insertInto()") {
     val df = Seq(1 -> "a", 2 -> "b").toDF("i", "j")
-
-    val e = intercept[AnalysisException] {
-      df.write.bucketBy(2, "i").insertInto("tt")
-    }
-    assert(e.getMessage == "'insertInto' does not support bucketBy right now")
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.write.bucketBy(2, "i").insertInto("tt")
+      },
+      condition = "_LEGACY_ERROR_TEMP_1312",
+      parameters = Map("operation" -> "insertInto"))
   }
 
   test("write bucketed and sorted data using insertInto()") {
     val df = Seq(1 -> "a", 2 -> "b").toDF("i", "j")
-
-    val e = intercept[AnalysisException] {
-      df.write.bucketBy(2, "i").sortBy("i").insertInto("tt")
-    }
-    assert(e.getMessage == "'insertInto' does not support bucketBy and sortBy right now")
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.write.bucketBy(2, "i").sortBy("i").insertInto("tt")
+      },
+      condition = "_LEGACY_ERROR_TEMP_1313",
+      parameters = Map("operation" -> "insertInto"))
   }
 
   private lazy val df = {
@@ -238,19 +246,23 @@ abstract class BucketedWriteSuite extends QueryTest with SQLTestUtils {
   }
 
   test("write bucketed data with the overlapping bucketBy/sortBy and partitionBy columns") {
-    val e1 = intercept[AnalysisException](df.write
-      .partitionBy("i", "j")
-      .bucketBy(8, "j", "k")
-      .sortBy("k")
-      .saveAsTable("bucketed_table"))
-    assert(e1.message.contains("bucketing column 'j' should not be part of partition columns"))
+    checkError(
+      exception = intercept[AnalysisException](df.write
+        .partitionBy("i", "j")
+        .bucketBy(8, "j", "k")
+        .sortBy("k")
+        .saveAsTable("bucketed_table")),
+      condition = "_LEGACY_ERROR_TEMP_1166",
+      parameters = Map("bucketCol" -> "j", "normalizedPartCols" -> "i, j"))
 
-    val e2 = intercept[AnalysisException](df.write
-      .partitionBy("i", "j")
-      .bucketBy(8, "k")
-      .sortBy("i")
-      .saveAsTable("bucketed_table"))
-    assert(e2.message.contains("bucket sorting column 'i' should not be part of partition columns"))
+    checkError(
+      exception = intercept[AnalysisException](df.write
+        .partitionBy("i", "j")
+        .bucketBy(8, "k")
+        .sortBy("i")
+        .saveAsTable("bucketed_table")),
+      condition = "_LEGACY_ERROR_TEMP_1167",
+      parameters = Map("sortCol" -> "i", "normalizedPartCols" -> "i, j"))
   }
 
   test("write bucketed data without partitionBy") {

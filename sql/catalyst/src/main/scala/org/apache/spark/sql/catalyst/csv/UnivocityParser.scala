@@ -18,23 +18,26 @@
 package org.apache.spark.sql.catalyst.csv
 
 import java.io.InputStream
+import java.util.Locale
 
+import scala.collection.mutable.ArrayBuffer
 import scala.util.control.NonFatal
 
+import com.univocity.parsers.common.TextParsingException
 import com.univocity.parsers.csv.CsvParser
 
-import org.apache.spark.SparkUpgradeException
+import org.apache.spark.{SparkRuntimeException, SparkUpgradeException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.{InternalRow, NoopFilters, OrderedFilters}
-import org.apache.spark.sql.catalyst.expressions.{Cast, EmptyRow, ExprUtils, GenericInternalRow, Literal}
+import org.apache.spark.sql.catalyst.expressions.{ExprUtils, GenericInternalRow}
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.LegacyDateFormats.FAST_DATE_FORMAT
-import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.errors.{ExecutionErrors, QueryExecutionErrors}
+import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.UTF8String
-
+import org.apache.spark.types.variant._
+import org.apache.spark.unsafe.types.{UTF8String, VariantVal}
 
 /**
  * Constructs a parser for a given schema that translates CSV data to an [[InternalRow]].
@@ -64,19 +67,25 @@ class UnivocityParser(
   private type ValueConverter = String => Any
 
   // This index is used to reorder parsed tokens
-  private val tokenIndexArr =
-    requiredSchema.map(f => java.lang.Integer.valueOf(dataSchema.indexOf(f))).toArray
+  private val tokenIndexArr = requiredSchema.map(f => dataSchema.indexOf(f)).toArray
+
+  // True if we should inform the Univocity CSV parser to select which fields to read by their
+  // positions. Generally assigned by input configuration options, except when input column(s) have
+  // default values, in which case we omit the explicit indexes in order to know how many tokens
+  // were present in each line instead.
+  private def columnPruning: Boolean = options.isColumnPruningEnabled(requiredSchema)
 
   // When column pruning is enabled, the parser only parses the required columns based on
   // their positions in the data schema.
-  private val parsedSchema = if (options.columnPruning) requiredSchema else dataSchema
+  private val parsedSchema = if (columnPruning) requiredSchema else dataSchema
 
   val tokenizer: CsvParser = {
     val parserSetting = options.asParserSettings
     // When to-be-parsed schema is shorter than the to-be-read data schema, we let Univocity CSV
     // parser select a sequence of fields for reading by their positions.
     if (parsedSchema.length < dataSchema.length) {
-      parserSetting.selectIndexes(tokenIndexArr: _*)
+      // Box into Integer here to avoid unboxing where `tokenIndexArr` is used during parsing
+      parserSetting.selectIndexes(tokenIndexArr.map(java.lang.Integer.valueOf(_)): _*)
     }
     new CsvParser(parserSetting)
   }
@@ -111,8 +120,32 @@ class UnivocityParser(
     new NoopFilters
   }
 
+  // Flags to signal if we need to fall back to the backward compatible behavior of parsing
+  // dates and timestamps.
+  // For more information, see comments for "enableDateTimeParsingFallback" option in CSVOptions.
+  private val enableParsingFallbackForTimestampType =
+    options.enableDateTimeParsingFallback
+      .orElse(SQLConf.get.csvEnableDateTimeParsingFallback)
+      .getOrElse {
+        SQLConf.get.legacyTimeParserPolicy == LegacyBehaviorPolicy.LEGACY ||
+          options.timestampFormatInRead.isEmpty
+      }
+  private val enableParsingFallbackForDateType =
+    options.enableDateTimeParsingFallback
+      .orElse(SQLConf.get.csvEnableDateTimeParsingFallback)
+      .getOrElse {
+        SQLConf.get.legacyTimeParserPolicy == LegacyBehaviorPolicy.LEGACY ||
+          options.dateFormatOption.isEmpty
+      }
+
+  // When `options.needHeaderForSingleVariantColumn` is true, it will be set to the header column
+  // names by `CSVDataSource.readHeaderForSingleVariantColumn`.
+  var headerColumnNames: Option[Array[String]] = None
+  private val singleVariantFieldConverters = new ArrayBuffer[VariantValueConverter]()
+
   // Retrieve the raw record string.
   private def getCurrentInput: UTF8String = {
+    if (tokenizer.getContext == null) return null
     val currentContent = tokenizer.getContext.currentParsedContent()
     if (currentContent == null) null else UTF8String.fromString(currentContent.stripLineEnd)
   }
@@ -136,9 +169,12 @@ class UnivocityParser(
   // Each input token is placed in each output row's position by mapping these. In this case,
   //
   //   output row - ["A", 2]
-  private val valueConverters: Array[ValueConverter] = {
-    requiredSchema.map(f => makeConverter(f.name, f.dataType, f.nullable)).toArray
-  }
+  private val valueConverters: Array[ValueConverter] =
+    if (options.singleVariantColumn.isDefined) {
+      null
+    } else {
+      requiredSchema.map(f => makeConverter(f.name, f.dataType, f.nullable)).toArray
+    }
 
   private val decimalParser = ExprUtils.getDecimalParser(options.locale)
 
@@ -189,6 +225,22 @@ class UnivocityParser(
         Decimal(decimalParser(datum), dt.precision, dt.scale)
       }
 
+    case _: DateType => (d: String) =>
+      nullSafeDatum(d, name, nullable, options) { datum =>
+        try {
+          dateFormatter.parse(datum)
+        } catch {
+          case NonFatal(e) =>
+            // If fails to parse, then tries the way used in 2.0 and 1.x for backwards
+            // compatibility if enabled.
+            if (!enableParsingFallbackForDateType) {
+              throw e
+            }
+            val str = DateTimeUtils.cleanLegacyTimestampStr(UTF8String.fromString(datum))
+            DateTimeUtils.stringToDate(str).getOrElse(throw e)
+        }
+      }
+
     case _: TimestampType => (d: String) =>
       nullSafeDatum(d, name, nullable, options) { datum =>
         try {
@@ -196,9 +248,12 @@ class UnivocityParser(
         } catch {
           case NonFatal(e) =>
             // If fails to parse, then tries the way used in 2.0 and 1.x for backwards
-            // compatibility.
+            // compatibility if enabled.
+            if (!enableParsingFallbackForTimestampType) {
+              throw e
+            }
             val str = DateTimeUtils.cleanLegacyTimestampStr(UTF8String.fromString(datum))
-            DateTimeUtils.stringToTimestamp(str, options.zoneId).getOrElse(throw e)
+            DateTimeUtils.stringToTimestamp(str, options.zoneId).getOrElse(throw(e))
         }
       }
 
@@ -207,21 +262,11 @@ class UnivocityParser(
         timestampNTZFormatter.parseWithoutTimeZone(datum, false)
       }
 
-    case _: DateType => (d: String) =>
-      nullSafeDatum(d, name, nullable, options) { datum =>
-        try {
-          dateFormatter.parse(datum)
-        } catch {
-          case NonFatal(e) =>
-            // If fails to parse, then tries the way used in 2.0 and 1.x for backwards
-            // compatibility.
-            val str = DateTimeUtils.cleanLegacyTimestampStr(UTF8String.fromString(datum))
-            DateTimeUtils.stringToDate(str).getOrElse(throw e)
-        }
-      }
-
     case _: StringType => (d: String) =>
       nullSafeDatum(d, name, nullable, options)(UTF8String.fromString)
+
+    case _: BinaryType => (d: String) =>
+      nullSafeDatum(d, name, nullable, options)(_.getBytes)
 
     case CalendarIntervalType => (d: String) =>
       nullSafeDatum(d, name, nullable, options) { datum =>
@@ -230,19 +275,22 @@ class UnivocityParser(
 
     case ym: YearMonthIntervalType => (d: String) =>
       nullSafeDatum(d, name, nullable, options) { datum =>
-        Cast(Literal(datum), ym).eval(EmptyRow)
+        IntervalUtils.castStringToYMInterval(
+          UTF8String.fromString(datum), ym.startField, ym.endField)
       }
 
     case dt: DayTimeIntervalType => (d: String) =>
       nullSafeDatum(d, name, nullable, options) { datum =>
-        Cast(Literal(datum), dt).eval(EmptyRow)
+        IntervalUtils.castStringToDTInterval(
+          UTF8String.fromString(datum), dt.startField, dt.endField)
       }
+
+    case _: VariantType => new VariantValueConverter
 
     case udt: UserDefinedType[_] =>
       makeConverter(name, udt.sqlType, nullable)
 
-    // We don't actually hit this exception though, we keep it for understandability
-    case _ => throw QueryExecutionErrors.unsupportedTypeError(dataType)
+    case _ => throw ExecutionErrors.unsupportedDataTypeError(dataType)
   }
 
   private def nullSafeDatum(
@@ -260,34 +308,94 @@ class UnivocityParser(
     }
   }
 
+  private def parseLine(line: String): Array[String] = {
+    try {
+      tokenizer.parseLine(line)
+    }
+    catch {
+      case e: TextParsingException if e.getCause.isInstanceOf[ArrayIndexOutOfBoundsException] =>
+        throw new SparkRuntimeException(
+          errorClass = "MALFORMED_CSV_RECORD",
+          messageParameters = Map("badRecord" -> line),
+          cause = e
+        )
+    }
+  }
+
   /**
    * Parses a single CSV string and turns it into either one resulting row or no row (if the
    * the record is malformed).
    */
   val parse: String => Option[InternalRow] = {
     // This is intentionally a val to create a function once and reuse.
-    if (options.columnPruning && requiredSchema.isEmpty) {
+    if (columnPruning && requiredSchema.isEmpty) {
       // If `columnPruning` enabled and partition attributes scanned only,
       // `schema` gets empty.
       (_: String) => Some(InternalRow.empty)
     } else {
       // parse if the columnPruning is disabled or requiredSchema is nonEmpty
-      (input: String) => convert(tokenizer.parseLine(input))
+      (input: String) => convert(parseLine(input))
     }
   }
 
-  private val getToken = if (options.columnPruning) {
+  private val getToken = if (columnPruning) {
     (tokens: Array[String], index: Int) => tokens(index)
   } else {
     (tokens: Array[String], index: Int) => tokens(tokenIndexArr(index))
+  }
+
+  /**
+   * The entire line of CSV data is collected into a single variant object. When `headerColumnNames`
+   * is defined, the field names will be extracted from it. Otherwise, the field names will have a
+   * a format of "_c$i" to match the position of the values in the CSV data.
+   */
+  protected final def convertSingleVariantRow(
+      tokens: Array[String],
+      currentInput: UTF8String): GenericInternalRow = {
+    val row = new GenericInternalRow(1)
+    try {
+      val keys = headerColumnNames.orNull
+      val numFields = if (keys != null) tokens.length.min(keys.length) else tokens.length
+      if (singleVariantFieldConverters.length < numFields) {
+        val extra = numFields - singleVariantFieldConverters.length
+        singleVariantFieldConverters.appendAll(Array.fill(extra)(new VariantValueConverter))
+      }
+      val builder = new VariantBuilder(false)
+      val start = builder.getWritePos
+      val fields = new java.util.ArrayList[VariantBuilder.FieldEntry](numFields)
+      for (i <- 0 until numFields) {
+        val key = if (keys != null) keys(i) else "_c" + i
+        val id = builder.addKey(key)
+        fields.add(new VariantBuilder.FieldEntry(key, id, builder.getWritePos - start))
+        singleVariantFieldConverters(i).convertInput(builder, tokens(i))
+      }
+      builder.finishWritingObject(start, fields)
+      val v = builder.result()
+      row(0) = new VariantVal(v.getValue, v.getMetadata)
+      // If the header line has different number of tokens than the content line, the CSV data is
+      // malformed. We may still have partially parsed data in `row`.
+      if (keys != null && keys.length != tokens.length) {
+        throw QueryExecutionErrors.malformedCSVRecordError(currentInput.toString)
+      }
+      row
+    } catch {
+      case NonFatal(e) =>
+        throw BadRecordException(() => currentInput, () => Array(row), cause = e)
+    }
   }
 
   private def convert(tokens: Array[String]): Option[InternalRow] = {
     if (tokens == null) {
       throw BadRecordException(
         () => getCurrentInput,
-        () => None,
-        QueryExecutionErrors.malformedCSVRecordError())
+        () => Array.empty,
+        LazyBadRecordCauseWrapper(() => QueryExecutionErrors.malformedCSVRecordError("")))
+    }
+
+    val currentInput = getCurrentInput
+
+    if (options.singleVariantColumn.isDefined) {
+      return Some(convertSingleVariantRow(tokens, currentInput))
     }
 
     var badRecordException: Option[Throwable] = if (tokens.length != parsedSchema.length) {
@@ -295,7 +403,8 @@ class UnivocityParser(
       // However, we still have chance to parse some of the tokens. It continues to parses the
       // tokens normally and sets null when `ArrayIndexOutOfBoundsException` occurs for missing
       // tokens.
-      Some(QueryExecutionErrors.malformedCSVRecordError())
+      Some(LazyBadRecordCauseWrapper(
+        () => QueryExecutionErrors.malformedCSVRecordError(currentInput.toString)))
     } else None
     // When the length of the returned tokens is identical to the length of the parsed schema,
     // we just need to:
@@ -318,7 +427,8 @@ class UnivocityParser(
         case e: SparkUpgradeException => throw e
         case NonFatal(e) =>
           badRecordException = badRecordException.orElse(Some(e))
-          row.setNullAt(i)
+          // Use the corresponding DEFAULT value associated with the column, if any.
+          row.update(i, ResolveDefaultColumns.existenceDefaultValues(requiredSchema)(i))
       }
       i += 1
     }
@@ -327,10 +437,136 @@ class UnivocityParser(
     } else {
       if (badRecordException.isDefined) {
         throw BadRecordException(
-          () => getCurrentInput, () => requiredRow.headOption, badRecordException.get)
+          () => currentInput, () => Array(requiredRow.get), badRecordException.get)
       } else {
         requiredRow
       }
+    }
+  }
+
+  /**
+   * This class converts a comma-separated value into a variant column (when the schema contains
+   * variant type) or a variant field (when in singleVariantColumn mode).
+   *
+   * It has a list of scalar types to try (long, decimal, date, timestamp, boolean) and maintains
+   * the current content type. It tries to parse the input as the current content type. If the
+   * parsing fails, it moves to the next type in the list and continues the trial. It never checks
+   * the previous types that have already failed. In the end, it either successfully parses the
+   * input as a specific scalar type, or fails after trying all the types and defaults to the string
+   * type. The state is reset for every input file.
+   *
+   * Floating point types (double, float) are not considered to avoid precision loss.
+   */
+  private final class VariantValueConverter extends ValueConverter {
+    private var currentType: DataType = LongType
+    // Keep consistent with `CSVInferSchema`: only produce TimestampNTZ when the default timestamp
+    // type is TimestampNTZ.
+    private val isDefaultNTZ = SQLConf.get.timestampType == TimestampNTZType
+
+    override def apply(s: String): Any = {
+      val builder = new VariantBuilder(false)
+      convertInput(builder, s)
+      val v = builder.result()
+      new VariantVal(v.getValue, v.getMetadata)
+    }
+
+    def convertInput(builder: VariantBuilder, s: String): Unit = {
+      if (s == null || s == options.nullValue) {
+        builder.appendNull()
+        return
+      }
+
+      def parseLong(): DataType = {
+        try {
+          builder.appendLong(s.toLong)
+          // The actual integral type doesn't matter. `appendLong` will use the smallest possible
+          // integral type to store the value.
+          LongType
+        } catch {
+          case NonFatal(_) => parseDecimal()
+        }
+      }
+
+      def parseDecimal(): DataType = {
+        try {
+          var d = decimalParser(s)
+          if (d.scale() < 0) {
+            d = d.setScale(0)
+          }
+          if (d.scale() <= VariantUtil.MAX_DECIMAL16_PRECISION &&
+            d.precision() <= VariantUtil.MAX_DECIMAL16_PRECISION) {
+            builder.appendDecimal(d)
+            // The actual decimal type doesn't matter. `appendDecimal` will use the smallest
+            // possible decimal type to store the value.
+            DecimalType.USER_DEFAULT
+          } else {
+            if (options.preferDate) parseDate() else parseTimestampNTZ()
+          }
+        } catch {
+          case NonFatal(_) =>
+            if (options.preferDate) parseDate() else parseTimestampNTZ()
+        }
+      }
+
+      def parseDate(): DataType = {
+        try {
+          builder.appendDate(dateFormatter.parse(s))
+          DateType
+        } catch {
+          case NonFatal(_) => parseTimestampNTZ()
+        }
+      }
+
+      def parseTimestampNTZ(): DataType = {
+        if (isDefaultNTZ) {
+          try {
+            builder.appendTimestampNtz(timestampNTZFormatter.parseWithoutTimeZone(s, false))
+            TimestampNTZType
+          } catch {
+            case NonFatal(_) => parseTimestamp()
+          }
+        } else {
+          parseTimestamp()
+        }
+      }
+
+      def parseTimestamp(): DataType = {
+        try {
+          builder.appendTimestamp(timestampFormatter.parse(s))
+          TimestampType
+        } catch {
+          case NonFatal(_) => parseBoolean()
+        }
+      }
+
+      def parseBoolean(): DataType = {
+        val lower = s.toLowerCase(Locale.ROOT)
+        if (lower == "true") {
+          builder.appendBoolean(true)
+          BooleanType
+        } else if (lower == "false") {
+          builder.appendBoolean(false)
+          BooleanType
+        } else {
+          parseString()
+        }
+      }
+
+      def parseString(): DataType = {
+        builder.appendString(s)
+        StringType
+      }
+
+      val newType = currentType match {
+        case LongType => parseLong()
+        case _: DecimalType => parseDecimal()
+        case DateType => parseDate()
+        case TimestampNTZType => parseTimestampNTZ()
+        case TimestampType => parseTimestamp()
+        case BooleanType => parseBoolean()
+        case StringType => parseString()
+      }
+      currentType = newType
     }
   }
 }

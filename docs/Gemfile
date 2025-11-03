@@ -15,10 +15,17 @@
 # limitations under the License.
 #
 
+ruby ">= 3.0.0"
 source "https://rubygems.org"
 
-gem "ffi", "1.15.5"
-gem "jekyll", "4.2.1"
-gem "rouge", "3.26.0"
-gem "jekyll-redirect-from", "0.16.0"
-gem "webrick", "1.7"
+# Keep these specifications as flexible as possible and leave it to Bundler
+# to pin versions in the lock file.
+# To update the lock file, run `bundle update`.
+# Version constraint reference: https://guides.rubygems.org/patterns/#declaring-dependencies
+
+gem "jekyll", "~> 4.4"
+gem "jekyll-redirect-from", "~> 0.16"
+# This resolves a build issue on Apple Silicon.
+# See: https://issues.apache.org/jira/browse/SPARK-38488
+gem "ffi", "~> 1.15"
+gem "rexml", "~> 3.4.4"

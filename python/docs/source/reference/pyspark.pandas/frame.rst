@@ -37,6 +37,7 @@ Attributes and underlying data
    :toctree: api/
 
    DataFrame.index
+   DataFrame.info
    DataFrame.columns
    DataFrame.empty
 
@@ -62,7 +63,6 @@ Conversion
    DataFrame.isnull
    DataFrame.notna
    DataFrame.notnull
-   DataFrame.pad
    DataFrame.bool
 
 Indexing, iteration
@@ -77,8 +77,8 @@ Indexing, iteration
    DataFrame.idxmin
    DataFrame.loc
    DataFrame.iloc
+   DataFrame.insert
    DataFrame.items
-   DataFrame.iteritems
    DataFrame.iterrows
    DataFrame.itertuples
    DataFrame.keys
@@ -127,6 +127,7 @@ Function application, GroupBy & Window
 
    DataFrame.apply
    DataFrame.applymap
+   DataFrame.map
    DataFrame.pipe
    DataFrame.agg
    DataFrame.aggregate
@@ -147,20 +148,23 @@ Computations / Descriptive Stats
    DataFrame.any
    DataFrame.clip
    DataFrame.corr
+   DataFrame.corrwith
    DataFrame.count
    DataFrame.cov
    DataFrame.describe
+   DataFrame.ewm
    DataFrame.kurt
    DataFrame.kurtosis
-   DataFrame.mad
    DataFrame.max
    DataFrame.mean
    DataFrame.min
    DataFrame.median
+   DataFrame.mode
    DataFrame.pct_change
    DataFrame.prod
    DataFrame.product
    DataFrame.quantile
+   DataFrame.rank
    DataFrame.nunique
    DataFrame.sem
    DataFrame.skew
@@ -194,6 +198,8 @@ Reindexing / Selection / Label manipulation
    DataFrame.first
    DataFrame.head
    DataFrame.last
+   DataFrame.reindex
+   DataFrame.reindex_like
    DataFrame.rename
    DataFrame.rename_axis
    DataFrame.reset_index
@@ -218,6 +224,8 @@ Missing data handling
    DataFrame.replace
    DataFrame.bfill
    DataFrame.ffill
+   DataFrame.interpolate
+   DataFrame.pad
 
 Reshaping, sorting, transposing
 -------------------------------
@@ -237,27 +245,23 @@ Reshaping, sorting, transposing
    DataFrame.squeeze
    DataFrame.T
    DataFrame.transpose
-   DataFrame.reindex
-   DataFrame.reindex_like
-   DataFrame.rank
 
 Combining / joining / merging
 -----------------------------
 .. autosummary::
    :toctree: api/
 
-   DataFrame.append
    DataFrame.assign
    DataFrame.merge
    DataFrame.join
    DataFrame.update
-   DataFrame.insert
 
 Time series-related
 -------------------
 .. autosummary::
    :toctree: api/
 
+   DataFrame.resample
    DataFrame.shift
    DataFrame.first_valid_index
    DataFrame.last_valid_index
@@ -267,21 +271,24 @@ Serialization / IO / Conversion
 .. autosummary::
    :toctree: api/
 
+   DataFrame.from_dict
    DataFrame.from_records
-   DataFrame.info
    DataFrame.to_table
    DataFrame.to_delta
    DataFrame.to_parquet
-   DataFrame.to_spark_io
    DataFrame.to_csv
+   DataFrame.to_orc
    DataFrame.to_pandas
    DataFrame.to_html
    DataFrame.to_numpy
    DataFrame.to_spark
    DataFrame.to_string
+   DataFrame.to_feather
+   DataFrame.to_stata
    DataFrame.to_json
    DataFrame.to_dict
    DataFrame.to_excel
+   DataFrame.to_hdf
    DataFrame.to_clipboard
    DataFrame.to_markdown
    DataFrame.to_records
@@ -295,6 +302,7 @@ in Spark. These can be accessed by ``DataFrame.spark.<function/property>``.
 
 .. autosummary::
    :toctree: api/
+   :template: autosummary/accessor_method.rst
 
    DataFrame.spark.frame
    DataFrame.spark.cache
@@ -315,17 +323,24 @@ specific plotting methods of the form ``DataFrame.plot.<kind>``.
 
 .. autosummary::
    :toctree: api/
+   :template: autosummary/accessor_method.rst
 
-   DataFrame.plot
    DataFrame.plot.area
-   DataFrame.plot.barh
    DataFrame.plot.bar
+   DataFrame.plot.barh
+   DataFrame.plot.box
+   DataFrame.plot.density
    DataFrame.plot.hist
+   DataFrame.plot.kde
    DataFrame.plot.line
    DataFrame.plot.pie
    DataFrame.plot.scatter
-   DataFrame.plot.density
+
+.. autosummary::
+   :toctree: api/
+
    DataFrame.hist
+   DataFrame.boxplot
    DataFrame.kde
 
 Pandas-on-Spark specific
@@ -335,6 +350,7 @@ These can be accessed by ``DataFrame.pandas_on_spark.<function/property>``.
 
 .. autosummary::
    :toctree: api/
+   :template: autosummary/accessor_method.rst
 
    DataFrame.pandas_on_spark.apply_batch
    DataFrame.pandas_on_spark.transform_batch

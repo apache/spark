@@ -18,14 +18,16 @@ package org.apache.spark.deploy.k8s
 
 import java.io.File
 
+import scala.jdk.CollectionConverters._
+
 import io.fabric8.kubernetes.api.model.{Config => _, _}
 import io.fabric8.kubernetes.client.KubernetesClient
-import io.fabric8.kubernetes.client.dsl.{MixedOperation, PodResource}
+import io.fabric8.kubernetes.client.dsl.PodResource
 import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito.{mock, never, verify, when}
-import scala.collection.JavaConverters._
 
 import org.apache.spark.{SparkConf, SparkException, SparkFunSuite}
+import org.apache.spark.deploy.k8s.Fabric8Aliases._
 import org.apache.spark.deploy.k8s.features.{KubernetesDriverCustomFeatureConfigStep, KubernetesExecutorCustomFeatureConfigStep, KubernetesFeatureConfigStep}
 import org.apache.spark.internal.config.ConfigEntry
 
@@ -37,6 +39,8 @@ abstract class PodBuilderSuite extends SparkFunSuite {
   protected def templateFileConf: ConfigEntry[_]
 
   protected def roleSpecificSchedulerNameConf: ConfigEntry[_]
+
+  protected def excludedFeatureStepsConf: ConfigEntry[_]
 
   protected def userFeatureStepsConf: ConfigEntry[_]
 
@@ -87,6 +91,21 @@ abstract class PodBuilderSuite extends SparkFunSuite {
     verifyPod(pod)
     assert(pod.container.getVolumeMounts.asScala.exists(_.getName == "so_long"))
     assert(pod.container.getVolumeMounts.asScala.exists(_.getName == "so_long_two"))
+  }
+
+  test("SPARK-52830: exclude a feature step") {
+    val client = mockKubernetesClient()
+    val sparkConf = baseConf.clone()
+      .set(excludedFeatureStepsConf.key,
+        "org.apache.spark.deploy.k8s.TestStepTwo")
+      .set(userFeatureStepsConf.key,
+        "org.apache.spark.deploy.k8s.TestStepTwo," +
+        "org.apache.spark.deploy.k8s.TestStep")
+      .set(templateFileConf.key, "template-file.yaml")
+    val pod = buildPod(sparkConf, client)
+    verifyPod(pod)
+    assert(pod.container.getVolumeMounts.asScala.exists(_.getName == "so_long"))
+    assert(!pod.container.getVolumeMounts.asScala.exists(_.getName == "so_long_two"))
   }
 
   test("SPARK-37145: configure a custom test step with base config") {
@@ -156,12 +175,11 @@ abstract class PodBuilderSuite extends SparkFunSuite {
 
   protected def mockKubernetesClient(pod: Pod = podWithSupportedFeatures()): KubernetesClient = {
     val kubernetesClient = mock(classOf[KubernetesClient])
-    val pods =
-      mock(classOf[MixedOperation[Pod, PodList, PodResource[Pod]]])
-    val podResource = mock(classOf[PodResource[Pod]])
+    val pods = mock(classOf[PODS])
+    val podResource = mock(classOf[PodResource])
     when(kubernetesClient.pods()).thenReturn(pods)
     when(pods.load(any(classOf[File]))).thenReturn(podResource)
-    when(podResource.get()).thenReturn(pod)
+    when(podResource.item()).thenReturn(pod)
     kubernetesClient
   }
 

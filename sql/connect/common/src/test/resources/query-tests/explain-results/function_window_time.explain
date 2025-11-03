@@ -1,0 +1,4 @@
+Project [window_time(wt)#0]
++- Project [precisetimestampconversion((precisetimestampconversion(wt#0.end, TimestampType, LongType) - 1), LongType, TimestampType) AS window_time(wt)#0, d#0, t#0, s#0, x#0L, wt#0]
+   +- Project [d#0, t#0, s#0, x#0L, wt#0 AS wt#0]
+      +- LocalRelation <empty>, [d#0, t#0, s#0, x#0L, wt#0]

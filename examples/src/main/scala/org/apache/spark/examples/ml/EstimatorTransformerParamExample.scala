@@ -30,7 +30,7 @@ object EstimatorTransformerParamExample {
 
   def main(args: Array[String]): Unit = {
     val spark = SparkSession
-      .builder
+      .builder()
       .appName("EstimatorTransformerParamExample")
       .getOrCreate()
 
@@ -58,7 +58,7 @@ object EstimatorTransformerParamExample {
     // we can view the parameters it used during fit().
     // This prints the parameter (name: value) pairs, where names are unique IDs for this
     // LogisticRegression instance.
-    println(s"Model 1 was fit using parameters: ${model1.parent.extractParamMap}")
+    println(s"Model 1 was fit using parameters: ${model1.parent.extractParamMap()}")
 
     // We may alternatively specify parameters using a ParamMap,
     // which supports several methods for specifying parameters.
@@ -73,7 +73,7 @@ object EstimatorTransformerParamExample {
     // Now learn a new model using the paramMapCombined parameters.
     // paramMapCombined overrides all parameters set earlier via lr.set* methods.
     val model2 = lr.fit(training, paramMapCombined)
-    println(s"Model 2 was fit using parameters: ${model2.parent.extractParamMap}")
+    println(s"Model 2 was fit using parameters: ${model2.parent.extractParamMap()}")
 
     // Prepare test data.
     val test = spark.createDataFrame(Seq(

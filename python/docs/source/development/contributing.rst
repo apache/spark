@@ -120,6 +120,8 @@ Prerequisite
 
 PySpark development requires to build Spark that needs a proper JDK installed, etc. See `Building Spark <https://spark.apache.org/docs/latest/building-spark.html>`_ for more details.
 
+Note that if you intend to contribute to Spark Connect in Python, ``buf`` is required, see `Buf Installation <https://docs.buf.build/installation>`_ for more details.
+
 Conda
 ~~~~~
 
@@ -127,10 +129,10 @@ If you are using Conda, the development environment can be set as follows.
 
 .. code-block:: bash
 
-    # Python 3.7+ is required
-    conda create --name pyspark-dev-env python=3.9
+    # Python 3.10+ is required
+    conda create --name pyspark-dev-env python=3.10
     conda activate pyspark-dev-env
-    pip install -r dev/requirements.txt
+    pip install --upgrade -r dev/requirements.txt
 
 Once it is set up, make sure you switch to `pyspark-dev-env` before starting the development:
 
@@ -143,11 +145,11 @@ Now, you can start developing and `running the tests <testing.rst>`_.
 pip
 ~~~
 
-With Python 3.7+, pip can be used as below to install and set up the development environment.
+With Python 3.10+, pip can be used as below to install and set up the development environment.
 
 .. code-block:: bash
 
-    pip install -r dev/requirements.txt
+    pip install --upgrade -r dev/requirements.txt
 
 Now, you can start developing and `running the tests <testing.rst>`_.
 
@@ -155,10 +157,7 @@ Now, you can start developing and `running the tests <testing.rst>`_.
 Contributing and Maintaining Type Hints
 ----------------------------------------
 
-PySpark type hints are provided using stub files, placed in the same directory as the annotated module, with exception to:
-
-* ``# type: ignore`` in modules which don't have their own stubs (tests, examples and non-public API). 
-* pandas API on Spark (``pyspark.pandas`` package) where the type hints are inlined.
+PySpark type hints are inlined, to take advantage of static type checking.
 
 As a rule of thumb, only public API is annotated.
 
@@ -166,7 +165,7 @@ Annotations should, when possible:
 
 * Reflect expectations of the underlying JVM API, to help avoid type related failures outside Python interpreter.
 * In case of conflict between too broad (``Any``) and too narrow argument annotations, prefer the latter as one, as long as it is covering most of the typical use cases.
-* Indicate nonsensical combinations of arguments using ``@overload``  annotations. For example, to indicate that ``*Col`` and ``*Cols`` arguments are mutually exclusive:
+* Indicate nonsensical combinations of arguments using ``@overload`` annotations. For example, to indicate that ``*Col`` and ``*Cols`` arguments are mutually exclusive:
 
   .. code-block:: python
 
@@ -234,3 +233,103 @@ For instance, the first block is for the statements for preparation, the second 
 and third block is for another argument. As a example, please refer `DataFrame.rsub <https://pandas.pydata.org/pandas-docs/stable/reference/api/pandas.DataFrame.rsub.html#pandas.DataFrame.rsub>`_ in pandas.
 
 These blocks should be consistently separated in PySpark doctests, and more doctests should be added if the coverage of the doctests or the number of examples to show is not enough.
+
+
+Contributing Error and Exception
+--------------------------------
+
+.. currentmodule:: pyspark.errors
+
+To throw a standardized user-facing error or exception, developers should specify the error class and message parameters rather than an arbitrary error message.
+
+
+Usage
+~~~~~
+
+1. Check if an appropriate error class already exists in `Error classes in PySpark <errors.rst#error-classes-in-pyspark>`_.
+   If true, use the error class and skip to step 3.
+2. Add a new class to `error-conditions.json <https://github.com/apache/spark/blob/master/python/pyspark/errors/error-conditions.json>`_; keep in mind the invariants below.
+3. Check if the exception type already extends `PySparkException`.
+   If true, skip to step 5.
+4. Mix `PySparkException` into the exception.
+5. Throw the exception with the error class and message parameters.
+
+
+**Before**
+
+Throw with arbitrary error message:
+
+.. code-block:: python
+
+  raise ValueError("Problem A because B")
+
+
+**After**
+
+`error-conditions.json`
+
+.. code-block:: python
+
+  "PROBLEM_BECAUSE": {
+    "message": ["Problem <problem> because <cause>"]
+  }
+
+`exceptions.py`
+
+.. code-block:: python
+
+  class PySparkTestError(PySparkException):
+      def __init__(self, errorClass: str, messageParameters: Dict[str, str]):
+          super().__init__(errorClass=errorClass, messageParameters=messageParameters)
+  
+      def getMessageParameters(self) -> Optional[Dict[str, str]]:
+          return super().getMessageParameters()
+
+Throw with error class and message parameters:
+
+.. code-block:: python
+
+  raise PySparkTestError("PROBLEM_BECAUSE", {"problem": "A", "cause": "B"})
+
+
+Access fields
+~~~~~~~~~~~~~
+
+To access error fields, catch exceptions that extend :class:`PySparkException` and access to error class with :func:`PySparkException.getCondition`.
+
+.. code-block:: python
+
+  try:
+      ...
+  except PySparkException as pe:
+      if pe.getCondition() == "PROBLEM_BECAUSE":
+          ...
+
+
+Fields
+~~~~~~
+
+**Error class**
+
+Error classes are a succinct, human-readable representation of the error category.
+
+An uncategorized errors can be assigned to a legacy error class with the prefix `_LEGACY_ERROR_TEMP_` and an unused sequential number, for instance `_LEGACY_ERROR_TEMP_0053`.
+
+Invariants:
+
+* Unique
+
+* Consistent across releases
+
+* Sorted alphabetically
+
+**Message**
+
+Error messages provide a descriptive, human-readable representation of the error.
+The message format accepts string parameters via the C-style printf syntax.
+
+The quality of the error message should match the `Apache Spark Error Message Guidelines <https://spark.apache.org/error-message-guidelines.html>`_
+
+Invariants:
+
+* Unique

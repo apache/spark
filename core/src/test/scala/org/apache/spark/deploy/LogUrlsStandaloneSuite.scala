@@ -17,7 +17,7 @@
 
 package org.apache.spark.deploy
 
-import java.net.URL
+import java.net.URI
 
 import scala.collection.mutable
 import scala.io.Source
@@ -59,13 +59,13 @@ class LogUrlsStandaloneSuite extends SparkFunSuite with LocalSparkContext {
     sc.parallelize(1 to 100, 4).map(_.toString).count()
 
     sc.listenerBus.waitUntilEmpty()
-    val listeners = sc.listenerBus.findListenersByClass[SaveExecutorInfo]
+    val listeners = sc.listenerBus.findListenersByClass[SaveExecutorInfo]()
     assert(listeners.size === 1)
     val listener = listeners(0)
     listener.addedExecutorInfos.values.foreach { info =>
       assert(info.logUrlMap.nonEmpty)
       info.logUrlMap.values.foreach { logUrl =>
-        assert(new URL(logUrl).getHost === SPARK_PUBLIC_DNS)
+        assert(new URI(logUrl).toURL.getHost === SPARK_PUBLIC_DNS)
       }
     }
   }

@@ -1,0 +1,352 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+// To compile and create test class:
+// cd connector/protobuf/src/test/resources/protobuf
+// protoc --java_out=./ functions_suite.proto
+// protoc --include_imports --descriptor_set_out=functions_suite.desc --java_out=org/apache/spark/sql/protobuf/ functions_suite.proto
+
+syntax = "proto3";
+
+package org.apache.spark.sql.protobuf.protos;
+
+import "timestamp.proto";
+import "duration.proto";
+import "basicmessage.proto";
+import "google/protobuf/any.proto";
+import "google/protobuf/wrappers.proto";
+
+option java_outer_classname = "SimpleMessageProtos";
+
+message SimpleMessageJavaTypes {
+  int64 id = 1;
+  string string_value = 2;
+  int32 int32_value = 3;
+  int64 int64_value = 4;
+  double double_value = 5;
+  float float_value = 6;
+  bool bool_value = 7;
+  bytes bytes_value = 8;
+}
+
+message SimpleMessage {
+  int64 id = 1;
+  string string_value = 2;
+  int32 int32_value = 3;
+  uint32 uint32_value = 4;
+  sint32 sint32_value = 5;
+  fixed32 fixed32_value = 6;
+  sfixed32 sfixed32_value = 7;
+  int64 int64_value = 8;
+  uint64 uint64_value = 9;
+  sint64 sint64_value = 10;
+  fixed64 fixed64_value = 11;
+  sfixed64 sfixed64_value = 12;
+  double double_value = 13;
+  float float_value = 14;
+  bool bool_value = 15;
+  bytes bytes_value = 16;
+}
+
+message SimpleMessageRepeated {
+  string key = 1;
+  string value = 2;
+  enum NestedEnum {
+    NESTED_NOTHING = 0;
+    NESTED_FIRST = 1;
+    NESTED_SECOND = 2;
+  }
+  repeated string rstring_value = 3;
+  repeated int32 rint32_value = 4;
+  repeated bool rbool_value = 5;
+  repeated int64 rint64_value = 6;
+  repeated float rfloat_value = 7;
+  repeated double rdouble_value = 8;
+  repeated bytes rbytes_value = 9;
+  repeated NestedEnum rnested_enum = 10;
+}
+
+message RepeatedMessage {
+  repeated BasicMessage basic_message = 1;
+}
+
+message SimpleMessageMap {
+  string key = 1;
+  string value = 2;
+  map<string, string> string_mapdata = 3;
+  map<int32, int32> int32_mapdata = 4;
+  map<uint32, uint32> uint32_mapdata = 5;
+  map<sint32, sint32> sint32_mapdata = 6;
+  map<fixed32, fixed32> float32_mapdata = 7;
+  map<sfixed32, sfixed32> sfixed32_mapdata = 8;
+  map<int64, int64> int64_mapdata = 9;
+  map<uint64, uint64> uint64_mapdata = 10;
+  map<sint64, sint64> sint64_mapdata = 11;
+  map<fixed64, fixed64> fixed64_mapdata = 12;
+  map<sfixed64, sfixed64> sfixed64_mapdata = 13;
+  map<string, double> double_mapdata = 14;
+  map<string, float> float_mapdata = 15;
+  map<bool, bool> bool_mapdata = 16;
+  map<string, bytes> bytes_mapdata = 17;
+}
+
+message BasicEnumMessage {
+  enum BasicEnum {
+    NOTHING = 0;
+    FIRST = 1;
+    SECOND = 2;
+  }
+}
+
+message SimpleMessageEnum {
+  string key = 1;
+  string value = 2;
+  enum NestedEnum {
+    NESTED_NOTHING = 0;
+    NESTED_FIRST = 1;
+    NESTED_SECOND = 2;
+  }
+  BasicEnumMessage.BasicEnum basic_enum = 3;
+  NestedEnum nested_enum = 4;
+  repeated BasicEnumMessage.BasicEnum repeated_enum = 5;
+}
+
+
+message OtherExample {
+  string other = 1;
+}
+
+message IncludedExample {
+  string included = 1;
+  OtherExample other = 2;
+}
+
+message MultipleExample {
+  IncludedExample included_example = 1;
+}
+
+message recursiveA {
+  string keyA = 1;
+  recursiveB messageB = 2;
+}
+
+message recursiveB {
+  string keyB = 1;
+  recursiveA messageA = 2;
+}
+
+message recursiveC {
+  string keyC = 1;
+  recursiveD messageD = 2;
+}
+
+message recursiveD {
+  string keyD = 1;
+  repeated recursiveC messageC = 2;
+}
+
+message requiredMsg {
+  string key = 1;
+  int32 col_1 = 2;
+  string col_2 = 3;
+  int32 col_3 = 4;
+}
+
+message timeStampMsg {
+  string key = 1;
+  Timestamp stmp = 2;
+}
+
+message durationMsg {
+  string key = 1;
+  Duration duration = 2;
+}
+
+message OneOfEvent {
+  string key = 1;
+  oneof payload {
+    int32 col_1 = 2;
+    string col_2 = 3;
+    int64 col_3 = 4;
+  }
+  repeated string col_4 = 5;
+}
+
+message EventWithRecursion {
+  int32 key = 1;
+  messageA a = 2;
+}
+message messageA {
+  EventWithRecursion a = 1;
+  messageB b = 2;
+}
+message messageB {
+  EventWithRecursion aa = 1;
+  messageC c = 2;
+}
+message messageC {
+  EventWithRecursion aaa = 1;
+  int32 key= 2;
+}
+
+message Employee {
+  string firstName = 1;
+  string lastName = 2;
+  oneof role {
+    IC ic = 3;
+    EM em = 4;
+    EM2 em2 = 5;
+  }
+}
+
+message IC {
+  repeated string skills = 1;
+  Employee icManager = 2;
+}
+
+message EM {
+  int64 teamsize = 1;
+  Employee emManager = 2;
+}
+
+message EM2 {
+  int64 teamsize = 1;
+  Employee em2Manager = 2;
+}
+
+message EventPerson { // Used for simple recursive field testing.
+  string name = 1;
+  EventPerson bff = 2;
+}
+
+message EventPersonWrapper {
+  EventPerson person = 1;
+}
+
+message PersonWithRecursiveArray {
+  // A protobuf with recursive repeated field
+  string name = 1;
+  repeated PersonWithRecursiveArray friends = 2;
+}
+
+message PersonWithRecursiveMap {
+  // A protobuf with recursive field in value
+  string name = 1;
+  map<string, PersonWithRecursiveMap> groups = 3;
+}
+
+
+message OneOfEventWithRecursion {
+  string key = 1;
+  oneof payload {
+    EventRecursiveA recursiveA = 3;
+    EventRecursiveB recursiveB = 6;
+  }
+  string value = 7;
+}
+
+message EventRecursiveA {
+  OneOfEventWithRecursion recursiveOneOffInA = 1;
+  string key = 2;
+}
+
+message EventRecursiveB {
+  string key = 1;
+  string value = 2;
+  OneOfEventWithRecursion recursiveOneOffInB = 3;
+}
+
+message EmptyProto {
+  // This is an empty proto
+}
+
+message EmptyProtoWrapper {
+  string name = 1;
+  EmptyProto empty_proto = 2;
+}
+
+message EmptyRecursiveProto {
+  // This is a recursive proto with no fields. Used to test edge. Catalyst schema for this
+  // should be "nothing" (i.e. completely dropped) irrespective of recursive limit.
+  EmptyRecursiveProto recursive_field = 1;
+  repeated EmptyRecursiveProto recursive_array = 2;
+}
+
+message EmptyRecursiveProtoWrapper {
+  string name = 1;
+  EmptyRecursiveProto empty_recursive = 2; // This field will be dropped.
+}
+
+message Status {
+  int32 id = 1;
+  Timestamp trade_time = 2;
+  Status status = 3;
+}
+
+// Messages for testing Any fields
+message ProtoWithAny {
+  string event_name = 1;
+  google.protobuf.Any details = 3;
+}
+
+message ProtoWithAnyArray { // A container of Any fields
+  string description = 1;
+  repeated google.protobuf.Any items = 2;
+}
+
+// Contains a representative sample of all types, using the groupings defined
+// here: https://protobuf.dev/programming-guides/field_presence/#presence-in-proto3-apis
+message Proto3AllTypes {
+  enum NestedEnum {
+    NOTHING = 0;
+    FIRST = 1;
+    SECOND = 2;
+  }
+
+  int64 int = 1;
+  string text = 2;
+  NestedEnum enum_val = 3;
+  OtherExample message = 4;
+
+  optional int64 optional_int = 5;
+  optional string optional_text = 6;
+  optional NestedEnum optional_enum_val = 7;
+  optional OtherExample optional_message = 8;
+
+  repeated int64 repeated_num = 9;
+  repeated OtherExample repeated_message = 10;
+  oneof payload {
+    int32 option_a = 11;
+    string option_b = 12;
+  }
+  map<string, string> map = 13;
+}
+
+message WellKnownWrapperTypes {
+  google.protobuf.BoolValue bool_val = 1;
+  google.protobuf.Int32Value int32_val = 2;
+  google.protobuf.UInt32Value uint32_val = 3;
+  google.protobuf.Int64Value int64_val = 4;
+  google.protobuf.UInt64Value uint64_val = 5;
+  google.protobuf.StringValue string_val = 6;
+  google.protobuf.BytesValue bytes_val = 7;
+  google.protobuf.FloatValue float_val = 8;
+  google.protobuf.DoubleValue double_val = 9;
+
+  // Sample repeated and map types
+  repeated google.protobuf.Int32Value int32_list = 10;
+  map<int32, google.protobuf.StringValue> wkt_map = 11;
+}

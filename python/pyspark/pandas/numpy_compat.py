@@ -17,12 +17,11 @@
 from typing import Any, Callable, no_type_check
 
 import numpy as np
-from pyspark.sql import functions as F, Column
+
+from pyspark.sql import functions as F
 from pyspark.sql.pandas.functions import pandas_udf
 from pyspark.sql.types import DoubleType, LongType, BooleanType
-
 from pyspark.pandas.base import IndexOpsMixin
-from pyspark.pandas.spark import functions as SF
 
 
 unary_np_spark_mappings = {
@@ -166,7 +165,7 @@ def maybe_dispatch_ufunc_to_dunder_op(
         "true_divide": "truediv",
         "power": "pow",
         "remainder": "mod",
-        "divide": "div",
+        "divide": "truediv",
         "equal": "eq",
         "not_equal": "ne",
         "less": "lt",
@@ -216,14 +215,13 @@ def maybe_dispatch_ufunc_to_spark_func(
         and (op_name in unary_np_spark_mappings or op_name in binary_np_spark_mappings)
         and kwargs.get("out") is None
     ):
-
         np_spark_map_func = unary_np_spark_mappings.get(op_name) or binary_np_spark_mappings.get(
             op_name
         )
 
         @no_type_check
         def convert_arguments(*args):
-            args = [SF.lit(inp) if not isinstance(inp, Column) else inp for inp in args]
+            args = [F.lit(inp) for inp in args]
             return np_spark_map_func(*args)
 
         return column_op(convert_arguments)(*inputs)

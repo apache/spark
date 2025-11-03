@@ -29,12 +29,21 @@ class KubernetesExecutorBuilderSuite extends PodBuilderSuite {
   val TEST_ANNOTATION_KEY: String = "executor-annotation-key"
   val TEST_ANNOTATION_VALUE: String = "executor-annotation-value"
 
+  override protected def afterEach(): Unit = {
+    ResourceProfile.clearDefaultProfile()
+    super.afterEach()
+  }
+
   override protected def templateFileConf: ConfigEntry[_] = {
     Config.KUBERNETES_EXECUTOR_PODTEMPLATE_FILE
   }
 
   override protected def roleSpecificSchedulerNameConf: ConfigEntry[_] = {
     Config.KUBERNETES_EXECUTOR_SCHEDULER_NAME
+  }
+
+  override protected def excludedFeatureStepsConf: ConfigEntry[_] = {
+    Config.KUBERNETES_EXECUTOR_POD_EXCLUDED_FEATURE_STEPS
   }
 
   override protected def userFeatureStepsConf: ConfigEntry[_] = {

@@ -31,9 +31,14 @@ class DescribeNamespaceSuite extends command.DescribeNamespaceSuiteBase with Com
 
   test("DescribeNamespace using v2 catalog") {
     withNamespace(s"$catalog.ns1.ns2") {
-      sql(s"CREATE NAMESPACE IF NOT EXISTS $catalog.ns1.ns2 COMMENT " +
-        "'test namespace' LOCATION '/tmp/ns_test'")
-      val descriptionDf = sql(s"DESCRIBE NAMESPACE $catalog.ns1.ns2")
+      sql(
+        s"""
+           | CREATE NAMESPACE IF NOT EXISTS $catalog.ns1.ns2
+           | COMMENT 'test namespace'
+           | LOCATION '/tmp/ns_test'
+           | WITH DBPROPERTIES (password = 'password')
+           """.stripMargin)
+      val descriptionDf = sql(s"DESCRIBE NAMESPACE EXTENDED $catalog.ns1.ns2")
       assert(descriptionDf.schema.map(field => (field.name, field.dataType)) ===
         Seq(
           ("info_name", StringType),
@@ -41,10 +46,12 @@ class DescribeNamespaceSuite extends command.DescribeNamespaceSuiteBase with Com
         ))
       val description = descriptionDf.collect()
       assert(description === Seq(
-        Row("Namespace Name", "ns2"),
+        Row("Catalog Name", catalog),
+        Row("Namespace Name", "ns1.ns2"),
         Row(SupportsNamespaces.PROP_COMMENT.capitalize, "test namespace"),
         Row(SupportsNamespaces.PROP_LOCATION.capitalize, "file:/tmp/ns_test"),
-        Row(SupportsNamespaces.PROP_OWNER.capitalize, Utils.getCurrentUserName()))
+        Row(SupportsNamespaces.PROP_OWNER.capitalize, Utils.getCurrentUserName()),
+        Row("Properties", "((password,*********(redacted)))"))
       )
     }
   }

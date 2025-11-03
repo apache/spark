@@ -1,0 +1,2 @@
+Project [map(a#0, g#0, 22, dummy) AS map(a, g, 22, dummy)#0]
++- LocalRelation <empty>, [id#0L, a#0, b#0, d#0, e#0, f#0, g#0]

@@ -17,8 +17,6 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.benchmark.Benchmark
-import org.apache.spark.sql.Column
-import org.apache.spark.sql.catalyst.expressions.{Expression, Literal, Or}
 import org.apache.spark.sql.execution.benchmark.SqlBasedBenchmark
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -31,9 +29,9 @@ import org.apache.spark.sql.internal.SQLConf
  *   1. without sbt:
  *      bin/spark-submit --class <this class> --jars <spark core test jar>,
  *        <spark catalyst test jar> <spark sql test jar>
- *   2. build/sbt "sql/test:runMain <this class>"
+ *   2. build/sbt "sql/Test/runMain <this class>"
  *   3. generate result:
- *      SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "sql/test:runMain <this class>"
+ *      SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "sql/Test/runMain <this class>"
  *      Results will be written to "benchmarks/SubExprEliminationBenchmark-results.txt".
  * }}}
  */
@@ -87,9 +85,11 @@ object SubExprEliminationBenchmark extends SqlBasedBenchmark {
       val numCols = 500
       val schema = writeWideRow(path.getAbsolutePath, rowsNum, numCols)
 
-      val predicate = (0 until numCols).map { idx =>
-        (from_json($"value", schema).getField(s"col$idx") >= Literal(100000)).expr
-      }.asInstanceOf[Seq[Expression]].reduce(Or)
+      val jsonValue = from_json($"value", schema)
+      val predicates = (0 until numCols).map { idx =>
+        jsonValue.getField(s"col$idx") >= lit(100000)
+      }
+      val predicate = predicates.reduce(_ || _)
 
       Seq(
         ("false", "true", "CODEGEN_ONLY"),
@@ -108,7 +108,7 @@ object SubExprEliminationBenchmark extends SqlBasedBenchmark {
             SQLConf.JSON_EXPRESSION_OPTIMIZATION.key -> "false") {
             val df = spark.read
               .text(path.getAbsolutePath)
-              .where(Column(predicate))
+              .where(predicate)
             df.write.mode("overwrite").format("noop").save()
           }
         }

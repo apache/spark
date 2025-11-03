@@ -19,6 +19,8 @@ package org.apache.spark.scheduler
 
 import java.util.Properties
 
+import scala.concurrent.Promise
+
 import org.apache.spark._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.{AccumulatorV2, CallSite}
@@ -39,6 +41,7 @@ private[scheduler] case class JobSubmitted(
     partitions: Array[Int],
     callSite: CallSite,
     listener: JobListener,
+    artifactSet: JobArtifactSet,
     properties: Properties = null)
   extends DAGSchedulerEvent
 
@@ -48,6 +51,7 @@ private[scheduler] case class MapStageSubmitted(
   dependency: ShuffleDependency[_, _, _],
   callSite: CallSite,
   listener: JobListener,
+  artifactSet: JobArtifactSet,
   properties: Properties = null)
   extends DAGSchedulerEvent
 
@@ -61,7 +65,16 @@ private[scheduler] case class JobCancelled(
     reason: Option[String])
   extends DAGSchedulerEvent
 
-private[scheduler] case class JobGroupCancelled(groupId: String) extends DAGSchedulerEvent
+private[scheduler] case class JobGroupCancelled(
+    groupId: String,
+    cancelFutureJobs: Boolean = false,
+    reason: Option[String])
+  extends DAGSchedulerEvent
+
+private[scheduler] case class JobTagCancelled(
+    tagName: String,
+    reason: Option[String],
+    cancelledJobs: Option[Promise[Seq[ActiveJob]]]) extends DAGSchedulerEvent
 
 private[scheduler] case object AllJobsCancelled extends DAGSchedulerEvent
 
@@ -89,13 +102,17 @@ private[scheduler] case class WorkerRemoved(workerId: String, host: String, mess
   extends DAGSchedulerEvent
 
 private[scheduler]
+case class StageFailed(stageId: Int, reason: String, exception: Option[Throwable])
+  extends DAGSchedulerEvent
+
+private[scheduler]
 case class TaskSetFailed(taskSet: TaskSet, reason: String, exception: Option[Throwable])
   extends DAGSchedulerEvent
 
 private[scheduler] case object ResubmitFailedStages extends DAGSchedulerEvent
 
 private[scheduler]
-case class SpeculativeTaskSubmitted(task: Task[_]) extends DAGSchedulerEvent
+case class SpeculativeTaskSubmitted(task: Task[_], taskIndex: Int = -1) extends DAGSchedulerEvent
 
 private[scheduler]
 case class UnschedulableTaskSetAdded(stageId: Int, stageAttemptId: Int)

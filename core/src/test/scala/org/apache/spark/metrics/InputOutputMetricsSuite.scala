@@ -18,10 +18,10 @@
 package org.apache.spark.metrics
 
 import java.io.{File, PrintWriter}
+import java.util.concurrent.ThreadLocalRandom
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.commons.lang3.RandomUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.io.{LongWritable, Text}
@@ -54,7 +54,7 @@ class InputOutputMetricsSuite extends SparkFunSuite with SharedSparkContext
     Utils.tryWithResource(new PrintWriter(tmpFile)) { pw =>
       for (x <- 1 to numRecords) {
         // scalastyle:off println
-        pw.println(RandomUtils.nextInt(0, numBuckets))
+        pw.println(ThreadLocalRandom.current().nextInt(0, numBuckets))
         // scalastyle:on println
       }
     }

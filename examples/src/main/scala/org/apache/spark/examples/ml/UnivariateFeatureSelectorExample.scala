@@ -34,7 +34,7 @@ import org.apache.spark.sql.SparkSession
 object UnivariateFeatureSelectorExample {
   def main(args: Array[String]): Unit = {
     val spark = SparkSession
-      .builder
+      .builder()
       .appName("UnivariateFeatureSelectorExample")
       .getOrCreate()
     import spark.implicits._

@@ -21,7 +21,7 @@ import scala.collection.mutable
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.SQLConfHelper
-import org.apache.spark.sql.catalyst.catalog.SessionCatalog
+import org.apache.spark.sql.catalyst.catalog.{SessionCatalog, TempVariableManager}
 import org.apache.spark.sql.catalyst.util.StringUtils
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
@@ -45,6 +45,9 @@ class CatalogManager(
   import CatalogV2Util._
 
   private val catalogs = mutable.HashMap.empty[String, CatalogPlugin]
+
+  // TODO: create a real SYSTEM catalog to host `TempVariableManager` under the SESSION namespace.
+  val tempVariableManager: TempVariableManager = new TempVariableManager
 
   def catalog(name: String): CatalogPlugin = synchronized {
     if (name.equalsIgnoreCase(SESSION_CATALOG_NAME)) {
@@ -82,9 +85,10 @@ class CatalogManager(
    * in the fallback configuration, spark.sql.sources.useV1SourceList
    */
   private[sql] def v2SessionCatalog: CatalogPlugin = {
-    conf.getConf(SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION).map { _ =>
-      catalogs.getOrElseUpdate(SESSION_CATALOG_NAME, loadV2SessionCatalog())
-    }.getOrElse(defaultSessionCatalog)
+    conf.getConf(SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION) match {
+      case "builtin" => defaultSessionCatalog
+      case _ => catalogs.getOrElseUpdate(SESSION_CATALOG_NAME, loadV2SessionCatalog())
+    }
   }
 
   private var _currentNamespace: Option[Array[String]] = None
@@ -103,17 +107,23 @@ class CatalogManager(
     }
   }
 
-  def setCurrentNamespace(namespace: Array[String]): Unit = synchronized {
+  private def assertNamespaceExist(namespace: Array[String]): Unit = {
     currentCatalog match {
-      case _ if isSessionCatalog(currentCatalog) && namespace.length == 1 =>
-        v1SessionCatalog.setCurrentDatabase(namespace.head)
-      case _ if isSessionCatalog(currentCatalog) =>
-        throw QueryCompilationErrors.noSuchNamespaceError(namespace)
       case catalog: SupportsNamespaces if !catalog.namespaceExists(namespace) =>
-        throw QueryCompilationErrors.noSuchNamespaceError(namespace)
+        throw QueryCompilationErrors.noSuchNamespaceError(catalog.name() +: namespace)
       case _ =>
-        _currentNamespace = Some(namespace)
     }
+  }
+
+  def setCurrentNamespace(namespace: Array[String]): Unit = synchronized {
+    if (isSessionCatalog(currentCatalog) && namespace.length == 1) {
+      v1SessionCatalog.setCurrentDatabaseWithNameCheck(
+        namespace.head,
+        _ => assertNamespaceExist(namespace))
+    } else {
+      assertNamespaceExist(namespace)
+    }
+    _currentNamespace = Some(namespace)
   }
 
   private var _currentCatalogName: Option[String] = None
@@ -130,12 +140,12 @@ class CatalogManager(
       _currentNamespace = None
       // Reset the current database of v1 `SessionCatalog` when switching current catalog, so that
       // when we switch back to session catalog, the current namespace definitely is ["default"].
-      v1SessionCatalog.setCurrentDatabase(SessionCatalog.DEFAULT_DATABASE)
+      v1SessionCatalog.setCurrentDatabase(conf.defaultDatabase)
     }
   }
 
   def listCatalogs(pattern: Option[String]): Seq[String] = {
-    val allCatalogs = synchronized(catalogs.keys.toSeq).sorted
+    val allCatalogs = (synchronized(catalogs.keys.toSeq) :+ SESSION_CATALOG_NAME).distinct.sorted
     pattern.map(StringUtils.filterPattern(allCatalogs, _)).getOrElse(allCatalogs)
   }
 
@@ -144,10 +154,12 @@ class CatalogManager(
     catalogs.clear()
     _currentNamespace = None
     _currentCatalogName = None
-    v1SessionCatalog.setCurrentDatabase(SessionCatalog.DEFAULT_DATABASE)
+    v1SessionCatalog.setCurrentDatabase(conf.defaultDatabase)
   }
 }
 
 private[sql] object CatalogManager {
   val SESSION_CATALOG_NAME: String = "spark_catalog"
+  val SYSTEM_CATALOG_NAME = "system"
+  val SESSION_NAMESPACE = "session"
 }

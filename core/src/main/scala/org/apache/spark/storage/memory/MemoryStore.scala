@@ -21,16 +21,15 @@ import java.io.OutputStream
 import java.nio.ByteBuffer
 import java.util.LinkedHashMap
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
+import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 import scala.util.control.NonFatal
 
-import com.google.common.io.ByteStreams
-
-import org.apache.spark.{SparkConf, TaskContext}
+import org.apache.spark.{SparkConf, SparkException, TaskContext}
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config.{STORAGE_UNROLL_MEMORY_THRESHOLD, UNROLL_MEMORY_CHECK_PERIOD, UNROLL_MEMORY_GROWTH_FACTOR}
 import org.apache.spark.memory.{MemoryManager, MemoryMode}
 import org.apache.spark.serializer.{SerializationStream, SerializerManager}
@@ -110,12 +109,14 @@ private[spark] class MemoryStore(
   }
 
   if (maxMemory < unrollMemoryThreshold) {
-    logWarning(s"Max memory ${Utils.bytesToString(maxMemory)} is less than the initial memory " +
-      s"threshold ${Utils.bytesToString(unrollMemoryThreshold)} needed to store a block in " +
-      s"memory. Please configure Spark with more memory.")
+    logWarning(log"Max memory ${MDC(NUM_BYTES, Utils.bytesToString(maxMemory))} " +
+      log"is less than the initial memory " +
+      log"threshold ${MDC(MAX_SIZE, Utils.bytesToString(unrollMemoryThreshold))} " +
+      log"needed to store a block in memory. Please configure Spark with more memory.")
   }
 
-  logInfo("MemoryStore started with capacity %s".format(Utils.bytesToString(maxMemory)))
+  logInfo(log"MemoryStore started with capacity " +
+    log"${MDC(MEMORY_SIZE, Utils.bytesToString(maxMemory))}")
 
   /** Total storage memory used including unroll memory, in bytes. */
   private def memoryUsed: Long = memoryManager.storageMemoryUsed
@@ -156,8 +157,9 @@ private[spark] class MemoryStore(
       entries.synchronized {
         entries.put(blockId, entry)
       }
-      logInfo("Block %s stored as bytes in memory (estimated size %s, free %s)".format(
-        blockId, Utils.bytesToString(size), Utils.bytesToString(maxMemory - blocksMemoryUsed)))
+      logInfo(log"Block ${MDC(BLOCK_ID, blockId)} stored as bytes in memory " +
+        log"(estimated size ${MDC(SIZE, Utils.bytesToString(size))}, " +
+        log"free ${MDC(MEMORY_SIZE, Utils.bytesToString(maxMemory - blocksMemoryUsed))})")
       true
     } else {
       false
@@ -213,14 +215,20 @@ private[spark] class MemoryStore(
       reserveUnrollMemoryForThisTask(blockId, initialMemoryThreshold, memoryMode)
 
     if (!keepUnrolling) {
-      logWarning(s"Failed to reserve initial memory threshold of " +
-        s"${Utils.bytesToString(initialMemoryThreshold)} for computing block $blockId in memory.")
+      logWarning(log"Failed to reserve initial memory threshold of " +
+        log"${MDC(NUM_BYTES, Utils.bytesToString(initialMemoryThreshold))} " +
+        log"for computing block ${MDC(BLOCK_ID, blockId)} in memory.")
     } else {
       unrollMemoryUsedByThisBlock += initialMemoryThreshold
     }
 
+    // Only do the thread interruption check on the executors.
+    val shouldCheckThreadInterruption = Option(TaskContext.get()).isDefined
+
     // Unroll this block safely, checking whether we have exceeded our threshold periodically
-    while (values.hasNext && keepUnrolling) {
+    // and if no thread interrupts have been received.
+    while (values.hasNext && keepUnrolling &&
+      (!shouldCheckThreadInterruption || !Thread.currentThread().isInterrupted)) {
       valuesHolder.storeValue(values.next())
       if (elementsUnrolled % memoryCheckPeriod == 0) {
         val currentSize = valuesHolder.estimatedSize()
@@ -239,10 +247,16 @@ private[spark] class MemoryStore(
       elementsUnrolled += 1
     }
 
-    // Make sure that we have enough memory to store the block. By this point, it is possible that
-    // the block's actual memory usage has exceeded the unroll memory by a small amount, so we
-    // perform one final call to attempt to allocate additional memory if necessary.
-    if (keepUnrolling) {
+    // SPARK-45025 - if a thread interrupt was received, we log a warning and return used memory
+    // to avoid getting killed by task reaper eventually.
+    if (shouldCheckThreadInterruption && Thread.currentThread().isInterrupted) {
+      logInfo(
+        log"Failed to unroll block=${MDC(BLOCK_ID, blockId)} since thread interrupt was received")
+      Left(unrollMemoryUsedByThisBlock)
+    } else if (keepUnrolling) {
+      // Make sure that we have enough memory to store the block. By this point, it is possible that
+      // the block's actual memory usage has exceeded the unroll memory by a small amount, so we
+      // perform one final call to attempt to allocate additional memory if necessary.
       val entryBuilder = valuesHolder.getBuilder()
       val size = entryBuilder.preciseSize
       if (size > unrollMemoryUsedByThisBlock) {
@@ -266,8 +280,9 @@ private[spark] class MemoryStore(
           entries.put(blockId, entry)
         }
 
-        logInfo("Block %s stored as values in memory (estimated size %s, free %s)".format(blockId,
-          Utils.bytesToString(entry.size), Utils.bytesToString(maxMemory - blocksMemoryUsed)))
+        logInfo(log"Block ${MDC(BLOCK_ID, blockId)} stored as values in memory " +
+          log"(estimated size ${MDC(MEMORY_SIZE, Utils.bytesToString(entry.size))}, free " +
+          log"${MDC(FREE_MEMORY_SIZE, Utils.bytesToString(maxMemory - blocksMemoryUsed))})")
         Right(entry.size)
       } else {
         // We ran out of space while unrolling the values for this block
@@ -338,9 +353,10 @@ private[spark] class MemoryStore(
     // Initial per-task memory to request for unrolling blocks (bytes).
     val initialMemoryThreshold = unrollMemoryThreshold
     val chunkSize = if (initialMemoryThreshold > ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
-      logWarning(s"Initial memory threshold of ${Utils.bytesToString(initialMemoryThreshold)} " +
-        s"is too large to be set as chunk size. Chunk size has been capped to " +
-        s"${Utils.bytesToString(ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH)}")
+      logWarning(log"Initial memory threshold of " +
+        log"${MDC(NUM_BYTES, Utils.bytesToString(initialMemoryThreshold))} " +
+        log"is too large to be set as chunk size. Chunk size has been capped to " +
+        log"${MDC(MAX_SIZE, Utils.bytesToString(ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH))}")
       ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH
     } else {
       initialMemoryThreshold.toInt
@@ -349,7 +365,7 @@ private[spark] class MemoryStore(
     val valuesHolder = new SerializedValuesHolder[T](blockId, chunkSize, classTag,
       memoryMode, serializerManager)
 
-    putIterator(blockId, values, classTag, memoryMode, valuesHolder) match {
+    val res = putIterator(blockId, values, classTag, memoryMode, valuesHolder) match {
       case Right(storedSize) => Right(storedSize)
       case Left(unrollMemoryUsedByThisBlock) =>
         Left(new PartiallySerializedBlock(
@@ -364,14 +380,18 @@ private[spark] class MemoryStore(
           values,
           classTag))
     }
+
+    Option(TaskContext.get()).foreach(_.killTaskIfInterrupted())
+    res
   }
 
   def getBytes(blockId: BlockId): Option[ChunkedByteBuffer] = {
     val entry = entries.synchronized { entries.get(blockId) }
     entry match {
       case null => None
-      case e: DeserializedMemoryEntry[_] =>
-        throw new IllegalArgumentException("should only call getBytes on serialized blocks")
+      case _: DeserializedMemoryEntry[_] =>
+        throw SparkException.internalError(
+          "should only call getBytes on serialized blocks", category = "STORAGE")
       case SerializedMemoryEntry(bytes, _, _) => Some(bytes)
     }
   }
@@ -381,7 +401,8 @@ private[spark] class MemoryStore(
     entry match {
       case null => None
       case e: SerializedMemoryEntry[_] =>
-        throw new IllegalArgumentException("should only call getValues on deserialized blocks")
+        throw SparkException.internalError(
+          "should only call getValues on deserialized blocks", category = "STORAGE")
       case DeserializedMemoryEntry(values, _, _, _) =>
         val x = Some(values)
         x.map(_.iterator)
@@ -502,9 +523,9 @@ private[spark] class MemoryStore(
       if (freedMemory >= space) {
         var lastSuccessfulBlock = -1
         try {
-          logInfo(s"${selectedBlocks.size} blocks selected for dropping " +
-            s"(${Utils.bytesToString(freedMemory)} bytes)")
-          (0 until selectedBlocks.size).foreach { idx =>
+          logInfo(log"${MDC(NUM_BLOCKS, selectedBlocks.size)} blocks selected for dropping " +
+            log"(${MDC(MEMORY_SIZE, Utils.bytesToString(freedMemory))} bytes)")
+          selectedBlocks.indices.foreach { idx =>
             val blockId = selectedBlocks(idx)
             val entry = entries.synchronized {
               entries.get(blockId)
@@ -518,8 +539,9 @@ private[spark] class MemoryStore(
             }
             lastSuccessfulBlock = idx
           }
-          logInfo(s"After dropping ${selectedBlocks.size} blocks, " +
-            s"free memory is ${Utils.bytesToString(maxMemory - blocksMemoryUsed)}")
+          logInfo(
+            log"After dropping ${MDC(NUM_BLOCKS, selectedBlocks.size)} blocks, free memory is" +
+            log"${MDC(FREE_MEMORY_SIZE, Utils.bytesToString(maxMemory - blocksMemoryUsed))}")
           freedMemory
         } finally {
           // like BlockManager.doPut, we use a finally rather than a catch to avoid having to deal
@@ -534,7 +556,7 @@ private[spark] class MemoryStore(
         }
       } else {
         blockId.foreach { id =>
-          logInfo(s"Will not store $id")
+          logInfo(log"Will not store ${MDC(BLOCK_ID, id)}")
         }
         selectedBlocks.foreach { id =>
           blockInfoManager.unlock(id)
@@ -630,11 +652,11 @@ private[spark] class MemoryStore(
    */
   private def logMemoryUsage(): Unit = {
     logInfo(
-      s"Memory use = ${Utils.bytesToString(blocksMemoryUsed)} (blocks) + " +
-      s"${Utils.bytesToString(currentUnrollMemory)} (scratch space shared across " +
-      s"$numTasksUnrolling tasks(s)) = ${Utils.bytesToString(memoryUsed)}. " +
-      s"Storage limit = ${Utils.bytesToString(maxMemory)}."
-    )
+      log"Memory use = ${MDC(CURRENT_MEMORY_SIZE, Utils.bytesToString(blocksMemoryUsed))} " +
+      log"(blocks) + ${MDC(FREE_MEMORY_SIZE, Utils.bytesToString(currentUnrollMemory))} " +
+      log"(scratch space shared across ${MDC(NUM_TASKS, numTasksUnrolling)} " +
+      log"tasks(s)) = ${MDC(STORAGE_MEMORY_SIZE, Utils.bytesToString(memoryUsed))}. " +
+      log"Storage limit = ${MDC(MAX_MEMORY_SIZE, Utils.bytesToString(maxMemory))}.")
   }
 
   /**
@@ -645,8 +667,8 @@ private[spark] class MemoryStore(
    */
   private def logUnrollFailureMessage(blockId: BlockId, finalVectorSize: Long): Unit = {
     logWarning(
-      s"Not enough space to cache $blockId in memory! " +
-      s"(computed ${Utils.bytesToString(finalVectorSize)} so far)"
+      log"Not enough space to cache ${MDC(BLOCK_ID, blockId)} in memory! " +
+        log"(computed ${MDC(NUM_BYTES, Utils.bytesToString(finalVectorSize))} so far)"
     )
     logMemoryUsage()
   }
@@ -735,7 +757,7 @@ private class SerializedValuesHolder[T](
     // We successfully unrolled the entirety of this block
     serializationStream.close()
 
-    override def preciseSize(): Long = bbos.size
+    override def preciseSize: Long = bbos.size
 
     override def build(): MemoryEntry[T] =
       SerializedMemoryEntry[T](bbos.toChunkedByteBuffer, memoryMode, classTag)
@@ -862,11 +884,13 @@ private[storage] class PartiallySerializedBlock[T](
 
   private def verifyNotConsumedAndNotDiscarded(): Unit = {
     if (consumed) {
-      throw new IllegalStateException(
-        "Can only call one of finishWritingToStream() or valuesIterator() and can only call once.")
+      throw SparkException.internalError(
+        "Can only call one of finishWritingToStream() or valuesIterator() and can only call once.",
+        category = "STORAGE")
     }
     if (discarded) {
-      throw new IllegalStateException("Cannot call methods on a discarded PartiallySerializedBlock")
+      throw SparkException.internalError(
+        "Cannot call methods on a discarded PartiallySerializedBlock", category = "STORAGE")
     }
   }
 
@@ -879,7 +903,7 @@ private[storage] class PartiallySerializedBlock[T](
         // We want to close the output stream in order to free any resources associated with the
         // serializer itself (such as Kryo's internal buffers). close() might cause data to be
         // written, so redirect the output stream to discard that data.
-        redirectableOutputStream.setOutputStream(ByteStreams.nullOutputStream())
+        redirectableOutputStream.setOutputStream(OutputStream.nullOutputStream())
         serializationStream.close()
       } finally {
         discarded = true
@@ -897,7 +921,7 @@ private[storage] class PartiallySerializedBlock[T](
     verifyNotConsumedAndNotDiscarded()
     consumed = true
     // `unrolled`'s underlying buffers will be freed once this input stream is fully read:
-    ByteStreams.copy(unrolledBuffer.toInputStream(dispose = true), os)
+    unrolledBuffer.toInputStream(dispose = true).transferTo(os)
     memoryStore.releaseUnrollMemoryForThisTask(memoryMode, unrollMemory)
     redirectableOutputStream.setOutputStream(os)
     while (rest.hasNext) {

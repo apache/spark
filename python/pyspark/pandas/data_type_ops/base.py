@@ -17,14 +17,15 @@
 
 import numbers
 from abc import ABCMeta
-from itertools import chain
 from typing import Any, Optional, Union
+from itertools import chain
 
 import numpy as np
 import pandas as pd
 from pandas.api.types import CategoricalDtype
+from pandas.core.dtypes.common import is_numeric_dtype
 
-from pyspark.sql import functions as F, Column
+from pyspark.sql import functions as F, Column as PySparkColumn
 from pyspark.sql.types import (
     ArrayType,
     BinaryType,
@@ -45,7 +46,6 @@ from pyspark.sql.types import (
     UserDefinedType,
 )
 from pyspark.pandas._typing import Dtype, IndexOpsLike, SeriesOrIndex
-from pyspark.pandas.spark import functions as SF
 from pyspark.pandas.typedef import extension_dtypes
 from pyspark.pandas.typedef.typehints import (
     extension_dtypes_available,
@@ -53,6 +53,7 @@ from pyspark.pandas.typedef.typehints import (
     extension_object_dtypes_available,
     spark_type_to_pandas_dtype,
 )
+from pyspark.pandas.utils import is_ansi_mode_enabled
 
 if extension_dtypes_available:
     from pandas import Int8Dtype, Int16Dtype, Int32Dtype, Int64Dtype
@@ -109,6 +110,33 @@ def transform_boolean_operand_to_numeric(
         return operand
 
 
+def _should_return_all_false(left: IndexOpsLike, right: Any) -> bool:
+    """
+    Determine if binary comparison should short-circuit to all False,
+    based on incompatible dtypes: non-numeric vs. numeric (including bools).
+    """
+    from pyspark.pandas.base import IndexOpsMixin
+    from pandas.api.types import is_list_like  # type: ignore[attr-defined]
+
+    def are_both_numeric(left_dtype: Dtype, right_dtype: Dtype) -> bool:
+        return is_numeric_dtype(left_dtype) and is_numeric_dtype(right_dtype)
+
+    left_dtype = left.dtype
+
+    if isinstance(right, IndexOpsMixin):
+        right_dtype = right.dtype
+    elif isinstance(right, (list, tuple)):
+        right_dtype = pd.Series(right).dtype
+    else:
+        assert not is_list_like(right), (
+            "Only ps.Series, ps.Index, list, tuple, or scalar is supported as the "
+            "right-hand operand."
+        )
+        right_dtype = pd.Series([right]).dtype
+
+    return left_dtype != right_dtype and not are_both_numeric(left_dtype, right_dtype)
+
+
 def _as_categorical_type(
     index_ops: IndexOpsLike, dtype: CategoricalDtype, spark_type: DataType
 ) -> IndexOpsLike:
@@ -116,21 +144,24 @@ def _as_categorical_type(
     assert isinstance(dtype, CategoricalDtype)
     if dtype.categories is None:
         codes, uniques = index_ops.factorize()
+        categories = uniques.astype(index_ops.dtype)
         return codes._with_new_scol(
             codes.spark.column,
-            field=codes._internal.data_fields[0].copy(dtype=CategoricalDtype(categories=uniques)),
+            field=codes._internal.data_fields[0].copy(
+                dtype=CategoricalDtype(categories=categories)
+            ),
         )
     else:
         categories = dtype.categories
         if len(categories) == 0:
-            scol = SF.lit(-1)
+            scol = F.lit(-1)
         else:
             kvs = chain(
-                *[(SF.lit(category), SF.lit(code)) for code, category in enumerate(categories)]
+                *[(F.lit(category), F.lit(code)) for code, category in enumerate(categories)]
             )
             map_scol = F.create_map(*kvs)
+            scol = F.coalesce(map_scol[index_ops.spark.column], F.lit(-1))
 
-            scol = F.coalesce(map_scol[index_ops.spark.column], SF.lit(-1))
         return index_ops._with_new_scol(
             scol.cast(spark_type),
             field=index_ops._internal.data_fields[0].copy(
@@ -145,7 +176,10 @@ def _as_bool_type(index_ops: IndexOpsLike, dtype: Dtype) -> IndexOpsLike:
     if isinstance(dtype, extension_dtypes):
         scol = index_ops.spark.column.cast(spark_type)
     else:
-        scol = F.when(index_ops.spark.column.isNull(), SF.lit(False)).otherwise(
+        null_value = (
+            F.lit(True) if isinstance(index_ops.spark.data_type, DecimalType) else F.lit(False)
+        )
+        scol = F.when(index_ops.spark.column.isNull(), null_value).otherwise(
             index_ops.spark.column.cast(spark_type)
         )
     return index_ops._with_new_scol(
@@ -212,6 +246,15 @@ def _is_boolean_type(right: Any) -> bool:
     return isinstance(right, bool) or (
         isinstance(right, IndexOpsMixin) and isinstance(right.spark.data_type, BooleanType)
     )
+
+
+def _is_extension_dtypes(object: Any) -> bool:
+    """
+    Check whether the type of given object is extension dtype or not.
+    Extention dtype includes Int8Dtype, Int16Dtype, Int32Dtype, Int64Dtype, BooleanDtype,
+    StringDtype, Float32Dtype and Float64Dtype.
+    """
+    return isinstance(getattr(object, "dtype", None), extension_dtypes)
 
 
 class DataTypeOps(object, metaclass=ABCMeta):
@@ -378,6 +421,10 @@ class DataTypeOps(object, metaclass=ABCMeta):
         raise TypeError(">= can not be applied to %s." % self.pretty_name)
 
     def eq(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        if is_ansi_mode_enabled(left._internal.spark_frame.sparkSession):
+            if _should_return_all_false(left, right):
+                return left._with_new_scol(F.lit(False)).rename(None)  # type: ignore[attr-defined]
+
         if isinstance(right, (list, tuple)):
             from pyspark.pandas.series import first_series, scol_for
             from pyspark.pandas.frame import DataFrame
@@ -468,14 +515,14 @@ class DataTypeOps(object, metaclass=ABCMeta):
         else:
             from pyspark.pandas.base import column_op
 
-            return column_op(Column.__eq__)(left, right)
+            return column_op(PySparkColumn.__eq__)(left, right)
 
     def ne(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         from pyspark.pandas.base import column_op
 
         _sanitize_list_like(right)
 
-        return column_op(Column.__ne__)(left, right)
+        return column_op(PySparkColumn.__ne__)(left, right)
 
     def invert(self, operand: IndexOpsLike) -> IndexOpsLike:
         raise TypeError("Unary ~ can not be applied to %s." % self.pretty_name)

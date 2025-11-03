@@ -25,6 +25,11 @@ In order to run PySpark tests, you should build Spark itself first via Maven or 
 
     build/mvn -DskipTests clean package
 
+.. code-block:: bash
+
+    build/sbt -Phive clean package
+
+
 After that, the PySpark test cases can be run via using ``python/run-tests``. For example,
 
 .. code-block:: bash
@@ -33,7 +38,7 @@ After that, the PySpark test cases can be run via using ``python/run-tests``. Fo
 
 Note that you may set ``OBJC_DISABLE_INITIALIZE_FORK_SAFETY`` environment variable to ``YES`` if you are running tests on Mac OS.
 
-Please see the guidance on how to `build Spark <https://github.com/apache/spark#building-spark>`_,
+Please see the guidance on how to |building_spark|_,
 `run tests for a module, or individual tests <https://spark.apache.org/developer-tools.html>`_.
 
 
@@ -49,9 +54,31 @@ You can run a specific test via using ``python/run-tests``, for example, as belo
 Please refer to `Testing PySpark <https://spark.apache.org/developer-tools.html>`_ for more details.
 
 
-Running tests using GitHub Actions
+Running Tests using GitHub Actions
 ----------------------------------
 
 You can run the full PySpark tests by using GitHub Actions in your own forked GitHub
 repository with a few clicks. Please refer to
 `Running tests in your forked repository using GitHub Actions <https://spark.apache.org/developer-tools.html>`_ for more details.
+
+
+Running Tests for Spark Connect
+-------------------------------
+
+Running Tests for Python Client
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+In order to test the changes in Protobuf definitions, for example, at
+`spark/sql/connect/common/src/main/protobuf/spark/connect <https://github.com/apache/spark/tree/master/sql/connect/common/src/main/protobuf/spark/connect>`_,
+you should regenerate Python Protobuf client first by running ``dev/connect-gen-protos.sh``.
+
+
+Running PySpark Shell with Python Client
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The command below starts Spark Connect server automatically locally, and creates a Spark Connect client connected to the server.
+
+.. code-block:: bash
+
+    bin/pyspark --remote "local[*]"
+

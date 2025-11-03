@@ -13,22 +13,18 @@ directory:
 
     ./dev/dev-run-integration-tests.sh
 
-To run tests with Java 11 instead of Java 8, use `--java-image-tag` to specify the base image.
+To run tests with a specific Java version instead of Java 21, use `--java-image-tag` to specify the 
+[base image](https://hub.docker.com/r/azul/zulu-openjdk/tags) accordingly.
 
-    ./dev/dev-run-integration-tests.sh --java-image-tag 11-jre-slim
+    ./dev/dev-run-integration-tests.sh --java-image-tag 17-jre
 
 To run tests with a custom docker image, use `--docker-file` to specify the Dockerfile.
 Note that if both `--docker-file` and `--java-image-tag` are used, `--docker-file` is preferred,
 and the custom Dockerfile need to include a Java installation by itself.
-Dockerfile.java17 is an example of custom Dockerfile, and you can specify it to run tests with Java 17.
 
-    ./dev/dev-run-integration-tests.sh --docker-file ../docker/src/main/dockerfiles/spark/Dockerfile.java17
+    ./dev/dev-run-integration-tests.sh --docker-file ../docker/src/main/dockerfiles/spark/Dockerfile
 
-To run tests with Hadoop 2.x instead of Hadoop 3.x, use `--hadoop-profile`.
-
-    ./dev/dev-run-integration-tests.sh --hadoop-profile hadoop-2
-
-The minimum tested version of Minikube is 1.18.0. The kube-dns addon must be enabled. Minikube should
+The minimum tested version of Minikube is 1.28.0. The kube-dns addon must be enabled. Minikube should
 run with a minimum of 4 CPUs and 6G of memory:
 
     minikube start --cpus 4 --memory 6144
@@ -47,7 +43,7 @@ default this is set to `minikube`, the available backends are their prerequisite
 
 ### `minikube`
 
-Uses the local `minikube` cluster, this requires that `minikube` 1.18.0 or greater be installed and that it be allocated
+Uses the local `minikube` cluster, this requires that `minikube` 1.28.0 or greater be installed and that it be allocated
 at least 4 CPUs and 6GB memory (some users have reported success with as few as 3 CPUs and 4GB memory).  The tests will 
 check if `minikube` is started and abort early if it isn't currently running.
 
@@ -132,10 +128,10 @@ configuration is provided in `dev/spark-rbac.yaml`.
 If you prefer to run just the integration tests directly, then you can customise the behaviour via passing system 
 properties to Maven.  For example:
 
-    mvn integration-test -am -pl :spark-kubernetes-integration-tests_2.12 \
+    mvn integration-test -am -pl :spark-kubernetes-integration-tests_2.13 \
                             -Pkubernetes -Pkubernetes-integration-tests \
-                            -Phadoop-2 -Dhadoop.version=2.7.4 \
-                            -Dspark.kubernetes.test.sparkTgz=spark-3.0.0-SNAPSHOT-bin-example.tgz \
+                            -Phadoop-3 -Dhadoop.version=3.4.0 \
+                            -Dspark.kubernetes.test.sparkTgz=spark-4.1.0-SNAPSHOT-bin-example.tgz \
                             -Dspark.kubernetes.test.imageTag=sometag \
                             -Dspark.kubernetes.test.imageRepo=docker.io/somerepo \
                             -Dspark.kubernetes.test.namespace=spark-int-tests \
@@ -203,9 +199,9 @@ to the wrapper scripts and using the wrapper scripts will simply set these appro
   <tr>
     <td><code>spark.kubernetes.test.javaImageTag</code></td>
     <td>
-      A specific OpenJDK base image tag to use, when set uses it instead of 8-jre-slim.
+      A specific Azul Zulu OpenJDK base image tag to use, when set uses it instead of 21.
     </td>
-    <td><code>8-jre-slim</code></td>
+    <td><code>N/A</code></td>
   </tr>
   <tr>
     <td><code>spark.kubernetes.test.imageTagFile</code></td>
@@ -268,6 +264,30 @@ to the wrapper scripts and using the wrapper scripts will simply set these appro
     </td>
     <td></td>
   </tr>
+  <tr>
+    <td><code>spark.kubernetes.test.driverRequestCores</code></td>
+    <td>
+      Set cpu resource for each driver pod in test, this is currently only for test on cpu resource limited cluster,
+      it's not recommended for other scenarios.
+    </td>
+    <td></td>
+  </tr>
+  <tr>
+    <td><code>spark.kubernetes.test.executorRequestCores</code></td>
+    <td>
+      Set cpu resource for each executor pod in test, this is currently only for test on cpu resource limited cluster,
+      it's not recommended for other scenarios.
+    </td>
+    <td></td>
+  </tr>
+  <tr>
+    <td><code>spark.kubernetes.test.volcanoMaxConcurrencyJobNum</code></td>
+    <td>
+      Set maximum number for concurrency jobs, It helps developers setting suitable resources according to test env in
+      volcano test.
+    </td>
+    <td></td>
+  </tr>
 </table>
 
 # Running the Kubernetes Integration Tests with SBT
@@ -308,19 +328,13 @@ You can also specify your specific dockerfile to build JVM/Python/R based image 
 
 # Running the Volcano Integration Tests
 
-Volcano integration is experimental in Aapche Spark 3.3.0 and the test coverage is limited.
-
 ## Requirements
 - A minimum of 6 CPUs and 9G of memory is required to complete all Volcano test cases.
-- Volcano v1.5.1.
+- Volcano v1.13.0.
 
 ## Installation
 
-    # x86_64
-    kubectl apply -f https://raw.githubusercontent.com/volcano-sh/volcano/v1.5.1/installer/volcano-development.yaml
-
-    # arm64:
-    kubectl apply -f https://raw.githubusercontent.com/volcano-sh/volcano/v1.5.1/installer/volcano-development-arm64.yaml
+    kubectl apply -f https://raw.githubusercontent.com/volcano-sh/volcano/v1.13.0/installer/volcano-development.yaml
 
 ## Run tests
 
@@ -341,13 +355,5 @@ You can also specify `volcano` tag to only run Volcano test:
 
 ## Cleanup Volcano
 
-    # x86_64
-    kubectl delete -f https://raw.githubusercontent.com/volcano-sh/volcano/v1.5.1/installer/volcano-development.yaml
-
-    # arm64:
-    kubectl delete -f https://raw.githubusercontent.com/volcano-sh/volcano/v1.5.1/installer/volcano-development-arm64.yaml
-    
-    # Cleanup Volcano webhook 
-    kubectl delete validatingwebhookconfigurations volcano-admission-service-jobs-validate volcano-admission-service-pods-validate volcano-admission-service-queues-validate
-    kubectl delete mutatingwebhookconfigurations volcano-admission-service-jobs-mutate volcano-admission-service-podgroups-mutate volcano-admission-service-pods-mutate volcano-admission-service-queues-mutate
+    kubectl delete -f https://raw.githubusercontent.com/volcano-sh/volcano/v1.13.0/installer/volcano-development.yaml
 

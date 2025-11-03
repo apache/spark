@@ -69,7 +69,7 @@ case class ObjectHashAggregateExec(
     child: SparkPlan)
   extends BaseAggregateExec {
 
-  override lazy val allAttributes: AttributeSeq =
+  override def allAttributes: AttributeSeq =
     child.output ++ aggregateBufferAttributes ++ aggregateAttributes ++
       aggregateExpressions.flatMap(_.aggregateFunction.inputAggBufferAttributes)
 
@@ -142,13 +142,4 @@ case class ObjectHashAggregateExec(
 
   override protected def withNewChildInternal(newChild: SparkPlan): ObjectHashAggregateExec =
     copy(child = newChild)
-}
-
-object ObjectHashAggregateExec {
-  def supportsAggregate(aggregateExpressions: Seq[AggregateExpression]): Boolean = {
-    aggregateExpressions.map(_.aggregateFunction).exists {
-      case _: TypedImperativeAggregate[_] => true
-      case _ => false
-    }
-  }
 }

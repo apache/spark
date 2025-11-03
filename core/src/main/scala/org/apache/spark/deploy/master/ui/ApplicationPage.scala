@@ -17,9 +17,9 @@
 
 package org.apache.spark.deploy.master.ui
 
-import javax.servlet.http.HttpServletRequest
-
 import scala.xml.Node
+
+import jakarta.servlet.http.HttpServletRequest
 
 import org.apache.spark.deploy.DeployMessages.{MasterStateResponse, RequestMasterState}
 import org.apache.spark.deploy.ExecutorState
@@ -43,8 +43,8 @@ private[ui] class ApplicationPage(parent: MasterWebUI) extends WebUIPage("app") 
       return UIUtils.basicSparkPage(request, msg, "Not Found")
     }
 
-    val executorHeaders = Seq("ExecutorID", "Worker", "Cores", "Memory", "Resources",
-      "State", "Logs")
+    val executorHeaders = Seq("ExecutorID", "Worker", "Cores", "Memory", "Resource Profile Id",
+      "Resources", "State", "Logs")
     val allExecutors = (app.executors.values ++ app.removedExecutors).toSet.toSeq
     // This includes executors that are either still running or have exited cleanly
     val executors = allExecutors.filter { exec =>
@@ -76,26 +76,36 @@ private[ui] class ApplicationPage(parent: MasterWebUI) extends WebUIPage("app") 
                     data-placement="top">
                 <strong>Executor Limit: </strong>
                 {
-                  if (app.executorLimit == Int.MaxValue) "Unlimited" else app.executorLimit
+                  if (app.getExecutorLimit == Int.MaxValue) "Unlimited" else app.getExecutorLimit
                 }
                 ({app.executors.size} granted)
               </span>
             </li>
             <li>
-              <strong>Executor Memory:</strong>
+              <strong>Executor Memory - Default Resource Profile:</strong>
               {Utils.megabytesToString(app.desc.memoryPerExecutorMB)}
             </li>
             <li>
-              <strong>Executor Resources:</strong>
+              <strong>Executor Resources - Default Resource Profile:</strong>
               {formatResourceRequirements(app.desc.resourceReqsPerExecutor)}
             </li>
             <li><strong>Submit Date:</strong> {UIUtils.formatDate(app.submitDate)}</li>
+            <li><strong>Duration:</strong> {UIUtils.formatDuration(app.duration)}</li>
             <li><strong>State:</strong> {app.state}</li>
             {
               if (!app.isFinished) {
+                if (app.desc.appUiUrl.isBlank()) {
+                  <li><strong>Application UI:</strong> Disabled</li>
+                } else {
+                  <li><strong>
+                      <a href={UIUtils.makeHref(parent.master.reverseProxy,
+                        app.id, app.desc.appUiUrl)}>Application Detail UI</a>
+                  </strong></li>
+                }
+              } else if (parent.master.historyServerUrl.nonEmpty) {
                 <li><strong>
-                    <a href={UIUtils.makeHref(parent.master.reverseProxy,
-                      app.id, app.desc.appUiUrl)}>Application Detail UI</a>
+                    <a href={s"${parent.master.historyServerUrl.get}/history/${app.id}"}>
+                      Application History UI</a>
                 </strong></li>
               }
             }
@@ -145,6 +155,7 @@ private[ui] class ApplicationPage(parent: MasterWebUI) extends WebUIPage("app") 
       </td>
       <td>{executor.cores}</td>
       <td>{executor.memory}</td>
+      <td>{executor.rpId}</td>
       <td>{formatResourcesAddresses(executor.resources)}</td>
       <td>{executor.state}</td>
       <td>

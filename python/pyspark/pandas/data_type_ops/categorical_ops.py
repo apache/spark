@@ -16,19 +16,18 @@
 #
 
 from itertools import chain
-from typing import cast, Any, Callable, Union
+from typing import cast, Any, Union
 
 import pandas as pd
 import numpy as np
 from pandas.api.types import is_list_like, CategoricalDtype  # type: ignore[attr-defined]
 
 from pyspark.pandas._typing import Dtype, IndexOpsLike, SeriesOrIndex
-from pyspark.pandas.base import column_op, IndexOpsMixin
+from pyspark.pandas.base import IndexOpsMixin
 from pyspark.pandas.data_type_ops.base import _sanitize_list_like, DataTypeOps
-from pyspark.pandas.spark import functions as SF
 from pyspark.pandas.typedef import pandas_on_spark_type
 from pyspark.sql import functions as F
-from pyspark.sql.column import Column
+from pyspark.sql.utils import pyspark_column_op
 
 
 class CategoricalOps(DataTypeOps):
@@ -66,33 +65,33 @@ class CategoricalOps(DataTypeOps):
 
     def eq(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         _sanitize_list_like(right)
-        return _compare(left, right, Column.__eq__, is_equality_comparison=True)
+        return _compare(left, right, "__eq__", is_equality_comparison=True)
 
     def ne(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         _sanitize_list_like(right)
-        return _compare(left, right, Column.__ne__, is_equality_comparison=True)
+        return _compare(left, right, "__ne__", is_equality_comparison=True)
 
     def lt(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         _sanitize_list_like(right)
-        return _compare(left, right, Column.__lt__)
+        return _compare(left, right, "__lt__")
 
     def le(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         _sanitize_list_like(right)
-        return _compare(left, right, Column.__le__)
+        return _compare(left, right, "__le__")
 
     def gt(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         _sanitize_list_like(right)
-        return _compare(left, right, Column.__gt__)
+        return _compare(left, right, "__gt__")
 
     def ge(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         _sanitize_list_like(right)
-        return _compare(left, right, Column.__ge__)
+        return _compare(left, right, "__ge__")
 
 
 def _compare(
     left: IndexOpsLike,
     right: Any,
-    f: Callable[..., Column],
+    func_name: str,
     *,
     is_equality_comparison: bool = False,
 ) -> SeriesOrIndex:
@@ -103,7 +102,7 @@ def _compare(
     ----------
     left: A Categorical operand
     right: The other operand to compare with
-    f : The Spark Column function to apply
+    func_name: The Spark Column function name to apply
     is_equality_comparison: True if it is equality comparison, ie. == or !=. False by default.
 
     Returns
@@ -118,15 +117,15 @@ def _compare(
         if hash(left.dtype) != hash(right.dtype):
             raise TypeError("Categoricals can only be compared if 'categories' are the same.")
         if cast(CategoricalDtype, left.dtype).ordered:
-            return column_op(f)(left, right)
+            return pyspark_column_op(func_name, left, right)
         else:
-            return column_op(f)(_to_cat(left), _to_cat(right))
+            return pyspark_column_op(func_name, _to_cat(left), _to_cat(right))
     elif not is_list_like(right):
         categories = cast(CategoricalDtype, left.dtype).categories
         if right not in categories:
             raise TypeError("Cannot compare a Categorical with a scalar, which is not a category.")
         right_code = categories.get_loc(right)
-        return column_op(f)(left, right_code)
+        return pyspark_column_op(func_name, left, right_code)
     else:
         raise TypeError("Cannot compare a Categorical with the given type.")
 
@@ -134,9 +133,9 @@ def _compare(
 def _to_cat(index_ops: IndexOpsLike) -> IndexOpsLike:
     categories = cast(CategoricalDtype, index_ops.dtype).categories
     if len(categories) == 0:
-        scol = SF.lit(None)
+        scol = F.lit(None)
     else:
-        kvs = chain(*[(SF.lit(code), SF.lit(category)) for code, category in enumerate(categories)])
+        kvs = chain(*[(F.lit(code), F.lit(category)) for code, category in enumerate(categories)])
         map_scol = F.create_map(*kvs)
         scol = map_scol[index_ops.spark.column]
     return index_ops._with_new_scol(scol)

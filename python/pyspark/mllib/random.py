@@ -21,8 +21,14 @@ Python package for random data generation.
 
 import sys
 from functools import wraps
+from typing import Any, Callable, Optional
+
+import numpy as np
 
 from pyspark.mllib.common import callMLlibFunc
+from pyspark.core.context import SparkContext
+from pyspark.core.rdd import RDD
+from pyspark.mllib.linalg import Vector
 
 
 __all__ = [
@@ -30,9 +36,9 @@ __all__ = [
 ]
 
 
-def toArray(f):
+def toArray(f: Callable[..., RDD[Vector]]) -> Callable[..., RDD[np.ndarray]]:
     @wraps(f)
-    def func(sc, *a, **kw):
+    def func(sc: SparkContext, *a: Any, **kw: Any) -> RDD[np.ndarray]:
         rdd = f(sc, *a, **kw)
         return rdd.map(lambda vec: vec.toArray())
 
@@ -48,7 +54,9 @@ class RandomRDDs:
     """
 
     @staticmethod
-    def uniformRDD(sc, size, numPartitions=None, seed=None):
+    def uniformRDD(
+        sc: SparkContext, size: int, numPartitions: Optional[int] = None, seed: Optional[int] = None
+    ) -> RDD[float]:
         """
         Generates an RDD comprised of i.i.d. samples from the
         uniform distribution U(0.0, 1.0).
@@ -91,7 +99,9 @@ class RandomRDDs:
         return callMLlibFunc("uniformRDD", sc._jsc, size, numPartitions, seed)
 
     @staticmethod
-    def normalRDD(sc, size, numPartitions=None, seed=None):
+    def normalRDD(
+        sc: SparkContext, size: int, numPartitions: Optional[int] = None, seed: Optional[int] = None
+    ) -> RDD[float]:
         """
         Generates an RDD comprised of i.i.d. samples from the standard normal
         distribution.
@@ -124,15 +134,22 @@ class RandomRDDs:
         >>> stats = x.stats()
         >>> stats.count()
         1000
-        >>> abs(stats.mean() - 0.0) < 0.1
+        >>> bool(abs(stats.mean() - 0.0) < 0.1)
         True
-        >>> abs(stats.stdev() - 1.0) < 0.1
+        >>> bool(abs(stats.stdev() - 1.0) < 0.1)
         True
         """
         return callMLlibFunc("normalRDD", sc._jsc, size, numPartitions, seed)
 
     @staticmethod
-    def logNormalRDD(sc, mean, std, size, numPartitions=None, seed=None):
+    def logNormalRDD(
+        sc: SparkContext,
+        mean: float,
+        std: float,
+        size: int,
+        numPartitions: Optional[int] = None,
+        seed: Optional[int] = None,
+    ) -> RDD[float]:
         """
         Generates an RDD comprised of i.i.d. samples from the log normal
         distribution with the input mean and standard distribution.
@@ -169,10 +186,10 @@ class RandomRDDs:
         >>> stats = x.stats()
         >>> stats.count()
         1000
-        >>> abs(stats.mean() - expMean) < 0.5
+        >>> bool(abs(stats.mean() - expMean) < 0.5)
         True
         >>> from math import sqrt
-        >>> abs(stats.stdev() - expStd) < 0.5
+        >>> bool(abs(stats.stdev() - expStd) < 0.5)
         True
         """
         return callMLlibFunc(
@@ -180,7 +197,13 @@ class RandomRDDs:
         )
 
     @staticmethod
-    def poissonRDD(sc, mean, size, numPartitions=None, seed=None):
+    def poissonRDD(
+        sc: SparkContext,
+        mean: float,
+        size: int,
+        numPartitions: Optional[int] = None,
+        seed: Optional[int] = None,
+    ) -> RDD[float]:
         """
         Generates an RDD comprised of i.i.d. samples from the Poisson
         distribution with the input mean.
@@ -215,13 +238,19 @@ class RandomRDDs:
         >>> abs(stats.mean() - mean) < 0.5
         True
         >>> from math import sqrt
-        >>> abs(stats.stdev() - sqrt(mean)) < 0.5
+        >>> bool(abs(stats.stdev() - sqrt(mean)) < 0.5)
         True
         """
         return callMLlibFunc("poissonRDD", sc._jsc, float(mean), size, numPartitions, seed)
 
     @staticmethod
-    def exponentialRDD(sc, mean, size, numPartitions=None, seed=None):
+    def exponentialRDD(
+        sc: SparkContext,
+        mean: float,
+        size: int,
+        numPartitions: Optional[int] = None,
+        seed: Optional[int] = None,
+    ) -> RDD[float]:
         """
         Generates an RDD comprised of i.i.d. samples from the Exponential
         distribution with the input mean.
@@ -256,13 +285,20 @@ class RandomRDDs:
         >>> abs(stats.mean() - mean) < 0.5
         True
         >>> from math import sqrt
-        >>> abs(stats.stdev() - sqrt(mean)) < 0.5
+        >>> bool(abs(stats.stdev() - sqrt(mean)) < 0.5)
         True
         """
         return callMLlibFunc("exponentialRDD", sc._jsc, float(mean), size, numPartitions, seed)
 
     @staticmethod
-    def gammaRDD(sc, shape, scale, size, numPartitions=None, seed=None):
+    def gammaRDD(
+        sc: SparkContext,
+        shape: float,
+        scale: float,
+        size: int,
+        numPartitions: Optional[int] = None,
+        seed: Optional[int] = None,
+    ) -> RDD[float]:
         """
         Generates an RDD comprised of i.i.d. samples from the Gamma
         distribution with the input shape and scale.
@@ -300,9 +336,9 @@ class RandomRDDs:
         >>> stats = x.stats()
         >>> stats.count()
         1000
-        >>> abs(stats.mean() - expMean) < 0.5
+        >>> bool(abs(stats.mean() - expMean) < 0.5)
         True
-        >>> abs(stats.stdev() - expStd) < 0.5
+        >>> bool(abs(stats.stdev() - expStd) < 0.5)
         True
         """
         return callMLlibFunc(
@@ -311,7 +347,13 @@ class RandomRDDs:
 
     @staticmethod
     @toArray
-    def uniformVectorRDD(sc, numRows, numCols, numPartitions=None, seed=None):
+    def uniformVectorRDD(
+        sc: SparkContext,
+        numRows: int,
+        numCols: int,
+        numPartitions: Optional[int] = None,
+        seed: Optional[int] = None,
+    ) -> RDD[Vector]:
         """
         Generates an RDD comprised of vectors containing i.i.d. samples drawn
         from the uniform distribution U(0.0, 1.0).
@@ -342,7 +384,7 @@ class RandomRDDs:
         >>> mat = np.matrix(RandomRDDs.uniformVectorRDD(sc, 10, 10).collect())
         >>> mat.shape
         (10, 10)
-        >>> mat.max() <= 1.0 and mat.min() >= 0.0
+        >>> bool(mat.max() <= 1.0 and mat.min() >= 0.0)
         True
         >>> RandomRDDs.uniformVectorRDD(sc, 10, 10, 4).getNumPartitions()
         4
@@ -351,7 +393,13 @@ class RandomRDDs:
 
     @staticmethod
     @toArray
-    def normalVectorRDD(sc, numRows, numCols, numPartitions=None, seed=None):
+    def normalVectorRDD(
+        sc: SparkContext,
+        numRows: int,
+        numCols: int,
+        numPartitions: Optional[int] = None,
+        seed: Optional[int] = None,
+    ) -> RDD[Vector]:
         """
         Generates an RDD comprised of vectors containing i.i.d. samples drawn
         from the standard normal distribution.
@@ -382,16 +430,24 @@ class RandomRDDs:
         >>> mat = np.matrix(RandomRDDs.normalVectorRDD(sc, 100, 100, seed=1).collect())
         >>> mat.shape
         (100, 100)
-        >>> abs(mat.mean() - 0.0) < 0.1
+        >>> bool(abs(mat.mean() - 0.0) < 0.1)
         True
-        >>> abs(mat.std() - 1.0) < 0.1
+        >>> bool(abs(mat.std() - 1.0) < 0.1)
         True
         """
         return callMLlibFunc("normalVectorRDD", sc._jsc, numRows, numCols, numPartitions, seed)
 
     @staticmethod
     @toArray
-    def logNormalVectorRDD(sc, mean, std, numRows, numCols, numPartitions=None, seed=None):
+    def logNormalVectorRDD(
+        sc: SparkContext,
+        mean: float,
+        std: float,
+        numRows: int,
+        numCols: int,
+        numPartitions: Optional[int] = None,
+        seed: Optional[int] = None,
+    ) -> RDD[Vector]:
         """
         Generates an RDD comprised of vectors containing i.i.d. samples drawn
         from the log normal distribution.
@@ -432,9 +488,9 @@ class RandomRDDs:
         >>> mat = np.matrix(m)
         >>> mat.shape
         (100, 100)
-        >>> abs(mat.mean() - expMean) < 0.1
+        >>> bool(abs(mat.mean() - expMean) < 0.1)
         True
-        >>> abs(mat.std() - expStd) < 0.1
+        >>> bool(abs(mat.std() - expStd) < 0.1)
         True
         """
         return callMLlibFunc(
@@ -450,7 +506,14 @@ class RandomRDDs:
 
     @staticmethod
     @toArray
-    def poissonVectorRDD(sc, mean, numRows, numCols, numPartitions=None, seed=None):
+    def poissonVectorRDD(
+        sc: SparkContext,
+        mean: float,
+        numRows: int,
+        numCols: int,
+        numPartitions: Optional[int] = None,
+        seed: Optional[int] = None,
+    ) -> RDD[Vector]:
         """
         Generates an RDD comprised of vectors containing i.i.d. samples drawn
         from the Poisson distribution with the input mean.
@@ -482,13 +545,13 @@ class RandomRDDs:
         >>> import numpy as np
         >>> mean = 100.0
         >>> rdd = RandomRDDs.poissonVectorRDD(sc, mean, 100, 100, seed=1)
-        >>> mat = np.mat(rdd.collect())
+        >>> mat = np.asmatrix(rdd.collect())
         >>> mat.shape
         (100, 100)
-        >>> abs(mat.mean() - mean) < 0.5
+        >>> bool(abs(mat.mean() - mean) < 0.5)
         True
         >>> from math import sqrt
-        >>> abs(mat.std() - sqrt(mean)) < 0.5
+        >>> bool(abs(mat.std() - sqrt(mean)) < 0.5)
         True
         """
         return callMLlibFunc(
@@ -497,7 +560,14 @@ class RandomRDDs:
 
     @staticmethod
     @toArray
-    def exponentialVectorRDD(sc, mean, numRows, numCols, numPartitions=None, seed=None):
+    def exponentialVectorRDD(
+        sc: SparkContext,
+        mean: float,
+        numRows: int,
+        numCols: int,
+        numPartitions: Optional[int] = None,
+        seed: Optional[int] = None,
+    ) -> RDD[Vector]:
         """
         Generates an RDD comprised of vectors containing i.i.d. samples drawn
         from the Exponential distribution with the input mean.
@@ -529,13 +599,13 @@ class RandomRDDs:
         >>> import numpy as np
         >>> mean = 0.5
         >>> rdd = RandomRDDs.exponentialVectorRDD(sc, mean, 100, 100, seed=1)
-        >>> mat = np.mat(rdd.collect())
+        >>> mat = np.asmatrix(rdd.collect())
         >>> mat.shape
         (100, 100)
-        >>> abs(mat.mean() - mean) < 0.5
+        >>> bool(abs(mat.mean() - mean) < 0.5)
         True
         >>> from math import sqrt
-        >>> abs(mat.std() - sqrt(mean)) < 0.5
+        >>> bool(abs(mat.std() - sqrt(mean)) < 0.5)
         True
         """
         return callMLlibFunc(
@@ -544,7 +614,15 @@ class RandomRDDs:
 
     @staticmethod
     @toArray
-    def gammaVectorRDD(sc, shape, scale, numRows, numCols, numPartitions=None, seed=None):
+    def gammaVectorRDD(
+        sc: SparkContext,
+        shape: float,
+        scale: float,
+        numRows: int,
+        numCols: int,
+        numPartitions: Optional[int] = None,
+        seed: Optional[int] = None,
+    ) -> RDD[Vector]:
         """
         Generates an RDD comprised of vectors containing i.i.d. samples drawn
         from the Gamma distribution.
@@ -584,9 +662,9 @@ class RandomRDDs:
         >>> mat = np.matrix(RandomRDDs.gammaVectorRDD(sc, shape, scale, 100, 100, seed=1).collect())
         >>> mat.shape
         (100, 100)
-        >>> abs(mat.mean() - expMean) < 0.1
+        >>> bool(abs(mat.mean() - expMean) < 0.1)
         True
-        >>> abs(mat.std() - expStd) < 0.1
+        >>> bool(abs(mat.std() - expStd) < 0.1)
         True
         """
         return callMLlibFunc(
@@ -601,7 +679,7 @@ class RandomRDDs:
         )
 
 
-def _test():
+def _test() -> None:
     import doctest
     from pyspark.sql import SparkSession
 

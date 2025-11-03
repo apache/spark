@@ -17,16 +17,20 @@
 
 package org.apache.spark.sql.connector
 
-import org.apache.spark.sql.{AnalysisException, DataFrame, SQLContext}
+import org.apache.spark.SparkUnsupportedOperationException
+import org.apache.spark.sql.{AnalysisException, SQLContext}
 import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, NamedRelation}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, EqualTo, Literal}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
+import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
+import org.apache.spark.sql.classic.DataFrame
 import org.apache.spark.sql.connector.catalog.{Table, TableCapability}
 import org.apache.spark.sql.connector.catalog.TableCapability._
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, TableCapabilityCheck}
-import org.apache.spark.sql.execution.streaming.{Offset, Source, StreamingRelation}
+import org.apache.spark.sql.execution.streaming.{Offset, Source}
+import org.apache.spark.sql.execution.streaming.runtime.StreamingRelation
 import org.apache.spark.sql.sources.StreamSourceProvider
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{LongType, StringType, StructType}
@@ -41,7 +45,7 @@ class TableCapabilityCheckSuite extends AnalysisTest with SharedSparkSession {
       "fake",
       table,
       CaseInsensitiveStringMap.empty(),
-      TableCapabilityCheckSuite.schema.toAttributes,
+      toAttributes(TableCapabilityCheckSuite.schema),
       None,
       None,
       v1Relation)
@@ -207,7 +211,7 @@ private object TableCapabilityCheckSuite {
 
 private case object TestRelation extends LeafNode with NamedRelation {
   override def name: String = "source_relation"
-  override def output: Seq[AttributeReference] = TableCapabilityCheckSuite.schema.toAttributes
+  override def output: Seq[AttributeReference] = toAttributes(TableCapabilityCheckSuite.schema)
 }
 
 private case class CapabilityTable(_capabilities: TableCapability*) extends Table {
@@ -238,10 +242,10 @@ private class TestStreamSourceProvider extends StreamSourceProvider {
     new Source {
       override def schema: StructType = TableCapabilityCheckSuite.schema
       override def getOffset: Option[Offset] = {
-        throw new UnsupportedOperationException
+        throw SparkUnsupportedOperationException()
       }
       override def getBatch(start: Option[Offset], end: Offset): DataFrame = {
-        throw new UnsupportedOperationException
+        throw SparkUnsupportedOperationException()
       }
       override def stop(): Unit = {}
     }

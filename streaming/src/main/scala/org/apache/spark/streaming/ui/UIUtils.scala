@@ -21,8 +21,6 @@ import java.util.concurrent.TimeUnit
 
 import scala.xml.Node
 
-import org.apache.commons.text.StringEscapeUtils
-
 import org.apache.spark.ui.{ UIUtils => SparkUIUtils }
 
 private[streaming] object UIUtils {
@@ -46,7 +44,7 @@ private[streaming] object UIUtils {
    */
   def normalizeDuration(milliseconds: Long): (Double, TimeUnit) = {
     if (milliseconds < 1000) {
-      return (milliseconds, TimeUnit.MILLISECONDS)
+      return (milliseconds.toDouble, TimeUnit.MILLISECONDS)
     }
     val seconds = milliseconds.toDouble / 1000
     if (seconds < 60) {
@@ -69,9 +67,9 @@ private[streaming] object UIUtils {
    * will discard the fractional part.
    */
   def convertToTimeUnit(milliseconds: Long, unit: TimeUnit): Double = unit match {
-    case TimeUnit.NANOSECONDS => milliseconds * 1000 * 1000
-    case TimeUnit.MICROSECONDS => milliseconds * 1000
-    case TimeUnit.MILLISECONDS => milliseconds
+    case TimeUnit.NANOSECONDS => milliseconds.toDouble * 1000 * 1000
+    case TimeUnit.MICROSECONDS => milliseconds.toDouble * 1000
+    case TimeUnit.MILLISECONDS => milliseconds.toDouble
     case TimeUnit.SECONDS => milliseconds / 1000.0
     case TimeUnit.MINUTES => milliseconds / 1000.0 / 60.0
     case TimeUnit.HOURS => milliseconds / 1000.0 / 60.0 / 60.0
@@ -96,14 +94,7 @@ private[streaming] object UIUtils {
       failureReason: String,
       rowspan: Int = 1,
       includeFirstLineInExpandDetails: Boolean = true): Seq[Node] = {
-    val isMultiline = failureReason.indexOf('\n') >= 0
-    // Display the first line by default
-    val failureReasonSummary = StringEscapeUtils.escapeHtml4(
-      if (isMultiline) {
-        failureReason.substring(0, failureReason.indexOf('\n'))
-      } else {
-        failureReason
-      })
+    val (failureReasonSummary, isMultiline) = SparkUIUtils.errorSummary(failureReason)
     val failureDetails =
       if (isMultiline && !includeFirstLineInExpandDetails) {
         // Skip the first line

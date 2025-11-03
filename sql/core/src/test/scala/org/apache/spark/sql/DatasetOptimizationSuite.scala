@@ -18,7 +18,7 @@
 package org.apache.spark.sql
 
 import org.apache.spark.metrics.source.CodegenMetrics
-import org.apache.spark.sql.catalyst.encoders.RowEncoder
+import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.{CreateNamedStruct, Expression}
 import org.apache.spark.sql.catalyst.plans.logical.SerializeFromObject
 import org.apache.spark.sql.functions._
@@ -32,10 +32,11 @@ class DatasetOptimizationSuite extends QueryTest with SharedSparkSession {
   test("SPARK-26619: Prune the unused serializers from SerializeFromObject") {
     val data = Seq(("a", 1), ("b", 2), ("c", 3))
     val ds = data.toDS().map(t => (t._1, t._2 + 1)).select("_1")
-    val serializer = ds.queryExecution.optimizedPlan.collect {
+    val serializerOpt = ds.queryExecution.optimizedPlan.collectFirst {
       case s: SerializeFromObject => s
-    }.head
-    assert(serializer.serializer.size == 1)
+    }
+    assert(serializerOpt.isDefined)
+    assert(serializerOpt.get.serializer.size == 1)
     checkAnswer(ds, Seq(Row("a"), Row("b"), Row("c")))
   }
 
@@ -45,15 +46,16 @@ class DatasetOptimizationSuite extends QueryTest with SharedSparkSession {
   // serializers. The first `structFields` is aligned with first serializer and ditto
   // for other `structFields`.
   private def testSerializer(df: DataFrame, structFields: Seq[Seq[String]]*): Unit = {
-    val serializer = df.queryExecution.optimizedPlan.collect {
+    val serializerOpt = df.queryExecution.optimizedPlan.collectFirst {
       case s: SerializeFromObject => s
-    }.head
+    }
 
     def collectNamedStruct: PartialFunction[Expression, Seq[CreateNamedStruct]] = {
       case c: CreateNamedStruct => Seq(c)
     }
 
-    serializer.serializer.zip(structFields).foreach { case (ser, fields) =>
+    assert(serializerOpt.isDefined)
+    serializerOpt.get.serializer.zip(structFields).foreach { case (ser, fields) =>
       val structs: Seq[CreateNamedStruct] = ser.collect(collectNamedStruct).flatten
       assert(structs.size == fields.size)
       structs.zip(fields).foreach { case (struct, fieldNames) =>
@@ -184,22 +186,24 @@ class DatasetOptimizationSuite extends QueryTest with SharedSparkSession {
       assert(count3 == count2)
     }
 
-    withClue("array type") {
-      checkCodegenCache(() => Seq(Seq("abc")).toDS())
-    }
+    withSQLConf(SQLConf.ARTIFACTS_SESSION_ISOLATION_ALWAYS_APPLY_CLASSLOADER.key -> "true") {
+      withClue("array type") {
+        checkCodegenCache(() => Seq(Seq("abc")).toDS())
+      }
 
-    withClue("map type") {
-      checkCodegenCache(() => Seq(Map("abc" -> 1)).toDS())
-    }
+      withClue("map type") {
+        checkCodegenCache(() => Seq(Map("abc" -> 1)).toDS())
+      }
 
-    withClue("array of map") {
-      checkCodegenCache(() => Seq(Seq(Map("abc" -> 1))).toDS())
+      withClue("array of map") {
+        checkCodegenCache(() => Seq(Seq(Map("abc" -> 1))).toDS())
+      }
     }
   }
 
   test("SPARK-32652: Pruned nested serializers: RowEncoder") {
     val df = Seq(("a", 1), ("b", 2), ("c", 3)).toDF("i", "j")
-    val encoder = RowEncoder(new StructType().add("s", df.schema))
+    val encoder = ExpressionEncoder(new StructType().add("s", df.schema))
     val query = df.map(row => Row(row))(encoder).select("s.i")
     testSerializer(query, Seq(Seq("i")))
     checkAnswer(query, Seq(Row("a"), Row("b"), Row("c")))

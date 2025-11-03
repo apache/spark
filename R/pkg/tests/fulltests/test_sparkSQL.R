@@ -154,7 +154,7 @@ test_that("structType and structField", {
   expect_is(testSchema$fields()[[2]], "structField")
   expect_equal(testSchema$fields()[[1]]$dataType.toString(), "StringType")
 
-  expect_error(structType("A stri"), "DataType stri is not supported.")
+  expect_error(structType("A stri"), ".*Unsupported data type \"STRI\".*")
 })
 
 test_that("structField type strings", {
@@ -495,7 +495,7 @@ test_that("SPARK-17902: collect() with stringsAsFactors enabled", {
   expect_equal(iris$Species, df$Species)
 })
 
-test_that("SPARK-17811: can create DataFrame containing NA as date and time", {
+test_that("SPARK-17811, SPARK-18011: can create DataFrame containing NA as date and time", {
   df <- data.frame(
     id = 1:2,
     time = c(as.POSIXlt("2016-01-10"), NA),
@@ -622,7 +622,7 @@ test_that("read/write json files", {
 
     # Test errorifexists
     expect_error(write.df(df, jsonPath2, "json", mode = "errorifexists"),
-                 "analysis error - path file:.*already exists")
+                 "Error in save : analysis error - \\[PATH_ALREADY_EXISTS\\].*")
 
     # Test write.json
     jsonPath3 <- tempfile(pattern = "jsonPath3", fileext = ".json")
@@ -663,7 +663,7 @@ test_that("test tableNames and tables", {
   expect_equal(count(tables), count + 1)
   expect_equal(count(tables()), count(tables))
   expect_true("tableName" %in% colnames(tables()))
-  expect_true(all(c("tableName", "database", "isTemporary") %in% colnames(tables())))
+  expect_true(all(c("tableName", "namespace", "isTemporary") %in% colnames(tables())))
 
   suppressWarnings(registerTempTable(df, "table2"))
   tables <- listTables()
@@ -673,6 +673,22 @@ test_that("test tableNames and tables", {
 
   tables <- listTables()
   expect_equal(count(tables), count + 0)
+
+  count2 <- count(listTables())
+  schema <- structType(structField("name", "string"), structField("age", "integer"),
+                       structField("height", "float"))
+  createTable("people", source = "json", schema = schema)
+
+  expect_equal(length(tableNames()), count2 + 1)
+  expect_equal(length(tableNames("default")), count2 + 1)
+  expect_equal(length(tableNames("spark_catalog.default")), count2 + 1)
+
+  tables <- listTables()
+  expect_equal(count(tables), count2 + 1)
+  expect_equal(count(tables()), count(tables))
+  expect_equal(count(tables("default")), count2 + 1)
+  expect_equal(count(tables("spark_catalog.default")), count2 + 1)
+  sql("DROP TABLE IF EXISTS people")
 })
 
 test_that(
@@ -696,16 +712,27 @@ test_that(
   expect_true(dropTempView("dfView"))
 })
 
-test_that("test cache, uncache and clearCache", {
-  df <- read.json(jsonPath)
-  createOrReplaceTempView(df, "table1")
-  cacheTable("table1")
-  uncacheTable("table1")
+test_that("test tableExists, cache, uncache and clearCache", {
+  schema <- structType(structField("name", "string"), structField("age", "integer"),
+                       structField("height", "float"))
+  createTable("table1", source = "json", schema = schema)
+
+  cacheTable("default.table1")
+  uncacheTable("spark_catalog.default.table1")
   clearCache()
-  expect_true(dropTempView("table1"))
 
   expect_error(uncacheTable("zxwtyswklpf"),
-      "Error in uncacheTable : analysis error - Table or view not found: zxwtyswklpf")
+      "[TABLE_OR_VIEW_NOT_FOUND]*`zxwtyswklpf`*")
+
+  expect_true(tableExists("table1"))
+  expect_true(tableExists("default.table1"))
+  expect_true(tableExists("spark_catalog.default.table1"))
+
+  sql("DROP TABLE IF EXISTS spark_catalog.default.table1")
+
+  expect_false(tableExists("table1"))
+  expect_false(tableExists("default.table1"))
+  expect_false(tableExists("spark_catalog.default.table1"))
 })
 
 test_that("insertInto() on a registered table", {
@@ -1264,6 +1291,15 @@ test_that("drop column", {
   df1 <- drop(df, df$age)
   expect_equal(columns(df1), c("name", "age2"))
 
+  df1 <- drop(df, df$age, df$name)
+  expect_equal(columns(df1), c("age2"))
+
+  df1 <- drop(df, df$age, column("random"))
+  expect_equal(columns(df1), c("name", "age2"))
+
+  df1 <- drop(df, df$age, "random")
+  expect_equal(columns(df1), c("name", "age2"))
+
   df$age2 <- NULL
   expect_equal(columns(df), c("name", "age"))
   df$age3 <- NULL
@@ -1342,7 +1378,7 @@ test_that("test HiveContext", {
 
     schema <- structType(structField("name", "string"), structField("age", "integer"),
                          structField("height", "float"))
-    createTable("people", source = "json", schema = schema)
+    createTable("spark_catalog.default.people", source = "json", schema = schema)
     df <- read.df(jsonPathNa, "json", schema)
     insertInto(df, "people")
     expect_equal(collect(sql("SELECT age from people WHERE name = 'Bob'"))$age, c(16))
@@ -1378,7 +1414,7 @@ test_that("test HiveContext", {
 
     # Invalid mode
     expect_error(saveAsTable(df, "parquetest", "parquet", mode = "abc", path = parquetDataPath),
-                 "illegal argument - Unknown save mode: abc")
+                 "Error in mode : analysis error - \\[INVALID_SAVE_MODE\\].*")
     unsetHiveContext()
   }
 })
@@ -1436,6 +1472,10 @@ test_that("column functions", {
   c29 <- acosh(c1) + asinh(c1) + atanh(c1)
   c30 <- product(c1) + product(c1 * 0.5)
   c31 <- sec(c1) + csc(c1) + cot(c1)
+  c32 <- ln(c1) + positive(c2) + negative(c3)
+  c33 <- width_bucket(lit(2.5), lit(2.0), lit(3.0), lit(10L))
+  c34 <- collate(c, "UNICODE")
+  c35 <- collation(c)
 
   # Test if base::is.nan() is exposed
   expect_equal(is.nan(c("a", "b")), c(FALSE, FALSE))
@@ -1568,6 +1608,16 @@ test_that("column functions", {
 
   result <- collect(select(df, array_sort(df[[1]])))[[1]]
   expect_equal(result, list(list(1L, 2L, 3L, NA), list(4L, 5L, 6L, NA, NA)))
+  result <- collect(select(
+    df,
+    array_sort(
+      df[[1]],
+      function(x, y) otherwise(
+        when(isNull(x), 1L), otherwise(when(isNull(y), -1L), cast(y - x, "integer"))
+      )
+    )
+  ))[[1]]
+  expect_equal(result, list(list(3L, 2L, 1L, NA), list(6L, 5L, 4L, NA, NA)))
 
   result <- collect(select(df, sort_array(df[[1]], FALSE)))[[1]]
   expect_equal(result, list(list(3L, 2L, 1L, NA), list(6L, 5L, 4L, NA, NA)))
@@ -2014,6 +2064,8 @@ test_that("date functions on a DataFrame", {
   expect_equal(collect(select(df, weekofyear(df$b)))[, 1], c(50, 50, 51))
   expect_equal(collect(select(df, year(df$b)))[, 1], c(2012, 2013, 2014))
   expect_equal(collect(select(df, month(df$b)))[, 1], c(12, 12, 12))
+  expect_equal(collect(select(df, monthname(df$b)))[, 1], c("Dec", "Dec", "Dec"))
+  expect_equal(collect(select(df, dayname(df$b)))[, 1], c("Thu", "Sat", "Mon"))
   expect_equal(collect(select(df, last_day(df$b)))[, 1],
                c(as.Date("2012-12-31"), as.Date("2013-12-31"), as.Date("2014-12-31")))
   expect_equal(collect(select(df, next_day(df$b, "MONDAY")))[, 1],
@@ -2760,6 +2812,12 @@ test_that("test hint", {
     explain(hint(df, "hint1", 1.23456, "aaaaaaaaaa", hintList), TRUE)
   )
   expect_true(any(grepl("1.23456, aaaaaaaaaa", execution_plan_hint)))
+
+  a <- column("id")
+  rebalance_plan_hint <- capture.output(
+      explain(hint(df, "rebalance", as.integer(2), a), TRUE)
+  )
+  expect_true(any(grepl("RebalancePartitions", rebalance_plan_hint)))
 })
 
 test_that("toJSON() on DataFrame", {
@@ -2965,6 +3023,32 @@ test_that("mutate(), transform(), rename() and names()", {
     df$age + 12345678901234567890 + 12345678901234567890 + 12345678901234
   )
   expect_match(tail(columns(newDF), 1L), "234567890", fixed = TRUE)
+})
+
+test_that("unpivot / melt", {
+  df <- createDataFrame(data.frame(
+    id = 1:3, x = c(1, 3, 5), y = c(2, 4, 6), z = c(-1, 0, 1)
+  ))
+
+  result <- unpivot(df, "id", c("x", "y"), "var", "val")
+  expect_s4_class(result, "SparkDataFrame")
+  expect_equal(columns(result), c("id", "var", "val"))
+  expect_equal(count(distinct(select(result, "var"))), 2)
+
+  result <- unpivot(df, "id", NULL, "variable", "value")
+  expect_s4_class(result, "SparkDataFrame")
+  expect_equal(columns(result), c("id", "variable", "value"))
+  expect_equal(count(distinct(select(result, "variable"))), 3)
+
+  result <- melt(df, "id", c("x", "y"), "key", "value")
+  expect_s4_class(result, "SparkDataFrame")
+  expect_equal(columns(result), c("id", "key", "value"))
+  expect_equal(count(distinct(select(result, "key"))), 2)
+
+  result <- melt(df, "id", NULL, "key", "val")
+  expect_s4_class(result, "SparkDataFrame")
+  expect_equal(columns(result), c("id", "key", "val"))
+  expect_equal(count(distinct(select(result, "key"))), 3)
 })
 
 test_that("read/write ORC files", {
@@ -3321,8 +3405,8 @@ test_that("approxQuantile() on a DataFrame", {
 
 test_that("SQL error message is returned from JVM", {
   retError <- tryCatch(sql("select * from blah"), error = function(e) e)
-  expect_equal(grepl("Table or view not found", retError), TRUE)
-  expect_equal(grepl("blah", retError), TRUE)
+  expect_equal(grepl("[TABLE_OR_VIEW_NOT_FOUND]", retError), TRUE)
+  expect_equal(grepl("`blah`", retError), TRUE)
 })
 
 irisDF <- suppressWarnings(createDataFrame(iris))
@@ -3411,6 +3495,8 @@ test_that("Method coltypes() to get and set R's data types of a DataFrame", {
                "Length of type vector should match the number of columns for SparkDataFrame")
   expect_error(coltypes(df) <- c("environment", "list"),
                "Only atomic type is supported for column types")
+
+  dropTempView("dfView")
 })
 
 test_that("Method str()", {
@@ -3450,6 +3536,8 @@ test_that("Method str()", {
 
   # Test utils:::str
   expect_equal(capture.output(utils:::str(iris)), capture.output(str(iris)))
+
+  dropTempView("irisView")
 })
 
 test_that("Histogram", {
@@ -3911,15 +3999,16 @@ test_that("Call DataFrameWriter.save() API in Java without path and check argume
   # It makes sure that we can omit path argument in write.df API and then it calls
   # DataFrameWriter.save() without path.
   expect_error(write.df(df, source = "csv"),
-              "Error in save : illegal argument - Expected exactly one path to be specified")
+               paste("Error in save : org.apache.spark.SparkIllegalArgumentException:",
+                     "'path' is not specified."))
   expect_error(write.json(df, jsonPath),
-              "Error in json : analysis error - path file:.*already exists")
+              "Error in json : analysis error - \\[PATH_ALREADY_EXISTS\\].*")
   expect_error(write.text(df, jsonPath),
-              "Error in text : analysis error - path file:.*already exists")
+              "Error in text : analysis error - \\[PATH_ALREADY_EXISTS\\].*")
   expect_error(write.orc(df, jsonPath),
-              "Error in orc : analysis error - path file:.*already exists")
+              "Error in orc : analysis error - \\[PATH_ALREADY_EXISTS\\].*")
   expect_error(write.parquet(df, jsonPath),
-              "Error in parquet : analysis error - path file:.*already exists")
+              "Error in parquet : analysis error - \\[PATH_ALREADY_EXISTS\\].*")
   expect_error(write.parquet(df, jsonPath, mode = 123), "mode should be character or omitted.")
 
   # Arguments checking in R side.
@@ -3937,14 +4026,17 @@ test_that("Call DataFrameWriter.load() API in Java without path and check argume
   # It makes sure that we can omit path argument in read.df API and then it calls
   # DataFrameWriter.load() without path.
   expect_error(read.df(source = "json"),
-               paste("Error in load : analysis error - Unable to infer schema for JSON.",
-                     "It must be specified manually"))
-  expect_error(read.df("arbitrary_path"), "Error in load : analysis error - Path does not exist")
-  expect_error(read.json("arbitrary_path"), "Error in json : analysis error - Path does not exist")
-  expect_error(read.text("arbitrary_path"), "Error in text : analysis error - Path does not exist")
-  expect_error(read.orc("arbitrary_path"), "Error in orc : analysis error - Path does not exist")
+               "Error in load : analysis error - \\[UNABLE_TO_INFER_SCHEMA\\].*")
+  expect_error(read.df("arbitrary_path"),
+               "Error in load : analysis error - \\[PATH_NOT_FOUND\\].*")
+  expect_error(read.json("arbitrary_path"),
+               "Error in json : analysis error - \\[PATH_NOT_FOUND\\].*")
+  expect_error(read.text("arbitrary_path"),
+               "Error in text : analysis error - \\[PATH_NOT_FOUND\\].*")
+  expect_error(read.orc("arbitrary_path"),
+               "Error in orc : analysis error - \\[PATH_NOT_FOUND\\].*")
   expect_error(read.parquet("arbitrary_path"),
-              "Error in parquet : analysis error - Path does not exist")
+               "Error in parquet : analysis error - \\[PATH_NOT_FOUND\\].*")
 
   # Arguments checking in R side.
   expect_error(read.df(path = c(3)),
@@ -3963,14 +4055,14 @@ test_that("Specify a schema by using a DDL-formatted string when reading", {
   expect_is(df1, "SparkDataFrame")
   expect_equal(dtypes(df1), list(c("name", "string"), c("age", "double")))
 
-  expect_error(read.df(jsonPath, "json", "name stri"), "DataType stri is not supported.")
+  expect_error(read.df(jsonPath, "json", "name stri"), ".*Unsupported data type \"STRI\".*")
 
   # Test loadDF with a user defined schema in a DDL-formatted string.
   df2 <- loadDF(jsonPath, "json", "name STRING, age DOUBLE")
   expect_is(df2, "SparkDataFrame")
   expect_equal(dtypes(df2), list(c("name", "string"), c("age", "double")))
 
-  expect_error(loadDF(jsonPath, "json", "name stri"), "DataType stri is not supported.")
+  expect_error(loadDF(jsonPath, "json", "name stri"), ".*Unsupported data type \"STRI\".*")
 })
 
 test_that("Collect on DataFrame when NAs exists at the top of a timestamp column", {
@@ -4011,22 +4103,42 @@ test_that("Collect on DataFrame when NAs exists at the top of a timestamp column
   expect_equal(class(ldf3$col3), c("POSIXct", "POSIXt"))
 })
 
-test_that("catalog APIs, currentDatabase, setCurrentDatabase, listDatabases", {
+test_that("catalog APIs, listCatalogs, setCurrentCatalog, currentCatalog", {
+  expect_equal(currentCatalog(), "spark_catalog")
+  expect_error(setCurrentCatalog("spark_catalog"), NA)
+  expect_error(setCurrentCatalog("zxwtyswklpf"),
+               "[CATALOG_NOT_FOUND]*`zxwtyswklpf`*")
+  catalogs <- collect(listCatalogs())
+})
+
+test_that("catalog APIs, currentDatabase, setCurrentDatabase, listDatabases, getDatabase", {
   expect_equal(currentDatabase(), "default")
   expect_error(setCurrentDatabase("default"), NA)
   expect_error(setCurrentDatabase("zxwtyswklpf"),
-               paste0("Error in setCurrentDatabase : analysis error - Database ",
-               "'zxwtyswklpf' does not exist"))
+               "[SCHEMA_NOT_FOUND]*`zxwtyswklpf`*")
+
+  expect_true(databaseExists("default"))
+  expect_true(databaseExists("spark_catalog.default"))
+  expect_false(databaseExists("some_db"))
+  expect_false(databaseExists("spark_catalog.some_db"))
+
   dbs <- collect(listDatabases())
-  expect_equal(names(dbs), c("name", "description", "locationUri"))
+  expect_equal(names(dbs), c("name", "catalog", "description", "locationUri"))
   expect_equal(which(dbs[, 1] == "default"), 1)
+
+  db <- getDatabase("spark_catalog.default")
+  expect_equal(db$name, "default")
+  expect_equal(db$catalog, "spark_catalog")
 })
 
-test_that("catalog APIs, listTables, listColumns, listFunctions", {
+test_that("catalog APIs, listTables, getTable, listColumns, listFunctions, functionExists", {
   tb <- listTables()
   count <- count(tables())
+  expect_equal(nrow(listTables("default")), count)
+  expect_equal(nrow(listTables("spark_catalog.default")), count)
   expect_equal(nrow(tb), count)
-  expect_equal(colnames(tb), c("name", "database", "description", "tableType", "isTemporary"))
+  expect_equal(colnames(tb),
+               c("name", "catalog", "namespace", "description", "tableType", "isTemporary"))
 
   createOrReplaceTempView(as.DataFrame(cars), "cars")
 
@@ -4035,35 +4147,84 @@ test_that("catalog APIs, listTables, listColumns, listFunctions", {
   tbs <- collect(tb)
   expect_true(nrow(tbs[tbs$name == "cars", ]) > 0)
   expect_error(listTables("bar"),
-               "Error in listTables : no such database - Database 'bar' not found")
+               "[SCHEMA_NOT_FOUND]*`bar`*")
 
   c <- listColumns("cars")
   expect_equal(nrow(c), 2)
   expect_equal(colnames(c),
-               c("name", "description", "dataType", "nullable", "isPartition", "isBucket"))
+               c("name", "description", "dataType", "nullable", "isPartition", "isBucket",
+                 "isCluster"))
   expect_equal(collect(c)[[1]][[1]], "speed")
   expect_error(listColumns("zxwtyswklpf", "default"),
-               paste("Error in listColumns : analysis error - Table",
-                     "'zxwtyswklpf' does not exist in database 'default'"))
+               "[TABLE_OR_VIEW_NOT_FOUND]*`spark_catalog`.`default`.`zxwtyswklpf`*")
 
   f <- listFunctions()
   expect_true(nrow(f) >= 200) # 250
   expect_equal(colnames(f),
-               c("name", "database", "description", "className", "isTemporary"))
-  expect_equal(take(orderBy(f, "className"), 1)$className,
+               c("name", "catalog", "namespace", "description", "className", "isTemporary"))
+  expect_equal(take(orderBy(filter(f, "className IS NOT NULL"), "className"), 1)$className,
                "org.apache.spark.sql.catalyst.expressions.Abs")
   expect_error(listFunctions("zxwtyswklpf_db"),
-               paste("Error in listFunctions : analysis error - Database",
-                     "'zxwtyswklpf_db' does not exist"))
+               "[SCHEMA_NOT_FOUND]*`zxwtyswklpf_db`*")
+
+  expect_true(functionExists("abs"))
+  expect_false(functionExists("aabbss"))
+
+  func0 <- getFunc("abs")
+  expect_equal(func0$name, "abs")
+  expect_equal(func0$className, "org.apache.spark.sql.catalyst.expressions.Abs")
+  expect_true(func0$isTemporary)
+
+  sql("CREATE FUNCTION func1 AS 'org.apache.spark.sql.catalyst.expressions.Add'")
+
+  func1 <- getFunc("spark_catalog.default.func1")
+  expect_equal(func1$name, "func1")
+  expect_equal(func1$catalog, "spark_catalog")
+  expect_equal(length(func1$namespace), 1)
+  expect_equal(func1$namespace[[1]], "default")
+  expect_equal(func1$className, "org.apache.spark.sql.catalyst.expressions.Add")
+  expect_false(func1$isTemporary)
+
+  expect_true(functionExists("func1"))
+  expect_true(functionExists("default.func1"))
+  expect_true(functionExists("spark_catalog.default.func1"))
+
+  expect_false(functionExists("func2"))
+  expect_false(functionExists("default.func2"))
+  expect_false(functionExists("spark_catalog.default.func2"))
+
+  sql("DROP FUNCTION func1")
+
+  expect_false(functionExists("func1"))
+  expect_false(functionExists("default.func1"))
+  expect_false(functionExists("spark_catalog.default.func1"))
 
   # recoverPartitions does not work with temporary view
   expect_error(recoverPartitions("cars"),
-               paste("Error in recoverPartitions : analysis error - cars is a temp view.",
-                     "'recoverPartitions()' expects a table"), fixed = TRUE)
+               "[EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE]*`cars`*")
   expect_error(refreshTable("cars"), NA)
   expect_error(refreshByPath("/"), NA)
 
+  view <- getTable("cars")
+  expect_equal(view$name, "cars")
+  expect_equal(view$tableType, "TEMPORARY")
+  expect_true(view$isTemporary)
+
   dropTempView("cars")
+
+  schema <- structType(structField("name", "string"), structField("age", "integer"),
+                       structField("height", "float"))
+  createTable("default.people", source = "json", schema = schema)
+
+  tbl <- getTable("spark_catalog.default.people")
+  expect_equal(tbl$name, "people")
+  expect_equal(tbl$catalog, "spark_catalog")
+  expect_equal(length(tbl$namespace), 1)
+  expect_equal(tbl$namespace[[1]], "default")
+  expect_equal(tbl$tableType, "MANAGED")
+  expect_false(tbl$isTemporary)
+
+  sql("DROP TABLE IF EXISTS people")
 })
 
 test_that("assert_true, raise_error", {
@@ -4082,6 +4243,54 @@ test_that("assert_true, raise_error", {
 
   expect_error(collect(select(filtered, raise_error("error message"))), "error message")
   expect_error(collect(select(filtered, raise_error(filtered$name))), "Justin")
+})
+
+test_that("SPARK-41937: check class column for multi-class object works", {
+  .originalTimeZone <- Sys.getenv("TZ")
+  Sys.setenv(TZ = "")
+  temp_time <- as.POSIXlt("2015-03-11 12:13:04.043", tz = "")
+  sdf <- createDataFrame(
+    data.frame(x = temp_time + c(-1, 1, -1, 1, -1)),
+    schema = structType("x timestamp")
+  )
+  expect_warning(collect(filter(sdf, column("x") > temp_time)), NA)
+  expect_equal(collect(filter(sdf, column("x") > temp_time)), data.frame(x = temp_time + c(1, 1)))
+  expect_warning(collect(filter(sdf, contains(column("x"), temp_time + 5))), NA)
+  expect_warning(
+    collect(
+      mutate(
+        sdf,
+        newcol = otherwise(when(column("x") > lit(temp_time), temp_time), temp_time + 1)
+      )
+    ),
+    NA
+  )
+  expect_equal(
+    collect(
+      mutate(
+        sdf,
+        newcol = otherwise(when(column("x") > lit(temp_time), temp_time), temp_time + 1)
+      )
+    ),
+    data.frame(x = temp_time + c(-1, 1, -1, 1, -1), newcol = temp_time + c(1, 0, 1, 0, 1))
+  )
+  expect_error(
+    collect(fillna(sdf, temp_time)),
+    "value should be an integer, numeric, character or named list"
+  )
+  expect_error(
+    collect(fillna(sdf, list(x = temp_time))),
+    "value should be an integer, numeric or character"
+  )
+  expect_warning(
+    collect(mutate(sdf, x2 = ifelse(column("x") > temp_time, temp_time + 5, temp_time - 5))),
+    NA
+  )
+  expect_equal(
+    collect(mutate(sdf, x2 = ifelse(column("x") > temp_time, temp_time + 5, temp_time - 5))),
+    data.frame(x = temp_time + c(-1, 1, -1, 1, -1), x2 = temp_time + c(-5, 5, -5, 5, -5))
+  )
+  Sys.setenv(TZ = .originalTimeZone)
 })
 
 compare_list <- function(list1, list2) {

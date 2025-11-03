@@ -8,6 +8,7 @@
 *.swp
 *~
 .java-version
+.python-version
 .DS_Store
 .ammonite
 .bloop
@@ -18,10 +19,7 @@
 .ensime_cache/
 .ensime_lucene
 .generated-mima*
-# All the files under .idea/ are ignore. To add new files under ./idea that are not in the VCS yet, please use `git add -f`
 .idea/
-# SPARK-35223: Add IssueNavigationLink to make IDEA support hyperlink on JIRA Ticket and GitHub PR on Git plugin.
-!.idea/vcs.xml
 .idea_modules/
 .metals
 .project
@@ -29,6 +27,7 @@
 .scala_dependencies
 .settings
 .vscode
+artifacts/
 /lib/
 R-unit-tests.log
 R/unit-tests.out
@@ -53,6 +52,7 @@ dev/create-release/*final
 dev/create-release/*txt
 dev/pr-deps/
 dist/
+docs/_generated/
 docs/_site/
 docs/api
 docs/.local_ruby_bundle
@@ -76,7 +76,9 @@ python/.eggs/
 python/coverage.xml
 python/deps
 python/docs/_site/
+python/docs/source/development/errors.rst
 python/docs/source/reference/**/api/
+python/docs/source/tutorial/pandas_on_spark/supported_pandas_api.rst
 python/test_coverage/coverage_data
 python/test_coverage/htmlcov
 python/pyspark/python
@@ -119,6 +121,11 @@ spark-warehouse/
 node_modules
 
 # For Antlr
-sql/catalyst/gen/
-sql/catalyst/src/main/antlr4/org/apache/spark/sql/catalyst/parser/SqlBaseLexer.tokens
-sql/catalyst/src/main/antlr4/org/apache/spark/sql/catalyst/parser/gen/
+sql/api/gen/
+sql/api/src/main/gen/
+sql/api/src/main/antlr4/org/apache/spark/sql/catalyst/parser/SqlBaseLexer.tokens
+sql/api/src/main/antlr4/org/apache/spark/sql/catalyst/parser/gen/
+
+tpcds-sf-1/
+tpcds-sf-1-text/
+tpcds-kit/

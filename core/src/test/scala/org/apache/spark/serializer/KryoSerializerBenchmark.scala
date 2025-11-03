@@ -28,7 +28,6 @@ import org.apache.spark.benchmark.{Benchmark, BenchmarkBase}
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Kryo._
 import org.apache.spark.internal.config.Tests.IS_TESTING
-import org.apache.spark.launcher.SparkLauncher.EXECUTOR_EXTRA_JAVA_OPTIONS
 import org.apache.spark.serializer.KryoTest._
 import org.apache.spark.util.ThreadUtils
 
@@ -38,9 +37,9 @@ import org.apache.spark.util.ThreadUtils
  * {{{
  *   1. without sbt:
  *      bin/spark-submit --class <this class> <spark core test jar>
- *   2. build/sbt "core/test:runMain <this class>"
+ *   2. build/sbt "core/Test/runMain <this class>"
  *   3. generate result:
- *      SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "core/test:runMain <this class>"
+ *      SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "core/Test/runMain <this class>"
  *      Results will be written to "benchmarks/KryoSerializerBenchmark-results.txt".
  * }}}
  */
@@ -76,9 +75,6 @@ object KryoSerializerBenchmark extends BenchmarkBase {
 
   def createSparkContext(usePool: Boolean): SparkContext = {
     val conf = new SparkConf()
-    // SPARK-29282 This is for consistency between JDK8 and JDK11.
-    conf.set(EXECUTOR_EXTRA_JAVA_OPTIONS,
-      "-XX:+UseParallelGC -XX:-UseDynamicNumberOfGCThreads")
     conf.set(SERIALIZER, "org.apache.spark.serializer.KryoSerializer")
     conf.set(KRYO_USER_REGISTRATORS, Seq(classOf[MyRegistrator].getName))
     conf.set(KRYO_USE_POOL, usePool)

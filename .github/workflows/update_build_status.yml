@@ -26,10 +26,13 @@ on:
 jobs:
   update:
     name: Update build status
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      checks: write
     steps:
       - name: "Update build status"
-        uses: actions/github-script@f05a81df23035049204b043b50c3322045ce7eb3 # pin@v3
+        uses: actions/github-script@v7
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
@@ -58,7 +61,7 @@ jobs:
 
                   // Iterator GitHub Checks in the PR
                   for await (const cr of checkRuns.data.check_runs) {
-                    if (cr.name == 'Build and test' && cr.conclusion != "action_required") {
+                    if (cr.name == 'Build' && cr.conclusion != "action_required") {
                       // text contains parameters to make request in JSON.
                       const params = JSON.parse(cr.output.text)
 
@@ -69,7 +72,7 @@ jobs:
                       } catch (error) {
                         console.error(error)
                         // Run not found. This can happen when the PR author removes GitHub Actions runs or
-                        // disalbes GitHub Actions.
+                        // disables GitHub Actions.
                         continue
                       }
 

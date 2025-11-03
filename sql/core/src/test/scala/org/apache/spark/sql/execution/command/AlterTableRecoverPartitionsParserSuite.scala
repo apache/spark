@@ -19,17 +19,17 @@ package org.apache.spark.sql.execution.command
 
 import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedTable}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser.parsePlan
-import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.RecoverPartitions
 import org.apache.spark.sql.test.SharedSparkSession
 
 class AlterTableRecoverPartitionsParserSuite extends AnalysisTest with SharedSparkSession {
 
   test("recover partitions without table") {
-    val errMsg = intercept[ParseException] {
-      parsePlan("ALTER TABLE RECOVER PARTITIONS")
-    }.getMessage
-    assert(errMsg.contains("Syntax error at or near 'PARTITIONS'"))
+    val sql = "ALTER TABLE RECOVER PARTITIONS"
+    checkError(
+      exception = parseException(parsePlan)(sql),
+      condition = "PARSE_SYNTAX_ERROR",
+      parameters = Map("error" -> "'PARTITIONS'", "hint" -> ""))
   }
 
   test("recover partitions of a table") {
@@ -38,8 +38,7 @@ class AlterTableRecoverPartitionsParserSuite extends AnalysisTest with SharedSpa
       RecoverPartitions(
         UnresolvedTable(
           Seq("tbl"),
-          "ALTER TABLE ... RECOVER PARTITIONS",
-          Some("Please use ALTER VIEW instead."))))
+          "ALTER TABLE ... RECOVER PARTITIONS")))
   }
 
   test("recover partitions of a table in a database") {
@@ -48,8 +47,7 @@ class AlterTableRecoverPartitionsParserSuite extends AnalysisTest with SharedSpa
       RecoverPartitions(
         UnresolvedTable(
           Seq("db", "tbl"),
-          "ALTER TABLE ... RECOVER PARTITIONS",
-          Some("Please use ALTER VIEW instead."))))
+          "ALTER TABLE ... RECOVER PARTITIONS")))
   }
 
   test("recover partitions of a table spark_catalog") {
@@ -58,8 +56,7 @@ class AlterTableRecoverPartitionsParserSuite extends AnalysisTest with SharedSpa
       RecoverPartitions(
         UnresolvedTable(
           Seq("spark_catalog", "db", "TBL"),
-          "ALTER TABLE ... RECOVER PARTITIONS",
-          Some("Please use ALTER VIEW instead."))))
+          "ALTER TABLE ... RECOVER PARTITIONS")))
   }
 
   test("recover partitions of a table in nested namespaces") {
@@ -68,7 +65,6 @@ class AlterTableRecoverPartitionsParserSuite extends AnalysisTest with SharedSpa
       RecoverPartitions(
         UnresolvedTable(
           Seq("ns1", "ns2", "ns3", "ns4", "ns5", "ns6", "ns7", "ns8", "t"),
-          "ALTER TABLE ... RECOVER PARTITIONS",
-          Some("Please use ALTER VIEW instead."))))
+          "ALTER TABLE ... RECOVER PARTITIONS")))
   }
 }

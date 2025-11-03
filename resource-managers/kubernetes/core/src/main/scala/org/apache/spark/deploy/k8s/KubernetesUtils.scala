@@ -19,13 +19,12 @@ package org.apache.spark.deploy.k8s
 import java.io.{File, IOException}
 import java.net.URI
 import java.security.SecureRandom
-import java.util.{Collections, UUID}
+import java.util.{Collections, HexFormat, UUID}
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
-import io.fabric8.kubernetes.api.model.{Container, ContainerBuilder, ContainerStateRunning, ContainerStateTerminated, ContainerStateWaiting, ContainerStatus, HasMetadata, OwnerReferenceBuilder, Pod, PodBuilder, Quantity}
+import io.fabric8.kubernetes.api.model.{Container, ContainerBuilder, ContainerStateRunning, ContainerStateTerminated, ContainerStateWaiting, ContainerStatus, EnvVar, EnvVarBuilder, EnvVarSourceBuilder, HasMetadata, OwnerReferenceBuilder, Pod, PodBuilder, Quantity}
 import io.fabric8.kubernetes.client.KubernetesClient
-import org.apache.commons.codec.binary.Hex
 import org.apache.hadoop.fs.{FileSystem, Path}
 
 import org.apache.spark.{SparkConf, SparkException}
@@ -33,6 +32,7 @@ import org.apache.spark.annotation.{DeveloperApi, Since, Unstable}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.k8s.Config.KUBERNETES_FILE_UPLOAD_PATH
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.LogKeys.POD_ID
 import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.resource.ResourceUtils
 import org.apache.spark.util.{Clock, SystemClock, Utils}
@@ -102,7 +102,7 @@ object KubernetesUtils extends Logging {
       val hadoopConf = SparkHadoopUtil.get.newConfiguration(conf)
       val localFile = downloadFile(templateFileName, Utils.createTempDir(), conf, hadoopConf)
       val templateFile = new File(new java.net.URI(localFile).getPath)
-      val pod = kubernetesClient.pods().load(templateFile).get()
+      val pod = kubernetesClient.pods().load(templateFile).item()
       selectSparkContainer(pod, containerName)
     } catch {
       case e: Exception =>
@@ -120,8 +120,8 @@ object KubernetesUtils extends Logging {
         case (sparkContainer :: Nil, rest) => Some((sparkContainer, rest))
         case _ =>
           logWarning(
-            s"specified container ${name} not found on pod template, " +
-              s"falling back to taking the first container")
+            log"specified container ${MDC(POD_ID, name)} not found on pod template, " +
+              log"falling back to taking the first container")
           Option.empty
       }
     val containers = pod.getSpec.getContainers.asScala.toList
@@ -145,7 +145,7 @@ object KubernetesUtils extends Logging {
   @Since("3.0.0")
   def formatPairsBundle(pairs: Seq[(String, String)], indent: Int = 1) : String = {
     // Use more loggable format if value is null or empty
-    val indentStr = "\t" * indent
+    val indentStr = "\t".repeat(indent)
     pairs.map {
       case (k, v) => s"\n$indentStr $k: ${Option(v).filter(_.nonEmpty).getOrElse("N/A")}"
     }.mkString("")
@@ -240,7 +240,7 @@ object KubernetesUtils extends Logging {
     }
 
     val time = java.lang.Long.toHexString(clock.getTimeMillis() & 0xFFFFFFFFFFL)
-    Hex.encodeHexString(random) + time
+    HexFormat.of().formatHex(random) + time
   }
 
   /**
@@ -380,5 +380,38 @@ object KubernetesUtils extends Logging {
         originalMetadata.setOwnerReferences(Collections.singletonList(reference))
       }
     }
+  }
+
+  /**
+   * This function builds the EnvVar objects for each key-value env with non-null value.
+   * If value is an empty string, define a key-only environment variable.
+   */
+  @Since("3.4.0")
+  def buildEnvVars(env: Seq[(String, String)]): Seq[EnvVar] = {
+    env.filterNot(_._2 == null)
+      .map { case (k, v) =>
+        new EnvVarBuilder()
+          .withName(k)
+          .withValue(v)
+          .build()
+      }
+  }
+
+  /**
+   * This function builds the EnvVar objects for each field ref env
+   * with non-null apiVersion and fieldPath.
+   */
+  @Since("3.4.0")
+  def buildEnvVarsWithFieldRef(env: Seq[(String, String, String)]): Seq[EnvVar] = {
+    env.filterNot(_._2 == null)
+      .filterNot(_._3 == null)
+      .map { case (key, apiVersion, fieldPath) =>
+        new EnvVarBuilder()
+          .withName(key)
+          .withValueFrom(new EnvVarSourceBuilder()
+            .withNewFieldRef(apiVersion, fieldPath)
+            .build())
+          .build()
+      }
   }
 }

@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.streaming.sources
 
 import java.io.ByteArrayOutputStream
 
-import org.apache.spark.sql.execution.streaming.MemoryStream
+import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.streaming.{StreamTest, Trigger}
 
 class ConsoleWriteSupportSuite extends StreamTest {
@@ -102,7 +102,6 @@ class ConsoleWriteSupportSuite extends StreamTest {
         ||    2|
         |+-----+
         |only showing top 2 rows
-        |
         |""".stripMargin)
   }
 

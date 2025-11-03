@@ -36,7 +36,7 @@ class BlockRDD[T: ClassTag](sc: SparkContext, @transient val blockIds: Array[Blo
 
   override def getPartitions: Array[Partition] = {
     assertValid()
-    (0 until blockIds.length).map { i =>
+    blockIds.indices.map { i =>
       new BlockRDDPartition(blockIds(i), i).asInstanceOf[Partition]
     }.toArray
   }

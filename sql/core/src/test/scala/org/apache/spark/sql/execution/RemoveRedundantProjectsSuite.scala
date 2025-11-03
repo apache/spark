@@ -246,7 +246,7 @@ abstract class RemoveRedundantProjectsSuiteBase
 
           val df =
             spark.read.format(format).load(path.getCanonicalPath).filter($"i" > 0).orderBy($"i")
-          assert(df.collect === Array(Row(1, 1), Row(2, 2)))
+          assert(df.collect() === Array(Row(1, 1), Row(2, 2)))
         }
       }
     }

@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 class SimplifyCastsSuite extends PlanTest {
@@ -96,6 +97,17 @@ class SimplifyCastsSuite extends PlanTest {
         input.select($"b".cast(DecimalType(10, 2)).cast(DecimalType(24, 2)).as("casted")).analyze),
       input.select($"b".cast(DecimalType(10, 2)).cast(DecimalType(24, 2)).as("casted")).analyze)
 
+    withClue("SPARK-39963: cast date to decimal") {
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> false.toString) {
+        // ANSI mode does not allow to cast a date to a decimal.
+        comparePlans(Optimize.execute(
+          input.select(
+            $"c".cast(DecimalType(10, 2)).cast(DecimalType(24, 2)).as("casted")).analyze),
+          input.select(
+            $"c".cast(DecimalType(10, 2)).cast(DecimalType(24, 2)).as("casted")).analyze)
+      }
+    }
+
     comparePlans(
       Optimize.execute(
         input.select($"c".cast(TimestampType).cast(StringType).as("casted")).analyze),
@@ -104,5 +116,26 @@ class SimplifyCastsSuite extends PlanTest {
       Optimize.execute(
         input.select($"d".cast(LongType).cast(StringType).as("casted")).analyze),
       input.select($"d".cast(LongType).cast(StringType).as("casted")).analyze)
+  }
+
+  test("SPARK-45909: Remove the cast if it can safely up-cast in IsNotNull") {
+    val input = LocalRelation($"a".int, $"b".decimal(18, 0))
+    // Remove cast
+    comparePlans(
+      Optimize.execute(
+        input.select($"a".cast(DecimalType(18, 1)).isNotNull.as("v")).analyze),
+      input.select($"a".isNotNull.as("v")).analyze)
+    comparePlans(
+      Optimize.execute(input.select($"a".cast(LongType).isNotNull.as("v")).analyze),
+      input.select($"a".isNotNull.as("v")).analyze)
+    comparePlans(
+      Optimize.execute(input.select($"b".cast(LongType).isNotNull.as("v")).analyze),
+      input.select($"b".isNotNull.as("v")).analyze)
+
+    // Can not remove cast
+    comparePlans(
+      Optimize.execute(
+        input.select($"a".cast(DecimalType(2, 1)).as("v")).analyze),
+      input.select($"a".cast(DecimalType(2, 1)).as("v")).analyze)
   }
 }

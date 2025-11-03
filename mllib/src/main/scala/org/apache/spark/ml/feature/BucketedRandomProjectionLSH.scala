@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml.feature
 
+import java.io.{DataInputStream, DataOutputStream}
+
 import scala.util.Random
 
 import org.apache.hadoop.fs.Path
@@ -26,9 +28,8 @@ import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared.HasSeed
 import org.apache.spark.ml.util._
-import org.apache.spark.mllib.util.MLUtils
-import org.apache.spark.sql.Row
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * Params for [[BucketedRandomProjectionLSH]].
@@ -67,8 +68,11 @@ class BucketedRandomProjectionLSHModel private[ml](
     private[ml] val randMatrix: Matrix)
   extends LSHModel[BucketedRandomProjectionLSHModel] with BucketedRandomProjectionLSHParams {
 
+  // For ml connect only
+  private[ml] def this() = this("", Matrices.empty)
+
   private[ml] def this(uid: String, randUnitVectors: Array[Vector]) = {
-    this(uid, Matrices.fromVectors(randUnitVectors))
+    this(uid, Matrices.fromVectors(randUnitVectors.toImmutableArraySeq))
   }
 
   private[ml] def randUnitVectors: Array[Vector] = randMatrix.rowIter.toArray
@@ -179,7 +183,7 @@ class BucketedRandomProjectionLSH(override val uid: String)
     inputDim: Int): BucketedRandomProjectionLSHModel = {
     val rng = new Random($(seed))
     val localNumHashTables = $(numHashTables)
-    val values = Array.fill(localNumHashTables * inputDim)(rng.nextGaussian)
+    val values = Array.fill(localNumHashTables * inputDim)(rng.nextGaussian())
     var i = 0
     while (i < localNumHashTables) {
       val offset = i * inputDim
@@ -210,6 +214,19 @@ object BucketedRandomProjectionLSH extends DefaultParamsReadable[BucketedRandomP
 
 @Since("2.1.0")
 object BucketedRandomProjectionLSHModel extends MLReadable[BucketedRandomProjectionLSHModel] {
+  // TODO: Save using the existing format of Array[Vector] once SPARK-12878 is resolved.
+  private[ml] case class Data(randUnitVectors: Matrix)
+
+  private[ml] def serializeData(data: Data, dos: DataOutputStream): Unit = {
+    import ReadWriteUtils._
+    serializeMatrix(data.randUnitVectors, dos)
+  }
+
+  private[ml] def deserializeData(dis: DataInputStream): Data = {
+    import ReadWriteUtils._
+    val randUnitVectors = deserializeMatrix(dis)
+    Data(randUnitVectors)
+  }
 
   @Since("2.1.0")
   override def read: MLReader[BucketedRandomProjectionLSHModel] = {
@@ -222,14 +239,11 @@ object BucketedRandomProjectionLSHModel extends MLReadable[BucketedRandomProject
   private[BucketedRandomProjectionLSHModel] class BucketedRandomProjectionLSHModelWriter(
     instance: BucketedRandomProjectionLSHModel) extends MLWriter {
 
-    // TODO: Save using the existing format of Array[Vector] once SPARK-12878 is resolved.
-    private case class Data(randUnitVectors: Matrix)
-
     override protected def saveImpl(path: String): Unit = {
-      DefaultParamsWriter.saveMetadata(instance, path, sc)
+      DefaultParamsWriter.saveMetadata(instance, path, sparkSession)
       val data = Data(instance.randMatrix)
       val dataPath = new Path(path, "data").toString
-      sparkSession.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
+      ReadWriteUtils.saveObject[Data](dataPath, data, sparkSession, serializeData)
     }
   }
 
@@ -240,14 +254,11 @@ object BucketedRandomProjectionLSHModel extends MLReadable[BucketedRandomProject
     private val className = classOf[BucketedRandomProjectionLSHModel].getName
 
     override def load(path: String): BucketedRandomProjectionLSHModel = {
-      val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
+      val metadata = DefaultParamsReader.loadMetadata(path, sparkSession, className)
 
       val dataPath = new Path(path, "data").toString
-      val data = sparkSession.read.parquet(dataPath)
-      val Row(randMatrix: Matrix) = MLUtils.convertMatrixColumnsToML(data, "randUnitVectors")
-        .select("randUnitVectors")
-        .head()
-      val model = new BucketedRandomProjectionLSHModel(metadata.uid, randMatrix)
+      val data = ReadWriteUtils.loadObject[Data](dataPath, sparkSession, deserializeData)
+      val model = new BucketedRandomProjectionLSHModel(metadata.uid, data.randUnitVectors)
 
       metadata.getAndSetParams(model)
       model

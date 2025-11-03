@@ -20,8 +20,6 @@ package org.apache.spark.network.protocol;
 import java.util.Objects;
 
 import io.netty.buffer.ByteBuf;
-import org.apache.commons.lang3.builder.ToStringBuilder;
-import org.apache.commons.lang3.builder.ToStringStyle;
 
 import org.apache.spark.network.buffer.ManagedBuffer;
 
@@ -75,8 +73,7 @@ public final class StreamResponse extends AbstractResponseMessage {
 
   @Override
   public boolean equals(Object other) {
-    if (other instanceof StreamResponse) {
-      StreamResponse o = (StreamResponse) other;
+    if (other instanceof StreamResponse o) {
       return byteCount == o.byteCount && streamId.equals(o.streamId);
     }
     return false;
@@ -84,11 +81,8 @@ public final class StreamResponse extends AbstractResponseMessage {
 
   @Override
   public String toString() {
-    return new ToStringBuilder(this, ToStringStyle.SHORT_PREFIX_STYLE)
-      .append("streamId", streamId)
-      .append("byteCount", byteCount)
-      .append("body", body())
-      .toString();
+    return "StreamResponse[streamId=" + streamId + ",byteCount=" + byteCount +
+        ",body=" + body() + "]";
   }
 
 }

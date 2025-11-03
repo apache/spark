@@ -206,8 +206,8 @@ private[ml] abstract class Selector[T <: SelectorModel[T]]
     val spark = dataset.sparkSession
     import spark.implicits._
 
-    val numFeatures = MetadataUtils.getNumFeatures(dataset, $(featuresCol))
-    val resultDF = getSelectionTestResult(dataset.toDF)
+    val numFeatures = DatasetUtils.getNumFeatures(dataset, $(featuresCol))
+    val resultDF = getSelectionTestResult(dataset.toDF())
 
     def getTopIndices(k: Int): Array[Int] = {
       resultDF.sort("pValue", "featureIndex")
@@ -233,7 +233,7 @@ private[ml] abstract class Selector[T <: SelectorModel[T]]
         val maxIndex = resultDF.sort("pValue", "featureIndex")
           .select("pValue")
           .as[Double].rdd
-          .zipWithIndex
+          .zipWithIndex()
           .flatMap { case (pValue, index) =>
             if (pValue <= f * (index + 1)) {
               Iterator.single(index.toInt)
@@ -341,7 +341,9 @@ private[feature] object SelectorModel {
       featuresCol: String,
       isNumericAttribute: Boolean): StructField = {
     val selector = selectedFeatures.toSet
-    val origAttrGroup = AttributeGroup.fromStructField(schema(featuresCol))
+    val origAttrGroup = AttributeGroup.fromStructField(
+      SchemaUtils.getSchemaField(schema, featuresCol)
+    )
     val featureAttributes: Array[Attribute] = if (origAttrGroup.attributes.nonEmpty) {
       origAttrGroup.attributes.get.zipWithIndex.filter(x => selector.contains(x._2)).map(_._1)
     } else {

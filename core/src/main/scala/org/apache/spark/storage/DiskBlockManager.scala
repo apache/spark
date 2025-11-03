@@ -19,7 +19,7 @@ package org.apache.spark.storage
 
 import java.io.{File, IOException}
 import java.nio.file.Files
-import java.nio.file.attribute.PosixFilePermission
+import java.nio.file.attribute.{PosixFilePermission, PosixFilePermissions}
 import java.util.UUID
 
 import scala.collection.mutable.HashMap
@@ -27,15 +27,17 @@ import scala.collection.mutable.HashMap
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.executor.ExecutorExitCode
 import org.apache.spark.internal.{config, Logging}
+import org.apache.spark.internal.LogKeys.{MERGE_DIR_NAME, PATH}
 import org.apache.spark.network.shuffle.ExecutorDiskUtils
 import org.apache.spark.storage.DiskBlockManager.ATTEMPT_ID_KEY
 import org.apache.spark.storage.DiskBlockManager.MERGE_DIR_KEY
 import org.apache.spark.storage.DiskBlockManager.MERGE_DIRECTORY
 import org.apache.spark.util.{ShutdownHookManager, Utils}
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * Creates and maintains the logical mapping between logical blocks and physical on-disk
@@ -79,9 +81,9 @@ private[spark] class DiskBlockManager(
   private val shutdownHook = addShutdownHook()
 
   // If either of these features are enabled, we must change permissions on block manager
-  // directories and files to accomodate the shuffle service deleting files in a secure environment.
-  // Parent directories are assumed to be restrictive to prevent unauthorized users from accessing
-  // or modifying world readable files.
+  // directories and files to accommodate the shuffle service deleting files in a secure
+  // environment. Parent directories are assumed to be restrictive to prevent unauthorized users
+  // from accessing or modifying world readable files.
   private val permissionChangingRequired = conf.get(config.SHUFFLE_SERVICE_ENABLED) && (
     conf.get(config.SHUFFLE_SERVICE_REMOVE_SHUFFLE_ENABLED) ||
     conf.get(config.SHUFFLE_SERVICE_FETCH_RDD_ENABLED)
@@ -139,15 +141,15 @@ private[spark] class DiskBlockManager(
       case mergedMetaBlockId: ShuffleMergedMetaBlockId =>
         getMergedShuffleFile(mergedMetaBlockId.name, dirs)
       case _ =>
-        throw new IllegalArgumentException(
-          s"Only merged block ID is supported, but got $blockId")
+        throw SparkException.internalError(
+          s"Only merged block ID is supported, but got $blockId", category = "STORAGE")
     }
   }
 
   private def getMergedShuffleFile(filename: String, dirs: Option[Array[String]]): File = {
     if (!dirs.exists(_.nonEmpty)) {
-      throw new IllegalArgumentException(
-        s"Cannot read $filename because merged shuffle dirs is empty")
+      throw SparkException.internalError(
+        s"Cannot read $filename because merged shuffle dirs is empty", category = "STORAGE")
     }
     new File(ExecutorDiskUtils.getFilePath(dirs.get, subDirsPerLocalDir, filename))
   }
@@ -167,8 +169,8 @@ private[spark] class DiskBlockManager(
       }
     }.filter(_ != null).flatMap { dir =>
       val files = dir.listFiles()
-      if (files != null) files.toSeq else Seq.empty
-    }
+      if (files != null) files.toImmutableArraySeq else Seq.empty
+    }.toImmutableArraySeq
   }
 
   /** List all the blocks currently stored on disk by the disk manager. */
@@ -218,18 +220,18 @@ private[spark] class DiskBlockManager(
 
   /** Produces a unique block id and File suitable for storing local intermediate results. */
   def createTempLocalBlock(): (TempLocalBlockId, File) = {
-    var blockId = new TempLocalBlockId(UUID.randomUUID())
+    var blockId = TempLocalBlockId(UUID.randomUUID())
     while (getFile(blockId).exists()) {
-      blockId = new TempLocalBlockId(UUID.randomUUID())
+      blockId = TempLocalBlockId(UUID.randomUUID())
     }
     (blockId, getFile(blockId))
   }
 
   /** Produces a unique block id and File suitable for storing shuffled intermediate results. */
   def createTempShuffleBlock(): (TempShuffleBlockId, File) = {
-    var blockId = new TempShuffleBlockId(UUID.randomUUID())
+    var blockId = TempShuffleBlockId(UUID.randomUUID())
     while (getFile(blockId).exists()) {
-      blockId = new TempShuffleBlockId(UUID.randomUUID())
+      blockId = TempShuffleBlockId(UUID.randomUUID())
     }
     val tmpFile = getFile(blockId)
     if (permissionChangingRequired) {
@@ -250,11 +252,12 @@ private[spark] class DiskBlockManager(
     Utils.getConfiguredLocalDirs(conf).flatMap { rootDir =>
       try {
         val localDir = Utils.createDirectory(rootDir, "blockmgr")
-        logInfo(s"Created local directory at $localDir")
+        logInfo(log"Created local directory at ${MDC(PATH, localDir)}")
         Some(localDir)
       } catch {
         case e: IOException =>
-          logError(s"Failed to create local dir in $rootDir. Ignoring this directory.", e)
+          logError(
+            log"Failed to create local dir in ${MDC(PATH, rootDir)}. Ignoring this directory.", e)
           None
       }
     }
@@ -273,7 +276,7 @@ private[spark] class DiskBlockManager(
       Utils.getConfiguredLocalDirs(conf).foreach { rootDir =>
         try {
           val mergeDir = new File(rootDir, mergeDirName)
-          if (!mergeDir.exists()) {
+          if (!mergeDir.exists() || mergeDir.listFiles().length < subDirsPerLocalDir) {
             // This executor does not find merge_manager directory, it will try to create
             // the merge_manager directory and the sub directories.
             logDebug(s"Try to create $mergeDir and its sub dirs since the " +
@@ -287,11 +290,12 @@ private[spark] class DiskBlockManager(
               }
             }
           }
-          logInfo(s"Merge directory and its sub dirs get created at $mergeDir")
+          logInfo(log"Merge directory and its sub dirs get created at ${MDC(PATH, mergeDir)}")
         } catch {
           case e: IOException =>
             logError(
-              s"Failed to create $mergeDirName dir in $rootDir. Ignoring this directory.", e)
+              log"Failed to create ${MDC(MERGE_DIR_NAME, mergeDirName)} dir in " +
+                log"${MDC(PATH, rootDir)}. Ignoring this directory.", e)
         }
       }
     }
@@ -301,9 +305,6 @@ private[spark] class DiskBlockManager(
    * Create a directory that is writable by the group.
    * Grant the permission 770 "rwxrwx---" to the directory so the shuffle server can
    * create subdirs/files within the merge folder.
-   * TODO: Find out why can't we create a dir using java api with permission 770
-   *  Files.createDirectories(mergeDir.toPath, PosixFilePermissions.asFileAttribute(
-   *  PosixFilePermissions.fromString("rwxrwx---")))
    */
   def createDirWithPermission770(dirToCreate: File): Unit = {
     var attempts = 0
@@ -315,20 +316,17 @@ private[spark] class DiskBlockManager(
         throw SparkCoreErrors.failToCreateDirectoryError(dirToCreate.getAbsolutePath, maxAttempts)
       }
       try {
-        val builder = new ProcessBuilder().command(
-          "mkdir", "-p", "-m770", dirToCreate.getAbsolutePath)
-        val proc = builder.start()
-        val exitCode = proc.waitFor()
+        Utils.createDirectory(dirToCreate)
+        Files.setPosixFilePermissions(
+          dirToCreate.toPath, PosixFilePermissions.fromString("rwxrwx---"))
         if (dirToCreate.exists()) {
           created = dirToCreate
         }
-        logDebug(
-          s"Created directory at ${dirToCreate.getAbsolutePath} with permission " +
-            s"770 and exitCode $exitCode")
+        logDebug(s"Created directory at ${dirToCreate.getAbsolutePath} with permission 770")
       } catch {
         case e: SecurityException =>
-          logWarning(s"Failed to create directory ${dirToCreate.getAbsolutePath} " +
-            s"with permission 770", e)
+          logWarning(log"Failed to create directory ${MDC(PATH, dirToCreate.getAbsolutePath)} " +
+            log"with permission 770", e)
           created = null;
       }
     }
@@ -375,7 +373,7 @@ private[spark] class DiskBlockManager(
             }
           } catch {
             case e: Exception =>
-              logError(s"Exception while deleting local spark dir: $localDir", e)
+              logError(log"Exception while deleting local spark dir: ${MDC(PATH, localDir)}", e)
           }
         }
       }

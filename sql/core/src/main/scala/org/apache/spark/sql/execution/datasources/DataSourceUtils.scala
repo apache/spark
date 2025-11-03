@@ -17,24 +17,24 @@
 
 package org.apache.spark.sql.execution.datasources
 
+import java.io.IOException
 import java.util.Locale
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.hadoop.fs.Path
-import org.json4s.NoTypeHints
+import org.json4s.{Formats, NoTypeHints}
 import org.json4s.jackson.Serialization
 
-import org.apache.spark.SparkUpgradeException
-import org.apache.spark.sql.{SPARK_LEGACY_DATETIME_METADATA_KEY, SPARK_LEGACY_INT96_METADATA_KEY, SPARK_TIMEZONE_METADATA_KEY, SPARK_VERSION_METADATA_KEY}
+import org.apache.spark.{SparkException, SparkUpgradeException}
+import org.apache.spark.sql.{sources, SPARK_LEGACY_DATETIME_METADATA_KEY, SPARK_LEGACY_INT96_METADATA_KEY, SPARK_TIMEZONE_METADATA_KEY, SPARK_VERSION_METADATA_KEY}
 import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogUtils}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, AttributeSet, Expression, ExpressionSet, PredicateHelper}
 import org.apache.spark.sql.catalyst.util.RebaseDateTime
 import org.apache.spark.sql.catalyst.util.RebaseDateTime.RebaseSpec
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.datasources.parquet.ParquetOptions
-import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy
+import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -54,9 +54,14 @@ object DataSourceUtils extends PredicateHelper {
   val PARTITION_OVERWRITE_MODE = "partitionOverwriteMode"
 
   /**
+   * The key to use for storing clusterBy columns as options.
+   */
+  val CLUSTERING_COLUMNS_KEY = "__clustering_columns"
+
+  /**
    * Utility methods for converting partitionBy columns to options and back.
    */
-  private implicit val formats = Serialization.formats(NoTypeHints)
+  private implicit val formats: Formats = Serialization.formats(NoTypeHints)
 
   def encodePartitioningColumns(columns: Seq[String]): String = {
     Serialization.write(columns)
@@ -73,7 +78,8 @@ object DataSourceUtils extends PredicateHelper {
   def checkFieldNames(format: FileFormat, schema: StructType): Unit = {
     schema.foreach { field =>
       if (!format.supportFieldName(field.name)) {
-        throw QueryCompilationErrors.columnNameContainsInvalidCharactersError(field.name)
+        throw QueryCompilationErrors.invalidColumnNameAsPathError(
+          format.getClass.getSimpleName, field.name)
       }
       field.dataType match {
         case s: StructType => checkFieldNames(format, s)
@@ -86,13 +92,17 @@ object DataSourceUtils extends PredicateHelper {
    * Verify if the schema is supported in datasource. This verification should be done
    * in a driver side.
    */
-  def verifySchema(format: FileFormat, schema: StructType): Unit = {
+  def verifySchema(format: FileFormat, schema: StructType, readOnly: Boolean = false): Unit = {
     schema.foreach { field =>
-      if (!format.supportDataType(field.dataType)) {
+      val supported = if (readOnly) {
+        format.supportReadDataType(field.dataType)
+      } else {
+        format.supportDataType(field.dataType)
+      }
+      if (!supported) {
         throw QueryCompilationErrors.dataTypeUnsupportedByDataSourceError(format.toString, field)
       }
     }
-    checkFieldNames(format, schema)
   }
 
   // SPARK-24626: Metadata files and temporary files should not be
@@ -173,7 +183,7 @@ object DataSourceUtils extends PredicateHelper {
         (SQLConf.PARQUET_REBASE_MODE_IN_READ.key, ParquetOptions.DATETIME_REBASE_MODE)
       case "Avro" =>
         (SQLConf.AVRO_REBASE_MODE_IN_READ.key, "datetimeRebaseMode")
-      case _ => throw new IllegalStateException(s"Unrecognized format $format.")
+      case _ => throw SparkException.internalError(s"Unrecognized format $format.")
     }
     QueryExecutionErrors.sparkUpgradeInReadingDatesError(format, config, option)
   }
@@ -183,9 +193,14 @@ object DataSourceUtils extends PredicateHelper {
       case "Parquet INT96" => SQLConf.PARQUET_INT96_REBASE_MODE_IN_WRITE.key
       case "Parquet" => SQLConf.PARQUET_REBASE_MODE_IN_WRITE.key
       case "Avro" => SQLConf.AVRO_REBASE_MODE_IN_WRITE.key
-      case _ => throw new IllegalStateException(s"Unrecognized format $format.")
+      case _ => throw SparkException.internalError(s"Unrecognized format $format.")
     }
     QueryExecutionErrors.sparkUpgradeInWritingDatesError(format, config)
+  }
+
+  def shouldIgnoreCorruptFileException(e: Throwable): Boolean = e match {
+    case _: RuntimeException | _: IOException | _: InternalError => true
+    case _ => false
   }
 
   def createDateRebaseFuncInRead(
@@ -274,10 +289,23 @@ object DataSourceUtils extends PredicateHelper {
     }
     val partitionSet = AttributeSet(partitionColumns)
     val (partitionFilters, dataFilters) = normalizedFilters.partition(f =>
-      f.references.subsetOf(partitionSet)
+      f.references.nonEmpty && f.references.subsetOf(partitionSet)
     )
     val extraPartitionFilter =
       dataFilters.flatMap(extractPredicatesWithinOutputSet(_, partitionSet))
     (ExpressionSet(partitionFilters ++ extraPartitionFilter).toSeq, dataFilters)
+  }
+
+  def containsFiltersWithCollation(filter: sources.Filter): Boolean = {
+    filter match {
+      case sources.And(left, right) =>
+        containsFiltersWithCollation(left) || containsFiltersWithCollation(right)
+      case sources.Or(left, right) =>
+        containsFiltersWithCollation(left) || containsFiltersWithCollation(right)
+      case sources.Not(child) =>
+        containsFiltersWithCollation(child)
+      case _: sources.CollatedFilter => true
+      case _ => false
+    }
   }
 }

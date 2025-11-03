@@ -37,16 +37,21 @@ import org.apache.hive.service.cli.RowSet;
 import org.apache.hive.service.cli.RowSetFactory;
 import org.apache.hive.service.cli.TableSchema;
 import org.apache.hive.service.cli.session.HiveSession;
-import org.apache.logging.log4j.core.appender.AbstractWriterAppender;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import org.apache.hive.service.rpc.thrift.TRowSet;
+import org.apache.hive.service.rpc.thrift.TTableSchema;
+import org.apache.logging.log4j.core.Appender;
+
+import org.apache.spark.internal.SparkLogger;
+import org.apache.spark.internal.SparkLoggerFactory;
+import org.apache.spark.internal.LogKeys;
+import org.apache.spark.internal.MDC;
 
 /**
  * OperationManager.
  *
  */
 public class OperationManager extends AbstractService {
-  private final Logger LOG = LoggerFactory.getLogger(OperationManager.class.getName());
+  private static final SparkLogger LOG = SparkLoggerFactory.getLogger(OperationManager.class);
 
   private final Map<OperationHandle, Operation> handleToOperation =
       new HashMap<OperationHandle, Operation>();
@@ -80,25 +85,15 @@ public class OperationManager extends AbstractService {
 
   private void initOperationLogCapture(String loggingMode) {
     // Register another Appender (with the same layout) that talks to us.
-    AbstractWriterAppender ap = new LogDivertAppender(this, OperationLog.getLoggingLevel(loggingMode));
+    Appender ap = LogDivertAppender.create(this, OperationLog.getLoggingLevel(loggingMode));
     ((org.apache.logging.log4j.core.Logger)org.apache.logging.log4j.LogManager.getRootLogger()).addAppender(ap);
     ap.start();
   }
 
   public ExecuteStatementOperation newExecuteStatementOperation(HiveSession parentSession,
-      String statement, Map<String, String> confOverlay, boolean runAsync)
-          throws HiveSQLException {
-    ExecuteStatementOperation executeStatementOperation = ExecuteStatementOperation
-        .newExecuteStatementOperation(parentSession, statement, confOverlay, runAsync, 0);
-    addOperation(executeStatementOperation);
-    return executeStatementOperation;
-  }
-
-  public ExecuteStatementOperation newExecuteStatementOperation(HiveSession parentSession,
       String statement, Map<String, String> confOverlay, boolean runAsync, long queryTimeout)
           throws HiveSQLException {
-    return newExecuteStatementOperation(parentSession, statement, confOverlay, runAsync,
-        queryTimeout);
+      throw new UnsupportedOperationException();
   }
 
   public GetTypeInfoOperation newGetTypeInfoOperation(HiveSession parentSession) {
@@ -230,23 +225,18 @@ public class OperationManager extends AbstractService {
     operation.close();
   }
 
-  public TableSchema getOperationResultSetSchema(OperationHandle opHandle)
+  public TTableSchema getOperationResultSetSchema(OperationHandle opHandle)
       throws HiveSQLException {
     return getOperation(opHandle).getResultSetSchema();
   }
 
-  public RowSet getOperationNextRowSet(OperationHandle opHandle)
-      throws HiveSQLException {
-    return getOperation(opHandle).getNextRowSet();
-  }
-
-  public RowSet getOperationNextRowSet(OperationHandle opHandle,
+  public TRowSet getOperationNextRowSet(OperationHandle opHandle,
       FetchOrientation orientation, long maxRows)
           throws HiveSQLException {
     return getOperation(opHandle).getNextRowSet(orientation, maxRows);
   }
 
-  public RowSet getOperationLogRowSet(OperationHandle opHandle,
+  public TRowSet getOperationLogRowSet(OperationHandle opHandle,
       FetchOrientation orientation, long maxRows)
           throws HiveSQLException {
     // get the OperationLog object from the operation
@@ -272,7 +262,7 @@ public class OperationManager extends AbstractService {
       rowSet.addRow(new String[] {log});
     }
 
-    return rowSet;
+    return rowSet.toTRowSet();
   }
 
   private boolean isFetchFirst(FetchOrientation fetchOrientation) {
@@ -302,7 +292,8 @@ public class OperationManager extends AbstractService {
     for (OperationHandle handle : handles) {
       Operation operation = removeTimedOutOperation(handle);
       if (operation != null) {
-        LOG.warn("Operation " + handle + " is timed-out and will be closed");
+        LOG.warn("Operation {} is timed-out and will be closed",
+          MDC.of(LogKeys.OPERATION_HANDLE, handle));
         removed.add(operation);
       }
     }

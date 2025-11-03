@@ -19,12 +19,12 @@ package org.apache.spark
 
 import java.io._
 import java.nio.ByteBuffer
-import java.nio.charset.StandardCharsets
+import java.nio.file.Files
 import java.util.zip.GZIPOutputStream
 
 import scala.io.Source
+import scala.util.control.NonFatal
 
-import com.google.common.io.Files
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.io._
@@ -38,7 +38,8 @@ import org.apache.spark.internal.config._
 import org.apache.spark.rdd.{HadoopRDD, NewHadoopRDD}
 import org.apache.spark.serializer.KryoSerializer
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.util.{Utils, VersionUtils}
+import org.apache.spark.util.Utils
+import org.apache.spark.util.collection.Utils.createArray
 
 class FileSuite extends SparkFunSuite with LocalSparkContext {
   var tempDir: File = _
@@ -80,17 +81,18 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
     val compressedOutputDir = new File(tempDir, "output_compressed").getAbsolutePath
     val codec = new DefaultCodec()
 
-    val data = sc.parallelize("a" * 10000, 1)
+    val data = sc.parallelize("a".repeat(10000), 1)
     data.saveAsTextFile(normalDir)
     data.saveAsTextFile(compressedOutputDir, classOf[DefaultCodec])
 
     val normalFile = new File(normalDir, "part-00000")
-    val normalContent = sc.textFile(normalDir).collect
-    assert(normalContent === Array.fill(10000)("a"))
+    val normalContent = sc.textFile(normalDir).collect()
+    val expected = createArray(10000, "a")
+    assert(normalContent === expected)
 
     val compressedFile = new File(compressedOutputDir, "part-00000" + codec.getDefaultExtension)
-    val compressedContent = sc.textFile(compressedOutputDir).collect
-    assert(compressedContent === Array.fill(10000)("a"))
+    val compressedContent = sc.textFile(compressedOutputDir).collect()
+    assert(compressedContent === expected)
 
     assert(compressedFile.length < normalFile.length)
   }
@@ -106,7 +108,7 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
   test("SequenceFiles") {
     sc = new SparkContext("local", "test")
     val outputDir = new File(tempDir, "output").getAbsolutePath
-    val nums = sc.makeRDD(1 to 3).map(x => (x, "a" * x)) // (1,a), (2,aa), (3,aaa)
+    val nums = sc.makeRDD(1 to 3).map(x => (x, "a".repeat(x))) // (1,a), (2,aa), (3,aaa)
     nums.saveAsSequenceFile(outputDir)
     // Try reading the output back as a SequenceFile
     val output = sc.sequenceFile[IntWritable, Text](outputDir)
@@ -124,22 +126,32 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
       data.saveAsSequenceFile(compressedOutputDir, Some(codec.getClass))
 
       val normalFile = new File(normalDir, "part-00000")
-      val normalContent = sc.sequenceFile[String, String](normalDir).collect
-      assert(normalContent === Array.fill(100)(("abc", "abc")))
+      val normalContent = sc.sequenceFile[String, String](normalDir).collect()
+      val expected = createArray(100, ("abc", "abc"))
+      assert(normalContent === expected)
 
       val compressedFile = new File(compressedOutputDir, "part-00000" + codec.getDefaultExtension)
-      val compressedContent = sc.sequenceFile[String, String](compressedOutputDir).collect
-      assert(compressedContent === Array.fill(100)(("abc", "abc")))
+      val compressedContent = sc.sequenceFile[String, String](compressedOutputDir).collect()
+      assert(compressedContent === expected)
 
       assert(compressedFile.length < normalFile.length)
     }
   }
 
   // Hadoop "gzip" and "zstd" codecs require native library installed for sequence files
-  val codecs = Seq((new DefaultCodec(), "default"), (new BZip2Codec(), "bzip2"),
-      (new SnappyCodec(), "snappy")) ++ {
-    if (VersionUtils.isHadoop3) Seq((new Lz4Codec(), "lz4")) else Seq()
-  }
+  private val codecs = Seq((new DefaultCodec(), "default"), (new BZip2Codec(), "bzip2")) ++ {
+    try {
+      // See HADOOP-17125. Hadoop lower than 3.3.1 can throw an exception when its native
+      // library for Snappy is unavailable. Here it calls `SnappyCodec.getCompressorType`
+      // to indirectly test if the Snappy native library is available in lower Hadoop versions.
+      new SnappyCodec().getCompressorType
+      Some(new SnappyCodec(), "snappy")
+    } catch {
+      case _: LinkageError => None
+      case NonFatal(_) => None
+    }
+  } ++ Seq((new Lz4Codec(), "lz4"))
+
   codecs.foreach { case (codec, codecName) =>
     runSequenceFileCodecTest(codec, codecName)
   }
@@ -147,7 +159,7 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
   test("SequenceFile with writable key") {
     sc = new SparkContext("local", "test")
     val outputDir = new File(tempDir, "output").getAbsolutePath
-    val nums = sc.makeRDD(1 to 3).map(x => (new IntWritable(x), "a" * x))
+    val nums = sc.makeRDD(1 to 3).map(x => (new IntWritable(x), "a".repeat(x)))
     nums.saveAsSequenceFile(outputDir)
     // Try reading the output back as a SequenceFile
     val output = sc.sequenceFile[IntWritable, Text](outputDir)
@@ -157,7 +169,7 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
   test("SequenceFile with writable value") {
     sc = new SparkContext("local", "test")
     val outputDir = new File(tempDir, "output").getAbsolutePath
-    val nums = sc.makeRDD(1 to 3).map(x => (x, new Text("a" * x)))
+    val nums = sc.makeRDD(1 to 3).map(x => (x, new Text("a".repeat(x))))
     nums.saveAsSequenceFile(outputDir)
     // Try reading the output back as a SequenceFile
     val output = sc.sequenceFile[IntWritable, Text](outputDir)
@@ -167,7 +179,7 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
   test("SequenceFile with writable key and value") {
     sc = new SparkContext("local", "test")
     val outputDir = new File(tempDir, "output").getAbsolutePath
-    val nums = sc.makeRDD(1 to 3).map(x => (new IntWritable(x), new Text("a" * x)))
+    val nums = sc.makeRDD(1 to 3).map(x => (new IntWritable(x), new Text("a".repeat(x))))
     nums.saveAsSequenceFile(outputDir)
     // Try reading the output back as a SequenceFile
     val output = sc.sequenceFile[IntWritable, Text](outputDir)
@@ -177,7 +189,7 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
   test("implicit conversions in reading SequenceFiles") {
     sc = new SparkContext("local", "test")
     val outputDir = new File(tempDir, "output").getAbsolutePath
-    val nums = sc.makeRDD(1 to 3).map(x => (x, "a" * x)) // (1,a), (2,aa), (3,aaa)
+    val nums = sc.makeRDD(1 to 3).map(x => (x, "a".repeat(x))) // (1,a), (2,aa), (3,aaa)
     nums.saveAsSequenceFile(outputDir)
     // Similar to the tests above, we read a SequenceFile, but this time we pass type params
     // that are convertible to Writable instead of calling sequenceFile[IntWritable, Text]
@@ -203,7 +215,7 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
   test("object files of complex types") {
     sc = new SparkContext("local", "test")
     val outputDir = new File(tempDir, "output").getAbsolutePath
-    val nums = sc.makeRDD(1 to 3).map(x => (x, "a" * x))
+    val nums = sc.makeRDD(1 to 3).map(x => (x, "a".repeat(x)))
     nums.saveAsObjectFile(outputDir)
     // Try reading the output back as an object file
     val output = sc.objectFile[(Int, String)](outputDir)
@@ -226,7 +238,7 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
       // Try reading the output back as an object file
       val ct = reflect.ClassTag[Any](Utils.classForName(className, noSparkClassLoader = true))
       val output = sc.objectFile[Any](outputDir)
-      assert(output.collect().size === 3)
+      assert(output.collect().length === 3)
       assert(output.collect().head.getClass.getName === className)
     }
   }
@@ -235,7 +247,7 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
     import org.apache.hadoop.mapreduce.lib.output.SequenceFileOutputFormat
     sc = new SparkContext("local", "test")
     val outputDir = new File(tempDir, "output").getAbsolutePath
-    val nums = sc.makeRDD(1 to 3).map(x => (new IntWritable(x), new Text("a" * x)))
+    val nums = sc.makeRDD(1 to 3).map(x => (new IntWritable(x), new Text("a".repeat(x))))
     nums.saveAsNewAPIHadoopFile[SequenceFileOutputFormat[IntWritable, Text]](
         outputDir)
     val output = sc.sequenceFile[IntWritable, Text](outputDir)
@@ -246,7 +258,7 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
     import org.apache.hadoop.mapreduce.lib.input.SequenceFileInputFormat
     sc = new SparkContext("local", "test")
     val outputDir = new File(tempDir, "output").getAbsolutePath
-    val nums = sc.makeRDD(1 to 3).map(x => (new IntWritable(x), new Text("a" * x)))
+    val nums = sc.makeRDD(1 to 3).map(x => (new IntWritable(x), new Text("a".repeat(x))))
     nums.saveAsSequenceFile(outputDir)
     val output =
       sc.newAPIHadoopFile[IntWritable, Text, SequenceFileInputFormat[IntWritable, Text]](outputDir)
@@ -278,7 +290,7 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
     val (infile, indata) = inRdd.collect().head
     // Make sure the name and array match
     assert(infile.contains(outFile.toURI.getPath)) // a prefix may get added
-    assert(indata.toArray === testOutput)
+    assert(indata.toArray() === testOutput)
   }
 
   test("portabledatastream caching tests") {
@@ -288,7 +300,7 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
     val inRdd = sc.binaryFiles(outFile.getAbsolutePath).cache()
     inRdd.foreach(_._2.toArray()) // force the file to read
     // Try reading the output back as an object file
-    assert(inRdd.values.collect().head.toArray === testOutput)
+    assert(inRdd.values.collect().head.toArray() === testOutput)
   }
 
   test("portabledatastream persist disk storage") {
@@ -297,7 +309,7 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
     val outFile = writeBinaryData(testOutput, 1)
     val inRdd = sc.binaryFiles(outFile.getAbsolutePath).persist(StorageLevel.DISK_ONLY)
     inRdd.foreach(_._2.toArray()) // force the file to read
-    assert(inRdd.values.collect().head.toArray === testOutput)
+    assert(inRdd.values.collect().head.toArray() === testOutput)
   }
 
   test("portabledatastream flatmap tests") {
@@ -310,22 +322,22 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
     val copyArr = copyRdd.collect()
     assert(copyArr.length == numOfCopies)
     for (i <- copyArr.indices) {
-      assert(copyArr(i).toArray === testOutput)
+      assert(copyArr(i).toArray() === testOutput)
     }
   }
 
   test("SPARK-22357 test binaryFiles minPartitions") {
     sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local")
       .set("spark.files.openCostInBytes", "0")
-      .set("spark.default.parallelism", "1"))
+      .set(DEFAULT_PARALLELISM.key, "1"))
 
     withTempDir { tempDir =>
       val tempDirPath = tempDir.getAbsolutePath
 
       for (i <- 0 until 8) {
         val tempFile = new File(tempDir, s"part-0000$i")
-        Files.write("someline1 in file1\nsomeline2 in file1\nsomeline3 in file1", tempFile,
-          StandardCharsets.UTF_8)
+        Files.writeString(tempFile.toPath,
+          "someline1 in file1\nsomeline2 in file1\nsomeline3 in file1")
       }
 
       for (p <- Seq(1, 2, 8)) {
@@ -344,7 +356,7 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
       "mapreduce.input.fileinputformat.split.minsize.per.rack", 5123456)
 
     val (_, data) = sc.binaryFiles(outFile.getAbsolutePath).collect().head
-    assert(data.toArray === testOutput)
+    assert(data.toArray() === testOutput)
   }
 
   test("fixed record length binary file as byte array") {
@@ -353,7 +365,7 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
     val testOutputCopies = 10
     val outFile = writeBinaryData(testOutput, testOutputCopies)
     val inRdd = sc.binaryRecords(outFile.getAbsolutePath, testOutput.length)
-    assert(inRdd.count == testOutputCopies)
+    assert(inRdd.count() == testOutputCopies)
     val inArr = inRdd.collect()
     for (i <- inArr.indices) {
       assert(inArr(i) === testOutput.map(b => (b + i).toByte))
@@ -370,12 +382,12 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
 
   test("file caching") {
     sc = new SparkContext("local", "test")
-    val out = new FileWriter(tempDir + "/input")
+    val out = new FileWriter(s"$tempDir/input")
     out.write("Hello world!\n")
     out.write("What's up?\n")
     out.write("Goodbye\n")
     out.close()
-    val rdd = sc.textFile(tempDir + "/input").cache()
+    val rdd = sc.textFile(s"$tempDir/input").cache()
     assert(rdd.count() === 3)
     assert(rdd.count() === 3)
     assert(rdd.count() === 3)
@@ -586,7 +598,7 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
 
     // Ensure that if all of the splits are empty, we remove the splits correctly
     testIgnoreEmptySplits(
-      data = Array.empty[Tuple2[String, String]],
+      data = Seq.empty[Tuple2[String, String]],
       actualPartitionNum = 1,
       expectedPartitionNum = 0)
 
@@ -629,7 +641,7 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
 
     // Ensure that if all of the splits are empty, we remove the splits correctly
     testIgnoreEmptySplits(
-      data = Array.empty[Tuple2[String, String]],
+      data = Seq.empty[Tuple2[String, String]],
       actualPartitionNum = 1,
       expectedPartitionNum = 0)
 
@@ -689,7 +701,7 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
     intercept[org.apache.hadoop.mapreduce.lib.input.InvalidInputException] {
       // Exception happens when NewHadoopRDD.getPartitions
       sc.newAPIHadoopFile(deletedPath.toString, classOf[NewTextInputFormat],
-        classOf[LongWritable], classOf[Text]).collect
+        classOf[LongWritable], classOf[Text]).collect()
     }
 
     e = intercept[SparkException] {

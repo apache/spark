@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.types.BooleanType
 
-class BooleanSimplificationSuite extends PlanTest with ExpressionEvalHelper with PredicateHelper {
+class BooleanSimplificationSuite extends PlanTest with ExpressionEvalHelper {
 
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches =
@@ -46,7 +46,7 @@ class BooleanSimplificationSuite extends PlanTest with ExpressionEvalHelper with
     $"e".boolean, $"f".boolean, $"g".boolean, $"h".boolean)
 
   val testRelationWithData = LocalRelation.fromExternalRows(
-    testRelation.output, Seq(Row(1, 2, 3, "abc"))
+    testRelation.output, Seq(Row(1, 2, 3, "abc", true, true, true, true))
   )
 
   val testNotNullableRelation = LocalRelation($"a".int.notNull, $"b".int.notNull, $"c".int.notNull,
@@ -54,7 +54,7 @@ class BooleanSimplificationSuite extends PlanTest with ExpressionEvalHelper with
     $"h".boolean.notNull)
 
   val testNotNullableRelationWithData = LocalRelation.fromExternalRows(
-    testNotNullableRelation.output, Seq(Row(1, 2, 3, "abc"))
+    testNotNullableRelation.output, Seq(Row(1, 2, 3, "abc", true, true, true, true))
   )
 
   private def checkCondition(input: Expression, expected: LogicalPlan): Unit = {

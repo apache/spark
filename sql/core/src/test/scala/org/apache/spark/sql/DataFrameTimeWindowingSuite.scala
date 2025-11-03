@@ -17,9 +17,10 @@
 
 package org.apache.spark.sql
 
+import java.sql.Timestamp
 import java.time.LocalDateTime
 
-import org.apache.spark.sql.catalyst.encoders.RowEncoder
+import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Expand, Filter}
 import org.apache.spark.sql.functions._
@@ -314,6 +315,42 @@ class DataFrameTimeWindowingSuite extends QueryTest with SharedSparkSession {
           Row("1970-01-01 00:00:05", "1970-01-01 00:00:15", 2))
       )
     }
+
+    val df3 = Seq(
+      ("1969-12-31 00:00:02", 1),
+      ("1969-12-31 00:00:12", 2)).toDF("time", "value")
+    val df4 = Seq(
+      (LocalDateTime.parse("1969-12-31T00:00:02"), 1),
+      (LocalDateTime.parse("1969-12-31T00:00:12"), 2)).toDF("time", "value")
+
+    Seq(df3, df4).foreach { df =>
+      checkAnswer(
+        df.select(window($"time", "10 seconds", "10 seconds", "5 seconds"), $"value")
+          .orderBy($"window.start".asc)
+          .select($"window.start".cast(StringType), $"window.end".cast(StringType), $"value"),
+        Seq(
+          Row("1969-12-30 23:59:55", "1969-12-31 00:00:05", 1),
+          Row("1969-12-31 00:00:05", "1969-12-31 00:00:15", 2))
+      )
+    }
+
+    val df5 = Seq(
+      ("1968-12-31 00:00:02", 1),
+      ("1968-12-31 00:00:12", 2)).toDF("time", "value")
+    val df6 = Seq(
+      (LocalDateTime.parse("1968-12-31T00:00:02"), 1),
+      (LocalDateTime.parse("1968-12-31T00:00:12"), 2)).toDF("time", "value")
+
+    Seq(df5, df6).foreach { df =>
+      checkAnswer(
+        df.select(window($"time", "10 seconds", "10 seconds", "5 seconds"), $"value")
+          .orderBy($"window.start".asc)
+          .select($"window.start".cast(StringType), $"window.end".cast(StringType), $"value"),
+        Seq(
+          Row("1968-12-30 23:59:55", "1968-12-31 00:00:05", 1),
+          Row("1968-12-31 00:00:05", "1968-12-31 00:00:15", 2))
+      )
+    }
   }
 
   test("multiple time windows in a single operator throws nice exception") {
@@ -559,8 +596,9 @@ class DataFrameTimeWindowingSuite extends QueryTest with SharedSparkSession {
       df <- Seq(df1, df2)
       nullable <- Seq(true, false)
     } {
-      val dfWithDesiredNullability = new DataFrame(df.queryExecution, RowEncoder(
-        StructType(df.schema.fields.map(_.copy(nullable = nullable)))))
+      val dfWithDesiredNullability = new classic.DataFrame(
+        df.queryExecution,
+        ExpressionEncoder(StructType(df.schema.fields.map(_.copy(nullable = nullable)))))
       // tumbling windows
       val windowedProject = dfWithDesiredNullability
         .select(window($"time", "10 seconds").as("window"), $"value")
@@ -573,6 +611,161 @@ class DataFrameTimeWindowingSuite extends QueryTest with SharedSparkSession {
         $"value")
       val schema2 = windowedProject2.queryExecution.optimizedPlan.schema
       validateWindowColumnInSchema(schema2, "window")
+    }
+  }
+
+  test("window_time function on raw window column") {
+    val df = Seq(
+      ("2016-03-27 19:38:18"), ("2016-03-27 19:39:25")
+    ).toDF("time")
+
+    checkAnswer(
+      df.select(window($"time", "10 seconds").as("window"))
+        .select(
+          $"window.end".cast("string"),
+          window_time($"window").cast("string")
+        ),
+      Seq(
+        Row("2016-03-27 19:38:20", "2016-03-27 19:38:19.999999"),
+        Row("2016-03-27 19:39:30", "2016-03-27 19:39:29.999999")
+      )
+    )
+  }
+
+  test("2 window_time functions on raw window column") {
+    val df = Seq(
+      ("2016-03-27 19:38:18"), ("2016-03-27 19:39:25")
+    ).toDF("time")
+
+    val df2 = df
+      .withColumn("time2", expr("time - INTERVAL 15 minutes"))
+      .select(window($"time", "10 seconds").as("window1"), $"time2")
+      .select($"window1", window($"time2", "10 seconds").as("window2"))
+
+    checkAnswer(
+      df2.select(
+        $"window1.end".cast("string"),
+        window_time($"window1").cast("string"),
+        $"window2.end".cast("string"),
+        window_time($"window2").cast("string")),
+      Seq(
+        Row("2016-03-27 19:38:20", "2016-03-27 19:38:19.999999",
+            "2016-03-27 19:23:20", "2016-03-27 19:23:19.999999"),
+        Row("2016-03-27 19:39:30", "2016-03-27 19:39:29.999999",
+            "2016-03-27 19:24:30", "2016-03-27 19:24:29.999999"))
+    )
+
+    // check column names
+    val df3 = df2
+      .select(
+        window_time($"window1").cast("string"),
+        window_time($"window2").cast("string"),
+        window_time($"window2").as("wt2_aliased").cast("string")
+      )
+
+    val schema = df3.schema
+
+    assert(schema.fields.exists(_.name == "window_time(window1)"))
+    assert(schema.fields.exists(_.name == "window_time(window2)"))
+    assert(schema.fields.exists(_.name == "wt2_aliased"))
+  }
+
+  test("window_time function on agg output") {
+    val df = Seq(
+      ("2016-03-27 19:38:19", 1), ("2016-03-27 19:39:25", 2)
+    ).toDF("time", "value")
+    checkAnswer(
+      df.groupBy(window($"time", "10 seconds"))
+        .agg(count("*").as("counts"))
+        .orderBy($"window.start".asc)
+        .select(
+          $"window.start".cast("string"),
+          $"window.end".cast("string"),
+          window_time($"window").cast("string"),
+          $"counts"),
+      Seq(
+        Row("2016-03-27 19:38:10", "2016-03-27 19:38:20", "2016-03-27 19:38:19.999999", 1),
+        Row("2016-03-27 19:39:20", "2016-03-27 19:39:30", "2016-03-27 19:39:29.999999", 1)
+      )
+    )
+  }
+
+  test("window_time in SQL") {
+    withTempView("tmpView") {
+      val df = Seq(
+        ("2016-03-27 19:38:19", 1), ("2016-03-27 19:39:25", 2)
+      ).toDF("time", "value")
+      df.createOrReplaceTempView("tmpView")
+      checkAnswer(
+        spark.sql(
+          s"""
+             |select
+             |  CAST(window.start AS string), CAST(window.end AS string),
+             |  CAST(window_time(window) AS string), counts
+             |from
+             |(
+             |  select window, count(*) AS counts from tmpView
+             |  group by window(time, "10 seconds")
+             |  order by window.start
+             |)
+             |""".stripMargin),
+        Seq(
+          Row("2016-03-27 19:38:10", "2016-03-27 19:38:20", "2016-03-27 19:38:19.999999", 1),
+          Row("2016-03-27 19:39:20", "2016-03-27 19:39:30", "2016-03-27 19:39:29.999999", 1)
+        )
+      )
+    }
+  }
+
+  test("SPARK-49836 using window fn with window as parameter should preserve parent operator") {
+    withTempView("clicks") {
+      val df = Seq(
+        // small window: [00:00, 01:00), user1, 2
+        ("2024-09-30 00:00:00", "user1"), ("2024-09-30 00:00:30", "user1"),
+        // small window: [01:00, 02:00), user2, 2
+        ("2024-09-30 00:01:00", "user2"), ("2024-09-30 00:01:30", "user2"),
+        // small window: [07:00, 08:00), user1, 1
+        ("2024-09-30 00:07:00", "user1"),
+        // small window: [11:00, 12:00), user1, 3
+        ("2024-09-30 00:11:00", "user1"), ("2024-09-30 00:11:30", "user1"),
+        ("2024-09-30 00:11:45", "user1")
+      ).toDF("eventTime", "userId")
+
+      // large window: [00:00, 10:00), user1, 3, [00:00, 10:00), user2, 2, [10:00, 20:00), user1, 3
+
+      df.createOrReplaceTempView("clicks")
+
+      val aggregatedData = spark.sql(
+        """
+          |SELECT
+          |  cpu_large.large_window.end AS timestamp,
+          |  avg(cpu_large.numClicks) AS avgClicksPerUser
+          |FROM
+          |(
+          |  SELECT
+          |    window(small_window, '10 minutes') AS large_window,
+          |    userId,
+          |    sum(numClicks) AS numClicks
+          |  FROM
+          |  (
+          |    SELECT
+          |      window(eventTime, '1 minute') AS small_window,
+          |      userId,
+          |      count(*) AS numClicks
+          |    FROM clicks
+          |    GROUP BY window, userId
+          |  ) cpu_small
+          |  GROUP BY window, userId
+          |) cpu_large
+          |GROUP BY timestamp
+          |""".stripMargin)
+
+      checkAnswer(
+        aggregatedData,
+        Seq(
+          Row(Timestamp.valueOf("2024-09-30 00:10:00"), 2.5),
+          Row(Timestamp.valueOf("2024-09-30 00:20:00"), 3))
+      )
     }
   }
 }

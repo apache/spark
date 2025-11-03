@@ -26,6 +26,8 @@ import java.util.Arrays;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
+
 import static java.nio.file.attribute.PosixFilePermission.*;
 
 import org.apache.logging.log4j.core.config.Property;
@@ -34,12 +36,12 @@ import org.apache.logging.log4j.core.Filter;
 import org.apache.logging.log4j.core.Layout;
 import org.apache.logging.log4j.core.appender.AbstractAppender;
 import org.apache.logging.log4j.core.LogEvent;
-import org.junit.AfterClass;
-import org.junit.Before;
-import org.junit.BeforeClass;
-import org.junit.Test;
-import static org.junit.Assert.*;
-import static org.junit.Assume.*;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assumptions.*;
 
 import static org.apache.spark.launcher.CommandBuilderUtils.*;
 
@@ -56,7 +58,7 @@ public class ChildProcAppHandleSuite extends BaseSuite {
 
   private static File TEST_SCRIPT_PATH;
 
-  @AfterClass
+  @AfterAll
   public static void cleanupClass() throws Exception {
     if (TEST_SCRIPT_PATH != null) {
       TEST_SCRIPT_PATH.delete();
@@ -64,7 +66,7 @@ public class ChildProcAppHandleSuite extends BaseSuite {
     }
   }
 
-  @BeforeClass
+  @BeforeAll
   public static void setupClass() throws Exception {
     TEST_SCRIPT_PATH = File.createTempFile("output-redir-test", ".sh");
     Files.setPosixFilePermissions(TEST_SCRIPT_PATH.toPath(),
@@ -72,7 +74,7 @@ public class ChildProcAppHandleSuite extends BaseSuite {
     Files.write(TEST_SCRIPT_PATH.toPath(), TEST_SCRIPT);
   }
 
-  @Before
+  @BeforeEach
   public void cleanupLog() {
     MESSAGES.clear();
   }
@@ -126,7 +128,9 @@ public class ChildProcAppHandleSuite extends BaseSuite {
     waitFor(handle);
 
     assertTrue(MESSAGES.contains("output"));
-    assertEquals(Arrays.asList("error"), Files.lines(err).collect(Collectors.toList()));
+    try (Stream<String> lines = Files.lines(err)) {
+      assertEquals(Arrays.asList("error"), lines.collect(Collectors.toList()));
+    }
   }
 
   @Test
@@ -142,7 +146,9 @@ public class ChildProcAppHandleSuite extends BaseSuite {
     waitFor(handle);
 
     assertTrue(MESSAGES.contains("error"));
-    assertEquals(Arrays.asList("output"), Files.lines(out).collect(Collectors.toList()));
+    try (Stream<String> lines = Files.lines(out)) {
+      assertEquals(Arrays.asList("output"), lines.collect(Collectors.toList()));
+    }
   }
 
   @Test
@@ -161,31 +167,37 @@ public class ChildProcAppHandleSuite extends BaseSuite {
     waitFor(handle);
 
     assertTrue(MESSAGES.isEmpty());
-    assertEquals(Arrays.asList("error"), Files.lines(err).collect(Collectors.toList()));
-    assertEquals(Arrays.asList("output"), Files.lines(out).collect(Collectors.toList()));
+    try (Stream<String> lines = Files.lines(err)) {
+      assertEquals(Arrays.asList("error"), lines.collect(Collectors.toList()));
+    }
+    try (Stream<String> lines = Files.lines(out)) {
+      assertEquals(Arrays.asList("output"), lines.collect(Collectors.toList()));
+    }
   }
 
-  @Test(expected = IllegalArgumentException.class)
+  @Test
   public void testBadLogRedirect() throws Exception {
     File out = Files.createTempFile("stdout", "txt").toFile();
     out.deleteOnExit();
-    new SparkLauncher()
-      .redirectError()
-      .redirectOutput(out)
-      .redirectToLog("foo")
-      .launch()
-      .waitFor();
+    assertThrows(IllegalArgumentException.class,
+      () -> new SparkLauncher()
+              .redirectError()
+              .redirectOutput(out)
+              .redirectToLog("foo")
+              .launch()
+              .waitFor());
   }
 
-  @Test(expected = IllegalArgumentException.class)
+  @Test
   public void testRedirectErrorTwiceFails() throws Exception {
     File err = Files.createTempFile("stderr", "txt").toFile();
     err.deleteOnExit();
-    new SparkLauncher()
-      .redirectError()
-      .redirectError(err)
-      .launch()
-      .waitFor();
+    assertThrows(IllegalArgumentException.class,
+      () -> new SparkLauncher()
+              .redirectError()
+              .redirectError(err)
+              .launch()
+              .waitFor());
   }
 
   @Test

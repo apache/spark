@@ -18,8 +18,8 @@
 
 package org.apache.spark.streaming;
 
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 public class JavaDurationSuite {
 
@@ -28,57 +28,57 @@ public class JavaDurationSuite {
 
   @Test
   public void testLess() {
-    Assert.assertTrue(new Duration(999).less(new Duration(1000)));
+    Assertions.assertTrue(new Duration(999).less(new Duration(1000)));
   }
 
   @Test
   public void testLessEq() {
-    Assert.assertTrue(new Duration(1000).lessEq(new Duration(1000)));
+    Assertions.assertTrue(new Duration(1000).lessEq(new Duration(1000)));
   }
 
   @Test
   public void testGreater() {
-    Assert.assertTrue(new Duration(1000).greater(new Duration(999)));
+    Assertions.assertTrue(new Duration(1000).greater(new Duration(999)));
   }
 
   @Test
   public void testGreaterEq() {
-    Assert.assertTrue(new Duration(1000).greaterEq(new Duration(1000)));
+    Assertions.assertTrue(new Duration(1000).greaterEq(new Duration(1000)));
   }
 
   @Test
   public void testPlus() {
-    Assert.assertEquals(new Duration(1100), new Duration(1000).plus(new Duration(100)));
+    Assertions.assertEquals(new Duration(1100), new Duration(1000).plus(new Duration(100)));
   }
 
   @Test
   public void testMinus() {
-    Assert.assertEquals(new Duration(900), new Duration(1000).minus(new Duration(100)));
+    Assertions.assertEquals(new Duration(900), new Duration(1000).minus(new Duration(100)));
   }
 
   @Test
   public void testTimes() {
-    Assert.assertEquals(new Duration(200), new Duration(100).times(2));
+    Assertions.assertEquals(new Duration(200), new Duration(100).times(2));
   }
 
   @Test
   public void testDiv() {
-    Assert.assertEquals(200.0, new Duration(1000).div(new Duration(5)), 1.0e-12);
+    Assertions.assertEquals(200.0, new Duration(1000).div(new Duration(5)), 1.0e-12);
   }
 
   @Test
   public void testMilliseconds() {
-    Assert.assertEquals(new Duration(100), Durations.milliseconds(100));
+    Assertions.assertEquals(new Duration(100), Durations.milliseconds(100));
   }
 
   @Test
   public void testSeconds() {
-    Assert.assertEquals(new Duration(30 * 1000), Durations.seconds(30));
+    Assertions.assertEquals(new Duration(30 * 1000), Durations.seconds(30));
   }
 
   @Test
   public void testMinutes() {
-    Assert.assertEquals(new Duration(2 * 60 * 1000), Durations.minutes(2));
+    Assertions.assertEquals(new Duration(2 * 60 * 1000), Durations.minutes(2));
   }
 
 }

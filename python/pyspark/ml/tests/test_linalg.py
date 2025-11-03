@@ -33,6 +33,7 @@ from pyspark.ml.linalg import (
 )
 from pyspark.testing.mllibutils import MLlibTestCase
 from pyspark.sql import Row
+from pyspark.sql.functions import unwrap_udt
 
 
 class VectorTests(MLlibTestCase):
@@ -319,7 +320,6 @@ class VectorTests(MLlibTestCase):
 
 
 class VectorUDTTests(MLlibTestCase):
-
     dv0 = DenseVector([])
     dv1 = DenseVector([1.0, 2.0])
     sv0 = SparseVector(2, [], [])
@@ -351,9 +351,21 @@ class VectorUDTTests(MLlibTestCase):
             else:
                 raise TypeError("expecting a vector but got %r of type %r" % (v, type(v)))
 
+    def test_unwrap_udt(self):
+        df = self.spark.createDataFrame(
+            [(Vectors.dense(1.0, 2.0, 3.0),), (Vectors.sparse(3, {1: 1.0, 2: 5.5}),)],
+            ["vec"],
+        )
+        results = df.select(unwrap_udt("vec").alias("v2")).collect()
+        unwrapped_vec = Row("type", "size", "indices", "values")
+        expected = [
+            Row(v2=unwrapped_vec(1, None, None, [1.0, 2.0, 3.0])),
+            Row(v2=unwrapped_vec(0, 3, [1, 2], [1.0, 5.5])),
+        ]
+        self.assertEqual(results, expected)
+
 
 class MatrixUDTTests(MLlibTestCase):
-
     dm1 = DenseMatrix(3, 2, [0, 1, 4, 5, 9, 10])
     dm2 = DenseMatrix(3, 2, [0, 1, 4, 5, 9, 10], isTransposed=True)
     sm1 = SparseMatrix(1, 1, [0, 1], [0], [2.0])
@@ -387,7 +399,7 @@ if __name__ == "__main__":
     from pyspark.ml.tests.test_linalg import *  # noqa: F401
 
     try:
-        import xmlrunner  # type: ignore[import]
+        import xmlrunner
 
         testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:

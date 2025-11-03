@@ -1,8 +1,0 @@
----
-# set up userspace
-- name: create local groups for external contributors
-  group:
-    name: "{{ item }}"
-    state: present
-  loop:
-    - jenkins

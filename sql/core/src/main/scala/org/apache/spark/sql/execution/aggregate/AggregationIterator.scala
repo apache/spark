@@ -23,6 +23,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * The base class of [[SortBasedAggregationIterator]], [[TungstenAggregationIterator]] and
@@ -142,7 +143,7 @@ abstract class AggregationIterator(
       // no-op expressions which are ignored during projection code-generation.
       case i: ImperativeAggregate => Seq.fill(i.aggBufferAttributes.length)(NoOp)
     }
-    newMutableProjection(initExpressions, Nil)
+    newMutableProjection(initExpressions.toImmutableArraySeq, Nil)
   }
 
   // All imperative AggregateFunctions.
@@ -222,7 +223,8 @@ abstract class AggregationIterator(
   }
 
   protected val processRow: (InternalRow, InternalRow) => Unit =
-    generateProcessRow(aggregateExpressions, aggregateFunctions, inputAttributes)
+    generateProcessRow(aggregateExpressions,
+      aggregateFunctions.toImmutableArraySeq, inputAttributes)
 
   protected val groupingProjection: UnsafeProjection =
     UnsafeProjection.create(groupingExpressions, inputAttributes)
@@ -239,7 +241,8 @@ abstract class AggregationIterator(
         case agg: AggregateFunction => NoOp
       }
       val aggregateResult = new SpecificInternalRow(aggregateAttributes.map(_.dataType))
-      val expressionAggEvalProjection = newMutableProjection(evalExpressions, bufferAttributes)
+      val expressionAggEvalProjection = newMutableProjection(
+        evalExpressions.toImmutableArraySeq, bufferAttributes.toImmutableArraySeq)
       expressionAggEvalProjection.target(aggregateResult)
 
       val resultProjection =

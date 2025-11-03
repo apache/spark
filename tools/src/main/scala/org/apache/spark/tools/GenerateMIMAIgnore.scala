@@ -18,7 +18,7 @@
 // scalastyle:off classforname
 package org.apache.spark.tools
 
-import scala.collection.mutable
+import scala.collection.{immutable, mutable}
 import scala.reflect.runtime.{universe => unv}
 import scala.reflect.runtime.universe.runtimeMirror
 import scala.util.Try
@@ -44,8 +44,15 @@ object GenerateMIMAIgnore {
   private def isPackagePrivate(sym: unv.Symbol) =
     !sym.privateWithin.fullName.startsWith("<none>")
 
-  private def isPackagePrivateModule(moduleSymbol: unv.ModuleSymbol) =
+  private def isPackagePrivateModule(moduleSymbol: unv.ModuleSymbol) = try {
     !moduleSymbol.privateWithin.fullName.startsWith("<none>")
+  } catch {
+    case e: Throwable =>
+      // scalastyle:off println
+      println("[WARN] Unable to check module:" + moduleSymbol)
+      // scalastyle:on println
+      false
+  }
 
   /**
    * For every class checks via scala reflection if the class itself or contained members
@@ -65,7 +72,8 @@ object GenerateMIMAIgnore {
         val directlyPrivateSpark =
           isPackagePrivate(classSymbol) ||
           isPackagePrivateModule(moduleSymbol) ||
-          classSymbol.isPrivate
+          classSymbol.isPrivate ||
+          moduleSymbol.isPrivate
         /* Inner classes defined within a private[spark] class or object are effectively
          invisible, so we account for them as package private. */
         lazy val indirectlyPrivateSpark = {
@@ -99,8 +107,10 @@ object GenerateMIMAIgnore {
    */
   def getInnerFunctions(classSymbol: unv.ClassSymbol): Seq[String] = {
     try {
-      Class.forName(classSymbol.fullName, false, classLoader).getMethods.map(_.getName)
+      val ret = Class.forName(classSymbol.fullName, false, classLoader)
+        .getMethods.map(_.getName)
         .filter(_.contains("$$")).map(classSymbol.fullName + "." + _)
+      immutable.ArraySeq.unsafeWrapArray(ret)
     } catch {
       case t: Throwable =>
         // scalastyle:off println
@@ -125,7 +135,7 @@ object GenerateMIMAIgnore {
       .writeAll(previousContents + privateClasses.mkString("\n"))
     // scalastyle:off println
     println("Created : .generated-mima-class-excludes in current directory.")
-    val previousMembersContents = Try(File(".generated-mima-member-excludes").lines)
+    val previousMembersContents = Try(File(".generated-mima-member-excludes").lines())
       .getOrElse(Iterator.empty).mkString("\n")
     File(".generated-mima-member-excludes").writeAll(previousMembersContents +
       privateMembers.mkString("\n"))
@@ -147,9 +157,9 @@ object GenerateMIMAIgnore {
    * and subpackages both from directories and jars present on the classpath.
    */
   private def getClasses(packageName: String): Set[String] = {
-    val finder = ClassFinder(maybeOverrideAsmVersion = Some(Opcodes.ASM7))
+    val finder = ClassFinder(maybeOverrideAsmVersion = Some(Opcodes.ASM8))
     finder
-      .getClasses
+      .getClasses()
       .map(_.name)
       .filter(_.startsWith(packageName))
       .filterNot(shouldExclude)

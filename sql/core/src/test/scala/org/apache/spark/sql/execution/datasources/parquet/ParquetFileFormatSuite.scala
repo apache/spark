@@ -17,9 +17,9 @@
 
 package org.apache.spark.sql.execution.datasources.parquet
 
-import java.time.{Duration, Period}
+import java.time.{Duration, LocalTime, Period}
 
-import org.apache.hadoop.fs.{FileSystem, Path}
+import org.apache.hadoop.fs.Path
 
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.sql.{QueryTest, Row}
@@ -27,6 +27,7 @@ import org.apache.spark.sql.execution.datasources.CommonFileDataSourceSuite
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
+import org.apache.spark.util.HadoopFSUtils
 
 abstract class ParquetFileFormatSuite
   extends QueryTest
@@ -34,12 +35,13 @@ abstract class ParquetFileFormatSuite
   with SharedSparkSession
   with CommonFileDataSourceSuite {
 
+  import testImplicits._
+
   override protected def dataSourceFormat = "parquet"
 
   test("read parquet footers in parallel") {
     def testReadFooters(ignoreCorruptFiles: Boolean): Unit = {
       withTempDir { dir =>
-        val fs = FileSystem.get(spark.sessionState.newHadoopConf())
         val basePath = dir.getCanonicalPath
 
         val path1 = new Path(basePath, "first")
@@ -50,21 +52,27 @@ abstract class ParquetFileFormatSuite
         spark.range(1, 2).toDF("a").coalesce(1).write.parquet(path2.toString)
         spark.range(2, 3).toDF("a").coalesce(1).write.json(path3.toString)
 
-        val fileStatuses =
-          Seq(fs.listStatus(path1), fs.listStatus(path2), fs.listStatus(path3)).flatten
+        val hadoopConf = spark.sessionState.newHadoopConf()
+        val fileStatuses = HadoopFSUtils.listFiles(
+          new Path(basePath),
+          hadoopConf,
+          (path: Path) => path.getName != "_SUCCESS").flatMap(_._2)
 
         val footers = ParquetFileFormat.readParquetFootersInParallel(
-          spark.sessionState.newHadoopConf(), fileStatuses, ignoreCorruptFiles)
+          hadoopConf, fileStatuses, ignoreCorruptFiles)
 
         assert(footers.size == 2)
       }
     }
 
     testReadFooters(true)
-    val exception = intercept[SparkException] {
-      testReadFooters(false)
-    }.getCause
-    assert(exception.getMessage().contains("Could not read footer for file"))
+    checkErrorMatchPVals(
+      exception = intercept[SparkException] {
+        testReadFooters(false)
+      }.getCause.asInstanceOf[SparkException],
+      condition = "FAILED_READ_FILE.CANNOT_READ_FILE_FOOTER",
+      parameters = Map("path" -> "file:.*")
+    )
   }
 
   test("SPARK-36825, SPARK-36854: year-month/day-time intervals written and read as INT32/INT64") {
@@ -97,7 +105,7 @@ abstract class ParquetFileFormatSuite
         Seq(
           Seq(StructField("f1", IntegerType), StructField("f2", BooleanType)) -> true,
           Seq(StructField("f1", IntegerType), StructField("f2", ArrayType(IntegerType))) -> enabled,
-          Seq(StructField("f1", BooleanType), StructField("f2", testUDT)) -> false
+          Seq(StructField("f1", BooleanType), StructField("f2", testUDT)) -> enabled
         ).foreach { case (schema, expected) =>
           assert(ParquetUtils.isBatchReadSupportedForSchema(conf, StructType(schema)) == expected)
         }
@@ -116,12 +124,31 @@ abstract class ParquetFileFormatSuite
           StructType(Seq(StructField("f1", DecimalType.SYSTEM_DEFAULT),
             StructField("f2", StringType))) -> enabled,
           MapType(keyType = LongType, valueType = DateType) -> enabled,
-          testUDT -> false,
-          ArrayType(testUDT) -> false,
-          StructType(Seq(StructField("f1", ByteType), StructField("f2", testUDT))) -> false,
-          MapType(keyType = testUDT, valueType = BinaryType) -> false
+          testUDT -> enabled,
+          ArrayType(testUDT) -> enabled,
+          StructType(Seq(StructField("f1", ByteType), StructField("f2", testUDT))) -> enabled,
+          MapType(keyType = testUDT, valueType = BinaryType) -> enabled
         ).foreach { case (dt, expected) =>
           assert(ParquetUtils.isBatchReadSupported(conf, dt) == expected)
+        }
+      }
+    }
+  }
+
+  test("Write and read back TIME values") {
+    Seq(false, true).foreach { offHeapEnabled =>
+      withSQLConf(SQLConf.COLUMN_VECTOR_OFFHEAP_ENABLED.key -> offHeapEnabled.toString) {
+        val data = Seq(LocalTime.parse("01:12:30.999999")).toDF("col")
+        withNestedDataFrame(data).foreach { case (newDF, colName, _) =>
+          withTempPath { dir =>
+            newDF.write.parquet(dir.getCanonicalPath)
+            Seq(false, true).foreach { vectorizedReaderEnabled =>
+              readParquetFile(dir.getCanonicalPath, vectorizedReaderEnabled) { df =>
+                checkAnswer(df, newDF)
+                assert(df(colName).expr.dataType == TimeType())
+              }
+            }
+          }
         }
       }
     }

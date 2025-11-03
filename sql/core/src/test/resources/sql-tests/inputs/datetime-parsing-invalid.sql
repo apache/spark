@@ -12,10 +12,7 @@ select to_timestamp('1234567', 'yyyyyyy'); -- the length of 'y' pattern must be 
 -- parsing invalid values with pattern 'D'
 select to_timestamp('366', 'D');
 select to_timestamp('9', 'DD');
--- in java 8 this case is invalid, but valid in java 11, disabled for jenkins
--- select to_timestamp('100', 'DD');
--- The error message is changed since Java 11+
--- select to_timestamp('366', 'DD');
+select to_timestamp('366', 'DD');
 select to_timestamp('9', 'DDD');
 select to_timestamp('99', 'DDD');
 select to_timestamp('30-365', 'dd-DDD');

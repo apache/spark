@@ -23,17 +23,6 @@ General functions
 =================
 .. currentmodule:: pyspark.pandas
 
-Working with options
---------------------
-
-.. autosummary::
-   :toctree: api/
-
-    reset_option
-    get_option
-    set_option
-    option_context
-
 Data manipulations and SQL
 --------------------------
 .. autosummary::
@@ -41,6 +30,7 @@ Data manipulations and SQL
 
    melt
    merge
+   merge_asof
    get_dummies
    concat
    sql
@@ -52,14 +42,21 @@ Top-level missing data
 .. autosummary::
    :toctree: api/
 
-   to_numeric
    isna
    isnull
    notna
    notnull
 
-Top-level dealing with datetimelike
+Top-level dealing with numeric data
 -----------------------------------
+
+.. autosummary::
+   :toctree: api/
+
+   to_numeric
+
+Top-level dealing with datetimelike data
+----------------------------------------
 .. autosummary::
    :toctree: api/
 

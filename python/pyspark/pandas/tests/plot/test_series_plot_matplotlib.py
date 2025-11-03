@@ -24,12 +24,8 @@ import pandas as pd
 
 from pyspark import pandas as ps
 from pyspark.pandas.config import set_option, reset_option
-from pyspark.testing.pandasutils import (
-    have_matplotlib,
-    matplotlib_requirement_message,
-    PandasOnSparkTestCase,
-    TestUtils,
-)
+from pyspark.testing.pandasutils import PandasOnSparkTestCase, TestUtils
+from pyspark.testing.utils import have_matplotlib, matplotlib_requirement_message
 
 if have_matplotlib:
     import matplotlib
@@ -39,7 +35,7 @@ if have_matplotlib:
 
 
 @unittest.skipIf(not have_matplotlib, matplotlib_requirement_message)
-class SeriesPlotMatplotlibTest(PandasOnSparkTestCase, TestUtils):
+class SeriesPlotMatplotlibTestsMixin:
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
@@ -70,7 +66,7 @@ class SeriesPlotMatplotlibTest(PandasOnSparkTestCase, TestUtils):
 
     @property
     def pdf2(self):
-        return self.psdf2.to_pandas()
+        return self.psdf2._to_pandas()
 
     @staticmethod
     def plot_to_base64(ax):
@@ -393,11 +389,15 @@ class SeriesPlotMatplotlibTest(PandasOnSparkTestCase, TestUtils):
         self.assertEqual(bin1, bin2)
 
 
+class SeriesPlotMatplotlibTests(SeriesPlotMatplotlibTestsMixin, PandasOnSparkTestCase, TestUtils):
+    pass
+
+
 if __name__ == "__main__":
     from pyspark.pandas.tests.plot.test_series_plot_matplotlib import *  # noqa: F401
 
     try:
-        import xmlrunner  # type: ignore[import]
+        import xmlrunner
 
         testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:

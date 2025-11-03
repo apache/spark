@@ -17,18 +17,15 @@
 
 package org.apache.spark.sql.hive.orc
 
-import java.net.URI
-import java.util.Properties
+import java.util.{Base64, Properties}
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
 import com.esotericsoftware.kryo.Kryo
 import com.esotericsoftware.kryo.io.Output
-import org.apache.commons.codec.binary.Base64
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
-import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hadoop.hive.ql.io.orc._
 import org.apache.hadoop.hive.ql.io.sarg.SearchArgument
 import org.apache.hadoop.hive.serde2.objectinspector
@@ -49,6 +46,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.orc.{OrcFilters, OrcOptions, OrcUtils}
 import org.apache.spark.sql.hive.{HiveInspectors, HiveShim}
+import org.apache.spark.sql.internal.SessionStateHelper
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
 import org.apache.spark.util.SerializableConfiguration
@@ -57,7 +55,10 @@ import org.apache.spark.util.SerializableConfiguration
  * `FileFormat` for reading ORC files. If this is moved or renamed, please update
  * `DataSource`'s backwardCompatibilityMap.
  */
-class OrcFileFormat extends FileFormat with DataSourceRegister with Serializable {
+case class OrcFileFormat() extends FileFormat
+  with DataSourceRegister
+  with SessionStateHelper
+  with Serializable {
 
   override def shortName(): String = "orc"
 
@@ -67,16 +68,15 @@ class OrcFileFormat extends FileFormat with DataSourceRegister with Serializable
       sparkSession: SparkSession,
       options: Map[String, String],
       files: Seq[FileStatus]): Option[StructType] = {
-    val orcOptions = new OrcOptions(options, sparkSession.sessionState.conf)
+    val orcOptions = new OrcOptions(options, getSqlConf(sparkSession))
     if (orcOptions.mergeSchema) {
       SchemaMergeUtils.mergeSchemasInParallel(
         sparkSession, options, files, OrcFileOperator.readOrcSchemasInParallel)
     } else {
-      val ignoreCorruptFiles = sparkSession.sessionState.conf.ignoreCorruptFiles
       OrcFileOperator.readSchema(
         files.map(_.getPath.toString),
-        Some(sparkSession.sessionState.newHadoopConfWithOptions(options)),
-        ignoreCorruptFiles
+        Some(getHadoopConf(sparkSession, options)),
+        orcOptions.ignoreCorruptFiles
       )
     }
   }
@@ -87,7 +87,7 @@ class OrcFileFormat extends FileFormat with DataSourceRegister with Serializable
       options: Map[String, String],
       dataSchema: StructType): OutputWriterFactory = {
 
-    val orcOptions = new OrcOptions(options, sparkSession.sessionState.conf)
+    val orcOptions = new OrcOptions(options, getSqlConf(sparkSession))
 
     val configuration = job.getConfiguration
 
@@ -137,22 +137,23 @@ class OrcFileFormat extends FileFormat with DataSourceRegister with Serializable
       options: Map[String, String],
       hadoopConf: Configuration): (PartitionedFile) => Iterator[InternalRow] = {
 
-    if (sparkSession.sessionState.conf.orcFilterPushDown) {
+    if (getSqlConf(sparkSession).orcFilterPushDown) {
       // Sets pushed predicates
       OrcFilters.createFilter(requiredSchema, filters).foreach { f =>
         hadoopConf.set(OrcFileFormat.SARG_PUSHDOWN, toKryo(f))
-        hadoopConf.setBoolean(ConfVars.HIVEOPTINDEXFILTER.varname, true)
+        hadoopConf.setBoolean("hive.optimize.index.filter", true)
       }
     }
 
     val broadcastedHadoopConf =
-      sparkSession.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))
-    val ignoreCorruptFiles = sparkSession.sessionState.conf.ignoreCorruptFiles
+      SerializableConfiguration.broadcast(sparkSession.sparkContext, hadoopConf)
+    val ignoreCorruptFiles =
+      new OrcOptions(options, getSqlConf(sparkSession)).ignoreCorruptFiles
 
     (file: PartitionedFile) => {
       val conf = broadcastedHadoopConf.value.value
 
-      val filePath = new Path(new URI(file.filePath))
+      val filePath = file.toPath
 
       // SPARK-8501: Empty ORC files always have an empty schema stored in their footer. In this
       // case, `OrcFileOperator.readSchema` returns `None`, and we can't read the underlying file
@@ -166,7 +167,7 @@ class OrcFileFormat extends FileFormat with DataSourceRegister with Serializable
 
         val orcRecordReader = {
           val job = Job.getInstance(conf)
-          FileInputFormat.setInputPaths(job, file.filePath)
+          FileInputFormat.setInputPaths(job, file.urlEncodedPath)
 
           // Custom OrcRecordReader is used to get
           // ObjectInspector during recordReader creation itself and can
@@ -192,8 +193,10 @@ class OrcFileFormat extends FileFormat with DataSourceRegister with Serializable
   }
 
   override def supportDataType(dataType: DataType): Boolean = dataType match {
-    case _: AnsiIntervalType => false
+    case _: VariantType => false
 
+    case _: AnsiIntervalType => false
+    case _: TimeType => false
     case _: AtomicType => true
 
     case st: StructType => st.forall { f => supportDataType(f.dataType) }
@@ -215,7 +218,7 @@ class OrcFileFormat extends FileFormat with DataSourceRegister with Serializable
     val out = new Output(4 * 1024, 10 * 1024 * 1024)
     kryo.writeObject(out, sarg)
     out.close()
-    Base64.encodeBase64String(out.toBytes)
+    Base64.getEncoder().encodeToString(out.toBytes)
   }
 }
 

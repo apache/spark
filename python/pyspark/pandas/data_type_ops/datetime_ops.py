@@ -23,8 +23,7 @@ import numpy as np
 import pandas as pd
 from pandas.api.types import CategoricalDtype
 
-from pyspark import SparkContext
-from pyspark.sql import Column
+from pyspark.sql import Column, functions as F
 from pyspark.sql.types import (
     BooleanType,
     LongType,
@@ -33,8 +32,9 @@ from pyspark.sql.types import (
     TimestampNTZType,
     NumericType,
 )
-
+from pyspark.sql.utils import pyspark_column_op
 from pyspark.pandas._typing import Dtype, IndexOpsLike, SeriesOrIndex
+from pyspark.sql.internal import InternalFunction as SF
 from pyspark.pandas.base import IndexOpsMixin
 from pyspark.pandas.data_type_ops.base import (
     DataTypeOps,
@@ -43,7 +43,6 @@ from pyspark.pandas.data_type_ops.base import (
     _as_string_type,
     _sanitize_list_like,
 )
-from pyspark.pandas.spark import functions as SF
 from pyspark.pandas.typedef import pandas_on_spark_type
 
 
@@ -76,7 +75,7 @@ class DatetimeOps(DataTypeOps):
                 SeriesOrIndex,
                 left._with_new_scol(
                     left.astype("long").spark.column
-                    - self._cast_spark_column_timestamp_to_long(SF.lit(right)),
+                    - self._cast_spark_column_timestamp_to_long(F.lit(right)),
                     field=left._internal.data_fields[0].copy(
                         dtype=np.dtype("int64"), spark_type=LongType()
                     ),
@@ -99,7 +98,7 @@ class DatetimeOps(DataTypeOps):
             return cast(
                 SeriesOrIndex,
                 left._with_new_scol(
-                    self._cast_spark_column_timestamp_to_long(SF.lit(right))
+                    self._cast_spark_column_timestamp_to_long(F.lit(right))
                     - left.astype("long").spark.column,
                     field=left._internal.data_fields[0].copy(
                         dtype=np.dtype("int64"), spark_type=LongType()
@@ -110,28 +109,20 @@ class DatetimeOps(DataTypeOps):
             raise TypeError("Datetime subtraction can only be applied to datetime series.")
 
     def lt(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
-        from pyspark.pandas.base import column_op
-
         _sanitize_list_like(right)
-        return column_op(Column.__lt__)(left, right)
+        return pyspark_column_op("__lt__", left, right)
 
     def le(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
-        from pyspark.pandas.base import column_op
-
         _sanitize_list_like(right)
-        return column_op(Column.__le__)(left, right)
+        return pyspark_column_op("__le__", left, right)
 
     def ge(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
-        from pyspark.pandas.base import column_op
-
         _sanitize_list_like(right)
-        return column_op(Column.__ge__)(left, right)
+        return pyspark_column_op("__ge__", left, right)
 
     def gt(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
-        from pyspark.pandas.base import column_op
-
         _sanitize_list_like(right)
-        return column_op(Column.__gt__)(left, right)
+        return pyspark_column_op("__gt__", left, right)
 
     def prepare(self, col: pd.Series) -> pd.Series:
         """Prepare column when from_pandas."""
@@ -160,8 +151,7 @@ class DatetimeNTZOps(DatetimeOps):
     """
 
     def _cast_spark_column_timestamp_to_long(self, scol: Column) -> Column:
-        jvm = SparkContext._active_spark_context._jvm
-        return Column(jvm.PythonSQLUtils.castTimestampNTZToLong(scol._jc))
+        return SF.timestamp_ntz_to_long(scol)
 
     def astype(self, index_ops: IndexOpsLike, dtype: Union[str, type, Dtype]) -> IndexOpsLike:
         dtype, spark_type = pandas_on_spark_type(dtype)

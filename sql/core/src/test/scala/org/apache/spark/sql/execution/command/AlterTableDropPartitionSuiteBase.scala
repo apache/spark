@@ -19,6 +19,9 @@ package org.apache.spark.sql.execution.command
 
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.analysis.NoSuchPartitionsException
+import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
+import org.apache.spark.sql.catalyst.util.quoteIdentifier
+import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -45,7 +48,8 @@ trait AlterTableDropPartitionSuiteBase extends QueryTest with DDLCommandTestUtil
       t: String,
       ifExists: String,
       specs: Map[String, Any]*): Unit = {
-    checkPartitions(t, specs.map(_.mapValues(_.toString).toMap): _*)
+    checkPartitions(t,
+      specs.map(_.map { case (k, v) => (k, v.toString) }.toMap): _*)
     val specStr = specs.map(partSpecToString).mkString(", ")
     sql(s"ALTER TABLE $t DROP $ifExists $specStr")
     checkPartitions(t)
@@ -86,10 +90,13 @@ trait AlterTableDropPartitionSuiteBase extends QueryTest with DDLCommandTestUtil
 
   test("table to alter does not exist") {
     withNamespaceAndTable("ns", "does_not_exist") { t =>
-      val errMsg = intercept[AnalysisException] {
+      val parsed = CatalystSqlParser.parseMultipartIdentifier(t)
+        .map(part => quoteIdentifier(part)).mkString(".")
+      val e = intercept[AnalysisException] {
         sql(s"ALTER TABLE $t DROP PARTITION (a='4', b='9')")
-      }.getMessage
-      assert(errMsg.contains("Table not found"))
+      }
+      checkErrorTableNotFound(e, parsed,
+        ExpectedContext(t, 12, 11 + t.length))
     }
   }
 
@@ -97,10 +104,20 @@ trait AlterTableDropPartitionSuiteBase extends QueryTest with DDLCommandTestUtil
     withNamespaceAndTable("ns", "tbl") { t =>
       sql(s"CREATE TABLE $t (id bigint, data string) $defaultUsing PARTITIONED BY (id)")
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
-        val errMsg = intercept[AnalysisException] {
-          sql(s"ALTER TABLE $t DROP PARTITION (ID=1)")
-        }.getMessage
-        assert(errMsg.contains("ID is not a valid partition column"))
+        val expectedTableName = if (commandVersion == DDLCommandTestUtils.V1_COMMAND_VERSION) {
+          s"`$SESSION_CATALOG_NAME`.`ns`.`tbl`"
+        } else {
+          "`test_catalog`.`ns`.`tbl`"
+        }
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql(s"ALTER TABLE $t DROP PARTITION (ID=1)")
+          },
+          condition = "PARTITIONS_NOT_FOUND",
+          parameters = Map(
+            "partitionList" -> "`ID`",
+            "tableName" -> expectedTableName)
+        )
       }
 
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
@@ -119,9 +136,10 @@ trait AlterTableDropPartitionSuiteBase extends QueryTest with DDLCommandTestUtil
         |$defaultUsing
         |PARTITIONED BY (part0, part1)""".stripMargin)
       val errMsg = intercept[AnalysisException] {
-        sql(s"ALTER TABLE $t DROP PARTITION (part0 = 1)")
+        sql(s"ALTER TABLE $t ADD PARTITION (part0 = 1)")
       }.getMessage
-      assert(errMsg.contains(notFullPartitionSpecErr))
+      assert(errMsg.contains("Partition spec is invalid. " +
+        "The spec (part0) must match the partition spec (part0, part1)"))
     }
   }
 
@@ -130,10 +148,18 @@ trait AlterTableDropPartitionSuiteBase extends QueryTest with DDLCommandTestUtil
       sql(s"CREATE TABLE $t (id bigint, data string) $defaultUsing PARTITIONED BY (id)")
       sql(s"ALTER TABLE $t ADD PARTITION (id=1) LOCATION 'loc'")
 
-      val errMsg = intercept[NoSuchPartitionsException] {
+      val e = intercept[NoSuchPartitionsException] {
         sql(s"ALTER TABLE $t DROP PARTITION (id=1), PARTITION (id=2)")
-      }.getMessage
-      assert(errMsg.contains("partitions not found in table"))
+      }
+      val expectedTableName = if (commandVersion == DDLCommandTestUtils.V1_COMMAND_VERSION) {
+        "`ns`.`tbl`"
+      } else {
+        "`test_catalog`.`ns`.`tbl`"
+      }
+      checkError(e,
+        condition = "PARTITIONS_NOT_FOUND",
+        parameters = Map("partitionList" -> "PARTITION (`id` = 2)",
+        "tableName" -> expectedTableName))
 
       checkPartitions(t, Map("id" -> "1"))
       sql(s"ALTER TABLE $t DROP IF EXISTS PARTITION (id=1), PARTITION (id=2)")
@@ -141,7 +167,7 @@ trait AlterTableDropPartitionSuiteBase extends QueryTest with DDLCommandTestUtil
     }
   }
 
-  test("SPARK-33990: don not return data from dropped partition") {
+  test("SPARK-33990: do not return data from dropped partition") {
     withNamespaceAndTable("ns", "tbl") { t =>
       sql(s"CREATE TABLE $t (id int, part int) $defaultUsing PARTITIONED BY (part)")
       sql(s"INSERT INTO $t PARTITION (part=0) SELECT 0")
@@ -208,25 +234,26 @@ trait AlterTableDropPartitionSuiteBase extends QueryTest with DDLCommandTestUtil
       checkCachedRelation(t, Seq(Row(0, 0), Row(1, 1), Row(2, 2), Row(3, 3)))
 
       withView("v0") {
-        sql(s"CREATE VIEW v0 AS SELECT * FROM $t")
+        // Add a dummy column so that this view is semantically different from raw table scan.
+        sql(s"CREATE VIEW v0 AS SELECT *, 'a' FROM $t")
         cacheRelation("v0")
         sql(s"ALTER TABLE $t DROP PARTITION (part=1)")
-        checkCachedRelation("v0", Seq(Row(0, 0), Row(2, 2), Row(3, 3)))
+        checkCachedRelation("v0", Seq(Row(0, 0, "a"), Row(2, 2, "a"), Row(3, 3, "a")))
       }
 
       withTempView("v1") {
-        sql(s"CREATE TEMP VIEW v1 AS SELECT * FROM $t")
+        sql(s"CREATE TEMP VIEW v1 AS SELECT *, 'a' FROM $t")
         cacheRelation("v1")
         sql(s"ALTER TABLE $t DROP PARTITION (part=2)")
-        checkCachedRelation("v1", Seq(Row(0, 0), Row(3, 3)))
+        checkCachedRelation("v1", Seq(Row(0, 0, "a"), Row(3, 3, "a")))
       }
 
-      val v2 = s"${spark.sharedState.globalTempViewManager.database}.v2"
+      val v2 = s"${spark.sharedState.globalTempDB}.v2"
       withGlobalTempView("v2") {
-        sql(s"CREATE GLOBAL TEMP VIEW v2 AS SELECT * FROM $t")
+        sql(s"CREATE GLOBAL TEMP VIEW v2 AS SELECT *, 'a' FROM $t")
         cacheRelation(v2)
         sql(s"ALTER TABLE $t DROP PARTITION (part=3)")
-        checkCachedRelation(v2, Seq(Row(0, 0)))
+        checkCachedRelation(v2, Seq(Row(0, 0, "a")))
       }
     }
   }
@@ -238,6 +265,54 @@ trait AlterTableDropPartitionSuiteBase extends QueryTest with DDLCommandTestUtil
       checkPartitions(t, Map("part" -> "2020-01-01"))
       sql(s"ALTER TABLE $t DROP PARTITION (part = date'2020-01-01')")
       checkPartitions(t)
+    }
+  }
+
+  test("SPARK-41982: drop partition when keepPartitionSpecAsString set `true`") {
+    withSQLConf(SQLConf.LEGACY_KEEP_PARTITION_SPEC_AS_STRING_LITERAL.key -> "true") {
+      withNamespaceAndTable("ns", "tbl") { t =>
+        sql(s"CREATE TABLE $t(name STRING, age INT) using orc PARTITIONED BY (dt STRING)")
+        sql(s"ALTER TABLE $t ADD PARTITION(dt = 08)")
+        checkPartitions(t, Map("dt" -> "08"))
+        sql(s"ALTER TABLE $t DROP PARTITION (dt = 08)")
+        checkPartitions(t)
+        sql(s"ALTER TABLE $t ADD PARTITION(dt = '08')")
+        checkPartitions(t, Map("dt" -> "08"))
+        sql(s"ALTER TABLE $t DROP PARTITION (dt = '08')")
+        checkPartitions(t)
+      }
+    }
+
+    withSQLConf(SQLConf.LEGACY_KEEP_PARTITION_SPEC_AS_STRING_LITERAL.key -> "false") {
+      withNamespaceAndTable("ns", "tb2") { t =>
+        sql(s"CREATE TABLE $t(name STRING, age INT) using orc PARTITIONED BY (dt STRING)")
+        sql(s"ALTER TABLE $t ADD PARTITION(dt = 08)")
+        checkPartitions(t, Map("dt" -> "8"))
+        sql(s"ALTER TABLE $t DROP PARTITION (dt = 08)")
+        checkPartitions(t)
+        sql(s"ALTER TABLE $t ADD PARTITION(dt = 08)")
+        checkPartitions(t, Map("dt" -> "8"))
+        sql(s"ALTER TABLE $t DROP PARTITION (dt = 8)")
+        checkPartitions(t)
+      }
+    }
+  }
+
+  test("SPARK-42480: drop partition when dropPartitionByName enabled") {
+    withSQLConf(SQLConf.HIVE_METASTORE_DROP_PARTITION_BY_NAME.key -> "true") {
+      withNamespaceAndTable("ns", "tbl") { t =>
+        sql(s"CREATE TABLE $t(name STRING, age INT) USING PARQUET PARTITIONED BY (region STRING)")
+        sql(s"ALTER TABLE $t ADD PARTITION (region='=reg1') LOCATION 'loc1'")
+        checkPartitions(t, Map("region" -> "=reg1"))
+        sql(s"ALTER TABLE $t PARTITION (region='=reg1') RENAME TO PARTITION (region='=%reg1')")
+        checkPartitions(t, Map("region" -> "=%reg1"))
+        sql(s"ALTER TABLE $t DROP PARTITION (region='=%reg1')")
+        checkPartitions(t)
+        sql(s"ALTER TABLE $t ADD PARTITION (region='reg?2') LOCATION 'loc2'")
+        checkPartitions(t, Map("region" -> "reg?2"))
+        sql(s"ALTER TABLE $t DROP PARTITION (region='reg?2')")
+        checkPartitions(t)
+      }
     }
   }
 }

@@ -23,8 +23,6 @@ import java.nio.ByteBuffer;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufInputStream;
-import org.apache.commons.lang3.builder.ToStringBuilder;
-import org.apache.commons.lang3.builder.ToStringStyle;
 
 /**
  * A {@link ManagedBuffer} backed by a Netty {@link ByteBuf}.
@@ -69,9 +67,12 @@ public class NettyManagedBuffer extends ManagedBuffer {
   }
 
   @Override
+  public Object convertToNettyForSsl() throws IOException {
+    return buf.duplicate().retain();
+  }
+
+  @Override
   public String toString() {
-    return new ToStringBuilder(this, ToStringStyle.SHORT_PREFIX_STYLE)
-      .append("buf", buf)
-      .toString();
+    return "NettyManagedBuffer[buf=" + buf + "]";
   }
 }

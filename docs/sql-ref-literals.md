@@ -46,10 +46,24 @@ A string literal is used to specify a character string value.
     One character from the character set. Use `\` to escape special characters (e.g., `'` or `\`).
     To represent unicode characters, use 16-bit or 32-bit unicode escape of the form `\uxxxx` or `\Uxxxxxxxx`,
     where xxxx and xxxxxxxx are 16-bit and 32-bit code points in hexadecimal respectively (e.g., `\u3042` for `あ` and `\U0001F44D` for `👍`).
+    An ASCII character can also be represented as an octal number preceded by `\` like `\101`, which represents `A`.
 
 * **r**
 
     Case insensitive, indicates `RAW`. If a string literal starts with `r` prefix, neither special characters nor unicode characters are escaped by `\`.
+
+The following escape sequences are recognized in regular string literals (without the `r` prefix), and replaced according to the following rules:
+- `\0` -> `\u0000`, unicode character with the code 0;
+- `\b` -> `\u0008`, backspace;
+- `\n` -> `\u000a`, linefeed;
+- `\r` -> `\u000d`, carriage return;
+- `\t` -> `\u0009`, horizontal tab;
+- `\Z` -> `\u001A`, substitute;
+- `\%` -> `\%`;
+- `\_` -> `\_`;
+- `\<other char>` -> `<other char>`, skip the slash and leave the character as is.
+
+The unescaping rules above can be turned off by setting the SQL config `spark.sql.parser.escapedStringLiterals` to `true`.
 
 #### Examples
 
@@ -65,14 +79,14 @@ SELECT "SPARK SQL" AS col;
 +---------+
 |      col|
 +---------+
-|Spark SQL|
+|SPARK SQL|
 +---------+
 
 SELECT 'it\'s $10.' AS col;
 +---------+
 |      col|
 +---------+
-|It's $10.|
+|it's $10.|
 +---------+
 
 SELECT r"'\n' represents newline character." AS col;
@@ -265,12 +279,19 @@ E [ + | - ] digit [ ... ]
 #### Fractional Literals Examples
 
 ```sql
-SELECT 12.578 AS col;
-+------+
-|   col|
-+------+
-|12.578|
-+------+
+SELECT 12.578 AS col, TYPEOF(12.578) AS type;
++------+------------+
+|   col|        type|
++------+------------+
+|12.578|decimal(5,3)|
++------+------------+
+
+SELECT 12.578E0 AS col, TYPEOF(12.578E0) AS type;
++------+------+
+|   col|  type|
++------+------+
+|12.578|double|
++------+------+
 
 SELECT -0.1234567 AS col;
 +----------+
@@ -352,7 +373,7 @@ SELECT -3.E-3D AS col;
 
 ### Datetime Literal
 
-A datetime literal is used to specify a date or timestamp value.
+A datetime literal is used to specify a date, time or timestamp value.
 
 #### Date Syntax
 
@@ -387,6 +408,44 @@ SELECT DATE '2011-11-11' AS col;
 +----------+
 |2011-11-11|
 +----------+
+```
+
+#### Time Syntax
+
+```sql
+TIME { '[h]h:[m]m[:]' |
+       '[h]h:[m]m:[s]s[.]' |
+       '[h]h:[m]m:[s]s.[ms][ms][ms][us][us][us]'}
+```
+**Note:** defaults to `00` if hour, minute or second is not specified.
+
+#### Time Examples
+
+```sql
+SELECT TIME'12:00' as col;
++--------+
+|col     |
++--------+
+|12:00:00|
++--------+
+SELECT TIME'2:0' as col;
++--------+
+|col     |
++--------+
+|02:00:00|
++--------+
+SELECT TIME'2:0:3' as col;
++--------+
+|col     |
++--------+
+|02:00:03|
++--------+
+SELECT TIME'23:59:59.999999' as col;
++---------------+
+|col            |
++---------------+
+|23:59:59.999999|
++---------------+
 ```
 
 #### Timestamp Syntax

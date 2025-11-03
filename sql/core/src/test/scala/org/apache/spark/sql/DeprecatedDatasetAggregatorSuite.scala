@@ -28,7 +28,7 @@ class DeprecatedDatasetAggregatorSuite extends QueryTest with SharedSparkSession
   test("typed aggregation: TypedAggregator") {
     val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
 
-    checkDataset(
+    checkDatasetUnorderly(
       ds.groupByKey(_._1).agg(typed.sum(_._2)),
       ("a", 30.0), ("b", 3.0), ("c", 1.0))
   }
@@ -36,7 +36,7 @@ class DeprecatedDatasetAggregatorSuite extends QueryTest with SharedSparkSession
   test("typed aggregation: TypedAggregator, expr, expr") {
     val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
 
-    checkDataset(
+    checkDatasetUnorderly(
       ds.groupByKey(_._1).agg(
         typed.sum(_._2),
         expr("sum(_2)").as[Long],
@@ -57,7 +57,7 @@ class DeprecatedDatasetAggregatorSuite extends QueryTest with SharedSparkSession
 
   test("typed aggregate: avg, count, sum") {
     val ds = Seq("a" -> 1, "a" -> 3, "b" -> 3).toDS()
-    checkDataset(
+    checkDatasetUnorderly(
       ds.groupByKey(_._1).agg(
         typed.avg(_._2), typed.count(_._2), typed.sum(_._2), typed.sumLong(_._2)),
       ("a", 2.0, 2L, 4.0, 4L), ("b", 3.0, 1L, 3.0, 3L))

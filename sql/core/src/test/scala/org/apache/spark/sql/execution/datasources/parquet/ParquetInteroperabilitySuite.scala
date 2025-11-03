@@ -20,9 +20,9 @@ package org.apache.spark.sql.execution.datasources.parquet
 import java.io.File
 import java.time.ZoneOffset
 
-import org.apache.commons.io.FileUtils
 import org.apache.hadoop.fs.{Path, PathFilter}
 import org.apache.parquet.format.converter.ParquetMetadataConverter.NO_FILTER
+import org.apache.parquet.hadoop.util.HadoopInputFile
 import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName
 
 import org.apache.spark.sql.Row
@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{ArrayType, IntegerType, StructField, StructType}
+import org.apache.spark.util.Utils
 
 class ParquetInteroperabilitySuite extends ParquetCompatibilityTest with SharedSparkSession {
   test("parquet files with different physical schemas but share the same logical schema") {
@@ -102,47 +103,51 @@ class ParquetInteroperabilitySuite extends ParquetCompatibilityTest with SharedS
     // the data can be correctly read back.
 
     Seq(false, true).foreach { legacyMode =>
-      withSQLConf(SQLConf.PARQUET_WRITE_LEGACY_FORMAT.key -> legacyMode.toString) {
-        withTempPath { tableDir =>
-          val schema1 = StructType(
-            StructField("col-0", ArrayType(
-              StructType(
-                StructField("col-0", IntegerType, true) ::
-                Nil
-              ),
-              containsNull = false // allows to create 2-level Parquet LIST type in legacy mode
-            )) ::
-            Nil
-          )
-          val row1 = Row(Seq(Row(1)))
-          val df1 = spark.createDataFrame(spark.sparkContext.parallelize(row1 :: Nil, 1), schema1)
-          df1.write.parquet(tableDir.getAbsolutePath)
-
-          val schema2 = StructType(
-            StructField("col-0", ArrayType(
-              StructType(
-                StructField("col-0", IntegerType, true) ::
-                StructField("col-1", IntegerType, true) :: // additional field
-                Nil
-              ),
-              containsNull = false
-            )) ::
-            Nil
-          )
-          val row2 = Row(Seq(Row(1, 2)))
-          val df2 = spark.createDataFrame(spark.sparkContext.parallelize(row2 :: Nil, 1), schema2)
-          df2.write.mode("append").parquet(tableDir.getAbsolutePath)
-
-          // Reading of data should succeed and should not fail with
-          // java.lang.ClassCastException: optional int32 col-0 is not a group
-          withAllParquetReaders {
-            checkAnswer(
-              spark.read.schema(schema2).parquet(tableDir.getAbsolutePath),
-              Seq(
-                Row(Seq(Row(1, null))),
-                Row(Seq(Row(1, 2)))
-              )
+      Seq(false, true).foreach { offheapEnabled =>
+        withSQLConf(
+            SQLConf.PARQUET_WRITE_LEGACY_FORMAT.key -> legacyMode.toString,
+            SQLConf.COLUMN_VECTOR_OFFHEAP_ENABLED.key -> offheapEnabled.toString) {
+          withTempPath { tableDir =>
+            val schema1 = StructType(
+              StructField("col-0", ArrayType(
+                StructType(
+                  StructField("col-0", IntegerType, true) ::
+                  Nil
+                ),
+                containsNull = false // allows to create 2-level Parquet LIST type in legacy mode
+              )) ::
+              Nil
             )
+            val row1 = Row(Seq(Row(1)))
+            val df1 = spark.createDataFrame(spark.sparkContext.parallelize(row1 :: Nil, 1), schema1)
+            df1.write.parquet(tableDir.getAbsolutePath)
+
+            val schema2 = StructType(
+              StructField("col-0", ArrayType(
+                StructType(
+                  StructField("col-0", IntegerType, true) ::
+                  StructField("col-1", IntegerType, true) :: // additional field
+                  Nil
+                ),
+                containsNull = false
+              )) ::
+              Nil
+            )
+            val row2 = Row(Seq(Row(1, 2)))
+            val df2 = spark.createDataFrame(spark.sparkContext.parallelize(row2 :: Nil, 1), schema2)
+            df2.write.mode("append").parquet(tableDir.getAbsolutePath)
+
+            // Reading of data should succeed and should not fail with
+            // java.lang.ClassCastException: optional int32 col-0 is not a group
+            withAllParquetReaders {
+              checkAnswer(
+                spark.read.schema(schema2).parquet(tableDir.getAbsolutePath),
+                Seq(
+                  Row(Seq(Row(1, null))),
+                  Row(Seq(Row(1, 2)))
+                )
+              )
+            }
           }
         }
       }
@@ -173,7 +178,7 @@ class ParquetInteroperabilitySuite extends ParquetCompatibilityTest with SharedS
       // match the column names of the file from impala
       val df = spark.createDataset(ts).toDF().repartition(1).withColumnRenamed("value", "ts")
       df.write.parquet(tableDir.getAbsolutePath)
-      FileUtils.copyFile(new File(impalaPath), new File(tableDir, "part-00001.parq"))
+      Utils.copyFile(new File(impalaPath), new File(tableDir, "part-00001.parq"))
 
       Seq(false, true).foreach { int96TimestampConversion =>
         withAllParquetReaders {
@@ -183,7 +188,7 @@ class ParquetInteroperabilitySuite extends ParquetCompatibilityTest with SharedS
               (SQLConf.PARQUET_INT96_TIMESTAMP_CONVERSION.key, int96TimestampConversion.toString())
           ) {
             val readBack = spark.read.parquet(tableDir.getAbsolutePath).collect()
-            assert(readBack.size === 6)
+            assert(readBack.length === 6)
             // if we apply the conversion, we'll get the "right" values, as saved by impala in the
             // original file.  Otherwise, they're off by the local timezone offset, set to
             // America/Los_Angeles in tests
@@ -209,8 +214,8 @@ class ParquetInteroperabilitySuite extends ParquetCompatibilityTest with SharedS
               // predicates because (a) in ParquetFilters, we ignore TimestampType and (b) parquet
               // does not read statistics from int96 fields, as they are unsigned.  See
               // scalastyle:off line.size.limit
-              // https://github.com/apache/parquet-mr/blob/2fd62ee4d524c270764e9b91dca72e5cf1a005b7/parquet-hadoop/src/main/java/org/apache/parquet/format/converter/ParquetMetadataConverter.java#L419
-              // https://github.com/apache/parquet-mr/blob/2fd62ee4d524c270764e9b91dca72e5cf1a005b7/parquet-hadoop/src/main/java/org/apache/parquet/format/converter/ParquetMetadataConverter.java#L348
+              // https://github.com/apache/parquet-java/blob/2fd62ee4d524c270764e9b91dca72e5cf1a005b7/parquet-hadoop/src/main/java/org/apache/parquet/format/converter/ParquetMetadataConverter.java#L419
+              // https://github.com/apache/parquet-java/blob/2fd62ee4d524c270764e9b91dca72e5cf1a005b7/parquet-hadoop/src/main/java/org/apache/parquet/format/converter/ParquetMetadataConverter.java#L348
               // scalastyle:on line.size.limit
               //
               // Just to be defensive in case anything ever changes in parquet, this test checks
@@ -225,8 +230,8 @@ class ParquetInteroperabilitySuite extends ParquetCompatibilityTest with SharedS
               // sure the test is configured correctly.
               assert(parts.size == 2)
               parts.foreach { part =>
-                val oneFooter =
-                  ParquetFooterReader.readFooter(hadoopConf, part.getPath, NO_FILTER)
+                val oneFooter = ParquetFooterReader.readFooter(
+                  HadoopInputFile.fromStatus(part, hadoopConf), NO_FILTER)
                 assert(oneFooter.getFileMetaData.getSchema.getColumns.size === 1)
                 val typeName = oneFooter
                   .getFileMetaData.getSchema.getColumns.get(0).getPrimitiveType.getPrimitiveTypeName

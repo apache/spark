@@ -23,12 +23,13 @@ import scala.collection.mutable
 
 import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.SparkException
+import org.apache.spark.{ExecutorDeadException, SparkException}
 import org.apache.spark.sql.ForeachWriter
-import org.apache.spark.sql.execution.streaming.MemoryStream
+import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.functions.{count, timestamp_seconds, window}
 import org.apache.spark.sql.streaming.{OutputMode, StreamingQueryException, StreamTest}
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.util.ArrayImplicits._
 
 class ForeachWriterSuite extends StreamTest with SharedSparkSession with BeforeAndAfter {
 
@@ -127,12 +128,14 @@ class ForeachWriterSuite extends StreamTest with SharedSparkSession with BeforeA
   testQuietly("foreach with error") {
     withTempDir { checkpointDir =>
       val input = MemoryStream[Int]
+
+      val funcEx = new RuntimeException("ForeachSinkSuite error")
       val query = input.toDS().repartition(1).writeStream
         .option("checkpointLocation", checkpointDir.getCanonicalPath)
         .foreach(new TestForeachWriter() {
           override def process(value: Int): Unit = {
             super.process(value)
-            throw new RuntimeException("ForeachSinkSuite error")
+            throw funcEx
           }
         }).start()
       input.addData(1, 2, 3, 4)
@@ -141,8 +144,13 @@ class ForeachWriterSuite extends StreamTest with SharedSparkSession with BeforeA
       val e = intercept[StreamingQueryException] {
         query.processAllAvailable()
       }
-      assert(e.getCause.isInstanceOf[SparkException])
-      assert(e.getCause.getCause.getCause.getMessage === "ForeachSinkSuite error")
+
+      val errClass = "FOREACH_USER_FUNCTION_ERROR"
+
+      // verify that we classified the exception
+      assert(e.getMessage.contains(errClass))
+      assert(e.cause.asInstanceOf[RuntimeException].getMessage == funcEx.getMessage)
+
       assert(query.isActive === false)
 
       val allEvents = ForeachWriterSuite.allEvents()
@@ -156,6 +164,23 @@ class ForeachWriterSuite extends StreamTest with SharedSparkSession with BeforeA
       assert(errorEvent.error.get.getMessage === "ForeachSinkSuite error")
       // 'close' shouldn't be called with abort message if close with error has been called
       assert(allEvents(0).size == 3)
+
+      val sparkEx = ExecutorDeadException("network error")
+      val e2 = intercept[StreamingQueryException] {
+        val query2 = input.toDS().repartition(1).writeStream
+          .foreach(new TestForeachWriter() {
+            override def process(value: Int): Unit = {
+              super.process(value)
+              throw sparkEx
+            }
+          }).start()
+        query2.processAllAvailable()
+      }
+
+      // we didn't wrap the spark exception
+      assert(!e2.getMessage.contains(errClass))
+      assert(e2.getCause.getCause.asInstanceOf[ExecutorDeadException].getMessage
+        == sparkEx.getMessage)
     }
   }
 
@@ -261,7 +286,7 @@ class ForeachWriterSuite extends StreamTest with SharedSparkSession with BeforeA
     }
   }
 
-  testQuietly("foreach with error not caused by ForeachWriter") {
+  test("foreach with error not caused by ForeachWriter") {
     withTempDir { checkpointDir =>
       val input = MemoryStream[Int]
       val query = input.toDS().repartition(1).map(_ / 0).writeStream
@@ -275,7 +300,7 @@ class ForeachWriterSuite extends StreamTest with SharedSparkSession with BeforeA
       }
 
       assert(e.getCause.isInstanceOf[SparkException])
-      assert(e.getCause.getCause.getCause.getMessage === "/ by zero")
+      assert(e.getCause.getCause.getMessage === "/ by zero")
       assert(query.isActive === false)
 
       val allEvents = ForeachWriterSuite.allEvents()
@@ -283,9 +308,11 @@ class ForeachWriterSuite extends StreamTest with SharedSparkSession with BeforeA
       assert(allEvents(0)(0) === ForeachWriterSuite.Open(partition = 0, version = 0))
       // `close` should be called with the error
       val errorEvent = allEvents(0)(1).asInstanceOf[ForeachWriterSuite.Close]
-      assert(errorEvent.error.get.isInstanceOf[SparkException])
-      assert(errorEvent.error.get.getMessage ===
-        "Foreach writer has been aborted due to a task failure")
+      checkError(
+        exception = errorEvent.error.get.asInstanceOf[SparkException],
+        condition = "_LEGACY_ERROR_TEMP_2256",
+        parameters = Map.empty
+      )
     }
   }
 }
@@ -308,7 +335,7 @@ object ForeachWriterSuite {
   }
 
   def allEvents(): Seq[Seq[Event]] = {
-    _allEvents.toArray(new Array[Seq[Event]](_allEvents.size()))
+    _allEvents.toArray(new Array[Seq[Event]](_allEvents.size())).toImmutableArraySeq
   }
 
   def clear(): Unit = {

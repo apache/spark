@@ -19,11 +19,14 @@ package org.apache.spark.sql.kafka010
 
 import java.{util => ju}
 
+import org.apache.spark.TaskContext
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.connector.metric.CustomTaskMetric
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader, PartitionReaderFactory}
+import org.apache.spark.sql.execution.streaming.runtime.{MicroBatchExecution, StreamExecution}
 import org.apache.spark.sql.kafka010.consumer.KafkaDataConsumer
 
 /** A [[InputPartition]] for reading Kafka data in a batch based streaming query. */
@@ -32,11 +35,27 @@ private[kafka010] case class KafkaBatchInputPartition(
     executorKafkaParams: ju.Map[String, Object],
     pollTimeoutMs: Long,
     failOnDataLoss: Boolean,
-    includeHeaders: Boolean) extends InputPartition
+    includeHeaders: Boolean) extends InputPartition {
+  override def preferredLocations(): Array[String] = {
+    offsetRange.preferredLoc.map(Array(_)).getOrElse(Array())
+  }
+}
 
-private[kafka010] object KafkaBatchReaderFactory extends PartitionReaderFactory {
+private[kafka010] object KafkaBatchReaderFactory extends PartitionReaderFactory with Logging {
   override def createReader(partition: InputPartition): PartitionReader[InternalRow] = {
     val p = partition.asInstanceOf[KafkaBatchInputPartition]
+
+    val taskCtx = TaskContext.get()
+    val queryId = taskCtx.getLocalProperty(StreamExecution.QUERY_ID_KEY)
+    val batchId = taskCtx.getLocalProperty(MicroBatchExecution.BATCH_ID_KEY)
+    logInfo(log"Creating Kafka reader " +
+      log"topicPartition=${MDC(TOPIC_PARTITION, p.offsetRange.topicPartition)} " +
+      log"fromOffset=${MDC(FROM_OFFSET, p.offsetRange.fromOffset)}} " +
+      log"untilOffset=${MDC(UNTIL_OFFSET, p.offsetRange.untilOffset)}, " +
+      log"for query queryId=${MDC(QUERY_ID, queryId)} batchId=${MDC(BATCH_ID, batchId)} " +
+      log"taskId=${MDC(TASK_ATTEMPT_ID, TaskContext.get().taskAttemptId())} " +
+      log"partitionId=${MDC(PARTITION_ID, TaskContext.get().partitionId())}")
+
     KafkaBatchPartitionReader(p.offsetRange, p.executorKafkaParams, p.pollTimeoutMs,
       p.failOnDataLoss, p.includeHeaders)
   }

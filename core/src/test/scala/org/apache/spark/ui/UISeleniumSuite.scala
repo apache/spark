@@ -17,20 +17,20 @@
 
 package org.apache.spark.ui
 
-import java.net.URL
+import java.net.{URI, URL}
 import java.util.Locale
-import javax.servlet.http.{HttpServletRequest, HttpServletResponse}
 
 import scala.io.Source
 import scala.xml.Node
 
-import com.gargoylesoftware.css.parser.CSSParseException
-import com.gargoylesoftware.htmlunit.DefaultCssErrorHandler
+import jakarta.servlet.http.{HttpServletRequest, HttpServletResponse}
+import org.glassfish.jersey.internal.util.collection.MultivaluedStringMap
+import org.htmlunit.DefaultCssErrorHandler
+import org.htmlunit.cssparser.parser.CSSParseException
 import org.json4s._
 import org.json4s.jackson.JsonMethods
 import org.openqa.selenium.{By, WebDriver}
 import org.openqa.selenium.htmlunit.HtmlUnitDriver
-import org.scalatest.BeforeAndAfterAll
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.matchers.must.Matchers
 import org.scalatest.matchers.should.Matchers._
@@ -46,6 +46,7 @@ import org.apache.spark.internal.config.Status._
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.shuffle.FetchFailedException
 import org.apache.spark.status.api.v1.{JacksonMessageWriter, RDDDataDistribution, StageStatus}
+import org.apache.spark.tags.WebBrowserTest
 import org.apache.spark.util.Utils
 
 private[spark] class SparkUICssErrorHandler extends DefaultCssErrorHandler {
@@ -80,10 +81,11 @@ private[spark] class SparkUICssErrorHandler extends DefaultCssErrorHandler {
 /**
  * Selenium tests for the Spark Web UI.
  */
-class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with BeforeAndAfterAll {
+@WebBrowserTest
+class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers {
 
   implicit var webDriver: WebDriver = _
-  implicit val formats = DefaultFormats
+  implicit val formats: Formats = DefaultFormats
 
 
   override def beforeAll(): Unit = {
@@ -109,6 +111,7 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
    */
   private def newSparkContext(
       killEnabled: Boolean = true,
+      timelineEnabled: Boolean = true,
       master: String = "local",
       additionalConfs: Map[String, String] = Map.empty): SparkContext = {
     val conf = new SparkConf()
@@ -117,6 +120,7 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
       .set(UI_ENABLED, true)
       .set(UI_PORT, 0)
       .set(UI_KILL_ENABLED, killEnabled)
+      .set(UI_TIMELINE_ENABLED, timelineEnabled)
       .set(MEMORY_OFFHEAP_SIZE.key, "64m")
     additionalConfs.foreach { case (k, v) => conf.set(k, v) }
     val sc = new SparkContext(conf)
@@ -338,7 +342,7 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
         data.dependencies.head.asInstanceOf[ShuffleDependency[_, _, _]].shuffleHandle
       // Simulate fetch failures:
       val mappedData = data.map { x =>
-        val taskContext = TaskContext.get
+        val taskContext = TaskContext.get()
         if (taskContext.taskAttemptId() == 1) {
           // Cause the post-shuffle stage to fail on its first attempt with a single task failure
           val env = SparkEnv.get
@@ -540,8 +544,8 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
     withSpark(newSparkContext(killEnabled = true)) { sc =>
       sc.parallelize(1 to 10).map{x => Thread.sleep(10000); x}.countAsync()
       eventually(timeout(5.seconds), interval(50.milliseconds)) {
-        val url = new URL(
-          sc.ui.get.webUrl.stripSuffix("/") + "/stages/stage/kill/?id=0")
+        val url = new URI(
+          sc.ui.get.webUrl.stripSuffix("/") + "/stages/stage/kill/?id=0").toURL
         // SPARK-6846: should be POST only but YARN AM doesn't proxy POST
         TestUtils.httpResponseCode(url, "GET") should be (200)
         TestUtils.httpResponseCode(url, "POST") should be (200)
@@ -553,8 +557,8 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
     withSpark(newSparkContext(killEnabled = true)) { sc =>
       sc.parallelize(1 to 10).map{x => Thread.sleep(10000); x}.countAsync()
       eventually(timeout(5.seconds), interval(50.milliseconds)) {
-        val url = new URL(
-          sc.ui.get.webUrl.stripSuffix("/") + "/jobs/job/kill/?id=0")
+        val url = new URI(
+          sc.ui.get.webUrl.stripSuffix("/") + "/jobs/job/kill/?id=0").toURL
         // SPARK-6846: should be POST only but YARN AM doesn't proxy POST
         TestUtils.httpResponseCode(url, "GET") should be (200)
         TestUtils.httpResponseCode(url, "POST") should be (200)
@@ -688,8 +692,8 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
 
   test("live UI json application list") {
     withSpark(newSparkContext()) { sc =>
-      val appListRawJson = HistoryServerSuite.getUrl(new URL(
-        sc.ui.get.webUrl + "/api/v1/applications"))
+      val appListRawJson = HistoryServerSuite.getUrl(new URI(
+        sc.ui.get.webUrl + "/api/v1/applications").toURL)
       val appListJsonAst = JsonMethods.parse(appListRawJson)
       appListJsonAst.children.length should be (1)
       val attempts = (appListJsonAst.children.head \ "attempts").children
@@ -698,7 +702,14 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
       parseDate(attempts(0) \ "startTime") should be (sc.startTime)
       parseDate(attempts(0) \ "endTime") should be (-1)
       val oneAppJsonAst = getJson(sc.ui.get, "")
-      oneAppJsonAst should be (appListJsonAst.children(0))
+      val duration = attempts(0) \ "duration"
+      oneAppJsonAst \\ "duration" should not be duration
+      // SPARK-42697: duration will increase as the app is running
+      // Replace the duration before we compare the full JObjects
+      val durationAdjusted = oneAppJsonAst.transformField {
+        case ("duration", _) => ("duration", duration)
+      }
+      durationAdjusted should be (appListJsonAst.children(0))
     }
   }
 
@@ -712,32 +723,57 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
       eventually(timeout(5.seconds), interval(100.milliseconds)) {
         val stage0 = Utils.tryWithResource(Source.fromURL(sc.ui.get.webUrl +
           "/stages/stage/?id=0&attempt=0&expandDagViz=true"))(_.mkString)
-        assert(stage0.contains("digraph G {\n  subgraph clusterstage_0 {\n    " +
-          "label=&quot;Stage 0&quot;;\n    subgraph "))
-        assert(stage0.contains("{\n      label=&quot;parallelize&quot;;\n      " +
-          "0 [labelType=&quot;html&quot; label=&quot;ParallelCollectionRDD [0]"))
-        assert(stage0.contains("{\n      label=&quot;map&quot;;\n      " +
-          "1 [labelType=&quot;html&quot; label=&quot;MapPartitionsRDD [1]"))
-        assert(stage0.contains("{\n      label=&quot;groupBy&quot;;\n      " +
-          "2 [labelType=&quot;html&quot; label=&quot;MapPartitionsRDD [2]"))
+        assert(stage0.contains("""digraph G {
+                                 |  id=&quot;graph_0&quot;;
+                                 |  subgraph graph_stage_0 {
+                                 |    id=&quot;graph_stage_0&quot;;
+                                 |    isCluster=&quot;true&quot;;
+                                 |    label=&quot;Stage 0&quot;;""".stripMargin))
+        assert(stage0.contains("""
+                                 |      isCluster=&quot;true&quot;;
+                                 |      label=&quot;parallelize&quot;;
+                                 |      0 [id=&quot;node_0&quot;""".stripMargin))
+        assert(stage0.contains("""
+                                 |      isCluster=&quot;true&quot;;
+                                 |      label=&quot;map&quot;;
+                                 |      1 [id=&quot;node_1&quot;""".stripMargin))
+        assert(stage0.contains("""
+                                 |      isCluster=&quot;true&quot;;
+                                 |      label=&quot;groupBy&quot;;
+                                 |      2 [id=&quot;node_2&quot;""".stripMargin))
 
         val stage1 = Utils.tryWithResource(Source.fromURL(sc.ui.get.webUrl +
           "/stages/stage/?id=1&attempt=0&expandDagViz=true"))(_.mkString)
-        assert(stage1.contains("digraph G {\n  subgraph clusterstage_1 {\n    " +
-          "label=&quot;Stage 1&quot;;\n    subgraph "))
-        assert(stage1.contains("{\n      label=&quot;groupBy&quot;;\n      " +
-          "3 [labelType=&quot;html&quot; label=&quot;ShuffledRDD [3]"))
-        assert(stage1.contains("{\n      label=&quot;map&quot;;\n      " +
-          "4 [labelType=&quot;html&quot; label=&quot;MapPartitionsRDD [4]"))
-        assert(stage1.contains("{\n      label=&quot;groupBy&quot;;\n      " +
-          "5 [labelType=&quot;html&quot; label=&quot;MapPartitionsRDD [5]"))
+        assert(stage1.contains("""digraph G {
+                                 |  id=&quot;graph_1&quot;;
+                                 |  subgraph graph_stage_1 {
+                                 |    id=&quot;graph_stage_1&quot;;
+                                 |    isCluster=&quot;true&quot;;
+                                 |    label=&quot;Stage 1&quot;;""".stripMargin))
+        assert(stage1.contains("""
+                                 |      isCluster=&quot;true&quot;;
+                                 |      label=&quot;groupBy&quot;;""".stripMargin))
+        assert(stage1.contains(
+          "3 [id=&quot;node_3&quot; labelType=&quot;html&quot; label=&quot;ShuffledRDD"))
+        assert(stage1.contains("""
+                                 |      isCluster=&quot;true&quot;;
+                                 |      label=&quot;map&quot;;""".stripMargin))
+        assert(stage1.contains(
+          "4 [id=&quot;node_4&quot; labelType=&quot;html&quot; label=&quot;MapPartitionsRDD [4]"))
 
         val stage2 = Utils.tryWithResource(Source.fromURL(sc.ui.get.webUrl +
           "/stages/stage/?id=2&attempt=0&expandDagViz=true"))(_.mkString)
-        assert(stage2.contains("digraph G {\n  subgraph clusterstage_2 {\n    " +
-          "label=&quot;Stage 2&quot;;\n    subgraph "))
-        assert(stage2.contains("{\n      label=&quot;groupBy&quot;;\n      " +
-          "6 [labelType=&quot;html&quot; label=&quot;ShuffledRDD [6]"))
+        assert(stage2.contains("""digraph G {
+                                 |  id=&quot;graph_2&quot;;
+                                 |  subgraph graph_stage_2 {
+                                 |    id=&quot;graph_stage_2&quot;;
+                                 |    isCluster=&quot;true&quot;;
+                                 |    label=&quot;Stage 2&quot;;""".stripMargin))
+        assert(stage2.contains("""
+                                 |      isCluster=&quot;true&quot;;
+                                 |      label=&quot;groupBy&quot;;""".stripMargin))
+        assert(stage2.contains(
+          "6 [id=&quot;node_6&quot; labelType=&quot;html&quot; label=&quot;ShuffledRDD [6]"))
       }
     }
   }
@@ -786,16 +822,81 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
 
   test("description for empty jobs") {
     withSpark(newSparkContext()) { sc =>
-      sc.emptyRDD[Int].collect
+      sc.emptyRDD[Int].collect()
       val description = "This is my job"
       sc.setJobDescription(description)
-      sc.emptyRDD[Int].collect
+      sc.emptyRDD[Int].collect()
 
       eventually(timeout(10.seconds), interval(50.milliseconds)) {
         goToUi(sc, "/jobs")
         val descriptions = findAll(className("description-input")).toArray
         descriptions(0).text should be (description)
         descriptions(1).text should include ("collect")
+      }
+    }
+  }
+
+  test("Support disable event timeline") {
+    Seq(true, false).foreach { timelineEnabled =>
+      withSpark(newSparkContext(timelineEnabled = timelineEnabled)) { sc =>
+        sc.range(1, 3).collect()
+        eventually(timeout(10.seconds), interval(50.milliseconds)) {
+          goToUi(sc, "/jobs")
+          assert(findAll(className("expand-application-timeline")).nonEmpty === timelineEnabled)
+
+          goToUi(sc, "/jobs/job/?id=0")
+          assert(findAll(className("expand-job-timeline")).nonEmpty === timelineEnabled)
+
+          goToUi(sc, "/stages/stage/?id=0&attempt=0")
+          assert(findAll(className("expand-task-assignment-timeline")).nonEmpty === timelineEnabled)
+        }
+      }
+    }
+  }
+
+  test("SPARK-41365: Stage page can be accessed if URI was encoded twice") {
+    withSpark(newSparkContext()) { sc =>
+      val rdd = sc.parallelize(0 to 10, 10).repartition(10)
+      rdd.count()
+      eventually(timeout(5.seconds), interval(50.milliseconds)) {
+        val encodeParams = new MultivaluedStringMap
+        encodeParams.add("order%255B0%255D%255Bcolumn%255D", "Locality%2520Level")
+        encodeParams.add("order%255B0%255D%255Bcolumn%255D", "Executor%2520ID")
+        encodeParams.add("search%255Bvalue%255D", null)
+        val decodeParams = UIUtils.decodeURLParameter(encodeParams)
+        // assert no change in order
+        assert(decodeParams.getFirst("order[0][column]").equals("Locality Level"))
+        assert(decodeParams.get("order[0][column]").size() == 2)
+        assert(decodeParams.getFirst("search[value]").equals(""))
+
+        val decodeQuery = "draw=2&order[0][column]=4&order[0][dir]=asc&start=0&length=20" +
+          "&search[value]=&search[regex]=false&numTasks=10&columnIndexToSort=4" +
+          "&columnNameToSort=Locality Level"
+        val encodeOnceQuery = "draw=2&order%5B0%5D%5Bcolumn%5D=4&start=0&length=20" +
+          "&search%5Bvalue%5D=&search%5Bregex%5D=false&numTasks=10&columnIndexToSort=4" +
+          "&columnNameToSort=Locality%20Level"
+        val encodeTwiceQuery = "draw=2&order%255B0%255D%255Bcolumn%255D=4&start=0&length=20" +
+          "&search%255Bvalue%255D=&search%255Bregex%255D=false&numTasks=10&columnIndexToSort=4" +
+          "&columnNameToSort=Locality%2520Level"
+        val encodeOnceRes = Utils.tryWithResource(Source.fromURL(
+          apiUrl(sc.ui.get, "stages/0/0/taskTable?" + encodeOnceQuery)))(_.mkString)
+        val encodeTwiceRes = Utils.tryWithResource(Source.fromURL(
+          apiUrl(sc.ui.get, "stages/0/0/taskTable?" + encodeTwiceQuery)))(_.mkString)
+        assert(encodeOnceRes.equals(encodeTwiceRes))
+      }
+    }
+  }
+
+  test("SPARK-44895: Add 'daemon', 'priority' for ThreadStackTrace") {
+    withSpark(newSparkContext()) { sc =>
+      val uiThreads = getJson(sc.ui.get, "executors/driver/threads")
+        .children
+        .filter(v => (v \ "threadName").extract[String].matches("SparkUI-\\d+"))
+      val priority = Thread.currentThread().getPriority
+
+      uiThreads.foreach { v =>
+        assert((v \ "isDaemon").extract[Boolean])
+        assert((v \ "priority").extract[Int] === priority)
       }
     }
   }
@@ -817,6 +918,6 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
   }
 
   def apiUrl(ui: SparkUI, path: String): URL = {
-    new URL(ui.webUrl + "/api/v1/applications/" + ui.sc.get.applicationId + "/" + path)
+    new URI(ui.webUrl + "/api/v1/applications/" + ui.sc.get.applicationId + "/" + path).toURL
   }
 }

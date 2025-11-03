@@ -21,8 +21,7 @@ import java.util.concurrent.TimeUnit
 
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config.{PYSPARK_DRIVER_PYTHON, PYSPARK_PYTHON}
-import org.apache.spark.internal.config.ConfigBuilder
+import org.apache.spark.internal.config.{ConfigBuilder, PYSPARK_DRIVER_PYTHON, PYSPARK_PYTHON}
 
 private[spark] object Config extends Logging {
 
@@ -50,7 +49,8 @@ private[spark] object Config extends Logging {
   val KUBERNETES_DRIVER_MASTER_URL =
     ConfigBuilder("spark.kubernetes.driver.master")
       .doc("The internal Kubernetes master (API server) address " +
-        "to be used for driver to request executors.")
+        "to be used for driver to request executors or " +
+        "'local[*]' for driver-only mode.")
       .version("3.0.0")
       .stringConf
       .createWithDefault(KUBERNETES_MASTER_INTERNAL_URL)
@@ -63,13 +63,38 @@ private[spark] object Config extends Logging {
       .booleanConf
       .createWithDefault(true)
 
+  val KUBERNETES_USE_LEGACY_PVC_ACCESS_MODE =
+    ConfigBuilder("spark.kubernetes.legacy.useReadWriteOnceAccessMode")
+      .internal()
+      .doc("If true, use ReadWriteOnce instead of ReadWriteOncePod as persistence volume " +
+        "access mode.")
+      .version("3.4.3")
+      .booleanConf
+      .createWithDefault(false)
+
+  val KUBERNETES_DRIVER_SERVICE_IP_FAMILY_POLICY =
+    ConfigBuilder("spark.kubernetes.driver.service.ipFamilyPolicy")
+      .doc("K8s IP Family Policy for Driver Service")
+      .version("3.4.0")
+      .stringConf
+      .checkValues(Set("SingleStack", "PreferDualStack", "RequireDualStack"))
+      .createWithDefault("SingleStack")
+
+  val KUBERNETES_DRIVER_SERVICE_IP_FAMILIES =
+    ConfigBuilder("spark.kubernetes.driver.service.ipFamilies")
+      .doc("A list of IP families for K8s Driver Service")
+      .version("3.4.0")
+      .stringConf
+      .checkValues(Set("IPv4", "IPv6", "IPv4,IPv6", "IPv6,IPv4"))
+      .createWithDefault("IPv4")
+
   val KUBERNETES_DRIVER_OWN_PVC =
     ConfigBuilder("spark.kubernetes.driver.ownPersistentVolumeClaim")
       .doc("If true, driver pod becomes the owner of on-demand persistent volume claims " +
         "instead of the executor pods")
       .version("3.2.0")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   val KUBERNETES_DRIVER_REUSE_PVC =
     ConfigBuilder("spark.kubernetes.driver.reusePersistentVolumeClaim")
@@ -82,6 +107,23 @@ private[spark] object Config extends Logging {
         "number of persistent volume claims can be larger than the number of running executors " +
         s"sometimes. This config requires ${KUBERNETES_DRIVER_OWN_PVC.key}=true.")
       .version("3.2.0")
+      .booleanConf
+      .createWithDefault(true)
+
+  val KUBERNETES_DRIVER_WAIT_TO_REUSE_PVC =
+    ConfigBuilder("spark.kubernetes.driver.waitToReusePersistentVolumeClaim")
+      .doc("If true, driver pod counts the number of created on-demand persistent volume claims " +
+        "and wait if the number is greater than or equal to the total number of volumes which " +
+        "the Spark job is able to have. This config requires both " +
+        s"${KUBERNETES_DRIVER_OWN_PVC.key}=true and ${KUBERNETES_DRIVER_REUSE_PVC.key}=true.")
+      .version("3.4.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  val KUBERNETES_EXECUTOR_USE_DRIVER_POD_IP =
+    ConfigBuilder("spark.kubernetes.executor.useDriverPodIP")
+      .doc("If true, executor pods use Driver pod IP directly instead of Driver Service.")
+      .version("4.1.0")
       .booleanConf
       .createWithDefault(false)
 
@@ -96,20 +138,23 @@ private[spark] object Config extends Logging {
     ConfigBuilder("spark.kubernetes.container.image")
       .doc("Container image to use for Spark containers. Individual container types " +
         "(e.g. driver or executor) can also be configured to use different images if desired, " +
-        "by setting the container type-specific image name.")
+        "by setting the container type-specific image name. Note that `{{SPARK_VERSION}}` is " +
+        "the built-in variable that will be substituted with current Spark's version.")
       .version("2.3.0")
       .stringConf
       .createOptional
 
   val DRIVER_CONTAINER_IMAGE =
     ConfigBuilder("spark.kubernetes.driver.container.image")
-      .doc("Container image to use for the driver.")
+      .doc("Container image to use for the driver. Note that `{{SPARK_VERSION}}` is " +
+        "the built-in variable that will be substituted with current Spark's version.")
       .version("2.3.0")
       .fallbackConf(CONTAINER_IMAGE)
 
   val EXECUTOR_CONTAINER_IMAGE =
     ConfigBuilder("spark.kubernetes.executor.container.image")
-      .doc("Container image to use for the executors.")
+      .doc("Container image to use for the executors. Note that `{{SPARK_VERSION}}` is " +
+        "the built-in variable that will be substituted with current Spark's version.")
       .version("2.3.0")
       .fallbackConf(CONTAINER_IMAGE)
 
@@ -136,7 +181,8 @@ private[spark] object Config extends Logging {
         " https://etcd.io/docs/v3.4.0/dev-guide/limit/ on k8s server end.")
       .version("3.1.0")
       .longConf
-      .createWithDefault(1572864) // 1.5 MiB
+      .checkValue(_ <= 1048576, "Must have at most 1048576 bytes")
+      .createWithDefault(1048576) // 1.0 MiB
 
   val EXECUTOR_ROLL_INTERVAL =
     ConfigBuilder("spark.kubernetes.executor.rollInterval")
@@ -148,13 +194,15 @@ private[spark] object Config extends Logging {
 
   object ExecutorRollPolicy extends Enumeration {
     val ID, ADD_TIME, TOTAL_GC_TIME, TOTAL_DURATION, AVERAGE_DURATION, FAILED_TASKS,
+      PEAK_JVM_ONHEAP_MEMORY, PEAK_JVM_OFFHEAP_MEMORY, TOTAL_SHUFFLE_WRITE, DISK_USED,
       OUTLIER, OUTLIER_NO_FALLBACK = Value
   }
 
   val EXECUTOR_ROLL_POLICY =
     ConfigBuilder("spark.kubernetes.executor.rollPolicy")
       .doc("Executor roll policy: Valid values are ID, ADD_TIME, TOTAL_GC_TIME, " +
-        "TOTAL_DURATION, FAILED_TASKS, and OUTLIER (default). " +
+        "TOTAL_DURATION, AVERAGE_DURATION, FAILED_TASKS, PEAK_JVM_ONHEAP_MEMORY, " +
+        "PEAK_JVM_OFFHEAP_MEMORY, OUTLIER (default), and OUTLIER_NO_FALLBACK. " +
         "When executor roll happens, Spark uses this policy to choose " +
         "an executor and decommission it. The built-in policies are based on executor summary." +
         "ID policy chooses an executor with the smallest executor ID. " +
@@ -163,6 +211,11 @@ private[spark] object Config extends Logging {
         "TOTAL_DURATION policy chooses an executor with the biggest total task time. " +
         "AVERAGE_DURATION policy chooses an executor with the biggest average task time. " +
         "FAILED_TASKS policy chooses an executor with the most number of failed tasks. " +
+        "PEAK_JVM_ONHEAP_MEMORY policy chooses an executor with the biggest peak JVM on-heap " +
+        "memory. PEAK_JVM_OFFHEAP_MEMORY policy chooses an executor with the biggest peak JVM " +
+        "off-heap memory. " +
+        "TOTAL_SHUFFLE_WRITE policy chooses an executor with the biggest total shuffle write. " +
+        "DISK_USED policy chooses an executor with the biggest used disk size. " +
         "OUTLIER policy chooses an executor with outstanding statistics which is bigger than" +
         "at least two standard deviation from the mean in average task time, " +
         "total task time, total task GC time, and the number of failed tasks if exists. " +
@@ -323,7 +376,7 @@ private[spark] object Config extends Logging {
   private def isValidExecutorPodNamePrefix(prefix: String): Boolean = {
     // 6 is length of '-exec-'
     val reservedLen = Int.MaxValue.toString.length + 6
-    val validLength = prefix.length + reservedLen <= KUBERNETES_DNSNAME_MAX_LENGTH
+    val validLength = prefix.length + reservedLen <= KUBERNETES_DNS_SUBDOMAIN_NAME_MAX_LENGTH
     validLength && podConfValidator.matcher(prefix).matches()
   }
 
@@ -331,15 +384,15 @@ private[spark] object Config extends Logging {
     ConfigBuilder("spark.kubernetes.executor.podNamePrefix")
       .doc("Prefix to use in front of the executor pod names. It must conform the rules defined " +
         "by the Kubernetes <a href=\"https://kubernetes.io/docs/concepts/overview/" +
-        "working-with-objects/names/#dns-label-names\">DNS Label Names</a>. " +
+        "working-with-objects/names/#dns-subdomain-names\">DNS Subdomain Names</a>. " +
         "The prefix will be used to generate executor pod names in the form of " +
         "<code>$podNamePrefix-exec-$id</code>, where the `id` is a positive int value, " +
-        "so the length of the `podNamePrefix` needs to be <= 47(= 63 - 10 - 6).")
+        "so the length of the `podNamePrefix` needs to be <= 237(= 253 - 10 - 6).")
       .version("2.3.0")
       .stringConf
       .checkValue(isValidExecutorPodNamePrefix,
         "must conform https://kubernetes.io/docs/concepts/overview/working-with-objects" +
-          "/names/#dns-label-names and the value length <= 47")
+          "/names/#dns-subdomain-names and the value length <= 237")
       .createOptional
 
   val KUBERNETES_EXECUTOR_DISABLE_CONFIGMAP =
@@ -361,6 +414,14 @@ private[spark] object Config extends Logging {
       .toSequence
       .createWithDefault(Nil)
 
+  val KUBERNETES_DRIVER_POD_EXCLUDED_FEATURE_STEPS =
+    ConfigBuilder("spark.kubernetes.driver.pod.excludedFeatureSteps")
+      .doc("Class names to exclude from driver pod feature steps. Comma separated.")
+      .version("4.1.0")
+      .stringConf
+      .toSequence
+      .createWithDefault(Nil)
+
   val KUBERNETES_EXECUTOR_POD_FEATURE_STEPS =
     ConfigBuilder("spark.kubernetes.executor.pod.featureSteps")
       .doc("Class name of an extra executor pod feature step implementing " +
@@ -369,6 +430,14 @@ private[spark] object Config extends Logging {
         "step can implement `KubernetesExecutorCustomFeatureConfigStep` where the executor " +
         "config is also available.")
       .version("3.2.0")
+      .stringConf
+      .toSequence
+      .createWithDefault(Nil)
+
+  val KUBERNETES_EXECUTOR_POD_EXCLUDED_FEATURE_STEPS =
+    ConfigBuilder("spark.kubernetes.executor.pod.excludedFeatureSteps")
+      .doc("Class name to exclude from executor pod feature steps. Comma separated.")
+      .version("4.1.0")
       .stringConf
       .toSequence
       .createWithDefault(Nil)
@@ -407,15 +476,23 @@ private[spark] object Config extends Logging {
       .version("2.3.0")
       .intConf
       .checkValue(value => value > 0, "Allocation batch size should be a positive integer")
-      .createWithDefault(5)
+      .createWithDefault(10)
 
   val KUBERNETES_ALLOCATION_BATCH_DELAY =
     ConfigBuilder("spark.kubernetes.allocation.batch.delay")
       .doc("Time to wait between each round of executor allocation.")
       .version("2.3.0")
       .timeConf(TimeUnit.MILLISECONDS)
-      .checkValue(value => value > 0, "Allocation batch delay must be a positive time value.")
+      .checkValue(value => value > 100, "Allocation batch delay must be greater than 0.1s.")
       .createWithDefaultString("1s")
+
+  val KUBERNETES_ALLOCATION_MAXIMUM =
+    ConfigBuilder("spark.kubernetes.allocation.maximum")
+      .doc("The maximum number of executor pods to try to create during the whole job lifecycle.")
+      .version("4.1.0")
+      .intConf
+      .checkValue(value => value > 0, "Allocation maximum should be a positive integer")
+      .createWithDefault(Int.MaxValue)
 
   val KUBERNETES_ALLOCATION_DRIVER_READINESS_TIMEOUT =
     ConfigBuilder("spark.kubernetes.allocation.driver.readinessTimeout")
@@ -437,16 +514,6 @@ private[spark] object Config extends Logging {
       .checkValue(value => value > 0, "Allocation executor timeout must be a positive time value.")
       .createWithDefaultString("600s")
 
-  val KUBERNETES_EXECUTOR_LOST_REASON_CHECK_MAX_ATTEMPTS =
-    ConfigBuilder("spark.kubernetes.executor.lostCheck.maxAttempts")
-      .doc("Maximum number of attempts allowed for checking the reason of an executor loss " +
-        "before it is assumed that the executor failed.")
-      .version("2.3.0")
-      .intConf
-      .checkValue(value => value > 0, "Maximum attempts of checks of executor lost reason " +
-        "must be a positive integer")
-      .createWithDefault(10)
-
   val WAIT_FOR_APP_COMPLETION =
     ConfigBuilder("spark.kubernetes.submission.waitAppCompletion")
       .doc("In cluster mode, whether to wait for the application to finish before exiting the " +
@@ -462,6 +529,25 @@ private[spark] object Config extends Logging {
       .timeConf(TimeUnit.MILLISECONDS)
       .checkValue(interval => interval > 0, s"Logging interval must be a positive time value.")
       .createWithDefaultString("1s")
+
+  val KUBERNETES_EXECUTOR_ENABLE_API_POLLING =
+    ConfigBuilder("spark.kubernetes.executor.enableApiPolling")
+      .doc("If Spark should poll Kubernetes for executor pod status. " +
+        "You should leave this enabled unless you're encountering issues with your etcd.")
+      .version("3.4.0")
+      .internal()
+      .booleanConf
+      .createWithDefault(true)
+
+  val KUBERNETES_EXECUTOR_ENABLE_API_WATCHER =
+    ConfigBuilder("spark.kubernetes.executor.enableApiWatcher")
+      .doc("If Spark should create watchers for executor pod status. " +
+        "You should leave this enabled unless you're encountering issues with your etcd.")
+      .version("3.4.0")
+      .internal()
+      .booleanConf
+      .createWithDefault(true)
+
 
   val KUBERNETES_EXECUTOR_API_POLLING_INTERVAL =
     ConfigBuilder("spark.kubernetes.executor.apiPollingInterval")
@@ -630,6 +716,14 @@ private[spark] object Config extends Logging {
       .booleanConf
       .createWithDefault(true)
 
+  val KUBERNETES_EXECUTOR_TERMINATION_GRACE_PERIOD_SECONDS =
+    ConfigBuilder("spark.kubernetes.executor.terminationGracePeriodSeconds")
+      .doc("Time to wait for graceful termination of executor pods.")
+      .version("4.1.0")
+      .timeConf(TimeUnit.SECONDS)
+      .checkValue(period => period >= 0, "terminationGracePeriodSeconds must be non-negative")
+      .createWithDefaultString("30s")
+
   val KUBERNETES_DYN_ALLOC_KILL_GRACE_PERIOD =
     ConfigBuilder("spark.kubernetes.dynamicAllocation.deleteGracePeriod")
       .doc("How long to wait for executors to shut down gracefully before a forceful kill.")
@@ -659,7 +753,7 @@ private[spark] object Config extends Logging {
         "executor status.")
       .version("3.1.0")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   val KUBERNETES_EXECUTOR_MISSING_POD_DETECT_DELTA =
     ConfigBuilder("spark.kubernetes.executor.missingPodDetectDelta")
@@ -684,8 +778,42 @@ private[spark] object Config extends Logging {
       .checkValue(value => value > 0, "Maximum number of pending pods should be a positive integer")
       .createWithDefault(Int.MaxValue)
 
+  val KUBERNETES_MAX_PENDING_PODS_PER_RPID =
+    ConfigBuilder("spark.kubernetes.allocation.maxPendingPodsPerRp")
+      .doc("Maximum number of pending PODs allowed per resource profile ID during executor " +
+        "allocation. This provides finer-grained control over pending pods by limiting them " +
+        "per resource profile rather than globally. When set, this limit is enforced " +
+        "independently for each resource profile ID.")
+      .version("4.1.0")
+      .intConf
+      .checkValue(value => value > 0,
+        "Maximum number of pending pods per rp id should be a positive integer")
+      .createWithDefault(Int.MaxValue)
+
+  val KUBERNETES_EXECUTOR_SNAPSHOTS_SUBSCRIBERS_GRACE_PERIOD =
+    ConfigBuilder("spark.kubernetes.executorSnapshotsSubscribersShutdownGracePeriod")
+      .doc("Time to wait for graceful shutdown kubernetes-executor-snapshots-subscribers " +
+        "thread pool. Since it may be called by ShutdownHookManager, where timeout is " +
+        "controlled by hadoop configuration `hadoop.service.shutdown.timeout` " +
+        "(default is 30s). As the whole Spark shutdown procedure shares the above timeout, " +
+        "this value should be short than that to prevent blocking the following shutdown " +
+        "procedures.")
+      .version("3.4.0")
+      .timeConf(TimeUnit.SECONDS)
+      .checkValue(value => value > 0, "Gracefully shutdown period must be a positive time value")
+      .createWithDefaultString("20s")
+
+  val KUBERNETES_ANNOTATE_EXIT_EXCEPTION =
+    ConfigBuilder("spark.kubernetes.driver.annotateExitException")
+      .doc("If set to true, Spark will store the exit exception failed applications in" +
+        s" the Kubernetes API server using the $EXIT_EXCEPTION_ANNOTATION annotation.")
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val KUBERNETES_DRIVER_LABEL_PREFIX = "spark.kubernetes.driver.label."
   val KUBERNETES_DRIVER_ANNOTATION_PREFIX = "spark.kubernetes.driver.annotation."
+  val KUBERNETES_DRIVER_SERVICE_LABEL_PREFIX = "spark.kubernetes.driver.service.label."
   val KUBERNETES_DRIVER_SERVICE_ANNOTATION_PREFIX = "spark.kubernetes.driver.service.annotation."
   val KUBERNETES_DRIVER_SECRETS_PREFIX = "spark.kubernetes.driver.secrets."
   val KUBERNETES_DRIVER_SECRET_KEY_REF_PREFIX = "spark.kubernetes.driver.secretKeyRef."
@@ -703,15 +831,19 @@ private[spark] object Config extends Logging {
   val KUBERNETES_VOLUMES_NFS_TYPE = "nfs"
   val KUBERNETES_VOLUMES_MOUNT_PATH_KEY = "mount.path"
   val KUBERNETES_VOLUMES_MOUNT_SUBPATH_KEY = "mount.subPath"
+  val KUBERNETES_VOLUMES_MOUNT_SUBPATHEXPR_KEY = "mount.subPathExpr"
   val KUBERNETES_VOLUMES_MOUNT_READONLY_KEY = "mount.readOnly"
   val KUBERNETES_VOLUMES_OPTIONS_PATH_KEY = "options.path"
+  val KUBERNETES_VOLUMES_OPTIONS_TYPE_KEY = "options.type"
   val KUBERNETES_VOLUMES_OPTIONS_CLAIM_NAME_KEY = "options.claimName"
   val KUBERNETES_VOLUMES_OPTIONS_CLAIM_STORAGE_CLASS_KEY = "options.storageClass"
   val KUBERNETES_VOLUMES_OPTIONS_MEDIUM_KEY = "options.medium"
   val KUBERNETES_VOLUMES_OPTIONS_SIZE_LIMIT_KEY = "options.sizeLimit"
   val KUBERNETES_VOLUMES_OPTIONS_SERVER_KEY = "options.server"
-
+  val KUBERNETES_VOLUMES_LABEL_KEY = "label."
+  val KUBERNETES_VOLUMES_ANNOTATION_KEY = "annotation."
   val KUBERNETES_DRIVER_ENV_PREFIX = "spark.kubernetes.driverEnv."
 
-  val KUBERNETES_DNSNAME_MAX_LENGTH = 63
+  val KUBERNETES_DNS_SUBDOMAIN_NAME_MAX_LENGTH = 253
+  val KUBERNETES_DNS_LABEL_NAME_MAX_LENGTH = 63
 }

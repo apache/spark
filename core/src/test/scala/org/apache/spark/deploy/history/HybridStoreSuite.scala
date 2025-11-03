@@ -21,7 +21,6 @@ import java.io.File
 import java.util.NoSuchElementException
 import java.util.concurrent.LinkedBlockingQueue
 
-import org.apache.commons.io.FileUtils
 import org.scalatest.BeforeAndAfter
 import org.scalatest.concurrent.TimeLimits
 import org.scalatest.time.SpanSugar._
@@ -29,6 +28,7 @@ import org.scalatest.time.SpanSugar._
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.status.KVUtils._
 import org.apache.spark.tags.ExtendedLevelDBTest
+import org.apache.spark.util.Utils
 import org.apache.spark.util.kvstore._
 
 abstract class HybridStoreSuite extends SparkFunSuite with BeforeAndAfter with TimeLimits {
@@ -41,7 +41,7 @@ abstract class HybridStoreSuite extends SparkFunSuite with BeforeAndAfter with T
       db.close()
     }
     if (dbpath != null) {
-      FileUtils.deleteQuietly(dbpath)
+      Utils.deleteQuietly(dbpath)
     }
   }
 
@@ -78,7 +78,7 @@ abstract class HybridStoreSuite extends SparkFunSuite with BeforeAndAfter with T
     store.setMetadata(t1)
     assert(store.getMetadata(classOf[CustomType1]) === t1)
 
-    // Switch to LevelDB and set a new metadata
+    // Switch to RocksDB/LevelDB and set a new metadata
     switchHybridStore(store)
 
     val t2 = createCustomType1(2)
@@ -103,6 +103,13 @@ abstract class HybridStoreSuite extends SparkFunSuite with BeforeAndAfter with T
   }
 
   test("test basic iteration") {
+
+    def head[T](view: KVStoreView[T]): T = {
+      Utils.tryWithResource(view.closeableIterator()) { iter =>
+        assert(iter.hasNext)
+        iter.next()
+      }
+    }
     val store = createHybridStore()
 
     val t1 = createCustomType1(1)
@@ -113,11 +120,11 @@ abstract class HybridStoreSuite extends SparkFunSuite with BeforeAndAfter with T
     Seq(false, true).foreach { switch =>
       if (switch) switchHybridStore(store)
 
-      assert(store.view(t1.getClass()).iterator().next().id === t1.id)
-      assert(store.view(t1.getClass()).skip(1).iterator().next().id === t2.id)
-      assert(store.view(t1.getClass()).skip(1).max(1).iterator().next().id === t2.id)
-      assert(store.view(t1.getClass()).first(t1.key).max(1).iterator().next().id === t1.id)
-      assert(store.view(t1.getClass()).first(t2.key).max(1).iterator().next().id === t2.id)
+      assert(head(store.view(t1.getClass)).id === t1.id)
+      assert(head(store.view(t1.getClass()).skip(1)).id === t2.id)
+      assert(head(store.view(t1.getClass()).skip(1).max(1)).id === t2.id)
+      assert(head(store.view(t1.getClass()).first(t1.key).max(1)).id === t1.id)
+      assert(head(store.view(t1.getClass()).first(t2.key).max(1)).id === t2.id)
     }
   }
 

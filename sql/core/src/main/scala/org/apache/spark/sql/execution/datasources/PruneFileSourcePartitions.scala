@@ -32,8 +32,7 @@ import org.apache.spark.sql.catalyst.rules.Rule
  * statistics will be updated. And the partition filters will be kept in the filters of returned
  * logical plan.
  */
-private[sql] object PruneFileSourcePartitions
-  extends Rule[LogicalPlan] with PredicateHelper {
+private[sql] object PruneFileSourcePartitions extends Rule[LogicalPlan] {
 
   private def rebuildPhysicalOperation(
       projects: Seq[NamedExpression],
@@ -50,21 +49,25 @@ private[sql] object PruneFileSourcePartitions
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan transformDown {
     case op @ PhysicalOperation(projects, filters,
-        logicalRelation @
-          LogicalRelation(fsRelation @
+        logicalRelation @ LogicalRelationWithTable(
+          fsRelation @
             HadoopFsRelation(
-              catalogFileIndex: CatalogFileIndex,
-              partitionSchema,
-              _,
-              _,
-              _,
-              _),
+            catalogFileIndex: CatalogFileIndex,
+            partitionSchema,
             _,
             _,
-            _))
+            _,
+            _),
+          _)
+        )
         if filters.nonEmpty && fsRelation.partitionSchema.nonEmpty =>
       val normalizedFilters = DataSourceStrategy.normalizeExprs(
-        filters.filter(f => f.deterministic && !SubqueryExpression.hasSubquery(f)),
+        filters.filter { f =>
+          f.deterministic &&
+            !SubqueryExpression.hasSubquery(f) &&
+            // Python UDFs might exist because this rule is applied before ``ExtractPythonUDFs``.
+            !f.exists(_.isInstanceOf[PythonUDF])
+        },
         logicalRelation.output)
       val (partitionKeyFilters, _) = DataSourceUtils
         .getPartitionFiltersAndDataFilters(partitionSchema, normalizedFilters)

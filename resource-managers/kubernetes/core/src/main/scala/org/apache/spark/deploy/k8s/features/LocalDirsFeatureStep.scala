@@ -18,12 +18,14 @@ package org.apache.spark.deploy.k8s.features
 
 import java.util.UUID
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import io.fabric8.kubernetes.api.model._
 
 import org.apache.spark.deploy.k8s.{KubernetesConf, SparkPod}
 import org.apache.spark.deploy.k8s.Config._
+import org.apache.spark.util.ArrayImplicits._
+import org.apache.spark.util.Utils.randomize
 
 private[spark] class LocalDirsFeatureStep(
     conf: KubernetesConf,
@@ -33,23 +35,24 @@ private[spark] class LocalDirsFeatureStep(
   private val useLocalDirTmpFs = conf.get(KUBERNETES_LOCAL_DIRS_TMPFS)
 
   override def configurePod(pod: SparkPod): SparkPod = {
-    var localDirs = pod.container.getVolumeMounts.asScala
+    var localDirs = randomize(pod.container.getVolumeMounts.asScala
       .filter(_.getName.startsWith("spark-local-dir-"))
-      .map(_.getMountPath)
-    var localDirVolumes : Seq[Volume] = Seq()
-    var localDirVolumeMounts : Seq[VolumeMount] = Seq()
+      .map(_.getMountPath))
+    var localDirVolumes: Seq[Volume] = Seq()
+    var localDirVolumeMounts: Seq[VolumeMount] = Seq()
 
     if (localDirs.isEmpty) {
       // Cannot use Utils.getConfiguredLocalDirs because that will default to the Java system
       // property - we want to instead default to mounting an emptydir volume that doesn't already
       // exist in the image.
       // We could make utils.getConfiguredLocalDirs opinionated about Kubernetes, as it is already
-      // a bit opinionated about YARN and Mesos.
+      // a bit opinionated about YARN.
       val resolvedLocalDirs = Option(conf.sparkConf.getenv("SPARK_LOCAL_DIRS"))
         .orElse(conf.getOption("spark.local.dir"))
         .getOrElse(defaultLocalDir)
         .split(",")
-      localDirs = resolvedLocalDirs.toBuffer
+      randomize(resolvedLocalDirs)
+      localDirs = resolvedLocalDirs.toImmutableArraySeq
       localDirVolumes = resolvedLocalDirs
         .zipWithIndex
         .map { case (_, index) =>
@@ -59,7 +62,7 @@ private[spark] class LocalDirsFeatureStep(
               .withMedium(if (useLocalDirTmpFs) "Memory" else null)
             .endEmptyDir()
             .build()
-        }
+        }.toImmutableArraySeq
 
       localDirVolumeMounts = localDirVolumes
         .zip(resolvedLocalDirs)
@@ -68,7 +71,7 @@ private[spark] class LocalDirsFeatureStep(
             .withName(localDirVolume.getName)
             .withMountPath(localDirPath)
             .build()
-          }
+        }
     }
 
     val podWithLocalDirVolumes = new PodBuilder(pod.pod)

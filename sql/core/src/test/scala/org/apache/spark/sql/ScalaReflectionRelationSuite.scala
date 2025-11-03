@@ -19,7 +19,7 @@ package org.apache.spark.sql
 
 import java.sql.{Date, Timestamp}
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkFunSuite, SparkUnsupportedOperationException}
 import org.apache.spark.sql.test.SharedSparkSession
 
 case class ReflectData(
@@ -159,18 +159,25 @@ class ScalaReflectionRelationSuite extends SparkFunSuite with SharedSparkSession
   }
 
   test("better error message when use java reserved keyword as field name") {
-    val e = intercept[UnsupportedOperationException] {
-      Seq(InvalidInJava(1)).toDS()
-    }
-    assert(e.getMessage.contains(
-      "`abstract` is not a valid identifier of Java and cannot be used as field name"))
+    checkError(
+      exception = intercept[SparkUnsupportedOperationException] {
+        Seq(InvalidInJava(1)).toDS()
+      },
+      condition = "INVALID_JAVA_IDENTIFIER_AS_FIELD_NAME",
+      parameters = Map(
+        "fieldName" -> "`abstract`",
+        "walkedTypePath" -> "- root class: \"org.apache.spark.sql.InvalidInJava\""))
   }
 
   test("better error message when use invalid java identifier as field name") {
-    val e1 = intercept[UnsupportedOperationException] {
-      Seq(InvalidInJava2(1)).toDS()
-    }
-    assert(e1.getMessage.contains(
-      "`0` is not a valid identifier of Java and cannot be used as field name"))
+    checkError(
+      exception = intercept[SparkUnsupportedOperationException] {
+        Seq(InvalidInJava2(1)).toDS()
+      },
+      condition = "INVALID_JAVA_IDENTIFIER_AS_FIELD_NAME",
+      parameters = Map(
+        "fieldName" -> "`0`",
+        "walkedTypePath" ->
+          "- root class: \"org.apache.spark.sql.ScalaReflectionRelationSuite.InvalidInJava2\""))
   }
 }

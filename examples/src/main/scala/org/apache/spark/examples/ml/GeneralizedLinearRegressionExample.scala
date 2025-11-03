@@ -35,7 +35,7 @@ object GeneralizedLinearRegressionExample {
 
   def main(args: Array[String]): Unit = {
     val spark = SparkSession
-      .builder
+      .builder()
       .appName("GeneralizedLinearRegressionExample")
       .getOrCreate()
 

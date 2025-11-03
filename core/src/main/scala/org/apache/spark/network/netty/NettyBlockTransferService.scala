@@ -21,8 +21,8 @@ import java.io.IOException
 import java.nio.ByteBuffer
 import java.util.{HashMap => JHashMap, Map => JMap}
 
-import scala.collection.JavaConverters._
 import scala.concurrent.{Future, Promise}
+import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 import scala.util.{Success, Try}
 
@@ -30,7 +30,7 @@ import com.codahale.metrics.{Metric, MetricSet}
 
 import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.ExecutorDeadException
-import org.apache.spark.internal.config
+import org.apache.spark.internal.{config, Logging, LogKeys}
 import org.apache.spark.network._
 import org.apache.spark.network.buffer.{ManagedBuffer, NioManagedBuffer}
 import org.apache.spark.network.client.{RpcResponseCallback, TransportClientBootstrap}
@@ -40,7 +40,7 @@ import org.apache.spark.network.shuffle.{BlockFetchingListener, BlockTransferLis
 import org.apache.spark.network.shuffle.protocol.{UploadBlock, UploadBlockStream}
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.rpc.RpcEndpointRef
-import org.apache.spark.serializer.JavaSerializer
+import org.apache.spark.serializer.SerializerManager
 import org.apache.spark.storage.{BlockId, StorageLevel}
 import org.apache.spark.storage.BlockManagerMessages.IsExecutorAlive
 import org.apache.spark.util.Utils
@@ -51,15 +51,16 @@ import org.apache.spark.util.Utils
 private[spark] class NettyBlockTransferService(
     conf: SparkConf,
     securityManager: SecurityManager,
+    serializerManager: SerializerManager,
     bindAddress: String,
     override val hostName: String,
     _port: Int,
     numCores: Int,
     driverEndPointRef: RpcEndpointRef = null)
-  extends BlockTransferService {
+  extends BlockTransferService with Logging {
 
   // TODO: Don't use Java serialization, use a more cross-version compatible serialization format.
-  private val serializer = new JavaSerializer(conf)
+  private val serializer = serializerManager.getSerializer(scala.reflect.classTag[Any], false)
   private val authEnabled = securityManager.isAuthenticationEnabled()
 
   private[this] var transportContext: TransportContext = _
@@ -69,7 +70,11 @@ private[spark] class NettyBlockTransferService(
     val rpcHandler = new NettyBlockRpcServer(conf.getAppId, serializer, blockDataManager)
     var serverBootstrap: Option[TransportServerBootstrap] = None
     var clientBootstrap: Option[TransportClientBootstrap] = None
-    this.transportConf = SparkTransportConf.fromSparkConf(conf, "shuffle", numCores)
+    this.transportConf = SparkTransportConf.fromSparkConf(
+      conf,
+      "shuffle",
+      numCores,
+      sslOptions = Some(securityManager.getRpcSSLOptions()))
     if (authEnabled) {
       serverBootstrap = Some(new AuthServerBootstrap(transportConf, securityManager))
       clientBootstrap = Some(new AuthClientBootstrap(transportConf, conf.getAppId, securityManager))
@@ -79,7 +84,13 @@ private[spark] class NettyBlockTransferService(
     server = createServer(serverBootstrap.toList)
     appId = conf.getAppId
 
-    logger.info(s"Server created on $hostName:${server.getPort}")
+    if (hostName.equals(bindAddress)) {
+      logger.info("Server created on {}:{}",
+        MDC(LogKeys.HOST, hostName), MDC(LogKeys.PORT, server.getPort))
+    } else {
+      logger.info("Server created on {} {}:{}", MDC(LogKeys.HOST, hostName),
+        MDC(LogKeys.BIND_ADDRESS, bindAddress), MDC(LogKeys.PORT, server.getPort))
+    }
   }
 
   /** Creates and binds the TransportServer, possibly trying multiple ports. */
@@ -132,7 +143,7 @@ private[spark] class NettyBlockTransferService(
                 driverEndPointRef.askSync[Boolean](IsExecutorAlive(execId))
               } match {
                 case Success(v) if v == false =>
-                  throw new ExecutorDeadException(s"The relative remote executor(Id: $execId)," +
+                  throw ExecutorDeadException(s"The relative remote executor(Id: $execId)," +
                     " which maintains the block data to fetch is dead.")
                 case _ => throw e
               }
@@ -184,7 +195,11 @@ private[spark] class NettyBlockTransferService(
       }
 
       override def onFailure(e: Throwable): Unit = {
-        logger.error(s"Error while uploading $blockId${if (asStream) " as stream" else ""}", e)
+        if (asStream) {
+          logger.error(s"Error while uploading {} as stream", e, MDC(LogKeys.BLOCK_ID, blockId))
+        } else {
+          logger.error(s"Error while uploading {}", e, MDC(LogKeys.BLOCK_ID, blockId))
+        }
         result.failure(e)
       }
     }

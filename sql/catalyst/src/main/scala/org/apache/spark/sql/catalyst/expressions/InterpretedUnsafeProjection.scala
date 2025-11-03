@@ -16,12 +16,15 @@
  */
 package org.apache.spark.sql.catalyst.expressions
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.{UnsafeArrayWriter, UnsafeRowWriter, UnsafeWriter}
+import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.catalyst.util.ArrayData
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{UserDefinedType, _}
 import org.apache.spark.unsafe.Platform
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * An interpreted unsafe projection. This class reuses the [[UnsafeRow]] it produces, a consumer
@@ -34,13 +37,8 @@ class InterpretedUnsafeProjection(expressions: Array[Expression]) extends Unsafe
   import InterpretedUnsafeProjection._
 
   private[this] val subExprEliminationEnabled = SQLConf.get.subexpressionEliminationEnabled
-  private[this] lazy val runtime =
-    new SubExprEvaluationRuntime(SQLConf.get.subexpressionEliminationCacheMaxEntries)
-  private[this] val exprs = if (subExprEliminationEnabled) {
-    runtime.proxyExpressions(expressions)
-  } else {
-    expressions.toSeq
-  }
+  private[this] val exprs =
+    prepareExpressions(expressions.toImmutableArraySeq, subExprEliminationEnabled)
 
   /** Number of (top level) fields in the resulting row. */
   private[this] val numFields = expressions.length
@@ -72,10 +70,7 @@ class InterpretedUnsafeProjection(expressions: Array[Expression]) extends Unsafe
   }
 
   override def initialize(partitionIndex: Int): Unit = {
-    exprs.foreach(_.foreach {
-      case n: Nondeterministic => n.initialize(partitionIndex)
-      case _ =>
-    })
+    initializeExprs(exprs, partitionIndex)
   }
 
   override def apply(row: InternalRow): UnsafeRow = {
@@ -105,11 +100,7 @@ object InterpretedUnsafeProjection {
    * Returns an [[UnsafeProjection]] for given sequence of bound Expressions.
    */
   def createProjection(exprs: Seq[Expression]): UnsafeProjection = {
-    // We need to make sure that we do not reuse stateful expressions.
-    val cleanedExpressions = exprs.map(_.transform {
-      case s: Stateful => s.freshCopy()
-    })
-    new InterpretedUnsafeProjection(cleanedExpressions.toArray)
+    new InterpretedUnsafeProjection(exprs.toArray)
   }
 
   /**
@@ -147,114 +138,110 @@ object InterpretedUnsafeProjection {
 
     // Create the basic writer.
     val unsafeWriter: (SpecializedGetters, Int) => Unit = dt match {
-      case BooleanType =>
-        (v, i) => writer.write(i, v.getBoolean(i))
+      case udt: UserDefinedType[_] => generateFieldWriter(writer, udt.sqlType, nullable)
+      case _ => PhysicalDataType(dt) match {
+        case PhysicalBooleanType => (v, i) => writer.write(i, v.getBoolean(i))
 
-      case ByteType =>
-        (v, i) => writer.write(i, v.getByte(i))
+        case PhysicalByteType => (v, i) => writer.write(i, v.getByte(i))
 
-      case ShortType =>
-        (v, i) => writer.write(i, v.getShort(i))
+        case PhysicalShortType => (v, i) => writer.write(i, v.getShort(i))
 
-      case IntegerType | DateType | _: YearMonthIntervalType =>
-        (v, i) => writer.write(i, v.getInt(i))
+        case PhysicalIntegerType => (v, i) => writer.write(i, v.getInt(i))
 
-      case LongType | TimestampType | TimestampNTZType | _: DayTimeIntervalType =>
-        (v, i) => writer.write(i, v.getLong(i))
+        case PhysicalLongType => (v, i) => writer.write(i, v.getLong(i))
 
-      case FloatType =>
-        (v, i) => writer.write(i, v.getFloat(i))
+        case PhysicalFloatType => (v, i) => writer.write(i, v.getFloat(i))
 
-      case DoubleType =>
-        (v, i) => writer.write(i, v.getDouble(i))
+        case PhysicalDoubleType => (v, i) => writer.write(i, v.getDouble(i))
 
-      case DecimalType.Fixed(precision, scale) =>
-        (v, i) => writer.write(i, v.getDecimal(i, precision, scale), precision, scale)
+        case PhysicalDecimalType(precision, scale) =>
+          (v, i) => writer.write(i, v.getDecimal(i, precision, scale), precision, scale)
 
-      case CalendarIntervalType =>
-        (v, i) => writer.write(i, v.getInterval(i))
+        case PhysicalCalendarIntervalType => (v, i) => writer.write(i, v.getInterval(i))
 
-      case BinaryType =>
-        (v, i) => writer.write(i, v.getBinary(i))
+        case PhysicalBinaryType => (v, i) => writer.write(i, v.getBinary(i))
 
-      case StringType =>
-        (v, i) => writer.write(i, v.getUTF8String(i))
+        case _: PhysicalStringType => (v, i) => writer.write(i, v.getUTF8String(i))
 
-      case StructType(fields) =>
-        val numFields = fields.length
-        val rowWriter = new UnsafeRowWriter(writer, numFields)
-        val structWriter = generateStructWriter(rowWriter, fields)
-        (v, i) => {
-          v.getStruct(i, fields.length) match {
-            case row: UnsafeRow =>
-              writer.write(i, row)
-            case row =>
-              val previousCursor = writer.cursor()
-              // Nested struct. We don't know where this will start because a row can be
-              // variable length, so we need to update the offsets and zero out the bit mask.
-              rowWriter.resetRowWriter()
-              structWriter.apply(row)
-              writer.setOffsetAndSizeFromPreviousCursor(i, previousCursor)
+        case _: PhysicalGeographyType => (v, i) => writer.write(i, v.getGeography(i))
+
+        case _: PhysicalGeometryType => (v, i) => writer.write(i, v.getGeometry(i))
+
+        case PhysicalVariantType => (v, i) => writer.write(i, v.getVariant(i))
+
+        case PhysicalStructType(fields) =>
+          val numFields = fields.length
+          val rowWriter = new UnsafeRowWriter(writer, numFields)
+          val structWriter = generateStructWriter(rowWriter, fields)
+            (v, i) => {
+            v.getStruct(i, fields.length) match {
+              case row: UnsafeRow =>
+                writer.write(i, row)
+              case row =>
+                val previousCursor = writer.cursor()
+                // Nested struct. We don't know where this will start because a row can be
+                // variable length, so we need to update the offsets and zero out the bit mask.
+                rowWriter.resetRowWriter()
+                structWriter.apply(row)
+                writer.setOffsetAndSizeFromPreviousCursor(i, previousCursor)
+            }
           }
-        }
 
-      case ArrayType(elementType, containsNull) =>
-        val arrayWriter = new UnsafeArrayWriter(writer, getElementSize(elementType))
-        val elementWriter = generateFieldWriter(
-          arrayWriter,
-          elementType,
-          containsNull)
-        (v, i) => {
-          val previousCursor = writer.cursor()
-          writeArray(arrayWriter, elementWriter, v.getArray(i))
-          writer.setOffsetAndSizeFromPreviousCursor(i, previousCursor)
-        }
-
-      case MapType(keyType, valueType, valueContainsNull) =>
-        val keyArrayWriter = new UnsafeArrayWriter(writer, getElementSize(keyType))
-        val keyWriter = generateFieldWriter(
-          keyArrayWriter,
-          keyType,
-          nullable = false)
-        val valueArrayWriter = new UnsafeArrayWriter(writer, getElementSize(valueType))
-        val valueWriter = generateFieldWriter(
-          valueArrayWriter,
-          valueType,
-          valueContainsNull)
-        (v, i) => {
-          v.getMap(i) match {
-            case map: UnsafeMapData =>
-              writer.write(i, map)
-            case map =>
-              val previousCursor = writer.cursor()
-
-              // preserve 8 bytes to write the key array numBytes later.
-              valueArrayWriter.grow(8)
-              valueArrayWriter.increaseCursor(8)
-
-              // Write the keys and write the numBytes of key array into the first 8 bytes.
-              writeArray(keyArrayWriter, keyWriter, map.keyArray())
-              Platform.putLong(
-                valueArrayWriter.getBuffer,
-                previousCursor,
-                valueArrayWriter.cursor - previousCursor - 8
-              )
-
-              // Write the values.
-              writeArray(valueArrayWriter, valueWriter, map.valueArray())
-              writer.setOffsetAndSizeFromPreviousCursor(i, previousCursor)
+        case PhysicalArrayType(elementType, containsNull) =>
+          val arrayWriter = new UnsafeArrayWriter(writer, getElementSize(elementType))
+          val elementWriter = generateFieldWriter(
+            arrayWriter,
+            elementType,
+            containsNull)
+            (v, i) => {
+            val previousCursor = writer.cursor()
+            writeArray(arrayWriter, elementWriter, v.getArray(i))
+            writer.setOffsetAndSizeFromPreviousCursor(i, previousCursor)
           }
-        }
 
-      case udt: UserDefinedType[_] =>
-        generateFieldWriter(writer, udt.sqlType, nullable)
+        case PhysicalMapType(keyType, valueType, valueContainsNull) =>
+          val keyArrayWriter = new UnsafeArrayWriter(writer, getElementSize(keyType))
+          val keyWriter = generateFieldWriter(
+            keyArrayWriter,
+            keyType,
+            nullable = false)
+          val valueArrayWriter = new UnsafeArrayWriter(writer, getElementSize(valueType))
+          val valueWriter = generateFieldWriter(
+            valueArrayWriter,
+            valueType,
+            valueContainsNull)
+            (v, i) => {
+            v.getMap(i) match {
+              case map: UnsafeMapData =>
+                writer.write(i, map)
+              case map =>
+                val previousCursor = writer.cursor()
 
-      case NullType =>
-        (_, _) => {}
+                // preserve 8 bytes to write the key array numBytes later.
+                valueArrayWriter.grow(8)
+                valueArrayWriter.increaseCursor(8)
 
-      case _ =>
-        throw new IllegalStateException(s"The data type '${dt.typeName}' is not supported in " +
-          "generating a writer function for a struct field, array element, map key or map value.")
+                // Write the keys and write the numBytes of key array into the first 8 bytes.
+                writeArray(keyArrayWriter, keyWriter, map.keyArray())
+                Platform.putLong(
+                  valueArrayWriter.getBuffer,
+                  previousCursor,
+                  valueArrayWriter.cursor - previousCursor - 8
+                )
+
+                // Write the values.
+                writeArray(valueArrayWriter, valueWriter, map.valueArray())
+                writer.setOffsetAndSizeFromPreviousCursor(i, previousCursor)
+            }
+          }
+
+        case PhysicalNullType => (_, _) => {}
+
+        case _ =>
+          throw SparkException.internalError(
+            s"The data type '${dt.typeName}' is not supported in " +
+            "generating a writer function for a struct field, array element, map key or map value.")
+      }
     }
 
     // Always wrap the writer with a null safe version.
@@ -265,6 +252,9 @@ object InterpretedUnsafeProjection {
       case DecimalType.Fixed(precision, _) if precision > Decimal.MAX_LONG_DIGITS =>
         // We can't call setNullAt() for DecimalType with precision larger than 18, we call write
         // directly. We can use the unwrapped writer directly.
+        unsafeWriter
+      case CalendarIntervalType =>
+        // We can't call setNullAt() for CalendarIntervalType, we call write directly.
         unsafeWriter
       case BooleanType | ByteType =>
         (v, i) => {
@@ -282,7 +272,7 @@ object InterpretedUnsafeProjection {
             writer.setNull2Bytes(i)
           }
         }
-      case IntegerType | DateType | FloatType =>
+      case IntegerType | DateType | FloatType | _: YearMonthIntervalType =>
         (v, i) => {
           if (!v.isNullAt(i)) {
             unsafeWriter(v, i)
@@ -308,9 +298,12 @@ object InterpretedUnsafeProjection {
    * portion of the array object. Primitives take up to 8 bytes, depending on the size of the
    * underlying data type.
    */
+  @scala.annotation.tailrec
   private def getElementSize(dataType: DataType): Int = dataType match {
-    case NullType | StringType | BinaryType | CalendarIntervalType |
+    case NullType | _: StringType | BinaryType | CalendarIntervalType | VariantType |
          _: DecimalType | _: StructType | _: ArrayType | _: MapType => 8
+    case udt: UserDefinedType[_] =>
+      getElementSize(udt.sqlType)
     case _ => dataType.defaultSize
   }
 

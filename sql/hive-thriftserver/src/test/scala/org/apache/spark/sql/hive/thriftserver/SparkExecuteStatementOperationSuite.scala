@@ -25,12 +25,12 @@ import scala.concurrent.duration._
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hive.service.cli.OperationState
 import org.apache.hive.service.cli.session.{HiveSession, HiveSessionImpl}
-import org.apache.hive.service.rpc.thrift.TProtocolVersion
+import org.apache.hive.service.rpc.thrift.{TProtocolVersion, TTypeId}
 import org.mockito.Mockito.{doReturn, mock, spy, when, RETURNS_DEEP_STUBS}
 import org.mockito.invocation.InvocationOnMock
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.{DataFrame, SQLContext}
+import org.apache.spark.sql.classic.{DataFrame, SparkSession}
 import org.apache.spark.sql.hive.thriftserver.ui.HiveThriftServer2EventManager
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, NullType, StringType, StructField, StructType}
@@ -41,22 +41,28 @@ class SparkExecuteStatementOperationSuite extends SparkFunSuite with SharedSpark
     val field1 = StructField("NULL", NullType)
     val field2 = StructField("(IF(true, NULL, NULL))", NullType)
     val tableSchema = StructType(Seq(field1, field2))
-    val columns = SparkExecuteStatementOperation.getTableSchema(tableSchema).getColumnDescriptors()
-    assert(columns.size() == 2)
-    assert(columns.get(0).getType().getName == "VOID")
-    assert(columns.get(1).getType().getName == "VOID")
+    val columns = SparkExecuteStatementOperation.toTTableSchema(tableSchema)
+    assert(columns.getColumnsSize == 2)
+    assert(columns.getColumns.get(0).getTypeDesc.getTypes.get(0).getPrimitiveEntry.getType
+      === TTypeId.NULL_TYPE)
+    assert(columns.getColumns.get(1).getTypeDesc.getTypes.get(0).getPrimitiveEntry.getType
+      === TTypeId.NULL_TYPE)
   }
 
   test("SPARK-20146 Comment should be preserved") {
     val field1 = StructField("column1", StringType).withComment("comment 1")
     val field2 = StructField("column2", IntegerType)
     val tableSchema = StructType(Seq(field1, field2))
-    val columns = SparkExecuteStatementOperation.getTableSchema(tableSchema).getColumnDescriptors()
-    assert(columns.size() == 2)
-    assert(columns.get(0).getType().getName == "STRING")
-    assert(columns.get(0).getComment() == "comment 1")
-    assert(columns.get(1).getType().getName == "INT")
-    assert(columns.get(1).getComment() == "")
+    val columns = SparkExecuteStatementOperation.toTTableSchema(tableSchema)
+    assert(columns.getColumnsSize == 2)
+    assert(columns.getColumns.get(0).getColumnName == "column1")
+    assert(columns.getColumns.get(0).getTypeDesc.getTypes.get(0).getPrimitiveEntry.getType
+      === TTypeId.STRING_TYPE)
+    assert(columns.getColumns.get(0).getComment == "comment 1")
+    assert(columns.getColumns.get(1).getColumnName == "column2")
+    assert(columns.getColumns.get(1).getTypeDesc.getTypes.get(0).getPrimitiveEntry.getType
+      === TTypeId.INT_TYPE)
+    assert(columns.getColumns.get(1).getComment == "")
   }
 
   Seq(
@@ -72,7 +78,7 @@ class SparkExecuteStatementOperationSuite extends SparkFunSuite with SharedSpark
 
       HiveThriftServer2.eventManager = mock(classOf[HiveThriftServer2EventManager])
 
-      val spySqlContext = spy(sqlContext)
+      val spySparkSession = spy[SparkSession](spark)
 
       // When cancel() is called on the operation, cleanup causes an exception to be thrown inside
       // of execute(). This should not cause the state to become ERROR. The exception here will be
@@ -84,9 +90,9 @@ class SparkExecuteStatementOperationSuite extends SparkFunSuite with SharedSpark
         throw new RuntimeException("Operation was cancelled by test cleanup.")
       })
       val statement = "stmt"
-      doReturn(dataFrame, Nil: _*).when(spySqlContext).sql(statement)
+      doReturn(dataFrame, Nil: _*).when(spySparkSession).sql(statement)
 
-      val executeStatementOperation = new MySparkExecuteStatementOperation(spySqlContext,
+      val executeStatementOperation = new MySparkExecuteStatementOperation(spySparkSession,
         hiveSession, statement, signal, finalState)
 
       val run = new Thread() {
@@ -104,12 +110,12 @@ class SparkExecuteStatementOperationSuite extends SparkFunSuite with SharedSpark
   }
 
   private class MySparkExecuteStatementOperation(
-      sqlContext: SQLContext,
+      session: SparkSession,
       hiveSession: HiveSession,
       statement: String,
       signal: Semaphore,
       finalState: OperationState)
-    extends SparkExecuteStatementOperation(sqlContext, hiveSession, statement,
+    extends SparkExecuteStatementOperation(session, hiveSession, statement,
       new util.HashMap, false, 0) {
 
     override def cleanup(): Unit = {

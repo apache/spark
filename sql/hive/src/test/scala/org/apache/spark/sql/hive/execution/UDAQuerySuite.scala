@@ -60,6 +60,22 @@ object LongProductSumAgg extends Aggregator[(jlLong, jlLong), Long, jlLong] {
   def outputEncoder: Encoder[jlLong] = Encoders.LONG
 }
 
+final case class Reduce[T: Encoder](r: (T, T) => T)(implicit i: Encoder[Option[T]])
+  extends Aggregator[T, Option[T], T] {
+  def zero: Option[T] = None
+  def reduce(b: Option[T], a: T): Option[T] = Some(b.fold(a)(r(_, a)))
+  def merge(b1: Option[T], b2: Option[T]): Option[T] =
+    (b1, b2) match {
+      case (Some(a), Some(b)) => Some(r(a, b))
+      case (Some(a), None) => Some(a)
+      case (None, Some(b)) => Some(b)
+      case (None, None) => None
+    }
+  def finish(reduction: Option[T]): T = reduction.get
+  def bufferEncoder: Encoder[Option[T]] = implicitly
+  def outputEncoder: Encoder[T] = implicitly
+}
+
 @SQLUserDefinedType(udt = classOf[CountSerDeUDT])
 case class CountSerDeSQL(nSer: Int, nDeSer: Int, sum: Int)
 
@@ -116,21 +132,21 @@ object ArrayDataAgg extends Aggregator[Array[Double], Array[Double], Array[Doubl
   def zero: Array[Double] = Array(0.0, 0.0, 0.0)
   def reduce(s: Array[Double], array: Array[Double]): Array[Double] = {
     require(s.length == array.length)
-    for ( j <- 0 until s.length ) {
+    for ( j <- s.indices) {
       s(j) += array(j)
     }
     s
   }
   def merge(s1: Array[Double], s2: Array[Double]): Array[Double] = {
     require(s1.length == s2.length)
-    for ( j <- 0 until s1.length ) {
+    for ( j <- s1.indices) {
       s1(j) += s2(j)
     }
     s1
   }
   def finish(s: Array[Double]): Array[Double] = s
-  def bufferEncoder: Encoder[Array[Double]] = ExpressionEncoder[Array[Double]]
-  def outputEncoder: Encoder[Array[Double]] = ExpressionEncoder[Array[Double]]
+  def bufferEncoder: Encoder[Array[Double]] = ExpressionEncoder[Array[Double]]()
+  def outputEncoder: Encoder[Array[Double]] = ExpressionEncoder[Array[Double]]()
 }
 
 abstract class UDAQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
@@ -180,6 +196,9 @@ abstract class UDAQuerySuite extends QueryTest with SQLTestUtils with TestHiveSi
     val data4 = Seq[Boolean](true, false, true).toDF("boolvalues")
     data4.write.saveAsTable("agg4")
 
+    val data5 = Seq[(Int, (Int, Int))]((1, (2, 3))).toDF("key", "value")
+    data5.write.saveAsTable("agg5")
+
     val emptyDF = spark.createDataFrame(
       sparkContext.emptyRDD[Row],
       StructType(StructField("key", StringType) :: StructField("value", IntegerType) :: Nil))
@@ -190,6 +209,8 @@ abstract class UDAQuerySuite extends QueryTest with SQLTestUtils with TestHiveSi
     spark.udf.register("mydoubleavg", udaf(MyDoubleAvgAgg))
     spark.udf.register("longProductSum", udaf(LongProductSumAgg))
     spark.udf.register("arraysum", udaf(ArrayDataAgg))
+    spark.udf.register("reduceOptionPair", udaf(Reduce[Option[(Int, Int)]](
+      (opt1, opt2) => opt1.zip(opt2).map { case ((a1, b1), (a2, b2)) => (a1 + a2, b1 + b2) })))
   }
 
   override def afterAll(): Unit = {
@@ -225,16 +246,21 @@ abstract class UDAQuerySuite extends QueryTest with SQLTestUtils with TestHiveSi
   }
 
   test("non-deterministic children expressions of aggregator") {
-    val e = intercept[AnalysisException] {
-      spark.sql(
-        """
-          |SELECT mydoublesum(value + 1.5 * key + rand())
-          |FROM agg1
-          |GROUP BY key
-        """.stripMargin)
-    }.getMessage
-    assert(Seq("nondeterministic expression",
-      "should not appear in the arguments of an aggregate function").forall(e.contains))
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.sql(
+          """
+            |SELECT mydoublesum(value + 1.5 * key + rand())
+            |FROM agg1
+            |GROUP BY key
+          """.stripMargin)
+      },
+      condition = "AGGREGATE_FUNCTION_WITH_NONDETERMINISTIC_EXPRESSION",
+      parameters = Map("sqlExpr" -> "\"mydoublesum(((value + (1.5 * key)) + rand()))\""),
+      context = ExpectedContext(
+        fragment = "value + 1.5 * key + rand()",
+        start = 20,
+        stop = 45))
   }
 
   test("interpreted aggregate function") {
@@ -364,6 +390,12 @@ abstract class UDAQuerySuite extends QueryTest with SQLTestUtils with TestHiveSi
     checkAnswer(
       spark.sql("SELECT arraysum(data) FROM agg3"),
       Row(Seq(12.0, 15.0, 18.0)) :: Nil)
+  }
+
+  test("SPARK-52023: Returning Option[Product] from udaf") {
+    checkAnswer(
+      spark.sql("SELECT reduceOptionPair(value) FROM agg5 GROUP BY key"),
+      Row(Row(2, 3)) :: Nil)
   }
 
   test("verify aggregator ser/de behavior") {

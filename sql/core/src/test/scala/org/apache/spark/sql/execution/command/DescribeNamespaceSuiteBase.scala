@@ -39,11 +39,12 @@ trait DescribeNamespaceSuiteBase extends QueryTest with DDLCommandTestUtils {
 
   test("namespace does not exists") {
     val ns = "db1"
-    val message = intercept[AnalysisException] {
+    val e = intercept[AnalysisException] {
       sql(s"DESCRIBE NAMESPACE EXTENDED $catalog.$ns")
-    }.getMessage
-
-    assert(message.contains(s"$notFoundMsgPrefix '$ns' not found"))
+    }
+    checkError(e,
+      condition = "SCHEMA_NOT_FOUND",
+      parameters = Map("schemaName" -> s"`$catalog`.`$ns`"))
   }
 
   test("Keep the legacy output schema") {

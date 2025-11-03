@@ -19,7 +19,7 @@ package org.apache.spark.sql.kafka010
 
 import java.sql.Timestamp
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.kafka.clients.consumer.ConsumerRecord
 
@@ -50,7 +50,7 @@ private[kafka010] class KafkaRecordToRowConverter {
         new GenericArrayData(cr.headers.iterator().asScala
           .map(header =>
             InternalRow(UTF8String.fromString(header.key()), header.value())
-          ).toArray)
+          ).toArray[Any])
       } else {
         null
       }

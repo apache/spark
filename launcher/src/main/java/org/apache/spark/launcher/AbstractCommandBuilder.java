@@ -47,7 +47,9 @@ abstract class AbstractCommandBuilder {
   String javaHome;
   String mainClass;
   String master;
+  String remote;
   protected String propertiesFile;
+  protected boolean loadSparkDefaults;
   final List<String> appArgs;
   final List<String> jars;
   final List<String> files;
@@ -58,6 +60,13 @@ abstract class AbstractCommandBuilder {
   // The merged configuration for the application. Cached to avoid having to read / parse
   // properties files multiple times.
   private Map<String, String> effectiveConfig;
+
+  /**
+   * Indicate if the current app submission has to use Spark Connect.
+   */
+  protected boolean isRemote = System.getenv().containsKey("SPARK_REMOTE");
+
+  protected boolean isBeeLine = false;
 
   AbstractCommandBuilder() {
     this.appArgs = new ArrayList<>();
@@ -139,6 +148,8 @@ abstract class AbstractCommandBuilder {
 
     boolean prependClasses = !isEmpty(getenv("SPARK_PREPEND_CLASSES"));
     boolean isTesting = "1".equals(getenv("SPARK_TESTING"));
+    boolean isTestingSql = "1".equals(getenv("SPARK_SQL_TESTING"));
+    String jarsDir = findJarsDir(getSparkHome(), getScalaVersion(), !isTesting && !isTestingSql);
     if (prependClasses || isTesting) {
       String scala = getScalaVersion();
       List<String> projects = Arrays.asList(
@@ -149,13 +160,14 @@ abstract class AbstractCommandBuilder {
         "common/sketch",
         "common/tags",
         "common/unsafe",
+        "sql/connect/common",
+        "sql/connect/server",
         "core",
         "examples",
         "graphx",
         "launcher",
         "mllib",
         "repl",
-        "resource-managers/mesos",
         "resource-managers/yarn",
         "sql/catalyst",
         "sql/core",
@@ -169,7 +181,44 @@ abstract class AbstractCommandBuilder {
             "NOTE: SPARK_PREPEND_CLASSES is set, placing locally compiled Spark classes ahead of " +
             "assembly.");
         }
+        // SPARK-51600: Add a condition check for `isTesting || isTestingSql` to
+        // `shouldPrePendSparkHive/shouldPrePendSparkHiveThriftServer`. When running Maven tests,
+        // prepend classes should be performed for "sql/hive" and "sql/hive-thriftserver"
+        boolean shouldPrePendSparkHive =
+          isTesting || isTestingSql || isJarAvailable(jarsDir, "spark-hive_");
+        boolean shouldPrePendSparkHiveThriftServer = isTesting || isTestingSql ||
+          (shouldPrePendSparkHive && isJarAvailable(jarsDir, "spark-hive-thriftserver_"));
         for (String project : projects) {
+          // Do not use locally compiled class files for Spark server because it should use shaded
+          // dependencies.
+          if (project.equals("sql/connect/server") || project.equals("sql/connect/common")) {
+            continue;
+          }
+          if (isRemote && "1".equals(getenv("SPARK_SCALA_SHELL")) && project.equals("sql/core")) {
+            continue;
+          }
+          if (isBeeLine && "1".equals(getenv("SPARK_CONNECT_BEELINE")) &&
+              project.equals("sql/core")) {
+            continue;
+          }
+          // SPARK-49534: The assumption here is that if `spark-hive_xxx.jar` is not in the
+          // classpath, then the `-Phive` profile was not used during package, and therefore
+          // the Hive-related jars should also not be in the classpath. To avoid failure in
+          // loading the SPI in `DataSourceRegister` under `sql/hive`, no longer prepend `sql/hive`.
+          if (!shouldPrePendSparkHive && project.equals("sql/hive")) {
+            continue;
+          }
+          // SPARK-49534: Meanwhile, due to the strong dependency of `sql/hive-thriftserver`
+          // on `sql/hive`, the prepend for `sql/hive-thriftserver` will also be excluded
+          // if `spark-hive_xxx.jar` is not in the classpath. On the other hand, if
+          // `spark-hive-thriftserver_xxx.jar` is not in the classpath, then the
+          // `-Phive-thriftserver` profile was not used during package, and therefore,
+          // jars such as hive-cli and hive-beeline should also not be included in the classpath.
+          // To avoid the inelegant startup failures of tools such as spark-sql, in this scenario,
+          // `sql/hive-thriftserver` will no longer be prepended to the classpath.
+          if (!shouldPrePendSparkHiveThriftServer && project.equals("sql/hive-thriftserver")) {
+            continue;
+          }
           addToClassPath(cp, String.format("%s/%s/target/scala-%s/classes", sparkHome, project,
             scala));
         }
@@ -190,10 +239,34 @@ abstract class AbstractCommandBuilder {
     // Add Spark jars to the classpath. For the testing case, we rely on the test code to set and
     // propagate the test classpath appropriately. For normal invocation, look for the jars
     // directory under SPARK_HOME.
-    boolean isTestingSql = "1".equals(getenv("SPARK_SQL_TESTING"));
-    String jarsDir = findJarsDir(getSparkHome(), getScalaVersion(), !isTesting && !isTestingSql);
     if (jarsDir != null) {
-      addToClassPath(cp, join(File.separator, jarsDir, "*"));
+      // Place slf4j-api-* jar first to be robust
+      for (File f: new File(jarsDir).listFiles()) {
+        if (f.getName().startsWith("slf4j-api-")) {
+          addToClassPath(cp, f.toString());
+        }
+      }
+
+      if (isRemote || (isBeeLine && "1".equals(getenv("SPARK_CONNECT_BEELINE")))) {
+        for (File f: new File(jarsDir).listFiles()) {
+          // Exclude Spark Classic SQL and Spark Connect server jars if we're in
+          // Spark Connect Shell or BeeLine with Connect JDBC driver. Also exclude
+          // Spark SQL API and Spark Connect Common which Spark Connect client shades.
+          // Then, we add the Spark Connect shell and its dependencies in connect-repl.
+          // See also SPARK-48936, SPARK-54002.
+          if (f.isDirectory() && f.getName().equals("connect-repl")) {
+            addToClassPath(cp, join(File.separator, f.toString(), "*"));
+          } else if (
+              !f.getName().startsWith("spark-sql_") &&
+              !f.getName().startsWith("spark-connect_") &&
+              !f.getName().startsWith("spark-sql-api_") &&
+              !f.getName().startsWith("spark-connect-common_")) {
+            addToClassPath(cp, f.toString());
+          }
+        }
+      } else {
+        addToClassPath(cp, join(File.separator, jarsDir, "*"));
+      }
     }
 
     addToClassPath(cp, getenv("HADOOP_CONF_DIR"));
@@ -223,23 +296,45 @@ abstract class AbstractCommandBuilder {
     }
   }
 
+  /**
+   * Checks if a JAR file with a specific prefix is available in the given directory.
+   *
+   * @param jarsDir       the directory to search for JAR files
+   * @param jarNamePrefix the prefix of the JAR file name to look for
+   * @return true if a JAR file with the specified prefix is found, false otherwise
+   */
+  private boolean isJarAvailable(String jarsDir, String jarNamePrefix) {
+    if (jarsDir != null) {
+      for (File f : new File(jarsDir).listFiles()) {
+        if (f.getName().startsWith(jarNamePrefix)) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
   String getScalaVersion() {
     String scala = getenv("SPARK_SCALA_VERSION");
     if (scala != null) {
       return scala;
     }
     String sparkHome = getSparkHome();
-    File scala212 = new File(sparkHome, "launcher/target/scala-2.12");
     File scala213 = new File(sparkHome, "launcher/target/scala-2.13");
-    checkState(!scala212.isDirectory() || !scala213.isDirectory(),
-      "Presence of build for multiple Scala versions detected.\n" +
-      "Either clean one of them or set SPARK_SCALA_VERSION in your environment.");
-    if (scala213.isDirectory()) {
-      return "2.13";
-    } else {
-      checkState(scala212.isDirectory(), "Cannot find any build directories.");
-      return "2.12";
-    }
+    checkState(scala213.isDirectory(), "Cannot find any build directories.");
+    return "2.13";
+    // String sparkHome = getSparkHome();
+    // File scala212 = new File(sparkHome, "launcher/target/scala-2.12");
+    // File scala213 = new File(sparkHome, "launcher/target/scala-2.13");
+    // checkState(!scala212.isDirectory() || !scala213.isDirectory(),
+    //  "Presence of build for multiple Scala versions detected.\n" +
+    //  "Either clean one of them or set SPARK_SCALA_VERSION in your environment.");
+    // if (scala213.isDirectory()) {
+    //  return "2.13";
+    // } else {
+    //  checkState(scala212.isDirectory(), "Cannot find any build directories.");
+    //  return "2.12";
+    // }
   }
 
   String getSparkHome() {
@@ -267,26 +362,42 @@ abstract class AbstractCommandBuilder {
       Properties p = loadPropertiesFile();
       p.stringPropertyNames().forEach(key ->
         effectiveConfig.computeIfAbsent(key, p::getProperty));
+      effectiveConfig.putIfAbsent(SparkLauncher.DRIVER_DEFAULT_EXTRA_CLASS_PATH,
+        SparkLauncher.DRIVER_DEFAULT_EXTRA_CLASS_PATH_VALUE);
     }
     return effectiveConfig;
   }
 
   /**
-   * Loads the configuration file for the application, if it exists. This is either the
-   * user-specified properties file, or the spark-defaults.conf file under the Spark configuration
-   * directory.
+   * Load the configuration file(s) for the application - from the user-specified properties
+   * file, and/or the spark-defaults.conf file under the Spark configuration directory, if exists.
+   * Configurations from user-specified properties file take precedence over spark-defaults.conf.
    */
   private Properties loadPropertiesFile() throws IOException {
     Properties props = new Properties();
-    File propsFile;
     if (propertiesFile != null) {
-      propsFile = new File(propertiesFile);
+      File propsFile = new File(propertiesFile);
       checkArgument(propsFile.isFile(), "Invalid properties file '%s'.", propertiesFile);
-    } else {
-      propsFile = new File(getConfDir(), DEFAULT_PROPERTIES_FILE);
+      props = loadPropertiesFile(propsFile);
     }
 
-    if (propsFile.isFile()) {
+    Properties defaultsProps = new Properties();
+    if (propertiesFile == null || loadSparkDefaults) {
+      defaultsProps = loadPropertiesFile(new File(getConfDir(), DEFAULT_PROPERTIES_FILE));
+    }
+
+    for (Map.Entry<Object, Object> entry : defaultsProps.entrySet()) {
+      if (!props.containsKey(entry.getKey())) {
+        props.put(entry.getKey(), entry.getValue());
+      }
+    }
+
+    return props;
+  }
+
+  private Properties loadPropertiesFile(File propsFile) throws IOException {
+    Properties props = new Properties();
+    if (propsFile != null && propsFile.isFile()) {
       try (InputStreamReader isr = new InputStreamReader(
           new FileInputStream(propsFile), StandardCharsets.UTF_8)) {
         props.load(isr);

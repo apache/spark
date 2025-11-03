@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 #
 # Licensed to the Apache Software Foundation (ASF) under one or more
 # contributor license agreements.  See the NOTICE file distributed with
@@ -41,8 +41,12 @@ if [ -z "$JAVA_HOME" ]; then
 fi
 
 SPARK_CLASSPATH="$SPARK_CLASSPATH:${SPARK_HOME}/jars/*"
-env | grep SPARK_JAVA_OPT_ | sort -t_ -k4 -n | sed 's/[^=]*=\(.*\)/\1/g' > /tmp/java_opts.txt
-readarray -t SPARK_EXECUTOR_JAVA_OPTS < /tmp/java_opts.txt
+env | grep SPARK_JAVA_OPT_ | sort -t_ -k4 -n | sed 's/[^=]*=\(.*\)/\1/g' > java_opts.txt
+if [ "$(command -v readarray)" ]; then
+  readarray -t SPARK_EXECUTOR_JAVA_OPTS < java_opts.txt
+else
+  SPARK_EXECUTOR_JAVA_OPTS=("${(@f)$(< java_opts.txt)}")
+fi
 
 if [ -n "$SPARK_EXTRA_CLASSPATH" ]; then
   SPARK_CLASSPATH="$SPARK_CLASSPATH:$SPARK_EXTRA_CLASSPATH"
@@ -71,12 +75,16 @@ elif ! [ -z ${SPARK_HOME+x} ]; then
   SPARK_CLASSPATH="$SPARK_HOME/conf:$SPARK_CLASSPATH";
 fi
 
+# SPARK-43540: add current working directory into executor classpath
+SPARK_CLASSPATH="$SPARK_CLASSPATH:$PWD"
+
 case "$1" in
   driver)
     shift 1
     CMD=(
       "$SPARK_HOME/bin/spark-submit"
       --conf "spark.driver.bindAddress=$SPARK_DRIVER_BIND_ADDRESS"
+      --conf "spark.executorEnv.SPARK_DRIVER_POD_IP=$SPARK_DRIVER_BIND_ADDRESS"
       --deploy-mode client
       "$@"
     )

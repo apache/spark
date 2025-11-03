@@ -19,7 +19,7 @@ package org.apache.spark.sql.connector
 
 import java.io.{BufferedReader, InputStreamReader, IOException}
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
@@ -107,7 +107,7 @@ class SimpleWritableDataSource extends TestingV2Source {
       try {
         for (file <- fs.listStatus(jobPath).map(_.getPath)) {
           val dest = new Path(finalPath, file.getName)
-          if(!fs.rename(file, dest)) {
+          if (!fs.rename(file, dest)) {
             throw new IOException(s"failed to rename($file, $dest)")
           }
         }
@@ -157,6 +157,7 @@ class CSVReaderFactory(conf: SerializableConfiguration)
     val fs = filePath.getFileSystem(conf.value)
 
     new PartitionReader[InternalRow] {
+      import org.apache.spark.util.ArrayImplicits._
       private val inputStream = fs.open(filePath)
       private val lines = new BufferedReader(new InputStreamReader(inputStream))
         .lines().iterator().asScala
@@ -172,7 +173,8 @@ class CSVReaderFactory(conf: SerializableConfiguration)
         }
       }
 
-      override def get(): InternalRow = InternalRow(currentLine.split(",").map(_.trim.toInt): _*)
+      override def get(): InternalRow =
+        InternalRow(currentLine.split(",").map(_.trim.toInt).toImmutableArraySeq: _*)
 
       override def close(): Unit = {
         inputStream.close()

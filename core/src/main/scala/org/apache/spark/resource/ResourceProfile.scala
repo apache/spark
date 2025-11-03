@@ -21,12 +21,13 @@ import java.util.{Map => JMap}
 import java.util.concurrent.atomic.AtomicInteger
 import javax.annotation.concurrent.GuardedBy
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 
-import org.apache.spark.{SparkConf, SparkException}
+import org.apache.spark.{SparkConf, SparkContext, SparkEnv, SparkException}
 import org.apache.spark.annotation.{Evolving, Since}
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Python.PYSPARK_EXECUTOR_MEMORY
 import org.apache.spark.util.Utils
@@ -49,6 +50,8 @@ class ResourceProfile(
     val executorResources: Map[String, ExecutorResourceRequest],
     val taskResources: Map[String, TaskResourceRequest]) extends Serializable with Logging {
 
+  validate()
+
   // _id is only a var for testing purposes
   private var _id = ResourceProfile.getNextProfileId
   // This is used for any resources that use fractional amounts, the key is the resource name
@@ -58,6 +61,19 @@ class ResourceProfile(
   private var _limitingResource: Option[String] = None
   private var _maxTasksPerExecutor: Option[Int] = None
   private var _coresLimitKnown: Boolean = false
+
+  /**
+   * Validate the ResourceProfile
+   */
+  protected def validate(): Unit = {
+    // The task.amount in ResourceProfile falls within the range of 0 to 0.5,
+    // or it's a whole number
+    for ((_, taskReq) <- taskResources) {
+      val taskAmount = taskReq.amount
+      assert(taskAmount <= 0.5 || taskAmount % 1 == 0,
+        s"The task resource amount ${taskAmount} must be either <= 0.5, or a whole number.")
+    }
+  }
 
   /**
    * A unique id of this ResourceProfile
@@ -90,14 +106,31 @@ class ResourceProfile(
     executorResources.get(ResourceProfile.PYSPARK_MEM).map(_.amount)
   }
 
+  private[spark] def getOverheadMemory: Option[Long] = {
+    executorResources.get(ResourceProfile.OVERHEAD_MEM).map(_.amount)
+  }
+
+  private[spark] def getExecutorOffHeap: Option[Long] = {
+    executorResources.get(ResourceProfile.OFFHEAP_MEM).map(_.amount)
+  }
+
+  private[spark] def getExecutorMemory: Option[Long] = {
+    executorResources.get(ResourceProfile.MEMORY).map(_.amount)
+  }
+
+  private[spark] def getCustomTaskResources(): Map[String, TaskResourceRequest] = {
+    taskResources.filter { case (k, _) => !k.equals(ResourceProfile.CPUS) }
+  }
+
+  protected[spark] def getCustomExecutorResources(): Map[String, ExecutorResourceRequest] = {
+    executorResources.
+      filter { case (k, _) => !ResourceProfile.allSupportedExecutorResources.contains(k) }
+  }
+
   /*
    * This function takes into account fractional amounts for the task resource requirement.
-   * Spark only supports fractional amounts < 1 to basically allow for multiple tasks
-   * to use the same resource address.
-   * The way the scheduler handles this is it adds the same address the number of slots per
-   * address times and then the amount becomes 1. This way it re-uses the same address
-   * the correct number of times. ie task requirement amount=0.25 -> addrs["0", "0", "0", "0"]
-   * and scheduler task amount=1. See ResourceAllocator.slotsPerAddress.
+   * Spark only supports fractional amounts &lt; 1 to basically allow for multiple tasks
+   * to use the same resource address or a whole number to use the multiple whole addresses.
    */
   private[spark] def getSchedulerTaskResourceAmount(resource: String): Int = {
     val taskAmount = taskResources.getOrElse(resource,
@@ -125,8 +158,8 @@ class ResourceProfile(
   }
 
   // Returns whether the executor cores was available to use to calculate the max tasks
-  // per executor and limiting resource. Some cluster managers (like standalone and coarse
-  // grained mesos) don't use the cores config by default so we can't use it to calculate slots.
+  // per executor and limiting resource. Some cluster managers (like standalone)
+  // don't use the cores config by default so we can't use it to calculate slots.
   private[spark] def isCoresLimitKnown: Boolean = _coresLimitKnown
 
   // The resource that has the least amount of slots per executor. Its possible multiple or all
@@ -178,8 +211,8 @@ class ResourceProfile(
     val numPartsPerResourceMap = new mutable.HashMap[String, Int]
     numPartsPerResourceMap(ResourceProfile.CORES) = 1
     val taskResourcesToCheck = new mutable.HashMap[String, TaskResourceRequest]
-    taskResourcesToCheck ++= ResourceProfile.getCustomTaskResources(this)
-    val execResourceToCheck = ResourceProfile.getCustomExecutorResources(this)
+    taskResourcesToCheck ++= this.getCustomTaskResources()
+    val execResourceToCheck = this.getCustomExecutorResources()
     execResourceToCheck.foreach { case (rName, execReq) =>
       val taskReq = taskResources.get(rName).map(_.amount).getOrElse(0.0)
       numPartsPerResourceMap(rName) = 1
@@ -197,17 +230,17 @@ class ResourceProfile(
         }
         taskResourcesToCheck -= rName
       } else {
-        logWarning(s"The executor resource config for resource: $rName was specified but " +
-          "no corresponding task resource request was specified.")
+        logWarning(log"The executor resource config for resource: ${MDC(RESOURCE_NAME, rName)} " +
+          log"was specified but no corresponding task resource request was specified.")
       }
     }
     if (taskResourcesToCheck.nonEmpty) {
-      throw new SparkException("No executor resource configs were not specified for the " +
+      throw new SparkException("No executor resource configs were specified for the " +
         s"following task configs: ${taskResourcesToCheck.keys.mkString(",")}")
     }
     val limiting =
       if (taskLimit == -1) "cpu" else s"$limitingResource at $taskLimit tasks per executor"
-    logInfo(s"Limiting resource is $limiting")
+    logInfo(log"Limiting resource is ${MDC(RESOURCE, limiting)}")
     _executorResourceSlotsPerAddr = Some(numPartsPerResourceMap.toMap)
     _maxTasksPerExecutor = if (taskLimit == -1) Some(1) else Some(taskLimit)
     _limitingResource = Some(limitingResource)
@@ -238,7 +271,8 @@ class ResourceProfile(
 
   // check that the task resources and executor resources are equal, but id's could be different
   private[spark] def resourcesEqual(rp: ResourceProfile): Boolean = {
-    rp.taskResources == taskResources && rp.executorResources == executorResources
+    rp.taskResources == taskResources && rp.executorResources == executorResources &&
+      rp.getClass == this.getClass
   }
 
   override def hashCode(): Int = Seq(taskResources, executorResources).hashCode()
@@ -246,6 +280,45 @@ class ResourceProfile(
   override def toString(): String = {
     s"Profile: id = ${_id}, executor resources: ${executorResources.mkString(",")}, " +
       s"task resources: ${taskResources.mkString(",")}"
+  }
+}
+
+/**
+ * Resource profile which only contains task resources, can be used for stage level task schedule
+ * when dynamic allocation is disabled, tasks will be scheduled to executors with default resource
+ * profile based on task resources described by this task resource profile.
+ * And when dynamic allocation is enabled, will require new executors for this profile based on
+ * the default executor resources requested at startup and assign tasks only on executors created
+ * with this resource profile.
+ *
+ * @param taskResources Resource requests for tasks. Mapped from the resource
+ *                      name (e.g., cores, memory, CPU) to its specific request.
+ */
+@Evolving
+@Since("3.4.0")
+private[spark] class TaskResourceProfile(
+    override val taskResources: Map[String, TaskResourceRequest])
+  extends ResourceProfile(Map.empty, taskResources) {
+
+  // The task.amount in TaskResourceProfile falls within the range of 0 to 1.0,
+  // or it's a whole number, and it has been checked in the TaskResourceRequest.
+  // Therefore, we can safely skip this check.
+  override protected def validate(): Unit = {}
+
+  override protected[spark] def getCustomExecutorResources()
+      : Map[String, ExecutorResourceRequest] = {
+    if (SparkEnv.get == null) {
+      // This will be called in standalone master when dynamic allocation enabled.
+      return super.getCustomExecutorResources()
+    }
+
+    val sparkConf = SparkEnv.get.conf
+    if (!Utils.isDynamicAllocationEnabled(sparkConf)) {
+      ResourceProfile.getOrCreateDefaultProfile(sparkConf)
+        .getCustomExecutorResources()
+    } else {
+      super.getCustomExecutorResources()
+    }
   }
 }
 
@@ -262,7 +335,7 @@ object ResourceProfile extends Logging {
    */
   val CORES = "cores"
   /**
-   * built-in executor resource: cores
+   * built-in executor resource: memory
    */
   val MEMORY = "memory"
   /**
@@ -288,8 +361,6 @@ object ResourceProfile extends Logging {
   val UNKNOWN_RESOURCE_PROFILE_ID = -1
   val DEFAULT_RESOURCE_PROFILE_ID = 0
 
-  private[spark] val MEMORY_OVERHEAD_MIN_MIB = 384L
-
   private lazy val nextProfileId = new AtomicInteger(0)
   private val DEFAULT_PROFILE_LOCK = new Object()
 
@@ -311,9 +382,9 @@ object ResourceProfile extends Logging {
           val defProf = new ResourceProfile(executorResources, taskResources)
           defProf.setToDefaultProfile()
           defaultProfile = Some(defProf)
-          logInfo("Default ResourceProfile created, executor resources: " +
-            s"${defProf.executorResources}, task resources: " +
-            s"${defProf.taskResources}")
+          logInfo(log"Default ResourceProfile created, executor resources: " +
+            log"${MDC(EXECUTOR_RESOURCES, defProf.executorResources)}, task resources: " +
+            log"${MDC(TASK_RESOURCES, defProf.taskResources)}")
           defProf
       }
     }
@@ -336,9 +407,25 @@ object ResourceProfile extends Logging {
 
   private def getDefaultExecutorResources(conf: SparkConf): Map[String, ExecutorResourceRequest] = {
     val ereqs = new ExecutorResourceRequests()
-    val cores = conf.get(EXECUTOR_CORES)
-    ereqs.cores(cores)
-    val memory = conf.get(EXECUTOR_MEMORY)
+
+    val isStandalone = conf.getOption("spark.master").exists(_.startsWith("spark://"))
+    // Since local-cluster and standalone share the same StandaloneSchedulerBackend and Master,
+    // and the Master will schedule based on resource profile, so we also need to create default
+    // resource profile for local-cluster here as well as standalone.
+    val isLocalCluster = conf.getOption("spark.master").exists(_.startsWith("local-cluster"))
+    // By default, standalone executors take all available cores, do not have a specific value.
+    val cores = if (isStandalone || isLocalCluster) {
+      conf.getOption(EXECUTOR_CORES.key).map(_.toInt)
+    } else {
+      Some(conf.get(EXECUTOR_CORES))
+    }
+    cores.foreach(ereqs.cores)
+
+    val memory = if (isStandalone || isLocalCluster) {
+      SparkContext.executorMemoryInMb(conf)
+    } else {
+      conf.get(EXECUTOR_MEMORY)
+    }
     ereqs.memory(memory.toString)
     val overheadMem = conf.get(EXECUTOR_MEMORY_OVERHEAD)
     overheadMem.map(mem => ereqs.memoryOverhead(mem.toString))
@@ -360,7 +447,7 @@ object ResourceProfile extends Logging {
   }
 
   // for testing only
-  private[spark] def reInitDefaultProfile(conf: SparkConf): Unit = {
+  private[spark] def reInitDefaultProfile(conf: SparkConf): ResourceProfile = {
     clearDefaultProfile()
     // force recreate it after clearing
     getOrCreateDefaultProfile(conf)
@@ -371,17 +458,6 @@ object ResourceProfile extends Logging {
       defaultProfile = None
       defaultProfileExecutorResources = None
     }
-  }
-
-  private[spark] def getCustomTaskResources(
-      rp: ResourceProfile): Map[String, TaskResourceRequest] = {
-    rp.taskResources.filterKeys(k => !k.equals(ResourceProfile.CPUS)).toMap
-  }
-
-  private[spark] def getCustomExecutorResources(
-      rp: ResourceProfile): Map[String, ExecutorResourceRequest] = {
-    rp.executorResources.
-      filterKeys(k => !ResourceProfile.allSupportedExecutorResources.contains(k)).toMap
   }
 
   /*
@@ -402,7 +478,7 @@ object ResourceProfile extends Logging {
   }
 
   private[spark] case class ExecutorResourcesOrDefaults(
-      cores: Int,
+      cores: Option[Int], // Can only be None for standalone and local-cluster.
       executorMemoryMiB: Long,
       memoryOffHeapMiB: Long,
       pysparkMemoryMiB: Long,
@@ -411,7 +487,7 @@ object ResourceProfile extends Logging {
       customResources: Map[String, ExecutorResourceRequest])
 
   private[spark] case class DefaultProfileExecutorResources(
-      cores: Int,
+      cores: Option[Int], // Can only be None for standalone cluster.
       executorMemoryMiB: Long,
       memoryOffHeapMiB: Long,
       pysparkMemoryMiB: Option[Long],
@@ -420,10 +496,11 @@ object ResourceProfile extends Logging {
 
   private[spark] def calculateOverHeadMemory(
       overHeadMemFromConf: Option[Long],
+      minimumOverHeadMemoryFromConf: Long,
       executorMemoryMiB: Long,
       overheadFactor: Double): Long = {
     overHeadMemFromConf.getOrElse(math.max((overheadFactor * executorMemoryMiB).toInt,
-        ResourceProfile.MEMORY_OVERHEAD_MIN_MIB))
+      minimumOverHeadMemoryFromConf))
   }
 
   /**
@@ -435,6 +512,7 @@ object ResourceProfile extends Logging {
   private[spark] def getResourcesForClusterManager(
       rpId: Int,
       execResources: Map[String, ExecutorResourceRequest],
+      minimumOverheadMemory: Long,
       overheadFactor: Double,
       conf: SparkConf,
       isPythonApp: Boolean,
@@ -446,7 +524,7 @@ object ResourceProfile extends Logging {
     var memoryOffHeapMiB = defaultResources.memoryOffHeapMiB
     var pysparkMemoryMiB = defaultResources.pysparkMemoryMiB.getOrElse(0L)
     var memoryOverheadMiB = calculateOverHeadMemory(defaultResources.memoryOverheadMiB,
-      executorMemoryMiB, overheadFactor)
+      minimumOverheadMemory, executorMemoryMiB, overheadFactor)
 
     val finalCustomResources = if (rpId != DEFAULT_RESOURCE_PROFILE_ID) {
       val customResources = new mutable.HashMap[String, ExecutorResourceRequest]
@@ -461,7 +539,7 @@ object ResourceProfile extends Logging {
           case ResourceProfile.OFFHEAP_MEM =>
             memoryOffHeapMiB = executorOffHeapMemorySizeAsMb(conf, execReq)
           case ResourceProfile.CORES =>
-            cores = execReq.amount.toInt
+            cores = Some(execReq.amount.toInt)
           case rName =>
             val nameToUse = resourceMappings.getOrElse(rName, rName)
             customResources(nameToUse) = execReq

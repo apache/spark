@@ -21,6 +21,7 @@ import scala.collection.mutable
 
 import org.apache.spark.ml.linalg._
 import org.apache.spark.rdd.RDD
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * Class that represents an instance of weighted data point with label and features.
@@ -174,7 +175,7 @@ private[spark] object InstanceBlock {
 
         // the block memory usage may slightly exceed threshold, not a big issue.
         // and this ensure even if one row exceed block limit, each block has one row.
-        InstanceBlock.fromInstances(buff.result())
+        InstanceBlock.fromInstances(buff.result().toImmutableArraySeq)
       }
     }
   }

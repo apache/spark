@@ -22,6 +22,68 @@ license: |
 * Table of contents
 {:toc}
 
+## Upgrading from Core 4.0 to 4.1
+
+- Since Spark 4.1, Spark Master deamon provides REST API by default. To restore the behavior before Spark 4.1, you can set `spark.master.rest.enabled` to `false`.
+- Since Spark 4.1, Spark will compress RDD checkpoints by default. To restore the behavior before Spark 4.1, you can set `spark.checkpoint.compress` to `false`.
+- Since Spark 4.1, Spark uses Apache Hadoop Magic Committer for all S3 buckets by default. To restore the behavior before Spark 4.0, you can set `spark.hadoop.fs.s3a.committer.magic.enabled=false`.
+- Since Spark 4.1, `java.lang.InternalError` encountered during file reading will no longer fail the task if the configuration `spark.sql.files.ignoreCorruptFiles` or the data source option `ignoreCorruptFiles` is set to `true`. 
+- Since Spark 4.1, Spark ignores `*.blacklist.*` alternative configuration names. To restore the behavior before Spark 4.1, you can use the corresponding configuration names instead which exists since Spark 3.1.0.
+- Since Spark 4.1, Spark will use multiple threads for LZF compression to compress data in parallel. To restore the behavior before Spark 4.1, you can set `spark.io.compression.lzf.parallel.enabled` to `false`.
+- Since Spark 4.1, Spark uses native Netty IO mode by default. To restore the behavior before Spark 4.1, you can set `spark.io.mode.default` to `NIO`.
+
+## Upgrading from Core 3.5 to 4.0
+
+- Since Spark 4.0, Spark migrated all its internal reference of servlet API from `javax` to `jakarta` 
+
+- Since Spark 4.0, Spark will roll event logs to archive them incrementally. To restore the behavior before Spark 4.0, you can set `spark.eventLog.rolling.enabled` to `false`.
+
+- Since Spark 4.0, Spark will compress event logs. To restore the behavior before Spark 4.0, you can set `spark.eventLog.compress` to `false`.
+
+- Since Spark 4.0, Spark workers will clean up worker and stopped application directories periodically. To restore the behavior before Spark 4.0, you can set `spark.worker.cleanup.enabled` to `false`.
+
+- Since Spark 4.0, `spark.shuffle.service.db.backend` is set to `ROCKSDB` by default which means Spark will use RocksDB store for shuffle service. To restore the behavior before Spark 4.0, you can set `spark.shuffle.service.db.backend` to `LEVELDB`.
+
+- In Spark 4.0, support for Apache Mesos as a resource manager was removed.
+
+- Since Spark 4.0, Spark will allocate executor pods with a batch size of `10`. To restore the legacy behavior, you can set `spark.kubernetes.allocation.batch.size` to `5`.
+
+- Since Spark 4.0, Spark uses `ReadWriteOncePod` instead of `ReadWriteOnce` access mode in persistence volume claims. To restore the legacy behavior, you can set `spark.kubernetes.legacy.useReadWriteOnceAccessMode` to `true`.
+
+- Since Spark 4.0, Spark reports its executor pod status by checking all containers of that pod. To restore the legacy behavior, you can set `spark.kubernetes.executor.checkAllContainers` to `false`.
+
+- Since Spark 4.0, Spark uses `~/.ivy2.5.2` as Ivy user directory by default to isolate the existing systems from Apache Ivy's incompatibility. To restore the legacy behavior, you can set `spark.jars.ivy` to `~/.ivy2`.
+
+- Since Spark 4.0, Spark uses the external shuffle service for deleting shuffle blocks for deallocated executors when the shuffle is no longer needed. To restore the legacy behavior, you can set `spark.shuffle.service.removeShuffle` to `false`.
+
+- Since Spark 4.0, the MDC (Mapped Diagnostic Context) key for Spark task names in Spark logs has been changed from `mdc.taskName` to `task_name`. To use the key `mdc.taskName`, you can set `spark.log.legacyTaskNameMdc.enabled` to `true`.
+
+- Since Spark 4.0, Spark performs speculative executions less aggressively with `spark.speculation.multiplier=3` and `spark.speculation.quantile=0.9`. To restore the legacy behavior, you can set `spark.speculation.multiplier=1.5` and `spark.speculation.quantile=0.75`.
+
+- Since Spark 4.0, `spark.shuffle.unsafe.file.output.buffer` is deprecated though still works. Use `spark.shuffle.localDisk.file.output.buffer` instead.
+
+- Since Spark 4.0, `org.apache.hadoop.security.AccessControlException` or `org.apache.hadoop.hdfs.BlockMissingException` encountered during file reading will fail the task even if the configuration `spark.sql.files.ignoreCorruptFiles` or the data source option `ignoreCorruptFiles` is set to `true`.
+
+## Upgrading from Core 3.5.3 to 3.5.4
+
+- Since Spark 3.5.4, when reading files hits `org.apache.hadoop.security.AccessControlException` and `org.apache.hadoop.hdfs.BlockMissingException`, the exception will be thrown and fail the task, even if `spark.files.ignoreCorruptFiles` is set to `true`.
+
+## Upgrading from Core 3.4 to 3.5
+
+- Since Spark 3.5, `spark.yarn.executor.failuresValidityInterval` is deprecated. Use `spark.executor.failuresValidityInterval` instead.
+
+- Since Spark 3.5, `spark.yarn.max.executor.failures` is deprecated. Use `spark.executor.maxNumFailures` instead.
+
+## Upgrading from Core 3.3 to 3.4
+
+- Since Spark 3.4, Spark driver will own `PersistentVolumeClaim`s and try to reuse if they are not assigned to live executors. To restore the behavior before Spark 3.4, you can set `spark.kubernetes.driver.ownPersistentVolumeClaim` to `false` and `spark.kubernetes.driver.reusePersistentVolumeClaim` to `false`.
+
+- Since Spark 3.4, Spark driver will track shuffle data when dynamic allocation is enabled without shuffle service. To restore the behavior before Spark 3.4, you can set `spark.dynamicAllocation.shuffleTracking.enabled` to `false`.
+
+- Since Spark 3.4, Spark will try to decommission cached RDD and shuffle blocks if both `spark.decommission.enabled` and `spark.storage.decommission.enabled` are true. To restore the behavior before Spark 3.4, you can set both `spark.storage.decommission.rddBlocks.enabled` and `spark.storage.decommission.shuffleBlocks.enabled` to `false`.
+
+- Since Spark 3.4, Spark will use RocksDB store if `spark.history.store.hybridStore.enabled` is true. To restore the behavior before Spark 3.4, you can set `spark.history.store.hybridStore.diskBackend` to `LEVELDB`.
+
 ## Upgrading from Core 3.2 to 3.3
 
 - Since Spark 3.3, Spark migrates its log4j dependency from 1.x to 2.x because log4j 1.x has reached end of life and is no longer supported by the community. Vulnerabilities reported after August 2015 against log4j 1.x were not checked and will not be fixed. Users should rewrite original log4j properties files using log4j2 syntax (XML, JSON, YAML, or properties format). Spark rewrites the `conf/log4j.properties.template` which is included in Spark distribution, to `conf/log4j2.properties.template` with log4j2 properties format.

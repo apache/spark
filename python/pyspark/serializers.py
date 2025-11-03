@@ -29,7 +29,7 @@ Examples
 --------
 The serializer is chosen when creating :class:`SparkContext`:
 
->>> from pyspark.context import SparkContext
+>>> from pyspark.core.context import SparkContext
 >>> from pyspark.serializers import MarshalSerializer
 >>> sc = SparkContext('local', 'test', serializer=MarshalSerializer())
 >>> sc.parallelize(list(range(1000))).map(lambda x: 2 * x).take(10)
@@ -54,6 +54,7 @@ which contains two batches of two objects:
 """
 
 import sys
+import os
 from itertools import chain, product
 import marshal
 import struct
@@ -66,7 +67,6 @@ import pickle
 pickle_protocol = pickle.HIGHEST_PROTOCOL
 
 from pyspark import cloudpickle
-from pyspark.util import print_exec
 
 
 __all__ = [
@@ -303,7 +303,7 @@ class CartesianDeserializer(Serializer):
     def _load_stream_without_unbatching(self, stream):
         key_batch_stream = self.key_ser._load_stream_without_unbatching(stream)
         val_batch_stream = self.val_ser._load_stream_without_unbatching(stream)
-        for (key_batch, val_batch) in zip(key_batch_stream, val_batch_stream):
+        for key_batch, val_batch in zip(key_batch_stream, val_batch_stream):
             # for correctness with repeated cartesian/zip this must be returned as one batch
             yield product(key_batch, val_batch)
 
@@ -329,7 +329,7 @@ class PairDeserializer(Serializer):
     def _load_stream_without_unbatching(self, stream):
         key_batch_stream = self.key_ser._load_stream_without_unbatching(stream)
         val_batch_stream = self.val_ser._load_stream_without_unbatching(stream)
-        for (key_batch, val_batch) in zip(key_batch_stream, val_batch_stream):
+        for key_batch, val_batch in zip(key_batch_stream, val_batch_stream):
             # For double-zipped RDDs, the batches can be iterators from other PairDeserializer,
             # instead of lists. We need to convert them to lists if needed.
             key_batch = key_batch if hasattr(key_batch, "__len__") else list(key_batch)
@@ -357,14 +357,14 @@ class NoOpSerializer(FramedSerializer):
         return obj
 
 
-if sys.version_info < (3, 8):
+if os.environ.get("PYSPARK_ENABLE_NAMEDTUPLE_PATCH") == "1":
     # Hack namedtuple, make it picklable.
     # For Python 3.8+, we use CPickle-based cloudpickle.
-    # For Python 3.7 and below, we use legacy build-in CPickle which
-    # requires namedtuple hack.
-    # The whole hack here should be removed once we drop Python 3.7.
+    # SPARK-41189: There are still behaviour differences between regular pickle
+    # and Cloudpickle e.g., bug fixes from the upstream. It's safer to have
+    # a switch to turn on and off for the time being.
 
-    __cls = {}
+    __cls = {}  # type: ignore[var-annotated]
 
     def _restore(name, fields, value):
         """Restore an object of namedtuple"""
@@ -454,6 +454,8 @@ class PickleSerializer(FramedSerializer):
 
 class CloudPickleSerializer(FramedSerializer):
     def dumps(self, obj):
+        from pyspark.util import print_exec
+
         try:
             return cloudpickle.dumps(obj, pickle_protocol)
         except pickle.PickleError:
@@ -471,10 +473,10 @@ class CloudPickleSerializer(FramedSerializer):
         return cloudpickle.loads(obj, encoding=encoding)
 
 
-if sys.version_info < (3, 8):
+if os.environ.get("PYSPARK_ENABLE_NAMEDTUPLE_PATCH") == "1":
     CPickleSerializer = PickleSerializer
 else:
-    CPickleSerializer = CloudPickleSerializer
+    CPickleSerializer = CloudPickleSerializer  # type: ignore[misc, assignment]
 
 
 class MarshalSerializer(FramedSerializer):

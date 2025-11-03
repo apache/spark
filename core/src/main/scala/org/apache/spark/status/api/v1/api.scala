@@ -31,6 +31,7 @@ import org.apache.spark.JobExecutionStatus
 import org.apache.spark.executor.ExecutorMetrics
 import org.apache.spark.metrics.ExecutorMetricType
 import org.apache.spark.resource.{ExecutorResourceRequest, ResourceInformation, TaskResourceRequest}
+import org.apache.spark.status.AppStatusUtils.getQuantilesValue
 
 case class ApplicationInfo private[spark](
     id: String,
@@ -39,7 +40,7 @@ case class ApplicationInfo private[spark](
     maxCores: Option[Int],
     coresPerExecutor: Option[Int],
     memoryPerExecutorMB: Option[Int],
-    attempts: Seq[ApplicationAttemptInfo])
+    attempts: collection.Seq[ApplicationAttemptInfo])
 
 @JsonIgnoreProperties(
   value = Array("startTimeEpoch", "endTimeEpoch", "lastUpdatedEpoch"),
@@ -196,8 +197,9 @@ class JobData private[spark](
     val description: Option[String],
     val submissionTime: Option[Date],
     val completionTime: Option[Date],
-    val stageIds: Seq[Int],
+    val stageIds: collection.Seq[Int],
     val jobGroup: Option[String],
+    val jobTags: collection.Seq[String],
     val status: JobExecutionStatus,
     val numTasks: Int,
     val numActiveTasks: Int,
@@ -220,8 +222,8 @@ class RDDStorageInfo private[spark](
     val storageLevel: String,
     val memoryUsed: Long,
     val diskUsed: Long,
-    val dataDistribution: Option[Seq[RDDDataDistribution]],
-    val partitions: Option[Seq[RDDPartitionInfo]])
+    val dataDistribution: Option[collection.Seq[RDDDataDistribution]],
+    val partitions: Option[collection.Seq[RDDPartitionInfo]])
 
 class RDDDataDistribution private[spark](
     val address: String,
@@ -242,7 +244,7 @@ class RDDPartitionInfo private[spark](
     val storageLevel: String,
     val memoryUsed: Long,
     val diskUsed: Long,
-    val executors: Seq[String])
+    val executors: collection.Seq[String])
 
 class StageData private[spark](
     val status: StageStatus,
@@ -282,6 +284,16 @@ class StageData private[spark](
     val shuffleLocalBytesRead: Long,
     val shuffleReadBytes: Long,
     val shuffleReadRecords: Long,
+    val shuffleCorruptMergedBlockChunks: Long,
+    val shuffleMergedFetchFallbackCount: Long,
+    val shuffleMergedRemoteBlocksFetched: Long,
+    val shuffleMergedLocalBlocksFetched: Long,
+    val shuffleMergedRemoteChunksFetched: Long,
+    val shuffleMergedLocalChunksFetched: Long,
+    val shuffleMergedRemoteBytesRead: Long,
+    val shuffleMergedLocalBytesRead: Long,
+    val shuffleRemoteReqsDuration: Long,
+    val shuffleMergedRemoteReqsDuration: Long,
     val shuffleWriteBytes: Long,
     val shuffleWriteTime: Long,
     val shuffleWriteRecords: Long,
@@ -291,8 +303,8 @@ class StageData private[spark](
     val details: String,
     val schedulingPool: String,
 
-    val rddIds: Seq[Int],
-    val accumulatorUpdates: Seq[AccumulableInfo],
+    val rddIds: collection.Seq[Int],
+    val accumulatorUpdates: collection.Seq[AccumulableInfo],
     val tasks: Option[Map[Long, TaskData]],
     val executorSummary: Option[Map[String, ExecutorStageSummary]],
     val speculationSummary: Option[SpeculationStageSummary],
@@ -302,7 +314,9 @@ class StageData private[spark](
     @JsonDeserialize(using = classOf[ExecutorMetricsJsonDeserializer])
     val peakExecutorMetrics: Option[ExecutorMetrics],
     val taskMetricsDistributions: Option[TaskMetricDistributions],
-    val executorMetricsDistributions: Option[ExecutorMetricsDistributions])
+    val executorMetricsDistributions: Option[ExecutorMetricsDistributions],
+    val isShufflePushEnabled: Boolean,
+    val shuffleMergersCount: Int)
 
 class TaskData private[spark](
     val taskId: Long,
@@ -318,7 +332,7 @@ class TaskData private[spark](
     val status: String,
     val taskLocality: String,
     val speculative: Boolean,
-    val accumulatorUpdates: Seq[AccumulableInfo],
+    val accumulatorUpdates: collection.Seq[AccumulableInfo],
     val errorMessage: Option[String] = None,
     val taskMetrics: Option[TaskMetrics] = None,
     val executorLogs: Map[String, String],
@@ -349,6 +363,17 @@ class OutputMetrics private[spark](
     val bytesWritten: Long,
     val recordsWritten: Long)
 
+class ShufflePushReadMetrics private[spark](
+  val corruptMergedBlockChunks: Long,
+  val mergedFetchFallbackCount: Long,
+  val remoteMergedBlocksFetched: Long,
+  val localMergedBlocksFetched: Long,
+  val remoteMergedChunksFetched: Long,
+  val localMergedChunksFetched: Long,
+  val remoteMergedBytesRead: Long,
+  val localMergedBytesRead: Long,
+  val remoteMergedReqsDuration: Long)
+
 class ShuffleReadMetrics private[spark](
     val remoteBlocksFetched: Long,
     val localBlocksFetched: Long,
@@ -356,7 +381,9 @@ class ShuffleReadMetrics private[spark](
     val remoteBytesRead: Long,
     val remoteBytesReadToDisk: Long,
     val localBytesRead: Long,
-    val recordsRead: Long)
+    val recordsRead: Long,
+    val remoteReqsDuration: Long,
+    val shufflePushReadMetrics: ShufflePushReadMetrics)
 
 class ShuffleWriteMetrics private[spark](
     val bytesWritten: Long,
@@ -393,6 +420,17 @@ class OutputMetricDistributions private[spark](
     val bytesWritten: IndexedSeq[Double],
     val recordsWritten: IndexedSeq[Double])
 
+class ShufflePushReadMetricDistributions private[spark](
+  val corruptMergedBlockChunks: IndexedSeq[Double],
+  val mergedFetchFallbackCount: IndexedSeq[Double],
+  val remoteMergedBlocksFetched: IndexedSeq[Double],
+  val localMergedBlocksFetched: IndexedSeq[Double],
+  val remoteMergedChunksFetched: IndexedSeq[Double],
+  val localMergedChunksFetched: IndexedSeq[Double],
+  val remoteMergedBytesRead: IndexedSeq[Double],
+  val localMergedBytesRead: IndexedSeq[Double],
+  val remoteMergedReqsDuration: IndexedSeq[Double])
+
 class ExecutorMetricsDistributions private[spark](
   val quantiles: IndexedSeq[Double],
 
@@ -418,13 +456,11 @@ class ExecutorMetricsDistributions private[spark](
 class ExecutorPeakMetricsDistributions private[spark](
   val quantiles: IndexedSeq[Double],
   val executorMetrics: IndexedSeq[ExecutorMetrics]) {
-  private lazy val count = executorMetrics.length
-  private lazy val indices = quantiles.map { q => math.min((q * count).toLong, count - 1) }
 
   /** Returns the distributions for the specified metric. */
   def getMetricDistribution(metricName: String): IndexedSeq[Double] = {
-    val sorted = executorMetrics.map(_.getMetricValue(metricName)).sorted
-    indices.map(i => sorted(i.toInt).toDouble).toIndexedSeq
+    val sorted = executorMetrics.map(_.getMetricValue(metricName).toDouble).sorted
+    getQuantilesValue(sorted, quantiles.toArray)
   }
 }
 
@@ -436,7 +472,9 @@ class ShuffleReadMetricDistributions private[spark](
     val fetchWaitTime: IndexedSeq[Double],
     val remoteBytesRead: IndexedSeq[Double],
     val remoteBytesReadToDisk: IndexedSeq[Double],
-    val totalBlocksFetched: IndexedSeq[Double])
+    val totalBlocksFetched: IndexedSeq[Double],
+    val remoteReqsDuration: IndexedSeq[Double],
+    val shufflePushReadMetricsDist: ShufflePushReadMetricDistributions)
 
 class ShuffleWriteMetricDistributions private[spark](
     val writeBytes: IndexedSeq[Double],
@@ -456,11 +494,12 @@ class VersionInfo private[spark](
 // REST call, they are not stored with it.
 class ApplicationEnvironmentInfo private[spark] (
     val runtime: RuntimeInfo,
-    val sparkProperties: Seq[(String, String)],
-    val hadoopProperties: Seq[(String, String)],
-    val systemProperties: Seq[(String, String)],
-    val classpathEntries: Seq[(String, String)],
-    val resourceProfiles: Seq[ResourceProfileInfo])
+    val sparkProperties: collection.Seq[(String, String)],
+    val hadoopProperties: collection.Seq[(String, String)],
+    val systemProperties: collection.Seq[(String, String)],
+    val metricsProperties: collection.Seq[(String, String)],
+    val classpathEntries: collection.Seq[(String, String)],
+    val resourceProfiles: collection.Seq[ResourceProfileInfo])
 
 class RuntimeInfo private[spark](
     val javaVersion: String,
@@ -471,7 +510,7 @@ case class StackTrace(elems: Seq[String]) {
   override def toString: String = elems.mkString
 
   def html: NodeSeq = {
-    val withNewLine = elems.foldLeft(NodeSeq.Empty) { (acc, elem) =>
+    val withNewLine = elems.map(_.stripLineEnd).foldLeft(NodeSeq.Empty) { (acc, elem) =>
       if (acc.isEmpty) {
         acc :+ Text(elem)
       } else {
@@ -488,13 +527,53 @@ case class StackTrace(elems: Seq[String]) {
 }
 
 case class ThreadStackTrace(
-    val threadId: Long,
-    val threadName: String,
-    val threadState: Thread.State,
-    val stackTrace: StackTrace,
-    val blockedByThreadId: Option[Long],
-    val blockedByLock: String,
-    val holdingLocks: Seq[String])
+    threadId: Long,
+    threadName: String,
+    threadState: Thread.State,
+    stackTrace: StackTrace,
+    blockedByThreadId: Option[Long],
+    blockedByLock: String,
+    @deprecated("using synchronizers and monitors instead", "4.0.0")
+    holdingLocks: Seq[String],
+    synchronizers: Seq[String],
+    monitors: Seq[String],
+    lockName: Option[String],
+    lockOwnerName: Option[String],
+    suspended: Boolean,
+    inNative: Boolean,
+    isDaemon: Boolean,
+    priority: Int) {
+
+  /**
+   * Returns a string representation of this thread stack trace
+   * w.r.t java.lang.management.ThreadInfo(JDK 8)'s toString.
+   *
+   * TODO(SPARK-44896): Also considering adding information os_prio, cpu, elapsed, tid, nid, etc.,
+   *   from the jstack tool
+   */
+  override def toString: String = {
+    val daemon = if (isDaemon) " daemon" else ""
+    val sb = new StringBuilder(
+      s""""$threadName"$daemon prio=$priority Id=$threadId $threadState""")
+    lockName.foreach(lock => sb.append(s" on $lock"))
+    lockOwnerName.foreach {
+      owner => sb.append(s"""owned by "$owner"""")
+    }
+    blockedByThreadId.foreach(id => s" Id=$id")
+    if (suspended) sb.append(" (suspended)")
+    if (inNative) sb.append(" (in native)")
+    sb.append('\n')
+
+    sb.append(stackTrace.elems.map(e => s"\tat $e").mkString)
+
+    if (synchronizers.nonEmpty) {
+      sb.append(s"\n\tNumber of locked synchronizers = ${synchronizers.length}\n")
+      synchronizers.foreach(sync => sb.append(s"\t- $sync\n"))
+    }
+    sb.append('\n')
+    sb.toString
+  }
+}
 
 class ProcessSummary private[spark](
      val id: String,

@@ -17,7 +17,7 @@
 
 package org.apache.spark.util.sketch
 
-import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
+import java.io.ByteArrayOutputStream
 
 import scala.reflect.ClassTag
 import scala.util.Random
@@ -34,9 +34,7 @@ class BloomFilterSuite extends AnyFunSuite { // scalastyle:ignore funsuite
     filter.writeTo(out)
     out.close()
 
-    val in = new ByteArrayInputStream(out.toByteArray)
-    val deserialized = BloomFilter.readFrom(in)
-    in.close()
+    val deserialized = BloomFilter.readFrom(out.toByteArray)
 
     assert(filter == deserialized)
   }
@@ -48,7 +46,9 @@ class BloomFilterSuite extends AnyFunSuite { // scalastyle:ignore funsuite
       val fpp = 0.05
       val numInsertion = numItems / 10
 
-      val allItems = Array.fill(numItems)(itemGen(r))
+      // using a Set to avoid duplicates,
+      // inserting twice as many random values as used, to compensate for lost dupes
+      val allItems = Set.fill(2 * numItems)(itemGen(r)).take(numItems)
 
       val filter = BloomFilter.create(numInsertion, fpp)
 
@@ -158,6 +158,12 @@ class BloomFilterSuite extends AnyFunSuite { // scalastyle:ignore funsuite
     intercept[IncompatibleMergeException] {
       val filter1 = BloomFilter.create(1000, 6400)
       val filter2 = BloomFilter.create(2000, 6400)
+      filter1.mergeInPlace(filter2)
+    }
+
+    intercept[IncompatibleMergeException] {
+      val filter1 = BloomFilter.create(BloomFilter.Version.V1, 1000L, 6400L, 0)
+      val filter2 = BloomFilter.create(BloomFilter.Version.V2, 1000L, 6400L, 0)
       filter1.mergeInPlace(filter2)
     }
   }

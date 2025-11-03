@@ -55,6 +55,14 @@ private[spark] object InputFileBlockHolder {
         new AtomicReference(new FileBlock)
     }
 
+  private[spark] def setThreadLocalValue(ref: Object): Unit = {
+    inputBlock.set(ref.asInstanceOf[AtomicReference[FileBlock]])
+  }
+
+  private[spark] def getThreadLocalValue(): Object = {
+    inputBlock.get()
+  }
+
   /**
    * Returns the holding file name or empty string if it is unknown.
    */
@@ -72,6 +80,9 @@ private[spark] object InputFileBlockHolder {
 
   /**
    * Sets the thread-local input block.
+   *
+   * Callers of this method must ensure a task completion listener has been registered to unset()
+   * the thread local in the task thread.
    */
   def set(filePath: String, startOffset: Long, length: Long): Unit = {
     require(filePath != null, "filePath cannot be null")

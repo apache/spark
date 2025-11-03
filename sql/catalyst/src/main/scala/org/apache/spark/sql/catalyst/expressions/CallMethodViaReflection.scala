@@ -19,12 +19,17 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.lang.reflect.{Method, Modifier}
 
+import scala.util.control.NonFatal
+
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TypeCheckResult}
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{TypeCheckFailure, TypeCheckSuccess}
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
+import org.apache.spark.sql.internal.types.StringTypeWithCollation
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
 /**
@@ -54,32 +59,86 @@ import org.apache.spark.util.Utils
   """,
   since = "2.0.0",
   group = "misc_funcs")
-case class CallMethodViaReflection(children: Seq[Expression])
-  extends Nondeterministic with CodegenFallback {
+case class CallMethodViaReflection(
+      children: Seq[Expression],
+      failOnError: Boolean = true)
+  extends Nondeterministic
+  with DefaultStringProducingExpression
+  with CodegenFallback
+  with QueryErrorsBase {
+
+  def this(children: Seq[Expression]) =
+    this(children, true)
 
   override def prettyName: String = getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("reflect")
 
   override def checkInputDataTypes(): TypeCheckResult = {
     if (children.size < 2) {
-      TypeCheckFailure("requires at least two arguments")
-    } else if (!children.take(2).forall(e => e.dataType == StringType && e.foldable)) {
-      // The first two arguments must be string type.
-      TypeCheckFailure("first two arguments should be string literals")
-    } else if (!classExists) {
-      TypeCheckFailure(s"class $className not found")
-    } else if (children.slice(2, children.length)
-        .exists(e => !CallMethodViaReflection.typeMapping.contains(e.dataType))) {
-      TypeCheckFailure("arguments from the third require boolean, byte, short, " +
-        "integer, long, float, double or string expressions")
-    } else if (method == null) {
-      TypeCheckFailure(s"cannot find a static method that matches the argument types in $className")
+      throw QueryCompilationErrors.wrongNumArgsError(
+        toSQLId(prettyName), Seq("> 1"), children.length
+      )
     } else {
-      TypeCheckSuccess
+      val unexpectedParameter = children.zipWithIndex.collectFirst {
+        case (e, 0) if !(e.dataType.isInstanceOf[StringType] && e.foldable) =>
+          DataTypeMismatch(
+            errorSubClass = "NON_FOLDABLE_INPUT",
+            messageParameters = Map(
+              "inputName" -> toSQLId("class"),
+              "inputType" -> toSQLType(StringTypeWithCollation),
+              "inputExpr" -> toSQLExpr(children.head)
+            )
+          )
+        case (e, 0) if e.eval() == null =>
+          DataTypeMismatch(
+            errorSubClass = "UNEXPECTED_NULL",
+            messageParameters = Map("exprName" -> toSQLId("class")))
+        case (e, 1) if !(e.dataType.isInstanceOf[StringType] && e.foldable) =>
+          DataTypeMismatch(
+            errorSubClass = "NON_FOLDABLE_INPUT",
+            messageParameters = Map(
+              "inputName" -> toSQLId("method"),
+              "inputType" -> toSQLType(StringTypeWithCollation),
+              "inputExpr" -> toSQLExpr(children(1))
+            )
+          )
+        case (e, 1) if e.eval() == null =>
+          DataTypeMismatch(
+            errorSubClass = "UNEXPECTED_NULL",
+            messageParameters = Map("exprName" -> toSQLId("method")))
+        case (e, idx) if idx > 1 &&
+          (!CallMethodViaReflection.typeMapping.contains(e.dataType)
+            && !e.dataType.isInstanceOf[StringType]) =>
+          DataTypeMismatch(
+            errorSubClass = "UNEXPECTED_INPUT_TYPE",
+            messageParameters = Map(
+              "paramIndex" -> ordinalNumber(idx),
+              "requiredType" -> toSQLType(
+                TypeCollection(BooleanType, ByteType, ShortType,
+                  IntegerType, LongType, FloatType, DoubleType,
+                  StringTypeWithCollation(supportsTrimCollation = true))),
+              "inputSql" -> toSQLExpr(e),
+              "inputType" -> toSQLType(e.dataType))
+          )
+      }
+
+      unexpectedParameter match {
+        case Some(mismatch) => mismatch
+        case _ if !classExists =>
+          DataTypeMismatch(
+            errorSubClass = "UNEXPECTED_CLASS_TYPE",
+            messageParameters = Map("className" -> className)
+          )
+        case _ if method == null =>
+          DataTypeMismatch(
+            errorSubClass = "UNEXPECTED_STATIC_METHOD",
+            messageParameters = Map("methodName" -> methodName, "className" -> className)
+          )
+        case _ => TypeCheckSuccess
+      }
     }
   }
 
   override def nullable: Boolean = true
-  override val dataType: DataType = StringType
   override protected def initializeInternal(partitionIndex: Int): Unit = {}
 
   override protected def evalInternal(input: InternalRow): Any = {
@@ -94,8 +153,13 @@ case class CallMethodViaReflection(children: Seq[Expression])
       }
       i += 1
     }
-    val ret = method.invoke(null, buffer : _*)
-    UTF8String.fromString(String.valueOf(ret))
+    try {
+      val ret = method.invoke(null, buffer : _*)
+      UTF8String.fromString(String.valueOf(ret))
+    } catch {
+      case NonFatal(_) if !failOnError =>
+        null
+    }
   }
 
   @transient private lazy val argExprs: Array[Expression] = children.drop(2).toArray
@@ -106,11 +170,12 @@ case class CallMethodViaReflection(children: Seq[Expression])
   /** True if the class exists and can be loaded. */
   @transient private lazy val classExists = CallMethodViaReflection.classExists(className)
 
+  /** Name of the method */
+  @transient private lazy val methodName = children(1).eval(null).asInstanceOf[UTF8String].toString
+
   /** The reflection method. */
-  @transient lazy val method: Method = {
-    val methodName = children(1).eval(null).asInstanceOf[UTF8String].toString
-    CallMethodViaReflection.findMethod(className, methodName, argExprs.map(_.dataType)).orNull
-  }
+  @transient lazy val method: Method = CallMethodViaReflection
+    .findMethod(className, methodName, argExprs.map(_.dataType).toImmutableArraySeq).orNull
 
   /** A temporary buffer used to hold intermediate results returned by children. */
   @transient private lazy val buffer = new Array[Object](argExprs.length)
@@ -169,7 +234,10 @@ object CallMethodViaReflection {
         // Argument type must match. That is, either the method's argument type matches one of the
         // acceptable types defined in typeMapping, or it is a super type of the acceptable types.
         candidateTypes.zip(argTypes).forall { case (candidateType, argType) =>
-          typeMapping(argType).exists(candidateType.isAssignableFrom)
+          if (!argType.isInstanceOf[StringType]) {
+            typeMapping(argType).exists(candidateType.isAssignableFrom)
+          }
+          else candidateType.isAssignableFrom(classOf[String])
         }
       }
     }

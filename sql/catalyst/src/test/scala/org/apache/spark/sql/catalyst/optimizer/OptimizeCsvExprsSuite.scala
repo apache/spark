@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
-class OptimizeCsvExprsSuite extends PlanTest with ExpressionEvalHelper {
+class OptimizeCsvExprsSuite extends PlanTest {
 
   private var csvExpressionOptimizeEnabled: Boolean = _
   protected override def beforeAll(): Unit = {

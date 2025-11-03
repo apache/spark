@@ -55,10 +55,13 @@ class ReplaceNullWithFalseInPredicateSuite extends PlanTest {
   }
 
   test("Not expected type - replaceNullWithFalse") {
-    val e = intercept[AnalysisException] {
-      testFilter(originalCond = Literal(null, IntegerType), expectedCond = FalseLiteral)
-    }.getMessage
-    assert(e.contains("'CAST(NULL AS INT)' of type int is not a boolean"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        testFilter(originalCond = Literal(null, IntegerType), expectedCond = FalseLiteral)
+      },
+      condition = "DATATYPE_MISMATCH.FILTER_NOT_BOOLEAN",
+      parameters = Map("sqlExpr" -> "\"NULL\"", "filter" -> "\"NULL\"", "type" -> "\"INT\"")
+    )
   }
 
   test("replace null in branches of If") {
@@ -480,10 +483,25 @@ class ReplaceNullWithFalseInPredicateSuite extends PlanTest {
       val notMatchedAssignments = Seq(
         Assignment($"i", $"d")
       )
+      val notMatchedBySourceAssignments = Seq(
+        Assignment($"i", $"i"),
+        Assignment($"b", $"b"),
+        Assignment($"a", $"a"),
+        Assignment($"m", $"m")
+      )
       val matchedActions = UpdateAction(Some(expr), matchedAssignments) ::
         DeleteAction(Some(expr)) :: Nil
       val notMatchedActions = InsertAction(None, notMatchedAssignments) :: Nil
-      MergeIntoTable(target, source, mergeCondition = expr, matchedActions, notMatchedActions)
+      val notMatchedBySourceActions = UpdateAction(Some(expr), matchedAssignments) ::
+        DeleteAction(Some(expr)) :: Nil
+      MergeIntoTable(
+        target,
+        source,
+        mergeCondition = expr,
+        matchedActions,
+        notMatchedActions,
+        notMatchedBySourceActions,
+        withSchemaEvolution = false)
     }
     val originalPlan = func(testRelation, anotherTestRelation, originalCond).analyze
     val optimizedPlan = Optimize.execute(originalPlan)
@@ -499,7 +517,14 @@ class ReplaceNullWithFalseInPredicateSuite extends PlanTest {
       // However, the source must have all the columns present in target for star resolution.
       val source = LocalRelation($"i".int, $"b".boolean, $"a".array(IntegerType))
       val target = LocalRelation($"a".array(IntegerType))
-      MergeIntoTable(target, source, mergeCondition = expr, matchedActions, notMatchedActions)
+      MergeIntoTable(
+        target,
+        source,
+        mergeCondition = expr,
+        matchedActions,
+        notMatchedActions,
+        notMatchedBySourceActions = Seq.empty,
+        withSchemaEvolution = false)
     }
     val originalPlanWithStar = mergePlanWithStar(originalCond).analyze
     val optimizedPlanWithStar = Optimize.execute(originalPlanWithStar)
@@ -522,8 +547,8 @@ class ReplaceNullWithFalseInPredicateSuite extends PlanTest {
       function = !(cond <=> TrueLiteral),
       arguments = lambdaArgs)
     testProjection(
-      originalExpr = createExpr(argument, lambda1) as Symbol("x"),
-      expectedExpr = createExpr(argument, lambda2) as Symbol("x"))
+      originalExpr = createExpr(argument, lambda1) as "x",
+      expectedExpr = createExpr(argument, lambda2) as "x")
   }
 
   private def test(

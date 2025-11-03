@@ -20,10 +20,11 @@ package org.apache.spark.sql.hive.execution
 import java.io.{DataInput, DataOutput, File, PrintWriter}
 import java.util.{ArrayList, Arrays, Properties}
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.hive.ql.exec.UDF
+import org.apache.hadoop.hive.ql.metadata.HiveException
 import org.apache.hadoop.hive.ql.udf.{UDAFPercentile, UDFType}
 import org.apache.hadoop.hive.ql.udf.generic._
 import org.apache.hadoop.hive.ql.udf.generic.GenericUDF.DeferredObject
@@ -32,11 +33,12 @@ import org.apache.hadoop.hive.serde2.objectinspector.{ObjectInspector, ObjectIns
 import org.apache.hadoop.hive.serde2.objectinspector.primitive.PrimitiveObjectInspectorFactory
 import org.apache.hadoop.io.{LongWritable, Writable}
 
-import org.apache.spark.{SparkFiles, TestUtils}
+import org.apache.spark.{SparkException, SparkFiles, TestUtils}
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
-import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
+import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode
 import org.apache.spark.sql.catalyst.plans.logical.Project
-import org.apache.spark.sql.functions.max
+import org.apache.spark.sql.execution.WholeStageCodegenExec
+import org.apache.spark.sql.functions.{call_function, max}
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
@@ -92,7 +94,8 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
         """.
             stripMargin.format(classOf[PairSerDe].getName))
 
-      val location = Utils.getSparkClassLoader.getResource("data/files/testUDF").getFile
+      val location = getWorkspaceFilePath(
+        "hive", "src", "test", "resources", "data", "files", "testUDF").toUri.toURL.getFile
       sql(s"""
         ALTER TABLE hiveUDFTestTable
         ADD IF NOT EXISTS PARTITION(partition='testUDF')
@@ -452,12 +455,12 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
 
       // EXTERNAL OpenCSVSerde table pointing to LOCATION
 
-      val file1 = new File(tempDir + "/data1")
+      val file1 = new File(s"$tempDir/data1")
       Utils.tryWithResource(new PrintWriter(file1)) { writer =>
         writer.write("1,2")
       }
 
-      val file2 = new File(tempDir + "/data2")
+      val file2 = new File(s"$tempDir/data2")
       Utils.tryWithResource(new PrintWriter(file2)) { writer =>
         writer.write("1,2")
       }
@@ -492,7 +495,7 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
         sql("SELECT input_file_name() as file FROM external_t5").head().getString(0)
       assert(answer1.contains("data1") || answer1.contains("data2"))
 
-      val count2 = sql("SELECT input_file_name() as file FROM external_t5").distinct().count
+      val count2 = sql("SELECT input_file_name() as file FROM external_t5").distinct().count()
       assert(count2 == 2)
       sql("DROP TABLE external_t5")
     }
@@ -514,7 +517,7 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
         sql("SELECT input_file_name() as file FROM external_parquet").head().getString(0)
       assert(answer3.contains("external_parquet"))
 
-      val count3 = sql("SELECT input_file_name() as file FROM external_parquet").distinct().count
+      val count3 = sql("SELECT input_file_name() as file FROM external_parquet").distinct().count()
       assert(count3 == 1)
       sql("DROP TABLE external_parquet")
     }
@@ -526,7 +529,7 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
       sql("SELECT input_file_name() as file FROM parquet_tmp").head().getString(0)
     assert(answer4.contains("parquet_tmp"))
 
-    val count4 = sql("SELECT input_file_name() as file FROM parquet_tmp").distinct().count
+    val count4 = sql("SELECT input_file_name() as file FROM parquet_tmp").distinct().count()
     assert(count4 == 1)
     sql("DROP TABLE parquet_tmp")
   }
@@ -551,29 +554,16 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
     }
   }
 
-  test("Show persistent functions") {
-    val testData = spark.sparkContext.parallelize(StringCaseClass("") :: Nil).toDF()
-    withTempView("inputTable") {
-      testData.createOrReplaceTempView("inputTable")
-      withUserDefinedFunction("testUDFToListInt" -> false) {
-        val numFunc = spark.catalog.listFunctions().count()
-        sql(s"CREATE FUNCTION testUDFToListInt AS '${classOf[UDFToListInt].getName}'")
-        assert(spark.catalog.listFunctions().count() == numFunc + 1)
-        checkAnswer(
-          sql("SELECT testUDFToListInt(s) FROM inputTable"),
-          Seq(Row(Seq(1, 2, 3))))
-        assert(sql("show functions").count() ==
-          numFunc + FunctionRegistry.builtinOperators.size + 1)
-        assert(spark.catalog.listFunctions().count() == numFunc + 1)
-
-        withDatabase("db2") {
-          sql("CREATE DATABASE db2")
-          sql(s"CREATE FUNCTION db2.testUDFToListInt AS '${classOf[UDFToListInt].getName}'")
-          checkAnswer(
-            sql("SHOW FUNCTIONS IN db2 LIKE 'testUDF*'"),
-            Seq(Row("db2.testudftolistint")))
-        }
-      }
+  test("Invoke a persist hive function with call_function") {
+    val testData = spark.range(5).repartition(1)
+    withUserDefinedFunction("custom_avg" -> false) {
+      sql(s"CREATE FUNCTION custom_avg AS '${classOf[GenericUDAFAverage].getName}'")
+      checkAnswer(
+        testData.select(
+          call_function("custom_avg", $"id"),
+          call_function("default.custom_avg", $"id"),
+          call_function("spark_catalog.default.custom_avg", $"id")),
+        Row(2.0, 2.0, 2.0))
     }
   }
 
@@ -597,16 +587,26 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
             sql(s"CREATE FUNCTION dAtABaSe1.test_avg AS '${classOf[GenericUDAFAverage].getName}'")
             checkAnswer(sql("SELECT dAtABaSe1.test_avg(1)"), Row(1.0))
           }
-          val message = intercept[AnalysisException] {
-            sql("SELECT dAtABaSe1.unknownFunc(1)")
-          }.getMessage
-          assert(message.contains("Undefined function: dAtABaSe1.unknownFunc"))
+          checkError(
+            exception = intercept[AnalysisException] {
+              sql("SELECT dAtABaSe1.unknownFunc(1)")
+            },
+            condition = "UNRESOLVED_ROUTINE",
+            parameters = Map(
+              "routineName" -> "`dAtABaSe1`.`unknownFunc`",
+              "searchPath" ->
+                "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"),
+            context = ExpectedContext(
+              fragment = "dAtABaSe1.unknownFunc(1)",
+              start = 7,
+              stop = 30))
         }
       }
     }
   }
 
   test("UDTF") {
+    assume(Thread.currentThread().getContextClassLoader.getResource("TestUDTF.jar") != null)
     withUserDefinedFunction("udtf_count2" -> true) {
       sql(s"ADD JAR ${hiveContext.getHiveFile("TestUDTF.jar").getCanonicalPath}")
       // The function source code can be found at:
@@ -628,6 +628,7 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
   }
 
   test("permanent UDTF") {
+    assume(Thread.currentThread().getContextClassLoader.getResource("TestUDTF.jar") != null)
     withUserDefinedFunction("udtf_count_temp" -> false) {
       sql(
         s"""
@@ -729,6 +730,113 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
       }
     }
   }
+
+  test("SPARK-42051: HiveGenericUDF Codegen Support") {
+    withUserDefinedFunction("CodeGenHiveGenericUDF" -> false) {
+      sql(s"CREATE FUNCTION CodeGenHiveGenericUDF AS '${classOf[GenericUDFMaskHash].getName}'")
+      withTable("HiveGenericUDFTable") {
+        sql(s"create table HiveGenericUDFTable as select 'Spark SQL' as v")
+        val df = sql("SELECT CodeGenHiveGenericUDF(v) from HiveGenericUDFTable")
+        val plan = df.queryExecution.executedPlan
+        assert(plan.isInstanceOf[WholeStageCodegenExec])
+        checkAnswer(df, Seq(Row("14ab8df5135825bc9f5ff7c30609f02f")))
+      }
+    }
+  }
+
+  test("SPARK-42051: HiveGenericUDF Codegen Support w/ execution failure") {
+    withUserDefinedFunction("CodeGenHiveGenericUDF" -> false) {
+      sql(s"CREATE FUNCTION CodeGenHiveGenericUDF AS '${classOf[GenericUDFAssertTrue].getName}'")
+      withTable("HiveGenericUDFTable") {
+        sql(s"create table HiveGenericUDFTable as select false as v")
+        val df = sql("SELECT CodeGenHiveGenericUDF(v) from HiveGenericUDFTable")
+        checkError(
+          intercept[SparkException](df.collect()),
+          "FAILED_EXECUTE_UDF",
+          parameters = Map(
+            "functionName" ->
+              "`org`.`apache`.`hadoop`.`hive`.`ql`.`udf`.`generic`.`GenericUDFAssertTrue`",
+            "signature" -> "boolean",
+            "result" -> "void",
+            "reason" ->
+              "org.apache.hadoop.hive.ql.metadata.HiveException: ASSERT_TRUE(): assertion failed."))
+      }
+    }
+  }
+
+  test("SPARK-42052: HiveSimpleUDF Codegen Support") {
+    withUserDefinedFunction("CodeGenHiveSimpleUDF" -> false) {
+      sql(s"CREATE FUNCTION CodeGenHiveSimpleUDF AS '${classOf[UDFStringString].getName}'")
+      withTable("HiveSimpleUDFTable") {
+        sql(s"create table HiveSimpleUDFTable as select 'Spark SQL' as v")
+        val df = sql("SELECT CodeGenHiveSimpleUDF('Hello', v) from HiveSimpleUDFTable")
+        val plan = df.queryExecution.executedPlan
+        assert(plan.isInstanceOf[WholeStageCodegenExec])
+        checkAnswer(df, Seq(Row("Hello Spark SQL")))
+      }
+    }
+  }
+
+  test("SPARK-42052: HiveSimpleUDF Codegen Support w/ execution failure") {
+    withUserDefinedFunction("CodeGenHiveSimpleUDF" -> false) {
+      sql(s"CREATE FUNCTION CodeGenHiveSimpleUDF AS '${classOf[SimpleUDFAssertTrue].getName}'")
+      withTable("HiveSimpleUDFTable") {
+        sql(s"create table HiveSimpleUDFTable as select false as v")
+        val df = sql("SELECT CodeGenHiveSimpleUDF(v) from HiveSimpleUDFTable")
+
+        val reason = """
+          |org.apache.hadoop.hive.ql.metadata.HiveException: Unable to execute method public
+          |boolean org.apache.spark.sql.hive.execution.SimpleUDFAssertTrue.evaluate(boolean) with
+          |arguments {false}:ASSERT_TRUE(): assertion failed."""
+          .stripMargin.replaceAll("\n", " ").trim
+
+        checkError(
+          exception = intercept[SparkException](df.collect()),
+          condition = "FAILED_EXECUTE_UDF",
+          parameters = Map(
+            "functionName" ->
+              "`org`.`apache`.`spark`.`sql`.`hive`.`execution`.`SimpleUDFAssertTrue`",
+            "signature" -> "boolean",
+            "result" -> "boolean",
+            "reason" -> reason
+          )
+        )
+      }
+    }
+  }
+
+  test("SPARK-48845: GenericUDF catch exceptions from child UDFs") {
+    withTable("test_catch_exception") {
+      withUserDefinedFunction("udf_throw_exception" -> true, "udf_catch_exception" -> true) {
+        Seq("9", "9-1").toDF("a").write.saveAsTable("test_catch_exception")
+        sql("CREATE TEMPORARY FUNCTION udf_throw_exception AS " +
+          s"'${classOf[UDFThrowException].getName}'")
+        sql("CREATE TEMPORARY FUNCTION udf_catch_exception AS " +
+          s"'${classOf[UDFCatchException].getName}'")
+        Seq(
+          CodegenObjectFactoryMode.FALLBACK.toString,
+          CodegenObjectFactoryMode.NO_CODEGEN.toString
+        ).foreach { codegenMode =>
+          withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> codegenMode) {
+            val df = sql(
+              "SELECT udf_catch_exception(udf_throw_exception(a)) FROM test_catch_exception")
+            checkAnswer(df, Seq(Row("9"), Row(null)))
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-52014: Support FoldableUnevaluable in HiveGenericUDFEvaluator") {
+    withUserDefinedFunction("hive_concat" -> true) {
+      sql(s"CREATE TEMPORARY FUNCTION hive_concat AS '${classOf[GenericUDFConcat].getName}'")
+      assert(sql(
+        s"""SELECT hive_concat(
+           |         date_format(CAST(CURRENT_DATE() AS DATE), 'yyyyMMdd'),
+           |         now())""".stripMargin).collect().length == 1)
+    }
+    hiveContext.reset()
+  }
 }
 
 class TestPair(x: Int, y: Int) extends Writable with Serializable {
@@ -828,5 +936,14 @@ class ListFiles extends UDF {
   def evaluate(path: String): JList[String] = {
     val fileArray = new File(path).list()
     if (fileArray != null) Arrays.asList(fileArray: _*) else new ArrayList[String]()
+  }
+}
+
+class SimpleUDFAssertTrue extends UDF {
+  def evaluate(condition: Boolean): Boolean = {
+    if (!condition) {
+      throw new HiveException("ASSERT_TRUE(): assertion failed.");
+    }
+    condition
   }
 }

@@ -187,6 +187,18 @@ pre {
   display: none;
 }
 
+.sub-execution-list {
+  font-size: 0.9rem;
+}
+
+.sub-execution-list.collapsed {
+  display: none;
+}
+
+.table-striped .sub-execution-list table tr {
+  background-color: inherit;
+}
+
 .description-input {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -274,6 +286,12 @@ span.expand-dag-viz, .collapse-table {
 
 a.expandbutton {
   cursor: pointer;
+  margin-right: 10px;
+}
+
+a.downloadbutton {
+  cursor: pointer;
+  margin-right: 10px;
 }
 
 .threaddump-td-mouseover {
@@ -342,6 +360,10 @@ a.expandbutton {
 .shuffle-remote-reads-checkbox-div {
   width: 170px;
 }
+
+.shuffle-write-time-checkbox-div {
+  width: 155px; 
+} 
 
 .result-serialization-time-checkbox-div {
   width: 185px;
@@ -423,4 +445,56 @@ a.expandbutton {
 
 #active-executors-table th:first-child {
   border-left: 1px solid #dddddd;
+}
+
+.scroll-btn-container {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  width: 48px;
+  height: 80px;
+  border-radius: 8px;
+  background-color: rgba(0, 136, 204, 0.5);;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+}
+
+.scroll-btn-half {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  cursor: pointer;
+  transition: background-color 0.3s ease;
+  position: relative;
+}
+
+.scroll-btn-half:hover {
+  background-color: rgba(0, 136, 204, 1);
+}
+
+.scroll-btn-top::before {
+  content: '';
+  width: 0;
+  height: 0;
+  border-left: 10px solid transparent;
+  border-right: 10px solid transparent;
+  border-bottom: 15px solid white;
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.scroll-btn-bottom::before {
+  content: '';
+  width: 0;
+  height: 0;
+  border-left: 10px solid transparent;
+  border-right: 10px solid transparent;
+  border-top: 15px solid white;
+  position: absolute;
+  bottom: 50%;
+  transform: translateY(50%);
 }

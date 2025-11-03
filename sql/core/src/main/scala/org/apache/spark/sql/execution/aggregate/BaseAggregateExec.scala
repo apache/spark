@@ -17,16 +17,17 @@
 
 package org.apache.spark.sql.execution.aggregate
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, AttributeSet, Expression, NamedExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, Final, PartialMerge}
 import org.apache.spark.sql.catalyst.plans.physical.{AllTuples, ClusteredDistribution, Distribution, UnspecifiedDistribution}
-import org.apache.spark.sql.execution.{AliasAwareOutputPartitioning, ExplainUtils, UnaryExecNode}
-import org.apache.spark.sql.execution.streaming.StatefulOperatorPartitioning
+import org.apache.spark.sql.execution.{ExplainUtils, PartitioningPreservingUnaryExecNode, UnaryExecNode}
+import org.apache.spark.sql.execution.streaming.operators.stateful.StatefulOperatorPartitioning
 
 /**
  * Holds common logic for aggregate operators
  */
-trait BaseAggregateExec extends UnaryExecNode with AliasAwareOutputPartitioning {
+trait BaseAggregateExec extends UnaryExecNode with PartitioningPreservingUnaryExecNode {
   def requiredChildDistributionExpressions: Option[Seq[Expression]]
   def isStreaming: Boolean
   def numShufflePartitions: Option[Int]
@@ -102,9 +103,9 @@ trait BaseAggregateExec extends UnaryExecNode with AliasAwareOutputPartitioning 
               StatefulOperatorPartitioning.getCompatibleDistribution(
                 exprs, parts, conf) :: Nil
 
-            case _ =>
-              throw new IllegalStateException("Expected to set the number of partitions before " +
-                "constructing required child distribution!")
+            case _ => throw SparkException.internalError(
+              "Expected to set the number of partitions before " +
+              "constructing required child distribution!")
           }
         } else {
           ClusteredDistribution(exprs) :: Nil

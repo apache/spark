@@ -21,6 +21,7 @@ import org.apache.spark.sql.catalyst.{InternalRow, StructFilters}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.sources
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * The class provides API for applying pushed down source filters to rows with
@@ -98,7 +99,7 @@ class JsonFilters(pushedFilters: Seq[sources.Filter], schema: StructType)
       // Combine all filters from the same group by `And` because all filters should
       // return `true` to do not skip a row. The result is compiled to a predicate.
       .map { case (refSet, refsFilters) =>
-        (refSet, JsonPredicate(toPredicate(refsFilters), refSet.size))
+        (refSet, JsonPredicate(toPredicate(refsFilters.toImmutableArraySeq), refSet.size))
       }
     // Apply predicates w/o references like `AlwaysTrue` and `AlwaysFalse` to all fields.
     // We cannot set such predicates to a particular position because skipRow() can
@@ -152,5 +153,5 @@ class JsonFilters(pushedFilters: Seq[sources.Filter], schema: StructType)
   /**
    * Reset states of all predicates by re-initializing reference counters.
    */
-  override def reset(): Unit = predicates.foreach(_.foreach(_.reset))
+  override def reset(): Unit = predicates.foreach(_.foreach(_.reset()))
 }

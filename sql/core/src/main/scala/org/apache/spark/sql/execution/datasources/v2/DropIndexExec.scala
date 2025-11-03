@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
+import org.apache.spark.internal.LogKeys.INDEX_NAME
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.NoSuchIndexException
 import org.apache.spark.sql.catalyst.expressions.Attribute
@@ -34,7 +35,7 @@ case class DropIndexExec(
       table.dropIndex(indexName)
     } catch {
       case _: NoSuchIndexException if ignoreIfNotExists =>
-        logWarning(s"Index $indexName does not exist. Ignoring.")
+        logWarning(log"Index ${MDC(INDEX_NAME, indexName)} does not exist. Ignoring.")
     }
     Seq.empty
   }

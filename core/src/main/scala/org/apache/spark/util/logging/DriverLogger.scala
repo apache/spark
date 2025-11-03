@@ -21,7 +21,6 @@ import java.io._
 import java.util.EnumSet
 import java.util.concurrent.{ScheduledExecutorService, TimeUnit}
 
-import org.apache.commons.io.FileUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, FSDataOutputStream, Path}
 import org.apache.hadoop.fs.permission.FsPermission
@@ -34,6 +33,7 @@ import org.apache.logging.log4j.core.layout.PatternLayout
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config._
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.util.{ThreadUtils, Utils}
@@ -42,13 +42,15 @@ private[spark] class DriverLogger(conf: SparkConf) extends Logging {
 
   private val UPLOAD_CHUNK_SIZE = 1024 * 1024
   private val UPLOAD_INTERVAL_IN_SECS = 5
-  private val DEFAULT_LAYOUT = "%d{yy/MM/dd HH:mm:ss.SSS} %t %p %c{1}: %m%n"
+  private val DEFAULT_LAYOUT = "%d{yy/MM/dd HH:mm:ss.SSS} %t %p %c{1}: %m%n%ex"
   private val LOG_FILE_PERMISSIONS = new FsPermission(Integer.parseInt("770", 8).toShort)
 
-  private val localLogFile: String = FileUtils.getFile(
+  private val localLogFile: String = conf.get(DRIVER_LOG_LOCAL_DIR).map {
+    Utils.getFile(_, DriverLogger.DRIVER_LOG_FILE).getAbsolutePath()
+  }.getOrElse(Utils.getFile(
     Utils.getLocalDir(conf),
     DriverLogger.DRIVER_LOG_DIR,
-    DriverLogger.DRIVER_LOG_FILE).getAbsolutePath()
+    DriverLogger.DRIVER_LOG_FILE).getAbsolutePath())
   private var writer: Option[DfsAsyncWriter] = None
 
   addLogAppender()
@@ -66,7 +68,7 @@ private[spark] class DriverLogger(conf: SparkConf) extends Logging {
       // `AbstractFilterable.Builder.asBuilder()` method will return `Any` in Scala.
       val builder: Log4jFileAppender.Builder[_] = Log4jFileAppender.newBuilder()
       builder.withAppend(false)
-      builder.withBufferedIo(false)
+      builder.setBufferedIo(false)
       builder.setConfiguration(config)
       builder.withFileName(localLogFile)
       builder.setIgnoreExceptions(false)
@@ -77,7 +79,7 @@ private[spark] class DriverLogger(conf: SparkConf) extends Logging {
     val fa = log4jFileAppender()
     logger.addAppender(fa)
     fa.start()
-    logInfo(s"Added a local log appender at: $localLogFile")
+    logInfo(log"Added a local log appender at: ${MDC(FILE_NAME, localLogFile)}")
   }
 
   def startSync(hadoopConf: Configuration): Unit = {
@@ -103,7 +105,7 @@ private[spark] class DriverLogger(conf: SparkConf) extends Logging {
         logError(s"Error in persisting driver logs", e)
     } finally {
       Utils.tryLogNonFatalError {
-        JavaUtils.deleteRecursively(FileUtils.getFile(localLogFile).getParentFile())
+        JavaUtils.deleteRecursively(Utils.getFile(localLogFile).getParentFile())
       }
     }
   }
@@ -126,13 +128,13 @@ private[spark] class DriverLogger(conf: SparkConf) extends Logging {
         throw new RuntimeException(s"${rootDir} does not exist." +
           s" Please create this dir in order to persist driver logs")
       }
-      val dfsLogFile: String = FileUtils.getFile(rootDir, appId
-        + DriverLogger.DRIVER_LOG_FILE_SUFFIX).getAbsolutePath()
+      val dfsLogFile: Path = fileSystem.makeQualified(new Path(rootDir, appId
+        + DriverLogger.DRIVER_LOG_FILE_SUFFIX))
       try {
         inStream = new BufferedInputStream(new FileInputStream(localLogFile))
-        outputStream = SparkHadoopUtil.createFile(fileSystem, new Path(dfsLogFile),
+        outputStream = SparkHadoopUtil.createFile(fileSystem, dfsLogFile,
           conf.get(DRIVER_LOG_ALLOW_EC))
-        fileSystem.setPermission(new Path(dfsLogFile), LOG_FILE_PERMISSIONS)
+        fileSystem.setPermission(dfsLogFile, LOG_FILE_PERMISSIONS)
       } catch {
         case e: Exception =>
           JavaUtils.closeQuietly(inStream)
@@ -142,7 +144,7 @@ private[spark] class DriverLogger(conf: SparkConf) extends Logging {
       threadpool = ThreadUtils.newDaemonSingleThreadScheduledExecutor("dfsSyncThread")
       threadpool.scheduleWithFixedDelay(this, UPLOAD_INTERVAL_IN_SECS, UPLOAD_INTERVAL_IN_SECS,
         TimeUnit.SECONDS)
-      logInfo(s"Started driver log file sync to: ${dfsLogFile}")
+      logInfo(log"Started driver log file sync to: ${MDC(PATH, dfsLogFile)}")
     }
 
     def run(): Unit = {
@@ -210,7 +212,9 @@ private[spark] object DriverLogger extends Logging {
   val APPENDER_NAME = "_DriverLogAppender"
 
   def apply(conf: SparkConf): Option[DriverLogger] = {
-    if (conf.get(DRIVER_LOG_PERSISTTODFS) && Utils.isClientMode(conf)) {
+    val localDriverLogEnabled = conf.get(DRIVER_LOG_LOCAL_DIR).nonEmpty
+    if (conf.get(DRIVER_LOG_PERSISTTODFS) && Utils.isClientMode(conf)
+      || localDriverLogEnabled) {
       if (conf.contains(DRIVER_LOG_DFS_DIR)) {
         try {
           Some(new DriverLogger(conf))
@@ -219,9 +223,14 @@ private[spark] object DriverLogger extends Logging {
             logError("Could not add driver logger", e)
             None
         }
+      } else if (localDriverLogEnabled) {
+        // Driver Logger is started only for Spark Driver Log UI Tab
+        new DriverLogger(conf)
+        // Return None because we don't need DFS-related logic in SparkContext and DfsAsyncWriter
+        None
       } else {
-        logWarning(s"Driver logs are not persisted because" +
-          s" ${DRIVER_LOG_DFS_DIR.key} is not configured")
+        logWarning(log"Driver logs are not persisted because" +
+          log" ${MDC(CONFIG, DRIVER_LOG_DFS_DIR.key)} is not configured")
         None
       }
     } else {

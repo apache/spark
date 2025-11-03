@@ -31,7 +31,6 @@ _local = threading.local()
 
 
 def _wrap_function(class_name: str, function_name: str, func: Callable, logger: Any) -> Callable:
-
     signature = inspect.signature(func)
 
     @functools.wraps(func)
@@ -91,7 +90,6 @@ def _wrap_property(class_name: str, property_name: str, prop: Any, logger: Any) 
 def _wrap_missing_function(
     class_name: str, function_name: str, func: Callable, original: Any, logger: Any
 ) -> Any:
-
     if not hasattr(original, function_name):
         return func
 
@@ -110,7 +108,6 @@ def _wrap_missing_function(
 
 
 def _wrap_missing_property(class_name: str, property_name: str, prop: Any, logger: Any) -> Any:
-
     is_deprecated = prop.fget.__name__ == "deprecated_property"
 
     @property  # type: ignore[misc]
@@ -163,7 +160,14 @@ def _attach(
         for name, func in inspect.getmembers(target_class, inspect.isfunction):
             if name.startswith("_") and name not in special_functions:
                 continue
-            setattr(target_class, name, _wrap_function(target_class.__name__, name, func, logger))
+            try:
+                isstatic = isinstance(inspect.getattr_static(target_class, name), staticmethod)
+            except AttributeError:
+                isstatic = False
+            wrapped_function = _wrap_function(target_class.__name__, name, func, logger)
+            setattr(
+                target_class, name, staticmethod(wrapped_function) if isstatic else wrapped_function
+            )
 
         for name, prop in inspect.getmembers(target_class, lambda o: isinstance(o, property)):
             if name.startswith("_"):

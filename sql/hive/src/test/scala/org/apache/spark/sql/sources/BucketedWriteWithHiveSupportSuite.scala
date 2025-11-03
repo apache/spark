@@ -22,7 +22,7 @@ import java.io.File
 import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.catalyst.expressions.{BitwiseAnd, Expression, HiveHash, Literal, Pmod}
 import org.apache.spark.sql.hive.HiveUtils
-import org.apache.spark.sql.hive.test.TestHive.implicits._
+import org.apache.spark.sql.hive.test.TestHive.sparkSession.implicits._
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
 

@@ -26,22 +26,6 @@ SciPy is available in their environment.
 import sys
 import array
 import struct
-
-import numpy as np
-
-from pyspark import since
-from pyspark.ml import linalg as newlinalg
-from pyspark.sql.types import (
-    UserDefinedType,
-    StructField,
-    StructType,
-    ArrayType,
-    DoubleType,
-    IntegerType,
-    ByteType,
-    BooleanType,
-)
-
 from typing import (
     Any,
     Callable,
@@ -58,6 +42,21 @@ from typing import (
     TypeVar,
     TYPE_CHECKING,
     Union,
+)
+
+import numpy as np
+
+from pyspark import since
+from pyspark.ml import linalg as newlinalg
+from pyspark.sql.types import (
+    UserDefinedType,
+    StructField,
+    StructType,
+    ArrayType,
+    DoubleType,
+    IntegerType,
+    ByteType,
+    BooleanType,
 )
 
 if TYPE_CHECKING:
@@ -297,7 +296,6 @@ class MatrixUDT(UserDefinedType):
 
 
 class Vector:
-
     __UDT__ = VectorUDT()
 
     """
@@ -815,12 +813,12 @@ class SparseVector(Vector):
 
         elif isinstance(other, SparseVector):
             # Find out common indices.
-            self_cmind = np.in1d(self.indices, other.indices, assume_unique=True)
+            self_cmind = np.isin(self.indices, other.indices, assume_unique=True)
             self_values = self.values[self_cmind]
             if self_values.size == 0:
                 return np.float64(0.0)
             else:
-                other_cmind = np.in1d(other.indices, self.indices, assume_unique=True)
+                other_cmind = np.isin(other.indices, self.indices, assume_unique=True)
                 return np.dot(self_values, other.values[other_cmind])
 
         else:
@@ -991,7 +989,7 @@ class Vectors:
     Notes
     -----
     Dense vectors are simply represented as NumPy array objects,
-    so there is no need to covert them for use in MLlib. For sparse vectors,
+    so there is no need to convert them for use in MLlib. For sparse vectors,
     the factory methods in this class create an MLlib-compatible type, or users
     can pass in SciPy's `scipy.sparse` column vectors.
     """
@@ -1200,7 +1198,6 @@ class Vectors:
 
 
 class Matrix:
-
     __UDT__ = MatrixUDT()
 
     """
@@ -1617,7 +1614,7 @@ class QRDecomposition(Generic[QT, RT]):
         self._Q = Q
         self._R = R
 
-    @property  # type: ignore[misc]
+    @property
     @since("2.0.0")
     def Q(self) -> QT:
         """
@@ -1626,7 +1623,7 @@ class QRDecomposition(Generic[QT, RT]):
         """
         return self._Q
 
-    @property  # type: ignore[misc]
+    @property
     @since("2.0.0")
     def R(self) -> RT:
         """

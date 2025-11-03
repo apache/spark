@@ -20,6 +20,7 @@ package org.apache.spark.sql
 import java.{lang => jl}
 import java.io.File
 import java.sql.{Date, Timestamp}
+import java.time.LocalDateTime
 
 import scala.collection.mutable
 import scala.util.Random
@@ -31,6 +32,7 @@ import org.apache.spark.sql.catalyst.expressions.AttributeMap
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, Histogram, HistogramBin, HistogramSerializer, LogicalPlan, Statistics}
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.test.SQLTestUtils
@@ -59,10 +61,12 @@ abstract class StatisticsCollectionTestBase extends QueryTest with SQLTestUtils 
   private val t1Internal = date(2016, 5, 8, 0, 0, 1, 123456)
   private val t1 = new Timestamp(DateTimeUtils.microsToMillis(t1Internal))
   t1.setNanos(123456000)
+  private val tsNTZ1 = LocalDateTime.parse(t1Str.replace(" ", "T"))
   private val t2Str = "2016-05-09 00:00:02.987654"
   private val t2Internal = date(2016, 5, 9, 0, 0, 2, 987654)
   private val t2 = new Timestamp(DateTimeUtils.microsToMillis(t2Internal))
   t2.setNanos(987654000)
+  private val tsNTZ2 = LocalDateTime.parse(t2Str.replace(" ", "T"))
 
   private val double1 = 1.123456789
   private val double2 = 6.987654321
@@ -74,14 +78,14 @@ abstract class StatisticsCollectionTestBase extends QueryTest with SQLTestUtils 
   protected val data = Seq[
     (jl.Boolean, jl.Byte, jl.Short, jl.Integer, jl.Long,
       jl.Double, jl.Float, java.math.BigDecimal,
-      String, Array[Byte], Date, Timestamp,
+      String, Array[Byte], Date, Timestamp, LocalDateTime,
       Seq[Int])](
     // scalastyle:off nonascii
     (false, 1.toByte, 1.toShort, 1, 1L, double1, 1.12345f,
-      dec1, "string escrito en español", "b1".getBytes, d1, t1, null),
+      dec1, "string escrito en español", "b1".getBytes, d1, t1, tsNTZ1, null),
     (true, 2.toByte, 30000.toShort, 40000000, 5536453629L, double2, 7.54321f,
-      dec2, "日本語で書かれたstring", "a string full of bytes".getBytes, d2, t2, null),
-    (null, null, null, null, null, null, null, null, null, null, null, null, null)
+      dec2, "日本語で書かれたstring", "a string full of bytes".getBytes, d2, t2, tsNTZ2, null),
+    (null, null, null, null, null, null, null, null, null, null, null, null, null, null)
     // scalastyle:on nonascii
   )
 
@@ -103,6 +107,8 @@ abstract class StatisticsCollectionTestBase extends QueryTest with SQLTestUtils 
     "cdate" -> CatalogColumnStat(Some(2), Some(d1Str), Some(d2Str),
       Some(1), Some(4), Some(4)),
     "ctimestamp" -> CatalogColumnStat(Some(2), Some(t1Str),
+      Some(t2Str), Some(1), Some(8), Some(8)),
+    "ctimestamp_ntz" -> CatalogColumnStat(Some(2), Some(t1Str),
       Some(t2Str), Some(1), Some(8), Some(8))
   )
 
@@ -134,8 +140,11 @@ abstract class StatisticsCollectionTestBase extends QueryTest with SQLTestUtils 
       Some(Histogram(1, Array(HistogramBin(d1Internal, d1Internal, 1),
         HistogramBin(d1Internal, d2Internal, 1))))))
     colStats.update("ctimestamp", stats("ctimestamp").copy(histogram =
-      Some(Histogram(1, Array(HistogramBin(t1Internal, t1Internal, 1),
-        HistogramBin(t1Internal, t2Internal, 1))))))
+      Some(Histogram(1, Array(HistogramBin(t1Internal.toDouble, t1Internal.toDouble, 1),
+        HistogramBin(t1Internal.toDouble, t2Internal.toDouble, 1))))))
+    colStats.update("ctimestamp_ntz", stats("ctimestamp_ntz").copy(histogram =
+      Some(Histogram(1, Array(HistogramBin(t1Internal.toDouble, t1Internal.toDouble, 1),
+        HistogramBin(t1Internal.toDouble, t2Internal.toDouble, 1))))))
     colStats
   }
 
@@ -220,7 +229,14 @@ abstract class StatisticsCollectionTestBase extends QueryTest with SQLTestUtils 
     "spark.sql.statistics.colStats.ctimestamp.maxLen" -> "8",
     "spark.sql.statistics.colStats.ctimestamp.min" -> "2016-05-08 00:00:01.123456",
     "spark.sql.statistics.colStats.ctimestamp.nullCount" -> "1",
-    "spark.sql.statistics.colStats.ctimestamp.version" -> strVersion
+    "spark.sql.statistics.colStats.ctimestamp.version" -> strVersion,
+    "spark.sql.statistics.colStats.ctimestamp_ntz.avgLen" -> "8",
+    "spark.sql.statistics.colStats.ctimestamp_ntz.distinctCount" -> "2",
+    "spark.sql.statistics.colStats.ctimestamp_ntz.max" -> "2016-05-09 00:00:02.987654",
+    "spark.sql.statistics.colStats.ctimestamp_ntz.maxLen" -> "8",
+    "spark.sql.statistics.colStats.ctimestamp_ntz.min" -> "2016-05-08 00:00:01.123456",
+    "spark.sql.statistics.colStats.ctimestamp_ntz.nullCount" -> "1",
+    "spark.sql.statistics.colStats.ctimestamp_ntz.version" -> strVersion
   )
 
   val expectedSerializedHistograms = Map(
@@ -241,7 +257,9 @@ abstract class StatisticsCollectionTestBase extends QueryTest with SQLTestUtils 
     "spark.sql.statistics.colStats.cdate.histogram" ->
       HistogramSerializer.serialize(statsWithHgms("cdate").histogram.get),
     "spark.sql.statistics.colStats.ctimestamp.histogram" ->
-      HistogramSerializer.serialize(statsWithHgms("ctimestamp").histogram.get)
+      HistogramSerializer.serialize(statsWithHgms("ctimestamp").histogram.get),
+    "spark.sql.statistics.colStats.ctimestamp_ntz.histogram" ->
+      HistogramSerializer.serialize(statsWithHgms("ctimestamp_ntz").histogram.get)
   )
 
   private val randomName = new Random(31)
@@ -252,7 +270,8 @@ abstract class StatisticsCollectionTestBase extends QueryTest with SQLTestUtils 
 
   def getTableFromCatalogCache(tableName: String): LogicalPlan = {
     val catalog = spark.sessionState.catalog
-    val qualifiedTableName = QualifiedTableName(catalog.getCurrentDatabase, tableName)
+    val qualifiedTableName = QualifiedTableName(
+      CatalogManager.SESSION_CATALOG_NAME, catalog.getCurrentDatabase, tableName)
     catalog.getCachedTable(qualifiedTableName)
   }
 
@@ -347,7 +366,7 @@ abstract class StatisticsCollectionTestBase extends QueryTest with SQLTestUtils 
       val stats = spark.table("ds_tbl").queryExecution.optimizedPlan.stats
       assert(stats.sizeInBytes > 0, "non-empty partitioned table should not report zero size.")
 
-      if (spark.conf.get(StaticSQLConf.CATALOG_IMPLEMENTATION) == "hive") {
+      if (spark.conf.get(StaticSQLConf.CATALOG_IMPLEMENTATION.key) == "hive") {
         sql("CREATE TABLE hive_tbl(i int) PARTITIONED BY (j int)")
         sql("INSERT INTO hive_tbl PARTITION(j=1) SELECT 1")
         val stats2 = spark.table("hive_tbl").queryExecution.optimizedPlan.stats
@@ -362,7 +381,7 @@ abstract class StatisticsCollectionTestBase extends QueryTest with SQLTestUtils 
       // Test data source table
       checkStatsConversion(tableName = "ds_tbl", isDatasourceTable = true)
       // Test hive serde table
-      if (spark.conf.get(StaticSQLConf.CATALOG_IMPLEMENTATION) == "hive") {
+      if (spark.conf.get(StaticSQLConf.CATALOG_IMPLEMENTATION.key) == "hive") {
         checkStatsConversion(tableName = "hive_tbl", isDatasourceTable = false)
       }
     }

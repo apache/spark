@@ -48,10 +48,18 @@ private[spark] object BlockManagerMessages {
   case class RemoveBroadcast(broadcastId: Long, removeFromDriver: Boolean = true)
     extends ToBlockManagerMasterStorageEndpoint
 
+  // Mark a rdd block as visible.
+  case class MarkRDDBlockAsVisible(blockId: RDDBlockId) extends ToBlockManagerMasterStorageEndpoint
+
   /**
    * Driver to Executor message to trigger a thread dump.
    */
   case object TriggerThreadDump extends ToBlockManagerMasterStorageEndpoint
+
+  /**
+   * Driver to Executor message to get a heap histogram.
+   */
+  case object TriggerHeapHistogram extends ToBlockManagerMasterStorageEndpoint
 
   //////////////////////////////////////////////////////////////////////////////////
   // Messages from storage endpoints to the master.
@@ -63,7 +71,8 @@ private[spark] object BlockManagerMessages {
       localDirs: Array[String],
       maxOnHeapMemSize: Long,
       maxOffHeapMemSize: Long,
-      sender: RpcEndpointRef)
+      sender: RpcEndpointRef,
+      isReRegister: Boolean)
     extends ToBlockManagerMaster
 
   case class UpdateBlockInfo(
@@ -93,6 +102,12 @@ private[spark] object BlockManagerMessages {
       diskSize = in.readLong()
     }
   }
+
+  case class UpdateRDDBlockTaskInfo(blockId: RDDBlockId, taskId: Long) extends ToBlockManagerMaster
+
+  case class UpdateRDDBlockVisibility(taskId: Long, visible: Boolean) extends ToBlockManagerMaster
+
+  case class GetRDDBlockVisibility(blockId: RDDBlockId) extends ToBlockManagerMaster
 
   case class GetLocations(blockId: BlockId) extends ToBlockManagerMaster
 

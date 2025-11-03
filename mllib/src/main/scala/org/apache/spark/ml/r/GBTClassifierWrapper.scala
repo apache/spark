@@ -29,6 +29,7 @@ import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.ml.r.RWrapperUtils._
 import org.apache.spark.ml.util._
 import org.apache.spark.sql.{DataFrame, Dataset}
+import org.apache.spark.util.ArrayImplicits._
 
 private[r] class GBTClassifierWrapper private (
   val pipeline: PipelineModel,
@@ -134,10 +135,12 @@ private[r] object GBTClassifierWrapper extends MLReadable[GBTClassifierWrapper] 
 
       val rMetadata = ("class" -> instance.getClass.getName) ~
         ("formula" -> instance.formula) ~
-        ("features" -> instance.features.toSeq)
+        ("features" -> instance.features.toImmutableArraySeq)
       val rMetadataJson: String = compact(render(rMetadata))
 
-      sc.parallelize(Seq(rMetadataJson), 1).saveAsTextFile(rMetadataPath)
+      sparkSession.createDataFrame(
+        Seq(Tuple1(rMetadataJson))
+      ).repartition(1).write.text(rMetadataPath)
       instance.pipeline.save(pipelinePath)
     }
   }
@@ -150,7 +153,8 @@ private[r] object GBTClassifierWrapper extends MLReadable[GBTClassifierWrapper] 
       val pipelinePath = new Path(path, "pipeline").toString
       val pipeline = PipelineModel.load(pipelinePath)
 
-      val rMetadataStr = sc.textFile(rMetadataPath, 1).first()
+      val rMetadataStr = sparkSession.read.text(rMetadataPath)
+        .first().getString(0)
       val rMetadata = parse(rMetadataStr)
       val formula = (rMetadata \ "formula").extract[String]
       val features = (rMetadata \ "features").extract[Array[String]]

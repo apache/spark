@@ -16,6 +16,7 @@
 # limitations under the License.
 #
 import os
+import signal
 import sys
 import tempfile
 import threading
@@ -70,7 +71,6 @@ class WorkerTests(ReusedPySparkTestCase):
                 try:
                     daemon_pid, worker_pid = map(int, data)
                 except ValueError:
-                    pass
                     # In case the value is not written yet.
                     cnt += 1
                     if cnt == 10:
@@ -187,16 +187,13 @@ class WorkerTests(ReusedPySparkTestCase):
 
 
 class WorkerReuseTest(PySparkTestCase):
+    @eventually(catch_assertions=True)
     def test_reuse_worker_of_parallelize_range(self):
-        def check_reuse_worker_of_parallelize_range():
-            rdd = self.sc.parallelize(range(20), 8)
-            previous_pids = rdd.map(lambda x: os.getpid()).collect()
-            current_pids = rdd.map(lambda x: os.getpid()).collect()
-            for pid in current_pids:
-                self.assertTrue(pid in previous_pids)
-            return True
-
-        eventually(check_reuse_worker_of_parallelize_range, catch_assertions=True)
+        rdd = self.sc.parallelize(range(20), 8)
+        previous_pids = rdd.map(lambda x: os.getpid()).collect()
+        current_pids = rdd.map(lambda x: os.getpid()).collect()
+        for pid in current_pids:
+            self.assertTrue(pid in previous_pids)
 
 
 @unittest.skipIf(
@@ -234,6 +231,7 @@ class WorkerSegfaultTest(ReusedPySparkTestCase):
         _conf.set("spark.python.worker.faulthandler.enabled", "true")
         return _conf
 
+    @unittest.skipIf(sys.version_info > (3, 12), "SPARK-46130: Flaky with Python 3.12")
     def test_python_segfault(self):
         try:
 
@@ -259,12 +257,27 @@ class WorkerSegfaultNonDaemonTest(WorkerSegfaultTest):
         return _conf
 
 
+class WorkerPoolCrashTest(PySparkTestCase):
+    def test_worker_crash(self):
+        # SPARK-47565: Kill a worker that is currently idling
+        rdd = self.sc.parallelize(range(20), 4)
+        # first ensure that workers are reused
+        worker_pids1 = set(rdd.map(lambda x: os.getpid()).collect())
+        worker_pids2 = set(rdd.map(lambda x: os.getpid()).collect())
+        self.assertEqual(worker_pids1, worker_pids2)
+        for pid in list(worker_pids1)[1:]:  # kill all workers except for one
+            os.kill(pid, signal.SIGTERM)
+        # give things a moment to settle
+        time.sleep(5)
+        rdd.map(lambda x: os.getpid()).collect()
+
+
 if __name__ == "__main__":
     import unittest
     from pyspark.tests.test_worker import *  # noqa: F401
 
     try:
-        import xmlrunner  # type: ignore[import]
+        import xmlrunner
 
         testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:

@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.types.{AbstractArrayType, StringTypeWithCollation}
 import org.apache.spark.sql.types._
 
 class AnsiTypeCoercionSuite extends TypeCoercionSuiteBase {
@@ -61,26 +62,6 @@ class AnsiTypeCoercionSuite extends TypeCoercionSuiteBase {
     AnsiTypeCoercion.implicitCast(e, expectedType)
 
   override def dateTimeOperationsRule: TypeCoercionRule = AnsiTypeCoercion.DateTimeOperations
-
-  private def shouldCastStringLiteral(to: AbstractDataType, expected: DataType): Unit = {
-    val input = Literal("123")
-    val castResult = AnsiTypeCoercion.implicitCast(input, to)
-    assert(DataType.equalsIgnoreCaseAndNullability(
-      castResult.map(_.dataType).getOrElse(null), expected),
-      s"Failed to cast String literal to $to")
-  }
-
-  private def shouldNotCastStringLiteral(to: AbstractDataType): Unit = {
-    val input = Literal("123")
-    val castResult = AnsiTypeCoercion.implicitCast(input, to)
-    assert(castResult.isEmpty, s"Should not be able to cast String literal to $to")
-  }
-
-  private def shouldNotCastStringInput(to: AbstractDataType): Unit = {
-    val input = AttributeReference("s", StringType)()
-    val castResult = AnsiTypeCoercion.implicitCast(input, to)
-    assert(castResult.isEmpty, s"Should not be able to cast non-foldable String input to $to")
-  }
 
   private def checkWidenType(
       widenFunc: (DataType, DataType) => Option[DataType],
@@ -480,9 +461,9 @@ class AnsiTypeCoercionSuite extends TypeCoercionSuiteBase {
         :: Literal.create(null, DecimalType(22, 10))
         :: Literal.create(null, DecimalType(38, 38))
         :: Nil),
-      CreateArray(Literal.create(null, DecimalType(5, 3)).cast(DecimalType(38, 38))
-        :: Literal.create(null, DecimalType(22, 10)).cast(DecimalType(38, 38))
-        :: Literal.create(null, DecimalType(38, 38))
+      CreateArray(Literal.create(null, DecimalType(5, 3)).cast(DecimalType(38, 26))
+        :: Literal.create(null, DecimalType(22, 10)).cast(DecimalType(38, 26))
+        :: Literal.create(null, DecimalType(38, 38)).cast(DecimalType(38, 26))
         :: Nil))
   }
 
@@ -529,9 +510,9 @@ class AnsiTypeCoercionSuite extends TypeCoercionSuiteBase {
         :: Literal.create(null, DecimalType(38, 38))
         :: Nil),
       CreateMap(Literal(1)
-        :: Literal.create(null, DecimalType(38, 0)).cast(DecimalType(38, 38))
+        :: Literal.create(null, DecimalType(38, 0))
         :: Literal(2)
-        :: Literal.create(null, DecimalType(38, 38))
+        :: Literal.create(null, DecimalType(38, 38)).cast(DecimalType(38, 0))
         :: Nil))
     // type coercion for both map keys and values
     ruleTest(AnsiTypeCoercion.FunctionArgumentConversion,
@@ -955,7 +936,12 @@ class AnsiTypeCoercionSuite extends TypeCoercionSuiteBase {
       windowSpec(
         Seq(UnresolvedAttribute("a")),
         Seq(SortOrder(Literal(1L), Ascending)),
-        SpecifiedWindowFrame(RangeFrame, Cast(3, LongType), Literal(2147483648L)))
+        SpecifiedWindowFrame(
+          RangeFrame,
+          Cast(3, LongType).withTimeZone(conf.sessionLocalTimeZone),
+          Literal(2147483648L)
+        )
+      )
     )
     // Cannot cast frame boundaries to order dataType.
     ruleTest(WindowFrameCoercion,
@@ -1045,5 +1031,57 @@ class AnsiTypeCoercionSuite extends TypeCoercionSuiteBase {
       ruleTest(
         AnsiTypeCoercion.GetDateFieldOperations, operation(ts), operation(Cast(ts, DateType)))
     }
+  }
+
+  test("SPARK-49188: implicit casts of arrays") {
+    // Valid casts when inner type is non-complex type.
+    shouldCast(
+      ArrayType(IntegerType),
+      AbstractArrayType(IntegerType),
+      ArrayType(IntegerType))
+    shouldCast(
+      ArrayType(StringType),
+      AbstractArrayType(StringTypeWithCollation(supportsTrimCollation = true)),
+      ArrayType(StringType))
+    shouldCast(
+      ArrayType(IntegerType),
+      AbstractArrayType(StringTypeWithCollation(supportsTrimCollation = true)),
+      ArrayType(StringType))
+    shouldCast(
+      ArrayType(StringType),
+      AbstractArrayType(IntegerType),
+      ArrayType(IntegerType))
+
+    // Valid casts when inner type is array of non-complex types.
+    shouldCast(
+      ArrayType(ArrayType(IntegerType)),
+      AbstractArrayType(AbstractArrayType(IntegerType)),
+      ArrayType(ArrayType(IntegerType)))
+    shouldCast(
+      ArrayType(ArrayType(StringType)),
+      AbstractArrayType(AbstractArrayType(StringTypeWithCollation(supportsTrimCollation = true))),
+      ArrayType(ArrayType(StringType)))
+    shouldCast(
+      ArrayType(ArrayType(IntegerType)),
+      AbstractArrayType(AbstractArrayType(StringTypeWithCollation(supportsTrimCollation = true))),
+      ArrayType(ArrayType(StringType)))
+    shouldCast(
+      ArrayType(ArrayType(StringType)),
+      AbstractArrayType(AbstractArrayType(IntegerType)),
+      ArrayType(ArrayType(IntegerType)))
+
+    // Invalid casts involving casting arrays into non-complex types.
+    shouldNotCast(ArrayType(IntegerType), IntegerType)
+    shouldNotCast(ArrayType(StringType), StringTypeWithCollation(supportsTrimCollation = true))
+    shouldNotCast(ArrayType(StringType), IntegerType)
+    shouldNotCast(ArrayType(IntegerType), StringTypeWithCollation(supportsTrimCollation = true))
+
+    // Invalid casts involving casting arrays of arrays into arrays of non-complex types.
+    shouldNotCast(ArrayType(ArrayType(IntegerType)), AbstractArrayType(IntegerType))
+    shouldNotCast(ArrayType(ArrayType(StringType)),
+      AbstractArrayType(StringTypeWithCollation(supportsTrimCollation = true)))
+    shouldNotCast(ArrayType(ArrayType(StringType)), AbstractArrayType(IntegerType))
+    shouldNotCast(ArrayType(ArrayType(IntegerType)),
+      AbstractArrayType(StringTypeWithCollation(supportsTrimCollation = true)))
   }
 }

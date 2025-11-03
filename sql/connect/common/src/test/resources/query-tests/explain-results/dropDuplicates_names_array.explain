@@ -1,0 +1,2 @@
+Deduplicate [a#0, id#0L]
++- LocalRelation <empty>, [id#0L, a#0, b#0]

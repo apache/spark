@@ -19,10 +19,11 @@ import pandas as pd
 
 import pyspark.pandas as ps
 from pyspark.ml.linalg import SparseVector
+from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.pandas.tests.data_type_ops.testing_utils import OpsTestBase
 
 
-class UDTOpsTest(OpsTestBase):
+class UDTOpsTestsMixin:
     @property
     def pser(self):
         sparse_values = {0: 0.1, 1: 1.1}
@@ -89,10 +90,10 @@ class UDTOpsTest(OpsTestBase):
 
     def test_pow(self):
         self.assertRaises(TypeError, lambda: self.psser ** "x")
-        self.assertRaises(TypeError, lambda: self.psser ** 1)
+        self.assertRaises(TypeError, lambda: self.psser**1)
 
         for psser in self.pssers:
-            self.assertRaises(TypeError, lambda: self.psser ** psser)
+            self.assertRaises(TypeError, lambda: self.psser**psser)
 
     def test_radd(self):
         self.assertRaises(TypeError, lambda: "x" + self.psser)
@@ -119,14 +120,34 @@ class UDTOpsTest(OpsTestBase):
 
     def test_rpow(self):
         self.assertRaises(TypeError, lambda: "x" ** self.psser)
-        self.assertRaises(TypeError, lambda: 1 ** self.psser)
+        self.assertRaises(TypeError, lambda: 1**self.psser)
 
     def test_from_to_pandas(self):
         sparse_values = {0: 0.1, 1: 1.1}
         sparse_vector = SparseVector(len(sparse_values), sparse_values)
         pser = pd.Series([sparse_vector])
         psser = ps.Series([sparse_vector])
-        self.assert_eq(pser, psser.to_pandas())
+        self.assert_eq(pser, psser._to_pandas())
+        self.assert_eq(ps.from_pandas(pser), psser)
+
+    def test_with_first_null(self):
+        lst = [None, None, None, SparseVector(1, {0: 0.1})]
+        pser = pd.Series(lst)
+        psser = ps.Series(lst)
+        self.assert_eq(pser, psser._to_pandas())
+        self.assert_eq(ps.from_pandas(pser), psser)
+
+        lst2 = [SparseVector(1, {0: 0.1}), None, None, None]
+        pdf = pd.DataFrame({"a": lst, "b": lst2})
+        psdf = ps.DataFrame({"a": lst, "b": lst2})
+        self.assert_eq(pdf, psdf._to_pandas())
+        self.assert_eq(ps.from_pandas(pdf), psdf)
+
+    def test_with_all_null(self):
+        lst = [None, None, None, None]
+        pser = pd.Series(lst, dtype=object)
+        psser = ps.Series(lst, dtype=object)
+        self.assert_eq(pser, psser._to_pandas())
         self.assert_eq(ps.from_pandas(pser), psser)
 
     def test_isnull(self):
@@ -175,12 +196,20 @@ class UDTOpsTest(OpsTestBase):
         )
 
 
+class UDTOpsTests(
+    UDTOpsTestsMixin,
+    OpsTestBase,
+    PandasOnSparkTestCase,
+):
+    pass
+
+
 if __name__ == "__main__":
     import unittest
     from pyspark.pandas.tests.data_type_ops.test_udt_ops import *  # noqa: F401
 
     try:
-        import xmlrunner  # type: ignore[import]
+        import xmlrunner
 
         testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:

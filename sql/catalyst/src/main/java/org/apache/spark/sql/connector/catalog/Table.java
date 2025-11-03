@@ -18,7 +18,9 @@
 package org.apache.spark.sql.connector.catalog;
 
 import org.apache.spark.annotation.Evolving;
+import org.apache.spark.sql.connector.catalog.constraints.Constraint;
 import org.apache.spark.sql.connector.expressions.Transform;
+import org.apache.spark.sql.errors.QueryCompilationErrors;
 import org.apache.spark.sql.types.StructType;
 
 import java.util.Collections;
@@ -51,8 +53,21 @@ public interface Table {
   /**
    * Returns the schema of this table. If the table is not readable and doesn't have a schema, an
    * empty schema can be returned here.
+   * <p>
+   * @deprecated This is deprecated. Please override {@link #columns} instead.
    */
-  StructType schema();
+  @Deprecated(since = "3.4.0")
+  default StructType schema() {
+    throw QueryCompilationErrors.mustOverrideOneMethodError("columns");
+  }
+
+  /**
+   * Returns the columns of this table. If the table is not readable and doesn't have a schema, an
+   * empty array can be returned here.
+   */
+  default Column[] columns() {
+    return CatalogV2Util.structTypeToV2Columns(schema());
+  }
 
   /**
    * Returns the physical partitioning of this table.
@@ -72,4 +87,15 @@ public interface Table {
    * Returns the set of capabilities for this table.
    */
   Set<TableCapability> capabilities();
+
+  /**
+   * Returns the constraints for this table.
+   */
+  default Constraint[] constraints() { return new Constraint[0]; }
+
+  /**
+   * Returns the current table version if implementation supports versioning.
+   * If the table is not versioned, null can be returned here.
+   */
+  default String currentVersion() { return null; }
 }

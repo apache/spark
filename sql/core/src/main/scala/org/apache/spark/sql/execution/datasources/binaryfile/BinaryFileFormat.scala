@@ -17,10 +17,9 @@
 
 package org.apache.spark.sql.execution.datasources.binaryfile
 
-import java.net.URI
 import java.sql.Timestamp
 
-import com.google.common.io.{ByteStreams, Closeables}
+import com.google.common.io.Closeables
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.mapreduce.Job
@@ -28,9 +27,11 @@ import org.apache.hadoop.mapreduce.Job
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.UnsafeRowWriter
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.{FileFormat, OutputWriterFactory, PartitionedFile}
+import org.apache.spark.sql.internal.SessionStateHelper
 import org.apache.spark.sql.internal.SQLConf.SOURCES_BINARY_FILE_MAX_LENGTH
 import org.apache.spark.sql.sources.{And, DataSourceRegister, EqualTo, Filter, GreaterThan, GreaterThanOrEqual, LessThan, LessThanOrEqual, Not, Or}
 import org.apache.spark.sql.types._
@@ -55,7 +56,8 @@ import org.apache.spark.util.SerializableConfiguration
  *     .load("/path/to/fileDir");
  * }}}
  */
-class BinaryFileFormat extends FileFormat with DataSourceRegister {
+case class BinaryFileFormat() extends FileFormat
+  with DataSourceRegister with SessionStateHelper {
 
   import BinaryFileFormat._
 
@@ -89,19 +91,19 @@ class BinaryFileFormat extends FileFormat with DataSourceRegister {
       filters: Seq[Filter],
       options: Map[String, String],
       hadoopConf: Configuration): PartitionedFile => Iterator[InternalRow] = {
-    require(dataSchema.sameType(schema),
+    require(DataTypeUtils.sameType(dataSchema, schema),
       s"""
          |Binary file data source expects dataSchema: $schema,
          |but got: $dataSchema.
         """.stripMargin)
 
     val broadcastedHadoopConf =
-      sparkSession.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))
-    val filterFuncs = filters.map(filter => createFilterFunction(filter))
-    val maxLength = sparkSession.conf.get(SOURCES_BINARY_FILE_MAX_LENGTH)
+      SerializableConfiguration.broadcast(sparkSession.sparkContext, hadoopConf)
+    val filterFuncs = filters.flatMap(filter => createFilterFunction(filter))
+    val maxLength = getSqlConf(sparkSession).getConf(SOURCES_BINARY_FILE_MAX_LENGTH)
 
     file: PartitionedFile => {
-      val path = new Path(new URI(file.filePath))
+      val path = file.toPath
       val fs = path.getFileSystem(broadcastedHadoopConf.value.value)
       val status = fs.getFileStatus(path)
       if (filterFuncs.forall(_.apply(status))) {
@@ -118,7 +120,7 @@ class BinaryFileFormat extends FileFormat with DataSourceRegister {
             }
             val stream = fs.open(status.getPath)
             try {
-              writer.write(i, ByteStreams.toByteArray(stream))
+              writer.write(i, stream.readAllBytes())
             } finally {
               Closeables.close(stream, true)
             }
@@ -152,44 +154,44 @@ object BinaryFileFormat {
    *  - length (LongType): The length of the file in bytes.
    *  - content (BinaryType): The content of the file.
    */
-  val schema = StructType(
-    StructField(PATH, StringType, false) ::
-    StructField(MODIFICATION_TIME, TimestampType, false) ::
-    StructField(LENGTH, LongType, false) ::
-    StructField(CONTENT, BinaryType, true) :: Nil)
+  val schema = StructType(Array(
+    StructField(PATH, StringType, false),
+    StructField(MODIFICATION_TIME, TimestampType, false),
+    StructField(LENGTH, LongType, false),
+    StructField(CONTENT, BinaryType, true)))
 
-  private[binaryfile] def createFilterFunction(filter: Filter): FileStatus => Boolean = {
+  private[binaryfile] def createFilterFunction(filter: Filter): Option[FileStatus => Boolean] = {
     filter match {
-      case And(left, right) =>
-        s => createFilterFunction(left)(s) && createFilterFunction(right)(s)
-      case Or(left, right) =>
-        s => createFilterFunction(left)(s) || createFilterFunction(right)(s)
-      case Not(child) =>
-        s => !createFilterFunction(child)(s)
-
-      case LessThan(LENGTH, value: Long) =>
-        _.getLen < value
-      case LessThanOrEqual(LENGTH, value: Long) =>
-        _.getLen <= value
-      case GreaterThan(LENGTH, value: Long) =>
-        _.getLen > value
-      case GreaterThanOrEqual(LENGTH, value: Long) =>
-        _.getLen >= value
-      case EqualTo(LENGTH, value: Long) =>
-        _.getLen == value
-
+      case And(left, right) => (createFilterFunction(left), createFilterFunction(right)) match {
+        case (Some(leftPred), Some(rightPred)) => Some(s => leftPred(s) && rightPred(s))
+        case (Some(leftPred), None) => Some(leftPred)
+        case (None, Some(rightPred)) => Some(rightPred)
+        case (None, None) => Some(_ => true)
+      }
+      case Or(left, right) => (createFilterFunction(left), createFilterFunction(right)) match {
+        case (Some(leftPred), Some(rightPred)) => Some(s => leftPred(s) || rightPred(s))
+        case _ => Some(_ => true)
+      }
+      case Not(child) => createFilterFunction(child) match {
+        case Some(pred) => Some(s => !pred(s))
+        case _ => Some(_ => true)
+      }
+      case LessThan(LENGTH, value: Long) => Some(_.getLen < value)
+      case LessThanOrEqual(LENGTH, value: Long) => Some(_.getLen <= value)
+      case GreaterThan(LENGTH, value: Long) => Some(_.getLen > value)
+      case GreaterThanOrEqual(LENGTH, value: Long) => Some(_.getLen >= value)
+      case EqualTo(LENGTH, value: Long) => Some(_.getLen == value)
       case LessThan(MODIFICATION_TIME, value: Timestamp) =>
-        _.getModificationTime < value.getTime
+        Some(_.getModificationTime < value.getTime)
       case LessThanOrEqual(MODIFICATION_TIME, value: Timestamp) =>
-        _.getModificationTime <= value.getTime
+        Some(_.getModificationTime <= value.getTime)
       case GreaterThan(MODIFICATION_TIME, value: Timestamp) =>
-        _.getModificationTime > value.getTime
+        Some(_.getModificationTime > value.getTime)
       case GreaterThanOrEqual(MODIFICATION_TIME, value: Timestamp) =>
-        _.getModificationTime >= value.getTime
+        Some(_.getModificationTime >= value.getTime)
       case EqualTo(MODIFICATION_TIME, value: Timestamp) =>
-        _.getModificationTime == value.getTime
-
-      case _ => (_ => true)
+        Some(_.getModificationTime == value.getTime)
+      case _ => None
     }
   }
 }

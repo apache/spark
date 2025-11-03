@@ -20,9 +20,9 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode}
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.types.DataType
+import org.apache.spark.sql.types.{DataType, NumericType}
 
-case class TryEval(child: Expression) extends UnaryExpression with NullIntolerant {
+case class TryEval(child: Expression) extends UnaryExpression {
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val childGen = child.genCode(ctx)
     ev.copy(code = code"""
@@ -48,6 +48,7 @@ case class TryEval(child: Expression) extends UnaryExpression with NullIntoleran
   override def dataType: DataType = child.dataType
 
   override def nullable: Boolean = true
+  override def nullIntolerant: Boolean = true
 
   override protected def withNewChildInternal(newChild: Expression): Expression =
     copy(child = newChild)
@@ -77,8 +78,13 @@ case class TryEval(child: Expression) extends UnaryExpression with NullIntoleran
 // scalastyle:on line.size.limit
 case class TryAdd(left: Expression, right: Expression, replacement: Expression)
     extends RuntimeReplaceable with InheritAnalysisRules {
-  def this(left: Expression, right: Expression) =
-    this(left, right, TryEval(Add(left, right, failOnError = true)))
+  def this(left: Expression, right: Expression) = this(left, right,
+    (left.dataType, right.dataType) match {
+      case (_: NumericType, _: NumericType) => Add(left, right, EvalMode.TRY)
+      // TODO: support TRY eval mode on datetime arithmetic expressions.
+      case _ => TryEval(Add(left, right, EvalMode.ANSI))
+    }
+  )
 
   override def prettyName: String = "try_add"
 
@@ -110,8 +116,13 @@ case class TryAdd(left: Expression, right: Expression, replacement: Expression)
 // scalastyle:on line.size.limit
 case class TryDivide(left: Expression, right: Expression, replacement: Expression)
   extends RuntimeReplaceable with InheritAnalysisRules {
-  def this(left: Expression, right: Expression) =
-    this(left, right, TryEval(Divide(left, right, failOnError = true)))
+  def this(left: Expression, right: Expression) = this(left, right,
+    (left.dataType, right.dataType) match {
+      case (_: NumericType, _: NumericType) => Divide(left, right, EvalMode.TRY)
+      // TODO: support TRY eval mode on datetime arithmetic expressions.
+      case _ => TryEval(Divide(left, right, EvalMode.ANSI))
+    }
+  )
 
   override def prettyName: String = "try_divide"
 
@@ -122,8 +133,45 @@ case class TryDivide(left: Expression, right: Expression, replacement: Expressio
   }
 }
 
+// scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "expr1 _FUNC_ expr2 - Returns `expr1`-`expr2` and the result is null on overflow. " +
+  usage = "_FUNC_(dividend, divisor) - Returns the remainder after `expr1`/`expr2`. " +
+    "`dividend` must be a numeric. `divisor` must be a numeric.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(3, 2);
+       1
+      > SELECT _FUNC_(2L, 2L);
+       0
+      > SELECT _FUNC_(3.0, 2.0);
+       1.0
+      > SELECT _FUNC_(1, 0);
+       NULL
+  """,
+  since = "4.0.0",
+  group = "math_funcs")
+// scalastyle:on line.size.limit
+case class TryMod(left: Expression, right: Expression, replacement: Expression)
+  extends RuntimeReplaceable with InheritAnalysisRules {
+  def this(left: Expression, right: Expression) = this(left, right,
+    (left.dataType, right.dataType) match {
+      case (_: NumericType, _: NumericType) => Remainder(left, right, EvalMode.TRY)
+      // TODO: support TRY eval mode on datetime arithmetic expressions.
+      case _ => TryEval(Remainder(left, right, EvalMode.ANSI))
+    }
+  )
+
+  override def prettyName: String = "try_mod"
+
+  override def parameters: Seq[Expression] = Seq(left, right)
+
+  override protected def withNewChildInternal(newChild: Expression): Expression = {
+    copy(replacement = newChild)
+  }
+}
+
+@ExpressionDescription(
+  usage = "_FUNC_(expr1, expr2) - Returns `expr1`-`expr2` and the result is null on overflow. " +
     "The acceptable input types are the same with the `-` operator.",
   examples = """
     Examples:
@@ -144,8 +192,13 @@ case class TryDivide(left: Expression, right: Expression, replacement: Expressio
   group = "math_funcs")
 case class TrySubtract(left: Expression, right: Expression, replacement: Expression)
   extends RuntimeReplaceable with InheritAnalysisRules {
-  def this(left: Expression, right: Expression) =
-    this(left, right, TryEval(Subtract(left, right, failOnError = true)))
+  def this(left: Expression, right: Expression) = this(left, right,
+    (left.dataType, right.dataType) match {
+      case (_: NumericType, _: NumericType) => Subtract(left, right, EvalMode.TRY)
+      // TODO: support TRY eval mode on datetime arithmetic expressions.
+      case _ => TryEval(Subtract(left, right, EvalMode.ANSI))
+    }
+  )
 
   override def prettyName: String = "try_subtract"
 
@@ -156,7 +209,7 @@ case class TrySubtract(left: Expression, right: Expression, replacement: Express
 }
 
 @ExpressionDescription(
-  usage = "expr1 _FUNC_ expr2 - Returns `expr1`*`expr2` and the result is null on overflow. " +
+  usage = "_FUNC_(expr1, expr2) - Returns `expr1`*`expr2` and the result is null on overflow. " +
     "The acceptable input types are the same with the `*` operator.",
   examples = """
     Examples:
@@ -171,8 +224,13 @@ case class TrySubtract(left: Expression, right: Expression, replacement: Express
   group = "math_funcs")
 case class TryMultiply(left: Expression, right: Expression, replacement: Expression)
   extends RuntimeReplaceable with InheritAnalysisRules {
-  def this(left: Expression, right: Expression) =
-    this(left, right, TryEval(Multiply(left, right, failOnError = true)))
+  def this(left: Expression, right: Expression) = this(left, right,
+    (left.dataType, right.dataType) match {
+      case (_: NumericType, _: NumericType) => Multiply(left, right, EvalMode.TRY)
+      // TODO: support TRY eval mode on datetime arithmetic expressions.
+      case _ => TryEval(Multiply(left, right, EvalMode.ANSI))
+    }
+  )
 
   override def prettyName: String = "try_multiply"
 
@@ -181,3 +239,70 @@ case class TryMultiply(left: Expression, right: Expression, replacement: Express
   override protected def withNewChildInternal(newChild: Expression): Expression =
     this.copy(replacement = newChild)
 }
+
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(str[, fmt]) - This is a special version of `to_binary` that performs the same operation, but returns a NULL value instead of raising an error if the conversion cannot be performed.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_('abc', 'utf-8');
+       abc
+      > select _FUNC_('a!', 'base64');
+       NULL
+      > select _FUNC_('abc', 'invalidFormat');
+       NULL
+  """,
+  since = "3.3.0",
+  group = "string_funcs")
+// scalastyle:on line.size.limit
+case class TryToBinary(
+    expr: Expression,
+    format: Option[Expression],
+    replacement: Expression) extends RuntimeReplaceable
+  with InheritAnalysisRules {
+  def this(expr: Expression) =
+    this(expr, None, TryEval(ToBinary(expr, None, nullOnInvalidFormat = true)))
+
+  def this(expr: Expression, formatExpression: Expression) =
+    this(expr, Some(formatExpression),
+      TryEval(ToBinary(expr, Some(formatExpression), nullOnInvalidFormat = true)))
+
+  override def prettyName: String = "try_to_binary"
+
+  override def parameters: Seq[Expression] = expr +: format.toSeq
+
+  override protected def withNewChildInternal(newChild: Expression): Expression =
+    this.copy(replacement = newChild)
+}
+
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(class, method[, arg1[, arg2 ..]]) - This is a special version of `reflect` that" +
+    " performs the same operation, but returns a NULL value instead of raising an error if the invoke method thrown exception.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_('java.util.UUID', 'randomUUID');
+       c33fb387-8500-4bfa-81d2-6e0e3e930df2
+      > SELECT _FUNC_('java.util.UUID', 'fromString', 'a5cf6c42-0c85-418f-af6c-3e4e5b1328f2');
+       a5cf6c42-0c85-418f-af6c-3e4e5b1328f2
+      > SELECT _FUNC_('java.net.URLDecoder', 'decode', '%');
+       NULL
+  """,
+  since = "4.0.0",
+  group = "misc_funcs")
+// scalastyle:on line.size.limit
+case class TryReflect(params: Seq[Expression], replacement: Expression) extends RuntimeReplaceable
+  with InheritAnalysisRules {
+
+  def this(params: Seq[Expression]) = this(params,
+    CallMethodViaReflection(params, failOnError = false))
+
+  override def prettyName: String = "try_reflect"
+
+  override def parameters: Seq[Expression] = params
+
+  override protected def withNewChildInternal(newChild: Expression): Expression = {
+    copy(replacement = newChild)
+  }
+}
+

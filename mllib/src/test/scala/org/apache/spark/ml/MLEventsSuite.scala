@@ -23,7 +23,6 @@ import scala.concurrent.duration._
 import org.apache.hadoop.fs.Path
 import org.mockito.ArgumentMatchers.{any, eq => meq}
 import org.mockito.Mockito.when
-import org.scalatest.BeforeAndAfterEach
 import org.scalatest.concurrent.Eventually
 import org.scalatestplus.mockito.MockitoSugar.mock
 
@@ -35,9 +34,7 @@ import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent}
 import org.apache.spark.sql._
 import org.apache.spark.util.JsonProtocol
 
-
-class MLEventsSuite
-  extends SparkFunSuite with BeforeAndAfterEach with MLlibTestSparkContext with Eventually {
+class MLEventsSuite extends SparkFunSuite with MLlibTestSparkContext with Eventually {
 
   private val events = mutable.ArrayBuffer.empty[MLEvent]
   private val listener: SparkListener = new SparkListener {
@@ -91,11 +88,11 @@ class MLEventsSuite
     val dataset4 = mock[DataFrame]
     val dataset5 = mock[DataFrame]
 
-    when(dataset1.toDF).thenReturn(dataset1)
-    when(dataset2.toDF).thenReturn(dataset2)
-    when(dataset3.toDF).thenReturn(dataset3)
-    when(dataset4.toDF).thenReturn(dataset4)
-    when(dataset5.toDF).thenReturn(dataset5)
+    when(dataset1.toDF()).thenReturn(dataset1)
+    when(dataset2.toDF()).thenReturn(dataset2)
+    when(dataset3.toDF()).thenReturn(dataset3)
+    when(dataset4.toDF()).thenReturn(dataset4)
+    when(dataset5.toDF()).thenReturn(dataset5)
 
     when(estimator1.fit(meq(dataset1))).thenReturn(model1)
     when(model1.transform(meq(dataset1))).thenReturn(dataset2)
@@ -146,7 +143,7 @@ class MLEventsSuite
     }
     // Test if they can be ser/de via JSON protocol.
     assert(events.nonEmpty)
-    events.map(JsonProtocol.sparkEventToJson).foreach { event =>
+    events.map(JsonProtocol.sparkEventToJsonString).foreach { event =>
       assert(JsonProtocol.sparkEventFromJson(event).isInstanceOf[MLEvent])
     }
   }
@@ -156,10 +153,10 @@ class MLEventsSuite
     val dataset2 = mock[DataFrame]
     val dataset3 = mock[DataFrame]
     val dataset4 = mock[DataFrame]
-    when(dataset1.toDF).thenReturn(dataset1)
-    when(dataset2.toDF).thenReturn(dataset2)
-    when(dataset3.toDF).thenReturn(dataset3)
-    when(dataset4.toDF).thenReturn(dataset4)
+    when(dataset1.toDF()).thenReturn(dataset1)
+    when(dataset2.toDF()).thenReturn(dataset2)
+    when(dataset3.toDF()).thenReturn(dataset3)
+    when(dataset4.toDF()).thenReturn(dataset4)
 
     val transformer1 = mock[Transformer]
     val model = mock[MyModel]
@@ -204,7 +201,7 @@ class MLEventsSuite
     }
     // Test if they can be ser/de via JSON protocol.
     assert(events.nonEmpty)
-    events.map(JsonProtocol.sparkEventToJson).foreach { event =>
+    events.map(JsonProtocol.sparkEventToJsonString).foreach { event =>
       assert(JsonProtocol.sparkEventFromJson(event).isInstanceOf[MLEvent])
     }
   }
@@ -236,7 +233,7 @@ class MLEventsSuite
       // Test if they can be ser/de via JSON protocol.
       eventually(timeout(10.seconds), interval(1.second)) {
         assert(events.nonEmpty)
-        events.map(JsonProtocol.sparkEventToJson).foreach { event =>
+        events.map(JsonProtocol.sparkEventToJsonString).foreach { event =>
           assert(JsonProtocol.sparkEventFromJson(event).isInstanceOf[MLEvent])
         }
       }
@@ -264,7 +261,7 @@ class MLEventsSuite
       // Test if they can be ser/de via JSON protocol.
       eventually(timeout(10.seconds), interval(1.second)) {
         assert(events.nonEmpty)
-        events.map(JsonProtocol.sparkEventToJson).foreach { event =>
+        events.map(JsonProtocol.sparkEventToJsonString).foreach { event =>
           assert(JsonProtocol.sparkEventFromJson(event).isInstanceOf[MLEvent])
         }
       }
@@ -299,7 +296,7 @@ class MLEventsSuite
       // Test if they can be ser/de via JSON protocol.
       eventually(timeout(10.seconds), interval(1.second)) {
         assert(events.nonEmpty)
-        events.map(JsonProtocol.sparkEventToJson).foreach { event =>
+        events.map(JsonProtocol.sparkEventToJsonString).foreach { event =>
           assert(JsonProtocol.sparkEventFromJson(event).isInstanceOf[MLEvent])
         }
       }
@@ -327,7 +324,7 @@ class MLEventsSuite
       // Test if they can be ser/de via JSON protocol.
       eventually(timeout(10.seconds), interval(1.second)) {
         assert(events.nonEmpty)
-        events.map(JsonProtocol.sparkEventToJson).foreach { event =>
+        events.map(JsonProtocol.sparkEventToJsonString).foreach { event =>
           assert(JsonProtocol.sparkEventFromJson(event).isInstanceOf[MLEvent])
         }
       }

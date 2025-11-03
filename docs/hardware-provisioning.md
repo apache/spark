@@ -32,8 +32,7 @@ possible**. We recommend the following:
 Hadoop's memory and CPU usage to avoid interference (for Hadoop, the relevant options are
 `mapred.child.java.opts` for the per-task memory and `mapreduce.tasktracker.map.tasks.maximum`
 and `mapreduce.tasktracker.reduce.tasks.maximum` for number of tasks). Alternatively, you can run
-Hadoop and Spark on a common cluster manager like [Mesos](running-on-mesos.html) or
-[Hadoop YARN](running-on-yarn.html).
+Hadoop and Spark on a common cluster manager like [Hadoop YARN](running-on-yarn.html).
 
 * If this is not possible, run Spark on different nodes in the same local-area network as HDFS.
 

@@ -17,6 +17,7 @@
 
 import sys
 from functools import reduce
+
 import numpy as np
 
 from pyspark import SparkContext, since
@@ -24,9 +25,9 @@ from pyspark.mllib.common import callMLlibFunc, inherit_doc
 from pyspark.mllib.linalg import Vectors, SparseVector, _convert_to_vector
 from pyspark.sql import DataFrame
 from typing import Generic, Iterable, List, Optional, Tuple, Type, TypeVar, cast, TYPE_CHECKING
-from pyspark.context import SparkContext
+from pyspark.core.context import SparkContext
 from pyspark.mllib.linalg import Vector
-from pyspark.rdd import RDD
+from pyspark.core.rdd import RDD
 from pyspark.sql.dataframe import DataFrame
 
 T = TypeVar("T")

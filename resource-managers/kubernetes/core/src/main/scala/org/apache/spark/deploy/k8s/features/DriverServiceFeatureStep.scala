@@ -16,19 +16,17 @@
  */
 package org.apache.spark.deploy.k8s.features
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import io.fabric8.kubernetes.api.model.{HasMetadata, ServiceBuilder}
 
-import org.apache.spark.deploy.k8s.{KubernetesDriverConf, KubernetesUtils, SparkPod}
-import org.apache.spark.deploy.k8s.Config.KUBERNETES_DNSNAME_MAX_LENGTH
+import org.apache.spark.deploy.k8s.{KubernetesDriverConf, SparkPod}
+import org.apache.spark.deploy.k8s.Config.{KUBERNETES_DNS_LABEL_NAME_MAX_LENGTH, KUBERNETES_DRIVER_SERVICE_IP_FAMILIES, KUBERNETES_DRIVER_SERVICE_IP_FAMILY_POLICY}
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.internal.{config, Logging}
-import org.apache.spark.util.{Clock, SystemClock}
 
 private[spark] class DriverServiceFeatureStep(
-    kubernetesConf: KubernetesDriverConf,
-    clock: Clock = new SystemClock())
+    kubernetesConf: KubernetesDriverConf)
   extends KubernetesFeatureConfigStep with Logging {
   import DriverServiceFeatureStep._
 
@@ -39,23 +37,19 @@ private[spark] class DriverServiceFeatureStep(
     s"$DRIVER_HOST_KEY is not supported in Kubernetes mode, as the driver's hostname will be " +
       "managed via a Kubernetes service.")
 
-  private val preferredServiceName = s"${kubernetesConf.resourceNamePrefix}$DRIVER_SVC_POSTFIX"
-  private val resolvedServiceName = if (preferredServiceName.length <= MAX_SERVICE_NAME_LENGTH) {
-    preferredServiceName
-  } else {
-    val randomServiceId = KubernetesUtils.uniqueID(clock = clock)
-    val shorterServiceName = s"spark-$randomServiceId$DRIVER_SVC_POSTFIX"
-    logWarning(s"Driver's hostname would preferably be $preferredServiceName, but this is " +
-      s"too long (must be <= $MAX_SERVICE_NAME_LENGTH characters). Falling back to use " +
-      s"$shorterServiceName as the driver service's name.")
-    shorterServiceName
-  }
+  private val resolvedServiceName = kubernetesConf.driverServiceName
+  private val ipFamilyPolicy =
+    kubernetesConf.sparkConf.get(KUBERNETES_DRIVER_SERVICE_IP_FAMILY_POLICY)
+  private val ipFamilies =
+    kubernetesConf.sparkConf.get(KUBERNETES_DRIVER_SERVICE_IP_FAMILIES).split(",").toList.asJava
 
   private val driverPort = kubernetesConf.sparkConf.getInt(
     config.DRIVER_PORT.key, DEFAULT_DRIVER_PORT)
   private val driverBlockManagerPort = kubernetesConf.sparkConf.getInt(
     config.DRIVER_BLOCK_MANAGER_PORT.key, DEFAULT_BLOCKMANAGER_PORT)
   private val  driverUIPort = kubernetesConf.get(config.UI.UI_PORT)
+  private val driverSparkConnectServerPort = kubernetesConf.sparkConf.getInt(
+    CONNECT_GRPC_BINDING_PORT, DEFAULT_SPARK_CONNECT_SERVER_PORT)
 
   override def configurePod(pod: SparkPod): SparkPod = pod
 
@@ -72,9 +66,12 @@ private[spark] class DriverServiceFeatureStep(
         .withName(resolvedServiceName)
         .addToAnnotations(kubernetesConf.serviceAnnotations.asJava)
         .addToLabels(SPARK_APP_ID_LABEL, kubernetesConf.appId)
+        .addToLabels(kubernetesConf.serviceLabels.asJava)
         .endMetadata()
       .withNewSpec()
         .withClusterIP("None")
+        .withIpFamilyPolicy(ipFamilyPolicy)
+        .withIpFamilies(ipFamilies)
         .withSelector(kubernetesConf.labels.asJava)
         .addNewPort()
           .withName(DRIVER_PORT_NAME)
@@ -91,6 +88,11 @@ private[spark] class DriverServiceFeatureStep(
           .withPort(driverUIPort)
           .withNewTargetPort(driverUIPort)
           .endPort()
+        .addNewPort()
+          .withName(SPARK_CONNECT_SERVER_PORT_NAME)
+          .withPort(driverSparkConnectServerPort)
+          .withNewTargetPort(driverSparkConnectServerPort)
+          .endPort()
         .endSpec()
       .build()
     Seq(driverService)
@@ -101,5 +103,5 @@ private[spark] object DriverServiceFeatureStep {
   val DRIVER_BIND_ADDRESS_KEY = config.DRIVER_BIND_ADDRESS.key
   val DRIVER_HOST_KEY = config.DRIVER_HOST_ADDRESS.key
   val DRIVER_SVC_POSTFIX = "-driver-svc"
-  val MAX_SERVICE_NAME_LENGTH = KUBERNETES_DNSNAME_MAX_LENGTH
+  val MAX_SERVICE_NAME_LENGTH = KUBERNETES_DNS_LABEL_NAME_MAX_LENGTH
 }

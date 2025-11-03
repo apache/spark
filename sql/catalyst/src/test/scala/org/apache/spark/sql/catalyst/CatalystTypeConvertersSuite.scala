@@ -17,9 +17,10 @@
 
 package org.apache.spark.sql.catalyst
 
-import java.time.{Duration, Instant, LocalDate, LocalDateTime, Period}
+import java.math.{BigDecimal => JavaBigDecimal}
+import java.time.{Duration, Instant, LocalDate, LocalDateTime, LocalTime, Period}
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkFunSuite, SparkIllegalArgumentException}
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions.UnsafeArrayData
 import org.apache.spark.sql.catalyst.plans.SQLHelper
@@ -104,47 +105,75 @@ class CatalystTypeConvertersSuite extends SparkFunSuite with SQLHelper {
 
   test("converting a wrong value to the struct type") {
     val structType = new StructType().add("f1", IntegerType)
-    val exception = intercept[IllegalArgumentException] {
-      CatalystTypeConverters.createToCatalystConverter(structType)("test")
-    }
-    assert(exception.getMessage.contains("The value (test) of the type "
-      + "(java.lang.String) cannot be converted to struct<f1:int>"))
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        CatalystTypeConverters.createToCatalystConverter(structType)("test")
+      },
+      condition = "_LEGACY_ERROR_TEMP_3219",
+      parameters = Map(
+        "other" -> "test",
+        "otherClass" -> "java.lang.String",
+        "dataType" -> "struct<f1:int>"))
   }
 
   test("converting a wrong value to the map type") {
     val mapType = MapType(StringType, IntegerType, false)
-    val exception = intercept[IllegalArgumentException] {
-      CatalystTypeConverters.createToCatalystConverter(mapType)("test")
-    }
-    assert(exception.getMessage.contains("The value (test) of the type "
-      + "(java.lang.String) cannot be converted to a map type with key "
-      + "type (string) and value type (int)"))
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        CatalystTypeConverters.createToCatalystConverter(mapType)("test")
+      },
+      condition = "_LEGACY_ERROR_TEMP_3221",
+      parameters = Map(
+        "other" -> "test",
+        "otherClass" -> "java.lang.String",
+        "keyType" -> "string",
+        "valueType" -> "int"))
   }
 
   test("converting a wrong value to the array type") {
     val arrayType = ArrayType(IntegerType, true)
-    val exception = intercept[IllegalArgumentException] {
-      CatalystTypeConverters.createToCatalystConverter(arrayType)("test")
-    }
-    assert(exception.getMessage.contains("The value (test) of the type "
-      + "(java.lang.String) cannot be converted to an array of int"))
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        CatalystTypeConverters.createToCatalystConverter(arrayType)("test")
+      },
+      condition = "_LEGACY_ERROR_TEMP_3220",
+      parameters = Map(
+        "other" -> "test",
+        "otherClass" -> "java.lang.String",
+        "elementType" -> "int"))
   }
 
   test("converting a wrong value to the decimal type") {
     val decimalType = DecimalType(10, 0)
-    val exception = intercept[IllegalArgumentException] {
-      CatalystTypeConverters.createToCatalystConverter(decimalType)("test")
-    }
-    assert(exception.getMessage.contains("The value (test) of the type "
-      + "(java.lang.String) cannot be converted to decimal(10,0)"))
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        CatalystTypeConverters.createToCatalystConverter(decimalType)("test")
+      },
+      condition = "_LEGACY_ERROR_TEMP_3219",
+      parameters = Map(
+        "other" -> "test",
+        "otherClass" -> "java.lang.String",
+        "dataType" -> "decimal(10,0)"))
+  }
+
+  test("SPARK-51941: convert BigDecimal to Decimal") {
+    val expected = Decimal("0.01")
+    val bigDecimal = BigDecimal("0.01")
+    assert(CatalystTypeConverters.convertToCatalyst(bigDecimal) === expected)
+    val javaBigDecimal = new JavaBigDecimal("0.01")
+    assert(CatalystTypeConverters.convertToCatalyst(javaBigDecimal) === expected)
   }
 
   test("converting a wrong value to the string type") {
-    val exception = intercept[IllegalArgumentException] {
-      CatalystTypeConverters.createToCatalystConverter(StringType)(0.1)
-    }
-    assert(exception.getMessage.contains("The value (0.1) of the type "
-      + "(java.lang.Double) cannot be converted to the string type"))
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        CatalystTypeConverters.createToCatalystConverter(StringType)(0.1)
+      },
+      condition = "_LEGACY_ERROR_TEMP_3219",
+      parameters = Map(
+        "other" -> "0.1",
+        "otherClass" -> "java.lang.Double",
+        "dataType" -> "STRING"))
   }
 
   test("SPARK-24571: convert Char to String") {
@@ -152,6 +181,7 @@ class CatalystTypeConvertersSuite extends SparkFunSuite with SQLHelper {
     val converter = CatalystTypeConverters.createToCatalystConverter(StringType)
     val expected = UTF8String.fromString("X")
     assert(converter(chr) === expected)
+    assert(CatalystTypeConverters.convertToCatalyst('a') === UTF8String.fromString("a"))
   }
 
   test("SPARK-33390: Make Literal support char array") {
@@ -392,6 +422,36 @@ class CatalystTypeConvertersSuite extends SparkFunSuite with SQLHelper {
           assert(result2 === expected)
         }
       }
+    }
+  }
+
+  test("converting java.time.LocalTime to TimeType") {
+    Seq(
+      "00:00:00",
+      "01:02:03.999",
+      "02:59:01",
+      "12:30:02.0",
+      "22:00:00.000001",
+      "23:59:59.999999").foreach { time =>
+      val input = LocalTime.parse(time)
+      val result = CatalystTypeConverters.convertToCatalyst(input)
+      val expected = DateTimeUtils.localTimeToNanos(input)
+      assert(result === expected)
+    }
+  }
+
+  test("converting TimeType to java.time.LocalTime") {
+    Seq(
+      0,
+      1,
+      59000000,
+      3600000001L,
+      43200999999L,
+      86399000000L,
+      86399999999L).foreach { us =>
+      val nanos = us * 1000L
+      val localTime = DateTimeUtils.nanosToLocalTime(nanos)
+      assert(CatalystTypeConverters.createToScalaConverter(TimeType())(nanos) === localTime)
     }
   }
 }

@@ -95,7 +95,7 @@ class ExpressionSQLBuilderSuite extends SparkFunSuite {
 
   test("attributes") {
     checkSQL($"a".int, "a")
-    checkSQL(Symbol("foo bar").int, "`foo bar`")
+    checkSQL(Symbol("`foo bar`").int, "`foo bar`")
     // Keyword
     checkSQL($"int".int, "int")
   }
@@ -169,7 +169,7 @@ class ExpressionSQLBuilderSuite extends SparkFunSuite {
     val interval = Literal(new CalendarInterval(0, 0, MICROS_PER_HOUR))
 
     checkSQL(
-      TimeAdd($"a", interval),
+      TimestampAddInterval($"a", interval),
       "a + INTERVAL '1 hours'"
     )
 

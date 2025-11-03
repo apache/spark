@@ -27,7 +27,10 @@ trait SharedSparkContext extends BeforeAndAfterAll with BeforeAndAfterEach { sel
 
   def sc: SparkContext = _sc
 
-  val conf = new SparkConf(false)
+  // SPARK-49647: use `SparkConf()` instead of `SparkConf(false)` because we want to
+  // load defaults from system properties and the classpath, including default test
+  // settings specified in the SBT and Maven build definitions.
+  val conf: SparkConf = new SparkConf()
 
   /**
    * Initialize the [[SparkContext]].  Generally, this is just called from beforeAll; however, in

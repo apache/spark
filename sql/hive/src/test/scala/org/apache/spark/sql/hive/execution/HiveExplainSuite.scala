@@ -21,14 +21,12 @@ import org.apache.spark.metrics.source.HiveCatalogMetrics
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.parser.ParseException
+import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.execution.adaptive.DisableAdaptiveExecution
-import org.apache.spark.sql.execution.datasources.InsertIntoHadoopFsRelationCommand
-import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.tags.SlowHiveTest
-import org.apache.spark.util.Utils
 
 /**
  * A set of tests that validates support for Hive Explain command.
@@ -101,10 +99,8 @@ class HiveExplainSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
 
   test("explain create table command") {
     checkKeywordsExist(sql("explain create table temp__b using hive as select * from src limit 2"),
-                   "== Physical Plan ==",
-                   "InsertIntoHiveTable",
-                   "Limit",
-                   "src")
+      "== Physical Plan ==",
+      "CreateHiveTableAsSelect")
 
     checkKeywordsExist(
       sql("explain extended create table temp__b using hive as select * from src limit 2"),
@@ -112,10 +108,7 @@ class HiveExplainSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
       "== Analyzed Logical Plan ==",
       "== Optimized Logical Plan ==",
       "== Physical Plan ==",
-      "CreateHiveTableAsSelect",
-      "InsertIntoHiveTable",
-      "Limit",
-      "src")
+      "CreateHiveTableAsSelect")
 
     checkKeywordsExist(sql(
       """
@@ -130,10 +123,7 @@ class HiveExplainSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
       "== Analyzed Logical Plan ==",
       "== Optimized Logical Plan ==",
       "== Physical Plan ==",
-      "CreateHiveTableAsSelect",
-      "InsertIntoHiveTable",
-      "Limit",
-      "src")
+      "CreateHiveTableAsSelect")
   }
 
   test("explain output of physical plan should contain proper codegen stage ID",
@@ -188,28 +178,7 @@ class HiveExplainSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
       Console.withOut(output) {
         spark.table(tableName).explain(extended = false)
       }
-      assert(output.toString.contains(s"Scan hive default.$tableName"))
-    }
-  }
-
-  test("SPARK-26661: Show actual class name of the writing command in CTAS explain") {
-    Seq(true, false).foreach { convertCTAS =>
-      withSQLConf(
-          HiveUtils.CONVERT_METASTORE_CTAS.key -> convertCTAS.toString,
-          HiveUtils.CONVERT_METASTORE_PARQUET.key -> convertCTAS.toString) {
-
-        val df = sql(s"EXPLAIN CREATE TABLE tab1 STORED AS PARQUET AS SELECT * FROM range(2)")
-        val keywords = if (convertCTAS) {
-          Seq(
-            s"Execute ${Utils.getSimpleName(classOf[OptimizedCreateHiveTableAsSelectCommand])}",
-            Utils.getSimpleName(classOf[InsertIntoHadoopFsRelationCommand]))
-        } else {
-          Seq(
-            s"Execute ${Utils.getSimpleName(classOf[CreateHiveTableAsSelectCommand])}",
-            Utils.getSimpleName(classOf[InsertIntoHiveTable]))
-        }
-        checkKeywordsExist(df, keywords: _*)
-      }
+      assert(output.toString.contains(s"Scan hive $SESSION_CATALOG_NAME.default.$tableName"))
     }
   }
 

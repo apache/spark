@@ -27,19 +27,19 @@ import org.apache.kafka.clients.producer.ProducerConfig
 import org.apache.kafka.clients.producer.internals.DefaultPartitioner
 import org.apache.kafka.common.Cluster
 import org.apache.kafka.common.serialization.ByteArraySerializer
-import org.scalatest.concurrent.TimeLimits.failAfter
 import org.scalatest.time.SpanSugar._
 
-import org.apache.spark.{SparkConf, SparkContext, SparkException, TestUtils}
+import org.apache.spark.{SparkConf, SparkContext, TestUtils}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, SpecificInternalRow, UnsafeProjection}
-import org.apache.spark.sql.execution.streaming.{MemoryStream, MemoryStreamBase}
+import org.apache.spark.sql.execution.streaming.runtime.{MemoryStream, MemoryStreamBase}
 import org.apache.spark.sql.execution.streaming.sources.ContinuousMemoryStream
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming._
 import org.apache.spark.sql.test.{SharedSparkSession, TestSparkSession}
 import org.apache.spark.sql.types.{BinaryType, DataType, IntegerType, StringType, StructField, StructType}
+import org.apache.spark.util.ArrayImplicits._
 
 abstract class KafkaSinkSuiteBase extends QueryTest with SharedSparkSession with KafkaTest {
   protected var testUtils: KafkaTestUtils = _
@@ -365,7 +365,7 @@ class KafkaContinuousSinkSuite extends KafkaSinkStreamingSuiteBase {
     try {
       val fieldTypes: Array[DataType] = Array(BinaryType)
       val converter = UnsafeProjection.create(fieldTypes)
-      val row = new SpecificInternalRow(fieldTypes)
+      val row = new SpecificInternalRow(fieldTypes.toImmutableArraySeq)
       row.update(0, data)
       val iter = Seq.fill(1000)(converter.apply(row)).iterator
       iter.foreach(writeTask.write(_))
@@ -491,14 +491,17 @@ abstract class KafkaSinkBatchSuiteBase extends KafkaSinkSuiteBase {
 
   test("batch - null topic field value, and no topic option") {
     val df = Seq[(String, String)](null.asInstanceOf[String] -> "1").toDF("topic", "value")
-    val ex = intercept[SparkException] {
+    val ex = intercept[KafkaIllegalStateException] {
       df.write
         .format("kafka")
         .option("kafka.bootstrap.servers", testUtils.brokerAddress)
         .mode("append")
         .save()
     }
-    TestUtils.assertExceptionMsg(ex, "null topic present in the data")
+    checkError(
+      exception = ex,
+      condition = "KAFKA_NULL_TOPIC_IN_DATA"
+    )
   }
 
   protected def testUnsupportedSaveModes(msg: (SaveMode) => Seq[String]): Unit = {
@@ -557,7 +560,7 @@ class KafkaSinkBatchSuiteV2 extends KafkaSinkBatchSuiteBase {
 
   test("batch - unsupported save modes") {
     testUnsupportedSaveModes((mode) =>
-      Seq(s"cannot be written with ${mode.name} mode", "does not support truncate"))
+      Seq(s"cannot be written in the \"${mode.name}\" mode", "does not support truncate"))
   }
 
   test("generic - write big data with small producer buffer") {
@@ -581,7 +584,7 @@ class KafkaSinkBatchSuiteV2 extends KafkaSinkBatchSuiteBase {
     try {
       val fieldTypes: Array[DataType] = Array(BinaryType)
       val converter = UnsafeProjection.create(fieldTypes)
-      val row = new SpecificInternalRow(fieldTypes)
+      val row = new SpecificInternalRow(fieldTypes.toImmutableArraySeq)
       row.update(0, data)
       val iter = Seq.fill(1000)(converter.apply(row)).iterator
       writeTask.execute(iter)

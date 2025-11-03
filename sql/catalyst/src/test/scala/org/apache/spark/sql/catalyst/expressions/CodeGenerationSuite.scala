@@ -19,8 +19,6 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.sql.Timestamp
 
-import scala.math.Ordering
-
 import org.apache.logging.log4j.Level
 
 import org.apache.spark.SparkFunSuite
@@ -33,6 +31,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.expressions.objects._
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, DateTimeUtils}
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.LA
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.ThreadUtils
@@ -106,7 +105,7 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("SPARK-22543: split large if expressions into blocks due to JVM code size limit") {
     var strExpr: Expression = Literal("abc")
     for (_ <- 1 to 150) {
-      strExpr = StringDecode(Encode(strExpr, "utf-8"), "utf-8")
+      strExpr = StringTrimRight(StringTrimLeft(strExpr))
     }
 
     val expressions = Seq(If(EqualTo(strExpr, strExpr), strExpr, strExpr))
@@ -332,7 +331,7 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
       ValidateExternalType(
         GetExternalRowField(inputObject, index = 0, fieldName = "\"quote"),
         IntegerType,
-        lenient = false) :: Nil)
+        IntegerType) :: Nil)
   }
 
   test("SPARK-17160: field names are properly escaped by AssertTrue") {
@@ -536,6 +535,21 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
       .exists(_.getMessage().getFormattedMessage.contains("Generated method too long")))
   }
 
+  test("SPARK-51527: spark.sql.codegen.logLevel") {
+    withSQLConf(SQLConf.CODEGEN_LOG_LEVEL.key -> "INFO") {
+      val appender = new LogAppender("codegen log level")
+      withLogAppender(appender, loggerNames = Seq(classOf[CodeGenerator[_, _]].getName),
+        Some(Level.INFO)) {
+        GenerateUnsafeProjection.generate(Seq(Literal.TrueLiteral))
+      }
+      assert(appender.loggingEvents.exists { event =>
+        event.getLevel === Level.INFO &&
+          event.getMessage.getFormattedMessage.contains(
+            "public java.lang.Object generate(Object[] references)")
+      })
+    }
+  }
+
   test("SPARK-28916: subexpression elimination can cause 64kb code limit on UnsafeProjection") {
     val numOfExprs = 10000
     val exprs = (0 to numOfExprs).flatMap(colIndex =>
@@ -558,17 +572,17 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("SPARK-32624: CodegenContext.addReferenceObj should work for nested Scala class") {
     // emulate TypeUtils.getInterpretedOrdering(StringType)
     val ctx = new CodegenContext
-    val comparator = implicitly[Ordering[UTF8String]]
+    val comparator = implicitly[Ordering[String]]
+
     val refTerm = ctx.addReferenceObj("comparator", comparator)
 
     // Expecting result:
-    //   "((scala.math.LowPriorityOrderingImplicits$$anon$3) references[0] /* comparator */)"
+    //   "((scala.math.Ordering) references[0] /* comparator */)"
     // Using lenient assertions to be resilient to anonymous class numbering changes
     assert(!refTerm.contains("null"))
-    assert(refTerm.contains("scala.math.LowPriorityOrderingImplicits$$anon$"))
+    assert(refTerm.contains("scala.math.Ordering"))
   }
 
-  // TODO (SPARK-35579): Fix this bug in janino and upgrade janino in Spark.
   test("SPARK-35578: final local variable bug in janino") {
     val code =
       """

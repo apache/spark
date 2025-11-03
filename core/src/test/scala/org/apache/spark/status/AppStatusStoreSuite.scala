@@ -22,7 +22,7 @@ import scala.util.Random
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.internal.config.History.{HYBRID_STORE_DISK_BACKEND, HybridStoreDiskBackend}
-import org.apache.spark.internal.config.Status.LIVE_ENTITY_UPDATE_PERIOD
+import org.apache.spark.internal.config.Status.{LIVE_ENTITY_UPDATE_PERIOD, LIVE_UI_LOCAL_STORE_DIR}
 import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.scheduler.{SparkListenerStageSubmitted, SparkListenerTaskStart, StageInfo, TaskInfo, TaskLocality}
 import org.apache.spark.status.api.v1.SpeculationStageSummary
@@ -88,17 +88,25 @@ class AppStatusStoreSuite extends SparkFunSuite {
       live: Boolean): AppStatusStore = {
     val conf = new SparkConf()
     if (live) {
-      return AppStatusStore.createLiveStore(conf)
-    }
-    // LevelDB doesn't support Apple Silicon yet
-    if (Utils.isMacOnAppleSilicon && disk) {
-      return null
+      if (disk) {
+        val testDir = Utils.createTempDir()
+        conf.set(LIVE_UI_LOCAL_STORE_DIR, testDir.getCanonicalPath)
+      }
+      val liveStore = AppStatusStore.createLiveStore(conf)
+      if (disk) {
+        val rocksDBCreated = liveStore.store match {
+          case e: ElementTrackingStore => !e.usingInMemoryStore
+          case _ => false
+        }
+        assert(rocksDBCreated)
+      }
+      return liveStore
     }
 
     val store: KVStore = if (disk) {
       conf.set(HYBRID_STORE_DISK_BACKEND, diskStoreType.toString)
       val testDir = Utils.createTempDir()
-      val diskStore = KVUtils.open(testDir, getClass.getName, conf)
+      val diskStore = KVUtils.open(testDir, getClass.getName, conf, live = false)
       new ElementTrackingStore(diskStore, conf)
     } else {
       new ElementTrackingStore(new InMemoryStore, conf)
@@ -106,86 +114,104 @@ class AppStatusStoreSuite extends SparkFunSuite {
     new AppStatusStore(store)
   }
 
-  Seq(
-    "disk leveldb" -> createAppStore(disk = true, HybridStoreDiskBackend.LEVELDB, live = false),
-    "disk rocksdb" -> createAppStore(disk = true, HybridStoreDiskBackend.ROCKSDB, live = false),
-    "in memory" -> createAppStore(disk = false, live = false),
-    "in memory live" -> createAppStore(disk = false, live = true)
-  ).foreach { case (hint, appStore) =>
+  private val cases = {
+    val baseCases = Seq(
+      "disk rocksdb" -> createAppStore(disk = true, HybridStoreDiskBackend.ROCKSDB, live = false),
+      "in memory" -> createAppStore(disk = false, live = false),
+      "in memory live" -> createAppStore(disk = false, live = true),
+      "rocksdb live" -> createAppStore(disk = true, HybridStoreDiskBackend.ROCKSDB, live = true)
+    )
+    if (Utils.isMacOnAppleSilicon) {
+      baseCases
+    } else {
+      Seq(
+        "disk leveldb" -> createAppStore(disk = true, HybridStoreDiskBackend.LEVELDB, live = false)
+      ) ++ baseCases
+    }
+  }
+
+  cases.foreach { case (hint, appStore) =>
     test(s"SPARK-26260: summary should contain only successful tasks' metrics (store = $hint)") {
       assume(appStore != null)
-      val store = appStore.store
+      try {
+        val store = appStore.store
 
-      // Success and failed tasks metrics
-      for (i <- 0 to 5) {
-        if (i % 2 == 0) {
-          writeTaskDataToStore(i, store, "FAILED")
-        } else {
-          writeTaskDataToStore(i, store, "SUCCESS")
+        // Success and failed tasks metrics
+        for (i <- 0 to 5) {
+          if (i % 2 == 0) {
+            writeTaskDataToStore(i, store, "FAILED")
+          } else {
+            writeTaskDataToStore(i, store, "SUCCESS")
+          }
         }
+
+        // Running tasks metrics (-1 = no metrics reported, positive = metrics have been reported)
+        Seq(-1, 6).foreach { metric =>
+          writeTaskDataToStore(metric, store, "RUNNING")
+        }
+
+        /**
+         * Following are the tasks metrics,
+         * 1, 3, 5 => Success
+         * 0, 2, 4 => Failed
+         * -1, 6 => Running
+         *
+         * Task summary will consider (1, 3, 5) only
+         */
+        val summary = appStore.taskSummary(stageId, attemptId, uiQuantiles).get
+        val successfulTasks = Array(getTaskMetrics(1), getTaskMetrics(3), getTaskMetrics(5))
+
+        def assertQuantiles(metricGetter: TaskMetrics => Double,
+          actualQuantiles: Seq[Double]): Unit = {
+          val values = successfulTasks.map(metricGetter)
+          val expectedQuantiles = new Distribution(values, 0, values.length)
+            .getQuantiles(uiQuantiles.sorted)
+
+          assert(actualQuantiles === expectedQuantiles)
+        }
+
+        assertQuantiles(_.executorDeserializeTime.toDouble, summary.executorDeserializeTime)
+        assertQuantiles(_.executorDeserializeCpuTime.toDouble, summary.executorDeserializeCpuTime)
+        assertQuantiles(_.executorRunTime.toDouble, summary.executorRunTime)
+        assertQuantiles(_.executorRunTime.toDouble, summary.executorRunTime)
+        assertQuantiles(_.executorCpuTime.toDouble, summary.executorCpuTime)
+        assertQuantiles(_.resultSize.toDouble, summary.resultSize)
+        assertQuantiles(_.jvmGCTime.toDouble, summary.jvmGcTime)
+        assertQuantiles(_.resultSerializationTime.toDouble, summary.resultSerializationTime)
+        assertQuantiles(_.memoryBytesSpilled.toDouble, summary.memoryBytesSpilled)
+        assertQuantiles(_.diskBytesSpilled.toDouble, summary.diskBytesSpilled)
+        assertQuantiles(_.peakExecutionMemory.toDouble, summary.peakExecutionMemory)
+        assertQuantiles(_.inputMetrics.bytesRead.toDouble, summary.inputMetrics.bytesRead)
+        assertQuantiles(_.inputMetrics.recordsRead.toDouble, summary.inputMetrics.recordsRead)
+        assertQuantiles(_.outputMetrics.bytesWritten.toDouble, summary.outputMetrics.bytesWritten)
+        assertQuantiles(_.outputMetrics.recordsWritten.toDouble,
+          summary.outputMetrics.recordsWritten)
+        assertQuantiles(_.shuffleReadMetrics.remoteBlocksFetched.toDouble,
+          summary.shuffleReadMetrics.remoteBlocksFetched)
+        assertQuantiles(_.shuffleReadMetrics.localBlocksFetched.toDouble,
+          summary.shuffleReadMetrics.localBlocksFetched)
+        assertQuantiles(_.shuffleReadMetrics.fetchWaitTime.toDouble,
+          summary.shuffleReadMetrics.fetchWaitTime)
+        assertQuantiles(_.shuffleReadMetrics.remoteBytesRead.toDouble,
+          summary.shuffleReadMetrics.remoteBytesRead)
+        assertQuantiles(_.shuffleReadMetrics.remoteBytesReadToDisk.toDouble,
+          summary.shuffleReadMetrics.remoteBytesReadToDisk)
+        assertQuantiles(
+          t => t.shuffleReadMetrics.localBytesRead + t.shuffleReadMetrics.remoteBytesRead.toDouble,
+          summary.shuffleReadMetrics.readBytes)
+        assertQuantiles(
+          t => t.shuffleReadMetrics.localBlocksFetched +
+            t.shuffleReadMetrics.remoteBlocksFetched.toDouble,
+          summary.shuffleReadMetrics.totalBlocksFetched)
+        assertQuantiles(_.shuffleWriteMetrics.bytesWritten.toDouble,
+          summary.shuffleWriteMetrics.writeBytes)
+        assertQuantiles(_.shuffleWriteMetrics.writeTime.toDouble,
+          summary.shuffleWriteMetrics.writeTime)
+        assertQuantiles(_.shuffleWriteMetrics.recordsWritten.toDouble,
+          summary.shuffleWriteMetrics.writeRecords)
+      } finally {
+        appStore.close()
       }
-
-      // Running tasks metrics (-1 = no metrics reported, positive = metrics have been reported)
-      Seq(-1, 6).foreach { metric =>
-        writeTaskDataToStore(metric, store, "RUNNING")
-      }
-
-      /**
-       * Following are the tasks metrics,
-       * 1, 3, 5 => Success
-       * 0, 2, 4 => Failed
-       * -1, 6 => Running
-       *
-       * Task summary will consider (1, 3, 5) only
-       */
-      val summary = appStore.taskSummary(stageId, attemptId, uiQuantiles).get
-      val successfulTasks = Array(getTaskMetrics(1), getTaskMetrics(3), getTaskMetrics(5))
-
-      def assertQuantiles(metricGetter: TaskMetrics => Double,
-        actualQuantiles: Seq[Double]): Unit = {
-        val values = successfulTasks.map(metricGetter)
-        val expectedQuantiles = new Distribution(values, 0, values.length)
-          .getQuantiles(uiQuantiles.sorted)
-
-        assert(actualQuantiles === expectedQuantiles)
-      }
-
-      assertQuantiles(_.executorDeserializeTime, summary.executorDeserializeTime)
-      assertQuantiles(_.executorDeserializeCpuTime, summary.executorDeserializeCpuTime)
-      assertQuantiles(_.executorRunTime, summary.executorRunTime)
-      assertQuantiles(_.executorRunTime, summary.executorRunTime)
-      assertQuantiles(_.executorCpuTime, summary.executorCpuTime)
-      assertQuantiles(_.resultSize, summary.resultSize)
-      assertQuantiles(_.jvmGCTime, summary.jvmGcTime)
-      assertQuantiles(_.resultSerializationTime, summary.resultSerializationTime)
-      assertQuantiles(_.memoryBytesSpilled, summary.memoryBytesSpilled)
-      assertQuantiles(_.diskBytesSpilled, summary.diskBytesSpilled)
-      assertQuantiles(_.peakExecutionMemory, summary.peakExecutionMemory)
-      assertQuantiles(_.inputMetrics.bytesRead, summary.inputMetrics.bytesRead)
-      assertQuantiles(_.inputMetrics.recordsRead, summary.inputMetrics.recordsRead)
-      assertQuantiles(_.outputMetrics.bytesWritten, summary.outputMetrics.bytesWritten)
-      assertQuantiles(_.outputMetrics.recordsWritten, summary.outputMetrics.recordsWritten)
-      assertQuantiles(_.shuffleReadMetrics.remoteBlocksFetched,
-        summary.shuffleReadMetrics.remoteBlocksFetched)
-      assertQuantiles(_.shuffleReadMetrics.localBlocksFetched,
-        summary.shuffleReadMetrics.localBlocksFetched)
-      assertQuantiles(_.shuffleReadMetrics.fetchWaitTime, summary.shuffleReadMetrics.fetchWaitTime)
-      assertQuantiles(_.shuffleReadMetrics.remoteBytesRead,
-        summary.shuffleReadMetrics.remoteBytesRead)
-      assertQuantiles(_.shuffleReadMetrics.remoteBytesReadToDisk,
-        summary.shuffleReadMetrics.remoteBytesReadToDisk)
-      assertQuantiles(
-        t => t.shuffleReadMetrics.localBytesRead + t.shuffleReadMetrics.remoteBytesRead,
-        summary.shuffleReadMetrics.readBytes)
-      assertQuantiles(
-        t => t.shuffleReadMetrics.localBlocksFetched + t.shuffleReadMetrics.remoteBlocksFetched,
-        summary.shuffleReadMetrics.totalBlocksFetched)
-      assertQuantiles(_.shuffleWriteMetrics.bytesWritten, summary.shuffleWriteMetrics.writeBytes)
-      assertQuantiles(_.shuffleWriteMetrics.writeTime, summary.shuffleWriteMetrics.writeTime)
-      assertQuantiles(_.shuffleWriteMetrics.recordsWritten,
-        summary.shuffleWriteMetrics.writeRecords)
-
-      appStore.close()
     }
   }
 
@@ -211,22 +237,26 @@ class AppStatusStoreSuite extends SparkFunSuite {
     val conf = new SparkConf(false).set(LIVE_ENTITY_UPDATE_PERIOD, 0L)
     val statusStore = AppStatusStore.createLiveStore(conf)
 
-    val listener = statusStore.listener.get
+    try {
+      val listener = statusStore.listener.get
 
-    // Simulate a stage in job progress listener
-    val stageInfo = new StageInfo(stageId = 0, attemptId = 0, name = "dummy", numTasks = 1,
-      rddInfos = Seq.empty, parentIds = Seq.empty, details = "details",
-      resourceProfileId = ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
-    (1 to 2).foreach {
-      taskId =>
-        val taskInfo = new TaskInfo(
-          taskId, taskId, 0, taskId, 0, "0", "localhost", TaskLocality.ANY,
-          false)
-        listener.onStageSubmitted(SparkListenerStageSubmitted(stageInfo))
-        listener.onTaskStart(SparkListenerTaskStart(0, 0, taskInfo))
+      // Simulate a stage in job progress listener
+      val stageInfo = new StageInfo(stageId = 0, attemptId = 0, name = "dummy", numTasks = 1,
+        rddInfos = Seq.empty, parentIds = Seq.empty, details = "details",
+        resourceProfileId = ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
+      (1 to 2).foreach {
+        taskId =>
+          val taskInfo = new TaskInfo(
+            taskId, taskId, 0, taskId, 0, "0", "localhost", TaskLocality.ANY,
+            false)
+          listener.onStageSubmitted(SparkListenerStageSubmitted(stageInfo))
+          listener.onTaskStart(SparkListenerTaskStart(0, 0, taskInfo))
+      }
+
+      assert(statusStore.speculationSummary(0, 0).isEmpty)
+    } finally {
+      statusStore.close()
     }
-
-    assert(statusStore.speculationSummary(0, 0).isEmpty)
   }
 
   private def compareQuantiles(count: Int, quantiles: Array[Double]): Unit = {
@@ -249,6 +279,7 @@ class AppStatusStoreSuite extends SparkFunSuite {
     new TaskDataWrapper(
       i.toLong, i, i, i, i, i, i,
       i.toString, i.toString, status, i.toString, false, Nil, None, true,
+      i, i, i, i, i, i, i, i, i, i,
       i, i, i, i, i, i, i, i, i, i,
       i, i, i, i, i, i, i, i, i, i,
       i, i, i, i, stageId, attemptId)

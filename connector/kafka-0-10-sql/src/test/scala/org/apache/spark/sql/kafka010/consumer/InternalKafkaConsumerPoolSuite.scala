@@ -19,7 +19,7 @@ package org.apache.spark.sql.kafka010.consumer
 
 import java.{util => ju}
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.kafka.clients.consumer.ConsumerConfig._
 import org.apache.kafka.common.TopicPartition

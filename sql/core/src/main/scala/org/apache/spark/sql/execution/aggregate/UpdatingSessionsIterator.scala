@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.aggregate
 
 import scala.collection.mutable
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
@@ -42,7 +43,8 @@ class UpdatingSessionsIterator(
     sessionExpression: NamedExpression,
     inputSchema: Seq[Attribute],
     inMemoryThreshold: Int,
-    spillThreshold: Int) extends Iterator[InternalRow] {
+    spillThreshold: Int,
+    sizeInBytesSpillThreshold: Long) extends Iterator[InternalRow] {
 
   private val groupingWithoutSession: Seq[NamedExpression] =
     groupingExpressions.diff(Seq(sessionExpression))
@@ -149,7 +151,13 @@ class UpdatingSessionsIterator(
     currentKeys = groupingKey.copy()
     currentSession = sessionStruct.copy()
 
-    rowsForCurrentSession = new ExternalAppendOnlyUnsafeRowArray(inMemoryThreshold, spillThreshold)
+    rowsForCurrentSession = new ExternalAppendOnlyUnsafeRowArray(
+      inMemoryThreshold,
+      // TODO: shall we have a new config to specify the max in-memory buffer size
+      //       of ExternalAppendOnlyUnsafeRowArray?
+      sizeInBytesSpillThreshold,
+      spillThreshold,
+      sizeInBytesSpillThreshold)
     rowsForCurrentSession.add(currentRow.asInstanceOf[UnsafeRow])
   }
 
@@ -173,7 +181,7 @@ class UpdatingSessionsIterator(
 
   private def handleBrokenPreconditionForSort(): Unit = {
     errorOnIterator = true
-    throw new IllegalStateException("The iterator must be sorted by key and session start!")
+    throw SparkException.internalError("The iterator must be sorted by key and session start!")
   }
 
   private val join = new JoinedRow
@@ -215,7 +223,7 @@ class UpdatingSessionsIterator(
 
   private def assertIteratorNotCorrupted(): Unit = {
     if (errorOnIterator) {
-      throw new IllegalStateException("The iterator is already corrupted.")
+      throw SparkException.internalError("The iterator is already corrupted.")
     }
   }
 }

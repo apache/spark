@@ -21,26 +21,30 @@ import java.math.{BigDecimal, BigInteger}
 import java.nio.ByteOrder
 import java.time.{ZoneId, ZoneOffset}
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
+import scala.jdk.CollectionConverters._
 
 import org.apache.parquet.column.Dictionary
 import org.apache.parquet.io.ColumnIOFactory
 import org.apache.parquet.io.api.{Binary, Converter, GroupConverter, PrimitiveConverter}
 import org.apache.parquet.schema.{GroupType, Type, Types}
 import org.apache.parquet.schema.LogicalTypeAnnotation._
-import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName.{BINARY, FIXED_LEN_BYTE_ARRAY, INT32, INT64, INT96}
+import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName.{BINARY, FIXED_LEN_BYTE_ARRAY, FLOAT, INT32, INT64, INT96}
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, CaseInsensitiveMap, DateTimeUtils, GenericArrayData}
+import org.apache.spark.sql.catalyst.types.{PhysicalByteType, PhysicalShortType}
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, CaseInsensitiveMap, DateTimeUtils, GenericArrayData, ResolveDefaultColumns}
 import org.apache.spark.sql.catalyst.util.RebaseDateTime.RebaseSpec
+import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.execution.datasources.DataSourceUtils
+import org.apache.spark.sql.execution.datasources.{DataSourceUtils, VariantMetadata}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.unsafe.types.{UTF8String, VariantVal}
+import org.apache.spark.util.collection.Utils
 
 /**
  * A [[ParentContainerUpdater]] is used by a Parquet converter to set converted values to some
@@ -91,7 +95,7 @@ private[parquet] class ParquetPrimitiveConverter(val updater: ParentContainerUpd
   override def addLong(value: Long): Unit = updater.setLong(value)
   override def addFloat(value: Float): Unit = updater.setFloat(value)
   override def addDouble(value: Double): Unit = updater.setDouble(value)
-  override def addBinary(value: Binary): Unit = updater.set(value.getBytes)
+  override def addBinary(value: Binary): Unit = updater.set(value.getBytesUnsafe)
 }
 
 /**
@@ -172,7 +176,7 @@ private[parquet] class ParquetRowConverter(
    * Updater used together with field converters within a [[ParquetRowConverter]].  It propagates
    * converted filed values to the `ordinal`-th cell in `currentRow`.
    */
-  private final class RowUpdater(row: InternalRow, ordinal: Int) extends ParentContainerUpdater {
+  private class RowUpdater(row: InternalRow, ordinal: Int) extends ParentContainerUpdater {
     override def set(value: Any): Unit = row(ordinal) = value
     override def setBoolean(value: Boolean): Unit = row.setBoolean(ordinal, value)
     override def setByte(value: Byte): Unit = row.setByte(ordinal, value)
@@ -185,10 +189,15 @@ private[parquet] class ParquetRowConverter(
 
   private[this] val currentRow = new SpecificInternalRow(catalystType.map(_.dataType))
 
+  private[this] lazy val bitmask = ResolveDefaultColumns.existenceDefaultsBitmask(catalystType)
+
   /**
    * The [[InternalRow]] converted from an entire Parquet record.
    */
-  def currentRecord: InternalRow = currentRow
+  def currentRecord: InternalRow = {
+    applyExistenceDefaultValuesToRow(catalystType, currentRow, bitmask)
+    currentRow
+  }
 
   private val dateRebaseFunc = DataSourceUtils.createDateRebaseFuncInRead(
     datetimeRebaseSpec.mode, "Parquet")
@@ -203,7 +212,7 @@ private[parquet] class ParquetRowConverter(
   private[this] val fieldConverters: Array[Converter with HasParentContainerUpdater] = {
     // (SPARK-31116) Use case insensitive map if spark.sql.caseSensitive is false
     // to prevent throwing IllegalArgumentException when searching catalyst type's field index
-    def nameToIndex: Map[String, Int] = catalystType.fieldNames.zipWithIndex.toMap
+    def nameToIndex: Map[String, Int] = Utils.toMapWithIndex(catalystType.fieldNames)
 
     val catalystFieldIdxByName = if (SQLConf.get.caseSensitiveAnalysis) {
       nameToIndex
@@ -222,19 +231,42 @@ private[parquet] class ParquetRowConverter(
       } else {
         Map.empty[Int, Int]
       }
-
+    // If any fields in the Catalyst result schema have associated existence default values,
+    // maintain a boolean array to track which fields have been explicitly assigned for each row.
+    if (ResolveDefaultColumns.hasExistenceDefaultValues(catalystType)) {
+      val existingValues = ResolveDefaultColumns.existenceDefaultValues(catalystType)
+      for (i <- 0 until existingValues.length) {
+       bitmask(i) =
+          // Assume the schema for a Parquet file-based table contains N fields. Then if we later
+          // run a command "ALTER TABLE t ADD COLUMN c DEFAULT <value>" on the Parquet table, this
+          // adds one field to the Catalyst schema. Then if we query the old files with the new
+          // Catalyst schema, we should only apply the existence default value to all columns >= N.
+          if (i < parquetType.getFieldCount) {
+            false
+          } else {
+            existingValues(i) != null
+          }
+      }
+    }
     parquetType.getFields.asScala.map { parquetField =>
-      val catalystFieldIndex = Option(parquetField.getId).flatMap { fieldId =>
+      Option(parquetField.getId).flatMap { fieldId =>
         // field has id, try to match by id first before falling back to match by name
         catalystFieldIdxByFieldId.get(fieldId.intValue())
-      }.getOrElse {
+      }.orElse {
         // field doesn't have id, just match by name
-        catalystFieldIdxByName(parquetField.getName)
+        catalystFieldIdxByName.get(parquetField.getName)
+      }.map { catalystFieldIndex =>
+        val catalystField = catalystType(catalystFieldIndex)
+        // Create a RowUpdater instance for converting Parquet objects to Catalyst rows.
+        val rowUpdater: RowUpdater = new RowUpdater(currentRow, catalystFieldIndex)
+        // Converted field value should be set to the `fieldIndex`-th cell of `currentRow`
+        newConverter(parquetField, catalystField.dataType, rowUpdater)
+      }.getOrElse {
+        // This should only happen if we are reading an arbitrary field from a struct for its levels
+        // that is not otherwise requested.
+        val catalystType = SparkShreddingUtils.parquetTypeToSparkType(parquetField)
+        newConverter(parquetField, catalystType, NoopUpdater)
       }
-      val catalystField = catalystType(catalystFieldIndex)
-      // Converted field value should be set to the `fieldIndex`-th cell of `currentRow`
-      newConverter(parquetField,
-        catalystField.dataType, new RowUpdater(currentRow, catalystFieldIndex))
     }.toArray
   }
 
@@ -286,7 +318,22 @@ private[parquet] class ParquetRowConverter(
       case LongType if isUnsignedIntTypeMatched(32) =>
         new ParquetPrimitiveConverter(updater) {
           override def addInt(value: Int): Unit =
-            updater.setLong(Integer.toUnsignedLong(value))
+            this.updater.setLong(Integer.toUnsignedLong(value))
+        }
+      case LongType if parquetType.asPrimitiveType().getPrimitiveTypeName == INT32 =>
+        new ParquetPrimitiveConverter(updater) {
+          override def addInt(value: Int): Unit =
+            this.updater.setLong(value)
+        }
+      case DoubleType if parquetType.asPrimitiveType().getPrimitiveTypeName == INT32 =>
+        new ParquetPrimitiveConverter(updater) {
+          override def addInt(value: Int): Unit =
+            this.updater.setDouble(value)
+        }
+      case DoubleType if parquetType.asPrimitiveType().getPrimitiveTypeName == FLOAT =>
+        new ParquetPrimitiveConverter(updater) {
+          override def addFloat(value: Float): Unit =
+            this.updater.setDouble(value)
         }
       case BooleanType | IntegerType | LongType | FloatType | DoubleType | BinaryType |
         _: AnsiIntervalType =>
@@ -295,13 +342,13 @@ private[parquet] class ParquetRowConverter(
       case ByteType =>
         new ParquetPrimitiveConverter(updater) {
           override def addInt(value: Int): Unit =
-            updater.setByte(value.asInstanceOf[ByteType#InternalType])
+            this.updater.setByte(value.asInstanceOf[PhysicalByteType#InternalType])
         }
 
       case ShortType =>
         new ParquetPrimitiveConverter(updater) {
           override def addInt(value: Int): Unit =
-            updater.setShort(value.asInstanceOf[ShortType#InternalType])
+            this.updater.setShort(value.asInstanceOf[PhysicalShortType#InternalType])
         }
 
       // For INT32 backed decimals
@@ -321,7 +368,7 @@ private[parquet] class ParquetRowConverter(
       case _: DecimalType if isUnsignedIntTypeMatched(64) =>
         new ParquetPrimitiveConverter(updater) {
           override def addLong(value: Long): Unit = {
-            updater.set(Decimal(java.lang.Long.toUnsignedString(value)))
+            this.updater.set(Decimal(java.lang.Long.toUnsignedString(value)))
           }
         }
 
@@ -355,7 +402,7 @@ private[parquet] class ParquetRowConverter(
         throw QueryExecutionErrors.cannotCreateParquetConverterForDecimalTypeError(
           t, parquetType.toString)
 
-      case StringType =>
+      case _: StringType =>
         new ParquetStringConverter(updater)
 
       // As long as the parquet type is INT64 timestamp, whether logical annotation
@@ -366,7 +413,7 @@ private[parquet] class ParquetRowConverter(
              .asInstanceOf[TimestampLogicalTypeAnnotation].getUnit == TimeUnit.MICROS =>
         new ParquetPrimitiveConverter(updater) {
           override def addLong(value: Long): Unit = {
-            updater.setLong(timestampRebaseFunc(value))
+            this.updater.setLong(timestampRebaseFunc(value))
           }
         }
 
@@ -379,7 +426,7 @@ private[parquet] class ParquetRowConverter(
         new ParquetPrimitiveConverter(updater) {
           override def addLong(value: Long): Unit = {
             val micros = DateTimeUtils.millisToMicros(value)
-            updater.setLong(timestampRebaseFunc(micros))
+            this.updater.setLong(timestampRebaseFunc(micros))
           }
         }
 
@@ -392,7 +439,18 @@ private[parquet] class ParquetRowConverter(
             val gregorianMicros = int96RebaseFunc(julianMicros)
             val adjTime = convertTz.map(DateTimeUtils.convertTz(gregorianMicros, _, ZoneOffset.UTC))
               .getOrElse(gregorianMicros)
-            updater.setLong(adjTime)
+            this.updater.setLong(adjTime)
+          }
+        }
+
+      // INT96 timestamp doesn't have a logical type, here we check the physical type instead.
+      case TimestampNTZType if parquetType.asPrimitiveType().getPrimitiveTypeName == INT96 =>
+        new ParquetPrimitiveConverter(updater) {
+          // Converts nanosecond timestamps stored as INT96.
+          // TimestampNTZ type does not require rebasing due to its lack of time zone context.
+          override def addBinary(value: Binary): Unit = {
+            val julianMicros = ParquetRowConverter.binaryToSQLTimestamp(value)
+            this.updater.setLong(julianMicros)
           }
         }
 
@@ -409,14 +467,34 @@ private[parquet] class ParquetRowConverter(
         new ParquetPrimitiveConverter(updater) {
           override def addLong(value: Long): Unit = {
             val micros = DateTimeUtils.millisToMicros(value)
-            updater.setLong(micros)
+            this.updater.setLong(micros)
+          }
+        }
+
+      // Allow upcasting INT32 date to timestampNTZ.
+      case TimestampNTZType if parquetType.asPrimitiveType().getPrimitiveTypeName == INT32 &&
+          parquetType.getLogicalTypeAnnotation.isInstanceOf[DateLogicalTypeAnnotation] =>
+        new ParquetPrimitiveConverter(updater) {
+          override def addInt(value: Int): Unit = {
+            this.updater.set(DateTimeUtils.daysToMicros(dateRebaseFunc(value), ZoneOffset.UTC))
           }
         }
 
       case DateType =>
         new ParquetPrimitiveConverter(updater) {
           override def addInt(value: Int): Unit = {
-            updater.set(dateRebaseFunc(value))
+            this.updater.set(dateRebaseFunc(value))
+          }
+        }
+
+      case _: TimeType
+        if parquetType.getLogicalTypeAnnotation.isInstanceOf[TimeLogicalTypeAnnotation] &&
+          parquetType.getLogicalTypeAnnotation
+            .asInstanceOf[TimeLogicalTypeAnnotation].getUnit == TimeUnit.MICROS =>
+        new ParquetPrimitiveConverter(updater) {
+          override def addLong(value: Long): Unit = {
+            val nanos = DateTimeUtils.microsToNanos(value)
+            this.updater.setLong(nanos)
           }
         }
 
@@ -436,6 +514,9 @@ private[parquet] class ParquetRowConverter(
 
       case t: MapType =>
         new ParquetMapConverter(parquetType.asGroupType(), t, updater)
+
+      case t: StructType if VariantMetadata.isVariantStruct(t) =>
+        new ParquetVariantConverter(t, parquetType.asGroupType(), updater)
 
       case t: StructType =>
         val wrappedUpdater = {
@@ -473,6 +554,13 @@ private[parquet] class ParquetRowConverter(
           int96RebaseSpec,
           wrappedUpdater)
 
+      case t: VariantType =>
+        if (SQLConf.get.getConf(SQLConf.VARIANT_ALLOW_READING_SHREDDED)) {
+          new ParquetVariantConverter(t, parquetType.asGroupType(), updater)
+        } else {
+          new ParquetUnshreddedVariantConverter(parquetType.asGroupType(), updater)
+        }
+
       case t =>
         throw QueryExecutionErrors.cannotCreateParquetConverterForDataTypeError(
           t, parquetType.toString)
@@ -484,10 +572,7 @@ private[parquet] class ParquetRowConverter(
   // can be read as Spark's TimestampNTZ type. This is to avoid mistakes in reading the timestamp
   // values.
   private def canReadAsTimestampNTZ(parquetType: Type): Boolean =
-    parquetType.asPrimitiveType().getPrimitiveTypeName == INT64 &&
-      parquetType.getLogicalTypeAnnotation.isInstanceOf[TimestampLogicalTypeAnnotation] &&
-      !parquetType.getLogicalTypeAnnotation
-        .asInstanceOf[TimestampLogicalTypeAnnotation].isAdjustedToUTC
+    parquetType.getLogicalTypeAnnotation.isInstanceOf[TimestampLogicalTypeAnnotation]
 
   /**
    * Parquet converter for strings. A dictionary is used to minimize string decoding cost.
@@ -501,7 +586,7 @@ private[parquet] class ParquetRowConverter(
 
     override def setDictionary(dictionary: Dictionary): Unit = {
       this.expandedDictionary = Array.tabulate(dictionary.getMaxId + 1) { i =>
-        UTF8String.fromBytes(dictionary.decodeToBinary(i).getBytes)
+        UTF8String.fromBytes(dictionary.decodeToBinary(i).getBytesUnsafe)
       }
     }
 
@@ -561,7 +646,7 @@ private[parquet] class ParquetRowConverter(
         Decimal(unscaled, precision, scale)
       } else {
         // Otherwise, resorts to an unscaled `BigInteger` instead.
-        Decimal(new BigDecimal(new BigInteger(value.getBytes), scale), precision, scale)
+        Decimal(new BigDecimal(new BigInteger(value.getBytesUnsafe), scale), precision, scale)
       }
     }
   }
@@ -781,6 +866,100 @@ private[parquet] class ParquetRowConverter(
         currentKey = null
         currentValue = null
       }
+    }
+  }
+
+  /** Parquet converter for unshredded Variant */
+  private final class ParquetUnshreddedVariantConverter(
+     parquetType: GroupType,
+     updater: ParentContainerUpdater)
+    extends ParquetGroupConverter(updater) {
+
+    private[this] var currentValue: Any = _
+    private[this] var currentMetadata: Any = _
+
+    private[this] val converters = {
+      if (parquetType.getFieldCount() != 2) {
+        // We may allow more than two children in the future, so consider this unsupported.
+        throw QueryCompilationErrors.invalidVariantWrongNumFieldsError()
+      }
+      val valueAndMetadata = Seq("value", "metadata").map { colName =>
+        val idx = (0 until parquetType.getFieldCount())
+            .find(parquetType.getFieldName(_) == colName)
+        if (idx.isEmpty) {
+          throw QueryCompilationErrors.invalidVariantMissingFieldError(colName)
+        }
+        val child = parquetType.getType(idx.get)
+        if (!child.isPrimitive || child.getRepetition != Type.Repetition.REQUIRED ||
+            child.asPrimitiveType().getPrimitiveTypeName != BINARY) {
+          throw QueryCompilationErrors.invalidVariantNullableOrNotBinaryFieldError(colName)
+        }
+        child
+      }
+      Array(
+        // Converter for value
+        newConverter(valueAndMetadata(0), BinaryType, new ParentContainerUpdater {
+          override def set(value: Any): Unit = currentValue = value
+        }),
+
+        // Converter for metadata
+        newConverter(valueAndMetadata(1), BinaryType, new ParentContainerUpdater {
+          override def set(value: Any): Unit = currentMetadata = value
+      }))
+    }
+
+    override def getConverter(fieldIndex: Int): Converter = converters(fieldIndex)
+
+    override def end(): Unit = {
+      updater.set(
+        new VariantVal(currentValue.asInstanceOf[Array[Byte]],
+            currentMetadata.asInstanceOf[Array[Byte]]))
+    }
+
+    override def start(): Unit = {
+      currentValue = null
+      currentMetadata = null
+    }
+  }
+
+  /** Parquet converter for Variant (shredded or unshredded) */
+  private final class ParquetVariantConverter(
+     targetType: DataType, parquetType: GroupType, updater: ParentContainerUpdater)
+    extends ParquetGroupConverter(updater) {
+
+    private[this] var currentRow: Any = _
+    private[this] val parquetSparkType = SparkShreddingUtils.parquetTypeToSparkType(parquetType)
+    private[this] val variantSchema = SparkShreddingUtils.buildVariantSchema(parquetSparkType)
+    private[this] val fieldsToExtract =
+      SparkShreddingUtils.getFieldsToExtract(targetType, variantSchema)
+    // A struct converter that reads the underlying file data.
+    private[this] val fileConverter = new ParquetRowConverter(
+      schemaConverter,
+      parquetType,
+      parquetSparkType.asInstanceOf[StructType],
+      convertTz,
+      datetimeRebaseSpec,
+      int96RebaseSpec,
+      new ParentContainerUpdater {
+        override def set(value: Any): Unit = currentRow = value
+      })
+
+    override def getConverter(fieldIndex: Int): Converter = fileConverter.getConverter(fieldIndex)
+
+    override def end(): Unit = {
+      fileConverter.end()
+      val row = currentRow.asInstanceOf[InternalRow]
+      val v = if (fieldsToExtract == null) {
+        SparkShreddingUtils.assembleVariant(row, variantSchema)
+      } else {
+        SparkShreddingUtils.assembleVariantStruct(row, variantSchema, fieldsToExtract)
+      }
+      updater.set(v)
+    }
+
+    override def start(): Unit = {
+      fileConverter.start()
+      currentRow = null
     }
   }
 

@@ -18,18 +18,17 @@
 package org.apache.spark.storage
 
 import java.util
-import java.util.Collections
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.locks.{Condition, Lock}
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 
 import com.google.common.collect.{ConcurrentHashMultiset, ImmutableMultiset}
 import com.google.common.util.concurrent.Striped
 
-import org.apache.spark.TaskContext
+import org.apache.spark.{SparkException, TaskContext}
 import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.internal.Logging
 
@@ -139,7 +138,7 @@ private[storage] object BlockInfo {
  *
  * This class is thread-safe.
  */
-private[storage] class BlockInfoManager extends Logging {
+private[storage] class BlockInfoManager(trackingCacheVisibility: Boolean = false) extends Logging {
 
   private type TaskAttemptId = Long
 
@@ -149,6 +148,12 @@ private[storage] class BlockInfoManager extends Logging {
    * by [[removeBlock()]].
    */
   private[this] val blockInfoWrappers = new ConcurrentHashMap[BlockId, BlockInfoWrapper]
+
+  /**
+   * Record invisible rdd blocks stored in the block manager, entries will be removed when blocks
+   * are marked as visible or blocks are removed by [[removeBlock()]].
+   */
+  private[this] val invisibleRDDBlocks = new mutable.HashSet[RDDBlockId]
 
   /**
    * Stripe used to control multi-threaded access to block information.
@@ -180,6 +185,32 @@ private[storage] class BlockInfoManager extends Logging {
 
   // ----------------------------------------------------------------------------------------------
 
+  // Exposed for test only.
+  private[storage] def containsInvisibleRDDBlock(blockId: RDDBlockId): Boolean = {
+    invisibleRDDBlocks.synchronized {
+      invisibleRDDBlocks.contains(blockId)
+    }
+  }
+
+  private[spark] def isRDDBlockVisible(blockId: RDDBlockId): Boolean = {
+    if (trackingCacheVisibility) {
+      invisibleRDDBlocks.synchronized {
+        blockInfoWrappers.containsKey(blockId) && !invisibleRDDBlocks.contains(blockId)
+      }
+    } else {
+      // Always be visible if the feature flag is disabled.
+      true
+    }
+  }
+
+  private[spark] def tryMarkBlockAsVisible(blockId: RDDBlockId): Unit = {
+    if (trackingCacheVisibility) {
+      invisibleRDDBlocks.synchronized {
+        invisibleRDDBlocks.remove(blockId)
+      }
+    }
+  }
+
   /**
    * Called at the start of a task in order to register that task with this [[BlockInfoManager]].
    * This must be called prior to calling any other BlockInfoManager methods from that task.
@@ -206,7 +237,7 @@ private[storage] class BlockInfoManager extends Logging {
       f: BlockInfo => Boolean): Option[BlockInfo] = {
     var done = false
     var result: Option[BlockInfo] = None
-    while(!done) {
+    while (!done) {
       val wrapper = blockInfoWrappers.get(blockId)
       if (wrapper == null) {
         done = true
@@ -227,7 +258,7 @@ private[storage] class BlockInfoManager extends Logging {
   }
 
   /**
-   * Apply function `f` on the [[BlockInfo]] object and the aquisition [[Condition]] for `blockId`.
+   * Apply function `f` on the [[BlockInfo]] object and the acquisition [[Condition]] for `blockId`.
    * Function `f` will be executed while holding the lock for the [[BlockInfo]] object. If `blockId`
    * was not registered, an error will be thrown.
    */
@@ -360,12 +391,17 @@ private[storage] class BlockInfoManager extends Logging {
         info.writerTask = BlockInfo.NO_WRITER
         writeLocksByTask.get(taskAttemptId).remove(blockId)
       } else {
-        assert(info.readerCount > 0, s"Block $blockId is not locked for reading")
-        info.readerCount -= 1
+        // There can be a race between unlock and releaseAllLocksForTask which causes negative
+        // reader counts. We need to check if the readLocksByTask per tasks are present, if they
+        // are not then we know releaseAllLocksForTask has already cleaned up the read lock.
         val countsForTask = readLocksByTask.get(taskAttemptId)
-        val newPinCountForTask: Int = countsForTask.remove(blockId, 1) - 1
-        assert(newPinCountForTask >= 0,
-          s"Task $taskAttemptId release lock on block $blockId more times than it acquired it")
+        if (countsForTask != null) {
+          assert(info.readerCount > 0, s"Block $blockId is not locked for reading")
+          info.readerCount -= 1
+          val newPinCountForTask: Int = countsForTask.remove(blockId, 1) - 1
+          assert(newPinCountForTask >= 0,
+            s"Task $taskAttemptId release lock on block $blockId more times than it acquired it")
+        }
       }
       condition.signalAll()
     }
@@ -378,13 +414,14 @@ private[storage] class BlockInfoManager extends Logging {
    * then just go ahead and acquire the write lock. Otherwise, if another thread is already
    * writing the block, then we wait for the write to finish before acquiring the read lock.
    *
-   * @return true if the block did not already exist, false otherwise. If this returns false, then
-   *         a read lock on the existing block will be held. If this returns true, a write lock on
-   *         the new block will be held.
+   * @return true if the block did not already exist, false otherwise.
+   *         If this returns true, a write lock on the new block will be held.
+   *         If this returns false then a read lock will be held iff keepReadLock == true.
    */
   def lockNewBlockForWriting(
       blockId: BlockId,
-      newBlockInfo: BlockInfo): Boolean = {
+      newBlockInfo: BlockInfo,
+      keepReadLock: Boolean = true): Boolean = {
     logTrace(s"Task $currentTaskAttemptId trying to put $blockId")
     // Get the lock that will be associated with the to-be written block and lock it for the entire
     // duration of this operation. This way we prevent race conditions when two threads try to write
@@ -394,12 +431,26 @@ private[storage] class BlockInfoManager extends Logging {
     try {
       val wrapper = new BlockInfoWrapper(newBlockInfo, lock)
       while (true) {
-        val previous = blockInfoWrappers.putIfAbsent(blockId, wrapper)
+        val previous = if (trackingCacheVisibility) {
+          invisibleRDDBlocks.synchronized {
+            val res = blockInfoWrappers.putIfAbsent(blockId, wrapper)
+            if (res == null) {
+              // Added to invisible blocks if it doesn't exist before.
+              blockId.asRDDId.foreach(invisibleRDDBlocks.add)
+            }
+            res
+          }
+        } else {
+          blockInfoWrappers.putIfAbsent(blockId, wrapper)
+        }
+
         if (previous == null) {
           // New block lock it for writing.
           val result = lockForWriting(blockId, blocking = false)
           assert(result.isDefined)
           return true
+        } else if (!keepReadLock) {
+          return false
         } else {
           // Block already exists. This could happen if another thread races with us to compute
           // the same block. In this case we try to acquire a read lock, if the locking succeeds
@@ -426,7 +477,7 @@ private[storage] class BlockInfoManager extends Logging {
   def releaseAllLocksForTask(taskAttemptId: TaskAttemptId): Seq[BlockId] = {
     val blocksWithReleasedLocks = mutable.ArrayBuffer[BlockId]()
 
-    val writeLocks = Option(writeLocksByTask.remove(taskAttemptId)).getOrElse(Collections.emptySet)
+    val writeLocks = Option(writeLocksByTask.remove(taskAttemptId)).getOrElse(util.Set.of())
     writeLocks.forEach { blockId =>
       blockInfo(blockId) { (info, condition) =>
         assert(info.writerTask == taskAttemptId)
@@ -494,10 +545,14 @@ private[storage] class BlockInfoManager extends Logging {
     logTrace(s"Task $taskAttemptId trying to remove block $blockId")
     blockInfo(blockId) { (info, condition) =>
       if (info.writerTask != taskAttemptId) {
-        throw new IllegalStateException(
-          s"Task $taskAttemptId called remove() on block $blockId without a write lock")
+        throw SparkException.internalError(
+          s"Task $taskAttemptId called remove() on block $blockId without a write lock",
+          category = "STORAGE")
       } else {
-        blockInfoWrappers.remove(blockId)
+        invisibleRDDBlocks.synchronized {
+          blockInfoWrappers.remove(blockId)
+          blockId.asRDDId.foreach(invisibleRDDBlocks.remove)
+        }
         info.readerCount = 0
         info.writerTask = BlockInfo.NO_WRITER
         writeLocksByTask.get(taskAttemptId).remove(blockId)
@@ -520,6 +575,9 @@ private[storage] class BlockInfoManager extends Logging {
     blockInfoWrappers.clear()
     readLocksByTask.clear()
     writeLocksByTask.clear()
+    invisibleRDDBlocks.synchronized {
+      invisibleRDDBlocks.clear()
+    }
   }
 
 }

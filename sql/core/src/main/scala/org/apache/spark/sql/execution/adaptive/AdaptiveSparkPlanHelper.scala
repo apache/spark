@@ -70,7 +70,7 @@ trait AdaptiveSparkPlanHelper {
    * Returns a Seq by applying a function to all nodes in this tree and using the elements of the
    * resulting collections.
    */
-  def flatMap[A](p: SparkPlan)(f: SparkPlan => TraversableOnce[A]): Seq[A] = {
+  def flatMap[A](p: SparkPlan)(f: SparkPlan => IterableOnce[A]): Seq[A] = {
     val ret = new collection.mutable.ArrayBuffer[A]()
     foreach(p)(ret ++= f(_))
     ret.toSeq
@@ -122,17 +122,19 @@ trait AdaptiveSparkPlanHelper {
     subqueries ++ subqueries.flatMap(subqueriesAll)
   }
 
-  private def allChildren(p: SparkPlan): Seq[SparkPlan] = p match {
+  protected def allChildren(p: SparkPlan): Seq[SparkPlan] = p match {
     case a: AdaptiveSparkPlanExec => Seq(a.executedPlan)
     case s: QueryStageExec => Seq(s.plan)
     case _ => p.children
   }
 
   /**
-   * Strip the executePlan of AdaptiveSparkPlanExec leaf node.
+   * Strip the top [[AdaptiveSparkPlanExec]] and [[ResultQueryStageExec]] nodes off
+   * the [[SparkPlan]].
    */
   def stripAQEPlan(p: SparkPlan): SparkPlan = p match {
-    case a: AdaptiveSparkPlanExec => a.executedPlan
+    case a: AdaptiveSparkPlanExec => stripAQEPlan(a.executedPlan)
+    case ResultQueryStageExec(_, plan, _) => plan
     case other => other
   }
 }

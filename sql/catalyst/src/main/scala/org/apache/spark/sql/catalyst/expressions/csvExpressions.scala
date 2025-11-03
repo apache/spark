@@ -19,15 +19,18 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.io.CharArrayWriter
 
-import com.univocity.parsers.csv.CsvParser
-
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.csv._
-import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
-import org.apache.spark.sql.catalyst.util._
-import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode}
+import org.apache.spark.sql.catalyst.expressions.codegen.Block.BlockHelper
+import org.apache.spark.sql.catalyst.expressions.csv.{CsvToStructsEvaluator, SchemaOfCsvEvaluator}
+import org.apache.spark.sql.catalyst.expressions.objects.Invoke
+import org.apache.spark.sql.catalyst.util.TypeUtils._
+import org.apache.spark.sql.errors.QueryErrorsBase
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.types.StringTypeWithCollation
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -54,16 +57,12 @@ case class CsvToStructs(
     timeZoneId: Option[String] = None,
     requiredSchema: Option[StructType] = None)
   extends UnaryExpression
-    with TimeZoneAwareExpression
-    with CodegenFallback
-    with ExpectsInputTypes
-    with NullIntolerant {
+  with TimeZoneAwareExpression
+  with ExpectsInputTypes {
 
   override def nullable: Boolean = child.nullable
 
-  // The CSV input data might be missing certain fields. We force the nullability
-  // of the user-provided schema to avoid data corruptions.
-  val nullableSchema: StructType = schema.asNullable
+  override def nullIntolerant: Boolean = true
 
   // Used in `FunctionRegistry`
   def this(child: Expression, schema: Expression, options: Map[String, String]) =
@@ -82,64 +81,48 @@ case class CsvToStructs(
       child = child,
       timeZoneId = None)
 
-  // This converts parsed rows to the desired output by the given schema.
-  @transient
-  lazy val converter = (rows: Iterator[InternalRow]) => {
-    if (rows.hasNext) {
-      val result = rows.next()
-      // CSV's parser produces one record only.
-      assert(!rows.hasNext)
-      result
-    } else {
-      throw new IllegalStateException("Expected one row from CSV parser.")
-    }
-  }
-
-  val nameOfCorruptRecord = SQLConf.get.getConf(SQLConf.COLUMN_NAME_OF_CORRUPT_RECORD)
-
-  @transient lazy val parser = {
-    val parsedOptions = new CSVOptions(
-      options,
-      columnPruning = true,
-      defaultTimeZoneId = timeZoneId.get,
-      defaultColumnNameOfCorruptRecord = nameOfCorruptRecord)
-    val mode = parsedOptions.parseMode
-    if (mode != PermissiveMode && mode != FailFastMode) {
-      throw QueryCompilationErrors.parseModeUnsupportedError("from_csv", mode)
-    }
-    ExprUtils.verifyColumnNameOfCorruptRecord(
-      nullableSchema,
-      parsedOptions.columnNameOfCorruptRecord)
-
-    val actualSchema =
-      StructType(nullableSchema.filterNot(_.name == parsedOptions.columnNameOfCorruptRecord))
-    val actualRequiredSchema =
-      StructType(requiredSchema.map(_.asNullable).getOrElse(nullableSchema)
-        .filterNot(_.name == parsedOptions.columnNameOfCorruptRecord))
-    val rawParser = new UnivocityParser(actualSchema,
-      actualRequiredSchema,
-      parsedOptions)
-    new FailureSafeParser[String](
-      input => rawParser.parse(input),
-      mode,
-      nullableSchema,
-      parsedOptions.columnNameOfCorruptRecord)
-  }
-
   override def dataType: DataType = requiredSchema.getOrElse(schema).asNullable
 
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression = {
     copy(timeZoneId = Option(timeZoneId))
   }
 
-  override def nullSafeEval(input: Any): Any = {
-    val csv = input.asInstanceOf[UTF8String].toString
-    converter(parser.parse(csv))
-  }
-
-  override def inputTypes: Seq[AbstractDataType] = StringType :: Nil
+  override def inputTypes: Seq[AbstractDataType] =
+    StringTypeWithCollation(supportsTrimCollation = true) :: Nil
 
   override def prettyName: String = "from_csv"
+
+  // The CSV input data might be missing certain fields. We force the nullability
+  // of the user-provided schema to avoid data corruptions.
+  private val nullableSchema: StructType = schema.asNullable
+
+  @transient
+  private val nameOfCorruptRecord = SQLConf.get.getConf(SQLConf.COLUMN_NAME_OF_CORRUPT_RECORD)
+
+  @transient
+  private lazy val evaluator: CsvToStructsEvaluator = CsvToStructsEvaluator(
+    options, nullableSchema, nameOfCorruptRecord, timeZoneId, requiredSchema)
+
+  override def nullSafeEval(input: Any): Any = {
+    evaluator.evaluate(input.asInstanceOf[UTF8String])
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val refEvaluator = ctx.addReferenceObj("evaluator", evaluator)
+    val eval = child.genCode(ctx)
+    val resultType = CodeGenerator.boxedType(dataType)
+    val resultTerm = ctx.freshName("result")
+    ev.copy(code =
+      code"""
+         |${eval.code}
+         |$resultType $resultTerm = ($resultType) $refEvaluator.evaluate(${eval.value});
+         |boolean ${ev.isNull} = $resultTerm == null;
+         |${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+         |if (!${ev.isNull}) {
+         |  ${ev.value} = $resultTerm;
+         |}
+         |""".stripMargin)
+  }
 
   override protected def withNewChildInternal(newChild: Expression): CsvToStructs =
     copy(child = newChild)
@@ -160,7 +143,10 @@ case class CsvToStructs(
 case class SchemaOfCsv(
     child: Expression,
     options: Map[String, String])
-  extends UnaryExpression with CodegenFallback {
+  extends UnaryExpression
+  with RuntimeReplaceable
+  with DefaultStringProducingExpression
+  with QueryErrorsBase {
 
   def this(child: Expression) = this(child, Map.empty[String, String])
 
@@ -168,41 +154,49 @@ case class SchemaOfCsv(
     child = child,
     options = ExprUtils.convertToMapData(options))
 
-  override def dataType: DataType = StringType
-
   override def nullable: Boolean = false
 
-  @transient
-  private lazy val csv = child.eval().asInstanceOf[UTF8String]
-
   override def checkInputDataTypes(): TypeCheckResult = {
-    if (child.foldable && csv != null) {
-      super.checkInputDataTypes()
+    if (!child.foldable) {
+      DataTypeMismatch(
+        errorSubClass = "NON_FOLDABLE_INPUT",
+        messageParameters = Map(
+          "inputName" -> toSQLId("csv"),
+          "inputType" -> toSQLType(child.dataType),
+          "inputExpr" -> toSQLExpr(child)))
+    } else if (child.eval() == null) {
+      DataTypeMismatch(
+        errorSubClass = "UNEXPECTED_NULL",
+        messageParameters = Map("exprName" -> "csv"))
+    } else if (child.dataType != StringType) {
+      DataTypeMismatch(
+        errorSubClass = "UNEXPECTED_INPUT_TYPE",
+        messageParameters = Map(
+          "paramIndex" -> ordinalNumber(0),
+          "inputSql" -> toSQLExpr(child),
+          "inputType" -> toSQLType(child.dataType),
+          "requiredType" -> toSQLType(StringType))
+      )
     } else {
-      TypeCheckResult.TypeCheckFailure(
-        "The input csv should be a foldable string expression and not null; " +
-        s"however, got ${child.sql}.")
+      super.checkInputDataTypes()
     }
-  }
-
-  override def eval(v: InternalRow): Any = {
-    val parsedOptions = new CSVOptions(options, true, "UTC")
-    val parser = new CsvParser(parsedOptions.asParserSettings)
-    val row = parser.parseLine(csv.toString)
-    assert(row != null, "Parsed CSV record should not be null.")
-
-    val header = row.zipWithIndex.map { case (_, index) => s"_c$index" }
-    val startType: Array[DataType] = Array.fill[DataType](header.length)(NullType)
-    val inferSchema = new CSVInferSchema(parsedOptions)
-    val fieldTypes = inferSchema.inferRowType(startType, row)
-    val st = StructType(inferSchema.toStructFields(fieldTypes, header))
-    UTF8String.fromString(st.sql)
   }
 
   override def prettyName: String = "schema_of_csv"
 
   override protected def withNewChildInternal(newChild: Expression): SchemaOfCsv =
     copy(child = newChild)
+
+  @transient
+  private lazy val evaluator: SchemaOfCsvEvaluator = SchemaOfCsvEvaluator(options)
+
+  override def replacement: Expression = Invoke(
+    Literal.create(evaluator, ObjectType(classOf[SchemaOfCsvEvaluator])),
+    "evaluate",
+    dataType,
+    Seq(child),
+    Seq(child.dataType),
+    returnNullable = false)
 }
 
 /**
@@ -225,8 +219,11 @@ case class StructsToCsv(
      options: Map[String, String],
      child: Expression,
      timeZoneId: Option[String] = None)
-  extends UnaryExpression with TimeZoneAwareExpression with CodegenFallback with ExpectsInputTypes
-    with NullIntolerant {
+  extends UnaryExpression
+  with TimeZoneAwareExpression
+  with DefaultStringProducingExpression
+  with ExpectsInputTypes {
+  override def nullIntolerant: Boolean = true
   override def nullable: Boolean = true
 
   def this(options: Map[String, String], child: Expression) = this(options, child, None)
@@ -240,15 +237,34 @@ case class StructsToCsv(
       child = child,
       timeZoneId = None)
 
+  override def checkInputDataTypes(): TypeCheckResult = {
+    child.dataType match {
+      case schema: StructType if schema.map(_.dataType).forall(
+        dt => isSupportedDataType(dt)) => TypeCheckSuccess
+      case _ => DataTypeMismatch(
+        errorSubClass = "UNSUPPORTED_INPUT_TYPE",
+        messageParameters = Map(
+          "functionName" -> toSQLId(prettyName),
+          "dataType" -> toSQLType(child.dataType)
+        )
+      )
+    }
+  }
+
+  private def isSupportedDataType(dataType: DataType): Boolean = dataType match {
+    case _: VariantType => false
+    case array: ArrayType => isSupportedDataType(array.elementType)
+    case map: MapType => isSupportedDataType(map.keyType) && isSupportedDataType(map.valueType)
+    case st: StructType => st.map(_.dataType).forall(dt => isSupportedDataType(dt))
+    case udt: UserDefinedType[_] => isSupportedDataType(udt.sqlType)
+    case _ => true
+  }
+
   @transient
   lazy val writer = new CharArrayWriter()
 
   @transient
-  lazy val inputSchema: StructType = child.dataType match {
-    case st: StructType => st
-    case other =>
-      throw new IllegalArgumentException(s"Unsupported input type ${other.catalogString}")
-  }
+  lazy val inputSchema: StructType = child.dataType.asInstanceOf[StructType]
 
   @transient
   lazy val gen = new UnivocityGenerator(
@@ -259,8 +275,6 @@ case class StructsToCsv(
   lazy val converter: Any => UTF8String = {
     (row: Any) => UTF8String.fromString(gen.writeToString(row.asInstanceOf[InternalRow]))
   }
-
-  override def dataType: DataType = StringType
 
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = Option(timeZoneId))
@@ -273,4 +287,10 @@ case class StructsToCsv(
 
   override protected def withNewChildInternal(newChild: Expression): StructsToCsv =
     copy(child = newChild)
+
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val structsToCsv = ctx.addReferenceObj("structsToCsv", this)
+    nullSafeCodeGen(ctx, ev,
+      eval => s"${ev.value} = (UTF8String) $structsToCsv.converter().apply($eval);")
+  }
 }

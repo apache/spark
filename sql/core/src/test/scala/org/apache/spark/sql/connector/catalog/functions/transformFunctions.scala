@@ -16,7 +16,13 @@
  */
 package org.apache.spark.sql.connector.catalog.functions
 
+import java.time.{Instant, LocalDate, ZoneId}
+import java.time.temporal.ChronoUnit
+
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 
 object UnboundYearsFunction extends UnboundFunction {
   override def bind(inputType: StructType): BoundFunction = {
@@ -34,11 +40,19 @@ object UnboundYearsFunction extends UnboundFunction {
   override def name(): String = "years"
 }
 
-object YearsFunction extends BoundFunction {
+object YearsFunction extends ScalarFunction[Long] {
   override def inputTypes(): Array[DataType] = Array(TimestampType)
   override def resultType(): DataType = LongType
   override def name(): String = "years"
   override def canonicalName(): String = name()
+
+  val UTC: ZoneId = ZoneId.of("UTC")
+  val EPOCH_LOCAL_DATE: LocalDate = Instant.EPOCH.atZone(UTC).toLocalDate
+
+  def invoke(ts: Long): Long = {
+    val localDate = DateTimeUtils.microsToInstant(ts).atZone(UTC).toLocalDate
+    ChronoUnit.YEARS.between(EPOCH_LOCAL_DATE, localDate)
+  }
 }
 
 object DaysFunction extends BoundFunction {
@@ -70,9 +84,69 @@ object UnboundBucketFunction extends UnboundFunction {
   override def name(): String = "bucket"
 }
 
-object BucketFunction extends BoundFunction {
-  override def inputTypes(): Array[DataType] = Array(IntegerType, IntegerType)
+object BucketFunction extends ScalarFunction[Int] with ReducibleFunction[Int, Int] {
+  override def inputTypes(): Array[DataType] = Array(IntegerType, LongType)
   override def resultType(): DataType = IntegerType
   override def name(): String = "bucket"
   override def canonicalName(): String = name()
+  override def toString: String = name()
+  override def produceResult(input: InternalRow): Int = {
+    (input.getLong(1) % input.getInt(0)).toInt
+  }
+
+  override def reducer(
+      thisNumBuckets: Int,
+      otherFunc: ReducibleFunction[_, _],
+      otherNumBuckets: Int): Reducer[Int, Int] = {
+
+    if (otherFunc == BucketFunction) {
+      val gcd = this.gcd(thisNumBuckets, otherNumBuckets)
+      if (gcd > 1 && gcd != thisNumBuckets) {
+        return BucketReducer(gcd)
+      }
+    }
+    null
+  }
+
+  private def gcd(a: Int, b: Int): Int = BigInt(a).gcd(BigInt(b)).toInt
+}
+
+case class BucketReducer(divisor: Int) extends Reducer[Int, Int] {
+  override def reduce(bucket: Int): Int = bucket % divisor
+}
+
+object UnboundStringSelfFunction extends UnboundFunction {
+  override def bind(inputType: StructType): BoundFunction = StringSelfFunction
+  override def description(): String = name()
+  override def name(): String = "string_self"
+}
+
+object StringSelfFunction extends ScalarFunction[UTF8String] {
+  override def inputTypes(): Array[DataType] = Array(StringType)
+  override def resultType(): DataType = StringType
+  override def name(): String = "string_self"
+  override def canonicalName(): String = name()
+  override def toString: String = name()
+  override def produceResult(input: InternalRow): UTF8String = {
+    input.getUTF8String(0)
+  }
+}
+
+object UnboundTruncateFunction extends UnboundFunction {
+  override def bind(inputType: StructType): BoundFunction = TruncateFunction
+  override def description(): String = name()
+  override def name(): String = "truncate"
+}
+
+object TruncateFunction extends ScalarFunction[UTF8String] {
+  override def inputTypes(): Array[DataType] = Array(StringType, IntegerType)
+  override def resultType(): DataType = StringType
+  override def name(): String = "truncate"
+  override def canonicalName(): String = name()
+  override def toString: String = name()
+  override def produceResult(input: InternalRow): UTF8String = {
+    val str = input.getUTF8String(0)
+    val length = input.getInt(1)
+    str.substring(0, length)
+  }
 }

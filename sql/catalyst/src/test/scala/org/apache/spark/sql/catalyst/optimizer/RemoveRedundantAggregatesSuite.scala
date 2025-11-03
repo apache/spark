@@ -17,10 +17,9 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
-import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{Expression, PythonUDF}
+import org.apache.spark.sql.catalyst.expressions.{Expression, Literal, PythonUDAF}
 import org.apache.spark.sql.catalyst.expressions.Literal.TrueLiteral
 import org.apache.spark.sql.catalyst.plans.{LeftAnti, LeftSemi, PlanTest}
 import org.apache.spark.sql.catalyst.plans.logical.{Distinct, LocalRelation, LogicalPlan}
@@ -31,18 +30,19 @@ class RemoveRedundantAggregatesSuite extends PlanTest {
 
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches = Batch("RemoveRedundantAggregates", FixedPoint(10),
-      RemoveRedundantAggregates) :: Nil
+      RemoveRedundantAggregates,
+      RemoveNoopOperators) :: Nil
   }
 
   private val relation = LocalRelation($"a".int, $"b".int)
-  private val x = relation.subquery(Symbol("x"))
-  private val y = relation.subquery(Symbol("y"))
+  private val x = relation.subquery("x")
+  private val y = relation.subquery("y")
 
   private def aggregates(e: Expression): Seq[Expression] = {
     Seq(
       count(e),
-      PythonUDF("pyUDF", null, IntegerType, Seq(e),
-        PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF, udfDeterministic = true)
+      PythonUDAF("pyUDAF", null, IntegerType, Seq(e), udfDeterministic = true)
+        .toAggregateExpression()
     )
   }
 
@@ -53,6 +53,7 @@ class RemoveRedundantAggregatesSuite extends PlanTest {
         .groupBy($"a")($"a")
         .analyze
       val expected = relation
+        .select($"a")
         .groupBy($"a")($"a")
         .analyze
       val optimized = Optimize.execute(query)
@@ -68,6 +69,7 @@ class RemoveRedundantAggregatesSuite extends PlanTest {
         .groupBy($"a")($"a")
         .analyze
       val expected = relation
+        .select($"a")
         .groupBy($"a")($"a")
         .analyze
       val optimized = Optimize.execute(query)
@@ -81,6 +83,7 @@ class RemoveRedundantAggregatesSuite extends PlanTest {
       .groupBy($"a")($"a")
       .analyze
     val expected = relation
+      .select($"a")
       .groupBy($"a")($"a")
       .analyze
     val optimized = Optimize.execute(query)
@@ -90,11 +93,12 @@ class RemoveRedundantAggregatesSuite extends PlanTest {
   test("Remove redundant aggregate with aliases") {
     for (agg <- aggregates($"b")) {
       val query = relation
-        .groupBy($"a" + $"b")(($"a" + $"b") as Symbol("c"), agg)
+        .groupBy($"a" + $"b")(($"a" + $"b") as "c", agg)
         .groupBy($"c")($"c")
         .analyze
       val expected = relation
-        .groupBy($"a" + $"b")(($"a" + $"b") as Symbol("c"))
+        .select(($"a" + $"b") as "c")
+        .groupBy($"c")($"c")
         .analyze
       val optimized = Optimize.execute(query)
       comparePlans(optimized, expected)
@@ -104,10 +108,11 @@ class RemoveRedundantAggregatesSuite extends PlanTest {
   test("Remove redundant aggregate with non-deterministic upper") {
     val query = relation
       .groupBy($"a")($"a")
-      .groupBy($"a")($"a", rand(0) as Symbol("c"))
+      .groupBy($"a")($"a", rand(0) as "c")
       .analyze
     val expected = relation
-      .groupBy($"a")($"a", rand(0) as Symbol("c"))
+      .select($"a")
+      .groupBy($"a")($"a", rand(0) as "c")
       .analyze
     val optimized = Optimize.execute(query)
     comparePlans(optimized, expected)
@@ -115,11 +120,13 @@ class RemoveRedundantAggregatesSuite extends PlanTest {
 
   test("Remove redundant aggregate with non-deterministic lower") {
     val query = relation
-      .groupBy($"a", $"c")($"a", rand(0) as Symbol("c"))
+      .groupBy($"a", $"c")($"a", rand(0) as "c")
       .groupBy($"a", $"c")($"a", $"c")
       .analyze
     val expected = relation
-      .groupBy($"a", $"c")($"a", rand(0) as Symbol("c"))
+      .select($"a", $"b", rand(0) as "_nondeterministic")
+      .select($"a", $"_nondeterministic" as "c")
+      .groupBy($"a", $"c")($"a", $"c")
       .analyze
     val optimized = Optimize.execute(query)
     comparePlans(optimized, expected)
@@ -152,7 +159,7 @@ class RemoveRedundantAggregatesSuite extends PlanTest {
 
   test("Remove redundant aggregate - upper has contains foldable expressions") {
     val originalQuery = x.groupBy($"a", $"b")($"a", $"b").groupBy($"a")($"a", TrueLiteral).analyze
-    val correctAnswer = x.groupBy($"a")($"a", TrueLiteral).analyze
+    val correctAnswer = x.select($"a").groupBy($"a")($"a", TrueLiteral).analyze
     val optimized = Optimize.execute(originalQuery)
     comparePlans(optimized, correctAnswer)
   }
@@ -160,7 +167,7 @@ class RemoveRedundantAggregatesSuite extends PlanTest {
   test("Keep non-redundant aggregate - upper references agg expression") {
     for (agg <- aggregates($"b")) {
       val query = relation
-        .groupBy($"a")($"a", agg as Symbol("c"))
+        .groupBy($"a")($"a", agg as "c")
         .groupBy($"c")($"c")
         .analyze
       val optimized = Optimize.execute(query)
@@ -170,12 +177,11 @@ class RemoveRedundantAggregatesSuite extends PlanTest {
 
   test("Remove non-redundant aggregate - upper references non-deterministic non-grouping") {
     val query = relation
-      .groupBy($"a")($"a", ($"a" + rand(0)) as Symbol("c"))
+      .groupBy($"a")($"a", ($"a" + rand(0)) as "c")
       .groupBy($"a", $"c")($"a", $"c")
       .analyze
     val expected = relation
-      .groupBy($"a")($"a", ($"a" + rand(0)) as Symbol("c"))
-      .select($"a", $"c")
+      .groupBy($"a")($"a", ($"a" + rand(0)) as "c")
       .analyze
     val optimized = Optimize.execute(query)
     comparePlans(optimized, expected)
@@ -188,7 +194,6 @@ class RemoveRedundantAggregatesSuite extends PlanTest {
         .groupBy("x.a".attr, "x.b".attr)("x.a".attr, "x.b".attr)
       val correctAnswer = x.groupBy($"a", $"b")($"a", $"b")
         .join(y, joinType, Some("x.a".attr === "y.a".attr && "x.b".attr === "y.b".attr))
-        .select("x.a".attr, "x.b".attr)
 
       val optimized = Optimize.execute(originalQuery.analyze)
       comparePlans(optimized, correctAnswer.analyze)
@@ -202,7 +207,6 @@ class RemoveRedundantAggregatesSuite extends PlanTest {
         .groupBy("x.a".attr, "d".attr)("x.a".attr, "d".attr)
       val correctAnswer = x.groupBy($"a", $"b")($"a", $"b".as("d"))
         .join(y, joinType, Some("x.a".attr === "y.a".attr && "d".attr === "y.b".attr))
-        .select("x.a".attr, "d".attr)
 
       val optimized = Optimize.execute(originalQuery.analyze)
       comparePlans(optimized, correctAnswer.analyze)
@@ -232,7 +236,6 @@ class RemoveRedundantAggregatesSuite extends PlanTest {
         .groupBy("x.a".attr, "x.b".attr)("x.a".attr)
       val correctAnswer = x.groupBy($"a", $"b")($"a", $"b")
         .join(y, joinType, Some("x.a".attr === "y.a".attr && "x.b".attr === "y.b".attr))
-        .select("x.a".attr, "x.b".attr)
         .join(y, joinType, Some("x.a".attr === "y.a".attr && "x.b".attr === "y.b".attr))
         .select("x.a".attr)
 
@@ -248,7 +251,6 @@ class RemoveRedundantAggregatesSuite extends PlanTest {
       .analyze
     val correctAnswer = relation
       .groupBy($"a")($"a", count($"b").as("cnt"))
-      .select($"a", $"cnt")
       .analyze
     val optimized = Optimize.execute(originalQuery)
     comparePlans(optimized, correctAnswer)
@@ -286,5 +288,24 @@ class RemoveRedundantAggregatesSuite extends PlanTest {
   test("SPARK-36194: Negative case: child distinct keys is empty") {
     val originalQuery = Distinct(x.groupBy($"a", $"b")($"a", TrueLiteral)).analyze
     comparePlans(Optimize.execute(originalQuery), originalQuery)
+  }
+
+  test("SPARK-53155: global lower aggregation should not be removed") {
+    object OptimizeNonRemovedRedundantAgg extends RuleExecutor[LogicalPlan] {
+      val batches = Batch("RemoveRedundantAggregates", FixedPoint(10),
+        PropagateEmptyRelation,
+        RemoveRedundantAggregates) :: Nil
+    }
+
+    val query = relation
+      .groupBy()(Literal(1).as("col1"), Literal(2).as("col2"), Literal(3).as("col3"))
+      .groupBy($"col1")(max($"col1"))
+      .analyze
+    val expected = relation
+      .groupBy()(Literal(1).as("col1"), Literal(2).as("col2"), Literal(3).as("col3"))
+      .groupBy($"col1")(max($"col1"))
+      .analyze
+    val optimized = OptimizeNonRemovedRedundantAgg.execute(query)
+    comparePlans(optimized, expected)
   }
 }

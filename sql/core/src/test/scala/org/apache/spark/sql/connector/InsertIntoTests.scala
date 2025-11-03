@@ -20,6 +20,9 @@ package org.apache.spark.sql.connector
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql._
+import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
+import org.apache.spark.sql.catalyst.util.TypeUtils._
+import org.apache.spark.sql.catalyst.util.quoteIdentifier
 import org.apache.spark.sql.internal.SQLConf.{PARTITION_OVERWRITE_MODE, PartitionOverwriteMode}
 import org.apache.spark.sql.test.SharedSparkSession
 
@@ -121,13 +124,23 @@ abstract class InsertIntoTests(
     val t1 = s"${catalogAndNamespace}tbl"
     sql(s"CREATE TABLE $t1 (id bigint, data string, missing string) USING $v2Format")
     val df = Seq((1L, "a"), (2L, "b"), (3L, "c")).toDF("id", "data")
-    val exc = intercept[AnalysisException] {
-      doInsert(t1, df)
-    }
 
     verifyTable(t1, Seq.empty[(Long, String, String)].toDF("id", "data", "missing"))
-    val tableName = if (catalogAndNamespace.isEmpty) s"default.$t1" else t1
-    assert(exc.getMessage.contains(s"Cannot write to '$tableName', not enough data columns"))
+    val tableName = if (catalogAndNamespace.isEmpty) {
+      toSQLId(s"spark_catalog.default.$t1")
+    } else {
+      toSQLId(t1)
+    }
+    checkError(
+      exception = intercept[AnalysisException] {
+        doInsert(t1, df)
+      },
+      condition = "INSERT_COLUMN_ARITY_MISMATCH.NOT_ENOUGH_DATA_COLUMNS",
+      parameters = Map(
+        "tableName" -> tableName,
+        "tableColumns" -> "`id`, `data`, `missing`",
+        "dataColumns" -> "`id`, `data`")
+    )
   }
 
   test("insertInto: fails when an extra column is present") {
@@ -135,13 +148,22 @@ abstract class InsertIntoTests(
     withTable(t1) {
       sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format")
       val df = Seq((1L, "a", "mango")).toDF("id", "data", "fruit")
-      val exc = intercept[AnalysisException] {
-        doInsert(t1, df)
-      }
-
       verifyTable(t1, Seq.empty[(Long, String)].toDF("id", "data"))
-      val tableName = if (catalogAndNamespace.isEmpty) s"default.$t1" else t1
-      assert(exc.getMessage.contains(s"Cannot write to '$tableName', too many data columns"))
+      val tableName = if (catalogAndNamespace.isEmpty) {
+        toSQLId(s"spark_catalog.default.$t1")
+      } else {
+        toSQLId(t1)
+      }
+      checkError(
+        exception = intercept[AnalysisException] {
+          doInsert(t1, df)
+        },
+        condition = "INSERT_COLUMN_ARITY_MISMATCH.TOO_MANY_DATA_COLUMNS",
+        parameters = Map(
+          "tableName" -> tableName,
+          "tableColumns" -> "`id`, `data`",
+          "dataColumns" -> "`id`, `data`, `fruit`")
+      )
     }
   }
 
@@ -198,7 +220,7 @@ trait InsertIntoSQLOnlyTests
   /** Whether to include the SQL specific tests in this trait within the extending test suite. */
   protected val includeSQLOnlyTests: Boolean
 
-  private def withTableAndData(tableName: String)(testFn: String => Unit): Unit = {
+  protected def withTableAndData(tableName: String)(testFn: String => Unit): Unit = {
     withTable(tableName) {
       val viewName = "tmp_view"
       val df = spark.createDataFrame(Seq((1L, "a"), (2L, "b"), (3L, "c"))).toDF("id", "data")
@@ -231,11 +253,13 @@ trait InsertIntoSQLOnlyTests
       val t2 = s"${catalogAndNamespace}tbl2"
       withTableAndData(t1) { _ =>
         sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format")
+        val parsed = CatalystSqlParser.parseMultipartIdentifier(t2)
+          .map(part => quoteIdentifier(part)).mkString(".")
         val e = intercept[AnalysisException] {
           sql(s"INSERT INTO $t2 VALUES (2L, 'dummy')")
         }
-        assert(e.getMessage.contains(t2))
-        assert(e.getMessage.contains("Table not found"))
+        checkErrorTableNotFound(e, parsed,
+          ExpectedContext(t2, 12, 11 + t2.length))
       }
     }
 
@@ -245,40 +269,6 @@ trait InsertIntoSQLOnlyTests
         sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format PARTITIONED BY (id)")
         sql(s"INSERT INTO $t1 PARTITION (id = 23) SELECT data FROM $view")
         verifyTable(t1, sql(s"SELECT 23, data FROM $view"))
-      }
-    }
-
-    test("InsertInto: static PARTITION clause fails with non-partition column") {
-      val t1 = s"${catalogAndNamespace}tbl"
-      withTableAndData(t1) { view =>
-        sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format PARTITIONED BY (data)")
-
-        val exc = intercept[AnalysisException] {
-          sql(s"INSERT INTO TABLE $t1 PARTITION (id=1) SELECT data FROM $view")
-        }
-
-        verifyTable(t1, spark.emptyDataFrame)
-        assert(exc.getMessage.contains(
-          "PARTITION clause cannot contain a non-partition column name"))
-        assert(exc.getMessage.contains("id"))
-        assert(exc.getErrorClass == "NON_PARTITION_COLUMN")
-      }
-    }
-
-    test("InsertInto: dynamic PARTITION clause fails with non-partition column") {
-      val t1 = s"${catalogAndNamespace}tbl"
-      withTableAndData(t1) { view =>
-        sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format PARTITIONED BY (id)")
-
-        val exc = intercept[AnalysisException] {
-          sql(s"INSERT INTO TABLE $t1 PARTITION (data) SELECT * FROM $view")
-        }
-
-        verifyTable(t1, spark.emptyDataFrame)
-        assert(exc.getMessage.contains(
-          "PARTITION clause cannot contain a non-partition column name"))
-        assert(exc.getMessage.contains("data"))
-        assert(exc.getErrorClass == "NON_PARTITION_COLUMN")
       }
     }
 

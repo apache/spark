@@ -17,13 +17,11 @@
 package org.apache.spark.deploy.k8s.integrationtest
 
 import java.io.File
-import java.nio.file.{Path, Paths}
+import java.nio.file.{Files, Path, Paths}
 import java.util.UUID
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
-import com.google.common.base.Charsets
-import com.google.common.io.Files
 import io.fabric8.kubernetes.api.model.Pod
 import io.fabric8.kubernetes.client.{Watcher, WatcherException}
 import io.fabric8.kubernetes.client.KubernetesClientException
@@ -45,8 +43,8 @@ import org.apache.spark.internal.config._
 class KubernetesSuite extends SparkFunSuite
   with BeforeAndAfterAll with BeforeAndAfter with BasicTestsSuite with SparkConfPropagateSuite
   with SecretsTestsSuite with PythonTestsSuite with ClientModeTestsSuite with PodTemplateSuite
-  with PVTestsSuite with DepsTestsSuite with DecommissionSuite with RTestsSuite with Logging
-  with Eventually with Matchers {
+  with VolumeSuite with PVTestsSuite with DepsTestsSuite with DecommissionSuite with RTestsSuite
+  with Logging with Eventually with Matchers {
 
 
   import KubernetesSuite._
@@ -81,6 +79,7 @@ class KubernetesSuite extends SparkFunSuite
     logInfo("END DESCRIBE PODS for the application")
     val driverPodOption = kubernetesTestComponents.kubernetesClient
       .pods()
+      .inNamespace(kubernetesTestComponents.namespace)
       .withLabel("spark-app-locator", appLocator)
       .withLabel("spark-role", "driver")
       .list()
@@ -91,12 +90,14 @@ class KubernetesSuite extends SparkFunSuite
       logInfo("BEGIN driver POD log\n" +
         kubernetesTestComponents.kubernetesClient
           .pods()
+          .inNamespace(kubernetesTestComponents.namespace)
           .withName(driverPod.getMetadata.getName)
           .getLog)
       logInfo("END driver POD log")
     }
     kubernetesTestComponents.kubernetesClient
       .pods()
+      .inNamespace(kubernetesTestComponents.namespace)
       .withLabel("spark-app-locator", appLocator)
       .withLabel("spark-role", "executor")
       .list()
@@ -104,6 +105,7 @@ class KubernetesSuite extends SparkFunSuite
         val podLog = try {
           kubernetesTestComponents.kubernetesClient
             .pods()
+            .inNamespace(kubernetesTestComponents.namespace)
             .withName(execPod.getMetadata.getName)
             .getLog
         } catch {
@@ -125,7 +127,7 @@ class KubernetesSuite extends SparkFunSuite
         val tagFile = new File(path)
         require(tagFile.isFile,
           s"No file found for image tag at ${tagFile.getAbsolutePath}.")
-        Files.toString(tagFile, Charsets.UTF_8).trim
+        Files.readString(tagFile.toPath).trim
       }
       .orElse(sys.props.get(CONFIG_KEY_IMAGE_TAG))
       .getOrElse {
@@ -156,8 +158,8 @@ class KubernetesSuite extends SparkFunSuite
       // Try the spark test home
       sys.props("spark.test.home")
     )
-    val sparkDirProp = possible_spark_dirs.filter(x =>
-      new File(Paths.get(x).toFile, "bin/spark-submit").exists).headOption.getOrElse(null)
+    val sparkDirProp = possible_spark_dirs.filter(_ != null).find(x =>
+      new File(Paths.get(x).toFile, "bin/spark-submit").exists).orNull
     require(sparkDirProp != null,
       s"Spark home directory must be provided in system properties tested $possible_spark_dirs")
     sparkHomeDir = Paths.get(sparkDirProp)
@@ -192,6 +194,12 @@ class KubernetesSuite extends SparkFunSuite
       .set("spark.kubernetes.driver.label.spark-app-locator", appLocator)
       .set("spark.kubernetes.executor.label.spark-app-locator", appLocator)
       .set(NETWORK_AUTH_ENABLED.key, "true")
+    sys.props.get(CONFIG_DRIVER_REQUEST_CORES).map { cpu =>
+      sparkAppConf.set("spark.kubernetes.driver.request.cores", cpu)
+    }
+    sys.props.get(CONFIG_EXECUTOR_REQUEST_CORES).map { cpu =>
+      sparkAppConf.set("spark.kubernetes.executor.request.cores", cpu)
+    }
     if (!kubernetesTestComponents.hasUserSpecifiedNamespace) {
       kubernetesTestComponents.createNamespace()
     }
@@ -312,6 +320,7 @@ class KubernetesSuite extends SparkFunSuite
 
     val driverPod = kubernetesTestComponents.kubernetesClient
       .pods()
+      .inNamespace(kubernetesTestComponents.namespace)
       .withLabel("spark-app-locator", appLocator)
       .withLabel("spark-role", "driver")
       .list()
@@ -323,6 +332,7 @@ class KubernetesSuite extends SparkFunSuite
       expectedJVMValue.foreach { e =>
         assert(kubernetesTestComponents.kubernetesClient
           .pods()
+          .inNamespace(kubernetesTestComponents.namespace)
           .withName(driverPod.getMetadata.getName)
           .getLog
           .contains(e), "The application did not complete.")
@@ -379,6 +389,7 @@ class KubernetesSuite extends SparkFunSuite
 
     val execWatcher = kubernetesTestComponents.kubernetesClient
       .pods()
+      .inNamespace(kubernetesTestComponents.namespace)
       .withLabel("spark-app-locator", customAppLocator.getOrElse(appLocator))
       .withLabel("spark-role", "executor")
       .watch(new Watcher[Pod] {
@@ -409,6 +420,7 @@ class KubernetesSuite extends SparkFunSuite
                 Eventually.eventually(TIMEOUT, INTERVAL) {
                   assert(kubernetesTestComponents.kubernetesClient
                     .pods()
+                    .inNamespace(kubernetesTestComponents.namespace)
                     .withName(driverPodName)
                     .getLog
                     .contains("Waiting to give nodes time to finish migration, decom exec 1."),
@@ -419,8 +431,12 @@ class KubernetesSuite extends SparkFunSuite
                 // We set an intentionally long grace period to test that Spark
                 // exits once the blocks are done migrating and doesn't wait for the
                 // entire grace period if it does not need to.
-                kubernetesTestComponents.kubernetesClient.pods()
-                  .withName(name).withGracePeriod(Int.MaxValue).delete()
+                kubernetesTestComponents.kubernetesClient
+                  .pods()
+                  .inNamespace(kubernetesTestComponents.namespace)
+                  .withName(name)
+                  .withGracePeriod(Int.MaxValue)
+                  .delete()
                 logDebug(s"Triggered pod decom/delete: $name deleted")
                 // Make sure this pod is deleted
                 Eventually.eventually(TIMEOUT, INTERVAL) {
@@ -452,6 +468,7 @@ class KubernetesSuite extends SparkFunSuite
 
     val driverPod = kubernetesTestComponents.kubernetesClient
       .pods()
+      .inNamespace(kubernetesTestComponents.namespace)
       .withLabel("spark-app-locator", customAppLocator.getOrElse(appLocator))
       .withLabel("spark-role", "driver")
       .list()
@@ -459,16 +476,19 @@ class KubernetesSuite extends SparkFunSuite
       .get(0)
     driverPodChecker(driverPod)
 
-    // If we're testing decommissioning we an executors, but we should have an executor
-    // at some point.
-    Eventually.eventually(TIMEOUT, patienceInterval) {
-      execPods.values.nonEmpty should be (true)
+    if (patienceInterval.value.toSeconds.toInt > 0) {
+      // If we're testing decommissioning we an executors, but we should have an executor
+      // at some point.
+      Eventually.eventually(TIMEOUT, patienceInterval) {
+        execPods.values.nonEmpty should be (true)
+      }
     }
     execPods.values.foreach(executorPodChecker(_))
 
     val execPod: Option[Pod] = if (expectedExecutorLogOnCompletion.nonEmpty) {
       Some(kubernetesTestComponents.kubernetesClient
         .pods()
+        .inNamespace(kubernetesTestComponents.namespace)
         .withLabel("spark-app-locator", appLocator)
         .withLabel("spark-role", "executor")
         .list()
@@ -482,6 +502,7 @@ class KubernetesSuite extends SparkFunSuite
       expectedDriverLogOnCompletion.foreach { e =>
         assert(kubernetesTestComponents.kubernetesClient
           .pods()
+          .inNamespace(kubernetesTestComponents.namespace)
           .withName(driverPod.getMetadata.getName)
           .getLog
           .contains(e),
@@ -490,6 +511,7 @@ class KubernetesSuite extends SparkFunSuite
       expectedExecutorLogOnCompletion.foreach { e =>
         assert(kubernetesTestComponents.kubernetesClient
           .pods()
+          .inNamespace(kubernetesTestComponents.namespace)
           .withName(execPod.get.getMetadata.getName)
           .getLog
           .contains(e),
@@ -565,7 +587,8 @@ class KubernetesSuite extends SparkFunSuite
     assert(pod.getMetadata.getLabels.get("label2") === "label2-value")
     assert(pod.getMetadata.getAnnotations.get("annotation1") === "annotation1-value")
     assert(pod.getMetadata.getAnnotations.get("annotation2") === "annotation2-value")
-    val appId = pod.getMetadata.getAnnotations.get("yunikorn.apache.org/app-id")
+    val appIdLabel = pod.getMetadata.getLabels.get("customAppIdLabelKey")
+    val appIdAnnotation = pod.getMetadata.getAnnotations.get("customAppIdAnnotation")
 
     val container = pod.getSpec.getContainers.get(0)
     val envVars = container
@@ -577,14 +600,20 @@ class KubernetesSuite extends SparkFunSuite
       .toMap
     assert(envVars("ENV1") === "VALUE1")
     assert(envVars("ENV2") === "VALUE2")
-    assert(appId === envVars(ENV_APPLICATION_ID))
+    assert(appIdLabel === envVars(ENV_APPLICATION_ID))
+    assert(appIdAnnotation === envVars(ENV_APPLICATION_ID))
   }
 
   private def deleteDriverPod(): Unit = {
-    kubernetesTestComponents.kubernetesClient.pods().withName(driverPodName).delete()
+    kubernetesTestComponents.kubernetesClient
+      .pods()
+      .inNamespace(kubernetesTestComponents.namespace)
+      .withName(driverPodName)
+      .delete()
     Eventually.eventually(TIMEOUT, INTERVAL) {
       assert(kubernetesTestComponents.kubernetesClient
         .pods()
+        .inNamespace(kubernetesTestComponents.namespace)
         .withName(driverPodName)
         .get() == null)
     }
@@ -594,12 +623,14 @@ class KubernetesSuite extends SparkFunSuite
     kubernetesTestComponents
       .kubernetesClient
       .pods()
+      .inNamespace(kubernetesTestComponents.namespace)
       .withLabel("spark-app-locator", appLocator)
       .withLabel("spark-role", "executor")
       .delete()
     Eventually.eventually(TIMEOUT, INTERVAL) {
       assert(kubernetesTestComponents.kubernetesClient
         .pods()
+        .inNamespace(kubernetesTestComponents.namespace)
         .withLabel("spark-app-locator", appLocator)
         .withLabel("spark-role", "executor")
         .list()
@@ -611,7 +642,9 @@ class KubernetesSuite extends SparkFunSuite
 private[spark] object KubernetesSuite {
   val k8sTestTag = Tag("k8s")
   val localTestTag = Tag("local")
+  val pvTestTag = Tag("pv")
   val schedulingTestTag = Tag("schedule")
+  val decomTestTag = Tag("decom")
   val rTestTag = Tag("r")
   val MinikubeTag = Tag("minikube")
   val SPARK_PI_MAIN_CLASS: String = "org.apache.spark.examples.SparkPi"

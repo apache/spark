@@ -44,6 +44,8 @@ class AggregatingAccumulator private(
   assert(bufferSchema.size == updateExpressions.size)
   assert(mergeExpressions == null || bufferSchema.size == mergeExpressions.size)
 
+  override def excludeFromHeartbeat: Boolean = true
+
   @transient
   private var joinedRow: JoinedRow = _
 
@@ -199,11 +201,13 @@ class AggregatingAccumulator private(
 
   override def withBufferSerialized(): AggregatingAccumulator = {
     assert(!isAtDriverSide)
-    var i = 0
-    // AggregatingAccumulator runs on executor, we should serialize all TypedImperativeAggregate.
-    while (i < typedImperatives.length) {
-      typedImperatives(i).serializeAggregateBufferInPlace(buffer)
-      i += 1
+    if (buffer != null) {
+      var i = 0
+      // AggregatingAccumulator runs on executor, we should serialize all TypedImperativeAggregate.
+      while (i < typedImperatives.length) {
+        typedImperatives(i).serializeAggregateBufferInPlace(buffer)
+        i += 1
+      }
     }
     this
   }

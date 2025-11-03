@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.parquet
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.parquet.schema.{MessageType, MessageTypeParser}
 
@@ -46,7 +46,8 @@ class ParquetFieldIdSchemaSuite extends ParquetSchemaTest {
         fileSchema,
         catalystSchema,
         caseSensitive = caseSensitive,
-        useFieldId = useFieldId)
+        useFieldId = useFieldId,
+        returnNullStructIfAllFieldsMissing = false)
 
       // each fake name should be uniquely generated
       val fakeColumnNames = actual.getPaths.asScala.flatten.filter(_.startsWith(FAKE_COLUMN_NAME))

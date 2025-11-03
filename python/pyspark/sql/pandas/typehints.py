@@ -15,23 +15,32 @@
 # limitations under the License.
 #
 from inspect import Signature
-from typing import Any, Callable, Dict, Optional, Union, TYPE_CHECKING
+from typing import Any, Callable, Dict, Optional, Union, TYPE_CHECKING, get_type_hints
+from inspect import getfullargspec, signature
 
-from pyspark.sql.pandas.utils import require_minimum_pandas_version
+from pyspark.sql.pandas.utils import require_minimum_pandas_version, require_minimum_pyarrow_version
+from pyspark.errors import PySparkNotImplementedError, PySparkValueError
 
 if TYPE_CHECKING:
     from pyspark.sql.pandas._typing import (
         PandasScalarUDFType,
         PandasScalarIterUDFType,
         PandasGroupedAggUDFType,
+        ArrowScalarUDFType,
+        ArrowScalarIterUDFType,
+        ArrowGroupedAggUDFType,
+        ArrowGroupedMapIterUDFType,
+        ArrowGroupedMapUDFType,
+        ArrowGroupedMapFunction,
     )
 
 
-def infer_eval_type(
-    sig: Signature, type_hints: Dict[str, Any]
-) -> Union["PandasScalarUDFType", "PandasScalarIterUDFType", "PandasGroupedAggUDFType"]:
+def infer_pandas_eval_type(
+    sig: Signature,
+    type_hints: Dict[str, Any],
+) -> Optional[Union["PandasScalarUDFType", "PandasScalarIterUDFType", "PandasGroupedAggUDFType"]]:
     """
-    Infers the evaluation type in :class:`pyspark.rdd.PythonEvalType` from
+    Infers the evaluation type in :class:`pyspark.util.PythonEvalType` from
     :class:`inspect.Signature` instance and type hints.
     """
     from pyspark.sql.pandas.functions import PandasUDFType
@@ -50,12 +59,18 @@ def infer_eval_type(
         annotations[parameter] for parameter in sig.parameters if parameter in annotations
     ]
     if len(parameters_sig) != len(sig.parameters):
-        raise ValueError("Type hints for all parameters should be specified; however, got %s" % sig)
+        raise PySparkValueError(
+            errorClass="TYPE_HINT_SHOULD_BE_SPECIFIED",
+            messageParameters={"target": "all parameters", "sig": str(sig)},
+        )
 
     # Check if the return has a type hint
     return_annotation = type_hints.get("return", sig.return_annotation)
     if sig.empty is return_annotation:
-        raise ValueError("Type hint for the return type should be specified; however, got %s" % sig)
+        raise PySparkValueError(
+            errorClass="TYPE_HINT_SHOULD_BE_SPECIFIED",
+            messageParameters={"target": "the return type", "sig": str(sig)},
+        )
 
     # Series, Frame or Union[DataFrame, Series], ... -> Series or Frame
     is_series_or_frame = all(
@@ -66,6 +81,8 @@ def infer_eval_type(
         )
         for a in parameters_sig
     ) and (return_annotation == pd.Series or return_annotation == pd.DataFrame)
+    if is_series_or_frame:
+        return PandasUDFType.SCALAR
 
     # Iterator[Tuple[Series, Frame or Union[DataFrame, Series], ...] -> Iterator[Series or Frame]
     is_iterator_tuple_series_or_frame = (
@@ -88,6 +105,8 @@ def infer_eval_type(
             return_annotation, parameter_check_func=lambda a: a == pd.DataFrame or a == pd.Series
         )
     )
+    if is_iterator_tuple_series_or_frame:
+        return PandasUDFType.SCALAR_ITER
 
     # Iterator[Series, Frame or Union[DataFrame, Series]] -> Iterator[Series or Frame]
     is_iterator_series_or_frame = (
@@ -106,6 +125,8 @@ def infer_eval_type(
             return_annotation, parameter_check_func=lambda a: a == pd.DataFrame or a == pd.Series
         )
     )
+    if is_iterator_series_or_frame:
+        return PandasUDFType.SCALAR_ITER
 
     # Series, Frame or Union[DataFrame, Series], ... -> Any
     is_series_or_frame_agg = all(
@@ -124,15 +145,253 @@ def infer_eval_type(
         and not check_iterator_annotation(return_annotation)
         and not check_tuple_annotation(return_annotation)
     )
-
-    if is_series_or_frame:
-        return PandasUDFType.SCALAR
-    elif is_iterator_tuple_series_or_frame or is_iterator_series_or_frame:
-        return PandasUDFType.SCALAR_ITER
-    elif is_series_or_frame_agg:
+    if is_series_or_frame_agg:
         return PandasUDFType.GROUPED_AGG
+
+    return None
+
+
+def infer_arrow_eval_type(
+    sig: Signature, type_hints: Dict[str, Any]
+) -> Optional[Union["ArrowScalarUDFType", "ArrowScalarIterUDFType", "ArrowGroupedAggUDFType"]]:
+    """
+    Infers the evaluation type in :class:`pyspark.util.PythonEvalType` from
+    :class:`inspect.Signature` instance and type hints.
+    """
+    from pyspark.sql.pandas.functions import ArrowUDFType
+
+    require_minimum_pyarrow_version()
+
+    import pyarrow as pa
+
+    annotations = {}
+    for param in sig.parameters.values():
+        if param.annotation is not param.empty:
+            annotations[param.name] = type_hints.get(param.name, param.annotation)
+
+    # Check if all arguments have type hints
+    parameters_sig = [
+        annotations[parameter] for parameter in sig.parameters if parameter in annotations
+    ]
+    if len(parameters_sig) != len(sig.parameters):
+        raise PySparkValueError(
+            errorClass="TYPE_HINT_SHOULD_BE_SPECIFIED",
+            messageParameters={"target": "all parameters", "sig": str(sig)},
+        )
+
+    # Check if the return has a type hint
+    return_annotation = type_hints.get("return", sig.return_annotation)
+    if sig.empty is return_annotation:
+        raise PySparkValueError(
+            errorClass="TYPE_HINT_SHOULD_BE_SPECIFIED",
+            messageParameters={"target": "the return type", "sig": str(sig)},
+        )
+
+    # pa.Array, ... -> pa.Array
+    is_arrow_array = all(a == pa.Array for a in parameters_sig) and (return_annotation == pa.Array)
+    if is_arrow_array:
+        return ArrowUDFType.SCALAR
+
+    # Iterator[Tuple[pa.Array, ...] -> Iterator[pa.Array]
+    is_iterator_tuple_array = (
+        len(parameters_sig) == 1
+        and check_iterator_annotation(  # Iterator
+            parameters_sig[0],
+            parameter_check_func=lambda a: check_tuple_annotation(  # Tuple
+                a,
+                parameter_check_func=lambda ta: (ta == Ellipsis or ta == pa.Array),
+            ),
+        )
+        and check_iterator_annotation(
+            return_annotation, parameter_check_func=lambda a: a == pa.Array
+        )
+    )
+    if is_iterator_tuple_array:
+        return ArrowUDFType.SCALAR_ITER
+
+    # Iterator[pa.Array] -> Iterator[pa.Array]
+    is_iterator_array = (
+        len(parameters_sig) == 1
+        and check_iterator_annotation(
+            parameters_sig[0],
+            parameter_check_func=lambda a: a == pa.Array,
+        )
+        and check_iterator_annotation(
+            return_annotation, parameter_check_func=lambda a: a == pa.Array
+        )
+    )
+    if is_iterator_array:
+        return ArrowUDFType.SCALAR_ITER
+
+    # pa.Array, ... -> Any
+    is_array_agg = all(a == pa.Array for a in parameters_sig) and (
+        return_annotation != pa.Array
+        and not check_iterator_annotation(return_annotation)
+        and not check_tuple_annotation(return_annotation)
+    )
+    if is_array_agg:
+        return ArrowUDFType.GROUPED_AGG
+
+    return None
+
+
+def infer_eval_type(
+    sig: Signature,
+    type_hints: Dict[str, Any],
+    kind: str = "all",
+) -> Union[
+    "PandasScalarUDFType",
+    "PandasScalarIterUDFType",
+    "PandasGroupedAggUDFType",
+    "ArrowScalarUDFType",
+    "ArrowScalarIterUDFType",
+    "ArrowGroupedAggUDFType",
+]:
+    """
+    Infers the evaluation type in :class:`pyspark.util.PythonEvalType` from
+    :class:`inspect.Signature` instance and type hints.
+    """
+    assert kind in ["pandas", "arrow", "all"], "kind should be either 'pandas', 'arrow' or 'all'"
+
+    eval_type: Optional[
+        Union[
+            "PandasScalarUDFType",
+            "PandasScalarIterUDFType",
+            "PandasGroupedAggUDFType",
+            "ArrowScalarUDFType",
+            "ArrowScalarIterUDFType",
+            "ArrowGroupedAggUDFType",
+        ]
+    ] = None
+    if kind == "pandas":
+        eval_type = infer_pandas_eval_type(sig, type_hints)
+    elif kind == "arrow":
+        eval_type = infer_arrow_eval_type(sig, type_hints)
     else:
-        raise NotImplementedError("Unsupported signature: %s." % sig)
+        eval_type = infer_pandas_eval_type(sig, type_hints) or infer_arrow_eval_type(
+            sig, type_hints
+        )
+
+    if eval_type is None:
+        raise PySparkNotImplementedError(
+            errorClass="UNSUPPORTED_SIGNATURE",
+            messageParameters={"signature": str(sig)},
+        )
+
+    return eval_type
+
+
+# infer the eval type for @udf
+def infer_eval_type_for_udf(  # type: ignore[no-untyped-def]
+    f,
+) -> Optional[
+    Union[
+        "PandasScalarUDFType",
+        "PandasScalarIterUDFType",
+        "PandasGroupedAggUDFType",
+        "ArrowScalarUDFType",
+        "ArrowScalarIterUDFType",
+        "ArrowGroupedAggUDFType",
+    ]
+]:
+    argspec = getfullargspec(f)
+    # different from inference of @pandas_udf/@arrow_udf, 0-arg is not allowed here
+    if len(argspec.args) > 0 and len(argspec.annotations) > 0:
+        try:
+            type_hints = get_type_hints(f)
+        except NameError:
+            type_hints = {}
+        return infer_eval_type(signature(f), type_hints)
+    else:
+        return None
+
+
+def infer_group_arrow_eval_type(
+    sig: Signature,
+    type_hints: Dict[str, Any],
+) -> Optional[Union["ArrowGroupedMapUDFType", "ArrowGroupedMapIterUDFType"]]:
+    from pyspark.sql.pandas.functions import PythonEvalType
+
+    require_minimum_pyarrow_version()
+
+    import pyarrow as pa
+
+    annotations = {}
+    for param in sig.parameters.values():
+        if param.annotation is not param.empty:
+            annotations[param.name] = type_hints.get(param.name, param.annotation)
+
+    # Check if all arguments have type hints
+    parameters_sig = [
+        annotations[parameter] for parameter in sig.parameters if parameter in annotations
+    ]
+    if len(parameters_sig) != len(sig.parameters):
+        raise PySparkValueError(
+            errorClass="TYPE_HINT_SHOULD_BE_SPECIFIED",
+            messageParameters={"target": "all parameters", "sig": str(sig)},
+        )
+
+    # Check if the return has a type hint
+    return_annotation = type_hints.get("return", sig.return_annotation)
+    if sig.empty is return_annotation:
+        raise PySparkValueError(
+            errorClass="TYPE_HINT_SHOULD_BE_SPECIFIED",
+            messageParameters={"target": "the return type", "sig": str(sig)},
+        )
+
+    # Iterator[pa.RecordBatch] -> Iterator[pa.RecordBatch]
+    is_iterator_batch = (
+        len(parameters_sig) == 1
+        and check_iterator_annotation(  # Iterator
+            parameters_sig[0],
+            parameter_check_func=lambda t: t == pa.RecordBatch,
+        )
+        and check_iterator_annotation(
+            return_annotation, parameter_check_func=lambda t: t == pa.RecordBatch
+        )
+    )
+    # Tuple[pa.Scalar, ...], Iterator[pa.RecordBatch] -> Iterator[pa.RecordBatch]
+    is_iterator_batch_with_keys = (
+        len(parameters_sig) == 2
+        and check_iterator_annotation(  # Iterator
+            parameters_sig[1],
+            parameter_check_func=lambda t: t == pa.RecordBatch,
+        )
+        and check_iterator_annotation(
+            return_annotation, parameter_check_func=lambda t: t == pa.RecordBatch
+        )
+    )
+
+    if is_iterator_batch or is_iterator_batch_with_keys:
+        return PythonEvalType.SQL_GROUPED_MAP_ARROW_ITER_UDF
+
+    # pa.Table -> pa.Table
+    is_table = (
+        len(parameters_sig) == 1 and parameters_sig[0] == pa.Table and return_annotation == pa.Table
+    )
+    # Tuple[pa.Scalar, ...], pa.Table -> pa.Table
+    is_table_with_keys = (
+        len(parameters_sig) == 2 and parameters_sig[1] == pa.Table and return_annotation == pa.Table
+    )
+    if is_table or is_table_with_keys:
+        return PythonEvalType.SQL_GROUPED_MAP_ARROW_UDF
+
+    return None
+
+
+def infer_group_arrow_eval_type_from_func(
+    f: "ArrowGroupedMapFunction",
+) -> Optional[Union["ArrowGroupedMapUDFType", "ArrowGroupedMapIterUDFType"]]:
+    argspec = getfullargspec(f)
+    if len(argspec.annotations) > 0:
+        try:
+            type_hints = get_type_hints(f)
+        except NameError:
+            type_hints = {}
+
+        return infer_group_arrow_eval_type(signature(f), type_hints)
+    else:
+        return None
 
 
 def check_tuple_annotation(
@@ -141,7 +400,7 @@ def check_tuple_annotation(
     # Tuple has _name but other types have __name__
     # Check if the name is Tuple first. After that, check the generic types.
     name = getattr(annotation, "_name", getattr(annotation, "__name__", None))
-    return name == "Tuple" and (
+    return name in ("Tuple", "tuple") and (
         parameter_check_func is None or all(map(parameter_check_func, annotation.__args__))
     )
 
@@ -161,7 +420,7 @@ def check_union_annotation(
     import typing
 
     # Note that we cannot rely on '__origin__' in other type hints as it has changed from version
-    # to version. For example, it's abc.Iterator in Python 3.7 but typing.Iterator in Python 3.6.
+    # to version.
     origin = getattr(annotation, "__origin__", None)
     return origin == typing.Union and (
         parameter_check_func is None or all(map(parameter_check_func, annotation.__args__))

@@ -60,7 +60,7 @@ private[ml] trait LSHParams extends HasInputCol with HasOutputCol {
 /**
  * Model produced by [[LSH]].
  */
-private[ml] abstract class LSHModel[T <: LSHModel[T]]
+private[spark] abstract class LSHModel[T <: LSHModel[T]]
   extends Model[T] with LSHParams with MLWritable {
   self: T =>
 
@@ -142,13 +142,13 @@ private[ml] abstract class LSHModel[T <: LSHModel[T]]
           var s = new QuantileSummaries(
             QuantileSummaries.defaultCompressThreshold, relativeError)
           while (iter.hasNext) {
-            val row = iter.next
+            val row = iter.next()
             if (!row.isNullAt(0)) {
               val v = row.getDouble(0)
               if (!v.isNaN) s = s.insert(v)
             }
           }
-          Iterator.single(s.compress)
+          Iterator.single(s.compress())
         } else Iterator.empty
       }.treeReduce((s1, s2) => s1.merge(s2))
       val count = summary.count
@@ -346,7 +346,7 @@ private[ml] abstract class LSH[T <: LSHModel[T]]
 
   override def fit(dataset: Dataset[_]): T = {
     transformSchema(dataset.schema, logging = true)
-    val inputDim = MetadataUtils.getNumFeatures(dataset, $(inputCol))
+    val inputDim = DatasetUtils.getNumFeatures(dataset, $(inputCol))
     val model = createRawLSHModel(inputDim).setParent(this)
     copyValues(model)
   }

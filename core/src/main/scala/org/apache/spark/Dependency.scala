@@ -25,9 +25,11 @@ import org.roaringbitmap.RoaringBitmap
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.shuffle.{ShuffleHandle, ShuffleWriteProcessor}
+import org.apache.spark.shuffle.checksum.RowBasedChecksum
 import org.apache.spark.storage.BlockManagerId
 import org.apache.spark.util.Utils
 
@@ -58,6 +60,9 @@ abstract class NarrowDependency[T](_rdd: RDD[T]) extends Dependency[T] {
   override def rdd: RDD[T] = _rdd
 }
 
+object ShuffleDependency {
+  private[spark] val EMPTY_ROW_BASED_CHECKSUMS: Array[RowBasedChecksum] = Array.empty
+}
 
 /**
  * :: DeveloperApi ::
@@ -73,6 +78,7 @@ abstract class NarrowDependency[T](_rdd: RDD[T]) extends Dependency[T] {
  * @param aggregator map/reduce-side aggregator for RDD's shuffle
  * @param mapSideCombine whether to perform partial aggregation (also known as map-side combine)
  * @param shuffleWriterProcessor the processor to control the write behavior in ShuffleMapTask
+ * @param rowBasedChecksums the row-based checksums for each shuffle partition
  */
 @DeveloperApi
 class ShuffleDependency[K: ClassTag, V: ClassTag, C: ClassTag](
@@ -82,8 +88,30 @@ class ShuffleDependency[K: ClassTag, V: ClassTag, C: ClassTag](
     val keyOrdering: Option[Ordering[K]] = None,
     val aggregator: Option[Aggregator[K, V, C]] = None,
     val mapSideCombine: Boolean = false,
-    val shuffleWriterProcessor: ShuffleWriteProcessor = new ShuffleWriteProcessor)
+    val shuffleWriterProcessor: ShuffleWriteProcessor = new ShuffleWriteProcessor,
+    val rowBasedChecksums: Array[RowBasedChecksum] = ShuffleDependency.EMPTY_ROW_BASED_CHECKSUMS,
+    val checksumMismatchFullRetryEnabled: Boolean = false)
   extends Dependency[Product2[K, V]] with Logging {
+
+  def this(
+      rdd: RDD[_ <: Product2[K, V]],
+      partitioner: Partitioner,
+      serializer: Serializer,
+      keyOrdering: Option[Ordering[K]],
+      aggregator: Option[Aggregator[K, V, C]],
+      mapSideCombine: Boolean,
+      shuffleWriterProcessor: ShuffleWriteProcessor) = {
+    this(
+      rdd,
+      partitioner,
+      serializer,
+      keyOrdering,
+      aggregator,
+      mapSideCombine,
+      shuffleWriterProcessor,
+      ShuffleDependency.EMPTY_ROW_BASED_CHECKSUMS
+    )
+  }
 
   if (mapSideCombine) {
     require(aggregator.isDefined, "Map-side combine without Aggregator specified!")
@@ -172,7 +200,7 @@ class ShuffleDependency[K: ClassTag, V: ClassTag, C: ClassTag](
   }
 
   private def canShuffleMergeBeEnabled(): Boolean = {
-    val isPushShuffleEnabled = Utils.isPushBasedShuffleEnabled(rdd.sparkContext.getConf,
+    val isPushShuffleEnabled = Utils.isPushBasedShuffleEnabled(rdd.sparkContext.conf,
       // invoked at driver
       isDriver = true)
     if (isPushShuffleEnabled && rdd.isBarrier()) {
@@ -204,6 +232,21 @@ class ShuffleDependency[K: ClassTag, V: ClassTag, C: ClassTag](
 
   private[spark] def setFinalizeTask(task: ScheduledFuture[_]): Unit = {
     finalizeTask = Option(task)
+  }
+
+  // Set the threshold to 1 billion which leads to an 128MB bitmap and
+  // the actual size of `HighlyCompressedMapStatus` can be much larger than 128MB.
+  // This may crash the driver with an OOM error.
+  if (numPartitions.toLong * partitioner.numPartitions.toLong > (1L << 30)) {
+    logWarning(
+      log"The number of shuffle blocks " +
+        log"(${MDC(NUM_PARTITIONS, numPartitions.toLong * partitioner.numPartitions.toLong)})" +
+        log" for shuffleId ${MDC(SHUFFLE_ID, shuffleId)} " +
+        log"for ${MDC(RDD_DESCRIPTION, _rdd)} " +
+        log"with ${MDC(NUM_PARTITIONS2, numPartitions)} partitions" +
+        log" is possibly too large, which could cause the driver to crash with an out-of-memory" +
+        log" error. Consider decreasing the number of partitions in this shuffle stage."
+    )
   }
 
   _rdd.sparkContext.cleaner.foreach(_.registerShuffleForCleanup(this))

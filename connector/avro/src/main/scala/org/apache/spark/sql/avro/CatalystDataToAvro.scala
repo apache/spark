@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.expressions.{Expression, UnaryExpression}
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.types.{BinaryType, DataType}
 
-private[avro] case class CatalystDataToAvro(
+case class CatalystDataToAvro(
     child: Expression,
     jsonFormatSchema: Option[String]) extends UnaryExpression {
 
@@ -35,7 +35,7 @@ private[avro] case class CatalystDataToAvro(
 
   @transient private lazy val avroType =
     jsonFormatSchema
-      .map(new Schema.Parser().parse)
+      .map(new Schema.Parser().setValidateDefaults(false).parse)
       .getOrElse(SchemaConverters.toAvroType(child.dataType, child.nullable))
 
   @transient private lazy val serializer =

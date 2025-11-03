@@ -26,14 +26,15 @@ import java.io.PrintWriter
 import java.util.StringTokenizer
 import java.util.concurrent.atomic.AtomicReference
 
-import scala.collection.JavaConverters._
 import scala.collection.Map
 import scala.collection.mutable.ArrayBuffer
 import scala.io.Source
+import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 
 import org.apache.spark.{Partition, TaskContext}
 import org.apache.spark.errors.SparkCoreErrors
+import org.apache.spark.internal.LogKeys.{COMMAND, ERROR, PATH}
 import org.apache.spark.util.Utils
 
 
@@ -88,7 +89,7 @@ private[spark] class PipedRDD[T: ClassTag](
       val currentDir = new File(".")
       logDebug("currentDir = " + currentDir.getAbsolutePath())
       val taskDirFile = new File(taskDirectory)
-      taskDirFile.mkdirs()
+      Utils.createDirectory(taskDirFile)
 
       try {
         val tasksDirFilter = new NotEqualsFileNameFilter("tasks")
@@ -105,8 +106,9 @@ private[spark] class PipedRDD[T: ClassTag](
         pb.directory(taskDirFile)
         workInTaskDirectory = true
       } catch {
-        case e: Exception => logError("Unable to setup task working directory: " + e.getMessage +
-          " (" + taskDirectory + ")", e)
+        case e: Exception =>
+          logError(log"Unable to setup task working directory: ${MDC(ERROR, e.getMessage)}" +
+          log" (${MDC(PATH, taskDirectory)})", e)
       }
     }
 
@@ -118,7 +120,7 @@ private[spark] class PipedRDD[T: ClassTag](
       override def run(): Unit = {
         val err = proc.getErrorStream
         try {
-          for (line <- Source.fromInputStream(err)(encoding).getLines) {
+          for (line <- Source.fromInputStream(err)(encoding).getLines()) {
             // scalastyle:off println
             System.err.println(line)
             // scalastyle:on println
@@ -182,16 +184,16 @@ private[spark] class PipedRDD[T: ClassTag](
     }
 
     // Return an iterator that read lines from the process's stdout
-    val lines = Source.fromInputStream(proc.getInputStream)(encoding).getLines
+    val lines = Source.fromInputStream(proc.getInputStream)(encoding).getLines()
     new Iterator[String] {
       def next(): String = {
-        if (!hasNext()) {
+        if (!hasNext) {
           throw SparkCoreErrors.noSuchElementError()
         }
         lines.next()
       }
 
-      def hasNext(): Boolean = {
+      def hasNext: Boolean = {
         val result = if (lines.hasNext) {
           true
         } else {
@@ -221,8 +223,8 @@ private[spark] class PipedRDD[T: ClassTag](
         val t = childThreadException.get()
         if (t != null) {
           val commandRan = command.mkString(" ")
-          logError(s"Caught exception while running pipe() operator. Command ran: $commandRan. " +
-            s"Exception: ${t.getMessage}")
+          logError(log"Caught exception while running pipe() operator. Command ran: " +
+            log"${MDC(COMMAND, commandRan)}. Exception: ${MDC(ERROR, t.getMessage)}")
           proc.destroy()
           cleanup()
           throw t
@@ -237,7 +239,7 @@ private object PipedRDD {
   def tokenize(command: String): Seq[String] = {
     val buf = new ArrayBuffer[String]
     val tok = new StringTokenizer(command)
-    while(tok.hasMoreElements) {
+    while (tok.hasMoreElements) {
       buf += tok.nextToken()
     }
     buf.toSeq

@@ -403,7 +403,7 @@ class BasicOperationTests(PySparkStreamingTestCase):
 
         self.fail("a failed func should throw an error")
 
-    def test_failed_func_with_reseting_failure(self):
+    def test_failed_func_with_resetting_failure(self):
         input = [self.sc.parallelize([d], 1) for d in range(4)]
         input_stream = self.ssc.queueStream(input)
 
@@ -435,7 +435,6 @@ class BasicOperationTests(PySparkStreamingTestCase):
     "The tests fail in PyPy3 implementation for an unknown reason.",
 )
 class WindowFunctionTests(PySparkStreamingTestCase):
-
     timeout = 15
 
     def test_window(self):
@@ -528,7 +527,6 @@ class WindowFunctionTests(PySparkStreamingTestCase):
     "The tests fail in PyPy3 implementation for an unknown reason.",
 )
 class CheckpointTests(unittest.TestCase):
-
     setupCalled = False
 
     @staticmethod
@@ -698,7 +696,7 @@ if __name__ == "__main__":
     from pyspark.streaming.tests.test_dstream import *  # noqa: F401
 
     try:
-        import xmlrunner  # type: ignore[import]
+        import xmlrunner
 
         testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:

@@ -23,13 +23,14 @@ import test.org.apache.spark.sql.connector.catalog.functions.JavaLongAdd.{JavaLo
 import org.apache.spark.benchmark.Benchmark
 import org.apache.spark.sql.Column
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.dsl.expressions._
-import org.apache.spark.sql.catalyst.expressions.{BinaryArithmetic, Expression}
+import org.apache.spark.sql.catalyst.expressions.{BinaryArithmetic, EvalMode, Expression, NumericEvalContext}
 import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode._
 import org.apache.spark.sql.catalyst.util.TypeUtils
+import org.apache.spark.sql.classic.ClassicConversions._
 import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryCatalog}
 import org.apache.spark.sql.connector.catalog.functions.{BoundFunction, ScalarFunction, UnboundFunction}
 import org.apache.spark.sql.execution.benchmark.SqlBasedBenchmark
+import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{AbstractDataType, DataType, LongType, NumericType, StructType}
 
@@ -40,8 +41,8 @@ import org.apache.spark.sql.types.{AbstractDataType, DataType, LongType, Numeric
  *   1. without sbt:
  *      bin/spark-submit --class <this class>
  *        --jars <spark core test jar>,<spark catalyst test jar> <sql core test jar>
- *   2. build/sbt "sql/test:runMain <this class>"
- *   3. generate result: SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "sql/test:runMain <this class>"
+ *   2. build/sbt "sql/Test/runMain <this class>"
+ *   3. generate result: SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "sql/Test/runMain <this class>"
  *      Results will be written to "benchmarks/V2FunctionBenchmark-results.txt".
  * }}}
  * '''NOTE''': to update the result of this benchmark, please use Github benchmark action:
@@ -64,6 +65,8 @@ object V2FunctionBenchmark extends SqlBasedBenchmark {
       N: Long,
       codegenEnabled: Boolean,
       resultNullable: Boolean): Unit = {
+    val classicSession = castToImpl(spark)
+    import classicSession.toRichColumn
     withSQLConf(s"spark.sql.catalog.$catalogName" -> classOf[InMemoryCatalog].getName) {
       createFunction("java_long_add_default",
         new JavaLongAdd(new JavaLongAddDefault(resultNullable)))
@@ -81,7 +84,9 @@ object V2FunctionBenchmark extends SqlBasedBenchmark {
             s"codegen = $codegenEnabled"
         val benchmark = new Benchmark(name, N, output = output)
         benchmark.addCase(s"native_long_add", numIters = 3) { _ =>
-          spark.range(N).select(Column(NativeAdd($"id".expr, $"id".expr, resultNullable))).noop()
+          spark.range(N)
+            .select(Column(NativeAdd(col("id").expr, col("id").expr, resultNullable)))
+            .noop()
         }
         Seq("java_long_add_default", "java_long_add_magic", "java_long_add_static_magic",
             "scala_long_add_default", "scala_long_add_magic").foreach { functionName =>
@@ -104,7 +109,7 @@ object V2FunctionBenchmark extends SqlBasedBenchmark {
       left: Expression,
       right: Expression,
       override val nullable: Boolean) extends BinaryArithmetic {
-    override protected val failOnError: Boolean = false
+    override val evalContext: NumericEvalContext = NumericEvalContext(EvalMode.LEGACY)
     override def inputType: AbstractDataType = NumericType
     override def symbol: String = "+"
 

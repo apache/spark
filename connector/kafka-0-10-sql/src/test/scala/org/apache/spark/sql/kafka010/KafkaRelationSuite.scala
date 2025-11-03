@@ -21,6 +21,8 @@ import java.nio.charset.StandardCharsets.UTF_8
 import java.util.Locale
 import java.util.concurrent.atomic.AtomicInteger
 
+import scala.concurrent.duration.DurationInt
+
 import org.apache.kafka.clients.producer.ProducerRecord
 import org.apache.kafka.common.TopicPartition
 
@@ -97,11 +99,11 @@ abstract class KafkaRelationSuiteBase extends QueryTest with SharedSparkSession 
     // Specify explicit earliest and latest offset values
     val df = createDF(topic,
       withOptions = Map("startingOffsets" -> "earliest", "endingOffsets" -> "latest"))
-    checkAnswer(df, (0 to 20).map(_.toString).toDF)
+    checkAnswer(df, (0 to 20).map(_.toString).toDF())
 
     // "latest" should late bind to the current (latest) offset in the df
     testUtils.sendMessages(topic, (21 to 29).map(_.toString).toArray, Some(2))
-    checkAnswer(df, (0 to 29).map(_.toString).toDF)
+    checkAnswer(df, (0 to 29).map(_.toString).toDF())
   }
 
   test("default starting and ending offsets") {
@@ -114,7 +116,7 @@ abstract class KafkaRelationSuiteBase extends QueryTest with SharedSparkSession 
     // Implicit offset values, should default to earliest and latest
     val df = createDF(topic)
     // Test that we default to "earliest" and "latest"
-    checkAnswer(df, (0 to 20).map(_.toString).toDF)
+    checkAnswer(df, (0 to 20).map(_.toString).toDF())
   }
 
   test("explicit offsets") {
@@ -140,15 +142,15 @@ abstract class KafkaRelationSuiteBase extends QueryTest with SharedSparkSession 
     val endingOffsets = JsonUtils.partitionOffsets(endPartitionOffsets)
     val df = createDF(topic,
         withOptions = Map("startingOffsets" -> startingOffsets, "endingOffsets" -> endingOffsets))
-    checkAnswer(df, (0 to 20).map(_.toString).toDF)
+    checkAnswer(df, (0 to 20).map(_.toString).toDF())
 
     // static offset partition 2, nothing should change
     testUtils.sendMessages(topic, (31 to 39).map(_.toString).toArray, Some(2))
-    checkAnswer(df, (0 to 20).map(_.toString).toDF)
+    checkAnswer(df, (0 to 20).map(_.toString).toDF())
 
     // latest offset partition 1, should change
     testUtils.sendMessages(topic, (21 to 30).map(_.toString).toArray, Some(1))
-    checkAnswer(df, (0 to 30).map(_.toString).toDF)
+    checkAnswer(df, (0 to 30).map(_.toString).toDF())
   }
 
   test("default starting and ending offsets with headers") {
@@ -171,7 +173,7 @@ abstract class KafkaRelationSuiteBase extends QueryTest with SharedSparkSession 
     // Test that we default to "earliest" and "latest"
     checkAnswer(df, Seq(("1", null),
       ("2", Seq(("a", "b".getBytes(UTF_8)), ("c", "d".getBytes(UTF_8)))),
-      ("3", Seq(("e", "f".getBytes(UTF_8)), ("e", "g".getBytes(UTF_8))))).toDF)
+      ("3", Seq(("e", "f".getBytes(UTF_8)), ("e", "g".getBytes(UTF_8))))).toDF())
   }
 
   test("timestamp provided for starting and ending") {
@@ -393,7 +395,7 @@ abstract class KafkaRelationSuiteBase extends QueryTest with SharedSparkSession 
       .option("subscribe", topic)
 
     val df2 = optionFn(df).load().selectExpr("CAST(value AS STRING)")
-    checkAnswer(df2, expectation.map(_.toString).toDF)
+    checkAnswer(df2, expectation.map(_.toString).toDF())
   }
 
   test("reuse same dataframe in query") {
@@ -405,7 +407,7 @@ abstract class KafkaRelationSuiteBase extends QueryTest with SharedSparkSession 
     // Specify explicit earliest and latest offset values
     val df = createDF(topic,
       withOptions = Map("startingOffsets" -> "earliest", "endingOffsets" -> "latest"))
-    checkAnswer(df.union(df), ((0 to 10) ++ (0 to 10)).map(_.toString).toDF)
+    checkAnswer(df.union(df), ((0 to 10) ++ (0 to 10)).map(_.toString).toDF())
   }
 
   test("test late binding start offsets") {
@@ -432,13 +434,13 @@ abstract class KafkaRelationSuiteBase extends QueryTest with SharedSparkSession 
       val df = createDF(topic,
         withOptions = Map("startingOffsets" -> "earliest", "endingOffsets" -> "latest"),
         Some(kafkaUtils.brokerAddress))
-      checkAnswer(df, (0 to 9).map(_.toString).toDF)
+      checkAnswer(df, (0 to 9).map(_.toString).toDF())
       // Blow away current set of messages.
       kafkaUtils.cleanupLogs()
       // Add some more data, but do not call cleanup
       kafkaUtils.sendMessages(topic, (10 to 19).map(_.toString).toArray, Some(0))
       // Ensure that we late bind to the new starting position
-      checkAnswer(df, (10 to 19).map(_.toString).toDF)
+      checkAnswer(df, (10 to 19).map(_.toString).toDF())
     } finally {
       if (kafkaUtils != null) {
         kafkaUtils.teardown()
@@ -521,7 +523,7 @@ abstract class KafkaRelationSuiteBase extends QueryTest with SharedSparkSession 
 
       // Should read all committed messages
       testUtils.waitUntilOffsetAppears(new TopicPartition(topic, 0), 6)
-      checkAnswer(df, (1 to 5).map(_.toString).toDF)
+      checkAnswer(df, (1 to 5).map(_.toString).toDF())
 
       producer.beginTransaction()
       (6 to 10).foreach { i =>
@@ -531,7 +533,7 @@ abstract class KafkaRelationSuiteBase extends QueryTest with SharedSparkSession 
 
       // Should not read aborted messages
       testUtils.waitUntilOffsetAppears(new TopicPartition(topic, 0), 12)
-      checkAnswer(df, (1 to 5).map(_.toString).toDF)
+      checkAnswer(df, (1 to 5).map(_.toString).toDF())
 
       producer.beginTransaction()
       (11 to 15).foreach { i =>
@@ -541,7 +543,7 @@ abstract class KafkaRelationSuiteBase extends QueryTest with SharedSparkSession 
 
       // Should skip aborted messages and read new committed ones.
       testUtils.waitUntilOffsetAppears(new TopicPartition(topic, 0), 18)
-      checkAnswer(df, ((1 to 5) ++ (11 to 15)).map(_.toString).toDF)
+      checkAnswer(df, ((1 to 5) ++ (11 to 15)).map(_.toString).toDF())
     }
   }
 
@@ -565,13 +567,13 @@ abstract class KafkaRelationSuiteBase extends QueryTest with SharedSparkSession 
 
       // "read_uncommitted" should see all messages including uncommitted ones
       testUtils.waitUntilOffsetAppears(new TopicPartition(topic, 0), 5)
-      checkAnswer(df, (1 to 5).map(_.toString).toDF)
+      checkAnswer(df, (1 to 5).map(_.toString).toDF())
 
       producer.commitTransaction()
 
       // Should read all committed messages
       testUtils.waitUntilOffsetAppears(new TopicPartition(topic, 0), 6)
-      checkAnswer(df, (1 to 5).map(_.toString).toDF)
+      checkAnswer(df, (1 to 5).map(_.toString).toDF())
 
       producer.beginTransaction()
       (6 to 10).foreach { i =>
@@ -581,7 +583,7 @@ abstract class KafkaRelationSuiteBase extends QueryTest with SharedSparkSession 
 
       // "read_uncommitted" should see all messages including uncommitted or aborted ones
       testUtils.waitUntilOffsetAppears(new TopicPartition(topic, 0), 12)
-      checkAnswer(df, (1 to 10).map(_.toString).toDF)
+      checkAnswer(df, (1 to 10).map(_.toString).toDF())
 
       producer.beginTransaction()
       (11 to 15).foreach { i =>
@@ -591,7 +593,7 @@ abstract class KafkaRelationSuiteBase extends QueryTest with SharedSparkSession 
 
       // Should read all messages
       testUtils.waitUntilOffsetAppears(new TopicPartition(topic, 0), 18)
-      checkAnswer(df, (1 to 15).map(_.toString).toDF)
+      checkAnswer(df, (1 to 15).map(_.toString).toDF())
     }
   }
 
@@ -616,6 +618,95 @@ abstract class KafkaRelationSuiteBase extends QueryTest with SharedSparkSession 
     assert(df.rdd.collectPartitions().flatMap(_.map(_.getString(0))).toSet
       === (0 to 30).map(_.toString).toSet)
   }
+
+  test("topic-partition for start offset and end offset must match") {
+    val e = intercept[IllegalArgumentException] {
+      spark.read
+        .format("kafka")
+        .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+        .option("subscribe", "test")
+        .option(
+          "startingOffsets",
+          """
+            |{"test": {"0": 1, "1": 1, "2": 1}}
+            |""".stripMargin
+        )
+        .option(
+          "endingOffsets",
+          """
+            |{"test": {"0": 0, "1": 0}}
+            |""".stripMargin
+        )
+        .load()
+        .collect()
+    }
+
+    assert(e.getMessage.contains(
+      "The specified start offset and end offset should have the same topic-partitions.")
+    )
+  }
+
+  test("unresolved start offset greater than end offset") {
+    val e = intercept[IllegalArgumentException] {
+      spark.read
+        .format("kafka")
+        .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+        .option("subscribe", "test")
+        .option(
+          "startingOffsets",
+          """
+            |{"test": {"0": 1, "1": 1, "2": 1}}
+            |""".stripMargin
+        )
+        .option(
+          "endingOffsets",
+          """
+            |{"test": {"0": 0, "1": 0, "2": 0}}
+            |""".stripMargin
+        )
+        .load()
+        .collect()
+    }
+
+    assert(e.getMessage.contains(
+      "The specified start offset 1 is greater than the end offset 0 for"))
+  }
+
+  test("resolved start offset greater than end offset (without latest)") {
+    val topic = newTopic()
+    testUtils.createTopic(topic, partitions = 3)
+    val timestamp1 =
+      testUtils.sendMessages(topic, Seq("0", "0").toArray, Some(0))(1)._2.timestamp()
+    val timestamp2 =
+      testUtils.sendMessages(topic, Seq("0", "0").toArray, Some(1))(1)._2.timestamp()
+    val timestamp3 =
+      testUtils.sendMessages(topic, Seq("0", "0").toArray, Some(2))(1)._2.timestamp()
+    val df = spark.read
+      .format("kafka")
+      .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+      .option("subscribe", topic)
+      .option(
+        "startingOffsets",
+        s"""
+          |{"$topic": {"0": 3, "1": 3, "2": 3}}
+          |""".stripMargin
+      )
+      .option(
+        "endingOffsetsByTimestamp",
+        s"""
+          |{"$topic": {"0": $timestamp1, "1": $timestamp2, "2": $timestamp3}}
+          |""".stripMargin
+      )
+      .load()
+
+    eventually(timeout(60.seconds)) {
+      val e = intercept[IllegalStateException] {
+        df.collect()
+      }
+      assert(e.getMessage.contains(
+        "The resolved start offset 3 is greater than the resolved end offset 1 for"))
+    }
+  }
 }
 
 class KafkaRelationSuiteWithAdminV1 extends KafkaRelationSuiteV1 {
@@ -637,9 +728,31 @@ class KafkaRelationSuiteV1 extends KafkaRelationSuiteBase {
   test("V1 Source is used when set through SQLConf") {
     val topic = newTopic()
     val df = createDF(topic)
-    assert(df.logicalPlan.collect {
-      case LogicalRelation(_, _, _, _) => true
+    assert(df.logicalPlan.collectFirst {
+      case _: LogicalRelation => true
     }.nonEmpty)
+  }
+
+  test("resolved start offset greater than end offset (with latest)") {
+    val topic = newTopic()
+    testUtils.createTopic(topic, partitions = 3)
+    val df = spark.read
+      .format("kafka")
+      .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+      .option("subscribe", topic)
+      .option(
+        "startingOffsets",
+        s"""
+           |{"$topic": {"0": 1, "1": 1, "2": 1}}
+           |""".stripMargin
+      )
+      .load()
+
+    val e = intercept[IllegalStateException] {
+      df.collect()
+    }
+    assert(e.getMessage.contains(
+      "The resolved start offset 1 is greater than the resolved end offset 0 for"))
   }
 }
 
@@ -652,7 +765,7 @@ class KafkaRelationSuiteV2 extends KafkaRelationSuiteBase {
   test("V2 Source is used when set through SQLConf") {
     val topic = newTopic()
     val df = createDF(topic)
-    assert(df.logicalPlan.collect {
+    assert(df.logicalPlan.collectFirst {
       case _: DataSourceV2Relation => true
     }.nonEmpty)
   }

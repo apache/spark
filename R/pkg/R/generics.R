@@ -442,7 +442,7 @@ setGeneric("describe", function(x, col, ...) { standardGeneric("describe") })
 setGeneric("distinct", function(x) { standardGeneric("distinct") })
 
 #' @rdname drop
-setGeneric("drop", function(x, ...) { standardGeneric("drop") })
+setGeneric("drop", function(x, col, ...) { standardGeneric("drop") })
 
 #' @rdname dropDuplicates
 setGeneric("dropDuplicates", function(x, ...) { standardGeneric("dropDuplicates") })
@@ -670,6 +670,16 @@ setGeneric("randomSplit", function(x, weights, seed) { standardGeneric("randomSp
 #' @rdname broadcast
 setGeneric("broadcast", function(x) { standardGeneric("broadcast") })
 
+#' @rdname unpivot
+setGeneric("unpivot", function(x, ids, values, variableColumnName, valueColumnName) {
+  standardGeneric("unpivot")
+})
+
+#' @rdname melt
+setGeneric("melt", function(x, ids, values, variableColumnName, valueColumnName) {
+  standardGeneric("melt")
+})
+
 ###################### Column Methods ##########################
 
 #' @rdname columnfunctions
@@ -840,7 +850,7 @@ setGeneric("array_repeat", function(x, count) { standardGeneric("array_repeat") 
 
 #' @rdname column_collection_functions
 #' @name NULL
-setGeneric("array_sort", function(x) { standardGeneric("array_sort") })
+setGeneric("array_sort", function(x, ...) { standardGeneric("array_sort") })
 
 #' @rdname column_ml_functions
 #' @name NULL
@@ -910,6 +920,14 @@ setGeneric("cbrt", function(x) { standardGeneric("cbrt") })
 #' @rdname column_math_functions
 #' @name NULL
 setGeneric("ceil", function(x) { standardGeneric("ceil") })
+
+#' @rdname column_string_functions
+#' @name NULL
+setGeneric("collate", function(x, collation) { standardGeneric("collate") })
+
+#' @rdname column_string_functions
+#' @name NULL
+setGeneric("collation", function(x) { standardGeneric("collation") })
 
 #' @rdname column_aggregate_functions
 #' @name NULL
@@ -1009,6 +1027,14 @@ setGeneric("dayofweek", function(x) { standardGeneric("dayofweek") })
 #' @rdname column_datetime_functions
 #' @name NULL
 setGeneric("dayofyear", function(x) { standardGeneric("dayofyear") })
+
+#' @rdname column_datetime_functions
+#' @name NULL
+setGeneric("monthname", function(x) { standardGeneric("monthname") })
+
+#' @rdname column_datetime_functions
+#' @name NULL
+setGeneric("dayname", function(x) { standardGeneric("dayname") })
 
 #' @rdname column_string_functions
 #' @name NULL
@@ -1142,6 +1168,10 @@ setGeneric("levenshtein", function(y, x) { standardGeneric("levenshtein") })
 #' @name NULL
 setGeneric("lit", function(x) { standardGeneric("lit") })
 
+#' @rdname column_math_functions
+#' @name NULL
+setGeneric("ln", function(x) { standardGeneric("ln") })
+
 #' @rdname column_string_functions
 #' @name NULL
 setGeneric("locate", function(substr, str, ...) { standardGeneric("locate") })
@@ -1238,6 +1268,10 @@ setGeneric("nanvl", function(y, x) { standardGeneric("nanvl") })
 #' @name NULL
 setGeneric("negate", function(x) { standardGeneric("negate") })
 
+#' @rdname column_nonaggregate_functions
+#' @name NULL
+setGeneric("negative", function(x) { standardGeneric("negative") })
+
 #' @rdname not
 setGeneric("not", function(x) { standardGeneric("not") })
 
@@ -1273,6 +1307,10 @@ setGeneric("percentile_approx",
 #' @rdname column_math_functions
 #' @name NULL
 setGeneric("pmod", function(y, x) { standardGeneric("pmod") })
+
+#' @rdname column_nonaggregate_functions
+#' @name NULL
+setGeneric("positive", function(x) { standardGeneric("positive") })
 
 #' @rdname column_collection_functions
 #' @name NULL
@@ -1433,6 +1471,10 @@ setGeneric("stddev", function(x) { standardGeneric("stddev") })
 
 #' @rdname column_aggregate_functions
 #' @name NULL
+setGeneric("std", function(x) { standardGeneric("std") })
+
+#' @rdname column_aggregate_functions
+#' @name NULL
 setGeneric("stddev_pop", function(x) { standardGeneric("stddev_pop") })
 
 #' @rdname column_aggregate_functions
@@ -1554,6 +1596,11 @@ setGeneric("vector_to_array", function(x, ...) { standardGeneric("vector_to_arra
 #' @rdname column_datetime_functions
 #' @name NULL
 setGeneric("weekofyear", function(x) { standardGeneric("weekofyear") })
+
+#' @rdname column_math_functions
+#' @name NULL
+setGeneric("width_bucket",
+           function(v, min, max, numBucket) { standardGeneric("width_bucket") })
 
 #' @rdname column_datetime_functions
 #' @name NULL

@@ -24,6 +24,7 @@ import org.apache.hadoop.fs.permission.{AclEntry, AclEntryScope, AclEntryType, F
 
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.{QualifiedTableName, TableIdentifier}
+import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.execution.command
 import org.apache.spark.sql.execution.command.FakeLocalFsFileSystem
 import org.apache.spark.sql.internal.SQLConf
@@ -146,7 +147,8 @@ trait TruncateTableSuiteBase extends command.TruncateTableSuiteBase {
           spark.table(t)
 
           val catalog = spark.sessionState.catalog
-          val qualifiedTableName = QualifiedTableName("ns", "tbl")
+          val qualifiedTableName =
+            QualifiedTableName(CatalogManager.SESSION_CATALOG_NAME, "ns", "tbl")
           val cachedPlan = catalog.getCachedTable(qualifiedTableName)
           assert(cachedPlan.stats.sizeInBytes == 0)
         }
@@ -195,10 +197,13 @@ class TruncateTableSuite extends TruncateTableSuiteBase with CommandSuiteBase {
       withNamespaceAndTable("ns", "tbl") { t =>
         (("a", "b") :: Nil).toDF().write.parquet(tempDir.getCanonicalPath)
         sql(s"CREATE TABLE $t $defaultUsing LOCATION '${tempDir.toURI}'")
-        val errMsg = intercept[AnalysisException] {
-          sql(s"TRUNCATE TABLE $t")
-        }.getMessage
-        assert(errMsg.contains("Operation not allowed: TRUNCATE TABLE on external tables"))
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql(s"TRUNCATE TABLE $t")
+          },
+          condition = "_LEGACY_ERROR_TEMP_1266",
+          parameters = Map("tableIdentWithDB" -> "`spark_catalog`.`ns`.`tbl`")
+        )
       }
     }
   }

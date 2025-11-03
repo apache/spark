@@ -56,7 +56,7 @@ def generate_sql_configs_table_html(sql_configs, path):
     The table will look something like this:
 
     ```html
-    <table class="table">
+    <table class="spark-config">
     <tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr>
 
     <tr>
@@ -76,7 +76,7 @@ def generate_sql_configs_table_html(sql_configs, path):
     with open(path, 'w') as f:
         f.write(dedent(
             """
-            <table class="table">
+            <table class="spark-config">
             <tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr>
             """
         ))
@@ -103,6 +103,14 @@ def generate_sql_configs_table_html(sql_configs, path):
                     )
                 )
 
+            if config.name == "spark.sql.files.ignoreInvalidPartitionPaths":
+                description = config.description.replace("<", "&lt;").replace(">", "&gt;")
+            elif config.name == "spark.sql.hive.quoteHiveStructFieldName":
+                description = config.description.replace(
+                    "<", "&lt;").replace(">", "&gt;").replace("`", "&#96;")
+            else:
+                description = config.description
+
             f.write(dedent(
                 """
                 <tr>
@@ -115,7 +123,7 @@ def generate_sql_configs_table_html(sql_configs, path):
                 .format(
                     name=config.name,
                     default=default,
-                    description=markdown.markdown(config.description),
+                    description=markdown.markdown(description),
                     version=config.version
                 )
             ))

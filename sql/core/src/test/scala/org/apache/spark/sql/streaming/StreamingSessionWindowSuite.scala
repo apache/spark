@@ -23,12 +23,15 @@ import org.scalatest.BeforeAndAfter
 import org.scalatest.matchers.must.Matchers
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{AnalysisException, Column, DataFrame}
-import org.apache.spark.sql.execution.streaming.MemoryStream
+import org.apache.spark.sql.{AnalysisException, Column, DataFrame, Encoder, Encoders}
+import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.execution.streaming.state.{HDFSBackedStateStoreProvider, RocksDBStateStoreProvider}
-import org.apache.spark.sql.functions.{count, session_window, sum}
+import org.apache.spark.sql.expressions.Aggregator
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.tags.SlowSQLTest
 
+@SlowSQLTest
 class StreamingSessionWindowSuite extends StreamTest
   with BeforeAndAfter with Matchers with Logging {
 
@@ -140,6 +143,126 @@ class StreamingSessionWindowSuite extends StreamTest
         ("streaming", 90, 100, 10, 1)
       )
     )
+  }
+
+  // Logic is the same as `complete mode - session window`
+  // just with a more complex key
+  testWithAllOptions("complete mode - session window - nested tuple key") {
+    val inputData = MemoryStream[(String, Long)]
+    val sessionUpdates = sessionWindowQueryNestedKey(inputData)
+
+    testStream(sessionUpdates, OutputMode.Complete())(
+      AddData(
+        inputData,
+        ("hello world spark streaming", 40L),
+        ("world hello structured streaming", 41L)),
+      CheckNewAnswer(
+        ((("hello", "hello"), "hello"), 40, 51, 11, 2),
+        ((("world", "world"), "world"), 40, 51, 11, 2),
+        ((("streaming", "streaming"), "streaming"), 40, 51, 11, 2),
+        ((("spark", "spark"), "spark"), 40, 50, 10, 1),
+        ((("structured", "structured"), "structured"), 41, 51, 10, 1)),
+      // placing new sessions "before" previous sessions
+      AddData(inputData, ("spark streaming", 25L)),
+      CheckNewAnswer(
+        ((("spark", "spark"), "spark"), 25, 35, 10, 1),
+        ((("streaming", "streaming"), "streaming"), 25, 35, 10, 1),
+        ((("hello", "hello"), "hello"), 40, 51, 11, 2),
+        ((("world", "world"), "world"), 40, 51, 11, 2),
+        ((("streaming", "streaming"), "streaming"), 40, 51, 11, 2),
+        ((("spark", "spark"), "spark"), 40, 50, 10, 1),
+        ((("structured", "structured"), "structured"), 41, 51, 10, 1)),
+      // concatenating multiple previous sessions into one
+      AddData(inputData, ("spark streaming", 30L)),
+      CheckNewAnswer(
+        ((("spark", "spark"), "spark"), 25, 50, 25, 3),
+        ((("streaming", "streaming"), "streaming"), 25, 51, 26, 4),
+        ((("hello", "hello"), "hello"), 40, 51, 11, 2),
+        ((("world", "world"), "world"), 40, 51, 11, 2),
+        ((("structured", "structured"), "structured"), 41, 51, 10, 1)),
+      // placing new sessions after previous sessions
+      AddData(inputData, ("hello apache spark", 60L)),
+      CheckNewAnswer(
+        ((("spark", "spark"), "spark"), 25, 50, 25, 3),
+        ((("streaming", "streaming"), "streaming"), 25, 51, 26, 4),
+        ((("hello", "hello"), "hello"), 40, 51, 11, 2),
+        ((("world", "world"), "world"), 40, 51, 11, 2),
+        ((("structured", "structured"), "structured"), 41, 51, 10, 1),
+        ((("hello", "hello"), "hello"), 60, 70, 10, 1),
+        ((("apache", "apache"), "apache"), 60, 70, 10, 1),
+        ((("spark", "spark"), "spark"), 60, 70, 10, 1)),
+      AddData(inputData, ("structured streaming", 90L)),
+      CheckNewAnswer(
+        ((("spark", "spark"), "spark"), 25, 50, 25, 3),
+        ((("streaming", "streaming"), "streaming"), 25, 51, 26, 4),
+        ((("hello", "hello"), "hello"), 40, 51, 11, 2),
+        ((("world", "world"), "world"), 40, 51, 11, 2),
+        ((("structured", "structured"), "structured"), 41, 51, 10, 1),
+        ((("hello", "hello"), "hello"), 60, 70, 10, 1),
+        ((("apache", "apache"), "apache"), 60, 70, 10, 1),
+        ((("spark", "spark"), "spark"), 60, 70, 10, 1),
+        ((("structured", "structured"), "structured"), 90, 100, 10, 1),
+        ((("streaming", "streaming"), "streaming"), 90, 100, 10, 1)))
+  }
+
+  // Logic is the same as `complete mode - session window`
+  // just with a more complex key
+  testWithAllOptions("complete mode - session window - multiple col key") {
+    val inputData = MemoryStream[(String, Long)]
+    val sessionUpdates = sessionWindowQueryMultiColKey(inputData)
+
+    testStream(sessionUpdates, OutputMode.Complete())(
+      AddData(
+        inputData,
+        ("hello world spark streaming", 40L),
+        ("world hello structured streaming", 41L)),
+      CheckNewAnswer(
+        (("hello", "hello"), "hello", 40, 51, 11, 2),
+        (("world", "world"), "world", 40, 51, 11, 2),
+        (("streaming", "streaming"), "streaming", 40, 51, 11, 2),
+        (("spark", "spark"), "spark", 40, 50, 10, 1),
+        (("structured", "structured"), "structured", 41, 51, 10, 1)),
+      // placing new sessions "before" previous sessions
+      AddData(inputData, ("spark streaming", 25L)),
+      CheckNewAnswer(
+        (("spark", "spark"), "spark", 25, 35, 10, 1),
+        (("streaming", "streaming"), "streaming", 25, 35, 10, 1),
+        (("hello", "hello"), "hello", 40, 51, 11, 2),
+        (("world", "world"), "world", 40, 51, 11, 2),
+        (("streaming", "streaming"), "streaming", 40, 51, 11, 2),
+        (("spark", "spark"), "spark", 40, 50, 10, 1),
+        (("structured", "structured"), "structured", 41, 51, 10, 1)),
+      // concatenating multiple previous sessions into one
+      AddData(inputData, ("spark streaming", 30L)),
+      CheckNewAnswer(
+        (("spark", "spark"), "spark", 25, 50, 25, 3),
+        (("streaming", "streaming"), "streaming", 25, 51, 26, 4),
+        (("hello", "hello"), "hello", 40, 51, 11, 2),
+        (("world", "world"), "world", 40, 51, 11, 2),
+        (("structured", "structured"), "structured", 41, 51, 10, 1)),
+      // placing new sessions after previous sessions
+      AddData(inputData, ("hello apache spark", 60L)),
+      CheckNewAnswer(
+        (("spark", "spark"), "spark", 25, 50, 25, 3),
+        (("streaming", "streaming"), "streaming", 25, 51, 26, 4),
+        (("hello", "hello"), "hello", 40, 51, 11, 2),
+        (("world", "world"), "world", 40, 51, 11, 2),
+        (("structured", "structured"), "structured", 41, 51, 10, 1),
+        (("hello", "hello"), "hello", 60, 70, 10, 1),
+        (("apache", "apache"), "apache", 60, 70, 10, 1),
+        (("spark", "spark"), "spark", 60, 70, 10, 1)),
+      AddData(inputData, ("structured streaming", 90L)),
+      CheckNewAnswer(
+        (("spark", "spark"), "spark", 25, 50, 25, 3),
+        (("streaming", "streaming"), "streaming", 25, 51, 26, 4),
+        (("hello", "hello"), "hello", 40, 51, 11, 2),
+        (("world", "world"), "world", 40, 51, 11, 2),
+        (("structured", "structured"), "structured", 41, 51, 10, 1),
+        (("hello", "hello"), "hello", 60, 70, 10, 1),
+        (("apache", "apache"), "apache", 60, 70, 10, 1),
+        (("spark", "spark"), "spark", 60, 70, 10, 1),
+        (("structured", "structured"), "structured", 90, 100, 10, 1),
+        (("streaming", "streaming"), "streaming", 90, 100, 10, 1)))
   }
 
   testWithAllOptions("complete mode - session window - no key") {
@@ -354,6 +477,107 @@ class StreamingSessionWindowSuite extends StreamTest
     )
   }
 
+  // Logic is the same as `SPARK-36465: dynamic gap duration`
+  // just with a more complex key
+  testWithAllOptions("dynamic gap duration - nested tuple key") {
+    val inputData = MemoryStream[(String, Long)]
+
+    val udf = spark.udf.register(
+      "gapDuration",
+      (s: ((String, String), String)) => {
+        if (s == (("hello", "hello"), "hello")) {
+          "1 second"
+        } else if (s == (("structured", "structured"), "structured")) {
+          // zero gap duration will be filtered out from aggregation
+          "0 second"
+        } else if (s == (("world", "world"), "world")) {
+          // negative gap duration will be filtered out from aggregation
+          "-10 seconds"
+        } else {
+          "10 seconds"
+        }
+      })
+
+    val sessionUpdates =
+      sessionWindowQueryNestedKey(inputData, session_window($"eventTime", udf($"sessionId")))
+
+    testStream(sessionUpdates, OutputMode.Append())(
+      AddData(
+        inputData,
+        ("hello world spark streaming", 40L),
+        ("world hello structured streaming", 41L)),
+      CheckNewAnswer(),
+      // placing new sessions "before" previous sessions
+      AddData(inputData, ("spark streaming", 25L)),
+      CheckNewAnswer(),
+      // late event which session's end 10 would be later than watermark 11: should be dropped
+      AddData(inputData, ("spark streaming", 0L)),
+      CheckNewAnswer(),
+      assertNumRowsDroppedByWatermark(2),
+      // concatenating multiple previous sessions into one
+      AddData(inputData, ("spark streaming", 30L)),
+      CheckNewAnswer(),
+      // placing new sessions after previous sessions
+      AddData(inputData, ("hello apache spark", 60L)),
+      CheckNewAnswer(),
+      AddData(inputData, ("structured streaming", 90L)),
+      CheckNewAnswer(
+        ((("spark", "spark"), "spark"), 25, 50, 25, 3),
+        ((("streaming", "streaming"), "streaming"), 25, 51, 26, 4),
+        ((("hello", "hello"), "hello"), 40, 42, 2, 2)))
+  }
+
+  // Logic is the same as `SPARK-36465: dynamic gap duration`
+  // just with a more complex key
+  testWithAllOptions("dynamic gap duration - multiple col key") {
+    val inputData = MemoryStream[(String, Long)]
+
+    val udf = spark.udf.register(
+      "gapDuration",
+      (s1: (String, String), s2: String) => {
+        if (s1 == ("hello", "hello") && s2 == "hello") {
+          "1 second"
+        } else if (s1 == ("structured", "structured") && s2 == "structured") {
+          // zero gap duration will be filtered out from aggregation
+          "0 second"
+        } else if (s1 == ("world", "world") && s2 == "world") {
+          // negative gap duration will be filtered out from aggregation
+          "-10 seconds"
+        } else {
+          "10 seconds"
+        }
+      })
+
+    val sessionUpdates = sessionWindowQueryMultiColKey(
+      inputData,
+      session_window($"eventTime", udf($"aggKeyDouble", $"aggKeySingle")))
+
+    testStream(sessionUpdates, OutputMode.Append())(
+      AddData(
+        inputData,
+        ("hello world spark streaming", 40L),
+        ("world hello structured streaming", 41L)),
+      CheckNewAnswer(),
+      // placing new sessions "before" previous sessions
+      AddData(inputData, ("spark streaming", 25L)),
+      CheckNewAnswer(),
+      // late event which session's end 10 would be later than watermark 11: should be dropped
+      AddData(inputData, ("spark streaming", 0L)),
+      CheckNewAnswer(),
+      assertNumRowsDroppedByWatermark(2),
+      // concatenating multiple previous sessions into one
+      AddData(inputData, ("spark streaming", 30L)),
+      CheckNewAnswer(),
+      // placing new sessions after previous sessions
+      AddData(inputData, ("hello apache spark", 60L)),
+      CheckNewAnswer(),
+      AddData(inputData, ("structured streaming", 90L)),
+      CheckNewAnswer(
+        (("spark", "spark"), "spark", 25, 50, 25, 3),
+        (("streaming", "streaming"), "streaming", 25, 51, 26, 4),
+        (("hello", "hello"), "hello", 40, 42, 2, 2)))
+  }
+
   testWithAllOptions("append mode - session window - no key") {
     val inputData = MemoryStream[Int]
     val windowedAggregation = sessionWindowQueryOnGlobalKey(inputData)
@@ -376,30 +600,106 @@ class StreamingSessionWindowSuite extends StreamTest
     val inputData = MemoryStream[(String, Long)]
     val sessionUpdates = sessionWindowQuery(inputData)
 
-    val e = intercept[AnalysisException] {
-      testStream(sessionUpdates, OutputMode.Update())(
-        AddData(inputData, ("hello", 40L)),
-        CheckAnswer() // this is just to trigger the exception
-      )
-    }
-    Seq("Update output mode", "not supported", "for session window").foreach { m =>
-      assert(e.getMessage.toLowerCase(Locale.ROOT).contains(m.toLowerCase(Locale.ROOT)))
-    }
+    checkError(
+      exception = intercept[AnalysisException] {
+        testStream(sessionUpdates, OutputMode.Update())(
+          AddData(inputData, ("hello", 40L)),
+          CheckAnswer() // this is just to trigger the exception
+        )
+      },
+      condition = "STREAMING_OUTPUT_MODE.UNSUPPORTED_OPERATION",
+      sqlState = "42KDE",
+      parameters = Map(
+        "outputMode" -> OutputMode.Update().toString.toLowerCase(Locale.ROOT),
+        "operation" -> "session window streaming aggregations"))
   }
 
   testWithAllOptions("update mode - session window - no key") {
     val inputData = MemoryStream[Int]
     val windowedAggregation = sessionWindowQueryOnGlobalKey(inputData)
 
-    val e = intercept[AnalysisException] {
-      testStream(windowedAggregation, OutputMode.Update())(
-        AddData(inputData, 40),
-        CheckAnswer() // this is just to trigger the exception
-      )
+    checkError(
+      exception = intercept[AnalysisException] {
+        testStream(windowedAggregation, OutputMode.Update())(
+          AddData(inputData, 40),
+          CheckAnswer() // this is just to trigger the exception
+        )
+      },
+      condition = "STREAMING_OUTPUT_MODE.UNSUPPORTED_OPERATION",
+      sqlState = "42KDE",
+      parameters = Map(
+        "outputMode" -> OutputMode.Update().toString.toLowerCase(Locale.ROOT),
+        "operation" -> "session window streaming aggregations"))
+  }
+
+  // Test that session window works with mean, median, std dev, variance, UDAFs
+  // and first, last on nested tuple keys
+  testWithAllOptions("session window - with more aggregation functions and UDAFs") {
+    // create a trivial summation UDAF for test
+    // input type is a single Long
+    object MySum extends Aggregator[Long, Long, Long] {
+
+      def zero: Long = 0L
+
+      def reduce(buffer: Long, data: Long): Long = {
+        buffer + data
+      }
+
+      def merge(b1: Long, b2: Long): Long = {
+        b1 + b2
+      }
+
+      def finish(reduction: Long): Long = reduction
+
+      def bufferEncoder: Encoder[Long] = Encoders.scalaLong
+
+      def outputEncoder: Encoder[Long] = Encoders.scalaLong
     }
-    Seq("Update output mode", "not supported", "for session window").foreach { m =>
-      assert(e.getMessage.toLowerCase(Locale.ROOT).contains(m.toLowerCase(Locale.ROOT)))
+    val mySum = spark.udf.register("mySum", udaf(MySum))
+
+    val inputData = MemoryStream[(String, Long)]
+    val sessionWithAgg = {
+      // Split the lines into words, treat words as sessionId of events
+      val events = inputData.toDF()
+        .select($"_1".as("value"), $"_2".as("timestamp"))
+        .withColumn("eventTime", $"timestamp".cast("timestamp"))
+        .withColumn("single", $"timestamp")
+        .withColumn("double", struct($"single", $"single"))
+        .withColumn("triple", struct($"double", $"single"))
+        .withWatermark("eventTime", "30 seconds")
+        .selectExpr("explode(split(value, ' ')) AS sessionId",
+          "eventTime", "single", "triple")
+
+      val sessionWindow = session_window($"eventTime", "10 seconds")
+      events
+        .groupBy(sessionWindow.as("session"), $"sessionId")
+        .agg(
+          mean($"single").as("meanTime"),
+          median($"single").as("medianTime"),
+          stddev($"single").as("stdDevTime"),
+          variance($"single").as("varTime"),
+          first($"triple").as("firstTimeTriple"),
+          last($"triple").as("lastTimeTriple"),
+          mySum($"single").as("mySumSingle")
+        )
+        .selectExpr(
+          "sessionId", "CAST(session.start AS LONG)",
+          "CAST(session.end AS LONG)",
+          // "firstTimeTriple", "lastTimeTriple",  // Non deterministic
+          "CAST(meanTime AS LONG)", "CAST(medianTime AS LONG)",
+          "CAST(stdDevTime AS LONG)", "CAST(varTime AS LONG)",
+          "mySumSingle")
     }
+
+    testStream(sessionWithAgg, OutputMode.Append())(
+      AddData(inputData, ("a", 41L)),
+      AddData(inputData, ("a", 42L)),
+      AddData(inputData, ("a", 40L)),
+      CheckAnswer(),
+      AddData(inputData, ("b", 100L)), // Move the watermark past the end of the session.
+      AddData(inputData, ("b", 101L)), // Trigger the session production.
+      CheckAnswer(("a", 40, 52, 41, 41, 1, 1, 123))
+    )
   }
 
   private def assertNumRowsDroppedByWatermark(
@@ -444,5 +744,65 @@ class StreamingSessionWindowSuite extends StreamTest
       .agg(count("*") as Symbol("count"), sum("value") as Symbol("sum"))
       .select($"session".getField("start").cast("long").as[Long],
         $"session".getField("end").cast("long").as[Long], $"count".as[Long], $"sum".as[Long])
+  }
+
+  // Manipulate the input to create a nested tuple out of words and do aggregation on the tuples.
+  // Split the lines into words, convert each word into a nested tuple,
+  // e.g. hello -> ((hello, hello), hello), treat each tuple as the sessionId of a event,
+  // which get aggregated in the second clause.
+  private def sessionWindowQueryNestedKey(
+      input: MemoryStream[(String, Long)],
+      sessionWindow: Column = session_window($"eventTime", "10 seconds")): DataFrame = {
+    val events = input
+      .toDF()
+      .select($"_1".as("value"), $"_2".as("timestamp"))
+      .withColumn("eventTime", $"timestamp".cast("timestamp"))
+      .withColumn("sessionIdSingle", split($"value", " "))
+      .withColumn("sessionIdDouble", arrays_zip($"sessionIdSingle", $"sessionIdSingle"))
+      .withColumn("sessionIdTriple", arrays_zip($"sessionIdDouble", $"sessionIdSingle"))
+      .withWatermark("eventTime", "30 seconds")
+      .selectExpr("explode(sessionIdTriple) AS sessionId", "eventTime")
+
+    events
+      .groupBy(sessionWindow.as("session"), $"sessionId")
+      .agg(count("*").as("numEvents"))
+      .selectExpr(
+        "sessionId",
+        "CAST(session.start AS LONG)",
+        "CAST(session.end AS LONG)",
+        "CAST(session.end AS LONG) - CAST(session.start AS LONG) AS durationMs",
+        "numEvents")
+  }
+
+  // Manipulate the input, for each word, create two columns and do aggregation on both cols.
+  // Split the lines into words, convert each word into two columns,
+  // e.g. hello -> col1: (hello, hello), col2: hello. Aggregate on both columns.
+  private def sessionWindowQueryMultiColKey(
+      input: MemoryStream[(String, Long)],
+      sessionWindow: Column = session_window($"eventTime", "10 seconds")): DataFrame = {
+    val events = input
+      .toDF()
+      .select($"_1".as("value"), $"_2".as("timestamp"))
+      .withColumn("eventTime", $"timestamp".cast("timestamp"))
+      .withColumn("sessionIdSingle", split($"value", " "))
+      .withColumn("sessionIdDouble", arrays_zip($"sessionIdSingle", $"sessionIdSingle"))
+      .withColumn("sessionIdTriple", arrays_zip($"sessionIdDouble", $"sessionIdSingle"))
+      .withColumn("sessionIdTriple", explode($"sessionIdTriple"))
+      .withWatermark("eventTime", "30 seconds")
+      .selectExpr(
+        "sessionIdTriple.sessionIdDouble AS aggKeyDouble",
+        "sessionIdTriple.sessionIdSingle AS aggKeySingle",
+        "eventTime")
+
+    events
+      .groupBy(sessionWindow.as("session"), $"aggKeyDouble", $"aggKeySingle")
+      .agg(count("*").as("numEvents"))
+      .selectExpr(
+        "aggKeyDouble",
+        "aggKeySingle",
+        "CAST(session.start AS LONG)",
+        "CAST(session.end AS LONG)",
+        "CAST(session.end AS LONG) - CAST(session.start AS LONG) AS durationMs",
+        "numEvents")
   }
 }

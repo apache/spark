@@ -23,7 +23,8 @@ import time
 import unittest
 
 from pyspark import SparkConf, SparkContext, TaskContext, BarrierTaskContext
-from pyspark.testing.utils import PySparkTestCase, SPARK_HOME, eventually
+from pyspark.testing.sqlutils import SPARK_HOME
+from pyspark.testing.utils import PySparkTestCase, eventually
 
 
 class TaskContextTests(PySparkTestCase):
@@ -286,11 +287,12 @@ class TaskContextTestsWithWorkerReuse(unittest.TestCase):
             self.assertTrue(pid in worker_pids)
         return True
 
+    @eventually(catch_assertions=True)
     def test_task_context_correct_with_python_worker_reuse(self):
         # Retrying the check as the PIDs from Python workers might be different even
         # when reusing Python workers is enabled if a Python worker is dead for some reasons
         # (e.g., socket connection failure) and new Python worker is created.
-        eventually(self.check_task_context_correct_with_python_worker_reuse, catch_assertions=True)
+        self.check_task_context_correct_with_python_worker_reuse()
 
     def tearDown(self):
         self.sc.stop()
@@ -342,7 +344,7 @@ if __name__ == "__main__":
     from pyspark.tests.test_taskcontext import *  # noqa: F401
 
     try:
-        import xmlrunner  # type: ignore[import]
+        import xmlrunner
 
         testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:

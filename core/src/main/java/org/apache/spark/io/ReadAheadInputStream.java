@@ -1,9 +1,12 @@
 /*
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
  *
- *     http://www.apache.org/licenses/LICENSE-2.0
+ *    http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -13,13 +16,6 @@
  */
 package org.apache.spark.io;
 
-import com.google.common.base.Preconditions;
-import com.google.common.base.Throwables;
-import org.apache.spark.util.ThreadUtils;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import javax.annotation.concurrent.GuardedBy;
 import java.io.EOFException;
 import java.io.IOException;
 import java.io.InputStream;
@@ -30,6 +26,14 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
+import javax.annotation.concurrent.GuardedBy;
+
+import org.apache.spark.internal.SparkLogger;
+import org.apache.spark.internal.SparkLoggerFactory;
+import org.apache.spark.internal.LogKeys;
+import org.apache.spark.internal.MDC;
+import org.apache.spark.network.util.JavaUtils;
+import org.apache.spark.util.ThreadUtils;
 
 /**
  * {@link InputStream} implementation which asynchronously reads ahead from the underlying input
@@ -42,7 +46,8 @@ import java.util.concurrent.locks.ReentrantLock;
  */
 public class ReadAheadInputStream extends InputStream {
 
-  private static final Logger logger = LoggerFactory.getLogger(ReadAheadInputStream.class);
+  private static final SparkLogger logger =
+    SparkLoggerFactory.getLogger(ReadAheadInputStream.class);
 
   private ReentrantLock stateChangeLock = new ReentrantLock();
 
@@ -89,8 +94,6 @@ public class ReadAheadInputStream extends InputStream {
 
   private final Condition asyncReadComplete = stateChangeLock.newCondition();
 
-  private static final ThreadLocal<byte[]> oneByte = ThreadLocal.withInitial(() -> new byte[1]);
-
   /**
    * Creates a <code>ReadAheadInputStream</code> with the specified buffer size and read-ahead
    * threshold
@@ -100,7 +103,7 @@ public class ReadAheadInputStream extends InputStream {
    */
   public ReadAheadInputStream(
       InputStream inputStream, int bufferSizeInBytes) {
-    Preconditions.checkArgument(bufferSizeInBytes > 0,
+    JavaUtils.checkArgument(bufferSizeInBytes > 0,
         "bufferSizeInBytes should be greater than 0, but the value is " + bufferSizeInBytes);
     activeBuffer = ByteBuffer.allocate(bufferSizeInBytes);
     readAheadBuffer = ByteBuffer.allocate(bufferSizeInBytes);
@@ -115,7 +118,10 @@ public class ReadAheadInputStream extends InputStream {
 
   private void checkReadException() throws IOException {
     if (readAborted) {
-      Throwables.propagateIfPossible(readException, IOException.class);
+      if (readException == null) throw new NullPointerException("readException is not captured.");
+      if (readException instanceof IOException ie) throw ie;
+      if (readException instanceof Error error) throw error;
+      if (readException instanceof RuntimeException re) throw re;
       throw new IOException(readException);
     }
   }
@@ -169,10 +175,10 @@ public class ReadAheadInputStream extends InputStream {
         } while (len > 0 && !isWaiting.get());
       } catch (Throwable ex) {
         exception = ex;
-        if (ex instanceof Error) {
+        if (ex instanceof Error error) {
           // `readException` may not be reported to the user. Rethrow Error to make sure at least
           // The user can see Error in UncaughtExceptionHandler.
-          throw (Error) ex;
+          throw error;
         }
       } finally {
         stateChangeLock.lock();
@@ -207,7 +213,7 @@ public class ReadAheadInputStream extends InputStream {
       try {
         underlyingInputStream.close();
       } catch (IOException e) {
-        logger.warn(e.getMessage(), e);
+        logger.warn("{}", e, MDC.of(LogKeys.ERROR, e.getMessage()));
       }
     }
   }
@@ -247,7 +253,7 @@ public class ReadAheadInputStream extends InputStream {
       // short path - just get one byte.
       return activeBuffer.get() & 0xFF;
     } else {
-      byte[] oneByteArray = oneByte.get();
+      byte[] oneByteArray = new byte[1];
       return read(oneByteArray, 0, 1) == -1 ? -1 : oneByteArray[0] & 0xFF;
     }
   }

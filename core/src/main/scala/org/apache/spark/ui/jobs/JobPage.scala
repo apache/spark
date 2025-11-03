@@ -18,11 +18,11 @@
 package org.apache.spark.ui.jobs
 
 import java.util.Locale
-import javax.servlet.http.HttpServletRequest
 
 import scala.collection.mutable.{Buffer, ListBuffer}
 import scala.xml.{Node, NodeSeq, Unparsed, Utility}
 
+import jakarta.servlet.http.HttpServletRequest
 import org.apache.commons.text.StringEscapeUtils
 
 import org.apache.spark.JobExecutionStatus
@@ -35,6 +35,7 @@ import org.apache.spark.ui._
 /** Page showing statistics and stage list for a given job */
 private[ui] class JobPage(parent: JobsTab, store: AppStatusStore) extends WebUIPage("job") {
 
+  private val TIMELINE_ENABLED = parent.conf.get(UI_TIMELINE_ENABLED)
   private val MAX_TIMELINE_STAGES = parent.conf.get(UI_TIMELINE_STAGES_MAXIMUM)
   private val MAX_TIMELINE_EXECUTORS = parent.conf.get(UI_TIMELINE_EXECUTORS_MAXIMUM)
 
@@ -153,6 +154,8 @@ private[ui] class JobPage(parent: JobsTab, store: AppStatusStore) extends WebUIP
       stages: Seq[v1.StageData],
       executors: Seq[v1.ExecutorSummary],
       appStartTime: Long): Seq[Node] = {
+
+    if (!TIMELINE_ENABLED) return Seq.empty[Node]
 
     val stageEventJsonAsStrSeq = makeStageEvent(stages)
     val executorsJsonAsStrSeq = makeExecutorEvent(executors)
@@ -275,6 +278,16 @@ private[ui] class JobPage(parent: JobsTab, store: AppStatusStore) extends WebUIP
           shuffleLocalBytesRead = 0L,
           shuffleReadBytes = 0L,
           shuffleReadRecords = 0L,
+          shuffleCorruptMergedBlockChunks = 0L,
+          shuffleMergedFetchFallbackCount = 0L,
+          shuffleMergedRemoteBlocksFetched = 0L,
+          shuffleMergedLocalBlocksFetched = 0L,
+          shuffleMergedRemoteChunksFetched = 0L,
+          shuffleMergedLocalChunksFetched = 0L,
+          shuffleMergedRemoteBytesRead = 0L,
+          shuffleMergedLocalBytesRead = 0L,
+          shuffleRemoteReqsDuration = 0L,
+          shuffleMergedRemoteReqsDuration = 0L,
           shuffleWriteBytes = 0L,
           shuffleWriteTime = 0L,
           shuffleWriteRecords = 0L,
@@ -293,7 +306,9 @@ private[ui] class JobPage(parent: JobsTab, store: AppStatusStore) extends WebUIP
           ResourceProfile.UNKNOWN_RESOURCE_PROFILE_ID,
           peakExecutorMetrics = None,
           taskMetricsDistributions = None,
-          executorMetricsDistributions = None)
+          executorMetricsDistributions = None,
+          isShufflePushEnabled = false,
+          shuffleMergersCount = 0)
       }
     }
 

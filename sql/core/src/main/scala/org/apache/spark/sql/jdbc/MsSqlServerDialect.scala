@@ -20,79 +20,158 @@ package org.apache.spark.sql.jdbc
 import java.sql.SQLException
 import java.util.Locale
 
-import org.apache.spark.sql.AnalysisException
+import scala.util.control.NonFatal
+
+import org.apache.spark.SparkThrowable
 import org.apache.spark.sql.catalyst.analysis.NonEmptyNamespaceException
-import org.apache.spark.sql.connector.expressions.aggregate.{AggregateFunc, GeneralAggregateFunc}
-import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.connector.catalog.Identifier
+import org.apache.spark.sql.connector.expressions.{Expression, NullOrdering, SortDirection}
+import org.apache.spark.sql.connector.expressions.filter.Predicate
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
+import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.jdbc.MsSqlServerDialect.{GEOGRAPHY, GEOMETRY}
 import org.apache.spark.sql.types._
 
 
-private object MsSqlServerDialect extends JdbcDialect {
-
-  // Special JDBC types in Microsoft SQL Server.
-  // https://github.com/microsoft/mssql-jdbc/blob/v8.2.2/src/main/java/microsoft/sql/Types.java
-  private object SpecificTypes {
-    val GEOMETRY = -157
-    val GEOGRAPHY = -158
-  }
-
+private case class MsSqlServerDialect() extends JdbcDialect with NoLegacyJDBCError {
   override def canHandle(url: String): Boolean =
     url.toLowerCase(Locale.ROOT).startsWith("jdbc:sqlserver")
+
+  override def isObjectNotFoundException(e: SQLException): Boolean = {
+    e.getErrorCode == 208
+  }
+
+  // Microsoft SQL Server does not have the boolean type.
+  // Compile the boolean value to the bit data type instead.
+  // scalastyle:off line.size.limit
+  // See https://docs.microsoft.com/en-us/sql/t-sql/data-types/data-types-transact-sql?view=sql-server-ver15
+  // scalastyle:on line.size.limit
+  override def compileValue(value: Any): Any = value match {
+    case booleanValue: Boolean => if (booleanValue) 1 else 0
+    case binaryValue: Array[Byte] => binaryValue.map("%02X".format(_)).mkString("0x", "", "")
+    case other => super.compileValue(other)
+  }
 
   // scalastyle:off line.size.limit
   // See https://docs.microsoft.com/en-us/sql/t-sql/functions/aggregate-functions-transact-sql?view=sql-server-ver15
   // scalastyle:on line.size.limit
-  override def compileAggregate(aggFunction: AggregateFunc): Option[String] = {
-    super.compileAggregate(aggFunction).orElse(
-      aggFunction match {
-        case f: GeneralAggregateFunc if f.name() == "VAR_POP" =>
-          assert(f.children().length == 1)
-          val distinct = if (f.isDistinct) "DISTINCT " else ""
-          Some(s"VARP($distinct${f.children().head})")
-        case f: GeneralAggregateFunc if f.name() == "VAR_SAMP" =>
-          assert(f.children().length == 1)
-          val distinct = if (f.isDistinct) "DISTINCT " else ""
-          Some(s"VAR($distinct${f.children().head})")
-        case f: GeneralAggregateFunc if f.name() == "STDDEV_POP" =>
-          assert(f.children().length == 1)
-          val distinct = if (f.isDistinct) "DISTINCT " else ""
-          Some(s"STDEVP($distinct${f.children().head})")
-        case f: GeneralAggregateFunc if f.name() == "STDDEV_SAMP" =>
-          assert(f.children().length == 1)
-          val distinct = if (f.isDistinct) "DISTINCT " else ""
-          Some(s"STDEV($distinct${f.children().head})")
-        case _ => None
+  private val supportedAggregateFunctions = Set("MAX", "MIN", "SUM", "COUNT", "AVG",
+    "VAR_POP", "VAR_SAMP", "STDDEV_POP", "STDDEV_SAMP")
+  private val supportedStringFunctions = Set("RPAD", "LPAD")
+  private val supportedFunctions = supportedAggregateFunctions ++ supportedStringFunctions
+
+  override def isSupportedFunction(funcName: String): Boolean =
+    supportedFunctions.contains(funcName)
+
+  class MsSqlServerSQLBuilder extends JDBCSQLBuilder {
+    override protected def predicateToIntSQL(input: String): String =
+      "IIF(" + input + ", 1, 0)"
+    override def visitSortOrder(
+        sortKey: String, sortDirection: SortDirection, nullOrdering: NullOrdering): String = {
+      (sortDirection, nullOrdering) match {
+        case (SortDirection.ASCENDING, NullOrdering.NULLS_FIRST) =>
+          s"$sortKey $sortDirection"
+        case (SortDirection.ASCENDING, NullOrdering.NULLS_LAST) =>
+          s"CASE WHEN $sortKey IS NULL THEN 1 ELSE 0 END, $sortKey $sortDirection"
+        case (SortDirection.DESCENDING, NullOrdering.NULLS_FIRST) =>
+          s"CASE WHEN $sortKey IS NULL THEN 0 ELSE 1 END, $sortKey $sortDirection"
+        case (SortDirection.DESCENDING, NullOrdering.NULLS_LAST) =>
+          s"$sortKey $sortDirection"
       }
-    )
+    }
+
+    override def dialectFunctionName(funcName: String): String = funcName match {
+      case "VAR_POP" => "VARP"
+      case "VAR_SAMP" => "VAR"
+      case "STDDEV_POP" => "STDEVP"
+      case "STDDEV_SAMP" => "STDEV"
+      case _ => super.dialectFunctionName(funcName)
+    }
+
+    override def visitSQLFunction(funcName: String, inputs: Array[String]): String =
+      funcName match {
+        case "RPAD" =>
+          val Array(str, len, pad) = inputs
+          s"LEFT(CONCAT($str, REPLICATE($pad, $len)), $len)"
+        case "LPAD" =>
+          val Array(str, len, pad) = inputs
+          s"RIGHT(CONCAT(REPLICATE($pad, $len), $str), $len)"
+        case _ => super.visitSQLFunction(funcName, inputs)
+      }
+
+    override def build(expr: Expression): String = {
+      // MsSqlServer does not support boolean comparison using standard comparison operators
+      // We shouldn't propagate these queries to MsSqlServer
+      expr match {
+        case e: Predicate => e.name() match {
+          case "=" | "<>" | "<=>" | "<" | "<=" | ">" | ">=" =>
+            val Array(l, r) = e.children().map(inputToSQLNoBool)
+            visitBinaryComparison(e.name(), l, r)
+          case "CASE_WHEN" =>
+            // Since MsSqlServer cannot handle boolean expressions inside
+            // a CASE WHEN, it is necessary to convert those to another
+            // CASE WHEN expression that will return 1 or 0 depending on
+            // the result.
+            // Example:
+            // In:  ... CASE WHEN a = b THEN c = d ... END
+            // Out: ... CASE WHEN a = b THEN CASE WHEN c = d THEN 1 ELSE 0 END ... END = 1
+            val stringArray = e.children().grouped(2).flatMap {
+              case Array(whenExpression, thenExpression) =>
+                Array(inputToSQL(whenExpression), inputToSQLNoBool(thenExpression))
+              case Array(elseExpression) =>
+                Array(inputToSQLNoBool(elseExpression))
+            }.toArray
+
+            visitCaseWhen(stringArray) + " = 1"
+          case _ => super.build(expr)
+        }
+        case _ => super.build(expr)
+      }
+    }
+  }
+
+  override def compileExpression(expr: Expression): Option[String] = {
+    val msSqlServerSQLBuilder = new MsSqlServerSQLBuilder()
+    try {
+      Some(msSqlServerSQLBuilder.build(expr))
+    } catch {
+      case NonFatal(e) =>
+        logWarning("Error occurs while compiling V2 expression", e)
+        None
+    }
   }
 
   override def getCatalystType(
       sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] = {
-    if (typeName.contains("datetimeoffset")) {
-      // String is recommend by Microsoft SQL Server for datetimeoffset types in non-MS clients
-      Option(StringType)
-    } else {
-      if (SQLConf.get.legacyMsSqlServerNumericMappingEnabled) {
-        None
-      } else {
-        sqlType match {
-          case java.sql.Types.SMALLINT => Some(ShortType)
-          case java.sql.Types.REAL => Some(FloatType)
-          case SpecificTypes.GEOMETRY | SpecificTypes.GEOGRAPHY => Some(BinaryType)
-          case _ => None
+    sqlType match {
+      case _ if typeName.contains("datetimeoffset") =>
+        if (SQLConf.get.legacyMsSqlServerDatetimeOffsetMappingEnabled) {
+          Some(StringType)
+        } else {
+          Some(TimestampType)
         }
-      }
+      case java.sql.Types.SMALLINT | java.sql.Types.TINYINT
+          if !SQLConf.get.legacyMsSqlServerNumericMappingEnabled =>
+        // Data range of TINYINT is 0-255 so it needs to be stored in ShortType.
+        // Reference doc: https://learn.microsoft.com/en-us/sql/t-sql/data-types
+        Some(ShortType)
+      case java.sql.Types.REAL if !SQLConf.get.legacyMsSqlServerNumericMappingEnabled =>
+        Some(FloatType)
+      case GEOMETRY | GEOGRAPHY => Some(BinaryType)
+      case _ => None
     }
   }
 
   override def getJDBCType(dt: DataType): Option[JdbcType] = dt match {
     case TimestampType => Some(JdbcType("DATETIME", java.sql.Types.TIMESTAMP))
+    case TimestampNTZType => Some(JdbcType("DATETIME", java.sql.Types.TIMESTAMP))
     case StringType => Some(JdbcType("NVARCHAR(MAX)", java.sql.Types.NVARCHAR))
     case BooleanType => Some(JdbcType("BIT", java.sql.Types.BIT))
     case BinaryType => Some(JdbcType("VARBINARY(MAX)", java.sql.Types.VARBINARY))
     case ShortType if !SQLConf.get.legacyMsSqlServerNumericMappingEnabled =>
       Some(JdbcType("SMALLINT", java.sql.Types.SMALLINT))
+    case ByteType => Some(JdbcType("SMALLINT", java.sql.Types.TINYINT))
     case _ => None
   }
 
@@ -101,8 +180,9 @@ private object MsSqlServerDialect extends JdbcDialect {
   // scalastyle:off line.size.limit
   // See https://docs.microsoft.com/en-us/sql/relational-databases/system-stored-procedures/sp-rename-transact-sql?view=sql-server-ver15
   // scalastyle:on line.size.limit
-  override def renameTable(oldTable: String, newTable: String): String = {
-    s"EXEC sp_rename $oldTable, $newTable"
+  override def renameTable(oldTable: Identifier, newTable: Identifier): String = {
+    s"EXEC sp_rename ${getFullyQualifiedQuotedTableName(oldTable)}, " +
+      s"${getFullyQualifiedQuotedTableName(newTable)}"
   }
 
   // scalastyle:off line.size.limit
@@ -151,17 +231,68 @@ private object MsSqlServerDialect extends JdbcDialect {
   }
 
   override def getLimitClause(limit: Integer): String = {
-    ""
+    if (limit > 0) s"TOP ($limit)" else ""
   }
 
-  override def classifyException(message: String, e: Throwable): AnalysisException = {
+  override def classifyException(
+      e: Throwable,
+      condition: String,
+      messageParameters: Map[String, String],
+      description: String,
+      isRuntime: Boolean): Throwable with SparkThrowable = {
     e match {
       case sqlException: SQLException =>
         sqlException.getErrorCode match {
-          case 3729 => throw NonEmptyNamespaceException(message, cause = Some(e))
-          case _ => super.classifyException(message, e)
+          case 3729 =>
+            throw NonEmptyNamespaceException(
+              namespace = messageParameters.get("namespace").toArray,
+              details = sqlException.getMessage,
+              cause = Some(e))
+           case 15335 if condition == "FAILED_JDBC.RENAME_TABLE" =>
+             val newTable = messageParameters("newName")
+             throw QueryCompilationErrors.tableAlreadyExistsError(newTable)
+          case _ =>
+            super.classifyException(e, condition, messageParameters, description, isRuntime)
         }
-      case _ => super.classifyException(message, e)
+      case _ => super.classifyException(e, condition, messageParameters, description, isRuntime)
     }
   }
+
+  class MsSqlServerSQLQueryBuilder(dialect: JdbcDialect, options: JDBCOptions)
+    extends JdbcSQLQueryBuilder(dialect, options) {
+
+    override def build(): String = {
+      val limitClause = dialect.getLimitClause(limit)
+
+      options.prepareQuery +
+        s"SELECT $limitClause $columnList FROM $tableOrQuery" +
+        s" $whereClause $groupByClause $orderByClause"
+    }
+  }
+
+  override def getJdbcSQLQueryBuilder(options: JDBCOptions): JdbcSQLQueryBuilder =
+    new MsSqlServerSQLQueryBuilder(this, options)
+
+  override def isSyntaxErrorBestEffort(exception: SQLException): Boolean = {
+    val exceptionMessage = Option(exception.getMessage)
+      .map(_.toLowerCase(Locale.ROOT))
+      .getOrElse("")
+    // scalastyle:off line.size.limit
+    // All errors are shown here, but there is no consistent error code to identify
+    // most syntax errors so we have to base off the exception message.
+    // https://learn.microsoft.com/en-us/sql/relational-databases/errors-events/database-engine-events-and-errors?view=sql-server-ver16
+    // scalastyle:on line.size.limit
+    exceptionMessage.contains("incorrect syntax") || exceptionMessage.contains("syntax error")
+  }
+
+  override def supportsLimit: Boolean = true
+
+  override def supportsJoin: Boolean = true
+}
+
+private object MsSqlServerDialect {
+  // Special JDBC types in Microsoft SQL Server.
+  // https://github.com/microsoft/mssql-jdbc/blob/v9.4.1/src/main/java/microsoft/sql/Types.java
+  final val GEOMETRY = -157
+  final val GEOGRAPHY = -158
 }

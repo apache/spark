@@ -21,15 +21,18 @@ import java.{util => ju}
 import java.lang.{Long => JLong}
 import java.net.URLDecoder
 import java.nio.charset.StandardCharsets.UTF_8
-import java.text.SimpleDateFormat
+import java.time.{Instant, ZoneId}
+import java.time.format.DateTimeFormatter
 import java.util.{Date, Locale, TimeZone}
-import javax.servlet.http.HttpServletRequest
-import javax.ws.rs.core.{MediaType, Response}
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 import scala.xml._
 import scala.xml.transform.{RewriteRule, RuleTransformer}
+
+import jakarta.servlet.http.HttpServletRequest
+import jakarta.ws.rs.core.{MediaType, MultivaluedMap, Response}
+import org.glassfish.jersey.internal.util.collection.MultivaluedStringMap
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.ui.scope.RDDOperationGraph
@@ -40,15 +43,14 @@ private[spark] object UIUtils extends Logging {
   val TABLE_CLASS_STRIPED = TABLE_CLASS_NOT_STRIPED + " table-striped"
   val TABLE_CLASS_STRIPED_SORTABLE = TABLE_CLASS_STRIPED + " sortable"
 
-  // SimpleDateFormat is not thread-safe. Don't expose it to avoid improper use.
-  private val dateFormat = new ThreadLocal[SimpleDateFormat]() {
-    override def initialValue(): SimpleDateFormat =
-      new SimpleDateFormat("yyyy/MM/dd HH:mm:ss", Locale.US)
-  }
+  private val dateTimeFormatter = DateTimeFormatter
+    .ofPattern("yyyy/MM/dd HH:mm:ss", Locale.US)
+    .withZone(ZoneId.systemDefault())
 
-  def formatDate(date: Date): String = dateFormat.get.format(date)
+  def formatDate(date: Date): String = dateTimeFormatter.format(date.toInstant)
 
-  def formatDate(timestamp: Long): String = dateFormat.get.format(new Date(timestamp))
+  def formatDate(timestamp: Long): String =
+    dateTimeFormatter.format(Instant.ofEpochMilli(timestamp))
 
   def formatDuration(milliseconds: Long): String = {
     if (milliseconds < 100) {
@@ -122,16 +124,13 @@ private[spark] object UIUtils extends Logging {
     }
   }
 
-  // SimpleDateFormat is not thread-safe. Don't expose it to avoid improper use.
-  private val batchTimeFormat = new ThreadLocal[SimpleDateFormat]() {
-    override def initialValue(): SimpleDateFormat =
-      new SimpleDateFormat("yyyy/MM/dd HH:mm:ss", Locale.US)
-  }
+  private val batchTimeFormat = DateTimeFormatter
+    .ofPattern("yyyy/MM/dd HH:mm:ss", Locale.US)
+    .withZone(ZoneId.systemDefault())
 
-  private val batchTimeFormatWithMilliseconds = new ThreadLocal[SimpleDateFormat]() {
-    override def initialValue(): SimpleDateFormat =
-      new SimpleDateFormat("yyyy/MM/dd HH:mm:ss.SSS", Locale.US)
-  }
+  private val batchTimeFormatWithMilliseconds = DateTimeFormatter
+    .ofPattern("yyyy/MM/dd HH:mm:ss.SSS", Locale.US)
+    .withZone(ZoneId.systemDefault())
 
   /**
    * If `batchInterval` is less than 1 second, format `batchTime` with milliseconds. Otherwise,
@@ -139,7 +138,7 @@ private[spark] object UIUtils extends Logging {
    *
    * @param batchTime the batch time to be formatted
    * @param batchInterval the batch interval
-   * @param showYYYYMMSS if showing the `yyyy/MM/dd` part. If it's false, the return value wll be
+   * @param showYYYYMMSS if showing the `yyyy/MM/dd` part. If it's false, the return value will be
    *                     only `HH:mm:ss` or `HH:mm:ss.SSS` depending on `batchInterval`
    * @param timezone only for test
    */
@@ -148,30 +147,14 @@ private[spark] object UIUtils extends Logging {
       batchInterval: Long,
       showYYYYMMSS: Boolean = true,
       timezone: TimeZone = null): String = {
-    val oldTimezones =
-      (batchTimeFormat.get.getTimeZone, batchTimeFormatWithMilliseconds.get.getTimeZone)
-    if (timezone != null) {
-      batchTimeFormat.get.setTimeZone(timezone)
-      batchTimeFormatWithMilliseconds.get.setTimeZone(timezone)
-    }
-    try {
-      val formattedBatchTime =
-        if (batchInterval < 1000) {
-          batchTimeFormatWithMilliseconds.get.format(batchTime)
-        } else {
-          // If batchInterval >= 1 second, don't show milliseconds
-          batchTimeFormat.get.format(batchTime)
-        }
-      if (showYYYYMMSS) {
-        formattedBatchTime
-      } else {
-        formattedBatchTime.substring(formattedBatchTime.indexOf(' ') + 1)
-      }
-    } finally {
-      if (timezone != null) {
-        batchTimeFormat.get.setTimeZone(oldTimezones._1)
-        batchTimeFormatWithMilliseconds.get.setTimeZone(oldTimezones._2)
-      }
+    // If batchInterval >= 1 second, don't show milliseconds
+    val format = if (batchInterval < 1000) batchTimeFormatWithMilliseconds else batchTimeFormat
+    val formatWithZone = if (timezone == null) format else format.withZone(timezone.toZoneId)
+    val formattedBatchTime = formatWithZone.format(Instant.ofEpochMilli(batchTime))
+    if (showYYYYMMSS) {
+      formattedBatchTime
+    } else {
+      formattedBatchTime.substring(formattedBatchTime.indexOf(' ') + 1)
     }
   }
 
@@ -239,6 +222,7 @@ private[spark] object UIUtils extends Logging {
     <script src={prependBaseUri(request, "/static/timeline-view.js")}></script>
     <script src={prependBaseUri(request, "/static/log-view.js")}></script>
     <script src={prependBaseUri(request, "/static/webui.js")}></script>
+    <script src={prependBaseUri(request, "/static/scroll-button.js")} type="module"></script>
     <script>setUIRoot('{UIUtils.uiRoot(request)}')</script>
   }
 
@@ -252,20 +236,18 @@ private[spark] object UIUtils extends Logging {
   }
 
   def dataTablesHeaderNodes(request: HttpServletRequest): Seq[Node] = {
-    <link rel="stylesheet" href={prependBaseUri(request,
-      "/static/jquery.dataTables.1.10.20.min.css")} type="text/css"/>
     <link rel="stylesheet"
-          href={prependBaseUri(request, "/static/dataTables.bootstrap4.1.10.20.min.css")}
+          href={prependBaseUri(request, "/static/dataTables.bootstrap4.min.css")}
           type="text/css"/>
     <link rel="stylesheet"
-          href={prependBaseUri(request, "/static/jsonFormatter.min.css")} type="text/css"/>
+          href={prependBaseUri(request, "/static/jquery.dataTables.min.css")}
+          type="text/css"/>
     <link rel="stylesheet"
           href={prependBaseUri(request, "/static/webui-dataTables.css")} type="text/css"/>
-    <script src={prependBaseUri(request, "/static/jquery.dataTables.1.10.20.min.js")}></script>
+    <script src={prependBaseUri(request, "/static/jquery.dataTables.min.js")}></script>
     <script src={prependBaseUri(request, "/static/jquery.cookies.2.2.0.min.js")}></script>
     <script src={prependBaseUri(request, "/static/jquery.blockUI.min.js")}></script>
-    <script src={prependBaseUri(request, "/static/dataTables.bootstrap4.1.10.20.min.js")}></script>
-    <script src={prependBaseUri(request, "/static/jsonFormatter.min.js")}></script>
+    <script src={prependBaseUri(request, "/static/dataTables.bootstrap4.min.js")}></script>
     <script src={prependBaseUri(request, "/static/jquery.mustache.js")}></script>
   }
 
@@ -404,7 +386,7 @@ private[spark] object UIUtils extends Logging {
       }
     }
     val colWidth = 100.toDouble / headers.size
-    val colWidthAttr = if (fixedWidth) colWidth + "%" else ""
+    val colWidthAttr = if (fixedWidth) s"$colWidth%" else ""
 
     def getClass(index: Int): String = {
       if (index < headerClasses.size) {
@@ -434,7 +416,7 @@ private[spark] object UIUtils extends Logging {
     }
 
     val headerRow: Seq[Node] = {
-      headers.view.zipWithIndex.map { x =>
+      headers.to(LazyList).zipWithIndex.map { x =>
         getTooltip(x._2) match {
           case Some(tooltip) =>
             <th width={colWidthAttr} class={getClass(x._2)}>
@@ -444,7 +426,7 @@ private[spark] object UIUtils extends Logging {
             </th>
           case None => <th width={colWidthAttr} class={getClass(x._2)}>{getHeaderContent(x._1)}</th>
         }
-      }.toSeq
+      }
     }
     <table class={listingTableClass} id={id.map(Text.apply)}>
       <thead>{headerRow}</thead>
@@ -468,16 +450,24 @@ private[spark] object UIUtils extends Logging {
     val startRatio = if (total == 0) 0.0 else (boundedStarted.toDouble / total) * 100
     val startWidth = "width: %s%%".format(startRatio)
 
+    val killTaskReasonText = reasonToNumKilled.toSeq.sortBy(-_._2).map {
+        case (reason, count) => s" ($count killed: $reason)"
+      }.mkString
+    val progressTitle = s"$completed/$total" + {
+      if (started > 0) s" ($started running)" else ""
+    } + {
+      if (failed > 0) s" ($failed failed)" else ""
+    } + {
+      if (skipped > 0) s" ($skipped skipped)" else ""
+    } + killTaskReasonText
+
     <div class="progress">
-      <span style="text-align:center; position:absolute; width:100%;">
+      <span style="text-align:center; position:absolute; width:100%;" title={progressTitle}>
         {completed}/{total}
         { if (failed == 0 && skipped == 0 && started > 0) s"($started running)" }
         { if (failed > 0) s"($failed failed)" }
         { if (skipped > 0) s"($skipped skipped)" }
-        { reasonToNumKilled.toSeq.sortBy(-_._2).map {
-            case (reason, count) => s"($count killed: $reason)"
-          }
-        }
+        { killTaskReasonText }
       </span>
       <div class="progress-bar progress-completed" style={completeWidth}></div>
       <div class="progress-bar progress-started" style={startWidth}></div>
@@ -490,7 +480,8 @@ private[spark] object UIUtils extends Logging {
   }
 
   /** Return a "DAG visualization" DOM element that expands into a visualization for a job. */
-  def showDagVizForJob(jobId: Int, graphs: Seq[RDDOperationGraph]): Seq[Node] = {
+  def showDagVizForJob(jobId: Int,
+      graphs: collection.Seq[RDDOperationGraph]): collection.Seq[Node] = {
     showDagViz(graphs, forJob = true)
   }
 
@@ -501,7 +492,8 @@ private[spark] object UIUtils extends Logging {
    * a format that is expected by spark-dag-viz.js. Any changes in the format here must be
    * reflected there.
    */
-  private def showDagViz(graphs: Seq[RDDOperationGraph], forJob: Boolean): Seq[Node] = {
+  private def showDagViz(
+      graphs: collection.Seq[RDDOperationGraph], forJob: Boolean): collection.Seq[Node] = {
     <div>
       <span id={if (forJob) "job-dag-viz" else "stage-dag-viz"}
             class="expand-dag-viz" onclick={s"toggleDagViz($forJob);"}>
@@ -551,8 +543,8 @@ private[spark] object UIUtils extends Logging {
    * the whole string will rendered as a simple escaped text.
    *
    * Note: In terms of security, only anchor tags with root relative links are supported. So any
-   * attempts to embed links outside Spark UI, or other tags like &lt;script&gt; will cause in
-   * the whole description to be treated as plain text.
+   * attempts to embed links outside Spark UI, other tags like &lt;script&gt;, or inline scripts
+   * like `onclick` will cause in the whole description to be treated as plain text.
    *
    * @param desc        the original job or stage description string, which may contain html tags.
    * @param basePathUri with which to prepend the relative links; this is used when plainText is
@@ -572,7 +564,13 @@ private[spark] object UIUtils extends Logging {
 
       // Verify that this has only anchors and span (we are wrapping in span)
       val allowedNodeLabels = Set("a", "span", "br")
-      val illegalNodes = (xml \\ "_").filterNot(node => allowedNodeLabels.contains(node.label))
+      val allowedAttributes = Set("class", "href")
+      val illegalNodes =
+        (xml \\ "_").filterNot { node =>
+          allowedNodeLabels.contains(node.label) &&
+            // Verify we only have href attributes
+            node.attributes.map(_.key).forall(allowedAttributes.contains)
+        }
       if (illegalNodes.nonEmpty) {
         throw new IllegalArgumentException(
           "Only HTML anchors allowed in job descriptions\n" +
@@ -636,6 +634,22 @@ private[spark] object UIUtils extends Logging {
     param
   }
 
+  /**
+   * Decode URLParameter if URL is encoded by YARN-WebAppProxyServlet.
+   */
+  def decodeURLParameter(params: MultivaluedMap[String, String]): MultivaluedStringMap = {
+    val decodedParameters = new MultivaluedStringMap
+    params.forEach((encodeKey, encodeValues) => {
+      val decodeKey = decodeURLParameter(encodeKey)
+      val decodeValues = new java.util.LinkedList[String]
+      encodeValues.forEach(v => {
+        decodeValues.add(decodeURLParameter(v))
+      })
+      decodedParameters.addAll(decodeKey, decodeValues)
+    })
+    decodedParameters
+  }
+
   def getTimeZoneOffset() : Int =
     TimeZone.getDefault().getOffset(System.currentTimeMillis()) / 1000 / 60
 
@@ -689,5 +703,43 @@ private[spark] object UIUtils extends Logging {
     } else {
       Seq.empty[Node]
     }
+  }
+
+  private final val ERROR_CLASS_REGEX = """\[(?<errorClass>[A-Z][A-Z_.]+[A-Z])]""".r
+
+  /**
+   * This function works exactly the same as utils.errorSummary(javascript), it shall be
+   * remained the same whichever changed */
+  def errorSummary(errorMessage: String): (String, Boolean) = {
+    var isMultiline = true
+    val maybeErrorClass =
+      ERROR_CLASS_REGEX.findFirstMatchIn(errorMessage).map(_.group("errorClass"))
+    val errorClassOrBrief = if (maybeErrorClass.nonEmpty && maybeErrorClass.get.nonEmpty) {
+      maybeErrorClass.get
+    } else if (errorMessage.indexOf('\n') >= 0) {
+      errorMessage.substring(0, errorMessage.indexOf('\n'))
+    } else if (errorMessage.indexOf(":") >= 0) {
+      errorMessage.substring(0, errorMessage.indexOf(":"))
+    } else {
+      isMultiline = false
+      errorMessage
+    }
+
+    (errorClassOrBrief, isMultiline)
+  }
+
+  def errorMessageCell(errorMessage: String): Seq[Node] = {
+    val (summary, isMultiline) = errorSummary(errorMessage)
+    val details = detailsUINode(isMultiline, errorMessage)
+    <td>{summary}{details}</td>
+  }
+
+  def formatImportJavaScript(
+      request: HttpServletRequest,
+      sourceFile: String,
+      methods: String*): String = {
+    val methodsStr = methods.mkString("{", ", ", "}")
+    val sourceFileStr = prependBaseUri(request, sourceFile)
+    s"""import $methodsStr from "$sourceFileStr";"""
   }
 }

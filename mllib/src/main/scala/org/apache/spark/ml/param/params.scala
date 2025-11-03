@@ -19,11 +19,10 @@ package org.apache.spark.ml.param
 
 import java.lang.reflect.Modifier
 import java.util.{List => JList}
-import java.util.NoSuchElementException
 
 import scala.annotation.varargs
-import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 
 import org.json4s._
 import org.json4s.jackson.JsonMethods._
@@ -32,6 +31,8 @@ import org.apache.spark.SparkException
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.linalg.{JsonMatrixConverter, JsonVectorConverter, Matrix, Vector}
 import org.apache.spark.ml.util.Identifiable
+import org.apache.spark.util.ArrayImplicits._
+import org.apache.spark.util.SizeEstimator
 
 /**
  * A param with self-contained documentation and optionally default value. Primitive-typed param
@@ -44,14 +45,22 @@ import org.apache.spark.ml.util.Identifiable
  *                See [[ParamValidators]] for factory methods for common validation functions.
  * @tparam T param value type
  */
-class Param[T](val parent: String, val name: String, val doc: String, val isValid: T => Boolean)
-  extends Serializable {
+class Param[T](
+    val parent: String, val name: String, val doc: String, val isValid: T => Boolean,
+    val dataClass: Class[T]
+  ) extends Serializable {
+
+  def this(parent: String, name: String, doc: String, isValid: T => Boolean) =
+    this(parent, name, doc, isValid, null)
 
   def this(parent: Identifiable, name: String, doc: String, isValid: T => Boolean) =
     this(parent.uid, name, doc, isValid)
 
   def this(parent: String, name: String, doc: String) =
     this(parent, name, doc, ParamValidators.alwaysTrue[T])
+
+  def this(parent: String, name: String, doc: String, dataClass: Class[T]) =
+    this(parent, name, doc, ParamValidators.alwaysTrue[T], dataClass)
 
   def this(parent: Identifiable, name: String, doc: String) = this(parent.uid, name, doc)
 
@@ -129,7 +138,7 @@ private[ml] object Param {
       case JObject(v) =>
         val keys = v.map(_._1)
         if (keys.contains("class")) {
-          implicit val formats = DefaultFormats
+          implicit val formats: Formats = DefaultFormats
           val className = (jValue \ "class").extract[String]
           className match {
             case JsonMatrixConverter.className =>
@@ -322,7 +331,7 @@ object ParamValidators {
  * Specialized version of `Param[Double]` for Java.
  */
 class DoubleParam(parent: String, name: String, doc: String, isValid: Double => Boolean)
-  extends Param[Double](parent, name, doc, isValid) {
+  extends Param[Double](parent, name, doc, isValid, classOf[Double]) {
 
   def this(parent: String, name: String, doc: String) =
     this(parent, name, doc, ParamValidators.alwaysTrue)
@@ -380,7 +389,7 @@ private[param] object DoubleParam {
  * Specialized version of `Param[Int]` for Java.
  */
 class IntParam(parent: String, name: String, doc: String, isValid: Int => Boolean)
-  extends Param[Int](parent, name, doc, isValid) {
+  extends Param[Int](parent, name, doc, isValid, classOf[Int]) {
 
   def this(parent: String, name: String, doc: String) =
     this(parent, name, doc, ParamValidators.alwaysTrue)
@@ -398,7 +407,7 @@ class IntParam(parent: String, name: String, doc: String, isValid: Int => Boolea
   }
 
   override def jsonDecode(json: String): Int = {
-    implicit val formats = DefaultFormats
+    implicit val formats: Formats = DefaultFormats
     parse(json).extract[Int]
   }
 }
@@ -407,7 +416,7 @@ class IntParam(parent: String, name: String, doc: String, isValid: Int => Boolea
  * Specialized version of `Param[Float]` for Java.
  */
 class FloatParam(parent: String, name: String, doc: String, isValid: Float => Boolean)
-  extends Param[Float](parent, name, doc, isValid) {
+  extends Param[Float](parent, name, doc, isValid, classOf[Float]) {
 
   def this(parent: String, name: String, doc: String) =
     this(parent, name, doc, ParamValidators.alwaysTrue)
@@ -466,7 +475,7 @@ private object FloatParam {
  * Specialized version of `Param[Long]` for Java.
  */
 class LongParam(parent: String, name: String, doc: String, isValid: Long => Boolean)
-  extends Param[Long](parent, name, doc, isValid) {
+  extends Param[Long](parent, name, doc, isValid, classOf[Long]) {
 
   def this(parent: String, name: String, doc: String) =
     this(parent, name, doc, ParamValidators.alwaysTrue)
@@ -484,7 +493,7 @@ class LongParam(parent: String, name: String, doc: String, isValid: Long => Bool
   }
 
   override def jsonDecode(json: String): Long = {
-    implicit val formats = DefaultFormats
+    implicit val formats: Formats = DefaultFormats
     parse(json).extract[Long]
   }
 }
@@ -493,7 +502,8 @@ class LongParam(parent: String, name: String, doc: String, isValid: Long => Bool
  * Specialized version of `Param[Boolean]` for Java.
  */
 class BooleanParam(parent: String, name: String, doc: String) // No need for isValid
-  extends Param[Boolean](parent, name, doc) {
+  extends Param[Boolean](parent, name, doc, ParamValidators.alwaysTrue[Boolean], classOf[Boolean])
+{
 
   def this(parent: Identifiable, name: String, doc: String) = this(parent.uid, name, doc)
 
@@ -505,7 +515,7 @@ class BooleanParam(parent: String, name: String, doc: String) // No need for isV
   }
 
   override def jsonDecode(json: String): Boolean = {
-    implicit val formats = DefaultFormats
+    implicit val formats: Formats = DefaultFormats
     parse(json).extract[Boolean]
   }
 }
@@ -514,7 +524,7 @@ class BooleanParam(parent: String, name: String, doc: String) // No need for isV
  * Specialized version of `Param[Array[String]]` for Java.
  */
 class StringArrayParam(parent: Params, name: String, doc: String, isValid: Array[String] => Boolean)
-  extends Param[Array[String]](parent, name, doc, isValid) {
+  extends Param[Array[String]](parent.uid, name, doc, isValid, classOf[Array[String]]) {
 
   def this(parent: Params, name: String, doc: String) =
     this(parent, name, doc, ParamValidators.alwaysTrue)
@@ -524,11 +534,11 @@ class StringArrayParam(parent: Params, name: String, doc: String, isValid: Array
 
   override def jsonEncode(value: Array[String]): String = {
     import org.json4s.JsonDSL._
-    compact(render(value.toSeq))
+    compact(render(value.toImmutableArraySeq))
   }
 
   override def jsonDecode(json: String): Array[String] = {
-    implicit val formats = DefaultFormats
+    implicit val formats: Formats = DefaultFormats
     parse(json).extract[Seq[String]].toArray
   }
 }
@@ -537,7 +547,7 @@ class StringArrayParam(parent: Params, name: String, doc: String, isValid: Array
  * Specialized version of `Param[Array[Double]]` for Java.
  */
 class DoubleArrayParam(parent: Params, name: String, doc: String, isValid: Array[Double] => Boolean)
-  extends Param[Array[Double]](parent, name, doc, isValid) {
+  extends Param[Array[Double]](parent.uid, name, doc, isValid, classOf[Array[Double]]) {
 
   def this(parent: Params, name: String, doc: String) =
     this(parent, name, doc, ParamValidators.alwaysTrue)
@@ -548,7 +558,7 @@ class DoubleArrayParam(parent: Params, name: String, doc: String, isValid: Array
 
   override def jsonEncode(value: Array[Double]): String = {
     import org.json4s.JsonDSL._
-    compact(render(value.toSeq.map(DoubleParam.jValueEncode)))
+    compact(render(value.toImmutableArraySeq.map(DoubleParam.jValueEncode)))
   }
 
   override def jsonDecode(json: String): Array[Double] = {
@@ -569,7 +579,9 @@ class DoubleArrayArrayParam(
     name: String,
     doc: String,
     isValid: Array[Array[Double]] => Boolean)
-  extends Param[Array[Array[Double]]](parent, name, doc, isValid) {
+  extends Param[Array[Array[Double]]](
+    parent.uid, name, doc, isValid, classOf[Array[Array[Double]]]
+  ) {
 
   def this(parent: Params, name: String, doc: String) =
     this(parent, name, doc, ParamValidators.alwaysTrue)
@@ -580,7 +592,8 @@ class DoubleArrayArrayParam(
 
   override def jsonEncode(value: Array[Array[Double]]): String = {
     import org.json4s.JsonDSL._
-    compact(render(value.toSeq.map(_.toSeq.map(DoubleParam.jValueEncode))))
+    compact(
+      render(value.toImmutableArraySeq.map(_.toImmutableArraySeq.map(DoubleParam.jValueEncode))))
   }
 
   override def jsonDecode(json: String): Array[Array[Double]] = {
@@ -602,7 +615,7 @@ class DoubleArrayArrayParam(
  * Specialized version of `Param[Array[Int]]` for Java.
  */
 class IntArrayParam(parent: Params, name: String, doc: String, isValid: Array[Int] => Boolean)
-  extends Param[Array[Int]](parent, name, doc, isValid) {
+  extends Param[Array[Int]](parent.uid, name, doc, isValid, classOf[Array[Int]]) {
 
   def this(parent: Params, name: String, doc: String) =
     this(parent, name, doc, ParamValidators.alwaysTrue)
@@ -613,11 +626,11 @@ class IntArrayParam(parent: Params, name: String, doc: String, isValid: Array[In
 
   override def jsonEncode(value: Array[Int]): String = {
     import org.json4s.JsonDSL._
-    compact(render(value.toSeq))
+    compact(render(value.toImmutableArraySeq))
   }
 
   override def jsonDecode(json: String): Array[Int] = {
-    implicit val formats = DefaultFormats
+    implicit val formats: Formats = DefaultFormats
     parse(json).extract[Seq[Int]].toArray
   }
 }
@@ -640,6 +653,10 @@ case class ParamPair[T] @Since("1.2.0") (
  */
 trait Params extends Identifiable with Serializable {
 
+  private[ml] def estimateMatadataSize: Long = {
+    SizeEstimator.estimate((this.paramMap, this.defaultParamMap, this.uid))
+  }
+
   /**
    * Returns all params sorted by their names. The default implementation uses Java reflection to
    * list all public methods that have no arguments and return [[Param]].
@@ -652,7 +669,7 @@ trait Params extends Identifiable with Serializable {
     methods.filter { m =>
         Modifier.isPublic(m.getModifiers) &&
           classOf[Param[_]].isAssignableFrom(m.getReturnType) &&
-          m.getParameterTypes.isEmpty
+          m.getParameterCount == 0
       }.sortBy(_.getName)
       .map(m => m.invoke(this).asInstanceOf[Param[_]])
   }
@@ -726,6 +743,7 @@ trait Params extends Identifiable with Serializable {
   protected final def set(paramPair: ParamPair[_]): this.type = {
     shouldOwn(paramPair.param)
     paramMap.put(paramPair)
+    onParamChange(paramPair.param)
     this
   }
 
@@ -743,6 +761,7 @@ trait Params extends Identifiable with Serializable {
   final def clear(param: Param[_]): this.type = {
     shouldOwn(param)
     paramMap.remove(param)
+    onParamChange(param)
     this
   }
 
@@ -767,8 +786,9 @@ trait Params extends Identifiable with Serializable {
    *               this method gets called.
    * @param value  the default value
    */
-  protected final def setDefault[T](param: Param[T], value: T): this.type = {
+  protected[ml] final def setDefault[T](param: Param[T], value: T): this.type = {
     defaultParamMap.put(param -> value)
+    onParamChange(param)
     this
   }
 
@@ -870,7 +890,7 @@ trait Params extends Identifiable with Serializable {
     params.foreach { param =>
       // copy default Params
       if (defaultParamMap.contains(param) && to.hasParam(param.name)) {
-        to.defaultParamMap.put(to.getParam(param.name), defaultParamMap(param))
+        to.setDefault(to.getParam(param.name), defaultParamMap(param))
       }
       // copy explicitly set Params
       if (map.contains(param) && to.hasParam(param.name)) {
@@ -879,15 +899,8 @@ trait Params extends Identifiable with Serializable {
     }
     to
   }
-}
 
-private[ml] object Params {
-  /**
-   * Sets a default param value for a `Params`.
-   */
-  private[ml] final def setDefault[T](params: Params, param: Param[T], value: T): Unit = {
-    params.defaultParamMap.put(param -> value)
-  }
+  private[ml] def onParamChange(param: Param[_]): Unit = {}
 }
 
 /**

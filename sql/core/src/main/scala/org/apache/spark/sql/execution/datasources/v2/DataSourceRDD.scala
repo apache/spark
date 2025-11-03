@@ -28,6 +28,7 @@ import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader, Par
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.metric.{CustomMetrics, SQLMetric}
 import org.apache.spark.sql.vectorized.ColumnarBatch
+import org.apache.spark.util.ArrayImplicits._
 
 class DataSourceRDDPartition(val index: Int, val inputPartitions: Seq[InputPartition])
   extends Partition with Serializable
@@ -60,6 +61,14 @@ class DataSourceRDD(
       private var currentIter: Option[Iterator[Object]] = None
       private var currentIndex: Int = 0
 
+      private val partitionMetricCallback = new PartitionMetricCallback(customMetrics)
+
+      // In case of early stopping before consuming the entire iterator,
+      // we need to do one more metric update at the end of the task.
+      context.addTaskCompletionListener[Unit] { _ =>
+        partitionMetricCallback.execute()
+      }
+
       override def hasNext: Boolean = currentIter.exists(_.hasNext) || advanceToNextIter()
 
       override def next(): Object = {
@@ -86,13 +95,10 @@ class DataSourceRDD(
               new PartitionIterator[InternalRow](rowReader, customMetrics))
             (iter, rowReader)
           }
-          context.addTaskCompletionListener[Unit] { _ =>
-            // In case of early stopping before consuming the entire iterator,
-            // we need to do one more metric update at the end of the task.
-            CustomMetrics.updateMetrics(reader.currentMetricsValues, customMetrics)
-            iter.forceUpdateMetrics()
-            reader.close()
-          }
+
+          // Once we advance to the next partition, update the metric callback for early finish
+          partitionMetricCallback.advancePartition(iter, reader)
+
           currentIter = Some(iter)
           hasNext
         }
@@ -107,16 +113,40 @@ class DataSourceRDD(
   }
 }
 
+private class PartitionMetricCallback
+    (customMetrics: Map[String, SQLMetric]) {
+  private var iter: MetricsIterator[_] = null
+  private var reader: PartitionReader[_] = null
+
+  def advancePartition(iter: MetricsIterator[_], reader: PartitionReader[_]): Unit = {
+    execute()
+
+    this.iter = iter
+    this.reader = reader
+  }
+
+  def execute(): Unit = {
+    if (iter != null && reader != null) {
+      CustomMetrics
+        .updateMetrics(reader.currentMetricsValues.toImmutableArraySeq, customMetrics)
+      iter.forceUpdateMetrics()
+      reader.close()
+    }
+  }
+}
+
 private class PartitionIterator[T](
     reader: PartitionReader[T],
     customMetrics: Map[String, SQLMetric]) extends Iterator[T] {
   private[this] var valuePrepared = false
+  private[this] var hasMoreInput = true
 
   private var numRow = 0L
 
   override def hasNext: Boolean = {
-    if (!valuePrepared) {
-      valuePrepared = reader.next()
+    if (!valuePrepared && hasMoreInput) {
+      hasMoreInput = reader.next()
+      valuePrepared = hasMoreInput
     }
     valuePrepared
   }
@@ -126,7 +156,7 @@ private class PartitionIterator[T](
       throw QueryExecutionErrors.endOfStreamError()
     }
     if (numRow % CustomMetrics.NUM_ROWS_PER_UPDATE == 0) {
-      CustomMetrics.updateMetrics(reader.currentMetricsValues, customMetrics)
+      CustomMetrics.updateMetrics(reader.currentMetricsValues.toImmutableArraySeq, customMetrics)
     }
     numRow += 1
     valuePrepared = false
@@ -167,7 +197,7 @@ private abstract class MetricsIterator[I](iter: Iterator[I]) extends Iterator[I]
 private class MetricsRowIterator(
     iter: Iterator[InternalRow]) extends MetricsIterator[InternalRow](iter) {
   override def next(): InternalRow = {
-    val item = iter.next
+    val item = iter.next()
     metricsHandler.updateMetrics(1)
     item
   }
@@ -176,7 +206,7 @@ private class MetricsRowIterator(
 private class MetricsBatchIterator(
     iter: Iterator[ColumnarBatch]) extends MetricsIterator[ColumnarBatch](iter) {
   override def next(): ColumnarBatch = {
-    val batch: ColumnarBatch = iter.next
+    val batch: ColumnarBatch = iter.next()
     metricsHandler.updateMetrics(batch.numRows)
     batch
   }

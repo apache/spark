@@ -6,6 +6,7 @@
 
 --CONFIG_DIM1 spark.sql.optimizeNullAwareAntiJoin=true
 --CONFIG_DIM1 spark.sql.optimizeNullAwareAntiJoin=false
+--ONLY_IF spark
 
 CREATE TEMPORARY VIEW m AS SELECT * FROM VALUES
   (null, null),

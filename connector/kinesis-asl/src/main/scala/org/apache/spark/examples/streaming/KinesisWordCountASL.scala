@@ -230,9 +230,9 @@ object KinesisWordProducerASL {
     // Iterate and put records onto the stream per the given recordPerSec and wordsPerRecord
     for (i <- 1 to 10) {
       // Generate recordsPerSec records to put onto the stream
-      val records = (1 to recordsPerSecond.toInt).foreach { recordNum =>
+      val records = (1 to recordsPerSecond).foreach { recordNum =>
         // Randomly generate wordsPerRecord number of words
-        val data = (1 to wordsPerRecord.toInt).map(x => {
+        val data = (1 to wordsPerRecord).map(x => {
           // Get a random index to a word
           val randomWordIdx = Random.nextInt(randomWords.size)
           val randomWord = randomWords(randomWordIdx)
@@ -275,7 +275,7 @@ private[streaming] object StreamingExamples extends Logging {
       // We first log something to initialize Spark's default logging, then we override the
       // logging level.
       logInfo("Setting log level to [WARN] for streaming example." +
-        " To override add a custom log4j.properties to the classpath.")
+        " To override add a custom log4j2.properties to the classpath.")
       Configurator.setRootLevel(Level.WARN)
     }
   }

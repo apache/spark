@@ -34,9 +34,9 @@ import org.apache.spark.sql.internal.SQLConf
  *   1. without sbt:
  *      bin/spark-submit --class <this class>
  *        --jars <spark core test jar>,<spark catalyst test jar> <sql core test jar>
- *   2. build/sbt "sql/test:runMain <this class>"
+ *   2. build/sbt "sql/Test/runMain <this class>"
  *   3. generate result:
- *      SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "sql/test:runMain <this class>"
+ *      SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "sql/Test/runMain <this class>"
  *      Results will be written to "benchmarks/DateTimeBenchmark-results.txt".
  * }}}
  */
@@ -45,6 +45,12 @@ object DateTimeBenchmark extends SqlBasedBenchmark {
     spark.range(cardinality)
       .selectExpr(exprs: _*)
       .noop()
+  }
+
+  private def doBenchmarkAnsiOff(cardinality: Int, exprs: String*): Unit = {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+      doBenchmark(cardinality, exprs: _*)
+    }
   }
 
   private def run(cardinality: Int, name: String, exprs: String*): Unit = {
@@ -75,7 +81,7 @@ object DateTimeBenchmark extends SqlBasedBenchmark {
             doBenchmark(N, s"$dt + interval 1 month 2 day")
           }
           benchmark.addCase("date + interval(m, d, ms)") { _ =>
-            doBenchmark(N, s"$dt + interval 1 month 2 day 5 hour")
+            doBenchmarkAnsiOff(N, s"$dt + interval 1 month 2 day 5 hour")
           }
           benchmark.addCase("date - interval(m)") { _ =>
             doBenchmark(N, s"$dt - interval 1 month")
@@ -84,7 +90,7 @@ object DateTimeBenchmark extends SqlBasedBenchmark {
             doBenchmark(N, s"$dt - interval 1 month 2 day")
           }
           benchmark.addCase("date - interval(m, d, ms)") { _ =>
-            doBenchmark(N, s"$dt - interval 1 month 2 day 5 hour")
+            doBenchmarkAnsiOff(N, s"$dt - interval 1 month 2 day 5 hour")
           }
           benchmark.addCase("timestamp + interval(m)") { _ =>
             doBenchmark(N, s"$ts + interval 1 month")
@@ -161,7 +167,7 @@ object DateTimeBenchmark extends SqlBasedBenchmark {
           }
           val dateExpr = "cast(timestamp_seconds(id) as date)"
           Seq("year", "yyyy", "yy", "mon", "month", "mm").foreach { level =>
-            run(N, s"trunc $level", s"trunc('$level', $dateExpr)")
+            run(N, s"trunc $level", s"trunc($dateExpr, '$level')")
           }
         }
         runBenchmark("Parsing") {
@@ -171,7 +177,7 @@ object DateTimeBenchmark extends SqlBasedBenchmark {
           run(n, "to timestamp str", timestampStrExpr)
           run(n, "to_timestamp", s"to_timestamp($timestampStrExpr, $pattern)")
           run(n, "to_unix_timestamp", s"to_unix_timestamp($timestampStrExpr, $pattern)")
-          val dateStrExpr = "concat('2019-01-', lpad(mod(id, 25), 2, '0'))"
+          val dateStrExpr = "concat('2019-01-', lpad(mod(id, 25) + 1, 2, '0'))"
           run(n, "to date str", dateStrExpr)
           run(n, "to_date", s"to_date($dateStrExpr, 'yyyy-MM-dd')")
         }

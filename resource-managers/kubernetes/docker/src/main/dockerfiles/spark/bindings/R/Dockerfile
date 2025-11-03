@@ -17,7 +17,12 @@
 
 ARG base_img
 
-FROM $base_img
+FROM ${base_img:-spark}
+LABEL org.opencontainers.image.authors="Apache Spark project <dev@spark.apache.org>"
+LABEL org.opencontainers.image.licenses="Apache-2.0"
+LABEL org.opencontainers.image.ref.name="Apache Spark R Image"
+# Overwrite this label to avoid exposing the underlying Ubuntu OS version label
+LABEL org.opencontainers.image.version=""
 WORKDIR /
 
 # Reset to root to run installation tasks
@@ -25,14 +30,14 @@ USER 0
 
 RUN mkdir ${SPARK_HOME}/R
 
-# Install R 4.0.4 (http://cloud.r-project.org/bin/linux/debian/)
+# Install R 4.1.2 (http://cloud.r-project.org/bin/linux/debian/)
 RUN \
   apt-get update && \
   apt install -y r-base r-base-dev && \
-  rm -rf /var/cache/apt/*
+  rm -rf /var/cache/apt/* && rm -rf /var/lib/apt/lists/*
 
 COPY R ${SPARK_HOME}/R
-ENV R_HOME /usr/lib/R
+ENV R_HOME=/usr/lib/R
 
 WORKDIR /opt/spark/work-dir
 ENTRYPOINT [ "/opt/entrypoint.sh" ]

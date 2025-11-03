@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.util;
 
+import org.apache.spark.sql.errors.QueryExecutionErrors;
 import org.apache.spark.unsafe.types.UTF8String;
 
 public class CharVarcharCodegenUtils {
@@ -27,7 +28,7 @@ public class CharVarcharCodegenUtils {
     int numTailSpacesToTrim = numChars - limit;
     UTF8String trimmed = inputStr.trimTrailingSpaces(numTailSpacesToTrim);
     if (trimmed.numChars() > limit) {
-      throw new RuntimeException("Exceeds char/varchar type length limitation: " + limit);
+      throw QueryExecutionErrors.exceedMaxLimit(limit);
     } else {
       return trimmed;
     }
@@ -50,6 +51,17 @@ public class CharVarcharCodegenUtils {
       return inputStr;
     } else {
       return trimTrailingSpaces(inputStr, numChars, limit);
+    }
+  }
+
+  public static UTF8String readSidePadding(UTF8String inputStr, int limit) {
+    int numChars = inputStr.numChars();
+    if (numChars == limit) {
+      return inputStr;
+    } else if (numChars < limit) {
+      return inputStr.rpad(limit, SPACE);
+    } else {
+      return inputStr;
     }
   }
 }

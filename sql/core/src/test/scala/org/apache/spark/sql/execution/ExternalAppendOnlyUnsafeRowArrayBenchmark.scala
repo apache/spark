@@ -32,10 +32,10 @@ import org.apache.spark.util.collection.unsafe.sort.UnsafeExternalSorter
  * {{{
  *   1. without sbt:
  *      bin/spark-submit --class <this class> --jars <spark core test jar> <spark sql test jar>
- *   2. build/sbt build/sbt ";project sql;set javaOptions
- *        in Test += \"-Dspark.memory.debugFill=false\";test:runMain <this class>"
- *   3. generate result: SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt ";project sql;set javaOptions
- *        in Test += \"-Dspark.memory.debugFill=false\";test:runMain <this class>"
+ *   2. build/sbt build/sbt ";project sql;
+ *        set Test / javaOptions += \"-Dspark.memory.debugFill=false\";Test/runMain <this class>"
+ *   3. generate result: SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt ";project sql;
+ *        set Test / javaOptions += \"-Dspark.memory.debugFill=false\";Test/runMain <this class>"
  *      Results will be written to
  *      "benchmarks/ExternalAppendOnlyUnsafeRowArrayBenchmark-results.txt".
  * }}}
@@ -107,7 +107,9 @@ object ExternalAppendOnlyUnsafeRowArrayBenchmark extends BenchmarkBase {
       for (_ <- 0L until iterations) {
         val array = new ExternalAppendOnlyUnsafeRowArray(
           ExternalAppendOnlyUnsafeRowArray.DefaultInitialSizeOfInMemoryBuffer,
-          numSpillThreshold)
+          Long.MaxValue,
+          numSpillThreshold,
+          Long.MaxValue)
 
         rows.foreach(x => array.add(x))
 
@@ -146,6 +148,7 @@ object ExternalAppendOnlyUnsafeRowArrayBenchmark extends BenchmarkBase {
           1024,
           SparkEnv.get.memoryManager.pageSizeBytes,
           numSpillThreshold,
+          Long.MaxValue,
           false)
 
         rows.foreach(x =>
@@ -170,7 +173,11 @@ object ExternalAppendOnlyUnsafeRowArrayBenchmark extends BenchmarkBase {
     benchmark.addCase("ExternalAppendOnlyUnsafeRowArray") { _: Int =>
       var sum = 0L
       for (_ <- 0L until iterations) {
-        val array = new ExternalAppendOnlyUnsafeRowArray(numSpillThreshold, numSpillThreshold)
+        val array = new ExternalAppendOnlyUnsafeRowArray(
+          numSpillThreshold,
+          Long.MaxValue,
+          numSpillThreshold,
+          Long.MaxValue)
         rows.foreach(x => array.add(x))
 
         val iterator = array.generateIterator()

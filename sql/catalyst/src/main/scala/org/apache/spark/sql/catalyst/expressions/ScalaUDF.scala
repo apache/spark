@@ -58,16 +58,21 @@ case class ScalaUDF(
 
   override lazy val deterministic: Boolean = udfDeterministic && children.forall(_.deterministic)
 
+  // `ScalaUDF` uses `ExpressionEncoder` to convert the function result to Catalyst internal format.
+  // `ExpressionEncoder` is stateful as it reuses the `UnsafeRow` instance, thus `ScalaUDF` is
+  // stateful as well.
+  override def stateful: Boolean = true
+
   final override val nodePatterns: Seq[TreePattern] = Seq(SCALA_UDF)
 
   override def toString: String = s"$name(${children.mkString(", ")})"
 
   override def name: String = udfName.getOrElse("UDF")
 
-  override lazy val preCanonicalized: Expression = {
+  override lazy val canonicalized: Expression = {
     // SPARK-32307: `ExpressionEncoder` can't be canonicalized, and technically we don't
     // need it to identify a `ScalaUDF`.
-    copy(children = children.map(_.preCanonicalized), inputEncoders = Nil, outputEncoder = None)
+    copy(children = children.map(_.canonicalized), inputEncoders = Nil, outputEncoder = None)
   }
 
   /**
@@ -157,7 +162,9 @@ case class ScalaUDF(
     if (useEncoder) {
       val enc = inputEncoders(i).get
       val fromRow = enc.createDeserializer()
-      val converter = if (enc.isSerializedAsStructForTopLevel) {
+      val unwrappedValueClass = enc.isSerializedAsStruct &&
+        enc.schema.fields.length == 1 && enc.schema.fields.head.dataType == dataType
+      val converter = if (enc.isSerializedAsStructForTopLevel && !unwrappedValueClass) {
         row: Any => fromRow(row.asInstanceOf[InternalRow])
       } else {
         val inputRow = new GenericInternalRow(1)
@@ -1163,7 +1170,7 @@ case class ScalaUDF(
          |  $funcInvocation;
          |} catch (Throwable e) {
          |  throw QueryExecutionErrors.failedExecuteUserDefinedFunctionError(
-         |    "$funcCls", "$inputTypesString", "$outputType", e);
+         |    "$functionName", "$inputTypesString", "$outputType", e);
          |}
        """.stripMargin
 
@@ -1183,6 +1190,8 @@ case class ScalaUDF(
 
   private[this] val resultConverter = catalystConverter
 
+  private def functionName = udfName.map { uName => s"$uName ($funcCls)" }.getOrElse(funcCls)
+
   lazy val funcCls = Utils.getSimpleName(function.getClass)
   lazy val inputTypesString = children.map(_.dataType.catalogString).mkString(", ")
   lazy val outputType = dataType.catalogString
@@ -1193,7 +1202,7 @@ case class ScalaUDF(
     } catch {
       case e: Exception =>
         throw QueryExecutionErrors.failedExecuteUserDefinedFunctionError(
-          funcCls, inputTypesString, outputType, e)
+          functionName, inputTypesString, outputType, e)
     }
 
     resultConverter(result)

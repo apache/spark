@@ -12,7 +12,7 @@ TakeOrderedAndProject [o_totalprice,o_orderdate,c_name,c_custkey,o_orderkey,sum(
                       Filter [c_custkey]
                         ColumnarToRow
                           InputAdapter
-                            Scan parquet default.customer [c_custkey,c_name]
+                            Scan parquet spark_catalog.default.customer [c_custkey,c_name]
                       InputAdapter
                         BroadcastExchange #2
                           WholeStageCodegen (3)
@@ -20,7 +20,7 @@ TakeOrderedAndProject [o_totalprice,o_orderdate,c_name,c_custkey,o_orderkey,sum(
                               Filter [o_custkey,o_orderkey]
                                 ColumnarToRow
                                   InputAdapter
-                                    Scan parquet default.orders [o_orderkey,o_custkey,o_totalprice,o_orderdate]
+                                    Scan parquet spark_catalog.default.orders [o_orderkey,o_custkey,o_totalprice,o_orderdate]
                               InputAdapter
                                 BroadcastExchange #3
                                   WholeStageCodegen (2)
@@ -33,7 +33,7 @@ TakeOrderedAndProject [o_totalprice,o_orderdate,c_name,c_custkey,o_orderkey,sum(
                                                 HashAggregate [l_orderkey,l_quantity] [sum,isEmpty,sum,isEmpty]
                                                   ColumnarToRow
                                                     InputAdapter
-                                                      Scan parquet default.lineitem [l_orderkey,l_quantity]
+                                                      Scan parquet spark_catalog.default.lineitem [l_orderkey,l_quantity]
                   InputAdapter
                     BroadcastExchange #5
                       WholeStageCodegen (6)
@@ -41,6 +41,6 @@ TakeOrderedAndProject [o_totalprice,o_orderdate,c_name,c_custkey,o_orderkey,sum(
                           Filter [l_orderkey]
                             ColumnarToRow
                               InputAdapter
-                                Scan parquet default.lineitem [l_orderkey,l_quantity]
+                                Scan parquet spark_catalog.default.lineitem [l_orderkey,l_quantity]
                           InputAdapter
                             ReusedExchange [l_orderkey] #3

@@ -17,12 +17,15 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import scala.util.{Either, Left, Right}
+
+import org.apache.spark.QueryContext
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{EXTRACT_VALUE, TreePattern}
 import org.apache.spark.sql.catalyst.util.{quoteIdentifier, ArrayData, GenericArrayData, MapData, TypeUtils}
-import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
@@ -34,6 +37,22 @@ import org.apache.spark.sql.types._
 
 object ExtractValue {
   /**
+   * Returns the resolved `ExtractValue` using the `extractValue` method call. In case the method
+   * returns `None`, it throws.
+   *
+   * See `extractValue` doc for more info.
+   */
+  def apply(
+      child: Expression,
+      extraction: Expression,
+      resolver: Resolver): Expression = {
+    extractValue(child, extraction, resolver) match {
+      case Left(expression) => expression
+      case Right(throwable) => throw throwable
+    }
+  }
+
+  /**
    * Returns the resolved `ExtractValue`. It will return one kind of concrete `ExtractValue`,
    * depend on the type of `child` and `extraction`.
    *
@@ -44,30 +63,86 @@ object ExtractValue {
    *    Array       |   Integral type    |         GetArrayItem
    *     Map        |   map key type     |         GetMapValue
    */
-  def apply(
+  def extractValue(
       child: Expression,
       extraction: Expression,
-      resolver: Resolver): Expression = {
-
+      resolver: Resolver): Either[Expression, Throwable] = {
     (child.dataType, extraction) match {
-      case (StructType(fields), NonNullLiteral(v, StringType)) =>
+      case (StructType(fields), NonNullLiteral(v, _: StringType)) =>
         val fieldName = v.toString
-        val ordinal = findField(fields, fieldName, resolver)
-        GetStructField(child, ordinal, Some(fieldName))
+        findField(fields, fieldName, resolver) match {
+          case Left(ordinal) => Left(GetStructField(child, ordinal, Some(fieldName)))
+          case Right(throwable) => Right(throwable)
+        }
 
-      case (ArrayType(StructType(fields), containsNull), NonNullLiteral(v, StringType)) =>
+      case (ArrayType(StructType(fields), containsNull), NonNullLiteral(v, _: StringType)) =>
         val fieldName = v.toString
-        val ordinal = findField(fields, fieldName, resolver)
-        GetArrayStructFields(child, fields(ordinal).copy(name = fieldName),
-          ordinal, fields.length, containsNull || fields(ordinal).nullable)
+        findField(fields, fieldName, resolver) match {
+          case Left(ordinal) =>
+            Left(
+              GetArrayStructFields(
+                child,
+                fields(ordinal).copy(name = fieldName),
+                ordinal,
+                fields.length,
+                containsNull || fields(ordinal).nullable
+              )
+            )
+          case Right(throwable) => Right(throwable)
+        }
 
-      case (_: ArrayType, _) => GetArrayItem(child, extraction)
+      case (_: ArrayType, _) => Left(GetArrayItem(child, extraction))
 
-      case (MapType(kt, _, _), _) => GetMapValue(child, extraction)
+      case (MapType(_, _, _), _) => Left(GetMapValue(child, extraction))
 
-      case (otherType, _) =>
-        throw QueryCompilationErrors.dataTypeUnsupportedByExtractValueError(
-          otherType, extraction, child)
+      case (otherType, _) => Right(
+        QueryCompilationErrors.dataTypeUnsupportedByExtractValueError(
+          child.dataType,
+          extraction,
+          child
+        )
+      )
+    }
+  }
+
+  /**
+   * Check that `attribute` can be fully extracted using the given nestedFields and `extractorKey`.
+   * This method first tries to extract the innermost nested field using `nestedFields`. If such
+   * nested field is found, try to extract the value using `extractorKey`, if it exists. This
+   * method returns true if all attempted extractions are successful.
+   */
+  def isExtractable(
+      attribute: Attribute,
+      nestedFields: Seq[String],
+      extractorKey: Option[Expression] = None,
+      resolver: Resolver): Boolean = {
+    val withExtractedNestedFields = nestedFields
+      .foldLeft(Some(attribute): Option[Expression]) {
+        case (Some(expression), field) =>
+          ExtractValue.extractValue(
+            child = expression,
+            extraction = Literal(field),
+            resolver = resolver
+          ) match {
+            case Left(e) => Some(e)
+            case Right(_) => None
+          }
+        case _ =>
+          None
+      }
+
+    withExtractedNestedFields match {
+      case Some(nestedField) if extractorKey.isDefined =>
+        ExtractValue.extractValue(
+          child = nestedField,
+          extraction = extractorKey.get,
+          resolver = resolver
+        ) match {
+          case Left(e) => true
+          case Right(_) => false
+        }
+      case Some(_) => true
+      case None => false
     }
   }
 
@@ -75,22 +150,25 @@ object ExtractValue {
    * Find the ordinal of StructField, report error if no desired field or over one
    * desired fields are found.
    */
-  private def findField(fields: Array[StructField], fieldName: String, resolver: Resolver): Int = {
+  private def findField(
+      fields: Array[StructField], fieldName: String, resolver: Resolver): Either[Int, Throwable] = {
     val checkField = (f: StructField) => resolver(f.name, fieldName)
     val ordinal = fields.indexWhere(checkField)
     if (ordinal == -1) {
-      throw QueryCompilationErrors.noSuchStructFieldInGivenFieldsError(fieldName, fields)
+      Right(QueryCompilationErrors.noSuchStructFieldInGivenFieldsError(fieldName, fields))
     } else if (fields.indexWhere(checkField, ordinal + 1) != -1) {
-      throw QueryCompilationErrors.ambiguousReferenceToFieldsError(
-        fields.filter(checkField).mkString(", "))
+      val numberOfAppearance = fields.count(checkField)
+      Right(QueryCompilationErrors.ambiguousReferenceToFieldsError(fieldName, numberOfAppearance))
     } else {
-      ordinal
+      Left(ordinal)
     }
   }
 }
 
-trait ExtractValue extends Expression with NullIntolerant {
+trait ExtractValue extends Expression with QueryErrorsBase {
+  override def nullIntolerant: Boolean = true
   final override val nodePatterns: Seq[TreePattern] = Seq(EXTRACT_VALUE)
+  val child: Expression
 }
 
 /**
@@ -102,12 +180,14 @@ trait ExtractValue extends Expression with NullIntolerant {
  * For example, when get field `yEAr` from `<year: int, month: int>`, we should pass in `yEAr`.
  */
 case class GetStructField(child: Expression, ordinal: Int, name: Option[String] = None)
-  extends UnaryExpression with ExtractValue {
+  extends UnaryExpression with ExtractValue with ExpectsInputTypes {
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(StructType, IntegralType)
 
   lazy val childSchema = child.dataType.asInstanceOf[StructType]
 
-  override lazy val preCanonicalized: Expression = {
-    copy(child = child.preCanonicalized, name = None)
+  override lazy val canonicalized: Expression = {
+    copy(child = child.canonicalized, name = None)
   }
 
   override def dataType: DataType = childSchema(ordinal).dataType
@@ -162,6 +242,13 @@ case class GetArrayStructFields(
     ordinal: Int,
     numFields: Int,
     containsNull: Boolean) extends UnaryExpression with ExtractValue {
+
+  override def checkInputDataTypes(): TypeCheckResult = child.dataType match {
+    case ArrayType(_: StructType, _) => TypeCheckResult.TypeCheckSuccess
+    // This should never happen, unless we hit a bug.
+    case other => TypeCheckResult.TypeCheckFailure(
+      "GetArrayStructFields.child must be array of struct type, but got " + other)
+  }
 
   override def dataType: DataType = ArrayType(field.dataType, containsNull)
   override def toString: String = s"$child.${field.name}"
@@ -235,11 +322,13 @@ case class GetArrayStructFields(
 case class GetArrayItem(
     child: Expression,
     ordinal: Expression,
-    failOnError: Boolean = SQLConf.get.strictIndexOperator)
-  extends BinaryExpression with GetArrayItemUtil with ExpectsInputTypes with ExtractValue {
+    failOnError: Boolean = SQLConf.get.ansiEnabled) extends BinaryExpression
+  with GetArrayItemUtil
+  with ExpectsInputTypes
+  with ExtractValue
+  with SupportQueryContext {
 
-  // We have done type checking for child in `ExtractValue`, so only need to check the `ordinal`.
-  override def inputTypes: Seq[AbstractDataType] = Seq(AnyDataType, IntegralType)
+  override def inputTypes: Seq[AbstractDataType] = Seq(ArrayType, IntegralType)
 
   override def toString: String = s"$child[$ordinal]"
   override def sql: String = s"${child.sql}[${ordinal.sql}]"
@@ -263,7 +352,8 @@ case class GetArrayItem(
     val index = ordinal.asInstanceOf[Number].intValue()
     if (index >= baseValue.numElements() || index < 0) {
       if (failOnError) {
-        throw QueryExecutionErrors.invalidArrayIndexError(index, baseValue.numElements)
+        throw QueryExecutionErrors.invalidArrayIndexError(
+          index, baseValue.numElements(), getContextOrNull())
       } else {
         null
       }
@@ -277,7 +367,8 @@ case class GetArrayItem(
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
       val index = ctx.freshName("index")
-      val nullCheck = if (child.dataType.asInstanceOf[ArrayType].containsNull) {
+      val childArrayElementNullable = child.dataType.asInstanceOf[ArrayType].containsNull
+      val nullCheck = if (childArrayElementNullable) {
         s"""else if ($eval1.isNullAt($index)) {
                ${ev.isNull} = true;
             }
@@ -287,7 +378,10 @@ case class GetArrayItem(
       }
 
       val indexOutOfBoundBranch = if (failOnError) {
-        s"throw QueryExecutionErrors.invalidArrayIndexError($index, $eval1.numElements());"
+        val errorContext = getContextOrNullCode(ctx)
+        // scalastyle:off line.size.limit
+        s"throw QueryExecutionErrors.invalidArrayIndexError($index, $eval1.numElements(), $errorContext);"
+        // scalastyle:on line.size.limit
       } else {
         s"${ev.isNull} = true;"
       }
@@ -306,6 +400,12 @@ case class GetArrayItem(
   override protected def withNewChildrenInternal(
       newLeft: Expression, newRight: Expression): GetArrayItem =
     copy(child = newLeft, ordinal = newRight)
+
+  override def initQueryContext(): Option[QueryContext] = if (failOnError) {
+    Some(origin.context)
+  } else {
+    None
+  }
 }
 
 /**
@@ -319,7 +419,7 @@ trait GetArrayItemUtil {
       ordinal: Expression,
       failOnError: Boolean,
       nullability: (Seq[Expression], Int) => Boolean): Boolean = {
-    val arrayContainsNull = child.dataType.asInstanceOf[ArrayType].containsNull
+    val arrayElementNullable = child.dataType.asInstanceOf[ArrayType].containsNull
     if (ordinal.foldable && !ordinal.nullable) {
       val intOrdinal = ordinal.eval().asInstanceOf[Number].intValue()
       child match {
@@ -331,7 +431,7 @@ trait GetArrayItemUtil {
           true
       }
     } else {
-      if (failOnError) arrayContainsNull else true
+      if (failOnError) arrayElementNullable else true
     }
   }
 }
@@ -341,15 +441,12 @@ trait GetArrayItemUtil {
  */
 trait GetMapValueUtil extends BinaryExpression with ImplicitCastInputTypes {
 
-  protected val isElementAtFunction: Boolean = false
-
   // todo: current search is O(n), improve it.
   def getValueEval(
       value: Any,
       ordinal: Any,
       keyType: DataType,
-      ordering: Ordering[Any],
-      failOnError: Boolean): Any = {
+      ordering: Ordering[Any]): Any = {
     val map = value.asInstanceOf[MapData]
     val length = map.numElements()
     val keys = map.keyArray()
@@ -365,13 +462,7 @@ trait GetMapValueUtil extends BinaryExpression with ImplicitCastInputTypes {
       }
     }
 
-    if (!found) {
-      if (failOnError) {
-        throw QueryExecutionErrors.mapKeyNotExistError(ordinal, isElementAtFunction, origin.context)
-      } else {
-        null
-      }
-    } else if (values.isNullAt(i)) {
+    if (!found || values.isNullAt(i)) {
       null
     } else {
       values.get(i, dataType)
@@ -381,53 +472,39 @@ trait GetMapValueUtil extends BinaryExpression with ImplicitCastInputTypes {
   def doGetValueGenCode(
       ctx: CodegenContext,
       ev: ExprCode,
-      mapType: MapType,
-      failOnError: Boolean): ExprCode = {
+      mapType: MapType): ExprCode = {
     val index = ctx.freshName("index")
     val length = ctx.freshName("length")
     val keys = ctx.freshName("keys")
-    val found = ctx.freshName("found")
     val key = ctx.freshName("key")
     val values = ctx.freshName("values")
     val keyType = mapType.keyType
     val nullCheck = if (mapType.valueContainsNull) {
-      s"""else if ($values.isNullAt($index)) {
-            ${ev.isNull} = true;
-          }
-       """
+      s" || $values.isNullAt($index)"
     } else {
       ""
     }
 
     val keyJavaType = CodeGenerator.javaType(keyType)
-    lazy val errorContext = ctx.addReferenceObj("errCtx", origin.context)
     nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
-      val keyNotFoundBranch = if (failOnError) {
-        s"throw QueryExecutionErrors.mapKeyNotExistError(" +
-          s"$eval2, $isElementAtFunction, $errorContext);"
-      } else {
-        s"${ev.isNull} = true;"
-      }
-
       s"""
         final int $length = $eval1.numElements();
         final ArrayData $keys = $eval1.keyArray();
         final ArrayData $values = $eval1.valueArray();
 
         int $index = 0;
-        boolean $found = false;
-        while ($index < $length && !$found) {
+        while ($index < $length) {
           final $keyJavaType $key = ${CodeGenerator.getValue(keys, keyType, index)};
           if (${ctx.genEqual(keyType, key, eval2)}) {
-            $found = true;
+            break;
           } else {
             $index++;
           }
         }
 
-        if (!$found) {
-          $keyNotFoundBranch
-        } $nullCheck else {
+        if ($index == $length$nullCheck) {
+          ${ev.isNull} = true;
+        } else {
           ${ev.value} = ${CodeGenerator.getValue(values, dataType, index)};
         }
       """
@@ -440,27 +517,27 @@ trait GetMapValueUtil extends BinaryExpression with ImplicitCastInputTypes {
  *
  * We need to do type checking here as `key` expression maybe unresolved.
  */
-case class GetMapValue(
-    child: Expression,
-    key: Expression,
-    failOnError: Boolean = SQLConf.get.strictIndexOperator)
+case class GetMapValue(child: Expression, key: Expression)
   extends GetMapValueUtil with ExtractValue {
 
   @transient private lazy val ordering: Ordering[Any] =
     TypeUtils.getInterpretedOrdering(keyType)
 
-  private def keyType = child.dataType.asInstanceOf[MapType].keyType
+  private[catalyst] def keyType = child.dataType.asInstanceOf[MapType].keyType
 
-  override def checkInputDataTypes(): TypeCheckResult = {
-    super.checkInputDataTypes() match {
-      case f: TypeCheckResult.TypeCheckFailure => f
-      case TypeCheckResult.TypeCheckSuccess =>
-        TypeUtils.checkForOrderingExpr(keyType, s"function $prettyName")
-    }
+  override def checkInputDataTypes(): TypeCheckResult = child.dataType match {
+    case _: MapType =>
+      super.checkInputDataTypes() match {
+        case f if f.isFailure => f
+        case TypeCheckResult.TypeCheckSuccess =>
+          TypeUtils.checkForOrderingExpr(keyType, prettyName)
+      }
+    // This should never happen, unless we hit a bug.
+    case other => TypeCheckResult.TypeCheckFailure(
+      "GetMapValue.child must be map type, but got " + other)
   }
 
-  // We have done type checking for child in `ExtractValue`, so only need to check the `key`.
-  override def inputTypes: Seq[AbstractDataType] = Seq(AnyDataType, keyType)
+  override def inputTypes: Seq[AbstractDataType] = Seq(MapType, keyType)
 
   override def toString: String = s"$child[$key]"
   override def sql: String = s"${child.sql}[${key.sql}]"
@@ -480,11 +557,11 @@ case class GetMapValue(
 
   // todo: current search is O(n), improve it.
   override def nullSafeEval(value: Any, ordinal: Any): Any = {
-    getValueEval(value, ordinal, keyType, ordering, failOnError)
+    getValueEval(value, ordinal, keyType, ordering)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    doGetValueGenCode(ctx, ev, child.dataType.asInstanceOf[MapType], failOnError)
+    doGetValueGenCode(ctx, ev, child.dataType.asInstanceOf[MapType])
   }
 
   override protected def withNewChildrenInternal(

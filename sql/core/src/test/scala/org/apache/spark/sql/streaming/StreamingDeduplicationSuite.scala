@@ -17,12 +17,19 @@
 
 package org.apache.spark.sql.streaming
 
+import java.io.File
+
+import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
-import org.apache.spark.sql.execution.streaming.MemoryStream
+import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.StringType
+import org.apache.spark.tags.SlowSQLTest
+import org.apache.spark.util.Utils
 
+@SlowSQLTest
 class StreamingDeduplicationSuite extends StateStoreMetricsTest {
 
   import testImplicits._
@@ -145,7 +152,6 @@ class StreamingDeduplicationSuite extends StateStoreMetricsTest {
       .withColumn("eventTime", timestamp_seconds($"value"))
       .withWatermark("eventTime", "10 seconds")
       .dropDuplicates()
-      .withWatermark("eventTime", "10 seconds")
       .groupBy(window($"eventTime", "5 seconds") as Symbol("window"))
       .agg(count("*") as Symbol("count"))
       .select($"window".getField("start").cast("long").as[Long], $"count".as[Long])
@@ -258,7 +264,7 @@ class StreamingDeduplicationSuite extends StateStoreMetricsTest {
 
   test("SPARK-19841: watermarkPredicate should filter based on keys") {
     val input = MemoryStream[(Int, Int)]
-    val df = input.toDS.toDF("time", "id")
+    val df = input.toDS().toDF("time", "id")
       .withColumn("time", timestamp_seconds($"time"))
       .withWatermark("time", "1 second")
       .dropDuplicates("id", "time") // Change the column positions
@@ -277,7 +283,7 @@ class StreamingDeduplicationSuite extends StateStoreMetricsTest {
 
   test("SPARK-21546: dropDuplicates should ignore watermark when it's not a key") {
     val input = MemoryStream[(Int, Int)]
-    val df = input.toDS.toDF("id", "time")
+    val df = input.toDS().toDF("id", "time")
       .withColumn("time", timestamp_seconds($"time"))
       .withWatermark("time", "1 second")
       .dropDuplicates("id")
@@ -313,7 +319,7 @@ class StreamingDeduplicationSuite extends StateStoreMetricsTest {
         },
         AssertOnQuery { q =>
           eventually(timeout(streamingTimeout)) {
-            q.lastProgress.sink.numOutputRows == 0L
+            assert(q.lastProgress.sink.numOutputRows == 0L)
             true
           }
         }
@@ -413,4 +419,176 @@ class StreamingDeduplicationSuite extends StateStoreMetricsTest {
       assertStateOperatorCustomMetric("numDroppedDuplicateRows", expected = 1)
     )
   }
+
+  test("SPARK-39650: duplicate with specific keys should allow input to change schema") {
+    withTempDir { checkpoint =>
+      val dedupeInputData = MemoryStream[(String, Int)]
+      val dedupe = dedupeInputData.toDS().dropDuplicates("_1")
+
+      testStream(dedupe, Append)(
+        StartStream(checkpointLocation = checkpoint.getCanonicalPath),
+
+        AddData(dedupeInputData, "a" -> 1),
+        CheckLastBatch("a" -> 1),
+
+        AddData(dedupeInputData, "a" -> 2, "b" -> 3),
+        CheckLastBatch("b" -> 3)
+      )
+
+      val dedupeInputData2 = MemoryStream[(String, Int, String)]
+      val dedupe2 = dedupeInputData2.toDS().dropDuplicates("_1")
+
+      // initialize new memory stream with previously executed batches
+      dedupeInputData2.addData(("a", 1, "dummy"))
+      dedupeInputData2.addData(Seq(("a", 2, "dummy"), ("b", 3, "dummy")))
+
+      testStream(dedupe2, Append)(
+        StartStream(checkpointLocation = checkpoint.getCanonicalPath),
+
+        AddData(dedupeInputData2, ("a", 5, "a"), ("b", 2, "b"), ("c", 9, "c")),
+        CheckLastBatch(("c", 9, "c"))
+      )
+    }
+  }
+
+  Seq("3.3.0", "3.5.1").foreach { sparkVersion =>
+    test("SPARK-39650: recovery from checkpoint having all columns as value schema " +
+      s"with sparkVersion=$sparkVersion") {
+      // NOTE: We are also changing the schema of input compared to the checkpoint.
+      // In the checkpoint we define the input schema as (String, Int).
+      val inputData = MemoryStream[(String, Int, String)]
+      val dedupe = inputData.toDS().dropDuplicates("_1")
+
+      val resourcePath = "/structured-streaming/checkpoint-version-" + sparkVersion +
+        "-streaming-deduplication/"
+      val resourceUri = this.getClass.getResource(resourcePath).toURI
+
+      val checkpointDir = Utils.createTempDir().getCanonicalFile
+      // Copy the checkpoint to a temp dir to prevent changes to the original.
+      // Not doing this will lead to the test passing on the first run, but fail subsequent runs.
+      Utils.copyDirectory(new File(resourceUri), checkpointDir)
+
+      inputData.addData(("a", 1, "dummy"))
+      inputData.addData(("a", 2, "dummy"), ("b", 3, "dummy"))
+
+      testStream(dedupe, Append)(
+        StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
+        /*
+        Note: The checkpoint was generated using the following input in Spark version 3.3.0
+        AddData(inputData, ("a", 1)),
+        CheckLastBatch(("a", 1)),
+        AddData(inputData, ("a", 2), ("b", 3)),
+        CheckLastBatch(("b", 3))
+       */
+
+        AddData(inputData, ("a", 5, "a"), ("b", 2, "b"), ("c", 9, "c")),
+        CheckLastBatch(("c", 9, "c"))
+      )
+    }
+  }
+
+  Seq("3.3.0", "3.5.1").foreach { sparkVersion =>
+    test("SPARK-39650: recovery from checkpoint with changes on key schema " +
+      s"are not allowed with sparkVersion=$sparkVersion") {
+      // NOTE: We are also changing the schema of input compared to the checkpoint.
+      // In the checkpoint we define the input schema as (String, Int).
+      val inputData = MemoryStream[(String, Int, String)]
+      val dedupe = inputData.toDS().dropDuplicates("_1", "_2")
+
+      val resourcePath = "/structured-streaming/checkpoint-version-" + sparkVersion +
+        "-streaming-deduplication/"
+      val resourceUri = this.getClass.getResource(resourcePath).toURI
+
+      val checkpointDir = Utils.createTempDir().getCanonicalFile
+      // Copy the checkpoint to a temp dir to prevent changes to the original.
+      // Not doing this will lead to the test passing on the first run, but fail subsequent runs.
+      Utils.copyDirectory(new File(resourceUri), checkpointDir)
+
+      inputData.addData(("a", 1, "dummy"))
+      inputData.addData(("a", 2, "dummy"), ("b", 3, "dummy"))
+
+      // trying to evolve the key schema is not allowed and should throw an exception
+      val ex = intercept[StreamingQueryException] {
+        testStream(dedupe, Append)(
+          StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
+          AddData(inputData, ("a", 5, "a"), ("b", 2, "b"), ("c", 9, "c")),
+          CheckLastBatch(("a", 5, "a"), ("b", 2, "b"), ("c", 9, "c"))
+        )
+      }
+
+      // verify that the key schema not compatible error is thrown
+      checkError(
+        ex.getCause.asInstanceOf[SparkUnsupportedOperationException],
+        condition = "STATE_STORE_KEY_SCHEMA_NOT_COMPATIBLE",
+        parameters = Map("storedKeySchema" -> ".*",
+          "newKeySchema" -> ".*"),
+        matchPVals = true
+      )
+    }
+  }
+
+  test("collation aware deduplication") {
+    val inputData = MemoryStream[(String, Int)]
+    val result = inputData.toDF()
+      .select(col("_1")
+        .try_cast(StringType("UTF8_BINARY")).as("str"),
+        col("_2").as("int"))
+      .dropDuplicates("str")
+
+    testStream(result, Append)(
+      AddData(inputData, "a" -> 1),
+      CheckLastBatch("a" -> 1),
+      assertNumStateRows(total = 1, updated = 1, droppedByWatermark = 0),
+      AddData(inputData, "a" -> 2), // Dropped
+      CheckLastBatch(),
+      assertNumStateRows(total = 1, updated = 0, droppedByWatermark = 0),
+      // scalastyle:off
+      AddData(inputData, "ä" -> 1),
+      CheckLastBatch("ä" -> 1),
+      // scalastyle:on
+      assertNumStateRows(total = 2, updated = 1, droppedByWatermark = 0)
+    )
+  }
+
+  test("non-binary collation aware deduplication not supported") {
+    val inputData = MemoryStream[(String)]
+    val result = inputData.toDF()
+      .select(col("value")
+        .try_cast(StringType("UTF8_LCASE")).as("str"))
+      .dropDuplicates("str")
+
+    val ex = intercept[StreamingQueryException] {
+      testStream(result, Append)(
+        AddData(inputData, "a"),
+        CheckLastBatch("a"))
+    }
+
+    checkError(
+      ex.getCause.asInstanceOf[SparkUnsupportedOperationException],
+      condition = "STATE_STORE_UNSUPPORTED_OPERATION_BINARY_INEQUALITY",
+      parameters = Map(
+        "schema" -> ".+\"str\":\"spark.UTF8_LCASE\".+"
+      ),
+      matchPVals = true
+    )
+  }
+
+  test("test that avro encoding is not supported") {
+    val inputData = MemoryStream[String]
+    val result = inputData.toDS().dropDuplicates()
+
+    val ex = intercept[Exception] {
+      withSQLConf(SQLConf.STREAMING_STATE_STORE_ENCODING_FORMAT.key -> "avro") {
+        testStream(result, Append)(
+          AddData(inputData, "a"),
+          ProcessAllAvailable()
+        )
+      }
+    }
+    assert(ex.getMessage.contains("State store encoding format as avro is not supported"))
+  }
 }
+
+@SlowSQLTest
+class RocksDBStateStoreStreamingDeduplicationSuite
+  extends StreamingDeduplicationSuite with RocksDBStateStoreTest

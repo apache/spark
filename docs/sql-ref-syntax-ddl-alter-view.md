@@ -109,6 +109,32 @@ Note that `ALTER VIEW` statement does not support `SET SERDE` or `SET SERDEPROPE
 
     Specifies the definition of the view. Check [select_statement](sql-ref-syntax-qry-select.html) for details.
 
+#### ALTER View WITH SCHEMA
+
+Changes the view's schema binding behavior. 
+
+If the view is cached, the command clears cached data of the view and all its dependents that refer to it. View's cache will be lazily filled when the next time the view is accessed. The command leaves view's dependents as uncached.
+
+This statement is not supported for `TEMPORARY` views.
+
+#### Syntax
+```sql
+ALTER VIEW view_identifier WITH SCHEMA { BINDING | COMPENSATION | [ TYPE ] EVOLUTION }
+```
+
+#### Parameters
+* **view_identifier**
+
+  Specifies a view name, which may be optionally qualified with a database name.
+
+  **Syntax:** `[ database_name. ] view_name`
+
+* **BINDING** - The view can tolerate only type changes in the underlying schema requiring safe up-casts.
+* **COMPENSATION** - The view can tolerate type changes in the underlying schema requiring casts. Runtime casting errors may occur.
+* **TYPE EVOLUTION** - The view will adapt to any type changes in the underlying schema.
+* **EVOLUTION** - For views defined without a column lists any schema changes are adapted by the view, including, for queries with `SELECT *` dropped or added columns.
+  If the view is defined with a column list, the clause is interpreted as `TYPE EVOLUTION`.
+
 ### Examples
 
 ```sql
@@ -195,6 +221,24 @@ DESC TABLE EXTENDED tempdb1.v2;
 |                        Type|                       VIEW|       |
 |                   View Text|   select * from tempdb1.v1|       |
 |          View Original Text|   select * from tempdb1.v1|       |
++----------------------------+---------------------------+-------+
+
+CREATE OR REPLACE VIEW open_orders AS SELECT * FROM orders WHERE status = 'open';
+ALTER VIEW open_orders WITH SCHEMA EVOLUTION;
+DESC TABLE EXTENDED open_orders;
++----------------------------+---------------------------+-------+
+|                    col_name|                  data_type|comment|
++----------------------------+---------------------------+-------+
+|                    order_no|                        int|   null|
+|                  order_date|                       date|   null|
+|                            |                           |       |
+|# Detailed Table Information|                           |       |
+|                    Database|                       mydb|       |
+|                       Table|                open_orders|       |
+|                        Type|                       VIEW|       |
+|                   View Text|       select * from orders|       |
+|          View Original Text|       select * from orders|       |
+|          View Schema Mode  |                  EVOLUTION|       |    
 +----------------------------+---------------------------+-------+
 ```
 

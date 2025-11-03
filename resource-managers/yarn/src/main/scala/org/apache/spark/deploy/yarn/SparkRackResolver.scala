@@ -17,19 +17,17 @@
 
 package org.apache.spark.deploy.yarn
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
+import scala.jdk.CollectionConverters._
 
-import com.google.common.base.Strings
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.CommonConfigurationKeysPublic
 import org.apache.hadoop.net._
 import org.apache.hadoop.util.ReflectionUtils
-import org.apache.hadoop.yarn.util.RackResolver
-import org.apache.logging.log4j.{Level, LogManager}
-import org.apache.logging.log4j.core.Logger
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.LogKeys.NODE_LOCATION
+import org.apache.spark.util.SparkStringUtils
 
 /**
  * Re-implement YARN's [[RackResolver]] for hadoop releases without YARN-9332.
@@ -37,12 +35,6 @@ import org.apache.spark.internal.Logging
  * self-initializes the first time it's called, and future calls all use the initial configuration.
  */
 private[spark] class SparkRackResolver(conf: Configuration) extends Logging {
-
-  // RackResolver logs an INFO message whenever it resolves a rack, which is way too often.
-  val logger = LogManager.getLogger(classOf[RackResolver])
-  if (logger.getLevel != Level.WARN) {
-    logger.asInstanceOf[Logger].setLevel(Level.WARN)
-  }
 
   private val dnsToSwitchMapping: DNSToSwitchMapping = {
     val dnsToSwitchMappingClass =
@@ -77,11 +69,11 @@ private[spark] class SparkRackResolver(conf: Configuration) extends Logging {
     val rNameList = dnsToSwitchMapping.resolve(hostNames.toList.asJava).asScala
     if (rNameList == null || rNameList.isEmpty) {
       hostNames.foreach(nodes += new NodeBase(_, NetworkTopology.DEFAULT_RACK))
-      logInfo(s"Got an error when resolving hostNames. " +
-        s"Falling back to ${NetworkTopology.DEFAULT_RACK} for all")
+      logInfo(log"Got an error when resolving hostNames. " +
+        log"Falling back to ${MDC(NODE_LOCATION, NetworkTopology.DEFAULT_RACK)} for all")
     } else {
       for ((hostName, rName) <- hostNames.zip(rNameList)) {
-        if (Strings.isNullOrEmpty(rName)) {
+        if (SparkStringUtils.isEmpty(rName)) {
           nodes += new NodeBase(hostName, NetworkTopology.DEFAULT_RACK)
           logDebug(s"Could not resolve $hostName. " +
             s"Falling back to ${NetworkTopology.DEFAULT_RACK}")

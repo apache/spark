@@ -29,8 +29,8 @@ from pyspark.pandas.indexes.base import Index
 from pyspark.pandas.indexes.category import CategoricalIndex
 from pyspark.pandas.indexes.datetimes import DatetimeIndex
 from pyspark.pandas.indexes.multi import MultiIndex
-from pyspark.pandas.indexes.numeric import Float64Index, Int64Index
-from pyspark.pandas.missing.frame import _MissingPandasLikeDataFrame
+from pyspark.pandas.missing.frame import MissingPandasLikeDataFrame
+from pyspark.pandas.missing.general_functions import MissingPandasLikeGeneralFunctions
 from pyspark.pandas.missing.groupby import (
     MissingPandasLikeDataFrameGroupBy,
     MissingPandasLikeSeriesGroupBy,
@@ -46,6 +46,8 @@ from pyspark.pandas.missing.window import (
     MissingPandasLikeRolling,
     MissingPandasLikeExpandingGroupby,
     MissingPandasLikeRollingGroupby,
+    MissingPandasLikeExponentialMoving,
+    MissingPandasLikeExponentialMovingGroupby,
 )
 from pyspark.pandas.series import Series
 from pyspark.pandas.spark.accessors import (
@@ -54,7 +56,14 @@ from pyspark.pandas.spark.accessors import (
     SparkIndexOpsMethods,
 )
 from pyspark.pandas.strings import StringMethods
-from pyspark.pandas.window import Expanding, ExpandingGroupby, Rolling, RollingGroupby
+from pyspark.pandas.window import (
+    Expanding,
+    ExpandingGroupby,
+    Rolling,
+    RollingGroupby,
+    ExponentialMoving,
+    ExponentialMovingGroupby,
+)
 from pyspark.instrumentation_utils import _attach
 
 
@@ -79,8 +88,6 @@ def attach(logger_module: Union[str, ModuleType]) -> None:
         Series,
         Index,
         MultiIndex,
-        Int64Index,
-        Float64Index,
         CategoricalIndex,
         DatetimeIndex,
         DataFrameGroupBy,
@@ -91,6 +98,8 @@ def attach(logger_module: Union[str, ModuleType]) -> None:
         ExpandingGroupby,
         Rolling,
         RollingGroupby,
+        ExponentialMoving,
+        ExponentialMovingGroupby,
         CachedSparkFrameMethods,
         SparkFrameMethods,
         SparkIndexOpsMethods,
@@ -109,7 +118,8 @@ def attach(logger_module: Union[str, ModuleType]) -> None:
     modules.append(sql_formatter)
 
     missings = [
-        (pd.DataFrame, _MissingPandasLikeDataFrame),
+        (pd, MissingPandasLikeGeneralFunctions),
+        (pd.DataFrame, MissingPandasLikeDataFrame),
         (pd.Series, MissingPandasLikeSeries),
         (pd.Index, MissingPandasLikeIndex),
         (pd.MultiIndex, MissingPandasLikeMultiIndex),
@@ -120,6 +130,11 @@ def attach(logger_module: Union[str, ModuleType]) -> None:
         (pd.core.window.Rolling, MissingPandasLikeRolling),
         (pd.core.window.ExpandingGroupby, MissingPandasLikeExpandingGroupby),
         (pd.core.window.RollingGroupby, MissingPandasLikeRollingGroupby),
+        (pd.core.window.ExponentialMovingWindow, MissingPandasLikeExponentialMoving),
+        (
+            pd.core.window.ExponentialMovingWindowGroupby,  # type: ignore[attr-defined]
+            MissingPandasLikeExponentialMovingGroupby,
+        ),
     ]
 
     _attach(logger_module, modules, classes, missings)

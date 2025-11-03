@@ -24,16 +24,19 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.annotation.Unstable
-import org.apache.spark.sql._
+import org.apache.spark.sql.{DataSourceRegistration, ExperimentalMethods, UDTFRegistration}
+import org.apache.spark.sql.artifact.ArtifactManager
 import org.apache.spark.sql.catalyst.analysis.{Analyzer, FunctionRegistry, TableFunctionRegistry}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.optimizer.Optimizer
 import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.classic.{SparkSession, StreamingQueryManager, UDFRegistration}
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.execution._
-import org.apache.spark.sql.streaming.StreamingQueryManager
+import org.apache.spark.sql.execution.adaptive.AdaptiveRulesHolder
+import org.apache.spark.sql.execution.datasources.DataSourceManager
 import org.apache.spark.sql.util.ExecutionListenerManager
 import org.apache.spark.util.{DependencyUtils, Utils}
 
@@ -45,6 +48,10 @@ import org.apache.spark.util.{DependencyUtils, Utils}
  * @param experimentalMethods Interface to add custom planning strategies and optimizers.
  * @param functionRegistry Internal catalog for managing functions registered by the user.
  * @param udfRegistration Interface exposed to the user for registering user-defined functions.
+ * @param udtfRegistration Interface exposed to the user for registering user-defined
+ *                         table functions.
+ * @param dataSourceManager Internal catalog for managing data sources registered by users.
+ * @param dataSourceRegistration Interface exposed to users for registering data sources.
  * @param catalogBuilder a function to create an internal catalog for managing table and database
  *                       states.
  * @param sqlParser Parser that extracts expressions, plans, table identifiers etc. from SQL texts.
@@ -68,6 +75,9 @@ private[sql] class SessionState(
     val functionRegistry: FunctionRegistry,
     val tableFunctionRegistry: TableFunctionRegistry,
     val udfRegistration: UDFRegistration,
+    val udtfRegistration: UDTFRegistration,
+    val dataSourceManager: DataSourceManager,
+    val dataSourceRegistration: DataSourceRegistration,
     catalogBuilder: () => SessionCatalog,
     val sqlParser: ParserInterface,
     analyzerBuilder: () => Analyzer,
@@ -79,7 +89,9 @@ private[sql] class SessionState(
     createQueryExecution: (LogicalPlan, CommandExecutionMode.Value) => QueryExecution,
     createClone: (SparkSession, SessionState) => SessionState,
     val columnarRules: Seq[ColumnarRule],
-    val queryStagePrepRules: Seq[Rule[SparkPlan]]) {
+    val adaptiveRulesHolder: AdaptiveRulesHolder,
+    val planNormalizationRules: Seq[Rule[LogicalPlan]],
+    val artifactManagerBuilder: () => ArtifactManager) {
 
   // The following fields are lazy to avoid creating the Hive client when creating SessionState.
   lazy val catalog: SessionCatalog = catalogBuilder()
@@ -93,6 +105,8 @@ private[sql] class SessionState(
   // The streamingQueryManager is lazy to avoid creating a StreamingQueryManager for each session
   // when connecting to ThriftServer.
   lazy val streamingQueryManager: StreamingQueryManager = streamingQueryManagerBuilder()
+
+  lazy val artifactManager: ArtifactManager = artifactManagerBuilder()
 
   def catalogManager: CatalogManager = analyzer.catalogManager
 

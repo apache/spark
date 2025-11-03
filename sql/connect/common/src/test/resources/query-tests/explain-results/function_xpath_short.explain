@@ -1,0 +1,2 @@
+Project [invoke(XPathShortEvaluator(a/b).evaluate(s#0)) AS xpath_short(s, a/b)#0]
++- LocalRelation <empty>, [d#0, t#0, s#0, x#0L, wt#0]

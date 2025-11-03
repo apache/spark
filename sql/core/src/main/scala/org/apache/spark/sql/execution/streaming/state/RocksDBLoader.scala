@@ -48,7 +48,16 @@ object RocksDBLoader extends Logging {
 
   def loadLibrary(): Unit = synchronized {
     if (exception == null) {
-      loadLibraryThread.start()
+      // SPARK-39847: if a task thread is interrupted while blocking in this loadLibrary()
+      // call then a second task thread might start a loadLibrary() call while the first
+      // call's loadLibraryThread is still running. Checking loadLibraryThread's state here
+      // ensures that the second loadLibrary() call will wait for the original call's
+      // loadLibraryThread to complete. If we didn't have this call then the second
+      // loadLibraryCall() would call start() on an already-started thread, causing a
+      // java.lang.IllegalThreadStateException error.
+      if (loadLibraryThread.getState == Thread.State.NEW) {
+        loadLibraryThread.start()
+      }
       logInfo("RocksDB library loading thread started")
       loadLibraryThread.join()
       exception.foreach(throw _)

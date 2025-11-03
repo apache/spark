@@ -19,22 +19,22 @@ package org.apache.spark.sql.util
 
 import java.util
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkFunSuite, SparkIllegalArgumentException, SparkUnsupportedOperationException}
 
 class CaseInsensitiveStringMapSuite extends SparkFunSuite {
 
   test("put and get") {
     val options = CaseInsensitiveStringMap.empty()
-    intercept[UnsupportedOperationException] {
+    intercept[SparkUnsupportedOperationException] {
       options.put("kEy", "valUE")
     }
   }
 
   test("clear") {
     val options = new CaseInsensitiveStringMap(Map("kEy" -> "valUE").asJava)
-    intercept[UnsupportedOperationException] {
+    intercept[SparkUnsupportedOperationException] {
       options.clear()
     }
   }
@@ -63,9 +63,12 @@ class CaseInsensitiveStringMapSuite extends SparkFunSuite {
     assert(options.getBoolean("isBar", true))
     assert(!options.getBoolean("isBar", false))
 
-    intercept[IllegalArgumentException] {
-      options.getBoolean("FOO", true)
-    }
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        options.getBoolean("FOO", true)
+      },
+      condition = "_LEGACY_ERROR_TEMP_3206",
+      parameters = Map("value" -> "bar"))
   }
 
   test("getLong") {

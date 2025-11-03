@@ -18,6 +18,7 @@
 package org.apache.spark.util.collection.unsafe.sort;
 
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.LinkedList;
 
 import javax.annotation.Nullable;
@@ -140,8 +141,9 @@ public final class UnsafeInMemorySorter {
     this.initialSize = array.size();
     if (recordComparator != null) {
       this.sortComparator = new SortComparator(recordComparator, prefixComparator, memoryManager);
-      if (canUseRadixSort && prefixComparator instanceof PrefixComparators.RadixSortSupport) {
-        this.radixSortSupport = (PrefixComparators.RadixSortSupport)prefixComparator;
+      if (canUseRadixSort &&
+        prefixComparator instanceof PrefixComparators.RadixSortSupport radixSortSupport) {
+        this.radixSortSupport = radixSortSupport;
       } else {
         this.radixSortSupport = null;
       }
@@ -214,7 +216,7 @@ public final class UnsafeInMemorySorter {
     if (array != null) {
       if (newArray.size() < array.size()) {
         // checkstyle.off: RegexpSinglelineJava
-        throw new SparkOutOfMemoryError("Not enough memory to grow pointer array");
+        throw new SparkOutOfMemoryError("POINTER_ARRAY_OUT_OF_MEMORY", new HashMap<>());
         // checkstyle.on: RegexpSinglelineJava
       }
       Platform.copyMemory(
@@ -277,6 +279,7 @@ public final class UnsafeInMemorySorter {
       this.offset = offset;
     }
 
+    @Override
     public SortedIterator clone() {
       SortedIterator iter = new SortedIterator(numRecords, offset);
       iter.position = position;

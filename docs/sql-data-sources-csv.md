@@ -23,16 +23,16 @@ Spark SQL provides `spark.read().csv("file_name")` to read a file or directory o
 
 <div class="codetabs">
 
+<div data-lang="python"  markdown="1">
+{% include_example csv_dataset python/sql/datasource.py %}
+</div>
+
 <div data-lang="scala"  markdown="1">
 {% include_example csv_dataset scala/org/apache/spark/examples/sql/SQLDataSourceExample.scala %}
 </div>
 
 <div data-lang="java"  markdown="1">
 {% include_example csv_dataset java/org/apache/spark/examples/sql/JavaSQLDataSourceExample.java %}
-</div>
-
-<div data-lang="python"  markdown="1">
-{% include_example csv_dataset python/sql/datasource.py %}
 </div>
 
 </div>
@@ -52,18 +52,24 @@ Data source options of CSV can be set via:
 * `OPTIONS` clause at [CREATE TABLE USING DATA_SOURCE](sql-ref-syntax-ddl-create-table-datasource.html)
 
 
-<table class="table">
-  <tr><th><b>Property Name</b></th><th><b>Default</b></th><th><b>Meaning</b></th><th><b>Scope</b></th></tr>
+<table>
+  <thead><tr><th><b>Property Name</b></th><th><b>Default</b></th><th><b>Meaning</b></th><th><b>Scope</b></th></tr></thead>
   <tr>
-    <td><code>sep</code></td>
+    <td><code>sep</code><br><code>delimiter</code></td>
     <td>,</td>
     <td>Sets a separator for each field and value. This separator can be one or more characters.</td>
     <td>read/write</td>
   </tr>
   <tr>
-    <td><code>encoding</code></td>
+    <td><code>extension</code></td>
+    <td>csv</td>
+    <td>Sets the file extension for the output files. Limited to letters. Length must equal 3.</td>
+    <td>write</td>
+  </tr>
+  <tr>
+    <td><code>encoding</code><br><code>charset</code></td>
     <td>UTF-8</td>
-    <td>For reading, decodes the CSV files by the given encoding type. For writing, specifies encoding (charset) of saved CSV files</td>
+    <td>For reading, decodes the CSV files by the given encoding type. For writing, specifies encoding (charset) of saved CSV files. CSV built-in functions ignore this option.</td>
     <td>read/write</td>
   </tr>
   <tr>
@@ -99,19 +105,25 @@ Data source options of CSV can be set via:
   <tr>
     <td><code>header</code></td>
     <td>false</td>
-    <td>For reading, uses the first line as names of columns. For writing, writes the names of columns as the first line. Note that if the given path is a RDD of Strings, this header option will remove all lines same with the header if exists.</td>
+    <td>For reading, uses the first line as names of columns. For writing, writes the names of columns as the first line. Note that if the given path is a RDD of Strings, this header option will remove all lines same with the header if exists. CSV built-in functions ignore this option.</td>
     <td>read/write</td>
   </tr>
   <tr>
     <td><code>inferSchema</code></td>
     <td>false</td>
-    <td>Infers the input schema automatically from data. It requires one extra pass over the data.</td>
+    <td>Infers the input schema automatically from data. It requires one extra pass over the data. CSV built-in functions ignore this option.</td>
+    <td>read</td>
+  </tr>
+  <tr>
+    <td><code>preferDate</code></td>
+    <td>true</td>
+    <td>During schema inference (<code>inferSchema</code>), attempts to infer string columns that contain dates as <code>Date</code> if the values satisfy the <code>dateFormat</code> option or default date format. For columns that contain a mixture of dates and timestamps, try inferring them as <code>TimestampType</code> if timestamp format not specified, otherwise infer them as <code>StringType</code>.</td>
     <td>read</td>
   </tr>
   <tr>
     <td><code>enforceSchema</code></td>
     <td>true</td>
-    <td>If it is set to <code>true</code>, the specified or inferred schema will be forcibly applied to datasource files, and headers in CSV files will be ignored. If the option is set to <code>false</code>, the schema will be validated against all headers in CSV files in the case when the <code>header</code> option is set to <code>true</code>. Field names in the schema and column names in CSV headers are checked by their positions taking into account <code>spark.sql.caseSensitive</code>. Though the default value is true, it is recommended to disable the <code>enforceSchema</code> option to avoid incorrect results.</td>
+    <td>If it is set to <code>true</code>, the specified or inferred schema will be forcibly applied to datasource files, and headers in CSV files will be ignored. If the option is set to <code>false</code>, the schema will be validated against all headers in CSV files in the case when the <code>header</code> option is set to <code>true</code>. Field names in the schema and column names in CSV headers are checked by their positions taking into account <code>spark.sql.caseSensitive</code>. Though the default value is true, it is recommended to disable the <code>enforceSchema</code> option to avoid incorrect results. CSV built-in functions ignore this option.</td>
     <td>read</td>
   </tr>
   <tr>
@@ -169,6 +181,12 @@ Data source options of CSV can be set via:
     <td>read/write</td>
   </tr>
   <tr>
+    <td><code>enableDateTimeParsingFallback</code></td>
+    <td>Enabled if the time parser policy has legacy settings or if no custom date or timestamp pattern was provided.</td>
+    <td>Allows falling back to the backward compatible (Spark 1.x and 2.0) behavior of parsing dates and timestamps if values do not match the set patterns.</td>
+    <td>read</td>
+  </tr>
+  <tr>
     <td><code>maxColumns</code></td>
     <td>20480</td>
     <td>Defines a hard limit of how many columns a record can have.</td>
@@ -186,7 +204,7 @@ Data source options of CSV can be set via:
     <td>Allows a mode for dealing with corrupt records during parsing. It supports the following case-insensitive modes. Note that Spark tries to parse only required columns in CSV under column pruning. Therefore, corrupt records can be different based on required set of fields. This behavior can be controlled by <code>spark.sql.csv.parser.columnPruning.enabled</code> (enabled by default).<br>
     <ul>
       <li><code>PERMISSIVE</code>: when it meets a corrupted record, puts the malformed string into a field configured by <code>columnNameOfCorruptRecord</code>, and sets malformed fields to <code>null</code>. To keep corrupt records, an user can set a string type field named <code>columnNameOfCorruptRecord</code> in an user-defined schema. If a schema does not have the field, it drops corrupt records during parsing. A record with less/more tokens than schema is not a corrupted record to CSV. When it meets a record having fewer tokens than the length of the schema, sets <code>null</code> to extra fields. When the record has more tokens than the length of the schema, it drops extra tokens.</li>
-      <li><code>DROPMALFORMED</code>: ignores the whole corrupted records.</li>
+      <li><code>DROPMALFORMED</code>: ignores the whole corrupted records. This mode is unsupported in the CSV built-in functions.</li>
       <li><code>FAILFAST</code>: throws an exception when it meets corrupted records.</li>
     </ul>
     </td>
@@ -201,7 +219,7 @@ Data source options of CSV can be set via:
   <tr>
     <td><code>multiLine</code></td>
     <td>false</td>
-    <td>Parse one record, which may span multiple lines, per file.</td>
+    <td>Allows a row to span multiple lines, by parsing line breaks within quoted values as part of the value itself. CSV built-in functions ignore this option.</td>
     <td>read</td>
   </tr>
   <tr>
@@ -213,7 +231,7 @@ Data source options of CSV can be set via:
   <tr>
     <td><code>samplingRatio</code></td>
     <td>1.0</td>
-    <td>Defines fraction of rows used for schema inferring.</td>
+    <td>Defines fraction of rows used for schema inferring. CSV built-in functions ignore this option.</td>
     <td>read</td>
   </tr>
   <tr>
@@ -231,7 +249,7 @@ Data source options of CSV can be set via:
   <tr>
     <td><code>lineSep</code></td>
     <td><code>\r</code>, <code>\r\n</code> and <code>\n</code> (for reading), <code>\n</code> (for writing)</td>
-    <td>Defines the line separator that should be used for parsing/writing. Maximum length is 1 character.</td>
+    <td>Defines the line separator that should be used for parsing/writing. Maximum length is 1 character. CSV built-in functions ignore this option.</td>
     <td>read/write</td>
   </tr>
   <tr>
@@ -249,10 +267,22 @@ Data source options of CSV can be set via:
     <td>read</td>
   </tr>
   <tr>
-    <td><code>compression</code></td>
+    <td><code>compression</code><br><code>codec</code></td>
     <td>(none)</td>
-    <td>Compression codec to use when saving to file. This can be one of the known case-insensitive shorten names (<code>none</code>, <code>bzip2</code>, <code>gzip</code>, <code>lz4</code>, <code>snappy</code> and <code>deflate</code>).</td>
+    <td>Compression codec to use when saving to file. This can be one of the known case-insensitive shorten names (<code>none</code>, <code>bzip2</code>, <code>gzip</code>, <code>lz4</code>, <code>snappy</code> and <code>deflate</code>). CSV built-in functions ignore this option.</td>
     <td>write</td>
+  </tr>
+  <tr>
+    <td><code>timeZone</code></td>
+    <td>(value of <code>spark.sql.session.timeZone</code> configuration)</td>
+    <td>Sets the string that indicates a time zone ID to be used to format timestamps in the JSON datasources or partition values. The following formats of <code>timeZone</code> are supported:<br>
+    <ul>
+      <li>Region-based zone ID: It should have the form 'area/city', such as 'America/Los_Angeles'.</li>
+      <li>Zone offset: It should be in the format '(+|-)HH:mm', for example '-08:00' or '+01:00'. Also 'UTC' and 'Z' are supported as aliases of '+00:00'.</li>
+    </ul>
+    Other short names like 'CST' are not recommended to use because they can be ambiguous.
+    </td>
+    <td>read/write</td>
   </tr>
 </table>
 Other generic options can be found in <a href="https://spark.apache.org/docs/latest/sql-data-sources-generic-options.html">Generic File Source Options</a>.

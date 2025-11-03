@@ -35,6 +35,7 @@ import org.scalatest.concurrent.Eventually._
 import org.apache.spark._
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.TestUtils.JavaSourceFromString
+import org.apache.spark.internal.config.MAX_RESULT_SIZE
 import org.apache.spark.internal.config.Network.RPC_MESSAGE_MAX_SIZE
 import org.apache.spark.storage.TaskResultBlockId
 import org.apache.spark.util.{MutableURLClassLoader, RpcUtils, ThreadUtils, Utils}
@@ -98,7 +99,7 @@ private class MyTaskResultGetter(env: SparkEnv, scheduler: TaskSchedulerImpl)
   extends TaskResultGetter(env, scheduler) {
 
   // Use the current thread so we can access its results synchronously
-  protected override val getTaskResultExecutor = ThreadUtils.sameThreadExecutorService
+  protected override val getTaskResultExecutor = ThreadUtils.sameThreadExecutorService()
 
   // DirectTaskResults that we receive from the executors
   private val _taskResults = new ArrayBuffer[DirectTaskResult[_]]
@@ -144,7 +145,7 @@ class TaskResultGetterSuite extends SparkFunSuite with BeforeAndAfter with Local
   test("handling total size of results larger than maxResultSize") {
     sc = new SparkContext("local", "test", conf)
     val scheduler = new DummyTaskSchedulerImpl(sc)
-    val spyScheduler = spy(scheduler)
+    val spyScheduler = spy[DummyTaskSchedulerImpl](scheduler)
     val resultGetter = new TaskResultGetter(sc.env, spyScheduler)
     scheduler.taskResultGetter = resultGetter
     val myTsm = new TaskSetManager(spyScheduler, FakeTask.createTaskSet(2), 1) {
@@ -152,7 +153,7 @@ class TaskResultGetterSuite extends SparkFunSuite with BeforeAndAfter with Local
       override def canFetchMoreResults(size: Long): Boolean = false
     }
     val indirectTaskResult = IndirectTaskResult(TaskResultBlockId(0), 0)
-    val directTaskResult = new DirectTaskResult(ByteBuffer.allocate(0), Nil, Array())
+    val directTaskResult = new DirectTaskResult(ByteBuffer.allocate(0), Nil, Array[Long]())
     val ser = sc.env.closureSerializer.newInstance()
     val serializedIndirect = ser.serialize(indirectTaskResult)
     val serializedDirect = ser.serialize(directTaskResult)
@@ -206,7 +207,7 @@ class TaskResultGetterSuite extends SparkFunSuite with BeforeAndAfter with Local
     // compile a small jar containing an exception that will be thrown on an executor.
     val tempDir = Utils.createTempDir()
     val srcDir = new File(tempDir, "repro/")
-    srcDir.mkdirs()
+    Utils.createDirectory(srcDir)
     val excSource = new JavaSourceFromString(new File(srcDir, "MyException").toURI.getPath,
       """package repro;
         |
@@ -257,7 +258,7 @@ class TaskResultGetterSuite extends SparkFunSuite with BeforeAndAfter with Local
     // Set up custom TaskResultGetter and TaskSchedulerImpl spy
     sc = new SparkContext("local", "test", conf)
     val scheduler = sc.taskScheduler.asInstanceOf[TaskSchedulerImpl]
-    val spyScheduler = spy(scheduler)
+    val spyScheduler = spy[TaskSchedulerImpl](scheduler)
     val resultGetter = new MyTaskResultGetter(sc.env, spyScheduler)
     val newDAGScheduler = new DAGScheduler(sc, spyScheduler)
     scheduler.taskResultGetter = resultGetter
@@ -295,6 +296,18 @@ class TaskResultGetterSuite extends SparkFunSuite with BeforeAndAfter with Local
     // Job failed, even though the failure reason is unknown.
     val unknownFailure = """(?s).*Lost task.*: UnknownReason.*""".r
     assert(unknownFailure.findFirstMatchIn(message).isDefined)
+  }
+
+  test("SPARK-40261: task result metadata should not be counted into result size") {
+    val conf = new SparkConf().set(MAX_RESULT_SIZE.key, "1M")
+    sc = new SparkContext("local", "test", conf)
+    val rdd = sc.parallelize(1 to 10000, 10000)
+    // This will trigger 10k task but return empty result. The total serialized return tasks
+    // size(including accumUpdates metadata) would be ~10M in total in this example, but the result
+    // value itself is pretty small(empty arrays)
+    // Even setting MAX_RESULT_SIZE to a small value(1M here), it should not throw exception
+    // because the actual result is small
+    assert(rdd.filter(_ < 0).collect().isEmpty)
   }
 
 }

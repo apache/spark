@@ -31,9 +31,8 @@ import org.apache.spark.streaming.StateSpec;
 import org.apache.spark.streaming.Time;
 import scala.Tuple2;
 
-import com.google.common.collect.Sets;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import org.apache.spark.HashPartitioner;
 import org.apache.spark.api.java.Optional;
@@ -108,7 +107,7 @@ public class Java8APISuite extends LocalJavaStreamingContext implements Serializ
     JavaTestUtils.attachTestOutputStream(mapped);
     List<List<String>> result = JavaTestUtils.runStreams(ssc, 2, 2);
 
-    Assert.assertEquals(expected, result);
+    Assertions.assertEquals(expected, result);
   }
 
   @Test
@@ -128,7 +127,7 @@ public class Java8APISuite extends LocalJavaStreamingContext implements Serializ
     JavaTestUtils.attachTestOutputStream(reduced);
     List<List<Integer>> result = JavaTestUtils.runStreams(ssc, 3, 3);
 
-    Assert.assertEquals(expected, result);
+    Assertions.assertEquals(expected, result);
   }
 
   @Test
@@ -150,7 +149,7 @@ public class Java8APISuite extends LocalJavaStreamingContext implements Serializ
     JavaTestUtils.attachTestOutputStream(reducedWindowed);
     List<List<Integer>> result = JavaTestUtils.runStreams(ssc, 4, 4);
 
-    Assert.assertEquals(expected, result);
+    Assertions.assertEquals(expected, result);
   }
 
   @Test
@@ -218,12 +217,12 @@ public class Java8APISuite extends LocalJavaStreamingContext implements Serializ
 
 
     List<Set<Tuple2<String, Tuple2<String, String>>>> expected = Arrays.asList(
-      Sets.newHashSet(
+      Set.of(
         new Tuple2<>("california",
           new Tuple2<>("dodgers", "giants")),
         new Tuple2<>("new york",
           new Tuple2<>("yankees", "mets"))),
-      Sets.newHashSet(
+      Set.of(
         new Tuple2<>("california",
           new Tuple2<>("sharks", "ducks")),
         new Tuple2<>("new york",
@@ -244,10 +243,10 @@ public class Java8APISuite extends LocalJavaStreamingContext implements Serializ
     List<List<Tuple2<String, Tuple2<String, String>>>> result = JavaTestUtils.runStreams(ssc, 2, 2);
     List<Set<Tuple2<String, Tuple2<String, String>>>> unorderedResult = new ArrayList<>();
     for (List<Tuple2<String, Tuple2<String, String>>> res : result) {
-      unorderedResult.add(Sets.newHashSet(res));
+      unorderedResult.add(new HashSet<>(res));
     }
 
-    Assert.assertEquals(expected, unorderedResult);
+    Assertions.assertEquals(expected, unorderedResult);
   }
 
 
@@ -322,7 +321,7 @@ public class Java8APISuite extends LocalJavaStreamingContext implements Serializ
     // This is just to test whether this transform to JavaStream compiles
     JavaDStream<Long> transformed1 = ssc.transform(
       listOfDStreams1, (List<JavaRDD<?>> listOfRDDs, Time time) -> {
-      Assert.assertEquals(2, listOfRDDs.size());
+      Assertions.assertEquals(2, listOfRDDs.size());
       return null;
     });
 
@@ -331,7 +330,7 @@ public class Java8APISuite extends LocalJavaStreamingContext implements Serializ
 
     JavaPairDStream<Integer, Tuple2<Integer, String>> transformed2 = ssc.transformToPair(
       listOfDStreams2, (List<JavaRDD<?>> listOfRDDs, Time time) -> {
-      Assert.assertEquals(3, listOfRDDs.size());
+      Assertions.assertEquals(3, listOfRDDs.size());
       JavaRDD<Integer> rdd1 = (JavaRDD<Integer>) listOfRDDs.get(0);
       JavaRDD<Integer> rdd2 = (JavaRDD<Integer>) listOfRDDs.get(1);
       JavaRDD<Tuple2<Integer, String>> rdd3 = (JavaRDD<Tuple2<Integer, String>>) listOfRDDs.get(2);
@@ -343,7 +342,7 @@ public class Java8APISuite extends LocalJavaStreamingContext implements Serializ
     JavaTestUtils.attachTestOutputStream(transformed2);
     List<List<Tuple2<Integer, Tuple2<Integer, String>>>> result =
       JavaTestUtils.runStreams(ssc, 2, 2);
-    Assert.assertEquals(expected, result);
+    Assertions.assertEquals(expected, result);
   }
 
   @Test
@@ -413,7 +412,7 @@ public class Java8APISuite extends LocalJavaStreamingContext implements Serializ
     JavaTestUtils.attachTestOutputStream(flatMapped);
     List<List<Tuple2<Integer, String>>> result = JavaTestUtils.runStreams(ssc, 3, 3);
 
-    Assert.assertEquals(expected, result);
+    Assertions.assertEquals(expected, result);
   }
 
   /*
@@ -429,7 +428,7 @@ public class Java8APISuite extends LocalJavaStreamingContext implements Serializ
         Collections.sort(sortedList);
         sortedActual.add(sortedList);
     });
-    Assert.assertEquals(expected, sortedActual);
+    Assertions.assertEquals(expected, sortedActual);
   }
 
   @Test
@@ -449,7 +448,7 @@ public class Java8APISuite extends LocalJavaStreamingContext implements Serializ
     JavaTestUtils.attachTestOutputStream(filtered);
     List<List<Tuple2<String, Integer>>> result = JavaTestUtils.runStreams(ssc, 2, 2);
 
-    Assert.assertEquals(expected, result);
+    Assertions.assertEquals(expected, result);
   }
 
   List<List<Tuple2<String, String>>> stringStringKVStream = Arrays.asList(
@@ -497,7 +496,7 @@ public class Java8APISuite extends LocalJavaStreamingContext implements Serializ
     JavaTestUtils.attachTestOutputStream(reversed);
     List<List<Tuple2<Integer, String>>> result = JavaTestUtils.runStreams(ssc, 2, 2);
 
-    Assert.assertEquals(expected, result);
+    Assertions.assertEquals(expected, result);
   }
 
   @Test
@@ -531,7 +530,7 @@ public class Java8APISuite extends LocalJavaStreamingContext implements Serializ
     JavaTestUtils.attachTestOutputStream(reversed);
     List<List<Tuple2<Integer, String>>> result = JavaTestUtils.runStreams(ssc, 2, 2);
 
-    Assert.assertEquals(expected, result);
+    Assertions.assertEquals(expected, result);
   }
 
   @Test
@@ -549,7 +548,7 @@ public class Java8APISuite extends LocalJavaStreamingContext implements Serializ
     JavaTestUtils.attachTestOutputStream(reversed);
     List<List<Integer>> result = JavaTestUtils.runStreams(ssc, 2, 2);
 
-    Assert.assertEquals(expected, result);
+    Assertions.assertEquals(expected, result);
   }
 
   @Test
@@ -588,7 +587,7 @@ public class Java8APISuite extends LocalJavaStreamingContext implements Serializ
     JavaTestUtils.attachTestOutputStream(flatMapped);
     List<List<Tuple2<Integer, String>>> result = JavaTestUtils.runStreams(ssc, 2, 2);
 
-    Assert.assertEquals(expected, result);
+    Assertions.assertEquals(expected, result);
   }
 
   @Test
@@ -612,7 +611,7 @@ public class Java8APISuite extends LocalJavaStreamingContext implements Serializ
     JavaTestUtils.attachTestOutputStream(reduced);
     List<List<Tuple2<String, Integer>>> result = JavaTestUtils.runStreams(ssc, 2, 2);
 
-    Assert.assertEquals(expected, result);
+    Assertions.assertEquals(expected, result);
   }
 
   @Test
@@ -637,7 +636,7 @@ public class Java8APISuite extends LocalJavaStreamingContext implements Serializ
     JavaTestUtils.attachTestOutputStream(combined);
     List<List<Tuple2<String, Integer>>> result = JavaTestUtils.runStreams(ssc, 2, 2);
 
-    Assert.assertEquals(expected, result);
+    Assertions.assertEquals(expected, result);
   }
 
   @Test
@@ -661,7 +660,7 @@ public class Java8APISuite extends LocalJavaStreamingContext implements Serializ
     JavaTestUtils.attachTestOutputStream(reduceWindowed);
     List<List<Tuple2<String, Integer>>> result = JavaTestUtils.runStreams(ssc, 3, 3);
 
-    Assert.assertEquals(expected, result);
+    Assertions.assertEquals(expected, result);
   }
 
   @Test
@@ -694,7 +693,7 @@ public class Java8APISuite extends LocalJavaStreamingContext implements Serializ
     JavaTestUtils.attachTestOutputStream(updated);
     List<List<Tuple2<String, Integer>>> result = JavaTestUtils.runStreams(ssc, 3, 3);
 
-    Assert.assertEquals(expected, result);
+    Assertions.assertEquals(expected, result);
   }
 
   @Test
@@ -719,7 +718,7 @@ public class Java8APISuite extends LocalJavaStreamingContext implements Serializ
     JavaTestUtils.attachTestOutputStream(reduceWindowed);
     List<List<Tuple2<String, Integer>>> result = JavaTestUtils.runStreams(ssc, 3, 3);
 
-    Assert.assertEquals(expected, result);
+    Assertions.assertEquals(expected, result);
   }
 
   @Test
@@ -757,7 +756,7 @@ public class Java8APISuite extends LocalJavaStreamingContext implements Serializ
     JavaTestUtils.attachTestOutputStream(sorted);
     List<List<Tuple2<Integer, Integer>>> result = JavaTestUtils.runStreams(ssc, 2, 2);
 
-    Assert.assertEquals(expected, result);
+    Assertions.assertEquals(expected, result);
   }
 
   @Test
@@ -785,7 +784,7 @@ public class Java8APISuite extends LocalJavaStreamingContext implements Serializ
     JavaTestUtils.attachTestOutputStream(firstParts);
     List<List<Integer>> result = JavaTestUtils.runStreams(ssc, 2, 2);
 
-    Assert.assertEquals(expected, result);
+    Assertions.assertEquals(expected, result);
   }
 
   @Test
@@ -811,7 +810,7 @@ public class Java8APISuite extends LocalJavaStreamingContext implements Serializ
     JavaTestUtils.attachTestOutputStream(mapped);
     List<List<Tuple2<String, String>>> result = JavaTestUtils.runStreams(ssc, 2, 2);
 
-    Assert.assertEquals(expected, result);
+    Assertions.assertEquals(expected, result);
   }
 
   @Test
@@ -844,7 +843,7 @@ public class Java8APISuite extends LocalJavaStreamingContext implements Serializ
       pairStream.flatMapValues(in -> Arrays.asList(in + "1", in + "2").iterator());
     JavaTestUtils.attachTestOutputStream(flatMapped);
     List<List<Tuple2<String, String>>> result = JavaTestUtils.runStreams(ssc, 2, 2);
-    Assert.assertEquals(expected, result);
+    Assertions.assertEquals(expected, result);
   }
 
   /**

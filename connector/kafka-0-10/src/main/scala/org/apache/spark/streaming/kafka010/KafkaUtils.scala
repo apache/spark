@@ -25,6 +25,7 @@ import org.apache.kafka.common.TopicPartition
 import org.apache.spark.SparkContext
 import org.apache.spark.api.java.{ JavaRDD, JavaSparkContext }
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.LogKeys.{CONFIG, GROUP_ID}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.streaming.StreamingContext
 import org.apache.spark.streaming.api.java.{ JavaInputDStream, JavaStreamingContext }
@@ -39,7 +40,7 @@ object KafkaUtils extends Logging {
    * Starting and ending offsets are specified in advance,
    * so that you can control exactly-once semantics.
    * @param kafkaParams Kafka
-   * <a href="http://kafka.apache.org/documentation.html#newconsumerconfigs">
+   * <a href="https://kafka.apache.org/documentation.html#consumerconfigs">
    * configuration parameters</a>. Requires "bootstrap.servers" to be set
    * with Kafka broker(s) specified in host1:port1,host2:port2 form.
    * @param offsetRanges offset ranges that define the Kafka data belonging to this RDD
@@ -74,7 +75,7 @@ object KafkaUtils extends Logging {
    * Starting and ending offsets are specified in advance,
    * so that you can control exactly-once semantics.
    * @param kafkaParams Kafka
-   * <a href="http://kafka.apache.org/documentation.html#newconsumerconfigs">
+   * <a href="https://kafka.apache.org/documentation.html#consumerconfigs">
    * configuration parameters</a>. Requires "bootstrap.servers" to be set
    * with Kafka broker(s) specified in host1:port1,host2:port2 form.
    * @param offsetRanges offset ranges that define the Kafka data belonging to this RDD
@@ -111,7 +112,7 @@ object KafkaUtils extends Logging {
       locationStrategy: LocationStrategy,
       consumerStrategy: ConsumerStrategy[K, V]
     ): InputDStream[ConsumerRecord[K, V]] = {
-    val ppc = new DefaultPerPartitionConfig(ssc.sparkContext.getConf)
+    val ppc = new DefaultPerPartitionConfig(ssc.sparkContext.getReadOnlyConf)
     createDirectStream[K, V](ssc, locationStrategy, consumerStrategy, ppc)
   }
 
@@ -183,25 +184,30 @@ object KafkaUtils extends Logging {
    * Tweak kafka params to prevent issues on executors
    */
   private[kafka010] def fixKafkaParams(kafkaParams: ju.HashMap[String, Object]): Unit = {
-    logWarning(s"overriding ${ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG} to false for executor")
+    logWarning(log"overriding ${MDC(CONFIG, ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG)} " +
+      log"to false for executor")
     kafkaParams.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, false: java.lang.Boolean)
 
-    logWarning(s"overriding ${ConsumerConfig.AUTO_OFFSET_RESET_CONFIG} to none for executor")
+    logWarning(log"overriding ${MDC(CONFIG, ConsumerConfig.AUTO_OFFSET_RESET_CONFIG)} " +
+      log"to none for executor")
     kafkaParams.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "none")
 
     // driver and executor should be in different consumer groups
     val originalGroupId = kafkaParams.get(ConsumerConfig.GROUP_ID_CONFIG)
     if (null == originalGroupId) {
-      logError(s"${ConsumerConfig.GROUP_ID_CONFIG} is null, you should probably set it")
+      logError(log"${MDC(CONFIG, ConsumerConfig.GROUP_ID_CONFIG)} is null, " +
+        log"you should probably set it")
     }
     val groupId = "spark-executor-" + originalGroupId
-    logWarning(s"overriding executor ${ConsumerConfig.GROUP_ID_CONFIG} to ${groupId}")
+    logWarning(log"overriding executor ${MDC(CONFIG, ConsumerConfig.GROUP_ID_CONFIG)} " +
+      log"to ${MDC(GROUP_ID, groupId)}")
     kafkaParams.put(ConsumerConfig.GROUP_ID_CONFIG, groupId)
 
     // possible workaround for KAFKA-3135
     val rbb = kafkaParams.get(ConsumerConfig.RECEIVE_BUFFER_CONFIG)
     if (null == rbb || rbb.asInstanceOf[java.lang.Integer] < 65536) {
-      logWarning(s"overriding ${ConsumerConfig.RECEIVE_BUFFER_CONFIG} to 65536 see KAFKA-3135")
+      logWarning(log"overriding ${MDC(CONFIG, ConsumerConfig.RECEIVE_BUFFER_CONFIG)} " +
+        log"to 65536 see KAFKA-3135")
       kafkaParams.put(ConsumerConfig.RECEIVE_BUFFER_CONFIG, 65536: java.lang.Integer)
     }
   }

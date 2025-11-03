@@ -22,9 +22,10 @@ import java.util.Arrays
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
-import org.apache.spark.sql.catalyst.expressions.{Cast, ExpressionEvalHelper, Literal}
+import org.apache.spark.sql.catalyst.expressions.{Cast, CodegenObjectFactoryMode, ExpressionEvalHelper, Literal, SpecificInternalRow}
 import org.apache.spark.sql.execution.datasources.parquet.ParquetTest
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
@@ -84,14 +85,14 @@ class UserDefinedTypeSuite extends QueryTest with SharedSparkSession with Parque
   test("register user type: MyDenseVector for MyLabeledPoint") {
     val labels: RDD[Double] = pointsRDD.select($"label").rdd.map { case Row(v: Double) => v }
     val labelsArrays: Array[Double] = labels.collect()
-    assert(labelsArrays.size === 2)
+    assert(labelsArrays.length === 2)
     assert(labelsArrays.contains(1.0))
     assert(labelsArrays.contains(0.0))
 
     val features: RDD[TestUDT.MyDenseVector] =
       pointsRDD.select($"features").rdd.map { case Row(v: TestUDT.MyDenseVector) => v }
     val featuresArrays: Array[TestUDT.MyDenseVector] = features.collect()
-    assert(featuresArrays.size === 2)
+    assert(featuresArrays.length === 2)
     assert(featuresArrays.contains(new TestUDT.MyDenseVector(Array(0.1, 1.0))))
     assert(featuresArrays.contains(new TestUDT.MyDenseVector(Array(0.2, 2.0))))
   }
@@ -244,6 +245,19 @@ class UserDefinedTypeSuite extends QueryTest with SharedSparkSession with Parque
     checkEvaluation(ret, "(1.0, 3.0, 5.0, 7.0, 9.0)")
   }
 
+  test("SPARK-52583: Cast UserDefinedType to string with custom stringifyValue") {
+    val udt = new TestUDT.MyDenseVectorUDT() {
+      override def stringifyValue(obj: Any): String = {
+        val v = obj.asInstanceOf[TestUDT.MyDenseVector]
+        v.toString.stripPrefix("(").stripSuffix(")")
+      }
+    }
+    val vector = new TestUDT.MyDenseVector(Array(1.0, 3.0, 5.0, 7.0, 9.0))
+    val data = udt.serialize(vector)
+    val ret = Cast(Literal(data, udt), StringType, None)
+    checkEvaluation(ret, "1.0, 3.0, 5.0, 7.0, 9.0")
+  }
+
   test("SPARK-28497 Can't up cast UserDefinedType to string") {
     val udt = new TestUDT.MyDenseVectorUDT()
     assert(!Cast.canUpCast(udt, StringType))
@@ -271,5 +285,56 @@ class UserDefinedTypeSuite extends QueryTest with SharedSparkSession with Parque
     val result = agg.collect()
 
     assert(result.toSet === Set(FooWithDate(year, "FooFoo", 3), FooWithDate(year, "Foo", 1)))
+  }
+
+  test("Test unwrap_udt function") {
+    val unwrappedFeatures = pointsRDD.select(unwrap_udt(col("features")))
+      .rdd.map { (row: Row) => row.getAs[Seq[Double]](0).toArray }
+    val unwrappedFeaturesArrays: Array[Array[Double]] = unwrappedFeatures.collect()
+    assert(unwrappedFeaturesArrays.length === 2)
+
+    java.util.Arrays.equals(unwrappedFeaturesArrays(0), Array(0.1, 1.0))
+    java.util.Arrays.equals(unwrappedFeaturesArrays(1), Array(0.2, 2.0))
+  }
+
+  test("SPARK-46289: UDT ordering") {
+    val settings = Seq(
+      ("true", CodegenObjectFactoryMode.CODEGEN_ONLY.toString),
+      ("false", CodegenObjectFactoryMode.NO_CODEGEN.toString))
+    withTempView("v1") {
+      pointsRDD.createOrReplaceTempView("v1")
+      for ((wsSetting, cgSetting) <- settings) {
+        withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> wsSetting,
+          SQLConf.CODEGEN_FACTORY_MODE.key -> cgSetting) {
+          val df = sql("select label from v1 order by features")
+          checkAnswer(df, Row(1.0) :: Row(0.0) :: Nil)
+        }
+      }
+    }
+  }
+
+  test("SPARK-52666: Map UDT to correct MutableValue in SpecificInternalRow") {
+    val udt = new YearUDT()
+    val row = new SpecificInternalRow(Seq(udt))
+    row.setInt(0, udt.serialize(Year.of(2018)))
+    assert(row.getInt(0) == 2018)
+  }
+
+  test("SPARK-52694: Add Encoders#udt") {
+    val udt = new YearUDT()
+    implicit val yearEncoder: Encoder[Year] = Encoders.udt(udt)
+    val ds = spark.createDataset(Seq(Year.of(2018), Year.of(2019)))
+    assert(ds.schema.head.dataType == udt)
+    checkAnswer(ds.toDF("year"), Seq(Row(Year.of(2018)), Row(Year.of(2019))))
+    checkDataset(
+      spark.range(10).map(i => Year.of(i.toInt + 2018)),
+      (0 to 9).map(i => Year.of(i + 2018)): _*)
+  }
+
+  test("SPARK-53518: No truncation for catalogString of User Defined Type") {
+    withSQLConf(SQLConf.MAX_TO_STRING_FIELDS.key -> "3") {
+      val string = new ExampleIntRowUDT(4).catalogString
+      assert(string == "struct<col0:int,col1:int,col2:int,col3:int>")
+    }
   }
 }

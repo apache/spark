@@ -20,7 +20,7 @@ package org.apache.spark.launcher
 import java.io.File
 import java.util.{HashMap => JHashMap, List => JList, Map => JMap}
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.deploy.Command
 

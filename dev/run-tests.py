@@ -29,7 +29,6 @@ from sparktestsupport.shellutils import exit_from_command_with_retcode, run_cmd,
 from sparktestsupport.utils import (
     determine_modules_for_files,
     determine_modules_to_test,
-    determine_tags_to_exclude,
     identify_changed_files_from_git_commits,
 )
 import sparktestsupport.modules as modules
@@ -37,7 +36,7 @@ import sparktestsupport.modules as modules
 
 def setup_test_environ(environ):
     print("[info] Setup the following environment variables for tests: ")
-    for (k, v) in environ.items():
+    for k, v in environ.items():
         print("%s=%s" % (k, v))
         os.environ[k] = v
 
@@ -181,7 +180,6 @@ def get_scala_profiles(scala_version):
         return []  # assume it's default.
 
     sbt_maven_scala_profiles = {
-        "scala2.12": ["-Pscala-2.12"],
         "scala2.13": ["-Pscala-2.13"],
     }
 
@@ -217,7 +215,6 @@ def get_hadoop_profiles(hadoop_version):
     """
 
     sbt_maven_hadoop_profiles = {
-        "hadoop2": ["-Phadoop-2"],
         "hadoop3": ["-Phadoop-3"],
     }
 
@@ -249,8 +246,9 @@ def build_spark_sbt(extra_profiles):
     # Enable all of the profiles for the build:
     build_profiles = extra_profiles + modules.root.build_profile_flags
     sbt_goals = [
-        "test:package",  # Build test jars as some tests depend on them
+        "Test/package",  # Build test jars as some tests depend on them
         "streaming-kinesis-asl-assembly/assembly",
+        "connect/assembly",  # Build Spark Connect assembly
     ]
     profiles_and_goals = build_profiles + sbt_goals
 
@@ -288,7 +286,7 @@ def build_spark_assembly_sbt(extra_profiles, checkstyle=False):
     if checkstyle:
         run_java_style_checks(build_profiles)
 
-    if not os.environ.get("AMPLAB_JENKINS") and not os.environ.get("SKIP_UNIDOC"):
+    if not os.environ.get("SKIP_UNIDOC"):
         build_spark_unidoc_sbt(extra_profiles)
 
 
@@ -331,7 +329,6 @@ def run_scala_tests_maven(test_profiles):
 
 
 def run_scala_tests_sbt(test_modules, test_profiles):
-
     sbt_test_goals = list(itertools.chain.from_iterable(m.sbt_test_goals for m in test_modules))
 
     if not sbt_test_goals:
@@ -363,12 +360,13 @@ def run_scala_tests(build_tool, extra_profiles, test_modules, excluded_tags, inc
     if excluded_tags:
         test_profiles += ["-Dtest.exclude.tags=" + ",".join(excluded_tags)]
 
-    # set up java11 env if this is a pull request build with 'test-java11' in the title
-    if "ghprbPullTitle" in os.environ:
-        if "test-java11" in os.environ["ghprbPullTitle"].lower():
-            os.environ["JAVA_HOME"] = "/usr/java/jdk-11.0.1"
-            os.environ["PATH"] = "%s/bin:%s" % (os.environ["JAVA_HOME"], os.environ["PATH"])
-            test_profiles += ["-Djava.version=11"]
+    # SPARK-45296: legacy code for Jenkins. If we move to Jenkins, we should
+    # revive this logic with a different combination of JDK.
+    # if "ghprbPullTitle" in os.environ:
+    #     if "test-java11" in os.environ["ghprbPullTitle"].lower():
+    #         os.environ["JAVA_HOME"] = "/usr/java/jdk-11.0.1"
+    #         os.environ["PATH"] = "%s/bin:%s" % (os.environ["JAVA_HOME"], os.environ["PATH"])
+    #         test_profiles += ["-Djava.version=11"]
 
     if build_tool == "maven":
         run_scala_tests_maven(test_profiles)
@@ -376,14 +374,14 @@ def run_scala_tests(build_tool, extra_profiles, test_modules, excluded_tags, inc
         run_scala_tests_sbt(test_modules, test_profiles)
 
 
-def run_python_tests(test_modules, parallelism, with_coverage=False):
+def run_python_tests(test_modules, test_pythons, parallelism, with_coverage=False):
     set_title_and_block("Running PySpark tests", "BLOCK_PYSPARK_UNIT_TESTS")
 
     if with_coverage:
         # Coverage makes the PySpark tests flaky due to heavy parallelism.
         # When we run PySpark tests with coverage, it uses 4 for now as
         # workaround.
-        parallelism = 4
+        parallelism = 1
         script = "run-tests-with-coverage"
     else:
         script = "run-tests"
@@ -391,11 +389,12 @@ def run_python_tests(test_modules, parallelism, with_coverage=False):
     if test_modules != [modules.root]:
         command.append("--modules=%s" % ",".join(m.name for m in test_modules))
     command.append("--parallelism=%i" % parallelism)
+    command.append("--python-executables=%s" % test_pythons)
     run_cmd(command)
 
 
 def run_python_packaging_tests():
-    if not os.environ.get("AMPLAB_JENKINS"):
+    if os.environ.get("SKIP_PACKAGING", "false") != "true":
         set_title_and_block("Running PySpark packaging tests", "BLOCK_PYSPARK_PIP_TESTS")
         command = [os.path.join(SPARK_HOME, "dev", "run-pip-tests")]
         run_cmd(command)
@@ -423,6 +422,12 @@ def parse_opts():
         type=int,
         default=8,
         help="The number of suites to test in parallel (default %(default)d)",
+    )
+    parser.add_argument(
+        "--python-executables",
+        type=str,
+        default="python3.11",
+        help="A comma-separated list of Python executables to test against (default: %(default)s)",
     )
     parser.add_argument(
         "-m",
@@ -472,6 +477,8 @@ def main():
     rm_r(os.path.join(SPARK_HOME, "work"))
     rm_r(os.path.join(USER_HOME, ".ivy2", "local", "org.apache.spark"))
     rm_r(os.path.join(USER_HOME, ".ivy2", "cache", "org.apache.spark"))
+    rm_r(os.path.join(USER_HOME, ".ivy2.5.2", "local", "org.apache.spark"))
+    rm_r(os.path.join(USER_HOME, ".ivy2.5.2", "cache", "org.apache.spark"))
 
     os.environ["CURRENT_BLOCK"] = str(ERROR_CODES["BLOCK_GENERAL"])
 
@@ -499,26 +506,13 @@ def main():
         else:
             print("Cannot install SparkR as R was not found in PATH")
 
-    if os.environ.get("AMPLAB_JENKINS"):
-        # if we're on the Amplab Jenkins build servers setup variables
-        # to reflect the environment settings
-        build_tool = os.environ.get("AMPLAB_JENKINS_BUILD_TOOL", "sbt")
-        scala_version = os.environ.get("AMPLAB_JENKINS_BUILD_SCALA_PROFILE")
-        hadoop_version = os.environ.get("AMPLAB_JENKINS_BUILD_PROFILE", "hadoop3")
-        test_env = "amplab_jenkins"
-        # add path for Python3 in Jenkins if we're calling from a Jenkins machine
-        # TODO(sknapp):  after all builds are ported to the ubuntu workers, change this to be:
-        # /home/jenkins/anaconda2/envs/py36/bin
-        os.environ["PATH"] = "/home/anaconda/envs/py36/bin:" + os.environ.get("PATH")
+    build_tool = "sbt"
+    scala_version = os.environ.get("SCALA_PROFILE")
+    hadoop_version = os.environ.get("HADOOP_PROFILE", "hadoop3")
+    if "GITHUB_ACTIONS" in os.environ:
+        test_env = "github_actions"
     else:
-        # else we're running locally or GitHub Actions.
-        build_tool = "sbt"
-        scala_version = os.environ.get("SCALA_PROFILE")
-        hadoop_version = os.environ.get("HADOOP_PROFILE", "hadoop3")
-        if "GITHUB_ACTIONS" in os.environ:
-            test_env = "github_actions"
-        else:
-            test_env = "local"
+        test_env = "local"
 
     extra_profiles = get_hadoop_profiles(hadoop_version) + get_scala_profiles(scala_version)
 
@@ -565,15 +559,6 @@ def main():
         if len(changed_modules) == 0:
             print("[info] There are no modules to test, exiting without testing.")
             return
-
-    # If we're running the tests in AMPLab Jenkins, calculate the diff from the targeted branch, and
-    # detect modules to test.
-    elif test_env == "amplab_jenkins" and os.environ.get("AMP_JENKINS_PRB"):
-        target_branch = os.environ["ghprbTargetBranch"]
-        changed_files = identify_changed_files_from_git_commits("HEAD", target_branch=target_branch)
-        changed_modules = determine_modules_for_files(changed_files)
-        test_modules = determine_modules_to_test(changed_modules)
-        excluded_tags = determine_tags_to_exclude(changed_modules)
 
     # If there is no changed module found, tests all.
     if not changed_modules:
@@ -629,12 +614,7 @@ def main():
         ):
             run_sparkr_style_checks()
 
-    # determine if docs were changed and if we're inside the amplab environment
-    # note - the below commented out until *all* Jenkins workers can get the Bundler gem installed
-    # if "DOCS" in changed_modules and test_env == "amplab_jenkins":
-    #    build_spark_documentation()
-
-    if any(m.should_run_build_tests for m in test_modules) and test_env != "amplab_jenkins":
+    if any(m.should_run_build_tests for m in test_modules):
         run_build_tests()
 
     # spark build
@@ -656,6 +636,7 @@ def main():
     if modules_with_python_tests and not os.environ.get("SKIP_PYTHON"):
         run_python_tests(
             modules_with_python_tests,
+            opts.python_executables,
             opts.parallelism,
             with_coverage=os.environ.get("PYSPARK_CODECOV", "false") == "true",
         )

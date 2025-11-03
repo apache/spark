@@ -17,7 +17,10 @@
 
 package org.apache.spark.sql.catalyst.plans
 
+import scala.annotation.nowarn
+
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
@@ -84,6 +87,7 @@ class LogicalPlanSuite extends SparkFunSuite {
   test("transformExpressions works with a Stream") {
     val id1 = NamedExpression.newExprId
     val id2 = NamedExpression.newExprId
+    @nowarn("cat=deprecation")
     val plan = Project(Stream(
       Alias(Literal(1), "a")(exprId = id1),
       Alias(Literal(2), "b")(exprId = id2)),
@@ -92,7 +96,26 @@ class LogicalPlanSuite extends SparkFunSuite {
       case Literal(v: Int, IntegerType) if v != 1 =>
         Literal(v + 1, IntegerType)
     }
+    @nowarn("cat=deprecation")
     val expected = Project(Stream(
+      Alias(Literal(1), "a")(exprId = id1),
+      Alias(Literal(3), "b")(exprId = id2)),
+      OneRowRelation())
+    assert(result.sameResult(expected))
+  }
+
+  test("SPARK-45685: transformExpressions works with a LazyList") {
+    val id1 = NamedExpression.newExprId
+    val id2 = NamedExpression.newExprId
+    val plan = Project(LazyList(
+      Alias(Literal(1), "a")(exprId = id1),
+      Alias(Literal(2), "b")(exprId = id2)),
+      OneRowRelation())
+    val result = plan.transformExpressions {
+      case Literal(v: Int, IntegerType) if v != 1 =>
+        Literal(v + 1, IntegerType)
+    }
+    val expected = Project(LazyList(
       Alias(Literal(1), "a")(exprId = id1),
       Alias(Literal(3), "b")(exprId = id2)),
       OneRowRelation())
@@ -112,5 +135,49 @@ class LogicalPlanSuite extends SparkFunSuite {
     val query = query1.union(query2)
     assert(query.maxRows.isEmpty)
     assert(query.maxRowsPerPartition.isEmpty)
+  }
+
+  test("SPARK-37961: add maxRows/maxRowsPerPartition for some logical nodes") {
+    val range = Range(0, 100, 1, 3)
+    assert(range.maxRows === Some(100))
+    assert(range.maxRowsPerPartition === Some(34))
+
+    val sort = Sort(Seq(Symbol("id").asc), false, range)
+    assert(sort.maxRows === Some(100))
+    assert(sort.maxRowsPerPartition === Some(34))
+    val sort2 = Sort(Seq(Symbol("id").asc), true, range)
+    assert(sort2.maxRows === Some(100))
+    assert(sort2.maxRowsPerPartition === Some(100))
+
+    val c1 = Literal(1).as("a").toAttribute.newInstance().withNullability(true)
+    val c2 = Literal(2).as("b").toAttribute.newInstance().withNullability(true)
+    val expand = Expand(
+      Seq(Seq(Literal(null), Symbol("b")), Seq(Symbol("a"), Literal(null))),
+      Seq(c1, c2),
+      sort.select(Symbol("id") as "a", Symbol("id") + 1 as "b"))
+    assert(expand.maxRows === Some(200))
+    assert(expand.maxRowsPerPartition === Some(68))
+
+    val sample = Sample(0.1, 0.9, false, 42, expand)
+    assert(sample.maxRows === Some(200))
+    assert(sample.maxRowsPerPartition === Some(68))
+  }
+
+  test("SPARK-44523: Filter's maxRows/maxRowsPerPartition is 0 if condition is FalseLiteral") {
+    val query = Range(0, 100, 1, 10)
+    assert(query.where(Literal.FalseLiteral).maxRows.contains(0))
+    assert(query.where(Literal.FalseLiteral).maxRowsPerPartition.contains(0))
+  }
+
+  test("SPARK-46285: foreachWithSubqueries") {
+    val input = UnresolvedRelation(Seq("subquery_table"))
+    val input2 = UnresolvedRelation(Seq("t"))
+    val plan = Filter(Exists(input), input2)
+    val tableNames = scala.collection.mutable.Set[String]()
+    plan.foreachWithSubqueries {
+      case e: UnresolvedRelation => tableNames.add(e.name)
+      case _ =>
+    }
+    assert(tableNames.contains("subquery_table"))
   }
 }

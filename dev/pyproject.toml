@@ -27,8 +27,8 @@ testpaths = [
 [tool.black]
 # When changing the version, we have to update
 # GitHub workflow version and dev/reformat-python
-required-version = "21.12b0"
+required-version = "23.12.1"
 line-length = 100
-target-version = ['py37']
+target-version = ['py39']
 include = '\.pyi?$'
-extend-exclude = 'cloudpickle'
+extend-exclude = 'cloudpickle|error_classes.py'

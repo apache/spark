@@ -17,11 +17,14 @@
 
 package org.apache.spark.sql.execution.columnar;
 
+import org.apache.spark.SparkUnsupportedOperationException;
 import org.apache.spark.sql.execution.vectorized.Dictionary;
 
 public final class ColumnDictionary implements Dictionary {
   private int[] intDictionary;
   private long[] longDictionary;
+  private float[] floatDictionary;
+  private double[] doubleDictionary;
 
   public ColumnDictionary(int[] dictionary) {
     this.intDictionary = dictionary;
@@ -29,6 +32,14 @@ public final class ColumnDictionary implements Dictionary {
 
   public ColumnDictionary(long[] dictionary) {
     this.longDictionary = dictionary;
+  }
+
+  public ColumnDictionary(float[] dictionary) {
+    this.floatDictionary = dictionary;
+  }
+
+  public ColumnDictionary(double[] dictionary) {
+    this.doubleDictionary = dictionary;
   }
 
   @Override
@@ -42,17 +53,13 @@ public final class ColumnDictionary implements Dictionary {
   }
 
   @Override
-  public float decodeToFloat(int id) {
-    throw new UnsupportedOperationException("Dictionary encoding does not support float");
-  }
+  public float decodeToFloat(int id) { return floatDictionary[id]; }
 
   @Override
-  public double decodeToDouble(int id) {
-    throw new UnsupportedOperationException("Dictionary encoding does not support double");
-  }
+  public double decodeToDouble(int id) { return doubleDictionary[id]; }
 
   @Override
   public byte[] decodeToBinary(int id) {
-    throw new UnsupportedOperationException("Dictionary encoding does not support String");
+    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3191");
   }
 }

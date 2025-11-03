@@ -17,5 +17,5 @@
 
 package org.apache.spark.storage
 
-class BlockSavedOnDecommissionedBlockManagerException(blockId: BlockId)
+private[spark] class BlockSavedOnDecommissionedBlockManagerException(blockId: BlockId)
   extends Exception(s"Block $blockId cannot be saved on decommissioned executor")

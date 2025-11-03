@@ -20,15 +20,13 @@ package org.apache.spark.scheduler
 import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito.{never, verify, when}
 import org.mockito.invocation.InvocationOnMock
-import org.scalatest.BeforeAndAfterEach
 import org.scalatestplus.mockito.MockitoSugar
 
 import org.apache.spark._
 import org.apache.spark.internal.config
 import org.apache.spark.util.ManualClock
 
-class HealthTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with MockitoSugar
-    with LocalSparkContext {
+class HealthTrackerSuite extends SparkFunSuite with MockitoSugar with LocalSparkContext {
 
   private val clock = new ManualClock(0)
 
@@ -429,10 +427,10 @@ class HealthTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with Mock
     assert(!HealthTracker.isExcludeOnFailureEnabled(conf))
     conf.set(config.EXCLUDE_ON_FAILURE_LEGACY_TIMEOUT_CONF, 5000L)
     assert(HealthTracker.isExcludeOnFailureEnabled(conf))
-    assert(5000 === HealthTracker.getExludeOnFailureTimeout(conf))
+    assert(5000 === HealthTracker.getExcludeOnFailureTimeout(conf))
     // the new conf takes precedence, though
     conf.set(config.EXCLUDE_ON_FAILURE_TIMEOUT_CONF, 1000L)
-    assert(1000 === HealthTracker.getExludeOnFailureTimeout(conf))
+    assert(1000 === HealthTracker.getExcludeOnFailureTimeout(conf))
 
     // if you explicitly set the legacy conf to 0, that also would disable excluding
     conf.set(config.EXCLUDE_ON_FAILURE_LEGACY_TIMEOUT_CONF, 0L)
@@ -440,7 +438,24 @@ class HealthTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with Mock
     // but again, the new conf takes precedence
     conf.set(config.EXCLUDE_ON_FAILURE_ENABLED, true)
     assert(HealthTracker.isExcludeOnFailureEnabled(conf))
-    assert(1000 === HealthTracker.getExludeOnFailureTimeout(conf))
+    assert(1000 === HealthTracker.getExcludeOnFailureTimeout(conf))
+  }
+
+  test("SPARK-49252: check exclusion enabling config on the application level") {
+    val conf = new SparkConf().setMaster("local")
+    assert(!HealthTracker.isExcludeOnFailureEnabled(conf))
+    conf.set(config.EXCLUDE_ON_FAILURE_ENABLED, true)
+    assert(HealthTracker.isExcludeOnFailureEnabled(conf))
+    // Turn off taskset level exclusion, application level healthtracker should still be enabled.
+    conf.set(config.EXCLUDE_ON_FAILURE_ENABLED_TASK_AND_STAGE, false)
+    assert(HealthTracker.isExcludeOnFailureEnabled(conf))
+    // Turn off the application level exclusion specifically, this overrides the global setting.
+    conf.set(config.EXCLUDE_ON_FAILURE_ENABLED_APPLICATION, false)
+    conf.set(config.EXCLUDE_ON_FAILURE_ENABLED_TASK_AND_STAGE, false)
+    assert(!HealthTracker.isExcludeOnFailureEnabled(conf))
+    // Turn on application level exclusion, health tracker should be enabled.
+    conf.set(config.EXCLUDE_ON_FAILURE_ENABLED_APPLICATION, true)
+    assert(HealthTracker.isExcludeOnFailureEnabled(conf))
   }
 
   test("check exclude configuration invariants") {

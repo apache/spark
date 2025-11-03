@@ -53,14 +53,14 @@ object PullOutGroupingExpressions extends Rule[LogicalPlan] {
         val newGroupingExpressions = a.groupingExpressions.toIndexedSeq.map {
           case e if !e.foldable && e.children.nonEmpty =>
             complexGroupingExpressionMap
-              .getOrElseUpdate(e.canonicalized, Alias(e, s"_groupingexpression")())
+              .getOrElseUpdate(e.canonicalized, Alias(e, "_groupingexpression")())
               .toAttribute
           case o => o
         }
         if (complexGroupingExpressionMap.nonEmpty) {
           def replaceComplexGroupingExpressions(e: Expression): Expression = {
             e match {
-              case _ if AggregateExpression.isAggregate(e) => e
+              case _: AggregateExpression => e
               case _ if e.foldable => e
               case _ if complexGroupingExpressionMap.contains(e.canonicalized) =>
                 complexGroupingExpressionMap.get(e.canonicalized).map(_.toAttribute).getOrElse(e)

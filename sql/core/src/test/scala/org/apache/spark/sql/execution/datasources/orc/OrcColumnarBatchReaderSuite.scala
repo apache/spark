@@ -26,11 +26,12 @@ import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
 import org.apache.orc.TypeDescription
 
 import org.apache.spark.TestUtils
+import org.apache.spark.memory.MemoryMode
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
-import org.apache.spark.sql.execution.vectorized.{OnHeapColumnVector, WritableColumnVector}
+import org.apache.spark.sql.execution.vectorized.{ConstantColumnVector, OffHeapColumnVector}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -49,14 +50,11 @@ class OrcColumnarBatchReaderSuite extends QueryTest with SharedSparkSession {
   orcFileSchemaList.foreach { case schema =>
     val orcFileSchema = TypeDescription.fromString(schema)
 
-    val isConstant = classOf[WritableColumnVector].getDeclaredField("isConstant")
-    isConstant.setAccessible(true)
-
     def getReader(
         requestedDataColIds: Array[Int],
         requestedPartitionColIds: Array[Int],
         resultFields: Array[StructField]): OrcColumnarBatchReader = {
-      val reader = new OrcColumnarBatchReader(4096)
+      val reader = new OrcColumnarBatchReader(4096, MemoryMode.ON_HEAP)
       reader.initBatch(
         orcFileSchema,
         resultFields,
@@ -83,10 +81,9 @@ class OrcColumnarBatchReaderSuite extends QueryTest with SharedSparkSession {
       assert(batch.numCols() === 2)
 
       assert(batch.column(0).isInstanceOf[OrcColumnVector])
-      assert(batch.column(1).isInstanceOf[OnHeapColumnVector])
+      assert(batch.column(1).isInstanceOf[ConstantColumnVector])
 
-      val p1 = batch.column(1).asInstanceOf[OnHeapColumnVector]
-      assert(isConstant.get(p1).asInstanceOf[Boolean]) // Partition column is constant.
+      val p1 = batch.column(1).asInstanceOf[ConstantColumnVector]
       assert(p1.getUTF8String(0) === partitionValues.getUTF8String(0))
     }
   }
@@ -119,9 +116,9 @@ class OrcColumnarBatchReaderSuite extends QueryTest with SharedSparkSession {
         val partitionValues = new GenericInternalRow(Array(v))
         val file = new File(TestUtils.listDirectory(dir).head)
         val fileSplit = new FileSplit(new Path(file.getCanonicalPath), 0L, file.length, Array.empty)
-        val taskConf = sqlContext.sessionState.newHadoopConf()
+        val taskConf = spark.sessionState.newHadoopConf()
         val orcFileSchema = TypeDescription.fromString(schema.simpleString)
-        val vectorizedReader = new OrcColumnarBatchReader(4096)
+        val vectorizedReader = new OrcColumnarBatchReader(4096, MemoryMode.ON_HEAP)
         val attemptId = new TaskAttemptID(new TaskID(new JobID(), TaskType.MAP, 0), 0)
         val taskAttemptContext = new TaskAttemptContextImpl(taskConf, attemptId)
 
@@ -151,5 +148,16 @@ class OrcColumnarBatchReaderSuite extends QueryTest with SharedSparkSession {
         }
       }
     }
+  }
+
+  test("SPARK-46598: off-heap mode") {
+    val reader = new OrcColumnarBatchReader(4096, MemoryMode.OFF_HEAP)
+    reader.initBatch(
+      TypeDescription.fromString("struct<col1:int,col2:int>"),
+      StructType.fromDDL("col1 int, col2 int, col3 int").fields,
+      Array(0, 1, -1),
+      Array(-1, -1, -1),
+      InternalRow.empty)
+    assert(reader.columnarBatch.column(2).isInstanceOf[OffHeapColumnVector])
   }
 }

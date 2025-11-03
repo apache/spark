@@ -20,9 +20,10 @@ package org.apache.spark.sql.execution.datasources.parquet
 import java.util.Locale
 
 import org.apache.parquet.hadoop.ParquetOutputFormat
-import org.apache.parquet.hadoop.metadata.CompressionCodecName
 
+import org.apache.spark.sql.catalyst.{DataSourceOptions, FileSourceOptions}
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -31,7 +32,7 @@ import org.apache.spark.sql.internal.SQLConf
 class ParquetOptions(
     @transient private val parameters: CaseInsensitiveMap[String],
     @transient private val sqlConf: SQLConf)
-  extends Serializable {
+  extends FileSourceOptions(parameters) {
 
   import ParquetOptions._
 
@@ -46,17 +47,17 @@ class ParquetOptions(
     // `compression`, `parquet.compression`(i.e., ParquetOutputFormat.COMPRESSION), and
     // `spark.sql.parquet.compression.codec`
     // are in order of precedence from highest to lowest.
-    val parquetCompressionConf = parameters.get(ParquetOutputFormat.COMPRESSION)
+    val parquetCompressionConf = parameters.get(PARQUET_COMPRESSION)
     val codecName = parameters
-      .get("compression")
+      .get(COMPRESSION)
       .orElse(parquetCompressionConf)
       .getOrElse(sqlConf.parquetCompressionCodec)
       .toLowerCase(Locale.ROOT)
     if (!shortParquetCompressionCodecNames.contains(codecName)) {
       val availableCodecs =
         shortParquetCompressionCodecNames.keys.map(_.toLowerCase(Locale.ROOT))
-      throw new IllegalArgumentException(s"Codec [$codecName] " +
-        s"is not available. Available codecs are ${availableCodecs.mkString(", ")}.")
+      throw QueryExecutionErrors.codecNotAvailableError(
+        codecName, availableCodecs.mkString(", "))
     }
     shortParquetCompressionCodecNames(codecName).name()
   }
@@ -75,43 +76,48 @@ class ParquetOptions(
    */
   def datetimeRebaseModeInRead: String = parameters
     .get(DATETIME_REBASE_MODE)
-    .getOrElse(sqlConf.getConf(SQLConf.PARQUET_REBASE_MODE_IN_READ))
+    .getOrElse(sqlConf.getConf(SQLConf.PARQUET_REBASE_MODE_IN_READ).toString)
+
+  val inferShreddingForVariant: Boolean = {
+    // VARIANT_WRITE_SHREDDING_ENABLED is a global kill switch.
+    sqlConf.getConf(SQLConf.VARIANT_WRITE_SHREDDING_ENABLED) &&
+      parameters.get(SQLConf.VARIANT_INFER_SHREDDING_SCHEMA.key).map(_.toBoolean)
+      .getOrElse(sqlConf.getConf(SQLConf.VARIANT_INFER_SHREDDING_SCHEMA))
+  }
+
   /**
    * The rebasing mode for INT96 timestamp values in reads.
    */
   def int96RebaseModeInRead: String = parameters
     .get(INT96_REBASE_MODE)
-    .getOrElse(sqlConf.getConf(SQLConf.PARQUET_INT96_REBASE_MODE_IN_READ))
+    .getOrElse(sqlConf.getConf(SQLConf.PARQUET_INT96_REBASE_MODE_IN_READ).toString)
 }
 
 
-object ParquetOptions {
-  val MERGE_SCHEMA = "mergeSchema"
-
+object ParquetOptions extends DataSourceOptions {
   // The parquet compression short names
-  private val shortParquetCompressionCodecNames = Map(
-    "none" -> CompressionCodecName.UNCOMPRESSED,
-    "uncompressed" -> CompressionCodecName.UNCOMPRESSED,
-    "snappy" -> CompressionCodecName.SNAPPY,
-    "gzip" -> CompressionCodecName.GZIP,
-    "lzo" -> CompressionCodecName.LZO,
-    "lz4" -> CompressionCodecName.LZ4,
-    "brotli" -> CompressionCodecName.BROTLI,
-    "zstd" -> CompressionCodecName.ZSTD)
+  private val shortParquetCompressionCodecNames =
+    ParquetCompressionCodec.values().map {
+      codec => codec.lowerCaseName() -> codec.getCompressionCodec
+    }.toMap
 
   def getParquetCompressionCodecName(name: String): String = {
     shortParquetCompressionCodecNames(name).name()
   }
 
+  val MERGE_SCHEMA = newOption("mergeSchema")
+  val PARQUET_COMPRESSION = newOption(ParquetOutputFormat.COMPRESSION)
+  val COMPRESSION = newOption("compression")
+
   // The option controls rebasing of the DATE and TIMESTAMP values between
   // Julian and Proleptic Gregorian calendars. It impacts on the behaviour of the Parquet
   // datasource similarly to the SQL config `spark.sql.parquet.datetimeRebaseModeInRead`,
   // and can be set to the same values: `EXCEPTION`, `LEGACY` or `CORRECTED`.
-  val DATETIME_REBASE_MODE = "datetimeRebaseMode"
+  val DATETIME_REBASE_MODE = newOption("datetimeRebaseMode")
 
   // The option controls rebasing of the INT96 timestamp values between Julian and Proleptic
   // Gregorian calendars. It impacts on the behaviour of the Parquet datasource similarly to
   // the SQL config `spark.sql.parquet.int96RebaseModeInRead`.
   // The valid option values are: `EXCEPTION`, `LEGACY` or `CORRECTED`.
-  val INT96_REBASE_MODE = "int96RebaseMode"
+  val INT96_REBASE_MODE = newOption("int96RebaseMode")
 }

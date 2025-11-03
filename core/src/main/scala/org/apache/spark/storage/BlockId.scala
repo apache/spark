@@ -23,6 +23,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.network.shuffle.RemoteBlockPushResolver
+import org.apache.spark.storage.LogBlockType.LogBlockType
 
 /**
  * :: DeveloperApi ::
@@ -170,6 +171,72 @@ case class StreamBlockId(streamId: Int, uniqueId: Long) extends BlockId {
   override def name: String = "input-" + streamId + "-" + uniqueId
 }
 
+@DeveloperApi
+case class PythonStreamBlockId(streamId: Int, uniqueId: Long) extends BlockId {
+  override def name: String = "python-stream-" + streamId + "-" + uniqueId
+}
+
+object LogBlockType extends Enumeration {
+  type LogBlockType = Value
+  val TEST = Value
+  val PYTHON_WORKER = Value
+}
+
+/**
+ * Identifies a block of log data.
+ *
+ * @param lastLogTime the timestamp of the last log entry in this block, used for filtering
+ *                    and log management.
+ * @param executorId the ID of the executor that produced this log block.
+ */
+abstract sealed class LogBlockId extends BlockId {
+  def lastLogTime: Long
+  def executorId: String
+  def logBlockType: LogBlockType
+}
+
+object LogBlockId {
+  def empty(logBlockType: LogBlockType): LogBlockId = {
+    logBlockType match {
+      case LogBlockType.TEST => TestLogBlockId(0L, "")
+      case LogBlockType.PYTHON_WORKER => PythonWorkerLogBlockId(0L, "", "", "")
+      case _ => throw new SparkException(s"Unsupported log block type: $logBlockType")
+    }
+  }
+}
+
+// Used for test purpose only.
+case class TestLogBlockId(lastLogTime: Long, executorId: String)
+  extends LogBlockId {
+  override def name: String =
+    "test_log_" + lastLogTime + "_" + executorId
+
+  override def logBlockType: LogBlockType = LogBlockType.TEST
+}
+
+/**
+ * Identifies a block of Python worker log data.
+ *
+ * @param lastLogTime the timestamp of the last log entry in this block, used for filtering
+ *                    and log management.
+ * @param executorId the ID of the executor that produced this log block.
+ * @param sessionId the session ID to isolate the logs.
+ * @param workerId the worker ID to distinguish the Python worker process.
+ */
+@DeveloperApi
+case class PythonWorkerLogBlockId(
+    lastLogTime: Long,
+    executorId: String,
+    sessionId: String,
+    workerId: String)
+  extends LogBlockId {
+  override def name: String = {
+    s"python_worker_log_${lastLogTime}_${executorId}_${sessionId}_$workerId"
+  }
+
+  override def logBlockType: LogBlockType = LogBlockType.PYTHON_WORKER
+}
+
 /** Id associated with temporary local data managed as blocks. Not serializable. */
 private[spark] case class TempLocalBlockId(id: UUID) extends BlockId {
   override def name: String = "temp_local_" + id
@@ -190,6 +257,11 @@ class UnrecognizedBlockId(name: String)
     extends SparkException(s"Failed to parse $name into a block ID")
 
 @DeveloperApi
+case class CacheId(sessionUUID: String, hash: String) extends BlockId {
+  override def name: String = s"cache_${sessionUUID}_$hash"
+}
+
+@DeveloperApi
 object BlockId {
   val RDD = "rdd_([0-9]+)_([0-9]+)".r
   val SHUFFLE = "shuffle_([0-9]+)_([0-9]+)_([0-9]+)".r
@@ -208,9 +280,12 @@ object BlockId {
   val BROADCAST = "broadcast_([0-9]+)([_A-Za-z0-9]*)".r
   val TASKRESULT = "taskresult_([0-9]+)".r
   val STREAM = "input-([0-9]+)-([0-9]+)".r
+  val PYTHON_STREAM = "python-stream-([0-9]+)-([0-9]+)".r
   val TEMP_LOCAL = "temp_local_([-A-Fa-f0-9]+)".r
   val TEMP_SHUFFLE = "temp_shuffle_([-A-Fa-f0-9]+)".r
   val TEST = "test_(.*)".r
+  val TEST_LOG_BLOCK = "test_log_([0-9]+)_(.*)".r
+  val PYTHON_WORKER_LOG_BLOCK = "python_worker_log_([0-9]+)_([^_]*)_([^_]*)_([^_]*)".r
 
   def apply(name: String): BlockId = name match {
     case RDD(rddId, splitIndex) =>
@@ -245,10 +320,16 @@ object BlockId {
       TaskResultBlockId(taskId.toLong)
     case STREAM(streamId, uniqueId) =>
       StreamBlockId(streamId.toInt, uniqueId.toLong)
+    case PYTHON_STREAM(streamId, uniqueId) =>
+      PythonStreamBlockId(streamId.toInt, uniqueId.toLong)
     case TEMP_LOCAL(uuid) =>
       TempLocalBlockId(UUID.fromString(uuid))
     case TEMP_SHUFFLE(uuid) =>
       TempShuffleBlockId(UUID.fromString(uuid))
+    case TEST_LOG_BLOCK(lastLogTime, executorId) =>
+      TestLogBlockId(lastLogTime.toLong, executorId)
+    case PYTHON_WORKER_LOG_BLOCK(lastLogTime, executorId, sessionId, workerId) =>
+      PythonWorkerLogBlockId(lastLogTime.toLong, executorId, sessionId, workerId)
     case TEST(value) =>
       TestBlockId(value)
     case _ => throw SparkCoreErrors.unrecognizedBlockIdError(name)

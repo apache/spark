@@ -73,6 +73,11 @@ public class JavaStrLen implements UnboundFunction {
     public String name() {
       return "strlen";
     }
+
+    @Override
+    public String canonicalName() {
+      return name();
+    }
   }
 
   public static class JavaStrLenDefault extends JavaStrLenBase {

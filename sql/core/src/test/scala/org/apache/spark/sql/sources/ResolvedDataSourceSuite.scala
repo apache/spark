@@ -19,6 +19,7 @@ package org.apache.spark.sql.sources
 
 import java.time.ZoneId
 
+import org.apache.spark.SparkClassNotFoundException
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.datasources.DataSource
@@ -79,26 +80,34 @@ class ResolvedDataSourceSuite extends SharedSparkSession {
 
   test("avro: show deploy guide for loading the external avro module") {
     Seq("avro", "org.apache.spark.sql.avro").foreach { provider =>
-      val message = intercept[AnalysisException] {
-        getProvidingClass(provider)
-      }.getMessage
-      assert(message.contains(s"Failed to find data source: $provider"))
-      assert(message.contains("Please deploy the application as per the deployment section of"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          getProvidingClass(provider)
+        },
+        condition = "_LEGACY_ERROR_TEMP_1139",
+        parameters = Map("provider" -> provider)
+      )
     }
   }
 
   test("kafka: show deploy guide for loading the external kafka module") {
-    val message = intercept[AnalysisException] {
-      getProvidingClass("kafka")
-    }.getMessage
-    assert(message.contains("Failed to find data source: kafka"))
-    assert(message.contains("Please deploy the application as per the deployment section of"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        getProvidingClass("kafka")
+      },
+      condition = "_LEGACY_ERROR_TEMP_1140",
+      parameters = Map("provider" -> "kafka")
+    )
   }
 
   test("error message for unknown data sources") {
-    val error = intercept[ClassNotFoundException] {
+    val error = intercept[SparkClassNotFoundException] {
       getProvidingClass("asfdwefasdfasdf")
     }
-    assert(error.getMessage.contains("Failed to find data source: asfdwefasdfasdf."))
+    checkError(
+      exception = error,
+      condition = "DATA_SOURCE_NOT_FOUND",
+      parameters = Map("provider" -> "asfdwefasdfasdf")
+    )
   }
 }

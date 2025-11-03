@@ -63,7 +63,7 @@ object SimplifyExtractValueOps extends Rule[LogicalPlan] {
           // out of bounds, mimic the runtime behavior and return null
           Literal(null, ga.dataType)
         }
-      case GetMapValue(CreateMap(elems, _), key, _) => CaseKeyWhen(key, elems)
+      case GetMapValue(CreateMap(elems, _), key) => CaseKeyWhen(key, elems)
     }
   }
 }

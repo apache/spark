@@ -19,6 +19,7 @@ select date'2021-4294967297-11';
 select current_date = current_date;
 -- under ANSI mode, `current_date` can't be a function name.
 select current_date() = current_date();
+select curdate(1);
 
 -- conversions between date and unix_date (number of days from epoch)
 select DATE_FROM_UNIX_DATE(0), DATE_FROM_UNIX_DATE(1000), DATE_FROM_UNIX_DATE(null);
@@ -143,24 +144,30 @@ select from_csv('26/October/2015', 'd Date', map('dateFormat', 'dd/MMMMM/yyyy'))
 
 -- Add a number of units to a timestamp or a date
 select dateadd(MICROSECOND, 1001, timestamp'2022-02-25 01:02:03.123');
-select dateadd(MILLISECOND, -1, timestamp'2022-02-25 01:02:03.456');
+select date_add(MILLISECOND, -1, timestamp'2022-02-25 01:02:03.456');
 select dateadd(SECOND, 58, timestamp'2022-02-25 01:02:03');
-select dateadd(MINUTE, -100, date'2022-02-25');
+select date_add(MINUTE, -100, date'2022-02-25');
 select dateadd(HOUR, -1, timestamp'2022-02-25 01:02:03');
-select dateadd(DAY, 367, date'2022-02-25');
+select date_add(DAY, 367, date'2022-02-25');
 select dateadd(WEEK, -4, timestamp'2022-02-25 01:02:03');
-select dateadd(MONTH, -1, timestamp'2022-02-25 01:02:03');
+select date_add(MONTH, -1, timestamp'2022-02-25 01:02:03');
 select dateadd(QUARTER, 5, date'2022-02-25');
-select dateadd(YEAR, 1, date'2022-02-25');
+select date_add(YEAR, 1, date'2022-02-25');
+
+select dateadd('MICROSECOND', 1001, timestamp'2022-02-25 01:02:03.123');
+select date_add('QUARTER', 5, date'2022-02-25');
 
 -- Get the difference between timestamps or dates in the specified units
 select datediff(MICROSECOND, timestamp'2022-02-25 01:02:03.123', timestamp'2022-02-25 01:02:03.124001');
-select datediff(MILLISECOND, timestamp'2022-02-25 01:02:03.456', timestamp'2022-02-25 01:02:03.455');
+select date_diff(MILLISECOND, timestamp'2022-02-25 01:02:03.456', timestamp'2022-02-25 01:02:03.455');
 select datediff(SECOND, timestamp'2022-02-25 01:02:03', timestamp'2022-02-25 01:03:01');
-select datediff(MINUTE, date'2022-02-25', timestamp'2022-02-24 22:20:00');
+select date_diff(MINUTE, date'2022-02-25', timestamp'2022-02-24 22:20:00');
 select datediff(HOUR, timestamp'2022-02-25 01:02:03', timestamp'2022-02-25 00:02:03');
-select datediff(DAY, date'2022-02-25', timestamp'2023-02-27 00:00:00');
+select date_diff(DAY, date'2022-02-25', timestamp'2023-02-27 00:00:00');
 select datediff(WEEK, timestamp'2022-02-25 01:02:03', timestamp'2022-01-28 01:02:03');
-select datediff(MONTH, timestamp'2022-02-25 01:02:03', timestamp'2022-01-25 01:02:03');
+select date_diff(MONTH, timestamp'2022-02-25 01:02:03', timestamp'2022-01-25 01:02:03');
 select datediff(QUARTER, date'2022-02-25', date'2023-05-25');
-select datediff(YEAR, date'2022-02-25', date'2023-02-25');
+select date_diff(YEAR, date'2022-02-25', date'2023-02-25');
+
+select date_diff('MILLISECOND', timestamp'2022-02-25 01:02:03.456', timestamp'2022-02-25 01:02:03.455');
+select datediff('YEAR', date'2022-02-25', date'2023-02-25');

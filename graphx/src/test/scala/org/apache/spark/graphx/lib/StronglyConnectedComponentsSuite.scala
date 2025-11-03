@@ -19,6 +19,7 @@ package org.apache.spark.graphx.lib
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.graphx._
+import org.apache.spark.util.ArrayImplicits._
 
 
 class StronglyConnectedComponentsSuite extends SparkFunSuite with LocalSparkContext {
@@ -52,7 +53,7 @@ class StronglyConnectedComponentsSuite extends SparkFunSuite with LocalSparkCont
         Array(0L -> 1L, 1L -> 2L, 2L -> 0L) ++
         Array(3L -> 4L, 4L -> 5L, 5L -> 3L) ++
         Array(6L -> 0L, 5L -> 7L)
-      val rawEdges = sc.parallelize(edges)
+      val rawEdges = sc.parallelize(edges.toImmutableArraySeq)
       val graph = Graph.fromEdgeTuples(rawEdges, -1)
       val sccGraph = graph.stronglyConnectedComponents(20)
       for ((id, scc) <- sccGraph.vertices.collect()) {

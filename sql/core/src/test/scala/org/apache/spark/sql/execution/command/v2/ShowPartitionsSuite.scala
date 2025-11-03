@@ -18,22 +18,55 @@
 package org.apache.spark.sql.execution.command.v2
 
 import org.apache.spark.sql.{AnalysisException, Row}
+import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
+import org.apache.spark.sql.catalyst.util.quoteIdentifier
 import org.apache.spark.sql.execution.command
 
 /**
  * The class contains tests for the `SHOW PARTITIONS` command to check V2 table catalogs.
  */
 class ShowPartitionsSuite extends command.ShowPartitionsSuiteBase with CommandSuiteBase {
+
+  test("show partitions of non-partitioned table") {
+    withNamespaceAndTable("ns", "not_partitioned_table") { t =>
+      sql(s"CREATE TABLE $t (col1 int) $defaultUsing")
+      val sqlText = s"SHOW PARTITIONS $t"
+      val tableName =
+        UnresolvedAttribute.parseAttributeName(t).map(quoteIdentifier).mkString(".")
+
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(sqlText)
+        },
+        condition = "INVALID_PARTITION_OPERATION.PARTITION_SCHEMA_IS_EMPTY",
+        parameters = Map("name" -> tableName),
+        context = ExpectedContext(
+          fragment = t,
+          start = 16,
+          stop = sqlText.length - 1))
+    }
+  }
+
   test("a table does not support partitioning") {
     val table = s"non_part_$catalog.tab1"
     withTable(table) {
       sql(s"""
         |CREATE TABLE $table (price int, qty int, year int, month int)
         |$defaultUsing""".stripMargin)
-      val errMsg = intercept[AnalysisException] {
-        sql(s"SHOW PARTITIONS $table")
-      }.getMessage
-      assert(errMsg.contains(s"Table $table does not support partition management"))
+      val tableName =
+        UnresolvedAttribute.parseAttributeName(table).map(quoteIdentifier).mkString(".")
+      val sqlText = s"SHOW PARTITIONS $table"
+
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(sqlText)
+        },
+        condition = "INVALID_PARTITION_OPERATION.PARTITION_MANAGEMENT_IS_UNSUPPORTED",
+        parameters = Map("name" -> tableName),
+        context = ExpectedContext(
+          fragment = table,
+          start = 16,
+          stop = sqlText.length - 1))
     }
   }
 

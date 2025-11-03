@@ -19,7 +19,8 @@ import shutil
 import tempfile
 import unittest
 
-from pyspark.testing.utils import ReusedPySparkTestCase, SPARK_HOME
+from pyspark.testing.sqlutils import SPARK_HOME
+from pyspark.testing.utils import ReusedPySparkTestCase
 
 
 class InputFormatTests(ReusedPySparkTestCase):
@@ -360,7 +361,7 @@ if __name__ == "__main__":
     from pyspark.tests.test_readwrite import *  # noqa: F401
 
     try:
-        import xmlrunner  # type: ignore[import]
+        import xmlrunner
 
         testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:

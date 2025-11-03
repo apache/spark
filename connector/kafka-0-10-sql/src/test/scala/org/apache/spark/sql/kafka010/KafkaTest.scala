@@ -21,9 +21,10 @@ import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.kafka010.producer.InternalKafkaProducerPool
+import org.apache.spark.util.ResetSystemProperties
 
 /** A trait to clean cached Kafka producers in `afterAll` */
-trait KafkaTest extends BeforeAndAfterAll {
+trait KafkaTest extends BeforeAndAfterAll with ResetSystemProperties {
   self: SparkFunSuite =>
 
   override def afterAll(): Unit = {

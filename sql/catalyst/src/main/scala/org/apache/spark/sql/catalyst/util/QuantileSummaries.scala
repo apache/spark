@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.util
 import scala.collection.mutable.{ArrayBuffer, ListBuffer}
 
 import org.apache.spark.sql.catalyst.util.QuantileSummaries.Stats
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * Helper class to compute approximate quantile summary.
@@ -136,8 +137,8 @@ class QuantileSummaries(
     val inserted = this.withHeadBufferInserted
     assert(inserted.headSampled.isEmpty)
     assert(inserted.count == count + headSampled.size)
-    val compressed =
-      compressImmut(inserted.sampled, mergeThreshold = 2 * relativeError * inserted.count)
+    val compressed = compressImmut(
+      inserted.sampled.toImmutableArraySeq, mergeThreshold = 2 * relativeError * inserted.count)
     new QuantileSummaries(compressThreshold, relativeError, compressed, inserted.count, true)
   }
 
@@ -298,13 +299,13 @@ class QuantileSummaries(
           result(pos) = sampled.last.value
         } else {
           val (newIndex, newMinRank, approxQuantile) =
-            findApproxQuantile(index, minRank, targetError, percentile)
+            findApproxQuantile(index, minRank, targetError.toDouble, percentile)
           index = newIndex
           minRank = newMinRank
           result(pos) = approxQuantile
         }
     }
-    Some(result)
+    Some(result.toImmutableArraySeq)
   }
 
   /**

@@ -1,0 +1,31 @@
+<?xml version="1.0"?>
+<ROWSET>
+    <ROW>
+        <integer_value int="10">10</integer_value>
+        <long_value int="Ten">10</long_value>
+        <float_value>10.0</float_value>
+        <double_value>10.0</double_value>
+        <boolean_value>true</boolean_value>
+        <string_value>Ten</string_value>
+        <integer_array>1</integer_array>
+        <integer_array>2</integer_array>
+        <integer_map>
+          <b>345</b>
+          <a>123</a>
+        </integer_map>
+    </ROW>
+    <ROW>
+        <integer_value int="Ten">Ten</integer_value>
+        <long_value int="10">Ten</long_value>
+        <float_value>Ten</float_value>
+        <double_value>Ten</double_value>
+        <boolean_value>Ten</boolean_value>
+        <string_value>Ten</string_value>
+        <integer_array>Ten</integer_array>
+        <integer_array>2</integer_array>
+        <integer_map>
+          <b>345</b>
+          <a>OneTwoThree</a>
+        </integer_map>
+    </ROW>
+</ROWSET>

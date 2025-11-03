@@ -103,7 +103,7 @@ then
   cd $SPARK_INPUT_DIR
 
   if [[ $DOCKER_FILE == "N/A" ]]; then
-    # OpenJDK base-image tag (e.g. 8-jre-slim, 11-jre-slim)
+    # OpenJDK base-image tag (e.g. 8-jre-focal, 11-jre-focal)
     JAVA_IMAGE_TAG_BUILD_ARG="-b java_image_tag=$JAVA_IMAGE_TAG"
   else
     if [[ $DOCKER_FILE = /* ]]; then
@@ -140,7 +140,7 @@ then
       fi
       ;;
 
-    docker-desktop | docker-for-desktop)
+    docker-desktop)
        # Only need to build as this will place it in our local Docker repo which is all
        # we need for Docker for Desktop to work so no need to also push
        $SPARK_INPUT_DIR/bin/docker-image-tool.sh -r $IMAGE_REPO -t $IMAGE_TAG $JAVA_IMAGE_TAG_BUILD_ARG $LANGUAGE_BINDING_BUILD_ARGS build

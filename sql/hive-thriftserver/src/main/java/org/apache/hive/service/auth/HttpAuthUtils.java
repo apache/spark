@@ -20,17 +20,17 @@ package org.apache.hive.service.auth;
 import java.security.AccessControlContext;
 import java.security.AccessController;
 import java.security.PrivilegedExceptionAction;
+import java.security.SecureRandom;
 import java.util.Arrays;
+import java.util.Base64;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
-import java.util.Random;
 import java.util.Set;
 import java.util.StringTokenizer;
 
 import javax.security.auth.Subject;
 
-import org.apache.commons.codec.binary.Base64;
 import org.apache.hadoop.hive.shims.ShimLoader;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.http.protocol.BasicHttpContext;
@@ -39,8 +39,11 @@ import org.ietf.jgss.GSSContext;
 import org.ietf.jgss.GSSManager;
 import org.ietf.jgss.GSSName;
 import org.ietf.jgss.Oid;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+
+import org.apache.spark.internal.SparkLogger;
+import org.apache.spark.internal.SparkLoggerFactory;
+import org.apache.spark.internal.LogKeys;
+import org.apache.spark.internal.MDC;
 
 /**
  * Utility functions for HTTP mode authentication.
@@ -50,13 +53,14 @@ public final class HttpAuthUtils {
   public static final String AUTHORIZATION = "Authorization";
   public static final String BASIC = "Basic";
   public static final String NEGOTIATE = "Negotiate";
-  private static final Logger LOG = LoggerFactory.getLogger(HttpAuthUtils.class);
+  private static final SparkLogger LOG = SparkLoggerFactory.getLogger(HttpAuthUtils.class);
   private static final String COOKIE_ATTR_SEPARATOR = "&";
   private static final String COOKIE_CLIENT_USER_NAME = "cu";
   private static final String COOKIE_CLIENT_RAND_NUMBER = "rn";
   private static final String COOKIE_KEY_VALUE_SEPARATOR = "=";
   private static final Set<String> COOKIE_ATTRIBUTES =
     new HashSet<String>(Arrays.asList(COOKIE_CLIENT_USER_NAME, COOKIE_CLIENT_RAND_NUMBER));
+  private static final SecureRandom random = new SecureRandom();
 
   /**
    * @return Stringified Base64 encoded kerberosAuthHeader on success
@@ -95,7 +99,7 @@ public final class HttpAuthUtils {
     sb.append(COOKIE_CLIENT_USER_NAME).append(COOKIE_KEY_VALUE_SEPARATOR).append(clientUserName)
       .append(COOKIE_ATTR_SEPARATOR);
     sb.append(COOKIE_CLIENT_RAND_NUMBER).append(COOKIE_KEY_VALUE_SEPARATOR)
-      .append((new Random(System.currentTimeMillis())).nextLong());
+      .append(random.nextLong());
     return sb.toString();
   }
 
@@ -108,7 +112,8 @@ public final class HttpAuthUtils {
     Map<String, String> map = splitCookieToken(tokenStr);
 
     if (!map.keySet().equals(COOKIE_ATTRIBUTES)) {
-      LOG.error("Invalid token with missing attributes " + tokenStr);
+      LOG.error("Invalid token with missing attributes {}",
+        MDC.of(LogKeys.TOKEN, tokenStr));
       return null;
     }
     return map.get(COOKIE_CLIENT_USER_NAME);
@@ -128,7 +133,7 @@ public final class HttpAuthUtils {
       String part = st.nextToken();
       int separator = part.indexOf(COOKIE_KEY_VALUE_SEPARATOR);
       if (separator == -1) {
-        LOG.error("Invalid token string " + tokenStr);
+        LOG.error("Invalid token string {}", MDC.of(LogKeys.TOKEN, tokenStr));
         return null;
       }
       String key = part.substring(0, separator);
@@ -152,13 +157,11 @@ public final class HttpAuthUtils {
     public static final String SERVER_HTTP_URL = "SERVER_HTTP_URL";
     private final String serverPrincipal;
     private final String serverHttpUrl;
-    private final Base64 base64codec;
     private final HttpContext httpContext;
 
     public HttpKerberosClientAction(String serverPrincipal, String serverHttpUrl) {
       this.serverPrincipal = serverPrincipal;
       this.serverHttpUrl = serverHttpUrl;
-      base64codec = new Base64(0);
       httpContext = new BasicHttpContext();
       httpContext.setAttribute(SERVER_HTTP_URL, serverHttpUrl);
     }
@@ -182,7 +185,7 @@ public final class HttpAuthUtils {
       byte[] outToken = gssContext.initSecContext(inToken, 0, inToken.length);
       gssContext.dispose();
       // Base64 encoded and stringified token for server
-      return new String(base64codec.encode(outToken));
+      return Base64.getEncoder().encodeToString(outToken);
     }
   }
 }

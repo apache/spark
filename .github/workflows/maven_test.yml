@@ -1,0 +1,243 @@
+#
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#   http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied.  See the License for the
+# specific language governing permissions and limitations
+# under the License.
+#
+
+name: Build and test using Maven
+
+on:
+  workflow_call:
+    inputs:
+      java:
+        required: false
+        type: string
+        default: 17
+      branch:
+        description: Branch to run the build against
+        required: false
+        type: string
+        default: master
+      hadoop:
+        description: Hadoop version to run with. HADOOP_PROFILE environment variable should accept it.
+        required: false
+        type: string
+        default: hadoop3
+      os:
+        description: OS to run this build.
+        required: false
+        type: string
+        default: ubuntu-latest
+      arch:
+        description: The target architecture (x86, x64, arm64) of the Python or PyPy interpreter.
+        required: false
+        type: string
+        default: x64
+      envs:
+        description: Additional environment variables to set when running the tests. Should be in JSON format.
+        required: false
+        type: string
+        default: '{}'
+jobs:
+  # Build: build Spark and run the tests for specified modules using maven
+  build:
+    name: "Build modules using Maven: ${{ matrix.modules }} ${{ matrix.comment }}"
+    runs-on: ${{ inputs.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        java:
+          - ${{ inputs.java }}
+        hadoop:
+          - ${{ inputs.hadoop }}
+        hive:
+          - hive2.3
+        modules:
+          - >-
+            core,launcher,common#unsafe,common#kvstore,common#network-common,common#network-shuffle,common#sketch,common#utils,common#utils-java,common#variant
+          - >-
+            graphx,streaming,hadoop-cloud
+          - >-
+            mllib-local,mllib,sql#pipelines
+          - >-
+            repl,sql#hive-thriftserver
+          - >-
+            connector#kafka-0-10,connector#kafka-0-10-sql,connector#kafka-0-10-token-provider,connector#spark-ganglia-lgpl,connector#protobuf,connector#avro,connector#kinesis-asl
+          - >-
+            sql#api,sql#catalyst,resource-managers#yarn,resource-managers#kubernetes#core
+          - >-
+            connect
+        # Here, we split Hive and SQL tests into some of slow ones and the rest of them.
+        included-tags: [ "" ]
+        excluded-tags: [ "" ]
+        comment: [ "" ]
+        include:
+          # Hive tests
+          - modules: sql#hive
+            java: ${{ inputs.java }}
+            hadoop: ${{ inputs.hadoop }}
+            hive: hive2.3
+            included-tags: org.apache.spark.tags.SlowHiveTest
+            comment: "- slow tests"
+          - modules: sql#hive
+            java: ${{ inputs.java }}
+            hadoop: ${{ inputs.hadoop }}
+            hive: hive2.3
+            excluded-tags: org.apache.spark.tags.SlowHiveTest
+            comment: "- other tests"
+          # SQL tests
+          - modules: sql#core
+            java: ${{ inputs.java }}
+            hadoop: ${{ inputs.hadoop }}
+            hive: hive2.3
+            included-tags: org.apache.spark.tags.ExtendedSQLTest
+            comment: "- extended tests"
+          - modules: sql#core
+            java: ${{ inputs.java }}
+            hadoop: ${{ inputs.hadoop }}
+            hive: hive2.3
+            included-tags: org.apache.spark.tags.SlowSQLTest
+            comment: "- slow tests"
+          - modules: sql#core
+            java: ${{ inputs.java }}
+            hadoop: ${{ inputs.hadoop }}
+            hive: hive2.3
+            excluded-tags: org.apache.spark.tags.ExtendedSQLTest,org.apache.spark.tags.SlowSQLTest
+            comment: "- other tests"
+    env:
+      MODULES_TO_TEST: ${{ matrix.modules }}
+      EXCLUDED_TAGS: ${{ matrix.excluded-tags }}
+      INCLUDED_TAGS: ${{ matrix.included-tags }}
+      HADOOP_PROFILE: ${{ matrix.hadoop }}
+      HIVE_PROFILE: ${{ matrix.hive }}
+      SPARK_LOCAL_IP: localhost
+      GITHUB_PREV_SHA: ${{ github.event.before }}
+    steps:
+      - name: Checkout Spark repository
+        uses: actions/checkout@v4
+        # In order to fetch changed files
+        with:
+          fetch-depth: 0
+          repository: apache/spark
+          ref: ${{ inputs.branch }}
+      - name: Sync the current branch with the latest in Apache Spark
+        if: github.repository != 'apache/spark'
+        run: |
+          echo "APACHE_SPARK_REF=$(git rev-parse HEAD)" >> $GITHUB_ENV
+          git fetch https://github.com/$GITHUB_REPOSITORY.git ${GITHUB_REF#refs/heads/}
+          git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
+          git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
+      # Cache local repositories. Note that GitHub Actions cache has a 10G limit.
+      - name: Cache SBT and Maven
+        uses: actions/cache@v4
+        with:
+          path: |
+            build/apache-maven-*
+            build/*.jar
+            ~/.sbt
+          key: build-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
+          restore-keys: |
+            build-
+      - name: Cache Maven local repository
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2/repository
+          key: java${{ matrix.java }}-maven-${{ hashFiles('**/pom.xml') }}
+          restore-keys: |
+            java${{ matrix.java }}-maven-
+      - name: Install Java ${{ matrix.java }}
+        uses: actions/setup-java@v4
+        with:
+          distribution: zulu
+          java-version: ${{ matrix.java }}
+      - name: Install Python 3.11
+        uses: actions/setup-python@v5
+        # We should install one Python that is higher than 3+ for SQL and Yarn because:
+        # - SQL component also has Python related tests, for example, IntegratedUDFTestUtils.
+        # - Yarn has a Python specific test too, for example, YarnClusterSuite.
+        if: contains(matrix.modules, 'resource-managers#yarn') || (contains(matrix.modules, 'sql#core')) || contains(matrix.modules, 'connect')
+        with:
+          python-version: '3.11'
+          architecture: ${{ inputs.arch }}
+      - name: Install Python packages (Python 3.11)
+        if: contains(matrix.modules, 'resource-managers#yarn') || (contains(matrix.modules, 'sql#core')) || contains(matrix.modules, 'connect')
+        run: |
+          python3.11 -m pip install 'numpy>=1.22' pyarrow pandas pyyaml scipy unittest-xml-reporting 'grpcio==1.67.0' 'grpcio-status==1.67.0' 'protobuf==5.29.5'
+          python3.11 -m pip list
+      # Run the tests using script command.
+      # BSD's script command doesn't support -c option, and the usage is different from Linux's one.
+      # The kind of script command is tested by `script -qec true`.
+      - name: Run tests
+        env: ${{ fromJSON(inputs.envs) }}
+        shell: |
+          bash -c "if script -qec true 2>/dev/null; then script -qec bash\ {0}; else script -qe /dev/null bash {0}; fi"
+        run: |
+          # Fix for TTY related issues when launching the Ammonite REPL in tests.
+          export TERM=vt100
+          # `set -e` to make the exit status as expected due to use script command to run the commands
+          set -e
+          export MAVEN_OPTS="-Xss64m -Xmx4g -Xms4g -XX:ReservedCodeCacheSize=128m -Dorg.slf4j.simpleLogger.defaultLogLevel=WARN"
+          export MAVEN_CLI_OPTS="--no-transfer-progress"
+          export JAVA_VERSION=${{ matrix.java }}
+          export INPUT_BRANCH=${{ inputs.branch }}
+          export ENABLE_KINESIS_TESTS=0
+          # Replace with the real module name, for example, connector#kafka-0-10 -> connector/kafka-0-10
+          export TEST_MODULES=`echo "$MODULES_TO_TEST" | sed -e "s%#%/%g"`
+          ./build/mvn $MAVEN_CLI_OPTS -DskipTests -Pyarn -Pkubernetes -Pvolcano -Phive -Phive-thriftserver -Phadoop-cloud -Pjvm-profiler -Pspark-ganglia-lgpl -Pkinesis-asl -Djava.version=${JAVA_VERSION/-ea} clean install
+          
+          if [ "$MODULES_TO_TEST" != "connect" ]; then
+            echo "Clean up the assembly module before maven testing"
+            ./build/mvn $MAVEN_CLI_OPTS clean -pl assembly
+          fi
+          
+          if [[ "$INCLUDED_TAGS" != "" ]]; then
+            ./build/mvn $MAVEN_CLI_OPTS -pl "$TEST_MODULES" -Pyarn -Pkubernetes -Pvolcano -Phive -Phive-thriftserver -Phadoop-cloud -Pjvm-profiler -Pspark-ganglia-lgpl -Pkinesis-asl -Djava.version=${JAVA_VERSION/-ea} -Dtest.include.tags="$INCLUDED_TAGS" test -fae
+          elif [[ "$MODULES_TO_TEST" == "connect" && "$INPUT_BRANCH" == "branch-4.0" ]]; then
+            # SPARK-53914: Remove sql/connect/client/jdbc from `-pl` for branch-4.0, this branch can be deleted after the EOL of branch-4.0.
+            ./build/mvn $MAVEN_CLI_OPTS -Djava.version=${JAVA_VERSION/-ea} -pl sql/connect/client/jvm,sql/connect/common,sql/connect/server test -fae
+          elif [[ "$MODULES_TO_TEST" == "connect" ]]; then
+            ./build/mvn $MAVEN_CLI_OPTS -Djava.version=${JAVA_VERSION/-ea} -pl sql/connect/client/jdbc,sql/connect/client/jvm,sql/connect/common,sql/connect/server test -fae
+          elif [[ "$EXCLUDED_TAGS" != "" ]]; then
+            ./build/mvn $MAVEN_CLI_OPTS -pl "$TEST_MODULES" -Pyarn -Pkubernetes -Pvolcano -Phive -Phive-thriftserver -Phadoop-cloud -Pjvm-profiler -Pspark-ganglia-lgpl -Pkinesis-asl -Djava.version=${JAVA_VERSION/-ea} -Dtest.exclude.tags="$EXCLUDED_TAGS" test -fae
+          elif [[ "$MODULES_TO_TEST" == *"sql#hive-thriftserver"* ]]; then
+            # To avoid a compilation loop, for the `sql/hive-thriftserver` module, run `clean install` instead
+            ./build/mvn $MAVEN_CLI_OPTS -pl "$TEST_MODULES" -Pyarn -Pkubernetes -Pvolcano -Phive -Phive-thriftserver -Phadoop-cloud -Pjvm-profiler -Pspark-ganglia-lgpl -Pkinesis-asl -Djava.version=${JAVA_VERSION/-ea} clean install -fae
+          elif [[ "$MODULES_TO_TEST" == *"sql#pipelines"* && "$INPUT_BRANCH" == "branch-4.0" ]]; then
+            # SPARK-52441: Remove sql/pipelines from TEST_MODULES for branch-4.0, this branch can be deleted after the EOL of branch-4.0.
+            TEST_MODULES=${TEST_MODULES/,sql\/pipelines/}
+            ./build/mvn $MAVEN_CLI_OPTS -pl "$TEST_MODULES" -Pyarn -Pkubernetes -Pvolcano -Phive -Phive-thriftserver -Pspark-ganglia-lgpl -Phadoop-cloud -Pjvm-profiler -Pkinesis-asl -Djava.version=${JAVA_VERSION/-ea} test -fae
+          elif [[ "$MODULES_TO_TEST" == *"common#utils-java"* && "$INPUT_BRANCH" == "branch-4.0" ]]; then
+            # SPARK-53138: Remove common/utils-java from TEST_MODULES for branch-4.0, this branch can be deleted after the EOL of branch-4.0.
+            TEST_MODULES=${TEST_MODULES/,common\/utils-java/}
+            ./build/mvn $MAVEN_CLI_OPTS -pl "$TEST_MODULES" -Pyarn -Pkubernetes -Pvolcano -Phive -Phive-thriftserver -Pspark-ganglia-lgpl -Phadoop-cloud -Pjvm-profiler -Pkinesis-asl -Djava.version=${JAVA_VERSION/-ea} test -fae
+          else
+            ./build/mvn $MAVEN_CLI_OPTS -pl "$TEST_MODULES" -Pyarn -Pkubernetes -Pvolcano -Phive -Phive-thriftserver -Pspark-ganglia-lgpl -Phadoop-cloud -Pjvm-profiler -Pkinesis-asl -Djava.version=${JAVA_VERSION/-ea} test -fae
+          fi
+      - name: Clean up local Maven repository
+        run: |  
+          rm -rf ~/.m2/repository/org/apache/spark
+      - name: Upload test results to report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-${{ matrix.modules }}-${{ matrix.comment }}-${{ matrix.java }}-${{ matrix.hadoop }}-${{ matrix.hive }}
+          path: "**/target/test-reports/*.xml"
+      - name: Upload unit tests log files
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-tests-log-${{ matrix.modules }}-${{ matrix.comment }}-${{ matrix.java }}-${{ matrix.hadoop }}-${{ matrix.hive }}
+          path: "**/target/unit-tests.log"

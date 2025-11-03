@@ -22,6 +22,7 @@ from typing import Union, Callable
 from pyspark.sql._typing import (
     AtomicDataTypeOrString,
     UserDefinedFunctionLike,
+    DataTypeOrString,
 )
 from pyspark.sql.pandas._typing import (
     GroupedMapPandasUserDefinedFunction,
@@ -34,11 +35,16 @@ from pyspark.sql.pandas._typing import (
     PandasScalarToScalarFunction,
     PandasScalarToStructFunction,
     PandasScalarUDFType,
+    ArrowScalarToScalarFunction,
+    ArrowScalarUDFType,
+    ArrowScalarIterFunction,
+    ArrowScalarIterUDFType,
+    ArrowGroupedAggUDFType,
 )
 
 from pyspark import since as since  # noqa: F401
-from pyspark.rdd import PythonEvalType as PythonEvalType  # noqa: F401
-from pyspark.sql.types import ArrayType, StructType
+from pyspark.util import PythonEvalType as PythonEvalType  # noqa: F401
+from pyspark.sql.types import ArrayType, StructType, DataType
 
 class PandasUDFType:
     SCALAR: PandasScalarUDFType
@@ -46,6 +52,47 @@ class PandasUDFType:
     GROUPED_MAP: PandasGroupedMapUDFType
     GROUPED_AGG: PandasGroupedAggUDFType
 
+class ArrowUDFType:
+    SCALAR: ArrowScalarUDFType
+    SCALAR_ITER: ArrowScalarIterUDFType
+    GROUPED_AGG: ArrowGroupedAggUDFType
+
+@overload
+def arrow_udf(
+    f: ArrowScalarToScalarFunction,
+    returnType: DataTypeOrString,
+    functionType: ArrowScalarUDFType,
+) -> UserDefinedFunctionLike: ...
+@overload
+def arrow_udf(
+    f: DataTypeOrString, returnType: ArrowScalarUDFType
+) -> Callable[[ArrowScalarToScalarFunction], UserDefinedFunctionLike]: ...
+@overload
+def arrow_udf(
+    f: DataTypeOrString, *, functionType: ArrowScalarUDFType
+) -> Callable[[ArrowScalarToScalarFunction], UserDefinedFunctionLike]: ...
+@overload
+def arrow_udf(
+    *, returnType: DataTypeOrString, functionType: ArrowScalarUDFType
+) -> Callable[[ArrowScalarToScalarFunction], UserDefinedFunctionLike]: ...
+@overload
+def arrow_udf(
+    f: ArrowScalarIterFunction,
+    returnType: Union[AtomicDataTypeOrString, ArrayType],
+    functionType: ArrowScalarIterUDFType,
+) -> UserDefinedFunctionLike: ...
+@overload
+def arrow_udf(
+    f: Union[AtomicDataTypeOrString, ArrayType], returnType: ArrowScalarIterUDFType
+) -> Callable[[ArrowScalarIterFunction], UserDefinedFunctionLike]: ...
+@overload
+def arrow_udf(
+    *, returnType: Union[AtomicDataTypeOrString, ArrayType], functionType: ArrowScalarIterUDFType
+) -> Callable[[ArrowScalarIterFunction], UserDefinedFunctionLike]: ...
+@overload
+def arrow_udf(
+    f: Union[AtomicDataTypeOrString, ArrayType], *, functionType: ArrowScalarIterUDFType
+) -> Callable[[ArrowScalarIterFunction], UserDefinedFunctionLike]: ...
 @overload
 def pandas_udf(
     f: PandasScalarToScalarFunction,
@@ -53,11 +100,11 @@ def pandas_udf(
     functionType: PandasScalarUDFType,
 ) -> UserDefinedFunctionLike: ...
 @overload
-def pandas_udf(f: Union[AtomicDataTypeOrString, ArrayType], returnType: PandasScalarUDFType) -> Callable[[PandasScalarToScalarFunction], UserDefinedFunctionLike]: ...  # type: ignore[misc]
+def pandas_udf(f: Union[AtomicDataTypeOrString, ArrayType], returnType: PandasScalarUDFType) -> Callable[[PandasScalarToScalarFunction], UserDefinedFunctionLike]: ...  # type: ignore[overload-overlap]
 @overload
-def pandas_udf(f: Union[AtomicDataTypeOrString, ArrayType], *, functionType: PandasScalarUDFType) -> Callable[[PandasScalarToScalarFunction], UserDefinedFunctionLike]: ...  # type: ignore[misc]
+def pandas_udf(f: Union[AtomicDataTypeOrString, ArrayType], *, functionType: PandasScalarUDFType) -> Callable[[PandasScalarToScalarFunction], UserDefinedFunctionLike]: ...  # type: ignore[overload-overlap]
 @overload
-def pandas_udf(*, returnType: Union[AtomicDataTypeOrString, ArrayType], functionType: PandasScalarUDFType) -> Callable[[PandasScalarToScalarFunction], UserDefinedFunctionLike]: ...  # type: ignore[misc]
+def pandas_udf(*, returnType: Union[AtomicDataTypeOrString, ArrayType], functionType: PandasScalarUDFType) -> Callable[[PandasScalarToScalarFunction], UserDefinedFunctionLike]: ...  # type: ignore[overload-overlap]
 @overload
 def pandas_udf(
     f: PandasScalarToStructFunction,

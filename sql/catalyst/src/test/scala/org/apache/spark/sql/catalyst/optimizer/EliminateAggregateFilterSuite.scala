@@ -34,10 +34,10 @@ class EliminateAggregateFilterSuite extends PlanTest {
 
   test("Eliminate Filter always is true") {
     val query = testRelation
-      .select(sumDistinct($"a", Some(Literal.TrueLiteral)).as(Symbol("result")))
+      .select(sumDistinct($"a", Some(Literal.TrueLiteral)).as("result"))
       .analyze
     val answer = testRelation
-      .select(sumDistinct($"a").as(Symbol("result")))
+      .select(sumDistinct($"a").as("result"))
       .analyze
     comparePlans(Optimize.execute(query), answer)
   }
@@ -45,20 +45,20 @@ class EliminateAggregateFilterSuite extends PlanTest {
   test("Eliminate Filter is foldable and always is true") {
     val query = testRelation
       .select(countDistinctWithFilter(GreaterThan(Literal(2), Literal(1)), $"a")
-        .as(Symbol("result")))
+        .as("result"))
       .analyze
     val answer = testRelation
-      .select(countDistinct($"a").as(Symbol("result")))
+      .select(countDistinct($"a").as("result"))
       .analyze
     comparePlans(Optimize.execute(query), answer)
   }
 
   test("Eliminate Filter always is false") {
     val query = testRelation
-      .select(sumDistinct($"a", Some(Literal.FalseLiteral)).as(Symbol("result")))
+      .select(sumDistinct($"a", Some(Literal.FalseLiteral)).as("result"))
       .analyze
     val answer = testRelation
-      .groupBy()(Literal.create(null, LongType).as(Symbol("result")))
+      .groupBy()(Literal.create(null, LongType).as("result"))
       .analyze
     comparePlans(Optimize.execute(query), answer)
   }
@@ -66,10 +66,10 @@ class EliminateAggregateFilterSuite extends PlanTest {
   test("Eliminate Filter is foldable and always is false") {
     val query = testRelation
       .select(countDistinctWithFilter(GreaterThan(Literal(1), Literal(2)), $"a")
-        .as(Symbol("result")))
+        .as("result"))
       .analyze
     val answer = testRelation
-      .groupBy()(Literal.create(0L, LongType).as(Symbol("result")))
+      .groupBy()(Literal.create(0L, LongType).as("result"))
       .analyze
     comparePlans(Optimize.execute(query), answer)
   }
@@ -77,11 +77,11 @@ class EliminateAggregateFilterSuite extends PlanTest {
   test("SPARK-38177: Eliminate Filter in non-root node") {
     val query = testRelation
       .select(countDistinctWithFilter(GreaterThan(Literal(1), Literal(2)), $"a")
-        .as(Symbol("result")))
+        .as("result"))
       .limit(1)
       .analyze
     val answer = testRelation
-      .groupBy()(Literal.create(0L, LongType).as(Symbol("result")))
+      .groupBy()(Literal.create(0L, LongType).as("result"))
       .limit(1)
       .analyze
     comparePlans(Optimize.execute(query), answer)

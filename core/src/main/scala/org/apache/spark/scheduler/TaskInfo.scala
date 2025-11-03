@@ -45,7 +45,7 @@ class TaskInfo(
     val executorId: String,
     val host: String,
     val taskLocality: TaskLocality.TaskLocality,
-    val speculative: Boolean) {
+    val speculative: Boolean) extends Cloneable {
 
   /**
    * This api doesn't contains partitionId, please use the new api.
@@ -83,6 +83,14 @@ class TaskInfo(
     _accumulables = newAccumulables
   }
 
+  override def clone(): TaskInfo = super.clone().asInstanceOf[TaskInfo]
+
+  private[scheduler] def cloneWithEmptyAccumulables(): TaskInfo = {
+    val cloned = clone()
+    cloned.setAccumulables(Nil)
+    cloned
+  }
+
   /**
    * The time when the task has completed successfully (including the time to remotely fetch
    * results, if necessary).
@@ -93,6 +101,8 @@ class TaskInfo(
 
   var killed = false
 
+  var launching = true
+
   private[spark] def markGettingResult(time: Long): Unit = {
     gettingResultTime = time
   }
@@ -101,11 +111,12 @@ class TaskInfo(
     // finishTime should be set larger than 0, otherwise "finished" below will return false.
     assert(time > 0)
     finishTime = time
-    if (state == TaskState.FAILED) {
-      failed = true
-    } else if (state == TaskState.KILLED) {
-      killed = true
-    }
+    failed = state == TaskState.FAILED
+    killed = state == TaskState.KILLED
+  }
+
+  private[spark] def launchSucceeded(): Unit = {
+    launching = false
   }
 
   def gettingResult: Boolean = gettingResultTime != 0

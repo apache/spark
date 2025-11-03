@@ -19,10 +19,11 @@ import pandas as pd
 from pandas.api.types import CategoricalDtype
 
 import pyspark.pandas as ps
+from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.pandas.tests.data_type_ops.testing_utils import OpsTestBase
 
 
-class NullOpsTest(OpsTestBase):
+class NullOpsTestsMixin:
     @property
     def pser(self):
         return pd.Series([None, None, None])
@@ -75,10 +76,10 @@ class NullOpsTest(OpsTestBase):
 
     def test_pow(self):
         self.assertRaises(TypeError, lambda: self.psser ** "x")
-        self.assertRaises(TypeError, lambda: self.psser ** 1)
+        self.assertRaises(TypeError, lambda: self.psser**1)
 
         for psser in self.pssers:
-            self.assertRaises(TypeError, lambda: self.psser ** psser)
+            self.assertRaises(TypeError, lambda: self.psser**psser)
 
     def test_radd(self):
         self.assertRaises(TypeError, lambda: "x" + self.psser)
@@ -105,13 +106,13 @@ class NullOpsTest(OpsTestBase):
 
     def test_rpow(self):
         self.assertRaises(TypeError, lambda: "x" ** self.psser)
-        self.assertRaises(TypeError, lambda: 1 ** self.psser)
+        self.assertRaises(TypeError, lambda: 1**self.psser)
 
     def test_from_to_pandas(self):
         data = [None, None, None]
         pser = pd.Series(data)
         psser = ps.Series(data)
-        self.assert_eq(pser, psser.to_pandas())
+        self.assert_eq(pser, psser._to_pandas())
         self.assert_eq(ps.from_pandas(pser), psser)
 
     def test_isnull(self):
@@ -138,6 +139,7 @@ class NullOpsTest(OpsTestBase):
     def test_eq(self):
         pser, psser = self.pser, self.psser
         self.assert_eq(pser == pser, psser == psser)
+        self.assert_eq(pser == [None, 1, None], psser == [None, 1, None])
 
     def test_ne(self):
         pser, psser = self.pser, self.psser
@@ -160,12 +162,20 @@ class NullOpsTest(OpsTestBase):
         self.assert_eq(pser >= pser, psser >= psser)
 
 
+class NullOpsTests(
+    NullOpsTestsMixin,
+    OpsTestBase,
+    PandasOnSparkTestCase,
+):
+    pass
+
+
 if __name__ == "__main__":
     import unittest
     from pyspark.pandas.tests.data_type_ops.test_null_ops import *  # noqa: F401
 
     try:
-        import xmlrunner  # type: ignore[import]
+        import xmlrunner
 
         testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:

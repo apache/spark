@@ -18,22 +18,26 @@
 package org.apache.spark.sql.api.r
 
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataInputStream, DataOutputStream}
-import java.util.{Locale, Map => JMap}
+import java.util.{Map => JMap}
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.util.matching.Regex
 
+import org.apache.spark.TaskContext
 import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
 import org.apache.spark.api.r.SerDe
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.LogKeys.CONFIG
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.expressions.{ExprUtils, GenericRowWithSchema}
+import org.apache.spark.sql.Row
+import org.apache.spark.sql.catalyst.expressions.{ExprUtils, GenericRowWithSchema, Literal}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
+import org.apache.spark.sql.classic.{DataFrame, RelationalGroupedDataset, SparkSession}
 import org.apache.spark.sql.execution.arrow.ArrowConverters
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
 import org.apache.spark.sql.types._
+import org.apache.spark.util.ArrayImplicits._
 
 private[sql] object SQLUtils extends Logging {
   SerDe.setSQLReadObject(readSqlObject).setSQLWriteObject(writeSqlObject)
@@ -44,8 +48,7 @@ private[sql] object SQLUtils extends Logging {
       enableHiveSupport: Boolean): SparkSession = {
     val spark =
       if (enableHiveSupport &&
-          jsc.sc.conf.get(CATALOG_IMPLEMENTATION.key, "hive").toLowerCase(Locale.ROOT) ==
-            "hive" &&
+          jsc.sc.conf.get(CATALOG_IMPLEMENTATION.key, "hive") == "hive" &&
           // Note that the order of conditions here are on purpose.
           // `SparkSession.hiveClassesArePresent` checks if Hive's `HiveConf` is loadable or not;
           // however, `HiveConf` itself has some static logic to check if Hadoop version is
@@ -57,9 +60,9 @@ private[sql] object SQLUtils extends Logging {
         SparkSession.builder().enableHiveSupport().sparkContext(jsc.sc).getOrCreate()
       } else {
         if (enableHiveSupport) {
-          logWarning("SparkR: enableHiveSupport is requested for SparkSession but " +
-            s"Spark is not built with Hive or ${CATALOG_IMPLEMENTATION.key} is not set to " +
-            "'hive', falling back to without Hive support.")
+          logWarning(log"SparkR: enableHiveSupport is requested for SparkSession but " +
+            log"Spark is not built with Hive or ${MDC(CONFIG, CATALOG_IMPLEMENTATION.key)} " +
+            log"is not set to 'hive', falling back to without Hive support.")
         }
         SparkSession.builder().sparkContext(jsc.sc).getOrCreate()
       }
@@ -140,7 +143,7 @@ private[sql] object SQLUtils extends Logging {
 
   // Schema for DataFrame of serialized R data
   // TODO: introduce a user defined type for serialized R data.
-  val SERIALIZED_R_DATA_SCHEMA = StructType(Seq(StructField("R", BinaryType)))
+  val SERIALIZED_R_DATA_SCHEMA = StructType(Array(StructField("R", BinaryType)))
 
   /**
    * The helper function for dapply() on R side.
@@ -191,7 +194,7 @@ private[sql] object SQLUtils extends Logging {
       case 's' =>
         // Read StructType for DataFrame
         val fields = SerDe.readList(dis, jvmObjectTracker = null)
-        Row.fromSeq(fields)
+        Row.fromSeq(fields.toImmutableArraySeq)
       case _ => null
     }
   }
@@ -216,11 +219,11 @@ private[sql] object SQLUtils extends Logging {
       case _ =>
         sparkSession.catalog.currentDatabase
     }
-    sparkSession.sessionState.catalog.listTables(db).map(_.table).toArray
+    sparkSession.catalog.listTables(db).collect().map(_.name)
   }
 
-  def createArrayType(column: Column): ArrayType = {
-    new ArrayType(ExprUtils.evalTypeExpr(column.expr), true)
+  def createArrayType(elementType: String): ArrayType = {
+    ArrayType(ExprUtils.evalTypeExpr(Literal(elementType)), true)
   }
 
   /**
@@ -230,7 +233,9 @@ private[sql] object SQLUtils extends Logging {
   def readArrowStreamFromFile(
       sparkSession: SparkSession,
       filename: String): JavaRDD[Array[Byte]] = {
-    ArrowConverters.readArrowStreamFromFile(sparkSession, filename)
+    // Parallelize the record batches to create an RDD
+    val batches = ArrowConverters.readArrowStreamFromFile(filename).toImmutableArraySeq
+    JavaRDD.fromRDD(sparkSession.sparkContext.parallelize(batches, batches.length))
   }
 
   /**
@@ -241,6 +246,17 @@ private[sql] object SQLUtils extends Logging {
       arrowBatchRDD: JavaRDD[Array[Byte]],
       schema: StructType,
       sparkSession: SparkSession): DataFrame = {
-    ArrowConverters.toDataFrame(arrowBatchRDD, schema.json, sparkSession)
+    val timeZoneId = sparkSession.sessionState.conf.sessionLocalTimeZone
+    val rdd = arrowBatchRDD.rdd.mapPartitions { iter =>
+      val context = TaskContext.get()
+      ArrowConverters.fromBatchIterator(
+        iter,
+        schema,
+        timeZoneId,
+        true,
+        false,
+        context)
+    }
+    sparkSession.internalCreateDataFrame(rdd.setName("arrow"), schema)
   }
 }

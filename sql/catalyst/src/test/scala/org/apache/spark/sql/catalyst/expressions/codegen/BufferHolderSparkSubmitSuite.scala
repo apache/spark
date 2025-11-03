@@ -18,9 +18,11 @@
 package org.apache.spark.sql.catalyst.expressions.codegen
 
 import org.scalatest.{Assertions, BeforeAndAfterEach}
+import org.scalatest.concurrent.Eventually.{eventually, interval, timeout}
 import org.scalatest.matchers.must.Matchers
+import org.scalatest.time.SpanSugar._
 
-import org.apache.spark.TestUtils
+import org.apache.spark.{SparkIllegalArgumentException, TestUtils}
 import org.apache.spark.deploy.SparkSubmitTestUtils
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.unsafe.array.ByteArrayMethods
@@ -46,7 +48,10 @@ class BufferHolderSparkSubmitSuite
       "--conf", "spark.master.rest.enabled=false",
       "--conf", "spark.driver.extraJavaOptions=-ea",
       unusedJar.toString)
-    runSparkSubmit(argsForSparkSubmit)
+    // Given that the default timeout of runSparkSubmit is 60 seconds, try 3 times in total.
+    eventually(timeout(210.seconds), interval(70.seconds)) {
+      runSparkSubmit(argsForSparkSubmit)
+    }
   }
 }
 
@@ -61,9 +66,10 @@ object BufferHolderSparkSubmitSuite extends Assertions {
 
     holder.reset()
 
-    assert(intercept[IllegalArgumentException] {
+    val e1 = intercept[SparkIllegalArgumentException] {
       holder.grow(-1)
-    }.getMessage.contains("because the size is negative"))
+    }
+    assert(e1.getCondition === "_LEGACY_ERROR_TEMP_3198")
 
     // while to reuse a buffer may happen, this test checks whether the buffer can be grown
     holder.grow(ARRAY_MAX / 2)
@@ -78,8 +84,9 @@ object BufferHolderSparkSubmitSuite extends Assertions {
     holder.grow(ARRAY_MAX - holder.totalSize())
     assert(unsafeRow.getSizeInBytes % 8 == 0)
 
-    assert(intercept[IllegalArgumentException] {
+    val e2 = intercept[SparkIllegalArgumentException] {
       holder.grow(ARRAY_MAX + 1 - holder.totalSize())
-    }.getMessage.contains("because the size after growing"))
+    }
+    assert(e2.getCondition === "_LEGACY_ERROR_TEMP_3199")
   }
 }

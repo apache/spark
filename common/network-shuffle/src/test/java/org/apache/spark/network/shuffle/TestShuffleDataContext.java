@@ -22,15 +22,17 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
+import java.nio.file.Files;
 
 import com.google.common.io.Closeables;
-import com.google.common.io.Files;
 
 import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo;
 import org.apache.spark.network.util.JavaUtils;
-import org.junit.Assert;
+import org.junit.jupiter.api.Assertions;
+// checkstyle.off: RegexpSinglelineJava
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+// checkstyle.on: RegexpSinglelineJava
 
 /**
  * Manages some sort-shuffle data, including the creation
@@ -47,12 +49,13 @@ public class TestShuffleDataContext {
     this.subDirsPerLocalDir = subDirsPerLocalDir;
   }
 
-  public void create() {
+  public void create() throws IOException {
+    String root = System.getProperty("java.io.tmpdir");
     for (int i = 0; i < localDirs.length; i ++) {
-      localDirs[i] = Files.createTempDir().getAbsolutePath();
+      localDirs[i] = JavaUtils.createDirectory(root, "spark").getAbsolutePath();
 
       for (int p = 0; p < subDirsPerLocalDir; p ++) {
-        new File(localDirs[i], String.format("%02x", p)).mkdirs();
+        Files.createDirectories(new File(localDirs[i], String.format("%02x", p)).toPath());
       }
     }
   }
@@ -61,7 +64,7 @@ public class TestShuffleDataContext {
     for (String localDir : localDirs) {
       try {
         JavaUtils.deleteRecursively(new File(localDir));
-      } catch (IOException e) {
+      } catch (Exception e) {
         logger.warn("Unable to cleanup localDir = " + localDir, e);
       }
     }
@@ -125,7 +128,7 @@ public class TestShuffleDataContext {
   private void insertFile(String filename, byte[] block) throws IOException {
     OutputStream dataStream = null;
     File file = new File(ExecutorDiskUtils.getFilePath(localDirs, subDirsPerLocalDir, filename));
-    Assert.assertFalse("this test file has been already generated", file.exists());
+    Assertions.assertFalse(file.exists(), "this test file has been already generated");
     try {
       dataStream = new FileOutputStream(
         new File(ExecutorDiskUtils.getFilePath(localDirs, subDirsPerLocalDir, filename)));

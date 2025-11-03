@@ -23,8 +23,8 @@ import java.util.List;
 
 import scala.Tuple3;
 
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import org.apache.spark.SharedSparkSession;
 import org.apache.spark.api.java.JavaDoubleRDD;
@@ -54,7 +54,7 @@ public class JavaIsotonicRegressionSuite extends SharedSparkSession {
     IsotonicRegressionModel model =
       runIsotonicRegression(new double[]{1, 2, 3, 3, 1, 6, 7, 8, 11, 9, 10, 12});
 
-    Assert.assertArrayEquals(
+    Assertions.assertArrayEquals(
       new double[]{1, 2, 7.0 / 3, 7.0 / 3, 6, 7, 8, 10, 10, 12}, model.predictions(), 1.0e-14);
   }
 
@@ -66,10 +66,10 @@ public class JavaIsotonicRegressionSuite extends SharedSparkSession {
     JavaDoubleRDD testRDD = jsc.parallelizeDoubles(Arrays.asList(0.0, 1.0, 9.5, 12.0, 13.0));
     List<Double> predictions = model.predict(testRDD).collect();
 
-    Assert.assertEquals(1.0, predictions.get(0).doubleValue(), 1.0e-14);
-    Assert.assertEquals(1.0, predictions.get(1).doubleValue(), 1.0e-14);
-    Assert.assertEquals(10.0, predictions.get(2).doubleValue(), 1.0e-14);
-    Assert.assertEquals(12.0, predictions.get(3).doubleValue(), 1.0e-14);
-    Assert.assertEquals(12.0, predictions.get(4).doubleValue(), 1.0e-14);
+    Assertions.assertEquals(1.0, predictions.get(0).doubleValue(), 1.0e-14);
+    Assertions.assertEquals(1.0, predictions.get(1).doubleValue(), 1.0e-14);
+    Assertions.assertEquals(10.0, predictions.get(2).doubleValue(), 1.0e-14);
+    Assertions.assertEquals(12.0, predictions.get(3).doubleValue(), 1.0e-14);
+    Assertions.assertEquals(12.0, predictions.get(4).doubleValue(), 1.0e-14);
   }
 }

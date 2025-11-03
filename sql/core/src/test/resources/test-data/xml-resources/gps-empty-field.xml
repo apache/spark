@@ -1,0 +1,20 @@
+<?xml version="1.0"?>
+<ROWSET>
+    <ROW lat="59.9155180" lon="10.6962430">
+        <ele>0.0</ele>
+        <time>2013-01-24T06:18:43Z</time>
+        <extensions>
+            <TrackPointExtension>
+            </TrackPointExtension>
+        </extensions>
+    </ROW>
+    <ROW lat="52.34534522" lon="10.6342634">
+        <ele>0.0</ele>
+        <time>2013-01-25T06:18:43Z</time>
+        <extensions>
+            <TrackPointExtension>
+                <hr>119</hr>
+            </TrackPointExtension>
+        </extensions>
+    </ROW>
+</ROWSET>

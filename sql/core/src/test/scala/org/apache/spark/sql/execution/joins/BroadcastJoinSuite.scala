@@ -20,12 +20,14 @@ package org.apache.spark.sql.execution.joins
 import scala.reflect.ClassTag
 
 import org.apache.spark.AccumulatorSuite
-import org.apache.spark.sql.{Dataset, QueryTest, Row, SparkSession}
+import org.apache.spark.internal.config.EXECUTOR_MEMORY
+import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, BitwiseAnd, BitwiseOr, Cast, Expression, Literal, ShiftLeft}
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight, BuildSide}
 import org.apache.spark.sql.catalyst.plans.Inner
 import org.apache.spark.sql.catalyst.plans.logical.BROADCAST
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, PartitioningCollection}
+import org.apache.spark.sql.classic.{Dataset, SparkSession}
 import org.apache.spark.sql.execution.{DummySparkPlan, SparkPlan, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper, DisableAdaptiveExecutionSuite, EnableAdaptiveExecutionSuite}
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
@@ -34,6 +36,7 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types.{LongType, ShortType}
+import org.apache.spark.tags.ExtendedSQLTest
 
 /**
  * Test various broadcast join operators.
@@ -56,7 +59,8 @@ abstract class BroadcastJoinSuiteBase extends QueryTest with SQLTestUtils
   override def beforeAll(): Unit = {
     super.beforeAll()
     spark = SparkSession.builder()
-      .master("local-cluster[2,1,1024]")
+      .master("local-cluster[2,1,512]")
+      .config(EXECUTOR_MEMORY.key, "512m")
       .appName("testing")
       .getOrCreate()
   }
@@ -68,6 +72,11 @@ abstract class BroadcastJoinSuiteBase extends QueryTest with SQLTestUtils
     } finally {
       super.afterAll()
     }
+  }
+
+  override def beforeEach(): Unit = {
+    super.beforeEach()
+    System.gc()
   }
 
   /**
@@ -547,8 +556,8 @@ abstract class BroadcastJoinSuiteBase extends QueryTest with SQLTestUtils
       right = DummySparkPlan())
     var expected = PartitioningCollection(Seq(
       HashPartitioning(Seq(l1, l2, l3), 1),
-      HashPartitioning(Seq(l1, l2, r2), 1),
       HashPartitioning(Seq(l1, r1, l3), 1),
+      HashPartitioning(Seq(l1, l2, r2), 1),
       HashPartitioning(Seq(l1, r1, r2), 1)))
     assert(bhj.outputPartitioning === expected)
 
@@ -564,8 +573,8 @@ abstract class BroadcastJoinSuiteBase extends QueryTest with SQLTestUtils
       right = DummySparkPlan())
     expected = PartitioningCollection(Seq(
       HashPartitioning(Seq(l1, l2), 1),
-      HashPartitioning(Seq(l1, r2), 1),
       HashPartitioning(Seq(r1, l2), 1),
+      HashPartitioning(Seq(l1, r2), 1),
       HashPartitioning(Seq(r1, r2), 1),
       HashPartitioning(Seq(l3), 1),
       HashPartitioning(Seq(r3), 1)))
@@ -616,8 +625,8 @@ abstract class BroadcastJoinSuiteBase extends QueryTest with SQLTestUtils
 
     val expected = Seq(
       HashPartitioning(Seq(l1, l2), 1),
-      HashPartitioning(Seq(l1, r2), 1),
       HashPartitioning(Seq(r1, l2), 1),
+      HashPartitioning(Seq(l1, r2), 1),
       HashPartitioning(Seq(r1, r2), 1))
 
     Seq(1, 2, 3, 4).foreach { limit =>
@@ -667,6 +676,8 @@ abstract class BroadcastJoinSuiteBase extends QueryTest with SQLTestUtils
   }
 }
 
+@ExtendedSQLTest
 class BroadcastJoinSuite extends BroadcastJoinSuiteBase with DisableAdaptiveExecutionSuite
 
+@ExtendedSQLTest
 class BroadcastJoinSuiteAE extends BroadcastJoinSuiteBase with EnableAdaptiveExecutionSuite

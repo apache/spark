@@ -30,8 +30,7 @@ r"""
 import sys
 import datetime
 
-from pyspark import SparkConf, SparkContext
-from pyspark.rdd import RDD
+from pyspark import SparkConf, SparkContext, RDD
 from pyspark.streaming import StreamingContext
 from pyspark.sql import Row, SparkSession
 

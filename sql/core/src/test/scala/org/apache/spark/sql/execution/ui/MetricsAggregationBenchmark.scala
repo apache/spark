@@ -41,8 +41,8 @@ import org.apache.spark.util.kvstore.InMemoryStore
  *   To run this benchmark:
  *   1. without sbt:
  *      bin/spark-submit --class <this class> --jars <core test jar> <spark sql test jar>
- *   2. build/sbt "core/test:runMain <this class>"
- *   3. generate result: SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "core/test:runMain <this class>"
+ *   2. build/sbt "core/Test/runMain <this class>"
+ *   3. generate result: SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "core/Test/runMain <this class>"
  *      Results will be written to "benchmarks/MetricsAggregationBenchmark-results.txt".
  * }}}
  */
@@ -75,6 +75,7 @@ object MetricsAggregationBenchmark extends BenchmarkBase {
     val executionId = idgen.incrementAndGet()
     val executionStart = SparkListenerSQLExecutionStart(
       executionId,
+      Some(executionId),
       getClass().getName(),
       getClass().getName(),
       getClass().getName(),
@@ -127,8 +128,8 @@ object MetricsAggregationBenchmark extends BenchmarkBase {
 
         info.setAccumulables(accumulables)
 
-        val start = SparkListenerTaskStart(stageInfo.stageId, stageInfo.attemptNumber, info)
-        val end = SparkListenerTaskEnd(stageInfo.stageId, stageInfo.attemptNumber,
+        val start = SparkListenerTaskStart(stageInfo.stageId, stageInfo.attemptNumber(), info)
+        val end = SparkListenerTaskEnd(stageInfo.stageId, stageInfo.attemptNumber(),
           taskType = "",
           reason = null,
           info,

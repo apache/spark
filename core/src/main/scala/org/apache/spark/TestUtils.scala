@@ -18,29 +18,25 @@
 package org.apache.spark
 
 import java.io.{ByteArrayInputStream, File, FileInputStream, FileOutputStream}
-import java.net.{HttpURLConnection, InetSocketAddress, URI, URL}
+import java.net.{HttpURLConnection, InetSocketAddress, URL}
 import java.nio.charset.StandardCharsets
-import java.nio.file.{Files => JavaFiles, Paths}
+import java.nio.file.{Files, Paths}
 import java.nio.file.attribute.PosixFilePermission.{OWNER_EXECUTE, OWNER_READ, OWNER_WRITE}
 import java.security.SecureRandom
 import java.security.cert.X509Certificate
-import java.util.{Arrays, EnumSet, Locale}
+import java.util.{EnumSet, Locale}
 import java.util.concurrent.{TimeoutException, TimeUnit}
 import java.util.jar.{JarEntry, JarOutputStream, Manifest}
 import java.util.regex.Pattern
 import javax.net.ssl._
-import javax.tools.{JavaFileObject, SimpleJavaFileObject, ToolProvider}
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.io.Source
 import scala.reflect.{classTag, ClassTag}
-import scala.sys.process.{Process, ProcessLogger}
+import scala.sys.process.Process
 import scala.util.Try
 
-import com.google.common.io.{ByteStreams, Files}
-import org.apache.commons.lang3.StringUtils
 import org.apache.logging.log4j.LogManager
 import org.apache.logging.log4j.core.LoggerContext
 import org.apache.logging.log4j.core.appender.ConsoleAppender
@@ -55,7 +51,7 @@ import org.json4s.jackson.JsonMethods.{compact, render}
 
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.scheduler._
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{SparkTestUtils, Utils}
 
 /**
  * Utilities for tests. Included in main codebase since it's used by multiple
@@ -64,7 +60,7 @@ import org.apache.spark.util.Utils
  * TODO: See if we can move this to the test codebase by specifying
  * test dependencies between projects.
  */
-private[spark] object TestUtils {
+private[spark] object TestUtils extends SparkTestUtils {
 
   /**
    * Create a jar that defines classes with the given names.
@@ -99,7 +95,7 @@ private[spark] object TestUtils {
     files.foreach { case (k, v) =>
       val entry = new JarEntry(k)
       jarStream.putNextEntry(entry)
-      ByteStreams.copy(new ByteArrayInputStream(v.getBytes(StandardCharsets.UTF_8)), jarStream)
+      new ByteArrayInputStream(v.getBytes(StandardCharsets.UTF_8)).transferTo(jarStream)
     }
     jarStream.close()
     jarFile.toURI.toURL
@@ -135,77 +131,13 @@ private[spark] object TestUtils {
       jarStream.putNextEntry(jarEntry)
 
       val in = new FileInputStream(file)
-      ByteStreams.copy(in, jarStream)
+      in.transferTo(jarStream)
       in.close()
     }
     jarStream.close()
     jarFileStream.close()
 
     jarFile.toURI.toURL
-  }
-
-  // Adapted from the JavaCompiler.java doc examples
-  private val SOURCE = JavaFileObject.Kind.SOURCE
-  private def createURI(name: String) = {
-    URI.create(s"string:///${name.replace(".", "/")}${SOURCE.extension}")
-  }
-
-  private[spark] class JavaSourceFromString(val name: String, val code: String)
-    extends SimpleJavaFileObject(createURI(name), SOURCE) {
-    override def getCharContent(ignoreEncodingErrors: Boolean): String = code
-  }
-
-  /** Creates a compiled class with the source file. Class file will be placed in destDir. */
-  def createCompiledClass(
-      className: String,
-      destDir: File,
-      sourceFile: JavaSourceFromString,
-      classpathUrls: Seq[URL]): File = {
-    val compiler = ToolProvider.getSystemJavaCompiler
-
-    // Calling this outputs a class file in pwd. It's easier to just rename the files than
-    // build a custom FileManager that controls the output location.
-    val options = if (classpathUrls.nonEmpty) {
-      Seq("-classpath", classpathUrls.map { _.getFile }.mkString(File.pathSeparator))
-    } else {
-      Seq.empty
-    }
-    compiler.getTask(null, null, null, options.asJava, null, Arrays.asList(sourceFile)).call()
-
-    val fileName = className + ".class"
-    val result = new File(fileName)
-    assert(result.exists(), "Compiled file not found: " + result.getAbsolutePath())
-    val out = new File(destDir, fileName)
-
-    // renameTo cannot handle in and out files in different filesystems
-    // use google's Files.move instead
-    Files.move(result, out)
-
-    assert(out.exists(), "Destination file not moved: " + out.getAbsolutePath())
-    out
-  }
-
-  /** Creates a compiled class with the given name. Class file will be placed in destDir. */
-  def createCompiledClass(
-      className: String,
-      destDir: File,
-      toStringValue: String = "",
-      baseClass: String = null,
-      classpathUrls: Seq[URL] = Seq.empty,
-      implementsClasses: Seq[String] = Seq.empty,
-      extraCodeBody: String = ""): File = {
-    val extendsText = Option(baseClass).map { c => s" extends ${c}" }.getOrElse("")
-    val implementsText =
-      "implements " + (implementsClasses :+ "java.io.Serializable").mkString(", ")
-    val sourceFile = new JavaSourceFromString(className,
-      s"""
-         |public class $className $extendsText $implementsText {
-         |  @Override public String toString() { return "$toStringValue"; }
-         |
-         |  $extraCodeBody
-         |}
-        """.stripMargin)
-    createCompiledClass(className, destDir, sourceFile, classpathUrls)
   }
 
   /**
@@ -270,20 +202,21 @@ private[spark] object TestUtils {
   /**
    * Test if a command is available.
    */
-  def testCommandAvailable(command: String): Boolean = {
-    val attempt = if (Utils.isWindows) {
-      Try(Process(Seq(
-        "cmd.exe", "/C", s"where $command")).run(ProcessLogger(_ => ())).exitValue())
-    } else {
-      Try(Process(Seq(
-        "sh", "-c", s"command -v $command")).run(ProcessLogger(_ => ())).exitValue())
-    }
-    attempt.isSuccess && attempt.get == 0
+  def testCommandAvailable(command: String): Boolean = Utils.checkCommandAvailable(command)
+
+  // SPARK-40053: This string needs to be updated when the
+  // minimum python supported version changes.
+  val minimumPythonSupportedVersion: String = "3.7.0"
+
+  def isPythonVersionAvailable: Boolean = {
+    val version = minimumPythonSupportedVersion.split('.').map(_.toInt)
+    assert(version.length == 3)
+    isPythonVersionAtLeast(version(0), version(1), version(2))
   }
 
-  def isPythonVersionAtLeast38(): Boolean = {
+  private def isPythonVersionAtLeast(major: Int, minor: Int, reversion: Int): Boolean = {
     val cmdSeq = if (Utils.isWindows) Seq("cmd.exe", "/C") else Seq("sh", "-c")
-    val pythonSnippet = "import sys; sys.exit(sys.version_info < (3, 8, 0))"
+    val pythonSnippet = s"import sys; sys.exit(sys.version_info < ($major, $minor, $reversion))"
     Try(Process(cmdSeq :+ s"python3 -c '$pythonSnippet'").! == 0).getOrElse(false)
   }
 
@@ -294,13 +227,13 @@ private[spark] object TestUtils {
   def getAbsolutePathFromExecutable(executable: String): Option[String] = {
     val command = if (Utils.isWindows) s"$executable.exe" else executable
     if (command.split(File.separator, 2).length == 1 &&
-        JavaFiles.isRegularFile(Paths.get(command)) &&
-        JavaFiles.isExecutable(Paths.get(command))) {
+        Files.isRegularFile(Paths.get(command)) &&
+        Files.isExecutable(Paths.get(command))) {
       Some(Paths.get(command).toAbsolutePath.toString)
     } else {
       sys.env("PATH").split(Pattern.quote(File.pathSeparator))
-        .map(path => Paths.get(s"${StringUtils.strip(path, "\"")}${File.separator}$command"))
-        .find(p => JavaFiles.isRegularFile(p) && JavaFiles.isExecutable(p))
+        .map(path => Paths.get(s"${Utils.strip(path, "\"")}${File.separator}$command"))
+        .find(p => Files.isRegularFile(p) && Files.isExecutable(p))
         .map(_.toString)
     }
   }
@@ -316,6 +249,19 @@ private[spark] object TestUtils {
       connection.getResponseCode()
     }
   }
+
+  /**
+   * Returns the Location header from an HTTP(S) URL.
+   */
+  def redirectUrl(
+      url: URL,
+      method: String = "GET",
+      headers: Seq[(String, String)] = Nil): String = {
+    withHttpConnection(url, method, headers = headers) { connection =>
+      connection.getHeaderField("Location");
+    }
+  }
+
 
   /**
    * Returns the response message from an HTTP(S) URL.
@@ -385,7 +331,7 @@ private[spark] object TestUtils {
 
   def withHttpServer(resBaseDir: String = ".")(body: URL => Unit): Unit = {
     // 0 as port means choosing randomly from the available ports
-    val server = new Server(new InetSocketAddress(Utils.localCanonicalHostName, 0))
+    val server = new Server(new InetSocketAddress(Utils.localCanonicalHostName(), 0))
     val resHandler = new ResourceHandler()
     resHandler.setResourceBase(resBaseDir)
     val handlers = new HandlerList()
@@ -431,7 +377,7 @@ private[spark] object TestUtils {
     val appenderBuilder = builder.newAppender("console", "CONSOLE")
       .addAttribute("target", ConsoleAppender.Target.SYSTEM_ERR)
     appenderBuilder.add(builder.newLayout("PatternLayout")
-      .addAttribute("pattern", "%d{yy/MM/dd HH:mm:ss} %p %c{1}: %m%n"))
+      .addAttribute("pattern", "%d{yy/MM/dd HH:mm:ss} %p %c{1}: %m%n%ex"))
     builder.add(appenderBuilder)
     builder.add(builder.newRootLogger(level).add(builder.newAppenderRef("console")))
     val configuration = builder.build()
@@ -465,7 +411,7 @@ private[spark] object TestUtils {
   /** Creates a temp JSON file that contains the input JSON record. */
   def createTempJsonFile(dir: File, prefix: String, jsonValue: JValue): String = {
     val file = File.createTempFile(prefix, ".json", dir)
-    JavaFiles.write(file.toPath, compact(render(jsonValue)).getBytes())
+    Files.write(file.toPath, compact(render(jsonValue)).getBytes())
     file.getPath
   }
 
@@ -473,8 +419,8 @@ private[spark] object TestUtils {
   def createTempScriptWithExpectedOutput(dir: File, prefix: String, output: String): String = {
     val file = File.createTempFile(prefix, ".sh", dir)
     val script = s"cat <<EOF\n$output\nEOF\n"
-    Files.write(script, file, StandardCharsets.UTF_8)
-    JavaFiles.setPosixFilePermissions(file.toPath,
+    Files.writeString(file.toPath, script)
+    Files.setPosixFilePermissions(file.toPath,
       EnumSet.of(OWNER_READ, OWNER_EXECUTE, OWNER_WRITE))
     file.getPath
   }

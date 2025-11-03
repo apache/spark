@@ -18,6 +18,7 @@
 package org.apache.spark.sql.connector.distributions
 
 import org.apache.spark.sql.connector.expressions.{Expression, SortOrder}
+import org.apache.spark.util.ArrayImplicits._
 
 private[sql] object LogicalDistributions {
 
@@ -26,11 +27,11 @@ private[sql] object LogicalDistributions {
   }
 
   def clustered(clustering: Array[Expression]): ClusteredDistribution = {
-    ClusteredDistributionImpl(clustering)
+    ClusteredDistributionImpl(clustering.toImmutableArraySeq)
   }
 
   def ordered(ordering: Array[SortOrder]): OrderedDistribution = {
-    OrderedDistributionImpl(ordering)
+    OrderedDistributionImpl(ordering.toImmutableArraySeq)
   }
 }
 

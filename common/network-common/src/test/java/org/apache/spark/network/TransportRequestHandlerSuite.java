@@ -22,14 +22,12 @@ import java.util.ArrayList;
 import java.util.List;
 
 import io.netty.channel.Channel;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
-import org.apache.commons.lang3.tuple.ImmutablePair;
-import org.apache.commons.lang3.tuple.Pair;
 import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.client.RpcResponseCallback;
 import org.apache.spark.network.client.TransportClient;
@@ -39,6 +37,7 @@ import org.apache.spark.network.server.OneForOneStreamManager;
 import org.apache.spark.network.server.RpcHandler;
 import org.apache.spark.network.server.StreamManager;
 import org.apache.spark.network.server.TransportRequestHandler;
+import org.apache.spark.util.Pair;
 
 public class TransportRequestHandlerSuite {
 
@@ -53,7 +52,7 @@ public class TransportRequestHandlerSuite {
       .thenAnswer(invocationOnMock0 -> {
         Object response = invocationOnMock0.getArguments()[0];
         ExtendedChannelPromise channelFuture = new ExtendedChannelPromise(channel);
-        responseAndPromisePairs.add(ImmutablePair.of(response, channelFuture));
+        responseAndPromisePairs.add(Pair.of(response, channelFuture));
         return channelFuture;
       });
 
@@ -66,7 +65,7 @@ public class TransportRequestHandlerSuite {
     managedBuffers.add(new TestManagedBuffer(40));
     long streamId = streamManager.registerStream("test-app", managedBuffers.iterator(), channel);
 
-    Assert.assertEquals(1, streamManager.numStreamStates());
+    Assertions.assertEquals(1, streamManager.numStreamStates());
 
     TransportClient reverseClient = mock(TransportClient.class);
     TransportRequestHandler requestHandler = new TransportRequestHandler(channel, reverseClient,
@@ -74,16 +73,16 @@ public class TransportRequestHandlerSuite {
 
     RequestMessage request0 = new StreamRequest(String.format("%d_%d", streamId, 0));
     requestHandler.handle(request0);
-    Assert.assertEquals(1, responseAndPromisePairs.size());
-    Assert.assertTrue(responseAndPromisePairs.get(0).getLeft() instanceof StreamResponse);
-    Assert.assertEquals(managedBuffers.get(0),
+    Assertions.assertEquals(1, responseAndPromisePairs.size());
+    Assertions.assertTrue(responseAndPromisePairs.get(0).getLeft() instanceof StreamResponse);
+    Assertions.assertEquals(managedBuffers.get(0),
       ((StreamResponse) (responseAndPromisePairs.get(0).getLeft())).body());
 
     RequestMessage request1 = new StreamRequest(String.format("%d_%d", streamId, 1));
     requestHandler.handle(request1);
-    Assert.assertEquals(2, responseAndPromisePairs.size());
-    Assert.assertTrue(responseAndPromisePairs.get(1).getLeft() instanceof StreamResponse);
-    Assert.assertEquals(managedBuffers.get(1),
+    Assertions.assertEquals(2, responseAndPromisePairs.size());
+    Assertions.assertTrue(responseAndPromisePairs.get(1).getLeft() instanceof StreamResponse);
+    Assertions.assertEquals(managedBuffers.get(1),
       ((StreamResponse) (responseAndPromisePairs.get(1).getLeft())).body());
 
     // Finish flushing the response for request0.
@@ -91,16 +90,16 @@ public class TransportRequestHandlerSuite {
 
     StreamRequest request2 = new StreamRequest(String.format("%d_%d", streamId, 2));
     requestHandler.handle(request2);
-    Assert.assertEquals(3, responseAndPromisePairs.size());
-    Assert.assertTrue(responseAndPromisePairs.get(2).getLeft() instanceof StreamFailure);
-    Assert.assertEquals(String.format("Stream '%s' was not found.", request2.streamId),
+    Assertions.assertEquals(3, responseAndPromisePairs.size());
+    Assertions.assertTrue(responseAndPromisePairs.get(2).getLeft() instanceof StreamFailure);
+    Assertions.assertEquals(String.format("Stream '%s' was not found.", request2.streamId),
         ((StreamFailure) (responseAndPromisePairs.get(2).getLeft())).error);
 
     RequestMessage request3 = new StreamRequest(String.format("%d_%d", streamId, 3));
     requestHandler.handle(request3);
-    Assert.assertEquals(4, responseAndPromisePairs.size());
-    Assert.assertTrue(responseAndPromisePairs.get(3).getLeft() instanceof StreamResponse);
-    Assert.assertEquals(managedBuffers.get(3),
+    Assertions.assertEquals(4, responseAndPromisePairs.size());
+    Assertions.assertTrue(responseAndPromisePairs.get(3).getLeft() instanceof StreamResponse);
+    Assertions.assertEquals(managedBuffers.get(3),
       ((StreamResponse) (responseAndPromisePairs.get(3).getLeft())).body());
 
     // Request4 will trigger the close of channel, because the number of max chunks being
@@ -108,10 +107,10 @@ public class TransportRequestHandlerSuite {
     RequestMessage request4 = new StreamRequest(String.format("%d_%d", streamId, 4));
     requestHandler.handle(request4);
     verify(channel, times(1)).close();
-    Assert.assertEquals(4, responseAndPromisePairs.size());
+    Assertions.assertEquals(4, responseAndPromisePairs.size());
 
     streamManager.connectionTerminated(channel);
-    Assert.assertEquals(0, streamManager.numStreamStates());
+    Assertions.assertEquals(0, streamManager.numStreamStates());
   }
 
   @Test
@@ -145,7 +144,7 @@ public class TransportRequestHandlerSuite {
     when(channel.writeAndFlush(any())).thenAnswer(invocationOnMock0 -> {
       Object response = invocationOnMock0.getArguments()[0];
       ExtendedChannelPromise channelFuture = new ExtendedChannelPromise(channel);
-      responseAndPromisePairs.add(ImmutablePair.of(response, channelFuture));
+      responseAndPromisePairs.add(Pair.of(response, channelFuture));
       return channelFuture;
     });
 

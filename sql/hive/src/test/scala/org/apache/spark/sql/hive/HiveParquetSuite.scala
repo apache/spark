@@ -17,17 +17,24 @@
 
 package org.apache.spark.sql.hive
 
+import java.io.File
 import java.time.{Duration, Period}
 import java.time.temporal.ChronoUnit
 
+import org.apache.hadoop.fs.Path
+import org.apache.parquet.hadoop.ParquetFileReader
+
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
-import org.apache.spark.sql.execution.datasources.parquet.ParquetTest
+import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.execution.datasources.parquet.{ParquetCompressionCodec, ParquetTest}
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
 
 case class Cases(lower: String, UPPER: String)
 
-class HiveParquetSuite extends QueryTest with ParquetTest with TestHiveSingleton {
+class HiveParquetSuite extends QueryTest
+  with ParquetTest
+  with TestHiveSingleton {
 
   test("Case insensitive attribute names") {
     withParquetTable((1 to 4).map(i => Cases(i.toString, i.toString)), "cases") {
@@ -112,19 +119,27 @@ class HiveParquetSuite extends QueryTest with ParquetTest with TestHiveSingleton
 
   test("SPARK-33323: Add query resolved check before convert hive relation") {
     withTable("t") {
+      val query =
+        s"""
+           |CREATE TABLE t STORED AS PARQUET AS
+           |SELECT * FROM (
+           | SELECT c3 FROM (
+           |  SELECT c1, c2 from values(1,2) t(c1, c2)
+           |  )
+           |)
+           |""".stripMargin
       val ex = intercept[AnalysisException] {
-        sql(
-          s"""
-             |CREATE TABLE t STORED AS PARQUET AS
-             |SELECT * FROM (
-             | SELECT c3 FROM (
-             |  SELECT c1, c2 from values(1,2) t(c1, c2)
-             |  )
-             |)
-          """.stripMargin)
+        sql(query)
       }
-      assert(ex.getErrorClass == "MISSING_COLUMN")
-      assert(ex.messageParameters.head == "c3")
+      checkError(
+        exception = ex,
+        condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+        parameters = Map("objectName" -> "`c3`", "proposal" -> "`c1`, `c2`"),
+        context = ExpectedContext(
+          fragment = "c3",
+          start = 61,
+          stop = 62)
+       )
     }
   }
 
@@ -147,7 +162,8 @@ class HiveParquetSuite extends QueryTest with ParquetTest with TestHiveSingleton
 
   test("SPARK-37098: Alter table properties should invalidate cache") {
     // specify the compression in case we change it in future
-    withSQLConf(SQLConf.PARQUET_COMPRESSION.key -> "snappy") {
+    withSQLConf(
+      SQLConf.PARQUET_COMPRESSION.key -> ParquetCompressionCodec.SNAPPY.lowerCaseName()) {
       withTempPath { dir =>
         withTable("t") {
           sql(s"CREATE TABLE t (c int) STORED AS PARQUET LOCATION '${dir.getCanonicalPath}'")
@@ -166,6 +182,43 @@ class HiveParquetSuite extends QueryTest with ParquetTest with TestHiveSingleton
           assert(files2.length == 1)
         }
       }
+    }
+  }
+
+  test("SPARK-52574: Ensure compression codec is correctly applied in Hive tables and dirs") {
+    withSQLConf(
+      HiveUtils.CONVERT_METASTORE_PARQUET.key -> "false",
+      HiveUtils.CONVERT_METASTORE_INSERT_DIR.key -> "false",
+      SQLConf.PARQUET_COMPRESSION.key -> ParquetCompressionCodec.SNAPPY.lowerCaseName()) {
+      withTable("tbl") {
+        sql("CREATE TABLE tbl(id int) STORED AS PARQUET")
+        sql("INSERT INTO tbl SELECT id AS part FROM range(10)")
+        val tblMata = spark.sessionState.catalog.getTableMetadata(TableIdentifier("tbl"))
+        checkCompressionCodec(new File(tblMata.storage.locationUri.get))
+      }
+
+      withTempPath { dir =>
+        sql(
+          s"""
+             |INSERT OVERWRITE LOCAL DIRECTORY '${dir.getCanonicalPath}'
+             |STORED AS parquet
+             |SELECT id FROM range(10)
+             |""".stripMargin)
+        checkCompressionCodec(dir)
+      }
+    }
+
+    def checkCompressionCodec(dir: File): Unit = {
+      val parquetFiles = dir.listFiles().filter(_.getName.startsWith("part-"))
+      assert(parquetFiles.nonEmpty, "No Parquet files found")
+
+      val conf = spark.sessionState.newHadoopConf()
+      val file = parquetFiles.head
+      val footer = ParquetFileReader.readFooter(conf, new Path(file.getAbsolutePath))
+
+      val codec = footer.getBlocks.get(0).getColumns.get(0).getCodec.name()
+      assert(codec.equalsIgnoreCase(ParquetCompressionCodec.SNAPPY.lowerCaseName()),
+        s"Expected ${ParquetCompressionCodec.SNAPPY.lowerCaseName()} compression but found $codec")
     }
   }
 }

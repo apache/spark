@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 
-from distutils.version import LooseVersion
+import unittest
 
 import pandas as pd
 from pandas.api.types import CategoricalDtype
@@ -24,7 +24,7 @@ import pyspark.pandas as ps
 from pyspark.testing.pandasutils import PandasOnSparkTestCase, TestUtils
 
 
-class CategoricalIndexTest(PandasOnSparkTestCase, TestUtils):
+class CategoricalIndexTestsMixin:
     def test_categorical_index(self):
         pidx = pd.CategoricalIndex([1, 2, 3])
         psidx = ps.CategoricalIndex([1, 2, 3])
@@ -67,6 +67,13 @@ class CategoricalIndexTest(PandasOnSparkTestCase, TestUtils):
         self.assert_eq(psidx.codes, pd.Index(pidx.codes))
         self.assert_eq(psidx.ordered, pidx.ordered)
 
+        with self.assertRaisesRegex(TypeError, "Index.name must be a hashable type"):
+            ps.CategoricalIndex([1, 2, 3], name=[(1, 2, 3)])
+        with self.assertRaisesRegex(
+            TypeError, "Cannot perform 'all' with this index type: CategoricalIndex"
+        ):
+            ps.CategoricalIndex([1, 2, 3]).all()
+
     def test_categories_setter(self):
         pdf = pd.DataFrame(
             {
@@ -80,16 +87,10 @@ class CategoricalIndexTest(PandasOnSparkTestCase, TestUtils):
         pidx = pdf.index
         psidx = psdf.index
 
-        pidx.categories = ["z", "y", "x"]
-        psidx.categories = ["z", "y", "x"]
-        if LooseVersion(pd.__version__) >= LooseVersion("1.1"):
-            self.assert_eq(pidx, psidx)
-            self.assert_eq(pdf, psdf)
-        else:
-            pidx = pidx.set_categories(pidx.categories)
-            pdf.index = pidx
-            self.assert_eq(pidx, psidx)
-            self.assert_eq(pdf, psdf)
+        pidx = pidx.rename_categories(["z", "y", "x"])
+        psidx = psidx.rename_categories(["z", "y", "x"])
+        self.assert_eq(pidx, psidx)
+        self.assert_eq(pdf, psdf)
 
         with self.assertRaises(ValueError):
             psidx.categories = [1, 2, 3, 4]
@@ -102,7 +103,6 @@ class CategoricalIndexTest(PandasOnSparkTestCase, TestUtils):
         self.assert_eq(pidx.add_categories([4, 5]), psidx.add_categories([4, 5]))
         self.assert_eq(pidx.add_categories([]), psidx.add_categories([]))
 
-        self.assertRaises(ValueError, lambda: psidx.add_categories(4, inplace=True))
         self.assertRaises(ValueError, lambda: psidx.add_categories(3))
         self.assertRaises(ValueError, lambda: psidx.add_categories([4, 4]))
 
@@ -118,7 +118,6 @@ class CategoricalIndexTest(PandasOnSparkTestCase, TestUtils):
         self.assert_eq(pidx.remove_categories(None), psidx.remove_categories(None))
         self.assert_eq(pidx.remove_categories([None]), psidx.remove_categories([None]))
 
-        self.assertRaises(ValueError, lambda: psidx.remove_categories(4, inplace=True))
         self.assertRaises(ValueError, lambda: psidx.remove_categories(4))
         self.assertRaises(ValueError, lambda: psidx.remove_categories([4, None]))
 
@@ -127,8 +126,6 @@ class CategoricalIndexTest(PandasOnSparkTestCase, TestUtils):
         psidx = ps.from_pandas(pidx)
 
         self.assert_eq(pidx.remove_unused_categories(), psidx.remove_unused_categories())
-
-        self.assertRaises(ValueError, lambda: psidx.remove_unused_categories(inplace=True))
 
     def test_reorder_categories(self):
         pidx = pd.CategoricalIndex([1, 2, 3])
@@ -145,7 +142,6 @@ class CategoricalIndexTest(PandasOnSparkTestCase, TestUtils):
             psidx.reorder_categories([3, 2, 1], ordered=True),
         )
 
-        self.assertRaises(ValueError, lambda: psidx.reorder_categories([1, 2, 3], inplace=True))
         self.assertRaises(ValueError, lambda: psidx.reorder_categories([1, 2]))
         self.assertRaises(ValueError, lambda: psidx.reorder_categories([1, 2, 4]))
         self.assertRaises(ValueError, lambda: psidx.reorder_categories([1, 2, 2]))
@@ -157,9 +153,6 @@ class CategoricalIndexTest(PandasOnSparkTestCase, TestUtils):
 
         self.assert_eq(pidx.as_ordered(), psidx.as_ordered())
         self.assert_eq(pidx.as_unordered(), psidx.as_unordered())
-
-        self.assertRaises(ValueError, lambda: psidx.as_ordered(inplace=True))
-        self.assertRaises(ValueError, lambda: psidx.as_unordered(inplace=True))
 
     def test_astype(self):
         pidx = pd.Index(["a", "b", "c"])
@@ -176,17 +169,10 @@ class CategoricalIndexTest(PandasOnSparkTestCase, TestUtils):
 
         self.assert_eq(pscidx.astype("category"), pcidx.astype("category"))
 
-        # CategoricalDtype is not updated if the dtype is same from pandas 1.3.
-        if LooseVersion(pd.__version__) >= LooseVersion("1.3"):
-            self.assert_eq(
-                pscidx.astype(CategoricalDtype(["b", "c", "a"])),
-                pcidx.astype(CategoricalDtype(["b", "c", "a"])),
-            )
-        else:
-            self.assert_eq(
-                pscidx.astype(CategoricalDtype(["b", "c", "a"])),
-                pcidx,
-            )
+        self.assert_eq(
+            pscidx.astype(CategoricalDtype(["b", "c", "a"])),
+            pcidx.astype(CategoricalDtype(["b", "c", "a"])),
+        )
 
         self.assert_eq(pscidx.astype(str), pcidx.astype(str))
 
@@ -200,8 +186,8 @@ class CategoricalIndexTest(PandasOnSparkTestCase, TestUtils):
         self.assert_eq(kcodes.tolist(), pcodes.tolist())
         self.assert_eq(kuniques, puniques)
 
-        pcodes, puniques = pidx.factorize(na_sentinel=-2)
-        kcodes, kuniques = psidx.factorize(na_sentinel=-2)
+        pcodes, puniques = pidx.factorize(use_na_sentinel=-2)
+        kcodes, kuniques = psidx.factorize(use_na_sentinel=-2)
 
         self.assert_eq(kcodes.tolist(), pcodes.tolist())
         self.assert_eq(kuniques, puniques)
@@ -254,25 +240,13 @@ class CategoricalIndexTest(PandasOnSparkTestCase, TestUtils):
         psidx2 = ps.from_pandas(pidx2)
         psidx3 = ps.from_pandas(pidx3)
 
-        if LooseVersion(pd.__version__) >= LooseVersion("1.2"):
-            self.assert_eq(
-                psidx1.intersection(psidx2).sort_values(), pidx1.intersection(pidx2).sort_values()
-            )
-            self.assert_eq(
-                psidx1.intersection(psidx3.astype("category")).sort_values(),
-                pidx1.intersection(pidx3.astype("category")).sort_values(),
-            )
-        else:
-            self.assert_eq(
-                psidx1.intersection(psidx2).sort_values(),
-                pidx1.intersection(pidx2).set_categories(pidx1.categories).sort_values(),
-            )
-            self.assert_eq(
-                psidx1.intersection(psidx3.astype("category")).sort_values(),
-                pidx1.intersection(pidx3.astype("category"))
-                .set_categories(pidx1.categories)
-                .sort_values(),
-            )
+        self.assert_eq(
+            psidx1.intersection(psidx2).sort_values(), pidx1.intersection(pidx2).sort_values()
+        )
+        self.assert_eq(
+            psidx1.intersection(psidx3.astype("category")).sort_values(),
+            pidx1.intersection(pidx3.astype("category")).sort_values(),
+        )
 
         # TODO: intersection non-categorical or categorical with a different category
         self.assertRaises(NotImplementedError, lambda: psidx1.intersection(psidx3))
@@ -310,10 +284,6 @@ class CategoricalIndexTest(PandasOnSparkTestCase, TestUtils):
         self.assertRaises(
             TypeError,
             lambda: psidx.rename_categories("x"),
-        )
-        self.assertRaises(
-            ValueError,
-            lambda: psidx.rename_categories({"b": "B", "c": "C"}, inplace=True),
         )
 
     def test_set_categories(self):
@@ -359,18 +329,11 @@ class CategoricalIndexTest(PandasOnSparkTestCase, TestUtils):
             psidx.set_categories(["a", "c", "b", "d", "e"], ordered=True),
         )
 
-        self.assertRaisesRegex(
-            ValueError,
-            "cannot use inplace with CategoricalIndex",
-            lambda: psidx.set_categories(["a", "c", "b", "o"], inplace=True),
-        )
-
     def test_map(self):
         pidxs = [pd.CategoricalIndex([1, 2, 3]), pd.CategoricalIndex([1, 2, 3], ordered=True)]
         psidxs = [ps.from_pandas(pidx) for pidx in pidxs]
 
         for pidx, psidx in zip(pidxs, psidxs):
-
             # Apply dict
             self.assert_eq(
                 pidx.map({1: "one", 2: "two", 3: "three"}),
@@ -434,12 +397,16 @@ class CategoricalIndexTest(PandasOnSparkTestCase, TestUtils):
             )
 
 
+class CategoricalIndexTests(CategoricalIndexTestsMixin, PandasOnSparkTestCase, TestUtils):
+    pass
+
+
 if __name__ == "__main__":
     import unittest
     from pyspark.pandas.tests.indexes.test_category import *  # noqa: F401
 
     try:
-        import xmlrunner  # type: ignore[import]
+        import xmlrunner
 
         testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:

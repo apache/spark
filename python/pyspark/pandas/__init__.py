@@ -22,9 +22,11 @@
 
 import os
 import sys
-from distutils.version import LooseVersion
 import warnings
+from typing import Any
 
+from pyspark.pandas.missing.general_functions import MissingPandasLikeGeneralFunctions
+from pyspark.pandas.missing.scalars import MissingPandasLikeScalars
 from pyspark.sql.pandas.utils import require_minimum_pandas_version, require_minimum_pyarrow_version
 
 try:
@@ -37,16 +39,8 @@ except ImportError as e:
     else:
         raise
 
-
-import pyarrow
-
-if (
-    LooseVersion(pyarrow.__version__) >= LooseVersion("2.0.0")
-    and "PYARROW_IGNORE_TIMEZONE" not in os.environ
-):
-    import logging
-
-    logging.warning(
+if "PYARROW_IGNORE_TIMEZONE" not in os.environ:
+    warnings.warn(
         "'PYARROW_IGNORE_TIMEZONE' environment variable was not set. It is required to "
         "set this environment variable to '1' in both driver and executor sides if you use "
         "pyarrow>=2.0.0. "
@@ -60,7 +54,6 @@ from pyspark.pandas.indexes.base import Index
 from pyspark.pandas.indexes.category import CategoricalIndex
 from pyspark.pandas.indexes.datetimes import DatetimeIndex
 from pyspark.pandas.indexes.multi import MultiIndex
-from pyspark.pandas.indexes.numeric import Float64Index, Int64Index
 from pyspark.pandas.indexes.timedelta import TimedeltaIndex
 from pyspark.pandas.series import Series
 from pyspark.pandas.groupby import NamedAgg
@@ -76,8 +69,6 @@ __all__ = [  # noqa: F405
     "Series",
     "Index",
     "MultiIndex",
-    "Int64Index",
-    "Float64Index",
     "CategoricalIndex",
     "DatetimeIndex",
     "TimedeltaIndex",
@@ -131,17 +122,16 @@ def _auto_patch_pandas() -> None:
     _frame_has_class_getitem = hasattr(pd.DataFrame, "__class_getitem__")
     _series_has_class_getitem = hasattr(pd.Series, "__class_getitem__")
 
-    if sys.version_info >= (3, 7):
-        # Just in case pandas implements '__class_getitem__' later.
-        if not _frame_has_class_getitem:
-            pd.DataFrame.__class_getitem__ = (  # type: ignore[assignment,attr-defined]
-                lambda params: DataFrame.__class_getitem__(params)
-            )
+    # Just in case pandas implements '__class_getitem__' later.
+    if not _frame_has_class_getitem:
+        pd.DataFrame.__class_getitem__ = (  # type: ignore[attr-defined]
+            lambda params: DataFrame.__class_getitem__(params)
+        )
 
-        if not _series_has_class_getitem:
-            pd.Series.__class_getitem__ = (  # type: ignore[assignment,attr-defined]
-                lambda params: Series.__class_getitem__(params)
-            )
+    if not _series_has_class_getitem:
+        pd.Series.__class_getitem__ = (  # type: ignore[attr-defined]
+            lambda params: Series.__class_getitem__(params)
+        )
 
 
 _auto_patch_spark()
@@ -151,3 +141,14 @@ _auto_patch_pandas()
 from pyspark.pandas.config import get_option, options, option_context, reset_option, set_option
 from pyspark.pandas.namespace import *  # noqa: F403
 from pyspark.pandas.sql_formatter import sql
+
+
+def __getattr__(key: str) -> Any:
+    if key.startswith("__"):
+        raise AttributeError(key)
+    if hasattr(MissingPandasLikeScalars, key):
+        raise getattr(MissingPandasLikeScalars, key)
+    if hasattr(MissingPandasLikeGeneralFunctions, key):
+        return getattr(MissingPandasLikeGeneralFunctions, key)
+    else:
+        raise AttributeError("module 'pyspark.pandas' has no attribute '%s'" % (key))

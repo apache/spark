@@ -31,8 +31,8 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.{InternalRow, NoopFilters}
 import org.apache.spark.sql.catalyst.util.RebaseDateTime.RebaseSpec
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
+import org.apache.spark.sql.internal.LegacyBehaviorPolicy._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy._
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.v2.avro.AvroScan
@@ -59,11 +59,13 @@ class AvroRowReaderSuite
 
       val df = spark.read.format("avro").load(dir.getCanonicalPath)
       val fileScan = df.queryExecution.executedPlan collectFirst {
-        case BatchScanExec(_, f: AvroScan, _, _) => f
+        case BatchScanExec(_, f: AvroScan, _, _, _, _) => f
       }
       val filePath = fileScan.get.fileIndex.inputFiles(0)
       val fileSize = new File(new URI(filePath)).length
+      // scalastyle:off pathfromuri
       val in = new FsInput(new Path(new URI(filePath)), new Configuration())
+      // scalastyle:on pathfromuri
       val reader = DataFileReader.openReader(in, new GenericDatumReader[GenericRecord]())
 
       val it = new Iterator[InternalRow] with AvroUtils.RowReader {
@@ -73,24 +75,27 @@ class AvroRowReaderSuite
           StructType(new StructField("value", IntegerType, true) :: Nil),
           false,
           RebaseSpec(CORRECTED),
-          new NoopFilters)
+          new NoopFilters,
+          false,
+          "",
+          -1)
         override val stopPosition = fileSize
 
         override def hasNext: Boolean = hasNextRow
 
-        override def next: InternalRow = nextRow
+        override def next(): InternalRow = nextRow
       }
       assert(it.hasNext == true)
-      assert(it.next.getInt(0) == 1)
+      assert(it.next().getInt(0) == 1)
       // test no intervening next
       assert(it.hasNext == true)
       assert(it.hasNext == true)
       // test no intervening hasNext
-      assert(it.next.getInt(0) == 2)
-      assert(it.next.getInt(0) == 3)
+      assert(it.next().getInt(0) == 2)
+      assert(it.next().getInt(0) == 3)
       assert(it.hasNext == false)
       assertThrows[NoSuchElementException] {
-        it.next
+        it.next()
       }
     }
   }

@@ -2,6 +2,8 @@
 --CONFIG_DIM1 spark.sql.codegen.wholeStage=true
 --CONFIG_DIM1 spark.sql.codegen.wholeStage=false,spark.sql.codegen.factoryMode=CODEGEN_ONLY
 --CONFIG_DIM1 spark.sql.codegen.wholeStage=false,spark.sql.codegen.factoryMode=NO_CODEGEN
+--CONFIG_DIM2 spark.sql.optimizer.windowGroupLimitThreshold=-1
+--CONFIG_DIM2 spark.sql.optimizer.windowGroupLimitThreshold=1000
 
 -- Test data.
 CREATE OR REPLACE TEMPORARY VIEW testData AS SELECT * FROM VALUES
@@ -123,6 +125,9 @@ stddev(val) OVER w AS stddev,
 first_value(val) OVER w AS first_value,
 first_value(val, true) OVER w AS first_value_ignore_null,
 first_value(val, false) OVER w AS first_value_contain_null,
+any_value(val) OVER w AS any_value,
+any_value(val, true) OVER w AS any_value_ignore_null,
+any_value(val, false) OVER w AS any_value_contain_null,
 last_value(val) OVER w AS last_value,
 last_value(val, true) OVER w AS last_value_ignore_null,
 last_value(val, false) OVER w AS last_value_contain_null,
@@ -156,11 +161,14 @@ SELECT val, cate, row_number() OVER(PARTITION BY cate) FROM testData ORDER BY ca
 -- Over clause is empty
 SELECT val, cate, sum(val) OVER(), avg(val) OVER() FROM testData ORDER BY cate, val;
 
--- first_value()/last_value() over ()
+-- first_value()/last_value()/any_value() over ()
 SELECT val, cate,
 first_value(false) OVER w AS first_value,
 first_value(true, true) OVER w AS first_value_ignore_null,
 first_value(false, false) OVER w AS first_value_contain_null,
+any_value(false) OVER w AS any_value,
+any_value(true, true) OVER w AS any_value_ignore_null,
+any_value(false, false) OVER w AS any_value_contain_null,
 last_value(false) OVER w AS last_value,
 last_value(true, true) OVER w AS last_value_ignore_null,
 last_value(false, false) OVER w AS last_value_contain_null
@@ -179,11 +187,12 @@ SELECT val, cate,
 count(val) FILTER (WHERE val > 1) OVER(PARTITION BY cate)
 FROM testData ORDER BY cate, val;
 
--- nth_value()/first_value() over ()
+-- nth_value()/first_value()/any_value() over ()
 SELECT
     employee_name,
     salary,
     first_value(employee_name) OVER w highest_salary,
+    any_value(employee_name) OVER w highest_salary,
     nth_value(employee_name, 2) OVER w second_highest_salary
 FROM
     basic_pays
@@ -194,6 +203,7 @@ SELECT
     employee_name,
     salary,
     first_value(employee_name) OVER w highest_salary,
+    any_value(employee_name) OVER w highest_salary,
     nth_value(employee_name, 2) OVER w second_highest_salary
 FROM
     basic_pays
@@ -204,6 +214,7 @@ SELECT
     employee_name,
     salary,
     first_value(employee_name) OVER w highest_salary,
+    any_value(employee_name) OVER w highest_salary,
     nth_value(employee_name, 2) OVER w second_highest_salary
 FROM
     basic_pays
@@ -214,6 +225,7 @@ SELECT
     employee_name,
     salary,
     first_value(employee_name) OVER w highest_salary,
+    any_value(employee_name) OVER w highest_salary,
     nth_value(employee_name, 2) OVER w second_highest_salary
 FROM
     basic_pays
@@ -224,6 +236,7 @@ SELECT
     employee_name,
     salary,
     first_value(employee_name) OVER w highest_salary,
+    any_value(employee_name) OVER w highest_salary,
     nth_value(employee_name, 2) OVER w second_highest_salary
 FROM
     basic_pays
@@ -234,6 +247,7 @@ SELECT
     employee_name,
     salary,
     first_value(employee_name) OVER w highest_salary,
+    any_value(employee_name) OVER w highest_salary,
     nth_value(employee_name, 2) OVER w second_highest_salary
 FROM
     basic_pays
@@ -244,6 +258,7 @@ SELECT
     employee_name,
     salary,
     first_value(employee_name) OVER w highest_salary,
+    any_value(employee_name) OVER w highest_salary,
     nth_value(employee_name, 2) OVER w second_highest_salary
 FROM
     basic_pays
@@ -254,6 +269,7 @@ SELECT
     employee_name,
     salary,
     first_value(employee_name) OVER w highest_salary,
+    any_value(employee_name) OVER w highest_salary,
     nth_value(employee_name, 2) OVER w second_highest_salary
 FROM
     basic_pays
@@ -264,6 +280,7 @@ SELECT
     employee_name,
     salary,
     first_value(employee_name) OVER w highest_salary,
+    any_value(employee_name) OVER w highest_salary,
     nth_value(employee_name, 2) OVER w second_highest_salary
 FROM
     basic_pays
@@ -289,6 +306,7 @@ SELECT
     employee_name,
     salary,
     first_value(employee_name) OVER w highest_salary,
+    any_value(employee_name) OVER w highest_salary,
     nth_value(employee_name, 2) OVER w second_highest_salary
 FROM
     basic_pays
@@ -309,10 +327,12 @@ SELECT
     lag(v, 1) IGNORE NULLS OVER w lag_1,
     lag(v, 2) IGNORE NULLS OVER w lag_2,
     lag(v, 3) IGNORE NULLS OVER w lag_3,
+    lag(v, +3) IGNORE NULLS OVER w lag_plus_3,
     nth_value(v, 1) IGNORE NULLS OVER w nth_value_1,
     nth_value(v, 2) IGNORE NULLS OVER w nth_value_2,
     nth_value(v, 3) IGNORE NULLS OVER w nth_value_3,
     first_value(v) IGNORE NULLS OVER w first_value,
+    any_value(v) IGNORE NULLS OVER w any_value,
     last_value(v) IGNORE NULLS OVER w last_value
 FROM
     test_ignore_null
@@ -327,6 +347,7 @@ SELECT
     nth_value(v, 2) IGNORE NULLS OVER w nth_value_2,
     nth_value(v, 3) IGNORE NULLS OVER w nth_value_3,
     first_value(v) IGNORE NULLS OVER w first_value,
+    any_value(v) IGNORE NULLS OVER w any_value,
     last_value(v) IGNORE NULLS OVER w last_value
 FROM
     test_ignore_null
@@ -341,6 +362,7 @@ SELECT
     nth_value(v, 2) IGNORE NULLS OVER w nth_value_2,
     nth_value(v, 3) IGNORE NULLS OVER w nth_value_3,
     first_value(v) IGNORE NULLS OVER w first_value,
+    any_value(v) IGNORE NULLS OVER w any_value,
     last_value(v) IGNORE NULLS OVER w last_value
 FROM
     test_ignore_null
@@ -355,6 +377,7 @@ SELECT
     nth_value(v, 2) IGNORE NULLS OVER w nth_value_2,
     nth_value(v, 3) IGNORE NULLS OVER w nth_value_3,
     first_value(v) IGNORE NULLS OVER w first_value,
+    any_value(v) IGNORE NULLS OVER w any_value,
     last_value(v) IGNORE NULLS OVER w last_value
 FROM
     test_ignore_null
@@ -369,6 +392,7 @@ SELECT
     nth_value(v, 2) IGNORE NULLS OVER w nth_value_2,
     nth_value(v, 3) IGNORE NULLS OVER w nth_value_3,
     first_value(v) IGNORE NULLS OVER w first_value,
+    any_value(v) IGNORE NULLS OVER w any_value,
     last_value(v) IGNORE NULLS OVER w last_value
 FROM
     test_ignore_null
@@ -383,6 +407,7 @@ SELECT
     nth_value(v, 2) IGNORE NULLS OVER w nth_value_2,
     nth_value(v, 3) IGNORE NULLS OVER w nth_value_3,
     first_value(v) IGNORE NULLS OVER w first_value,
+    any_value(v) IGNORE NULLS OVER w any_value,
     last_value(v) IGNORE NULLS OVER w last_value
 FROM
     test_ignore_null
@@ -397,6 +422,7 @@ SELECT
     nth_value(v, 2) IGNORE NULLS OVER w nth_value_2,
     nth_value(v, 3) IGNORE NULLS OVER w nth_value_3,
     first_value(v) IGNORE NULLS OVER w first_value,
+    any_value(v) IGNORE NULLS OVER w any_value,
     last_value(v) IGNORE NULLS OVER w last_value
 FROM
     test_ignore_null
@@ -411,6 +437,7 @@ SELECT
     nth_value(v, 2) IGNORE NULLS OVER w nth_value_2,
     nth_value(v, 3) IGNORE NULLS OVER w nth_value_3,
     first_value(v) IGNORE NULLS OVER w first_value,
+    any_value(v) IGNORE NULLS OVER w any_value,
     last_value(v) IGNORE NULLS OVER w last_value
 FROM
     test_ignore_null
@@ -425,6 +452,7 @@ SELECT
     nth_value(v, 2) IGNORE NULLS OVER w nth_value_2,
     nth_value(v, 3) IGNORE NULLS OVER w nth_value_3,
     first_value(v) IGNORE NULLS OVER w first_value,
+    any_value(v) IGNORE NULLS OVER w any_value,
     last_value(v) IGNORE NULLS OVER w last_value
 FROM
     test_ignore_null
@@ -441,59 +469,17 @@ SELECT
 FROM
 	basic_pays;
 
-SELECT
-    employee_name,
-    department,
-    salary,
-    percentile_cont(0.25) WITHIN GROUP (ORDER BY salary) OVER (PARTITION BY department),
-    percentile_cont(0.25) WITHIN GROUP (ORDER BY salary DESC) OVER (PARTITION BY department)
-FROM basic_pays
-ORDER BY salary;
+-- Test cases for InferWindowGroupLimit
+create or replace temp view t1 (p, o) as values (1, 1), (1, 1), (1, 2), (2, 1), (2, 1), (2, 2);
+select * from (select *, dense_rank() over (partition by p order by o) as rnk from t1) where rnk = 1;
 
-SELECT
-    employee_name,
-    department,
-    salary,
-    percentile_cont(0.25) WITHIN GROUP (ORDER BY salary) OVER (PARTITION BY department ORDER BY salary),
-    percentile_cont(0.25) WITHIN GROUP (ORDER BY salary DESC) OVER (PARTITION BY department ORDER BY salary)
-FROM basic_pays
-ORDER BY salary;
+SELECT * FROM (SELECT cate, val, rank() OVER(PARTITION BY cate ORDER BY val) as r FROM testData) where r = 1;
+SELECT * FROM (SELECT cate, val, rank() OVER(PARTITION BY cate ORDER BY val) as r FROM testData) where r <= 2;
+SELECT * FROM (SELECT cate, val, dense_rank() OVER(PARTITION BY cate ORDER BY val) as r FROM testData) where r = 1;
+SELECT * FROM (SELECT cate, val, dense_rank() OVER(PARTITION BY cate ORDER BY val) as r FROM testData) where r <= 2;
+SELECT * FROM (SELECT cate, val, row_number() OVER(PARTITION BY cate ORDER BY val) as r FROM testData) where r = 1;
+SELECT * FROM (SELECT cate, val, row_number() OVER(PARTITION BY cate ORDER BY val) as r FROM testData) where r <= 2;
 
-SELECT
-    employee_name,
-    department,
-    salary,
-    percentile_cont(0.25) WITHIN GROUP (ORDER BY salary) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING),
-    percentile_cont(0.25) WITHIN GROUP (ORDER BY salary DESC) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING)
-FROM basic_pays
-ORDER BY salary;
-
-SELECT
-    employee_name,
-    department,
-    salary,
-    percentile_cont(0.25) WITHIN GROUP (ORDER BY salary) OVER w,
-    percentile_cont(0.25) WITHIN GROUP (ORDER BY salary DESC) OVER w
-FROM basic_pays
-WINDOW w AS (PARTITION BY department)
-ORDER BY salary;
-
-SELECT
-    employee_name,
-    department,
-    salary,
-    percentile_cont(0.25) WITHIN GROUP (ORDER BY salary) OVER w,
-    percentile_cont(0.25) WITHIN GROUP (ORDER BY salary DESC) OVER w
-FROM basic_pays
-WINDOW w AS (PARTITION BY department ORDER BY salary)
-ORDER BY salary;
-
-SELECT
-    employee_name,
-    department,
-    salary,
-    percentile_cont(0.25) WITHIN GROUP (ORDER BY salary) OVER w,
-    percentile_cont(0.25) WITHIN GROUP (ORDER BY salary DESC) OVER w
-FROM basic_pays
-WINDOW w AS (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING)
-ORDER BY salary;
+SELECT *, mean(val_double) over (partition BY val ORDER BY val_date RANGE INTERVAL '5' DAY PRECEDING) AS mean FROM testData;
+SELECT *, mean(val_double) over (partition BY val ORDER BY val_date RANGE INTERVAL '1 2:3:4.001' DAY TO SECOND PRECEDING) AS mean FROM testData;
+SELECT *, mean(val_double) over (partition BY val ORDER BY val_date RANGE DATE '2024-01-01' FOLLOWING) AS mean FROM testData;

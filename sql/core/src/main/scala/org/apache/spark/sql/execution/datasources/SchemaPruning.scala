@@ -18,16 +18,17 @@
 package org.apache.spark.sql.execution.datasources
 
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.planning.PhysicalOperation
+import org.apache.spark.sql.catalyst.planning.ScanOperation
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LeafNode, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.execution.datasources.orc.OrcFileFormat
 import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
 import org.apache.spark.sql.types.{ArrayType, DataType, MapType, StructType}
 import org.apache.spark.sql.util.SchemaUtils._
 
 /**
- * Prunes unnecessary physical columns given a [[PhysicalOperation]] over a data source relation.
+ * Prunes unnecessary physical columns given a [[ScanOperation]] over a data source relation.
  * By "physical column", we mean a column as defined in the data source format like Parquet format
  * or ORC format. For example, in Spark SQL, a root-level Parquet column corresponds to a SQL
  * column, and a nested Parquet column corresponds to a [[StructField]].
@@ -39,9 +40,10 @@ object SchemaPruning extends Rule[LogicalPlan] {
 
   override def apply(plan: LogicalPlan): LogicalPlan =
     plan transformDown {
-      case op @ PhysicalOperation(projects, filters,
-      l @ LogicalRelation(hadoopFsRelation: HadoopFsRelation, _, _, _)) =>
-        prunePhysicalColumns(l, projects, filters, hadoopFsRelation,
+      case op @ ScanOperation(projects, filtersStayUp, filtersPushDown,
+        l @ LogicalRelationWithTable(hadoopFsRelation: HadoopFsRelation, _)) =>
+        val allFilters = filtersPushDown.reduceOption(And).toSeq ++ filtersStayUp
+        prunePhysicalColumns(l, projects, allFilters, hadoopFsRelation,
           (prunedDataSchema, prunedMetadataSchema) => {
             val prunedHadoopRelation =
               hadoopFsRelation.copy(dataSchema = prunedDataSchema)(hadoopFsRelation.sparkSession)
@@ -61,9 +63,10 @@ object SchemaPruning extends Rule[LogicalPlan] {
       filters: Seq[Expression],
       hadoopFsRelation: HadoopFsRelation,
       leafNodeBuilder: (StructType, StructType) => LeafNode): Option[LogicalPlan] = {
-
-    val (normalizedProjects, normalizedFilters) =
-      normalizeAttributeRefNames(relation.output, projects, filters)
+    val attrNameMap = relation.output.map(att => (att.exprId, att.name)).toMap
+    val normalizedProjects = normalizeAttributeRefNames(attrNameMap, projects)
+      .asInstanceOf[Seq[NamedExpression]]
+    val normalizedFilters = normalizeAttributeRefNames(attrNameMap, filters)
     val requestedRootFields = identifyRootFields(normalizedProjects, normalizedFilters)
 
     // If requestedRootFields includes a nested field, continue. Otherwise,
@@ -91,8 +94,8 @@ object SchemaPruning extends Rule[LogicalPlan] {
       if (countLeaves(hadoopFsRelation.dataSchema) > countLeaves(prunedDataSchema) ||
         countLeaves(metadataSchema) > countLeaves(prunedMetadataSchema)) {
         val prunedRelation = leafNodeBuilder(prunedDataSchema, prunedMetadataSchema)
-        val projectionOverSchema =
-          ProjectionOverSchema(prunedDataSchema.merge(prunedMetadataSchema))
+        val projectionOverSchema = ProjectionOverSchema(
+          prunedDataSchema.merge(prunedMetadataSchema), AttributeSet(relation.output))
         Some(buildNewProjection(projects, normalizedProjects, normalizedFilters,
           prunedRelation, projectionOverSchema))
       } else {
@@ -112,24 +115,17 @@ object SchemaPruning extends Rule[LogicalPlan] {
         fsRelation.fileFormat.isInstanceOf[OrcFileFormat])
 
   /**
-   * Normalizes the names of the attribute references in the given projects and filters to reflect
+   * Normalizes the names of the attribute references in the given expressions to reflect
    * the names in the given logical relation. This makes it possible to compare attributes and
    * fields by name. Returns a tuple with the normalized projects and filters, respectively.
    */
   private def normalizeAttributeRefNames(
-      output: Seq[AttributeReference],
-      projects: Seq[NamedExpression],
-      filters: Seq[Expression]): (Seq[NamedExpression], Seq[Expression]) = {
-    val normalizedAttNameMap = output.map(att => (att.exprId, att.name)).toMap
-    val normalizedProjects = projects.map(_.transform {
-      case att: AttributeReference if normalizedAttNameMap.contains(att.exprId) =>
-        att.withName(normalizedAttNameMap(att.exprId))
-    }).map { case expr: NamedExpression => expr }
-    val normalizedFilters = filters.map(_.transform {
-      case att: AttributeReference if normalizedAttNameMap.contains(att.exprId) =>
-        att.withName(normalizedAttNameMap(att.exprId))
+      attrNameMap: Map[ExprId, String],
+      exprs: Seq[Expression]): Seq[Expression] = {
+    exprs.map(_.transform {
+      case att: AttributeReference if attrNameMap.contains(att.exprId) =>
+        att.withName(attrNameMap(att.exprId))
     })
-    (normalizedProjects, normalizedFilters)
   }
 
   /**
@@ -148,8 +144,8 @@ object SchemaPruning extends Rule[LogicalPlan] {
         val projectedFilters = filters.map(_.transformDown {
           case projectionOverSchema(expr) => expr
         })
-        val newFilterCondition = projectedFilters.reduce(And)
-        Filter(newFilterCondition, leafNode)
+        // bottom-most filters are put in the left of the list.
+        projectedFilters.foldLeft[LogicalPlan](leafNode)((plan, cond) => Filter(cond, plan))
       } else {
         leafNode
       }
@@ -177,7 +173,9 @@ object SchemaPruning extends Rule[LogicalPlan] {
       prunedMetadataSchema: StructType) = {
     val finalSchema = prunedBaseRelation.schema.merge(prunedMetadataSchema)
     val prunedOutput = getPrunedOutput(outputRelation.output, finalSchema)
-    outputRelation.copy(relation = prunedBaseRelation, output = prunedOutput)
+    val prunedRelation = outputRelation.copy(relation = prunedBaseRelation, output = prunedOutput)
+    prunedRelation.copyTagsFrom(outputRelation)
+    prunedRelation
   }
 
   // Prune the given output to make it consistent with `requiredSchema`.
@@ -187,8 +185,7 @@ object SchemaPruning extends Rule[LogicalPlan] {
     // We need to update the data type of the output attributes to use the pruned ones.
     // so that references to the original relation's output are not broken
     val nameAttributeMap = output.map(att => (att.name, att)).toMap
-    requiredSchema
-      .toAttributes
+    toAttributes(requiredSchema)
       .map {
         case att if nameAttributeMap.contains(att.name) =>
           nameAttributeMap(att.name).withDataType(att.dataType)

@@ -17,20 +17,18 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression}
-import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan}
+import org.apache.spark.sql.catalyst.expressions.Expression
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.trees.TreePattern.{RELATION_TIME_TRAVEL, TreePattern}
 
 /**
  * A logical node used to time travel the child relation to the given `timestamp` or `version`.
  * The `child` must support time travel, e.g. a v2 source, and cannot be a view, subquery or stream.
- * The timestamp expression cannot refer to any columns and cannot contain subqueries.
+ * The timestamp expression cannot refer to any columns.
  */
 case class RelationTimeTravel(
     relation: LogicalPlan,
     timestamp: Option[Expression],
-    version: Option[String]) extends LeafNode {
-  override def output: Seq[Attribute] = Nil
-  override lazy val resolved: Boolean = false
+    version: Option[String]) extends UnresolvedLeafNode {
   override val nodePatterns: Seq[TreePattern] = Seq(RELATION_TIME_TRAVEL)
 }

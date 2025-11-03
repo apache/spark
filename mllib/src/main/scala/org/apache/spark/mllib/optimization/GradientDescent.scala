@@ -21,7 +21,7 @@ import scala.collection.mutable.ArrayBuffer
 
 import breeze.linalg.{norm, DenseVector => BDV}
 
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.rdd.RDD
 
@@ -203,8 +203,9 @@ object GradientDescent extends Logging {
     }
 
     if (numIterations * miniBatchFraction < 1.0) {
-      logWarning("Not all examples will be used if numIterations * miniBatchFraction < 1.0: " +
-        s"numIterations=$numIterations and miniBatchFraction=$miniBatchFraction")
+      logWarning(log"Not all examples will be used if numIterations * miniBatchFraction < 1.0: " +
+        log"numIterations=${MDC(LogKeys.NUM_ITERATIONS, numIterations)} and " +
+        log"miniBatchFraction=${MDC(LogKeys.MINI_BATCH_FRACTION, miniBatchFraction)}")
     }
 
     val stochasticLossHistory = new ArrayBuffer[Double](numIterations + 1)
@@ -243,8 +244,9 @@ object GradientDescent extends Logging {
       // Sample a subset (fraction miniBatchFraction) of the total data
       // compute and sum up the subgradients on this subset (this is one map-reduce)
       val (gradientSum, lossSum, miniBatchSize) = data.sample(false, miniBatchFraction, 42 + i)
-        .treeAggregate((null.asInstanceOf[BDV[Double]], 0.0, 0L))(
-          seqOp = (c, v) => {
+        .treeAggregate[(BDV[Double], Double, Long)](
+          zeroValue = (null.asInstanceOf[BDV[Double]], 0.0, 0L),
+          seqOp = (c: (BDV[Double], Double, Long), v: (Double, Vector)) => {
             // c: (grad, loss, count), v: (label, features)
             val vec =
               if (c._1 == null) {
@@ -255,7 +257,7 @@ object GradientDescent extends Logging {
             val l = gradient.compute(v._2, v._1, bcWeights.value, Vectors.fromBreeze(vec))
             (vec, c._2 + l, c._3 + 1)
           },
-          combOp = (c1, c2) => {
+          combOp = (c1: (BDV[Double], Double, Long), c2: (BDV[Double], Double, Long)) => {
             // c: (grad, loss, count)
             val vec =
               if (c1._1 == null) {
@@ -267,7 +269,9 @@ object GradientDescent extends Logging {
                 c1._1
               }
             (vec, c1._2 + c2._2, c1._3 + c2._3)
-          })
+          },
+          depth = 2,
+          finalAggregateOnExecutor = true)
       bcWeights.destroy()
 
       if (miniBatchSize > 0) {
@@ -291,13 +295,15 @@ object GradientDescent extends Logging {
           }
         }
       } else {
-        logWarning(s"Iteration ($i/$numIterations). The size of sampled batch is zero")
+        logWarning(log"Iteration " +
+          log"(${MDC(LogKeys.INDEX, i)}/${MDC(LogKeys.NUM_ITERATIONS, numIterations)}). " +
+          log"The size of sampled batch is zero")
       }
       i += 1
     }
 
-    logInfo("GradientDescent.runMiniBatchSGD finished. Last 10 stochastic losses %s".format(
-      stochasticLossHistory.takeRight(10).mkString(", ")))
+    logInfo(log"GradientDescent.runMiniBatchSGD finished. Last 10 stochastic losses " +
+      log"${MDC(LogKeys.LOSSES, stochasticLossHistory.takeRight(10).mkString(", "))}")
 
     (weights, stochasticLossHistory.toArray)
   }

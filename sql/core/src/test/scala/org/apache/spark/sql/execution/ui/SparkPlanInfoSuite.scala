@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.ui
 import org.apache.spark.sql.execution.SparkPlanInfo
 import org.apache.spark.sql.test.SharedSparkSession
 
-class SparkPlanInfoSuite extends SharedSparkSession{
+class SparkPlanInfoSuite extends SharedSparkSession {
 
   import testImplicits._
 

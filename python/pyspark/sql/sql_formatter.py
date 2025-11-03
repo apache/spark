@@ -20,11 +20,10 @@ import typing
 from typing import Any, Optional, List, Tuple, Sequence, Mapping
 import uuid
 
-from py4j.java_gateway import is_instance_of
-
 if typing.TYPE_CHECKING:
     from pyspark.sql import SparkSession, DataFrame
-from pyspark.sql.functions import lit
+from pyspark.sql.utils import get_lit_sql_str
+from pyspark.errors import PySparkValueError
 
 
 class SQLStringFormatter(string.Formatter):
@@ -46,14 +45,17 @@ class SQLStringFormatter(string.Formatter):
         """
         Converts the given value into a SQL string.
         """
+        from py4j.java_gateway import is_instance_of
+
         from pyspark import SparkContext
-        from pyspark.sql import Column, DataFrame
+        from pyspark.sql import Column, DataFrame, SparkSession
 
         if isinstance(val, Column):
-            assert SparkContext._gateway is not None
+            jsession = SparkSession.active()._jsparkSession
+            jexpr = jsession.expression(val._jc)
 
+            assert SparkContext._gateway is not None
             gw = SparkContext._gateway
-            jexpr = val._jc.expr()
             if is_instance_of(
                 gw, jexpr, "org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute"
             ) or is_instance_of(
@@ -61,9 +63,9 @@ class SQLStringFormatter(string.Formatter):
             ):
                 return jexpr.sql()
             else:
-                raise ValueError(
-                    "%s in %s should be a plain column reference such as `df.col` "
-                    "or `col('column')`" % (val, field_name)
+                raise PySparkValueError(
+                    errorClass="VALUE_NOT_PLAIN_COLUMN_REFERENCE",
+                    messageParameters={"val": str(val), "field_name": field_name},
                 )
         elif isinstance(val, DataFrame):
             for df, n in self._temp_views:
@@ -74,7 +76,7 @@ class SQLStringFormatter(string.Formatter):
             val.createOrReplaceTempView(df_name)
             return df_name
         elif isinstance(val, str):
-            return lit(val)._jc.expr().sql()  # for escaped characters.
+            return get_lit_sql_str(val)
         else:
             return val
 

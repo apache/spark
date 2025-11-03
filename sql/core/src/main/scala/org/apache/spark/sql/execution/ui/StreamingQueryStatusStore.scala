@@ -32,21 +32,21 @@ class StreamingQueryStatusStore(store: KVStore) {
 
   def allQueryUIData: Seq[StreamingQueryUIData] = {
     val view = store.view(classOf[StreamingQueryData]).index("startTimestamp").first(0L)
-    KVUtils.viewToSeq(view, Int.MaxValue)(_ => true).map(makeUIData)
+    KVUtils.viewToSeq(view).map(makeUIData)
   }
 
   // visible for test
   private[sql] def getQueryProgressData(runId: UUID): Seq[StreamingQueryProgressWrapper] = {
     val view = store.view(classOf[StreamingQueryProgressWrapper])
       .index("runId").first(runId.toString).last(runId.toString)
-    KVUtils.viewToSeq(view, Int.MaxValue)(_ => true)
+    KVUtils.viewToSeq(view)
   }
 
   private def makeUIData(summary: StreamingQueryData): StreamingQueryUIData = {
     val runId = summary.runId
     val view = store.view(classOf[StreamingQueryProgressWrapper])
       .index("runId").first(runId).last(runId)
-    val recentProgress = KVUtils.viewToSeq(view, Int.MaxValue)(_ => true)
+    val recentProgress = KVUtils.viewToSeq(view)
       .map(_.progress).sortBy(_.timestamp).toArray
     StreamingQueryUIData(summary, recentProgress)
   }

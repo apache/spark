@@ -17,9 +17,9 @@
 
 package org.apache.spark.streaming.kinesis
 
+import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 
-import collection.JavaConverters._
 import com.amazonaws.services.kinesis.clientlibrary.lib.worker.{InitialPositionInStream, KinesisClientLibConfiguration}
 import com.amazonaws.services.kinesis.metrics.interfaces.MetricsLevel
 import com.amazonaws.services.kinesis.model.Record

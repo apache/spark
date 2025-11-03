@@ -43,7 +43,7 @@ trait DockerIntegrationFunSuite extends SparkFunSuite {
     }
   }
 
-  /** Run the give body of code only if Kinesis tests are enabled */
+  /** Run the given body of code only if ENABLE_DOCKER_INTEGRATION_TESTS is 1. */
   def runIfTestsEnabled(message: String)(body: => Unit): Unit = {
     if (shouldRunTests) {
       body

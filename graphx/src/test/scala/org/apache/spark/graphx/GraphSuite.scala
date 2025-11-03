@@ -20,6 +20,7 @@ package org.apache.spark.graphx
 import org.apache.spark.{SparkContext, SparkFunSuite}
 import org.apache.spark.graphx.Graph._
 import org.apache.spark.graphx.PartitionStrategy._
+import org.apache.spark.internal.config
 import org.apache.spark.rdd._
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.Utils
@@ -94,18 +95,18 @@ class GraphSuite extends SparkFunSuite with LocalSparkContext {
 
       // The two edges start out in different partitions
       for (edges <- List(identicalEdges, canonicalEdges, sameSrcEdges)) {
-        assert(nonemptyParts(mkGraph(edges)).count === 2)
+        assert(nonemptyParts(mkGraph(edges)).count() === 2)
       }
       // partitionBy(RandomVertexCut) puts identical edges in the same partition
-      assert(nonemptyParts(mkGraph(identicalEdges).partitionBy(RandomVertexCut)).count === 1)
+      assert(nonemptyParts(mkGraph(identicalEdges).partitionBy(RandomVertexCut)).count() === 1)
       // partitionBy(EdgePartition1D) puts same-source edges in the same partition
-      assert(nonemptyParts(mkGraph(sameSrcEdges).partitionBy(EdgePartition1D)).count === 1)
+      assert(nonemptyParts(mkGraph(sameSrcEdges).partitionBy(EdgePartition1D)).count() === 1)
       // partitionBy(CanonicalRandomVertexCut) puts edges that are identical modulo direction into
       // the same partition
       assert(
-        nonemptyParts(mkGraph(canonicalEdges).partitionBy(CanonicalRandomVertexCut)).count === 1)
+        nonemptyParts(mkGraph(canonicalEdges).partitionBy(CanonicalRandomVertexCut)).count() === 1)
       // partitionBy(EdgePartition2D) puts identical edges in the same partition
-      assert(nonemptyParts(mkGraph(identicalEdges).partitionBy(EdgePartition2D)).count === 1)
+      assert(nonemptyParts(mkGraph(identicalEdges).partitionBy(EdgePartition2D)).count() === 1)
 
       // partitionBy(EdgePartition2D) ensures that vertices need only be replicated to 2 * sqrt(p)
       // partitions
@@ -122,7 +123,7 @@ class GraphSuite extends SparkFunSuite with LocalSparkContext {
       val partitionSets = partitionedGraph.edges.partitionsRDD.mapPartitions { iter =>
         val part = iter.next()._2
         Iterator((part.iterator.flatMap(e => Iterator(e.srcId, e.dstId))).toSet)
-      }.collect
+      }.collect()
       if (!verts.forall(id => partitionSets.count(_.contains(id)) <= bound)) {
         val numFailures = verts.count(id => partitionSets.count(_.contains(id)) > bound)
         val failure = verts.maxBy(id => partitionSets.count(_.contains(id)))
@@ -134,7 +135,7 @@ class GraphSuite extends SparkFunSuite with LocalSparkContext {
       val partitionSetsUnpartitioned = graph.edges.partitionsRDD.mapPartitions { iter =>
         val part = iter.next()._2
         Iterator((part.iterator.flatMap(e => Iterator(e.srcId, e.dstId))).toSet)
-      }.collect
+      }.collect()
       assert(verts.exists(id => partitionSetsUnpartitioned.count(_.contains(id)) > bound))
 
       // Forming triplets view
@@ -194,7 +195,7 @@ class GraphSuite extends SparkFunSuite with LocalSparkContext {
       val starWithEdgeAttrs = star.mapEdges(e => e.dstId)
 
       val edges = starWithEdgeAttrs.edges.collect()
-      assert(edges.size === n)
+      assert(edges.length === n)
       assert(edges.toSet === (1 to n).map(x => Edge(0, x, x)).toSet)
     }
   }
@@ -373,7 +374,7 @@ class GraphSuite extends SparkFunSuite with LocalSparkContext {
     val numEdgePartitions = 4
     assert(defaultParallelism != numEdgePartitions)
     val conf = new org.apache.spark.SparkConf()
-      .set("spark.default.parallelism", defaultParallelism.toString)
+      .set(config.DEFAULT_PARALLELISM.key, defaultParallelism.toString)
     val sc = new SparkContext("local", "test", conf)
     try {
       val edges = sc.parallelize((1 to n).map(x => (x: VertexId, 0: VertexId)),

@@ -24,12 +24,13 @@ import org.scalatest.Assertions._
 
 import org.apache.spark.ml.classification.LinearSVCSuite._
 import org.apache.spark.ml.feature.LabeledPoint
-import org.apache.spark.ml.linalg.{DenseVector, SparseVector, Vector, Vectors}
+import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest, MLTestingUtils}
 import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.sql.{Dataset, Row}
 import org.apache.spark.sql.functions._
+import org.apache.spark.util.ArrayImplicits._
 
 
 class LinearSVCSuite extends MLTest with DefaultReadWriteTest {
@@ -69,7 +70,7 @@ class LinearSVCSuite extends MLTest with DefaultReadWriteTest {
    */
   ignore("export test data into CSV format") {
     binaryDataset.rdd.map { case Row(label: Double, features: Vector) =>
-      label + "," + features.toArray.mkString(",")
+      s"$label,${features.toArray.mkString(",")}"
     }.repartition(1).saveAsTextFile("target/tmp/LinearSVC/binaryDataset")
   }
 
@@ -335,6 +336,58 @@ class LinearSVCSuite extends MLTest with DefaultReadWriteTest {
     testEstimatorAndModelReadWrite(svm, smallBinaryDataset, LinearSVCSuite.allParamSettings,
       LinearSVCSuite.allParamSettings, checkModelData)
   }
+
+  test("model size estimation: dense linear svc") {
+    val rng = new Random(1)
+
+    Seq(10, 100, 1000, 10000, 100000).foreach { n =>
+      val df = Seq(
+        (Vectors.dense(Array.fill(n)(rng.nextDouble())), 0.0),
+        (Vectors.dense(Array.fill(n)(rng.nextDouble())), 1.0)
+      ).toDF("features", "label")
+
+      val svc = new LinearSVC().setMaxIter(1)
+      val size1 = svc.estimateModelSize(df)
+      val model = svc.fit(df)
+      assert(model.coefficients.isInstanceOf[DenseVector])
+      val size2 = model.estimatedSize
+
+      // the model is dense, the estimation should be relatively accurate
+      //      (n, size1, size2)
+      //      (10,3972,3972) <- when the model is small, model.params matters
+      //      (100,4692,4692)
+      //      (1000,11892,11892)
+      //      (10000,83892,83892)
+      //      (100000,803892,803892)
+      val rel = (size1 - size2).toDouble / size2
+      assert(math.abs(rel) < 0.05, (n, size1, size2))
+    }
+  }
+
+  test("model size estimation: sparse linear svc") {
+    val rng = new Random(1)
+
+    Seq(100, 1000, 10000, 100000).foreach { n =>
+      val df = Seq(
+        (Vectors.sparse(n, Array.range(0, 10), Array.fill(10)(rng.nextDouble())), 0.0),
+        (Vectors.sparse(n, Array.range(0, 10), Array.fill(10)(rng.nextDouble())), 1.0)
+      ).toDF("features", "label")
+
+      val lor = new LinearSVC().setMaxIter(1).setRegParam(10.0)
+      val size1 = lor.estimateModelSize(df)
+      val model = lor.fit(df)
+      assert(model.coefficients.isInstanceOf[SparseVector])
+      val size2 = model.estimatedSize
+
+      // the model is sparse, the estimated size is likely larger
+      //      (n, size1, size2)
+      //      (100,4692,4028)
+      //      (1000,11892,4028)
+      //      (10000,83892,4028)
+      //      (100000,803892,4028)
+      assert(size1 > size2, (n, size1, size2))
+    }
+  }
 }
 
 object LinearSVCSuite {
@@ -365,7 +418,7 @@ object LinearSVCSuite {
       val yD = new BDV(xi).dot(weightsMat) + intercept + 0.01 * rnd.nextGaussian()
       if (yD > 0) 1.0 else 0.0
     }
-    y.zip(x).map(p => LabeledPoint(p._1, Vectors.dense(p._2)))
+    y.zip(x).map(p => LabeledPoint(p._1, Vectors.dense(p._2))).toImmutableArraySeq
   }
 
   def checkModels(model1: LinearSVCModel, model2: LinearSVCModel): Unit = {

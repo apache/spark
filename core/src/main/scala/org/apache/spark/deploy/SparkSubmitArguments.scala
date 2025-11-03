@@ -18,18 +18,18 @@
 package org.apache.spark.deploy
 
 import java.io.{ByteArrayOutputStream, File, PrintStream}
-import java.lang.reflect.InvocationTargetException
 import java.nio.charset.StandardCharsets
 import java.util.{List => JList}
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable.{ArrayBuffer, HashMap}
 import scala.io.Source
+import scala.jdk.CollectionConverters._
 import scala.util.Try
 
 import org.apache.spark.{SparkConf, SparkException, SparkUserAppException}
 import org.apache.spark.deploy.SparkSubmitAction._
 import org.apache.spark.internal.{config, Logging}
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config.DYN_ALLOCATION_ENABLED
 import org.apache.spark.launcher.SparkSubmitArgumentsParser
 import org.apache.spark.network.util.JavaUtils
@@ -41,12 +41,17 @@ import org.apache.spark.util.Utils
  */
 private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, String] = sys.env)
   extends SparkSubmitArgumentsParser with Logging {
-  var master: String = null
+  var maybeMaster: Option[String] = None
+  // Global defaults. These should be keep to minimum to avoid confusing behavior.
+  def master: String =
+    maybeMaster.getOrElse(System.getProperty("spark.test.master", "local[*]"))
+  var maybeRemote: Option[String] = None
   var deployMode: String = null
   var executorMemory: String = null
   var executorCores: String = null
   var totalExecutorCores: String = null
   var propertiesFile: String = null
+  private var loadSparkDefaults: Boolean = false
   var driverMemory: String = null
   var driverExtraClassPath: String = null
   var driverExtraLibraryPath: String = null
@@ -75,7 +80,6 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
   var principal: String = null
   var keytab: String = null
   private var dynamicAllocationEnabled: Boolean = false
-
   // Standalone cluster mode only
   var supervise: Boolean = false
   var driverCores: String = null
@@ -83,26 +87,7 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
   var submissionToRequestStatusFor: String = null
   var useRest: Boolean = false // used internally
 
-  /** Default properties present in the currently defined defaults file. */
-  lazy val defaultSparkProperties: HashMap[String, String] = {
-    val defaultProperties = new HashMap[String, String]()
-    if (verbose) {
-      logInfo(s"Using properties file: $propertiesFile")
-    }
-    Option(propertiesFile).foreach { filename =>
-      val properties = Utils.getPropertiesFromFile(filename)
-      properties.foreach { case (k, v) =>
-        defaultProperties(k) = v
-      }
-      // Property files may contain sensitive information, so redact before printing
-      if (verbose) {
-        Utils.redact(properties).foreach { case (k, v) =>
-          logInfo(s"Adding default property: $k=$v")
-        }
-      }
-    }
-    defaultProperties
-  }
+  override protected def logName: String = classOf[SparkSubmitArguments].getName
 
   // Set parameters from command line arguments
   parse(args.asJava)
@@ -119,17 +104,43 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
   validateArguments()
 
   /**
+   * Load properties from the file with the given path into `sparkProperties`.
+   * No-op if the file path is null
+   */
+  private def loadPropertiesFromFile(filePath: String): Unit = {
+    if (filePath != null) {
+      if (verbose) {
+        logInfo(log"Using properties file: ${MDC(PATH, filePath)}")
+      }
+      val properties = Utils.getPropertiesFromFile(filePath)
+      properties.foreach { case (k, v) =>
+        if (!sparkProperties.contains(k)) {
+          sparkProperties(k) = v
+        }
+      }
+      // Property files may contain sensitive information, so redact before printing
+      if (verbose) {
+        Utils.redact(properties).foreach { case (k, v) =>
+          logInfo(log"Adding default property: ${MDC(KEY, k)}=${MDC(VALUE, v)}")
+        }
+      }
+    }
+  }
+
+  /**
    * Merge values from the default properties file with those specified through --conf.
    * When this is called, `sparkProperties` is already filled with configs from the latter.
    */
   private def mergeDefaultSparkProperties(): Unit = {
-    // Use common defaults file, if not specified by user
-    propertiesFile = Option(propertiesFile).getOrElse(Utils.getDefaultPropertiesFile(env))
-    // Honor --conf before the defaults file
-    defaultSparkProperties.foreach { case (k, v) =>
-      if (!sparkProperties.contains(k)) {
-        sparkProperties(k) = v
-      }
+    // Honor --conf before the specified properties file and defaults file
+    loadPropertiesFromFile(propertiesFile)
+
+    // Also load properties from `spark-defaults.conf` if they do not exist in the properties file
+    // and --conf list when:
+    //   - no input properties file is specified
+    //   - input properties file is specified, but `--load-spark-defaults` flag is set
+    if (propertiesFile == null || loadSparkDefaults) {
+      loadPropertiesFromFile(Utils.getDefaultPropertiesFile(env))
     }
   }
 
@@ -140,7 +151,7 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
     sparkProperties.keys.foreach { k =>
       if (!k.startsWith("spark.")) {
         sparkProperties -= k
-        logWarning(s"Ignoring non-Spark config property: $k")
+        logWarning(log"Ignoring non-Spark config property: ${MDC(CONFIG, k)}")
       }
     }
   }
@@ -149,10 +160,13 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
    * Load arguments from environment variables, Spark properties etc.
    */
   private def loadEnvironmentArguments(): Unit = {
-    master = Option(master)
+    maybeMaster = maybeMaster
       .orElse(sparkProperties.get("spark.master"))
       .orElse(env.get("MASTER"))
-      .orNull
+    maybeRemote = maybeRemote
+      .orElse(sparkProperties.get("spark.remote"))
+      .orElse(env.get("SPARK_REMOTE"))
+
     driverExtraClassPath = Option(driverExtraClassPath)
       .orElse(sparkProperties.get(config.DRIVER_CLASS_PATH.key))
       .orNull
@@ -210,9 +224,6 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
     dynamicAllocationEnabled =
       sparkProperties.get(DYN_ALLOCATION_ENABLED.key).exists("true".equalsIgnoreCase)
 
-    // Global defaults. These should be keep to minimum to avoid confusing behavior.
-    master = Option(master).getOrElse("local[*]")
-
     // In YARN mode, app name can be set via SPARK_YARN_APP_NAME (see SPARK-5222)
     if (master.startsWith("yarn")) {
       name = Option(name).orElse(env.get("SPARK_YARN_APP_NAME")).orNull
@@ -241,6 +252,9 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
   private def validateSubmitArguments(): Unit = {
     if (args.length == 0) {
       printUsageAndExit(-1)
+    }
+    if (maybeRemote.isDefined && (maybeMaster.isDefined || deployMode != null)) {
+      error("Remote cannot be specified with master and/or deploy mode.")
     }
     if (primaryResource == null) {
       error("Must specify a primary resource (JAR or Python or R file)")
@@ -299,6 +313,7 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
   override def toString: String = {
     s"""Parsed arguments:
     |  master                  $master
+    |  remote                  ${maybeRemote.orNull}
     |  deployMode              $deployMode
     |  executorMemory          $executorMemory
     |  executorCores           $executorCores
@@ -338,7 +353,10 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
         name = value
 
       case MASTER =>
-        master = value
+        maybeMaster = Option(value)
+
+      case REMOTE =>
+        maybeRemote = Option(value)
 
       case CLASS =>
         mainClass = value
@@ -378,6 +396,9 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
 
       case PROPERTIES_FILE =>
         propertiesFile = value
+
+      case LOAD_SPARK_DEFAULTS =>
+        loadSparkDefaults = true
 
       case KILL_SUBMISSION =>
         submissionToKill = value
@@ -479,7 +500,7 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
 
   private def printUsageAndExit(exitCode: Int, unknownParam: Any = null): Unit = {
     if (unknownParam != null) {
-      logInfo("Unknown/unsupported param " + unknownParam)
+      logInfo(log"Unknown/unsupported param ${MDC(UNKNOWN_PARAM, unknownParam)}")
     }
     val command = sys.env.getOrElse("_SPARK_CMD_USAGE",
       """Usage: spark-submit [options] <app jar | python file | R file> [app arguments]
@@ -492,7 +513,7 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
     logInfo(
       s"""
         |Options:
-        |  --master MASTER_URL         spark://host:port, mesos://host:port, yarn,
+        |  --master MASTER_URL         spark://host:port, yarn,
         |                              k8s://https://host:port, or local (Default: local[*]).
         |  --deploy-mode DEPLOY_MODE   Whether to launch the driver program locally ("client") or
         |                              on one of the worker machines inside the cluster ("cluster")
@@ -522,6 +543,10 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
         |  --conf, -c PROP=VALUE       Arbitrary Spark configuration property.
         |  --properties-file FILE      Path to a file from which to load extra properties. If not
         |                              specified, this will look for conf/spark-defaults.conf.
+        |  --load-spark-defaults       Whether to load properties from conf/spark-defaults.conf,
+        |                              even if --properties-file is specified. Configurations
+        |                              specified in --properties-file will take precedence over
+        |                              those in conf/spark-defaults.conf.
         |
         |  --driver-memory MEM         Memory for driver (e.g. 1000M, 2G) (Default: ${mem_mb}M).
         |  --driver-java-options       Extra Java options to pass to the driver.
@@ -539,18 +564,23 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
         |  --verbose, -v               Print additional debug output.
         |  --version,                  Print the version of current Spark.
         |
+        | Spark Connect only:
+        |   --remote CONNECT_URL       URL to connect to the server for Spark Connect, e.g.,
+        |                              sc://host:port. --master and --deploy-mode cannot be set
+        |                              together with this option.
+        |
         | Cluster deploy mode only:
         |  --driver-cores NUM          Number of cores used by the driver, only in cluster mode
         |                              (Default: 1).
         |
-        | Spark standalone or Mesos with cluster deploy mode only:
+        | Spark standalone with cluster deploy mode only:
         |  --supervise                 If given, restarts the driver on failure.
         |
-        | Spark standalone, Mesos or K8s with cluster deploy mode only:
+        | Spark standalone or K8s with cluster deploy mode only:
         |  --kill SUBMISSION_ID        If given, kills the driver specified.
         |  --status SUBMISSION_ID      If given, requests the status of the driver specified.
         |
-        | Spark standalone, Mesos and Kubernetes only:
+        | Spark standalone only:
         |  --total-executor-cores NUM  Total cores for all executors.
         |
         | Spark standalone, YARN and Kubernetes only:
@@ -576,56 +606,32 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
       logInfo(getSqlShellOptions())
     }
 
-    throw new SparkUserAppException(exitCode)
+    throw SparkUserAppException(exitCode)
   }
 
   /**
    * Run the Spark SQL CLI main class with the "--help" option and catch its output. Then filter
    * the results to remove unwanted lines.
-   *
-   * Since the CLI will call `System.exit()`, we install a security manager to prevent that call
-   * from working, and restore the original one afterwards.
    */
   private def getSqlShellOptions(): String = {
     val currentOut = System.out
     val currentErr = System.err
-    val currentSm = System.getSecurityManager()
     try {
       val out = new ByteArrayOutputStream()
       val stream = new PrintStream(out)
       System.setOut(stream)
       System.setErr(stream)
 
-      val sm = new SecurityManager() {
-        override def checkExit(status: Int): Unit = {
-          throw new SecurityException()
-        }
-
-        override def checkPermission(perm: java.security.Permission): Unit = {}
-      }
-      System.setSecurityManager(sm)
-
-      try {
-        Utils.classForName(mainClass).getMethod("main", classOf[Array[String]])
-          .invoke(null, Array(HELP))
-      } catch {
-        case e: InvocationTargetException =>
-          // Ignore SecurityException, since we throw it above.
-          if (!e.getCause().isInstanceOf[SecurityException]) {
-            throw e
-          }
-      }
-
+      Utils.classForName(mainClass).getMethod("printUsage").invoke(null)
       stream.flush()
 
       // Get the output and discard any unnecessary lines from it.
-      Source.fromString(new String(out.toByteArray(), StandardCharsets.UTF_8)).getLines
+      Source.fromString(new String(out.toByteArray(), StandardCharsets.UTF_8)).getLines()
         .filter { line =>
           !line.startsWith("log4j") && !line.startsWith("usage")
         }
         .mkString("\n")
     } finally {
-      System.setSecurityManager(currentSm)
       System.setOut(currentOut)
       System.setErr(currentErr)
     }

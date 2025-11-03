@@ -24,7 +24,7 @@ import scala.reflect.runtime.universe.TypeTag
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.serializer.{JavaSerializer, KryoSerializer}
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.catalyst.encoders.{ExpressionEncoder, RowEncoder}
+import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.UnsafeArrayData
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.Platform
@@ -73,8 +73,8 @@ class UnsafeArraySuite extends SparkFunSuite {
   }
 
   private def toUnsafeArray[T: TypeTag](array: Array[T]): ArrayData = {
-    val converted = ExpressionEncoder[Array[T]].createSerializer().apply(array).getArray(0)
-    assert(converted.numElements == array.length)
+    val converted = ExpressionEncoder[Array[T]]().createSerializer().apply(array).getArray(0)
+    assert(converted.numElements() == array.length)
     converted
   }
 
@@ -128,25 +128,25 @@ class UnsafeArraySuite extends SparkFunSuite {
       val decimal = decimalArray(0)
       val schema = new StructType().add(
         "array", ArrayType(DecimalType(decimal.precision, decimal.scale)))
-      val encoder = RowEncoder(schema).resolveAndBind()
+      val encoder = ExpressionEncoder(schema).resolveAndBind()
       val externalRow = Row(decimalArray)
       val ir = encoder.createSerializer().apply(externalRow)
 
       val unsafeDecimal = ir.getArray(0)
       assert(unsafeDecimal.isInstanceOf[UnsafeArrayData])
-      assert(unsafeDecimal.numElements == decimalArray.length)
+      assert(unsafeDecimal.numElements() == decimalArray.length)
       decimalArray.zipWithIndex.map { case (e, i) =>
         assert(unsafeDecimal.getDecimal(i, e.precision, e.scale).toBigDecimal == e)
       }
     }
 
     val schema = new StructType().add("array", ArrayType(CalendarIntervalType))
-    val encoder = RowEncoder(schema).resolveAndBind()
+    val encoder = ExpressionEncoder(schema).resolveAndBind()
     val externalRow = Row(calendarintervalArray)
     val ir = encoder.createSerializer().apply(externalRow)
     val unsafeCalendar = ir.getArray(0)
     assert(unsafeCalendar.isInstanceOf[UnsafeArrayData])
-    assert(unsafeCalendar.numElements == calendarintervalArray.length)
+    assert(unsafeCalendar.numElements() == calendarintervalArray.length)
     calendarintervalArray.zipWithIndex.map { case (e, i) =>
       assert(unsafeCalendar.getInterval(i) == e)
     }
@@ -155,7 +155,7 @@ class UnsafeArraySuite extends SparkFunSuite {
     intMultiDimArray.zipWithIndex.map { case (a, j) =>
       val u = unsafeMultiDimInt.getArray(j)
       assert(u.isInstanceOf[UnsafeArrayData])
-      assert(u.numElements == a.length)
+      assert(u.numElements() == a.length)
       a.zipWithIndex.map { case (e, i) =>
         assert(u.getInt(i) == e)
       }
@@ -165,7 +165,7 @@ class UnsafeArraySuite extends SparkFunSuite {
     doubleMultiDimArray.zipWithIndex.map { case (a, j) =>
       val u = unsafeMultiDimDouble.getArray(j)
       assert(u.isInstanceOf[UnsafeArrayData])
-      assert(u.numElements == a.length)
+      assert(u.numElements() == a.length)
       a.zipWithIndex.map { case (e, i) =>
         assert(u.getDouble(i) == e)
       }

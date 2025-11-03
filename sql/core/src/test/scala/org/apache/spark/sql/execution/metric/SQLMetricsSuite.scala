@@ -22,22 +22,27 @@ import java.io.File
 import scala.reflect.{classTag, ClassTag}
 import scala.util.Random
 
+import com.fasterxml.jackson.databind.ObjectMapper
 import org.apache.hadoop.mapreduce.{JobContext, TaskAttemptContext}
 
 import org.apache.spark.internal.io.FileCommitProtocol
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{Final, Partial}
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
+import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.adaptive.DisableAdaptiveExecutionSuite
 import org.apache.spark.sql.execution.aggregate.HashAggregateExec
 import org.apache.spark.sql.execution.command.DataWritingCommandExec
-import org.apache.spark.sql.execution.datasources.{BasicWriteJobStatsTracker, SQLHadoopMapReduceCommitProtocol}
+import org.apache.spark.sql.execution.datasources.{BasicWriteJobStatsTracker, InsertIntoHadoopFsRelationCommand, SQLHadoopMapReduceCommitProtocol, V1WriteCommand}
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ShuffleExchangeExec}
-import org.apache.spark.sql.execution.joins.ShuffledHashJoinExec
+import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, ShuffledHashJoinExec}
+import org.apache.spark.sql.execution.window.WindowGroupLimitExec
+import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.util.QueryExecutionListener
 import org.apache.spark.util.{AccumulatorContext, JsonProtocol}
 
 // Disable AQE because metric info is different with AQE on/off
@@ -73,6 +78,54 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
     val metrics2 = df2.queryExecution.executedPlan.collectLeaves().head.metrics
     assert(metrics2.contains("numOutputRows"))
     assert(metrics2("numOutputRows").value === 2)
+  }
+
+  test("SPARK-43214: LocalTableScanExec metrics") {
+    val df1 = spark.createDataset(Seq(1, 2, 3))
+    val logical = df1.queryExecution.logical
+    require(logical.isInstanceOf[LocalRelation])
+    df1.collect()
+
+    val expected = Map("number of output rows" -> 3L)
+    testSparkPlanMetrics(df1.toDF(), 0, Map(
+      0L -> (("LocalTableScan", expected))))
+  }
+
+  test("SPARK-43214: CommandResultExec metrics") {
+    withTable("t", "t2") {
+      sql("CREATE TABLE t(id STRING) USING PARQUET")
+      sql("CREATE TABLE t2(id STRING) USING PARQUET")
+      val df = sql("SHOW TABLES")
+      val command = df.queryExecution.executedPlan.collect {
+        case cmd: CommandResultExec => cmd
+      }
+      sparkContext.listenerBus.waitUntilEmpty()
+      assert(command.size == 1)
+      val expected = Map("number of output rows" -> 2L)
+      testSparkPlanMetrics(df, 0, Map(
+        0L -> (("CommandResult", expected))))
+    }
+  }
+
+  test("Recursive CTEs metrics") {
+    withSQLConf(SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> "") {
+      val df = sql(
+        """WITH RECURSIVE t(n) AS(
+          | VALUES 1, 2
+          | UNION ALL
+          | SELECT n+1 FROM t WHERE n < 20
+          | )
+          | SELECT * FROM t""".stripMargin)
+      val unionLoopExec = df.queryExecution.executedPlan.collect {
+        case ule: UnionLoopExec => ule
+      }
+      sparkContext.listenerBus.waitUntilEmpty()
+      assert(unionLoopExec.size == 1)
+      val expected = Map("number of output rows" -> 39L, "number of recursive iterations" -> 20L,
+        "number of anchor output rows" -> 2L)
+      testSparkPlanMetrics(df, 22, Map(
+        2L -> (("UnionLoop", expected))))
+    }
   }
 
   test("Filter metrics") {
@@ -204,7 +257,7 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
     // Assume the execution plan is
     // ... -> ObjectHashAggregate(nodeId = 2) -> Exchange(nodeId = 1)
     // -> ObjectHashAggregate(nodeId = 0)
-    val df = testData2.groupBy().agg(collect_set($"a")) // 2 partitions
+    val df = testData2.agg(collect_set($"a")) // 2 partitions
     testSparkPlanMetrics(df, 1, Map(
       2L -> (("ObjectHashAggregate", Map("number of output rows" -> 2L))),
       1L -> (("Exchange", Map(
@@ -372,8 +425,7 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
           val df = df1.join(df2, "key")
           testSparkPlanMetrics(df, 1, Map(
             nodeId1 -> (("ShuffledHashJoin", Map(
-              "number of output rows" -> 2L,
-              "avg hash probes per key" -> aggregateMetricsPattern))),
+              "number of output rows" -> 2L))),
             nodeId2 -> (("Exchange", Map(
               "shuffle records written" -> 2L,
               "records read" -> 2L))),
@@ -402,8 +454,7 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
           rightDf.hint("shuffle_hash"), $"key" === $"key2", joinType)
         testSparkPlanMetrics(df, 1, Map(
           nodeId -> (("ShuffledHashJoin", Map(
-            "number of output rows" -> rows,
-            "avg hash probes per key" -> aggregateMetricsPattern)))),
+            "number of output rows" -> rows)))),
           enableWholeStage
         )
       }
@@ -581,8 +632,10 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
     assert(metricInfo.metadata === Some(AccumulatorContext.SQL_ACCUM_IDENTIFIER))
     // After serializing to JSON, the original value type is lost, but we can still
     // identify that it's a SQL metric from the metadata
-    val metricInfoJson = JsonProtocol.accumulableInfoToJson(metricInfo)
-    val metricInfoDeser = JsonProtocol.accumulableInfoFromJson(metricInfoJson)
+    val mapper = new ObjectMapper()
+    val metricInfoJson = JsonProtocol.toJsonString(
+      JsonProtocol.accumulableInfoToJson(metricInfo, _))
+    val metricInfoDeser = JsonProtocol.accumulableInfoFromJson(mapper.readTree(metricInfoJson))
     metricInfoDeser.update match {
       case Some(v: String) => assert(v.toLong === 10L)
       case Some(v) => fail(s"deserialized metric value was not a string: ${v.getClass.getName}")
@@ -641,8 +694,9 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
       val union = view.union(view)
       testSparkPlanMetrics(union, 1, Map(
         0L -> ("Union" -> Map()),
-        1L -> ("LocalTableScan" -> Map("number of output rows" -> 2L)),
-        2L -> ("LocalTableScan" -> Map("number of output rows" -> 2L))))
+        1L -> ("Project" -> Map()),
+        2L -> ("LocalTableScan" -> Map("number of output rows" -> 2L)),
+        3L -> ("LocalTableScan" -> Map("number of output rows" -> 2L))))
     }
   }
 
@@ -740,7 +794,7 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
       val df = spark.sql(
         "SELECT * FROM testDataForScan WHERE p = 1")
       testSparkPlanMetrics(df, 1, Map(
-        0L -> (("Scan parquet default.testdataforscan", Map(
+        0L -> ((s"Scan parquet $SESSION_CATALOG_NAME.default.testdataforscan", Map(
           "number of output rows" -> 3L,
           "number of files read" -> 2L))))
       )
@@ -825,19 +879,123 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
 
   test("SPARK-34567: Add metrics for CTAS operator") {
     withTable("t") {
-      val df = sql("CREATE TABLE t USING PARQUET AS SELECT 1 as a")
-      assert(df.queryExecution.executedPlan.isInstanceOf[CommandResultExec])
-      val commandResultExec = df.queryExecution.executedPlan.asInstanceOf[CommandResultExec]
-      val dataWritingCommandExec =
-        commandResultExec.commandPhysicalPlan.asInstanceOf[DataWritingCommandExec]
-      val createTableAsSelect = dataWritingCommandExec.cmd
-      assert(createTableAsSelect.metrics.contains("numFiles"))
-      assert(createTableAsSelect.metrics("numFiles").value == 1)
-      assert(createTableAsSelect.metrics.contains("numOutputBytes"))
-      assert(createTableAsSelect.metrics("numOutputBytes").value > 0)
-      assert(createTableAsSelect.metrics.contains("numOutputRows"))
-      assert(createTableAsSelect.metrics("numOutputRows").value == 1)
+      var v1WriteCommand: V1WriteCommand = null
+      val listener = new QueryExecutionListener {
+        override def onFailure(f: String, qe: QueryExecution, e: Exception): Unit = {}
+        override def onSuccess(funcName: String, qe: QueryExecution, duration: Long): Unit = {
+          qe.executedPlan match {
+            case dataWritingCommandExec: DataWritingCommandExec =>
+              val createTableAsSelect = dataWritingCommandExec.cmd
+              v1WriteCommand = createTableAsSelect.asInstanceOf[InsertIntoHadoopFsRelationCommand]
+            case _ =>
+          }
+        }
+      }
+      spark.listenerManager.register(listener)
+      try {
+        val df = sql("CREATE TABLE t USING PARQUET AS SELECT 1 as a")
+        sparkContext.listenerBus.waitUntilEmpty()
+        assert(v1WriteCommand != null)
+        assert(v1WriteCommand.metrics.contains("numFiles"))
+        assert(v1WriteCommand.metrics("numFiles").value == 1)
+        assert(v1WriteCommand.metrics.contains("numOutputBytes"))
+        assert(v1WriteCommand.metrics("numOutputBytes").value > 0)
+        assert(v1WriteCommand.metrics.contains("numOutputRows"))
+        assert(v1WriteCommand.metrics("numOutputRows").value == 1)
+      } finally {
+        spark.listenerManager.unregister(listener)
+      }
     }
+  }
+
+  test("SPARK-41003: BHJ LeftAnti does not update numOutputRows when codegen is disabled") {
+    Seq(true, false).foreach { enableWholeStage =>
+      withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> enableWholeStage.toString) {
+        withSQLConf(SQLConf.OPTIMIZE_NULL_AWARE_ANTI_JOIN.key -> "true") {
+          withTable("t1", "t2") {
+            spark.range(4).write.saveAsTable("t1")
+            spark.range(2).write.saveAsTable("t2")
+            val df = sql("SELECT * FROM t1 WHERE id NOT IN (SELECT id FROM t2)")
+            df.collect()
+            val plan = df.queryExecution.executedPlan
+
+            val joins = plan.collect {
+              case s: BroadcastHashJoinExec => s
+            }
+
+            assert(joins.size === 1)
+            testMetricsInSparkPlanOperator(joins.head, Map("numOutputRows" -> 2))
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-40711: Add spill size metrics for window") {
+    val data = Seq((1, "a"), (2, "b")).toDF("c1", "c2")
+    val w = Window.partitionBy("c1").orderBy("c2")
+    val df = data.select(rank().over(w))
+    // Project
+    //   Window
+    //     ...
+    testSparkPlanMetricsWithPredicates(df, 1, Map(
+      1L -> (("Window", Map(
+        "spill size" -> {
+          _.toString.matches(sizeMetricPattern)
+        }))))
+    )
+  }
+
+  test("SPARK-37099: Add numOutputRows metric for WindowGroupLimitExec") {
+    val data = Seq(("a", 1), ("a", 2), ("b", 1)).toDF("c1", "c2")
+    val w = Window.partitionBy("c1").orderBy("c2")
+    val df = data.select(row_number().over(w).as("r")).where("r = 1")
+    df.collect()
+    val windowGroupLimit = df.queryExecution.executedPlan.find(_.isInstanceOf[WindowGroupLimitExec])
+    assert(windowGroupLimit.isDefined)
+    assert(windowGroupLimit.get.metrics("numOutputRows").value == 2L)
+  }
+
+  test("Creating metrics with initial values") {
+    assert(SQLMetrics.createSizeMetric(sparkContext, name = "m").value === 0)
+    assert(SQLMetrics.createSizeMetric(sparkContext, name = "m", initValue = -1).value === 0)
+
+    assert(SQLMetrics.createSizeMetric(sparkContext, name = "m").isZero)
+    assert(SQLMetrics.createSizeMetric(sparkContext, name = "m", initValue = -1).isZero)
+
+    assert(SQLMetrics.createTimingMetric(sparkContext, name = "m").value === 0)
+    assert(SQLMetrics.createTimingMetric(sparkContext, name = "m", initValue = -1).value === 0)
+
+    assert(SQLMetrics.createTimingMetric(sparkContext, name = "m").isZero)
+    assert(SQLMetrics.createTimingMetric(sparkContext, name = "m", initValue = -1).isZero)
+
+    assert(SQLMetrics.createNanoTimingMetric(sparkContext, name = "m").value === 0)
+    assert(SQLMetrics.createNanoTimingMetric(sparkContext, name = "m", initValue = -1).value === 0)
+
+    assert(SQLMetrics.createNanoTimingMetric(sparkContext, name = "m").isZero)
+    assert(SQLMetrics.createNanoTimingMetric(sparkContext, name = "m", initValue = -1).isZero)
+
+    // initValue must be <= 0
+    intercept[AssertionError] {
+      SQLMetrics.createNanoTimingMetric(sparkContext, name = "m", initValue = 5)
+    }
+  }
+
+  test("SQLMetric#toInfoUpdate") {
+    assert(SQLMetrics.createSizeMetric(sparkContext, name = "m").toInfoUpdate.update === Some(-1))
+    assert(SQLMetrics.createMetric(sparkContext, name = "m").toInfoUpdate.update === Some(0))
+  }
+
+  test("withTimingNs should time and return same result") {
+    val metric = SQLMetrics.createTimingMetric(sparkContext, name = "m")
+
+    // Use a simple block that returns a value
+    val result = SQLMetrics.withTimingNs(metric) {
+      42
+    }
+
+    assert(result === 42)
+    assert(!metric.isZero, "Metric was not increased")
   }
 }
 

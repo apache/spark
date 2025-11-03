@@ -18,15 +18,18 @@
 package org.apache.spark.util.kvstore;
 
 import java.io.IOException;
+import java.lang.ref.Cleaner;
 import java.util.*;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.Preconditions;
-import com.google.common.base.Throwables;
 import org.rocksdb.RocksIterator;
+
+import org.apache.spark.network.util.JavaUtils;
 
 class RocksDBIterator<T> implements KVStoreIterator<T> {
 
+  private static final Cleaner CLEANER = Cleaner.create();
   private final RocksDB db;
   private final boolean ascending;
   private final RocksIterator it;
@@ -36,6 +39,8 @@ class RocksDBIterator<T> implements KVStoreIterator<T> {
   private final byte[] indexKeyPrefix;
   private final byte[] end;
   private final long max;
+  private final Cleaner.Cleanable cleanable;
+  private final RocksDBIterator.ResourceCleaner resourceCleaner;
 
   private boolean checkedNext;
   private byte[] next;
@@ -50,8 +55,10 @@ class RocksDBIterator<T> implements KVStoreIterator<T> {
     this.ti = db.getTypeInfo(type);
     this.index = ti.index(params.index);
     this.max = params.max;
+    this.resourceCleaner = new RocksDBIterator.ResourceCleaner(it, db);
+    this.cleanable = CLEANER.register(this, resourceCleaner);
 
-    Preconditions.checkArgument(!index.isChild() || params.parent != null,
+    JavaUtils.checkArgument(!index.isChild() || params.parent != null,
       "Cannot iterate over child index %s without parent value.", params.index);
     byte[] parent = index.isChild() ? index.parent().childPrefix(params.parent) : null;
 
@@ -106,7 +113,7 @@ class RocksDBIterator<T> implements KVStoreIterator<T> {
       try {
         close();
       } catch (IOException ioe) {
-        throw Throwables.propagate(ioe);
+        throw new RuntimeException(ioe);
       }
     }
     return next != null;
@@ -130,13 +137,9 @@ class RocksDBIterator<T> implements KVStoreIterator<T> {
       next = null;
       return ret;
     } catch (Exception e) {
-      throw Throwables.propagate(e);
+      if (e instanceof RuntimeException re) throw re;
+      throw new RuntimeException(e);
     }
-  }
-
-  @Override
-  public void remove() {
-    throw new UnsupportedOperationException();
   }
 
   @Override
@@ -150,6 +153,8 @@ class RocksDBIterator<T> implements KVStoreIterator<T> {
 
   @Override
   public boolean skip(long n) {
+    if(closed) return false;
+
     long skipped = 0;
     while (skipped < n) {
       if (next != null) {
@@ -179,21 +184,33 @@ class RocksDBIterator<T> implements KVStoreIterator<T> {
 
   @Override
   public synchronized void close() throws IOException {
-    db.notifyIteratorClosed(this);
+    db.notifyIteratorClosed(it);
     if (!closed) {
-      it.close();
-      closed = true;
+      try {
+        it.close();
+      } finally {
+        closed = true;
+        next = null;
+        cancelResourceClean();
+      }
     }
   }
 
   /**
-   * Because it's tricky to expose closeable iterators through many internal APIs, especially
-   * when Scala wrappers are used, this makes sure that, hopefully, the JNI resources held by
-   * the iterator will eventually be released.
+   * Prevent ResourceCleaner from actually releasing resources after close it.
    */
-  @Override
-  protected void finalize() throws Throwable {
-    db.closeIterator(this);
+  private void cancelResourceClean() {
+    this.resourceCleaner.setStartedToFalse();
+    this.cleanable.clean();
+  }
+
+  @VisibleForTesting
+  ResourceCleaner getResourceCleaner() {
+    return resourceCleaner;
+  }
+
+  RocksIterator internalIterator() {
+    return it;
   }
 
   private byte[] loadNext() {
@@ -257,8 +274,8 @@ class RocksDBIterator<T> implements KVStoreIterator<T> {
 
   private boolean isEndMarker(byte[] key) {
     return (key.length > 2 &&
-        key[key.length - 2] == LevelDBTypeInfo.KEY_SEPARATOR &&
-        key[key.length - 1] == LevelDBTypeInfo.END_MARKER[0]);
+        key[key.length - 2] == RocksDBTypeInfo.KEY_SEPARATOR &&
+        key[key.length - 1] == RocksDBTypeInfo.END_MARKER[0]);
   }
 
   static int compare(byte[] a, byte[] b) {
@@ -274,4 +291,31 @@ class RocksDBIterator<T> implements KVStoreIterator<T> {
     return a.length - b.length;
   }
 
+  static class ResourceCleaner implements Runnable {
+
+    private final RocksIterator rocksIterator;
+    private final RocksDB rocksDB;
+    private final AtomicBoolean started = new AtomicBoolean(true);
+
+    ResourceCleaner(RocksIterator rocksIterator, RocksDB rocksDB) {
+      this.rocksIterator = rocksIterator;
+      this.rocksDB = rocksDB;
+    }
+
+    @Override
+    public void run() {
+      if (started.compareAndSet(true, false)) {
+        rocksDB.closeIterator(rocksIterator);
+      }
+    }
+
+    void setStartedToFalse() {
+      started.set(false);
+    }
+
+    @VisibleForTesting
+    boolean isCompleted() {
+      return !started.get();
+    }
+  }
 }

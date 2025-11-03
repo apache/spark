@@ -17,22 +17,21 @@
 
 package org.apache.spark.sql.execution
 
-import scala.collection.JavaConverters._
-
-import org.apache.spark.{broadcast, TaskContext}
+import org.apache.spark.broadcast
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Attribute, SortOrder, SpecializedGetters, UnsafeProjection}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, SortOrder, SpecializedGetters}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.errors.ExecutionErrors
+import org.apache.spark.sql.execution.command.DataWritingCommandExec
+import org.apache.spark.sql.execution.datasources.V1WriteCommand
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
-import org.apache.spark.sql.execution.vectorized.{OffHeapColumnVector, OnHeapColumnVector, WritableColumnVector}
+import org.apache.spark.sql.execution.vectorized.WritableColumnVector
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.vectorized.{ColumnarBatch, ColumnVector}
-import org.apache.spark.util.Utils
 
 /**
  * Holds a user defined rule that can be used to inject columnar implementations of various
@@ -66,9 +65,6 @@ trait ColumnarToRowTransition extends UnaryExecNode
  * [[MapPartitionsInRWithArrowExec]]. Eventually this should replace those implementations.
  */
 case class ColumnarToRowExec(child: SparkPlan) extends ColumnarToRowTransition with CodegenSupport {
-  // supportsColumnar requires to be only called on driver side, see also SPARK-37779.
-  assert(Utils.isInRunningSparkTask || child.supportsColumnar)
-
   override def output: Seq[Attribute] = child.output
 
   override def outputPartitioning: Partitioning = child.outputPartitioning
@@ -85,17 +81,16 @@ case class ColumnarToRowExec(child: SparkPlan) extends ColumnarToRowTransition w
   )
 
   override def doExecute(): RDD[InternalRow] = {
-    val numOutputRows = longMetric("numOutputRows")
-    val numInputBatches = longMetric("numInputBatches")
-    // This avoids calling `output` in the RDD closure, so that we don't need to include the entire
-    // plan (this) in the closure.
-    val localOutput = this.output
-    child.executeColumnar().mapPartitionsInternal { batches =>
-      val toUnsafe = UnsafeProjection.create(localOutput, localOutput)
-      batches.flatMap { batch =>
-        numInputBatches += 1
-        numOutputRows += batch.numRows()
-        batch.rowIterator().asScala.map(toUnsafe)
+    val evaluatorFactory = new ColumnarToRowEvaluatorFactory(
+      child.output,
+      longMetric("numOutputRows"),
+      longMetric("numInputBatches"))
+    if (conf.usePartitionEvaluator) {
+      child.executeColumnar().mapPartitionsWithEvaluator(evaluatorFactory)
+    } else {
+      child.executeColumnar().mapPartitionsWithIndexInternal { (index, batches) =>
+        val evaluator = evaluatorFactory.createEvaluator()
+        evaluator.eval(index, batches)
       }
     }
   }
@@ -195,8 +190,13 @@ case class ColumnarToRowExec(child: SparkPlan) extends ColumnarToRowTransition w
        |    $shouldStop
        |  }
        |  $idx = $numRows;
+       |  $batch.closeIfFreeable();
        |  $batch = null;
        |  $nextBatchFuncName();
+       |}
+       |// clean up resources
+       |if ($batch != null) {
+       |  $batch.close();
        |}
      """.stripMargin
   }
@@ -267,19 +267,22 @@ private object RowToColumnConverter {
       case LongType | TimestampType | TimestampNTZType | _: DayTimeIntervalType => LongConverter
       case DoubleType => DoubleConverter
       case StringType => StringConverter
+      case _: GeographyType => GeographyConverter
+      case _: GeometryType => GeometryConverter
       case CalendarIntervalType => CalendarConverter
+      case VariantType => VariantConverter
       case at: ArrayType => ArrayConverter(getConverterForType(at.elementType, at.containsNull))
       case st: StructType => new StructConverter(st.fields.map(
         (f) => getConverterForType(f.dataType, f.nullable)))
       case dt: DecimalType => new DecimalConverter(dt)
       case mt: MapType => MapConverter(getConverterForType(mt.keyType, nullable = false),
         getConverterForType(mt.valueType, mt.valueContainsNull))
-      case unknown => throw QueryExecutionErrors.unsupportedDataTypeError(unknown.toString)
+      case unknown => throw ExecutionErrors.unsupportedDataTypeError(unknown)
     }
 
     if (nullable) {
       dataType match {
-        case CalendarIntervalType => new StructNullableTypeConverter(core)
+        case CalendarIntervalType | VariantType => new StructNullableTypeConverter(core)
         case st: StructType => new StructNullableTypeConverter(core)
         case _ => new BasicNullableTypeConverter(core)
       }
@@ -337,6 +340,20 @@ private object RowToColumnConverter {
     }
   }
 
+  private object GeographyConverter extends TypeConverter {
+    override def append(row: SpecializedGetters, column: Int, cv: WritableColumnVector): Unit = {
+      val data = row.getGeography(column).getBytes
+      cv.appendByteArray(data, 0, data.length)
+    }
+  }
+
+  private object GeometryConverter extends TypeConverter {
+    override def append(row: SpecializedGetters, column: Int, cv: WritableColumnVector): Unit = {
+      val data = row.getGeometry(column).getBytes
+      cv.appendByteArray(data, 0, data.length)
+    }
+  }
+
   private object CalendarConverter extends TypeConverter {
     override def append(row: SpecializedGetters, column: Int, cv: WritableColumnVector): Unit = {
       val c = row.getInterval(column)
@@ -344,6 +361,15 @@ private object RowToColumnConverter {
       cv.getChild(0).appendInt(c.months)
       cv.getChild(1).appendInt(c.days)
       cv.getChild(2).appendLong(c.microseconds)
+    }
+  }
+
+  private object VariantConverter extends TypeConverter {
+    override def append(row: SpecializedGetters, column: Int, cv: WritableColumnVector): Unit = {
+      val v = row.getVariant(column)
+      cv.appendStruct(false)
+      cv.getChild(0).appendByteArray(v.getValue, 0, v.getValue.length)
+      cv.getChild(1).appendByteArray(v.getMetadata, 0, v.getMetadata.length)
     }
   }
 
@@ -363,7 +389,7 @@ private object RowToColumnConverter {
     override def append(row: SpecializedGetters, column: Int, cv: WritableColumnVector): Unit = {
       cv.appendStruct(false)
       val data = row.getStruct(column, childConverters.length)
-      for (i <- 0 until childConverters.length) {
+      for (i <- childConverters.indices) {
         childConverters(i).append(data, i, cv.getChild(i))
       }
     }
@@ -451,51 +477,20 @@ case class RowToColumnarExec(child: SparkPlan) extends RowToColumnarTransition {
   )
 
   override def doExecuteColumnar(): RDD[ColumnarBatch] = {
-    val enableOffHeapColumnVector = conf.offHeapColumnVectorEnabled
-    val numInputRows = longMetric("numInputRows")
-    val numOutputBatches = longMetric("numOutputBatches")
-    // Instead of creating a new config we are reusing columnBatchSize. In the future if we do
-    // combine with some of the Arrow conversion tools we will need to unify some of the configs.
-    val numRows = conf.columnBatchSize
-    // This avoids calling `schema` in the RDD closure, so that we don't need to include the entire
-    // plan (this) in the closure.
-    val localSchema = this.schema
-    child.execute().mapPartitionsInternal { rowIterator =>
-      if (rowIterator.hasNext) {
-        new Iterator[ColumnarBatch] {
-          private val converters = new RowToColumnConverter(localSchema)
-          private val vectors: Seq[WritableColumnVector] = if (enableOffHeapColumnVector) {
-            OffHeapColumnVector.allocateColumns(numRows, localSchema)
-          } else {
-            OnHeapColumnVector.allocateColumns(numRows, localSchema)
-          }
-          private val cb: ColumnarBatch = new ColumnarBatch(vectors.toArray)
-
-          TaskContext.get().addTaskCompletionListener[Unit] { _ =>
-            cb.close()
-          }
-
-          override def hasNext: Boolean = {
-            rowIterator.hasNext
-          }
-
-          override def next(): ColumnarBatch = {
-            cb.setNumRows(0)
-            vectors.foreach(_.reset())
-            var rowCount = 0
-            while (rowCount < numRows && rowIterator.hasNext) {
-              val row = rowIterator.next()
-              converters.convert(row, vectors.toArray)
-              rowCount += 1
-            }
-            cb.setNumRows(rowCount)
-            numInputRows += rowCount
-            numOutputBatches += 1
-            cb
-          }
-        }
-      } else {
-        Iterator.empty
+    val evaluatorFactory = new RowToColumnarEvaluatorFactory(
+      conf.offHeapColumnVectorEnabled,
+      // Instead of creating a new config we are reusing columnBatchSize. In the future if we do
+      // combine with some of the Arrow conversion tools we will need to unify some of the configs.
+      conf.columnBatchSize,
+      schema,
+      longMetric("numInputRows"),
+      longMetric("numOutputBatches"))
+    if (conf.usePartitionEvaluator) {
+      child.execute().mapPartitionsWithEvaluator(evaluatorFactory)
+    } else {
+      child.execute().mapPartitionsWithIndexInternal { (index, rowIterator) =>
+        val evaluator = evaluatorFactory.createEvaluator()
+        evaluator.eval(index, rowIterator)
       }
     }
   }
@@ -517,15 +512,45 @@ case class ApplyColumnarRulesAndInsertTransitions(
   extends Rule[SparkPlan] {
 
   /**
-   * Inserts an transition to columnar formatted data.
+   * Ensures columnar output on the input query plan. Transitions will be inserted
+   * on demand.
    */
-  private def insertRowToColumnar(plan: SparkPlan): SparkPlan = {
+  private def ensureOutputsColumnar(plan: SparkPlan): SparkPlan = {
     if (!plan.supportsColumnar) {
       // The tree feels kind of backwards
       // Columnar Processing will start here, so transition from row to columnar
-      RowToColumnarExec(insertTransitions(plan, outputsColumnar = false))
+      RowToColumnarExec(ensureOutputsRowBased(plan))
     } else if (!plan.isInstanceOf[RowToColumnarTransition]) {
-      plan.withNewChildren(plan.children.map(insertRowToColumnar))
+      plan.withNewChildren(plan.children.map(ensureOutputsColumnar))
+    } else {
+      plan
+    }
+  }
+
+  /**
+   * Ensures row-based output on the input query plan. Transitions will be inserted
+   * on demand.
+   */
+  private def ensureOutputsRowBased(plan: SparkPlan): SparkPlan = {
+    if (plan.supportsColumnar && !plan.supportsRowBased) {
+      // `outputsColumnar` is false but the plan only outputs columnar format, so add a
+      // to-row transition here.
+      ColumnarToRowExec(ensureOutputsColumnar(plan))
+    } else if (!plan.isInstanceOf[ColumnarToRowTransition]) {
+      val outputsColumnar = plan match {
+        // With planned write, the write command invokes child plan's `executeWrite` which is
+        // neither columnar nor row-based.
+        case write: DataWritingCommandExec
+            if write.cmd.isInstanceOf[V1WriteCommand] && conf.plannedWriteEnabled =>
+          write.child.supportsColumnar
+        // If it is not required to output columnar (`outputsColumnar` is false), and the plan
+        // supports row-based and columnar, we don't need to output row-based data on its children
+        // nodes. So we set `outputsColumnar` to true.
+        case _ if plan.supportsColumnar && plan.supportsRowBased => true
+        case _ =>
+          false
+      }
+      plan.withNewChildren(plan.children.map(insertTransitions(_, outputsColumnar)))
     } else {
       plan
     }
@@ -536,15 +561,9 @@ case class ApplyColumnarRulesAndInsertTransitions(
    */
   private def insertTransitions(plan: SparkPlan, outputsColumnar: Boolean): SparkPlan = {
     if (outputsColumnar) {
-      insertRowToColumnar(plan)
-    } else if (plan.supportsColumnar && !plan.supportsRowBased) {
-      // `outputsColumnar` is false but the plan only outputs columnar format, so add a
-      // to-row transition here.
-      ColumnarToRowExec(insertRowToColumnar(plan))
-    } else if (!plan.isInstanceOf[ColumnarToRowTransition]) {
-      plan.withNewChildren(plan.children.map(insertTransitions(_, outputsColumnar = false)))
+      ensureOutputsColumnar(plan)
     } else {
-      plan
+      ensureOutputsRowBased(plan)
     }
   }
 

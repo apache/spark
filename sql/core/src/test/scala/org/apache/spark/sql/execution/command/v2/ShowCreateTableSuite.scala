@@ -82,7 +82,12 @@ class ShowCreateTableSuite extends command.ShowCreateTableSuiteBase with Command
            |  to = 1,
            |  via = 2)
            |COMMENT 'This is a comment'
-           |TBLPROPERTIES ('prop1' = '1', 'prop2' = '2', 'prop3' = 3, 'prop4' = 4)
+           |TBLPROPERTIES (
+           |  'prop1' = '1',
+           |  'prop2' = '2',
+           |  'prop3' = 3,
+           |  'prop4' = 4,
+           |  'password' = 'password')
            |PARTITIONED BY (a)
            |LOCATION '/tmp'
         """.stripMargin)
@@ -103,6 +108,7 @@ class ShowCreateTableSuite extends command.ShowCreateTableSuiteBase with Command
         "COMMENT 'This is a comment'",
         "LOCATION 'file:/tmp'",
         "TBLPROPERTIES (",
+        "'password' = '*********(redacted)',",
         "'prop1' = '1',",
         "'prop2' = '2',",
         "'prop3' = '3',",
@@ -136,6 +142,99 @@ class ShowCreateTableSuite extends command.ShowCreateTableSuiteBase with Command
         "CLUSTERED BY (b)",
         "INTO 16 BUCKETS"
       ))
+    }
+  }
+
+  test("should quote identifiers with special characters") {
+    withNamespaceAndTable("`a_schema-with+special^chars`", "`a_table-with+special^chars`") { t =>
+      sql(s"""
+           |CREATE TABLE $t (
+           |  a bigint NOT NULL,
+           |  b bigint
+           |) $defaultUsing
+        """.stripMargin)
+      val showDDL = getShowCreateDDL(t)
+      assert(
+        showDDL(0) == s"CREATE TABLE test_catalog.`a_schema-with+special^chars`." +
+        s"`a_table-with+special^chars` ("
+      )
+    }
+  }
+
+  test("SPARK-46629: show struct fields with NOT NULL and comment") {
+    withNamespaceAndTable(ns, table) { t =>
+      sql(s"""
+             |CREATE TABLE $t (
+             |  a struct<b: bigint COMMENT 'comment', c: struct<d: string NOT NULL, e: string>>
+             |)
+             |USING parquet
+             |COMMENT 'This is a comment'
+        """.stripMargin)
+      val showDDL = getShowCreateDDL(t)
+      assert(
+        showDDL === Array(
+          s"CREATE TABLE $fullName (",
+          "a STRUCT<b: BIGINT COMMENT 'comment', c: STRUCT<d: STRING NOT NULL, e: STRING>>)",
+          "USING parquet",
+          "COMMENT 'This is a comment'"
+        )
+      )
+    }
+  }
+
+  test("show table constraints") {
+    withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
+      withTable("other_table") {
+        sql(
+          s"""
+             |CREATE TABLE other_table (
+             |  id STRING PRIMARY KEY
+             |)
+             |USING parquet
+        """.stripMargin)
+        sql(
+          s"""
+             |CREATE TABLE $t (
+             |  a INT,
+             |  b STRING,
+             |  c STRING,
+             |  PRIMARY KEY (a),
+             |  CONSTRAINT uk_b UNIQUE (b),
+             |  CONSTRAINT fk_c FOREIGN KEY (c) REFERENCES other_table(id) RELY,
+             |  CONSTRAINT c1 CHECK (c IS NOT NULL),
+             |  CONSTRAINT c2 CHECK (a > 0)
+             |)
+             |$defaultUsing
+        """.stripMargin)
+        var showDDL = getShowCreateDDL(t)
+        val expectedDDLPrefix = Array(
+          s"CREATE TABLE $nonPartitionCatalog.ns.tbl (",
+          "a INT NOT NULL,",
+          "b STRING,",
+          "c STRING,",
+          "CONSTRAINT tbl_pk PRIMARY KEY (a) NOT ENFORCED NORELY,",
+          "CONSTRAINT uk_b UNIQUE (b) NOT ENFORCED NORELY,",
+          "CONSTRAINT fk_c FOREIGN KEY (c) REFERENCES other_table (id) NOT ENFORCED RELY,",
+          "CONSTRAINT c1 CHECK (c IS NOT NULL) ENFORCED NORELY,"
+        )
+        assert(showDDL === expectedDDLPrefix ++ Array(
+          "CONSTRAINT c2 CHECK (a > 0) ENFORCED NORELY)",
+          defaultUsing))
+
+        sql(s"ALTER TABLE $t ADD CONSTRAINT c3 CHECK (b IS NOT NULL) ENFORCED RELY")
+        showDDL = getShowCreateDDL(t)
+        val expectedDDLArrayWithNewConstraint = expectedDDLPrefix ++ Array(
+          "CONSTRAINT c2 CHECK (a > 0) ENFORCED NORELY,",
+          "CONSTRAINT c3 CHECK (b IS NOT NULL) ENFORCED RELY)",
+          defaultUsing
+        )
+        assert(showDDL === expectedDDLArrayWithNewConstraint)
+        sql(s"ALTER TABLE $t DROP CONSTRAINT c1")
+        showDDL = getShowCreateDDL(t)
+        val expectedDDLArrayAfterDrop = expectedDDLArrayWithNewConstraint.filterNot(
+          _.contains("c1 CHECK (c IS NOT NULL) ENFORCED NORELY"))
+        assert(showDDL === expectedDDLArrayAfterDrop)
+      }
     }
   }
 }

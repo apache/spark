@@ -111,4 +111,48 @@ class StatusTrackerSuite extends SparkFunSuite with Matchers with LocalSparkCont
       sc.statusTracker.getJobIdsForGroup("my-job-group2") should have size 2
     }
   }
+
+  test("getJobIdsForTag()") {
+    sc = new SparkContext("local", "test", new SparkConf(false))
+
+    sc.addJobTag("tag1")
+    sc.statusTracker.getJobIdsForTag("tag1") should be (Seq.empty)
+
+    // countAsync()
+    val firstJobFuture = sc.parallelize(1 to 1000).countAsync()
+    val firstJobId = eventually(timeout(10.seconds)) {
+      firstJobFuture.jobIds.head
+    }
+    eventually(timeout(10.seconds)) {
+      sc.statusTracker.getJobIdsForTag("tag1") should be (Seq(firstJobId))
+    }
+
+    sc.addJobTag("tag2")
+    // takeAsync()
+    val secondJobFuture = sc.parallelize(1 to 1000).takeAsync(1)
+    val secondJobId = eventually(timeout(10.seconds)) {
+      secondJobFuture.jobIds.head
+    }
+    eventually(timeout(10.seconds)) {
+      sc.statusTracker.getJobIdsForTag("tag1").toSet should be (
+        Set(firstJobId, secondJobId))
+      sc.statusTracker.getJobIdsForTag("tag2") should be (Seq(secondJobId))
+    }
+
+    sc.removeJobTag("tag1")
+
+    // takeAsync() across multiple partitions
+    val thirdJobFuture = sc.parallelize(1 to 1000, 2).takeAsync(999)
+    val thirdJobIds = eventually(timeout(10.seconds)) {
+      // Wait for the two jobs triggered by takeAsync
+      thirdJobFuture.jobIds.size should be(2)
+      thirdJobFuture.jobIds
+    }
+    eventually(timeout(10.seconds)) {
+      sc.statusTracker.getJobIdsForTag("tag1").toSet should be (
+        Set(firstJobId, secondJobId))
+      sc.statusTracker.getJobIdsForTag("tag2").toSet should be (
+        Set(secondJobId) ++ thirdJobIds)
+    }
+  }
 }

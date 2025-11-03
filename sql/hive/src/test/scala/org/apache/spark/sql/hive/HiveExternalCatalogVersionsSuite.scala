@@ -24,7 +24,6 @@ import java.nio.file.{Files, Paths}
 import scala.sys.process._
 import scala.util.control.NonFatal
 
-import org.apache.commons.lang3.{JavaVersion, SystemUtils}
 import org.apache.hadoop.conf.Configuration
 import org.scalatest.time.Span
 import org.scalatest.time.SpanSugar._
@@ -34,13 +33,15 @@ import org.apache.spark.deploy.SparkSubmitTestUtils
 import org.apache.spark.internal.config.MASTER_REST_SERVER_ENABLED
 import org.apache.spark.internal.config.UI.UI_ENABLED
 import org.apache.spark.launcher.JavaModuleOptions
-import org.apache.spark.sql.{QueryTest, Row, SparkSession}
+import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.CatalogTableType
+import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.internal.StaticSQLConf.WAREHOUSE_PATH
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.tags.{ExtendedHiveTest, SlowHiveTest}
-import org.apache.spark.util.{Utils, VersionUtils}
+import org.apache.spark.util.ArrayImplicits._
+import org.apache.spark.util.Utils
 
 /**
  * Test HiveExternalCatalog backward compatibility.
@@ -64,11 +65,7 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
   private val sparkTestingDir = Option(System.getProperty(SPARK_TEST_CACHE_DIR_SYSTEM_PROPERTY))
       .map(new File(_)).getOrElse(Utils.createTempDir(namePrefix = "test-spark"))
   private val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
-  val hiveVersion = if (SystemUtils.isJavaVersionAtLeast(JavaVersion.JAVA_9)) {
-    HiveUtils.builtinHiveVersion
-  } else {
-    "1.2.1"
-  }
+  val hiveVersion = HiveUtils.builtinHiveVersion
 
   override def afterAll(): Unit = {
     try {
@@ -98,13 +95,12 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
       mirrors.distinct :+ "https://archive.apache.org/dist" :+ PROCESS_TABLES.releaseMirror
     logInfo(s"Trying to download Spark $version from $sites")
     for (site <- sites) {
-      val filename = VersionUtils.majorMinorPatchVersion(version) match {
-        case Some((major, _, _)) if major > 3 => s"spark-$version-bin-hadoop3.tgz"
-        case Some((3, minor, _)) if minor >= 3 => s"spark-$version-bin-hadoop3.tgz"
-        case Some((3, minor, _)) if minor < 3 => s"spark-$version-bin-hadoop3.2.tgz"
-        case Some((_, _, _)) => s"spark-$version-bin-hadoop2.7.tgz"
-        case None => s"spark-$version-bin-hadoop2.7.tgz"
+      val scalaVersion = version match {
+        case v if v.startsWith("3.") => "-scala2.13"
+        case v if v.startsWith("4.") => ""
+        case _ => fail(s"Spark version $version is unexpected")
       }
+      val filename = s"spark-$version-bin-hadoop3$scalaVersion.tgz"
       val url = s"$site/spark/spark-$version/$filename"
       logInfo(s"Downloading Spark $version from $url")
       try {
@@ -113,7 +109,8 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
         val targetDir = new File(sparkTestingDir, s"spark-$version").getCanonicalPath
 
         Seq("mkdir", targetDir).!
-        val exitCode = Seq("tar", "-xzf", downloaded, "-C", targetDir, "--strip-components=1").!
+        val exitCode = Seq("tar", "-xzf", downloaded, "-C", targetDir, "--strip-components=1",
+          "--no-same-owner").!
         Seq("rm", downloaded).!
 
         // For a corrupted file, `tar` returns non-zero values. However, we also need to check
@@ -145,7 +142,7 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
 
     val outDir = new File(targetDir)
     if (!outDir.exists()) {
-      outDir.mkdirs()
+      Utils.createDirectory(outDir)
     }
 
     // propagate exceptions up to the caller of getFileFromUrl
@@ -201,7 +198,16 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
     // scalastyle:on line.size.limit
 
     if (PROCESS_TABLES.testingVersions.isEmpty) {
-      logError("Fail to get the latest Spark versions to test.")
+      if (PROCESS_TABLES.isPythonVersionAvailable) {
+        if (Utils.isJavaVersionAtMost17) {
+          logError("Fail to get the latest Spark versions to test.")
+        } else {
+          logInfo("Skip tests because old Spark versions don't support Java 21.")
+        }
+      } else {
+        logError(s"Python version <  ${TestUtils.minimumPythonSupportedVersion}, " +
+          "the running environment is unavailable.")
+      }
     }
 
     PROCESS_TABLES.testingVersions.zipWithIndex.foreach { case (version, index) =>
@@ -210,7 +216,6 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
         tryDownloadSpark(version, sparkTestingDir.getCanonicalPath)
       }
 
-      // Extract major.minor for testing Spark 3.1.x and 3.0.x with metastore 2.3.9 and Java 11.
       val hiveMetastoreVersion = """^\d+\.\d+""".r.findFirstIn(hiveVersion).get
       val args = Seq(
         "--name", "prepare testing tables",
@@ -222,8 +227,6 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
         "--conf", s"${WAREHOUSE_PATH.key}=${wareHousePath.getCanonicalPath}",
         "--conf", s"spark.sql.test.version.index=$index",
         "--driver-java-options", s"-Dderby.system.home=${wareHousePath.getCanonicalPath} " +
-          // TODO SPARK-37159 Consider to remove the following
-          // JVM module options once the Spark 3.2 line is EOL.
           JavaModuleOptions.defaultModuleOptions(),
         tempPyFile.getCanonicalPath)
       runSparkSubmit(args, Some(sparkHome.getCanonicalPath), isSparkTesting = false)
@@ -233,6 +236,7 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
   }
 
   test("backward compatibility") {
+    assume(PROCESS_TABLES.isPythonVersionAvailable)
     val args = Seq(
       "--class", PROCESS_TABLES.getClass.getName.stripSuffix("$"),
       "--name", "HiveExternalCatalog backward compatibility test",
@@ -249,29 +253,33 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
 }
 
 object PROCESS_TABLES extends QueryTest with SQLTestUtils {
+  // TODO In SPARK-46302, the env SKIP_SPARK_RELEASE_VERSIONS has been added to
+  //  allow Maven tests to skip problematic release versions.
+  //  Related issues will be fixed in SPARK-46400, and testing will be resumed
+  //  after the fixed Spark 3.x version is released.
+  private val skipReleaseVersions =
+    sys.env.getOrElse("SKIP_SPARK_RELEASE_VERSIONS", "").split(",").toSet
+  val isPythonVersionAvailable = TestUtils.isPythonVersionAvailable
   val releaseMirror = sys.env.getOrElse("SPARK_RELEASE_MIRROR",
     "https://dist.apache.org/repos/dist/release")
-  // Tests the latest version of every release line.
-  val testingVersions: Seq[String] = {
+  // Tests the latest version of every release line if Java version is at most 17.
+  val testingVersions: Seq[String] = if (isPythonVersionAvailable &&
+      Utils.isJavaVersionAtMost17) {
     import scala.io.Source
-    val versions: Seq[String] = try Utils.tryWithResource(
+    val sparkVersionPattern = """<a href="spark-(\d.\d.\d)/">""".r
+    try Utils.tryWithResource(
       Source.fromURL(s"$releaseMirror/spark")) { source =>
       source.mkString
         .split("\n")
-        .filter(_.contains("""<a href="spark-"""))
-        .filterNot(_.contains("preview"))
-        .map("""<a href="spark-(\d.\d.\d)/">""".r.findFirstMatchIn(_).get.group(1))
+        .filter(sparkVersionPattern.unanchored.matches(_))
+        .map(sparkVersionPattern.findFirstMatchIn(_).get.group(1))
         .filter(_ < org.apache.spark.SPARK_VERSION)
+        .filterNot(skipReleaseVersions.contains).toImmutableArraySeq
     } catch {
       // Do not throw exception during object initialization.
       case NonFatal(_) => Nil
     }
-    versions
-      .filter(v => v.startsWith("3") || !TestUtils.isPythonVersionAtLeast38())
-      .filter(v => v.startsWith("3") || !SystemUtils.isJavaVersionAtLeast(JavaVersion.JAVA_9))
-      .filter(v => !((v.startsWith("3.0") || v.startsWith("3.1")) &&
-        SystemUtils.isJavaVersionAtLeast(JavaVersion.JAVA_17)))
-  }
+  } else Seq.empty[String]
 
   protected var spark: SparkSession = _
 

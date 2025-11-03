@@ -23,7 +23,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.streaming.{Sink, Source}
 import org.apache.spark.sql.streaming.OutputMode
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types._
 
 /**
  * Data sources should implement this trait so that they can register an alias to their data source.
@@ -175,6 +175,27 @@ trait CreatableRelationProvider {
       mode: SaveMode,
       parameters: Map[String, String],
       data: DataFrame): BaseRelation
+
+  /**
+   * Check if the relation supports the given data type.
+   *
+   * @param dt Data type to check
+   * @return True if the data type is supported
+   *
+   * @since 4.0.0
+   */
+  def supportsDataType(dt: DataType): Boolean = {
+    dt match {
+      case ArrayType(e, _) => supportsDataType(e)
+      case MapType(k, v, _) => supportsDataType(k) && supportsDataType(v)
+      case StructType(fields) => fields.forall(f => supportsDataType(f.dataType))
+      case udt: UserDefinedType[_] => supportsDataType(udt.sqlType)
+      case BinaryType | BooleanType | ByteType | CharType(_) | DateType | _ : DecimalType |
+           DoubleType | FloatType | IntegerType | LongType | NullType | ObjectType(_) | ShortType |
+           _: StringType | TimestampNTZType | TimestampType | VarcharType(_) => true
+      case _ => false
+    }
+  }
 }
 
 /**
@@ -206,7 +227,7 @@ abstract class BaseRelation {
    *
    * @since 1.3.0
    */
-  def sizeInBytes: Long = sqlContext.conf.defaultSizeInBytes
+  def sizeInBytes: Long = sqlContext.sparkSession.sessionState.conf.defaultSizeInBytes
 
   /**
    * Whether does it need to convert the objects in Row to internal representation, for example:
@@ -308,4 +329,35 @@ trait InsertableRelation {
 @Unstable
 trait CatalystScan {
   def buildScan(requiredColumns: Seq[Attribute], filters: Seq[Expression]): RDD[Row]
+}
+
+/**
+ * Implemented by StreamSourceProvider objects that can generate file metadata columns.
+ * This trait extends the basic StreamSourceProvider by allowing the addition of metadata
+ * columns to the schema of the Stream Data Source.
+ */
+trait SupportsStreamSourceMetadataColumns extends StreamSourceProvider {
+
+  /**
+   * Returns the metadata columns that should be added to the schema of the Stream Source.
+   * These metadata columns supplement the columns
+   * defined in the sourceSchema() of the StreamSourceProvider.
+   *
+   * The final schema for the Stream Source, therefore, consists of the source schema as
+   * defined by StreamSourceProvider.sourceSchema(), with the metadata columns added at the end.
+   * The caller is responsible for resolving any naming conflicts with the source schema.
+   *
+   * An example of using this streaming source metadata output interface is
+   * when a customized file-based streaming source needs to expose file metadata columns,
+   * leveraging the hidden file metadata columns from its underlying storage format.
+   *
+   * @param spark               The SparkSession used for the operation.
+   * @param options             A map of options of the Stream Data Source.
+   * @param userSpecifiedSchema An optional user-provided schema of the Stream Data Source.
+   * @return A Seq of AttributeReference representing the metadata output attributes.
+   */
+  def getMetadataOutput(
+      spark: SparkSession,
+      options: Map[String, String],
+      userSpecifiedSchema: Option[StructType]): Seq[AttributeReference]
 }

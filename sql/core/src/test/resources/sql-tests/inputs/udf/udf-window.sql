@@ -66,6 +66,9 @@ stddev(udf(val)) OVER w AS stddev,
 first_value(udf(val)) OVER w AS first_value,
 first_value(udf(val), true) OVER w AS first_value_ignore_null,
 first_value(udf(val), false) OVER w AS first_value_contain_null,
+any_value(udf(val)) OVER w AS any_value,
+any_value(udf(val), true) OVER w AS any_value_ignore_null,
+any_value(udf(val), false) OVER w AS any_value_contain_null,
 last_value(udf(val)) OVER w AS last_value,
 last_value(udf(val), true) OVER w AS last_value_ignore_null,
 last_value(udf(val), false) OVER w AS last_value_contain_null,
@@ -99,11 +102,14 @@ SELECT udf(val), cate, row_number() OVER(PARTITION BY cate) FROM testData ORDER 
 -- Over clause is empty
 SELECT udf(val), cate, sum(val) OVER(), avg(val) OVER() FROM testData ORDER BY cate, val;
 
--- first_value()/last_value() over ()
+-- first_value()/last_value()/any_value() over ()
 SELECT udf(val), cate,
 first_value(false) OVER w AS first_value,
 first_value(true, true) OVER w AS first_value_ignore_null,
 first_value(false, false) OVER w AS first_value_contain_null,
+any_value(false) OVER w AS any_value,
+any_value(true, true) OVER w AS any_value_ignore_null,
+any_value(false, false) OVER w AS any_value_contain_null,
 last_value(false) OVER w AS last_value,
 last_value(true, true) OVER w AS last_value_ignore_null,
 last_value(false, false) OVER w AS last_value_contain_null

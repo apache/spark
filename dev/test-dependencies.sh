@@ -30,13 +30,15 @@ export LC_ALL=C
 
 # NOTE: These should match those in the release publishing script, and be kept in sync with
 #   dev/create-release/release-build.sh
-HADOOP_MODULE_PROFILES="-Phive-thriftserver -Pmesos -Pkubernetes -Pyarn -Phive \
-    -Pspark-ganglia-lgpl -Pkinesis-asl -Phadoop-cloud"
+HADOOP_MODULE_PROFILES="-Phive-thriftserver -Pkubernetes -Pyarn -Phive \
+    -Pspark-ganglia-lgpl -Pkinesis-asl -Phadoop-cloud -Pjvm-profiler"
 MVN="build/mvn"
 HADOOP_HIVE_PROFILES=(
-    hadoop-2-hive-2.3
     hadoop-3-hive-2.3
 )
+
+MVN_EXEC_PLUGIN_VERSION=$(build/mvn help:evaluate \
+    -Dexpression=exec-maven-plugin.version -q -DforceStdout | grep -E "[0-9]+\.[0-9]+\.[0-9]+")
 
 # We'll switch the version to a temp. one, publish POMs using that new version, then switch back to
 # the old version. We need to do this because the `dependency:build-classpath` task needs to
@@ -48,11 +50,11 @@ OLD_VERSION=$($MVN -q \
     -Dexec.executable="echo" \
     -Dexec.args='${project.version}' \
     --non-recursive \
-    org.codehaus.mojo:exec-maven-plugin:1.6.0:exec | grep -E '[0-9]+\.[0-9]+\.[0-9]+')
+    org.codehaus.mojo:exec-maven-plugin:${MVN_EXEC_PLUGIN_VERSION}:exec | grep -E '[0-9]+\.[0-9]+\.[0-9]+')
 # dependency:get for guava and jetty-io are workaround for SPARK-37302.
-GUAVA_VERSION=$(build/mvn help:evaluate -Dexpression=guava.version -q -DforceStdout | grep -E "^[0-9.]+$")
+GUAVA_VERSION=$(build/mvn help:evaluate -Dexpression=guava.version -q -DforceStdout | grep -E "^[0-9\.]+")
 build/mvn dependency:get -Dartifact=com.google.guava:guava:${GUAVA_VERSION} -q
-JETTY_VERSION=$(build/mvn help:evaluate -Dexpression=jetty.version -q -DforceStdout | grep -E "^[0-9.]+v[0-9]+")
+JETTY_VERSION=$(build/mvn help:evaluate -Dexpression=jetty.version -q -DforceStdout | grep -E "[0-9]+\.[0-9]+\.[0-9]+")
 build/mvn dependency:get -Dartifact=org.eclipse.jetty:jetty-io:${JETTY_VERSION} -q
 if [ $? != 0 ]; then
     echo -e "Error while getting version string from Maven:\n$OLD_VERSION"
@@ -62,9 +64,8 @@ SCALA_BINARY_VERSION=$($MVN -q \
     -Dexec.executable="echo" \
     -Dexec.args='${scala.binary.version}' \
     --non-recursive \
-    org.codehaus.mojo:exec-maven-plugin:1.6.0:exec | grep -E '[0-9]+\.[0-9]+')
-if [[ "$SCALA_BINARY_VERSION" != "2.12" ]]; then
-  # TODO(SPARK-36168) Support Scala 2.13 in dev/test-dependencies.sh
+    org.codehaus.mojo:exec-maven-plugin:${MVN_EXEC_PLUGIN_VERSION}:exec | grep -E '[0-9]+\.[0-9]+')
+if [[ "$SCALA_BINARY_VERSION" != "2.13" ]]; then
   echo "Skip dependency testing on $SCALA_BINARY_VERSION"
   exit 0
 fi
@@ -86,8 +87,6 @@ $MVN -q versions:set -DnewVersion=$TEMP_VERSION -DgenerateBackupPoms=false > /de
 for HADOOP_HIVE_PROFILE in "${HADOOP_HIVE_PROFILES[@]}"; do
   if [[ $HADOOP_HIVE_PROFILE == **hadoop-3-hive-2.3** ]]; then
     HADOOP_PROFILE=hadoop-3
-  else
-    HADOOP_PROFILE=hadoop-2
   fi
   echo "Performing Maven install for $HADOOP_HIVE_PROFILE"
   $MVN $HADOOP_MODULE_PROFILES -P$HADOOP_PROFILE jar:jar jar:test-jar install:install clean -q
@@ -143,5 +142,9 @@ for HADOOP_HIVE_PROFILE in "${HADOOP_HIVE_PROFILES[@]}"; do
     exit 1
   fi
 done
+
+if [[ -d "$FWDIR/dev/pr-deps" ]]; then
+  rm -rf "$FWDIR/dev/pr-deps"
+fi
 
 exit 0

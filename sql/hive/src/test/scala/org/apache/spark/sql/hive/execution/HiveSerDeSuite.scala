@@ -84,7 +84,7 @@ class HiveSerDeSuite extends HiveComparisonTest with PlanTest with BeforeAndAfte
   }
 
   // Make sure we set the config values to TestHive.conf.
-  override def withSQLConf(pairs: (String, String)*)(f: => Unit): Unit =
+  override def withSQLConf[T](pairs: (String, String)*)(f: => T): T =
     SQLConf.withExistingConf(TestHive.conf)(super.withSQLConf(pairs: _*)(f))
 
   test("Test the default fileformat for Hive-serde tables") {
@@ -145,7 +145,7 @@ class HiveSerDeSuite extends HiveComparisonTest with PlanTest with BeforeAndAfte
       .add("id", "int")
       .add("name", "string", nullable = true, comment = "blabla"))
     assert(table.provider == Some(DDLUtils.HIVE_PROVIDER))
-    assert(table.storage.locationUri == Some(new URI("/tmp/file")))
+    assert(table.storage.locationUri == Some(new URI("file:///tmp/file")))
     assert(table.storage.properties == Map("my_prop" -> "1"))
     assert(table.comment == Some("BLABLA"))
 

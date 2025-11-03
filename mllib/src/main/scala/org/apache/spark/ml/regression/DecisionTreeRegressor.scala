@@ -22,6 +22,7 @@ import org.json4s.{DefaultFormats, JObject}
 import org.json4s.JsonDSL._
 
 import org.apache.spark.annotation.Since
+import org.apache.spark.internal.{LogKeys}
 import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.ml.param.ParamMap
@@ -129,7 +130,8 @@ class DecisionTreeRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: S
 
     instr.logPipelineStage(this)
     instr.logDataset(instances)
-    instr.logParams(this, params: _*)
+    import org.apache.spark.util.ArrayImplicits._
+    instr.logParams(this, params.toImmutableArraySeq: _*)
 
     val trees = RandomForest.run(instances, strategy, numTrees = 1, featureSubsetStrategy = "all",
       seed = $(seed), instr = Some(instr), parentUID = Some(uid))
@@ -185,6 +187,11 @@ class DecisionTreeRegressionModel private[ml] (
   private[ml] def this(rootNode: Node, numFeatures: Int) =
     this(Identifiable.randomUID("dtr"), rootNode, numFeatures)
 
+  // For ml connect only
+  private[ml] def this() = this("", Node.dummyNode, -1)
+
+  override def estimatedSize: Long = getEstimatedSize()
+
   override def predict(features: Vector): Double = {
     rootNode.predictImpl(features).prediction
   }
@@ -237,8 +244,8 @@ class DecisionTreeRegressionModel private[ml] (
     if (predictionColNames.nonEmpty) {
       dataset.withColumns(predictionColNames, predictionColumns)
     } else {
-      this.logWarning(s"$uid: DecisionTreeRegressionModel.transform() does nothing" +
-        " because no output columns were set.")
+      this.logWarning(log"${MDC(LogKeys.UUID, uid)}: DecisionTreeRegressionModel.transform() " +
+        log"does nothing because no output columns were set.")
       dataset.toDF()
     }
   }
@@ -300,11 +307,13 @@ object DecisionTreeRegressionModel extends MLReadable[DecisionTreeRegressionMode
     override protected def saveImpl(path: String): Unit = {
       val extraMetadata: JObject = Map(
         "numFeatures" -> instance.numFeatures)
-      DefaultParamsWriter.saveMetadata(instance, path, sc, Some(extraMetadata))
+      DefaultParamsWriter.saveMetadata(instance, path, sparkSession, Some(extraMetadata))
       val (nodeData, _) = NodeData.build(instance.rootNode, 0)
       val dataPath = new Path(path, "data").toString
       val numDataParts = NodeData.inferNumPartitions(instance.numNodes)
-      sparkSession.createDataFrame(nodeData).repartition(numDataParts).write.parquet(dataPath)
+      ReadWriteUtils.saveArray(
+        dataPath, nodeData.toArray, sparkSession, NodeData.serializeData, numDataParts
+      )
     }
   }
 
@@ -316,7 +325,7 @@ object DecisionTreeRegressionModel extends MLReadable[DecisionTreeRegressionMode
 
     override def load(path: String): DecisionTreeRegressionModel = {
       implicit val format = DefaultFormats
-      val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
+      val metadata = DefaultParamsReader.loadMetadata(path, sparkSession, className)
       val numFeatures = (metadata.metadata \ "numFeatures").extract[Int]
       val root = loadTreeNodes(path, metadata, sparkSession)
       val model = new DecisionTreeRegressionModel(metadata.uid, root, numFeatures)

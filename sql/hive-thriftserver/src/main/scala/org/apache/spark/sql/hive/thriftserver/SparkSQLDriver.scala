@@ -19,22 +19,25 @@ package org.apache.spark.sql.hive.thriftserver
 
 import java.util.{ArrayList => JArrayList, Arrays, List => JList}
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
-import org.apache.commons.lang3.exception.ExceptionUtils
 import org.apache.hadoop.hive.metastore.api.{FieldSchema, Schema}
 import org.apache.hadoop.hive.ql.Driver
 import org.apache.hadoop.hive.ql.processors.CommandProcessorResponse
 
 import org.apache.spark.SparkThrowable
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.SQLContext
-import org.apache.spark.sql.execution.{QueryExecution, SQLExecution}
+import org.apache.spark.internal.LogKeys.COMMAND
+import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.catalyst.plans.logical.CommandResult
+import org.apache.spark.sql.classic.ClassicConversions._
+import org.apache.spark.sql.execution.{QueryExecution, QueryExecutionException, SQLExecution}
 import org.apache.spark.sql.execution.HiveResult.hiveResultString
 import org.apache.spark.sql.internal.{SQLConf, VariableSubstitution}
+import org.apache.spark.util.Utils
 
 
-private[hive] class SparkSQLDriver(val context: SQLContext = SparkSQLEnv.sqlContext)
+private[hive] class SparkSQLDriver(val sparkSession: SparkSession = SparkSQLEnv.sparkSession)
   extends Driver
   with Logging {
 
@@ -60,23 +63,30 @@ private[hive] class SparkSQLDriver(val context: SQLContext = SparkSQLEnv.sqlCont
 
   override def run(command: String): CommandProcessorResponse = {
     try {
-      val substitutorCommand = SQLConf.withExistingConf(context.conf) {
+      val substitutorCommand = SQLConf.withExistingConf(sparkSession.sessionState.conf) {
         new VariableSubstitution().substitute(command)
       }
-      context.sparkContext.setJobDescription(substitutorCommand)
-      val execution = context.sessionState.executePlan(context.sql(command).logicalPlan)
-      hiveResponse = SQLExecution.withNewExecutionId(execution, Some("cli")) {
-        hiveResultString(execution.executedPlan)
+      sparkSession.sparkContext.setJobDescription(substitutorCommand)
+      val execution = sparkSession.sessionState.executePlan(sparkSession.sql(command).logicalPlan)
+      // The SQL command has been executed above via `executePlan`, therefore we don't need to
+      // wrap it again with a new execution ID when getting Hive result.
+      execution.logical match {
+        case _: CommandResult =>
+          hiveResponse = hiveResultString(execution.executedPlan)
+        case _ =>
+          hiveResponse = SQLExecution.withNewExecutionId(execution, Some("cli")) {
+            hiveResultString(execution.executedPlan)
+          }
       }
       tableSchema = getResultSetSchema(execution)
       new CommandProcessorResponse(0)
     } catch {
         case st: SparkThrowable =>
           logDebug(s"Failed in [$command]", st)
-          new CommandProcessorResponse(1, ExceptionUtils.getStackTrace(st), st.getSqlState, st)
+          throw st
         case cause: Throwable =>
-          logError(s"Failed in [$command]", cause)
-          new CommandProcessorResponse(1, ExceptionUtils.getStackTrace(cause), null, cause)
+          logError(log"Failed in [${MDC(COMMAND, command)}]", cause)
+          throw new QueryExecutionException(Utils.stackTraceToString(cause))
     }
   }
 

@@ -23,9 +23,8 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.stream.Stream;
 
-import com.google.common.base.Preconditions;
-
 import org.apache.spark.annotation.Private;
+import org.apache.spark.network.util.JavaUtils;
 
 /**
  * Wrapper around types managed in a KVStore, providing easy access to their indexed fields.
@@ -48,7 +47,6 @@ public class KVTypeInfo {
         checkIndex(idx, indices);
         f.setAccessible(true);
         indices.put(idx.value(), idx);
-        f.setAccessible(true);
         accessors.put(idx.value(), new FieldAccessor(f));
       }
     }
@@ -57,38 +55,37 @@ public class KVTypeInfo {
       KVIndex idx = m.getAnnotation(KVIndex.class);
       if (idx != null) {
         checkIndex(idx, indices);
-        Preconditions.checkArgument(m.getParameterTypes().length == 0,
+        JavaUtils.checkArgument(m.getParameterCount() == 0,
           "Annotated method %s::%s should not have any parameters.", type.getName(), m.getName());
         m.setAccessible(true);
         indices.put(idx.value(), idx);
-        m.setAccessible(true);
         accessors.put(idx.value(), new MethodAccessor(m));
       }
     }
 
-    Preconditions.checkArgument(indices.containsKey(KVIndex.NATURAL_INDEX_NAME),
+    JavaUtils.checkArgument(indices.containsKey(KVIndex.NATURAL_INDEX_NAME),
         "No natural index defined for type %s.", type.getName());
 
     for (KVIndex idx : indices.values()) {
       if (!idx.parent().isEmpty()) {
         KVIndex parent = indices.get(idx.parent());
-        Preconditions.checkArgument(parent != null,
+        JavaUtils.checkArgument(parent != null,
           "Cannot find parent %s of index %s.", idx.parent(), idx.value());
-        Preconditions.checkArgument(parent.parent().isEmpty(),
+        JavaUtils.checkArgument(parent.parent().isEmpty(),
           "Parent index %s of index %s cannot be itself a child index.", idx.parent(), idx.value());
       }
     }
   }
 
   private void checkIndex(KVIndex idx, Map<String, KVIndex> indices) {
-    Preconditions.checkArgument(idx.value() != null && !idx.value().isEmpty(),
+    JavaUtils.checkArgument(idx.value() != null && !idx.value().isEmpty(),
       "No name provided for index in type %s.", type.getName());
-    Preconditions.checkArgument(
+    JavaUtils.checkArgument(
       !idx.value().startsWith("_") || idx.value().equals(KVIndex.NATURAL_INDEX_NAME),
       "Index name %s (in type %s) is not allowed.", idx.value(), type.getName());
-    Preconditions.checkArgument(idx.parent().isEmpty() || !idx.parent().equals(idx.value()),
+    JavaUtils.checkArgument(idx.parent().isEmpty() || !idx.parent().equals(idx.value()),
       "Index %s cannot be parent of itself.", idx.value());
-    Preconditions.checkArgument(!indices.containsKey(idx.value()),
+    JavaUtils.checkArgument(!indices.containsKey(idx.value()),
       "Duplicate index %s for type %s.", idx.value(), type.getName());
   }
 
@@ -106,7 +103,7 @@ public class KVTypeInfo {
 
   Accessor getAccessor(String indexName) {
     Accessor a = accessors.get(indexName);
-    Preconditions.checkArgument(a != null, "No index %s.", indexName);
+    JavaUtils.checkArgument(a != null, "No index %s.", indexName);
     return a;
   }
 

@@ -20,11 +20,11 @@ package org.apache.spark.util.logging
 import java.io._
 import java.util.zip.GZIPOutputStream
 
-import com.google.common.io.Files
-import org.apache.commons.io.IOUtils
-
 import org.apache.spark.SparkConf
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config
+import org.apache.spark.util.ArrayImplicits._
+import org.apache.spark.util.Utils
 
 /**
  * Continuously appends data from input stream into the given file, and rolls
@@ -76,7 +76,7 @@ private[spark] class RollingFileAppender(
       }
     } catch {
       case e: Exception =>
-        logError(s"Error rolling over $activeFile", e)
+        logError(log"Error rolling over ${MDC(PATH, activeFile)}", e)
     }
   }
 
@@ -89,16 +89,16 @@ private[spark] class RollingFileAppender(
       try {
         inputStream = new FileInputStream(activeFile)
         gzOutputStream = new GZIPOutputStream(new FileOutputStream(gzFile))
-        IOUtils.copy(inputStream, gzOutputStream)
+        inputStream.transferTo(gzOutputStream)
         inputStream.close()
         gzOutputStream.close()
         activeFile.delete()
       } finally {
-        IOUtils.closeQuietly(inputStream)
-        IOUtils.closeQuietly(gzOutputStream)
+        Utils.closeQuietly(inputStream)
+        Utils.closeQuietly(gzOutputStream)
       }
     } else {
-      Files.move(activeFile, rolloverFile)
+      Utils.moveFile(activeFile, rolloverFile)
     }
   }
 
@@ -116,7 +116,7 @@ private[spark] class RollingFileAppender(
     if (activeFile.exists) {
       if (!rolloverFileExist(rolloverFile)) {
         rotateFile(activeFile, rolloverFile)
-        logInfo(s"Rolled over $activeFile to $rolloverFile")
+        logInfo(log"Rolled over ${MDC(FILE_NAME, activeFile)} to ${MDC(FILE_NAME2, rolloverFile)}")
       } else {
         // In case the rollover file name clashes, make a unique file name.
         // The resultant file names are long and ugly, so this is used only
@@ -130,12 +130,13 @@ private[spark] class RollingFileAppender(
           i += 1
         } while (i < 10000 && rolloverFileExist(altRolloverFile))
 
-        logWarning(s"Rollover file $rolloverFile already exists, " +
-          s"rolled over $activeFile to file $altRolloverFile")
+        logWarning(log"Rollover file ${MDC(FILE_NAME, rolloverFile)} already exists, " +
+          log"rolled over ${MDC(FILE_NAME2, activeFile)} " +
+          log"to file ${MDC(FILE_NAME3, altRolloverFile)}")
         rotateFile(activeFile, altRolloverFile)
       }
     } else {
-      logWarning(s"File $activeFile does not exist")
+      logWarning(log"File ${MDC(FILE_NAME, activeFile)} does not exist")
     }
   }
 
@@ -150,12 +151,14 @@ private[spark] class RollingFileAppender(
       val filesToBeDeleted = rolledoverFiles.take(
         math.max(0, rolledoverFiles.length - maxRetainedFiles))
       filesToBeDeleted.foreach { file =>
-        logInfo(s"Deleting file executor log file ${file.getAbsolutePath}")
+        logInfo(log"Deleting file executor log file" +
+          log" ${MDC(FILE_ABSOLUTE_PATH, file.getAbsolutePath)}")
         file.delete()
       }
     } catch {
       case e: Exception =>
-        logError("Error cleaning logs in directory " + activeFile.getParentFile.getAbsolutePath, e)
+        val path = activeFile.getParentFile.getAbsolutePath
+        logError(log"Error cleaning logs in directory ${MDC(PATH, path)}", e)
     }
   }
 }
@@ -184,6 +187,7 @@ private[spark] object RollingFileAppender {
       val file = new File(directory, activeFileName).getAbsoluteFile
       if (file.exists) Some(file) else None
     }
-    rolledOverFiles.sortBy(_.getName.stripSuffix(GZIP_LOG_SUFFIX)) ++ activeFile
+    (rolledOverFiles.sortBy(_.getName.stripSuffix(GZIP_LOG_SUFFIX)) ++ activeFile)
+      .toImmutableArraySeq
   }
 }

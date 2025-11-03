@@ -1,5 +1,6 @@
 -- A test suite for set-operations in parent side, subquery, and both predicate subquery
 -- It includes correlated cases.
+--ONLY_IF spark
 
 create temporary view t1 as select * from values
   ("val1a", 6S, 8, 10L, float(15.0), 20D, 20E2BD, timestamp '2014-04-04 01:00:00.000', date '2014-04-04'),
@@ -470,3 +471,112 @@ HAVING   t1b NOT IN
                 FROM   t3)
 ORDER BY t1c DESC NULLS LAST, t1i;
 
+-- Correlated set ops inside IN - unsupported
+
+SELECT *
+FROM   t1
+WHERE  t1a IN (SELECT t2a
+               FROM   t2
+               WHERE t2b = t1b
+               UNION ALL
+               SELECT t3a
+               FROM   t3);
+
+SELECT *
+FROM   t1
+WHERE  t1a IN (SELECT t2a
+               FROM   t2
+               WHERE t2b = t1b
+               UNION DISTINCT
+               SELECT t3a
+               FROM   t3);
+
+SELECT *
+FROM   t1
+WHERE  t1a IN (SELECT t2a
+               FROM   t2
+               WHERE t2b = t1b
+               INTERSECT ALL
+               SELECT t3a
+               FROM   t3);
+
+SELECT *
+FROM   t1
+WHERE  t1a IN (SELECT t2a
+               FROM   t2
+               WHERE t2b = t1b
+               INTERSECT DISTINCT
+               SELECT t3a
+               FROM   t3);
+
+SELECT *
+FROM   t1
+WHERE  t1a IN (SELECT t2a
+               FROM   t2
+               WHERE t2b = t1b
+               EXCEPT ALL
+               SELECT t3a
+               FROM   t3);
+
+SELECT *
+FROM   t1
+WHERE  t1a IN (SELECT t2a
+               FROM   t2
+               WHERE t2b = t1b
+               EXCEPT DISTINCT
+               SELECT t3a
+               FROM   t3);
+
+SELECT *
+FROM   t1
+WHERE  t1a NOT IN (SELECT t2a
+               FROM   t2
+               WHERE t2b = t1b
+               UNION ALL
+               SELECT t3a
+               FROM   t3);
+
+SELECT *
+FROM   t1
+WHERE  t1a NOT IN (SELECT t2a
+               FROM   t2
+               WHERE t2b = t1b
+               UNION DISTINCT
+               SELECT t3a
+               FROM   t3);
+
+SELECT *
+FROM   t1
+WHERE  t1a NOT IN (SELECT t2a
+               FROM   t2
+               WHERE t2b = t1b
+               INTERSECT ALL
+               SELECT t3a
+               FROM   t3);
+
+SELECT *
+FROM   t1
+WHERE  t1a NOT IN (SELECT t2a
+               FROM   t2
+               WHERE t2b = t1b
+               INTERSECT DISTINCT
+               SELECT t3a
+               FROM   t3);
+
+SELECT *
+FROM   t1
+WHERE  t1a NOT IN (SELECT t2a
+               FROM   t2
+               WHERE t2b = t1b
+               EXCEPT ALL
+               SELECT t3a
+               FROM   t3);
+
+SELECT *
+FROM   t1
+WHERE  t1a NOT IN (SELECT t2a
+               FROM   t2
+               WHERE t2b = t1b
+               EXCEPT DISTINCT
+               SELECT t3a
+               FROM   t3);

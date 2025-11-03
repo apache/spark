@@ -20,11 +20,11 @@ package org.apache.spark.ui.jobs
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets.UTF_8
 import java.util.{Date, Locale}
-import javax.servlet.http.HttpServletRequest
 
 import scala.collection.mutable.ListBuffer
 import scala.xml._
 
+import jakarta.servlet.http.HttpServletRequest
 import org.apache.commons.text.StringEscapeUtils
 
 import org.apache.spark.JobExecutionStatus
@@ -41,6 +41,7 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
 
   import ApiHelper._
 
+  private val TIMELINE_ENABLED = parent.conf.get(UI_TIMELINE_ENABLED)
   private val MAX_TIMELINE_JOBS = parent.conf.get(UI_TIMELINE_JOBS_MAXIMUM)
   private val MAX_TIMELINE_EXECUTORS = parent.conf.get(UI_TIMELINE_EXECUTORS_MAXIMUM)
 
@@ -174,6 +175,8 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
       executors: Seq[v1.ExecutorSummary],
       startTime: Long): Seq[Node] = {
 
+    if (!TIMELINE_ENABLED) return Seq.empty[Node]
+
     val jobEventJsonAsStrSeq = makeJobEvent(jobs)
     val executorEventJsonAsStrSeq = makeExecutorEvent(executors)
 
@@ -274,7 +277,8 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
 
   def render(request: HttpServletRequest): Seq[Node] = {
     val appInfo = store.applicationInfo()
-    val startTime = appInfo.attempts.head.startTime.getTime()
+    val startDate = appInfo.attempts.head.startTime
+    val startTime = startDate.getTime()
     val endTime = appInfo.attempts.head.endTime.getTime()
 
     val activeJobs = new ListBuffer[v1.JobData]()
@@ -323,6 +327,10 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
 
             <strong>User:</strong>
             {parent.getSparkUser}
+          </li>
+          <li>
+            <strong>Started At:</strong>
+            {UIUtils.formatDate(startDate)}
           </li>
           <li>
             <strong>Total Uptime:</strong>

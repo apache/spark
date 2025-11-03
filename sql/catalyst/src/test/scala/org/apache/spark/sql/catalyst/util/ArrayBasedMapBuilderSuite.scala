@@ -18,11 +18,12 @@
 package org.apache.spark.sql.catalyst.util
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.SparkRuntimeException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{UnsafeArrayData, UnsafeRow}
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{ArrayType, BinaryType, IntegerType, StructType}
+import org.apache.spark.sql.types.{ArrayType, BinaryType, DoubleType, IntegerType, StructType}
 import org.apache.spark.unsafe.Platform
 
 class ArrayBasedMapBuilderSuite extends SparkFunSuite with SQLHelper {
@@ -40,15 +41,53 @@ class ArrayBasedMapBuilderSuite extends SparkFunSuite with SQLHelper {
   test("fail with null key") {
     val builder = new ArrayBasedMapBuilder(IntegerType, IntegerType)
     builder.put(1, null) // null value is OK
-    val e = intercept[RuntimeException](builder.put(null, 1))
-    assert(e.getMessage.contains("Cannot use null as map key"))
+    checkError(
+      exception = intercept[SparkRuntimeException](builder.put(null, 1)),
+      condition = "NULL_MAP_KEY",
+      parameters = Map.empty
+    )
   }
 
   test("fail while duplicated keys detected") {
     val builder = new ArrayBasedMapBuilder(IntegerType, IntegerType)
     builder.put(1, 1)
-    val e = intercept[RuntimeException](builder.put(1, 2))
-    assert(e.getMessage.contains("Duplicate map key 1 was found"))
+    checkError(
+      exception = intercept[SparkRuntimeException](builder.put(1, 2)),
+      condition = "DUPLICATED_MAP_KEY",
+      parameters = Map(
+        "key" -> "1",
+        "mapKeyDedupPolicy" -> "\"spark.sql.mapKeyDedupPolicy\"")
+    )
+  }
+
+  test("apply key normalization when creating") {
+    val builderDouble = new ArrayBasedMapBuilder(DoubleType, IntegerType)
+    builderDouble.put(-0.0, 1)
+    checkError(
+      exception = intercept[SparkRuntimeException](builderDouble.put(0.0, 2)),
+      condition = "DUPLICATED_MAP_KEY",
+      parameters = Map(
+        "key" -> "0.0",
+        "mapKeyDedupPolicy" -> "\"spark.sql.mapKeyDedupPolicy\"")
+    )
+  }
+
+  test ("disable map key normalization") {
+    withSQLConf(SQLConf.DISABLE_MAP_KEY_NORMALIZATION.key -> "true") {
+      val builder = new ArrayBasedMapBuilder(DoubleType, IntegerType)
+      builder.put(0.0, 1)
+      builder.put(-0.0, 1)
+      val map = builder.build()
+      assert(map.numElements() == 2)
+    }
+  }
+
+  test("successful map normalization on build") {
+    val builder = new ArrayBasedMapBuilder(DoubleType, IntegerType)
+    builder.put(-0.0, 1)
+    val map = builder.build()
+    assert(map.numElements() == 1)
+    assert(ArrayBasedMapData.toScalaMap(map) == Map(0.0 -> 1))
   }
 
   test("remove duplicated keys with last wins policy") {
@@ -67,9 +106,15 @@ class ArrayBasedMapBuilderSuite extends SparkFunSuite with SQLHelper {
     val builder = new ArrayBasedMapBuilder(BinaryType, IntegerType)
     builder.put(Array(1.toByte), 1)
     builder.put(Array(2.toByte), 2)
-    val e = intercept[RuntimeException](builder.put(Array(1.toByte), 3))
     // By default duplicated map key fails the query.
-    assert(e.getMessage.contains("Duplicate map key"))
+    val arr = Array(1.toByte)
+    checkError(
+      exception = intercept[SparkRuntimeException](builder.put(arr, 3)),
+      condition = "DUPLICATED_MAP_KEY",
+      parameters = Map(
+        "key" -> arr.toString,
+        "mapKeyDedupPolicy" -> "\"spark.sql.mapKeyDedupPolicy\"")
+    )
 
     withSQLConf(SQLConf.MAP_KEY_DEDUP_POLICY.key -> SQLConf.MapKeyDedupPolicy.LAST_WIN.toString) {
       val builder = new ArrayBasedMapBuilder(BinaryType, IntegerType)
@@ -98,9 +143,14 @@ class ArrayBasedMapBuilderSuite extends SparkFunSuite with SQLHelper {
     val builder = new ArrayBasedMapBuilder(new StructType().add("i", "int"), IntegerType)
     builder.put(InternalRow(1), 1)
     builder.put(InternalRow(2), 2)
-    val e = intercept[RuntimeException](builder.put(unsafeRow, 3))
     // By default duplicated map key fails the query.
-    assert(e.getMessage.contains("Duplicate map key"))
+    checkError(
+      exception = intercept[SparkRuntimeException](builder.put(unsafeRow, 3)),
+      condition = "DUPLICATED_MAP_KEY",
+      parameters = Map(
+        "key" -> unsafeRow.toString(),
+        "mapKeyDedupPolicy" -> "\"spark.sql.mapKeyDedupPolicy\"")
+    )
 
     withSQLConf(SQLConf.MAP_KEY_DEDUP_POLICY.key -> SQLConf.MapKeyDedupPolicy.LAST_WIN.toString) {
       val builder = new ArrayBasedMapBuilder(new StructType().add("i", "int"), IntegerType)
@@ -127,9 +177,14 @@ class ArrayBasedMapBuilderSuite extends SparkFunSuite with SQLHelper {
     val builder = new ArrayBasedMapBuilder(ArrayType(IntegerType), IntegerType)
     builder.put(new GenericArrayData(Seq(1, 1)), 1)
     builder.put(new GenericArrayData(Seq(2, 2)), 2)
-    val e = intercept[RuntimeException](builder.put(unsafeArray, 3))
     // By default duplicated map key fails the query.
-    assert(e.getMessage.contains("Duplicate map key"))
+    checkError(
+      exception = intercept[SparkRuntimeException](builder.put(unsafeArray, 3)),
+      condition = "DUPLICATED_MAP_KEY",
+      parameters = Map(
+        "key" -> unsafeArray.toString,
+        "mapKeyDedupPolicy" -> "\"spark.sql.mapKeyDedupPolicy\"")
+    )
 
     withSQLConf(SQLConf.MAP_KEY_DEDUP_POLICY.key -> SQLConf.MapKeyDedupPolicy.LAST_WIN.toString) {
       val builder = new ArrayBasedMapBuilder(ArrayType(IntegerType), IntegerType)

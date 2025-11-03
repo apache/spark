@@ -16,10 +16,8 @@
 #
 
 from abc import ABCMeta, abstractmethod
-
 import copy
 import threading
-
 from typing import (
     Any,
     Callable,
@@ -109,8 +107,6 @@ class Estimator(Params, Generic[M], metaclass=ABCMeta):
 
     .. versionadded:: 1.3.0
     """
-
-    pass
 
     @abstractmethod
     def _fit(self, dataset: DataFrame) -> M:
@@ -219,8 +215,6 @@ class Transformer(Params, metaclass=ABCMeta):
 
     .. versionadded:: 1.3.0
     """
-
-    pass
 
     @abstractmethod
     def _transform(self, dataset: DataFrame) -> DataFrame:
@@ -400,7 +394,7 @@ class PredictionModel(Model, _PredictorParams, Generic[T], metaclass=ABCMeta):
         """
         return self._set(predictionCol=value)
 
-    @property  # type: ignore[misc]
+    @property
     @abstractmethod
     @since("2.1.0")
     def numFeatures(self) -> int:

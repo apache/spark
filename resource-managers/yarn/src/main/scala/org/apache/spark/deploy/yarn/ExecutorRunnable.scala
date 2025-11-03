@@ -20,9 +20,12 @@ package org.apache.spark.deploy.yarn
 import java.nio.ByteBuffer
 import java.util.Collections
 
-import scala.collection.JavaConverters._
+import scala.collection.mutable
 import scala.collection.mutable.{HashMap, ListBuffer}
+import scala.jdk.CollectionConverters._
 
+import com.fasterxml.jackson.databind.ObjectMapper
+import com.fasterxml.jackson.module.scala.DefaultScalaModule
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.io.DataOutputBuffer
 import org.apache.hadoop.security.UserGroupInformation
@@ -35,7 +38,8 @@ import org.apache.hadoop.yarn.ipc.YarnRPC
 import org.apache.hadoop.yarn.util.Records
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkException}
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MessageWithContext}
+import org.apache.spark.internal.LogKeys.{EXECUTOR_ENVS, EXECUTOR_LAUNCH_COMMANDS, EXECUTOR_RESOURCES}
 import org.apache.spark.internal.config._
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.util.Utils
@@ -65,21 +69,23 @@ private[yarn] class ExecutorRunnable(
     startContainer()
   }
 
-  def launchContextDebugInfo(): String = {
+  def launchContextDebugInfo(): MessageWithContext = {
     val commands = prepareCommand()
     val env = prepareEnvironment()
 
-    s"""
-    |===============================================================================
-    |Default YARN executor launch context:
-    |  env:
-    |${Utils.redact(sparkConf, env.toSeq).map { case (k, v) => s"    $k -> $v\n" }.mkString}
-    |  command:
-    |    ${Utils.redactCommandLineArgs(sparkConf, commands).mkString(" \\ \n      ")}
-    |
-    |  resources:
-    |${localResources.map { case (k, v) => s"    $k -> $v\n" }.mkString}
-    |===============================================================================""".stripMargin
+    // scalastyle:off line.size.limit
+    log"""
+        |===============================================================================
+        |Default YARN executor launch context:
+        |  env:
+        |${MDC(EXECUTOR_ENVS, Utils.redact(sparkConf, env.toSeq).map { case (k, v) => s"    $k -> $v\n" }.mkString)}
+        |  command:
+        |    ${MDC(EXECUTOR_LAUNCH_COMMANDS, Utils.redactCommandLineArgs(sparkConf, commands).mkString(" \\ \n      "))}
+        |
+        |  resources:
+        |${MDC(EXECUTOR_RESOURCES, localResources.map { case (k, v) => s"    $k -> $v\n" }.mkString)}
+        |===============================================================================""".stripMargin
+    // scalastyle:on line.size.limit
   }
 
   def startContainer(): java.util.Map[String, ByteBuffer] = {
@@ -105,18 +111,7 @@ private[yarn] class ExecutorRunnable(
     // started on the NodeManager and, if authentication is enabled, provide it with our secret
     // key for fetching shuffle files later
     if (sparkConf.get(SHUFFLE_SERVICE_ENABLED)) {
-      val secretString = securityMgr.getSecretKey()
-      val secretBytes =
-        if (secretString != null) {
-          // This conversion must match how the YarnShuffleService decodes our secret
-          JavaUtils.stringToBytes(secretString)
-        } else {
-          // Authentication is not enabled, so just provide dummy metadata
-          ByteBuffer.allocate(0)
-        }
-      val serviceName = sparkConf.get(SHUFFLE_SERVICE_NAME)
-      logInfo(s"Initializing service data for shuffle service using name '$serviceName'")
-      ctx.setServiceData(Collections.singletonMap(serviceName, secretBytes))
+      configureServiceData(ctx)
     }
 
     // Send the start request to the ContainerManager
@@ -129,12 +124,39 @@ private[yarn] class ExecutorRunnable(
     }
   }
 
+  private[yarn] def configureServiceData(ctx: ContainerLaunchContext): Unit = {
+    val secretString = securityMgr.getSecretKey()
+
+    val serviceName = sparkConf.get(SHUFFLE_SERVICE_NAME)
+    if (!sparkConf.get(SHUFFLE_SERVER_RECOVERY_DISABLED)) {
+      val secretBytes =
+        if (secretString != null) {
+          // This conversion must match how the YarnShuffleService decodes our secret
+          JavaUtils.stringToBytes(secretString)
+        } else {
+          // Authentication is not enabled, so just provide dummy metadata
+          ByteBuffer.allocate(0)
+        }
+      ctx.setServiceData(Collections.singletonMap(serviceName, secretBytes))
+    } else {
+      val payload = new mutable.HashMap[String, Object]()
+      payload.put(SHUFFLE_SERVER_RECOVERY_DISABLED.key, java.lang.Boolean.TRUE)
+      if (secretString != null) {
+        payload.put(ExecutorRunnable.SECRET_KEY, secretString)
+      }
+      val mapper = new ObjectMapper()
+      mapper.registerModule(DefaultScalaModule)
+      val jsonString = mapper.writeValueAsString(payload)
+      ctx.setServiceData(Collections.singletonMap(serviceName, JavaUtils.stringToBytes(jsonString)))
+    }
+  }
+
   private def prepareCommand(): List[String] = {
     // Extra options for the JVM
     val javaOpts = ListBuffer[String]()
 
     // Set the JVM memory
-    val executorMemoryString = executorMemory + "m"
+    val executorMemoryString = s"${executorMemory}m"
     javaOpts += "-Xmx" + executorMemoryString
 
     // Set extra Java options for the executor, if defined
@@ -159,32 +181,6 @@ private[yarn] class ExecutorRunnable(
     sparkConf.getAll
       .filter { case (k, v) => SparkConf.isExecutorStartupConf(k) }
       .foreach { case (k, v) => javaOpts += YarnSparkHadoopUtil.escapeForShell(s"-D$k=$v") }
-
-    // Commenting it out for now - so that people can refer to the properties if required. Remove
-    // it once cpuset version is pushed out.
-    // The context is, default gc for server class machines end up using all cores to do gc - hence
-    // if there are multiple containers in same node, spark gc effects all other containers
-    // performance (which can also be other spark containers)
-    // Instead of using this, rely on cpusets by YARN to enforce spark behaves 'properly' in
-    // multi-tenant environments. Not sure how default java gc behaves if it is limited to subset
-    // of cores on a node.
-    /*
-        else {
-          // If no java_opts specified, default to using -XX:+CMSIncrementalMode
-          // It might be possible that other modes/config is being done in
-          // spark.executor.extraJavaOptions, so we don't want to mess with it.
-          // In our expts, using (default) throughput collector has severe perf ramifications in
-          // multi-tenant machines
-          // The options are based on
-          // http://www.oracle.com/technetwork/java/gc-tuning-5-138395.html#0.0.0.%20When%20to%20Use
-          // %20the%20Concurrent%20Low%20Pause%20Collector|outline
-          javaOpts += "-XX:+UseConcMarkSweepGC"
-          javaOpts += "-XX:+CMSIncrementalMode"
-          javaOpts += "-XX:+CMSIncrementalPacing"
-          javaOpts += "-XX:CMSIncrementalDutyCycleMin=0"
-          javaOpts += "-XX:CMSIncrementalDutyCycle=10"
-        }
-    */
 
     // For log4j configuration to reference
     javaOpts += ("-Dspark.yarn.app.container.log.dir=" + ApplicationConstants.LOG_DIR_EXPANSION_VAR)
@@ -212,7 +208,7 @@ private[yarn] class ExecutorRunnable(
     val env = new HashMap[String, String]()
     Client.populateClasspath(null, conf, sparkConf, env, sparkConf.get(EXECUTOR_CLASS_PATH))
 
-    System.getenv().asScala.filterKeys(_.startsWith("SPARK"))
+    System.getenv().asScala.filter { case (k, _) => k.startsWith("SPARK") }
       .foreach { case (k, v) => env(k) = v }
 
     sparkConf.getExecutorEnv.foreach { case (key, value) =>
@@ -228,4 +224,8 @@ private[yarn] class ExecutorRunnable(
 
     env
   }
+}
+
+private[yarn] object ExecutorRunnable {
+  private[yarn] val SECRET_KEY = "secret"
 }

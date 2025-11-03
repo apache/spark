@@ -61,10 +61,10 @@ class AggregateOptimizeSuite extends AnalysisTest {
   }
 
   test("Remove aliased literals") {
-    val query = testRelation.select($"a", $"b", Literal(1).as(Symbol("y")))
+    val query = testRelation.select($"a", $"b", Literal(1).as("y"))
       .groupBy($"a", $"y")(sum($"b"))
     val optimized = Optimize.execute(analyzer.execute(query))
-    val correctAnswer = testRelation.select($"a", $"b", Literal(1).as(Symbol("y")))
+    val correctAnswer = testRelation.select($"a", $"b", Literal(1).as("y"))
       .groupBy($"a")(sum($"b")).analyze
 
     comparePlans(optimized, correctAnswer)
@@ -80,8 +80,8 @@ class AggregateOptimizeSuite extends AnalysisTest {
   }
 
   test("SPARK-34808: Remove left join if it only has distinct on left side") {
-    val x = testRelation.subquery(Symbol("x"))
-    val y = testRelation.subquery(Symbol("y"))
+    val x = testRelation.subquery("x")
+    val y = testRelation.subquery("y")
     val query = Distinct(x.join(y, LeftOuter, Some("x.a".attr === "y.a".attr)).select("x.b".attr))
     val correctAnswer = x.select("x.b".attr).groupBy("x.b".attr)("x.b".attr)
 
@@ -89,8 +89,8 @@ class AggregateOptimizeSuite extends AnalysisTest {
   }
 
   test("SPARK-34808: Remove right join if it only has distinct on right side") {
-    val x = testRelation.subquery(Symbol("x"))
-    val y = testRelation.subquery(Symbol("y"))
+    val x = testRelation.subquery("x")
+    val y = testRelation.subquery("y")
     val query = Distinct(x.join(y, RightOuter, Some("x.a".attr === "y.a".attr)).select("y.b".attr))
     val correctAnswer = y.select("y.b".attr).groupBy("y.b".attr)("y.b".attr)
 
@@ -98,8 +98,8 @@ class AggregateOptimizeSuite extends AnalysisTest {
   }
 
   test("SPARK-34808: Should not remove left join if select 2 join sides") {
-    val x = testRelation.subquery(Symbol("x"))
-    val y = testRelation.subquery(Symbol("y"))
+    val x = testRelation.subquery("x")
+    val y = testRelation.subquery("y")
     val query = Distinct(x.join(y, RightOuter, Some("x.a".attr === "y.a".attr))
       .select("x.b".attr, "y.c".attr))
     val correctAnswer = Aggregate(query.child.output, query.child.output, query.child)
@@ -108,8 +108,8 @@ class AggregateOptimizeSuite extends AnalysisTest {
   }
 
   test("SPARK-34808: aggregateExpressions only contains groupingExpressions") {
-    val x = testRelation.subquery(Symbol("x"))
-    val y = testRelation.subquery(Symbol("y"))
+    val x = testRelation.subquery("x")
+    val y = testRelation.subquery("y")
     comparePlans(
       Optimize.execute(
         Distinct(x.join(y, LeftOuter, Some("x.a".attr === "y.a".attr))
@@ -130,8 +130,8 @@ class AggregateOptimizeSuite extends AnalysisTest {
   }
 
   test("SPARK-37292: Removes outer join if it only has DISTINCT on streamed side with alias") {
-    val x = testRelation.subquery(Symbol("x"))
-    val y = testRelation.subquery(Symbol("y"))
+    val x = testRelation.subquery("x")
+    val y = testRelation.subquery("y")
     comparePlans(
       Optimize.execute(
         Distinct(x.join(y, LeftOuter, Some("x.a".attr === "y.a".attr))
@@ -153,8 +153,8 @@ class AggregateOptimizeSuite extends AnalysisTest {
   }
 
   test("SPARK-38489: Aggregate.groupOnly support foldable expressions") {
-    val x = testRelation.subquery(Symbol("x"))
-    val y = testRelation.subquery(Symbol("y"))
+    val x = testRelation.subquery("x")
+    val y = testRelation.subquery("y")
     comparePlans(
       Optimize.execute(
         Distinct(x.join(y, LeftOuter, Some("x.a".attr === "y.a".attr))
@@ -163,5 +163,59 @@ class AggregateOptimizeSuite extends AnalysisTest {
       x.select("x.b".attr, TrueLiteral, FalseLiteral.as("newAlias"))
         .groupBy("x.b".attr)("x.b".attr, TrueLiteral, FalseLiteral.as("newAlias"))
         .analyze)
+  }
+
+  test("SPARK-38886: Remove outer join if aggregate functions are duplicate agnostic on " +
+    "streamed side") {
+    val x = testRelation.subquery("x")
+    val y = testRelation.subquery("y")
+
+    Seq((LeftOuter, "x", x), (RightOuter, "y", y)).foreach { case (joinType, t, streamed) =>
+      comparePlans(Optimize.execute(
+        x.join(y, joinType, Some($"x.a" === $"y.a"))
+          .groupBy($"$t.a")($"$t.a", max($"$t.b")).analyze),
+        streamed.groupBy($"$t.a")($"$t.a", max($"$t.b")).analyze)
+
+      // with project
+      comparePlans(Optimize.execute(
+        x.join(y, joinType, Some($"x.a" === $"y.a")).select($"$t.a" as "a1", $"$t.b" as "b1")
+          .groupBy($"a1")($"a1", max($"b1")).analyze),
+        streamed.select($"$t.a" as "a1", $"$t.b" as "b1")
+          .groupBy($"a1")($"a1", max($"b1")).analyze)
+
+      // global aggregate
+      comparePlans(Optimize.execute(
+        x.join(y, joinType, Some($"x.a" === $"y.a"))
+          .groupBy()(max($"$t.b"), min($"$t.c")).analyze),
+        streamed.groupBy()(max($"$t.b"), min($"$t.c")).analyze)
+
+      // distinct aggregate
+      comparePlans(Optimize.execute(
+        x.join(y, joinType, Some($"x.a" === $"y.a"))
+          .groupBy()(countDistinct($"$t.b"), sumDistinct($"$t.c")).analyze),
+        streamed.groupBy()(countDistinct($"$t.b"), sumDistinct($"$t.c")).analyze)
+
+      // mixed
+      comparePlans(Optimize.execute(
+        x.join(y, joinType, Some($"x.a" === $"y.a"))
+          .groupBy()(countDistinct($"$t.b"), min($"$t.c")).analyze),
+        streamed.groupBy()(countDistinct($"$t.b"), min($"$t.c")).analyze)
+
+      // negative cases
+      // with non-deterministic project
+      val p1 = x.join(y, joinType, Some($"x.a" === $"y.a")).select($"$t.a" as "a1", rand(1) as "b1")
+        .groupBy($"b1")($"b1", max($"a1")).analyze
+      comparePlans(Optimize.execute(p1), p1)
+
+      // not from streamed side
+      val p2 = x.join(y, joinType, Some($"x.a" === $"y.a"))
+        .groupBy($"x.a", $"y.b")(min($"x.b"), max($"y.a")).analyze
+      comparePlans(Optimize.execute(p2), p2)
+
+      // not duplicate agnostic
+      val p3 = x.join(y, joinType, Some($"x.a" === $"y.a"))
+        .groupBy($"$t.a")(sum($"$t.a")).analyze
+      comparePlans(Optimize.execute(p3), p3)
+    }
   }
 }

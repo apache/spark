@@ -18,7 +18,7 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import java.util.UUID
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
@@ -28,6 +28,7 @@ import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat
 import org.apache.spark.internal.io.FileCommitProtocol
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils}
 import org.apache.spark.sql.connector.write.{BatchWrite, LogicalWriteInfo, Write}
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -36,23 +37,25 @@ import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.sql.util.SchemaUtils
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.SerializableConfiguration
 
 trait FileWrite extends Write {
   def paths: Seq[String]
   def formatName: String
   def supportsDataType: DataType => Boolean
+  def allowDuplicatedColumnNames: Boolean = false
   def info: LogicalWriteInfo
 
   private val schema = info.schema()
   private val queryId = info.queryId()
-  private val options = info.options()
+  val options = info.options()
 
   override def description(): String = formatName
 
   override def toBatch: BatchWrite = {
     val sparkSession = SparkSession.active
-    validateInputs(sparkSession.sessionState.conf.caseSensitiveAnalysis)
+    validateInputs(sparkSession.sessionState.conf)
     val path = new Path(paths.head)
     val caseSensitiveMap = options.asCaseSensitiveMap.asScala.toMap
     // Hadoop Configurations are case sensitive.
@@ -80,7 +83,8 @@ trait FileWrite extends Write {
       options: Map[String, String],
       dataSchema: StructType): OutputWriterFactory
 
-  private def validateInputs(caseSensitiveAnalysis: Boolean): Unit = {
+  private def validateInputs(sqlConf: SQLConf): Unit = {
+    val caseSensitiveAnalysis = sqlConf.caseSensitiveAnalysis
     assert(schema != null, "Missing input data schema")
     assert(queryId != null, "Missing query ID")
 
@@ -88,10 +92,11 @@ trait FileWrite extends Write {
       throw new IllegalArgumentException("Expected exactly one path to be specified, but " +
         s"got: ${paths.mkString(", ")}")
     }
-    val pathName = paths.head
-    SchemaUtils.checkColumnNameDuplication(schema.fields.map(_.name),
-      s"when inserting into $pathName", caseSensitiveAnalysis)
-    DataSource.validateSchema(schema)
+    if (!allowDuplicatedColumnNames) {
+      SchemaUtils.checkColumnNameDuplication(
+        schema.fields.map(_.name).toImmutableArraySeq, caseSensitiveAnalysis)
+    }
+    DataSource.validateSchema(formatName, schema, sqlConf)
 
     // TODO: [SPARK-36340] Unify check schema filed of DataSource V2 Insert.
     schema.foreach { field =>
@@ -119,7 +124,7 @@ trait FileWrite extends Write {
     // Note: prepareWrite has side effect. It sets "job".
     val outputWriterFactory =
       prepareWrite(sparkSession.sessionState.conf, job, caseInsensitiveOptions, schema)
-    val allColumns = schema.toAttributes
+    val allColumns = toAttributes(schema)
     val metrics: Map[String, SQLMetric] = BasicWriteJobStatsTracker.metrics
     val serializableHadoopConf = new SerializableConfiguration(hadoopConf)
     val statsTracker = new BasicWriteJobStatsTracker(serializableHadoopConf, metrics)

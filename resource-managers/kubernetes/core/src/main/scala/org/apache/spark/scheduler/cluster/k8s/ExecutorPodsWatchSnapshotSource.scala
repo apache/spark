@@ -22,7 +22,10 @@ import io.fabric8.kubernetes.api.model.Pod
 import io.fabric8.kubernetes.client.{KubernetesClient, Watcher, WatcherException}
 import io.fabric8.kubernetes.client.Watcher.Action
 
+import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.annotation.{DeveloperApi, Since, Stable}
+import org.apache.spark.deploy.k8s.Config.KUBERNETES_EXECUTOR_ENABLE_API_WATCHER
+import org.apache.spark.deploy.k8s.Config.KUBERNETES_NAMESPACE
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.internal.Logging
 import org.apache.spark.util.Utils
@@ -38,19 +41,31 @@ import org.apache.spark.util.Utils
 @DeveloperApi
 class ExecutorPodsWatchSnapshotSource(
     snapshotsStore: ExecutorPodsSnapshotsStore,
-    kubernetesClient: KubernetesClient) extends Logging {
+    kubernetesClient: KubernetesClient,
+    conf: SparkConf) extends Logging {
 
   private var watchConnection: Closeable = _
+  private val enableWatching = conf.get(KUBERNETES_EXECUTOR_ENABLE_API_WATCHER)
+
+  private val namespace = conf.get(KUBERNETES_NAMESPACE)
+
+  // If we're constructed with the old API get the SparkConf from the running SparkContext.
+  def this(snapshotsStore: ExecutorPodsSnapshotsStore, kubernetesClient: KubernetesClient) = {
+    this(snapshotsStore, kubernetesClient, SparkContext.getOrCreate().conf)
+  }
 
   @Since("3.1.3")
   def start(applicationId: String): Unit = {
-    require(watchConnection == null, "Cannot start the watcher twice.")
-    logDebug(s"Starting watch for pods with labels $SPARK_APP_ID_LABEL=$applicationId," +
-      s" $SPARK_ROLE_LABEL=$SPARK_POD_EXECUTOR_ROLE.")
-    watchConnection = kubernetesClient.pods()
-      .withLabel(SPARK_APP_ID_LABEL, applicationId)
-      .withLabel(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE)
-      .watch(new ExecutorPodsWatcher())
+    if (enableWatching) {
+      require(watchConnection == null, "Cannot start the watcher twice.")
+      logDebug(s"Starting to watch for pods with labels $SPARK_APP_ID_LABEL=$applicationId," +
+        s" $SPARK_ROLE_LABEL=$SPARK_POD_EXECUTOR_ROLE.")
+      watchConnection = kubernetesClient.pods()
+        .inNamespace(namespace)
+        .withLabel(SPARK_APP_ID_LABEL, applicationId)
+        .withLabel(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE)
+        .watch(new ExecutorPodsWatcher())
+    }
   }
 
   @Since("3.1.3")
@@ -71,12 +86,20 @@ class ExecutorPodsWatchSnapshotSource(
     }
 
     override def onClose(e: WatcherException): Unit = {
-      logWarning("Kubernetes client has been closed (this is expected if the application is" +
-        " shutting down.)", e)
+      if (SparkContext.getActive.map(_.isStopped).getOrElse(true)) {
+        logInfo("Kubernetes client has been closed.")
+      } else {
+        logWarning("Kubernetes client has been closed (this is expected if the application is" +
+          " shutting down.)", e)
+      }
     }
 
     override def onClose(): Unit = {
-      logWarning("Kubernetes client has been closed.")
+      if (SparkContext.getActive.map(_.isStopped).getOrElse(true)) {
+        logInfo("Kubernetes client has been closed.")
+      } else {
+        logWarning("Kubernetes client has been closed.")
+      }
     }
   }
 

@@ -17,12 +17,13 @@
 
 package org.apache.spark.ui
 
-import java.util.{Timer, TimerTask}
+import java.util.concurrent.TimeUnit
 
 import org.apache.spark._
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.status.api.v1.StageData
+import org.apache.spark.util.ThreadUtils
 
 /**
  * ConsoleProgressBar shows the progress of stages in the next line of the console. It poll the
@@ -34,9 +35,11 @@ private[spark] class ConsoleProgressBar(sc: SparkContext) extends Logging {
   // Carriage return
   private val CR = '\r'
   // Update period of progress bar, in milliseconds
-  private val updatePeriodMSec = sc.getConf.get(UI_CONSOLE_PROGRESS_UPDATE_INTERVAL)
+  private val updatePeriodMSec = sc.conf.get(UI_CONSOLE_PROGRESS_UPDATE_INTERVAL)
   // Delay to show up a progress bar, in milliseconds
   private val firstDelayMSec = 500L
+  // Get the stderr (which is console for spark-shell) before installing RedirectConsolePlugin
+  private val console = System.err
 
   // The width of terminal
   private val TerminalWidth = sys.env.getOrElse("COLUMNS", "80").toInt
@@ -46,12 +49,9 @@ private[spark] class ConsoleProgressBar(sc: SparkContext) extends Logging {
   private var lastProgressBar = ""
 
   // Schedule a refresh thread to run periodically
-  private val timer = new Timer("refresh progress", true)
-  timer.schedule(new TimerTask{
-    override def run(): Unit = {
-      refresh()
-    }
-  }, firstDelayMSec, updatePeriodMSec)
+  private val timer = ThreadUtils.newDaemonSingleThreadScheduledExecutor("refresh progress")
+  private val timerFuture = timer.scheduleAtFixedRate(
+    () => refresh(), firstDelayMSec, updatePeriodMSec, TimeUnit.MILLISECONDS)
 
   /**
    * Try to refresh the progress bar in every cycle
@@ -74,7 +74,7 @@ private[spark] class ConsoleProgressBar(sc: SparkContext) extends Logging {
    * the progress bar, then progress bar will be showed in next line without overwrite logs.
    */
   private def show(now: Long, stages: Seq[StageData]): Unit = {
-    val width = TerminalWidth / stages.size
+    val width = TerminalWidth / stages.length
     val bar = stages.map { s =>
       val total = s.numTasks
       val header = s"[Stage ${s.stageId}:"
@@ -94,7 +94,7 @@ private[spark] class ConsoleProgressBar(sc: SparkContext) extends Logging {
     // only refresh if it's changed OR after 1 minute (or the ssh connection will be closed
     // after idle some time)
     if (bar != lastProgressBar || now - lastUpdateTime > 60 * 1000L) {
-      System.err.print(CR + bar + CR)
+      console.print(s"$CR$bar$CR")
       lastUpdateTime = now
     }
     lastProgressBar = bar
@@ -105,7 +105,7 @@ private[spark] class ConsoleProgressBar(sc: SparkContext) extends Logging {
    */
   private def clear(): Unit = {
     if (!lastProgressBar.isEmpty) {
-      System.err.printf(CR + " " * TerminalWidth + CR)
+      console.printf(s"$CR${" ".repeat(TerminalWidth)}$CR")
       lastProgressBar = ""
     }
   }
@@ -123,5 +123,8 @@ private[spark] class ConsoleProgressBar(sc: SparkContext) extends Logging {
    * Tear down the timer thread.  The timer thread is a GC root, and it retains the entire
    * SparkContext if it's not terminated.
    */
-  def stop(): Unit = timer.cancel()
+  def stop(): Unit = {
+    timerFuture.cancel(false)
+    ThreadUtils.shutdown(timer)
+  }
 }

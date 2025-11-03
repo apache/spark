@@ -16,29 +16,26 @@
  */
 package org.apache.spark.sql.execution.datasources.v2
 
-import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.{FileSourceOptions, InternalRow}
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader, PartitionReaderFactory}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.{FilePartition, PartitionedFile}
 import org.apache.spark.sql.vectorized.ColumnarBatch
 
 abstract class FilePartitionReaderFactory extends PartitionReaderFactory {
+
+  protected def options: FileSourceOptions
+
   override def createReader(partition: InputPartition): PartitionReader[InternalRow] = {
     assert(partition.isInstanceOf[FilePartition])
-    val filePartition = partition.asInstanceOf[FilePartition]
-    val iter = filePartition.files.iterator.map { file =>
-      PartitionedFileReader(file, buildReader(file))
-    }
-    new FilePartitionReader[InternalRow](iter)
+    val files = partition.asInstanceOf[FilePartition].files
+    new FilePartitionReader[InternalRow](files.iterator, buildReader, options)
   }
 
   override def createColumnarReader(partition: InputPartition): PartitionReader[ColumnarBatch] = {
     assert(partition.isInstanceOf[FilePartition])
-    val filePartition = partition.asInstanceOf[FilePartition]
-    val iter = filePartition.files.iterator.map { file =>
-      PartitionedFileReader(file, buildColumnarReader(file))
-    }
-    new FilePartitionReader[ColumnarBatch](iter)
+    val files = partition.asInstanceOf[FilePartition].files
+    new FilePartitionReader[ColumnarBatch](files.iterator, buildColumnarReader, options)
   }
 
   def buildReader(partitionedFile: PartitionedFile): PartitionReader[InternalRow]

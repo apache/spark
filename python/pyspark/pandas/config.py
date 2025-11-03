@@ -20,10 +20,10 @@ Infrastructure of options for pandas-on-Spark.
 """
 from contextlib import contextmanager
 import json
-from typing import Any, Callable, Dict, Iterator, List, Tuple, Union
+from typing import Any, Callable, Dict, Iterator, List, Tuple, Union, Optional
 
 from pyspark._globals import _NoValue, _NoValueType
-
+from pyspark.sql.session import SparkSession
 from pyspark.pandas.utils import default_session
 
 
@@ -51,7 +51,7 @@ class Option:
         default is str. It defines the expected types for this option. It is
         used with `isinstance` to validate the given value to this option.
     check_func: Tuple[Callable[[Any], bool], str], keyword-only argument
-        default is a function that always returns `True` with a empty string.
+        default is a function that always returns `True` with an empty string.
         It defines:
           - a function to check the given value to this option
           - the error message to show when this check is failed
@@ -113,7 +113,7 @@ class Option:
 #
 # NOTE: if you are fixing or adding an option here, make sure you execute `show_options()` and
 #     copy & paste the results into show_options
-#     'docs/source/user_guide/pandas_on_spark/options.rst' as well.
+#     'python/docs/source/tutorial/pandas_on_spark/options.rst' as well.
 #     See the examples below:
 #     >>> from pyspark.pandas.config import show_options
 #     >>> show_options()
@@ -152,7 +152,7 @@ _options: List[Option] = [
         key="compute.shortcut_limit",
         doc=(
             "'compute.shortcut_limit' sets the limit for a shortcut. "
-            "It computes specified number of rows and use its schema. When the dataframe "
+            "It computes the specified number of rows and uses its schema. When the dataframe "
             "length is larger than this limit, pandas-on-Spark uses PySpark to compute."
         ),
         default=1000,
@@ -170,7 +170,7 @@ _options: List[Option] = [
             "can be expensive in general. So, if `compute.ops_on_diff_frames` variable is not "
             "True, that method throws an exception."
         ),
-        default=False,
+        default=True,
         types=bool,
     ),
     Option(
@@ -181,6 +181,43 @@ _options: List[Option] = [
         check_func=(
             lambda v: v in ("sequence", "distributed", "distributed-sequence"),
             "Index type should be one of 'sequence', 'distributed', 'distributed-sequence'.",
+        ),
+    ),
+    Option(
+        key="compute.default_index_cache",
+        doc=(
+            "This sets the default storage level for temporary RDDs cached in "
+            "distributed-sequence indexing: 'NONE', 'DISK_ONLY', 'DISK_ONLY_2', "
+            "'DISK_ONLY_3', 'MEMORY_ONLY', 'MEMORY_ONLY_2', 'MEMORY_ONLY_SER', "
+            "'MEMORY_ONLY_SER_2', 'MEMORY_AND_DISK', 'MEMORY_AND_DISK_2', "
+            "'MEMORY_AND_DISK_SER', 'MEMORY_AND_DISK_SER_2', 'OFF_HEAP', "
+            "'LOCAL_CHECKPOINT'."
+        ),
+        default="MEMORY_AND_DISK_SER",
+        types=str,
+        check_func=(
+            lambda v: v
+            in (
+                "NONE",
+                "DISK_ONLY",
+                "DISK_ONLY_2",
+                "DISK_ONLY_3",
+                "MEMORY_ONLY",
+                "MEMORY_ONLY_2",
+                "MEMORY_ONLY_SER",
+                "MEMORY_ONLY_SER_2",
+                "MEMORY_AND_DISK",
+                "MEMORY_AND_DISK_2",
+                "MEMORY_AND_DISK_SER",
+                "MEMORY_AND_DISK_SER_2",
+                "OFF_HEAP",
+                "LOCAL_CHECKPOINT",
+            ),
+            "Index type should be one of 'NONE', 'DISK_ONLY', 'DISK_ONLY_2', "
+            "'DISK_ONLY_3', 'MEMORY_ONLY', 'MEMORY_ONLY_2', 'MEMORY_ONLY_SER', "
+            "'MEMORY_ONLY_SER_2', 'MEMORY_AND_DISK', 'MEMORY_AND_DISK_2', "
+            "'MEMORY_AND_DISK_SER', 'MEMORY_AND_DISK_SER_2', 'OFF_HEAP', "
+            "'LOCAL_CHECKPOINT'.",
         ),
     ),
     Option(
@@ -204,7 +241,7 @@ _options: List[Option] = [
             "pandas-on-Spark skip the validation and will be slightly different from pandas. "
             "Affected APIs: `Series.dot`, `Series.asof`, `Series.compare`, "
             "`FractionalExtensionOps.astype`, `IntegralExtensionOps.astype`, "
-            "`FractionalOps.astype`, `DecimalOps.astype`."
+            "`FractionalOps.astype`, `DecimalOps.astype`, `skipna of statistical functions`."
         ),
         default=True,
         types=bool,
@@ -224,6 +261,36 @@ _options: List[Option] = [
         ),
     ),
     Option(
+        key="compute.pandas_fallback",
+        doc=(
+            "'compute.pandas_fallback' sets whether or not to fallback automatically "
+            "to Pandas' implementation."
+        ),
+        default=False,
+        types=bool,
+    ),
+    Option(
+        key="compute.fail_on_ansi_mode",
+        doc=(
+            "'compute.fail_on_ansi_mode' sets whether or not work with ANSI mode. "
+            "If True, pandas API on Spark raises an exception if the underlying Spark is "
+            "working with ANSI mode enabled and the option 'compute.ansi_mode_support' is False."
+        ),
+        default=True,
+        types=bool,
+    ),
+    Option(
+        key="compute.ansi_mode_support",
+        doc=(
+            "'compute.ansi_mode_support' sets whether or not to support the ANSI mode of "
+            "the underlying Spark. "
+            "If False, pandas API on Spark may hit unexpected results or errors. "
+            "The default is False."
+        ),
+        default=True,
+        types=bool,
+    ),
+    Option(
         key="plotting.max_rows",
         doc=(
             "'plotting.max_rows' sets the visual limit on top-n-based plots such as `plot.bar` "
@@ -233,7 +300,7 @@ _options: List[Option] = [
         default=1000,
         types=int,
         check_func=(
-            lambda v: v is v >= 0,
+            lambda v: v >= 0,
             "'plotting.max_rows' should be greater than or equal to 0.",
         ),
     ),
@@ -242,7 +309,8 @@ _options: List[Option] = [
         doc=(
             "'plotting.sample_ratio' sets the proportion of data that will be plotted for sample-"
             "based plots such as `plot.line` and `plot.area`. "
-            "This option defaults to 'plotting.max_rows' option."
+            "If not set, it is derived from 'plotting.max_rows', by calculating the ratio of "
+            "'plotting.max_rows' to the total data size."
         ),
         default=None,
         types=(float, type(None)),
@@ -305,7 +373,12 @@ def show_options() -> None:
     print(row_format.format("=" * 31, "=" * 23, "=" * 53))
 
 
-def get_option(key: str, default: Union[Any, _NoValueType] = _NoValue) -> Any:
+def get_option(
+    key: str,
+    default: Union[Any, _NoValueType] = _NoValue,
+    *,
+    spark_session: Optional[SparkSession] = None,
+) -> Any:
     """
     Retrieves the value of the specified option.
 
@@ -315,6 +388,9 @@ def get_option(key: str, default: Union[Any, _NoValueType] = _NoValue) -> Any:
         The key which should match a single option.
     default : object
         The default value if the option is not set yet. The value should be JSON serializable.
+    spark_session : :class:`SparkSession`, optional
+        The explicit :class:`SparkSession` object to get the option.
+        If not specified, the default session will be used.
 
     Returns
     -------
@@ -328,11 +404,12 @@ def get_option(key: str, default: Union[Any, _NoValueType] = _NoValue) -> Any:
     if default is _NoValue:
         default = _options_dict[key].default
     _options_dict[key].validate(default)
+    spark_session = spark_session or default_session(check_ansi_mode=False)
 
-    return json.loads(default_session().conf.get(_key_format(key), default=json.dumps(default)))
+    return json.loads(spark_session.conf.get(_key_format(key), default=json.dumps(default)))
 
 
-def set_option(key: str, value: Any) -> None:
+def set_option(key: str, value: Any, *, spark_session: Optional[SparkSession] = None) -> None:
     """
     Sets the value of the specified option.
 
@@ -342,6 +419,9 @@ def set_option(key: str, value: Any) -> None:
         The key which should match a single option.
     value : object
         New value of option. The value should be JSON serializable.
+    spark_session : :class:`SparkSession`, optional
+        The explicit :class:`SparkSession` object to set the option.
+        If not specified, the default session will be used.
 
     Returns
     -------
@@ -349,27 +429,32 @@ def set_option(key: str, value: Any) -> None:
     """
     _check_option(key)
     _options_dict[key].validate(value)
+    spark_session = spark_session or default_session(check_ansi_mode=False)
 
-    default_session().conf.set(_key_format(key), json.dumps(value))
+    spark_session.conf.set(_key_format(key), json.dumps(value))
 
 
-def reset_option(key: str) -> None:
+def reset_option(key: str, *, spark_session: Optional[SparkSession] = None) -> None:
     """
     Reset one option to their default value.
 
-    Pass "all" as argument to reset all options.
+    Pass "all" as an argument to reset all options.
 
     Parameters
     ----------
     key : str
         If specified only option will be reset.
+    spark_session : :class:`SparkSession`, optional
+        The explicit :class:`SparkSession` object to reset the option.
+        If not specified, the default session will be used.
 
     Returns
     -------
     None
     """
     _check_option(key)
-    default_session().conf.unset(_key_format(key))
+    spark_session = spark_session or default_session(check_ansi_mode=False)
+    spark_session.conf.unset(_key_format(key))
 
 
 @contextmanager
@@ -377,7 +462,7 @@ def option_context(*args: Any) -> Iterator[None]:
     """
     Context manager to temporarily set options in the `with` statement context.
 
-    You need to invoke as ``option_context(pat, val, [(pat, val), ...])``.
+    You need to invoke ``option_context(pat, val, [(pat, val), ...])``.
 
     Examples
     --------

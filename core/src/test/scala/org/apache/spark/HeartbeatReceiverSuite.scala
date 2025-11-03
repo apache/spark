@@ -29,7 +29,8 @@ import org.scalatest.{BeforeAndAfterEach, PrivateMethodTester}
 import org.scalatest.concurrent.Eventually._
 
 import org.apache.spark.executor.{ExecutorMetrics, TaskMetrics}
-import org.apache.spark.internal.config.DYN_ALLOCATION_TESTING
+import org.apache.spark.internal.config.{DYN_ALLOCATION_TESTING, STORAGE_BLOCKMANAGER_HEARTBEAT_TIMEOUT}
+import org.apache.spark.internal.config.Network.NETWORK_TIMEOUT
 import org.apache.spark.resource.{ResourceProfile, ResourceProfileManager}
 import org.apache.spark.rpc.{RpcCallContext, RpcEndpoint, RpcEndpointRef, RpcEnv}
 import org.apache.spark.scheduler._
@@ -73,10 +74,10 @@ class HeartbeatReceiverSuite
       .setMaster("local[2]")
       .setAppName("test")
       .set(DYN_ALLOCATION_TESTING, true)
-    sc = spy(new SparkContext(conf))
+    sc = spy[SparkContext](new SparkContext(conf))
     scheduler = mock(classOf[TaskSchedulerImpl])
     when(sc.taskScheduler).thenReturn(scheduler)
-    when(scheduler.excludedNodes).thenReturn(Predef.Set[String]())
+    when(scheduler.excludedNodes()).thenReturn(Predef.Set[String]())
     when(scheduler.sc).thenReturn(sc)
     heartbeatReceiverClock = new ManualClock
     heartbeatReceiver = new HeartbeatReceiver(sc, heartbeatReceiverClock)
@@ -237,6 +238,32 @@ class HeartbeatReceiverSuite
     }
   }
 
+  test("SPARK-44726: Show spark.network.timeout config error message") {
+    sc.stop()
+    val conf = new SparkConf()
+      .setMaster("local[2]")
+      .setAppName("test")
+      .set(NETWORK_TIMEOUT.key, "30s")
+    val m = intercept[IllegalArgumentException] {
+      new SparkContext(conf)
+    }.getMessage
+    assert(m.contains("spark.network.timeoutInterval should be less than or equal to " +
+      NETWORK_TIMEOUT.key))
+  }
+
+  test("SPARK-44726: Show spark.storage.blockManagerHeartbeatTimeoutMs error message") {
+    sc.stop()
+    val conf = new SparkConf()
+      .setMaster("local[2]")
+      .setAppName("test")
+      .set(STORAGE_BLOCKMANAGER_HEARTBEAT_TIMEOUT.key, "30s")
+    val m = intercept[IllegalArgumentException] {
+      new SparkContext(conf)
+    }.getMessage
+    assert(m.contains("spark.network.timeoutInterval should be less than or equal to " +
+      STORAGE_BLOCKMANAGER_HEARTBEAT_TIMEOUT.key))
+  }
+
   /** Manually send a heartbeat and return the response. */
   private def triggerHeartbeat(
       executorId: String,
@@ -279,7 +306,7 @@ class HeartbeatReceiverSuite
     // We may receive undesired SparkListenerExecutorAdded from LocalSchedulerBackend,
     // so exclude it from the map. See SPARK-10800.
     heartbeatReceiver.invokePrivate(_executorLastSeen()).
-      filterKeys(_ != SparkContext.DRIVER_IDENTIFIER).toMap
+      filter { case (k, _) => k != SparkContext.DRIVER_IDENTIFIER }
   }
 }
 

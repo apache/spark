@@ -23,10 +23,11 @@ import time
 from pyspark.sql import Row
 from pyspark.sql.functions import lit
 from pyspark.sql.types import StructType, StructField, DecimalType, BinaryType
-from pyspark.testing.sqlutils import ReusedSQLTestCase, UTCOffsetTimezone
+from pyspark.testing.objects import UTCOffsetTimezone
+from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 
-class SerdeTests(ReusedSQLTestCase):
+class SerdeTestsMixin:
     def test_serialize_nested_array_and_map(self):
         d = [Row(lst=[Row(a=1, b="s")], d={"key": Row(c=1.0, d="2")})]
         rdd = self.sc.parallelize(d)
@@ -54,7 +55,7 @@ class SerdeTests(ReusedSQLTestCase):
 
     def test_struct_in_map(self):
         d = [Row(m={Row(i=1): Row(s="")})]
-        df = self.sc.parallelize(d).toDF()
+        df = self.spark.createDataFrame(d)
         k, v = list(df.head().m.items())[0]
         self.assertEqual(1, k.i)
         self.assertEqual("", v.s)
@@ -82,9 +83,6 @@ class SerdeTests(ReusedSQLTestCase):
         day = datetime.date.today()
         now = datetime.datetime.now()
         ts = time.mktime(now.timetuple())
-        # class in __main__ is not serializable
-        from pyspark.testing.sqlutils import UTCOffsetTimezone
-
         utc = UTCOffsetTimezone()
         utcnow = datetime.datetime.utcfromtimestamp(ts)  # without microseconds
         # add microseconds to utcnow (keeping year,month,day,hour,minute,second)
@@ -94,6 +92,14 @@ class SerdeTests(ReusedSQLTestCase):
         self.assertEqual(day1, day)
         self.assertEqual(now, now1)
         self.assertEqual(now, utcnow1)
+
+    def test_ntz_from_internal(self):
+        for ts in [1, 22, 333, 44444444, 5555555555]:
+            t1 = datetime.datetime.utcfromtimestamp(ts // 1000000).replace(microsecond=ts % 1000000)
+            t2 = datetime.datetime.fromtimestamp(ts // 1000000, datetime.timezone.utc).replace(
+                microsecond=ts % 1000000, tzinfo=None
+            )
+            self.assertEqual(t1, t2)
 
     # regression test for SPARK-19561
     def test_datetime_at_epoch(self):
@@ -140,12 +146,16 @@ class SerdeTests(ReusedSQLTestCase):
         self.assertEqual(df.first().col, bytearray(b"abcd"))
 
 
+class SerdeTests(SerdeTestsMixin, ReusedSQLTestCase):
+    pass
+
+
 if __name__ == "__main__":
     import unittest
     from pyspark.sql.tests.test_serde import *  # noqa: F401
 
     try:
-        import xmlrunner  # type: ignore[import]
+        import xmlrunner
 
         testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:

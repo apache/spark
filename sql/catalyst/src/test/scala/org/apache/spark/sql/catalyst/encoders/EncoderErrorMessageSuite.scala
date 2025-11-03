@@ -17,9 +17,7 @@
 
 package org.apache.spark.sql.catalyst.encoders
 
-import scala.reflect.ClassTag
-
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SPARK_DOC_ROOT, SparkFunSuite, SparkUnsupportedOperationException}
 import org.apache.spark.sql.Encoders
 
 class NonEncodable(i: Int)
@@ -40,63 +38,62 @@ class EncoderErrorMessageSuite extends SparkFunSuite {
   // That is done in Java because Scala cannot create truly private classes.
 
   test("primitive types in encoders using Kryo serialization") {
-    intercept[UnsupportedOperationException] { Encoders.kryo[Int] }
-    intercept[UnsupportedOperationException] { Encoders.kryo[Long] }
-    intercept[UnsupportedOperationException] { Encoders.kryo[Char] }
+    intercept[SparkUnsupportedOperationException] { Encoders.kryo[Int] }
+    intercept[SparkUnsupportedOperationException] { Encoders.kryo[Long] }
+    intercept[SparkUnsupportedOperationException] { Encoders.kryo[Char] }
   }
 
   test("primitive types in encoders using Java serialization") {
-    intercept[UnsupportedOperationException] { Encoders.javaSerialization[Int] }
-    intercept[UnsupportedOperationException] { Encoders.javaSerialization[Long] }
-    intercept[UnsupportedOperationException] { Encoders.javaSerialization[Char] }
+    intercept[SparkUnsupportedOperationException] { Encoders.javaSerialization[Int] }
+    intercept[SparkUnsupportedOperationException] { Encoders.javaSerialization[Long] }
+    intercept[SparkUnsupportedOperationException] { Encoders.javaSerialization[Char] }
   }
 
   test("nice error message for missing encoder") {
-    val errorMsg1 =
-      intercept[UnsupportedOperationException](ExpressionEncoder[ComplexNonEncodable1]).getMessage
-    assert(errorMsg1.contains(
-      s"""root class: "${clsName[ComplexNonEncodable1]}""""))
-    assert(errorMsg1.contains(
-      s"""field (class: "${clsName[NonEncodable]}", name: "name1")"""))
+    checkError(
+      exception = intercept[
+        SparkUnsupportedOperationException](ExpressionEncoder[ComplexNonEncodable1]()),
+      condition = "ENCODER_NOT_FOUND",
+      parameters = Map(
+        "typeName" -> "org.apache.spark.sql.catalyst.encoders.NonEncodable",
+        "docroot" -> SPARK_DOC_ROOT)
+    )
 
-    val errorMsg2 =
-      intercept[UnsupportedOperationException](ExpressionEncoder[ComplexNonEncodable2]).getMessage
-    assert(errorMsg2.contains(
-      s"""root class: "${clsName[ComplexNonEncodable2]}""""))
-    assert(errorMsg2.contains(
-      s"""field (class: "${clsName[ComplexNonEncodable1]}", name: "name2")"""))
-    assert(errorMsg1.contains(
-      s"""field (class: "${clsName[NonEncodable]}", name: "name1")"""))
+    checkError(
+      exception = intercept[
+        SparkUnsupportedOperationException](ExpressionEncoder[ComplexNonEncodable2]()),
+      condition = "ENCODER_NOT_FOUND",
+      parameters = Map(
+        "typeName" -> "org.apache.spark.sql.catalyst.encoders.NonEncodable",
+        "docroot" -> SPARK_DOC_ROOT)
+    )
 
-    val errorMsg3 =
-      intercept[UnsupportedOperationException](ExpressionEncoder[ComplexNonEncodable3]).getMessage
-    assert(errorMsg3.contains(
-      s"""root class: "${clsName[ComplexNonEncodable3]}""""))
-    assert(errorMsg3.contains(
-      s"""field (class: "scala.Option", name: "name3")"""))
-    assert(errorMsg3.contains(
-      s"""option value class: "${clsName[NonEncodable]}""""))
+    checkError(
+      exception = intercept[
+        SparkUnsupportedOperationException](ExpressionEncoder[ComplexNonEncodable3]()),
+      condition = "ENCODER_NOT_FOUND",
+      parameters = Map(
+        "typeName" -> "org.apache.spark.sql.catalyst.encoders.NonEncodable",
+        "docroot" -> SPARK_DOC_ROOT)
+    )
 
-    val errorMsg4 =
-      intercept[UnsupportedOperationException](ExpressionEncoder[ComplexNonEncodable4]).getMessage
-    assert(errorMsg4.contains(
-      s"""root class: "${clsName[ComplexNonEncodable4]}""""))
-    assert(errorMsg4.contains(
-      s"""field (class: "scala.Array", name: "name4")"""))
-    assert(errorMsg4.contains(
-      s"""array element class: "${clsName[NonEncodable]}""""))
+    checkError(
+      exception = intercept[
+        SparkUnsupportedOperationException](ExpressionEncoder[ComplexNonEncodable4]()),
+      condition = "ENCODER_NOT_FOUND",
+      parameters = Map(
+        "typeName" -> "org.apache.spark.sql.catalyst.encoders.NonEncodable",
+        "docroot" -> SPARK_DOC_ROOT)
+    )
 
-    val errorMsg5 =
-      intercept[UnsupportedOperationException](ExpressionEncoder[ComplexNonEncodable5]).getMessage
-    assert(errorMsg5.contains(
-      s"""root class: "${clsName[ComplexNonEncodable5]}""""))
-    assert(errorMsg5.contains(
-      s"""field (class: "scala.Option", name: "name5")"""))
-    assert(errorMsg5.contains(
-      s"""option value class: "scala.Array""""))
-    assert(errorMsg5.contains(
-      s"""array element class: "${clsName[NonEncodable]}""""))
+    checkError(
+      exception = intercept[
+        SparkUnsupportedOperationException](ExpressionEncoder[ComplexNonEncodable5]()),
+      condition = "ENCODER_NOT_FOUND",
+      parameters = Map(
+        "typeName" -> "org.apache.spark.sql.catalyst.encoders.NonEncodable",
+        "docroot" -> SPARK_DOC_ROOT)
+    )
   }
 
-  private def clsName[T : ClassTag]: String = implicitly[ClassTag[T]].runtimeClass.getName
 }

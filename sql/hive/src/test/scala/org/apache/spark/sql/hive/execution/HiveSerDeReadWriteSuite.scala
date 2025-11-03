@@ -17,12 +17,19 @@
 
 package org.apache.spark.sql.hive.execution
 
+import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataInputStream, DataOutputStream, File}
+import java.nio.charset.StandardCharsets
+import java.nio.file.Files
 import java.sql.{Date, Timestamp}
 
+import org.apache.hadoop.fs.Path
+import org.apache.hadoop.hive.ql.io.{DelegateSymlinkTextInputFormat, SymlinkTextInputFormat}
+import org.apache.hadoop.mapred.FileSplit;
+import org.apache.spark.internal.config.HADOOP_RDD_IGNORE_EMPTY_SPLITS
 import org.apache.spark.sql.{QueryTest, Row}
-import org.apache.spark.sql.hive.HiveUtils.{CONVERT_METASTORE_ORC, CONVERT_METASTORE_PARQUET}
+import org.apache.spark.sql.hive.HiveUtils.{CONVERT_METASTORE_ORC, CONVERT_METASTORE_PARQUET, USE_DELEGATE_FOR_SYMLINK_TEXT_INPUT_FORMAT}
 import org.apache.spark.sql.hive.test.TestHiveSingleton
-import org.apache.spark.sql.internal.SQLConf.ORC_IMPLEMENTATION
+import org.apache.spark.sql.internal.SQLConf.{ORC_IMPLEMENTATION}
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.tags.SlowHiveTest
 
@@ -37,7 +44,7 @@ class HiveSerDeReadWriteSuite extends QueryTest with SQLTestUtils with TestHiveS
     super.beforeAll()
     originalConvertMetastoreParquet = spark.conf.get(CONVERT_METASTORE_PARQUET.key)
     originalConvertMetastoreORC = spark.conf.get(CONVERT_METASTORE_ORC.key)
-    originalORCImplementation = spark.conf.get(ORC_IMPLEMENTATION)
+    originalORCImplementation = spark.conf.get(ORC_IMPLEMENTATION.key)
 
     spark.conf.set(CONVERT_METASTORE_PARQUET.key, "false")
     spark.conf.set(CONVERT_METASTORE_ORC.key, "false")
@@ -100,9 +107,10 @@ class HiveSerDeReadWriteSuite extends QueryTest with SQLTestUtils with TestHiveS
     withTable("hive_serde") {
       hiveClient.runSqlHive(s"CREATE TABLE hive_serde (c1 CHAR(10)) STORED AS $fileFormat")
       hiveClient.runSqlHive("INSERT INTO TABLE hive_serde values('s')")
-      checkAnswer(spark.table("hive_serde"), Row("s" + " " * 9))
+      checkAnswer(spark.table("hive_serde"), Row("s" + " ".repeat(9)))
       spark.sql(s"INSERT INTO TABLE hive_serde values('s3')")
-      checkAnswer(spark.table("hive_serde"), Seq(Row("s" + " " * 9), Row("s3" + " " * 8)))
+      checkAnswer(spark.table("hive_serde"),
+        Seq(Row("s" + " ".repeat(9)), Row("s3" + " ".repeat(8))))
     }
   }
 
@@ -216,6 +224,94 @@ class HiveSerDeReadWriteSuite extends QueryTest with SQLTestUtils with TestHiveS
 
       hiveClient.runSqlHive("INSERT INTO t1 SELECT array('SPARK-34512', 'HIVE-24797')")
       checkAnswer(spark.table("t1"), Seq(Row(Array("SPARK-34512", "HIVE-24797"))))
+    }
+  }
+
+  test("SPARK-40815: DelegateSymlinkTextInputFormat serialization") {
+    def assertSerDe(split: DelegateSymlinkTextInputFormat.DelegateSymlinkTextInputSplit): Unit = {
+      val buf = new ByteArrayOutputStream()
+      val out = new DataOutputStream(buf)
+      try {
+        split.write(out)
+      } finally {
+        out.close()
+      }
+
+      val res = new DelegateSymlinkTextInputFormat.DelegateSymlinkTextInputSplit()
+      val in = new DataInputStream(new ByteArrayInputStream(buf.toByteArray()))
+      try {
+        res.readFields(in)
+      } finally {
+        in.close()
+      }
+
+      assert(split.getPath == res.getPath)
+      assert(split.getStart == res.getStart)
+      assert(split.getLength == res.getLength)
+      assert(split.getLocations.toSeq == res.getLocations.toSeq)
+      assert(split.getTargetPath == res.getTargetPath)
+    }
+
+    assertSerDe(
+      new DelegateSymlinkTextInputFormat.DelegateSymlinkTextInputSplit(
+        new SymlinkTextInputFormat.SymlinkTextInputSplit(
+          new Path("file:/tmp/symlink"),
+          new FileSplit(new Path("file:/tmp/file"), 1L, 2L, Array[String]())
+        )
+      )
+    )
+  }
+
+  test("SPARK-40815: Read SymlinkTextInputFormat") {
+    withTable("t") {
+      withTempDir { root =>
+        val dataPath = new File(root, "data")
+        val symlinkPath = new File(root, "symlink")
+
+        spark.range(10).selectExpr("cast(id as string) as value")
+          .repartition(4).write.text(dataPath.getAbsolutePath)
+
+        // Generate symlink manifest file.
+        val files = dataPath.listFiles().filter(_.getName.endsWith(".txt"))
+        assert(files.length > 0)
+
+        symlinkPath.mkdir()
+        Files.write(
+          new File(symlinkPath, "symlink.txt").toPath,
+          files.mkString("\n").getBytes(StandardCharsets.UTF_8)
+        )
+
+        sql(s"""
+          CREATE TABLE t (id bigint)
+          STORED AS
+            INPUTFORMAT 'org.apache.hadoop.hive.ql.io.SymlinkTextInputFormat'
+            OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat'
+          LOCATION '${symlinkPath.getAbsolutePath}';
+        """)
+
+        checkAnswer(
+          sql("SELECT id FROM t ORDER BY id ASC"),
+          (0 until 10).map(Row(_))
+        )
+
+        // Verify limit since we bypass ExecMapper.getDone().
+        checkAnswer(
+          sql("SELECT id FROM t ORDER BY id ASC LIMIT 2"),
+          (0 until 2).map(Row(_))
+        )
+
+        // Verify that with the flag disabled, we use the original SymlinkTextInputFormat
+        // which has the empty splits issue and therefore the result should be empty.
+        withSQLConf(
+          HADOOP_RDD_IGNORE_EMPTY_SPLITS.key -> "true",
+          USE_DELEGATE_FOR_SYMLINK_TEXT_INPUT_FORMAT.key -> "false") {
+
+          checkAnswer(
+            sql("SELECT id FROM t ORDER BY id ASC"),
+            Seq.empty[Row]
+          )
+        }
+      }
     }
   }
 }

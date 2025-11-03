@@ -19,48 +19,54 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import java.util.Locale
 
-import org.apache.spark.sql.{DataFrame, Dataset}
+import scala.util.control.NonFatal
+
+import org.apache.spark.internal.LogKeys.OPTIONS
 import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.LocalTempView
+import org.apache.spark.sql.catalyst.analysis.{LocalTempView, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
+import org.apache.spark.sql.classic.Dataset
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
-import org.apache.spark.sql.execution.command.CreateViewCommand
+import org.apache.spark.sql.connector.catalog.Identifier
+import org.apache.spark.sql.execution.command.{CreateViewCommand, DropTempViewCommand}
+import org.apache.spark.sql.execution.command.CommandUtils
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.util.Utils
 
 trait BaseCacheTableExec extends LeafV2CommandExec {
   def relationName: String
   def planToCache: LogicalPlan
-  def dataFrameForCachedPlan: DataFrame
   def isLazy: Boolean
   def options: Map[String, String]
 
   override def run(): Seq[InternalRow] = {
     val storageLevelKey = "storagelevel"
-    val storageLevelValue =
-      CaseInsensitiveMap(options).get(storageLevelKey).map(_.toUpperCase(Locale.ROOT))
-    val withoutStorageLevel = options.filterKeys(_.toLowerCase(Locale.ROOT) != storageLevelKey)
+    val storageLevel = CaseInsensitiveMap(options).get(storageLevelKey)
+      .map(s => StorageLevel.fromString(s.toUpperCase(Locale.ROOT)))
+      .getOrElse(conf.defaultCacheStorageLevel)
+    val withoutStorageLevel = options
+      .filter { case (k, _) => k.toLowerCase(Locale.ROOT) != storageLevelKey }
     if (withoutStorageLevel.nonEmpty) {
-      logWarning(s"Invalid options: ${withoutStorageLevel.mkString(", ")}")
+      logWarning(log"Invalid options: ${MDC(OPTIONS, withoutStorageLevel.mkString(", "))}")
     }
 
-    if (storageLevelValue.nonEmpty) {
-      session.sharedState.cacheManager.cacheQuery(
-        session,
-        planToCache,
-        Some(relationName),
-        StorageLevel.fromString(storageLevelValue.get))
-    } else {
-      session.sharedState.cacheManager.cacheQuery(
-        session,
-        planToCache,
-        Some(relationName))
-    }
+    val df = Dataset.ofRows(session, planToCache)
+    session.sharedState.cacheManager.cacheQuery(df, Some(relationName), storageLevel)
 
     if (!isLazy) {
       // Performs eager caching.
-      dataFrameForCachedPlan.count()
+      try {
+        df.count()
+      } catch {
+        case NonFatal(e) =>
+          // If the query fails, we should remove the cached table.
+          Utils.tryLogNonFatalError {
+            session.sharedState.cacheManager.uncacheQuery(session, planToCache, cascade = false)
+          }
+          throw e
+      }
     }
 
     Seq.empty
@@ -77,10 +83,6 @@ case class CacheTableExec(
   override lazy val relationName: String = multipartIdentifier.quoted
 
   override lazy val planToCache: LogicalPlan = relation
-
-  override lazy val dataFrameForCachedPlan: DataFrame = {
-    Dataset.ofRows(session, planToCache)
-  }
 }
 
 case class CacheTableAsSelectExec(
@@ -92,11 +94,15 @@ case class CacheTableAsSelectExec(
     referredTempFunctions: Seq[String]) extends BaseCacheTableExec {
   override lazy val relationName: String = tempViewName
 
-  override lazy val planToCache: LogicalPlan = {
+  override def planToCache: LogicalPlan = UnresolvedRelation(Seq(tempViewName))
+
+  override def run(): Seq[InternalRow] = {
+    // CACHE TABLE AS TABLE creates a temp view and caches the temp view.
     CreateViewCommand(
       name = TableIdentifier(tempViewName),
       userSpecifiedColumns = Nil,
       comment = None,
+      collation = None,
       properties = Map.empty,
       originalText = Some(originalText),
       plan = query,
@@ -106,12 +112,15 @@ case class CacheTableAsSelectExec(
       isAnalyzed = true,
       referredTempFunctions = referredTempFunctions
     ).run(session)
-
-    dataFrameForCachedPlan.logicalPlan
-  }
-
-  override lazy val dataFrameForCachedPlan: DataFrame = {
-    session.table(tempViewName)
+    try {
+      super.run()
+    } catch {
+      case NonFatal(e) =>
+        Utils.tryLogNonFatalError {
+          DropTempViewCommand(Identifier.of(Array.empty, tempViewName)).run(session)
+        }
+        throw e
+    }
   }
 }
 
@@ -119,7 +128,7 @@ case class UncacheTableExec(
     relation: LogicalPlan,
     cascade: Boolean) extends LeafV2CommandExec {
   override def run(): Seq[InternalRow] = {
-    session.sharedState.cacheManager.uncacheQuery(session, relation, cascade)
+    CommandUtils.uncacheTableOrView(session, relation, cascade)
     Seq.empty
   }
 

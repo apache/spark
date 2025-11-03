@@ -17,13 +17,17 @@
 
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
+import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataInputStream, DataOutputStream}
+
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodegenFallback, ExprCode}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{AGGREGATE_EXPRESSION, TreePattern}
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types._
+import org.apache.spark.util.collection.OpenHashMap
 
 /** The mode of an [[AggregateFunction]]. */
 sealed trait AggregateMode
@@ -83,11 +87,7 @@ object AggregateExpression {
   }
 
   def containsAggregate(expr: Expression): Boolean = {
-    expr.exists(isAggregate)
-  }
-
-  def isAggregate(expr: Expression): Boolean = {
-    expr.isInstanceOf[AggregateExpression] || PythonUDF.isGroupedAggPandasUDF(expr)
+    expr.exists(_.isInstanceOf[AggregateExpression])
   }
 }
 
@@ -117,13 +117,13 @@ case class AggregateExpression(
     // This is a bit of a hack.  Really we should not be constructing this container and reasoning
     // about datatypes / aggregation mode until after we have finished analysis and made it to
     // planning.
-    UnresolvedAttribute(aggregateFunction.toString)
+    UnresolvedAttribute.quoted(aggregateFunction.toString)
   }
 
   def filterAttributes: AttributeSet = filter.map(_.references).getOrElse(AttributeSet.empty)
 
   // We compute the same thing regardless of our final result.
-  override lazy val preCanonicalized: Expression = {
+  override lazy val canonicalized: Expression = {
     val normalizedAggFunc = mode match {
       // For PartialMerge or Final mode, the input to the `aggregateFunction` is aggregate buffers,
       // and the actual children of `aggregateFunction` is not used, here we normalize the expr id.
@@ -134,10 +134,10 @@ case class AggregateExpression(
     }
 
     AggregateExpression(
-      normalizedAggFunc.preCanonicalized.asInstanceOf[AggregateFunction],
+      normalizedAggFunc.canonicalized.asInstanceOf[AggregateFunction],
       mode,
       isDistinct,
-      filter.map(_.preCanonicalized),
+      filter.map(_.canonicalized),
       ExprId(0))
   }
 
@@ -420,9 +420,9 @@ abstract class DeclarativeAggregate
   val evaluateExpression: Expression
 
   /** An expression-based aggregate's bufferSchema is derived from bufferAttributes. */
-  final override def aggBufferSchema: StructType = StructType.fromAttributes(aggBufferAttributes)
+  final override def aggBufferSchema: StructType = DataTypeUtils.fromAttributes(aggBufferAttributes)
 
-  final lazy val inputAggBufferAttributes: Seq[AttributeReference] =
+  lazy val inputAggBufferAttributes: Seq[AttributeReference] =
     aggBufferAttributes.map(_.newInstance())
 
   /**
@@ -607,7 +607,7 @@ abstract class TypedImperativeAggregate[T] extends ImperativeAggregate {
   final override lazy val inputAggBufferAttributes: Seq[AttributeReference] =
     aggBufferAttributes.map(_.newInstance())
 
-  final override def aggBufferSchema: StructType = StructType.fromAttributes(aggBufferAttributes)
+  final override def aggBufferSchema: StructType = DataTypeUtils.fromAttributes(aggBufferAttributes)
 
   /**
    * In-place replaces the aggregation buffer object stored at buffer's index
@@ -636,5 +636,69 @@ abstract class TypedImperativeAggregate[T] extends ImperativeAggregate {
 
   private def getBufferObject(buffer: InternalRow, offset: Int): T = {
     buffer.get(offset, anyObjectType).asInstanceOf[T]
+  }
+}
+
+/**
+ * A special [[TypedImperativeAggregate]] that uses `OpenHashMap[AnyRef, Long]` as internal
+ * aggregation buffer.
+ */
+abstract class TypedAggregateWithHashMapAsBuffer
+  extends TypedImperativeAggregate[OpenHashMap[AnyRef, Long]] {
+  override def createAggregationBuffer(): OpenHashMap[AnyRef, Long] = {
+    // Initialize new counts map instance here.
+    new OpenHashMap[AnyRef, Long]()
+  }
+
+  protected def child: Expression
+
+  private lazy val projection = UnsafeProjection.create(Array[DataType](child.dataType, LongType))
+
+  override def serialize(obj: OpenHashMap[AnyRef, Long]): Array[Byte] = {
+    val buffer = new Array[Byte](4 << 10)  // 4K
+    val bos = new ByteArrayOutputStream()
+    val out = new DataOutputStream(bos)
+    try {
+      // Write pairs in counts map to byte buffer.
+      obj.foreach { case (key, count) =>
+        val row = InternalRow.apply(key, count)
+        val unsafeRow = projection.apply(row)
+        out.writeInt(unsafeRow.getSizeInBytes)
+        unsafeRow.writeToStream(out, buffer)
+      }
+      out.writeInt(-1)
+      out.flush()
+
+      bos.toByteArray
+    } finally {
+      out.close()
+      bos.close()
+    }
+  }
+
+  override def deserialize(bytes: Array[Byte]): OpenHashMap[AnyRef, Long] = {
+    val bis = new ByteArrayInputStream(bytes)
+    val ins = new DataInputStream(bis)
+    try {
+      val counts = new OpenHashMap[AnyRef, Long]
+      // Read unsafeRow size and content in bytes.
+      var sizeOfNextRow = ins.readInt()
+      while (sizeOfNextRow >= 0) {
+        val bs = new Array[Byte](sizeOfNextRow)
+        ins.readFully(bs)
+        val row = new UnsafeRow(2)
+        row.pointTo(bs, sizeOfNextRow)
+        // Insert the pairs into counts map.
+        val key = row.get(0, child.dataType)
+        val count = row.get(1, LongType).asInstanceOf[Long]
+        counts.update(key, count)
+        sizeOfNextRow = ins.readInt()
+      }
+
+      counts
+    } finally {
+      ins.close()
+      bis.close()
+    }
   }
 }

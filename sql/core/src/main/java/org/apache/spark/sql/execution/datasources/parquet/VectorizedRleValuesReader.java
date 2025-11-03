@@ -20,7 +20,6 @@ package org.apache.spark.sql.execution.datasources.parquet;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 
-import org.apache.parquet.Preconditions;
 import org.apache.parquet.bytes.ByteBufferInputStream;
 import org.apache.parquet.bytes.BytesUtils;
 import org.apache.parquet.column.values.ValuesReader;
@@ -29,6 +28,8 @@ import org.apache.parquet.column.values.bitpacking.Packer;
 import org.apache.parquet.io.ParquetDecodingException;
 import org.apache.parquet.io.api.Binary;
 
+import org.apache.spark.SparkUnsupportedOperationException;
+import org.apache.spark.network.util.JavaUtils;
 import org.apache.spark.sql.execution.vectorized.WritableColumnVector;
 
 /**
@@ -121,7 +122,7 @@ public final class VectorizedRleValuesReader extends ValuesReader
    * Initializes the internal state for decoding ints of `bitWidth`.
    */
   private void init(int bitWidth) {
-    Preconditions.checkArgument(bitWidth >= 0 && bitWidth <= 32, "bitWidth must be >= 0 and <= 32");
+    JavaUtils.checkArgument(bitWidth >= 0 && bitWidth <= 32, "bitWidth must be >= 0 and <= 32");
     this.bitWidth = bitWidth;
     this.bytesWidth = BytesUtils.paddedByteCountFromBits(bitWidth);
     this.packer = Packer.LITTLE_ENDIAN.newBytePacker(bitWidth);
@@ -147,13 +148,10 @@ public final class VectorizedRleValuesReader extends ValuesReader
     if (this.currentCount == 0) { this.readNextGroup(); }
 
     this.currentCount--;
-    switch (mode) {
-      case RLE:
-        return this.currentValue;
-      case PACKED:
-        return this.currentBuffer[currentBufferIdx++];
-    }
-    throw new RuntimeException("Unreachable");
+    return switch (mode) {
+      case RLE -> this.currentValue;
+      case PACKED -> this.currentBuffer[currentBufferIdx++];
+    };
   }
 
   /**
@@ -172,7 +170,11 @@ public final class VectorizedRleValuesReader extends ValuesReader
       WritableColumnVector defLevels,
       VectorizedValuesReader valueReader,
       ParquetVectorUpdater updater) {
-    readBatchInternal(state, values, values, defLevels, valueReader, updater);
+    if (defLevels == null) {
+      readBatchInternal(state, values, values, valueReader, updater);
+    } else {
+      readBatchInternalWithDefLevels(state, values, values, defLevels, valueReader, updater);
+    }
   }
 
   /**
@@ -185,11 +187,89 @@ public final class VectorizedRleValuesReader extends ValuesReader
       WritableColumnVector nulls,
       WritableColumnVector defLevels,
       VectorizedValuesReader valueReader) {
-    readBatchInternal(state, values, nulls, defLevels, valueReader,
-      new ParquetVectorUpdaterFactory.IntegerUpdater());
+    if (defLevels == null) {
+      readBatchInternal(state, values, nulls, valueReader,
+        new ParquetVectorUpdaterFactory.IntegerUpdater());
+    } else {
+      readBatchInternalWithDefLevels(state, values, nulls, defLevels, valueReader,
+        new ParquetVectorUpdaterFactory.IntegerUpdater());
+    }
   }
 
   private void readBatchInternal(
+      ParquetReadState state,
+      WritableColumnVector values,
+      WritableColumnVector nulls,
+      VectorizedValuesReader valueReader,
+      ParquetVectorUpdater updater) {
+
+    long rowId = state.rowId;
+    int leftInBatch = state.rowsToReadInBatch;
+    int leftInPage = state.valuesToReadInPage;
+
+    while (leftInBatch > 0 && leftInPage > 0) {
+      if (currentCount == 0 && !readNextGroup()) break;
+      int n = Math.min(leftInBatch, Math.min(leftInPage, this.currentCount));
+
+      long rangeStart = state.currentRangeStart();
+      long rangeEnd = state.currentRangeEnd();
+
+      if (rowId + n < rangeStart) {
+        skipValues(n, state, valueReader, updater);
+        rowId += n;
+        leftInPage -= n;
+      } else if (rowId > rangeEnd) {
+        state.nextRange();
+      } else {
+        // The range [rowId, rowId + n) overlaps with the current row range in state
+        long start = Math.max(rangeStart, rowId);
+        long end = Math.min(rangeEnd, rowId + n - 1);
+
+        // Skip the part [rowId, start)
+        int toSkip = (int) (start - rowId);
+        if (toSkip > 0) {
+          skipValues(toSkip, state, valueReader, updater);
+          rowId += toSkip;
+          leftInPage -= toSkip;
+        }
+
+        // Read the part [start, end]
+        n = (int) (end - start + 1);
+
+        switch (mode) {
+          case RLE -> {
+            if (currentValue == state.maxDefinitionLevel) {
+              updater.readValues(n, state.valueOffset, values, valueReader);
+            } else {
+              nulls.putNulls(state.valueOffset, n);
+            }
+            state.valueOffset += n;
+          }
+          case PACKED -> {
+            for (int i = 0; i < n; ++i) {
+              int currentValue = currentBuffer[currentBufferIdx++];
+              if (currentValue == state.maxDefinitionLevel) {
+                updater.readValue(state.valueOffset++, values, valueReader);
+              } else {
+                nulls.putNull(state.valueOffset++);
+              }
+            }
+          }
+        }
+        state.levelOffset += n;
+        leftInBatch -= n;
+        rowId += n;
+        leftInPage -= n;
+        currentCount -= n;
+      }
+    }
+
+    state.rowsToReadInBatch = leftInBatch;
+    state.valuesToReadInPage = leftInPage;
+    state.rowId = rowId;
+  }
+
+  private void readBatchInternalWithDefLevels(
       ParquetReadState state,
       WritableColumnVector values,
       WritableColumnVector nulls,
@@ -325,7 +405,7 @@ public final class VectorizedRleValuesReader extends ValuesReader
       long rangeEnd = state.currentRangeEnd();
 
       switch (mode) {
-        case RLE:
+        case RLE -> {
           // This RLE block is consist of top-level rows, so we'll need to check
           // if the rows should be skipped according to row indexes.
           if (currentValue == 0) {
@@ -383,8 +463,8 @@ public final class VectorizedRleValuesReader extends ValuesReader
             leftInPage -= valuesLeftInBlock;
             currentCount -= valuesLeftInBlock;
           }
-          break;
-        case PACKED:
+        }
+        case PACKED -> {
           int i = 0;
 
           for (; i < valuesLeftInBlock; i++) {
@@ -419,7 +499,7 @@ public final class VectorizedRleValuesReader extends ValuesReader
           leftInPage -= i;
           currentCount -= i;
           currentBufferIdx += i;
-          break;
+        }
       }
     }
 
@@ -547,7 +627,7 @@ public final class VectorizedRleValuesReader extends ValuesReader
       VectorizedValuesReader valueReader,
       ParquetVectorUpdater updater) {
     switch (mode) {
-      case RLE:
+      case RLE -> {
         if (currentValue == state.maxDefinitionLevel) {
           updater.readValues(n, state.valueOffset, values, valueReader);
         } else {
@@ -555,8 +635,8 @@ public final class VectorizedRleValuesReader extends ValuesReader
         }
         state.valueOffset += n;
         defLevels.putInts(state.levelOffset, n, currentValue);
-        break;
-      case PACKED:
+      }
+      case PACKED -> {
         for (int i = 0; i < n; ++i) {
           int currentValue = currentBuffer[currentBufferIdx++];
           if (currentValue == state.maxDefinitionLevel) {
@@ -566,7 +646,7 @@ public final class VectorizedRleValuesReader extends ValuesReader
           }
           defLevels.putInt(state.levelOffset + i, currentValue);
         }
-        break;
+      }
     }
   }
 
@@ -583,21 +663,23 @@ public final class VectorizedRleValuesReader extends ValuesReader
       if (currentCount == 0 && !readNextGroup()) break;
       int num = Math.min(n, this.currentCount);
       switch (mode) {
-        case RLE:
+        case RLE -> {
           // We only need to skip non-null values from `valuesReader` since nulls are represented
           // via definition levels which are skipped here via decrementing `currentCount`.
           if (currentValue == state.maxDefinitionLevel) {
             updater.skipValues(num, valuesReader);
           }
-          break;
-        case PACKED:
+        }
+        case PACKED -> {
+          int totalSkipNum = 0;
           for (int i = 0; i < num; ++i) {
             // Same as above, only skip non-null values from `valuesReader`
             if (currentBuffer[currentBufferIdx++] == state.maxDefinitionLevel) {
-              updater.skipValues(1, valuesReader);
+              ++totalSkipNum;
             }
           }
-          break;
+          updater.skipValues(totalSkipNum, valuesReader);
+        }
       }
       currentCount -= num;
       n -= num;
@@ -614,13 +696,11 @@ public final class VectorizedRleValuesReader extends ValuesReader
       if (currentCount == 0 && !readNextGroup()) break;
       int n = Math.min(left, this.currentCount);
       switch (mode) {
-        case RLE:
-          c.putInts(rowId, n, currentValue);
-          break;
-        case PACKED:
+        case RLE -> c.putInts(rowId, n, currentValue);
+        case PACKED -> {
           c.putInts(rowId, n, currentBuffer, currentBufferIdx);
           currentBufferIdx += n;
-          break;
+        }
       }
       rowId += n;
       left -= n;
@@ -630,43 +710,43 @@ public final class VectorizedRleValuesReader extends ValuesReader
 
   @Override
   public void readUnsignedIntegers(int total, WritableColumnVector c, int rowId) {
-    throw new UnsupportedOperationException("only readInts is valid.");
+    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3187");
   }
 
   @Override
   public void readUnsignedLongs(int total, WritableColumnVector c, int rowId) {
-    throw new UnsupportedOperationException("only readInts is valid.");
+    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3187");
   }
 
   @Override
   public void readIntegersWithRebase(
       int total, WritableColumnVector c, int rowId, boolean failIfRebase) {
-    throw new UnsupportedOperationException("only readInts is valid.");
+    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3187");
   }
 
   @Override
   public byte readByte() {
-    throw new UnsupportedOperationException("only readInts is valid.");
+    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3187");
   }
 
   @Override
   public short readShort() {
-    throw new UnsupportedOperationException("only readInts is valid.");
+    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3187");
   }
 
   @Override
   public void readBytes(int total, WritableColumnVector c, int rowId) {
-    throw new UnsupportedOperationException("only readInts is valid.");
+    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3187");
   }
 
   @Override
   public void readShorts(int total, WritableColumnVector c, int rowId) {
-    throw new UnsupportedOperationException("only readInts is valid.");
+    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3187");
   }
 
   @Override
   public void readLongs(int total, WritableColumnVector c, int rowId) {
-    throw new UnsupportedOperationException("only readInts is valid.");
+    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3187");
   }
 
   @Override
@@ -676,12 +756,12 @@ public final class VectorizedRleValuesReader extends ValuesReader
       int rowId,
       boolean failIfRebase,
       String timeZone) {
-    throw new UnsupportedOperationException("only readInts is valid.");
+    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3187");
   }
 
   @Override
   public void readBinary(int total, WritableColumnVector c, int rowId) {
-    throw new UnsupportedOperationException("only readInts is valid.");
+    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3187");
   }
 
   @Override
@@ -691,15 +771,13 @@ public final class VectorizedRleValuesReader extends ValuesReader
       if (this.currentCount == 0) this.readNextGroup();
       int n = Math.min(left, this.currentCount);
       switch (mode) {
-        case RLE:
-          c.putBooleans(rowId, n, currentValue != 0);
-          break;
-        case PACKED:
+        case RLE -> c.putBooleans(rowId, n, currentValue != 0);
+        case PACKED -> {
           for (int i = 0; i < n; ++i) {
             // For Boolean types, `currentBuffer[currentBufferIdx++]` can only be 0 or 1
             c.putByte(rowId + i, (byte) currentBuffer[currentBufferIdx++]);
           }
-          break;
+        }
       }
       rowId += n;
       left -= n;
@@ -709,17 +787,17 @@ public final class VectorizedRleValuesReader extends ValuesReader
 
   @Override
   public void readFloats(int total, WritableColumnVector c, int rowId) {
-    throw new UnsupportedOperationException("only readInts is valid.");
+    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3187");
   }
 
   @Override
   public void readDoubles(int total, WritableColumnVector c, int rowId) {
-    throw new UnsupportedOperationException("only readInts is valid.");
+    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3187");
   }
 
   @Override
   public Binary readBinary(int len) {
-    throw new UnsupportedOperationException("only readInts is valid.");
+    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3187");
   }
 
   @Override
@@ -734,37 +812,37 @@ public final class VectorizedRleValuesReader extends ValuesReader
 
   @Override
   public void skipBytes(int total) {
-    throw new UnsupportedOperationException("only skipIntegers is valid");
+    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3188");
   }
 
   @Override
   public void skipShorts(int total) {
-    throw new UnsupportedOperationException("only skipIntegers is valid");
+    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3188");
   }
 
   @Override
   public void skipLongs(int total) {
-    throw new UnsupportedOperationException("only skipIntegers is valid");
+    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3188");
   }
 
   @Override
   public void skipFloats(int total) {
-    throw new UnsupportedOperationException("only skipIntegers is valid");
+    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3188");
   }
 
   @Override
   public void skipDoubles(int total) {
-    throw new UnsupportedOperationException("only skipIntegers is valid");
+    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3188");
   }
 
   @Override
   public void skipBinary(int total) {
-    throw new UnsupportedOperationException("only skipIntegers is valid");
+    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3188");
   }
 
   @Override
   public void skipFixedLenByteArray(int total, int len) {
-    throw new UnsupportedOperationException("only skipIntegers is valid");
+    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3188");
   }
 
   /**
@@ -797,27 +875,23 @@ public final class VectorizedRleValuesReader extends ValuesReader
    * Reads the next byteWidth little endian int.
    */
   private int readIntLittleEndianPaddedOnBitWidth() throws IOException {
-    switch (bytesWidth) {
-      case 0:
-        return 0;
-      case 1:
-        return in.read();
-      case 2: {
+    return switch (bytesWidth) {
+      case 0 -> 0;
+      case 1 -> in.read();
+      case 2 -> {
         int ch2 = in.read();
         int ch1 = in.read();
-        return (ch1 << 8) + ch2;
+        yield (ch1 << 8) + ch2;
       }
-      case 3: {
+      case 3 -> {
         int ch3 = in.read();
         int ch2 = in.read();
         int ch1 = in.read();
-        return (ch1 << 16) + (ch2 << 8) + (ch3 << 0);
+        yield (ch1 << 16) + (ch2 << 8) + (ch3 << 0);
       }
-      case 4: {
-        return readIntLittleEndian();
-      }
-    }
-    throw new RuntimeException("Unreachable");
+      case 4 -> readIntLittleEndian();
+      default -> throw new RuntimeException("Unreachable");
+    };
   }
 
   /**
@@ -833,11 +907,11 @@ public final class VectorizedRleValuesReader extends ValuesReader
       int header = readUnsignedVarInt();
       this.mode = (header & 1) == 0 ? MODE.RLE : MODE.PACKED;
       switch (mode) {
-        case RLE:
+        case RLE -> {
           this.currentCount = header >>> 1;
           this.currentValue = readIntLittleEndianPaddedOnBitWidth();
-          break;
-        case PACKED:
+        }
+        case PACKED -> {
           int numGroups = header >>> 1;
           this.currentCount = numGroups * 8;
 
@@ -852,9 +926,7 @@ public final class VectorizedRleValuesReader extends ValuesReader
             this.packer.unpack8Values(buffer, buffer.position(), this.currentBuffer, valueIndex);
             valueIndex += 8;
           }
-          break;
-        default:
-          throw new ParquetDecodingException("not a valid mode " + this.mode);
+        }
       }
     } catch (IOException e) {
       throw new ParquetDecodingException("Failed to read from input stream", e);
@@ -872,11 +944,8 @@ public final class VectorizedRleValuesReader extends ValuesReader
       if (this.currentCount == 0 && !readNextGroup()) break;
       int num = Math.min(left, this.currentCount);
       switch (mode) {
-        case RLE:
-          break;
-        case PACKED:
-          currentBufferIdx += num;
-          break;
+        case RLE -> {}
+        case PACKED -> currentBufferIdx += num;
       }
       currentCount -= num;
       left -= num;

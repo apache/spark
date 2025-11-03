@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.IntegerType
 
-class LeftSemiPushdownSuite extends PlanTest {
+class LeftSemiAntiJoinPushDownSuite extends PlanTest {
 
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches =
@@ -46,7 +46,7 @@ class LeftSemiPushdownSuite extends PlanTest {
   val testRelation1 = LocalRelation($"d".int)
   val testRelation2 = LocalRelation($"e".int)
 
-  test("Project: LeftSemiAnti join pushdown") {
+  test("Project: LeftSemi join pushdown") {
     val originalQuery = testRelation
       .select(star())
       .join(testRelation1, joinType = LeftSemi, condition = Some($"b" === $"d"))
@@ -59,7 +59,7 @@ class LeftSemiPushdownSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
-  test("Project: LeftSemiAnti join no pushdown because of non-deterministic proj exprs") {
+  test("Project: LeftSemi join no pushdown - non-deterministic proj exprs") {
     val originalQuery = testRelation
       .select(Rand(1), $"b", $"c")
       .join(testRelation1, joinType = LeftSemi, condition = Some($"b" === $"d"))
@@ -68,7 +68,7 @@ class LeftSemiPushdownSuite extends PlanTest {
     comparePlans(optimized, originalQuery.analyze)
   }
 
-  test("Project: LeftSemiAnti join non correlated scalar subq") {
+  test("Project: LeftSemi join pushdown - non-correlated scalar subq") {
     val subq = ScalarSubquery(testRelation.groupBy($"b")(sum($"c").as("sum")).analyze)
     val originalQuery = testRelation
       .select(subq.as("sum"))
@@ -83,7 +83,7 @@ class LeftSemiPushdownSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
-  test("Project: LeftSemiAnti join no pushdown - correlated scalar subq in projection list") {
+  test("Project: LeftSemi join no pushdown - correlated scalar subq in projection list") {
     val testRelation2 = LocalRelation($"e".int, $"f".int)
     val subqPlan = testRelation2.groupBy($"e")(sum($"f").as("sum")).where($"e" === $"a")
     val subqExpr = ScalarSubquery(subqPlan)
@@ -95,7 +95,7 @@ class LeftSemiPushdownSuite extends PlanTest {
     comparePlans(optimized, originalQuery.analyze)
   }
 
-  test("Aggregate: LeftSemiAnti join pushdown") {
+  test("Aggregate: LeftSemi join pushdown") {
     val originalQuery = testRelation
       .groupBy($"b")($"b", sum($"c"))
       .join(testRelation1, joinType = LeftSemi, condition = Some($"b" === $"d"))
@@ -109,9 +109,9 @@ class LeftSemiPushdownSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
-  test("Aggregate: LeftSemiAnti join no pushdown due to non-deterministic aggr expressions") {
+  test("Aggregate: LeftSemi join no pushdown - non-deterministic aggr expressions") {
     val originalQuery = testRelation
-      .groupBy($"b")($"b", Rand(10).as(Symbol("c")))
+      .groupBy($"b")($"b", Rand(10).as("c"))
       .join(testRelation1, joinType = LeftSemi, condition = Some($"b" === $"d"))
 
     val optimized = Optimize.execute(originalQuery.analyze)
@@ -120,13 +120,13 @@ class LeftSemiPushdownSuite extends PlanTest {
 
   test("Aggregate: LeftSemi join partial pushdown") {
     val originalQuery = testRelation
-      .groupBy($"b")($"b", sum($"c").as(Symbol("sum")))
+      .groupBy($"b")($"b", sum($"c").as("sum"))
       .join(testRelation1, joinType = LeftSemi, condition = Some($"b" === $"d" && $"sum" === 10))
 
     val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer = testRelation
       .join(testRelation1, joinType = LeftSemi, condition = Some($"b" === $"d"))
-      .groupBy($"b")($"b", sum($"c").as(Symbol("sum")))
+      .groupBy($"b")($"b", sum($"c").as("sum"))
       .where($"sum" === 10)
       .analyze
 
@@ -135,23 +135,23 @@ class LeftSemiPushdownSuite extends PlanTest {
 
   test("Aggregate: LeftAnti join no pushdown") {
     val originalQuery = testRelation
-      .groupBy($"b")($"b", sum($"c").as(Symbol("sum")))
+      .groupBy($"b")($"b", sum($"c").as("sum"))
       .join(testRelation1, joinType = LeftAnti, condition = Some($"b" === $"d" && $"sum" === 10))
 
     val optimized = Optimize.execute(originalQuery.analyze)
     comparePlans(optimized, originalQuery.analyze)
   }
 
-  test("LeftSemiAnti join over aggregate - no pushdown") {
+  test("Aggregate: LeftSemi join no pushdown") {
     val originalQuery = testRelation
-      .groupBy($"b")($"b", sum($"c").as(Symbol("sum")))
+      .groupBy($"b")($"b", sum($"c").as("sum"))
       .join(testRelation1, joinType = LeftSemi, condition = Some($"b" === $"d" && $"sum" === $"d"))
 
     val optimized = Optimize.execute(originalQuery.analyze)
     comparePlans(optimized, originalQuery.analyze)
   }
 
-  test("Aggregate: LeftSemiAnti join non-correlated scalar subq aggr exprs") {
+  test("Aggregate: LeftSemi join pushdown - non-correlated scalar subq aggr exprs") {
     val subq = ScalarSubquery(testRelation.groupBy($"b")(sum($"c").as("sum")).analyze)
     val originalQuery = testRelation
       .groupBy($"a") ($"a", subq.as("sum"))
@@ -166,12 +166,12 @@ class LeftSemiPushdownSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
-  test("LeftSemiAnti join over Window") {
+  test("Window: LeftSemi join pushdown") {
     val winExpr = windowExpr(count($"b"),
       windowSpec($"a" :: Nil, $"b".asc :: Nil, UnspecifiedFrame))
 
     val originalQuery = testRelation
-      .select($"a", $"b", $"c", winExpr.as(Symbol("window")))
+      .select($"a", $"b", $"c", winExpr.as("window"))
       .join(testRelation1, joinType = LeftSemi, condition = Some($"a" === $"d"))
 
     val optimized = Optimize.execute(originalQuery.analyze)
@@ -179,20 +179,20 @@ class LeftSemiPushdownSuite extends PlanTest {
     val correctAnswer = testRelation
       .join(testRelation1, joinType = LeftSemi, condition = Some($"a" === $"d"))
       .select($"a", $"b", $"c")
-      .window(winExpr.as(Symbol("window")) :: Nil, $"a" :: Nil, $"b".asc :: Nil)
+      .window(winExpr.as("window") :: Nil, $"a" :: Nil, $"b".asc :: Nil)
       .select($"a", $"b", $"c", $"window").analyze
 
     comparePlans(optimized, correctAnswer)
   }
 
-  test("Window: LeftSemi partial pushdown") {
+  test("Window: LeftSemi join partial pushdown") {
     // Attributes from join condition which does not refer to the window partition spec
     // are kept up in the plan as a Filter operator above Window.
     val winExpr = windowExpr(count($"b"),
       windowSpec($"a" :: Nil, $"b".asc :: Nil, UnspecifiedFrame))
 
     val originalQuery = testRelation
-      .select($"a", $"b", $"c", winExpr.as(Symbol("window")))
+      .select($"a", $"b", $"c", winExpr.as("window"))
       .join(testRelation1, joinType = LeftSemi, condition = Some($"a" === $"d" && $"b" > 5))
 
     val optimized = Optimize.execute(originalQuery.analyze)
@@ -200,7 +200,7 @@ class LeftSemiPushdownSuite extends PlanTest {
     val correctAnswer = testRelation
       .join(testRelation1, joinType = LeftSemi, condition = Some($"a" === $"d"))
       .select($"a", $"b", $"c")
-      .window(winExpr.as(Symbol("window")) :: Nil, $"a" :: Nil, $"b".asc :: Nil)
+      .window(winExpr.as("window") :: Nil, $"a" :: Nil, $"b".asc :: Nil)
       .where($"b" > 5)
       .select($"a", $"b", $"c", $"window").analyze
 
@@ -214,20 +214,20 @@ class LeftSemiPushdownSuite extends PlanTest {
       windowSpec($"a" :: Nil, $"b".asc :: Nil, UnspecifiedFrame))
 
     val originalQuery = testRelation
-      .select($"a", $"b", $"c", winExpr.as(Symbol("window")))
+      .select($"a", $"b", $"c", winExpr.as("window"))
       .join(testRelation1, joinType = LeftAnti, condition = Some($"a" === $"d" && $"b" > 5))
 
     val optimized = Optimize.execute(originalQuery.analyze)
 
     val correctAnswer = testRelation
       .select($"a", $"b", $"c")
-      .window(winExpr.as(Symbol("window")) :: Nil, $"a" :: Nil, $"b".asc :: Nil)
+      .window(winExpr.as("window") :: Nil, $"a" :: Nil, $"b".asc :: Nil)
       .join(testRelation1, joinType = LeftAnti, condition = Some($"a" === $"d" && $"b" > 5))
       .select($"a", $"b", $"c", $"window").analyze
     comparePlans(optimized, correctAnswer)
   }
 
-  test("Union: LeftSemiAnti join pushdown") {
+  test("Union: LeftSemi join pushdown") {
     val testRelation2 = LocalRelation($"x".int, $"y".int, $"z".int)
 
     val originalQuery = Union(Seq(testRelation, testRelation2))
@@ -243,7 +243,7 @@ class LeftSemiPushdownSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
-  test("Union: LeftSemiAnti join pushdown in self join scenario") {
+  test("Union: LeftSemi join pushdown in self join scenario") {
     val testRelation2 = LocalRelation($"x".int, $"y".int, $"z".int)
     val attrX = testRelation2.output.head
 
@@ -262,7 +262,7 @@ class LeftSemiPushdownSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
-  test("Unary: LeftSemiAnti join pushdown") {
+  test("Unary: LeftSemi join pushdown") {
     val originalQuery = testRelation
       .select(star())
       .repartition(1)
@@ -277,7 +277,7 @@ class LeftSemiPushdownSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
-  test("Unary: LeftSemiAnti join pushdown - empty join condition") {
+  test("Unary: LeftSemi join pushdown - empty join condition") {
     val originalQuery = testRelation
       .select(star())
       .repartition(1)
@@ -292,7 +292,7 @@ class LeftSemiPushdownSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
-  test("Unary: LeftSemi join pushdown - partial pushdown") {
+  test("Unary: LeftSemi join partial pushdown") {
     val testRelationWithArrayType = LocalRelation($"a".int, $"b".int, $"c_arr".array(IntegerType))
     val originalQuery = testRelationWithArrayType
       .generate(Explode($"c_arr"), alias = Some("arr"), outputNames = Seq("out_col"))
@@ -309,7 +309,7 @@ class LeftSemiPushdownSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
-  test("Unary: LeftAnti join pushdown - no pushdown") {
+  test("Unary: LeftAnti join no pushdown") {
     val testRelationWithArrayType = LocalRelation($"a".int, $"b".int, $"c_arr".array(IntegerType))
     val originalQuery = testRelationWithArrayType
       .generate(Explode($"c_arr"), alias = Some("arr"), outputNames = Seq("out_col"))
@@ -320,7 +320,7 @@ class LeftSemiPushdownSuite extends PlanTest {
     comparePlans(optimized, originalQuery.analyze)
   }
 
-  test("Unary: LeftSemiAnti join pushdown - no pushdown") {
+  test("Unary: LeftSemi join - no pushdown") {
     val testRelationWithArrayType = LocalRelation($"a".int, $"b".int, $"c_arr".array(IntegerType))
     val originalQuery = testRelationWithArrayType
       .generate(Explode($"c_arr"), alias = Some("arr"), outputNames = Seq("out_col"))
@@ -331,7 +331,7 @@ class LeftSemiPushdownSuite extends PlanTest {
     comparePlans(optimized, originalQuery.analyze)
   }
 
-  test("Unary: LeftSemi join push down through Expand") {
+  test("Unary: LeftSemi join pushdown through Expand") {
     val expand = Expand(Seq(Seq($"a", $"b", "null"), Seq($"a", "null", $"c")),
       Seq($"a", $"b", $"c"), testRelation)
     val originalQuery = expand
@@ -483,4 +483,12 @@ class LeftSemiPushdownSuite extends PlanTest {
     }
   }
 
+  test("SPARK-40628: Do not push complex left semi/anti join condition through project") {
+    val originalQuery = testRelation
+      .select(($"a" + 1).as("new_a"))
+      .join(testRelation1, joinType = LeftSemi, condition = Some($"new_a" === $"d"))
+      .analyze
+
+    comparePlans(Optimize.execute(originalQuery), originalQuery)
+  }
 }

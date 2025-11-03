@@ -17,13 +17,14 @@
 
 package org.apache.spark.sql.internal.connector
 
+import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.catalyst.expressions.ExpressionInfo
 import org.apache.spark.sql.connector.catalog.functions.{BoundFunction, UnboundFunction}
 import org.apache.spark.sql.types.StructType
 
 case class V1Function(info: ExpressionInfo) extends UnboundFunction {
   override def bind(inputType: StructType): BoundFunction = {
-    throw new UnsupportedOperationException("Cannot bind a V1 function.")
+    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3110")
   }
   override def name(): String = info.getName
   override def description(): String = info.getUsage

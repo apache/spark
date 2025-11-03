@@ -29,7 +29,7 @@ private[deploy] object JsonProtocol {
 
   private def writeResourcesInfo(info: Map[String, ResourceInformation]): JObject = {
     val jsonFields = info.map {
-      case (k, v) => JField(k, v.toJson)
+      case (k, v) => JField(k, v.toJson())
     }
     JObject(jsonFields.toList)
   }
@@ -188,7 +188,7 @@ private[deploy] object JsonProtocol {
    * Export the [[MasterStateResponse]] to a Json object. A [[MasterStateResponse]] consists the
    * information of a master node.
    *
-   * @return a Json object containing the following fields:
+   * @return a Json object containing the following fields if `field` is None:
    *         `url` the url of the master node
    *         `workers` a list of Json objects of [[WorkerInfo]] of the workers allocated to the
    *         master
@@ -208,24 +208,63 @@ private[deploy] object JsonProtocol {
    *         `completeddrivers` a list of Json objects of [[DriverInfo]] of the completed drivers
    *         of the master
    *         `status` status of the master,
-   *         see [[org.apache.spark.deploy.master.RecoveryState.MasterState]]
+   *         see [[org.apache.spark.deploy.master.RecoveryState.MasterState]].
+   *         If `field` is not None, the Json object will contain the matched field.
+   *         If `field` doesn't match, the Json object `(field -> "")` is returned.
    */
-  def writeMasterState(obj: MasterStateResponse): JObject = {
+  def writeMasterState(obj: MasterStateResponse, field: Option[String] = None): JObject = {
     val aliveWorkers = obj.workers.filter(_.isAlive())
-    ("url" -> obj.uri) ~
-    ("workers" -> obj.workers.toList.map(writeWorkerInfo)) ~
-    ("aliveworkers" -> aliveWorkers.length) ~
-    ("cores" -> aliveWorkers.map(_.cores).sum) ~
-    ("coresused" -> aliveWorkers.map(_.coresUsed).sum) ~
-    ("memory" -> aliveWorkers.map(_.memory).sum) ~
-    ("memoryused" -> aliveWorkers.map(_.memoryUsed).sum) ~
-    ("resources" -> aliveWorkers.map(_.resourcesInfo).toList.map(writeResourcesInfo)) ~
-    ("resourcesused" -> aliveWorkers.map(_.resourcesInfoUsed).toList.map(writeResourcesInfo)) ~
-    ("activeapps" -> obj.activeApps.toList.map(writeApplicationInfo)) ~
-    ("completedapps" -> obj.completedApps.toList.map(writeApplicationInfo)) ~
-    ("activedrivers" -> obj.activeDrivers.toList.map(writeDriverInfo)) ~
-    ("completeddrivers" -> obj.completedDrivers.toList.map(writeDriverInfo)) ~
-    ("status" -> obj.status.toString)
+    field match {
+      case None =>
+        ("url" -> obj.uri) ~
+        ("workers" -> obj.workers.toList.map (writeWorkerInfo) ) ~
+        ("aliveworkers" -> aliveWorkers.length) ~
+        ("cores" -> aliveWorkers.map (_.cores).sum) ~
+        ("coresused" -> aliveWorkers.map (_.coresUsed).sum) ~
+        ("memory" -> aliveWorkers.map (_.memory).sum) ~
+        ("memoryused" -> aliveWorkers.map (_.memoryUsed).sum) ~
+        ("resources" -> aliveWorkers.map (_.resourcesInfo).toList.map (writeResourcesInfo) ) ~
+        ("resourcesused" ->
+          aliveWorkers.map (_.resourcesInfoUsed).toList.map (writeResourcesInfo) ) ~
+        ("activeapps" -> obj.activeApps.toList.map (writeApplicationInfo) ) ~
+        ("completedapps" -> obj.completedApps.toList.map (writeApplicationInfo) ) ~
+        ("activedrivers" -> obj.activeDrivers.toList.map (writeDriverInfo) ) ~
+        ("completeddrivers" -> obj.completedDrivers.toList.map (writeDriverInfo) ) ~
+        ("status" -> obj.status.toString)
+      case Some(field) =>
+        field match {
+          case "url" =>
+            ("url" -> obj.uri)
+          case "workers" =>
+            ("workers" -> obj.workers.toList.map (writeWorkerInfo) )
+          case "aliveworkers" =>
+            ("aliveworkers" -> aliveWorkers.length)
+          case "cores" =>
+            ("cores" -> aliveWorkers.map (_.cores).sum)
+          case "coresused" =>
+            ("coresused" -> aliveWorkers.map (_.coresUsed).sum)
+          case "memory" =>
+            ("memory" -> aliveWorkers.map (_.memory).sum)
+          case "memoryused" =>
+            ("memoryused" -> aliveWorkers.map (_.memoryUsed).sum)
+          case "resources" =>
+            ("resources" -> aliveWorkers.map (_.resourcesInfo).toList.map (writeResourcesInfo) )
+          case "resourcesused" =>
+            ("resourcesused" ->
+              aliveWorkers.map (_.resourcesInfoUsed).toList.map (writeResourcesInfo) )
+          case "activeapps" =>
+            ("activeapps" -> obj.activeApps.toList.map (writeApplicationInfo) )
+          case "completedapps" =>
+            ("completedapps" -> obj.completedApps.toList.map (writeApplicationInfo) )
+          case "activedrivers" =>
+            ("activedrivers" -> obj.activeDrivers.toList.map (writeDriverInfo) )
+          case "completeddrivers" =>
+            ("completeddrivers" -> obj.completedDrivers.toList.map (writeDriverInfo) )
+          case "status" =>
+            ("status" -> obj.status.toString)
+          case field => (field -> "")
+        }
+    }
   }
 
   /**
@@ -259,5 +298,23 @@ private[deploy] object JsonProtocol {
     ("resourcesused" -> writeResourcesInfo(obj.resourcesUsed)) ~
     ("executors" -> obj.executors.map(writeExecutorRunner)) ~
     ("finishedexecutors" -> obj.finishedExecutors.map(writeExecutorRunner))
+  }
+
+  /**
+   * Export the cluster utilization based on the [[MasterStateResponse]] to a Json object.
+   */
+  def writeClusterUtilization(obj: MasterStateResponse): JObject = {
+    val aliveWorkers = obj.workers.filter(_.isAlive())
+    val cores = aliveWorkers.map(_.cores).sum
+    val coresUsed = aliveWorkers.map(_.coresUsed).sum
+    val memory = aliveWorkers.map(_.memory).sum
+    val memoryUsed = aliveWorkers.map(_.memoryUsed).sum
+    ("waitingDrivers" -> obj.activeDrivers.count(_.state == DriverState.SUBMITTED)) ~
+    ("cores" -> cores) ~
+    ("coresused" -> coresUsed) ~
+    ("coresutilization" -> (if (cores == 0) 100 else 100 * coresUsed / cores)) ~
+    ("memory" -> memory) ~
+    ("memoryused" -> memoryUsed) ~
+    ("memoryutilization" -> (if (memory == 0) 100 else 100 * memoryUsed / memory))
   }
 }

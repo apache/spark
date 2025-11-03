@@ -368,12 +368,12 @@ class ParamTests(SparkSessionTestCase):
         self.assertFalse(binarizer.isSet(binarizer.outputCol))
         self.assertEqual(result[0][0], 1.0)
 
-    def test_lr_evaluate_invaild_type(self):
+    def test_lr_evaluate_invalid_type(self):
         lr = LinearRegressionModel()
         invalid_type = ""
         self.assertRaises(TypeError, lr.evaluate, invalid_type)
 
-    def test_glr_evaluate_invaild_type(self):
+    def test_glr_evaluate_invalid_type(self):
         glr = GeneralizedLinearRegressionModel()
         invalid_type = ""
         self.assertRaises(TypeError, glr.evaluate, invalid_type)
@@ -433,7 +433,7 @@ if __name__ == "__main__":
     from pyspark.ml.tests.test_param import *  # noqa: F401
 
     try:
-        import xmlrunner  # type: ignore[import]
+        import xmlrunner
 
         testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:

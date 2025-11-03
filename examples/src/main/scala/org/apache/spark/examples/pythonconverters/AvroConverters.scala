@@ -19,7 +19,7 @@ package org.apache.spark.examples.pythonconverters
 
 import java.util.{Collection => JCollection, Map => JMap}
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.avro.Schema
 import org.apache.avro.Schema.Type._

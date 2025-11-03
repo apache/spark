@@ -17,12 +17,13 @@
 
 package org.apache.spark.sql
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.plans.{Inner, InnerLike, LeftOuter, RightOuter}
 import org.apache.spark.sql.catalyst.plans.logical.{BROADCAST, Filter, HintInfo, Join, JoinHint, LogicalPlan, Project}
 import org.apache.spark.sql.connector.catalog.CatalogManager
+import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.execution.FileSourceScanExec
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.analysis.DetectAmbiguousSelfJoin.LogicalPlanWithDatasetId
@@ -57,6 +58,15 @@ class DataFrameJoinSuite extends QueryTest
       Row(1, 2, "1", "2") :: Row(2, 3, "2", "3") :: Row(3, 4, "3", "4") :: Nil)
   }
 
+  test("join - join using multiple columns array") {
+    val df = Seq(1, 2, 3).map(i => (i, i + 1, i.toString)).toDF("int", "int2", "str")
+    val df2 = Seq(1, 2, 3).map(i => (i, i + 1, (i + 1).toString)).toDF("int", "int2", "str")
+
+    checkAnswer(
+      df.join(df2, Array("int", "int2")),
+      Row(1, 2, "1", "2") :: Row(2, 3, "2", "3") :: Row(3, 4, "3", "4") :: Nil)
+  }
+
   test("join - sorted columns not in join's outputSet") {
     val df = Seq((1, 2, "1"), (3, 4, "3")).toDF("int", "int2", "str_sort").as("df1")
     val df2 = Seq((1, 3, "1"), (5, 6, "5")).toDF("int", "int2", "str").as("df2")
@@ -71,6 +81,15 @@ class DataFrameJoinSuite extends QueryTest
       df2.join(df3, $"df2.int" === $"df3.int", "inner")
         .select($"df2.int", $"df3.int").orderBy($"df2.str".desc),
       Row(5, 5) :: Row(1, 1) :: Nil)
+  }
+
+  test("join - join using specifying join type") {
+    val df = Seq(1, 2, 3).map(i => (i, i.toString)).toDF("int", "str")
+    val df2 = Seq(1, 2, 3).map(i => (i, (i + 1).toString)).toDF("int", "str")
+
+    checkAnswer(
+      df.join(df2, "int", "inner"),
+      Row(1, "1", "2") :: Row(2, "2", "3") :: Row(3, "3", "4") :: Nil)
   }
 
   test("join - join using multiple columns and specifying join type") {
@@ -110,6 +129,43 @@ class DataFrameJoinSuite extends QueryTest
       Row(3, "3", 4) :: Nil)
   }
 
+  test("join - join using multiple columns array and specifying join type") {
+    val df = Seq((1, 2, "1"), (3, 4, "3")).toDF("int", "int2", "str")
+    val df2 = Seq((1, 3, "1"), (5, 6, "5")).toDF("int", "int2", "str")
+
+    checkAnswer(
+      df.join(df2, Array("int", "str"), "inner"),
+      Row(1, "1", 2, 3) :: Nil)
+
+    checkAnswer(
+      df.join(df2, Array("int", "str"), "left"),
+      Row(1, "1", 2, 3) :: Row(3, "3", 4, null) :: Nil)
+
+    checkAnswer(
+      df.join(df2, Array("int", "str"), "right"),
+      Row(1, "1", 2, 3) :: Row(5, "5", null, 6) :: Nil)
+
+    checkAnswer(
+      df.join(df2, Array("int", "str"), "outer"),
+      Row(1, "1", 2, 3) :: Row(3, "3", 4, null) :: Row(5, "5", null, 6) :: Nil)
+
+    checkAnswer(
+      df.join(df2, Array("int", "str"), "left_semi"),
+      Row(1, "1", 2) :: Nil)
+
+    checkAnswer(
+      df.join(df2, Array("int", "str"), "semi"),
+      Row(1, "1", 2) :: Nil)
+
+    checkAnswer(
+      df.join(df2, Array("int", "str"), "left_anti"),
+      Row(3, "3", 4) :: Nil)
+
+    checkAnswer(
+      df.join(df2, Array("int", "str"), "anti"),
+      Row(3, "3", 4) :: Nil)
+  }
+
   test("join - cross join") {
     val df1 = Seq((1, "1"), (3, "3")).toDF("int", "str")
     val df2 = Seq((2, "2"), (4, "4")).toDF("int", "str")
@@ -139,22 +195,28 @@ class DataFrameJoinSuite extends QueryTest
     val df1 = Seq((1, "1"), (2, "2")).toDF("key", "value")
     val df2 = Seq((1, "1"), (2, "2")).toDF("key", "value")
 
-    // equijoin - should be converted into broadcast join
-    val plan1 = df1.join(broadcast(df2), "key").queryExecution.sparkPlan
-    assert(plan1.collect { case p: BroadcastHashJoinExec => p }.size === 1)
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      // equijoin - should not be converted into broadcast join without hint
+      val plan1 = df1.join(df2, "key").queryExecution.sparkPlan
+      assert(plan1.collect { case p: BroadcastHashJoinExec => p }.size === 0)
 
-    // no join key -- should not be a broadcast join
-    val plan2 = df1.crossJoin(broadcast(df2)).queryExecution.sparkPlan
-    assert(plan2.collect { case p: BroadcastHashJoinExec => p }.size === 0)
+      // equijoin - should be converted into broadcast join with hint
+      val plan2 = df1.join(broadcast(df2), "key").queryExecution.sparkPlan
+      assert(plan2.collect { case p: BroadcastHashJoinExec => p }.size === 1)
 
-    // planner should not crash without a join
-    broadcast(df1).queryExecution.sparkPlan
+      // no join key -- should not be a broadcast join
+      val plan3 = df1.crossJoin(broadcast(df2)).queryExecution.sparkPlan
+      assert(plan3.collect { case p: BroadcastHashJoinExec => p }.size === 0)
 
-    // SPARK-12275: no physical plan for BroadcastHint in some condition
-    withTempPath { path =>
-      df1.write.parquet(path.getCanonicalPath)
-      val pf1 = spark.read.parquet(path.getCanonicalPath)
-      assert(df1.crossJoin(broadcast(pf1)).count() === 4)
+      // planner should not crash without a join
+      broadcast(df1).queryExecution.sparkPlan
+
+      // SPARK-12275: no physical plan for BroadcastHint in some condition
+      withTempPath { path =>
+        df1.write.parquet(path.getCanonicalPath)
+        val pf1 = spark.read.parquet(path.getCanonicalPath)
+        assert(df1.crossJoin(broadcast(pf1)).count() === 4)
+      }
     }
   }
 
@@ -223,7 +285,7 @@ class DataFrameJoinSuite extends QueryTest
   test("process outer join results using the non-nullable columns in the join input") {
     // Filter data using a non-nullable column from a right table
     val df1 = Seq((0, 0), (1, 0), (2, 0), (3, 0), (4, 0)).toDF("id", "count")
-    val df2 = Seq(Tuple1(0), Tuple1(1)).toDF("id").groupBy("id").count
+    val df2 = Seq(Tuple1(0), Tuple1(1)).toDF("id").groupBy("id").count()
     checkAnswer(
       df1.join(df2, df1("id") === df2("id"), "left_outer").filter(df2("count").isNull),
       Row(2, 0, null, null) ::
@@ -285,6 +347,24 @@ class DataFrameJoinSuite extends QueryTest
           LogicalPlanWithDatasetId(_, rightId), _, _, _) =>
           assert(leftId === rightId)
       }
+    }
+  }
+
+  Seq("left_semi", "left_anti").foreach { joinType =>
+    test(s"SPARK-41162: $joinType self-joined aggregated dataframe") {
+      // aggregated dataframe
+      val ids = Seq(1, 2, 3).toDF("id").distinct()
+
+      // self-joined via joinType
+      val result = ids.withColumn("id", $"id" + 1)
+        .join(ids, "id", joinType).collect()
+
+      val expected = joinType match {
+        case "left_semi" => 2
+        case "left_anti" => 1
+        case _ => -1  // unsupported test type, test will always fail
+      }
+      assert(result.length == expected)
     }
   }
 
@@ -368,10 +448,11 @@ class DataFrameJoinSuite extends QueryTest
             }
             assert(broadcastExchanges.size == 1)
             val tables = broadcastExchanges.head.collect {
-              case FileSourceScanExec(_, _, _, _, _, _, _, Some(tableIdent), _) => tableIdent
+              case FileSourceScanExec(_, _, _, _, _, _, _, _, Some(tableIdent), _) => tableIdent
             }
             assert(tables.size == 1)
-            assert(tables.head === TableIdentifier(table1Name, Some(dbName)))
+            assert(tables.head ===
+              TableIdentifier(table1Name, Some(dbName), Some(SESSION_CATALOG_NAME)))
           }
 
           def checkIfHintNotApplied(df: DataFrame): Unit = {
@@ -498,5 +579,56 @@ class DataFrameJoinSuite extends QueryTest
         )
       )
     }
+  }
+
+  test("SPARK-39376: Hide duplicated columns in star expansion of subquery alias from USING JOIN") {
+    val joinDf = testData2.as("testData2").join(
+      testData3.as("testData3"), usingColumns = Seq("a"), joinType = "fullouter")
+    val equivalentQueries = Seq(
+      joinDf.select($"*"),
+      joinDf.as("r").select($"*"),
+      joinDf.as("r").select($"r.*")
+    )
+    equivalentQueries.foreach { query =>
+      checkAnswer(query,
+        Seq(
+          Row(1, 1, null),
+          Row(1, 2, null),
+          Row(2, 1, 2),
+          Row(2, 2, 2),
+          Row(3, 1, null),
+          Row(3, 2, null)
+        )
+      )
+    }
+  }
+
+  test("SPARK-20359: catalyst outer join optimization should not throw npe") {
+    val df1 = Seq("a", "b", "c").toDF("x")
+      .withColumn("y", udf{ (x: String) => x.substring(0, 1) + "!" }.apply($"x"))
+    val df2 = Seq("a", "b").toDF("x1")
+    df1
+      .join(df2, df1("x") === df2("x1"), "left_outer")
+      .filter($"x1".isNotNull || !$"y".isin("a!"))
+      .count()
+  }
+
+  test("SPARK-16181: outer join with isNull filter") {
+    val left = Seq("x").toDF("col")
+    val right = Seq("y").toDF("col").withColumn("new", lit(true))
+    val joined = left.join(right, left("col") === right("col"), "left_outer")
+
+    checkAnswer(joined, Row("x", null, null))
+    checkAnswer(joined.filter($"new".isNull), Row("x", null, null))
+  }
+
+  test("SPARK-47810: replace equivalent expression to <=> in join condition") {
+    val joinTypes = Seq("inner", "outer", "left", "right", "semi", "anti", "cross")
+    joinTypes.foreach(joinType => {
+      val df1 = testData3.as("x").join(testData3.as("y"),
+        ($"x.a" <=> $"y.b").or($"x.a".isNull.and($"y.b".isNull)), joinType)
+      val df2 = testData3.as("x").join(testData3.as("y"), $"x.a" <=> $"y.b", joinType)
+      checkAnswer(df1, df2)
+    })
   }
 }

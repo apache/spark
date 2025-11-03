@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.connector.read.{InputPartition, Scan}
 import org.apache.spark.sql.connector.read.streaming.{ContinuousPartitionReaderFactory, ContinuousStream, Offset}
 import org.apache.spark.sql.execution.streaming.continuous._
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * Physical plan node for scanning data from a streaming data source with continuous mode.
@@ -32,7 +33,8 @@ case class ContinuousScanExec(
     @transient scan: Scan,
     @transient stream: ContinuousStream,
     @transient start: Offset,
-    keyGroupedPartitioning: Option[Seq[Expression]] = None) extends DataSourceV2ScanExecBase {
+    keyGroupedPartitioning: Option[Seq[Expression]] = None,
+    ordering: Option[Seq[SortOrder]] = None) extends DataSourceV2ScanExecBase {
 
   // TODO: unify the equal/hashCode implementation for all data source v2 query plans.
   override def equals(other: Any): Boolean = other match {
@@ -42,7 +44,8 @@ case class ContinuousScanExec(
 
   override def hashCode(): Int = stream.hashCode()
 
-  override lazy val inputPartitions: Seq[InputPartition] = stream.planInputPartitions(start)
+  override lazy val inputPartitions: Seq[InputPartition] =
+    stream.planInputPartitions(start).toImmutableArraySeq
 
   override lazy val readerFactory: ContinuousPartitionReaderFactory = {
     stream.createContinuousReaderFactory()
@@ -54,7 +57,7 @@ case class ContinuousScanExec(
       sparkContext.getLocalProperty(ContinuousExecution.EPOCH_COORDINATOR_ID_KEY),
       sparkContext.env)
       .askSync[Unit](SetReaderPartitions(partitions.size))
-    new ContinuousDataSourceRDD(
+    val inputRDD = new ContinuousDataSourceRDD(
       sparkContext,
       conf.continuousStreamingExecutorQueueSize,
       conf.continuousStreamingExecutorPollIntervalMs,
@@ -62,5 +65,7 @@ case class ContinuousScanExec(
       schema,
       readerFactory,
       customMetrics)
+    postDriverMetrics()
+    inputRDD
   }
 }

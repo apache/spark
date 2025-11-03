@@ -40,6 +40,15 @@ public class ChildFirstURLClassLoader extends MutableURLClassLoader {
     this.parent = new ParentClassLoader(parent);
   }
 
+  /**
+   * Specify the grandparent if there is a need to load in the order of
+   * `grandparent -&gt; urls (child) -&gt; parent`.
+   */
+  public ChildFirstURLClassLoader(URL[] urls, ClassLoader parent, ClassLoader grandparent) {
+    super(urls, grandparent);
+    this.parent = new ParentClassLoader(parent);
+  }
+
   @Override
   public Class<?> loadClass(String name, boolean resolve) throws ClassNotFoundException {
     try {

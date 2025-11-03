@@ -19,8 +19,8 @@ package test.org.apache.spark.sql;
 
 import java.util.Arrays;
 
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 import scala.Tuple2;
 
 import org.apache.spark.sql.Dataset;
@@ -36,7 +36,7 @@ public class Java8DatasetAggregatorSuite extends JavaDatasetAggregatorSuiteBase 
     KeyValueGroupedDataset<String, Tuple2<String, Integer>> grouped = generateGroupedDataset();
     Dataset<Tuple2<String, Double>> aggregated = grouped.agg(
       org.apache.spark.sql.expressions.javalang.typed.avg(v -> (double)(v._2() * 2)));
-    Assert.assertEquals(
+    Assertions.assertEquals(
         Arrays.asList(new Tuple2<>("a", 3.0), new Tuple2<>("b", 6.0)),
         aggregated.collectAsList());
   }
@@ -47,7 +47,7 @@ public class Java8DatasetAggregatorSuite extends JavaDatasetAggregatorSuiteBase 
     KeyValueGroupedDataset<String, Tuple2<String, Integer>> grouped = generateGroupedDataset();
     Dataset<Tuple2<String, Long>> aggregated = grouped.agg(
       org.apache.spark.sql.expressions.javalang.typed.count(v -> v));
-    Assert.assertEquals(
+    Assertions.assertEquals(
         Arrays.asList(new Tuple2<>("a", 2L), new Tuple2<>("b", 1L)),
         aggregated.collectAsList());
   }
@@ -58,7 +58,7 @@ public class Java8DatasetAggregatorSuite extends JavaDatasetAggregatorSuiteBase 
     KeyValueGroupedDataset<String, Tuple2<String, Integer>> grouped = generateGroupedDataset();
     Dataset<Tuple2<String, Double>> aggregated = grouped.agg(
       org.apache.spark.sql.expressions.javalang.typed.sum(v -> (double)v._2()));
-    Assert.assertEquals(
+    Assertions.assertEquals(
         Arrays.asList(new Tuple2<>("a", 3.0), new Tuple2<>("b", 3.0)),
         aggregated.collectAsList());
   }
@@ -69,7 +69,7 @@ public class Java8DatasetAggregatorSuite extends JavaDatasetAggregatorSuiteBase 
     KeyValueGroupedDataset<String, Tuple2<String, Integer>> grouped = generateGroupedDataset();
     Dataset<Tuple2<String, Long>> aggregated = grouped.agg(
       org.apache.spark.sql.expressions.javalang.typed.sumLong(v -> (long)v._2()));
-    Assert.assertEquals(
+    Assertions.assertEquals(
         Arrays.asList(new Tuple2<>("a", 3L), new Tuple2<>("b", 3L)),
         aggregated.collectAsList());
   }

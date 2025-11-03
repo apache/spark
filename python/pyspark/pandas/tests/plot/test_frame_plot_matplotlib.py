@@ -24,12 +24,8 @@ import numpy as np
 
 from pyspark import pandas as ps
 from pyspark.pandas.config import set_option, reset_option
-from pyspark.testing.pandasutils import (
-    have_matplotlib,
-    matplotlib_requirement_message,
-    PandasOnSparkTestCase,
-    TestUtils,
-)
+from pyspark.testing.pandasutils import PandasOnSparkTestCase, TestUtils
+from pyspark.testing.utils import have_matplotlib, matplotlib_requirement_message
 
 if have_matplotlib:
     import matplotlib
@@ -39,7 +35,7 @@ if have_matplotlib:
 
 
 @unittest.skipIf(not have_matplotlib, matplotlib_requirement_message)
-class DataFramePlotMatplotlibTest(PandasOnSparkTestCase, TestUtils):
+class DataFramePlotMatplotlibTestsMixin:
     sample_ratio_default = None
 
     @classmethod
@@ -473,11 +469,17 @@ class DataFramePlotMatplotlibTest(PandasOnSparkTestCase, TestUtils):
         check_kde_plot(pdf1, psdf1, ind=[1, 2, 3], bw_method=3.0)
 
 
+class DataFramePlotMatplotlibTests(
+    DataFramePlotMatplotlibTestsMixin, PandasOnSparkTestCase, TestUtils
+):
+    pass
+
+
 if __name__ == "__main__":
     from pyspark.pandas.tests.plot.test_frame_plot_matplotlib import *  # noqa: F401
 
     try:
-        import xmlrunner  # type: ignore[import]
+        import xmlrunner
 
         testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:

@@ -17,8 +17,8 @@
       url: sql-getting-started.html#interoperating-with-rdds
     - text: Scalar Functions
       url: sql-getting-started.html#scalar-functions
-    - text: Aggregations
-      url: sql-getting-started.html#aggregations
+    - text: Aggregate Functions
+      url: sql-getting-started.html#aggregate-functions
 - text: Data Sources
   url: sql-data-sources.html
   subitems:
@@ -36,12 +36,16 @@
       url: sql-data-sources-csv.html
     - text: Text Files
       url: sql-data-sources-text.html
+    - text: XML Files
+      url: sql-data-sources-xml.html
     - text: Hive Tables
       url: sql-data-sources-hive-tables.html
     - text: JDBC To Other Databases
       url: sql-data-sources-jdbc.html
     - text: Avro Files
       url: sql-data-sources-avro.html
+    - text: Protobuf data
+      url: sql-data-sources-protobuf.html
     - text: Whole Binary Files
       url: sql-data-sources-binaryFile.html
     - text: Troubleshooting
@@ -49,16 +53,18 @@
 - text: Performance Tuning
   url: sql-performance-tuning.html
   subitems:
-    - text: Caching Data In Memory
-      url: sql-performance-tuning.html#caching-data-in-memory
-    - text: Other Configuration Options
-      url: sql-performance-tuning.html#other-configuration-options
-    - text: Join Strategy Hints for SQL Queries
-      url: sql-performance-tuning.html#join-strategy-hints-for-sql-queries
-    - text: Coalesce Hints for SQL Queries
-      url: sql-performance-tuning.html#coalesce-hints-for-sql-queries
+    - text: Caching Data
+      url: sql-performance-tuning.html#caching-data
+    - text: Tuning Partitions
+      url: sql-performance-tuning.html#tuning-partitions
+    - text: Leveraging Statistics
+      url: sql-performance-tuning.html#leveraging-statistics
+    - text: Optimizing the Join Strategy
+      url: sql-performance-tuning.html#optimizing-the-join-strategy
     - text: Adaptive Query Execution
       url: sql-performance-tuning.html#adaptive-query-execution
+    - text: Storage Partition Join
+      url: sql-performance-tuning.html#storage-partition-join
 - text: Distributed SQL Engine
   url: sql-distributed-sql-engine.html
   subitems:
@@ -69,7 +75,7 @@
 - text: PySpark Usage Guide for Pandas with Apache Arrow
   url: sql-pyspark-pandas-with-arrow.html
 - text: Migration Guide
-  url: sql-migration-old.html
+  url: sql-migration-guide.html
 - text: SQL Reference
   url: sql-ref.html
   subitems:
@@ -81,10 +87,14 @@
       url: sql-ref-datetime-pattern.html
     - text: Number Pattern
       url: sql-ref-number-pattern.html
+    - text: Operators
+      url: sql-ref-operators.html
     - text: Functions
       url: sql-ref-functions.html
     - text: Identifiers
       url: sql-ref-identifier.html
+    - text: IDENTIFIER clause
+      url: sql-ref-identifier-clause.html
     - text: Literals
       url: sql-ref-literals.html
     - text: Null Semantics
@@ -100,3 +110,7 @@
           url: sql-ref-syntax.html#data-retrieval-statements
         - text: Auxiliary Statements
           url: sql-ref-syntax.html#auxiliary-statements
+        - text: Pipe Syntax
+          url: sql-pipe-syntax.html
+- text: Error Conditions
+  url: sql-error-conditions.html

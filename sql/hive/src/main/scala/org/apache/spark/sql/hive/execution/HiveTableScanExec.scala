@@ -17,15 +17,17 @@
 
 package org.apache.spark.sql.hive.execution
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.hive.ql.io.{DelegateSymlinkTextInputFormat, SymlinkTextInputFormat}
 import org.apache.hadoop.hive.ql.metadata.{Partition => HivePartition}
 import org.apache.hadoop.hive.ql.plan.TableDesc
 import org.apache.hadoop.hive.serde.serdeConstants
 import org.apache.hadoop.hive.serde2.objectinspector._
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspectorUtils.ObjectInspectorCopyOption
 import org.apache.hadoop.hive.serde2.typeinfo.TypeInfoUtils
+import org.apache.hadoop.mapred.InputFormat
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SparkSession
@@ -38,7 +40,7 @@ import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.hive._
 import org.apache.spark.sql.hive.client.HiveClientImpl
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.{SessionStateHelper, SQLConf}
 import org.apache.spark.sql.types.{BooleanType, DataType}
 import org.apache.spark.util.Utils
 
@@ -55,12 +57,12 @@ case class HiveTableScanExec(
     relation: HiveTableRelation,
     partitionPruningPred: Seq[Expression])(
     @transient private val sparkSession: SparkSession)
-  extends LeafExecNode with CastSupport {
+  extends LeafExecNode with CastSupport with SessionStateHelper {
 
   require(partitionPruningPred.isEmpty || relation.isPartitioned,
     "Partition pruning predicates only supported for partitioned tables.")
 
-  override def conf: SQLConf = sparkSession.sessionState.conf
+  override def conf: SQLConf = getSqlConf(sparkSession)
 
   override def nodeName: String = s"Scan hive ${relation.tableMeta.qualifiedName}"
 
@@ -89,14 +91,14 @@ case class HiveTableScanExec(
 
   @transient private lazy val hiveQlTable = HiveClientImpl.toHiveTable(relation.tableMeta)
   @transient private lazy val tableDesc = new TableDesc(
-    hiveQlTable.getInputFormatClass,
+    getInputFormat(hiveQlTable.getInputFormatClass, conf),
     hiveQlTable.getOutputFormatClass,
     hiveQlTable.getMetadata)
 
   // Create a local copy of hadoopConf,so that scan specific modifications should not impact
   // other queries
   @transient private lazy val hadoopConf = {
-    val c = sparkSession.sessionState.newHadoopConf()
+    val c = getHadoopConf(sparkSession)
     // append columns ids and names before broadcast
     addColumnMetadataToConf(c)
     c
@@ -157,7 +159,7 @@ case class HiveTableScanExec(
 
         // Only partitioned values are needed here, since the predicate has already been bound to
         // partition key attribute references.
-        val row = InternalRow.fromSeq(castedValues.toSeq)
+        val row = new GenericInternalRow(castedValues.toArray)
         shouldKeep.eval(row).asInstanceOf[Boolean]
       }
     }
@@ -173,8 +175,7 @@ case class HiveTableScanExec(
         prunePartitions(hivePartitions)
       }
     } else {
-      if (sparkSession.sessionState.conf.metastorePartitionPruning &&
-        partitionPruningPred.nonEmpty) {
+      if (conf.metastorePartitionPruning && partitionPruningPred.nonEmpty) {
         rawPartitions
       } else {
         prunePartitions(rawPartitions)
@@ -185,16 +186,15 @@ case class HiveTableScanExec(
   // exposed for tests
   @transient lazy val rawPartitions: Seq[HivePartition] = {
     val prunedPartitions =
-      if (sparkSession.sessionState.conf.metastorePartitionPruning &&
-        partitionPruningPred.nonEmpty) {
+      if (conf.metastorePartitionPruning && partitionPruningPred.nonEmpty) {
         // Retrieve the original attributes based on expression ID so that capitalization matches.
         val normalizedFilters = partitionPruningPred.map(_.transform {
           case a: AttributeReference => originalAttributes(a)
         })
-        sparkSession.sessionState.catalog
+        sessionState(sparkSession).catalog
           .listPartitionsByFilter(relation.tableMeta.identifier, normalizedFilters)
       } else {
-        sparkSession.sessionState.catalog.listPartitions(relation.tableMeta.identifier)
+        sessionState(sparkSession).catalog.listPartitions(relation.tableMeta.identifier)
       }
     prunedPartitions.map(HiveClientImpl.toHivePartition(_, hiveQlTable))
   }
@@ -229,6 +229,20 @@ case class HiveTableScanExec(
   private def filterUnusedDynamicPruningExpressions(
       predicates: Seq[Expression]): Seq[Expression] = {
     predicates.filterNot(_ == DynamicPruningExpression(Literal.TrueLiteral))
+  }
+
+  // Optionally returns a delegate input format based on the provided input format class.
+  // This is currently used to replace SymlinkTextInputFormat with DelegateSymlinkTextInputFormat
+  // in order to fix SPARK-40815.
+  private def getInputFormat(
+      inputFormatClass: Class[_ <: InputFormat[_, _]],
+      conf: SQLConf): Class[_ <: InputFormat[_, _]] = {
+    if (inputFormatClass == classOf[SymlinkTextInputFormat] &&
+        conf != null && conf.getConf(HiveUtils.USE_DELEGATE_FOR_SYMLINK_TEXT_INPUT_FORMAT)) {
+      classOf[DelegateSymlinkTextInputFormat]
+    } else {
+      inputFormatClass
+    }
   }
 
   override def doCanonicalize(): HiveTableScanExec = {

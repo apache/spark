@@ -17,24 +17,29 @@
 
 package org.apache.spark.sql.execution.datasources
 
-import java.io.{Closeable, FileNotFoundException, IOException}
-
-import scala.util.control.NonFatal
+import java.io.{Closeable, FileNotFoundException}
+import java.net.URI
 
 import org.apache.hadoop.fs.Path
+import org.apache.hadoop.hdfs.BlockMissingException
+import org.apache.hadoop.security.AccessControlException
 
-import org.apache.spark.{Partition => RDDPartition, SparkUpgradeException, TaskContext}
+import org.apache.spark.{Partition => RDDPartition, TaskContext}
 import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.internal.LogKeys.{CURRENT_FILE, PATH}
+import org.apache.spark.paths.SparkPath
 import org.apache.spark.rdd.{InputFileBlockHolder, RDD}
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, GenericInternalRow, JoinedRow, UnsafeProjection, UnsafeRow}
-import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.catalyst.{FileSourceOptions, InternalRow}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, GenericInternalRow, JoinedRow, Literal, UnsafeProjection, UnsafeRow}
+import org.apache.spark.sql.catalyst.types.PhysicalDataType
+import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.execution.datasources.FileFormat._
-import org.apache.spark.sql.execution.vectorized.ConstantColumnVector
-import org.apache.spark.sql.types.{LongType, StringType, StructType}
-import org.apache.spark.sql.vectorized.ColumnarBatch
-import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.sql.execution.datasources.v2.FileDataSourceV2
+import org.apache.spark.sql.execution.vectorized.{ColumnVectorUtils, ConstantColumnVector}
+import org.apache.spark.sql.types._
+import org.apache.spark.sql.vectorized.{ColumnarBatch, ColumnVector}
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.NextIterator
 
 /**
@@ -47,15 +52,22 @@ import org.apache.spark.util.NextIterator
  * @param length number of bytes to read.
  * @param modificationTime The modification time of the input file, in milliseconds.
  * @param fileSize The length of the input file (not the block), in bytes.
+ * @param otherConstantMetadataColumnValues The values of any additional constant metadata columns.
  */
 case class PartitionedFile(
     partitionValues: InternalRow,
-    filePath: String,
+    filePath: SparkPath,
     start: Long,
     length: Long,
     @transient locations: Array[String] = Array.empty,
     modificationTime: Long = 0L,
-    fileSize: Long = 0L) {
+    fileSize: Long = 0L,
+    otherConstantMetadataColumnValues: Map[String, Any] = Map.empty) {
+
+  def pathUri: URI = filePath.toUri
+  def toPath: Path = filePath.toPath
+  def urlEncodedPath: String = filePath.urlEncoded
+
   override def toString: String = {
     s"path: $filePath, range: $start-${start + length}, partition values: $partitionValues"
   }
@@ -63,17 +75,20 @@ case class PartitionedFile(
 
 /**
  * An RDD that scans a list of file partitions.
+ * @param metadataColumns File-constant metadata columns to append to end of schema.
  */
 class FileScanRDD(
     @transient private val sparkSession: SparkSession,
     readFunction: (PartitionedFile) => Iterator[InternalRow],
     @transient val filePartitions: Seq[FilePartition],
-    val readDataSchema: StructType,
-    val metadataColumns: Seq[AttributeReference] = Seq.empty)
+    val readSchema: StructType,
+    val metadataColumns: Seq[AttributeReference] = Seq.empty,
+    metadataExtractors: Map[String, PartitionedFile => Any] = Map.empty,
+    options: FileSourceOptions = new FileSourceOptions(CaseInsensitiveMap(Map.empty)))
   extends RDD[InternalRow](sparkSession.sparkContext, Nil) {
 
-  private val ignoreCorruptFiles = sparkSession.sessionState.conf.ignoreCorruptFiles
-  private val ignoreMissingFiles = sparkSession.sessionState.conf.ignoreMissingFiles
+  private val ignoreCorruptFiles = options.ignoreCorruptFiles
+  private val ignoreMissingFiles = options.ignoreMissingFiles
 
   override def compute(split: RDDPartition, context: TaskContext): Iterator[InternalRow] = {
     val iterator = new Iterator[Object] with AutoCloseable {
@@ -108,12 +123,23 @@ class FileScanRDD(
         currentIterator = null
       }
 
+      // This is called by both `hasNext` and `nextIterator`. We do not merge it into `hasNext`,
+      // to make the error enhancement in `hasNext` only apply once in the recursion (`nextIterator`
+      // calls `hasNext0`).
+      private def hasNext0: Boolean = {
+        (currentIterator != null && currentIterator.hasNext) || nextIterator()
+      }
+
       def hasNext: Boolean = {
         // Kill the task in case it has been marked as killed. This logic is from
         // InterruptibleIterator, but we inline it here instead of wrapping the iterator in order
         // to avoid performance overhead.
         context.killTaskIfInterrupted()
-        (currentIterator != null && currentIterator.hasNext) || nextIterator()
+        try {
+          hasNext0
+        } catch {
+          case e: Throwable => throw FileDataSourceV2.attachFilePath(currentFile.urlEncodedPath, e)
+        }
       }
 
       ///////////////////////////
@@ -126,44 +152,39 @@ class FileScanRDD(
       // an unsafe projection to convert a joined internal row to an unsafe row
       private lazy val projection = {
         val joinedExpressions =
-          readDataSchema.fields.map(_.dataType) ++ metadataColumns.map(_.dataType)
+          readSchema.fields.map(_.dataType) ++ metadataColumns.map(_.dataType)
         UnsafeProjection.create(joinedExpressions)
       }
 
       /**
-       * For each partitioned file, metadata columns for each record in the file are exactly same.
-       * Only update metadata row when `currentFile` is changed.
+       * The value of some of the metadata columns remains exactly the same for each record of
+       * a partitioned file. Only need to update their values in the metadata row when `currentFile`
+       * is changed.
        */
       private def updateMetadataRow(): Unit =
         if (metadataColumns.nonEmpty && currentFile != null) {
-          updateMetadataInternalRow(metadataRow, metadataColumns.map(_.name),
-            new Path(currentFile.filePath), currentFile.fileSize, currentFile.modificationTime)
+          updateMetadataInternalRow(
+            metadataRow, metadataColumns.map(_.name), currentFile, metadataExtractors)
         }
 
       /**
        * Create an array of constant column vectors containing all required metadata columns
        */
-      private def createMetadataColumnVector(c: ColumnarBatch): Array[ConstantColumnVector] = {
-        val path = new Path(currentFile.filePath)
-        metadataColumns.map(_.name).map {
-          case FILE_PATH =>
-            val columnVector = new ConstantColumnVector(c.numRows(), StringType)
-            columnVector.setUtf8String(UTF8String.fromString(path.toString))
-            columnVector
-          case FILE_NAME =>
-            val columnVector = new ConstantColumnVector(c.numRows(), StringType)
-            columnVector.setUtf8String(UTF8String.fromString(path.getName))
-            columnVector
-          case FILE_SIZE =>
-            val columnVector = new ConstantColumnVector(c.numRows(), LongType)
-            columnVector.setLong(currentFile.fileSize)
-            columnVector
-          case FILE_MODIFICATION_TIME =>
-            val columnVector = new ConstantColumnVector(c.numRows(), LongType)
-            // the modificationTime from the file is in millisecond,
-            // while internally, the TimestampType is stored in microsecond
-            columnVector.setLong(currentFile.modificationTime * 1000L)
-            columnVector
+      private def createMetadataColumnVector(c: ColumnarBatch): Array[ColumnVector] = {
+        val tmpRow = new GenericInternalRow(1)
+        metadataColumns.map { attr =>
+          // Populate each metadata column by passing the resulting value through `tmpRow`.
+          getFileConstantMetadataColumnValue(attr.name, currentFile, metadataExtractors) match {
+            case Literal(null, _) =>
+              tmpRow.setNullAt(0)
+            case literal =>
+              require(PhysicalDataType(attr.dataType) == PhysicalDataType(literal.dataType))
+              tmpRow.update(0, literal.value)
+          }
+
+          val columnVector = new ConstantColumnVector(c.numRows(), attr.dataType)
+          ColumnVectorUtils.populate(columnVector, tmpRow, 0)
+          columnVector
         }.toArray
       }
 
@@ -205,12 +226,7 @@ class FileScanRDD(
       }
 
       private def readCurrentFile(): Iterator[InternalRow] = {
-        try {
-          readFunction(currentFile)
-        } catch {
-          case e: FileNotFoundException =>
-            throw QueryExecutionErrors.readCurrentFileNotFoundError(e)
-        }
+        readFunction(currentFile)
       }
 
       /** Advances to the next file. Returns true if a new non-empty iterator is available. */
@@ -218,9 +234,10 @@ class FileScanRDD(
         if (files.hasNext) {
           currentFile = files.next()
           updateMetadataRow()
-          logInfo(s"Reading File $currentFile")
+          logInfo(log"Reading File ${MDC(CURRENT_FILE, currentFile)}")
           // Sets InputFileBlockHolder for the file block's information
-          InputFileBlockHolder.set(currentFile.filePath, currentFile.start, currentFile.length)
+          InputFileBlockHolder
+            .set(currentFile.urlEncodedPath, currentFile.start, currentFile.length)
 
           resetCurrentIterator()
           if (ignoreMissingFiles || ignoreCorruptFiles) {
@@ -245,14 +262,16 @@ class FileScanRDD(
                   }
                 } catch {
                   case e: FileNotFoundException if ignoreMissingFiles =>
-                    logWarning(s"Skipped missing file: $currentFile", e)
+                    logWarning(log"Skipped missing file: ${MDC(PATH, currentFile)}", e)
                     finished = true
                     null
                   // Throw FileNotFoundException even if `ignoreCorruptFiles` is true
                   case e: FileNotFoundException if !ignoreMissingFiles => throw e
-                  case e @ (_: RuntimeException | _: IOException) if ignoreCorruptFiles =>
-                    logWarning(
-                      s"Skipped the rest of the content in the corrupted file: $currentFile", e)
+                  case e @ (_ : AccessControlException | _ : BlockMissingException) => throw e
+                  case e if ignoreCorruptFiles &&
+                      DataSourceUtils.shouldIgnoreCorruptFileException(e) =>
+                    logWarning(log"Skipped the rest of the content in the corrupted file: " +
+                      log"${MDC(PATH, currentFile)}", e)
                     finished = true
                     null
                 }
@@ -270,19 +289,7 @@ class FileScanRDD(
             currentIterator = readCurrentFile()
           }
 
-          try {
-            hasNext
-          } catch {
-            case e: SchemaColumnConvertNotSupportedException =>
-              throw QueryExecutionErrors.unsupportedSchemaColumnConvertError(
-                currentFile.filePath, e.getColumn, e.getLogicalType, e.getPhysicalType, e)
-            case sue: SparkUpgradeException => throw sue
-            case NonFatal(e) =>
-              e.getCause match {
-                case sue: SparkUpgradeException => throw sue
-                case _ => throw QueryExecutionErrors.cannotReadFilesError(e, currentFile.filePath)
-              }
-          }
+          hasNext0
         } else {
           currentFile = null
           updateMetadataRow()
@@ -307,6 +314,6 @@ class FileScanRDD(
   override protected def getPartitions: Array[RDDPartition] = filePartitions.toArray
 
   override protected def getPreferredLocations(split: RDDPartition): Seq[String] = {
-    split.asInstanceOf[FilePartition].preferredLocations()
+    split.asInstanceOf[FilePartition].preferredLocations().toImmutableArraySeq
   }
 }

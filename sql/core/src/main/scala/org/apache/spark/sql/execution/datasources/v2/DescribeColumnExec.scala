@@ -22,11 +22,16 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
+import org.apache.spark.sql.connector.catalog.{SupportsRead, Table}
+import org.apache.spark.sql.connector.expressions.FieldReference
+import org.apache.spark.sql.connector.read.SupportsReportStatistics
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 case class DescribeColumnExec(
     override val output: Seq[Attribute],
     column: Attribute,
-    isExtended: Boolean) extends LeafV2CommandExec {
+    isExtended: Boolean,
+    table: Table) extends LeafV2CommandExec {
 
   override protected def run(): Seq[InternalRow] = {
     val rows = new ArrayBuffer[InternalRow]()
@@ -42,7 +47,56 @@ case class DescribeColumnExec(
       CharVarcharUtils.getRawType(column.metadata).getOrElse(column.dataType).catalogString)
     rows += toCatalystRow("comment", comment)
 
-    // TODO: The extended description (isExtended = true) can be added here.
+    if (isExtended) {
+      val colStats = table match {
+        case read: SupportsRead =>
+          read.newScanBuilder(CaseInsensitiveStringMap.empty()).build() match {
+            case s: SupportsReportStatistics =>
+              val stats = s.estimateStatistics()
+              Option(stats.columnStats().get(FieldReference.column(column.name)))
+            case _ => None
+          }
+        case _ => None
+      }
+
+      if (colStats.nonEmpty) {
+        if (colStats.get.min().isPresent) {
+          rows += toCatalystRow("min", colStats.get.min().toString)
+        } else {
+          rows += toCatalystRow("min", "NULL")
+        }
+
+        if (colStats.get.max().isPresent) {
+          rows += toCatalystRow("max", colStats.get.max().toString)
+        } else {
+          rows += toCatalystRow("max", "NULL")
+        }
+
+        if (colStats.get.nullCount().isPresent) {
+          rows += toCatalystRow("num_nulls", colStats.get.nullCount().getAsLong.toString)
+        } else {
+          rows += toCatalystRow("num_nulls", "NULL")
+        }
+
+        if (colStats.get.distinctCount().isPresent) {
+          rows += toCatalystRow("distinct_count", colStats.get.distinctCount().getAsLong.toString)
+        } else {
+          rows += toCatalystRow("distinct_count", "NULL")
+        }
+
+        if (colStats.get.avgLen().isPresent) {
+          rows += toCatalystRow("avg_col_len", colStats.get.avgLen().getAsLong.toString)
+        } else {
+          rows += toCatalystRow("avg_col_len", "NULL")
+        }
+
+        if (colStats.get.maxLen().isPresent) {
+          rows += toCatalystRow("max_col_len", colStats.get.maxLen().getAsLong.toString)
+        } else {
+          rows += toCatalystRow("max_col_len", "NULL")
+        }
+      }
+    }
 
     rows.toSeq
   }

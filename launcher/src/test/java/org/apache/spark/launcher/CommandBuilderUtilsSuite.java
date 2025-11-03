@@ -21,8 +21,8 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
-import org.junit.Test;
-import static org.junit.Assert.*;
+import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.*;
 
 import static org.apache.spark.launcher.CommandBuilderUtils.*;
 
@@ -69,6 +69,16 @@ public class CommandBuilderUtilsSuite {
   }
 
   @Test
+  public void testRedactCommandLineArgs() {
+    assertEquals(redact("secret"), "secret");
+    assertEquals(redact("-Dk=v"), "-Dk=v");
+    assertEquals(redact("-Dk=secret"), "-Dk=secret");
+    assertEquals(redact("-DsecretKey=my-secret"), "-DsecretKey=*********(redacted)");
+    assertEquals(redactCommandLineArgs(Arrays.asList("-DsecretKey=my-secret")),
+      Arrays.asList("-DsecretKey=*********(redacted)"));
+  }
+
+  @Test
   public void testWindowsBatchQuoting() {
     assertEquals("abc", quoteForBatchScript("abc"));
     assertEquals("\"a b c\"", quoteForBatchScript("a b c"));
@@ -100,8 +110,8 @@ public class CommandBuilderUtilsSuite {
   }
 
   private static void testOpt(String opts, List<String> expected) {
-    assertEquals(String.format("test string failed to parse: [[ %s ]]", opts),
-        expected, parseOptionString(opts));
+    assertEquals(expected, parseOptionString(opts),
+      String.format("test string failed to parse: [[ %s ]]", opts));
   }
 
   private static void testInvalidOpt(String opts) {

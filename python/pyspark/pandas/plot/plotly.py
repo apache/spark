@@ -123,11 +123,7 @@ def plot_histogram(data: Union["ps.DataFrame", "ps.Series"], **kwargs):
 def plot_box(data: Union["ps.DataFrame", "ps.Series"], **kwargs):
     import plotly.graph_objs as go
     import pyspark.pandas as ps
-
-    if isinstance(data, ps.DataFrame):
-        raise RuntimeError(
-            "plotly does not support a box plot with pandas-on-Spark DataFrame. Use Series instead."
-        )
+    from pyspark.sql.types import NumericType
 
     # 'whis' isn't actually an argument in plotly (but in matplotlib). But seems like
     # plotly doesn't expose the reach of the whiskers to the beyond the first and
@@ -150,40 +146,70 @@ def plot_box(data: Union["ps.DataFrame", "ps.Series"], **kwargs):
             "Set to False." % notched
         )
 
-    colname = name_like_string(data.name)
-    spark_column_name = data._internal.spark_column_name_for(data._column_label)
-
-    # Computes mean, median, Q1 and Q3 with approx_percentile and precision
-    col_stats, col_fences = BoxPlotBase.compute_stats(data, spark_column_name, whis, precision)
-
-    # Creates a column to flag rows as outliers or not
-    outliers = BoxPlotBase.outliers(data, spark_column_name, *col_fences)
-
-    # Computes min and max values of non-outliers - the whiskers
-    whiskers = BoxPlotBase.calc_whiskers(spark_column_name, outliers)
-
-    fliers = None
-    if boxpoints:
-        fliers = BoxPlotBase.get_fliers(spark_column_name, outliers, whiskers[0])
-        fliers = [fliers] if len(fliers) > 0 else None
-
     fig = go.Figure()
-    fig.add_trace(
-        go.Box(
-            name=colname,
-            q1=[col_stats["q1"]],
-            median=[col_stats["med"]],
-            q3=[col_stats["q3"]],
-            mean=[col_stats["mean"]],
-            lowerfence=[whiskers[0]],
-            upperfence=[whiskers[1]],
-            y=fliers,
-            boxpoints=boxpoints,
-            notched=notched,
-            **kwargs,  # this is for workarounds. Box takes different options from express.box.
-        )
+
+    if isinstance(data, ps.Series):
+        sdf = data._psdf._internal.resolved_copy.spark_frame
+        spark_column_name = data._internal.spark_column_name_for(data._column_label)
+        colnames = [spark_column_name]
+    else:
+        sdf = data._internal.resolved_copy.spark_frame
+        colnames = []
+        for column_label in data._internal.column_labels:
+            if isinstance(data._internal.spark_type_for(column_label), NumericType):
+                colnames.append(name_like_string(column_label))
+
+    results = BoxPlotBase.compute_box(
+        sdf,
+        colnames,
+        whis,
+        precision,
+        boxpoints is not None,
     )
-    fig["layout"]["xaxis"]["title"] = colname
+    assert len(results) == len(colnames)
+
+    if isinstance(data, ps.Series):
+        colname = name_like_string(data.name)
+        result = results[0]
+
+        fig.add_trace(
+            go.Box(
+                name=colname,
+                q1=[result["q1"]],
+                median=[result["med"]],
+                q3=[result["q3"]],
+                mean=[result["mean"]],
+                lowerfence=[result["lower_whisker"]],
+                upperfence=[result["upper_whisker"]],
+                y=[result["fliers"]] if result["fliers"] else None,
+                boxpoints=boxpoints,
+                notched=notched,
+                **kwargs,  # this is for workarounds. Box takes different options from express.box.
+            )
+        )
+        fig["layout"]["xaxis"]["title"] = colname
+
+    else:
+        for i, colname in enumerate(colnames):
+            result = results[i]
+
+            fig.add_trace(
+                go.Box(
+                    x=[i],
+                    name=colname,
+                    q1=[result["q1"]],
+                    median=[result["med"]],
+                    q3=[result["q3"]],
+                    mean=[result["mean"]],
+                    lowerfence=[result["lower_whisker"]],
+                    upperfence=[result["upper_whisker"]],
+                    y=[result["fliers"]] if result["fliers"] else None,
+                    boxpoints=boxpoints,
+                    notched=notched,
+                    **kwargs,
+                )
+            )
+
     fig["layout"]["yaxis"]["title"] = "value"
     return fig
 
@@ -201,22 +227,28 @@ def plot_kde(data: Union["ps.DataFrame", "ps.Series"], **kwargs):
     ind = KdePlotBase.get_ind(sdf.select(*data_columns), kwargs.pop("ind", None))
     bw_method = kwargs.pop("bw_method", None)
 
-    pdfs = []
-    for label in psdf._internal.column_labels:
-        pdfs.append(
+    kde_cols = [
+        KdePlotBase.compute_kde_col(
+            input_col=psdf._internal.spark_column_for(label),
+            ind=ind,
+            bw_method=bw_method,
+        ).alias(f"kde_{i}")
+        for i, label in enumerate(psdf._internal.column_labels)
+    ]
+    kde_results = sdf.select(*kde_cols).first()
+
+    pdf = pd.concat(
+        [
             pd.DataFrame(
                 {
-                    "Density": KdePlotBase.compute_kde(
-                        sdf.select(psdf._internal.spark_column_for(label)),
-                        ind=ind,
-                        bw_method=bw_method,
-                    ),
+                    "Density": kde_result,
                     "names": name_like_string(label),
                     "index": ind,
                 }
             )
-        )
-    pdf = pd.concat(pdfs)
+            for label, kde_result in zip(psdf._internal.column_labels, list(kde_results))
+        ]
+    )
 
     fig = express.line(pdf, x="index", y="Density", **kwargs)
     fig["layout"]["xaxis"]["title"] = None

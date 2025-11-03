@@ -15,35 +15,35 @@
  * limitations under the License.
  */
 
-#plan-viz-graph .label {
+svg g.label {
   font-size: 0.85rem;
   font-weight: normal;
   text-shadow: none;
   color: #333;
 }
 
-#plan-viz-graph svg g.cluster rect {
+svg g.cluster rect {
   fill: #A0DFFF;
   stroke: #3EC0FF;
   stroke-width: 1px;
 }
 
-#plan-viz-graph svg g.node rect {
+svg g.node rect {
   fill: #C3EBFF;
   stroke: #3EC0FF;
   stroke-width: 1px;
 }
 
 /* Highlight the SparkPlan node name */
-#plan-viz-graph svg text :first-child:not(.stageId-and-taskId-metrics) {
+svg text :first-child:not(.stageId-and-taskId-metrics) {
   font-weight: bold;
 }
 
-#plan-viz-graph svg text {
+svg text {
   fill: #333;
 }
 
-#plan-viz-graph svg path {
+svg path {
   stroke: #444;
   stroke-width: 1.5px;
 }
@@ -56,4 +56,22 @@
 /* Breaks the long job url list when showing Details for Query in SQL */
 .job-url {
   word-wrap: break-word;
+}
+
+svg g.node rect.selected {
+  fill: #E25A1CFF;
+  stroke: #317EACFF;
+  stroke-width: 2px;
+}
+
+svg g.node rect.linked {
+  fill: #FFC106FF;
+  stroke: #317EACFF;
+  stroke-width: 2px;
+}
+
+svg path.linked {
+  fill: #317EACFF;
+  stroke: #317EACFF;
+  stroke-width: 2px;
 }

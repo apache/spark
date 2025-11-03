@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-/* global $ */
+/* global $, d3, collapseTable */
 /* eslint-disable no-unused-vars */
 /* Adds background colors to stripe table rows in the summary table (on the stage page). This is
  * necessary (instead of using css or the table striping provided by bootstrap) because the summary
@@ -82,30 +82,38 @@ function onMouseOverAndOut(threadId) {
 }
 
 function onSearchStringChange() {
-  var searchString = $('#search').val().toLowerCase();
+  const searchString = $('#search').val().toLowerCase();
   //remove the stacktrace
   collapseAllThreadStackTrace(false);
-  if (searchString.length == 0) {
-    $('tr').each(function() {
+  $('tr[id^="thread_"]').each(function() {
+    if (searchString.length === 0) {
       $(this).removeClass('d-none')
-    })
-  } else {
-    $('tr').each(function(){
-      if($(this).attr('id') && $(this).attr('id').match(/thread_[0-9]+_tr/) ) {
-        var children = $(this).children();
-        var found = false;
-        for (var i = 0; i < children.length; i++) {
-          if (children.eq(i).text().toLowerCase().indexOf(searchString) >= 0) {
-            found = true;
-          }
-        }
-        if (found) {
-          $(this).removeClass('d-none')
+    } else {
+      let found = false;
+      const children = $(this).children();
+      let i = 0;
+      while(!found && i < children.length) {
+        if (children.eq(i).text().toLowerCase().indexOf(searchString) >= 0) {
+          found = true;
         } else {
-          $(this).addClass('d-none')
+          i++;
         }
       }
-    });
+      $(this).toggleClass('d-none', !found);
+    }
+  });
+}
+/* eslint-enable no-unused-vars */
+
+/* eslint-disable no-unused-vars */
+function collapseTableAndButton(thisName, table) {
+  collapseTable(thisName, table);
+
+  const t = d3.select("." + table);
+  if (t.classed("collapsed")) {
+    d3.select("." + table + "-button").style("display", "none");
+  } else {
+    d3.select("." + table + "-button").style("display", "flex");
   }
 }
 /* eslint-enable no-unused-vars */

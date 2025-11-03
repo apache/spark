@@ -9,9 +9,9 @@ license: |
   The ASF licenses this file to You under the Apache License, Version 2.0
   (the "License"); you may not use this file except in compliance with
   the License.  You may obtain a copy of the License at
- 
+
      http://www.apache.org/licenses/LICENSE-2.0
- 
+
   Unless required by applicable law or agreed to in writing, software
   distributed under the License is distributed on an "AS IS" BASIS,
   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -62,8 +62,8 @@ For example: `/path/to/spark-sql-cli.sql` equals to `file:///path/to/spark-sql-c
 
 ## Supported comment types
 
-<table class="table">
-<tr><th>Comment</th><th>Example</th></tr>
+<table>
+<thead><tr><th>Comment</th><th>Example</th></tr></thead>
 <tr>
   <td>simple comment</td>
   <td>
@@ -102,7 +102,7 @@ When `./bin/spark-sql` is run without either the `-e` or `-f` option, it enters 
 Use `;` (semicolon) to terminate commands. Notice:
 1. The CLI use `;` to terminate commands only when it's at the end of line, and it's not escaped by `\\;`.
 2. `;` is the only way to terminate commands. If the user types `SELECT 1` and presses enter, the console will just wait for input.
-3. If the user types multiple commands in one line like `SELECT 1; SELECT 2;`, the commands `SELECT 1` and `SELECT 2` will be executed separatly.
+3. If the user types multiple commands in one line like `SELECT 1; SELECT 2;`, the commands `SELECT 1` and `SELECT 2` will be executed separately.
 4. If `;` appears within a SQL statement (not the end of the line), then it has no special meanings:
    ```sql
    -- This is a ; comment
@@ -115,8 +115,8 @@ Use `;` (semicolon) to terminate commands. Notice:
    ```
    However, if ';' is the end of the line, it terminates the SQL statement. The example above will be terminated into  `/* This is a comment contains ` and `*/ SELECT 1`, Spark will submit these two commands separated and throw parser error (`unclosed bracketed comment` and `Syntax error at or near '*/'`).
 
-<table class="table">
-<tr><th>Command</th><th>Description</th></tr>
+<table>
+<thead><tr><th>Command</th><th>Description</th></tr></thead>
 <tr>
   <td><code>quit</code> or <code>exit</code></td>
   <td>Exits the interactive shell.</td>
@@ -148,15 +148,15 @@ Example of running a query from the command line:
 Example of setting Hive configuration variables:
 
     ./bin/spark-sql -e 'SELECT COL FROM TBL' --hiveconf hive.exec.scratchdir=/home/my/hive_scratch
-    
+
 Example of setting Hive configuration variables and using it in the SQL query:
 
     ./bin/spark-sql -e 'SELECT ${hiveconf:aaa}' --hiveconf aaa=bbb --hiveconf hive.exec.scratchdir=/home/my/hive_scratch
     spark-sql> SELECT ${aaa};
     bbb
-    
+
 Example of setting Hive variables substitution:
-    
+
     ./bin/spark-sql --hivevar aaa=bbb --define ccc=ddd
     spark-sql> SELECT ${aaa}, ${ccc};
     bbb ddd
@@ -186,6 +186,6 @@ Example of entering interactive mode with escape `;` in comment:
 
     ./bin/spark-sql
     spark-sql>/* This is a comment contains \\;
-             > It won't be terminaled by \\; */
+             > It won't be terminated by \\; */
              > SELECT 1;
     1

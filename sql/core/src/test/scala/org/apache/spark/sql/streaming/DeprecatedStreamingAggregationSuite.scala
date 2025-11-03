@@ -19,12 +19,14 @@ package org.apache.spark.sql.streaming
 
 import org.scalatest.Assertions
 
-import org.apache.spark.sql.execution.streaming._
-import org.apache.spark.sql.execution.streaming.state.StreamingAggregationStateManager
+import org.apache.spark.sql.execution.streaming.operators.stateful.StreamingAggregationStateManager
+import org.apache.spark.sql.execution.streaming.runtime._
 import org.apache.spark.sql.expressions.scalalang.typed
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.OutputMode._
+import org.apache.spark.tags.SlowSQLTest
 
+@SlowSQLTest
 @deprecated("This test suite will be removed.", "3.0.0")
 class DeprecatedStreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
 

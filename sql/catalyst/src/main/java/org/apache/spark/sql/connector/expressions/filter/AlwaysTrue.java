@@ -34,13 +34,16 @@ public final class AlwaysTrue extends Predicate implements Literal<Boolean> {
     super("ALWAYS_TRUE", new Predicate[]{});
   }
 
+  @Override
   public Boolean value() {
     return true;
   }
 
+  @Override
   public DataType dataType() {
     return DataTypes.BooleanType;
   }
 
+  @Override
   public String toString() { return "TRUE"; }
 }

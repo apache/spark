@@ -47,7 +47,7 @@ class LookupFunctionsSuite extends PlanTest {
           ignoreIfExists = false)
         val catalog = new SessionCatalog(externalCatalog, new SimpleFunctionRegistry)
         val catalogManager = new CatalogManager(new CustomV2SessionCatalog(catalog), catalog)
-        catalog.setCurrentDatabase("db1")
+        catalogManager.setCurrentNamespace(Array("db1"))
         try {
           val analyzer = new Analyzer(catalogManager)
 
@@ -60,10 +60,12 @@ class LookupFunctionsSuite extends PlanTest {
               )
             )
           }
-
-          assert(cause.getMessage.contains("Undefined function: undefined_fn"))
-          // SPARK-21318: the error message should contains the current database name
-          assert(cause.getMessage.contains("db1"))
+          checkError(
+            exception = cause,
+            condition = "UNRESOLVED_ROUTINE",
+            parameters = Map(
+              "routineName" -> "`undefined_fn`",
+              "searchPath" -> "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`db1`]"))
         } finally {
           catalog.reset()
         }

@@ -19,10 +19,11 @@ import unittest
 from pyspark.ml.image import ImageSchema
 from pyspark.testing.mlutils import SparkSessionTestCase
 from pyspark.sql import Row
-from pyspark.testing.utils import QuietTest
+from pyspark.testing.utils import QuietTest, eventually
 
 
 class ImageFileFormatTest(SparkSessionTestCase):
+    @eventually(timeout=60.0, catch_assertions=True)
     def test_read_images(self):
         data_path = "data/mllib/images/origin/kittens"
         df = (
@@ -74,7 +75,7 @@ if __name__ == "__main__":
     from pyspark.ml.tests.test_image import *  # noqa: F401
 
     try:
-        import xmlrunner  # type: ignore[import]
+        import xmlrunner
 
         testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:

@@ -28,14 +28,18 @@ import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Slf4jReporter;
 import com.codahale.metrics.Snapshot;
 import com.codahale.metrics.Timer;
-import org.apache.commons.io.FileUtils;
-import org.junit.After;
-import org.junit.AfterClass;
-import org.junit.Before;
-import org.junit.Ignore;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Disabled;
+import org.junit.jupiter.api.Test;
+// checkstyle.off: RegexpSinglelineJava
 import org.slf4j.LoggerFactory;
-import static org.junit.Assert.*;
+// checkstyle.on: RegexpSinglelineJava
+
+import org.apache.spark.network.util.JavaUtils;
+
+import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * A set of small benchmarks for the LevelDB implementation.
@@ -48,7 +52,7 @@ import static org.junit.Assert.*;
  * - iterate over natural index, ascending and descending
  * - iterate over ref index, ascending and descending
  */
-@Ignore
+@Disabled
 public class LevelDBBenchmark {
 
   private static final int COUNT = 1024;
@@ -60,7 +64,7 @@ public class LevelDBBenchmark {
   private LevelDB db;
   private File dbpath;
 
-  @Before
+  @BeforeEach
   public void setup() throws Exception {
     dbpath = File.createTempFile("test.", ".ldb");
     dbpath.delete();
@@ -69,7 +73,7 @@ public class LevelDBBenchmark {
     }
   }
 
-  @After
+  @AfterEach
   public void cleanup() throws Exception {
     if (db != null) {
       try(Timer.Context ctx = dbClose.time()) {
@@ -77,11 +81,11 @@ public class LevelDBBenchmark {
       }
     }
     if (dbpath != null) {
-      FileUtils.deleteQuietly(dbpath);
+      JavaUtils.deleteQuietly(dbpath);
     }
   }
 
-  @AfterClass
+  @AfterAll
   public static void report() {
     if (metrics.getTimers().isEmpty()) {
       return;
@@ -197,9 +201,15 @@ public class LevelDBBenchmark {
       }
     }
 
-    while (it.hasNext()) {
-      try(Timer.Context ctx = iter.time()) {
-        it.next();
+    try {
+      while (it.hasNext()) {
+        try (Timer.Context ctx = iter.time()) {
+          it.next();
+        }
+      }
+    } finally {
+      if (it != null) {
+        it.close();
       }
     }
   }
@@ -254,7 +264,7 @@ public class LevelDBBenchmark {
   }
 
   private Timer newTimer(String name) {
-    assertNull("Timer already exists: " + name, metrics.getTimers().get(name));
+    assertNull(metrics.getTimers().get(name), "Timer already exists: " + name);
     return metrics.timer(name);
   }
 

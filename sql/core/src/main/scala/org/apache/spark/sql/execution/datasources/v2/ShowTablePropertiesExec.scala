@@ -31,10 +31,10 @@ case class ShowTablePropertiesExec(
     propertyKey: Option[String]) extends LeafV2CommandExec {
 
   override protected def run(): Seq[InternalRow] = {
-    import scala.collection.JavaConverters._
+    import scala.jdk.CollectionConverters._
 
     // The reserved properties are accessible through DESCRIBE
-    val properties = catalogTable.properties.asScala
+    val properties = conf.redactOptions(catalogTable.properties.asScala.toMap)
       .filter { case (k, _) => !CatalogV2Util.TABLE_RESERVED_PROPERTIES.contains(k) }
     propertyKey match {
       case Some(p) =>
@@ -47,7 +47,7 @@ case class ShowTablePropertiesExec(
         }
       case None =>
         properties.toSeq.sortBy(_._1).map(kv =>
-          toCatalystRow(kv._1, kv._2)).toSeq
+          toCatalystRow(kv._1, kv._2))
     }
   }
 }

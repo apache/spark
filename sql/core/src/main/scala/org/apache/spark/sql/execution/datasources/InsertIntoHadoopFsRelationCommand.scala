@@ -20,13 +20,14 @@ package org.apache.spark.sql.execution.datasources
 import org.apache.hadoop.fs.{FileSystem, Path}
 
 import org.apache.spark.internal.io.FileCommitProtocol
-import org.apache.spark.sql._
+import org.apache.spark.sql.{Row, SaveMode}
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogTable, CatalogTablePartition}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils._
-import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.expressions.{Attribute, SortOrder}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
+import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.command._
@@ -57,7 +58,7 @@ case class InsertIntoHadoopFsRelationCommand(
     catalogTable: Option[CatalogTable],
     fileIndex: Option[FileIndex],
     outputColumnNames: Seq[String])
-  extends DataWritingCommand {
+  extends V1WriteCommand {
 
   private lazy val parameters = CaseInsensitiveMap(options)
 
@@ -74,12 +75,19 @@ case class InsertIntoHadoopFsRelationCommand(
       staticPartitions.size < partitionColumns.length
   }
 
+  override def requiredOrdering: Seq[SortOrder] =
+    V1WritesUtils.getSortOrder(outputColumns, partitionColumns, bucketSpec, options,
+      staticPartitions.size)
+
   override def run(sparkSession: SparkSession, child: SparkPlan): Seq[Row] = {
-    // Most formats don't do well with duplicate columns, so lets not allow that
-    SchemaUtils.checkColumnNameDuplication(
-      outputColumnNames,
-      s"when inserting into $outputPath",
-      sparkSession.sessionState.conf.caseSensitiveAnalysis)
+    if (!fileFormat.allowDuplicatedColumnNames) {
+      SchemaUtils.checkColumnNameDuplication(
+        outputColumnNames,
+        sparkSession.sessionState.conf.caseSensitiveAnalysis)
+    }
+    if (!conf.allowCollationsInMapKeys) {
+      SchemaUtils.checkNoCollationsInMapKeys(query.schema)
+    }
 
     val hadoopConf = sparkSession.sessionState.newHadoopConfWithOptions(options)
     val fs = outputPath.getFileSystem(hadoopConf)
@@ -133,7 +141,7 @@ case class InsertIntoHadoopFsRelationCommand(
         case (SaveMode.Ignore, exists) =>
           !exists
         case (s, exists) =>
-          throw QueryExecutionErrors.unsupportedSaveModeError(s.toString, exists)
+          throw QueryExecutionErrors.saveModeUnsupportedError(s, exists)
       }
     }
 
@@ -183,7 +191,8 @@ case class InsertIntoHadoopFsRelationCommand(
           partitionColumns = partitionColumns,
           bucketSpec = bucketSpec,
           statsTrackers = Seq(basicWriteJobStatsTracker(hadoopConf)),
-          options = options)
+          options = options,
+          numStaticPartitionCols = staticPartitions.size)
 
 
       // update metastore partition metadata

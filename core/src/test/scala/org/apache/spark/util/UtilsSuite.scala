@@ -22,32 +22,32 @@ import java.lang.reflect.Field
 import java.net.{BindException, ServerSocket, URI}
 import java.nio.{ByteBuffer, ByteOrder}
 import java.nio.charset.StandardCharsets.UTF_8
+import java.nio.file.Files
 import java.text.DecimalFormatSymbols
 import java.util.Locale
 import java.util.concurrent.TimeUnit
 import java.util.zip.GZIPOutputStream
 
 import scala.collection.mutable.ListBuffer
-import scala.util.Random
+import scala.util.{Random, Try}
 
-import com.google.common.io.Files
-import org.apache.commons.io.IOUtils
-import org.apache.commons.lang3.{JavaVersion, SystemUtils}
 import org.apache.commons.math3.stat.inference.ChiSquareTest
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
+import org.apache.hadoop.fs.audit.CommonAuditContext.currentAuditContext
+import org.apache.hadoop.ipc.{CallerContext => HadoopCallerContext}
 import org.apache.logging.log4j.Level
 
 import org.apache.spark.{SparkConf, SparkException, SparkFunSuite, TaskContext}
-import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Tests.IS_TESTING
 import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.scheduler.SparkListener
+import org.apache.spark.util.collection.Utils.createArray
 import org.apache.spark.util.io.ChunkedByteBufferInputStream
 
-class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
+class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
 
   test("timeConversion") {
     // Test -1
@@ -247,15 +247,15 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
         assert(mergedStream.read() === -1)
         assert(byteBufferInputStream.chunkedByteBuffer === null)
       } finally {
-        IOUtils.closeQuietly(mergedStream)
-        IOUtils.closeQuietly(in)
+        Utils.closeQuietly(mergedStream)
+        Utils.closeQuietly(in)
       }
     }
   }
 
   private def getFieldValue(obj: AnyRef, fieldName: String): Any = {
     val field: Field = obj.getClass().getDeclaredField(fieldName)
-    if (field.isAccessible()) {
+    if (field.canAccess(obj)) {
       field.get(obj)
     } else {
       field.setAccessible(true)
@@ -342,9 +342,9 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     } else {
       new FileOutputStream(path)
     }
-    IOUtils.write(content, outputStream)
+    outputStream.write(content)
     outputStream.close()
-    content.size
+    content.length
   }
 
   private val workerConf = new SparkConf()
@@ -352,7 +352,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
   def testOffsetBytes(isCompressed: Boolean): Unit = {
     withTempDir { tmpDir2 =>
       val suffix = getSuffix(isCompressed)
-      val f1Path = tmpDir2 + "/f1" + suffix
+      val f1Path = s"$tmpDir2/f1$suffix"
       writeLogFile(f1Path, "1\n2\n3\n4\n5\n6\n7\n8\n9\n".getBytes(UTF_8))
       val f1Length = Utils.getFileLength(new File(f1Path), workerConf)
 
@@ -491,10 +491,10 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     assert(Utils.createDirectory(testDirPath, "scenario1").exists())
 
     // 2. Illegal file path
-    val scenario2 = new File(testDir, "scenario2" * 256)
+    val scenario2 = new File(testDir, "scenario2".repeat(256))
     assert(!Utils.createDirectory(scenario2))
     assert(!scenario2.exists())
-    assertThrows[IOException](Utils.createDirectory(testDirPath, "scenario2" * 256))
+    assertThrows[IOException](Utils.createDirectory(testDirPath, "scenario2".repeat(256)))
 
     // 3. The parent directory cannot read
     val scenario3 = new File(testDir, "scenario3")
@@ -525,9 +525,16 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
 
     // The following 3 scenarios are only for the method: createDirectory(File)
     // 6. Symbolic link
-    val scenario6 = java.nio.file.Files.createSymbolicLink(new File(testDir, "scenario6")
+    val scenario6 = Files.createSymbolicLink(new File(testDir, "scenario6")
       .toPath, scenario1.toPath).toFile
-    assert(!Utils.createDirectory(scenario6))
+    if (Utils.isJavaVersionAtLeast21) {
+      assert(Utils.createDirectory(scenario6))
+    } else if (Runtime.version().feature() == 17 && Runtime.version().update() >= 14) {
+      // SPARK-50946: Java 17.0.14 includes JDK-8294193, so scenario6 can succeed.
+      assert(Utils.createDirectory(scenario6))
+    } else {
+      assert(!Utils.createDirectory(scenario6))
+    }
     assert(scenario6.exists())
 
     // 7. Directory exists
@@ -711,7 +718,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
 
     val tempDir2 = Utils.createTempDir()
     val sourceFile1 = new File(tempDir2, "foo.txt")
-    Files.touch(sourceFile1)
+    Utils.touch(sourceFile1)
     assert(sourceFile1.exists())
     Utils.deleteRecursively(sourceFile1)
     assert(!sourceFile1.exists())
@@ -719,7 +726,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     val tempDir3 = new File(tempDir2, "subdir")
     assert(tempDir3.mkdir())
     val sourceFile2 = new File(tempDir3, "bar.txt")
-    Files.touch(sourceFile2)
+    Utils.touch(sourceFile2)
     assert(sourceFile2.exists())
     Utils.deleteRecursively(tempDir2)
     assert(!tempDir2.exists())
@@ -727,12 +734,49 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     assert(!sourceFile2.exists())
   }
 
+  test("SPARK-50716: deleteRecursively - SymbolicLink To File") {
+    val tempDir = Utils.createTempDir()
+    val sourceFile = new File(tempDir, "foo.txt")
+    Files.writeString(sourceFile.toPath, "Some content")
+    assert(sourceFile.exists())
+
+    val symlinkFile = new File(tempDir, "bar.txt")
+    Files.createSymbolicLink(symlinkFile.toPath, sourceFile.toPath)
+
+    // Check that the symlink was created successfully
+    assert(Files.isSymbolicLink(symlinkFile.toPath))
+    Utils.deleteRecursively(tempDir)
+
+    // Verify that everything is deleted
+    assert(!tempDir.exists)
+  }
+
+  test("SPARK-50716: deleteRecursively - SymbolicLink To Dir") {
+    val tempDir = Utils.createTempDir()
+    val sourceDir = new File(tempDir, "sourceDir")
+    assert(sourceDir.mkdir())
+    val sourceFile = new File(sourceDir, "file.txt")
+    Files.writeString(sourceFile.toPath, "Some content")
+
+    val symlinkDir = new File(tempDir, "targetDir")
+    Files.createSymbolicLink(symlinkDir.toPath, sourceDir.toPath)
+
+    // Check that the symlink was created successfully
+    assert(Files.isSymbolicLink(symlinkDir.toPath))
+
+    // Now delete recursively
+    Utils.deleteRecursively(tempDir)
+
+    // Verify that everything is deleted
+    assert(!tempDir.exists)
+  }
+
   test("loading properties from file") {
     withTempDir { tmpDir =>
       val outFile = File.createTempFile("test-load-spark-properties", "test", tmpDir)
       System.setProperty("spark.test.fileNameLoadB", "2")
-      Files.write("spark.test.fileNameLoadA true\n" +
-        "spark.test.fileNameLoadB 1\n", outFile, UTF_8)
+      Files.writeString(outFile.toPath, "spark.test.fileNameLoadA true\n" +
+        "spark.test.fileNameLoadB 1\n")
       val properties = Utils.getPropertiesFromFile(outFile.getAbsolutePath)
       properties
         .filter { case (k, v) => k.startsWith("spark.")}
@@ -761,7 +805,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
       val innerSourceDir = Utils.createTempDir(root = sourceDir.getPath)
       val sourceFile = File.createTempFile("someprefix", "somesuffix", innerSourceDir)
       val targetDir = new File(tempDir, "target-dir")
-      Files.write("some text", sourceFile, UTF_8)
+      Files.writeString(sourceFile.toPath, "some text")
 
       val path =
         if (Utils.isWindows) {
@@ -956,13 +1000,19 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
   }
 
   test("Set Spark CallerContext") {
-    val context = "test"
-    new CallerContext(context).setCurrentContext()
-    if (CallerContext.callerContextSupported) {
-      val callerContext = Utils.classForName("org.apache.hadoop.ipc.CallerContext")
-      assert(s"SPARK_$context" ===
-        callerContext.getMethod("getCurrent").invoke(null).toString)
-    }
+    currentAuditContext.reset
+    new CallerContext("test",
+      Some("upstream"),
+      Some("app"),
+      Some("attempt"),
+      Some(1),
+      Some(2),
+      Some(3),
+      Some(4),
+      Some(5)).setCurrentContext()
+    val expected = s"SPARK_test_app_attempt_JId_1_SId_2_3_TId_4_5_upstream"
+    assert(expected === HadoopCallerContext.getCurrent.toString)
+    assert(expected === currentAuditContext.get("spark"))
   }
 
   test("encodeFileNameToURIRawPath") {
@@ -980,29 +1030,23 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
   test("Kill process") {
     // Verify that we can terminate a process even if it is in a bad state. This is only run
     // on UNIX since it does some OS specific things to verify the correct behavior.
-    if (SystemUtils.IS_OS_UNIX) {
-      def getPid(p: Process): Int = {
-        val f = p.getClass().getDeclaredField("pid")
-        f.setAccessible(true)
-        f.get(p).asInstanceOf[Int]
-      }
-
-      def pidExists(pid: Int): Boolean = {
-        val p = Runtime.getRuntime.exec(s"kill -0 $pid")
+    if (Utils.isUnix) {
+      def pidExists(pid: Long): Boolean = {
+        val p = Runtime.getRuntime.exec(Array("kill", "-0", s"$pid"))
         p.waitFor()
         p.exitValue() == 0
       }
 
-      def signal(pid: Int, s: String): Unit = {
-        val p = Runtime.getRuntime.exec(s"kill -$s $pid")
+      def signal(pid: Long, s: String): Unit = {
+        val p = Runtime.getRuntime.exec(Array("kill", s"-$s", s"$pid"))
         p.waitFor()
       }
 
       // Start up a process that runs 'sleep 10'. Terminate the process and assert it takes
       // less time and the process is no longer there.
       val startTimeNs = System.nanoTime()
-      val process = new ProcessBuilder("sleep", "10").start()
-      val pid = getPid(process)
+      var process = new ProcessBuilder("sleep", "10").start()
+      var pid = process.toHandle.pid()
       try {
         assert(pidExists(pid))
         val terminated = Utils.terminateProcess(process, 5000)
@@ -1016,37 +1060,34 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
         signal(pid, "SIGKILL")
       }
 
-      if (SystemUtils.isJavaVersionAtLeast(JavaVersion.JAVA_1_8)) {
-        // We'll make sure that forcibly terminating a process works by
-        // creating a very misbehaving process. It ignores SIGTERM and has been SIGSTOPed. On
-        // older versions of java, this will *not* terminate.
-        val file = File.createTempFile("temp-file-name", ".tmp")
-        file.deleteOnExit()
-        val cmd =
-          s"""
-             |#!/bin/bash
-             |trap "" SIGTERM
-             |sleep 10
-           """.stripMargin
-        Files.write(cmd.getBytes(UTF_8), file)
-        file.getAbsoluteFile.setExecutable(true)
+      // We'll make sure that forcibly terminating a process works by
+      // creating a very misbehaving process. It ignores SIGTERM and has been SIGSTOPed. On
+      // older versions of java, this will *not* terminate.
+      val file = File.createTempFile("temp-file-name", ".tmp")
+      file.deleteOnExit()
+      val cmd =
+        s"""
+           |#!/usr/bin/env bash
+           |trap "" SIGTERM
+           |sleep 10
+         """.stripMargin
+      Files.writeString(file.toPath, cmd)
+      file.getAbsoluteFile.setExecutable(true)
 
-        val process = new ProcessBuilder(file.getAbsolutePath).start()
-        val pid = getPid(process)
-        assert(pidExists(pid))
-        try {
-          signal(pid, "SIGSTOP")
-          val startNs = System.nanoTime()
-          val terminated = Utils.terminateProcess(process, 5000)
-          assert(terminated.isDefined)
-          process.waitFor(5, TimeUnit.SECONDS)
-          val duration = System.nanoTime() - startNs
-          // add a little extra time to allow a force kill to finish
-          assert(duration < TimeUnit.SECONDS.toNanos(6))
-          assert(!pidExists(pid))
-        } finally {
-          signal(pid, "SIGKILL")
-        }
+      process = new ProcessBuilder(file.getAbsolutePath).start()
+      pid = process.toHandle.pid()
+      try {
+        signal(pid, "SIGSTOP")
+        val startNs = System.nanoTime()
+        val terminated = Utils.terminateProcess(process, 5000)
+        assert(terminated.isDefined)
+        process.waitFor(5, TimeUnit.SECONDS)
+        val duration = System.nanoTime() - startNs
+        // add a little extra time to allow a force kill to finish
+        assert(duration < TimeUnit.SECONDS.toNanos(6))
+        assert(!pidExists(pid))
+      } finally {
+        signal(pid, "SIGKILL")
       }
     }
   }
@@ -1075,7 +1116,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     val chi = new ChiSquareTest()
 
     // We expect an even distribution; this array will be rescaled by `chiSquareTest`
-    val expected = Array.fill(arraySize * arraySize)(1.0)
+    val expected = createArray(arraySize * arraySize, 1.0)
     val observed = results.flatten
 
     // Performs Pearson's chi-squared test. Using the sum-of-squares as the test statistic, gives
@@ -1091,6 +1132,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     // Set some secret keys
     val secretKeys = Seq(
       "spark.executorEnv.HADOOP_CREDSTORE_PASSWORD",
+      "spark.hadoop.fs.s3.awsAccessKeyId",
       "spark.hadoop.fs.s3a.access.key",
       "spark.my.password",
       "spark.my.sECreT")
@@ -1260,7 +1302,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     assert(isErrorOccurred)
     // if the try, catch and finally blocks don't throw exceptions
     Utils.tryWithSafeFinallyAndFailureCallbacks {}(catchBlock = {}, finallyBlock = {})
-    TaskContext.unset
+    TaskContext.unset()
   }
 
   test("load extensions") {
@@ -1528,6 +1570,250 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
       conf, isDriver = false, checkSerializer = false) === true)
     conf.set(SERIALIZER, "org.apache.spark.serializer.JavaSerializer")
     assert(Utils.isPushBasedShuffleEnabled(conf, isDriver = true) === false)
+  }
+
+
+  private def throwException(): String = {
+    throw new Exception("test")
+  }
+
+  private def callDoTry(): Try[String] = {
+    Utils.doTryWithCallerStacktrace {
+      throwException()
+    }
+  }
+
+  private def callGetTry(t: Try[String]): String = {
+    Utils.getTryWithCallerStacktrace(t)
+  }
+
+  private def callGetTryAgain(t: Try[String]): String = {
+    Utils.getTryWithCallerStacktrace(t)
+  }
+
+  test("doTryWithCallerStacktrace and getTryWithCallerStacktrace") {
+    val t = callDoTry()
+
+    val e1 = intercept[Exception] {
+      callGetTry(t)
+    }
+    // Uncomment for manual inspection
+    // e1.printStackTrace()
+    // Example:
+    // java.lang.Exception: test
+    //   at org.apache.spark.util.UtilsSuite.throwException(UtilsSuite.scala:1640)
+    //   at org.apache.spark.util.UtilsSuite.$anonfun$callDoTry$1(UtilsSuite.scala:1645)
+    //   at scala.util.Try$.apply(Try.scala:213)
+    //   at org.apache.spark.util.Utils$.doTryWithCallerStacktrace(Utils.scala:1586)
+    //   at org.apache.spark.util.Utils$.getTryWithCallerStacktrace(Utils.scala:1639)
+    //   at org.apache.spark.util.UtilsSuite.callGetTry(UtilsSuite.scala:1650)
+    //   at org.apache.spark.util.UtilsSuite.$anonfun$new$165(UtilsSuite.scala:1661)
+    // <- callGetTry is seen as calling getTryWithCallerStacktrace
+
+    val st1 = e1.getStackTrace
+    // throwException should be on the stack trace
+    assert(st1.exists(_.getMethodName == "throwException"))
+    // callDoTry shouldn't be on the stack trace, but callGetTry should be.
+    assert(!st1.exists(_.getMethodName == "callDoTry"))
+    assert(st1.exists(_.getMethodName == "callGetTry"))
+
+    // The original stack trace with callDoTry should be in the suppressed exceptions.
+    // Example:
+    // scalastyle:off line.size.limit
+    // Suppressed: java.lang.Exception: Full stacktrace of original doTryWithCallerStacktrace caller
+    //   at org.apache.spark.util.UtilsSuite.throwException(UtilsSuite.scala:1640)
+    //   at org.apache.spark.util.UtilsSuite.$anonfun$callDoTry$1(UtilsSuite.scala:1645)
+    //   at scala.util.Try$.apply(Try.scala:213)
+    //   at org.apache.spark.util.Utils$.doTryWithCallerStacktrace(Utils.scala:1586)
+    //   at org.apache.spark.util.UtilsSuite.callDoTry(UtilsSuite.scala:1645)
+    //   at org.apache.spark.util.UtilsSuite.$anonfun$new$165(UtilsSuite.scala:1658)
+    //   ... 56 more
+    // scalastyle:on line.size.limit
+    val origSt = e1.getSuppressed.find(_.isInstanceOf[Utils.OriginalTryStackTraceException])
+    assert(origSt.isDefined)
+    assert(origSt.get.getStackTrace.exists(_.getMethodName == "throwException"))
+    assert(origSt.get.getStackTrace.exists(_.getMethodName == "callDoTry"))
+
+    // Should save the depth of the stack trace under doTryWithCallerStacktrace.
+    assert(origSt.get.asInstanceOf[Utils.OriginalTryStackTraceException]
+      .doTryWithCallerStacktraceDepth == 4)
+
+    val e2 = intercept[Exception] {
+      callGetTryAgain(t)
+    }
+    // Uncomment for manual inspection
+    // e2.printStackTrace()
+    // Example:
+    // java.lang.Exception: test
+    //   at org.apache.spark.util.UtilsSuite.throwException(UtilsSuite.scala:1640)
+    //   at org.apache.spark.util.UtilsSuite.$anonfun$callDoTry$1(UtilsSuite.scala:1645)
+    //   at scala.util.Try$.apply(Try.scala:213)
+    //   at org.apache.spark.util.Utils$.doTryWithCallerStacktrace(Utils.scala:1586)
+    //   at org.apache.spark.util.Utils$.getTryWithCallerStacktrace(Utils.scala:1639)
+    //   at org.apache.spark.util.UtilsSuite.callGetTryAgain(UtilsSuite.scala:1654)
+    //   at org.apache.spark.util.UtilsSuite.$anonfun$new$165(UtilsSuite.scala:1711)
+    // <- callGetTryAgain is seen as calling getTryWithCallerStacktrace
+
+    val st2 = e2.getStackTrace
+    // throwException should be on the stack trace
+    assert(st2.exists(_.getMethodName == "throwException"))
+    // callDoTry shouldn't be on the stack trace, but callGetTryAgain should be.
+    assert(!st2.exists(_.getMethodName == "callDoTry"))
+    assert(st2.exists(_.getMethodName == "callGetTryAgain"))
+    // callGetTry that we called before shouldn't be on the stack trace.
+    assert(!st2.exists(_.getMethodName == "callGetTry"))
+
+    // Unfortunately, this utility is not able to clone the exception, but modifies it in place,
+    // so now e1 is also pointing to "callGetTryAgain" instead of "callGetTry".
+    val st1Again = e1.getStackTrace
+    assert(st1Again.exists(_.getMethodName == "callGetTryAgain"))
+    assert(!st1Again.exists(_.getMethodName == "callGetTry"))
+  }
+
+  private def callGetTryFromNested(t: Try[String]): String = {
+    Utils.getTryWithCallerStacktrace(t)
+  }
+
+  private def callDoTryNested(): Try[String] = {
+    Utils.doTryWithCallerStacktrace {
+      val t = callDoTry()
+      val e = intercept[Exception] {
+        callGetTryFromNested(t)
+      }
+
+      // Uncomment for manual inspection
+      //
+      // println("\nIntercepted in callDoTryNested:")
+      // e.printStackTrace()
+      //
+      // scalastyle:off line.size.limit
+      // java.lang.Exception: test
+      //  at org.apache.spark.util.UtilsSuite.throwException(UtilsSuite.scala:1529)
+      //  at org.apache.spark.util.UtilsSuite.$anonfun$callDoTry$1(UtilsSuite.scala:1534)
+      //  at scala.util.Try$.apply(Try.scala:217)
+      //  at org.apache.spark.util.Utils$.doTryWithCallerStacktrace(Utils.scala:1377)
+      //  at org.apache.spark.util.Utils$.getTryWithCallerStacktrace(Utils.scala:1438)
+      // ----> at org.apache.spark.util.UtilsSuite.callGetTryFromNested(UtilsSuite.scala:1626) <---- STITCHED.
+      //  at org.apache.spark.util.UtilsSuite.$anonfun$callDoTryNested$2(UtilsSuite.scala:1633)
+      //  at org.scalatest.Assertions.intercept(Assertions.scala:749)
+      //  at org.scalatest.Assertions.intercept$(Assertions.scala:746)
+      //  at org.scalatest.funsuite.AnyFunSuite.intercept(AnyFunSuite.scala:1564)
+      //  at org.apache.spark.util.UtilsSuite.$anonfun$callDoTryNested$1(UtilsSuite.scala:1632)
+      //  at scala.util.Try$.apply(Try.scala:217)
+      //  at org.apache.spark.util.Utils$.doTryWithCallerStacktrace(Utils.scala:1377)
+      //  at org.apache.spark.util.UtilsSuite.callDoTryNested(UtilsSuite.scala:1630)
+      //  at org.apache.spark.util.UtilsSuite.$anonfun$callDoTryNestedNested$1(UtilsSuite.scala:1655)
+      //  at scala.util.Try$.apply(Try.scala:217)
+      //  at org.apache.spark.util.Utils$.doTryWithCallerStacktrace(Utils.scala:1377)
+      //  at org.apache.spark.util.UtilsSuite.callDoTryNestedNested(UtilsSuite.scala:1654)
+      //  at org.apache.spark.util.UtilsSuite.$anonfun$new$172(UtilsSuite.scala:1674)
+      // ...
+      // Suppressed: org.apache.spark.util.Utils$OriginalTryStackTraceException: Full stacktrace of original doTryWithCallerStacktrace caller
+      //  at org.apache.spark.util.UtilsSuite.throwException(UtilsSuite.scala:1529)
+      //  at org.apache.spark.util.UtilsSuite.$anonfun$callDoTry$1(UtilsSuite.scala:1534)
+      //  at scala.util.Try$.apply(Try.scala:217)
+      //  at org.apache.spark.util.Utils$.doTryWithCallerStacktrace(Utils.scala:1377)
+      //  at org.apache.spark.util.UtilsSuite.callDoTry(UtilsSuite.scala:1534)
+      //  at org.apache.spark.util.UtilsSuite.$anonfun$callDoTryNested$1(UtilsSuite.scala:1631)
+      //  ...
+      // scalastyle:on line.size.limit
+
+      assert(e.getStackTrace.exists(_.getMethodName == "callGetTryFromNested"))
+      assert(!e.getStackTrace.exists(_.getMethodName == "callGetTryFromNestedNested"))
+      assert(!e.getStackTrace.exists(_.getMethodName == "callGetTry"))
+      assert(e.getSuppressed.length == 1)
+
+      Utils.getTryWithCallerStacktrace(t)
+    }
+  }
+
+  private def callGetTryFromNestedNested(t: Try[String]): String = {
+    Utils.getTryWithCallerStacktrace(t)
+  }
+
+  private def callDoTryNestedNested(): Try[String] = {
+    Utils.doTryWithCallerStacktrace {
+      val t = callDoTryNested()
+      val e = intercept[Exception] {
+        callGetTryFromNestedNested(t)
+      }
+
+      // Uncomment for manual inspection
+      //
+      // println("\nIntercepted in callDoTryNestedNested:")
+      // e.printStackTrace()
+      //
+      // scalastyle:off line.size.limit
+      // java.lang.Exception: test
+      //  at org.apache.spark.util.UtilsSuite.throwException(UtilsSuite.scala:1529)
+      //  at org.apache.spark.util.UtilsSuite.$anonfun$callDoTry$1(UtilsSuite.scala:1534)
+      //  at scala.util.Try$.apply(Try.scala:217)
+      //  at org.apache.spark.util.Utils$.doTryWithCallerStacktrace(Utils.scala:1377)
+      //  at org.apache.spark.util.UtilsSuite.callDoTry(UtilsSuite.scala:1534)
+      //  at org.apache.spark.util.UtilsSuite.$anonfun$callDoTryNested$1(UtilsSuite.scala:1631)
+      //  at scala.util.Try$.apply(Try.scala:217)
+      //  at org.apache.spark.util.Utils$.doTryWithCallerStacktrace(Utils.scala:1377)
+      //  at org.apache.spark.util.Utils$.getTryWithCallerStacktrace(Utils.scala:1438)
+      // ----> at org.apache.spark.util.UtilsSuite.callGetTryFromNestedNested(UtilsSuite.scala:1650) <---- STITCHED.
+      //  at org.apache.spark.util.UtilsSuite.$anonfun$callDoTryNestedNested$2(UtilsSuite.scala:1657)
+      //  at org.scalatest.Assertions.intercept(Assertions.scala:749)
+      //  at org.scalatest.Assertions.intercept$(Assertions.scala:746)
+      //  at org.scalatest.funsuite.AnyFunSuite.intercept(AnyFunSuite.scala:1564)
+      //  at org.apache.spark.util.UtilsSuite.$anonfun$callDoTryNestedNested$1(UtilsSuite.scala:1656)
+      //  at scala.util.Try$.apply(Try.scala:217)
+      //  at org.apache.spark.util.Utils$.doTryWithCallerStacktrace(Utils.scala:1377)
+      //  at org.apache.spark.util.UtilsSuite.callDoTryNestedNested(UtilsSuite.scala:1654)
+      //  at org.apache.spark.util.UtilsSuite.$anonfun$new$172(UtilsSuite.scala:1674)
+      // scalastyle:on line.size.limit
+
+      assert(e.getStackTrace.exists(_.getMethodName == "callGetTryFromNestedNested"))
+      assert(!e.getStackTrace.exists(_.getMethodName == "callGetTryFromNested"))
+      assert(!e.getStackTrace.exists(_.getMethodName == "callGetTry"))
+      assert(e.getSuppressed.length == 1)
+
+      Utils.getTryWithCallerStacktrace(t)
+    }
+  }
+
+  test("nested doTryWithCallerStacktrace and getTryWithCallerStacktrace") {
+    val t = callDoTryNestedNested()
+
+    val e = intercept[Exception] {
+      callGetTry(t)
+    }
+
+    // Uncomment for manual inspection
+    //
+    // println("\nIntercepted in test:")
+    // e.printStackTrace()
+    //
+    // scalastyle:off line.size.limit
+    // java.lang.Exception: test
+    //  at org.apache.spark.util.UtilsSuite.throwException(UtilsSuite.scala:1529)
+    //  at org.apache.spark.util.UtilsSuite.$anonfun$callDoTry$1(UtilsSuite.scala:1534)
+    //  at scala.util.Try$.apply(Try.scala:217)
+    //  at org.apache.spark.util.Utils$.doTryWithCallerStacktrace(Utils.scala:1377)
+    //  at org.apache.spark.util.UtilsSuite.callDoTry(UtilsSuite.scala:1534)
+    //  at org.apache.spark.util.UtilsSuite.$anonfun$callDoTryNested$1(UtilsSuite.scala:1631)
+    //  at scala.util.Try$.apply(Try.scala:217)
+    //  at org.apache.spark.util.Utils$.doTryWithCallerStacktrace(Utils.scala:1377)
+    //  at org.apache.spark.util.UtilsSuite.callDoTryNested(UtilsSuite.scala:1630)
+    //  at org.apache.spark.util.UtilsSuite.$anonfun$callDoTryNestedNested$1(UtilsSuite.scala:1655)
+    //  at scala.util.Try$.apply(Try.scala:217)
+    //  at org.apache.spark.util.Utils$.doTryWithCallerStacktrace(Utils.scala:1377)
+    //  at org.apache.spark.util.Utils$.getTryWithCallerStacktrace(Utils.scala:1438)
+    // ---->  at org.apache.spark.util.UtilsSuite.callGetTry(UtilsSuite.scala:1539) <---- STITCHED.
+    //  at org.apache.spark.util.UtilsSuite.$anonfun$new$173(UtilsSuite.scala:1677)
+    //  at org.scalatest.Assertions.intercept(Assertions.scala:749)
+    //  at org.scalatest.Assertions.intercept$(Assertions.scala:746)
+    //  at org.scalatest.funsuite.AnyFunSuite.intercept(AnyFunSuite.scala:1564)
+    //  at org.apache.spark.util.UtilsSuite.$anonfun$new$172(UtilsSuite.scala:1676)
+    // scalastyle:on line.size.limit
+
+    assert(e.getStackTrace.exists(_.getMethodName == "callGetTry"))
+    assert(!e.getStackTrace.exists(_.getMethodName == "callGetTryFromNested"))
+    assert(!e.getStackTrace.exists(_.getMethodName == "callGetTryFromNestedNested"))
+    assert(e.getSuppressed.length == 1)
   }
 }
 

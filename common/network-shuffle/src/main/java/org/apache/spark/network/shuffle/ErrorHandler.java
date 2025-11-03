@@ -20,18 +20,15 @@ package org.apache.spark.network.shuffle;
 import java.io.FileNotFoundException;
 import java.net.ConnectException;
 
-import com.google.common.base.Throwables;
-
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.network.server.BlockPushNonFatalFailure;
-
-import static org.apache.spark.network.server.BlockPushNonFatalFailure.ReturnCode.*;
+import org.apache.spark.network.util.JavaUtils;
 
 /**
  * Plugs into {@link RetryingBlockTransferor} to further control when an exception should be retried
  * and logged.
  * Note: {@link RetryingBlockTransferor} will delegate the exception to this handler only when
- * - remaining retries < max retries
+ * - remaining retries  &lt; max retries
  * - exception is an IOException
  *
  * @since 3.1.0
@@ -89,9 +86,9 @@ public interface ErrorHandler {
 
       // If the block is too late or the invalid block push or the attempt is not the latest one,
       // there is no need to retry it
-      return !(t instanceof BlockPushNonFatalFailure &&
+      return !(t instanceof BlockPushNonFatalFailure blockPushNonFatalFailure &&
         BlockPushNonFatalFailure
-          .shouldNotRetryErrorCode(((BlockPushNonFatalFailure) t).getReturnCode()));
+          .shouldNotRetryErrorCode(blockPushNonFatalFailure.getReturnCode()));
     }
 
     @Override
@@ -107,12 +104,12 @@ public interface ErrorHandler {
 
     @Override
     public boolean shouldRetryError(Throwable t) {
-      return !Throwables.getStackTraceAsString(t).contains(STALE_SHUFFLE_BLOCK_FETCH);
+      return !JavaUtils.stackTraceToString(t).contains(STALE_SHUFFLE_BLOCK_FETCH);
     }
 
     @Override
     public boolean shouldLogError(Throwable t) {
-      return !Throwables.getStackTraceAsString(t).contains(STALE_SHUFFLE_BLOCK_FETCH);
+      return !JavaUtils.stackTraceToString(t).contains(STALE_SHUFFLE_BLOCK_FETCH);
     }
   }
 }

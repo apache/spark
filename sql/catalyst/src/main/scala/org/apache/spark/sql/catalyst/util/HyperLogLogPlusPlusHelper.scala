@@ -96,7 +96,13 @@ class HyperLogLogPlusPlusHelper(relativeSD: Double) extends Serializable {
       case _ => _value
     }
     // Create the hashed value 'x'.
-    val x = XxHash64Function.hash(value, dataType, 42L)
+    val x = XxHash64Function.hash(
+      value,
+      dataType,
+      42L,
+      isCollationAware = true,
+      // legacyCollationAwareHashing only matters when isCollationAware is false.
+      legacyCollationAwareHashing = false)
 
     // Determine the index of the register we are going to use.
     val idx = (x >>> idxShift).toInt

@@ -35,7 +35,8 @@ private[spark] object CoarseGrainedClusterMessages {
       sparkProperties: Seq[(String, String)],
       ioEncryptionKey: Option[Array[Byte]],
       hadoopDelegationCreds: Option[Array[Byte]],
-      resourceProfile: ResourceProfile)
+      resourceProfile: ResourceProfile,
+      logLevel: Option[String])
     extends CoarseGrainedClusterMessage
 
   case object RetrieveLastAllocatedExecutorId extends CoarseGrainedClusterMessage
@@ -48,6 +49,10 @@ private[spark] object CoarseGrainedClusterMessages {
 
   case class KillExecutorsOnHost(host: String)
     extends CoarseGrainedClusterMessage
+
+  case class UpdateExecutorsLogLevel(logLevel: String) extends CoarseGrainedClusterMessage
+
+  case class UpdateExecutorLogLevel(logLevel: String) extends CoarseGrainedClusterMessage
 
   case class DecommissionExecutorsOnHost(host: String)
     extends CoarseGrainedClusterMessage
@@ -74,14 +79,20 @@ private[spark] object CoarseGrainedClusterMessages {
       taskId: Long,
       state: TaskState,
       data: SerializableBuffer,
-      resources: Map[String, ResourceInformation] = Map.empty)
+      taskCpus: Int,
+      resources: Map[String, Map[String, Long]] = Map.empty)
     extends CoarseGrainedClusterMessage
 
   object StatusUpdate {
     /** Alternate factory method that takes a ByteBuffer directly for the data field */
-    def apply(executorId: String, taskId: Long, state: TaskState, data: ByteBuffer,
-        resources: Map[String, ResourceInformation]): StatusUpdate = {
-      StatusUpdate(executorId, taskId, state, new SerializableBuffer(data), resources)
+    def apply(
+        executorId: String,
+        taskId: Long,
+        state: TaskState,
+        data: ByteBuffer,
+        taskCpus: Int,
+        resources: Map[String, Map[String, Long]]): StatusUpdate = {
+      StatusUpdate(executorId, taskId, state, new SerializableBuffer(data), taskCpus, resources)
     }
   }
 
@@ -151,8 +162,10 @@ private[spark] object CoarseGrainedClusterMessages {
   case class KillExecutors(executorIds: Seq[String]) extends CoarseGrainedClusterMessage
 
   // Used internally by executors to shut themselves down.
-  case object Shutdown extends CoarseGrainedClusterMessage
+  case class Shutdown(exitCode: Int = 0) extends CoarseGrainedClusterMessage
 
   // The message to check if `CoarseGrainedSchedulerBackend` thinks the executor is alive or not.
   case class IsExecutorAlive(executorId: String) extends CoarseGrainedClusterMessage
+
+  case class TaskThreadDump(taskId: Long) extends CoarseGrainedClusterMessage
 }

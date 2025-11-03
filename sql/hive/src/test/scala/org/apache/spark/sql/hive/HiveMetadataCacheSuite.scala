@@ -55,11 +55,13 @@ class HiveMetadataCacheSuite extends QueryTest with SQLTestUtils with TestHiveSi
         assert(p.getFileSystem(hiveContext.sessionState.newHadoopConf()).delete(p, false))
 
         // Read it again and now we should see a FileNotFoundException
-        val e = intercept[SparkException] {
-          sql("select count(*) from view_refresh").first()
-        }
-        assert(e.getMessage.contains("FileNotFoundException"))
-        assert(e.getMessage.contains("REFRESH"))
+        checkErrorMatchPVals(
+          exception = intercept[SparkException] {
+            sql("select count(*) from view_refresh").first()
+          },
+          condition = "FAILED_READ_FILE.FILE_NOT_EXIST",
+          parameters = Map("path" -> ".*")
+        )
 
         // Refresh and we should be able to read it again.
         spark.catalog.refreshTable("view_refresh")
@@ -96,10 +98,13 @@ class HiveMetadataCacheSuite extends QueryTest with SQLTestUtils with TestHiveSi
 
             // Delete a file, then assert that we tried to read it. This means the table was cached.
             deleteRandomFile()
-            val e = intercept[SparkException] {
-              sql("select * from test").count()
-            }
-            assert(e.getMessage.contains("FileNotFoundException"))
+            checkErrorMatchPVals(
+              exception = intercept[SparkException] {
+                sql("select * from test").count()
+              },
+              condition = "FAILED_READ_FILE.FILE_NOT_EXIST",
+              parameters = Map("path" -> ".*")
+            )
 
             // Test refreshing the cache.
             spark.catalog.refreshTable("test")
@@ -111,10 +116,13 @@ class HiveMetadataCacheSuite extends QueryTest with SQLTestUtils with TestHiveSi
             deleteRandomFile()
             spark.catalog.cacheTable("test")
             spark.catalog.refreshByPath("/some-invalid-path")  // no-op
-            val e2 = intercept[SparkException] {
-              sql("select * from test").count()
-            }
-            assert(e.getMessage.contains("FileNotFoundException"))
+            checkErrorMatchPVals(
+              exception = intercept[SparkException] {
+                sql("select * from test").count()
+              },
+              condition = "FAILED_READ_FILE.FILE_NOT_EXIST",
+              parameters = Map("path" -> ".*")
+            )
             spark.catalog.refreshByPath(dir.getAbsolutePath)
             assert(sql("select * from test").count() == 3)
           }

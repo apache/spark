@@ -20,45 +20,77 @@ package org.apache.spark.sql.jdbc
 import java.sql.{SQLException, Types}
 import java.util.Locale
 
-import org.apache.spark.sql.AnalysisException
+import scala.util.control.NonFatal
+
+import org.apache.spark.{SparkThrowable, SparkUnsupportedOperationException}
+import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.analysis.NonEmptyNamespaceException
-import org.apache.spark.sql.connector.expressions.aggregate.{AggregateFunc, GeneralAggregateFunc}
+import org.apache.spark.sql.connector.catalog.Identifier
+import org.apache.spark.sql.connector.expressions.Expression
+import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
 import org.apache.spark.sql.types._
 
-private object DB2Dialect extends JdbcDialect {
+private case class DB2Dialect() extends JdbcDialect with SQLConfHelper with NoLegacyJDBCError {
 
   override def canHandle(url: String): Boolean =
     url.toLowerCase(Locale.ROOT).startsWith("jdbc:db2")
 
+  private val distinctUnsupportedAggregateFunctions =
+    Set("COVAR_POP", "COVAR_SAMP", "REGR_INTERCEPT", "REGR_R2", "REGR_SLOPE", "REGR_SXY")
+
   // See https://www.ibm.com/docs/en/db2/11.5?topic=functions-aggregate
-  override def compileAggregate(aggFunction: AggregateFunc): Option[String] = {
-    super.compileAggregate(aggFunction).orElse(
-      aggFunction match {
-        case f: GeneralAggregateFunc if f.name() == "VAR_POP" =>
-          assert(f.children().length == 1)
-          val distinct = if (f.isDistinct) "DISTINCT " else ""
-          Some(s"VARIANCE($distinct${f.children().head})")
-        case f: GeneralAggregateFunc if f.name() == "VAR_SAMP" =>
-          assert(f.children().length == 1)
-          val distinct = if (f.isDistinct) "DISTINCT " else ""
-          Some(s"VARIANCE_SAMP($distinct${f.children().head})")
-        case f: GeneralAggregateFunc if f.name() == "STDDEV_POP" =>
-          assert(f.children().length == 1)
-          val distinct = if (f.isDistinct) "DISTINCT " else ""
-          Some(s"STDDEV($distinct${f.children().head})")
-        case f: GeneralAggregateFunc if f.name() == "STDDEV_SAMP" =>
-          assert(f.children().length == 1)
-          val distinct = if (f.isDistinct) "DISTINCT " else ""
-          Some(s"STDDEV_SAMP($distinct${f.children().head})")
-        case f: GeneralAggregateFunc if f.name() == "COVAR_POP" && f.isDistinct == false =>
-          assert(f.children().length == 2)
-          Some(s"COVARIANCE(${f.children().head}, ${f.children().last})")
-        case f: GeneralAggregateFunc if f.name() == "COVAR_SAMP" && f.isDistinct == false =>
-          assert(f.children().length == 2)
-          Some(s"COVARIANCE_SAMP(${f.children().head}, ${f.children().last})")
-        case _ => None
+  private val supportedAggregateFunctions = Set("MAX", "MIN", "SUM", "COUNT", "AVG",
+    "VAR_POP", "VAR_SAMP", "STDDEV_POP", "STDDEV_SAMP") ++ distinctUnsupportedAggregateFunctions
+  private val supportedFunctions = supportedAggregateFunctions
+
+  override def isSupportedFunction(funcName: String): Boolean =
+    supportedFunctions.contains(funcName)
+
+  override def isObjectNotFoundException(e: SQLException): Boolean = {
+    e.getErrorCode == -204
+  }
+
+  class DB2SQLBuilder extends JDBCSQLBuilder {
+
+    override def visitAggregateFunction(
+        funcName: String, isDistinct: Boolean, inputs: Array[String]): String =
+      if (isDistinct && distinctUnsupportedAggregateFunctions.contains(funcName)) {
+        throw new SparkUnsupportedOperationException(
+          errorClass = "_LEGACY_ERROR_TEMP_3184",
+          messageParameters = Map(
+            "class" -> this.getClass.getSimpleName,
+            "funcName" -> funcName))
+      } else {
+        super.visitAggregateFunction(funcName, isDistinct, inputs)
       }
-    )
+
+    override def dialectFunctionName(funcName: String): String = funcName match {
+      case "VAR_POP" => "VARIANCE"
+      case "VAR_SAMP" => "VARIANCE_SAMP"
+      case "STDDEV_POP" => "STDDEV"
+      case "STDDEV_SAMP" => "STDDEV_SAMP"
+      case "COVAR_POP" => "COVARIANCE"
+      case "COVAR_SAMP" => "COVARIANCE_SAMP"
+      case _ => super.dialectFunctionName(funcName)
+    }
+  }
+
+  override def compileExpression(expr: Expression): Option[String] = {
+    val db2SQLBuilder = new DB2SQLBuilder()
+    try {
+      Some(db2SQLBuilder.build(expr))
+    } catch {
+      case NonFatal(e) =>
+        logWarning("Error occurs while compiling V2 expression", e)
+        None
+    }
+  }
+
+  override def compileValue(value: Any): Any = value match {
+    case binaryValue: Array[Byte] =>
+      binaryValue.map("%02X".format(_)).mkString("BLOB(X'", "", "')")
+    case other => super.compileValue(other)
   }
 
   override def getCatalystType(
@@ -66,6 +98,8 @@ private object DB2Dialect extends JdbcDialect {
       typeName: String,
       size: Int,
       md: MetadataBuilder): Option[DataType] = sqlType match {
+    case Types.SMALLINT if !conf.legacyDB2numericMappingEnabled =>
+      Option(ShortType)
     case Types.REAL => Option(FloatType)
     case Types.OTHER =>
       typeName match {
@@ -79,27 +113,35 @@ private object DB2Dialect extends JdbcDialect {
 
   override def getJDBCType(dt: DataType): Option[JdbcType] = dt match {
     case StringType => Option(JdbcType("CLOB", java.sql.Types.CLOB))
-    case BooleanType => Option(JdbcType("CHAR(1)", java.sql.Types.CHAR))
+    case BooleanType if conf.legacyDB2BooleanMappingEnabled =>
+      Option(JdbcType("CHAR(1)", java.sql.Types.CHAR))
+    case BooleanType => Option(JdbcType("BOOLEAN", java.sql.Types.BOOLEAN))
     case ShortType | ByteType => Some(JdbcType("SMALLINT", java.sql.Types.SMALLINT))
     case _ => None
   }
 
   override def isCascadingTruncateTable(): Option[Boolean] = Some(false)
 
+  // See https://www.ibm.com/docs/en/db2-for-zos/12.0.0?topic=codes-sqlstate-values-common-error
+  override def isSyntaxErrorBestEffort(exception: SQLException): Boolean = {
+    Option(exception.getSQLState).exists(_.startsWith("42"))
+  }
+
   // scalastyle:off line.size.limit
   // See https://www.ibm.com/support/knowledgecenter/en/SSEPGG_11.5.0/com.ibm.db2.luw.sql.ref.doc/doc/r0053474.html
   // scalastyle:on line.size.limit
   override def getTruncateQuery(
       table: String,
-      cascade: Option[Boolean] = isCascadingTruncateTable): String = {
+      cascade: Option[Boolean] = isCascadingTruncateTable()): String = {
     s"TRUNCATE TABLE $table IMMEDIATE"
   }
 
   // scalastyle:off line.size.limit
   // See https://www.ibm.com/support/knowledgecenter/en/SSEPGG_11.5.0/com.ibm.db2.luw.sql.ref.doc/doc/r0000980.html
   // scalastyle:on line.size.limit
-  override def renameTable(oldTable: String, newTable: String): String = {
-    s"RENAME TABLE $oldTable TO $newTable"
+  override def renameTable(oldTable: Identifier, newTable: Identifier): String = {
+    s"RENAME TABLE ${getFullyQualifiedQuotedTableName(oldTable)} TO " +
+      s"${getFullyQualifiedQuotedTableName(newTable)}"
   }
 
   // scalastyle:off line.size.limit
@@ -126,16 +168,28 @@ private object DB2Dialect extends JdbcDialect {
   override def removeSchemaCommentQuery(schema: String): String = {
     s"COMMENT ON SCHEMA ${quoteIdentifier(schema)} IS ''"
   }
-
-  override def classifyException(message: String, e: Throwable): AnalysisException = {
+  override def classifyException(
+      e: Throwable,
+      condition: String,
+      messageParameters: Map[String, String],
+      description: String,
+      isRuntime: Boolean): Throwable with SparkThrowable = {
     e match {
       case sqlException: SQLException =>
         sqlException.getSQLState match {
           // https://www.ibm.com/docs/en/db2/11.5?topic=messages-sqlstate
-          case "42893" => throw NonEmptyNamespaceException(message, cause = Some(e))
-          case _ => super.classifyException(message, e)
+          case "42893" =>
+            throw NonEmptyNamespaceException(
+              namespace = messageParameters.get("namespace").toArray,
+              details = sqlException.getMessage,
+              cause = Some(e))
+          case "42710" if condition == "FAILED_JDBC.RENAME_TABLE" =>
+            val newTable = messageParameters("newName")
+            throw QueryCompilationErrors.tableAlreadyExistsError(newTable)
+          case _ =>
+            super.classifyException(e, condition, messageParameters, description, isRuntime)
         }
-      case _ => super.classifyException(message, e)
+      case _ => super.classifyException(e, condition, messageParameters, description, isRuntime)
     }
   }
 
@@ -146,4 +200,32 @@ private object DB2Dialect extends JdbcDialect {
       s"DROP SCHEMA ${quoteIdentifier(schema)} RESTRICT"
     }
   }
+
+  override def getLimitClause(limit: Integer): String = {
+    if (limit > 0) s"FETCH FIRST $limit ROWS ONLY" else ""
+  }
+
+  override def getOffsetClause(offset: Integer): String = {
+    if (offset > 0) s"OFFSET $offset ROWS" else ""
+  }
+
+  class DB2SQLQueryBuilder(dialect: JdbcDialect, options: JDBCOptions)
+    extends JdbcSQLQueryBuilder(dialect, options) {
+
+    override def build(): String = {
+      val limitClause = dialect.getLimitClause(limit)
+      val offsetClause = dialect.getOffsetClause(offset)
+
+      options.prepareQuery +
+        s"SELECT $columnList FROM ${options.tableOrQuery}" +
+        s" $whereClause $groupByClause $orderByClause $offsetClause $limitClause"
+    }
+  }
+
+  override def getJdbcSQLQueryBuilder(options: JDBCOptions): JdbcSQLQueryBuilder =
+    new DB2SQLQueryBuilder(this, options)
+
+  override def supportsLimit: Boolean = true
+
+  override def supportsOffset: Boolean = true
 }

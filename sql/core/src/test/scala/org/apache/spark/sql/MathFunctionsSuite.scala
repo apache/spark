@@ -18,7 +18,10 @@
 package org.apache.spark.sql
 
 import java.nio.charset.StandardCharsets
+import java.sql.Date
+import java.text.SimpleDateFormat
 import java.time.Period
+import java.util.Locale
 
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.functions.{log => logarithm}
@@ -208,7 +211,7 @@ class MathFunctionsSuite extends QueryTest with SharedSparkSession {
           types.StructType(Seq(types.StructField("a", types.LongType))))
     assert(
       spark.range(1).select(ceil(col("id"), lit(0)).alias("a")).schema ==
-          types.StructType(Seq(types.StructField("a", types.DecimalType(20, 0)))))
+          types.StructType(Seq(types.StructField("a", types.DecimalType(21, 0)))))
     checkAnswer(
       sql("SELECT ceiling(0), ceiling(1), ceiling(1.5)"),
       Row(0L, 1L, 2L))
@@ -222,8 +225,6 @@ class MathFunctionsSuite extends QueryTest with SharedSparkSession {
     checkAnswer(df.selectExpr("conv(num, fromBase, toBase)"), Row("101001101"))
     checkAnswer(df.selectExpr("""conv("100", 2, 10)"""), Row("4"))
     checkAnswer(df.selectExpr("""conv("-10", 16, -10)"""), Row("-16"))
-    checkAnswer(
-      df.selectExpr("""conv("9223372036854775807", 36, -16)"""), Row("-1")) // for overflow
   }
 
   test("SPARK-33428 conv function should trim input string") {
@@ -235,24 +236,42 @@ class MathFunctionsSuite extends QueryTest with SharedSparkSession {
   }
 
   test("SPARK-33428 conv function shouldn't raise error if input string is too big") {
-    val df = Seq((
-      "aaaaaaa0aaaaaaa0aaaaaaa0aaaaaaa0aaaaaaa0aaaaaaa0aaaaaaa0aaaaaaa0aaaaaaa0")).toDF("num")
-    checkAnswer(df.select(conv($"num", 16, 10)), Row("18446744073709551615"))
-    checkAnswer(df.select(conv($"num", 16, -10)), Row("-1"))
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> false.toString) {
+      val df = Seq((
+        "aaaaaaa0aaaaaaa0aaaaaaa0aaaaaaa0aaaaaaa0aaaaaaa0aaaaaaa0aaaaaaa0aaaaaaa0")).toDF("num")
+      checkAnswer(df.select(conv($"num", 16, 10)), Row("18446744073709551615"))
+      checkAnswer(df.select(conv($"num", 16, -10)), Row("-1"))
+    }
   }
 
   test("SPARK-36229 inconsistently behaviour where returned value is above the 64 char threshold") {
-    val df = Seq(("?" * 64), ("?" * 65), ("a" * 4 + "?" * 60), ("a" * 4 + "?" * 61)).toDF("num")
-    val expectedResult = Seq(Row("0"), Row("0"), Row("43690"), Row("43690"))
-    checkAnswer(df.select(conv($"num", 16, 10)), expectedResult)
-    checkAnswer(df.select(conv($"num", 16, -10)), expectedResult)
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> false.toString) {
+      val df = Seq(("?".repeat(64)), ("?".repeat(65)), ("a".repeat(4) + "?".repeat(60)),
+          ("a".repeat(4) + "?".repeat(61))).toDF("num")
+      val expectedResult = Seq(Row("0"), Row("0"), Row("43690"), Row("43690"))
+      checkAnswer(df.select(conv($"num", 16, 10)), expectedResult)
+      checkAnswer(df.select(conv($"num", 16, -10)), expectedResult)
+    }
   }
 
   test("SPARK-36229 conv should return result equal to -1 in base of toBase") {
-    val df = Seq(("aaaaaaa0aaaaaaa0a"), ("aaaaaaa0aaaaaaa0")).toDF("num")
-    checkAnswer(df.select(conv($"num", 16, 10)),
-      Seq(Row("18446744073709551615"), Row("12297829339523361440")))
-    checkAnswer(df.select(conv($"num", 16, -10)), Seq(Row("-1"), Row("-6148914734186190176")))
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> false.toString) {
+      val df = Seq(("aaaaaaa0aaaaaaa0a"), ("aaaaaaa0aaaaaaa0")).toDF("num")
+      checkAnswer(df.select(conv($"num", 16, 10)),
+        Seq(Row("18446744073709551615"), Row("12297829339523361440")))
+      checkAnswer(df.select(conv($"num", 16, -10)), Seq(Row("-1"), Row("-6148914734186190176")))
+    }
+  }
+
+  test("SPARK-44973: conv must allocate enough space for all digits plus negative sign") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> false.toString) {
+      val df = Seq(
+        ((BigInt(Long.MaxValue) + 1).toString(16)),
+        (BigInt(Long.MinValue).toString(16))
+      ).toDF("num")
+      checkAnswer(df.select(conv($"num", 16, -2)),
+        Seq(Row(BigInt(Long.MinValue).toString(2)), Row(BigInt(Long.MinValue).toString(2))))
+    }
   }
 
   test("floor") {
@@ -263,7 +282,7 @@ class MathFunctionsSuite extends QueryTest with SharedSparkSession {
           types.StructType(Seq(types.StructField("a", types.LongType))))
     assert(
       spark.range(1).select(floor(col("id"), lit(0)).alias("a")).schema ==
-          types.StructType(Seq(types.StructField("a", types.DecimalType(20, 0)))))
+          types.StructType(Seq(types.StructField("a", types.DecimalType(21, 0)))))
   }
 
   test("factorial") {
@@ -424,6 +443,10 @@ class MathFunctionsSuite extends QueryTest with SharedSparkSession {
     checkAnswer(
       sql("SELECT sign(10), signum(-11)"),
       Row(1, -1))
+
+    checkAnswer(
+      Seq((1, 2)).toDF().select(signum(lit(10)), signum(lit(-11))),
+      Row(1, -1))
   }
 
   test("pow / power") {
@@ -432,6 +455,11 @@ class MathFunctionsSuite extends QueryTest with SharedSparkSession {
     checkAnswer(
       sql("SELECT pow(1, 2), power(2, 1)"),
       Seq((1, 2)).toDF().select(pow(lit(1), lit(2)), pow(lit(2), lit(1)))
+    )
+
+    checkAnswer(
+      sql("SELECT pow(1, 2), power(2, 1)"),
+      Seq((1, 2)).toDF().select(power(lit(1), lit(2)), power(lit(2), lit(1)))
     )
   }
 
@@ -591,12 +619,19 @@ class MathFunctionsSuite extends QueryTest with SharedSparkSession {
     checkAnswer(
       sql("SELECT negative(1), negative(0), negative(-1)"),
       Row(-1, 0, 1))
+
+    checkAnswer(
+      Seq((1, 2)).toDF().select(negative(lit(1)), negative(lit(0)), negative(lit(-1))),
+      Row(-1, 0, 1))
   }
 
   test("positive") {
     val df = Seq((1, -1, "abc")).toDF("a", "b", "c")
     checkAnswer(df.selectExpr("positive(a)"), Row(1))
     checkAnswer(df.selectExpr("positive(b)"), Row(-1))
+
+    checkAnswer(df.select(positive(col("a"))), Row(1))
+    checkAnswer(df.select(positive(col("b"))), Row(-1))
   }
 
   test("SPARK-35926: Support YearMonthIntervalType in width-bucket function") {
@@ -612,6 +647,118 @@ class MathFunctionsSuite extends QueryTest with SharedSparkSession {
     ).foreach { case ((value, start, end, num), expected) =>
       val df = Seq((value, start, end, num)).toDF("v", "s", "e", "n")
       checkAnswer(df.selectExpr("width_bucket(v, s, e, n)"), Row(expected))
+      checkAnswer(df.select(width_bucket(col("v"), col("s"), col("e"), col("n"))), Row(expected))
     }
+  }
+
+  test("width_bucket with numbers") {
+    val df1 = Seq(
+      (5.3, 0.2, 10.6, 5), (-2.1, 1.3, 3.4, 3),
+      (8.1, 0.0, 5.7, 4), (-0.9, 5.2, 0.5, 2)
+    ).toDF("v", "min", "max", "n")
+
+    checkAnswer(
+      df1.selectExpr("width_bucket(v, min, max, n)"),
+      df1.select(width_bucket(col("v"), col("min"), col("max"), col("n")))
+    )
+  }
+
+  val sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US)
+  val sdfDate = new SimpleDateFormat("yyyy-MM-dd", Locale.US)
+  val d = new Date(sdf.parse("2015-04-08 13:10:15").getTime)
+
+  test("try_add") {
+    val df = Seq((1982, 15)).toDF("birth", "age")
+
+    checkAnswer(df.selectExpr("try_add(birth, age)"), Seq(Row(1997)))
+    checkAnswer(df.select(try_add(col("birth"), col("age"))), Seq(Row(1997)))
+
+    val d1 = Date.valueOf("2015-09-30")
+    val d2 = Date.valueOf("2016-02-29")
+    val df1 = Seq((1, d1), (2, d2)).toDF("i", "d")
+
+    checkAnswer(df1.selectExpr("try_add(d, i)"),
+      df1.select(try_add(col("d"), col("i"))))
+    checkAnswer(df1.selectExpr(s"try_add(d, make_interval(i))"),
+      df1.select(try_add(column("d"), make_interval(col("i")))))
+    checkAnswer(df1.selectExpr(s"try_add(d, make_interval(0, 0, 0, i))"),
+      df1.select(try_add(column("d"), make_interval(lit(0), lit(0), lit(0), col("i")))))
+    checkAnswer(df1.selectExpr("try_add(make_interval(i), make_interval(i))"),
+      df1.select(try_add(make_interval(col("i")), make_interval(col("i")))))
+  }
+
+  test("try_avg") {
+    val df = Seq((1982, 15), (1990, 11)).toDF("birth", "age")
+
+    checkAnswer(df.selectExpr("try_avg(age)"), Seq(Row(13)))
+    checkAnswer(df.select(try_avg(col("age"))), Seq(Row(13)))
+  }
+
+  test("try_divide") {
+    val df = Seq((2000, 10), (2050, 5)).toDF("birth", "age")
+
+    checkAnswer(df.selectExpr("try_divide(birth, age)"), Seq(Row(200.0), Row(410.0)))
+    checkAnswer(df.select(try_divide(col("birth"), col("age"))), Seq(Row(200.0), Row(410.0)))
+
+    val df1 = Seq((1, 2)).toDF("year", "month")
+
+    checkAnswer(df1.selectExpr(s"try_divide(make_interval(year, month), 2)"),
+      df1.select(try_divide(make_interval(col("year"), col("month")), lit(2))))
+    checkAnswer(df1.selectExpr(s"try_divide(make_interval(year, month), 0)"),
+      df1.select(try_divide(make_interval(col("year"), col("month")), lit(0))))
+  }
+
+  test("try_mod") {
+    val df = Seq((10, 3), (5, 5), (5, 0)).toDF("birth", "age")
+    checkAnswer(df.selectExpr("try_mod(birth, age)"), Seq(Row(1), Row(0), Row(null)))
+
+    val dfDecimal = Seq(
+      (BigDecimal(10), BigDecimal(3)),
+      (BigDecimal(5), BigDecimal(5)),
+      (BigDecimal(5), BigDecimal(0))).toDF("birth", "age")
+    checkAnswer(dfDecimal.selectExpr("try_mod(birth, age)"), Seq(Row(1), Row(0), Row(null)))
+  }
+
+  test("try_element_at") {
+    val df = Seq((Array(1, 2, 3), 2)).toDF("a", "b")
+    checkAnswer(df.selectExpr("try_element_at(a, b)"), Seq(Row(2)))
+    checkAnswer(df.select(try_element_at(col("a"), col("b"))), Seq(Row(2)))
+  }
+
+  test("try_multiply") {
+    val df = Seq((2, 3)).toDF("a", "b")
+
+    checkAnswer(df.selectExpr("try_multiply(a, b)"), Seq(Row(6)))
+    checkAnswer(df.select(try_multiply(col("a"), col("b"))), Seq(Row(6)))
+
+    checkAnswer(df.selectExpr("try_multiply(make_interval(a), b)"),
+      df.select(try_multiply(make_interval(col("a")), col("b"))))
+  }
+
+  test("try_subtract") {
+    val df = Seq((2, 3)).toDF("a", "b")
+
+    checkAnswer(df.selectExpr("try_subtract(a, b)"), Seq(Row(-1)))
+    checkAnswer(df.select(try_subtract(col("a"), col("b"))), Seq(Row(-1)))
+
+    val d1 = Date.valueOf("2015-09-30")
+    val d2 = Date.valueOf("2016-02-29")
+    val df1 = Seq((1, d1), (2, d2)).toDF("i", "d")
+
+    checkAnswer(df1.selectExpr("try_subtract(d, i)"),
+      df1.select(try_subtract(col("d"), col("i"))))
+    checkAnswer(df1.selectExpr(s"try_subtract(d, make_interval(i))"),
+      df1.select(try_subtract(col("d"), make_interval(col("i")))))
+    checkAnswer(df1.selectExpr(s"try_subtract(d, make_interval(0, 0, 0, i))"),
+      df1.select(try_subtract(col("d"), make_interval(lit(0), lit(0), lit(0), col("i")))))
+    checkAnswer(df1.selectExpr("try_subtract(make_interval(i), make_interval(i))"),
+      df1.select(try_subtract(make_interval(col("i")), make_interval(col("i")))))
+  }
+
+  test("try_sum") {
+    val df = Seq((2, 3), (5, 6)).toDF("a", "b")
+
+    checkAnswer(df.selectExpr("try_sum(a)"), Seq(Row(7)))
+    checkAnswer(df.select(try_sum(col("a"))), Seq(Row(7)))
   }
 }

@@ -81,7 +81,7 @@ class BarrierTaskContextSuite extends SparkFunSuite with LocalSparkContext with 
     val rdd = sc.makeRDD(1 to 10, 4)
     val rdd2 = rdd.barrier().mapPartitions { it =>
       val context = BarrierTaskContext.get()
-      val partitionId = context.partitionId
+      val partitionId = context.partitionId()
       if (partitionId == 0) {
         context.barrier()
       } else {
@@ -101,7 +101,7 @@ class BarrierTaskContextSuite extends SparkFunSuite with LocalSparkContext with 
     val rdd2 = rdd.barrier().mapPartitions { it =>
       val context = BarrierTaskContext.get()
       // Sleep for a random time before global sync.
-      Thread.sleep(Random.nextInt(1000))
+      Thread.sleep(Random.nextInt(500))
       context.barrier()
       val time1 = System.currentTimeMillis()
       // Sleep for a random time before global sync.
@@ -155,7 +155,7 @@ class BarrierTaskContextSuite extends SparkFunSuite with LocalSparkContext with 
     val rdd2 = rdd.barrier().mapPartitions { it =>
       val context = BarrierTaskContext.get()
       // Task 3 shall sleep 2000ms to ensure barrier() call timeout
-      if (context.taskAttemptId == 3) {
+      if (context.taskAttemptId() == 3) {
         Thread.sleep(2000)
       }
       context.barrier()
@@ -175,7 +175,7 @@ class BarrierTaskContextSuite extends SparkFunSuite with LocalSparkContext with 
     val rdd = sc.makeRDD(1 to 10, 4)
     val rdd2 = rdd.barrier().mapPartitions { it =>
       val context = BarrierTaskContext.get()
-      if (context.taskAttemptId != 0) {
+      if (context.taskAttemptId() != 0) {
         context.barrier()
       }
       it
@@ -195,7 +195,7 @@ class BarrierTaskContextSuite extends SparkFunSuite with LocalSparkContext with 
     val rdd2 = rdd.barrier().mapPartitions { it =>
       val context = BarrierTaskContext.get()
       try {
-        if (context.taskAttemptId == 0) {
+        if (context.taskAttemptId() == 0) {
           // Due to some non-obvious reason, the code can trigger an Exception and skip the
           // following statements within the try ... catch block, including the first barrier()
           // call.
@@ -367,4 +367,27 @@ class BarrierTaskContextSuite extends SparkFunSuite with LocalSparkContext with 
     // double check we kill task success
     assert(System.currentTimeMillis() - startTime < 5000)
   }
+
+  test("SPARK-40932, messages of allGather should not been overridden " +
+    "by the following barrier APIs") {
+
+    sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local[2]"))
+    sc.setLogLevel("INFO")
+    val rdd = sc.makeRDD(1 to 10, 2)
+    val rdd2 = rdd.barrier().mapPartitions { it =>
+      val context = BarrierTaskContext.get()
+      // Sleep for a random time before global sync.
+      Thread.sleep(Random.nextInt(1000))
+      // Pass partitionId message in
+      val message: String = context.partitionId().toString
+      val messages: Array[String] = context.allGather(message)
+      context.barrier()
+      Iterator.single(messages.toList)
+    }
+    val messages = rdd2.collect()
+    // All the task partitionIds are shared across all tasks
+    assert(messages.length === 2)
+    assert(messages.forall(_ == List("0", "1")))
+  }
+
 }

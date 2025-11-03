@@ -94,7 +94,7 @@ object SparkSessionSingleton {
   def getInstance(sparkConf: SparkConf): SparkSession = {
     if (instance == null) {
       instance = SparkSession
-        .builder
+        .builder()
         .config(sparkConf)
         .getOrCreate()
     }

@@ -36,14 +36,13 @@ private[spark] object RpcUtils {
     rpcEnv.setupEndpointRef(RpcAddress(driverHost, driverPort), name)
   }
 
-  /** Returns the configured number of times to retry connecting */
-  def numRetries(conf: SparkConf): Int = {
-    conf.get(RPC_NUM_RETRIES)
-  }
-
-  /** Returns the configured number of milliseconds to wait on each retry */
-  def retryWaitMs(conf: SparkConf): Long = {
-    conf.get(RPC_RETRY_WAIT)
+  def makeDriverRef(
+      name: String,
+      driverHost: String,
+      driverPort: Int,
+      rpcEnv: RpcEnv): RpcEndpointRef = {
+    Utils.checkHost(driverHost)
+    rpcEnv.setupEndpointRef(RpcAddress(driverHost, driverPort), name)
   }
 
   /** Returns the default Spark timeout to use for RPC ask operations. */

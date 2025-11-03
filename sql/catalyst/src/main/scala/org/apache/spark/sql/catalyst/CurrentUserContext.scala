@@ -17,8 +17,14 @@
 
 package org.apache.spark.sql.catalyst
 
+import org.apache.spark.util.Utils
+
 object CurrentUserContext {
   val CURRENT_USER: InheritableThreadLocal[String] = new InheritableThreadLocal[String] {
     override protected def initialValue(): String = null
   }
+
+  def getCurrentUser: String = Option(CURRENT_USER.get()).getOrElse(Utils.getCurrentUserName())
+
+  def getCurrentUserOrEmpty: String = Option(CURRENT_USER.get()).getOrElse("")
 }

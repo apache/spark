@@ -17,9 +17,7 @@
 
 package org.apache.spark.mllib.linalg
 
-import dev.ludovic.netlib.{JavaLAPACK => NetlibJavaLAPACK,
-                           LAPACK => NetlibLAPACK,
-                           NativeLAPACK => NetlibNativeLAPACK}
+import dev.ludovic.netlib.lapack.{JavaLAPACK => NetlibJavaLAPACK, LAPACK => NetlibLAPACK, NativeLAPACK => NetlibNativeLAPACK}
 
 /**
  * LAPACK routines for MLlib's vectors and matrices.

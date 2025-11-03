@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:simpleType name="somedecimal">
+    <xs:restriction base="xs:decimal">
+      <xs:fractionDigits value="6"/>
+      <xs:totalDigits value="12"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:element name="decimal_type_1" type="xs:decimal"/>
+  <xs:element name="decimal_type_2">
+    <xs:simpleType>
+      <xs:restriction base="xs:decimal">
+        <xs:fractionDigits value="2" />
+      </xs:restriction>
+    </xs:simpleType>
+  </xs:element>
+  <xs:element name="decimal_type_3" type="somedecimal"/>
+</xs:schema>

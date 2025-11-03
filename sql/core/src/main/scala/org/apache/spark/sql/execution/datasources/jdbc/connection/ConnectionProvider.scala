@@ -70,7 +70,7 @@ protected abstract class ConnectionProviderBase extends Logging {
     val selectedProvider = connectionProviderName match {
       case Some(providerName) =>
         // It is assumed that no two providers will have the same name
-        filteredProviders.filter(_.name == providerName).headOption.getOrElse {
+        filteredProviders.find(_.name == providerName).getOrElse {
           throw new IllegalArgumentException(
             s"Could not find a JDBC connection provider with name '$providerName' " +
             "that can handle the specified driver and options. " +

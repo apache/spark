@@ -17,10 +17,13 @@
 
 package org.apache.spark.ml.clustering
 
+import java.io.{DataInputStream, DataOutputStream}
+
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.broadcast.Broadcast
+import org.apache.spark.internal.{LogKeys}
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.impl.Utils.{unpackUpperTriangular, EPSILON}
 import org.apache.spark.ml.linalg._
@@ -37,7 +40,8 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel
-
+import org.apache.spark.util.ArrayImplicits._
+import org.apache.spark.util.SizeEstimator
 
 /**
  * Common params for GaussianMixture and GaussianMixtureModel
@@ -92,6 +96,9 @@ class GaussianMixtureModel private[ml] (
   extends Model[GaussianMixtureModel] with GaussianMixtureParams with MLWritable
   with HasTrainingSummary[GaussianMixtureSummary] {
 
+  // For ml connect only
+  private[ml] def this() = this("", Array.emptyDoubleArray, Array.empty)
+
   @Since("3.0.0")
   lazy val numFeatures: Int = gaussians.head.mean.size
 
@@ -142,10 +149,10 @@ class GaussianMixtureModel private[ml] (
     }
 
     if (numColsOutput == 0) {
-      this.logWarning(s"$uid: GaussianMixtureModel.transform() does nothing" +
-        " because no output columns were set.")
+      this.logWarning(log"${MDC(LogKeys.UUID, uid)}: GaussianMixtureModel.transform() does " +
+        log"nothing because no output columns were set.")
     }
-    outputData.toDF
+    outputData.toDF()
   }
 
   @Since("2.0.0")
@@ -189,7 +196,7 @@ class GaussianMixtureModel private[ml] (
   def gaussiansDF: DataFrame = {
     val modelGaussians = gaussians.map { gaussian =>
       (OldVectors.fromML(gaussian.mean), OldMatrices.fromML(gaussian.cov))
-    }
+    }.toImmutableArraySeq
     SparkSession.builder().getOrCreate().createDataFrame(modelGaussians).toDF("mean", "cov")
   }
 
@@ -215,10 +222,65 @@ class GaussianMixtureModel private[ml] (
   @Since("2.0.0")
   override def summary: GaussianMixtureSummary = super.summary
 
+  override def estimatedSize: Long = SizeEstimator.estimate((weights, gaussians))
+
+  private[spark] def createSummary(
+    predictions: DataFrame, logLikelihood: Double, iteration: Int
+  ): Unit = {
+    val summary = new GaussianMixtureSummary(predictions,
+      $(predictionCol), $(probabilityCol), $(featuresCol), $(k), logLikelihood, iteration)
+    setSummary(Some(summary))
+  }
+
+  override private[spark] def saveSummary(path: String): Unit = {
+    ReadWriteUtils.saveObjectToLocal[(Double, Int)](
+      path, (summary.logLikelihood, summary.numIter),
+      (data, dos) => {
+        dos.writeDouble(data._1)
+        dos.writeInt(data._2)
+      }
+    )
+  }
+
+  override private[spark] def loadSummary(path: String, dataset: DataFrame): Unit = {
+    val (logLikelihood: Double, numIter: Int) = ReadWriteUtils.loadObjectFromLocal[(Double, Int)](
+      path,
+      dis => {
+        val logLikelihood = dis.readDouble()
+        val numIter = dis.readInt()
+        (logLikelihood, numIter)
+      }
+    )
+    createSummary(dataset, logLikelihood, numIter)
+  }
 }
 
 @Since("2.0.0")
 object GaussianMixtureModel extends MLReadable[GaussianMixtureModel] {
+  private[ml] case class Data(
+      weights: Array[Double],
+      mus: Array[OldVector],
+      sigmas: Array[OldMatrix]
+  )
+
+  private[ml] def serializeData(data: Data, dos: DataOutputStream): Unit = {
+    import ReadWriteUtils._
+    serializeDoubleArray(data.weights, dos)
+    serializeGenericArray[OldVector](data.mus, dos, (v, dos) => serializeVector(v.asML, dos))
+    serializeGenericArray[OldMatrix](data.sigmas, dos, (v, dos) => serializeMatrix(v.asML, dos))
+  }
+
+  private[ml] def deserializeData(dis: DataInputStream): Data = {
+    import ReadWriteUtils._
+    val weights = deserializeDoubleArray(dis)
+    val mus = deserializeGenericArray[OldVector](
+      dis, dis => OldVectors.fromML(deserializeVector(dis))
+    )
+    val sigmas = deserializeGenericArray[OldMatrix](
+      dis, dis => OldMatrices.fromML(deserializeMatrix(dis))
+    )
+    Data(weights, mus, sigmas)
+  }
 
   @Since("2.0.0")
   override def read: MLReader[GaussianMixtureModel] = new GaussianMixtureModelReader
@@ -230,11 +292,9 @@ object GaussianMixtureModel extends MLReadable[GaussianMixtureModel] {
   private[GaussianMixtureModel] class GaussianMixtureModelWriter(
       instance: GaussianMixtureModel) extends MLWriter {
 
-    private case class Data(weights: Array[Double], mus: Array[OldVector], sigmas: Array[OldMatrix])
-
     override protected def saveImpl(path: String): Unit = {
       // Save metadata and Params
-      DefaultParamsWriter.saveMetadata(instance, path, sc)
+      DefaultParamsWriter.saveMetadata(instance, path, sparkSession)
       // Save model data: weights and gaussians
       val weights = instance.weights
       val gaussians = instance.gaussians
@@ -242,7 +302,7 @@ object GaussianMixtureModel extends MLReadable[GaussianMixtureModel] {
       val sigmas = gaussians.map(c => OldMatrices.fromML(c.cov))
       val data = Data(weights, mus, sigmas)
       val dataPath = new Path(path, "data").toString
-      sparkSession.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
+      ReadWriteUtils.saveObject[Data](dataPath, data, sparkSession, serializeData)
     }
   }
 
@@ -252,19 +312,30 @@ object GaussianMixtureModel extends MLReadable[GaussianMixtureModel] {
     private val className = classOf[GaussianMixtureModel].getName
 
     override def load(path: String): GaussianMixtureModel = {
-      val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
+      val metadata = DefaultParamsReader.loadMetadata(path, sparkSession, className)
 
       val dataPath = new Path(path, "data").toString
-      val row = sparkSession.read.parquet(dataPath).select("weights", "mus", "sigmas").head()
-      val weights = row.getSeq[Double](0).toArray
-      val mus = row.getSeq[OldVector](1).toArray
-      val sigmas = row.getSeq[OldMatrix](2).toArray
-      require(mus.length == sigmas.length, "Length of Mu and Sigma array must match")
-      require(mus.length == weights.length, "Length of weight and Gaussian array must match")
 
-      val gaussians = mus.zip(sigmas)
+      val data = if (ReadWriteUtils.localSavingModeState.get()) {
+        ReadWriteUtils.loadObjectFromLocal(dataPath, deserializeData)
+      } else {
+        val row = sparkSession.read.parquet(dataPath).select("weights", "mus", "sigmas").head()
+        Data(
+          row.getSeq[Double](0).toArray,
+          row.getSeq[OldVector](1).toArray,
+          row.getSeq[OldMatrix](2).toArray
+        )
+      }
+
+      require(data.mus.length == data.sigmas.length, "Length of Mu and Sigma array must match")
+      require(
+        data.mus.length == data.weights.length,
+        "Length of weight and Gaussian array must match"
+      )
+
+      val gaussians = data.mus.zip(data.sigmas)
         .map { case (mu, sigma) => new MultivariateGaussian(mu.asML, sigma.asML) }
-      val model = new GaussianMixtureModel(metadata.uid, weights, gaussians)
+      val model = new GaussianMixtureModel(metadata.uid, data.weights, gaussians)
 
       metadata.getAndSetParams(model)
       model
@@ -381,7 +452,7 @@ class GaussianMixture @Since("2.0.0") (
     val spark = dataset.sparkSession
     import spark.implicits._
 
-    val numFeatures = MetadataUtils.getNumFeatures(dataset, $(featuresCol))
+    val numFeatures = getNumFeatures(dataset, $(featuresCol))
     require(numFeatures < GaussianMixture.MAX_NUM_FEATURES, s"GaussianMixture cannot handle more " +
       s"than ${GaussianMixture.MAX_NUM_FEATURES} features because the size of the covariance" +
       s" matrix is quadratic in the number of features.")
@@ -412,11 +483,10 @@ class GaussianMixture @Since("2.0.0") (
 
     val model = copyValues(new GaussianMixtureModel(uid, weights, gaussianDists))
       .setParent(this)
-    val summary = new GaussianMixtureSummary(model.transform(dataset),
-      $(predictionCol), $(probabilityCol), $(featuresCol), $(k), logLikelihood, iteration)
+    model.createSummary(model.transform(dataset), logLikelihood, iteration)
     instr.logNamedValue("logLikelihood", logLikelihood)
-    instr.logNamedValue("clusterSizes", summary.clusterSizes)
-    model.setSummary(Some(summary))
+    instr.logNamedValue("clusterSizes", model.summary.clusterSizes)
+    model
   }
 
   private def trainImpl(
@@ -441,7 +511,7 @@ class GaussianMixture @Since("2.0.0") (
       instances.mapPartitions { iter =>
         if (iter.nonEmpty) {
           val agg = new ExpectationAggregator(numFeatures, bcWeights, bcGaussians)
-          while (iter.hasNext) { agg.add(iter.next) }
+          while (iter.hasNext) { agg.add(iter.next()) }
           // sum of weights in this partition
           val ws = agg.weights.sum
           if (iteration == 0) weightSumAccum.add(ws)
@@ -508,8 +578,8 @@ class GaussianMixture @Since("2.0.0") (
     val gaussians = Array.tabulate(numClusters) { i =>
       val start = i * numSamples
       val end = start + numSamples
-      val sampleSlice = samples.view.slice(start, end)
-      val weightSlice = sampleWeights.view.slice(start, end)
+      val sampleSlice = samples.slice(start, end)
+      val weightSlice = sampleWeights.slice(start, end)
       val localWeightSum = weightSlice.sum
       weights(i) = localWeightSum / weightSum
 

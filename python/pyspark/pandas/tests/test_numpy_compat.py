@@ -15,37 +15,35 @@
 # limitations under the License.
 #
 
+import unittest
 import numpy as np
 import pandas as pd
 
 from pyspark import pandas as ps
 from pyspark.pandas import set_option, reset_option
-from pyspark.pandas.numpy_compat import unary_np_spark_mappings, binary_np_spark_mappings
-from pyspark.testing.pandasutils import ComparisonTestBase
+from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.sqlutils import SQLTestUtils
 
 
-class NumPyCompatTest(ComparisonTestBase, SQLTestUtils):
+class NumPyCompatTestsMixin:
+    @classmethod
+    def setUpClass(cls):
+        super(NumPyCompatTestsMixin, cls).setUpClass()
+        # Some nanosecond->microsecond conversions throw loss of precision errors
+        cls.spark.conf.set("spark.sql.execution.pandas.convertToArrowArraySafely", "false")
+
     blacklist = [
-        # Koalas does not currently support
+        # Pandas-on-Spark does not currently support
         "conj",
         "conjugate",
         "isnat",
         "matmul",
         "frexp",
         # Values are close enough but tests failed.
-        "arccos",
-        "exp",
-        "expm1",
         "log",  # flaky
         "log10",  # flaky
         "log1p",  # flaky
         "modf",
-        "floor_divide",  # flaky
-        # Results seem inconsistent in a different version of, I (Hyukjin) suspect, PyArrow.
-        # From PyArrow 0.15, seems it returns the correct results via PySpark. Probably we
-        # can enable it later when Koalas switches to PyArrow 0.15 completely.
-        "left_shift",
     ]
 
     @property
@@ -54,6 +52,10 @@ class NumPyCompatTest(ComparisonTestBase, SQLTestUtils):
             {"a": [1, 2, 3, 4, 5, 6, 7, 8, 9], "b": [4, 5, 6, 3, 2, 1, 0, 0, 0]},
             index=[0, 1, 3, 5, 6, 8, 9, 9, 9],
         )
+
+    @property
+    def psdf(self):
+        return ps.from_pandas(self.pdf)
 
     def test_np_add_series(self):
         psdf = self.psdf
@@ -80,7 +82,14 @@ class NumPyCompatTest(ComparisonTestBase, SQLTestUtils):
         with self.assertRaisesRegex(NotImplementedError, "on-Spark.*not.*support.*sqrt.*"):
             np.sqrt(psdf, psdf)
 
+        psdf1 = ps.DataFrame({"A": [1, 2, 3]})
+        psdf2 = ps.DataFrame({("A", "B"): [4, 5, 6]})
+        with self.assertRaisesRegex(ValueError, "cannot join with no overlapping index names"):
+            np.left_shift(psdf1, psdf2)
+
     def test_np_spark_compat_series(self):
+        from pyspark.pandas.numpy_compat import unary_np_spark_mappings, binary_np_spark_mappings
+
         # Use randomly generated dataFrame
         pdf = pd.DataFrame(
             np.random.randint(-100, 100, size=(np.random.randint(100), 2)), columns=["a", "b"]
@@ -129,6 +138,8 @@ class NumPyCompatTest(ComparisonTestBase, SQLTestUtils):
             reset_option("compute.ops_on_diff_frames")
 
     def test_np_spark_compat_frame(self):
+        from pyspark.pandas.numpy_compat import unary_np_spark_mappings, binary_np_spark_mappings
+
         # Use randomly generated dataFrame
         pdf = pd.DataFrame(
             np.random.randint(-100, 100, size=(np.random.randint(100), 2)), columns=["a", "b"]
@@ -178,12 +189,20 @@ class NumPyCompatTest(ComparisonTestBase, SQLTestUtils):
             reset_option("compute.ops_on_diff_frames")
 
 
+class NumPyCompatTests(
+    NumPyCompatTestsMixin,
+    PandasOnSparkTestCase,
+    SQLTestUtils,
+):
+    pass
+
+
 if __name__ == "__main__":
     import unittest
     from pyspark.pandas.tests.test_numpy_compat import *  # noqa: F401
 
     try:
-        import xmlrunner  # type: ignore[import]
+        import xmlrunner
 
         testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:

@@ -20,11 +20,11 @@ package org.apache.spark.mllib.stat.test
 import org.apache.commons.math3.distribution.ChiSquaredDistribution
 
 import org.apache.spark.SparkException
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.mllib.linalg._
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.rdd.RDD
-import org.apache.spark.util.collection.OpenHashMap
+import org.apache.spark.util.collection.{OpenHashMap, Utils}
 
 /**
  * Conduct the chi-squared test for the input RDDs using the specified method.
@@ -162,7 +162,7 @@ private[spark] object ChiSqTest extends Logging {
           .map { case ((label, _), c) => (label, c) }
           .toArray
           .groupBy(_._1)
-          .mapValues(_.map(_._2).sum)
+          .transform((_, v) => v.map(_._2).sum)
         labelCounts.foreach { case (label, countByLabel) =>
           val nnzByLabel = labelNNZ.getOrElse(label, 0L)
           val nzByLabel = countByLabel - nnzByLabel
@@ -181,14 +181,14 @@ private[spark] object ChiSqTest extends Logging {
       counts: Map[(Double, Double), Long],
       methodName: String,
       col: Int): ChiSqTestResult = {
-    val label2Index = counts.iterator.map(_._1._1).toArray.distinct.sorted.zipWithIndex.toMap
+    val label2Index = Utils.toMapWithIndex(counts.iterator.map(_._1._1).toArray.distinct.sorted)
     val numLabels = label2Index.size
     if (numLabels > maxCategories) {
       throw new SparkException(s"Chi-square test expect factors (categorical values) but "
         + s"found more than $maxCategories distinct label values.")
     }
 
-    val value2Index = counts.iterator.map(_._1._2).toArray.distinct.sorted.zipWithIndex.toMap
+    val value2Index = Utils.toMapWithIndex(counts.iterator.map(_._1._2).toArray.distinct.sorted)
     val numValues = value2Index.size
     if (numValues > maxCategories) {
       throw new SparkException(s"Chi-square test expect factors (categorical values) but "
@@ -200,7 +200,7 @@ private[spark] object ChiSqTest extends Logging {
     counts.foreach { case ((label, value), c) =>
       val i = value2Index(value)
       val j = label2Index(label)
-      contingency.update(i, j, c)
+      contingency.update(i, j, c.toDouble)
     }
 
     ChiSqTest.chiSquaredMatrix(contingency, methodName)
@@ -221,8 +221,9 @@ private[spark] object ChiSqTest extends Logging {
     }
     val size = observed.size
     if (size > 1000) {
-      logWarning("Chi-squared approximation may not be accurate due to low expected frequencies "
-        + s" as a result of a large number of categories: $size.")
+      logWarning(log"Chi-squared approximation may not be accurate due to low expected " +
+        log"frequencies as a result of a large number of categories: " +
+        log"${MDC(LogKeys.NUM_CATEGORIES, size)}.")
     }
     val obsArr = observed.toArray
     val expArr = if (expected.size == 0) Array.tabulate(size)(_ => 1.0 / size) else expected.toArray

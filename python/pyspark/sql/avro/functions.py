@@ -20,15 +20,18 @@ A collections of builtin avro functions
 """
 
 
-from typing import Dict, Optional, TYPE_CHECKING
-from pyspark import SparkContext
-from pyspark.sql.column import Column, _to_java_column
+from typing import Dict, Optional, TYPE_CHECKING, cast
+
+from pyspark.errors import PySparkTypeError
+from pyspark.sql.column import Column
+from pyspark.sql.utils import get_active_spark_context, try_remote_avro_functions
 from pyspark.util import _print_missing_jar
 
 if TYPE_CHECKING:
     from pyspark.sql._typing import ColumnOrName
 
 
+@try_remote_avro_functions
 def from_avro(
     data: "ColumnOrName", jsonFormatSchema: str, options: Optional[Dict[str, str]] = None
 ) -> Column:
@@ -40,6 +43,9 @@ def from_avro(
     set via the option avroSchema.
 
     .. versionadded:: 3.0.0
+
+    .. versionchanged:: 3.5.0
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -63,7 +69,7 @@ def from_avro(
     >>> df = spark.createDataFrame(data, ("key", "value"))
     >>> avroDf = df.select(to_avro(df.value).alias("avro"))
     >>> avroDf.collect()
-    [Row(avro=bytearray(b'\\x00\\x00\\x04\\x00\\nAlice'))]
+    [Row(avro=b'\\x00\\x00\\x04\\x00\\nAlice')]
 
     >>> jsonFormatSchema = '''{"type":"record","name":"topLevelRecord","fields":
     ...     [{"name":"avro","type":[{"type":"record","name":"value","namespace":"topLevelRecord",
@@ -72,11 +78,31 @@ def from_avro(
     >>> avroDf.select(from_avro(avroDf.avro, jsonFormatSchema).alias("value")).collect()
     [Row(value=Row(avro=Row(age=2, name='Alice')))]
     """
+    from py4j.java_gateway import JVMView
+    from pyspark.sql.classic.column import _to_java_column
 
-    sc = SparkContext._active_spark_context
-    assert sc is not None and sc._jvm is not None
+    if not isinstance(data, (Column, str)):
+        raise PySparkTypeError(
+            errorClass="INVALID_TYPE",
+            messageParameters={
+                "arg_name": "data",
+                "arg_type": "pyspark.sql.Column or str",
+            },
+        )
+    if not isinstance(jsonFormatSchema, str):
+        raise PySparkTypeError(
+            errorClass="INVALID_TYPE",
+            messageParameters={"arg_name": "jsonFormatSchema", "arg_type": "str"},
+        )
+    if options is not None and not isinstance(options, dict):
+        raise PySparkTypeError(
+            errorClass="INVALID_TYPE",
+            messageParameters={"arg_name": "options", "arg_type": "dict, optional"},
+        )
+
+    sc = get_active_spark_context()
     try:
-        jc = sc._jvm.org.apache.spark.sql.avro.functions.from_avro(
+        jc = getattr(cast(JVMView, sc._jvm), "org.apache.spark.sql.avro.functions").from_avro(
             _to_java_column(data), jsonFormatSchema, options or {}
         )
     except TypeError as e:
@@ -86,11 +112,15 @@ def from_avro(
     return Column(jc)
 
 
+@try_remote_avro_functions
 def to_avro(data: "ColumnOrName", jsonFormatSchema: str = "") -> Column:
     """
     Converts a column into binary of avro format.
 
     .. versionadded:: 3.0.0
+
+    .. versionchanged:: 3.5.0
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -111,21 +141,38 @@ def to_avro(data: "ColumnOrName", jsonFormatSchema: str = "") -> Column:
     >>> data = ['SPADES']
     >>> df = spark.createDataFrame(data, "string")
     >>> df.select(to_avro(df.value).alias("suite")).collect()
-    [Row(suite=bytearray(b'\\x00\\x0cSPADES'))]
+    [Row(suite=b'\\x00\\x0cSPADES')]
 
     >>> jsonFormatSchema = '''["null", {"type": "enum", "name": "value",
     ...     "symbols": ["SPADES", "HEARTS", "DIAMONDS", "CLUBS"]}]'''
     >>> df.select(to_avro(df.value, jsonFormatSchema).alias("suite")).collect()
-    [Row(suite=bytearray(b'\\x02\\x00'))]
+    [Row(suite=b'\\x02\\x00')]
     """
+    from py4j.java_gateway import JVMView
+    from pyspark.sql.classic.column import _to_java_column
 
-    sc = SparkContext._active_spark_context
-    assert sc is not None and sc._jvm is not None
+    if not isinstance(data, (Column, str)):
+        raise PySparkTypeError(
+            errorClass="INVALID_TYPE",
+            messageParameters={
+                "arg_name": "data",
+                "arg_type": "pyspark.sql.Column or str",
+            },
+        )
+    if not isinstance(jsonFormatSchema, str):
+        raise PySparkTypeError(
+            errorClass="INVALID_TYPE",
+            messageParameters={"arg_name": "jsonFormatSchema", "arg_type": "str"},
+        )
+
+    sc = get_active_spark_context()
     try:
         if jsonFormatSchema == "":
-            jc = sc._jvm.org.apache.spark.sql.avro.functions.to_avro(_to_java_column(data))
+            jc = getattr(cast(JVMView, sc._jvm), "org.apache.spark.sql.avro.functions").to_avro(
+                _to_java_column(data)
+            )
         else:
-            jc = sc._jvm.org.apache.spark.sql.avro.functions.to_avro(
+            jc = getattr(cast(JVMView, sc._jvm), "org.apache.spark.sql.avro.functions").to_avro(
                 _to_java_column(data), jsonFormatSchema
             )
     except TypeError as e:
@@ -138,9 +185,9 @@ def to_avro(data: "ColumnOrName", jsonFormatSchema: str = "") -> Column:
 def _test() -> None:
     import os
     import sys
-    from pyspark.testing.utils import search_jar
+    from pyspark.testing.sqlutils import search_jar
 
-    avro_jar = search_jar("external/avro", "spark-avro", "spark-avro")
+    avro_jar = search_jar("connector/avro", "spark-avro", "spark-avro")
     if avro_jar is None:
         print(
             "Skipping all Avro Python tests as the optional Avro project was "

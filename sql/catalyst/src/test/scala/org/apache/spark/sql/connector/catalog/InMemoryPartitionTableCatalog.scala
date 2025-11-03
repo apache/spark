@@ -21,26 +21,52 @@ import java.util
 
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.connector.expressions.Transform
-import org.apache.spark.sql.types.StructType
 
 class InMemoryPartitionTableCatalog extends InMemoryTableCatalog {
   import CatalogV2Implicits._
 
   override def createTable(
       ident: Identifier,
-      schema: StructType,
+      columns: Array[Column],
       partitions: Array[Transform],
       properties: util.Map[String, String]): Table = {
     if (tables.containsKey(ident)) {
-      throw new TableAlreadyExistsException(ident)
+      throw new TableAlreadyExistsException(ident.asMultipartIdentifier)
     }
 
     InMemoryTableCatalog.maybeSimulateFailedTableCreation(properties)
 
+    val finalCols = if (properties.containsKey("dropExistsDefault")) {
+      columns.map { c =>
+        if (c.defaultValue().getValue == null) {
+          c
+        } else {
+          Column.create(
+            c.name(),
+            c.dataType(),
+            c.nullable(),
+            c.comment(),
+            new ColumnDefaultValue(
+              c.defaultValue().getSql,
+              c.defaultValue().getExpression,
+              null
+            ),
+            c.metadataInJSON()
+          )
+        }
+      }
+    } else {
+      columns
+    }
+    val schema = CatalogV2Util.v2ColumnsToStructType(finalCols)
     val table = new InMemoryAtomicPartitionTable(
       s"$name.${ident.quoted}", schema, partitions, properties)
     tables.put(ident, table)
     namespaces.putIfAbsent(ident.namespace.toList, Map())
     table
+  }
+
+  override def createTable(ident: Identifier, tableInfo: TableInfo): Table = {
+    createTable(ident, tableInfo.columns(), tableInfo.partitions(), tableInfo.properties)
   }
 }

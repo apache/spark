@@ -23,7 +23,9 @@ import org.apache.spark.sql.types.*;
 import org.apache.spark.sql.vectorized.ColumnVector;
 import org.apache.spark.sql.vectorized.ColumnarArray;
 import org.apache.spark.sql.vectorized.ColumnarMap;
+import org.apache.spark.unsafe.types.CalendarInterval;
 import org.apache.spark.unsafe.types.UTF8String;
+import org.apache.spark.unsafe.types.VariantVal;
 
 /**
  * This class adds the constant support to ColumnVector.
@@ -58,14 +60,26 @@ public class ConstantColumnVector extends ColumnVector {
     super(type);
     this.numRows = numRows;
 
-    if (type instanceof StructType) {
-      this.childData = new ConstantColumnVector[((StructType) type).fields().length];
+    if (type instanceof StructType structType) {
+      this.childData = new ConstantColumnVector[structType.fields().length];
     } else if (type instanceof CalendarIntervalType) {
       // Three columns. Months as int. Days as Int. Microseconds as Long.
       this.childData = new ConstantColumnVector[3];
+      this.childData[0] = new ConstantColumnVector(1, DataTypes.IntegerType);
+      this.childData[1] = new ConstantColumnVector(1, DataTypes.IntegerType);
+      this.childData[2] = new ConstantColumnVector(1, DataTypes.LongType);
+    } else if (type instanceof VariantType) {
+      this.childData = new ConstantColumnVector[2];
+      this.childData[0] = new ConstantColumnVector(1, DataTypes.BinaryType);
+      this.childData[1] = new ConstantColumnVector(1, DataTypes.BinaryType);
     } else {
       this.childData = null;
     }
+  }
+
+  public void closeIfFreeable() {
+    // no-op: `ConstantColumnVector`s reuse the data backing its value across multiple batches and
+    // are freed at the end of execution in `close`.
   }
 
   @Override
@@ -293,5 +307,22 @@ public class ConstantColumnVector extends ColumnVector {
    */
   public void setChild(int ordinal, ConstantColumnVector value) {
     childData[ordinal] = value;
+  }
+
+  /**
+   * Sets the CalendarInterval `value` for all rows
+   */
+  public void setCalendarInterval(CalendarInterval value) {
+    this.childData[0].setInt(value.months);
+    this.childData[1].setInt(value.days);
+    this.childData[2].setLong(value.microseconds);
+  }
+
+  /**
+   * Sets the Variant `value` for all rows
+   */
+  public void setVariant(VariantVal value) {
+    this.childData[0].setBinary(value.getValue());
+    this.childData[1].setBinary(value.getMetadata());
   }
 }

@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<root>
+  <foo> 3.0 <bar> lorem </bar> text ignored <baz><bing>2</bing></baz> text ignored </foo>
+  <missing> ipsum </missing>
+</root>

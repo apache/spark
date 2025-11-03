@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.datasources.v2
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.JoinedRow
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
+import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.connector.read.PartitionReader
 import org.apache.spark.sql.types.StructType
 
@@ -31,7 +32,7 @@ class PartitionReaderWithPartitionValues(
     readDataSchema: StructType,
     partitionSchema: StructType,
     partitionValues: InternalRow) extends PartitionReader[InternalRow] {
-  private val fullSchema = readDataSchema.toAttributes ++ partitionSchema.toAttributes
+  private val fullSchema = toAttributes(readDataSchema) ++ toAttributes(partitionSchema)
   private val unsafeProjection = GenerateUnsafeProjection.generate(fullSchema, fullSchema)
   // Note that we have to apply the converter even though `file.partitionValues` is empty.
   // This is because the converter is also responsible for converting safe `InternalRow`s into

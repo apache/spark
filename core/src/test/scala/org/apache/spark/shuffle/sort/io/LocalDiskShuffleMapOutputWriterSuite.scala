@@ -27,13 +27,12 @@ import org.mockito.ArgumentMatchers.{any, anyInt, anyLong}
 import org.mockito.Mock
 import org.mockito.Mockito.when
 import org.mockito.MockitoAnnotations
-import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.shuffle.IndexShuffleBlockResolver
 import org.apache.spark.util.Utils
 
-class LocalDiskShuffleMapOutputWriterSuite extends SparkFunSuite with BeforeAndAfterEach {
+class LocalDiskShuffleMapOutputWriterSuite extends SparkFunSuite {
 
   @Mock(answer = RETURNS_SMART_NULLS)
   private var blockResolver: IndexShuffleBlockResolver = _
@@ -72,7 +71,7 @@ class LocalDiskShuffleMapOutputWriterSuite extends SparkFunSuite with BeforeAndA
     partitionSizesInMergedFile = null
     conf = new SparkConf()
       .set("spark.app.id", "example.spark.app")
-      .set("spark.shuffle.unsafe.file.output.buffer", "16k")
+      .set("spark.shuffle.localDisk.file.output.buffer", "16k")
     when(blockResolver.getDataFile(anyInt, anyLong)).thenReturn(mergedOutputFile)
     when(blockResolver.createTempFile(any(classOf[File])))
       .thenAnswer { invocationOnMock =>

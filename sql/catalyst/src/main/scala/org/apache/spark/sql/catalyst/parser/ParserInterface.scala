@@ -21,18 +21,29 @@ import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.types.{DataType, StructType}
+import org.apache.spark.sql.types.StructType
 
 /**
  * Interface for a parser.
  */
 @DeveloperApi
-trait ParserInterface {
+trait ParserInterface extends DataTypeParserInterface {
   /**
    * Parse a string to a [[LogicalPlan]].
    */
   @throws[ParseException]("Text cannot be parsed to a LogicalPlan")
   def parsePlan(sqlText: String): LogicalPlan
+
+  /**
+   * Parse a string to a [[LogicalPlan]] with explicit parameter context.
+   * This method avoids thread-local usage for better API design.
+   */
+  @throws[ParseException]("Text cannot be parsed to a LogicalPlan")
+  def parsePlanWithParameters(sqlText: String, parameterContext: ParameterContext): LogicalPlan = {
+    // Default implementation falls back to regular parsePlan
+    // Concrete implementations can override this for parameter support
+    parsePlan(sqlText)
+  }
 
   /**
    * Parse a string to an [[Expression]].
@@ -59,21 +70,14 @@ trait ParserInterface {
   def parseMultipartIdentifier(sqlText: String): Seq[String]
 
   /**
-   * Parse a string to a [[StructType]]. The passed SQL string should be a comma separated list
-   * of field definitions which will preserve the correct Hive metadata.
-   */
-  @throws[ParseException]("Text cannot be parsed to a schema")
-  def parseTableSchema(sqlText: String): StructType
-
-  /**
-   * Parse a string to a [[DataType]].
-   */
-  @throws[ParseException]("Text cannot be parsed to a DataType")
-  def parseDataType(sqlText: String): DataType
-
-  /**
    * Parse a query string to a [[LogicalPlan]].
    */
   @throws[ParseException]("Text cannot be parsed to a LogicalPlan")
   def parseQuery(sqlText: String): LogicalPlan
+
+  /**
+   * Parse a string to a [[StructType]] as routine parameters, handling default values and comments.
+   */
+  @throws[ParseException]("Text cannot be parsed to routine parameters")
+  def parseRoutineParam(sqlText: String): StructType
 }

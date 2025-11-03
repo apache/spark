@@ -20,7 +20,7 @@ package org.apache.spark.ui
 import scala.xml.{Node, Text}
 import scala.xml.Utility.trim
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{ErrorMessageFormat, SparkException, SparkFunSuite, SparkThrowableHelper}
 
 class UIUtilsSuite extends SparkFunSuite {
   import UIUtils._
@@ -59,6 +59,20 @@ class UIUtilsSuite extends SparkFunSuite {
       <span class="description-input">test <a href="base/link"> text </a></span>,
       baseUrl = "base",
       errorMsg = "Base URL should be prepended to html links",
+      plainText = false
+    )
+
+    verify(
+      """<a onclick="alert('oops');"></a>""",
+      <span class="description-input">{"""<a onclick="alert('oops');"></a>"""}</span>,
+      "Non href attributes should make the description be treated as a string instead of HTML",
+      plainText = false
+    )
+
+    verify(
+      """<a onmouseover="alert('oops');"></a>""",
+      <span class="description-input">{"""<a onmouseover="alert('oops');"></a>"""}</span>,
+      "Non href attributes should make the description be treated as a string instead of HTML",
       plainText = false
     )
   }
@@ -189,4 +203,26 @@ class UIUtilsSuite extends SparkFunSuite {
     assert(generated.sameElements(expected),
       s"\n$errorMsg\n\nExpected:\n$expected\nGenerated:\n$generated")
   }
+
+  // scalastyle:off line.size.limit
+  test("SPARK-44367: Extract errorClass from errorMsg with errorMessageCell") {
+    val e1 = "Job aborted due to stage failure: Task 0 in stage 1.0 failed 1 times, most recent failure: Lost task 0.0 in stage 1.0 (TID 1) (10.221.98.22 executor driver): org.apache.spark.SparkArithmeticException: [DIVIDE_BY_ZERO] Division by zero. Use `try_divide` to tolerate divisor being 0 and return NULL instead. If necessary set \"spark.sql.ansi.enabled\" to \"false\" to bypass this error.\n== SQL (line 1, position 8) ==\nselect a/b from src\n       ^^^\n\n\tat org.apache.spark.sql.errors.QueryExecutionErrors$.divideByZeroError(QueryExecutionErrors.scala:226)\n\tat org.apache.spark.sql.errors.QueryExecutionErrors.divideByZeroError(QueryExecutionErrors.scala)\n\tat org.apache.spark.sql.catalyst.expressions.GeneratedClass$GeneratedIteratorForCodegenStage1.processNext(generated.java:54)\n\tat org.apache.spark.sql.execution.BufferedRowIterator.hasNext(BufferedRowIterator.java:43)\n\tat org.apache.spark.sql.execution.WholeStageCodegenEvaluatorFactory$WholeStageCodegenPartitionEvaluator$$anon$1.hasNext(WholeStageCodegenEvaluatorFactory.scala:43)\n\tat org.apache.spark.sql.execution.SparkPlan.$anonfun$getByteArrayRdd$1(SparkPlan.scala:388)\n\tat org.apache.spark.rdd.RDD.$anonfun$mapPartitionsInternal$2(RDD.scala:890)\n\tat org.apache.spark.rdd.RDD.$anonfun$mapPartitionsInternal$2$adapted(RDD.scala:890)\n\tat org.apache.spark.rdd.MapPartitionsRDD.compute(MapPartitionsRDD.scala:52)\n\tat org.apache.spark.rdd.RDD.computeOrReadCheckpoint(RDD.scala:364)\n\tat org.apache.spark.rdd.RDD.iterator(RDD.scala:328)\n\tat org.apache.spark.scheduler.ResultTask.runTask(ResultTask.scala:93)\n\tat org.apache.spark.TaskContext.runTaskWithListeners(TaskContext.scala:161)\n\tat org.apache.spark.scheduler.Task.run(Task.scala:141)\n\tat org.apache.spark.executor.Executor$TaskRunner.$anonfun$run$4(Executor.scala:592)\n\tat org.apache.spark.util.Utils$.tryWithSafeFinally(Utils.scala:1474)\n\tat org.apache.spark.executor.Executor$TaskRunner.run(Executor.scala:595)\n\tat java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1149)\n\tat java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:624)\n\tat java.lang.Thread.run(Thread.java:750)\n\nDriver stacktrace:"
+    val cell1 = UIUtils.errorMessageCell(e1)
+    assert(cell1 === <td>{"DIVIDE_BY_ZERO"}{UIUtils.detailsUINode(isMultiline = true, e1)}</td>)
+
+    val e2 = SparkException.internalError("test")
+    val cell2 = UIUtils.errorMessageCell(e2.getMessage)
+    assert(cell2 === <td>{"INTERNAL_ERROR"}{UIUtils.detailsUINode(isMultiline = true, e2.getMessage)}</td>)
+
+    val e3 = new SparkException(
+      errorClass = "CANNOT_CAST_DATATYPE",
+      messageParameters = Map("sourceType" -> "long", "targetType" -> "int"), cause = null)
+    val cell3 = UIUtils.errorMessageCell(SparkThrowableHelper.getMessage(e3, ErrorMessageFormat.PRETTY))
+    assert(cell3 === <td>{"CANNOT_CAST_DATATYPE"}{UIUtils.detailsUINode(isMultiline = true, e3.getMessage)}</td>)
+
+    val e4 = "java.lang.RuntimeException: random text"
+    val cell4 = UIUtils.errorMessageCell(e4)
+    assert(cell4 === <td>{"java.lang.RuntimeException"}{UIUtils.detailsUINode(isMultiline = true, e4)}</td>)
+  }
+  // scalastyle:on line.size.limit
 }

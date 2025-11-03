@@ -19,17 +19,17 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.sql.{Date, Timestamp}
 
-import scala.collection.JavaConverters._
-import scala.collection.mutable.WrappedArray
+import scala.collection.immutable
+import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.Random
 
-import org.apache.spark.{SparkConf, SparkFunSuite}
+import org.apache.spark.{SparkConf, SparkException, SparkFunSuite, SparkRuntimeException}
 import org.apache.spark.serializer.{JavaSerializer, KryoSerializer}
 import org.apache.spark.sql.{RandomDataGenerator, Row}
-import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
-import org.apache.spark.sql.catalyst.ScroogeLikeExample
+import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, ScalaReflection, ScroogeLikeExample}
 import org.apache.spark.sql.catalyst.analysis.{ResolveTimeZone, SimpleAnalyzer, UnresolvedDeserializer}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.encoders._
@@ -74,9 +74,41 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluationWithMutableProjection(invoke, null, inputRow)
   }
 
+  test("SPARK-44525: Invoke could not find method") {
+    val inputRow = InternalRow(new Object)
+    val inputObject = BoundReference(0, ObjectType(classOf[Object]), nullable = false)
+
+    checkError(
+      exception = intercept[SparkException] {
+        Invoke(inputObject, "zeroArgNotExistMethod", IntegerType).eval(inputRow)
+      },
+      condition = "INTERNAL_ERROR",
+      parameters = Map("message" ->
+        ("Couldn't find method zeroArgNotExistMethod with arguments " +
+          "() on class java.lang.Object.")
+      )
+    )
+
+    checkError(
+      exception = intercept[SparkException] {
+        Invoke(
+          inputObject,
+          "oneArgNotExistMethod",
+          IntegerType,
+          Seq(Literal.fromObject(UTF8String.fromString("dummyInputString"))),
+          Seq(StringType)).eval(inputRow)
+      },
+      condition = "INTERNAL_ERROR",
+      parameters = Map("message" ->
+        ("Couldn't find method oneArgNotExistMethod with arguments " +
+          "(class org.apache.spark.unsafe.types.UTF8String) on class java.lang.Object.")
+      )
+    )
+  }
+
   test("MapObjects should make copies of unsafe-backed data") {
     // test UnsafeRow-backed data
-    val structEncoder = ExpressionEncoder[Array[Tuple2[java.lang.Integer, java.lang.Integer]]]
+    val structEncoder = ExpressionEncoder[Array[Tuple2[java.lang.Integer, java.lang.Integer]]]()
     val structInputRow = InternalRow.fromSeq(Seq(Array((1, 2), (3, 4))))
     val structExpected = new GenericArrayData(
       Array(InternalRow.fromSeq(Seq(1, 2)), InternalRow.fromSeq(Seq(3, 4))))
@@ -84,7 +116,7 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       structEncoder.serializer.head, structExpected, structInputRow)
 
     // test UnsafeArray-backed data
-    val arrayEncoder = ExpressionEncoder[Array[Array[Int]]]
+    val arrayEncoder = ExpressionEncoder[Array[Array[Int]]]()
     val arrayInputRow = InternalRow.fromSeq(Seq(Array(Array(1, 2), Array(3, 4))))
     val arrayExpected = new GenericArrayData(
       Array(new GenericArrayData(Array(1, 2)), new GenericArrayData(Array(3, 4))))
@@ -92,7 +124,7 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       arrayEncoder.serializer.head, arrayExpected, arrayInputRow)
 
     // test UnsafeMap-backed data
-    val mapEncoder = ExpressionEncoder[Array[Map[Int, Int]]]
+    val mapEncoder = ExpressionEncoder[Array[Map[Int, Int]]]()
     val mapInputRow = InternalRow.fromSeq(Seq(Array(
       Map(1 -> 100, 2 -> 200), Map(3 -> 300, 4 -> 400))))
     val mapExpected = new GenericArrayData(Seq(
@@ -268,7 +300,7 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   // by scala values instead of catalyst values.
   private def checkObjectExprEvaluation(
       expression: => Expression, expected: Any, inputRow: InternalRow = EmptyRow): Unit = {
-    val serializer = new JavaSerializer(new SparkConf()).newInstance
+    val serializer = new JavaSerializer(new SparkConf()).newInstance()
     val resolver = ResolveTimeZone
     val expr = resolver.resolveTimeZones(serializer.deserialize(serializer.serialize(expression)))
     checkEvaluationWithoutCodegen(expr, expected, inputRow)
@@ -330,8 +362,13 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
           assert(result.asInstanceOf[ArrayData].array.toSeq == expected)
         case l if classOf[java.util.List[_]].isAssignableFrom(l) =>
           assert(result.asInstanceOf[java.util.List[_]].asScala == expected)
-        case a if classOf[WrappedArray[Int]].isAssignableFrom(a) =>
-          assert(result == WrappedArray.make[Int](expected.toArray))
+        case s if classOf[java.util.Set[_]].isAssignableFrom(s) =>
+          assert(result.asInstanceOf[java.util.Set[_]].asScala == expected.toSet)
+        case a if classOf[mutable.ArraySeq[Int]].isAssignableFrom(a) =>
+          assert(result == mutable.ArraySeq.make[Int](expected.toArray))
+        case a if classOf[immutable.ArraySeq[Int]].isAssignableFrom(a) =>
+          assert(result.isInstanceOf[immutable.ArraySeq[_]])
+          assert(result == immutable.ArraySeq.unsafeWrapArray[Int](expected.toArray))
         case s if classOf[Seq[_]].isAssignableFrom(s) =>
           assert(result.asInstanceOf[Seq[_]] == expected)
         case s if classOf[scala.collection.Set[_]].isAssignableFrom(s) =>
@@ -339,11 +376,13 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       }
     }
 
-    val customCollectionClasses = Seq(classOf[WrappedArray[Int]],
+    val customCollectionClasses = Seq(
+      classOf[mutable.ArraySeq[Int]], classOf[immutable.ArraySeq[Int]],
       classOf[Seq[Int]], classOf[scala.collection.Set[Int]],
       classOf[java.util.List[Int]], classOf[java.util.AbstractList[Int]],
       classOf[java.util.AbstractSequentialList[Int]], classOf[java.util.Vector[Int]],
-      classOf[java.util.Stack[Int]], null)
+      classOf[java.util.Stack[Int]], null,
+      classOf[java.util.Set[Int]])
 
     val list = new java.util.ArrayList[Int]()
     list.add(1)
@@ -360,7 +399,8 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     stack.add(3)
 
     Seq(
-      (Seq(1, 2, 3), ObjectType(classOf[WrappedArray[Int]])),
+      (Seq(1, 2, 3), ObjectType(classOf[mutable.ArraySeq[Int]])),
+      (Seq(1, 2, 3), ObjectType(classOf[immutable.ArraySeq[Int]])),
       (Seq(1, 2, 3), ObjectType(classOf[Seq[Int]])),
       (Array(1, 2, 3), ObjectType(classOf[Array[Int]])),
       (Seq(1, 2, 3), ObjectType(classOf[Object])),
@@ -373,11 +413,12 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       customCollectionClasses.foreach(testMapObjects(collection, _, inputType))
 
       // Unsupported custom collection class
-      val errMsg = intercept[RuntimeException] {
-        testMapObjects(collection, classOf[scala.collection.Map[Int, Int]], inputType)
-      }.getMessage()
-      assert(errMsg.contains("`scala.collection.Map` is not supported by `MapObjects` " +
-        "as resulting collection."))
+      checkError(
+        exception = intercept[SparkRuntimeException] {
+          testMapObjects(collection, classOf[scala.collection.Map[Int, Int]], inputType)
+        },
+        condition = "CLASS_UNSUPPORTED_BY_MAP_OBJECTS",
+        parameters = Map("cls" -> "scala.collection.Map"))
     }
   }
 
@@ -423,7 +464,7 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       inputTypes = Nil,
       propagateNull = false,
       dataType = ObjectType(classOf[ScroogeLikeExample]),
-      outerPointer = Some(() => outerObj))
+      outerPointer = None)
     checkObjectExprEvaluation(newInst3, ScroogeLikeExample(1))
   }
 
@@ -452,7 +493,7 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     testTypes.foreach { dt =>
       genSchema(dt).map { schema =>
         val row = RandomDataGenerator.randomRow(random, schema)
-        val toRow = RowEncoder(schema).createSerializer()
+        val toRow = ExpressionEncoder(schema).createSerializer()
         val internalRow = toRow(row)
         val lambda = LambdaVariable("dummy", schema(0).dataType, schema(0).nullable, id = 0)
         checkEvaluationWithoutCodegen(lambda, internalRow.get(0, schema(0).dataType), internalRow)
@@ -460,7 +501,8 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
-  implicit private def mapIntStrEncoder = ExpressionEncoder[Map[Int, String]]()
+  implicit private def mapIntStrEncoder: ExpressionEncoder[Map[Int, String]] =
+    ExpressionEncoder[Map[Int, String]]()
 
   test("SPARK-23588 CatalystToExternalMap should support interpreted execution") {
     // To get a resolved `CatalystToExternalMap` expression, we build a deserializer plan
@@ -497,20 +539,63 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       (java.math.BigDecimal.valueOf(10), DecimalType.BigIntDecimal),
       (Array(3, 2, 1), ArrayType(IntegerType))
     ).foreach { case (input, dt) =>
+      val enc = RowEncoder.encoderForDataType(dt, lenient = false)
       val validateType = ValidateExternalType(
         GetExternalRowField(inputObject, index = 0, fieldName = "c0"),
         dt,
-        lenient = false)
+        EncoderUtils.lenientExternalDataTypeFor(enc))
       checkObjectExprEvaluation(validateType, input, InternalRow.fromSeq(Seq(Row(input))))
     }
 
-    checkExceptionInExpression[RuntimeException](
+    checkExceptionInExpression[SparkRuntimeException](
       ValidateExternalType(
         GetExternalRowField(inputObject, index = 0, fieldName = "c0"),
         DoubleType,
-        lenient = false),
+        DoubleType),
       InternalRow.fromSeq(Seq(Row(1))),
-      "java.lang.Integer is not a valid external type for schema of double")
+      "The external type java.lang.Integer is not valid for the type \"DOUBLE\"")
+  }
+
+  test("SPARK-49044 ValidateExternalType should return child in error") {
+    val inputObject = BoundReference(0, ObjectType(classOf[Row]), nullable = true)
+    Seq(
+      (true, BooleanType),
+      (2.toByte, ByteType),
+      (5.toShort, ShortType),
+      (23, IntegerType),
+      (61L, LongType),
+      (1.0f, FloatType),
+      (10.0, DoubleType),
+      ("abcd".getBytes, BinaryType),
+      ("abcd", StringType),
+      (BigDecimal.valueOf(10), DecimalType.IntDecimal),
+      (IntervalUtils.stringToInterval(UTF8String.fromString("interval 3 day")),
+        CalendarIntervalType),
+      (java.math.BigDecimal.valueOf(10), DecimalType.BigIntDecimal),
+      (Array(3, 2, 1), ArrayType(IntegerType))
+    ).foreach { case (input, dt) =>
+      val enc = RowEncoder.encoderForDataType(dt, lenient = false)
+      val validateType = ValidateExternalType(
+        GetExternalRowField(inputObject, index = 0, fieldName = "c0"),
+        dt,
+        EncoderUtils.lenientExternalDataTypeFor(enc))
+      checkObjectExprEvaluation(validateType, input, InternalRow.fromSeq(Seq(Row(input))))
+    }
+
+    checkErrorInExpression[SparkRuntimeException](
+      expression = ValidateExternalType(
+        GetExternalRowField(inputObject, index = 0, fieldName = "c0"),
+        DoubleType,
+        DoubleType),
+      inputRow = InternalRow.fromSeq(Seq(Row(1))),
+      condition = "INVALID_EXTERNAL_TYPE",
+      parameters = Map[String, String](
+        "externalType" -> "java.lang.Integer",
+        "type" -> "\"DOUBLE\"",
+        "expr" -> ("\"getexternalrowfield(input[0, org.apache.spark.sql.Row, true], " +
+          "0, c0)\"")
+      )
+    )
   }
 
   private def javaMapSerializerFor(
@@ -541,13 +626,13 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   private def scalaMapSerializerFor[T: TypeTag, U: TypeTag](inputObject: Expression): Expression = {
-    import org.apache.spark.sql.catalyst.ScalaReflection._
+    val keyEnc = ScalaReflection.encoderFor[T]
+    val valueEnc = ScalaReflection.encoderFor[U]
 
-    def kvSerializerFor[V: TypeTag](inputObject: Expression): Expression =
-         localTypeOf[V].dealias match {
-       case t if t <:< localTypeOf[java.lang.Integer] =>
-         Invoke(inputObject, "intValue", IntegerType)
-       case t if t <:< localTypeOf[String] =>
+    def kvSerializerFor(enc: AgnosticEncoder[_])(inputObject: Expression): Expression = enc match {
+      case AgnosticEncoders.BoxedIntEncoder =>
+        Invoke(inputObject, "intValue", IntegerType)
+      case AgnosticEncoders.StringEncoder =>
         StaticInvoke(
           classOf[UTF8String],
           StringType,
@@ -560,12 +645,12 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     ExternalMapToCatalyst(
       inputObject,
-      dataTypeFor[T],
-      kvSerializerFor[T],
-      keyNullable = !localTypeOf[T].typeSymbol.asClass.isPrimitive,
-      dataTypeFor[U],
-      kvSerializerFor[U],
-      valueNullable = !localTypeOf[U].typeSymbol.asClass.isPrimitive
+      EncoderUtils.externalDataTypeFor(keyEnc),
+      kvSerializerFor(keyEnc),
+      keyNullable = keyEnc.nullable,
+      EncoderUtils.externalDataTypeFor(valueEnc),
+      kvSerializerFor(valueEnc),
+      valueNullable = valueEnc.nullable
     )
   }
 
@@ -594,6 +679,7 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     // NULL key test
     val scalaMapHasNullKey = scala.collection.Map[java.lang.Integer, String](
       null.asInstanceOf[java.lang.Integer] -> "v0", java.lang.Integer.valueOf(1) -> "v1")
+
     val javaMapHasNullKey = new java.util.HashMap[java.lang.Integer, java.lang.String]() {
       {
         put(null, "v0")
@@ -605,15 +691,15 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val serializer3 =
       javaMapSerializerFor(classOf[java.lang.Integer], classOf[java.lang.String])(
         Literal.fromObject(javaMapHasNullKey))
-    checkExceptionInExpression[RuntimeException](
-      serializer3, EmptyRow, "Cannot use null as map key!")
+    checkErrorInExpression[SparkRuntimeException](
+      serializer3, EmptyRow, "NULL_MAP_KEY", Map[String, String]())
 
     // Scala Map
     val serializer4 = scalaMapSerializerFor[java.lang.Integer, String](
       Literal.fromObject(scalaMapHasNullKey))
 
-    checkExceptionInExpression[RuntimeException](
-      serializer4, EmptyRow, "Cannot use null as map key!")
+    checkErrorInExpression[SparkRuntimeException](
+      serializer4, EmptyRow, "NULL_MAP_KEY", Map[String, String]())
   }
 
   test("SPARK-35244: invoke should throw the original exception") {
@@ -669,6 +755,55 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val genCode = StaticInvoke(TestFun.getClass, IntegerType, "foo", arguments).genCode(ctx)
     assert(!genCode.code.toString.contains("boxedResult"))
   }
+
+  test("StaticInvoke call return `any` method") {
+    val cls = TestStaticInvokeReturnAny.getClass
+    Seq((0, IntegerType, true), (1, IntegerType, true), (2, IntegerType, false)).foreach {
+      case (arg, argDataType, returnNullable) =>
+        val dataType = arg match {
+          case 0 => ObjectType(classOf[java.lang.Integer])
+          case 1 => ShortType
+          case 2 => ObjectType(classOf[java.lang.Long])
+        }
+        val arguments = Seq(Literal(arg, argDataType))
+        val inputTypes = Seq(IntegerType)
+        val expected = arg match {
+          case 0 => java.lang.Integer.valueOf(1)
+          case 1 => 0.toShort
+          case 2 => java.lang.Long.valueOf(2)
+        }
+        val inputRow = InternalRow.fromSeq(Seq(arg))
+        checkObjectExprEvaluation(
+          StaticInvoke(cls, dataType, "func", arguments, inputTypes,
+            returnNullable = returnNullable),
+          expected,
+          inputRow)
+    }
+  }
+
+  test("Invoke call the method that throw Exception") {
+    val targetObject = new TestThrowExceptionMethod
+    val funcClass = classOf[TestThrowExceptionMethod]
+    val funcObj = Literal.create(targetObject, ObjectType(funcClass))
+
+    val inputInt = Seq(BoundReference(0, IntegerType, nullable = true))
+
+    checkObjectExprEvaluation(
+      Invoke(funcObj, "invoke", IntegerType, inputInt),
+      2,
+      InternalRow.fromSeq(Seq(Integer.valueOf(1))))
+  }
+
+  test("StaticInvoke call the method that throw Exception") {
+    val funcClass = classOf[TestThrowExceptionMethod]
+
+    val inputInt = Seq(BoundReference(0, IntegerType, nullable = true))
+
+    checkObjectExprEvaluation(
+      StaticInvoke(funcClass, IntegerType, "staticInvoke", inputInt),
+      2,
+      InternalRow.fromSeq(Seq(Integer.valueOf(1))))
+  }
 }
 
 class TestBean extends Serializable {
@@ -704,3 +839,10 @@ case object TestFun {
   def foo(left: Int, right: Int): Int = left + right
 }
 
+object TestStaticInvokeReturnAny {
+  def func(input: Int): Any = input match {
+    case 0 => java.lang.Integer.valueOf(1)
+    case 1 => 0.toShort
+    case 2 => java.lang.Long.valueOf(2)
+  }
+}

@@ -17,8 +17,8 @@
 
 import sys
 import warnings
-
 from typing import Any, Dict, List, Optional, TYPE_CHECKING
+import functools
 
 import numpy as np
 
@@ -34,6 +34,8 @@ from pyspark.ml.param.shared import (
     HasProbabilityCol,
     HasDistanceMeasure,
     HasCheckpointInterval,
+    HasSolver,
+    HasMaxBlockSizeInMB,
     Param,
     Params,
     TypeConverters,
@@ -43,13 +45,15 @@ from pyspark.ml.util import (
     JavaMLReadable,
     GeneralJavaMLWritable,
     HasTrainingSummary,
-    SparkContext,
+    try_remote_attribute_relation,
+    invoke_helper_relation,
 )
 from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaParams, JavaWrapper
-from pyspark.ml.common import inherit_doc, _java2py
+from pyspark.ml.common import inherit_doc
 from pyspark.ml.stat import MultivariateGaussian
 from pyspark.sql import DataFrame
 from pyspark.ml.linalg import Vector, Matrix
+from pyspark.sql.utils import is_remote
 
 if TYPE_CHECKING:
     from pyspark.ml._typing import M
@@ -81,7 +85,7 @@ class ClusteringSummary(JavaWrapper):
     .. versionadded:: 2.1.0
     """
 
-    @property  # type: ignore[misc]
+    @property
     @since("2.1.0")
     def predictionCol(self) -> str:
         """
@@ -89,15 +93,16 @@ class ClusteringSummary(JavaWrapper):
         """
         return self._call_java("predictionCol")
 
-    @property  # type: ignore[misc]
+    @property
     @since("2.1.0")
+    @try_remote_attribute_relation
     def predictions(self) -> DataFrame:
         """
         DataFrame produced by the model's `transform` method.
         """
         return self._call_java("predictions")
 
-    @property  # type: ignore[misc]
+    @property
     @since("2.1.0")
     def featuresCol(self) -> str:
         """
@@ -105,7 +110,7 @@ class ClusteringSummary(JavaWrapper):
         """
         return self._call_java("featuresCol")
 
-    @property  # type: ignore[misc]
+    @property
     @since("2.1.0")
     def k(self) -> int:
         """
@@ -113,15 +118,16 @@ class ClusteringSummary(JavaWrapper):
         """
         return self._call_java("k")
 
-    @property  # type: ignore[misc]
+    @property
     @since("2.1.0")
+    @try_remote_attribute_relation
     def cluster(self) -> DataFrame:
         """
         DataFrame of predicted cluster centers for each training data point.
         """
         return self._call_java("cluster")
 
-    @property  # type: ignore[misc]
+    @property
     @since("2.1.0")
     def clusterSizes(self) -> List[int]:
         """
@@ -129,7 +135,7 @@ class ClusteringSummary(JavaWrapper):
         """
         return self._call_java("clusterSizes")
 
-    @property  # type: ignore[misc]
+    @property
     @since("2.4.0")
     def numIter(self) -> int:
         """
@@ -208,7 +214,15 @@ class GaussianMixtureModel(
         """
         return self._set(probabilityCol=value)
 
-    @property  # type: ignore[misc]
+    @property
+    @since("4.1.0")
+    def numFeatures(self) -> int:
+        """
+        Number of features, i.e., length of Vectors which this transforms.
+        """
+        return self._call_java("numFeatures")
+
+    @property
     @since("2.0.0")
     def weights(self) -> List[float]:
         """
@@ -218,24 +232,21 @@ class GaussianMixtureModel(
         """
         return self._call_java("weights")
 
-    @property  # type: ignore[misc]
+    @property
     @since("3.0.0")
     def gaussians(self) -> List[MultivariateGaussian]:
         """
         Array of :py:class:`MultivariateGaussian` where gaussians[i] represents
         the Multivariate Gaussian (Normal) Distribution for Gaussian i
         """
-        sc = SparkContext._active_spark_context
-        assert sc is not None and self._java_obj is not None
-
-        jgaussians = self._java_obj.gaussians()
         return [
-            MultivariateGaussian(_java2py(sc, jgaussian.mean()), _java2py(sc, jgaussian.cov()))
-            for jgaussian in jgaussians
+            MultivariateGaussian(row.mean.asML(), row.cov.asML())
+            for row in self.gaussiansDF.collect()
         ]
 
-    @property  # type: ignore[misc]
+    @property
     @since("2.0.0")
+    @try_remote_attribute_relation
     def gaussiansDF(self) -> DataFrame:
         """
         Retrieve Gaussian distributions as a DataFrame.
@@ -243,20 +254,6 @@ class GaussianMixtureModel(
         The DataFrame has two columns: mean (Vector) and cov (Matrix).
         """
         return self._call_java("gaussiansDF")
-
-    @property  # type: ignore[misc]
-    @since("2.1.0")
-    def summary(self) -> "GaussianMixtureSummary":
-        """
-        Gets summary (cluster assignments, cluster sizes) of the model trained on the
-        training set. An exception is thrown if no summary exists.
-        """
-        if self.hasSummary:
-            return GaussianMixtureSummary(super(GaussianMixtureModel, self).summary)
-        else:
-            raise RuntimeError(
-                "No training summary available for this %s" % self.__class__.__name__
-            )
 
     @since("3.0.0")
     def predict(self, value: Vector) -> int:
@@ -271,6 +268,10 @@ class GaussianMixtureModel(
         Predict probability for the given features.
         """
         return self._call_java("predictProbability", value)
+
+    @property
+    def _summaryCls(self) -> type:
+        return GaussianMixtureSummary
 
 
 @inherit_doc
@@ -347,15 +348,15 @@ class GaussianMixture(
     >>> gaussians[0].mean
     DenseVector([0.825, 0.8675])
     >>> gaussians[0].cov
-    DenseMatrix(2, 2, [0.0056, -0.0051, -0.0051, 0.0046], 0)
+    DenseMatrix(2, 2, [0.0056, -0.0051, -0.0051, 0.0046], False)
     >>> gaussians[1].mean
     DenseVector([-0.87, -0.72])
     >>> gaussians[1].cov
-    DenseMatrix(2, 2, [0.0016, 0.0016, 0.0016, 0.0016], 0)
+    DenseMatrix(2, 2, [0.0016, 0.0016, 0.0016, 0.0016], False)
     >>> gaussians[2].mean
     DenseVector([-0.055, -0.075])
     >>> gaussians[2].cov
-    DenseMatrix(2, 2, [0.002, -0.0011, -0.0011, 0.0006], 0)
+    DenseMatrix(2, 2, [0.002, -0.0011, -0.0011, 0.0006], False)
     >>> model.gaussiansDF.select("mean").head()
     Row(mean=DenseVector([0.825, 0.8675]))
     >>> model.gaussiansDF.select("cov").head()
@@ -527,7 +528,7 @@ class GaussianMixtureSummary(ClusteringSummary):
     .. versionadded:: 2.1.0
     """
 
-    @property  # type: ignore[misc]
+    @property
     @since("2.1.0")
     def probabilityCol(self) -> str:
         """
@@ -535,15 +536,16 @@ class GaussianMixtureSummary(ClusteringSummary):
         """
         return self._call_java("probabilityCol")
 
-    @property  # type: ignore[misc]
+    @property
     @since("2.1.0")
+    @try_remote_attribute_relation
     def probability(self) -> DataFrame:
         """
         DataFrame of probabilities of each cluster for each training data point.
         """
         return self._call_java("probability")
 
-    @property  # type: ignore[misc]
+    @property
     @since("2.2.0")
     def logLikelihood(self) -> float:
         """
@@ -559,7 +561,7 @@ class KMeansSummary(ClusteringSummary):
     .. versionadded:: 2.1.0
     """
 
-    @property  # type: ignore[misc]
+    @property
     @since("2.4.0")
     def trainingCost(self) -> float:
         """
@@ -571,7 +573,15 @@ class KMeansSummary(ClusteringSummary):
 
 @inherit_doc
 class _KMeansParams(
-    HasMaxIter, HasFeaturesCol, HasSeed, HasPredictionCol, HasTol, HasDistanceMeasure, HasWeightCol
+    HasMaxIter,
+    HasFeaturesCol,
+    HasSeed,
+    HasPredictionCol,
+    HasTol,
+    HasDistanceMeasure,
+    HasWeightCol,
+    HasSolver,
+    HasMaxBlockSizeInMB,
 ):
     """
     Params for :py:class:`KMeans` and :py:class:`KMeansModel`.
@@ -599,6 +609,12 @@ class _KMeansParams(
         "The number of steps for k-means|| " + "initialization mode. Must be > 0.",
         typeConverter=TypeConverters.toInt,
     )
+    solver: Param[str] = Param(
+        Params._dummy(),
+        "solver",
+        "The solver algorithm for optimization. Supported " + "options: auto, row, block.",
+        typeConverter=TypeConverters.toString,
+    )
 
     def __init__(self, *args: Any):
         super(_KMeansParams, self).__init__(*args)
@@ -609,6 +625,8 @@ class _KMeansParams(
             tol=1e-4,
             maxIter=20,
             distanceMeasure="euclidean",
+            solver="auto",
+            maxBlockSizeInMB=0.0,
         )
 
     @since("1.5.0")
@@ -663,21 +681,16 @@ class KMeansModel(
     @since("1.5.0")
     def clusterCenters(self) -> List[np.ndarray]:
         """Get the cluster centers, represented as a list of NumPy arrays."""
-        return [c.toArray() for c in self._call_java("clusterCenters")]
+        matrix = self._call_java("clusterCenterMatrix")
+        return [vec for vec in matrix.toArray()]
 
-    @property  # type: ignore[misc]
-    @since("2.1.0")
-    def summary(self) -> KMeansSummary:
+    @property
+    @since("4.1.0")
+    def numFeatures(self) -> int:
         """
-        Gets summary (cluster assignments, cluster sizes) of the model trained on the
-        training set. An exception is thrown if no summary exists.
+        Number of features, i.e., length of Vectors which this transforms.
         """
-        if self.hasSummary:
-            return KMeansSummary(super(KMeansModel, self).summary)
-        else:
-            raise RuntimeError(
-                "No training summary available for this %s" % self.__class__.__name__
-            )
+        return self._call_java("numFeatures")
 
     @since("3.0.0")
     def predict(self, value: Vector) -> int:
@@ -685,6 +698,10 @@ class KMeansModel(
         Predict label for the given features.
         """
         return self._call_java("predict", value)
+
+    @property
+    def _summaryCls(self) -> type:
+        return KMeansSummary
 
 
 @inherit_doc
@@ -711,7 +728,11 @@ class KMeans(JavaEstimator[KMeansModel], _KMeansParams, JavaMLWritable, JavaMLRe
     >>> kmeans.getMaxIter()
     10
     >>> kmeans.clear(kmeans.maxIter)
+    >>> kmeans.getSolver()
+    'auto'
     >>> model = kmeans.fit(df)
+    >>> model.getMaxBlockSizeInMB()
+    0.0
     >>> model.getDistanceMeasure()
     'euclidean'
     >>> model.setPredictionCol("newPrediction")
@@ -770,11 +791,14 @@ class KMeans(JavaEstimator[KMeansModel], _KMeansParams, JavaMLWritable, JavaMLRe
         seed: Optional[int] = None,
         distanceMeasure: str = "euclidean",
         weightCol: Optional[str] = None,
+        solver: str = "auto",
+        maxBlockSizeInMB: float = 0.0,
     ):
         """
         __init__(self, \\*, featuresCol="features", predictionCol="prediction", k=2, \
                  initMode="k-means||", initSteps=2, tol=1e-4, maxIter=20, seed=None, \
-                 distanceMeasure="euclidean", weightCol=None)
+                 distanceMeasure="euclidean", weightCol=None, solver="auto", \
+                 maxBlockSizeInMB=0.0)
         """
         super(KMeans, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.clustering.KMeans", self.uid)
@@ -799,11 +823,14 @@ class KMeans(JavaEstimator[KMeansModel], _KMeansParams, JavaMLWritable, JavaMLRe
         seed: Optional[int] = None,
         distanceMeasure: str = "euclidean",
         weightCol: Optional[str] = None,
+        solver: str = "auto",
+        maxBlockSizeInMB: float = 0.0,
     ) -> "KMeans":
         """
         setParams(self, \\*, featuresCol="features", predictionCol="prediction", k=2, \
                   initMode="k-means||", initSteps=2, tol=1e-4, maxIter=20, seed=None, \
-                  distanceMeasure="euclidean", weightCol=None)
+                  distanceMeasure="euclidean", weightCol=None, solver="auto", \
+                  maxBlockSizeInMB=0.0)
 
         Sets params for KMeans.
         """
@@ -879,6 +906,20 @@ class KMeans(JavaEstimator[KMeansModel], _KMeansParams, JavaMLWritable, JavaMLRe
         Sets the value of :py:attr:`weightCol`.
         """
         return self._set(weightCol=value)
+
+    @since("3.4.0")
+    def setSolver(self, value: str) -> "KMeans":
+        """
+        Sets the value of :py:attr:`solver`.
+        """
+        return self._set(solver=value)
+
+    @since("3.4.0")
+    def setMaxBlockSizeInMB(self, value: float) -> "KMeans":
+        """
+        Sets the value of :py:attr:`maxBlockSizeInMB`.
+        """
+        return self._set(maxBlockSizeInMB=value)
 
 
 @inherit_doc
@@ -959,7 +1000,8 @@ class BisectingKMeansModel(
     @since("2.0.0")
     def clusterCenters(self) -> List[np.ndarray]:
         """Get the cluster centers, represented as a list of NumPy arrays."""
-        return [c.toArray() for c in self._call_java("clusterCenters")]
+        matrix = self._call_java("clusterCenterMatrix")
+        return [vec for vec in matrix.toArray()]
 
     @since("2.0.0")
     def computeCost(self, dataset: DataFrame) -> float:
@@ -979,19 +1021,13 @@ class BisectingKMeansModel(
         )
         return self._call_java("computeCost", dataset)
 
-    @property  # type: ignore[misc]
-    @since("2.1.0")
-    def summary(self) -> "BisectingKMeansSummary":
+    @property
+    @since("4.1.0")
+    def numFeatures(self) -> int:
         """
-        Gets summary (cluster assignments, cluster sizes) of the model trained on the
-        training set. An exception is thrown if no summary exists.
+        Number of features, i.e., length of Vectors which this transforms.
         """
-        if self.hasSummary:
-            return BisectingKMeansSummary(super(BisectingKMeansModel, self).summary)
-        else:
-            raise RuntimeError(
-                "No training summary available for this %s" % self.__class__.__name__
-            )
+        return self._call_java("numFeatures")
 
     @since("3.0.0")
     def predict(self, value: Vector) -> int:
@@ -999,6 +1035,10 @@ class BisectingKMeansModel(
         Predict label for the given features.
         """
         return self._call_java("predict", value)
+
+    @property
+    def _summaryCls(self) -> type:
+        return BisectingKMeansSummary
 
 
 @inherit_doc
@@ -1203,7 +1243,7 @@ class BisectingKMeansSummary(ClusteringSummary):
     .. versionadded:: 2.1.0
     """
 
-    @property  # type: ignore[misc]
+    @property
     @since("3.0.0")
     def trainingCost(self) -> float:
         """
@@ -1464,6 +1504,7 @@ class LDAModel(JavaModel, _LDAParams):
         return self._call_java("logPerplexity", dataset)
 
     @since("2.0.0")
+    @try_remote_attribute_relation
     def describeTopics(self, maxTermsPerTopic: int = 10) -> DataFrame:
         """
         Return the topics described by their top-weighted terms.
@@ -1492,6 +1533,7 @@ class DistributedLDAModel(LDAModel, JavaMLReadable["DistributedLDAModel"], JavaM
     .. versionadded:: 2.0.0
     """
 
+    @functools.cache
     @since("2.0.0")
     def toLocal(self) -> "LocalLDAModel":
         """
@@ -1501,6 +1543,8 @@ class DistributedLDAModel(LDAModel, JavaMLReadable["DistributedLDAModel"], JavaM
         .. warning:: This involves collecting a large :py:func:`topicsMatrix` to the driver.
         """
         model = LocalLDAModel(self._call_java("toLocal"))
+        if is_remote():
+            return model
 
         # SPARK-10931: Temporary fix to be removed once LDAModel defines Params
         model._create_params_from_java()
@@ -2103,8 +2147,21 @@ class PowerIterationClustering(
             - id: Long
             - cluster: Int
         """
-        self._transfer_params_to_java()
         assert self._java_obj is not None
+
+        if is_remote():
+            return invoke_helper_relation(
+                "powerIterationClusteringAssignClusters",
+                dataset,
+                self.getK(),
+                self.getMaxIter(),
+                self.getInitMode(),
+                self.getSrcCol(),
+                self.getDstCol(),
+                self.getWeightCol() if self.isDefined(self.weightCol) else "",
+            )
+
+        self._transfer_params_to_java()
 
         jdf = self._java_obj.assignClusters(dataset._jdf)
         return DataFrame(jdf, dataset.sparkSession)

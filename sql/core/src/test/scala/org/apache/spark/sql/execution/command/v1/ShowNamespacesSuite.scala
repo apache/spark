@@ -18,7 +18,9 @@
 package org.apache.spark.sql.execution.command.v1
 
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.catalog.CatalogDatabase
 import org.apache.spark.sql.execution.command
+import org.apache.spark.util.Utils
 
 /**
  * This base suite contains unified tests for the `SHOW NAMESPACES` and `SHOW DATABASES` commands
@@ -31,11 +33,24 @@ import org.apache.spark.sql.execution.command
 trait ShowNamespacesSuiteBase extends command.ShowNamespacesSuiteBase {
   override protected def builtinTopNamespaces: Seq[String] = Seq("default")
 
+  override protected def createNamespaceWithSpecialName(ns: String): Unit = {
+    // Call `ExternalCatalog` directly to bypass the database name validation in `SessionCatalog`.
+    spark.sharedState.externalCatalog.createDatabase(
+      CatalogDatabase(
+        name = ns,
+        description = "",
+        locationUri = Utils.createTempDir().toURI,
+        properties = Map.empty),
+      ignoreIfExists = false)
+  }
+
   test("IN namespace doesn't exist") {
-    val errMsg = intercept[AnalysisException] {
+    val e = intercept[AnalysisException] {
       sql("SHOW NAMESPACES in dummy")
-    }.getMessage
-    assert(errMsg.contains("Namespace 'dummy' not found"))
+    }
+    checkError(e,
+      condition = "SCHEMA_NOT_FOUND",
+      parameters = Map("schemaName" -> s"`$catalog`.`dummy`"))
   }
 }
 

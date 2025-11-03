@@ -15,18 +15,17 @@
 # limitations under the License.
 #
 
-from distutils.version import LooseVersion
-
 import pandas as pd
 import numpy as np
 from pandas.api.types import CategoricalDtype
 
 from pyspark import pandas as ps
 from pyspark.pandas.config import option_context
+from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.pandas.tests.data_type_ops.testing_utils import OpsTestBase
 
 
-class CategoricalOpsTest(OpsTestBase):
+class CategoricalOpsTestsMixin:
     @property
     def pdf(self):
         return pd.DataFrame(
@@ -111,11 +110,11 @@ class CategoricalOpsTest(OpsTestBase):
 
     def test_pow(self):
         self.assertRaises(TypeError, lambda: self.psser ** "x")
-        self.assertRaises(TypeError, lambda: self.psser ** 1)
+        self.assertRaises(TypeError, lambda: self.psser**1)
 
         with option_context("compute.ops_on_diff_frames", True):
             for psser in self.pssers:
-                self.assertRaises(TypeError, lambda: self.psser ** psser)
+                self.assertRaises(TypeError, lambda: self.psser**psser)
 
     def test_radd(self):
         self.assertRaises(TypeError, lambda: "x" + self.psser)
@@ -142,7 +141,7 @@ class CategoricalOpsTest(OpsTestBase):
 
     def test_rpow(self):
         self.assertRaises(TypeError, lambda: "x" ** self.psser)
-        self.assertRaises(TypeError, lambda: 1 ** self.psser)
+        self.assertRaises(TypeError, lambda: 1**self.psser)
 
     def test_and(self):
         self.assertRaises(TypeError, lambda: self.psser & True)
@@ -166,7 +165,7 @@ class CategoricalOpsTest(OpsTestBase):
         data = [1, "x", "y"]
         pser = pd.Series(data, dtype="category")
         psser = ps.Series(data, dtype="category")
-        self.assert_eq(pser, psser.to_pandas())
+        self.assert_eq(pser, psser._to_pandas())
         self.assert_eq(ps.from_pandas(pser), psser)
 
     def test_isnull(self):
@@ -187,11 +186,7 @@ class CategoricalOpsTest(OpsTestBase):
         self.assert_eq(pser.astype("category"), psser.astype("category"))
 
         cat_type = CategoricalDtype(categories=[3, 1, 2])
-        # CategoricalDtype is not updated if the dtype is same from pandas 1.3.
-        if LooseVersion(pd.__version__) >= LooseVersion("1.3"):
-            self.assert_eq(pser.astype(cat_type), psser.astype(cat_type))
-        else:
-            self.assert_eq(psser.astype(cat_type), pser)
+        self.assert_eq(pser.astype(cat_type), psser.astype(cat_type))
 
         # Empty
         pser = pd.Series([], dtype="category")
@@ -545,12 +540,20 @@ class CategoricalOpsTest(OpsTestBase):
         )
 
 
+class CategoricalOpsTests(
+    CategoricalOpsTestsMixin,
+    OpsTestBase,
+    PandasOnSparkTestCase,
+):
+    pass
+
+
 if __name__ == "__main__":
     import unittest
     from pyspark.pandas.tests.data_type_ops.test_categorical_ops import *  # noqa: F401
 
     try:
-        import xmlrunner  # type: ignore[import]
+        import xmlrunner
 
         testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:

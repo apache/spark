@@ -1,0 +1,2 @@
+Aggregate [count(a#0) AS count(a)#0L]
++- LocalRelation <empty>, [id#0L, a#0, b#0, d#0, e#0, f#0, g#0]

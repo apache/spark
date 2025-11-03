@@ -74,6 +74,8 @@ class BlockTransferServiceSuite extends SparkFunSuite with TimeLimits {
               override def release(): ManagedBuffer = this
 
               override def convertToNetty(): AnyRef = null
+
+              override def convertToNettyForSsl(): AnyRef = null
             }
             listener.onBlockFetchSuccess("block-id-unused", badBuffer)
           }

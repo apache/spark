@@ -17,16 +17,23 @@
 
 package org.apache.spark.sql.connector
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.{AnalysisException, Row}
+import org.apache.spark.sql.QueryTest.checkAnswer
+import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
+import org.apache.spark.sql.catalyst.parser.ParseException
+import org.apache.spark.sql.catalyst.util.quoteIdentifier
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Column, ColumnDefaultValue, Identifier, Table, TableCatalog, TableInfo}
 import org.apache.spark.sql.connector.catalog.CatalogV2Util.withDefaultOwnership
-import org.apache.spark.sql.connector.catalog.Table
+import org.apache.spark.sql.connector.expressions.LiteralValue
+import org.apache.spark.sql.errors.QueryErrorsBase
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
-trait AlterTableTests extends SharedSparkSession {
+trait AlterTableTests extends SharedSparkSession with QueryErrorsBase {
 
   protected def getTableMetadata(tableName: String): Table
 
@@ -38,25 +45,54 @@ trait AlterTableTests extends SharedSparkSession {
     if (catalogAndNamespace.isEmpty) {
       s"default.$tableName"
     } else {
-      s"${catalogAndNamespace}table_name"
+      s"$catalogAndNamespace$tableName"
+    }
+  }
+
+  private def prependCatalogName(tableName: String): String = {
+    if (catalogAndNamespace.isEmpty) {
+      s"spark_catalog.$tableName"
+    } else {
+      tableName
+    }
+  }
+
+  private def tableIdentifier(tableName: String): Identifier = {
+    if (catalogAndNamespace.nonEmpty) {
+      val parts = catalogAndNamespace.stripSuffix(".").split("\\.").tail
+      Identifier.of(parts, tableName)
+    } else {
+      Identifier.of(Array("default"), tableName)
+    }
+  }
+
+  private def tableCatalog(): TableCatalog = {
+    if (catalogAndNamespace.isEmpty) {
+      spark.sessionState.catalogManager.v2SessionCatalog.asInstanceOf[TableCatalog]
+    } else {
+      val parts = catalogAndNamespace.stripSuffix(".").split("\\.")
+      spark.sessionState.catalogManager.catalog(parts(0)).asInstanceOf[TableCatalog]
     }
   }
 
   test("AlterTable: table does not exist") {
     val t2 = s"${catalogAndNamespace}fake_table"
+    val quoted = UnresolvedAttribute.parseAttributeName(s"${catalogAndNamespace}table_name")
+      .map(part => quoteIdentifier(part)).mkString(".")
     withTable(t2) {
       sql(s"CREATE TABLE $t2 (id int) USING $v2Format")
       val exc = intercept[AnalysisException] {
         sql(s"ALTER TABLE ${catalogAndNamespace}table_name DROP COLUMN id")
       }
 
-      assert(exc.getMessage.contains(s"${catalogAndNamespace}table_name"))
-      assert(exc.getMessage.contains("Table not found"))
+      checkErrorTableNotFound(exc, quoted,
+        ExpectedContext(s"${catalogAndNamespace}table_name", 12,
+          11 + s"${catalogAndNamespace}table_name".length))
     }
   }
 
   test("AlterTable: change rejected by implementation") {
-    val t = s"${catalogAndNamespace}table_name"
+    val t = fullTableName("table_name")
     withTable(t) {
       sql(s"CREATE TABLE $t (id int) USING $v2Format")
 
@@ -67,301 +103,382 @@ trait AlterTableTests extends SharedSparkSession {
       assert(exc.getMessage.contains("Unsupported table change"))
       assert(exc.getMessage.contains("Cannot drop all fields")) // from the implementation
 
-      val tableName = fullTableName(t)
-      val table = getTableMetadata(tableName)
+      val table = getTableMetadata(t)
 
-      assert(table.name === tableName)
-      assert(table.schema === new StructType().add("id", IntegerType))
+      assert(table.name === t)
+      assert(table.columns sameElements Array(Column.create("id", IntegerType)))
     }
   }
 
   test("AlterTable: add top-level column") {
-    val t = s"${catalogAndNamespace}table_name"
+    val t = fullTableName("table_name")
     withTable(t) {
       sql(s"CREATE TABLE $t (id int) USING $v2Format")
       sql(s"ALTER TABLE $t ADD COLUMN data string")
 
-      val tableName = fullTableName(t)
-      val table = getTableMetadata(tableName)
+      val table = getTableMetadata(t)
 
-      assert(table.name === tableName)
-      assert(table.schema === new StructType().add("id", IntegerType).add("data", StringType))
+      assert(table.name === t)
+      assert(table.columns sameElements
+        Array(Column.create("id", IntegerType),
+          Column.create("data", StringType)))
     }
   }
 
   test("AlterTable: add column with NOT NULL") {
-    val t = s"${catalogAndNamespace}table_name"
+    val t = fullTableName("table_name")
     withTable(t) {
       sql(s"CREATE TABLE $t (id int) USING $v2Format")
       sql(s"ALTER TABLE $t ADD COLUMN data string NOT NULL")
 
-      val tableName = fullTableName(t)
-      val table = getTableMetadata(tableName)
+      val table = getTableMetadata(t)
 
-      assert(table.name === tableName)
-      assert(table.schema === StructType(Seq(
-        StructField("id", IntegerType),
-        StructField("data", StringType, nullable = false))))
+      assert(table.name === t)
+      assert(table.columns sameElements
+        Array(Column.create("id", IntegerType),
+          Column.create("data", StringType, false)))
     }
   }
 
   test("AlterTable: add column with comment") {
-    val t = s"${catalogAndNamespace}table_name"
+    val t = fullTableName("table_name")
     withTable(t) {
       sql(s"CREATE TABLE $t (id int) USING $v2Format")
       sql(s"ALTER TABLE $t ADD COLUMN data string COMMENT 'doc'")
 
-      val tableName = fullTableName(t)
-      val table = getTableMetadata(tableName)
+      val table = getTableMetadata(t)
 
-      assert(table.name === tableName)
-      assert(table.schema === StructType(Seq(
-        StructField("id", IntegerType),
-        StructField("data", StringType).withComment("doc"))))
+      assert(table.name === t)
+      assert(table.columns sameElements
+        Array(Column.create("id", IntegerType),
+          Column.create("data", StringType, true, "doc", null)))
     }
   }
 
   test("AlterTable: add column with interval type") {
-    val t = s"${catalogAndNamespace}table_name"
+    val t = fullTableName("table_name")
     withTable(t) {
       sql(s"CREATE TABLE $t (id int, point struct<x: double, y: double>) USING $v2Format")
       val e1 =
-        intercept[AnalysisException](sql(s"ALTER TABLE $t ADD COLUMN data interval"))
-      assert(e1.getMessage.contains("Cannot use interval type in the table schema."))
+        intercept[ParseException](sql(s"ALTER TABLE $t ADD COLUMN data interval"))
+      assert(e1.getMessage.contains("Cannot use \"INTERVAL\" type in the table schema."))
       val e2 =
-        intercept[AnalysisException](sql(s"ALTER TABLE $t ADD COLUMN point.z interval"))
-      assert(e2.getMessage.contains("Cannot use interval type in the table schema."))
+        intercept[ParseException](sql(s"ALTER TABLE $t ADD COLUMN point.z interval"))
+      assert(e2.getMessage.contains("Cannot use \"INTERVAL\" type in the table schema."))
     }
   }
 
   test("AlterTable: add column with position") {
-    val t = s"${catalogAndNamespace}table_name"
+    val t = fullTableName("table_name")
     withTable(t) {
       sql(s"CREATE TABLE $t (point struct<x: int>) USING $v2Format")
 
       sql(s"ALTER TABLE $t ADD COLUMN a string FIRST")
-      val tableName = fullTableName(t)
-      assert(getTableMetadata(tableName).schema == new StructType()
-        .add("a", StringType)
-        .add("point", new StructType().add("x", IntegerType)))
+      assert(getTableMetadata(t).columns sameElements
+        Array(
+          Column.create("a", StringType),
+          Column.create("point", new StructType().add("x", IntegerType))))
 
       sql(s"ALTER TABLE $t ADD COLUMN b string AFTER point")
-      assert(getTableMetadata(tableName).schema == new StructType()
-        .add("a", StringType)
-        .add("point", new StructType().add("x", IntegerType))
-        .add("b", StringType))
+      assert(getTableMetadata(t).columns sameElements
+        Array(
+          Column.create("a", StringType),
+          Column.create("point", new StructType().add("x", IntegerType)),
+          Column.create("b", StringType)))
 
       val e1 = intercept[AnalysisException](
         sql(s"ALTER TABLE $t ADD COLUMN c string AFTER non_exist"))
-      assert(e1.getMessage().contains("Couldn't find the reference column"))
+      checkError(
+        exception = e1,
+        condition = "FIELD_NOT_FOUND",
+        parameters = Map("fieldName" -> "`c`", "fields" -> "a, point, b")
+      )
 
       sql(s"ALTER TABLE $t ADD COLUMN point.y int FIRST")
-      assert(getTableMetadata(tableName).schema == new StructType()
-        .add("a", StringType)
-        .add("point", new StructType()
-          .add("y", IntegerType)
-          .add("x", IntegerType))
-        .add("b", StringType))
+      assert(getTableMetadata(t).columns sameElements
+        Array(Column.create("a", StringType),
+          Column.create("point", new StructType()
+            .add("y", IntegerType)
+            .add("x", IntegerType)),
+          Column.create("b", StringType)))
 
       sql(s"ALTER TABLE $t ADD COLUMN point.z int AFTER x")
-      assert(getTableMetadata(tableName).schema == new StructType()
-        .add("a", StringType)
-        .add("point", new StructType()
-          .add("y", IntegerType)
-          .add("x", IntegerType)
-          .add("z", IntegerType))
-        .add("b", StringType))
+      assert(getTableMetadata(t).columns sameElements
+        Array(
+          Column.create("a", StringType),
+          Column.create("point", new StructType()
+            .add("y", IntegerType)
+            .add("x", IntegerType)
+            .add("z", IntegerType)),
+          Column.create("b", StringType)))
 
       val e2 = intercept[AnalysisException](
         sql(s"ALTER TABLE $t ADD COLUMN point.x2 int AFTER non_exist"))
-      assert(e2.getMessage().contains("Couldn't find the reference column"))
+      checkError(
+        exception = e2,
+        condition = "FIELD_NOT_FOUND",
+        parameters = Map("fieldName" -> "`x2`", "fields" -> "y, x, z")
+      )
     }
   }
 
   test("SPARK-30814: add column with position referencing new columns being added") {
-    val t = s"${catalogAndNamespace}table_name"
+    val t = fullTableName("table_name")
     withTable(t) {
       sql(s"CREATE TABLE $t (a string, b int, point struct<x: double, y: double>) USING $v2Format")
       sql(s"ALTER TABLE $t ADD COLUMNS (x int AFTER a, y int AFTER x, z int AFTER y)")
 
-      val tableName = fullTableName(t)
-      assert(getTableMetadata(tableName).schema === new StructType()
-        .add("a", StringType)
-        .add("x", IntegerType)
-        .add("y", IntegerType)
-        .add("z", IntegerType)
-        .add("b", IntegerType)
-        .add("point", new StructType()
-          .add("x", DoubleType)
-          .add("y", DoubleType)))
+      assert(getTableMetadata(t).columns sameElements
+        Array(
+          Column.create("a", StringType),
+          Column.create("x", IntegerType),
+          Column.create("y", IntegerType),
+          Column.create("z", IntegerType),
+          Column.create("b", IntegerType),
+          Column.create("point", new StructType()
+            .add("x", DoubleType)
+            .add("y", DoubleType))))
 
       sql(s"ALTER TABLE $t ADD COLUMNS (point.z double AFTER x, point.zz double AFTER z)")
-      assert(getTableMetadata(tableName).schema === new StructType()
-        .add("a", StringType)
-        .add("x", IntegerType)
-        .add("y", IntegerType)
-        .add("z", IntegerType)
-        .add("b", IntegerType)
-        .add("point", new StructType()
-          .add("x", DoubleType)
-          .add("z", DoubleType)
-          .add("zz", DoubleType)
-          .add("y", DoubleType)))
+      assert(getTableMetadata(t).columns sameElements
+        Array(
+          Column.create("a", StringType),
+          Column.create("x", IntegerType),
+          Column.create("y", IntegerType),
+          Column.create("z", IntegerType),
+          Column.create("b", IntegerType),
+          Column.create("point", new StructType()
+            .add("x", DoubleType)
+            .add("z", DoubleType)
+            .add("zz", DoubleType)
+            .add("y", DoubleType))))
 
       // The new column being referenced should come before being referenced.
       val e = intercept[AnalysisException](
         sql(s"ALTER TABLE $t ADD COLUMNS (yy int AFTER xx, xx int)"))
-      assert(e.getMessage().contains("Couldn't find the reference column for AFTER xx at root"))
+      checkError(
+        exception = e,
+        condition = "FIELD_NOT_FOUND",
+        parameters = Map("fieldName" -> "`yy`", "fields" -> "a, x, y, z, b, point")
+      )
     }
   }
 
   test("AlterTable: add multiple columns") {
-    val t = s"${catalogAndNamespace}table_name"
+    val t = fullTableName("table_name")
     withTable(t) {
       sql(s"CREATE TABLE $t (id int) USING $v2Format")
       sql(s"ALTER TABLE $t ADD COLUMNS data string COMMENT 'doc', ts timestamp")
 
-      val tableName = fullTableName(t)
-      val table = getTableMetadata(tableName)
+      val table = getTableMetadata(t)
 
-      assert(table.name === tableName)
-      assert(table.schema === StructType(Seq(
-        StructField("id", IntegerType),
-        StructField("data", StringType).withComment("doc"),
-        StructField("ts", TimestampType))))
+      assert(table.name === t)
+      assert(table.columns sameElements Array(
+          Column.create("id", IntegerType),
+          Column.create("data", StringType, true, "doc", null),
+          Column.create("ts", TimestampType)))
     }
   }
 
   test("AlterTable: add nested column") {
-    val t = s"${catalogAndNamespace}table_name"
+    val t = fullTableName("table_name")
     withTable(t) {
       sql(s"CREATE TABLE $t (id int, point struct<x: double, y: double>) USING $v2Format")
       sql(s"ALTER TABLE $t ADD COLUMN point.z double")
 
-      val tableName = fullTableName(t)
-      val table = getTableMetadata(tableName)
+      val table = getTableMetadata(t)
 
-      assert(table.name === tableName)
-      assert(table.schema === new StructType()
-        .add("id", IntegerType)
-        .add("point", StructType(Seq(
-          StructField("x", DoubleType),
-          StructField("y", DoubleType),
-          StructField("z", DoubleType)))))
+      assert(table.name === t)
+      assert(table.columns sameElements Array(
+        Column.create("id", IntegerType),
+        Column.create("point", new StructType()
+          .add("x", DoubleType)
+          .add("y", DoubleType)
+          .add("z", DoubleType))))
     }
   }
 
   test("AlterTable: add nested column to map key") {
-    val t = s"${catalogAndNamespace}table_name"
+    val t = fullTableName("table_name")
     withTable(t) {
       sql(s"CREATE TABLE $t (id int, points map<struct<x: double, y: double>, bigint>) " +
         s"USING $v2Format")
       sql(s"ALTER TABLE $t ADD COLUMN points.key.z double")
 
-      val tableName = fullTableName(t)
-      val table = getTableMetadata(tableName)
+      val table = getTableMetadata(t)
 
-      assert(table.name === tableName)
-      assert(table.schema === new StructType()
-        .add("id", IntegerType)
-        .add("points", MapType(StructType(Seq(
-          StructField("x", DoubleType),
-          StructField("y", DoubleType),
-          StructField("z", DoubleType))), LongType)))
+      assert(table.name === t)
+      assert(table.columns sameElements Array(
+        Column.create("id", IntegerType),
+        Column.create("points",
+          MapType(StructType(Seq(
+            StructField("x", DoubleType),
+            StructField("y", DoubleType),
+            StructField("z", DoubleType))),
+            LongType))))
     }
   }
 
   test("AlterTable: add nested column to map value") {
-    val t = s"${catalogAndNamespace}table_name"
+    val t = fullTableName("table_name")
     withTable(t) {
       sql(s"CREATE TABLE $t (id int, points map<string, struct<x: double, y: double>>) " +
         s"USING $v2Format")
       sql(s"ALTER TABLE $t ADD COLUMN points.value.z double")
 
-      val tableName = fullTableName(t)
-      val table = getTableMetadata(tableName)
+      val table = getTableMetadata(t)
 
-      assert(table.name === tableName)
-      assert(table.schema === new StructType()
-        .add("id", IntegerType)
-        .add("points", MapType(StringType, StructType(Seq(
-          StructField("x", DoubleType),
-          StructField("y", DoubleType),
-          StructField("z", DoubleType))))))
+      assert(table.name === t)
+      assert(table.columns sameElements Array(
+        Column.create("id", IntegerType),
+        Column.create("points",
+          MapType(StringType, StructType(Seq(
+            StructField("x", DoubleType),
+            StructField("y", DoubleType),
+            StructField("z", DoubleType)))))))
     }
   }
 
   test("AlterTable: add nested column to array element") {
-    val t = s"${catalogAndNamespace}table_name"
+    val t = fullTableName("table_name")
     withTable(t) {
       sql(s"CREATE TABLE $t (id int, points array<struct<x: double, y: double>>) USING $v2Format")
       sql(s"ALTER TABLE $t ADD COLUMN points.element.z double")
 
-      val tableName = fullTableName(t)
-      val table = getTableMetadata(tableName)
+      val table = getTableMetadata(t)
 
-      assert(table.name === tableName)
-      assert(table.schema === new StructType()
-        .add("id", IntegerType)
-        .add("points", ArrayType(StructType(Seq(
+      assert(table.name === t)
+      assert(table.columns sameElements Array(
+        Column.create("id", IntegerType),
+        Column.create("points", ArrayType(StructType(Seq(
           StructField("x", DoubleType),
           StructField("y", DoubleType),
-          StructField("z", DoubleType))))))
+          StructField("z", DoubleType)))))))
+    }
+  }
+
+  test("SPARK-39383 DEFAULT columns on V2 data sources with ALTER TABLE ADD/ALTER COLUMN") {
+    withSQLConf(SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS.key -> s"$v2Format, ") {
+      val t = fullTableName("table_name")
+      withTable("t") {
+        sql(s"create table $t (a string) using $v2Format")
+        sql(s"alter table $t add column (b int default 2 + 3)")
+
+        val table = getTableMetadata(t)
+
+        assert(table.name === t)
+        assert(table.columns sameElements Array(
+          Column.create("a", StringType),
+          Column.create("b", IntegerType, true, null,
+            new ColumnDefaultValue("2 + 3", LiteralValue(5, IntegerType)), null)))
+
+        sql(s"alter table $t alter column b set default 2 + 3")
+
+        assert(
+          getTableMetadata(t).columns sameElements Array(
+            Column.create("a", StringType),
+            Column.create("b", IntegerType, true, null,
+              new ColumnDefaultValue("2 + 3", LiteralValue(5, IntegerType)), null)))
+
+        sql(s"alter table $t alter column b drop default")
+
+        assert(
+          getTableMetadata(t).columns sameElements Array(
+            Column.create("a", StringType),
+            Column.create("b", IntegerType, true, null, """{"EXISTS_DEFAULT":"5"}""")))
+      }
+    }
+  }
+
+  test("SPARK-45075: ALTER COLUMN with invalid default value") {
+    withSQLConf(SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS.key -> s"$v2Format, ") {
+      withTable("t") {
+        sql(s"create table t(i boolean) using $v2Format")
+        // The default value fails to analyze.
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql("alter table t add column s bigint default badvalue")
+          },
+          condition = "INVALID_DEFAULT_VALUE.UNRESOLVED_EXPRESSION",
+          parameters = Map(
+            "statement" -> "ALTER TABLE ADD COLUMNS",
+            "colName" -> "`s`",
+            "defaultValue" -> "badvalue"))
+
+        sql("alter table t add column s bigint default 3L")
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql("alter table t alter column s set default badvalue")
+          },
+          condition = "INVALID_DEFAULT_VALUE.UNRESOLVED_EXPRESSION",
+          parameters = Map(
+            "statement" -> "ALTER TABLE ALTER COLUMN",
+            "colName" -> "`s`",
+            "defaultValue" -> "badvalue"))
+      }
     }
   }
 
   test("AlterTable: add complex column") {
-    val t = s"${catalogAndNamespace}table_name"
+    val t = fullTableName("table_name")
     withTable(t) {
       sql(s"CREATE TABLE $t (id int) USING $v2Format")
       sql(s"ALTER TABLE $t ADD COLUMN points array<struct<x: double, y: double>>")
 
-      val tableName = fullTableName(t)
-      val table = getTableMetadata(tableName)
+      val table = getTableMetadata(t)
 
-      assert(table.name === tableName)
-      assert(table.schema === new StructType()
-        .add("id", IntegerType)
-        .add("points", ArrayType(StructType(Seq(
+      assert(table.name === t)
+      assert(table.columns sameElements Array(
+        Column.create("id", IntegerType),
+        Column.create("points", ArrayType(StructType(Seq(
           StructField("x", DoubleType),
           StructField("y", DoubleType))))))
+      )
     }
   }
 
   test("AlterTable: add nested column with comment") {
-    val t = s"${catalogAndNamespace}table_name"
+    val t = fullTableName("table_name")
     withTable(t) {
       sql(s"CREATE TABLE $t (id int, points array<struct<x: double, y: double>>) USING $v2Format")
       sql(s"ALTER TABLE $t ADD COLUMN points.element.z double COMMENT 'doc'")
 
-      val tableName = fullTableName(t)
-      val table = getTableMetadata(tableName)
+      val table = getTableMetadata(t)
 
-      assert(table.name === tableName)
-      assert(table.schema === new StructType()
-        .add("id", IntegerType)
-        .add("points", ArrayType(StructType(Seq(
+      assert(table.name === t)
+      assert(table.columns sameElements Array(
+        Column.create("id", IntegerType),
+        Column.create("points", ArrayType(StructType(Seq(
           StructField("x", DoubleType),
           StructField("y", DoubleType),
-          StructField("z", DoubleType).withComment("doc"))))))
+          StructField("z", DoubleType).withComment("doc")))))))
     }
   }
 
   test("AlterTable: add nested column parent must exist") {
-    val t = s"${catalogAndNamespace}table_name"
+    val t = fullTableName("table_name")
     withTable(t) {
       sql(s"CREATE TABLE $t (id int) USING $v2Format")
 
-      val exc = intercept[AnalysisException] {
-        sql(s"ALTER TABLE $t ADD COLUMN point.z double")
-      }
-
-      assert(exc.getMessage.contains("Missing field point"))
+      val sqlText = s"ALTER TABLE $t ADD COLUMN point.z double"
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(sqlText)
+        },
+        condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+        sqlState = "42703",
+        parameters = Map(
+          "objectName" -> "`point`",
+          "proposal" -> "`id`"),
+        context = ExpectedContext(
+          fragment = "point.z double",
+          start = 24 + t.length,
+          stop = 37 + t.length))
     }
   }
 
   test("AlterTable: add column - new column should not exist") {
-    val t = s"${catalogAndNamespace}table_name"
+    val t = fullTableName("table_name")
     withTable(t) {
       sql(
         s"""CREATE TABLE $t (
@@ -374,82 +491,108 @@ trait AlterTableTests extends SharedSparkSession {
            |USING $v2Format""".stripMargin)
 
       Seq("id", "point.x", "arr.element.x", "mk.key.x", "mv.value.x").foreach { field =>
-
-        val e = intercept[AnalysisException] {
-          sql(s"ALTER TABLE $t ADD COLUMNS $field double")
-        }
-        assert(e.getMessage.contains("add"))
-        assert(e.getMessage.contains(s"$field already exists"))
+        val expectedParameters = Map(
+          "op" -> "add",
+          "fieldNames" -> s"${toSQLId(field)}",
+          "struct" ->
+            """"STRUCT<id: INT, point: STRUCT<x: DOUBLE, y: DOUBLE>,
+              |arr: ARRAY<STRUCT<x: DOUBLE, y: DOUBLE>>,
+              |mk: MAP<STRUCT<x: DOUBLE, y: DOUBLE>, STRING>,
+              |mv: MAP<STRING, STRUCT<x: DOUBLE, y: DOUBLE>>>"""".stripMargin.replace("\n", " "))
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql(s"ALTER TABLE $t ADD COLUMNS $field double")
+          },
+          condition = "FIELD_ALREADY_EXISTS",
+          parameters = expectedParameters,
+          context = ExpectedContext(
+            fragment = s"ALTER TABLE $t ADD COLUMNS $field double",
+            start = 0,
+            stop = 31 + t.length + field.length)
+        )
       }
     }
   }
 
   test("SPARK-36372: Adding duplicate columns should not be allowed") {
-    val t = s"${catalogAndNamespace}table_name"
+    val t = fullTableName("table_name")
     withTable(t) {
       sql(s"CREATE TABLE $t (id int) USING $v2Format")
-      val e = intercept[AnalysisException] {
-        sql(s"ALTER TABLE $t ADD COLUMNS (data string, data1 string, data string)")
-      }
-      assert(e.message.contains("Found duplicate column(s) in the user specified columns: `data`"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"ALTER TABLE $t ADD COLUMNS (data string, data1 string, data string)")
+        },
+        condition = "COLUMN_ALREADY_EXISTS",
+        parameters = Map("columnName" -> "`data`"))
     }
   }
 
   test("SPARK-36372: Adding duplicate nested columns should not be allowed") {
-    val t = s"${catalogAndNamespace}table_name"
+    val t = fullTableName("table_name")
     withTable(t) {
       sql(s"CREATE TABLE $t (id int, point struct<x: double, y: double>) USING $v2Format")
-      val e = intercept[AnalysisException] {
-        sql(s"ALTER TABLE $t ADD COLUMNS (point.z double, point.z double, point.xx double)")
-      }
-      assert(e.message.contains(
-        "Found duplicate column(s) in the user specified columns: `point.z`"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"ALTER TABLE $t ADD COLUMNS (point.z double, point.z double, point.xx double)")
+        },
+        condition = "COLUMN_ALREADY_EXISTS",
+        parameters = Map("columnName" -> toSQLId("point.z")))
     }
   }
 
   test("AlterTable: update column type int -> long") {
-    val t = s"${catalogAndNamespace}table_name"
+    val t = fullTableName("table_name")
     withTable(t) {
       sql(s"CREATE TABLE $t (id int) USING $v2Format")
       sql(s"ALTER TABLE $t ALTER COLUMN id TYPE bigint")
 
-      val tableName = fullTableName(t)
-      val table = getTableMetadata(tableName)
+      val table = getTableMetadata(t)
 
-      assert(table.name === tableName)
-      assert(table.schema === new StructType().add("id", LongType))
+      assert(table.name === t)
+      assert(table.columns sameElements Array(Column.create("id", LongType)))
     }
   }
 
   test("AlterTable: update column type to interval") {
-    val t = s"${catalogAndNamespace}table_name"
+    val t = fullTableName("table_name")
     withTable(t) {
       sql(s"CREATE TABLE $t (id int) USING $v2Format")
       (DataTypeTestUtils.dayTimeIntervalTypes ++ DataTypeTestUtils.yearMonthIntervalTypes)
         .foreach {
-          case d: DataType => d.typeName
-            val e = intercept[AnalysisException](
-              sql(s"ALTER TABLE $t ALTER COLUMN id TYPE ${d.typeName}"))
-            assert(e.getMessage.contains("id to interval type"))
+          d: DataType => d.typeName
+            val sqlText = s"ALTER TABLE $t ALTER COLUMN id TYPE ${d.typeName}"
+
+            checkError(
+              exception = intercept[AnalysisException] {
+                sql(sqlText)
+              },
+              condition = "CANNOT_UPDATE_FIELD.INTERVAL_TYPE",
+              parameters = Map(
+                "table" -> s"${toSQLId(prependCatalogName(t))}",
+                "fieldName" -> "`id`"),
+              context = ExpectedContext(
+                fragment = sqlText,
+                start = 0,
+                stop = 33 + d.typeName.length + t.length)
+            )
         }
     }
   }
 
   test("AlterTable: SET/DROP NOT NULL") {
-    val t = s"${catalogAndNamespace}table_name"
+    val t = fullTableName("table_name")
     withTable(t) {
       sql(s"CREATE TABLE $t (id bigint NOT NULL) USING $v2Format")
       sql(s"ALTER TABLE $t ALTER COLUMN id SET NOT NULL")
 
-      val tableName = fullTableName(t)
-      val table = getTableMetadata(tableName)
-      assert(table.name === tableName)
-      assert(table.schema === new StructType().add("id", LongType, nullable = false))
+      val table = getTableMetadata(t)
+      assert(table.name === t)
+      assert(table.columns sameElements Array(Column.create("id", LongType, false)))
 
       sql(s"ALTER TABLE $t ALTER COLUMN id DROP NOT NULL")
-      val table2 = getTableMetadata(tableName)
-      assert(table2.name === tableName)
-      assert(table2.schema === new StructType().add("id", LongType))
+      val table2 = getTableMetadata(t)
+      assert(table2.name === t)
+      assert(table2.columns sameElements Array(Column.create("id", LongType, true)))
 
       val e = intercept[AnalysisException] {
         sql(s"ALTER TABLE $t ALTER COLUMN id SET NOT NULL")
@@ -459,279 +602,340 @@ trait AlterTableTests extends SharedSparkSession {
   }
 
   test("AlterTable: update nested type float -> double") {
-    val t = s"${catalogAndNamespace}table_name"
+    val t = fullTableName("table_name")
     withTable(t) {
       sql(s"CREATE TABLE $t (id int, point struct<x: float, y: double>) USING $v2Format")
       sql(s"ALTER TABLE $t ALTER COLUMN point.x TYPE double")
 
-      val tableName = fullTableName(t)
-      val table = getTableMetadata(tableName)
-      assert(table.name === tableName)
-      assert(table.schema === new StructType()
-        .add("id", IntegerType)
-        .add("point", StructType(Seq(
-          StructField("x", DoubleType),
-          StructField("y", DoubleType)))))
+      val table = getTableMetadata(t)
+      assert(table.name === t)
+      assert(table.columns sameElements Array(
+        Column.create("id", IntegerType),
+        Column.create("point", new StructType()
+          .add("x", DoubleType)
+          .add("y", DoubleType))))
     }
   }
 
   test("AlterTable: update column with struct type fails") {
-    val t = s"${catalogAndNamespace}table_name"
+    val t = fullTableName("table_name")
     withTable(t) {
       sql(s"CREATE TABLE $t (id int, point struct<x: double, y: double>) USING $v2Format")
+      val sqlText =
+        s"ALTER TABLE $t ALTER COLUMN point TYPE struct<x: double, y: double, z: double>"
 
-      val exc = intercept[AnalysisException] {
-        sql(s"ALTER TABLE $t ALTER COLUMN point TYPE struct<x: double, y: double, z: double>")
-      }
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(sqlText)
+        },
+        condition = "CANNOT_UPDATE_FIELD.STRUCT_TYPE",
+        parameters = Map(
+          "table" -> s"${toSQLId(prependCatalogName(t))}",
+          "fieldName" -> "`point`"),
+        context = ExpectedContext(
+          fragment = sqlText,
+          start = 0,
+          stop = 75 + t.length)
+      )
 
-      assert(exc.getMessage.contains("point"))
-      assert(exc.getMessage.contains("update a struct by updating its fields"))
+      val table = getTableMetadata(t)
 
-      val tableName = fullTableName(t)
-      val table = getTableMetadata(tableName)
-
-      assert(table.name === tableName)
-      assert(table.schema === new StructType()
-        .add("id", IntegerType)
-        .add("point", StructType(Seq(
-          StructField("x", DoubleType),
-          StructField("y", DoubleType)))))
+      assert(table.name === t)
+      assert(table.columns sameElements Array(
+        Column.create("id", IntegerType),
+        Column.create("point", new StructType()
+          .add("x", DoubleType)
+          .add("y", DoubleType))))
     }
   }
 
   test("AlterTable: update column with array type fails") {
-    val t = s"${catalogAndNamespace}table_name"
+    val t = fullTableName("table_name")
     withTable(t) {
       sql(s"CREATE TABLE $t (id int, points array<int>) USING $v2Format")
+      val sqlText = s"ALTER TABLE $t ALTER COLUMN points TYPE array<long>"
 
-      val exc = intercept[AnalysisException] {
-        sql(s"ALTER TABLE $t ALTER COLUMN points TYPE array<long>")
-      }
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(sqlText)
+        },
+        condition = "CANNOT_UPDATE_FIELD.ARRAY_TYPE",
+        parameters = Map(
+          "table" -> s"${toSQLId(prependCatalogName(t))}",
+          "fieldName" -> "`points`"),
+        context = ExpectedContext(
+          fragment = sqlText,
+          start = 0,
+          stop = 48 + t.length)
+      )
 
-      assert(exc.getMessage.contains("update the element by updating points.element"))
+      val table = getTableMetadata(t)
 
-      val tableName = fullTableName(t)
-      val table = getTableMetadata(tableName)
-
-      assert(table.name === tableName)
-      assert(table.schema === new StructType()
-        .add("id", IntegerType)
-        .add("points", ArrayType(IntegerType)))
+      assert(table.name === t)
+      assert(table.columns sameElements Array(
+        Column.create("id", IntegerType),
+        Column.create("points", ArrayType(IntegerType))))
     }
   }
 
   test("AlterTable: update column array element type") {
-    val t = s"${catalogAndNamespace}table_name"
+    val t = fullTableName("table_name")
     withTable(t) {
       sql(s"CREATE TABLE $t (id int, points array<int>) USING $v2Format")
       sql(s"ALTER TABLE $t ALTER COLUMN points.element TYPE long")
 
-      val tableName = fullTableName(t)
-      val table = getTableMetadata(tableName)
+      val table = getTableMetadata(t)
 
-      assert(table.name === tableName)
-      assert(table.schema === new StructType()
-        .add("id", IntegerType)
-        .add("points", ArrayType(LongType)))
+      assert(table.name === t)
+      assert(table.columns sameElements Array(
+        Column.create("id", IntegerType),
+        Column.create("points", ArrayType(LongType))))
     }
   }
 
   test("AlterTable: update column with map type fails") {
-    val t = s"${catalogAndNamespace}table_name"
+    val t = fullTableName("table_name")
     withTable(t) {
       sql(s"CREATE TABLE $t (id int, m map<string, int>) USING $v2Format")
+      val sqlText = s"ALTER TABLE $t ALTER COLUMN m TYPE map<string, long>"
 
-      val exc = intercept[AnalysisException] {
-        sql(s"ALTER TABLE $t ALTER COLUMN m TYPE map<string, long>")
-      }
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(sqlText)
+        },
+        condition = "CANNOT_UPDATE_FIELD.MAP_TYPE",
+        parameters = Map(
+          "table" -> s"${toSQLId(prependCatalogName(t))}",
+          "fieldName" -> "`m`"),
+        context = ExpectedContext(
+          fragment = sqlText,
+          start = 0,
+          stop = 49 + t.length)
+      )
 
-      assert(exc.getMessage.contains("update a map by updating m.key or m.value"))
+      val table = getTableMetadata(t)
 
-      val tableName = fullTableName(t)
-      val table = getTableMetadata(tableName)
-
-      assert(table.name === tableName)
-      assert(table.schema === new StructType()
-        .add("id", IntegerType)
-        .add("m", MapType(StringType, IntegerType)))
+      assert(table.name === t)
+      assert(table.columns sameElements Array(
+        Column.create("id", IntegerType),
+        Column.create("m", MapType(StringType, IntegerType))))
     }
   }
 
   test("AlterTable: update column map value type") {
-    val t = s"${catalogAndNamespace}table_name"
+    val t = fullTableName("table_name")
     withTable(t) {
       sql(s"CREATE TABLE $t (id int, m map<string, int>) USING $v2Format")
       sql(s"ALTER TABLE $t ALTER COLUMN m.value TYPE long")
 
-      val tableName = fullTableName(t)
-      val table = getTableMetadata(tableName)
+      val table = getTableMetadata(t)
 
-      assert(table.name === tableName)
-      assert(table.schema === new StructType()
-        .add("id", IntegerType)
-        .add("m", MapType(StringType, LongType)))
+      assert(table.name === t)
+      assert(table.columns sameElements Array(
+        Column.create("id", IntegerType),
+        Column.create("m", MapType(StringType, LongType))))
     }
   }
 
   test("AlterTable: update nested type in map key") {
-    val t = s"${catalogAndNamespace}table_name"
+    val t = fullTableName("table_name")
     withTable(t) {
       sql(s"CREATE TABLE $t (id int, points map<struct<x: float, y: double>, bigint>) " +
         s"USING $v2Format")
       sql(s"ALTER TABLE $t ALTER COLUMN points.key.x TYPE double")
 
-      val tableName = fullTableName(t)
-      val table = getTableMetadata(tableName)
+      val table = getTableMetadata(t)
 
-      assert(table.name === tableName)
-      assert(table.schema === new StructType()
-        .add("id", IntegerType)
-        .add("points", MapType(StructType(Seq(
-          StructField("x", DoubleType),
-          StructField("y", DoubleType))), LongType)))
+      assert(table.name === t)
+      assert(table.columns sameElements Array(
+        Column.create("id", IntegerType),
+        Column.create("points",
+          MapType(StructType(Seq(
+            StructField("x", DoubleType),
+            StructField("y", DoubleType))),
+            LongType))))
     }
   }
 
   test("AlterTable: update nested type in map value") {
-    val t = s"${catalogAndNamespace}table_name"
+    val t = fullTableName("table_name")
     withTable(t) {
       sql(s"CREATE TABLE $t (id int, points map<string, struct<x: float, y: double>>) " +
         s"USING $v2Format")
       sql(s"ALTER TABLE $t ALTER COLUMN points.value.x TYPE double")
 
-      val tableName = fullTableName(t)
-      val table = getTableMetadata(tableName)
+      val table = getTableMetadata(t)
 
-      assert(table.name === tableName)
-      assert(table.schema === new StructType()
-        .add("id", IntegerType)
-        .add("points", MapType(StringType, StructType(Seq(
-          StructField("x", DoubleType),
-          StructField("y", DoubleType))))))
+      assert(table.name === t)
+      assert(table.columns sameElements Array(
+        Column.create("id", IntegerType),
+        Column.create("points",
+          MapType(StringType, StructType(Seq(
+            StructField("x", DoubleType),
+            StructField("y", DoubleType)))))))
     }
   }
 
   test("AlterTable: update nested type in array") {
-    val t = s"${catalogAndNamespace}table_name"
+    val t = fullTableName("table_name")
     withTable(t) {
       sql(s"CREATE TABLE $t (id int, points array<struct<x: float, y: double>>) USING $v2Format")
       sql(s"ALTER TABLE $t ALTER COLUMN points.element.x TYPE double")
 
-      val tableName = fullTableName(t)
-      val table = getTableMetadata(tableName)
+      val table = getTableMetadata(t)
 
-      assert(table.name === tableName)
-      assert(table.schema === new StructType()
-        .add("id", IntegerType)
-        .add("points", ArrayType(StructType(Seq(
-          StructField("x", DoubleType),
-          StructField("y", DoubleType))))))
+      assert(table.name === t)
+      assert(table.columns sameElements Array(
+        Column.create("id", IntegerType),
+        Column.create("points",
+          ArrayType(StructType(Seq(
+            StructField("x", DoubleType),
+            StructField("y", DoubleType)))))))
     }
   }
 
   test("AlterTable: update column must exist") {
-    val t = s"${catalogAndNamespace}table_name"
+    val t = fullTableName("table_name")
     withTable(t) {
       sql(s"CREATE TABLE $t (id int) USING $v2Format")
 
-      val exc = intercept[AnalysisException] {
-        sql(s"ALTER TABLE $t ALTER COLUMN data TYPE string")
-      }
-
-      assert(exc.getMessage.contains("Missing field data"))
+      val sqlText = s"ALTER TABLE $t ALTER COLUMN data TYPE string"
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(sqlText)
+        },
+        condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+        sqlState = "42703",
+        parameters = Map(
+          "objectName" -> "`data`",
+          "proposal" -> "`id`"),
+        context = ExpectedContext(fragment = sqlText, start = 0, stop = sqlText.length - 1))
     }
   }
 
   test("AlterTable: nested update column must exist") {
-    val t = s"${catalogAndNamespace}table_name"
+    val t = fullTableName("table_name")
     withTable(t) {
       sql(s"CREATE TABLE $t (id int) USING $v2Format")
 
-      val exc = intercept[AnalysisException] {
-        sql(s"ALTER TABLE $t ALTER COLUMN point.x TYPE double")
-      }
-
-      assert(exc.getMessage.contains("Missing field point.x"))
+      val sqlText = s"ALTER TABLE $t ALTER COLUMN point.x TYPE double"
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(sqlText)
+        },
+        condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+        sqlState = "42703",
+        parameters = Map(
+          "objectName" -> "`point`.`x`",
+          "proposal" -> "`id`"),
+        context = ExpectedContext(fragment = sqlText, start = 0, stop = sqlText.length - 1))
     }
   }
 
   test("AlterTable: update column type must be compatible") {
-    val t = s"${catalogAndNamespace}table_name"
+    val t = fullTableName("table_name")
     withTable(t) {
       sql(s"CREATE TABLE $t (id int) USING $v2Format")
-
-      val exc = intercept[AnalysisException] {
-        sql(s"ALTER TABLE $t ALTER COLUMN id TYPE boolean")
-      }
-
-      assert(exc.getMessage.contains("id"))
-      assert(exc.getMessage.contains("int cannot be cast to boolean"))
+      val sql1 = s"ALTER TABLE $t ALTER COLUMN id TYPE boolean"
+      checkErrorMatchPVals(
+        exception = intercept[AnalysisException] {
+          sql(sql1)
+        },
+        condition = "NOT_SUPPORTED_CHANGE_COLUMN",
+        sqlState = None,
+        parameters = Map(
+          "originType" -> "\"INT\"",
+          "newType" -> "\"BOOLEAN\"",
+          "newName" -> "`id`",
+          "originName" -> "`id`",
+          "table" -> ".*table_name.*"),
+        context = ExpectedContext(
+          fragment = sql1,
+          start = 0,
+          stop = sql1.length - 1)
+      )
     }
   }
 
   test("AlterTable: update column comment") {
-    val t = s"${catalogAndNamespace}table_name"
+    val t = fullTableName("table_name")
     withTable(t) {
       sql(s"CREATE TABLE $t (id int) USING $v2Format")
       sql(s"ALTER TABLE $t ALTER COLUMN id COMMENT 'doc'")
 
-      val tableName = fullTableName(t)
-      val table = getTableMetadata(tableName)
+      val table = getTableMetadata(t)
 
-      assert(table.name === tableName)
-      assert(table.schema === StructType(Seq(StructField("id", IntegerType).withComment("doc"))))
+      assert(table.name === t)
+      assert(table.columns sameElements Array(
+        Column.create("id", IntegerType, true, "doc", null)))
     }
   }
 
   test("AlterTable: update column position") {
-    val t = s"${catalogAndNamespace}table_name"
+    val t = fullTableName("table_name")
     withTable(t) {
       sql(s"CREATE TABLE $t (a int, b int, point struct<x: int, y: int, z: int>) USING $v2Format")
 
       sql(s"ALTER TABLE $t ALTER COLUMN b FIRST")
-      val tableName = fullTableName(t)
-      assert(getTableMetadata(tableName).schema == new StructType()
-        .add("b", IntegerType)
-        .add("a", IntegerType)
-        .add("point", new StructType()
+      assert(getTableMetadata(t).columns sameElements Array(
+        Column.create("b", IntegerType),
+        Column.create("a", IntegerType),
+        Column.create("point", new StructType()
           .add("x", IntegerType)
           .add("y", IntegerType)
-          .add("z", IntegerType)))
+          .add("z", IntegerType))))
 
       sql(s"ALTER TABLE $t ALTER COLUMN b AFTER point")
-      assert(getTableMetadata(tableName).schema == new StructType()
-        .add("a", IntegerType)
-        .add("point", new StructType()
+      assert(getTableMetadata(t).columns sameElements Array(
+        Column.create("a", IntegerType),
+        Column.create("point", new StructType()
           .add("x", IntegerType)
           .add("y", IntegerType)
-          .add("z", IntegerType))
-        .add("b", IntegerType))
+          .add("z", IntegerType)),
+        Column.create("b", IntegerType)))
 
-      val e1 = intercept[AnalysisException](
-        sql(s"ALTER TABLE $t ALTER COLUMN b AFTER non_exist"))
-      assert(e1.getMessage.contains("Missing field non_exist"))
+      val sqlText1 = s"ALTER TABLE $t ALTER COLUMN b AFTER non_exist"
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(sqlText1)
+        },
+        condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+        sqlState = "42703",
+        parameters = Map(
+          "objectName" -> "`non_exist`",
+          "proposal" -> "`a`, `point`, `b`"),
+        context = ExpectedContext(fragment = sqlText1, start = 0, stop = sqlText1.length - 1))
 
       sql(s"ALTER TABLE $t ALTER COLUMN point.y FIRST")
-      assert(getTableMetadata(tableName).schema == new StructType()
-        .add("a", IntegerType)
-        .add("point", new StructType()
+      assert(getTableMetadata(t).columns sameElements Array(
+        Column.create("a", IntegerType),
+        Column.create("point", new StructType()
           .add("y", IntegerType)
           .add("x", IntegerType)
-          .add("z", IntegerType))
-        .add("b", IntegerType))
+          .add("z", IntegerType)),
+        Column.create("b", IntegerType)
+      ))
 
       sql(s"ALTER TABLE $t ALTER COLUMN point.y AFTER z")
-      assert(getTableMetadata(tableName).schema == new StructType()
-        .add("a", IntegerType)
-        .add("point", new StructType()
+      assert(getTableMetadata(t).columns sameElements Array(
+        Column.create("a", IntegerType),
+        Column.create("point", new StructType()
           .add("x", IntegerType)
           .add("z", IntegerType)
-          .add("y", IntegerType))
-        .add("b", IntegerType))
+          .add("y", IntegerType)),
+        Column.create("b", IntegerType)))
 
-      val e2 = intercept[AnalysisException](
-        sql(s"ALTER TABLE $t ALTER COLUMN point.y AFTER non_exist"))
-      assert(e2.getMessage.contains("Missing field point.non_exist"))
+      val sqlText2 = s"ALTER TABLE $t ALTER COLUMN point.y AFTER non_exist"
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(sqlText2)
+        },
+        condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+        sqlState = "42703",
+        parameters = Map(
+          "objectName" -> "`point`.`non_exist`",
+          "proposal" -> "`a`, `point`, `b`"),
+        context = ExpectedContext(fragment = sqlText2, start = 0, stop = sqlText2.length - 1))
 
       // `AlterTable.resolved` checks column existence.
       intercept[AnalysisException](
@@ -740,221 +944,322 @@ trait AlterTableTests extends SharedSparkSession {
   }
 
   test("AlterTable: update nested column comment") {
-    val t = s"${catalogAndNamespace}table_name"
+    val t = fullTableName("table_name")
     withTable(t) {
       sql(s"CREATE TABLE $t (id int, point struct<x: double, y: double>) USING $v2Format")
       sql(s"ALTER TABLE $t ALTER COLUMN point.y COMMENT 'doc'")
 
-      val tableName = fullTableName(t)
-      val table = getTableMetadata(tableName)
+      val table = getTableMetadata(t)
 
-      assert(table.name === tableName)
-      assert(table.schema === new StructType()
-        .add("id", IntegerType)
-        .add("point", StructType(Seq(
-          StructField("x", DoubleType),
-          StructField("y", DoubleType).withComment("doc")))))
+      assert(table.name === t)
+      assert(table.columns sameElements Array(
+        Column.create("id", IntegerType),
+        Column.create("point", new StructType()
+          .add("x", DoubleType)
+          .add("y", DoubleType, nullable = true, "doc"))))
     }
   }
 
   test("AlterTable: update nested column comment in map key") {
-    val t = s"${catalogAndNamespace}table_name"
+    val t = fullTableName("table_name")
     withTable(t) {
       sql(s"CREATE TABLE $t (id int, points map<struct<x: double, y: double>, bigint>) " +
         s"USING $v2Format")
       sql(s"ALTER TABLE $t ALTER COLUMN points.key.y COMMENT 'doc'")
 
-      val tableName = fullTableName(t)
-      val table = getTableMetadata(tableName)
+      val table = getTableMetadata(t)
 
-      assert(table.name === tableName)
-      assert(table.schema === new StructType()
-        .add("id", IntegerType)
-        .add("points", MapType(StructType(Seq(
-          StructField("x", DoubleType),
-          StructField("y", DoubleType).withComment("doc"))), LongType)))
+      assert(table.name === t)
+      assert(table.columns sameElements Array(
+        Column.create("id", IntegerType),
+        Column.create("points",
+          MapType(StructType(Seq(
+            StructField("x", DoubleType),
+            StructField("y", DoubleType).withComment("doc"))), LongType))))
     }
   }
 
   test("AlterTable: update nested column comment in map value") {
-    val t = s"${catalogAndNamespace}table_name"
+    val t = fullTableName("table_name")
     withTable(t) {
       sql(s"CREATE TABLE $t (id int, points map<string, struct<x: double, y: double>>) " +
         s"USING $v2Format")
       sql(s"ALTER TABLE $t ALTER COLUMN points.value.y COMMENT 'doc'")
 
-      val tableName = fullTableName(t)
-      val table = getTableMetadata(tableName)
+      val table = getTableMetadata(t)
 
-      assert(table.name === tableName)
-      assert(table.schema === new StructType()
-        .add("id", IntegerType)
-        .add("points", MapType(StringType, StructType(Seq(
-          StructField("x", DoubleType),
-          StructField("y", DoubleType).withComment("doc"))))))
+      assert(table.name === t)
+      assert(table.columns sameElements Array(
+        Column.create("id", IntegerType),
+        Column.create("points",
+          MapType(StringType, StructType(Seq(
+            StructField("x", DoubleType),
+            StructField("y", DoubleType, nullable = true,
+              new MetadataBuilder()
+                .putString("comment", "doc")
+                .build())))))))
     }
   }
 
   test("AlterTable: update nested column comment in array") {
-    val t = s"${catalogAndNamespace}table_name"
+    val t = fullTableName("table_name")
     withTable(t) {
       sql(s"CREATE TABLE $t (id int, points array<struct<x: double, y: double>>) USING $v2Format")
       sql(s"ALTER TABLE $t ALTER COLUMN points.element.y COMMENT 'doc'")
 
-      val tableName = fullTableName(t)
-      val table = getTableMetadata(tableName)
+      val table = getTableMetadata(t)
 
-      assert(table.name === tableName)
-      assert(table.schema === new StructType()
-        .add("id", IntegerType)
-        .add("points", ArrayType(StructType(Seq(
+      assert(table.name === t)
+      assert(table.columns sameElements Array(
+        Column.create("id", IntegerType),
+        Column.create("points", ArrayType(StructType(Seq(
           StructField("x", DoubleType),
-          StructField("y", DoubleType).withComment("doc"))))))
+          StructField("y", DoubleType, nullable = true,
+            new MetadataBuilder()
+              .putString("comment", "doc")
+              .build())))))))
     }
   }
 
   test("AlterTable: comment update column must exist") {
-    val t = s"${catalogAndNamespace}table_name"
+    val t = fullTableName("table_name")
     withTable(t) {
       sql(s"CREATE TABLE $t (id int) USING $v2Format")
 
-      val exc = intercept[AnalysisException] {
-        sql(s"ALTER TABLE $t ALTER COLUMN data COMMENT 'doc'")
-      }
-
-      assert(exc.getMessage.contains("Missing field data"))
+      val sqlText = s"ALTER TABLE $t ALTER COLUMN data COMMENT 'doc'"
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(sqlText)
+        },
+        condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+        sqlState = "42703",
+        parameters = Map(
+          "objectName" -> "`data`",
+          "proposal" -> "`id`"),
+        context = ExpectedContext(fragment = sqlText, start = 0, stop = sqlText.length - 1))
     }
   }
 
   test("AlterTable: nested comment update column must exist") {
-    val t = s"${catalogAndNamespace}table_name"
+    val t = fullTableName("table_name")
     withTable(t) {
       sql(s"CREATE TABLE $t (id int) USING $v2Format")
 
-      val exc = intercept[AnalysisException] {
-        sql(s"ALTER TABLE $t ALTER COLUMN point.x COMMENT 'doc'")
-      }
+      val sqlText = s"ALTER TABLE $t ALTER COLUMN point.x COMMENT 'doc'"
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(sqlText)
+        },
+        condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+        sqlState = "42703",
+        parameters = Map(
+          "objectName" -> "`point`.`x`",
+          "proposal" -> "`id`"),
+        context = ExpectedContext(fragment = sqlText, start = 0, stop = sqlText.length - 1))
+    }
+  }
 
-      assert(exc.getMessage.contains("Missing field point.x"))
+  test("AlterTable: alter multiple columns/fields in the same command") {
+    withSQLConf(SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS.key -> s"$v2Format, ") {
+      val t = fullTableName("table_name")
+      withTable(t) {
+        sql(s"""CREATE TABLE $t (
+             |  id int,
+             |  data string,
+             |  ts timestamp NOT NULL,
+             |  points array<struct<x: double, y: double>>) USING $v2Format""".stripMargin)
+        sql(s"""ALTER TABLE $t ALTER COLUMN
+             |  id TYPE bigint,
+             |  data FIRST,
+             |  ts DROP NOT NULL,
+             |  points.element.x SET DEFAULT (1.0 + 2.0),
+             |  points.element.y COMMENT 'comment on y'""".stripMargin)
+
+        val table = getTableMetadata(t)
+
+        assert(table.name === t)
+        assert(
+          table.columns sameElements Array(
+            Column.create("data", StringType),
+            Column.create("id", LongType),
+            Column.create("ts", TimestampType, true),
+            Column.create("points", ArrayType(
+              StructType(
+                Seq(
+                  StructField("x", DoubleType).withCurrentDefaultValue("(1.0 + 2.0)"),
+                  StructField("y", DoubleType).withComment("comment on y")
+                ))))))
+      }
+    }
+  }
+
+  test("AlterTable: cannot alter the same column in the same command") {
+    val t = fullTableName("table_name")
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id int, data string, ts timestamp) USING $v2Format")
+      val sqlText = s"ALTER TABLE $t ALTER COLUMN id TYPE bigint, id COMMENT 'id', data FIRST"
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(sqlText)
+        },
+        condition = "NOT_SUPPORTED_CHANGE_SAME_COLUMN",
+        parameters = Map(
+          "table" -> s"${toSQLId(prependCatalogName(t))}",
+          "fieldName" -> "`id`"),
+        context = ExpectedContext(fragment = sqlText, start = 0, stop = sqlText.length - 1)
+      )
+    }
+  }
+
+  test("AlterTable: cannot alter parent and child fields in the same command") {
+    withSQLConf(SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS.key -> s"$v2Format, ") {
+      val t = fullTableName("table_name")
+      withTable(t) {
+        sql(s"CREATE TABLE $t (parent array<struct<child: int>>) USING $v2Format")
+        val sqlText = s"""ALTER TABLE $t ALTER COLUMN
+                         | parent.element.child TYPE string,
+                         | parent SET DEFAULT array(struct(1000))""".stripMargin
+
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql(sqlText)
+          },
+          condition = "NOT_SUPPORTED_CHANGE_SAME_COLUMN",
+          parameters = Map(
+            "table" -> s"${toSQLId(prependCatalogName(t))}",
+            "fieldName" -> "`parent`"),
+          context = ExpectedContext(
+            fragment = sqlText,
+            start = 0,
+            stop = sqlText.length - 1)
+        )
+      }
     }
   }
 
   test("AlterTable: rename column") {
-    val t = s"${catalogAndNamespace}table_name"
+    val t = fullTableName("table_name")
     withTable(t) {
       sql(s"CREATE TABLE $t (id int) USING $v2Format")
       sql(s"ALTER TABLE $t RENAME COLUMN id TO user_id")
 
-      val tableName = fullTableName(t)
-      val table = getTableMetadata(tableName)
+      val table = getTableMetadata(t)
 
-      assert(table.name === tableName)
-      assert(table.schema === new StructType().add("user_id", IntegerType))
+      assert(table.name === t)
+      assert(table.columns sameElements Array(Column.create("user_id", IntegerType)))
     }
   }
 
   test("AlterTable: rename nested column") {
-    val t = s"${catalogAndNamespace}table_name"
+    val t = fullTableName("table_name")
     withTable(t) {
       sql(s"CREATE TABLE $t (id int, point struct<x: double, y: double>) USING $v2Format")
       sql(s"ALTER TABLE $t RENAME COLUMN point.y TO t")
 
-      val tableName = fullTableName(t)
-      val table = getTableMetadata(tableName)
+      val table = getTableMetadata(t)
 
-      assert(table.name === tableName)
-      assert(table.schema === new StructType()
-        .add("id", IntegerType)
-        .add("point", StructType(Seq(
+      assert(table.name === t)
+      assert(table.columns sameElements Array(
+        Column.create("id", IntegerType),
+        Column.create("point", StructType(Seq(
           StructField("x", DoubleType),
-          StructField("t", DoubleType)))))
+          StructField("t", DoubleType))))))
     }
   }
 
   test("AlterTable: rename nested column in map key") {
-    val t = s"${catalogAndNamespace}table_name"
+    val t = fullTableName("table_name")
     withTable(t) {
       sql(s"CREATE TABLE $t (id int, point map<struct<x: double, y: double>, bigint>) " +
         s"USING $v2Format")
       sql(s"ALTER TABLE $t RENAME COLUMN point.key.y TO t")
 
-      val tableName = fullTableName(t)
-      val table = getTableMetadata(tableName)
+      val table = getTableMetadata(t)
 
-      assert(table.name === tableName)
-      assert(table.schema === new StructType()
-        .add("id", IntegerType)
-        .add("point", MapType(StructType(Seq(
+      assert(table.name === t)
+      assert(table.columns sameElements Array(
+        Column.create("id", IntegerType),
+        Column.create("point", MapType(StructType(Seq(
           StructField("x", DoubleType),
-          StructField("t", DoubleType))), LongType)))
+          StructField("t", DoubleType))), LongType))))
     }
   }
 
   test("AlterTable: rename nested column in map value") {
-    val t = s"${catalogAndNamespace}table_name"
+    val t = fullTableName("table_name")
     withTable(t) {
       sql(s"CREATE TABLE $t (id int, points map<string, struct<x: double, y: double>>) " +
         s"USING $v2Format")
       sql(s"ALTER TABLE $t RENAME COLUMN points.value.y TO t")
 
-      val tableName = fullTableName(t)
-      val table = getTableMetadata(tableName)
+      val table = getTableMetadata(t)
 
-      assert(table.name === tableName)
-      assert(table.schema === new StructType()
-        .add("id", IntegerType)
-        .add("points", MapType(StringType, StructType(Seq(
+      assert(table.name === t)
+      assert(table.columns sameElements Array(
+        Column.create("id", IntegerType),
+        Column.create("points", MapType(StringType, StructType(Seq(
           StructField("x", DoubleType),
-          StructField("t", DoubleType))))))
+          StructField("t", DoubleType)))))))
     }
   }
 
   test("AlterTable: rename nested column in array element") {
-    val t = s"${catalogAndNamespace}table_name"
+    val t = fullTableName("table_name")
     withTable(t) {
       sql(s"CREATE TABLE $t (id int, points array<struct<x: double, y: double>>) USING $v2Format")
       sql(s"ALTER TABLE $t RENAME COLUMN points.element.y TO t")
 
-      val tableName = fullTableName(t)
-      val table = getTableMetadata(tableName)
+      val table = getTableMetadata(t)
 
-      assert(table.name === tableName)
-      assert(table.schema === new StructType()
-        .add("id", IntegerType)
-        .add("points", ArrayType(StructType(Seq(
+      assert(table.name === t)
+      assert(table.columns sameElements Array(
+        Column.create("id", IntegerType),
+        Column.create("points", ArrayType(StructType(Seq(
           StructField("x", DoubleType),
-          StructField("t", DoubleType))))))
+          StructField("t", DoubleType)))))))
     }
   }
 
   test("AlterTable: rename column must exist") {
-    val t = s"${catalogAndNamespace}table_name"
+    val t = fullTableName("table_name")
     withTable(t) {
       sql(s"CREATE TABLE $t (id int) USING $v2Format")
 
-      val exc = intercept[AnalysisException] {
-        sql(s"ALTER TABLE $t RENAME COLUMN data TO some_string")
-      }
-
-      assert(exc.getMessage.contains("Missing field data"))
+      val sqlText = s"ALTER TABLE $t RENAME COLUMN data TO some_string"
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(sqlText)
+        },
+        condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+        sqlState = "42703",
+        parameters = Map(
+          "objectName" -> "`data`",
+          "proposal" -> "`id`"),
+        context = ExpectedContext(fragment = sqlText, start = 0, stop = sqlText.length - 1))
     }
   }
 
   test("AlterTable: nested rename column must exist") {
-    val t = s"${catalogAndNamespace}table_name"
+    val t = fullTableName("table_name")
     withTable(t) {
       sql(s"CREATE TABLE $t (id int) USING $v2Format")
 
-      val exc = intercept[AnalysisException] {
-        sql(s"ALTER TABLE $t RENAME COLUMN point.x TO z")
-      }
-
-      assert(exc.getMessage.contains("Missing field point.x"))
+      val sqlText = s"ALTER TABLE $t RENAME COLUMN point.x TO z"
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(sqlText)
+        },
+        condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+        sqlState = "42703",
+        parameters = Map(
+          "objectName" -> "`point`.`x`",
+          "proposal" -> "`id`"),
+        context = ExpectedContext(fragment = sqlText, start = 0, stop = sqlText.length - 1))
     }
   }
 
   test("AlterTable: rename column - new name should not exist") {
-    val t = s"${catalogAndNamespace}table_name"
+    val t = fullTableName("table_name")
     withTable(t) {
       sql(
         s"""CREATE TABLE $t (
@@ -968,222 +1273,396 @@ trait AlterTableTests extends SharedSparkSession {
            |USING $v2Format""".stripMargin)
 
       Seq(
-        "id" -> "user_id",
-        "point.x" -> "y",
-        "arr.element.x" -> "y",
-        "mk.key.x" -> "y",
-        "mv.value.x" -> "y").foreach { case (field, newName) =>
+        ("id" -> "user_id") -> "user_id",
+        ("point.x" -> "y") -> "point.y",
+        ("arr.element.x" -> "y") -> "arr.element.y",
+        ("mk.key.x" -> "y") -> "mk.key.y",
+        ("mv.value.x" -> "y") -> "mv.value.y").foreach { case ((field, newName), expectedName) =>
 
-        val e = intercept[AnalysisException] {
-          sql(s"ALTER TABLE $t RENAME COLUMN $field TO $newName")
+        val expectedStruct =
+          """"
+            |STRUCT<id: INT, user_id: INT,
+            | point: STRUCT<x: DOUBLE, y: DOUBLE>,
+            | arr: ARRAY<STRUCT<x: DOUBLE, y: DOUBLE>>,
+            | mk: MAP<STRUCT<x: DOUBLE, y: DOUBLE>, STRING>,
+            | mv: MAP<STRING, STRUCT<x: DOUBLE, y: DOUBLE>>>
+            |"""".stripMargin.replace("\n", "")
+        val expectedStop = if (expectedName == "user_id") {
+          39 + t.length
+        } else {
+          31 + t.length + expectedName.length
         }
-        assert(e.getMessage.contains("rename"))
-        assert(e.getMessage.contains((field.split("\\.").init :+ newName).mkString(".")))
-        assert(e.getMessage.contains("already exists"))
+
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql(s"ALTER TABLE $t RENAME COLUMN $field TO $newName")
+          },
+          condition = "FIELD_ALREADY_EXISTS",
+          parameters = Map(
+            "op" -> "rename",
+            "fieldNames" -> s"${toSQLId(expectedName)}",
+            "struct" -> expectedStruct),
+          context = ExpectedContext(
+            fragment = s"ALTER TABLE $t RENAME COLUMN $field TO $newName",
+            start = 0,
+            stop = expectedStop)
+        )
       }
     }
   }
 
   test("AlterTable: drop column") {
-    val t = s"${catalogAndNamespace}table_name"
+    val t = fullTableName("table_name")
     withTable(t) {
       sql(s"CREATE TABLE $t (id int, data string) USING $v2Format")
       sql(s"ALTER TABLE $t DROP COLUMN data")
 
-      val tableName = fullTableName(t)
-      val table = getTableMetadata(tableName)
+      val table = getTableMetadata(t)
 
-      assert(table.name === tableName)
-      assert(table.schema === new StructType().add("id", IntegerType))
+      assert(table.name === t)
+      assert(table.columns sameElements Array(Column.create("id", IntegerType)))
     }
   }
 
   test("AlterTable: drop nested column") {
-    val t = s"${catalogAndNamespace}table_name"
+    val t = fullTableName("table_name")
     withTable(t) {
       sql(s"CREATE TABLE $t (id int, point struct<x: double, y: double, t: double>) " +
         s"USING $v2Format")
       sql(s"ALTER TABLE $t DROP COLUMN point.t")
 
-      val tableName = fullTableName(t)
-      val table = getTableMetadata(tableName)
+      val table = getTableMetadata(t)
 
-      assert(table.name === tableName)
-      assert(table.schema === new StructType()
-        .add("id", IntegerType)
-        .add("point", StructType(Seq(
+      assert(table.name === t)
+      assert(table.columns sameElements Array(
+        Column.create("id", IntegerType),
+        Column.create("point", StructType(Seq(
           StructField("x", DoubleType),
-          StructField("y", DoubleType)))))
+          StructField("y", DoubleType))))))
     }
   }
 
   test("AlterTable: drop nested column in map key") {
-    val t = s"${catalogAndNamespace}table_name"
+    val t = fullTableName("table_name")
     withTable(t) {
       sql(s"CREATE TABLE $t (id int, point map<struct<x: double, y: double>, bigint>) " +
         s"USING $v2Format")
       sql(s"ALTER TABLE $t DROP COLUMN point.key.y")
 
-      val tableName = fullTableName(t)
-      val table = getTableMetadata(tableName)
+      val table = getTableMetadata(t)
 
-      assert(table.name === tableName)
-      assert(table.schema === new StructType()
-        .add("id", IntegerType)
-        .add("point", MapType(StructType(Seq(
-          StructField("x", DoubleType))), LongType)))
+      assert(table.name === t)
+      assert(table.columns sameElements Array(
+        Column.create("id", IntegerType),
+        Column.create("point", MapType(StructType(Seq(
+          StructField("x", DoubleType))), LongType))))
     }
   }
 
   test("AlterTable: drop nested column in map value") {
-    val t = s"${catalogAndNamespace}table_name"
+    val t = fullTableName("table_name")
     withTable(t) {
       sql(s"CREATE TABLE $t (id int, points map<string, struct<x: double, y: double>>) " +
         s"USING $v2Format")
       sql(s"ALTER TABLE $t DROP COLUMN points.value.y")
 
-      val tableName = fullTableName(t)
-      val table = getTableMetadata(tableName)
+      val table = getTableMetadata(t)
 
-      assert(table.name === tableName)
-      assert(table.schema === new StructType()
-        .add("id", IntegerType)
-        .add("points", MapType(StringType, StructType(Seq(
-          StructField("x", DoubleType))))))
+      assert(table.name === t)
+      assert(table.columns sameElements Array(
+        Column.create("id", IntegerType),
+        Column.create("points", MapType(StringType, StructType(Seq(
+          StructField("x", DoubleType)))))))
     }
   }
 
   test("AlterTable: drop nested column in array element") {
-    val t = s"${catalogAndNamespace}table_name"
+    val t = fullTableName("table_name")
     withTable(t) {
       sql(s"CREATE TABLE $t (id int, points array<struct<x: double, y: double>>) USING $v2Format")
       sql(s"ALTER TABLE $t DROP COLUMN points.element.y")
 
-      val tableName = fullTableName(t)
-      val table = getTableMetadata(tableName)
+      val table = getTableMetadata(t)
 
-      assert(table.name === tableName)
-      assert(table.schema === new StructType()
-        .add("id", IntegerType)
-        .add("points", ArrayType(StructType(Seq(
-          StructField("x", DoubleType))))))
+      assert(table.name === t)
+      assert(table.columns sameElements Array(
+        Column.create("id", IntegerType),
+        Column.create("points", ArrayType(StructType(Seq(
+          StructField("x", DoubleType)))))))
     }
   }
 
-  test("AlterTable: drop column must exist") {
-    val t = s"${catalogAndNamespace}table_name"
+  test("AlterTable: drop column must exist if required") {
+    val t = fullTableName("table_name")
     withTable(t) {
       sql(s"CREATE TABLE $t (id int) USING $v2Format")
 
-      val exc = intercept[AnalysisException] {
-        sql(s"ALTER TABLE $t DROP COLUMN data")
-      }
+      val sqlText = s"ALTER TABLE $t DROP COLUMN data"
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(sqlText)
+        },
+        condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+        sqlState = "42703",
+        parameters = Map(
+          "objectName" -> "`data`",
+          "proposal" -> "`id`"),
+        context = ExpectedContext(fragment = sqlText, start = 0, stop = sqlText.length - 1))
 
-      assert(exc.getMessage.contains("Missing field data"))
+      // with if exists it should pass
+      sql(s"ALTER TABLE $t DROP COLUMN IF EXISTS data")
+      val table = getTableMetadata(t)
+      assert(table.columns sameElements Array(Column.create("id", IntegerType)))
     }
   }
 
-  test("AlterTable: nested drop column must exist") {
-    val t = s"${catalogAndNamespace}table_name"
+  test("AlterTable: nested drop column must exist if required") {
+    val t = fullTableName("table_name")
     withTable(t) {
       sql(s"CREATE TABLE $t (id int) USING $v2Format")
 
-      val exc = intercept[AnalysisException] {
-        sql(s"ALTER TABLE $t DROP COLUMN point.x")
-      }
+      val sqlText = s"ALTER TABLE $t DROP COLUMN point.x"
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(sqlText)
+        },
+        condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+        sqlState = "42703",
+        parameters = Map(
+          "objectName" -> "`point`.`x`",
+          "proposal" -> "`id`"),
+        context = ExpectedContext(fragment = sqlText, start = 0, stop = sqlText.length - 1))
 
-      assert(exc.getMessage.contains("Missing field point.x"))
+      // with if exists it should pass
+      sql(s"ALTER TABLE $t DROP COLUMN IF EXISTS point.x")
+      val table = getTableMetadata(t)
+      assert(table.columns sameElements Array(Column.create("id", IntegerType)))
     }
   }
 
-  test("AlterTable: set location") {
-    val t = s"${catalogAndNamespace}table_name"
+  test("AlterTable: drop mixed existing/non-existing columns using IF EXISTS") {
+    val t = fullTableName("table_name")
     withTable(t) {
-      sql(s"CREATE TABLE $t (id int) USING $v2Format")
-      sql(s"ALTER TABLE $t SET LOCATION 's3://bucket/path'")
+      sql(s"CREATE TABLE $t (id int, name string, points array<struct<x: double, y: double>>) " +
+        s"USING $v2Format")
 
-      val tableName = fullTableName(t)
-      val table = getTableMetadata(tableName)
-
-      assert(table.name === tableName)
-      assert(table.properties ===
-        withDefaultOwnership(Map("provider" -> v2Format, "location" -> "s3://bucket/path")).asJava)
-    }
-  }
-
-  test("AlterTable: set partition location") {
-    val t = s"${catalogAndNamespace}table_name"
-    withTable(t) {
-      sql(s"CREATE TABLE $t (id int) USING $v2Format")
-
-      val exc = intercept[AnalysisException] {
-        sql(s"ALTER TABLE $t PARTITION(ds='2017-06-10') SET LOCATION 's3://bucket/path'")
-      }
-      assert(exc.getMessage.contains(
-        "ALTER TABLE SET LOCATION does not support partition for v2 tables"))
+      // with if exists it should pass
+      sql(s"ALTER TABLE $t DROP COLUMNS IF EXISTS " +
+        s"names, name, points.element.z, id, points.element.x")
+      val table = getTableMetadata(t)
+      assert(table.columns sameElements Array(
+        Column.create("points", ArrayType(
+          StructType(Seq(
+            StructField("y", DoubleType)))))))
     }
   }
 
   test("AlterTable: set table property") {
-    val t = s"${catalogAndNamespace}table_name"
+    val t = fullTableName("table_name")
     withTable(t) {
       sql(s"CREATE TABLE $t (id int) USING $v2Format")
       sql(s"ALTER TABLE $t SET TBLPROPERTIES ('test'='34')")
 
-      val tableName = fullTableName(t)
-      val table = getTableMetadata(tableName)
+      val table = getTableMetadata(t)
 
-      assert(table.name === tableName)
+      assert(table.name === t)
       assert(table.properties ===
         withDefaultOwnership(Map("provider" -> v2Format, "test" -> "34")).asJava)
     }
   }
 
   test("AlterTable: remove table property") {
-    val t = s"${catalogAndNamespace}table_name"
+    val t = fullTableName("table_name")
     withTable(t) {
       sql(s"CREATE TABLE $t (id int) USING $v2Format TBLPROPERTIES('test' = '34')")
 
-      val tableName = fullTableName(t)
-      val table = getTableMetadata(tableName)
+      val table = getTableMetadata(t)
 
-      assert(table.name === tableName)
+      assert(table.name === t)
       assert(table.properties ===
         withDefaultOwnership(Map("provider" -> v2Format, "test" -> "34")).asJava)
 
       sql(s"ALTER TABLE $t UNSET TBLPROPERTIES ('test')")
 
-      val updated = getTableMetadata(tableName)
+      val updated = getTableMetadata(t)
 
-      assert(updated.name === tableName)
+      assert(updated.name === t)
       assert(updated.properties === withDefaultOwnership(Map("provider" -> v2Format)).asJava)
     }
   }
 
   test("AlterTable: replace columns") {
-    val t = s"${catalogAndNamespace}table_name"
+    val t = fullTableName("table_name")
     withTable(t) {
       sql(s"CREATE TABLE $t (col1 int, col2 int COMMENT 'c2') USING $v2Format")
       sql(s"ALTER TABLE $t REPLACE COLUMNS (col2 string, col3 int COMMENT 'c3')")
 
-      val tableName = fullTableName(t)
-      val table = getTableMetadata(tableName)
+      val table = getTableMetadata(t)
 
-      assert(table.name === tableName)
-      assert(table.schema === StructType(Seq(
-        StructField("col2", StringType),
-        StructField("col3", IntegerType).withComment("c3"))))
+      assert(table.name === t)
+      assert(table.columns sameElements Array(
+        Column.create("col2", StringType),
+        Column.create("col3", IntegerType, true, "c3", null)))
     }
   }
 
   test("SPARK-36449: Replacing columns with duplicate name should not be allowed") {
-    val t = s"${catalogAndNamespace}table_name"
+    val t = fullTableName("table_name")
     withTable(t) {
       sql(s"CREATE TABLE $t (data string) USING $v2Format")
-      val e = intercept[AnalysisException] {
-        sql(s"ALTER TABLE $t REPLACE COLUMNS (data string, data1 string, data string)")
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"ALTER TABLE $t REPLACE COLUMNS (data string, data1 string, data string)")
+        },
+        condition = "COLUMN_ALREADY_EXISTS",
+        parameters = Map("columnName" -> "`data`"))
+    }
+  }
+
+  test("Alter column type between string and char/varchar") {
+    val types = Seq(
+      ("STRING", "\"STRING\""),
+      ("STRING COLLATE UTF8_LCASE", "\"STRING COLLATE UTF8_LCASE\""),
+      ("CHAR(5)", "\"CHAR\\(5\\)\""),
+      ("VARCHAR(5)", "\"VARCHAR\\(5\\)\""))
+    types.flatMap { a => types.map { b => (a, b) } }
+      .filter { case (a, b) => a != b }
+      .filter { case ((a, _), (b, _)) => !a.startsWith("STRING") || !b.startsWith("STRING") }
+      .foreach { case ((from, originType), (to, newType)) =>
+        val t = "table_name"
+        withTable(t) {
+          sql(s"CREATE TABLE $t (id $from) USING PARQUET")
+          val sql1 = s"ALTER TABLE $t ALTER COLUMN id TYPE $to"
+          checkErrorMatchPVals(
+            exception = intercept[AnalysisException] {
+              sql(sql1)
+            },
+            condition = "NOT_SUPPORTED_CHANGE_COLUMN",
+            sqlState = None,
+            parameters = Map(
+              "originType" -> originType,
+              "newType" -> newType,
+              "newName" -> "`id`",
+              "originName" -> "`id`",
+              "table" -> ".*table_name.*"),
+            context = ExpectedContext(
+              fragment = sql1,
+              start = 0,
+              stop = sql1.length - 1)
+          )
+        }
       }
-      assert(e.message.contains("Found duplicate column(s) in the user specified columns: `data`"))
+  }
+
+  test("Alter table add nested column") {
+    val t = fullTableName("table_name")
+    withTable(t) {
+      val schema =
+        StructType(Seq(
+          StructField("pk", IntegerType, nullable = false),
+          StructField("m", MapType(
+            StructType(Seq(StructField("c1", IntegerType))),
+            StructType(Seq(StructField("c2", StringType))))),
+          StructField("dep", StringType)))
+
+      val ident = tableIdentifier("table_name")
+      val tableInfo = new TableInfo.Builder()
+        .withColumns(CatalogV2Util.structTypeToV2Columns(schema))
+        .build()
+
+      val catalog = tableCatalog()
+      catalog.createTable(ident, tableInfo)
+
+      val data = Seq(
+        Row(0, Map(Row(10) -> Row("c")), "hr"),
+        Row(1, Map(Row(20) -> Row("d")), "sales"))
+
+      spark.createDataFrame(
+        spark.sparkContext.parallelize(data),
+        schema).writeTo(t).append()
+
+      sql(s"ALTER TABLE $t ADD COLUMN m.key.c5 boolean")
+      sql(s"ALTER TABLE $t ADD COLUMN m.value.c6 boolean")
+
+      checkAnswer(
+        sql(s"SELECT * FROM $t"),
+        Seq(Row(0, Map(Row(10, null) -> Row("c", null)), "hr"),
+          Row(1, Map(Row(20, null) -> Row("d", null)), "sales")))
+    }
+  }
+
+  private def checkConflictSpecialColNameResult(table: String): Unit = {
+    val result = sql(s"SELECT * FROM $table").collect()
+    assert(result.length == 1)
+    assert(!result(0).getBoolean(0))
+    assert(result(0).get(1) != null)
+  }
+
+  test("Add column with special column name default value conflicting with column name") {
+    withSQLConf(SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS.key -> s"$v2Format, ") {
+      val t = fullTableName("table_name")
+      // There is a default value that is a special column name 'current_timestamp'.
+      withTable(t) {
+        sql(s"CREATE TABLE $t (i boolean) USING $v2Format")
+        sql(s"ALTER TABLE $t ADD COLUMN s timestamp DEFAULT current_timestamp")
+        sql(s"INSERT INTO $t(i) VALUES(false)")
+        checkConflictSpecialColNameResult(t)
+      }
+      // There is a default value with special column name 'current_user' but in uppercase.
+      withTable(t) {
+        sql(s"CREATE TABLE $t (i boolean) USING $v2Format")
+        sql(s"ALTER TABLE $t ADD COLUMN s string DEFAULT CURRENT_USER")
+        sql(s"INSERT INTO $t(i) VALUES(false)")
+        checkConflictSpecialColNameResult(t)
+      }
+      // There is a default value with special column name same as current column name
+      withTable(t) {
+        sql(s"CREATE TABLE $t (b boolean) USING $v2Format")
+        sql(s"ALTER TABLE $t ADD COLUMN current_timestamp timestamp DEFAULT current_timestamp")
+        sql(s"INSERT INTO $t(b) VALUES(false)")
+        checkConflictSpecialColNameResult(t)
+      }
+      // There is a default value with special column name same as another column name
+      withTable(t) {
+        sql(s"CREATE TABLE $t (current_date boolean) USING $v2Format")
+        sql(s"ALTER TABLE $t ADD COLUMN s date DEFAULT current_date")
+        sql(s"INSERT INTO $t(current_date) VALUES(false)")
+        checkConflictSpecialColNameResult(t)
+      }
+    }
+  }
+
+  test("Set default value for existing column conflicting with special column names") {
+    withSQLConf(SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS.key -> s"$v2Format, ") {
+      val t = fullTableName("table_name")
+      // There is a default value that is a special column name 'current_timestamp'.
+      withTable(t) {
+        sql(s"CREATE TABLE $t (i boolean, s timestamp) USING $v2Format")
+        sql(s"ALTER TABLE $t ALTER COLUMN s SET DEFAULT current_timestamp")
+        sql(s"INSERT INTO $t(i) VALUES(false)")
+        checkConflictSpecialColNameResult(t)
+      }
+      // There is a default value with special column name 'current_user' but in uppercase.
+      withTable(t) {
+        sql(s"CREATE TABLE $t (i boolean, s string) USING $v2Format")
+        sql(s"ALTER TABLE $t ALTER COLUMN s SET DEFAULT CURRENT_USER")
+        sql(s"INSERT INTO $t(i) VALUES(false)")
+        checkConflictSpecialColNameResult(t)
+      }
+      // There is a default value with special column name same as current column name
+      withTable(t) {
+        sql(s"CREATE TABLE $t (b boolean, current_timestamp timestamp) USING $v2Format")
+        sql(s"ALTER TABLE $t ALTER COLUMN current_timestamp SET DEFAULT current_timestamp")
+        sql(s"INSERT INTO $t(b) VALUES(false)")
+        checkConflictSpecialColNameResult(t)
+      }
+      // There is a default value with special column name same as another column name
+      withTable(t) {
+        sql(s"CREATE TABLE $t (current_date boolean, s date) USING $v2Format")
+        sql(s"ALTER TABLE $t ALTER COLUMN s SET DEFAULT current_date")
+        sql(s"INSERT INTO $t(current_date) VALUES(false)")
+        checkConflictSpecialColNameResult(t)
+      }
     }
   }
 }

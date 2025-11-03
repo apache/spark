@@ -34,7 +34,7 @@ import org.apache.spark.sql.errors.QueryExecutionErrors
  */
 case class SubqueryAdaptiveBroadcastExec(
     name: String,
-    index: Int,
+    indices: Seq[Int],
     onlyInBroadcast: Boolean,
     @transient buildPlan: LogicalPlan,
     buildKeys: Seq[Expression],

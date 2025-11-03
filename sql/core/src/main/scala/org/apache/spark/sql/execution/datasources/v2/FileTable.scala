@@ -18,7 +18,7 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import java.util
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.hadoop.fs.{FileStatus, Path}
 
@@ -26,12 +26,15 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connector.catalog.{SupportsRead, SupportsWrite, Table, TableCapability}
 import org.apache.spark.sql.connector.catalog.TableCapability._
 import org.apache.spark.sql.connector.expressions.Transform
+import org.apache.spark.sql.connector.write.{LogicalWriteInfo, LogicalWriteInfoImpl}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources._
-import org.apache.spark.sql.execution.streaming.{FileStreamSink, MetadataLogFileIndex}
+import org.apache.spark.sql.execution.streaming.runtime.MetadataLogFileIndex
+import org.apache.spark.sql.execution.streaming.sinks.FileStreamSink
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.sql.util.SchemaUtils
+import org.apache.spark.util.ArrayImplicits._
 
 abstract class FileTable(
     sparkSession: SparkSession,
@@ -79,16 +82,14 @@ abstract class FileTable(
 
   override lazy val schema: StructType = {
     val caseSensitive = sparkSession.sessionState.conf.caseSensitiveAnalysis
-    SchemaUtils.checkSchemaColumnNameDuplication(dataSchema,
-      "in the data schema", caseSensitive)
+    SchemaUtils.checkSchemaColumnNameDuplication(dataSchema, caseSensitive)
     dataSchema.foreach { field =>
       if (!supportsDataType(field.dataType)) {
         throw QueryCompilationErrors.dataTypeUnsupportedByDataSourceError(formatName, field)
       }
     }
     val partitionSchema = fileIndex.partitionSchema
-    SchemaUtils.checkSchemaColumnNameDuplication(partitionSchema,
-      "in the partition schema", caseSensitive)
+    SchemaUtils.checkSchemaColumnNameDuplication(partitionSchema, caseSensitive)
     val partitionNameSet: Set[String] =
       partitionSchema.fields.map(PartitioningUtils.getColName(_, caseSensitive)).toSet
 
@@ -101,7 +102,8 @@ abstract class FileTable(
     StructType(fields)
   }
 
-  override def partitioning: Array[Transform] = fileIndex.partitionSchema.names.toSeq.asTransforms
+  override def partitioning: Array[Transform] =
+    fileIndex.partitionSchema.names.toImmutableArraySeq.asTransforms
 
   override def properties: util.Map[String, String] = options.asCaseSensitiveMap
 
@@ -145,6 +147,32 @@ abstract class FileTable(
   private def globPaths: Boolean = {
     val entry = options.get(DataSource.GLOB_PATHS_KEY)
     Option(entry).map(_ == "true").getOrElse(true)
+  }
+
+  /**
+   * Merge the options of FileTable and the table operation while respecting the
+   * keys of the table operation.
+   *
+   * @param options The options of the table operation.
+   * @return
+   */
+  protected def mergedOptions(options: CaseInsensitiveStringMap): CaseInsensitiveStringMap = {
+    val finalOptions = this.options.asCaseSensitiveMap().asScala ++
+      options.asCaseSensitiveMap().asScala
+    new CaseInsensitiveStringMap(finalOptions.asJava)
+  }
+
+  /**
+   * Merge the options of FileTable and the LogicalWriteInfo while respecting the
+   * keys of the options carried by LogicalWriteInfo.
+   */
+  protected def mergedWriteInfo(writeInfo: LogicalWriteInfo): LogicalWriteInfo = {
+    LogicalWriteInfoImpl(
+      writeInfo.queryId(),
+      writeInfo.schema(),
+      mergedOptions(writeInfo.options()),
+      writeInfo.rowIdSchema(),
+      writeInfo.metadataSchema())
   }
 }
 

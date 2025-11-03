@@ -20,18 +20,18 @@ package org.apache.hive.service.cli.thrift;
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import java.security.PrivilegedExceptionAction;
+import java.security.SecureRandom;
+import java.util.Base64;
 import java.util.Map;
-import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
-import javax.servlet.ServletException;
-import javax.servlet.http.Cookie;
-import javax.servlet.http.HttpServletRequest;
-import javax.servlet.http.HttpServletResponse;
-import javax.ws.rs.core.NewCookie;
+import jakarta.servlet.ServletException;
+import jakarta.servlet.http.Cookie;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import jakarta.ws.rs.core.NewCookie;
 
-import org.apache.commons.codec.binary.Base64;
 import org.apache.commons.codec.binary.StringUtils;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars;
@@ -49,15 +49,17 @@ import org.apache.hive.service.cli.HiveSQLException;
 import org.apache.hive.service.cli.session.SessionManager;
 import org.apache.thrift.TProcessor;
 import org.apache.thrift.protocol.TProtocolFactory;
-import org.apache.thrift.server.TServlet;
 import org.ietf.jgss.GSSContext;
 import org.ietf.jgss.GSSCredential;
 import org.ietf.jgss.GSSException;
 import org.ietf.jgss.GSSManager;
 import org.ietf.jgss.GSSName;
 import org.ietf.jgss.Oid;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+
+import org.apache.spark.internal.SparkLogger;
+import org.apache.spark.internal.SparkLoggerFactory;
+import org.apache.spark.internal.LogKeys;
+import org.apache.spark.internal.MDC;
 
 /**
  *
@@ -67,7 +69,7 @@ import org.slf4j.LoggerFactory;
 public class ThriftHttpServlet extends TServlet {
 
   private static final long serialVersionUID = 1L;
-  public static final Logger LOG = LoggerFactory.getLogger(ThriftHttpServlet.class.getName());
+  public static final SparkLogger LOG = SparkLoggerFactory.getLogger(ThriftHttpServlet.class);
   private final String authType;
   private final UserGroupInformation serviceUGI;
   private final UserGroupInformation httpUGI;
@@ -76,7 +78,7 @@ public class ThriftHttpServlet extends TServlet {
   // Class members for cookie based authentication.
   private CookieSigner signer;
   public static final String AUTH_COOKIE = "hive.server2.auth";
-  private static final Random RAN = new Random();
+  private static final SecureRandom RAN = new SecureRandom();
   private boolean isCookieAuthEnabled;
   private String cookieDomain;
   private String cookiePath;
@@ -175,7 +177,8 @@ public class ThriftHttpServlet extends TServlet {
         } else {
           response.addCookie(hs2Cookie);
         }
-        LOG.info("Cookie added for clientUserName " + clientUserName);
+        LOG.info("Cookie added for clientUserName {}",
+          MDC.of(LogKeys.USER_NAME, clientUserName));
       }
       super.doPost(request, response);
     }
@@ -229,7 +232,7 @@ public class ThriftHttpServlet extends TServlet {
         String userName = HttpAuthUtils.getUserNameFromCookieToken(currValue);
 
         if (userName == null) {
-          LOG.warn("Invalid cookie token " + currValue);
+          LOG.warn("Invalid cookie token {}", MDC.of(LogKeys.TOKEN, currValue));
           continue;
         }
         //We have found a valid cookie in the client request.
@@ -420,7 +423,7 @@ public class ThriftHttpServlet extends TServlet {
         gssContext = manager.createContext(serverCreds);
         // Get service ticket from the authorization header
         String serviceTicketBase64 = getAuthHeader(request, authType);
-        byte[] inToken = Base64.decodeBase64(serviceTicketBase64.getBytes());
+        byte[] inToken = Base64.getDecoder().decode(serviceTicketBase64.getBytes());
         gssContext.acceptSecContext(inToken, 0, inToken.length);
         // Authenticate or deny based on its context completion
         if (!gssContext.isEstablished()) {
@@ -501,7 +504,7 @@ public class ThriftHttpServlet extends TServlet {
       String authType) throws HttpAuthenticationException {
     String authHeaderBase64 = getAuthHeader(request, authType);
     String authHeaderString = StringUtils.newStringUtf8(
-        Base64.decodeBase64(authHeaderBase64.getBytes()));
+      Base64.getDecoder().decode(authHeaderBase64.getBytes()));
     String[] creds = authHeaderString.split(":");
     return creds;
   }
@@ -550,7 +553,7 @@ public class ThriftHttpServlet extends TServlet {
     if (queryString == null) {
       return null;
     }
-    Map<String, String[]> params = javax.servlet.http.HttpUtils.parseQueryString( queryString );
+    Map<String, String[]> params = jakarta.servlet.http.HttpUtils.parseQueryString( queryString );
     Set<String> keySet = params.keySet();
     for (String key: keySet) {
       if (key.equalsIgnoreCase("doAs")) {

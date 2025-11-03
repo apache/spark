@@ -20,10 +20,10 @@ package org.apache.spark.mllib.stat;
 import java.util.Arrays;
 import java.util.List;
 
-import org.junit.After;
-import org.junit.Before;
-import org.junit.Test;
-import static org.junit.Assert.assertEquals;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaDoubleRDD;
@@ -46,7 +46,7 @@ public class JavaStatisticsSuite {
   private transient JavaSparkContext jsc;
   private transient JavaStreamingContext ssc;
 
-  @Before
+  @BeforeEach
   public void setUp() {
     SparkConf conf = new SparkConf()
       .set("spark.streaming.clock", "org.apache.spark.util.ManualClock");
@@ -60,7 +60,7 @@ public class JavaStatisticsSuite {
     ssc.checkpoint("checkpoint");
   }
 
-  @After
+  @AfterEach
   public void tearDown() {
     spark.stop();
     ssc.stop();

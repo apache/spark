@@ -17,12 +17,12 @@
 
 package org.apache.spark.sql.execution.datasources
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
-import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoStatement, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, FileTable}
+import org.apache.spark.sql.classic.SparkSession
+import org.apache.spark.sql.execution.datasources.v2.{ExtractV2Table, FileTable}
 
 /**
  * Replace the File source V2 table in [[InsertIntoStatement]] to V1 [[FileFormat]].
@@ -35,8 +35,8 @@ import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, File
 class FallBackFileSourceV2(sparkSession: SparkSession) extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     case i @ InsertIntoStatement(
-        d @ DataSourceV2Relation(table: FileTable, _, _, _, _), _, _, _, _, _) =>
-      val v1FileFormat = table.fallbackFileFormat.newInstance()
+        d @ ExtractV2Table(table: FileTable), _, _, _, _, _, _) =>
+      val v1FileFormat = table.fallbackFileFormat.getDeclaredConstructor().newInstance()
       val relation = HadoopFsRelation(
         table.fileIndex,
         table.fileIndex.partitionSchema,

@@ -21,9 +21,9 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 
-import org.junit.After;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import org.apache.spark.sql.*;
 import org.apache.spark.sql.expressions.Window;
@@ -41,7 +41,7 @@ public class JavaDataFrameSuite {
     QueryTest$.MODULE$.checkAnswer(actual, expected);
   }
 
-  @Before
+  @BeforeEach
   public void setUp() throws IOException {
     hc = TestHive$.MODULE$;
     List<String> jsonObjects = new ArrayList<>(10);
@@ -52,7 +52,7 @@ public class JavaDataFrameSuite {
     df.createOrReplaceTempView("window_table");
   }
 
-  @After
+  @AfterEach
   public void tearDown() throws IOException {
     // Clean up tables.
     if (hc != null) {

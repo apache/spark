@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.command
 
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SaveMode}
+import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{StringType, StructType}
 
@@ -63,25 +64,23 @@ trait ShowPartitionsSuiteBase extends QueryTest with DDLCommandTestUtils {
       .saveAsTable(table)
   }
 
-  test("show partitions of non-partitioned table") {
-    withNamespaceAndTable("ns", "not_partitioned_table") { t =>
-      sql(s"CREATE TABLE $t (col1 int) $defaultUsing")
-      val errMsg = intercept[AnalysisException] {
-        sql(s"SHOW PARTITIONS $t")
-      }.getMessage
-      assert(errMsg.contains("not allowed on a table that is not partitioned") ||
-        // V2 error message.
-        errMsg.contains(s"Table $t is not partitioned"))
-    }
-  }
-
   test("non-partitioning columns") {
     withNamespaceAndTable("ns", "dateTable") { t =>
       createDateTable(t)
-      val errMsg = intercept[AnalysisException] {
-        sql(s"SHOW PARTITIONS $t PARTITION(abcd=2015, xyz=1)")
-      }.getMessage
-      assert(errMsg.contains("abcd is not a valid partition column"))
+      val expectedTableName = if (commandVersion == DDLCommandTestUtils.V1_COMMAND_VERSION) {
+        s"`$SESSION_CATALOG_NAME`.`ns`.`datetable`"
+      } else {
+        "`test_catalog`.`ns`.`dateTable`"
+      }
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"SHOW PARTITIONS $t PARTITION(abcd=2015, xyz=1)")
+        },
+        condition = "PARTITIONS_NOT_FOUND",
+        parameters = Map(
+          "partitionList" -> "`abcd`",
+          "tableName" -> expectedTableName)
+      )
     }
   }
 

@@ -20,8 +20,11 @@ package org.apache.spark.sql.types
 import scala.collection.mutable
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.catalyst.expressions.Cast
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
+import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLType
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy
 
@@ -32,56 +35,94 @@ class StrictDataTypeWriteCompatibilitySuite extends DataTypeWriteCompatibilityBa
   override def canCast: (DataType, DataType) => Boolean = Cast.canUpCast
 
   test("Check struct types: unsafe casts are not allowed") {
-    assertNumErrors(widerPoint2, point2, "t",
-      "Should fail because types require unsafe casts", 2) { errs =>
-
-      assert(errs(0).contains("'t.x'"), "Should include the nested field name context")
-      assert(errs(0).contains("Cannot safely cast"))
-
-      assert(errs(1).contains("'t.y'"), "Should include the nested field name context")
-      assert(errs(1).contains("Cannot safely cast"))
-    }
+    val errs = new mutable.ArrayBuffer[String]()
+    checkError(
+      exception = intercept[AnalysisException] (
+        DataTypeUtils.canWrite("", widerPoint2, point2, true,
+          analysis.caseSensitiveResolution, "t", storeAssignmentPolicy, errMsg => errs += errMsg)
+      ),
+      condition = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
+      parameters = Map(
+        "tableName" -> "``",
+        "colName" -> "`t`.`x`",
+        "srcType" -> "\"DOUBLE\"",
+        "targetType" -> "\"FLOAT\"")
+    )
   }
 
   test("Check array types: unsafe casts are not allowed") {
     val arrayOfLong = ArrayType(LongType)
     val arrayOfInt = ArrayType(IntegerType)
 
-    assertSingleError(arrayOfLong, arrayOfInt, "arr",
-      "Should not allow array of longs to array of ints") { err =>
-      assert(err.contains("'arr.element'"),
-        "Should identify problem with named array's element type")
-      assert(err.contains("Cannot safely cast"))
-    }
+    val errs = new mutable.ArrayBuffer[String]()
+    checkError(
+      exception = intercept[AnalysisException] (
+        DataTypeUtils.canWrite("", arrayOfLong, arrayOfInt, true,
+          analysis.caseSensitiveResolution, "arr", storeAssignmentPolicy, errMsg => errs += errMsg)
+      ),
+      condition = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
+      parameters = Map(
+        "tableName" -> "``",
+        "colName" -> "`arr`.`element`",
+        "srcType" -> "\"BIGINT\"",
+        "targetType" -> "\"INT\"")
+    )
   }
 
   test("Check map value types: casting Long to Integer is not allowed") {
     val mapOfLong = MapType(StringType, LongType)
     val mapOfInt = MapType(StringType, IntegerType)
 
-    assertSingleError(mapOfLong, mapOfInt, "m",
-      "Should not allow map of longs to map of ints") { err =>
-      assert(err.contains("'m.value'"), "Should identify problem with named map's value type")
-      assert(err.contains("Cannot safely cast"))
-    }
+    val errs = new mutable.ArrayBuffer[String]()
+    checkError(
+      exception = intercept[AnalysisException] (
+        DataTypeUtils.canWrite("", mapOfLong, mapOfInt, true,
+          analysis.caseSensitiveResolution, "m", storeAssignmentPolicy, errMsg => errs += errMsg)
+      ),
+      condition = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
+      parameters = Map(
+        "tableName" -> "``",
+        "colName" -> "`m`.`value`",
+        "srcType" -> "\"BIGINT\"",
+        "targetType" -> "\"INT\"")
+    )
   }
 
   test("Check map key types: unsafe casts are not allowed") {
     val mapKeyLong = MapType(LongType, StringType)
     val mapKeyInt = MapType(IntegerType, StringType)
 
-    assertSingleError(mapKeyLong, mapKeyInt, "m",
-      "Should not allow map of long keys to map of int keys") { err =>
-      assert(err.contains("'m.key'"), "Should identify problem with named map's key type")
-      assert(err.contains("Cannot safely cast"))
-    }
+    val errs = new mutable.ArrayBuffer[String]()
+    checkError(
+      exception = intercept[AnalysisException] (
+        DataTypeUtils.canWrite("", mapKeyLong, mapKeyInt, true,
+          analysis.caseSensitiveResolution, "m", storeAssignmentPolicy, errMsg => errs += errMsg)
+      ),
+      condition = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
+      parameters = Map(
+        "tableName" -> "``",
+        "colName" -> "`m`.`key`",
+        "srcType" -> "\"BIGINT\"",
+        "targetType" -> "\"INT\"")
+    )
   }
 
   test("Check NullType is incompatible with all other types") {
     allNonNullTypes.foreach { t =>
-      assertSingleError(NullType, t, "nulls", s"Should not allow writing None to type $t") { err =>
-        assert(err.contains(s"incompatible with ${t.catalogString}"))
-      }
+      val errs = new mutable.ArrayBuffer[String]()
+      checkError(
+        exception = intercept[AnalysisException] (
+          DataTypeUtils.canWrite("", NullType, t, true,
+            analysis.caseSensitiveResolution, "nulls", storeAssignmentPolicy,
+            errMsg => errs += errMsg)
+        ),
+        condition = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
+        parameters = Map(
+          "tableName" -> "``",
+          "colName" -> "`nulls`",
+          "srcType" -> "\"VOID\"",
+          "targetType" -> toSQLType(t.catalogString))
+      )
     }
   }
 }
@@ -96,11 +137,19 @@ class ANSIDataTypeWriteCompatibilitySuite extends DataTypeWriteCompatibilityBase
     val mapOfString = MapType(StringType, StringType)
     val mapOfInt = MapType(StringType, IntegerType)
 
-    assertSingleError(mapOfString, mapOfInt, "m",
-      "Should not allow map of strings to map of ints") { err =>
-      assert(err.contains("'m.value'"), "Should identify problem with named map's value type")
-      assert(err.contains("Cannot safely cast"))
-    }
+    val errs = new mutable.ArrayBuffer[String]()
+    checkError(
+      exception = intercept[AnalysisException] (
+        DataTypeUtils.canWrite("", mapOfString, mapOfInt, true,
+          analysis.caseSensitiveResolution, "m", storeAssignmentPolicy, errMsg => errs += errMsg)
+      ),
+      condition = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
+      parameters = Map(
+        "tableName" -> "``",
+        "colName" -> "`m`.`value`",
+        "srcType" -> "\"STRING\"",
+        "targetType" -> "\"INT\"")
+    )
   }
 
   private val stringPoint2 = StructType(Seq(
@@ -108,50 +157,87 @@ class ANSIDataTypeWriteCompatibilitySuite extends DataTypeWriteCompatibilityBase
     StructField("y", StringType, nullable = false)))
 
   test("Check struct types: unsafe casts are not allowed") {
-    assertNumErrors(stringPoint2, point2, "t",
-      "Should fail because types require unsafe casts", 2) { errs =>
-
-      assert(errs(0).contains("'t.x'"), "Should include the nested field name context")
-      assert(errs(0).contains("Cannot safely cast"))
-
-      assert(errs(1).contains("'t.y'"), "Should include the nested field name context")
-      assert(errs(1).contains("Cannot safely cast"))
-    }
+    val errs = new mutable.ArrayBuffer[String]()
+    checkError(
+      exception = intercept[AnalysisException] (
+        DataTypeUtils.canWrite("", stringPoint2, point2, true,
+          analysis.caseSensitiveResolution, "t", storeAssignmentPolicy, errMsg => errs += errMsg)
+      ),
+      condition = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
+      parameters = Map(
+        "tableName" -> "``",
+        "colName" -> "`t`.`x`",
+        "srcType" -> "\"STRING\"",
+        "targetType" -> "\"FLOAT\"")
+    )
   }
 
   test("Check array types: unsafe casts are not allowed") {
     val arrayOfString = ArrayType(StringType)
     val arrayOfInt = ArrayType(IntegerType)
 
-    assertSingleError(arrayOfString, arrayOfInt, "arr",
-      "Should not allow array of strings to array of ints") { err =>
-      assert(err.contains("'arr.element'"),
-        "Should identify problem with named array's element type")
-      assert(err.contains("Cannot safely cast"))
-    }
+    val errs = new mutable.ArrayBuffer[String]()
+    checkError(
+      exception = intercept[AnalysisException] (
+        DataTypeUtils.canWrite("", arrayOfString, arrayOfInt, true,
+          analysis.caseSensitiveResolution, "arr", storeAssignmentPolicy, errMsg => errs += errMsg)
+      ),
+      condition = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
+      parameters = Map(
+        "tableName" -> "``",
+        "colName" -> "`arr`.`element`",
+        "srcType" -> "\"STRING\"",
+        "targetType" -> "\"INT\"")
+    )
   }
 
   test("Check map key types: unsafe casts are not allowed") {
     val mapKeyString = MapType(StringType, StringType)
     val mapKeyInt = MapType(IntegerType, StringType)
 
-    assertSingleError(mapKeyString, mapKeyInt, "m",
-      "Should not allow map of string keys to map of int keys") { err =>
-      assert(err.contains("'m.key'"), "Should identify problem with named map's key type")
-      assert(err.contains("Cannot safely cast"))
-    }
+    val errs = new mutable.ArrayBuffer[String]()
+    checkError(
+      exception = intercept[AnalysisException] (
+        DataTypeUtils.canWrite("", mapKeyString, mapKeyInt, true,
+          analysis.caseSensitiveResolution, "arr", storeAssignmentPolicy, errMsg => errs += errMsg)
+      ),
+      condition = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
+      parameters = Map(
+        "tableName" -> "``",
+        "colName" -> "`arr`.`key`",
+        "srcType" -> "\"STRING\"",
+        "targetType" -> "\"INT\"")
+    )
   }
 
   test("Conversions between timestamp and long are not allowed") {
-    assertSingleError(LongType, TimestampType, "longToTimestamp",
-      "Should not allow long to timestamp") { err =>
-      assert(err.contains("Cannot safely cast 'longToTimestamp': bigint to timestamp"))
-    }
-
-    assertSingleError(TimestampType, LongType, "timestampToLong",
-      "Should not allow timestamp to long") { err =>
-      assert(err.contains("Cannot safely cast 'timestampToLong': timestamp to bigint"))
-    }
+    val errs = new mutable.ArrayBuffer[String]()
+    checkError(
+      exception = intercept[AnalysisException] (
+        DataTypeUtils.canWrite("", LongType, TimestampType, true,
+          analysis.caseSensitiveResolution, "longToTimestamp", storeAssignmentPolicy,
+          errMsg => errs += errMsg)
+      ),
+      condition = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
+      parameters = Map(
+        "tableName" -> "``",
+        "colName" -> "`longToTimestamp`",
+        "srcType" -> "\"BIGINT\"",
+        "targetType" -> "\"TIMESTAMP\"")
+    )
+    checkError(
+      exception = intercept[AnalysisException] (
+        DataTypeUtils.canWrite("", TimestampType, LongType, true,
+          analysis.caseSensitiveResolution, "timestampToLong", storeAssignmentPolicy,
+          errMsg => errs += errMsg)
+      ),
+      condition = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
+      parameters = Map(
+        "tableName" -> "``",
+        "colName" -> "`timestampToLong`",
+        "srcType" -> "\"TIMESTAMP\"",
+        "targetType" -> "\"BIGINT\"")
+    )
   }
 
   test("SPARK-37707: Check datetime types compatible with each other") {
@@ -214,13 +300,21 @@ abstract class DataTypeWriteCompatibilityBaseSuite extends SparkFunSuite {
           assertAllowed(w, r, "t", s"Should allow writing $w to $r because cast is safe")
 
         } else {
-          assertSingleError(w, r, "t",
-            s"Should not allow writing $w to $r because cast is not safe") { err =>
-            assert(err.contains("'t'"), "Should include the field name context")
-            assert(err.contains("Cannot safely cast"), "Should identify unsafe cast")
-            assert(err.contains(s"${w.catalogString}"), "Should include write type")
-            assert(err.contains(s"${r.catalogString}"), "Should include read type")
-          }
+          val errs = new mutable.ArrayBuffer[String]()
+          checkError(
+            exception = intercept[AnalysisException] (
+              DataTypeUtils.canWrite("", w, r, true, analysis.caseSensitiveResolution, "t",
+                storeAssignmentPolicy, errMsg => errs += errMsg)
+            ),
+            condition = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
+            parameters = Map(
+              "tableName" -> "``",
+              "colName" -> "`t`",
+              "srcType" -> toSQLType(w),
+              "targetType" -> toSQLType(r)
+            ),
+            matchPVals = true
+          )
         }
       }
     }
@@ -228,29 +322,33 @@ abstract class DataTypeWriteCompatibilityBaseSuite extends SparkFunSuite {
 
   test("Check struct types: missing required field") {
     val missingRequiredField = StructType(Seq(StructField("x", FloatType, nullable = false)))
-    assertSingleError(missingRequiredField, point2, "t",
-      "Should fail because required field 'y' is missing") { err =>
-      assert(err.contains("'t'"), "Should include the struct name for context")
-      assert(err.contains("'y'"), "Should include the nested field name")
-      assert(err.contains("missing field"), "Should call out field missing")
-    }
+    val errs = new mutable.ArrayBuffer[String]()
+    checkError(
+      exception = intercept[AnalysisException] (
+        DataTypeUtils.canWrite("", missingRequiredField, point2, true,
+          analysis.caseSensitiveResolution, "t", storeAssignmentPolicy, errMsg => errs += errMsg)
+      ),
+      condition = "INCOMPATIBLE_DATA_FOR_TABLE.STRUCT_MISSING_FIELDS",
+      parameters = Map("tableName" -> "``", "colName" -> "`t`", "missingFields" -> "`y`")
+    )
   }
 
   test("Check struct types: missing starting field, matched by position") {
     val missingRequiredField = StructType(Seq(StructField("y", FloatType, nullable = false)))
-
-    // should have 2 errors: names x and y don't match, and field y is missing
-    assertNumErrors(missingRequiredField, point2, "t",
-      "Should fail because field 'x' is matched to field 'y' and required field 'y' is missing", 2)
-    { errs =>
-      assert(errs(0).contains("'t'"), "Should include the struct name for context")
-      assert(errs(0).contains("expected 'x', found 'y'"), "Should detect name mismatch")
-      assert(errs(0).contains("field name does not match"), "Should identify name problem")
-
-      assert(errs(1).contains("'t'"), "Should include the struct name for context")
-      assert(errs(1).contains("'y'"), "Should include the _last_ nested fields of the read schema")
-      assert(errs(1).contains("missing field"), "Should call out field missing")
-    }
+    val errs = new mutable.ArrayBuffer[String]()
+    checkError(
+      exception = intercept[AnalysisException] (
+        DataTypeUtils.canWrite("", missingRequiredField, point2, true,
+          analysis.caseSensitiveResolution, "t", storeAssignmentPolicy, errMsg => errs += errMsg)
+      ),
+      condition = "INCOMPATIBLE_DATA_FOR_TABLE.UNEXPECTED_COLUMN_NAME",
+      parameters = Map(
+        "expected" -> "`x`",
+        "found" -> "`y`",
+        "tableName" -> "``",
+        "colName" -> "`t`",
+        "order" -> "0")
+    )
   }
 
   test("Check struct types: missing middle field, matched by position") {
@@ -265,17 +363,20 @@ abstract class DataTypeWriteCompatibilityBaseSuite extends SparkFunSuite {
 
     // types are compatible: (req int, req int) => (req int, req int, opt int)
     // but this should still fail because the names do not match.
-
-    assertNumErrors(missingMiddleField, expectedStruct, "t",
-      "Should fail because field 'y' is matched to field 'z'", 2) { errs =>
-      assert(errs(0).contains("'t'"), "Should include the struct name for context")
-      assert(errs(0).contains("expected 'y', found 'z'"), "Should detect name mismatch")
-      assert(errs(0).contains("field name does not match"), "Should identify name problem")
-
-      assert(errs(1).contains("'t'"), "Should include the struct name for context")
-      assert(errs(1).contains("'z'"), "Should include the nested field name")
-      assert(errs(1).contains("missing field"), "Should call out field missing")
-    }
+    val errs = new mutable.ArrayBuffer[String]()
+    checkError(
+      exception = intercept[AnalysisException] (
+        DataTypeUtils.canWrite("", missingMiddleField, expectedStruct, true,
+          analysis.caseSensitiveResolution, "t", storeAssignmentPolicy, errMsg => errs += errMsg)
+      ),
+      condition = "INCOMPATIBLE_DATA_FOR_TABLE.UNEXPECTED_COLUMN_NAME",
+      parameters = Map(
+        "expected" -> "`y`",
+        "found" -> "`z`",
+        "tableName" -> "``",
+        "colName" -> "`t`",
+        "order" -> "1")
+    )
   }
 
   test("Check struct types: generic colN names are ignored") {
@@ -299,20 +400,27 @@ abstract class DataTypeWriteCompatibilityBaseSuite extends SparkFunSuite {
       StructField("x", FloatType),
       StructField("y", FloatType, nullable = false)))
 
-    assertSingleError(requiredFieldIsOptional, point2, "t",
-      "Should fail because required field 'x' is optional") { err =>
-      assert(err.contains("'t.x'"), "Should include the nested field name context")
-      assert(err.contains("Cannot write nullable values to non-null field"))
-    }
+    val errs = new mutable.ArrayBuffer[String]()
+    checkError(
+      exception = intercept[AnalysisException] (
+        DataTypeUtils.canWrite("", requiredFieldIsOptional, point2, true,
+          analysis.caseSensitiveResolution, "t", storeAssignmentPolicy, errMsg => errs += errMsg)
+      ),
+      condition = "INCOMPATIBLE_DATA_FOR_TABLE.NULLABLE_COLUMN",
+      parameters = Map("tableName" -> "``", "colName" -> "`t`.`x`")
+    )
   }
 
   test("Check struct types: data field would be dropped") {
-    assertSingleError(point3, point2, "t",
-      "Should fail because field 'z' would be dropped") { err =>
-      assert(err.contains("'t'"), "Should include the struct name for context")
-      assert(err.contains("'z'"), "Should include the extra field name")
-      assert(err.contains("Cannot write extra fields"))
-    }
+    val errs = new mutable.ArrayBuffer[String]()
+    checkError(
+      exception = intercept[AnalysisException] (
+        DataTypeUtils.canWrite("", point3, point2, true,
+          analysis.caseSensitiveResolution, "t", storeAssignmentPolicy, errMsg => errs += errMsg)
+      ),
+      condition = "INCOMPATIBLE_DATA_FOR_TABLE.EXTRA_STRUCT_FIELDS",
+      parameters = Map("tableName" -> "``", "colName" -> "`t`", "extraFields" -> "`z`")
+    )
   }
 
   test("Check struct types: type promotion is allowed") {
@@ -345,11 +453,15 @@ abstract class DataTypeWriteCompatibilityBaseSuite extends SparkFunSuite {
     val arrayOfRequired = ArrayType(LongType, containsNull = false)
     val arrayOfOptional = ArrayType(LongType)
 
-    assertSingleError(arrayOfOptional, arrayOfRequired, "arr",
-      "Should not allow array of optional elements to array of required elements") { err =>
-      assert(err.contains("'arr'"), "Should include type name context")
-      assert(err.contains("Cannot write nullable elements to array of non-nulls"))
-    }
+    val errs = new mutable.ArrayBuffer[String]()
+    checkError(
+      exception = intercept[AnalysisException] (
+        DataTypeUtils.canWrite("", arrayOfOptional, arrayOfRequired, true,
+          analysis.caseSensitiveResolution, "arr", storeAssignmentPolicy, errMsg => errs += errMsg)
+      ),
+      condition = "INCOMPATIBLE_DATA_FOR_TABLE.NULLABLE_ARRAY_ELEMENTS",
+      parameters = Map("tableName" -> "``", "colName" -> "`arr`")
+    )
   }
 
   test("Check array types: writing required to optional elements is allowed") {
@@ -371,11 +483,15 @@ abstract class DataTypeWriteCompatibilityBaseSuite extends SparkFunSuite {
     val mapOfRequired = MapType(StringType, LongType, valueContainsNull = false)
     val mapOfOptional = MapType(StringType, LongType)
 
-    assertSingleError(mapOfOptional, mapOfRequired, "m",
-      "Should not allow map of optional values to map of required values") { err =>
-      assert(err.contains("'m'"), "Should include type name context")
-      assert(err.contains("Cannot write nullable values to map of non-nulls"))
-    }
+    val errs = new mutable.ArrayBuffer[String]()
+    checkError(
+      exception = intercept[AnalysisException] (
+        DataTypeUtils.canWrite("", mapOfOptional, mapOfRequired, true,
+          analysis.caseSensitiveResolution, "m", storeAssignmentPolicy, errMsg => errs += errMsg)
+      ),
+      condition = "INCOMPATIBLE_DATA_FOR_TABLE.NULLABLE_MAP_VALUES",
+      parameters = Map("tableName" -> "``", "colName" -> "`m`")
+    )
   }
 
   test("Check map value types: writing required to optional values is allowed") {
@@ -392,6 +508,140 @@ abstract class DataTypeWriteCompatibilityBaseSuite extends SparkFunSuite {
 
     assertAllowed(mapKeyInt, mapKeyLong, "m",
       "Should allow map of int written to map of long column")
+  }
+
+  test("SPARK-47528: Check udt: underlying sql type is same") {
+    val udtType = new UserDefinedType[Any] {
+      override def sqlType: DataType = StructType(Seq(
+        StructField("col1", FloatType, nullable = false),
+        StructField("col2", FloatType, nullable = false)))
+
+      override def userClass: java.lang.Class[Any] = null
+
+      override def serialize(obj: Any): Any = null
+
+      override def deserialize(datum: Any): Any = null
+    }
+
+    val sqlType = StructType(Seq(
+      StructField("col1", FloatType, nullable = false),
+      StructField("col2", FloatType, nullable = false)))
+
+    assertAllowed(udtType, sqlType, "m",
+      "Should allow udt with same sqlType written to struct column")
+
+    assertAllowed(sqlType, udtType, "m",
+      "Should allow udt with same sqlType written to struct column")
+  }
+
+  test("SPARK-47528: Check udt: underlying sql type is same but different nullability") {
+    val udtType = new UserDefinedType[Any] {
+      override def sqlType: DataType = StructType(Seq(
+        StructField("col1", FloatType, nullable = false),
+        StructField("col2", FloatType, nullable = false)))
+
+      override def userClass: java.lang.Class[Any] = null
+
+      override def serialize(obj: Any): Any = null
+
+      override def deserialize(datum: Any): Any = null
+    }
+
+    val sqlType = StructType(Seq(
+      StructField("col1", FloatType, nullable = false),
+      StructField("col2", FloatType, nullable = true)))
+
+    assertAllowed(udtType, sqlType, "m",
+      "Should allow udt with same sqlType written to struct column")
+
+    val errs = new mutable.ArrayBuffer[String]()
+    checkError(
+      exception = intercept[AnalysisException] (
+        DataTypeUtils.canWrite("", sqlType, udtType, true,
+          analysis.caseSensitiveResolution, "t", storeAssignmentPolicy, errMsg => errs += errMsg)
+      ),
+      condition = "INCOMPATIBLE_DATA_FOR_TABLE.NULLABLE_COLUMN",
+      parameters = Map(
+        "tableName" -> "``",
+        "colName" -> "`t`.`col2`"
+      )
+    )
+  }
+
+  test("SPARK-47528: Check udt: write underlying sql type is not same") {
+    val udtType = new UserDefinedType[Any] {
+      override def sqlType: DataType = StructType(Seq(
+        StructField("col1", FloatType, nullable = false),
+        StructField("col2", FloatType, nullable = false)))
+
+      override def userClass: java.lang.Class[Any] = null
+
+      override def serialize(obj: Any): Any = null
+
+      override def deserialize(datum: Any): Any = null
+    }
+
+    val sqlType = StructType(Seq(
+      StructField("col1", FloatType, nullable = false),
+      StructField("col2", IntegerType, nullable = false)))
+
+    if (canCast(udtType.sqlType, sqlType)) {
+      assertAllowed(udtType, sqlType, "m",
+        "Should allow udt with compatible sqlType written to struct column")
+    } else {
+      val errs = new mutable.ArrayBuffer[String]()
+      checkError(
+        exception = intercept[AnalysisException](
+          DataTypeUtils.canWrite("", udtType, sqlType, true,
+            analysis.caseSensitiveResolution, "t", storeAssignmentPolicy, errMsg => errs += errMsg)
+        ),
+        condition = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
+        parameters = Map(
+          "tableName" -> "``",
+          "colName" -> "`t`.`col2`",
+          "srcType" -> "\"FLOAT\"",
+          "targetType" -> "\"INT\""
+        )
+      )
+    }
+  }
+
+  test("SPARK-47528: Check udt: read side underlying sql type is not same") {
+    val udtType = new UserDefinedType[Any] {
+      override def sqlType: DataType = StructType(Seq(
+        StructField("col1", FloatType, nullable = false),
+        StructField("col2", IntegerType, nullable = false)))
+
+      override def userClass: java.lang.Class[Any] = null
+
+      override def serialize(obj: Any): Any = null
+
+      override def deserialize(datum: Any): Any = null
+    }
+
+    val sqlType = StructType(Seq(
+      StructField("col1", FloatType, nullable = false),
+      StructField("col2", FloatType, nullable = false)))
+
+    if (canCast(sqlType, udtType.sqlType)) {
+      assertAllowed(sqlType, udtType, "m",
+        "Should allow udt with compatible sqlType written to struct column")
+    } else {
+      val errs = new mutable.ArrayBuffer[String]()
+      checkError(
+        exception = intercept[AnalysisException](
+          DataTypeUtils.canWrite("", sqlType, udtType, true,
+            analysis.caseSensitiveResolution, "t", storeAssignmentPolicy, errMsg => errs += errMsg)
+        ),
+        condition = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
+        parameters = Map(
+          "tableName" -> "``",
+          "colName" -> "`t`.`col2`",
+          "srcType" -> "\"FLOAT\"",
+          "targetType" -> "\"INT\""
+        )
+      )
+    }
   }
 
   test("Check types with multiple errors") {
@@ -419,58 +669,25 @@ abstract class DataTypeWriteCompatibilityBaseSuite extends SparkFunSuite {
       StructField("y", StringType)
     ))
 
-    assertNumErrors(writeType, readType, "top", "Should catch 14 errors", 14) { errs =>
-      assert(errs(0).contains("'top.a.element'"), "Should identify bad type")
-      assert(errs(0).contains("Cannot safely cast"))
-      assert(errs(0).contains("string to double"))
+    val errs = new mutable.ArrayBuffer[String]()
+    checkError(
+      exception = intercept[AnalysisException] (
+        DataTypeUtils.canWrite("", writeType, readType, true,
+          analysis.caseSensitiveResolution, "t", storeAssignmentPolicy, errMsg => errs += errMsg)
+      ),
+      condition = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
+      parameters = Map(
+        "tableName" -> "``",
+        "colName" -> "`t`.`a`.`element`",
+        "srcType" -> "\"STRING\"",
+        "targetType" -> "\"DOUBLE\""
+      )
+    )
+  }
 
-      assert(errs(1).contains("'top.a'"), "Should identify bad type")
-      assert(errs(1).contains("Cannot write nullable elements to array of non-nulls"))
-
-      assert(errs(2).contains("'top.arr_of_structs.element'"), "Should identify bad type")
-      assert(errs(2).contains("'z'"), "Should identify bad field")
-      assert(errs(2).contains("Cannot write extra fields to struct"))
-
-      assert(errs(3).contains("'top.arr_of_structs'"), "Should identify bad type")
-      assert(errs(3).contains("Cannot write nullable elements to array of non-nulls"))
-
-      assert(errs(4).contains("'top.bad_nested_type'"), "Should identify bad type")
-      assert(errs(4).contains("is incompatible with"))
-
-      assert(errs(5).contains("'top.m.key'"), "Should identify bad type")
-      assert(errs(5).contains("Cannot safely cast"))
-      assert(errs(5).contains("string to bigint"))
-
-      assert(errs(6).contains("'top.m.value'"), "Should identify bad type")
-      assert(errs(6).contains("Cannot safely cast"))
-      assert(errs(6).contains("boolean to float"))
-
-      assert(errs(7).contains("'top.m'"), "Should identify bad type")
-      assert(errs(7).contains("Cannot write nullable values to map of non-nulls"))
-
-      assert(errs(8).contains("'top.map_of_structs.value'"), "Should identify bad type")
-      assert(errs(8).contains("expected 'y', found 'z'"), "Should detect name mismatch")
-      assert(errs(8).contains("field name does not match"), "Should identify name problem")
-
-      assert(errs(9).contains("'top.map_of_structs.value'"), "Should identify bad type")
-      assert(errs(9).contains("'z'"), "Should identify missing field")
-      assert(errs(9).contains("missing fields"), "Should detect missing field")
-
-      assert(errs(10).contains("'top.map_of_structs'"), "Should identify bad type")
-      assert(errs(10).contains("Cannot write nullable values to map of non-nulls"))
-
-      assert(errs(11).contains("'top.x'"), "Should identify bad type")
-      assert(errs(11).contains("Cannot safely cast"))
-      assert(errs(11).contains("string to int"))
-
-      assert(errs(12).contains("'top'"), "Should identify bad type")
-      assert(errs(12).contains("expected 'x', found 'y'"), "Should detect name mismatch")
-      assert(errs(12).contains("field name does not match"), "Should identify name problem")
-
-      assert(errs(13).contains("'top'"), "Should identify bad type")
-      assert(errs(13).contains("'missing1'"), "Should identify missing field")
-      assert(errs(13).contains("missing fields"), "Should detect missing field")
-    }
+  test("Check string types: cast allowed regardless of collation") {
+    assertAllowed(StringType, StringType("UTF8_LCASE"),
+      "date time types", "Should allow writing string to collated string")
   }
 
   // Helper functions
@@ -482,8 +699,8 @@ abstract class DataTypeWriteCompatibilityBaseSuite extends SparkFunSuite {
       desc: String,
       byName: Boolean = true): Unit = {
     assert(
-      DataType.canWrite(writeType, readType, byName, analysis.caseSensitiveResolution, name,
-        storeAssignmentPolicy,
+      DataTypeUtils.canWrite("", writeType, readType, byName, analysis.caseSensitiveResolution,
+        name, storeAssignmentPolicy,
         errMsg => fail(s"Should not produce errors but was called with: $errMsg")), desc)
   }
 
@@ -508,8 +725,8 @@ abstract class DataTypeWriteCompatibilityBaseSuite extends SparkFunSuite {
       (checkErrors: Seq[String] => Unit): Unit = {
     val errs = new mutable.ArrayBuffer[String]()
     assert(
-      DataType.canWrite(writeType, readType, byName, analysis.caseSensitiveResolution, name,
-        storeAssignmentPolicy, errMsg => errs += errMsg) === false, desc)
+      DataTypeUtils.canWrite("", writeType, readType, byName, analysis.caseSensitiveResolution,
+        name, storeAssignmentPolicy, errMsg => errs += errMsg) === false, desc)
     assert(errs.size === numErrs, s"Should produce $numErrs error messages")
     checkErrors(errs.toSeq)
   }

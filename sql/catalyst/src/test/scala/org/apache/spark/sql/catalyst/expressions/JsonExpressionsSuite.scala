@@ -25,15 +25,15 @@ import org.scalatest.exceptions.TestFailedException
 import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.TypeCheckFailure
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
+import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
-import org.apache.spark.sql.catalyst.plans.PlanTestBase
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{PST, UTC, UTC_OPT}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
-class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with PlanTestBase {
+class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   val json =
     """
       |{"store":{"fruit":[{"weight":8,"type":"apple"},{"weight":9,"type":"pear"}],
@@ -254,7 +254,7 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with 
   }
 
   test("some big value") {
-    val value = "x" * 3000
+    val value = "x".repeat(3000)
     checkEvaluation(
       GetJsonObject(NonFoldableLiteral((s"""{"big": "$value"}""")),
       NonFoldableLiteral("$.big")), value)
@@ -268,12 +268,13 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with 
     Nil
 
   private def checkJsonTuple(jt: JsonTuple, expected: InternalRow): Unit = {
-    assert(jt.eval(null).toSeq.head === expected)
+    assert(jt.eval(null).iterator.to(Seq).head === expected)
   }
 
   test("json_tuple escaping") {
-    GenerateUnsafeProjection.generate(
-      JsonTuple(Literal("\"quote") ::  Literal("\"quote") :: Nil) :: Nil)
+    checkJsonTuple(
+      JsonTuple(Literal("\"quote") ::  Literal("\"quote") :: Nil),
+      InternalRow.fromSeq(Seq(null).map(UTF8String.fromString)))
   }
 
   test("json_tuple - hive key 1") {
@@ -407,6 +408,15 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with 
       InternalRow(UTF8String.fromString("1"), null, UTF8String.fromString("1")))
   }
 
+  test("json_tuple - all arguments must be strings") {
+    assert(JsonTuple(Seq(Literal(888), Literal(999))).checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "NON_STRING_TYPE",
+        messageParameters = Map("funcName" -> "`json_tuple`")
+      )
+    )
+  }
+
   test("from_json escaping") {
     val schema = StructType(StructField("\"quote", IntegerType) :: Nil)
     GenerateUnsafeProjection.generate(
@@ -436,9 +446,11 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with 
         InternalRow(null)
       )
     }.getCause
-    assert(exception.isInstanceOf[SparkException])
-    assert(exception.getMessage.contains(
-      "Malformed records are detected in record parsing. Parse Mode: FAILFAST"))
+    checkError(
+      exception = exception.asInstanceOf[SparkException],
+      condition = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
+      parameters = Map("badRecord" -> "[null]", "failFastMode" -> "FAILFAST")
+    )
   }
 
   test("from_json - input=array, schema=array, output=array") {
@@ -570,7 +582,7 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with 
     val schema = StructType(StructField("\"quote", IntegerType) :: Nil)
     val struct = Literal.create(create_row(1), schema)
     GenerateUnsafeProjection.generate(
-      StructsToJson(Map.empty, struct, UTC_OPT) :: Nil)
+      StructsToJson(Map.empty, struct, UTC_OPT).replacement :: Nil)
   }
 
   test("to_json - struct") {
@@ -579,6 +591,19 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with 
     checkEvaluation(
       StructsToJson(Map.empty, struct, UTC_OPT),
       """{"a":1}"""
+    )
+  }
+
+  test("to_json - struct: unable to convert column of ObjectType to JSON") {
+    val schema = StructType(StructField("a", ObjectType(classOf[java.lang.Integer])) :: Nil)
+    val structData = Literal.create(create_row(Integer.valueOf(1)), schema)
+    assert(StructsToJson(Map.empty, structData).checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "CANNOT_CONVERT_TO_JSON",
+        messageParameters = Map(
+          "name" -> "`a`",
+          "type" -> "\"JAVA.LANG.INTEGER\"")
+      )
     )
   }
 
@@ -766,13 +791,13 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with 
   }
 
   test("verify corrupt column") {
-    checkExceptionInExpression[AnalysisException](
+    checkErrorInExpression[AnalysisException](
       JsonToStructs(
         schema = StructType.fromDDL("i int, _unparsed boolean"),
         options = Map("columnNameOfCorruptRecord" -> "_unparsed"),
         child = Literal.create("""{"i":"a"}"""),
-        timeZoneId = UTC_OPT),
-      expectedErrMsg = "The field for corrupt records must be string type and nullable")
+        timeZoneId = UTC_OPT), null, "INVALID_CORRUPT_RECORD_TYPE",
+      Map("columnName" -> "`_unparsed`", "actualType" -> "\"BOOLEAN\""))
   }
 
   def decimalInput(langTag: String): (Decimal, String) = {
@@ -862,12 +887,23 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with 
         """"test": {"1": "test"}"""),
       (ArrayType(MapType(IntegerType, StringType)), """[{"1": "test"}]"""),
       (MapType(StringType, MapType(IntegerType, StringType)), """{"key": {"1" : "test"}}""")
-    ).foreach{
+    ).foreach {
       case(schema, jsonData) =>
-        assert(JsonToStructs(schema, Map.empty, Literal(jsonData)).checkInputDataTypes() match {
-          case TypeCheckFailure(_) => true
-          case _ => false
-        })
-      }
+        assert(JsonToStructs(schema, Map.empty, Literal(jsonData)).checkInputDataTypes() ==
+          DataTypeMismatch(
+            errorSubClass = "INVALID_JSON_MAP_KEY_TYPE",
+            messageParameters = Map(
+              "schema" -> toSQLType(schema)
+            )
+          )
+        )
+    }
+  }
+
+  test("SPARK-46761: support ? characters") {
+    checkEvaluation(
+      GetJsonObject(Literal(s"""{"?":"QUESTION"}"""), Literal("$['?']")),
+      "QUESTION"
+    )
   }
 }

@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.catalog.{CatalogFunction, FunctionResource}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, ExpressionInfo}
+import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.StringUtils
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types.{StringType, StructField, StructType}
@@ -95,12 +96,18 @@ case class DescribeFunctionCommand(
     isExtended: Boolean) extends LeafRunnableCommand {
 
   override val output: Seq[Attribute] = {
-    val schema = StructType(StructField("function_desc", StringType, nullable = false) :: Nil)
-    schema.toAttributes
+    val schema = StructType(Array(StructField("function_desc", StringType, nullable = false)))
+    toAttributes(schema)
   }
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    val name = if (info.getDb != null) info.getDb + "." + info.getName else info.getName
+    val identifier = if (info.getDb != null) {
+      sparkSession.sessionState.catalog.qualifyIdentifier(
+        FunctionIdentifier(info.getName, Some(info.getDb)))
+    } else {
+      FunctionIdentifier(info.getName)
+    }
+    val name = identifier.unquotedString
     val result = if (info.getClassName != null) {
       Row(s"Function: $name") ::
         Row(s"Class: ${info.getClassName}") ::
@@ -204,24 +211,24 @@ case class RefreshFunctionCommand(
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
-    if (FunctionRegistry.builtin.functionExists(FunctionIdentifier(functionName, databaseName))) {
+    val ident = FunctionIdentifier(functionName, databaseName)
+    if (FunctionRegistry.builtin.functionExists(ident)) {
       throw QueryCompilationErrors.cannotRefreshBuiltInFuncError(functionName)
     }
-    if (catalog.isTemporaryFunction(FunctionIdentifier(functionName, databaseName))) {
+    if (catalog.isTemporaryFunction(ident)) {
       throw QueryCompilationErrors.cannotRefreshTempFuncError(functionName)
     }
 
-    val identifier = FunctionIdentifier(
-      functionName, Some(databaseName.getOrElse(catalog.getCurrentDatabase)))
+    val qualified = catalog.qualifyIdentifier(ident)
     // we only refresh the permanent function.
-    if (catalog.isPersistentFunction(identifier)) {
+    if (catalog.isPersistentFunction(qualified)) {
       // register overwrite function.
-      val func = catalog.getFunctionMetadata(identifier)
+      val func = catalog.getFunctionMetadata(qualified)
       catalog.registerFunction(func, true)
     } else {
       // clear cached function and throw exception
-      catalog.unregisterFunction(identifier)
-      throw QueryCompilationErrors.noSuchFunctionError(identifier)
+      catalog.unregisterFunction(qualified)
+      throw QueryCompilationErrors.noSuchFunctionError(qualified)
     }
 
     Seq.empty[Row]

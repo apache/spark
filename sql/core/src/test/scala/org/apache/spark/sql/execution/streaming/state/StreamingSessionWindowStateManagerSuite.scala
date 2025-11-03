@@ -24,7 +24,8 @@ import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeProjection, UnsafeRow}
-import org.apache.spark.sql.execution.streaming.StatefulOperatorStateInfo
+import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
+import org.apache.spark.sql.execution.streaming.operators.stateful.{StatefulOperatorStateInfo, StreamingSessionWindowStateManager}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.StreamTest
 import org.apache.spark.sql.types.{IntegerType, LongType, StringType, StructType}
@@ -34,7 +35,7 @@ class StreamingSessionWindowStateManagerSuite extends StreamTest with BeforeAndA
   private val rowSchema = new StructType().add("key1", StringType).add("key2", IntegerType)
     .add("session", new StructType().add("start", LongType).add("end", LongType))
     .add("value", LongType)
-  private val rowAttributes = rowSchema.toAttributes
+  private val rowAttributes = toAttributes(rowSchema)
 
   private val keysWithoutSessionAttributes = rowAttributes.filter { attr =>
     List("key1", "key2").contains(attr.name)
@@ -172,7 +173,8 @@ class StreamingSessionWindowStateManagerSuite extends StreamTest with BeforeAndA
       f: (StreamingSessionWindowStateManager, StateStore) => Unit): Unit = {
     withTempDir { file =>
       val storeConf = new StateStoreConf()
-      val stateInfo = StatefulOperatorStateInfo(file.getAbsolutePath, UUID.randomUUID, 0, 0, 5)
+      val stateInfo = StatefulOperatorStateInfo(
+        file.getAbsolutePath, UUID.randomUUID, 0, 0, 5, None)
 
       val manager = StreamingSessionWindowStateManager.createStateManager(
         keysWithoutSessionAttributes,
@@ -183,7 +185,8 @@ class StreamingSessionWindowStateManagerSuite extends StreamTest with BeforeAndA
       val storeProviderId = StateStoreProviderId(stateInfo, 0, StateStoreId.DEFAULT_STORE_NAME)
       val store = StateStore.get(
         storeProviderId, manager.getStateKeySchema, manager.getStateValueSchema,
-        manager.getNumColsForPrefixKey, stateInfo.storeVersion, storeConf, new Configuration)
+        PrefixKeyScanStateEncoderSpec(manager.getStateKeySchema, manager.getNumColsForPrefixKey),
+        stateInfo.storeVersion, None, None, useColumnFamilies = false, storeConf, new Configuration)
 
       try {
         f(manager, store)

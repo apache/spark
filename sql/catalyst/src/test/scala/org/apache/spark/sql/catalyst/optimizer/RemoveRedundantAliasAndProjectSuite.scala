@@ -23,9 +23,10 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
-import org.apache.spark.sql.types.MetadataBuilder
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.{IntegerType, MetadataBuilder}
 
-class RemoveRedundantAliasAndProjectSuite extends PlanTest with PredicateHelper {
+class RemoveRedundantAliasAndProjectSuite extends PlanTest {
 
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches = Batch(
@@ -38,14 +39,14 @@ class RemoveRedundantAliasAndProjectSuite extends PlanTest with PredicateHelper 
 
   test("all expressions in project list are aliased child output") {
     val relation = LocalRelation($"a".int, $"b".int)
-    val query = relation.select($"a" as Symbol("a"), $"b" as Symbol("b")).analyze
+    val query = relation.select($"a" as "a", $"b" as "b").analyze
     val optimized = Optimize.execute(query)
     comparePlans(optimized, relation)
   }
 
   test("all expressions in project list are aliased child output but with different order") {
     val relation = LocalRelation($"a".int, $"b".int)
-    val query = relation.select($"b" as Symbol("b"), $"a" as Symbol("a")).analyze
+    val query = relation.select($"b" as "b", $"a" as "a").analyze
     val optimized = Optimize.execute(query)
     val expected = relation.select($"b", $"a").analyze
     comparePlans(optimized, expected)
@@ -53,14 +54,14 @@ class RemoveRedundantAliasAndProjectSuite extends PlanTest with PredicateHelper 
 
   test("some expressions in project list are aliased child output") {
     val relation = LocalRelation($"a".int, $"b".int)
-    val query = relation.select($"a" as Symbol("a"), $"b").analyze
+    val query = relation.select($"a" as "a", $"b").analyze
     val optimized = Optimize.execute(query)
     comparePlans(optimized, relation)
   }
 
   test("some expressions in project list are aliased child output but with different order") {
     val relation = LocalRelation($"a".int, $"b".int)
-    val query = relation.select($"b" as Symbol("b"), $"a").analyze
+    val query = relation.select($"b" as "b", $"a").analyze
     val optimized = Optimize.execute(query)
     val expected = relation.select($"b", $"a").analyze
     comparePlans(optimized, expected)
@@ -68,7 +69,7 @@ class RemoveRedundantAliasAndProjectSuite extends PlanTest with PredicateHelper 
 
   test("some expressions in project list are not Alias or Attribute") {
     val relation = LocalRelation($"a".int, $"b".int)
-    val query = relation.select($"a" as Symbol("a"), $"b" + 1).analyze
+    val query = relation.select($"a" as "a", $"b" + 1).analyze
     val optimized = Optimize.execute(query)
     val expected = relation.select($"a", $"b" + 1).analyze
     comparePlans(optimized, expected)
@@ -85,9 +86,9 @@ class RemoveRedundantAliasAndProjectSuite extends PlanTest with PredicateHelper 
 
   test("remove redundant project with self-join") {
     val relation = LocalRelation($"a".int)
-    val fragment = relation.select($"a" as Symbol("a"))
-    val query = fragment.select($"a" as Symbol("a"))
-      .join(fragment.select($"a" as Symbol("a"))).analyze
+    val fragment = relation.select($"a" as "a")
+    val query = fragment.select($"a" as "a")
+      .join(fragment.select($"a" as "a")).analyze
     val optimized = Optimize.execute(query)
     val expected = relation.join(relation).analyze
     comparePlans(optimized, expected)
@@ -96,16 +97,16 @@ class RemoveRedundantAliasAndProjectSuite extends PlanTest with PredicateHelper 
   test("alias removal should not break after push project through union") {
     val r1 = LocalRelation($"a".int)
     val r2 = LocalRelation($"b".int)
-    val query = r1.select($"a" as Symbol("a"))
-      .union(r2.select($"b" as Symbol("b"))).select($"a").analyze
+    val query = r1.select($"a" as "a")
+      .union(r2.select($"b" as "b")).select($"a").analyze
     val optimized = Optimize.execute(query)
-    val expected = r1.union(r2)
+    val expected = r1.select($"a" as "a").union(r2).analyze
     comparePlans(optimized, expected)
   }
 
   test("remove redundant alias from aggregate") {
     val relation = LocalRelation($"a".int, $"b".int)
-    val query = relation.groupBy($"a" as Symbol("a"))($"a" as Symbol("a"), sum($"b")).analyze
+    val query = relation.groupBy($"a" as "a")($"a" as "a", sum($"b")).analyze
     val optimized = Optimize.execute(query)
     val expected = relation.groupBy($"a")($"a", sum($"b")).analyze
     comparePlans(optimized, expected)
@@ -113,7 +114,7 @@ class RemoveRedundantAliasAndProjectSuite extends PlanTest with PredicateHelper 
 
   test("remove redundant alias from window") {
     val relation = LocalRelation($"a".int, $"b".int)
-    val query = relation.window(Seq($"b" as Symbol("b")), Seq($"a" as Symbol("a")), Seq()).analyze
+    val query = relation.window(Seq($"b" as "b"), Seq($"a" as "a"), Seq()).analyze
     val optimized = Optimize.execute(query)
     val expected = relation.window(Seq($"b"), Seq($"a"), Seq()).analyze
     comparePlans(optimized, expected)
@@ -129,5 +130,143 @@ class RemoveRedundantAliasAndProjectSuite extends PlanTest with PredicateHelper 
       relation.select($"a" as "a", $"b").where($"b" < 10).select($"a").analyze,
       correlated = false)
     comparePlans(optimized, expected)
+  }
+
+  test("SPARK-46640: do not remove outer references from a subquery expression") {
+    val a = $"a".int
+    val a_alias = Alias(a, "a")()
+    val a_alias_attr = a_alias.toAttribute
+    val b = $"b".int
+
+    // The original input query
+    //  Filter exists [a#1 && (a#1 = b#2)]
+    //  :  +- LocalRelation <empty>, [b#2]
+    //    +- Project [a#0 AS a#1]
+    //    +- LocalRelation <empty>, [a#0]
+    val query = Filter(
+      Exists(
+        LocalRelation(b),
+        outerAttrs = Seq(a_alias_attr),
+        joinCond = Seq(EqualTo(a_alias_attr, b))
+      ),
+      Project(Seq(a_alias), LocalRelation(a))
+    )
+
+    // The alias would not be removed if excluding subquery references is enabled.
+    val expectedWhenExcluded = query
+
+    // The alias would have been removed if excluding subquery references is disabled.
+    //  Filter exists [a#0 && (a#0 = b#2)]
+    //  :  +- LocalRelation <empty>, [b#2]
+    //    +- LocalRelation <empty>, [a#0]
+    val expectedWhenNotExcluded = Filter(
+      Exists(
+        LocalRelation(b),
+        outerAttrs = Seq(a),
+        joinCond = Seq(EqualTo(a, b))
+      ),
+      LocalRelation(a)
+    )
+
+    withSQLConf(SQLConf.EXCLUDE_SUBQUERY_EXP_REFS_FROM_REMOVE_REDUNDANT_ALIASES.key -> "true") {
+      val optimized = Optimize.execute(query)
+      comparePlans(optimized, expectedWhenExcluded)
+    }
+
+    withSQLConf(SQLConf.EXCLUDE_SUBQUERY_EXP_REFS_FROM_REMOVE_REDUNDANT_ALIASES.key -> "false") {
+      val optimized = Optimize.execute(query)
+      comparePlans(optimized, expectedWhenNotExcluded)
+    }
+  }
+
+  test("SPARK-46640: exclude outer references accounts for children of plan expression") {
+    val a = $"a".int
+    val a_alias = Alias(a, "a")()
+    val a_alias_attr = a_alias.toAttribute
+
+    // The original input query
+    //  Project [CASE WHEN exists#2 [a#1 && (a#1 = a#0)] THEN 1 ELSE 2 END AS result#3]
+    //  :  +- LocalRelation <empty>, [a#0]
+    //  +- Project [a#0 AS a#1]
+    //    +- LocalRelation <empty>, [a#0]
+    // The subquery expression (`exists#2`) is wrapped in a CaseWhen and an Alias.
+    // Without the fix on excluding outer references, the rewritten plan would have been:
+    //  Project [CASE WHEN exists#2 [a#0 && (a#0 = a#0)] THEN 1 ELSE 2 END AS result#3]
+    //  :  +- LocalRelation <empty>, [a#0]
+    //  +- LocalRelation <empty>, [a#0]
+    // This plan would then fail later with the error -- conflicting a#0 in join condition.
+
+    val query = Project(Seq(
+      Alias(
+        CaseWhen(Seq((
+          Exists(
+            LocalRelation(a),
+            outerAttrs = Seq(a_alias_attr),
+            joinCond = Seq(EqualTo(a_alias_attr, a))
+          ), Literal(1))),
+          Some(Literal(2))),
+        "result"
+      )()),
+      Project(Seq(a_alias), LocalRelation(a))
+    )
+
+    // The alias would not be removed if excluding subquery references is enabled.
+    val expectedWhenExcluded = query
+
+    // The alias would be removed and we would have conflicting expression ID(s) in the join cond
+    val expectedWhenNotEnabled = Project(Seq(
+      Alias(
+        CaseWhen(Seq((
+          Exists(
+            LocalRelation(a),
+            outerAttrs = Seq(a),
+            joinCond = Seq(EqualTo(a, a))
+          ), Literal(1))),
+          Some(Literal(2))),
+        "result"
+      )()),
+      LocalRelation(a)
+    )
+
+    withSQLConf(SQLConf.EXCLUDE_SUBQUERY_EXP_REFS_FROM_REMOVE_REDUNDANT_ALIASES.key -> "true") {
+      val optimized = Optimize.execute(query)
+      comparePlans(optimized, expectedWhenExcluded)
+    }
+
+    withSQLConf(SQLConf.EXCLUDE_SUBQUERY_EXP_REFS_FROM_REMOVE_REDUNDANT_ALIASES.key -> "false") {
+      val optimized = Optimize.execute(query)
+      comparePlans(optimized, expectedWhenNotEnabled)
+    }
+  }
+
+  test("SPARK-53308: Don't remove aliases in RemoveRedundantAliases that would cause duplicates") {
+    val exprId = NamedExpression.newExprId
+    val attribute = AttributeReference("attr", IntegerType)(exprId = exprId)
+    val project = Project(
+      Seq(
+        Alias(attribute, "attr")(),
+        attribute
+      ),
+      LocalRelation(attribute)
+    )
+    val projectWithoutAlias =
+      Project(
+        Seq(
+          attribute,
+          attribute
+        ),
+        LocalRelation(attribute)
+      )
+    val union = Union(Seq(project, project))
+
+    withSQLConf(SQLConf.UNION_IS_RESOLVED_WHEN_DUPLICATES_PER_CHILD_RESOLVED.key -> "true") {
+      val optimized = Optimize.execute(union)
+      comparePlans(union, optimized)
+    }
+
+    withSQLConf(SQLConf.UNION_IS_RESOLVED_WHEN_DUPLICATES_PER_CHILD_RESOLVED.key -> "false") {
+      val optimized = Optimize.execute(union)
+      comparePlans(optimized, Union(Seq(project, projectWithoutAlias)))
+    }
   }
 }

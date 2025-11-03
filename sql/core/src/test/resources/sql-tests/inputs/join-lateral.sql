@@ -2,6 +2,8 @@
 
 CREATE VIEW t1(c1, c2) AS VALUES (0, 1), (1, 2);
 CREATE VIEW t2(c1, c2) AS VALUES (0, 2), (0, 3);
+CREATE VIEW t3(c1, c2) AS VALUES (0, ARRAY(0, 1)), (1, ARRAY(2)), (2, ARRAY()), (null, ARRAY(4));
+CREATE VIEW t4(c1, c2) AS VALUES (0, 1), (0, 2), (1, 1), (1, 3);
 
 -- lateral join with single column select
 SELECT * FROM t1, LATERAL (SELECT c1);
@@ -43,6 +45,9 @@ SELECT * FROM t1, LATERAL (SELECT c2 FROM t2 WHERE t1.c1 = t2.c1);
 
 -- lateral join with correlated non-equality predicates
 SELECT * FROM t1, LATERAL (SELECT c2 FROM t2 WHERE t1.c2 < t2.c2);
+
+-- SPARK-36114: lateral join with aggregation and correlated non-equality predicates
+SELECT * FROM t1, LATERAL (SELECT max(c2) AS m FROM t2 WHERE t1.c2 < t2.c2);
 
 -- lateral join can reference preceding FROM clause items
 SELECT * FROM t1 JOIN t2 JOIN LATERAL (SELECT t1.c2 + t2.c2);
@@ -95,6 +100,11 @@ SELECT * FROM t1 WHERE c1 = (SELECT MIN(a) FROM t2, LATERAL (SELECT c1 AS a));
 
 -- lateral join inside correlated subquery
 SELECT * FROM t1 WHERE c1 = (SELECT MIN(a) FROM t2, LATERAL (SELECT c1 AS a) WHERE c1 = t1.c1);
+
+-- join condition has a correlated reference to the left side of the lateral join
+SELECT * FROM t1 JOIN lateral (SELECT * FROM t2 JOIN t4 ON t2.c1 = t4.c1 AND t2.c1 = t1.c1);
+SELECT * FROM t1 JOIN lateral (SELECT * FROM t2 JOIN t4 ON t2.c1 != t4.c1 AND t2.c1 != t1.c1);
+SELECT * FROM t1 LEFT JOIN lateral (SELECT * FROM t4 LEFT JOIN t2 ON t2.c1 = t4.c1 AND t2.c1 = t1.c1);
 
 -- COUNT bug with a single aggregate expression
 SELECT * FROM t1, LATERAL (SELECT COUNT(*) cnt FROM t2 WHERE c1 = t1.c1);
@@ -167,6 +177,383 @@ WITH cte1 AS (
 )
 SELECT * FROM cte2;
 
+-- SPARK-41441: lateral join with outer references in Generate
+SELECT * FROM t3 JOIN LATERAL (SELECT EXPLODE(c2));
+SELECT * FROM t3 JOIN LATERAL (SELECT EXPLODE_OUTER(c2));
+SELECT * FROM t3 JOIN LATERAL (SELECT EXPLODE(c2)) t(c3) ON c1 = c3;
+SELECT * FROM t3 LEFT JOIN LATERAL (SELECT EXPLODE(c2)) t(c3) ON c1 = c3;
+
+-- Window func
+SELECT * FROM t1 JOIN LATERAL
+  (SELECT sum(t2.c2) over (order by t2.c1)
+  FROM   t2
+  WHERE  t2.c1 >= t1.c1);
+
+-- lateral join with union
+SELECT * FROM t1 JOIN LATERAL
+  (SELECT t2.c2
+  FROM   t2
+  WHERE  t2.c1 = t1.c1
+  UNION ALL
+  SELECT t4.c2
+  FROM   t4
+  WHERE  t4.c1 = t1.c1);
+
+SELECT * FROM t1 JOIN LATERAL
+  (SELECT t2.c2
+  FROM   t2
+  WHERE  t2.c1 = t1.c1
+  UNION DISTINCT
+  SELECT t4.c2
+  FROM   t4
+  WHERE  t4.c1 > t1.c2);
+
+-- INTERSECT
+SELECT * FROM t1 JOIN LATERAL
+  (SELECT t2.c2
+  FROM   t2
+  WHERE  t2.c1 = t1.c1
+  INTERSECT ALL
+  SELECT t4.c2
+  FROM   t4
+  WHERE  t4.c1 = t1.c1);
+
+SELECT * FROM t1 JOIN LATERAL
+  (SELECT t2.c2
+  FROM   t2
+  WHERE  t2.c1 = t1.c1
+  INTERSECT DISTINCT
+  SELECT t4.c2
+  FROM   t4
+  WHERE  t4.c1 > t1.c2);
+
+-- EXCEPT
+SELECT * FROM t1 JOIN LATERAL
+  (SELECT t2.c2
+  FROM   t2
+  WHERE  t2.c1 = t1.c1
+  EXCEPT ALL
+  SELECT t4.c2
+  FROM   t4
+  WHERE  t4.c1 = t1.c1);
+
+SELECT * FROM t1 JOIN LATERAL
+  (SELECT t2.c2
+  FROM   t2
+  WHERE  t2.c1 = t1.c1
+  EXCEPT DISTINCT
+  SELECT t4.c2
+  FROM   t4
+  WHERE  t4.c1 > t1.c2);
+
+-- COUNT bug with UNION in subquery
+SELECT * FROM t1 JOIN LATERAL
+  (SELECT COUNT(t2.c2)
+  FROM   t2
+  WHERE  t2.c1 = t1.c1
+  UNION DISTINCT
+  SELECT COUNT(t4.c2)
+  FROM   t4
+  WHERE  t4.c1 > t1.c2);
+
+-- Both correlated and uncorrelated children
+SELECT * FROM t1 JOIN LATERAL
+  (SELECT t2.c1, t2.c2
+  FROM   t2
+  WHERE  t2.c1 = t1.c1
+  UNION ALL
+  SELECT t4.c2, t4.c1
+  FROM   t4
+  WHERE  t4.c1 = t1.c1);
+
+SELECT * FROM t1 JOIN LATERAL
+  (SELECT t2.c2
+  FROM   t2
+  WHERE  t2.c1 = t1.c1 and t2.c2 >= t1.c2
+  UNION ALL
+  SELECT t4.c2
+  FROM   t4);
+
+SELECT * FROM t1 JOIN LATERAL
+  (SELECT t2.c2
+  FROM   t2
+  WHERE  t2.c1 = t1.c1
+  UNION ALL
+  SELECT t4.c2
+  FROM   t4);
+
+SELECT * FROM t1 JOIN LATERAL
+  (SELECT t2.c2
+  FROM   t2
+  WHERE  t2.c1 = t1.c1 and t2.c2 >= t1.c2
+  UNION DISTINCT
+  SELECT t4.c2
+  FROM   t4);
+
+SELECT * FROM t1 JOIN LATERAL
+  (SELECT t2.c2
+  FROM   t2
+  WHERE  t2.c1 = t1.c1 and t2.c2 >= t1.c2
+  INTERSECT ALL
+  SELECT t4.c2
+  FROM   t4);
+  
+SELECT * FROM t1 JOIN LATERAL
+  (SELECT t2.c2
+  FROM   t2
+  WHERE  t2.c1 = t1.c1 and t2.c2 >= t1.c2
+  INTERSECT DISTINCT
+  SELECT t4.c2
+  FROM   t4);
+
+SELECT * FROM t1 JOIN LATERAL
+  (SELECT t2.c2
+  FROM   t2
+  WHERE  t2.c1 = t1.c1 and t2.c2 >= t1.c2
+  EXCEPT ALL
+  SELECT t4.c2
+  FROM   t4);
+  
+SELECT * FROM t1 JOIN LATERAL
+  (SELECT t2.c2
+  FROM   t2
+  WHERE  t2.c1 = t1.c1 and t2.c2 >= t1.c2
+  EXCEPT DISTINCT
+  SELECT t4.c2
+  FROM   t4);
+
+-- Correlation under group by
+SELECT * FROM t1 JOIN LATERAL
+  (SELECT t2.c2
+  FROM   t2
+  WHERE  t2.c1 = t1.c1
+  GROUP BY t2.c2
+  UNION ALL
+  SELECT t4.c2
+  FROM   t4
+  WHERE  t4.c1 > t1.c2
+  GROUP BY t4.c2);
+
+-- Correlation in group by
+SELECT * FROM t1 JOIN LATERAL
+  (SELECT t2.c1 - t1.c1
+  FROM   t2
+  GROUP BY t2.c1 - t1.c1
+  UNION ALL
+  SELECT t4.c2
+  FROM   t4
+  WHERE  t4.c1 > t1.c2
+  GROUP BY t4.c2);
+
+-- Window func - unsupported
+SELECT * FROM t1 JOIN LATERAL
+  (SELECT sum(t2.c2) over (order by t2.c1)
+  FROM   t2
+  WHERE  t2.c1 >= t1.c1
+  UNION ALL
+  SELECT t4.c2
+  FROM   t4);
+
+-- lateral join under union
+SELECT * FROM t1 JOIN LATERAL (SELECT * FROM t2 WHERE t2.c1 = t1.c1)
+UNION ALL
+SELECT * FROM t1 JOIN t4;
+
+-- union above and below lateral join
+SELECT * FROM t1 JOIN LATERAL
+  (SELECT t2.c2
+  FROM   t2
+  WHERE  t2.c1 = t1.c1
+  UNION ALL
+  SELECT t4.c2
+  FROM   t4
+  WHERE  t4.c1 = t1.c1)
+UNION ALL
+SELECT * FROM t2 JOIN LATERAL
+  (SELECT t1.c2
+  FROM   t1
+  WHERE  t2.c1 <= t1.c1
+  UNION ALL
+  SELECT t4.c2
+  FROM   t4
+  WHERE  t4.c1 < t2.c1);
+
+-- Combinations of set ops
+SELECT * FROM t1 JOIN LATERAL
+  ((SELECT t2.c2
+  FROM   t2
+  WHERE  t2.c1 = t1.c1
+  EXCEPT DISTINCT
+  SELECT t4.c2
+  FROM   t4
+  WHERE  t4.c1 > t1.c2)
+  UNION DISTINCT
+  (SELECT t4.c1
+  FROM   t4
+  WHERE  t4.c1 <= t1.c2
+  INTERSECT ALL
+  SELECT t4.c2
+  FROM   t4
+  WHERE  t4.c1 <> t1.c1)
+);
+
+SELECT * FROM t1 JOIN LATERAL
+  ((SELECT t2.c2
+  FROM   t2
+  WHERE  t2.c1 = t1.c1
+  UNION ALL
+  SELECT t4.c2
+  FROM   t4
+  WHERE  t4.c1 > t1.c2)
+  INTERSECT DISTINCT
+  (SELECT t4.c1
+  FROM   t4
+  WHERE  t4.c1 <= t1.c2
+  EXCEPT ALL
+  SELECT t4.c2
+  FROM   t4
+  WHERE  t4.c1 <> t1.c1)
+);
+
+-- Semi join with correlation on left side - supported
+SELECT * FROM t1 JOIN LATERAL (SELECT sum(c1) FROM
+  (SELECT *
+  FROM   t2
+  WHERE  t2.c1 <= t1.c1) lhs
+  LEFT SEMI JOIN
+  (SELECT *
+  FROM   t4) rhs
+  ON lhs.c1 <=> rhs.c1 and lhs.c2 <=> rhs.c2
+);
+
+-- Semi join with correlation on right side - unsupported
+SELECT * FROM t1 JOIN LATERAL (SELECT sum(c1) FROM
+  (SELECT *
+  FROM   t2
+  WHERE  t2.c1 <= t1.c1) lhs
+  LEFT SEMI JOIN
+  (SELECT *
+  FROM   t4
+  WHERE t4.c1 > t1.c2) rhs
+  ON lhs.c1 <=> rhs.c1 and lhs.c2 <=> rhs.c2
+);
+
+-- SPARK-41961: lateral join with table-valued functions
+SELECT * FROM LATERAL EXPLODE(ARRAY(1, 2));
+SELECT * FROM t1, LATERAL RANGE(3);
+SELECT * FROM t1, LATERAL EXPLODE(ARRAY(c1, c2)) t2(c3);
+SELECT * FROM t3, LATERAL EXPLODE(c2) t2(v);
+SELECT * FROM t3, LATERAL EXPLODE_OUTER(c2) t2(v);
+SELECT * FROM EXPLODE(ARRAY(1, 2)) t(v), LATERAL (SELECT v + 1);
+
+-- lateral join with table-valued functions and join conditions
+SELECT * FROM t1 JOIN LATERAL EXPLODE(ARRAY(c1, c2)) t(c3) ON t1.c1 = c3;
+SELECT * FROM t3 JOIN LATERAL EXPLODE(c2) t(c3) ON t3.c1 = c3;
+SELECT * FROM t3 LEFT JOIN LATERAL EXPLODE(c2) t(c3) ON t3.c1 = c3;
+
+-- lateral join with table-valued functions in lateral subqueries
+SELECT * FROM t1, LATERAL (SELECT * FROM EXPLODE(ARRAY(c1, c2)));
+SELECT * FROM t1, LATERAL (SELECT t1.c1 + c3 FROM EXPLODE(ARRAY(c1, c2)) t(c3));
+SELECT * FROM t1, LATERAL (SELECT t1.c1 + c3 FROM EXPLODE(ARRAY(c1, c2)) t(c3) WHERE t1.c2 > 1);
+SELECT * FROM t1, LATERAL (SELECT * FROM EXPLODE(ARRAY(c1, c2)) l(x) JOIN EXPLODE(ARRAY(c2, c1)) r(y) ON x = y);
+
+-- SPARK-42119: lateral join with table-valued functions inline and inline_outer;
+CREATE OR REPLACE TEMPORARY VIEW array_struct(id, arr) AS VALUES
+    (1, ARRAY(STRUCT(1, 'a'), STRUCT(2, 'b'))),
+    (2, ARRAY()),
+    (3, ARRAY(STRUCT(3, 'c')));
+SELECT * FROM t1, LATERAL INLINE(ARRAY(STRUCT(1, 'a'), STRUCT(2, 'b')));
+SELECT c1, t.* FROM t1, LATERAL INLINE(ARRAY(STRUCT(1, 'a'), STRUCT(2, 'b'))) t(x, y);
+SELECT * FROM array_struct JOIN LATERAL INLINE(arr);
+SELECT * FROM array_struct LEFT JOIN LATERAL INLINE(arr) t(k, v) ON id = k;
+SELECT * FROM array_struct JOIN LATERAL INLINE_OUTER(arr);
+DROP VIEW array_struct;
+
+-- lateral join with table-valued functions posexplode and posexplode_outer
+SELECT * FROM LATERAL posexplode(ARRAY(1, 2));
+SELECT * FROM t1, LATERAL posexplode(ARRAY(c1, c2)) t2(pos, c3);
+SELECT * FROM t1 JOIN LATERAL posexplode(ARRAY(c1, c2)) t(pos, c3) ON t1.c1 = c3;
+SELECT * FROM t3, LATERAL posexplode(c2) t2(pos, v);
+SELECT * FROM t3 JOIN LATERAL posexplode(c2) t(pos, c3) ON t3.c1 = c3;
+SELECT * FROM t3, LATERAL posexplode_outer(c2) t2(pos, v);
+SELECT * FROM t3 LEFT JOIN LATERAL posexplode(c2) t(pos, c3) ON t3.c1 = c3;
+SELECT * FROM t3 LEFT JOIN LATERAL posexplode_outer(c2) t(pos, c3) ON t3.c1 = c3;
+
+-- lateral join with table-valued function json_tuple
+CREATE OR REPLACE TEMP VIEW json_table(key, jstring) AS VALUES
+    ('1', '{"f1": "1", "f2": "2", "f3": 3, "f5": 5.23}'),
+    ('2', '{"f1": "1", "f3": "3", "f2": 2, "f4": 4.01}'),
+    ('3', '{"f1": 3, "f4": "4", "f3": "3", "f2": 2, "f5": 5.01}'),
+    ('4', cast(null as string)),
+    ('5', '{"f1": null, "f5": ""}'),
+    ('6', '[invalid JSON string]');
+SELECT t1.key, t2.* FROM json_table t1, LATERAL json_tuple(t1.jstring, 'f1', 'f2', 'f3', 'f4', 'f5') t2;
+SELECT t1.key, t2.* FROM json_table t1, LATERAL json_tuple(t1.jstring, 'f1', 'f2', 'f3', 'f4', 'f5') t2 WHERE t2.c0 IS NOT NULL;
+SELECT t1.key, t2.* FROM json_table t1
+  JOIN LATERAL json_tuple(t1.jstring, 'f1', 'f2', 'f3', 'f4', 'f5') t2(f1, f2, f3, f4, f5)
+  ON t1.key = t2.f1;
+SELECT t1.key, t2.* FROM json_table t1
+  LEFT JOIN LATERAL json_tuple(t1.jstring, 'f1', 'f2', 'f3', 'f4', 'f5') t2(f1, f2, f3, f4, f5)
+  ON t1.key = t2.f1;
+DROP VIEW json_table;
+
+-- lateral join with table-valued function stack
+SELECT t.* FROM t1, LATERAL stack(2, 'Key', c1, 'Value', c2) t;
+SELECT t.* FROM t1 JOIN LATERAL stack(1, c1, c2) t(x, y);
+SELECT t.* FROM t1 JOIN t3 ON t1.c1 = t3.c1 JOIN LATERAL stack(1, t1.c2, t3.c2) t;
+-- expect error
+SELECT t.* FROM t1, LATERAL stack(c1, c2);
+
+-- SPARK-36191: ORDER BY/LIMIT in the correlated subquery
+select * from t1 join lateral (select * from t2 where t1.c1 = t2.c1 and t1.c2 < t2.c2 limit 1);
+
+select * from t1 join lateral (select * from t4 where t1.c1 <= t4.c1 order by t4.c2 limit 10);
+
+select * from t1 join lateral (select c1, min(c2) as m
+                               from t2 where t1.c1 = t2.c1 and t1.c2 < t2.c2
+                               group by t2.c1
+                               order by m);
+
+select * from t1 join lateral (select c1, min(c2) as m
+                               from t4 where t1.c1 = t4.c1
+                               group by t4.c1
+                               limit 1);
+
+select * from t1 join lateral
+  ((select t4.c2 from t4 where t1.c1 <= t4.c1 order by t4.c2 limit 1)
+   union all
+   (select t4.c1 from t4 where t1.c1 = t4.c1 order by t4.c1 limit 3));
+
+select * from t1 join lateral
+  (select * from
+   ((select t4.c2 as t from t4 where t1.c1 <= t4.c1)
+   union all
+   (select t4.c1 as t from t4 where t1.c1 = t4.c1)) as foo
+   order by foo.t limit 5);
+
+
+select 1
+from t1 as t_outer
+left join
+ lateral(
+     select b1,b2
+     from
+     (
+         select
+             t2.c1 as b1,
+             1 as b2
+         from t2
+         union
+         select t_outer.c1 as b1,
+                null as b2
+     ) as t_inner
+     where (t_inner.b1 < t_outer.c2  or t_inner.b1 is null)
+      and  t_inner.b1 = t_outer.c1
+     order by t_inner.b1,t_inner.b2 desc limit 1
+ ) as lateral_table;
+
 -- clean up
 DROP VIEW t1;
 DROP VIEW t2;
+DROP VIEW t3;
+DROP VIEW t4;

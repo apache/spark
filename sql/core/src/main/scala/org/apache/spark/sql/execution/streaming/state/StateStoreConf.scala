@@ -17,15 +17,30 @@
 
 package org.apache.spark.sql.execution.streaming.state
 
+import org.apache.spark.sql.execution.streaming.operators.stateful.StatefulOperatorStateInfo
 import org.apache.spark.sql.internal.SQLConf
 
 /** A class that contains configuration parameters for [[StateStore]]s. */
 class StateStoreConf(
+    // Should be private because it could be null under serialization (due to
+    // the transient annotation)
     @transient private val sqlConf: SQLConf,
-    extraOptions: Map[String, String] = Map.empty)
+    val extraOptions: Map[String, String] = Map.empty)
   extends Serializable {
 
   def this() = this(new SQLConf)
+
+  /**
+   * Size of MaintenanceThreadPool to perform maintenance tasks for StateStore
+   */
+  val numStateStoreMaintenanceThreads: Int = sqlConf.numStateStoreMaintenanceThreads
+
+  /**
+   * Timeout for state store maintenance operations to complete on shutdown
+   */
+  val stateStoreMaintenanceShutdownTimeout: Long = sqlConf.stateStoreMaintenanceShutdownTimeout
+
+  val stateStoreMaintenanceProcessingTimeout: Long = sqlConf.stateStoreMaintenanceProcessingTimeout
 
   /**
    * Minimum number of delta files in a chain after which HDFSBackedStateStore will
@@ -36,8 +51,19 @@ class StateStoreConf(
   /** Minimum versions a State Store implementation should retain to allow rollbacks */
   val minVersionsToRetain: Int = sqlConf.minBatchesToRetain
 
+  /**
+   * Minimum number of stale checkpoint versions that need to be present in the DFS
+   * checkpoint directory for old state checkpoint version deletion to be invoked.
+   * This is to amortize the cost of discovering and deleting old checkpoint versions.
+   */
+  val minVersionsToDelete: Long =
+    Math.round(sqlConf.ratioExtraSpaceAllowedInCheckpoint * sqlConf.minBatchesToRetain)
+
   /** Maximum count of versions a State Store implementation should retain in memory */
   val maxVersionsToRetainInMemory: Int = sqlConf.maxBatchesToRetainInMemory
+
+  /** Maximum number of versions to delete per maintenance operation */
+  val maxVersionsToDeletePerMaintenance: Int = sqlConf.maxVersionsToDeletePerMaintenance
 
   /**
    * Optional fully qualified name of the subclass of [[StateStoreProvider]]
@@ -48,9 +74,24 @@ class StateStoreConf(
   /** Whether validate the underlying format or not. */
   val formatValidationEnabled: Boolean = sqlConf.stateStoreFormatValidationEnabled
 
-  /** Whether validate the value format when the format invalidation enabled. */
+  /**
+   * Whether to validate StateStore commits for ForeachBatch sinks to ensure all partitions
+   * are processed. This helps detect incomplete processing due to operations like show()
+   * or limit().
+   */
+  val commitValidationEnabled = sqlConf.stateStoreCommitValidationEnabled
+
+  /**
+   * Whether to validate the value side. This config is applied to both validators as below:
+   *
+   * - whether to validate the value format when the format validation is enabled.
+   * - whether to validate the value schema when the state schema check is enabled.
+   */
   val formatValidationCheckValue: Boolean =
     extraOptions.getOrElse(StateStoreConf.FORMAT_VALIDATION_CHECK_VALUE_CONFIG, "true") == "true"
+
+  /** Whether to skip null values for hash based stream-stream joins. */
+  val skipNullsForStreamStreamJoins: Boolean = sqlConf.stateStoreSkipNullsForStreamStreamJoins
 
   /** The compression codec used to compress delta and snapshot files. */
   val compressionCodec: String = sqlConf.stateStoreCompressionCodec
@@ -61,13 +102,33 @@ class StateStoreConf(
   /** The interval of maintenance tasks. */
   val maintenanceInterval = sqlConf.streamingMaintenanceInterval
 
+  /** The interval of maintenance tasks. */
+  val stateStoreEncodingFormat = sqlConf.stateStoreEncodingFormat
+
+  /**
+   * When creating new state store checkpoint, which format version to use.
+   */
+  val enableStateStoreCheckpointIds =
+    StatefulOperatorStateInfo.enableStateStoreCheckpointIds(sqlConf)
+
+  /**
+   * Whether the coordinator is reporting state stores trailing behind in snapshot uploads.
+   */
+  val reportSnapshotUploadLag: Boolean =
+    sqlConf.stateStoreCoordinatorReportSnapshotUploadLag
+
+  /** Whether to unload the store on task completion. */
+  val unloadOnCommit = sqlConf.stateStoreUnloadOnCommit
+
+  /** The version of the state store checkpoint format. */
+  val stateStoreCheckpointFormatVersion: Int = sqlConf.stateStoreCheckpointFormatVersion
+
   /**
    * Additional configurations related to state store. This will capture all configs in
-   * SQLConf that start with `spark.sql.streaming.stateStore.` and extraOptions for a specific
-   * operator.
+   * SQLConf that start with `spark.sql.streaming.stateStore.`
    */
-  val confs: Map[String, String] =
-    sqlConf.getAllConfs.filter(_._1.startsWith("spark.sql.streaming.stateStore.")) ++ extraOptions
+  val sqlConfs: Map[String, String] =
+    sqlConf.getAllConfs.filter(_._1.startsWith("spark.sql.streaming.stateStore."))
 }
 
 object StateStoreConf {

@@ -19,14 +19,15 @@ package org.apache.spark.sql.execution.dynamicpruning
 
 import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.optimizer.JoinSelectionHelper
 import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
-import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.connector.read.SupportsRuntimeFiltering
+import org.apache.spark.sql.connector.read.SupportsRuntimeV2Filtering
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * Dynamic partition pruning optimization is performed based on the type and
@@ -49,7 +50,7 @@ import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
  *    subquery query twice, we keep the duplicated subquery
  *    (3) otherwise, we drop the subquery.
  */
-object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper {
+object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with JoinSelectionHelper {
 
   /**
    * Searches for a table scan that can be filtered for a given column in a logical plan.
@@ -78,8 +79,9 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper {
         } else {
           None
         }
-      case (resExp, r @ DataSourceV2ScanRelation(_, scan: SupportsRuntimeFiltering, _, _)) =>
-        val filterAttrs = V2ExpressionUtils.resolveRefs[Attribute](scan.filterAttributes, r)
+      case (resExp, r @ DataSourceV2ScanRelation(_, scan: SupportsRuntimeV2Filtering, _, _, _)) =>
+        val filterAttrs = V2ExpressionUtils.resolveRefs[Attribute](
+          scan.filterAttributes.toImmutableArraySeq, r)
         if (resExp.references.subsetOf(AttributeSet(filterAttrs))) {
           Some(r)
         } else {
@@ -101,13 +103,16 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper {
   private def insertPredicate(
       pruningKey: Expression,
       pruningPlan: LogicalPlan,
-      filteringKey: Expression,
+      filteringKeys: Seq[Expression],
       filteringPlan: LogicalPlan,
       joinKeys: Seq[Expression],
       partScan: LogicalPlan): LogicalPlan = {
     val reuseEnabled = conf.exchangeReuseEnabled
-    val index = joinKeys.indexOf(filteringKey)
-    lazy val hasBenefit = pruningHasBenefit(pruningKey, partScan, filteringKey, filteringPlan)
+    require(filteringKeys.size == 1, "DPP Filters should only have a single broadcasting key " +
+      "since there are no usage for multiple broadcasting keys at the moment.")
+    val indices = Seq(joinKeys.indexOf(filteringKeys.head))
+    lazy val hasBenefit = pruningHasBenefit(
+      pruningKey, partScan, filteringKeys.head, filteringPlan)
     if (reuseEnabled || hasBenefit) {
       // insert a DynamicPruning wrapper to identify the subquery during query planning
       Filter(
@@ -115,7 +120,7 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper {
           pruningKey,
           filteringPlan,
           joinKeys,
-          index,
+          indices,
           conf.dynamicPartitionPruningReuseBroadcastOnly || !hasBenefit),
         pruningPlan)
     } else {
@@ -215,16 +220,6 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper {
     !plan.isStreaming && hasSelectivePredicate(plan)
   }
 
-  private def canPruneLeft(joinType: JoinType): Boolean = joinType match {
-    case Inner | LeftSemi | RightOuter => true
-    case _ => false
-  }
-
-  private def canPruneRight(joinType: JoinType): Boolean = joinType match {
-    case Inner | LeftSemi | LeftOuter => true
-    case _ => false
-  }
-
   private def prune(plan: LogicalPlan): LogicalPlan = {
     plan transformUp {
       // skip this rule if there's already a DPP subquery on the LHS of a join
@@ -263,12 +258,12 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper {
             var filterableScan = getFilterableTableScan(l, left)
             if (filterableScan.isDefined && canPruneLeft(joinType) &&
                 hasPartitionPruningFilter(right)) {
-              newLeft = insertPredicate(l, newLeft, r, right, rightKeys, filterableScan.get)
+              newLeft = insertPredicate(l, newLeft, Seq(r), right, rightKeys, filterableScan.get)
             } else {
               filterableScan = getFilterableTableScan(r, right)
               if (filterableScan.isDefined && canPruneRight(joinType) &&
                   hasPartitionPruningFilter(left) ) {
-                newRight = insertPredicate(r, newRight, l, left, leftKeys, filterableScan.get)
+                newRight = insertPredicate(r, newRight, Seq(l), left, leftKeys, filterableScan.get)
               }
             }
           case _ =>

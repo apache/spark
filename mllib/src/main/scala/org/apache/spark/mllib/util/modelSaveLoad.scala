@@ -26,6 +26,7 @@ import org.json4s.jackson.JsonMethods._
 import org.apache.spark.SparkContext
 import org.apache.spark.annotation.Since
 import org.apache.spark.sql.catalyst.ScalaReflection
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.types.{DataType, StructField, StructType}
 
 /**
@@ -105,7 +106,7 @@ private[mllib] object Loader {
       assert(loadedFields.contains(field.name), s"Unable to parse model data." +
         s"  Expected field with name ${field.name} was missing in loaded schema:" +
         s" ${loadedFields.mkString(", ")}")
-      assert(loadedFields(field.name).sameType(field.dataType),
+      assert(DataTypeUtils.sameType(loadedFields(field.name), field.dataType),
         s"Unable to parse model data.  Expected field $field but found field" +
           s" with different type: ${loadedFields(field.name)}")
     }
@@ -116,7 +117,7 @@ private[mllib] object Loader {
    * @return (class name, version, metadata)
    */
   def loadMetadata(sc: SparkContext, path: String): (String, String, JValue) = {
-    implicit val formats = DefaultFormats
+    implicit val formats: Formats = DefaultFormats
     val metadata = parse(sc.textFile(metadataPath(path)).first())
     val clazz = (metadata \ "class").extract[String]
     val version = (metadata \ "version").extract[String]

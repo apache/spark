@@ -17,11 +17,12 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, Expression}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, Expression, SubqueryExpression}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.rules.RuleId
 import org.apache.spark.sql.catalyst.rules.UnknownRuleId
 import org.apache.spark.sql.catalyst.trees.{AlwaysProcess, CurrentOrigin, TreePatternBits}
+import org.apache.spark.sql.catalyst.trees.TreePattern.PLAN_EXPRESSION
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.util.Utils
 
@@ -155,6 +156,35 @@ trait AnalysisHelper extends QueryPlan[LogicalPlan] { self: LogicalPlan =>
     }
   }
 
+  /**
+   * Similar to [[resolveOperatorsUpWithPruning]], but also applies the given partial function to
+   * all the plans in the subqueries of all nodes. This method is useful when we want to rewrite the
+   * whole plan, including its subqueries, in one go.
+   */
+  def resolveOperatorsUpWithSubqueriesAndPruning(
+      cond: TreePatternBits => Boolean,
+      ruleId: RuleId = UnknownRuleId)(
+      rule: PartialFunction[LogicalPlan, LogicalPlan]): LogicalPlan = {
+    val visit: PartialFunction[LogicalPlan, LogicalPlan] =
+      new PartialFunction[LogicalPlan, LogicalPlan] {
+        override def isDefinedAt(x: LogicalPlan): Boolean = true
+
+        override def apply(plan: LogicalPlan): LogicalPlan = {
+          val transformed = plan.transformExpressionsUpWithPruning(
+            t => t.containsPattern(PLAN_EXPRESSION) && cond(t)
+          ) {
+            case subquery: SubqueryExpression =>
+              val newPlan =
+                subquery.plan.resolveOperatorsUpWithSubqueriesAndPruning(cond, ruleId)(rule)
+              subquery.withNewPlan(newPlan)
+          }
+          rule.applyOrElse[LogicalPlan, LogicalPlan](transformed, identity)
+        }
+      }
+
+    resolveOperatorsUpWithPruning(cond, ruleId)(visit)
+  }
+
   /** Similar to [[resolveOperatorsUp]], but does it top-down. */
   def resolveOperatorsDown(rule: PartialFunction[LogicalPlan, LogicalPlan]): LogicalPlan = {
     resolveOperatorsDownWithPruning(AlwaysProcess.fn, UnknownRuleId)(rule)
@@ -177,10 +207,14 @@ trait AnalysisHelper extends QueryPlan[LogicalPlan] { self: LogicalPlan =>
             self.markRuleAsIneffective(ruleId)
             self
           } else {
+            rewritten_plan.copyTagsFrom(self)
             rewritten_plan
           }
         } else {
-          afterRule.mapChildren(_.resolveOperatorsDownWithPruning(cond, ruleId)(rule))
+          val newPlan = afterRule
+            .mapChildren(_.resolveOperatorsDownWithPruning(cond, ruleId)(rule))
+          newPlan.copyTagsFrom(self)
+          newPlan
         }
       }
     } else {
@@ -241,8 +275,67 @@ trait AnalysisHelper extends QueryPlan[LogicalPlan] { self: LogicalPlan =>
    */
   def resolveExpressionsWithPruning(cond: TreePatternBits => Boolean,
     ruleId: RuleId = UnknownRuleId)(rule: PartialFunction[Expression, Expression]): LogicalPlan = {
+    resolveExpressionsDownWithPruning(cond, ruleId)(rule)
+  }
+
+  /**
+   * Recursively top-down transforms the expressions of a tree, skipping nodes that have already
+   * been analyzed.
+   */
+  def resolveExpressionsDown(r: PartialFunction[Expression, Expression]): LogicalPlan = {
+    resolveExpressionsDownWithPruning(AlwaysProcess.fn, UnknownRuleId)(r)
+  }
+
+  /**
+   * Recursively top-down transforms the expressions of a tree, skipping nodes that have already
+   * been analyzed.
+   *
+   * @param rule   the function used to transform this nodes children.
+   * @param cond   a Lambda expression to prune tree traversals. If `cond.apply` returns false
+   *               on a TreeNode T, skips processing T and its subtree; otherwise, processes
+   *               T and its subtree recursively.
+   * @param ruleId is a unique Id for `rule` to prune unnecessary tree traversals. When it is
+   *               UnknownRuleId, no pruning happens. Otherwise, if `rule` (with id `ruleId`)
+   *               has been marked as in effective on a TreeNode T, skips processing T and its
+   *               subtree. Do not pass it if the rule is not purely functional and reads a
+   *               varying initial state for different invocations.
+   */
+  def resolveExpressionsDownWithPruning(cond: TreePatternBits => Boolean,
+      ruleId: RuleId = UnknownRuleId)(
+      rule: PartialFunction[Expression, Expression]): LogicalPlan = {
     resolveOperatorsWithPruning(cond, ruleId) {
       case p => p.transformExpressionsWithPruning(cond, ruleId)(rule)
+    }
+  }
+
+  /**
+   * Recursively bottom-up transforms the expressions of a tree, skipping nodes that have already
+   * been analyzed.
+   */
+  def resolveExpressionsUp(r: PartialFunction[Expression, Expression]): LogicalPlan = {
+    resolveExpressionsUpWithPruning(AlwaysProcess.fn, UnknownRuleId)(r)
+  }
+
+  /**
+   * Recursively transforms all expressions of all the logical nodes in plan tree
+   * in a bottom-up manner. It applies first to all of its children and then itself (post-order),
+   * skipping nodes that have already been analyzed.
+   *
+   * @param rule   the function used to transform this nodes children.
+   * @param cond   a Lambda expression to prune tree traversals. If `cond.apply` returns false
+   *               on a TreeNode T, skips processing T and its subtree; otherwise, processes
+   *               T and its subtree recursively.
+   * @param ruleId is a unique Id for `rule` to prune unnecessary tree traversals. When it is
+   *               UnknownRuleId, no pruning happens. Otherwise, if `rule` (with id `ruleId`)
+   *               has been marked as in effective on a TreeNode T, skips processing T and its
+   *               subtree. Do not pass it if the rule is not purely functional and reads a
+   *               varying initial state for different invocations.
+   */
+  def resolveExpressionsUpWithPruning(cond: TreePatternBits => Boolean,
+      ruleId: RuleId = UnknownRuleId)(
+      rule: PartialFunction[Expression, Expression]): LogicalPlan = {
+    resolveOperatorsUpWithPruning(cond, ruleId) {
+      case p => p.transformExpressionsUpWithPruning(cond, ruleId)(rule)
     }
   }
 

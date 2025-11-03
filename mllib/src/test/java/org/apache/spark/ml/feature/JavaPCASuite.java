@@ -21,8 +21,8 @@ import java.io.Serializable;
 import java.util.Arrays;
 import java.util.List;
 
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import org.apache.spark.SharedSparkSession;
 import org.apache.spark.api.java.JavaRDD;
@@ -94,7 +94,7 @@ public class JavaPCASuite extends SharedSparkSession {
       Vector calculatedVector = (Vector) r.get(0);
       Vector expectedVector = (Vector) r.get(1);
       for (int i = 0; i < calculatedVector.size(); i++) {
-        Assert.assertEquals(calculatedVector.apply(i), expectedVector.apply(i), 1.0e-8);
+        Assertions.assertEquals(calculatedVector.apply(i), expectedVector.apply(i), 1.0e-8);
       }
     }
   }

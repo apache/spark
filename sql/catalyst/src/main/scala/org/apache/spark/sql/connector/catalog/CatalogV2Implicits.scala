@@ -19,12 +19,17 @@ package org.apache.spark.sql.connector.catalog
 
 import scala.collection.mutable
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.catalog.BucketSpec
+import org.apache.spark.sql.catalyst.catalog.{BucketSpec, ClusterBySpec}
+import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
-import org.apache.spark.sql.catalyst.util.quoteIfNeeded
-import org.apache.spark.sql.connector.expressions.{BucketTransform, FieldReference, IdentityTransform, LogicalExpressions, Transform}
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
+import org.apache.spark.sql.catalyst.util.{quoteIfNeeded, QuotingUtils}
+import org.apache.spark.sql.connector.expressions.{BucketTransform, ClusterByTransform, FieldReference, IdentityTransform, LogicalExpressions, Transform}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
+import org.apache.spark.sql.types.StructType
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * Conversion helpers for working with v2 [[CatalogPlugin]].
@@ -50,17 +55,24 @@ private[sql] object CatalogV2Implicits {
     }
   }
 
+  implicit class ClusterByHelper(spec: ClusterBySpec) {
+    def asTransform: Transform = clusterBy(spec.columnNames.toArray)
+  }
+
   implicit class TransformHelper(transforms: Seq[Transform]) {
-    def convertTransforms: (Seq[String], Option[BucketSpec]) = {
+    def convertTransforms: (Seq[String], Option[BucketSpec], Option[ClusterBySpec]) = {
       val identityCols = new mutable.ArrayBuffer[String]
       var bucketSpec = Option.empty[BucketSpec]
+      var clusterBySpec = Option.empty[ClusterBySpec]
 
       transforms.map {
         case IdentityTransform(FieldReference(Seq(col))) =>
           identityCols += col
 
         case BucketTransform(numBuckets, col, sortCol) =>
-          if (bucketSpec.nonEmpty) throw QueryExecutionErrors.multipleBucketTransformsError
+          if (bucketSpec.nonEmpty) {
+            throw QueryExecutionErrors.unsupportedMultipleBucketTransformsError()
+          }
           if (sortCol.isEmpty) {
             bucketSpec = Some(BucketSpec(numBuckets, col.map(_.fieldNames.mkString(".")), Nil))
           } else {
@@ -68,11 +80,23 @@ private[sql] object CatalogV2Implicits {
               sortCol.map(_.fieldNames.mkString("."))))
           }
 
+        case ClusterByTransform(columnNames) =>
+          if (clusterBySpec.nonEmpty) {
+            // AstBuilder guarantees that it only passes down one ClusterByTransform.
+            throw SparkException.internalError("Cannot have multiple cluster by transforms.")
+          }
+          clusterBySpec = Some(ClusterBySpec(columnNames))
+
         case transform =>
           throw QueryExecutionErrors.unsupportedPartitionTransformError(transform)
       }
 
-      (identityCols.toSeq, bucketSpec)
+      // Parser guarantees that partition and clustering cannot co-exist.
+      assert(!(identityCols.toSeq.nonEmpty && clusterBySpec.nonEmpty))
+      // Parser guarantees that bucketing and clustering cannot co-exist.
+      assert(!(bucketSpec.nonEmpty && clusterBySpec.nonEmpty))
+
+      (identityCols.toSeq, bucketSpec, clusterBySpec)
     }
   }
 
@@ -102,10 +126,17 @@ private[sql] object CatalogV2Implicits {
       case _ =>
         throw QueryCompilationErrors.missingCatalogAbilityError(plugin, "functions")
     }
+
+    def asProcedureCatalog: ProcedureCatalog = plugin match {
+        case procedureCatalog: ProcedureCatalog =>
+          procedureCatalog
+        case _ =>
+          throw QueryCompilationErrors.missingCatalogAbilityError(plugin, "procedures")
+    }
   }
 
   implicit class NamespaceHelper(namespace: Array[String]) {
-    def quoted: String = namespace.map(quoteIfNeeded).mkString(".")
+    def quoted: String = QuotingUtils.quoted(namespace)
   }
 
   implicit class FunctionIdentifierHelper(ident: FunctionIdentifier) {
@@ -120,30 +151,54 @@ private[sql] object CatalogV2Implicits {
   }
 
   implicit class IdentifierHelper(ident: Identifier) {
+    /* Quote the identifier if needed. */
     def quoted: String = {
-      if (ident.namespace.nonEmpty) {
-        ident.namespace.map(quoteIfNeeded).mkString(".") + "." + quoteIfNeeded(ident.name)
-      } else {
-        quoteIfNeeded(ident.name)
-      }
+      QuotingUtils.quoted(ident)
     }
 
-    def asMultipartIdentifier: Seq[String] = ident.namespace :+ ident.name
+    /* Always quote the identifier. */
+    def fullyQuoted: String = {
+      QuotingUtils.fullyQuoted(ident)
+    }
+
+    def original: String = ident.namespace() :+ ident.name() mkString "."
+
+    def asMultipartIdentifier: Seq[String] = (ident.namespace :+ ident.name).toImmutableArraySeq
 
     def asTableIdentifier: TableIdentifier = ident.namespace match {
       case ns if ns.isEmpty => TableIdentifier(ident.name)
       case Array(dbName) => TableIdentifier(ident.name, Some(dbName))
-      case _ =>
-        throw QueryCompilationErrors.identifierHavingMoreThanTwoNamePartsError(
-          quoted, "TableIdentifier")
+      case _ => throw QueryCompilationErrors.identifierTooManyNamePartsError(original)
+    }
+
+    /**
+     * Tries to convert catalog identifier to the table identifier. Table identifier does not
+     * support multiple namespaces (nested namespaces), so if identifier contains nested namespace,
+     * conversion cannot be done
+     * @param catalogName Catalog name. Identifier represents just one object in catalog, so it has
+     *                    no catalog name needed for table identifier creation
+     * @return Table identifier if conversion can be done, None otherwise
+     */
+    def asTableIdentifierOpt(catalogName: Option[String]): Option[TableIdentifier] = {
+      ident.namespace().toImmutableArraySeq match {
+        case Seq(singleNamespace) =>
+          Some(TableIdentifier(ident.name(), Some(singleNamespace), catalogName))
+        case Seq() =>
+          // If namespace is not given, catalog will not be used
+          Some(TableIdentifier(ident.name()))
+        case _ =>
+          None
+      }
     }
 
     def asFunctionIdentifier: FunctionIdentifier = ident.namespace() match {
       case ns if ns.isEmpty => FunctionIdentifier(ident.name())
       case Array(dbName) => FunctionIdentifier(ident.name(), Some(dbName))
-      case _ =>
-        throw QueryCompilationErrors.identifierHavingMoreThanTwoNamePartsError(
-          quoted, "FunctionIdentifier")
+      case _ => throw QueryCompilationErrors.identifierTooManyNamePartsError(original)
+    }
+
+    def toQualifiedNameParts(catalog: CatalogPlugin): Seq[String] = {
+      (catalog.name() +: ident.namespace() :+ ident.name()).toImmutableArraySeq
     }
   }
 
@@ -157,20 +212,18 @@ private[sql] object CatalogV2Implicits {
     def asTableIdentifier: TableIdentifier = parts match {
       case Seq(tblName) => TableIdentifier(tblName)
       case Seq(dbName, tblName) => TableIdentifier(tblName, Some(dbName))
-      case _ =>
-        throw QueryCompilationErrors.identifierHavingMoreThanTwoNamePartsError(
-          quoted, "TableIdentifier")
+      case _ => throw QueryCompilationErrors.identifierTooManyNamePartsError(original)
     }
 
     def asFunctionIdentifier: FunctionIdentifier = parts match {
       case Seq(funcName) => FunctionIdentifier(funcName)
       case Seq(dbName, funcName) => FunctionIdentifier(funcName, Some(dbName))
-      case _ =>
-        throw QueryCompilationErrors.identifierHavingMoreThanTwoNamePartsError(
-          quoted, "FunctionIdentifier")
+      case _ => throw QueryCompilationErrors.identifierTooManyNamePartsError(original)
     }
 
     def quoted: String = parts.map(quoteIfNeeded).mkString(".")
+
+    def original: String = parts.mkString(".")
   }
 
   implicit class TableIdentifierHelper(identifier: TableIdentifier) {
@@ -183,6 +236,11 @@ private[sql] object CatalogV2Implicits {
 
       }
     }
+  }
+
+  implicit class ColumnsHelper(columns: Array[Column]) {
+    def asSchema: StructType = CatalogV2Util.v2ColumnsToStructType(columns)
+    def toAttributes: Seq[AttributeReference] = DataTypeUtils.toAttributes(asSchema)
   }
 
   def parseColumnPath(name: String): Seq[String] = {

@@ -16,18 +16,23 @@
  */
 package org.apache.spark.sql.execution.datasources.v2.orc
 
+import scala.jdk.CollectionConverters.MapHasAsScala
+
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
+import org.apache.spark.memory.MemoryMode
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.connector.expressions.aggregate.Aggregation
 import org.apache.spark.sql.connector.read.PartitionReaderFactory
 import org.apache.spark.sql.execution.datasources.{AggregatePushDownUtils, PartitioningAwareFileIndex}
+import org.apache.spark.sql.execution.datasources.orc.OrcOptions
 import org.apache.spark.sql.execution.datasources.v2.FileScan
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.SerializableConfiguration
 
 case class OrcScan(
@@ -59,12 +64,18 @@ case class OrcScan(
   }
 
   override def createReaderFactory(): PartitionReaderFactory = {
-    val broadcastedConf = sparkSession.sparkContext.broadcast(
-      new SerializableConfiguration(hadoopConf))
+    val broadcastedConf =
+      SerializableConfiguration.broadcast(sparkSession.sparkContext, hadoopConf)
+    val memoryMode = if (conf.offHeapColumnVectorEnabled) {
+      MemoryMode.OFF_HEAP
+    } else {
+      MemoryMode.ON_HEAP
+    }
     // The partition values are already truncated in `FileScan.partitions`.
     // We should use `readPartitionSchema` as the partition schema here.
-    OrcPartitionReaderFactory(sparkSession.sessionState.conf, broadcastedConf,
-      dataSchema, readDataSchema, readPartitionSchema, pushedFilters, pushedAggregate)
+    OrcPartitionReaderFactory(conf, broadcastedConf,
+      dataSchema, readDataSchema, readPartitionSchema, pushedFilters, pushedAggregate,
+      new OrcOptions(options.asScala.toMap, conf), memoryMode)
   }
 
   override def equals(obj: Any): Boolean = obj match {
@@ -82,20 +93,14 @@ case class OrcScan(
   override def hashCode(): Int = getClass.hashCode()
 
   lazy private val (pushedAggregationsStr, pushedGroupByStr) = if (pushedAggregate.nonEmpty) {
-    (seqToString(pushedAggregate.get.aggregateExpressions),
-      seqToString(pushedAggregate.get.groupByColumns))
+    (seqToString(pushedAggregate.get.aggregateExpressions.toImmutableArraySeq),
+      seqToString(pushedAggregate.get.groupByExpressions.toImmutableArraySeq))
   } else {
     ("[]", "[]")
   }
 
-  override def description(): String = {
-    super.description() + ", PushedFilters: " + seqToString(pushedFilters) +
-      ", PushedAggregation: " + pushedAggregationsStr +
-      ", PushedGroupBy: " + pushedGroupByStr
-  }
-
   override def getMetaData(): Map[String, String] = {
-    super.getMetaData() ++ Map("PushedFilters" -> seqToString(pushedFilters)) ++
+    super.getMetaData() ++ Map("PushedFilters" -> seqToString(pushedFilters.toImmutableArraySeq)) ++
       Map("PushedAggregation" -> pushedAggregationsStr) ++
       Map("PushedGroupBy" -> pushedGroupByStr)
   }

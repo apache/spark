@@ -9,9 +9,9 @@ license: |
   The ASF licenses this file to You under the Apache License, Version 2.0
   (the "License"); you may not use this file except in compliance with
   the License.  You may obtain a copy of the License at
- 
+
      http://www.apache.org/licenses/LICENSE-2.0
- 
+
   Unless required by applicable law or agreed to in writing, software
   distributed under the License is distributed on an "AS IS" BASIS,
   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -37,6 +37,7 @@ DAG visualization, and all stages of the job.
 
 The information that is displayed in this section is
 * User: Current Spark user
+* Started At: The startup time of Spark application
 * Total uptime: Time since Spark application started
 * Scheduling mode: See [job scheduling](job-scheduling.html#configuring-pool-properties)
 * Number of jobs per status: Active, Completed, Failed
@@ -62,7 +63,7 @@ When you click on a specific job, you can see the detailed information of this j
 
 ### Jobs detail
 
-This page displays the details of a specific job identified by its job ID. 
+This page displays the details of a specific job identified by its job ID.
 * Job Status: (running, succeeded, failed)
 * Number of stages per status (active, pending, completed, skipped, failed)
 * Associated SQL Query: Link to the sql tab for this job
@@ -74,21 +75,21 @@ This page displays the details of a specific job identified by its job ID.
 
 * DAG visualization: Visual representation of the directed acyclic graph of this job where vertices represent the RDDs or DataFrames and the edges represent an operation to be applied on RDD.
 * An example of DAG visualization for `sc.parallelize(1 to 100).toDF.count()`
- 
+
 <p style="text-align: center;">
   <img src="img/JobPageDetail2.png" title="DAG" alt="DAG" width="40%">
 </p>
 
 * List of stages (grouped by state active, pending, completed, skipped, and failed)
-	* Stage ID
-	* Description of the stage
-	* Submitted timestamp
-	* Duration of the stage
-	* Tasks progress bar
-	* Input: Bytes read from storage in this stage
-	* Output: Bytes written in storage in this stage
-	* Shuffle read: Total shuffle bytes and records read, includes both data read locally and data read from remote executors
-	* Shuffle write: Bytes and records written to disk in order to be read by a shuffle in a future stage
+    * Stage ID
+    * Description of the stage
+    * Submitted timestamp
+    * Duration of the stage
+    * Tasks progress bar
+    * Input: Bytes read from storage in this stage
+    * Output: Bytes written in storage in this stage
+    * Shuffle read: Total shuffle bytes and records read, includes both data read locally and data read from remote executors
+    * Shuffle write: Bytes and records written to disk in order to be read by a shuffle in a future stage
 
 <p style="text-align: center;">
   <img src="img/JobPageDetail3.png" title="DAG" alt="DAG">
@@ -185,7 +186,7 @@ scala> rdd.persist(MEMORY_ONLY_SER)
 res0: rdd.type = rdd MapPartitionsRDD[1] at range at <console>:27
 
 scala> rdd.count
-res1: Long = 100                                                                
+res1: Long = 100
 
 scala> val df = Seq((1, "andy"), (2, "bob"), (2, "andy")).toDF("count", "name")
 df: org.apache.spark.sql.DataFrame = [count: int, name: string]
@@ -318,7 +319,7 @@ scala> val df = Seq((1, "andy"), (2, "bob"), (2, "andy")).toDF("count", "name")
 df: org.apache.spark.sql.DataFrame = [count: int, name: string]
 
 scala> df.count
-res0: Long = 3                                                                  
+res0: Long = 3
 
 scala> df.createGlobalTempView("df")
 
@@ -380,8 +381,8 @@ operator shows the number of bytes written by a shuffle.
 
 Here is the list of SQL metrics:
 
-<table class="table">
-<tr><th>SQL metrics</th><th>Meaning</th><th>Operators</th></tr>
+<table>
+<thead><tr><th>SQL metrics</th><th>Meaning</th><th>Operators</th></tr></thead>
 <tr><td> <code>number of output rows</code> </td><td> the number of output rows of the operator </td><td> Aggregate operators, Join operators, Sample, Range, Scan operators, Filter, etc.</td></tr>
 <tr><td> <code>data size</code> </td><td> the size of broadcast/shuffled/collected data of the operator </td><td> BroadcastExchange, ShuffleExchange, Subquery </td></tr>
 <tr><td> <code>time to collect</code> </td><td> the time spent on collecting data </td><td> BroadcastExchange, Subquery </td></tr>
@@ -406,10 +407,12 @@ Here is the list of SQL metrics:
 <tr><td> <code>time to build hash map</code> </td><td> the time spent on building hash map </td><td> ShuffledHashJoin </td></tr>
 <tr><td> <code>task commit time</code> </td><td> the time spent on committing the output of a task after the writes succeed </td><td> any write operation on a file-based table </td></tr>
 <tr><td> <code>job commit time</code> </td><td> the time spent on committing the output of a job after the writes succeed </td><td> any write operation on a file-based table </td></tr>
+<tr><td> <code>data sent to Python workers</code> </td><td> the number of bytes of serialized data sent to the Python workers </td><td> Python UDFs, Pandas UDFs, Pandas Functions API and Python Data Source </td></tr>
+<tr><td> <code>data returned from Python workers</code> </td><td> the number of bytes of serialized data received back from the Python workers </td><td> Python UDFs, Pandas UDFS, Pandas Functions API and Python Data Source </td></tr>
 </table>
 
 ## Structured Streaming Tab
-When running Structured Streaming jobs in micro-batch mode, a Structured Streaming tab will be 
+When running Structured Streaming jobs in micro-batch mode, a Structured Streaming tab will be
 available on the Web UI. The overview page displays some brief statistics for running and completed
 queries. Also, you can check the latest exception of a failed query. For detailed statistics, please
 click a "run id" in the tables.
@@ -419,13 +422,13 @@ click a "run id" in the tables.
   <img src="img/webui-structured-streaming-detail2.png">
 </p>
 
-The statistics page displays some useful metrics for insight into the status of your streaming 
+The statistics page displays some useful metrics for insight into the status of your streaming
 queries. Currently, it contains the following metrics.
 
 * **Input Rate.** The aggregate (across all sources) rate of data arriving.
 * **Process Rate.** The aggregate (across all sources) rate at which Spark is processing data.
 * **Input Rows.** The aggregate (across all sources) number of records processed in a trigger.
-* **Batch Duration.** The process duration of each batch. 
+* **Batch Duration.** The process duration of each batch.
 * **Operation Duration.** The amount of time taken to perform various operations in milliseconds.
 The tracked operations are listed as follows.
     * addBatch: Time taken to read the micro-batch's input data from the sources, process it, and write the batch's output to the sink. This should take the bulk of the micro-batch's time.
@@ -438,7 +441,7 @@ The tracked operations are listed as follows.
 * **Aggregated Number Of Updated State Rows.** The aggregated number of updated state rows.
 * **Aggregated State Memory Used In Bytes.** The aggregated state memory used in bytes.
 * **Aggregated Number Of State Rows Dropped By Watermark.** The aggregated number of state rows dropped by watermark.
-    
+
 As an early-release version, the statistics page is still under development and will be improved in
 future releases.
 
@@ -477,12 +480,12 @@ The third section has the SQL statistics of the submitted operations.
 * **Duration time** is the difference between close time and start time.
 * **Statement** is the operation being executed.
 * **State** of the process.
-	* _Started_, first state, when the process begins.
-	* _Compiled_, execution plan generated.
-	* _Failed_, final state when the execution failed or finished with error.
-	* _Canceled_, final state when the execution is canceled.
-	* _Finished_ processing and waiting to fetch results.
-	* _Closed_, final state when client closed the statement.
+    * _Started_, first state, when the process begins.
+    * _Compiled_, execution plan generated.
+    * _Failed_, final state when the execution failed or finished with error.
+    * _Canceled_, final state when the execution is canceled.
+    * _Finished_ processing and waiting to fetch results.
+    * _Closed_, final state when client closed the statement.
 * **Detail** of the execution plan with parsed logical plan, analyzed logical plan, optimized logical plan and physical plan or errors in the SQL statement.
 
 <p style="text-align: center;">
