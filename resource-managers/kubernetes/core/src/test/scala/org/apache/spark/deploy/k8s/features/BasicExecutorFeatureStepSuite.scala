@@ -16,6 +16,8 @@
  */
 package org.apache.spark.deploy.k8s.features
 
+import java.util.Locale
+
 import scala.collection.JavaConverters._
 
 import com.google.common.net.InternetDomainName
@@ -23,7 +25,7 @@ import io.fabric8.kubernetes.api.model._
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkException, SparkFunSuite}
-import org.apache.spark.deploy.k8s.{KubernetesExecutorConf, KubernetesTestConf, SecretVolumeUtils, SparkPod}
+import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesExecutorConf, KubernetesTestConf, SecretVolumeUtils, SparkPod}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.features.KubernetesFeaturesTestUtils.TestResourceInformation
@@ -223,6 +225,24 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
       assert(hostname.length <= KUBERNETES_DNS_LABEL_NAME_MAX_LENGTH)
       assert(InternetDomainName.isValid(hostname))
     }
+  }
+
+  test("deployment allocator uses restartPolicy Always and lowercase hostnames") {
+    baseConf.set(KUBERNETES_ALLOCATION_PODS_ALLOCATOR, "deployment")
+    initDefaultProfile(baseConf)
+    val executorConf = KubernetesConf.createExecutorConf(
+      sparkConf = baseConf,
+      executorId = "EXECID",
+      appId = KubernetesTestConf.APP_ID,
+      driverPod = Some(DRIVER_POD))
+    val step = new BasicExecutorFeatureStep(executorConf, new SecurityManager(baseConf),
+      defaultProfile)
+    val executor = step.configurePod(SparkPod.initialPod())
+
+    val hostname = executor.pod.getSpec.getHostname
+    assert(hostname === hostname.toLowerCase(Locale.ROOT))
+    assert(InternetDomainName.isValid(hostname))
+    assert(executor.pod.getSpec.getRestartPolicy === "Always")
   }
 
   test("classpath and extra java options get translated into environment variables") {
