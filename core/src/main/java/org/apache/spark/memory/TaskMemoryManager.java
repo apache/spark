@@ -341,7 +341,7 @@ public class TaskMemoryManager {
       logger.info(
         "{} bytes of memory are used for execution " +
                 "and {} bytes of memory are used for storage " +
-                "and {} bytes of memory are used but unmanaged",
+                "and {} bytes of unmanaged memory are used",
         MDC.of(LogKeys.EXECUTION_MEMORY_SIZE, memoryManager.executionMemoryUsed()),
         MDC.of(LogKeys.STORAGE_MEMORY_SIZE,  memoryManager.storageMemoryUsed()),
         MDC.of(LogKeys.MEMORY_SIZE, UnifiedMemoryManager$.MODULE$.getUnmanagedMemoryUsed()));
