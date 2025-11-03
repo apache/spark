@@ -152,7 +152,7 @@ private object ErrorClassesJsonReader {
     .addModule(DefaultScalaModule)
     .build()
   private def readAsMap(url: URL): Map[String, ErrorInfo] = {
-    val map = mapper.readValue(url, new TypeReference[Map[String, ErrorInfo]]() {})
+    val map = mapper.readValue(url.openStream(), new TypeReference[Map[String, ErrorInfo]]() {})
     val errorClassWithDots = map.collectFirst {
       case (errorClass, _) if errorClass.contains('.') => errorClass
       case (_, ErrorInfo(_, Some(map), _, _)) if map.keys.exists(_.contains('.')) =>
