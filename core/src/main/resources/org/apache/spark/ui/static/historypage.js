@@ -18,7 +18,16 @@
 /* global $, Mustache, formatDuration, formatTimeMillis, jQuery, uiRoot */
 
 var appLimit = -1;
-
+/* escape XSS  */
+function escapeHtml(text) {
+  if (typeof text !== 'string') return text;
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
 /* eslint-disable no-unused-vars */
 function setAppLimit(val) {
   appLimit = val;
@@ -147,7 +156,7 @@ $(document).ready(function() {
         attempt["durationMillisec"] = attempt["duration"];
         attempt["duration"] = formatDuration(attempt["duration"]);
         attempt["id"] = id;
-        attempt["name"] = name;
+        attempt["name"] = escapeHtml(name);
         attempt["version"] = version;
         attempt["attemptUrl"] = uiRoot + "/history/" + id + "/" +
           (attempt.hasOwnProperty("attemptId") ? attempt["attemptId"] + "/" : "") + "jobs/";
