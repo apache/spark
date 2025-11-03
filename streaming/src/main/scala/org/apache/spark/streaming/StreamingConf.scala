@@ -188,7 +188,7 @@ object StreamingConf {
   private[streaming] val STREAMING_EXTRA_LISTENERS =
     ConfigBuilder("spark.streaming.extraListeners")
       .doc("Class names of streaming listeners to add to StreamingContext during initialization.")
-      .version("3.4.0")
+      .version("4.1.0")
       .stringConf
       .toSequence
       .createOptional
