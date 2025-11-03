@@ -1326,7 +1326,7 @@ def read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index, profil
         if not has_memory_profiler:
             profiling_func = chained_func
         elif _is_iter_based(eval_type):
-            profiling_func = chained_func
+            profiling_func = wrap_iter_memory_profiler(chained_func, result_id)
         else:
             profiling_func = wrap_memory_profiler(chained_func, result_id)
     else:
