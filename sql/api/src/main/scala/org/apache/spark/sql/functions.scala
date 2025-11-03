@@ -1202,6 +1202,17 @@ object functions {
   /**
    * Aggregate function: returns the compact binary representation of the Datasketches ThetaSketch
    * built with the values in the input column and configured with the `lgNomEntries` nominal
+   * entries and `family`.
+   *
+   * @group agg_funcs
+   * @since 4.1.0
+   */
+  def theta_sketch_agg(e: Column, lgNomEntries: Column, family: Column): Column =
+    Column.fn("theta_sketch_agg", e, lgNomEntries, family)
+
+  /**
+   * Aggregate function: returns the compact binary representation of the Datasketches ThetaSketch
+   * built with the values in the input column and configured with the `lgNomEntries` nominal
    * entries.
    *
    * @group agg_funcs
@@ -1242,6 +1253,47 @@ object functions {
    */
   def theta_sketch_agg(columnName: String): Column =
     theta_sketch_agg(Column(columnName))
+
+  /**
+   * Aggregate function: returns the compact binary representation of the Datasketches ThetaSketch
+   * built with the values in the input column, configured with `lgNomEntries` and `family`.
+   *
+   * @group agg_funcs
+   * @since 4.1.0
+   */
+  def theta_sketch_agg(e: Column, lgNomEntries: Int, family: String): Column =
+    Column.fn("theta_sketch_agg", e, lit(lgNomEntries), lit(family))
+
+  /**
+   * Aggregate function: returns the compact binary representation of the Datasketches ThetaSketch
+   * built with the values in the input column, configured with `lgNomEntries` and `family`.
+   *
+   * @group agg_funcs
+   * @since 4.1.0
+   */
+  def theta_sketch_agg(columnName: String, lgNomEntries: Int, family: String): Column =
+    theta_sketch_agg(Column(columnName), lgNomEntries, family)
+
+  /**
+   * Aggregate function: returns the compact binary representation of the Datasketches ThetaSketch
+   * built with the values in the input column, configured with the specified `family` and default
+   * lgNomEntries.
+   *
+   * @group agg_funcs
+   * @since 4.1.0
+   */
+  def theta_sketch_agg(e: Column, family: String): Column =
+    theta_sketch_agg(e, 12, family)
+
+  /**
+   * Aggregate function: returns the compact binary representation of the Datasketches ThetaSketch
+   * built with the values in the input column, configured with specified `family`.
+   *
+   * @group agg_funcs
+   * @since 4.1.0
+   */
+  def theta_sketch_agg(columnName: String, family: String): Column =
+    theta_sketch_agg(columnName, 12, family)
 
   /**
    * Aggregate function: returns the compact binary representation of the Datasketches

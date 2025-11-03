@@ -4494,12 +4494,17 @@ hll_union.__doc__ = pysparkfuncs.hll_union.__doc__
 def theta_sketch_agg(
     col: "ColumnOrName",
     lgNomEntries: Optional[Union[int, Column]] = None,
+    family: Optional[str] = None,
 ) -> Column:
     fn = "theta_sketch_agg"
-    if lgNomEntries is None:
+    if lgNomEntries is None and family is None:
         return _invoke_function_over_columns(fn, col)
-    else:
+    elif family is None:
         return _invoke_function_over_columns(fn, col, lit(lgNomEntries))
+    else:
+        if lgNomEntries is None:
+            lgNomEntries = 12  # default value
+        return _invoke_function_over_columns(fn, col, lit(lgNomEntries), lit(family))
 
 
 theta_sketch_agg.__doc__ = pysparkfuncs.theta_sketch_agg.__doc__
