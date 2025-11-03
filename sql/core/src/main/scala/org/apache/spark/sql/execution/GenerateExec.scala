@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.execution.metric.SQLMetrics
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 /**
@@ -85,7 +86,24 @@ case class GenerateExec(
 
   override def outputPartitioning: Partitioning = child.outputPartitioning
 
-  lazy val boundGenerator: Generator = BindReferences.bindReference(generator, child.output)
+  lazy val boundGenerator: Generator = {
+    try {
+      BindReferences.bindReference(generator, child.output)
+    } catch {
+      case _: IllegalStateException =>
+        val childOutput = child.output
+        val resolver = SQLConf.get.resolver
+        val remapped = generator.transform {
+          case attr: AttributeReference =>
+            childOutput
+              .find(_.exprId == attr.exprId)
+              .orElse(childOutput.find(o => resolver(o.name, attr.name) && o.dataType == attr.dataType))
+              .orElse(childOutput.find(_.dataType == attr.dataType))
+              .getOrElse(attr)
+        }.asInstanceOf[Generator]
+        BindReferences.bindReference(remapped, childOutput)
+    }
+  }
 
   protected override def doExecute(): RDD[InternalRow] = {
     // boundGenerator.terminate() should be triggered after all of the rows in the partition

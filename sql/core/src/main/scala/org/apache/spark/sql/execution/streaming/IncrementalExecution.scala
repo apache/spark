@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.execution.{LocalLimitExec, QueryExecution, SparkPlan, SparkPlanner, UnaryExecNode}
+import org.apache.spark.sql.execution.datasources.SchemaPruning
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, MergingSessionsExec, ObjectHashAggregateExec, SortAggregateExec, UpdatingSessionsExec}
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeLike
 import org.apache.spark.sql.execution.python.FlatMapGroupsInPandasWithStateExec
@@ -88,8 +89,10 @@ class IncrementalExecution(
       // of sink information.
       case w: WriteToMicroBatchDataSourceV1 => w.child
     }
-    sparkSession.sessionState.optimizer.executeAndTrack(preOptimized,
-      tracker).transformAllExpressionsWithPruning(
+    SchemaPruning.StreamingContext.withStreamingQuery {
+      sparkSession.sessionState.optimizer.executeAndTrack(preOptimized,
+        tracker)
+    }.transformAllExpressionsWithPruning(
       _.containsAnyPattern(CURRENT_LIKE, EXPRESSION_WITH_RANDOM_SEED)) {
       case ts @ CurrentBatchTimestamp(timestamp, _, _) =>
         logInfo(s"Current batch timestamp = $timestamp")

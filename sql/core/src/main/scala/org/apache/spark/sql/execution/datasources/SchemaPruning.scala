@@ -19,11 +19,13 @@ package org.apache.spark.sql.execution.datasources
 
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.ScanOperation
-import org.apache.spark.sql.catalyst.plans.logical.{Filter, Generate, LeafNode, LogicalPlan, Project}
+import org.apache.spark.sql.catalyst.plans.logical.{EventTimeWatermark, Filter, Generate, LeafNode, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.execution.datasources.orc.OrcFileFormat
 import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
+import org.apache.spark.sql.execution.streaming.{StreamingExecutionRelation, StreamingRelation}
+import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
 import org.apache.spark.sql.types.{ArrayType, DataType, MapType, StructField, StructType}
 import org.apache.spark.sql.util.SchemaUtils._
 
@@ -40,7 +42,38 @@ import org.apache.spark.sql.util.SchemaUtils._
 object SchemaPruning extends Rule[LogicalPlan] {
   import org.apache.spark.sql.catalyst.expressions.SchemaPruning._
 
+  object StreamingContext {
+    private val skip = new ThreadLocal[Boolean] {
+      override def initialValue(): Boolean = false
+    }
+
+    def skipping: Boolean = skip.get()
+
+    def withStreamingQuery[T](body: => T): T = {
+      val previous = skip.get()
+      skip.set(true)
+      try body finally skip.set(previous)
+    }
+  }
+
+  private[datasources] def isStreamingQuery(plan: LogicalPlan): Boolean = {
+    plan.isStreaming || plan.exists {
+      case _: EventTimeWatermark => true
+      case _: StreamingRelation => true
+      case _: StreamingRelationV2 => true
+      case _: StreamingExecutionRelation => true
+      case _ => false
+    }
+  }
+
   override def apply(plan: LogicalPlan): LogicalPlan = {
+    if (StreamingContext.skipping || isStreamingQuery(plan)) {
+      // Streaming queries rely on incremental execution passes that rebuild the plan with
+      // streaming-specific markers (e.g. watermark attributes). The schema pruning extension
+      // assumes a static batch plan, so short circuit here to preserve the streaming behaviour.
+      return plan
+    }
+
     // SPARK-47230: Collect GetArrayStructFields, GetStructField, Generate mappings,
     // and _extract_ alias mappings
     val allArrayStructFields = scala.collection.mutable.ArrayBuffer[GetArrayStructFields]()
@@ -887,6 +920,9 @@ object GeneratorOrdinalRewriting extends Rule[LogicalPlan] {
   }
 
   override def apply(plan: LogicalPlan): LogicalPlan = {
+    if (SchemaPruning.StreamingContext.skipping || SchemaPruning.isStreamingQuery(plan)) {
+      return plan
+    }
 
     // Check if there are any Generate nodes that need ordinal rewriting
     var hasGenerateNodes = false
