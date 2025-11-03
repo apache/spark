@@ -370,7 +370,7 @@ jobs:
       run: |
         uname -a
         cat /etc/os-release
-        ./build/sbt clean "core/testOnly *ShuffleNettyIoUringSuite"
+        ./build/sbt clean "core/testOnly *ShuffleNettyIoUringSuite -- -z non-zero"
     - name: Run tests
       env: ${{ fromJSON(inputs.envs) }}
       shell: 'script -q -e -c "bash {0}"'

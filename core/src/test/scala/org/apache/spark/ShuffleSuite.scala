@@ -43,6 +43,7 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalRootDi
   // Ensure that the DAGScheduler doesn't retry stages whose fetches fail, so that we accurately
   // test that the shuffle works (rather than retrying until all blocks are local to one Executor).
   conf.set(TEST_NO_STAGE_RETRY, true)
+  conf.set("spark.ui.enabled", "false")
 
   test("groupByKey without compression") {
     val myConf = conf.clone().set(config.SHUFFLE_COMPRESS, false)
