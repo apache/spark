@@ -116,6 +116,15 @@ class SparkConnectServiceServicer(object):
         context.set_details("Method not implemented!")
         raise NotImplementedError("Method not implemented!")
 
+    def BatchExecutePlan(self, request, context):
+        """Execute multiple plans in a batch.
+        Submits multiple execute plan requests sequentially and returns the operation IDs
+        and submission status for each. Does not wait for execution results.
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details("Method not implemented!")
+        raise NotImplementedError("Method not implemented!")
+
     def Config(self, request, context):
         """Update or fetch the configurations and returns a [[ConfigResponse]] containing the result."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
@@ -204,6 +213,11 @@ def add_SparkConnectServiceServicer_to_server(servicer, server):
             servicer.AnalyzePlan,
             request_deserializer=spark_dot_connect_dot_base__pb2.AnalyzePlanRequest.FromString,
             response_serializer=spark_dot_connect_dot_base__pb2.AnalyzePlanResponse.SerializeToString,
+        ),
+        "BatchExecutePlan": grpc.unary_unary_rpc_method_handler(
+            servicer.BatchExecutePlan,
+            request_deserializer=spark_dot_connect_dot_base__pb2.BatchExecutePlanRequest.FromString,
+            response_serializer=spark_dot_connect_dot_base__pb2.BatchExecutePlanResponse.SerializeToString,
         ),
         "Config": grpc.unary_unary_rpc_method_handler(
             servicer.Config,
@@ -311,6 +325,36 @@ class SparkConnectService(object):
             "/spark.connect.SparkConnectService/AnalyzePlan",
             spark_dot_connect_dot_base__pb2.AnalyzePlanRequest.SerializeToString,
             spark_dot_connect_dot_base__pb2.AnalyzePlanResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True,
+        )
+
+    @staticmethod
+    def BatchExecutePlan(
+        request,
+        target,
+        options=(),
+        channel_credentials=None,
+        call_credentials=None,
+        insecure=False,
+        compression=None,
+        wait_for_ready=None,
+        timeout=None,
+        metadata=None,
+    ):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            "/spark.connect.SparkConnectService/BatchExecutePlan",
+            spark_dot_connect_dot_base__pb2.BatchExecutePlanRequest.SerializeToString,
+            spark_dot_connect_dot_base__pb2.BatchExecutePlanResponse.FromString,
             options,
             channel_credentials,
             insecure,

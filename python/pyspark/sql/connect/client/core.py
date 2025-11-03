@@ -1194,6 +1194,99 @@ class SparkConnectClient(object):
                     },
                 )
 
+    def batch_execute(
+        self,
+        plans: List[Tuple[pb2.Plan, Optional[str]]],
+        rollback_on_failure: bool = True,
+    ) -> pb2.BatchExecutePlanResponse:
+        """
+        Execute multiple plans in a batch.
+
+        Submits multiple execute plan requests sequentially to the server and returns
+        the operation IDs and submission status for each. Does not wait for execution results.
+
+        Note: rollback_on_failure only applies to submission failures (e.g., invalid operation
+        ID, duplicate operation ID), not execution failures. Once an operation is successfully
+        submitted, it executes independently. Use reattach_execute() to consume execution
+        results or errors.
+
+        Parameters
+        ----------
+        plans : list of (Plan, Optional[str])
+            List of (plan, operation_id) tuples. If operation_id is None, the server will
+            generate one.
+        rollback_on_failure : bool
+            If True, cancel all previously submitted operations if any submission fails.
+            Defaults to True. Does not apply to execution failures that occur after
+            successful submission.
+
+        Returns
+        -------
+        BatchExecutePlanResponse
+            Response containing submission status for each plan. A successful result indicates
+            the operation was submitted successfully, not that it executed successfully.
+        """
+        req = pb2.BatchExecutePlanRequest()
+        req.session_id = self._session_id
+        if self._user_id:
+            req.user_context.user_id = self._user_id
+        req.client_type = self._builder.userAgent
+        req.rollback_on_failure = rollback_on_failure
+
+        if self._server_side_session_id:
+            req.client_observed_server_side_session_id = self._server_side_session_id
+
+        for plan, op_id in plans:
+            plan_exec = req.plan_executions.add()
+            plan_exec.plan.CopyFrom(plan)
+            if op_id:
+                plan_exec.operation_id = op_id
+
+        metadata = self._builder.metadata()
+        return self._stub.BatchExecutePlan(req, metadata=metadata)
+
+    def reattach_execute(self, operation_id: str) -> Iterator[pb2.ExecutePlanResponse]:
+        """
+        Reattach to an existing operation by operation ID and consume all responses.
+
+        Parameters
+        ----------
+        operation_id : str
+            The operation ID to reattach to (must be a valid UUID)
+
+        Returns
+        -------
+        Iterator[pb2.ExecutePlanResponse]
+            An iterator of ExecutePlanResponse messages
+
+        Raises
+        ------
+        ValueError
+            If the operation_id is not a valid UUID format
+        """
+        import uuid
+
+        try:
+            uuid.UUID(operation_id)
+        except ValueError:
+            raise ValueError(
+                f"Invalid operationId: {operation_id}. The id must be an UUID string of "
+                "the format `00112233-4455-6677-8899-aabbccddeeff`"
+            )
+
+        req = pb2.ReattachExecuteRequest()
+        req.session_id = self._session_id
+        if self._user_id:
+            req.user_context.user_id = self._user_id
+        req.operation_id = operation_id
+        req.client_type = self._builder.userAgent
+
+        if self._server_side_session_id:
+            req.client_observed_server_side_session_id = self._server_side_session_id
+
+        metadata = self._builder.metadata()
+        return self._stub.ReattachExecute(req, metadata=metadata)
+
     def same_semantics(self, plan: pb2.Plan, other: pb2.Plan) -> bool:
         """
         return if two plans have the same semantics.

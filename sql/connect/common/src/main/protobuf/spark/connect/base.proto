@@ -1200,6 +1200,75 @@ message CloneSessionResponse {
   string new_server_side_session_id = 4;
 }
 
+// Request to execute multiple plans in a batch.
+message BatchExecutePlanRequest {
+  // (Required)
+  //
+  // The session_id specifies a spark session for a user id (which is specified
+  // by user_context.user_id). The session_id is set by the client to be able to
+  // collate streaming responses from different queries within the dedicated session.
+  // The id should be an UUID string of the format `00112233-4455-6677-8899-aabbccddeeff`
+  string session_id = 1;
+
+  // (Optional)
+  //
+  // Server-side generated idempotency key from the previous responses (if any). Server
+  // can use this to validate that the server side session has not changed.
+  optional string client_observed_server_side_session_id = 2;
+
+  // (Required) User context
+  UserContext user_context = 3;
+
+  // Provides optional information about the client sending the request. This field
+  // can be used for language or version specific information and is only intended for
+  // logging purposes and will not be interpreted by the server.
+  optional string client_type = 4;
+
+  // (Required) List of plans to execute
+  repeated PlanExecution plan_executions = 5;
+
+  // (Required) If true, rollback (cancel) all operations if any submission fails
+  bool rollback_on_failure = 6;
+
+  // A single plan execution in the batch
+  message PlanExecution {
+    // (Required) The logical plan to be executed
+    Plan plan = 1;
+
+    // (Optional) Provide an id for this execution. If not provided, it will be generated
+    // by the server. The id must be an UUID string of the format
+    // `00112233-4455-6677-8899-aabbccddeeff`
+    optional string operation_id = 2;
+
+    // Repeated field for tags that can be associated with this execution
+    repeated string tags = 3;
+  }
+}
+
+// Response for batch execute plan request.
+message BatchExecutePlanResponse {
+  // Session id in which the batch was executed.
+  string session_id = 1;
+
+  // Server-side generated idempotency key for the session.
+  string server_side_session_id = 2;
+
+  // Results for each submitted plan in the same order as the request
+  repeated ExecutionResult results = 3;
+
+  // Result of a single plan execution in the batch
+  message ExecutionResult {
+    // (Required) The operation ID assigned to this execution
+    string operation_id = 1;
+
+    // (Required) Whether the operation was successfully submitted
+    bool success = 2;
+
+    // (Optional) Error message if submission failed
+    optional string error_message = 3;
+  }
+}
+
 // Main interface for the SparkConnect service.
 service SparkConnectService {
 
@@ -1254,4 +1323,9 @@ service SparkConnectService {
   // The request can optionally specify a custom session ID for the cloned session (must be
   // a valid UUID). If not provided, a new UUID will be generated automatically.
   rpc CloneSession(CloneSessionRequest) returns (CloneSessionResponse) {}
+
+  // Execute multiple plans in a batch.
+  // Submits multiple execute plan requests sequentially and returns the operation IDs
+  // and submission status for each. Does not wait for execution results.
+  rpc BatchExecutePlan(BatchExecutePlanRequest) returns (BatchExecutePlanResponse) {}
 }

@@ -154,6 +154,85 @@ private[sql] class SparkConnectClient(
   }
 
   /**
+   * Execute multiple plans in a batch.
+   *
+   * Submits multiple execute plan requests sequentially to the server and returns the operation
+   * IDs and submission status for each. Does not wait for execution results.
+   *
+   * Note: rollbackOnFailure only applies to submission failures (e.g., invalid operation ID,
+   * duplicate operation ID), not execution failures. Once an operation is successfully submitted,
+   * it executes independently. Use reattach() to consume execution results or errors.
+   *
+   * @param plans
+   *   Sequence of (plan, optional operation_id) tuples to execute
+   * @param rollbackOnFailure
+   *   If true, cancel all previously submitted operations if any submission fails. Defaults to
+   *   true. Does not apply to execution failures that occur after successful submission.
+   * @return
+   *   A [[proto.BatchExecutePlanResponse]] containing submission status for each plan. A
+   *   successful result indicates the operation was submitted successfully, not that it executed
+   *   successfully.
+   */
+  def batchExecute(
+      plans: Seq[(proto.Plan, Option[String])],
+      rollbackOnFailure: Boolean = true): proto.BatchExecutePlanResponse = {
+    artifactManager.uploadAllClassFileArtifacts()
+    val requestBuilder = proto.BatchExecutePlanRequest
+      .newBuilder()
+      .setUserContext(userContext)
+      .setSessionId(sessionId)
+      .setClientType(userAgent)
+      .setRollbackOnFailure(rollbackOnFailure)
+
+    serverSideSessionId.foreach(session =>
+      requestBuilder.setClientObservedServerSideSessionId(session))
+
+    plans.foreach { case (plan, opId) =>
+      val planExecBuilder = proto.BatchExecutePlanRequest.PlanExecution
+        .newBuilder()
+        .setPlan(plan)
+      opId.foreach { id =>
+        require(
+          isValidUUID(id),
+          s"Invalid operationId: $id. The id must be an UUID string of " +
+            "the format `00112233-4455-6677-8899-aabbccddeeff`")
+        planExecBuilder.setOperationId(id)
+      }
+      requestBuilder.addPlanExecutions(planExecBuilder)
+    }
+
+    bstub.batchExecutePlan(requestBuilder.build())
+  }
+
+  /**
+   * Reattach to an existing operation by operation ID and consume all responses. This method will
+   * block until the operation completes.
+   *
+   * @param operationId
+   *   The operation ID to reattach to
+   * @return
+   *   An iterator of ExecutePlanResponse messages
+   */
+  def reattach(operationId: String): CloseableIterator[proto.ExecutePlanResponse] = {
+    require(
+      isValidUUID(operationId),
+      s"Invalid operationId: $operationId. The id must be an UUID string of " +
+        "the format `00112233-4455-6677-8899-aabbccddeeff`")
+
+    val requestBuilder = proto.ReattachExecuteRequest
+      .newBuilder()
+      .setSessionId(sessionId)
+      .setUserContext(userContext)
+      .setOperationId(operationId)
+      .setClientType(userAgent)
+
+    serverSideSessionId.foreach(session =>
+      requestBuilder.setClientObservedServerSideSessionId(session))
+
+    bstub.reattachExecute(requestBuilder.build())
+  }
+
+  /**
    * Dispatch the [[proto.ConfigRequest]] to the Spark Connect server.
    * @return
    *   A [[proto.ConfigResponse]] from the Spark Connect server.
