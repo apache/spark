@@ -86,6 +86,8 @@ class BlockManagerMasterEndpoint(
   private val blockLocations = new JHashMap[BlockId, mutable.HashSet[BlockManagerId]]
 
   // Keep track of last access times if we're using block TTLs
+  // We intentionally use a non-concurrent datastructure since "close"
+  // is good enough for atimes and reducing update cost matters.
   private[spark] val rddAccessTime = new JHashMap[Int, Long]
 
   // Mapping from task id to the set of rdd blocks which are generated from the task.
