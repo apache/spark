@@ -73,7 +73,8 @@ def generate_llms_txt(docs_path: Path, output_path: Path, version: str = "latest
         ),
         (
             "Spark SQL CLI",
-            f"https://spark.apache.org/docs/{version}/sql-distributed-sql-engine-spark-sql-cli.html",
+            f"https://spark.apache.org/docs/{version}/"
+            f"sql-distributed-sql-engine-spark-sql-cli.html",
         ),
     ]
     for title, url in programming_guides:
