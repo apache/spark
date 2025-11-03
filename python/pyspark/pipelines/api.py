@@ -168,6 +168,7 @@ def table(
                 name=resolved_name,
                 table_properties=table_properties or {},
                 partition_cols=partition_cols,
+                cluster_cols=cluster_by,
                 schema=schema,
                 source_code_location=source_code_location,
                 format=format,
