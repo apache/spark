@@ -288,7 +288,7 @@ object RebaseDateTime {
   // `JsonRebaseRecord`. Mutable HashMap is used here instead of AnyRefMap due to SPARK-49491.
   private[sql] def loadRebaseRecords(fileName: String): HashMap[String, RebaseInfo] = {
     val file = SparkClassUtils.getSparkClassLoader.getResource(fileName)
-    val jsonRebaseRecords = mapper.readValue[Seq[JsonRebaseRecord]](file)
+    val jsonRebaseRecords = mapper.readValue[Seq[JsonRebaseRecord]](file.openStream())
     val hashMap = new HashMap[String, RebaseInfo]
     hashMap.sizeHint(jsonRebaseRecords.size)
     jsonRebaseRecords.foreach { jsonRecord =>

@@ -209,6 +209,16 @@ trait StateStore extends ReadStateStore {
       colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Unit
 
   /**
+   * Put a new list of non-null values for a non-null key. Implementations must be aware that the
+   * UnsafeRows in the params can be reused, and must make copies of the data as needed for
+   * persistence.
+   */
+  def putList(
+      key: UnsafeRow,
+      values: Array[UnsafeRow],
+      colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Unit
+
+  /**
    * Remove a single non-null key.
    */
   def remove(
@@ -223,6 +233,18 @@ trait StateStore extends ReadStateStore {
    * multipleValuesPerKey as true for the column family.
    */
   def merge(key: UnsafeRow, value: UnsafeRow,
+      colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Unit
+
+  /**
+   * Merges the provided list of values with existing values of a non-null key. If a existing
+   * value does not exist, this operation behaves as [[StateStore.putArray()]].
+   *
+   * It is expected to throw exception if Spark calls this method without setting
+   * multipleValuesPerKey as true for the column family.
+   */
+  def mergeList(
+      key: UnsafeRow,
+      values: Array[UnsafeRow],
       colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Unit
 
   /**

@@ -18,6 +18,7 @@
 package org.apache.spark.sql
 
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.st._
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
