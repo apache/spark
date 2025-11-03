@@ -652,6 +652,16 @@ Misc Functions
     version
 
 
+Geospatial ST Functions
+-----------------------
+.. autosummary::
+    :toctree: api/
+
+    st_asbinary
+    st_geogfromwkb
+    st_geomfromwkb
+
+
 UDF, UDTF and UDT
 -----------------
 .. autosummary::

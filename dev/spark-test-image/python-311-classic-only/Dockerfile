@@ -49,6 +49,7 @@ RUN apt-get update && apt-get install -y \
     libpython3-dev \
     libssl-dev \
     libtiff5-dev \
+    libwebp-dev \
     libxml2-dev \
     openjdk-17-jdk-headless \
     pkg-config \
@@ -67,7 +68,7 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 
-ARG BASIC_PIP_PKGS="numpy pyarrow>=21.0.0 pandas==2.3.2 plotly<6.0.0 matplotlib openpyxl memory-profiler>=0.61.0 mlflow>=2.8.1 scipy scikit-learn>=1.3.2"
+ARG BASIC_PIP_PKGS="numpy pyarrow>=21.0.0 pandas==2.3.3 plotly<6.0.0 matplotlib openpyxl memory-profiler>=0.61.0 mlflow>=2.8.1 scipy scikit-learn>=1.3.2"
 ARG TEST_PIP_PKGS="coverage unittest-xml-reporting"
 
 # Install Python 3.11 packages
