@@ -18,6 +18,7 @@
 package org.apache.spark.sql
 
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.st._
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
@@ -27,10 +28,10 @@ class STExpressionsSuite
   with ExpressionEvalHelper {
 
   // Private common constants used across several tests.
-  private val defaultGeographyType: DataType =
-    GeographyType(ExpressionDefaults.DEFAULT_GEOGRAPHY_SRID)
-  private val defaultGeometryType: DataType =
-    GeometryType(ExpressionDefaults.DEFAULT_GEOMETRY_SRID)
+  private final val defaultGeographySrid: Int = ExpressionDefaults.DEFAULT_GEOGRAPHY_SRID
+  private final val defaultGeographyType: DataType = GeographyType(defaultGeographySrid)
+  private final val defaultGeometrySrid: Int = ExpressionDefaults.DEFAULT_GEOMETRY_SRID
+  private final val defaultGeometryType: DataType = GeometryType(defaultGeometrySrid)
 
   /** ST reader/writer expressions. */
 
@@ -46,6 +47,36 @@ class STExpressionsSuite
     val geometryExpression = ST_GeomFromWKB(wkbLiteral)
     assert(geometryExpression.dataType.sameType(defaultGeometryType))
     checkEvaluation(ST_AsBinary(geometryExpression), wkb)
+  }
+
+  /** ST accessor expressions. */
+
+  test("ST_Srid") {
+    // Test data: WKB representation of POINT(1 2).
+    val wkb = Hex.unhex("0101000000000000000000F03F0000000000000040".getBytes())
+    val wkbLiteral = Literal.create(wkb, BinaryType)
+
+    // ST_Srid with GEOGRAPHY.
+    val geographyExpression = ST_GeogFromWKB(wkbLiteral)
+    val stSridGeography = ST_Srid(geographyExpression)
+    assert(stSridGeography.dataType.sameType(IntegerType))
+    checkEvaluation(stSridGeography, defaultGeographySrid)
+    // Test NULL handling.
+    val nullGeographyLiteral = Literal.create(null, defaultGeographyType)
+    val stSridGeographyNull = ST_Srid(nullGeographyLiteral)
+    assert(stSridGeographyNull.dataType.sameType(IntegerType))
+    checkEvaluation(stSridGeographyNull, null)
+
+    // ST_Srid with GEOMETRY.
+    val geometryExpression = ST_GeomFromWKB(wkbLiteral)
+    val stSridGeometry = ST_Srid(geometryExpression)
+    assert(stSridGeometry.dataType.sameType(IntegerType))
+    checkEvaluation(stSridGeometry, defaultGeometrySrid)
+    // Test NULL handling.
+    val nullGeometryLiteral = Literal.create(null, defaultGeometryType)
+    val stSridGeometryNull = ST_Srid(nullGeometryLiteral)
+    assert(stSridGeometryNull.dataType.sameType(IntegerType))
+    checkEvaluation(stSridGeometryNull, null)
   }
 
 }

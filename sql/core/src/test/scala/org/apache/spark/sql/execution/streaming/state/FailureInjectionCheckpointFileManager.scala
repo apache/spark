@@ -313,7 +313,9 @@ object FailureInjectionRocksDBStateStoreProvider {
           localTempDir,
           hadoopConf,
           codecName,
-          loggingId = loggingId) {
+          loggingId = loggingId,
+          fileChecksumEnabled = this.conf.fileChecksumEnabled,
+          fileChecksumThreadPoolSize = this.fileChecksumThreadPoolSize) {
           override def getFileSystem(
               myDfsRootDir: String,
               myHadoopConf: Configuration): FileSystem = {

@@ -43,6 +43,7 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.util.quietly
 import org.apache.spark.sql.execution.streaming._
+import org.apache.spark.sql.execution.streaming.checkpointing.{CheckpointFileManager, ChecksumCheckpointFileManager, ChecksumFile}
 import org.apache.spark.sql.execution.streaming.runtime.{MemoryStream, StreamExecution}
 import org.apache.spark.sql.execution.streaming.state.StateStoreCoordinatorSuite.withCoordinatorRef
 import org.apache.spark.sql.functions.count
@@ -1173,13 +1174,13 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
 
     // Put should create a temp file
     put(store0, "a", 0, 1)
-    assert(numTempFiles === 1)
+    assert(numTempFiles === 2)
     assert(numDeltaFiles === 0)
 
     // Commit should remove temp file and create a delta file
     store0.commit()
     assert(numTempFiles === 0)
-    assert(numDeltaFiles === 1)
+    assert(numDeltaFiles === 2)
 
     // Remove should create a temp file
     val store1 = shouldNotCreateTempFile {
@@ -1189,13 +1190,13 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
         version = 1, None, None, useColumnFamilies = false, storeConf, hadoopConf)
     }
     remove(store1, _._1 == "a")
-    assert(numTempFiles === 1)
-    assert(numDeltaFiles === 1)
+    assert(numTempFiles === 2)
+    assert(numDeltaFiles === 2)
 
     // Commit should remove temp file and create a delta file
     store1.commit()
     assert(numTempFiles === 0)
-    assert(numDeltaFiles === 2)
+    assert(numDeltaFiles === 4)
 
     // Commit without any updates should create a delta file
     val store2 = shouldNotCreateTempFile {
@@ -1206,7 +1207,7 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
     }
     store2.commit()
     assert(numTempFiles === 0)
-    assert(numDeltaFiles === 3)
+    assert(numDeltaFiles === 6)
   }
 
   test("SPARK-21145: Restarted queries create new provider instances") {
@@ -1451,6 +1452,18 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
       numOfVersToRetainInMemory = numOfVersToRetainInMemory)
   }
 
+  override def newStoreProviderWithClonedConf(
+      storeId: StateStoreId): HDFSBackedStateStoreProvider = {
+    newStoreProvider(
+      storeId.operatorId,
+      storeId.partitionId,
+      dir = storeId.checkpointRootLocation,
+      sqlConfOpt = Some(cloneSQLConf()))
+  }
+
+  override def newStoreProviderNoInit(): HDFSBackedStateStoreProvider =
+    new HDFSBackedStateStoreProvider
+
   override def getLatestData(
       storeProvider: HDFSBackedStateStoreProvider,
       useColumnFamilies: Boolean = false): Set[((String, Int), Int)] = {
@@ -1484,6 +1497,8 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
     sqlConf.setConf(SQLConf.MAX_BATCHES_TO_RETAIN_IN_MEMORY, numOfVersToRetainInMemory)
     sqlConf.setConf(SQLConf.MIN_BATCHES_TO_RETAIN, 2)
     sqlConf.setConf(SQLConf.STATE_STORE_COMPRESSION_CODEC, SQLConf.get.stateStoreCompressionCodec)
+    sqlConf.setConf(
+      SQLConf.STREAMING_CHECKPOINT_FILE_CHECKSUM_ENABLED, SQLConf.get.checkpointFileChecksumEnabled)
     sqlConf
   }
 
@@ -1493,11 +1508,13 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
       keyStateEncoderSpec: KeyStateEncoderSpec = NoPrefixKeyStateEncoderSpec(keySchema),
       keySchema: StructType = keySchema,
       dir: String = newDir(),
+      sqlConfOpt: Option[SQLConf] = None,
       minDeltasForSnapshot: Int = SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.defaultValue.get,
       numOfVersToRetainInMemory: Int = SQLConf.MAX_BATCHES_TO_RETAIN_IN_MEMORY.defaultValue.get,
       hadoopConf: Configuration = new Configuration): HDFSBackedStateStoreProvider = {
     hadoopConf.set(StreamExecution.RUN_ID_KEY, UUID.randomUUID().toString)
-    val sqlConf = getDefaultSQLConf(minDeltasForSnapshot, numOfVersToRetainInMemory)
+    val sqlConf = sqlConfOpt.getOrElse(
+      getDefaultSQLConf(minDeltasForSnapshot, numOfVersToRetainInMemory))
     val provider = new HDFSBackedStateStoreProvider()
     provider.init(
       StateStoreId(dir, opId, partition),
@@ -1553,7 +1570,12 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
     val basePath = provider invokePrivate method()
     val fileName = if (isSnapshot) s"$version.snapshot" else s"$version.delta"
     val filePath = new File(basePath.toString, fileName)
-    filePath.delete()
+
+    // deleting the file with fm, incase file checksum is enabled
+    val fileManagerMethod = PrivateMethod[CheckpointFileManager](Symbol("fm"))
+    val fm = provider invokePrivate fileManagerMethod()
+    fm.delete(new Path(filePath.toURI))
+
     filePath.createNewFile()
   }
 }
@@ -2053,6 +2075,252 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
     }
   }
 
+  testWithAllCodec("file checksum can be enabled and disabled for the same checkpoint") { _ =>
+    val storeId = StateStoreId(newDir(), 0L, 1)
+    var version = 0L
+
+    // Commit to store using file checksum
+    withSQLConf(SQLConf.STREAMING_CHECKPOINT_FILE_CHECKSUM_ENABLED.key -> true.toString) {
+      tryWithProviderResource(newStoreProviderWithClonedConf(storeId)) { provider =>
+        val store = provider.getStore(version)
+        put(store, "1", 11, 100)
+        put(store, "2", 22, 200)
+        version = store.commit()
+      }
+    }
+
+    // Reload the store and commit without file checksum
+    withSQLConf(SQLConf.STREAMING_CHECKPOINT_FILE_CHECKSUM_ENABLED.key -> false.toString) {
+      tryWithProviderResource(newStoreProviderWithClonedConf(storeId)) { provider =>
+        assert(version == 1)
+        val store = provider.getStore(version)
+        assert(get(store, "1", 11) === Some(100))
+        assert(get(store, "2", 22) === Some(200))
+
+        put(store, "3", 33, 300)
+        put(store, "4", 44, 400)
+        version = store.commit()
+      }
+    }
+
+    // Reload the store and commit with file checksum
+    withSQLConf(SQLConf.STREAMING_CHECKPOINT_FILE_CHECKSUM_ENABLED.key -> true.toString) {
+      tryWithProviderResource(newStoreProviderWithClonedConf(storeId)) { provider =>
+        assert(version == 2)
+        val store = provider.getStore(version)
+        assert(get(store, "1", 11) === Some(100))
+        assert(get(store, "2", 22) === Some(200))
+        assert(get(store, "3", 33) === Some(300))
+        assert(get(store, "4", 44) === Some(400))
+
+        put(store, "5", 55, 500)
+        version = store.commit()
+      }
+    }
+  }
+
+  test("checksum files are also cleaned up during maintenance") {
+    val storeId = StateStoreId(newDir(), 0L, 1)
+    val numBatches = 6
+    val minDeltas = 2
+    // Adding 1 to ensure snapshot is uploaded.
+    // Snapshot upload might happen at minDeltas or minDeltas + 1, depending on the provider
+    val maintFrequency = minDeltas + 1
+    var version = 0L
+
+    withSQLConf(SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.key -> minDeltas.toString,
+      SQLConf.MIN_BATCHES_TO_RETAIN.key -> "1",
+      // So that RocksDB will also generate changelog files
+      RocksDBConf.ROCKSDB_SQL_CONF_NAME_PREFIX + ".changelogCheckpointing.enabled" ->
+        true.toString) {
+
+      tryWithProviderResource(newStoreProviderWithClonedConf(storeId)) { provider =>
+        (version + 1 to numBatches).foreach { i =>
+          version = putAndCommitStore(
+            provider, loadVersion = i - 1, doMaintenance = i % maintFrequency == 0)
+        }
+
+        // This is because, hdfs and rocksdb old files detection logic is different
+        provider match {
+          case _: HDFSBackedStateStoreProvider =>
+            // For HDFS State store, files left:
+            // 3.delta to 6.delta (+ checksum file)
+            // 3.snapshot (+ checksum file), 6.snapshot (+ checksum file)
+            verifyChecksumFiles(storeId.storeCheckpointLocation().toString,
+              expectedNumFiles = 12, expectedNumChecksumFiles = 6)
+          case _ =>
+            // For RocksDB State store, files left:
+            // 6.changelog (+ checksum file), 6.zip (+ checksum file)
+            verifyChecksumFiles(storeId.storeCheckpointLocation().toString,
+              expectedNumFiles = 4, expectedNumChecksumFiles = 2)
+        }
+      }
+
+      // turn off file checksum, and verify that the previously created checksum files
+      // will be deleted by maintenance
+      withSQLConf(SQLConf.STREAMING_CHECKPOINT_FILE_CHECKSUM_ENABLED.key -> false.toString) {
+        tryWithProviderResource(newStoreProviderWithClonedConf(storeId)) { provider =>
+          (version + 1 to version + numBatches).foreach { i =>
+            version = putAndCommitStore(
+              provider, loadVersion = i - 1, doMaintenance = i % maintFrequency == 0)
+          }
+
+          // now verify no checksum files are left
+          // This is because, hdfs and rocksdb old files detection logic is different
+          provider match {
+            case _: HDFSBackedStateStoreProvider =>
+              // For HDFS State store, files left:
+              // 6.delta, 9.delta to 12.delta
+              // 9.snapshot, 12.snapshot
+              verifyChecksumFiles(storeId.storeCheckpointLocation().toString,
+                expectedNumFiles = 7, expectedNumChecksumFiles = 0)
+            case _ =>
+              // For RocksDB State store, files left:
+              // 12.changelog, 12.zip
+              verifyChecksumFiles(storeId.storeCheckpointLocation().toString,
+                expectedNumFiles = 2, expectedNumChecksumFiles = 0)
+          }
+        }
+      }
+    }
+  }
+
+  testWithAllCodec("overwrite state file without overwriting checksum file") { _ =>
+    val storeId = StateStoreId(newDir(), 0L, 1)
+    val numBatches = 3
+    val minDeltas = 2
+
+    withSQLConf(SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.key -> minDeltas.toString,
+      // So that RocksDB will also generate changelog files
+      RocksDBConf.ROCKSDB_SQL_CONF_NAME_PREFIX + ".changelogCheckpointing.enabled" ->
+        true.toString) {
+
+      // First run with file checksum enabled. It will generate state and checksum files.
+      // Turn off file checksum, and regenerate only the state files
+      Seq(true, false).foreach { fileChecksumEnabled =>
+        withSQLConf(
+          SQLConf.STREAMING_CHECKPOINT_FILE_CHECKSUM_ENABLED.key -> fileChecksumEnabled.toString) {
+          tryWithProviderResource(newStoreProviderWithClonedConf(storeId)) { provider =>
+            (1 to numBatches).foreach { i =>
+              putAndCommitStore(
+                provider, loadVersion = i - 1, doMaintenance = false)
+            }
+
+            // This should only create snapshot and no delete
+            provider.doMaintenance()
+
+            // number of files should be the same.
+            // 3 delta/changelog files, 1 snapshot (with checksum files)
+            verifyChecksumFiles(storeId.storeCheckpointLocation().toString,
+              expectedNumFiles = 8, expectedNumChecksumFiles = 4)
+          }
+        }
+      }
+
+      withSQLConf(
+        SQLConf.STREAMING_CHECKPOINT_FILE_CHECKSUM_ENABLED.key -> true.toString) {
+        // now try to load the store with checksum enabled.
+        // It will verify the overwritten state files with the checksum files.
+        (1 to numBatches).foreach { i =>
+          tryWithProviderResource(newStoreProviderWithClonedConf(storeId)) { provider =>
+            // load from DFS should be successful
+            val store = provider.getStore(i)
+            store.abort()
+          }
+        }
+      }
+    }
+  }
+
+  test("Load spark 4.0 golden checkpoint written without checksum") {
+    // We have Spark 4.0 golden files for each of these operations and store names.
+    // Tuple(operation name, store name, key schema, value schema)
+    val stores = Seq(
+      ("agg", StateStoreId.DEFAULT_STORE_NAME,
+        StructType(Seq(StructField("_1", IntegerType, nullable = false))),
+        StructType(Seq(StructField("count", LongType, nullable = false)))),
+      ("dedup", StateStoreId.DEFAULT_STORE_NAME,
+        StructType(Seq(StructField("_1", IntegerType, nullable = false))),
+        StructType(Seq(StructField("__dummy__", NullType)))),
+      ("join1", "left-keyToNumValues",
+        StructType(Seq(StructField("field0", IntegerType, nullable = false))),
+        StructType(Seq(StructField("value", LongType)))),
+      ("join1", "left-keyWithIndexToValue",
+        StructType(Seq(StructField("field0", IntegerType, nullable = false))),
+        StructType(Seq(StructField("value", LongType)))),
+      ("join1", "right-keyToNumValues",
+        StructType(Seq(StructField("field0", IntegerType, nullable = false))),
+        StructType(Seq(StructField("value", LongType)))),
+      ("join1", "right-keyWithIndexToValue",
+        StructType(Seq(StructField("field0", IntegerType, nullable = false))),
+        StructType(Seq(StructField("value", LongType))))
+    )
+
+    // now try to load the store with checksum enabled.
+    withSQLConf(SQLConf.STREAMING_CHECKPOINT_FILE_CHECKSUM_ENABLED.key -> true.toString) {
+      stores.foreach { case (opName, storeName, keySchema, valueSchema) =>
+        (1 to 4).foreach { version =>
+          tryWithProviderResource(newStoreProviderNoInit()) { provider =>
+            // load from golden checkpoint should be successful
+            val providerName = provider match {
+              case _: HDFSBackedStateStoreProvider => "hdfs"
+              case _: RocksDBStateStoreProvider => "rocksdb"
+              case _ => throw new IllegalArgumentException("Unknown ProviderClass")
+            }
+
+            val checkpointPath = this.getClass.getResource(
+              s"/structured-streaming/checkpoint-version-4.0.0/" +
+                s"$providerName/$opName/state"
+            ).getPath
+
+            val conf = new Configuration()
+            conf.set(StreamExecution.RUN_ID_KEY, UUID.randomUUID().toString)
+            provider.init(
+              StateStoreId(checkpointPath, 0, 0, storeName),
+              keySchema,
+              valueSchema,
+              NoPrefixKeyStateEncoderSpec(keySchema),
+              useColumnFamilies = false,
+              new StateStoreConf(cloneSQLConf()),
+              conf
+            )
+            val store = provider.getStore(version)
+            store.abort()
+          }
+        }
+      }
+    }
+  }
+
+  private def verifyChecksumFiles(
+      dir: String, expectedNumFiles: Int, expectedNumChecksumFiles: Int): Unit = {
+    val allFiles = new File(dir)
+      // filter out dirs and local hdfs files
+      .listFiles().filter(f => f.isFile && !f.getName.startsWith("."))
+      .map(f => new Path(f.toURI)).toSet
+    assert(allFiles.size == expectedNumFiles)
+
+    val checksumFiles = allFiles.filter(
+      ChecksumCheckpointFileManager.isChecksumFile).map(ChecksumFile)
+    assert(checksumFiles.size == expectedNumChecksumFiles)
+
+    // verify that no orphan checksum file i.e. the respective main file should be present
+    assert(checksumFiles.forall(c => allFiles.contains(c.mainFilePath)))
+  }
+
+  private def putAndCommitStore(
+      provider: ProviderClass, loadVersion: Long, doMaintenance: Boolean): Long = {
+    val store = provider.getStore(loadVersion)
+    put(store, loadVersion.toString, loadVersion.toInt, loadVersion.toInt * 100)
+    val newVersion = store.commit()
+
+    if (doMaintenance) {
+      provider.doMaintenance()
+    }
+
+    newVersion
+  }
+
   test("StateStore.get") {
     val conf = new SparkConf()
       .setMaster("local")
@@ -2379,6 +2647,12 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
   /** Return a new provider with useColumnFamilies set to true */
   def newStoreProvider(useColumnFamilies: Boolean): ProviderClass
 
+  /** Create a new store provider with cloned SQLConf */
+  def newStoreProviderWithClonedConf(storeId: StateStoreId): ProviderClass
+
+  /** Return a new provider without initializing it */
+  def newStoreProviderNoInit(): ProviderClass
+
   /** Get the latest data referred to by the given provider but not using this provider */
   def getLatestData(storeProvider: ProviderClass,
     useColumnFamilies: Boolean): Set[((String, Int), Int)]
@@ -2408,6 +2682,8 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
 
   /** Get the `SQLConf` by the given minimum delta and version to retain in memory */
   def getDefaultSQLConf(minDeltasForSnapshot: Int, numOfVersToRetainInMemory: Int): SQLConf
+
+  def cloneSQLConf(): SQLConf = SQLConf.get.clone()
 
   /** Get the `StateStoreConf` used by the tests with default setting */
   def getDefaultStoreConf(): StateStoreConf = StateStoreConf.empty

@@ -15,8 +15,9 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.catalyst.expressions
+package org.apache.spark.sql.catalyst.expressions.st
 
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.objects._
 import org.apache.spark.sql.catalyst.trees._
 import org.apache.spark.sql.catalyst.util.{Geography, Geometry, STUtils}
@@ -171,4 +172,54 @@ case class ST_GeomFromWKB(wkb: Expression)
 
   override protected def withNewChildInternal(newChild: Expression): ST_GeomFromWKB =
     copy(wkb = newChild)
+}
+
+/** ST accessor expressions. */
+
+/**
+ * Returns the SRID of the input GEOGRAPHY or GEOMETRY value. Returns NULL if the input is NULL.
+ * See https://en.wikipedia.org/wiki/Spatial_reference_system#Identifier for more details on the
+ * Spatial Reference System Identifier (SRID).
+ */
+@ExpressionDescription(
+  usage = "_FUNC_(geo) - Returns the SRID of the input GEOGRAPHY or GEOMETRY value.",
+  arguments = """
+    Arguments:
+      * geo - A GEOGRAPHY or GEOMETRY value.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_(st_geogfromwkb(X'0101000000000000000000F03F0000000000000040'));
+       4326
+      > SELECT _FUNC_(st_geomfromwkb(X'0101000000000000000000F03F0000000000000040'));
+       0
+      > SELECT _FUNC_(NULL);
+       NULL
+  """,
+  since = "4.1.0",
+  group = "st_funcs"
+)
+case class ST_Srid(geo: Expression)
+    extends RuntimeReplaceable
+    with ImplicitCastInputTypes
+    with UnaryLike[Expression] {
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(
+    TypeCollection(GeographyType, GeometryType)
+  )
+
+  override lazy val replacement: Expression = StaticInvoke(
+    classOf[STUtils],
+    IntegerType,
+    "stSrid",
+    Seq(geo),
+    returnNullable = false
+  )
+
+  override def prettyName: String = "st_srid"
+
+  override def child: Expression = geo
+
+  override protected def withNewChildInternal(newChild: Expression): ST_Srid =
+    copy(geo = newChild)
 }

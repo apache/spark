@@ -1072,7 +1072,8 @@ class StateDataSourceTransformWithStateSuite extends StateStoreMetricsTest
       val dfsRootDir = new File(tmpDir.getAbsolutePath + "/state/0/4")
       val fileManager = new RocksDBFileManager(
         dfsRootDir.getAbsolutePath, Utils.createTempDir(), new Configuration,
-        CompressionCodec.LZ4)
+        CompressionCodec.LZ4, fileChecksumEnabled = SQLConf.get.checkpointFileChecksumEnabled,
+        fileChecksumThreadPoolSize = Some(2))
 
       // Read the changelog for one of the partitions at version 3 and
       // ensure that we have two entries

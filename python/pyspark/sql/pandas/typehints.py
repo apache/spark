@@ -32,6 +32,9 @@ if TYPE_CHECKING:
         ArrowGroupedMapIterUDFType,
         ArrowGroupedMapUDFType,
         ArrowGroupedMapFunction,
+        PandasGroupedMapFunction,
+        PandasGroupedMapUDFType,
+        PandasGroupedMapIterUDFType,
     )
 
 
@@ -390,6 +393,98 @@ def infer_group_arrow_eval_type_from_func(
             type_hints = {}
 
         return infer_group_arrow_eval_type(signature(f), type_hints)
+    else:
+        return None
+
+
+def infer_group_pandas_eval_type(
+    sig: Signature,
+    type_hints: Dict[str, Any],
+) -> Optional[Union["PandasGroupedMapUDFType", "PandasGroupedMapIterUDFType"]]:
+    from pyspark.sql.pandas.functions import PythonEvalType
+
+    require_minimum_pandas_version()
+
+    import pandas as pd
+
+    annotations = {}
+    for param in sig.parameters.values():
+        if param.annotation is not param.empty:
+            annotations[param.name] = type_hints.get(param.name, param.annotation)
+
+    # Check if all arguments have type hints
+    parameters_sig = [
+        annotations[parameter] for parameter in sig.parameters if parameter in annotations
+    ]
+    if len(parameters_sig) != len(sig.parameters):
+        raise PySparkValueError(
+            errorClass="TYPE_HINT_SHOULD_BE_SPECIFIED",
+            messageParameters={"target": "all parameters", "sig": str(sig)},
+        )
+
+    # Check if the return has a type hint
+    return_annotation = type_hints.get("return", sig.return_annotation)
+    if sig.empty is return_annotation:
+        raise PySparkValueError(
+            errorClass="TYPE_HINT_SHOULD_BE_SPECIFIED",
+            messageParameters={"target": "the return type", "sig": str(sig)},
+        )
+
+    # Iterator[pd.DataFrame] -> Iterator[pd.DataFrame]
+    is_iterator_dataframe = (
+        len(parameters_sig) == 1
+        and check_iterator_annotation(  # Iterator
+            parameters_sig[0],
+            parameter_check_func=lambda t: t == pd.DataFrame,
+        )
+        and check_iterator_annotation(
+            return_annotation, parameter_check_func=lambda t: t == pd.DataFrame
+        )
+    )
+    # Tuple[Any, ...], Iterator[pd.DataFrame] -> Iterator[pd.DataFrame]
+    is_iterator_dataframe_with_keys = (
+        len(parameters_sig) == 2
+        and check_iterator_annotation(  # Iterator
+            parameters_sig[1],
+            parameter_check_func=lambda t: t == pd.DataFrame,
+        )
+        and check_iterator_annotation(
+            return_annotation, parameter_check_func=lambda t: t == pd.DataFrame
+        )
+    )
+
+    if is_iterator_dataframe or is_iterator_dataframe_with_keys:
+        return PythonEvalType.SQL_GROUPED_MAP_PANDAS_ITER_UDF
+
+    # pd.DataFrame -> pd.DataFrame
+    is_dataframe = (
+        len(parameters_sig) == 1
+        and parameters_sig[0] == pd.DataFrame
+        and return_annotation == pd.DataFrame
+    )
+    # Tuple[Any, ...], pd.DataFrame -> pd.DataFrame
+    is_dataframe_with_keys = (
+        len(parameters_sig) == 2
+        and parameters_sig[1] == pd.DataFrame
+        and return_annotation == pd.DataFrame
+    )
+    if is_dataframe or is_dataframe_with_keys:
+        return PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF
+
+    return None
+
+
+def infer_group_pandas_eval_type_from_func(
+    f: "PandasGroupedMapFunction",
+) -> Optional[Union["PandasGroupedMapUDFType", "PandasGroupedMapIterUDFType"]]:
+    argspec = getfullargspec(f)
+    if len(argspec.annotations) > 0:
+        try:
+            type_hints = get_type_hints(f)
+        except NameError:
+            type_hints = {}
+
+        return infer_group_pandas_eval_type(signature(f), type_hints)
     else:
         return None
 

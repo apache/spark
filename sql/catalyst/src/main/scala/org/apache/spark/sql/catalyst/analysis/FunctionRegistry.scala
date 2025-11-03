@@ -30,6 +30,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
+import org.apache.spark.sql.catalyst.expressions.st._
 import org.apache.spark.sql.catalyst.expressions.variant._
 import org.apache.spark.sql.catalyst.expressions.xml._
 import org.apache.spark.sql.catalyst.plans.logical.{FunctionBuilderBase, Generate, LogicalPlan, OneRowRelation, Range}
@@ -877,6 +878,7 @@ object FunctionRegistry {
     expression[ST_AsBinary]("st_asbinary"),
     expression[ST_GeogFromWKB]("st_geogfromwkb"),
     expression[ST_GeomFromWKB]("st_geomfromwkb"),
+    expression[ST_Srid]("st_srid"),
 
     // cast
     expression[Cast]("cast"),

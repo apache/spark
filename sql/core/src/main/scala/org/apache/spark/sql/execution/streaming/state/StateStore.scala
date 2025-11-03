@@ -40,6 +40,7 @@ import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.catalyst.util.UnsafeRowUtils
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
+import org.apache.spark.sql.execution.streaming.checkpointing.{CheckpointFileManager, ChecksumFile}
 import org.apache.spark.sql.execution.streaming.operators.stateful.StatefulOperatorStateInfo
 import org.apache.spark.sql.execution.streaming.runtime.StreamExecution
 import org.apache.spark.sql.execution.streaming.state.MaintenanceTaskType._
@@ -208,6 +209,16 @@ trait StateStore extends ReadStateStore {
       colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Unit
 
   /**
+   * Put a new list of non-null values for a non-null key. Implementations must be aware that the
+   * UnsafeRows in the params can be reused, and must make copies of the data as needed for
+   * persistence.
+   */
+  def putList(
+      key: UnsafeRow,
+      values: Array[UnsafeRow],
+      colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Unit
+
+  /**
    * Remove a single non-null key.
    */
   def remove(
@@ -222,6 +233,18 @@ trait StateStore extends ReadStateStore {
    * multipleValuesPerKey as true for the column family.
    */
   def merge(key: UnsafeRow, value: UnsafeRow,
+      colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Unit
+
+  /**
+   * Merges the provided list of values with existing values of a non-null key. If a existing
+   * value does not exist, this operation behaves as [[StateStore.putArray()]].
+   *
+   * It is expected to throw exception if Spark calls this method without setting
+   * multipleValuesPerKey as true for the column family.
+   */
+  def mergeList(
+      key: UnsafeRow,
+      values: Array[UnsafeRow],
       colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Unit
 
   /**
@@ -743,6 +766,64 @@ object StateStoreProvider extends Logging {
           throw StateStoreErrors.valueRowFormatValidationFailure(error, stateStoreId.toString)
         }
       }
+    }
+  }
+
+  /**
+   * If file checksum is enabled, then when we delete store files, using fm.delete,
+   * then the corresponding checksum file would be deleted too. But there are situations
+   * where we can have orphan checksum files (i.e. the main file no longer exist),
+   * so we need to delete them too:
+   *   1. If the file was created when file checksum was enabled, but then file checksum
+   *      was later disabled. In this case, fm.delete will not delete the checksum file.
+   *      Since we use a specific fm (checksum file manager) when checksum is enabled.
+   *   2. We enable concurrent file deletion for the checksum file manager,
+   *      for perf improvement, hence there is a slight chance deleting the main file was
+   *      successful but the checksum file deletion failed. Hence, we need to clean it up by
+   *      ourselves. If we don't want this behavior we can turn off concurrent deletion
+   *      for the checksum file manager
+   * */
+  private[streaming] def deleteOrphanChecksumFiles(
+      fm: CheckpointFileManager,
+      checksumFiles: Seq[ChecksumFile],
+      deletedStoreFiles: Seq[Path],
+      minVersionToRetain: Long,
+      fileChecksumEnabled: Boolean): Unit = {
+    // Use file name instead since path format might be different
+    // i.e. checksum files might have scheme prefix and the deleted files might not.
+    val deletedStoreFilesSet = deletedStoreFiles.map(_.getName).toSet
+    val oldChecksumFiles = checksumFiles
+      .filter(f => f.baseName.split("_")(0).toLong < minVersionToRetain)
+
+    val orphanChecksumFiles = if (fileChecksumEnabled) {
+      oldChecksumFiles
+        // old checksum files and was not part of the store files deleted
+        .filterNot(f => deletedStoreFilesSet.contains(f.mainFilePath.getName))
+    } else {
+      // all old checksum files, in case file checksum was previously enabled
+      oldChecksumFiles
+    }
+
+    val failedFiles = mutable.ListBuffer[Path]()
+    val (_, dur) = Utils.timeTakenMs {
+      orphanChecksumFiles.foreach { f =>
+        try {
+          fm.delete(f.path)
+        } catch {
+          case NonFatal(e) =>
+            failedFiles += f.path
+            logWarning(log"Failed to delete orphan checksum file " +
+              log"${MDC(LogKeys.FILE_NAME, f.path)}", e)
+        }
+      }
+    }
+
+    if (orphanChecksumFiles.nonEmpty) {
+      logInfo(log"Deleted orphan checksum files older than version " +
+        log"${MDC(LogKeys.FILE_VERSION, minVersionToRetain)} " +
+        log"(timeTakenMs = ${MDC(LogKeys.DURATION, dur)}) - " +
+        log"Orphan files: ${MDC(LogKeys.FILE_NAME, orphanChecksumFiles.mkString(", "))}" +
+        log"Failed to Delete: ${MDC(LogKeys.FILE_NAME, failedFiles.mkString(", "))}")
     }
   }
 

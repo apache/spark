@@ -3093,6 +3093,48 @@ class BaseUDTFTestsMixin:
             ],
         )
 
+    @unittest.skipIf(is_remote_only(), "Requires JVM access")
+    def test_udtf_analyze_with_logging(self):
+        @udtf
+        class TestUDTFWithLogging:
+            @staticmethod
+            def analyze(x: AnalyzeArgument) -> AnalyzeResult:
+                logger = logging.getLogger("test_udtf")
+                logger.warning(f"udtf analyze: {x.dataType.json()}")
+                return AnalyzeResult(StructType().add("a", IntegerType()).add("b", IntegerType()))
+
+            def eval(self, x: int):
+                yield x * 2, x + 10
+
+        with self.sql_conf({"spark.sql.pyspark.worker.logging.enabled": "true"}):
+            assertDataFrameEqual(
+                self.spark.createDataFrame([(5,), (10,)], ["x"]).lateralJoin(
+                    TestUDTFWithLogging(col("x").outer())
+                ),
+                [Row(x=x, a=x * 2, b=x + 10) for x in [5, 10]],
+            )
+
+        logs = self.spark.table("system.session.python_worker_logs")
+
+        assertDataFrameEqual(
+            logs.select(
+                "level",
+                "msg",
+                col("context.class_name").alias("context_class_name"),
+                col("context.func_name").alias("context_func_name"),
+                "logger",
+            ).distinct(),
+            [
+                Row(
+                    level="WARNING",
+                    msg='udtf analyze: "long"',
+                    context_class_name="TestUDTFWithLogging",
+                    context_func_name="analyze",
+                    logger="test_udtf",
+                )
+            ],
+        )
+
 
 class UDTFTests(BaseUDTFTestsMixin, ReusedSQLTestCase):
     @classmethod

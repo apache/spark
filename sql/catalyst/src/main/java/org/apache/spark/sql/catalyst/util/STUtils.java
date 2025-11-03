@@ -67,4 +67,13 @@ public final class STUtils {
     return toPhysVal(Geometry.fromWkb(wkb));
   }
 
+  // ST_Srid
+  public static int stSrid(GeographyVal geog) {
+    return fromPhysVal(geog).srid();
+  }
+
+  public static int stSrid(GeometryVal geom) {
+    return fromPhysVal(geom).srid();
+  }
+
 }
