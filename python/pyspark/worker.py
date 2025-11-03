@@ -1246,6 +1246,36 @@ def wrap_memory_profiler(f, result_id):
     return profiling_func
 
 
+def wrap_iter_memory_profiler(f, result_id):
+    from pyspark.sql.profiler import ProfileResultsParam
+    from pyspark.profiler import UDFLineProfilerV2
+
+    accumulator = _deserialize_accumulator(
+        SpecialAccumulatorIds.SQL_UDF_PROFIER, None, ProfileResultsParam
+    )
+
+    def profiling_func(*args, **kwargs):
+        profiler = UDFLineProfilerV2()
+        profiler.add_function(f)
+
+        iterator = iter(f(*args, **kwargs))
+
+        while True:
+            try:
+                with profiler:
+                    item = next(iterator)
+                yield item
+            except StopIteration:
+                break
+
+        codemap_dict = {
+            filename: list(line_iterator) for filename, line_iterator in profiler.code_map.items()
+        }
+        accumulator.add({result_id: (None, codemap_dict)})
+
+    return profiling_func
+
+
 def read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index, profiler):
     num_arg = read_int(infile)
 

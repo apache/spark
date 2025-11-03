@@ -339,9 +339,7 @@ class UDFProfiler2TestsMixin:
                 yield s + 2
 
         with self.sql_conf({"spark.sql.pyspark.udf.profiler": "perf"}):
-            df = self.spark.range(10, numPartitions=2).select(
-                add1("id"), add2("id"), add1("id")
-            )
+            df = self.spark.range(10, numPartitions=2).select(add1("id"), add2("id"), add1("id"))
             df.collect()
 
         self.assertEqual(2, len(self.profile_results), str(self.profile_results.keys()))
@@ -364,9 +362,7 @@ class UDFProfiler2TestsMixin:
                 yield pa.compute.add(s, 2)
 
         with self.sql_conf({"spark.sql.pyspark.udf.profiler": "perf"}):
-            df = self.spark.range(10, numPartitions=2).select(
-                add1("id"), add2("id"), add1("id")
-            )
+            df = self.spark.range(10, numPartitions=2).select(add1("id"), add2("id"), add1("id"))
             df.collect()
 
         self.assertEqual(2, len(self.profile_results), str(self.profile_results.keys()))
@@ -401,7 +397,9 @@ class UDFProfiler2TestsMixin:
 
         def map_func(iterator: Iterator[pa.RecordBatch]) -> Iterator[pa.RecordBatch]:
             for batch in iterator:
-                yield pa.RecordBatch.from_arrays([batch.column("id"), pa.compute.add(batch.column("age"), 1)], ["id", "age"])
+                yield pa.RecordBatch.from_arrays(
+                    [batch.column("id"), pa.compute.add(batch.column("age"), 1)], ["id", "age"]
+                )
 
         with self.sql_conf({"spark.sql.pyspark.udf.profiler": "perf"}):
             df.mapInArrow(map_func, df.schema).show()
