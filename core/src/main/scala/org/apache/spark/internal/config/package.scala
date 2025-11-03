@@ -3400,6 +3400,7 @@ package object config {
         "after GC on driver, which with DataFrames or RDDs at the global scope will not occur. " +
         "This must be configured before starting the SparkContext (e.g. can not be added to " +
         "a running Spark instance).")
+      .version("4.3.0")
       .timeConf(TimeUnit.MILLISECONDS)
       .createOptional
 
@@ -3409,6 +3410,7 @@ package object config {
         "after GC on driver, which with DataFrames or RDDs at the global scope will not occur. " +
         "This must be configured before starting the SparkContext (e.g. can not be added to " +
         "a running Spark instance).")
+      .version("4.3.0")
       .timeConf(TimeUnit.MILLISECONDS)
       .createOptional
 }
