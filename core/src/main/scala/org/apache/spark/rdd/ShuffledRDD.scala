@@ -78,7 +78,6 @@ class ShuffledRDD[K: ClassTag, V: ClassTag, C: ClassTag](
     this
   }
 
-
   override def getDependencies: Seq[Dependency[_]] = {
     val serializer = userSpecifiedSerializer.getOrElse {
       val serializerManager = SparkEnv.get.serializerManager
