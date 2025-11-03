@@ -25,7 +25,6 @@ import com.fasterxml.jackson.databind.json.JsonMapper
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
 
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.util.SparkErrorUtils
 
 /**
  * A reader to load error information from one or more JSON files. Note that, if one error appears
@@ -153,9 +152,7 @@ private object ErrorClassesJsonReader {
     .addModule(DefaultScalaModule)
     .build()
   private def readAsMap(url: URL): Map[String, ErrorInfo] = {
-    val map = SparkErrorUtils.tryWithResource(url.openStream()) { inputStream =>
-      mapper.readValue(inputStream, new TypeReference[Map[String, ErrorInfo]]() {})
-    }
+    val map = mapper.readValue(url.openStream(), new TypeReference[Map[String, ErrorInfo]]() {})
     val errorClassWithDots = map.collectFirst {
       case (errorClass, _) if errorClass.contains('.') => errorClass
       case (_, ErrorInfo(_, Some(map), _, _)) if map.keys.exists(_.contains('.')) =>

@@ -75,9 +75,8 @@ class SparkThrowableSuite extends SparkFunSuite {
       .addModule(DefaultScalaModule)
       .enable(STRICT_DUPLICATE_DETECTION)
       .build()
-    Utils.tryWithResource(errorJsonFilePath.toUri.toURL.openStream()) { inputStream =>
-      mapper.readValue(inputStream, new TypeReference[Map[String, ErrorInfo]]() {})
-    }
+    mapper.readValue(
+      errorJsonFilePath.toUri.toURL.openStream(), new TypeReference[Map[String, ErrorInfo]]() {})
   }
 
   test("Error conditions are correctly formatted") {
@@ -125,14 +124,10 @@ class SparkThrowableSuite extends SparkFunSuite {
       .addModule(DefaultScalaModule)
       .enable(STRICT_DUPLICATE_DETECTION)
       .build()
-    val errorClasses =
-      Utils.tryWithResource(errorClassesJson.openStream()) { inputStream =>
-        mapper.readValue(inputStream, new TypeReference[Map[String, String]]() {})
-      }
-    val errorStates =
-      Utils.tryWithResource(errorStatesJson.openStream()) { inputStream =>
-        mapper.readValue(inputStream, new TypeReference[Map[String, ErrorStateInfo]]() {})
-      }
+    val errorClasses = mapper.readValue(
+      errorClassesJson.openStream(), new TypeReference[Map[String, String]]() {})
+    val errorStates = mapper.readValue(
+      errorStatesJson.openStream(), new TypeReference[Map[String, ErrorStateInfo]]() {})
     val errorConditionStates = errorReader.errorInfoMap.values.toSeq.flatMap(_.sqlState).toSet
     assert(Set("22012", "22003", "42601").subsetOf(errorStates.keySet))
     assert(errorClasses.keySet.filter(!_.matches("[A-Z0-9]{2}")).isEmpty)
