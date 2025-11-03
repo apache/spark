@@ -1888,6 +1888,12 @@
     ],
     "sqlState" : "42623"
   },
+  "GEO_ENCODER_SRID_MISMATCH_ERROR" : {
+    "message" : [
+      "Failed to encode <type> value because provided SRID <valueSrid> of a value to encode does not match type SRID: <typeSrid>."
+    ],
+    "sqlState" : "42K09"
+  },
   "GET_TABLES_BY_TYPE_UNSUPPORTED_BY_HIVE_VERSION" : {
     "message" : [
       "Hive 2.2 and lower versions don't support getTablesByType. Please use Hive 2.3 or higher version."
