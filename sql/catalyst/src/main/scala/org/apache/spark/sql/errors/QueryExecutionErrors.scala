@@ -2794,12 +2794,6 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       cause = e)
   }
 
-  def stInvalidSridValueError(srid: String): SparkIllegalArgumentException = {
-    new SparkIllegalArgumentException(
-      errorClass = "ST_INVALID_SRID_VALUE",
-      messageParameters = Map("srid" -> srid))
-  }
-
   def hllInvalidLgK(function: String, min: Int, max: Int, value: Int): Throwable = {
     new SparkRuntimeException(
       errorClass = "HLL_INVALID_LG_K",

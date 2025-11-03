@@ -16,7 +16,6 @@
  */
 package org.apache.spark.sql.catalyst.util;
 
-import org.apache.spark.sql.errors.QueryExecutionErrors;
 import org.apache.spark.sql.types.GeographyType;
 import org.apache.spark.sql.types.GeometryType;
 import org.apache.spark.unsafe.types.GeographyVal;
@@ -56,17 +55,6 @@ public final class STUtils {
     // Geographic SRID is always a valid SRID for geometry, so we don't need to check it.
     // Also, all geographic coordinates are valid for geometry, so no need to check bounds.
     return toPhysVal(Geometry.fromBytes(geographyVal.getBytes()));
-  }
-
-  // Cast geometry to geography.
-  public static GeographyVal geometryToGeography(GeometryVal geometryVal) {
-    // We need to check whether the geometry SRID is a geographic SRID.
-    int srid = stSrid(geometryVal);
-    if (!GeographyType.isSridSupported(srid)) {
-      throw QueryExecutionErrors.stInvalidSridValueError(String.valueOf(srid));
-    }
-    // TODO(SPARK-XXXXX): We also need to check whether the input coordinates are out-of-bounds.
-    return toPhysVal(Geography.fromBytes(geometryVal.getBytes()));
   }
 
   /** Geospatial type encoder/decoder utilities. */

@@ -1489,10 +1489,10 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
-  // The following tests are confirming the behavior of casting between GEOGRAPHY and GEOMETRY.
+  // The following tests are confirming the behavior of casting between geospatial types.
 
-  test("Casting GeographyType to/from GeometryType") {
-    // Casting between GEOGRAPHY to GEOMETRY is only allowed if the SRIDs are the same.
+  test("Casting GeographyType to GeometryType") {
+    // Casting from GEOGRAPHY to GEOMETRY is only allowed if the SRIDs are the same.
 
     // Valid cast test cases.
     val canAnsiCastTestCases: Seq[(DataType, DataType)] = Seq(
@@ -1504,9 +1504,6 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
       // Cast can be performed from `fromType` to `toType`.
       assert(Cast.canCast(fromType, toType))
       assert(Cast.canAnsiCast(fromType, toType))
-      // Cast can be performed from `toType` to `fromType`.
-      assert(Cast.canCast(toType, fromType))
-      assert(Cast.canAnsiCast(toType, fromType))
     }
 
     // Invalid cast test cases.
@@ -1523,9 +1520,6 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
       // Cast cannot be performed from `fromType` to `toType`.
       assert(!Cast.canCast(fromType, toType))
       assert(!Cast.canAnsiCast(fromType, toType))
-      // Cast cannot be performed from `toType` to `fromType`.
-      assert(!Cast.canCast(toType, fromType))
-      assert(!Cast.canAnsiCast(toType, fromType))
     }
   }
 

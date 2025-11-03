@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.catalyst.util;
 
-import org.apache.spark.SparkIllegalArgumentException;
 import org.apache.spark.unsafe.types.GeographyVal;
 import org.apache.spark.unsafe.types.GeometryVal;
 import org.junit.jupiter.api.Test;
@@ -71,28 +70,6 @@ class STUtilsSuite {
     GeometryVal geometryVal = STUtils.geographyToGeometry(geographyVal);
     assertNotNull(geometryVal);
     assertArrayEquals(geographyVal.getBytes(), geometryVal.getBytes());
-  }
-
-  @Test
-  void testGeometryToGeography() {
-    // Create a geometry with a valid SRID that is geographic (e.g. 4326).
-    byte[] testGeometryBytesSrid4326 = testGeometryBytes;
-    testGeometryBytesSrid4326[0] = (byte) 0xE6;
-    testGeometryBytesSrid4326[1] = 0x10;
-    GeometryVal geometryVal = GeometryVal.fromBytes(testGeometryBytesSrid4326);
-    GeographyVal geographyVal = STUtils.geometryToGeography(geometryVal);
-    assertNotNull(geographyVal);
-    assertArrayEquals(geometryVal.getBytes(), geographyVal.getBytes());
-  }
-
-  @Test
-  void testGeometryToGeographyInvalidSrid() {
-    // Create a geometry with a valid SRID that is not geographic (e.g. 0).
-    GeometryVal geometryVal = GeometryVal.fromBytes(testGeometryBytes);
-    Exception exception = assertThrows(IllegalArgumentException.class,
-      () -> STUtils.geometryToGeography(geometryVal));
-    String actualErrorClass = ((SparkIllegalArgumentException) exception).getCondition();
-    assertEquals("ST_INVALID_SRID_VALUE", actualErrorClass);
   }
 
   /** Tests for ST expression utility methods. */

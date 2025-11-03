@@ -74,10 +74,25 @@ Project [cast(st_geogfromwkb(0x0101000000000000000000F03F0000000000000040) as ge
 
 
 -- !query
-SELECT CAST(ST_GeogFromWKB(X'0101000000000000000000f03f0000000000000040')::GEOMETRY(4326) AS GEOGRAPHY(4326)) AS result
+SELECT CAST(ST_GeogFromWKB(X'0101000000000000000000f03f0000000000000040') AS GEOMETRY(ANY)) AS result
 -- !query analysis
-Project [cast(cast(st_geogfromwkb(0x0101000000000000000000F03F0000000000000040) as geometry(4326)) as geography(4326)) AS result#x]
-+- OneRowRelation
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "sqlExpr" : "\"CAST(st_geogfromwkb(X'0101000000000000000000F03F0000000000000040') AS GEOMETRY(ANY))\"",
+    "srcType" : "\"GEOGRAPHY(4326)\"",
+    "targetType" : "\"GEOMETRY(ANY)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 91,
+    "fragment" : "CAST(ST_GeogFromWKB(X'0101000000000000000000f03f0000000000000040') AS GEOMETRY(ANY))"
+  } ]
+}
 
 
 -- !query
