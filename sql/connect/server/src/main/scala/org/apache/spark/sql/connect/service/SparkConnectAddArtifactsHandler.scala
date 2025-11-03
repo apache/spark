@@ -219,9 +219,9 @@ class SparkConnectAddArtifactsHandler(val responseObserver: StreamObserver[AddAr
         ArtifactUtils.concatenatePaths(stagingDir, path)
       } catch {
         case _: IllegalArgumentException =>
-          throw new IllegalArgumentException(
-            s"Artifact with name: $name is invalid. The `name` " +
-              s"must be a relative path and cannot reference parent/sibling/nephew directories.")
+          throw new SparkRuntimeException(
+            errorClass = "INVALID_ARTIFACT_PATH",
+            messageParameters = Map("name" -> name))
         case NonFatal(e) => throw e
       }
 
