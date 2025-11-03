@@ -16,7 +16,6 @@
  */
 package org.apache.spark.sql.catalyst.util;
 
-import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 
 // Helper interface for the APIs expected from top-level GEOMETRY and GEOGRAPHY classes.
