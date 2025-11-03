@@ -74,12 +74,11 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 
 
 -- !query
-SELECT CAST(ST_GeogFromWKB(X'0101000000000000000000f03f0000000000000040') AS GEOMETRY(4326)) AS result
+hex(ST_AsBinary(SELECT CAST(ST_GeogFromWKB(X'0101000000000000000000f03f0000000000000040') AS GEOMETRY(4326)))) AS result
 -- !query schema
-struct<>
+struct<result:string>
 -- !query output
-scala.MatchError
-(org.apache.spark.sql.types.Geometry@ad180c98,GeometryType(4326)) (of class scala.Tuple2)
+0101000000000000000000F03F0000000000000040
 
 
 -- !query
