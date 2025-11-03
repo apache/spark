@@ -19,15 +19,26 @@ package org.apache.spark.sql.connect.client.jdbc
 
 import java.sql.{Array => _, _}
 
+import scala.util.Using
+
 import org.apache.spark.SparkBuildInfo.{spark_version => SPARK_VERSION}
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connect.client.jdbc.test.JdbcHelper
-import org.apache.spark.sql.connect.test.{ConnectFunSuite, RemoteSparkSession}
+import org.apache.spark.sql.connect.test.{ConnectFunSuite, RemoteSparkSession, SQLHelper}
 import org.apache.spark.util.VersionUtils
 
 class SparkConnectDatabaseMetaDataSuite extends ConnectFunSuite with RemoteSparkSession
-    with JdbcHelper {
+    with JdbcHelper with SQLHelper {
 
   def jdbcUrl: String = s"jdbc:sc://localhost:$serverPort"
+
+  // catalyst test jar is inaccessible here, but presents at the testing connect server classpath
+  private val TEST_IN_MEMORY_CATALOG = "org.apache.spark.sql.connector.catalog.InMemoryCatalog"
+
+  private def registerCatalog(
+      name: String, className: String)(implicit spark: SparkSession): Unit = {
+    spark.conf.set(s"spark.sql.catalog.$name", className)
+  }
 
   test("SparkConnectDatabaseMetaData simple methods") {
     withConnection { conn =>
@@ -188,6 +199,40 @@ class SparkConnectDatabaseMetaDataSuite extends ConnectFunSuite with RemoteSpark
       assert(metadata.getMaxLogicalLobSize === 0)
       assert(metadata.supportsRefCursors === false)
       assert(metadata.supportsSharding === false)
+    }
+  }
+
+  test("SparkConnectDatabaseMetaData getSQLKeywords") {
+    withConnection { conn =>
+      val metadata = conn.getMetaData
+      // scalastyle:off line.size.limit
+      assert(metadata.getSQLKeywords === "ADD,AFTER,AGGREGATE,ALWAYS,ANALYZE,ANTI,ANY_VALUE,ARCHIVE,ASC,BINDING,BUCKET,BUCKETS,BYTE,CACHE,CASCADE,CATALOG,CATALOGS,CHANGE,CLEAR,CLUSTER,CLUSTERED,CODEGEN,COLLATION,COLLECTION,COLUMNS,COMMENT,COMPACT,COMPACTIONS,COMPENSATION,COMPUTE,CONCATENATE,CONTAINS,CONTINUE,COST,DATA,DATABASE,DATABASES,DATEADD,DATEDIFF,DATE_ADD,DATE_DIFF,DAYOFYEAR,DAYS,DBPROPERTIES,DEFINED,DEFINER,DELAY,DELIMITED,DESC,DFS,DIRECTORIES,DIRECTORY,DISTRIBUTE,DIV,DO,ELSEIF,ENFORCED,ESCAPED,EVOLUTION,EXCHANGE,EXCLUDE,EXIT,EXPLAIN,EXPORT,EXTEND,EXTENDED,FIELDS,FILEFORMAT,FIRST,FLOW,FOLLOWING,FORMAT,FORMATTED,FOUND,FUNCTIONS,GENERATED,GEOGRAPHY,GEOMETRY,HANDLER,HOURS,IDENTIFIER,IF,IGNORE,ILIKE,IMMEDIATE,INCLUDE,INCREMENT,INDEX,INDEXES,INPATH,INPUT,INPUTFORMAT,INVOKER,ITEMS,ITERATE,JSON,KEY,KEYS,LAST,LAZY,LEAVE,LEVEL,LIMIT,LINES,LIST,LOAD,LOCATION,LOCK,LOCKS,LOGICAL,LONG,LOOP,MACRO,MAP,MATCHED,MATERIALIZED,MICROSECOND,MICROSECONDS,MILLISECOND,MILLISECONDS,MINUS,MINUTES,MONTHS,MSCK,NAME,NAMESPACE,NAMESPACES,NANOSECOND,NANOSECONDS,NORELY,NULLS,OFFSET,OPTION,OPTIONS,OUTPUTFORMAT,OVERWRITE,PARTITIONED,PARTITIONS,PERCENT,PIVOT,PLACING,PRECEDING,PRINCIPALS,PROCEDURES,PROPERTIES,PURGE,QUARTER,QUERY,RECORDREADER,RECORDWRITER,RECOVER,RECURSION,REDUCE,REFRESH,RELY,RENAME,REPAIR,REPEAT,REPEATABLE,REPLACE,RESET,RESPECT,RESTRICT,ROLE,ROLES,SCHEMA,SCHEMAS,SECONDS,SECURITY,SEMI,SEPARATED,SERDE,SERDEPROPERTIES,SETS,SHORT,SHOW,SINGLE,SKEWED,SORT,SORTED,SOURCE,STATISTICS,STORED,STRATIFY,STREAM,STREAMING,STRING,STRUCT,SUBSTR,SYNC,SYSTEM_TIME,SYSTEM_VERSION,TABLES,TARGET,TBLPROPERTIES,TERMINATED,TIMEDIFF,TIMESTAMPADD,TIMESTAMPDIFF,TIMESTAMP_LTZ,TIMESTAMP_NTZ,TINYINT,TOUCH,TRANSACTION,TRANSACTIONS,TRANSFORM,TRUNCATE,TRY_CAST,TYPE,UNARCHIVE,UNBOUNDED,UNCACHE,UNLOCK,UNPIVOT,UNSET,UNTIL,USE,VAR,VARIABLE,VARIANT,VERSION,VIEW,VIEWS,VOID,WATERMARK,WEEK,WEEKS,WHILE,X,YEARS,ZONE")
+      // scalastyle:on line.size.limit
+    }
+  }
+
+  test("SparkConnectDatabaseMetaData getCatalogs") {
+    withConnection { conn =>
+      implicit val spark: SparkSession = conn.asInstanceOf[SparkConnectConnection].spark
+
+      registerCatalog("testcat", TEST_IN_MEMORY_CATALOG)
+      registerCatalog("testcat2", TEST_IN_MEMORY_CATALOG)
+
+      // forcibly initialize the registered catalogs because SHOW CATALOGS only
+      // returns the initialized catalogs.
+      spark.sql("USE testcat")
+      spark.sql("USE testcat2")
+      spark.sql("USE spark_catalog")
+
+      val metadata = conn.getMetaData
+      Using.resource(metadata.getCatalogs) { rs =>
+        val catalogs = new Iterator[String] {
+          def hasNext: Boolean = rs.next()
+          def next(): String = rs.getString("TABLE_CAT")
+        }.toSeq
+        // results are ordered by TABLE_CAT
+        assert(catalogs === Seq("spark_catalog", "testcat", "testcat2"))
+      }
     }
   }
 }

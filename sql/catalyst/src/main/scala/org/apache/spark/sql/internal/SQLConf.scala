@@ -3430,6 +3430,15 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val STREAMING_CHECKPOINT_FILE_CHECKSUM_ENABLED =
+    buildConf("spark.sql.streaming.checkpoint.fileChecksum.enabled")
+      .internal()
+      .doc("When true, checksum would be generated and verified for checkpoint files. " +
+        "This is used to detect file corruption.")
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val PARALLEL_FILE_LISTING_IN_STATS_COMPUTATION =
     buildConf("spark.sql.statistics.parallelFileListingInStatsComputation.enabled")
       .internal()
@@ -3871,6 +3880,15 @@ object SQLConf {
           "for Python execution with DataFrame and SQL. It can change during runtime.")
       .version("4.1.0")
       .fallbackConf(Python.PYTHON_WORKER_TRACEBACK_DUMP_INTERVAL_SECONDS)
+
+  val PYTHON_WORKER_LOGGING_ENABLED =
+    buildConf("spark.sql.pyspark.worker.logging.enabled")
+      .doc("When set to true, this configuration enables comprehensive logging within " +
+        "Python worker processes that execute User-Defined Functions (UDFs), " +
+        "User-Defined Table Functions (UDTFs), and other Python-based operations in Spark SQL.")
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(false)
 
   val PYSPARK_PLOT_MAX_ROWS =
     buildConf("spark.sql.pyspark.plotting.max_rows")
@@ -6477,6 +6495,15 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val MERGE_INTO_SOURCE_NESTED_TYPE_COERCION_ENABLED =
+    buildConf("spark.sql.merge.source.nested.type.coercion.enabled")
+      .internal()
+      .doc("If enabled, allow MERGE INTO to coerce source nested types if they have less" +
+        "nested fields than the target table's nested types.")
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(true)
+
   /**
    * Holds information about keys that have been deprecated.
    *
@@ -6709,6 +6736,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
     getConf(STATE_STORE_COORDINATOR_MAX_LAGGING_STORES_TO_REPORT)
 
   def checkpointLocation: Option[String] = getConf(CHECKPOINT_LOCATION)
+
+  def checkpointFileChecksumEnabled: Boolean = getConf(STREAMING_CHECKPOINT_FILE_CHECKSUM_ENABLED)
 
   def isUnsupportedOperationCheckEnabled: Boolean = getConf(UNSUPPORTED_OPERATION_CHECK_ENABLED)
 
@@ -7283,6 +7312,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def pythonUDFWorkerTracebackDumpIntervalSeconds: Long =
     getConf(PYTHON_UDF_WORKER_TRACEBACK_DUMP_INTERVAL_SECONDS)
 
+  def pythonWorkerLoggingEnabled: Boolean = getConf(PYTHON_WORKER_LOGGING_ENABLED)
+
   def pythonUDFArrowConcurrencyLevel: Option[Int] = getConf(PYTHON_UDF_ARROW_CONCURRENCY_LEVEL)
 
   def pythonUDFArrowFallbackOnUDT: Boolean = getConf(PYTHON_UDF_ARROW_FALLBACK_ON_UDT)
@@ -7607,6 +7638,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def legacyXMLParserEnabled: Boolean =
     getConf(SQLConf.LEGACY_XML_PARSER_ENABLED)
+
+  def coerceMergeNestedTypes: Boolean =
+    getConf(SQLConf.MERGE_INTO_SOURCE_NESTED_TYPE_COERCION_ENABLED)
 
   /** ********************** SQLConf functionality methods ************ */
 

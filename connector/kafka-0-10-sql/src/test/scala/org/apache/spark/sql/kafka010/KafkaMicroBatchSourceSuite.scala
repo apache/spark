@@ -390,7 +390,6 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase with 
       .readStream
       .format("kafka")
       .option("kafka.bootstrap.servers", testUtils.brokerAddress)
-      .option("kafka.metadata.max.age.ms", "1")
       .option("maxOffsetsPerTrigger", 5)
       .option("subscribe", topic)
       .option("startingOffsets", "earliest")
@@ -1839,20 +1838,20 @@ abstract class KafkaMicroBatchV2SourceSuite extends KafkaMicroBatchSourceSuiteBa
     val latestOffset = Map[TopicPartition, Long]((topicPartition1, 3L), (topicPartition2, 6L))
 
     // test empty offset.
-    assert(KafkaMicroBatchStream.metrics(Optional.ofNullable(null), latestOffset).isEmpty)
+    assert(KafkaMicroBatchStream.metrics(Optional.ofNullable(null), Some(latestOffset)).isEmpty)
 
     // test valid offsetsBehindLatest
     val offset = KafkaSourceOffset(
       Map[TopicPartition, Long]((topicPartition1, 1L), (topicPartition2, 2L)))
     assert(
-      KafkaMicroBatchStream.metrics(Optional.ofNullable(offset), latestOffset) ===
+      KafkaMicroBatchStream.metrics(Optional.ofNullable(offset), Some(latestOffset)) ===
         Map[String, String](
           "minOffsetsBehindLatest" -> "2",
           "maxOffsetsBehindLatest" -> "4",
           "avgOffsetsBehindLatest" -> "3.0").asJava)
 
     // test null latestAvailablePartitionOffsets
-    assert(KafkaMicroBatchStream.metrics(Optional.ofNullable(offset), null).isEmpty)
+    assert(KafkaMicroBatchStream.metrics(Optional.ofNullable(offset), None).isEmpty)
   }
 }
 

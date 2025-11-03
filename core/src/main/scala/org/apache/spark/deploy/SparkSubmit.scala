@@ -1166,7 +1166,7 @@ object SparkSubmit extends CommandLineUtils with Logging {
           super.doSubmit(args)
         } catch {
           case e: SparkUserAppException =>
-            exitFn(e.exitCode, Some(e))
+            exitFn(e.exitCode, Option(e.getCause))
         }
       }
 

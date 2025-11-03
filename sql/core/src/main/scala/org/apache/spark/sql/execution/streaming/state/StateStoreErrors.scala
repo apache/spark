@@ -248,6 +248,12 @@ object StateStoreErrors {
     new StateStoreOperationOutOfOrder(errorMsg)
   }
 
+  def unexpectedEmptyFileInRocksDBZip(
+      fileName: String,
+      zipFileName: String): StateStoreUnexpectedEmptyFileInRocksDBZip = {
+    new StateStoreUnexpectedEmptyFileInRocksDBZip(fileName, zipFileName)
+  }
+
   def cannotLoadStore(e: Throwable): Throwable = {
     e match {
       case e: SparkException
@@ -569,3 +575,11 @@ class StateStoreCommitValidationFailed(
       "missingCommits" -> missingCommits
     )
   )
+
+class StateStoreUnexpectedEmptyFileInRocksDBZip(fileName: String, zipFileName: String)
+  extends SparkException(
+    errorClass = "STATE_STORE_UNEXPECTED_EMPTY_FILE_IN_ROCKSDB_ZIP",
+    messageParameters = Map(
+      "fileName" -> fileName,
+      "zipFileName" -> zipFileName),
+    cause = null)

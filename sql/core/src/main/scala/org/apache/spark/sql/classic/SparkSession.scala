@@ -38,11 +38,12 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.scheduler.{SparkListener, SparkListenerApplicationEnd}
 import org.apache.spark.sql
 import org.apache.spark.sql.{AnalysisException, Artifact, DataSourceRegistration, Encoder, Encoders, ExperimentalMethods, Row, SparkSessionBuilder, SparkSessionCompanion, SparkSessionExtensions, SparkSessionExtensionsProvider, UDTFRegistration}
+import org.apache.spark.sql.api.python.PythonSQLUtils
 import org.apache.spark.sql.artifact.ArtifactManager
 import org.apache.spark.sql.catalyst._
-import org.apache.spark.sql.catalyst.analysis.{GeneralParameterizedQuery, NameParameterizedQuery, PosParameterizedQuery, UnresolvedRelation}
+import org.apache.spark.sql.catalyst.analysis.{GeneralParameterizedQuery, NameParameterizedQuery, ParameterizedQueryArgumentsValidator, PosParameterizedQuery, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.encoders._
-import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeReference, CreateArray, CreateMap, CreateNamedStruct, Expression, Literal, MapFromArrays, MapFromEntries, VariableReference}
+import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeReference, Expression, Literal}
 import org.apache.spark.sql.catalyst.parser.{HybridParameterContext, NamedParameterContext, ParserInterface, PositionalParameterContext}
 import org.apache.spark.sql.catalyst.plans.logical.{CompoundBody, LocalRelation, OneRowRelation, Project, Range}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
@@ -453,27 +454,15 @@ class SparkSession private(
     // Analyze the plan to resolve expressions
     val analyzed = sessionState.analyzer.execute(fakePlan)
 
-    // Validate: the expression tree must only contain allowed expression types.
-    // This mirrors the validation in BindParameters.checkArgs.
-    // We check this BEFORE optimization to catch unsupported functions like str_to_map.
-    def isNotAllowed(expr: Expression): Boolean = expr.exists {
-      case _: Literal | _: CreateArray | _: CreateNamedStruct |
-        _: CreateMap | _: MapFromArrays | _: MapFromEntries | _: VariableReference => false
-      case a: Alias => isNotAllowed(a.child)
-      case _ => true
+    val expressionsToValidate = analyzed.asInstanceOf[Project].projectList.map {
+      case alias: Alias =>
+        (alias.name, alias.child)
+      case other =>
+        throw SparkException.internalError(
+          s"Expected an Alias, but got ${other.getClass.getSimpleName}"
+        )
     }
-
-    analyzed.asInstanceOf[Project].projectList.foreach { alias =>
-      val optimizedExpr = alias.asInstanceOf[Alias].child
-      if (isNotAllowed(optimizedExpr)) {
-        // Both modern and legacy modes use INVALID_SQL_ARG for sql() API argument validation.
-        // UNSUPPORTED_EXPR_FOR_PARAMETER is reserved for EXECUTE IMMEDIATE.
-        throw new AnalysisException(
-          errorClass = "INVALID_SQL_ARG",
-          messageParameters = Map("name" -> alias.name),
-          origin = optimizedExpr.origin)
-      }
-    }
+    ParameterizedQueryArgumentsValidator(expressionsToValidate)
 
     // Optimize to constant-fold expressions. After optimization, all allowed expressions
     // should be folded to Literals.
@@ -887,6 +876,15 @@ class SparkSession private(
   private[sql] lazy val observationManager = new ObservationManager(this)
 
   override private[sql] def isUsable: Boolean = !sparkContext.isStopped
+
+  /**
+   * Cleans up Python worker logs.
+   *
+   * It is used by PySpark tests or Spark Connect when the session is closed.
+   */
+  private[sql] def cleanupPythonWorkerLogs(): Unit = {
+    PythonSQLUtils.cleanupPythonWorkerLogs(sessionUUID, sparkContext)
+  }
 }
 
 
