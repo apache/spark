@@ -2814,11 +2814,11 @@ class FunctionsTestsMixin:
         )
         results = df.select(
             F.hex(F.st_asbinary(F.st_geogfromwkb("wkb"))),
-            F.hex(F.st_asbinary(F.st_geomfromwkb("wkb")))
+            F.hex(F.st_asbinary(F.st_geomfromwkb("wkb"))),
         ).collect()
         expected = Row(
             "0101000000000000000000F03F0000000000000040",
-            "0101000000000000000000F03F0000000000000040"
+            "0101000000000000000000F03F0000000000000040",
         )
         self.assertEqual(results, [expected])
 
