@@ -86,7 +86,6 @@ private[sql] class SparkResult[T](
   private[this] var arrowSchema: pojo.Schema = _
   private[this] var nextResultIndex: Int = 0
   private val resultMap = mutable.Map.empty[Int, (Long, Seq[ArrowMessage])]
-  private val arrowBatchChunksToAssemble = mutable.Buffer.empty[ByteString]
   private val observedMetrics = mutable.Map.empty[String, Row]
   private val cleanable =
     SparkResult.cleaner.register(this, new SparkResultCloseable(resultMap, responses))
@@ -123,6 +122,7 @@ private[sql] class SparkResult[T](
       stopOnFirstNonEmptyResponse: Boolean = false): Boolean = {
     var nonEmpty = false
     var stop = false
+    val arrowBatchChunksToAssemble = mutable.Buffer.empty[ByteString]
     while (!stop && responses.hasNext) {
       val response = responses.next()
 
