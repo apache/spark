@@ -84,7 +84,6 @@ object GeneratorInputAnalyzer {
         pathPrefix = pathPrefix
       )
     }
-
     results.toMap
   }
 
@@ -247,6 +246,16 @@ object GeneratorInputAnalyzer {
           }
         }
 
+      case GetStructField(arrayItem: GetArrayItem, _, Some(fieldName)) =>
+        val childPaths = extractFieldPaths(arrayItem, targetOutputIds, aliasMap, visited)
+        if (childPaths.isEmpty) {
+          paths += Seq(fieldName)
+        } else {
+          childPaths.foreach { suffix =>
+            paths += (suffix :+ fieldName)
+          }
+        }
+
       case gsf: GetStructField =>
         extractNestedPath(gsf, targetOutputIds, aliasMap, visited).foreach(paths += _)
 
@@ -256,6 +265,14 @@ object GeneratorInputAnalyzer {
 
       case gasf: GetArrayStructFields =>
         extractNestedArrayPath(gasf, targetOutputIds, aliasMap, visited).foreach(paths += _)
+        val childPaths = extractFieldPaths(gasf.child, targetOutputIds, aliasMap, visited)
+        if (childPaths.isEmpty) {
+          paths += Seq(gasf.field.name)
+        } else {
+          childPaths.foreach { suffix =>
+            paths += (suffix :+ gasf.field.name)
+          }
+        }
 
       case attr: AttributeReference
           if aliasMap.contains(attr.exprId) && !visited.contains(attr.exprId) =>
@@ -276,6 +293,10 @@ object GeneratorInputAnalyzer {
     def buildPath(expr: Expression, accumulated: List[String]): Option[Seq[String]] = expr match {
       case GetStructField(child, _, Some(fieldName)) =>
         buildPath(child, fieldName :: accumulated)
+      case GetArrayStructFields(child, field, _, _, _) =>
+        buildPath(child, field.name :: accumulated)
+      case GetArrayItem(child, _, _) =>
+        buildPath(child, accumulated)
       case attr: AttributeReference if targetOutputIds.contains(attr.exprId) =>
         Some(accumulated.toSeq)
       case attr: AttributeReference
@@ -313,6 +334,12 @@ object GeneratorInputAnalyzer {
           aliasMap,
           visited
         ).map(parentField +: _)
+      case GetArrayItem(child, _, _) =>
+        extractNestedArrayPath(
+          GetArrayStructFields(child, gasf.field, gasf.ordinal, gasf.numFields, gasf.containsNull),
+          targetOutputIds,
+          aliasMap,
+          visited)
       case _ =>
         None
     }

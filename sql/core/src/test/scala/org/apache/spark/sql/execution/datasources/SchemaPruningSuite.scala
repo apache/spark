@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.logical.Expand
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.execution.FileSourceScanExec
+import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2ScanExecBase, FileScan}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -503,6 +504,105 @@ abstract class SchemaPruningSuite
         |""".stripMargin)
     checkScan(query4, "struct<friends:array<struct<first:string,middle:string,last:string>>>")
     checkAnswer(query4, Row(0, "Susan", "Z.", Row("Susan", "Z.", "Smith")) :: Nil)
+  }
+
+  testSchemaPruning(
+    "SPARK-47230: posexplode keeps requested nested block reasons without widening structs") {
+    withSQLConf(SQLConf.OPTIMIZER_V2_PENDING_SCAN_ENABLED.key -> "true") {
+      val jsonData =
+        """
+          |[
+          |  {
+          |    "publisherId": 1,
+          |    "endOfSession": 1000,
+          |    "pv_requests": [
+          |      {
+          |        "available": true,
+          |        "rankerVerboseDataList": [
+          |          { "blockedItemsList": [ { "blockReason": "reason_r0_req0_rv0", "extra": "extra_r0_req0_rv0" },
+          |                                     { "blockReason": "second_r0_req0_rv1" } ] }
+          |        ],
+          |        "servedItems": [ { "id": 1, "name": "item_0_0", "clicked": true } ]
+          |      },
+          |      {
+          |        "available": false,
+          |        "rankerVerboseDataList": [
+          |          { "blockedItemsList": [ { "blockReason": "reason_r0_req1_rv0", "extra": "extra_r0_req1_rv0" } ] }
+          |        ],
+          |        "servedItems": [ { "id": 11, "name": "item_0_1", "clicked": false } ]
+          |      }
+          |    ]
+          |  },
+          |  {
+          |    "publisherId": 2,
+          |    "endOfSession": 1001,
+          |    "pv_requests": [
+          |      {
+          |        "available": true,
+          |        "rankerVerboseDataList": [
+          |          { "blockedItemsList": [ { "blockReason": "reason_r1_req0_rv0", "extra": "extra_r1_req0_rv0" },
+          |                                     { "blockReason": "second_r1_req0_rv1" } ] }
+          |        ],
+          |        "servedItems": [ { "id": 1, "name": "item_1_0", "clicked": false } ]
+          |      },
+          |      {
+          |        "available": false,
+          |        "rankerVerboseDataList": [
+          |          { "blockedItemsList": [ { "blockReason": "reason_r1_req1_rv0", "extra": "extra_r1_req1_rv0" } ] }
+          |        ],
+          |        "servedItems": [ { "id": 11, "name": "item_1_1", "clicked": true } ]
+          |      }
+          |    ]
+          |  }
+          |]
+          |""".stripMargin
+
+      withTempPath { path =>
+        val jsonDS = spark.createDataset(Seq(jsonData))(org.apache.spark.sql.Encoders.STRING)
+        val rawDF = spark.read.json(jsonDS)
+        rawDF.write.mode("overwrite").parquet(path.getCanonicalPath)
+
+        spark.read.parquet(path.getCanonicalPath).createOrReplaceTempView("rawdata")
+
+        val result = spark.sql(
+          """
+            |WITH pageviews AS (
+            |  SELECT *,
+            |         request.available AS request_available
+            |  FROM rawdata
+            |  LATERAL VIEW OUTER posexplode(pv_requests) AS requestIdx, request
+            |  LATERAL VIEW OUTER posexplode(request.servedItems) AS servedItemIdx, servedItem
+            |)
+            |SELECT request.rankerVerboseDataList.blockedItemsList[0].blockReason AS blockReason,
+            |       request.available AS request_available
+            |FROM pageviews
+            |""".stripMargin)
+
+        val hasV2Scan = result.queryExecution.executedPlan.exists {
+          case _: DataSourceV2ScanExecBase => true
+          case _ => false
+        }
+        val expectedSchema =
+          if (hasV2Scan) {
+            "struct<pv_requests:array<struct<available:boolean," +
+              "rankerVerboseDataList:array<struct<blockedItemsList:array<struct<blockReason:string>>>>," +
+              "servedItems:array<struct<>>>>>"
+          } else {
+            "struct<pv_requests:array<struct<available:boolean," +
+              "rankerVerboseDataList:array<struct<blockedItemsList:array<struct<blockReason:string>>>>," +
+            "servedItems:array<struct<clicked:boolean,id:bigint,name:string>>>>>"
+          }
+
+        checkScan(result, expectedSchema)
+
+        checkAnswer(
+          result,
+          Row(Seq("reason_r0_req0_rv0", "second_r0_req0_rv1"), true) ::
+            Row(Seq("reason_r0_req1_rv0"), false) ::
+            Row(Seq("reason_r1_req0_rv0", "second_r1_req0_rv1"), true) ::
+            Row(Seq("reason_r1_req1_rv0"), false) :: Nil)
+      }
+    }
   }
 
   testSchemaPruning("SPARK-47230: multi-field pruning with case-insensitive EXPLODE") {
@@ -1375,10 +1475,19 @@ abstract class SchemaPruningSuite
       collect(df.queryExecution.executedPlan) {
         case scan: FileSourceScanExec => scan.requiredSchema
       }
-    assert(fileSourceScanSchemata.size === expectedSchemaCatalogStrings.size,
-      s"Found ${fileSourceScanSchemata.size} file sources in dataframe, " +
+    val v2ScanSchemata =
+      collect(df.queryExecution.executedPlan) {
+        case scan: DataSourceV2ScanExecBase =>
+          scan.scan match {
+            case fileScan: FileScan => fileScan.readDataSchema
+            case other => other.readSchema()
+          }
+      }
+    val collectedSchemas = fileSourceScanSchemata ++ v2ScanSchemata
+    assert(collectedSchemas.size === expectedSchemaCatalogStrings.size,
+      s"Found ${collectedSchemas.size} file/V2 sources in dataframe, " +
         s"but expected $expectedSchemaCatalogStrings")
-    fileSourceScanSchemata.zip(expectedSchemaCatalogStrings).foreach {
+    collectedSchemas.zip(expectedSchemaCatalogStrings).foreach {
       case (scanSchema, expectedScanSchemaCatalogString) =>
         val expectedScanSchema = CatalystSqlParser.parseDataType(expectedScanSchemaCatalogString)
         implicit val equality = schemaEquality

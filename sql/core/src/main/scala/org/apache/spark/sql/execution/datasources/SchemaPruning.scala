@@ -22,12 +22,15 @@ import org.apache.spark.sql.catalyst.planning.ScanOperation
 import org.apache.spark.sql.catalyst.plans.logical.{EventTimeWatermark, Filter, Generate, LeafNode, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
+import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.execution.datasources.orc.OrcFileFormat
 import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
+import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
 import org.apache.spark.sql.execution.streaming.{StreamingExecutionRelation, StreamingRelation}
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
-import org.apache.spark.sql.types.{ArrayType, DataType, MapType, StructField, StructType}
+import org.apache.spark.sql.types.{ArrayType, DataType, MapType, MetadataBuilder, StructField, StructType}
 import org.apache.spark.sql.util.SchemaUtils._
+import scala.util.Try
 
 /**
  * Prunes unnecessary physical columns given a [[ScanOperation]] over a data source relation.
@@ -41,6 +44,9 @@ import org.apache.spark.sql.util.SchemaUtils._
  */
 object SchemaPruning extends Rule[LogicalPlan] {
   import org.apache.spark.sql.catalyst.expressions.SchemaPruning._
+
+  private[datasources] val GeneratorFullStructTag =
+    TreeNodeTag[Map[ExprId, StructType]]("generatorFullStruct")
 
   object StreamingContext {
     private val skip = new ThreadLocal[Boolean] {
@@ -149,12 +155,10 @@ object SchemaPruning extends Rule[LogicalPlan] {
                 generator match {
                   case e: Explode =>
                     traceArrayAccess(e.child).foreach { case (rootCol, _) =>
-                      println(s"[SchemaPruning DEBUG] marking full struct for $rootCol via direct attr ${attr.name}")
                       columnsNeedingFullPreservation += rootCol
                     }
                   case pe: PosExplode =>
                     traceArrayAccess(pe.child).foreach { case (rootCol, _) =>
-                      println(s"[SchemaPruning DEBUG] marking full struct for $rootCol via direct attr ${attr.name}")
                       columnsNeedingFullPreservation += rootCol
                     }
                   case _ =>
@@ -188,12 +192,10 @@ object SchemaPruning extends Rule[LogicalPlan] {
                 generator match {
                   case e: Explode =>
                     traceArrayAccess(e.child).foreach { case (rootCol, _) =>
-                      println(s"[SchemaPruning DEBUG] marking full struct for $rootCol via alias ${attr.name}")
                       columnsNeedingFullPreservation += rootCol
                     }
                   case pe: PosExplode =>
                     traceArrayAccess(pe.child).foreach { case (rootCol, _) =>
-                      println(s"[SchemaPruning DEBUG] marking full struct for $rootCol via alias ${attr.name}")
                       columnsNeedingFullPreservation += rootCol
                     }
                   case _ =>
@@ -316,7 +318,6 @@ object SchemaPruning extends Rule[LogicalPlan] {
       rootAndPath.foreach { case (rootCol, path) =>
         val existingPaths = nestedFieldAccesses.getOrElse(rootCol, Set.empty)
         nestedFieldAccesses(rootCol) = existingPaths + path
-        println(s"[SchemaPruning DEBUG] recorded path for $rootCol -> ${path.mkString(".")}")
         // Track this as an array struct field path
         val existingArrayPaths = arrayStructFieldPaths.getOrElse(rootCol, Set.empty)
         arrayStructFieldPaths(rootCol) = existingArrayPaths + path
@@ -349,13 +350,11 @@ object SchemaPruning extends Rule[LogicalPlan] {
     columnsNeedingFullPreservation.foreach { rootCol =>
       val existingPaths = nestedFieldAccesses.getOrElse(rootCol, Set.empty)
       nestedFieldAccesses(rootCol) = existingPaths + Seq.empty[String]
-      println(s"[SchemaPruning DEBUG] preserving full struct for $rootCol due to direct usage")
     }
 
     // SPARK-47230: Only apply enhanced pruning if we actually traced through Generate nodes
     // This enables pruning for explode/posexplode cases
     if (!tracedThroughGenerate) {
-      println(s"[SchemaPruning DEBUG] continuing without generator trace (tracedThroughGenerate=false)")
     }
 
     if (nestedFieldAccesses.isEmpty) {
@@ -384,7 +383,6 @@ object SchemaPruning extends Rule[LogicalPlan] {
     }
     val prunedSchema = pruneNestedArraySchema(
       originalSchema, filteredAccesses.toMap, requiredColumns, filteredArrayPaths.toMap)
-    println(s"[SchemaPruning DEBUG] pruned schema = ${prunedSchema.simpleString}")
 
 
     // Check if we actually pruned anything
@@ -481,31 +479,26 @@ object SchemaPruning extends Rule[LogicalPlan] {
         // Check if this attribute is from a Generate node
         generateMappings.get(attr.exprId) match {
           case Some(gen: UnaryExpression) =>
-            println(s"[SchemaPruning DEBUG] tracing attr ${attr.exprId.id} via generator ${gen.getClass.getSimpleName}")
             // This attribute comes from a unary generator (explode, posexplode, etc.)
             // Extract the child and trace through it
             val (result, _) = traceArrayAccessThroughGenerates(
               gen.child, generateMappings, extractAliases, relationExprIds)
             (result, true)
           case Some(other) =>
-            println(s"[SchemaPruning DEBUG] tracing attr ${attr.exprId.id} via generator ${other.getClass.getSimpleName}")
             // Other generator types without a single child - mark as used Generate
             val (result, _) = traceArrayAccessThroughGenerates(
               other, generateMappings, extractAliases, relationExprIds)
             (result, true)
           case None =>
-            println(s"[SchemaPruning DEBUG] attr ${attr.exprId.id} not found in generateMappings; checking aliases")
             // Not from a Generate node - check if it's an _extract_ alias
             extractAliases.get(attr.exprId) match {
               case Some(aliasChild) =>
-                println(s"[SchemaPruning DEBUG] attr ${attr.exprId.id} resolved via alias")
                 // SPARK-47230: This is an _extract_ attribute created by NestedColumnAliasing
                 // Trace through the alias child expression
                 val (result, usedGen) = traceArrayAccessThroughGenerates(
                   aliasChild, generateMappings, extractAliases, relationExprIds)
                 (result, usedGen)
               case None =>
-                println(s"[SchemaPruning DEBUG] attr ${attr.exprId.id} maps to base relation? ${relationExprIds.contains(attr.exprId)}")
                 // Not from a Generate node or _extract_ alias - this is a regular attribute
                 val isRelation = relationExprIds.contains(attr.exprId)
                 if (isRelation) {
@@ -852,6 +845,19 @@ object SchemaPruning extends Rule[LogicalPlan] {
  * before the next Generate node can correctly rewrite its ordinals.
  */
 object GeneratorOrdinalRewriting extends Rule[LogicalPlan] {
+  private val GeneratorFullStructKey = "spark.generator.fullStruct"
+
+  private def collectGeneratorStructs(plan: LogicalPlan): Map[ExprId, StructType] = {
+    val builder = scala.collection.mutable.Map[ExprId, StructType]()
+    plan.foreach {
+      case relation: DataSourceV2ScanRelation =>
+        relation.getTagValue(SchemaPruning.GeneratorFullStructTag).foreach { map =>
+          builder ++= map
+        }
+      case _ =>
+    }
+    builder.toMap
+  }
 
   /**
    * Find field ordinal using case-insensitive or case-sensitive lookup
@@ -939,9 +945,18 @@ object GeneratorOrdinalRewriting extends Rule[LogicalPlan] {
     // First pass: collect ALL updated schemas from the plan (from all attributes)
     // This includes schemas that have been pruned by SchemaPruning
     val schemaMap = scala.collection.mutable.Map[ExprId, DataType]()
+    val generatorStructMap = collectGeneratorStructs(plan)
     plan.foreach { node =>
       node.output.foreach { attr =>
-        schemaMap(attr.exprId) = attr.dataType
+        val restoredOpt =
+          if (attr.metadata.contains(GeneratorFullStructKey)) {
+            Try(DataType.fromJson(attr.metadata.getString(GeneratorFullStructKey)))
+              .toOption
+              .collect { case st: StructType => st }
+          } else {
+            generatorStructMap.get(attr.exprId)
+          }
+        schemaMap(attr.exprId) = restoredOpt.getOrElse(attr.dataType)
       }
     }
 
@@ -1031,20 +1046,46 @@ object GeneratorOrdinalRewriting extends Rule[LogicalPlan] {
         val newGeneratorOutput = generatorOutput
           .zip(toAttributes(rewrittenGenerator.elementSchema))
           .map { case (oldAttr, newAttr) =>
-            val updated = newAttr.withExprId(oldAttr.exprId).withName(oldAttr.name)
-            if (updated.dataType != oldAttr.dataType) {
-            }
+            val updated = newAttr
+              .withExprId(oldAttr.exprId)
+              .withName(oldAttr.name)
+              .withMetadata(oldAttr.metadata)
             updated
           }
 
-        // Update schemaMap immediately with new generator outputs
-        // This is critical for nested Generates to see each other's updated schemas
-        newGeneratorOutput.foreach { attr =>
-          schemaMap(attr.exprId) = attr.dataType
+        val restoreStructMapEntries = generatorOutput.flatMap {
+          case oldAttr: AttributeReference
+              if oldAttr.metadata.contains(GeneratorFullStructKey) =>
+            val parsed = Try(
+              DataType.fromJson(oldAttr.metadata.getString(GeneratorFullStructKey)))
+              .toOption
+              .collect { case st: StructType => st }
+            parsed.map { struct =>
+              oldAttr.exprId -> (oldAttr.metadata, struct)
+            }
+          case oldAttr: AttributeReference if generatorStructMap.contains(oldAttr.exprId) =>
+            val struct = generatorStructMap(oldAttr.exprId)
+            val metadata = new MetadataBuilder()
+              .withMetadata(oldAttr.metadata)
+              .putString(GeneratorFullStructKey, struct.json)
+              .build()
+            Some(oldAttr.exprId -> (metadata, struct))
+          case _ => None
+        }.toMap
+
+        val adjustedGeneratorOutput = newGeneratorOutput.map { attr =>
+          restoreStructMapEntries.get(attr.exprId) match {
+            case Some((metadata, struct)) =>
+              schemaMap(attr.exprId) = struct
+              attr.withDataType(struct).withMetadata(metadata)
+            case None =>
+              schemaMap(attr.exprId) = attr.dataType
+              attr
+          }
         }
 
         Generate(rewrittenGenerator, unrequiredChildIndex, outer, qualifier,
-          newGeneratorOutput, child)
+          adjustedGeneratorOutput, child)
     }
 
     // Second pass: Comprehensive expression rewriting throughout the ENTIRE plan

@@ -29,7 +29,7 @@ import org.apache.spark.sql.util.SchemaUtils.restoreOriginalOutputNames
 import org.apache.spark.sql.catalyst.expressions.SchemaPruning
 import org.apache.spark.sql.connector.read.Scan
 import org.apache.spark.sql.connector.read.V1Scan
-import org.apache.spark.sql.types.{ArrayType, DataType, MapType, StructType}
+import org.apache.spark.sql.types.{ArrayType, DataType, MapType, MetadataBuilder, StructType}
 
 /**
  * SPARK-47230: Placeholder optimizer rule that will eventually consume [[PendingV2ScanRelation]]
@@ -39,6 +39,8 @@ import org.apache.spark.sql.types.{ArrayType, DataType, MapType, StructType}
  * requirement-based pruning logic is implemented.
  */
 object V2PendingScanFinalizer extends Rule[LogicalPlan] with Logging {
+  private val GeneratorFullStructKey = "spark.generator.fullStruct"
+
   override def apply(plan: LogicalPlan): LogicalPlan = {
     logDebug("V2PendingScanFinalizer executing")
 
@@ -69,7 +71,8 @@ object V2PendingScanFinalizer extends Rule[LogicalPlan] with Logging {
             rootFields
               .map(f => s"${f.field.name}:${f.field.dataType.catalogString}:${f.derivedFromAtt}")
               .mkString(",")
-          println(s"[V2PendingScanFinalizer DEBUG] relation=${pendingScan.relationId} requirementRootFields=$requirementDebug")
+          logDebug(
+            s"relation=${pendingScan.relationId} requirementRootFields=$requirementDebug")
         }
 
         val fallbackRootFields =
@@ -79,7 +82,8 @@ object V2PendingScanFinalizer extends Rule[LogicalPlan] with Logging {
             fallbackRootFields
               .map(f => s"${f.field.name}:${f.field.dataType.catalogString}:${f.derivedFromAtt}")
               .mkString(",")
-          println(s"[V2PendingScanFinalizer DEBUG] relation=${pendingScan.relationId} fallbackRootFields=$fallbackDebug")
+          logDebug(
+            s"relation=${pendingScan.relationId} fallbackRootFields=$fallbackDebug")
         }
 
         val mergedRootFields = mergeRootFields(rootFields, fallbackRootFields)
@@ -89,11 +93,14 @@ object V2PendingScanFinalizer extends Rule[LogicalPlan] with Logging {
             mergedRootFields
               .map(f => s"${f.field.name}:${f.field.dataType.catalogString}:${f.derivedFromAtt}")
               .mkString(",")
-          println(s"[V2PendingScanFinalizer DEBUG] relation=${pendingScan.relationId} mergedRootFields=$mergedDebug")
+          logDebug(s"relation=${pendingScan.relationId} mergedRootFields=$mergedDebug")
         }
 
         val effectiveRootFields =
           if (mergedRootFields.nonEmpty) Some(mergedRootFields) else None
+
+        val generatorFullStructs =
+          pendingScan.requirements.map(_.generatorFullStructs).getOrElse(Map.empty)
 
         val (scan, output) = PushDownUtils.pruneColumns(
           builder,
@@ -102,15 +109,31 @@ object V2PendingScanFinalizer extends Rule[LogicalPlan] with Logging {
           normalizedFilters,
           effectiveRootFields)
 
+        val adjustedOutput = output.map { attr =>
+          generatorFullStructs.get(attr.exprId) match {
+            case Some(struct) =>
+              val metadata = new MetadataBuilder()
+                .withMetadata(attr.metadata)
+                .putString(GeneratorFullStructKey, struct.json)
+                .build()
+              attr.withMetadata(metadata)
+            case None =>
+              attr
+          }
+        }
+
         val effectiveSchema = scan.readSchema()
         println(s"!!!!! SCHEMA USED (relation=${pendingScan.relationId} " +
           s"${pendingScan.relation.table.name()}): ${effectiveSchema.catalogString}")
 
         val wrappedScan = wrapScanWithState(scan, pendingScan)
-        val scanRelation = DataSourceV2ScanRelation(pendingScan.relation, wrappedScan, output)
+        val scanRelation = DataSourceV2ScanRelation(pendingScan.relation, wrappedScan, adjustedOutput)
+        scanRelation.setTagValue(
+          org.apache.spark.sql.execution.datasources.SchemaPruning.GeneratorFullStructTag,
+          generatorFullStructs)
 
         val projectionOverSchema =
-          ProjectionOverSchema(output.toStructType, AttributeSet(output))
+          ProjectionOverSchema(adjustedOutput.toStructType, AttributeSet(adjustedOutput))
         val projectionFunc = (expr: Expression) => expr transformDown {
           case projectionOverSchema(newExpr) => newExpr
         }

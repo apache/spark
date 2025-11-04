@@ -17,12 +17,8 @@
 package org.apache.spark.sql.execution.datasources.orc
 
 import org.apache.spark.SparkConf
-import org.apache.spark.sql.DataFrame
-import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.datasources.SchemaPruningSuite
-import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
-import org.apache.spark.sql.execution.datasources.v2.orc.OrcScan
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.tags.ExtendedSQLTest
 
@@ -40,19 +36,4 @@ class OrcV2SchemaPruningSuite extends SchemaPruningSuite with AdaptiveSparkPlanH
       .set(SQLConf.USE_V1_SOURCE_LIST, "")
       .set(SQLConf.OPTIMIZER_V2_PENDING_SCAN_ENABLED.key, "true")
 
-  override def checkScanSchemata(df: DataFrame, expectedSchemaCatalogStrings: String*): Unit = {
-    val fileSourceScanSchemata =
-      collect(df.queryExecution.executedPlan) {
-        case BatchScanExec(_, scan: OrcScan, _, _, _, _) => scan.readDataSchema
-      }
-    assert(fileSourceScanSchemata.size === expectedSchemaCatalogStrings.size,
-      s"Found ${fileSourceScanSchemata.size} file sources in dataframe, " +
-        s"but expected $expectedSchemaCatalogStrings")
-    fileSourceScanSchemata.zip(expectedSchemaCatalogStrings).foreach {
-      case (scanSchema, expectedScanSchemaCatalogString) =>
-        val expectedScanSchema = CatalystSqlParser.parseDataType(expectedScanSchemaCatalogString)
-        implicit val equality = schemaEquality
-        assert(scanSchema === expectedScanSchema)
-    }
-  }
 }

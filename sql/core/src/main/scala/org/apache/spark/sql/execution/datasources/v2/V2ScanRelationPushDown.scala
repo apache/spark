@@ -33,7 +33,7 @@ import org.apache.spark.sql.connector.expressions.aggregate.{Aggregation, Avg, C
 import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownAggregates, SupportsPushDownFilters, SupportsPushDownV2Filters, V1Scan}
 import org.apache.spark.sql.catalyst.expressions.SchemaPruning
-import org.apache.spark.sql.execution.datasources.DataSourceStrategy
+import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, SchemaPruning => ExecSchemaPruning}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
 import org.apache.spark.sql.execution.datasources.v2.GeneratorInputAnalyzer.GeneratorInputInfo
 import org.apache.spark.sql.internal.SQLConf
@@ -376,8 +376,11 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
     // SPARK-47230 Redesign: Analyze the complete plan ONCE to collect ALL schema requirements
     // for ALL relations. This solves the multiple-invocation problem where each pruneColumns
     // call only sees a subset of expressions.
+    val isStreamingPlan =
+      ExecSchemaPruning.StreamingContext.skipping || ExecSchemaPruning.isStreamingQuery(planWithAliasing)
+
     val pendingEligible =
-      SQLConf.get.optimizerV2PendingScanEnabled && hasGenerators
+      SQLConf.get.optimizerV2PendingScanEnabled && hasGenerators && !isStreamingPlan
 
     val planForPruning = planWithAliasing
 
@@ -402,8 +405,8 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
           val relationColumns = sHolder.relation.output.map(_.name).toSet
           val relationExprIds = sHolder.relation.output.map(_.exprId).toSet
           val allGeneratorInfosSeq = allGeneratorInfo.values.toSeq
-          println(s"[V2ScanRelationPushDown DEBUG] relation=$relationId generators=${allGeneratorInfosSeq.map(_.columnName).mkString(",")}")
-          println(s"[V2ScanRelationPushDown DEBUG] relation=$relationId plan:\n${planForPruning.treeString}")
+          logDebug(s"Pending scan relation=$relationId generators=${allGeneratorInfosSeq.map(_.columnName).mkString(",")}")
+          logDebug(s"Pending scan relation=$relationId plan:\n${planForPruning.treeString}")
           val pendingInfos = mutable.ArrayBuffer[GeneratorInputInfo]()
           pendingInfos ++= allGeneratorInfosSeq
           val contextMap = mutable.Map[ExprId, GeneratorContext]()
@@ -451,7 +454,15 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
           val computedDirectAttrExprIds = mutable.Set[ExprId]()
           val computedDirectGeneratorOutputs = mutable.Set[ExprId]()
           val passThroughGeneratorOutputs = mutable.Set[ExprId]()
-          val wholeStructGeneratorOutputs = mutable.Set[ExprId]()
+          val projectDirectGeneratorOutputs = mutable.Set[ExprId]()
+
+          normalizedProjects.foreach {
+            case attr: AttributeReference if generatorOutputExprIds.contains(attr.exprId) =>
+              projectDirectGeneratorOutputs += attr.exprId
+            case Alias(childAttr: AttributeReference, _) if generatorOutputExprIds.contains(childAttr.exprId) =>
+              projectDirectGeneratorOutputs += childAttr.exprId
+            case _ =>
+          }
 
           def isComplexType(dataType: DataType): Boolean = dataType match {
             case _: StructType | _: ArrayType | _: MapType => true
@@ -473,15 +484,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
               }
               val childIsGenerator = childAttrOpt.exists(attr => generatorOutputExprIds.contains(attr.exprId))
               val childUnderAccessor =
-                underAccessor ||
-                  alias.name.startsWith("_extract_") ||
-                  (childIsGenerator && childAttrOpt.exists(attr => attr.name != alias.name))
-              if (childIsGenerator && childAttrOpt.nonEmpty && alias.child.isInstanceOf[AttributeReference]) {
-                val childAttr = childAttrOpt.get
-                if (isComplexType(childAttr.dataType)) {
-                  wholeStructGeneratorOutputs += childAttr.exprId
-                }
-              }
+                underAccessor || alias.name.startsWith("_extract_")
               traverse(alias.child, childUnderAccessor)
             case GetStructField(child, _, _) =>
               traverse(child, underAccessor = true)
@@ -543,14 +546,22 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
             (computedDirectAttrExprIds.toSet -- generatorInputExprIds)
               .intersect(planOutputExprIds)
           val directGeneratorOutputExprIds =
-            (computedDirectGeneratorOutputs.toSet -- generatorOutputsUsedAsInputs) --
-              passThroughGeneratorOutputs
-          val generatorWholeStructExprIds = wholeStructGeneratorOutputs.toSet -- passThroughGeneratorOutputs
+            ((computedDirectGeneratorOutputs.toSet ++ projectDirectGeneratorOutputs.toSet) --
+              generatorOutputsUsedAsInputs --
+              passThroughGeneratorOutputs)
+          val generatorWholeStructExprIds =
+            directGeneratorOutputExprIds
+              .flatMap(generatorContexts.get)
+              .filter(ctx => isComplexType(ctx.output.dataType))
+              .map(_.output.exprId)
+              .toSet
           val directAttrNames =
             directAttrExprIds.flatMap(relationAttrsByExprId.get).map(_.name).toSeq.sorted
           val directGeneratorOutputNames =
             directGeneratorOutputExprIds.flatMap(generatorContexts.get).map(_.output.name).toSeq.sorted
-          println(s"[V2ScanRelationPushDown DEBUG] relation=$relationId directAttrs=${directAttrExprIds.size}:${directAttrNames.mkString(",")} directGeneratorOutputs=${directGeneratorOutputExprIds.size}:${directGeneratorOutputNames.mkString(",")}")
+          logDebug(
+            s"Pending scan relation=$relationId directAttrs=${directAttrExprIds.size}:${directAttrNames.mkString(",")} " +
+              s"directGeneratorOutputs=${directGeneratorOutputExprIds.size}:${directGeneratorOutputNames.mkString(",")}")
           val baselineRootFields =
             SchemaPruning.identifyRootFields(normalizedProjects, normalizedFilters).toVector
           // baselineRootFields kept for non-generator columns; generator columns handled separately

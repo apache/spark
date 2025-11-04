@@ -48,7 +48,10 @@ case class FieldPath(segments: Seq[String], container: FieldPath.ContainerKind)
 
 case class RequirementDetail(path: FieldPath, reason: UsageReason)
 
-case class V2Requirements(relationId: Long, requirements: Seq[RequirementDetail])
+case class V2Requirements(
+    relationId: Long,
+    requirements: Seq[RequirementDetail],
+    generatorFullStructs: Map[ExprId, StructType])
 
 case class GeneratorContext(output: AttributeReference, input: ExprId)
 
@@ -113,6 +116,7 @@ object EnhancedRequirementCollector {
       relationOutput: Seq[AttributeReference],
       relationSchema: StructType): V2Requirements = {
     val detailMap = mutable.LinkedHashMap[FieldPath, RequirementDetail]()
+    val generatorOriginalStructs = mutable.Map[ExprId, StructType]()
 
     def reasonRank(reason: UsageReason): Int = reason match {
       case UsageReason.DirectValue => 0
@@ -187,9 +191,6 @@ object EnhancedRequirementCollector {
         resolveDataType(relationSchema, canonicalizeSegments(relationSchema, rootSegments))
           .getOrElse(prunedField.dataType)
       val isGeneratorRoot = generatorColumnNames.contains(root.field.name)
-      if (isGeneratorRoot) {
-        println(s"[EnhancedRequirementCollector DEBUG] baseline generator root=${root.field.name} pruned=${prunedField.dataType.catalogString}")
-      }
       if (root.derivedFromAtt && !isGeneratorRoot) {
         recordPath(rootSegments, rootType, UsageReason.DirectValue)
       }
@@ -210,15 +211,6 @@ object EnhancedRequirementCollector {
 
     generatorInfos.foreach { info =>
       val nestedUsage = info.nestedFieldsAccessed.filter(_.nonEmpty)
-      val directStructOutputs =
-        info.outputAttributes.collect {
-          case outAttr: AttributeReference
-              if directGeneratorExprIds.contains(outAttr.exprId) &&
-                (outAttr.dataType.isInstanceOf[StructType] ||
-                  outAttr.dataType.isInstanceOf[ArrayType] ||
-                  outAttr.dataType.isInstanceOf[MapType]) =>
-            outAttr
-        }
       val generatorHasDirect =
         info.outputAttributes.exists {
           case outAttr: AttributeReference => directGeneratorExprIds.contains(outAttr.exprId)
@@ -231,13 +223,8 @@ object EnhancedRequirementCollector {
         }
       val requiresFullStruct =
         directAttrExprIds.contains(info.inputAttr.exprId) ||
-          directStructOutputs.nonEmpty ||
           generatorNeedsWholeStruct ||
           (generatorHasDirect && info.pathPrefix.isEmpty && nestedUsage.isEmpty)
-      val nestedDebug = nestedUsage.map(_.mkString(".")).mkString("[", ",", "]")
-      val pathPrefixDebug = if (info.pathPrefix.isEmpty) "" else info.pathPrefix.mkString(".")
-      val structOutputDebug = directStructOutputs.map(_.name).mkString("[", ",", "]")
-      println(s"[EnhancedRequirementCollector DEBUG] relation=$relationId input=${info.inputAttr.name} generatorHasDirect=$generatorHasDirect nested=$nestedDebug directAttr=${directAttrExprIds.contains(info.inputAttr.exprId)} pathPrefix=$pathPrefixDebug directStructOutputs=$structOutputDebug requiresFullStruct=$requiresFullStruct")
       val baseAttrOpt =
         relationAttrsByExprId.get(info.inputAttr.exprId)
           .orElse(info.outputAttributes.collectFirst {
@@ -249,8 +236,19 @@ object EnhancedRequirementCollector {
 
       baseAttrOpt.foreach { baseAttr =>
         val rootSegments = Seq(baseAttr.name) ++ info.pathPrefix
+        val canonicalRoot =
+          canonicalizeSegments(relationSchema, rootSegments)
+        val generatorInputTypeOpt =
+          resolveDataType(relationSchema, canonicalRoot)
+        val recordingDataType =
+          if (requiresFullStruct) {
+            generatorInputTypeOpt.getOrElse(info.dataType)
+          } else {
+            info.dataType
+          }
+
         if (requiresFullStruct) {
-          recordPath(rootSegments, info.dataType, UsageReason.DirectValue)
+          recordPath(rootSegments, recordingDataType, UsageReason.DirectValue)
         } else if (info.pathPrefix.nonEmpty) {
           recordPath(rootSegments, info.dataType, UsageReason.GeneratorInput)
         }
@@ -258,6 +256,22 @@ object EnhancedRequirementCollector {
         nestedUsage.foreach { pathSegments =>
           val fullSegments = rootSegments ++ pathSegments
           recordPath(fullSegments, info.dataType, UsageReason.GeneratorInput)
+        }
+
+        info.outputAttributes.foreach {
+          case outAttr: AttributeReference
+              if outAttr.dataType.isInstanceOf[StructType] &&
+                wholeStructGeneratorExprIds.contains(outAttr.exprId) =>
+            val originalStructOpt = generatorInputTypeOpt.flatMap {
+              case ArrayType(st: StructType, _) => Some(st)
+              case MapType(_, st: StructType, _) => Some(st)
+              case st: StructType => Some(st)
+              case _ => None
+            }
+            originalStructOpt.foreach { st =>
+              generatorOriginalStructs.getOrElseUpdate(outAttr.exprId, st)
+            }
+          case _ =>
         }
       }
     }
@@ -267,8 +281,7 @@ object EnhancedRequirementCollector {
     }
 
     val collected = detailMap.values.toVector
-    println(s"[EnhancedRequirementCollector DEBUG] relation=$relationId collected=${collected.map(d => s"${d.path.segments.mkString(".")}:${d.reason}").mkString(",")}")
-    V2Requirements(relationId, collected)
+    V2Requirements(relationId, collected, generatorOriginalStructs.toMap)
   }
 
   def toRootFields(
