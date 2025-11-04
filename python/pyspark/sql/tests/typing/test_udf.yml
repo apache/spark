@@ -114,12 +114,12 @@
 - case: mapIterUdf
   main: |
     from pyspark.sql.session import SparkSession
-    from typing import Iterable
+    from typing import Iterator
     import pandas.core.frame
 
     spark = SparkSession.builder.getOrCreate()
 
-    def f(batch_iter: Iterable[pandas.core.frame.DataFrame]) -> Iterable[pandas.core.frame.DataFrame]:
+    def f(batch_iter: Iterator[pandas.core.frame.DataFrame]) -> Iterator[pandas.core.frame.DataFrame]:
         for pdf in batch_iter:
             yield pdf[pdf.id == 1]
 
