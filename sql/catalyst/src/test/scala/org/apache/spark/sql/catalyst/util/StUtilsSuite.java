@@ -34,8 +34,10 @@ class STUtilsSuite {
 
   /** Common test data used across multiple tests below. */
 
-  private final byte[] testWkb = new byte[] {0x01, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  private final byte[] testWkbNdr = new byte[] {0x01, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
     0x00, 0x00, 0x00, (byte)0xF0, 0x3F, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x40};
+  private final byte[] testWkbXdr = new byte[] {0x00, 0x00, 0x00, 0x00, 0x01, 0x3f, (byte)0xf0,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x40, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
 
   // A sample Geography byte array for testing purposes, representing a POINT(1 2) with SRID 4326.
   private final int testGeographySrid = 4326;
@@ -52,14 +54,14 @@ class STUtilsSuite {
     byte[] geogSrid = ByteBuffer.allocate(sridLen).order(end).putInt(testGeographySrid).array();
     byte[] geomSrid = ByteBuffer.allocate(sridLen).order(end).putInt(testGeometrySrid).array();
     // Initialize GEOGRAPHY.
-    int wkbLen = testWkb.length;
+    int wkbLen = testWkbNdr.length;
     testGeographyBytes = new byte[sridLen + wkbLen];
     System.arraycopy(geogSrid, 0, testGeographyBytes, 0, sridLen);
-    System.arraycopy(testWkb, 0, testGeographyBytes, sridLen, wkbLen);
+    System.arraycopy(testWkbNdr, 0, testGeographyBytes, sridLen, wkbLen);
     // Initialize GEOMETRY.
     testGeometryBytes = new byte[sridLen + wkbLen];
     System.arraycopy(geomSrid, 0, testGeometryBytes, 0, sridLen);
-    System.arraycopy(testWkb, 0, testGeometryBytes, sridLen, wkbLen);
+    System.arraycopy(testWkbNdr, 0, testGeometryBytes, sridLen, wkbLen);
   }
 
   /** Tests for ST expression utility methods. */
@@ -70,7 +72,7 @@ class STUtilsSuite {
     GeographyVal geographyVal = GeographyVal.fromBytes(testGeographyBytes);
     byte[] geographyWkb = STUtils.stAsBinary(geographyVal);
     assertNotNull(geographyWkb);
-    assertArrayEquals(testWkb, geographyWkb);
+    assertArrayEquals(testWkbNdr, geographyWkb);
   }
 
   @Test
@@ -78,13 +80,20 @@ class STUtilsSuite {
     GeometryVal geometryVal = GeometryVal.fromBytes(testGeometryBytes);
     byte[] geometryWkb = STUtils.stAsBinary(geometryVal);
     assertNotNull(geometryWkb);
-    assertArrayEquals(testWkb, geometryWkb);
+    assertArrayEquals(testWkbNdr, geometryWkb);
   }
 
   // ST_GeogFromWKB
   @Test
-  void testStGeogFromWKB() {
-    GeographyVal geographyVal = STUtils.stGeogFromWKB(testWkb);
+  void testStGeogFromWKB_NDR() {
+    GeographyVal geographyVal = STUtils.stGeogFromWKB(testWkbNdr);
+    assertNotNull(geographyVal);
+    assertArrayEquals(testGeographyBytes, geographyVal.getBytes());
+  }
+
+  @Test
+  void testStGeogFromWKB_XDR() {
+    GeographyVal geographyVal = STUtils.stGeogFromWKB(testWkbXdr);
     assertNotNull(geographyVal);
     assertArrayEquals(testGeographyBytes, geographyVal.getBytes());
   }
@@ -92,7 +101,7 @@ class STUtilsSuite {
   // ST_GeomFromWKB
   @Test
   void testStGeomFromWKB() {
-    GeometryVal geometryVal = STUtils.stGeomFromWKB(testWkb);
+    GeometryVal geometryVal = STUtils.stGeomFromWKB(testWkbNdr);
     assertNotNull(geometryVal);
     assertArrayEquals(testGeometryBytes, geometryVal.getBytes());
   }

@@ -83,10 +83,9 @@ class GeographyExecutionSuite {
   /** Tests for Geography WKB parsing. */
 
   @Test
-  void testFromWkbWithSridRudimentary() {
-    byte[] wkb = new byte[]{1, 2, 3};
-    // Note: This is a rudimentary WKB handling test; actual WKB parsing is not yet implemented.
-    // Once we implement the appropriate parsing logic, this test should be updated accordingly.
+  void testFromWkbWithSrid() {
+    // Test data: WKB representation of LINESTRING EMPTY.
+    byte[] wkb = new byte[]{0x01, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
     Geography geography = Geography.fromWkb(wkb, 4326);
     assertNotNull(geography);
     assertArrayEquals(wkb, geography.toWkb());
@@ -94,14 +93,37 @@ class GeographyExecutionSuite {
   }
 
   @Test
-  void testFromWkbNoSridRudimentary() {
-    byte[] wkb = new byte[]{1, 2, 3};
-    // Note: This is a rudimentary WKB handling test; actual WKB parsing is not yet implemented.
-    // Once we implement the appropriate parsing logic, this test should be updated accordingly.
+  void testFromWkbNoSrid() {
+    // Test data: WKB representation of LINESTRING EMPTY.
+    byte[] wkb = new byte[]{0x01, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
     Geography geography = Geography.fromWkb(wkb);
     assertNotNull(geography);
     assertArrayEquals(wkb, geography.toWkb());
     assertEquals(4326, geography.srid());
+  }
+
+  @Test
+  void testFromInvalidWkb() {
+    // Test data: invalid WKB byte array.
+    byte[] wkb = new byte[]{0x01, 0x02, 0x03};
+    IllegalArgumentException exception = assertThrows(
+      IllegalArgumentException.class,
+      () -> Geography.fromWkb(wkb)
+    );
+    assertTrue(exception.getMessage().startsWith("[WKB_PARSE_ERROR] Error parsing WKB"));
+  }
+
+  @Test
+  void testFromInvalidSrid() {
+    // Test data: WKB representation of LINESTRING EMPTY.
+    byte[] wkb = new byte[]{0x01, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+    int srid = 999;
+    IllegalArgumentException exception = assertThrows(
+      IllegalArgumentException.class,
+      () -> Geography.fromWkb(wkb, srid)
+    );
+    assertTrue(exception.getMessage().startsWith("[ST_INVALID_SRID_VALUE]"));
+    assertTrue(exception.getMessage().contains("value: " + srid + "."));
   }
 
   /** Tests for Geography EWKB parsing. */

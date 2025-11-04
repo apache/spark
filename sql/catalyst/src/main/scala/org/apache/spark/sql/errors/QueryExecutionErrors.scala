@@ -665,6 +665,21 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       summary = "")
   }
 
+  def stInvalidSridValueError(srid: String): SparkIllegalArgumentException = {
+    new SparkIllegalArgumentException(
+      errorClass = "ST_INVALID_SRID_VALUE",
+      messageParameters = Map("srid" -> srid)
+    )
+  }
+
+  def stInvalidSridValueError(srid: Int): SparkIllegalArgumentException = {
+    stInvalidSridValueError(srid.toString)
+  }
+
+  def wkbParseError(): SparkIllegalArgumentException = {
+    new SparkIllegalArgumentException(errorClass = "WKB_PARSE_ERROR")
+  }
+
   def withSuggestionIntervalArithmeticOverflowError(
       suggestedFunc: String,
       context: QueryContext): ArithmeticException = {
