@@ -2742,7 +2742,7 @@ class TypesTestsMixin:
 
         with self.assertRaises(IllegalArgumentException) as pe:
             self.spark.createDataFrame(
-                geometry_mixed_invalid_data, f"id INT, geom GEOMETRY(ANY)"
+                geometry_mixed_invalid_data, "id INT, geom GEOMETRY(ANY)"
             ).collect()
         self.check_error(
             exception=pe.exception,
