@@ -24,20 +24,29 @@ import org.apache.spark.sql.types._
 
 object UnsafeRowUtils {
 
-  private final val getPadding: (UnsafeRow, Int, Int) => Long = {
-    if (nativeOrder().equals(BIG_ENDIAN)) {
-       (row: UnsafeRow, index: Int, bitShift: Int) => row.getLong(index) << bitShift
-    } else {
-       (row: UnsafeRow, index: Int, bitShift: Int) => row.getLong(index) >> bitShift
-    }
+  sealed trait PaddingProvider {
+    def getPadding(row: UnsafeRow, index: Int, bitShift: Int): Long
+    def getPaddingBoolean(row: UnsafeRow, index: Int): Long
   }
 
-  private final val getPaddingBoolean: (UnsafeRow, Int) => Long = {
-    if (nativeOrder().equals(BIG_ENDIAN)) {
-       (row: UnsafeRow, index: Int) => row.getLong(index) & 0xFEFFFFFFFFFFFFFFL
-    } else {
-       (row: UnsafeRow, index: Int) => row.getLong(index) >> 1
-    }
+  object PaddingProviderLE extends PaddingProvider {
+    override def getPadding(
+      row: UnsafeRow, index: Int, bitShift: Int): Long = row.getLong(index) >> bitShift
+    override def getPaddingBoolean(
+      row: UnsafeRow, index: Int): Long = row.getLong(index) >> 1
+  }
+
+  object PaddingProviderBE extends PaddingProvider {
+    override def getPadding(
+      row: UnsafeRow, index: Int, bitShift: Int): Long = row.getLong(index) << bitShift
+    override def getPaddingBoolean(
+      row: UnsafeRow, index: Int): Long = row.getLong(index) & 0xFEFFFFFFFFFFFFFFL
+  }
+
+  private final val padder: PaddingProvider = if (nativeOrder().equals(BIG_ENDIAN)) {
+    PaddingProviderBE
+  } else {
+    PaddingProviderLE
   }
 
   /**
@@ -92,23 +101,23 @@ object UnsafeRowUtils {
       case (field, index) if UnsafeRow.isFixedLength(field.dataType) && !row.isNullAt(index) =>
         field.dataType match {
           case BooleanType =>
-            if (getPaddingBoolean(row, index) != 0L) {
+            if (padder.getPaddingBoolean(row, index) != 0L) {
               return Some(s"Fixed-length field validation error: field: $field, index: $index")
             }
           case ByteType =>
-            if (getPadding(row, index, 8) != 0L) {
+            if (padder.getPadding(row, index, 8) != 0L) {
               return Some(s"Fixed-length field validation error: field: $field, index: $index")
             }
           case ShortType =>
-            if (getPadding(row, index, 16) != 0L) {
+            if (padder.getPadding(row, index, 16) != 0L) {
               return Some(s"Fixed-length field validation error: field: $field, index: $index")
             }
           case IntegerType =>
-            if (getPadding(row, index, 32) != 0L) {
+            if (padder.getPadding(row, index, 32) != 0L) {
               return Some(s"Fixed-length field validation error: field: $field, index: $index")
             }
           case FloatType =>
-            if (getPadding(row, index, 32) != 0L) {
+            if (padder.getPadding(row, index, 32) != 0L) {
               return Some(s"Fixed-length field validation error: field: $field, index: $index")
             }
           case _ =>
