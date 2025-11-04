@@ -862,7 +862,7 @@ case class MergeIntoTable(
     notMatchedBySourceActions: Seq[MergeAction],
     withSchemaEvolution: Boolean,
     // Preserves original pre-aligned actions for source matches
-    preservedSourceActions: Option[Seq[MergeAction]] = None)
+    originalSourceActions: Seq[MergeAction])
   extends BinaryCommand with SupportsSubquery {
 
   lazy val aligned: Boolean = {
@@ -895,12 +895,14 @@ case class MergeIntoTable(
     case _ => false
   }
 
-  private lazy val migrationSchema: StructType =
+  // a pruned version of source schema that only contains columns/nested fields
+  // explicitly assigned by MERGE INTO actions
+  private lazy val referencedSourceSchema: StructType =
     MergeIntoTable.referencedSourceSchema(this)
 
   lazy val needSchemaEvolution: Boolean = {
     schemaEvolutionEnabled &&
-      MergeIntoTable.schemaChanges(targetTable.schema, migrationSchema).nonEmpty
+      MergeIntoTable.schemaChanges(targetTable.schema, referencedSourceSchema).nonEmpty
   }
 
   private def schemaEvolutionEnabled: Boolean = withSchemaEvolution && {
@@ -918,6 +920,26 @@ case class MergeIntoTable(
 }
 
 object MergeIntoTable {
+
+  def apply(
+      targetTable: LogicalPlan,
+      sourceTable: LogicalPlan,
+      mergeCondition: Expression,
+      matchedActions: Seq[MergeAction],
+      notMatchedActions: Seq[MergeAction],
+      notMatchedBySourceActions: Seq[MergeAction],
+      withSchemaEvolution: Boolean): MergeIntoTable = {
+    MergeIntoTable(
+      targetTable,
+      sourceTable,
+      mergeCondition,
+      matchedActions,
+      notMatchedActions,
+      notMatchedBySourceActions,
+      withSchemaEvolution,
+      matchedActions ++ notMatchedActions)
+  }
+
   def getWritePrivileges(
       matchedActions: Iterable[MergeAction],
       notMatchedActions: Iterable[MergeAction],
@@ -955,12 +977,11 @@ object MergeIntoTable {
             case currentField: StructField if newFieldMap.contains(currentField.name) =>
               schemaChanges(currentField.dataType, newFieldMap(currentField.name).dataType,
                 originalTarget, originalSource, fieldPath ++ Seq(currentField.name))
-          }
-        }.flatten
+          }}.flatten
 
         // Identify the newly added fields and append to the end
         val currentFieldMap = toFieldMap(currentFields)
-        val adds = newFields.filterNot(f => currentFieldMap.contains(f.name))
+        val adds = newFields.filterNot (f => currentFieldMap.contains (f.name))
           .map(f => TableChange.addColumn(fieldPath ++ Set(f.name), f.dataType))
 
         updates ++ adds
@@ -1003,17 +1024,12 @@ object MergeIntoTable {
   // by at least one merge action
   def referencedSourceSchema(merge: MergeIntoTable): StructType = {
 
-    val actions = merge.preservedSourceActions match {
-      case Some(preserved) => preserved
-      case None => merge.matchedActions ++ merge.notMatchedActions
-    }
-
-    val assignments = actions.collect {
+    val assignments = merge.originalSourceActions.collect {
       case a: UpdateAction => a.assignments.map(_.key)
       case a: InsertAction => a.assignments.map(_.key)
     }.flatten
 
-    val containsStarAction = actions.exists {
+    val containsStarAction = merge.originalSourceActions.exists {
       case _: UpdateStarAction => true
       case _: InsertStarAction => true
       case _ => false
@@ -1042,8 +1058,6 @@ object MergeIntoTable {
         }
       })
 
-    val sourceSchema = merge.sourceTable.schema
-    val targetSchema = merge.targetTable.schema
     val res = filterSchema(merge.sourceTable.schema, Seq.empty)
     res
   }
@@ -1071,7 +1085,6 @@ object MergeIntoTable {
     exprPath.length == path.length && isPrefix(exprPath, path)
   }
 }
-
 
 sealed abstract class MergeAction extends Expression with Unevaluable {
   def condition: Option[Expression]

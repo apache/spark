@@ -1749,7 +1749,8 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
             m.copy(mergeCondition = resolvedMergeCondition,
               matchedActions = newMatchedActions,
               notMatchedActions = newNotMatchedActions,
-              notMatchedBySourceActions = newNotMatchedBySourceActions)
+              notMatchedBySourceActions = newNotMatchedBySourceActions,
+              originalSourceActions = newMatchedActions ++ newNotMatchedActions)
         }
 
       // UnresolvedHaving can host grouping expressions and aggregate functions. We should resolve

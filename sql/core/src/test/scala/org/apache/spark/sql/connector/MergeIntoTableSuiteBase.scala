@@ -3721,6 +3721,46 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
     }
   }
 
+  test("Merge schema evolution should not evolve when assigning existing target column " +
+    "from source column that does not exist in target") {
+    Seq(true, false).foreach { withSchemaEvolution =>
+      withTempView("source") {
+        createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+          """{ "pk": 1, "salary": 100, "dep": "hr" }
+            |{ "pk": 2, "salary": 200, "dep": "software" }
+            |""".stripMargin)
+
+        val sourceDF = Seq((2, 150, "dummy", 50),
+          (3, 250, "dummy", 75)).toDF("pk", "salary", "dep", "bonus")
+        sourceDF.createOrReplaceTempView("source")
+
+        val schemaEvolutionClause = if (withSchemaEvolution) "WITH SCHEMA EVOLUTION" else ""
+        val mergeStmt =
+          s"""MERGE $schemaEvolutionClause
+             |INTO $tableNameAsString t
+             |USING source s
+             |ON t.pk = s.pk
+             |WHEN MATCHED THEN
+             | UPDATE SET salary = s.bonus
+             |WHEN NOT MATCHED THEN
+             | INSERT (pk, salary, dep) VALUES (s.pk, s.bonus, 'newdep')
+             |""".stripMargin
+
+        sql(mergeStmt)
+        // bonus column should NOT be added to target schema
+        // Only salary is updated with bonus value
+        checkAnswer(
+          sql(s"SELECT * FROM $tableNameAsString"),
+          Seq(
+            Row(1, 100, "hr"),
+            Row(2, 50, "software"),
+            Row(3, 75, "newdep")))
+
+        sql(s"DROP TABLE $tableNameAsString")
+      }
+    }
+  }
+
   test("Merge schema evolution should evolve struct if directly referencing new field " +
     "in top level struct: insert") {
     Seq(true, false).foreach { withSchemaEvolution =>
@@ -3989,6 +4029,50 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
         sql(s"DROP TABLE $tableNameAsString")
       }
     }
+  }
+
+  test("merge into with source missing fields in top-level struct") {
+    withTempView("source") {
+      // Target table has struct with 3 fields at top level
+      createAndInitTable(
+        s"""pk INT NOT NULL,
+           |s STRUCT<c1: INT, c2: STRING, c3: BOOLEAN>,
+           |dep STRING""".stripMargin,
+        """{ "pk": 0, "s": { "c1": 1, "c2": "a", "c3": true }, "dep": "sales"}""")
+
+      // Source table has struct with only 2 fields (c1, c2) - missing c3
+      val sourceTableSchema = StructType(Seq(
+        StructField("pk", IntegerType, nullable = false),
+        StructField("s", StructType(Seq(
+          StructField("c1", IntegerType),
+          StructField("c2", StringType)))), // missing c3 field
+        StructField("dep", StringType)))
+      val data = Seq(
+        Row(1, Row(10, "b"), "hr"),
+        Row(2, Row(20, "c"), "engineering")
+      )
+      spark.createDataFrame(spark.sparkContext.parallelize(data), sourceTableSchema)
+        .createOrReplaceTempView("source")
+
+      sql(
+        s"""MERGE INTO $tableNameAsString t
+           |USING source src
+           |ON t.pk = src.pk
+           |WHEN MATCHED THEN
+           | UPDATE SET *
+           |WHEN NOT MATCHED THEN
+           | INSERT *
+           |""".stripMargin)
+
+      // Missing field c3 should be filled with NULL
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString"),
+        Seq(
+          Row(0, Row(1, "a", true), "sales"),
+          Row(1, Row(10, "b", null), "hr"),
+          Row(2, Row(20, "c", null), "engineering")))
+    }
+    sql(s"DROP TABLE IF EXISTS $tableNameAsString")
   }
 
   test("merge into with source missing fields in struct nested in array") {
