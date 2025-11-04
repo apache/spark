@@ -107,9 +107,7 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
   }
 
   /** Implementation of [[StateStore]] API which is backed by an HDFS-compatible file system */
-  class HDFSBackedStateStore(
-      val version: Long,
-      private val mapToUpdate: HDFSBackedStateStoreMap)
+  class HDFSBackedStateStore(val version: Long, mapToUpdate: HDFSBackedStateStoreMap)
     extends StateStore {
 
     /** Trait and classes representing the internal state of the store */
@@ -165,16 +163,8 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
       verify(state == UPDATING, "Cannot put after already committed or aborted")
       val keyCopy = key.copy()
       val valueCopy = value.copy()
-
-      val valueWrapper = if (storeConf.rowChecksumEnabled) {
-        // Add the key-value checksum to the value row
-        StateStoreRowWithChecksum(valueCopy, KeyValueChecksum.create(keyCopy, Some(valueCopy)))
-      } else {
-        StateStoreRow(valueCopy)
-      }
-
-      mapToUpdate.put(keyCopy, valueWrapper)
-      writeUpdateToDeltaFile(compressedStream, keyCopy, valueWrapper)
+      mapToUpdate.put(keyCopy, valueCopy)
+      writeUpdateToDeltaFile(compressedStream, keyCopy, valueCopy)
     }
 
     override def remove(key: UnsafeRow, colFamilyName: String): Unit = {
@@ -182,13 +172,7 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
       verify(state == UPDATING, "Cannot remove after already committed or aborted")
       val prevValue = mapToUpdate.remove(key)
       if (prevValue != null) {
-        val keyWrapper = if (storeConf.rowChecksumEnabled) {
-          // Add checksum for only the removed key
-          StateStoreRowWithChecksum(key, KeyValueChecksum.create(key, None))
-        } else {
-          StateStoreRow(key)
-        }
-        writeRemoveToDeltaFile(compressedStream, keyWrapper)
+        writeRemoveToDeltaFile(compressedStream, key)
       }
     }
 
@@ -292,10 +276,19 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
       throw StateStoreErrors.unsupportedOperationException("multipleValuesPerKey", providerName)
     }
 
+    override def putList(key: UnsafeRow, values: Array[UnsafeRow], colFamilyName: String): Unit = {
+      throw StateStoreErrors.unsupportedOperationException("putList", providerName)
+    }
+
     override def merge(key: UnsafeRow,
         value: UnsafeRow,
         colFamilyName: String): Unit = {
       throw StateStoreErrors.unsupportedOperationException("merge", providerName)
+    }
+
+    override def mergeList(
+        key: UnsafeRow, values: Array[UnsafeRow], colFamilyName: String): Unit = {
+      throw StateStoreErrors.unsupportedOperationException("mergeList", providerName)
     }
   }
 
@@ -335,7 +328,7 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
       }
 
       performedSnapshotAutoRepair.set(false)
-      val newMap = createHDFSBackedStateStoreMap()
+      val newMap = HDFSBackedStateStoreMap.create(keySchema, numColsPrefixKey)
       if (version > 0) {
         newMap.putAll(loadMap(version))
       }
@@ -620,7 +613,7 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
       } else {
         // Load all the deltas from the version after the loadedVersion up to the target version.
         // The loadedVersion is the one with a full snapshot, so it doesn't need deltas.
-        val resultMap = createHDFSBackedStateStoreMap()
+        val resultMap = HDFSBackedStateStoreMap.create(keySchema, numColsPrefixKey)
         resultMap.putAll(loadedMap)
         for (deltaVersion <- loadedVersion + 1 to version) {
           updateFromDeltaFile(deltaVersion, resultMap)
@@ -659,7 +652,7 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
       override protected def loadSnapshotFromCheckpoint(snapshotVersion: Long): Unit = {
         loadedMap = if (snapshotVersion <= 0) {
           // Use an empty map for versions 0 or less.
-          Some(createHDFSBackedStateStoreMap())
+          Some(HDFSBackedStateStoreMap.create(keySchema, numColsPrefixKey))
         } else {
           // first try to get the map from the cache
           synchronized { Option(loadedMaps.get(snapshotVersion)) }
@@ -691,30 +684,17 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
   private def writeUpdateToDeltaFile(
       output: DataOutputStream,
       key: UnsafeRow,
-      value: UnsafeRowWrapper): Unit = {
+      value: UnsafeRow): Unit = {
     val keyBytes = key.getBytes()
-    val valueBytes = value match {
-      case v: StateStoreRowWithChecksum =>
-        // If it has checksum, encode the value bytes with the checksum.
-        KeyValueChecksumEncoder.encodeSingleValueRowWithChecksum(
-          v.unsafeRow().getBytes(), v.checksum)
-      case _ => value.unsafeRow().getBytes()
-    }
-
+    val valueBytes = value.getBytes()
     output.writeInt(keyBytes.size)
     output.write(keyBytes)
     output.writeInt(valueBytes.size)
     output.write(valueBytes)
   }
 
-  private def writeRemoveToDeltaFile(output: DataOutputStream, key: UnsafeRowWrapper): Unit = {
-    val keyBytes = key match {
-      case k: StateStoreRowWithChecksum =>
-        // If it has checksum, encode the key bytes with the checksum.
-        KeyValueChecksumEncoder.encodeKeyRowWithChecksum(
-          k.unsafeRow().getBytes(), k.checksum)
-      case _ => key.unsafeRow().getBytes()
-    }
+  private def writeRemoveToDeltaFile(output: DataOutputStream, key: UnsafeRow): Unit = {
+    val keyBytes = key.getBytes()
     output.writeInt(keyBytes.size)
     output.write(keyBytes)
     output.writeInt(-1)
@@ -738,10 +718,6 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
       input = decompressStream(sourceStream)
       var eof = false
 
-      // If row checksum is enabled, verify every record in the file to detect corrupt rows.
-      val verifier = KeyValueIntegrityVerifier
-        .create(stateStoreId_.toString, storeConf.rowChecksumEnabled, verificationRatio = 1)
-
       while (!eof) {
         val keySize = input.readInt()
         if (keySize == -1) {
@@ -754,46 +730,26 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
           Utils.readFully(input, keyRowBuffer, 0, keySize)
 
           val keyRow = new UnsafeRow(keySchema.fields.length)
+          keyRow.pointTo(keyRowBuffer, keySize)
 
           val valueSize = input.readInt()
           if (valueSize < 0) {
-            val originalKeyBytes = if (storeConf.rowChecksumEnabled) {
-              // For deleted row, we added checksum to the key side.
-              // Decode the original key and remove the checksum part
-              KeyValueChecksumEncoder.decodeAndVerifyKeyRowWithChecksum(verifier, keyRowBuffer)
-            } else {
-              keyRowBuffer
-            }
-            keyRow.pointTo(originalKeyBytes, originalKeyBytes.length)
             map.remove(keyRow)
           } else {
-            keyRow.pointTo(keyRowBuffer, keySize)
-
             val valueRowBuffer = new Array[Byte](valueSize)
             Utils.readFully(input, valueRowBuffer, 0, valueSize)
             val valueRow = new UnsafeRow(valueSchema.fields.length)
-
-            val (originalValueBytes, valueWrapper) = if (storeConf.rowChecksumEnabled) {
-              // checksum is on the value side
-              val (valueBytes, checksum) = KeyValueChecksumEncoder
-                .decodeSingleValueRowWithChecksum(valueRowBuffer)
-              verifier.foreach(_.verify(keyRowBuffer, Some(valueBytes), checksum))
-              (valueBytes, StateStoreRowWithChecksum(valueRow, checksum))
-            } else {
-              (valueRowBuffer, StateStoreRow(valueRow))
-            }
-
             // If valueSize in existing file is not multiple of 8, floor it to multiple of 8.
             // This is a workaround for the following:
             // Prior to Spark 2.3 mistakenly append 4 bytes to the value row in
             // `RowBasedKeyValueBatch`, which gets persisted into the checkpoint data
-            valueRow.pointTo(originalValueBytes, (originalValueBytes.length / 8) * 8)
+            valueRow.pointTo(valueRowBuffer, (valueSize / 8) * 8)
             if (!isValidated) {
               StateStoreProvider.validateStateRowFormat(
                 keyRow, keySchema, valueRow, valueSchema, stateStoreId, storeConf)
               isValidated = true
             }
-            map.put(keyRow, valueWrapper)
+            map.put(keyRow, valueRow)
           }
         }
       }
@@ -814,28 +770,11 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
     try {
       rawOutput = fm.createAtomic(targetFile, overwriteIfPossible = true)
       output = compressStream(rawOutput)
-      // Entry iterator doesn't do verification, we will do it ourselves
-      // Using this instead of iterator() since we want the UnsafeRowWrapper
-      val iter = map.entryIterator()
-
-      // If row checksum is enabled, we will verify every entry in the map before writing snapshot,
-      // to prevent writing corrupt rows since the map might have been created a while ago.
-      // This is fine since write snapshot is typically done in the background.
-      val verifier = KeyValueIntegrityVerifier
-        .create(stateStoreId_.toString, storeConf.rowChecksumEnabled, verificationRatio = 1)
-
+      val iter = map.iterator()
       while (iter.hasNext) {
         val entry = iter.next()
-        verifier.foreach(_.verify(entry.getKey, entry.getValue))
-
-        val keyBytes = entry.getKey.getBytes()
-        val valueBytes = entry.getValue match {
-          case v: StateStoreRowWithChecksum =>
-            // If it has checksum, encode it with the checksum.
-            KeyValueChecksumEncoder.encodeSingleValueRowWithChecksum(
-              v.unsafeRow().getBytes(), v.checksum)
-          case o => o.unsafeRow().getBytes()
-        }
+        val keyBytes = entry.key.getBytes()
+        val valueBytes = entry.value.getBytes()
         output.writeInt(keyBytes.size)
         output.write(keyBytes)
         output.writeInt(valueBytes.size)
@@ -892,16 +831,12 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
   */
   private def readSnapshotFile(version: Long): Option[HDFSBackedStateStoreMap] = {
     val fileToRead = snapshotFile(version)
-    val map = createHDFSBackedStateStoreMap()
+    val map = HDFSBackedStateStoreMap.create(keySchema, numColsPrefixKey)
     var input: DataInputStream = null
 
     try {
       input = decompressStream(fm.open(fileToRead))
       var eof = false
-
-      // If row checksum is enabled, verify every record in the file to detect corrupt rows.
-      val verifier = KeyValueIntegrityVerifier
-        .create(stateStoreId_.toString, storeConf.rowChecksumEnabled, verificationRatio = 1)
 
       while (!eof) {
         val keySize = input.readInt()
@@ -925,28 +860,17 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
             val valueRowBuffer = new Array[Byte](valueSize)
             Utils.readFully(input, valueRowBuffer, 0, valueSize)
             val valueRow = new UnsafeRow(valueSchema.fields.length)
-
-            val (originalValueBytes, valueWrapper) = if (storeConf.rowChecksumEnabled) {
-              // Checksum is on the value side
-              val (valueBytes, checksum) = KeyValueChecksumEncoder
-                .decodeSingleValueRowWithChecksum(valueRowBuffer)
-              verifier.foreach(_.verify(keyRowBuffer, Some(valueBytes), checksum))
-              (valueBytes, StateStoreRowWithChecksum(valueRow, checksum))
-            } else {
-              (valueRowBuffer, StateStoreRow(valueRow))
-            }
-
             // If valueSize in existing file is not multiple of 8, floor it to multiple of 8.
             // This is a workaround for the following:
             // Prior to Spark 2.3 mistakenly append 4 bytes to the value row in
             // `RowBasedKeyValueBatch`, which gets persisted into the checkpoint data
-            valueRow.pointTo(originalValueBytes, (originalValueBytes.length / 8) * 8)
+            valueRow.pointTo(valueRowBuffer, (valueSize / 8) * 8)
             if (!isValidated) {
               StateStoreProvider.validateStateRowFormat(
                 keyRow, keySchema, valueRow, valueSchema, stateStoreId, storeConf)
               isValidated = true
             }
-            map.put(keyRow, valueWrapper)
+            map.put(keyRow, valueRow)
           }
         }
       }
@@ -963,7 +887,7 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
 
 
   /** Perform a snapshot of the store to allow delta files to be consolidated */
-  private def doSnapshot(opType: String, throwEx: Boolean = false): Unit = {
+  private def doSnapshot(opType: String): Unit = {
     try {
       val ((files, _), e1) = Utils.timeTakenMs(fetchFiles())
       logDebug(s"fetchFiles() took $e1 ms.")
@@ -985,9 +909,6 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
     } catch {
       case NonFatal(e) =>
         logWarning(log"Error doing snapshots", e)
-        if (throwEx) {
-          throw e
-        }
     }
   }
 
@@ -1207,7 +1128,7 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
         throw QueryExecutionErrors.unexpectedStateStoreVersion(endVersion)
       }
 
-      val newMap = createHDFSBackedStateStoreMap()
+      val newMap = HDFSBackedStateStoreMap.create(keySchema, numColsPrefixKey)
       newMap.putAll(constructMapFromSnapshot(snapshotVersion, endVersion))
 
       newMap
@@ -1235,7 +1156,7 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
       }
 
       // Load all the deltas from the version after the start version up to the end version.
-      val resultMap = createHDFSBackedStateStoreMap()
+      val resultMap = HDFSBackedStateStoreMap.create(keySchema, numColsPrefixKey)
       resultMap.putAll(startVersionMap.get)
       for (deltaVersion <- snapshotVersion + 1 to endVersion) {
         updateFromDeltaFile(deltaVersion, resultMap)
@@ -1248,15 +1169,6 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
       s"$endVersion takes $elapsedMs ms.")
 
     result
-  }
-
-  private def createHDFSBackedStateStoreMap(): HDFSBackedStateStoreMap = {
-    val readVerifier = KeyValueIntegrityVerifier.create(
-      stateStoreId_.toString,
-      storeConf.rowChecksumEnabled,
-      storeConf.rowChecksumReadVerificationRatio)
-
-    HDFSBackedStateStoreMap.create(keySchema, numColsPrefixKey, readVerifier)
   }
 
   override def getStateStoreChangeDataReader(
@@ -1277,9 +1189,9 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
       throw StateStoreErrors.multipleColumnFamiliesNotSupported(providerName)
     }
 
-    new HDFSBackedStateStoreChangeDataReader(stateStoreId_, fm, baseDir, startVersion, endVersion,
+    new HDFSBackedStateStoreChangeDataReader(fm, baseDir, startVersion, endVersion,
       CompressionCodec.createCodec(sparkConf, storeConf.compressionCodec),
-      keySchema, valueSchema, storeConf)
+      keySchema, valueSchema)
   }
 
   /** Reports to the coordinator the store's latest snapshot version */
@@ -1295,17 +1207,15 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
 
 /** [[StateStoreChangeDataReader]] implementation for [[HDFSBackedStateStoreProvider]] */
 class HDFSBackedStateStoreChangeDataReader(
-    storeId: StateStoreId,
     fm: CheckpointFileManager,
     stateLocation: Path,
     startVersion: Long,
     endVersion: Long,
     compressionCodec: CompressionCodec,
     keySchema: StructType,
-    valueSchema: StructType,
-    storeConf: StateStoreConf)
+    valueSchema: StructType)
   extends StateStoreChangeDataReader(
-    storeId, fm, stateLocation, startVersion, endVersion, compressionCodec, storeConf) {
+    fm, stateLocation, startVersion, endVersion, compressionCodec) {
 
   override protected val changelogSuffix: String = "delta"
 
@@ -1316,32 +1226,16 @@ class HDFSBackedStateStoreChangeDataReader(
     }
     val (recordType, keyArray, valueArray) = reader.next()
     val keyRow = new UnsafeRow(keySchema.fields.length)
+    keyRow.pointTo(keyArray, keyArray.length)
     if (valueArray == null) {
-      val originalKeyBytes = if (storeConf.rowChecksumEnabled) {
-        // Decode the original key and remove the checksum part
-        KeyValueChecksumEncoder.decodeAndVerifyKeyRowWithChecksum(readVerifier, keyArray)
-      } else {
-        keyArray
-      }
-      keyRow.pointTo(originalKeyBytes, originalKeyBytes.length)
       (recordType, keyRow, null, currentChangelogVersion - 1)
     } else {
-      keyRow.pointTo(keyArray, keyArray.length)
-
       val valueRow = new UnsafeRow(valueSchema.fields.length)
-      val originalValueBytes = if (storeConf.rowChecksumEnabled) {
-        // Checksum is on the value side
-        KeyValueChecksumEncoder.decodeAndVerifySingleValueRowWithChecksum(
-          readVerifier, keyArray, valueArray)
-      } else {
-        valueArray
-      }
-
       // If valueSize in existing file is not multiple of 8, floor it to multiple of 8.
       // This is a workaround for the following:
       // Prior to Spark 2.3 mistakenly append 4 bytes to the value row in
       // `RowBasedKeyValueBatch`, which gets persisted into the checkpoint data
-      valueRow.pointTo(originalValueBytes, (originalValueBytes.length / 8) * 8)
+      valueRow.pointTo(valueArray, (valueArray.length / 8) * 8)
       (recordType, keyRow, valueRow, currentChangelogVersion - 1)
     }
   }

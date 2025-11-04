@@ -94,6 +94,9 @@ case class ThetaSketchAgg(
   // ThetaSketch config - mark as lazy so that they're not evaluated during tree transformation.
 
   lazy val lgNomEntries: Int = {
+    if (!right.foldable) {
+      throw QueryExecutionErrors.thetaLgNomEntriesMustBeConstantError(prettyName)
+    }
     val lgNomEntriesInput = right.eval().asInstanceOf[Int]
     ThetaSketchUtils.checkLgNomLongs(lgNomEntriesInput, prettyName)
     lgNomEntriesInput
@@ -332,6 +335,9 @@ case class ThetaUnionAgg(
   // ThetaSketch config - mark as lazy so that they're not evaluated during tree transformation.
 
   lazy val lgNomEntries: Int = {
+    if (!right.foldable) {
+      throw QueryExecutionErrors.thetaLgNomEntriesMustBeConstantError(prettyName)
+    }
     val lgNomEntriesInput = right.eval().asInstanceOf[Int]
     ThetaSketchUtils.checkLgNomLongs(lgNomEntriesInput, prettyName)
     lgNomEntriesInput

@@ -75,7 +75,8 @@ class SparkThrowableSuite extends SparkFunSuite {
       .addModule(DefaultScalaModule)
       .enable(STRICT_DUPLICATE_DETECTION)
       .build()
-    mapper.readValue(errorJsonFilePath.toUri.toURL, new TypeReference[Map[String, ErrorInfo]]() {})
+    mapper.readValue(
+      errorJsonFilePath.toUri.toURL.openStream(), new TypeReference[Map[String, ErrorInfo]]() {})
   }
 
   test("Error conditions are correctly formatted") {
@@ -88,7 +89,7 @@ class SparkThrowableSuite extends SparkFunSuite {
     val prettyPrinter = new DefaultPrettyPrinter()
       .withArrayIndenter(DefaultIndenter.SYSTEM_LINEFEED_INSTANCE)
     val rewrittenString = mapper.configure(SerializationFeature.ORDER_MAP_ENTRIES_BY_KEYS, true)
-      .setSerializationInclusion(Include.NON_ABSENT)
+      .setDefaultPropertyInclusion(Include.NON_ABSENT)
       .writer(prettyPrinter)
       .writeValueAsString(errorReader.errorInfoMap)
 
@@ -124,9 +125,9 @@ class SparkThrowableSuite extends SparkFunSuite {
       .enable(STRICT_DUPLICATE_DETECTION)
       .build()
     val errorClasses = mapper.readValue(
-      errorClassesJson, new TypeReference[Map[String, String]]() {})
+      errorClassesJson.openStream(), new TypeReference[Map[String, String]]() {})
     val errorStates = mapper.readValue(
-      errorStatesJson, new TypeReference[Map[String, ErrorStateInfo]]() {})
+      errorStatesJson.openStream(), new TypeReference[Map[String, ErrorStateInfo]]() {})
     val errorConditionStates = errorReader.errorInfoMap.values.toSeq.flatMap(_.sqlState).toSet
     assert(Set("22012", "22003", "42601").subsetOf(errorStates.keySet))
     assert(errorClasses.keySet.filter(!_.matches("[A-Z0-9]{2}")).isEmpty)
@@ -619,7 +620,6 @@ class SparkThrowableSuite extends SparkFunSuite {
     // Create a custom throwable that overrides getDefaultMessageTemplate.
     class CustomTemplatedThrowable extends Throwable with SparkThrowable {
       override def getCondition: String = "DIVIDE_BY_ZERO"
-      override def getErrorClass: String = "DIVIDE_BY_ZERO"
       override def getMessage: String = "Custom message"
       override def getMessageParameters: java.util.Map[String, String] =
         Map("config" -> "TEST_CONFIG").asJava
@@ -642,7 +642,6 @@ class SparkThrowableSuite extends SparkFunSuite {
     // Create a throwable that uses default getDefaultMessageTemplate implementation.
     class ReadFromJSONThrowable extends Throwable with SparkThrowable {
       override def getCondition: String = "DIVIDE_BY_ZERO"
-      override def getErrorClass: String = "DIVIDE_BY_ZERO"
       override def getMessage: String = "Random message"
       override def getMessageParameters: java.util.Map[String, String] =
         Map("config" -> "TEST_CONFIG").asJava
@@ -664,7 +663,6 @@ class SparkThrowableSuite extends SparkFunSuite {
     // Create a throwable with non-existing error condition.
     class NonExistingConditionThrowable extends Throwable with SparkThrowable {
       override def getCondition: String = "NON_EXISTING_ERROR_CONDITION"
-      override def getErrorClass: String = "NON_EXISTING_ERROR_CONDITION"
       override def getMessage: String = "Non-existing error message"
       override def getMessageParameters: java.util.Map[String, String] =
         Map("param" -> "value").asJava

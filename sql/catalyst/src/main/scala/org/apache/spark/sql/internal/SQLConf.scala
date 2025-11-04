@@ -2670,31 +2670,6 @@ object SQLConf {
       .checkValue(k => k >= 0, "Must be greater than or equal to 0")
       .createWithDefault(5)
 
-  val STATE_STORE_ROW_CHECKSUM_ENABLED =
-    buildConf("spark.sql.streaming.stateStore.rowChecksum.enabled")
-      .internal()
-      .doc("When true, checksum would be generated and verified for each state store row. " +
-        "This is used to detect row level corruption. " +
-        "Note: This configuration cannot be changed between query restarts " +
-        "from the same checkpoint location.")
-      .version("4.1.0")
-      .booleanConf
-      .createWithDefault(false)
-
-  val STATE_STORE_ROW_CHECKSUM_READ_VERIFICATION_RATIO =
-    buildConf("spark.sql.streaming.stateStore.rowChecksum.readVerificationRatio")
-      .internal()
-      .doc("When specified, Spark will do row checksum verification for every specified " +
-        "number of rows read from state store. The check is to ensure the row read from " +
-        "state store is not corrupt. Default is 0, which means no verification during read " +
-        "but we will still do verification when loading from checkpoint location." +
-        "Example, if you set to 1, it will do the check for every row read from the state store." +
-        "If set to 10, it will do the check for every 10th row read from the state store.")
-      .version("4.1.0")
-      .longConf
-      .checkValue(k => k >= 0, "Must be greater than or equal to 0")
-      .createWithDefault(if (Utils.isTesting) 1 else 0)
-
   val STATEFUL_SHUFFLE_PARTITIONS_INTERNAL =
     buildConf("spark.sql.streaming.internal.stateStore.partitions")
       .doc("WARN: This config is used internally and is not intended to be user-facing. This " +
@@ -4048,6 +4023,20 @@ object SQLConf {
           "spark.sql.execution.arrow.maxBytesPerBatch should be greater " +
           "than zero and less than INT_MAX.")
       .createWithDefaultString("64MB")
+
+  val ARROW_EXECUTION_COMPRESSION_CODEC =
+    buildConf("spark.sql.execution.arrow.compressionCodec")
+      .doc("Compression codec used to compress Arrow IPC data when transferring data " +
+        "between JVM and Python processes (e.g., toPandas, toArrow). This can significantly " +
+        "reduce memory usage and network bandwidth when transferring large datasets. " +
+        "Supported codecs: 'none' (no compression), 'zstd' (Zstandard), 'lz4' (LZ4). " +
+        "Note that compression may add CPU overhead but can provide substantial memory savings " +
+        "especially for datasets with high compression ratios.")
+      .version("4.1.0")
+      .stringConf
+      .transform(_.toLowerCase(java.util.Locale.ROOT))
+      .checkValues(Set("none", "zstd", "lz4"))
+      .createWithDefault("none")
 
   val ARROW_TRANSFORM_WITH_STATE_IN_PYSPARK_MAX_STATE_RECORDS_PER_BATCH =
     buildConf("spark.sql.execution.arrow.transformWithStateInPySpark.maxStateRecordsPerBatch")
@@ -6806,11 +6795,6 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def stateStoreCoordinatorMaxLaggingStoresToReport: Int =
     getConf(STATE_STORE_COORDINATOR_MAX_LAGGING_STORES_TO_REPORT)
 
-  def stateStoreRowChecksumEnabled: Boolean = getConf(STATE_STORE_ROW_CHECKSUM_ENABLED)
-
-  def stateStoreRowChecksumReadVerificationRatio: Long =
-    getConf(STATE_STORE_ROW_CHECKSUM_READ_VERIFICATION_RATIO)
-
   def checkpointLocation: Option[String] = getConf(CHECKPOINT_LOCATION)
 
   def checkpointFileChecksumEnabled: Boolean = getConf(STREAMING_CHECKPOINT_FILE_CHECKSUM_ENABLED)
@@ -7407,6 +7391,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def arrowMaxBytesPerOutputBatch: Long = getConf(ARROW_EXECUTION_MAX_BYTES_PER_OUTPUT_BATCH)
 
   def arrowMaxBytesPerBatch: Long = getConf(ARROW_EXECUTION_MAX_BYTES_PER_BATCH)
+
+  def arrowCompressionCodec: String = getConf(ARROW_EXECUTION_COMPRESSION_CODEC)
 
   def arrowTransformWithStateInPySparkMaxStateRecordsPerBatch: Int =
     getConf(ARROW_TRANSFORM_WITH_STATE_IN_PYSPARK_MAX_STATE_RECORDS_PER_BATCH)

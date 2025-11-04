@@ -48,7 +48,6 @@ import org.apache.spark.sql.execution.streaming.runtime.{MemoryStream, StreamExe
 import org.apache.spark.sql.execution.streaming.state.StateStoreCoordinatorSuite.withCoordinatorRef
 import org.apache.spark.sql.functions.count
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.tags.ExtendedSQLTest
 import org.apache.spark.unsafe.types.UTF8String
@@ -256,19 +255,13 @@ private object FakeStateStoreProviderWithMaintenanceError {
 
 @ExtendedSQLTest
 class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
-  with AlsoTestWithStateStoreRowChecksum
-  with SharedSparkSession
   with BeforeAndAfter {
   import StateStoreTestsHelper._
   import StateStoreCoordinatorSuite._
 
-  override def beforeEach(): Unit = {}
-  override def afterEach(): Unit = {}
-
   before {
     StateStore.stop()
     require(!StateStore.isMaintenanceRunning)
-    spark.streams.stateStoreCoordinator // initialize the lazy coordinator
   }
 
   after {
@@ -807,7 +800,7 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
     }
   }
 
-  testWithRowChecksumDisabled("SPARK-51291: corrupted file handling") {
+  test("SPARK-51291: corrupted file handling") {
     tryWithProviderResource(newStoreProvider(opId = Random.nextInt(), partition = 0,
       minDeltasForSnapshot = 5)) { provider =>
 
@@ -1304,10 +1297,7 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
     }
   }
 
-  // When row checksum is enabled, we store checksum in the map and JVM does some memory
-  // optimization that will cause the memory used to be significantly lower for the
-  // reloadedProvider compared to the initial provider. The test expects it to be higher.
-  testWithRowChecksumDisabled("expose metrics with custom metrics to StateStoreMetrics") {
+  test("expose metrics with custom metrics to StateStoreMetrics") {
     def getCustomMetric(metrics: StateStoreMetrics, name: String): Long = {
       val metricPair = metrics.customMetrics.find(_._1.name == name)
       assert(metricPair.isDefined)
@@ -1595,8 +1585,6 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
     sqlConf.setConf(SQLConf.STATE_STORE_COMPRESSION_CODEC, SQLConf.get.stateStoreCompressionCodec)
     sqlConf.setConf(
       SQLConf.STREAMING_CHECKPOINT_FILE_CHECKSUM_ENABLED, SQLConf.get.checkpointFileChecksumEnabled)
-    sqlConf.setConf(
-      SQLConf.STATE_STORE_ROW_CHECKSUM_ENABLED, SQLConf.get.stateStoreRowChecksumEnabled)
     sqlConf
   }
 
@@ -1675,12 +1663,6 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
     fm.delete(new Path(filePath.toURI))
 
     filePath.createNewFile()
-  }
-
-  override protected def testQuietly(name: String)(f: => Unit): Unit = {
-    // Use the implementation from StateStoreSuiteBase.
-    // There is another in SQLTestUtils. Doing this to avoid conflict error.
-    super[StateStoreSuiteBase].testQuietly(name)(f)
   }
 }
 
