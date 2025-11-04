@@ -40,7 +40,7 @@ import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.{Register
 import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
 import org.apache.spark.scheduler.cluster.k8s.ExecutorLifecycleTestUtils.TEST_SPARK_APP_ID
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 class KubernetesClusterSchedulerBackendSuite extends SparkFunSuite with BeforeAndAfter {
 
