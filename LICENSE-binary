@@ -215,10 +215,8 @@ com.github.joshelser:dropwizard-metrics-hadoop-metrics2-reporter
 com.google.code.findbugs:jsr305
 com.google.code.gson:gson
 com.google.crypto.tink:tink
-com.google.errorprone:error_prone_annotations
 com.google.flatbuffers:flatbuffers-java
 com.google.guava:guava
-com.google.j2objc:j2objc-annotations
 com.jamesmurty.utils:java-xmlbuilder
 com.ning:compress-lzf
 com.squareup.okhttp3:logging-interceptor
@@ -478,7 +476,6 @@ dev.ludovic.netlib:blas
 dev.ludovic.netlib:arpack
 dev.ludovic.netlib:lapack
 net.razorvine:pickle
-org.checkerframework:checker-qual
 org.typelevel:algebra_2.13:jar
 org.typelevel:cats-kernel_2.13
 org.typelevel:spire_2.13

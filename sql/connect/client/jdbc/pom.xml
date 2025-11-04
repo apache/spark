@@ -77,7 +77,7 @@
     <dependency>
       <groupId>com.google.guava</groupId>
       <artifactId>guava</artifactId>
-      <version>${connect.guava.version}</version>
+      <version>${guava.version}</version>
       <scope>compile</scope>
     </dependency>
     <dependency>
@@ -176,10 +176,6 @@
             <relocation>
               <pattern>io.netty</pattern>
               <shadedPattern>${spark.shade.packageName}.io.netty</shadedPattern>
-            </relocation>
-            <relocation>
-              <pattern>org.checkerframework</pattern>
-              <shadedPattern>${spark.shade.packageName}.org.checkerframework</shadedPattern>
             </relocation>
             <relocation>
               <pattern>io.perfmark</pattern>

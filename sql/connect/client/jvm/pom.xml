@@ -77,7 +77,6 @@
     <dependency>
       <groupId>com.google.guava</groupId>
       <artifactId>guava</artifactId>
-      <version>${connect.guava.version}</version>
       <scope>compile</scope>
     </dependency>
     <dependency>
@@ -178,10 +177,7 @@
               <include>com.google.guava:*</include>
               <include>com.google.android:*</include>
               <include>com.google.api.grpc:*</include>
-              <include>com.google.code.findbugs:*</include>
               <include>com.google.code.gson:*</include>
-              <include>com.google.errorprone:*</include>
-              <include>com.google.j2objc:*</include>
               <include>com.google.protobuf:*</include>
               <include>com.google.flatbuffers:*</include>
               <include>io.grpc:*</include>
@@ -189,7 +185,6 @@
               <include>io.perfmark:*</include>
               <include>org.apache.arrow:*</include>
               <include>org.codehaus.mojo:*</include>
-              <include>org.checkerframework:*</include>
               <include>org.apache.spark:spark-connect-common_${scala.binary.version}</include>
               <include>org.apache.spark:spark-sql-api_${scala.binary.version}</include>
             </includes>
@@ -220,10 +215,6 @@
             <relocation>
               <pattern>io.netty</pattern>
               <shadedPattern>${spark.shade.packageName}.io.netty</shadedPattern>
-            </relocation>
-            <relocation>
-              <pattern>org.checkerframework</pattern>
-              <shadedPattern>${spark.shade.packageName}.org.checkerframework</shadedPattern>
             </relocation>
             <relocation>
               <pattern>io.perfmark</pattern>
