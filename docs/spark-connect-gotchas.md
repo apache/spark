@@ -72,7 +72,7 @@ Unlike query execution, Spark Classic and Spark Connect differ in when schema an
 
 # Common Gotchas (with Mitigations)
 
-If not careful about the difference between lazy vs. eager analysis, there are some gotchas you can run into.
+If not careful about the difference between lazy vs. eager analysis, there are four key gotchas to be aware of: 1) overwriting temporary view names, 2) capturing external variables in UDFs, 3) delayed error detection, and 4) excessive schema access on new DataFrames.
 
 ## 1. Reusing temporary view names
 
