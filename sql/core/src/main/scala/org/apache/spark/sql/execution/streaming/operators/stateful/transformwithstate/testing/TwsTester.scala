@@ -16,16 +16,19 @@
  */
 package org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.testing
 
+import java.sql.Timestamp
 import java.time.Clock
 
 import scala.reflect.ClassTag
 
+import org.apache.spark.sql.catalyst.util.IntervalUtils
 import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.statefulprocessor.ImplicitGroupingKeyTracker
 import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.timers.ExpiredTimerInfoImpl
 import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.timers.TimerValuesImpl
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.streaming.StatefulProcessor
 import org.apache.spark.sql.streaming.TimeMode
+import org.apache.spark.sql.streaming.TimerValues
 
 /**
  * Testing utility for transformWithState stateful processors. Provides in-memory state management
@@ -47,6 +50,10 @@ class TwsTester[K, I, O](
     val outputMode: OutputMode = OutputMode.Append) {
   private val handle = new InMemoryStatefulProcessorHandleImpl(timeMode, null, clock)
 
+  private var eventTimeFunc: (I => Timestamp) = null
+  private var delayThresholdMs: Long = 0
+  private var currentWatermarkMs: Option[Long] = None
+
   processor.setHandle(handle)
   processor.init(outputMode, timeMode)
 
@@ -57,27 +64,35 @@ class TwsTester[K, I, O](
    * @return all output rows produced by the processor
    */
   def test(input: List[(K, I)]): List[O] = {
-    val currentTimeMs = clock.instant().toEpochMilli()
-    // TODO: support TimeMode.EventTime.
-    val timerValues = new TimerValuesImpl(Some(currentTimeMs), None)
-    var ans: List[O] = handleExpiredTimers(currentTimeMs)
+    val currentTimeMs: Long = clock.instant().toEpochMilli()
+    val timerValues = new TimerValuesImpl(Some(currentTimeMs), currentWatermarkMs)
+    var ans: List[O] = handleExpiredTimers(timerValues)
 
     for ((key, v) <- input.groupBy(_._1)) {
       ImplicitGroupingKeyTracker.setImplicitKey(key)
       ans = ans ++ processor.handleInputRows(key, v.map(_._2).iterator, timerValues).toList
       ImplicitGroupingKeyTracker.removeImplicitKey()
     }
+
+    updateWatermark(input)
+
     ans
   }
 
-  private def handleExpiredTimers(currentTimeMs: Long): List[O] = {
+  private def handleExpiredTimers(timerValues: TimerValues): List[O] = {
+    if (timeMode == TimeMode.None) {
+      return List()
+    }
+    val currentTimeMs: Long =
+      if (timeMode == TimeMode.EventTime) timerValues.getCurrentWatermarkInMs()
+      else timerValues.getCurrentProcessingTimeInMs()
+
     var ans: List[O] = List()
     for (key <- handle.getAllKeysWithTimers[K]()) {
       ImplicitGroupingKeyTracker.setImplicitKey(key)
       var timersToRemove: List[Long] = List()
       for (expiryTimestampMs <- handle.listTimers()) {
         if (expiryTimestampMs <= currentTimeMs) {
-          val timerValues = new TimerValuesImpl(Some(currentTimeMs), None)
           val expiredTimerInfo = new ExpiredTimerInfoImpl(Some(expiryTimestampMs))
           ans = ans ++ processor.handleExpiredTimer(key, timerValues, expiredTimerInfo).toList
           timersToRemove = timersToRemove ++ List(expiryTimestampMs)
@@ -89,6 +104,19 @@ class TwsTester[K, I, O](
       ImplicitGroupingKeyTracker.removeImplicitKey()
     }
     ans
+  }
+
+  def updateWatermark(input: List[(K, I)]): Unit = {
+    if (timeMode != TimeMode.EventTime || input.isEmpty) {
+      return
+    }
+    require(eventTimeFunc != null, "call withWatermark if timeMode is EventTime")
+    currentWatermarkMs = Some(
+      math.max(
+        currentWatermarkMs.getOrElse(0L),
+        input.map(v => eventTimeFunc(v._2).getTime()).max - delayThresholdMs
+      )
+    )
   }
 
   /**
@@ -208,5 +236,25 @@ class TwsTester[K, I, O](
     val result: Map[MK, MV] = handle.peekMapState[MK, MV](stateName)
     ImplicitGroupingKeyTracker.removeImplicitKey()
     return result
+  }
+
+  /**
+   * Sets watermark for EventTime time mode.
+   *
+   * @param eventTime function used to extract timestamp column from input rows.
+   * @param delayThreshold a string specifying the minimum delay to wait to data to arrive late,
+   *     relative to the latest record that has been processed in the form of an interval (e.g.
+   *     "1 minute" or "5 hours")
+   */
+  def withWatermark(eventTime: (I => Timestamp), delayThreshold: String): Unit = {
+    require(timeMode == TimeMode.EventTime, "withWatermark is only usable with TimeMode.EventTime")
+    val parsedDelay = IntervalUtils.fromIntervalString(delayThreshold)
+    require(
+      !IntervalUtils.isNegative(parsedDelay),
+      s"delay threshold ($delayThreshold) should not be negative."
+    )
+    eventTimeFunc = eventTime
+    delayThresholdMs =
+      IntervalUtils.getDuration(parsedDelay, java.util.concurrent.TimeUnit.MILLISECONDS, 30)
   }
 }

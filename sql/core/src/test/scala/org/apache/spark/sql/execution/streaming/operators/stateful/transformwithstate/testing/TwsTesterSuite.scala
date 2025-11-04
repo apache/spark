@@ -16,6 +16,7 @@
  */
 package org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.testing
 
+import java.sql.Timestamp
 import java.time.Clock
 import java.time.Duration
 import java.time.Instant
@@ -258,6 +259,68 @@ class MultiTimerProcessor
     timerTypeMapState.removeKey(expiryTime)
 
     Iterator.single((key, timerType, expiryTime))
+  }
+}
+
+/**
+ * Event time window processor that demonstrates event time timer usage.
+ *
+ * Input: (eventId, eventTime) as (String, Timestamp)
+ * Output: (userId, status, count) as (String, String, Long)
+ *
+ * Behavior:
+ * - Tracks event count per user window
+ * - On first event, registers a timer for windowDurationMs from the first event time
+ * - Accumulates events in the window
+ * - When timer expires (based on watermark), emits window summary and starts new window
+ */
+class EventTimeWindowProcessor(val windowDurationMs: Long = 10000L)
+    extends StatefulProcessor[String, (String, Timestamp), (String, String, Long)] {
+
+  @transient private var eventCountState: ValueState[Long] = _
+  @transient private var windowEndTimeState: ValueState[Long] = _
+
+  override def init(outputMode: OutputMode, timeMode: TimeMode): Unit = {
+    eventCountState =
+      getHandle.getValueState[Long]("eventCount", Encoders.scalaLong, TTLConfig.NONE)
+    windowEndTimeState =
+      getHandle.getValueState[Long]("windowEndTime", Encoders.scalaLong, TTLConfig.NONE)
+  }
+
+  override def handleInputRows(
+      key: String,
+      inputRows: Iterator[(String, Timestamp)],
+      timerValues: TimerValues
+  ): Iterator[(String, String, Long)] = {
+    val events = inputRows.toList
+    val currentCount = if (eventCountState.exists()) eventCountState.get() else 0L
+    val newCount = currentCount + events.size
+    eventCountState.update(newCount)
+
+    // If this is the first event in a window, register timer
+    if (!windowEndTimeState.exists()) {
+      val firstEventTime = events.head._2.getTime
+      val windowEnd = firstEventTime + windowDurationMs
+      getHandle.registerTimer(windowEnd)
+      windowEndTimeState.update(windowEnd)
+      Iterator.single((key, "WINDOW_START", newCount))
+    } else {
+      Iterator.single((key, "WINDOW_CONTINUE", newCount))
+    }
+  }
+
+  override def handleExpiredTimer(
+      key: String,
+      timerValues: TimerValues,
+      expiredTimerInfo: ExpiredTimerInfo
+  ): Iterator[(String, String, Long)] = {
+    val count = if (eventCountState.exists()) eventCountState.get() else 0L
+
+    // Clear window state
+    eventCountState.clear()
+    windowEndTimeState.clear()
+
+    Iterator.single((key, "WINDOW_END", count))
   }
 }
 
@@ -637,5 +700,64 @@ class TwsTesterSuite extends SparkFunSuite {
     // New timer at 18000ms should fire
     assert(result2.length == 1)
     assert(result2(0) == ("user1", "SESSION_TIMEOUT", 2L))
+  }
+
+  test("TwsTester should handle EventTime mode with watermark") {
+    val processor = new EventTimeWindowProcessor(windowDurationMs = 10000L)
+    val tester = new TwsTester(processor, timeMode = TimeMode.EventTime)
+
+    // Configure watermark: extract timestamp from input, 2 second delay
+    // In real Spark, the watermark column must be of Timestamp type
+    tester.withWatermark(
+      (input: (String, Timestamp)) => input._2,
+      "2 seconds"
+    )
+
+    // Batch 1: Process events with timestamps 10000, 12000, 15000
+    // Max event time = 15000, watermark after batch = 15000 - 2000 = 13000
+    val result1 = tester.test(
+      List(
+        ("user1", ("event1", new Timestamp(10000L))),
+        ("user1", ("event2", new Timestamp(12000L))),
+        ("user1", ("event3", new Timestamp(15000L)))
+      )
+    )
+    // First batch: registers timer at 20000 (10000 + 10000), no timers fire yet
+    assert(result1 == List(("user1", "WINDOW_START", 3L)))
+    assert(tester.peekValueState[Long]("eventCount", "user1").get == 3L)
+    assert(tester.peekValueState[Long]("windowEndTime", "user1").get == 20000L)
+
+    // Batch 2: Process more events with timestamps 18000, 20000
+    // Watermark before batch = 13000, so timer at 20000 doesn't fire yet
+    // Max event time = 20000, watermark after batch = 20000 - 2000 = 18000
+    // Timer at 20000 still doesn't fire (watermark < timer)
+    val result2 = tester.test(
+      List(
+        ("user1", ("event4", new Timestamp(18000L))),
+        ("user1", ("event5", new Timestamp(20000L)))
+      )
+    )
+    assert(result2 == List(("user1", "WINDOW_CONTINUE", 5L)))
+    assert(tester.peekValueState[Long]("eventCount", "user1").get == 5L)
+
+    // Batch 3: Process event with timestamp 23000
+    // Watermark before batch = 18000, so timer at 20000 doesn't fire yet
+    // Max event time = 23000, watermark after batch = 23000 - 2000 = 21000
+    val result3 = tester.test(List(("user1", ("event6", new Timestamp(23000L)))))
+    assert(result3 == List(("user1", "WINDOW_CONTINUE", 6L)))
+    assert(tester.peekValueState[Long]("eventCount", "user1").get == 6L)
+
+    // Batch 4: Process another event with timestamp 25000
+    // Watermark before batch = 21000, so timer at 20000 FIRES now!
+    // Then new event is processed, starting a new window
+    // Watermark after batch = 25000 - 2000 = 23000
+    val result4 = tester.test(List(("user1", ("event7", new Timestamp(25000L)))))
+
+    // Timer fires first (with count 6), then new event starts new window
+    assert(result4.length == 2)
+    assert(result4(0) == ("user1", "WINDOW_END", 6L)) // Timer fired with final count
+    assert(result4(1) == ("user1", "WINDOW_START", 1L)) // New window started
+    assert(tester.peekValueState[Long]("eventCount", "user1").get == 1L)
+    assert(tester.peekValueState[Long]("windowEndTime", "user1").get == 35000L)
   }
 }
