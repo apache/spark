@@ -321,10 +321,23 @@ class StateStoreCoordinatorSuite extends SparkFunSuite with SharedSparkContext {
           // verify that lagging stores in query2 are not impacted by query1 catching up
           assertForceSnapshotUploadOnBadPartitions(true)
 
-          query.stop()
-          query2.stop()
+          // verify report snapshot upload will remove lagging stores
+          val storeId = StateStoreId(
+            stateCheckpointDir2, 0, badPartitions.head, StateStoreId.DEFAULT_STORE_NAME)
+          val providerId = StateStoreProviderId(storeId, query2.runId)
+          coordRef.snapshotUploaded(
+            providerId,
+            snapshotVersionOnLagDetected + 1,
+            System.currentTimeMillis()
+          )
+          val stateStoreStatus = coordRef.reportActiveInstance(
+            providerId, "hostX", "exec1", Seq.empty)
+          assert(stateStoreStatus.shouldForceSnapshotUpload == false)
+
           // Verify that the lagging stores are no longer marked as
           // lagging because they are removed when stop() is called
+          query.stop()
+          query2.stop()
           assertForceSnapshotUploadOnBadPartitions(false)
         }
       }

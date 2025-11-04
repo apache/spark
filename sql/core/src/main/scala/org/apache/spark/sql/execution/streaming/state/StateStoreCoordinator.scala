@@ -51,7 +51,7 @@ private case class ReportActiveInstance(
  * Response from coordinator for ReportActiveInstance
  * @param shouldForceSnapshotUpload Whether the current provider should force a snapshot
  * upload on next commit
- * @param providerIdsToUnload The list of provider IDs that should be unloaded from this executor.
+ * @param providerIdsToUnload The list of provider IDs that should be unloaded from the executor.
  */
 case class ReportActiveInstanceResponse(
     shouldForceSnapshotUpload: Boolean,
