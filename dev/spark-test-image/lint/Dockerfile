@@ -82,8 +82,8 @@ RUN python3.11 -m pip install \
     'flake8==3.9.0' \
     'googleapis-common-protos-stubs==2.2.0' \
     'grpc-stubs==1.24.11' \
-    'grpcio-status==1.76.0' \
-    'grpcio==1.76.0' \
+    'grpcio-status==1.67.0' \
+    'grpcio==1.67.0' \
     'ipython' \
     'ipython_genutils' \
     'jinja2' \

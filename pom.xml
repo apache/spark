@@ -305,8 +305,9 @@
     <!-- Version used in Connect -->
     <connect.guava.version>33.4.0-jre</connect.guava.version>
     <guava.failureaccess.version>1.0.2</guava.failureaccess.version>
-    <io.grpc.version>1.76.0</io.grpc.version>
+    <io.grpc.version>1.67.1</io.grpc.version>
     <mima.version>1.1.4</mima.version>
+    <tomcat.annotations.api.version>6.0.53</tomcat.annotations.api.version>
 
     <!-- Version used in Profiler -->
     <ap-loader.version>4.0-10</ap-loader.version>
