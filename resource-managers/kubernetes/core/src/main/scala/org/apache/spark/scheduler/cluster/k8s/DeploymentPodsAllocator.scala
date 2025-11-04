@@ -18,8 +18,8 @@ package org.apache.spark.scheduler.cluster.k8s
 
 import java.util.concurrent.TimeUnit
 
-import scala.jdk.CollectionConverters._
 import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 
 import io.fabric8.kubernetes.api.model.{Pod, PodSpec, PodSpecBuilder, PodTemplateSpec}
 import io.fabric8.kubernetes.api.model.apps.DeploymentBuilder
