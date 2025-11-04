@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.arrow
 
+import scala.jdk.CollectionConverters._
+
 import org.apache.arrow.vector.VectorSchemaRoot
 
 import org.apache.spark.SparkFunSuite
