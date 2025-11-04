@@ -3149,6 +3149,10 @@
               <shadedPattern>${spark.shade.packageName}.guava</shadedPattern>
             </relocation>
             <relocation>
+              <pattern>com.google.thirdparty</pattern>
+              <shadedPattern>${spark.shade.packageName}.guava.thirdparty</shadedPattern>
+            </relocation>
+            <relocation>
               <pattern>org.dmg.pmml</pattern>
               <shadedPattern>${spark.shade.packageName}.dmg.pmml</shadedPattern>
             </relocation>
