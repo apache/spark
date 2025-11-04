@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.streaming.state
 
-import java.io.{ByteArrayInputStream, ByteArrayOutputStream, File, IOException, ObjectInputStream, ObjectOutputStream}
+import java.io.{ByteArrayInputStream, ByteArrayOutputStream, File, IOException, ObjectInputStream, ObjectOutputStream, PrintWriter}
 import java.net.URI
 import java.util
 import java.util.UUID
@@ -1418,6 +1418,92 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
     }
     assert(e.getMessage.contains(
       "HDFSBackedStateStoreProvider does not support checkpointFormatVersion > 1"))
+  }
+
+  test("Auto snapshot repair") {
+    withSQLConf(
+      SQLConf.STREAMING_CHECKPOINT_FILE_CHECKSUM_ENABLED.key -> false.toString,
+      SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.key -> "1" // for hdfs means every 2 versions
+    ) {
+      val storeId = StateStoreId(newDir(), 0L, 1)
+      val remoteDir = storeId.storeCheckpointLocation().toString
+
+      def numSnapshotsAutoRepaired(store: StateStore): Long = {
+        store.metrics.customMetrics
+          .find(m => m._1.name == "numSnapshotsAutoRepaired").get._2
+      }
+
+      tryWithProviderResource(newStoreProviderWithClonedConf(storeId)) { provider =>
+        var store = provider.getStore(0)
+        put(store, "a", 0, 0)
+        store.commit()
+        assert(numSnapshotsAutoRepaired(store) == 0)
+
+        store = provider.getStore(1)
+        put(store, "b", 1, 1)
+        store.commit()
+        assert(numSnapshotsAutoRepaired(store) == 0)
+        provider.doMaintenance() // upload snapshot 2.snapshot
+
+        store = provider.getStore(2)
+        put(store, "c", 2, 2)
+        store.commit()
+        assert(numSnapshotsAutoRepaired(store) == 0)
+
+        store = provider.getStore(3)
+        put(store, "d", 3, 3)
+        store.commit()
+        assert(numSnapshotsAutoRepaired(store) == 0)
+        provider.doMaintenance() // upload snapshot 4.snapshot
+      }
+
+      def corruptFile(file: File): Unit =
+        // overwrite the file content to become empty
+        new PrintWriter(file) { close() }
+
+      // corrupt 4.snapshot
+      corruptFile(new File(remoteDir, "4.snapshot"))
+
+      tryWithProviderResource(newStoreProviderWithClonedConf(storeId)) { provider =>
+        // this should fail when trying to load from remote
+        val ex = intercept[SparkException] {
+          provider.getStore(4)
+        }
+        assert(ex.getCause.isInstanceOf[java.io.EOFException])
+      }
+
+      // Enable auto snapshot repair
+      withSQLConf(SQLConf.STATE_STORE_AUTO_SNAPSHOT_REPAIR_ENABLED.key -> true.toString,
+        SQLConf.STATE_STORE_AUTO_SNAPSHOT_REPAIR_NUM_FAILURES_BEFORE_ACTIVATING.key -> "1",
+        SQLConf.STATE_STORE_AUTO_SNAPSHOT_REPAIR_MAX_CHANGE_FILE_REPLAY.key -> "6"
+      ) {
+        tryWithProviderResource(newStoreProviderWithClonedConf(storeId)) { provider =>
+          // this should now succeed
+          var store = provider.getStore(4)
+          assert(get(store, "a", 0).contains(0))
+          put(store, "e", 4, 4)
+          store.commit()
+          assert(numSnapshotsAutoRepaired(store) == 1)
+
+          store = provider.getStore(5)
+          put(store, "f", 5, 5)
+          store.commit()
+          assert(numSnapshotsAutoRepaired(store) == 0)
+          provider.doMaintenance() // upload snapshot 6.snapshot
+        }
+
+        // corrupt all snapshot files
+        Seq(2, 6).foreach { v => corruptFile(new File(remoteDir, s"$v.snapshot"))}
+
+        tryWithProviderResource(newStoreProviderWithClonedConf(storeId)) { provider =>
+          // this load should succeed due to auto repair, even though all snapshots are bad
+          val store = provider.getStore(6)
+          assert(get(store, "b", 1).contains(1))
+          store.commit()
+          assert(numSnapshotsAutoRepaired(store) == 1)
+        }
+      }
+    }
   }
 
   override def newStoreProvider(): HDFSBackedStateStoreProvider = {
