@@ -1219,6 +1219,9 @@ def wrap_memory_profiler(f, eval_type, result_id):
     from pyspark.sql.profiler import ProfileResultsParam
     from pyspark.profiler import UDFLineProfilerV2
 
+    if not has_memory_profiler:
+        return f
+
     accumulator = _deserialize_accumulator(
         SpecialAccumulatorIds.SQL_UDF_PROFIER, None, ProfileResultsParam
     )
@@ -1308,10 +1311,8 @@ def read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index, profil
 
     elif profiler == "memory":
         result_id = read_long(infile)
-        if not has_memory_profiler:
-            profiling_func = chained_func
-        else:
-            profiling_func = wrap_memory_profiler(chained_func, eval_type, result_id)
+
+        profiling_func = wrap_memory_profiler(chained_func, eval_type, result_id)
     else:
         profiling_func = chained_func
 
