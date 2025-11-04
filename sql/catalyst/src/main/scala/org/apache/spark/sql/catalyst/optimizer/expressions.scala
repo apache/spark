@@ -145,6 +145,16 @@ object ConstantPropagation extends Rule[LogicalPlan] {
   }
 
   /**
+   * Substitutes [[Attribute Attributes]] which can be statically evaluated with their corresponding
+   * value in conjunctive [[Expression Expressions]]. This opens up the main logic in this rule to
+   * be used externally.
+   */
+  def replaceAttributesWithConstants(condition: Expression): Option[Expression] = {
+    val (newCondition, _) = traverse(condition, replaceChildren = true, nullIsFalse = true)
+    newCondition
+  }
+
+  /**
    * Traverse a condition as a tree and replace attributes with constant values.
    * - On matching [[And]], recursively traverse each children and get propagated mappings.
    *   If the current node is not child of another [[And]], replace all occurrences of the
