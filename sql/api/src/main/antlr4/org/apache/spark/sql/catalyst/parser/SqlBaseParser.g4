@@ -1585,7 +1585,8 @@ qualifiedName
 // replace identifier with errorCapturingIdentifier where the immediate follow symbol is not an expression, otherwise
 // valid expressions such as "a-b" can be recognized as an identifier
 errorCapturingIdentifier
-    : identifier errorCapturingIdentifierExtra
+    : identifier errorCapturingIdentifierExtra                         #errorCapturingIdentifierBase
+    | IDENTIFIER_KW LEFT_PAREN stringLit RIGHT_PAREN errorCapturingIdentifierExtra #identifierLiteralWithExtra
     ;
 
 // extra left-factoring grammar

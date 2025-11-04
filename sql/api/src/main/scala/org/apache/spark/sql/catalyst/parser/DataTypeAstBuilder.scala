@@ -170,12 +170,34 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
    */
   protected def getIdentifierParts(ctx: ParserRuleContext): Seq[String] = {
     ctx match {
+      case idCtx: IdentifierContext =>
+        // identifier can be either strictIdentifier or strictNonReserved
+        // Recursively process the strictIdentifier
+        if (idCtx.strictIdentifier() != null) {
+          getIdentifierParts(idCtx.strictIdentifier())
+        } else {
+          Seq(ctx.getText)
+        }
       case idLitCtx: IdentifierLiteralContext =>
-        // For IDENTIFIER('literal'), extract the string literal value and parse it
+        // For IDENTIFIER('literal') in strictIdentifier
         val literalValue = string(visitStringLit(idLitCtx.stringLit()))
         // This base implementation just returns the literal as a single part
         // Subclasses should override to parse qualified identifiers
         Seq(literalValue)
+      case idLitCtx: IdentifierLiteralWithExtraContext =>
+        // For IDENTIFIER('literal') in errorCapturingIdentifier
+        val literalValue = string(visitStringLit(idLitCtx.stringLit()))
+        // This base implementation just returns the literal as a single part
+        // Subclasses should override to parse qualified identifiers
+        Seq(literalValue)
+      case base: ErrorCapturingIdentifierBaseContext =>
+        // Regular identifier with errorCapturingIdentifierExtra
+        // Need to recursively handle identifier which might itself be IDENTIFIER('literal')
+        if (base.identifier() != null && base.identifier().strictIdentifier() != null) {
+          getIdentifierParts(base.identifier().strictIdentifier())
+        } else {
+          Seq(ctx.getText)
+        }
       case _ =>
         // For regular identifiers, just return the text as a single part
         Seq(ctx.getText)
@@ -191,21 +213,49 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
   protected def getIdentifierText(ctx: ParserRuleContext): String = {
     val parts = getIdentifierParts(ctx)
     if (parts.size > 1) {
-      ctx match {
-        case idLitCtx: IdentifierLiteralContext =>
-          val literalValue = string(visitStringLit(idLitCtx.stringLit()))
-          // Use existing error: IDENTIFIER_TOO_MANY_NAME_PARTS with limit=1
-          throw new ParseException(
-            errorClass = "IDENTIFIER_TOO_MANY_NAME_PARTS",
-            messageParameters = Map("identifier" -> literalValue, "limit" -> "1"),
-            ctx)
-        case _ =>
-          // This shouldn't happen for regular identifiers in strictIdentifier context
-          throw new IllegalStateException(
-            s"Expected single identifier but got qualified name: ${parts.mkString(".")}")
+      // Try to find the original IDENTIFIER('literal') context for better error messages
+      val literalValue = extractIdentifierLiteral(ctx)
+      if (literalValue.isDefined) {
+        throw new ParseException(
+          errorClass = "IDENTIFIER_TOO_MANY_NAME_PARTS",
+          messageParameters = Map("identifier" -> literalValue.get, "limit" -> "1"),
+          ctx)
+      } else {
+        // Regular qualified identifier without IDENTIFIER()
+        throw new IllegalStateException(
+          s"Expected single identifier but got qualified name: ${parts.mkString(".")}")
       }
     }
     parts.head
+  }
+
+  /**
+   * Extract the string literal value from IDENTIFIER('literal') if present in the context tree.
+   * Returns None if this is not an IDENTIFIER('literal') construct.
+   */
+  private def extractIdentifierLiteral(ctx: ParserRuleContext): Option[String] = {
+    ctx match {
+      case idLitCtx: IdentifierLiteralContext =>
+        Some(string(visitStringLit(idLitCtx.stringLit())))
+      case idLitCtx: IdentifierLiteralWithExtraContext =>
+        Some(string(visitStringLit(idLitCtx.stringLit())))
+      case idCtx: IdentifierContext =>
+        // Recurse into strictIdentifier
+        if (idCtx.strictIdentifier() != null) {
+          extractIdentifierLiteral(idCtx.strictIdentifier())
+        } else {
+          None
+        }
+      case base: ErrorCapturingIdentifierBaseContext =>
+        // Recurse into identifier
+        if (base.identifier() != null && base.identifier().strictIdentifier() != null) {
+          extractIdentifierLiteral(base.identifier().strictIdentifier())
+        } else {
+          None
+        }
+      case _ =>
+        None
+    }
   }
 
   /**
@@ -215,15 +265,26 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
   override def visitMultipartIdentifier(ctx: MultipartIdentifierContext): Seq[String] =
     withOrigin(ctx) {
       ctx.parts.asScala.flatMap { part =>
-        // Each part can be an errorCapturingIdentifier, which contains an identifier
-        // The identifier can be a strictIdentifier which might be an identifierLiteral
-        val identifierCtx = part.identifier()
-        if (identifierCtx != null && identifierCtx.strictIdentifier() != null) {
-          // getIdentifierParts handles both regular identifiers (returns Seq with 1 element)
-          // and identifier-lite (may return multiple parts if the literal is qualified)
-          getIdentifierParts(identifierCtx.strictIdentifier())
-        } else {
-          Seq(part.getText)
+        // Each part is an errorCapturingIdentifier, which can be either:
+        // 1. identifier errorCapturingIdentifierExtra (regular path) - labeled as
+        //    #errorCapturingIdentifierBase
+        // 2. IDENTIFIER_KW LEFT_PAREN stringLit RIGHT_PAREN errorCapturingIdentifierExtra
+        //    (identifier-lite path) - labeled as #identifierLiteralWithExtra
+        part match {
+          case idLitWithExtra: IdentifierLiteralWithExtraContext =>
+            // This is identifier-lite: IDENTIFIER('string')
+            getIdentifierParts(idLitWithExtra)
+          case base: ErrorCapturingIdentifierBaseContext =>
+            // Regular identifier path
+            val identifierCtx = base.identifier()
+            if (identifierCtx != null && identifierCtx.strictIdentifier() != null) {
+              getIdentifierParts(identifierCtx.strictIdentifier())
+            } else {
+              Seq(part.getText)
+            }
+          case _ =>
+            // Fallback for other cases
+            Seq(part.getText)
         }
       }.toSeq
     }
@@ -411,7 +472,7 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
     }
 
     StructField(
-      name = getIdentifierText(colName.identifier.strictIdentifier()),
+      name = getIdentifierText(colName),
       dataType = typedVisit[DataType](ctx.dataType),
       nullable = NULL == null,
       metadata = builder.build())

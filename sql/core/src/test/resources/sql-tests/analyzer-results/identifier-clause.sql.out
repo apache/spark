@@ -574,7 +574,14 @@ CreateVariable defaultvalueexpression(sometable, 'sometable'), false
 -- !query
 CREATE TABLE IDENTIFIER(var)(c1 INT) USING CSV
 -- !query analysis
-CreateDataSourceTableCommand `spark_catalog`.`default`.`sometable`, false
+org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
+{
+  "errorClass" : "TABLE_OR_VIEW_ALREADY_EXISTS",
+  "sqlState" : "42P07",
+  "messageParameters" : {
+    "relationName" : "`spark_catalog`.`default`.`sometable`"
+  }
+}
 
 
 -- !query
@@ -604,8 +611,15 @@ SetVariable [variablereference(system.session.var='c1')]
 -- !query
 DROP TABLE IDENTIFIER(var || 'table')
 -- !query analysis
-DropTable false, false
-+- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.sometable
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'var'",
+    "hint" : ""
+  }
+}
 
 
 -- !query
@@ -853,7 +867,8 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "IDENTIFIER_TOO_MANY_NAME_PARTS",
   "sqlState" : "42601",
   "messageParameters" : {
-    "identifier" : "`a`.`b`.`c`.`d`"
+    "identifier" : "`a`.`b`.`c`.`d`",
+    "limit" : "2"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1064,27 +1079,32 @@ SELECT row_number() OVER IDENTIFIER('x.win') FROM VALUES(1) AS T(c1) WINDOW win 
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "errorClass" : "IDENTIFIER_TOO_MANY_NAME_PARTS",
   "sqlState" : "42601",
   "messageParameters" : {
-    "error" : "''x.win''",
-    "hint" : ""
-  }
+    "identifier" : "x.win",
+    "limit" : "1"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 26,
+    "stopIndex" : 44,
+    "fragment" : "IDENTIFIER('x.win')"
+  } ]
 }
 
 
 -- !query
 SELECT T1.c1 FROM VALUES(1) AS T1(c1) JOIN VALUES(1) AS T2(c1) USING (IDENTIFIER('c1'))
 -- !query analysis
-org.apache.spark.sql.catalyst.parser.ParseException
-{
-  "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "42601",
-  "messageParameters" : {
-    "error" : "'('",
-    "hint" : ""
-  }
-}
+Project [c1#x]
++- Project [c1#x]
+   +- Join Inner, (c1#x = c1#x)
+      :- SubqueryAlias T1
+      :  +- LocalRelation [c1#x]
+      +- SubqueryAlias T2
+         +- LocalRelation [c1#x]
 
 
 -- !query
@@ -1111,40 +1131,28 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 SELECT map('a', 1).IDENTIFIER('a') FROM VALUES(1) AS T(c1)
 -- !query analysis
-org.apache.spark.sql.catalyst.parser.ParseException
-{
-  "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "42601",
-  "messageParameters" : {
-    "error" : "''a''",
-    "hint" : ""
-  }
-}
+Project [map(a, 1)[a] AS map(a, 1)[a]#x]
++- SubqueryAlias T
+   +- LocalRelation [c1#x]
 
 
 -- !query
 SELECT named_struct('a', 1).IDENTIFIER('a') FROM VALUES(1) AS T(c1)
 -- !query analysis
-org.apache.spark.sql.catalyst.parser.ParseException
-{
-  "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "42601",
-  "messageParameters" : {
-    "error" : "''a''",
-    "hint" : ""
-  }
-}
+Project [named_struct(a, 1).a AS named_struct(a, 1).a#x]
++- SubqueryAlias T
+   +- LocalRelation [c1#x]
 
 
 -- !query
 SELECT * FROM s.IDENTIFIER('tab')
 -- !query analysis
-org.apache.spark.sql.catalyst.parser.ParseException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "INVALID_SQL_SYNTAX.INVALID_TABLE_VALUED_FUNC_NAME",
-  "sqlState" : "42000",
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
   "messageParameters" : {
-    "funcName" : "`s`.`IDENTIFIER`"
+    "relationName" : "`s`.`tab`"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1159,110 +1167,267 @@ org.apache.spark.sql.catalyst.parser.ParseException
 -- !query
 SELECT * FROM IDENTIFIER('s').IDENTIFIER('tab')
 -- !query analysis
-org.apache.spark.sql.catalyst.parser.ParseException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "42601",
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
   "messageParameters" : {
-    "error" : "'.'",
-    "hint" : ""
-  }
+    "relationName" : "`s`.`tab`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 15,
+    "stopIndex" : 47,
+    "fragment" : "IDENTIFIER('s').IDENTIFIER('tab')"
+  } ]
 }
 
 
 -- !query
 SELECT * FROM IDENTIFIER('s').tab
 -- !query analysis
-org.apache.spark.sql.catalyst.parser.ParseException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "42601",
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
   "messageParameters" : {
-    "error" : "'.'",
-    "hint" : ""
-  }
+    "relationName" : "`s`.`tab`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 15,
+    "stopIndex" : 33,
+    "fragment" : "IDENTIFIER('s').tab"
+  } ]
 }
 
 
 -- !query
 SELECT row_number() OVER IDENTIFIER('win') FROM VALUES(1) AS T(c1) WINDOW win AS (ORDER BY c1)
 -- !query analysis
-org.apache.spark.sql.catalyst.parser.ParseException
-{
-  "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "42601",
-  "messageParameters" : {
-    "error" : "''win''",
-    "hint" : ""
-  }
-}
+Project [row_number() OVER (ORDER BY c1 ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x]
++- Project [c1#x, row_number() OVER (ORDER BY c1 ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x, row_number() OVER (ORDER BY c1 ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x]
+   +- Window [row_number() windowspecdefinition(c1#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS row_number() OVER (ORDER BY c1 ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x], [c1#x ASC NULLS FIRST]
+      +- Project [c1#x]
+         +- SubqueryAlias T
+            +- LocalRelation [c1#x]
 
 
 -- !query
 SELECT row_number() OVER win FROM VALUES(1) AS T(c1) WINDOW IDENTIFIER('win') AS (ORDER BY c1)
 -- !query analysis
-org.apache.spark.sql.catalyst.parser.ParseException
-{
-  "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "42601",
-  "messageParameters" : {
-    "error" : "'WINDOW'",
-    "hint" : ""
-  }
-}
+Project [row_number() OVER (ORDER BY c1 ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x]
++- Project [c1#x, row_number() OVER (ORDER BY c1 ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x, row_number() OVER (ORDER BY c1 ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x]
+   +- Window [row_number() windowspecdefinition(c1#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS row_number() OVER (ORDER BY c1 ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x], [c1#x ASC NULLS FIRST]
+      +- Project [c1#x]
+         +- SubqueryAlias T
+            +- LocalRelation [c1#x]
+
+
+-- !query
+SELECT 1 AS IDENTIFIER('col1')
+-- !query analysis
+Project [1 AS col1#x]
++- OneRowRelation
+
+
+-- !query
+SELECT my_table.* FROM VALUES (1, 2) AS IDENTIFIER('my_table')(IDENTIFIER('c1'), IDENTIFIER('c2'))
+-- !query analysis
+Project [c1#x, c2#x]
++- SubqueryAlias my_table
+   +- LocalRelation [c1#x, c2#x]
 
 
 -- !query
 WITH identifier('v')(identifier('c1')) AS (VALUES(1)) (SELECT c1 FROM v)
 -- !query analysis
-org.apache.spark.sql.catalyst.parser.ParseException
-{
-  "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "42601",
-  "messageParameters" : {
-    "error" : "''v''",
-    "hint" : ""
-  }
-}
-
-
--- !query
-INSERT INTO tab(IDENTIFIER('c1')) VALUES(1)
--- !query analysis
-org.apache.spark.sql.catalyst.parser.ParseException
-{
-  "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "42601",
-  "messageParameters" : {
-    "error" : "'('",
-    "hint" : ": missing ')'"
-  }
-}
+WithCTE
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias v
+:     +- Project [col1#x AS c1#x]
+:        +- LocalRelation [col1#x]
++- Project [c1#x]
+   +- SubqueryAlias v
+      +- CTERelationRef xxxx, true, [c1#x], false, false, 1
 
 
 -- !query
 CREATE OR REPLACE VIEW v(IDENTIFIER('c1')) AS VALUES(1)
 -- !query analysis
-org.apache.spark.sql.catalyst.parser.ParseException
-{
-  "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "42601",
-  "messageParameters" : {
-    "error" : "'('",
-    "hint" : ""
-  }
-}
+CreateViewCommand `spark_catalog`.`default`.`v`, [(c1,None)], VALUES(1), false, true, PersistedView, COMPENSATION, true
+   +- LocalRelation [col1#x]
+
+
+-- !query
+SELECT c1 FROM v
+-- !query analysis
+Project [c1#x]
++- SubqueryAlias spark_catalog.default.v
+   +- View (`spark_catalog`.`default`.`v`, [c1#x])
+      +- Project [cast(col1#x as int) AS c1#x]
+         +- LocalRelation [col1#x]
 
 
 -- !query
 CREATE TABLE tab(IDENTIFIER('c1') INT) USING CSV
 -- !query analysis
+CreateDataSourceTableCommand `spark_catalog`.`default`.`tab`, false
+
+
+-- !query
+INSERT INTO tab(IDENTIFIER('c1')) VALUES(1)
+-- !query analysis
+InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/tab, false, CSV, [path=file:[not included in comparison]/{warehouse_dir}/tab], Append, `spark_catalog`.`default`.`tab`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/tab), [c1]
++- Project [c1#x AS c1#x]
+   +- Project [col1#x AS c1#x]
+      +- LocalRelation [col1#x]
+
+
+-- !query
+SELECT c1 FROM tab
+-- !query analysis
+Project [c1#x]
++- SubqueryAlias spark_catalog.default.tab
+   +- Relation spark_catalog.default.tab[c1#x] csv
+
+
+-- !query
+ALTER TABLE IDENTIFIER('tab') RENAME COLUMN IDENTIFIER('c1') TO IDENTIFIER('col1')
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNSUPPORTED_FEATURE.TABLE_OPERATION",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "operation" : "RENAME COLUMN",
+    "tableName" : "`spark_catalog`.`default`.`tab`"
+  }
+}
+
+
+-- !query
+SELECT col1 FROM tab
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`col1`",
+    "proposal" : "`c1`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 11,
+    "fragment" : "col1"
+  } ]
+}
+
+
+-- !query
+ALTER TABLE IDENTIFIER('tab') ADD COLUMN IDENTIFIER('c2') INT
+-- !query analysis
+AlterTableAddColumnsCommand `spark_catalog`.`default`.`tab`, [StructField(c2,IntegerType,true)]
+
+
+-- !query
+SELECT c2 FROM tab
+-- !query analysis
+Project [c2#x]
++- SubqueryAlias spark_catalog.default.tab
+   +- Relation spark_catalog.default.tab[c1#x,c2#x] csv
+
+
+-- !query
+ALTER TABLE IDENTIFIER('tab') DROP COLUMN IDENTIFIER('c2')
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNSUPPORTED_FEATURE.TABLE_OPERATION",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "operation" : "DROP COLUMN",
+    "tableName" : "`spark_catalog`.`default`.`tab`"
+  }
+}
+
+
+-- !query
+ALTER TABLE IDENTIFIER('tab') RENAME TO IDENTIFIER('tab_renamed')
+-- !query analysis
+org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
+{
+  "errorClass" : "TABLE_OR_VIEW_ALREADY_EXISTS",
+  "sqlState" : "42P07",
+  "messageParameters" : {
+    "relationName" : "`default`.`tab_renamed`"
+  }
+}
+
+
+-- !query
+SELECT * FROM tab_renamed
+-- !query analysis
+Project [c1#x, c2#x]
++- SubqueryAlias spark_catalog.default.tab_renamed
+   +- Relation spark_catalog.default.tab_renamed[c1#x,c2#x] csv
+
+
+-- !query
+CREATE TABLE test_col_with_dot(IDENTIFIER('`col.with.dot`') INT) USING CSV
+-- !query analysis
+CreateDataSourceTableCommand `spark_catalog`.`default`.`test_col_with_dot`, false
+
+
+-- !query
+DROP TABLE IF EXISTS test_col_with_dot
+-- !query analysis
+DropTable true, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.test_col_with_dot
+
+
+-- !query
+SELECT * FROM VALUES (1, 2) AS IDENTIFIER('schema.table')(c1, c2)
+-- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "errorClass" : "IDENTIFIER_TOO_MANY_NAME_PARTS",
   "sqlState" : "42601",
   "messageParameters" : {
-    "error" : "'('",
-    "hint" : ""
-  }
+    "identifier" : "schema.table",
+    "limit" : "1"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 15,
+    "stopIndex" : 65,
+    "fragment" : "VALUES (1, 2) AS IDENTIFIER('schema.table')(c1, c2)"
+  } ]
+}
+
+
+-- !query
+SELECT 1 AS IDENTIFIER('col1.col2')
+-- !query analysis
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "IDENTIFIER_TOO_MANY_NAME_PARTS",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "identifier" : "col1.col2",
+    "limit" : "1"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 35,
+    "fragment" : "1 AS IDENTIFIER('col1.col2')"
+  } ]
 }

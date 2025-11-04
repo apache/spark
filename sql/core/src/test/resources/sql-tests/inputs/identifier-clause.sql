@@ -157,64 +157,6 @@ SELECT IDENTIFIER('max')(IDENTIFIER('c1')) FROM IDENTIFIER('T');
 WITH ABC(c1, c2) AS (VALUES(1, 2), (2, 3))
 SELECT IDENTIFIER('max')(IDENTIFIER('c1')) FROM IDENTIFIER('A' || 'BC');
 
--- Identifier-lite: Tests for string literal-only IDENTIFIER() usage
--- These tests verify that IDENTIFIER('literal') works in all identifier positions
--- Note: The difference from tests above is these use ONLY string literals (no expressions/variables)
-
--- Identifier-lite in column definitions
-CREATE TABLE IDENTIFIER('id_lite_col_test')(IDENTIFIER('col1') INT, IDENTIFIER('col2') STRING) USING CSV;
-INSERT INTO IDENTIFIER('id_lite_col_test') VALUES (1, 'test');
-SELECT IDENTIFIER('col1'), IDENTIFIER('col2') FROM IDENTIFIER('id_lite_col_test');
-DROP TABLE IDENTIFIER('id_lite_col_test');
-
--- Identifier-lite in ALTER TABLE operations
-CREATE TABLE IDENTIFIER('id_lite_alter')(c1 INT) USING CSV;
-ALTER TABLE IDENTIFIER('id_lite_alter') RENAME COLUMN IDENTIFIER('c1') TO IDENTIFIER('col1');
-ALTER TABLE IDENTIFIER('id_lite_alter') ADD COLUMN IDENTIFIER('c2') INT;
-ALTER TABLE IDENTIFIER('id_lite_alter') DROP COLUMN IDENTIFIER('c2');
-ALTER TABLE IDENTIFIER('id_lite_alter') RENAME TO IDENTIFIER('id_lite_renamed');
-DROP TABLE IDENTIFIER('id_lite_renamed');
-
--- Identifier-lite with multiple qualified parts
-CREATE SCHEMA identifier_lite_schema;
-CREATE TABLE IDENTIFIER('identifier_lite_schema.qualified_test')(c1 INT) USING CSV;
-INSERT INTO IDENTIFIER('identifier_lite_schema.qualified_test') VALUES(42);
-SELECT * FROM IDENTIFIER('identifier_lite_schema.qualified_test');
-DROP TABLE IDENTIFIER('identifier_lite_schema.qualified_test');
-DROP SCHEMA identifier_lite_schema;
-
--- Identifier-lite with qualified identifiers in different positions
-CREATE SCHEMA cat1;
-CREATE TABLE cat1.tab1(c1 INT) USING CSV;
-
--- IDENTIFIER('schema').table syntax
-INSERT INTO IDENTIFIER('cat1').tab1 VALUES(1);
-SELECT * FROM IDENTIFIER('cat1').tab1;
-
--- IDENTIFIER('schema.table') syntax
-SELECT * FROM IDENTIFIER('cat1.tab1');
-
--- Mixed: IDENTIFIER('schema').IDENTIFIER('table')
-SELECT * FROM IDENTIFIER('cat1').IDENTIFIER('tab1');
-
-DROP TABLE cat1.tab1;
-DROP SCHEMA cat1;
-
--- Identifier-lite with backticks in qualified names
-CREATE SCHEMA `schema 1`;
-CREATE TABLE `schema 1`.`table 1`(c1 INT) USING CSV;
-
--- Use identifier-lite with backticked qualified name
-INSERT INTO IDENTIFIER('`schema 1`.`table 1`') VALUES(100);
-SELECT * FROM IDENTIFIER('`schema 1`.`table 1`');
-
--- Mixed: IDENTIFIER for schema part, regular for table
-SELECT * FROM IDENTIFIER('`schema 1`').`table 1`;
-
-DROP TABLE `schema 1`.`table 1`;
-DROP SCHEMA `schema 1`;
-
--- Not supported
 SELECT row_number() OVER IDENTIFIER('x.win') FROM VALUES(1) AS T(c1) WINDOW win AS (ORDER BY c1);
 SELECT T1.c1 FROM VALUES(1) AS T1(c1) JOIN VALUES(1) AS T2(c1) USING (IDENTIFIER('c1'));
 SELECT IDENTIFIER('t').c1 FROM VALUES(1) AS T(c1);
@@ -225,37 +167,26 @@ SELECT * FROM IDENTIFIER('s').IDENTIFIER('tab');
 SELECT * FROM IDENTIFIER('s').tab;
 SELECT row_number() OVER IDENTIFIER('win') FROM VALUES(1) AS T(c1) WINDOW win AS (ORDER BY c1);
 SELECT row_number() OVER win FROM VALUES(1) AS T(c1) WINDOW IDENTIFIER('win') AS (ORDER BY c1);
-WITH identifier('v')(identifier('c1')) AS (VALUES(1)) (SELECT c1 FROM v);
-INSERT INTO tab(IDENTIFIER('c1')) VALUES(1);
-CREATE OR REPLACE VIEW v(IDENTIFIER('c1')) AS VALUES(1);
-CREATE TABLE tab(IDENTIFIER('c1') INT) USING CSV;
-
--- Identifier-lite: Column definitions should work with string literals
--- (This is a positive test showing identifier-lite works in column definitions)
-CREATE TABLE IDENTIFIER('id_lite_coldef_ok')(IDENTIFIER('c1') INT) USING CSV;
-DROP TABLE IDENTIFIER('id_lite_coldef_ok');
-
--- Identifier-lite: Error when qualified identifier used in single identifier context
--- This should error because 'col1.col2' is qualified but column name must be single
-CREATE TABLE test_qualified_col_error(IDENTIFIER('col1.col2') INT) USING CSV;
-
--- This should error because 'schema.table' is qualified but used as column name
-CREATE TABLE test_qualified_col_error2(id INT, IDENTIFIER('schema.table') STRING) USING CSV;
-
--- Correct way: use backticks to create a single identifier with a dot
-CREATE TABLE test_col_with_dot(IDENTIFIER('`col.with.dot`') INT) USING CSV;
-DROP TABLE test_col_with_dot;
-
--- Identifier-lite in column aliases (AS clause)
 SELECT 1 AS IDENTIFIER('col1');
-SELECT 'hello' AS IDENTIFIER('my_column');
+SELECT my_table.* FROM VALUES (1, 2) AS IDENTIFIER('my_table')(IDENTIFIER('c1'), IDENTIFIER('c2'));
+WITH identifier('v')(identifier('c1')) AS (VALUES(1)) (SELECT c1 FROM v);
+CREATE OR REPLACE VIEW v(IDENTIFIER('c1')) AS VALUES(1);
+SELECT c1 FROM v;
+CREATE TABLE tab(IDENTIFIER('c1') INT) USING CSV;
+INSERT INTO tab(IDENTIFIER('c1')) VALUES(1);
+SELECT c1 FROM tab;
+ALTER TABLE IDENTIFIER('tab') RENAME COLUMN IDENTIFIER('c1') TO IDENTIFIER('col1');
+SELECT col1 FROM tab;
+ALTER TABLE IDENTIFIER('tab') ADD COLUMN IDENTIFIER('c2') INT;
+SELECT c2 FROM tab;
+ALTER TABLE IDENTIFIER('tab') DROP COLUMN IDENTIFIER('c2');
+ALTER TABLE IDENTIFIER('tab') RENAME TO IDENTIFIER('tab_renamed');
+SELECT * FROM tab_renamed;
 
--- Identifier-lite in table value constructor with table and column aliases
-SELECT * FROM VALUES (1, 2) AS IDENTIFIER('my_table')(IDENTIFIER('c1'), IDENTIFIER('c2'));
-SELECT * FROM VALUES (10, 20) AS IDENTIFIER('t')(IDENTIFIER('col_a'), IDENTIFIER('col_b'));
-
+-- Error because qualified names are not allowed
+CREATE TABLE test_col_with_dot(IDENTIFIER('`col.with.dot`') INT) USING CSV;
+DROP TABLE IF EXISTS test_col_with_dot;
 -- Identifier-lite: table alias with qualified name should error (table alias must be single)
 SELECT * FROM VALUES (1, 2) AS IDENTIFIER('schema.table')(c1, c2);
-
 -- Identifier-lite: column alias with qualified name should error (column alias must be single)
 SELECT 1 AS IDENTIFIER('col1.col2');

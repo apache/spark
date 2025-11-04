@@ -629,7 +629,8 @@ class SparkSqlAstBuilder extends AstBuilder {
 
     val userSpecifiedColumns = Option(ctx.identifierCommentList).toSeq.flatMap { icl =>
       icl.identifierComment.asScala.map { ic =>
-        ic.identifier.getText -> Option(ic.commentSpec()).map(visitCommentSpec)
+        // Use getIdentifierText to handle both regular identifiers and IDENTIFIER('literal')
+        getIdentifierText(ic.identifier) -> Option(ic.commentSpec()).map(visitCommentSpec)
       }
     }
 
