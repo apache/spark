@@ -1972,6 +1972,12 @@
     ],
     "sqlState" : "22546"
   },
+  "HLL_K_MUST_BE_CONSTANT" : {
+    "message" : [
+      "Invalid call to <function>; the `K` value must be a constant value, but got a non-constant expression."
+    ],
+    "sqlState" : "42K0E"
+  },
   "HLL_UNION_DIFFERENT_LG_K" : {
     "message" : [
       "Sketches have different `lgConfigK` values: <left> and <right>. Set the `allowDifferentLgConfigK` parameter to true to call <function> with different `lgConfigK` values."
@@ -5756,6 +5762,12 @@
       "Invalid call to <function>; the `lgNomEntries` value must be between <min> and <max>, inclusive: <value>."
     ],
     "sqlState" : "22546"
+  },
+  "THETA_LG_NOM_ENTRIES_MUST_BE_CONSTANT" : {
+    "message" : [
+      "Invalid call to <function>; the `lgNomEntries` value must be a constant value, but got a non-constant expression."
+    ],
+    "sqlState" : "42K0E"
   },
   "TRAILING_COMMA_IN_SELECT" : {
     "message" : [

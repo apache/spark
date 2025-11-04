@@ -216,6 +216,7 @@ case class ExpressionEncoder[T](
     StructField(s.name, s.dataType, s.nullable)
   })
 
+  @scala.annotation.tailrec
   private def transformerOfOption(enc: AgnosticEncoder[_]): Boolean =
     enc match {
       case t: TransformingEncoder[_, _] => transformerOfOption(t.transformed)

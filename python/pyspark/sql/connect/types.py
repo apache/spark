@@ -48,6 +48,7 @@ from pyspark.sql.types import (
     BinaryType,
     BooleanType,
     NullType,
+    NumericType,
     VariantType,
     UserDefinedType,
 )
@@ -367,15 +368,42 @@ def verify_col_name(name: str, schema: StructType) -> bool:
     if parts is None or len(parts) == 0:
         return False
 
-    def _quick_verify(parts: List[str], schema: DataType) -> bool:
+    def _quick_verify(parts: List[str], dt: DataType) -> bool:
         if len(parts) == 0:
             return True
 
         _schema: Optional[StructType] = None
-        if isinstance(schema, StructType):
-            _schema = schema
-        elif isinstance(schema, ArrayType) and isinstance(schema.elementType, StructType):
-            _schema = schema.elementType
+        if isinstance(dt, StructType):
+            _schema = dt
+        elif isinstance(dt, ArrayType) and isinstance(dt.elementType, StructType):
+            _schema = dt.elementType
+        else:
+            return False
+
+        part = parts[0]
+        for field in _schema:
+            if field.name == part:
+                return _quick_verify(parts[1:], field.dataType)
+
+        return False
+
+    return _quick_verify(parts, schema)
+
+
+def verify_numeric_col_name(name: str, schema: StructType) -> bool:
+    parts = parse_attr_name(name)
+    if parts is None or len(parts) == 0:
+        return False
+
+    def _quick_verify(parts: List[str], dt: DataType) -> bool:
+        if len(parts) == 0 and isinstance(dt, NumericType):
+            return True
+
+        _schema: Optional[StructType] = None
+        if isinstance(dt, StructType):
+            _schema = dt
+        elif isinstance(dt, ArrayType) and isinstance(dt.elementType, StructType):
+            _schema = dt.elementType
         else:
             return False
 
