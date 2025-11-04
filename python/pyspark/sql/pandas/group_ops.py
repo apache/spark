@@ -169,15 +169,16 @@ class PandasGroupedOpsMixin:
         ...     return pdf.assign(v=(v - v.mean()) / v.std())
         ...
         >>> df.groupby("id").applyInPandas(
-        ...     normalize, schema="id long, v double").show()
+        ...     normalize, schema="id long, v double"
+        ... ).sort("id", "v").show()
         +---+-------------------+
         | id|                  v|
         +---+-------------------+
-        |  1|-0.7071067811865475|
-        |  1| 0.7071067811865475|
-        |  2|-0.8320502943378437|
-        |  2|-0.2773500981126146|
-        |  2| 1.1094003924504583|
+        |  1|-0.7071067811865...|
+        |  1| 0.7071067811865...|
+        |  2|-0.8320502943378...|
+        |  2|-0.2773500981126...|
+        |  2| 1.1094003924504...|
         +---+-------------------+
 
         Alternatively, the user can pass a function that takes two arguments.
@@ -195,8 +196,9 @@ class PandasGroupedOpsMixin:
         ...     # of 'id' for the current group
         ...     return pd.DataFrame([key + (pdf.v.mean(),)])
         ...
-        >>> df.groupby('id').applyInPandas(
-        ...     mean_func, schema="id long, v double").show()
+        >>> df.groupby("id").applyInPandas(
+        ...     mean_func, schema="id long, v double"
+        ... ).sort("id").show()
         +---+---+
         | id|  v|
         +---+---+
@@ -210,14 +212,15 @@ class PandasGroupedOpsMixin:
         ...     return pd.DataFrame([key + (pdf.v.sum(),)])
         ...
         >>> df.groupby(df.id, sf.ceil(df.v / 2)).applyInPandas(
-        ...     sum_func, schema="id long, `ceil(v / 2)` long, v double").show()
+        ...     sum_func, schema="id long, `ceil(v / 2)` long, v double"
+        ... ).sort("id", "v").show()
         +---+-----------+----+
         | id|ceil(v / 2)|   v|
         +---+-----------+----+
-        |  2|          5|10.0|
         |  1|          1| 3.0|
-        |  2|          3| 5.0|
         |  2|          2| 3.0|
+        |  2|          3| 5.0|
+        |  2|          5|10.0|
         +---+-----------+----+
 
         The function can also take and return an iterator of `pandas.DataFrame` using type
@@ -236,7 +239,8 @@ class PandasGroupedOpsMixin:
         ...         if not filtered.empty:
         ...             yield filtered[['v']]
         >>> df.groupby("id").applyInPandas(
-        ...     filter_func, schema="v double").show()
+        ...     filter_func, schema="v double"
+        ... ).sort("v").show()
         +----+
         |   v|
         +----+
@@ -259,16 +263,17 @@ class PandasGroupedOpsMixin:
         ...         result = batch.assign(id=key[0], v_doubled=batch['v'] * 2)
         ...         yield result[['id', 'v_doubled']]
         >>> df.groupby("id").applyInPandas(
-        ...     transform_func, schema="id long, v_doubled double").show()
-        +---+----------+
-        | id|v_doubled |
-        +---+----------+
-        |  1|       2.0|
-        |  1|       4.0|
-        |  2|       6.0|
-        |  2|      10.0|
-        |  2|      20.0|
-        +---+----------+
+        ...     transform_func, schema="id long, v_doubled double"
+        ... ).sort("id", "v_doubled").show()
+        +---+---------+
+        | id|v_doubled|
+        +---+---------+
+        |  1|      2.0|
+        |  1|      4.0|
+        |  2|      6.0|
+        |  2|     10.0|
+        |  2|     20.0|
+        +---+---------+
 
         Notes
         -----
@@ -1187,8 +1192,14 @@ def _test() -> None:
     import doctest
     from pyspark.sql import SparkSession
     import pyspark.sql.pandas.group_ops
+    from pyspark.testing.utils import have_pandas, have_pyarrow
 
     globs = pyspark.sql.pandas.group_ops.__dict__.copy()
+
+    if not have_pandas or not have_pyarrow:
+        del pyspark.sql.pandas.group_ops.PandasGroupedOpsMixin.apply.__doc__
+        del pyspark.sql.pandas.group_ops.PandasGroupedOpsMixin.applyInPandas.__doc__
+
     spark = SparkSession.builder.master("local[4]").appName("sql.pandas.group tests").getOrCreate()
     globs["spark"] = spark
     (failure_count, test_count) = doctest.testmod(
