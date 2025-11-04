@@ -20,6 +20,8 @@ import java.util.Arrays
 import java.util.concurrent.TimeUnit
 import java.util.function.UnaryOperator
 
+import scala.jdk.CollectionConverters._
+
 import io.fabric8.kubernetes.api.model.{ConfigMap, Pod, PodBuilder, PodList}
 import io.fabric8.kubernetes.client.KubernetesClient
 import io.fabric8.kubernetes.client.dsl.PodResource
@@ -39,8 +41,6 @@ import org.apache.spark.scheduler.{ExecutorKilled, LiveListenerBus, TaskSchedule
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.{RegisterExecutor, RemoveExecutor, StopDriver}
 import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
 import org.apache.spark.scheduler.cluster.k8s.ExecutorLifecycleTestUtils.TEST_SPARK_APP_ID
-
-import scala.jdk.CollectionConverters._
 
 class KubernetesClusterSchedulerBackendSuite extends SparkFunSuite with BeforeAndAfter {
 
