@@ -468,6 +468,14 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val AVOID_DOUBLE_FILTER_EVAL =
+    buildConf("spark.sql.optimizer.avoidDoubleFilterEval")
+    .doc("When true avoid pushing expensive (UDF, etc.) filters down if it could result in" +
+        "double evaluation. This was the behaviour prior to 3.X.")
+    .version("4.1.0")
+    .booleanConf
+    .createWithDefault(true)
+
   val OPTIMIZER_EXCLUDED_RULES = buildConf("spark.sql.optimizer.excludedRules")
     .doc("Configures a list of rules to be disabled in the optimizer, in which the rules are " +
       "specified by their rule names and separated by comma. It is not guaranteed that all the " +
@@ -7531,6 +7539,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def charVarcharAsString: Boolean = getConf(SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING)
 
   def preserveCharVarcharTypeInfo: Boolean = getConf(SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO)
+
+  def avoidDoubleFilterEvail: Boolean = getConf(AVOID_DOUBLE_FILTER_EVAL)
 
   def readSideCharPadding: Boolean = getConf(SQLConf.READ_SIDE_CHAR_PADDING)
 

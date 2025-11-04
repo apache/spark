@@ -2083,25 +2083,30 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
         kv => (kv._2.exprId, kv._2)
       }.toMap
       val (cheap, expensive) = splitConjunctivePredicates(condition).partition { cond =>
-        val (replaced, usedAliases) = replaceAliasWhileTracking(cond, aliasMap)
-        if (cond == replaced) {
-          // If nothing changes then our alias is cheap
-          true
-        } else if (usedAliases.iterator.map(_._2.child.expectedCost).sum < 100) {
-          // If it's cheap we can push it because it might eliminate more data quickly and
-          // it may also be something which could be evaluated at the storage layer.
-          // We may wish to improve this heuristic in the future.
+        if (!SQLConf.get.avoidDoubleFilterEvail) {
+          // If we are always pushing through short circuit the check.
           true
         } else {
-          // This is an expensive replacement so we see resolve it
-          usedAliases.iterator.foreach {
-            e: (Attribute, Alias) =>
-            if (leftBehindAliases.contains(e._2.exprId)) {
-              leftBehindAliases = leftBehindAliases.removed(e._2.exprId)
-              filterAliasesBuf += e._2
+          val (replaced, usedAliases) = replaceAliasWhileTracking(cond, aliasMap)
+          if (cond == replaced) {
+          // If nothing changes then our alias is cheap
+            true
+          } else if (usedAliases.iterator.map(_._2.child.expectedCost).sum < 100) {
+            // If it's cheap we can push it because it might eliminate more data quickly and
+            // it may also be something which could be evaluated at the storage layer.
+            // We may wish to improve this heuristic in the future.
+            true
+          } else {
+            // This is an expensive replacement so we see resolve it
+            usedAliases.iterator.foreach {
+              e: (Attribute, Alias) =>
+              if (leftBehindAliases.contains(e._2.exprId)) {
+                leftBehindAliases = leftBehindAliases.removed(e._2.exprId)
+                filterAliasesBuf += e._2
+              }
             }
+            false
           }
-          false
         }
       }
 
