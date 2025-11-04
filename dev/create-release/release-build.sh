@@ -833,6 +833,14 @@ if [[ "$1" == "docs" ]]; then
   fi
   bundle install
   PRODUCTION=1 RELEASE_VERSION="$SPARK_VERSION" bundle exec jekyll build
+
+  # Generate llms.txt for LLM consumption
+  echo "Generating llms.txt..."
+  python "$SELF/generate-llms-txt.py" \
+    --docs-path . \
+    --output _site/llms.txt \
+    --version "$SPARK_VERSION"
+
   cd ..
   cd ..
 

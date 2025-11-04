@@ -522,6 +522,11 @@ __all__ = [  # noqa: F405
     "UserDefinedFunction",
     "UserDefinedTableFunction",
     "arrow_udf",
+    # Geospatial ST Functions
+    "st_asbinary",
+    "st_geogfromwkb",
+    "st_geomfromwkb",
+    # Call Functions
     "call_udf",
     "pandas_udf",
     "udf",

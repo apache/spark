@@ -292,10 +292,19 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
       throw StateStoreErrors.unsupportedOperationException("multipleValuesPerKey", providerName)
     }
 
+    override def putList(key: UnsafeRow, values: Array[UnsafeRow], colFamilyName: String): Unit = {
+      throw StateStoreErrors.unsupportedOperationException("putList", providerName)
+    }
+
     override def merge(key: UnsafeRow,
         value: UnsafeRow,
         colFamilyName: String): Unit = {
       throw StateStoreErrors.unsupportedOperationException("merge", providerName)
+    }
+
+    override def mergeList(
+        key: UnsafeRow, values: Array[UnsafeRow], colFamilyName: String): Unit = {
+      throw StateStoreErrors.unsupportedOperationException("mergeList", providerName)
     }
   }
 

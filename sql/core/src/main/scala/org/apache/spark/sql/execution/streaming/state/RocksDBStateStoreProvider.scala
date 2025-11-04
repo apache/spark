@@ -300,6 +300,31 @@ private[sql] class RocksDBStateStoreProvider
       rocksDB.merge(keyEncoder.encodeKey(key), valueEncoder.encodeValue(value), colFamilyName)
     }
 
+    override def mergeList(
+        key: UnsafeRow,
+        values: Array[UnsafeRow],
+        colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Unit = {
+      validateAndTransitionState(UPDATE)
+      verify(state == UPDATING, "Cannot merge after already committed or aborted")
+      verifyColFamilyOperations("merge", colFamilyName)
+
+      val kvEncoder = keyValueEncoderMap.get(colFamilyName)
+      val keyEncoder = kvEncoder._1
+      val valueEncoder = kvEncoder._2
+      verify(
+        valueEncoder.supportsMultipleValuesPerKey,
+        "Merge operation requires an encoder" +
+          " which supports multiple values for a single key")
+      verify(key != null, "Key cannot be null")
+      require(values != null, "Cannot merge a null value")
+      values.foreach(v => require(v != null, "Cannot merge a null value in the array"))
+
+      rocksDB.mergeList(
+        keyEncoder.encodeKey(key),
+        values.map(valueEncoder.encodeValue).toList,
+        colFamilyName)
+    }
+
     override def put(key: UnsafeRow, value: UnsafeRow, colFamilyName: String): Unit = {
       validateAndTransitionState(UPDATE)
       verify(state == UPDATING, "Cannot put after already committed or aborted")
@@ -309,6 +334,28 @@ private[sql] class RocksDBStateStoreProvider
 
       val kvEncoder = keyValueEncoderMap.get(colFamilyName)
       rocksDB.put(kvEncoder._1.encodeKey(key), kvEncoder._2.encodeValue(value), colFamilyName)
+    }
+
+    override def putList(
+        key: UnsafeRow,
+        values: Array[UnsafeRow],
+        colFamilyName: String): Unit = {
+      validateAndTransitionState(UPDATE)
+      verify(state == UPDATING, "Cannot put after already committed or aborted")
+      verify(key != null, "Key cannot be null")
+      require(values != null, "Cannot put a null value")
+      values.foreach(v => require(v != null, "Cannot put a null value in the array"))
+      verifyColFamilyOperations("put", colFamilyName)
+
+      val kvEncoder = keyValueEncoderMap.get(colFamilyName)
+      verify(
+        kvEncoder._2.supportsMultipleValuesPerKey,
+        "Multi-value put operation requires an encoder" +
+          " which supports multiple values for a single key")
+      rocksDB.putList(
+        kvEncoder._1.encodeKey(key),
+        values.map(kvEncoder._2.encodeValue).toList,
+        colFamilyName)
     }
 
     override def remove(key: UnsafeRow, colFamilyName: String): Unit = {

@@ -123,6 +123,13 @@ case class CkptIdCollectingStateStoreWrapper(innerStore: StateStore) extends Sta
     innerStore.put(key, value, colFamilyName)
   }
 
+  override def putList(
+      key: UnsafeRow,
+      values: Array[UnsafeRow],
+      colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Unit = {
+    innerStore.putList(key, values, colFamilyName)
+  }
+
   override def remove(
       key: UnsafeRow,
       colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Unit = {
@@ -134,6 +141,13 @@ case class CkptIdCollectingStateStoreWrapper(innerStore: StateStore) extends Sta
       value: UnsafeRow,
       colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Unit = {
     innerStore.merge(key, value, colFamilyName)
+  }
+
+  override def mergeList(
+      key: UnsafeRow,
+      values: Array[UnsafeRow],
+      colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Unit = {
+    innerStore.mergeList(key, values, colFamilyName)
   }
 
   override def commit(): Long = innerStore.commit()
