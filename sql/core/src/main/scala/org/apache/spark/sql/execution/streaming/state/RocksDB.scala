@@ -1055,18 +1055,29 @@ class RocksDB(
    * Convert the given list of value row bytes into a single byte array. The returned array
    * bytes supports additional values to be later merged to it.
    */
-  private def getListValuesInArrayByte(values: List[Array[Byte]]): Array[Byte] = {
+  private def getListValuesInArrayByte(
+      keyWithPrefix: Array[Byte],
+      values: List[Array[Byte]],
+      includesChecksum: Boolean): Array[Byte] = {
+    val valueWithChecksum = if (conf.rowChecksumEnabled && !includesChecksum) {
+      values.map { value =>
+        KeyValueChecksumEncoder.encodeValueRowWithChecksum(value,
+          KeyValueChecksum.create(keyWithPrefix, Some(value)))
+      }
+    } else {
+      values
+    }
     // Delimit each value row bytes with a single byte delimiter, the last
     // value row won't have a delimiter at the end.
-    val delimiterNum = values.length - 1
-    // The bytes in values already include the bytes length prefix
-    val totalSize = values.map(_.length).sum +
+    val delimiterNum = valueWithChecksum.length - 1
+    // The bytes in valueWithChecksum already include the bytes length prefix
+    val totalSize = valueWithChecksum.map(_.length).sum +
       delimiterNum // for each delimiter
 
     val result = new Array[Byte](totalSize)
     var pos = Platform.BYTE_ARRAY_OFFSET
 
-    values.zipWithIndex.foreach { case (rowBytes, idx) =>
+    valueWithChecksum.zipWithIndex.foreach { case (rowBytes, idx) =>
       // Write the data
       Platform.copyMemory(rowBytes, Platform.BYTE_ARRAY_OFFSET, result, pos, rowBytes.length)
       pos += rowBytes.length
@@ -1091,6 +1102,7 @@ class RocksDB(
       values: List[Array[Byte]],
       cfName: String = StateStore.DEFAULT_COL_FAMILY_NAME,
       includesPrefix: Boolean = false,
+      includesChecksum: Boolean = false,
       deriveCfName: Boolean = false): Unit = {
     updateMemoryUsageIfNeeded()
     val keyWithPrefix = if (useColumnFamilies && !includesPrefix) {
@@ -1099,7 +1111,7 @@ class RocksDB(
       key
     }
 
-    val valuesInArrayByte = getListValuesInArrayByte(values)
+    val valuesInArrayByte = getListValuesInArrayByte(keyWithPrefix, values, includesChecksum)
 
     val columnFamilyName = if (deriveCfName && useColumnFamilies) {
       val (_, cfName) = decodeStateRowWithPrefix(keyWithPrefix)
@@ -1169,6 +1181,7 @@ class RocksDB(
       values: List[Array[Byte]],
       cfName: String = StateStore.DEFAULT_COL_FAMILY_NAME,
       includesPrefix: Boolean = false,
+      includesChecksum: Boolean = false,
       deriveCfName: Boolean = false): Unit = {
     updateMemoryUsageIfNeeded()
     val keyWithPrefix = if (useColumnFamilies && !includesPrefix) {
@@ -1184,7 +1197,7 @@ class RocksDB(
       cfName
     }
 
-    val valueInArrayByte = getListValuesInArrayByte(values)
+    val valueInArrayByte = getListValuesInArrayByte(keyWithPrefix, values, includesChecksum)
 
     handleMetricsUpdate(keyWithPrefix, columnFamilyName, isPutOrMerge = true)
     db.merge(writeOptions, keyWithPrefix, valueInArrayByte)
