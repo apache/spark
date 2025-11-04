@@ -2031,6 +2031,12 @@ class SparkConnectClient(object):
                 return self._artifact_manager.cache_artifact(blob)
         raise SparkConnectException("Invalid state during retry exception handling.")
 
+    def cache_artifacts(self, blobs: list[bytes]) -> list[str]:
+        for attempt in self._retrying():
+            with attempt:
+                return self._artifact_manager.cache_artifacts(blobs)
+        raise SparkConnectException("Invalid state during retry exception handling.")
+
     def _verify_response_integrity(
         self,
         response: Union[
@@ -2224,3 +2230,69 @@ class SparkConnectClient(object):
                     "Plan compression is disabled because the server does not support it.", e
                 )
         return self._plan_compression_threshold, self._plan_compression_algorithm
+
+    def clone(self, new_session_id: Optional[str] = None) -> "SparkConnectClient":
+        """
+        Clone this client session on the server side. The server-side session is cloned with
+        all its current state (SQL configurations, temporary views, registered functions,
+        catalog state) copied over to a new independent session. The returned client with the
+        cloned session is isolated from this client's session - any subsequent changes to
+        either session's server-side state will not be reflected in the other.
+
+        Parameters
+        ----------
+        new_session_id : str, optional
+            Custom session ID to use for the cloned session (must be a valid UUID).
+            If not provided, a new UUID will be generated.
+
+        Returns
+        -------
+        SparkConnectClient
+            A new SparkConnectClient instance with the cloned session.
+
+        Notes
+        -----
+        This creates a new server-side session with the specified or generated session ID
+        while preserving the current session's configuration and state.
+
+        .. note::
+            This is a developer API.
+        """
+        from pyspark.sql.connect.proto import base_pb2 as pb2
+
+        request = pb2.CloneSessionRequest(
+            session_id=self._session_id,
+            client_type="python",
+        )
+        if self._user_id is not None:
+            request.user_context.user_id = self._user_id
+
+        if new_session_id is not None:
+            request.new_session_id = new_session_id
+
+        for attempt in self._retrying():
+            with attempt:
+                response: pb2.CloneSessionResponse = self._stub.CloneSession(
+                    request, metadata=self._builder.metadata()
+                )
+
+        # Assert that the returned session ID matches the requested ID if one was provided
+        if new_session_id is not None:
+            assert response.new_session_id == new_session_id, (
+                f"Returned session ID '{response.new_session_id}' does not match "
+                f"requested ID '{new_session_id}'"
+            )
+
+        # Create a new client with the cloned session ID
+        new_connection = copy.deepcopy(self._builder)
+        new_connection.set(ChannelBuilder.PARAM_SESSION_ID, response.new_session_id)
+
+        # Create new client and explicitly set the session ID
+        new_client = SparkConnectClient(
+            connection=new_connection,
+            user_id=self._user_id,
+            use_reattachable_execute=self._use_reattachable_execute,
+        )
+        # Ensure the session ID is correctly set from the response
+        new_client._session_id = response.new_session_id
+        return new_client

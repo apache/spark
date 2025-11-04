@@ -67,6 +67,7 @@ private[spark] object PythonEvalType {
   val SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_UDF = 213
   val SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_INIT_STATE_UDF = 214
   val SQL_GROUPED_MAP_ARROW_ITER_UDF = 215
+  val SQL_GROUPED_MAP_PANDAS_ITER_UDF = 216
 
   // Arrow UDFs
   val SQL_SCALAR_ARROW_UDF = 250
@@ -102,6 +103,8 @@ private[spark] object PythonEvalType {
     case SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_UDF => "SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_UDF"
     case SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_INIT_STATE_UDF =>
       "SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_INIT_STATE_UDF"
+    case SQL_GROUPED_MAP_ARROW_ITER_UDF => "SQL_GROUPED_MAP_ARROW_ITER_UDF"
+    case SQL_GROUPED_MAP_PANDAS_ITER_UDF => "SQL_GROUPED_MAP_PANDAS_ITER_UDF"
 
     // Arrow UDFs
     case SQL_SCALAR_ARROW_UDF => "SQL_SCALAR_ARROW_UDF"
@@ -117,6 +120,18 @@ private[spark] object BasePythonRunner extends Logging {
 
   private[spark] def faultHandlerLogPath(pid: Int): Path = {
     new File(faultHandlerLogDir, pid.toString).toPath
+  }
+
+  private[spark] def tryReadFaultHandlerLog(
+      faultHandlerEnabled: Boolean, pid: Option[Int]): Option[String] = {
+    if (faultHandlerEnabled) {
+      pid.map(faultHandlerLogPath).collect {
+        case path if JavaFiles.exists(path) =>
+          val error = String.join("\n", JavaFiles.readAllLines(path)) + "\n"
+          JavaFiles.deleteIfExists(path)
+          error
+      }
+    } else None
   }
 
   private[spark] def pythonWorkerStatusMessageWithContext(
@@ -318,7 +333,8 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
 
     // Return an iterator that read lines from the process's stdout
     val dataIn = new DataInputStream(new BufferedInputStream(
-      new ReaderInputStream(worker, writer, handle, idleTimeoutSeconds, killOnIdleTimeout),
+      new ReaderInputStream(worker, writer, handle,
+        faultHandlerEnabled, idleTimeoutSeconds, killOnIdleTimeout),
       bufferSize))
     val stdoutIterator = newReaderIterator(
       dataIn, writer, startTime, env, worker, handle.map(_.pid.toInt), releasedOrClosed, context)
@@ -648,13 +664,6 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
         logError("This may have been caused by a prior exception:", writer.exception.get)
         throw writer.exception.get
 
-      case e: IOException if faultHandlerEnabled && pid.isDefined &&
-          JavaFiles.exists(faultHandlerLogPath(pid.get)) =>
-        val path = faultHandlerLogPath(pid.get)
-        val error = String.join("\n", JavaFiles.readAllLines(path)) + "\n"
-        JavaFiles.deleteIfExists(path)
-        throw new SparkException(s"Python worker exited unexpectedly (crashed): $error", e)
-
       case e: IOException if !faultHandlerEnabled =>
         throw new SparkException(
           s"Python worker exited unexpectedly (crashed). " +
@@ -663,7 +672,11 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
             "the better Python traceback.", e)
 
       case e: IOException =>
-        throw new SparkException("Python worker exited unexpectedly (crashed)", e)
+        val base = "Python worker exited unexpectedly (crashed)"
+        val msg = tryReadFaultHandlerLog(faultHandlerEnabled, pid)
+          .map(error => s"$base: $error")
+          .getOrElse(base)
+        throw new SparkException(msg, e)
     }
   }
 
@@ -721,6 +734,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
       worker: PythonWorker,
       writer: Writer,
       handle: Option[ProcessHandle],
+      faultHandlerEnabled: Boolean,
       idleTimeoutSeconds: Long,
       killOnIdleTimeout: Boolean) extends InputStream {
     private[this] var writerIfbhThreadLocalValue: Object = null
@@ -856,6 +870,14 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
             }
           }
         }
+      }
+      if (n == -1 && pythonWorkerKilled) {
+        val base = "Python worker process terminated due to idle timeout " +
+          s"(timeout: $idleTimeoutSeconds seconds)"
+        val msg = tryReadFaultHandlerLog(faultHandlerEnabled, handle.map(_.pid.toInt))
+          .map(error => s"$base: $error")
+          .getOrElse(base)
+        throw new PythonWorkerException(msg)
       }
       n
     }
@@ -1007,6 +1029,12 @@ private[spark] class PythonRunner(
       }
     }
   }
+}
+
+class PythonWorkerException(msg: String, cause: Throwable)
+  extends SparkException(msg, cause) {
+
+  def this(msg: String) = this(msg, cause = null)
 }
 
 private[spark] object SpecialLengths {

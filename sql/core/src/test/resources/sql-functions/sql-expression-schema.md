@@ -48,6 +48,7 @@
 | org.apache.spark.sql.catalyst.expressions.Between | between | SELECT 0.5 between 0.1 AND 1.0 | struct<between(0.5, 0.1, 1.0):boolean> |
 | org.apache.spark.sql.catalyst.expressions.Bin | bin | SELECT bin(13) | struct<bin(13):string> |
 | org.apache.spark.sql.catalyst.expressions.BitLength | bit_length | SELECT bit_length('Spark SQL') | struct<bit_length(Spark SQL):int> |
+| org.apache.spark.sql.catalyst.expressions.BitmapAndAgg | bitmap_and_agg | SELECT substring(hex(bitmap_and_agg(col)), 0, 6) FROM VALUES (X 'F0'), (X '70'), (X '30') AS tab(col) | struct<substring(hex(bitmap_and_agg(col)), 0, 6):string> |
 | org.apache.spark.sql.catalyst.expressions.BitmapBitPosition | bitmap_bit_position | SELECT bitmap_bit_position(1) | struct<bitmap_bit_position(1):bigint> |
 | org.apache.spark.sql.catalyst.expressions.BitmapBucketNumber | bitmap_bucket_number | SELECT bitmap_bucket_number(123) | struct<bitmap_bucket_number(123):bigint> |
 | org.apache.spark.sql.catalyst.expressions.BitmapConstructAgg | bitmap_construct_agg | SELECT substring(hex(bitmap_construct_agg(bitmap_bit_position(col))), 0, 6) FROM VALUES (1), (2), (3) AS tab(col) | struct<substring(hex(bitmap_construct_agg(bitmap_bit_position(col))), 0, 6):string> |
@@ -411,6 +412,7 @@
 | org.apache.spark.sql.catalyst.expressions.aggregate.AnyValue | any_value | SELECT any_value(col) FROM VALUES (10), (5), (20) AS tab(col) | struct<any_value(col):int> |
 | org.apache.spark.sql.catalyst.expressions.aggregate.ApproxTopK | approx_top_k | SELECT approx_top_k(expr) FROM VALUES (0), (0), (1), (1), (2), (3), (4), (4) AS tab(expr) | struct<approx_top_k(expr, 5, 10000):array<struct<item:int,count:bigint>>> |
 | org.apache.spark.sql.catalyst.expressions.aggregate.ApproxTopKAccumulate | approx_top_k_accumulate | SELECT approx_top_k_estimate(approx_top_k_accumulate(expr)) FROM VALUES (0), (0), (1), (1), (2), (3), (4), (4) AS tab(expr) | struct<approx_top_k_estimate(approx_top_k_accumulate(expr, 10000), 5):array<struct<item:int,count:bigint>>> |
+| org.apache.spark.sql.catalyst.expressions.aggregate.ApproxTopKCombine | approx_top_k_combine | SELECT approx_top_k_estimate(approx_top_k_combine(sketch, 10000), 5) FROM (SELECT approx_top_k_accumulate(expr) AS sketch FROM VALUES (0), (0), (1), (1) AS tab(expr) UNION ALL SELECT approx_top_k_accumulate(expr) AS sketch FROM VALUES (2), (3), (4), (4) AS tab(expr)) | struct<approx_top_k_estimate(approx_top_k_combine(sketch, 10000), 5):array<struct<item:int,count:bigint>>> |
 | org.apache.spark.sql.catalyst.expressions.aggregate.ApproximatePercentile | approx_percentile | SELECT approx_percentile(col, array(0.5, 0.4, 0.1), 100) FROM VALUES (0), (1), (2), (10) AS tab(col) | struct<approx_percentile(col, array(0.5, 0.4, 0.1), 100):array<int>> |
 | org.apache.spark.sql.catalyst.expressions.aggregate.ApproximatePercentile | percentile_approx | SELECT percentile_approx(col, array(0.5, 0.4, 0.1), 100) FROM VALUES (0), (1), (2), (10) AS tab(col) | struct<percentile_approx(col, array(0.5, 0.4, 0.1), 100):array<int>> |
 | org.apache.spark.sql.catalyst.expressions.aggregate.Average | avg | SELECT avg(col) FROM VALUES (1), (2), (3) AS tab(col) | struct<avg(col):double> |
@@ -475,6 +477,10 @@
 | org.apache.spark.sql.catalyst.expressions.aggregate.VariancePop | var_pop | SELECT var_pop(col) FROM VALUES (1), (2), (3) AS tab(col) | struct<var_pop(col):double> |
 | org.apache.spark.sql.catalyst.expressions.aggregate.VarianceSamp | var_samp | SELECT var_samp(col) FROM VALUES (1), (2), (3) AS tab(col) | struct<var_samp(col):double> |
 | org.apache.spark.sql.catalyst.expressions.aggregate.VarianceSamp | variance | SELECT variance(col) FROM VALUES (1), (2), (3) AS tab(col) | struct<variance(col):double> |
+| org.apache.spark.sql.catalyst.expressions.st.ST_AsBinary | st_asbinary | SELECT hex(st_asbinary(st_geogfromwkb(X'0101000000000000000000F03F0000000000000040'))) | struct<hex(st_asbinary(st_geogfromwkb(X'0101000000000000000000F03F0000000000000040'))):string> |
+| org.apache.spark.sql.catalyst.expressions.st.ST_GeogFromWKB | st_geogfromwkb | SELECT hex(st_asbinary(st_geogfromwkb(X'0101000000000000000000F03F0000000000000040'))) | struct<hex(st_asbinary(st_geogfromwkb(X'0101000000000000000000F03F0000000000000040'))):string> |
+| org.apache.spark.sql.catalyst.expressions.st.ST_GeomFromWKB | st_geomfromwkb | SELECT hex(st_asbinary(st_geomfromwkb(X'0101000000000000000000F03F0000000000000040'))) | struct<hex(st_asbinary(st_geomfromwkb(X'0101000000000000000000F03F0000000000000040'))):string> |
+| org.apache.spark.sql.catalyst.expressions.st.ST_Srid | st_srid | SELECT st_srid(st_geogfromwkb(X'0101000000000000000000F03F0000000000000040')) | struct<st_srid(st_geogfromwkb(X'0101000000000000000000F03F0000000000000040')):int> |
 | org.apache.spark.sql.catalyst.expressions.variant.IsVariantNull | is_variant_null | SELECT is_variant_null(parse_json('null')) | struct<is_variant_null(parse_json(null)):boolean> |
 | org.apache.spark.sql.catalyst.expressions.variant.ParseJsonExpressionBuilder | parse_json | SELECT parse_json('{"a":1,"b":0.8}') | struct<parse_json({"a":1,"b":0.8}):variant> |
 | org.apache.spark.sql.catalyst.expressions.variant.SchemaOfVariant | schema_of_variant | SELECT schema_of_variant(parse_json('null')) | struct<schema_of_variant(parse_json(null)):string> |

@@ -1170,6 +1170,54 @@ message CheckpointCommandResult {
   CachedRemoteRelation relation = 1;
 }
 
+message CloneSessionRequest {
+  // (Required)
+  //
+  // The session_id specifies a spark session for a user id (which is specified
+  // by user_context.user_id). The session_id is set by the client to be able to
+  // collate streaming responses from different queries within the dedicated session.
+  // The id should be an UUID string of the format `00112233-4455-6677-8899-aabbccddeeff`
+  string session_id = 1;
+
+  // (Optional)
+  //
+  // Server-side generated idempotency key from the previous responses (if any). Server
+  // can use this to validate that the server side session has not changed.
+  optional string client_observed_server_side_session_id = 5;
+
+  // (Required) User context
+  //
+  // user_context.user_id and session_id both identify a unique remote spark session on the
+  // server side.
+  UserContext user_context = 2;
+
+  // Provides optional information about the client sending the request. This field
+  // can be used for language or version specific information and is only intended for
+  // logging purposes and will not be interpreted by the server.
+  optional string client_type = 3;
+
+  // (Optional)
+  // The session_id for the new cloned session. If not provided, a new UUID will be generated.
+  // The id should be an UUID string of the format `00112233-4455-6677-8899-aabbccddeeff`
+  optional string new_session_id = 4;
+}
+
+// Next ID: 5
+message CloneSessionResponse {
+  // Session id of the original session that was cloned.
+  string session_id = 1;
+
+  // Server-side generated idempotency key that the client can use to assert that the server side
+  // session (parent of the cloned session) has not changed.
+  string server_side_session_id = 2;
+
+  // Session id of the new cloned session.
+  string new_session_id = 3;
+  
+  // Server-side session ID of the new cloned session.
+  string new_server_side_session_id = 4;
+}
+
 // Main interface for the SparkConnect service.
 service SparkConnectService {
 
@@ -1214,4 +1262,14 @@ service SparkConnectService {
 
   // FetchErrorDetails retrieves the matched exception with details based on a provided error id.
   rpc FetchErrorDetails(FetchErrorDetailsRequest) returns (FetchErrorDetailsResponse) {}
+
+  // Create a clone of a Spark Connect session on the server side. The server-side session
+  // is cloned with all its current state (SQL configurations, temporary views, registered
+  // functions, catalog state) copied over to a new independent session. The cloned session
+  // is isolated from the source session - any subsequent changes to either session's
+  // server-side state will not be reflected in the other.
+  //
+  // The request can optionally specify a custom session ID for the cloned session (must be
+  // a valid UUID). If not provided, a new UUID will be generated automatically.
+  rpc CloneSession(CloneSessionRequest) returns (CloneSessionResponse) {}
 }

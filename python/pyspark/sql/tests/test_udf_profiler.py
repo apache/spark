@@ -263,15 +263,16 @@ class UDFProfiler2TestsMixin:
         def add1(x):
             return x + 1
 
-        self.spark.udf.register("add1", add1)
+        with self.temp_func("add1"):
+            self.spark.udf.register("add1", add1)
 
-        with self.sql_conf({"spark.sql.pyspark.udf.profiler": "perf"}):
-            self.spark.sql("SELECT id, add1(id) add1 FROM range(10)").collect()
+            with self.sql_conf({"spark.sql.pyspark.udf.profiler": "perf"}):
+                self.spark.sql("SELECT id, add1(id) add1 FROM range(10)").collect()
 
-        self.assertEqual(1, len(self.profile_results), str(self.profile_results.keys()))
+            self.assertEqual(1, len(self.profile_results), str(self.profile_results.keys()))
 
-        for id in self.profile_results:
-            self.assert_udf_profile_present(udf_id=id, expected_line_count_prefix=10)
+            for id in self.profile_results:
+                self.assert_udf_profile_present(udf_id=id, expected_line_count_prefix=10)
 
     @unittest.skipIf(
         not have_pandas or not have_pyarrow,

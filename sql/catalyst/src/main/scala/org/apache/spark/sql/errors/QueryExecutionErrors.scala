@@ -2665,6 +2665,23 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       cause = null)
   }
 
+  def checkpointFileChecksumVerificationFailed(
+      file: Path,
+      expectedSize: Long,
+      expectedChecksum: Int,
+      computedSize: Long,
+      computedChecksum: Int): Throwable = {
+    new SparkException(
+      errorClass = "CHECKPOINT_FILE_CHECKSUM_VERIFICATION_FAILED",
+      messageParameters = Map(
+        "fileName" -> file.toString,
+        "expectedSize" -> expectedSize.toString,
+        "expectedChecksum" -> expectedChecksum.toString,
+        "computedSize" -> computedSize.toString,
+        "computedChecksum" -> computedChecksum.toString),
+      cause = null)
+  }
+
   def cannotReadCheckpoint(expectedVersion: String, actualVersion: String): Throwable = {
     new SparkException (
       errorClass = "CANNOT_LOAD_STATE_STORE.CANNOT_READ_CHECKPOINT",
@@ -2831,6 +2848,22 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       messageParameters = Map(
         "maxItemsTracked" -> toSQLValue(maxItemsTracked, IntegerType),
         "limit" -> toSQLValue(limit, IntegerType)))
+  }
+
+  def approxTopKSketchSizeNotMatch(size1: Int, size2: Int): Throwable = {
+    new SparkRuntimeException(
+      errorClass = "APPROX_TOP_K_SKETCH_SIZE_NOT_MATCH",
+      messageParameters = Map(
+        "size1" -> toSQLValue(size1, IntegerType),
+        "size2" -> toSQLValue(size2, IntegerType)))
+  }
+
+  def approxTopKSketchTypeNotMatch(type1: DataType, type2: DataType): Throwable = {
+    new SparkRuntimeException(
+      errorClass = "APPROX_TOP_K_SKETCH_TYPE_NOT_MATCH",
+      messageParameters = Map(
+        "type1" -> toSQLType(type1),
+        "type2" -> toSQLType(type2)))
   }
 
   def mergeCardinalityViolationError(): SparkRuntimeException = {

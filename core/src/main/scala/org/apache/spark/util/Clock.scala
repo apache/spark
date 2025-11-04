@@ -58,7 +58,7 @@ private[spark] trait Clock {
 /**
  * A clock backed by the actual time from the OS as reported by the `System` API.
  */
-private[spark] class SystemClock extends Clock {
+private[spark] class SystemClock extends Clock with Serializable {
 
   val minPollTime = 25L
 

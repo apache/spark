@@ -71,6 +71,7 @@ import org.apache.spark.util.SparkClassUtils
  * @groupname array_funcs Array functions
  * @groupname map_funcs Map functions
  * @groupname struct_funcs Struct functions
+ * @groupname st_funcs ST geospatial functions
  * @groupname csv_funcs CSV functions
  * @groupname json_funcs JSON functions
  * @groupname variant_funcs VARIANT functions
@@ -4235,6 +4236,15 @@ object functions {
    * @since 3.5.0
    */
   def bitmap_or_agg(col: Column): Column = Column.fn("bitmap_or_agg", col)
+
+  /**
+   * Returns a bitmap that is the bitwise AND of all of the bitmaps from the input column. The
+   * input column should be bitmaps created from bitmap_construct_agg().
+   *
+   * @group agg_funcs
+   * @since 4.1.0
+   */
+  def bitmap_and_agg(col: Column): Column = Column.fn("bitmap_and_agg", col)
 
   //////////////////////////////////////////////////////////////////////////////////////////////
   // String functions
@@ -8787,6 +8797,24 @@ object functions {
     Column.fn("make_timestamp", years, months, days, hours, mins, secs)
 
   /**
+   * Create a local date-time from date, time, and timezone fields.
+   *
+   * @group datetime_funcs
+   * @since 4.1.0
+   */
+  def make_timestamp(date: Column, time: Column, timezone: Column): Column =
+    Column.fn("make_timestamp", date, time, timezone)
+
+  /**
+   * Create a local date-time from date and time fields.
+   *
+   * @group datetime_funcs
+   * @since 4.1.0
+   */
+  def make_timestamp(date: Column, time: Column): Column =
+    Column.fn("make_timestamp", date, time)
+
+  /**
    * Try to create a timestamp from years, months, days, hours, mins, secs and timezone fields.
    * The result data type is consistent with the value of configuration `spark.sql.timestampType`.
    * The function returns NULL on invalid inputs.
@@ -8820,6 +8848,24 @@ object functions {
       mins: Column,
       secs: Column): Column =
     Column.fn("try_make_timestamp", years, months, days, hours, mins, secs)
+
+  /**
+   * Try to create a local date-time from date, time, and timezone fields.
+   *
+   * @group datetime_funcs
+   * @since 4.1.0
+   */
+  def try_make_timestamp(date: Column, time: Column, timezone: Column): Column =
+    Column.fn("try_make_timestamp", date, time, timezone)
+
+  /**
+   * Try to create a local date-time from date and time fields.
+   *
+   * @group datetime_funcs
+   * @since 4.1.0
+   */
+  def try_make_timestamp(date: Column, time: Column): Column =
+    Column.fn("try_make_timestamp", date, time)
 
   /**
    * Create the current timestamp with local time zone from years, months, days, hours, mins, secs
@@ -9093,6 +9139,37 @@ object functions {
   }
 
    */
+
+  //////////////////////////////////////////////////////////////////////////////////////////////
+  // ST geospatial functions
+  //////////////////////////////////////////////////////////////////////////////////////////////
+
+  /**
+   * Returns the input GEOGRAPHY or GEOMETRY value in WKB format.
+   *
+   * @group st_funcs
+   * @since 4.1.0
+   */
+  def st_asbinary(geo: Column): Column =
+    Column.fn("st_asbinary", geo)
+
+  /**
+   * Parses the WKB description of a geography and returns the corresponding GEOGRAPHY value.
+   *
+   * @group st_funcs
+   * @since 4.1.0
+   */
+  def st_geogfromwkb(wkb: Column): Column =
+    Column.fn("st_geogfromwkb", wkb)
+
+  /**
+   * Parses the WKB description of a geometry and returns the corresponding GEOMETRY value.
+   *
+   * @group st_funcs
+   * @since 4.1.0
+   */
+  def st_geomfromwkb(wkb: Column): Column =
+    Column.fn("st_geomfromwkb", wkb)
 
   //////////////////////////////////////////////////////////////////////////////////////////////
   // Scala UDF functions

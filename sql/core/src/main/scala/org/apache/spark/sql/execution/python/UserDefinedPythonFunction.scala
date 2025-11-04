@@ -231,7 +231,8 @@ class UserDefinedPythonTableFunctionAnalyzeRunner(
       }
       if (value.foldable) {
         dataOut.writeBoolean(true)
-        val obj = pickler.dumps(EvaluatePython.toJava(value.eval(), value.dataType))
+        val obj = pickler.dumps(EvaluatePython.toJava(
+          value.eval(), value.dataType, SQLConf.get.pysparkBinaryAsBytes))
         PythonWorkerUtils.writeBytes(obj, dataOut)
       } else {
         dataOut.writeBoolean(false)

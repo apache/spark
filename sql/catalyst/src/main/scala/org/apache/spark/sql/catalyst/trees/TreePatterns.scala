@@ -40,8 +40,10 @@ object TreePattern extends Enumeration  {
   val COMMON_EXPR_REF: Value = Value
   val CONCAT: Value = Value
   val COUNT: Value = Value
+  val CREATE_MAP: Value = Value
   val CREATE_NAMED_STRUCT: Value = Value
   val CURRENT_LIKE: Value = Value
+  val DATETIME: Value = Value
   val DYNAMIC_PRUNING_EXPRESSION: Value = Value
   val DYNAMIC_PRUNING_SUBQUERY: Value = Value
   val EXISTS_SUBQUERY = Value
@@ -65,6 +67,8 @@ object TreePattern extends Enumeration  {
   val LIKE_FAMLIY: Value = Value
   val LIST_SUBQUERY: Value = Value
   val LITERAL: Value = Value
+  val MAP_FROM_ARRAYS: Value = Value
+  val MAP_FROM_ENTRIES: Value = Value
   val MAP_OBJECTS: Value = Value
   val MULTI_ALIAS: Value = Value
   val NEW_INSTANCE: Value = Value
@@ -99,6 +103,7 @@ object TreePattern extends Enumeration  {
   val UPDATE_FIELDS: Value = Value
   val UPPER_OR_LOWER: Value = Value
   val UP_CAST: Value = Value
+  val VARIABLE_REFERENCE: Value = Value
   val DISTRIBUTED_SEQUENCE_ID: Value = Value
 
   // Unresolved expression patterns (Alphabetically ordered)
@@ -122,6 +127,7 @@ object TreePattern extends Enumeration  {
   val AGGREGATE: Value = Value
   val APPEND_COLUMNS: Value = Value
   val AS_OF_JOIN: Value = Value
+  val COLLECT_METRICS: Value = Value
   val COMMAND: Value = Value
   val CTE: Value = Value
   val DESERIALIZE_TO_OBJECT: Value = Value
@@ -170,6 +176,7 @@ object TreePattern extends Enumeration  {
 
   // Unresolved Plan patterns (Alphabetically ordered)
   val PLAN_WITH_UNRESOLVED_IDENTIFIER: Value = Value
+  val UNRESOLVED_EVENT_TIME_WATERMARK: Value = Value
   val UNRESOLVED_HAVING: Value = Value
   val UNRESOLVED_HINT: Value = Value
   val UNRESOLVED_FUNC: Value = Value

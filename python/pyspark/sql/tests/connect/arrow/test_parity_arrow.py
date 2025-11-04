@@ -78,6 +78,12 @@ class ArrowParityTests(ArrowTestsMixin, ReusedConnectTestCase, PandasOnSparkTest
     def test_toPandas_respect_session_timezone(self):
         self.check_toPandas_respect_session_timezone(True)
 
+    def test_cached_local_relation_changing_values(self):
+        self.check_cached_local_relation_changing_values()
+
+    def test_large_cached_local_relation_same_values(self):
+        self.check_large_cached_local_relation_same_values()
+
     def test_toPandas_with_array_type(self):
         self.check_toPandas_with_array_type(True)
 

@@ -93,6 +93,24 @@ HAVING (
 );
 
 -- Missing attribute (col2) in HAVING is added only once
-
 SELECT col1 FROM VALUES(1,2) GROUP BY col1, col2 HAVING col2 = col2;
 SELECT col1 AS a, a AS b FROM VALUES(1,2) GROUP BY col1, col2 HAVING col2 = col2;
+
+-- Replacing Having condition with alias from below
+SELECT col1, col1 AS a FROM VALUES(1) GROUP BY col1 HAVING col1 > 0;
+SELECT col1 AS a, col1 FROM VALUES(1) GROUP BY col1 HAVING col1 > 0;
+SELECT make_date(col1, col2, col3) AS a, a AS b FROM VALUES(1,2,3) GROUP BY make_date(col1, col2, col3) HAVING make_date(col1, col2, col3) > '2025-01-01';
+SELECT 1 AS a, 1 / a AS b, ZEROIFNULL(SUM(col1)) FROM VALUES(1) GROUP BY 1 HAVING ZEROIFNULL(SUM(col1)) > 0;
+SELECT col1 AS a, SUM(col2) AS b, CASE WHEN col1 = 1 THEN 1 END AS c FROM VALUES(1,2) GROUP BY col1 HAVING CASE WHEN col1 = 1 THEN 1 END = 1;
+
+-- Deduplicate expressions before adding them to Aggregate
+SELECT col1 FROM VALUES(1,2) GROUP BY col1 HAVING MAX(col2) == (SELECT 1 WHERE MAX(col2) = 1);
+SELECT col1 FROM VALUES(1,2) GROUP BY col1 HAVING (SELECT 1 WHERE MAX(col2) = 1) == MAX(col2);
+SELECT col1 FROM VALUES(1,2) GROUP BY col1 HAVING (SELECT 1 WHERE MAX(col2) = 1) == (SELECT 1 WHERE MAX(col2) = 1);
+SELECT col1 FROM VALUES(1,2) GROUP BY col1 HAVING bool_or(col2 = 1) AND bool_or(col2 = 1);
+SELECT 1 GROUP BY COALESCE(1, 1) HAVING COALESCE(1, 1) = 1  OR COALESCE(1, 1) IS NOT NULL;
+SELECT col1 FROM VALUES (1) t1 GROUP BY col1 HAVING (
+    SELECT MAX(t2.col1) FROM VALUES (1) t2 WHERE t2.col1 == MAX(t1.col1) GROUP BY t2.col1 HAVING (
+        SELECT t3.col1 FROM VALUES (1) t3 WHERE t3.col1 == MAX(t2.col1)
+    )
+);

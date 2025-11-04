@@ -25,6 +25,8 @@ import datetime
 import io
 import time
 from contextlib import redirect_stdout
+import logging
+import sys
 
 from pyspark.sql import SparkSession, Column, Row
 from pyspark.sql.functions import col, udf, assert_true, lit, rand
@@ -32,6 +34,7 @@ from pyspark.sql.udf import UserDefinedFunction
 from pyspark.sql.types import (
     StringType,
     IntegerType,
+    BinaryType,
     BooleanType,
     DoubleType,
     LongType,
@@ -52,6 +55,7 @@ from pyspark.testing.sqlutils import (
     test_not_compiled_message,
 )
 from pyspark.testing.utils import assertDataFrameEqual, timeout
+from pyspark.util import is_remote_only
 
 
 class BaseUDFTestsMixin(object):
@@ -81,18 +85,20 @@ class BaseUDFTestsMixin(object):
         self.assertEqual(res.agg({"plus_four": "sum"}).collect()[0][0], 85)
 
     def test_udf(self):
-        self.spark.catalog.registerFunction("twoArgs", lambda x, y: len(x) + y, IntegerType())
-        [row] = self.spark.sql("SELECT twoArgs('test', 1)").collect()
-        self.assertEqual(row[0], 5)
+        with self.temp_func("twoArgs"):
+            self.spark.catalog.registerFunction("twoArgs", lambda x, y: len(x) + y, IntegerType())
+            [row] = self.spark.sql("SELECT twoArgs('test', 1)").collect()
+            self.assertEqual(row[0], 5)
 
     def test_udf_on_sql_context(self):
         from pyspark import SQLContext
 
-        # This is to check if a deprecated 'SQLContext.registerFunction' can call its alias.
-        sqlContext = SQLContext.getOrCreate(self.spark.sparkContext)
-        sqlContext.registerFunction("oneArg", lambda x: len(x), IntegerType())
-        [row] = sqlContext.sql("SELECT oneArg('test')").collect()
-        self.assertEqual(row[0], 4)
+        with self.temp_func("oneArg"):
+            # This is to check if a deprecated 'SQLContext.registerFunction' can call its alias.
+            sqlContext = SQLContext.getOrCreate(self.spark.sparkContext)
+            sqlContext.registerFunction("oneArg", lambda x: len(x), IntegerType())
+            [row] = sqlContext.sql("SELECT oneArg('test')").collect()
+            self.assertEqual(row[0], 4)
 
     def test_udf2(self):
         with self.tempView("test"):
@@ -102,20 +108,22 @@ class BaseUDFTestsMixin(object):
             self.assertEqual(4, res[0])
 
     def test_udf3(self):
-        two_args = self.spark.catalog.registerFunction(
-            "twoArgs", UserDefinedFunction(lambda x, y: len(x) + y)
-        )
-        self.assertEqual(two_args.deterministic, True)
-        [row] = self.spark.sql("SELECT twoArgs('test', 1)").collect()
-        self.assertEqual(row[0], "5")
+        with self.temp_func("twoArgs"):
+            two_args = self.spark.catalog.registerFunction(
+                "twoArgs", UserDefinedFunction(lambda x, y: len(x) + y)
+            )
+            self.assertEqual(two_args.deterministic, True)
+            [row] = self.spark.sql("SELECT twoArgs('test', 1)").collect()
+            self.assertEqual(row[0], "5")
 
     def test_udf_registration_return_type_none(self):
-        two_args = self.spark.catalog.registerFunction(
-            "twoArgs", UserDefinedFunction(lambda x, y: len(x) + y, "integer"), None
-        )
-        self.assertEqual(two_args.deterministic, True)
-        [row] = self.spark.sql("SELECT twoArgs('test', 1)").collect()
-        self.assertEqual(row[0], 5)
+        with self.temp_func("twoArgs"):
+            two_args = self.spark.catalog.registerFunction(
+                "twoArgs", UserDefinedFunction(lambda x, y: len(x) + y, "integer"), None
+            )
+            self.assertEqual(two_args.deterministic, True)
+            [row] = self.spark.sql("SELECT twoArgs('test', 1)").collect()
+            self.assertEqual(row[0], 5)
 
     def test_udf_registration_return_type_not_none(self):
         with self.quiet():
@@ -148,21 +156,22 @@ class BaseUDFTestsMixin(object):
     def test_nondeterministic_udf2(self):
         import random
 
-        random_udf = udf(lambda: random.randint(6, 6), IntegerType()).asNondeterministic()
-        self.assertEqual(random_udf.deterministic, False)
-        random_udf1 = self.spark.catalog.registerFunction("randInt", random_udf)
-        self.assertEqual(random_udf1.deterministic, False)
-        [row] = self.spark.sql("SELECT randInt()").collect()
-        self.assertEqual(row[0], 6)
-        [row] = self.spark.range(1).select(random_udf1()).collect()
-        self.assertEqual(row[0], 6)
-        [row] = self.spark.range(1).select(random_udf()).collect()
-        self.assertEqual(row[0], 6)
-        # render_doc() reproduces the help() exception without printing output
-        pydoc.render_doc(udf(lambda: random.randint(6, 6), IntegerType()))
-        pydoc.render_doc(random_udf)
-        pydoc.render_doc(random_udf1)
-        pydoc.render_doc(udf(lambda x: x).asNondeterministic)
+        with self.temp_func("randInt"):
+            random_udf = udf(lambda: random.randint(6, 6), IntegerType()).asNondeterministic()
+            self.assertEqual(random_udf.deterministic, False)
+            random_udf1 = self.spark.catalog.registerFunction("randInt", random_udf)
+            self.assertEqual(random_udf1.deterministic, False)
+            [row] = self.spark.sql("SELECT randInt()").collect()
+            self.assertEqual(row[0], 6)
+            [row] = self.spark.range(1).select(random_udf1()).collect()
+            self.assertEqual(row[0], 6)
+            [row] = self.spark.range(1).select(random_udf()).collect()
+            self.assertEqual(row[0], 6)
+            # render_doc() reproduces the help() exception without printing output
+            pydoc.render_doc(udf(lambda: random.randint(6, 6), IntegerType()))
+            pydoc.render_doc(random_udf)
+            pydoc.render_doc(random_udf1)
+            pydoc.render_doc(udf(lambda x: x).asNondeterministic)
 
     def test_nondeterministic_udf3(self):
         # regression test for SPARK-23233
@@ -193,29 +202,37 @@ class BaseUDFTestsMixin(object):
             df.agg(sum(udf_random_col())).collect()
 
     def test_chained_udf(self):
-        self.spark.catalog.registerFunction("double", lambda x: x + x, IntegerType())
-        [row] = self.spark.sql("SELECT double(1)").collect()
-        self.assertEqual(row[0], 2)
-        [row] = self.spark.sql("SELECT double(double(1))").collect()
-        self.assertEqual(row[0], 4)
-        [row] = self.spark.sql("SELECT double(double(1) + 1)").collect()
-        self.assertEqual(row[0], 6)
+        with self.temp_func("double_int"):
+            self.spark.catalog.registerFunction("double_int", lambda x: x + x, IntegerType())
+            [row] = self.spark.sql("SELECT double_int(1)").collect()
+            self.assertEqual(row[0], 2)
+            [row] = self.spark.sql("SELECT double_int(double_int(1))").collect()
+            self.assertEqual(row[0], 4)
+            [row] = self.spark.sql("SELECT double_int(double_int(1) + 1)").collect()
+            self.assertEqual(row[0], 6)
 
     def test_single_udf_with_repeated_argument(self):
         # regression test for SPARK-20685
-        self.spark.catalog.registerFunction("add", lambda x, y: x + y, IntegerType())
-        row = self.spark.sql("SELECT add(1, 1)").first()
-        self.assertEqual(tuple(row), (2,))
+        with self.temp_func("add_int"):
+            self.spark.catalog.registerFunction("add_int", lambda x, y: x + y, IntegerType())
+            row = self.spark.sql("SELECT add_int(1, 1)").first()
+            self.assertEqual(tuple(row), (2,))
 
     def test_multiple_udfs(self):
-        self.spark.catalog.registerFunction("double", lambda x: x * 2, IntegerType())
-        [row] = self.spark.sql("SELECT double(1), double(2)").collect()
-        self.assertEqual(tuple(row), (2, 4))
-        [row] = self.spark.sql("SELECT double(double(1)), double(double(2) + 2)").collect()
-        self.assertEqual(tuple(row), (4, 12))
-        self.spark.catalog.registerFunction("add", lambda x, y: x + y, IntegerType())
-        [row] = self.spark.sql("SELECT double(add(1, 2)), add(double(2), 1)").collect()
-        self.assertEqual(tuple(row), (6, 5))
+        with self.temp_func("double_int", "add_int"):
+            self.spark.catalog.registerFunction("double_int", lambda x: x * 2, IntegerType())
+            [row] = self.spark.sql("SELECT double_int(1), double_int(2)").collect()
+            self.assertEqual(tuple(row), (2, 4))
+            [row] = self.spark.sql(
+                "SELECT double_int(double_int(1)), double_int(double_int(2) + 2)"
+            ).collect()
+            self.assertEqual(tuple(row), (4, 12))
+
+            self.spark.catalog.registerFunction("add_int", lambda x, y: x + y, IntegerType())
+            [row] = self.spark.sql(
+                "SELECT double_int(add_int(1, 2)), add_int(double_int(2), 1)"
+            ).collect()
+            self.assertEqual(tuple(row), (6, 5))
 
     def test_udf_in_filter_on_top_of_outer_join(self):
         left = self.spark.createDataFrame([Row(a=1)])
@@ -299,12 +316,13 @@ class BaseUDFTestsMixin(object):
         assertDataFrameEqual(df, [Row(a=1, a1=1, a2=1, b=1, b1=1, b2=1)])
 
     def test_udf_without_arguments(self):
-        self.spark.catalog.registerFunction("foo", lambda: "bar")
-        [row] = self.spark.sql("SELECT foo()").collect()
-        self.assertEqual(row[0], "bar")
+        with self.temp_func("foo"):
+            self.spark.catalog.registerFunction("foo", lambda: "bar")
+            [row] = self.spark.sql("SELECT foo()").collect()
+            self.assertEqual(row[0], "bar")
 
     def test_udf_with_array_type(self):
-        with self.tempView("test"):
+        with self.tempView("test"), self.temp_func("copylist", "maplen"):
             self.spark.createDataFrame(
                 [
                     ([0, 1, 2], {"key": [0, 1, 2, 3, 4]}),
@@ -320,13 +338,14 @@ class BaseUDFTestsMixin(object):
             self.assertEqual(1, l2)
 
     def test_broadcast_in_udf(self):
-        bar = {"a": "aa", "b": "bb", "c": "abc"}
-        foo = self.sc.broadcast(bar)
-        self.spark.catalog.registerFunction("MYUDF", lambda x: foo.value[x] if x else "")
-        [res] = self.spark.sql("SELECT MYUDF('c')").collect()
-        self.assertEqual("abc", res[0])
-        [res] = self.spark.sql("SELECT MYUDF('')").collect()
-        self.assertEqual("", res[0])
+        with self.temp_func("MYUDF"):
+            bar = {"a": "aa", "b": "bb", "c": "abc"}
+            foo = self.sc.broadcast(bar)
+            self.spark.catalog.registerFunction("MYUDF", lambda x: foo.value[x] if x else "")
+            [res] = self.spark.sql("SELECT MYUDF('c')").collect()
+            self.assertEqual("abc", res[0])
+            [res] = self.spark.sql("SELECT MYUDF('')").collect()
+            self.assertEqual("", res[0])
 
     def test_udf_with_filter_function(self):
         df = self.spark.createDataFrame([(1, "1"), (2, "2"), (1, "2"), (1, "2")], ["key", "value"])
@@ -511,75 +530,78 @@ class BaseUDFTestsMixin(object):
 
     def test_udf_registration_returns_udf(self):
         df = self.spark.range(10)
-        add_three = self.spark.udf.register("add_three", lambda x: x + 3, IntegerType())
-        self.assertListEqual(
-            df.selectExpr("add_three(id) AS plus_three").collect(),
-            df.select(add_three("id").alias("plus_three")).collect(),
-        )
 
-        add_three_str = self.spark.udf.register("add_three_str", lambda x: x + 3)
-        self.assertListEqual(
-            df.selectExpr("add_three_str(id) AS plus_three").collect(),
-            df.select(add_three_str("id").alias("plus_three")).collect(),
-        )
+        with self.temp_func("add_three"):
+            add_three = self.spark.udf.register("add_three", lambda x: x + 3, IntegerType())
+            self.assertListEqual(
+                df.selectExpr("add_three(id) AS plus_three").collect(),
+                df.select(add_three("id").alias("plus_three")).collect(),
+            )
+
+        with self.temp_func("add_three_str"):
+            add_three_str = self.spark.udf.register("add_three_str", lambda x: x + 3)
+            self.assertListEqual(
+                df.selectExpr("add_three_str(id) AS plus_three").collect(),
+                df.select(add_three_str("id").alias("plus_three")).collect(),
+            )
 
     def test_udf_registration_returns_udf_on_sql_context(self):
         from pyspark import SQLContext
 
         df = self.spark.range(10)
 
-        # This is to check if a 'SQLContext.udf' can call its alias.
-        sqlContext = SQLContext.getOrCreate(self.spark.sparkContext)
-        add_four = sqlContext.udf.register("add_four", lambda x: x + 4, IntegerType())
+        with self.temp_func("add_four"):
+            # This is to check if a 'SQLContext.udf' can call its alias.
+            sqlContext = SQLContext.getOrCreate(self.spark.sparkContext)
+            add_four = sqlContext.udf.register("add_four", lambda x: x + 4, IntegerType())
 
-        self.assertListEqual(
-            df.selectExpr("add_four(id) AS plus_four").collect(),
-            df.select(add_four("id").alias("plus_four")).collect(),
-        )
+            self.assertListEqual(
+                df.selectExpr("add_four(id) AS plus_four").collect(),
+                df.select(add_four("id").alias("plus_four")).collect(),
+            )
 
     @unittest.skipIf(not test_compiled, test_not_compiled_message)  # type: ignore
     def test_register_java_function(self):
-        self.spark.udf.registerJavaFunction(
-            "javaStringLength", "test.org.apache.spark.sql.JavaStringLength", IntegerType()
-        )
-        [value] = self.spark.sql("SELECT javaStringLength('test')").first()
-        self.assertEqual(value, 4)
+        with self.temp_func("javaStringLength", "javaStringLength2", "javaStringLength3"):
+            self.spark.udf.registerJavaFunction(
+                "javaStringLength", "test.org.apache.spark.sql.JavaStringLength", IntegerType()
+            )
+            [value] = self.spark.sql("SELECT javaStringLength('test')").first()
+            self.assertEqual(value, 4)
 
-        self.spark.udf.registerJavaFunction(
-            "javaStringLength2", "test.org.apache.spark.sql.JavaStringLength"
-        )
-        [value] = self.spark.sql("SELECT javaStringLength2('test')").first()
-        self.assertEqual(value, 4)
+            self.spark.udf.registerJavaFunction(
+                "javaStringLength2", "test.org.apache.spark.sql.JavaStringLength"
+            )
+            [value] = self.spark.sql("SELECT javaStringLength2('test')").first()
+            self.assertEqual(value, 4)
 
-        self.spark.udf.registerJavaFunction(
-            "javaStringLength3", "test.org.apache.spark.sql.JavaStringLength", "integer"
-        )
-        [value] = self.spark.sql("SELECT javaStringLength3('test')").first()
-        self.assertEqual(value, 4)
+            self.spark.udf.registerJavaFunction(
+                "javaStringLength3", "test.org.apache.spark.sql.JavaStringLength", "integer"
+            )
+            [value] = self.spark.sql("SELECT javaStringLength3('test')").first()
+            self.assertEqual(value, 4)
 
     @unittest.skipIf(not test_compiled, test_not_compiled_message)  # type: ignore
     def test_register_java_udaf(self):
-        self.spark.udf.registerJavaUDAF("javaUDAF", "test.org.apache.spark.sql.MyDoubleAvg")
-        df = self.spark.createDataFrame([(1, "a"), (2, "b"), (3, "a")], ["id", "name"])
-        df.createOrReplaceTempView("df")
-        row = self.spark.sql(
-            "SELECT name, javaUDAF(id) as avg from df group by name order by name desc"
-        ).first()
-        self.assertEqual(row.asDict(), Row(name="b", avg=102.0).asDict())
+        with self.temp_func("javaUDAF"):
+            self.spark.udf.registerJavaUDAF("javaUDAF", "test.org.apache.spark.sql.MyDoubleAvg")
+            df = self.spark.createDataFrame([(1, "a"), (2, "b"), (3, "a")], ["id", "name"])
+            df.createOrReplaceTempView("df")
+            row = self.spark.sql(
+                "SELECT name, javaUDAF(id) as avg from df group by name order by name desc"
+            ).first()
+            self.assertEqual(row.asDict(), Row(name="b", avg=102.0).asDict())
 
     def test_err_udf_registration(self):
-        with self.quiet():
-            self.check_err_udf_registration()
+        with self.quiet(), self.temp_func("f"):
+            with self.assertRaises(PySparkTypeError) as pe:
+                self.spark.udf.register("f", UserDefinedFunction("x", StringType()), "int")
 
-    def check_err_udf_registration(self):
-        with self.assertRaises(PySparkTypeError) as pe:
-            self.spark.udf.register("f", UserDefinedFunction("x", StringType()), "int")
-
-        self.check_error(
-            exception=pe.exception,
-            errorClass="NOT_CALLABLE",
-            messageParameters={"arg_name": "func", "arg_type": "str"},
-        )
+            self.check_error(
+                exception=pe.exception,
+                errorClass="NOT_CALLABLE",
+                messageParameters={"arg_name": "func", "arg_type": "str"},
+            )
 
     def test_non_existed_udf(self):
         spark = self.spark
@@ -1065,107 +1087,111 @@ class BaseUDFTestsMixin(object):
         def test_udf(a, b):
             return a + 10 * b
 
-        self.spark.udf.register("test_udf", test_udf)
+        with self.temp_func("test_udf"):
+            self.spark.udf.register("test_udf", test_udf)
 
-        for i, df in enumerate(
-            [
-                self.spark.range(2).select(test_udf(col("id"), b=col("id") * 10)),
-                self.spark.range(2).select(test_udf(a=col("id"), b=col("id") * 10)),
-                self.spark.range(2).select(test_udf(b=col("id") * 10, a=col("id"))),
-                self.spark.sql("SELECT test_udf(id, b => id * 10) FROM range(2)"),
-                self.spark.sql("SELECT test_udf(a => id, b => id * 10) FROM range(2)"),
-                self.spark.sql("SELECT test_udf(b => id * 10, a => id) FROM range(2)"),
-            ]
-        ):
-            with self.subTest(query_no=i):
-                assertDataFrameEqual(df, [Row(0), Row(101)])
+            for i, df in enumerate(
+                [
+                    self.spark.range(2).select(test_udf(col("id"), b=col("id") * 10)),
+                    self.spark.range(2).select(test_udf(a=col("id"), b=col("id") * 10)),
+                    self.spark.range(2).select(test_udf(b=col("id") * 10, a=col("id"))),
+                    self.spark.sql("SELECT test_udf(id, b => id * 10) FROM range(2)"),
+                    self.spark.sql("SELECT test_udf(a => id, b => id * 10) FROM range(2)"),
+                    self.spark.sql("SELECT test_udf(b => id * 10, a => id) FROM range(2)"),
+                ]
+            ):
+                with self.subTest(query_no=i):
+                    assertDataFrameEqual(df, [Row(0), Row(101)])
 
     def test_named_arguments_negative(self):
         @udf("int")
         def test_udf(a, b):
             return a + b
 
-        self.spark.udf.register("test_udf", test_udf)
+        with self.temp_func("test_udf"):
+            self.spark.udf.register("test_udf", test_udf)
 
-        with self.assertRaisesRegex(
-            AnalysisException,
-            "DUPLICATE_ROUTINE_PARAMETER_ASSIGNMENT.DOUBLE_NAMED_ARGUMENT_REFERENCE",
-        ):
-            self.spark.sql("SELECT test_udf(a => id, a => id * 10) FROM range(2)").show()
+            with self.assertRaisesRegex(
+                AnalysisException,
+                "DUPLICATE_ROUTINE_PARAMETER_ASSIGNMENT.DOUBLE_NAMED_ARGUMENT_REFERENCE",
+            ):
+                self.spark.sql("SELECT test_udf(a => id, a => id * 10) FROM range(2)").show()
 
-        with self.assertRaisesRegex(AnalysisException, "UNEXPECTED_POSITIONAL_ARGUMENT"):
-            self.spark.sql("SELECT test_udf(a => id, id * 10) FROM range(2)").show()
+            with self.assertRaisesRegex(AnalysisException, "UNEXPECTED_POSITIONAL_ARGUMENT"):
+                self.spark.sql("SELECT test_udf(a => id, id * 10) FROM range(2)").show()
 
-        with self.assertRaisesRegex(
-            PythonException, r"test_udf\(\) got an unexpected keyword argument 'c'"
-        ):
-            self.spark.sql("SELECT test_udf(c => 'x') FROM range(2)").show()
+            with self.assertRaisesRegex(
+                PythonException, r"test_udf\(\) got an unexpected keyword argument 'c'"
+            ):
+                self.spark.sql("SELECT test_udf(c => 'x') FROM range(2)").show()
 
-        with self.assertRaisesRegex(
-            PythonException, r"test_udf\(\) got multiple values for argument 'a'"
-        ):
-            self.spark.sql("SELECT test_udf(id, a => id * 10) FROM range(2)").show()
+            with self.assertRaisesRegex(
+                PythonException, r"test_udf\(\) got multiple values for argument 'a'"
+            ):
+                self.spark.sql("SELECT test_udf(id, a => id * 10) FROM range(2)").show()
 
     def test_kwargs(self):
         @udf("int")
         def test_udf(**kwargs):
             return kwargs["a"] + 10 * kwargs["b"]
 
-        self.spark.udf.register("test_udf", test_udf)
+        with self.temp_func("test_udf"):
+            self.spark.udf.register("test_udf", test_udf)
 
-        for i, df in enumerate(
-            [
-                self.spark.range(2).select(test_udf(a=col("id"), b=col("id") * 10)),
-                self.spark.range(2).select(test_udf(b=col("id") * 10, a=col("id"))),
-                self.spark.sql("SELECT test_udf(a => id, b => id * 10) FROM range(2)"),
-                self.spark.sql("SELECT test_udf(b => id * 10, a => id) FROM range(2)"),
-            ]
-        ):
-            with self.subTest(query_no=i):
-                assertDataFrameEqual(df, [Row(0), Row(101)])
+            for i, df in enumerate(
+                [
+                    self.spark.range(2).select(test_udf(a=col("id"), b=col("id") * 10)),
+                    self.spark.range(2).select(test_udf(b=col("id") * 10, a=col("id"))),
+                    self.spark.sql("SELECT test_udf(a => id, b => id * 10) FROM range(2)"),
+                    self.spark.sql("SELECT test_udf(b => id * 10, a => id) FROM range(2)"),
+                ]
+            ):
+                with self.subTest(query_no=i):
+                    assertDataFrameEqual(df, [Row(0), Row(101)])
 
-        # negative
-        with self.assertRaisesRegex(
-            AnalysisException,
-            "DUPLICATE_ROUTINE_PARAMETER_ASSIGNMENT.DOUBLE_NAMED_ARGUMENT_REFERENCE",
-        ):
-            self.spark.sql("SELECT test_udf(a => id, a => id * 10) FROM range(2)").show()
+            # negative
+            with self.assertRaisesRegex(
+                AnalysisException,
+                "DUPLICATE_ROUTINE_PARAMETER_ASSIGNMENT.DOUBLE_NAMED_ARGUMENT_REFERENCE",
+            ):
+                self.spark.sql("SELECT test_udf(a => id, a => id * 10) FROM range(2)").show()
 
-        with self.assertRaisesRegex(AnalysisException, "UNEXPECTED_POSITIONAL_ARGUMENT"):
-            self.spark.sql("SELECT test_udf(a => id, id * 10) FROM range(2)").show()
+            with self.assertRaisesRegex(AnalysisException, "UNEXPECTED_POSITIONAL_ARGUMENT"):
+                self.spark.sql("SELECT test_udf(a => id, id * 10) FROM range(2)").show()
 
     def test_named_arguments_and_defaults(self):
         @udf("int")
         def test_udf(a, b=0):
             return a + 10 * b
 
-        self.spark.udf.register("test_udf", test_udf)
+        with self.temp_func("test_udf"):
+            self.spark.udf.register("test_udf", test_udf)
 
-        # without "b"
-        for i, df in enumerate(
-            [
-                self.spark.range(2).select(test_udf(col("id"))),
-                self.spark.range(2).select(test_udf(a=col("id"))),
-                self.spark.sql("SELECT test_udf(id) FROM range(2)"),
-                self.spark.sql("SELECT test_udf(a => id) FROM range(2)"),
-            ]
-        ):
-            with self.subTest(with_b=False, query_no=i):
-                assertDataFrameEqual(df, [Row(0), Row(1)])
+            # without "b"
+            for i, df in enumerate(
+                [
+                    self.spark.range(2).select(test_udf(col("id"))),
+                    self.spark.range(2).select(test_udf(a=col("id"))),
+                    self.spark.sql("SELECT test_udf(id) FROM range(2)"),
+                    self.spark.sql("SELECT test_udf(a => id) FROM range(2)"),
+                ]
+            ):
+                with self.subTest(with_b=False, query_no=i):
+                    assertDataFrameEqual(df, [Row(0), Row(1)])
 
-        # with "b"
-        for i, df in enumerate(
-            [
-                self.spark.range(2).select(test_udf(col("id"), b=col("id") * 10)),
-                self.spark.range(2).select(test_udf(a=col("id"), b=col("id") * 10)),
-                self.spark.range(2).select(test_udf(b=col("id") * 10, a=col("id"))),
-                self.spark.sql("SELECT test_udf(id, b => id * 10) FROM range(2)"),
-                self.spark.sql("SELECT test_udf(a => id, b => id * 10) FROM range(2)"),
-                self.spark.sql("SELECT test_udf(b => id * 10, a => id) FROM range(2)"),
-            ]
-        ):
-            with self.subTest(with_b=True, query_no=i):
-                assertDataFrameEqual(df, [Row(0), Row(101)])
+            # with "b"
+            for i, df in enumerate(
+                [
+                    self.spark.range(2).select(test_udf(col("id"), b=col("id") * 10)),
+                    self.spark.range(2).select(test_udf(a=col("id"), b=col("id") * 10)),
+                    self.spark.range(2).select(test_udf(b=col("id") * 10, a=col("id"))),
+                    self.spark.sql("SELECT test_udf(id, b => id * 10) FROM range(2)"),
+                    self.spark.sql("SELECT test_udf(a => id, b => id * 10) FROM range(2)"),
+                    self.spark.sql("SELECT test_udf(b => id * 10, a => id) FROM range(2)"),
+                ]
+            ):
+                with self.subTest(with_b=True, query_no=i):
+                    assertDataFrameEqual(df, [Row(0), Row(101)])
 
     def test_num_arguments(self):
         @udf("long")
@@ -1225,7 +1251,10 @@ class BaseUDFTestsMixin(object):
                 time.sleep(2)
                 return str(x)
 
-            with self.assertRaisesRegex(Exception, "Python worker exited unexpectedly"):
+            with self.assertRaisesRegex(
+                Exception,
+                "Python worker process terminated due to idle timeout \\(timeout: 1 seconds\\)",
+            ):
                 self.spark.range(1).select(f("id")).show()
 
     def test_err_udf_init(self):
@@ -1446,6 +1475,188 @@ class BaseUDFTestsMixin(object):
 
                 self.spark.range(1).select(my_udf().alias("result")).show()
 
+    def test_udf_binary_type(self):
+        def get_binary_type(x):
+            return type(x).__name__
+
+        binary_udf = udf(get_binary_type, returnType="string")
+
+        df = self.spark.createDataFrame(
+            [Row(b=b"hello world")], schema=StructType([StructField("b", BinaryType())])
+        )
+
+        for conf_value in ["true", "false"]:
+            expected_type = "bytes" if conf_value == "true" else "bytearray"
+            with self.sql_conf({"spark.sql.execution.pyspark.binaryAsBytes": conf_value}):
+                result = df.select(binary_udf(col("b")).alias("type_name"))
+                expected = self.spark.createDataFrame([Row(type_name=expected_type)])
+                assertDataFrameEqual(result, expected)
+
+    def test_udf_binary_type_in_nested_structures(self):
+        """Test that binary type in arrays, maps, and structs respects binaryAsBytes config"""
+
+        # Test binary in array
+        def check_array_binary_type(arr):
+            return type(arr[0]).__name__
+
+        array_udf = udf(check_array_binary_type, returnType="string")
+        df_array = self.spark.createDataFrame(
+            [Row(arr=[b"hello world"])],
+            schema=StructType([StructField("arr", ArrayType(BinaryType()))]),
+        )
+
+        for conf_value in ["true", "false"]:
+            expected_type = "bytes" if conf_value == "true" else "bytearray"
+            with self.sql_conf({"spark.sql.execution.pyspark.binaryAsBytes": conf_value}):
+                result = df_array.select(array_udf(col("arr")).alias("type_name"))
+                expected = self.spark.createDataFrame([Row(type_name=expected_type)])
+                assertDataFrameEqual(result, expected)
+
+        # Test binary in map value
+        def check_map_binary_type(m):
+            return type(list(m.values())[0]).__name__
+
+        map_udf = udf(check_map_binary_type, returnType="string")
+        df_map = self.spark.createDataFrame(
+            [Row(m={"key": b"value"})],
+            schema=StructType([StructField("m", MapType(StringType(), BinaryType()))]),
+        )
+
+        for conf_value in ["true", "false"]:
+            expected_type = "bytes" if conf_value == "true" else "bytearray"
+            with self.sql_conf({"spark.sql.execution.pyspark.binaryAsBytes": conf_value}):
+                result = df_map.select(map_udf(col("m")).alias("type_name"))
+                expected = self.spark.createDataFrame([Row(type_name=expected_type)])
+                assertDataFrameEqual(result, expected)
+
+        # Test binary in struct
+        def check_struct_binary_type(s):
+            return type(s.binary_field).__name__
+
+        struct_udf = udf(check_struct_binary_type, returnType="string")
+        df_struct = self.spark.createDataFrame(
+            [Row(s=Row(binary_field=b"test", other_field="value"))],
+            schema=StructType(
+                [
+                    StructField(
+                        "s",
+                        StructType(
+                            [
+                                StructField("binary_field", BinaryType()),
+                                StructField("other_field", StringType()),
+                            ]
+                        ),
+                    )
+                ]
+            ),
+        )
+
+        for conf_value in ["true", "false"]:
+            expected_type = "bytes" if conf_value == "true" else "bytearray"
+            with self.sql_conf({"spark.sql.execution.pyspark.binaryAsBytes": conf_value}):
+                result = df_struct.select(struct_udf(col("s")).alias("type_name"))
+                expected = self.spark.createDataFrame([Row(type_name=expected_type)])
+                assertDataFrameEqual(result, expected)
+
+    @unittest.skipIf(is_remote_only(), "Requires JVM access")
+    def test_udf_with_logging(self):
+        @udf
+        def my_udf():
+            logger = logging.getLogger("test")
+            print("print to stdout ❤", file=sys.stdout)
+            print("print to stderr 😀", file=sys.stderr)
+            logger.warning("custom context", extra={"context": dict(abc=123)})
+            try:
+                1 / 0
+            except Exception:
+                logger.exception("exception")
+            return "x"
+
+        # Logging is disabled by default
+        assertDataFrameEqual(
+            self.spark.range(1).select(my_udf().alias("result")), [Row(result="x")]
+        )
+        self.assertEqual(self.spark.table("system.session.python_worker_logs").count(), 0)
+
+        with self.sql_conf({"spark.sql.pyspark.worker.logging.enabled": "true"}):
+            assertDataFrameEqual(
+                self.spark.range(1).select(my_udf().alias("result")), [Row(result="x")]
+            )
+
+        logs = self.spark.table("system.session.python_worker_logs")
+
+        assertDataFrameEqual(
+            logs.select("level", "msg", "context", "logger"),
+            [
+                Row(
+                    level="INFO",
+                    msg="print to stdout ❤",
+                    context={"func_name": my_udf.__name__},
+                    logger="stdout",
+                ),
+                Row(
+                    level="ERROR",
+                    msg="print to stderr 😀",
+                    context={"func_name": my_udf.__name__},
+                    logger="stderr",
+                ),
+                Row(
+                    level="WARNING",
+                    msg="custom context",
+                    context={"func_name": my_udf.__name__, "abc": "123"},
+                    logger="test",
+                ),
+                Row(
+                    level="ERROR",
+                    msg="exception",
+                    context={"func_name": my_udf.__name__},
+                    logger="test",
+                ),
+            ],
+        )
+
+        self.assertEqual(logs.where("exception is not null").select("exception").count(), 1)
+
+    @unittest.skipIf(is_remote_only(), "Requires JVM access")
+    def test_multiple_udfs_with_logging(self):
+        @udf
+        def my_udf1():
+            logger = logging.getLogger("test1")
+            logger.warning("test1")
+            return "x"
+
+        @udf
+        def my_udf2():
+            logger = logging.getLogger("test2")
+            logger.warning("test2")
+            return "y"
+
+        with self.sql_conf({"spark.sql.pyspark.worker.logging.enabled": "true"}):
+            assertDataFrameEqual(
+                self.spark.range(1).select(my_udf1().alias("result"), my_udf2().alias("result2")),
+                [Row(result="x", result2="y")],
+            )
+
+        logs = self.spark.table("system.session.python_worker_logs")
+
+        assertDataFrameEqual(
+            logs.select("level", "msg", "context", "logger"),
+            [
+                Row(
+                    level="WARNING",
+                    msg="test1",
+                    context={"func_name": my_udf1.__name__},
+                    logger="test1",
+                ),
+                Row(
+                    level="WARNING",
+                    msg="test2",
+                    context={"func_name": my_udf2.__name__},
+                    logger="test2",
+                ),
+            ],
+        )
+
 
 class UDFTests(BaseUDFTestsMixin, ReusedSQLTestCase):
     @classmethod
@@ -1457,28 +1668,36 @@ class UDFTests(BaseUDFTestsMixin, ReusedSQLTestCase):
     # various batch size and see whether the query runs successfully, and the output is
     # consistent across different batch sizes.
     def test_udf_with_various_batch_size(self):
-        self.spark.catalog.registerFunction("twoArgs", lambda x, y: len(x) + y, IntegerType())
-        for batch_size in [1, 33, 1000, 2000]:
-            with self.sql_conf({"spark.sql.execution.python.udf.maxRecordsPerBatch": batch_size}):
-                df = self.spark.range(1000).selectExpr("twoArgs('test', id) AS ret").orderBy("ret")
-                rets = [x["ret"] for x in df.collect()]
-                self.assertEqual(rets, list(range(4, 1004)))
+        with self.temp_func("twoArgs"):
+            self.spark.catalog.registerFunction("twoArgs", lambda x, y: len(x) + y, IntegerType())
+            for batch_size in [1, 33, 1000, 2000]:
+                with self.sql_conf(
+                    {"spark.sql.execution.python.udf.maxRecordsPerBatch": batch_size}
+                ):
+                    df = (
+                        self.spark.range(1000)
+                        .selectExpr("twoArgs('test', id) AS ret")
+                        .orderBy("ret")
+                    )
+                    rets = [x["ret"] for x in df.collect()]
+                    self.assertEqual(rets, list(range(4, 1004)))
 
     # We cannot check whether the buffer size is effective or not. We just run the query with
     # various buffer size and see whether the query runs successfully, and the output is
     # consistent across different batch sizes.
     def test_udf_with_various_buffer_size(self):
-        self.spark.catalog.registerFunction("twoArgs", lambda x, y: len(x) + y, IntegerType())
-        for batch_size in [1, 33, 10000]:
-            with self.sql_conf({"spark.sql.execution.python.udf.buffer.size": batch_size}):
-                df = (
-                    self.spark.range(1000)
-                    .repartition(1)
-                    .selectExpr("twoArgs('test', id) AS ret")
-                    .orderBy("ret")
-                )
-                rets = [x["ret"] for x in df.collect()]
-                self.assertEqual(rets, list(range(4, 1004)))
+        with self.temp_func("twoArgs"):
+            self.spark.catalog.registerFunction("twoArgs", lambda x, y: len(x) + y, IntegerType())
+            for batch_size in [1, 33, 10000]:
+                with self.sql_conf({"spark.sql.execution.python.udf.buffer.size": batch_size}):
+                    df = (
+                        self.spark.range(1000)
+                        .repartition(1)
+                        .selectExpr("twoArgs('test', id) AS ret")
+                        .orderBy("ret")
+                    )
+                    rets = [x["ret"] for x in df.collect()]
+                    self.assertEqual(rets, list(range(4, 1004)))
 
 
 class UDFInitializationTests(unittest.TestCase):

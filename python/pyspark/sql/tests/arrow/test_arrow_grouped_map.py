@@ -17,6 +17,7 @@
 import inspect
 import os
 import time
+import logging
 from typing import Iterator, Tuple
 import unittest
 
@@ -29,6 +30,8 @@ from pyspark.testing.sqlutils import (
     have_pyarrow,
     pyarrow_requirement_message,
 )
+from pyspark.testing.utils import assertDataFrameEqual
+from pyspark.util import is_remote_only
 
 if have_pyarrow:
     import pyarrow as pa
@@ -353,38 +356,120 @@ class ApplyInArrowTestsMixin:
         self.assertEqual(df2.join(df2).count(), 1)
 
     def test_arrow_batch_slicing(self):
-        with self.sql_conf({"spark.sql.execution.arrow.maxRecordsPerBatch": 1000}):
-            df = self.spark.range(10000000).select(
-                (sf.col("id") % 2).alias("key"), sf.col("id").alias("v")
-            )
-            cols = {f"col_{i}": sf.col("v") + i for i in range(20)}
-            df = df.withColumns(cols)
+        df = self.spark.range(10000000).select(
+            (sf.col("id") % 2).alias("key"), sf.col("id").alias("v")
+        )
+        cols = {f"col_{i}": sf.col("v") + i for i in range(20)}
+        df = df.withColumns(cols)
 
-            def min_max_v(table):
-                return pa.Table.from_pydict(
+        def min_max_v(table):
+            assert len(table) == 10000000 / 2, len(table)
+            return pa.Table.from_pydict(
+                {
+                    "key": [table.column("key")[0].as_py()],
+                    "min": [pc.min(table.column("v")).as_py()],
+                    "max": [pc.max(table.column("v")).as_py()],
+                }
+            )
+
+        expected = (
+            df.groupby("key").agg(sf.min("v").alias("min"), sf.max("v").alias("max")).sort("key")
+        ).collect()
+
+        for maxRecords, maxBytes in [(1000, 2**31 - 1), (0, 1048576), (1000, 1048576)]:
+            with self.subTest(maxRecords=maxRecords, maxBytes=maxBytes):
+                with self.sql_conf(
                     {
-                        "key": [table.column("key")[0].as_py()],
-                        "min": [pc.min(table.column("v")).as_py()],
-                        "max": [pc.max(table.column("v")).as_py()],
+                        "spark.sql.execution.arrow.maxRecordsPerBatch": maxRecords,
+                        "spark.sql.execution.arrow.maxBytesPerBatch": maxBytes,
                     }
-                )
+                ):
+                    result = (
+                        df.groupBy("key")
+                        .applyInArrow(min_max_v, "key long, min long, max long")
+                        .sort("key")
+                    ).collect()
 
-            result = (
-                df.groupBy("key")
-                .applyInArrow(min_max_v, "key long, min long, max long")
-                .sort("key")
-            )
-            expected = (
-                df.groupby("key")
-                .agg(sf.min("v").alias("min"), sf.max("v").alias("max"))
-                .sort("key")
-            )
-            self.assertEqual(expected.collect(), result.collect())
+                    self.assertEqual(expected, result)
 
     def test_negative_and_zero_batch_size(self):
         for batch_size in [0, -1]:
             with self.sql_conf({"spark.sql.execution.arrow.maxRecordsPerBatch": batch_size}):
                 ApplyInArrowTestsMixin.test_apply_in_arrow(self)
+
+    @unittest.skipIf(is_remote_only(), "Requires JVM access")
+    def test_apply_in_arrow_with_logging(self):
+        import pyarrow as pa
+
+        def func_with_logging(group):
+            assert isinstance(group, pa.Table)
+            logger = logging.getLogger("test_arrow_grouped_map")
+            logger.warning(f"arrow grouped map: {group.to_pydict()}")
+            return group
+
+        df = self.spark.range(9).withColumn("value", col("id") * 10)
+        grouped_df = df.groupBy((col("id") % 2).cast("int"))
+
+        with self.sql_conf({"spark.sql.pyspark.worker.logging.enabled": "true"}):
+            assertDataFrameEqual(
+                grouped_df.applyInArrow(func_with_logging, "id long, value long"),
+                df,
+            )
+
+        logs = self.spark.table("system.session.python_worker_logs")
+
+        assertDataFrameEqual(
+            logs.select("level", "msg", "context", "logger"),
+            [
+                Row(
+                    level="WARNING",
+                    msg=f"arrow grouped map: {dict(id=lst, value=[v*10 for v in lst])}",
+                    context={"func_name": func_with_logging.__name__},
+                    logger="test_arrow_grouped_map",
+                )
+                for lst in [[0, 2, 4, 6, 8], [1, 3, 5, 7]]
+            ],
+        )
+
+    @unittest.skipIf(is_remote_only(), "Requires JVM access")
+    def test_apply_in_arrow_iter_with_logging(self):
+        import pyarrow as pa
+
+        def func_with_logging(group: Iterator[pa.RecordBatch]) -> Iterator[pa.RecordBatch]:
+            logger = logging.getLogger("test_arrow_grouped_map")
+            for batch in group:
+                assert isinstance(batch, pa.RecordBatch)
+                logger.warning(f"arrow grouped map: {batch.to_pydict()}")
+                yield batch
+
+        df = self.spark.range(9).withColumn("value", col("id") * 10)
+        grouped_df = df.groupBy((col("id") % 2).cast("int"))
+
+        with self.sql_conf(
+            {
+                "spark.sql.execution.arrow.maxRecordsPerBatch": 3,
+                "spark.sql.pyspark.worker.logging.enabled": "true",
+            }
+        ):
+            assertDataFrameEqual(
+                grouped_df.applyInArrow(func_with_logging, "id long, value long"),
+                df,
+            )
+
+        logs = self.spark.table("system.session.python_worker_logs")
+
+        assertDataFrameEqual(
+            logs.select("level", "msg", "context", "logger"),
+            [
+                Row(
+                    level="WARNING",
+                    msg=f"arrow grouped map: {dict(id=lst, value=[v*10 for v in lst])}",
+                    context={"func_name": func_with_logging.__name__},
+                    logger="test_arrow_grouped_map",
+                )
+                for lst in [[0, 2, 4], [6, 8], [1, 3, 5], [7]]
+            ],
+        )
 
 
 class ApplyInArrowTests(ApplyInArrowTestsMixin, ReusedSQLTestCase):

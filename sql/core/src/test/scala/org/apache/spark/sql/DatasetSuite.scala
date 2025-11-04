@@ -1012,7 +1012,7 @@ class DatasetSuite extends QueryTest
     assert(err.getMessage.contains("An Observation can be used with a Dataset only once"))
 
     // streaming datasets are not supported
-    val streamDf = new MemoryStream[Int](0, sqlContext).toDF()
+    val streamDf = new MemoryStream[Int](0, spark).toDF()
     val streamObservation = Observation("stream")
     val streamErr = intercept[IllegalArgumentException] {
       streamDf.observe(streamObservation, avg($"value").cast("int").as("avg_val"))

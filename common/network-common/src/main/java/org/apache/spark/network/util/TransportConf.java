@@ -28,6 +28,7 @@ import io.netty.util.NettyRuntime;
  */
 public class TransportConf {
 
+  private final String SPARK_NETWORK_DEFAULT_IO_MODE_KEY = "spark.io.mode.default";
   private final String SPARK_NETWORK_IO_MODE_KEY;
   private final String SPARK_NETWORK_IO_PREFERDIRECTBUFS_KEY;
   private final String SPARK_NETWORK_IO_CONNECTIONTIMEOUT_KEY;
@@ -86,9 +87,10 @@ public class TransportConf {
     return module;
   }
 
-  /** IO mode: nio or epoll */
+  /** IO mode: NIO, EPOLL, KQUEUE, or AUTO */
   public String ioMode() {
-    return conf.get(SPARK_NETWORK_IO_MODE_KEY, "NIO").toUpperCase(Locale.ROOT);
+    String defaultIOMode = conf.get(SPARK_NETWORK_DEFAULT_IO_MODE_KEY, "AUTO");
+    return conf.get(SPARK_NETWORK_IO_MODE_KEY, defaultIOMode).toUpperCase(Locale.ROOT);
   }
 
   /** If true, we will prefer allocating off-heap byte buffers within Netty. */

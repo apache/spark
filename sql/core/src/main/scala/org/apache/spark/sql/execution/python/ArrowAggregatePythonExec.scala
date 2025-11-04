@@ -144,6 +144,12 @@ case class ArrowAggregatePythonExec(
 
 
     val jobArtifactUUID = JobArtifactSet.getCurrentJobArtifactState.map(_.uuid)
+    val sessionUUID = {
+      Option(session).collect {
+        case session if session.sessionState.conf.pythonWorkerLoggingEnabled =>
+          session.sessionUUID
+      }
+    }
 
     // Map grouped rows to ArrowPythonRunner results, Only execute if partition is not empty
     inputRDD.mapPartitionsInternal { iter => if (iter.isEmpty) iter else {
@@ -180,7 +186,7 @@ case class ArrowAggregatePythonExec(
         rows
       }
 
-      val columnarBatchIter = new ArrowPythonWithNamedArgumentRunner(
+      val runner = new ArrowPythonWithNamedArgumentRunner(
         pyFuncs,
         evalType,
         argMetas,
@@ -190,7 +196,10 @@ case class ArrowAggregatePythonExec(
         pythonRunnerConf,
         pythonMetrics,
         jobArtifactUUID,
-        conf.pythonUDFProfiler).compute(projectedRowIter, context.partitionId(), context)
+        sessionUUID,
+        conf.pythonUDFProfiler) with GroupedPythonArrowInput
+
+      val columnarBatchIter = runner.compute(projectedRowIter, context.partitionId(), context)
 
       val joinedAttributes =
         groupingExpressions.map(_.toAttribute) ++ aggExpressions.map(_.resultAttribute)

@@ -508,6 +508,14 @@ class SparkConf(loadDefaults: Boolean)
       .map { case (k, v) => (k.substring(prefix.length), v) }
   }
 
+  /**
+   * Get all parameters that start with `prefix` and apply f.
+   */
+  def getAllWithPrefix[K](prefix: String, f: String => K): Array[(K, String)] = {
+    getAll.filter { case (k, _) => k.startsWith(prefix) }
+      .map { case (k, v) => (f(k), v) }
+  }
+
   /** Get all executor environment variables set on this SparkConf */
   def getExecutorEnv: Seq[(String, String)] = {
     getAllWithPrefix("spark.executorEnv.").toImmutableArraySeq
@@ -667,7 +675,7 @@ private[spark] object SparkConf extends Logging {
       DeprecatedConfig("spark.shuffle.spill", "1.6", "Not used anymore."),
       DeprecatedConfig("spark.rpc", "2.0", "Not used anymore."),
       DeprecatedConfig("spark.scheduler.executorTaskBlacklistTime", "2.1.0",
-        "Please use the new excludedOnFailure options, spark.excludeOnFailure.*"),
+        "Not used anymore. Please use the new excludedOnFailure options, spark.excludeOnFailure.*"),
       DeprecatedConfig("spark.yarn.am.port", "2.0.0", "Not used anymore"),
       DeprecatedConfig("spark.executor.port", "2.0.0", "Not used anymore"),
       DeprecatedConfig("spark.rpc.numRetries", "2.2.0", "Not used anymore"),
@@ -680,29 +688,32 @@ private[spark] object SparkConf extends Logging {
       DeprecatedConfig("spark.executor.plugins", "3.0.0",
         "Feature replaced with new plugin API. See Monitoring documentation."),
       DeprecatedConfig("spark.blacklist.enabled", "3.1.0",
-        "Please use spark.excludeOnFailure.enabled"),
+        "Not used anymore. Please use spark.excludeOnFailure.enabled"),
       DeprecatedConfig("spark.blacklist.task.maxTaskAttemptsPerExecutor", "3.1.0",
-        "Please use spark.excludeOnFailure.task.maxTaskAttemptsPerExecutor"),
+        "Not used anymore. Please use spark.excludeOnFailure.task.maxTaskAttemptsPerExecutor"),
       DeprecatedConfig("spark.blacklist.task.maxTaskAttemptsPerNode", "3.1.0",
-        "Please use spark.excludeOnFailure.task.maxTaskAttemptsPerNode"),
+        "Not used anymore. Please use spark.excludeOnFailure.task.maxTaskAttemptsPerNode"),
       DeprecatedConfig("spark.blacklist.application.maxFailedTasksPerExecutor", "3.1.0",
-        "Please use spark.excludeOnFailure.application.maxFailedTasksPerExecutor"),
+        "Not used anymore. Please use " +
+          "spark.excludeOnFailure.application.maxFailedTasksPerExecutor"),
       DeprecatedConfig("spark.blacklist.stage.maxFailedTasksPerExecutor", "3.1.0",
-        "Please use spark.excludeOnFailure.stage.maxFailedTasksPerExecutor"),
+        "Not used anymore. Please use spark.excludeOnFailure.stage.maxFailedTasksPerExecutor"),
       DeprecatedConfig("spark.blacklist.application.maxFailedExecutorsPerNode", "3.1.0",
-        "Please use spark.excludeOnFailure.application.maxFailedExecutorsPerNode"),
+        "Not used anymore. Please use " +
+          "spark.excludeOnFailure.application.maxFailedExecutorsPerNode"),
       DeprecatedConfig("spark.blacklist.stage.maxFailedExecutorsPerNode", "3.1.0",
-        "Please use spark.excludeOnFailure.stage.maxFailedExecutorsPerNode"),
+        "Not used anymore. Please use spark.excludeOnFailure.stage.maxFailedExecutorsPerNode"),
       DeprecatedConfig("spark.blacklist.timeout", "3.1.0",
-        "Please use spark.excludeOnFailure.timeout"),
+        "Not used anymore. Please use spark.excludeOnFailure.timeout"),
       DeprecatedConfig("spark.blacklist.application.fetchFailure.enabled", "3.1.0",
-        "Please use spark.excludeOnFailure.application.fetchFailure.enabled"),
+        "Not used anymore. Please use spark.excludeOnFailure.application.fetchFailure.enabled"),
       DeprecatedConfig("spark.scheduler.blacklist.unschedulableTaskSetTimeout", "3.1.0",
-        "Please use spark.scheduler.excludeOnFailure.unschedulableTaskSetTimeout"),
+        "Not used anymore. Please use " +
+          "spark.scheduler.excludeOnFailure.unschedulableTaskSetTimeout"),
       DeprecatedConfig("spark.blacklist.killBlacklistedExecutors", "3.1.0",
-        "Please use spark.excludeOnFailure.killExcludedExecutors"),
+        "Not used anymore. Please use spark.excludeOnFailure.killExcludedExecutors"),
       DeprecatedConfig("spark.yarn.blacklist.executor.launch.blacklisting.enabled", "3.1.0",
-        "Please use spark.yarn.executor.launch.excludeOnFailure.enabled"),
+        "Not used anymore. Please use spark.yarn.executor.launch.excludeOnFailure.enabled"),
       DeprecatedConfig("spark.network.remoteReadNioBufferConversion", "3.5.2",
         "Please open a JIRA ticket to report it if you need to use this configuration."),
       DeprecatedConfig("spark.shuffle.unsafe.file.output.buffer", "4.0.0",
