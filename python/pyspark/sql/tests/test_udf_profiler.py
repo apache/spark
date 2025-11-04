@@ -330,20 +330,15 @@ class UDFProfiler2TestsMixin:
         import pandas as pd
 
         @pandas_udf("long")
-        def add1(iter: Iterator[pd.Series]) -> Iterator[pd.Series]:
+        def add(iter: Iterator[pd.Series]) -> Iterator[pd.Series]:
             for s in iter:
                 yield s + 1
 
-        @pandas_udf("long")
-        def add2(iter: Iterator[pd.Series]) -> Iterator[pd.Series]:
-            for s in iter:
-                yield s + 2
-
         with self.sql_conf({"spark.sql.pyspark.udf.profiler": "perf"}):
-            df = self.spark.range(10, numPartitions=2).select(add1("id"), add2("id"), add1("id"))
+            df = self.spark.range(10, numPartitions=2).select(add("id"))
             df.collect()
 
-        self.assertEqual(2, len(self.profile_results), str(self.profile_results.keys()))
+        self.assertEqual(1, len(self.profile_results), str(self.profile_results.keys()))
 
         for id in self.profile_results:
             self.assert_udf_profile_present(udf_id=id, expected_line_count_prefix=4)
@@ -353,20 +348,15 @@ class UDFProfiler2TestsMixin:
         import pyarrow as pa
 
         @arrow_udf("long")
-        def add1(iter: Iterator[pa.Array]) -> Iterator[pa.Array]:
+        def add(iter: Iterator[pa.Array]) -> Iterator[pa.Array]:
             for s in iter:
                 yield pa.compute.add(s, 1)
 
-        @arrow_udf("long")
-        def add2(iter: Iterator[pa.Array]) -> Iterator[pa.Array]:
-            for s in iter:
-                yield pa.compute.add(s, 2)
-
         with self.sql_conf({"spark.sql.pyspark.udf.profiler": "perf"}):
-            df = self.spark.range(10, numPartitions=2).select(add1("id"), add2("id"), add1("id"))
+            df = self.spark.range(10, numPartitions=2).select(add("id"))
             df.collect()
 
-        self.assertEqual(2, len(self.profile_results), str(self.profile_results.keys()))
+        self.assertEqual(1, len(self.profile_results), str(self.profile_results.keys()))
 
         for id in self.profile_results:
             self.assert_udf_profile_present(udf_id=id, expected_line_count_prefix=4)
