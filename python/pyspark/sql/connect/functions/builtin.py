@@ -4807,6 +4807,13 @@ def st_geomfromwkb(wkb: "ColumnOrName") -> Column:
 st_geomfromwkb.__doc__ = pysparkfuncs.st_geomfromwkb.__doc__
 
 
+def st_srid(geo: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("st_srid", geo)
+
+
+st_srid.__doc__ = pysparkfuncs.st_srid.__doc__
+
+
 # Call Functions
 
 
