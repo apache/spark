@@ -19,6 +19,8 @@ package org.apache.spark.sql.connect.client.jdbc
 
 import java.sql.{Array => _, _}
 
+import org.apache.spark.sql.connect.client.SparkResult
+
 class SparkConnectStatement(conn: SparkConnectConnection) extends Statement {
 
   private var operationId: String = _
@@ -49,33 +51,51 @@ class SparkConnectStatement(conn: SparkConnectConnection) extends Statement {
   }
 
   override def executeQuery(sql: String): ResultSet = {
-    checkOpen()
-
-    val df = conn.spark.sql(sql)
-    val sparkResult = df.collectResult()
-    operationId = sparkResult.operationId
-    resultSet = new SparkConnectResultSet(sparkResult, this)
-    resultSet
+    val hasResultSet = execute(sql)
+    if (hasResultSet) {
+      assert(resultSet != null)
+      resultSet
+    } else {
+      throw new SQLException("The query does not produce a ResultSet.")
+    }
   }
 
   override def executeUpdate(sql: String): Int = {
-    checkOpen()
+    val hasResultSet = execute(sql)
+    if (hasResultSet) {
+      // user are not expected to access the result set in this case,
+      // we must close it to avoid memory leak.
+      resultSet.close()
+      throw new SQLException("The query produces a ResultSet.")
+    } else {
+      assert(resultSet == null)
+      getUpdateCount
+    }
+  }
 
-    val df = conn.spark.sql(sql)
-    val sparkResult = df.collectResult()
-    operationId = sparkResult.operationId
-    resultSet = null
-
-    // always return 0 because affected rows is not supported yet
-    0
+  private def hasResultSet(sparkResult: SparkResult[_]): Boolean = {
+    // suppose this works in most cases
+    sparkResult.schema.length > 0
   }
 
   override def execute(sql: String): Boolean = {
     checkOpen()
 
-    // always perform executeQuery and reture a ResultSet
-    executeQuery(sql)
-    true
+    // stmt can be reused to execute more than one queries,
+    // reset before executing new query
+    operationId = null
+    resultSet = null
+
+    val df = conn.spark.sql(sql)
+    val sparkResult = df.collectResult()
+    operationId = sparkResult.operationId
+    if (hasResultSet(sparkResult)) {
+      resultSet = new SparkConnectResultSet(sparkResult, this)
+      true
+    } else {
+      sparkResult.close()
+      false
+    }
   }
 
   override def getResultSet: ResultSet = {
@@ -123,8 +143,15 @@ class SparkConnectStatement(conn: SparkConnectConnection) extends Statement {
   override def setCursorName(name: String): Unit =
     throw new SQLFeatureNotSupportedException
 
-  override def getUpdateCount: Int =
-    throw new SQLFeatureNotSupportedException
+  override def getUpdateCount: Int = {
+    checkOpen()
+
+    if (resultSet != null) {
+      -1
+    } else {
+      0 // always return 0 because affected rows is not supported yet
+    }
+  }
 
   override def getMoreResults: Boolean =
     throw new SQLFeatureNotSupportedException

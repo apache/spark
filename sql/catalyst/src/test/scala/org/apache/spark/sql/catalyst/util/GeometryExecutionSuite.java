@@ -29,7 +29,7 @@ import static org.junit.jupiter.api.Assertions.*;
 /**
  * Test suite for the Geometry server-side execution class.
  */
-class GeometryExecutionTest {
+class GeometryExecutionSuite {
 
   // A sample Geometry byte array for testing purposes, representing a POINT(1 2) with SRID 4326.
   private final byte[] testGeometryVal = new byte[] {

@@ -19,7 +19,7 @@ package org.apache.spark.sql.types
 
 import org.json4s.JsonAST.{JString, JValue}
 
-import org.apache.spark.SparkIllegalArgumentException
+import org.apache.spark.{SparkIllegalArgumentException, SparkRuntimeException}
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql.internal.types.CartesianSpatialReferenceSystemMapper
 
@@ -130,6 +130,27 @@ class GeometryType private (val crs: String) extends AtomicType with Serializabl
     // If the SRID is not mixed, we can only accept the same SRID.
     isMixedSrid || gt.srid == srid
   }
+
+  private[sql] def assertSridAllowedForType(otherSrid: Int): Unit = {
+    // If SRID is not mixed, SRIDs must match.
+    if (!isMixedSrid && otherSrid != srid) {
+      throw new SparkRuntimeException(
+        errorClass = "GEO_ENCODER_SRID_MISMATCH_ERROR",
+        messageParameters = Map(
+          "type" -> "GEOMETRY",
+          "valueSrid" -> otherSrid.toString,
+          "typeSrid" -> srid.toString))
+    } else if (isMixedSrid) {
+      // For fixed SRID geom types, we have a check that value matches the type srid.
+      // For mixed SRID we need to do that check explicitly, as MIXED SRID can accept any SRID.
+      // However it should accept only valid SRIDs.
+      if (!GeometryType.isSridSupported(otherSrid)) {
+        throw new SparkIllegalArgumentException(
+          errorClass = "ST_INVALID_SRID_VALUE",
+          messageParameters = Map("srid" -> otherSrid.toString))
+      }
+    }
+  }
 }
 
 @Experimental
@@ -148,6 +169,11 @@ object GeometryType extends SpatialType {
    */
   private final val GEOMETRY_MIXED_TYPE: GeometryType =
     GeometryType(MIXED_CRS)
+
+  /** Returns whether the given SRID is supported. */
+  private[types] def isSridSupported(srid: Int): Boolean = {
+    CartesianSpatialReferenceSystemMapper.getStringId(srid) != null
+  }
 
   /**
    * Constructors for GeometryType.
