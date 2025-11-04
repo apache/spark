@@ -660,6 +660,7 @@ Geospatial ST Functions
     st_asbinary
     st_geogfromwkb
     st_geomfromwkb
+    st_srid
 
 
 UDF, UDTF and UDT
