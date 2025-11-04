@@ -73,12 +73,12 @@ class PandasGroupedOpsMixin:
         >>> df = spark.createDataFrame(
         ...     [(1, 1.0), (1, 2.0), (2, 3.0), (2, 5.0), (2, 10.0)],
         ...     ("id", "v"))
-        >>> @pandas_udf("id long, v double", PandasUDFType.GROUPED_MAP)  # doctest: +SKIP
+        >>> @pandas_udf("id long, v double", PandasUDFType.GROUPED_MAP)
         ... def normalize(pdf):
         ...     v = pdf.v
         ...     return pdf.assign(v=(v - v.mean()) / v.std())
         ...
-        >>> df.groupby("id").apply(normalize).show()  # doctest: +SKIP
+        >>> df.groupby("id").apply(normalize).show()
         +---+-------------------+
         | id|                  v|
         +---+-------------------+
@@ -159,17 +159,17 @@ class PandasGroupedOpsMixin:
 
         Examples
         --------
-        >>> import pandas as pd  # doctest: +SKIP
-        >>> from pyspark.sql.functions import ceil
+        >>> import pandas as pd
+        >>> from pyspark.sql import functions as sf
         >>> df = spark.createDataFrame(
         ...     [(1, 1.0), (1, 2.0), (2, 3.0), (2, 5.0), (2, 10.0)],
-        ...     ("id", "v"))  # doctest: +SKIP
+        ...     ("id", "v"))
         >>> def normalize(pdf):
         ...     v = pdf.v
         ...     return pdf.assign(v=(v - v.mean()) / v.std())
         ...
         >>> df.groupby("id").applyInPandas(
-        ...     normalize, schema="id long, v double").show()  # doctest: +SKIP
+        ...     normalize, schema="id long, v double").show()
         +---+-------------------+
         | id|                  v|
         +---+-------------------+
@@ -189,14 +189,14 @@ class PandasGroupedOpsMixin:
 
         >>> df = spark.createDataFrame(
         ...     [(1, 1.0), (1, 2.0), (2, 3.0), (2, 5.0), (2, 10.0)],
-        ...     ("id", "v"))  # doctest: +SKIP
+        ...     ("id", "v"))
         >>> def mean_func(key, pdf):
         ...     # key is a tuple of one numpy.int64, which is the value
         ...     # of 'id' for the current group
         ...     return pd.DataFrame([key + (pdf.v.mean(),)])
         ...
         >>> df.groupby('id').applyInPandas(
-        ...     mean_func, schema="id long, v double").show()  # doctest: +SKIP
+        ...     mean_func, schema="id long, v double").show()
         +---+---+
         | id|  v|
         +---+---+
@@ -209,8 +209,8 @@ class PandasGroupedOpsMixin:
         ...     # of 'id' and 'ceil(df.v / 2)' for the current group
         ...     return pd.DataFrame([key + (pdf.v.sum(),)])
         ...
-        >>> df.groupby(df.id, ceil(df.v / 2)).applyInPandas(
-        ...     sum_func, schema="id long, `ceil(v / 2)` long, v double").show()  # doctest: +SKIP
+        >>> df.groupby(df.id, sf.ceil(df.v / 2)).applyInPandas(
+        ...     sum_func, schema="id long, `ceil(v / 2)` long, v double").show()
         +---+-----------+----+
         | id|ceil(v / 2)|   v|
         +---+-----------+----+
@@ -223,20 +223,20 @@ class PandasGroupedOpsMixin:
         The function can also take and return an iterator of `pandas.DataFrame` using type
         hints.
 
-        >>> from typing import Iterator  # doctest: +SKIP
+        >>> from typing import Iterator
         >>> df = spark.createDataFrame(
         ...     [(1, 1.0), (1, 2.0), (2, 3.0), (2, 5.0), (2, 10.0)],
-        ...     ("id", "v"))  # doctest: +SKIP
+        ...     ("id", "v"))
         >>> def filter_func(
         ...     batches: Iterator[pd.DataFrame]
-        ... ) -> Iterator[pd.DataFrame]:  # doctest: +SKIP
+        ... ) -> Iterator[pd.DataFrame]:
         ...     for batch in batches:
         ...         # Process and yield each batch independently
         ...         filtered = batch[batch['v'] > 2.0]
         ...         if not filtered.empty:
         ...             yield filtered[['v']]
         >>> df.groupby("id").applyInPandas(
-        ...     filter_func, schema="v double").show()  # doctest: +SKIP
+        ...     filter_func, schema="v double").show()
         +----+
         |   v|
         +----+
@@ -250,16 +250,16 @@ class PandasGroupedOpsMixin:
         be passed as the second argument. The grouping key(s) will be passed as a tuple of numpy
         data types. The data will still be passed in as an iterator of `pandas.DataFrame`.
 
-        >>> from typing import Iterator, Tuple, Any  # doctest: +SKIP
+        >>> from typing import Iterator, Tuple, Any
         >>> def transform_func(
         ...     key: Tuple[Any, ...], batches: Iterator[pd.DataFrame]
-        ... ) -> Iterator[pd.DataFrame]:  # doctest: +SKIP
+        ... ) -> Iterator[pd.DataFrame]:
         ...     for batch in batches:
         ...         # Yield transformed results for each batch
         ...         result = batch.assign(id=key[0], v_doubled=batch['v'] * 2)
         ...         yield result[['id', 'v_doubled']]
         >>> df.groupby("id").applyInPandas(
-        ...     transform_func, schema="id long, v_doubled double").show()  # doctest: +SKIP
+        ...     transform_func, schema="id long, v_doubled double").show()
         +---+----------+
         | id|v_doubled |
         +---+----------+
