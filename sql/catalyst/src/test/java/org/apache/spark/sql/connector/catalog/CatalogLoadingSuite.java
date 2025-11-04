@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.connector.catalog;
 
+import org.apache.spark.network.util.JavaUtils;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -59,6 +60,7 @@ public class CatalogLoadingSuite {
     conf.setConfString("spark.sql.catalog.test-name", TestCatalogPlugin.class.getCanonicalName());
     conf.setConfString("spark.sql.catalog.test-name.name", "not-catalog-name");
     conf.setConfString("spark.sql.catalog.test-name.kEy", "valUE");
+    conf.setConfString("spark.sql.catalog.test-name.osName", "${system:os.name}");
 
     CatalogPlugin plugin = Catalogs.load("test-name", conf);
     Assertions.assertNotNull(plugin,"Should instantiate a non-null plugin");
@@ -67,11 +69,13 @@ public class CatalogLoadingSuite {
 
     TestCatalogPlugin testPlugin = (TestCatalogPlugin) plugin;
 
-    Assertions.assertEquals(2, testPlugin.options.size(), "Options should contain only two keys");
+    Assertions.assertEquals(3, testPlugin.options.size(), "Options should contain only two keys");
     Assertions.assertEquals("not-catalog-name", testPlugin.options.get("name"),
       "Options should contain correct value for name (not overwritten)");
     Assertions.assertEquals("valUE", testPlugin.options.get("key"),
       "Options should contain correct value for key");
+    Assertions.assertEquals(JavaUtils.osName, testPlugin.options.get("osName"),
+          "Options should contain correct substitution for value");
   }
 
   @Test
