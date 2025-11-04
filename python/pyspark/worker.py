@@ -1249,9 +1249,11 @@ def wrap_memory_profiler(f, eval_type, result_id):
 
         def profiling_func(*args, **kwargs):
             profiler = UDFLineProfilerV2()
+            profiler.add_function(f)
 
-            wrapped = profiler(f)
-            ret = wrapped(*args, **kwargs)
+            with profiler:
+                ret = f(*args, **kwargs)
+
             codemap_dict = {
                 filename: list(line_iterator)
                 for filename, line_iterator in profiler.code_map.items()
