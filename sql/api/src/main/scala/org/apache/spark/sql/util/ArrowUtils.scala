@@ -145,10 +145,7 @@ private[sql] object ArrowUtils {
         toArrowField(name, udt.sqlType, nullable, timeZoneId, largeVarTypes)
       case g: GeometryType =>
         val fieldType =
-          new FieldType(
-            nullable,
-            ArrowType.Struct.INSTANCE,
-            null)
+          new FieldType(nullable, ArrowType.Struct.INSTANCE, null)
 
         // WKB field is tagged with additional metadata so we can identify that the arrow
         // struct actually represents a geometry schema.
@@ -167,11 +164,7 @@ private[sql] object ArrowUtils {
 
       case g: GeographyType =>
         val fieldType =
-          new FieldType(
-            nullable,
-            ArrowType.Struct.INSTANCE,
-            null,
-            null)
+          new FieldType(nullable, ArrowType.Struct.INSTANCE, null, null)
 
         // WKB field is tagged with additional metadata so we can identify that the arrow
         // struct actually represents a geography schema.
@@ -225,8 +218,8 @@ private[sql] object ArrowUtils {
       .map(_.getName)
       .asJava
       .containsAll(Seq("wkb", "srid").asJava) && field.getChildren.asScala.exists { child =>
-        child.getName == "wkb" && child.getMetadata.getOrDefault("geometry", "false") == "true"
-      }
+      child.getName == "wkb" && child.getMetadata.getOrDefault("geometry", "false") == "true"
+    }
   }
 
   def isGeographyField(field: Field): Boolean = {
@@ -235,8 +228,8 @@ private[sql] object ArrowUtils {
       .map(_.getName)
       .asJava
       .containsAll(Seq("wkb", "srid").asJava) && field.getChildren.asScala.exists { child =>
-        child.getName == "wkb" && child.getMetadata.getOrDefault("geography", "false") == "true"
-      }
+      child.getName == "wkb" && child.getMetadata.getOrDefault("geography", "false") == "true"
+    }
   }
 
   def fromArrowField(field: Field): DataType = {
