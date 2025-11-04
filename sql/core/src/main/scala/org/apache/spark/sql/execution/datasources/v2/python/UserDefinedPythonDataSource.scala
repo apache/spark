@@ -173,7 +173,7 @@ case class UserDefinedPythonDataSource(dataSourceCls: PythonFunction) {
       metrics,
       jobArtifactUUID,
       sessionUUID,
-      None)
+      conf.pythonUDFProfiler)
   }
 
   def createPythonMetrics(): Array[CustomMetric] = {
