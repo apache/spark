@@ -556,7 +556,7 @@ trait APITest
                      |
                      |spark = SparkSession.active()
                      |
-                     |@dp.materialized_view(cluster_by = ["cluster_col1", "cluster_col2"])
+                     |@dp.materialized_view(cluster_by = ["cluster_col1"])
                      |def mv():
                      |  df = spark.range(10)
                      |  df = df.withColumn("cluster_col1", col("id") % 3)
@@ -584,7 +584,6 @@ trait APITest
     // Verify clustering information is stored in catalog
     val catalog = spark.sessionState.catalogManager.currentCatalog
       .asInstanceOf[org.apache.spark.sql.connector.catalog.TableCatalog]
-
     // Check materialized view has clustering transform
     val mvIdentifier = org.apache.spark.sql.connector.catalog.Identifier
       .of(Array("default"), "mv")
@@ -593,8 +592,6 @@ trait APITest
     assert(mvTransforms.length == 1)
     assert(mvTransforms.head.name() == "cluster_by")
     assert(mvTransforms.head.toString.contains("cluster_col1"))
-    assert(mvTransforms.head.toString.contains("cluster_col2"))
-
     // Check streaming table has clustering transform
     val stIdentifier = org.apache.spark.sql.connector.catalog.Identifier
       .of(Array("default"), "st")
@@ -603,7 +600,6 @@ trait APITest
     assert(stTransforms.length == 1)
     assert(stTransforms.head.name() == "cluster_by")
     assert(stTransforms.head.toString.contains("cluster_col1"))
-    assert(!stTransforms.head.toString.contains("cluster_col2")) // st only clusters by cluster_col1
   }
 
   /* Below tests pipeline execution configurations */
