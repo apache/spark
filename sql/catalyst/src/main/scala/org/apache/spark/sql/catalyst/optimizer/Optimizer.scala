@@ -1804,8 +1804,25 @@ object InferFiltersFromConstraints extends Rule[LogicalPlan]
       left: LogicalPlan,
       right: LogicalPlan,
       conditionOpt: Option[Expression]): ExpressionSet = {
-    val baseConstraints = left.constraints.union(right.constraints)
-      .union(ExpressionSet(conditionOpt.map(splitConjunctivePredicates).getOrElse(Nil)))
+    val childConstraints = left.constraints.union(right.constraints)
+
+    // Combine child constraints with the join condition into a single And-expression so that
+    // replaceAttributesWithConstants can propagate known constant values from child constraints
+    // into the join condition. For example, given:
+    //   child constraint: t2.b = 1
+    //   join condition:   t1.a = t2.b + 2
+    // the combined expression And(t1.a = t2.b + 2, t2.b = 1) allows
+    // replaceAttributesWithConstants to extract {t2.b -> 1} and substitute it to produce
+    // t1.a = 1 + 2, which then yields the new inferred constraint t1.a = 3 (after constant
+    // folding).
+    val simplifiedCondition = conditionOpt.map { condition =>
+      val combined = childConstraints.foldLeft(condition: Expression)(And)
+      ConstantPropagation.replaceAttributesWithConstants(combined).getOrElse(combined)
+    }
+
+    val baseConstraints = childConstraints
+      .union(ExpressionSet(simplifiedCondition.map(splitConjunctivePredicates).getOrElse(Nil)))
+
     baseConstraints.union(inferAdditionalConstraints(baseConstraints))
   }
 
