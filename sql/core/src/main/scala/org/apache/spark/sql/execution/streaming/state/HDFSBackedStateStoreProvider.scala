@@ -668,7 +668,7 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
       override protected def loadSnapshotFromCheckpoint(snapshotVersion: Long): Unit = {
         loadedMap = if (snapshotVersion <= 0) {
           // Use an empty map for versions 0 or less.
-          Some(HDFSBackedStateStoreMap.create(keySchema, numColsPrefixKey))
+          Some(createHDFSBackedStateStoreMap())
         } else {
           // first try to get the map from the cache
           synchronized { Option(loadedMaps.get(snapshotVersion)) }

@@ -2221,7 +2221,7 @@ case class RocksDBConf(
     maxVersionsToDeletePerMaintenance: Int,
     fileChecksumEnabled: Boolean,
     rowChecksumEnabled: Boolean,
-    rowChecksumReadVerificationRatio: Long)
+    rowChecksumReadVerificationRatio: Long,
     stateStoreConf: StateStoreConf)
 
 object RocksDBConf {
