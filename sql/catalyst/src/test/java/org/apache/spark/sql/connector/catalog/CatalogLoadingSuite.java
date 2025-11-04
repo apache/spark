@@ -75,7 +75,7 @@ public class CatalogLoadingSuite {
     Assertions.assertEquals("valUE", testPlugin.options.get("key"),
       "Options should contain correct value for key");
     Assertions.assertEquals(JavaUtils.osName, testPlugin.options.get("osName"),
-          "Options should contain correct substitution for value");
+      "Options should contain correct substitution for value");
   }
 
   @Test
