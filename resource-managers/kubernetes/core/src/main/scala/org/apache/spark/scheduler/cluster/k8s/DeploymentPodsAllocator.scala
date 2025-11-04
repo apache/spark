@@ -157,7 +157,8 @@ class DeploymentPodsAllocator(
       val currentAnnotations = Option(meta.getAnnotations)
         .map(_.asScala).getOrElse(Map.empty[String, String])
       if (!currentAnnotations.contains(podDeletionCostAnnotation)) {
-        meta.setAnnotations((currentAnnotations + (podDeletionCostAnnotation -> "0")).asJava)
+        val newAnnotations = currentAnnotations.concat(Seq(podDeletionCostAnnotation -> "0"))
+        meta.setAnnotations(newAnnotations.asJava)
       }
 
       val podTemplateSpec = new PodTemplateSpec(meta, podWithAttachedContainer)
