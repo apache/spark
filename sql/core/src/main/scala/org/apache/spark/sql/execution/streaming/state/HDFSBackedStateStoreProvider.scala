@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.streaming.state
 import java.io._
 import java.util
 import java.util.{Locale, UUID}
-import java.util.concurrent.atomic.{AtomicLong, LongAdder}
+import java.util.concurrent.atomic.{AtomicBoolean, AtomicLong, LongAdder}
 
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
@@ -311,7 +311,9 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
   def getMetricsForProvider(): Map[String, Long] = synchronized {
     Map("memoryUsedBytes" -> SizeEstimator.estimate(loadedMaps),
       metricLoadedMapCacheHit.name -> loadedMapCacheHitCount.sum(),
-      metricLoadedMapCacheMiss.name -> loadedMapCacheMissCount.sum())
+      metricLoadedMapCacheMiss.name -> loadedMapCacheMissCount.sum(),
+      metricNumSnapshotsAutoRepaired.name -> (if (performedSnapshotAutoRepair.get()) 1 else 0)
+    )
   }
 
   /** Get the state store for making updates to create a new `version` of the store. */
@@ -340,6 +342,8 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
       if (version < 0) {
         throw QueryExecutionErrors.unexpectedStateStoreVersion(version)
       }
+
+      performedSnapshotAutoRepair.set(false)
       val newMap = createHDFSBackedStateStoreMap()
       if (version > 0) {
         newMap.putAll(loadMap(version))
@@ -442,6 +446,7 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
 
   override def supportedCustomMetrics: Seq[StateStoreCustomMetric] = {
     metricStateOnCurrentVersionSizeBytes :: metricLoadedMapCacheHit :: metricLoadedMapCacheMiss ::
+    metricNumSnapshotsAutoRepaired ::
       Nil
   }
 
@@ -487,6 +492,9 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
       mgr
     }
   }
+  private val onlySnapshotFiles = new PathFilter {
+    override def accept(path: Path): Boolean = path.toString.endsWith(".snapshot")
+  }
   private lazy val sparkConf = Option(SparkEnv.get).map(_.conf).getOrElse(new SparkConf)
 
   private val loadedMapCacheHitCount: LongAdder = new LongAdder
@@ -495,6 +503,8 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
   // This is updated when the maintenance task writes the snapshot file and read by the task
   // thread. -1 represents no version has ever been uploaded.
   private val lastUploadedSnapshotVersion: AtomicLong = new AtomicLong(-1L)
+  // Was snapshot auto repair performed when loading the current version
+  private val performedSnapshotAutoRepair: AtomicBoolean = new AtomicBoolean(false)
 
   private lazy val metricStateOnCurrentVersionSizeBytes: StateStoreCustomSizeMetric =
     StateStoreCustomSizeMetric("stateOnCurrentVersionSizeBytes",
@@ -507,6 +517,10 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
   private lazy val metricLoadedMapCacheMiss: StateStoreCustomMetric =
     StateStoreCustomSumMetric("loadedMapCacheMissCount",
       "count of cache miss on states cache in provider")
+
+  private lazy val metricNumSnapshotsAutoRepaired: StateStoreCustomMetric =
+    StateStoreCustomSumMetric("numSnapshotsAutoRepaired",
+    "number of snapshots that were automatically repaired during store load")
 
   private lazy val instanceMetricSnapshotLastUpload: StateStoreInstanceMetric =
     StateStoreSnapshotLastUploadInstanceMetric()
@@ -609,52 +623,78 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
     loadedMapCacheMissCount.increment()
 
     val (result, elapsedMs) = Utils.timeTakenMs {
-      val snapshotCurrentVersionMap = readSnapshotFile(version)
-      if (snapshotCurrentVersionMap.isDefined) {
-        synchronized { putStateIntoStateCacheMap(version, snapshotCurrentVersionMap.get) }
-
-        // Report the loaded snapshot's version to the coordinator
-        reportSnapshotUploadToCoordinator(version)
-
-        return snapshotCurrentVersionMap.get
-      }
-
-      // Find the most recent map before this version that we can.
-      // [SPARK-22305] This must be done iteratively to avoid stack overflow.
-      var lastAvailableVersion = version
-      var lastAvailableMap: Option[HDFSBackedStateStoreMap] = None
-      while (lastAvailableMap.isEmpty) {
-        lastAvailableVersion -= 1
-
-        if (lastAvailableVersion <= 0) {
-          // Use an empty map for versions 0 or less.
-          lastAvailableMap = Some(createHDFSBackedStateStoreMap())
-        } else {
-          lastAvailableMap =
-            synchronized { Option(loadedMaps.get(lastAvailableVersion)) }
-              .orElse(readSnapshotFile(lastAvailableVersion))
+      val (loadedVersion, loadedMap) = loadSnapshot(version)
+      val finalMap = if (loadedVersion == version) {
+        loadedMap
+      } else {
+        // Load all the deltas from the version after the loadedVersion up to the target version.
+        // The loadedVersion is the one with a full snapshot, so it doesn't need deltas.
+        val resultMap = createHDFSBackedStateStoreMap()
+        resultMap.putAll(loadedMap)
+        for (deltaVersion <- loadedVersion + 1 to version) {
+          updateFromDeltaFile(deltaVersion, resultMap)
         }
+        resultMap
       }
 
-      // Load all the deltas from the version after the last available one up to the target version.
-      // The last available version is the one with a full snapshot, so it doesn't need deltas.
-      val resultMap = createHDFSBackedStateStoreMap()
-      resultMap.putAll(lastAvailableMap.get)
-      for (deltaVersion <- lastAvailableVersion + 1 to version) {
-        updateFromDeltaFile(deltaVersion, resultMap)
-      }
+      // Synchronize and update the state cache map
+      synchronized { putStateIntoStateCacheMap(version, finalMap) }
 
-      synchronized { putStateIntoStateCacheMap(version, resultMap) }
+      // Report the snapshot found to the coordinator
+      reportSnapshotUploadToCoordinator(loadedVersion)
 
-      // Report the last available snapshot's version to the coordinator
-      reportSnapshotUploadToCoordinator(lastAvailableVersion)
-
-      resultMap
+      finalMap
     }
 
     logDebug(s"Loading state for $version takes $elapsedMs ms.")
 
     result
+  }
+
+  /** Loads the latest snapshot for the version we want to load and
+   * returns the snapshot version and map representing the snapshot */
+  private def loadSnapshot(versionToLoad: Long): (Long, HDFSBackedStateStoreMap) = {
+    var loadedMap: Option[HDFSBackedStateStoreMap] = None
+    val storeIdStr = s"StateStoreId(opId=${stateStoreId_.operatorId}," +
+      s"partId=${stateStoreId_.partitionId},name=${stateStoreId_.storeName})"
+
+    val snapshotLoader = new AutoSnapshotLoader(
+      storeConf.autoSnapshotRepairEnabled,
+      storeConf.autoSnapshotRepairNumFailuresBeforeActivating,
+      storeConf.autoSnapshotRepairMaxChangeFileReplay,
+      storeIdStr) {
+      override protected def beforeLoad(): Unit = {}
+
+      override protected def loadSnapshotFromCheckpoint(snapshotVersion: Long): Unit = {
+        loadedMap = if (snapshotVersion <= 0) {
+          // Use an empty map for versions 0 or less.
+          Some(HDFSBackedStateStoreMap.create(keySchema, numColsPrefixKey))
+        } else {
+          // first try to get the map from the cache
+          synchronized { Option(loadedMaps.get(snapshotVersion)) }
+            .orElse(readSnapshotFile(snapshotVersion))
+        }
+      }
+
+      override protected def onLoadSnapshotFromCheckpointFailure(): Unit = {}
+
+      override protected def getEligibleSnapshots(versionToLoad: Long): Seq[Long] = {
+        val snapshotVersions = SnapshotLoaderHelper.getEligibleSnapshotsForVersion(
+          versionToLoad, fm, baseDir, onlySnapshotFiles, fileSuffix = ".snapshot")
+
+        // Get locally cached versions, so we can use the locally cached version if available.
+        val cachedVersions = synchronized {
+          loadedMaps.keySet.asScala.toSeq
+        }.filter(_ <= versionToLoad)
+
+        // Combine the two sets of versions, so we can check both during load
+        (snapshotVersions ++ cachedVersions).distinct
+      }
+    }
+
+    val (loadedVersion, autoRepairCompleted) = snapshotLoader.loadSnapshot(versionToLoad)
+    performedSnapshotAutoRepair.set(autoRepairCompleted)
+    (loadedVersion, loadedMap.get)
   }
 
   private def writeUpdateToDeltaFile(

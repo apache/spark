@@ -3692,6 +3692,83 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
     }
   }
 
+  testWithChangelogCheckpointingEnabled("Auto snapshot repair") {
+    withSQLConf(
+      SQLConf.STREAMING_CHECKPOINT_FILE_CHECKSUM_ENABLED.key -> false.toString,
+      SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.key -> "2"
+    ) {
+      withTempDir { dir =>
+        val remoteDir = dir.getCanonicalPath
+        withDB(remoteDir) { db =>
+          db.load(0)
+          db.put("a", "0")
+          db.commit()
+          assert(db.metricsOpt.get.numSnapshotsAutoRepaired == 0)
+
+          db.load(1)
+          db.put("b", "1")
+          db.commit() // snapshot is created
+          assert(db.metricsOpt.get.numSnapshotsAutoRepaired == 0)
+          db.doMaintenance() // upload snapshot 2.zip
+
+          db.load(2)
+          db.put("c", "2")
+          db.commit()
+          assert(db.metricsOpt.get.numSnapshotsAutoRepaired == 0)
+
+          db.load(3)
+          db.put("d", "3")
+          db.commit() // snapshot is created
+          assert(db.metricsOpt.get.numSnapshotsAutoRepaired == 0)
+          db.doMaintenance() // upload snapshot 4.zip
+        }
+
+        def corruptFile(file: File): Unit =
+          // overwrite the file content to become empty
+          new PrintWriter(file) { close() }
+
+        // corrupt snapshot 4.zip
+        corruptFile(new File(remoteDir, "4.zip"))
+
+        withDB(remoteDir) { db =>
+          // this should fail when trying to load from remote
+          val ex = intercept[java.nio.file.NoSuchFileException] {
+            db.load(4)
+          }
+          // would fail while trying to read the metadata file from the empty zip file
+          assert(ex.getMessage.contains("/metadata"))
+        }
+
+        // Enable auto snapshot repair
+        withSQLConf(SQLConf.STATE_STORE_AUTO_SNAPSHOT_REPAIR_ENABLED.key -> true.toString,
+          SQLConf.STATE_STORE_AUTO_SNAPSHOT_REPAIR_NUM_FAILURES_BEFORE_ACTIVATING.key -> "1",
+          SQLConf.STATE_STORE_AUTO_SNAPSHOT_REPAIR_MAX_CHANGE_FILE_REPLAY.key -> "5"
+        ) {
+          withDB(remoteDir) { db =>
+            // this should now succeed
+            db.load(4)
+            assert(toStr(db.get("a")) == "0")
+            db.put("e", "4")
+            db.commit() // a new snapshot (5.zip) will be created since previous one is corrupt
+            assert(db.metricsOpt.get.numSnapshotsAutoRepaired == 1)
+            db.doMaintenance() // upload snapshot 5.zip
+          }
+
+          // corrupt all snapshot files
+          Seq(2, 5).foreach { v => corruptFile(new File(remoteDir, s"$v.zip")) }
+
+          withDB(remoteDir) { db =>
+            // this load should succeed due to auto repair, even though all snapshots are bad
+            db.load(5)
+            assert(toStr(db.get("b")) == "1")
+            db.commit()
+            assert(db.metricsOpt.get.numSnapshotsAutoRepaired == 1)
+          }
+        }
+      }
+    }
+  }
+
   testWithChangelogCheckpointingEnabled("SPARK-51922 - Changelog writer v1 with large key" +
     " does not cause UTFDataFormatException") {
     val remoteDir = Utils.createTempDir()

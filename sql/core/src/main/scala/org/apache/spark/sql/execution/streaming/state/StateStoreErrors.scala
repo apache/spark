@@ -261,6 +261,16 @@ object StateStoreErrors {
     new StateStoreUnexpectedEmptyFileInRocksDBZip(fileName, zipFileName)
   }
 
+  def autoSnapshotRepairFailed(
+      stateStoreId: String,
+      latestSnapshot: Long,
+      selectedSnapshots: Seq[Long],
+      eligibleSnapshots: Seq[Long],
+      cause: Throwable): StateStoreAutoSnapshotRepairFailed = {
+    new StateStoreAutoSnapshotRepairFailed(
+      stateStoreId, latestSnapshot, selectedSnapshots, eligibleSnapshots, cause)
+  }
+
   def cannotLoadStore(e: Throwable): Throwable = {
     e match {
       case e: SparkException
@@ -602,3 +612,18 @@ class StateStoreUnexpectedEmptyFileInRocksDBZip(fileName: String, zipFileName: S
       "fileName" -> fileName,
       "zipFileName" -> zipFileName),
     cause = null)
+
+class StateStoreAutoSnapshotRepairFailed(
+    stateStoreId: String,
+    latestSnapshot: Long,
+    selectedSnapshots: Seq[Long],
+    eligibleSnapshots: Seq[Long],
+    cause: Throwable)
+  extends SparkRuntimeException(
+    errorClass = "CANNOT_LOAD_STATE_STORE.AUTO_SNAPSHOT_REPAIR_FAILED",
+    messageParameters = Map(
+      "latestSnapshot" -> latestSnapshot.toString,
+      "stateStoreId" -> stateStoreId,
+      "selectedSnapshots" -> selectedSnapshots.mkString(","),
+      "eligibleSnapshots" -> eligibleSnapshots.mkString(",")),
+    cause)

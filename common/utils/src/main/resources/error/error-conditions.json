@@ -320,6 +320,11 @@
       "An error occurred during loading state."
     ],
     "subClass" : {
+      "AUTO_SNAPSHOT_REPAIR_FAILED" : {
+        "message" : [
+          "Failed to load snapshot version <latestSnapshot> for state store <stateStoreId>. An attempt to auto repair using snapshot versions (<selectedSnapshots>) out of available snapshots (<eligibleSnapshots>) also failed."
+        ]
+      },
       "CANNOT_FIND_BASE_SNAPSHOT_CHECKPOINT" : {
         "message" : [
           "Cannot find a base snapshot checkpoint with lineage: <lineage>."
