@@ -2110,7 +2110,7 @@ class Geography:
         """
         return self.wkb
 
-    def __eq__(self, other):
+    def __eq__(self, other: Any) -> bool:
         if not isinstance(other, Geography):
             # Don't attempt to compare against unrelated types.
             return NotImplemented
@@ -2181,7 +2181,7 @@ class Geometry:
         """
         return self.wkb
 
-    def __eq__(self, other):
+    def __eq__(self, other: Any) -> bool:
         if not isinstance(other, Geometry):
             # Don't attempt to compare against unrelated types.
             return NotImplemented
