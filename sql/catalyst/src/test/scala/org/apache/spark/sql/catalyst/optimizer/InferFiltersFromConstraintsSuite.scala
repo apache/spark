@@ -201,7 +201,7 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
   test("constraints should be inferred from aliased literals") {
     val originalLeft = testRelation.subquery("left").as("left")
     val optimizedLeft = testRelation.subquery("left")
-      .where(IsNotNull($"a") && $"a" <=> 2).as("left")
+      .where(IsNotNull($"a") && $"a" === 2).as("left")
 
     val right = Project(Seq(Literal(2).as("two")),
       testRelation.subquery("right")).as("right")
@@ -211,6 +211,23 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
     val correct = optimizedLeft.join(right, Inner, condition)
 
     comparePlans(Optimize.execute(original.analyze), correct.analyze)
+  }
+
+  test("single inner join: infer constraints in condition with complex expressions") {
+    val leftRelation = testRelation.subquery("x")
+    val rightRelation = testRelation.subquery("y")
+
+    val left = leftRelation.where($"a" === 1)
+    val right = rightRelation
+
+    testConstraintsAfterJoin(
+      left,
+      right,
+      leftRelation.where(IsNotNull($"a") && $"a" === 1),
+      rightRelation.where(IsNotNull($"b") && $"b" === Add(1, 2)),
+      Inner,
+      Some("y.b".attr === "x.a".attr + 2)
+    )
   }
 
   test("SPARK-23405: left-semi equal-join should filter out null join keys on both sides") {
@@ -274,17 +291,21 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
     val testRelation1 = LocalRelation($"a".int)
     val testRelation2 = LocalRelation($"b".long)
     val originalLeft = testRelation1.subquery("left")
-    val originalRight = testRelation2.where($"b" === 1L).subquery("right")
+    val originalRight = testRelation2.where($"b" > 100L).subquery("right")
 
-    val left = testRelation1.where(IsNotNull($"a") && $"a".cast(LongType) === 1L)
+    val left = testRelation1.where(IsNotNull($"a") && $"a".cast(LongType) > 100L)
       .subquery("left")
-    val right = testRelation2.where(IsNotNull($"b") && $"b" === 1L).subquery("right")
+    val right = testRelation2.where(IsNotNull($"b") && $"b" > 100L).subquery("right")
 
+    // CAST(a AS BIGINT) = b with b > 100
+    // Should infer: CAST(a AS BIGINT) > 100
     Seq(Some("left.a".attr.cast(LongType) === "right.b".attr),
       Some("right.b".attr === "left.a".attr.cast(LongType))).foreach { condition =>
       testConstraintsAfterJoin(originalLeft, originalRight, left, right, Inner, condition)
     }
 
+    // a = CAST(b AS INT) with b > 100
+    // Should NOT infer new filter
     Seq(Some("left.a".attr === "right.b".attr.cast(IntegerType)),
       Some("right.b".attr.cast(IntegerType) === "left.a".attr)).foreach { condition =>
       testConstraintsAfterJoin(
@@ -300,25 +321,55 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
   test("Constraints shouldn't be inferred from cast equality constraint(filter lower data type)") {
     val testRelation1 = LocalRelation($"a".int)
     val testRelation2 = LocalRelation($"b".long)
-    val originalLeft = testRelation1.where($"a" === 1).subquery("left")
+    val originalLeft = testRelation1.where($"a" > 50).subquery("left")
     val originalRight = testRelation2.subquery("right")
 
-    val left = testRelation1.where(IsNotNull($"a") && $"a" === 1).subquery("left")
+    val left = testRelation1.where(IsNotNull($"a") && $"a" > 50).subquery("left")
     val right = testRelation2.where(IsNotNull($"b")).subquery("right")
 
+    // CAST(a AS BIGINT) = b with a > 50
+    // Should NOT infer new filter
     Seq(Some("left.a".attr.cast(LongType) === "right.b".attr),
       Some("right.b".attr === "left.a".attr.cast(LongType))).foreach { condition =>
       testConstraintsAfterJoin(originalLeft, originalRight, left, right, Inner, condition)
     }
 
+    // a = CAST(b AS INT) with a > 50
+    // Should infer: CAST(b AS INT) > 50
     Seq(Some("left.a".attr === "right.b".attr.cast(IntegerType)),
       Some("right.b".attr.cast(IntegerType) === "left.a".attr)).foreach { condition =>
       testConstraintsAfterJoin(
         originalLeft,
         originalRight,
         left,
-        testRelation2.where(IsNotNull($"b") && $"b".attr.cast(IntegerType) === 1)
+        testRelation2.where(IsNotNull($"b") && $"b".attr.cast(IntegerType) > 50)
           .subquery("right"),
+        Inner,
+        condition)
+    }
+  }
+
+  test("constant propagation through cast in join condition") {
+    val testRelation1 = LocalRelation($"a".int)
+    val testRelation2 = LocalRelation($"b".long)
+
+    val originalLeft = testRelation1.subquery("left")
+    val originalRight = testRelation2.where($"b" === 1L).subquery("right")
+
+    val left = testRelation1.where(IsNotNull($"a") &&
+      $"a" === Literal(1L).cast(IntegerType)).subquery("left")
+    val right = testRelation2.where(IsNotNull($"b") && $"b" === 1L).subquery("right")
+
+    // Test constant propagation: b = 1 propagates through CAST
+    // JOIN ON a = CAST(b AS INT) with b = 1
+    // Should infer: a = CAST(1 AS INT)
+    Seq(Some("left.a".attr === "right.b".attr.cast(IntegerType)),
+      Some("right.b".attr.cast(IntegerType) === "left.a".attr)).foreach { condition =>
+      testConstraintsAfterJoin(
+        originalLeft,
+        originalRight,
+        left,
+        right,
         Inner,
         condition)
     }

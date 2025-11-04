@@ -1735,7 +1735,7 @@ object InferFiltersFromGenerate extends Rule[LogicalPlan] {
  * Inner and LeftSemi joins.
  */
 object InferFiltersFromConstraints extends Rule[LogicalPlan]
-  with PredicateHelper with ConstraintHelper {
+  with PredicateHelper with ConstraintHelper with ConstantPropagationHelper {
 
   def apply(plan: LogicalPlan): LogicalPlan = {
     if (conf.constraintPropagationEnabled) {
@@ -1786,9 +1786,43 @@ object InferFiltersFromConstraints extends Rule[LogicalPlan]
       left: LogicalPlan,
       right: LogicalPlan,
       conditionOpt: Option[Expression]): ExpressionSet = {
-    val baseConstraints = left.constraints.union(right.constraints)
-      .union(ExpressionSet(conditionOpt.map(splitConjunctivePredicates).getOrElse(Nil)))
+    // Get constraints from children
+    val childConstraints = left.constraints.union(right.constraints)
+
+    // Apply constant propagation to the join condition using constraints from children
+    // This simplifies conditions like "t1.a = t2.b + 2" to "t1.a = 3" when t2.b = 1 is known
+    val simplifiedCondition = conditionOpt.map { condition =>
+      propagateConstants(condition, childConstraints)
+    }
+
+    // Collect all constraints: from children + simplified join condition
+    val baseConstraints = childConstraints
+      .union(ExpressionSet(simplifiedCondition.map(splitConjunctivePredicates).getOrElse(Nil)))
+
+    // Infer additional constraints through transitive closure
     baseConstraints.union(inferAdditionalConstraints(baseConstraints))
+  }
+
+  /**
+   * Apply constant propagation to an expression using a set of known constraints.
+   * This extracts attribute => literal mappings from the constraints and applies them
+   * to simplify the expression.
+   *
+   * @param expression the expression to simplify
+   * @param constraints known constraints (typically from WHERE clauses or join children)
+   * @return the simplified expression, or the original if no simplification is possible
+   */
+  private def propagateConstants(
+      expression: Expression,
+      constraints: ExpressionSet): Expression = {
+    // Build attribute => literal map from constraints
+    val constantsMap = buildConstantsMap(constraints, nullIsFalse = true)
+    if (constantsMap.isEmpty) {
+      expression
+    } else {
+      // Apply the substitution
+      substituteConstants(expression, constantsMap)
+    }
   }
 
   private def inferNewFilter(plan: LogicalPlan, constraints: ExpressionSet): LogicalPlan = {

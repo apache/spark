@@ -118,6 +118,113 @@ object ConstantFolding extends Rule[LogicalPlan] {
 }
 
 /**
+ * Helper trait for constant propagation logic that can be reused across different optimizer rules.
+ *
+ * This trait provides utilities to perform constant propagation: substituting attribute references
+ * with their constant values when those values can be determined from equality predicates.
+ *
+ * Example usage in Filter:
+ * {{{
+ *   Input:  Filter(i = 5 AND j = i + 3)
+ *   Step 1: Extract mapping {i -> 5} from the equality predicate
+ *   Step 2: Substitute i with 5 in "j = i + 3" to get "j = 8"
+ *   Output: Filter(i = 5 AND j = 8)
+ * }}}
+ */
+trait ConstantPropagationHelper {
+
+  /**
+   * Substitute attributes with their constant values in an expression.
+   *
+   * This method performs the actual substitution of attribute references with literal constants
+   * within binary comparison expressions.
+   *
+   * Example:
+   * {{{
+   *   expression = (j = i + 3)
+   *   constantsMap = {i -> 5}
+   *   result = (j = 5 + 3)
+   * }}}
+   *
+   * @param expression the expression to transform
+   * @param constantsMap map from attributes to their constant literal values
+   * @param excludePredicates set of predicates to exclude from transformation (the source equality
+   *                          predicates themselves)
+   * @return transformed expression with attributes replaced by literals
+   */
+  protected def substituteConstants(
+      expression: Expression,
+      constantsMap: AttributeMap[Literal],
+      excludePredicates: Set[Expression] = Set.empty): Expression = {
+    if (constantsMap.isEmpty) {
+      expression
+    } else {
+      expression.transformWithPruning(_.containsPattern(BINARY_COMPARISON)) {
+        case b: BinaryComparison if !excludePredicates.contains(b) => b transform {
+          case a: AttributeReference => constantsMap.getOrElse(a, a)
+        }
+      }
+    }
+  }
+
+  /**
+   * Build a map of attribute => literal from a set of constraints.
+   *
+   * This method scans a set of constraint expressions (typically from WHERE clauses or
+   * join children) and extracts all equality predicates that map an attribute to a constant.
+   *
+   * Example:
+   * {{{
+   *   constraints = Set(i = 5, j = 10, k > 3, i + j = 15)
+   *   result = {i -> 5, j -> 10}  // only extracts simple equality predicates
+   * }}}
+   */
+  protected def buildConstantsMap(
+      constraints: ExpressionSet,
+      nullIsFalse: Boolean): AttributeMap[Literal] = {
+    val mappings = constraints.flatMap(extractConstantMapping(_, nullIsFalse))
+    AttributeMap(mappings.toSeq)
+  }
+
+  /**
+   * Extract a constant mapping from an equality predicate if possible.
+   *
+   * Examples:
+   * {{{
+   *   i = 5           => Some((i, 5))
+   *   5 = i           => Some((i, 5))
+   *   i <=> 5         => Some((i, 5))
+   *   i + 1 = 5       => None (not a simple attribute-to-literal mapping)
+   *   i = j           => None (no literal involved)
+   *   i > 5           => None (not an equality predicate)
+   * }}}
+   */
+  protected def extractConstantMapping(
+        expr: Expression,
+        nullIsFalse: Boolean): Option[(AttributeReference, Literal)] = expr match {
+    case EqualTo(left: AttributeReference, right: Literal) if safeToReplace(left, nullIsFalse) =>
+      Some(left -> right)
+    case EqualTo(left: Literal, right: AttributeReference) if safeToReplace(right, nullIsFalse) =>
+      Some(right -> left)
+    case EqualNullSafe(left: AttributeReference, right: Literal)
+      if safeToReplace(left, nullIsFalse) =>
+      Some(left -> right)
+    case EqualNullSafe(left: Literal, right: AttributeReference)
+      if safeToReplace(right, nullIsFalse) =>
+      Some(right -> left)
+    case _ => None
+  }
+
+  // We need to take into account if an attribute is nullable and the context of the conjunctive
+  // expression. E.g. `SELECT * FROM t WHERE NOT(c = 1 AND c + 1 = 1)` where attribute `c` can be
+  // substituted into `1 + 1 = 1` if 'c' isn't nullable. If 'c' is nullable then the enclosing
+  // NOT prevents us to do the substitution as NOT flips the context (`nullIsFalse`) of what a
+  // null result of the enclosed expression means.
+  private def safeToReplace(ar: AttributeReference, nullIsFalse: Boolean): Boolean =
+    !ar.nullable || nullIsFalse
+}
+
+/**
  * Substitutes [[Attribute Attributes]] which can be statically evaluated with their corresponding
  * value in conjunctive [[Expression Expressions]]
  * e.g.
@@ -131,7 +238,7 @@ object ConstantFolding extends Rule[LogicalPlan] {
  * - Using this mapping, replace occurrence of the attributes with the corresponding constant values
  *   in the AND node.
  */
-object ConstantPropagation extends Rule[LogicalPlan] {
+object ConstantPropagation extends Rule[LogicalPlan] with ConstantPropagationHelper {
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformUpWithPruning(
     _.containsAllPatterns(LITERAL, FILTER, BINARY_COMPARISON), ruleId) {
     case f: Filter =>
@@ -162,22 +269,16 @@ object ConstantPropagation extends Rule[LogicalPlan] {
    *         2. AttributeMap: propagated mapping of attribute => constant
    */
   private def traverse(condition: Expression, replaceChildren: Boolean, nullIsFalse: Boolean)
-    : (Option[Expression], AttributeMap[(Literal, BinaryComparison)]) =
+  : (Option[Expression], AttributeMap[(Literal, BinaryComparison)]) =
     condition match {
       case _ if !condition.containsAllPatterns(LITERAL, BINARY_COMPARISON) =>
         (None, AttributeMap.empty)
-      case e @ EqualTo(left: AttributeReference, right: Literal)
-        if safeToReplace(left, nullIsFalse) =>
-        (None, AttributeMap(Map(left -> (right, e))))
-      case e @ EqualTo(left: Literal, right: AttributeReference)
-        if safeToReplace(right, nullIsFalse) =>
-        (None, AttributeMap(Map(right -> (left, e))))
-      case e @ EqualNullSafe(left: AttributeReference, right: Literal)
-        if safeToReplace(left, nullIsFalse) =>
-        (None, AttributeMap(Map(left -> (right, e))))
-      case e @ EqualNullSafe(left: Literal, right: AttributeReference)
-        if safeToReplace(right, nullIsFalse) =>
-        (None, AttributeMap(Map(right -> (left, e))))
+      case e: BinaryComparison =>
+        // Try to extract constant mapping from this equality predicate
+        extractConstantMapping(e, nullIsFalse) match {
+          case Some((attr, literal)) => (None, AttributeMap(Map(attr -> (literal, e))))
+          case None => (None, AttributeMap.empty)
+        }
       case a: And =>
         val (newLeft, equalityPredicatesLeft) =
           traverse(a.left, replaceChildren = false, nullIsFalse)
@@ -185,8 +286,14 @@ object ConstantPropagation extends Rule[LogicalPlan] {
           traverse(a.right, replaceChildren = false, nullIsFalse)
         val equalityPredicates = equalityPredicatesLeft ++ equalityPredicatesRight
         val newSelf = if (equalityPredicates.nonEmpty && replaceChildren) {
-          Some(And(replaceConstants(newLeft.getOrElse(a.left), equalityPredicates),
-            replaceConstants(newRight.getOrElse(a.right), equalityPredicates)))
+          // Convert map to just literals for substitution
+          val constantsMap = AttributeMap(equalityPredicates.map {
+            case (attr, (lit, _)) => attr -> lit
+          })
+          val predicatesToExclude: Set[Expression] = equalityPredicates.values.map(_._2).toSet
+          Some(And(
+            substituteConstants(newLeft.getOrElse(a.left), constantsMap, predicatesToExclude),
+            substituteConstants(newRight.getOrElse(a.right), constantsMap, predicatesToExclude)))
         } else {
           if (newLeft.isDefined || newRight.isDefined) {
             Some(And(newLeft.getOrElse(a.left), newRight.getOrElse(a.right)))
@@ -211,26 +318,6 @@ object ConstantPropagation extends Rule[LogicalPlan] {
         (newChild.map(Not), AttributeMap.empty)
       case _ => (None, AttributeMap.empty)
     }
-
-  // We need to take into account if an attribute is nullable and the context of the conjunctive
-  // expression. E.g. `SELECT * FROM t WHERE NOT(c = 1 AND c + 1 = 1)` where attribute `c` can be
-  // substituted into `1 + 1 = 1` if 'c' isn't nullable. If 'c' is nullable then the enclosing
-  // NOT prevents us to do the substitution as NOT flips the context (`nullIsFalse`) of what a
-  // null result of the enclosed expression means.
-  private def safeToReplace(ar: AttributeReference, nullIsFalse: Boolean) =
-    !ar.nullable || nullIsFalse
-
-  private def replaceConstants(
-      condition: Expression,
-      equalityPredicates: AttributeMap[(Literal, BinaryComparison)]): Expression = {
-    val constantsMap = AttributeMap(equalityPredicates.map { case (attr, (lit, _)) => attr -> lit })
-    val predicates = equalityPredicates.values.map(_._2).toSet
-    condition.transformWithPruning(_.containsPattern(BINARY_COMPARISON)) {
-      case b: BinaryComparison if !predicates.contains(b) => b transform {
-        case a: AttributeReference => constantsMap.getOrElse(a, a)
-      }
-    }
-  }
 }
 
 /**
