@@ -26,7 +26,7 @@ import java.util.concurrent.atomic.AtomicLong
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.SparkEnv
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.storage.{PythonWorkerLogBlockIdGenerator, PythonWorkerLogLine, RollingLogWriter}
 
 /**
@@ -64,7 +64,9 @@ private[python] class PythonWorkerLogCapture(
         writer.close()
       } catch {
         case e: Exception =>
-          logWarning(s"Failed to close log writer for worker $workerId", e)
+          logWarning(
+            log"Failed to close log writer for worker ${MDC(LogKeys.PYTHON_WORKER_ID, workerId)}",
+            e)
       }
     }
   }
@@ -73,12 +75,14 @@ private[python] class PythonWorkerLogCapture(
    * Closes all active worker log writers.
    */
   def closeAllWriters(): Unit = {
-    workerLogWriters.values().asScala.foreach { case (writer, _) =>
+    workerLogWriters.asScala.foreach { case (workerId, (writer, _)) =>
       try {
         writer.close()
       } catch {
         case e: Exception =>
-          logWarning("Failed to close log writer", e)
+          logWarning(
+            log"Failed to close log writer for worker ${MDC(LogKeys.PYTHON_WORKER_ID, workerId)}",
+            e)
       }
     }
     workerLogWriters.clear()
@@ -128,7 +132,8 @@ private[python] class PythonWorkerLogCapture(
           }
         } catch {
           case e: Exception =>
-            logWarning(s"Failed to write log for worker $workerId", e)
+            logWarning(
+              log"Failed to write log for worker ${MDC(LogKeys.PYTHON_WORKER_ID, workerId)}", e)
         }
       }
       prefix
