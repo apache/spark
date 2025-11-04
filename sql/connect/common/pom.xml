@@ -87,11 +87,6 @@
             <artifactId>netty-transport-native-unix-common</artifactId>
             <version>${netty.version}</version>
         </dependency>
-        <dependency> <!-- necessary for Java 9+ -->
-            <groupId>org.apache.tomcat</groupId>
-            <artifactId>annotations-api</artifactId>
-            <version>${tomcat.annotations.api.version}</version>
-        </dependency>
         <!--
           This spark-tags test-dep is needed even though it isn't used in this module,
           otherwise testing-cmds that excludethem will yield errors.
@@ -123,27 +118,6 @@
                                 <source>src/test/gen-java</source>
                             </sources>
                         </configuration>
-                    </execution>
-                </executions>
-            </plugin>
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-shade-plugin</artifactId>
-                <configuration combine.self = "override">
-                    <shadedArtifactAttached>false</shadedArtifactAttached>
-                    <artifactSet>
-                        <includes>
-                            <include>org.spark-project.spark:unused</include>
-                            <include>org.apache.tomcat:annotations-api</include>
-                        </includes>
-                    </artifactSet>
-                </configuration>
-                <executions>
-                    <execution>
-                        <phase>package</phase>
-                        <goals>
-                            <goal>shade</goal>
-                        </goals>
                     </execution>
                 </executions>
             </plugin>
