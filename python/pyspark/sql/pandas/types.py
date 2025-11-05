@@ -50,6 +50,10 @@ from pyspark.sql.types import (
     UserDefinedType,
     VariantType,
     VariantVal,
+    GeometryType,
+    Geometry,
+    GeographyType,
+    Geography,
     _create_row,
 )
 from pyspark.errors import PySparkTypeError, UnsupportedOperationException, PySparkValueError
@@ -202,6 +206,18 @@ def to_arrow_type(
             pa.field("metadata", pa.binary(), nullable=False, metadata={b"variant": b"true"}),
         ]
         arrow_type = pa.struct(fields)
+    elif type(dt) == GeometryType:
+        fields = [
+            pa.field("srid", pa.int32(), nullable=False),
+            pa.field("wkb", pa.binary(), nullable=False, metadata={b"geometry": b"true", b"srid": str(dt.srid)}),
+        ]
+        arrow_type = pa.struct(fields)
+    elif type(dt) == GeographyType:
+        fields = [
+            pa.field("srid", pa.int32(), nullable=False),
+            pa.field("wkb", pa.binary(), nullable=False, metadata={b"geography": b"true", b"srid": str(dt.srid)}),
+        ]
+        arrow_type = pa.struct(fields)
     else:
         raise PySparkTypeError(
             errorClass="UNSUPPORTED_DATA_TYPE_FOR_ARROW_CONVERSION",
@@ -272,6 +288,38 @@ def is_variant(at: "pa.DataType") -> bool:
     ) and any(field.name == "value" for field in at)
 
 
+def is_geometry(at: "pa.DataType") -> bool:
+    """Check if a PyArrow struct data type represents a geometry"""
+    import pyarrow.types as types
+
+    assert types.is_struct(at)
+
+    return any(
+        (
+            field.name == "wkb"
+            and b"geometry" in field.metadata
+            and field.metadata[b"geometry"] == b"true"
+        )
+        for field in at
+    ) and any(field.name == "srid" for field in at)
+
+
+def is_geography(at: "pa.DataType") -> bool:
+    """Check if a PyArrow struct data type represents a geography"""
+    import pyarrow.types as types
+
+    assert types.is_struct(at)
+
+    return any(
+        (
+            field.name == "wkb"
+            and b"geography" in field.metadata
+            and field.metadata[b"geography"] == b"true"
+        )
+        for field in at
+    ) and any(field.name == "srid" for field in at)
+
+
 def from_arrow_type(at: "pa.DataType", prefer_timestamp_ntz: bool = False) -> DataType:
     """Convert pyarrow type to Spark data type."""
     import pyarrow.types as types
@@ -337,6 +385,18 @@ def from_arrow_type(at: "pa.DataType", prefer_timestamp_ntz: bool = False) -> Da
     elif types.is_struct(at):
         if is_variant(at):
             return VariantType()
+        elif is_geometry(at):
+            srid = int(at.field("wkb").metadata.get(b"srid"))
+            if srid == GeometryType.MIXED_SRID:
+                return GeometryType("ANY")
+            else:
+                return GeometryType(srid)
+        elif is_geography(at):
+            srid = int(at.field("wkb").metadata.get(b"srid"))
+            if srid == GeographyType.MIXED_SRID:
+                return GeographyType("ANY")
+            else:
+                return GeographyType(srid)
         return StructType(
             [
                 StructField(
