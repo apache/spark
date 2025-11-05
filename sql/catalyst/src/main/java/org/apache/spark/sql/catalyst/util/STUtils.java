@@ -16,6 +16,7 @@
  */
 package org.apache.spark.sql.catalyst.util;
 
+import org.apache.spark.sql.errors.QueryExecutionErrors;
 import org.apache.spark.sql.types.GeographyType;
 import org.apache.spark.sql.types.GeometryType;
 import org.apache.spark.unsafe.types.GeographyVal;
@@ -112,6 +113,31 @@ public final class STUtils {
 
   public static GeometryVal stGeomFromWKB(byte[] wkb, int srid) {
     return toPhysVal(Geometry.fromWkb(wkb, srid));
+  }
+
+  // ST_SetSrid
+  public static GeographyVal stSetSrid(GeographyVal geo, int srid) {
+    // We only allow setting the SRID to geographic values.
+    if(!GeographyType.isSridSupported(srid)) {
+      throw QueryExecutionErrors.stInvalidSridValueError(srid);
+    }
+    // Create a copy of the input geography.
+    Geography copy = fromPhysVal(geo).copy();
+    // Set the SRID of the copy to the specified value.
+    copy.setSrid(srid);
+    return toPhysVal(copy);
+  }
+
+  public static GeometryVal stSetSrid(GeometryVal geo, int srid) {
+    // We only allow setting the SRID to valid values.
+    if(!GeometryType.isSridSupported(srid)) {
+      throw QueryExecutionErrors.stInvalidSridValueError(srid);
+    }
+    // Create a copy of the input geometry.
+    Geometry copy = fromPhysVal(geo).copy();
+    // Set the SRID of the copy to the specified value.
+    copy.setSrid(srid);
+    return toPhysVal(copy);
   }
 
   // ST_Srid
