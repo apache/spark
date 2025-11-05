@@ -26,14 +26,20 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.Encoders
-import org.apache.spark.sql.streaming.ExpiredTimerInfo
+import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
+import org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.streaming.{
+  ExpiredTimerInfo,
+  OutputMode,
+  StatefulProcessor,
+  StreamTest,
+  TimeMode,
+  TimerValues,
+  TTLConfig
+}
 import org.apache.spark.sql.streaming.ListState
 import org.apache.spark.sql.streaming.MapState
-import org.apache.spark.sql.streaming.OutputMode
-import org.apache.spark.sql.streaming.StatefulProcessor
-import org.apache.spark.sql.streaming.TimeMode
-import org.apache.spark.sql.streaming.TimerValues
-import org.apache.spark.sql.streaming.TTLConfig
 import org.apache.spark.sql.streaming.ValueState
 
 class TestClock(var currentInstant: Instant, zone: ZoneId = ZoneId.systemDefault()) extends Clock {
@@ -47,8 +53,8 @@ class TestClock(var currentInstant: Instant, zone: ZoneId = ZoneId.systemDefault
 }
 
 /** Test StatefulProcessor implementation that maintains a running count. */
-class RunningCountProcessor(ttl: TTLConfig = TTLConfig.NONE)
-    extends StatefulProcessor[String, (String, String), (String, Long)] {
+class RunningCountProcessor[T](ttl: TTLConfig = TTLConfig.NONE)
+    extends StatefulProcessor[String, T, (String, Long)] {
 
   @transient private var countState: ValueState[Long] = _
 
@@ -58,7 +64,7 @@ class RunningCountProcessor(ttl: TTLConfig = TTLConfig.NONE)
 
   override def handleInputRows(
       key: String,
-      inputRows: Iterator[(String, String)],
+      inputRows: Iterator[T],
       timerValues: TimerValues
   ): Iterator[(String, Long)] = {
     val incoming = inputRows.size
@@ -328,16 +334,16 @@ class EventTimeWindowProcessor(val windowDurationMs: Long = 10000L)
 class TwsTesterSuite extends SparkFunSuite {
 
   test("TwsTester should correctly test RunningCountProcessor") {
-    val input: List[(String, (String, String))] = List(
-      ("key1", ("a", "b")),
-      ("key2", ("b", "c")),
-      ("key1", ("c", "d")),
-      ("key2", ("b", "c")),
-      ("key1", ("c", "d")),
-      ("key1", ("c", "d")),
-      ("key3", ("q", "f"))
+    val input: List[(String, String)] = List(
+      ("key1", "a"),
+      ("key2", "b"),
+      ("key1", "c"),
+      ("key2", "b"),
+      ("key1", "c"),
+      ("key1", "c"),
+      ("key3", "q")
     )
-    val tester = new TwsTester(new RunningCountProcessor())
+    val tester = new TwsTester(new RunningCountProcessor[String]())
     val ans1: List[(String, Long)] = tester.test(input)
     assert(ans1.sorted == List(("key1", 4L), ("key2", 2L), ("key3", 1L)).sorted)
 
@@ -346,12 +352,12 @@ class TwsTesterSuite extends SparkFunSuite {
     assert(tester.peekValueState[Long]("count", "key3").get == 1L)
     assert(tester.peekValueState[Long]("count", "key4").isEmpty)
 
-    val ans2 = tester.testOneRow("key1", ("q", "p"))
+    val ans2 = tester.testOneRow("key1", "q")
     assert(ans2 == List(("key1", 5L)))
     assert(tester.peekValueState[Long]("count", "key1").get == 5L)
     assert(tester.peekValueState[Long]("count", "key2").get == 2L)
 
-    val ans3 = tester.test(List(("key1", ("a", "b")), ("key2", ("a", "b"))))
+    val ans3 = tester.test(List(("key1", "a"), ("key2", "a")))
     assert(ans3.sorted == List(("key1", 6L), ("key2", 3L)))
   }
 
@@ -473,11 +479,11 @@ class TwsTesterSuite extends SparkFunSuite {
   }
 
   test("TwsTester should expire old value state according to TTL") {
-    val processor = new RunningCountProcessor(TTLConfig(Duration.ofSeconds(100)))
+    val processor = new RunningCountProcessor[String](TTLConfig(Duration.ofSeconds(100)))
     val testClock = new TestClock(Instant.EPOCH)
     val tester = new TwsTester(processor, testClock)
 
-    tester.testOneRow("key1", ("b", "c"))
+    tester.testOneRow("key1", "b")
     assert(tester.peekValueState[Long]("count", "key1").get == 1L)
     testClock.advanceBy(Duration.ofSeconds(101))
     assert(tester.peekValueState[Long]("count", "key1").isEmpty)
@@ -538,10 +544,10 @@ class TwsTesterSuite extends SparkFunSuite {
   }
 
   test("TwsTester should test one row with value state") {
-    val processor = new RunningCountProcessor()
+    val processor = new RunningCountProcessor[String]()
     val tester = new TwsTester(processor)
 
-    val (rows, newState) = tester.testOneRowWithValueState("key1", ("a", "b"), "count", 10L)
+    val (rows, newState) = tester.testOneRowWithValueState("key1", "a", "count", 10L)
     assert(rows == List(("key1", 11L)))
     assert(newState == 11L)
   }
@@ -759,5 +765,84 @@ class TwsTesterSuite extends SparkFunSuite {
     assert(result4(1) == ("user1", "WINDOW_START", 1L)) // New window started
     assert(tester.peekValueState[Long]("eventCount", "user1").get == 1L)
     assert(tester.peekValueState[Long]("windowEndTime", "user1").get == 35000L)
+  }
+}
+
+/**
+ * Integration test suite that compares TwsTester results with real streaming execution.
+ * Thread auditing is disabled because this suite runs actual streaming queries with RocksDB
+ * and shuffle operations, which spawn daemon threads (e.g., Netty boss/worker threads,
+ * file client threads, ForkJoinPool workers, and cleaner threads) that shut down
+ * asynchronously after SparkContext.stop().
+ */
+class TwsTesterFuzzTestSuite extends StreamTest {
+  import testImplicits._
+
+  // Disable thread auditing for this suite since it runs integration tests with
+  // real streaming queries that create asynchronously-stopped threads
+  override protected val enableAutoThreadAudit = false
+
+  /**
+   * Processes given input using TwsTester and real transformWithState+testStream.
+   *
+   * Asserts that results are identical.
+   */
+  def compareTws[
+      K: org.apache.spark.sql.Encoder,
+      I: org.apache.spark.sql.Encoder,
+      O: org.apache.spark.sql.Encoder](
+      processor: StatefulProcessor[K, I, O],
+      input: List[(K, I)]) = {
+    withSQLConf(
+      SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[RocksDBStateStoreProvider].getName,
+      SQLConf.SHUFFLE_PARTITIONS.key -> "5"
+    ) {
+      val outputMode = OutputMode.Append()
+      implicit val tupleEncoder = org.apache.spark.sql.Encoders.tuple(
+        implicitly[org.apache.spark.sql.Encoder[K]],
+        implicitly[org.apache.spark.sql.Encoder[I]]
+      )
+      val inputStream = MemoryStream[(K, I)]
+      val result = inputStream
+        .toDS()
+        .groupByKey(_._1)
+        .mapValues(_._2)
+        .transformWithState(processor, TimeMode.None(), outputMode)
+
+      val output: List[O] = new TwsTester(processor).test(input)
+      testStream(result, outputMode)(
+        AddData(inputStream, input: _*),
+        CheckNewAnswer(output.head, output.tail: _*),
+        StopStream
+      )
+    }
+  }
+
+  test("fuzz test with RunningCountProcessor") {
+    val random = new scala.util.Random(0)
+    val input = List.fill(1000) {
+      (s"key${random.nextInt(10)}", random.alphanumeric.take(5).mkString)
+    }
+    val processor = new RunningCountProcessor[String]()
+    compareTws(processor, input)
+  }
+
+  test("fuzz test with TopKProcessor") {
+    val random = new scala.util.Random(0)
+    val input = List.fill(1000) {
+      (s"key${random.nextInt(10)}", (random.alphanumeric.take(5).mkString, random.nextDouble() * 100))
+    }
+    val processor = new TopKProcessor(5)
+    compareTws(processor, input)
+  }
+
+  test("fuzz test with WordFrequencyProcessor") {
+    val random = new scala.util.Random(0)
+    val words = Array("spark", "scala", "flink", "kafka", "hadoop", "hive", "presto", "trino")
+    val input = List.fill(1000) {
+      (s"key${random.nextInt(10)}", ("", words(random.nextInt(words.length))))
+    }
+    val processor = new WordFrequencyProcessor()
+    compareTws(processor, input)
   }
 }
