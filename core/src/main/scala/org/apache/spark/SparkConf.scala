@@ -720,6 +720,9 @@ private[spark] object SparkConf extends Logging {
         "Please use spark.shuffle.localDisk.file.output.buffer"),
       DeprecatedConfig("spark.shuffle.server.chunkFetchHandlerThreadsPercent", "4.2.0",
         "Using separate chunkFetchHandlers could be problematic according to the underlying" +
+          " netty layer"),
+      DeprecatedConfig("spark.shuffle.server.finalizeShuffleMergeThreadsPercent", "4.2.0",
+        "Using separate finalizeWorkers could be problematic according to the underlying" +
           " netty layer")
     )
 
