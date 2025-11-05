@@ -249,7 +249,7 @@ object IntegratedUDFTestUtils extends SQLHelper {
     binaryPythonDataSource
   }
 
-  private lazy val pandasFunc: Array[Byte] = if (shouldTestPandasUDFs) {
+  private lazy val pandasScalarFunc: Array[Byte] = if (shouldTestPandasUDFs) {
     var binaryPandasFunc: Array[Byte] = null
     withTempPath { path =>
       Process(
@@ -262,6 +262,29 @@ object IntegratedUDFTestUtils extends SQLHelper {
             "f.write(CloudPickleSerializer().dumps((" +
             "lambda x: x.apply(" +
             "lambda v: None if v is None else str(v)), StringType())))"),
+        None,
+        "PYTHONPATH" -> s"$pysparkPythonPath:$pythonPath").!!
+      binaryPandasFunc = Files.readAllBytes(path.toPath)
+    }
+    assert(binaryPandasFunc != null)
+    binaryPandasFunc
+  } else {
+    throw new RuntimeException(s"Python executable [$pythonExec] and/or pyspark are unavailable.")
+  }
+
+  private lazy val pandasScalarIterFunc: Array[Byte] = if (shouldTestPandasUDFs) {
+    var binaryPandasFunc: Array[Byte] = null
+    withTempPath { path =>
+      Process(
+        Seq(
+          pythonExec,
+          "-c",
+          "from pyspark.sql.types import StringType; " +
+            "from pyspark.serializers import CloudPickleSerializer; " +
+            s"f = open('$path', 'wb');" +
+            "f.write(CloudPickleSerializer().dumps((" +
+            "lambda it: map(lambda x: x.apply(lambda v: None if v is None else str(v)), it)" +
+            "))"),
         None,
         "PYTHONPATH" -> s"$pysparkPythonPath:$pythonPath").!!
       binaryPandasFunc = Files.readAllBytes(path.toPath)
@@ -1380,7 +1403,7 @@ object IntegratedUDFTestUtils extends SQLHelper {
     private[IntegratedUDFTestUtils] lazy val udf = new UserDefinedPythonFunction(
       name = name,
       func = SimplePythonFunction(
-        command = pandasFunc.toImmutableArraySeq,
+        command = pandasScalarFunc.toImmutableArraySeq,
         envVars = workerEnv.clone().asInstanceOf[java.util.Map[String, String]],
         pythonIncludes = List.empty[String].asJava,
         pythonExec = pythonExec,
@@ -1389,6 +1412,60 @@ object IntegratedUDFTestUtils extends SQLHelper {
         accumulator = null),
       dataType = StringType,
       pythonEvalType = PythonEvalType.SQL_SCALAR_PANDAS_UDF,
+      udfDeterministic = true) {
+
+      override def builder(e: Seq[Expression]): Expression = {
+        assert(e.length == 1, "Defined UDF only has one column")
+        val expr = e.head
+        val rt = returnType.getOrElse {
+          assert(expr.resolved, "column should be resolved to use the same type " +
+            "as input. Try df(name) or df.col(name)")
+          expr.dataType
+        }
+        val pythonUDF = new PythonUDFWithoutId(
+          super.builder(Cast(expr, StringType) :: Nil).asInstanceOf[PythonUDF])
+        Cast(pythonUDF, rt)
+      }
+    }
+
+    def apply(exprs: Column*): Column = udf(exprs: _*)
+
+    val prettyName: String = "Scalar Pandas UDF"
+  }
+
+  /**
+   * A Scalar Iterator Pandas UDF that takes one column, casts into string, executes the
+   * Python native function, and casts back to the type of input column.
+   *
+   * Virtually equivalent to:
+   *
+   * {{{
+   *   from pyspark.sql.functions import pandas_udf, PandasUDFType
+   *
+   *   df = spark.range(3).toDF("col")
+   *   scalar_iter_udf = pandas_udf(
+   *       lambda it: map(lambda x: x.apply(lambda v: str(v)), it),
+   *       "string",
+   *       PandasUDFType.SCALAR_ITER)
+   *   casted_col = scalar_iter_udf(df.col.cast("string"))
+   *   casted_col.cast(df.schema["col"].dataType)
+   * }}}
+   */
+  case class TestScalarIterPandasUDF(
+      name: String,
+      returnType: Option[DataType] = None) extends TestUDF {
+    private[IntegratedUDFTestUtils] lazy val udf = new UserDefinedPythonFunction(
+      name = name,
+      func = SimplePythonFunction(
+        command = pandasScalarIterFunc.toImmutableArraySeq,
+        envVars = workerEnv.clone().asInstanceOf[java.util.Map[String, String]],
+        pythonIncludes = List.empty[String].asJava,
+        pythonExec = pythonExec,
+        pythonVer = pythonVer,
+        broadcastVars = List.empty[Broadcast[PythonBroadcast]].asJava,
+        accumulator = null),
+      dataType = StringType,
+      pythonEvalType = PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF,
       udfDeterministic = true) {
 
       override def builder(e: Seq[Expression]): Expression = {
@@ -1606,6 +1683,7 @@ object IntegratedUDFTestUtils extends SQLHelper {
   def registerTestUDF(testUDF: TestUDF, session: classic.SparkSession): Unit = testUDF match {
     case udf: TestPythonUDF => session.udf.registerPython(udf.name, udf.udf)
     case udf: TestScalarPandasUDF => session.udf.registerPython(udf.name, udf.udf)
+    case udf: TestScalarIterPandasUDF => session.udf.registerPython(udf.name, udf.udf)
     case udf: TestGroupedAggPandasUDF => session.udf.registerPython(udf.name, udf.udf)
     case udf: TestScalaUDF =>
       val registry = session.sessionState.functionRegistry

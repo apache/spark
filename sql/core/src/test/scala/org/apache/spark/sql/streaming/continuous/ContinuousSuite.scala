@@ -278,10 +278,12 @@ class ContinuousSuite extends ContinuousSuiteBase {
       s"Result set ${results.toSet} are not a superset of $expected!")
   }
 
-  Seq(TestScalaUDF("udf"), TestPythonUDF("udf"), TestScalarPandasUDF("udf")).foreach { udf =>
+  Seq(TestScalaUDF("udf"), TestPythonUDF("udf"),
+    TestScalarPandasUDF("udf"), TestScalarIterPandasUDF("udf")).foreach { udf =>
     test(s"continuous mode with various UDFs - ${udf.prettyName}") {
       assume(
         shouldTestPandasUDFs && udf.isInstanceOf[TestScalarPandasUDF] ||
+        shouldTestPandasUDFs && udf.isInstanceOf[TestScalarIterPandasUDF] ||
         shouldTestPythonUDFs && udf.isInstanceOf[TestPythonUDF] ||
         udf.isInstanceOf[TestScalaUDF])
 

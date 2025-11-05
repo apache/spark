@@ -194,6 +194,12 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
           /* Do nothing */
         }
       case udfTestCase: SQLQueryTestSuite#UDFTest
+        if udfTestCase.udf.isInstanceOf[TestScalarIterPandasUDF] && !shouldTestPandasUDFs =>
+        ignore(s"${testCase.name} is skipped because pyspark," +
+          s"pandas and/or pyarrow were not available in [$pythonExec].") {
+          /* Do nothing */
+        }
+      case udfTestCase: SQLQueryTestSuite#UDFTest
           if udfTestCase.udf.isInstanceOf[TestGroupedAggPandasUDF] &&
             !shouldTestPandasUDFs =>
         ignore(s"${testCase.name} is skipped because pyspark," +
@@ -398,6 +404,10 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
         s"${testCase.name}${System.lineSeparator()}" +
           s"Python: $pythonVer Pandas: $pandasVer PyArrow: $pyarrowVer${System.lineSeparator()}"
       case udfTestCase: SQLQueryTestSuite#UDFTest
+        if udfTestCase.udf.isInstanceOf[TestScalarIterPandasUDF] && shouldTestPandasUDFs =>
+        s"${testCase.name}${System.lineSeparator()}" +
+          s"Python: $pythonVer Pandas: $pandasVer PyArrow: $pyarrowVer${System.lineSeparator()}"
+      case udfTestCase: SQLQueryTestSuite#UDFTest
           if udfTestCase.udf.isInstanceOf[TestGroupedAggPandasUDF] &&
             shouldTestPandasUDFs =>
         s"${testCase.name}${System.lineSeparator()}" +
@@ -446,12 +456,14 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
       // Create test cases of test types that depend on the input filename.
       val newTestCases: Seq[TestCase] = if (file.getAbsolutePath.startsWith(
         s"$inputFilePath${File.separator}udf${File.separator}postgreSQL")) {
-        Seq(TestScalaUDF("udf"), TestPythonUDF("udf"), TestScalarPandasUDF("udf")).map { udf =>
+        Seq(TestScalaUDF("udf"), TestPythonUDF("udf"),
+          TestScalarPandasUDF("udf"), TestScalarIterPandasUDF("udf")).map { udf =>
           UDFPgSQLTestCase(
             s"$testCaseName - ${udf.prettyName}", absPath, resultFile, udf)
         }
       } else if (file.getAbsolutePath.startsWith(s"$inputFilePath${File.separator}udf")) {
-        Seq(TestScalaUDF("udf"), TestPythonUDF("udf"), TestScalarPandasUDF("udf")).map { udf =>
+        Seq(TestScalaUDF("udf"), TestPythonUDF("udf"),
+          TestScalarPandasUDF("udf"), TestScalarIterPandasUDF("udf")).map { udf =>
           UDFTestCase(
             s"$testCaseName - ${udf.prettyName}", absPath, resultFile, udf)
         }
