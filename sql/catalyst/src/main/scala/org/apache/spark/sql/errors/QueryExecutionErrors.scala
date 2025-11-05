@@ -3219,4 +3219,54 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
         "functionName" -> toSQLId(function),
         "k" -> toSQLValue(k, IntegerType)))
   }
+
+  def tupleInvalidInputSketchBuffer(function: String): Throwable = {
+    val reason: String = "Invalid buffer state or input data"
+    tupleInvalidInputSketchBuffer(function, reason)
+  }
+
+  def tupleInvalidInputSketchBuffer(function: String, reason: String): Throwable = {
+    new SparkRuntimeException(
+      errorClass = "TUPLE_INVALID_INPUT_SKETCH_BUFFER",
+      messageParameters = Map("function" -> toSQLId(function), "reason" -> reason))
+  }
+
+  def tupleInvalidSummaryType(
+      function: String,
+      summaryType: String,
+      validTypes: Seq[String]): Throwable = {
+    new SparkRuntimeException(
+      errorClass = "TUPLE_INVALID_SKETCH_SUMMARY_TYPE",
+      messageParameters = Map(
+        "function" -> toSQLId(function),
+        "summaryType" -> summaryType,
+        "validTypes" -> validTypes.mkString(", ")))
+  }
+
+  def tupleInvalidMode(function: String, mode: String, validModes: Seq[String]): Throwable = {
+    new SparkRuntimeException(
+      errorClass = "TUPLE_INVALID_SKETCH_MODE",
+      messageParameters = Map(
+        "function" -> toSQLId(function),
+        "mode" -> mode,
+        "validModes" -> validModes.mkString(", ")))
+  }
+
+  def tupleSketchParameterMustBeConstant(function: String, parameter: String): Throwable = {
+    new SparkRuntimeException(
+      errorClass = "TUPLE_SKETCH_PARAMETER_MUST_BE_CONSTANT",
+      messageParameters = Map("functionName" -> toSQLId(function), "parameter" -> parameter))
+  }
+
+  def tupleInvalidSummaryValueType(
+      function: String,
+      summaryType: String,
+      actualType: String): Throwable = {
+    new SparkRuntimeException(
+      errorClass = "TUPLE_INVALID_SKETCH_SUMMARY_VALUE_TYPE",
+      messageParameters = Map(
+        "function" -> toSQLId(function),
+        "summaryType" -> summaryType,
+        "actualType" -> actualType))
+  }
 }

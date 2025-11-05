@@ -47,6 +47,11 @@ object ThetaSketchUtils {
   final val MODE_MAX = "max"
   final val MODE_ALWAYSONE = "alwaysone"
 
+  final val VALID_SUMMARY_TYPES: Seq[String] =
+    Seq(SUMMARY_TYPE_DOUBLE, SUMMARY_TYPE_INTEGER, SUMMARY_TYPE_STRING)
+
+  final val VALID_MODES: Seq[String] = Seq(MODE_SUM, MODE_MIN, MODE_MAX, MODE_ALWAYSONE)
+
   /**
    * Validates the lgNomLongs parameter for Theta sketch size. Throws a Spark SQL exception if the
    * value is out of bounds.

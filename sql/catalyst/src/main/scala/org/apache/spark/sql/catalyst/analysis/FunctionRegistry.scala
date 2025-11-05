@@ -553,7 +553,9 @@ object FunctionRegistry {
     expression[KllSketchGetQuantileDouble]("kll_sketch_get_quantile_double"),
     expression[KllSketchGetRankBigint]("kll_sketch_get_rank_bigint"),
     expression[KllSketchGetRankFloat]("kll_sketch_get_rank_float"),
-    expression[KllSketchGetRankDouble]("kll_sketch_get_rank_double"),
+    expression[TupleSketchAgg]("tuple_sketch_agg"),
+    expression[TupleUnionAgg]("tuple_union_agg"),
+    expression[TupleIntersectionAgg]("tuple_intersection_agg"),
 
     // string functions
     expression[Ascii]("ascii"),
