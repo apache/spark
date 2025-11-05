@@ -465,7 +465,7 @@ private[spark] object Config extends Logging {
       .doc("Value to set for the controller.kubernetes.io/pod-deletion-cost" +
         " annotation when Spark asks a deployment-based allocator to remove executor pods. This " +
         "helps Kubernetes pick the same pods Spark selected when the deployment scales down.")
-      .version("3.5.2")
+      .version("4.1.0")
       .intConf
       .createOptional
 

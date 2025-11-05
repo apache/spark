@@ -161,9 +161,8 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager wit
   private[k8s] def makeExecutorPodsAllocator(sc: SparkContext, kubernetesClient: KubernetesClient,
       snapshotsStore: ExecutorPodsSnapshotsStore) = {
     val allocator = sc.conf.get(KUBERNETES_ALLOCATION_PODS_ALLOCATOR)
-    if (allocator == "deployment" &&
-        Utils.isDynamicAllocationEnabled(sc.conf) &&
-        sc.conf.get(KUBERNETES_EXECUTOR_POD_DELETION_COST).isEmpty) {
+    if (allocator == "deployment" && Utils.isDynamicAllocationEnabled(sc.conf) &&
+      sc.conf.get(KUBERNETES_EXECUTOR_POD_DELETION_COST).isEmpty) {
       throw new SparkException(
         s"Dynamic allocation with the deployment pods allocator requires " +
           s"'${KUBERNETES_EXECUTOR_POD_DELETION_COST.key}' to be configured.")
