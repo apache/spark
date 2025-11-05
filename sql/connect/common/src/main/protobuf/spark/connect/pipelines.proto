@@ -106,7 +106,7 @@ message PipelineCommand {
       }
 
       // Optional cluster columns for the table.
-      repeated string cluster_cols = 6;
+      repeated string clustering_columns = 6;
     }
 
     // Metadata that's only applicable to sinks.

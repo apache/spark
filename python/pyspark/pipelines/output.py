@@ -53,7 +53,7 @@ class Table(Output):
 
     table_properties: Mapping[str, str]
     partition_cols: Optional[Sequence[str]]
-    cluster_cols: Optional[Sequence[str]]
+    cluster_by: Optional[Sequence[str]]
     schema: Optional[Union[StructType, str]]
     format: Optional[str]
 

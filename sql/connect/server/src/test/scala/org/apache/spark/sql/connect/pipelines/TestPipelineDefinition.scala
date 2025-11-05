@@ -46,7 +46,7 @@ class TestPipelineDefinition(graphId: String) {
     val tableDetails = sc.PipelineCommand.DefineOutput.TableDetails
       .newBuilder()
       .addAllPartitionCols(partitionCols.getOrElse(Seq()).asJava)
-      .addAllClusterCols(clusterCols.getOrElse(Seq()).asJava)
+      .addAllClusteringColumns(clusterCols.getOrElse(Seq()).asJava)
       .putAllTableProperties(properties.asJava)
       .build()
 
