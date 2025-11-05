@@ -1493,7 +1493,7 @@ See the [configuration page](configuration.html) for information on Spark config
     when Spark tells a deployment-based allocator to remove executor pods. Set this to steer
     Kubernetes to remove the same pods that Spark selected when the deployment scales down.
   </td>
-  <td>3.5.2</td>
+  <td>4.2.0</td>
 </tr>
 <tr>
   <td><code>spark.kubernetes.executor.scheduler.name</code></td>
