@@ -53,7 +53,7 @@ private[spark] class ExecutorPodsLifecycleManager(
   // bounds.
   private lazy val removedExecutorsCache =
     CacheBuilder.newBuilder()
-      .expireAfterWrite(3, TimeUnit.MINUTES)
+      .expireAfterWrite(conf.get(KUBERNETES_DELETED_EXECUTORS_CACHE_TTL_SECONDS), TimeUnit.SECONDS)
       .build[java.lang.Long, java.lang.Long]()
 
   private var lastFullSnapshotTs: Long = 0
