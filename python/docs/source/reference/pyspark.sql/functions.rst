@@ -458,6 +458,9 @@ Aggregate Functions
     histogram_numeric
     hll_sketch_agg
     hll_union_agg
+    kll_sketch_agg_bigint
+    kll_sketch_agg_double
+    kll_sketch_agg_float
     kurtosis
     last
     last_value
@@ -631,6 +634,21 @@ Misc Functions
     current_user
     hll_sketch_estimate
     hll_union
+    kll_sketch_get_n_bigint
+    kll_sketch_get_n_double
+    kll_sketch_get_n_float
+    kll_sketch_get_quantile_bigint
+    kll_sketch_get_quantile_double
+    kll_sketch_get_quantile_float
+    kll_sketch_get_rank_bigint
+    kll_sketch_get_rank_double
+    kll_sketch_get_rank_float
+    kll_sketch_merge_bigint
+    kll_sketch_merge_double
+    kll_sketch_merge_float
+    kll_sketch_to_string_bigint
+    kll_sketch_to_string_double
+    kll_sketch_to_string_float
     input_file_block_length
     input_file_block_start
     input_file_name
