@@ -413,6 +413,57 @@ SELECT kll_sketch_get_n_float(X'cafebabe') AS invalid_binary_float;
 
 SELECT kll_sketch_get_n_double(X'12345678') AS invalid_binary_double;
 
+-- Wrong argument types
+SELECT kll_sketch_get_n_bigint(42) AS wrong_argument_type;
+
+SELECT kll_sketch_get_n_float(42.0) AS wrong_argument_type;
+
+SELECT kll_sketch_get_n_double(42.0D) AS wrong_argument_type;
+
+-- Negative tests for kll_sketch_get_quantile functions with invalid second argument types
+-- Invalid type: STRING instead of DOUBLE for quantile parameter
+SELECT kll_sketch_get_quantile_bigint(agg, 'invalid') AS quantile_string
+FROM (
+    SELECT kll_sketch_agg_bigint(col1) AS agg
+    FROM t_long_1_5_through_7_11
+);
+
+-- Invalid type: BINARY instead of DOUBLE for quantile parameter
+SELECT kll_sketch_get_quantile_float(agg, X'deadbeef') AS quantile_binary
+FROM (
+    SELECT kll_sketch_agg_float(col1) AS agg
+    FROM t_float_1_5_through_7_11
+);
+
+-- Invalid type: BOOLEAN instead of DOUBLE for quantile parameter
+SELECT kll_sketch_get_quantile_double(agg, true) AS quantile_boolean
+FROM (
+    SELECT kll_sketch_agg_double(col1) AS agg
+    FROM t_double_1_5_through_7_11
+);
+
+-- Negative tests for kll_sketch_get_rank functions with invalid second argument types
+-- Invalid type: STRING instead of BIGINT for rank value parameter
+SELECT kll_sketch_get_rank_bigint(agg, 'invalid') AS rank_string
+FROM (
+    SELECT kll_sketch_agg_bigint(col1) AS agg
+    FROM t_long_1_5_through_7_11
+);
+
+-- Invalid type: BINARY instead of FLOAT for rank value parameter
+SELECT kll_sketch_get_rank_float(agg, X'cafebabe') AS rank_binary
+FROM (
+    SELECT kll_sketch_agg_float(col1) AS agg
+    FROM t_float_1_5_through_7_11
+);
+
+-- Invalid type: BOOLEAN instead of DOUBLE for rank value parameter
+SELECT kll_sketch_get_rank_double(agg, false) AS rank_boolean
+FROM (
+    SELECT kll_sketch_agg_double(col1) AS agg
+    FROM t_double_1_5_through_7_11
+);
+
 -- Clean up
 DROP TABLE IF EXISTS t_int_1_5_through_7_11;
 DROP TABLE IF EXISTS t_long_1_5_through_7_11;

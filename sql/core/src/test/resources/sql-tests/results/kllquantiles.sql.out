@@ -1140,6 +1140,262 @@ org.apache.spark.SparkRuntimeException
 
 
 -- !query
+SELECT kll_sketch_get_n_bigint(42) AS wrong_argument_type
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"42\"",
+    "inputType" : "\"INT\"",
+    "paramIndex" : "first",
+    "requiredType" : "\"BINARY\"",
+    "sqlExpr" : "\"kll_sketch_get_n_bigint(42)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 34,
+    "fragment" : "kll_sketch_get_n_bigint(42)"
+  } ]
+}
+
+
+-- !query
+SELECT kll_sketch_get_n_float(42.0) AS wrong_argument_type
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"42.0\"",
+    "inputType" : "\"DECIMAL(3,1)\"",
+    "paramIndex" : "first",
+    "requiredType" : "\"BINARY\"",
+    "sqlExpr" : "\"kll_sketch_get_n_float(42.0)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 35,
+    "fragment" : "kll_sketch_get_n_float(42.0)"
+  } ]
+}
+
+
+-- !query
+SELECT kll_sketch_get_n_double(42.0D) AS wrong_argument_type
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"42.0\"",
+    "inputType" : "\"DOUBLE\"",
+    "paramIndex" : "first",
+    "requiredType" : "\"BINARY\"",
+    "sqlExpr" : "\"kll_sketch_get_n_double(42.0)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 37,
+    "fragment" : "kll_sketch_get_n_double(42.0D)"
+  } ]
+}
+
+
+-- !query
+SELECT kll_sketch_get_quantile_bigint(agg, 'invalid') AS quantile_string
+FROM (
+    SELECT kll_sketch_agg_bigint(col1) AS agg
+    FROM t_long_1_5_through_7_11
+)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkNumberFormatException
+{
+  "errorClass" : "CAST_INVALID_INPUT",
+  "sqlState" : "22018",
+  "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
+    "expression" : "'invalid'",
+    "sourceType" : "\"STRING\"",
+    "targetType" : "\"DOUBLE\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 53,
+    "fragment" : "kll_sketch_get_quantile_bigint(agg, 'invalid')"
+  } ]
+}
+
+
+-- !query
+SELECT kll_sketch_get_quantile_float(agg, X'deadbeef') AS quantile_binary
+FROM (
+    SELECT kll_sketch_agg_float(col1) AS agg
+    FROM t_float_1_5_through_7_11
+)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"X'DEADBEEF'\"",
+    "inputType" : "\"BINARY\"",
+    "paramIndex" : "second",
+    "requiredType" : "(\"DOUBLE\" or \"ARRAY<DOUBLE>\")",
+    "sqlExpr" : "\"kll_sketch_get_quantile_float(agg, X'DEADBEEF')\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 54,
+    "fragment" : "kll_sketch_get_quantile_float(agg, X'deadbeef')"
+  } ]
+}
+
+
+-- !query
+SELECT kll_sketch_get_quantile_double(agg, true) AS quantile_boolean
+FROM (
+    SELECT kll_sketch_agg_double(col1) AS agg
+    FROM t_double_1_5_through_7_11
+)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"true\"",
+    "inputType" : "\"BOOLEAN\"",
+    "paramIndex" : "second",
+    "requiredType" : "(\"DOUBLE\" or \"ARRAY<DOUBLE>\")",
+    "sqlExpr" : "\"kll_sketch_get_quantile_double(agg, true)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 48,
+    "fragment" : "kll_sketch_get_quantile_double(agg, true)"
+  } ]
+}
+
+
+-- !query
+SELECT kll_sketch_get_rank_bigint(agg, 'invalid') AS rank_string
+FROM (
+    SELECT kll_sketch_agg_bigint(col1) AS agg
+    FROM t_long_1_5_through_7_11
+)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkNumberFormatException
+{
+  "errorClass" : "CAST_INVALID_INPUT",
+  "sqlState" : "22018",
+  "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
+    "expression" : "'invalid'",
+    "sourceType" : "\"STRING\"",
+    "targetType" : "\"BIGINT\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 49,
+    "fragment" : "kll_sketch_get_rank_bigint(agg, 'invalid')"
+  } ]
+}
+
+
+-- !query
+SELECT kll_sketch_get_rank_float(agg, X'cafebabe') AS rank_binary
+FROM (
+    SELECT kll_sketch_agg_float(col1) AS agg
+    FROM t_float_1_5_through_7_11
+)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"X'CAFEBABE'\"",
+    "inputType" : "\"BINARY\"",
+    "paramIndex" : "second",
+    "requiredType" : "(\"FLOAT\" or \"ARRAY<FLOAT>\")",
+    "sqlExpr" : "\"kll_sketch_get_rank_float(agg, X'CAFEBABE')\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 50,
+    "fragment" : "kll_sketch_get_rank_float(agg, X'cafebabe')"
+  } ]
+}
+
+
+-- !query
+SELECT kll_sketch_get_rank_double(agg, false) AS rank_boolean
+FROM (
+    SELECT kll_sketch_agg_double(col1) AS agg
+    FROM t_double_1_5_through_7_11
+)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"false\"",
+    "inputType" : "\"BOOLEAN\"",
+    "paramIndex" : "second",
+    "requiredType" : "(\"DOUBLE\" or \"ARRAY<DOUBLE>\")",
+    "sqlExpr" : "\"kll_sketch_get_rank_double(agg, false)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 45,
+    "fragment" : "kll_sketch_get_rank_double(agg, false)"
+  } ]
+}
+
+
+-- !query
 DROP TABLE IF EXISTS t_int_1_5_through_7_11
 -- !query schema
 struct<>
