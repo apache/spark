@@ -973,7 +973,7 @@ class SparkConnectClient(object):
             "spark.sql.execution.pandas.structHandlingMode",
             "spark.sql.execution.arrow.pyspark.selfDestruct.enabled",
         )
-        self_destruct = self_destruct == "true"
+        self_destruct: bool = self_destruct == "true"
 
         table, schema, metrics, observed_metrics, _ = self._execute_and_fetch(
             req, observations, self_destruct=self_destruct
