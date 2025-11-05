@@ -822,6 +822,7 @@ private[spark] object Config extends Logging {
   val KUBERNETES_VOLUMES_PVC_TYPE = "persistentVolumeClaim"
   val KUBERNETES_VOLUMES_EMPTYDIR_TYPE = "emptyDir"
   val KUBERNETES_VOLUMES_NFS_TYPE = "nfs"
+  val KUBERNETES_VOLUMES_CSI_TYPE = "csiVolumeClaim"
   val KUBERNETES_VOLUMES_MOUNT_PATH_KEY = "mount.path"
   val KUBERNETES_VOLUMES_MOUNT_SUBPATH_KEY = "mount.subPath"
   val KUBERNETES_VOLUMES_MOUNT_SUBPATHEXPR_KEY = "mount.subPathExpr"
@@ -835,6 +836,7 @@ private[spark] object Config extends Logging {
   val KUBERNETES_VOLUMES_OPTIONS_SERVER_KEY = "options.server"
   val KUBERNETES_VOLUMES_LABEL_KEY = "label."
   val KUBERNETES_VOLUMES_ANNOTATION_KEY = "annotation."
+  val KUBERNETES_VOLUMES_OPTIONS_CSI_DRIVER_NAME_KEY = "csiDriverName"
   val KUBERNETES_DRIVER_ENV_PREFIX = "spark.kubernetes.driverEnv."
 
   val KUBERNETES_DNS_SUBDOMAIN_NAME_MAX_LENGTH = 253
