@@ -9309,7 +9309,7 @@ def current_time(precision: Optional[int] = None) -> Column:
     Returns the current time at the start of query evaluation as a :class:`TimeType` column. All
     calls of current_time within the same query return the same value.
 
-    .. versionadded:: 4.2.0
+    .. versionadded:: 4.1.0
 
     Parameters
     ----------
@@ -11725,7 +11725,7 @@ def to_time(str: "ColumnOrName", format: Optional["ColumnOrName"] = None) -> Col
 
     .. _datetime pattern: https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html
 
-    .. versionadded:: 4.2.0
+    .. versionadded:: 4.1.0
 
     Parameters
     ----------
@@ -11871,7 +11871,7 @@ def try_to_time(str: "ColumnOrName", format: Optional["ColumnOrName"] = None) ->
 
     .. _datetime pattern: https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html
 
-    .. versionadded:: 4.2.0
+    .. versionadded:: 4.1.0
 
     Parameters
     ----------
@@ -12715,7 +12715,7 @@ def time_diff(unit: "ColumnOrName", start: "ColumnOrName", end: "ColumnOrName") 
     """
     Returns the difference between two times, measured in specified units.
 
-    .. versionadded:: 4.2.0
+    .. versionadded:: 4.1.0
 
     Parameters
     ----------
@@ -12758,7 +12758,7 @@ def time_trunc(unit: "ColumnOrName", time: "ColumnOrName") -> Column:
     """
     Returns `time` truncated to the `unit`.
 
-    .. versionadded:: 4.2.0
+    .. versionadded:: 4.1.0
 
     Parameters
     ----------
@@ -13623,7 +13623,7 @@ def uuid(seed: Optional[Union[Column, int]] = None) -> Column:
     """Returns an universally unique identifier (UUID) string.
     The value is returned as a canonical UUID 36-character string.
 
-    .. versionadded:: 4.2.0
+    .. versionadded:: 4.1.0
 
     Parameters
     ----------
@@ -17642,7 +17642,7 @@ def chr(n: "ColumnOrName") -> Column:
     Returns the ASCII character having the binary equivalent to `n`.
     If n is larger than 256 the result is equivalent to chr(n % 256).
 
-    .. versionadded:: 4.2.0
+    .. versionadded:: 4.1.0
 
     Parameters
     ----------
@@ -18174,7 +18174,7 @@ def quote(col: "ColumnOrName") -> Column:
     r"""Returns `str` enclosed by single quotes and each instance of
     single quote in it is preceded by a backslash.
 
-    .. versionadded:: 4.2.0
+    .. versionadded:: 4.1.0
 
     Parameters
     ----------
@@ -24760,7 +24760,7 @@ def make_time(hour: "ColumnOrName", minute: "ColumnOrName", second: "ColumnOrNam
     """
     Create time from hour, minute and second fields. For invalid inputs it will throw an error.
 
-    .. versionadded:: 4.2.0
+    .. versionadded:: 4.1.0
 
     Parameters
     ----------
@@ -25908,7 +25908,7 @@ def bucket(numBuckets: Union[Column, int], col: "ColumnOrName") -> Column:
 def st_asbinary(geo: "ColumnOrName") -> Column:
     """Returns the input GEOGRAPHY or GEOMETRY value in WKB format.
 
-    .. versionadded:: 4.2.0
+    .. versionadded:: 4.1.0
 
     Parameters
     ----------
@@ -25933,7 +25933,7 @@ def st_asbinary(geo: "ColumnOrName") -> Column:
 def st_geogfromwkb(wkb: "ColumnOrName") -> Column:
     """Parses the input WKB description and returns the corresponding GEOGRAPHY value.
 
-    .. versionadded:: 4.2.0
+    .. versionadded:: 4.1.0
 
     Parameters
     ----------
@@ -25954,7 +25954,7 @@ def st_geogfromwkb(wkb: "ColumnOrName") -> Column:
 def st_geomfromwkb(wkb: "ColumnOrName") -> Column:
     """Parses the input WKB description and returns the corresponding GEOMETRY value.
 
-    .. versionadded:: 4.2.0
+    .. versionadded:: 4.1.0
 
     Parameters
     ----------
@@ -25975,7 +25975,7 @@ def st_geomfromwkb(wkb: "ColumnOrName") -> Column:
 def st_srid(geo: "ColumnOrName") -> Column:
     """Returns the SRID of the input GEOGRAPHY or GEOMETRY value.
 
-    .. versionadded:: 4.2.0
+    .. versionadded:: 4.1.0
 
     Parameters
     ----------
@@ -26395,7 +26395,7 @@ def theta_sketch_agg(
     Aggregate function: returns the compact binary representation of the Datasketches
     ThetaSketch with the values in the input column configured with lgNomEntries nominal entries.
 
-    .. versionadded:: 4.2.0
+    .. versionadded:: 4.1.0
 
     Parameters
     ----------
@@ -26452,7 +26452,7 @@ def theta_union_agg(
     Aggregate function: returns the compact binary representation of the Datasketches
     ThetaSketch that is the union of the Theta sketches in the input column.
 
-    .. versionadded:: 4.2.0
+    .. versionadded:: 4.1.0
 
     Parameters
     ----------
@@ -26500,7 +26500,7 @@ def theta_intersection_agg(col: "ColumnOrName") -> Column:
     Aggregate function: returns the compact binary representation of the Datasketches
     ThetaSketch that is the intersection of the Theta sketches in the input column
 
-    .. versionadded:: 4.2.0
+    .. versionadded:: 4.1.0
 
     Parameters
     ----------
@@ -26546,7 +26546,7 @@ def kll_sketch_agg_bigint(
     KllLongsSketch built with the values in the input column. The optional k parameter
     controls the size and accuracy of the sketch (default 200, range 8-65535).
 
-    .. versionadded:: 4.2.0
+    .. versionadded:: 4.1.0
 
     Parameters
     ----------
@@ -26588,7 +26588,7 @@ def kll_sketch_agg_float(
     KllFloatsSketch built with the values in the input column. The optional k parameter
     controls the size and accuracy of the sketch (default 200, range 8-65535).
 
-    .. versionadded:: 4.2.0
+    .. versionadded:: 4.1.0
 
     Parameters
     ----------
@@ -26630,7 +26630,7 @@ def kll_sketch_agg_double(
     KllDoublesSketch built with the values in the input column. The optional k parameter
     controls the size and accuracy of the sketch (default 200, range 8-65535).
 
-    .. versionadded:: 4.2.0
+    .. versionadded:: 4.1.0
 
     Parameters
     ----------
@@ -26667,7 +26667,7 @@ def kll_sketch_to_string_bigint(col: "ColumnOrName") -> Column:
     """
     Returns a string with human readable summary information about the KLL bigint sketch.
 
-    .. versionadded:: 4.2.0
+    .. versionadded:: 4.1.0
 
     Parameters
     ----------
@@ -26700,7 +26700,7 @@ def kll_sketch_to_string_float(col: "ColumnOrName") -> Column:
     """
     Returns a string with human readable summary information about the KLL float sketch.
 
-    .. versionadded:: 4.2.0
+    .. versionadded:: 4.1.0
 
     Parameters
     ----------
@@ -26733,7 +26733,7 @@ def kll_sketch_to_string_double(col: "ColumnOrName") -> Column:
     """
     Returns a string with human readable summary information about the KLL double sketch.
 
-    .. versionadded:: 4.2.0
+    .. versionadded:: 4.1.0
 
     Parameters
     ----------
@@ -26766,7 +26766,7 @@ def kll_sketch_get_n_bigint(col: "ColumnOrName") -> Column:
     """
     Returns the number of items collected in the KLL bigint sketch.
 
-    .. versionadded:: 4.2.0
+    .. versionadded:: 4.1.0
 
     Parameters
     ----------
@@ -26799,7 +26799,7 @@ def kll_sketch_get_n_float(col: "ColumnOrName") -> Column:
     """
     Returns the number of items collected in the KLL float sketch.
 
-    .. versionadded:: 4.2.0
+    .. versionadded:: 4.1.0
 
     Parameters
     ----------
@@ -26832,7 +26832,7 @@ def kll_sketch_get_n_double(col: "ColumnOrName") -> Column:
     """
     Returns the number of items collected in the KLL double sketch.
 
-    .. versionadded:: 4.2.0
+    .. versionadded:: 4.1.0
 
     Parameters
     ----------
@@ -26865,7 +26865,7 @@ def kll_sketch_merge_bigint(left: "ColumnOrName", right: "ColumnOrName") -> Colu
     """
     Merges two KLL bigint sketch buffers together into one.
 
-    .. versionadded:: 4.2.0
+    .. versionadded:: 4.1.0
 
     Parameters
     ----------
@@ -26900,7 +26900,7 @@ def kll_sketch_merge_float(left: "ColumnOrName", right: "ColumnOrName") -> Colum
     """
     Merges two KLL float sketch buffers together into one.
 
-    .. versionadded:: 4.2.0
+    .. versionadded:: 4.1.0
 
     Parameters
     ----------
@@ -26935,7 +26935,7 @@ def kll_sketch_merge_double(left: "ColumnOrName", right: "ColumnOrName") -> Colu
     """
     Merges two KLL double sketch buffers together into one.
 
-    .. versionadded:: 4.2.0
+    .. versionadded:: 4.1.0
 
     Parameters
     ----------
@@ -26971,7 +26971,7 @@ def kll_sketch_get_quantile_bigint(sketch: "ColumnOrName", rank: "ColumnOrName")
     Extracts a quantile value from a KLL bigint sketch given an input rank value.
     The rank can be a single value or an array.
 
-    .. versionadded:: 4.2.0
+    .. versionadded:: 4.1.0
 
     Parameters
     ----------
@@ -27007,7 +27007,7 @@ def kll_sketch_get_quantile_float(sketch: "ColumnOrName", rank: "ColumnOrName") 
     Extracts a quantile value from a KLL float sketch given an input rank value.
     The rank can be a single value or an array.
 
-    .. versionadded:: 4.2.0
+    .. versionadded:: 4.1.0
 
     Parameters
     ----------
@@ -27043,7 +27043,7 @@ def kll_sketch_get_quantile_double(sketch: "ColumnOrName", rank: "ColumnOrName")
     Extracts a quantile value from a KLL double sketch given an input rank value.
     The rank can be a single value or an array.
 
-    .. versionadded:: 4.2.0
+    .. versionadded:: 4.1.0
 
     Parameters
     ----------
@@ -27079,7 +27079,7 @@ def kll_sketch_get_rank_bigint(sketch: "ColumnOrName", quantile: "ColumnOrName")
     Extracts a rank value from a KLL bigint sketch given an input quantile value.
     The quantile can be a single value or an array.
 
-    .. versionadded:: 4.2.0
+    .. versionadded:: 4.1.0
 
     Parameters
     ----------
@@ -27115,7 +27115,7 @@ def kll_sketch_get_rank_float(sketch: "ColumnOrName", quantile: "ColumnOrName") 
     Extracts a rank value from a KLL float sketch given an input quantile value.
     The quantile can be a single value or an array.
 
-    .. versionadded:: 4.2.0
+    .. versionadded:: 4.1.0
 
     Parameters
     ----------
@@ -27151,7 +27151,7 @@ def kll_sketch_get_rank_double(sketch: "ColumnOrName", quantile: "ColumnOrName")
     Extracts a rank value from a KLL double sketch given an input quantile value.
     The quantile can be a single value or an array.
 
-    .. versionadded:: 4.2.0
+    .. versionadded:: 4.1.0
 
     Parameters
     ----------
@@ -27187,7 +27187,7 @@ def theta_sketch_estimate(col: "ColumnOrName") -> Column:
     Returns the estimated number of unique values given the binary representation
     of a Datasketches ThetaSketch.
 
-    .. versionadded:: 4.2.0
+    .. versionadded:: 4.1.0
 
     Parameters
     ----------
@@ -27231,7 +27231,7 @@ def theta_union(
     Merges two binary representations of Datasketches ThetaSketch objects, using a
     Datasketches Union object.
 
-    .. versionadded:: 4.2.0
+    .. versionadded:: 4.1.0
 
     Parameters
     ----------
@@ -27286,7 +27286,7 @@ def theta_intersection(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
     Returns the intersection of two binary representations of Datasketches ThetaSketch
     objects, using a Datasketches Intersection object.
 
-    .. versionadded:: 4.2.0
+    .. versionadded:: 4.1.0
 
     Parameters
     ----------
@@ -27330,7 +27330,7 @@ def theta_difference(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
     Returns the set difference of two binary representations of Datasketches ThetaSketch
     objects (elements in first sketch but not in second), using a Datasketches ANotB object.
 
-    .. versionadded:: 4.2.0
+    .. versionadded:: 4.1.0
 
     Parameters
     ----------
@@ -28562,7 +28562,7 @@ def bitmap_and_agg(col: "ColumnOrName") -> Column:
     Returns a bitmap that is the bitwise AND of all of the bitmaps from the input column.
     The input column should be bitmaps created from bitmap_construct_agg().
 
-    .. versionadded:: 4.2.0
+    .. versionadded:: 4.1.0
 
     See Also
     --------
@@ -28965,7 +28965,7 @@ def arrow_udtf(
     or RecordBatches.
     This enables true vectorized computation without row-by-row processing overhead.
 
-    .. versionadded:: 4.2.0
+    .. versionadded:: 4.1.0
 
     Parameters
     ----------

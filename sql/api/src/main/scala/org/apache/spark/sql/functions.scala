@@ -882,7 +882,7 @@ object functions {
    * @param second
    *   the second to represent, from 0 to 59.999999
    * @group datetime_funcs
-   * @since 4.2.0
+   * @since 4.1.0
    */
   def make_time(hour: Column, minute: Column, second: Column): Column = {
     Column.fn("make_time", hour, minute, second)
@@ -1172,7 +1172,7 @@ object functions {
    * column via a Datasketches Intersection instance.
    *
    * @group agg_funcs
-   * @since 4.2.0
+   * @since 4.1.0
    */
   def theta_intersection_agg(e: Column): Column =
     Column.fn("theta_intersection_agg", e)
@@ -1183,7 +1183,7 @@ object functions {
    * volumn via a Datasketches Intersection instance.
    *
    * @group agg_funcs
-   * @since 4.2.0
+   * @since 4.1.0
    */
   def theta_intersection_agg(columnName: String): Column =
     theta_intersection_agg(Column(columnName))
@@ -1194,7 +1194,7 @@ object functions {
    * entries.
    *
    * @group agg_funcs
-   * @since 4.2.0
+   * @since 4.1.0
    */
   def theta_sketch_agg(e: Column, lgNomEntries: Column): Column =
     Column.fn("theta_sketch_agg", e, lgNomEntries)
@@ -1205,7 +1205,7 @@ object functions {
    * entries.
    *
    * @group agg_funcs
-   * @since 4.2.0
+   * @since 4.1.0
    */
   def theta_sketch_agg(e: Column, lgNomEntries: Int): Column =
     Column.fn("theta_sketch_agg", e, lit(lgNomEntries))
@@ -1216,7 +1216,7 @@ object functions {
    * entries.
    *
    * @group agg_funcs
-   * @since 4.2.0
+   * @since 4.1.0
    */
   def theta_sketch_agg(columnName: String, lgNomEntries: Int): Column =
     theta_sketch_agg(Column(columnName), lgNomEntries)
@@ -1227,7 +1227,7 @@ object functions {
    * `lgNomEntries`.
    *
    * @group agg_funcs
-   * @since 4.2.0
+   * @since 4.1.0
    */
   def theta_sketch_agg(e: Column): Column =
     Column.fn("theta_sketch_agg", e)
@@ -1238,7 +1238,7 @@ object functions {
    * `lgNomEntries`.
    *
    * @group agg_funcs
-   * @since 4.2.0
+   * @since 4.1.0
    */
   def theta_sketch_agg(columnName: String): Column =
     theta_sketch_agg(Column(columnName))
@@ -1250,7 +1250,7 @@ object functions {
    * entries for the union buffer.
    *
    * @group agg_funcs
-   * @since 4.2.0
+   * @since 4.1.0
    */
   def theta_union_agg(e: Column, lgNomEntries: Column): Column =
     Column.fn("theta_union_agg", e, lgNomEntries)
@@ -1262,7 +1262,7 @@ object functions {
    * entries for the union buffer.
    *
    * @group agg_funcs
-   * @since 4.2.0
+   * @since 4.1.0
    */
   def theta_union_agg(e: Column, lgNomEntries: Int): Column =
     Column.fn("theta_union_agg", e, lit(lgNomEntries))
@@ -1274,7 +1274,7 @@ object functions {
    * entries for the union buffer.
    *
    * @group agg_funcs
-   * @since 4.2.0
+   * @since 4.1.0
    */
   def theta_union_agg(columnName: String, lgNomEntries: Int): Column =
     theta_union_agg(Column(columnName), lgNomEntries)
@@ -1286,7 +1286,7 @@ object functions {
    * `lgNomEntries`.
    *
    * @group agg_funcs
-   * @since 4.2.0
+   * @since 4.1.0
    */
   def theta_union_agg(e: Column): Column =
     Column.fn("theta_union_agg", e)
@@ -1298,7 +1298,7 @@ object functions {
    * `lgNomEntries`.
    *
    * @group agg_funcs
-   * @since 4.2.0
+   * @since 4.1.0
    */
   def theta_union_agg(columnName: String): Column =
     theta_union_agg(Column(columnName))
@@ -1309,7 +1309,7 @@ object functions {
    * the size and accuracy of the sketch (default 200, range 8-65535).
    *
    * @group agg_funcs
-   * @since 4.2.0
+   * @since 4.1.0
    */
   def kll_sketch_agg_bigint(e: Column, k: Column): Column =
     Column.fn("kll_sketch_agg_bigint", e, k)
@@ -1320,7 +1320,7 @@ object functions {
    * the size and accuracy of the sketch (default 200, range 8-65535).
    *
    * @group agg_funcs
-   * @since 4.2.0
+   * @since 4.1.0
    */
   def kll_sketch_agg_bigint(e: Column, k: Int): Column =
     Column.fn("kll_sketch_agg_bigint", e, lit(k))
@@ -1331,7 +1331,7 @@ object functions {
    * the size and accuracy of the sketch (default 200, range 8-65535).
    *
    * @group agg_funcs
-   * @since 4.2.0
+   * @since 4.1.0
    */
   def kll_sketch_agg_bigint(columnName: String, k: Int): Column =
     kll_sketch_agg_bigint(Column(columnName), k)
@@ -1341,7 +1341,7 @@ object functions {
    * KllLongsSketch built with the values in the input column with default k value of 200.
    *
    * @group agg_funcs
-   * @since 4.2.0
+   * @since 4.1.0
    */
   def kll_sketch_agg_bigint(e: Column): Column =
     Column.fn("kll_sketch_agg_bigint", e)
@@ -1351,7 +1351,7 @@ object functions {
    * KllLongsSketch built with the values in the input column with default k value of 200.
    *
    * @group agg_funcs
-   * @since 4.2.0
+   * @since 4.1.0
    */
   def kll_sketch_agg_bigint(columnName: String): Column =
     kll_sketch_agg_bigint(Column(columnName))
@@ -1362,7 +1362,7 @@ object functions {
    * the size and accuracy of the sketch (default 200, range 8-65535).
    *
    * @group agg_funcs
-   * @since 4.2.0
+   * @since 4.1.0
    */
   def kll_sketch_agg_float(e: Column, k: Column): Column =
     Column.fn("kll_sketch_agg_float", e, k)
@@ -1373,7 +1373,7 @@ object functions {
    * the size and accuracy of the sketch (default 200, range 8-65535).
    *
    * @group agg_funcs
-   * @since 4.2.0
+   * @since 4.1.0
    */
   def kll_sketch_agg_float(e: Column, k: Int): Column =
     Column.fn("kll_sketch_agg_float", e, lit(k))
@@ -1384,7 +1384,7 @@ object functions {
    * the size and accuracy of the sketch (default 200, range 8-65535).
    *
    * @group agg_funcs
-   * @since 4.2.0
+   * @since 4.1.0
    */
   def kll_sketch_agg_float(columnName: String, k: Int): Column =
     kll_sketch_agg_float(Column(columnName), k)
@@ -1394,7 +1394,7 @@ object functions {
    * KllFloatsSketch built with the values in the input column with default k value of 200.
    *
    * @group agg_funcs
-   * @since 4.2.0
+   * @since 4.1.0
    */
   def kll_sketch_agg_float(e: Column): Column =
     Column.fn("kll_sketch_agg_float", e)
@@ -1404,7 +1404,7 @@ object functions {
    * KllFloatsSketch built with the values in the input column with default k value of 200.
    *
    * @group agg_funcs
-   * @since 4.2.0
+   * @since 4.1.0
    */
   def kll_sketch_agg_float(columnName: String): Column =
     kll_sketch_agg_float(Column(columnName))
@@ -1415,7 +1415,7 @@ object functions {
    * the size and accuracy of the sketch (default 200, range 8-65535).
    *
    * @group agg_funcs
-   * @since 4.2.0
+   * @since 4.1.0
    */
   def kll_sketch_agg_double(e: Column, k: Column): Column =
     Column.fn("kll_sketch_agg_double", e, k)
@@ -1426,7 +1426,7 @@ object functions {
    * the size and accuracy of the sketch (default 200, range 8-65535).
    *
    * @group agg_funcs
-   * @since 4.2.0
+   * @since 4.1.0
    */
   def kll_sketch_agg_double(e: Column, k: Int): Column =
     Column.fn("kll_sketch_agg_double", e, lit(k))
@@ -1437,7 +1437,7 @@ object functions {
    * the size and accuracy of the sketch (default 200, range 8-65535).
    *
    * @group agg_funcs
-   * @since 4.2.0
+   * @since 4.1.0
    */
   def kll_sketch_agg_double(columnName: String, k: Int): Column =
     kll_sketch_agg_double(Column(columnName), k)
@@ -1447,7 +1447,7 @@ object functions {
    * KllDoublesSketch built with the values in the input column with default k value of 200.
    *
    * @group agg_funcs
-   * @since 4.2.0
+   * @since 4.1.0
    */
   def kll_sketch_agg_double(e: Column): Column =
     Column.fn("kll_sketch_agg_double", e)
@@ -1457,7 +1457,7 @@ object functions {
    * KllDoublesSketch built with the values in the input column with default k value of 200.
    *
    * @group agg_funcs
-   * @since 4.2.0
+   * @since 4.1.0
    */
   def kll_sketch_agg_double(columnName: String): Column =
     kll_sketch_agg_double(Column(columnName))
@@ -1466,7 +1466,7 @@ object functions {
    * Returns a string with human readable summary information about the KLL bigint sketch.
    *
    * @group misc_funcs
-   * @since 4.2.0
+   * @since 4.1.0
    */
   def kll_sketch_to_string_bigint(e: Column): Column =
     Column.fn("kll_sketch_to_string_bigint", e)
@@ -1475,7 +1475,7 @@ object functions {
    * Returns a string with human readable summary information about the KLL float sketch.
    *
    * @group misc_funcs
-   * @since 4.2.0
+   * @since 4.1.0
    */
   def kll_sketch_to_string_float(e: Column): Column =
     Column.fn("kll_sketch_to_string_float", e)
@@ -1484,7 +1484,7 @@ object functions {
    * Returns a string with human readable summary information about the KLL double sketch.
    *
    * @group misc_funcs
-   * @since 4.2.0
+   * @since 4.1.0
    */
   def kll_sketch_to_string_double(e: Column): Column =
     Column.fn("kll_sketch_to_string_double", e)
@@ -1493,7 +1493,7 @@ object functions {
    * Returns the number of items collected in the KLL bigint sketch.
    *
    * @group misc_funcs
-   * @since 4.2.0
+   * @since 4.1.0
    */
   def kll_sketch_get_n_bigint(e: Column): Column =
     Column.fn("kll_sketch_get_n_bigint", e)
@@ -1502,7 +1502,7 @@ object functions {
    * Returns the number of items collected in the KLL float sketch.
    *
    * @group misc_funcs
-   * @since 4.2.0
+   * @since 4.1.0
    */
   def kll_sketch_get_n_float(e: Column): Column =
     Column.fn("kll_sketch_get_n_float", e)
@@ -1511,7 +1511,7 @@ object functions {
    * Returns the number of items collected in the KLL double sketch.
    *
    * @group misc_funcs
-   * @since 4.2.0
+   * @since 4.1.0
    */
   def kll_sketch_get_n_double(e: Column): Column =
     Column.fn("kll_sketch_get_n_double", e)
@@ -1520,7 +1520,7 @@ object functions {
    * Merges two KLL bigint sketch buffers together into one.
    *
    * @group misc_funcs
-   * @since 4.2.0
+   * @since 4.1.0
    */
   def kll_sketch_merge_bigint(left: Column, right: Column): Column =
     Column.fn("kll_sketch_merge_bigint", left, right)
@@ -1529,7 +1529,7 @@ object functions {
    * Merges two KLL float sketch buffers together into one.
    *
    * @group misc_funcs
-   * @since 4.2.0
+   * @since 4.1.0
    */
   def kll_sketch_merge_float(left: Column, right: Column): Column =
     Column.fn("kll_sketch_merge_float", left, right)
@@ -1538,7 +1538,7 @@ object functions {
    * Merges two KLL double sketch buffers together into one.
    *
    * @group misc_funcs
-   * @since 4.2.0
+   * @since 4.1.0
    */
   def kll_sketch_merge_double(left: Column, right: Column): Column =
     Column.fn("kll_sketch_merge_double", left, right)
@@ -1548,7 +1548,7 @@ object functions {
    * The rank can be a single value or an array.
    *
    * @group misc_funcs
-   * @since 4.2.0
+   * @since 4.1.0
    */
   def kll_sketch_get_quantile_bigint(sketch: Column, rank: Column): Column =
     Column.fn("kll_sketch_get_quantile_bigint", sketch, rank)
@@ -1558,7 +1558,7 @@ object functions {
    * The rank can be a single value or an array.
    *
    * @group misc_funcs
-   * @since 4.2.0
+   * @since 4.1.0
    */
   def kll_sketch_get_quantile_float(sketch: Column, rank: Column): Column =
     Column.fn("kll_sketch_get_quantile_float", sketch, rank)
@@ -1568,7 +1568,7 @@ object functions {
    * The rank can be a single value or an array.
    *
    * @group misc_funcs
-   * @since 4.2.0
+   * @since 4.1.0
    */
   def kll_sketch_get_quantile_double(sketch: Column, rank: Column): Column =
     Column.fn("kll_sketch_get_quantile_double", sketch, rank)
@@ -1578,7 +1578,7 @@ object functions {
    * The quantile can be a single value or an array.
    *
    * @group misc_funcs
-   * @since 4.2.0
+   * @since 4.1.0
    */
   def kll_sketch_get_rank_bigint(sketch: Column, quantile: Column): Column =
     Column.fn("kll_sketch_get_rank_bigint", sketch, quantile)
@@ -1588,7 +1588,7 @@ object functions {
    * The quantile can be a single value or an array.
    *
    * @group misc_funcs
-   * @since 4.2.0
+   * @since 4.1.0
    */
   def kll_sketch_get_rank_float(sketch: Column, quantile: Column): Column =
     Column.fn("kll_sketch_get_rank_float", sketch, quantile)
@@ -1598,7 +1598,7 @@ object functions {
    * The quantile can be a single value or an array.
    *
    * @group misc_funcs
-   * @since 4.2.0
+   * @since 4.1.0
    */
   def kll_sketch_get_rank_double(sketch: Column, quantile: Column): Column =
     Column.fn("kll_sketch_get_rank_double", sketch, quantile)
@@ -1838,7 +1838,7 @@ object functions {
    *   A time.
    *
    * @group datetime_funcs
-   * @since 4.2.0
+   * @since 4.1.0
    */
   def current_time(): Column = {
     Column.fn("current_time")
@@ -1854,7 +1854,7 @@ object functions {
    *   A time.
    *
    * @group datetime_funcs
-   * @since 4.2.0
+   * @since 4.1.0
    */
   def current_time(precision: Int): Column = {
     Column.fn("current_time", lit(precision))
@@ -3995,7 +3995,7 @@ object functions {
    * using a Datasketches AnotB object
    *
    * @group misc_funcs
-   * @since 4.2.0
+   * @since 4.1.0
    */
   def theta_difference(c1: Column, c2: Column): Column =
     Column.fn("theta_difference", c1, c2)
@@ -4005,7 +4005,7 @@ object functions {
    * using a Datasketches AnotB object
    *
    * @group misc_funcs
-   * @since 4.2.0
+   * @since 4.1.0
    */
   def theta_difference(columnName1: String, columnName2: String): Column = {
     theta_difference(Column(columnName1), Column(columnName2))
@@ -4016,7 +4016,7 @@ object functions {
    * columns using a Datasketches Intersection object
    *
    * @group misc_funcs
-   * @since 4.2.0
+   * @since 4.1.0
    */
   def theta_intersection(c1: Column, c2: Column): Column =
     Column.fn("theta_intersection", c1, c2)
@@ -4026,7 +4026,7 @@ object functions {
    * columns using a Datasketches Intersection object
    *
    * @group misc_funcs
-   * @since 4.2.0
+   * @since 4.1.0
    */
   def theta_intersection(columnName1: String, columnName2: String): Column = {
     theta_intersection(Column(columnName1), Column(columnName2))
@@ -4037,7 +4037,7 @@ object functions {
    * Datasketches ThetaSketch.
    *
    * @group misc_funcs
-   * @since 4.2.0
+   * @since 4.1.0
    */
   def theta_sketch_estimate(c: Column): Column = Column.fn("theta_sketch_estimate", c)
 
@@ -4046,7 +4046,7 @@ object functions {
    * Datasketches ThetaSketch.
    *
    * @group misc_funcs
-   * @since 4.2.0
+   * @since 4.1.0
    */
   def theta_sketch_estimate(columnName: String): Column = {
     theta_sketch_estimate(Column(columnName))
@@ -4058,7 +4058,7 @@ object functions {
    * `lgNomEntries`.
    *
    * @group misc_funcs
-   * @since 4.2.0
+   * @since 4.1.0
    */
   def theta_union(c1: Column, c2: Column): Column =
     Column.fn("theta_union", c1, c2)
@@ -4069,7 +4069,7 @@ object functions {
    * `lgNomEntries`.
    *
    * @group misc_funcs
-   * @since 4.2.0
+   * @since 4.1.0
    */
   def theta_union(columnName1: String, columnName2: String): Column = {
     theta_union(Column(columnName1), Column(columnName2))
@@ -4081,7 +4081,7 @@ object functions {
    * entries for the union buffer.
    *
    * @group misc_funcs
-   * @since 4.2.0
+   * @since 4.1.0
    */
   def theta_union(c1: Column, c2: Column, lgNomEntries: Int): Column =
     Column.fn("theta_union", c1, c2, lit(lgNomEntries))
@@ -4092,7 +4092,7 @@ object functions {
    * entries for the union buffer.
    *
    * @group misc_funcs
-   * @since 4.2.0
+   * @since 4.1.0
    */
   def theta_union(columnName1: String, columnName2: String, lgNomEntries: Int): Column = {
     theta_union(Column(columnName1), Column(columnName2), lgNomEntries)
@@ -4104,7 +4104,7 @@ object functions {
    * entries for the union buffer.
    *
    * @group misc_funcs
-   * @since 4.2.0
+   * @since 4.1.0
    */
   def theta_union(c1: Column, c2: Column, lgNomEntries: Column): Column =
     Column.fn("theta_union", c1, c2, lgNomEntries)
@@ -4139,7 +4139,7 @@ object functions {
    * UUID 36-character string.
    *
    * @group misc_funcs
-   * @since 4.2.0
+   * @since 4.1.0
    */
   def uuid(seed: Column): Column = Column.fn("uuid", seed)
 
@@ -4542,7 +4542,7 @@ object functions {
    * input column should be bitmaps created from bitmap_construct_agg().
    *
    * @group agg_funcs
-   * @since 4.2.0
+   * @since 4.1.0
    */
   def bitmap_and_agg(col: Column): Column = Column.fn("bitmap_and_agg", col)
 
@@ -5708,7 +5708,7 @@ object functions {
    * by a backslash.
    *
    * @group string_funcs
-   * @since 4.2.0
+   * @since 4.1.0
    */
   def quote(str: Column): Column = Column.fn("quote", str)
 
@@ -6313,7 +6313,7 @@ object functions {
    *   A time, or raises an error if the input is malformed.
    *
    * @group datetime_funcs
-   * @since 4.2.0
+   * @since 4.1.0
    */
   def to_time(str: Column): Column = {
     Column.fn("to_time", str)
@@ -6333,7 +6333,7 @@ object functions {
    *   A time, or raises an error if the input is malformed.
    *
    * @group datetime_funcs
-   * @since 4.2.0
+   * @since 4.1.0
    */
   def to_time(str: Column, format: Column): Column = {
     Column.fn("to_time", str, format)
@@ -6380,7 +6380,7 @@ object functions {
    *   A time, or null if the input is malformed.
    *
    * @group datetime_funcs
-   * @since 4.2.0
+   * @since 4.1.0
    */
   def try_to_time(str: Column): Column = {
     Column.fn("try_to_time", str)
@@ -6400,7 +6400,7 @@ object functions {
    *   A time, or null if the input is malformed.
    *
    * @group datetime_funcs
-   * @since 4.2.0
+   * @since 4.1.0
    */
   def try_to_time(str: Column, format: Column): Column = {
     Column.fn("try_to_time", str, format)
@@ -6883,7 +6883,7 @@ object functions {
    * @note
    *   If any of the inputs is `NULL`, the result is `NULL`.
    * @group datetime_funcs
-   * @since 4.2.0
+   * @since 4.1.0
    */
   def time_diff(unit: Column, start: Column, end: Column): Column = {
     Column.fn("time_diff", unit, start, end)
@@ -6904,7 +6904,7 @@ object functions {
    * @throws IllegalArgumentException
    *   If the `unit` is not supported.
    * @group datetime_funcs
-   * @since 4.2.0
+   * @since 4.1.0
    */
   def time_trunc(unit: Column, time: Column): Column = {
     Column.fn("time_trunc", unit, time)
@@ -9100,7 +9100,7 @@ object functions {
    * Create a local date-time from date, time, and timezone fields.
    *
    * @group datetime_funcs
-   * @since 4.2.0
+   * @since 4.1.0
    */
   def make_timestamp(date: Column, time: Column, timezone: Column): Column =
     Column.fn("make_timestamp", date, time, timezone)
@@ -9109,7 +9109,7 @@ object functions {
    * Create a local date-time from date and time fields.
    *
    * @group datetime_funcs
-   * @since 4.2.0
+   * @since 4.1.0
    */
   def make_timestamp(date: Column, time: Column): Column =
     Column.fn("make_timestamp", date, time)
@@ -9153,7 +9153,7 @@ object functions {
    * Try to create a local date-time from date, time, and timezone fields.
    *
    * @group datetime_funcs
-   * @since 4.2.0
+   * @since 4.1.0
    */
   def try_make_timestamp(date: Column, time: Column, timezone: Column): Column =
     Column.fn("try_make_timestamp", date, time, timezone)
@@ -9162,7 +9162,7 @@ object functions {
    * Try to create a local date-time from date and time fields.
    *
    * @group datetime_funcs
-   * @since 4.2.0
+   * @since 4.1.0
    */
   def try_make_timestamp(date: Column, time: Column): Column =
     Column.fn("try_make_timestamp", date, time)
@@ -9256,7 +9256,7 @@ object functions {
    * Create a local date-time from date and time fields.
    *
    * @group datetime_funcs
-   * @since 4.2.0
+   * @since 4.1.0
    */
   def make_timestamp_ntz(date: Column, time: Column): Column =
     Column.fn("make_timestamp_ntz", date, time)
@@ -9281,7 +9281,7 @@ object functions {
    * Try to create a local date-time from date and time fields.
    *
    * @group datetime_funcs
-   * @since 4.2.0
+   * @since 4.1.0
    */
   def try_make_timestamp_ntz(date: Column, time: Column): Column =
     Column.fn("try_make_timestamp_ntz", date, time)
@@ -9448,7 +9448,7 @@ object functions {
    * Returns the input GEOGRAPHY or GEOMETRY value in WKB format.
    *
    * @group st_funcs
-   * @since 4.2.0
+   * @since 4.1.0
    */
   def st_asbinary(geo: Column): Column =
     Column.fn("st_asbinary", geo)
@@ -9457,7 +9457,7 @@ object functions {
    * Parses the WKB description of a geography and returns the corresponding GEOGRAPHY value.
    *
    * @group st_funcs
-   * @since 4.2.0
+   * @since 4.1.0
    */
   def st_geogfromwkb(wkb: Column): Column =
     Column.fn("st_geogfromwkb", wkb)
@@ -9466,7 +9466,7 @@ object functions {
    * Parses the WKB description of a geometry and returns the corresponding GEOMETRY value.
    *
    * @group st_funcs
-   * @since 4.2.0
+   * @since 4.1.0
    */
   def st_geomfromwkb(wkb: Column): Column =
     Column.fn("st_geomfromwkb", wkb)
@@ -9475,7 +9475,7 @@ object functions {
    * Returns the SRID of the input GEOGRAPHY or GEOMETRY value.
    *
    * @group st_funcs
-   * @since 4.2.0
+   * @since 4.1.0
    */
   def st_srid(geo: Column): Column =
     Column.fn("st_srid", geo)
