@@ -190,3 +190,204 @@ DROP TABLE IF EXISTS test_col_with_dot;
 SELECT * FROM VALUES (1, 2) AS IDENTIFIER('schema.table')(c1, c2);
 -- Identifier-lite: column alias with qualified name should error (column alias must be single)
 SELECT 1 AS IDENTIFIER('col1.col2');
+
+-- Additional coverage: SHOW commands with identifier-lite
+CREATE TABLE test_show(c1 INT, c2 STRING) USING CSV;
+SHOW VIEWS IN IDENTIFIER('default');
+SHOW PARTITIONS IDENTIFIER('test_show');
+SHOW CREATE TABLE IDENTIFIER('test_show');
+DROP TABLE test_show;
+
+-- SET CATALOG with identifier-lite
+-- SET CATALOG IDENTIFIER('spark_catalog');
+
+-- DESCRIBE with different forms
+CREATE TABLE test_desc(c1 INT) USING CSV;
+DESCRIBE TABLE IDENTIFIER('test_desc');
+DESCRIBE FORMATTED IDENTIFIER('test_desc');
+DESCRIBE EXTENDED IDENTIFIER('test_desc');
+DESC IDENTIFIER('test_desc');
+DROP TABLE test_desc;
+
+-- COMMENT ON COLUMN with identifier-lite
+CREATE TABLE test_comment(c1 INT, c2 STRING) USING CSV;
+COMMENT ON TABLE IDENTIFIER('test_comment') IS 'table comment';
+ALTER TABLE test_comment ALTER COLUMN IDENTIFIER('c1') COMMENT 'column comment';
+DROP TABLE test_comment;
+
+-- Additional identifier-lite tests with qualified table names in various commands
+CREATE SCHEMA test_schema;
+CREATE TABLE test_schema.test_table(c1 INT) USING CSV;
+ANALYZE TABLE IDENTIFIER('test_schema.test_table') COMPUTE STATISTICS;
+REFRESH TABLE IDENTIFIER('test_schema.test_table');
+DESCRIBE IDENTIFIER('test_schema.test_table');
+SHOW COLUMNS FROM IDENTIFIER('test_schema.test_table');
+DROP TABLE IDENTIFIER('test_schema.test_table');
+DROP SCHEMA test_schema;
+
+-- Session variables with identifier-lite
+DECLARE IDENTIFIER('my_var') = 'value';
+SET VAR IDENTIFIER('my_var') = 'new_value';
+SELECT IDENTIFIER('my_var');
+DROP TEMPORARY VARIABLE IDENTIFIER('my_var');
+
+-- SQL UDF with identifier-lite in parameter names and return statement
+CREATE TEMPORARY FUNCTION test_udf(IDENTIFIER('param1') INT, IDENTIFIER('param2') STRING)
+RETURNS INT
+RETURN IDENTIFIER('param1') + length(IDENTIFIER('param2'));
+
+SELECT test_udf(5, 'hello');
+DROP TEMPORARY FUNCTION test_udf;
+
+-- SQL UDF with table return type using identifier-lite
+CREATE TEMPORARY FUNCTION test_table_udf(IDENTIFIER('input_val') INT)
+RETURNS TABLE(IDENTIFIER('col1') INT, IDENTIFIER('col2') STRING)
+RETURN SELECT IDENTIFIER('input_val'), 'result';
+
+SELECT * FROM test_table_udf(42);
+DROP TEMPORARY FUNCTION test_table_udf;
+
+-- SQL Script labels with identifier-lite
+BEGIN
+  IDENTIFIER('loop_label'): LOOP
+    SELECT 1;
+    LEAVE IDENTIFIER('loop_label');
+  END LOOP loop_label;
+END;
+
+-- SQL Script with labeled BEGIN/END block
+BEGIN
+  block_label: BEGIN
+    DECLARE IDENTIFIER('x') INT DEFAULT 1;
+    SELECT x;
+  END IDENTIFIER('block_label');
+END;
+
+-- WHILE loop with identifier-lite label
+BEGIN
+  DECLARE IDENTIFIER('counter') INT DEFAULT 0;
+  IDENTIFIER('while_label'): WHILE IDENTIFIER('counter') < 3 DO
+    SET VAR counter = IDENTIFIER('counter') + 1;
+  END WHILE while_label;
+  SELECT IDENTIFIER('counter');
+END;
+
+-- REPEAT loop with identifier-lite label
+BEGIN
+  DECLARE IDENTIFIER('cnt') INT DEFAULT 0;
+  repeat_label: REPEAT
+    SET VAR IDENTIFIER('cnt') = cnt + 1;
+  UNTIL IDENTIFIER('cnt') >= 2
+  END REPEAT IDENTIFIER('repeat_label');
+  SELECT IDENTIFIER('cnt');
+END;
+
+-- FOR loop with identifier-lite
+BEGIN
+  IDENTIFIER('for_label'): FOR IDENTIFIER('row') AS SELECT 1 AS c1 DO
+    SELECT row.c1;
+  END FOR IDENTIFIER('for_label');
+END;
+
+-- Integration tests: Combining parameter markers, string coalescing, and IDENTIFIER
+-- These tests demonstrate the power of combining IDENTIFIER with parameters
+
+-- Test 1: IDENTIFIER with parameter marker for table name
+EXECUTE IMMEDIATE 'SELECT IDENTIFIER(:tab \'b\').c1 FROM VALUES(1) AS tab(c1)' USING 'ta' AS tab;
+
+-- Test 2: IDENTIFIER with string coalescing for column name
+EXECUTE IMMEDIATE 'SELECT IDENTIFIER(:col1 ''.c2'') FROM VALUES(named_struct(''c2'', 42)) AS T(c1)'
+  USING 'c1' AS col1;
+
+-- Test 3: IDENTIFIER with parameter and string literal coalescing for qualified table name
+CREATE TABLE integration_test(c1 INT, c2 STRING) USING CSV;
+INSERT INTO integration_test VALUES (1, 'a'), (2, 'b');
+EXECUTE IMMEDIATE 'SELECT * FROM IDENTIFIER(:schema ''.'' :table)'
+  USING 'default' AS schema, 'integration_test' AS table;
+
+-- Test 4: IDENTIFIER in column reference with parameter and string coalescing
+EXECUTE IMMEDIATE 'SELECT IDENTIFIER(:prefix ''1''), IDENTIFIER(:prefix ''2'') FROM integration_test'
+  USING 'c' AS prefix;
+
+-- Test 5: IDENTIFIER in WHERE clause with parameters
+EXECUTE IMMEDIATE 'SELECT * FROM integration_test WHERE IDENTIFIER(:col) = :val'
+  USING 'c1' AS col, 1 AS val;
+
+-- Test 6: IDENTIFIER in JOIN with parameters for table and column names
+CREATE TABLE integration_test2(c1 INT, c3 STRING) USING CSV;
+INSERT INTO integration_test2 VALUES (1, 'x'), (2, 'y');
+EXECUTE IMMEDIATE 'SELECT t1.*, t2.* FROM IDENTIFIER(:t1) t1 JOIN IDENTIFIER(:t2) t2 USING (IDENTIFIER(:col))'
+  USING 'integration_test' AS t1, 'integration_test2' AS t2, 'c1' AS col;
+
+-- Test 7: IDENTIFIER in window function with parameter for partition column
+EXECUTE IMMEDIATE
+  'SELECT IDENTIFIER(:col1), IDENTIFIER(:col2), row_number() OVER (PARTITION BY IDENTIFIER(:part) ORDER BY IDENTIFIER(:ord)) as rn FROM integration_test'
+  USING 'c1' AS col1, 'c2' AS col2, 'c2' AS part, 'c1' AS ord;
+
+-- Test 8: IDENTIFIER in aggregate function with string coalescing
+EXECUTE IMMEDIATE 'SELECT IDENTIFIER(:prefix ''2''), IDENTIFIER(:agg)(IDENTIFIER(:col)) FROM integration_test GROUP BY IDENTIFIER(:prefix ''2'')'
+  USING 'c' AS prefix, 'count' AS agg, 'c1' AS col;
+
+-- Test 9: IDENTIFIER in ORDER BY with multiple parameters
+EXECUTE IMMEDIATE 'SELECT * FROM integration_test ORDER BY IDENTIFIER(:col1) DESC, IDENTIFIER(:col2)'
+  USING 'c1' AS col1, 'c2' AS col2;
+
+-- Test 10: IDENTIFIER in INSERT with parameter for column name
+EXECUTE IMMEDIATE 'INSERT INTO integration_test(IDENTIFIER(:col1), IDENTIFIER(:col2)) VALUES (:val1, :val2)'
+  USING 'c1' AS col1, 'c2' AS col2, 3 AS val1, 'c' AS val2;
+
+-- Test 11: Complex - IDENTIFIER with nested string operations
+EXECUTE IMMEDIATE 'SELECT IDENTIFIER(concat(:schema, ''.'', :table, ''.c1'')) FROM VALUES(named_struct(''c1'', 100)) AS IDENTIFIER(:alias)(IDENTIFIER(:schema ''.'' :table))'
+  USING 'default' AS schema, 'my_table' AS table, 't' AS alias;
+
+-- Test 12: IDENTIFIER in CTE name with parameter
+EXECUTE IMMEDIATE 'WITH IDENTIFIER(:cte_name)(c1) AS (VALUES(1)) SELECT c1 FROM IDENTIFIER(:cte_name)'
+  USING 'my_cte' AS cte_name;
+
+-- Test 13: IDENTIFIER in view name with parameter
+EXECUTE IMMEDIATE 'CREATE OR REPLACE TEMPORARY VIEW IDENTIFIER(:view_name)(IDENTIFIER(:col_name)) AS VALUES(1)'
+  USING 'test_view' AS view_name, 'test_col' AS col_name;
+EXECUTE IMMEDIATE 'SELECT IDENTIFIER(:col) FROM IDENTIFIER(:view)'
+  USING 'test_col' AS col, 'test_view' AS view;
+DROP VIEW test_view;
+
+-- Test 14: IDENTIFIER in ALTER TABLE with parameters
+EXECUTE IMMEDIATE 'ALTER TABLE IDENTIFIER(:tab) ADD COLUMN IDENTIFIER(:new_col) INT'
+  USING 'integration_test' AS tab, 'c4' AS new_col;
+EXECUTE IMMEDIATE 'ALTER TABLE IDENTIFIER(:tab) RENAME COLUMN IDENTIFIER(:old_col) TO IDENTIFIER(:new_col)'
+  USING 'integration_test' AS tab, 'c4' AS old_col, 'c5' AS new_col;
+
+-- Test 15: IDENTIFIER with dereference using parameters
+EXECUTE IMMEDIATE 'SELECT map(:key, :val).IDENTIFIER(:key) AS result'
+  USING 'mykey' AS key, 42 AS val;
+
+-- Test 16: IDENTIFIER in table alias with string coalescing
+EXECUTE IMMEDIATE 'SELECT IDENTIFIER(:alias ''.c1'') FROM integration_test AS IDENTIFIER(:alias)'
+  USING 't' AS alias;
+
+-- Test 17: Multiple IDENTIFIER clauses with different parameter combinations
+EXECUTE IMMEDIATE
+  'SELECT IDENTIFIER(:col1), IDENTIFIER(:p ''2'') FROM IDENTIFIER(:schema ''.'' :tab) WHERE IDENTIFIER(:col1) > 0 ORDER BY IDENTIFIER(:p ''1'')'
+  USING 'c1' AS col1, 'c' AS p, 'default' AS schema, 'integration_test' AS tab;
+
+-- Test 18: IDENTIFIER in DECLARE and SELECT within EXECUTE IMMEDIATE
+EXECUTE IMMEDIATE
+  'BEGIN
+     DECLARE IDENTIFIER(:var_name) INT DEFAULT :var_value;
+     SELECT IDENTIFIER(:var_name) AS result;
+   END'
+  USING 'my_variable' AS var_name, 100 AS var_value;
+
+-- Test 19: IDENTIFIER with qualified name coalescing for schema.table.column pattern
+-- This should work for multi-part identifiers
+EXECUTE IMMEDIATE 'SELECT * FROM IDENTIFIER(:schema ''.'' :table) WHERE IDENTIFIER(concat(:tab_alias, ''.c1'')) > 0'
+  USING 'default' AS schema, 'integration_test' AS table, 'integration_test' AS tab_alias;
+
+-- Test 20: Error case - IDENTIFIER with too many parts from parameter coalescing
+-- This should error as column alias must be single identifier
+EXECUTE IMMEDIATE 'SELECT 1 AS IDENTIFIER(:schema ''.'' :col)'
+  USING 'default' AS schema, 'col1' AS col;
+
+-- Cleanup
+DROP TABLE integration_test;
+DROP TABLE integration_test2;

@@ -679,8 +679,8 @@ dmlStatementNoWith
     ;
 
 identifierReference
-    : multipartIdentifier
-    | IDENTIFIER_KW LEFT_PAREN expression RIGHT_PAREN
+    : IDENTIFIER_KW LEFT_PAREN expression RIGHT_PAREN
+    | multipartIdentifier
     ;
 
 catalogIdentifierReference

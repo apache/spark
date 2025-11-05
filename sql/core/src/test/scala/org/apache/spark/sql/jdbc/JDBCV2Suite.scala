@@ -3078,7 +3078,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
         },
         condition = "IDENTIFIER_TOO_MANY_NAME_PARTS",
         sqlState = "42601",
-        parameters = Map("identifier" -> "`db_name`.`schema_name`.`function_name`")
+        parameters = Map("identifier" -> "`db_name`.`schema_name`.`function_name`", "limit" -> "2")
       )
     } finally {
       JdbcDialects.unregisterDialect(testH2Dialect)

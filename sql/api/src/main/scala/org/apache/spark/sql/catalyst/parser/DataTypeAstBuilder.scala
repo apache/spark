@@ -35,6 +35,32 @@ import org.apache.spark.sql.types.{ArrayType, BinaryType, BooleanType, ByteType,
 /**
  * AST builder for parsing data type definitions and table schemas.
  *
+ * == CRITICAL: Extracting Identifier Names ==
+ *
+ * When extracting identifier names from parser contexts, you MUST use the helper methods
+ * provided by this class instead of calling ctx.getText() directly:
+ *
+ *   - '''getIdentifierText(ctx)''': For single identifiers (column names, aliases, window names)
+ *   - '''getIdentifierParts(ctx)''': For qualified identifiers (table names, schema.table)
+ *
+ * '''DO NOT use ctx.getText() or ctx.identifier.getText()''' directly! These methods do not
+ * handle the IDENTIFIER('literal') syntax and will cause incorrect behavior.
+ *
+ * The IDENTIFIER('literal') syntax allows string literals to be used as identifiers at parse
+ * time (e.g., IDENTIFIER('my_col') resolves to the identifier my_col). If you use getText(),
+ * you'll get the raw text "IDENTIFIER('my_col')" instead of "my_col", breaking the feature.
+ *
+ * Example:
+ * {{{
+ *   // WRONG - does not handle IDENTIFIER('literal'):
+ *   val name = ctx.identifier.getText
+ *   SubqueryAlias(ctx.name.getText, plan)
+ *
+ *   // CORRECT - handles both regular identifiers and IDENTIFIER('literal'):
+ *   val name = getIdentifierText(ctx.identifier)
+ *   SubqueryAlias(getIdentifierText(ctx.name), plan)
+ * }}}
+ *
  * This is a client-side parser designed specifically for parsing data type strings (e.g., "INT",
  * "STRUCT<name:STRING, age:INT>") and table schemas. It assumes that the input does not contain
  * parameter markers (`:name` or `?`), as parameter substitution should occur before data types
