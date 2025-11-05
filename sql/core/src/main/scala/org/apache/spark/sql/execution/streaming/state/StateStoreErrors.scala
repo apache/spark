@@ -104,6 +104,13 @@ object StateStoreErrors {
     new StateStoreInvalidStamp(providedStamp, currentStamp)
   }
 
+  def rowChecksumVerificationFailed(
+      storeId: String,
+      expectedChecksum: Int,
+      computedChecksum: Int): StateStoreRowChecksumVerificationFailed = {
+    new StateStoreRowChecksumVerificationFailed(storeId, expectedChecksum, computedChecksum)
+  }
+
   def incorrectNumOrderingColsForRangeScan(numOrderingCols: String):
     StateStoreIncorrectNumOrderingColsForRangeScan = {
     new StateStoreIncorrectNumOrderingColsForRangeScan(numOrderingCols)
@@ -246,6 +253,22 @@ object StateStoreErrors {
 
   def stateStoreOperationOutOfOrder(errorMsg: String): StateStoreOperationOutOfOrder = {
     new StateStoreOperationOutOfOrder(errorMsg)
+  }
+
+  def unexpectedEmptyFileInRocksDBZip(
+      fileName: String,
+      zipFileName: String): StateStoreUnexpectedEmptyFileInRocksDBZip = {
+    new StateStoreUnexpectedEmptyFileInRocksDBZip(fileName, zipFileName)
+  }
+
+  def autoSnapshotRepairFailed(
+      stateStoreId: String,
+      latestSnapshot: Long,
+      selectedSnapshots: Seq[Long],
+      eligibleSnapshots: Seq[Long],
+      cause: Throwable): StateStoreAutoSnapshotRepairFailed = {
+    new StateStoreAutoSnapshotRepairFailed(
+      stateStoreId, latestSnapshot, selectedSnapshots, eligibleSnapshots, cause)
   }
 
   def cannotLoadStore(e: Throwable): Throwable = {
@@ -569,3 +592,38 @@ class StateStoreCommitValidationFailed(
       "missingCommits" -> missingCommits
     )
   )
+
+class StateStoreRowChecksumVerificationFailed(
+    storeId: String,
+    expectedChecksum: Int,
+    computedChecksum: Int)
+  extends SparkException(
+    errorClass = "STATE_STORE_ROW_CHECKSUM_VERIFICATION_FAILED",
+    messageParameters = Map(
+      "stateStoreId" -> storeId,
+      "expectedChecksum" -> expectedChecksum.toString,
+      "computedChecksum" -> computedChecksum.toString),
+    cause = null)
+
+class StateStoreUnexpectedEmptyFileInRocksDBZip(fileName: String, zipFileName: String)
+  extends SparkException(
+    errorClass = "STATE_STORE_UNEXPECTED_EMPTY_FILE_IN_ROCKSDB_ZIP",
+    messageParameters = Map(
+      "fileName" -> fileName,
+      "zipFileName" -> zipFileName),
+    cause = null)
+
+class StateStoreAutoSnapshotRepairFailed(
+    stateStoreId: String,
+    latestSnapshot: Long,
+    selectedSnapshots: Seq[Long],
+    eligibleSnapshots: Seq[Long],
+    cause: Throwable)
+  extends SparkRuntimeException(
+    errorClass = "CANNOT_LOAD_STATE_STORE.AUTO_SNAPSHOT_REPAIR_FAILED",
+    messageParameters = Map(
+      "latestSnapshot" -> latestSnapshot.toString,
+      "stateStoreId" -> stateStoreId,
+      "selectedSnapshots" -> selectedSnapshots.mkString(","),
+      "eligibleSnapshots" -> eligibleSnapshots.mkString(",")),
+    cause)

@@ -71,6 +71,7 @@ import org.apache.spark.util.SparkClassUtils
  * @groupname array_funcs Array functions
  * @groupname map_funcs Map functions
  * @groupname struct_funcs Struct functions
+ * @groupname st_funcs ST geospatial functions
  * @groupname csv_funcs CSV functions
  * @groupname json_funcs JSON functions
  * @groupname variant_funcs VARIANT functions
@@ -9138,6 +9139,46 @@ object functions {
   }
 
    */
+
+  //////////////////////////////////////////////////////////////////////////////////////////////
+  // ST geospatial functions
+  //////////////////////////////////////////////////////////////////////////////////////////////
+
+  /**
+   * Returns the input GEOGRAPHY or GEOMETRY value in WKB format.
+   *
+   * @group st_funcs
+   * @since 4.1.0
+   */
+  def st_asbinary(geo: Column): Column =
+    Column.fn("st_asbinary", geo)
+
+  /**
+   * Parses the WKB description of a geography and returns the corresponding GEOGRAPHY value.
+   *
+   * @group st_funcs
+   * @since 4.1.0
+   */
+  def st_geogfromwkb(wkb: Column): Column =
+    Column.fn("st_geogfromwkb", wkb)
+
+  /**
+   * Parses the WKB description of a geometry and returns the corresponding GEOMETRY value.
+   *
+   * @group st_funcs
+   * @since 4.1.0
+   */
+  def st_geomfromwkb(wkb: Column): Column =
+    Column.fn("st_geomfromwkb", wkb)
+
+  /**
+   * Returns the SRID of the input GEOGRAPHY or GEOMETRY value.
+   *
+   * @group st_funcs
+   * @since 4.1.0
+   */
+  def st_srid(geo: Column): Column =
+    Column.fn("st_srid", geo)
 
   //////////////////////////////////////////////////////////////////////////////////////////////
   // Scala UDF functions

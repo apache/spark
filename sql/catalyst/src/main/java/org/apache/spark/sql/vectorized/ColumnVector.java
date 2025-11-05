@@ -25,6 +25,8 @@ import org.apache.spark.sql.types.UserDefinedType;
 import org.apache.spark.unsafe.types.CalendarInterval;
 import org.apache.spark.unsafe.types.UTF8String;
 import org.apache.spark.unsafe.types.VariantVal;
+import org.apache.spark.unsafe.types.GeographyVal;
+import org.apache.spark.unsafe.types.GeometryVal;
 
 /**
  * An interface representing in-memory columnar data in Spark. This interface defines the main APIs
@@ -287,6 +289,16 @@ public abstract class ColumnVector implements AutoCloseable {
    * should return null.
    */
   public abstract byte[] getBinary(int rowId);
+
+  public GeographyVal getGeography(int rowId) {
+    byte[] bytes = getBinary(rowId);
+    return (bytes == null) ? null : GeographyVal.fromBytes(bytes);
+  }
+
+  public GeometryVal getGeometry(int rowId) {
+    byte[] bytes = getBinary(rowId);
+    return (bytes == null) ? null : GeometryVal.fromBytes(bytes);
+  }
 
   /**
    * Returns the calendar interval type value for {@code rowId}. If the slot for

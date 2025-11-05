@@ -69,6 +69,15 @@ FROM VALUES (50), (60), (60) tab(col);
 SELECT hll_sketch_agg(col, 40)
 FROM VALUES (50), (60), (60) tab(col);
 
+SELECT hll_sketch_agg(col, CAST(NULL AS INT)) AS k_is_null
+FROM VALUES (15), (16), (17) tab(col);
+
+SELECT hll_sketch_agg(col, CAST(col AS INT)) AS k_non_constant
+FROM VALUES (15), (16), (17) tab(col);
+
+SELECT hll_sketch_agg(col, '15')
+FROM VALUES (50), (60), (60) tab(col);
+
 SELECT hll_union(
     hll_sketch_agg(col1, 12),
     hll_sketch_agg(col2, 13))

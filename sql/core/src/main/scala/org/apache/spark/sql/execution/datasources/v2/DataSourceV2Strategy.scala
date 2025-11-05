@@ -21,7 +21,7 @@ import scala.collection.mutable
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkException, SparkIllegalArgumentException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.EXPR
 import org.apache.spark.sql.catalyst.analysis.{ResolvedIdentifier, ResolvedNamespace, ResolvedPartitionSpec, ResolvedTable}
@@ -33,13 +33,13 @@ import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.{toPrettySQL, GeneratedColumn, IdentityColumn, ResolveDefaultColumns, ResolveTableConstraints, V2ExpressionBuilder}
 import org.apache.spark.sql.classic.SparkSession
-import org.apache.spark.sql.connector.catalog.{Identifier, StagingTableCatalog, SupportsDeleteV2, SupportsNamespaces, SupportsPartitionManagement, SupportsWrite, Table, TableCapability, TableCatalog, TruncatableTable}
+import org.apache.spark.sql.connector.catalog.{Identifier, StagingTableCatalog, SupportsDeleteV2, SupportsNamespaces, SupportsPartitionManagement, SupportsWrite, TableCapability, TableCatalog, TruncatableTable}
 import org.apache.spark.sql.connector.catalog.TableChange
 import org.apache.spark.sql.connector.catalog.index.SupportsIndex
 import org.apache.spark.sql.connector.expressions.{FieldReference, LiteralValue}
 import org.apache.spark.sql.connector.expressions.filter.{And => V2And, Not => V2Not, Or => V2Or, Predicate}
 import org.apache.spark.sql.connector.read.LocalScan
-import org.apache.spark.sql.connector.read.streaming.{ContinuousStream, MicroBatchStream}
+import org.apache.spark.sql.connector.read.streaming.{ContinuousStream, MicroBatchStream, SupportsRealTimeMode}
 import org.apache.spark.sql.connector.write.V1Write
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.{FilterExec, InSubqueryExec, LeafExecNode, LocalTableScanExec, ProjectExec, RowDataSourceScanExec, SparkPlan, SparkStrategy => Strategy}
@@ -59,23 +59,32 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
   import DataSourceV2Implicits._
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
+  private def cacheManager = session.sharedState.cacheManager
+
   private def hadoopConf = session.sessionState.newHadoopConf()
 
-  private def refreshCache(r: DataSourceV2Relation)(): Unit = {
-    session.sharedState.cacheManager.recacheByPlan(session, r)
+  // recaches all cache entries without time travel for the given table
+  // after a write operation that moves the state of the table forward (e.g. append, overwrite)
+  // this method accounts for V2 tables loaded via TableProvider (no catalog/identifier)
+  private def refreshCache(r: DataSourceV2Relation)(): Unit = r match {
+    case ExtractV2CatalogAndIdentifier(catalog, ident) =>
+      val nameParts = ident.toQualifiedNameParts(catalog)
+      cacheManager.recacheTableOrView(session, nameParts, includeTimeTravel = false)
+    case _ =>
+      cacheManager.recacheByPlan(session, r)
   }
 
-  private def recacheTable(r: ResolvedTable)(): Unit = {
-    val v2Relation = DataSourceV2Relation.create(r.table, Some(r.catalog), Some(r.identifier))
-    session.sharedState.cacheManager.recacheByPlan(session, v2Relation)
+  private def recacheTable(r: ResolvedTable, includeTimeTravel: Boolean)(): Unit = {
+    val nameParts = r.identifier.toQualifiedNameParts(r.catalog)
+    cacheManager.recacheTableOrView(session, nameParts, includeTimeTravel)
   }
 
   // Invalidates the cache associated with the given table. If the invalidated cache matches the
   // given table, the cache's storage level is returned.
   private def invalidateTableCache(r: ResolvedTable)(): Option[StorageLevel] = {
     val v2Relation = DataSourceV2Relation.create(r.table, Some(r.catalog), Some(r.identifier))
-    val cache = session.sharedState.cacheManager.lookupCachedData(session, v2Relation)
-    session.sharedState.cacheManager.uncacheQuery(session, v2Relation, cascade = true)
+    val cache = cacheManager.lookupCachedData(session, v2Relation)
+    invalidateCache(r.catalog, r.identifier)
     if (cache.isDefined) {
       val cacheLevel = cache.get.cachedRepresentation.cacheBuilder.storageLevel
       Some(cacheLevel)
@@ -84,9 +93,9 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
     }
   }
 
-  private def invalidateCache(catalog: TableCatalog, table: Table, ident: Identifier): Unit = {
-    val v2Relation = DataSourceV2Relation.create(table, Some(catalog), Some(ident))
-    session.sharedState.cacheManager.uncacheQuery(session, v2Relation, cascade = true)
+  private def invalidateCache(catalog: TableCatalog, ident: Identifier): Unit = {
+    val nameParts = ident.toQualifiedNameParts(catalog)
+    cacheManager.uncacheTableOrView(session, nameParts, cascade = true)
   }
 
   private def makeQualifiedDBObjectPath(location: String): String = {
@@ -170,10 +179,28 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
     case PhysicalOperation(p, f, r: StreamingDataSourceV2ScanRelation)
       if r.startOffset.isDefined && r.endOffset.isEmpty =>
 
-      val continuousStream = r.stream.asInstanceOf[ContinuousStream]
-      val scanExec = ContinuousScanExec(r.output, r.scan, continuousStream, r.startOffset.get)
-      // initialize partitions
-      scanExec.inputPartitions
+        val scanExec = if (r.relation.realTimeModeDuration.isDefined) {
+          if (!r.stream.isInstanceOf[SupportsRealTimeMode]) {
+            throw new SparkIllegalArgumentException(
+              errorClass = "STREAMING_REAL_TIME_MODE.INPUT_STREAM_NOT_SUPPORTED",
+              messageParameters = Map("className" -> r.stream.getClass.getName)
+            )
+          }
+          val microBatchStream = r.stream.asInstanceOf[MicroBatchStream]
+          new RealTimeStreamScanExec(
+            r.output,
+            r.scan,
+            microBatchStream,
+            r.startOffset.get,
+            r.relation.realTimeModeDuration.get
+          )
+        } else {
+          val continuousStream = r.stream.asInstanceOf[ContinuousStream]
+          val s = ContinuousScanExec(r.output, r.scan, continuousStream, r.startOffset.get)
+          // initialize partitions
+          s.inputPartitions
+          s
+        }
 
       // Add a Project here to make sure we produce unsafe rows.
       DataSourceV2Strategy.withProjectAndFilter(p, f, scanExec, !scanExec.supportsColumnar) :: Nil
@@ -216,7 +243,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       }
 
     case RefreshTable(r: ResolvedTable) =>
-      RefreshTableExec(r.catalog, r.identifier, recacheTable(r)) :: Nil
+      RefreshTableExec(r.catalog, r.identifier, recacheTable(r, includeTimeTravel = true)) :: Nil
 
     case c @ ReplaceTable(
         ResolvedIdentifier(catalog, ident), columns, parts, tableSpec: TableSpec, orCreate) =>
@@ -449,7 +476,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
         table,
         parts.asResolvedPartitionSpecs,
         ignoreIfExists,
-        recacheTable(r)) :: Nil
+        recacheTable(r, includeTimeTravel = false)) :: Nil
 
     case DropPartitions(
         r @ ResolvedTable(_, _, table: SupportsPartitionManagement, _),
@@ -461,7 +488,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
         parts.asResolvedPartitionSpecs,
         ignoreIfNotExists,
         purge,
-        recacheTable(r)) :: Nil
+        recacheTable(r, includeTimeTravel = false)) :: Nil
 
     case RenamePartitions(
         r @ ResolvedTable(_, _, table: SupportsPartitionManagement, _), from, to) =>
@@ -469,7 +496,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
         table,
         Seq(from).asResolvedPartitionSpecs.head,
         Seq(to).asResolvedPartitionSpecs.head,
-        recacheTable(r)) :: Nil
+        recacheTable(r, includeTimeTravel = false)) :: Nil
 
     case RecoverPartitions(_: ResolvedTable) =>
       throw QueryCompilationErrors.alterTableRecoverPartitionsNotSupportedForV2TablesError()
@@ -489,13 +516,13 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
     case TruncateTable(r: ResolvedTable) =>
       TruncateTableExec(
         r.table.asTruncatable,
-        recacheTable(r)) :: Nil
+        recacheTable(r, includeTimeTravel = false)) :: Nil
 
     case TruncatePartition(r: ResolvedTable, part) =>
       TruncatePartitionExec(
         r.table.asPartitionable,
         Seq(part).asResolvedPartitionSpecs.head,
-        recacheTable(r)) :: Nil
+        recacheTable(r, includeTimeTravel = false)) :: Nil
 
     case ShowColumns(resolvedTable: ResolvedTable, ns, output) =>
       ns match {

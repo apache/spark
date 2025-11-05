@@ -244,9 +244,9 @@ private[spark] abstract class MemoryManager(
    * by looking at the number of cores available to the process, and the total amount of memory,
    * and then divide it by a factor of safety.
    *
-   * SPARK-37593 If we are using G1GC, it's better to take the LONG_ARRAY_OFFSET
-   * into consideration so that the requested memory size is power of 2
-   * and can be divided by G1 heap region size to reduce memory waste within one G1 region.
+   * SPARK-37593 If we are using G1GC, ZGC or ShenandoahGC, it's better to take the
+   * LONG_ARRAY_OFFSET into consideration so that the requested memory size is power of 2
+   * and can be divided by heap region size to reduce memory waste.
    */
   private lazy val defaultPageSizeBytes = {
     val minPageSize = 1L * 1024 * 1024   // 1MB
@@ -260,7 +260,8 @@ private[spark] abstract class MemoryManager(
     }
     val size = ByteArrayMethods.nextPowerOf2(maxTungstenMemory / cores / safetyFactor)
     val chosenPageSize = math.min(maxPageSize, math.max(minPageSize, size))
-    if (Utils.isG1GC && tungstenMemoryMode == MemoryMode.ON_HEAP) {
+    if ((Utils.isG1GC || Utils.isZGC || Utils.isShenandoahGC) &&
+        tungstenMemoryMode == MemoryMode.ON_HEAP) {
       chosenPageSize - Platform.LONG_ARRAY_OFFSET
     } else {
       chosenPageSize

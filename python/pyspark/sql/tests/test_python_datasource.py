@@ -16,8 +16,13 @@
 #
 import os
 import platform
+import sys
 import tempfile
 import unittest
+import logging
+import json
+import os
+from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
 from typing import Callable, Iterable, List, Union, Iterator, Tuple
@@ -56,6 +61,7 @@ from pyspark.testing.sqlutils import (
     have_pyarrow,
     pyarrow_requirement_message,
 )
+from pyspark.util import is_remote_only
 
 
 @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
@@ -252,6 +258,7 @@ class BasePythonDataSourceTestsMixin:
         with self.assertRaisesRegex(PythonException, "DATA_SOURCE_INVALID_RETURN_TYPE"):
             df.collect()
 
+    @unittest.skipIf(sys.version_info > (3, 13), "SPARK-54065")
     def test_in_memory_data_source(self):
         class InMemDataSourceReader(DataSourceReader):
             DEFAULT_NUM_PARTITIONS: int = 3
@@ -904,6 +911,357 @@ class BasePythonDataSourceTestsMixin:
                         self.spark.range(10).write.format("test").mode("append").saveAsTable(
                             "test_table"
                         )
+
+    @unittest.skipIf(is_remote_only(), "Requires JVM access")
+    def test_data_source_reader_with_logging(self):
+        logger = logging.getLogger("test_data_source_reader")
+
+        class TestJsonReader(DataSourceReader):
+            def __init__(self, options):
+                logger.warning(f"TestJsonReader.__init__: {list(options)}")
+                self.options = options
+
+            def partitions(self):
+                logger.warning("TestJsonReader.partitions")
+                return super().partitions()
+
+            def read(self, partition):
+                logger.warning(f"TestJsonReader.read: {partition}")
+                path = self.options.get("path")
+                if path is None:
+                    raise Exception("path is not specified")
+                with open(path, "r") as file:
+                    for line in file.readlines():
+                        if line.strip():
+                            data = json.loads(line)
+                            yield data.get("name"), data.get("age")
+
+        class TestJsonDataSource(DataSource):
+            def __init__(self, options):
+                super().__init__(options)
+                logger.warning(f"TestJsonDataSource.__init__: {list(options)}")
+
+            @classmethod
+            def name(cls):
+                logger.warning("TestJsonDataSource.name")
+                return "my-json"
+
+            def schema(self):
+                logger.warning("TestJsonDataSource.schema")
+                return "name STRING, age INT"
+
+            def reader(self, schema) -> "DataSourceReader":
+                logger.warning(f"TestJsonDataSource.reader: {schema.fieldNames()}")
+                return TestJsonReader(self.options)
+
+        self.spark.dataSource.register(TestJsonDataSource)
+        path1 = os.path.join(SPARK_HOME, "python/test_support/sql/people.json")
+
+        with self.sql_conf({"spark.sql.pyspark.worker.logging.enabled": "true"}):
+            assertDataFrameEqual(
+                self.spark.read.format("my-json").load(path1),
+                [
+                    Row(name="Michael", age=None),
+                    Row(name="Andy", age=30),
+                    Row(name="Justin", age=19),
+                ],
+            )
+
+        logs = self.spark.table("system.session.python_worker_logs")
+
+        assertDataFrameEqual(
+            logs.select("level", "msg", "context", "logger"),
+            [
+                Row(
+                    level="WARNING",
+                    msg=msg,
+                    context=context,
+                    logger="test_data_source_reader",
+                )
+                for msg, context in [
+                    (
+                        "TestJsonDataSource.__init__: ['path']",
+                        {"class_name": "TestJsonDataSource", "func_name": "__init__"},
+                    ),
+                    (
+                        "TestJsonDataSource.name",
+                        {"class_name": "TestJsonDataSource", "func_name": "name"},
+                    ),
+                    (
+                        "TestJsonDataSource.schema",
+                        {"class_name": "TestJsonDataSource", "func_name": "schema"},
+                    ),
+                    (
+                        "TestJsonDataSource.reader: ['name', 'age']",
+                        {"class_name": "TestJsonDataSource", "func_name": "reader"},
+                    ),
+                    (
+                        "TestJsonReader.__init__: ['path']",
+                        {"class_name": "TestJsonDataSource", "func_name": "reader"},
+                    ),
+                    (
+                        "TestJsonReader.partitions",
+                        {"class_name": "TestJsonReader", "func_name": "partitions"},
+                    ),
+                    (
+                        "TestJsonReader.read: None",
+                        {"class_name": "TestJsonReader", "func_name": "read"},
+                    ),
+                ]
+            ],
+        )
+
+    @unittest.skipIf(is_remote_only(), "Requires JVM access")
+    def test_data_source_reader_pushdown_with_logging(self):
+        logger = logging.getLogger("test_data_source_reader_pushdown")
+
+        class TestJsonReader(DataSourceReader):
+            def __init__(self, options):
+                logger.warning(f"TestJsonReader.__init__: {list(options)}")
+                self.options = options
+
+            def pushFilters(self, filters):
+                logger.warning(f"TestJsonReader.pushFilters: {filters}")
+                return super().pushFilters(filters)
+
+            def partitions(self):
+                logger.warning("TestJsonReader.partitions")
+                return super().partitions()
+
+            def read(self, partition):
+                logger.warning(f"TestJsonReader.read: {partition}")
+                path = self.options.get("path")
+                if path is None:
+                    raise Exception("path is not specified")
+                with open(path, "r") as file:
+                    for line in file.readlines():
+                        if line.strip():
+                            data = json.loads(line)
+                            yield data.get("name"), data.get("age")
+
+        class TestJsonDataSource(DataSource):
+            def __init__(self, options):
+                super().__init__(options)
+                logger.warning(f"TestJsonDataSource.__init__: {list(options)}")
+
+            @classmethod
+            def name(cls):
+                logger.warning("TestJsonDataSource.name")
+                return "my-json"
+
+            def schema(self):
+                logger.warning("TestJsonDataSource.schema")
+                return "name STRING, age INT"
+
+            def reader(self, schema) -> "DataSourceReader":
+                logger.warning(f"TestJsonDataSource.reader: {schema.fieldNames()}")
+                return TestJsonReader(self.options)
+
+        self.spark.dataSource.register(TestJsonDataSource)
+        path1 = os.path.join(SPARK_HOME, "python/test_support/sql/people.json")
+
+        with self.sql_conf(
+            {
+                "spark.sql.python.filterPushdown.enabled": "true",
+                "spark.sql.pyspark.worker.logging.enabled": "true",
+            }
+        ):
+            assertDataFrameEqual(
+                self.spark.read.format("my-json").load(path1).filter("age is not null"),
+                [
+                    Row(name="Andy", age=30),
+                    Row(name="Justin", age=19),
+                ],
+            )
+
+        logs = self.spark.table("system.session.python_worker_logs")
+
+        assertDataFrameEqual(
+            logs.select("level", "msg", "context", "logger"),
+            [
+                Row(
+                    level="WARNING",
+                    msg=msg,
+                    context=context,
+                    logger="test_data_source_reader_pushdown",
+                )
+                for msg, context in [
+                    (
+                        "TestJsonDataSource.__init__: ['path']",
+                        {"class_name": "TestJsonDataSource", "func_name": "__init__"},
+                    ),
+                    (
+                        "TestJsonDataSource.name",
+                        {"class_name": "TestJsonDataSource", "func_name": "name"},
+                    ),
+                    (
+                        "TestJsonDataSource.schema",
+                        {"class_name": "TestJsonDataSource", "func_name": "schema"},
+                    ),
+                    (
+                        "TestJsonDataSource.reader: ['name', 'age']",
+                        {"class_name": "TestJsonDataSource", "func_name": "reader"},
+                    ),
+                    (
+                        "TestJsonReader.pushFilters: [IsNotNull(attribute=('age',))]",
+                        {"class_name": "TestJsonReader", "func_name": "pushFilters"},
+                    ),
+                    (
+                        "TestJsonReader.__init__: ['path']",
+                        {"class_name": "TestJsonDataSource", "func_name": "reader"},
+                    ),
+                    (
+                        "TestJsonReader.partitions",
+                        {"class_name": "TestJsonReader", "func_name": "partitions"},
+                    ),
+                    (
+                        "TestJsonReader.read: None",
+                        {"class_name": "TestJsonReader", "func_name": "read"},
+                    ),
+                ]
+            ],
+        )
+
+    @unittest.skipIf(is_remote_only(), "Requires JVM access")
+    def test_data_source_writer_with_logging(self):
+        logger = logging.getLogger("test_datasource_writer")
+
+        @dataclass
+        class TestCommitMessage(WriterCommitMessage):
+            count: int
+
+        class TestJsonWriter(DataSourceWriter):
+            def __init__(self, options):
+                logger.warning(f"TestJsonWriter.__init__: {list(options)}")
+                self.options = options
+                self.path = self.options.get("path")
+
+            def write(self, iterator):
+                from pyspark import TaskContext
+
+                if self.options.get("abort", None):
+                    logger.warning("TestJsonWriter.write: abort test")
+                    raise Exception("abort test")
+
+                context = TaskContext.get()
+                output_path = os.path.join(self.path, f"{context.partitionId()}.json")
+                count = 0
+                rows = []
+                with open(output_path, "w") as file:
+                    for row in iterator:
+                        count += 1
+                        rows.append(row.asDict())
+                        file.write(json.dumps(row.asDict()) + "\n")
+
+                logger.warning(f"TestJsonWriter.write: {count}, {rows}")
+
+                return TestCommitMessage(count=count)
+
+            def commit(self, messages):
+                total_count = sum(message.count for message in messages)
+                with open(os.path.join(self.path, "_success.txt"), "w") as file:
+                    file.write(f"count: {total_count}\n")
+
+                logger.warning(f"TestJsonWriter.commit: {total_count}")
+
+            def abort(self, messages):
+                with open(os.path.join(self.path, "_failed.txt"), "w") as file:
+                    file.write("failed")
+
+                logger.warning("TestJsonWriter.abort")
+
+        class TestJsonDataSource(DataSource):
+            @classmethod
+            def name(cls):
+                logger.warning("TestJsonDataSource.name")
+                return "my-json"
+
+            def writer(self, schema, overwrite):
+                logger.warning(f"TestJsonDataSource.writer: {schema.fieldNames(), {overwrite}}")
+                return TestJsonWriter(self.options)
+
+        # Register the data source
+        self.spark.dataSource.register(TestJsonDataSource)
+
+        with tempfile.TemporaryDirectory(prefix="test_datasource_write_logging") as d:
+            with self.sql_conf({"spark.sql.pyspark.worker.logging.enabled": "true"}):
+                # Create a simple DataFrame and write it using our custom datasource
+                df = self.spark.createDataFrame(
+                    [("Charlie", 35), ("Diana", 28)], "name STRING, age INT"
+                ).repartitionByRange(2, "age")
+                df.write.format("my-json").mode("overwrite").save(d)
+
+                # Verify the write worked by checking the success file
+                with open(os.path.join(d, "_success.txt"), "r") as file:
+                    text = file.read()
+                self.assertEqual(text, "count: 2\n")
+
+                with self.assertRaises(Exception, msg="abort test"):
+                    df.write.format("my-json").mode("append").option("abort", "true").save(d)
+
+        logs = self.spark.table("system.session.python_worker_logs")
+
+        assertDataFrameEqual(
+            logs.select("level", "msg", "context", "logger"),
+            [
+                Row(
+                    level="WARNING",
+                    msg=msg,
+                    context=context,
+                    logger="test_datasource_writer",
+                )
+                for msg, context in [
+                    (
+                        "TestJsonDataSource.name",
+                        {"class_name": "TestJsonDataSource", "func_name": "name"},
+                    ),
+                    (
+                        "TestJsonDataSource.writer: (['name', 'age'], {True})",
+                        {"class_name": "TestJsonDataSource", "func_name": "writer"},
+                    ),
+                    (
+                        "TestJsonWriter.__init__: ['path']",
+                        {"class_name": "TestJsonDataSource", "func_name": "writer"},
+                    ),
+                    (
+                        "TestJsonWriter.write: 1, [{'name': 'Diana', 'age': 28}]",
+                        {"class_name": "TestJsonWriter", "func_name": "write"},
+                    ),
+                    (
+                        "TestJsonWriter.write: 1, [{'name': 'Charlie', 'age': 35}]",
+                        {"class_name": "TestJsonWriter", "func_name": "write"},
+                    ),
+                    (
+                        "TestJsonWriter.commit: 2",
+                        {"class_name": "TestJsonWriter", "func_name": "commit"},
+                    ),
+                    (
+                        "TestJsonDataSource.name",
+                        {"class_name": "TestJsonDataSource", "func_name": "name"},
+                    ),
+                    (
+                        "TestJsonDataSource.writer: (['name', 'age'], {False})",
+                        {"class_name": "TestJsonDataSource", "func_name": "writer"},
+                    ),
+                    (
+                        "TestJsonWriter.__init__: ['abort', 'path']",
+                        {"class_name": "TestJsonDataSource", "func_name": "writer"},
+                    ),
+                    (
+                        "TestJsonWriter.write: abort test",
+                        {"class_name": "TestJsonWriter", "func_name": "write"},
+                    ),
+                    (
+                        "TestJsonWriter.write: abort test",
+                        {"class_name": "TestJsonWriter", "func_name": "write"},
+                    ),
+                    (
+                        "TestJsonWriter.abort",
+                        {"class_name": "TestJsonWriter", "func_name": "abort"},
+                    ),
+                ]
+            ],
+        )
 
 
 class PythonDataSourceTests(BasePythonDataSourceTestsMixin, ReusedSQLTestCase):

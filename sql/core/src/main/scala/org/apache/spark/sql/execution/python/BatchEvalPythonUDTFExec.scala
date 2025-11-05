@@ -51,6 +51,12 @@ case class BatchEvalPythonUDTFExec(
   extends EvalPythonUDTFExec with PythonSQLMetrics {
 
   private[this] val jobArtifactUUID = JobArtifactSet.getCurrentJobArtifactState.map(_.uuid)
+  private[this] val sessionUUID = {
+    Option(session).collect {
+      case session if session.sessionState.conf.pythonWorkerLoggingEnabled =>
+        session.sessionUUID
+    }
+  }
 
   /**
    * Evaluates a Python UDTF. It computes the results using the PythonUDFRunner, and returns
@@ -70,7 +76,7 @@ case class BatchEvalPythonUDTFExec(
 
     // Output iterator for results from Python.
     val outputIterator =
-      new PythonUDTFRunner(udtf, argMetas, pythonMetrics, jobArtifactUUID)
+      new PythonUDTFRunner(udtf, argMetas, pythonMetrics, jobArtifactUUID, sessionUUID)
         .compute(inputIterator, context.partitionId(), context)
 
     val unpickle = new Unpickler
@@ -99,10 +105,12 @@ class PythonUDTFRunner(
     udtf: PythonUDTF,
     argMetas: Array[ArgumentMetadata],
     pythonMetrics: Map[String, SQLMetric],
-    jobArtifactUUID: Option[String])
+    jobArtifactUUID: Option[String],
+    sessionUUID: Option[String])
   extends BasePythonUDFRunner(
     Seq((ChainedPythonFunctions(Seq(udtf.func)), udtf.resultId.id)),
-    PythonEvalType.SQL_TABLE_UDF, Array(argMetas.map(_.offset)), pythonMetrics, jobArtifactUUID) {
+    PythonEvalType.SQL_TABLE_UDF, Array(argMetas.map(_.offset)), pythonMetrics,
+    jobArtifactUUID, sessionUUID) {
 
   // Overriding here to NOT use the same value of UDF config in UDTF.
   override val bufferSize: Int = SparkEnv.get.conf.get(BUFFER_SIZE)

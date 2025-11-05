@@ -24,7 +24,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.sql.{Encoders, Row}
 import org.apache.spark.sql.execution.streaming.runtime.{MemoryStream, StreamingQueryCheckpointMetadata}
-import org.apache.spark.sql.execution.streaming.state.{AlsoTestWithEncodingTypes, AlsoTestWithRocksDBFeatures, RocksDBFileManager, RocksDBStateStoreProvider, TestClass}
+import org.apache.spark.sql.execution.streaming.state.{AlsoTestWithEncodingTypes, AlsoTestWithRocksDBFeatures, EnableStateStoreRowChecksum, RocksDBFileManager, RocksDBStateStoreProvider, TestClass}
 import org.apache.spark.sql.functions.{col, explode, timestamp_seconds}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.{InputMapRow, ListState, MapInputEvent, MapOutputEvent, MapStateTTLProcessor, MaxEventTimeStatefulProcessor, OutputMode, RunningCountStatefulProcessor, RunningCountStatefulProcessorWithProcTimeTimerUpdates, StatefulProcessor, StateStoreMetricsTest, TestMapStateProcessor, TimeMode, TimerValues, TransformWithStateSuiteUtils, Trigger, TTLConfig, ValueState}
@@ -1072,7 +1072,8 @@ class StateDataSourceTransformWithStateSuite extends StateStoreMetricsTest
       val dfsRootDir = new File(tmpDir.getAbsolutePath + "/state/0/4")
       val fileManager = new RocksDBFileManager(
         dfsRootDir.getAbsolutePath, Utils.createTempDir(), new Configuration,
-        CompressionCodec.LZ4)
+        CompressionCodec.LZ4, fileChecksumEnabled = SQLConf.get.checkpointFileChecksumEnabled,
+        fileChecksumThreadPoolSize = Some(2))
 
       // Read the changelog for one of the partitions at version 3 and
       // ensure that we have two entries
@@ -1180,3 +1181,10 @@ class StateDataSourceTransformWithStateSuiteCheckpointV2 extends
     spark.conf.set(SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION, 2)
   }
 }
+
+/**
+ * Test suite that runs all StateDataSourceTransformWithStateSuite tests with row checksum enabled.
+ */
+@SlowSQLTest
+class StateDataSourceTransformWithStateSuiteWithRowChecksum
+  extends StateDataSourceTransformWithStateSuite with EnableStateStoreRowChecksum

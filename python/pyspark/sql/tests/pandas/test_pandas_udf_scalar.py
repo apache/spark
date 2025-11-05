@@ -20,13 +20,14 @@ import shutil
 import tempfile
 import time
 import unittest
+import logging
 from datetime import date, datetime
 from decimal import Decimal
 from typing import cast
 
 from pyspark import TaskContext
-from pyspark.util import PythonEvalType
-from pyspark.sql import Column
+from pyspark.util import PythonEvalType, is_remote_only
+from pyspark.sql import Column, Row
 from pyspark.sql.functions import (
     array,
     col,
@@ -1916,6 +1917,76 @@ class ScalarPandasUDFTestsMixin:
             with self.subTest(type=t):
                 row = df.select(pandas_udf(lambda _: pd.Series(["123"]), t)(df.id)).first()
                 assert row[0] == 123
+
+    @unittest.skipIf(is_remote_only(), "Requires JVM access")
+    def test_scalar_pandas_udf_with_logging(self):
+        @pandas_udf("string", PandasUDFType.SCALAR)
+        def my_scalar_pandas_udf(x):
+            assert isinstance(x, pd.Series)
+            logger = logging.getLogger("test_scalar_pandas")
+            logger.warning(f"scalar pandas udf: {list(x)}")
+            return pd.Series(["scalar_pandas_" + str(val) for val in x])
+
+        with self.sql_conf({"spark.sql.pyspark.worker.logging.enabled": "true"}):
+            assertDataFrameEqual(
+                self.spark.range(3, numPartitions=2).select(
+                    my_scalar_pandas_udf("id").alias("result")
+                ),
+                [Row(result=f"scalar_pandas_{i}") for i in range(3)],
+            )
+
+        logs = self.spark.table("system.session.python_worker_logs")
+
+        assertDataFrameEqual(
+            logs.select("level", "msg", "context", "logger"),
+            [
+                Row(
+                    level="WARNING",
+                    msg=f"scalar pandas udf: {lst}",
+                    context={"func_name": my_scalar_pandas_udf.__name__},
+                    logger="test_scalar_pandas",
+                )
+                for lst in [[0], [1, 2]]
+            ],
+        )
+
+    @unittest.skipIf(is_remote_only(), "Requires JVM access")
+    def test_scalar_iter_pandas_udf_with_logging(self):
+        @pandas_udf("string", PandasUDFType.SCALAR_ITER)
+        def my_scalar_iter_pandas_udf(it):
+            logger = logging.getLogger("test_scalar_iter_pandas")
+            for x in it:
+                assert isinstance(x, pd.Series)
+                logger.warning(f"scalar iter pandas udf: {list(x)}")
+                yield pd.Series(["scalar_iter_pandas_" + str(val) for val in x])
+
+        with self.sql_conf(
+            {
+                "spark.sql.execution.arrow.maxRecordsPerBatch": "3",
+                "spark.sql.pyspark.worker.logging.enabled": "true",
+            }
+        ):
+            assertDataFrameEqual(
+                self.spark.range(9, numPartitions=2).select(
+                    my_scalar_iter_pandas_udf("id").alias("result")
+                ),
+                [Row(result=f"scalar_iter_pandas_{i}") for i in range(9)],
+            )
+
+        logs = self.spark.table("system.session.python_worker_logs")
+
+        assertDataFrameEqual(
+            logs.select("level", "msg", "context", "logger"),
+            [
+                Row(
+                    level="WARNING",
+                    msg=f"scalar iter pandas udf: {lst}",
+                    context={"func_name": my_scalar_iter_pandas_udf.__name__},
+                    logger="test_scalar_iter_pandas",
+                )
+                for lst in [[0, 1, 2], [3], [4, 5, 6], [7, 8]]
+            ],
+        )
 
 
 class ScalarPandasUDFTests(ScalarPandasUDFTestsMixin, ReusedSQLTestCase):

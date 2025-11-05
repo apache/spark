@@ -21,6 +21,7 @@ import scala.util.control.NonFatal
 
 import io.grpc.stub.StreamObserver
 
+import org.apache.spark.SparkSQLException
 import org.apache.spark.connect.proto.ExecutePlanResponse
 import org.apache.spark.connect.proto.StreamingQueryListenerBusCommand
 import org.apache.spark.connect.proto.StreamingQueryListenerEventsResult
@@ -117,7 +118,10 @@ class SparkConnectStreamingQueryListenerHandler(executeHolder: ExecuteHolder) ex
             return
         }
       case StreamingQueryListenerBusCommand.CommandCase.COMMAND_NOT_SET =>
-        throw new IllegalArgumentException("Missing command in StreamingQueryListenerBusCommand")
+        throw new SparkSQLException(
+          errorClass = "INVALID_PARAMETER_VALUE.STREAMING_LISTENER_COMMAND_MISSING",
+          messageParameters =
+            Map("parameter" -> "command", "functionName" -> "StreamingQueryListenerBusCommand"))
     }
     executeHolder.eventsManager.postFinished()
   }

@@ -19,8 +19,9 @@ package org.apache.spark.sql.types
 
 import org.json4s.JsonAST.{JString, JValue}
 
-import org.apache.spark.SparkIllegalArgumentException
+import org.apache.spark.{SparkIllegalArgumentException, SparkRuntimeException}
 import org.apache.spark.annotation.Experimental
+import org.apache.spark.sql.internal.types.GeographicSpatialReferenceSystemMapper
 
 /**
  * The data type representing GEOGRAPHY values which are spatial objects, as defined in the Open
@@ -132,6 +133,27 @@ class GeographyType private (val crs: String, val algorithm: EdgeInterpolationAl
     // If the SRID is not mixed, we can only accept the same SRID.
     isMixedSrid || gt.srid == srid
   }
+
+  private[sql] def assertSridAllowedForType(otherSrid: Int): Unit = {
+    // If SRID is not mixed, SRIDs must match.
+    if (!isMixedSrid && otherSrid != srid) {
+      throw new SparkRuntimeException(
+        errorClass = "GEO_ENCODER_SRID_MISMATCH_ERROR",
+        messageParameters = Map(
+          "type" -> "GEOGRAPHY",
+          "valueSrid" -> otherSrid.toString,
+          "typeSrid" -> srid.toString))
+    } else if (isMixedSrid) {
+      // For fixed SRID geom types, we have a check that value matches the type srid.
+      // For mixed SRID we need to do that check explicitly, as MIXED SRID can accept any SRID.
+      // However it should accept only valid SRIDs.
+      if (!GeographyType.isSridSupported(otherSrid)) {
+        throw new SparkIllegalArgumentException(
+          errorClass = "ST_INVALID_SRID_VALUE",
+          messageParameters = Map("srid" -> otherSrid.toString))
+      }
+    }
+  }
 }
 
 @Experimental
@@ -156,12 +178,17 @@ object GeographyType extends SpatialType {
   private final val GEOGRAPHY_MIXED_TYPE: GeographyType =
     GeographyType(MIXED_CRS, GEOGRAPHY_DEFAULT_ALGORITHM)
 
+  /** Returns whether the given SRID is supported. */
+  private[types] def isSridSupported(srid: Int): Boolean = {
+    GeographicSpatialReferenceSystemMapper.getStringId(srid) != null
+  }
+
   /**
    * Constructors for GeographyType.
    */
   def apply(srid: Int): GeographyType = {
-    if (!isValidSrid(srid)) {
-      // Limited geographic SRID values are allowed.
+    val crs = GeographicSpatialReferenceSystemMapper.getStringId(srid)
+    if (crs == null) {
       throw new SparkIllegalArgumentException(
         errorClass = "ST_INVALID_SRID_VALUE",
         messageParameters = Map("srid" -> srid.toString))
@@ -193,33 +220,7 @@ object GeographyType extends SpatialType {
   }
 
   def apply(crs: String, algorithm: EdgeInterpolationAlgorithm): GeographyType = {
-    if (!isValidCrs(crs)) {
-      // Limited geographic CRS values are allowed.
-      throw new SparkIllegalArgumentException(
-        errorClass = "ST_INVALID_CRS_VALUE",
-        messageParameters = Map("crs" -> crs))
-    }
     new GeographyType(crs, algorithm)
-  }
-
-  /**
-   * Helper method to validate the CRS value. Limited geographic CRS values are allowed.
-   */
-  private def isValidCrs(crs: String): Boolean = {
-    // Currently, we only support "OGC:CRS84" / "EPSG:4326" / "SRID:ANY".
-    // In the future, we may support others.
-    crs.equalsIgnoreCase(GEOGRAPHY_DEFAULT_CRS) ||
-    crs.equalsIgnoreCase(GEOGRAPHY_DEFAULT_EPSG_CRS) ||
-    crs.equalsIgnoreCase(MIXED_CRS)
-  }
-
-  /**
-   * Helper method to validate the SRID value. Only geographic SRID values are allowed.
-   */
-
-  private def isValidSrid(srid: Int): Boolean = {
-    // Currently, we only support 4326. In the future, we may support others.
-    srid == GEOGRAPHY_DEFAULT_SRID
   }
 
   override private[sql] def defaultConcreteType: DataType = GEOGRAPHY_MIXED_TYPE
@@ -235,17 +236,17 @@ object GeographyType extends SpatialType {
   private[types] def toSrid(crs: String): Int = {
     // The special value "SRID:ANY" is used to represent mixed SRID values.
     if (crs.equalsIgnoreCase(GeographyType.MIXED_CRS)) {
-      GeographyType.MIXED_SRID
+      return GeographyType.MIXED_SRID
     }
-    // As for other valid CRS values, we currently offer limited support.
-    else if (crs.equalsIgnoreCase(GeographyType.GEOGRAPHY_DEFAULT_CRS) ||
-      crs.equalsIgnoreCase(GeographyType.GEOGRAPHY_DEFAULT_EPSG_CRS)) {
-      GeographyType.GEOGRAPHY_DEFAULT_SRID
-    } else {
+    // For all other CRS values, we need to look up the corresponding SRID.
+    val srid = GeographicSpatialReferenceSystemMapper.getSrid(crs)
+    if (srid == null) {
+      // If the CRS value is not recognized, we throw an exception.
       throw new SparkIllegalArgumentException(
         errorClass = "ST_INVALID_CRS_VALUE",
         messageParameters = Map("crs" -> crs))
     }
+    srid
   }
 }
 
