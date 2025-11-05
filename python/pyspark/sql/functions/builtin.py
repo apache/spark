@@ -12018,6 +12018,20 @@ def xpath(xml: "ColumnOrName", path: "ColumnOrName") -> Column:
     +--------------------+
     |        [b1, b2, b3]|
     +--------------------+
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.from_xml`
+    :meth:`pyspark.sql.functions.schema_of_xml`
+    :meth:`pyspark.sql.functions.to_xml`
+    :meth:`pyspark.sql.functions.xpath_boolean`
+    :meth:`pyspark.sql.functions.xpath_double`
+    :meth:`pyspark.sql.functions.xpath_float`
+    :meth:`pyspark.sql.functions.xpath_int`
+    :meth:`pyspark.sql.functions.xpath_long`
+    :meth:`pyspark.sql.functions.xpath_number`
+    :meth:`pyspark.sql.functions.xpath_short`
+    :meth:`pyspark.sql.functions.xpath_string`
     """
     return _invoke_function_over_columns("xpath", xml, path)
 
@@ -12039,6 +12053,20 @@ def xpath_boolean(xml: "ColumnOrName", path: "ColumnOrName") -> Column:
     +---------------------+
     |                 true|
     +---------------------+
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.from_xml`
+    :meth:`pyspark.sql.functions.schema_of_xml`
+    :meth:`pyspark.sql.functions.to_xml`
+    :meth:`pyspark.sql.functions.xpath`
+    :meth:`pyspark.sql.functions.xpath_double`
+    :meth:`pyspark.sql.functions.xpath_float`
+    :meth:`pyspark.sql.functions.xpath_int`
+    :meth:`pyspark.sql.functions.xpath_long`
+    :meth:`pyspark.sql.functions.xpath_number`
+    :meth:`pyspark.sql.functions.xpath_short`
+    :meth:`pyspark.sql.functions.xpath_string`
     """
     return _invoke_function_over_columns("xpath_boolean", xml, path)
 
@@ -12061,6 +12089,20 @@ def xpath_double(xml: "ColumnOrName", path: "ColumnOrName") -> Column:
     +-------------------------+
     |                      3.0|
     +-------------------------+
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.from_xml`
+    :meth:`pyspark.sql.functions.schema_of_xml`
+    :meth:`pyspark.sql.functions.to_xml`
+    :meth:`pyspark.sql.functions.xpath`
+    :meth:`pyspark.sql.functions.xpath_boolean`
+    :meth:`pyspark.sql.functions.xpath_float`
+    :meth:`pyspark.sql.functions.xpath_int`
+    :meth:`pyspark.sql.functions.xpath_long`
+    :meth:`pyspark.sql.functions.xpath_number`
+    :meth:`pyspark.sql.functions.xpath_short`
+    :meth:`pyspark.sql.functions.xpath_string`
     """
     return _invoke_function_over_columns("xpath_double", xml, path)
 
@@ -12084,6 +12126,20 @@ def xpath_number(xml: "ColumnOrName", path: "ColumnOrName") -> Column:
     +-------------------------+
     |                      3.0|
     +-------------------------+
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.from_xml`
+    :meth:`pyspark.sql.functions.schema_of_xml`
+    :meth:`pyspark.sql.functions.to_xml`
+    :meth:`pyspark.sql.functions.xpath`
+    :meth:`pyspark.sql.functions.xpath_boolean`
+    :meth:`pyspark.sql.functions.xpath_double`
+    :meth:`pyspark.sql.functions.xpath_float`
+    :meth:`pyspark.sql.functions.xpath_int`
+    :meth:`pyspark.sql.functions.xpath_long`
+    :meth:`pyspark.sql.functions.xpath_short`
+    :meth:`pyspark.sql.functions.xpath_string`
     """
     return _invoke_function_over_columns("xpath_number", xml, path)
 
@@ -12106,6 +12162,20 @@ def xpath_float(xml: "ColumnOrName", path: "ColumnOrName") -> Column:
     +------------------------+
     |                     3.0|
     +------------------------+
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.from_xml`
+    :meth:`pyspark.sql.functions.schema_of_xml`
+    :meth:`pyspark.sql.functions.to_xml`
+    :meth:`pyspark.sql.functions.xpath`
+    :meth:`pyspark.sql.functions.xpath_boolean`
+    :meth:`pyspark.sql.functions.xpath_double`
+    :meth:`pyspark.sql.functions.xpath_int`
+    :meth:`pyspark.sql.functions.xpath_long`
+    :meth:`pyspark.sql.functions.xpath_number`
+    :meth:`pyspark.sql.functions.xpath_short`
+    :meth:`pyspark.sql.functions.xpath_string`
     """
     return _invoke_function_over_columns("xpath_float", xml, path)
 
@@ -12128,6 +12198,20 @@ def xpath_int(xml: "ColumnOrName", path: "ColumnOrName") -> Column:
     +----------------------+
     |                     3|
     +----------------------+
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.from_xml`
+    :meth:`pyspark.sql.functions.schema_of_xml`
+    :meth:`pyspark.sql.functions.to_xml`
+    :meth:`pyspark.sql.functions.xpath`
+    :meth:`pyspark.sql.functions.xpath_boolean`
+    :meth:`pyspark.sql.functions.xpath_double`
+    :meth:`pyspark.sql.functions.xpath_float`
+    :meth:`pyspark.sql.functions.xpath_long`
+    :meth:`pyspark.sql.functions.xpath_number`
+    :meth:`pyspark.sql.functions.xpath_short`
+    :meth:`pyspark.sql.functions.xpath_string`
     """
     return _invoke_function_over_columns("xpath_int", xml, path)
 
@@ -12150,6 +12234,20 @@ def xpath_long(xml: "ColumnOrName", path: "ColumnOrName") -> Column:
     +-----------------------+
     |                      3|
     +-----------------------+
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.from_xml`
+    :meth:`pyspark.sql.functions.schema_of_xml`
+    :meth:`pyspark.sql.functions.to_xml`
+    :meth:`pyspark.sql.functions.xpath`
+    :meth:`pyspark.sql.functions.xpath_boolean`
+    :meth:`pyspark.sql.functions.xpath_double`
+    :meth:`pyspark.sql.functions.xpath_float`
+    :meth:`pyspark.sql.functions.xpath_int`
+    :meth:`pyspark.sql.functions.xpath_number`
+    :meth:`pyspark.sql.functions.xpath_short`
+    :meth:`pyspark.sql.functions.xpath_string`
     """
     return _invoke_function_over_columns("xpath_long", xml, path)
 
@@ -12172,6 +12270,20 @@ def xpath_short(xml: "ColumnOrName", path: "ColumnOrName") -> Column:
     +------------------------+
     |                       3|
     +------------------------+
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.from_xml`
+    :meth:`pyspark.sql.functions.schema_of_xml`
+    :meth:`pyspark.sql.functions.to_xml`
+    :meth:`pyspark.sql.functions.xpath`
+    :meth:`pyspark.sql.functions.xpath_boolean`
+    :meth:`pyspark.sql.functions.xpath_double`
+    :meth:`pyspark.sql.functions.xpath_float`
+    :meth:`pyspark.sql.functions.xpath_int`
+    :meth:`pyspark.sql.functions.xpath_long`
+    :meth:`pyspark.sql.functions.xpath_number`
+    :meth:`pyspark.sql.functions.xpath_string`
     """
     return _invoke_function_over_columns("xpath_short", xml, path)
 
@@ -12193,6 +12305,20 @@ def xpath_string(xml: "ColumnOrName", path: "ColumnOrName") -> Column:
     +--------------------+
     |                  cc|
     +--------------------+
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.from_xml`
+    :meth:`pyspark.sql.functions.schema_of_xml`
+    :meth:`pyspark.sql.functions.to_xml`
+    :meth:`pyspark.sql.functions.xpath`
+    :meth:`pyspark.sql.functions.xpath_boolean`
+    :meth:`pyspark.sql.functions.xpath_double`
+    :meth:`pyspark.sql.functions.xpath_float`
+    :meth:`pyspark.sql.functions.xpath_int`
+    :meth:`pyspark.sql.functions.xpath_long`
+    :meth:`pyspark.sql.functions.xpath_number`
+    :meth:`pyspark.sql.functions.xpath_short`
     """
     return _invoke_function_over_columns("xpath_string", xml, path)
 
@@ -21468,6 +21594,20 @@ def from_xml(
     ... # Parse the XML column using the generated schema
     >>> df.select(sf.from_xml(df.value, schema).alias("xml")).collect()
     [Row(xml=Row(a=[1, 2]))]
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.schema_of_xml`
+    :meth:`pyspark.sql.functions.to_xml`
+    :meth:`pyspark.sql.functions.xpath`
+    :meth:`pyspark.sql.functions.xpath_boolean`
+    :meth:`pyspark.sql.functions.xpath_double`
+    :meth:`pyspark.sql.functions.xpath_float`
+    :meth:`pyspark.sql.functions.xpath_int`
+    :meth:`pyspark.sql.functions.xpath_long`
+    :meth:`pyspark.sql.functions.xpath_number`
+    :meth:`pyspark.sql.functions.xpath_short`
+    :meth:`pyspark.sql.functions.xpath_string`
     """
     from pyspark.sql.classic.column import _to_java_column
 
@@ -21547,6 +21687,20 @@ def schema_of_xml(xml: Union[Column, str], options: Optional[Mapping[str, str]] 
     ...     ).alias("xml")
     ... ).collect()
     [Row(xml='STRUCT<values: STRUCT<value: ARRAY<BIGINT>>>')]
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.from_xml`
+    :meth:`pyspark.sql.functions.to_xml`
+    :meth:`pyspark.sql.functions.xpath`
+    :meth:`pyspark.sql.functions.xpath_boolean`
+    :meth:`pyspark.sql.functions.xpath_double`
+    :meth:`pyspark.sql.functions.xpath_float`
+    :meth:`pyspark.sql.functions.xpath_int`
+    :meth:`pyspark.sql.functions.xpath_long`
+    :meth:`pyspark.sql.functions.xpath_number`
+    :meth:`pyspark.sql.functions.xpath_short`
+    :meth:`pyspark.sql.functions.xpath_string`
     """
     from pyspark.sql.classic.column import _to_java_column
 
@@ -21591,6 +21745,20 @@ def to_xml(col: "ColumnOrName", options: Optional[Mapping[str, str]] = None) -> 
     >>> df = spark.createDataFrame(data, ("key", "value"))
     >>> df.select(to_xml(df.value, {'rowTag':'person'}).alias("xml")).collect()
     [Row(xml='<person>\\n    <age>2</age>\\n    <name>Alice</name>\\n</person>')]
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.from_xml`
+    :meth:`pyspark.sql.functions.schema_of_xml`
+    :meth:`pyspark.sql.functions.xpath`
+    :meth:`pyspark.sql.functions.xpath_boolean`
+    :meth:`pyspark.sql.functions.xpath_double`
+    :meth:`pyspark.sql.functions.xpath_float`
+    :meth:`pyspark.sql.functions.xpath_int`
+    :meth:`pyspark.sql.functions.xpath_long`
+    :meth:`pyspark.sql.functions.xpath_number`
+    :meth:`pyspark.sql.functions.xpath_short`
+    :meth:`pyspark.sql.functions.xpath_string`
     """
     from pyspark.sql.classic.column import _to_java_column
 
@@ -25969,6 +26137,31 @@ def st_geomfromwkb(wkb: "ColumnOrName") -> Column:
     [Row(result='0101000000000000000000F03F0000000000000040')]
     """
     return _invoke_function_over_columns("st_geomfromwkb", wkb)
+
+
+@_try_remote_functions
+def st_srid(geo: "ColumnOrName") -> Column:
+    """Returns the SRID of the input GEOGRAPHY or GEOMETRY value.
+
+    .. versionadded:: 4.1.0
+
+    Parameters
+    ----------
+    geo : :class:`~pyspark.sql.Column` or str
+        A geospatial value, either a GEOGRAPHY or a GEOMETRY.
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(bytes.fromhex('0101000000000000000000F03F0000000000000040'),)], ['wkb'])  # noqa
+    >>> df.select(sf.st_srid(sf.st_geogfromwkb('wkb')).alias('result')).collect()
+    [Row(result=4326)]
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(bytes.fromhex('0101000000000000000000F03F0000000000000040'),)], ['wkb'])  # noqa
+    >>> df.select(sf.st_srid(sf.st_geomfromwkb('wkb')).alias('result')).collect()
+    [Row(result=0)]
+    """
+    return _invoke_function_over_columns("st_srid", geo)
 
 
 # Call Functions

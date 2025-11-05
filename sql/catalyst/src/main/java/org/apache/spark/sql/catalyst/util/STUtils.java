@@ -48,6 +48,15 @@ public final class STUtils {
     return g.getValue();
   }
 
+  /** Geospatial type casting utility methods. */
+
+  // Cast geography to geometry.
+  public static GeometryVal geographyToGeometry(GeographyVal geographyVal) {
+    // Geographic SRID is always a valid SRID for geometry, so we don't need to check it.
+    // Also, all geographic coordinates are valid for geometry, so no need to check bounds.
+    return toPhysVal(Geometry.fromBytes(geographyVal.getBytes()));
+  }
+
   /** Geospatial type encoder/decoder utilities. */
 
   public static GeometryVal serializeGeomFromWKB(org.apache.spark.sql.types.Geometry geometry,

@@ -3181,4 +3181,42 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       errorClass = "THETA_LG_NOM_ENTRIES_MUST_BE_CONSTANT",
       messageParameters = Map("function" -> toSQLId(function)))
   }
+
+  def kllSketchInvalidQuantileRangeError(function: String, quantile: Double): Throwable = {
+    new SparkRuntimeException(
+      errorClass = "KLL_SKETCH_INVALID_QUANTILE_RANGE",
+      messageParameters = Map(
+        "functionName" -> toSQLId(function),
+        "quantile" -> toSQLValue(quantile, DoubleType)))
+  }
+
+  def kllSketchInvalidInputError(function: String, reason: String): Throwable = {
+    new SparkRuntimeException(
+      errorClass = "KLL_SKETCH_INVALID_INPUT",
+      messageParameters = Map(
+        "functionName" -> toSQLId(function),
+        "reason" -> reason))
+  }
+
+  def kllSketchIncompatibleMergeError(function: String, reason: String): Throwable = {
+    new SparkRuntimeException(
+      errorClass = "KLL_SKETCH_INCOMPATIBLE_MERGE",
+      messageParameters = Map(
+        "functionName" -> toSQLId(function),
+        "reason" -> reason))
+  }
+
+  def kllSketchKMustBeConstantError(function: String): Throwable = {
+    new SparkRuntimeException(
+      errorClass = "KLL_SKETCH_K_MUST_BE_CONSTANT",
+      messageParameters = Map("functionName" -> toSQLId(function)))
+  }
+
+  def kllSketchKOutOfRangeError(function: String, k: Int): Throwable = {
+    new SparkRuntimeException(
+      errorClass = "KLL_SKETCH_K_OUT_OF_RANGE",
+      messageParameters = Map(
+        "functionName" -> toSQLId(function),
+        "k" -> toSQLValue(k, IntegerType)))
+  }
 }
