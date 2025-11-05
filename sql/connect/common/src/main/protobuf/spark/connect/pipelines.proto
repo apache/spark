@@ -142,6 +142,7 @@ message PipelineCommand {
 
     oneof details {
       WriteRelationFlowDetails relation_flow_details = 7;
+      StandaloneFlowDetails standalone_flow_details = 8;
       google.protobuf.Any extension = 999;
     }
 
@@ -150,6 +151,19 @@ message PipelineCommand {
       // An unresolved relation that defines the dataset's flow. Empty if the query function
       // that defines the flow cannot be analyzed at the time of flow definition.
       optional spark.connect.Relation relation = 1;
+    }
+
+    // A standalone flow that writes to the target dataset with additional options.
+    message StandaloneFlowDetails {
+      // An unresolved relation that defines the dataset's flow. Empty if the query function
+      // that defines the flow cannot be analyzed at the time of flow definition.
+      optional spark.connect.Relation relation = 1;
+      // The output mode for the standalone flow.
+      optional string outputMode = 2;
+      // If true, define the flow as a one-time flow, such as for backfill. Set to true changes the flow in two ways:
+      //   - The flow is run one time by default. If the pipeline is ran with a full refresh, the flow will run again.
+      //   - The flow function must be a batch DataFrame, not a streaming DataFrame.
+      optional bool once = 3;
     }
 
     message Response {
