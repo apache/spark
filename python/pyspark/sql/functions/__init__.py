@@ -526,6 +526,7 @@ __all__ = [  # noqa: F405
     "st_asbinary",
     "st_geogfromwkb",
     "st_geomfromwkb",
+    "st_srid",
     # Call Functions
     "call_udf",
     "pandas_udf",

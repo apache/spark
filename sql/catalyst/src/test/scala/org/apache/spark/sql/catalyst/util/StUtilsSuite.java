@@ -62,6 +62,16 @@ class STUtilsSuite {
     System.arraycopy(testWkb, 0, testGeometryBytes, sridLen, wkbLen);
   }
 
+  /** Geospatial type casting utility methods. */
+
+  @Test
+  void testGeographyToGeometry() {
+    GeographyVal geographyVal = GeographyVal.fromBytes(testGeographyBytes);
+    GeometryVal geometryVal = STUtils.geographyToGeometry(geographyVal);
+    assertNotNull(geometryVal);
+    assertArrayEquals(geographyVal.getBytes(), geometryVal.getBytes());
+  }
+
   /** Tests for ST expression utility methods. */
 
   // ST_AsBinary
