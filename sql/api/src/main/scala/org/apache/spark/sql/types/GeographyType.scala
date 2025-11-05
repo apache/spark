@@ -179,7 +179,7 @@ object GeographyType extends SpatialType {
     GeographyType(MIXED_CRS, GEOGRAPHY_DEFAULT_ALGORITHM)
 
   /** Returns whether the given SRID is supported. */
-  private[types] def isSridSupported(srid: Int): Boolean = {
+  def isSridSupported(srid: Int): Boolean = {
     GeographicSpatialReferenceSystemMapper.getStringId(srid) != null
   }
 
