@@ -62,14 +62,14 @@ class GraphRegistrationContext(
     flows += flowDef.copy(sqlConf = defaultSqlConf ++ flowDef.sqlConf)
   }
 
-  private def isPipelineEmpty: Boolean = {
+  private def isEmpty: Boolean = {
     tables.isEmpty && views.collect { case v: PersistedView =>
       v
     }.isEmpty && sinks.isEmpty
   }
 
   def toDataflowGraph: DataflowGraph = {
-    if (isPipelineEmpty) {
+    if (isEmpty) {
       throw new AnalysisException(
         errorClass = "RUN_EMPTY_PIPELINE",
         messageParameters = Map.empty)
