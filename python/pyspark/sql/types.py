@@ -716,6 +716,20 @@ class GeometryType(SpatialType):
         # The JSON representation always uses the CRS value.
         return f"geometry({self._crs})"
 
+    def needConversion(self) -> bool:
+        return True
+
+    def fromInternal(self, obj: Dict) -> Optional["Geometry"]:
+        if obj is None or not all(key in obj for key in ["srid", "bytes"]):
+            return None
+        return Geometry(obj["bytes"], obj["srid"])
+
+    def toInternal(self, geometry: Any) -> Any:
+        if geometry is None:
+            return None
+        assert isinstance(geometry, Geometry)
+        return {"srid": geometry.srid, "wkb": geometry.wkb}
+
 
 class ByteType(IntegralType):
     """Byte data type, representing signed 8-bit integers."""
@@ -2079,12 +2093,10 @@ class Geography:
 
     Examples
     --------
-    >>> from pyspark.sql import functions as sf
-    >>> df = spark.createDataFrame([(bytes.fromhex("010100000000000000000031400000000000001C40"),)], ["wkb"],)  # noqa
-    >>> g = df.select(sf.geogfromwkb(df.geogwkb).alias("geog")).head().geom # doctest: +SKIP
-    >>> g.getBytes() # doctest: +SKIP
-    b'\x01\x01\x00\x00\x00\x00\x00\x00\x00\x00\x001@\x00\x00\x00\x00\x00\x00\x1c@'
-    >>> g.getSrid() # doctest: +SKIP
+    >>> g = Geography.fromWKB(bytes.fromhex('010100000000000000000031400000000000001c40'), 4326)
+    >>> g.getBytes().hex()
+    '010100000000000000000031400000000000001c40'
+    >>> g.getSrid()
     4326
     """
 
@@ -2100,13 +2112,13 @@ class Geography:
 
     def getSrid(self) -> int:
         """
-        Returns the SRID of Geometry.
+        Returns the SRID of Geography.
         """
         return self.srid
 
     def getBytes(self) -> bytes:
         """
-        Returns the WKB of Geometry.
+        Returns the WKB of Geography.
         """
         return self.wkb
 
@@ -2150,12 +2162,10 @@ class Geometry:
 
     Examples
     --------
-    >>> from pyspark.sql import functions as sf
-    >>> df = spark.createDataFrame([(bytes.fromhex("010100000000000000000031400000000000001C40"),)], ["wkb"],)  # noqa
-    >>> g = df.select(sf.geomfromwkb(df.geomwkb).alias("geom")).head().geom # doctest: +SKIP
-    >>> g.getBytes() # doctest: +SKIP
-    b'\x01\x01\x00\x00\x00\x00\x00\x00\x00\x00\x001@\x00\x00\x00\x00\x00\x00\x1c@'
-    >>> g.getSrid() # doctest: +SKIP
+    >>> g = Geometry.fromWKB(bytes.fromhex('010100000000000000000031400000000000001c40'), 0)
+    >>> g.getBytes().hex()
+    '010100000000000000000031400000000000001c40'
+    >>> g.getSrid()
     0
     """
 

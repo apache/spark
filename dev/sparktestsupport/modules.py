@@ -1114,6 +1114,8 @@ pyspark_connect = Module(
         "pyspark.sql.tests.connect.test_connect_retry",
         "pyspark.sql.tests.connect.test_connect_session",
         "pyspark.sql.tests.connect.test_connect_stat",
+        "pyspark.sql.tests.connect.test_parity_geographytype",
+        "pyspark.sql.tests.connect.test_parity_geometrytype",
         "pyspark.sql.tests.connect.test_parity_datasources",
         "pyspark.sql.tests.connect.test_parity_errors",
         "pyspark.sql.tests.connect.test_parity_catalog",
