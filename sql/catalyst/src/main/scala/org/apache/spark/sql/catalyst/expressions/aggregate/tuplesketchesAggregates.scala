@@ -969,7 +969,7 @@ trait BaseTupleSketchAgg {
     mode match {
       case Some(expr) =>
         if (!expr.foldable) {
-          throw new QueryExecutionErrors.tupleSketchParameterMustBeConstant(prettyName, "mode")
+          throw QueryExecutionErrors.tupleSketchParameterMustBeConstant(prettyName, "mode")
         }
         val modeStr = expr
           .eval()
@@ -1079,8 +1079,8 @@ trait BaseTupleSketchAgg {
       this.createAggregationBuffer()
     } else {
       val mem = Memory.wrap(buffer)
-      try {
-        val sketch = Sketches.heapifySketch(mem, summaryDeserializer)
+      val sketch = try {
+        Sketches.heapifySketch(mem, summaryDeserializer)
       } catch {
         case e: Exception =>
           throw QueryExecutionErrors.tupleInvalidInputSketchBuffer(prettyName, e.getMessage)
