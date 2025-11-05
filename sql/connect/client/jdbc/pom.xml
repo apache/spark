@@ -182,10 +182,6 @@
               <shadedPattern>${spark.shade.packageName}.org.checkerframework</shadedPattern>
             </relocation>
             <relocation>
-              <pattern>javax.annotation</pattern>
-              <shadedPattern>${spark.shade.packageName}.javax.annotation</shadedPattern>
-            </relocation>
-            <relocation>
               <pattern>io.perfmark</pattern>
               <shadedPattern>${spark.shade.packageName}.io.perfmark</shadedPattern>
             </relocation>
