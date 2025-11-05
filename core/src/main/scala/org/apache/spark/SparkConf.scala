@@ -719,7 +719,8 @@ private[spark] object SparkConf extends Logging {
       DeprecatedConfig("spark.shuffle.unsafe.file.output.buffer", "4.0.0",
         "Please use spark.shuffle.localDisk.file.output.buffer"),
       DeprecatedConfig("spark.shuffle.server.chunkFetchHandlerThreadsPercent", "4.2.0",
-        "Using separate chunkFetchHandlers could be problematic due to the underlying netty layer")
+        "Using separate chunkFetchHandlers could be problematic according to the underlying" +
+          " netty layer")
     )
 
     Map(configs.map { cfg => (cfg.key -> cfg) } : _*)
