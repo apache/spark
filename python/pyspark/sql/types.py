@@ -2094,11 +2094,11 @@ class Geography:
     Examples
     --------
     >>> from pyspark.sql import functions as sf
-    >>> df = spark.createDataFrame([(bytes.fromhex("010100000000000000000031400000000000001C40"),)], ["wkb"],)  # noqa
-    >>> g = df.select(sf.geogfromwkb(df.wkb).alias("geog")).head().geog # doctest: +SKIP
-    >>> g.getBytes() # doctest: +SKIP
-    b'\x01\x01\x00\x00\x00\x00\x00\x00\x00\x00\x001@\x00\x00\x00\x00\x00\x00\x1c@'
-    >>> g.getSrid() # doctest: +SKIP
+    >>> df = spark.createDataFrame([(bytes.fromhex("010100000000000000000031400000000000001c40"),)], ["wkb"],)  # noqa
+    >>> g = df.select(sf.st_geogfromwkb(df.wkb).alias("geog")).head().geog
+    >>> g.getBytes().hex()
+    '010100000000000000000031400000000000001c40'
+    >>> g.getSrid()
     4326
     """
 
@@ -2165,11 +2165,11 @@ class Geometry:
     Examples
     --------
     >>> from pyspark.sql import functions as sf
-    >>> df = spark.createDataFrame([(bytes.fromhex("010100000000000000000031400000000000001C40"),)], ["wkb"],)  # noqa
-    >>> g = df.select(sf.geomfromwkb(df.geomwkb).alias("geom")).head().geom # doctest: +SKIP
-    >>> g.getBytes() # doctest: +SKIP
-    b'\x01\x01\x00\x00\x00\x00\x00\x00\x00\x00\x001@\x00\x00\x00\x00\x00\x00\x1c@'
-    >>> g.getSrid() # doctest: +SKIP
+    >>> df = spark.createDataFrame([(bytes.fromhex("010100000000000000000031400000000000001c40"),)], ["wkb"],)  # noqa
+    >>> g = df.select(sf.st_geomfromwkb(df.wkb).alias("geom")).head().geom
+    >>> g.getBytes().hex()
+    '010100000000000000000031400000000000001c40'
+    >>> g.getSrid()
     0
     """
 
