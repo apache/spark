@@ -34,7 +34,7 @@ import org.apache.spark.sql.connector.catalog.{
   TableInfo
 }
 import org.apache.spark.sql.connector.catalog.CatalogV2Util.v2ColumnsToStructType
-import org.apache.spark.sql.connector.expressions.{ClusterByTransform, Expressions, FieldReference}
+import org.apache.spark.sql.connector.expressions.{ClusterByTransform, Expressions}
 import org.apache.spark.sql.execution.command.CreateViewCommand
 import org.apache.spark.sql.pipelines.graph.QueryOrigin.ExceptionHelpers
 import org.apache.spark.sql.pipelines.util.SchemaInferenceUtils.diffSchemas
@@ -267,7 +267,7 @@ object DatasetManager extends Logging {
     val mergedProperties = resolveTableProperties(table, identifier)
     val partitioning = table.partitionCols.toSeq.flatten.map(Expressions.identity)
     val clustering = table.clusterCols.map(cols =>
-      ClusterByTransform(cols.map(col => FieldReference(col)).toSeq)
+      ClusterByTransform(cols.map(col => Expressions.column(col)))
     ).toSeq
 
     // Validate that partition and cluster columns don't coexist
