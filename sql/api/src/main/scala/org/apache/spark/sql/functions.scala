@@ -1544,8 +1544,8 @@ object functions {
     Column.fn("kll_sketch_merge_double", left, right)
 
   /**
-   * Extracts a quantile value from a KLL bigint sketch given an input rank value.
-   * The rank can be a single value or an array.
+   * Extracts a quantile value from a KLL bigint sketch given an input rank value. The rank can be
+   * a single value or an array.
    *
    * @group misc_funcs
    * @since 4.1.0
@@ -1554,8 +1554,8 @@ object functions {
     Column.fn("kll_sketch_get_quantile_bigint", sketch, rank)
 
   /**
-   * Extracts a quantile value from a KLL float sketch given an input rank value.
-   * The rank can be a single value or an array.
+   * Extracts a quantile value from a KLL float sketch given an input rank value. The rank can be
+   * a single value or an array.
    *
    * @group misc_funcs
    * @since 4.1.0
@@ -1564,8 +1564,8 @@ object functions {
     Column.fn("kll_sketch_get_quantile_float", sketch, rank)
 
   /**
-   * Extracts a quantile value from a KLL double sketch given an input rank value.
-   * The rank can be a single value or an array.
+   * Extracts a quantile value from a KLL double sketch given an input rank value. The rank can be
+   * a single value or an array.
    *
    * @group misc_funcs
    * @since 4.1.0
@@ -1574,8 +1574,8 @@ object functions {
     Column.fn("kll_sketch_get_quantile_double", sketch, rank)
 
   /**
-   * Extracts a rank value from a KLL bigint sketch given an input quantile value.
-   * The quantile can be a single value or an array.
+   * Extracts a rank value from a KLL bigint sketch given an input quantile value. The quantile
+   * can be a single value or an array.
    *
    * @group misc_funcs
    * @since 4.1.0
@@ -1584,8 +1584,8 @@ object functions {
     Column.fn("kll_sketch_get_rank_bigint", sketch, quantile)
 
   /**
-   * Extracts a rank value from a KLL float sketch given an input quantile value.
-   * The quantile can be a single value or an array.
+   * Extracts a rank value from a KLL float sketch given an input quantile value. The quantile can
+   * be a single value or an array.
    *
    * @group misc_funcs
    * @since 4.1.0
@@ -1594,8 +1594,8 @@ object functions {
     Column.fn("kll_sketch_get_rank_float", sketch, quantile)
 
   /**
-   * Extracts a rank value from a KLL double sketch given an input quantile value.
-   * The quantile can be a single value or an array.
+   * Extracts a rank value from a KLL double sketch given an input quantile value. The quantile
+   * can be a single value or an array.
    *
    * @group misc_funcs
    * @since 4.1.0
