@@ -561,6 +561,7 @@ class PipelineCommand(google.protobuf.message.Message):
             RELATION_FIELD_NUMBER: builtins.int
             OUTPUTMODE_FIELD_NUMBER: builtins.int
             ONCE_FIELD_NUMBER: builtins.int
+            COMMENT_FIELD_NUMBER: builtins.int
             @property
             def relation(self) -> pyspark.sql.connect.proto.relations_pb2.Relation:
                 """An unresolved relation that defines the dataset's flow. Empty if the query function
@@ -573,22 +574,29 @@ class PipelineCommand(google.protobuf.message.Message):
               - The flow is run one time by default. If the pipeline is ran with a full refresh, the flow will run again.
               - The flow function must be a batch DataFrame, not a streaming DataFrame.
             """
+            comment: builtins.str
+            """An optional comment for the flow."""
             def __init__(
                 self,
                 *,
                 relation: pyspark.sql.connect.proto.relations_pb2.Relation | None = ...,
                 outputMode: builtins.str | None = ...,
                 once: builtins.bool | None = ...,
+                comment: builtins.str | None = ...,
             ) -> None: ...
             def HasField(
                 self,
                 field_name: typing_extensions.Literal[
+                    "_comment",
+                    b"_comment",
                     "_once",
                     b"_once",
                     "_outputMode",
                     b"_outputMode",
                     "_relation",
                     b"_relation",
+                    "comment",
+                    b"comment",
                     "once",
                     b"once",
                     "outputMode",
@@ -600,12 +608,16 @@ class PipelineCommand(google.protobuf.message.Message):
             def ClearField(
                 self,
                 field_name: typing_extensions.Literal[
+                    "_comment",
+                    b"_comment",
                     "_once",
                     b"_once",
                     "_outputMode",
                     b"_outputMode",
                     "_relation",
                     b"_relation",
+                    "comment",
+                    b"comment",
                     "once",
                     b"once",
                     "outputMode",
@@ -614,6 +626,10 @@ class PipelineCommand(google.protobuf.message.Message):
                     b"relation",
                 ],
             ) -> None: ...
+            @typing.overload
+            def WhichOneof(
+                self, oneof_group: typing_extensions.Literal["_comment", b"_comment"]
+            ) -> typing_extensions.Literal["comment"] | None: ...
             @typing.overload
             def WhichOneof(
                 self, oneof_group: typing_extensions.Literal["_once", b"_once"]
