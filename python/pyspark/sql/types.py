@@ -2093,9 +2093,7 @@ class Geography:
 
     Examples
     --------
-    >>> from pyspark.sql import functions as sf
-    >>> df = spark.createDataFrame([(bytes.fromhex("010100000000000000000031400000000000001c40"),)], ["wkb"],)  # noqa
-    >>> g = df.select(sf.st_geogfromwkb(df.wkb).alias("geog")).head().geog
+    >>> g = Geography.fromWKB(bytes.fromhex('010100000000000000000031400000000000001c40'), 4326)
     >>> g.getBytes().hex()
     '010100000000000000000031400000000000001c40'
     >>> g.getSrid()
@@ -2164,9 +2162,7 @@ class Geometry:
 
     Examples
     --------
-    >>> from pyspark.sql import functions as sf
-    >>> df = spark.createDataFrame([(bytes.fromhex("010100000000000000000031400000000000001c40"),)], ["wkb"],)  # noqa
-    >>> g = df.select(sf.st_geomfromwkb(df.wkb).alias("geom")).head().geom
+    >>> g = Geometry.fromWKB(bytes.fromhex('010100000000000000000031400000000000001c40'), 0)
     >>> g.getBytes().hex()
     '010100000000000000000031400000000000001c40'
     >>> g.getSrid()
