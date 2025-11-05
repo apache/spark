@@ -305,7 +305,7 @@ case class TupleSketchAgg(
         mergeTyped[ArrayOfStringsSummary](updateBuffer, input)
     }
   }
-  
+
   private def mergeTyped[S <: Summary](
       updateBuffer: TupleSketchState,
       input: TupleSketchState): TupleSketchState = {
