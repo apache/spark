@@ -2692,6 +2692,9 @@ object SQLConf {
         "This is used to detect row level corruption. " +
         "Note: This configuration cannot be changed between query restarts " +
         "from the same checkpoint location.")
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(false)
 
   val STATE_STORE_ROW_CHECKSUM_READ_VERIFICATION_RATIO =
     buildConf("spark.sql.streaming.stateStore.rowChecksum.readVerificationRatio")
@@ -2713,7 +2716,7 @@ object SQLConf {
       .doc(
         "When enabled, state stores with lagging snapshot uploads will automatically trigger " +
         "a snapshot on the next commit. Requires spark.sql.streaming.stateStore.coordinator" +
-        ".reportSnapshotUploadLag.enabled to be enabled."
+        "ReportSnapshotUploadLag to be true."
       )
       .version("4.1.0")
       .booleanConf

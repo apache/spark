@@ -285,7 +285,7 @@ class StateStoreCoordinatorSuite extends SparkFunSuite with SharedSparkContext {
           val streamingQuery = query.asInstanceOf[StreamingQueryWrapper].streamingQuery
           val stateCheckpointDir = streamingQuery.lastExecution.checkpointLocation
 
-          def verifyBadPartitions(
+          def verifyShouldForceSnapshotOnBadPartitions(
               checkpointDir: String,
               runId: UUID,
               shouldForce: Boolean,
@@ -307,7 +307,7 @@ class StateStoreCoordinatorSuite extends SparkFunSuite with SharedSparkContext {
               assert(stateStoreStatus.shouldForceSnapshotUpload == shouldForce)
             }
           }
-          verifyBadPartitions(
+          verifyShouldForceSnapshotOnBadPartitions(
             stateCheckpointDir,
             query.runId,
             false,
@@ -318,7 +318,7 @@ class StateStoreCoordinatorSuite extends SparkFunSuite with SharedSparkContext {
           val stateCheckpointDir2 = streamingQuery2.lastExecution.checkpointLocation
 
           // verify that lagging stores in query2 are not impacted by query1 catching up
-          verifyBadPartitions(stateCheckpointDir2, query2.runId, true, None)
+          verifyShouldForceSnapshotOnBadPartitions(stateCheckpointDir2, query2.runId, true, None)
 
           // verify report snapshot upload will remove lagging stores
           val storeId = StateStoreId(
@@ -335,9 +335,9 @@ class StateStoreCoordinatorSuite extends SparkFunSuite with SharedSparkContext {
 
           // Verify that the lagging stores are no longer marked as
           // lagging because they are removed when stop() is called
-          query.stop()
           query2.stop()
-          verifyBadPartitions(stateCheckpointDir2, query2.runId, false, None)
+          verifyShouldForceSnapshotOnBadPartitions(stateCheckpointDir2, query2.runId, false, None)
+          query.stop()
         }
       }
   }
