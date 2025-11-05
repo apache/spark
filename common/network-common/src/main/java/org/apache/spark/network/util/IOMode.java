@@ -32,5 +32,9 @@ public enum IOMode {
   /**
    * Native KQUEUE via JNI, MacOS/BSD only
    */
-  KQUEUE
+  KQUEUE,
+  /**
+   * Prefer to use native EPOLL on Linux (or KQUEUE on MacOS) if available. Then, fallback to NIO.
+   */
+  AUTO
 }

@@ -808,7 +808,7 @@ object SparkConnect {
     },
 
     (assembly / assemblyShadeRules) := Seq(
-      ShadeRule.rename("io.grpc.**" -> "org.sparkproject.connect.grpc.@0").inAll,
+      ShadeRule.rename("io.grpc.**" -> "org.sparkproject.connect.grpc.@1").inAll,
       ShadeRule.rename("com.google.common.**" -> "org.sparkproject.connect.guava.@1").inAll,
       ShadeRule.rename("com.google.thirdparty.**" -> "org.sparkproject.connect.guava.@1").inAll,
       ShadeRule.rename("com.google.protobuf.**" -> "org.sparkproject.connect.protobuf.@1").inAll,
@@ -820,11 +820,13 @@ object SparkConnect {
       ShadeRule.rename("org.checkerframework.**" -> "org.sparkproject.connect.checkerframework.@1").inAll,
       ShadeRule.rename("com.google.gson.**" -> "org.sparkproject.connect.gson.@1").inAll,
       ShadeRule.rename("com.google.api.**" -> "org.sparkproject.connect.google_protos.api.@1").inAll,
+      ShadeRule.rename("com.google.apps.**" -> "org.sparkproject.connect.google_protos.apps.@1").inAll,
       ShadeRule.rename("com.google.cloud.**" -> "org.sparkproject.connect.google_protos.cloud.@1").inAll,
       ShadeRule.rename("com.google.geo.**" -> "org.sparkproject.connect.google_protos.geo.@1").inAll,
       ShadeRule.rename("com.google.logging.**" -> "org.sparkproject.connect.google_protos.logging.@1").inAll,
       ShadeRule.rename("com.google.longrunning.**" -> "org.sparkproject.connect.google_protos.longrunning.@1").inAll,
       ShadeRule.rename("com.google.rpc.**" -> "org.sparkproject.connect.google_protos.rpc.@1").inAll,
+      ShadeRule.rename("com.google.shopping.**" -> "org.sparkproject.connect.google_protos.shopping.@1").inAll,
       ShadeRule.rename("com.google.type.**" -> "org.sparkproject.connect.google_protos.type.@1").inAll
     ),
 
@@ -911,7 +913,6 @@ object SparkConnectJdbc {
       ShadeRule.rename("com.google.**" -> "org.sparkproject.connect.client.com.google.@1").inAll,
       ShadeRule.rename("io.netty.**" -> "org.sparkproject.connect.client.io.netty.@1").inAll,
       ShadeRule.rename("org.checkerframework.**" -> "org.sparkproject.connect.client.org.checkerframework.@1").inAll,
-      ShadeRule.rename("javax.annotation.**" -> "org.sparkproject.connect.client.javax.annotation.@1").inAll,
       ShadeRule.rename("io.perfmark.**" -> "org.sparkproject.connect.client.io.perfmark.@1").inAll,
       ShadeRule.rename("org.codehaus.**" -> "org.sparkproject.connect.client.org.codehaus.@1").inAll,
       ShadeRule.rename("android.annotation.**" -> "org.sparkproject.connect.client.android.annotation.@1").inAll
@@ -991,7 +992,6 @@ object SparkConnectClient {
       ShadeRule.rename("com.google.**" -> "org.sparkproject.connect.client.com.google.@1").inAll,
       ShadeRule.rename("io.netty.**" -> "org.sparkproject.connect.client.io.netty.@1").inAll,
       ShadeRule.rename("org.checkerframework.**" -> "org.sparkproject.connect.client.org.checkerframework.@1").inAll,
-      ShadeRule.rename("javax.annotation.**" -> "org.sparkproject.connect.client.javax.annotation.@1").inAll,
       ShadeRule.rename("io.perfmark.**" -> "org.sparkproject.connect.client.io.perfmark.@1").inAll,
       ShadeRule.rename("org.codehaus.**" -> "org.sparkproject.connect.client.org.codehaus.@1").inAll,
       ShadeRule.rename("android.annotation.**" -> "org.sparkproject.connect.client.android.annotation.@1").inAll
@@ -1075,10 +1075,7 @@ object SparkProtobuf {
 }
 
 object Unsafe {
-  lazy val settings = Seq(
-    // This option is needed to suppress warnings from sun.misc.Unsafe usage
-    (Compile / javacOptions) += "-XDignore.symbol.file"
-  )
+  lazy val settings = Seq()
 }
 
 
@@ -1186,15 +1183,26 @@ object KubernetesIntegrationTests {
  * Overrides to work around sbt's dependency resolution being different from Maven's.
  */
 object DependencyOverrides {
-  lazy val guavaVersion = sys.props.get("guava.version").getOrElse("33.4.0-jre")
   lazy val jacksonVersion = sys.props.get("fasterxml.jackson.version").getOrElse("2.20.0")
   lazy val jacksonDeps = Bom.dependencies("com.fasterxml.jackson" % "jackson-bom" % jacksonVersion)
   lazy val settings = jacksonDeps ++ Seq(
-    dependencyOverrides += "com.google.guava" % "guava" % guavaVersion,
-    dependencyOverrides ++= jacksonDeps.key.value,
-    dependencyOverrides += "jline" % "jline" % "2.14.6",
-    dependencyOverrides += "org.apache.avro" % "avro" % "1.12.1",
-    dependencyOverrides += "org.slf4j" % "slf4j-api" % "2.0.17")
+    dependencyOverrides ++= {
+      val guavaVersion = sys.props.get("guava.version").getOrElse(
+        SbtPomKeys.effectivePom.value.getProperties.get("guava.version").asInstanceOf[String])
+      val jlineVersion =
+        SbtPomKeys.effectivePom.value.getProperties.get("jline.version").asInstanceOf[String]
+      val avroVersion =
+        SbtPomKeys.effectivePom.value.getProperties.get("avro.version").asInstanceOf[String]
+      val slf4jVersion =
+        SbtPomKeys.effectivePom.value.getProperties.get("slf4j.version").asInstanceOf[String]
+      Seq(
+        "com.google.guava" % "guava" % guavaVersion,
+        "jline" % "jline" % jlineVersion,
+        "org.apache.avro" % "avro" % avroVersion,
+        "org.slf4j" % "slf4j-api" % slf4jVersion
+      ) ++ jacksonDeps.key.value
+    }
+  )
 }
 
 /**

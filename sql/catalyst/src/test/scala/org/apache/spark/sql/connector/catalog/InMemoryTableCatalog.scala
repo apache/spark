@@ -66,6 +66,19 @@ class BasicInMemoryTableCatalog extends TableCatalog {
     }
   }
 
+  def pinTable(ident: Identifier, version: String): Unit = {
+    Option(tables.get(ident)) match {
+      case Some(table: InMemoryBaseTable) =>
+        val versionIdent = Identifier.of(ident.namespace, ident.name + version)
+        val versionTable = table.copy()
+        tables.put(versionIdent, versionTable)
+      case Some(table) =>
+        throw new UnsupportedOperationException(s"Can't pin ${table.getClass.getName}")
+      case _ =>
+        throw new NoSuchTableException(ident.asMultipartIdentifier)
+    }
+  }
+
   override def loadTable(ident: Identifier, version: String): Table = {
     val versionIdent = Identifier.of(ident.namespace, ident.name + version)
     Option(tables.get(versionIdent)) match {

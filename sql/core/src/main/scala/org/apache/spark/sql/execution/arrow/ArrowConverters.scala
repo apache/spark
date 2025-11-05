@@ -23,9 +23,11 @@ import java.nio.channels.{Channels, ReadableByteChannel}
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
 
+import org.apache.arrow.compression.{Lz4CompressionCodec, ZstdCompressionCodec}
 import org.apache.arrow.flatbuf.MessageHeader
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector._
+import org.apache.arrow.vector.compression.{CompressionCodec, NoCompressionCodec}
 import org.apache.arrow.vector.ipc.{ArrowStreamReader, ArrowStreamWriter, ReadChannel, WriteChannel}
 import org.apache.arrow.vector.ipc.message.{ArrowRecordBatch, IpcOption, MessageSerializer}
 
@@ -37,6 +39,7 @@ import org.apache.spark.sql.catalyst.expressions.{UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.classic.{DataFrame, Dataset, SparkSession}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.ArrowUtils
 import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch, ColumnVector}
@@ -92,8 +95,25 @@ private[sql] object ArrowConverters extends Logging {
       ArrowUtils.rootAllocator.newChildAllocator(
         s"to${this.getClass.getSimpleName}", 0, Long.MaxValue)
 
-    private val root = VectorSchemaRoot.create(arrowSchema, allocator)
-    protected val unloader = new VectorUnloader(root)
+    protected val root = VectorSchemaRoot.create(arrowSchema, allocator)
+
+    // Create compression codec based on config
+    private val compressionCodecName = SQLConf.get.arrowCompressionCodec
+    private val codec = compressionCodecName match {
+      case "none" => NoCompressionCodec.INSTANCE
+      case "zstd" =>
+        val factory = CompressionCodec.Factory.INSTANCE
+        val codecType = new ZstdCompressionCodec().getCodecType()
+        factory.createCodec(codecType)
+      case "lz4" =>
+        val factory = CompressionCodec.Factory.INSTANCE
+        val codecType = new Lz4CompressionCodec().getCodecType()
+        factory.createCodec(codecType)
+      case other =>
+        throw new IllegalArgumentException(
+          s"Unsupported Arrow compression codec: $other. Supported values: none, zstd, lz4")
+    }
+    protected val unloader = new VectorUnloader(root, true, codec, true)
     protected val arrowWriter = ArrowWriter.create(root)
 
     Option(context).foreach {_.addTaskCompletionListener[Unit] { _ =>

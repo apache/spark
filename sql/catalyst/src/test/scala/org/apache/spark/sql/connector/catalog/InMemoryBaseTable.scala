@@ -725,6 +725,10 @@ abstract class InMemoryBaseTable(
       }
     }
   }
+
+  def copy(): Table = {
+    throw new UnsupportedOperationException(s"copy is not supported for ${getClass.getName}")
+  }
 }
 
 object InMemoryBaseTable {

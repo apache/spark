@@ -22,7 +22,7 @@ import java.util.{Locale, TimeZone}
 
 import scala.jdk.CollectionConverters._
 
-import org.antlr.v4.runtime.{ParserRuleContext, Token}
+import org.antlr.v4.runtime.ParserRuleContext
 import org.antlr.v4.runtime.tree.TerminalNode
 
 import org.apache.spark.SparkException
@@ -1084,9 +1084,9 @@ class SparkSqlAstBuilder extends AstBuilder {
   override protected def withScriptIOSchema(
       ctx: ParserRuleContext,
       inRowFormat: RowFormatContext,
-      recordWriter: Token,
+      recordWriter: StringLitContext,
       outRowFormat: RowFormatContext,
-      recordReader: Token,
+      recordReader: StringLitContext,
       schemaLess: Boolean): ScriptInputOutputSchema = {
     if (recordWriter != null || recordReader != null) {
       // TODO: what does this message mean?

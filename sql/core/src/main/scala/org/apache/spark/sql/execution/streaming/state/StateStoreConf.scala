@@ -48,6 +48,17 @@ class StateStoreConf(
    */
   val minDeltasForSnapshot: Int = sqlConf.stateStoreMinDeltasForSnapshot
 
+  /** Whether we should enable automatic snapshot repair */
+  val autoSnapshotRepairEnabled: Boolean = sqlConf.stateStoreAutoSnapshotRepairEnabled
+
+  /** Number of failures before activating auto snapshot repair when enabled */
+  val autoSnapshotRepairNumFailuresBeforeActivating: Int =
+    sqlConf.stateStoreAutoSnapshotRepairNumFailuresBeforeActivating
+
+  /** Maximum number of change files allowed to be replayed when auto snapshot repair is enabled */
+  val autoSnapshotRepairMaxChangeFileReplay: Int =
+    sqlConf.stateStoreAutoSnapshotRepairMaxChangeFileReplay
+
   /** Minimum versions a State Store implementation should retain to allow rollbacks */
   val minVersionsToRetain: Int = sqlConf.minBatchesToRetain
 
@@ -96,6 +107,9 @@ class StateStoreConf(
   /** The compression codec used to compress delta and snapshot files. */
   val compressionCodec: String = sqlConf.stateStoreCompressionCodec
 
+  /** Whether file checksum generation and verification is enabled. */
+  val checkpointFileChecksumEnabled: Boolean = sqlConf.checkpointFileChecksumEnabled
+
   /** whether to validate state schema during query run. */
   val stateSchemaCheckEnabled = sqlConf.isStateSchemaCheckEnabled
 
@@ -119,6 +133,12 @@ class StateStoreConf(
 
   /** Whether to unload the store on task completion. */
   val unloadOnCommit = sqlConf.stateStoreUnloadOnCommit
+
+  /** whether to enable checksum for state store rows. */
+  val rowChecksumEnabled = sqlConf.stateStoreRowChecksumEnabled
+
+  /** How often should we do row checksum verification when rows are read from the state store. */
+  val rowChecksumReadVerificationRatio: Long = sqlConf.stateStoreRowChecksumReadVerificationRatio
 
   /** The version of the state store checkpoint format. */
   val stateStoreCheckpointFormatVersion: Int = sqlConf.stateStoreCheckpointFormatVersion

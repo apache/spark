@@ -2665,6 +2665,23 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       cause = null)
   }
 
+  def checkpointFileChecksumVerificationFailed(
+      file: Path,
+      expectedSize: Long,
+      expectedChecksum: Int,
+      computedSize: Long,
+      computedChecksum: Int): Throwable = {
+    new SparkException(
+      errorClass = "CHECKPOINT_FILE_CHECKSUM_VERIFICATION_FAILED",
+      messageParameters = Map(
+        "fileName" -> file.toString,
+        "expectedSize" -> expectedSize.toString,
+        "expectedChecksum" -> expectedChecksum.toString,
+        "computedSize" -> computedSize.toString,
+        "computedChecksum" -> computedChecksum.toString),
+      cause = null)
+  }
+
   def cannotReadCheckpoint(expectedVersion: String, actualVersion: String): Throwable = {
     new SparkException (
       errorClass = "CANNOT_LOAD_STATE_STORE.CANNOT_READ_CHECKPOINT",
@@ -2785,6 +2802,12 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
         "min" -> toSQLValue(min, IntegerType),
         "max" -> toSQLValue(max, IntegerType),
         "value" -> toSQLValue(value, IntegerType)))
+  }
+
+  def hllKMustBeConstantError(function: String): Throwable = {
+    new SparkRuntimeException(
+      errorClass = "HLL_K_MUST_BE_CONSTANT",
+      messageParameters = Map("function" -> toSQLId(function)))
   }
 
   def hllInvalidInputSketchBuffer(function: String): Throwable = {
@@ -3151,5 +3174,49 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
         "min" -> toSQLValue(min, IntegerType),
         "max" -> toSQLValue(max, IntegerType),
         "value" -> toSQLValue(value, IntegerType)))
+  }
+
+  def thetaLgNomEntriesMustBeConstantError(function: String): Throwable = {
+    new SparkRuntimeException(
+      errorClass = "THETA_LG_NOM_ENTRIES_MUST_BE_CONSTANT",
+      messageParameters = Map("function" -> toSQLId(function)))
+  }
+
+  def kllSketchInvalidQuantileRangeError(function: String, quantile: Double): Throwable = {
+    new SparkRuntimeException(
+      errorClass = "KLL_SKETCH_INVALID_QUANTILE_RANGE",
+      messageParameters = Map(
+        "functionName" -> toSQLId(function),
+        "quantile" -> toSQLValue(quantile, DoubleType)))
+  }
+
+  def kllSketchInvalidInputError(function: String, reason: String): Throwable = {
+    new SparkRuntimeException(
+      errorClass = "KLL_SKETCH_INVALID_INPUT",
+      messageParameters = Map(
+        "functionName" -> toSQLId(function),
+        "reason" -> reason))
+  }
+
+  def kllSketchIncompatibleMergeError(function: String, reason: String): Throwable = {
+    new SparkRuntimeException(
+      errorClass = "KLL_SKETCH_INCOMPATIBLE_MERGE",
+      messageParameters = Map(
+        "functionName" -> toSQLId(function),
+        "reason" -> reason))
+  }
+
+  def kllSketchKMustBeConstantError(function: String): Throwable = {
+    new SparkRuntimeException(
+      errorClass = "KLL_SKETCH_K_MUST_BE_CONSTANT",
+      messageParameters = Map("functionName" -> toSQLId(function)))
+  }
+
+  def kllSketchKOutOfRangeError(function: String, k: Int): Throwable = {
+    new SparkRuntimeException(
+      errorClass = "KLL_SKETCH_K_OUT_OF_RANGE",
+      messageParameters = Map(
+        "functionName" -> toSQLId(function),
+        "k" -> toSQLValue(k, IntegerType)))
   }
 }

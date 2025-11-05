@@ -2653,6 +2653,18 @@ Apart from these, the following properties are also available, and may be useful
   <td>4.1.0</td>
 </tr>
 <tr>
+  <td><code>spark.io.mode.default</code></td>
+  <td>AUTO</td>
+  <td>
+    The default IO mode for Netty transports.
+    One of <code>NIO</code>, <code>EPOLL</code>, <code>KQUEUE</code>, or <code>AUTO</code>.
+    The default value is <code>AUTO</code> which means to use native Netty libraries if available.
+    In other words, for Linux environments, <code>EPOLL</code> is used if available before using <code>NIO</code>.
+    For MacOS/BSD environments, <code>KQUEUE</code> is used if available before using <code>NIO</code>.
+  </td>
+  <td>4.1.0</td>
+</tr>
+<tr>
   <td><code>spark.rpc.io.backLog</code></td>
   <td>64</td>
   <td>

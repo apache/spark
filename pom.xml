@@ -26,7 +26,7 @@
   </parent>
   <groupId>org.apache.spark</groupId>
   <artifactId>spark-parent_2.13</artifactId>
-  <version>4.1.0-SNAPSHOT</version>
+  <version>4.2.0-SNAPSHOT</version>
   <packaging>pom</packaging>
   <name>Spark Project Parent POM</name>
   <url>https://spark.apache.org/</url>
@@ -123,7 +123,7 @@
     <maven.version>3.9.11</maven.version>
     <exec-maven-plugin.version>3.6.1</exec-maven-plugin.version>
     <sbt.project.name>spark</sbt.project.name>
-    <asm.version>9.8</asm.version>
+    <asm.version>9.9</asm.version>
     <slf4j.version>2.0.17</slf4j.version>
     <log4j.version>2.24.3</log4j.version>
     <!-- make sure to update IsolatedClientLoader whenever this version is changed -->
@@ -172,8 +172,6 @@
     <commons.httpclient.version>4.5.14</commons.httpclient.version>
     <commons.httpcore.version>4.4.16</commons.httpcore.version>
     <commons.math3.version>3.6.1</commons.math3.version>
-    <!-- managed up from 3.2.1 for SPARK-11652 -->
-    <commons.collections.version>3.2.2</commons.collections.version>
     <commons.collections4.version>4.5.0</commons.collections4.version>
     <scala.version>2.13.17</scala.version>
     <scala.binary.version>2.13</scala.binary.version>
@@ -185,6 +183,7 @@
     <scalafmt.skip>true</scalafmt.skip>
     <scalafmt.validateOnly>true</scalafmt.validateOnly>
     <scalafmt.changedOnly>true</scalafmt.changedOnly>
+    <!-- Should be consistent with SparkBuild.scala and docs -->
     <fasterxml.jackson.version>2.20.0</fasterxml.jackson.version>
     <ws.xmlschema.version>2.3.1</ws.xmlschema.version>
     <snappy.version>1.1.10.8</snappy.version>
@@ -221,6 +220,7 @@
     <netty-tcnative.version>2.0.74.Final</netty-tcnative.version>
     <icu4j.version>77.1</icu4j.version>
     <junit.version>6.0.0</junit.version>
+    <jline.version>2.14.6</jline.version>
     <!--
       SPARK-50299: When updating `sbt-jupiter-interface.version`,
       also need to update the version in `SparkBuild.scala` and `plugins.sbt`.
@@ -305,9 +305,8 @@
     <!-- Version used in Connect -->
     <connect.guava.version>33.4.0-jre</connect.guava.version>
     <guava.failureaccess.version>1.0.2</guava.failureaccess.version>
-    <io.grpc.version>1.67.1</io.grpc.version>
+    <io.grpc.version>1.76.0</io.grpc.version>
     <mima.version>1.1.4</mima.version>
-    <tomcat.annotations.api.version>6.0.53</tomcat.annotations.api.version>
 
     <!-- Version used in Profiler -->
     <ap-loader.version>4.0-10</ap-loader.version>
@@ -344,7 +343,7 @@
     <mysql.connector.version>9.2.0</mysql.connector.version>
     <postgresql.version>42.7.7</postgresql.version>
     <db2.jcc.version>11.5.9.0</db2.jcc.version>
-    <mssql.jdbc.version>12.8.1.jre11</mssql.jdbc.version>
+    <mssql.jdbc.version>13.2.1.jre11</mssql.jdbc.version>
     <ojdbc17.version>23.6.0.24.10</ojdbc17.version>
     <databricks.jdbc.version>2.7.1</databricks.jdbc.version>
     <snowflake.jdbc.version>3.26.1</snowflake.jdbc.version>
@@ -539,7 +538,7 @@
       <dependency>
         <groupId>org.apache.xbean</groupId>
         <artifactId>xbean-asm9-shaded</artifactId>
-        <version>4.27</version>
+        <version>4.28</version>
       </dependency>
 
       <!-- Shaded deps marked as provided. These are promoted to compile scope
@@ -704,11 +703,6 @@
         <groupId>org.apache.commons</groupId>
         <artifactId>commons-math3</artifactId>
         <version>${commons.math3.version}</version>
-      </dependency>
-      <dependency>
-        <groupId>commons-collections</groupId>
-        <artifactId>commons-collections</artifactId>
-        <version>${commons.collections.version}</version>
       </dependency>
       <dependency>
         <groupId>org.apache.commons</groupId>
@@ -1187,7 +1181,7 @@
       <dependency>
         <groupId>jline</groupId>
         <artifactId>jline</artifactId>
-        <version>2.14.6</version>
+        <version>${jline.version}</version>
       </dependency>
       <dependency>
         <groupId>org.scalatest</groupId>
@@ -2526,6 +2520,25 @@
       </dependency>
       <dependency>
         <groupId>org.apache.arrow</groupId>
+        <artifactId>arrow-compression</artifactId>
+        <version>${arrow.version}</version>
+        <exclusions>
+          <exclusion>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-annotations</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-core</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>io.netty</groupId>
+            <artifactId>netty-common</artifactId>
+          </exclusion>
+        </exclusions>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.arrow</groupId>
         <artifactId>arrow-memory-netty</artifactId>
         <version>${arrow.version}</version>
         <exclusions>
@@ -2655,7 +2668,7 @@
             <dependency>
               <groupId>org.codehaus.mojo</groupId>
               <artifactId>extra-enforcer-rules</artifactId>
-              <version>1.10.0</version>
+              <version>1.11.0</version>
             </dependency>
           </dependencies>
         </plugin>
@@ -3133,6 +3146,10 @@
             <relocation>
               <pattern>com.google.common</pattern>
               <shadedPattern>${spark.shade.packageName}.guava</shadedPattern>
+            </relocation>
+            <relocation>
+              <pattern>com.google.thirdparty</pattern>
+              <shadedPattern>${spark.shade.packageName}.guava.thirdparty</shadedPattern>
             </relocation>
             <relocation>
               <pattern>org.dmg.pmml</pattern>

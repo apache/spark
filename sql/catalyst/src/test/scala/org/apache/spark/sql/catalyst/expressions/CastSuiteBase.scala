@@ -1454,6 +1454,75 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
       (child: Expression) => Cast(child, StringType), TimeType())
   }
 
+  test("Casting geospatial data types to/from other data types") {
+    val geoTypes: Seq[DataType] = Seq(
+      GeographyType(4326),
+      GeographyType("ANY"),
+      GeometryType(0),
+      GeometryType(3857),
+      GeometryType(4326),
+      GeometryType("ANY")
+    )
+    val otherTypes: Seq[DataType] = Seq(
+      BinaryType,
+      BooleanType,
+      ByteType,
+      StringType,
+      StringType("UTF8_LCASE"),
+      StringType("UNICODE_CI"),
+      ShortType,
+      IntegerType,
+      LongType,
+      FloatType,
+      DoubleType
+    )
+    // Iterate over the test cases and verify casting.
+    geoTypes.foreach { geoType =>
+      otherTypes.foreach { otherType =>
+        // Cast cannot be performed from `geoType` to `otherType`.
+        assert(!Cast.canCast(geoType, otherType))
+        assert(!Cast.canAnsiCast(geoType, otherType))
+        // Cast cannot be performed from `otherType` to `geoType`.
+        assert(!Cast.canCast(otherType, geoType))
+        assert(!Cast.canAnsiCast(otherType, geoType))
+      }
+    }
+  }
+
+  // The following tests are confirming the behavior of casting between geospatial types.
+
+  test("Casting GeographyType to GeometryType") {
+    // Casting from GEOGRAPHY to GEOMETRY is only allowed if the SRIDs are the same.
+
+    // Valid cast test cases.
+    val canAnsiCastTestCases: Seq[(DataType, DataType)] = Seq(
+      (GeographyType(4326), GeometryType(4326)),
+      (GeographyType("ANY"), GeometryType("ANY"))
+    )
+    // Iterate over the test cases and verify casting.
+    canAnsiCastTestCases.foreach { case (fromType, toType) =>
+      // Cast can be performed from `fromType` to `toType`.
+      assert(Cast.canCast(fromType, toType))
+      assert(Cast.canAnsiCast(fromType, toType))
+    }
+
+    // Invalid cast test cases.
+    val cannotAnsiCastTestCases: Seq[(DataType, DataType)] = Seq(
+      (GeographyType(4326), GeometryType(0)),
+      (GeographyType(4326), GeometryType(3857)),
+      (GeographyType(4326), GeometryType("ANY")),
+      (GeographyType("ANY"), GeometryType(0)),
+      (GeographyType("ANY"), GeometryType(3857)),
+      (GeographyType("ANY"), GeometryType(4326))
+    )
+    // Iterate over the test cases and verify casting.
+    cannotAnsiCastTestCases.foreach { case (fromType, toType) =>
+      // Cast cannot be performed from `fromType` to `toType`.
+      assert(!Cast.canCast(fromType, toType))
+      assert(!Cast.canAnsiCast(fromType, toType))
+    }
+  }
+
   test("cast string to time") {
     checkEvaluation(cast(Literal.create("0:0:0"), TimeType()), 0L)
     checkEvaluation(cast(Literal.create(" 01:2:3.01   "), TimeType(2)), localTime(1, 2, 3, 10000))

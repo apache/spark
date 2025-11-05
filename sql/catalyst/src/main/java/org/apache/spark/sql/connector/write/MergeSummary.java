@@ -28,42 +28,45 @@ import org.apache.spark.annotation.Evolving;
 public interface MergeSummary extends WriteSummary {
 
   /**
-   * Returns the number of target rows copied unmodified because they did not match any action.
+   * Returns the number of target rows copied unmodified because they did not match any action,
+   * or -1 if not found.
    */
   long numTargetRowsCopied();
 
   /**
-   * Returns the number of target rows deleted.
+   * Returns the number of target rows deleted, or -1 if not found.
    */
   long numTargetRowsDeleted();
 
   /**
-   * Returns the number of target rows updated.
+   * Returns the number of target rows updated, or -1 if not found.
    */
   long numTargetRowsUpdated();
 
   /**
-   * Returns the number of target rows inserted.
+   * Returns the number of target rows inserted, or -1 if not found.
    */
   long numTargetRowsInserted();
 
   /**
-   * Returns the number of target rows updated by a matched clause.
+   * Returns the number of target rows updated by a matched clause, or -1 if not found.
    */
   long numTargetRowsMatchedUpdated();
 
   /**
-   * Returns the number of target rows deleted by a matched clause
+   * Returns the number of target rows deleted by a matched clause, or -1 if not found.
    */
   long numTargetRowsMatchedDeleted();
 
   /**
-   * Returns the number of target rows updated by a not matched by source clause.
+   * Returns the number of target rows updated by a not matched by source clause,
+   * or -1 if not found.
    */
   long numTargetRowsNotMatchedBySourceUpdated();
 
   /**
-   * Returns the number of target rows deleted by a not matched by source clause.
+   * Returns the number of target rows deleted by a not matched by source clause,
+   * or -1 if not found.
    */
   long numTargetRowsNotMatchedBySourceDeleted();
 }

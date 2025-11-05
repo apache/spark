@@ -559,6 +559,11 @@ class SparkSession:
             # If no schema supplied by user then get the names of columns only
             if schema is None:
                 _cols = [str(x) if not isinstance(x, str) else x for x in data.columns]
+                if len(_cols) == 0:
+                    raise PySparkValueError(
+                        errorClass="CANNOT_INFER_EMPTY_SCHEMA",
+                        messageParameters={},
+                    )
                 infer_pandas_dict_as_map = (
                     configs["spark.sql.execution.pandas.inferPandasDictAsMap"] == "true"
                 )

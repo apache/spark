@@ -136,4 +136,15 @@ class RowSuite extends SparkFunSuite with SharedSparkSession {
       parameters = Map("index" -> position.toString)
     )
   }
+
+  test("Geospatial row API - Geography and Geometry") {
+    // A test WKB value corresponding to: POINT (17 7).
+    val point = "010100000000000000000031400000000000001C40"
+      .grouped(2).map(Integer.parseInt(_, 16).toByte).toArray
+
+    val row = Row(Geometry.fromWKB(point), Geography.fromWKB(point))
+
+    assert(row.getGeometry(0).getBytes() == point)
+    assert(row.getGeography(1).getBytes() == point)
+  }
 }

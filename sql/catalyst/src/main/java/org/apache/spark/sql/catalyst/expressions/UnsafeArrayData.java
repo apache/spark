@@ -40,6 +40,8 @@ import org.apache.spark.unsafe.hash.Murmur3_x86_32;
 import org.apache.spark.unsafe.types.CalendarInterval;
 import org.apache.spark.unsafe.types.UTF8String;
 import org.apache.spark.unsafe.types.VariantVal;
+import org.apache.spark.unsafe.types.GeographyVal;
+import org.apache.spark.unsafe.types.GeometryVal;
 
 import static org.apache.spark.unsafe.Platform.BYTE_ARRAY_OFFSET;
 
@@ -220,6 +222,18 @@ public final class UnsafeArrayData extends ArrayData implements Externalizable, 
     final byte[] bytes = new byte[size];
     Platform.copyMemory(baseObject, baseOffset + offset, bytes, Platform.BYTE_ARRAY_OFFSET, size);
     return bytes;
+  }
+
+  @Override
+  public GeographyVal getGeography(int ordinal) {
+    byte[] bytes = getBinary(ordinal);
+    return (bytes == null) ? null : GeographyVal.fromBytes(bytes);
+  }
+
+  @Override
+  public GeometryVal getGeometry(int ordinal) {
+    byte[] bytes = getBinary(ordinal);
+    return (bytes == null) ? null : GeometryVal.fromBytes(bytes);
   }
 
   @Override

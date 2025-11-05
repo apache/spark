@@ -73,20 +73,20 @@ class PandasGroupedOpsMixin:
         >>> df = spark.createDataFrame(
         ...     [(1, 1.0), (1, 2.0), (2, 3.0), (2, 5.0), (2, 10.0)],
         ...     ("id", "v"))
-        >>> @pandas_udf("id long, v double", PandasUDFType.GROUPED_MAP)  # doctest: +SKIP
+        >>> @pandas_udf("id long, v double", PandasUDFType.GROUPED_MAP)
         ... def normalize(pdf):
         ...     v = pdf.v
         ...     return pdf.assign(v=(v - v.mean()) / v.std())
         ...
-        >>> df.groupby("id").apply(normalize).show()  # doctest: +SKIP
+        >>> df.groupby("id").apply(normalize).sort("id", "v").show()
         +---+-------------------+
         | id|                  v|
         +---+-------------------+
-        |  1|-0.7071067811865475|
-        |  1| 0.7071067811865475|
-        |  2|-0.8320502943378437|
-        |  2|-0.2773500981126146|
-        |  2| 1.1094003924504583|
+        |  1|-0.7071067811865...|
+        |  1| 0.7071067811865...|
+        |  2|-0.8320502943378...|
+        |  2|-0.2773500981126...|
+        |  2| 1.1094003924504...|
         +---+-------------------+
 
         See Also
@@ -123,12 +123,13 @@ class PandasGroupedOpsMixin:
         Maps each group of the current :class:`DataFrame` using a pandas udf and returns the result
         as a `DataFrame`.
 
-        The function should take a `pandas.DataFrame` and return another
-        `pandas.DataFrame`. Alternatively, the user can pass a function that takes
-        a tuple of the grouping key(s) and a `pandas.DataFrame`.
-        For each group, all columns are passed together as a `pandas.DataFrame`
-        to the user-function and the returned `pandas.DataFrame` are combined as a
-        :class:`DataFrame`.
+        The function can take one of two forms: It can take a `pandas.DataFrame` and return a
+        `pandas.DataFrame`, or it can take an iterator of `pandas.DataFrame` and yield
+        `pandas.DataFrame`. Alternatively each form can take a tuple of grouping keys
+        as the first argument in addition to the input type above.
+        For each group, all columns are passed together as a `pandas.DataFrame` or iterator of
+        `pandas.DataFrame`, and the returned `pandas.DataFrame` or iterator of `pandas.DataFrame`
+        are combined as a :class:`DataFrame`.
 
         The `schema` should be a :class:`StructType` describing the schema of the returned
         `pandas.DataFrame`. The column labels of the returned `pandas.DataFrame` must either match
@@ -141,37 +142,43 @@ class PandasGroupedOpsMixin:
         .. versionchanged:: 3.4.0
             Support Spark Connect.
 
+        .. versionchanged:: 4.1.0
+            Added support for an iterator of `pandas.DataFrame` API.
+
         Parameters
         ----------
         func : function
-            a Python native function that takes a `pandas.DataFrame` and outputs a
-            `pandas.DataFrame`, or that takes one tuple (grouping keys) and a
-            `pandas.DataFrame` and outputs a `pandas.DataFrame`.
+            a Python native function that either takes a `pandas.DataFrame` and outputs a
+            `pandas.DataFrame` or takes an iterator of `pandas.DataFrame` and yields
+            `pandas.DataFrame`. Additionally, each form can take a tuple of grouping keys
+            as the first argument, with the `pandas.DataFrame` or iterator of `pandas.DataFrame`
+            as the second argument.
         schema : :class:`pyspark.sql.types.DataType` or str
             the return type of the `func` in PySpark. The value can be either a
             :class:`pyspark.sql.types.DataType` object or a DDL-formatted type string.
 
         Examples
         --------
-        >>> import pandas as pd  # doctest: +SKIP
-        >>> from pyspark.sql.functions import ceil
+        >>> import pandas as pd
+        >>> from pyspark.sql import functions as sf
         >>> df = spark.createDataFrame(
         ...     [(1, 1.0), (1, 2.0), (2, 3.0), (2, 5.0), (2, 10.0)],
-        ...     ("id", "v"))  # doctest: +SKIP
+        ...     ("id", "v"))
         >>> def normalize(pdf):
         ...     v = pdf.v
         ...     return pdf.assign(v=(v - v.mean()) / v.std())
         ...
         >>> df.groupby("id").applyInPandas(
-        ...     normalize, schema="id long, v double").show()  # doctest: +SKIP
+        ...     normalize, schema="id long, v double"
+        ... ).sort("id", "v").show()
         +---+-------------------+
         | id|                  v|
         +---+-------------------+
-        |  1|-0.7071067811865475|
-        |  1| 0.7071067811865475|
-        |  2|-0.8320502943378437|
-        |  2|-0.2773500981126146|
-        |  2| 1.1094003924504583|
+        |  1|-0.7071067811865...|
+        |  1| 0.7071067811865...|
+        |  2|-0.8320502943378...|
+        |  2|-0.2773500981126...|
+        |  2| 1.1094003924504...|
         +---+-------------------+
 
         Alternatively, the user can pass a function that takes two arguments.
@@ -183,14 +190,15 @@ class PandasGroupedOpsMixin:
 
         >>> df = spark.createDataFrame(
         ...     [(1, 1.0), (1, 2.0), (2, 3.0), (2, 5.0), (2, 10.0)],
-        ...     ("id", "v"))  # doctest: +SKIP
+        ...     ("id", "v"))
         >>> def mean_func(key, pdf):
         ...     # key is a tuple of one numpy.int64, which is the value
         ...     # of 'id' for the current group
         ...     return pd.DataFrame([key + (pdf.v.mean(),)])
         ...
-        >>> df.groupby('id').applyInPandas(
-        ...     mean_func, schema="id long, v double").show()  # doctest: +SKIP
+        >>> df.groupby("id").applyInPandas(
+        ...     mean_func, schema="id long, v double"
+        ... ).sort("id").show()
         +---+---+
         | id|  v|
         +---+---+
@@ -203,33 +211,98 @@ class PandasGroupedOpsMixin:
         ...     # of 'id' and 'ceil(df.v / 2)' for the current group
         ...     return pd.DataFrame([key + (pdf.v.sum(),)])
         ...
-        >>> df.groupby(df.id, ceil(df.v / 2)).applyInPandas(
-        ...     sum_func, schema="id long, `ceil(v / 2)` long, v double").show()  # doctest: +SKIP
+        >>> df.groupby(df.id, sf.ceil(df.v / 2)).applyInPandas(
+        ...     sum_func, schema="id long, `ceil(v / 2)` long, v double"
+        ... ).sort("id", "v").show()
         +---+-----------+----+
         | id|ceil(v / 2)|   v|
         +---+-----------+----+
-        |  2|          5|10.0|
         |  1|          1| 3.0|
-        |  2|          3| 5.0|
         |  2|          2| 3.0|
+        |  2|          3| 5.0|
+        |  2|          5|10.0|
         +---+-----------+----+
+
+        The function can also take and return an iterator of `pandas.DataFrame` using type
+        hints.
+
+        >>> from typing import Iterator
+        >>> df = spark.createDataFrame(
+        ...     [(1, 1.0), (1, 2.0), (2, 3.0), (2, 5.0), (2, 10.0)],
+        ...     ("id", "v"))
+        >>> def filter_func(
+        ...     batches: Iterator[pd.DataFrame]
+        ... ) -> Iterator[pd.DataFrame]:
+        ...     for batch in batches:
+        ...         # Process and yield each batch independently
+        ...         filtered = batch[batch['v'] > 2.0]
+        ...         if not filtered.empty:
+        ...             yield filtered[['v']]
+        >>> df.groupby("id").applyInPandas(
+        ...     filter_func, schema="v double"
+        ... ).sort("v").show()
+        +----+
+        |   v|
+        +----+
+        | 3.0|
+        | 5.0|
+        |10.0|
+        +----+
+
+        Alternatively, the user can pass a function that takes two arguments.
+        In this case, the grouping key(s) will be passed as the first argument and the data will
+        be passed as the second argument. The grouping key(s) will be passed as a tuple of numpy
+        data types. The data will still be passed in as an iterator of `pandas.DataFrame`.
+
+        >>> from typing import Iterator, Tuple, Any
+        >>> def transform_func(
+        ...     key: Tuple[Any, ...], batches: Iterator[pd.DataFrame]
+        ... ) -> Iterator[pd.DataFrame]:
+        ...     for batch in batches:
+        ...         # Yield transformed results for each batch
+        ...         result = batch.assign(id=key[0], v_doubled=batch['v'] * 2)
+        ...         yield result[['id', 'v_doubled']]
+        >>> df.groupby("id").applyInPandas(
+        ...     transform_func, schema="id long, v_doubled double"
+        ... ).sort("id", "v_doubled").show()
+        +---+---------+
+        | id|v_doubled|
+        +---+---------+
+        |  1|      2.0|
+        |  1|      4.0|
+        |  2|      6.0|
+        |  2|     10.0|
+        |  2|     20.0|
+        +---+---------+
 
         Notes
         -----
-        This function requires a full shuffle. All the data of a group will be loaded
-        into memory, so the user should be aware of the potential OOM risk if data is skewed
-        and certain groups are too large to fit in memory.
+        This function requires a full shuffle. If using the `pandas.DataFrame` API, all data of a
+        group will be loaded into memory, so the user should be aware of the potential OOM risk if
+        data is skewed and certain groups are too large to fit in memory, and can use the
+        iterator of `pandas.DataFrame` API to mitigate this.
 
         See Also
         --------
         pyspark.sql.functions.pandas_udf
         """
         from pyspark.sql import GroupedData
-        from pyspark.sql.functions import pandas_udf, PandasUDFType
+        from pyspark.sql.functions import pandas_udf
+        from pyspark.sql.pandas.typehints import infer_group_pandas_eval_type_from_func
 
         assert isinstance(self, GroupedData)
 
-        udf = pandas_udf(func, returnType=schema, functionType=PandasUDFType.GROUPED_MAP)
+        # Try to infer the eval type from type hints
+        eval_type = None
+        try:
+            eval_type = infer_group_pandas_eval_type_from_func(func)
+        except Exception as e:
+            warnings.warn(f"Cannot infer the eval type from type hints: {e}", UserWarning)
+
+        if eval_type is None:
+            eval_type = PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF
+
+        udf = pandas_udf(func, returnType=schema, functionType=eval_type)
         df = self._df
         udf_column = udf(*[df[col] for col in df.columns])
         jdf = self._jgd.flatMapGroupsInPandas(udf_column._jc)
@@ -1119,8 +1192,14 @@ def _test() -> None:
     import doctest
     from pyspark.sql import SparkSession
     import pyspark.sql.pandas.group_ops
+    from pyspark.testing.utils import have_pandas, have_pyarrow
 
     globs = pyspark.sql.pandas.group_ops.__dict__.copy()
+
+    if not have_pandas or not have_pyarrow:
+        del pyspark.sql.pandas.group_ops.PandasGroupedOpsMixin.apply.__doc__
+        del pyspark.sql.pandas.group_ops.PandasGroupedOpsMixin.applyInPandas.__doc__
+
     spark = SparkSession.builder.master("local[4]").appName("sql.pandas.group tests").getOrCreate()
     globs["spark"] = spark
     (failure_count, test_count) = doctest.testmod(
