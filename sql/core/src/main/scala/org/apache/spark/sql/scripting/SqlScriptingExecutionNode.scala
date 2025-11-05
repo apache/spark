@@ -20,6 +20,8 @@ package org.apache.spark.sql.scripting
 import java.util
 import java.util.{Locale, UUID}
 
+import scala.annotation.tailrec
+
 import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.Row
@@ -309,7 +311,7 @@ class CompoundBodyExec(
         !stopIteration && (localIterator.hasNext || childHasNext)
       }
 
-      @scala.annotation.tailrec
+      @tailrec
       override def next(): CompoundStatementExec = {
         curr match {
           case None => throw SparkException.internalError(
@@ -1056,6 +1058,7 @@ class ForStatementExec(
         case ForState.Body => bodyWithVariables.exists(_.getTreeIterator.hasNext)
       })
 
+      @tailrec
       override def next(): CompoundStatementExec = state match {
 
         case ForState.VariableAssignment =>

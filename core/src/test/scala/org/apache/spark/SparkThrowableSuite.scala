@@ -620,7 +620,6 @@ class SparkThrowableSuite extends SparkFunSuite {
     // Create a custom throwable that overrides getDefaultMessageTemplate.
     class CustomTemplatedThrowable extends Throwable with SparkThrowable {
       override def getCondition: String = "DIVIDE_BY_ZERO"
-      override def getErrorClass: String = "DIVIDE_BY_ZERO"
       override def getMessage: String = "Custom message"
       override def getMessageParameters: java.util.Map[String, String] =
         Map("config" -> "TEST_CONFIG").asJava
@@ -643,7 +642,6 @@ class SparkThrowableSuite extends SparkFunSuite {
     // Create a throwable that uses default getDefaultMessageTemplate implementation.
     class ReadFromJSONThrowable extends Throwable with SparkThrowable {
       override def getCondition: String = "DIVIDE_BY_ZERO"
-      override def getErrorClass: String = "DIVIDE_BY_ZERO"
       override def getMessage: String = "Random message"
       override def getMessageParameters: java.util.Map[String, String] =
         Map("config" -> "TEST_CONFIG").asJava
@@ -665,7 +663,6 @@ class SparkThrowableSuite extends SparkFunSuite {
     // Create a throwable with non-existing error condition.
     class NonExistingConditionThrowable extends Throwable with SparkThrowable {
       override def getCondition: String = "NON_EXISTING_ERROR_CONDITION"
-      override def getErrorClass: String = "NON_EXISTING_ERROR_CONDITION"
       override def getMessage: String = "Non-existing error message"
       override def getMessageParameters: java.util.Map[String, String] =
         Map("param" -> "value").asJava

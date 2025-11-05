@@ -476,3 +476,9 @@ class StateStoreInstanceMetricSuite extends StreamTest with AlsoTestWithRocksDBF
       }
   }
 }
+
+/**
+ * Test suite that runs all StateStoreInstanceMetricSuite tests with row checksum enabled.
+ */
+class StateStoreInstanceMetricSuiteWithRowChecksum
+  extends StateStoreInstanceMetricSuite with EnableStateStoreRowChecksum
