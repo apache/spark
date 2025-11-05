@@ -201,7 +201,7 @@ private[spark] class ExecutorPodsLifecycleManager(
   private def removeExecutorFromK8s(execId: Long, updatedPod: Pod): Unit = {
     Utils.tryLogNonFatalError {
       if (shouldDeleteExecutors) {
-        if updatedPod.getMetadata.getDeletionTimestamp != null {
+        if (updatedPod.getMetadata.getDeletionTimestamp != null) {
           // Do not call the Kubernetes API if the deletion timestamp
           // is already set on the updatedPod object.
           // This is removing the need for un-necessary API roundtrips
@@ -220,7 +220,8 @@ private[spark] class ExecutorPodsLifecycleManager(
           .inNamespace(namespace)
           .withName(updatedPod.getMetadata.getName)
 
-        if (podToDelete.get() != null || podToDelete.getDeletionTimestamp != null) {
+        if (podToDelete.get() != null ||
+            podToDelete.get.getMetadata.getDeletionTimestamp != null) {
           podToDelete.delete()
         }
       } else if (!inactivatedPods.contains(execId) && !isPodInactive(updatedPod)) {
