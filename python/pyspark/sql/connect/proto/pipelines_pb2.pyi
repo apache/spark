@@ -614,8 +614,10 @@ class PipelineCommand(google.protobuf.message.Message):
         @property
         def extension(self) -> google.protobuf.any_pb2.Any: ...
         once: builtins.bool
-        """If true, define the flow as a one-time flow, such as for backfill. Set to true changes the flow in two ways:
-          - The flow is run one time by default. If the pipeline is ran with a full refresh, the flow will run again.
+        """If true, define the flow as a one-time flow, such as for backfill.
+        Set to true changes the flow in two ways:
+          - The flow is run one time by default. If the pipeline is ran with a full refresh,
+            the flow will run again.
           - The flow function must be a batch DataFrame, not a streaming DataFrame.
         """
         def __init__(
