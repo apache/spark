@@ -46,6 +46,13 @@ options { tokenVocab = SqlBaseLexer; }
    * When true, parameter markers are allowed everywhere a literal is supported.
    */
   public boolean parameter_substitution_enabled = true;
+
+  /**
+   * When false (default), IDENTIFIER('literal') is resolved to an identifier at parse time (identifier-lite).
+   * When true, only the legacy IDENTIFIER(expression) function syntax is allowed.
+   * Controlled by spark.sql.legacy.identifierClause configuration.
+   */
+  public boolean legacy_identifier_clause_only = false;
 }
 
 compoundOrSingleStatement
@@ -1586,7 +1593,7 @@ qualifiedName
 // valid expressions such as "a-b" can be recognized as an identifier
 errorCapturingIdentifier
     : identifier errorCapturingIdentifierExtra                         #errorCapturingIdentifierBase
-    | IDENTIFIER_KW LEFT_PAREN stringLit RIGHT_PAREN errorCapturingIdentifierExtra #identifierLiteralWithExtra
+    | {!legacy_identifier_clause_only}? IDENTIFIER_KW LEFT_PAREN stringLit RIGHT_PAREN errorCapturingIdentifierExtra #identifierLiteralWithExtra
     ;
 
 // extra left-factoring grammar
@@ -1603,7 +1610,7 @@ identifier
 strictIdentifier
     : IDENTIFIER              #unquotedIdentifier
     | quotedIdentifier        #quotedIdentifierAlternative
-    | IDENTIFIER_KW LEFT_PAREN stringLit RIGHT_PAREN  #identifierLiteral
+    | {!legacy_identifier_clause_only}? IDENTIFIER_KW LEFT_PAREN stringLit RIGHT_PAREN  #identifierLiteral
     | {SQL_standard_keyword_behavior}? ansiNonReserved #unquotedIdentifier
     | {!SQL_standard_keyword_behavior}? nonReserved    #unquotedIdentifier
     ;
@@ -1719,7 +1726,7 @@ singleStringLitWithoutMarker
 singleStringLit
     : singleStringLitWithoutMarker
     | parameterMarker
-    ;
+;
 
 parameterMarker
     : {parameter_substitution_enabled}? namedParameterMarker                                   #namedParameterMarkerRule

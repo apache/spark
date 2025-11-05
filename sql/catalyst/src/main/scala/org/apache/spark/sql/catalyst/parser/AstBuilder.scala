@@ -3494,13 +3494,18 @@ class AstBuilder extends DataTypeAstBuilder
    * quoted in ``
    */
   override def visitColumnReference(ctx: ColumnReferenceContext): Expression = withOrigin(ctx) {
-    ctx.getStart.getText match {
+    // For regex check, we need the original text before identifier-lite resolution
+    val originalText = ctx.getStart.getText
+    originalText match {
       case escapedIdentifier(columnNameRegex)
         if conf.supportQuotedRegexColumnName &&
           isRegex(columnNameRegex) && canApplyRegex(ctx) =>
         UnresolvedRegex(columnNameRegex, None, conf.caseSensitiveAnalysis)
       case _ =>
-        UnresolvedAttribute.quoted(ctx.getText)
+        // Use getIdentifierParts to handle IDENTIFIER('literal') correctly
+        // This allows IDENTIFIER('t').c1 to work like t.c1
+        val parts = getIdentifierParts(ctx.identifier())
+        UnresolvedAttribute(parts)
     }
 
   }

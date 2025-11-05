@@ -1,0 +1,2 @@
+--SET spark.sql.legacy.identifierClause = true
+--IMPORT identifier-clause.sql
