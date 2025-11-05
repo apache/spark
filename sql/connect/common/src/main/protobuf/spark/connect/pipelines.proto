@@ -158,17 +158,12 @@ message PipelineCommand {
       // An unresolved relation that defines the dataset's flow. Empty if the query function
       // that defines the flow cannot be analyzed at the time of flow definition.
       optional spark.connect.Relation relation = 1;
-
       // The output mode for the standalone flow.
       optional string outputMode = 2;
-
       // If true, define the flow as a one-time flow, such as for backfill. Set to true changes the flow in two ways:
       //   - The flow is run one time by default. If the pipeline is ran with a full refresh, the flow will run again.
       //   - The flow function must be a batch DataFrame, not a streaming DataFrame.
       optional bool once = 3;
-
-      // An optional comment for the flow.
-      optional string comment = 4;
     }
 
     message Response {
