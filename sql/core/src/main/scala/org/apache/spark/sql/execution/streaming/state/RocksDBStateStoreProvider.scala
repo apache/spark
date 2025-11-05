@@ -1295,7 +1295,7 @@ object RocksDBStateStoreProvider {
     "RocksDB: number of snapshots that were automatically repaired during store load")
 
   val CUSTOM_METRIC_FORCE_SNAPSHOT = StateStoreCustomSumMetric(
-    "forceSnapshotCount", "RocksDB: number of stores that had forced snapshot")
+    "rocksdbForceSnapshotCount", "RocksDB: number of stores that had forced snapshot on commit")
 
   val ALL_CUSTOM_METRICS = Seq(
     CUSTOM_METRIC_SST_FILE_SIZE, CUSTOM_METRIC_GET_TIME, CUSTOM_METRIC_PUT_TIME,

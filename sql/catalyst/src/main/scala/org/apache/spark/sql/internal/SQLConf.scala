@@ -6901,15 +6901,11 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def stateStoreCoordinatorMaxLaggingStoresToReport: Int =
     getConf(STATE_STORE_COORDINATOR_MAX_LAGGING_STORES_TO_REPORT)
 
-<<<<<<< HEAD
   def stateStoreRowChecksumEnabled: Boolean = getConf(STATE_STORE_ROW_CHECKSUM_ENABLED)
 
   def stateStoreRowChecksumReadVerificationRatio: Long =
     getConf(STATE_STORE_ROW_CHECKSUM_READ_VERIFICATION_RATIO)
 
-  def stateStoreAutoSnapshotForLaggingStoresEnabled: Boolean =
-    getConf(STATE_STORE_AUTO_SNAPSHOT_FOR_LAGGING_STORES_ENABLED)
-=======
   def stateStoreForceSnapshotUploadOnLag: Boolean = {
     val value = getConf(STATE_STORE_FORCE_SNAPSHOT_UPLOAD_ON_LAG)
     if (value && !stateStoreCoordinatorReportSnapshotUploadLag) {
@@ -6920,7 +6916,6 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
     }
     value
   }
->>>>>>> 10ca5c809e (address comment)
 
   def checkpointLocation: Option[String] = getConf(CHECKPOINT_LOCATION)
 

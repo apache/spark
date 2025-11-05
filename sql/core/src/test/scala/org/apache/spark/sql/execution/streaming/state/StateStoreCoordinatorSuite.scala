@@ -284,42 +284,41 @@ class StateStoreCoordinatorSuite extends SparkFunSuite with SharedSparkContext {
 
           val streamingQuery = query.asInstanceOf[StreamingQueryWrapper].streamingQuery
           val stateCheckpointDir = streamingQuery.lastExecution.checkpointLocation
-          // Verify bad partitions have uploaded a snapshot and it's logged by the coordinator
-          badPartitions.foreach {
-            partitionId =>
-              // Verify for every store name listed
+
+          def verifyBadPartitions(
+              checkpointDir: String,
+              runId: UUID,
+              shouldForce: Boolean,
+              expectedSnapshotVersion: Option[Int]): Unit = {
+            badPartitions.foreach { partitionId =>
               val storeId = StateStoreId(
-                stateCheckpointDir, 0, partitionId, StateStoreId.DEFAULT_STORE_NAME)
-              val providerId = StateStoreProviderId(storeId, query.runId)
-              val latestSnapshotVersion = coordRef.getLatestSnapshotVersionForTesting(providerId)
-              assert(latestSnapshotVersion.get == snapshotVersionOnLagDetected + 1)
-              // Also verify that store is no longer force uploading snapshot
-              val stateStoreStatus = coordRef.reportActiveInstance(
-                providerId, "hostX", "exec1", Seq.empty
+                checkpointDir,
+                0,
+                partitionId,
+                StateStoreId.DEFAULT_STORE_NAME
               )
-              assert(stateStoreStatus.shouldForceSnapshotUpload == false)
+              val providerId = StateStoreProviderId(storeId, runId)
+              if (expectedSnapshotVersion.isDefined) {
+                val latestSnapshotVersion = coordRef.getLatestSnapshotVersionForTesting(providerId)
+                assert(latestSnapshotVersion.get == expectedSnapshotVersion.get)
+              }
+              val stateStoreStatus = coordRef.reportActiveInstance(
+                providerId, "hostX", "exec1", Seq.empty)
+              assert(stateStoreStatus.shouldForceSnapshotUpload == shouldForce)
+            }
           }
+          verifyBadPartitions(
+            stateCheckpointDir,
+            query.runId,
+            false,
+            Some(snapshotVersionOnLagDetected + 1)
+          )
 
           val streamingQuery2 = query2.asInstanceOf[StreamingQueryWrapper].streamingQuery
           val stateCheckpointDir2 = streamingQuery2.lastExecution.checkpointLocation
 
-          // Helper function to verify shouldForceSnapshotUpload for queried partitions
-          def assertForceSnapshotUploadOnBadPartitions(
-              shouldForce: Boolean): Unit = {
-            badPartitions.foreach { partitionId =>
-              val storeId = StateStoreId(
-                stateCheckpointDir2, 0, partitionId, StateStoreId.DEFAULT_STORE_NAME)
-              val providerId = StateStoreProviderId(storeId, query2.runId)
-              val stateStoreStatus = coordRef.reportActiveInstance(
-                providerId, "hostX", "exec1", Seq.empty)
-              assert(
-                stateStoreStatus.shouldForceSnapshotUpload == shouldForce
-              )
-            }
-          }
-
           // verify that lagging stores in query2 are not impacted by query1 catching up
-          assertForceSnapshotUploadOnBadPartitions(true)
+          verifyBadPartitions(stateCheckpointDir2, query2.runId, true, None)
 
           // verify report snapshot upload will remove lagging stores
           val storeId = StateStoreId(
@@ -338,7 +337,7 @@ class StateStoreCoordinatorSuite extends SparkFunSuite with SharedSparkContext {
           // lagging because they are removed when stop() is called
           query.stop()
           query2.stop()
-          assertForceSnapshotUploadOnBadPartitions(false)
+          verifyBadPartitions(stateCheckpointDir2, query2.runId, false, None)
         }
       }
   }
