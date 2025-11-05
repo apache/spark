@@ -26564,13 +26564,9 @@ def kll_sketch_agg_bigint(
     --------
     >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([1,2,3,4,5], "INT")
-    >>> df.agg(sf.kll_sketch_agg_bigint("value")).show()  # doctest: +SKIP
-    +----------------------------+
-    |kll_sketch_agg_bigint(value)|
-    +----------------------------+
-    |        [05 01 0F 00 C8 0...|
-    +----------------------------+
-    <BLANKLINE>
+    >>> result = df.agg(sf.kll_sketch_agg_bigint("value")).first()[0]
+    >>> result is not None and len(result) > 0
+    True
     """
     fn = "kll_sketch_agg_bigint"
     if k is None:
@@ -26607,13 +26603,9 @@ def kll_sketch_agg_float(
     --------
     >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([1.0,2.0,3.0,4.0,5.0], "FLOAT")
-    >>> df.agg(sf.kll_sketch_agg_float("value")).show()  # doctest: +SKIP
-    +---------------------------+
-    |kll_sketch_agg_float(value)|
-    +---------------------------+
-    |       [05 01 0F 00 C8 0...|
-    +---------------------------+
-    <BLANKLINE>
+    >>> result = df.agg(sf.kll_sketch_agg_float("value")).first()[0]
+    >>> result is not None and len(result) > 0
+    True
     """
     fn = "kll_sketch_agg_float"
     if k is None:
@@ -26650,13 +26642,9 @@ def kll_sketch_agg_double(
     --------
     >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([1.0,2.0,3.0,4.0,5.0], "DOUBLE")
-    >>> df.agg(sf.kll_sketch_agg_double("value")).show()  # doctest: +SKIP
-    +----------------------------+
-    |kll_sketch_agg_double(value)|
-    +----------------------------+
-    |        [05 01 0F 00 C8 0...|
-    +----------------------------+
-    <BLANKLINE>
+    >>> result = df.agg(sf.kll_sketch_agg_double("value")).first()[0]
+    >>> result is not None and len(result) > 0
+    True
     """
     fn = "kll_sketch_agg_double"
     if k is None:
@@ -26687,13 +26675,9 @@ def kll_sketch_to_string_bigint(col: "ColumnOrName") -> Column:
     >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([1,2,3,4,5], "INT")
     >>> sketch_df = df.agg(sf.kll_sketch_agg_bigint("value").alias("sketch"))
-    >>> sketch_df.select(sf.kll_sketch_to_string_bigint("sketch")).show()  # doctest: +SKIP
-    +-----------------------------------+
-    |kll_sketch_to_string_bigint(sketch)|
-    +-----------------------------------+
-    |               \n### KllKllLongs...|
-    +-----------------------------------+
-    <BLANKLINE>
+    >>> result = sketch_df.select(sf.kll_sketch_to_string_bigint("sketch")).first()[0]
+    >>> "Kll" in result and "N" in result
+    True
     """
     fn = "kll_sketch_to_string_bigint"
     return _invoke_function_over_columns(fn, col)
@@ -26721,13 +26705,9 @@ def kll_sketch_to_string_float(col: "ColumnOrName") -> Column:
     >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([1.0,2.0,3.0,4.0,5.0], "FLOAT")
     >>> sketch_df = df.agg(sf.kll_sketch_agg_float("value").alias("sketch"))
-    >>> sketch_df.select(sf.kll_sketch_to_string_float("sketch")).show()  # doctest: +SKIP
-    +----------------------------------+
-    |kll_sketch_to_string_float(sketch)|
-    +----------------------------------+
-    |              \n### KllKllFloat...|
-    +----------------------------------+
-    <BLANKLINE>
+    >>> result = sketch_df.select(sf.kll_sketch_to_string_float("sketch")).first()[0]
+    >>> "Kll" in result and "N" in result
+    True
     """
     fn = "kll_sketch_to_string_float"
     return _invoke_function_over_columns(fn, col)
@@ -26755,13 +26735,9 @@ def kll_sketch_to_string_double(col: "ColumnOrName") -> Column:
     >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([1.0,2.0,3.0,4.0,5.0], "DOUBLE")
     >>> sketch_df = df.agg(sf.kll_sketch_agg_double("value").alias("sketch"))
-    >>> sketch_df.select(sf.kll_sketch_to_string_double("sketch")).show()  # doctest: +SKIP
-    +-----------------------------------+
-    |kll_sketch_to_string_double(sketch)|
-    +-----------------------------------+
-    |               \n### KllKllDoubl...|
-    +-----------------------------------+
-    <BLANKLINE>
+    >>> result = sketch_df.select(sf.kll_sketch_to_string_double("sketch")).first()[0]
+    >>> "Kll" in result and "N" in result
+    True
     """
     fn = "kll_sketch_to_string_double"
     return _invoke_function_over_columns(fn, col)
@@ -26890,13 +26866,9 @@ def kll_sketch_merge_bigint(left: "ColumnOrName", right: "ColumnOrName") -> Colu
     >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([1,2,3,4,5], "INT")
     >>> sketch_df = df.agg(sf.kll_sketch_agg_bigint("value").alias("sketch"))
-    >>> sketch_df.select(sf.kll_sketch_merge_bigint("sketch", "sketch")).show()  # doctest: +SKIP
-    +---------------------------------------+
-    |kll_sketch_merge_bigint(sketch, sketch)|
-    +---------------------------------------+
-    |                   [05 01 0F 00 C8 0...|
-    +---------------------------------------+
-    <BLANKLINE>
+    >>> result = sketch_df.select(sf.kll_sketch_merge_bigint("sketch", "sketch")).first()[0]
+    >>> result is not None and len(result) > 0
+    True
     """
     fn = "kll_sketch_merge_bigint"
     return _invoke_function_over_columns(fn, left, right)
@@ -26926,13 +26898,9 @@ def kll_sketch_merge_float(left: "ColumnOrName", right: "ColumnOrName") -> Colum
     >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([1.0,2.0,3.0,4.0,5.0], "FLOAT")
     >>> sketch_df = df.agg(sf.kll_sketch_agg_float("value").alias("sketch"))
-    >>> sketch_df.select(sf.kll_sketch_merge_float("sketch", "sketch")).show()  # doctest: +SKIP
-    +--------------------------------------+
-    |kll_sketch_merge_float(sketch, sketch)|
-    +--------------------------------------+
-    |                  [05 01 0F 00 C8 0...|
-    +--------------------------------------+
-    <BLANKLINE>
+    >>> result = sketch_df.select(sf.kll_sketch_merge_float("sketch", "sketch")).first()[0]
+    >>> result is not None and len(result) > 0
+    True
     """
     fn = "kll_sketch_merge_float"
     return _invoke_function_over_columns(fn, left, right)
@@ -26962,13 +26930,9 @@ def kll_sketch_merge_double(left: "ColumnOrName", right: "ColumnOrName") -> Colu
     >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([1.0,2.0,3.0,4.0,5.0], "DOUBLE")
     >>> sketch_df = df.agg(sf.kll_sketch_agg_double("value").alias("sketch"))
-    >>> sketch_df.select(sf.kll_sketch_merge_double("sketch", "sketch")).show()  # doctest: +SKIP
-    +---------------------------------------+
-    |kll_sketch_merge_double(sketch, sketch)|
-    +---------------------------------------+
-    |                   [05 01 0F 00 C8 0...|
-    +---------------------------------------+
-    <BLANKLINE>
+    >>> result = sketch_df.select(sf.kll_sketch_merge_double("sketch", "sketch")).first()[0]
+    >>> result is not None and len(result) > 0
+    True
     """
     fn = "kll_sketch_merge_double"
     return _invoke_function_over_columns(fn, left, right)
