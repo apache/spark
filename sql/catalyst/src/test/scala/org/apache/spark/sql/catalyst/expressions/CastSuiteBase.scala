@@ -1491,6 +1491,27 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
 
   // The following tests are confirming the behavior of casting between geospatial types.
 
+  test("Casting GeographyType to GeographyType") {
+    // Casting from fixed SRID GEOGRAPHY(<srid>) to mixed SRID GEOGRAPHY(ANY) is always allowed.
+    // Type casting is always safe in this direction, so no additional constraints are imposed.
+    // Casting from mixed SRID GEOGRAPHY(ANY) to fixed SRID GEOGRAPHY(<srid>) is not allowed.
+    // Type casting can be unsafe in this direction, because per-row SRID values may be different.
+
+    // Valid cast test cases.
+    val canCastTestCases: Seq[(DataType, DataType)] = Seq(
+      (GeographyType(4326), GeographyType("ANY"))
+    )
+    // Iterate over the test cases and verify casting.
+    canCastTestCases.foreach { case (fromType, toType) =>
+      // Cast can be performed from `fromType` to `toType`.
+      assert(Cast.canCast(fromType, toType))
+      assert(Cast.canAnsiCast(fromType, toType))
+      // Cast cannot be performed from `toType` to `fromType`.
+      assert(!Cast.canCast(toType, fromType))
+      assert(!Cast.canAnsiCast(toType, fromType))
+    }
+  }
+
   test("Casting GeographyType to GeometryType") {
     // Casting from GEOGRAPHY to GEOMETRY is only allowed if the SRIDs are the same.
 
