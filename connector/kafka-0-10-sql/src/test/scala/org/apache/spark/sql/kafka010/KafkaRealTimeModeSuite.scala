@@ -696,7 +696,7 @@ class KafkaConsumerPoolRealTimeModeSuite
   override def beforeAll(): Unit = {
     super.beforeAll()
     spark.conf.set(
-      DatabricksSQLConf.STREAMING_REAL_TIME_MODE_MIN_BATCH_DURATION,
+      SQLConf.STREAMING_REAL_TIME_MODE_MIN_BATCH_DURATION,
       defaultTrigger.batchDurationMs
     )
   }
