@@ -578,6 +578,13 @@ object SchemaPruning extends Rule[LogicalPlan] {
           val arrayPaths = arrayStructFieldPaths.getOrElse(field.name, Set.empty)
           val prunedField = pruneFieldByPaths(field, paths.toSeq, arrayPaths)
           Some(prunedField)
+        case Some(_) =>
+          // Field was tracked but no nested paths survived; fall back to direct reference check.
+          if (requiredColumns.contains(field.name)) {
+            Some(field)
+          } else {
+            None
+          }
         case None =>
           // SPARK-47230: Preserve top-level columns that are directly referenced
           // (e.g., columns used in GROUP BY, WHERE without nested access)
