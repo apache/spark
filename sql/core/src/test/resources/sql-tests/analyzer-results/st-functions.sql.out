@@ -23,6 +23,28 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 
 
 -- !query
+DROP TABLE IF EXISTS geoinvaliddata
+-- !query analysis
+DropTable true, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.geoinvaliddata
+
+
+-- !query
+CREATE TABLE geoinvaliddata(wkb BINARY) USING parquet
+-- !query analysis
+CreateDataSourceTableCommand `spark_catalog`.`default`.`geoinvaliddata`, false
+
+
+-- !query
+INSERT INTO geoinvaliddata VALUES
+(X'010203')
+-- !query analysis
+InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/geoinvaliddata, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/geoinvaliddata], Append, `spark_catalog`.`default`.`geoinvaliddata`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/geoinvaliddata), [wkb]
++- Project [col1#x AS wkb#x]
+   +- LocalRelation [col1#x]
+
+
+-- !query
 SELECT CAST(ST_GeogFromWKB(X'0101000000000000000000f03f0000000000000040') AS STRING) AS result
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
@@ -81,6 +103,51 @@ Project [hex(st_asbinary(st_geomfromwkb(0x0101000000000000000000F03F000000000000
 
 
 -- !query
+SELECT ST_GeogFromWKB(NULL)
+-- !query analysis
+Project [st_geogfromwkb(cast(null as binary)) AS st_geogfromwkb(NULL)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT ST_AsBinary(ST_GeogFromWKB(X'0101000000000000000000F03F0000000000000040'))
+-- !query analysis
+Project [st_asbinary(st_geogfromwkb(0x0101000000000000000000F03F0000000000000040)) AS st_asbinary(st_geogfromwkb(X'0101000000000000000000F03F0000000000000040'))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT ST_AsBinary(ST_GeomFromWKB(X'00000000013FF00000000000004000000000000000'))
+-- !query analysis
+Project [st_asbinary(st_geomfromwkb(0x00000000013FF00000000000004000000000000000)) AS st_asbinary(st_geomfromwkb(X'00000000013FF00000000000004000000000000000'))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT ST_AsBinary(ST_GeomFromWKB(X'010203'))
+-- !query analysis
+Project [st_asbinary(st_geomfromwkb(0x010203)) AS st_asbinary(st_geomfromwkb(X'010203'))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT COUNT(*) FROM geodata WHERE wkb IS NOT NULL AND ST_AsBinary(ST_GeogFromWKB(wkb)) IS NULL
+-- !query analysis
+Aggregate [count(1) AS count(1)#xL]
++- Filter (isnotnull(wkb#x) AND isnull(st_asbinary(st_geogfromwkb(wkb#x))))
+   +- SubqueryAlias spark_catalog.default.geodata
+      +- Relation spark_catalog.default.geodata[wkb#x] parquet
+
+
+-- !query
+SELECT ST_AsBinary(ST_GeogFromWKB(wkb)) FROM geoinvaliddata
+-- !query analysis
+Project [st_asbinary(st_geogfromwkb(wkb#x)) AS st_asbinary(st_geogfromwkb(wkb))#x]
++- SubqueryAlias spark_catalog.default.geoinvaliddata
+   +- Relation spark_catalog.default.geoinvaliddata[wkb#x] parquet
+
+
+-- !query
 SELECT ST_Srid(NULL)
 -- !query analysis
 Project [st_srid(cast(null as geography(any))) AS st_srid(NULL)#x]
@@ -124,3 +191,10 @@ DROP TABLE geodata
 -- !query analysis
 DropTable false, false
 +- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.geodata
+
+
+-- !query
+DROP TABLE geoinvaliddata
+-- !query analysis
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.geoinvaliddata

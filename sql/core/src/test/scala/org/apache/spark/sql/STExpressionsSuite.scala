@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.st._
 import org.apache.spark.sql.test.SharedSparkSession
@@ -33,7 +34,12 @@ class STExpressionsSuite
   private final val defaultGeometrySrid: Int = ExpressionDefaults.DEFAULT_GEOMETRY_SRID
   private final val defaultGeometryType: DataType = GeometryType(defaultGeometrySrid)
 
-  /** ST reader/writer expressions. */
+  // Private helper method to assert the data type of a query result.
+  private def assertType(query: String, expectedDataType: DataType) = {
+    assert(sql(query).schema.fields.head.dataType.sameType(expectedDataType))
+  }
+
+  /** ST writer expressions. */
 
   test("ST_AsBinary") {
     // Test data: WKB representation of POINT(1 2).
@@ -47,6 +53,69 @@ class STExpressionsSuite
     val geometryExpression = ST_GeomFromWKB(wkbLiteral)
     assert(geometryExpression.dataType.sameType(defaultGeometryType))
     checkEvaluation(ST_AsBinary(geometryExpression), wkb)
+  }
+
+  /** ST reader expressions. */
+
+  test("ST_GeogFromWKB - expressions") {
+    // Test data: WKB representation of POINT(1 2).
+    val validWkb = Hex.unhex("0101000000000000000000F03F0000000000000040".getBytes())
+    val validWkbLiteral = Literal.create(validWkb, BinaryType)
+    val invalidWkb = Hex.unhex("010203".getBytes())
+    val invalidWkbLiteral = Literal.create(invalidWkb, BinaryType)
+
+    // ST_GeogFromWKB with valid WKB.
+    val geogLitValidWkb = ST_GeogFromWKB(validWkbLiteral)
+    assert(geogLitValidWkb.dataType.sameType(defaultGeographyType))
+    checkEvaluation(ST_AsBinary(geogLitValidWkb), validWkb)
+    // ST_GeogFromWKB with invalid WKB.
+    val geogLitInvalidWkb = ST_GeogFromWKB(invalidWkbLiteral)
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        geogLitInvalidWkb.eval()
+      },
+      condition = "WKB_PARSE_ERROR",
+      parameters = Map.empty
+    )
+  }
+
+  test("ST_GeogFromWKB - table") {
+    // Test data: WKB representation of POINT(1 2).
+    val validWkbString = "0101000000000000000000F03F0000000000000040"
+    val validWkb = Hex.unhex(validWkbString.getBytes())
+    val invalidWkbString = "010203"
+
+    withTable("tbl") {
+      // Construct the test table.
+      sql(s"CREATE TABLE tbl (validWkb BINARY, invalidWkb BINARY)")
+      sql(s"INSERT INTO tbl VALUES (X'$validWkbString', X'$invalidWkbString')")
+
+      // ST_GeogFromWKB with valid WKB column.
+      val geogCol = "ST_GeogFromWKB(validWkb)"
+      assertType(s"SELECT $geogCol FROM tbl", GeographyType(4326))
+      checkAnswer(sql(s"SELECT ST_AsBinary($geogCol) FROM tbl"), Row(validWkb))
+      // ST_GeogFromWKB with valid WKB literal.
+      val geogLit = s"ST_GeogFromWKB(X'$validWkbString')"
+      assertType(s"SELECT $geogLit", GeographyType(4326))
+      checkAnswer(sql(s"SELECT ST_AsBinary($geogLit) AS wkb"), Row(validWkb))
+
+      // ST_GeogFromWKB with invalid WKB column.
+      checkError(
+        exception = intercept[SparkIllegalArgumentException] {
+          sql(s"SELECT ST_GeogFromWKB(invalidWkb) FROM tbl").collect()
+        },
+        condition = "WKB_PARSE_ERROR",
+        parameters = Map.empty
+      )
+      // ST_GeogFromWKB with invalid WKB literal.
+      checkError(
+        exception = intercept[SparkIllegalArgumentException] {
+          sql(s"SELECT ST_GeogFromWKB(X'$invalidWkbString')").collect()
+        },
+        condition = "WKB_PARSE_ERROR",
+        parameters = Map.empty
+      )
+    }
   }
 
   /** ST accessor expressions. */

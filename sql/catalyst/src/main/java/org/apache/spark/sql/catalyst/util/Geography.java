@@ -16,6 +16,9 @@
  */
 package org.apache.spark.sql.catalyst.util;
 
+import org.apache.spark.sql.errors.QueryExecutionErrors;
+import org.apache.spark.sql.types.GeographyType;
+import org.apache.spark.sql.util.GeoWkbReader;
 import org.apache.spark.unsafe.types.GeographyVal;
 
 import java.nio.ByteBuffer;
@@ -77,9 +80,17 @@ public final class Geography implements Geo {
 
   // Returns a Geography object with the specified SRID value by parsing the input WKB.
   public static Geography fromWkb(byte[] wkb, int srid) {
+    // Verify that the provided SRID value is geographic.
+    if (!GeographyType.isSridSupported(srid)) {
+      throw QueryExecutionErrors.stInvalidSridValueError(srid);
+    }
+    // Create a new byte array to hold the Geography representation and populate the header.
     byte[] bytes = new byte[HEADER_SIZE + wkb.length];
     ByteBuffer.wrap(bytes).order(DEFAULT_ENDIANNESS).putInt(srid);
-    System.arraycopy(wkb, 0, bytes, WKB_OFFSET, wkb.length);
+    // Parse the provided WKB and copy it into the Geography byte array after the header.
+    byte[] wkbBytes = GeoWkbReader.readWkb(wkb);
+    System.arraycopy(wkbBytes, 0, bytes, WKB_OFFSET, wkbBytes.length);
+    // Finally, create and return the Geography instance.
     return fromBytes(bytes);
   }
 
