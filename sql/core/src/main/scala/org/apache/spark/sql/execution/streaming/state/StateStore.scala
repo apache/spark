@@ -1636,4 +1636,3 @@ object StateStore extends Logging {
     }
   }
 }
-

@@ -2232,6 +2232,43 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
     }
   }
 
+  test("SPARK-54156: boolean Protobuf options reject non-boolean values") {
+    Seq(
+      "emit.default.values",
+      "enums.as.ints",
+      "upcast.unsigned.ints",
+      "unwrap.primitive.wrapper.types",
+      "retain.empty.message.types",
+      "convert.any.fields.to.json"
+    ).foreach { opt =>
+      val e = intercept[AnalysisException] {
+        ProtobufOptions(Map(opt -> "not_a_bool"))
+      }
+      checkError(
+        exception = e,
+        condition = "STDS_INVALID_OPTION_VALUE.WITH_MESSAGE",
+        parameters = Map(
+          "optionName" -> opt,
+          "message" -> "Cannot cast value 'not_a_bool' to Boolean."
+        )
+      )
+    }
+  }
+
+  test("SPARK-54156: integer Protobuf options reject non-integer values") {
+    val e = intercept[AnalysisException] {
+      ProtobufOptions(Map("recursive.fields.max.depth" -> "not_an_int"))
+    }
+    checkError(
+      exception = e,
+      condition = "STDS_INVALID_OPTION_VALUE.WITH_MESSAGE",
+      parameters = Map(
+        "optionName" -> "recursive.fields.max.depth",
+        "message" -> "Cannot cast value 'not_an_int' to Int."
+      )
+    )
+  }
+
   def testFromProtobufWithOptions(
     df: DataFrame,
     expectedDf: DataFrame,
