@@ -143,6 +143,11 @@ object KubernetesTestConf {
           (KUBERNETES_VOLUMES_NFS_TYPE, Map(
             KUBERNETES_VOLUMES_OPTIONS_PATH_KEY -> path,
             KUBERNETES_VOLUMES_OPTIONS_SERVER_KEY -> server))
+
+        case KubernetesCSIVolumeConf(driverName, attributes) =>
+          (KUBERNETES_VOLUMES_CSI_TYPE, Map(
+            KUBERNETES_VOLUMES_OPTIONS_CSI_DRIVER_NAME_KEY -> driverName
+          ) ++ attributes)
       }
 
       conf.set(key(vtype, spec.volumeName, KUBERNETES_VOLUMES_MOUNT_PATH_KEY), spec.mountPath)

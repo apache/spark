@@ -134,6 +134,13 @@ private[spark] class MountVolumesFeatureStep(conf: KubernetesConf)
               .withPath(path)
               .withServer(server)
             .endNfs()
+
+        case KubernetesCSIVolumeConf(driverName, attributes) =>
+          new VolumeBuilder()
+            .withNewCsi()
+              .withDriver(driverName)
+              .withVolumeAttributes(attributes.asJava)
+            .endCsi()
       }
 
       val volume = volumeBuilder.withName(spec.volumeName).build()
