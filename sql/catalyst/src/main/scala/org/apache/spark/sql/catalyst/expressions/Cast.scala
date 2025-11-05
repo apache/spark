@@ -38,7 +38,7 @@ import org.apache.spark.sql.catalyst.util.IntervalUtils.{dayTimeIntervalToByte, 
 import org.apache.spark.sql.errors.{QueryErrorsBase, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.{GeographyVal, UTF8String, VariantVal}
+import org.apache.spark.unsafe.types.{GeographyVal, GeometryVal, UTF8String, VariantVal}
 import org.apache.spark.unsafe.types.UTF8String.{IntWrapper, LongWrapper}
 import org.apache.spark.util.ArrayImplicits._
 
@@ -166,6 +166,9 @@ object Cast extends QueryErrorsBase {
 
     // Casting from GEOGRAPHY to GEOMETRY with the same SRID is allowed.
     case (geog: GeographyType, geom: GeometryType) if geog.srid == geom.srid =>
+      true
+    // Casts from concrete GEOMETRY(srid) to mixed GEOMETRY(ANY) is allowed.
+    case (gt1: GeometryType, gt2: GeometryType) if !gt1.isMixedSrid && gt2.isMixedSrid =>
       true
 
     case _ => false
@@ -296,6 +299,9 @@ object Cast extends QueryErrorsBase {
 
     // Casting from GEOGRAPHY to GEOMETRY with the same SRID is allowed.
     case (geog: GeographyType, geom: GeometryType) if geog.srid == geom.srid =>
+      true
+    // Casts from concrete GEOMETRY(srid) to mixed GEOMETRY(ANY) is allowed.
+    case (gt1: GeometryType, gt2: GeometryType) if !gt1.isMixedSrid && gt2.isMixedSrid =>
       true
 
     case _ => false
@@ -1151,6 +1157,8 @@ case class Cast(
   private[this] def castToGeometry(from: DataType): Any => Any = from match {
     case _: GeographyType =>
       buildCast[GeographyVal](_, STUtils.geographyToGeometry)
+    case _: GeometryType =>
+      buildCast[GeometryVal](_, STUtils.geometryToGeometry)
   }
 
   private[this] def castArray(fromType: DataType, toType: DataType): Any => Any = {
@@ -2193,6 +2201,9 @@ case class Cast(
       case _: GeographyType =>
         (c, evPrim, _) =>
           code"$evPrim = org.apache.spark.sql.catalyst.util.STUtils.geographyToGeometry($c);"
+      case _: GeometryType =>
+        (c, evPrim, _) =>
+          code"$evPrim = org.apache.spark.sql.catalyst.util.STUtils.geometryToGeometry($c);"
     }
   }
 

@@ -73,6 +73,14 @@ class STUtilsSuite {
     assertArrayEquals(geographyVal.getBytes(), geometryVal.getBytes());
   }
 
+  @Test
+  void testGeometryToGeography() {
+    GeometryVal geometryVal = GeometryVal.fromBytes(testGeometryBytes);
+    GeometryVal geometryCast = STUtils.geometryToGeometry(geometryVal);
+    assertNotNull(geometryCast);
+    assertArrayEquals(geometryVal.getBytes(), geometryCast.getBytes());
+  }
+
   /** Tests for ST expression utility methods. */
 
   // ST_AsBinary
