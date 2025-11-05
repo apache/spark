@@ -50,6 +50,8 @@ from pyspark.sql.types import (
     NullType,
     NumericType,
     VariantType,
+    GeographyType,
+    GeometryType,
     UserDefinedType,
 )
 from pyspark.errors import PySparkAssertionError, PySparkValueError
@@ -191,6 +193,10 @@ def pyspark_types_to_proto_types(data_type: DataType) -> pb2.DataType:
         ret.array.contains_null = data_type.containsNull
     elif isinstance(data_type, VariantType):
         ret.variant.CopyFrom(pb2.DataType.Variant())
+    elif isinstance(data_type, GeometryType):
+        ret.geometry.srid = data_type.srid
+    elif isinstance(data_type, GeographyType):
+        ret.geography.srid = data_type.srid
     elif isinstance(data_type, UserDefinedType):
         json_value = data_type.jsonValue()
         ret.udt.type = "udt"
@@ -303,6 +309,18 @@ def proto_schema_to_pyspark_data_type(schema: pb2.DataType) -> DataType:
         )
     elif schema.HasField("variant"):
         return VariantType()
+    elif schema.HasField("geometry"):
+        srid = schema.geometry.srid
+        if srid == GeometryType.MIXED_SRID:
+            return GeometryType("ANY")
+        else:
+            return GeometryType(srid)
+    elif schema.HasField("geography"):
+        srid = schema.geography.srid
+        if srid == GeographyType.MIXED_SRID:
+            return GeographyType("ANY")
+        else:
+            return GeographyType(srid)
     elif schema.HasField("udt"):
         assert schema.udt.type == "udt"
         json_value = {}
