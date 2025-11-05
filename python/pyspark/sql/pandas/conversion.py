@@ -208,35 +208,43 @@ class PandasConversionMixin:
 
         # Below is toPandas without Arrow optimization.
         rows = self.collect()
-        if len(rows) > 0:
-            pdf = pd.DataFrame.from_records(
-                rows, index=range(len(rows)), columns=self.columns  # type: ignore[arg-type]
-            )
-        else:
-            pdf = pd.DataFrame(columns=self.columns)
 
-        if len(pdf.columns) > 0:
+        if len(self.columns) > 0:
             timezone = sessionLocalTimeZone
             struct_in_pandas = pandasStructHandlingMode
 
-            return pd.concat(
-                [
-                    _create_converter_to_pandas(
-                        field.dataType,
-                        field.nullable,
-                        timezone=timezone,
-                        struct_in_pandas=(
-                            "row" if struct_in_pandas == "legacy" else struct_in_pandas
-                        ),
-                        error_on_duplicated_field_names=False,
-                        timestamp_utc_localized=False,
-                    )(pser)
-                    for (_, pser), field in zip(pdf.items(), self.schema.fields)
-                ],
-                axis="columns",
-            )
-        else:
+            # Avoid intermediate pandas DataFrame creation by directly converting columns
+            if len(rows) > 0:
+                # Extract columns from rows
+                columns_data = list(zip(*rows))
+                pdf = pd.concat(
+                    [
+                        _create_converter_to_pandas(
+                            field.dataType,
+                            field.nullable,
+                            timezone=timezone,
+                            struct_in_pandas=(
+                                "row" if struct_in_pandas == "legacy" else struct_in_pandas
+                            ),
+                            error_on_duplicated_field_names=False,
+                            timestamp_utc_localized=False,
+                        )(pd.Series(col_data))
+                        for col_data, field in zip(columns_data, self.schema.fields)
+                    ],
+                    axis="columns",
+                )
+            else:
+                # Empty dataset
+                pdf = pd.DataFrame(
+                    {
+                        col_name: pd.Series(dtype=object)
+                        for col_name in self.columns
+                    }
+                )
+            pdf.columns = self.columns
             return pdf
+        else:
+            return pd.DataFrame()
 
     def toArrow(self) -> "pa.Table":
         from pyspark.sql.dataframe import DataFrame
