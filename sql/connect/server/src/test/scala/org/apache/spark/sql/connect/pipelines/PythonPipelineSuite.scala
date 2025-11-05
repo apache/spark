@@ -890,13 +890,15 @@ class PythonPipelineSuite
       val mvIdentifier = Identifier.of(Array("default"), "mv")
       val mvTable = catalog.loadTable(mvIdentifier)
       val mvTransforms = mvTable.partitioning()
-      assert(mvTransforms.isEmpty,
+      assert(
+        mvTransforms.isEmpty,
         s"MaterializedView should have no transforms, but got: ${mvTransforms.mkString(", ")}")
 
       val stIdentifier = Identifier.of(Array("default"), "st")
       val stTable = catalog.loadTable(stIdentifier)
       val stTransforms = stTable.partitioning()
-      assert(stTransforms.isEmpty,
+      assert(
+        stTransforms.isEmpty,
         s"Table should have no transforms, but got: ${stTransforms.mkString(", ")}")
     }
   }
