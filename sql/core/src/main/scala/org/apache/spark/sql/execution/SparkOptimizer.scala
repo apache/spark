@@ -34,9 +34,9 @@ class SparkOptimizer(
     experimentalMethods: ExperimentalMethods)
   extends Optimizer(catalogManager) {
 
-  // SPARK-47230: Exclude schema pruning batch from idempotence checking because
-  // SchemaPruning with NestedColumnAliasing creates new objects on second pass for chained
-  // generators, breaking fastEquals even though the plans are semantically identical
+  // SPARK-47230: Exclude schema pruning batch from idempotence checking because SchemaPruning
+  // with NestedColumnAliasing creates new objects on a second pass for chained generators,
+  // breaking fastEquals even though the plans are semantically identical.
   override protected val excludedOnceBatches: Set[String] =
     Set(
       "PartitionPruning",
@@ -62,7 +62,8 @@ class SparkOptimizer(
     val parentBatches = super.defaultBatches
     val (preEarly, earlyAndAfter) =
       parentBatches.span(_.name != "Early Filter and Projection Push-Down")
-    require(earlyAndAfter.nonEmpty,
+    require(
+      earlyAndAfter.nonEmpty,
       "Expected 'Early Filter and Projection Push-Down' batch in parent optimizer")
     val earlyPushDownBatch = earlyAndAfter.head
     val postEarlyBatches = earlyAndAfter.tail
@@ -70,9 +71,12 @@ class SparkOptimizer(
     val reorderedBatches =
       (preOptimizationBatches ++ preEarly :+
         earlyPushDownBatch :+
-        // SPARK-47230: Separate batch for SchemaPruning, Pending V2 finalization, and ordinal fixup.
-        // GeneratorOrdinalRewriting must run IMMEDIATELY AFTER schema pruning rewrites complete.
-        Batch("Schema Pruning", Once,
+        // SPARK-47230: Separate batch for SchemaPruning, Pending V2 finalization, and ordinal
+        // fixup. GeneratorOrdinalRewriting must run immediately after schema pruning rewrites
+        // complete.
+        Batch(
+          "Schema Pruning",
+          Once,
           SchemaPruning,
           V2PendingScanFinalizer,
           ColumnPruning,

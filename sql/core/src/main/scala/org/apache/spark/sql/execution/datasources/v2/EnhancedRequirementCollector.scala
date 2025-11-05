@@ -81,7 +81,10 @@ object EnhancedRequirementCollector {
   private def canonicalizeSegments(schema: StructType, segments: Seq[String]): Seq[String] = {
     val resolver = SQLConf.get.resolver
 
-    def loop(currentType: DataType, remaining: List[String], acc: Vector[String]): Option[Vector[String]] = {
+    def loop(
+        currentType: DataType,
+        remaining: List[String],
+        acc: Vector[String]): Option[Vector[String]] = {
       remaining match {
         case Nil => Some(acc)
         case head :: tail =>

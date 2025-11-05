@@ -155,10 +155,12 @@ object SchemaPruning extends SQLConfHelper {
               // Create a pruned struct with only the field we need
               val prunedElement = StructType(Array(field))
               val prunedArrayType = ArrayType(prunedElement, arrContainsNull)
-              RootField(
-                StructField(rootField.field.name, prunedArrayType, rootField.field.nullable, rootField.field.metadata),
-                derivedFromAtt = false
-              )
+              val prunedField = StructField(
+                rootField.field.name,
+                prunedArrayType,
+                rootField.field.nullable,
+                rootField.field.metadata)
+              RootField(prunedField, derivedFromAtt = false)
             case _ =>
               // Not an array of structs, keep as is
               rootField

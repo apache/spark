@@ -21,15 +21,14 @@ import scala.collection.mutable
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.expressions.{AttributeSet, Expression, NamedExpression, ProjectionOverSchema}
+import org.apache.spark.sql.catalyst.expressions.SchemaPruning
 import org.apache.spark.sql.catalyst.optimizer.ColumnPruning
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.connector.read.{Scan, V1Scan}
 import org.apache.spark.sql.execution.datasources.v2.EnhancedRequirementCollector.toRootFields
-import org.apache.spark.sql.util.SchemaUtils.restoreOriginalOutputNames
-import org.apache.spark.sql.catalyst.expressions.SchemaPruning
-import org.apache.spark.sql.connector.read.Scan
-import org.apache.spark.sql.connector.read.V1Scan
 import org.apache.spark.sql.types.{ArrayType, DataType, MapType, MetadataBuilder, StructType}
+import org.apache.spark.sql.util.SchemaUtils.restoreOriginalOutputNames
 
 /**
  * SPARK-47230: Placeholder optimizer rule that will eventually consume [[PendingV2ScanRelation]]
@@ -123,17 +122,22 @@ object V2PendingScanFinalizer extends Rule[LogicalPlan] with Logging {
         }
 
         val effectiveSchema = scan.readSchema()
-        println(s"!!!!! SCHEMA USED (relation=${pendingScan.relationId} " +
-          s"${pendingScan.relation.table.name()}): ${effectiveSchema.catalogString}")
+        logDebug(
+          s"relation=${pendingScan.relationId} scanSchema=" +
+            s"${effectiveSchema.catalogString}")
 
         val wrappedScan = wrapScanWithState(scan, pendingScan)
-        val scanRelation = DataSourceV2ScanRelation(pendingScan.relation, wrappedScan, adjustedOutput)
+        val scanRelation = DataSourceV2ScanRelation(
+          pendingScan.relation,
+          wrappedScan,
+          adjustedOutput)
         scanRelation.setTagValue(
           org.apache.spark.sql.execution.datasources.SchemaPruning.GeneratorFullStructTag,
           generatorFullStructs)
 
-        val projectionOverSchema =
-          ProjectionOverSchema(adjustedOutput.toStructType, AttributeSet(adjustedOutput))
+        val projectionOverSchema = ProjectionOverSchema(
+          adjustedOutput.toStructType,
+          AttributeSet(adjustedOutput))
         val projectionFunc = (expr: Expression) => expr transformDown {
           case projectionOverSchema(newExpr) => newExpr
         }
@@ -163,12 +167,12 @@ object V2PendingScanFinalizer extends Rule[LogicalPlan] with Logging {
       case pending: PendingV2ScanRelation =>
         pending.requirements match {
           case Some(reqs) =>
+            val reqCount = reqs.requirements.size
             logDebug(
-              s"V2PendingScanFinalizer observed PendingV2ScanRelation id=${pending.relationId}, " +
-                s"requirements=${reqs.requirements.size}")
+              s"PendingV2ScanRelation id=${pending.relationId} requirements=$reqCount")
           case None =>
             logWarning(
-              s"V2PendingScanFinalizer missing requirements for PendingV2ScanRelation id=${pending.relationId}")
+              s"Missing requirements for PendingV2ScanRelation id=${pending.relationId}")
         }
         pending
     }

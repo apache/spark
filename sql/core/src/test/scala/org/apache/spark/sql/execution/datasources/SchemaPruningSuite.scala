@@ -29,8 +29,8 @@ import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.logical.Expand
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.execution.FileSourceScanExec
-import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2ScanExecBase, FileScan}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
+import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2ScanExecBase, FileScan}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -502,7 +502,9 @@ abstract class SchemaPruningSuite
         |select pos, friend.first, friend.middle, friend
         |from contacts, lateral posexplode(friends) t(pos, friend)
         |""".stripMargin)
-    checkScan(query4, "struct<friends:array<struct<first:string,middle:string,last:string>>>")
+    val friendsSchema =
+      "struct<friends:array<struct<first:string,middle:string,last:string>>>"
+    checkScan(query4, friendsSchema)
     checkAnswer(query4, Row(0, "Susan", "Z.", Row("Susan", "Z.", "Smith")) :: Nil)
   }
 
@@ -519,15 +521,29 @@ abstract class SchemaPruningSuite
           |      {
           |        "available": true,
           |        "rankerVerboseDataList": [
-          |          { "blockedItemsList": [ { "blockReason": "reason_r0_req0_rv0", "extra": "extra_r0_req0_rv0" },
-          |                                     { "blockReason": "second_r0_req0_rv1" } ] }
+          |          {
+          |            "blockedItemsList": [
+          |              {
+          |                "blockReason": "reason_r0_req0_rv0",
+          |                "extra": "extra_r0_req0_rv0"
+          |              },
+          |              { "blockReason": "second_r0_req0_rv1" }
+          |            ]
+          |          }
           |        ],
           |        "servedItems": [ { "id": 1, "name": "item_0_0", "clicked": true } ]
           |      },
           |      {
           |        "available": false,
           |        "rankerVerboseDataList": [
-          |          { "blockedItemsList": [ { "blockReason": "reason_r0_req1_rv0", "extra": "extra_r0_req1_rv0" } ] }
+          |          {
+          |            "blockedItemsList": [
+          |              {
+          |                "blockReason": "reason_r0_req1_rv0",
+          |                "extra": "extra_r0_req1_rv0"
+          |              }
+          |            ]
+          |          }
           |        ],
           |        "servedItems": [ { "id": 11, "name": "item_0_1", "clicked": false } ]
           |      }
@@ -540,15 +556,29 @@ abstract class SchemaPruningSuite
           |      {
           |        "available": true,
           |        "rankerVerboseDataList": [
-          |          { "blockedItemsList": [ { "blockReason": "reason_r1_req0_rv0", "extra": "extra_r1_req0_rv0" },
-          |                                     { "blockReason": "second_r1_req0_rv1" } ] }
+          |          {
+          |            "blockedItemsList": [
+          |              {
+          |                "blockReason": "reason_r1_req0_rv0",
+          |                "extra": "extra_r1_req0_rv0"
+          |              },
+          |              { "blockReason": "second_r1_req0_rv1" }
+          |            ]
+          |          }
           |        ],
           |        "servedItems": [ { "id": 1, "name": "item_1_0", "clicked": false } ]
           |      },
           |      {
           |        "available": false,
           |        "rankerVerboseDataList": [
-          |          { "blockedItemsList": [ { "blockReason": "reason_r1_req1_rv0", "extra": "extra_r1_req1_rv0" } ] }
+          |          {
+          |            "blockedItemsList": [
+          |              {
+          |                "blockReason": "reason_r1_req1_rv0",
+          |                "extra": "extra_r1_req1_rv0"
+          |              }
+          |            ]
+          |          }
           |        ],
           |        "servedItems": [ { "id": 11, "name": "item_1_1", "clicked": true } ]
           |      }
@@ -582,15 +612,16 @@ abstract class SchemaPruningSuite
           case _: DataSourceV2ScanExecBase => true
           case _ => false
         }
+        val schemaPrefix =
+          "struct<pv_requests:array<struct<available:boolean," +
+            "rankerVerboseDataList:array<struct<blockedItemsList:" +
+            "array<struct<blockReason:string>>>>,"
         val expectedSchema =
           if (hasV2Scan) {
-            "struct<pv_requests:array<struct<available:boolean," +
-              "rankerVerboseDataList:array<struct<blockedItemsList:array<struct<blockReason:string>>>>," +
-              "servedItems:array<struct<>>>>>"
+            schemaPrefix + "servedItems:array<struct<>>>>>"
           } else {
-            "struct<pv_requests:array<struct<available:boolean," +
-              "rankerVerboseDataList:array<struct<blockedItemsList:array<struct<blockReason:string>>>>," +
-            "servedItems:array<struct<clicked:boolean,id:bigint,name:string>>>>>"
+            schemaPrefix +
+              "servedItems:array<struct<clicked:boolean,id:bigint,name:string>>>>>"
           }
 
         checkScan(result, expectedSchema)

@@ -71,7 +71,7 @@ class RealQueryPruningTest extends QueryTest with SharedSparkSession {
         val fieldCount = countFields(s)
         // We expect only a few fields, not the full schema
         assert(fieldCount < 100, s"Schema should be pruned but has $fieldCount fields")
-        println(s"Explode query: Pruned schema has $fieldCount leaf fields")
+        info(s"Explode query: Pruned schema has $fieldCount leaf fields")
       }
 
       // Ensure query executes without errors
@@ -121,7 +121,7 @@ class RealQueryPruningTest extends QueryTest with SharedSparkSession {
         val fieldCount = countFields(s)
         // We expect only a few fields, not the full schema
         assert(fieldCount < 100, s"Schema should be pruned but has $fieldCount fields")
-        println(s"Posexplode query: Pruned schema has $fieldCount leaf fields")
+        info(s"Posexplode query: Pruned schema has $fieldCount leaf fields")
       }
 
       // Ensure query executes without errors

@@ -105,8 +105,10 @@ object NestedColumnAliasing {
       rewritePlanIfSubsetFieldsUsed(
         plan, projectList ++ Seq(condition) ++ child.expressions, child.producedAttributes.toSeq)
 
-    case Project(projectList, child) if
-        SQLConf.get.nestedSchemaPruningEnabled && canProjectPushThrough(child) && !hasExtractAliases(child) =>
+    case Project(projectList, child)
+        if SQLConf.get.nestedSchemaPruningEnabled &&
+          canProjectPushThrough(child) &&
+          !hasExtractAliases(child) =>
       rewritePlanIfSubsetFieldsUsed(
         plan, projectList ++ child.expressions, child.producedAttributes.toSeq)
 
@@ -399,24 +401,31 @@ object GeneratorNestedColumnAliasing {
     //       expression where n is the total number of columns (or struct fields) of the output.
     case p @ Project(projectList, g: Generate) =>
       // DEBUG: Check each pattern match condition
-      val configCheck = SQLConf.get.nestedPruningOnExpressions || SQLConf.get.nestedSchemaPruningEnabled
+      val configCheck =
+        SQLConf.get.nestedPruningOnExpressions || SQLConf.get.nestedSchemaPruningEnabled
       val canPruneCheck = canPruneGenerator(g.generator)
       val hasAliasesCheck = NestedColumnAliasing.hasExtractAliases(g.child)
       // SPARK-47230: Allow up to 10 iterations per plan node
-      val currentCount = p.getTagValue(NestedColumnAliasing.GENERATOR_ALIASING_APPLIED).getOrElse(0)
+      val currentCount =
+        p.getTagValue(NestedColumnAliasing.GENERATOR_ALIASING_APPLIED).getOrElse(0)
       val iterationCheck = currentCount < 10
       val aliasGuard = !hasAliasesCheck || currentCount == 0
+      val allConditions =
+        configCheck && canPruneCheck && aliasGuard && iterationCheck
+      def dbg(msg: String): Unit = generatorDebug(s"[GENERATOR DEBUG] $msg")
 
-      generatorDebug(s"[GENERATOR DEBUG] Pattern match for Project(Generate):")
-      generatorDebug(s"  Config enabled: $configCheck")
-      generatorDebug(s"  Can prune generator: $canPruneCheck (generator: ${g.generator.getClass.getSimpleName})")
-      generatorDebug(s"  Has extract aliases: $hasAliasesCheck")
-      generatorDebug(s"  Iteration count: $currentCount (max 10): $iterationCheck")
-      generatorDebug(s"  Alias guard passed: $aliasGuard")
-      generatorDebug(s"  ALL CONDITIONS: ${configCheck && canPruneCheck && aliasGuard && iterationCheck}")
+      dbg("Pattern match for Project(Generate):")
+      dbg(s"  Config enabled: $configCheck")
+      dbg(
+        s"  Can prune generator: $canPruneCheck (generator: " +
+          s"${g.generator.getClass.getSimpleName})")
+      dbg(s"  Has extract aliases: $hasAliasesCheck")
+      dbg(s"  Iteration count: $currentCount (max 10): $iterationCheck")
+      dbg(s"  Alias guard passed: $aliasGuard")
+      dbg(s"  ALL CONDITIONS: $allConditions")
 
       if (!configCheck || !canPruneCheck || !aliasGuard || !iterationCheck) {
-        generatorDebug(s"[GENERATOR DEBUG] Skipping transformation - conditions not met")
+        dbg("Skipping transformation - conditions not met")
         return None
       }
       // On top on `Generate`, a `Project` that might have nested column accessors.
@@ -424,52 +433,55 @@ object GeneratorNestedColumnAliasing {
       val attrToExtractValues = NestedColumnAliasing.getAttributeToExtractValues(
         projectList ++ g.generator.children, Seq.empty)
 
-      generatorDebug(s"[GENERATOR DEBUG] attrToExtractValues: ${attrToExtractValues.size} entries")
-      generatorDebug(s"[GENERATOR DEBUG] Extract values details:")
+      dbg(s"attrToExtractValues: ${attrToExtractValues.size} entries")
+      dbg("Extract values details:")
       attrToExtractValues.foreach { case (attr, extractValues) =>
-        generatorDebug(s"  - Attr: ${attr.name} (${attr.getClass.getSimpleName})")
-        extractValues.foreach(ev => generatorDebug(s"    * ${ev.sql}"))
+        dbg(s"  - Attr: ${attr.name} (${attr.getClass.getSimpleName})")
+        extractValues.foreach(ev => dbg(s"    * ${ev.sql}"))
       }
 
       if (attrToExtractValues.isEmpty) {
-        generatorDebug(s"[GENERATOR DEBUG] Skipping - no extract values found")
+        dbg("Skipping - no extract values found")
         return None
       }
 
       val generatorOutputSet = AttributeSet(g.qualifiedGeneratorOutput)
-      generatorDebug(s"[GENERATOR DEBUG] Generator output attributes: ${g.qualifiedGeneratorOutput.map(_.name).mkString(", ")}")
+      val generatorOutputNames = g.qualifiedGeneratorOutput.map(_.name).mkString(", ")
+      dbg(s"Generator output attributes: $generatorOutputNames")
 
       var (attrToExtractValuesOnGenerator, attrToExtractValuesNotOnGenerator) =
         attrToExtractValues.partition { case (attr, _) =>
           attr.references.subsetOf(generatorOutputSet) }
 
-      generatorDebug(s"[GENERATOR DEBUG] Partition results:")
-      generatorDebug(s"  - On generator: ${attrToExtractValuesOnGenerator.size} attrs")
-      generatorDebug(s"  - Not on generator: ${attrToExtractValuesNotOnGenerator.size} attrs")
+      dbg("Partition results:")
+      dbg(s"  - On generator: ${attrToExtractValuesOnGenerator.size} attrs")
+      dbg(s"  - Not on generator: ${attrToExtractValuesNotOnGenerator.size} attrs")
 
       val pushedThrough = NestedColumnAliasing.rewritePlanWithAliases(
         plan, attrToExtractValuesNotOnGenerator)
 
-      generatorDebug(s"[GENERATOR DEBUG] After rewritePlanWithAliases:")
-      generatorDebug(s"  Plan type: ${pushedThrough.getClass.getSimpleName}")
+      dbg("After rewritePlanWithAliases:")
+      dbg(s"  Plan type: ${pushedThrough.getClass.getSimpleName}")
 
       // We cannot push through if the child of generator is `MapType`.
-      generatorDebug(s"[GENERATOR DEBUG] Checking generator child dataType: ${g.generator.children.head.dataType}")
+      val generatorChildType = g.generator.children.head.dataType
+      dbg(s"Checking generator child dataType: $generatorChildType")
       g.generator.children.head.dataType match {
         case _: MapType =>
-          generatorDebug(s"[GENERATOR DEBUG] MapType - returning pushedThrough")
+          dbg("MapType - returning pushedThrough")
           return Some(pushedThrough)
         case ArrayType(_: ArrayType, _) =>
-          generatorDebug(s"[GENERATOR DEBUG] ArrayType of ArrayType - returning pushedThrough")
+          dbg("ArrayType of ArrayType - returning pushedThrough")
           return Some(pushedThrough)
         case other =>
-          generatorDebug(s"[GENERATOR DEBUG] Other type: ${other.getClass.getSimpleName}, continuing...")
+          dbg(s"Other type: ${other.getClass.getSimpleName}, continuing...")
       }
 
-      generatorDebug(s"[GENERATOR DEBUG] Checking if generator is ExplodeBase: ${g.generator.isInstanceOf[ExplodeBase]}")
-      generatorDebug(s"[GENERATOR DEBUG] Generator class: ${g.generator.getClass.getSimpleName}")
+      dbg(
+        s"Checking if generator is ExplodeBase: ${g.generator.isInstanceOf[ExplodeBase]}")
+      dbg(s"Generator class: ${g.generator.getClass.getSimpleName}")
       if (!g.generator.isInstanceOf[ExplodeBase]) {
-        generatorDebug(s"[GENERATOR DEBUG] Not ExplodeBase - returning pushedThrough")
+        dbg("Not ExplodeBase - returning pushedThrough")
         return Some(pushedThrough)
       }
 
@@ -493,32 +505,36 @@ object GeneratorNestedColumnAliasing {
         (res._1 ++ res._2).filterNot(_.isInstanceOf[Attribute])
       }
 
-      generatorDebug(s"[GENERATOR DEBUG] Before nested field collection:")
-      generatorDebug(s"  attrToExtractValuesOnGenerator (before): ${attrToExtractValuesOnGenerator.size} entries")
+      dbg("Before nested field collection:")
+      dbg(
+        s"  attrToExtractValuesOnGenerator (before): " +
+          s"${attrToExtractValuesOnGenerator.size} entries")
 
       attrToExtractValuesOnGenerator = NestedColumnAliasing.getAttributeToExtractValues(
         attrToExtractValuesOnGenerator.flatMap(_._2).toSeq, Seq.empty,
         collectNestedGetStructFields)
 
-      generatorDebug(s"[GENERATOR DEBUG] After nested field collection:")
-      generatorDebug(s"  attrToExtractValuesOnGenerator (after): ${attrToExtractValuesOnGenerator.size} entries")
+      dbg("After nested field collection:")
+      dbg(
+        s"  attrToExtractValuesOnGenerator (after): " +
+          s"${attrToExtractValuesOnGenerator.size} entries")
       attrToExtractValuesOnGenerator.foreach { case (attr, extractValues) =>
-        generatorDebug(s"    - Attr: ${attr.name}")
-        extractValues.foreach(ev => generatorDebug(s"      * ${ev.sql}"))
+        dbg(s"    - Attr: ${attr.name}")
+        extractValues.foreach(ev => dbg(s"      * ${ev.sql}"))
       }
 
       // SPARK-47230/SPARK-34956: Support multiple nested field pruning on Generator output.
       // For single field, we can push the field access directly into the generator.
       // For multiple fields, we create _extract_* aliases like we do for non-generator fields.
       val nestedFieldsOnGenerator = attrToExtractValuesOnGenerator.values.flatten.toSet
-      generatorDebug(s"[GENERATOR DEBUG] nestedFieldsOnGenerator size: ${nestedFieldsOnGenerator.size}")
-      nestedFieldsOnGenerator.foreach(field => generatorDebug(s"  - Field: ${field.sql}"))
+      dbg(s"nestedFieldsOnGenerator size: ${nestedFieldsOnGenerator.size}")
+      nestedFieldsOnGenerator.foreach(field => dbg(s"  - Field: ${field.sql}"))
 
       if (nestedFieldsOnGenerator.isEmpty) {
-        generatorDebug(s"[GENERATOR DEBUG] No nested fields on generator - returning pushedThrough")
+        dbg("No nested fields on generator - returning pushedThrough")
         Some(pushedThrough)
       } else if (nestedFieldsOnGenerator.size == 1) {
-        generatorDebug(s"[GENERATOR DEBUG] SINGLE nested field on generator - applying direct push")
+        dbg("SINGLE nested field on generator - applying direct push")
         // Only one nested column accessor.
         // E.g., df.select(explode($"items").as("item")).select($"item.a")
         val nestedFieldOnGenerator = nestedFieldsOnGenerator.head
@@ -562,14 +578,14 @@ object GeneratorNestedColumnAliasing {
             throw new IllegalStateException(s"Unreasonable plan after optimization: $other")
         }
       } else {
-        generatorDebug("\n" + "="*80)
-        generatorDebug("=== SPARK-34956/47230: Multi-field Generator Handler ===")
-        generatorDebug("="*80)
-        generatorDebug(s"Number of nested fields on generator: ${nestedFieldsOnGenerator.size}")
+        dbg("\n" + "=" * 80)
+        dbg("=== SPARK-34956/47230: Multi-field Generator Handler ===")
+        dbg("=" * 80)
+        dbg(s"Number of nested fields on generator: ${nestedFieldsOnGenerator.size}")
         nestedFieldsOnGenerator.zipWithIndex.foreach { case (field, idx) =>
-          generatorDebug(s"  [$idx] ${field.getClass.getSimpleName}: $field")
+          dbg(s"  [$idx] ${field.getClass.getSimpleName}: $field")
         }
-        generatorDebug(s"\nPushed-through plan structure:")
+        dbg(s"\nPushed-through plan structure:")
         generatorDebug(pushedThrough.treeString)
 
         // SPARK-34956/SPARK-47230: Handle multiple nested fields on generator output.
@@ -577,23 +593,26 @@ object GeneratorNestedColumnAliasing {
         // and add a projection below the generator with aliases.
         pushedThrough match {
           case p @ Project(projectList, newG: Generate) =>
-            generatorDebug(s"\n✓ Matched Project -> Generate pattern")
-            generatorDebug(s"  Generator class: ${newG.generator.getClass.getSimpleName}")
-            generatorDebug(s"  Generator output: ${newG.generatorOutput.map(_.name).mkString(", ")}")
+            dbg("\n[OK] Matched Project -> Generate pattern")
+            dbg(s"  Generator class: ${newG.generator.getClass.getSimpleName}")
+            val newGeneratorOutput = newG.generatorOutput.map(_.name).mkString(", ")
+            dbg(s"  Generator output: $newGeneratorOutput")
 
             newG.generator match {
               case explode: ExplodeBase =>
-                generatorDebug(s"\n✓ Generator is ExplodeBase")
+                dbg("\n[OK] Generator is ExplodeBase")
                 val generatorInput = explode.child
-                generatorDebug(s"  Input expression: $generatorInput")
-                generatorDebug(s"  Input type: ${generatorInput.dataType}")
+                dbg(s"  Input expression: $generatorInput")
+                dbg(s"  Input type: ${generatorInput.dataType}")
 
                 generatorInput.dataType match {
                   case ArrayType(elementType: StructType, containsNull) =>
-                    generatorDebug(s"\n✓ Generator input is Array[Struct]")
-                    generatorDebug(s"  Element type: $elementType")
-                    generatorDebug(s"  Element fields: ${elementType.fields.map(f => s"${f.name}:${f.dataType}").mkString(", ")}")
-                    generatorDebug(s"  Contains null: $containsNull")
+                    dbg("\n[OK] Generator input is Array[Struct]")
+                    dbg(s"  Element type: $elementType")
+                    val elementFieldSummary =
+                      elementType.fields.map(f => s"${f.name}:${f.dataType}").mkString(", ")
+                    dbg(s"  Element fields: $elementFieldSummary")
+                    dbg(s"  Contains null: $containsNull")
 
                     // Check for existing _extract_ aliases to prevent infinite loop
                     // SPARK-47230: This check is now redundant with the guard at line 387
@@ -608,89 +627,111 @@ object GeneratorNestedColumnAliasing {
                     }
 
                     if (existingExtractAliases.nonEmpty) {
-                      generatorDebug(s"\n⚠ CYCLE DETECTION: Already processed - found existing aliases:")
-                      existingExtractAliases.foreach(name => generatorDebug(s"    - $name"))
-                      generatorDebug("  Returning pushedThrough plan to prevent infinite loop")
+                      dbg("\n[WARN] CYCLE DETECTION: Already processed - found existing aliases:")
+                      existingExtractAliases.foreach(name => dbg(s"    - $name"))
+                      dbg("  Returning pushedThrough plan to prevent infinite loop")
                       Some(pushedThrough)
                     } else {
-                      generatorDebug(s"\n✓ No existing _extract_ aliases - proceeding with transformation")
+                      dbg("\n[OK] No existing _extract_ aliases - proceeding with transformation")
 
                       // Extract field names from nested field expressions
-                      generatorDebug(s"\nExtracting field names from ${nestedFieldsOnGenerator.size} expressions:")
+                      val fieldCount = nestedFieldsOnGenerator.size
+                      dbg(
+                        s"\nExtracting field names from $fieldCount " +
+                          "expressions:")
                       val fieldNamesWithOrdinals = nestedFieldsOnGenerator.flatMap { expr =>
                         expr match {
                           case GetStructField(_, ordinal, Some(name)) =>
-                            generatorDebug(s"  ✓ GetStructField(ordinal=$ordinal, name=$name)")
+                            dbg(s"  [OK] GetStructField(ordinal=$ordinal, name=$name)")
                             Some((name, ordinal))
                           case GetStructField(_, ordinal, None) =>
                             // Try to get name from element type by ordinal
-                            if (ordinal >= 0 && ordinal < elementType.fields.length) {
+                            if (ordinal >= 0 &&
+                                ordinal < elementType.fields.length) {
                               val name = elementType.fields(ordinal).name
-                              generatorDebug(s"  ✓ GetStructField(ordinal=$ordinal) -> resolved name=$name")
+                              dbg(
+                                s"  [OK] GetStructField(ordinal=$ordinal) -> " +
+                                  s"resolved name=$name")
                               Some((name, ordinal))
                             } else {
-                              generatorDebug(s"  ✗ GetStructField(ordinal=$ordinal) -> ordinal out of bounds!")
+                              dbg(
+                                s"  [ERROR] GetStructField(ordinal=$ordinal) -> " +
+                                  "ordinal out of bounds!")
                               None
                             }
                           case other =>
-                            generatorDebug(s"  ✗ Unexpected expression type: ${other.getClass.getSimpleName}")
-                            generatorDebug(s"      Expression: $other")
+                            dbg(
+                              s"  [ERROR] Unexpected expression type: " +
+                                s"${other.getClass.getSimpleName}")
+                            dbg(s"      Expression: $other")
                             None
                         }
                       }
 
-                      generatorDebug(s"\nExtracted ${fieldNamesWithOrdinals.size} field names: ${fieldNamesWithOrdinals.map(_._1).mkString(", ")}")
+                      val extractedNames =
+                        fieldNamesWithOrdinals.map(_._1).mkString(", ")
+                      val extractedSize = fieldNamesWithOrdinals.size
+                      dbg(s"\nExtracted $extractedSize field names: $extractedNames")
 
                       if (fieldNamesWithOrdinals.isEmpty) {
-                        generatorDebug("✗ ERROR: No valid field names extracted!")
+                        dbg("[ERROR] ERROR: No valid field names extracted!")
                         None
                       } else {
-                        // Use ordinals directly to get struct fields (avoids case sensitivity issues)
-                        generatorDebug(s"\nLooking up struct fields by ordinal:")
-                        val structFieldsToExtract = fieldNamesWithOrdinals.flatMap { case (fieldName, ordinal) =>
-                          // Use ordinal directly instead of name-based lookup
-                          if (ordinal >= 0 && ordinal < elementType.fields.length) {
-                            val field = elementType.fields(ordinal)
-                            generatorDebug(s"  ✓ Ordinal $ordinal -> ${field.name}:${field.dataType} (accessed as '$fieldName')")
-                            Some((field, ordinal))
-                          } else {
-                            generatorDebug(s"  ✗ ERROR: Ordinal $ordinal out of bounds (0-${elementType.fields.length-1})!")
-                            generatorDebug(s"      Field name was: $fieldName")
-                            None
-                          }
+                        // Use ordinals directly to get struct fields. This avoids
+                        // case sensitivity issues.
+                        dbg(s"\nLooking up struct fields by ordinal:")
+                        val structFieldsToExtract = fieldNamesWithOrdinals.flatMap {
+                          case (fieldName, ordinal) =>
+                            if (ordinal >= 0 && ordinal < elementType.fields.length) {
+                              val field = elementType.fields(ordinal)
+                              dbg(
+                                s"  [OK] Ordinal $ordinal -> ${field.name}:${field.dataType} " +
+                                  s"(accessed as '$fieldName')")
+                              Some((field, ordinal))
+                            } else {
+                              val maxOrdinal = elementType.fields.length - 1
+                              dbg(
+                                s"  [ERROR] ERROR: Ordinal $ordinal out of bounds (0-$maxOrdinal)!")
+                              dbg(s"      Field name was: $fieldName")
+                              None
+                            }
                         }
 
-                        generatorDebug(s"\nSuccessfully mapped ${structFieldsToExtract.size}/${fieldNamesWithOrdinals.size} fields")
+                        dbg(
+                          s"\nSuccessfully mapped ${structFieldsToExtract.size}/" +
+                            s"${fieldNamesWithOrdinals.size} fields")
 
                         if (structFieldsToExtract.size != fieldNamesWithOrdinals.size) {
-                          generatorDebug("✗ ERROR: Some fields could not be mapped - aborting transformation")
+                          dbg(
+                            "[ERROR] ERROR: Some fields could not be mapped - " +
+                              "aborting transformation")
                           None
                         } else {
-                          generatorDebug(s"\n✓ All fields mapped successfully")
+                          dbg("\n[OK] All fields mapped successfully")
 
                           // Create GetArrayStructFields for each field
-                          generatorDebug(s"\nCreating GetArrayStructFields expressions:")
-                          val arrayFieldExtractors = structFieldsToExtract.map { case (field, ordinal) =>
-                            val extractor = GetArrayStructFields(
-                              generatorInput,
-                              field,
-                              ordinal,
-                              field.dataType.defaultSize,
-                              containsNull || field.nullable
-                            )
-                            generatorDebug(s"  ✓ Created for '${field.name}' (ordinal=$ordinal):")
-                            generatorDebug(s"      Input: $generatorInput")
-                            generatorDebug(s"      Field: ${field.name}:${field.dataType}")
-                            generatorDebug(s"      Nullable: ${containsNull || field.nullable}")
-                            extractor
+                          dbg("\nCreating GetArrayStructFields expressions:")
+                          val arrayFieldExtractors = structFieldsToExtract.map {
+                            case (field, ordinal) =>
+                              val extractor = GetArrayStructFields(
+                                generatorInput,
+                                field,
+                                ordinal,
+                                field.dataType.defaultSize,
+                                containsNull || field.nullable)
+                              dbg(s"  [OK] Created for '${field.name}' (ordinal=$ordinal):")
+                              dbg(s"      Input: $generatorInput")
+                              dbg(s"      Field: ${field.name}:${field.dataType}")
+                              dbg(s"      Nullable: ${containsNull || field.nullable}")
+                              extractor
                           }
 
                           // Create aliases with _extract_ prefix
-                          generatorDebug(s"\nCreating alias expressions:")
+                          dbg("\nCreating alias expressions:")
                           val aliases = arrayFieldExtractors.map { extractor =>
                             val aliasName = s"_extract_${extractor.field.name}"
                             val alias = Alias(extractor, aliasName)()
-                            generatorDebug(s"  ✓ Alias: $aliasName")
+                            dbg(s"  [OK] Alias: $aliasName")
                             alias
                           }
 
@@ -703,28 +744,34 @@ object GeneratorNestedColumnAliasing {
                             NestedColumnAliasing.GENERATOR_ALIASING_APPLIED,
                             currentCount + 1)
 
-                          generatorDebug(s"\n✓ Created projection below generator:")
-                          generatorDebug(s"  Original child outputs: ${newG.child.output.map(_.name).mkString(", ")}")
-                          generatorDebug(s"  New alias outputs: ${aliases.map(_.name).mkString(", ")}")
-                          generatorDebug(s"  Total outputs: ${projectionBelowGen.output.map(_.name).mkString(", ")}")
+                          dbg("\n[OK] Created projection below generator:")
+                          val originalOutputs = newG.child.output.map(_.name).mkString(", ")
+                          val aliasOutputs = aliases.map(_.name).mkString(", ")
+                          val totalOutputs = projectionBelowGen.output.map(_.name).mkString(", ")
+                          dbg(s"  Original child outputs: $originalOutputs")
+                          dbg(s"  New alias outputs: $aliasOutputs")
+                          dbg(s"  Total outputs: $totalOutputs")
 
                           // Update generator to use new child
                           val updatedGenerate = newG.copy(child = projectionBelowGen)
 
-                          generatorDebug(s"\n✓ Updated generator with new child")
+                          dbg("\n[OK] Updated generator with new child")
 
                           // Update top project
                           val result = p.withNewChildren(Seq(updatedGenerate))
 
                           // SPARK-47230: Increment iteration count (allow up to 10 transformations)
                           val newCount = currentCount + 1
-                          generatorDebug(s"[GENERATOR DEBUG] ✓ Transformation SUCCESSFUL - setting count to $newCount")
-                          result.setTagValue(NestedColumnAliasing.GENERATOR_ALIASING_APPLIED, newCount)
+                          dbg(
+                            s"[OK] Transformation SUCCESSFUL - setting count to $newCount")
+                          result.setTagValue(
+                            NestedColumnAliasing.GENERATOR_ALIASING_APPLIED,
+                            newCount)
 
-                          generatorDebug(s"\n✓ Final transformation result:")
+                          dbg("\n[OK] Final transformation result:")
                           generatorDebug(result.treeString)
-                          generatorDebug(s"  ✓ GENERATOR_ALIASING_APPLIED count = $newCount")
-                          generatorDebug("="*80 + "\n")
+                          dbg(s"  [OK] GENERATOR_ALIASING_APPLIED count = $newCount")
+                          dbg("=" * 80 + "\n")
 
                           Some(result)
                         }
@@ -732,19 +779,19 @@ object GeneratorNestedColumnAliasing {
                     }
 
                   case other =>
-                    generatorDebug(s"\n✗ ERROR: Generator input is not Array[Struct]")
+                    generatorDebug(s"\n[ERROR] ERROR: Generator input is not Array[Struct]")
                     generatorDebug(s"  Got: $other")
                     None
                 }
 
               case other =>
-                generatorDebug(s"\n✗ ERROR: Generator is not ExplodeBase")
+                generatorDebug(s"\n[ERROR] ERROR: Generator is not ExplodeBase")
                 generatorDebug(s"  Got: ${other.getClass.getSimpleName}")
                 None
             }
 
           case other =>
-            generatorDebug(s"\n✗ ERROR: Unexpected plan structure")
+            generatorDebug(s"\n[ERROR] ERROR: Unexpected plan structure")
             generatorDebug(s"  Expected: Project -> Generate")
             generatorDebug(s"  Got: ${other.getClass.getSimpleName}")
             generatorDebug(other.treeString)

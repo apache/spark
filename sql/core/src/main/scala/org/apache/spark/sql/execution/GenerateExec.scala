@@ -97,7 +97,9 @@ case class GenerateExec(
           case attr: AttributeReference =>
             childOutput
               .find(_.exprId == attr.exprId)
-              .orElse(childOutput.find(o => resolver(o.name, attr.name) && o.dataType == attr.dataType))
+              .orElse(childOutput.find { o =>
+                resolver(o.name, attr.name) && o.dataType == attr.dataType
+              })
               .orElse(childOutput.find(_.dataType == attr.dataType))
               .getOrElse(attr)
         }.asInstanceOf[Generator]

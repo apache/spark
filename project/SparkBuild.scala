@@ -214,10 +214,18 @@ object SparkBuild extends PomBuild {
   }
 
   def enableScalaStyle: Seq[sbt.Def.Setting[_]] = Seq(
-    scalaStyleOnCompile := {},
-    scalaStyleOnTest := {},
-    (Compile / compile) := (Compile / compile).value,
-    (Test / compile) := (Test / compile).value
+    scalaStyleOnCompile := cachedScalaStyle(Compile).value,
+    scalaStyleOnTest := cachedScalaStyle(Test).value,
+    (scalaStyleOnCompile / logLevel) := Level.Warn,
+    (scalaStyleOnTest / logLevel) := Level.Warn,
+    (Compile / compile) := {
+      scalaStyleOnCompile.value
+      (Compile / compile).value
+    },
+    (Test / compile) := {
+      scalaStyleOnTest.value
+      (Test / compile).value
+    }
   )
 
   // Silencer: Scala compiler plugin for warning suppression

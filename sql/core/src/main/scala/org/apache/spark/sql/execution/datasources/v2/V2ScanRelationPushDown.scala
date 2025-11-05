@@ -21,18 +21,68 @@ import scala.collection.immutable.Map
 import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.analysis.NamedRelation
-import org.apache.spark.sql.catalyst.expressions.{aggregate, Alias, And, Attribute, AttributeMap, AttributeReference, AttributeSet, Cast, ExprId, Expression, ExtractValue, GetArrayItem, GetArrayStructFields, GetMapValue, GetStructField, IntegerLiteral, Literal, NamedExpression, PredicateHelper, ProjectionOverSchema, SortOrder, SubqueryExpression}
+import org.apache.spark.sql.catalyst.expressions.{
+  aggregate,
+  Alias,
+  And,
+  Attribute,
+  AttributeMap,
+  AttributeReference,
+  AttributeSet,
+  Cast,
+  Expression,
+  ExprId,
+  ExtractValue,
+  GetArrayItem,
+  GetArrayStructFields,
+  GetMapValue,
+  GetStructField,
+  IntegerLiteral,
+  Literal,
+  NamedExpression,
+  PredicateHelper,
+  ProjectionOverSchema,
+  SortOrder,
+  SubqueryExpression}
+import org.apache.spark.sql.catalyst.expressions.SchemaPruning
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.optimizer.CollapseProject
 import org.apache.spark.sql.catalyst.planning.{PhysicalOperation, ScanOperation}
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, Generate, LeafNode, Limit, LimitAndOffset, LocalLimit, LogicalPlan, Offset, OffsetAndLimit, Project, Sample, Sort, Statistics, UnaryNode}
+import org.apache.spark.sql.catalyst.plans.logical.{
+  Aggregate,
+  Filter,
+  Generate,
+  LeafNode,
+  Limit,
+  LimitAndOffset,
+  LocalLimit,
+  LogicalPlan,
+  Offset,
+  OffsetAndLimit,
+  Project,
+  Sample,
+  Sort,
+  Statistics,
+  UnaryNode}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.connector.expressions.{SortOrder => V2SortOrder}
-import org.apache.spark.sql.connector.expressions.aggregate.{Aggregation, Avg, Count, CountStar, Max, Min, Sum}
+import org.apache.spark.sql.connector.expressions.aggregate.{
+  Aggregation,
+  Avg,
+  Count,
+  CountStar,
+  Max,
+  Min,
+  Sum}
 import org.apache.spark.sql.connector.expressions.filter.Predicate
-import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownAggregates, SupportsPushDownFilters, SupportsPushDownV2Filters, V1Scan}
-import org.apache.spark.sql.catalyst.expressions.SchemaPruning
+import org.apache.spark.sql.connector.read.{
+  Scan,
+  ScanBuilder,
+  SupportsPushDownAggregates,
+  SupportsPushDownFilters,
+  SupportsPushDownV2Filters,
+  V1Scan}
 import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, SchemaPruning => ExecSchemaPruning}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
 import org.apache.spark.sql.execution.datasources.v2.GeneratorInputAnalyzer.GeneratorInputInfo
@@ -377,7 +427,8 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
     // for ALL relations. This solves the multiple-invocation problem where each pruneColumns
     // call only sees a subset of expressions.
     val isStreamingPlan =
-      ExecSchemaPruning.StreamingContext.skipping || ExecSchemaPruning.isStreamingQuery(planWithAliasing)
+      ExecSchemaPruning.StreamingContext.skipping ||
+        ExecSchemaPruning.isStreamingQuery(planWithAliasing)
 
     val pendingEligible =
       SQLConf.get.optimizerV2PendingScanEnabled && hasGenerators && !isStreamingPlan
@@ -405,7 +456,8 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
           val relationColumns = sHolder.relation.output.map(_.name).toSet
           val relationExprIds = sHolder.relation.output.map(_.exprId).toSet
           val allGeneratorInfosSeq = allGeneratorInfo.values.toSeq
-          logDebug(s"Pending scan relation=$relationId generators=${allGeneratorInfosSeq.map(_.columnName).mkString(",")}")
+          val generatorNames = allGeneratorInfosSeq.map(_.columnName).mkString(",")
+          logDebug(s"Pending scan relation=$relationId generators=$generatorNames")
           logDebug(s"Pending scan relation=$relationId plan:\n${planForPruning.treeString}")
           val pendingInfos = mutable.ArrayBuffer[GeneratorInputInfo]()
           pendingInfos ++= allGeneratorInfosSeq
@@ -457,9 +509,11 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
           val projectDirectGeneratorOutputs = mutable.Set[ExprId]()
 
           normalizedProjects.foreach {
-            case attr: AttributeReference if generatorOutputExprIds.contains(attr.exprId) =>
+            case attr: AttributeReference
+                if generatorOutputExprIds.contains(attr.exprId) =>
               projectDirectGeneratorOutputs += attr.exprId
-            case Alias(childAttr: AttributeReference, _) if generatorOutputExprIds.contains(childAttr.exprId) =>
+            case Alias(childAttr: AttributeReference, _)
+                if generatorOutputExprIds.contains(childAttr.exprId) =>
               projectDirectGeneratorOutputs += childAttr.exprId
             case _ =>
           }
@@ -478,11 +532,6 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
                 computedDirectGeneratorOutputs += attr.exprId
               }
             case alias: Alias =>
-              val childAttrOpt = alias.child match {
-                case attr: AttributeReference => Some(attr)
-                case _ => None
-              }
-              val childIsGenerator = childAttrOpt.exists(attr => generatorOutputExprIds.contains(attr.exprId))
               val childUnderAccessor =
                 underAccessor || alias.name.startsWith("_extract_")
               traverse(alias.child, childUnderAccessor)
@@ -519,7 +568,8 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
                     }
                 if (projectIsPassThrough) {
                   project.projectList.foreach {
-                    case attr: AttributeReference if generatorOutputExprIds.contains(attr.exprId) =>
+                    case attr: AttributeReference
+                        if generatorOutputExprIds.contains(attr.exprId) =>
                       passThroughGeneratorOutputs += attr.exprId
                     case _ =>
                   }
@@ -558,10 +608,18 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
           val directAttrNames =
             directAttrExprIds.flatMap(relationAttrsByExprId.get).map(_.name).toSeq.sorted
           val directGeneratorOutputNames =
-            directGeneratorOutputExprIds.flatMap(generatorContexts.get).map(_.output.name).toSeq.sorted
+            directGeneratorOutputExprIds
+              .flatMap(generatorContexts.get)
+              .map(_.output.name)
+              .toSeq
+              .sorted
+          val attrSummary =
+            s"${directAttrExprIds.size}:${directAttrNames.mkString(",")}"
+          val generatorSummary =
+            s"${directGeneratorOutputExprIds.size}:${directGeneratorOutputNames.mkString(",")}"
           logDebug(
-            s"Pending scan relation=$relationId directAttrs=${directAttrExprIds.size}:${directAttrNames.mkString(",")} " +
-              s"directGeneratorOutputs=${directGeneratorOutputExprIds.size}:${directGeneratorOutputNames.mkString(",")}")
+            s"Pending scan relation=$relationId directAttrs=$attrSummary " +
+              s"directGeneratorOutputs=$generatorSummary")
           val baselineRootFields =
             SchemaPruning.identifyRootFields(normalizedProjects, normalizedFilters).toVector
           // baselineRootFields kept for non-generator columns; generator columns handled separately

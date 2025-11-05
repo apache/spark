@@ -172,14 +172,16 @@ object PushDownUtils {
   /**
    * Applies column pruning to the data source, w.r.t. the references of the given expressions.
    *
-   * SPARK-47230: After transformation by GeneratorNestedColumnAliasingRule in V2ScanRelationPushDown,
-   * this method handles GetArrayStructFields expressions via identifyRootFields.
+   * SPARK-47230: After transformation by GeneratorNestedColumnAliasingRule in
+   * V2ScanRelationPushDown, this method handles GetArrayStructFields expressions via
+   * identifyRootFields.
    *
    * @param scanBuilder The scan builder to push pruning to
    * @param relation The data source relation
    * @param projects The projection expressions
    * @param filters The filter expressions
-   * @param precomputedRootFields Pre-computed root fields from complete plan analysis (SPARK-47230 Redesign)
+   * @param precomputedRootFields Pre-computed root fields from complete plan analysis
+   *   (SPARK-47230 redesign)
    * @return the `Scan` instance (since column pruning is the last step of operator pushdown),
    *         and new output attributes after column pruning.
    */
@@ -188,7 +190,8 @@ object PushDownUtils {
       relation: DataSourceV2Relation,
       projects: Seq[NamedExpression],
       filters: Seq[Expression],
-      precomputedRootFields: Option[Seq[SchemaPruning.RootField]] = None): (Scan, Seq[AttributeReference]) = {
+      precomputedRootFields: Option[Seq[SchemaPruning.RootField]] = None
+      ): (Scan, Seq[AttributeReference]) = {
 
     val exprs = projects ++ filters
     val requiredColumns = AttributeSet(exprs.flatMap(_.references))
@@ -196,8 +199,8 @@ object PushDownUtils {
 
     scanBuilder match {
       case r: SupportsPushDownRequiredColumns if SQLConf.get.nestedSchemaPruningEnabled =>
-        // SPARK-47230 Redesign: Use pre-computed root fields if available (from complete plan analysis),
-        // otherwise fall back to computing from local projects/filters
+        // SPARK-47230 redesign: Use pre-computed root fields if available (from complete plan
+        // analysis), otherwise fall back to computing from local projects/filters
         val rootFields = precomputedRootFields.getOrElse {
           SchemaPruning.identifyRootFields(projects, filters)
         }
@@ -208,7 +211,8 @@ object PushDownUtils {
           new StructType()
         }
         val neededFieldNames = neededOutput.map(_.name).toSet
-        r.pruneColumns(StructType(prunedSchema.filter(f => neededFieldNames.contains(f.name))))
+        r.pruneColumns(
+          StructType(prunedSchema.filter(f => neededFieldNames.contains(f.name))))
         val scan = r.build()
         scan -> toOutputAttrs(scan.readSchema(), relation)
 
