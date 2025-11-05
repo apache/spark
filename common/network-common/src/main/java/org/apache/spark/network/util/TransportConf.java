@@ -473,6 +473,7 @@ public class TransportConf {
    * spark.shuffle.server.chunkFetchHandlerThreadsPercent. The returned value is rounded off to
    * ceiling of the nearest integer.
    */
+  @Deprecated(since = "4.2.0", forRemoval = true)
   public int chunkFetchHandlerThreads() {
     if (!this.getModuleName().equalsIgnoreCase("shuffle")) {
       return 0;
@@ -488,6 +489,7 @@ public class TransportConf {
    * Whether to use a separate EventLoopGroup to process ChunkFetchRequest messages, it is decided
    * by the config `spark.shuffle.server.chunkFetchHandlerThreadsPercent` is set or not.
    */
+  @Deprecated(since = "4.2.0", forRemoval = true)
   public boolean separateChunkFetchRequest() {
     return conf.getInt("spark.shuffle.server.chunkFetchHandlerThreadsPercent", 0) > 0;
   }
