@@ -143,6 +143,17 @@ object KubernetesTestConf {
           (KUBERNETES_VOLUMES_NFS_TYPE, Map(
             KUBERNETES_VOLUMES_OPTIONS_PATH_KEY -> path,
             KUBERNETES_VOLUMES_OPTIONS_SERVER_KEY -> server))
+
+        case KubernetesCSIVolumeConf(driverName, attributes, fsType, nodePublishSecretName) =>
+          val fsTypeConf = fsType.map(KUBERNETES_VOLUMES_OPTIONS_FS_TYPE_KEY -> _).toMap
+          val secretConf = nodePublishSecretName
+            .map(KUBERNETES_VOLUMES_OPTIONS_NODE_PUBLISH_SECRET_NAME_KEY -> _).toMap
+          val attributesConf = attributes.map { case (k, v) =>
+            s"$KUBERNETES_VOLUMES_OPTIONS_VOLUME_ATTRIBUTES_KEY$k" -> v
+          }
+          (KUBERNETES_VOLUMES_CSI_TYPE,
+            Map(KUBERNETES_VOLUMES_OPTIONS_DRIVER_KEY -> driverName) ++
+              fsTypeConf ++ secretConf ++ attributesConf)
       }
 
       conf.set(key(vtype, spec.volumeName, KUBERNETES_VOLUMES_MOUNT_PATH_KEY), spec.mountPath)

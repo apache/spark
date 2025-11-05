@@ -134,6 +134,19 @@ private[spark] class MountVolumesFeatureStep(conf: KubernetesConf)
               .withPath(path)
               .withServer(server)
             .endNfs()
+
+        case KubernetesCSIVolumeConf(driverName, attributes, fsType, nodePublishSecretName) =>
+          val nodePublishSecretRef = nodePublishSecretName
+            .map(name => new LocalObjectReferenceBuilder().withName(name).build())
+            .orNull
+          new VolumeBuilder()
+            .withNewCsi()
+              .withDriver(driverName)
+              .withReadOnly(spec.mountReadOnly)
+              .withFsType(fsType.orNull)
+              .withVolumeAttributes(attributes.asJava)
+              .withNodePublishSecretRef(nodePublishSecretRef)
+            .endCsi()
       }
 
       val volume = volumeBuilder.withName(spec.volumeName).build()
