@@ -716,6 +716,15 @@ private[spark] object Config extends Logging {
       .booleanConf
       .createWithDefault(true)
 
+  val KUBERNETES_DELETED_EXECUTORS_CACHE_TIMEOUT =
+    ConfigBuilder("spark.kubernetes.executor.deletedExecutorsCacheTimeout")
+      .internal()
+      .doc("Time-to-live (TTL) value for the cache for deleted executors")
+      .version("4.1.0")
+      .timeConf(TimeUnit.SECONDS)
+      .checkValue(_ >= 0, "deletedExecutorsCacheTimeout must be non-negative")
+      .createWithDefault(180)
+
   val KUBERNETES_EXECUTOR_TERMINATION_GRACE_PERIOD_SECONDS =
     ConfigBuilder("spark.kubernetes.executor.terminationGracePeriodSeconds")
       .doc("Time to wait for graceful termination of executor pods.")
