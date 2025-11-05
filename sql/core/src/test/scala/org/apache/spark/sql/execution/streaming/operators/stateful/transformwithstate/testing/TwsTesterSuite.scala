@@ -792,7 +792,7 @@ class TwsTesterFuzzTestSuite extends StreamTest {
       I: org.apache.spark.sql.Encoder,
       O: org.apache.spark.sql.Encoder](
       processor: StatefulProcessor[K, I, O],
-      input: List[(K, I)]) = {
+      input: List[(K, I)]): Unit = {
     withSQLConf(
       SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[RocksDBStateStoreProvider].getName,
       SQLConf.SHUFFLE_PARTITIONS.key -> "5"
@@ -830,7 +830,10 @@ class TwsTesterFuzzTestSuite extends StreamTest {
   test("fuzz test with TopKProcessor") {
     val random = new scala.util.Random(0)
     val input = List.fill(1000) {
-      (s"key${random.nextInt(10)}", (random.alphanumeric.take(5).mkString, random.nextDouble() * 100))
+      (
+        s"key${random.nextInt(10)}",
+        (random.alphanumeric.take(5).mkString, random.nextDouble() * 100)
+      )
     }
     val processor = new TopKProcessor(5)
     compareTws(processor, input)
