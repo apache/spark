@@ -1477,6 +1477,22 @@ struct<c1:int,c2:int>
 
 
 -- !query
+DROP TABLE IF EXISTS tab_renamed
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP TABLE IF EXISTS tab
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
 CREATE TABLE test_col_with_dot(IDENTIFIER('`col.with.dot`') INT) USING CSV
 -- !query schema
 struct<>

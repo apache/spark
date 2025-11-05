@@ -1611,6 +1611,22 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 
 
 -- !query
+DROP TABLE IF EXISTS tab_renamed
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP TABLE IF EXISTS tab
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
 CREATE TABLE test_col_with_dot(IDENTIFIER('`col.with.dot`') INT) USING CSV
 -- !query schema
 struct<>
@@ -1827,7 +1843,7 @@ struct<>
 
 
 -- !query
-CREATE SCHEMA test_schema
+CREATE SCHEMA identifier_clause_test_schema
 -- !query schema
 struct<>
 -- !query output
@@ -1835,7 +1851,7 @@ struct<>
 
 
 -- !query
-CREATE TABLE test_schema.test_table(c1 INT) USING CSV
+CREATE TABLE identifier_clause_test_schema.test_table(c1 INT) USING CSV
 -- !query schema
 struct<>
 -- !query output
@@ -1843,7 +1859,7 @@ struct<>
 
 
 -- !query
-ANALYZE TABLE IDENTIFIER('test_schema.test_table') COMPUTE STATISTICS
+ANALYZE TABLE IDENTIFIER('identifier_clause_test_schema.test_table') COMPUTE STATISTICS
 -- !query schema
 struct<>
 -- !query output
@@ -1851,7 +1867,7 @@ struct<>
 
 
 -- !query
-REFRESH TABLE IDENTIFIER('test_schema.test_table')
+REFRESH TABLE IDENTIFIER('identifier_clause_test_schema.test_table')
 -- !query schema
 struct<>
 -- !query output
@@ -1859,7 +1875,7 @@ struct<>
 
 
 -- !query
-DESCRIBE IDENTIFIER('test_schema.test_table')
+DESCRIBE IDENTIFIER('identifier_clause_test_schema.test_table')
 -- !query schema
 struct<col_name:string,data_type:string,comment:string>
 -- !query output
@@ -1867,7 +1883,7 @@ c1                  	int
 
 
 -- !query
-SHOW COLUMNS FROM IDENTIFIER('test_schema.test_table')
+SHOW COLUMNS FROM IDENTIFIER('identifier_clause_test_schema.test_table')
 -- !query schema
 struct<col_name:string>
 -- !query output
@@ -1875,7 +1891,7 @@ c1
 
 
 -- !query
-DROP TABLE IDENTIFIER('test_schema.test_table')
+DROP TABLE IDENTIFIER('identifier_clause_test_schema.test_table')
 -- !query schema
 struct<>
 -- !query output
@@ -1883,7 +1899,7 @@ struct<>
 
 
 -- !query
-DROP SCHEMA test_schema
+DROP SCHEMA identifier_clause_test_schema
 -- !query schema
 struct<>
 -- !query output

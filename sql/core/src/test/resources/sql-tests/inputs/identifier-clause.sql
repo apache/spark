@@ -182,6 +182,8 @@ SELECT c2 FROM tab;
 ALTER TABLE IDENTIFIER('tab') DROP COLUMN IDENTIFIER('c2');
 ALTER TABLE IDENTIFIER('tab') RENAME TO IDENTIFIER('tab_renamed');
 SELECT * FROM tab_renamed;
+DROP TABLE IF EXISTS tab_renamed;
+DROP TABLE IF EXISTS tab;
 
 -- Error because qualified names are not allowed
 CREATE TABLE test_col_with_dot(IDENTIFIER('`col.with.dot`') INT) USING CSV;
@@ -215,15 +217,15 @@ COMMENT ON TABLE IDENTIFIER('test_comment') IS 'table comment';
 ALTER TABLE test_comment ALTER COLUMN IDENTIFIER('c1') COMMENT 'column comment';
 DROP TABLE test_comment;
 
--- Additional identifier-lite tests with qualified table names in various commands
-CREATE SCHEMA test_schema;
-CREATE TABLE test_schema.test_table(c1 INT) USING CSV;
-ANALYZE TABLE IDENTIFIER('test_schema.test_table') COMPUTE STATISTICS;
-REFRESH TABLE IDENTIFIER('test_schema.test_table');
-DESCRIBE IDENTIFIER('test_schema.test_table');
-SHOW COLUMNS FROM IDENTIFIER('test_schema.test_table');
-DROP TABLE IDENTIFIER('test_schema.test_table');
-DROP SCHEMA test_schema;
+-- Additional identifier tests with qualified table names in various commands
+CREATE SCHEMA identifier_clause_test_schema;
+CREATE TABLE identifier_clause_test_schema.test_table(c1 INT) USING CSV;
+ANALYZE TABLE IDENTIFIER('identifier_clause_test_schema.test_table') COMPUTE STATISTICS;
+REFRESH TABLE IDENTIFIER('identifier_clause_test_schema.test_table');
+DESCRIBE IDENTIFIER('identifier_clause_test_schema.test_table');
+SHOW COLUMNS FROM IDENTIFIER('identifier_clause_test_schema.test_table');
+DROP TABLE IDENTIFIER('identifier_clause_test_schema.test_table');
+DROP SCHEMA identifier_clause_test_schema;
 
 -- Session variables with identifier-lite
 DECLARE IDENTIFIER('my_var') = 'value';

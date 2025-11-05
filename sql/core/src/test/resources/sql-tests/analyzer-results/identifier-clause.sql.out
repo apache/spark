@@ -1350,14 +1350,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 ALTER TABLE IDENTIFIER('tab') RENAME TO IDENTIFIER('tab_renamed')
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
-{
-  "errorClass" : "TABLE_OR_VIEW_ALREADY_EXISTS",
-  "sqlState" : "42P07",
-  "messageParameters" : {
-    "relationName" : "`default`.`tab_renamed`"
-  }
-}
+AlterTableRenameCommand `spark_catalog`.`default`.`tab`, `tab_renamed`, false
 
 
 -- !query
@@ -1366,6 +1359,20 @@ SELECT * FROM tab_renamed
 Project [c1#x, c2#x]
 +- SubqueryAlias spark_catalog.default.tab_renamed
    +- Relation spark_catalog.default.tab_renamed[c1#x,c2#x] csv
+
+
+-- !query
+DROP TABLE IF EXISTS tab_renamed
+-- !query analysis
+DropTable true, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.tab_renamed
+
+
+-- !query
+DROP TABLE IF EXISTS tab
+-- !query analysis
+DropTable true, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.tab
 
 
 -- !query
