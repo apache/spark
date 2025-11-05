@@ -25072,8 +25072,7 @@ def make_timestamp(
     hours: "ColumnOrName",
     mins: "ColumnOrName",
     secs: "ColumnOrName",
-) -> Column:
-    ...
+) -> Column: ...
 
 
 @overload
@@ -25085,20 +25084,17 @@ def make_timestamp(
     mins: "ColumnOrName",
     secs: "ColumnOrName",
     timezone: "ColumnOrName",
-) -> Column:
-    ...
+) -> Column: ...
 
 
 @overload
-def make_timestamp(*, date: "ColumnOrName", time: "ColumnOrName") -> Column:
-    ...
+def make_timestamp(*, date: "ColumnOrName", time: "ColumnOrName") -> Column: ...
 
 
 @overload
 def make_timestamp(
     *, date: "ColumnOrName", time: "ColumnOrName", timezone: "ColumnOrName"
-) -> Column:
-    ...
+) -> Column: ...
 
 
 @_try_remote_functions
@@ -25302,8 +25298,7 @@ def try_make_timestamp(
     hours: "ColumnOrName",
     mins: "ColumnOrName",
     secs: "ColumnOrName",
-) -> Column:
-    ...
+) -> Column: ...
 
 
 @overload
@@ -25315,20 +25310,17 @@ def try_make_timestamp(
     mins: "ColumnOrName",
     secs: "ColumnOrName",
     timezone: "ColumnOrName",
-) -> Column:
-    ...
+) -> Column: ...
 
 
 @overload
-def try_make_timestamp(*, date: "ColumnOrName", time: "ColumnOrName") -> Column:
-    ...
+def try_make_timestamp(*, date: "ColumnOrName", time: "ColumnOrName") -> Column: ...
 
 
 @overload
 def try_make_timestamp(
     *, date: "ColumnOrName", time: "ColumnOrName", timezone: "ColumnOrName"
-) -> Column:
-    ...
+) -> Column: ...
 
 
 @_try_remote_functions
@@ -25753,8 +25745,7 @@ def make_timestamp_ntz(
     hours: "ColumnOrName",
     mins: "ColumnOrName",
     secs: "ColumnOrName",
-) -> Column:
-    ...
+) -> Column: ...
 
 
 @overload
@@ -25762,8 +25753,7 @@ def make_timestamp_ntz(
     *,
     date: "ColumnOrName",
     time: "ColumnOrName",
-) -> Column:
-    ...
+) -> Column: ...
 
 
 @_try_remote_functions
@@ -25910,8 +25900,7 @@ def try_make_timestamp_ntz(
     hours: "ColumnOrName",
     mins: "ColumnOrName",
     secs: "ColumnOrName",
-) -> Column:
-    ...
+) -> Column: ...
 
 
 @overload
@@ -25919,8 +25908,7 @@ def try_make_timestamp_ntz(
     *,
     date: "ColumnOrName",
     time: "ColumnOrName",
-) -> Column:
-    ...
+) -> Column: ...
 
 
 @_try_remote_functions
