@@ -235,12 +235,7 @@ class PandasConversionMixin:
                 )
             else:
                 # Empty dataset
-                pdf = pd.DataFrame(
-                    {
-                        col_name: pd.Series(dtype=object)
-                        for col_name in self.columns
-                    }
-                )
+                pdf = pd.DataFrame({col_name: pd.Series(dtype=object) for col_name in self.columns})
             pdf.columns = self.columns
             return pdf
         else:
