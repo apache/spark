@@ -1110,4 +1110,23 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
     val analysisEx = ex.cause.asInstanceOf[AnalysisException]
     assert(analysisEx.errorClass.get == "SPECIFY_CLUSTER_BY_WITH_PARTITIONED_BY_IS_NOT_ALLOWED")
   }
+
+  test("cluster column that doesn't exist in table schema should fail") {
+    val session = spark
+    import session.implicits._
+
+    val ex = intercept[TableMaterializationException] {
+      materializeGraph(
+        new TestGraphRegistrationContext(spark) {
+          registerTable(
+            "invalid_cluster_table",
+            query = Option(dfFlowFunc(Seq((1, 1, "x"), (2, 3, "y")).toDF("x1", "x2", "x3"))),
+            clusterCols = Option(Seq("nonexistent_column"))
+          )
+        }.resolveToDataflowGraph(),
+        storageRoot = storageRoot
+      )
+    }
+    assert(ex.cause.isInstanceOf[AnalysisException])
+  }
 }
