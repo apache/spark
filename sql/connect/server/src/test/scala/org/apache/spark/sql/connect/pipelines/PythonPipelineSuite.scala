@@ -877,7 +877,7 @@ class PythonPipelineSuite
             |
             |@dp.table(cluster_by = [])
             |def st():
-            |  return spark.range(3).withColumn("id_mod", col("id") % 2)
+            |  return spark.readStream.table("mv")
             |""".stripMargin)
       val updateContext =
         new PipelineUpdateContextImpl(graph, eventCallback = _ => (), storageRoot = storageRoot)
@@ -890,13 +890,13 @@ class PythonPipelineSuite
       val mvIdentifier = Identifier.of(Array("default"), "mv")
       val mvTable = catalog.loadTable(mvIdentifier)
       val mvTransforms = mvTable.partitioning()
-      assert(mvTransforms.length == 0,
+      assert(mvTransforms.isEmpty,
         s"MaterializedView should have no transforms, but got: ${mvTransforms.mkString(", ")}")
 
       val stIdentifier = Identifier.of(Array("default"), "st")
       val stTable = catalog.loadTable(stIdentifier)
       val stTransforms = stTable.partitioning()
-      assert(stTransforms.length == 0,
+      assert(stTransforms.isEmpty,
         s"Table should have no transforms, but got: ${stTransforms.mkString(", ")}")
     }
   }
