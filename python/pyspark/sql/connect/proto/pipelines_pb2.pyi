@@ -553,80 +553,6 @@ class PipelineCommand(google.protobuf.message.Message):
                 self, oneof_group: typing_extensions.Literal["_relation", b"_relation"]
             ) -> typing_extensions.Literal["relation"] | None: ...
 
-        class StandaloneFlowDetails(google.protobuf.message.Message):
-            """A standalone flow that writes to the target dataset with additional options."""
-
-            DESCRIPTOR: google.protobuf.descriptor.Descriptor
-
-            RELATION_FIELD_NUMBER: builtins.int
-            OUTPUTMODE_FIELD_NUMBER: builtins.int
-            ONCE_FIELD_NUMBER: builtins.int
-            @property
-            def relation(self) -> pyspark.sql.connect.proto.relations_pb2.Relation:
-                """An unresolved relation that defines the dataset's flow. Empty if the query function
-                that defines the flow cannot be analyzed at the time of flow definition.
-                """
-            outputMode: builtins.str
-            """The output mode for the standalone flow."""
-            once: builtins.bool
-            """If true, define the flow as a one-time flow, such as for backfill. Set to true changes the flow in two ways:
-              - The flow is run one time by default. If the pipeline is ran with a full refresh, the flow will run again.
-              - The flow function must be a batch DataFrame, not a streaming DataFrame.
-            """
-            def __init__(
-                self,
-                *,
-                relation: pyspark.sql.connect.proto.relations_pb2.Relation | None = ...,
-                outputMode: builtins.str | None = ...,
-                once: builtins.bool | None = ...,
-            ) -> None: ...
-            def HasField(
-                self,
-                field_name: typing_extensions.Literal[
-                    "_once",
-                    b"_once",
-                    "_outputMode",
-                    b"_outputMode",
-                    "_relation",
-                    b"_relation",
-                    "once",
-                    b"once",
-                    "outputMode",
-                    b"outputMode",
-                    "relation",
-                    b"relation",
-                ],
-            ) -> builtins.bool: ...
-            def ClearField(
-                self,
-                field_name: typing_extensions.Literal[
-                    "_once",
-                    b"_once",
-                    "_outputMode",
-                    b"_outputMode",
-                    "_relation",
-                    b"_relation",
-                    "once",
-                    b"once",
-                    "outputMode",
-                    b"outputMode",
-                    "relation",
-                    b"relation",
-                ],
-            ) -> None: ...
-            @typing.overload
-            def WhichOneof(
-                self, oneof_group: typing_extensions.Literal["_once", b"_once"]
-            ) -> typing_extensions.Literal["once"] | None: ...
-            @typing.overload
-            def WhichOneof(
-                self, oneof_group: typing_extensions.Literal["_outputMode", b"_outputMode"]
-            ) -> typing_extensions.Literal["outputMode"] | None: ...
-            @typing.overload
-            def WhichOneof(
-                self, oneof_group: typing_extensions.Literal["_relation", b"_relation"]
-            ) -> typing_extensions.Literal["relation"] | None: ...
-
         class Response(google.protobuf.message.Message):
             DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -661,7 +587,6 @@ class PipelineCommand(google.protobuf.message.Message):
         CLIENT_ID_FIELD_NUMBER: builtins.int
         SOURCE_CODE_LOCATION_FIELD_NUMBER: builtins.int
         RELATION_FLOW_DETAILS_FIELD_NUMBER: builtins.int
-        STANDALONE_FLOW_DETAILS_FIELD_NUMBER: builtins.int
         EXTENSION_FIELD_NUMBER: builtins.int
         dataflow_graph_id: builtins.str
         """The graph to attach this flow to."""
@@ -686,10 +611,6 @@ class PipelineCommand(google.protobuf.message.Message):
             self,
         ) -> global___PipelineCommand.DefineFlow.WriteRelationFlowDetails: ...
         @property
-        def standalone_flow_details(
-            self,
-        ) -> global___PipelineCommand.DefineFlow.StandaloneFlowDetails: ...
-        @property
         def extension(self) -> google.protobuf.any_pb2.Any: ...
         def __init__(
             self,
@@ -701,8 +622,6 @@ class PipelineCommand(google.protobuf.message.Message):
             client_id: builtins.str | None = ...,
             source_code_location: global___SourceCodeLocation | None = ...,
             relation_flow_details: global___PipelineCommand.DefineFlow.WriteRelationFlowDetails
-            | None = ...,
-            standalone_flow_details: global___PipelineCommand.DefineFlow.StandaloneFlowDetails
             | None = ...,
             extension: google.protobuf.any_pb2.Any | None = ...,
         ) -> None: ...
@@ -733,8 +652,6 @@ class PipelineCommand(google.protobuf.message.Message):
                 b"relation_flow_details",
                 "source_code_location",
                 b"source_code_location",
-                "standalone_flow_details",
-                b"standalone_flow_details",
                 "target_dataset_name",
                 b"target_dataset_name",
             ],
@@ -768,8 +685,6 @@ class PipelineCommand(google.protobuf.message.Message):
                 b"source_code_location",
                 "sql_conf",
                 b"sql_conf",
-                "standalone_flow_details",
-                b"standalone_flow_details",
                 "target_dataset_name",
                 b"target_dataset_name",
             ],
@@ -802,12 +717,7 @@ class PipelineCommand(google.protobuf.message.Message):
         @typing.overload
         def WhichOneof(
             self, oneof_group: typing_extensions.Literal["details", b"details"]
-        ) -> (
-            typing_extensions.Literal[
-                "relation_flow_details", "standalone_flow_details", "extension"
-            ]
-            | None
-        ): ...
+        ) -> typing_extensions.Literal["relation_flow_details", "extension"] | None: ...
 
     class StartRun(google.protobuf.message.Message):
         """Resolves all datasets and flows and start a pipeline update. Should be called after all
