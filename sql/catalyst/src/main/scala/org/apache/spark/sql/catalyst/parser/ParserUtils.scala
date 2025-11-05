@@ -20,6 +20,7 @@ import java.util
 import java.util.Locale
 
 import scala.collection.{immutable, mutable}
+import scala.jdk.CollectionConverters._
 import scala.util.matching.Regex
 
 import org.antlr.v4.runtime.{ParserRuleContext, Token}
@@ -45,6 +46,38 @@ object ParserUtils extends SparkParserUtils {
 
   def invalidStatement(statement: String, ctx: ParserRuleContext): Nothing = {
     throw QueryParsingErrors.invalidStatementError(statement, ctx)
+  }
+
+  /**
+   * Gets the resolved text of a multipart identifier, handling IDENTIFIER('literal') syntax.
+   * This parses each part through CatalystSqlParser to resolve identifier-lite expressions.
+   */
+  def getMultipartIdentifierText(ctx: MultipartIdentifierContext): String = {
+    // Build the text by resolving each part
+    val parts = ctx.parts.asScala.flatMap { part =>
+      val partText = part.getText
+      // Check if this looks like IDENTIFIER('...')
+      if (partText.startsWith("IDENTIFIER(") && partText.endsWith(")")) {
+        // Extract the literal string between the parentheses
+        val literal = partText.substring("IDENTIFIER(".length, partText.length - 1)
+        // Remove quotes and unescape
+        val unquoted = if (literal.startsWith("'") && literal.endsWith("'")) {
+          literal.substring(1, literal.length - 1).replace("''", "'")
+        } else {
+          literal
+        }
+        // Parse as multipart identifier
+        try {
+          CatalystSqlParser.parseMultipartIdentifier(unquoted)
+        } catch {
+          case _: Exception => Seq(partText)
+        }
+      } else {
+        // Regular identifier
+        Seq(partText)
+      }
+    }.mkString(".")
+    parts
   }
 
   def checkDuplicateClauses[T](
@@ -285,13 +318,15 @@ class SqlScriptingLabelContext {
     (beginLabelCtx, endLabelCtx) match {
       // Throw an error if labels do not match.
       case (Some(bl: BeginLabelContext), Some(el: EndLabelContext))
-        if bl.multipartIdentifier().getText.toLowerCase(Locale.ROOT) !=
-            el.multipartIdentifier().getText.toLowerCase(Locale.ROOT) =>
+        if ParserUtils.getMultipartIdentifierText(bl.multipartIdentifier())
+          .toLowerCase(Locale.ROOT) !=
+          ParserUtils.getMultipartIdentifierText(el.multipartIdentifier())
+            .toLowerCase(Locale.ROOT) =>
         withOrigin(bl) {
           throw SqlScriptingErrors.labelsMismatch(
             CurrentOrigin.get,
-            bl.multipartIdentifier().getText,
-            el.multipartIdentifier().getText)
+            ParserUtils.getMultipartIdentifierText(bl.multipartIdentifier()),
+            ParserUtils.getMultipartIdentifierText(el.multipartIdentifier()))
         }
       // Throw an error if label is qualified.
       case (Some(bl: BeginLabelContext), _)
@@ -299,14 +334,15 @@ class SqlScriptingLabelContext {
         withOrigin(bl) {
           throw SqlScriptingErrors.labelCannotBeQualified(
             CurrentOrigin.get,
-            bl.multipartIdentifier().getText.toLowerCase(Locale.ROOT)
+            ParserUtils.getMultipartIdentifierText(bl.multipartIdentifier())
+              .toLowerCase(Locale.ROOT)
           )
         }
       // Throw an error if end label exists without begin label.
       case (None, Some(el: EndLabelContext)) =>
         withOrigin(el) {
           throw SqlScriptingErrors.endLabelWithoutBeginLabel(
-            CurrentOrigin.get, el.multipartIdentifier().getText)
+            CurrentOrigin.get, ParserUtils.getMultipartIdentifierText(el.multipartIdentifier()))
         }
       case _ =>
     }
@@ -324,7 +360,7 @@ class SqlScriptingLabelContext {
   private def assertIdentifierNotInSeenLabels(
       identifierCtx: Option[MultipartIdentifierContext]): Unit = {
     identifierCtx.foreach { ctx =>
-      val identifierName = ctx.getText
+      val identifierName = ParserUtils.getMultipartIdentifierText(ctx)
       if (seenLabels.contains(identifierName.toLowerCase(Locale.ROOT))) {
         withOrigin(ctx) {
           throw SqlScriptingErrors
@@ -348,7 +384,8 @@ class SqlScriptingLabelContext {
 
     // Get label text and add it to seenLabels.
     val labelText = if (isLabelDefined(beginLabelCtx)) {
-      val txt = beginLabelCtx.get.multipartIdentifier().getText.toLowerCase(Locale.ROOT)
+      val txt = ParserUtils.getMultipartIdentifierText(
+        beginLabelCtx.get.multipartIdentifier()).toLowerCase(Locale.ROOT)
       if (seenLabels.contains(txt)) {
         withOrigin(beginLabelCtx.get) {
           throw SqlScriptingErrors.duplicateLabels(CurrentOrigin.get, txt)
@@ -374,7 +411,8 @@ class SqlScriptingLabelContext {
    */
   def exitLabeledScope(beginLabelCtx: Option[BeginLabelContext]): Unit = {
     if (isLabelDefined(beginLabelCtx)) {
-      seenLabels.remove(beginLabelCtx.get.multipartIdentifier().getText.toLowerCase(Locale.ROOT))
+      seenLabels.remove(ParserUtils.getMultipartIdentifierText(
+        beginLabelCtx.get.multipartIdentifier()).toLowerCase(Locale.ROOT))
     }
   }
 
@@ -385,7 +423,7 @@ class SqlScriptingLabelContext {
    */
   def enterForScope(identifierCtx: Option[MultipartIdentifierContext]): Unit = {
     identifierCtx.foreach { ctx =>
-      val identifierName = ctx.getText
+      val identifierName = ParserUtils.getMultipartIdentifierText(ctx)
       assertIdentifierNotInSeenLabels(identifierCtx)
       seenLabels.add(identifierName.toLowerCase(Locale.ROOT))
 
@@ -405,7 +443,7 @@ class SqlScriptingLabelContext {
    */
   def exitForScope(identifierCtx: Option[MultipartIdentifierContext]): Unit = {
     identifierCtx.foreach { ctx =>
-      val identifierName = ctx.getText
+      val identifierName = ParserUtils.getMultipartIdentifierText(ctx)
       seenLabels.remove(identifierName.toLowerCase(Locale.ROOT))
     }
   }

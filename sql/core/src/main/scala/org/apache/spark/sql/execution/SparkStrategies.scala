@@ -1091,10 +1091,12 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case r: LogicalRDD =>
         RDDScanExec(r.output, r.rdd, "ExistingRDD", r.outputPartitioning, r.outputOrdering,
           r.stream) :: Nil
-      case _: UpdateTable =>
-        throw QueryExecutionErrors.ddlUnsupportedTemporarilyError("UPDATE TABLE")
-      case _: MergeIntoTable =>
-        throw QueryExecutionErrors.ddlUnsupportedTemporarilyError("MERGE INTO TABLE")
+      case u: UpdateTable =>
+        val tableName = extractTableNameForError(u.table)
+        throw QueryExecutionErrors.ddlUnsupportedTemporarilyError("UPDATE TABLE", tableName)
+      case m: MergeIntoTable =>
+        val tableName = extractTableNameForError(m.targetTable)
+        throw QueryExecutionErrors.ddlUnsupportedTemporarilyError("MERGE INTO TABLE", tableName)
       case logical.CollectMetrics(name, metrics, child, _) =>
         execution.CollectMetricsExec(name, metrics, planLater(child)) :: Nil
       case WriteFiles(child, fileFormat, partitionColumns, bucket, options, staticPartitions) =>
@@ -1103,6 +1105,33 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case MultiResult(children) =>
         MultiResultExec(children.map(planLater)) :: Nil
       case _ => Nil
+    }
+  }
+
+  /**
+   * Extracts a user-friendly table name from a logical plan for error messages.
+   */
+  private def extractTableNameForError(table: LogicalPlan): String = {
+    import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, NamedRelation}
+    import org.apache.spark.sql.execution.datasources.LogicalRelation
+    import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
+    import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
+
+    val unwrapped = EliminateSubqueryAliases(table)
+    unwrapped match {
+      // Check specific types before NamedRelation since they extend it
+      case DataSourceV2Relation(_, _, catalog, Some(ident), _, _) =>
+        (catalog.map(_.name()).toSeq ++ ident.asMultipartIdentifier).mkString(".")
+      case LogicalRelation(_, _, Some(catalogTable), _, _) =>
+        catalogTable.identifier.unquotedString
+      case r: NamedRelation =>
+        r.name
+      case _ =>
+        // Try to get name from SubqueryAlias before unwrapping
+        table match {
+          case logical.SubqueryAlias(name, _) => name.toString
+          case _ => "table"
+        }
     }
   }
 }

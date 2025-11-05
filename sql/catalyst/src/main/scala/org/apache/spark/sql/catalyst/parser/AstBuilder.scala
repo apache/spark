@@ -603,7 +603,7 @@ class AstBuilder extends DataTypeAstBuilder
       SingleStatement(visitQuery(queryCtx))
     }
     parsingCtx.labelContext.enterForScope(Option(ctx.multipartIdentifier()))
-    val varName = Option(ctx.multipartIdentifier()).map(_.getText)
+    val varName = Option(ctx.multipartIdentifier()).map(ParserUtils.getMultipartIdentifierText)
     val body = visitCompoundBodyImpl(
       ctx.compoundBody(),
       None,

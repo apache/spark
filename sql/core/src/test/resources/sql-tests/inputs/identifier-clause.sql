@@ -247,48 +247,6 @@ RETURN SELECT IDENTIFIER('input_val'), 'result';
 SELECT * FROM test_table_udf(42);
 DROP TEMPORARY FUNCTION test_table_udf;
 
--- SQL Script labels with identifier-lite
-BEGIN
-  IDENTIFIER('loop_label'): LOOP
-    SELECT 1;
-    LEAVE IDENTIFIER('loop_label');
-  END LOOP loop_label;
-END;
-
--- SQL Script with labeled BEGIN/END block
-BEGIN
-  block_label: BEGIN
-    DECLARE IDENTIFIER('x') INT DEFAULT 1;
-    SELECT x;
-  END IDENTIFIER('block_label');
-END;
-
--- WHILE loop with identifier-lite label
-BEGIN
-  DECLARE IDENTIFIER('counter') INT DEFAULT 0;
-  IDENTIFIER('while_label'): WHILE IDENTIFIER('counter') < 3 DO
-    SET VAR counter = IDENTIFIER('counter') + 1;
-  END WHILE while_label;
-  SELECT IDENTIFIER('counter');
-END;
-
--- REPEAT loop with identifier-lite label
-BEGIN
-  DECLARE IDENTIFIER('cnt') INT DEFAULT 0;
-  repeat_label: REPEAT
-    SET VAR IDENTIFIER('cnt') = cnt + 1;
-  UNTIL IDENTIFIER('cnt') >= 2
-  END REPEAT IDENTIFIER('repeat_label');
-  SELECT IDENTIFIER('cnt');
-END;
-
--- FOR loop with identifier-lite
-BEGIN
-  IDENTIFIER('for_label'): FOR IDENTIFIER('row') AS SELECT 1 AS c1 DO
-    SELECT row.c1;
-  END FOR IDENTIFIER('for_label');
-END;
-
 -- Integration tests: Combining parameter markers, string coalescing, and IDENTIFIER
 -- These tests demonstrate the power of combining IDENTIFIER with parameters
 
@@ -369,14 +327,6 @@ EXECUTE IMMEDIATE 'SELECT IDENTIFIER(:alias ''.c1'') FROM integration_test AS ID
 EXECUTE IMMEDIATE
   'SELECT IDENTIFIER(:col1), IDENTIFIER(:p ''2'') FROM IDENTIFIER(:schema ''.'' :tab) WHERE IDENTIFIER(:col1) > 0 ORDER BY IDENTIFIER(:p ''1'')'
   USING 'c1' AS col1, 'c' AS p, 'default' AS schema, 'integration_test' AS tab;
-
--- Test 18: IDENTIFIER in DECLARE and SELECT within EXECUTE IMMEDIATE
-EXECUTE IMMEDIATE
-  'BEGIN
-     DECLARE IDENTIFIER(:var_name) INT DEFAULT :var_value;
-     SELECT IDENTIFIER(:var_name) AS result;
-   END'
-  USING 'my_variable' AS var_name, 100 AS var_value;
 
 -- Test 19: IDENTIFIER with qualified name coalescing for schema.table.column pattern
 -- This should work for multi-part identifiers

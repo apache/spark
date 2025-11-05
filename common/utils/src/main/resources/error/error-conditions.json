@@ -8473,11 +8473,6 @@
       "Failed to merge incompatible schemas <left> and <right>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_2096" : {
-    "message" : [
-      "<ddl> is not supported temporarily."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2097" : {
     "message" : [
       "Could not execute broadcast in <timeout> secs. You can increase the timeout for broadcasts via <broadcastTimeout> or disable broadcast join by setting <autoBroadcastJoinThreshold> to -1 or remove the broadcast hint if it exists in your code."
