@@ -1011,10 +1011,11 @@ class SparkConnectClient(object):
 
         if len(pdf.columns) > 0:
             error_on_duplicated_field_names: bool = False
-            if any(_has_type(f.dataType, StructType) for f in schema.fields):
-                if struct_in_pandas == "legacy":
-                    error_on_duplicated_field_names = True
-                    struct_in_pandas = "dict"
+            if struct_in_pandas == "legacy" and any(
+                _has_type(f.dataType, StructType) for f in schema.fields
+            ):
+                error_on_duplicated_field_names = True
+                struct_in_pandas = "dict"
 
             pdf = pd.concat(
                 [
