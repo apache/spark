@@ -21,7 +21,7 @@ import java.util.concurrent.TimeUnit
 
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config.{ConfigBuilder, PYSPARK_DRIVER_PYTHON, PYSPARK_PYTHON}
+import org.apache.spark.internal.config.ConfigBuilder
 
 private[spark] object Config extends Logging {
 
@@ -586,22 +586,6 @@ private[spark] object Config extends Logging {
       .checkValue(mem_overhead => mem_overhead >= 0,
         "Ensure that memory overhead is non-negative")
       .createWithDefault(0.1)
-
-  val PYSPARK_MAJOR_PYTHON_VERSION =
-    ConfigBuilder("spark.kubernetes.pyspark.pythonVersion")
-      .doc(
-        s"(Deprecated since Spark 3.1, please set '${PYSPARK_PYTHON.key}' and " +
-        s"'${PYSPARK_DRIVER_PYTHON.key}' configurations or $ENV_PYSPARK_PYTHON and " +
-        s"$ENV_PYSPARK_DRIVER_PYTHON environment variables instead.)")
-      .version("2.4.0")
-      .stringConf
-      .checkValue("3" == _,
-        "Python 2 was dropped from Spark 3.1, and only 3 is allowed in " +
-          "this configuration. Note that this configuration was deprecated in Spark 3.1. " +
-          s"Please set '${PYSPARK_PYTHON.key}' and '${PYSPARK_DRIVER_PYTHON.key}' " +
-          s"configurations or $ENV_PYSPARK_PYTHON and $ENV_PYSPARK_DRIVER_PYTHON environment " +
-          "variables instead.")
-      .createOptional
 
   val KUBERNETES_KERBEROS_KRB5_FILE =
     ConfigBuilder("spark.kubernetes.kerberos.krb5.path")
