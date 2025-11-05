@@ -449,3 +449,9 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest
     }
   }
 }
+
+/**
+ * Test suite that runs all RocksDBStateStoreIntegrationSuite tests with row checksum enabled.
+ */
+class RocksDBStateStoreIntegrationSuiteWithRowChecksum
+  extends RocksDBStateStoreIntegrationSuite with EnableStateStoreRowChecksum

@@ -5433,6 +5433,13 @@
     ],
     "sqlState" : "42K06"
   },
+  "STATE_STORE_ROW_CHECKSUM_VERIFICATION_FAILED" : {
+    "message" : [
+      "Row checksum verification failed for stateStore=<stateStoreId>. The row may be corrupted.",
+      "Expected checksum: <expectedChecksum>, Computed checksum: <computedChecksum>."
+    ],
+    "sqlState" : "XXKST"
+  },
   "STATE_STORE_STATE_SCHEMA_FILES_THRESHOLD_EXCEEDED" : {
     "message" : [
       "The number of state schema files <numStateSchemaFiles> exceeds the maximum number of state schema files for this query: <maxStateSchemaFiles>.",

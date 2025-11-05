@@ -48,6 +48,7 @@ import org.apache.spark.sql.execution.streaming.runtime.{MemoryStream, StreamExe
 import org.apache.spark.sql.execution.streaming.state.StateStoreCoordinatorSuite.withCoordinatorRef
 import org.apache.spark.sql.functions.count
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.tags.ExtendedSQLTest
 import org.apache.spark.unsafe.types.UTF8String
@@ -255,6 +256,7 @@ private object FakeStateStoreProviderWithMaintenanceError {
 
 @ExtendedSQLTest
 class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
+  with SharedSparkSession
   with BeforeAndAfter {
   import StateStoreTestsHelper._
   import StateStoreCoordinatorSuite._
@@ -262,6 +264,7 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
   before {
     StateStore.stop()
     require(!StateStore.isMaintenanceRunning)
+    spark.streams.stateStoreCoordinator // initialize the lazy coordinator
   }
 
   after {
@@ -1585,6 +1588,8 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
     sqlConf.setConf(SQLConf.STATE_STORE_COMPRESSION_CODEC, SQLConf.get.stateStoreCompressionCodec)
     sqlConf.setConf(
       SQLConf.STREAMING_CHECKPOINT_FILE_CHECKSUM_ENABLED, SQLConf.get.checkpointFileChecksumEnabled)
+    sqlConf.setConf(
+      SQLConf.STATE_STORE_ROW_CHECKSUM_ENABLED, SQLConf.get.stateStoreRowChecksumEnabled)
     sqlConf
   }
 
@@ -1663,6 +1668,12 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
     fm.delete(new Path(filePath.toURI))
 
     filePath.createNewFile()
+  }
+
+  override protected def testQuietly(name: String)(f: => Unit): Unit = {
+    // Use the implementation from StateStoreSuiteBase.
+    // There is another in SQLTestUtils. Doing this to avoid conflict error.
+    super[StateStoreSuiteBase].testQuietly(name)(f)
   }
 }
 
@@ -2929,4 +2940,17 @@ class RenameReturnsFalseFileSystem extends RawLocalFileSystem {
 
 object RenameReturnsFalseFileSystem {
   val scheme = s"StateStoreSuite${math.abs(Random.nextInt())}fs"
+}
+
+/**
+ * Test suite that runs all StateStoreSuite tests with row checksum enabled.
+ */
+@ExtendedSQLTest
+class StateStoreSuiteWithRowChecksum
+  extends StateStoreSuite with EnableStateStoreRowChecksum {
+  override protected def testQuietly(name: String)(f: => Unit): Unit = {
+    // Use the implementation from StateStoreSuiteBase.
+    // There is another in SQLTestUtils. Doing this to avoid conflict error.
+    super[StateStoreSuite].testQuietly(name)(f)
+  }
 }
