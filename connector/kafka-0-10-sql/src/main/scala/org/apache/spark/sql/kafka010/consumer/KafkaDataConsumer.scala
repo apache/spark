@@ -848,4 +848,8 @@ private[kafka010] object KafkaDataConsumer extends Logging {
 
     new KafkaDataConsumer(topicPartition, kafkaParams, consumerPool, fetchedDataPool)
   }
+
+  private[kafka010] def getActiveSizeInConsumerPool: Int = {
+    consumerPool.numActive
+  }
 }
