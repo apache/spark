@@ -962,10 +962,14 @@ class SparkConnectClient(object):
             logger.debug(f"Executing plan {self._proto_to_string(plan, True)}")
         req = self._execute_plan_request_with_metadata()
         req.plan.CopyFrom(plan)
-        (self_destruct_conf,) = self.get_config_with_defaults(
-            ("spark.sql.execution.arrow.pyspark.selfDestruct.enabled", "false"),
+
+        # Get all related configs in a batch
+        configs = self._client.get_config_dict(
+            "spark.sql.session.timeZone",
+            "spark.sql.execution.pandas.structHandlingMode",
+            "spark.sql.execution.arrow.pyspark.selfDestruct.enabled",
         )
-        self_destruct = cast(str, self_destruct_conf).lower() == "true"
+        self_destruct = configs["spark.sql.execution.arrow.pyspark.selfDestruct.enabled"] == "true"
         table, schema, metrics, observed_metrics, _ = self._execute_and_fetch(
             req, observations, self_destruct=self_destruct
         )
@@ -1003,15 +1007,12 @@ class SparkConnectClient(object):
         if len(pdf.columns) > 0:
             timezone: Optional[str] = None
             if any(_has_type(f.dataType, TimestampType) for f in schema.fields):
-                (timezone,) = self.get_configs("spark.sql.session.timeZone")
+                timezone = configs["spark.sql.session.timeZone"]
 
             struct_in_pandas: Optional[str] = None
             error_on_duplicated_field_names: bool = False
             if any(_has_type(f.dataType, StructType) for f in schema.fields):
-                (struct_in_pandas,) = self.get_config_with_defaults(
-                    ("spark.sql.execution.pandas.structHandlingMode", "legacy"),
-                )
-
+                struct_in_pandas = configs["spark.sql.execution.pandas.structHandlingMode"]
                 if struct_in_pandas == "legacy":
                     error_on_duplicated_field_names = True
                     struct_in_pandas = "dict"
