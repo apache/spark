@@ -374,7 +374,7 @@ case class TransformWithStateExec(
     metrics // force lazy init at driver
 
     validateTimeMode()
-    validateStateStoreProvider()
+    validateStateStoreProvider(isStreaming)
 
     if (hasInitialState) {
       val storeConf = new StateStoreConf(session.sessionState.conf)

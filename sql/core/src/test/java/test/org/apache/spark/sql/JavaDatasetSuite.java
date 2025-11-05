@@ -187,8 +187,6 @@ public class JavaDatasetSuite implements Serializable {
 
   @Test
   public void testInitialStateForTransformWithState() {
-    spark.sessionState().conf().setConfString("spark.sql.streaming.stateStore.providerClass",
-				"org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider");
     List<String> data = Arrays.asList("a", "xy", "foo", "bar");
     Dataset<String> ds = spark.createDataset(data, Encoders.STRING());
     Dataset<Tuple2<Integer, String>> initialStateDS = spark.createDataset(
@@ -357,8 +355,6 @@ public class JavaDatasetSuite implements Serializable {
 
   @Test
   public void testTransformWithState() {
-    spark.sessionState().conf().setConfString("spark.sql.streaming.stateStore.providerClass",
-        "org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider");
     List<String> data = Arrays.asList("a", "foo", "bar");
     Dataset<String> ds = spark.createDataset(data, Encoders.STRING());
     KeyValueGroupedDataset<Integer, String> grouped =

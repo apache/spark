@@ -224,9 +224,9 @@ abstract class TransformWithStateExecBase(
   }
 
   /** Validates that the configured state store provider is supported by TransformWithState. */
-  protected def validateStateStoreProvider(): Unit = {
+  protected def validateStateStoreProvider(isStreaming: Boolean): Unit = {
     val providerName = conf.getConf(SQLConf.STATE_STORE_PROVIDER_CLASS)
-    if (!SUPPORTED_STATE_STORE_PROVIDERS.contains(providerName)) {
+    if (isStreaming && !SUPPORTED_STATE_STORE_PROVIDERS.contains(providerName)) {
       throw StateStoreErrors.storeBackendNotSupportedForTWS(providerName)
     }
   }
