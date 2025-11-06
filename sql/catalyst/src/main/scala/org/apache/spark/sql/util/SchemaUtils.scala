@@ -24,6 +24,8 @@ import scala.collection.immutable.Queue
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, NamedExpression}
+import org.apache.spark.sql.connector.catalog.CatalogV2Util
+import org.apache.spark.sql.connector.catalog.Table
 import org.apache.spark.sql.connector.expressions.{BucketTransform, FieldReference, NamedTransform, Transform}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.types._
@@ -96,6 +98,11 @@ private[spark] object SchemaUtils {
         }
       case _ =>
     }
+  }
+
+  def checkSchemaColumnNameDuplication(table: Table, resolver: Resolver): Unit = {
+    val schema = CatalogV2Util.v2ColumnsToStructType(table.columns)
+    checkSchemaColumnNameDuplication(schema, resolver)
   }
 
   /**

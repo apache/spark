@@ -2075,6 +2075,17 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val TABLE_METADATA_MAX_AGE =
+    buildConf("spark.sql.analyzer.tableMetadataMaxAge")
+      .doc("Maximum age in milliseconds for analyzed table metadata. Table metadata is " +
+        "considered valid for this duration after being loaded during analysis. If execution " +
+        "is delayed beyond this threshold, metadata will be refreshed to ensure consistency " +
+        "and detect schema changes. Note this config is only supported for versioned tables " +
+        "that expose their versions to Spark and is only checked during the first execution.")
+      .version("4.1.0")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .createWithDefault(100L)
+
   val BUCKETING_MAX_BUCKETS = buildConf("spark.sql.sources.bucketing.maxBuckets")
     .doc("The maximum number of buckets allowed.")
     .version("2.4.0")
@@ -7290,6 +7301,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def bucketingEnabled: Boolean = getConf(SQLConf.BUCKETING_ENABLED)
 
   def bucketingMaxBuckets: Int = getConf(SQLConf.BUCKETING_MAX_BUCKETS)
+
+  def tableMetadataMaxAge: Long = getConf(SQLConf.TABLE_METADATA_MAX_AGE)
 
   def autoBucketedScanEnabled: Boolean = getConf(SQLConf.AUTO_BUCKETED_SCAN_ENABLED)
 
