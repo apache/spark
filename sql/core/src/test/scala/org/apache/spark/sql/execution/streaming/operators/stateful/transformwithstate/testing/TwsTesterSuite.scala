@@ -361,6 +361,14 @@ class TwsTesterSuite extends SparkFunSuite {
     assert(ans3.sorted == List(("key1", 6L), ("key2", 3L)))
   }
 
+  test("TwsTester should allow direct access to ValueState") {
+    val processor = new RunningCountProcessor[String]()
+    val tester = new TwsTester[String, String, (String, Long)](processor)
+    tester.setValueState[Long]("count", "foo", 5)
+    tester.test(List(("foo", "a")))
+    assert(tester.peekValueState[Long]("count", "foo").get == 6L)
+  }
+
   test("TwsTester should correctly test TopKProcessor") {
     val input: List[(String, (String, Double))] = List(
       ("key2", ("c", 30.0)),
