@@ -78,4 +78,7 @@ interface Geo {
   // Returns the Spatial Reference Identifier (SRID) value of the geo object.
   int srid();
 
+  // Sets the Spatial Reference Identifier (SRID) value of the geo object.
+  void setSrid(int srid);
+
 }

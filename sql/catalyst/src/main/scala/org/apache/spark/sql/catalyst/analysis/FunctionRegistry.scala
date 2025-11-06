@@ -897,6 +897,7 @@ object FunctionRegistry {
     expression[ST_GeogFromWKB]("st_geogfromwkb"),
     expression[ST_GeomFromWKB]("st_geomfromwkb"),
     expression[ST_Srid]("st_srid"),
+    expression[ST_SetSrid]("st_setsrid"),
 
     // cast
     expression[Cast]("cast"),

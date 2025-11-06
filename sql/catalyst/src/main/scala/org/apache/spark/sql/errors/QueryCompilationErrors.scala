@@ -1770,6 +1770,14 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map("provider" -> provider))
   }
 
+  def failedToCreatePlanForDirectQueryError(
+      dataSourceType: String, cause: Throwable): Throwable = {
+    new AnalysisException(
+      errorClass = "FAILED_TO_CREATE_PLAN_FOR_DIRECT_QUERY",
+      messageParameters = Map("dataSourceType" -> dataSourceType),
+      cause = Some(cause))
+  }
+
   def findMultipleDataSourceError(provider: String, sourceNames: Seq[String]): Throwable = {
     new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1141",

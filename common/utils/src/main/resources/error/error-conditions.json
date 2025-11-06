@@ -1832,6 +1832,12 @@
     ],
     "sqlState" : "2203G"
   },
+  "FAILED_TO_CREATE_PLAN_FOR_DIRECT_QUERY" : {
+    "message" : [
+      "Failed to create plan for direct query on files: <dataSourceType>"
+    ],
+    "sqlState" : "58030"
+  },
   "FAILED_TO_LOAD_ROUTINE" : {
     "message" : [
       "Failed to load routine <routineName>."

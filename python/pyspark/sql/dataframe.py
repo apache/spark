@@ -6524,8 +6524,7 @@ class DataFrame:
         >>> df = spark.createDataFrame([(1, 21), (2, 30)], ("id", "age"))
         >>> def filter_func(iterator):
         ...     for batch in iterator:
-        ...         pdf = batch.to_pandas()
-        ...         yield pa.RecordBatch.from_pandas(pdf[pdf.id == 1])
+        ...         yield batch.filter(pa.compute.field("id") == 1)
         >>> df.mapInArrow(filter_func, df.schema).show()
         +---+---+
         | id|age|
