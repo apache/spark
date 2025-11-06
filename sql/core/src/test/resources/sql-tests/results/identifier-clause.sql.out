@@ -1183,7 +1183,7 @@ org.apache.spark.sql.catalyst.parser.ParseException
   "errorClass" : "IDENTIFIER_TOO_MANY_NAME_PARTS",
   "sqlState" : "42601",
   "messageParameters" : {
-    "identifier" : "x.win",
+    "identifier" : "`x`.`win`",
     "limit" : "1"
   },
   "queryContext" : [ {
@@ -1518,7 +1518,7 @@ org.apache.spark.sql.catalyst.parser.ParseException
   "errorClass" : "IDENTIFIER_TOO_MANY_NAME_PARTS",
   "sqlState" : "42601",
   "messageParameters" : {
-    "identifier" : "schema.table",
+    "identifier" : "`schema`.`table`",
     "limit" : "1"
   },
   "queryContext" : [ {
@@ -1541,7 +1541,7 @@ org.apache.spark.sql.catalyst.parser.ParseException
   "errorClass" : "IDENTIFIER_TOO_MANY_NAME_PARTS",
   "sqlState" : "42601",
   "messageParameters" : {
-    "identifier" : "col1.col2",
+    "identifier" : "`col1`.`col2`",
     "limit" : "1"
   },
   "queryContext" : [ {
@@ -1906,7 +1906,7 @@ struct<c1:int,c2:string>
 
 
 -- !query
-EXECUTE IMMEDIATE 'SELECT IDENTIFIER(:prefix ''1''), IDENTIFIER(:prefix ''2'') FROM integration_test'
+EXECUTE IMMEDIATE 'SELECT IDENTIFIER(:prefix ''1''), IDENTIFIER(:prefix ''2'') FROM integration_test ORDER BY ALL'
   USING 'c' AS prefix
 -- !query schema
 struct<c1:int,c2:string>
@@ -2001,7 +2001,7 @@ org.apache.spark.sql.catalyst.parser.ParseException
   "errorClass" : "IDENTIFIER_TOO_MANY_NAME_PARTS",
   "sqlState" : "42601",
   "messageParameters" : {
-    "identifier" : "identifier_clause_test_schema.my_table",
+    "identifier" : "`identifier_clause_test_schema`.`my_table`",
     "limit" : "1"
   },
   "queryContext" : [ {
@@ -2142,7 +2142,7 @@ org.apache.spark.sql.catalyst.parser.ParseException
   "errorClass" : "IDENTIFIER_TOO_MANY_NAME_PARTS",
   "sqlState" : "42601",
   "messageParameters" : {
-    "identifier" : "identifier_clause_test_schema.col1",
+    "identifier" : "`identifier_clause_test_schema`.`col1`",
     "limit" : "1"
   },
   "queryContext" : [ {

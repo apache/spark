@@ -1072,7 +1072,7 @@ org.apache.spark.sql.catalyst.parser.ParseException
   "errorClass" : "IDENTIFIER_TOO_MANY_NAME_PARTS",
   "sqlState" : "42601",
   "messageParameters" : {
-    "identifier" : "x.win",
+    "identifier" : "`x`.`win`",
     "limit" : "1"
   },
   "queryContext" : [ {
@@ -1396,7 +1396,7 @@ org.apache.spark.sql.catalyst.parser.ParseException
   "errorClass" : "IDENTIFIER_TOO_MANY_NAME_PARTS",
   "sqlState" : "42601",
   "messageParameters" : {
-    "identifier" : "schema.table",
+    "identifier" : "`schema`.`table`",
     "limit" : "1"
   },
   "queryContext" : [ {
@@ -1417,7 +1417,7 @@ org.apache.spark.sql.catalyst.parser.ParseException
   "errorClass" : "IDENTIFIER_TOO_MANY_NAME_PARTS",
   "sqlState" : "42601",
   "messageParameters" : {
-    "identifier" : "col1.col2",
+    "identifier" : "`col1`.`col2`",
     "limit" : "1"
   },
   "queryContext" : [ {
@@ -1707,12 +1707,13 @@ Sort [c1#x ASC NULLS FIRST, c2#x ASC NULLS FIRST], true
 
 
 -- !query
-EXECUTE IMMEDIATE 'SELECT IDENTIFIER(:prefix ''1''), IDENTIFIER(:prefix ''2'') FROM integration_test'
+EXECUTE IMMEDIATE 'SELECT IDENTIFIER(:prefix ''1''), IDENTIFIER(:prefix ''2'') FROM integration_test ORDER BY ALL'
   USING 'c' AS prefix
 -- !query analysis
-Project [c1#x, c2#x]
-+- SubqueryAlias spark_catalog.identifier_clause_test_schema.integration_test
-   +- Relation spark_catalog.identifier_clause_test_schema.integration_test[c1#x,c2#x] csv
+Sort [c1#x ASC NULLS FIRST, c2#x ASC NULLS FIRST], true
++- Project [c1#x, c2#x]
+   +- SubqueryAlias spark_catalog.identifier_clause_test_schema.integration_test
+      +- Relation spark_catalog.identifier_clause_test_schema.integration_test[c1#x,c2#x] csv
 
 
 -- !query
@@ -1806,7 +1807,7 @@ org.apache.spark.sql.catalyst.parser.ParseException
   "errorClass" : "IDENTIFIER_TOO_MANY_NAME_PARTS",
   "sqlState" : "42601",
   "messageParameters" : {
-    "identifier" : "identifier_clause_test_schema.my_table",
+    "identifier" : "`identifier_clause_test_schema`.`my_table`",
     "limit" : "1"
   },
   "queryContext" : [ {
@@ -1944,7 +1945,7 @@ org.apache.spark.sql.catalyst.parser.ParseException
   "errorClass" : "IDENTIFIER_TOO_MANY_NAME_PARTS",
   "sqlState" : "42601",
   "messageParameters" : {
-    "identifier" : "identifier_clause_test_schema.col1",
+    "identifier" : "`identifier_clause_test_schema`.`col1`",
     "limit" : "1"
   },
   "queryContext" : [ {

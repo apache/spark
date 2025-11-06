@@ -2604,31 +2604,7 @@ class AstBuilder extends DataTypeAstBuilder
    */
   override def visitTableIdentifier(
       ctx: TableIdentifierContext): TableIdentifier = withOrigin(ctx) {
-    // Get the table parts (may be multiple if using qualified identifier-lite)
-    // Handle null case for error recovery
-    val tableParts = if (ctx.table != null) {
-      getIdentifierParts(ctx.table)
-    } else {
-      Seq("")
-    }
-
-    // Get the database parts if present
-    val dbParts = Option(ctx.db).map { db =>
-      getIdentifierParts(db)
-    }
-
-    // Combine db and table parts
-    val allParts = dbParts.getOrElse(Seq.empty) ++ tableParts
-
-    // TableIdentifier expects (table, database) where database is optional
-    // If we have multiple parts, the last is the table, everything before is the database path
-    allParts match {
-      case Seq(table) => TableIdentifier(table, None)
-      case parts if parts.size >= 2 =>
-        TableIdentifier(parts.last, Some(parts.dropRight(1).mkString(".")))
-      case _ =>
-        throw new IllegalStateException(s"Invalid table identifier: ${ctx.getText}")
-    }
+    TableIdentifier(getIdentifierText(ctx.table), Option(ctx.db).map(getIdentifierText))
   }
 
   /**
@@ -2637,31 +2613,7 @@ class AstBuilder extends DataTypeAstBuilder
    */
   override def visitFunctionIdentifier(
       ctx: FunctionIdentifierContext): FunctionIdentifier = withOrigin(ctx) {
-    // Get the function parts (may be multiple if using qualified identifier-lite)
-    // Handle null case for error recovery
-    val functionParts = if (ctx.function != null) {
-      getIdentifierParts(ctx.function)
-    } else {
-      Seq("")
-    }
-
-    // Get the database parts if present
-    val dbParts = Option(ctx.db).map { db =>
-      getIdentifierParts(db)
-    }
-
-    // Combine db and function parts
-    val allParts = dbParts.getOrElse(Seq.empty) ++ functionParts
-
-    // FunctionIdentifier expects (function, database) where database is optional
-    // If we have multiple parts, the last is the function, everything before is the database path
-    allParts match {
-      case Seq(function) => FunctionIdentifier(function, None)
-      case parts if parts.size >= 2 =>
-        FunctionIdentifier(parts.last, Some(parts.dropRight(1).mkString(".")))
-      case _ =>
-        throw new IllegalStateException(s"Invalid function identifier: ${ctx.getText}")
-    }
+    FunctionIdentifier(getIdentifierText(ctx.function), Option(ctx.db).map(getIdentifierText))
   }
 
   /* ********************************************************************************************

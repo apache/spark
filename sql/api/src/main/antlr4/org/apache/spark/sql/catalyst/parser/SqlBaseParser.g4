@@ -1726,7 +1726,7 @@ singleStringLitWithoutMarker
 singleStringLit
     : singleStringLitWithoutMarker
     | parameterMarker
-;
+    ;
 
 parameterMarker
     : {parameter_substitution_enabled}? namedParameterMarker                                   #namedParameterMarkerRule

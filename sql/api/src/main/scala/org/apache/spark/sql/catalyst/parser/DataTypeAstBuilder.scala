@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.catalyst.util.SparkParserUtils.{string, withOrigin}
 import org.apache.spark.sql.connector.catalog.IdentityColumnSpec
-import org.apache.spark.sql.errors.QueryParsingErrors
+import org.apache.spark.sql.errors.{DataTypeErrorsBase, QueryParsingErrors}
 import org.apache.spark.sql.internal.SqlApiConf
 import org.apache.spark.sql.types.{ArrayType, BinaryType, BooleanType, ByteType, CalendarIntervalType, CharType, DataType, DateType, DayTimeIntervalType, DecimalType, DoubleType, FloatType, GeographyType, GeometryType, IntegerType, LongType, MapType, MetadataBuilder, NullType, ShortType, StringType, StructField, StructType, TimestampNTZType, TimestampType, TimeType, VarcharType, VariantType, YearMonthIntervalType}
 
@@ -87,9 +87,23 @@ import org.apache.spark.sql.types.{ArrayType, BinaryType, BooleanType, ByteType,
  * @see
  *   [[org.apache.spark.sql.catalyst.parser.AstBuilder]] for the full SQL statement parser
  */
-class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
+class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with DataTypeErrorsBase {
   protected def typedVisit[T](ctx: ParseTree): T = {
     ctx.accept(this).asInstanceOf[T]
+  }
+
+  /**
+   * Public helper to extract identifier parts from a context. This is exposed as public to allow
+   * utility classes like ParserUtils to reuse the identifier resolution logic without duplicating
+   * code.
+   *
+   * @param ctx
+   *   The parser context containing the identifier.
+   * @return
+   *   Sequence of identifier parts.
+   */
+  def extractIdentifierParts(ctx: ParserRuleContext): Seq[String] = {
+    getIdentifierParts(ctx)
   }
 
   override def visitSingleDataType(ctx: SingleDataTypeContext): DataType = withOrigin(ctx) {
@@ -239,49 +253,12 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
   protected def getIdentifierText(ctx: ParserRuleContext): String = {
     val parts = getIdentifierParts(ctx)
     if (parts.size > 1) {
-      // Try to find the original IDENTIFIER('literal') context for better error messages
-      val literalValue = extractIdentifierLiteral(ctx)
-      if (literalValue.isDefined) {
-        throw new ParseException(
-          errorClass = "IDENTIFIER_TOO_MANY_NAME_PARTS",
-          messageParameters = Map("identifier" -> literalValue.get, "limit" -> "1"),
-          ctx)
-      } else {
-        // Regular qualified identifier without IDENTIFIER()
-        throw new IllegalStateException(
-          s"Expected single identifier but got qualified name: ${parts.mkString(".")}")
-      }
+      throw new ParseException(
+        errorClass = "IDENTIFIER_TOO_MANY_NAME_PARTS",
+        messageParameters = Map("identifier" -> toSQLId(parts), "limit" -> "1"),
+        ctx)
     }
     parts.head
-  }
-
-  /**
-   * Extract the string literal value from IDENTIFIER('literal') if present in the context tree.
-   * Returns None if this is not an IDENTIFIER('literal') construct.
-   */
-  private def extractIdentifierLiteral(ctx: ParserRuleContext): Option[String] = {
-    ctx match {
-      case idLitCtx: IdentifierLiteralContext =>
-        Some(string(visitStringLit(idLitCtx.stringLit())))
-      case idLitCtx: IdentifierLiteralWithExtraContext =>
-        Some(string(visitStringLit(idLitCtx.stringLit())))
-      case idCtx: IdentifierContext =>
-        // Recurse into strictIdentifier
-        if (idCtx.strictIdentifier() != null) {
-          extractIdentifierLiteral(idCtx.strictIdentifier())
-        } else {
-          None
-        }
-      case base: ErrorCapturingIdentifierBaseContext =>
-        // Recurse into identifier
-        if (base.identifier() != null && base.identifier().strictIdentifier() != null) {
-          extractIdentifierLiteral(base.identifier().strictIdentifier())
-        } else {
-          None
-        }
-      case _ =>
-        None
-    }
   }
 
   /**

@@ -266,7 +266,7 @@ EXECUTE IMMEDIATE 'SELECT * FROM IDENTIFIER(:schema ''.'' :table) ORDER BY ALL'
   USING 'identifier_clause_test_schema' AS schema, 'integration_test' AS table;
 
 -- Test 4: IDENTIFIER in column reference with parameter and string coalescing
-EXECUTE IMMEDIATE 'SELECT IDENTIFIER(:prefix ''1''), IDENTIFIER(:prefix ''2'') FROM integration_test'
+EXECUTE IMMEDIATE 'SELECT IDENTIFIER(:prefix ''1''), IDENTIFIER(:prefix ''2'') FROM integration_test ORDER BY ALL'
   USING 'c' AS prefix;
 
 -- Test 5: IDENTIFIER in WHERE clause with parameters

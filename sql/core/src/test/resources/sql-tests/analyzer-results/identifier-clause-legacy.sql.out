@@ -1857,12 +1857,13 @@ Sort [c1#x ASC NULLS FIRST, c2#x ASC NULLS FIRST], true
 
 
 -- !query
-EXECUTE IMMEDIATE 'SELECT IDENTIFIER(:prefix ''1''), IDENTIFIER(:prefix ''2'') FROM integration_test'
+EXECUTE IMMEDIATE 'SELECT IDENTIFIER(:prefix ''1''), IDENTIFIER(:prefix ''2'') FROM integration_test ORDER BY ALL'
   USING 'c' AS prefix
 -- !query analysis
-Project [c1#x, c2#x]
-+- SubqueryAlias spark_catalog.identifier_clause_test_schema.integration_test
-   +- Relation spark_catalog.identifier_clause_test_schema.integration_test[c1#x,c2#x] csv
+Sort [c1#x ASC NULLS FIRST, c2#x ASC NULLS FIRST], true
++- Project [c1#x, c2#x]
+   +- SubqueryAlias spark_catalog.identifier_clause_test_schema.integration_test
+      +- Relation spark_catalog.identifier_clause_test_schema.integration_test[c1#x,c2#x] csv
 
 
 -- !query

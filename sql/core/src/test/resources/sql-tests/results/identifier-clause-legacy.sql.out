@@ -2109,7 +2109,7 @@ struct<c1:int,c2:string>
 
 
 -- !query
-EXECUTE IMMEDIATE 'SELECT IDENTIFIER(:prefix ''1''), IDENTIFIER(:prefix ''2'') FROM integration_test'
+EXECUTE IMMEDIATE 'SELECT IDENTIFIER(:prefix ''1''), IDENTIFIER(:prefix ''2'') FROM integration_test ORDER BY ALL'
   USING 'c' AS prefix
 -- !query schema
 struct<c1:int,c2:string>

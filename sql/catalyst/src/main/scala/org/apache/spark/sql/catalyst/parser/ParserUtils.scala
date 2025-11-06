@@ -52,117 +52,17 @@ object ParserUtils extends SparkParserUtils {
    * Gets the resolved text of a multipart identifier, handling IDENTIFIER('literal') syntax.
    * This method properly traverses the parse tree structure to extract identifier literals,
    * making it robust to comments, whitespace, and string coalescing.
-   * Uses the same pattern-matching approach as DataTypeAstBuilder.getIdentifierParts.
+   * Uses DataTypeAstBuilder.extractIdentifierParts to reuse existing logic.
    *
    * @param ctx The multipart identifier context from the parse tree.
    * @return The resolved identifier text as a dot-separated string.
    */
   def getMultipartIdentifierText(ctx: MultipartIdentifierContext): String = {
+    // Use DataTypeAstBuilder to properly extract identifier parts.
+    val astBuilder = new DataTypeAstBuilder()
     ctx.parts.asScala.flatMap { part =>
-      getErrorCapturingIdentifierParts(part)
+      astBuilder.extractIdentifierParts(part)
     }.mkString(".")
-  }
-
-  /**
-   * Extract identifier parts from an ErrorCapturingIdentifierContext.
-   * Mirrors the logic in DataTypeAstBuilder.getIdentifierParts but adapted for use
-   * in ParserUtils where we don't have access to the full AstBuilder infrastructure.
-   */
-  private def getErrorCapturingIdentifierParts(
-      ctx: SqlBaseParser.ErrorCapturingIdentifierContext): Seq[String] = {
-
-    ctx match {
-      case base: SqlBaseParser.ErrorCapturingIdentifierBaseContext =>
-        // Regular identifier with errorCapturingIdentifierExtra.
-        val identifier = base.identifier()
-        if (identifier != null && identifier.strictIdentifier() != null) {
-          getStrictIdentifierParts(identifier.strictIdentifier())
-        } else {
-          Seq(ctx.getText)
-        }
-      case idLit: SqlBaseParser.IdentifierLiteralWithExtraContext =>
-        // IDENTIFIER('literal') in errorCapturingIdentifier.
-        val literalValue = extractStringLiteralValue(idLit.stringLit())
-        // Parse the literal as a multipart identifier.
-        try {
-          CatalystSqlParser.parseMultipartIdentifier(literalValue)
-        } catch {
-          case _: ParseException => Seq(literalValue)
-        }
-      case _ =>
-        Seq(ctx.getText)
-    }
-  }
-
-  /**
-   * Extract identifier parts from a StrictIdentifierContext.
-   * Mirrors DataTypeAstBuilder logic for strictIdentifier contexts.
-   */
-  private def getStrictIdentifierParts(
-      ctx: SqlBaseParser.StrictIdentifierContext): Seq[String] = {
-    ctx match {
-      case idLit: SqlBaseParser.IdentifierLiteralContext =>
-        // IDENTIFIER('literal') in strictIdentifier.
-        val literalValue = extractStringLiteralValue(idLit.stringLit())
-        try {
-          CatalystSqlParser.parseMultipartIdentifier(literalValue)
-        } catch {
-          case _: ParseException => Seq(literalValue)
-        }
-      case _ =>
-        // Regular identifier (unquoted, quoted, or keyword).
-        Seq(ctx.getText)
-    }
-  }
-
-  /**
-   * Extract the string value from a StringLitContext.
-   * This properly handles string coalescing ('a' 'b' -> 'ab'), escaping, and whitespace/comments.
-   * Mirrors the string extraction logic used in DataTypeAstBuilder.
-   */
-  private def extractStringLiteralValue(ctx: SqlBaseParser.StringLitContext): String = {
-    if (ctx == null) {
-      return ""
-    }
-
-    // Extract all string literal tokens from the parse tree.
-    val tokens = ctx.singleStringLit().asScala.flatMap { singleStr =>
-      val childCount = singleStr.getChildCount
-      if (childCount > 0) {
-        val child = singleStr.getChild(0)
-        child match {
-          case terminal: org.antlr.v4.runtime.tree.TerminalNode =>
-            Some(terminal.getSymbol)
-          case _ => None
-        }
-      } else {
-        None
-      }
-    }
-
-    if (tokens.isEmpty) {
-      // Fallback: extract via getText if token extraction failed.
-      val text = ctx.getText
-      if (text.startsWith("'") && text.endsWith("'")) {
-        return text.substring(1, text.length - 1).replace("''", "'")
-      } else if (text.startsWith("\"") && text.endsWith("\"")) {
-        return text.substring(1, text.length - 1).replace("\"\"", "\"")
-      } else {
-        return text
-      }
-    }
-
-    // Coalesce multiple string literals and unescape.
-    tokens.map { token =>
-      val text = token.getText
-      if (text.startsWith("'") && text.endsWith("'")) {
-        text.substring(1, text.length - 1).replace("''", "'")
-      } else if (text.startsWith("\"") && text.endsWith("\"")) {
-        text.substring(1, text.length - 1).replace("\"\"", "\"")
-      } else {
-        text
-      }
-    }.mkString("")
   }
 
   def checkDuplicateClauses[T](
