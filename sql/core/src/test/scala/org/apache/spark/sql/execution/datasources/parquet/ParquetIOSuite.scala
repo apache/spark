@@ -296,7 +296,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
     }
   }
 
-  test("NullType") {
+  test("SPARK-54220: NullType") {
     val data = (1 to 5)
       .map(_ => Row(null, Row(null, null), Seq(null, null), Map(Row(null) -> null))).asJava
     val dataSchema = new StructType()
