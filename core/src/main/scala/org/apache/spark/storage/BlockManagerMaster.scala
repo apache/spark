@@ -17,15 +17,19 @@
 
 package org.apache.spark.storage
 
+import java.util.concurrent.TimeUnit
+
 import scala.collection.BuildFrom
 import scala.collection.immutable.Iterable
 import scala.concurrent.Future
+import scala.concurrent.duration.FiniteDuration
 
 import org.apache.spark.SparkConf
 import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys._
-import org.apache.spark.rpc.RpcEndpointRef
+import org.apache.spark.internal.config.CLEANER_REFERENCE_TRACKING_BLOCKING_TIMEOUT
+import org.apache.spark.rpc.{RpcEndpointRef, RpcTimeout}
 import org.apache.spark.storage.BlockManagerMessages._
 import org.apache.spark.util.{RpcUtils, ThreadUtils}
 
@@ -38,6 +42,8 @@ class BlockManagerMaster(
   extends Logging {
 
   val timeout = RpcUtils.askRpcTimeout(conf)
+
+  val cleanBlockBlockingTimeout = conf.get(CLEANER_REFERENCE_TRACKING_BLOCKING_TIMEOUT)
 
   /** Remove a dead executor from the driver endpoint. This is only called on the driver side. */
   def removeExecutor(execId: String): Unit = {
@@ -195,8 +201,13 @@ class BlockManagerMaster(
         log"${MDC(ERROR, e.getMessage)}", e)
     )(ThreadUtils.sameThread)
     if (blocking) {
-      // the underlying Futures will timeout anyway, so it's safe to use infinite timeout here
-      RpcUtils.INFINITE_TIMEOUT.awaitResult(future)
+      if (cleanBlockBlockingTimeout.isDefined) {
+        new RpcTimeout(FiniteDuration(cleanBlockBlockingTimeout.get, TimeUnit.SECONDS),
+          CLEANER_REFERENCE_TRACKING_BLOCKING_TIMEOUT.key)
+      } else {
+        // the underlying Futures will timeout anyway, so it's safe to use infinite timeout here
+        RpcUtils.INFINITE_TIMEOUT.awaitResult(future)
+      }
     }
   }
 
@@ -208,8 +219,13 @@ class BlockManagerMaster(
         log"${MDC(ERROR, e.getMessage)}", e)
     )(ThreadUtils.sameThread)
     if (blocking) {
-      // the underlying Futures will timeout anyway, so it's safe to use infinite timeout here
-      RpcUtils.INFINITE_TIMEOUT.awaitResult(future)
+      if (cleanBlockBlockingTimeout.isDefined) {
+        new RpcTimeout(FiniteDuration(cleanBlockBlockingTimeout.get, TimeUnit.SECONDS),
+          CLEANER_REFERENCE_TRACKING_BLOCKING_TIMEOUT.key)
+      } else {
+        // the underlying Futures will timeout anyway, so it's safe to use infinite timeout here
+        RpcUtils.INFINITE_TIMEOUT.awaitResult(future)
+      }
     }
   }
 
@@ -223,8 +239,13 @@ class BlockManagerMaster(
         log"${MDC(ERROR, e.getMessage)}", e)
     )(ThreadUtils.sameThread)
     if (blocking) {
-      // the underlying Futures will timeout anyway, so it's safe to use infinite timeout here
-      RpcUtils.INFINITE_TIMEOUT.awaitResult(future)
+      if (cleanBlockBlockingTimeout.isDefined) {
+        new RpcTimeout(FiniteDuration(cleanBlockBlockingTimeout.get, TimeUnit.SECONDS),
+          CLEANER_REFERENCE_TRACKING_BLOCKING_TIMEOUT.key)
+      } else {
+        // the underlying Futures will timeout anyway, so it's safe to use infinite timeout here
+        RpcUtils.INFINITE_TIMEOUT.awaitResult(future)
+      }
     }
   }
 
