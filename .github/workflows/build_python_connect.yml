@@ -129,7 +129,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: test-results-spark-connect-python-only
-          path: "**/target/test-reports/*.xml"
+          path: "**/target/{test,surefire}-reports/*.xml"
       - name: Upload Spark Connect server log file
         if: ${{ !success() }}
         uses: actions/upload-artifact@v4
