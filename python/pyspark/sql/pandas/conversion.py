@@ -217,29 +217,32 @@ class PandasConversionMixin:
             if len(rows) > 0:
                 # Extract columns from rows
                 columns_data = list(zip(*rows))
-                pdf = pd.concat(
-                    [
-                        _create_converter_to_pandas(
-                            field.dataType,
-                            field.nullable,
-                            timezone=timezone,
-                            struct_in_pandas=(
-                                "row" if struct_in_pandas == "legacy" else struct_in_pandas
-                            ),
-                            error_on_duplicated_field_names=False,
-                            timestamp_utc_localized=False,
-                        )(pd.Series(col_data))
-                        for col_data, field in zip(columns_data, self.schema.fields)
-                    ],
-                    axis="columns",
-                )
+                series_list = [pd.Series(col_data) for col_data in columns_data]
             else:
-                # Empty dataset
-                pdf = pd.DataFrame({col_name: pd.Series(dtype=object) for col_name in self.columns})
+                # Empty rows - create empty DataFrame and extract empty Series
+                pdf_temp = pd.DataFrame(columns=self.columns)
+                series_list = [pser for _, pser in pdf_temp.items()]
+
+            pdf = pd.concat(
+                [
+                    _create_converter_to_pandas(
+                        field.dataType,
+                        field.nullable,
+                        timezone=timezone,
+                        struct_in_pandas=(
+                            "row" if struct_in_pandas == "legacy" else struct_in_pandas
+                        ),
+                        error_on_duplicated_field_names=False,
+                        timestamp_utc_localized=False,
+                    )(series)
+                    for series, field in zip(series_list, self.schema.fields)
+                ],
+                axis="columns",
+            )
             pdf.columns = self.columns
             return pdf
         else:
-            return pd.DataFrame()
+            return pd.DataFrame(columns=[], index=range(len(rows)))
 
     def toArrow(self) -> "pa.Table":
         from pyspark.sql.dataframe import DataFrame
