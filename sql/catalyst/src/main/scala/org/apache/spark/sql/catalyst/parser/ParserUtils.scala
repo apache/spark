@@ -121,8 +121,6 @@ object ParserUtils extends SparkParserUtils {
    * Mirrors the string extraction logic used in DataTypeAstBuilder.
    */
   private def extractStringLiteralValue(ctx: SqlBaseParser.StringLitContext): String = {
-    import scala.jdk.CollectionConverters._
-
     if (ctx == null) {
       return ""
     }

@@ -6031,8 +6031,6 @@ class AstBuilder extends DataTypeAstBuilder
    * }}}
    */
   override def visitCacheTable(ctx: CacheTableContext): LogicalPlan = withOrigin(ctx) {
-    import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
-
     val query = Option(ctx.query).map(plan)
     withIdentClause(ctx.identifierReference, query.toSeq, (ident, children) => {
       if (query.isDefined && ident.length > 1) {

@@ -23,6 +23,7 @@ import org.apache.spark.{SparkException, SparkUnsupportedOperationException}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{execution, AnalysisException}
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, NamedRelation}
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight, BuildSide, JoinSelectionHelper, NormalizeFloatingNumbers}
@@ -31,12 +32,14 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.streaming.{InternalOutputModes, StreamingRelationV2}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
+import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.{SparkStrategy => Strategy}
 import org.apache.spark.sql.execution.aggregate.AggUtils
 import org.apache.spark.sql.execution.columnar.{InMemoryRelation, InMemoryTableScanExec}
 import org.apache.spark.sql.execution.command._
-import org.apache.spark.sql.execution.datasources.{WriteFiles, WriteFilesExec}
+import org.apache.spark.sql.execution.datasources.{LogicalRelation, WriteFiles, WriteFilesExec}
+import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.execution.exchange.{REBALANCE_PARTITIONS_BY_COL, REBALANCE_PARTITIONS_BY_NONE, REPARTITION_BY_COL, REPARTITION_BY_NUM, ShuffleExchangeExec}
 import org.apache.spark.sql.execution.python._
 import org.apache.spark.sql.execution.python.streaming.{FlatMapGroupsInPandasWithStateExec, TransformWithStateInPySparkExec}
@@ -1112,11 +1115,6 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
    * Extracts a user-friendly table name from a logical plan for error messages.
    */
   private def extractTableNameForError(table: LogicalPlan): String = {
-    import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, NamedRelation}
-    import org.apache.spark.sql.execution.datasources.LogicalRelation
-    import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
-    import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
-
     val unwrapped = EliminateSubqueryAliases(table)
     unwrapped match {
       // Check specific types before NamedRelation since they extend it
