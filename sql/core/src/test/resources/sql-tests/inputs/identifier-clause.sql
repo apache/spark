@@ -194,8 +194,10 @@ SELECT * FROM VALUES (1, 2) AS IDENTIFIER('schema.table')(c1, c2);
 SELECT 1 AS IDENTIFIER('col1.col2');
 
 -- Additional coverage: SHOW commands with identifier-lite
+CREATE SCHEMA identifier_clause_test_schema;
+USE identifier_clause_test_schema;
 CREATE TABLE test_show(c1 INT, c2 STRING) USING CSV;
-SHOW VIEWS IN IDENTIFIER('default');
+SHOW VIEWS IN IDENTIFIER('identifier_clause_test_schema');
 SHOW PARTITIONS IDENTIFIER('test_show');
 SHOW CREATE TABLE IDENTIFIER('test_show');
 DROP TABLE test_show;
@@ -218,14 +220,12 @@ ALTER TABLE test_comment ALTER COLUMN IDENTIFIER('c1') COMMENT 'column comment';
 DROP TABLE test_comment;
 
 -- Additional identifier tests with qualified table names in various commands
-CREATE SCHEMA identifier_clause_test_schema;
 CREATE TABLE identifier_clause_test_schema.test_table(c1 INT) USING CSV;
 ANALYZE TABLE IDENTIFIER('identifier_clause_test_schema.test_table') COMPUTE STATISTICS;
 REFRESH TABLE IDENTIFIER('identifier_clause_test_schema.test_table');
 DESCRIBE IDENTIFIER('identifier_clause_test_schema.test_table');
 SHOW COLUMNS FROM IDENTIFIER('identifier_clause_test_schema.test_table');
 DROP TABLE IDENTIFIER('identifier_clause_test_schema.test_table');
-DROP SCHEMA identifier_clause_test_schema;
 
 -- Session variables with identifier-lite
 DECLARE IDENTIFIER('my_var') = 'value';
@@ -262,8 +262,8 @@ EXECUTE IMMEDIATE 'SELECT IDENTIFIER(:col1 ''.c2'') FROM VALUES(named_struct(''c
 -- Test 3: IDENTIFIER with parameter and string literal coalescing for qualified table name
 CREATE TABLE integration_test(c1 INT, c2 STRING) USING CSV;
 INSERT INTO integration_test VALUES (1, 'a'), (2, 'b');
-EXECUTE IMMEDIATE 'SELECT * FROM IDENTIFIER(:schema ''.'' :table)'
-  USING 'default' AS schema, 'integration_test' AS table;
+EXECUTE IMMEDIATE 'SELECT * FROM IDENTIFIER(:schema ''.'' :table) ORDER BY ALL'
+  USING 'identifier_clause_test_schema' AS schema, 'integration_test' AS table;
 
 -- Test 4: IDENTIFIER in column reference with parameter and string coalescing
 EXECUTE IMMEDIATE 'SELECT IDENTIFIER(:prefix ''1''), IDENTIFIER(:prefix ''2'') FROM integration_test'
@@ -298,7 +298,7 @@ EXECUTE IMMEDIATE 'INSERT INTO integration_test(IDENTIFIER(:col1), IDENTIFIER(:c
 
 -- Test 11: Complex - IDENTIFIER with nested string operations
 EXECUTE IMMEDIATE 'SELECT IDENTIFIER(concat(:schema, ''.'', :table, ''.c1'')) FROM VALUES(named_struct(''c1'', 100)) AS IDENTIFIER(:alias)(IDENTIFIER(:schema ''.'' :table))'
-  USING 'default' AS schema, 'my_table' AS table, 't' AS alias;
+  USING 'identifier_clause_test_schema' AS schema, 'my_table' AS table, 't' AS alias;
 
 -- Test 12: IDENTIFIER in CTE name with parameter
 EXECUTE IMMEDIATE 'WITH IDENTIFIER(:cte_name)(c1) AS (VALUES(1)) SELECT c1 FROM IDENTIFIER(:cte_name)'
@@ -328,18 +328,19 @@ EXECUTE IMMEDIATE 'SELECT IDENTIFIER(:alias ''.c1'') FROM integration_test AS ID
 -- Test 17: Multiple IDENTIFIER clauses with different parameter combinations
 EXECUTE IMMEDIATE
   'SELECT IDENTIFIER(:col1), IDENTIFIER(:p ''2'') FROM IDENTIFIER(:schema ''.'' :tab) WHERE IDENTIFIER(:col1) > 0 ORDER BY IDENTIFIER(:p ''1'')'
-  USING 'c1' AS col1, 'c' AS p, 'default' AS schema, 'integration_test' AS tab;
+  USING 'c1' AS col1, 'c' AS p, 'identifier_clause_test_schema' AS schema, 'integration_test' AS tab;
 
 -- Test 19: IDENTIFIER with qualified name coalescing for schema.table.column pattern
 -- This should work for multi-part identifiers
 EXECUTE IMMEDIATE 'SELECT * FROM IDENTIFIER(:schema ''.'' :table) WHERE IDENTIFIER(concat(:tab_alias, ''.c1'')) > 0 ORDER BY ALL'
-  USING 'default' AS schema, 'integration_test' AS table, 'integration_test' AS tab_alias;
+  USING 'identifier_clause_test_schema' AS schema, 'integration_test' AS table, 'integration_test' AS tab_alias;
 
 -- Test 20: Error case - IDENTIFIER with too many parts from parameter coalescing
 -- This should error as column alias must be single identifier
 EXECUTE IMMEDIATE 'SELECT 1 AS IDENTIFIER(:schema ''.'' :col)'
-  USING 'default' AS schema, 'col1' AS col;
+  USING 'identifier_clause_test_schema' AS schema, 'col1' AS col;
 
 -- Cleanup
 DROP TABLE integration_test;
 DROP TABLE integration_test2;
+DROP SCHEMA identifier_clause_test_schema;

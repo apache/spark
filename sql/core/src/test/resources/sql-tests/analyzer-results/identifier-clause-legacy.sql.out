@@ -1515,15 +1515,29 @@ org.apache.spark.sql.catalyst.parser.ParseException
 
 
 -- !query
-CREATE TABLE test_show(c1 INT, c2 STRING) USING CSV
+CREATE SCHEMA identifier_clause_test_schema
 -- !query analysis
-CreateDataSourceTableCommand `spark_catalog`.`default`.`test_show`, false
+CreateNamespace false
++- ResolvedNamespace V2SessionCatalog(spark_catalog), [identifier_clause_test_schema]
 
 
 -- !query
-SHOW VIEWS IN IDENTIFIER('default')
+USE identifier_clause_test_schema
 -- !query analysis
-ShowViewsCommand default, [namespace#x, viewName#x, isTemporary#x]
+SetCatalogAndNamespace
++- ResolvedNamespace V2SessionCatalog(spark_catalog), [identifier_clause_test_schema]
+
+
+-- !query
+CREATE TABLE test_show(c1 INT, c2 STRING) USING CSV
+-- !query analysis
+CreateDataSourceTableCommand `spark_catalog`.`identifier_clause_test_schema`.`test_show`, false
+
+
+-- !query
+SHOW VIEWS IN IDENTIFIER('identifier_clause_test_schema')
+-- !query analysis
+ShowViewsCommand identifier_clause_test_schema, [namespace#x, viewName#x, isTemporary#x]
 
 
 -- !query
@@ -1534,7 +1548,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "INVALID_PARTITION_OPERATION.PARTITION_SCHEMA_IS_EMPTY",
   "sqlState" : "42601",
   "messageParameters" : {
-    "name" : "`spark_catalog`.`default`.`test_show`"
+    "name" : "`spark_catalog`.`identifier_clause_test_schema`.`test_show`"
   }
 }
 
@@ -1543,64 +1557,64 @@ org.apache.spark.sql.AnalysisException
 SHOW CREATE TABLE IDENTIFIER('test_show')
 -- !query analysis
 ShowCreateTable false, [createtab_stmt#x]
-+- ResolvedTable V2SessionCatalog(spark_catalog), default.test_show, V1Table(default.test_show), [c1#x, c2#x]
++- ResolvedTable V2SessionCatalog(spark_catalog), identifier_clause_test_schema.test_show, V1Table(identifier_clause_test_schema.test_show), [c1#x, c2#x]
 
 
 -- !query
 DROP TABLE test_show
 -- !query analysis
 DropTable false, false
-+- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.test_show
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), identifier_clause_test_schema.test_show
 
 
 -- !query
 CREATE TABLE test_desc(c1 INT) USING CSV
 -- !query analysis
-CreateDataSourceTableCommand `spark_catalog`.`default`.`test_desc`, false
+CreateDataSourceTableCommand `spark_catalog`.`identifier_clause_test_schema`.`test_desc`, false
 
 
 -- !query
 DESCRIBE TABLE IDENTIFIER('test_desc')
 -- !query analysis
-DescribeTableCommand `spark_catalog`.`default`.`test_desc`, false, [col_name#x, data_type#x, comment#x]
+DescribeTableCommand `spark_catalog`.`identifier_clause_test_schema`.`test_desc`, false, [col_name#x, data_type#x, comment#x]
 
 
 -- !query
 DESCRIBE FORMATTED IDENTIFIER('test_desc')
 -- !query analysis
-DescribeTableCommand `spark_catalog`.`default`.`test_desc`, true, [col_name#x, data_type#x, comment#x]
+DescribeTableCommand `spark_catalog`.`identifier_clause_test_schema`.`test_desc`, true, [col_name#x, data_type#x, comment#x]
 
 
 -- !query
 DESCRIBE EXTENDED IDENTIFIER('test_desc')
 -- !query analysis
-DescribeTableCommand `spark_catalog`.`default`.`test_desc`, true, [col_name#x, data_type#x, comment#x]
+DescribeTableCommand `spark_catalog`.`identifier_clause_test_schema`.`test_desc`, true, [col_name#x, data_type#x, comment#x]
 
 
 -- !query
 DESC IDENTIFIER('test_desc')
 -- !query analysis
-DescribeTableCommand `spark_catalog`.`default`.`test_desc`, false, [col_name#x, data_type#x, comment#x]
+DescribeTableCommand `spark_catalog`.`identifier_clause_test_schema`.`test_desc`, false, [col_name#x, data_type#x, comment#x]
 
 
 -- !query
 DROP TABLE test_desc
 -- !query analysis
 DropTable false, false
-+- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.test_desc
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), identifier_clause_test_schema.test_desc
 
 
 -- !query
 CREATE TABLE test_comment(c1 INT, c2 STRING) USING CSV
 -- !query analysis
-CreateDataSourceTableCommand `spark_catalog`.`default`.`test_comment`, false
+CreateDataSourceTableCommand `spark_catalog`.`identifier_clause_test_schema`.`test_comment`, false
 
 
 -- !query
 COMMENT ON TABLE IDENTIFIER('test_comment') IS 'table comment'
 -- !query analysis
 CommentOnTable table comment
-+- ResolvedTable V2SessionCatalog(spark_catalog), default.test_comment, V1Table(default.test_comment), [c1#x, c2#x]
++- ResolvedTable V2SessionCatalog(spark_catalog), identifier_clause_test_schema.test_comment, V1Table(identifier_clause_test_schema.test_comment), [c1#x, c2#x]
 
 
 -- !query
@@ -1621,14 +1635,7 @@ org.apache.spark.sql.catalyst.parser.ParseException
 DROP TABLE test_comment
 -- !query analysis
 DropTable false, false
-+- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.test_comment
-
-
--- !query
-CREATE SCHEMA identifier_clause_test_schema
--- !query analysis
-CreateNamespace false
-+- ResolvedNamespace V2SessionCatalog(spark_catalog), [identifier_clause_test_schema]
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), identifier_clause_test_schema.test_comment
 
 
 -- !query
@@ -1666,13 +1673,6 @@ DROP TABLE IDENTIFIER('identifier_clause_test_schema.test_table')
 -- !query analysis
 DropTable false, false
 +- ResolvedIdentifier V2SessionCatalog(spark_catalog), identifier_clause_test_schema.test_table
-
-
--- !query
-DROP SCHEMA identifier_clause_test_schema
--- !query analysis
-DropNamespace false, false
-+- ResolvedNamespace V2SessionCatalog(spark_catalog), [identifier_clause_test_schema]
 
 
 -- !query
@@ -1735,7 +1735,7 @@ org.apache.spark.sql.AnalysisException
   "sqlState" : "42883",
   "messageParameters" : {
     "routineName" : "`test_udf`",
-    "searchPath" : "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"
+    "searchPath" : "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`identifier_clause_test_schema`]"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1835,24 +1835,25 @@ Project [c1#x.c2 AS c1.c2#x]
 -- !query
 CREATE TABLE integration_test(c1 INT, c2 STRING) USING CSV
 -- !query analysis
-CreateDataSourceTableCommand `spark_catalog`.`default`.`integration_test`, false
+CreateDataSourceTableCommand `spark_catalog`.`identifier_clause_test_schema`.`integration_test`, false
 
 
 -- !query
 INSERT INTO integration_test VALUES (1, 'a'), (2, 'b')
 -- !query analysis
-InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/integration_test, false, CSV, [path=file:[not included in comparison]/{warehouse_dir}/integration_test], Append, `spark_catalog`.`default`.`integration_test`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/integration_test), [c1, c2]
+InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/identifier_clause_test_schema.db/integration_test, false, CSV, [path=file:[not included in comparison]/{warehouse_dir}/identifier_clause_test_schema.db/integration_test], Append, `spark_catalog`.`identifier_clause_test_schema`.`integration_test`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/identifier_clause_test_schema.db/integration_test), [c1, c2]
 +- Project [col1#x AS c1#x, col2#x AS c2#x]
    +- LocalRelation [col1#x, col2#x]
 
 
 -- !query
-EXECUTE IMMEDIATE 'SELECT * FROM IDENTIFIER(:schema ''.'' :table)'
-  USING 'default' AS schema, 'integration_test' AS table
+EXECUTE IMMEDIATE 'SELECT * FROM IDENTIFIER(:schema ''.'' :table) ORDER BY ALL'
+  USING 'identifier_clause_test_schema' AS schema, 'integration_test' AS table
 -- !query analysis
-Project [c1#x, c2#x]
-+- SubqueryAlias spark_catalog.default.integration_test
-   +- Relation spark_catalog.default.integration_test[c1#x,c2#x] csv
+Sort [c1#x ASC NULLS FIRST, c2#x ASC NULLS FIRST], true
++- Project [c1#x, c2#x]
+   +- SubqueryAlias spark_catalog.identifier_clause_test_schema.integration_test
+      +- Relation spark_catalog.identifier_clause_test_schema.integration_test[c1#x,c2#x] csv
 
 
 -- !query
@@ -1860,8 +1861,8 @@ EXECUTE IMMEDIATE 'SELECT IDENTIFIER(:prefix ''1''), IDENTIFIER(:prefix ''2'') F
   USING 'c' AS prefix
 -- !query analysis
 Project [c1#x, c2#x]
-+- SubqueryAlias spark_catalog.default.integration_test
-   +- Relation spark_catalog.default.integration_test[c1#x,c2#x] csv
++- SubqueryAlias spark_catalog.identifier_clause_test_schema.integration_test
+   +- Relation spark_catalog.identifier_clause_test_schema.integration_test[c1#x,c2#x] csv
 
 
 -- !query
@@ -1870,20 +1871,20 @@ EXECUTE IMMEDIATE 'SELECT * FROM integration_test WHERE IDENTIFIER(:col) = :val'
 -- !query analysis
 Project [c1#x, c2#x]
 +- Filter (c1#x = 1)
-   +- SubqueryAlias spark_catalog.default.integration_test
-      +- Relation spark_catalog.default.integration_test[c1#x,c2#x] csv
+   +- SubqueryAlias spark_catalog.identifier_clause_test_schema.integration_test
+      +- Relation spark_catalog.identifier_clause_test_schema.integration_test[c1#x,c2#x] csv
 
 
 -- !query
 CREATE TABLE integration_test2(c1 INT, c3 STRING) USING CSV
 -- !query analysis
-CreateDataSourceTableCommand `spark_catalog`.`default`.`integration_test2`, false
+CreateDataSourceTableCommand `spark_catalog`.`identifier_clause_test_schema`.`integration_test2`, false
 
 
 -- !query
 INSERT INTO integration_test2 VALUES (1, 'x'), (2, 'y')
 -- !query analysis
-InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/integration_test2, false, CSV, [path=file:[not included in comparison]/{warehouse_dir}/integration_test2], Append, `spark_catalog`.`default`.`integration_test2`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/integration_test2), [c1, c3]
+InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/identifier_clause_test_schema.db/integration_test2, false, CSV, [path=file:[not included in comparison]/{warehouse_dir}/identifier_clause_test_schema.db/integration_test2], Append, `spark_catalog`.`identifier_clause_test_schema`.`integration_test2`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/identifier_clause_test_schema.db/integration_test2), [c1, c3]
 +- Project [col1#x AS c1#x, col2#x AS c3#x]
    +- LocalRelation [col1#x, col2#x]
 
@@ -1919,8 +1920,8 @@ Project [c1#x, c2#x, rn#x]
 +- Project [c1#x, c2#x, rn#x, rn#x]
    +- Window [row_number() windowspecdefinition(c2#x, c1#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS rn#x], [c2#x], [c1#x ASC NULLS FIRST]
       +- Project [c1#x, c2#x]
-         +- SubqueryAlias spark_catalog.default.integration_test
-            +- Relation spark_catalog.default.integration_test[c1#x,c2#x] csv
+         +- SubqueryAlias spark_catalog.identifier_clause_test_schema.integration_test
+            +- Relation spark_catalog.identifier_clause_test_schema.integration_test[c1#x,c2#x] csv
 
 
 -- !query
@@ -1928,8 +1929,8 @@ EXECUTE IMMEDIATE 'SELECT IDENTIFIER(:prefix ''2''), IDENTIFIER(:agg)(IDENTIFIER
   USING 'c' AS prefix, 'count' AS agg, 'c1' AS col
 -- !query analysis
 Aggregate [c2#x], [c2#x, count(c1#x) AS count(c1)#xL]
-+- SubqueryAlias spark_catalog.default.integration_test
-   +- Relation spark_catalog.default.integration_test[c1#x,c2#x] csv
++- SubqueryAlias spark_catalog.identifier_clause_test_schema.integration_test
+   +- Relation spark_catalog.identifier_clause_test_schema.integration_test[c1#x,c2#x] csv
 
 
 -- !query
@@ -1938,8 +1939,8 @@ EXECUTE IMMEDIATE 'SELECT * FROM integration_test ORDER BY IDENTIFIER(:col1) DES
 -- !query analysis
 Sort [c1#x DESC NULLS LAST, c2#x ASC NULLS FIRST], true
 +- Project [c1#x, c2#x]
-   +- SubqueryAlias spark_catalog.default.integration_test
-      +- Relation spark_catalog.default.integration_test[c1#x,c2#x] csv
+   +- SubqueryAlias spark_catalog.identifier_clause_test_schema.integration_test
+      +- Relation spark_catalog.identifier_clause_test_schema.integration_test[c1#x,c2#x] csv
 
 
 -- !query
@@ -1966,7 +1967,7 @@ org.apache.spark.sql.catalyst.parser.ParseException
 
 -- !query
 EXECUTE IMMEDIATE 'SELECT IDENTIFIER(concat(:schema, ''.'', :table, ''.c1'')) FROM VALUES(named_struct(''c1'', 100)) AS IDENTIFIER(:alias)(IDENTIFIER(:schema ''.'' :table))'
-  USING 'default' AS schema, 'my_table' AS table, 't' AS alias
+  USING 'identifier_clause_test_schema' AS schema, 'my_table' AS table, 't' AS alias
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
@@ -2059,7 +2060,7 @@ org.apache.spark.sql.catalyst.analysis.NoSuchTableException
   "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",
   "messageParameters" : {
-    "relationName" : "`spark_catalog`.`default`.`test_view`"
+    "relationName" : "`spark_catalog`.`identifier_clause_test_schema`.`test_view`"
   }
 }
 
@@ -2155,28 +2156,29 @@ org.apache.spark.sql.catalyst.parser.ParseException
 -- !query
 EXECUTE IMMEDIATE
   'SELECT IDENTIFIER(:col1), IDENTIFIER(:p ''2'') FROM IDENTIFIER(:schema ''.'' :tab) WHERE IDENTIFIER(:col1) > 0 ORDER BY IDENTIFIER(:p ''1'')'
-  USING 'c1' AS col1, 'c' AS p, 'default' AS schema, 'integration_test' AS tab
+  USING 'c1' AS col1, 'c' AS p, 'identifier_clause_test_schema' AS schema, 'integration_test' AS tab
 -- !query analysis
 Sort [c1#x ASC NULLS FIRST], true
 +- Project [c1#x, c2#x]
    +- Filter (c1#x > 0)
-      +- SubqueryAlias spark_catalog.default.integration_test
-         +- Relation spark_catalog.default.integration_test[c1#x,c2#x] csv
+      +- SubqueryAlias spark_catalog.identifier_clause_test_schema.integration_test
+         +- Relation spark_catalog.identifier_clause_test_schema.integration_test[c1#x,c2#x] csv
 
 
 -- !query
 EXECUTE IMMEDIATE 'SELECT * FROM IDENTIFIER(:schema ''.'' :table) WHERE IDENTIFIER(concat(:tab_alias, ''.c1'')) > 0 ORDER BY ALL'
-  USING 'default' AS schema, 'integration_test' AS table, 'integration_test' AS tab_alias
+  USING 'identifier_clause_test_schema' AS schema, 'integration_test' AS table, 'integration_test' AS tab_alias
 -- !query analysis
-Project [c1#x, c2#x]
-+- Filter (c1#x > 0)
-   +- SubqueryAlias spark_catalog.default.integration_test
-      +- Relation spark_catalog.default.integration_test[c1#x,c2#x] csv
+Sort [c1#x ASC NULLS FIRST, c2#x ASC NULLS FIRST], true
++- Project [c1#x, c2#x]
+   +- Filter (c1#x > 0)
+      +- SubqueryAlias spark_catalog.identifier_clause_test_schema.integration_test
+         +- Relation spark_catalog.identifier_clause_test_schema.integration_test[c1#x,c2#x] csv
 
 
 -- !query
 EXECUTE IMMEDIATE 'SELECT 1 AS IDENTIFIER(:schema ''.'' :col)'
-  USING 'default' AS schema, 'col1' AS col
+  USING 'identifier_clause_test_schema' AS schema, 'col1' AS col
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
@@ -2200,11 +2202,18 @@ org.apache.spark.sql.catalyst.parser.ParseException
 DROP TABLE integration_test
 -- !query analysis
 DropTable false, false
-+- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.integration_test
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), identifier_clause_test_schema.integration_test
 
 
 -- !query
 DROP TABLE integration_test2
 -- !query analysis
 DropTable false, false
-+- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.integration_test2
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), identifier_clause_test_schema.integration_test2
+
+
+-- !query
+DROP SCHEMA identifier_clause_test_schema
+-- !query analysis
+DropNamespace false, false
++- ResolvedNamespace V2SessionCatalog(spark_catalog), [identifier_clause_test_schema]

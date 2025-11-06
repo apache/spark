@@ -1683,6 +1683,22 @@ org.apache.spark.sql.catalyst.parser.ParseException
 
 
 -- !query
+CREATE SCHEMA identifier_clause_test_schema
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+USE identifier_clause_test_schema
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
 CREATE TABLE test_show(c1 INT, c2 STRING) USING CSV
 -- !query schema
 struct<>
@@ -1691,7 +1707,7 @@ struct<>
 
 
 -- !query
-SHOW VIEWS IN IDENTIFIER('default')
+SHOW VIEWS IN IDENTIFIER('identifier_clause_test_schema')
 -- !query schema
 struct<namespace:string,viewName:string,isTemporary:boolean>
 -- !query output
@@ -1708,7 +1724,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "INVALID_PARTITION_OPERATION.PARTITION_SCHEMA_IS_EMPTY",
   "sqlState" : "42601",
   "messageParameters" : {
-    "name" : "`spark_catalog`.`default`.`test_show`"
+    "name" : "`spark_catalog`.`identifier_clause_test_schema`.`test_show`"
   }
 }
 
@@ -1718,7 +1734,7 @@ SHOW CREATE TABLE IDENTIFIER('test_show')
 -- !query schema
 struct<createtab_stmt:string>
 -- !query output
-CREATE TABLE spark_catalog.default.test_show (
+CREATE TABLE spark_catalog.identifier_clause_test_schema.test_show (
   c1 INT,
   c2 STRING)
 USING CSV
@@ -1757,14 +1773,14 @@ c1                  	int
                     	                    	                    
 # Detailed Table Information	                    	                    
 Catalog             	spark_catalog       	                    
-Database            	default             	                    
+Database            	identifier_clause_test_schema	                    
 Table               	test_desc           	                    
 Created Time [not included in comparison]
 Last Access [not included in comparison]
 Created By [not included in comparison]
 Type                	MANAGED             	                    
 Provider            	CSV                 	                    
-Location [not included in comparison]/{warehouse_dir}/test_desc
+Location [not included in comparison]/{warehouse_dir}/identifier_clause_test_schema.db/test_desc
 
 
 -- !query
@@ -1776,14 +1792,14 @@ c1                  	int
                     	                    	                    
 # Detailed Table Information	                    	                    
 Catalog             	spark_catalog       	                    
-Database            	default             	                    
+Database            	identifier_clause_test_schema	                    
 Table               	test_desc           	                    
 Created Time [not included in comparison]
 Last Access [not included in comparison]
 Created By [not included in comparison]
 Type                	MANAGED             	                    
 Provider            	CSV                 	                    
-Location [not included in comparison]/{warehouse_dir}/test_desc
+Location [not included in comparison]/{warehouse_dir}/identifier_clause_test_schema.db/test_desc
 
 
 -- !query
@@ -1843,14 +1859,6 @@ struct<>
 
 
 -- !query
-CREATE SCHEMA identifier_clause_test_schema
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
 CREATE TABLE identifier_clause_test_schema.test_table(c1 INT) USING CSV
 -- !query schema
 struct<>
@@ -1892,14 +1900,6 @@ c1
 
 -- !query
 DROP TABLE IDENTIFIER('identifier_clause_test_schema.test_table')
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-DROP SCHEMA identifier_clause_test_schema
 -- !query schema
 struct<>
 -- !query output
@@ -1975,7 +1975,7 @@ org.apache.spark.sql.AnalysisException
   "sqlState" : "42883",
   "messageParameters" : {
     "routineName" : "`test_udf`",
-    "searchPath" : "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"
+    "searchPath" : "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`identifier_clause_test_schema`]"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2099,8 +2099,8 @@ struct<>
 
 
 -- !query
-EXECUTE IMMEDIATE 'SELECT * FROM IDENTIFIER(:schema ''.'' :table)'
-  USING 'default' AS schema, 'integration_test' AS table
+EXECUTE IMMEDIATE 'SELECT * FROM IDENTIFIER(:schema ''.'' :table) ORDER BY ALL'
+  USING 'identifier_clause_test_schema' AS schema, 'integration_test' AS table
 -- !query schema
 struct<c1:int,c2:string>
 -- !query output
@@ -2224,7 +2224,7 @@ org.apache.spark.sql.catalyst.parser.ParseException
 
 -- !query
 EXECUTE IMMEDIATE 'SELECT IDENTIFIER(concat(:schema, ''.'', :table, ''.c1'')) FROM VALUES(named_struct(''c1'', 100)) AS IDENTIFIER(:alias)(IDENTIFIER(:schema ''.'' :table))'
-  USING 'default' AS schema, 'my_table' AS table, 't' AS alias
+  USING 'identifier_clause_test_schema' AS schema, 'my_table' AS table, 't' AS alias
 -- !query schema
 struct<>
 -- !query output
@@ -2327,7 +2327,7 @@ org.apache.spark.sql.catalyst.analysis.NoSuchTableException
   "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",
   "messageParameters" : {
-    "relationName" : "`spark_catalog`.`default`.`test_view`"
+    "relationName" : "`spark_catalog`.`identifier_clause_test_schema`.`test_view`"
   }
 }
 
@@ -2431,7 +2431,7 @@ org.apache.spark.sql.catalyst.parser.ParseException
 -- !query
 EXECUTE IMMEDIATE
   'SELECT IDENTIFIER(:col1), IDENTIFIER(:p ''2'') FROM IDENTIFIER(:schema ''.'' :tab) WHERE IDENTIFIER(:col1) > 0 ORDER BY IDENTIFIER(:p ''1'')'
-  USING 'c1' AS col1, 'c' AS p, 'default' AS schema, 'integration_test' AS tab
+  USING 'c1' AS col1, 'c' AS p, 'identifier_clause_test_schema' AS schema, 'integration_test' AS tab
 -- !query schema
 struct<c1:int,c2:string>
 -- !query output
@@ -2441,7 +2441,7 @@ struct<c1:int,c2:string>
 
 -- !query
 EXECUTE IMMEDIATE 'SELECT * FROM IDENTIFIER(:schema ''.'' :table) WHERE IDENTIFIER(concat(:tab_alias, ''.c1'')) > 0 ORDER BY ALL'
-  USING 'default' AS schema, 'integration_test' AS table, 'integration_test' AS tab_alias
+  USING 'identifier_clause_test_schema' AS schema, 'integration_test' AS table, 'integration_test' AS tab_alias
 -- !query schema
 struct<c1:int,c2:string>
 -- !query output
@@ -2451,7 +2451,7 @@ struct<c1:int,c2:string>
 
 -- !query
 EXECUTE IMMEDIATE 'SELECT 1 AS IDENTIFIER(:schema ''.'' :col)'
-  USING 'default' AS schema, 'col1' AS col
+  USING 'identifier_clause_test_schema' AS schema, 'col1' AS col
 -- !query schema
 struct<>
 -- !query output
@@ -2483,6 +2483,14 @@ struct<>
 
 -- !query
 DROP TABLE integration_test2
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP SCHEMA identifier_clause_test_schema
 -- !query schema
 struct<>
 -- !query output
