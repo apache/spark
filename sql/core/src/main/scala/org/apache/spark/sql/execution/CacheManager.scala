@@ -313,15 +313,13 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
   }
 
   /**
-   * Tries to re-cache all the cache entries that refer to the given plan.
+   * Tries to re-cache all the cache entries that refer to the given plan. The given plan will be
+   * normalized before being used further.
    */
   def recacheByPlan(spark: SparkSession, plan: LogicalPlan): Unit = {
     val normalized = QueryExecution.normalize(spark, plan)
     // Only use fresh plan for entries that directly match it (not dependent entries like views)
-    val directMatcher = (cachedPlan: LogicalPlan) => {
-      val cachedNormalized = QueryExecution.normalize(spark, cachedPlan)
-      normalized.sameResult(cachedNormalized)
-    }
+    val directMatcher = (cachedPlan: LogicalPlan) => normalized.sameResult(cachedPlan)
     recacheByCondition(
       spark,
       cd => cd.plan.exists(_.sameResult(normalized)),
