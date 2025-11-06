@@ -59,7 +59,7 @@ jobs:
   build:
     name: "PySpark test on macos: ${{ matrix.modules }}"
     runs-on: ${{ inputs.os }}
-    timeout-minutes: 120
+    timeout-minutes: 150
     strategy:
       fail-fast: false
       matrix:
