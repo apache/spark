@@ -973,10 +973,9 @@ class SparkConnectClient(object):
             "spark.sql.execution.pandas.structHandlingMode",
             "spark.sql.execution.arrow.pyspark.selfDestruct.enabled",
         )
-        self_destruct: bool = self_destruct == "true"
 
         table, schema, metrics, observed_metrics, _ = self._execute_and_fetch(
-            req, observations, self_destruct=self_destruct
+            req, observations, self_destruct=self_destruct == "true"
         )
         assert table is not None
         ei = ExecutionInfo(metrics, observed_metrics)
@@ -994,7 +993,7 @@ class SparkConnectClient(object):
             renamed_table = table.rename_columns([f"col_{i}" for i in range(table.num_columns)])
 
             pandas_options = {"coerce_temporal_nanoseconds": True}
-            if self_destruct:
+            if self_destruct == "true":
                 # Configure PyArrow to use as little memory as possible:
                 # self_destruct - free columns as they are converted
                 # split_blocks - create a separate Pandas block for each column
