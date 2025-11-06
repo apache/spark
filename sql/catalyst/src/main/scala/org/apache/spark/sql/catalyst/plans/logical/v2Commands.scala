@@ -860,9 +860,7 @@ case class MergeIntoTable(
     matchedActions: Seq[MergeAction],
     notMatchedActions: Seq[MergeAction],
     notMatchedBySourceActions: Seq[MergeAction],
-    withSchemaEvolution: Boolean,
-    // Preserves original pre-aligned actions for source matches
-    originalSourceActions: Seq[MergeAction])
+    withSchemaEvolution: Boolean)
   extends BinaryCommand with SupportsSubquery {
 
   lazy val aligned: Boolean = {
@@ -895,14 +893,12 @@ case class MergeIntoTable(
     case _ => false
   }
 
-  // a pruned version of source schema that only contains columns/nested fields
-  // explicitly assigned by MERGE INTO actions
-  private lazy val referencedSourceSchema: StructType =
-    MergeIntoTable.referencedSourceSchema(this)
+  private lazy val sourceSchemaForEvolution: StructType =
+    MergeIntoTable.sourceSchemaForSchemaEvolution(this)
 
   lazy val needSchemaEvolution: Boolean = {
     schemaEvolutionEnabled &&
-      MergeIntoTable.schemaChanges(targetTable.schema, referencedSourceSchema).nonEmpty
+      MergeIntoTable.schemaChanges(targetTable.schema, sourceSchemaForEvolution).nonEmpty
   }
 
   private def schemaEvolutionEnabled: Boolean = withSchemaEvolution && {
@@ -920,25 +916,6 @@ case class MergeIntoTable(
 }
 
 object MergeIntoTable {
-
-  def apply(
-      targetTable: LogicalPlan,
-      sourceTable: LogicalPlan,
-      mergeCondition: Expression,
-      matchedActions: Seq[MergeAction],
-      notMatchedActions: Seq[MergeAction],
-      notMatchedBySourceActions: Seq[MergeAction],
-      withSchemaEvolution: Boolean): MergeIntoTable = {
-    MergeIntoTable(
-      targetTable,
-      sourceTable,
-      mergeCondition,
-      matchedActions,
-      notMatchedActions,
-      notMatchedBySourceActions,
-      withSchemaEvolution,
-      matchedActions ++ notMatchedActions)
-  }
 
   def getWritePrivileges(
       matchedActions: Iterable[MergeAction],
@@ -1020,16 +997,18 @@ object MergeIntoTable {
     }
   }
 
-  // Filter the source schema to retain only fields that are referenced
-  // by at least one merge action
-  def referencedSourceSchema(merge: MergeIntoTable): StructType = {
+  // A pruned version of source schema that only contains columns/nested fields
+  // explicitly and directly assigned to a target counterpart in MERGE INTO actions.
+  // New columns/nested fields not existing in target will be added for schema evolution.
+  def sourceSchemaForSchemaEvolution(merge: MergeIntoTable): StructType = {
 
-    val assignments = merge.originalSourceActions.collect {
-      case a: UpdateAction => a.assignments.map(_.key)
-      case a: InsertAction => a.assignments.map(_.key)
+    val actions = merge.matchedActions ++ merge.notMatchedActions
+    val assignments = actions.collect {
+      case a: UpdateAction => a.assignments
+      case a: InsertAction => a.assignments
     }.flatten
 
-    val containsStarAction = merge.originalSourceActions.exists {
+    val containsStarAction = actions.exists {
       case _: UpdateStarAction => true
       case _: InsertStarAction => true
       case _ => false
@@ -1046,7 +1025,7 @@ object MergeIntoTable {
           // If this is a struct and one of the children is being assigned to in a merge clause,
           // keep it and continue filtering children.
           case struct: StructType if assignments.exists(assign =>
-            isPrefix(fieldPath, extractFieldPath(assign))) =>
+            isPrefix(fieldPath, extractFieldPath(assign.key))) =>
             Some(field.copy(dataType = filterSchema(struct, fieldPath)))
           // The field isn't assigned to directly or indirectly (i.e. its children) in any non-*
           // clause. Check if it should be kept with any * action.
@@ -1058,8 +1037,7 @@ object MergeIntoTable {
         }
       })
 
-    val res = filterSchema(merge.sourceTable.schema, Seq.empty)
-    res
+    filterSchema(merge.sourceTable.schema, Seq.empty)
   }
 
   // Helper method to extract field path from an Expression.
@@ -1071,18 +1049,28 @@ object MergeIntoTable {
     case _ => Seq.empty
   }
 
-  // Helper method to check if a given field path is a prefix of another path. Delegates
-  // equality to conf.resolver to correctly handle case sensitivity.
+  // Helper method to check if a given field path is a prefix of another path.
   private def isPrefix(prefix: Seq[String], path: Seq[String]): Boolean =
     prefix.length <= path.length && prefix.zip(path).forall {
       case (prefixNamePart, pathNamePart) =>
         SQLConf.get.resolver(prefixNamePart, pathNamePart)
     }
 
-  // Helper method to check if an assignment Expression's field path is equal to a path.
-  def isEqual(assignmentExpr: Expression, path: Seq[String]): Boolean = {
-    val exprPath = extractFieldPath(assignmentExpr)
-    exprPath.length == path.length && isPrefix(exprPath, path)
+  // Helper method to check if a given field path is a suffix of another path.
+  private def isSuffix(prefix: Seq[String], path: Seq[String]): Boolean =
+    prefix.length <= path.length && prefix.reverse.zip(path.reverse).forall {
+      case (prefixNamePart, pathNamePart) =>
+        SQLConf.get.resolver(prefixNamePart, pathNamePart)
+    }
+
+  // Helper method to check if an assignment key is equal to a source column
+  // and if the assignment value is the corresponding source column directly
+  private def isEqual(assignment: Assignment, path: Seq[String]): Boolean = {
+    val assignmenKeyExpr = extractFieldPath(assignment.key)
+    val assignmentValueExpr = extractFieldPath(assignment.value)
+    // Valid assignments are: col = s.col or col.nestedField = s.col.nestedField
+    assignmenKeyExpr.length == path.length && isPrefix(assignmenKeyExpr, path) &&
+      isSuffix(path, assignmentValueExpr)
   }
 }
 

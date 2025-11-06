@@ -1669,7 +1669,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
 
       case u: UpdateTable => resolveReferencesInUpdate(u)
 
-      case m @ MergeIntoTable(targetTable, sourceTable, _, _, _, _, _, _)
+      case m @ MergeIntoTable(targetTable, sourceTable, _, _, _, _, _)
         if !m.resolved && targetTable.resolved && sourceTable.resolved && !m.needSchemaEvolution =>
 
         EliminateSubqueryAliases(targetTable) match {
@@ -1749,8 +1749,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
             m.copy(mergeCondition = resolvedMergeCondition,
               matchedActions = newMatchedActions,
               notMatchedActions = newNotMatchedActions,
-              notMatchedBySourceActions = newNotMatchedBySourceActions,
-              originalSourceActions = newMatchedActions ++ newNotMatchedActions)
+              notMatchedBySourceActions = newNotMatchedBySourceActions)
         }
 
       // UnresolvedHaving can host grouping expressions and aggregate functions. We should resolve

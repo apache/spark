@@ -1699,8 +1699,7 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
               Seq(DeleteAction(Some(EqualTo(ndl: AttributeReference, StringLiteral("delete")))),
                 UpdateAction(Some(EqualTo(nul: AttributeReference, StringLiteral("update"))),
                   notMatchedBySourceUpdateAssigns)),
-              withSchemaEvolution,
-              _) =>
+              withSchemaEvolution) =>
             checkMergeConditionResolution(target, source, mergeCondition)
             checkMatchedClausesResolution(target, source, Some(dl), Some(ul), updateAssigns)
             checkNotMatchedClausesResolution(target, source, Some(il), insertAssigns)
@@ -1732,8 +1731,7 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
               Seq(InsertAction(Some(EqualTo(il: AttributeReference, StringLiteral("insert"))),
                   insertAssigns)),
               Seq(),
-              withSchemaEvolution,
-              _) =>
+              withSchemaEvolution) =>
             checkMergeConditionResolution(target, source, mergeCondition)
             checkMatchedClausesResolution(target, source, Some(dl), Some(ul), updateAssigns,
               starInUpdate = true)
@@ -1760,8 +1758,7 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
               Seq(UpdateAction(None, updateAssigns)),
               Seq(InsertAction(None, insertAssigns)),
               Seq(),
-              withSchemaEvolution,
-              _) =>
+              withSchemaEvolution) =>
             checkMergeConditionResolution(target, source, mergeCondition)
             checkMatchedClausesResolution(target, source, None, None, updateAssigns,
               starInUpdate = true)
@@ -1792,8 +1789,7 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
               Seq(InsertAction(None, insertAssigns)),
               Seq(DeleteAction(Some(EqualTo(_: AttributeReference, StringLiteral("delete")))),
                 UpdateAction(None, notMatchedBySourceUpdateAssigns)),
-              withSchemaEvolution,
-              _) =>
+              withSchemaEvolution) =>
             checkMergeConditionResolution(target, source, mergeCondition)
             checkMatchedClausesResolution(target, source, None, None, updateAssigns)
             checkNotMatchedClausesResolution(target, source, None, insertAssigns)
@@ -1830,8 +1826,7 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
               Seq(DeleteAction(Some(EqualTo(ndl: AttributeReference, StringLiteral("delete")))),
                 UpdateAction(Some(EqualTo(nul: AttributeReference, StringLiteral("update"))),
                   notMatchedBySourceUpdateAssigns)),
-              withSchemaEvolution,
-              _) =>
+              withSchemaEvolution) =>
             checkMergeConditionResolution(target, source, mergeCondition)
             checkMatchedClausesResolution(target, source, Some(dl), Some(ul), updateAssigns)
             checkNotMatchedClausesResolution(target, source, Some(il), insertAssigns)
@@ -1870,8 +1865,7 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
               Seq(DeleteAction(Some(EqualTo(ndl: AttributeReference, StringLiteral("delete")))),
                 UpdateAction(Some(EqualTo(nul: AttributeReference, StringLiteral("update"))),
                   notMatchedBySourceUpdateAssigns)),
-              withSchemaEvolution,
-              _) =>
+              withSchemaEvolution) =>
             checkMergeConditionResolution(target, source, mergeCondition)
             checkMatchedClausesResolution(target, source, Some(dl), Some(ul), updateAssigns)
             checkNotMatchedClausesResolution(target, source, Some(il), insertAssigns)
@@ -2157,8 +2151,7 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
               Some(EqualTo(il: AttributeReference, StringLiteral("a"))),
             insertAssigns)),
             Seq(DeleteAction(Some(_)), UpdateAction(None, secondUpdateAssigns)),
-            withSchemaEvolution,
-            _) =>
+            withSchemaEvolution) =>
           val ti = target.output.find(_.name == "i").get
           val ts = target.output.find(_.name == "s").get
           val si = source.output.find(_.name == "i").get
@@ -2265,8 +2258,7 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
             Seq(),
             Seq(),
             notMatchedBySourceActions,
-            withSchemaEvolution,
-            _) =>
+            withSchemaEvolution) =>
           assert(notMatchedBySourceActions.length == 2)
           notMatchedBySourceActions(0) match {
             case DeleteAction(Some(EqualTo(dl: AttributeReference, StringLiteral("b")))) =>
@@ -2341,8 +2333,7 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
           Seq(UpdateAction(None, updateAssigns)), // Matched actions
           Seq(), // Not matched actions
           Seq(), // Not matched by source actions
-          withSchemaEvolution,
-          _) =>
+          withSchemaEvolution) =>
         val ti = target.output.find(_.name == "i").get
         val si = source.output.find(_.name == "i").get
         assert(updateAssigns.size == 1)
@@ -2367,8 +2358,7 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
           Seq(), // Matched action
           Seq(InsertAction(None, insertAssigns)), // Not matched actions
           Seq(), // Not matched by source actions
-          withSchemaEvolution,
-          _) =>
+          withSchemaEvolution) =>
         val ti = target.output.find(_.name == "i").get
         val si = source.output.find(_.name == "i").get
         assert(insertAssigns.size == 1)
@@ -2452,8 +2442,7 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
           Seq(DeleteAction(None)),
           Seq(InsertAction(None, insertAssigns)),
           Nil,
-          withSchemaEvolution,
-          _) =>
+          withSchemaEvolution) =>
         // There is only one assignment, the missing col is not filled with default value
         assert(insertAssigns.size == 1)
         // Special case: Spark does not resolve any columns in MERGE if table accepts any schema.

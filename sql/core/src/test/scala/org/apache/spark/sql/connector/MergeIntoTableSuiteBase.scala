@@ -3510,6 +3510,41 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
     }
   }
 
+  test("Merge schema evolution should not evolve referencing new column via transform") {
+    Seq(true, false).foreach { withSchemaEvolution =>
+      withTempView("source") {
+        createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+          """{ "pk": 1, "salary": 100, "dep": "hr" }
+            |{ "pk": 2, "salary": 200, "dep": "software" }
+            |""".stripMargin)
+
+        val sourceDF = Seq((2, 150, "dummy", "blah"),
+          (3, 250, "dummy", "blah")).toDF("pk", "salary", "dep", "extra")
+        sourceDF.createOrReplaceTempView("source")
+
+        val schemaEvolutionClause = if (withSchemaEvolution) "WITH SCHEMA EVOLUTION" else ""
+        val mergeStmt =
+          s"""MERGE $schemaEvolutionClause
+             |INTO $tableNameAsString t
+             |USING source s
+             |ON t.pk = s.pk
+             |WHEN MATCHED THEN
+             | UPDATE SET extra=substring(s.extra, 1, 2)
+             |""".stripMargin
+
+
+        val e = intercept[org.apache.spark.sql.AnalysisException] {
+          sql(mergeStmt)
+        }
+        assert(e.errorClass.get == "UNRESOLVED_COLUMN.WITH_SUGGESTION")
+        assert(e.getMessage.contains("A column, variable, or function parameter with name " +
+          "`extra` cannot be resolved"))
+
+        sql(s"DROP TABLE $tableNameAsString")
+      }
+    }
+  }
+
   test("Merge schema evolution should not evolve if not directly referencing new column: update") {
     Seq(true, false).foreach { withSchemaEvolution =>
       withTempView("source") {
@@ -3611,6 +3646,40 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
             Row(1, 100, "hr"),
             Row(2, 200, "software"),
             Row(3, 250, "newdep")))
+
+        sql(s"DROP TABLE $tableNameAsString")
+      }
+    }
+  }
+
+  test("Merge schema evolution should not evolve if not having just column name: update") {
+    Seq(true, false).foreach { withSchemaEvolution =>
+      withTempView("source") {
+        createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+          """{ "pk": 1, "salary": 100, "dep": "hr" }
+            |{ "pk": 2, "salary": 200, "dep": "software" }
+            |""".stripMargin)
+
+        val sourceDF = Seq((2, 150, "dummy", "blah"),
+          (3, 250, "dummy", "blah")).toDF("pk", "salary", "dep", "extra")
+        sourceDF.createOrReplaceTempView("source")
+
+        val schemaEvolutionClause = if (withSchemaEvolution) "WITH SCHEMA EVOLUTION" else ""
+        val mergeStmt =
+          s"""MERGE $schemaEvolutionClause
+             |INTO $tableNameAsString t
+             |USING source s
+             |ON t.pk = s.pk
+             |WHEN MATCHED THEN
+             | UPDATE SET t.extra = s.extra
+             |""".stripMargin
+
+        val exception = intercept[org.apache.spark.sql.AnalysisException] {
+          sql(mergeStmt)
+        }
+        assert(exception.errorClass.get == "UNRESOLVED_COLUMN.WITH_SUGGESTION")
+        assert(exception.message.contains(" A column, variable, or function parameter with name " +
+          "`t`.`extra` cannot be resolved"))
 
         sql(s"DROP TABLE $tableNameAsString")
       }
@@ -3761,7 +3830,7 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
     }
   }
 
-  test("Merge schema evolution should evolve struct if directly referencing new field " +
+  test("Merge schema evolution should not evolve struct if not directly referencing new field " +
     "in top level struct: insert") {
     Seq(true, false).foreach { withSchemaEvolution =>
       withTempView("source") {
@@ -3801,28 +3870,19 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
              |""".stripMargin
 
         sql(mergeStmt)
-        if (withSchemaEvolution) {
-          checkAnswer(
-            sql(s"SELECT * FROM $tableNameAsString"),
-            Seq(
-              Row(1, Row(100, "active", null), "hr"),
-              Row(2, Row(200, "inactive", null), "software"),
-              Row(3, Row(250, "active", null), "marketing")))
-        } else {
-          checkAnswer(
-            sql(s"SELECT * FROM $tableNameAsString"),
-            Seq(
-              Row(1, Row(100, "active"), "hr"),
-              Row(2, Row(200, "inactive"), "software"),
-              Row(3, Row(250, "active"), "marketing")))
-        }
+        checkAnswer(
+          sql(s"SELECT * FROM $tableNameAsString"),
+          Seq(
+            Row(1, Row(100, "active"), "hr"),
+            Row(2, Row(200, "inactive"), "software"),
+            Row(3, Row(250, "active"), "marketing")))
         sql(s"DROP TABLE $tableNameAsString")
       }
     }
   }
 
   test("Merge schema evolution should not evolve if not directly referencing new field " +
-    "in top level struct") {
+    "in top level struct: UPDATE") {
     Seq(true, false).foreach { withSchemaEvolution =>
       withTempView("source") {
         createAndInitTable(
@@ -3945,49 +4005,6 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
     }
   }
 
-  test("Merge schema evolution should evolve referencing new column via transform") {
-    Seq(true, false).foreach { withSchemaEvolution =>
-      withTempView("source") {
-        createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
-          """{ "pk": 1, "salary": 100, "dep": "hr" }
-            |{ "pk": 2, "salary": 200, "dep": "software" }
-            |""".stripMargin)
-
-        val sourceDF = Seq((2, 150, "dummy", "blah"),
-          (3, 250, "dummy", "blah")).toDF("pk", "salary", "dep", "extra")
-        sourceDF.createOrReplaceTempView("source")
-
-        val schemaEvolutionClause = if (withSchemaEvolution) "WITH SCHEMA EVOLUTION" else ""
-        val mergeStmt =
-          s"""MERGE $schemaEvolutionClause
-             |INTO $tableNameAsString t
-             |USING source s
-             |ON t.pk = s.pk
-             |WHEN MATCHED THEN
-             | UPDATE SET dep='software', extra=substring(s.extra, 1, 2)
-             |""".stripMargin
-
-        if (withSchemaEvolution) {
-          sql(mergeStmt)
-          checkAnswer(
-            sql(s"SELECT * FROM $tableNameAsString"),
-            Seq(
-              Row(1, 100, "hr", null),
-              Row(2, 200, "software", "bl")))
-        } else {
-          val e = intercept[org.apache.spark.sql.AnalysisException] {
-            sql(mergeStmt)
-          }
-          assert(e.errorClass.get == "UNRESOLVED_COLUMN.WITH_SUGGESTION")
-          assert(e.getMessage.contains("A column, variable, or function parameter with name " +
-            "`extra` cannot be resolved"))
-        }
-
-        sql(s"DROP TABLE $tableNameAsString")
-      }
-    }
-  }
-
   test("Merge schema evolution should evolve referencing new column assigned to something else") {
     Seq(true, false).foreach { withSchemaEvolution =>
       withTempView("source") {
@@ -4007,25 +4024,15 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
              |USING source s
              |ON t.pk = s.pk
              |WHEN MATCHED THEN
-             | UPDATE SET dep='software', extra=s.dep
+             | UPDATE SET extra=s.dep
              |""".stripMargin
 
-        if (withSchemaEvolution) {
+        val e = intercept[org.apache.spark.sql.AnalysisException] {
           sql(mergeStmt)
-          checkAnswer(
-            sql(s"SELECT * FROM $tableNameAsString"),
-            Seq(
-              Row(1, 100, "hr", null),
-              Row(2, 200, "software", "dummy")))
-        } else {
-          val e = intercept[org.apache.spark.sql.AnalysisException] {
-            sql(mergeStmt)
-          }
-          assert(e.errorClass.get == "UNRESOLVED_COLUMN.WITH_SUGGESTION")
-          assert(e.getMessage.contains("A column, variable, or function parameter with name " +
-            "`extra` cannot be resolved"))
         }
-
+        assert(e.errorClass.get == "UNRESOLVED_COLUMN.WITH_SUGGESTION")
+        assert(e.getMessage.contains("A column, variable, or function parameter with name " +
+          "`extra` cannot be resolved"))
         sql(s"DROP TABLE $tableNameAsString")
       }
     }

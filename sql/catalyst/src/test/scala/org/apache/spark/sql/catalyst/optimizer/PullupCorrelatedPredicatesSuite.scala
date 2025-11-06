@@ -167,7 +167,7 @@ class PullupCorrelatedPredicatesSuite extends PlanTest {
     assert(optimized.resolved)
 
     optimized match {
-      case MergeIntoTable(_, _, s: InSubquery, _, _, _, _, _) =>
+      case MergeIntoTable(_, _, s: InSubquery, _, _, _, _) =>
         val outerRefs = SubExprUtils.getOuterReferences(s.query.plan)
         assert(outerRefs.isEmpty, "should be no outer refs")
       case other =>

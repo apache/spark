@@ -34,7 +34,7 @@ import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 object ResolveMergeIntoSchemaEvolution extends Rule[LogicalPlan] {
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-    case m @ MergeIntoTable(_, _, _, _, _, _, _, _)
+    case m @ MergeIntoTable(_, _, _, _, _, _, _)
       if m.needSchemaEvolution =>
         val newTarget = m.targetTable.transform {
           case r : DataSourceV2Relation => performSchemaEvolution(r, m)
@@ -46,7 +46,7 @@ object ResolveMergeIntoSchemaEvolution extends Rule[LogicalPlan] {
     : DataSourceV2Relation = {
     (relation.catalog, relation.identifier) match {
       case (Some(c: TableCatalog), Some(i)) =>
-        val referencedSourceSchema = MergeIntoTable.referencedSourceSchema(m)
+        val referencedSourceSchema = MergeIntoTable.sourceSchemaForSchemaEvolution(m)
 
         val changes = MergeIntoTable.schemaChanges(relation.schema, referencedSourceSchema)
         c.alterTable(i, changes: _*)
