@@ -865,4 +865,41 @@ class PythonPipelineSuite
 
     (exitCode, output.toSeq)
   }
+
+  test("empty cluster_by list should work and create table with no clustering") {
+    withTable("mv", "st") {
+      val graph = buildGraph("""
+            |from pyspark.sql.functions import col
+            |
+            |@dp.materialized_view(cluster_by = [])
+            |def mv():
+            |  return spark.range(5).withColumn("id_mod", col("id") % 2)
+            |
+            |@dp.table(cluster_by = [])
+            |def st():
+            |  return spark.readStream.table("mv")
+            |""".stripMargin)
+      val updateContext =
+        new PipelineUpdateContextImpl(graph, eventCallback = _ => (), storageRoot = storageRoot)
+      updateContext.pipelineExecution.runPipeline()
+      updateContext.pipelineExecution.awaitCompletion()
+
+      // Check tables are created with no clustering transforms
+      val catalog = spark.sessionState.catalogManager.currentCatalog.asInstanceOf[TableCatalog]
+
+      val mvIdentifier = Identifier.of(Array("default"), "mv")
+      val mvTable = catalog.loadTable(mvIdentifier)
+      val mvTransforms = mvTable.partitioning()
+      assert(
+        mvTransforms.isEmpty,
+        s"MaterializedView should have no transforms, but got: ${mvTransforms.mkString(", ")}")
+
+      val stIdentifier = Identifier.of(Array("default"), "st")
+      val stTable = catalog.loadTable(stIdentifier)
+      val stTransforms = stTable.partitioning()
+      assert(
+        stTransforms.isEmpty,
+        s"Table should have no transforms, but got: ${stTransforms.mkString(", ")}")
+    }
+  }
 }
