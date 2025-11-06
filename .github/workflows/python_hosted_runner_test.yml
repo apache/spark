@@ -167,7 +167,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: test-results-${{ inputs.os }}-${{ matrix.modules }}--${{ matrix.java }}-${{ inputs.hadoop }}-hive2.3-${{ env.PYTHON_TO_TEST }}
-          path: "**/target/{test,surefire}-reports/*.xml"
+          path: |
+            **/target/test-reports/*.xml
+            **/target/surefire-reports/*.xml
       - name: Upload unit tests log files
         env: ${{ fromJSON(inputs.envs) }}
         if: ${{ !success() }}

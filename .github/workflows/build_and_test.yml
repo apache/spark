@@ -384,7 +384,9 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: test-results-${{ matrix.modules }}-${{ matrix.comment }}-${{ matrix.java }}-${{ matrix.hadoop }}-${{ matrix.hive }}
-        path: "**/target/{test,surefire}-reports/*.xml"
+        path: |
+          **/target/test-reports/*.xml
+          **/target/surefire-reports/*.xml
     - name: Upload unit tests log files
       if: ${{ !success() }}
       uses: actions/upload-artifact@v4
@@ -645,7 +647,9 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: test-results-${{ matrix.modules }}--${{ matrix.java }}-${{ inputs.hadoop }}-hive2.3-${{ env.PYTHON_TO_TEST }}
-        path: "**/target/{test,surefire}-reports/*.xml"
+        path: |
+          **/target/test-reports/*.xml
+          **/target/surefire-reports/*.xml
     - name: Upload unit tests log files
       env: ${{ fromJSON(inputs.envs) }}
       if: ${{ !success() }}
@@ -727,7 +731,9 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: test-results-sparkr--${{ inputs.java }}-${{ inputs.hadoop }}-hive2.3
-        path: "**/target/{test,surefire}-reports/*.xml"
+        path: |
+          **/target/test-reports/*.xml
+          **/target/surefire-reports/*.xml
 
   buf:
     needs: [precondition]
@@ -1202,7 +1208,9 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: test-results-tpcds--${{ inputs.java }}-${{ inputs.hadoop }}-hive2.3
-        path: "**/target/{test,surefire}-reports/*.xml"
+        path: |
+          **/target/test-reports/*.xml
+          **/target/surefire-reports/*.xml
     - name: Upload unit tests log files
       if: ${{ !success() }}
       uses: actions/upload-artifact@v4
@@ -1269,7 +1277,9 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: test-results-docker-integration--${{ inputs.java }}-${{ inputs.hadoop }}-hive2.3
-        path: "**/target/{test,surefire}-reports/*.xml"
+        path: |
+          **/target/test-reports/*.xml
+          **/target/surefire-reports/*.xml
     - name: Upload unit tests log files
       if: ${{ !success() }}
       uses: actions/upload-artifact@v4
