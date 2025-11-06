@@ -296,6 +296,31 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
     }
   }
 
+  test("NullType") {
+    val data = (1 to 5)
+      .map(_ => Row(null, Row(null, null), Seq(null, null), Map(Row(null) -> null))).asJava
+    val dataSchema = new StructType()
+      .add("_1", NullType)
+      .add("_2", new StructType()
+        .add("_1", NullType)
+        .add("_2", NullType))
+      .add("_3", ArrayType(NullType, containsNull = true))
+      .add("_4", MapType(new StructType().add("_1", NullType), NullType, valueContainsNull = true))
+    val expected = data.asScala.toArray
+
+    withAllParquetWriters {
+      withTempPath { path =>
+        val file = path.getCanonicalPath
+        spark.createDataFrame(data, dataSchema).write.parquet(file)
+
+        withAllParquetReaders {
+          val df = spark.read.parquet(file)
+          checkAnswer(df, expected)
+        }
+      }
+    }
+  }
+
   testStandardAndLegacyModes("map") {
     val data = (1 to 4).map(i => Tuple1(Map(i -> s"val_$i")))
     checkParquetFile(data)

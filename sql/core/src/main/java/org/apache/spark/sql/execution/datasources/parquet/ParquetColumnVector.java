@@ -80,7 +80,7 @@ final class ParquetColumnVector {
       }
 
       if (defaultValue == null) {
-        vector.setAllNull();
+        vector.setMissing();
         return;
       }
       // For Parquet tables whose columns have associated DEFAULT values, this reader must return
@@ -137,7 +137,7 @@ final class ParquetColumnVector {
 
         // Only use levels from non-missing child, this can happen if only some but not all
         // fields of a struct are missing.
-        if (!childCv.vector.isAllNull()) {
+        if (!childCv.vector.isMissing()) {
           allChildrenAreMissing = false;
           this.repetitionLevels = childCv.repetitionLevels;
           this.definitionLevels = childCv.definitionLevels;
@@ -147,7 +147,7 @@ final class ParquetColumnVector {
       // This can happen if all the fields of a struct are missing, in which case we should mark
       // the struct itself as a missing column
       if (allChildrenAreMissing) {
-        vector.setAllNull();
+        vector.setMissing();
       }
     }
   }

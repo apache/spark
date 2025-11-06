@@ -108,14 +108,14 @@ public final class OnHeapColumnVector extends WritableColumnVector {
 
   @Override
   public void putNull(int rowId) {
-    if (isAllNull) return; // Skip writing nulls to all-null vector.
+    if (isAllNull()) return; // Skip writing nulls to all-null vector.
     nulls[rowId] = (byte)1;
     ++numNulls;
   }
 
   @Override
   public void putNulls(int rowId, int count) {
-    if (isAllNull) return; // Skip writing nulls to all-null vector.
+    if (isAllNull()) return; // Skip writing nulls to all-null vector.
     for (int i = 0; i < count; ++i) {
       nulls[rowId + i] = (byte)1;
     }
@@ -132,7 +132,7 @@ public final class OnHeapColumnVector extends WritableColumnVector {
 
   @Override
   public boolean isNullAt(int rowId) {
-    return isAllNull || nulls[rowId] == 1;
+    return isAllNull() || nulls[rowId] == 1;
   }
 
   //
@@ -579,7 +579,7 @@ public final class OnHeapColumnVector extends WritableColumnVector {
   // Spilt this function out since it is the slow path.
   @Override
   protected void reserveInternal(int newCapacity) {
-    if (isAllNull) return; // Skip allocation for all-null vector.
+    if (isAllNull()) return; // Skip allocation for all-null vector.
 
     if (isArray() || type instanceof MapType) {
       int[] newLengths = new int[newCapacity];

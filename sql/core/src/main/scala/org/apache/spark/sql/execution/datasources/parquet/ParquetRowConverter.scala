@@ -315,6 +315,9 @@ private[parquet] class ParquetRowConverter(
     }
 
     catalystType match {
+      case NullType
+        if parquetType.getLogicalTypeAnnotation.isInstanceOf[UnknownLogicalTypeAnnotation] =>
+        new ParquetPrimitiveConverter(updater)
       case LongType if isUnsignedIntTypeMatched(32) =>
         new ParquetPrimitiveConverter(updater) {
           override def addInt(value: Int): Unit =

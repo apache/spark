@@ -59,7 +59,7 @@ public abstract class WritableColumnVector extends ColumnVector {
    * Resets this column for writing. The currently stored values are no longer accessible.
    */
   public void reset() {
-    if (isConstant || isAllNull) return;
+    if (isConstant || isAllNull()) return;
 
     if (childColumns != null) {
       for (WritableColumnVector c: childColumns) {
@@ -142,7 +142,7 @@ public abstract class WritableColumnVector extends ColumnVector {
 
   @Override
   public boolean hasNull() {
-    return isAllNull || numNulls > 0;
+    return isAllNull() || numNulls > 0;
   }
 
   @Override
@@ -876,17 +876,24 @@ public abstract class WritableColumnVector extends ColumnVector {
   }
 
   /**
-   * Marks this column only contains null values.
+   * Marks this column missing from the file.
    */
-  public final void setAllNull() {
-    isAllNull = true;
+  public final void setMissing() {
+    isMissing = true;
+  }
+
+  /**
+   * Whether this column is missing from the file.
+   */
+  public final boolean isMissing() {
+    return isMissing;
   }
 
   /**
    * Whether this column only contains null values.
    */
   public final boolean isAllNull() {
-    return isAllNull;
+    return isMissing || type instanceof NullType;
   }
 
   /**
@@ -921,10 +928,10 @@ public abstract class WritableColumnVector extends ColumnVector {
   protected boolean isConstant;
 
   /**
-   * True if this column only contains nulls. This means the column values never change, even
-   * across resets. Comparing to 'isConstant' above, this doesn't require any allocation of space.
+   * True if this column is missing from the file. This means the column values never change and are
+   * nulls, even across resets. This doesn't require any allocation of space.
    */
-  protected boolean isAllNull;
+  protected boolean isMissing;
 
   /**
    * Default size of each array length value. This grows as necessary.
@@ -961,9 +968,6 @@ public abstract class WritableColumnVector extends ColumnVector {
     this.defaultCapacity = capacity;
     this.hugeVectorThreshold = SQLConf.get().vectorizedHugeVectorThreshold();
     this.hugeVectorReserveRatio = SQLConf.get().vectorizedHugeVectorReserveRatio();
-    // We set isAllNull to true for NullType columns to prevent allocation of any memory,
-    // as all values are always null and do not need to be stored.
-    this.isAllNull = type instanceof NullType;
 
     if (isArray()) {
       DataType childType;
