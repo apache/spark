@@ -33,6 +33,7 @@ on:
     - 'dev/spark-test-image/python-minimum/Dockerfile'
     - 'dev/spark-test-image/python-ps-minimum/Dockerfile'
     - 'dev/spark-test-image/pypy-310/Dockerfile'
+    - 'dev/spark-test-image/pypy-311/Dockerfile'
     - 'dev/spark-test-image/python-310/Dockerfile'
     - 'dev/spark-test-image/python-311/Dockerfile'
     - 'dev/spark-test-image/python-311-classic-only/Dockerfile'
@@ -153,6 +154,19 @@ jobs:
       - name: Image digest (PySpark with PyPy 3.10)
         if: hashFiles('dev/spark-test-image/pypy-310/Dockerfile') != ''
         run: echo ${{ steps.docker_build_pyspark_pypy_310.outputs.digest }}
+      - name: Build and push (PySpark with PyPy 3.11)
+        if: hashFiles('dev/spark-test-image/pypy-311/Dockerfile') != ''
+        id: docker_build_pyspark_pypy_311
+        uses: docker/build-push-action@v6
+        with:
+          context: ./dev/spark-test-image/pypy-311/
+          push: true
+          tags: ghcr.io/apache/spark/apache-spark-github-action-image-pyspark-pypy-311-cache:${{ github.ref_name }}-static
+          cache-from: type=registry,ref=ghcr.io/apache/spark/apache-spark-github-action-image-pyspark-pypy-311-cache:${{ github.ref_name }}
+          cache-to: type=registry,ref=ghcr.io/apache/spark/apache-spark-github-action-image-pyspark-pypy-311-cache:${{ github.ref_name }},mode=max
+      - name: Image digest (PySpark with PyPy 3.11)
+        if: hashFiles('dev/spark-test-image/pypy-311/Dockerfile') != ''
+        run: echo ${{ steps.docker_build_pyspark_pypy_311.outputs.digest }}
       - name: Build and push (PySpark with Python 3.10)
         if: hashFiles('dev/spark-test-image/python-310/Dockerfile') != ''
         id: docker_build_pyspark_python_310
