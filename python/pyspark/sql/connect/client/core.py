@@ -975,7 +975,7 @@ class SparkConnectClient(object):
         )
 
         table, schema, metrics, observed_metrics, _ = self._execute_and_fetch(
-            req, observations, self_destruct=self_destruct == "true"
+            req, observations, self_destruct == "true"
         )
         assert table is not None
         ei = ExecutionInfo(metrics, observed_metrics)
