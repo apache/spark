@@ -46,7 +46,7 @@ import org.apache.spark.sql.connect.client.arrow.FooEnum.FooEnum
 import org.apache.spark.sql.connect.test.ConnectFunSuite
 import org.apache.spark.sql.types.{ArrayType, DataType, DayTimeIntervalType, Decimal, DecimalType, IntegerType, Metadata, SQLUserDefinedType, StringType, StructType, UserDefinedType, YearMonthIntervalType}
 import org.apache.spark.unsafe.types.VariantVal
-import org.apache.spark.util.SparkStringUtils
+import org.apache.spark.util.{MaybeNull, SparkStringUtils}
 
 /**
  * Tests for encoding external data to and from arrow.
@@ -215,20 +215,6 @@ class ArrowEncoderSuite extends ConnectFunSuite with BeforeAndAfterAll {
     override def apply(batch: Array[Byte]): Unit = {
       _numBatches += 1
       _sizeInBytes += batch.length
-    }
-  }
-
-  private case class MaybeNull(interval: Int) {
-    assert(interval > 1)
-    private var invocations = 0
-    def apply[T](value: T): T = {
-      val result = if (invocations % interval == 0) {
-        null.asInstanceOf[T]
-      } else {
-        value
-      }
-      invocations += 1
-      result
     }
   }
 
