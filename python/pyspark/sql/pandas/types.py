@@ -1168,6 +1168,40 @@ def _create_converter_to_pandas(
 
             return convert_variant
 
+        elif isinstance(dt, GeographyType):
+
+            def convert_geography(value: Any) -> Any:
+                if value is None:
+                    return None
+                elif (
+                    isinstance(value, dict)
+                    and all(key in value for key in ["wkb", "srid"])
+                    and isinstance(value["wkb"], bytes)
+                    and isinstance(value["srid"], int)
+                ):
+                    return Geography.fromWKB(value["wkb"], value["srid"])
+                else:
+                    raise PySparkValueError(errorClass="MALFORMED_GEOGRAPHY")
+
+            return convert_geography
+
+        elif isinstance(dt, GeometryType):
+
+            def convert_geometry(value: Any) -> Any:
+                if value is None:
+                    return None
+                elif (
+                    isinstance(value, dict)
+                    and all(key in value for key in ["wkb", "srid"])
+                    and isinstance(value["wkb"], bytes)
+                    and isinstance(value["srid"], int)
+                ):
+                    return Geometry.fromWKB(value["wkb"], value["srid"])
+                else:
+                    raise PySparkValueError(errorClass="MALFORMED_GEOMETRY")
+
+            return convert_geometry
+
         else:
             return None
 
@@ -1429,6 +1463,22 @@ def _create_converter_from_pandas(
                 return {"value": variant.value, "metadata": variant.metadata}
 
             return convert_variant
+
+        elif isinstance(dt, GeographyType):
+
+            def convert_geography(value: Any) -> Any:
+                assert isinstance(value, Geography)
+                return {"srid": value.srid, "wkb": value.wkb}
+
+            return convert_geography
+
+        elif isinstance(dt, GeometryType):
+
+            def convert_geometry(value: Any) -> Any:
+                assert isinstance(value, Geometry)
+                return {"srid": value.srid, "wkb": value.wkb}
+
+            return convert_geometry
 
         return None
 

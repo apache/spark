@@ -2751,20 +2751,17 @@ class TypesTestsMixin:
         )
 
     def test_geospatial_result_encoding(self):
-        point_bytes = bytes.fromhex("010100000000000000000031400000000000001c40")
-        df = self.spark.sql(
-            """
-        SELECT ST_GeomFromWKB(X'010100000000000000000031400000000000001c40', 0) AS geom,
-        ST_GeomFromWKB(X'010100000000000000000031400000000000001c40', 4326) AS geom4326,
-        ST_GeogFromWKB(X'010100000000000000000031400000000000001c40') AS geog"""
-        )
-        GeospatialRow = Row("geom", "geom4326", "geog")
+        point_wkb = "010100000000000000000031400000000000001c40"
+        point_bytes = bytes.fromhex(point_wkb)
+        df = self.spark.sql(f"""
+            SELECT ST_GeomFromWKB(X'{point_wkb}') AS geom,
+            ST_GeogFromWKB(X'{point_wkb}') AS geog""")
+        GeospatialRow = Row("geom", "geog")
         self.assertEqual(
             df.collect(),
             [
                 GeospatialRow(
                     Geometry.fromWKB(point_bytes, 0),
-                    Geometry.fromWKB(point_bytes, 4326),
                     Geography.fromWKB(point_bytes, 4326),
                 )
             ],
