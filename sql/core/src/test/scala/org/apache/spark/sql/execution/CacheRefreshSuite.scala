@@ -62,17 +62,19 @@ import org.apache.spark.sql.types.{
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 /**
- * Test suite for cache refresh behavior with DataSource V2 tables.
+ * Test suite for cache refresh behavior with DataSource V1 and V2 tables.
  *
  * Verifies that cache refresh operations correctly update cached data when using
- * V2 tables with immutable Table instances:
+ * V2 tables with immutable Table instances, as well as V1 tables and views:
  * - recacheByPlan uses the provided fresh plan for re-execution
  * - refreshTable properly invalidates and resolves fresh table metadata
  *
- * These tests use TestV2Table with snapshot versioning to verify that cache
+ * V2 tests use TestV2Table with snapshot versioning to verify that cache
  * refresh picks up the latest table state.
  */
-class CacheRefreshForDSv2Suite extends QueryTest with SharedSparkSession {
+class CacheRefreshSuite extends QueryTest with SharedSparkSession {
+
+  import testImplicits._
 
   // Workaround for Scala incremental compiler false positive "unused import" warnings
   // All these imports ARE used in the test infrastructure below, but the compiler
@@ -100,7 +102,7 @@ class CacheRefreshForDSv2Suite extends QueryTest with SharedSparkSession {
   }
 
   test("recacheByPlan correctly updates cached V2 table data") {
-    testCacheRefreshBehavior { (tableName, cachedDf) =>
+    testV2CacheRefresh { (tableName, cachedDf) =>
       val freshPlan = spark.table(s"testcat.$tableName").queryExecution.analyzed
       val cacheManager = spark.sharedState.cacheManager
       cacheManager.recacheByPlan(spark, freshPlan)
@@ -108,7 +110,7 @@ class CacheRefreshForDSv2Suite extends QueryTest with SharedSparkSession {
   }
 
   test("refreshTable correctly updates cached V2 table data") {
-    testCacheRefreshBehavior { (tableName, cachedDf) =>
+    testV2CacheRefresh { (tableName, cachedDf) =>
       spark.catalog.refreshTable(s"testcat.$tableName")
     }
   }
@@ -130,7 +132,7 @@ class CacheRefreshForDSv2Suite extends QueryTest with SharedSparkSession {
    *
    * @param refreshOp The cache refresh operation to test (recacheByPlan, refreshTable, etc.)
    */
-  private def testCacheRefreshBehavior(
+  private def testV2CacheRefresh(
       refreshOp: (String, org.apache.spark.sql.Dataset[Row]) => Unit): Unit = {
     val initialData = Seq(Row(1, "v1"), Row(2, "v1"))
     val updatedData = Seq(Row(1, "v2"), Row(2, "v2"))
@@ -176,6 +178,98 @@ class CacheRefreshForDSv2Suite extends QueryTest with SharedSparkSession {
       // Verify: New DataFrame reads fresh data from cache
       val df2 = spark.table("testcat.test_table")
       checkAnswer(df2, updatedData)
+    }
+  }
+
+  // Additional tests for V1 tables and views to ensure CacheManager changes don't break them
+  test("recacheByPlan correctly updates cached V1 table data") {
+    testV1TableCacheRefresh { tableName =>
+      val freshPlan = spark.table(tableName).queryExecution.analyzed
+      val cacheManager = spark.sharedState.cacheManager
+      cacheManager.recacheByPlan(spark, freshPlan)
+    }
+  }
+
+  test("refreshTable correctly updates cached V1 table data") {
+    testV1TableCacheRefresh { tableName =>
+      spark.catalog.refreshTable(tableName)
+    }
+  }
+
+  /**
+   * Common test method to verify cache refresh behavior with V1 tables.
+   */
+  private def testV1TableCacheRefresh(refreshOp: String => Unit): Unit = {
+    val initialData = Seq((1, "v1"), (2, "v1"))
+    val updatedData = Seq((1, "v1"), (2, "v1"), (3, "v2"))
+
+    withTable("v1_table") {
+      // Create V1 table with initial data
+      initialData.toDF("id", "value").write.saveAsTable("v1_table")
+
+      // Cache the table
+      val df1 = spark.table("v1_table")
+      df1.cache()
+      df1.count()
+      checkAnswer(df1, initialData.toDF("id", "value"))
+
+      // Modify table (insert new data)
+      Seq((3, "v2")).toDF("id", "value")
+        .write.mode("append").saveAsTable("v1_table")
+
+      // Trigger cache refresh operation
+      refreshOp("v1_table")
+
+      // Verify: reads updated data
+      val df2 = spark.table("v1_table")
+      checkAnswer(df2, updatedData.toDF("id", "value"))
+    }
+  }
+
+  test("recacheByPlan correctly updates cached view data") {
+    testViewCacheRefresh { viewName =>
+      val freshPlan = spark.table(viewName).queryExecution.analyzed
+      val cacheManager = spark.sharedState.cacheManager
+      cacheManager.recacheByPlan(spark, freshPlan)
+    }
+  }
+
+  test("refreshTable correctly updates cached view data") {
+    testViewCacheRefresh { viewName =>
+      spark.catalog.refreshTable(viewName)
+    }
+  }
+
+  /**
+   * Common test method to verify cache refresh behavior with views.
+   */
+  private def testViewCacheRefresh(refreshOp: String => Unit): Unit = {
+    withTable("base_table") {
+      withView("test_view") {
+        // Create base table
+        Seq((1, "v1"), (2, "v1")).toDF("id", "value")
+          .write.saveAsTable("base_table")
+
+        // Create view
+        spark.sql("CREATE VIEW test_view AS SELECT * FROM base_table WHERE id <= 2")
+
+        // Cache the view
+        val df1 = spark.table("test_view")
+        df1.cache()
+        df1.count()
+        checkAnswer(df1, Seq((1, "v1"), (2, "v1")).toDF("id", "value"))
+
+        // Modify base table
+        Seq((1, "v2"), (2, "v2")).toDF("id", "value")
+          .write.mode("overwrite").saveAsTable("base_table")
+
+        // Trigger cache refresh operation
+        refreshOp("test_view")
+
+        // Verify: view reads updated data
+        val df2 = spark.table("test_view")
+        checkAnswer(df2, Seq((1, "v2"), (2, "v2")).toDF("id", "value"))
+      }
     }
   }
 }
