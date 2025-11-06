@@ -1163,7 +1163,7 @@ class V2SessionCatalogNamespaceSuite extends V2SessionCatalogBaseSuite {
     checkError(
       exception = intercept[AnalysisException](testIdent.asTableIdentifier),
       condition = "IDENTIFIER_TOO_MANY_NAME_PARTS",
-      parameters = Map("identifier" -> "`a`.`b`.`c`")
+      parameters = Map("identifier" -> "`a`.`b`.`c`", "limit" -> "2")
     )
   }
 
@@ -1172,7 +1172,7 @@ class V2SessionCatalogNamespaceSuite extends V2SessionCatalogBaseSuite {
     checkError(
       exception = intercept[AnalysisException](testIdent.asFunctionIdentifier),
       condition = "IDENTIFIER_TOO_MANY_NAME_PARTS",
-      parameters = Map("identifier" -> "`a`.`b`.`c`")
+      parameters = Map("identifier" -> "`a`.`b`.`c`", "limit" -> "2")
     )
   }
 }
