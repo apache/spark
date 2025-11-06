@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.kafka010
 
+import java.util.UUID
+
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.time.SpanSugar._
 
@@ -708,12 +710,15 @@ class KafkaConsumerPoolRealTimeModeSuite
     testUtils.sendMessages(topic, Array("1", "2"), Some(0))
     testUtils.sendMessages(topic, Array("3"), Some(1))
 
+    val groupIdPrefix = UUID.randomUUID().toString
+
     val reader = spark
       .readStream
       .format("kafka")
       .option("kafka.bootstrap.servers", testUtils.brokerAddress)
       .option("subscribe", topic)
       .option("startingOffsets", "earliest")
+      .option("groupIdPrefix", groupIdPrefix)
       .load()
       .selectExpr("CAST(value AS STRING)")
       .as[String]
@@ -728,7 +733,7 @@ class KafkaConsumerPoolRealTimeModeSuite
       // After completion of batch 0
       new ExternalAction() {
         override def runAction(): Unit = {
-          assertActiveSizeOnConsumerPool(2)
+          assertActiveSizeOnConsumerPool(groupIdPrefix, 2)
 
           testUtils.sendMessages(topic, Array("4", "5"), Some(0))
           testUtils.sendMessages(topic, Array("6"), Some(1))
@@ -739,7 +744,7 @@ class KafkaConsumerPoolRealTimeModeSuite
       // After completion of batch 1
       new ExternalAction() {
         override def runAction(): Unit = {
-          assertActiveSizeOnConsumerPool(2)
+          assertActiveSizeOnConsumerPool(groupIdPrefix, 2)
 
           testUtils.sendMessages(topic, Array("7"), Some(1))
         }
@@ -749,7 +754,7 @@ class KafkaConsumerPoolRealTimeModeSuite
       // After completion of batch 2
       new ExternalAction() {
         override def runAction(): Unit = {
-          assertActiveSizeOnConsumerPool(2)
+          assertActiveSizeOnConsumerPool(groupIdPrefix, 2)
         }
       },
       StopStream
@@ -761,9 +766,11 @@ class KafkaConsumerPoolRealTimeModeSuite
    * a normal unit test setup (say, local[<number, or *>] in spark master). With that setup, we
    * can access singleton object directly.
    */
-  private def assertActiveSizeOnConsumerPool(maxAllowedActiveSize: Int): Unit = {
-    val activeSize = KafkaDataConsumer.getActiveSizeInConsumerPool
+  private def assertActiveSizeOnConsumerPool(
+      groupIdPrefix: String,
+      maxAllowedActiveSize: Int): Unit = {
+    val activeSize = KafkaDataConsumer.getActiveSizeInConsumerPool(groupIdPrefix)
     assert(activeSize <= maxAllowedActiveSize, s"Consumer pool size is expected to be less " +
-      s"than $maxAllowedActiveSize, but $value.")
+      s"than $maxAllowedActiveSize, but $activeSize.")
   }
 }
