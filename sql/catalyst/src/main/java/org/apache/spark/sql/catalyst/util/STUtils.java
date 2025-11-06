@@ -16,6 +16,7 @@
  */
 package org.apache.spark.sql.catalyst.util;
 
+import org.apache.spark.sql.errors.QueryExecutionErrors;
 import org.apache.spark.sql.types.GeographyType;
 import org.apache.spark.sql.types.GeometryType;
 import org.apache.spark.unsafe.types.GeographyVal;
@@ -46,6 +47,15 @@ public final class STUtils {
   // Converts a `Geometry` object to the corresponding GEOMETRY physical value.
   static GeometryVal toPhysVal(Geometry g) {
     return g.getValue();
+  }
+
+  /** Geospatial type casting utility methods. */
+
+  // Cast geography to geometry.
+  public static GeometryVal geographyToGeometry(GeographyVal geographyVal) {
+    // Geographic SRID is always a valid SRID for geometry, so we don't need to check it.
+    // Also, all geographic coordinates are valid for geometry, so no need to check bounds.
+    return toPhysVal(Geometry.fromBytes(geographyVal.getBytes()));
   }
 
   /** Geospatial type encoder/decoder utilities. */
@@ -99,6 +109,31 @@ public final class STUtils {
   // ST_GeomFromWKB
   public static GeometryVal stGeomFromWKB(byte[] wkb) {
     return toPhysVal(Geometry.fromWkb(wkb));
+  }
+
+  // ST_SetSrid
+  public static GeographyVal stSetSrid(GeographyVal geo, int srid) {
+    // We only allow setting the SRID to geographic values.
+    if(!GeographyType.isSridSupported(srid)) {
+      throw QueryExecutionErrors.stInvalidSridValueError(srid);
+    }
+    // Create a copy of the input geography.
+    Geography copy = fromPhysVal(geo).copy();
+    // Set the SRID of the copy to the specified value.
+    copy.setSrid(srid);
+    return toPhysVal(copy);
+  }
+
+  public static GeometryVal stSetSrid(GeometryVal geo, int srid) {
+    // We only allow setting the SRID to valid values.
+    if(!GeometryType.isSridSupported(srid)) {
+      throw QueryExecutionErrors.stInvalidSridValueError(srid);
+    }
+    // Create a copy of the input geometry.
+    Geometry copy = fromPhysVal(geo).copy();
+    // Set the SRID of the copy to the specified value.
+    copy.setSrid(srid);
+    return toPhysVal(copy);
   }
 
   // ST_Srid

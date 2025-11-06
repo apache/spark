@@ -305,9 +305,8 @@
     <!-- Version used in Connect -->
     <connect.guava.version>33.4.0-jre</connect.guava.version>
     <guava.failureaccess.version>1.0.2</guava.failureaccess.version>
-    <io.grpc.version>1.67.1</io.grpc.version>
+    <io.grpc.version>1.76.0</io.grpc.version>
     <mima.version>1.1.4</mima.version>
-    <tomcat.annotations.api.version>6.0.53</tomcat.annotations.api.version>
 
     <!-- Version used in Profiler -->
     <ap-loader.version>4.0-10</ap-loader.version>
@@ -376,6 +375,17 @@
       <id>central</id>
       <name>Maven Repository</name>
       <url>https://repo.maven.apache.org/maven2</url>
+      <releases>
+        <enabled>true</enabled>
+      </releases>
+      <snapshots>
+        <enabled>false</enabled>
+      </snapshots>
+    </repository>
+    <repository>
+      <id>jitpack.io</id>
+      <name>JitPack</name>
+      <url>https://jitpack.io</url>
       <releases>
         <enabled>true</enabled>
       </releases>
@@ -898,11 +908,10 @@
         <scope>provided</scope>
       </dependency>
       <dependency>
-        <groupId>org.roaringbitmap</groupId>
-        <artifactId>RoaringBitmap</artifactId>
-        <version>1.3.0</version>
+        <groupId>com.github.RoaringBitmap.RoaringBitmap</groupId>
+        <artifactId>roaringbitmap</artifactId>
+        <version>1.5.3</version>
       </dependency>
-
       <!-- Netty Begin -->
       <dependency>
         <groupId>io.netty</groupId>

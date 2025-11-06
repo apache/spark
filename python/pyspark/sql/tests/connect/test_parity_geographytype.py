@@ -14,11 +14,25 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-version: v1
-plugins:
-   # Building the Python build and building the mypy interfaces.
-  - plugin: buf.build/protocolbuffers/python:v33.0
-    out: gen/proto/python
-  - name: mypy
-    out: gen/proto/python
 
+import unittest
+
+from pyspark.sql.tests.test_geographytype import GeographyTypeTestMixin
+from pyspark.testing.connectutils import ReusedConnectTestCase
+
+
+class GeographyTypeParityTest(GeographyTypeTestMixin, ReusedConnectTestCase):
+    pass
+
+
+if __name__ == "__main__":
+    import unittest
+    from pyspark.sql.tests.connect.test_parity_geographytype import *  # noqa: F401
+
+    try:
+        import xmlrunner
+
+        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
+    except ImportError:
+        testRunner = None
+    unittest.main(testRunner=testRunner, verbosity=2)

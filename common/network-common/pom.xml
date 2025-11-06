@@ -132,10 +132,9 @@
       <artifactId>tink</artifactId>
     </dependency>
     <dependency>
-      <groupId>org.roaringbitmap</groupId>
-      <artifactId>RoaringBitmap</artifactId>
+      <groupId>com.github.RoaringBitmap.RoaringBitmap</groupId>
+      <artifactId>roaringbitmap</artifactId>
     </dependency>
-
     <!-- Test dependencies -->
     <dependency>
       <groupId>org.apache.logging.log4j</groupId>

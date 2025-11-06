@@ -171,7 +171,7 @@ object GeometryType extends SpatialType {
     GeometryType(MIXED_CRS)
 
   /** Returns whether the given SRID is supported. */
-  private[types] def isSridSupported(srid: Int): Boolean = {
+  def isSridSupported(srid: Int): Boolean = {
     CartesianSpatialReferenceSystemMapper.getStringId(srid) != null
   }
 

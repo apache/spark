@@ -4045,3 +4045,10 @@ object RocksDBSuite {
     }
   }
 }
+
+/**
+ * Test suite that runs all RocksDBSuite tests with row checksum enabled.
+ * This ensures row checksum works correctly with all RocksDB features.
+ */
+@SlowSQLTest
+class RocksDBSuiteWithRowChecksum extends RocksDBSuite with EnableStateStoreRowChecksum

@@ -20,7 +20,7 @@ package org.apache.spark.sql.streaming
 import org.apache.spark.sql.{DataFrame, Dataset, Encoders, KeyValueGroupedDataset}
 import org.apache.spark.sql.execution.datasources.v2.state.StateSourceOptions
 import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
-import org.apache.spark.sql.execution.streaming.state.{AlsoTestWithEncodingTypes, AlsoTestWithRocksDBFeatures, RocksDBStateStoreProvider}
+import org.apache.spark.sql.execution.streaming.state.{AlsoTestWithEncodingTypes, AlsoTestWithRocksDBFeatures, EnableStateStoreRowChecksum, RocksDBStateStoreProvider}
 import org.apache.spark.sql.functions.{col, timestamp_seconds}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.util.StreamManualClock
@@ -763,3 +763,10 @@ class TransformWithStateInitialStateSuiteCheckpointV2
     spark.conf.set(SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION, 2)
   }
 }
+
+/**
+ * Test suite that runs all TransformWithStateInitialStateSuite tests with row checksum enabled.
+ */
+@SlowSQLTest
+class TransformWithStateInitialStateSuiteWithRowChecksum
+  extends TransformWithStateInitialStateSuite with EnableStateStoreRowChecksum

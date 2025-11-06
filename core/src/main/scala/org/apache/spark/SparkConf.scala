@@ -717,7 +717,13 @@ private[spark] object SparkConf extends Logging {
       DeprecatedConfig("spark.network.remoteReadNioBufferConversion", "3.5.2",
         "Please open a JIRA ticket to report it if you need to use this configuration."),
       DeprecatedConfig("spark.shuffle.unsafe.file.output.buffer", "4.0.0",
-        "Please use spark.shuffle.localDisk.file.output.buffer")
+        "Please use spark.shuffle.localDisk.file.output.buffer"),
+      DeprecatedConfig("spark.shuffle.server.chunkFetchHandlerThreadsPercent", "4.2.0",
+        "Using separate chunkFetchHandlers could be problematic according to the underlying" +
+          " netty layer"),
+      DeprecatedConfig("spark.shuffle.server.finalizeShuffleMergeThreadsPercent", "4.2.0",
+        "Using separate finalizeWorkers could be problematic according to the underlying" +
+          " netty layer")
     )
 
     Map(configs.map { cfg => (cfg.key -> cfg) } : _*)

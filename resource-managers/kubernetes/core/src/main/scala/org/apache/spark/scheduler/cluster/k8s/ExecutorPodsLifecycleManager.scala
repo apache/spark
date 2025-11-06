@@ -53,7 +53,7 @@ private[spark] class ExecutorPodsLifecycleManager(
   // bounds.
   private lazy val removedExecutorsCache =
     CacheBuilder.newBuilder()
-      .expireAfterWrite(3, TimeUnit.MINUTES)
+      .expireAfterWrite(conf.get(KUBERNETES_DELETED_EXECUTORS_CACHE_TIMEOUT), TimeUnit.SECONDS)
       .build[java.lang.Long, java.lang.Long]()
 
   private var lastFullSnapshotTs: Long = 0
@@ -113,25 +113,23 @@ private[spark] class ExecutorPodsLifecycleManager(
             inactivatedPods -= execId
 
           case deleted@PodDeleted(_) =>
+            execIdsRemovedInThisRound += execId
             if (removeExecutorFromSpark(schedulerBackend, deleted, execId)) {
-              execIdsRemovedInThisRound += execId
               logDebug(s"Snapshot reported deleted executor with id $execId," +
                 s" pod name ${state.pod.getMetadata.getName}")
             }
             inactivatedPods -= execId
 
           case failed@PodFailed(_) =>
-            val deleteFromK8s = !execIdsRemovedInThisRound.contains(execId)
+            val deleteFromK8s = execIdsRemovedInThisRound.add(execId)
             if (onFinalNonDeletedState(failed, execId, schedulerBackend, deleteFromK8s)) {
-              execIdsRemovedInThisRound += execId
               logDebug(s"Snapshot reported failed executor with id $execId," +
                 s" pod name ${state.pod.getMetadata.getName}")
             }
 
           case succeeded@PodSucceeded(_) =>
-            val deleteFromK8s = !execIdsRemovedInThisRound.contains(execId)
+            val deleteFromK8s = execIdsRemovedInThisRound.add(execId)
             if (onFinalNonDeletedState(succeeded, execId, schedulerBackend, deleteFromK8s)) {
-              execIdsRemovedInThisRound += execId
               if (schedulerBackend.isExecutorActive(execId.toString)) {
                 logInfo(log"Snapshot reported succeeded executor with id " +
                   log"${MDC(LogKeys.EXECUTOR_ID, execId)}, even though the application has not " +
@@ -201,8 +199,16 @@ private[spark] class ExecutorPodsLifecycleManager(
   private def removeExecutorFromK8s(execId: Long, updatedPod: Pod): Unit = {
     Utils.tryLogNonFatalError {
       if (shouldDeleteExecutors) {
-        // Get pod before deleting it, we can skip deleting if pod is already deleted so that
-        // we do not send too many requests to api server.
+        if (updatedPod.getMetadata.getDeletionTimestamp != null) {
+          // Do not call the Kubernetes API if the deletion timestamp
+          // is already set on the updatedPod object.
+          // This is removing the need for un-necessary API roundtrips
+          // against the Kubernetes API.
+          return
+        }
+        // Get pod before deleting it, we can skip deleting if pod is already deleted
+        // or has already the deletion timestamp set so that we do not send
+        // too many requests to apu server.
         // If deletion failed on a previous try, we can try again if resync informs us the pod
         // is still around.
         // Delete as best attempt - duplicate deletes will throw an exception but the end state
@@ -211,7 +217,9 @@ private[spark] class ExecutorPodsLifecycleManager(
           .pods()
           .inNamespace(namespace)
           .withName(updatedPod.getMetadata.getName)
-        if (podToDelete.get() != null) {
+
+        if (podToDelete.get() != null &&
+            podToDelete.get.getMetadata.getDeletionTimestamp == null) {
           podToDelete.delete()
         }
       } else if (!inactivatedPods.contains(execId) && !isPodInactive(updatedPod)) {
