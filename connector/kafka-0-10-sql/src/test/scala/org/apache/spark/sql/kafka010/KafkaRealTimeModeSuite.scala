@@ -701,8 +701,6 @@ class KafkaConsumerPoolRealTimeModeSuite
     )
   }
 
-  override val numCores = 8
-
   test("SPARK-54200: Kafka consumers in consumer pool should be properly reused") {
     val topic = newTopic()
     testUtils.createTopic(topic, partitions = 2)
