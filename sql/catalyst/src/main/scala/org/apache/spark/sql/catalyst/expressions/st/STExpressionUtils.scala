@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions.st
 
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types._
 
 private[sql] object STExpressionUtils {
@@ -27,6 +28,51 @@ private[sql] object STExpressionUtils {
   def isGeoSpatialType(dt: DataType): Boolean = dt match {
     case _: GeometryType | _: GeographyType => true
     case _ => false
+  }
+
+  /**
+   * Returns the input GEOMETRY or GEOGRAPHY value with the specified SRID. Only geospatial types
+   * are allowed as the source type, and calls are delegated to the corresponding helper methods.
+   */
+  def geospatialTypeWithSrid(sourceType: DataType, srid: Expression): DataType = {
+    sourceType match {
+      case _: GeometryType =>
+        geometryTypeWithSrid(srid)
+      case _: GeographyType =>
+        geographyTypeWithSrid(srid)
+      case _ =>
+        throw new IllegalArgumentException(s"Unexpected data type: $sourceType.")
+    }
+  }
+
+  /**
+   * Returns the input GEOMETRY value with the specified SRID. If the SRID expression is a literal,
+   * the SRID value can be directly extracted. Otherwise, only the mixed SRID value can be used.
+   */
+  private def geometryTypeWithSrid(srid: Expression): GeometryType = {
+    srid match {
+      case Literal(sridValue: Int, IntegerType) =>
+        // If the SRID expression is a literal, the SRID value can be directly extracted.
+        GeometryType(sridValue)
+      case _ =>
+        // Otherwise, only the mixed SRID value can be used for the output GEOMETRY value.
+        GeometryType("ANY")
+    }
+  }
+
+  /**
+   * Returns the input GEOGRAPHY value with the specified SRID. If the SRID expression is a literal,
+   * the SRID value can be directly extracted. Otherwise, only the mixed SRID value can be used.
+   */
+  private def geographyTypeWithSrid(srid: Expression): GeographyType = {
+    srid match {
+      case Literal(sridValue: Int, IntegerType) =>
+        // If the SRID expression is a literal, the SRID value can be directly extracted.
+        GeographyType(sridValue)
+      case _ =>
+        // Otherwise, only the mixed SRID value can be used for the output GEOMETRY value.
+        GeographyType("ANY")
+    }
   }
 
 }

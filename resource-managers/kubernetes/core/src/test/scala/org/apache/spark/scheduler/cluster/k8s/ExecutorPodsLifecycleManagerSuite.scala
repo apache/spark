@@ -20,7 +20,7 @@ import java.util.function.UnaryOperator
 
 import scala.collection.mutable
 
-import io.fabric8.kubernetes.api.model.Pod
+import io.fabric8.kubernetes.api.model.{Pod, PodBuilder}
 import io.fabric8.kubernetes.client.KubernetesClient
 import io.fabric8.kubernetes.client.dsl.PodResource
 import org.mockito.{Mock, MockitoAnnotations}
@@ -217,6 +217,31 @@ class ExecutorPodsLifecycleManagerSuite extends SparkFunSuite with BeforeAndAfte
     val msg = exitReasonMessage(1, failedPod, 1)
     val expectedLossReason = ExecutorExited(1, exitCausedByApp = true, msg)
     verify(schedulerBackend).doRemoveExecutor("1", expectedLossReason)
+  }
+
+  test("Don't delete pod from K8s if deletionTimestamp is already set.") {
+    // Create a failed pod with deletionTimestamp already in the past
+    val basePod = failedExecutorWithoutDeletion(1)
+    val failedPodWithDeletionTimestamp = new PodBuilder(basePod)
+      .editOrNewMetadata()
+        .withDeletionTimestamp("1970-01-01T00:00:00Z")
+      .endMetadata()
+      .build()
+
+    val mockPodResource = mock(classOf[PodResource])
+    namedExecutorPods.put("spark-executor-1", mockPodResource)
+    when(mockPodResource.get()).thenReturn(failedPodWithDeletionTimestamp)
+
+    snapshotsStore.updatePod(failedPodWithDeletionTimestamp)
+    snapshotsStore.notifySubscribers()
+
+    // Verify executor is removed from Spark
+    val msg = "The executor with id 1 was deleted by a user or the framework."
+    val expectedLossReason = ExecutorExited(1, exitCausedByApp = false, msg)
+    verify(schedulerBackend).doRemoveExecutor("1", expectedLossReason)
+
+    // Verify delete() is NOT called since deletionTimestamp is already set
+    verify(mockPodResource, never()).delete()
   }
 
   test("SPARK-54198: Delete Kubernetes executor pods only once per event processing interval") {
