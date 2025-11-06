@@ -1245,6 +1245,65 @@ class SparkConnectClient(object):
         metadata = self._builder.metadata()
         return self._stub.BatchExecutePlan(req, metadata=metadata)
 
+    def batch_list_execute(
+        self,
+        plan_sequences: List[List[Tuple[pb2.Plan, Optional[str]]]],
+        sequence_operation_ids: Optional[List[Optional[str]]] = None,
+    ) -> pb2.BatchListExecutePlanResponse:
+        """
+        Execute multiple sequences of plans in batch. Each sequence executes
+        sequentially, all sequences execute in parallel.
+
+        Parameters
+        ----------
+        plan_sequences : list of list of (Plan, Optional[str])
+            List of sequences. Each sequence is a list of (plan, operation_id) tuples.
+        sequence_operation_ids : list of Optional[str], optional
+            Optional operation IDs for each sequence
+
+        Returns
+        -------
+        BatchListExecutePlanResponse
+            Response containing sequence operation IDs and query operation IDs
+        """
+        import uuid
+
+        req = pb2.BatchListExecutePlanRequest()
+        req.session_id = self._session_id
+        if self._user_id:
+            req.user_context.user_id = self._user_id
+        req.client_type = self._builder.userAgent
+
+        if self._server_side_session_id:
+            req.client_observed_server_side_session_id = self._server_side_session_id
+
+        seq_op_ids = sequence_operation_ids or []
+
+        for idx, sequence in enumerate(plan_sequences):
+            seq = req.plan_sequences.add()
+
+            # Set sequence operation ID if provided
+            if idx < len(seq_op_ids) and seq_op_ids[idx]:
+                try:
+                    uuid.UUID(seq_op_ids[idx])
+                    seq.sequence_operation_id = seq_op_ids[idx]
+                except ValueError:
+                    raise ValueError(f"Invalid sequence operation ID: {seq_op_ids[idx]}")
+
+            # Add plans to sequence
+            for plan, op_id in sequence:
+                plan_exec = seq.plan_executions.add()
+                plan_exec.plan.CopyFrom(plan)
+                if op_id:
+                    try:
+                        uuid.UUID(op_id)
+                        plan_exec.operation_id = op_id
+                    except ValueError:
+                        raise ValueError(f"Invalid operation ID: {op_id}")
+
+        metadata = self._builder.metadata()
+        return self._stub.BatchListExecutePlan(req, metadata=metadata)
+
     def reattach_execute(self, operation_id: str) -> Iterator[pb2.ExecutePlanResponse]:
         """
         Reattach to an existing operation by operation ID and consume all responses.

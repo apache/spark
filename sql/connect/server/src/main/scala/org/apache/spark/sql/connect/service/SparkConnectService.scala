@@ -131,6 +131,27 @@ class SparkConnectService(debug: Boolean) extends AsyncService with BindableServ
   }
 
   /**
+   * Execute multiple sequences of plans in batch. Each sequence executes sequentially, all
+   * sequences execute in parallel.
+   *
+   * @param request
+   * @param responseObserver
+   */
+  override def batchListExecutePlan(
+      request: proto.BatchListExecutePlanRequest,
+      responseObserver: StreamObserver[proto.BatchListExecutePlanResponse]): Unit = {
+    try {
+      new SparkConnectBatchListExecutePlanHandler(responseObserver).handle(request)
+    } catch {
+      ErrorUtils.handleError(
+        "batchListExecute",
+        observer = responseObserver,
+        userId = request.getUserContext.getUserId,
+        sessionId = request.getSessionId)
+    }
+  }
+
+  /**
    * This is the main entry method for Spark Connect and all calls to update or fetch
    * configuration..
    *

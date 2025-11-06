@@ -205,6 +205,66 @@ private[sql] class SparkConnectClient(
   }
 
   /**
+   * Execute multiple sequences of plans in batch. Each sequence executes sequentially, all
+   * sequences execute in parallel. Returns operation IDs for reattachment.
+   *
+   * @param planSequences
+   *   Sequences of (plan, optional operation ID) tuples to execute
+   * @param sequenceOperationIds
+   *   Optional operation IDs for each sequence
+   * @return
+   *   BatchListExecutePlanResponse containing sequence operation IDs and query operation IDs
+   */
+  def batchListExecute(
+      planSequences: Seq[Seq[(proto.Plan, Option[String])]],
+      sequenceOperationIds: Seq[Option[String]] = Seq.empty)
+      : proto.BatchListExecutePlanResponse = {
+    artifactManager.uploadAllClassFileArtifacts()
+
+    val requestBuilder = proto.BatchListExecutePlanRequest
+      .newBuilder()
+      .setUserContext(userContext)
+      .setSessionId(sessionId)
+      .setClientType(userAgent)
+
+    serverSideSessionId.foreach(session =>
+      requestBuilder.setClientObservedServerSideSessionId(session))
+
+    planSequences.zipWithIndex.foreach { case (sequence, idx) =>
+      val sequenceBuilder = proto.BatchListExecutePlanRequest.PlanSequence
+        .newBuilder()
+
+      // Set sequence operation ID if provided
+      sequenceOperationIds.lift(idx).flatten.foreach { seqOpId =>
+        require(
+          isValidUUID(seqOpId),
+          s"Invalid sequence operation ID: $seqOpId. The id must be an UUID string of " +
+            "the format `00112233-4455-6677-8899-aabbccddeeff`")
+        sequenceBuilder.setSequenceOperationId(seqOpId)
+      }
+
+      // Add plans to sequence
+      sequence.foreach { case (plan, opId) =>
+        val planExecBuilder = proto.BatchListExecutePlanRequest.PlanExecution
+          .newBuilder()
+          .setPlan(plan)
+        opId.foreach { id =>
+          require(
+            isValidUUID(id),
+            s"Invalid operation ID: $id. The id must be an UUID string of " +
+              "the format `00112233-4455-6677-8899-aabbccddeeff`")
+          planExecBuilder.setOperationId(id)
+        }
+        sequenceBuilder.addPlanExecutions(planExecBuilder)
+      }
+
+      requestBuilder.addPlanSequences(sequenceBuilder)
+    }
+
+    bstub.batchListExecutePlan(requestBuilder.build())
+  }
+
+  /**
    * Reattach to an existing operation by operation ID and consume all responses. This method will
    * block until the operation completes.
    *

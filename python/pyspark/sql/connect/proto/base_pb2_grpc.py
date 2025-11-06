@@ -102,6 +102,12 @@ class SparkConnectServiceStub(object):
             response_deserializer=spark_dot_connect_dot_base__pb2.BatchExecutePlanResponse.FromString,
             _registered_method=True,
         )
+        self.BatchListExecutePlan = channel.unary_unary(
+            "/spark.connect.SparkConnectService/BatchListExecutePlan",
+            request_serializer=spark_dot_connect_dot_base__pb2.BatchListExecutePlanRequest.SerializeToString,
+            response_deserializer=spark_dot_connect_dot_base__pb2.BatchListExecutePlanResponse.FromString,
+            _registered_method=True,
+        )
 
 
 class SparkConnectServiceServicer(object):
@@ -207,6 +213,14 @@ class SparkConnectServiceServicer(object):
         context.set_details("Method not implemented!")
         raise NotImplementedError("Method not implemented!")
 
+    def BatchListExecutePlan(self, request, context):
+        """Execute multiple sequences of plans in batch. Each sequence executes sequentially,
+        all sequences execute in parallel. Returns operation IDs for reattachment.
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details("Method not implemented!")
+        raise NotImplementedError("Method not implemented!")
+
 
 def add_SparkConnectServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -269,6 +283,11 @@ def add_SparkConnectServiceServicer_to_server(servicer, server):
             servicer.BatchExecutePlan,
             request_deserializer=spark_dot_connect_dot_base__pb2.BatchExecutePlanRequest.FromString,
             response_serializer=spark_dot_connect_dot_base__pb2.BatchExecutePlanResponse.SerializeToString,
+        ),
+        "BatchListExecutePlan": grpc.unary_unary_rpc_method_handler(
+            servicer.BatchListExecutePlan,
+            request_deserializer=spark_dot_connect_dot_base__pb2.BatchListExecutePlanRequest.FromString,
+            response_serializer=spark_dot_connect_dot_base__pb2.BatchListExecutePlanResponse.SerializeToString,
         ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -631,6 +650,36 @@ class SparkConnectService(object):
             "/spark.connect.SparkConnectService/BatchExecutePlan",
             spark_dot_connect_dot_base__pb2.BatchExecutePlanRequest.SerializeToString,
             spark_dot_connect_dot_base__pb2.BatchExecutePlanResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True,
+        )
+
+    @staticmethod
+    def BatchListExecutePlan(
+        request,
+        target,
+        options=(),
+        channel_credentials=None,
+        call_credentials=None,
+        insecure=False,
+        compression=None,
+        wait_for_ready=None,
+        timeout=None,
+        metadata=None,
+    ):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            "/spark.connect.SparkConnectService/BatchListExecutePlan",
+            spark_dot_connect_dot_base__pb2.BatchListExecutePlanRequest.SerializeToString,
+            spark_dot_connect_dot_base__pb2.BatchListExecutePlanResponse.FromString,
             options,
             channel_credentials,
             insecure,
