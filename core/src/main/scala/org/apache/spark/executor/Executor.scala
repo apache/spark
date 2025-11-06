@@ -40,6 +40,7 @@ import org.slf4j.{MDC => SLF4JMDC}
 
 import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.executor.Executor.TASK_THREAD_NAME_PREFIX
 import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config._
@@ -132,7 +133,7 @@ private[spark] class Executor(
   private[executor] val threadPool = {
     val threadFactory = new ThreadFactoryBuilder()
       .setDaemon(true)
-      .setNameFormat("Executor task launch worker-%d")
+      .setNameFormat(s"$TASK_THREAD_NAME_PREFIX-%d")
       .setThreadFactory((r: Runnable) => new UninterruptibleThread(r, "unused"))
       .build()
     Executors.newCachedThreadPool(threadFactory).asInstanceOf[ThreadPoolExecutor]
@@ -478,7 +479,7 @@ private[spark] class Executor(
 
     val taskId = taskDescription.taskId
     val taskName = taskDescription.name
-    val threadName = s"Executor task launch worker for $taskName"
+    val threadName = s"$TASK_THREAD_NAME_PREFIX for $taskName"
     val mdcProperties = taskDescription.properties.asScala
       .filter(_._1.startsWith("mdc.")).toSeq
 
@@ -1316,6 +1317,8 @@ private[spark] class Executor(
 }
 
 private[spark] object Executor extends Logging {
+  val TASK_THREAD_NAME_PREFIX = "Executor task launch worker"
+
   // This is reserved for internal use by components that need to read task properties before a
   // task is fully deserialized. When possible, the TaskContext.getLocalProperty call should be
   // used instead.

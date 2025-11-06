@@ -67,6 +67,35 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 
 
 -- !query
+SELECT hex(ST_AsBinary(CAST(ST_GeogFromWKB(X'0101000000000000000000f03f0000000000000040') AS GEOMETRY(4326)))) AS result
+-- !query analysis
+Project [hex(st_asbinary(cast(st_geogfromwkb(0x0101000000000000000000F03F0000000000000040) as geometry(4326)))) AS result#x]
++- OneRowRelation
+
+
+-- !query
+SELECT CAST(ST_GeogFromWKB(X'0101000000000000000000f03f0000000000000040') AS GEOMETRY(ANY)) AS result
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "sqlExpr" : "\"CAST(st_geogfromwkb(X'0101000000000000000000F03F0000000000000040') AS GEOMETRY(ANY))\"",
+    "srcType" : "\"GEOGRAPHY(4326)\"",
+    "targetType" : "\"GEOMETRY(ANY)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 91,
+    "fragment" : "CAST(ST_GeogFromWKB(X'0101000000000000000000f03f0000000000000040') AS GEOMETRY(ANY))"
+  } ]
+}
+
+
+-- !query
 SELECT hex(ST_AsBinary(ST_GeogFromWKB(X'0101000000000000000000f03f0000000000000040'))) AS result
 -- !query analysis
 Project [hex(st_asbinary(st_geogfromwkb(0x0101000000000000000000F03F0000000000000040))) AS result#x]
@@ -117,6 +146,90 @@ Aggregate [count(1) AS count(1)#xL]
 +- Filter NOT (st_srid(st_geomfromwkb(wkb#x)) = 0)
    +- SubqueryAlias spark_catalog.default.geodata
       +- Relation spark_catalog.default.geodata[wkb#x] parquet
+
+
+-- !query
+SELECT ST_Srid(ST_SetSrid(ST_GeogFromWKB(X'0101000000000000000000F03F0000000000000040'), 4326))
+-- !query analysis
+Project [st_srid(st_setsrid(st_geogfromwkb(0x0101000000000000000000F03F0000000000000040), 4326)) AS st_srid(st_setsrid(st_geogfromwkb(X'0101000000000000000000F03F0000000000000040'), 4326))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT ST_Srid(ST_SetSrid(ST_GeomFromWKB(X'0101000000000000000000F03F0000000000000040'), 3857))
+-- !query analysis
+Project [st_srid(st_setsrid(st_geomfromwkb(0x0101000000000000000000F03F0000000000000040), 3857)) AS st_srid(st_setsrid(st_geomfromwkb(X'0101000000000000000000F03F0000000000000040'), 3857))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT ST_Srid(ST_SetSrid(ST_GeogFromWKB(X'0101000000000000000000F03F0000000000000040'), 3857))
+-- !query analysis
+org.apache.spark.SparkIllegalArgumentException
+{
+  "errorClass" : "ST_INVALID_SRID_VALUE",
+  "sqlState" : "22023",
+  "messageParameters" : {
+    "srid" : "3857"
+  }
+}
+
+
+-- !query
+SELECT ST_Srid(ST_SetSrid(ST_GeomFromWKB(X'0101000000000000000000F03F0000000000000040'), 9999))
+-- !query analysis
+org.apache.spark.SparkIllegalArgumentException
+{
+  "errorClass" : "ST_INVALID_SRID_VALUE",
+  "sqlState" : "22023",
+  "messageParameters" : {
+    "srid" : "9999"
+  }
+}
+
+
+-- !query
+SELECT COUNT(*) FROM geodata WHERE ST_Srid(ST_SetSrid(ST_GeogFromWKB(wkb), 4326)) <> 4326
+-- !query analysis
+Aggregate [count(1) AS count(1)#xL]
++- Filter NOT (st_srid(st_setsrid(st_geogfromwkb(wkb#x), 4326)) = 4326)
+   +- SubqueryAlias spark_catalog.default.geodata
+      +- Relation spark_catalog.default.geodata[wkb#x] parquet
+
+
+-- !query
+SELECT COUNT(*) FROM geodata WHERE ST_Srid(ST_SetSrid(ST_GeomFromWKB(wkb), 3857)) <> 3857
+-- !query analysis
+Aggregate [count(1) AS count(1)#xL]
++- Filter NOT (st_srid(st_setsrid(st_geomfromwkb(wkb#x), 3857)) = 3857)
+   +- SubqueryAlias spark_catalog.default.geodata
+      +- Relation spark_catalog.default.geodata[wkb#x] parquet
+
+
+-- !query
+SELECT COUNT(*) FROM geodata WHERE ST_Srid(ST_SetSrid(ST_GeogFromWKB(wkb), 3857)) IS NOT NULL
+-- !query analysis
+org.apache.spark.SparkIllegalArgumentException
+{
+  "errorClass" : "ST_INVALID_SRID_VALUE",
+  "sqlState" : "22023",
+  "messageParameters" : {
+    "srid" : "3857"
+  }
+}
+
+
+-- !query
+SELECT COUNT(*) FROM geodata WHERE ST_Srid(ST_SetSrid(ST_GeomFromWKB(wkb), 9999)) IS NOT NULL
+-- !query analysis
+org.apache.spark.SparkIllegalArgumentException
+{
+  "errorClass" : "ST_INVALID_SRID_VALUE",
+  "sqlState" : "22023",
+  "messageParameters" : {
+    "srid" : "9999"
+  }
+}
 
 
 -- !query

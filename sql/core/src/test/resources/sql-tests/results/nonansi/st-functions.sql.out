@@ -74,6 +74,38 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 
 
 -- !query
+SELECT hex(ST_AsBinary(CAST(ST_GeogFromWKB(X'0101000000000000000000f03f0000000000000040') AS GEOMETRY(4326)))) AS result
+-- !query schema
+struct<result:string>
+-- !query output
+0101000000000000000000F03F0000000000000040
+
+
+-- !query
+SELECT CAST(ST_GeogFromWKB(X'0101000000000000000000f03f0000000000000040') AS GEOMETRY(ANY)) AS result
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "sqlExpr" : "\"CAST(st_geogfromwkb(X'0101000000000000000000F03F0000000000000040') AS GEOMETRY(ANY))\"",
+    "srcType" : "\"GEOGRAPHY(4326)\"",
+    "targetType" : "\"GEOMETRY(ANY)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 91,
+    "fragment" : "CAST(ST_GeogFromWKB(X'0101000000000000000000f03f0000000000000040') AS GEOMETRY(ANY))"
+  } ]
+}
+
+
+-- !query
 SELECT hex(ST_AsBinary(ST_GeogFromWKB(X'0101000000000000000000f03f0000000000000040'))) AS result
 -- !query schema
 struct<result:string>
@@ -127,6 +159,98 @@ SELECT COUNT(*) FROM geodata WHERE ST_Srid(ST_GeomFromWKB(wkb)) <> 0
 struct<count(1):bigint>
 -- !query output
 0
+
+
+-- !query
+SELECT ST_Srid(ST_SetSrid(ST_GeogFromWKB(X'0101000000000000000000F03F0000000000000040'), 4326))
+-- !query schema
+struct<st_srid(st_setsrid(st_geogfromwkb(X'0101000000000000000000F03F0000000000000040'), 4326)):int>
+-- !query output
+4326
+
+
+-- !query
+SELECT ST_Srid(ST_SetSrid(ST_GeomFromWKB(X'0101000000000000000000F03F0000000000000040'), 3857))
+-- !query schema
+struct<st_srid(st_setsrid(st_geomfromwkb(X'0101000000000000000000F03F0000000000000040'), 3857)):int>
+-- !query output
+3857
+
+
+-- !query
+SELECT ST_Srid(ST_SetSrid(ST_GeogFromWKB(X'0101000000000000000000F03F0000000000000040'), 3857))
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkIllegalArgumentException
+{
+  "errorClass" : "ST_INVALID_SRID_VALUE",
+  "sqlState" : "22023",
+  "messageParameters" : {
+    "srid" : "3857"
+  }
+}
+
+
+-- !query
+SELECT ST_Srid(ST_SetSrid(ST_GeomFromWKB(X'0101000000000000000000F03F0000000000000040'), 9999))
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkIllegalArgumentException
+{
+  "errorClass" : "ST_INVALID_SRID_VALUE",
+  "sqlState" : "22023",
+  "messageParameters" : {
+    "srid" : "9999"
+  }
+}
+
+
+-- !query
+SELECT COUNT(*) FROM geodata WHERE ST_Srid(ST_SetSrid(ST_GeogFromWKB(wkb), 4326)) <> 4326
+-- !query schema
+struct<count(1):bigint>
+-- !query output
+0
+
+
+-- !query
+SELECT COUNT(*) FROM geodata WHERE ST_Srid(ST_SetSrid(ST_GeomFromWKB(wkb), 3857)) <> 3857
+-- !query schema
+struct<count(1):bigint>
+-- !query output
+0
+
+
+-- !query
+SELECT COUNT(*) FROM geodata WHERE ST_Srid(ST_SetSrid(ST_GeogFromWKB(wkb), 3857)) IS NOT NULL
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkIllegalArgumentException
+{
+  "errorClass" : "ST_INVALID_SRID_VALUE",
+  "sqlState" : "22023",
+  "messageParameters" : {
+    "srid" : "3857"
+  }
+}
+
+
+-- !query
+SELECT COUNT(*) FROM geodata WHERE ST_Srid(ST_SetSrid(ST_GeomFromWKB(wkb), 9999)) IS NOT NULL
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkIllegalArgumentException
+{
+  "errorClass" : "ST_INVALID_SRID_VALUE",
+  "sqlState" : "22023",
+  "messageParameters" : {
+    "srid" : "9999"
+  }
+}
 
 
 -- !query

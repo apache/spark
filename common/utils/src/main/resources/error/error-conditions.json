@@ -320,6 +320,11 @@
       "An error occurred during loading state."
     ],
     "subClass" : {
+      "AUTO_SNAPSHOT_REPAIR_FAILED" : {
+        "message" : [
+          "Failed to load snapshot version <latestSnapshot> for state store <stateStoreId>. An attempt to auto repair using snapshot versions (<selectedSnapshots>) out of available snapshots (<eligibleSnapshots>) also failed."
+        ]
+      },
       "CANNOT_FIND_BASE_SNAPSHOT_CHECKPOINT" : {
         "message" : [
           "Cannot find a base snapshot checkpoint with lineage: <lineage>."
@@ -1827,6 +1832,12 @@
     ],
     "sqlState" : "2203G"
   },
+  "FAILED_TO_CREATE_PLAN_FOR_DIRECT_QUERY" : {
+    "message" : [
+      "Failed to create plan for direct query on files: <dataSourceType>"
+    ],
+    "sqlState" : "58030"
+  },
   "FAILED_TO_LOAD_ROUTINE" : {
     "message" : [
       "Failed to load routine <routineName>."
@@ -1887,6 +1898,12 @@
       "A column cannot have both a default value and a generation expression but column <colName> has default value: (<defaultValue>) and generation expression: (<genExpr>)."
     ],
     "sqlState" : "42623"
+  },
+  "GEO_ENCODER_SRID_MISMATCH_ERROR" : {
+    "message" : [
+      "Failed to encode <type> value because provided SRID <valueSrid> of a value to encode does not match type SRID: <typeSrid>."
+    ],
+    "sqlState" : "42K09"
   },
   "GET_TABLES_BY_TYPE_UNSUPPORTED_BY_HIVE_VERSION" : {
     "message" : [
@@ -1965,6 +1982,12 @@
       "Invalid call to <function>; the `lgConfigK` value must be between <min> and <max>, inclusive: <value>."
     ],
     "sqlState" : "22546"
+  },
+  "HLL_K_MUST_BE_CONSTANT" : {
+    "message" : [
+      "Invalid call to <function>; the `K` value must be a constant value, but got a non-constant expression."
+    ],
+    "sqlState" : "42K0E"
   },
   "HLL_UNION_DIFFERENT_LG_K" : {
     "message" : [
@@ -4142,6 +4165,36 @@
     ],
     "sqlState" : "42K0E"
   },
+  "KLL_SKETCH_INCOMPATIBLE_MERGE" : {
+    "message" : [
+      "For function <functionName>, cannot merge KLL sketches: <reason>"
+    ],
+    "sqlState" : "22000"
+  },
+  "KLL_SKETCH_INVALID_INPUT" : {
+    "message" : [
+      "For function <functionName>, invalid KLL sketch binary data: <reason>"
+    ],
+    "sqlState" : "22000"
+  },
+  "KLL_SKETCH_INVALID_QUANTILE_RANGE" : {
+    "message" : [
+      "For function <functionName>, the quantile value must be between 0.0 and 1.0 (inclusive), but got <quantile>."
+    ],
+    "sqlState" : "22003"
+  },
+  "KLL_SKETCH_K_MUST_BE_CONSTANT" : {
+    "message" : [
+      "For function <functionName>, the k parameter must be a constant value, but got a non-constant expression."
+    ],
+    "sqlState" : "42K0E"
+  },
+  "KLL_SKETCH_K_OUT_OF_RANGE" : {
+    "message" : [
+      "For function <functionName>, the k parameter must be between 8 and 65535 (inclusive), but got <k>."
+    ],
+    "sqlState" : "22003"
+  },
   "KRYO_BUFFER_OVERFLOW" : {
     "message" : [
       "Kryo serialization failed: <exceptionMsg>. To avoid this, increase \"<bufferSizeConfKey>\" value."
@@ -5386,6 +5439,13 @@
     ],
     "sqlState" : "42K06"
   },
+  "STATE_STORE_ROW_CHECKSUM_VERIFICATION_FAILED" : {
+    "message" : [
+      "Row checksum verification failed for stateStore=<stateStoreId>. The row may be corrupted.",
+      "Expected checksum: <expectedChecksum>, Computed checksum: <computedChecksum>."
+    ],
+    "sqlState" : "XXKST"
+  },
   "STATE_STORE_STATE_SCHEMA_FILES_THRESHOLD_EXCEEDED" : {
     "message" : [
       "The number of state schema files <numStateSchemaFiles> exceeds the maximum number of state schema files for this query: <maxStateSchemaFiles>.",
@@ -5750,6 +5810,12 @@
       "Invalid call to <function>; the `lgNomEntries` value must be between <min> and <max>, inclusive: <value>."
     ],
     "sqlState" : "22546"
+  },
+  "THETA_LG_NOM_ENTRIES_MUST_BE_CONSTANT" : {
+    "message" : [
+      "Invalid call to <function>; the `lgNomEntries` value must be a constant value, but got a non-constant expression."
+    ],
+    "sqlState" : "42K0E"
   },
   "TRAILING_COMMA_IN_SELECT" : {
     "message" : [

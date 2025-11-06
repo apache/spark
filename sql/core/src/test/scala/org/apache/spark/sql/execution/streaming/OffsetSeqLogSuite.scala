@@ -197,4 +197,26 @@ class OffsetSeqLogSuite extends SharedSparkSession {
         "unsaferow")
     }
   }
+
+  test("Row checksum disabled by default") {
+    val offsetSeqMetadata = OffsetSeqMetadata.apply(batchWatermarkMs = 0, batchTimestampMs = 0,
+      spark.conf)
+    assert(offsetSeqMetadata.conf.get(SQLConf.STATE_STORE_ROW_CHECKSUM_ENABLED.key) ===
+      Some(false.toString))
+  }
+
+  test("Row checksum disabled for existing checkpoint even if conf is enabled") {
+    val rowChecksumConf = SQLConf.STATE_STORE_ROW_CHECKSUM_ENABLED.key
+    withSQLConf(rowChecksumConf -> true.toString) {
+      val existingChkpt = "offset-log-version-2.1.0"
+      val (_, offsetSeq) = readFromResource(existingChkpt)
+      val offsetSeqMetadata = offsetSeq.metadata.get
+      // Not present in existing checkpoint
+      assert(offsetSeqMetadata.conf.get(rowChecksumConf) === None)
+
+      val clonedSqlConf = spark.sessionState.conf.clone()
+      OffsetSeqMetadata.setSessionConf(offsetSeqMetadata, clonedSqlConf)
+      assert(!clonedSqlConf.stateStoreRowChecksumEnabled)
+    }
+  }
 }

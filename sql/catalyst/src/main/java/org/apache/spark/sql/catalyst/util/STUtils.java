@@ -16,6 +16,9 @@
  */
 package org.apache.spark.sql.catalyst.util;
 
+import org.apache.spark.sql.errors.QueryExecutionErrors;
+import org.apache.spark.sql.types.GeographyType;
+import org.apache.spark.sql.types.GeometryType;
 import org.apache.spark.unsafe.types.GeographyVal;
 import org.apache.spark.unsafe.types.GeometryVal;
 
@@ -46,6 +49,47 @@ public final class STUtils {
     return g.getValue();
   }
 
+  /** Geospatial type casting utility methods. */
+
+  // Cast geography to geometry.
+  public static GeometryVal geographyToGeometry(GeographyVal geographyVal) {
+    // Geographic SRID is always a valid SRID for geometry, so we don't need to check it.
+    // Also, all geographic coordinates are valid for geometry, so no need to check bounds.
+    return toPhysVal(Geometry.fromBytes(geographyVal.getBytes()));
+  }
+
+  /** Geospatial type encoder/decoder utilities. */
+
+  public static GeometryVal serializeGeomFromWKB(org.apache.spark.sql.types.Geometry geometry,
+      GeometryType gt) {
+    int geometrySrid = geometry.getSrid();
+    gt.assertSridAllowedForType(geometrySrid);
+    return toPhysVal(Geometry.fromWkb(geometry.getBytes(), geometrySrid));
+  }
+
+  public static GeographyVal serializeGeogFromWKB(org.apache.spark.sql.types.Geography geography,
+      GeographyType gt) {
+    int geographySrid = geography.getSrid();
+    gt.assertSridAllowedForType(geographySrid);
+    return toPhysVal(Geography.fromWkb(geography.getBytes(), geographySrid));
+  }
+
+  public static org.apache.spark.sql.types.Geometry deserializeGeom(
+      GeometryVal geometry, GeometryType gt) {
+    int geometrySrid = stSrid(geometry);
+    gt.assertSridAllowedForType(geometrySrid);
+    byte[] wkb = stAsBinary(geometry);
+    return org.apache.spark.sql.types.Geometry.fromWKB(wkb, geometrySrid);
+  }
+
+  public static org.apache.spark.sql.types.Geography deserializeGeog(
+      GeographyVal geography, GeographyType gt) {
+    int geographySrid = stSrid(geography);
+    gt.assertSridAllowedForType(geographySrid);
+    byte[] wkb = stAsBinary(geography);
+    return org.apache.spark.sql.types.Geography.fromWKB(wkb, geographySrid);
+  }
+
   /** Methods for implementing ST expressions. */
 
   // ST_AsBinary
@@ -65,6 +109,31 @@ public final class STUtils {
   // ST_GeomFromWKB
   public static GeometryVal stGeomFromWKB(byte[] wkb) {
     return toPhysVal(Geometry.fromWkb(wkb));
+  }
+
+  // ST_SetSrid
+  public static GeographyVal stSetSrid(GeographyVal geo, int srid) {
+    // We only allow setting the SRID to geographic values.
+    if(!GeographyType.isSridSupported(srid)) {
+      throw QueryExecutionErrors.stInvalidSridValueError(srid);
+    }
+    // Create a copy of the input geography.
+    Geography copy = fromPhysVal(geo).copy();
+    // Set the SRID of the copy to the specified value.
+    copy.setSrid(srid);
+    return toPhysVal(copy);
+  }
+
+  public static GeometryVal stSetSrid(GeometryVal geo, int srid) {
+    // We only allow setting the SRID to valid values.
+    if(!GeometryType.isSridSupported(srid)) {
+      throw QueryExecutionErrors.stInvalidSridValueError(srid);
+    }
+    // Create a copy of the input geometry.
+    Geometry copy = fromPhysVal(geo).copy();
+    // Set the SRID of the copy to the specified value.
+    copy.setSrid(srid);
+    return toPhysVal(copy);
   }
 
   // ST_Srid
