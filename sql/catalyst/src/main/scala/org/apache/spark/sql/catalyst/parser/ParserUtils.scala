@@ -321,6 +321,20 @@ class SqlScriptingLabelContext {
   private def checkLabels(
       beginLabelCtx: Option[BeginLabelContext],
       endLabelCtx: Option[EndLabelContext]): Unit = {
+    // First, check if the begin label is qualified (if it exists).
+    beginLabelCtx.foreach { bl =>
+      val resolvedLabel = ParserUtils.getMultipartIdentifierText(bl.multipartIdentifier())
+      if (bl.multipartIdentifier().parts.size() > 1 || resolvedLabel.contains(".")) {
+        withOrigin(bl) {
+          throw SqlScriptingErrors.labelCannotBeQualified(
+            CurrentOrigin.get,
+            resolvedLabel.toLowerCase(Locale.ROOT)
+          )
+        }
+      }
+    }
+
+    // Then, check label matching and other constraints.
     (beginLabelCtx, endLabelCtx) match {
       // Throw an error if labels do not match.
       case (Some(bl: BeginLabelContext), Some(el: EndLabelContext)) =>
@@ -335,16 +349,6 @@ class SqlScriptingLabelContext {
               ParserUtils.getMultipartIdentifierText(bl.multipartIdentifier()),
               ParserUtils.getMultipartIdentifierText(el.multipartIdentifier()))
           }
-        }
-      // Throw an error if label is qualified.
-      case (Some(bl: BeginLabelContext), _)
-        if bl.multipartIdentifier().parts.size() > 1 =>
-        withOrigin(bl) {
-          throw SqlScriptingErrors.labelCannotBeQualified(
-            CurrentOrigin.get,
-            ParserUtils.getMultipartIdentifierText(bl.multipartIdentifier())
-              .toLowerCase(Locale.ROOT)
-          )
         }
       // Throw an error if end label exists without begin label.
       case (None, Some(el: EndLabelContext)) =>
