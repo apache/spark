@@ -2000,7 +2000,7 @@ class HiveDDLSuite
       val e2 = intercept[AnalysisException] {
         Seq(1 -> "a").toDF("i", "j").write.format("hive").bucketBy(4, "i").saveAsTable("t1")
       }
-      assert(e2.message.contains("Creating bucketed Hive serde table is not supported"))
+      assert(e2.message.contains("Creating bucketed Hive serde table is not supported yet"))
 
       checkError(
         exception = intercept[AnalysisException] {

@@ -211,35 +211,33 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with DataTypeE
   protected def getIdentifierParts(ctx: ParserRuleContext): Seq[String] = {
     ctx match {
       case idCtx: IdentifierContext =>
-        // identifier can be either strictIdentifier or strictNonReserved
-        // Recursively process the strictIdentifier
-        if (idCtx.strictIdentifier() != null) {
-          getIdentifierParts(idCtx.strictIdentifier())
-        } else {
-          Seq(ctx.getText)
-        }
+        // identifier can be either strictIdentifier or strictNonReserved.
+        // Recursively process the strictIdentifier.
+        Option(idCtx.strictIdentifier()).map(getIdentifierParts).getOrElse(Seq(ctx.getText))
+
       case idLitCtx: IdentifierLiteralContext =>
-        // For IDENTIFIER('literal') in strictIdentifier
+        // For IDENTIFIER('literal') in strictIdentifier.
         val literalValue = string(visitStringLit(idLitCtx.stringLit()))
-        // This base implementation just returns the literal as a single part
-        // Subclasses should override to parse qualified identifiers
+        // This base implementation just returns the literal as a single part.
+        // Subclasses should override to parse qualified identifiers.
         Seq(literalValue)
+
       case idLitCtx: IdentifierLiteralWithExtraContext =>
-        // For IDENTIFIER('literal') in errorCapturingIdentifier
+        // For IDENTIFIER('literal') in errorCapturingIdentifier.
         val literalValue = string(visitStringLit(idLitCtx.stringLit()))
-        // This base implementation just returns the literal as a single part
-        // Subclasses should override to parse qualified identifiers
+        // This base implementation just returns the literal as a single part.
+        // Subclasses should override to parse qualified identifiers.
         Seq(literalValue)
+
       case base: ErrorCapturingIdentifierBaseContext =>
-        // Regular identifier with errorCapturingIdentifierExtra
-        // Need to recursively handle identifier which might itself be IDENTIFIER('literal')
-        if (base.identifier() != null && base.identifier().strictIdentifier() != null) {
-          getIdentifierParts(base.identifier().strictIdentifier())
-        } else {
-          Seq(ctx.getText)
-        }
+        // Regular identifier with errorCapturingIdentifierExtra.
+        // Need to recursively handle identifier which might itself be IDENTIFIER('literal').
+        Option(base.identifier()).flatMap(id =>
+          Option(id.strictIdentifier()).map(getIdentifierParts)
+        ).getOrElse(Seq(ctx.getText))
+
       case _ =>
-        // For regular identifiers, just return the text as a single part
+        // For regular identifiers, just return the text as a single part.
         Seq(ctx.getText)
     }
   }

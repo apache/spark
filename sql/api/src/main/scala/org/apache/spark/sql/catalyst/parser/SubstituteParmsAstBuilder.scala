@@ -81,6 +81,7 @@ class SubstituteParmsAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
    */
   override def visitNamedParameterLiteral(ctx: NamedParameterLiteralContext): AnyRef =
     withOrigin(ctx) {
+      // Named parameters use simpleIdentifier, so .getText() is correct.
       val paramName = ctx.namedParameterMarker().identifier().getText
       namedParams += paramName
 
@@ -117,6 +118,7 @@ class SubstituteParmsAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
    */
   override def visitNamedParameterMarkerRule(ctx: NamedParameterMarkerRuleContext): AnyRef =
     withOrigin(ctx) {
+      // Named parameters use simpleIdentifier, so .getText() is correct.
       val paramName = ctx.namedParameterMarker().identifier().getText
       namedParams += paramName
 

@@ -1121,7 +1121,7 @@
       },
       "HASH_VARIANT_TYPE" : {
         "message" : [
-          "Input to the function <functionName> cannot contain elements of the \"VARIANT\" type."
+          "Input to the function <functionName> cannot contain elements of the \"VARIANT\" type yet."
         ]
       },
       "INPUT_SIZE_NOT_ONE" : {
@@ -4822,7 +4822,7 @@
   },
   "PARQUET_TYPE_NOT_SUPPORTED" : {
     "message" : [
-      "Parquet type not supported: <parquetType>."
+      "Parquet type not yet supported: <parquetType>."
     ],
     "sqlState" : "42846"
   },
@@ -4996,7 +4996,7 @@
   },
   "PROTOBUF_TYPE_NOT_SUPPORT" : {
     "message" : [
-      "Protobuf type not supported: <protobufType>."
+      "Protobuf type not yet supported: <protobufType>."
     ],
     "sqlState" : "42K0G"
   },
@@ -5750,7 +5750,7 @@
   },
   "TABLE_VALUED_ARGUMENTS_NOT_YET_IMPLEMENTED_FOR_SQL_FUNCTIONS" : {
     "message" : [
-      "Cannot <action> SQL user-defined function <functionName> with TABLE arguments because this functionality is not supported."
+      "Cannot <action> SQL user-defined function <functionName> with TABLE arguments because this functionality is not yet implemented."
     ],
     "sqlState" : "0A000"
   },
@@ -5963,7 +5963,7 @@
   },
   "UNION_NOT_SUPPORTED_IN_RECURSIVE_CTE" : {
     "message" : [
-      "The UNION operator is not supported within recursive common table expressions (WITH clauses that refer to themselves, directly or indirectly). Please use UNION ALL instead."
+      "The UNION operator is not yet supported within recursive common table expressions (WITH clauses that refer to themselves, directly or indirectly). Please use UNION ALL instead."
     ],
     "sqlState" : "42836"
   },
@@ -6466,7 +6466,7 @@
       },
       "LATERAL_COLUMN_ALIAS_IN_GROUP_BY" : {
         "message" : [
-          "Referencing a lateral column alias via GROUP BY alias/ALL is not supported."
+          "Referencing a lateral column alias via GROUP BY alias/ALL is not supported yet."
         ]
       },
       "LATERAL_COLUMN_ALIAS_IN_WINDOW" : {
@@ -6871,7 +6871,7 @@
   },
   "UNSUPPORTED_SINGLE_PASS_ANALYZER_FEATURE" : {
     "message" : [
-      "The single-pass analyzer cannot process this query or command because it does not support <feature>."
+      "The single-pass analyzer cannot process this query or command because it does not yet support <feature>."
     ],
     "sqlState" : "0A000"
   },
@@ -7409,7 +7409,7 @@
   },
   "_LEGACY_ERROR_TEMP_1018" : {
     "message" : [
-      "<quoted> is a permanent view, which is not supported by streaming reading API such as `DataStreamReader.table`."
+      "<quoted> is a permanent view, which is not supported by streaming reading API such as `DataStreamReader.table` yet."
     ]
   },
   "_LEGACY_ERROR_TEMP_1021" : {
@@ -7419,7 +7419,7 @@
   },
   "_LEGACY_ERROR_TEMP_1030" : {
     "message" : [
-      "Window aggregate function with filter predicate is not supported."
+      "Window aggregate function with filter predicate is not supported yet."
     ]
   },
   "_LEGACY_ERROR_TEMP_1031" : {
@@ -7530,7 +7530,7 @@
   },
   "_LEGACY_ERROR_TEMP_1071" : {
     "message" : [
-      "Some existing schema fields (<nonExistentColumnNames>) are not present in the new schema. We don't support dropping columns."
+      "Some existing schema fields (<nonExistentColumnNames>) are not present in the new schema. We don't support dropping columns yet."
     ]
   },
   "_LEGACY_ERROR_TEMP_1072" : {
@@ -8294,7 +8294,7 @@
   },
   "_LEGACY_ERROR_TEMP_2030" : {
     "message" : [
-      "Can not handle nested schema...  plan <plan>."
+      "Can not handle nested schema yet...  plan <plan>."
     ]
   },
   "_LEGACY_ERROR_TEMP_2031" : {
@@ -8349,7 +8349,7 @@
   },
   "_LEGACY_ERROR_TEMP_2041" : {
     "message" : [
-      "<methodName> is not supported."
+      "<methodName> is not implemented."
     ]
   },
   "_LEGACY_ERROR_TEMP_2045" : {
@@ -8965,7 +8965,7 @@
   },
   "_LEGACY_ERROR_TEMP_2237" : {
     "message" : [
-      "<className>.getParentLogger is not supported."
+      "<className>.getParentLogger is not yet implemented."
     ]
   },
   "_LEGACY_ERROR_TEMP_2241" : {
@@ -9486,7 +9486,7 @@
   },
   "_LEGACY_ERROR_TEMP_3082" : {
     "message" : [
-      "Creating bucketed Hive serde table is not supported."
+      "Creating bucketed Hive serde table is not supported yet."
     ]
   },
   "_LEGACY_ERROR_TEMP_3083" : {

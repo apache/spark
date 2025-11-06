@@ -125,37 +125,23 @@ class AstBuilder extends DataTypeAstBuilder
    */
   override protected def getIdentifierParts(ctx: ParserRuleContext): Seq[String] = {
     ctx match {
-      case idCtx: IdentifierContext =>
-        // identifier can be either strictIdentifier or strictNonReserved
-        // Recursively process the strictIdentifier
-        if (idCtx.strictIdentifier() != null) {
-          getIdentifierParts(idCtx.strictIdentifier())
-        } else {
-          Seq(ctx.getText)
-        }
       case idLitCtx: IdentifierLiteralContext =>
-        // For IDENTIFIER('literal') in strictIdentifier
+        // For IDENTIFIER('literal') in strictIdentifier.
         val literalValue = string(visitStringLit(idLitCtx.stringLit()))
-        // Parse the string as a multi-part identifier
+        // Parse the string as a multi-part identifier.
         // (e.g., "`cat`.`schema`" -> Seq("cat", "schema"))
         CatalystSqlParser.parseMultipartIdentifier(literalValue)
+
       case idLitCtx: IdentifierLiteralWithExtraContext =>
-        // For IDENTIFIER('literal') in errorCapturingIdentifier
+        // For IDENTIFIER('literal') in errorCapturingIdentifier.
         val literalValue = string(visitStringLit(idLitCtx.stringLit()))
-        // Parse the string as a multi-part identifier
+        // Parse the string as a multi-part identifier.
         // (e.g., "`cat`.`schema`" -> Seq("cat", "schema"))
         CatalystSqlParser.parseMultipartIdentifier(literalValue)
-      case base: ErrorCapturingIdentifierBaseContext =>
-        // Regular identifier with errorCapturingIdentifierExtra
-        // Need to recursively handle identifier which might itself be IDENTIFIER('literal')
-        if (base.identifier() != null && base.identifier().strictIdentifier() != null) {
-          getIdentifierParts(base.identifier().strictIdentifier())
-        } else {
-          Seq(ctx.getText)
-        }
+
       case _ =>
-        // For regular identifiers, just return the text as a single part
-        Seq(ctx.getText)
+        // Delegate all other cases to the base implementation.
+        super.getIdentifierParts(ctx)
     }
   }
 
@@ -1970,6 +1956,7 @@ class AstBuilder extends DataTypeAstBuilder
       query: LogicalPlan): LogicalPlan = withOrigin(ctx) {
     var plan = query
     ctx.hintStatements.asScala.reverse.foreach { stmt =>
+      // Hint names use simpleIdentifier, so .getText() is correct.
       plan = UnresolvedHint(stmt.hintName.getText,
         stmt.parameters.asScala.map(expression).toSeq, plan)
     }
@@ -2086,7 +2073,7 @@ class AstBuilder extends DataTypeAstBuilder
   override def visitUnpivotColumnAndAlias(ctx: UnpivotColumnAndAliasContext):
   (NamedExpression, Option[String]) = withOrigin(ctx) {
     val attr = visitUnpivotColumn(ctx.unpivotColumn())
-    val alias = Option(ctx.unpivotAlias()).map(_.errorCapturingIdentifier().getText)
+    val alias = Option(ctx.unpivotAlias()).map(a => getIdentifierText(a.errorCapturingIdentifier()))
     (attr, alias)
   }
 
@@ -2098,7 +2085,7 @@ class AstBuilder extends DataTypeAstBuilder
   (Seq[NamedExpression], Option[String]) =
     withOrigin(ctx) {
       val exprs = ctx.unpivotColumns.asScala.map(visitUnpivotColumn).toSeq
-      val alias = Option(ctx.unpivotAlias()).map(_.errorCapturingIdentifier().getText)
+      val alias = Option(ctx.unpivotAlias()).map(a => getIdentifierText(a.errorCapturingIdentifier()))
       (exprs, alias)
     }
 
@@ -2114,9 +2101,9 @@ class AstBuilder extends DataTypeAstBuilder
       unrequiredChildIndex = Nil,
       outer = ctx.OUTER != null,
       // scalastyle:off caselocale
-      Some(ctx.tblName.getText.toLowerCase),
+      Some(getIdentifierText(ctx.tblName).toLowerCase),
       // scalastyle:on caselocale
-      ctx.colName.asScala.map(_.getText).map(UnresolvedAttribute.quoted).toSeq,
+      ctx.colName.asScala.map(getIdentifierText).map(UnresolvedAttribute.quoted).toSeq,
       query)
   }
 
@@ -3021,8 +3008,11 @@ class AstBuilder extends DataTypeAstBuilder
       }
     } else {
       // If the parser is not in ansi mode, we should return `UnresolvedAttribute`, in case there
-      // are columns named `CURRENT_DATE` or `CURRENT_TIMESTAMP` or `CURRENT_TIME`
+      // are columns named `CURRENT_DATE` or `CURRENT_TIMESTAMP` or `CURRENT_TIME`.
+      // scalastyle:off parser.gettext
+      // ctx.name is a token, not an identifier context.
       UnresolvedAttribute.quoted(ctx.name.getText)
+      // scalastyle:on parser.gettext
     }
   }
 
@@ -4176,7 +4166,7 @@ class AstBuilder extends DataTypeAstBuilder
       ctx: ColumnConstraintDefinitionContext): TableConstraint = {
     withOrigin(ctx) {
       val name = if (ctx.name != null) {
-        ctx.name.getText
+        getIdentifierText(ctx.name)
       } else {
         null
       }
@@ -5646,7 +5636,7 @@ class AstBuilder extends DataTypeAstBuilder
       ctx: TableConstraintDefinitionContext): TableConstraint =
     withOrigin(ctx) {
       val name = if (ctx.name != null) {
-        ctx.name.getText
+        getIdentifierText(ctx.name)
       } else {
         null
       }
@@ -5750,7 +5740,7 @@ class AstBuilder extends DataTypeAstBuilder
         ctx.identifierReference, "ALTER TABLE ... DROP CONSTRAINT")
       DropConstraint(
           table,
-          ctx.name.getText,
+          getIdentifierText(ctx.name),
           ifExists = ctx.EXISTS() != null,
           cascade = ctx.CASCADE() != null)
     }
@@ -6360,6 +6350,7 @@ class AstBuilder extends DataTypeAstBuilder
    * Create a plan for a SHOW FUNCTIONS command.
    */
   override def visitShowFunctions(ctx: ShowFunctionsContext): LogicalPlan = withOrigin(ctx) {
+    // Function scope uses simpleIdentifier, so .getText() is correct.
     val (userScope, systemScope) = Option(ctx.identifier)
       .map(_.getText.toLowerCase(Locale.ROOT)) match {
         case None | Some("all") => (true, true)
@@ -6492,12 +6483,18 @@ class AstBuilder extends DataTypeAstBuilder
    */
   override def visitTimestampadd(ctx: TimestampaddContext): Expression = withOrigin(ctx) {
     if (ctx.invalidUnit != null) {
+      // scalastyle:off parser.gettext
+      // ctx.name and ctx.invalidUnit are tokens, not identifier contexts.
       throw QueryParsingErrors.invalidDatetimeUnitError(
         ctx,
         ctx.name.getText,
         ctx.invalidUnit.getText)
+      // scalastyle:on parser.gettext
     } else {
+      // scalastyle:off parser.gettext
+      // ctx.unit is a token, not an identifier context.
       TimestampAdd(ctx.unit.getText, expression(ctx.unitsAmount), expression(ctx.timestamp))
+      // scalastyle:on parser.gettext
     }
   }
 
@@ -6506,12 +6503,18 @@ class AstBuilder extends DataTypeAstBuilder
    */
   override def visitTimestampdiff(ctx: TimestampdiffContext): Expression = withOrigin(ctx) {
     if (ctx.invalidUnit != null) {
+      // scalastyle:off parser.gettext
+      // ctx.name and ctx.invalidUnit are tokens, not identifier contexts.
       throw QueryParsingErrors.invalidDatetimeUnitError(
         ctx,
         ctx.name.getText,
         ctx.invalidUnit.getText)
+      // scalastyle:on parser.gettext
     } else {
+      // scalastyle:off parser.gettext
+      // ctx.unit is a token, not an identifier context.
       TimestampDiff(ctx.unit.getText, expression(ctx.startTimestamp), expression(ctx.endTimestamp))
+      // scalastyle:on parser.gettext
     }
   }
 
@@ -6520,6 +6523,7 @@ class AstBuilder extends DataTypeAstBuilder
    * */
   override def visitNamedParameterLiteral(
       ctx: NamedParameterLiteralContext): Expression = withOrigin(ctx) {
+    // Named parameters use simpleIdentifier, so .getText() is correct.
     NamedParameter(ctx.namedParameterMarker().identifier().getText)
   }
 
