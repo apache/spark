@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.arrow
 import java.io.DataOutputStream
 
 import org.apache.arrow.memory.BufferAllocator
-import org.apache.arrow.vector.VectorSchemaRoot
+import org.apache.arrow.vector.{VectorSchemaRoot, VectorUnloader}
 import org.apache.arrow.vector.ipc.ArrowStreamWriter
 
 import org.apache.spark.TaskContext
@@ -34,6 +34,7 @@ case class ArrowWriterWrapper(
     var arrowWriter: SparkArrowWriter,
     var root: VectorSchemaRoot,
     var allocator: BufferAllocator,
+    var unloader: VectorUnloader,
     context: TaskContext) {
   @volatile var isClosed = false
 
@@ -58,6 +59,7 @@ case class ArrowWriterWrapper(
       arrowWriter = null
       root = null
       allocator = null
+      unloader = null
     }
   }
 }
@@ -77,8 +79,10 @@ object ArrowWriterWrapper {
       s"stdout writer for $allocatorOwner", 0, Long.MaxValue)
     val root = VectorSchemaRoot.create(arrowSchema, allocator)
     val arrowWriter = SparkArrowWriter.create(root)
+
     val streamWriter = new ArrowStreamWriter(root, null, dataOut)
     streamWriter.start()
-    ArrowWriterWrapper(streamWriter, arrowWriter, root, allocator, context)
+    // Unloader will be set by the caller after creation
+    ArrowWriterWrapper(streamWriter, arrowWriter, root, allocator, null, context)
   }
 }
