@@ -58,13 +58,6 @@ public final class STUtils {
     return toPhysVal(Geometry.fromBytes(geographyVal.getBytes()));
   }
 
-  // Cast geometry to geometry.
-  public static GeometryVal geometryToGeometry(GeometryVal geometryVal) {
-    // We don't modify per-row SRID values for geometries. The geometries remain unchanged.
-    // This method should be used only for casts from GEOMETRY(<srid>) to GEOMETRY(ANY).
-    return geometryVal;
-  }
-
   /** Geospatial type encoder/decoder utilities. */
 
   public static GeometryVal serializeGeomFromWKB(org.apache.spark.sql.types.Geometry geometry,

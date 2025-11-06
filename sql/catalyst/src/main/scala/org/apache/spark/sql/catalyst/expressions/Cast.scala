@@ -38,7 +38,7 @@ import org.apache.spark.sql.catalyst.util.IntervalUtils.{dayTimeIntervalToByte, 
 import org.apache.spark.sql.errors.{QueryErrorsBase, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.{GeographyVal, GeometryVal, UTF8String, VariantVal}
+import org.apache.spark.unsafe.types.{GeographyVal, UTF8String, VariantVal}
 import org.apache.spark.unsafe.types.UTF8String.{IntWrapper, LongWrapper}
 import org.apache.spark.util.ArrayImplicits._
 
@@ -1158,7 +1158,7 @@ case class Cast(
     case _: GeographyType =>
       buildCast[GeographyVal](_, STUtils.geographyToGeometry)
     case _: GeometryType =>
-      buildCast[GeometryVal](_, STUtils.geometryToGeometry)
+      identity
   }
 
   private[this] def castArray(fromType: DataType, toType: DataType): Any => Any = {
@@ -2203,7 +2203,7 @@ case class Cast(
           code"$evPrim = org.apache.spark.sql.catalyst.util.STUtils.geographyToGeometry($c);"
       case _: GeometryType =>
         (c, evPrim, _) =>
-          code"$evPrim = org.apache.spark.sql.catalyst.util.STUtils.geometryToGeometry($c);"
+          code"$evPrim = $c;"
     }
   }
 

@@ -33,10 +33,53 @@ class STExpressionsSuite
   private final val defaultGeographyType: DataType = GeographyType(defaultGeographySrid)
   private final val defaultGeometrySrid: Int = ExpressionDefaults.DEFAULT_GEOMETRY_SRID
   private final val defaultGeometryType: DataType = GeometryType(defaultGeometrySrid)
+  private final val mixedSridGeometryType: DataType = GeometryType("ANY")
 
   // Private helper method to assert the data type of a query result.
   private def assertType(query: String, expectedDataType: DataType) = {
     assert(sql(query).schema.fields.head.dataType.sameType(expectedDataType))
+  }
+
+  /** Geospatial type casting. */
+
+  test("Cast GEOMETRY(srid) to GEOMETRY(ANY)") {
+    // Test data: WKB representation of POINT(1 2).
+    val wkbString = "0101000000000000000000F03F0000000000000040"
+    val wkb = Hex.unhex(wkbString.getBytes())
+    val wkbLiteral = Literal.create(wkb, BinaryType)
+
+    // Construct the input GEOMETRY expression.
+    val geomExpr = ST_GeomFromWKB(wkbLiteral)
+    assert(geomExpr.dataType.sameType(defaultGeometryType))
+    checkEvaluation(ST_AsBinary(geomExpr), wkb)
+    // Cast the GEOMETRY with fixed SRID to GEOMETRY with mixed SRID.
+    val castExpr = Cast(geomExpr, mixedSridGeometryType)
+    assert(castExpr.dataType.sameType(mixedSridGeometryType))
+    checkEvaluation(ST_AsBinary(castExpr), wkb)
+
+    // Construct the input GEOMETRY SQL query, using WKB literal.
+    val geomQueryLit: String = s"ST_GeomFromWKB(X'$wkbString')"
+    assertType(s"SELECT $geomQueryLit", defaultGeometryType)
+    checkAnswer(sql(s"SELECT ST_AsBinary($geomQueryLit)"), Row(wkb))
+    // Cast the GEOMETRY with fixed SRID to GEOMETRY with mixed SRID.
+    val castQueryLit = s"$geomQueryLit::GEOMETRY(ANY)"
+    assertType(s"SELECT $castQueryLit", mixedSridGeometryType)
+    checkAnswer(sql(s"SELECT ST_AsBinary($castQueryLit)"), Row(wkb))
+
+    withTable("tbl") {
+      // Construct the test table with WKB.
+      sql(s"CREATE TABLE tbl (wkb BINARY)")
+      sql(s"INSERT INTO tbl VALUES (X'$wkbString')")
+
+      // Construct the input GEOMETRY SQL query, using WKB column.
+      val geomQueryCol: String = s"ST_GeomFromWKB(wkb)"
+      assertType(s"SELECT $geomQueryCol FROM tbl", defaultGeometryType)
+      checkAnswer(sql(s"SELECT ST_AsBinary($geomQueryCol) FROM tbl"), Row(wkb))
+      // Cast the GEOMETRY with fixed SRID to GEOMETRY with mixed SRID.
+      val castQueryCol = s"$geomQueryCol::GEOMETRY(ANY)"
+      assertType(s"SELECT $castQueryCol FROM tbl", mixedSridGeometryType)
+      checkAnswer(sql(s"SELECT ST_AsBinary($castQueryCol) FROM tbl"), Row(wkb))
+    }
   }
 
   /** ST reader/writer expressions. */
