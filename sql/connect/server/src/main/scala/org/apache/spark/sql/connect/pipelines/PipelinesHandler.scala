@@ -203,6 +203,8 @@ private[connect] object PipelinesHandler extends Logging {
             },
             partitionCols = Option(tableDetails.getPartitionColsList.asScala.toSeq)
               .filter(_.nonEmpty),
+            clusterCols = Option(tableDetails.getClusteringColumnsList.asScala.toSeq)
+              .filter(_.nonEmpty),
             properties = tableDetails.getTablePropertiesMap.asScala.toMap,
             origin = QueryOrigin(
               filePath = Option.when(output.getSourceCodeLocation.hasFileName)(

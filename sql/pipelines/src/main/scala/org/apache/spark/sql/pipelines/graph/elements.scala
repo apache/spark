@@ -114,6 +114,7 @@ sealed trait TableInput extends Input {
  * @param identifier The identifier of this table within the graph.
  * @param specifiedSchema The user-specified schema for this table.
  * @param partitionCols What columns the table should be partitioned by when materialized.
+ * @param clusterCols What columns the table should be clustered by when materialized.
  * @param normalizedPath Normalized storage location for the table based on the user-specified table
  *                       path (if not defined, we will normalize a managed storage path for it).
  * @param properties Table Properties to set in table metadata.
@@ -124,6 +125,7 @@ case class Table(
     identifier: TableIdentifier,
     specifiedSchema: Option[StructType],
     partitionCols: Option[Seq[String]],
+    clusterCols: Option[Seq[String]],
     normalizedPath: Option[String],
     properties: Map[String, String] = Map.empty,
     comment: Option[String],
