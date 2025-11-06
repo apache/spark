@@ -48,36 +48,42 @@ object ParserUtils extends SparkParserUtils {
     throw QueryParsingErrors.invalidStatementError(statement, ctx)
   }
 
+  private val IDENTIFIER_PREFIX = "IDENTIFIER("
+
   /**
    * Gets the resolved text of a multipart identifier, handling IDENTIFIER('literal') syntax.
-   * This parses each part through CatalystSqlParser to resolve identifier-lite expressions.
+   * This method parses each part through CatalystSqlParser to resolve identifier-lite
+   * expressions into their actual identifier names.
+   *
+   * @param ctx The multipart identifier context from the parse tree.
+   * @return The resolved identifier text as a dot-separated string.
    */
   def getMultipartIdentifierText(ctx: MultipartIdentifierContext): String = {
-    // Build the text by resolving each part
-    val parts = ctx.parts.asScala.flatMap { part =>
+    ctx.parts.asScala.flatMap { part =>
       val partText = part.getText
-      // Check if this looks like IDENTIFIER('...')
-      if (partText.startsWith("IDENTIFIER(") && partText.endsWith(")")) {
-        // Extract the literal string between the parentheses
-        val literal = partText.substring("IDENTIFIER(".length, partText.length - 1)
-        // Remove quotes and unescape
+      // Check if this is an IDENTIFIER('...') literal.
+      if (partText.startsWith(IDENTIFIER_PREFIX) && partText.endsWith(")")) {
+        // Extract the literal string between the parentheses.
+        val literal = partText.substring(IDENTIFIER_PREFIX.length, partText.length - 1)
+        // Remove quotes and unescape single quotes.
         val unquoted = if (literal.startsWith("'") && literal.endsWith("'")) {
           literal.substring(1, literal.length - 1).replace("''", "'")
         } else {
           literal
         }
-        // Parse as multipart identifier
+        // Parse as multipart identifier and return the parts.
         try {
           CatalystSqlParser.parseMultipartIdentifier(unquoted)
         } catch {
-          case _: Exception => Seq(partText)
+          case _: ParseException =>
+            // If parsing fails, treat the entire text as a single identifier part.
+            Seq(partText)
         }
       } else {
-        // Regular identifier
+        // Regular identifier - return as-is.
         Seq(partText)
       }
     }.mkString(".")
-    parts
   }
 
   def checkDuplicateClauses[T](
@@ -314,19 +320,21 @@ class SqlScriptingLabelContext {
    */
   private def checkLabels(
       beginLabelCtx: Option[BeginLabelContext],
-      endLabelCtx: Option[EndLabelContext]) : Unit = {
+      endLabelCtx: Option[EndLabelContext]): Unit = {
     (beginLabelCtx, endLabelCtx) match {
       // Throw an error if labels do not match.
-      case (Some(bl: BeginLabelContext), Some(el: EndLabelContext))
-        if ParserUtils.getMultipartIdentifierText(bl.multipartIdentifier())
-          .toLowerCase(Locale.ROOT) !=
-          ParserUtils.getMultipartIdentifierText(el.multipartIdentifier())
-            .toLowerCase(Locale.ROOT) =>
-        withOrigin(bl) {
-          throw SqlScriptingErrors.labelsMismatch(
-            CurrentOrigin.get,
-            ParserUtils.getMultipartIdentifierText(bl.multipartIdentifier()),
-            ParserUtils.getMultipartIdentifierText(el.multipartIdentifier()))
+      case (Some(bl: BeginLabelContext), Some(el: EndLabelContext)) =>
+        val beginLabel = ParserUtils.getMultipartIdentifierText(bl.multipartIdentifier())
+          .toLowerCase(Locale.ROOT)
+        val endLabel = ParserUtils.getMultipartIdentifierText(el.multipartIdentifier())
+          .toLowerCase(Locale.ROOT)
+        if (beginLabel != endLabel) {
+          withOrigin(bl) {
+            throw SqlScriptingErrors.labelsMismatch(
+              CurrentOrigin.get,
+              ParserUtils.getMultipartIdentifierText(bl.multipartIdentifier()),
+              ParserUtils.getMultipartIdentifierText(el.multipartIdentifier()))
+          }
         }
       // Throw an error if label is qualified.
       case (Some(bl: BeginLabelContext), _)
@@ -342,7 +350,8 @@ class SqlScriptingLabelContext {
       case (None, Some(el: EndLabelContext)) =>
         withOrigin(el) {
           throw SqlScriptingErrors.endLabelWithoutBeginLabel(
-            CurrentOrigin.get, ParserUtils.getMultipartIdentifierText(el.multipartIdentifier()))
+            CurrentOrigin.get,
+            ParserUtils.getMultipartIdentifierText(el.multipartIdentifier()))
         }
       case _ =>
     }
@@ -350,7 +359,8 @@ class SqlScriptingLabelContext {
 
   /** Check if the label is defined. */
   private def isLabelDefined(beginLabelCtx: Option[BeginLabelContext]): Boolean = {
-    beginLabelCtx.map(_.multipartIdentifier().getText).isDefined
+    beginLabelCtx.map(ctx =>
+      ParserUtils.getMultipartIdentifierText(ctx.multipartIdentifier())).isDefined
   }
 
   /**
@@ -418,7 +428,7 @@ class SqlScriptingLabelContext {
 
   /**
    * Enter a for loop scope.
-   * If the for loop variable is defined, it will be asserted to not be inside seenLabels;
+   * If the for loop variable is defined, it will be asserted to not be inside seenLabels.
    * Then, if the for loop variable is defined, it will be added to seenLabels.
    */
   def enterForScope(identifierCtx: Option[MultipartIdentifierContext]): Unit = {

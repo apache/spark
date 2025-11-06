@@ -1533,54 +1533,54 @@ DropTable false, false
 
 
 -- !query
-CREATE SCHEMA test_schema
+CREATE SCHEMA identifier_clause_test_schema
 -- !query analysis
 CreateNamespace false
-+- ResolvedNamespace V2SessionCatalog(spark_catalog), [test_schema]
++- ResolvedNamespace V2SessionCatalog(spark_catalog), [identifier_clause_test_schema]
 
 
 -- !query
-CREATE TABLE test_schema.test_table(c1 INT) USING CSV
+CREATE TABLE identifier_clause_test_schema.test_table(c1 INT) USING CSV
 -- !query analysis
-CreateDataSourceTableCommand `spark_catalog`.`test_schema`.`test_table`, false
+CreateDataSourceTableCommand `spark_catalog`.`identifier_clause_test_schema`.`test_table`, false
 
 
 -- !query
-ANALYZE TABLE IDENTIFIER('test_schema.test_table') COMPUTE STATISTICS
+ANALYZE TABLE IDENTIFIER('identifier_clause_test_schema.test_table') COMPUTE STATISTICS
 -- !query analysis
-AnalyzeTableCommand `spark_catalog`.`test_schema`.`test_table`, false
+AnalyzeTableCommand `spark_catalog`.`identifier_clause_test_schema`.`test_table`, false
 
 
 -- !query
-REFRESH TABLE IDENTIFIER('test_schema.test_table')
+REFRESH TABLE IDENTIFIER('identifier_clause_test_schema.test_table')
 -- !query analysis
-RefreshTableCommand `spark_catalog`.`test_schema`.`test_table`
+RefreshTableCommand `spark_catalog`.`identifier_clause_test_schema`.`test_table`
 
 
 -- !query
-DESCRIBE IDENTIFIER('test_schema.test_table')
+DESCRIBE IDENTIFIER('identifier_clause_test_schema.test_table')
 -- !query analysis
-DescribeTableCommand `spark_catalog`.`test_schema`.`test_table`, false, [col_name#x, data_type#x, comment#x]
+DescribeTableCommand `spark_catalog`.`identifier_clause_test_schema`.`test_table`, false, [col_name#x, data_type#x, comment#x]
 
 
 -- !query
-SHOW COLUMNS FROM IDENTIFIER('test_schema.test_table')
+SHOW COLUMNS FROM IDENTIFIER('identifier_clause_test_schema.test_table')
 -- !query analysis
-ShowColumnsCommand `spark_catalog`.`test_schema`.`test_table`, [col_name#x]
+ShowColumnsCommand `spark_catalog`.`identifier_clause_test_schema`.`test_table`, [col_name#x]
 
 
 -- !query
-DROP TABLE IDENTIFIER('test_schema.test_table')
+DROP TABLE IDENTIFIER('identifier_clause_test_schema.test_table')
 -- !query analysis
 DropTable false, false
-+- ResolvedIdentifier V2SessionCatalog(spark_catalog), test_schema.test_table
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), identifier_clause_test_schema.test_table
 
 
 -- !query
-DROP SCHEMA test_schema
+DROP SCHEMA identifier_clause_test_schema
 -- !query analysis
 DropNamespace false, false
-+- ResolvedNamespace V2SessionCatalog(spark_catalog), [test_schema]
++- ResolvedNamespace V2SessionCatalog(spark_catalog), [identifier_clause_test_schema]
 
 
 -- !query
