@@ -219,6 +219,22 @@ class ExecutorPodsLifecycleManagerSuite extends SparkFunSuite with BeforeAndAfte
     verify(schedulerBackend).doRemoveExecutor("1", expectedLossReason)
   }
 
+  test("SPARK-54198: Delete Kubernetes executor pods only once per event processing interval") {
+    val failedPod = failedExecutorWithoutDeletion(1)
+    val mockPodResource = mock(classOf[PodResource])
+    namedExecutorPods.put("spark-executor-1", mockPodResource)
+    when(mockPodResource.get()).thenReturn(failedPod)
+    snapshotsStore.updatePod(failedPod)
+    snapshotsStore.notifySubscribers()
+    snapshotsStore.updatePod(failedPod)
+    snapshotsStore.updatePod(failedPod)
+    snapshotsStore.notifySubscribers()
+    val msg = exitReasonMessage(1, failedPod, 1)
+    val expectedLossReason = ExecutorExited(1, exitCausedByApp = true, msg)
+    verify(schedulerBackend, times(1)).doRemoveExecutor("1", expectedLossReason)
+    verify(namedExecutorPods(failedPod.getMetadata.getName), times(2)).delete()
+  }
+
   private def exitReasonMessage(execId: Int, failedPod: Pod, exitCode: Int): String = {
     val reason = Option(failedPod.getStatus.getReason)
     val message = Option(failedPod.getStatus.getMessage)
