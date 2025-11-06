@@ -220,8 +220,8 @@ private[spark] class ExecutorPodsLifecycleManager(
           .inNamespace(namespace)
           .withName(updatedPod.getMetadata.getName)
 
-        if (podToDelete.get() != null ||
-            podToDelete.get.getMetadata.getDeletionTimestamp != null) {
+        if (podToDelete.get() != null &&
+            podToDelete.get.getMetadata.getDeletionTimestamp == null) {
           podToDelete.delete()
         }
       } else if (!inactivatedPods.contains(execId) && !isPodInactive(updatedPod)) {
