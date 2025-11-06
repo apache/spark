@@ -263,7 +263,9 @@ object SparkEnv extends Logging {
       s"${DRIVER_HOST_ADDRESS.key} is not set on the driver!")
     assert(conf.contains(DRIVER_PORT), s"${DRIVER_PORT.key} is not set on the driver!")
     val bindAddress = conf.get(DRIVER_BIND_ADDRESS)
-    val advertiseAddress = conf.get(DRIVER_HOST_ADDRESS)
+    val useDriverPodIP =
+      conf.get("spark.kubernetes.executor.useDriverPodIP", "false").equalsIgnoreCase("true")
+    val advertiseAddress = if (useDriverPodIP) bindAddress else conf.get(DRIVER_HOST_ADDRESS)
     val port = conf.get(DRIVER_PORT)
     val ioEncryptionKey = if (conf.get(IO_ENCRYPTION_ENABLED)) {
       Some(CryptoStreamUtils.createKey(conf))
@@ -369,6 +371,11 @@ object SparkEnv extends Logging {
         logInfo(log"Registering ${MDC(LogKeys.ENDPOINT_NAME, name)}")
         rpcEnv.setupEndpoint(name, endpointCreator)
       } else {
+        val useDriverPodIP =
+          conf.get("spark.kubernetes.executor.useDriverPodIP", "false").equalsIgnoreCase("true")
+        if (useDriverPodIP) {
+          conf.set(config.DRIVER_HOST_ADDRESS.key, conf.get(config.DRIVER_BIND_ADDRESS.key))
+        }
         RpcUtils.makeDriverRef(name, conf, rpcEnv)
       }
     }
