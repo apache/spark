@@ -120,6 +120,9 @@ import org.apache.spark.util.Utils
  *  - Scalar Pandas UDF test case with a Scalar Pandas UDF registered as the name 'udf'
  *    iff Python executable, pyspark, pandas and pyarrow are available.
  *
+ *  - Scalar Iterator Pandas UDF test case with a Scalar Iterator Pandas UDF registered
+ *    as the name 'udf' iff Python executable, pyspark, pandas and pyarrow are available.
+ *
  * Therefore, UDF test cases should have single input and output files but executed by three
  * different types of UDFs. See 'udf/udf-inner-join.sql' as an example.
  *
@@ -404,7 +407,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
         s"${testCase.name}${System.lineSeparator()}" +
           s"Python: $pythonVer Pandas: $pandasVer PyArrow: $pyarrowVer${System.lineSeparator()}"
       case udfTestCase: SQLQueryTestSuite#UDFTest
-        if udfTestCase.udf.isInstanceOf[TestScalarIterPandasUDF] && shouldTestPandasUDFs =>
+          if udfTestCase.udf.isInstanceOf[TestScalarIterPandasUDF] && shouldTestPandasUDFs =>
         s"${testCase.name}${System.lineSeparator()}" +
           s"Python: $pythonVer Pandas: $pandasVer PyArrow: $pyarrowVer${System.lineSeparator()}"
       case udfTestCase: SQLQueryTestSuite#UDFTest
