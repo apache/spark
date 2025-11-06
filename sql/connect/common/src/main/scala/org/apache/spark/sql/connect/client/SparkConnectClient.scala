@@ -138,22 +138,6 @@ private[sql] class SparkConnectClient(
       .setSessionId(sessionId)
       .setClientType(userAgent)
       .addAllTags(tags.get.toSeq.asJava)
-
-    // Add request option to allow result chunking.
-    if (configuration.allowArrowBatchChunking) {
-      val chunkingOptionsBuilder = proto.ResultChunkingOptions
-        .newBuilder()
-        .setAllowArrowBatchChunking(true)
-      configuration.preferredArrowChunkSize.foreach { size =>
-        chunkingOptionsBuilder.setPreferredArrowChunkSize(size)
-      }
-      request.addRequestOptions(
-        proto.ExecutePlanRequest.RequestOption
-          .newBuilder()
-          .setResultChunkingOptions(chunkingOptionsBuilder.build())
-          .build())
-    }
-
     serverSideSessionId.foreach(session => request.setClientObservedServerSideSessionId(session))
     operationId.foreach { opId =>
       require(
@@ -347,16 +331,6 @@ private[sql] class SparkConnectClient(
   }
 
   def copy(): SparkConnectClient = configuration.toSparkConnectClient
-
-  /**
-   * Returns whether arrow batch chunking is allowed.
-   */
-  def allowArrowBatchChunking: Boolean = configuration.allowArrowBatchChunking
-
-  /**
-   * Returns the preferred arrow chunk size in bytes.
-   */
-  def preferredArrowChunkSize: Option[Int] = configuration.preferredArrowChunkSize
 
   /**
    * Add a single artifact to the client session.
@@ -783,21 +757,6 @@ object SparkConnectClient {
       this
     }
 
-    def allowArrowBatchChunking(allow: Boolean): Builder = {
-      _configuration = _configuration.copy(allowArrowBatchChunking = allow)
-      this
-    }
-
-    def allowArrowBatchChunking: Boolean = _configuration.allowArrowBatchChunking
-
-    def preferredArrowChunkSize(size: Option[Int]): Builder = {
-      size.foreach(s => require(s > 0, "preferredArrowChunkSize must be positive"))
-      _configuration = _configuration.copy(preferredArrowChunkSize = size)
-      this
-    }
-
-    def preferredArrowChunkSize: Option[Int] = _configuration.preferredArrowChunkSize
-
     def build(): SparkConnectClient = _configuration.toSparkConnectClient
   }
 
@@ -842,9 +801,7 @@ object SparkConnectClient {
       interceptors: List[ClientInterceptor] = List.empty,
       sessionId: Option[String] = None,
       grpcMaxMessageSize: Int = ConnectCommon.CONNECT_GRPC_MAX_MESSAGE_SIZE,
-      grpcMaxRecursionLimit: Int = ConnectCommon.CONNECT_GRPC_MARSHALLER_RECURSION_LIMIT,
-      allowArrowBatchChunking: Boolean = true,
-      preferredArrowChunkSize: Option[Int] = None) {
+      grpcMaxRecursionLimit: Int = ConnectCommon.CONNECT_GRPC_MARSHALLER_RECURSION_LIMIT) {
 
     private def isLocal = host.equals("localhost")
 

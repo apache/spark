@@ -187,27 +187,19 @@ object SparkConnectServerUtils {
   }
 
   def createSparkSession(): SparkSession = {
-    createSparkSession(identity)
-  }
-
-  def createSparkSession(
-      customBuilderFunc: SparkConnectClient.Builder => SparkConnectClient.Builder)
-      : SparkSession = {
     SparkConnectServerUtils.start()
 
-    var builder = SparkConnectClient
-      .builder()
-      .userId("test")
-      .port(port)
-      .retryPolicy(
-        RetryPolicy
-          .defaultPolicy()
-          .copy(maxRetries = Some(10), maxBackoff = Some(FiniteDuration(30, "s"))))
-
-    builder = customBuilderFunc(builder)
     val spark = SparkSession
       .builder()
-      .client(builder.build())
+      .client(
+        SparkConnectClient
+          .builder()
+          .userId("test")
+          .port(port)
+          .retryPolicy(RetryPolicy
+            .defaultPolicy()
+            .copy(maxRetries = Some(10), maxBackoff = Some(FiniteDuration(30, "s"))))
+          .build())
       .create()
 
     // Execute an RPC which will get retried until the server is up.
