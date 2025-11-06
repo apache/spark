@@ -31,6 +31,7 @@ import org.apache.arrow.vector.compression.{CompressionCodec, NoCompressionCodec
 import org.apache.arrow.vector.ipc.{ArrowStreamReader, ArrowStreamWriter, ReadChannel, WriteChannel}
 import org.apache.arrow.vector.ipc.message.{ArrowRecordBatch, IpcOption, MessageSerializer}
 
+import org.apache.spark.SparkException
 import org.apache.spark.TaskContext
 import org.apache.spark.internal.Logging
 import org.apache.spark.network.util.JavaUtils
@@ -110,7 +111,7 @@ private[sql] object ArrowConverters extends Logging {
         val codecType = new Lz4CompressionCodec().getCodecType()
         factory.createCodec(codecType)
       case other =>
-        throw new IllegalArgumentException(
+        throw SparkException.internalError(
           s"Unsupported Arrow compression codec: $other. Supported values: none, zstd, lz4")
     }
     protected val unloader = new VectorUnloader(root, true, codec, true)

@@ -26,7 +26,7 @@ import org.apache.arrow.vector.ipc.ArrowStreamWriter
 import org.apache.arrow.vector.ipc.WriteChannel
 import org.apache.arrow.vector.ipc.message.MessageSerializer
 
-import org.apache.spark.{SparkEnv, TaskContext}
+import org.apache.spark.{SparkEnv, SparkException, TaskContext}
 import org.apache.spark.api.python.{BasePythonRunner, PythonRDD, PythonWorker}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.arrow
@@ -89,7 +89,7 @@ private[python] trait PythonArrowInput[IN] { self: BasePythonRunner[IN, _] =>
       val codecType = new Lz4CompressionCodec().getCodecType()
       factory.createCodec(codecType)
     case other =>
-      throw new IllegalArgumentException(
+      throw SparkException.internalError(
         s"Unsupported Arrow compression codec: $other. Supported values: none, zstd, lz4")
   }
   protected val unloader = new VectorUnloader(root, true, codec, true)
@@ -286,7 +286,7 @@ private[python] trait GroupedPythonArrowInput { self: RowInputArrowPythonRunner 
         val codecType = new Lz4CompressionCodec().getCodecType()
         factory.createCodec(codecType)
       case other =>
-        throw new IllegalArgumentException(
+        throw SparkException.internalError(
           s"Unsupported Arrow compression codec: $other. Supported values: none, zstd, lz4")
     }
     new VectorUnloader(root, true, codec, true)
