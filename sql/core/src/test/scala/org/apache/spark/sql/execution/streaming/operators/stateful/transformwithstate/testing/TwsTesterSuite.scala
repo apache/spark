@@ -17,10 +17,8 @@
 package org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.testing
 
 import java.sql.Timestamp
-import java.time.Clock
 import java.time.Duration
 import java.time.Instant
-import java.time.ZoneId
 
 import scala.collection.mutable.ArrayBuffer
 
@@ -41,16 +39,6 @@ import org.apache.spark.sql.streaming.{
 import org.apache.spark.sql.streaming.ListState
 import org.apache.spark.sql.streaming.MapState
 import org.apache.spark.sql.streaming.ValueState
-
-class TestClock(var currentInstant: Instant, zone: ZoneId = ZoneId.systemDefault()) extends Clock {
-  override def getZone: ZoneId = zone
-  override def withZone(zone: ZoneId): Clock = new TestClock(currentInstant, zone)
-  override def instant(): Instant = currentInstant
-
-  def advanceBy(duration: Duration): Unit = {
-    currentInstant = currentInstant.plus(duration)
-  }
-}
 
 /** Test StatefulProcessor implementation that maintains a running count. */
 class RunningCountProcessor[T](ttl: TTLConfig = TTLConfig.NONE)
@@ -488,7 +476,7 @@ class TwsTesterSuite extends SparkFunSuite {
 
   test("TwsTester should expire old value state according to TTL") {
     val processor = new RunningCountProcessor[String](TTLConfig(Duration.ofSeconds(100)))
-    val testClock = new TestClock(Instant.EPOCH)
+    val testClock = new TwsTester.TestClock(Instant.EPOCH)
     val tester = new TwsTester(processor, testClock)
 
     tester.testOneRow("key1", "b")
@@ -498,7 +486,7 @@ class TwsTesterSuite extends SparkFunSuite {
   }
 
   test("TwsTester should expire old list state according to TTL") {
-    val testClock = new TestClock(Instant.EPOCH)
+    val testClock = new TwsTester.TestClock(Instant.EPOCH)
     val ttlConfig = TTLConfig(Duration.ofSeconds(100))
     val processor = new TopKProcessor(2, ttlConfig)
     val tester = new TwsTester(processor, testClock)
@@ -523,7 +511,7 @@ class TwsTesterSuite extends SparkFunSuite {
   }
 
   test("TwsTester should expire old map state according to TTL") {
-    val testClock = new TestClock(Instant.EPOCH)
+    val testClock = new TwsTester.TestClock(Instant.EPOCH)
     val ttlConfig = TTLConfig(Duration.ofSeconds(100))
     val processor = new WordFrequencyProcessor(ttlConfig)
     val tester = new TwsTester(processor, testClock)
@@ -561,7 +549,7 @@ class TwsTesterSuite extends SparkFunSuite {
   }
 
   test("TwsTester should handle session timeout with timer") {
-    val testClock = new TestClock(Instant.ofEpochMilli(10000L))
+    val testClock = new TwsTester.TestClock(Instant.ofEpochMilli(10000L))
     val processor = new SessionTimeoutProcessor(timeoutDurationMs = 5000L)
     val tester = new TwsTester(processor, testClock, timeMode = TimeMode.ProcessingTime)
 
@@ -587,7 +575,7 @@ class TwsTesterSuite extends SparkFunSuite {
   }
 
   test("TwsTester should process timers before input rows") {
-    val testClock = new TestClock(Instant.ofEpochMilli(10000L))
+    val testClock = new TwsTester.TestClock(Instant.ofEpochMilli(10000L))
     val processor = new SessionTimeoutProcessor(timeoutDurationMs = 5000L)
     val tester = new TwsTester(processor, testClock, timeMode = TimeMode.ProcessingTime)
 
@@ -611,7 +599,7 @@ class TwsTesterSuite extends SparkFunSuite {
   }
 
   test("TwsTester should handle multiple timers in same batch") {
-    val testClock = new TestClock(Instant.ofEpochMilli(10000L))
+    val testClock = new TwsTester.TestClock(Instant.ofEpochMilli(10000L))
     val processor = new MultiTimerProcessor()
     val tester = new TwsTester(processor, testClock, timeMode = TimeMode.ProcessingTime)
 
@@ -636,7 +624,7 @@ class TwsTesterSuite extends SparkFunSuite {
   }
 
   test("TwsTester should not process timers twice") {
-    val testClock = new TestClock(Instant.ofEpochMilli(10000L))
+    val testClock = new TwsTester.TestClock(Instant.ofEpochMilli(10000L))
     val processor = new SessionTimeoutProcessor(timeoutDurationMs = 5000L)
     val tester = new TwsTester(processor, testClock, timeMode = TimeMode.ProcessingTime)
 
@@ -662,7 +650,7 @@ class TwsTesterSuite extends SparkFunSuite {
   }
 
   test("TwsTester should handle timers for multiple keys independently") {
-    val testClock = new TestClock(Instant.ofEpochMilli(10000L))
+    val testClock = new TwsTester.TestClock(Instant.ofEpochMilli(10000L))
     val processor = new SessionTimeoutProcessor(timeoutDurationMs = 5000L)
     val tester = new TwsTester(processor, testClock, timeMode = TimeMode.ProcessingTime)
 
@@ -688,7 +676,7 @@ class TwsTesterSuite extends SparkFunSuite {
   }
 
   test("TwsTester should handle timer deletion correctly") {
-    val testClock = new TestClock(Instant.ofEpochMilli(10000L))
+    val testClock = new TwsTester.TestClock(Instant.ofEpochMilli(10000L))
     val processor = new SessionTimeoutProcessor(timeoutDurationMs = 5000L)
     val tester = new TwsTester(processor, testClock, timeMode = TimeMode.ProcessingTime)
 

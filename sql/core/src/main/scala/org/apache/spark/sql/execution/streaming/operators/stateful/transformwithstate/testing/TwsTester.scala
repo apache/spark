@@ -18,6 +18,9 @@ package org.apache.spark.sql.execution.streaming.operators.stateful.transformwit
 
 import java.sql.Timestamp
 import java.time.Clock
+import java.time.Duration
+import java.time.Instant
+import java.time.ZoneId
 
 import scala.reflect.ClassTag
 
@@ -256,5 +259,25 @@ class TwsTester[K, I, O](
     eventTimeFunc = eventTime
     delayThresholdMs =
       IntervalUtils.getDuration(parsedDelay, java.util.concurrent.TimeUnit.MILLISECONDS, 30)
+  }
+}
+
+object TwsTester {
+  /** Fake implementation of {@code java.time.CLock} to be used with TwsTester to simulate time. */
+  class TestClock(
+      var currentInstant: Instant = Instant.EPOCH,
+      zone: ZoneId = ZoneId.systemDefault())
+      extends Clock {
+    override def getZone: ZoneId = zone
+    override def withZone(zone: ZoneId): Clock = new TestClock(currentInstant, zone)
+    override def instant(): Instant = currentInstant
+
+    def setInstant(instant: Instant): Unit = {
+      currentInstant = instant
+    }
+
+    def advanceBy(duration: Duration): Unit = {
+      currentInstant = currentInstant.plus(duration)
+    }
   }
 }
