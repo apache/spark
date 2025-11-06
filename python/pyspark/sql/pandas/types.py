@@ -209,13 +209,23 @@ def to_arrow_type(
     elif type(dt) == GeometryType:
         fields = [
             pa.field("srid", pa.int32(), nullable=False),
-            pa.field("wkb", pa.binary(), nullable=False, metadata={b"geometry": b"true", b"srid": str(dt.srid)}),
+            pa.field(
+                "wkb",
+                pa.binary(),
+                nullable=False,
+                metadata={b"geometry": b"true", b"srid": str(dt.srid)},
+            ),
         ]
         arrow_type = pa.struct(fields)
     elif type(dt) == GeographyType:
         fields = [
             pa.field("srid", pa.int32(), nullable=False),
-            pa.field("wkb", pa.binary(), nullable=False, metadata={b"geography": b"true", b"srid": str(dt.srid)}),
+            pa.field(
+                "wkb",
+                pa.binary(),
+                nullable=False,
+                metadata={b"geography": b"true", b"srid": str(dt.srid)},
+            ),
         ]
         arrow_type = pa.struct(fields)
     else:
