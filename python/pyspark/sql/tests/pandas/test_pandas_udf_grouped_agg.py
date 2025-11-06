@@ -861,6 +861,50 @@ class GroupedAggPandasUDFTestsMixin:
             ],
         )
 
+    def test_grouped_agg_pandas_udf_with_compression_codec(self):
+        # Test grouped agg Pandas UDF with different compression codec settings
+        @pandas_udf("double", PandasUDFType.GROUPED_AGG)
+        def sum_udf(v):
+            return v.sum()
+
+        df = self.data
+        expected = df.groupby("id").agg(sum_udf(df.v)).sort("id").toPandas()
+
+        for codec in ["none", "zstd", "lz4"]:
+            with self.subTest(compressionCodec=codec):
+                with self.sql_conf({"spark.sql.execution.arrow.compressionCodec": codec}):
+                    result = df.groupby("id").agg(sum_udf(df.v)).sort("id").toPandas()
+                    assert_frame_equal(expected, result)
+
+    def test_grouped_agg_pandas_udf_with_compression_codec_complex(self):
+        # Test grouped agg with multiple UDFs and compression
+        @pandas_udf("double", PandasUDFType.GROUPED_AGG)
+        def mean_udf(v):
+            return v.mean()
+
+        @pandas_udf("double", PandasUDFType.GROUPED_AGG)
+        def sum_udf(v):
+            return v.sum()
+
+        df = self.data
+        expected = (
+            df.groupby("id")
+            .agg(mean_udf(df.v), sum_udf(df.v))
+            .sort("id")
+            .toPandas()
+        )
+
+        for codec in ["none", "zstd", "lz4"]:
+            with self.subTest(compressionCodec=codec):
+                with self.sql_conf({"spark.sql.execution.arrow.compressionCodec": codec}):
+                    result = (
+                        df.groupby("id")
+                        .agg(mean_udf(df.v), sum_udf(df.v))
+                        .sort("id")
+                        .toPandas()
+                    )
+                    assert_frame_equal(expected, result)
+
 
 class GroupedAggPandasUDFTests(GroupedAggPandasUDFTestsMixin, ReusedSQLTestCase):
     pass

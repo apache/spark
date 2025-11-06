@@ -1406,6 +1406,61 @@ class ApplyInPandasTestsMixin:
             actual = grouped_df.applyInPandas(func, "value long").collect()
             self.assertEqual(actual, expected)
 
+    def test_grouped_map_pandas_udf_with_compression_codec(self):
+        # Test grouped map Pandas UDF with different compression codec settings
+        @pandas_udf("id long, v int, v1 double", PandasUDFType.GROUPED_MAP)
+        def foo(pdf):
+            return pdf.assign(v1=pdf.v * pdf.id * 1.0)
+
+        df = self.data
+        pdf = df.toPandas()
+        expected = pdf.groupby("id", as_index=False).apply(foo.func).reset_index(drop=True)
+
+        for codec in ["none", "zstd", "lz4"]:
+            with self.subTest(compressionCodec=codec):
+                with self.sql_conf({"spark.sql.execution.arrow.compressionCodec": codec}):
+                    result = df.groupby("id").apply(foo).sort("id").toPandas()
+                    assert_frame_equal(expected, result)
+
+    def test_apply_in_pandas_with_compression_codec(self):
+        # Test applyInPandas with different compression codec settings
+        def stats(key, pdf):
+            return pd.DataFrame([(key[0], pdf.v.mean())], columns=["id", "mean"])
+
+        df = self.data
+        expected = df.select("id").distinct().withColumn("mean", sf.lit(24.5)).toPandas()
+
+        for codec in ["none", "zstd", "lz4"]:
+            with self.subTest(compressionCodec=codec):
+                with self.sql_conf({"spark.sql.execution.arrow.compressionCodec": codec}):
+                    result = (
+                        df.groupby("id")
+                        .applyInPandas(stats, schema="id long, mean double")
+                        .sort("id")
+                        .toPandas()
+                    )
+                    assert_frame_equal(expected, result)
+
+    def test_apply_in_pandas_iterator_with_compression_codec(self):
+        # Test applyInPandas with iterator and compression
+        df = self.spark.createDataFrame(
+            [(1, 1.0), (1, 2.0), (2, 3.0), (2, 5.0), (2, 10.0)], ("id", "v")
+        )
+
+        def sum_func(batches: Iterator[pd.DataFrame]) -> Iterator[pd.DataFrame]:
+            total = 0
+            for batch in batches:
+                total += batch["v"].sum()
+            yield pd.DataFrame({"v": [total]})
+
+        expected = [Row(v=3.0), Row(v=18.0)]
+
+        for codec in ["none", "zstd", "lz4"]:
+            with self.subTest(compressionCodec=codec):
+                with self.sql_conf({"spark.sql.execution.arrow.compressionCodec": codec}):
+                    result = df.groupby("id").applyInPandas(sum_func, schema="v double").orderBy("v").collect()
+                    self.assertEqual(result, expected)
+
 
 class ApplyInPandasTests(ApplyInPandasTestsMixin, ReusedSQLTestCase):
     pass
