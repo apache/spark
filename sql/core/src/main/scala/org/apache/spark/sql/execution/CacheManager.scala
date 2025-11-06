@@ -313,18 +313,20 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
   }
 
   /**
-   * Tries to re-cache all the cache entries that refer to the given plan. The given plan will be
-   * normalized before being used further.
+   * Tries to re-cache all the cache entries that refer to the given plan.
    */
   def recacheByPlan(spark: SparkSession, plan: LogicalPlan): Unit = {
     val normalized = QueryExecution.normalize(spark, plan)
-    // For recacheByPlan, we only want to use the fresh plan for entries that directly match it,
-    // not for dependent entries (like views). Dependent entries should re-execute their own plans.
+    // Only use fresh plan for entries that directly match it (not dependent entries like views)
+    val directMatcher = (cachedPlan: LogicalPlan) => {
+      val cachedNormalized = QueryExecution.normalize(spark, cachedPlan)
+      normalized.sameResult(cachedNormalized)
+    }
     recacheByCondition(
       spark,
       cd => cd.plan.exists(_.sameResult(normalized)),
       freshPlan = Some(normalized),
-      useOnlyForDirectMatch = true)
+      directMatchCondition = Some(directMatcher))
   }
 
   /**
@@ -375,21 +377,13 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
    *  @param spark SparkSession
    *  @param condition Condition to filter cache entries to recache
    *  @param freshPlan Optional fresh plan to use for re-execution and as the new cached plan.
-   *                   If None, uses the old cached plan (old behavior - may be stale for
-   *                   V2 tables).
-   *  @param useOnlyForDirectMatch If true and freshPlan is provided, only use the fresh plan
-   *                               for entries that directly match it (sameResult), not for
-   *                               entries that contain it as a sub-plan (e.g., dependent views).
-   *  @param directMatchCondition Optional custom condition to determine if an entry should use
-   *                              the fresh plan. If provided, this takes precedence over
-   *                              useOnlyForDirectMatch. The function receives the entry's plan
-   *                              and returns true if the fresh plan should be used.
+   *  @param directMatchCondition Optional condition to determine if an entry should use the fresh
+   *                              plan. If None, all matched entries use the fresh plan.
    */
   private def recacheByCondition(
       spark: SparkSession,
       condition: CachedData => Boolean,
       freshPlan: Option[LogicalPlan] = None,
-      useOnlyForDirectMatch: Boolean = false,
       directMatchCondition: Option[LogicalPlan => Boolean] = None): Unit = {
     val needToRecache = cachedData.filter(condition)
     this.synchronized {
@@ -400,20 +394,8 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
       cd.cachedRepresentation.cacheBuilder.clearCache()
       val sessionWithConfigsOff = getOrCloneSessionWithConfigsOff(spark)
 
-      // Determine which plan to use:
-      // 1. If directMatchCondition is provided, use it to check if this entry should use fresh plan
-      // 2. Otherwise, if freshPlan is provided and either:
-      //    a) useOnlyForDirectMatch is false, OR
-      //    b) this entry directly matches the fresh plan
-      //    then use the fresh plan
-      // 3. Otherwise, use the cached plan
-      val useFresh = freshPlan.isDefined && (directMatchCondition match {
-        case Some(matcher) => matcher(cd.plan)
-        case None => !useOnlyForDirectMatch || {
-          val normalized = QueryExecution.normalize(spark, cd.plan)
-          freshPlan.exists(_.sameResult(normalized))
-        }
-      })
+      // Use fresh plan if: (1) freshPlan provided, AND (2) no directMatchCondition OR it matches
+      val useFresh = freshPlan.isDefined && directMatchCondition.forall(_(cd.plan))
 
       val newCache = sessionWithConfigsOff.withActive {
         val planToExecute = if (useFresh) freshPlan.get else cd.plan
