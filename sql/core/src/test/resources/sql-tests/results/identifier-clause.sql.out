@@ -1941,7 +1941,7 @@ struct<>
 
 
 -- !query
-EXECUTE IMMEDIATE 'SELECT t1.*, t2.* FROM IDENTIFIER(:t1) t1 JOIN IDENTIFIER(:t2) t2 USING (IDENTIFIER(:col))'
+EXECUTE IMMEDIATE 'SELECT t1.*, t2.* FROM IDENTIFIER(:t1) t1 JOIN IDENTIFIER(:t2) t2 USING (IDENTIFIER(:col)) ORDER BY ALL'
   USING 'integration_test' AS t1, 'integration_test2' AS t2, 'c1' AS col
 -- !query schema
 struct<c1:int,c2:string,c1:int,c3:string>
@@ -1962,7 +1962,7 @@ struct<c1:int,c2:string,rn:int>
 
 
 -- !query
-EXECUTE IMMEDIATE 'SELECT IDENTIFIER(:prefix ''2''), IDENTIFIER(:agg)(IDENTIFIER(:col)) FROM integration_test GROUP BY IDENTIFIER(:prefix ''2'')'
+EXECUTE IMMEDIATE 'SELECT IDENTIFIER(:prefix ''2''), IDENTIFIER(:agg)(IDENTIFIER(:col)) FROM integration_test GROUP BY IDENTIFIER(:prefix ''2'') ORDER BY ALL'
   USING 'c' AS prefix, 'count' AS agg, 'c1' AS col
 -- !query schema
 struct<c2:string,count(c1):bigint>
@@ -2085,7 +2085,7 @@ struct<result:int>
 
 
 -- !query
-EXECUTE IMMEDIATE 'SELECT IDENTIFIER(:alias ''.c1'') FROM integration_test AS IDENTIFIER(:alias)'
+EXECUTE IMMEDIATE 'SELECT IDENTIFIER(:alias ''.c1'') FROM integration_test AS IDENTIFIER(:alias) ORDER BY ALL'
   USING 't' AS alias
 -- !query schema
 struct<>

@@ -276,7 +276,7 @@ EXECUTE IMMEDIATE 'SELECT * FROM integration_test WHERE IDENTIFIER(:col) = :val'
 -- Test 6: IDENTIFIER in JOIN with parameters for table and column names
 CREATE TABLE integration_test2(c1 INT, c3 STRING) USING CSV;
 INSERT INTO integration_test2 VALUES (1, 'x'), (2, 'y');
-EXECUTE IMMEDIATE 'SELECT t1.*, t2.* FROM IDENTIFIER(:t1) t1 JOIN IDENTIFIER(:t2) t2 USING (IDENTIFIER(:col))'
+EXECUTE IMMEDIATE 'SELECT t1.*, t2.* FROM IDENTIFIER(:t1) t1 JOIN IDENTIFIER(:t2) t2 USING (IDENTIFIER(:col)) ORDER BY ALL'
   USING 'integration_test' AS t1, 'integration_test2' AS t2, 'c1' AS col;
 
 -- Test 7: IDENTIFIER in window function with parameter for partition column
@@ -285,7 +285,7 @@ EXECUTE IMMEDIATE
   USING 'c1' AS col1, 'c2' AS col2, 'c2' AS part, 'c1' AS ord;
 
 -- Test 8: IDENTIFIER in aggregate function with string coalescing
-EXECUTE IMMEDIATE 'SELECT IDENTIFIER(:prefix ''2''), IDENTIFIER(:agg)(IDENTIFIER(:col)) FROM integration_test GROUP BY IDENTIFIER(:prefix ''2'')'
+EXECUTE IMMEDIATE 'SELECT IDENTIFIER(:prefix ''2''), IDENTIFIER(:agg)(IDENTIFIER(:col)) FROM integration_test GROUP BY IDENTIFIER(:prefix ''2'') ORDER BY ALL'
   USING 'c' AS prefix, 'count' AS agg, 'c1' AS col;
 
 -- Test 9: IDENTIFIER in ORDER BY with multiple parameters
@@ -322,7 +322,7 @@ EXECUTE IMMEDIATE 'SELECT map(:key, :val).IDENTIFIER(:key) AS result'
   USING 'mykey' AS key, 42 AS val;
 
 -- Test 16: IDENTIFIER in table alias with string coalescing
-EXECUTE IMMEDIATE 'SELECT IDENTIFIER(:alias ''.c1'') FROM integration_test AS IDENTIFIER(:alias)'
+EXECUTE IMMEDIATE 'SELECT IDENTIFIER(:alias ''.c1'') FROM integration_test AS IDENTIFIER(:alias) ORDER BY ALL'
   USING 't' AS alias;
 
 -- Test 17: Multiple IDENTIFIER clauses with different parameter combinations

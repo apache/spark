@@ -1741,18 +1741,19 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 
 
 -- !query
-EXECUTE IMMEDIATE 'SELECT t1.*, t2.* FROM IDENTIFIER(:t1) t1 JOIN IDENTIFIER(:t2) t2 USING (IDENTIFIER(:col))'
+EXECUTE IMMEDIATE 'SELECT t1.*, t2.* FROM IDENTIFIER(:t1) t1 JOIN IDENTIFIER(:t2) t2 USING (IDENTIFIER(:col)) ORDER BY ALL'
   USING 'integration_test' AS t1, 'integration_test2' AS t2, 'c1' AS col
 -- !query analysis
-Project [c1#x, c2#x, c1#x, c3#x]
-+- Project [c1#x, c2#x, c3#x, c1#x]
-   +- Join Inner, (c1#x = c1#x)
-      :- SubqueryAlias t1
-      :  +- SubqueryAlias spark_catalog.identifier_clause_test_schema.integration_test
-      :     +- Relation spark_catalog.identifier_clause_test_schema.integration_test[c1#x,c2#x] csv
-      +- SubqueryAlias t2
-         +- SubqueryAlias spark_catalog.identifier_clause_test_schema.integration_test2
-            +- Relation spark_catalog.identifier_clause_test_schema.integration_test2[c1#x,c3#x] csv
+Sort [c1#x ASC NULLS FIRST, c2#x ASC NULLS FIRST, c1#x ASC NULLS FIRST, c3#x ASC NULLS FIRST], true
++- Project [c1#x, c2#x, c1#x, c3#x]
+   +- Project [c1#x, c2#x, c3#x, c1#x]
+      +- Join Inner, (c1#x = c1#x)
+         :- SubqueryAlias t1
+         :  +- SubqueryAlias spark_catalog.identifier_clause_test_schema.integration_test
+         :     +- Relation spark_catalog.identifier_clause_test_schema.integration_test[c1#x,c2#x] csv
+         +- SubqueryAlias t2
+            +- SubqueryAlias spark_catalog.identifier_clause_test_schema.integration_test2
+               +- Relation spark_catalog.identifier_clause_test_schema.integration_test2[c1#x,c3#x] csv
 
 
 -- !query
@@ -1769,12 +1770,13 @@ Project [c1#x, c2#x, rn#x]
 
 
 -- !query
-EXECUTE IMMEDIATE 'SELECT IDENTIFIER(:prefix ''2''), IDENTIFIER(:agg)(IDENTIFIER(:col)) FROM integration_test GROUP BY IDENTIFIER(:prefix ''2'')'
+EXECUTE IMMEDIATE 'SELECT IDENTIFIER(:prefix ''2''), IDENTIFIER(:agg)(IDENTIFIER(:col)) FROM integration_test GROUP BY IDENTIFIER(:prefix ''2'') ORDER BY ALL'
   USING 'c' AS prefix, 'count' AS agg, 'c1' AS col
 -- !query analysis
-Aggregate [c2#x], [c2#x, count(c1#x) AS count(c1)#xL]
-+- SubqueryAlias spark_catalog.identifier_clause_test_schema.integration_test
-   +- Relation spark_catalog.identifier_clause_test_schema.integration_test[c1#x,c2#x] csv
+Sort [c2#x ASC NULLS FIRST, count(c1)#xL ASC NULLS FIRST], true
++- Aggregate [c2#x], [c2#x, count(c1#x) AS count(c1)#xL]
+   +- SubqueryAlias spark_catalog.identifier_clause_test_schema.integration_test
+      +- Relation spark_catalog.identifier_clause_test_schema.integration_test[c1#x,c2#x] csv
 
 
 -- !query
@@ -1892,7 +1894,7 @@ Project [map(mykey, 42)[mykey] AS result#x]
 
 
 -- !query
-EXECUTE IMMEDIATE 'SELECT IDENTIFIER(:alias ''.c1'') FROM integration_test AS IDENTIFIER(:alias)'
+EXECUTE IMMEDIATE 'SELECT IDENTIFIER(:alias ''.c1'') FROM integration_test AS IDENTIFIER(:alias) ORDER BY ALL'
   USING 't' AS alias
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException

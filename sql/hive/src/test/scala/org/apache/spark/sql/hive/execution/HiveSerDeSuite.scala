@@ -170,7 +170,7 @@ class HiveSerDeSuite extends HiveComparisonTest with PlanTest with BeforeAndAfte
 
     val v2 = "CREATE TABLE t (c1 int, c2 int) USING hive CLUSTERED BY (c2) INTO 4 BUCKETS"
     val e2 = intercept[AnalysisException](analyzeCreateTable(v2))
-    assert(e2.message.contains("Creating bucketed Hive serde table is not supported yet"))
+    assert(e2.message.contains("Creating bucketed Hive serde table is not supported"))
 
     val v3 =
       """
