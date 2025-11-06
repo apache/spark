@@ -164,7 +164,7 @@ object Cast extends QueryErrorsBase {
 
     case (udt1: UserDefinedType[_], udt2: UserDefinedType[_]) if udt2.acceptsType(udt1) => true
 
-    // Casts from concrete GEOGRAPHY to mixed GEOGRAPHY is available to users.
+    // Casts from concrete GEOGRAPHY(srid) to mixed GEOGRAPHY(ANY) is allowed.
     case (gt1: GeographyType, gt2: GeographyType) if !gt1.isMixedSrid && gt2.isMixedSrid =>
       true
     // Casting from GEOGRAPHY to GEOMETRY with the same SRID is allowed.
@@ -297,7 +297,7 @@ object Cast extends QueryErrorsBase {
 
     case (udt1: UserDefinedType[_], udt2: UserDefinedType[_]) if udt2.acceptsType(udt1) => true
 
-    // Casts from concrete GEOGRAPHY to mixed GEOGRAPHY is available to users.
+    // Casts from concrete GEOGRAPHY(srid) to mixed GEOGRAPHY(ANY) is allowed.
     case (gt1: GeographyType, gt2: GeographyType) if !gt1.isMixedSrid && gt2.isMixedSrid =>
       true
     // Casting from GEOGRAPHY to GEOMETRY with the same SRID is allowed.
