@@ -374,6 +374,8 @@ object SparkEnv extends Logging {
         val useDriverPodIP =
           conf.get("spark.kubernetes.executor.useDriverPodIP", "false").equalsIgnoreCase("true")
         if (useDriverPodIP) {
+          logInfo(log"Use DRIVER_BIND_ADDRESS instead of DRIVER_HOST_ADDRESS because " +
+            log"spark.kubernetes.executor.useDriverPodIP is true")
           conf.set(config.DRIVER_HOST_ADDRESS.key, conf.get(config.DRIVER_BIND_ADDRESS.key))
         }
         RpcUtils.makeDriverRef(name, conf, rpcEnv)
