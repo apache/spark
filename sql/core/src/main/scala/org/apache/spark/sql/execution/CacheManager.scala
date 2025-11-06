@@ -318,7 +318,7 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
    */
   def recacheByPlan(spark: SparkSession, plan: LogicalPlan): Unit = {
     val normalized = QueryExecution.normalize(spark, plan)
-    recacheByCondition(spark, _.plan.exists(_.sameResult(normalized)))
+    recacheByCondition(spark, _.plan.exists(_.sameResult(normalized)), Some(normalized))
   }
 
   /**
@@ -328,18 +328,38 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
       spark: SparkSession,
       name: Seq[String],
       includeTimeTravel: Boolean = true): Unit = {
+    import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
+
     def shouldInvalidate(entry: CachedData): Boolean = {
       entry.plan.exists(isMatchedTableOrView(_, name, spark.sessionState.conf, includeTimeTravel))
     }
-    recacheByCondition(spark, shouldInvalidate)
+
+    // Resolve the table to get a fresh plan (works for V1, V2, and views)
+    // This mirrors how Catalog.refreshTable() works
+    val freshPlanOpt = try {
+      val tableName = name.quoted
+      val relation = spark.table(tableName).queryExecution.analyzed
+      val normalized = QueryExecution.normalize(spark, relation)
+      Some(normalized)
+    } catch {
+      case _: Exception => None
+    }
+
+    recacheByCondition(spark, shouldInvalidate, freshPlanOpt)
   }
 
   /**
    *  Re-caches all the cache entries that satisfies the given `condition`.
+   *  @param spark SparkSession
+   *  @param condition Condition to filter cache entries to recache
+   *  @param freshPlan Optional fresh plan to use for re-execution and as the new cached plan.
+   *                   If None, uses the old cached plan (old behavior - may be stale for
+   *                   V2 tables).
    */
   private def recacheByCondition(
       spark: SparkSession,
-      condition: CachedData => Boolean): Unit = {
+      condition: CachedData => Boolean,
+      freshPlan: Option[LogicalPlan] = None): Unit = {
     val needToRecache = cachedData.filter(condition)
     this.synchronized {
       // Remove the cache entry before creating a new ones.
@@ -349,10 +369,14 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
       cd.cachedRepresentation.cacheBuilder.clearCache()
       val sessionWithConfigsOff = getOrCloneSessionWithConfigsOff(spark)
       val newCache = sessionWithConfigsOff.withActive {
-        val qe = sessionWithConfigsOff.sessionState.executePlan(cd.plan)
+        // Use the fresh plan if provided, otherwise use the old cached plan
+        val planToExecute = freshPlan.getOrElse(cd.plan)
+        val qe = sessionWithConfigsOff.sessionState.executePlan(planToExecute)
         InMemoryRelation(cd.cachedRepresentation.cacheBuilder, qe)
       }
-      val recomputedPlan = cd.copy(cachedRepresentation = newCache)
+      // Update the cached plan to the fresh plan if provided
+      val updatedPlan = freshPlan.getOrElse(cd.plan)
+      val recomputedPlan = cd.copy(plan = updatedPlan, cachedRepresentation = newCache)
       this.synchronized {
         if (lookupCachedDataInternal(recomputedPlan.plan).nonEmpty) {
           logWarning("While recaching, data was already added to cache.")
