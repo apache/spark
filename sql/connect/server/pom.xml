@@ -286,8 +286,6 @@
           <shadedArtifactAttached>false</shadedArtifactAttached>
           <artifactSet>
             <includes>
-              <include>com.google.guava:guava</include>
-              <include>com.google.guava:failureaccess</include>
               <include>io.grpc:*:</include>
               <include>com.google.protobuf:*</include>
 
@@ -304,20 +302,19 @@
             </includes>
           </artifactSet>
           <relocations>
+            <!--
+              Keep the Guava classes relocation rules consistent with other modules to ensure
+              correct runtime linkage to Guava classes included in spark-network-common jar.
+              -->
             <relocation>
               <pattern>com.google.common</pattern>
-              <shadedPattern>${spark.shade.packageName}.connect.guava</shadedPattern>
-              <includes>
-                <include>com.google.common.**</include>
-              </includes>
+              <shadedPattern>${spark.shade.packageName}.guava</shadedPattern>
             </relocation>
             <relocation>
               <pattern>com.google.thirdparty</pattern>
-              <shadedPattern>${spark.shade.packageName}.connect.guava</shadedPattern>
-              <includes>
-                <include>com.google.thirdparty.**</include>
-              </includes>
+              <shadedPattern>${spark.shade.packageName}.guava.thirdparty</shadedPattern>
             </relocation>
+
             <relocation>
               <pattern>com.google.protobuf</pattern>
               <shadedPattern>${spark.shade.packageName}.connect.protobuf</shadedPattern>

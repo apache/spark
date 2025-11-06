@@ -791,15 +791,14 @@ object SparkConnect {
     // Exclude `scala-library` from assembly.
     (assembly / assemblyPackageScala / assembleArtifact) := false,
 
-    // SPARK-46733: Include `spark-connect-*.jar`, `unused-*.jar`, `guava-*.jar`,
-    // `failureaccess-*.jar`, `annotations-*.jar`, `grpc-*.jar`, `protobuf-*.jar`,
-    // `gson-*.jar`, `animal-sniffer-annotations-*.jar`, `perfmark-api-*.jar`,
-    // `proto-google-common-protos-*.jar` in assembly.
+    // SPARK-46733: Include `spark-connect-*.jar`, `unused-*.jar`, `annotations-*.jar`,
+    // `grpc-*.jar`, `protobuf-*.jar`, `gson-*.jar`, `animal-sniffer-annotations-*.jar`,
+    // `perfmark-api-*.jar`, `proto-google-common-protos-*.jar` in assembly.
     // This needs to be consistent with the content of `maven-shade-plugin`.
     (assembly / assemblyExcludedJars) := {
       val cp = (assembly / fullClasspath).value
-      val validPrefixes = Set("spark-connect", "unused-", "guava-", "failureaccess-",
-        "annotations-", "grpc-", "protobuf-", "gson", "animal-sniffer-annotations",
+      val validPrefixes = Set("spark-connect", "unused-", "annotations-",
+        "grpc-", "protobuf-", "gson", "animal-sniffer-annotations",
         "perfmark-api", "proto-google-common-protos")
       cp filterNot { v =>
         validPrefixes.exists(v.data.getName.startsWith)
@@ -808,8 +807,6 @@ object SparkConnect {
 
     (assembly / assemblyShadeRules) := Seq(
       ShadeRule.rename("io.grpc.**" -> "org.sparkproject.connect.grpc.@1").inAll,
-      ShadeRule.rename("com.google.common.**" -> "org.sparkproject.connect.guava.@1").inAll,
-      ShadeRule.rename("com.google.thirdparty.**" -> "org.sparkproject.connect.guava.@1").inAll,
       ShadeRule.rename("com.google.protobuf.**" -> "org.sparkproject.connect.protobuf.@1").inAll,
       ShadeRule.rename("android.annotation.**" -> "org.sparkproject.connect.android_annotation.@1").inAll,
       ShadeRule.rename("io.perfmark.**" -> "org.sparkproject.connect.io_perfmark.@1").inAll,
