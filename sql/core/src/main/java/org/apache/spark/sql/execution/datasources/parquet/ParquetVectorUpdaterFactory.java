@@ -75,8 +75,7 @@ public class ParquetVectorUpdaterFactory {
     PrimitiveType.PrimitiveTypeName typeName = type.getPrimitiveTypeName();
     boolean isUnknownType = type.getLogicalTypeAnnotation() instanceof UnknownLogicalTypeAnnotation;
     if (isUnknownType && sparkType instanceof NullType) {
-      // Updater should never be used if all values are nulls, so we can return null here.
-      return null;
+      return new NullTypeUpdater();
     }
 
     switch (typeName) {
@@ -249,6 +248,42 @@ public class ParquetVectorUpdaterFactory {
   boolean isUnsignedIntTypeMatched(int bitWidth) {
     return logicalTypeAnnotation instanceof IntLogicalTypeAnnotation annotation &&
       !annotation.isSigned() && annotation.getBitWidth() == bitWidth;
+  }
+
+  /**
+   * Updater should not be called if all values are nulls, so all methods throw exception here.
+   */
+  private static class NullTypeUpdater implements ParquetVectorUpdater {
+    @Override
+    public void readValues(
+        int total,
+        int offset,
+        WritableColumnVector values,
+        VectorizedValuesReader valuesReader) {
+      throw SparkUnsupportedOperationException.apply();
+    }
+
+    @Override
+    public void skipValues(int total, VectorizedValuesReader valuesReader) {
+      throw SparkUnsupportedOperationException.apply();
+    }
+
+    @Override
+    public void readValue(
+        int offset,
+        WritableColumnVector values,
+        VectorizedValuesReader valuesReader) {
+      throw SparkUnsupportedOperationException.apply();
+    }
+
+    @Override
+    public void decodeSingleDictionaryId(
+        int offset,
+        WritableColumnVector values,
+        WritableColumnVector dictionaryIds,
+        Dictionary dictionary) {
+      throw SparkUnsupportedOperationException.apply();
+    }
   }
 
   private static class BooleanUpdater implements ParquetVectorUpdater {
