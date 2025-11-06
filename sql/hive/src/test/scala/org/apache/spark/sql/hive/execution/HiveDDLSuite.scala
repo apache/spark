@@ -2588,16 +2588,8 @@ class HiveDDLSuite
   test("SPARK-36241: support creating tables with void datatype") {
     // CTAS with void type
     withTable("t1", "t2", "t3") {
-      checkError(
-        exception = intercept[AnalysisException] {
-          sql("CREATE TABLE t1 USING PARQUET AS SELECT NULL AS null_col")
-        },
-        condition = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
-        parameters = Map(
-          "columnName" -> "`null_col`",
-          "columnType" -> "\"VOID\"",
-          "format" -> "Parquet")
-      )
+      sql("CREATE TABLE t1 USING PARQUET AS SELECT NULL AS null_col")
+      checkAnswer(sql("SELECT * FROM t1"), Row(null))
 
       checkError(
         exception = intercept[AnalysisException] {
@@ -2615,15 +2607,8 @@ class HiveDDLSuite
 
     // Create table with void type
     withTable("t1", "t2", "t3", "t4") {
-      checkError(
-        exception = intercept[AnalysisException] {
-          sql("CREATE TABLE t1 (v VOID) USING PARQUET")
-        },
-        condition = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
-        parameters = Map(
-          "columnName" -> "`v`",
-          "columnType" -> "\"VOID\"",
-          "format" -> "Parquet"))
+      sql("CREATE TABLE t1 (v VOID) USING PARQUET")
+      checkAnswer(sql("SELECT * FROM t1"), Seq.empty)
 
       checkError(
         exception = intercept[AnalysisException] {
