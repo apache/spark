@@ -30,6 +30,7 @@ import org.apache.spark.sql.execution.streaming.operators.stateful.transformwith
 import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.timers.TimerValuesImpl
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.streaming.StatefulProcessor
+import org.apache.spark.sql.streaming.StatefulProcessorWithInitialState
 import org.apache.spark.sql.streaming.TimeMode
 import org.apache.spark.sql.streaming.TimerValues
 
@@ -41,7 +42,8 @@ import org.apache.spark.sql.streaming.TimerValues
  * @param clock the clock to use for time-based operations, defaults to system UTC
  * @param timeMode time mode that will be passed to transformWithState (defaults to TimeMode.None)
  * @param outputMode output mode that will be passed to transformWithState (defaults to
- *                   OutputMode.Append).
+ *                   OutputMode.Append)
+ * @param initialState initial state for each key
  * @tparam K the type of grouping key
  * @tparam I the type of input rows
  * @tparam O the type of output rows
@@ -50,7 +52,8 @@ class TwsTester[K, I, O](
     val processor: StatefulProcessor[K, I, O],
     val clock: Clock = Clock.systemUTC(),
     val timeMode: TimeMode = TimeMode.None,
-    val outputMode: OutputMode = OutputMode.Append) {
+    val outputMode: OutputMode = OutputMode.Append,
+    val initialState: List[(K, Any)] = List()) {
   private val handle = new InMemoryStatefulProcessorHandleImpl(timeMode, null, clock)
 
   private var eventTimeFunc: (I => Timestamp) = null
@@ -59,6 +62,22 @@ class TwsTester[K, I, O](
 
   processor.setHandle(handle)
   processor.init(outputMode, timeMode)
+
+  processor match {
+    case p: StatefulProcessorWithInitialState[K @unchecked, I @unchecked, O @unchecked, s] =>
+      handleInitialState[s]()
+    case _ => 
+  }
+
+  def handleInitialState[S]() = {
+      val timerValues = new TimerValuesImpl(Some(clock.instant().toEpochMilli()), None)
+      val p = processor.asInstanceOf[StatefulProcessorWithInitialState[K,I,O,S]]
+      initialState.foreach { case (key, state) =>
+        ImplicitGroupingKeyTracker.setImplicitKey(key)
+        p.handleInitialState(key, state.asInstanceOf[S], timerValues)
+        ImplicitGroupingKeyTracker.removeImplicitKey()
+      }
+  }
 
   /**
    * Processes input rows through the stateful processor, grouped by key.

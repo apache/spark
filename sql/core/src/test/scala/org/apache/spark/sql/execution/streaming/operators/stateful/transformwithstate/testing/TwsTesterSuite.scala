@@ -31,6 +31,7 @@ import org.apache.spark.sql.streaming.{
   ExpiredTimerInfo,
   OutputMode,
   StatefulProcessor,
+  StatefulProcessorWithInitialState,
   StreamTest,
   TimeMode,
   TimerValues,
@@ -42,12 +43,20 @@ import org.apache.spark.sql.streaming.ValueState
 
 /** Test StatefulProcessor implementation that maintains a running count. */
 class RunningCountProcessor[T](ttl: TTLConfig = TTLConfig.NONE)
-    extends StatefulProcessor[String, T, (String, Long)] {
+    extends StatefulProcessorWithInitialState[String, T, (String, Long), Long] {
 
   @transient private var countState: ValueState[Long] = _
 
   override def init(outputMode: OutputMode, timeMode: TimeMode): Unit = {
     countState = getHandle.getValueState[Long]("count", Encoders.scalaLong, ttl)
+  }
+
+  override def handleInitialState(
+      key: String,
+      initialState: Long,
+      timerValues: TimerValues
+  ): Unit = {
+    countState.update(initialState)
   }
 
   override def handleInputRows(
@@ -761,6 +770,16 @@ class TwsTesterSuite extends SparkFunSuite {
     assert(result4(1) == ("user1", "WINDOW_START", 1L)) // New window started
     assert(tester.peekValueState[Long]("eventCount", "user1").get == 1L)
     assert(tester.peekValueState[Long]("windowEndTime", "user1").get == 35000L)
+  }
+
+  test("TwsTester should call handleInitialState") {
+    val processor = new RunningCountProcessor[String]()
+    val tester = new TwsTester(processor, initialState = List(("a", 10L), ("b", 20L)))
+    assert(tester.peekValueState[Long]("count", "a").get == 10L)
+    assert(tester.peekValueState[Long]("count", "b").get == 20L)
+
+    val ans = tester.test(List(("a", "a"), ("c", "c")))
+    assert(ans == List(("a", 11L), ("c", 1L)))
   }
 }
 
