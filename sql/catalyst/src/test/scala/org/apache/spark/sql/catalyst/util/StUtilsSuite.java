@@ -66,14 +66,6 @@ class STUtilsSuite {
   /** Geospatial type casting utility methods. */
 
   @Test
-  void testGeographyToGeography() {
-    GeographyVal geographyVal = GeographyVal.fromBytes(testGeographyBytes);
-    GeographyVal geographyCast = STUtils.geographyToGeography(geographyVal);
-    assertNotNull(geographyCast);
-    assertArrayEquals(geographyVal.getBytes(), geographyCast.getBytes());
-  }
-
-  @Test
   void testGeographyToGeometry() {
     GeographyVal geographyVal = GeographyVal.fromBytes(testGeographyBytes);
     GeometryVal geometryVal = STUtils.geographyToGeometry(geographyVal);

@@ -51,13 +51,6 @@ public final class STUtils {
 
   /** Geospatial type casting utility methods. */
 
-  // Cast geography to geography.
-  public static GeographyVal geographyToGeography(GeographyVal geographyVal) {
-    // We don't modify per-row SRID values for geographies. The geographies remain unchanged.
-    // This method should be used only for casts from GEOGRAPHY(<srid>) to GEOGRAPHY(ANY).
-    return geographyVal;
-  }
-
   // Cast geography to geometry.
   public static GeometryVal geographyToGeometry(GeographyVal geographyVal) {
     // Geographic SRID is always a valid SRID for geometry, so we don't need to check it.

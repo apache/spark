@@ -1153,12 +1153,6 @@ case class Cast(
       b => numeric.toFloat(b)
   }
 
-  // GeographyConverter
-  private[this] def castToGeography(from: DataType): Any => Any = from match {
-    case _: GeographyType =>
-      buildCast[GeographyVal](_, STUtils.geographyToGeography)
-  }
-
   // GeometryConverter
   private[this] def castToGeometry(from: DataType): Any => Any = from match {
     case _: GeographyType =>
@@ -1244,7 +1238,7 @@ case class Cast(
         case FloatType => castToFloat(from)
         case LongType => castToLong(from)
         case DoubleType => castToDouble(from)
-        case _: GeographyType => castToGeography(from)
+        case _: GeographyType => identity
         case _: GeometryType => castToGeometry(from)
         case array: ArrayType =>
           castArray(from.asInstanceOf[ArrayType].elementType, array.elementType)
@@ -1354,7 +1348,7 @@ case class Cast(
     case FloatType => castToFloatCode(from, ctx)
     case LongType => castToLongCode(from, ctx)
     case DoubleType => castToDoubleCode(from, ctx)
-    case _: GeographyType => castToGeographyCode(from)
+    case _: GeographyType => (c, evPrim, _) => code"$evPrim = $c;"
     case _: GeometryType => castToGeometryCode(from)
 
     case array: ArrayType =>
@@ -2199,14 +2193,6 @@ case class Cast(
         (c, evPrim, evNull) => code"$evPrim = $c.toDouble();"
       case x: NumericType =>
         (c, evPrim, evNull) => code"$evPrim = (double) $c;"
-    }
-  }
-
-  private[this] def castToGeographyCode(from: DataType): CastFunction = {
-    from match {
-      case _: GeographyType =>
-        (c, evPrim, _) =>
-          code"$evPrim = org.apache.spark.sql.catalyst.util.STUtils.geographyToGeography($c);"
     }
   }
 
