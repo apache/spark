@@ -331,23 +331,19 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
 
   /**
    * Re-caches all cache entries that reference the given table name.
-   * @param freshPlanForTable Optional fresh plan for the table itself (not views).
-   *                          If provided, used to refresh the table's cache entry.
-   *                          Views will be re-executed with their own cached plans.
    */
   def recacheTableOrView(
       spark: SparkSession,
       name: Seq[String],
-      includeTimeTravel: Boolean = true,
-      freshPlanForTable: Option[LogicalPlan] = None): Unit = {
+      includeTimeTravel: Boolean = true): Unit = {
     def shouldInvalidate(entry: CachedData): Boolean = {
       entry.plan.exists(isMatchedTableOrView(_, name, spark.sessionState.conf, includeTimeTravel))
     }
 
-    // If we have a fresh plan for the table, we need to identify which cached entry
-    // is the table itself (vs dependent views). We do this by creating a custom
-    // matcher function.
-    val tableNameMatcher: Option[LogicalPlan => Boolean] = freshPlanForTable.map { _ =>
+    // For V2 tables, resolve a fresh plan to get updated table metadata
+    val freshPlanOpt = resolveFreshPlan(spark, name)
+
+    val directMatchCondition = freshPlanOpt.map { _ =>
       val resolver = spark.sessionState.conf.resolver
       def isSameName(nameInCache: Seq[String]): Boolean = {
         nameInCache.length == name.length && nameInCache.zip(name).forall(resolver.tupled)
@@ -365,11 +361,18 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
       }
     }
 
-    recacheByCondition(
-      spark,
-      shouldInvalidate,
-      freshPlan = freshPlanForTable,
-      directMatchCondition = tableNameMatcher)
+    recacheByCondition(spark, shouldInvalidate, freshPlanOpt, directMatchCondition)
+  }
+
+  private def resolveFreshPlan(spark: SparkSession, name: Seq[String]): Option[LogicalPlan] = {
+    import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
+    try {
+      val tableName = name.quoted
+      val relation = spark.table(tableName).queryExecution.analyzed
+      Some(QueryExecution.normalize(spark, relation))
+    } catch {
+      case _: Exception => None
+    }
   }
 
   /**

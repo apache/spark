@@ -515,8 +515,7 @@ object CommandUtils extends Logging {
     EliminateSubqueryAliases(relation) match {
       case r @ ExtractV2CatalogAndIdentifier(catalog, ident) if r.timeTravelSpec.isEmpty =>
         val nameParts = ident.toQualifiedNameParts(catalog)
-        sparkSession.sharedState.cacheManager.recacheTableOrView(
-          sparkSession, nameParts, freshPlanForTable = Some(normalized))
+        sparkSession.sharedState.cacheManager.recacheTableOrView(sparkSession, nameParts)
       case _ =>
         sparkSession.sharedState.cacheManager.recacheByPlan(sparkSession, normalized)
     }
