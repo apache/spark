@@ -113,25 +113,23 @@ private[spark] class ExecutorPodsLifecycleManager(
             inactivatedPods -= execId
 
           case deleted@PodDeleted(_) =>
+            execIdsRemovedInThisRound += execId
             if (removeExecutorFromSpark(schedulerBackend, deleted, execId)) {
-              execIdsRemovedInThisRound += execId
               logDebug(s"Snapshot reported deleted executor with id $execId," +
                 s" pod name ${state.pod.getMetadata.getName}")
             }
             inactivatedPods -= execId
 
           case failed@PodFailed(_) =>
-            val deleteFromK8s = !execIdsRemovedInThisRound.contains(execId)
+            val deleteFromK8s = execIdsRemovedInThisRound.add(execId)
             if (onFinalNonDeletedState(failed, execId, schedulerBackend, deleteFromK8s)) {
-              execIdsRemovedInThisRound += execId
               logDebug(s"Snapshot reported failed executor with id $execId," +
                 s" pod name ${state.pod.getMetadata.getName}")
             }
 
           case succeeded@PodSucceeded(_) =>
-            val deleteFromK8s = !execIdsRemovedInThisRound.contains(execId)
+            val deleteFromK8s = execIdsRemovedInThisRound.add(execId)
             if (onFinalNonDeletedState(succeeded, execId, schedulerBackend, deleteFromK8s)) {
-              execIdsRemovedInThisRound += execId
               if (schedulerBackend.isExecutorActive(execId.toString)) {
                 logInfo(log"Snapshot reported succeeded executor with id " +
                   log"${MDC(LogKeys.EXECUTOR_ID, execId)}, even though the application has not " +
