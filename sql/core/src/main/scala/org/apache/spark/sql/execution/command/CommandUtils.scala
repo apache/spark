@@ -511,12 +511,14 @@ object CommandUtils extends Logging {
   // if the passed relation is a DSv2 relation without time travel,
   // this method recaches all cache entries for the given table by name (including time travel)
   def recacheTableOrView(sparkSession: SparkSession, relation: LogicalPlan): Unit = {
+    val normalized = QueryExecution.normalize(sparkSession, relation)
     EliminateSubqueryAliases(relation) match {
       case r @ ExtractV2CatalogAndIdentifier(catalog, ident) if r.timeTravelSpec.isEmpty =>
         val nameParts = ident.toQualifiedNameParts(catalog)
-        sparkSession.sharedState.cacheManager.recacheTableOrView(sparkSession, nameParts)
+        sparkSession.sharedState.cacheManager.recacheTableOrView(
+          sparkSession, nameParts, freshPlanForTable = Some(normalized))
       case _ =>
-        sparkSession.sharedState.cacheManager.recacheByPlan(sparkSession, relation)
+        sparkSession.sharedState.cacheManager.recacheByPlan(sparkSession, normalized)
     }
   }
 
