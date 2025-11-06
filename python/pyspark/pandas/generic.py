@@ -3370,7 +3370,7 @@ class Frame(object, metaclass=ABCMeta):
 
         Propagate non-null values backward.
 
-        >>> psdf.bfill()
+        >>> psdf.bfill().sort_index()
              A    B    C  D
         0  3.0  2.0  1.0  0
         1  3.0  4.0  1.0  1
@@ -3387,7 +3387,7 @@ class Frame(object, metaclass=ABCMeta):
         3    1.0
         dtype: float64
 
-        >>> psser.bfill()
+        >>> psser.bfill().sort_index()
         0    1.0
         1    1.0
         2    1.0
