@@ -246,7 +246,9 @@ class ParquetToSparkSchemaConverter(
       DecimalType(precision, scale)
     }
 
-    val sparkType = sparkReadType.getOrElse(typeName match {
+    val isUnknownType = typeAnnotation.isInstanceOf[UnknownLogicalTypeAnnotation]
+    val nullTypeOpt = Option.when(isUnknownType)(NullType)
+    val sparkType = sparkReadType.orElse(nullTypeOpt).getOrElse(typeName match {
       case BOOLEAN => BooleanType
 
       case FLOAT => FloatType
