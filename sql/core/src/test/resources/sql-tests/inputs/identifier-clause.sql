@@ -332,7 +332,7 @@ EXECUTE IMMEDIATE
 
 -- Test 19: IDENTIFIER with qualified name coalescing for schema.table.column pattern
 -- This should work for multi-part identifiers
-EXECUTE IMMEDIATE 'SELECT * FROM IDENTIFIER(:schema ''.'' :table) WHERE IDENTIFIER(concat(:tab_alias, ''.c1'')) > 0'
+EXECUTE IMMEDIATE 'SELECT * FROM IDENTIFIER(:schema ''.'' :table) WHERE IDENTIFIER(concat(:tab_alias, ''.c1'')) > 0 ORDER BY ALL'
   USING 'default' AS schema, 'integration_test' AS table, 'integration_test' AS tab_alias;
 
 -- Test 20: Error case - IDENTIFIER with too many parts from parameter coalescing

@@ -2440,7 +2440,7 @@ struct<c1:int,c2:string>
 
 
 -- !query
-EXECUTE IMMEDIATE 'SELECT * FROM IDENTIFIER(:schema ''.'' :table) WHERE IDENTIFIER(concat(:tab_alias, ''.c1'')) > 0'
+EXECUTE IMMEDIATE 'SELECT * FROM IDENTIFIER(:schema ''.'' :table) WHERE IDENTIFIER(concat(:tab_alias, ''.c1'')) > 0 ORDER BY ALL'
   USING 'default' AS schema, 'integration_test' AS table, 'integration_test' AS tab_alias
 -- !query schema
 struct<c1:int,c2:string>
