@@ -113,6 +113,8 @@ abstract class BasePythonUDFRunner(
             case length if length >= 0 =>
               val obj = PythonWorkerUtils.readBytes(length, stream)
               pythonMetrics("pythonDataReceived") += length
+              batchesProcessed += 1
+              totalDataReceived += length
               obj
             case SpecialLengths.TIMING_DATA =>
               handleTimingData()
