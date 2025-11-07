@@ -185,12 +185,12 @@ object MergeScalarSubqueries extends Rule[LogicalPlan] {
           maxLevel = maxLevel.max(level + 1)
 
           val mergedOutput = mergeResult.outputMap(planWithReferences.output.head)
-          val headerIndex =
+          val outputIndex =
             mergeResult.mergedPlan.plan.output.indexWhere(_.exprId == mergedOutput.exprId)
           ScalarSubqueryReference(
             level,
             mergeResult.mergedPlanIndex,
-            headerIndex,
+            outputIndex,
             s.dataType,
             s.exprId)
         case o => o
