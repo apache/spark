@@ -82,7 +82,6 @@
     <dependency>
       <groupId>com.google.guava</groupId>
       <artifactId>failureaccess</artifactId>
-      <version>${guava.failureaccess.version}</version>
       <scope>compile</scope>
     </dependency>
     <!--
