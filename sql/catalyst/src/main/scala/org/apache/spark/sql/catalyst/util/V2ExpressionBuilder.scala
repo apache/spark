@@ -326,6 +326,9 @@ class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) extends L
     case _: Sha2 => generateExpressionWithName("SHA2", expr, isPredicate)
     case _: StringLPad => generateExpressionWithName("LPAD", expr, isPredicate)
     case _: StringRPad => generateExpressionWithName("RPAD", expr, isPredicate)
+    case GetArrayItem(_, _, failOnError) if failOnError =>
+      // Pushdown only if ANSI is enabled (fail on error) to be compatible with remote systems.
+      generateExpressionWithName("GET_ARRAY_ITEM", expr, isPredicate)
     // TODO supports other expressions
     case ApplyFunctionExpression(function, children) =>
       val childrenExpressions = children.flatMap(generateExpression(_))

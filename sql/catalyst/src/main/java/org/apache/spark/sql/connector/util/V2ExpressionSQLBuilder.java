@@ -127,6 +127,7 @@ public class V2ExpressionSQLBuilder {
         case "LTRIM" -> visitTrim("LEADING", expressionsToStringArray(e.children()));
         case "RTRIM" -> visitTrim("TRAILING", expressionsToStringArray(e.children()));
         case "OVERLAY" -> visitOverlay(expressionsToStringArray(e.children()));
+        case "GET_ARRAY_ITEM" -> visitGetArrayItem(expressionsToStringArray(e.children()));
         // TODO supports other expressions
         default -> visitUnexpectedExpr(expr);
       };
@@ -346,6 +347,13 @@ public class V2ExpressionSQLBuilder {
     } else {
       return "TRIM(" + direction + " " + inputs[1] + " FROM " + inputs[0] + ")";
     }
+  }
+
+  protected String visitGetArrayItem(String[] inputs) {
+    throw new SparkUnsupportedOperationException(
+      "_LEGACY_ERROR_TEMP_3177",
+      Map.of("class", this.getClass().getSimpleName(), "funcName", "GET_ARRAY_ITEM")
+    );
   }
 
   protected String visitExtract(Extract extract) {
