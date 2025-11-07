@@ -41,7 +41,7 @@ import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.{SparkPlan, SQLExecution}
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, RealTimeStreamScanExec, StreamingDataSourceV2Relation, StreamingDataSourceV2ScanRelation, StreamWriterCommitProgress, WriteToDataSourceV2Exec}
-import org.apache.spark.sql.execution.streaming.{AvailableNowTrigger, Offset, OneTimeTrigger, ProcessingTimeTrigger, RealTimeTrigger, Sink, Source, StreamingQueryPlanTraverseHelper}
+import org.apache.spark.sql.execution.streaming.{AvailableNowTrigger, Offset, OneTimeTrigger, ProcessingTimeTrigger, RealTimeModeAllowlist, RealTimeTrigger, Sink, Source, StreamingQueryPlanTraverseHelper}
 import org.apache.spark.sql.execution.streaming.checkpointing.{CheckpointFileManager, CommitMetadata, OffsetSeq, OffsetSeqMetadata}
 import org.apache.spark.sql.execution.streaming.operators.stateful.{StatefulOperatorStateInfo, StatefulOpStateStoreCheckpointInfo, StateStoreWriter}
 import org.apache.spark.sql.execution.streaming.runtime.AcceptsLatestSeenOffsetHandler
@@ -436,7 +436,10 @@ class MicroBatchExecution(
       }
     }
 
-    if (containsStatefulOperator(analyzedPlan)) {
+    if (trigger.isInstanceOf[RealTimeTrigger]) {
+      logWarning(log"Disabling AQE since AQE is not supported for Real-time Mode.")
+      sparkSessionToRunBatches.conf.set(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, "false")
+    } else if (containsStatefulOperator(analyzedPlan)) {
       // SPARK-53941: We disable AQE for stateful workloads as of now.
       logWarning(log"Disabling AQE since AQE is not supported in stateful workloads.")
       sparkSessionToRunBatches.conf.set(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, "false")
@@ -1041,6 +1044,14 @@ class MicroBatchExecution(
     setupStateStoreCommitTracking(execCtx)
 
     markMicroBatchExecutionStart(execCtx)
+
+    if (trigger.isInstanceOf[RealTimeTrigger]) {
+      RealTimeModeAllowlist.checkAllowedPhysicalOperator(
+        execCtx.executionPlan.executedPlan,
+        sparkSession.sessionState.conf.getConf(
+          SQLConf.STREAMING_REAL_TIME_MODE_ALLOWLIST_CHECK)
+      )
+    }
 
     if (execCtx.previousContext.isEmpty) {
       purgeStatefulMetadataAsync(execCtx.executionPlan.executedPlan)
