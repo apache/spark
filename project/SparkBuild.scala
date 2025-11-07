@@ -672,7 +672,7 @@ object SparkConnectCommon {
     libraryDependencies ++= {
       val guavaVersion =
         SbtPomKeys.effectivePom.value.getProperties.get(
-          "connect.guava.version").asInstanceOf[String]
+          "guava.version").asInstanceOf[String]
       val guavaFailureaccessVersion =
         SbtPomKeys.effectivePom.value.getProperties.get(
           "guava.failureaccess.version").asInstanceOf[String]
@@ -690,7 +690,7 @@ object SparkConnectCommon {
     dependencyOverrides ++= {
       val guavaVersion =
         SbtPomKeys.effectivePom.value.getProperties.get(
-          "connect.guava.version").asInstanceOf[String]
+          "guava.version").asInstanceOf[String]
       val guavaFailureaccessVersion =
         SbtPomKeys.effectivePom.value.getProperties.get(
           "guava.failureaccess.version").asInstanceOf[String]
@@ -758,7 +758,7 @@ object SparkConnect {
     libraryDependencies ++= {
       val guavaVersion =
         SbtPomKeys.effectivePom.value.getProperties.get(
-          "connect.guava.version").asInstanceOf[String]
+          "guava.version").asInstanceOf[String]
       val guavaFailureaccessVersion =
         SbtPomKeys.effectivePom.value.getProperties.get(
           "guava.failureaccess.version").asInstanceOf[String]
@@ -772,7 +772,7 @@ object SparkConnect {
     dependencyOverrides ++= {
       val guavaVersion =
         SbtPomKeys.effectivePom.value.getProperties.get(
-          "connect.guava.version").asInstanceOf[String]
+          "guava.version").asInstanceOf[String]
       val guavaFailureaccessVersion =
         SbtPomKeys.effectivePom.value.getProperties.get(
           "guava.failureaccess.version").asInstanceOf[String]
@@ -790,18 +790,15 @@ object SparkConnect {
     // Exclude `scala-library` from assembly.
     (assembly / assemblyPackageScala / assembleArtifact) := false,
 
-    // SPARK-46733: Include `spark-connect-*.jar`, `unused-*.jar`,`guava-*.jar`,
-    // `failureaccess-*.jar`, `annotations-*.jar`, `grpc-*.jar`, `protobuf-*.jar`,
-    // `gson-*.jar`, `error_prone_annotations-*.jar`, `j2objc-annotations-*.jar`,
-    // `animal-sniffer-annotations-*.jar`, `perfmark-api-*.jar`,
-    // `proto-google-common-protos-*.jar` in assembly.
+    // SPARK-46733: Include `spark-connect-*.jar`, `unused-*.jar`, `annotations-*.jar`,
+    // `grpc-*.jar`, `protobuf-*.jar`, `gson-*.jar`, `animal-sniffer-annotations-*.jar`,
+    // `perfmark-api-*.jar`, `proto-google-common-protos-*.jar` in assembly.
     // This needs to be consistent with the content of `maven-shade-plugin`.
     (assembly / assemblyExcludedJars) := {
       val cp = (assembly / fullClasspath).value
-      val validPrefixes = Set("spark-connect", "unused-", "guava-", "failureaccess-",
-        "annotations-", "grpc-", "protobuf-", "gson", "error_prone_annotations",
-        "j2objc-annotations", "animal-sniffer-annotations", "perfmark-api",
-        "proto-google-common-protos")
+      val validPrefixes = Set("spark-connect", "unused-", "annotations-",
+        "grpc-", "protobuf-", "gson", "animal-sniffer-annotations",
+        "perfmark-api", "proto-google-common-protos")
       cp filterNot { v =>
         validPrefixes.exists(v.data.getName.startsWith)
       }
@@ -809,15 +806,10 @@ object SparkConnect {
 
     (assembly / assemblyShadeRules) := Seq(
       ShadeRule.rename("io.grpc.**" -> "org.sparkproject.connect.grpc.@1").inAll,
-      ShadeRule.rename("com.google.common.**" -> "org.sparkproject.connect.guava.@1").inAll,
-      ShadeRule.rename("com.google.thirdparty.**" -> "org.sparkproject.connect.guava.@1").inAll,
       ShadeRule.rename("com.google.protobuf.**" -> "org.sparkproject.connect.protobuf.@1").inAll,
       ShadeRule.rename("android.annotation.**" -> "org.sparkproject.connect.android_annotation.@1").inAll,
       ShadeRule.rename("io.perfmark.**" -> "org.sparkproject.connect.io_perfmark.@1").inAll,
       ShadeRule.rename("org.codehaus.mojo.animal_sniffer.**" -> "org.sparkproject.connect.animal_sniffer.@1").inAll,
-      ShadeRule.rename("com.google.j2objc.annotations.**" -> "org.sparkproject.connect.j2objc_annotations.@1").inAll,
-      ShadeRule.rename("com.google.errorprone.annotations.**" -> "org.sparkproject.connect.errorprone_annotations.@1").inAll,
-      ShadeRule.rename("org.checkerframework.**" -> "org.sparkproject.connect.checkerframework.@1").inAll,
       ShadeRule.rename("com.google.gson.**" -> "org.sparkproject.connect.gson.@1").inAll,
       ShadeRule.rename("com.google.api.**" -> "org.sparkproject.connect.google_protos.api.@1").inAll,
       ShadeRule.rename("com.google.apps.**" -> "org.sparkproject.connect.google_protos.apps.@1").inAll,
@@ -851,7 +843,7 @@ object SparkConnectJdbc {
     libraryDependencies ++= {
       val guavaVersion =
         SbtPomKeys.effectivePom.value.getProperties.get(
-          "connect.guava.version").asInstanceOf[String]
+          "guava.version").asInstanceOf[String]
       Seq(
         "com.google.guava" % "guava" % guavaVersion,
         "com.google.protobuf" % "protobuf-java" % protoVersion % "protobuf"
@@ -860,7 +852,7 @@ object SparkConnectJdbc {
     dependencyOverrides ++= {
       val guavaVersion =
         SbtPomKeys.effectivePom.value.getProperties.get(
-          "connect.guava.version").asInstanceOf[String]
+          "guava.version").asInstanceOf[String]
       Seq(
         "com.google.guava" % "guava" % guavaVersion,
         "com.google.protobuf" % "protobuf-java" % protoVersion
@@ -888,14 +880,17 @@ object SparkConnectJdbc {
     // Exclude `scala-library` from assembly.
     (assembly / assemblyPackageScala / assembleArtifact) := false,
 
-    // Exclude `pmml-model-*.jar`, `scala-collection-compat_*.jar`,`jsr305-*.jar` and
-    // `netty-*.jar` and `unused-1.0.0.jar` from assembly.
+    // Exclude `pmml-model-*.jar`, `scala-collection-compat_*.jar`, `jsr305-*.jar`,
+    // `error_prone_annotations-*.jar`, `listenablefuture-9999.0-empty-to-avoid-conflict-with-guava.jar`,
+    // `j2objc-annotations-*.jar`, `checker-qual-*.jar` and `unused-1.0.0.jar` from assembly.
     (assembly / assemblyExcludedJars) := {
       val cp = (assembly / fullClasspath).value
       cp filter { v =>
         val name = v.data.getName
         name.startsWith("pmml-model-") || name.startsWith("scala-collection-compat_") ||
-          name.startsWith("jsr305-") || name == "unused-1.0.0.jar"
+          name.startsWith("jsr305-") || name.startsWith("error_prone_annotations") ||
+          name.startsWith("listenablefuture") || name.startsWith("j2objc-annotations") ||
+          name.startsWith("checker-qual") || name == "unused-1.0.0.jar"
       }
     },
     // Only include `spark-connect-client-jdbc-*.jar`
@@ -912,7 +907,6 @@ object SparkConnectJdbc {
       ShadeRule.rename("io.grpc.**" -> "org.sparkproject.connect.client.io.grpc.@1").inAll,
       ShadeRule.rename("com.google.**" -> "org.sparkproject.connect.client.com.google.@1").inAll,
       ShadeRule.rename("io.netty.**" -> "org.sparkproject.connect.client.io.netty.@1").inAll,
-      ShadeRule.rename("org.checkerframework.**" -> "org.sparkproject.connect.client.org.checkerframework.@1").inAll,
       ShadeRule.rename("io.perfmark.**" -> "org.sparkproject.connect.client.io.perfmark.@1").inAll,
       ShadeRule.rename("org.codehaus.**" -> "org.sparkproject.connect.client.org.codehaus.@1").inAll,
       ShadeRule.rename("android.annotation.**" -> "org.sparkproject.connect.client.android.annotation.@1").inAll
@@ -939,7 +933,7 @@ object SparkConnectClient {
     libraryDependencies ++= {
       val guavaVersion =
         SbtPomKeys.effectivePom.value.getProperties.get(
-          "connect.guava.version").asInstanceOf[String]
+          "guava.version").asInstanceOf[String]
       Seq(
         "com.google.guava" % "guava" % guavaVersion,
         "com.google.protobuf" % "protobuf-java" % protoVersion % "protobuf"
@@ -948,7 +942,7 @@ object SparkConnectClient {
     dependencyOverrides ++= {
       val guavaVersion =
         SbtPomKeys.effectivePom.value.getProperties.get(
-          "connect.guava.version").asInstanceOf[String]
+          "guava.version").asInstanceOf[String]
       Seq(
         "com.google.guava" % "guava" % guavaVersion,
         "com.google.protobuf" % "protobuf-java" % protoVersion
@@ -976,14 +970,17 @@ object SparkConnectClient {
     // Exclude `scala-library` from assembly.
     (assembly / assemblyPackageScala / assembleArtifact) := false,
 
-    // Exclude `pmml-model-*.jar`, `scala-collection-compat_*.jar`,`jsr305-*.jar` and
-    // `netty-*.jar` and `unused-1.0.0.jar` from assembly.
+    // Exclude `pmml-model-*.jar`, `scala-collection-compat_*.jar`, `jsr305-*.jar`,
+    // `error_prone_annotations-*.jar`, `listenablefuture-9999.0-empty-to-avoid-conflict-with-guava.jar`,
+    // `j2objc-annotations-*.jar`, `checker-qual-*.jar` and `unused-1.0.0.jar` from assembly.
     (assembly / assemblyExcludedJars) := {
       val cp = (assembly / fullClasspath).value
       cp filter { v =>
         val name = v.data.getName
         name.startsWith("pmml-model-") || name.startsWith("scala-collection-compat_") ||
-          name.startsWith("jsr305-") || name == "unused-1.0.0.jar"
+          name.startsWith("jsr305-") || name.startsWith("error_prone_annotations") ||
+          name.startsWith("listenablefuture") || name.startsWith("j2objc-annotations") ||
+          name.startsWith("checker-qual") || name == "unused-1.0.0.jar"
       }
     },
 
@@ -991,7 +988,6 @@ object SparkConnectClient {
       ShadeRule.rename("io.grpc.**" -> "org.sparkproject.connect.client.io.grpc.@1").inAll,
       ShadeRule.rename("com.google.**" -> "org.sparkproject.connect.client.com.google.@1").inAll,
       ShadeRule.rename("io.netty.**" -> "org.sparkproject.connect.client.io.netty.@1").inAll,
-      ShadeRule.rename("org.checkerframework.**" -> "org.sparkproject.connect.client.org.checkerframework.@1").inAll,
       ShadeRule.rename("io.perfmark.**" -> "org.sparkproject.connect.client.io.perfmark.@1").inAll,
       ShadeRule.rename("org.codehaus.**" -> "org.sparkproject.connect.client.org.codehaus.@1").inAll,
       ShadeRule.rename("android.annotation.**" -> "org.sparkproject.connect.client.android.annotation.@1").inAll
