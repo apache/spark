@@ -41,7 +41,7 @@ class BlockManagerMasterSuite extends SparkFunSuite {
     assert(bmm.getStorageStatus.isEmpty)
   }
 
-  test("handleRemoveBlockBlockingTimeout with configured timeout - success case") {
+  test("SPARK-54219: wait block removal timeout - success case") {
     val conf = new SparkConf()
     conf.set(CLEANER_REFERENCE_TRACKING_BLOCKING_TIMEOUT, 5L)
     
@@ -66,7 +66,7 @@ class BlockManagerMasterSuite extends SparkFunSuite {
     bmm.removeRdd(1, blocking = true)
   }
 
-  test("handleRemoveBlockBlockingTimeout with configured timeout - timeout case") {
+  test("SPARK-54219: wait block removal timeout - timeout case") {
     val conf = new SparkConf()
     // Set a very short timeout (1 second)
     conf.set(CLEANER_REFERENCE_TRACKING_BLOCKING_TIMEOUT, 1L)

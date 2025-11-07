@@ -17,18 +17,16 @@
 
 package org.apache.spark.storage
 
-import java.util.concurrent.TimeUnit
-
 import scala.collection.BuildFrom
 import scala.collection.immutable.Iterable
 import scala.concurrent.Future
-import scala.concurrent.duration.FiniteDuration
 
 import org.apache.spark.SparkConf
 import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config.CLEANER_REFERENCE_TRACKING_BLOCKING_TIMEOUT
+import org.apache.spark.internal.config.Network.{NETWORK_TIMEOUT, RPC_ASK_TIMEOUT}
 import org.apache.spark.rpc.{RpcEndpointRef, RpcTimeout}
 import org.apache.spark.storage.BlockManagerMessages._
 import org.apache.spark.util.{RpcUtils, ThreadUtils}
@@ -43,7 +41,10 @@ class BlockManagerMaster(
 
   val timeout = RpcUtils.askRpcTimeout(conf)
 
-  val cleanBlockBlockingTimeout = conf.get(CLEANER_REFERENCE_TRACKING_BLOCKING_TIMEOUT)
+  val waitBlockRemovalTimeout =
+    RpcTimeout(
+      conf,
+      Seq(CLEANER_REFERENCE_TRACKING_BLOCKING_TIMEOUT.key, NETWORK_TIMEOUT.key), "120s")
 
   /** Remove a dead executor from the driver endpoint. This is only called on the driver side. */
   def removeExecutor(execId: String): Unit = {
@@ -201,7 +202,7 @@ class BlockManagerMaster(
         log"${MDC(ERROR, e.getMessage)}", e)
     )(ThreadUtils.sameThread)
     if (blocking) {
-      handleRemoveBlockBlockingTimeout(future)
+      waitBlockRemovalTimeout.awaitResult(future)
     }
   }
 
@@ -213,7 +214,7 @@ class BlockManagerMaster(
         log"${MDC(ERROR, e.getMessage)}", e)
     )(ThreadUtils.sameThread)
     if (blocking) {
-      handleRemoveBlockBlockingTimeout(future)
+      waitBlockRemovalTimeout.awaitResult(future)
     }
   }
 
@@ -227,19 +228,7 @@ class BlockManagerMaster(
         log"${MDC(ERROR, e.getMessage)}", e)
     )(ThreadUtils.sameThread)
     if (blocking) {
-      handleRemoveBlockBlockingTimeout(future)
-    }
-  }
-
-  private def handleRemoveBlockBlockingTimeout(future: Future[_]): Unit = {
-    if (cleanBlockBlockingTimeout.isDefined) {
-      new RpcTimeout(FiniteDuration(cleanBlockBlockingTimeout.get, TimeUnit.SECONDS),
-        CLEANER_REFERENCE_TRACKING_BLOCKING_TIMEOUT.key).awaitResult(future)
-    } else {
-      // Normally, the underlying Futures will timeout anyway,
-      // so it's safe to use infinite timeout here. In extreme case,
-      // Driver can't crease thread handling this rpc, here will be stuck forever.
-      RpcUtils.INFINITE_TIMEOUT.awaitResult(future)
+      waitBlockRemovalTimeout.awaitResult(future)
     }
   }
 
