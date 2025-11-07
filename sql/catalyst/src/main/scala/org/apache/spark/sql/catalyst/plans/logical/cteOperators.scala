@@ -196,8 +196,10 @@ case class CTERelationRef(
     override val isStreaming: Boolean,
     statsOpt: Option[Statistics] = None,
     recursive: Boolean = false,
-    override val maxRows: Option[Long] = None,
+    _maxRows: Option[Long] = None,
     isUnlimitedRecursion: Boolean = false) extends LeafNode with MultiInstanceRelation {
+
+  override lazy val maxRows: Option[Long] = _maxRows
 
   final override val nodePatterns: Seq[TreePattern] = Seq(CTE)
 
