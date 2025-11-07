@@ -6340,12 +6340,7 @@ class AstBuilder extends DataTypeAstBuilder
         case Some("system") => (false, true)
         case Some("user") => (true, false)
         case Some(x) =>
-          // Cast to IdentifierContext for backward compatibility with error signature.
-          // The error method signature expects IdentifierContext but we use simpleIdentifier
-          // in the grammar now. Since both inherit from ParserRuleContext and the error
-          // method only uses it for location info, this cast is safe.
-          throw QueryParsingErrors.showFunctionsUnsupportedError(
-            x, ctx.functionScope.asInstanceOf[IdentifierContext])
+          throw QueryParsingErrors.showFunctionsUnsupportedError(x, ctx.functionScope)
     }
 
     val legacy = Option(ctx.legacy).map(visitMultipartIdentifier)

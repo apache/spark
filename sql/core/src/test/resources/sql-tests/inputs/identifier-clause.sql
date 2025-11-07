@@ -343,4 +343,40 @@ EXECUTE IMMEDIATE 'SELECT 1 AS IDENTIFIER(:schema ''.'' :col)'
 -- Cleanup
 DROP TABLE integration_test;
 DROP TABLE integration_test2;
+
+-- LATERAL VIEW with IDENTIFIER() for table and column names
+CREATE TABLE lateral_test(arr ARRAY<INT>) USING PARQUET;
+INSERT INTO lateral_test VALUES (array(1, 2, 3));
+SELECT * FROM lateral_test LATERAL VIEW explode(arr) IDENTIFIER('tbl') AS IDENTIFIER('col') ORDER BY ALL;
+SELECT * FROM lateral_test LATERAL VIEW OUTER explode(arr) IDENTIFIER('my_table') AS IDENTIFIER('my_col') ORDER BY ALL;
+DROP TABLE lateral_test;
+
+-- UNPIVOT with IDENTIFIER() for value column alias
+CREATE TABLE unpivot_test(id INT, a INT, b INT, c INT) USING CSV;
+INSERT INTO unpivot_test VALUES (1, 10, 20, 30);
+SELECT * FROM unpivot_test UNPIVOT (val FOR col IN (a AS IDENTIFIER('col_a'), b AS IDENTIFIER('col_b'))) ORDER BY ALL;
+SELECT * FROM unpivot_test UNPIVOT ((v1, v2) FOR col IN ((a, b) AS IDENTIFIER('cols_ab'), (b, c) AS IDENTIFIER('cols_bc'))) ORDER BY ALL;
+DROP TABLE unpivot_test;
+
+-- All the following tests fail because they are not about "true" identifiers
+
+-- This should fail - named parameters don't support IDENTIFIER()
+SELECT :IDENTIFIER('param1') FROM VALUES(1) AS T(c1);
+
+-- Hint names use simpleIdentifier - these should fail
+CREATE TABLE hint_test(c1 INT, c2 INT) USING CSV;
+INSERT INTO hint_test VALUES (1, 2), (3, 4);
+SELECT /*+ IDENTIFIER('BROADCAST')(hint_test) */ * FROM hint_test;
+SELECT /*+ IDENTIFIER('MERGE')(hint_test) */ * FROM hint_test;
+DROP TABLE hint_test;
+
+-- These should fail - function scope doesn't support IDENTIFIER()
+SHOW IDENTIFIER('USER') FUNCTIONS;
+
+-- EXTRACT field name uses simpleIdentifier - should fail
+SELECT EXTRACT(IDENTIFIER('YEAR') FROM DATE'2024-01-15');
+
+-- TIMESTAMPADD unit is a token, not identifier - should fail
+SELECT TIMESTAMPADD(IDENTIFIER('YEAR'), 1, DATE'2024-01-15');
+
 DROP SCHEMA identifier_clause_test_schema;
