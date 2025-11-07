@@ -65,6 +65,7 @@ from pyspark.sql.types import (
     StructType,
     VariantVal,
 )
+from pyspark.logger import PySparkLogger
 from pyspark.testing import assertDataFrameEqual, assertSchemaEqual
 from pyspark.testing.objects import ExamplePoint, ExamplePointUDT
 from pyspark.testing.sqlutils import (
@@ -3131,6 +3132,50 @@ class BaseUDTFTestsMixin:
                     context_class_name="TestUDTFWithLogging",
                     context_func_name="analyze",
                     logger="test_udtf",
+                )
+            ],
+        )
+
+    @unittest.skipIf(is_remote_only(), "Requires JVM access")
+    def test_udtf_analyze_with_pyspark_logger(self):
+        @udtf
+        class TestUDTFWithLogging:
+            @staticmethod
+            def analyze(x: AnalyzeArgument) -> AnalyzeResult:
+                logger = PySparkLogger.getLogger("PySparkLogger")
+                logger.warning(f"udtf analyze: {x.dataType.json()}", dt=x.dataType.json())
+                return AnalyzeResult(StructType().add("a", IntegerType()).add("b", IntegerType()))
+
+            def eval(self, x: int):
+                yield x * 2, x + 10
+
+        with self.sql_conf({"spark.sql.pyspark.worker.logging.enabled": "true"}):
+            assertDataFrameEqual(
+                self.spark.createDataFrame([(5,), (10,)], ["x"]).lateralJoin(
+                    TestUDTFWithLogging(col("x").outer())
+                ),
+                [Row(x=x, a=x * 2, b=x + 10) for x in [5, 10]],
+            )
+
+        logs = self.spark.table("system.session.python_worker_logs")
+
+        assertDataFrameEqual(
+            logs.select(
+                "level",
+                "msg",
+                col("context.class_name").alias("context_class_name"),
+                col("context.func_name").alias("context_func_name"),
+                col("context.dt").alias("context_dt"),
+                "logger",
+            ).distinct(),
+            [
+                Row(
+                    level="WARNING",
+                    msg='udtf analyze: "long"',
+                    context_class_name="TestUDTFWithLogging",
+                    context_func_name="analyze",
+                    context_dt='"long"',
+                    logger="PySparkLogger",
                 )
             ],
         )
