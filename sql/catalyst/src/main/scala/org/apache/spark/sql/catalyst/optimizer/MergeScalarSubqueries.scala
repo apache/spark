@@ -120,7 +120,6 @@ object MergeScalarSubqueries extends Rule[LogicalPlan] {
   /**
    * An item in the cache of merged scalar subqueries.
    *
-   * @param attributes Attributes that form the struct scalar return value of a merged subquery.
    * @param plan The plan of a merged scalar subquery.
    * @param merged A flag to identify if this item is the result of merging subqueries.
    *               Please note that `attributes.size == 1` doesn't always mean that the plan is not
@@ -131,7 +130,6 @@ object MergeScalarSubqueries extends Rule[LogicalPlan] {
    *                   nested subqueries.
    */
   case class Header(
-      attributes: Seq[Attribute],
       plan: LogicalPlan,
       merged: Boolean,
       references: Set[Int])
@@ -143,7 +141,7 @@ object MergeScalarSubqueries extends Rule[LogicalPlan] {
       cache(i) = cache(i).copy(plan =
         if (header.merged) {
           CTERelationDef(
-            createProject(header.attributes, removeReferences(header.plan, cache)),
+            createProject(header.plan.output, removeReferences(header.plan, cache)),
             underSubquery = true)
         } else {
           removeReferences(header.plan, cache)
@@ -187,27 +185,20 @@ object MergeScalarSubqueries extends Rule[LogicalPlan] {
       case (header, subqueryIndex) if !references.contains(subqueryIndex) =>
         checkIdenticalPlans(plan, header.plan).map { outputMap =>
           val mappedOutput = mapAttributes(output, outputMap)
-          val headerIndex = header.attributes.indexWhere(_.exprId == mappedOutput.exprId)
+          val headerIndex = header.plan.output.indexWhere(_.exprId == mappedOutput.exprId)
           subqueryIndex -> headerIndex
         }.orElse{
           tryMergePlans(plan, header.plan).map {
             case (mergedPlan, outputMap) =>
               val mappedOutput = mapAttributes(output, outputMap)
-              var headerIndex = header.attributes.indexWhere(_.exprId == mappedOutput.exprId)
-              val newHeaderAttributes = if (headerIndex == -1) {
-                headerIndex = header.attributes.size
-                header.attributes :+ mappedOutput
-              } else {
-                header.attributes
-              }
-              cache(subqueryIndex) =
-                Header(newHeaderAttributes, mergedPlan, true, header.references ++ references)
+              val headerIndex = mergedPlan.output.indexWhere(_.exprId == mappedOutput.exprId)
+              cache(subqueryIndex) = Header(mergedPlan, true, header.references ++ references)
               subqueryIndex -> headerIndex
           }
         }
       case _ => None
     }).getOrElse {
-      cache += Header(Seq(output), plan, false, references.toSet)
+      cache += Header(plan, false, references.toSet)
       cache.length - 1 -> 0
     }
   }

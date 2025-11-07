@@ -28,7 +28,7 @@ import org.apache.parquet.hadoop.api.{InitContext, ReadSupport}
 import org.apache.parquet.hadoop.api.ReadSupport.ReadContext
 import org.apache.parquet.io.api.RecordMaterializer
 import org.apache.parquet.schema._
-import org.apache.parquet.schema.LogicalTypeAnnotation.ListLogicalTypeAnnotation
+import org.apache.parquet.schema.LogicalTypeAnnotation.{ListLogicalTypeAnnotation, MapKeyValueTypeAnnotation, MapLogicalTypeAnnotation}
 import org.apache.parquet.schema.Type.Repetition
 
 import org.apache.spark.internal.Logging
@@ -502,36 +502,64 @@ object ParquetReadSupport extends Logging {
   }
 
   /**
-   * Finds the leaf node under a given file schema node that is likely to be cheapest to fetch.
-   * Keeps this leaf node inside the same parent hierarchy. This is used when all struct fields in
-   * the requested schema are missing. Uses a very simple heuristic based on the parquet type.
+   * Finds the leaf node(s) under a given file schema node that is likely to be cheapest to fetch.
+   * Note that multiple leaves can be selected if a map type is deemed to be the cheapest to fetch,
+   * because for each map in the hierarchy, we need to fetch something from both the key and value
+   * types. This function keeps the leaf node(s) inside the same parent hierarchy. This is used when
+   * all struct fields in the requested schema are missing. Uses a very simple heuristic based on
+   * the parquet type.
    */
   private def findCheapestGroupField(parentGroupType: GroupType): Type = {
     def findCheapestGroupFieldRecurse(curType: Type, repLevel: Int = 0): (Type, Int, Int) = {
       curType match {
         case groupType: GroupType =>
-          var (bestType, bestRepLevel, bestCost) = (Option.empty[Type], 0, 0)
-          for (field <- groupType.getFields.asScala) {
-            val newRepLevel = repLevel + (if (field.isRepetition(Repetition.REPEATED)) 1 else 0)
-            // Never take a field at a deeper repetition level, since it's likely to have more data.
-            // Don't do safety checks because we should already have done them when traversing the
-            // schema for the first time.
-            if (bestType.isEmpty || newRepLevel <= bestRepLevel) {
-              val (childType, childRepLevel, childCost) =
-                findCheapestGroupFieldRecurse(field, newRepLevel)
-              // Always prefer elements with a lower repetition level, since more nesting of arrays
-              // is likely to result in more data. At the same repetition level, prefer the smaller
-              // type.
-              if (bestType.isEmpty || childRepLevel < bestRepLevel ||
-                  (childRepLevel == bestRepLevel && childCost < bestCost)) {
-                // This is the new best path.
-                bestType = Some(childType)
-                bestRepLevel = childRepLevel
-                bestCost = childCost
+          groupType.getLogicalTypeAnnotation match {
+            case _: MapLogicalTypeAnnotation | _: MapKeyValueTypeAnnotation =>
+              // For maps, we need to ensure we read something from both the key and value types, as
+              // otherwise the GroupType we return from here would contain only one child (either
+              // the key or the value, but not both), which is invalid when the GroupType has a map
+              // logical annotation. This would later cause failures when converting the row we read
+              // to Spark type.
+              // Below code is adapted from ParquetSchemaConverter.convertGroupField
+              ParquetSchemaConverter.checkConversionRequirement(
+                groupType.getFieldCount == 1 && !groupType.getType(0).isPrimitive,
+                s"Invalid map type: $groupType")
+
+              val keyValueType = groupType.getFields.get(0).asGroupType()
+              ParquetSchemaConverter.checkConversionRequirement(
+                keyValueType.isRepetition(Repetition.REPEATED) && keyValueType.getFieldCount == 2,
+                s"Invalid map type: $groupType")
+
+              val keyResult = findCheapestGroupFieldRecurse(keyValueType.getType(0), repLevel + 1)
+              val valueResult = findCheapestGroupFieldRecurse(keyValueType.getType(1), repLevel + 1)
+              (
+                groupType.withNewFields(keyValueType.withNewFields(keyResult._1, valueResult._1)),
+                keyResult._2.max(valueResult._2), // Take max repetition level
+                keyResult._3 + valueResult._3 // Add up the costs of reading both fields
+              )
+            case _ =>
+              var (bestType, bestRepLevel, bestCost) = (Option.empty[Type], 0, 0)
+              for (field <- groupType.getFields.asScala) {
+                val newRepLevel = repLevel + (if (field.isRepetition(Repetition.REPEATED)) 1 else 0)
+                // Never take a field at a deeper repetition level, since it's likely to have more
+                // data.
+                if (bestType.isEmpty || newRepLevel <= bestRepLevel) {
+                  val (childType, childRepLevel, childCost) =
+                    findCheapestGroupFieldRecurse(field, newRepLevel)
+                  // Always prefer elements with a lower repetition level, since more nesting of
+                  // arrays is likely to result in more data. At the same repetition level, prefer
+                  // the smaller type.
+                  if (bestType.isEmpty || childRepLevel < bestRepLevel ||
+                    (childRepLevel == bestRepLevel && childCost < bestCost)) {
+                    // This is the new best path.
+                    bestType = Some(childType)
+                    bestRepLevel = childRepLevel
+                    bestCost = childCost
+                  }
+                }
               }
-            }
+              (groupType.withNewFields(bestType.get), bestRepLevel, bestCost)
           }
-          (groupType.withNewFields(bestType.get), bestRepLevel, bestCost)
         case primitiveType: PrimitiveType =>
           val cost = primitiveType.getPrimitiveTypeName match {
             case PrimitiveType.PrimitiveTypeName.BOOLEAN => 1

@@ -20,13 +20,14 @@ import random
 import time
 import unittest
 import datetime
+import logging
 from decimal import Decimal
 from typing import Iterator, Tuple
 
 from pyspark.util import PythonEvalType
 
 from pyspark.sql.functions import arrow_udf, ArrowUDFType
-from pyspark.sql import functions as F
+from pyspark.sql import Row, functions as F
 from pyspark.sql.types import (
     IntegerType,
     ByteType,
@@ -51,8 +52,10 @@ from pyspark.testing.utils import (
     numpy_requirement_message,
     have_pyarrow,
     pyarrow_requirement_message,
+    assertDataFrameEqual,
 )
 from pyspark.testing.sqlutils import ReusedSQLTestCase
+from pyspark.util import is_remote_only
 
 
 @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
@@ -1178,6 +1181,80 @@ class ScalarArrowUDFTestsMixin:
                     @arrow_udf(ArrayType(YearMonthIntervalType()))
                     def func_a(a: pa.Array) -> pa.Array:
                         return a
+
+    @unittest.skipIf(is_remote_only(), "Requires JVM access")
+    def test_scalar_arrow_udf_with_logging(self):
+        import pyarrow as pa
+
+        @arrow_udf("string")
+        def my_scalar_arrow_udf(x):
+            assert isinstance(x, pa.Array)
+            logger = logging.getLogger("test_scalar_arrow")
+            logger.warning(f"scalar arrow udf: {x.to_pylist()}")
+            return pa.array(["scalar_arrow_" + str(val.as_py()) for val in x])
+
+        with self.sql_conf({"spark.sql.pyspark.worker.logging.enabled": "true"}):
+            assertDataFrameEqual(
+                self.spark.range(3, numPartitions=2).select(
+                    my_scalar_arrow_udf("id").alias("result")
+                ),
+                [Row(result=f"scalar_arrow_{i}") for i in range(3)],
+            )
+
+        logs = self.spark.table("system.session.python_worker_logs")
+
+        assertDataFrameEqual(
+            logs.select("level", "msg", "context", "logger"),
+            [
+                Row(
+                    level="WARNING",
+                    msg=f"scalar arrow udf: {lst}",
+                    context={"func_name": my_scalar_arrow_udf.__name__},
+                    logger="test_scalar_arrow",
+                )
+                for lst in [[0], [1, 2]]
+            ],
+        )
+
+    @unittest.skipIf(is_remote_only(), "Requires JVM access")
+    def test_scalar_iter_arrow_udf_with_logging(self):
+        import pyarrow as pa
+
+        @arrow_udf("string", ArrowUDFType.SCALAR_ITER)
+        def my_scalar_iter_arrow_udf(it):
+            logger = logging.getLogger("test_scalar_iter_arrow")
+            for x in it:
+                assert isinstance(x, pa.Array)
+                logger.warning(f"scalar iter arrow udf: {x.to_pylist()}")
+                yield pa.array(["scalar_iter_arrow_" + str(val.as_py()) for val in x])
+
+        with self.sql_conf(
+            {
+                "spark.sql.execution.arrow.maxRecordsPerBatch": "3",
+                "spark.sql.pyspark.worker.logging.enabled": "true",
+            }
+        ):
+            assertDataFrameEqual(
+                self.spark.range(9, numPartitions=2).select(
+                    my_scalar_iter_arrow_udf("id").alias("result")
+                ),
+                [Row(result=f"scalar_iter_arrow_{i}") for i in range(9)],
+            )
+
+        logs = self.spark.table("system.session.python_worker_logs")
+
+        assertDataFrameEqual(
+            logs.select("level", "msg", "context", "logger"),
+            [
+                Row(
+                    level="WARNING",
+                    msg=f"scalar iter arrow udf: {lst}",
+                    context={"func_name": my_scalar_iter_arrow_udf.__name__},
+                    logger="test_scalar_iter_arrow",
+                )
+                for lst in [[0, 1, 2], [3], [4, 5, 6], [7, 8]]
+            ],
+        )
 
 
 class ScalarArrowUDFTests(ScalarArrowUDFTestsMixin, ReusedSQLTestCase):

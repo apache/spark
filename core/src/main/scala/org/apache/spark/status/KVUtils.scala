@@ -74,7 +74,7 @@ private[spark] object KVUtils extends Logging {
   private[spark] class KVStoreScalaSerializer extends KVStoreSerializer {
 
     mapper.registerModule(DefaultScalaModule)
-    mapper.setSerializationInclusion(JsonInclude.Include.NON_ABSENT)
+    mapper.setDefaultPropertyInclusion(JsonInclude.Include.NON_ABSENT)
 
   }
 

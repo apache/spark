@@ -78,6 +78,47 @@ class GeographyTypeTestMixin:
             geography_type_2 = GeographyType("ANY")
             self.assertNotEqual(geography_type_1.srid, geography_type_2.srid)
 
+    def test_geographytype_from_invalid_crs(self):
+        """Test that GeographyType construction fails when an invalid CRS is specified."""
+
+        for invalid_crs in ["srid", "any", "ogccrs84", "ogc:crs84", "ogc:CRS84", "asdf", ""]:
+            with self.assertRaises(IllegalArgumentException) as error_context:
+                GeographyType._from_crs(invalid_crs, "SPHERICAL")
+            crs_header = "[ST_INVALID_CRS_VALUE] Invalid or unsupported CRS"
+            self.assertEqual(
+                str(error_context.exception),
+                f"{crs_header} (coordinate reference system) value: '{invalid_crs}'.",
+            )
+
+    # The tests below verify GEOGRAPHY type JSON parsing based on CRS and algorithm.
+
+    def test_geographytype_from_invalid_algorithm(self):
+        """Test that GeographyType construction fails when an invalid CRS is specified."""
+
+        for invalid_alg in ["alg", "algorithm", "KARNEY", "spherical", "SPHEROID", "asdf", ""]:
+            with self.assertRaises(IllegalArgumentException) as error_context:
+                GeographyType._from_crs("OGC:CRS84", invalid_alg)
+            alg_header = "[ST_INVALID_ALGORITHM_VALUE] Invalid or unsupported"
+            self.assertEqual(
+                str(error_context.exception),
+                f"{alg_header} edge interpolation algorithm value: '{invalid_alg}'.",
+            )
+
+    def test_geographytype_from_valid_crs_and_algorithm(self):
+        """Test that GeographyType construction passes when valid CRS & ALG are specified."""
+
+        supported_crs = {
+            "OGC:CRS84": 4326,
+        }
+        for valid_crs, srid in supported_crs.items():
+            for valid_alg in ["SPHERICAL"]:
+                geography_type = GeographyType._from_crs(valid_crs, valid_alg)
+                self.assertEqual(geography_type.srid, srid)
+                self.assertEqual(geography_type.typeName(), "geography")
+                self.assertEqual(geography_type.simpleString(), f"geography({srid})")
+                self.assertEqual(geography_type.jsonValue(), f"geography({valid_crs}, {valid_alg})")
+                self.assertEqual(repr(geography_type), f"GeographyType({srid})")
+
 
 class GeographyTypeTest(GeographyTypeTestMixin, ReusedSQLTestCase):
     pass

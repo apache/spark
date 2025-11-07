@@ -150,6 +150,18 @@ class SubstituteParmsAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
     }
 
   /**
+   * Visit singleStringLit contexts to ensure we traverse into parameter markers. This is needed
+   * because singleStringLit can be either singleStringLitWithoutMarker or parameterMarker, and we
+   * need to visit the parameterMarker child.
+   */
+  override def visitSingleStringLit(ctx: SingleStringLitContext): AnyRef =
+    withOrigin(ctx) {
+      // Visit children to find any parameter markers
+      visitChildren(ctx)
+      null
+    }
+
+  /**
    * Override visit to ensure we traverse all children to find parameters.
    */
   override def visit(tree: ParseTree): AnyRef = {
@@ -165,6 +177,8 @@ class SubstituteParmsAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
         visitNamedParameterMarkerRule(ctx)
       case ctx: PositionalParameterMarkerRuleContext =>
         visitPositionalParameterMarkerRule(ctx)
+      case ctx: SingleStringLitContext =>
+        visitSingleStringLit(ctx)
       case ruleNode: RuleNode =>
         // Continue traversing children for rule nodes (this handles ParameterStringValueContext,
         // ParameterIntegerValueContext, StringLiteralInContextContext, and other rule nodes

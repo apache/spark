@@ -40,12 +40,12 @@ class FrameMissingDataMixin:
         )
         psdf = ps.from_pandas(pdf)
 
-        self.assert_eq(pdf.backfill(), psdf.backfill())
+        self.assert_eq(pdf.backfill().sort_index(), psdf.backfill().sort_index())
 
         # Test `inplace=True`
         pdf.backfill(inplace=True)
         psdf.backfill(inplace=True)
-        self.assert_eq(pdf, psdf)
+        self.assert_eq(pdf.sort_index(), psdf.sort_index())
 
     def _test_dropna(self, pdf, axis):
         psdf = ps.from_pandas(pdf)
@@ -191,14 +191,21 @@ class FrameMissingDataMixin:
         )
         self.assert_eq(pdf.fillna(method="ffill"), psdf.fillna(method="ffill"))
         self.assert_eq(pdf.fillna(method="ffill", limit=2), psdf.fillna(method="ffill", limit=2))
-        self.assert_eq(pdf.fillna(method="bfill"), psdf.fillna(method="bfill"))
-        self.assert_eq(pdf.fillna(method="bfill", limit=2), psdf.fillna(method="bfill", limit=2))
+        self.assert_eq(
+            pdf.fillna(method="bfill").sort_index(), psdf.fillna(method="bfill").sort_index()
+        )
+        self.assert_eq(
+            pdf.fillna(method="bfill", limit=2).sort_index(),
+            psdf.fillna(method="bfill", limit=2).sort_index(),
+        )
 
         pdf = pdf.set_index(["x", "y"])
         psdf = ps.from_pandas(pdf)
         # check multi index
         self.assert_eq(psdf.fillna(-1), pdf.fillna(-1))
-        self.assert_eq(pdf.fillna(method="bfill"), psdf.fillna(method="bfill"))
+        self.assert_eq(
+            pdf.fillna(method="bfill").sort_index(), psdf.fillna(method="bfill").sort_index()
+        )
         self.assert_eq(pdf.fillna(method="ffill"), psdf.fillna(method="ffill"))
 
         pser = pdf.z
@@ -253,7 +260,9 @@ class FrameMissingDataMixin:
         )
         self.assert_eq(pdf.fillna(method="ffill"), psdf.fillna(method="ffill"))
         self.assert_eq(pdf.fillna(method="ffill", limit=2), psdf.fillna(method="ffill", limit=2))
-        self.assert_eq(pdf.fillna(method="bfill"), psdf.fillna(method="bfill"))
+        self.assert_eq(
+            pdf.fillna(method="bfill").sort_index(), psdf.fillna(method="bfill").sort_index()
+        )
         self.assert_eq(pdf.fillna(method="bfill", limit=2), psdf.fillna(method="bfill", limit=2))
 
         self.assert_eq(psdf.fillna({"x": -1}), pdf.fillna({"x": -1}))
@@ -422,8 +431,8 @@ class FrameMissingDataMixin:
         )
         psdf = ps.from_pandas(pdf)
 
-        self.assert_eq(psdf.bfill(), pdf.bfill())
-        self.assert_eq(psdf.bfill(limit=1), pdf.bfill(limit=1))
+        self.assert_eq(psdf.bfill().sort_index(), pdf.bfill().sort_index())
+        self.assert_eq(psdf.bfill(limit=1).sort_index(), pdf.bfill(limit=1).sort_index())
 
         pser = pdf.x
         psser = psdf.x
@@ -431,9 +440,9 @@ class FrameMissingDataMixin:
         psdf.bfill(inplace=True)
         pdf.bfill(inplace=True)
 
-        self.assert_eq(psdf, pdf)
-        self.assert_eq(psser, pser)
-        self.assert_eq(psser[idx[0]], pser[idx[0]])
+        self.assert_eq(psdf.sort_index(), pdf.sort_index())
+        self.assert_eq(psser.sort_index(), pser.sort_index())
+        self.assert_eq(psser.sort_index()[idx[0]], pser.sort_index()[idx[0]])
 
     def test_pad(self):
         pdf = pd.DataFrame(

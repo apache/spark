@@ -456,7 +456,7 @@ class GroupedData(PandasGroupedOpsMixin):
 
         Examples
         --------
-        >>> from pyspark.sql import Row
+        >>> from pyspark.sql import Row, functions as sf
         >>> df1 = spark.createDataFrame([
         ...     Row(course="dotNET", year=2012, earnings=10000),
         ...     Row(course="Java", year=2012, earnings=20000),
@@ -474,28 +474,30 @@ class GroupedData(PandasGroupedOpsMixin):
         |dotNET|2013|   48000|
         |  Java|2013|   30000|
         +------+----+--------+
+
         >>> df2 = spark.createDataFrame([
         ...     Row(training="expert", sales=Row(course="dotNET", year=2012, earnings=10000)),
         ...     Row(training="junior", sales=Row(course="Java", year=2012, earnings=20000)),
         ...     Row(training="expert", sales=Row(course="dotNET", year=2012, earnings=5000)),
         ...     Row(training="junior", sales=Row(course="dotNET", year=2013, earnings=48000)),
         ...     Row(training="expert", sales=Row(course="Java", year=2013, earnings=30000)),
-        ... ])  # doctest: +SKIP
-        >>> df2.show()  # doctest: +SKIP
-        +--------+--------------------+
-        |training|               sales|
-        +--------+--------------------+
-        |  expert|{dotNET, 2012, 10...|
-        |  junior| {Java, 2012, 20000}|
-        |  expert|{dotNET, 2012, 5000}|
-        |  junior|{dotNET, 2013, 48...|
-        |  expert| {Java, 2013, 30000}|
-        +--------+--------------------+
+        ... ])
+        >>> df2.show(truncate=False)
+        +--------+---------------------+
+        |training|sales                |
+        +--------+---------------------+
+        |expert  |{dotNET, 2012, 10000}|
+        |junior  |{Java, 2012, 20000}  |
+        |expert  |{dotNET, 2012, 5000} |
+        |junior  |{dotNET, 2013, 48000}|
+        |expert  |{Java, 2013, 30000}  |
+        +--------+---------------------+
 
         Compute the sum of earnings for each year by course with each course as a separate column
 
         >>> df1.groupBy("year").pivot(
-        ...     "course", ["dotNET", "Java"]).sum("earnings").sort("year").show()
+        ...    "course", ["dotNET", "Java"]
+        ... ).sum("earnings").sort("year").show()
         +----+------+-----+
         |year|dotNET| Java|
         +----+------+-----+
@@ -512,9 +514,10 @@ class GroupedData(PandasGroupedOpsMixin):
         |2012|20000| 15000|
         |2013|30000| 48000|
         +----+-----+------+
-        >>> df2.groupBy(
-        ...     "sales.year").pivot("sales.course").sum("sales.earnings").sort("year").show()
-        ... # doctest: +SKIP
+
+        >>> df2.groupBy("sales.year").pivot(
+        ...     "sales.course"
+        ... ).agg(sf.sum("sales.earnings")).sort("year").show()
         +----+-----+------+
         |year| Java|dotNET|
         +----+-----+------+

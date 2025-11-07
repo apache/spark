@@ -16,9 +16,10 @@
 #
 
 import unittest
+import logging
 
 from pyspark.sql.functions import arrow_udf, ArrowUDFType
-from pyspark.util import PythonEvalType
+from pyspark.util import PythonEvalType, is_remote_only
 from pyspark.sql import Row
 from pyspark.sql.types import (
     ArrayType,
@@ -35,6 +36,7 @@ from pyspark.testing.utils import (
     numpy_requirement_message,
     have_pyarrow,
     pyarrow_requirement_message,
+    assertDataFrameEqual,
 )
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 
@@ -1020,6 +1022,42 @@ class GroupedAggArrowUDFTestsMixin:
                     ).collect()
 
                     self.assertEqual(expected, result)
+
+    @unittest.skipIf(is_remote_only(), "Requires JVM access")
+    def test_grouped_agg_arrow_udf_with_logging(self):
+        import pyarrow as pa
+
+        @arrow_udf("double", ArrowUDFType.GROUPED_AGG)
+        def my_grouped_agg_arrow_udf(x):
+            assert isinstance(x, pa.Array)
+            logger = logging.getLogger("test_grouped_agg_arrow")
+            logger.warning(f"grouped agg arrow udf: {len(x)}")
+            return pa.compute.sum(x)
+
+        df = self.spark.createDataFrame(
+            [(1, 1.0), (1, 2.0), (2, 3.0), (2, 5.0), (2, 10.0)], ("id", "v")
+        )
+
+        with self.sql_conf({"spark.sql.pyspark.worker.logging.enabled": "true"}):
+            assertDataFrameEqual(
+                df.groupby("id").agg(my_grouped_agg_arrow_udf("v").alias("result")),
+                [Row(id=1, result=3.0), Row(id=2, result=18.0)],
+            )
+
+        logs = self.spark.table("system.session.python_worker_logs")
+
+        assertDataFrameEqual(
+            logs.select("level", "msg", "context", "logger"),
+            [
+                Row(
+                    level="WARNING",
+                    msg=f"grouped agg arrow udf: {n}",
+                    context={"func_name": my_grouped_agg_arrow_udf.__name__},
+                    logger="test_grouped_agg_arrow",
+                )
+                for n in [2, 3]
+            ],
+        )
 
 
 class GroupedAggArrowUDFTests(GroupedAggArrowUDFTestsMixin, ReusedSQLTestCase):

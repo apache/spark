@@ -91,7 +91,7 @@ public class TransportConfSuite {
   @Test
   public void testDefaultIOMode() {
     TransportConf c1 = new TransportConf("m1", new MapConfigProvider(Map.of()));
-    assertEquals("NIO", c1.ioMode());
+    assertEquals("AUTO", c1.ioMode());
 
     TransportConf c2 = new TransportConf("m1",
       new MapConfigProvider(Map.of("spark.io.mode.default", "KQUEUE")));

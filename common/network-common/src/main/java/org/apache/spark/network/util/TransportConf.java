@@ -89,7 +89,7 @@ public class TransportConf {
 
   /** IO mode: NIO, EPOLL, KQUEUE, or AUTO */
   public String ioMode() {
-    String defaultIOMode = conf.get(SPARK_NETWORK_DEFAULT_IO_MODE_KEY, "NIO");
+    String defaultIOMode = conf.get(SPARK_NETWORK_DEFAULT_IO_MODE_KEY, "AUTO");
     return conf.get(SPARK_NETWORK_IO_MODE_KEY, defaultIOMode).toUpperCase(Locale.ROOT);
   }
 
@@ -473,6 +473,7 @@ public class TransportConf {
    * spark.shuffle.server.chunkFetchHandlerThreadsPercent. The returned value is rounded off to
    * ceiling of the nearest integer.
    */
+  @Deprecated(since = "4.2.0", forRemoval = true)
   public int chunkFetchHandlerThreads() {
     if (!this.getModuleName().equalsIgnoreCase("shuffle")) {
       return 0;
@@ -488,6 +489,7 @@ public class TransportConf {
    * Whether to use a separate EventLoopGroup to process ChunkFetchRequest messages, it is decided
    * by the config `spark.shuffle.server.chunkFetchHandlerThreadsPercent` is set or not.
    */
+  @Deprecated(since = "4.2.0", forRemoval = true)
   public boolean separateChunkFetchRequest() {
     return conf.getInt("spark.shuffle.server.chunkFetchHandlerThreadsPercent", 0) > 0;
   }
@@ -500,6 +502,7 @@ public class TransportConf {
    * handling finalizeShuffleMerge requests are percentage of io.serverThreads (if defined) else it
    * is a percentage of 2 * #cores.
    */
+  @Deprecated(since = "4.2.0", forRemoval = true)
   public int finalizeShuffleMergeHandlerThreads() {
     if (!this.getModuleName().equalsIgnoreCase("shuffle")) {
       return 0;
@@ -517,6 +520,7 @@ public class TransportConf {
    * Whether to use a separate EventLoopGroup to process FinalizeShuffleMerge messages, it is
    * decided by the config `spark.shuffle.server.finalizeShuffleMergeThreadsPercent` is set or not.
    */
+  @Deprecated(since = "4.2.0", forRemoval = true)
   public boolean separateFinalizeShuffleMerge() {
     return conf.getInt("spark.shuffle.server.finalizeShuffleMergeThreadsPercent", 0) > 0;
   }

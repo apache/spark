@@ -64,6 +64,10 @@ from pyspark.errors import (
     PySparkAttributeError,
     PySparkKeyError,
 )
+from pyspark.sql.geo_utils import (
+    GeographicSpatialReferenceSystemMapper as _GeographicSRSMapper,
+    CartesianSpatialReferenceSystemMapper as _CartesianSRSMapper,
+)
 
 if TYPE_CHECKING:
     import numpy as np
@@ -86,6 +90,8 @@ __all__ = [
     "TimestampNTZType",
     "DecimalType",
     "DoubleType",
+    "Geography",
+    "Geometry",
     "FloatType",
     "ByteType",
     "IntegerType",
@@ -101,6 +107,8 @@ __all__ = [
     "StructType",
     "VariantType",
     "VariantVal",
+    "GeographyType",
+    "GeometryType",
 ]
 
 
@@ -549,8 +557,8 @@ class GeographyType(SpatialType):
         if srid == "ANY":
             self.srid = GeographyType.MIXED_SRID
             self._crs = GeographyType.MIXED_CRS
-        # Otherwise, the parameterized GEOMETRY type syntax requires a valid SRID value.
-        elif not isinstance(srid, int) or srid != GeographyType.DEFAULT_SRID:
+        # Otherwise, the parameterized GEOGRAPHY type requires a valid integer SRID value.
+        elif not isinstance(srid, int) or (crs := _GeographicSRSMapper.get_string_id(srid)) is None:
             raise IllegalArgumentException(
                 errorClass="ST_INVALID_SRID_VALUE",
                 messageParameters={
@@ -559,7 +567,7 @@ class GeographyType(SpatialType):
             )
         else:
             self.srid = srid
-            self._crs = GeographyType.DEFAULT_CRS
+            self._crs = crs
         self._alg = GeographyType.DEFAULT_ALG
 
     @classmethod
@@ -567,7 +575,7 @@ class GeographyType(SpatialType):
         # Algorithm value must be validated, although only SPHERICAL is supported currently.
         if alg != cls.DEFAULT_ALG:
             raise IllegalArgumentException(
-                errorClass="INVALID_ALGORITHM_VALUE",
+                errorClass="ST_INVALID_ALGORITHM_VALUE",
                 messageParameters={
                     "alg": str(alg),
                 },
@@ -577,7 +585,7 @@ class GeographyType(SpatialType):
         if crs.lower() == cls.MIXED_CRS.lower():
             return GeographyType("ANY")
         # Otherwise, JSON parsing for the GEOGRAPHY type requires a valid CRS value.
-        srid = GeographyType.DEFAULT_SRID if crs == "OGC:CRS84" else None
+        srid = _GeographicSRSMapper.get_srid(crs)
         if srid is None:
             raise IllegalArgumentException(
                 errorClass="ST_INVALID_CRS_VALUE",
@@ -610,6 +618,20 @@ class GeographyType(SpatialType):
         # The JSON representation always uses the CRS and algorithm value.
         return f"geography({self._crs}, {self._alg})"
 
+    def needConversion(self) -> bool:
+        return True
+
+    def fromInternal(self, obj: Dict) -> Optional["Geography"]:
+        if obj is None or not all(key in obj for key in ["srid", "bytes"]):
+            return None
+        return Geography(obj["bytes"], obj["srid"])
+
+    def toInternal(self, geography: Any) -> Any:
+        if geography is None:
+            return None
+        assert isinstance(geography, Geography)
+        return {"srid": geography.srid, "wkb": geography.wkb}
+
 
 class GeometryType(SpatialType):
     """
@@ -638,8 +660,8 @@ class GeometryType(SpatialType):
         if srid == "ANY":
             self.srid = GeometryType.MIXED_SRID
             self._crs = GeometryType.MIXED_CRS
-        # Otherwise, the parameterized GEOMETRY type syntax requires a valid SRID value.
-        elif not isinstance(srid, int) or srid != GeometryType.DEFAULT_SRID:
+        # Otherwise, the parameterized GEOMETRY type requires a valid integer SRID value.
+        elif not isinstance(srid, int) or (crs := _CartesianSRSMapper.get_string_id(srid)) is None:
             raise IllegalArgumentException(
                 errorClass="ST_INVALID_SRID_VALUE",
                 messageParameters={
@@ -649,7 +671,7 @@ class GeometryType(SpatialType):
         # If the SRID is valid, initialize the GEOMETRY type with the corresponding CRS value.
         else:
             self.srid = srid
-            self._crs = GeometryType.DEFAULT_CRS
+            self._crs = crs
 
     """ JSON parsing logic for the GEOMETRY type relies on the CRS value, instead of the SRID.
     The method can accept either a single valid geometric string CRS value, or a special case
@@ -662,7 +684,7 @@ class GeometryType(SpatialType):
         if crs.lower() == cls.MIXED_CRS.lower():
             return GeometryType("ANY")
         # Otherwise, JSON parsing for the GEOMETRY type requires a valid CRS value.
-        srid = GeometryType.DEFAULT_SRID if crs == "OGC:CRS84" else None
+        srid = _CartesianSRSMapper.get_srid(crs)
         if srid is None:
             raise IllegalArgumentException(
                 errorClass="ST_INVALID_CRS_VALUE",
@@ -693,6 +715,20 @@ class GeometryType(SpatialType):
     def jsonValue(self) -> Union[str, Dict[str, Any]]:
         # The JSON representation always uses the CRS value.
         return f"geometry({self._crs})"
+
+    def needConversion(self) -> bool:
+        return True
+
+    def fromInternal(self, obj: Dict) -> Optional["Geometry"]:
+        if obj is None or not all(key in obj for key in ["srid", "bytes"]):
+            return None
+        return Geometry(obj["bytes"], obj["srid"])
+
+    def toInternal(self, geometry: Any) -> Any:
+        if geometry is None:
+            return None
+        assert isinstance(geometry, Geometry)
+        return {"srid": geometry.srid, "wkb": geometry.wkb}
 
 
 class ByteType(IntegralType):
@@ -2031,6 +2067,144 @@ class VariantVal:
         """
         (value, metadata) = VariantUtils.parse_json(json_str)
         return VariantVal(value, metadata)
+
+
+class Geography:
+    """
+    A class to represent a Geography value in Python.
+
+    .. versionadded:: 4.1.0
+
+    Parameters
+    ----------
+    wkb : bytes
+        The bytes representing the WKB of Geography.
+
+    srid : integer
+        The integer value representing SRID of Geography.
+
+    Methods
+    -------
+    getBytes()
+        Returns the WKB of Geography.
+
+    getSrid()
+        Returns the SRID of Geography.
+
+    Examples
+    --------
+    >>> g = Geography.fromWKB(bytes.fromhex('010100000000000000000031400000000000001c40'), 4326)
+    >>> g.getBytes().hex()
+    '010100000000000000000031400000000000001c40'
+    >>> g.getSrid()
+    4326
+    """
+
+    def __init__(self, wkb: bytes, srid: int):
+        self.wkb = wkb
+        self.srid = srid
+
+    def __str__(self) -> str:
+        return "Geography(%r, %d)" % (self.wkb, self.srid)
+
+    def __repr__(self) -> str:
+        return "Geography(%r, %d)" % (self.wkb, self.srid)
+
+    def getSrid(self) -> int:
+        """
+        Returns the SRID of Geography.
+        """
+        return self.srid
+
+    def getBytes(self) -> bytes:
+        """
+        Returns the WKB of Geography.
+        """
+        return self.wkb
+
+    def __eq__(self, other: Any) -> bool:
+        if not isinstance(other, Geography):
+            # Don't attempt to compare against unrelated types.
+            return NotImplemented
+
+        return self.wkb == other.wkb and self.srid == other.srid
+
+    @classmethod
+    def fromWKB(cls, wkb: bytes, srid: int) -> "Geography":
+        """
+        Construct Python Geography object from WKB.
+        :return: Python representation of the Geography type value.
+        """
+        return Geography(wkb, srid)
+
+
+class Geometry:
+    """
+    A class to represent a Geometry value in Python.
+
+    .. versionadded:: 4.1.0
+
+    Parameters
+    ----------
+    wkb : bytes
+        The bytes representing the WKB of Geometry.
+
+    srid : integer
+        The integer value representing SRID of Geometry.
+
+    Methods
+    -------
+    getBytes()
+        Returns the WKB of Geometry.
+
+    getSrid()
+        Returns the SRID of Geometry.
+
+    Examples
+    --------
+    >>> g = Geometry.fromWKB(bytes.fromhex('010100000000000000000031400000000000001c40'), 0)
+    >>> g.getBytes().hex()
+    '010100000000000000000031400000000000001c40'
+    >>> g.getSrid()
+    0
+    """
+
+    def __init__(self, wkb: bytes, srid: int):
+        self.wkb = wkb
+        self.srid = srid
+
+    def __str__(self) -> str:
+        return "Geometry(%r, %d)" % (self.wkb, self.srid)
+
+    def __repr__(self) -> str:
+        return "Geometry(%r, %d)" % (self.wkb, self.srid)
+
+    def getSrid(self) -> int:
+        """
+        Returns the SRID of Geometry.
+        """
+        return self.srid
+
+    def getBytes(self) -> bytes:
+        """
+        Returns the WKB of Geometry.
+        """
+        return self.wkb
+
+    def __eq__(self, other: Any) -> bool:
+        if not isinstance(other, Geometry):
+            # Don't attempt to compare against unrelated types.
+            return NotImplemented
+
+        return self.wkb == other.wkb and self.srid == other.srid
+
+    @classmethod
+    def fromWKB(cls, wkb: bytes, srid: int) -> "Geometry":
+        """
+        Construct Python Geometry object from WKB.
+        :return: Python representation of the Geometry type value.
+        """
+        return Geometry(wkb, srid)
 
 
 _atomic_types: List[Type[DataType]] = [

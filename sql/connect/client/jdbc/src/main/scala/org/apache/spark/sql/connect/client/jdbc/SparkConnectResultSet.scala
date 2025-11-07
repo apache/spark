@@ -25,6 +25,7 @@ import java.util.Calendar
 
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.connect.client.SparkResult
+import org.apache.spark.sql.connect.client.jdbc.util.JdbcErrorUtils
 
 class SparkConnectResultSet(
     sparkResult: SparkResult[Row],
@@ -34,16 +35,25 @@ class SparkConnectResultSet(
 
   private var currentRow: Row = _
 
-  private var _wasNull: Boolean = false
+  // cursor is 1-based, range in [0, length + 1]
+  // - 0 means beforeFirstRow
+  // - value in [1, length] means the row number
+  // - length + 1 means afterLastRow
+  private var cursor: Int = 0
 
+  private var _wasNull: Boolean = false
   override def wasNull: Boolean = _wasNull
 
   override def next(): Boolean = {
     val hasNext = iterator.hasNext
     if (hasNext) {
       currentRow = iterator.next()
+      cursor += 1
     } else {
       currentRow = null
+      if (cursor > 0 && cursor == sparkResult.length) {
+        cursor += 1
+      }
     }
     hasNext
   }
@@ -253,13 +263,25 @@ class SparkConnectResultSet(
   override def getBigDecimal(columnLabel: String): java.math.BigDecimal =
     throw new SQLFeatureNotSupportedException
 
-  override def isBeforeFirst: Boolean = throw new SQLFeatureNotSupportedException
+  override def isBeforeFirst: Boolean = {
+    checkOpen()
+    cursor < 1 && sparkResult.length > 0
+  }
 
-  override def isAfterLast: Boolean = throw new SQLFeatureNotSupportedException
+  override def isFirst: Boolean = {
+    checkOpen()
+    cursor == 1
+  }
 
-  override def isFirst: Boolean = throw new SQLFeatureNotSupportedException
+  override def isLast: Boolean = {
+    checkOpen()
+    cursor > 0 && cursor == sparkResult.length
+  }
 
-  override def isLast: Boolean = throw new SQLFeatureNotSupportedException
+  override def isAfterLast: Boolean = {
+    checkOpen()
+    cursor > 0 && cursor > sparkResult.length
+  }
 
   override def beforeFirst(): Unit = throw new SQLFeatureNotSupportedException
 
@@ -269,7 +291,15 @@ class SparkConnectResultSet(
 
   override def last(): Boolean = throw new SQLFeatureNotSupportedException
 
-  override def getRow: Int = throw new SQLFeatureNotSupportedException
+  override def getRow: Int = {
+    checkOpen()
+
+    if (cursor < 1 || cursor > sparkResult.length) {
+      0
+    } else {
+      cursor
+    }
+  }
 
   override def absolute(row: Int): Boolean = throw new SQLFeatureNotSupportedException
 
@@ -277,11 +307,21 @@ class SparkConnectResultSet(
 
   override def previous(): Boolean = throw new SQLFeatureNotSupportedException
 
-  override def setFetchDirection(direction: Int): Unit =
-    throw new SQLFeatureNotSupportedException
+  override def setFetchDirection(direction: Int): Unit = {
+    checkOpen()
+    assert(this.getType == ResultSet.TYPE_FORWARD_ONLY)
 
-  override def getFetchDirection: Int =
-    throw new SQLFeatureNotSupportedException
+    if (direction != ResultSet.FETCH_FORWARD) {
+      throw new SQLException(
+        s"Fetch direction ${JdbcErrorUtils.stringifyFetchDirection(direction)} is not supported " +
+          s"for ${JdbcErrorUtils.stringifyResultSetType(ResultSet.TYPE_FORWARD_ONLY)} result set.")
+    }
+  }
+
+  override def getFetchDirection: Int = {
+    checkOpen()
+    ResultSet.FETCH_FORWARD
+  }
 
   override def setFetchSize(rows: Int): Unit =
     throw new SQLFeatureNotSupportedException

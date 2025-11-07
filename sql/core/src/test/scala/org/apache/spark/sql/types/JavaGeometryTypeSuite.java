@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.types;
 
-import org.apache.spark.sql.internal.types.SpatialReferenceSystemMapper;
+import org.apache.spark.sql.internal.types.CartesianSpatialReferenceSystemMapper;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -63,9 +63,8 @@ public class JavaGeometryTypeSuite {
   @Test
   public void geometryTypeWithSpecifiedValidCrsTest() {
     // Valid CRS values for GEOMETRY.
-    SpatialReferenceSystemMapper srsMapper = SpatialReferenceSystemMapper.get();
     Stream.of("SRID:0", "EPSG:3857", "OGC:CRS84").forEach(crs -> {
-      int srid = srsMapper.getSrid(crs);
+      Integer srid = CartesianSpatialReferenceSystemMapper.getSrid(crs);
       DataType geometryType = DataTypes.createGeometryType(crs);
       Assertions.assertEquals("GEOMETRY(" + srid + ")", geometryType.sql());
       Assertions.assertEquals("geometry(" + srid + ")", geometryType.typeName());

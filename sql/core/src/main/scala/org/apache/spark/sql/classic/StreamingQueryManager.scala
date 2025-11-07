@@ -24,6 +24,7 @@ import javax.annotation.concurrent.GuardedBy
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 
+import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.annotation.Evolving
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{CLASS_NAME, QUERY_ID, RUN_ID}
@@ -189,6 +190,21 @@ class StreamingQueryManager private[sql] (
     val analyzedPlan = df.queryExecution.analyzed
     df.queryExecution.assertAnalyzed()
 
+    if (trigger.isInstanceOf[RealTimeTrigger]) {
+      val minBatchDuration =
+        sparkSession.conf.get(SQLConf.STREAMING_REAL_TIME_MODE_MIN_BATCH_DURATION)
+      val realTimeTrigger = trigger.asInstanceOf[RealTimeTrigger]
+      if (realTimeTrigger.batchDurationMs < minBatchDuration) {
+        throw new SparkIllegalArgumentException(
+          errorClass = "INVALID_STREAMING_REAL_TIME_MODE_TRIGGER_INTERVAL",
+          messageParameters = Map(
+            "interval" -> realTimeTrigger.batchDurationMs.toString,
+            "minBatchDuration" -> minBatchDuration.toString
+          )
+        )
+      }
+    }
+
     val dataStreamWritePlan = WriteToStreamStatement(
       userSpecifiedName,
       userSpecifiedCheckpointLocation,
@@ -216,6 +232,11 @@ class StreamingQueryManager private[sql] (
           analyzedStreamWritePlan))
       case _ =>
         val microBatchExecution = if (useAsyncProgressTracking(extraOptions)) {
+          if (trigger.isInstanceOf[RealTimeTrigger]) {
+            throw new SparkIllegalArgumentException(
+              errorClass = "STREAMING_REAL_TIME_MODE.ASYNC_PROGRESS_TRACKING_NOT_SUPPORTED"
+            )
+          }
           new AsyncProgressTrackingMicroBatchExecution(
             sparkSession,
             trigger,
