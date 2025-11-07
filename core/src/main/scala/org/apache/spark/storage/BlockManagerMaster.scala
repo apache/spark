@@ -203,7 +203,7 @@ class BlockManagerMaster(
     if (blocking) {
       if (cleanBlockBlockingTimeout.isDefined) {
         new RpcTimeout(FiniteDuration(cleanBlockBlockingTimeout.get, TimeUnit.SECONDS),
-          CLEANER_REFERENCE_TRACKING_BLOCKING_TIMEOUT.key)
+          CLEANER_REFERENCE_TRACKING_BLOCKING_TIMEOUT.key).awaitResult(future)
       } else {
         // the underlying Futures will timeout anyway, so it's safe to use infinite timeout here
         RpcUtils.INFINITE_TIMEOUT.awaitResult(future)
@@ -221,7 +221,7 @@ class BlockManagerMaster(
     if (blocking) {
       if (cleanBlockBlockingTimeout.isDefined) {
         new RpcTimeout(FiniteDuration(cleanBlockBlockingTimeout.get, TimeUnit.SECONDS),
-          CLEANER_REFERENCE_TRACKING_BLOCKING_TIMEOUT.key)
+          CLEANER_REFERENCE_TRACKING_BLOCKING_TIMEOUT.key).awaitResult(future)
       } else {
         // the underlying Futures will timeout anyway, so it's safe to use infinite timeout here
         RpcUtils.INFINITE_TIMEOUT.awaitResult(future)
@@ -241,7 +241,7 @@ class BlockManagerMaster(
     if (blocking) {
       if (cleanBlockBlockingTimeout.isDefined) {
         new RpcTimeout(FiniteDuration(cleanBlockBlockingTimeout.get, TimeUnit.SECONDS),
-          CLEANER_REFERENCE_TRACKING_BLOCKING_TIMEOUT.key)
+          CLEANER_REFERENCE_TRACKING_BLOCKING_TIMEOUT.key).awaitResult(future)
       } else {
         // the underlying Futures will timeout anyway, so it's safe to use infinite timeout here
         RpcUtils.INFINITE_TIMEOUT.awaitResult(future)
