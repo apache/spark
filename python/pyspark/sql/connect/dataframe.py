@@ -587,7 +587,7 @@ class DataFrame(ParentDataFrame):
             if isinstance(c, Column):
                 _cols.append(c)
             elif isinstance(c, str):
-                _cols.append(self[c])
+                _cols.append(F.col(c))
             elif isinstance(c, int) and not isinstance(c, bool):
                 if c < 1:
                     raise PySparkIndexError(

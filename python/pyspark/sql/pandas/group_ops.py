@@ -1026,6 +1026,7 @@ class PandasCogroupedOps:
 
         Examples
         --------
+        >>> import pandas as pd
         >>> df1 = spark.createDataFrame(
         ...     [(20000101, 1, 1.0), (20000101, 2, 2.0), (20000102, 1, 3.0), (20000102, 2, 4.0)],
         ...     ("time", "id", "v1"))
@@ -1037,7 +1038,7 @@ class PandasCogroupedOps:
         ...
         >>> df1.groupby("id").cogroup(df2.groupby("id")).applyInPandas(
         ...     asof_join, schema="time int, id int, v1 double, v2 string"
-        ... ).show()  # doctest: +SKIP
+        ... ).sort("id", "time").show()
         +--------+---+---+---+
         |    time| id| v1| v2|
         +--------+---+---+---+
@@ -1060,7 +1061,8 @@ class PandasCogroupedOps:
         ...         return pd.DataFrame(columns=['time', 'id', 'v1', 'v2'])
         ...
         >>> df1.groupby("id").cogroup(df2.groupby("id")).applyInPandas(
-        ...     asof_join, "time int, id int, v1 double, v2 string").show()  # doctest: +SKIP
+        ...     asof_join, "time int, id int, v1 double, v2 string"
+        ... ).sort("time").show()
         +--------+---+---+---+
         |    time| id| v1| v2|
         +--------+---+---+---+
@@ -1124,17 +1126,17 @@ class PandasCogroupedOps:
 
         Examples
         --------
-        >>> import pyarrow  # doctest: +SKIP
+        >>> import pyarrow as pa
         >>> df1 = spark.createDataFrame([(1, 1.0), (2, 2.0), (1, 3.0), (2, 4.0)], ("id", "v1"))
         >>> df2 = spark.createDataFrame([(1, "x"), (2, "y")], ("id", "v2"))
         >>> def summarize(l, r):
-        ...     return pyarrow.Table.from_pydict({
+        ...     return pa.Table.from_pydict({
         ...         "left": [l.num_rows],
         ...         "right": [r.num_rows]
         ...     })
         >>> df1.groupby("id").cogroup(df2.groupby("id")).applyInArrow(
         ...     summarize, schema="left long, right long"
-        ... ).show()  # doctest: +SKIP
+        ... ).show()
         +----+-----+
         |left|right|
         +----+-----+
@@ -1149,14 +1151,14 @@ class PandasCogroupedOps:
         in as two `pyarrow.Table`\\s containing all columns from the original Spark DataFrames.
 
         >>> def summarize(key, l, r):
-        ...     return pyarrow.Table.from_pydict({
+        ...     return pa.Table.from_pydict({
         ...         "key": [key[0].as_py()],
         ...         "left": [l.num_rows],
         ...         "right": [r.num_rows]
         ...     })
         >>> df1.groupby("id").cogroup(df2.groupby("id")).applyInArrow(
         ...     summarize, schema="key long, left long, right long"
-        ... ).show()  # doctest: +SKIP
+        ... ).sort("key").show()
         +---+----+-----+
         |key|left|right|
         +---+----+-----+
@@ -1205,9 +1207,11 @@ def _test() -> None:
     if not have_pandas or not have_pyarrow:
         del pyspark.sql.pandas.group_ops.PandasGroupedOpsMixin.apply.__doc__
         del pyspark.sql.pandas.group_ops.PandasGroupedOpsMixin.applyInPandas.__doc__
+        del pyspark.sql.pandas.group_ops.PandasCogroupedOps.applyInPandas.__doc__
 
     if not have_pyarrow:
         del pyspark.sql.pandas.group_ops.PandasGroupedOpsMixin.applyInArrow.__doc__
+        del pyspark.sql.pandas.group_ops.PandasCogroupedOps.applyInArrow.__doc__
 
     spark = SparkSession.builder.master("local[4]").appName("sql.pandas.group tests").getOrCreate()
     globs["spark"] = spark

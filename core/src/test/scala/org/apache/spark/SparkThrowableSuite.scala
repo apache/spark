@@ -37,17 +37,13 @@ import org.apache.spark.util.Utils
 
 /**
  * Test suite for Spark Throwables.
+ * To re-generate the error class file, run:
+ * {{{
+ *   SPARK_GENERATE_GOLDEN_FILES=1 build/sbt \
+ *     "core/testOnly *SparkThrowableSuite -- -t \"Error conditions are correctly formatted\""
+ * }}}
  */
 class SparkThrowableSuite extends SparkFunSuite {
-
-  /* Used to regenerate the error class file. Run:
-   {{{
-      SPARK_GENERATE_GOLDEN_FILES=1 build/sbt \
-        "core/testOnly *SparkThrowableSuite -- -t \"Error conditions are correctly formatted\""
-   }}}
-   */
-  private val regenerateCommand = "SPARK_GENERATE_GOLDEN_FILES=1 build/sbt " +
-    "\"core/testOnly *SparkThrowableSuite -- -t \\\"Error conditions are correctly formatted\\\"\""
 
   private val errorJsonFilePath = getWorkspaceFilePath(
     "common", "utils", "src", "main", "resources", "error", "error-conditions.json")

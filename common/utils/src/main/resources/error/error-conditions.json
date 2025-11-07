@@ -5671,6 +5671,21 @@
         "message" : [
           "The input stream <className> is not supported in Real-time Mode."
         ]
+      },
+      "OPERATOR_OR_SINK_NOT_IN_ALLOWLIST" : {
+        "message" : [
+          "The <errorType>(s): <message> not in the <errorType> allowlist for Real-Time Mode. To bypass this check, set spark.sql.streaming.realTimeMode.allowlistCheck to false. By changing this, you agree to run the query at your own risk."
+        ]
+      },
+      "OUTPUT_MODE_NOT_SUPPORTED" : {
+        "message" : [
+          "The output mode <outputMode> is not supported. To work around this limitation, set the output mode to Update. In the future, <outputMode> may be supported."
+        ]
+      },
+      "SINK_NOT_SUPPORTED" : {
+        "message" : [
+          "The <className> sink is currently not supported. See the Real-Time Mode User Guide for a list of supported sinks."
+        ]
       }
     },
     "sqlState" : "0A000"
@@ -6644,6 +6659,11 @@
       "STATE_STORE_TTL" : {
         "message" : [
           "State TTL with <stateStoreProvider> is not supported. Please use RocksDBStateStoreProvider."
+        ]
+      },
+      "STORE_BACKEND_NOT_SUPPORTED_FOR_TWS" : {
+        "message" : [
+          "Store backend <stateStoreProvider> is not supported by TransformWithState operator. Please use RocksDBStateStoreProvider."
         ]
       },
       "TABLE_OPERATION" : {
