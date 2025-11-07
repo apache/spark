@@ -66,17 +66,18 @@ class TwsTester[K, I, O](
   processor match {
     case p: StatefulProcessorWithInitialState[K @unchecked, I @unchecked, O @unchecked, s] =>
       handleInitialState[s]()
-    case _ => 
+    case _ =>
   }
 
   def handleInitialState[S]() = {
-      val timerValues = new TimerValuesImpl(Some(clock.instant().toEpochMilli()), None)
-      val p = processor.asInstanceOf[StatefulProcessorWithInitialState[K,I,O,S]]
-      initialState.foreach { case (key, state) =>
+    val timerValues = new TimerValuesImpl(Some(clock.instant().toEpochMilli()), None)
+    val p = processor.asInstanceOf[StatefulProcessorWithInitialState[K, I, O, S]]
+    initialState.foreach {
+      case (key, state) =>
         ImplicitGroupingKeyTracker.setImplicitKey(key)
         p.handleInitialState(key, state.asInstanceOf[S], timerValues)
         ImplicitGroupingKeyTracker.removeImplicitKey()
-      }
+    }
   }
 
   /**
@@ -282,6 +283,7 @@ class TwsTester[K, I, O](
 }
 
 object TwsTester {
+
   /** Fake implementation of {@code java.time.CLock} to be used with TwsTester to simulate time. */
   class TestClock(
       var currentInstant: Instant = Instant.EPOCH,
