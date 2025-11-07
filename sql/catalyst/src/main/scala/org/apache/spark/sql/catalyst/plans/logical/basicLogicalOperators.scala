@@ -581,18 +581,17 @@ case class Union(
   assert(!allowMissingCol || byName, "`allowMissingCol` can be true only if `byName` is true.")
 
   override lazy val maxRows: Option[Long] = {
-    var sum = BigInt(0)
-    children.foreach { child =>
-      if (child.maxRows.isDefined) {
-        sum += child.maxRows.get
-        if (!sum.isValidLong) {
-          return None
+    val sum = children.foldLeft(Option(BigInt(0))) {
+      case (Some(acc), child) =>
+        child.maxRows match {
+          case Some(n) =>
+            val newSum = acc + n
+            if (newSum.isValidLong) Some(newSum) else None
+          case None => None
         }
-      } else {
-        return None
-      }
+      case (None, _) => None
     }
-    Some(sum.toLong)
+    sum.map(_.toLong)
   }
 
   final override val nodePatterns: Seq[TreePattern] = Seq(UNION)
@@ -601,18 +600,17 @@ case class Union(
    * Note the definition has assumption about how union is implemented physically.
    */
   override lazy val maxRowsPerPartition: Option[Long] = {
-    var sum = BigInt(0)
-    children.foreach { child =>
-      if (child.maxRowsPerPartition.isDefined) {
-        sum += child.maxRowsPerPartition.get
-        if (!sum.isValidLong) {
-          return None
+    val sum = children.foldLeft(Option(BigInt(0))) {
+      case (Some(acc), child) =>
+        child.maxRowsPerPartition match {
+          case Some(n) =>
+            val newSum = acc + n
+            if (newSum.isValidLong) Some(newSum) else None
+          case None => None
         }
-      } else {
-        return None
-      }
+      case (None, _) => None
     }
-    Some(sum.toLong)
+    sum.map(_.toLong)
   }
 
   private def duplicatesResolvedPerBranch: Boolean =
