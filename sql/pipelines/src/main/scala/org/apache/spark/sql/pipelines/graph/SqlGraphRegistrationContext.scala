@@ -187,6 +187,7 @@ class SqlGraphRegistrationContext(
           specifiedSchema =
             Option.when(cst.columns.nonEmpty)(StructType(cst.columns.map(_.toV1Column))),
           partitionCols = Option(PartitionHelper.applyPartitioning(cst.partitioning, queryOrigin)),
+          clusterCols = None,
           properties = cst.tableSpec.properties,
           origin = queryOrigin.copy(
             objectName = Option(stIdentifier.unquotedString),
@@ -218,6 +219,7 @@ class SqlGraphRegistrationContext(
           specifiedSchema =
             Option.when(cst.columns.nonEmpty)(StructType(cst.columns.map(_.toV1Column))),
           partitionCols = Option(PartitionHelper.applyPartitioning(cst.partitioning, queryOrigin)),
+          clusterCols = None,
           properties = cst.tableSpec.properties,
           origin = queryOrigin.copy(
             objectName = Option(stIdentifier.unquotedString),
@@ -268,6 +270,7 @@ class SqlGraphRegistrationContext(
           specifiedSchema =
             Option.when(cmv.columns.nonEmpty)(StructType(cmv.columns.map(_.toV1Column))),
           partitionCols = Option(PartitionHelper.applyPartitioning(cmv.partitioning, queryOrigin)),
+          clusterCols = None,
           properties = cmv.tableSpec.properties,
           origin = queryOrigin.copy(
             objectName = Option(mvIdentifier.unquotedString),

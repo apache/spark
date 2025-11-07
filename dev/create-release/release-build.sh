@@ -838,7 +838,7 @@ if [[ "$1" == "docs" ]]; then
   echo "Generating llms.txt..."
   python "$SELF/generate-llms-txt.py" \
     --docs-path . \
-    --output _site/llms.txt \
+    --output "$SELF/_site/llms.txt" \
     --version "$SPARK_VERSION"
 
   cd ..

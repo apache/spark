@@ -73,7 +73,7 @@ ARG TEST_PIP_PKGS="coverage unittest-xml-reporting"
 
 # Install Python 3.11 packages
 RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.11
-RUN python3.11 -m pip install --ignore-installed blinker>=1.6.2 # mlflow needs this
+RUN python3.11 -m pip install --ignore-installed 'blinker>=1.6.2' # mlflow needs this
 RUN python3.11 -m pip install $BASIC_PIP_PKGS $TEST_PIP_PKGS && \
     python3.11 -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu && \
     python3.11 -m pip install deepspeed torcheval && \

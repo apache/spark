@@ -240,6 +240,7 @@ class PipelineCommand(google.protobuf.message.Message):
             FORMAT_FIELD_NUMBER: builtins.int
             SCHEMA_DATA_TYPE_FIELD_NUMBER: builtins.int
             SCHEMA_STRING_FIELD_NUMBER: builtins.int
+            CLUSTERING_COLUMNS_FIELD_NUMBER: builtins.int
             @property
             def table_properties(
                 self,
@@ -255,6 +256,11 @@ class PipelineCommand(google.protobuf.message.Message):
             @property
             def schema_data_type(self) -> pyspark.sql.connect.proto.types_pb2.DataType: ...
             schema_string: builtins.str
+            @property
+            def clustering_columns(
+                self,
+            ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
+                """Optional cluster columns for the table."""
             def __init__(
                 self,
                 *,
@@ -263,6 +269,7 @@ class PipelineCommand(google.protobuf.message.Message):
                 format: builtins.str | None = ...,
                 schema_data_type: pyspark.sql.connect.proto.types_pb2.DataType | None = ...,
                 schema_string: builtins.str = ...,
+                clustering_columns: collections.abc.Iterable[builtins.str] | None = ...,
             ) -> None: ...
             def HasField(
                 self,
@@ -284,6 +291,8 @@ class PipelineCommand(google.protobuf.message.Message):
                 field_name: typing_extensions.Literal[
                     "_format",
                     b"_format",
+                    "clustering_columns",
+                    b"clustering_columns",
                     "format",
                     b"format",
                     "partition_cols",

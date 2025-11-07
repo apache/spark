@@ -3302,6 +3302,170 @@ class DataFrameAggregateSuite extends QueryTest
       .groupBy($"col1").agg(max("col1"))
     checkAnswer(df, Seq(Row(1, 1)))
   }
+
+  test("kll_sketch_agg_bigint basic functionality") {
+    val df = Seq(1, 2, 3, 4, 5).toDF("value")
+
+    // Test with default k
+    val sketch1 = df.agg(kll_sketch_agg_bigint($"value")).collect()(0)(0)
+    assert(sketch1 != null)
+    assert(sketch1.asInstanceOf[Array[Byte]].length > 0)
+
+    // Test with explicit k
+    val sketch2 = df.agg(kll_sketch_agg_bigint($"value", 400)).collect()(0)(0)
+    assert(sketch2 != null)
+    assert(sketch2.asInstanceOf[Array[Byte]].length > 0)
+
+    // Test with column name
+    val sketch3 = df.agg(kll_sketch_agg_bigint("value")).collect()(0)(0)
+    assert(sketch3 != null)
+  }
+
+  test("kll_sketch_agg_float basic functionality") {
+    val df = Seq(1.0f, 2.0f, 3.0f, 4.0f, 5.0f).toDF("value")
+
+    val sketch = df.agg(kll_sketch_agg_float($"value")).collect()(0)(0)
+    assert(sketch != null)
+    assert(sketch.asInstanceOf[Array[Byte]].length > 0)
+
+    // Test with k parameter
+    val sketch2 = df.agg(kll_sketch_agg_float($"value", 300)).collect()(0)(0)
+    assert(sketch2 != null)
+  }
+
+  test("kll_sketch_agg_double basic functionality") {
+    val df = Seq(1.0, 2.0, 3.0, 4.0, 5.0).toDF("value")
+
+    val sketch = df.agg(kll_sketch_agg_double($"value")).collect()(0)(0)
+    assert(sketch != null)
+    assert(sketch.asInstanceOf[Array[Byte]].length > 0)
+  }
+
+  test("kll_sketch_to_string functions") {
+    val df = Seq(1, 2, 3, 4, 5).toDF("value")
+    val sketchDf = df.agg(kll_sketch_agg_bigint($"value").alias("sketch"))
+
+    val result = sketchDf.select(kll_sketch_to_string_bigint($"sketch")).collect()(0)(0)
+    assert(result != null)
+    assert(result.asInstanceOf[String].length > 0)
+    assert(result.asInstanceOf[String].contains("Kll"))
+  }
+
+  test("kll_sketch_get_n functions") {
+    val df = Seq(1, 2, 3, 4, 5).toDF("value")
+    val sketchDf = df.agg(kll_sketch_agg_bigint($"value").alias("sketch"))
+
+    val n = sketchDf.select(kll_sketch_get_n_bigint($"sketch")).collect()(0)(0)
+    assert(n == 5L)
+  }
+
+  test("kll_sketch_merge_bigint") {
+    val df = Seq(1, 2, 3).toDF("value")
+    val sketchDf = df.agg(kll_sketch_agg_bigint($"value").alias("sketch"))
+
+    val merged = sketchDf.select(
+      kll_sketch_merge_bigint($"sketch", $"sketch").alias("merged")
+    ).collect()(0)(0)
+    assert(merged != null)
+    assert(merged.asInstanceOf[Array[Byte]].length > 0)
+  }
+
+  test("kll_sketch_get_quantile_bigint") {
+    val df = Seq(1, 2, 3, 4, 5).toDF("value")
+    val sketchDf = df.agg(kll_sketch_agg_bigint($"value").alias("sketch"))
+
+    val quantile = sketchDf.select(
+      kll_sketch_get_quantile_bigint($"sketch", lit(0.5))
+    ).collect()(0)(0)
+    assert(quantile.asInstanceOf[Long] >= 1 && quantile.asInstanceOf[Long] <= 5)
+
+    // Test with array of ranks
+    val quantiles = sketchDf.select(
+      kll_sketch_get_quantile_bigint($"sketch", array(lit(0.25), lit(0.5), lit(0.75)))
+    ).collect()(0)(0)
+    assert(quantiles != null)
+  }
+
+  test("kll_sketch_get_rank_bigint") {
+    val df = Seq(1, 2, 3, 4, 5).toDF("value")
+    val sketchDf = df.agg(kll_sketch_agg_bigint($"value").alias("sketch"))
+
+    val rank = sketchDf.select(
+      kll_sketch_get_rank_bigint($"sketch", lit(3))
+    ).collect()(0)(0)
+    assert(rank.asInstanceOf[Double] >= 0.0 && rank.asInstanceOf[Double] <= 1.0)
+  }
+
+  test("kll_sketch float variants") {
+    val df = Seq(1.0f, 2.0f, 3.0f, 4.0f, 5.0f).toDF("value")
+    val sketchDf = df.agg(kll_sketch_agg_float($"value").alias("sketch"))
+
+    // Test to_string
+    val str = sketchDf.select(kll_sketch_to_string_float($"sketch")).collect()(0)(0)
+    assert(str.asInstanceOf[String].contains("Kll"))
+
+    // Test get_n
+    val n = sketchDf.select(kll_sketch_get_n_float($"sketch")).collect()(0)(0)
+    assert(n == 5L)
+
+    // Test merge
+    val merged = sketchDf.select(
+      kll_sketch_merge_float($"sketch", $"sketch")
+    ).collect()(0)(0)
+    assert(merged != null)
+
+    // Test get_quantile
+    val quantile = sketchDf.select(
+      kll_sketch_get_quantile_float($"sketch", lit(0.5))
+    ).collect()(0)(0)
+    assert(quantile != null)
+
+    // Test get_rank
+    val rank = sketchDf.select(
+      kll_sketch_get_rank_float($"sketch", lit(3.0f))
+    ).collect()(0)(0)
+    assert(rank.asInstanceOf[Double] >= 0.0 && rank.asInstanceOf[Double] <= 1.0)
+  }
+
+  test("kll_sketch double variants") {
+    val df = Seq(1.0, 2.0, 3.0, 4.0, 5.0).toDF("value")
+    val sketchDf = df.agg(kll_sketch_agg_double($"value").alias("sketch"))
+
+    // Test to_string
+    val str = sketchDf.select(kll_sketch_to_string_double($"sketch")).collect()(0)(0)
+    assert(str.asInstanceOf[String].contains("Kll"))
+
+    // Test get_n
+    val n = sketchDf.select(kll_sketch_get_n_double($"sketch")).collect()(0)(0)
+    assert(n == 5L)
+
+    // Test merge
+    val merged = sketchDf.select(
+      kll_sketch_merge_double($"sketch", $"sketch")
+    ).collect()(0)(0)
+    assert(merged != null)
+
+    // Test get_quantile
+    val quantile = sketchDf.select(
+      kll_sketch_get_quantile_double($"sketch", lit(0.5))
+    ).collect()(0)(0)
+    assert(quantile != null)
+
+    // Test get_rank
+    val rank = sketchDf.select(
+      kll_sketch_get_rank_double($"sketch", lit(3.0))
+    ).collect()(0)(0)
+    assert(rank.asInstanceOf[Double] >= 0.0 && rank.asInstanceOf[Double] <= 1.0)
+  }
+
+  test("kll_sketch with null values") {
+    val df = Seq(Some(1), None, Some(3), Some(4), None).toDF("value")
+    val sketchDf = df.agg(kll_sketch_agg_bigint($"value").alias("sketch"))
+
+    val n = sketchDf.select(kll_sketch_get_n_bigint($"sketch")).collect()(0)(0)
+    // Should only count non-null values
+    assert(n == 3L)
+  }
 }
 
 case class B(c: Option[Double])

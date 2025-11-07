@@ -256,12 +256,19 @@ class BatchTableWrite(
       Future {
         val dataFrameWriter = data.write
         destination.format.foreach(dataFrameWriter.format)
+
+        // In "append" mode with saveAsTable, partition/cluster columns must be specified in query
+        // because the format and options of the existing table is used, and the table could
+        // have been created with partition columns.
+	destination.clusterCols.foreach { clusterCols =>
+	  dataFrameWriter.clusterBy(clusterCols.head, clusterCols.tail: _*)
+	}
+	destination.partitionCols.foreach { partitionCols =>
+	  dataFrameWriter.partitionBy(partitionCols: _*)
+        }
+
         dataFrameWriter
           .mode("append")
-          // In "append" mode with saveAsTable, partition columns must be specified in query
-          // because the format and options of the existing table is used, and the table could
-          // have been created with partition columns.
-          .partitionBy(destination.partitionCols.getOrElse(Seq.empty): _*)
           .saveAsTable(destination.identifier.unquotedString)
       }
     }
