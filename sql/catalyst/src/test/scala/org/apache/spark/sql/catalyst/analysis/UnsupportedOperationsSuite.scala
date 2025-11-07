@@ -863,7 +863,12 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
     "real-time without operators - append mode",
     streamRelation, Append,
     "STREAMING_REAL_TIME_MODE.OUTPUT_MODE_NOT_SUPPORTED"
-    //    Map("outputMode" -> "Append")
+  )
+
+  assertSupportedForRealTime(
+    "real-time with stream-batch join - update mode",
+    streamRelation.join(batchRelation, joinType = Inner),
+    Update
   )
 
   /*

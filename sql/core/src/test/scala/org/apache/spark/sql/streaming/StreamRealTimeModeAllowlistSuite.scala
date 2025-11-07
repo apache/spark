@@ -107,27 +107,57 @@ class StreamRealTimeModeAllowlistSuite extends StreamRealTimeModeE2ESuiteBase {
     }
   }
 
-//  test("exactly once sink not supported") {
-//    val read = LowLatencyMemoryStream[Int](2)
-//
-//    val query = read
-//      .toDF()
-//      .writeStream
-//      .format("memory")
-//      .outputMode(OutputMode.Update())
-//      .trigger(defaultTrigger)
-//      .queryName("rtm_sink_allowlist")
-//
-//    checkError(
-//      exception = intercept[SparkUnsupportedOperationException ] {
-//        query.start()
-//      },
-//      condition = "STREAMING_REAL_TIME_MODE.EXACTLY_ONCE_SINK_NOT_SUPPORTED",
-//      parameters = Map(
-//        "sink" -> "org.apache.spark.sql.execution.streaming.sources.MemorySink"
-//      ))
-//
-//    val tmp = query.option("mode", "atLeastOnce").start()
-//    tmp.stop()
-//  }
+  // TODO : Remove this test after RTM can shuffle to multiple stages
+  test("repartition not allowed") {
+      val inputData = LowLatencyMemoryStream[Int](2)
+
+      val df = inputData.toDF()
+        .select(col("value").as("key"))
+        .repartition(4, col("key"))
+
+      val query = runStreamingQuery("repartition_allowlist", df)
+
+      eventually(timeout(60.seconds)) {
+        checkError(
+          exception = query.exception.get.getCause.asInstanceOf[SparkIllegalArgumentException],
+          condition = "STREAMING_REAL_TIME_MODE.OPERATOR_OR_SINK_NOT_IN_ALLOWLIST",
+          parameters = Map(
+            "errorType" -> "operator",
+            "message" -> (
+                "org.apache.spark.sql.execution.exchange.ShuffleExchangeExec is"
+              )
+          )
+        )
+      }
+  }
+
+  // TODO : Remove this test after RTM supports stateful queries
+  test("stateful queries not allowed") {
+    val inputData = LowLatencyMemoryStream[Int](2)
+
+    val df = inputData.toDF()
+      .select(col("value").as("key"))
+      .groupBy(col("key"))
+      .count()
+      .select(concat(col("key"), lit("-"), col("count")))
+
+    val query = runStreamingQuery("repartition_allowlist", df)
+
+    eventually(timeout(60.seconds)) {
+      checkError(
+        exception = query.exception.get.getCause.asInstanceOf[SparkIllegalArgumentException],
+        condition = "STREAMING_REAL_TIME_MODE.OPERATOR_OR_SINK_NOT_IN_ALLOWLIST",
+        parameters = Map(
+          "errorType" -> "operator",
+          "message" -> (
+            "org.apache.spark.sql.execution.aggregate.HashAggregateExec, " +
+              "org.apache.spark.sql.execution.exchange.ShuffleExchangeExec, " +
+              "org.apache.spark.sql.execution.streaming" +
+              ".operators.stateful.StateStoreRestoreExec, " +
+              "org.apache.spark.sql.execution.streaming.operators.stateful.StateStoreSaveExec are"
+            )
+        )
+      )
+    }
+  }
 }

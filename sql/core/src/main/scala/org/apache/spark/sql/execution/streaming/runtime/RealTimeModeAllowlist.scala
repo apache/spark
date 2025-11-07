@@ -54,6 +54,7 @@ object RealTimeModeAllowlist extends Logging {
     "org.apache.spark.sql.execution.datasources.v2.RealTimeStreamScanExec",
     "org.apache.spark.sql.execution.datasources.v2.WriteToDataSourceV2Exec",
     "org.apache.spark.sql.execution.exchange.BroadcastExchangeExec",
+    "org.apache.spark.sql.execution.joins.BroadcastHashJoinExec",
     "org.apache.spark.sql.execution.exchange.ReusedExchangeExec",
     classOf[EventTimeWatermarkExec].getName
   )
