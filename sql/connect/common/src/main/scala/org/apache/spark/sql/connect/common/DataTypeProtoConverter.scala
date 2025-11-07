@@ -75,16 +75,14 @@ object DataTypeProtoConverter {
         val srid = t.getGeometry.getSrid
         if (srid == GeometryType.MIXED_SRID) {
           GeometryType("ANY")
-        }
-        else {
+        } else {
           GeometryType(srid)
         }
       case proto.DataType.KindCase.GEOGRAPHY =>
         val srid = t.getGeography.getSrid
         if (srid == GeographyType.MIXED_SRID) {
           GeographyType("ANY")
-        }
-        else {
+        } else {
           GeographyType(srid)
         }
 

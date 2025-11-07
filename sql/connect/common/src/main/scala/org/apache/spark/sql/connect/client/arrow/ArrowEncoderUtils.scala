@@ -43,9 +43,9 @@ private[arrow] object ArrowEncoderUtils {
   }
 
   def assertMetadataPresent(
-    vectors: Seq[FieldVector],
-    expectedVectors: Seq[String],
-    expectedMetadata: Seq[(String, String)]): Unit = {
+      vectors: Seq[FieldVector],
+      expectedVectors: Seq[String],
+      expectedMetadata: Seq[(String, String)]): Unit = {
     expectedVectors.foreach { vectorName =>
       assert(vectors.exists(_.getName == vectorName))
     }

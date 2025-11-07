@@ -26,9 +26,13 @@ import org.apache.spark.sql.types._
 class GeometryConnectDataFrameSuite extends QueryTest with RemoteSparkSession {
 
   private val point1: Array[Byte] = "010100000000000000000031400000000000001C40"
-    .grouped(2).map(Integer.parseInt(_, 16).toByte).toArray
+    .grouped(2)
+    .map(Integer.parseInt(_, 16).toByte)
+    .toArray
   private val point2: Array[Byte] = "010100000000000000000035400000000000001E40"
-    .grouped(2).map(Integer.parseInt(_, 16).toByte).toArray
+    .grouped(2)
+    .map(Integer.parseInt(_, 16).toByte)
+    .toArray
 
   test("decode geometry value: SRID schema does not match input SRID data schema") {
     val geometry = Geometry.fromWKB(point1, 4326)
@@ -39,8 +43,7 @@ class GeometryConnectDataFrameSuite extends QueryTest with RemoteSparkSession {
         spark.createDataFrame(seq).collect()
       },
       condition = "GEO_ENCODER_SRID_MISMATCH_ERROR",
-      parameters = Map("type" -> "GEOMETRY", "valueSrid" -> "4326", "typeSrid" -> "0")
-    )
+      parameters = Map("type" -> "GEOMETRY", "valueSrid" -> "4326", "typeSrid" -> "0"))
 
     import testImplicits._
     checkError(
@@ -48,30 +51,29 @@ class GeometryConnectDataFrameSuite extends QueryTest with RemoteSparkSession {
         Seq(geometry).toDF().collect()
       },
       condition = "GEO_ENCODER_SRID_MISMATCH_ERROR",
-      parameters = Map("type" -> "GEOMETRY", "valueSrid" -> "4326", "typeSrid" -> "0")
-    )
+      parameters = Map("type" -> "GEOMETRY", "valueSrid" -> "4326", "typeSrid" -> "0"))
   }
 
   test("decode geometry value: mixed SRID schema is provided") {
     val schema = StructType(Seq(StructField("col1", GeometryType("ANY"), nullable = false)))
-    val expectedResult = Seq(
-      Row(Geometry.fromWKB(point1, 0)), Row(Geometry.fromWKB(point2, 4326)))
+    val expectedResult =
+      Seq(Row(Geometry.fromWKB(point1, 0)), Row(Geometry.fromWKB(point2, 4326)))
 
-    val javaList = java.util.Arrays.asList(
-      Row(Geometry.fromWKB(point1, 0)), Row(Geometry.fromWKB(point2, 4326)))
+    val javaList = java.util.Arrays
+      .asList(Row(Geometry.fromWKB(point1, 0)), Row(Geometry.fromWKB(point2, 4326)))
     val resultJavaListDF = spark.createDataFrame(javaList, schema)
     checkAnswer(resultJavaListDF, expectedResult)
 
     // Test that unsupported SRID with mixed schema will throw an error.
     val invalidData =
-      java.util.Arrays.asList(Row(Geometry.fromWKB(point1, 1)), Row(Geometry.fromWKB(point2, 4326)))
+      java.util.Arrays
+        .asList(Row(Geometry.fromWKB(point1, 1)), Row(Geometry.fromWKB(point2, 4326)))
     checkError(
       exception = intercept[SparkIllegalArgumentException] {
         spark.createDataFrame(invalidData, schema).collect()
       },
       condition = "ST_INVALID_SRID_VALUE",
-      parameters = Map("srid" -> "1")
-    )
+      parameters = Map("srid" -> "1"))
   }
 
   test("createDataFrame APIs with Geometry.fromWKB") {
@@ -86,9 +88,7 @@ class GeometryConnectDataFrameSuite extends QueryTest with RemoteSparkSession {
     // 2. Test createDataFrame with RDD of Rows and StructType schema
     val geometry3 = Geometry.fromWKB(point1, 4326)
     val geometry4 = Geometry.fromWKB(point2, 4326)
-    val schema = StructType(Seq(
-      StructField("geometry", GeometryType(4326), nullable = true)
-    ))
+    val schema = StructType(Seq(StructField("geometry", GeometryType(4326), nullable = true)))
 
     // 3. Test createDataFrame with Java List of Rows and StructType schema
     val javaList = java.util.Arrays.asList(Row(geometry3), Row(geometry4), Row(null))

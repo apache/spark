@@ -26,44 +26,41 @@ import org.apache.spark.sql.types.{Geography, Geometry}
 
 abstract class GeospatialArrowSerDe[T](typeName: String) {
 
-  def createDeserializer(struct: StructVector, vectors: Seq[FieldVector], timeZoneId: String)
-      : ArrowDeserializers.StructFieldSerializer[T] = {
+  def createDeserializer(
+      struct: StructVector,
+      vectors: Seq[FieldVector],
+      timeZoneId: String): ArrowDeserializers.StructFieldSerializer[T] = {
     assertMetadataPresent(vectors)
     val wkbDecoder = ArrowDeserializers.deserializerFor(
       BinaryEncoder,
       vectors
         .find(_.getName == "wkb")
         .getOrElse(throw CompilationErrors.columnNotFoundError("wkb")),
-      timeZoneId
-    )
+      timeZoneId)
     val sridDecoder = ArrowDeserializers.deserializerFor(
       PrimitiveIntEncoder,
       vectors
         .find(_.getName == "srid")
         .getOrElse(throw CompilationErrors.columnNotFoundError("srid")),
-      timeZoneId
-    )
+      timeZoneId)
     new ArrowDeserializers.StructFieldSerializer[T](struct) {
       override def value(i: Int): T = createInstance(wkbDecoder.get(i), sridDecoder.get(i))
     }
   }
 
-  def createSerializer(struct: StructVector, vectors: Seq[FieldVector]):
-      ArrowSerializer.StructSerializer = {
+  def createSerializer(
+      struct: StructVector,
+      vectors: Seq[FieldVector]): ArrowSerializer.StructSerializer = {
     assertMetadataPresent(vectors)
     new ArrowSerializer.StructSerializer(
       struct,
       Seq(
         new ArrowSerializer.StructFieldSerializer(
           extractor = (v: Any) => extractSrid(v),
-          ArrowSerializer.serializerFor(PrimitiveIntEncoder, struct.getChild("srid"))
-        ),
+          ArrowSerializer.serializerFor(PrimitiveIntEncoder, struct.getChild("srid"))),
         new ArrowSerializer.StructFieldSerializer(
           extractor = (v: Any) => extractBytes(v),
-          ArrowSerializer.serializerFor(BinaryEncoder, struct.getChild("wkb"))
-        )
-      )
-    )
+          ArrowSerializer.serializerFor(BinaryEncoder, struct.getChild("wkb")))))
   }
 
   private def assertMetadataPresent(vectors: Seq[FieldVector]): Unit = {
@@ -71,8 +68,7 @@ abstract class GeospatialArrowSerDe[T](typeName: String) {
     assert(
       vectors.exists(field =>
         field.getName == "wkb" && field.getField.getMetadata
-          .containsKey(typeName) && field.getField.getMetadata.get(typeName) == "true")
-    )
+          .containsKey(typeName) && field.getField.getMetadata.get(typeName) == "true"))
   }
 
   protected def createInstance(wkb: Any, srid: Any): T

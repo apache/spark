@@ -265,15 +265,18 @@ class ArrowEncoderSuite extends ConnectFunSuite with BeforeAndAfterAll {
 
   test("geography round trip") {
     val point1 = "010100000000000000000031400000000000001C40"
-      .grouped(2).map(Integer.parseInt(_, 16).toByte).toArray
+      .grouped(2)
+      .map(Integer.parseInt(_, 16).toByte)
+      .toArray
     val point2 = "010100000000000000000035400000000000001E40"
-      .grouped(2).map(Integer.parseInt(_, 16).toByte).toArray
+      .grouped(2)
+      .map(Integer.parseInt(_, 16).toByte)
+      .toArray
 
     val geographyEncoder = toRowEncoder(new StructType().add("g", "geography(4326)"))
     roundTripAndCheckIdentical(geographyEncoder) { () =>
       val maybeNull = MaybeNull(7)
-      Iterator.tabulate(101)(i =>
-        Row(maybeNull(Geography.fromWKB(point1, 4326))))
+      Iterator.tabulate(101)(i => Row(maybeNull(Geography.fromWKB(point1, 4326))))
     }
 
     val nestedGeographyEncoder = toRowEncoder(
@@ -302,30 +305,26 @@ class ArrowEncoderSuite extends ConnectFunSuite with BeforeAndAfterAll {
                 i,
                 maybeNull7(Geography.fromWKB(point1)),
                 i + 1,
-                maybeNull11(
-                  Geography.fromWKB(point2, 4326)))),
-            maybeNull7((0 until 10).map(j =>
-              Geography.fromWKB(point2, 0))),
-            maybeNull13(
-              Map(
-                (
-                  i.toString,
-                  maybeNull17(
-                    Geography.fromWKB(point1, 4326)))))))
+                maybeNull11(Geography.fromWKB(point2, 4326)))),
+            maybeNull7((0 until 10).map(j => Geography.fromWKB(point2, 0))),
+            maybeNull13(Map((i.toString, maybeNull17(Geography.fromWKB(point1, 4326)))))))
     }
   }
 
   test("geometry round trip") {
     val point1 = "010100000000000000000031400000000000001C40"
-      .grouped(2).map(Integer.parseInt(_, 16).toByte).toArray
+      .grouped(2)
+      .map(Integer.parseInt(_, 16).toByte)
+      .toArray
     val point2 = "010100000000000000000035400000000000001E40"
-      .grouped(2).map(Integer.parseInt(_, 16).toByte).toArray
+      .grouped(2)
+      .map(Integer.parseInt(_, 16).toByte)
+      .toArray
 
     val geometryEncoder = toRowEncoder(new StructType().add("g", "geometry(0)"))
     roundTripAndCheckIdentical(geometryEncoder) { () =>
       val maybeNull = MaybeNull(7)
-      Iterator.tabulate(101)(i =>
-        Row(maybeNull(Geometry.fromWKB(point1, 0))))
+      Iterator.tabulate(101)(i => Row(maybeNull(Geometry.fromWKB(point1, 0))))
     }
 
     val nestedGeometryEncoder = toRowEncoder(
@@ -354,16 +353,9 @@ class ArrowEncoderSuite extends ConnectFunSuite with BeforeAndAfterAll {
                 i,
                 maybeNull7(Geometry.fromWKB(point1, 0)),
                 i + 1,
-                maybeNull11(
-                  Geometry.fromWKB(point2, 4326)))),
-            maybeNull7((0 until 10).map(j =>
-              Geometry.fromWKB(point2, 0))),
-            maybeNull13(
-              Map(
-                (
-                  i.toString,
-                  maybeNull17(
-                    Geometry.fromWKB(point1, 4326)))))))
+                maybeNull11(Geometry.fromWKB(point2, 4326)))),
+            maybeNull7((0 until 10).map(j => Geometry.fromWKB(point2, 0))),
+            maybeNull13(Map((i.toString, maybeNull17(Geometry.fromWKB(point1, 4326)))))))
     }
   }
 

@@ -594,8 +594,8 @@ object ArrowSerializer {
   }
 
   private[arrow] class StructFieldSerializer(
-    val extractor: Any => Any,
-    val serializer: Serializer) {
+      val extractor: Any => Any,
+      val serializer: Serializer) {
     def write(index: Int, value: Any): Unit = serializer.write(index, extractor(value))
     def writeNull(index: Int): Unit = serializer.write(index, null)
   }
