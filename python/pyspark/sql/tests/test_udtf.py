@@ -3142,7 +3142,7 @@ class BaseUDTFTestsMixin:
         class TestUDTFWithLogging:
             @staticmethod
             def analyze(x: AnalyzeArgument) -> AnalyzeResult:
-                logger = PySparkLogger.getLogger("test_udtf")
+                logger = PySparkLogger.getLogger("PySparkLogger")
                 logger.warning(f"udtf analyze: {x.dataType.json()}", dt=x.dataType.json())
                 return AnalyzeResult(StructType().add("a", IntegerType()).add("b", IntegerType()))
 
@@ -3175,7 +3175,7 @@ class BaseUDTFTestsMixin:
                     context_class_name="TestUDTFWithLogging",
                     context_func_name="analyze",
                     context_dt='"long"',
-                    logger="test_udtf",
+                    logger="PySparkLogger",
                 )
             ],
         )
