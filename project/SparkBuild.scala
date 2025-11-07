@@ -410,7 +410,8 @@ object SparkBuild extends PomBuild {
   /* Enable shared settings on all projects */
   (allProjects ++ optionallyEnabledProjects ++ assemblyProjects ++ copyJarsProjects ++ Seq(spark, tools))
     .foreach(enable(sharedSettings ++ DependencyOverrides.settings ++
-      ExcludedDependencies.settings ++ Checkstyle.settings))
+      ExcludedDependencies.settings ++
+      (if (sys.env.contains("NOLINT_ON_COMPILE")) Nil else Checkstyle.settings)))
 
   /* Enable tests settings for all projects except examples, assembly and tools */
   (allProjects ++ optionallyEnabledProjects).foreach(enable(TestSettings.settings))
