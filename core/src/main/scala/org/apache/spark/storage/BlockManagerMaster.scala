@@ -26,7 +26,7 @@ import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config.CLEANER_REFERENCE_TRACKING_BLOCKING_TIMEOUT
-import org.apache.spark.internal.config.Network.{NETWORK_TIMEOUT, RPC_ASK_TIMEOUT}
+import org.apache.spark.internal.config.Network.NETWORK_TIMEOUT
 import org.apache.spark.rpc.{RpcEndpointRef, RpcTimeout}
 import org.apache.spark.storage.BlockManagerMessages._
 import org.apache.spark.util.{RpcUtils, ThreadUtils}
