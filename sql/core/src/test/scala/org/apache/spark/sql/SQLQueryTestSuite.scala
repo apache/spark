@@ -120,6 +120,9 @@ import org.apache.spark.util.Utils
  *  - Scalar Pandas UDF test case with a Scalar Pandas UDF registered as the name 'udf'
  *    iff Python executable, pyspark, pandas and pyarrow are available.
  *
+ *  - Scalar Iterator Pandas UDF test case with a Scalar Iterator Pandas UDF registered
+ *    as the name 'udf' iff Python executable, pyspark, pandas and pyarrow are available.
+ *
  * Therefore, UDF test cases should have single input and output files but executed by three
  * different types of UDFs. See 'udf/udf-inner-join.sql' as an example.
  *
@@ -189,6 +192,12 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
         }
       case udfTestCase: SQLQueryTestSuite#UDFTest
           if udfTestCase.udf.isInstanceOf[TestScalarPandasUDF] && !shouldTestPandasUDFs =>
+        ignore(s"${testCase.name} is skipped because pyspark," +
+          s"pandas and/or pyarrow were not available in [$pythonExec].") {
+          /* Do nothing */
+        }
+      case udfTestCase: SQLQueryTestSuite#UDFTest
+        if udfTestCase.udf.isInstanceOf[TestScalarIterPandasUDF] && !shouldTestPandasUDFs =>
         ignore(s"${testCase.name} is skipped because pyspark," +
           s"pandas and/or pyarrow were not available in [$pythonExec].") {
           /* Do nothing */
@@ -398,6 +407,10 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
         s"${testCase.name}${System.lineSeparator()}" +
           s"Python: $pythonVer Pandas: $pandasVer PyArrow: $pyarrowVer${System.lineSeparator()}"
       case udfTestCase: SQLQueryTestSuite#UDFTest
+          if udfTestCase.udf.isInstanceOf[TestScalarIterPandasUDF] && shouldTestPandasUDFs =>
+        s"${testCase.name}${System.lineSeparator()}" +
+          s"Python: $pythonVer Pandas: $pandasVer PyArrow: $pyarrowVer${System.lineSeparator()}"
+      case udfTestCase: SQLQueryTestSuite#UDFTest
           if udfTestCase.udf.isInstanceOf[TestGroupedAggPandasUDF] &&
             shouldTestPandasUDFs =>
         s"${testCase.name}${System.lineSeparator()}" +
@@ -446,12 +459,14 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
       // Create test cases of test types that depend on the input filename.
       val newTestCases: Seq[TestCase] = if (file.getAbsolutePath.startsWith(
         s"$inputFilePath${File.separator}udf${File.separator}postgreSQL")) {
-        Seq(TestScalaUDF("udf"), TestPythonUDF("udf"), TestScalarPandasUDF("udf")).map { udf =>
+        Seq(TestScalaUDF("udf"), TestPythonUDF("udf"),
+          TestScalarPandasUDF("udf"), TestScalarIterPandasUDF("udf")).map { udf =>
           UDFPgSQLTestCase(
             s"$testCaseName - ${udf.prettyName}", absPath, resultFile, udf)
         }
       } else if (file.getAbsolutePath.startsWith(s"$inputFilePath${File.separator}udf")) {
-        Seq(TestScalaUDF("udf"), TestPythonUDF("udf"), TestScalarPandasUDF("udf")).map { udf =>
+        Seq(TestScalaUDF("udf"), TestPythonUDF("udf"),
+          TestScalarPandasUDF("udf"), TestScalarIterPandasUDF("udf")).map { udf =>
           UDFTestCase(
             s"$testCaseName - ${udf.prettyName}", absPath, resultFile, udf)
         }
