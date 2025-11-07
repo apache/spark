@@ -1627,10 +1627,10 @@ strictIdentifier
 
 // simpleStrictIdentifier: like strictIdentifier but without IDENTIFIER('literal') support
 simpleStrictIdentifier
-    : IDENTIFIER              #unquotedIdentifier
-    | quotedIdentifier        #quotedIdentifierAlternative
-    | {SQL_standard_keyword_behavior}? ansiNonReserved #unquotedIdentifier
-    | {!SQL_standard_keyword_behavior}? nonReserved    #unquotedIdentifier
+    : IDENTIFIER              #simpleUnquotedIdentifier
+    | quotedIdentifier        #simpleQuotedIdentifierAlternative
+    | {SQL_standard_keyword_behavior}? ansiNonReserved #simpleUnquotedIdentifier
+    | {!SQL_standard_keyword_behavior}? nonReserved    #simpleUnquotedIdentifier
     ;
 
 quotedIdentifier

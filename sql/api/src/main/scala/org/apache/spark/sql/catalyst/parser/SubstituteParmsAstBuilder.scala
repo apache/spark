@@ -82,7 +82,7 @@ class SubstituteParmsAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
   override def visitNamedParameterLiteral(ctx: NamedParameterLiteralContext): AnyRef =
     withOrigin(ctx) {
       // Named parameters use simpleIdentifier, so .getText() is correct.
-      val paramName = ctx.namedParameterMarker().identifier().getText
+      val paramName = ctx.namedParameterMarker().simpleIdentifier().getText
       namedParams += paramName
 
       // Calculate the location of the entire parameter (including the colon)
@@ -119,7 +119,7 @@ class SubstituteParmsAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
   override def visitNamedParameterMarkerRule(ctx: NamedParameterMarkerRuleContext): AnyRef =
     withOrigin(ctx) {
       // Named parameters use simpleIdentifier, so .getText() is correct.
-      val paramName = ctx.namedParameterMarker().identifier().getText
+      val paramName = ctx.namedParameterMarker().simpleIdentifier().getText
       namedParams += paramName
 
       // Calculate the location of the entire parameter (including the colon)

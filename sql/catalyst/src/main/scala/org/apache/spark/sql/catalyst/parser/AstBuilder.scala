@@ -2085,7 +2085,8 @@ class AstBuilder extends DataTypeAstBuilder
   (Seq[NamedExpression], Option[String]) =
     withOrigin(ctx) {
       val exprs = ctx.unpivotColumns.asScala.map(visitUnpivotColumn).toSeq
-      val alias = Option(ctx.unpivotAlias()).map(a => getIdentifierText(a.errorCapturingIdentifier()))
+      val alias =
+        Option(ctx.unpivotAlias()).map(a => getIdentifierText(a.errorCapturingIdentifier()))
       (exprs, alias)
     }
 
@@ -6351,12 +6352,18 @@ class AstBuilder extends DataTypeAstBuilder
    */
   override def visitShowFunctions(ctx: ShowFunctionsContext): LogicalPlan = withOrigin(ctx) {
     // Function scope uses simpleIdentifier, so .getText() is correct.
-    val (userScope, systemScope) = Option(ctx.identifier)
-      .map(_.getText.toLowerCase(Locale.ROOT)) match {
+    val scope = Option(ctx.functionScope)
+    val (userScope, systemScope) = scope.map(_.getText.toLowerCase(Locale.ROOT)) match {
         case None | Some("all") => (true, true)
         case Some("system") => (false, true)
         case Some("user") => (true, false)
-        case Some(x) => throw QueryParsingErrors.showFunctionsUnsupportedError(x, ctx.identifier())
+        case Some(x) =>
+          // Cast to IdentifierContext for backward compatibility with error signature.
+          // The error method signature expects IdentifierContext but we use simpleIdentifier
+          // in the grammar now. Since both inherit from ParserRuleContext and the error
+          // method only uses it for location info, this cast is safe.
+          throw QueryParsingErrors.showFunctionsUnsupportedError(
+            x, ctx.functionScope.asInstanceOf[IdentifierContext])
     }
 
     val legacy = Option(ctx.legacy).map(visitMultipartIdentifier)
@@ -6524,7 +6531,7 @@ class AstBuilder extends DataTypeAstBuilder
   override def visitNamedParameterLiteral(
       ctx: NamedParameterLiteralContext): Expression = withOrigin(ctx) {
     // Named parameters use simpleIdentifier, so .getText() is correct.
-    NamedParameter(ctx.namedParameterMarker().identifier().getText)
+    NamedParameter(ctx.namedParameterMarker().simpleIdentifier().getText)
   }
 
   /**
