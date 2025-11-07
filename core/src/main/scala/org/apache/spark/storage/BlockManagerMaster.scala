@@ -231,7 +231,7 @@ class BlockManagerMaster(
     }
   }
 
-  def handleRemoveBlockBlockingTimeout(future: Future[_]): Unit = {
+  private def handleRemoveBlockBlockingTimeout(future: Future[_]): Unit = {
     if (cleanBlockBlockingTimeout.isDefined) {
       new RpcTimeout(FiniteDuration(cleanBlockBlockingTimeout.get, TimeUnit.SECONDS),
         CLEANER_REFERENCE_TRACKING_BLOCKING_TIMEOUT.key).awaitResult(future)
