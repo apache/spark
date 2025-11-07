@@ -1057,11 +1057,8 @@ object MergeIntoTable {
     }
 
   // Helper method to check if a given field path is a suffix of another path.
-  private def isSuffix(prefix: Seq[String], path: Seq[String]): Boolean =
-    prefix.length <= path.length && prefix.reverse.zip(path.reverse).forall {
-      case (prefixNamePart, pathNamePart) =>
-        SQLConf.get.resolver(prefixNamePart, pathNamePart)
-    }
+  private def isSuffix(suffix: Seq[String], path: Seq[String]): Boolean =
+    isPrefix(suffix.reverse, path.reverse)
 
   // Helper method to check if an assignment key is equal to a source column
   // and if the assignment value is the corresponding source column directly
