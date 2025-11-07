@@ -887,21 +887,13 @@ class GroupedAggPandasUDFTestsMixin:
             return v.sum()
 
         df = self.data
-        expected = (
-            df.groupby("id")
-            .agg(mean_udf(df.v), sum_udf(df.v))
-            .sort("id")
-            .toPandas()
-        )
+        expected = df.groupby("id").agg(mean_udf(df.v), sum_udf(df.v)).sort("id").toPandas()
 
         for codec in ["none", "zstd", "lz4"]:
             with self.subTest(compressionCodec=codec):
                 with self.sql_conf({"spark.sql.execution.arrow.compressionCodec": codec}):
                     result = (
-                        df.groupby("id")
-                        .agg(mean_udf(df.v), sum_udf(df.v))
-                        .sort("id")
-                        .toPandas()
+                        df.groupby("id").agg(mean_udf(df.v), sum_udf(df.v)).sort("id").toPandas()
                     )
                     assert_frame_equal(expected, result)
 

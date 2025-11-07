@@ -1458,7 +1458,12 @@ class ApplyInPandasTestsMixin:
         for codec in ["none", "zstd", "lz4"]:
             with self.subTest(compressionCodec=codec):
                 with self.sql_conf({"spark.sql.execution.arrow.compressionCodec": codec}):
-                    result = df.groupby("id").applyInPandas(sum_func, schema="v double").orderBy("v").collect()
+                    result = (
+                        df.groupby("id")
+                        .applyInPandas(sum_func, schema="v double")
+                        .orderBy("v")
+                        .collect()
+                    )
                     self.assertEqual(result, expected)
 
 
