@@ -136,7 +136,7 @@ object MergeScalarSubqueries extends Rule[LogicalPlan] {
         } else {
           removeReferences(mergedPlan.plan, subqueryPlansByLevel)
         }
-        if (mergedPlan.merged) {
+        if (mergedPlan.merged && mergedPlan.plan.output.size > 1) {
           CTERelationDef(
             Project(
               Seq(Alias(
@@ -177,19 +177,19 @@ object MergeScalarSubqueries extends Rule[LogicalPlan] {
         case s: ScalarSubquery if !s.isCorrelated && s.deterministic =>
           val (planWithReferences, level) = insertReferences(s.plan, planMergers)
 
-          while (level >= planMergers.size) planMergers += PlanMerger()
+          while (level >= planMergers.size) planMergers += new PlanMerger()
           // The subquery could contain a hint that is not propagated once we merge it, but as a
           // non-correlated scalar subquery won't be turned into a Join the loss of hints is fine.
-          val planMergeResult = planMergers(level).merge(planWithReferences)
+          val mergeResult = planMergers(level).merge(planWithReferences)
 
           maxLevel = maxLevel.max(level + 1)
 
-          val mergedOutput = planMergeResult.outputMap(planWithReferences.output.head)
+          val mergedOutput = mergeResult.outputMap(planWithReferences.output.head)
           val headerIndex =
-            planMergeResult.mergedPlan.output.indexWhere(_.exprId == mergedOutput.exprId)
+            mergeResult.mergedPlan.plan.output.indexWhere(_.exprId == mergedOutput.exprId)
           ScalarSubqueryReference(
             level,
-            planMergeResult.mergedPlanIndex,
+            mergeResult.mergedPlanIndex,
             headerIndex,
             s.dataType,
             s.exprId)

@@ -31,16 +31,13 @@ import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, Join, Log
  *                   - A newly merged plan combining the input with a cached plan
  *                   - The original input plan (if no merge was possible)
  * @param mergedPlanIndex The index of this plan in the PlanMerger's cache.
- * @param merged Whether the plan was merged with an existing cached plan (true) or
- *               is a new entry (false).
  * @param outputMap Maps attributes from the input plan to corresponding attributes in
  *                  `mergedPlan`. Used to rewrite expressions referencing the original plan
  *                  to reference the merged plan instead.
  */
 case class MergeResult(
-    mergedPlan: LogicalPlan,
+    mergedPlan: MergedPlan,
     mergedPlanIndex: Int,
-    merged: Boolean,
     outputMap: AttributeMap[Attribute])
 
 /**
@@ -75,7 +72,7 @@ case class MergedPlan(plan: LogicalPlan, merged: Boolean)
  *   val merger = PlanMerger()
  *   val result1 = merger.merge(plan1)  // Adds plan1 to cache
  *   val result2 = merger.merge(plan2)  // Merges with plan1 if compatible
- *   // result2.merged == true if plans were merged
+ *   // result2.mergedPlan.merged == true if plans were merged
  *   // result2.outputMap maps plan2's attributes to the merged plan's attributes
  * }}}
  */
@@ -94,26 +91,29 @@ class PlanMerger {
    * @return A [[MergeResult]] containing:
    *         - The merged/cached plan to use
    *         - Its index in the cache
-   *         - Whether it was merged with an existing plan
    *         - An attribute mapping for rewriting expressions
    */
   def merge(plan: LogicalPlan): MergeResult = {
     cache.zipWithIndex.collectFirst(Function.unlift {
       case (mp, i) =>
         checkIdenticalPlans(plan, mp.plan).map { outputMap =>
-          MergeResult(mp.plan, i, true, outputMap)
+          val newMergePlan = MergedPlan(mp.plan, true)
+          cache(i) = newMergePlan
+          MergeResult(newMergePlan, i, outputMap)
         }.orElse {
           tryMergePlans(plan, mp.plan).map {
             case (mergedPlan, outputMap) =>
-              cache(i) = MergedPlan(mergedPlan, true)
-              MergeResult(mergedPlan, i, true, outputMap)
+              val newMergePlan = MergedPlan(mergedPlan, true)
+              cache(i) = newMergePlan
+              MergeResult(newMergePlan, i, outputMap)
           }
         }
       case _ => None
     }).getOrElse {
-      cache += MergedPlan(plan, false)
+      val newMergePlan = MergedPlan(plan, false)
+      cache += newMergePlan
       val outputMap = AttributeMap(plan.output.map(a => a -> a))
-      MergeResult(plan, cache.length - 1, false, outputMap)
+      MergeResult(newMergePlan, cache.length - 1, outputMap)
     }
   }
 
@@ -296,8 +296,4 @@ class PlanMerger {
           newPlanSupportsObjectHashAggregate == cachedPlanSupportsObjectHashAggregate
       }
   }
-}
-
-object PlanMerger {
-  def apply(): PlanMerger = new PlanMerger
 }
