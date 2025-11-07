@@ -501,14 +501,21 @@ class SparkSession private(
   private[sql] def sql(sqlText: String, args: Array[_], tracker: QueryPlanningTracker): DataFrame =
     withActive {
       val plan = tracker.measurePhase(QueryPlanningTracker.PARSING) {
-        val parsedPlan = if (args.nonEmpty) {
-          // Resolve and validate parameters first
-          val paramMap = args.zipWithIndex.map { case (arg, idx) =>
-            s"_pos_$idx" -> lit(arg).expr
-          }.toMap
-          val resolvedParams = resolveAndValidateParameters(paramMap)
+        val parsedPlan = {
+          // Always parse with parameter context to detect unbound parameter markers.
+          // Even if args is empty, we need to detect and reject parameter markers in the SQL.
+          val (paramMap, resolvedParams) = if (args.nonEmpty) {
+            val pMap = args.zipWithIndex.map { case (arg, idx) =>
+              s"_pos_$idx" -> lit(arg).expr
+            }.toMap
+            (pMap, resolveAndValidateParameters(pMap))
+          } else {
+            (Map.empty[String, Expression], Map.empty[String, Expression])
+          }
+
           val paramContext = PositionalParameterContext(resolvedParams.values.toSeq)
           val parsed = sessionState.sqlParser.parsePlanWithParameters(sqlText, paramContext)
+
           // Check for SQL scripting with positional parameters
           if (parsed.isInstanceOf[CompoundBody]) {
             throw SqlScriptingErrors.positionalParametersAreNotSupportedWithSqlScripting()
@@ -519,8 +526,6 @@ class SparkSession private(
           } else {
             parsed
           }
-        } else {
-          sessionState.sqlParser.parsePlan(sqlText)
         }
         parsedPlan
       }
@@ -574,7 +579,8 @@ class SparkSession private(
       } else {
         // No parameters - parse normally without parameter context
         val plan = tracker.measurePhase(QueryPlanningTracker.PARSING) {
-          sessionState.sqlParser.parsePlan(sqlText)
+          val paramContext = HybridParameterContext(Seq.empty, Seq.empty)
+          sessionState.sqlParser.parsePlanWithParameters(sqlText, paramContext)
         }
         Dataset.ofRows(self, plan, tracker)
       }
