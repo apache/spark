@@ -81,8 +81,9 @@ private[python] trait PythonArrowInput[IN] { self: BasePythonRunner[IN, _] =>
   private val codec = compressionCodecName match {
     case "none" => NoCompressionCodec.INSTANCE
     case "zstd" =>
+      val compressionLevel = SQLConf.get.arrowZstdCompressionLevel
       val factory = CompressionCodec.Factory.INSTANCE
-      val codecType = new ZstdCompressionCodec().getCodecType()
+      val codecType = new ZstdCompressionCodec(compressionLevel).getCodecType()
       factory.createCodec(codecType)
     case "lz4" =>
       val factory = CompressionCodec.Factory.INSTANCE
@@ -278,8 +279,9 @@ private[python] trait GroupedPythonArrowInput { self: RowInputArrowPythonRunner 
     val codec = SQLConf.get.arrowCompressionCodec match {
       case "none" => NoCompressionCodec.INSTANCE
       case "zstd" =>
+        val compressionLevel = SQLConf.get.arrowZstdCompressionLevel
         val factory = CompressionCodec.Factory.INSTANCE
-        val codecType = new ZstdCompressionCodec().getCodecType()
+        val codecType = new ZstdCompressionCodec(compressionLevel).getCodecType()
         factory.createCodec(codecType)
       case "lz4" =>
         val factory = CompressionCodec.Factory.INSTANCE

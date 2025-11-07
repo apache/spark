@@ -87,8 +87,9 @@ class CoGroupedArrowPythonRunner(
     val codec = compressionCodecName match {
       case "none" => NoCompressionCodec.INSTANCE
       case "zstd" =>
+        val compressionLevel = SQLConf.get.arrowZstdCompressionLevel
         val factory = CompressionCodec.Factory.INSTANCE
-        val codecType = new ZstdCompressionCodec().getCodecType()
+        val codecType = new ZstdCompressionCodec(compressionLevel).getCodecType()
         factory.createCodec(codecType)
       case "lz4" =>
         val factory = CompressionCodec.Factory.INSTANCE
