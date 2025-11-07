@@ -1544,6 +1544,29 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
+  test("Casting GeometryType to GeometryType") {
+    // Casting from fixed SRID GEOMETRY(<srid>) to mixed SRID GEOMETRY(ANY) is always allowed.
+    // Type casting is always safe in this direction, so no additional constraints are imposed.
+    // Casting from mixed SRID GEOMETRY(ANY) to fixed SRID GEOMETRY(<srid>) is not allowed.
+    // Type casting can be unsafe in this direction, because per-row SRID values may be different.
+
+    // Valid cast test cases.
+    val canCastTestCases: Seq[(DataType, DataType)] = Seq(
+      (GeometryType(0), GeometryType("ANY")),
+      (GeometryType(3857), GeometryType("ANY")),
+      (GeometryType(4326), GeometryType("ANY"))
+    )
+    // Iterate over the test cases and verify casting.
+    canCastTestCases.foreach { case (fromType, toType) =>
+      // Cast can be performed from `fromType` to `toType`.
+      assert(Cast.canCast(fromType, toType))
+      assert(Cast.canAnsiCast(fromType, toType))
+      // Cast cannot be performed from `toType` to `fromType`.
+      assert(!Cast.canCast(toType, fromType))
+      assert(!Cast.canAnsiCast(toType, fromType))
+    }
+  }
+
   test("cast string to time") {
     checkEvaluation(cast(Literal.create("0:0:0"), TimeType()), 0L)
     checkEvaluation(cast(Literal.create(" 01:2:3.01   "), TimeType(2)), localTime(1, 2, 3, 10000))
