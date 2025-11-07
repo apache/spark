@@ -264,12 +264,20 @@ class BatchTableWrite(
         if (destination.format.isDefined) {
           dataFrameWriter.format(destination.format.get)
         }
+
+        // In "append" mode with saveAsTable, partition/cluster columns must be specified in query
+        // because the format and options of the existing table is used, and the table could
+        // have been created with partition columns.
+        if (destination.clusterCols.isDefined) {
+          val clusterCols = destination.clusterCols.get
+          dataFrameWriter.clusterBy(clusterCols.head, clusterCols.tail: _*)
+        }
+        if (destination.partitionCols.isDefined) {
+          dataFrameWriter.partitionBy(destination.partitionCols.get: _*)
+        }
+
         dataFrameWriter
           .mode("append")
-          // In "append" mode with saveAsTable, partition columns must be specified in query
-          // because the format and options of the existing table is used, and the table could
-          // have been created with partition columns.
-          .partitionBy(destination.partitionCols.getOrElse(Seq.empty): _*)
           .saveAsTable(destination.identifier.unquotedString)
       }
     }

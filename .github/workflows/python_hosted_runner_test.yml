@@ -59,7 +59,7 @@ jobs:
   build:
     name: "PySpark test on macos: ${{ matrix.modules }}"
     runs-on: ${{ inputs.os }}
-    timeout-minutes: 120
+    timeout-minutes: 150
     strategy:
       fail-fast: false
       matrix:
@@ -167,7 +167,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: test-results-${{ inputs.os }}-${{ matrix.modules }}--${{ matrix.java }}-${{ inputs.hadoop }}-hive2.3-${{ env.PYTHON_TO_TEST }}
-          path: "**/target/test-reports/*.xml"
+          path: |
+            **/target/test-reports/*.xml
+            **/target/surefire-reports/*.xml
       - name: Upload unit tests log files
         env: ${{ fromJSON(inputs.envs) }}
         if: ${{ !success() }}

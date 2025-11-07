@@ -99,7 +99,7 @@ from pyspark.sql.connect.plan import (
 from pyspark.sql.connect.observation import Observation
 from pyspark.sql.connect.utils import get_python_ver
 from pyspark.sql.pandas.types import _create_converter_to_pandas, from_arrow_schema
-from pyspark.sql.types import DataType, StructType, TimestampType, _has_type
+from pyspark.sql.types import DataType, StructType, _has_type
 from pyspark.util import PythonEvalType
 from pyspark.storagelevel import StorageLevel
 from pyspark.errors import PySparkValueError, PySparkAssertionError, PySparkNotImplementedError
@@ -962,12 +962,20 @@ class SparkConnectClient(object):
             logger.debug(f"Executing plan {self._proto_to_string(plan, True)}")
         req = self._execute_plan_request_with_metadata()
         req.plan.CopyFrom(plan)
-        (self_destruct_conf,) = self.get_config_with_defaults(
-            ("spark.sql.execution.arrow.pyspark.selfDestruct.enabled", "false"),
+
+        # Get all related configs in a batch
+        (
+            timezone,
+            struct_in_pandas,
+            self_destruct,
+        ) = self.get_configs(
+            "spark.sql.session.timeZone",
+            "spark.sql.execution.pandas.structHandlingMode",
+            "spark.sql.execution.arrow.pyspark.selfDestruct.enabled",
         )
-        self_destruct = cast(str, self_destruct_conf).lower() == "true"
+
         table, schema, metrics, observed_metrics, _ = self._execute_and_fetch(
-            req, observations, self_destruct=self_destruct
+            req, observations, self_destruct == "true"
         )
         assert table is not None
         ei = ExecutionInfo(metrics, observed_metrics)
@@ -985,7 +993,7 @@ class SparkConnectClient(object):
             renamed_table = table.rename_columns([f"col_{i}" for i in range(table.num_columns)])
 
             pandas_options = {"coerce_temporal_nanoseconds": True}
-            if self_destruct:
+            if self_destruct == "true":
                 # Configure PyArrow to use as little memory as possible:
                 # self_destruct - free columns as they are converted
                 # split_blocks - create a separate Pandas block for each column
@@ -1001,20 +1009,12 @@ class SparkConnectClient(object):
             pdf.columns = schema.names
 
         if len(pdf.columns) > 0:
-            timezone: Optional[str] = None
-            if any(_has_type(f.dataType, TimestampType) for f in schema.fields):
-                (timezone,) = self.get_configs("spark.sql.session.timeZone")
-
-            struct_in_pandas: Optional[str] = None
             error_on_duplicated_field_names: bool = False
-            if any(_has_type(f.dataType, StructType) for f in schema.fields):
-                (struct_in_pandas,) = self.get_config_with_defaults(
-                    ("spark.sql.execution.pandas.structHandlingMode", "legacy"),
-                )
-
-                if struct_in_pandas == "legacy":
-                    error_on_duplicated_field_names = True
-                    struct_in_pandas = "dict"
+            if struct_in_pandas == "legacy" and any(
+                _has_type(f.dataType, StructType) for f in schema.fields
+            ):
+                error_on_duplicated_field_names = True
+                struct_in_pandas = "dict"
 
             pdf = pd.concat(
                 [
