@@ -142,10 +142,24 @@
       Because we don't shade dependencies anymore, we need to restore Guava to compile scope so
       that the libraries Spark depend on have it available. We'll package the version that Spark
       uses which is not the same as Hadoop dependencies, but works.
+      As mentioned in https://github.com/google/guava/wiki/UseGuavaInYourBuild
+      Guava has one dependency that is needed for linkage at runtime:
+      com.google.guava:failureaccess:<version>
     -->
     <dependency>
       <groupId>com.google.guava</groupId>
       <artifactId>guava</artifactId>
+      <scope>${hadoop.deps.scope}</scope>
+      <exclusions>
+        <exclusion>
+          <groupId>*</groupId>
+          <artifactId>*</artifactId>
+        </exclusion>
+      </exclusions>
+    </dependency>
+    <dependency>
+      <groupId>com.google.guava</groupId>
+      <artifactId>failureaccess</artifactId>
       <scope>${hadoop.deps.scope}</scope>
     </dependency>
   </dependencies>
