@@ -35,4 +35,8 @@ class ToStringSQLBuilder extends V2ExpressionSQLBuilder with Serializable {
     val distinct = if (isDistinct) "DISTINCT " else ""
     s"""$funcName($distinct${inputs.mkString(", ")})"""
   }
+
+  override protected def visitGetArrayItem(inputs: Array[String]): String = {
+    s"${inputs(0)}[${inputs.tail.mkString(", ")}]"
+  }
 }
