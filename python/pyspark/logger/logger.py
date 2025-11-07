@@ -140,7 +140,19 @@ class PySparkLogger(logging.Logger):
     """
 
     def __init__(self, name: str = "PySparkLogger"):
+        from pyspark.logger.worker_io import JSONFormatterWithMarker
+
         super().__init__(name, level=logging.WARN)
+
+        root_logger = logging.getLogger()
+        if any(
+            isinstance(h, logging.StreamHandler)
+            and isinstance(h.formatter, JSONFormatterWithMarker)
+            for h in root_logger.handlers
+        ):
+            # Likely in the `capture_outputs` context, so don't add a handler
+            return
+
         _handler = logging.StreamHandler()
         self.addHandler(_handler)
 
