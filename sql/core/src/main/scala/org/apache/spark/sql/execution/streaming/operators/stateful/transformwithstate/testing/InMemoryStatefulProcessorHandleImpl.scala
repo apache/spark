@@ -27,10 +27,10 @@ import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.statefulprocessor.ImplicitGroupingKeyTracker
 import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.statefulprocessor.QueryInfoImpl
-import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.statefulprocessor.StatefulProcessorHandleImplBase
 import org.apache.spark.sql.streaming.ListState
 import org.apache.spark.sql.streaming.MapState
 import org.apache.spark.sql.streaming.QueryInfo
+import org.apache.spark.sql.streaming.StatefulProcessorHandle
 import org.apache.spark.sql.streaming.TimeMode
 import org.apache.spark.sql.streaming.TTLConfig
 import org.apache.spark.sql.streaming.ValueState
@@ -249,7 +249,7 @@ class InMemoryStatefulProcessorHandleImpl(
     timeMode: TimeMode,
     keyExprEnc: ExpressionEncoder[Any],
     clock: Clock = Clock.systemUTC())
-    extends StatefulProcessorHandleImplBase(timeMode, keyExprEnc) {
+    extends StatefulProcessorHandle {
 
   private val states = mutable.Map[String, Any]()
 
