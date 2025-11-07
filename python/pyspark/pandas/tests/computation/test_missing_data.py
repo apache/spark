@@ -442,7 +442,7 @@ class FrameMissingDataMixin:
 
         self.assert_eq(psdf.sort_index(), pdf.sort_index())
         self.assert_eq(psser.sort_index(), pser.sort_index())
-        self.assert_eq(psser[idx[0]].sort_index(), pser[idx[0]].sort_index())
+        self.assert_eq(psser.sort_index()[idx[0]], pser.sort_index()[idx[0]])
 
     def test_pad(self):
         pdf = pd.DataFrame(
