@@ -110,7 +110,7 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
   class HDFSBackedStateStore(
       val version: Long,
       private val mapToUpdate: HDFSBackedStateStoreMap,
-      shouldForceSnapshotOnCommit: Boolean = false)
+      shouldForceSnapshot: Boolean = false)
     extends StateStore {
 
     /** Trait and classes representing the internal state of the store */
@@ -197,7 +197,7 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
     override def commit(): Long = {
       try {
         verify(state == UPDATING, "Cannot commit after already committed or aborted")
-        commitUpdates(newVersion, mapToUpdate, compressedStream, shouldForceSnapshotOnCommit)
+        commitUpdates(newVersion, mapToUpdate, compressedStream, shouldForceSnapshot)
         state = COMMITTED
         logInfo(log"Committed version ${MDC(LogKeys.COMMITTED_VERSION, newVersion)} " +
           log"for ${MDC(LogKeys.STATE_STORE_PROVIDER, this)} to file " +
@@ -256,7 +256,7 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
         // just allow searching from list cause the list is small enough
         supportedCustomMetrics.find(_.name == name).map(_ -> value)
       } + (metricStateOnCurrentVersionSizeBytes -> SizeEstimator.estimate(mapToUpdate)) +
-        (metricForceSnapshot -> (if (shouldForceSnapshotOnCommit) 1L else 0L))
+        (metricForceSnapshot -> (if (shouldForceSnapshot) 1L else 0L))
 
       val instanceMetrics = Map(
         instanceMetricSnapshotLastUpload.withNewId(
@@ -543,10 +543,10 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
       newVersion: Long,
       map: HDFSBackedStateStoreMap,
       output: DataOutputStream,
-      shouldForceSnapshotOnCommit: Boolean = false): Unit = {
+      shouldForceSnapshot: Boolean = false): Unit = {
     synchronized {
       finalizeDeltaFile(output)
-      if (shouldForceSnapshotOnCommit) {
+      if (shouldForceSnapshot) {
         writeSnapshotFile(newVersion, map, "commit")
       }
       putStateIntoStateCacheMap(newVersion, map)

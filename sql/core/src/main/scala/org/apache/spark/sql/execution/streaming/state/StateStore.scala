@@ -702,7 +702,9 @@ trait StateStoreProvider {
   def upgradeReadStoreToWriteStore(
       readStore: ReadStateStore,
       version: Long,
-      uniqueId: Option[String] = None): StateStore = getStore(version, uniqueId)
+      uniqueId: Option[String] = None,
+      forceSnapshotOnCommit: Boolean = false): StateStore =
+    getStore(version, uniqueId, forceSnapshotOnCommit)
 
 
   /** Optional method for providers to allow for background maintenance (e.g. compactions) */
@@ -1231,10 +1233,11 @@ object StateStore extends Logging {
     if (version < 0) {
       throw QueryExecutionErrors.unexpectedStateStoreVersion(version)
     }
-    val (storeProvider, _) = getStateStoreProvider(storeProviderId,
+    val (storeProvider, shouldForceSnapshotUpload) = getStateStoreProvider(storeProviderId,
       keySchema, valueSchema, keyStateEncoderSpec, useColumnFamilies, storeConf, hadoopConf,
       useMultipleValuesPerKey, stateSchemaBroadcast)
-    storeProvider.upgradeReadStoreToWriteStore(readStore, version, stateStoreCkptId)
+    storeProvider.upgradeReadStoreToWriteStore(readStore, version, stateStoreCkptId,
+      shouldForceSnapshotUpload)
   }
 
   /** Get or create a store associated with the id. */
@@ -1618,11 +1621,11 @@ object StateStore extends Logging {
           shouldForceSnapshotUpload = false,
           providerIdsToUnload = Seq.empty[StateStoreProviderId]))
       logInfo(log"Reported that the loaded instance " +
-        log"${MDC(LogKeys.STATE_STORE_PROVIDER_ID, storeProviderId)} is active")
-      logDebug(log"The loaded instances are going to unload: " +
-        log"${MDC(LogKeys.STATE_STORE_PROVIDER_IDS, storeStatus.providerIdsToUnload)}" +
+        log"${MDC(LogKeys.STATE_STORE_PROVIDER_ID, storeProviderId)} is active" +
         log", shouldForceSnapshotUpload=" +
         log"${MDC(LogKeys.STREAM_SHOULD_FORCE_SNAPSHOT, storeStatus.shouldForceSnapshotUpload)}")
+      logDebug(log"The loaded instances are going to unload: " +
+        log"${MDC(LogKeys.STATE_STORE_PROVIDER_IDS, storeStatus.providerIdsToUnload)}")
       storeStatus
     } else {
       ReportActiveInstanceResponse(

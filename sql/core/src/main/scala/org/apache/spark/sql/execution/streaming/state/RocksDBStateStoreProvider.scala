@@ -47,7 +47,7 @@ private[sql] class RocksDBStateStoreProvider
       lastVersion: Long,
       private[RocksDBStateStoreProvider] val stamp: Long,
       private[RocksDBStateStoreProvider] var readOnly: Boolean,
-      private val forceSnapshotOnCommit: Boolean) extends StateStore {
+      private var forceSnapshotOnCommit: Boolean) extends StateStore {
 
     private sealed trait OPERATION
     private case object UPDATE extends OPERATION
@@ -765,6 +765,7 @@ private[sql] class RocksDBStateStoreProvider
         case Some(store: RocksDBStateStore) =>
           // Mark store as being used for write operations
           store.readOnly = readOnly
+          store.forceSnapshotOnCommit = forceSnapshotOnCommit
           store
         case None =>
           // Create new store instance. The stamp should be defined
@@ -810,7 +811,8 @@ private[sql] class RocksDBStateStoreProvider
   override def upgradeReadStoreToWriteStore(
       readStore: ReadStateStore,
       version: Long,
-      uniqueId: Option[String] = None): StateStore = {
+      uniqueId: Option[String] = None,
+      forceSnapshotOnCommit: Boolean = false): StateStore = {
     assert(version == readStore.version,
       s"Can only upgrade readStore to writeStore with the same version," +
         s" readStoreVersion: ${readStore.version}, writeStoreVersion: ${version}")
@@ -819,7 +821,7 @@ private[sql] class RocksDBStateStoreProvider
     assert(readStore.isInstanceOf[RocksDBStateStore], "Can only upgrade state store if it is a " +
       "RocksDBStateStore")
     loadStateStore(version, uniqueId, readOnly = false, existingStore =
-      Some(readStore.asInstanceOf[RocksDBStateStore]))
+      Some(readStore.asInstanceOf[RocksDBStateStore]), forceSnapshotOnCommit = forceSnapshotOnCommit)
   }
 
   override def getReadStore(

@@ -276,12 +276,6 @@ class StateStoreCoordinatorSuite extends SparkFunSuite with SharedSparkContext {
           verifySnapshotUploadEvents(coordRef, query, badPartitions)
           verifySnapshotUploadEvents(coordRef, query2, badPartitions)
 
-          // The coordinator should detected that lagging stores now. So next
-          // commit should automatically trigger snapshot
-          inputData.addData(1, 2, 3)
-          query.processAllAvailable()
-          Thread.sleep(500)
-
           val streamingQuery = query.asInstanceOf[StreamingQueryWrapper].streamingQuery
           val stateCheckpointDir = streamingQuery.lastExecution.checkpointLocation
 
@@ -307,6 +301,19 @@ class StateStoreCoordinatorSuite extends SparkFunSuite with SharedSparkContext {
               assert(stateStoreStatus.shouldForceSnapshotUpload == shouldForce)
             }
           }
+
+          // Verify that shouldForceSnapshotUpload is true for bad partitions
+          // after the coordinator detects the lag
+          verifyShouldForceSnapshotOnBadPartitions(
+            stateCheckpointDir, query.runId, true, None)
+
+          // The coordinator should detected that lagging stores now. So next
+          // commit should automatically trigger snapshot
+          inputData.addData(1, 2, 3)
+          query.processAllAvailable()
+          Thread.sleep(500)
+
+          // Verify that snapshot was created and shouldForceSnapshotUpload is now false
           verifyShouldForceSnapshotOnBadPartitions(
             stateCheckpointDir,
             query.runId,

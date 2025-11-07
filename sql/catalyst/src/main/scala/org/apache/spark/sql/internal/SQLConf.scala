@@ -2718,7 +2718,7 @@ object SQLConf {
         "a snapshot on the next commit. Requires spark.sql.streaming.stateStore.coordinator" +
         "ReportSnapshotUploadLag to be true."
       )
-      .version("4.1.0")
+      .version("4.2.0")
       .booleanConf
       .createWithDefault(false)
 

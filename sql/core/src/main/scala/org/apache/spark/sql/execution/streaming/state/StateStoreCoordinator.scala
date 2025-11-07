@@ -289,8 +289,8 @@ private class StateStoreCoordinator(
   private def shouldCoordinatorReportSnapshotLag: Boolean =
     sqlConf.stateStoreCoordinatorReportSnapshotUploadLag
 
-  private def stateStoreForceSnapshotUploadOnLag: Boolean =
-    sqlConf.stateStoreForceSnapshotUploadOnLag
+  private def forceSnapshotUploadOnLag: Boolean =
+    sqlConf.forceSnapshotUploadOnLag
 
   private def coordinatorLagReportInterval: Long =
     sqlConf.stateStoreCoordinatorSnapshotLagReportInterval
@@ -309,7 +309,7 @@ private class StateStoreCoordinator(
       }
       // Check if the store is lagging behind in snapshot uploads
       val shouldForceSnapshotUpload =
-        stateStoreForceSnapshotUploadOnLag && snapshotUploadLaggingStores
+        forceSnapshotUploadOnLag && snapshotUploadLaggingStores
           .getOrElse(id.queryRunId, mutable.HashSet.empty)
           .contains(id)
       logDebug(s"State store $id is lagging: $shouldForceSnapshotUpload")
@@ -355,9 +355,9 @@ private class StateStoreCoordinator(
       logDebug(s"Snapshot version $version was uploaded for state store $providerId")
       if (!stateStoreLatestUploadedSnapshot.get(providerId).exists(_.version >= version)) {
         stateStoreLatestUploadedSnapshot.put(providerId, SnapshotUploadEvent(version, timestamp))
-      }
-      if (stateStoreForceSnapshotUploadOnLag) {
-        snapshotUploadLaggingStores.get(providerId.queryRunId).foreach(_.remove(providerId))
+        if (forceSnapshotUploadOnLag) {
+          snapshotUploadLaggingStores.get(providerId.queryRunId).foreach(_.remove(providerId))
+        }
       }
       context.reply(true)
 
@@ -368,7 +368,7 @@ private class StateStoreCoordinator(
       if (shouldCoordinatorReportSnapshotLag) {
         val laggingStores =
           findLaggingStores(queryRunId, latestVersion, currentTimestamp, isTerminatingTrigger)
-        if (stateStoreForceSnapshotUploadOnLag) {
+        if (forceSnapshotUploadOnLag) {
           // findLaggingStores will always get a complete list of lagging stores of a query run.
           // Therefore, we can assign the new set to the snapshotUploadLaggingStores map.
           snapshotUploadLaggingStores.put(queryRunId, mutable.HashSet(laggingStores: _*))
