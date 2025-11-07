@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import java.util.Locale
 
 import org.apache.spark.{QueryContext, SparkException}
+import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TypeCheckResult, TypeCoercion}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
@@ -406,14 +407,14 @@ abstract class Expression extends TreeNode[Expression] {
     }
 
   /**
-   * A _very rough_ indication of the expected cost of evaluating an expression.
-   * This can be used by the optimizer to decide if an element should be double
-   * evaluated for pre-emptive row filtering, in ordering filter expression, etc.
-   * This is an internal API and may go away at any time.
+   * A developer API for marking if an expression is likely to be expensive.
+   * The current only consumer of this is the pushdown optimizer.
+   * By default an expression is expensive if any of it's children are expensive.
    */
-  protected[spark] def expectedCost: Int = _expectedCost
+  @DeveloperApi
+  def expensive: Boolean = _expensive
 
-  private lazy val _expectedCost = children.map(_.expectedCost).sum + 1
+  private lazy val _expensive: Boolean = children.map(_.expensive).exists(_ == true)
 }
 
 object ExpressionPatternBitMask {

@@ -2294,7 +2294,7 @@ case class ArrayJoin(
 
   override def prettyName: String = "array_join"
 
-  override protected[spark] def expectedCost = 200
+  override def expensive: Boolean = true
 }
 
 /**
@@ -4558,8 +4558,6 @@ case class ArrayUnion(left: Expression, right: Expression) extends ArrayBinaryLi
 case class ArrayIntersect(left: Expression, right: Expression) extends ArrayBinaryLike
   with ComplexTypeMergingExpression {
 
-  override protected[spark] def expectedCost = 200
-
   private lazy val internalDataType: DataType = {
     dataTypeCheck
     ArrayType(elementType, leftArrayElementNullable && rightArrayElementNullable)
@@ -4791,8 +4789,6 @@ case class ArrayIntersect(left: Expression, right: Expression) extends ArrayBina
   since = "2.4.0")
 case class ArrayExcept(left: Expression, right: Expression) extends ArrayBinaryLike
   with ComplexTypeMergingExpression {
-
-  override protected[spark] def expectedCost = 200
 
   private lazy val internalDataType: DataType = {
     dataTypeCheck

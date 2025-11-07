@@ -84,7 +84,26 @@ abstract class StringRegexExpression extends BinaryExpression
     }
   }
 
-  override protected[spark] def expectedCost: Int = 100
+  override def expensive: Boolean = _expensiveRegex
+
+  lazy val _expensiveRegex = {
+    // A quick heuristic for expensive a pattern is.
+    left match {
+      case StringLiteral(str) =>
+        // If we have a clear start limited back tracking required.
+        if (str.startsWith("^") || str.startsWith("\\b")) {
+          false
+        } else if (str.contains("+")) {
+          // Greedy matching can be tricky.
+          true
+        } else {
+          // Default to pushdown for now.
+          false
+        }
+      case _ =>
+        true // per row regex compilation.
+    }
+  }
 }
 
 private[catalyst] object StringRegexExpression {
