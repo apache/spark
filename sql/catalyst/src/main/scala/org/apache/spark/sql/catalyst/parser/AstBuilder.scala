@@ -119,30 +119,12 @@ class AstBuilder extends DataTypeAstBuilder
   }
 
   /**
-   * Override the base getIdentifierParts to properly parse qualified identifiers in
-   * IDENTIFIER('literal') contexts. Uses CatalystSqlParser to handle qualified identifiers
-   * like IDENTIFIER('`catalog`.`schema`') which should be parsed as Seq("catalog", "schema").
+   * Override to provide actual multi-part identifier parsing using CatalystSqlParser. This allows
+   * the base class to handle IDENTIFIER('qualified.identifier') without needing special case
+   * logic in getIdentifierParts.
    */
-  override protected def getIdentifierParts(ctx: ParserRuleContext): Seq[String] = {
-    ctx match {
-      case idLitCtx: IdentifierLiteralContext =>
-        // For IDENTIFIER('literal') in strictIdentifier.
-        val literalValue = string(visitStringLit(idLitCtx.stringLit()))
-        // Parse the string as a multi-part identifier.
-        // (e.g., "`cat`.`schema`" -> Seq("cat", "schema"))
-        CatalystSqlParser.parseMultipartIdentifier(literalValue)
-
-      case idLitCtx: IdentifierLiteralWithExtraContext =>
-        // For IDENTIFIER('literal') in errorCapturingIdentifier.
-        val literalValue = string(visitStringLit(idLitCtx.stringLit()))
-        // Parse the string as a multi-part identifier.
-        // (e.g., "`cat`.`schema`" -> Seq("cat", "schema"))
-        CatalystSqlParser.parseMultipartIdentifier(literalValue)
-
-      case _ =>
-        // Delegate all other cases to the base implementation.
-        super.getIdentifierParts(ctx)
-    }
+  override protected def parseMultipartIdentifier(identifier: String): Seq[String] = {
+    CatalystSqlParser.parseMultipartIdentifier(identifier)
   }
 
   /**

@@ -201,6 +201,25 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with DataTypeE
   }
 
   /**
+   * Parse a string into a multi-part identifier. This method is intended to be overridden by
+   * subclasses that have access to a full SQL parser. The base implementation simply returns the
+   * input as a single-part identifier.
+   *
+   * For example, in AstBuilder, this would parse "`catalog`.`schema`.`table`" into Seq("catalog",
+   * "schema", "table").
+   *
+   * @param identifier
+   *   The identifier string to parse, potentially containing dots and backticks.
+   * @return
+   *   Sequence of identifier parts.
+   */
+  protected def parseMultipartIdentifier(identifier: String): Seq[String] = {
+    // Base implementation: just return the string as a single part.
+    // Subclasses with access to a full parser should override this.
+    Seq(identifier)
+  }
+
+  /**
    * Get the identifier parts from a context, handling both regular identifiers and
    * IDENTIFIER('literal'). This method is used to support identifier-lite syntax where
    * IDENTIFIER('string') is folded at parse time. For qualified identifiers like
@@ -218,23 +237,21 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with DataTypeE
       case idLitCtx: IdentifierLiteralContext =>
         // For IDENTIFIER('literal') in strictIdentifier.
         val literalValue = string(visitStringLit(idLitCtx.stringLit()))
-        // This base implementation just returns the literal as a single part.
-        // Subclasses should override to parse qualified identifiers.
-        Seq(literalValue)
+        // Parse the string to handle qualified identifiers like "`cat`.`schema`".
+        parseMultipartIdentifier(literalValue)
 
       case idLitCtx: IdentifierLiteralWithExtraContext =>
         // For IDENTIFIER('literal') in errorCapturingIdentifier.
         val literalValue = string(visitStringLit(idLitCtx.stringLit()))
-        // This base implementation just returns the literal as a single part.
-        // Subclasses should override to parse qualified identifiers.
-        Seq(literalValue)
+        // Parse the string to handle qualified identifiers like "`cat`.`schema`".
+        parseMultipartIdentifier(literalValue)
 
       case base: ErrorCapturingIdentifierBaseContext =>
         // Regular identifier with errorCapturingIdentifierExtra.
         // Need to recursively handle identifier which might itself be IDENTIFIER('literal').
-        Option(base.identifier()).flatMap(id =>
-          Option(id.strictIdentifier()).map(getIdentifierParts)
-        ).getOrElse(Seq(ctx.getText))
+        Option(base.identifier())
+          .flatMap(id => Option(id.strictIdentifier()).map(getIdentifierParts))
+          .getOrElse(Seq(ctx.getText))
 
       case _ =>
         // For regular identifiers, just return the text as a single part.
