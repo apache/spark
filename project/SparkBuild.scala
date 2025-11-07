@@ -364,7 +364,8 @@ object SparkBuild extends PomBuild {
   /* Enable shared settings on all projects */
   (allProjects ++ optionallyEnabledProjects ++ assemblyProjects ++ copyJarsProjects ++ Seq(spark, tools))
     .foreach(enable(sharedSettings ++ DependencyOverrides.settings ++
-      ExcludedDependencies.settings ++ Checkstyle.settings ++ ExcludeShims.settings))
+      ExcludedDependencies.settings ++ (if (noLintOnCompile) Nil else Checkstyle.settings) ++
+      ExcludeShims.settings))
 
   /* Enable tests settings for all projects except examples, assembly and tools */
   (allProjects ++ optionallyEnabledProjects).foreach(enable(TestSettings.settings))
