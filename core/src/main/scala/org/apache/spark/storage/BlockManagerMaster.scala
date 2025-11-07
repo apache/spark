@@ -201,13 +201,7 @@ class BlockManagerMaster(
         log"${MDC(ERROR, e.getMessage)}", e)
     )(ThreadUtils.sameThread)
     if (blocking) {
-      if (cleanBlockBlockingTimeout.isDefined) {
-        new RpcTimeout(FiniteDuration(cleanBlockBlockingTimeout.get, TimeUnit.SECONDS),
-          CLEANER_REFERENCE_TRACKING_BLOCKING_TIMEOUT.key).awaitResult(future)
-      } else {
-        // the underlying Futures will timeout anyway, so it's safe to use infinite timeout here
-        RpcUtils.INFINITE_TIMEOUT.awaitResult(future)
-      }
+      handleRemoveBlockBlockingTimeout(future)
     }
   }
 
@@ -219,13 +213,7 @@ class BlockManagerMaster(
         log"${MDC(ERROR, e.getMessage)}", e)
     )(ThreadUtils.sameThread)
     if (blocking) {
-      if (cleanBlockBlockingTimeout.isDefined) {
-        new RpcTimeout(FiniteDuration(cleanBlockBlockingTimeout.get, TimeUnit.SECONDS),
-          CLEANER_REFERENCE_TRACKING_BLOCKING_TIMEOUT.key).awaitResult(future)
-      } else {
-        // the underlying Futures will timeout anyway, so it's safe to use infinite timeout here
-        RpcUtils.INFINITE_TIMEOUT.awaitResult(future)
-      }
+      handleRemoveBlockBlockingTimeout(future)
     }
   }
 
@@ -239,13 +227,19 @@ class BlockManagerMaster(
         log"${MDC(ERROR, e.getMessage)}", e)
     )(ThreadUtils.sameThread)
     if (blocking) {
-      if (cleanBlockBlockingTimeout.isDefined) {
-        new RpcTimeout(FiniteDuration(cleanBlockBlockingTimeout.get, TimeUnit.SECONDS),
-          CLEANER_REFERENCE_TRACKING_BLOCKING_TIMEOUT.key).awaitResult(future)
-      } else {
-        // the underlying Futures will timeout anyway, so it's safe to use infinite timeout here
-        RpcUtils.INFINITE_TIMEOUT.awaitResult(future)
-      }
+      handleRemoveBlockBlockingTimeout(future)
+    }
+  }
+
+  def handleRemoveBlockBlockingTimeout(future: Future[_]): Unit = {
+    if (cleanBlockBlockingTimeout.isDefined) {
+      new RpcTimeout(FiniteDuration(cleanBlockBlockingTimeout.get, TimeUnit.SECONDS),
+        CLEANER_REFERENCE_TRACKING_BLOCKING_TIMEOUT.key).awaitResult(future)
+    } else {
+      // Normally, the underlying Futures will timeout anyway,
+      // so it's safe to use infinite timeout here. In extreme case,
+      // Driver can't crease thread handling this rpc, here will be stuck forever.
+      RpcUtils.INFINITE_TIMEOUT.awaitResult(future)
     }
   }
 
