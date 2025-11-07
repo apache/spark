@@ -21,7 +21,7 @@ import scala.jdk.CollectionConverters._
 import io.fabric8.kubernetes.api.model.{HasMetadata, ServiceBuilder}
 
 import org.apache.spark.deploy.k8s.{KubernetesDriverConf, SparkPod}
-import org.apache.spark.deploy.k8s.Config.{KUBERNETES_DNS_LABEL_NAME_MAX_LENGTH, KUBERNETES_DRIVER_SERVICE_IP_FAMILIES, KUBERNETES_DRIVER_SERVICE_IP_FAMILY_POLICY}
+import org.apache.spark.deploy.k8s.Config.{KUBERNETES_DNS_LABEL_NAME_MAX_LENGTH, KUBERNETES_DRIVER_SERVICE_IP_FAMILIES, KUBERNETES_DRIVER_SERVICE_IP_FAMILY_POLICY, KUBERNETES_EXECUTOR_USE_DRIVER_POD_IP}
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.internal.{config, Logging}
 
@@ -37,6 +37,7 @@ private[spark] class DriverServiceFeatureStep(
     s"$DRIVER_HOST_KEY is not supported in Kubernetes mode, as the driver's hostname will be " +
       "managed via a Kubernetes service.")
 
+  private val userDriverPodIp = kubernetesConf.sparkConf.get(KUBERNETES_EXECUTOR_USE_DRIVER_POD_IP)
   private val resolvedServiceName = kubernetesConf.driverServiceName
   private val ipFamilyPolicy =
     kubernetesConf.sparkConf.get(KUBERNETES_DRIVER_SERVICE_IP_FAMILY_POLICY)
@@ -54,15 +55,20 @@ private[spark] class DriverServiceFeatureStep(
   override def configurePod(pod: SparkPod): SparkPod = pod
 
   override def getAdditionalPodSystemProperties(): Map[String, String] = {
-    val driverHostname = s"$resolvedServiceName.${kubernetesConf.namespace}.svc"
-    Map(DRIVER_HOST_KEY -> driverHostname,
-      config.DRIVER_PORT.key -> driverPort.toString,
-      config.DRIVER_BLOCK_MANAGER_PORT.key -> driverBlockManagerPort.toString)
+    if (userDriverPodIp) {
+      val driverHostname = s"$resolvedServiceName.${kubernetesConf.namespace}.svc"
+      Map(DRIVER_HOST_KEY -> driverHostname,
+        config.DRIVER_PORT.key -> driverPort.toString,
+        config.DRIVER_BLOCK_MANAGER_PORT.key -> driverBlockManagerPort.toString)
+    } else {
+      Map.empty
+    }
   }
 
   override def getAdditionalKubernetesResources(): Seq[HasMetadata] = {
-    val driverService = new ServiceBuilder()
-      .withNewMetadata()
+    if (userDriverPodIp) {
+      val driverService = new ServiceBuilder()
+        .withNewMetadata()
         .withName(resolvedServiceName)
         .addToAnnotations(kubernetesConf.serviceAnnotations.asJava)
         .addToLabels(SPARK_APP_ID_LABEL, kubernetesConf.appId)
@@ -94,8 +100,11 @@ private[spark] class DriverServiceFeatureStep(
           .withNewTargetPort(driverSparkConnectServerPort)
           .endPort()
         .endSpec()
-      .build()
-    Seq(driverService)
+        .build()
+      Seq(driverService)
+    } else {
+      Nil
+    }
   }
 }
 

@@ -85,6 +85,19 @@ class KubernetesDriverBuilderSuite extends PodBuilderSuite {
     assert(spec.driverPreKubernetesResources.size === 1)
     assert(spec.driverPreKubernetesResources === ADDITION_PRE_RESOURCES)
   }
+
+
+  test("SPARK-54228: remove driver service when using driver pod ip") {
+    val client = mockKubernetesClient()
+    val sparkConf = new SparkConf(false)
+      .set(Config.KUBERNETES_EXECUTOR_USE_DRIVER_POD_IP.key,
+        "true")
+    val conf = KubernetesTestConf.createDriverConf(
+      sparkConf = sparkConf
+    )
+    val spec = new KubernetesDriverBuilder().buildFromFeatures(conf, client)
+    assert(spec.driverKubernetesResources.find(f => f.getMetadata.getName.endsWith(".svc")).size === 0)
+  }
 }
 
 class TestStep extends KubernetesFeatureConfigStep {
