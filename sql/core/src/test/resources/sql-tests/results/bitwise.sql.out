@@ -360,7 +360,14 @@ org.apache.spark.sql.catalyst.parser.ParseException
   "messageParameters" : {
     "error" : "'>'",
     "hint" : ""
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 21,
+    "fragment" : "SELECT 20181117 > > 2"
+  } ]
 }
 
 
@@ -376,7 +383,14 @@ org.apache.spark.sql.catalyst.parser.ParseException
   "messageParameters" : {
     "error" : "'<'",
     "hint" : ""
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 21,
+    "fragment" : "SELECT 20181117 < < 2"
+  } ]
 }
 
 
@@ -392,7 +406,14 @@ org.apache.spark.sql.catalyst.parser.ParseException
   "messageParameters" : {
     "error" : "'>>'",
     "hint" : ""
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 22,
+    "fragment" : "SELECT 20181117 > >> 2"
+  } ]
 }
 
 
@@ -408,7 +429,14 @@ org.apache.spark.sql.catalyst.parser.ParseException
   "messageParameters" : {
     "error" : "'<'",
     "hint" : ""
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 21,
+    "fragment" : "SELECT 20181117 <<< 2"
+  } ]
 }
 
 
@@ -424,7 +452,14 @@ org.apache.spark.sql.catalyst.parser.ParseException
   "messageParameters" : {
     "error" : "'>'",
     "hint" : ""
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 22,
+    "fragment" : "SELECT 20181117 >>>> 2"
+  } ]
 }
 
 
