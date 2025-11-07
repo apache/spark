@@ -31,12 +31,55 @@ class STExpressionsSuite
   // Private common constants used across several tests.
   private final val defaultGeographySrid: Int = ExpressionDefaults.DEFAULT_GEOGRAPHY_SRID
   private final val defaultGeographyType: DataType = GeographyType(defaultGeographySrid)
+  private final val mixedSridGeographyType: DataType = GeographyType("ANY")
   private final val defaultGeometrySrid: Int = ExpressionDefaults.DEFAULT_GEOMETRY_SRID
   private final val defaultGeometryType: DataType = GeometryType(defaultGeometrySrid)
 
   // Private helper method to assert the data type of a query result.
   private def assertType(query: String, expectedDataType: DataType) = {
     assert(sql(query).schema.fields.head.dataType.sameType(expectedDataType))
+  }
+
+  /** Geospatial type casting. */
+
+  test("Cast GEOGRAPHY(srid) to GEOGRAPHY(ANY)") {
+    // Test data: WKB representation of POINT(1 2).
+    val wkbString = "0101000000000000000000F03F0000000000000040"
+    val wkb = Hex.unhex(wkbString.getBytes())
+    val wkbLiteral = Literal.create(wkb, BinaryType)
+
+    // Construct the input GEOGRAPHY expression.
+    val geogExpr = ST_GeogFromWKB(wkbLiteral)
+    assert(geogExpr.dataType.sameType(defaultGeographyType))
+    checkEvaluation(ST_AsBinary(geogExpr), wkb)
+    // Cast the GEOGRAPHY with fixed SRID to GEOGRAPHY with mixed SRID.
+    val castExpr = Cast(geogExpr, mixedSridGeographyType)
+    assert(castExpr.dataType.sameType(mixedSridGeographyType))
+    checkEvaluation(ST_AsBinary(castExpr), wkb)
+
+    // Construct the input GEOGRAPHY SQL query, using WKB literal.
+    val geogQueryLit: String = s"ST_GeogFromWKB(X'$wkbString')"
+    assertType(s"SELECT $geogQueryLit", defaultGeographyType)
+    checkAnswer(sql(s"SELECT ST_AsBinary($geogQueryLit)"), Row(wkb))
+    // Cast the GEOGRAPHY with fixed SRID to GEOGRAPHY with mixed SRID.
+    val castQueryLit = s"$geogQueryLit::GEOGRAPHY(ANY)"
+    assertType(s"SELECT $castQueryLit", mixedSridGeographyType)
+    checkAnswer(sql(s"SELECT ST_AsBinary($castQueryLit)"), Row(wkb))
+
+    withTable("tbl") {
+      // Construct the test table with WKB.
+      sql(s"CREATE TABLE tbl (wkb BINARY)")
+      sql(s"INSERT INTO tbl VALUES (X'$wkbString')")
+
+      // Construct the input GEOGRAPHY SQL query, using WKB column.
+      val geogQueryCol: String = s"ST_GeogFromWKB(wkb)"
+      assertType(s"SELECT $geogQueryCol FROM tbl", defaultGeographyType)
+      checkAnswer(sql(s"SELECT ST_AsBinary($geogQueryCol) FROM tbl"), Row(wkb))
+      // Cast the GEOGRAPHY with fixed SRID to GEOGRAPHY with mixed SRID.
+      val castQueryCol = s"$geogQueryCol::GEOGRAPHY(ANY)"
+      assertType(s"SELECT $castQueryCol FROM tbl", mixedSridGeographyType)
+      checkAnswer(sql(s"SELECT ST_AsBinary($castQueryCol) FROM tbl"), Row(wkb))
+    }
   }
 
   /** ST reader/writer expressions. */
