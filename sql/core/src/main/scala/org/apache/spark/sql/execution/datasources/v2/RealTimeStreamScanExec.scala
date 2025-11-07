@@ -83,7 +83,9 @@ case class LowLatencyReaderWrap(
     reader.get()
   }
 
-  override def close(): Unit = {}
+  override def close(): Unit = {
+    reader.close()
+  }
 }
 
 /**

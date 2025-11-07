@@ -48,6 +48,17 @@ class StateStoreConf(
    */
   val minDeltasForSnapshot: Int = sqlConf.stateStoreMinDeltasForSnapshot
 
+  /** Whether we should enable automatic snapshot repair */
+  val autoSnapshotRepairEnabled: Boolean = sqlConf.stateStoreAutoSnapshotRepairEnabled
+
+  /** Number of failures before activating auto snapshot repair when enabled */
+  val autoSnapshotRepairNumFailuresBeforeActivating: Int =
+    sqlConf.stateStoreAutoSnapshotRepairNumFailuresBeforeActivating
+
+  /** Maximum number of change files allowed to be replayed when auto snapshot repair is enabled */
+  val autoSnapshotRepairMaxChangeFileReplay: Int =
+    sqlConf.stateStoreAutoSnapshotRepairMaxChangeFileReplay
+
   /** Minimum versions a State Store implementation should retain to allow rollbacks */
   val minVersionsToRetain: Int = sqlConf.minBatchesToRetain
 

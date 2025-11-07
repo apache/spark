@@ -12018,6 +12018,20 @@ def xpath(xml: "ColumnOrName", path: "ColumnOrName") -> Column:
     +--------------------+
     |        [b1, b2, b3]|
     +--------------------+
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.from_xml`
+    :meth:`pyspark.sql.functions.schema_of_xml`
+    :meth:`pyspark.sql.functions.to_xml`
+    :meth:`pyspark.sql.functions.xpath_boolean`
+    :meth:`pyspark.sql.functions.xpath_double`
+    :meth:`pyspark.sql.functions.xpath_float`
+    :meth:`pyspark.sql.functions.xpath_int`
+    :meth:`pyspark.sql.functions.xpath_long`
+    :meth:`pyspark.sql.functions.xpath_number`
+    :meth:`pyspark.sql.functions.xpath_short`
+    :meth:`pyspark.sql.functions.xpath_string`
     """
     return _invoke_function_over_columns("xpath", xml, path)
 
@@ -12039,6 +12053,20 @@ def xpath_boolean(xml: "ColumnOrName", path: "ColumnOrName") -> Column:
     +---------------------+
     |                 true|
     +---------------------+
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.from_xml`
+    :meth:`pyspark.sql.functions.schema_of_xml`
+    :meth:`pyspark.sql.functions.to_xml`
+    :meth:`pyspark.sql.functions.xpath`
+    :meth:`pyspark.sql.functions.xpath_double`
+    :meth:`pyspark.sql.functions.xpath_float`
+    :meth:`pyspark.sql.functions.xpath_int`
+    :meth:`pyspark.sql.functions.xpath_long`
+    :meth:`pyspark.sql.functions.xpath_number`
+    :meth:`pyspark.sql.functions.xpath_short`
+    :meth:`pyspark.sql.functions.xpath_string`
     """
     return _invoke_function_over_columns("xpath_boolean", xml, path)
 
@@ -12061,6 +12089,20 @@ def xpath_double(xml: "ColumnOrName", path: "ColumnOrName") -> Column:
     +-------------------------+
     |                      3.0|
     +-------------------------+
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.from_xml`
+    :meth:`pyspark.sql.functions.schema_of_xml`
+    :meth:`pyspark.sql.functions.to_xml`
+    :meth:`pyspark.sql.functions.xpath`
+    :meth:`pyspark.sql.functions.xpath_boolean`
+    :meth:`pyspark.sql.functions.xpath_float`
+    :meth:`pyspark.sql.functions.xpath_int`
+    :meth:`pyspark.sql.functions.xpath_long`
+    :meth:`pyspark.sql.functions.xpath_number`
+    :meth:`pyspark.sql.functions.xpath_short`
+    :meth:`pyspark.sql.functions.xpath_string`
     """
     return _invoke_function_over_columns("xpath_double", xml, path)
 
@@ -12084,6 +12126,20 @@ def xpath_number(xml: "ColumnOrName", path: "ColumnOrName") -> Column:
     +-------------------------+
     |                      3.0|
     +-------------------------+
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.from_xml`
+    :meth:`pyspark.sql.functions.schema_of_xml`
+    :meth:`pyspark.sql.functions.to_xml`
+    :meth:`pyspark.sql.functions.xpath`
+    :meth:`pyspark.sql.functions.xpath_boolean`
+    :meth:`pyspark.sql.functions.xpath_double`
+    :meth:`pyspark.sql.functions.xpath_float`
+    :meth:`pyspark.sql.functions.xpath_int`
+    :meth:`pyspark.sql.functions.xpath_long`
+    :meth:`pyspark.sql.functions.xpath_short`
+    :meth:`pyspark.sql.functions.xpath_string`
     """
     return _invoke_function_over_columns("xpath_number", xml, path)
 
@@ -12106,6 +12162,20 @@ def xpath_float(xml: "ColumnOrName", path: "ColumnOrName") -> Column:
     +------------------------+
     |                     3.0|
     +------------------------+
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.from_xml`
+    :meth:`pyspark.sql.functions.schema_of_xml`
+    :meth:`pyspark.sql.functions.to_xml`
+    :meth:`pyspark.sql.functions.xpath`
+    :meth:`pyspark.sql.functions.xpath_boolean`
+    :meth:`pyspark.sql.functions.xpath_double`
+    :meth:`pyspark.sql.functions.xpath_int`
+    :meth:`pyspark.sql.functions.xpath_long`
+    :meth:`pyspark.sql.functions.xpath_number`
+    :meth:`pyspark.sql.functions.xpath_short`
+    :meth:`pyspark.sql.functions.xpath_string`
     """
     return _invoke_function_over_columns("xpath_float", xml, path)
 
@@ -12128,6 +12198,20 @@ def xpath_int(xml: "ColumnOrName", path: "ColumnOrName") -> Column:
     +----------------------+
     |                     3|
     +----------------------+
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.from_xml`
+    :meth:`pyspark.sql.functions.schema_of_xml`
+    :meth:`pyspark.sql.functions.to_xml`
+    :meth:`pyspark.sql.functions.xpath`
+    :meth:`pyspark.sql.functions.xpath_boolean`
+    :meth:`pyspark.sql.functions.xpath_double`
+    :meth:`pyspark.sql.functions.xpath_float`
+    :meth:`pyspark.sql.functions.xpath_long`
+    :meth:`pyspark.sql.functions.xpath_number`
+    :meth:`pyspark.sql.functions.xpath_short`
+    :meth:`pyspark.sql.functions.xpath_string`
     """
     return _invoke_function_over_columns("xpath_int", xml, path)
 
@@ -12150,6 +12234,20 @@ def xpath_long(xml: "ColumnOrName", path: "ColumnOrName") -> Column:
     +-----------------------+
     |                      3|
     +-----------------------+
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.from_xml`
+    :meth:`pyspark.sql.functions.schema_of_xml`
+    :meth:`pyspark.sql.functions.to_xml`
+    :meth:`pyspark.sql.functions.xpath`
+    :meth:`pyspark.sql.functions.xpath_boolean`
+    :meth:`pyspark.sql.functions.xpath_double`
+    :meth:`pyspark.sql.functions.xpath_float`
+    :meth:`pyspark.sql.functions.xpath_int`
+    :meth:`pyspark.sql.functions.xpath_number`
+    :meth:`pyspark.sql.functions.xpath_short`
+    :meth:`pyspark.sql.functions.xpath_string`
     """
     return _invoke_function_over_columns("xpath_long", xml, path)
 
@@ -12172,6 +12270,20 @@ def xpath_short(xml: "ColumnOrName", path: "ColumnOrName") -> Column:
     +------------------------+
     |                       3|
     +------------------------+
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.from_xml`
+    :meth:`pyspark.sql.functions.schema_of_xml`
+    :meth:`pyspark.sql.functions.to_xml`
+    :meth:`pyspark.sql.functions.xpath`
+    :meth:`pyspark.sql.functions.xpath_boolean`
+    :meth:`pyspark.sql.functions.xpath_double`
+    :meth:`pyspark.sql.functions.xpath_float`
+    :meth:`pyspark.sql.functions.xpath_int`
+    :meth:`pyspark.sql.functions.xpath_long`
+    :meth:`pyspark.sql.functions.xpath_number`
+    :meth:`pyspark.sql.functions.xpath_string`
     """
     return _invoke_function_over_columns("xpath_short", xml, path)
 
@@ -12193,6 +12305,20 @@ def xpath_string(xml: "ColumnOrName", path: "ColumnOrName") -> Column:
     +--------------------+
     |                  cc|
     +--------------------+
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.from_xml`
+    :meth:`pyspark.sql.functions.schema_of_xml`
+    :meth:`pyspark.sql.functions.to_xml`
+    :meth:`pyspark.sql.functions.xpath`
+    :meth:`pyspark.sql.functions.xpath_boolean`
+    :meth:`pyspark.sql.functions.xpath_double`
+    :meth:`pyspark.sql.functions.xpath_float`
+    :meth:`pyspark.sql.functions.xpath_int`
+    :meth:`pyspark.sql.functions.xpath_long`
+    :meth:`pyspark.sql.functions.xpath_number`
+    :meth:`pyspark.sql.functions.xpath_short`
     """
     return _invoke_function_over_columns("xpath_string", xml, path)
 
@@ -21468,6 +21594,20 @@ def from_xml(
     ... # Parse the XML column using the generated schema
     >>> df.select(sf.from_xml(df.value, schema).alias("xml")).collect()
     [Row(xml=Row(a=[1, 2]))]
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.schema_of_xml`
+    :meth:`pyspark.sql.functions.to_xml`
+    :meth:`pyspark.sql.functions.xpath`
+    :meth:`pyspark.sql.functions.xpath_boolean`
+    :meth:`pyspark.sql.functions.xpath_double`
+    :meth:`pyspark.sql.functions.xpath_float`
+    :meth:`pyspark.sql.functions.xpath_int`
+    :meth:`pyspark.sql.functions.xpath_long`
+    :meth:`pyspark.sql.functions.xpath_number`
+    :meth:`pyspark.sql.functions.xpath_short`
+    :meth:`pyspark.sql.functions.xpath_string`
     """
     from pyspark.sql.classic.column import _to_java_column
 
@@ -21547,6 +21687,20 @@ def schema_of_xml(xml: Union[Column, str], options: Optional[Mapping[str, str]] 
     ...     ).alias("xml")
     ... ).collect()
     [Row(xml='STRUCT<values: STRUCT<value: ARRAY<BIGINT>>>')]
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.from_xml`
+    :meth:`pyspark.sql.functions.to_xml`
+    :meth:`pyspark.sql.functions.xpath`
+    :meth:`pyspark.sql.functions.xpath_boolean`
+    :meth:`pyspark.sql.functions.xpath_double`
+    :meth:`pyspark.sql.functions.xpath_float`
+    :meth:`pyspark.sql.functions.xpath_int`
+    :meth:`pyspark.sql.functions.xpath_long`
+    :meth:`pyspark.sql.functions.xpath_number`
+    :meth:`pyspark.sql.functions.xpath_short`
+    :meth:`pyspark.sql.functions.xpath_string`
     """
     from pyspark.sql.classic.column import _to_java_column
 
@@ -21591,6 +21745,20 @@ def to_xml(col: "ColumnOrName", options: Optional[Mapping[str, str]] = None) -> 
     >>> df = spark.createDataFrame(data, ("key", "value"))
     >>> df.select(to_xml(df.value, {'rowTag':'person'}).alias("xml")).collect()
     [Row(xml='<person>\\n    <age>2</age>\\n    <name>Alice</name>\\n</person>')]
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.from_xml`
+    :meth:`pyspark.sql.functions.schema_of_xml`
+    :meth:`pyspark.sql.functions.xpath`
+    :meth:`pyspark.sql.functions.xpath_boolean`
+    :meth:`pyspark.sql.functions.xpath_double`
+    :meth:`pyspark.sql.functions.xpath_float`
+    :meth:`pyspark.sql.functions.xpath_int`
+    :meth:`pyspark.sql.functions.xpath_long`
+    :meth:`pyspark.sql.functions.xpath_number`
+    :meth:`pyspark.sql.functions.xpath_short`
+    :meth:`pyspark.sql.functions.xpath_string`
     """
     from pyspark.sql.classic.column import _to_java_column
 
@@ -25901,6 +26069,104 @@ def bucket(numBuckets: Union[Column, int], col: "ColumnOrName") -> Column:
     return partitioning.bucket(numBuckets, col)
 
 
+# Geospatial ST Functions
+
+
+@_try_remote_functions
+def st_asbinary(geo: "ColumnOrName") -> Column:
+    """Returns the input GEOGRAPHY or GEOMETRY value in WKB format.
+
+    .. versionadded:: 4.1.0
+
+    Parameters
+    ----------
+    geo : :class:`~pyspark.sql.Column` or str
+        A geospatial value, either a GEOGRAPHY or a GEOMETRY.
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(bytes.fromhex('0101000000000000000000F03F0000000000000040'),)], ['wkb'])  # noqa
+    >>> df.select(sf.hex(sf.st_asbinary(sf.st_geogfromwkb('wkb'))).alias('result')).collect()
+    [Row(result='0101000000000000000000F03F0000000000000040')]
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(bytes.fromhex('0101000000000000000000F03F0000000000000040'),)], ['wkb'])  # noqa
+    >>> df.select(sf.hex(sf.st_asbinary(sf.st_geomfromwkb('wkb'))).alias('result')).collect()
+    [Row(result='0101000000000000000000F03F0000000000000040')]
+    """
+    return _invoke_function_over_columns("st_asbinary", geo)
+
+
+@_try_remote_functions
+def st_geogfromwkb(wkb: "ColumnOrName") -> Column:
+    """Parses the input WKB description and returns the corresponding GEOGRAPHY value.
+
+    .. versionadded:: 4.1.0
+
+    Parameters
+    ----------
+    wkb : :class:`~pyspark.sql.Column` or str
+        A BINARY value in WKB format, representing a GEOGRAPHY value.
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(bytes.fromhex('0101000000000000000000F03F0000000000000040'),)], ['wkb'])  # noqa
+    >>> df.select(sf.hex(sf.st_asbinary(sf.st_geogfromwkb('wkb'))).alias('result')).collect()
+    [Row(result='0101000000000000000000F03F0000000000000040')]
+    """
+    return _invoke_function_over_columns("st_geogfromwkb", wkb)
+
+
+@_try_remote_functions
+def st_geomfromwkb(wkb: "ColumnOrName") -> Column:
+    """Parses the input WKB description and returns the corresponding GEOMETRY value.
+
+    .. versionadded:: 4.1.0
+
+    Parameters
+    ----------
+    wkb : :class:`~pyspark.sql.Column` or str
+        A BINARY value in WKB format, representing a GEOMETRY value.
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(bytes.fromhex('0101000000000000000000F03F0000000000000040'),)], ['wkb'])  # noqa
+    >>> df.select(sf.hex(sf.st_asbinary(sf.st_geomfromwkb('wkb'))).alias('result')).collect()
+    [Row(result='0101000000000000000000F03F0000000000000040')]
+    """
+    return _invoke_function_over_columns("st_geomfromwkb", wkb)
+
+
+@_try_remote_functions
+def st_srid(geo: "ColumnOrName") -> Column:
+    """Returns the SRID of the input GEOGRAPHY or GEOMETRY value.
+
+    .. versionadded:: 4.1.0
+
+    Parameters
+    ----------
+    geo : :class:`~pyspark.sql.Column` or str
+        A geospatial value, either a GEOGRAPHY or a GEOMETRY.
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(bytes.fromhex('0101000000000000000000F03F0000000000000040'),)], ['wkb'])  # noqa
+    >>> df.select(sf.st_srid(sf.st_geogfromwkb('wkb')).alias('result')).collect()
+    [Row(result=4326)]
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(bytes.fromhex('0101000000000000000000F03F0000000000000040'),)], ['wkb'])  # noqa
+    >>> df.select(sf.st_srid(sf.st_geomfromwkb('wkb')).alias('result')).collect()
+    [Row(result=0)]
+    """
+    return _invoke_function_over_columns("st_srid", geo)
+
+
+# Call Functions
+
+
 @_try_remote_functions
 def call_udf(udfName: str, *cols: "ColumnOrName") -> Column:
     """
@@ -26436,6 +26702,624 @@ def theta_intersection_agg(col: "ColumnOrName") -> Column:
     """
     fn = "theta_intersection_agg"
     return _invoke_function_over_columns(fn, col)
+
+
+@_try_remote_functions
+def kll_sketch_agg_bigint(
+    col: "ColumnOrName",
+    k: Optional[Union[int, Column]] = None,
+) -> Column:
+    """
+    Aggregate function: returns the compact binary representation of the Datasketches
+    KllLongsSketch built with the values in the input column. The optional k parameter
+    controls the size and accuracy of the sketch (default 200, range 8-65535).
+
+    .. versionadded:: 4.1.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or column name
+        The column containing bigint values to aggregate
+    k : :class:`~pyspark.sql.Column` or int, optional
+        The k parameter that controls size and accuracy (default 200, range 8-65535)
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        The binary representation of the KllLongsSketch.
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([1,2,3,4,5], "INT")
+    >>> result = df.agg(sf.kll_sketch_agg_bigint("value")).first()[0]
+    >>> result is not None and len(result) > 0
+    True
+    """
+    fn = "kll_sketch_agg_bigint"
+    if k is None:
+        return _invoke_function_over_columns(fn, col)
+    else:
+        return _invoke_function_over_columns(fn, col, lit(k))
+
+
+@_try_remote_functions
+def kll_sketch_agg_float(
+    col: "ColumnOrName",
+    k: Optional[Union[int, Column]] = None,
+) -> Column:
+    """
+    Aggregate function: returns the compact binary representation of the Datasketches
+    KllFloatsSketch built with the values in the input column. The optional k parameter
+    controls the size and accuracy of the sketch (default 200, range 8-65535).
+
+    .. versionadded:: 4.1.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or column name
+        The column containing float values to aggregate
+    k : :class:`~pyspark.sql.Column` or int, optional
+        The k parameter that controls size and accuracy (default 200, range 8-65535)
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        The binary representation of the KllFloatsSketch.
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([1.0,2.0,3.0,4.0,5.0], "FLOAT")
+    >>> result = df.agg(sf.kll_sketch_agg_float("value")).first()[0]
+    >>> result is not None and len(result) > 0
+    True
+    """
+    fn = "kll_sketch_agg_float"
+    if k is None:
+        return _invoke_function_over_columns(fn, col)
+    else:
+        return _invoke_function_over_columns(fn, col, lit(k))
+
+
+@_try_remote_functions
+def kll_sketch_agg_double(
+    col: "ColumnOrName",
+    k: Optional[Union[int, Column]] = None,
+) -> Column:
+    """
+    Aggregate function: returns the compact binary representation of the Datasketches
+    KllDoublesSketch built with the values in the input column. The optional k parameter
+    controls the size and accuracy of the sketch (default 200, range 8-65535).
+
+    .. versionadded:: 4.1.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or column name
+        The column containing double values to aggregate
+    k : :class:`~pyspark.sql.Column` or int, optional
+        The k parameter that controls size and accuracy (default 200, range 8-65535)
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        The binary representation of the KllDoublesSketch.
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([1.0,2.0,3.0,4.0,5.0], "DOUBLE")
+    >>> result = df.agg(sf.kll_sketch_agg_double("value")).first()[0]
+    >>> result is not None and len(result) > 0
+    True
+    """
+    fn = "kll_sketch_agg_double"
+    if k is None:
+        return _invoke_function_over_columns(fn, col)
+    else:
+        return _invoke_function_over_columns(fn, col, lit(k))
+
+
+@_try_remote_functions
+def kll_sketch_to_string_bigint(col: "ColumnOrName") -> Column:
+    """
+    Returns a string with human readable summary information about the KLL bigint sketch.
+
+    .. versionadded:: 4.1.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or column name
+        The KLL bigint sketch binary representation
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        A string representation of the sketch.
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([1,2,3,4,5], "INT")
+    >>> sketch_df = df.agg(sf.kll_sketch_agg_bigint("value").alias("sketch"))
+    >>> result = sketch_df.select(sf.kll_sketch_to_string_bigint("sketch")).first()[0]
+    >>> "Kll" in result and "N" in result
+    True
+    """
+    fn = "kll_sketch_to_string_bigint"
+    return _invoke_function_over_columns(fn, col)
+
+
+@_try_remote_functions
+def kll_sketch_to_string_float(col: "ColumnOrName") -> Column:
+    """
+    Returns a string with human readable summary information about the KLL float sketch.
+
+    .. versionadded:: 4.1.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or column name
+        The KLL float sketch binary representation
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        A string representation of the sketch.
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([1.0,2.0,3.0,4.0,5.0], "FLOAT")
+    >>> sketch_df = df.agg(sf.kll_sketch_agg_float("value").alias("sketch"))
+    >>> result = sketch_df.select(sf.kll_sketch_to_string_float("sketch")).first()[0]
+    >>> "Kll" in result and "N" in result
+    True
+    """
+    fn = "kll_sketch_to_string_float"
+    return _invoke_function_over_columns(fn, col)
+
+
+@_try_remote_functions
+def kll_sketch_to_string_double(col: "ColumnOrName") -> Column:
+    """
+    Returns a string with human readable summary information about the KLL double sketch.
+
+    .. versionadded:: 4.1.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or column name
+        The KLL double sketch binary representation
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        A string representation of the sketch.
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([1.0,2.0,3.0,4.0,5.0], "DOUBLE")
+    >>> sketch_df = df.agg(sf.kll_sketch_agg_double("value").alias("sketch"))
+    >>> result = sketch_df.select(sf.kll_sketch_to_string_double("sketch")).first()[0]
+    >>> "Kll" in result and "N" in result
+    True
+    """
+    fn = "kll_sketch_to_string_double"
+    return _invoke_function_over_columns(fn, col)
+
+
+@_try_remote_functions
+def kll_sketch_get_n_bigint(col: "ColumnOrName") -> Column:
+    """
+    Returns the number of items collected in the KLL bigint sketch.
+
+    .. versionadded:: 4.1.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or column name
+        The KLL bigint sketch binary representation
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        The count of items in the sketch.
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([1,2,3,4,5], "INT")
+    >>> sketch_df = df.agg(sf.kll_sketch_agg_bigint("value").alias("sketch"))
+    >>> sketch_df.select(sf.kll_sketch_get_n_bigint("sketch")).show()
+    +-------------------------------+
+    |kll_sketch_get_n_bigint(sketch)|
+    +-------------------------------+
+    |                              5|
+    +-------------------------------+
+    """
+    fn = "kll_sketch_get_n_bigint"
+    return _invoke_function_over_columns(fn, col)
+
+
+@_try_remote_functions
+def kll_sketch_get_n_float(col: "ColumnOrName") -> Column:
+    """
+    Returns the number of items collected in the KLL float sketch.
+
+    .. versionadded:: 4.1.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or column name
+        The KLL float sketch binary representation
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        The count of items in the sketch.
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([1.0,2.0,3.0,4.0,5.0], "FLOAT")
+    >>> sketch_df = df.agg(sf.kll_sketch_agg_float("value").alias("sketch"))
+    >>> sketch_df.select(sf.kll_sketch_get_n_float("sketch")).show()
+    +------------------------------+
+    |kll_sketch_get_n_float(sketch)|
+    +------------------------------+
+    |                             5|
+    +------------------------------+
+    """
+    fn = "kll_sketch_get_n_float"
+    return _invoke_function_over_columns(fn, col)
+
+
+@_try_remote_functions
+def kll_sketch_get_n_double(col: "ColumnOrName") -> Column:
+    """
+    Returns the number of items collected in the KLL double sketch.
+
+    .. versionadded:: 4.1.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or column name
+        The KLL double sketch binary representation
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        The count of items in the sketch.
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([1.0,2.0,3.0,4.0,5.0], "DOUBLE")
+    >>> sketch_df = df.agg(sf.kll_sketch_agg_double("value").alias("sketch"))
+    >>> sketch_df.select(sf.kll_sketch_get_n_double("sketch")).show()
+    +-------------------------------+
+    |kll_sketch_get_n_double(sketch)|
+    +-------------------------------+
+    |                              5|
+    +-------------------------------+
+    """
+    fn = "kll_sketch_get_n_double"
+    return _invoke_function_over_columns(fn, col)
+
+
+@_try_remote_functions
+def kll_sketch_merge_bigint(left: "ColumnOrName", right: "ColumnOrName") -> Column:
+    """
+    Merges two KLL bigint sketch buffers together into one.
+
+    .. versionadded:: 4.1.0
+
+    Parameters
+    ----------
+    left : :class:`~pyspark.sql.Column` or column name
+        The first KLL bigint sketch
+    right : :class:`~pyspark.sql.Column` or column name
+        The second KLL bigint sketch
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        The merged KLL sketch.
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([1,2,3,4,5], "INT")
+    >>> sketch_df = df.agg(sf.kll_sketch_agg_bigint("value").alias("sketch"))
+    >>> result = sketch_df.select(sf.kll_sketch_merge_bigint("sketch", "sketch")).first()[0]
+    >>> result is not None and len(result) > 0
+    True
+    """
+    fn = "kll_sketch_merge_bigint"
+    return _invoke_function_over_columns(fn, left, right)
+
+
+@_try_remote_functions
+def kll_sketch_merge_float(left: "ColumnOrName", right: "ColumnOrName") -> Column:
+    """
+    Merges two KLL float sketch buffers together into one.
+
+    .. versionadded:: 4.1.0
+
+    Parameters
+    ----------
+    left : :class:`~pyspark.sql.Column` or column name
+        The first KLL float sketch
+    right : :class:`~pyspark.sql.Column` or column name
+        The second KLL float sketch
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        The merged KLL sketch.
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([1.0,2.0,3.0,4.0,5.0], "FLOAT")
+    >>> sketch_df = df.agg(sf.kll_sketch_agg_float("value").alias("sketch"))
+    >>> result = sketch_df.select(sf.kll_sketch_merge_float("sketch", "sketch")).first()[0]
+    >>> result is not None and len(result) > 0
+    True
+    """
+    fn = "kll_sketch_merge_float"
+    return _invoke_function_over_columns(fn, left, right)
+
+
+@_try_remote_functions
+def kll_sketch_merge_double(left: "ColumnOrName", right: "ColumnOrName") -> Column:
+    """
+    Merges two KLL double sketch buffers together into one.
+
+    .. versionadded:: 4.1.0
+
+    Parameters
+    ----------
+    left : :class:`~pyspark.sql.Column` or column name
+        The first KLL double sketch
+    right : :class:`~pyspark.sql.Column` or column name
+        The second KLL double sketch
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        The merged KLL sketch.
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([1.0,2.0,3.0,4.0,5.0], "DOUBLE")
+    >>> sketch_df = df.agg(sf.kll_sketch_agg_double("value").alias("sketch"))
+    >>> result = sketch_df.select(sf.kll_sketch_merge_double("sketch", "sketch")).first()[0]
+    >>> result is not None and len(result) > 0
+    True
+    """
+    fn = "kll_sketch_merge_double"
+    return _invoke_function_over_columns(fn, left, right)
+
+
+@_try_remote_functions
+def kll_sketch_get_quantile_bigint(sketch: "ColumnOrName", rank: "ColumnOrName") -> Column:
+    """
+    Extracts a quantile value from a KLL bigint sketch given an input rank value.
+    The rank can be a single value or an array.
+
+    .. versionadded:: 4.1.0
+
+    Parameters
+    ----------
+    sketch : :class:`~pyspark.sql.Column` or column name
+        The KLL bigint sketch binary representation
+    rank : :class:`~pyspark.sql.Column` or column name
+        The rank value(s) to extract (between 0.0 and 1.0)
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        The quantile value(s).
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([1,2,3,4,5], "INT")
+    >>> sketch_df = df.agg(sf.kll_sketch_agg_bigint("value").alias("sketch"))
+    >>> sketch_df.select(sf.kll_sketch_get_quantile_bigint("sketch", sf.lit(0.5))).show()
+    +-------------------------------------------+
+    |kll_sketch_get_quantile_bigint(sketch, 0.5)|
+    +-------------------------------------------+
+    |                                          3|
+    +-------------------------------------------+
+    """
+    fn = "kll_sketch_get_quantile_bigint"
+    return _invoke_function_over_columns(fn, sketch, rank)
+
+
+@_try_remote_functions
+def kll_sketch_get_quantile_float(sketch: "ColumnOrName", rank: "ColumnOrName") -> Column:
+    """
+    Extracts a quantile value from a KLL float sketch given an input rank value.
+    The rank can be a single value or an array.
+
+    .. versionadded:: 4.1.0
+
+    Parameters
+    ----------
+    sketch : :class:`~pyspark.sql.Column` or column name
+        The KLL float sketch binary representation
+    rank : :class:`~pyspark.sql.Column` or column name
+        The rank value(s) to extract (between 0.0 and 1.0)
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        The quantile value(s).
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([1.0,2.0,3.0,4.0,5.0], "FLOAT")
+    >>> sketch_df = df.agg(sf.kll_sketch_agg_float("value").alias("sketch"))
+    >>> sketch_df.select(sf.kll_sketch_get_quantile_float("sketch", sf.lit(0.5))).show()
+    +------------------------------------------+
+    |kll_sketch_get_quantile_float(sketch, 0.5)|
+    +------------------------------------------+
+    |                                       3.0|
+    +------------------------------------------+
+    """
+    fn = "kll_sketch_get_quantile_float"
+    return _invoke_function_over_columns(fn, sketch, rank)
+
+
+@_try_remote_functions
+def kll_sketch_get_quantile_double(sketch: "ColumnOrName", rank: "ColumnOrName") -> Column:
+    """
+    Extracts a quantile value from a KLL double sketch given an input rank value.
+    The rank can be a single value or an array.
+
+    .. versionadded:: 4.1.0
+
+    Parameters
+    ----------
+    sketch : :class:`~pyspark.sql.Column` or column name
+        The KLL double sketch binary representation
+    rank : :class:`~pyspark.sql.Column` or column name
+        The rank value(s) to extract (between 0.0 and 1.0)
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        The quantile value(s).
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([1.0,2.0,3.0,4.0,5.0], "DOUBLE")
+    >>> sketch_df = df.agg(sf.kll_sketch_agg_double("value").alias("sketch"))
+    >>> sketch_df.select(sf.kll_sketch_get_quantile_double("sketch", sf.lit(0.5))).show()
+    +-------------------------------------------+
+    |kll_sketch_get_quantile_double(sketch, 0.5)|
+    +-------------------------------------------+
+    |                                        3.0|
+    +-------------------------------------------+
+    """
+    fn = "kll_sketch_get_quantile_double"
+    return _invoke_function_over_columns(fn, sketch, rank)
+
+
+@_try_remote_functions
+def kll_sketch_get_rank_bigint(sketch: "ColumnOrName", quantile: "ColumnOrName") -> Column:
+    """
+    Extracts a rank value from a KLL bigint sketch given an input quantile value.
+    The quantile can be a single value or an array.
+
+    .. versionadded:: 4.1.0
+
+    Parameters
+    ----------
+    sketch : :class:`~pyspark.sql.Column` or column name
+        The KLL bigint sketch binary representation
+    quantile : :class:`~pyspark.sql.Column` or column name
+        The quantile value(s) to lookup
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        The rank value(s) (between 0.0 and 1.0).
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([1,2,3,4,5], "INT")
+    >>> sketch_df = df.agg(sf.kll_sketch_agg_bigint("value").alias("sketch"))
+    >>> sketch_df.select(sf.kll_sketch_get_rank_bigint("sketch", sf.lit(3))).show()
+    +-------------------------------------+
+    |kll_sketch_get_rank_bigint(sketch, 3)|
+    +-------------------------------------+
+    |                                  0.6|
+    +-------------------------------------+
+    """
+    fn = "kll_sketch_get_rank_bigint"
+    return _invoke_function_over_columns(fn, sketch, quantile)
+
+
+@_try_remote_functions
+def kll_sketch_get_rank_float(sketch: "ColumnOrName", quantile: "ColumnOrName") -> Column:
+    """
+    Extracts a rank value from a KLL float sketch given an input quantile value.
+    The quantile can be a single value or an array.
+
+    .. versionadded:: 4.1.0
+
+    Parameters
+    ----------
+    sketch : :class:`~pyspark.sql.Column` or column name
+        The KLL float sketch binary representation
+    quantile : :class:`~pyspark.sql.Column` or column name
+        The quantile value(s) to lookup
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        The rank value(s) (between 0.0 and 1.0).
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([1.0,2.0,3.0,4.0,5.0], "FLOAT")
+    >>> sketch_df = df.agg(sf.kll_sketch_agg_float("value").alias("sketch"))
+    >>> sketch_df.select(sf.kll_sketch_get_rank_float("sketch", sf.lit(3.0))).show()
+    +--------------------------------------+
+    |kll_sketch_get_rank_float(sketch, 3.0)|
+    +--------------------------------------+
+    |                                   0.6|
+    +--------------------------------------+
+    """
+    fn = "kll_sketch_get_rank_float"
+    return _invoke_function_over_columns(fn, sketch, quantile)
+
+
+@_try_remote_functions
+def kll_sketch_get_rank_double(sketch: "ColumnOrName", quantile: "ColumnOrName") -> Column:
+    """
+    Extracts a rank value from a KLL double sketch given an input quantile value.
+    The quantile can be a single value or an array.
+
+    .. versionadded:: 4.1.0
+
+    Parameters
+    ----------
+    sketch : :class:`~pyspark.sql.Column` or column name
+        The KLL double sketch binary representation
+    quantile : :class:`~pyspark.sql.Column` or column name
+        The quantile value(s) to lookup
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        The rank value(s) (between 0.0 and 1.0).
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([1.0,2.0,3.0,4.0,5.0], "DOUBLE")
+    >>> sketch_df = df.agg(sf.kll_sketch_agg_double("value").alias("sketch"))
+    >>> sketch_df.select(sf.kll_sketch_get_rank_double("sketch", sf.lit(3.0))).show()
+    +---------------------------------------+
+    |kll_sketch_get_rank_double(sketch, 3.0)|
+    +---------------------------------------+
+    |                                    0.6|
+    +---------------------------------------+
+    """
+    fn = "kll_sketch_get_rank_double"
+    return _invoke_function_over_columns(fn, sketch, quantile)
 
 
 @_try_remote_functions

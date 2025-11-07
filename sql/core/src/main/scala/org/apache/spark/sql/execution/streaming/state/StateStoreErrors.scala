@@ -65,6 +65,11 @@ object StateStoreErrors {
     new StateStoreRemovingColumnFamiliesNotSupportedException(stateStoreProvider)
   }
 
+  def storeBackendNotSupportedForTWS(stateStoreProvider: String):
+    StateStoreBackendNotSupportedForTWSException = {
+    new StateStoreBackendNotSupportedForTWSException(stateStoreProvider)
+  }
+
   def cannotUseColumnFamilyWithInvalidName(operationName: String, colFamilyName: String):
     StateStoreCannotUseColumnFamilyWithInvalidName = {
       new StateStoreCannotUseColumnFamilyWithInvalidName(operationName, colFamilyName)
@@ -261,6 +266,16 @@ object StateStoreErrors {
     new StateStoreUnexpectedEmptyFileInRocksDBZip(fileName, zipFileName)
   }
 
+  def autoSnapshotRepairFailed(
+      stateStoreId: String,
+      latestSnapshot: Long,
+      selectedSnapshots: Seq[Long],
+      eligibleSnapshots: Seq[Long],
+      cause: Throwable): StateStoreAutoSnapshotRepairFailed = {
+    new StateStoreAutoSnapshotRepairFailed(
+      stateStoreId, latestSnapshot, selectedSnapshots, eligibleSnapshots, cause)
+  }
+
   def cannotLoadStore(e: Throwable): Throwable = {
     e match {
       case e: SparkException
@@ -318,6 +333,11 @@ class StateStoreMultipleColumnFamiliesNotSupportedException(stateStoreProvider: 
 class StateStoreRemovingColumnFamiliesNotSupportedException(stateStoreProvider: String)
   extends SparkUnsupportedOperationException(
     errorClass = "UNSUPPORTED_FEATURE.STATE_STORE_REMOVING_COLUMN_FAMILIES",
+    messageParameters = Map("stateStoreProvider" -> stateStoreProvider))
+
+class StateStoreBackendNotSupportedForTWSException(stateStoreProvider: String)
+  extends SparkUnsupportedOperationException(
+    errorClass = "UNSUPPORTED_FEATURE.STORE_BACKEND_NOT_SUPPORTED_FOR_TWS",
     messageParameters = Map("stateStoreProvider" -> stateStoreProvider))
 
 class StateStoreCannotUseColumnFamilyWithInvalidName(operationName: String, colFamilyName: String)
@@ -602,3 +622,18 @@ class StateStoreUnexpectedEmptyFileInRocksDBZip(fileName: String, zipFileName: S
       "fileName" -> fileName,
       "zipFileName" -> zipFileName),
     cause = null)
+
+class StateStoreAutoSnapshotRepairFailed(
+    stateStoreId: String,
+    latestSnapshot: Long,
+    selectedSnapshots: Seq[Long],
+    eligibleSnapshots: Seq[Long],
+    cause: Throwable)
+  extends SparkRuntimeException(
+    errorClass = "CANNOT_LOAD_STATE_STORE.AUTO_SNAPSHOT_REPAIR_FAILED",
+    messageParameters = Map(
+      "latestSnapshot" -> latestSnapshot.toString,
+      "stateStoreId" -> stateStoreId,
+      "selectedSnapshots" -> selectedSnapshots.mkString(","),
+      "eligibleSnapshots" -> eligibleSnapshots.mkString(",")),
+    cause)

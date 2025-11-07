@@ -46,7 +46,6 @@ class TestSparkThrowableWithBreakingChange(
     with SparkThrowable {
 
   override def getCondition: String = errorClass
-  override def getErrorClass: String = errorClass
   override def getMessageParameters: java.util.Map[String, String] = {
     import scala.jdk.CollectionConverters._
     messageParams.asJava

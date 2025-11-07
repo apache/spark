@@ -164,6 +164,7 @@ class JSONFormatterWithMarker(JSONFormatter):
                 )
             elif self.default_msec_format:
                 s = self.default_msec_format % (s, record.msecs)
+            s = f"{s}{time.strftime('%z', ct)}"
         return s
 
 

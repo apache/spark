@@ -22,7 +22,7 @@
   <parent>
     <groupId>org.apache.spark</groupId>
     <artifactId>spark-parent_2.13</artifactId>
-    <version>4.1.0-SNAPSHOT</version>
+    <version>4.2.0-SNAPSHOT</version>
     <relativePath>../../../../pom.xml</relativePath>
   </parent>
 
@@ -77,13 +77,11 @@
     <dependency>
       <groupId>com.google.guava</groupId>
       <artifactId>guava</artifactId>
-      <version>${connect.guava.version}</version>
       <scope>compile</scope>
     </dependency>
     <dependency>
       <groupId>com.google.guava</groupId>
       <artifactId>failureaccess</artifactId>
-      <version>${guava.failureaccess.version}</version>
       <scope>compile</scope>
     </dependency>
     <dependency>
@@ -176,14 +174,6 @@
             <relocation>
               <pattern>io.netty</pattern>
               <shadedPattern>${spark.shade.packageName}.io.netty</shadedPattern>
-            </relocation>
-            <relocation>
-              <pattern>org.checkerframework</pattern>
-              <shadedPattern>${spark.shade.packageName}.org.checkerframework</shadedPattern>
-            </relocation>
-            <relocation>
-              <pattern>javax.annotation</pattern>
-              <shadedPattern>${spark.shade.packageName}.javax.annotation</shadedPattern>
             </relocation>
             <relocation>
               <pattern>io.perfmark</pattern>

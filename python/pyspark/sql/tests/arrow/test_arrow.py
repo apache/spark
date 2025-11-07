@@ -1810,6 +1810,81 @@ class ArrowTestsMixin:
         df = self.spark.createDataFrame(t)
         self.assertIsInstance(df.schema["fsl"].dataType, ArrayType)
 
+    def test_toPandas_with_compression_codec(self):
+        # Test toPandas() with different compression codec settings
+        df = self.spark.createDataFrame(self.data, schema=self.schema)
+        expected = self.create_pandas_data_frame()
+
+        for codec in ["none", "zstd", "lz4"]:
+            with self.subTest(compressionCodec=codec):
+                with self.sql_conf({"spark.sql.execution.arrow.compressionCodec": codec}):
+                    pdf = df.toPandas()
+                    assert_frame_equal(expected, pdf)
+
+    def test_toArrow_with_compression_codec(self):
+        # Test toArrow() with different compression codec settings
+        import pyarrow.compute as pc
+
+        t_in = self.create_arrow_table()
+
+        # Convert timezone-naive local timestamp column in input table to UTC
+        # to enable comparison to UTC timestamp column in output table
+        timezone = self.spark.conf.get("spark.sql.session.timeZone")
+        t_in = t_in.set_column(
+            t_in.schema.get_field_index("8_timestamp_t"),
+            "8_timestamp_t",
+            pc.assume_timezone(t_in["8_timestamp_t"], timezone),
+        )
+        t_in = t_in.cast(
+            t_in.schema.set(
+                t_in.schema.get_field_index("8_timestamp_t"),
+                pa.field("8_timestamp_t", pa.timestamp("us", tz="UTC")),
+            )
+        )
+
+        df = self.spark.createDataFrame(self.data, schema=self.schema)
+
+        for codec in ["none", "zstd", "lz4"]:
+            with self.subTest(compressionCodec=codec):
+                with self.sql_conf({"spark.sql.execution.arrow.compressionCodec": codec}):
+                    t_out = df.toArrow()
+                    self.assertTrue(t_out.equals(t_in))
+
+    def test_toPandas_with_compression_codec_large_dataset(self):
+        # Test compression with a larger dataset to verify memory savings
+        # Create a dataset with repetitive data that compresses well
+        from pyspark.sql.functions import lit, col
+
+        df = self.spark.range(10000).select(
+            col("id"),
+            lit("test_string_value_" * 10).alias("str_col"),
+            (col("id") % 100).alias("mod_col"),
+        )
+
+        for codec in ["none", "zstd", "lz4"]:
+            with self.subTest(compressionCodec=codec):
+                with self.sql_conf({"spark.sql.execution.arrow.compressionCodec": codec}):
+                    pdf = df.toPandas()
+                    self.assertEqual(len(pdf), 10000)
+                    self.assertEqual(pdf.columns.tolist(), ["id", "str_col", "mod_col"])
+
+    def test_toArrow_with_compression_codec_large_dataset(self):
+        # Test compression with a larger dataset for toArrow
+        from pyspark.sql.functions import lit, col
+
+        df = self.spark.range(10000).select(
+            col("id"),
+            lit("test_string_value_" * 10).alias("str_col"),
+            (col("id") % 100).alias("mod_col"),
+        )
+
+        for codec in ["none", "zstd", "lz4"]:
+            with self.subTest(compressionCodec=codec):
+                with self.sql_conf({"spark.sql.execution.arrow.compressionCodec": codec}):
+                    t = df.toArrow()
+                    self.assertEqual(t.num_rows, 10000)
+                    self.assertEqual(t.column_names, ["id", "str_col", "mod_col"])
+
 
 @unittest.skipIf(
     not have_pandas or not have_pyarrow,
