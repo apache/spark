@@ -3930,6 +3930,123 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
     }
   }
 
+  test("Merge schema evolution should evolve when directly assigning struct with new field:" +
+    "UPDATE") {
+    Seq(true, false).foreach { withSchemaEvolution =>
+      withTempView("source") {
+        createAndInitTable(
+          s"""pk INT NOT NULL,
+             |info STRUCT<salary: INT, status: STRING>,
+             |dep STRING""".stripMargin,
+          """{ "pk": 1, "info": { "salary": 100, "status": "active" }, "dep": "hr" }
+            |{ "pk": 2, "info": { "salary": 200, "status": "inactive" }, "dep": "software" }
+            |""".stripMargin)
+
+        val sourceTableSchema = StructType(Seq(
+          StructField("pk", IntegerType, nullable = false),
+          StructField("info", StructType(Seq(
+            StructField("salary", IntegerType),
+            StructField("status", StringType),
+            StructField("bonus", IntegerType) // new field not in target
+          ))),
+          StructField("dep", StringType)
+        ))
+        val data = Seq(
+          Row(2, Row(150, "updated", 50), "engineering")
+        )
+        spark.createDataFrame(spark.sparkContext.parallelize(data), sourceTableSchema)
+          .createOrReplaceTempView("source")
+
+        val schemaEvolutionClause = if (withSchemaEvolution) "WITH SCHEMA EVOLUTION" else ""
+        val mergeStmt =
+          s"""MERGE $schemaEvolutionClause
+             |INTO $tableNameAsString t
+             |USING source s
+             |ON t.pk = s.pk
+             |WHEN MATCHED THEN
+             | UPDATE SET info = s.info
+             |""".stripMargin
+
+        if (withSchemaEvolution) {
+          sql(mergeStmt)
+          // Schema should evolve - bonus field should be added
+          checkAnswer(
+            sql(s"SELECT * FROM $tableNameAsString"),
+            Seq(
+              Row(1, Row(100, "active", null), "hr"),
+              Row(2, Row(150, "updated", 50), "software")))
+        } else {
+          val exception = intercept[org.apache.spark.sql.AnalysisException] {
+            sql(mergeStmt)
+          }
+          assert(exception.getMessage.contains("Cannot safely cast") ||
+            exception.getMessage.contains("incompatible"))
+        }
+
+        sql(s"DROP TABLE $tableNameAsString")
+      }
+    }
+  }
+
+  test("Merge schema evolution should evolve when directly assigning struct with new field: " +
+    "INSERT") {
+    Seq(true, false).foreach { withSchemaEvolution =>
+      withTempView("source") {
+        createAndInitTable(
+          s"""pk INT NOT NULL,
+             |info STRUCT<salary: INT, status: STRING>,
+             |dep STRING""".stripMargin,
+          """{ "pk": 1, "info": { "salary": 100, "status": "active" }, "dep": "hr" }
+            |{ "pk": 2, "info": { "salary": 200, "status": "inactive" }, "dep": "software" }
+            |""".stripMargin)
+
+        val sourceTableSchema = StructType(Seq(
+          StructField("pk", IntegerType, nullable = false),
+          StructField("info", StructType(Seq(
+            StructField("salary", IntegerType),
+            StructField("status", StringType),
+            StructField("bonus", IntegerType) // new field not in target
+          ))),
+          StructField("dep", StringType)
+        ))
+        val data = Seq(
+          Row(3, Row(150, "new", 50), "engineering")
+        )
+        spark.createDataFrame(spark.sparkContext.parallelize(data), sourceTableSchema)
+          .createOrReplaceTempView("source")
+
+        val schemaEvolutionClause = if (withSchemaEvolution) "WITH SCHEMA EVOLUTION" else ""
+        val mergeStmt =
+          s"""MERGE $schemaEvolutionClause
+             |INTO $tableNameAsString t
+             |USING source s
+             |ON t.pk = s.pk
+             |WHEN NOT MATCHED THEN
+             | INSERT (pk, info, dep) VALUES (s.pk, s.info, s.dep)
+             |""".stripMargin
+
+        if (withSchemaEvolution) {
+          sql(mergeStmt)
+          // Schema should evolve - bonus field should be added
+          checkAnswer(
+            sql(s"SELECT * FROM $tableNameAsString"),
+            Seq(
+              Row(1, Row(100, "active", null), "hr"),
+              Row(2, Row(200, "inactive", null), "software"),
+              Row(3, Row(150, "new", 50), "engineering")))
+        } else {
+          val exception = intercept[org.apache.spark.sql.AnalysisException] {
+            sql(mergeStmt)
+          }
+          assert(exception.getMessage.contains("Cannot safely cast") ||
+            exception.getMessage.contains("incompatible"))
+        }
+
+        sql(s"DROP TABLE $tableNameAsString")
+      }
+    }
+  }
+
   test("Merge schema evolution should not evolve if not directly referencing " +
     "new field in nested struct") {
     Seq(true, false).foreach { withSchemaEvolution =>
