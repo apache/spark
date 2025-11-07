@@ -37,7 +37,7 @@ import org.scalatest.matchers.should.Matchers._
 import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
 import org.apache.spark.TestUtils.{createTempJsonFile, createTempScriptWithExpectedOutput}
 import org.apache.spark.deploy.{Command, ExecutorState, ExternalShuffleService}
-import org.apache.spark.deploy.DeployMessages.{DriverStateChanged, ExecutorStateChanged, WorkDirCleanup}
+import org.apache.spark.deploy.DeployMessages.{DriverStateChanged, ExecutorStateChanged, RegisteredWorker, WorkDirCleanup}
 import org.apache.spark.deploy.master.DriverState
 import org.apache.spark.internal.config
 import org.apache.spark.internal.config.SHUFFLE_SERVICE_DB_BACKEND
@@ -46,7 +46,7 @@ import org.apache.spark.network.shuffledb.DBBackend
 import org.apache.spark.resource.{ResourceAllocation, ResourceInformation}
 import org.apache.spark.resource.ResourceUtils._
 import org.apache.spark.resource.TestResourceIDs.{WORKER_FPGA_ID, WORKER_GPU_ID}
-import org.apache.spark.rpc.{RpcAddress, RpcEnv}
+import org.apache.spark.rpc.{RpcAddress, RpcEndpointRef, RpcEnv}
 import org.apache.spark.util.Utils
 
 class WorkerSuite extends SparkFunSuite with Matchers with BeforeAndAfter with PrivateMethodTester {
@@ -404,5 +404,30 @@ class WorkerSuite extends SparkFunSuite with Matchers with BeforeAndAfter with P
       makeWorker(new SparkConf().set(WORKER_ID_PATTERN, "my worker"))
     }.getMessage
     assert(m.contains("Whitespace is not allowed"))
+  }
+
+  test("heartbeat task and workdir cleanup task should only be scheduled once " +
+    "across multiple registrations") {
+    val worker = spy(makeWorker())
+    val masterWebUiUrl = "https://1.2.3.4:8080"
+    val masterAddress = RpcAddress("1.2.3.4", 1234)
+    val masterRef = mock(classOf[RpcEndpointRef])
+    when(masterRef.address).thenReturn(masterAddress)
+
+    // Tasks should not be scheduled yet before registration
+    assert(worker.heartbeatTask.isEmpty && worker.workDirCleanupTask.isEmpty)
+
+    val msg = RegisteredWorker(masterRef, masterWebUiUrl, masterAddress, duplicate = false)
+    // Simulate first registration - this should schedule both tasks
+    worker.receive(msg)
+    val heartbeatTask = worker.heartbeatTask
+    val workDirCleanupTask = worker.workDirCleanupTask
+    assert(heartbeatTask.isDefined && workDirCleanupTask.isDefined)
+
+    // Simulate disconnection and re-registration
+    worker.receive(msg)
+    // After re-registration, the task references should be the same (not rescheduled)
+    assert(worker.heartbeatTask == heartbeatTask)
+    assert(worker.workDirCleanupTask == workDirCleanupTask)
   }
 }
