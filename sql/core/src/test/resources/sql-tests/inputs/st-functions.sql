@@ -28,6 +28,28 @@ SELECT hex(ST_AsBinary(CAST(ST_GeomFromWKB(X'0101000000000000000000f03f000000000
 -- Casting GEOMETRY(ANY) to GEOMETRY(<srid>) is not allowed.
 SELECT CAST(ST_GeomFromWKB(X'0101000000000000000000f03f0000000000000040')::GEOMETRY(ANY) AS GEOMETRY(4326)) AS result;
 
+---- Geospatial type coercion
+
+-- Array
+SELECT typeof(array(ST_GeomFromWKB(wkb), ST_GeomFromWKB(wkb)::GEOMETRY(ANY))) FROM geodata;
+-- Map
+SELECT typeof(map('a', ST_GeomFromWKB(wkb), 'b', ST_GeomFromWKB(wkb)::GEOMETRY(ANY))) FROM geodata;
+-- Struct
+SELECT typeof(array(named_struct('g1', ST_GeomFromWKB(wkb), 'g2', ST_GeomFromWKB(wkb)::GEOMETRY(ANY)), named_struct('g1', ST_GeomFromWKB(wkb)::GEOMETRY(ANY), 'g2', ST_GeomFromWKB(wkb)))) FROM geodata;
+-- Nested
+SELECT typeof(named_struct('a', array(ST_GeomFromWKB(wkb), ST_GeomFromWKB(wkb)::GEOMETRY(ANY)), 'b', map('g', ST_GeomFromWKB(wkb), 'h', ST_GeomFromWKB(wkb)::GEOMETRY(ANY)))) FROM geodata;
+
+-- NVL
+SELECT typeof(nvl(ST_GeomFromWKB(wkb), ST_GeomFromWKB(wkb)::GEOMETRY(ANY))) FROM geodata;
+-- NVL2
+SELECT typeof(nvl2(ST_GeomFromWKB(wkb), ST_GeomFromWKB(wkb)::GEOMETRY(ANY), ST_GeomFromWKB(wkb))) FROM geodata;
+-- CASE WHEN
+SELECT typeof(CASE WHEN wkb IS NOT NULL THEN ST_GeomFromWKB(wkb)::GEOMETRY(ANY) ELSE ST_GeomFromWKB(wkb) END) FROM geodata;
+-- COALESCE
+SELECT typeof(coalesce(ST_GeomFromWKB(wkb), ST_GeomFromWKB(wkb)::GEOMETRY(ANY))) FROM geodata;
+-- IF
+SELECT typeof(IF(wkb IS NOT NULL, ST_GeomFromWKB(wkb)::GEOMETRY(ANY), ST_GeomFromWKB(wkb))) FROM geodata;
+
 ---- ST reader/writer expressions
 
 -- WKB (Well-Known Binary) round-trip tests for GEOGRAPHY and GEOMETRY types.

@@ -123,6 +123,154 @@ class STExpressionsSuite
     }
   }
 
+  /** Geospatial type coercion. */
+
+  test("CreateArray with GEOMETRY literals") {
+    // Test data: WKB representation of POINT(1 2).
+    val wkbString = "0101000000000000000000F03F0000000000000040"
+    // Test with literals, using geometries with different SRID values.
+    val geom1 = s"ST_GeomFromWKB(X'$wkbString')" // Literal with fixed SRID (0).
+    val geometryType1 = GeometryType(0)
+    val geom2 = s"$geom1::GEOMETRY(ANY)" // Literal with mixed SRID (ANY).
+    val geometryType2 = GeometryType("ANY")
+    val geo = "hex(ST_AsBinary(g)), ST_Srid(g)"
+    val row = Row(wkbString, 0)
+
+    val testCases = Seq(
+      (s"array($geom1)", geometryType1, Seq(row)),
+      (s"array($geom2)", geometryType2, Seq(row)),
+      (s"array($geom1, $geom1)", geometryType1, Seq(row, row)),
+      (s"array($geom2, $geom2)", geometryType2, Seq(row, row)),
+      (s"array($geom1, $geom2)", mixedSridGeometryType, Seq(row, row)),
+      (s"array($geom2, $geom1)", mixedSridGeometryType, Seq(row, row))
+    )
+
+    for ((expr, expectedType, expectedRows) <- testCases) {
+      assertType(
+        s"SELECT $expr",
+        ArrayType(expectedType)
+      )
+      checkAnswer(
+        sql(s"WITH t AS (SELECT explode($expr) AS g) SELECT $geo FROM t"),
+        expectedRows
+      )
+    }
+  }
+
+  test("CreateArray with GEOMETRY columns") {
+    // Test data: WKB representation of POINT(1 2).
+    val wkbString = "0101000000000000000000F03F0000000000000040"
+    // Test with columns, using geometries with different SRID values.
+    val geom1 = "ST_GeomFromWKB(wkb)" // Column with fixed SRID (0).
+    val geometryType1 = GeometryType(0)
+    val geom2 = s"$geom1::GEOMETRY(ANY)" // Column with mixed SRID (ANY).
+    val geometryType2 = GeometryType("ANY")
+    val geo = "hex(ST_AsBinary(g)), ST_Srid(g)"
+    val row = Row(wkbString, 0)
+
+    val testCases = Seq(
+      (s"array($geom1)", geometryType1, Seq(row)),
+      (s"array($geom2)", geometryType2, Seq(row)),
+      (s"array($geom1, $geom1)", geometryType1, Seq(row, row)),
+      (s"array($geom2, $geom2)", geometryType2, Seq(row, row)),
+      (s"array($geom1, $geom2)", mixedSridGeometryType, Seq(row, row)),
+      (s"array($geom2, $geom1)", mixedSridGeometryType, Seq(row, row))
+    )
+
+    // Test with literal and column, using geometries with different SRID values.
+    withTable("tbl") {
+      // Construct and populate the test table.
+      sql("CREATE TABLE tbl (wkb BINARY)")
+      sql(s"INSERT INTO tbl VALUES (X'$wkbString')")
+
+      for ((query, expectedType, expectedRows) <- testCases) {
+        assertType(
+          s"SELECT $query FROM tbl",
+          ArrayType(expectedType)
+        )
+        checkAnswer(
+          sql(s"WITH t AS (SELECT explode($query) AS g FROM tbl) SELECT $geo FROM t"),
+          expectedRows
+        )
+      }
+    }
+  }
+
+  test("NVL with GEOMETRY literals") {
+    // Test data: WKB representation of POINT(1 2).
+    val wkbString = "0101000000000000000000F03F0000000000000040"
+    // Test with literals, using geometries with different SRID values.
+    val geom1 = s"ST_GeomFromWKB(X'$wkbString')" // Literal with fixed SRID (0).
+    val geometryType1 = GeometryType(0)
+    val geom2 = s"$geom1::GEOMETRY(ANY)" // Literal with mixed SRID (ANY).
+    val geometryType2 = GeometryType("ANY")
+    val geo = "hex(ST_AsBinary(g)), ST_Srid(g)"
+    val row = Row(wkbString, 0)
+
+    val testCases = Seq(
+      (s"nvl(null, $geom1)", geometryType1, Seq(row)),
+      (s"nvl($geom1, null)", geometryType1, Seq(row)),
+      (s"nvl(null, $geom2)", geometryType2, Seq(row)),
+      (s"nvl($geom2, null)", geometryType2, Seq(row)),
+      (s"nvl($geom1, $geom1)", geometryType1, Seq(row)),
+      (s"nvl($geom2, $geom2)", geometryType2, Seq(row)),
+      (s"nvl($geom1, $geom2)", mixedSridGeometryType, Seq(row)),
+      (s"nvl($geom2, $geom1)", mixedSridGeometryType, Seq(row))
+    )
+
+    for ((expr, expectedType, expectedRows) <- testCases) {
+      assertType(
+        s"SELECT $expr",
+        expectedType
+      )
+      checkAnswer(
+        sql(s"WITH t AS (SELECT $expr AS g) SELECT $geo FROM t"),
+        expectedRows
+      )
+    }
+  }
+
+  test("NVL with GEOMETRY columns") {
+    // Test data: WKB representation of POINT(1 2).
+    val wkbString = "0101000000000000000000F03F0000000000000040"
+    // Test with columns, using geometries with different SRID values.
+    val geom1 = "ST_GeomFromWKB(wkb)" // Column with fixed SRID (0).
+    val geometryType1 = GeometryType(0)
+    val geom2 = s"$geom1::GEOMETRY(ANY)" // Column with mixed SRID (ANY).
+    val geometryType2 = GeometryType("ANY")
+    val geo = "hex(ST_AsBinary(g)), ST_Srid(g)"
+    val row = Row(wkbString, 0)
+
+    val testCases = Seq(
+      (s"nvl(null, $geom1)", geometryType1, Seq(row)),
+      (s"nvl($geom1, null)", geometryType1, Seq(row)),
+      (s"nvl(null, $geom2)", geometryType2, Seq(row)),
+      (s"nvl($geom2, null)", geometryType2, Seq(row)),
+      (s"nvl($geom1, $geom1)", geometryType1, Seq(row)),
+      (s"nvl($geom2, $geom2)", geometryType2, Seq(row)),
+      (s"nvl($geom1, $geom2)", mixedSridGeometryType, Seq(row)),
+      (s"nvl($geom2, $geom1)", mixedSridGeometryType, Seq(row))
+    )
+
+    // Test with literal and column, using geometries with different SRID values.
+    withTable("tbl") {
+      // Construct and populate the test table.
+      sql("CREATE TABLE tbl (wkb BINARY)")
+      sql(s"INSERT INTO tbl VALUES (X'$wkbString')")
+
+      for ((query, expectedType, expectedRows) <- testCases) {
+        assertType(
+          s"SELECT $query FROM tbl",
+          expectedType
+        )
+        checkAnswer(
+          sql(s"WITH t AS (SELECT $query AS g FROM tbl) SELECT $geo FROM t"),
+          expectedRows
+        )
+      }
+    }
+  }
+
   /** ST reader/writer expressions. */
 
   test("ST_AsBinary") {
