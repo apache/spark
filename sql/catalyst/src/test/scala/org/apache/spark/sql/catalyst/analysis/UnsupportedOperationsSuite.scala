@@ -854,22 +854,25 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
   }
 
   /*
-  =======================================================================================
+    =======================================================================================
                                  REAL-TIME STREAMING
-  =======================================================================================
- */
+    =======================================================================================
+  */
 
-  assertNotSupportedForRealTime(
-    "real-time without operators - append mode",
-    streamRelation, Append,
-    "STREAMING_REAL_TIME_MODE.OUTPUT_MODE_NOT_SUPPORTED"
-  )
+  {
+    assertNotSupportedForRealTime(
+      "real-time without operators - append mode",
+      streamRelation,
+      Append,
+      "STREAMING_REAL_TIME_MODE.OUTPUT_MODE_NOT_SUPPORTED"
+    )
 
-  assertSupportedForRealTime(
-    "real-time with stream-batch join - update mode",
-    streamRelation.join(batchRelation, joinType = Inner),
-    Update
-  )
+    assertSupportedForRealTime(
+      "real-time with stream-batch join - update mode",
+      streamRelation.join(batchRelation, joinType = Inner),
+      Update
+    )
+  }
 
   /*
     =======================================================================================
@@ -1042,7 +1045,8 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
     }
   }
 
-  /** Assert that the logical plan is not supported inside a streaming plan with the
+  /**
+   * Assert that the logical plan is not supported inside a streaming plan with the
    * real-time trigger.
    */
   def assertNotSupportedForRealTime(

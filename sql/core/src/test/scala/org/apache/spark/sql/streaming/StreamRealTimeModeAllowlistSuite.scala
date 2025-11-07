@@ -50,7 +50,7 @@ class StreamRealTimeModeAllowlistSuite extends StreamRealTimeModeE2ESuiteBase {
   }
 
   test("rtm operator allowlist") {
-    withSQLConf("spark.sql.autoBroadcastJoinThreshold" -> "0") {
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "0") {
       val inputData = LowLatencyMemoryStream[Int](2)
       val staticDf = spark.range(1, 31, 1, 10).selectExpr("id AS join_key", "id AS join_value")
 
@@ -107,7 +107,7 @@ class StreamRealTimeModeAllowlistSuite extends StreamRealTimeModeE2ESuiteBase {
     }
   }
 
-  // TODO : Remove this test after RTM can shuffle to multiple stages
+  // TODO(SPARK-54237) : Remove this test after RTM can shuffle to multiple stages
   test("repartition not allowed") {
       val inputData = LowLatencyMemoryStream[Int](2)
 
@@ -131,7 +131,7 @@ class StreamRealTimeModeAllowlistSuite extends StreamRealTimeModeE2ESuiteBase {
       }
   }
 
-  // TODO : Remove this test after RTM supports stateful queries
+  // TODO(SPARK-54236) : Remove this test after RTM supports stateful queries
   test("stateful queries not allowed") {
     val inputData = LowLatencyMemoryStream[Int](2)
 

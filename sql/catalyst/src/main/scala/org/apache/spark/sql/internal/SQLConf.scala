@@ -3097,6 +3097,7 @@ object SQLConf {
   val STREAMING_REAL_TIME_MODE_ALLOWLIST_CHECK = buildConf(
     "spark.sql.streaming.realTimeMode.allowlistCheck")
     .doc("Whether to check all operators, sinks used in real-time mode are in the allowlist.")
+    .version("4.1.0")
     .booleanConf
     .createWithDefault(true)
 
