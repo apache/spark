@@ -47,7 +47,7 @@ private[sql] class RocksDBStateStoreProvider
       lastVersion: Long,
       private[RocksDBStateStoreProvider] val stamp: Long,
       private[RocksDBStateStoreProvider] var readOnly: Boolean,
-      private var forceSnapshotOnCommit: Boolean) extends StateStore {
+      private[RocksDBStateStoreProvider] var forceSnapshotOnCommit: Boolean) extends StateStore {
 
     private sealed trait OPERATION
     private case object UPDATE extends OPERATION
@@ -820,8 +820,11 @@ private[sql] class RocksDBStateStoreProvider
       " the same stateStoreId")
     assert(readStore.isInstanceOf[RocksDBStateStore], "Can only upgrade state store if it is a " +
       "RocksDBStateStore")
-    loadStateStore(version, uniqueId, readOnly = false, existingStore =
-      Some(readStore.asInstanceOf[RocksDBStateStore]), forceSnapshotOnCommit = forceSnapshotOnCommit)
+    loadStateStore(version,
+      uniqueId,
+      readOnly = false,
+      existingStore = Some(readStore.asInstanceOf[RocksDBStateStore]),
+      forceSnapshotOnCommit = forceSnapshotOnCommit)
   }
 
   override def getReadStore(

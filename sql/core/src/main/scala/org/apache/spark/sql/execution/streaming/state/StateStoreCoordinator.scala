@@ -124,6 +124,14 @@ private case class GetLaggingStoresForTesting(
     isTerminatingTrigger: Boolean)
   extends StateStoreCoordinatorMessage
 
+/**
+ * Message used for testing.
+ * This message is used to check if a specific state store provider should force
+ * snapshot upload based on current lag status, without modifying coordinator state.
+ */
+private case class CheckIfShouldForceSnapshotUploadForTesting(providerId: StateStoreProviderId)
+  extends StateStoreCoordinatorMessage
+
 private object StopCoordinator
   extends StateStoreCoordinatorMessage
 
@@ -251,6 +259,17 @@ class StateStoreCoordinatorRef private(rpcEndpointRef: RpcEndpointRef) {
     )
   }
 
+  /**
+   * Endpoint used for testing.
+   * Check if a specific state store should force snapshot upload based on current lag status.
+   * This is a read-only operation that does not modify coordinator state.
+   */
+  private[state] def checkIfShouldForceSnapshotUploadForTesting(
+      providerId: StateStoreProviderId): Boolean = {
+    rpcEndpointRef.askSync[Boolean](
+      CheckIfShouldForceSnapshotUploadForTesting(providerId))
+  }
+
   private[state] def stop(): Unit = {
     rpcEndpointRef.askSync[Boolean](StopCoordinator)
   }
@@ -290,7 +309,7 @@ private class StateStoreCoordinator(
     sqlConf.stateStoreCoordinatorReportSnapshotUploadLag
 
   private def forceSnapshotUploadOnLag: Boolean =
-    sqlConf.forceSnapshotUploadOnLag
+    sqlConf.stateStoreForceSnapshotUploadOnLag
 
   private def coordinatorLagReportInterval: Long =
     sqlConf.stateStoreCoordinatorSnapshotLagReportInterval
@@ -308,11 +327,7 @@ private class StateStoreCoordinator(
         providerLoc.map(_ != taskLocation).getOrElse(false)
       }
       // Check if the store is lagging behind in snapshot uploads
-      val shouldForceSnapshotUpload =
-        forceSnapshotUploadOnLag && snapshotUploadLaggingStores
-          .getOrElse(id.queryRunId, mutable.HashSet.empty)
-          .contains(id)
-      logDebug(s"State store $id is lagging: $shouldForceSnapshotUpload")
+      val shouldForceSnapshotUpload = shouldForceSnapshotUploadForProvider(id)
       context.reply(ReportActiveInstanceResponse(
         shouldForceSnapshotUpload,
         providerIdsToUnload))
@@ -343,7 +358,9 @@ private class StateStoreCoordinator(
       // Remove the corresponding run id entries for report time and starting time
       lastFullSnapshotLagReportTimeMs -= runId
       // Remove the corresponding run id entries for snapshot upload lagging stores
-      snapshotUploadLaggingStores.remove(runId)
+      if (forceSnapshotUploadOnLag) {
+        snapshotUploadLaggingStores.remove(runId)
+      }
       logDebug(s"Deactivating instances related to checkpoint location $runId: " +
         storeIdsToRemove.mkString(", "))
       context.reply(true)
@@ -355,9 +372,6 @@ private class StateStoreCoordinator(
       logDebug(s"Snapshot version $version was uploaded for state store $providerId")
       if (!stateStoreLatestUploadedSnapshot.get(providerId).exists(_.version >= version)) {
         stateStoreLatestUploadedSnapshot.put(providerId, SnapshotUploadEvent(version, timestamp))
-        if (forceSnapshotUploadOnLag) {
-          snapshotUploadLaggingStores.get(providerId.queryRunId).foreach(_.remove(providerId))
-        }
       }
       context.reply(true)
 
@@ -480,10 +494,21 @@ private class StateStoreCoordinator(
         context.reply(Seq.empty)
       }
 
+    case CheckIfShouldForceSnapshotUploadForTesting(providerId) =>
+      val shouldForceSnapshotUpload = shouldForceSnapshotUploadForProvider(providerId)
+      context.reply(shouldForceSnapshotUpload)
+
     case StopCoordinator =>
       stop() // Stop before replying to ensure that endpoint name has been deregistered
       logInfo("StateStoreCoordinator stopped")
       context.reply(true)
+  }
+
+  private def shouldForceSnapshotUploadForProvider(
+      providerId: StateStoreProviderId): Boolean = {
+    forceSnapshotUploadOnLag && snapshotUploadLaggingStores
+      .getOrElse(providerId.queryRunId, mutable.HashSet.empty)
+      .contains(providerId)
   }
 
   private def findLaggingStores(
