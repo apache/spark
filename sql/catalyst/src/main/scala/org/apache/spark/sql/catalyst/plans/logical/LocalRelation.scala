@@ -119,7 +119,7 @@ case class LocalRelation(
       output.map(_.name).mkString("(", ", ", ")")
   }
 
-  override def maxRows: Option[Long] = Some(data.length.toLong)
+  override lazy val maxRows: Option[Long] = Some(data.length.toLong)
 
   override val nodePatterns: Seq[TreePattern] = Seq(LOCAL_RELATION)
 }

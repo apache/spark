@@ -294,14 +294,12 @@ class CombiningLimitsSuite extends PlanTest {
   }
 }
 
-case class RelationWithoutMaxRows(output: Seq[Attribute]) extends LeafNode {
-  override def maxRows: Option[Long] = None
-}
+case class RelationWithoutMaxRows(output: Seq[Attribute]) extends LeafNode
 
 case class LongMaxRelation(output: Seq[Attribute]) extends LeafNode {
-  override def maxRows: Option[Long] = Some(Long.MaxValue)
+  override lazy val maxRows: Option[Long] = Some(Long.MaxValue)
 }
 
 case class EmptyRelation(output: Seq[Attribute]) extends LeafNode {
-  override def maxRows: Option[Long] = Some(0)
+  override lazy val maxRows: Option[Long] = Some(0)
 }

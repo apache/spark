@@ -71,7 +71,7 @@ case class LogicalQueryStage(
     physicalStats.getOrElse(logicalPlan.stats)
   }
 
-  override def maxRows: Option[Long] = stats.rowCount.map(_.min(Long.MaxValue).toLong)
+  override lazy val maxRows: Option[Long] = stats.rowCount.map(_.min(Long.MaxValue).toLong)
 
   override def isMaterialized: Boolean = physicalPlan.exists {
     case s: QueryStageExec => s.isMaterialized

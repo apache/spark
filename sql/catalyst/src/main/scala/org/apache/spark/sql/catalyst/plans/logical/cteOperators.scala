@@ -116,7 +116,7 @@ case class CTERelationDef(
 
   final override val nodePatterns: Seq[TreePattern] = Seq(CTE)
 
-  override def maxRows: Option[Long] = if (conf.getConf(SQLConf.CTE_RELATION_DEF_MAX_ROWS)) {
+  override lazy val maxRows: Option[Long] = if (conf.getConf(SQLConf.CTE_RELATION_DEF_MAX_ROWS)) {
     child.maxRows
   } else {
     None
@@ -249,9 +249,9 @@ case class WithCTE(plan: LogicalPlan, cteDefs: Seq[CTERelationDef]) extends Logi
     withNewChildren(children.init :+ newPlan).asInstanceOf[WithCTE]
   }
 
-  override def maxRows: Option[Long] = plan.maxRows
+  override lazy val maxRows: Option[Long] = plan.maxRows
 
-  override def maxRowsPerPartition: Option[Long] = plan.maxRowsPerPartition
+  override lazy val maxRowsPerPartition: Option[Long] = plan.maxRowsPerPartition
 }
 
 /**

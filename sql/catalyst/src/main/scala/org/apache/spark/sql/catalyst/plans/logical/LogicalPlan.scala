@@ -90,12 +90,12 @@ abstract class LogicalPlan
    * Any operator that a Limit can be pushed passed should override this function (e.g., Union).
    * Any operator that can push through a Limit should override this function (e.g., Project).
    */
-  def maxRows: Option[Long] = None
+  lazy val maxRows: Option[Long] = None
 
   /**
    * Returns the maximum number of rows this plan may compute on each partition.
    */
-  def maxRowsPerPartition: Option[Long] = maxRows
+  lazy val maxRowsPerPartition: Option[Long] = maxRows
 
   /**
    * Returns true if this expression and all its children have been resolved to a specific schema

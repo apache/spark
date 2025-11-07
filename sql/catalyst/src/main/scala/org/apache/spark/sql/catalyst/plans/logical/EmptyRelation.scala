@@ -29,7 +29,7 @@ case class EmptyRelation(logical: LogicalPlan) extends LeafNode {
 
   override def computeStats(): Statistics = Statistics(sizeInBytes = 0, rowCount = Some(0))
 
-  override def maxRows: Option[Long] = Some(0)
+  override lazy val maxRows: Option[Long] = Some(0)
 
-  override def maxRowsPerPartition: Option[Long] = Some(0)
+  override lazy val maxRowsPerPartition: Option[Long] = Some(0)
 }
