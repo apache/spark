@@ -4001,6 +4001,19 @@ object SQLConf {
       .checkValues(Set("none", "zstd", "lz4"))
       .createWithDefault("none")
 
+  val ARROW_EXECUTION_ZSTD_COMPRESSION_LEVEL =
+    buildConf("spark.sql.execution.arrow.zstd.compressionLevel")
+      .doc("Compression level for Zstandard (zstd) codec when compressing Arrow IPC data. " +
+        "This config is only used when spark.sql.execution.arrow.compressionCodec is set to " +
+        "'zstd'. Valid values are integers from 1 (fastest, lowest compression) to 22 " +
+        "(slowest, highest compression). The default value 3 provides a good balance between " +
+        "compression speed and compression ratio.")
+      .version("4.1.0")
+      .intConf
+      .checkValue(level => level >= 1 && level <= 22,
+        "Zstd compression level must be between 1 and 22")
+      .createWithDefault(3)
+
   val ARROW_TRANSFORM_WITH_STATE_IN_PYSPARK_MAX_STATE_RECORDS_PER_BATCH =
     buildConf("spark.sql.execution.arrow.transformWithStateInPySpark.maxStateRecordsPerBatch")
       .doc("When using TransformWithState in PySpark (both Python Row and Pandas), limit " +
@@ -7347,6 +7360,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def arrowMaxBytesPerBatch: Long = getConf(ARROW_EXECUTION_MAX_BYTES_PER_BATCH)
 
   def arrowCompressionCodec: String = getConf(ARROW_EXECUTION_COMPRESSION_CODEC)
+
+  def arrowZstdCompressionLevel: Int = getConf(ARROW_EXECUTION_ZSTD_COMPRESSION_LEVEL)
 
   def arrowTransformWithStateInPySparkMaxStateRecordsPerBatch: Int =
     getConf(ARROW_TRANSFORM_WITH_STATE_IN_PYSPARK_MAX_STATE_RECORDS_PER_BATCH)
