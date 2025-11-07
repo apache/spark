@@ -860,8 +860,7 @@ case class MergeIntoTable(
     matchedActions: Seq[MergeAction],
     notMatchedActions: Seq[MergeAction],
     notMatchedBySourceActions: Seq[MergeAction],
-    withSchemaEvolution: Boolean)
-  extends BinaryCommand with SupportsSubquery {
+    withSchemaEvolution: Boolean) extends BinaryCommand with SupportsSubquery {
 
   lazy val aligned: Boolean = {
     val actions = matchedActions ++ notMatchedActions ++ notMatchedBySourceActions
@@ -998,8 +997,10 @@ object MergeIntoTable {
   }
 
   // A pruned version of source schema that only contains columns/nested fields
-  // explicitly and directly assigned to a target counterpart in MERGE INTO actions.
-  // New columns/nested fields not existing in target will be added for schema evolution.
+  // explicitly and directly assigned to a target counterpart in MERGE INTO actions,
+  // which are relevant for schema evolution.
+  // New columns/nested fields in this schema that are not existing in target schema
+  // will be added for schema evolution.
   def sourceSchemaForSchemaEvolution(merge: MergeIntoTable): StructType = {
 
     val actions = merge.matchedActions ++ merge.notMatchedActions
