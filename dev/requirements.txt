@@ -65,6 +65,7 @@ grpcio>=1.67.0
 grpcio-status>=1.67.0
 googleapis-common-protos>=1.65.0
 protobuf==5.29.5
+zstandard>=0.23.0
 
 # Spark Connect python proto generation plugin (optional)
 mypy-protobuf==3.3.0
