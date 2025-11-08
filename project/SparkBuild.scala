@@ -882,17 +882,17 @@ object SparkConnectJdbc {
     // Exclude `scala-library` from assembly.
     (assembly / assemblyPackageScala / assembleArtifact) := false,
 
-    // Exclude `pmml-model-*.jar`, `scala-collection-compat_*.jar`, `jsr305-*.jar`,
+    // Exclude `pmml-model-*.jar`, `scala-collection-compat_*.jar`, `jspecify-*.jar`,
     // `error_prone_annotations-*.jar`, `listenablefuture-9999.0-empty-to-avoid-conflict-with-guava.jar`,
-    // `j2objc-annotations-*.jar`, `checker-qual-*.jar` and `unused-1.0.0.jar` from assembly.
+    // `j2objc-annotations-*.jar` and `unused-1.0.0.jar` from assembly.
     (assembly / assemblyExcludedJars) := {
       val cp = (assembly / fullClasspath).value
       cp filter { v =>
         val name = v.data.getName
         name.startsWith("pmml-model-") || name.startsWith("scala-collection-compat_") ||
-          name.startsWith("jsr305-") || name.startsWith("error_prone_annotations") ||
+          name.startsWith("jspecify-") || name.startsWith("error_prone_annotations") ||
           name.startsWith("listenablefuture") || name.startsWith("j2objc-annotations") ||
-          name.startsWith("checker-qual") || name == "unused-1.0.0.jar"
+          name == "unused-1.0.0.jar"
       }
     },
     // Only include `spark-connect-client-jdbc-*.jar`
@@ -972,17 +972,17 @@ object SparkConnectClient {
     // Exclude `scala-library` from assembly.
     (assembly / assemblyPackageScala / assembleArtifact) := false,
 
-    // Exclude `pmml-model-*.jar`, `scala-collection-compat_*.jar`, `jsr305-*.jar`,
+    // Exclude `pmml-model-*.jar`, `scala-collection-compat_*.jar`, `jspecify-*.jar`,
     // `error_prone_annotations-*.jar`, `listenablefuture-9999.0-empty-to-avoid-conflict-with-guava.jar`,
-    // `j2objc-annotations-*.jar`, `checker-qual-*.jar` and `unused-1.0.0.jar` from assembly.
+    // `j2objc-annotations-*.jar` and `unused-1.0.0.jar` from assembly.
     (assembly / assemblyExcludedJars) := {
       val cp = (assembly / fullClasspath).value
       cp filter { v =>
         val name = v.data.getName
         name.startsWith("pmml-model-") || name.startsWith("scala-collection-compat_") ||
-          name.startsWith("jsr305-") || name.startsWith("error_prone_annotations") ||
+          name.startsWith("jspecify-") || name.startsWith("error_prone_annotations") ||
           name.startsWith("listenablefuture") || name.startsWith("j2objc-annotations") ||
-          name.startsWith("checker-qual") || name == "unused-1.0.0.jar"
+          name == "unused-1.0.0.jar"
       }
     },
 
