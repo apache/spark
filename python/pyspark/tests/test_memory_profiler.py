@@ -341,12 +341,13 @@ class MemoryProfiler2TestsMixin:
         not have_pandas or not have_pyarrow,
         cast(str, pandas_requirement_message or pyarrow_requirement_message),
     )
-    def test_memory_profiler_pandas_udf_iterator_not_supported(self):
+    def test_memory_profiler_pandas_udf_iterator(self):
         import pandas as pd
 
         @pandas_udf("long")
-        def add1(x):
-            return x + 1
+        def add1(iter: Iterator[pd.Series]) -> Iterator[pd.Series]:
+            for s in iter:
+                yield s + 1
 
         @pandas_udf("long")
         def add2(iter: Iterator[pd.Series]) -> Iterator[pd.Series]:
@@ -359,7 +360,7 @@ class MemoryProfiler2TestsMixin:
             )
             df.collect()
 
-        self.assertEqual(1, len(self.profile_results), str(self.profile_results.keys()))
+        self.assertEqual(3, len(self.profile_results), str(self.profile_results.keys()))
 
         for id in self.profile_results:
             self.assert_udf_memory_profile_present(udf_id=id)
@@ -368,7 +369,7 @@ class MemoryProfiler2TestsMixin:
         not have_pandas or not have_pyarrow,
         cast(str, pandas_requirement_message or pyarrow_requirement_message),
     )
-    def test_memory_profiler_map_in_pandas_not_supported(self):
+    def test_memory_profiler_map_in_pandas(self):
         df = self.spark.createDataFrame([(1, 21), (2, 30)], ("id", "age"))
 
         def filter_func(iterator):
@@ -378,7 +379,10 @@ class MemoryProfiler2TestsMixin:
         with self.sql_conf({"spark.sql.pyspark.udf.profiler": "memory"}):
             df.mapInPandas(filter_func, df.schema).show()
 
-        self.assertEqual(0, len(self.profile_results), str(self.profile_results.keys()))
+        self.assertEqual(1, len(self.profile_results), str(self.profile_results.keys()))
+
+        for id in self.profile_results:
+            self.assert_udf_memory_profile_present(udf_id=id)
 
     @unittest.skipIf(
         not have_pandas or not have_pyarrow,
