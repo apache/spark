@@ -517,11 +517,11 @@ class SparkSession private(
           val parsed = sessionState.sqlParser.parsePlanWithParameters(sqlText, paramContext)
 
           // Check for SQL scripting with positional parameters
-          if (parsed.isInstanceOf[CompoundBody]) {
+          if (parsed.isInstanceOf[CompoundBody] && args.nonEmpty) {
             throw SqlScriptingErrors.positionalParametersAreNotSupportedWithSqlScripting()
           }
           // In legacy mode, wrap with PosParameterizedQuery for analyzer binding
-          if (sessionState.conf.legacyParameterSubstitutionConstantsOnly) {
+          if (args.nonEmpty && sessionState.conf.legacyParameterSubstitutionConstantsOnly) {
             PosParameterizedQuery(parsed, paramContext.params)
           } else {
             parsed
@@ -572,7 +572,8 @@ class SparkSession private(
         val queryPlan = parsedPlan match {
           case compoundBody: CompoundBody => compoundBody
           case logicalPlan: LogicalPlan =>
-            if (args.nonEmpty) {
+            // In legacy mode, wrap with NameParameterizedQuery for analyzer binding
+            if (args.nonEmpty && sessionState.conf.legacyParameterSubstitutionConstantsOnly) {
               NameParameterizedQuery(logicalPlan, paramContext.params)
             } else {
               logicalPlan
