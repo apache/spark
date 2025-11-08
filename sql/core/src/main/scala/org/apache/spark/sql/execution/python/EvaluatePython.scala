@@ -29,9 +29,9 @@ import org.apache.spark.api.python.SerDeUtil
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, GenericArrayData, MapData}
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, GenericArrayData, MapData, STUtils}
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.{UTF8String, VariantVal}
+import org.apache.spark.unsafe.types.{GeographyVal, GeometryVal, UTF8String, VariantVal}
 
 object EvaluatePython {
 
@@ -43,7 +43,7 @@ object EvaluatePython {
 
   def needConversionInPython(dt: DataType): Boolean = dt match {
     case DateType | TimestampType | TimestampNTZType | VariantType | _: DayTimeIntervalType
-         | _: TimeType => true
+         | _: TimeType | _: GeometryType | _: GeographyType => true
     case _: StructType => true
     case _: UserDefinedType[_] => true
     case ArrayType(elementType, _) => needConversionInPython(elementType)
@@ -91,6 +91,10 @@ object EvaluatePython {
       case (d: Decimal, _) => d.toJavaBigDecimal
 
       case (s: UTF8String, _: StringType) => s.toString
+
+      case (g: GeometryVal, gt: GeometryType) => STUtils.deserializeGeom(g, gt)
+
+      case (g: GeographyVal, gt: GeographyType) => STUtils.deserializeGeog(g, gt)
 
       case (bytes: Array[Byte], BinaryType) =>
         if (binaryAsBytes) {
@@ -226,6 +230,23 @@ object EvaluatePython {
         new VariantVal(
           s.get("value").asInstanceOf[Array[Byte]], s.get("metadata").asInstanceOf[Array[Byte]]
         )
+    }
+
+    case g: GeographyType => (obj: Any) => nullSafeConvert(obj) {
+      case s: java.util.HashMap[_, _] =>
+        val geographySrid = s.get("srid").asInstanceOf[Int]
+        g.assertSridAllowedForType(geographySrid)
+        STUtils.stGeogFromWKB(
+          s.get("wkb").asInstanceOf[Array[Byte]])
+    }
+
+    case g: GeometryType => (obj: Any) => nullSafeConvert(obj) {
+      case s: java.util.HashMap[_, _] =>
+        val geometrySrid = s.get("srid").asInstanceOf[Int]
+        g.assertSridAllowedForType(geometrySrid)
+        STUtils.stGeomFromWKB(
+          s.get("wkb").asInstanceOf[Array[Byte]],
+          geometrySrid)
     }
 
     case other => (obj: Any) => nullSafeConvert(obj)(PartialFunction.empty)
