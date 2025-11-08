@@ -989,9 +989,6 @@ class SparkConnectClient(object):
         if table.num_rows == 0:
             pdf = pd.DataFrame(columns=schema.names, index=range(0))
         else:
-            # Rename columns to avoid duplicated column names.
-            renamed_table = table.rename_columns([f"col_{i}" for i in range(table.num_columns)])
-
             pandas_options = {"coerce_temporal_nanoseconds": True}
             if self_destruct == "true":
                 # Configure PyArrow to use as little memory as possible:
@@ -1005,30 +1002,33 @@ class SparkConnectClient(object):
                         "use_threads": False,
                     }
                 )
-            pdf = renamed_table.to_pandas(**pandas_options)
+
+            if len(schema.names) > 0:
+                error_on_duplicated_field_names: bool = False
+                if struct_in_pandas == "legacy" and any(
+                    _has_type(f.dataType, StructType) for f in schema.fields
+                ):
+                    error_on_duplicated_field_names = True
+                    struct_in_pandas = "dict"
+
+                pdf = pd.concat(
+                    [
+                        _create_converter_to_pandas(
+                            field.dataType,
+                            field.nullable,
+                            timezone=timezone,
+                            struct_in_pandas=struct_in_pandas,
+                            error_on_duplicated_field_names=error_on_duplicated_field_names,
+                        )(arrow_col.to_pandas(**pandas_options))
+                        for arrow_col, field in zip(table.columns, schema.fields)
+                    ],
+                    axis="columns",
+                )
+            else:
+                # empty columns
+                pdf = table.to_pandas(**pandas_options)
+
             pdf.columns = schema.names
-
-        if len(pdf.columns) > 0:
-            error_on_duplicated_field_names: bool = False
-            if struct_in_pandas == "legacy" and any(
-                _has_type(f.dataType, StructType) for f in schema.fields
-            ):
-                error_on_duplicated_field_names = True
-                struct_in_pandas = "dict"
-
-            pdf = pd.concat(
-                [
-                    _create_converter_to_pandas(
-                        field.dataType,
-                        field.nullable,
-                        timezone=timezone,
-                        struct_in_pandas=struct_in_pandas,
-                        error_on_duplicated_field_names=error_on_duplicated_field_names,
-                    )(pser)
-                    for (_, pser), field, pa_field in zip(pdf.items(), schema.fields, table.schema)
-                ],
-                axis="columns",
-            )
 
         if len(metrics) > 0:
             pdf.attrs["metrics"] = metrics
