@@ -14,7 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.testing
+package org.apache.spark.sql.streaming
 
 import java.sql.Timestamp
 import java.time.Duration
