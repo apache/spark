@@ -66,7 +66,7 @@ ARG BASIC_PIP_PKGS="numpy==1.22.4 pyarrow==15.0.0 pandas==2.2.0 six==1.16.0 scip
 # Python deps for Spark Connect
 ARG CONNECT_PIP_PKGS="grpcio==1.76.0 grpcio-status==1.76.0 googleapis-common-protos==1.71.0 graphviz==0.20 protobuf"
 
-# Install Python 3.9 packages
+# Install Python 3.10 packages
 RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.10
 RUN python3.10 -m pip install --force $BASIC_PIP_PKGS $CONNECT_PIP_PKGS && \
     python3.10 -m pip cache purge
