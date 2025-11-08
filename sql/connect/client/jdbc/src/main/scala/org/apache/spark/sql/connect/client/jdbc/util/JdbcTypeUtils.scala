@@ -56,8 +56,8 @@ private[jdbc] object JdbcTypeUtils {
   }
 
   def isSigned(field: StructField): Boolean = field.dataType match {
-    case ByteType | ShortType | IntegerType | LongType | FloatType | DoubleType
-         | DecimalType.Fixed(_, _) => true
+    case ByteType | ShortType | IntegerType | LongType | FloatType | DoubleType |
+         _: DecimalType => true
     case NullType | BooleanType | StringType => false
     case other =>
       throw new SQLFeatureNotSupportedException(s"DataType $other is not supported yet.")
