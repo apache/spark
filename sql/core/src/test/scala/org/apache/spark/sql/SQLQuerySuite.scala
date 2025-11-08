@@ -4779,7 +4779,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       // scalastyle:off
       """== Physical Plan ==
         |Execute ExplainCommand
-        |   +- ExplainCommand ExplainCommand 'Project [unresolvedalias(1)], SimpleMode, SimpleMode
+        |   +- ExplainCommand ExplainCommand 'NameParameterizedQuery [first], [1], SimpleMode, SimpleMode
 
         |"""
       // scalastyle:on
