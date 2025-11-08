@@ -1984,7 +1984,8 @@ class SparkConnectClient(object):
                     if info.metadata.get("errorClass") == "CONNECT_INVALID_PLAN.CANNOT_PARSE":
                         # Disable plan compression if the server fails to interpret the plan.
                         logger.info(
-                            "Disabling plan compression for the session due to CONNECT_INVALID_PLAN.CANNOT_PARSE error."
+                            "Disabling plan compression for the session due to "
+                            "CONNECT_INVALID_PLAN.CANNOT_PARSE error."
                         )
                         self._plan_compression_threshold, self._plan_compression_algorithm = (
                             -1,
@@ -2194,8 +2195,10 @@ class SparkConnectClient(object):
                 duration = time.time() - start_time
                 compressed_size = len(compressed_operation.data)
                 logger.debug(
-                    f"Plan compression: original_size={original_size}, compressed_size={compressed_size}, "
-                    f"saving_ratio={1 - compressed_size / original_size:.2f}, duration_s={duration:.1f}"
+                    f"Plan compression: original_size={original_size}, "
+                    f"compressed_size={compressed_size}, "
+                    f"saving_ratio={1 - compressed_size / original_size:.2f}, "
+                    f"duration_s={duration:.1f}"
                 )
                 if compressed_size < original_size:
                     plan.compressed_operation.CopyFrom(compressed_operation)
