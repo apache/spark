@@ -183,7 +183,7 @@ class AnsiTypeCoercionSuite extends TypeCoercionSuiteBase {
     // Geometry with same fixed SRIDs.
     widenTest(GeometryType(0), GeometryType(0), Some(GeometryType(0)))
     widenTest(GeometryType(3857), GeometryType(3857), Some(GeometryType(3857)))
-    widenTest(GeometryType(4326), GeometryType(4326), Some(GeometryType(4326)))    
+    widenTest(GeometryType(4326), GeometryType(4326), Some(GeometryType(4326)))
     // Geometry with different fixed SRIDs.
     widenTest(GeometryType(0), GeometryType(3857), Some(GeometryType("ANY")))
     widenTest(GeometryType(3857), GeometryType(4326), Some(GeometryType("ANY")))
