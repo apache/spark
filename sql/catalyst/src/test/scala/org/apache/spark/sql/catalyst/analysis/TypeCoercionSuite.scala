@@ -597,6 +597,13 @@ class TypeCoercionSuite extends TypeCoercionSuiteBase {
     widenTest(FloatType, FloatType, Some(FloatType))
     widenTest(DoubleType, DoubleType, Some(DoubleType))
 
+    // Geography with same fixed SRIDs.
+    widenTest(GeographyType(4326), GeographyType(4326), Some(GeographyType(4326)))
+    // Geography with mixed SRIDs.
+    widenTest(GeographyType("ANY"), GeographyType("ANY"), Some(GeographyType("ANY")))
+    widenTest(GeographyType("ANY"), GeographyType(4326), Some(GeographyType("ANY")))
+    widenTest(GeographyType(4326), GeographyType("ANY"), Some(GeographyType("ANY")))
+
     // Integral mixed with floating point.
     widenTest(IntegerType, FloatType, Some(FloatType))
     widenTest(IntegerType, DoubleType, Some(DoubleType))
