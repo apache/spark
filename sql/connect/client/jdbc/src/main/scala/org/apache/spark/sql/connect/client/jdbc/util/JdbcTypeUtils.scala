@@ -35,7 +35,7 @@ private[jdbc] object JdbcTypeUtils {
     case FloatType => Types.FLOAT
     case DoubleType => Types.DOUBLE
     case StringType => Types.VARCHAR
-    case DecimalType.Fixed(_, _) => Types.DECIMAL
+    case _: DecimalType => Types.DECIMAL
     case other =>
       throw new SQLFeatureNotSupportedException(s"DataType $other is not supported yet.")
   }
@@ -50,7 +50,7 @@ private[jdbc] object JdbcTypeUtils {
     case FloatType => classOf[JFloat].getName
     case DoubleType => classOf[JDouble].getName
     case StringType => classOf[String].getName
-    case DecimalType.Fixed(_, _) => classOf[JBigDecimal].getName
+    case _: DecimalType => classOf[JBigDecimal].getName
     case other =>
       throw new SQLFeatureNotSupportedException(s"DataType $other is not supported yet.")
   }
