@@ -130,6 +130,10 @@ object AnsiTypeCoercion extends TypeCoercionBase {
     case (t1: YearMonthIntervalType, t2: YearMonthIntervalType) =>
       Some(YearMonthIntervalType(t1.startField.min(t2.startField), t1.endField.max(t2.endField)))
 
+    // We allow coercion from GEOGRAPHY(<srid>) types (i.e. fixed SRID types) to the
+    // GEOGRAPHY(ANY) type (i.e. mixed SRID type). This coercion is always safe to do.
+    case (t1: GeographyType, t2: GeographyType) if t1 != t2 => Some(GeographyType("ANY"))
+
     case (t1, t2) => findTypeForComplex(t1, t2, findTightestCommonType)
   }
 

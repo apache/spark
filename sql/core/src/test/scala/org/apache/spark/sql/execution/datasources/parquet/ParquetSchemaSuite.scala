@@ -3370,6 +3370,40 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
            |}
          """).stripMargin,
       returnNullStructIfAllFieldsMissing = returnNullStructIfAllFieldsMissing)
+
+    testSchemaClipping(
+      s"SPARK-54220: missing struct with NullType, " +
+        s"returnNullStructIfAllFieldsMissing=$returnNullStructIfAllFieldsMissing",
+      parquetSchema =
+        """message root {
+          |  optional group _1 {
+          |    optional int32 _1;
+          |    optional boolean _2;
+          |    optional group _3 {
+          |      optional int64 _1 (UNKNOWN);
+          |    }
+          |  }
+          |}
+        """.stripMargin,
+      catalystSchema = new StructType()
+        .add("_1", new StructType()
+          .add("_101", IntegerType)
+          .add("_102", LongType)),
+      expectedSchema =
+        ("""message root {
+           |  optional group _1 {
+           |    optional int32 _101;
+           |    optional int64 _102;""" + (if (!returnNullStructIfAllFieldsMissing) {
+         """
+           |    optional group _3 {
+           |      optional int64 _1 (UNKNOWN);
+           |    }
+           |  }""" } else { "" }) +
+         """
+           |  }
+           |}
+         """).stripMargin,
+      returnNullStructIfAllFieldsMissing = returnNullStructIfAllFieldsMissing)
   }
 
   testSchemaClipping(

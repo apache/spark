@@ -568,14 +568,14 @@ class MergeScalarSubqueriesSuite extends PlanTest {
     val subquery5 = ScalarSubquery(testRelation.select((Symbol("a") + 2).as("a_plus2_2")))
     val subquery6 = ScalarSubquery(testRelation.select(Symbol("b").as("b_2")))
     val originalQuery = testRelation
-      .select(
-        subquery1,
-        subquery2,
-        subquery3)
       .where(
         subquery4 +
         subquery5 +
         subquery6 === 0)
+      .select(
+        subquery1,
+        subquery2,
+        subquery3)
 
     val mergedSubquery = testRelation
       .select(
@@ -591,14 +591,14 @@ class MergeScalarSubqueriesSuite extends PlanTest {
     val analyzedMergedSubquery = mergedSubquery.analyze
     val correctAnswer = WithCTE(
       testRelation
-        .select(
-          extractorExpression(0, analyzedMergedSubquery.output, 0),
-          extractorExpression(0, analyzedMergedSubquery.output, 1),
-          extractorExpression(0, analyzedMergedSubquery.output, 2))
         .where(
           extractorExpression(0, analyzedMergedSubquery.output, 0) +
           extractorExpression(0, analyzedMergedSubquery.output, 1) +
-          extractorExpression(0, analyzedMergedSubquery.output, 2) === 0),
+          extractorExpression(0, analyzedMergedSubquery.output, 2) === 0)
+        .select(
+          extractorExpression(0, analyzedMergedSubquery.output, 0),
+          extractorExpression(0, analyzedMergedSubquery.output, 1),
+          extractorExpression(0, analyzedMergedSubquery.output, 2)),
       Seq(definitionNode(analyzedMergedSubquery, 0)))
 
     comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer.analyze)

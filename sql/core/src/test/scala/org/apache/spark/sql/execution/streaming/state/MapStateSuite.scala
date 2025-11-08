@@ -290,3 +290,8 @@ class MapStateSuite extends StateVariableSuiteBase {
     }
   }
 }
+
+/**
+ * Test suite that runs all MapStateSuite tests with row checksum enabled.
+ */
+class MapStateSuiteWithRowChecksum extends MapStateSuite with EnableStateStoreRowChecksum

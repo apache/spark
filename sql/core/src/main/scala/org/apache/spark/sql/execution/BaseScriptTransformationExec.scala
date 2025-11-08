@@ -84,6 +84,10 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
     val path = System.getenv("PATH") + File.pathSeparator +
       SparkFiles.getRootDirectory()
     builder.environment().put("PATH", path)
+    // if OMP_NUM_THREADS is not explicitly set, override it with the value of "spark.task.cpus"
+    if (System.getenv("OMP_NUM_THREADS") == null) {
+      builder.environment().put("OMP_NUM_THREADS", conf.getConfString("spark.task.cpus", "1"))
+    }
 
     val proc = builder.start()
     val inputStream = proc.getInputStream

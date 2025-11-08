@@ -427,6 +427,12 @@ class RocksDBFileManager(
     }
   }
 
+  /** Get all the snapshot versions that can be used to load this version */
+  def getEligibleSnapshotsForVersion(version: Long): Seq[Long] = {
+    SnapshotLoaderHelper.getEligibleSnapshotsForVersion(
+      version, fm, new Path(dfsRootDir), onlyZipFiles, fileSuffix = ".zip")
+  }
+
   /**
    * Based on the ground truth lineage loaded from changelog file (lineage), this function
    * does file listing to find all snapshot (version, uniqueId) pairs, and finds
@@ -1123,7 +1129,7 @@ object RocksDBCheckpointMetadata {
   /** Used to convert between classes and JSON. */
   lazy val mapper = {
     val _mapper = new ObjectMapper with ClassTagExtensions
-    _mapper.setSerializationInclusion(Include.NON_ABSENT)
+    _mapper.setDefaultPropertyInclusion(Include.NON_ABSENT)
     _mapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
     _mapper.registerModule(DefaultScalaModule)
     _mapper

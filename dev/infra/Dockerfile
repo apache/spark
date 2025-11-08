@@ -92,16 +92,16 @@ RUN mkdir -p /usr/local/pypy/pypy3.10 && \
     ln -sf /usr/local/pypy/pypy3.10/bin/pypy /usr/local/bin/pypy3.10 && \
     ln -sf /usr/local/pypy/pypy3.10/bin/pypy /usr/local/bin/pypy3
 RUN curl -sS https://bootstrap.pypa.io/get-pip.py | pypy3
-RUN pypy3 -m pip install numpy 'six==1.16.0' 'pandas==2.3.0' scipy coverage matplotlib lxml
+RUN pypy3 -m pip install numpy 'six==1.16.0' 'pandas==2.3.3' scipy coverage matplotlib lxml
 
 
-ARG BASIC_PIP_PKGS="numpy pyarrow>=18.0.0 six==1.16.0 pandas==2.3.0 scipy plotly>=4.8 mlflow>=2.8.1 coverage matplotlib openpyxl memory-profiler>=0.61.0 scikit-learn>=1.3.2"
+ARG BASIC_PIP_PKGS="numpy pyarrow>=18.0.0 six==1.16.0 pandas==2.3.3 scipy plotly>=4.8 mlflow>=2.8.1 coverage matplotlib openpyxl memory-profiler>=0.61.0 scikit-learn>=1.3.2"
 # Python deps for Spark Connect
-ARG CONNECT_PIP_PKGS="grpcio==1.67.0 grpcio-status==1.67.0 protobuf==5.29.5 googleapis-common-protos==1.65.0 graphviz==0.20.3"
+ARG CONNECT_PIP_PKGS="grpcio==1.76.0 grpcio-status==1.76.0 protobuf==6.33.0 googleapis-common-protos==1.71.0 graphviz==0.20.3"
 
 # Install Python 3.10 packages
 RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.10
-RUN python3.10 -m pip install --ignore-installed blinker>=1.6.2 # mlflow needs this
+RUN python3.10 -m pip install --ignore-installed 'blinker>=1.6.2' # mlflow needs this
 RUN python3.10 -m pip install --ignore-installed 'six==1.16.0'  # Avoid `python3-six` installation
 RUN python3.10 -m pip install $BASIC_PIP_PKGS unittest-xml-reporting $CONNECT_PIP_PKGS && \
     python3.10 -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu && \
@@ -114,7 +114,7 @@ RUN apt-get update && apt-get install -y \
     python3.9 python3.9-distutils \
     && rm -rf /var/lib/apt/lists/*
 RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.9
-RUN python3.9 -m pip install --ignore-installed blinker>=1.6.2 # mlflow needs this
+RUN python3.9 -m pip install --ignore-installed 'blinker>=1.6.2' # mlflow needs this
 RUN python3.9 -m pip install --force $BASIC_PIP_PKGS unittest-xml-reporting $CONNECT_PIP_PKGS && \
     python3.9 -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu && \
     python3.9 -m pip install torcheval && \
@@ -125,7 +125,7 @@ RUN apt-get update && apt-get install -y \
     python3.11 \
     && rm -rf /var/lib/apt/lists/*
 RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.11
-RUN python3.11 -m pip install --ignore-installed blinker>=1.6.2 # mlflow needs this
+RUN python3.11 -m pip install --ignore-installed 'blinker>=1.6.2' # mlflow needs this
 RUN python3.11 -m pip install $BASIC_PIP_PKGS unittest-xml-reporting $CONNECT_PIP_PKGS && \
     python3.11 -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu && \
     python3.11 -m pip install deepspeed torcheval && \
@@ -136,7 +136,7 @@ RUN apt-get update && apt-get install -y \
     python3.12 \
     && rm -rf /var/lib/apt/lists/*
 RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.12
-RUN python3.12 -m pip install --ignore-installed blinker>=1.6.2 # mlflow needs this
+RUN python3.12 -m pip install --ignore-installed 'blinker>=1.6.2' # mlflow needs this
 RUN python3.12 -m pip install $BASIC_PIP_PKGS unittest-xml-reporting $CONNECT_PIP_PKGS lxml && \
     python3.12 -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu && \
     python3.12 -m pip install torcheval && \
@@ -148,8 +148,8 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.13
 # TODO(SPARK-49862) Add BASIC_PIP_PKGS and CONNECT_PIP_PKGS to Python 3.13 image when it supports Python 3.13
-RUN python3.13 -m pip install --ignore-installed blinker>=1.6.2 # mlflow needs this
-RUN python3.13 -m pip install numpy>=2.1 pyarrow>=18.0.0 six==1.16.0 pandas==2.3.0 scipy coverage matplotlib openpyxl grpcio==1.67.0 grpcio-status==1.67.0 lxml jinja2 && \
+RUN python3.13 -m pip install --ignore-installed 'blinker>=1.6.2' # mlflow needs this
+RUN python3.13 -m pip install 'numpy>=2.1' 'pyarrow>=18.0.0' 'six==1.16.0' 'pandas==2.3.3' scipy coverage matplotlib openpyxl 'grpcio==1.76.0' 'grpcio-status==1.76.0' lxml jinja2 && \
     python3.13 -m pip cache purge
 
 # Remove unused installation packages to free up disk space

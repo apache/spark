@@ -619,6 +619,7 @@ class StateStoreChangelogReaderV4(
  * store. In each iteration, it will return a tuple of (changeType: [[RecordType]],
  * nested key: [[UnsafeRow]], nested value: [[UnsafeRow]], batchId: [[Long]])
  *
+ * @param storeId id of the state store
  * @param fm checkpoint file manager used to manage streaming query checkpoint
  * @param stateLocation location of the state store
  * @param startVersion start version of the changelog file to read
@@ -627,16 +628,23 @@ class StateStoreChangelogReaderV4(
  * @param colFamilyNameOpt optional column family name to read from
  */
 abstract class StateStoreChangeDataReader(
+    storeId: StateStoreId,
     fm: CheckpointFileManager,
     stateLocation: Path,
     startVersion: Long,
     endVersion: Long,
     compressionCodec: CompressionCodec,
+    storeConf: StateStoreConf,
     colFamilyNameOpt: Option[String] = None)
   extends NextIterator[(RecordType.Value, UnsafeRow, UnsafeRow, Long)] with Logging {
 
   assert(startVersion >= 1)
   assert(endVersion >= startVersion)
+
+  protected val readVerifier: Option[KeyValueIntegrityVerifier] = KeyValueIntegrityVerifier.create(
+    storeId.toString,
+    storeConf.rowChecksumEnabled,
+    storeConf.rowChecksumReadVerificationRatio)
 
   /**
    * Iterator that iterates over the changelog files in the state store.
