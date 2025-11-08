@@ -895,6 +895,50 @@ class FilterPushdownSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
+
+  test("SPARK-47031 + SPARK-13473 union - non-deterministic") {
+    val testRelation2 = LocalRelation($"d".int, $"e".int, $"f".int)
+
+    // in subq1 j is deterministic
+    val subq1 = testRelation.select(
+      Literal(1.0).as("j")
+    )
+
+    // j is non-deterministic
+    val subq2 = testRelation2.select(
+      Rand(10).as("j")
+    )
+
+    // not deterministic in first sub-query
+    val originalQuery = Union(Seq(subq2, subq1))
+      .where($"j" > 5L)
+
+    val optimized = Optimize.execute(originalQuery.analyze)
+
+    val correctAnswer = Union(Seq(
+      subq2,
+      subq1))
+      .where($"j" > 5L)
+      .analyze
+
+    comparePlans(optimized, correctAnswer)
+
+    // deterministic in first sub query but not second
+
+    val originalQueryReversed = Union(Seq(subq1, subq2))
+      .where($"j" > 5L)
+
+    val optimizedReversed = Optimize.execute(originalQueryReversed.analyze)
+
+    val correctAnswerReversed = Union(Seq(
+      subq1,
+      subq2))
+      .where($"j" > 5L)
+      .analyze
+
+    comparePlans(optimizedReversed, correctAnswerReversed)
+  }
+
   test("union filter pushdown w/reference to grand-child field") {
     val nonNullableArray = StructField("a", ArrayType(IntegerType, false))
     val bField = StructField("b", IntegerType)

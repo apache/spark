@@ -287,6 +287,7 @@ case class UnresolvedAttribute(nameParts: Seq[String]) extends Attribute with Un
 
   override def newInstance(): UnresolvedAttribute = this
   override def withNullability(newNullability: Boolean): UnresolvedAttribute = this
+  override def withDeterminism(newDeterminism: Boolean): UnresolvedAttribute = this
   override def withQualifier(newQualifier: Seq[String]): UnresolvedAttribute = this
   override def withName(newName: String): UnresolvedAttribute = UnresolvedAttribute.quoted(newName)
   override def withMetadata(newMetadata: Metadata): Attribute = this

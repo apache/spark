@@ -113,6 +113,7 @@ abstract class Attribute extends LeafExpression with NamedExpression {
   override lazy val references: AttributeSet = AttributeSet(this)
 
   def withNullability(newNullability: Boolean): Attribute
+  def withDeterminism(newDeterminism: Boolean): Attribute
   def withQualifier(newQualifier: Seq[String]): Attribute
   def withName(newName: String): Attribute
   def withMetadata(newMetadata: Metadata): Attribute
@@ -203,7 +204,8 @@ case class Alias(child: Expression, name: String)(
 
   override def toAttribute: Attribute = {
     if (resolved) {
-      AttributeReference(name, child.dataType, child.nullable, metadata)(exprId, qualifier)
+      AttributeReference(name, child.dataType, child.nullable, metadata, child.deterministic)(
+        exprId, qualifier)
     } else {
       UnresolvedAttribute.quoted(name)
     }
@@ -276,6 +278,7 @@ object AttributeReferenceTreeBits {
  * @param dataType The [[DataType]] of this attribute.
  * @param nullable True if null is a valid value for this attribute.
  * @param metadata The metadata of this attribute.
+ * @param determinism If this reference is deterministic.
  * @param exprId A globally unique id used to check if different AttributeReferences refer to the
  *               same attribute.
  * @param qualifier An optional string that can be used to referred to this attribute in a fully
@@ -286,12 +289,15 @@ case class AttributeReference(
     name: String,
     dataType: DataType,
     nullable: Boolean = true,
-    override val metadata: Metadata = Metadata.empty)(
+    override val metadata: Metadata = Metadata.empty,
+    determinism: Boolean = true)(
     val exprId: ExprId = NamedExpression.newExprId,
     val qualifier: Seq[String] = Seq.empty[String])
   extends Attribute with Unevaluable {
 
   override lazy val treePatternBits: BitSet = AttributeReferenceTreeBits.bits
+
+  override lazy val deterministic: Boolean = determinism
 
   /**
    * Returns true iff the expression id is the same for both attributes.
@@ -326,7 +332,7 @@ case class AttributeReference(
   }
 
   override def newInstance(): AttributeReference =
-    AttributeReference(name, dataType, nullable, metadata)(qualifier = qualifier)
+    AttributeReference(name, dataType, nullable, metadata, determinism)(qualifier = qualifier)
 
   /**
    * Returns a copy of this [[AttributeReference]] with changed nullability.
@@ -335,7 +341,18 @@ case class AttributeReference(
     if (nullable == newNullability) {
       this
     } else {
-      AttributeReference(name, dataType, newNullability, metadata)(exprId, qualifier)
+      AttributeReference(name, dataType, newNullability, metadata, determinism)(exprId, qualifier)
+    }
+  }
+
+  /**
+   * Returns a copy of this [[AttributeReference]] with changed determinism.
+   */
+  override def withDeterminism(newDeterminism: Boolean): AttributeReference = {
+    if (determinism == newDeterminism) {
+      this
+    } else {
+      AttributeReference(name, dataType, nullable, metadata, newDeterminism)(exprId, qualifier)
     }
   }
 
@@ -343,7 +360,7 @@ case class AttributeReference(
     if (name == newName) {
       this
     } else {
-      AttributeReference(newName, dataType, nullable, metadata)(exprId, qualifier)
+      AttributeReference(newName, dataType, nullable, metadata, determinism)(exprId, qualifier)
     }
   }
 
@@ -354,7 +371,7 @@ case class AttributeReference(
     if (newQualifier == qualifier) {
       this
     } else {
-      AttributeReference(name, dataType, nullable, metadata)(exprId, newQualifier)
+      AttributeReference(name, dataType, nullable, metadata, determinism)(exprId, newQualifier)
     }
   }
 
@@ -362,16 +379,16 @@ case class AttributeReference(
     if (exprId == newExprId) {
       this
     } else {
-      AttributeReference(name, dataType, nullable, metadata)(newExprId, qualifier)
+      AttributeReference(name, dataType, nullable, metadata, determinism)(newExprId, qualifier)
     }
   }
 
   override def withMetadata(newMetadata: Metadata): AttributeReference = {
-    AttributeReference(name, dataType, nullable, newMetadata)(exprId, qualifier)
+    AttributeReference(name, dataType, nullable, newMetadata, determinism)(exprId, qualifier)
   }
 
   override def withDataType(newType: DataType): AttributeReference = {
-    AttributeReference(name, newType, nullable, metadata)(exprId, qualifier)
+    AttributeReference(name, newType, nullable, metadata, determinism)(exprId, qualifier)
   }
 
   override protected final def otherCopyArgs: Seq[AnyRef] = {
@@ -397,6 +414,16 @@ case class AttributeReference(
     val qualifierPrefix =
       if (qualifier.nonEmpty) qualifier.map(quoteIfNeeded).mkString(".") + "." else ""
     s"$qualifierPrefix${quoteIfNeeded(name)}"
+  }
+}
+
+object AttributeReference {
+  /**
+   * Customize unapply so the adding of the determinism field does not break API
+   * compatibility.
+   */
+  def unapply(ar: AttributeReference): Some[(String, DataType, Boolean, Metadata)] = {
+    Some((ar.name, ar.dataType, ar.nullable, ar.metadata))
   }
 }
 
@@ -433,6 +460,8 @@ case class PrettyAttribute(
   }
 
   override def withNullability(newNullability: Boolean): Attribute =
+    throw SparkUnsupportedOperationException()
+  override def withDeterminism(newDeterminism: Boolean): Attribute =
     throw SparkUnsupportedOperationException()
   override def newInstance(): Attribute =
     throw SparkUnsupportedOperationException()
