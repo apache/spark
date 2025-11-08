@@ -913,12 +913,16 @@
     "subClass" : {
       "CANNOT_PARSE" : {
         "message" : [
-          "Cannot decompress or parse the input plan (<errorMsg>)"
+          "Cannot decompress or parse the input plan (<errorMsg>)",
+          "This may be caused by a corrupted compressed plan.",
+          "To disable plan compression, set 'spark.connect.session.planCompression.threshold' to -1."
         ]
       },
       "PLAN_SIZE_LARGER_THAN_MAX" : {
         "message" : [
-          "The plan size is larger than max (<planSize> vs. <maxPlanSize>)"
+          "The plan size is larger than max (<planSize> vs. <maxPlanSize>)",
+          "This typically occurs when building very complex queries with many operations, large literals, or deeply nested expressions.",
+          "Consider splitting the query into smaller parts using temporary views for intermediate results or reducing the number of operations."
         ]
       }
     },
