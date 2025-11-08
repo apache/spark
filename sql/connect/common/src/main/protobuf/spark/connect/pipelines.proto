@@ -152,6 +152,13 @@ message PipelineCommand {
       optional spark.connect.Relation relation = 1;
     }
 
+    // If true, define the flow as a one-time flow, such as for backfill.
+    // Set to true changes the flow in two ways:
+    //   - The flow is run one time by default. If the pipeline is ran with a full refresh,
+    //     the flow will run again.
+    //   - The flow function must be a batch DataFrame, not a streaming DataFrame.
+    optional bool once = 8;
+
     message Response {
       // Fully qualified flow name that uniquely identify a flow in the Dataflow graph.
       optional string flow_name = 1;

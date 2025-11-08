@@ -588,6 +588,7 @@ class PipelineCommand(google.protobuf.message.Message):
         SOURCE_CODE_LOCATION_FIELD_NUMBER: builtins.int
         RELATION_FLOW_DETAILS_FIELD_NUMBER: builtins.int
         EXTENSION_FIELD_NUMBER: builtins.int
+        ONCE_FIELD_NUMBER: builtins.int
         dataflow_graph_id: builtins.str
         """The graph to attach this flow to."""
         flow_name: builtins.str
@@ -612,6 +613,13 @@ class PipelineCommand(google.protobuf.message.Message):
         ) -> global___PipelineCommand.DefineFlow.WriteRelationFlowDetails: ...
         @property
         def extension(self) -> google.protobuf.any_pb2.Any: ...
+        once: builtins.bool
+        """If true, define the flow as a one-time flow, such as for backfill.
+        Set to true changes the flow in two ways:
+          - The flow is run one time by default. If the pipeline is ran with a full refresh,
+            the flow will run again.
+          - The flow function must be a batch DataFrame, not a streaming DataFrame.
+        """
         def __init__(
             self,
             *,
@@ -624,6 +632,7 @@ class PipelineCommand(google.protobuf.message.Message):
             relation_flow_details: global___PipelineCommand.DefineFlow.WriteRelationFlowDetails
             | None = ...,
             extension: google.protobuf.any_pb2.Any | None = ...,
+            once: builtins.bool | None = ...,
         ) -> None: ...
         def HasField(
             self,
@@ -634,6 +643,8 @@ class PipelineCommand(google.protobuf.message.Message):
                 b"_dataflow_graph_id",
                 "_flow_name",
                 b"_flow_name",
+                "_once",
+                b"_once",
                 "_source_code_location",
                 b"_source_code_location",
                 "_target_dataset_name",
@@ -648,6 +659,8 @@ class PipelineCommand(google.protobuf.message.Message):
                 b"extension",
                 "flow_name",
                 b"flow_name",
+                "once",
+                b"once",
                 "relation_flow_details",
                 b"relation_flow_details",
                 "source_code_location",
@@ -665,6 +678,8 @@ class PipelineCommand(google.protobuf.message.Message):
                 b"_dataflow_graph_id",
                 "_flow_name",
                 b"_flow_name",
+                "_once",
+                b"_once",
                 "_source_code_location",
                 b"_source_code_location",
                 "_target_dataset_name",
@@ -679,6 +694,8 @@ class PipelineCommand(google.protobuf.message.Message):
                 b"extension",
                 "flow_name",
                 b"flow_name",
+                "once",
+                b"once",
                 "relation_flow_details",
                 b"relation_flow_details",
                 "source_code_location",
@@ -702,6 +719,10 @@ class PipelineCommand(google.protobuf.message.Message):
         def WhichOneof(
             self, oneof_group: typing_extensions.Literal["_flow_name", b"_flow_name"]
         ) -> typing_extensions.Literal["flow_name"] | None: ...
+        @typing.overload
+        def WhichOneof(
+            self, oneof_group: typing_extensions.Literal["_once", b"_once"]
+        ) -> typing_extensions.Literal["once"] | None: ...
         @typing.overload
         def WhichOneof(
             self,
