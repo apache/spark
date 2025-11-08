@@ -96,12 +96,12 @@ private[jdbc] object JdbcTypeUtils {
     case DoubleType => 24
     case StringType =>
       getPrecision(field)
-    // precision + sign(+/-) + leading zero + decimal point, like DECIMAL(5,5) = -0.12345
+    // precision + negative sign + leading zero + decimal point, like DECIMAL(5,5) = -0.12345
     case DecimalType.Fixed(p, s) if p == s => p + 3
-    // precision + sign(+/-), like DECIMAL(5,0) = -12345
+    // precision + negative sign, like DECIMAL(5,0) = -12345
     case DecimalType.Fixed(p, s) if s == 0 => p + 1
-    // precision + sign(+/-) + decimal point, like DECIMAL(5,2) = -123.45
-    case DecimalType.Fixed(p, s) => p + 2
+    // precision + negative sign + decimal point, like DECIMAL(5,2) = -123.45
+    case DecimalType.Fixed(p, _) => p + 2
     case other =>
       throw new SQLFeatureNotSupportedException(s"DataType $other is not supported yet.")
   }
