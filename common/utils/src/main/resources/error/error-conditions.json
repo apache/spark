@@ -1412,6 +1412,12 @@
     ],
     "sqlState" : "42623"
   },
+  "DEFINE_FLOW_ONCE_OPTION_NOT_SUPPORTED" : {
+    "message" : [
+      "Defining a one-time flow <flowName> with the 'once' option is not supported."
+    ],
+    "sqlState" : "0A000"
+  },
   "DESCRIBE_JSON_NOT_EXTENDED" : {
     "message" : [
       "DESCRIBE TABLE ... AS JSON only supported when [EXTENDED|FORMATTED] is specified.",
