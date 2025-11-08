@@ -341,7 +341,7 @@ case class AttributeReference(
     if (nullable == newNullability) {
       this
     } else {
-      AttributeReference(name, dataType, newNullability, metadata, determinism)(exprId, qualifier)
+      this.copy(nullable = newNullability)(exprId, qualifier)
     }
   }
 
@@ -352,7 +352,7 @@ case class AttributeReference(
     if (determinism == newDeterminism) {
       this
     } else {
-      AttributeReference(name, dataType, nullable, metadata, newDeterminism)(exprId, qualifier)
+      this.copy(determinism = newDeterminism)(exprId, qualifier)
     }
   }
 
@@ -360,7 +360,7 @@ case class AttributeReference(
     if (name == newName) {
       this
     } else {
-      AttributeReference(newName, dataType, nullable, metadata, determinism)(exprId, qualifier)
+      this.copy(name = newName)(exprId, qualifier)
     }
   }
 
@@ -371,7 +371,7 @@ case class AttributeReference(
     if (newQualifier == qualifier) {
       this
     } else {
-      AttributeReference(name, dataType, nullable, metadata, determinism)(exprId, newQualifier)
+      this.copy()(exprId, newQualifier)
     }
   }
 
@@ -379,16 +379,16 @@ case class AttributeReference(
     if (exprId == newExprId) {
       this
     } else {
-      AttributeReference(name, dataType, nullable, metadata, determinism)(newExprId, qualifier)
+      this.copy()(newExprId, qualifier)
     }
   }
 
   override def withMetadata(newMetadata: Metadata): AttributeReference = {
-    AttributeReference(name, dataType, nullable, newMetadata, determinism)(exprId, qualifier)
+    this.copy(metadata = newMetadata)(exprId, qualifier)
   }
 
   override def withDataType(newType: DataType): AttributeReference = {
-    AttributeReference(name, newType, nullable, metadata, determinism)(exprId, qualifier)
+    this.copy(dataType = newType)(exprId, qualifier)
   }
 
   override protected final def otherCopyArgs: Seq[AnyRef] = {
