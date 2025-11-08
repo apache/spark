@@ -3101,6 +3101,13 @@ object SQLConf {
     .timeConf(TimeUnit.MILLISECONDS)
     .createWithDefault(5000)
 
+  val STREAMING_REAL_TIME_MODE_ALLOWLIST_CHECK = buildConf(
+    "spark.sql.streaming.realTimeMode.allowlistCheck")
+    .doc("Whether to check all operators, sinks used in real-time mode are in the allowlist.")
+    .version("4.1.0")
+    .booleanConf
+    .createWithDefault(true)
+
   val VARIABLE_SUBSTITUTE_ENABLED =
     buildConf("spark.sql.variable.substitute")
       .doc("This enables substitution using syntax like `${var}`, `${system:var}`, " +

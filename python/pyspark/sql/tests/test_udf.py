@@ -48,6 +48,7 @@ from pyspark.sql.types import (
     VariantVal,
 )
 from pyspark.errors import AnalysisException, PythonException, PySparkTypeError
+from pyspark.logger import PySparkLogger
 from pyspark.testing.objects import ExamplePoint, ExamplePointUDT
 from pyspark.testing.sqlutils import (
     ReusedSQLTestCase,
@@ -1654,6 +1655,35 @@ class BaseUDFTestsMixin(object):
                     context={"func_name": my_udf2.__name__},
                     logger="test2",
                 ),
+            ],
+        )
+
+    @unittest.skipIf(is_remote_only(), "Requires JVM access")
+    def test_udf_with_pyspark_logger(self):
+        @udf
+        def my_udf(x):
+            logger = PySparkLogger.getLogger("PySparkLogger")
+            logger.warning("PySparkLogger test", x=x)
+            return str(x)
+
+        with self.sql_conf({"spark.sql.pyspark.worker.logging.enabled": "true"}):
+            assertDataFrameEqual(
+                self.spark.range(2).select(my_udf("id").alias("result")),
+                [Row(result=str(i)) for i in range(2)],
+            )
+
+        logs = self.spark.table("system.session.python_worker_logs")
+
+        assertDataFrameEqual(
+            logs.select("level", "msg", "context", "logger"),
+            [
+                Row(
+                    level="WARNING",
+                    msg="PySparkLogger test",
+                    context={"func_name": my_udf.__name__, "x": str(i)},
+                    logger="PySparkLogger",
+                )
+                for i in range(2)
             ],
         )
 

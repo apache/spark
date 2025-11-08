@@ -71,6 +71,24 @@ class SparkDeclarativePipelinesServerSuite
 
   }
 
+  gridTest("Define flow 'once' argument not supported")(Seq(true, false)) { onceValue =>
+    val ex = intercept[Exception] {
+      withRawBlockingStub { implicit stub =>
+        val graphId = createDataflowGraph
+        sendPlan(
+          buildPlanFromPipelineCommand(
+            PipelineCommand
+              .newBuilder()
+              .setDefineFlow(DefineFlow
+                .newBuilder()
+                .setDataflowGraphId(graphId)
+                .setOnce(onceValue))
+              .build()))
+      }
+    }
+    assert(ex.getMessage.contains("DEFINE_FLOW_ONCE_OPTION_NOT_SUPPORTED"))
+  }
+
   test(
     "Cross dependency between SQL dataset and non-SQL dataset is valid and can be registered") {
     withRawBlockingStub { implicit stub =>
