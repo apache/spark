@@ -36,23 +36,17 @@ object PlanCompressionUtils {
       case proto.Plan.OpTypeCase.COMPRESSED_OPERATION =>
         val (cis, closeStream) = decompressBytes(
           plan.getCompressedOperation.getData,
-          plan.getCompressedOperation.getCompressionCodec
-        )
+          plan.getCompressedOperation.getCompressionCodec)
         try {
           plan.getCompressedOperation.getOpType match {
             case proto.Plan.CompressedOperation.OpType.OP_TYPE_RELATION =>
-              proto.Plan.newBuilder().setRoot(
-                proto.Relation.parser().parseFrom(cis)
-              ).build()
+              proto.Plan.newBuilder().setRoot(proto.Relation.parser().parseFrom(cis)).build()
             case proto.Plan.CompressedOperation.OpType.OP_TYPE_COMMAND =>
-              proto.Plan.newBuilder().setCommand(
-                proto.Command.parser().parseFrom(cis)
-              ).build()
+              proto.Plan.newBuilder().setCommand(proto.Command.parser().parseFrom(cis)).build()
             case other =>
               throw InvalidInputErrors.invalidOneOfField(
                 other,
-                plan.getCompressedOperation.getDescriptorForType
-              )
+                plan.getCompressedOperation.getDescriptorForType)
           }
         } catch {
           case e: SparkSQLException =>
@@ -60,14 +54,13 @@ object PlanCompressionUtils {
           case NonFatal(e) =>
             throw new SparkSQLException(
               errorClass = "CONNECT_INVALID_PLAN.CANNOT_PARSE",
-              messageParameters = Map("errorMsg" -> e.getMessage)
-            )
+              messageParameters = Map("errorMsg" -> e.getMessage))
         } finally {
-            try {
-              closeStream()
-            } catch {
-                case NonFatal(_) =>
-            }
+          try {
+            closeStream()
+          } catch {
+            case NonFatal(_) =>
+          }
         }
       case _ => plan
     }
@@ -79,7 +72,8 @@ object PlanCompressionUtils {
 
   /**
    * Decompress the given bytes using the specified codec.
-   * @return A tuple of decompressed CodedInputStream and a function to close the underlying stream.
+   * @return
+   *   A tuple of decompressed CodedInputStream and a function to close the underlying stream.
    */
   private def decompressBytes(
       data: ByteString,
@@ -93,18 +87,15 @@ object PlanCompressionUtils {
   }
 
   private def decompressBytesWithZstd(
-      input: ByteString, maxOutputSize: Long
-    ): (CodedInputStream, () => Unit) = {
+      input: ByteString,
+      maxOutputSize: Long): (CodedInputStream, () => Unit) = {
     // Check the declared size in the header against the limit.
     val declaredSize = Zstd.getFrameContentSize(input.asReadOnlyByteBuffer())
     if (declaredSize > maxOutputSize) {
       throw new SparkSQLException(
         errorClass = "CONNECT_INVALID_PLAN.PLAN_SIZE_LARGER_THAN_MAX",
-        messageParameters = Map(
-          "planSize" -> declaredSize.toString,
-          "maxPlanSize" -> maxOutputSize.toString
-        )
-      )
+        messageParameters =
+          Map("planSize" -> declaredSize.toString, "maxPlanSize" -> maxOutputSize.toString))
     }
 
     val zstdStream = new ZstdInputStreamNoFinalizer(input.newInput())
@@ -116,11 +107,8 @@ object PlanCompressionUtils {
       override protected def onMaxLength(maxBytes: Long, count: Long): Unit =
         throw new SparkSQLException(
           errorClass = "CONNECT_INVALID_PLAN.PLAN_SIZE_LARGER_THAN_MAX",
-          messageParameters = Map(
-            "planSize" -> "unknown",
-            "maxPlanSize" -> maxOutputSize.toString
-          )
-        )
+          messageParameters =
+            Map("planSize" -> "unknown", "maxPlanSize" -> maxOutputSize.toString))
     }
     val cis = CodedInputStream.newInstance(boundedStream)
     cis.setSizeLimit(Integer.MAX_VALUE)
