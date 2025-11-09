@@ -2149,7 +2149,7 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
   }
 
   test("Merge schema evolution new column with set explicit column") {
-    Seq((true, true)).foreach {
+    Seq((true, true), (false, true), (true, false)).foreach {
       case (withSchemaEvolution, schemaEvolutionEnabled) =>
         withTempView("source") {
           createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
@@ -4463,6 +4463,62 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
       }
     }
     sql(s"DROP TABLE IF EXISTS $tableNameAsString")
+  }
+
+  test("Merge schema evolution should error on non-existent column in UPDATE and INSERT") {
+    withTable(tableNameAsString) {
+      withTempView("source") {
+        createAndInitTable(
+          s"""pk INT NOT NULL,
+             |salary INT,
+             |dep STRING""".stripMargin,
+          """{ "pk": 1, "salary": 100, "dep": "hr" }
+            |{ "pk": 2, "salary": 200, "dep": "software" }
+            |""".stripMargin)
+
+        val sourceTableSchema = StructType(Seq(
+          StructField("pk", IntegerType),
+          StructField("salary", IntegerType),
+          StructField("dep", StringType)
+        ))
+
+        val data = Seq(
+          Row(2, 250, "engineering"),
+          Row(3, 300, "finance")
+        )
+
+        spark.createDataFrame(spark.sparkContext.parallelize(data), sourceTableSchema)
+          .createOrReplaceTempView("source")
+
+        val updateException = intercept[AnalysisException] {
+          sql(
+            s"""MERGE WITH SCHEMA EVOLUTION
+               |INTO $tableNameAsString t
+               |USING source s
+               |ON t.pk = s.pk
+               |WHEN MATCHED THEN
+               | UPDATE SET non_existent = s.nonexistent_column
+               |""".stripMargin)
+        }
+        assert(updateException.errorClass.get == "UNRESOLVED_COLUMN.WITH_SUGGESTION")
+        assert(updateException.message.contains("A column, variable, or function parameter " +
+          "with name `non_existent` cannot be resolved"))
+
+        val insertException = intercept[AnalysisException] {
+          sql(
+            s"""MERGE WITH SCHEMA EVOLUTION
+               |INTO $tableNameAsString t
+               |USING source s
+               |ON t.pk = s.pk
+               |WHEN NOT MATCHED THEN
+               | INSERT (pk, salary, dep, non_existent) VALUES (s.pk, s.salary, s.dep, s.dep)
+               |""".stripMargin)
+        }
+        assert(insertException.errorClass.get == "UNRESOLVED_COLUMN.WITH_SUGGESTION")
+        assert(insertException.message.contains("A column, variable, or function parameter " +
+          "with name `non_existent` cannot be resolved"))
+      }
+    }
   }
 
   private def findMergeExec(query: String): MergeRowsExec = {

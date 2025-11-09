@@ -1672,11 +1672,12 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       case m @ MergeIntoTable(targetTable, sourceTable, _, _, _, _, _)
         if !m.resolved && targetTable.resolved && sourceTable.resolved =>
 
-        // This rule is run again after schema evolution to re-resolve based on evolved schema
-        // Schema evolution requires all assignments with keys being non candidate columns
-        // to be resolved.
-        // The final run will throw exceptions if not all expressions are resolved
-        val finalResolution = m.allAssignmentsResolvedOrEvolutionCandidate
+        // Do not throw exception for schema evolution case if it has not had a chance to run.
+        // This allows unresolved assignment keys a chance to be resolved by a second pass
+        // by newly column/nested fields added by schema evolution.
+        // If schema evolution has already had a chance to run, this will be the final pass
+        val throws = !m.schemaEvolutionEnabled ||
+          (m.canEvaluateSchemaEvolution && !m.schemaChangesNonEmpty)
 
         EliminateSubqueryAliases(targetTable) match {
           case r: NamedRelation if r.skipSchemaResolution =>
@@ -1701,7 +1702,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
                   resolvedUpdateCondition,
                   // The update value can access columns from both target and source tables.
                   resolveAssignments(assignments, m, MergeResolvePolicy.BOTH,
-                    throws = finalResolution))
+                    throws = throws))
               case UpdateStarAction(updateCondition) =>
                 // Use only source columns.  Missing columns in target will be handled in
                 // ResolveRowLevelCommandAssignments.
@@ -1726,7 +1727,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
                   updateCondition.map(resolveExpressionByPlanChildren(_, m)),
                   // For UPDATE *, the value must be from source table.
                   resolveAssignments(assignments, m, MergeResolvePolicy.SOURCE,
-                    throws = finalResolution))
+                    throws = throws))
               case o => o
             }
             val newNotMatchedActions = m.notMatchedActions.map {
@@ -1738,7 +1739,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
                 InsertAction(
                   resolvedInsertCondition,
                   resolveAssignments(assignments, m, MergeResolvePolicy.SOURCE,
-                    throws = finalResolution))
+                    throws = throws))
               case InsertStarAction(insertCondition) =>
                 // The insert action is used when not matched, so its condition and value can only
                 // access columns from the source table.
@@ -1762,7 +1763,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
                 InsertAction(
                   resolvedInsertCondition,
                   resolveAssignments(assignments, m, MergeResolvePolicy.SOURCE,
-                    throws = finalResolution))
+                    throws = throws))
               case o => o
             }
             val newNotMatchedBySourceActions = m.notMatchedBySourceActions.map {
@@ -1777,7 +1778,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
                   resolvedUpdateCondition,
                   // The update value can access columns from the target table only.
                   resolveAssignments(assignments, m, MergeResolvePolicy.TARGET,
-                    throws = finalResolution))
+                    throws = throws))
               case o => o
             }
 
