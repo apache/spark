@@ -373,7 +373,7 @@ private[spark] object ClosureCleaner extends Logging {
       // the already populated accessed fields map of the starting closure
       if (cleanTransitively && isClosure(clone.getClass)) {
         logDebug(s" + cleaning cloned closure recursively (${cls.getName})")
-        val cleaned = clean(clone, cleanTransitively, accessedFields)
+        clean(clone, cleanTransitively, accessedFields)
       }
       parent = clone
     }
