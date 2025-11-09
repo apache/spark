@@ -28,18 +28,19 @@ import io.grpc.stub.StreamObserver
 import org.apache.spark.SparkSQLException
 import org.apache.spark.connect.proto
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.connect.execution.SequenceExecuteThreadRunner
 
 /**
  * Handler for BatchExecutePlan RPC.
  *
- * This handler submits multiple execution plans sequentially and returns the submission status
- * for each. Operations are submitted independently and execute asynchronously. The handler does
- * not wait for execution results - clients must use ReattachExecute to consume results.
+ * This handler submits multiple sequences of execution plans, where each sequence executes
+ * sequentially in its own thread, and all sequences execute in parallel. Each sequence is
+ * reattachable as a single operation. Individual queries within a sequence are not separately
+ * reattachable.
  *
- * rollbackOnFailure only applies to submission failures (e.g., invalid operation ID, duplicate
- * operation ID). Once an operation is successfully submitted, it executes independently.
- * Execution failures (e.g., invalid SQL, missing table) occur after successful submission and are
- * not affected by rollback.
+ * Single-plan batches are treated as sequences containing one plan.
+ *
+ * The handler returns submission status and operation IDs for each sequence and its queries.
  */
 class SparkConnectBatchExecutePlanHandler(
     responseObserver: StreamObserver[proto.BatchExecutePlanResponse])
@@ -56,28 +57,65 @@ class SparkConnectBatchExecutePlanHandler(
       request.getSessionId,
       previousSessionId)
 
-    val results = new ArrayBuffer[proto.BatchExecutePlanResponse.ExecutionResult]()
-    val submittedHolders = new ArrayBuffer[ExecuteHolder]()
-    var shouldContinue = true
+    val sequenceResults = new ArrayBuffer[proto.BatchExecutePlanResponse.SequenceResult]()
 
-    // Process each plan execution sequentially
-    for (planExecution <- request.getPlanExecutionsList.asScala if shouldContinue) {
+    // Process each sequence
+    for (planSequence <- request.getPlanSequencesList.asScala) {
       try {
-        // Build an ExecutePlanRequest for this plan
-        // Mark it as reattachable so operations can be consumed later via reattach
-        val reattachOptions = proto.ReattachOptions.newBuilder().setReattachable(true).build()
-        val requestOption = proto.ExecutePlanRequest.RequestOption
-          .newBuilder()
-          .setReattachOptions(reattachOptions)
-          .build()
+        // Generate or validate sequence operation ID
+        val sequenceOperationId = if (planSequence.hasSequenceOperationId) {
+          try {
+            UUID.fromString(planSequence.getSequenceOperationId)
+            planSequence.getSequenceOperationId
+          } catch {
+            case _: IllegalArgumentException =>
+              throw new SparkSQLException(
+                errorClass = "INVALID_HANDLE.FORMAT",
+                messageParameters = Map("handle" -> planSequence.getSequenceOperationId))
+          }
+        } else {
+          UUID.randomUUID().toString
+        }
 
+        // Collect query operation IDs and validate them
+        val queryOperationIds =
+          new ArrayBuffer[proto.BatchExecutePlanResponse.QueryOperationId]()
+        val plansWithIds = new ArrayBuffer[(proto.Plan, String, Seq[String])]()
+
+        planSequence.getPlanExecutionsList.asScala.zipWithIndex.foreach {
+          case (planExecution, index) =>
+            val queryOperationId = if (planExecution.hasOperationId) {
+              try {
+                UUID.fromString(planExecution.getOperationId)
+                planExecution.getOperationId
+              } catch {
+                case _: IllegalArgumentException =>
+                  throw new SparkSQLException(
+                    errorClass = "INVALID_HANDLE.FORMAT",
+                    messageParameters = Map("handle" -> planExecution.getOperationId))
+              }
+            } else {
+              UUID.randomUUID().toString
+            }
+
+            queryOperationIds += proto.BatchExecutePlanResponse.QueryOperationId
+              .newBuilder()
+              .setOperationId(queryOperationId)
+              .setQueryIndex(index)
+              .build()
+
+            plansWithIds += ((
+              planExecution.getPlan,
+              queryOperationId,
+              planExecution.getTagsList.asScala.toSeq))
+        }
+
+        // Create a special ExecutePlanRequest that will be handled by SequenceExecuteThreadRunner
         val executePlanRequestBuilder = proto.ExecutePlanRequest
           .newBuilder()
-          .setPlan(planExecution.getPlan)
           .setUserContext(request.getUserContext)
           .setSessionId(request.getSessionId)
-          .addAllTags(planExecution.getTagsList)
-          .addRequestOptions(requestOption)
+          .setOperationId(sequenceOperationId)
 
         if (request.hasClientType) {
           executePlanRequestBuilder.setClientType(request.getClientType)
@@ -88,19 +126,27 @@ class SparkConnectBatchExecutePlanHandler(
             request.getClientObservedServerSideSessionId)
         }
 
-        // Handle operation ID - use provided or let ExecuteKey generate one
-        if (planExecution.hasOperationId) {
-          // Validate the operation ID format
-          try {
-            UUID.fromString(planExecution.getOperationId)
-            executePlanRequestBuilder.setOperationId(planExecution.getOperationId)
-          } catch {
-            case _: IllegalArgumentException =>
-              throw new SparkSQLException(
-                errorClass = "INVALID_HANDLE.FORMAT",
-                messageParameters = Map("handle" -> planExecution.getOperationId))
-          }
+        // Mark as reattachable
+        val reattachOptions = proto.ReattachOptions.newBuilder().setReattachable(true).build()
+        val requestOption = proto.ExecutePlanRequest.RequestOption
+          .newBuilder()
+          .setReattachOptions(reattachOptions)
+          .build()
+        executePlanRequestBuilder.addRequestOptions(requestOption)
+
+        // Set the first plan from the sequence as the representative plan for the ExecuteKey
+        // The actual execution will use all plans from plansWithIds
+        val firstPlan = if (plansWithIds.nonEmpty) {
+          plansWithIds.head._1
+        } else {
+          // Empty sequence - create a minimal valid plan
+          proto.Plan
+            .newBuilder()
+            .setRoot(proto.Relation.newBuilder().setLocalRelation(
+              proto.LocalRelation.newBuilder()))
+            .build()
         }
+        executePlanRequestBuilder.setPlan(firstPlan)
 
         val executePlanRequest = executePlanRequestBuilder.build()
         val executeKey = ExecuteKey(executePlanRequest, sessionHolder)
@@ -109,117 +155,51 @@ class SparkConnectBatchExecutePlanHandler(
         if (SparkConnectService.executionManager.getExecuteHolder(executeKey).isDefined) {
           throw new SparkSQLException(
             errorClass = "INVALID_HANDLE.OPERATION_ALREADY_EXISTS",
-            messageParameters = Map("handle" -> executeKey.operationId))
+            messageParameters = Map("handle" -> sequenceOperationId))
         }
 
-        // Create the execute holder - operations run independently without GRPC response observers
+        // Create the execute holder with custom runner
         val executeHolder = SparkConnectService.executionManager.createExecuteHolder(
           executeKey,
           executePlanRequest,
           sessionHolder)
 
-        // Start the execution following the standard pattern
-        // Operations are marked as reattachable, so they can be consumed later via reattach
+        // Replace the standard runner with our sequence runner
+        val sequenceRunner = new SequenceExecuteThreadRunner(executeHolder, plansWithIds.toSeq)
+        executeHolder.setRunner(sequenceRunner)
+
+        // Start the execution
         executeHolder.eventsManager.postStarted()
         executeHolder.start()
         executeHolder.afterInitialRPC()
 
-        // If we got here without exceptions, the operation was successfully submitted
-        submittedHolders += executeHolder
-        results += proto.BatchExecutePlanResponse.ExecutionResult
+        // Build success result
+        sequenceResults += proto.BatchExecutePlanResponse.SequenceResult
           .newBuilder()
-          .setOperationId(executeKey.operationId)
+          .setSequenceOperationId(sequenceOperationId)
           .setSuccess(true)
+          .addAllQueryOperationIds(queryOperationIds.asJava)
           .build()
 
       } catch {
         case NonFatal(e) =>
-          // Submission failed for this operation
-          // Note: If the executeHolder was created, it needs to be cleaned up
-          val operationId = if (planExecution.hasOperationId) {
-            planExecution.getOperationId
+          // Submission failed for this sequence
+          val sequenceOperationId = if (planSequence.hasSequenceOperationId) {
+            planSequence.getSequenceOperationId
           } else {
-            UUID.randomUUID().toString // Generate one for the error response
+            UUID.randomUUID().toString
           }
 
           val errorMessage = s"${e.getClass.getSimpleName}: ${e.getMessage}"
 
-          // Check if an executeHolder was created - if so, remove it to prevent orphaned state
-          val maybeExecuteKey =
-            try {
-              val req = proto.ExecutePlanRequest
-                .newBuilder()
-                .setPlan(planExecution.getPlan)
-                .setUserContext(request.getUserContext)
-                .setSessionId(request.getSessionId)
-                .build()
-              Some(ExecuteKey(req, sessionHolder))
-            } catch {
-              case _: Exception => None
-            }
-
-          maybeExecuteKey.foreach { key =>
-            SparkConnectService.executionManager.getExecuteHolder(key).foreach { holder =>
-              // Remove the holder to prevent it from trying to complete lifecycle
-              SparkConnectService.executionManager.removeExecuteHolder(key)
-            }
-          }
-
-          results += proto.BatchExecutePlanResponse.ExecutionResult
+          sequenceResults += proto.BatchExecutePlanResponse.SequenceResult
             .newBuilder()
-            .setOperationId(operationId)
+            .setSequenceOperationId(sequenceOperationId)
             .setSuccess(false)
             .setErrorMessage(errorMessage)
             .build()
 
-          // If rollback is enabled, we need to cancel all previously submitted operations
-          if (request.getRollbackOnFailure) {
-            shouldContinue = false
-            logInfo(
-              s"Batch execute failed for operation $operationId with rollback enabled. " +
-                s"Interrupting ${submittedHolders.size} previously submitted operations.")
-
-            // Interrupt all previously submitted operations
-            submittedHolders.foreach { holder =>
-              holder.interrupt()
-            }
-
-            // Wait briefly for interrupts to take effect
-            // The interrupts happen asynchronously, give them time to complete
-            if (submittedHolders.nonEmpty) {
-              Thread.sleep(
-                1000
-              ) // 1 second should be sufficient for interrupt signals to propagate
-            }
-
-            // Mark previously successful operations as failed due to rollback
-            val rolledBackResults =
-              new ArrayBuffer[proto.BatchExecutePlanResponse.ExecutionResult]()
-            for (i <- 0 until submittedHolders.size) {
-              rolledBackResults += proto.BatchExecutePlanResponse.ExecutionResult
-                .newBuilder()
-                .setOperationId(results(i).getOperationId)
-                .setSuccess(false)
-                .setErrorMessage(
-                  s"Rolled back due to failure in subsequent operation: $errorMessage")
-                .build()
-            }
-
-            // Replace successful results with rolled back results
-            results.clear()
-            results ++= rolledBackResults
-            results += proto.BatchExecutePlanResponse.ExecutionResult
-              .newBuilder()
-              .setOperationId(operationId)
-              .setSuccess(false)
-              .setErrorMessage(errorMessage)
-              .build()
-          } else {
-            // Continue processing remaining operations when rollback is disabled
-            logInfo(
-              s"Batch execute failed for operation $operationId with rollback disabled. " +
-                "Continuing with remaining operations.")
-          }
+          logWarning(s"Failed to submit sequence $sequenceOperationId: $errorMessage")
       }
     }
 
@@ -228,10 +208,11 @@ class SparkConnectBatchExecutePlanHandler(
       .newBuilder()
       .setSessionId(request.getSessionId)
       .setServerSideSessionId(sessionHolder.serverSessionId)
-      .addAllResults(results.asJava)
+      .addAllSequenceResults(sequenceResults.asJava)
       .build()
 
     responseObserver.onNext(response)
     responseObserver.onCompleted()
   }
 }
+

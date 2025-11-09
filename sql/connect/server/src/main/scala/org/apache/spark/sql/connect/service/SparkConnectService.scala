@@ -106,10 +106,11 @@ class SparkConnectService(debug: Boolean) extends AsyncService with BindableServ
   }
 
   /**
-   * Execute multiple plans in a batch.
+   * Execute multiple sequences of plans in batch.
    *
-   * This method submits multiple execute plan requests sequentially and returns the operation IDs
-   * and submission status for each. It does not wait for execution results.
+   * Each sequence executes sequentially in its own thread, and all sequences execute in parallel.
+   * Single-plan batches are treated as sequences containing one plan. Returns operation IDs for
+   * reattachment.
    *
    * The batch execution is delegated to the [[SparkConnectBatchExecutePlanHandler]].
    *
@@ -124,27 +125,6 @@ class SparkConnectService(debug: Boolean) extends AsyncService with BindableServ
     } catch {
       ErrorUtils.handleError(
         "batchExecute",
-        observer = responseObserver,
-        userId = request.getUserContext.getUserId,
-        sessionId = request.getSessionId)
-    }
-  }
-
-  /**
-   * Execute multiple sequences of plans in batch. Each sequence executes sequentially, all
-   * sequences execute in parallel.
-   *
-   * @param request
-   * @param responseObserver
-   */
-  override def batchListExecutePlan(
-      request: proto.BatchListExecutePlanRequest,
-      responseObserver: StreamObserver[proto.BatchListExecutePlanResponse]): Unit = {
-    try {
-      new SparkConnectBatchListExecutePlanHandler(responseObserver).handle(request)
-    } catch {
-      ErrorUtils.handleError(
-        "batchListExecute",
         observer = responseObserver,
         userId = request.getUserContext.getUserId,
         sessionId = request.getSessionId)

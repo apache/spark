@@ -17,14 +17,13 @@
 
 package org.apache.spark.sql.connect.execution
 
-import scala.util.control.NonFatal
-
 import org.apache.spark.connect.proto
 import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.sql.classic.Dataset
 import org.apache.spark.sql.connect.common.DataTypeProtoConverter
 import org.apache.spark.sql.connect.planner.SparkConnectPlanner
 import org.apache.spark.sql.connect.service.{ExecuteHolder, ExecuteSessionTag, SparkConnectService}
+import org.apache.spark.sql.connect.utils.ErrorUtils
 import org.apache.spark.util.Utils
 
 /**
@@ -42,35 +41,71 @@ private[connect] class SequenceExecuteThreadRunner(
     extends ExecuteThreadRunner(executeHolder)
     with Logging {
 
-  // Replace the execution thread with our custom one
   private val sequenceExecutionThread: SequenceExecutionThread =
     new SequenceExecutionThread()
 
+  @volatile private var started = false
+  @volatile private var interrupted = false
+
   override def start(): Unit = {
+    started = true
     sequenceExecutionThread.start()
   }
 
+  override def interrupt(): Boolean = {
+    if (started && !interrupted) {
+      interrupted = true
+      sequenceExecutionThread.interrupt()
+      true
+    } else {
+      false
+    }
+  }
+
   private def execute(): Unit = {
+    var success = false
     try {
-      executeSequence()
+      try {
+        executeSequence()
+        success = true
+      } catch {
+        case e: Throwable =>
+          logDebug(log"Exception in execute: ${MDC(LogKeys.EXCEPTION, e)}")
+          executeHolder.sessionHolder.session.sparkContext.cancelJobsWithTag(
+            executeHolder.jobTag,
+            s"A job with the same tag ${executeHolder.jobTag} has failed.")
+          throw e
+      } finally {
+        executeHolder.sessionHolder.session.sparkContext.removeJobTag(executeHolder.jobTag)
+        SparkConnectService.executionListener.foreach(_.removeJobTag(executeHolder.jobTag))
+        executeHolder.sparkSessionTags.foreach { tag =>
+          executeHolder.sessionHolder.session.sparkContext.removeJobTag(
+            ExecuteSessionTag(
+              executeHolder.sessionHolder.userId,
+              executeHolder.sessionHolder.sessionId,
+              tag))
+        }
+      }
     } catch {
       case e: Throwable =>
-        logError(
-          log"Sequence ${MDC(LogKeys.EXECUTE_KEY, executeHolder.operationId)} failed: " +
-            log"${MDC(LogKeys.EXCEPTION, e)}")
-        executeHolder.sessionHolder.session.sparkContext.cancelJobsWithTag(
-          executeHolder.jobTag,
-          s"A job with the same tag ${executeHolder.jobTag} has failed.")
-        throw e
+        ErrorUtils.handleError(
+          "execute",
+          executeHolder.responseObserver,
+          executeHolder.sessionHolder.userId,
+          executeHolder.sessionHolder.sessionId,
+          Some(executeHolder.eventsManager),
+          false)(e)
     } finally {
-      executeHolder.sessionHolder.session.sparkContext.removeJobTag(executeHolder.jobTag)
-      SparkConnectService.executionListener.foreach(_.removeJobTag(executeHolder.jobTag))
-      executeHolder.sparkSessionTags.foreach { tag =>
-        executeHolder.sessionHolder.session.sparkContext.removeJobTag(
-          ExecuteSessionTag(
-            executeHolder.sessionHolder.userId,
-            executeHolder.sessionHolder.sessionId,
-            tag))
+      // Ensure observer is always completed, even if something went wrong
+      if (!success && !executeHolder.responseObserver.completed()) {
+        logWarning(
+          log"Sequence ${MDC(LogKeys.EXECUTE_KEY, executeHolder.operationId)} " +
+            log"finished without completing observer, completing now")
+        try {
+          executeHolder.responseObserver.onCompleted()
+        } catch {
+          case _: IllegalStateException => // Already completed, ignore
+        }
       }
     }
   }
@@ -151,13 +186,14 @@ private[connect] class SequenceExecuteThreadRunner(
         // All queries in sequence completed successfully
         executeHolder.eventsManager.postFinished()
 
-        // Send ResultComplete
+        // Send ResultComplete and complete the observer
         if (!executeHolder.responseObserver.completed()) {
           executeHolder.responseObserver.onNext(createResultComplete())
+          executeHolder.responseObserver.onCompleted()
         }
 
       } catch {
-        case NonFatal(e) =>
+        case e: Throwable =>
           logError(
             log"Sequence ${MDC(LogKeys.EXECUTE_KEY, executeHolder.operationId)} failed: " +
               log"${MDC(LogKeys.EXCEPTION, e)}")
@@ -195,7 +231,7 @@ private[connect] class SequenceExecuteThreadRunner(
 private class QueryTaggingResponseObserver(
     underlying: ExecuteResponseObserver[proto.ExecutePlanResponse],
     queryOperationId: String)
-    extends ExecuteResponseObserver[proto.ExecutePlanResponse](null) {
+    extends io.grpc.stub.StreamObserver[proto.ExecutePlanResponse] {
 
   override def onNext(response: proto.ExecutePlanResponse): Unit = {
     // Add query_operation_id to the response

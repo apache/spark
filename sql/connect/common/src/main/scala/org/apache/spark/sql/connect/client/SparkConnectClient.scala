@@ -154,74 +154,24 @@ private[sql] class SparkConnectClient(
   }
 
   /**
-   * Execute multiple plans in a batch.
+   * Execute multiple sequences of plans in batch.
    *
-   * Submits multiple execute plan requests sequentially to the server and returns the operation
-   * IDs and submission status for each. Does not wait for execution results.
-   *
-   * Note: rollbackOnFailure only applies to submission failures (e.g., invalid operation ID,
-   * duplicate operation ID), not execution failures. Once an operation is successfully submitted,
-   * it executes independently. Use reattach() to consume execution results or errors.
-   *
-   * @param plans
-   *   Sequence of (plan, optional operation_id) tuples to execute
-   * @param rollbackOnFailure
-   *   If true, cancel all previously submitted operations if any submission fails. Defaults to
-   *   true. Does not apply to execution failures that occur after successful submission.
-   * @return
-   *   A [[proto.BatchExecutePlanResponse]] containing submission status for each plan. A
-   *   successful result indicates the operation was submitted successfully, not that it executed
-   *   successfully.
-   */
-  def batchExecute(
-      plans: Seq[(proto.Plan, Option[String])],
-      rollbackOnFailure: Boolean = true): proto.BatchExecutePlanResponse = {
-    artifactManager.uploadAllClassFileArtifacts()
-    val requestBuilder = proto.BatchExecutePlanRequest
-      .newBuilder()
-      .setUserContext(userContext)
-      .setSessionId(sessionId)
-      .setClientType(userAgent)
-      .setRollbackOnFailure(rollbackOnFailure)
-
-    serverSideSessionId.foreach(session =>
-      requestBuilder.setClientObservedServerSideSessionId(session))
-
-    plans.foreach { case (plan, opId) =>
-      val planExecBuilder = proto.BatchExecutePlanRequest.PlanExecution
-        .newBuilder()
-        .setPlan(plan)
-      opId.foreach { id =>
-        require(
-          isValidUUID(id),
-          s"Invalid operationId: $id. The id must be an UUID string of " +
-            "the format `00112233-4455-6677-8899-aabbccddeeff`")
-        planExecBuilder.setOperationId(id)
-      }
-      requestBuilder.addPlanExecutions(planExecBuilder)
-    }
-
-    bstub.batchExecutePlan(requestBuilder.build())
-  }
-
-  /**
-   * Execute multiple sequences of plans in batch. Each sequence executes sequentially, all
-   * sequences execute in parallel. Returns operation IDs for reattachment.
+   * Each sequence executes sequentially, all sequences execute in parallel. Single-plan batches
+   * are treated as sequences containing one plan. Returns operation IDs for reattachment.
    *
    * @param planSequences
    *   Sequences of (plan, optional operation ID) tuples to execute
    * @param sequenceOperationIds
    *   Optional operation IDs for each sequence
    * @return
-   *   BatchListExecutePlanResponse containing sequence operation IDs and query operation IDs
+   *   BatchExecutePlanResponse containing sequence operation IDs and query operation IDs
    */
-  def batchListExecute(
+  def batchExecute(
       planSequences: Seq[Seq[(proto.Plan, Option[String])]],
-      sequenceOperationIds: Seq[Option[String]] = Seq.empty)
-      : proto.BatchListExecutePlanResponse = {
+      sequenceOperationIds: Seq[Option[String]] = Seq.empty): proto.BatchExecutePlanResponse = {
     artifactManager.uploadAllClassFileArtifacts()
 
-    val requestBuilder = proto.BatchListExecutePlanRequest
+    val requestBuilder = proto.BatchExecutePlanRequest
       .newBuilder()
       .setUserContext(userContext)
       .setSessionId(sessionId)
@@ -231,7 +181,7 @@ private[sql] class SparkConnectClient(
       requestBuilder.setClientObservedServerSideSessionId(session))
 
     planSequences.zipWithIndex.foreach { case (sequence, idx) =>
-      val sequenceBuilder = proto.BatchListExecutePlanRequest.PlanSequence
+      val sequenceBuilder = proto.BatchExecutePlanRequest.PlanSequence
         .newBuilder()
 
       // Set sequence operation ID if provided
@@ -245,7 +195,7 @@ private[sql] class SparkConnectClient(
 
       // Add plans to sequence
       sequence.foreach { case (plan, opId) =>
-        val planExecBuilder = proto.BatchListExecutePlanRequest.PlanExecution
+        val planExecBuilder = proto.BatchExecutePlanRequest.PlanExecution
           .newBuilder()
           .setPlan(plan)
         opId.foreach { id =>
@@ -261,7 +211,7 @@ private[sql] class SparkConnectClient(
       requestBuilder.addPlanSequences(sequenceBuilder)
     }
 
-    bstub.batchListExecutePlan(requestBuilder.build())
+    bstub.batchExecutePlan(requestBuilder.build())
   }
 
   /**

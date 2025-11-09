@@ -93,19 +93,6 @@ private[connect] class CustomSparkConnectBlockingStub(
     }
   }
 
-  def batchListExecutePlan(request: BatchListExecutePlanRequest): BatchListExecutePlanResponse = {
-    grpcExceptionConverter.convert(
-      request.getSessionId,
-      request.getUserContext,
-      request.getClientType) {
-      retryHandler.retry {
-        stubState.responseValidator.verifyResponse {
-          stub.batchListExecutePlan(request)
-        }
-      }
-    }
-  }
-
   def reattachExecute(request: ReattachExecuteRequest): CloseableIterator[ExecutePlanResponse] = {
     grpcExceptionConverter.convert(
       request.getSessionId,
