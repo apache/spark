@@ -18,15 +18,15 @@
 package org.apache.spark.util
 
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
-import java.lang.invoke.{MethodHandleInfo, SerializedLambda}
+import java.lang.invoke.{MethodHandleInfo, MethodHandles, SerializedLambda}
 import java.lang.reflect.{Field, Modifier}
 
-import scala.collection.mutable.{Map, Queue, Set, Stack}
+import scala.collection.mutable.{ArrayBuffer, Map, Queue, Set, Stack}
 import scala.jdk.CollectionConverters._
 
-import org.apache.xbean.asm9.{ClassReader, ClassVisitor, Handle, MethodVisitor, Type}
+import org.apache.xbean.asm9.{ClassReader, ClassVisitor, ClassWriter, Handle, MethodVisitor, Type}
 import org.apache.xbean.asm9.Opcodes._
-import org.apache.xbean.asm9.tree.{ClassNode, MethodNode}
+import org.apache.xbean.asm9.tree.{ClassNode, FieldInsnNode, FieldNode, InsnNode, MethodInsnNode, MethodNode, VarInsnNode}
 
 import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
@@ -191,10 +191,12 @@ private[spark] object ClosureCleaner extends Logging {
    * @param accessedFields    a map from a class to a set of its fields that are accessed by
    *                          the starting closure
    */
-  private[spark] def clean(
-      func: AnyRef,
+  private[spark] def clean[F <: AnyRef](
+      func: F,
       cleanTransitively: Boolean,
-      accessedFields: Map[Class[_], Set[String]]): Boolean = {
+      accessedFields: Map[Class[_], Set[String]]): Option[F] = {
+    var cleanedFunc: F = func
+
     // indylambda check. Most likely to be the case with 2.12, 2.13
     // so we check first
     // non LMF-closures should be less frequent from now on
@@ -202,14 +204,14 @@ private[spark] object ClosureCleaner extends Logging {
 
     if (!isClosure(func.getClass) && maybeIndylambdaProxy.isEmpty) {
       logDebug(s"Expected a closure; got ${func.getClass.getName}")
-      return false
+      return None
     }
 
     // TODO: clean all inner closures first. This requires us to find the inner objects.
     // TODO: cache outerClasses / innerClasses / accessedFields
 
     if (func == null) {
-      return false
+      return None
     }
 
     if (maybeIndylambdaProxy.isEmpty) {
@@ -233,9 +235,9 @@ private[spark] object ClosureCleaner extends Logging {
 
       val outerThis = if (lambdaProxy.getCapturedArgCount > 0) {
         // only need to clean when there is an enclosing non-null "this" captured by the closure
-        Option(lambdaProxy.getCapturedArg(0)).getOrElse(return false)
+        Option(lambdaProxy.getCapturedArg(0)).getOrElse(return None)
       } else {
-        return false
+        return None
       }
 
       // clean only if enclosing "this" is something cleanable, i.e. a Scala REPL line object or
@@ -245,22 +247,28 @@ private[spark] object ClosureCleaner extends Logging {
       if (isDefinedInAmmonite(outerThis.getClass)) {
         // If outerThis is a lambda, we have to clean that instead
         IndylambdaScalaClosures.getSerializationProxy(outerThis).foreach { _ =>
-          return clean(outerThis, cleanTransitively, accessedFields)
+          val cleanedOuterThis = clean(outerThis, cleanTransitively, accessedFields)
+          if (cleanedOuterThis.isEmpty) {
+            return None
+          } else {
+            return Some(
+              convertIndyLambdaForJava22(func, cleanedOuterThis.get, lambdaProxy).getOrElse(func))
+          }
         }
-        cleanupAmmoniteReplClosure(func, lambdaProxy, outerThis, cleanTransitively)
+        cleanedFunc = cleanupAmmoniteReplClosure(func, lambdaProxy, outerThis, cleanTransitively)
       } else {
         val isClosureDeclaredInScalaRepl = capturingClassName.startsWith("$line") &&
           capturingClassName.endsWith("$iw")
         if (isClosureDeclaredInScalaRepl && outerThis.getClass.getName == capturingClassName) {
           assert(accessedFields.isEmpty)
-          cleanupScalaReplClosure(func, lambdaProxy, outerThis, cleanTransitively)
+          cleanedFunc = cleanupScalaReplClosure(func, lambdaProxy, outerThis, cleanTransitively)
         }
       }
 
       logDebug(s" +++ indylambda closure ($implMethodName) is now cleaned +++")
     }
 
-    true
+    Some(cleanedFunc)
   }
 
   /**
@@ -365,7 +373,7 @@ private[spark] object ClosureCleaner extends Logging {
       // the already populated accessed fields map of the starting closure
       if (cleanTransitively && isClosure(clone.getClass)) {
         logDebug(s" + cleaning cloned closure recursively (${cls.getName})")
-        clean(clone, cleanTransitively, accessedFields)
+        val cleaned = clean(clone, cleanTransitively, accessedFields)
       }
       parent = clone
     }
@@ -396,11 +404,11 @@ private[spark] object ClosureCleaner extends Logging {
    * @param outerThis lambda enclosing class
    * @param cleanTransitively whether to clean enclosing closures transitively
    */
-  private def cleanupScalaReplClosure(
-      func: AnyRef,
+  private def cleanupScalaReplClosure[F <: AnyRef](
+      func: F,
       lambdaProxy: SerializedLambda,
       outerThis: AnyRef,
-      cleanTransitively: Boolean): Unit = {
+      cleanTransitively: Boolean): F = {
 
     val capturingClass = outerThis.getClass
     val accessedFields: Map[Class[_], Set[String]] = Map.empty
@@ -422,13 +430,17 @@ private[spark] object ClosureCleaner extends Logging {
       logDebug(s" + cloning instance of REPL class ${capturingClass.getName}")
       val clonedOuterThis = cloneAndSetFields(
         parent = null, outerThis, capturingClass, accessedFields)
-
-      val outerField = func.getClass.getDeclaredField("arg$1")
-      // SPARK-37072: When Java 17 is used and `outerField` is read-only,
-      // the content of `outerField` cannot be set by reflect api directly.
-      // But we can remove the `final` modifier of `outerField` before set value
-      // and reset the modifier after set value.
-      setFieldAndIgnoreModifiers(func, outerField, clonedOuterThis)
+      convertIndyLambdaForJava22(func, clonedOuterThis, lambdaProxy).getOrElse {
+        val outerField = func.getClass.getDeclaredField("arg$1")
+        // SPARK-37072: When Java 17 is used and `outerField` is read-only,
+        // the content of `outerField` cannot be set by reflect api directly.
+        // But we can remove the `final` modifier of `outerField` before set value
+        // and reset the modifier after set value.
+        setFieldAndIgnoreModifiers(func, outerField, clonedOuterThis)
+        func
+      }
+    } else {
+      func
     }
   }
 
@@ -457,11 +469,11 @@ private[spark] object ClosureCleaner extends Logging {
    * @param outerThis         lambda enclosing class
    * @param cleanTransitively whether to clean enclosing closures transitively
    */
-  private def cleanupAmmoniteReplClosure(
-      func: AnyRef,
+  private def cleanupAmmoniteReplClosure[F <: AnyRef](
+      func: F,
       lambdaProxy: SerializedLambda,
       outerThis: AnyRef,
-      cleanTransitively: Boolean): Unit = {
+      cleanTransitively: Boolean): F = {
 
     val accessedFields: Map[Class[_], Set[String]] = Map.empty
     initAccessedFields(accessedFields, Seq(outerThis.getClass))
@@ -550,9 +562,12 @@ private[spark] object ClosureCleaner extends Logging {
       cmdClones(outerThis.getClass)
     }
 
-    val outerField = func.getClass.getDeclaredField("arg$1")
-    // update lambda capturing class reference
-    setFieldAndIgnoreModifiers(func, outerField, outerThisClone)
+    convertIndyLambdaForJava22(func, outerThisClone, lambdaProxy).getOrElse {
+      val outerField = func.getClass.getDeclaredField("arg$1")
+      // update lambda capturing class reference
+      setFieldAndIgnoreModifiers(func, outerField, outerThisClone)
+      func
+    }
   }
 
   private def setFieldAndIgnoreModifiers(obj: AnyRef, field: Field, value: AnyRef): Unit = {
@@ -595,6 +610,173 @@ private[spark] object ClosureCleaner extends Logging {
       field.set(obj, enclosingObject)
     }
     obj
+  }
+
+  def convertIndyLambdaForJava22[F <: AnyRef](
+      indyLambda: F,
+      outerThis: AnyRef,
+      lambdaProxy: SerializedLambda): Option[F] = {
+    if (Runtime.version().feature() >= 22) {
+      val convertedLambdaClass = doConvertIndyLambda(indyLambda.getClass, lambdaProxy)
+      val argTypesBuffer = new ArrayBuffer[Class[_]]()
+      val argsBuffer = new ArrayBuffer[Object]()
+      var i = 0
+      while (i < lambdaProxy.getCapturedArgCount) {
+        val arg = lambdaProxy.getCapturedArg(i)
+        argTypesBuffer.append(arg.getClass)
+        argsBuffer.append(arg)
+        i += 1
+      }
+
+      val convertedLambda = convertedLambdaClass
+        .getDeclaredConstructors.head
+        .newInstance(outerThis +: argsBuffer.tail.toArray: _*)
+        .asInstanceOf[F]
+      Some(convertedLambda)
+    } else {
+      None
+    }
+  }
+
+  private def doConvertIndyLambda(
+      originalFuncClass: Class[_],
+      lambdaProxy: SerializedLambda): Class[_] = {
+    // Signature, args and return type of the impl method
+    val implSig = lambdaProxy.getImplMethodSignature
+    val implArgTypes = Type.getArgumentTypes(implSig)
+    val implRet = Type.getReturnType(implSig)
+
+    // First args of the impl method are captured by the lambda and the rests are passed by the
+    // caller of the lambda.
+    val numCapturedArgs = lambdaProxy.getCapturedArgCount
+    val (capturedArgs, remainingArgs) = implArgTypes.splitAt(numCapturedArgs)
+    val capturedArgsWithIndex = capturedArgs.zipWithIndex
+
+    def buildFieldAndConstructor(classNode: ClassNode): Unit = {
+      val ctorArgDescBuilder = new StringBuilder("(")
+      capturedArgsWithIndex.foreach {
+        case (t, i) =>
+          val argName = "arg$" + (i + 1)
+          val argDesc = t.getDescriptor
+          val argField = new FieldNode(ACC_PRIVATE | ACC_FINAL, argName, argDesc, null, null)
+          classNode.fields.add(argField)
+          ctorArgDescBuilder.append(argDesc)
+      }
+      ctorArgDescBuilder.append(")V")
+
+      val ctorArgDesc = ctorArgDescBuilder.toString()
+      val ctor = new MethodNode(ACC_PUBLIC, "<init>", ctorArgDesc, null, null)
+
+      // super()
+      ctor.instructions.add(new VarInsnNode(ALOAD, 0))
+      ctor.instructions.add(
+        new MethodInsnNode(INVOKESPECIAL, "java/lang/Object", "<init>", "()V", false))
+
+      // this()
+      var ctorLocalSize = 1
+      capturedArgsWithIndex.foreach {
+        case (t, i) =>
+          ctor.instructions.add(new VarInsnNode(ALOAD, 0))
+          ctor.instructions.add(new VarInsnNode(getLoadOpCode(t), ctorLocalSize))
+          ctor.instructions.add(
+            new FieldInsnNode(PUTFIELD, classNode.name, "arg$" + (i + 1), t.getDescriptor))
+          ctorLocalSize += t.getSize
+      }
+
+      ctor.instructions.add(new InsnNode(RETURN))
+      // Stack the results of 2 load instructions at most.
+      ctor.maxStack = 2
+      ctor.maxLocals = ctorLocalSize
+      classNode.methods.add(ctor)
+    }
+
+    def buildLambdaImplMethod(classNode: ClassNode): Unit = {
+      val fMethodName = lambdaProxy.getFunctionalInterfaceMethodName
+      val fMethodSig = lambdaProxy.getFunctionalInterfaceMethodSignature
+      val lambdaImplMethod = new MethodNode (ACC_PUBLIC, fMethodName, fMethodSig, null, null)
+
+      capturedArgsWithIndex.foreach {
+        case (t, i) =>
+          lambdaImplMethod.instructions.add(new VarInsnNode (ALOAD, 0))
+          lambdaImplMethod.instructions.add(
+            new FieldInsnNode(GETFIELD, classNode.name, "arg$" + (i + 1), t.getDescriptor))
+      }
+
+      var implMethodLocalSize = 1
+      for (t <- remainingArgs) {
+        lambdaImplMethod.instructions.add(new VarInsnNode(getLoadOpCode(t), implMethodLocalSize))
+        implMethodLocalSize += t.getSize
+      }
+
+      lambdaImplMethod.instructions.add(
+        new MethodInsnNode (
+          INVOKESTATIC,
+          lambdaProxy.getImplClass,
+          lambdaProxy.getImplMethodName,
+          lambdaProxy.getImplMethodSignature,
+          false))
+      lambdaImplMethod.instructions.add(new InsnNode(getReturnOpCode(implRet)))
+      lambdaImplMethod.maxStack = implArgTypes.length
+      lambdaImplMethod.maxLocals = implMethodLocalSize
+      classNode.methods.add(lambdaImplMethod)
+    }
+
+    // Split the original lambda class name (like $Lambda/0x0000007801a0d278) and use the last
+    // part for the cloned function class name.
+    val clonedFuncClassName =
+      originalFuncClass.getName.replace("/", "_").replace(".", "/") + "Converted"
+
+    // Converted class
+    val convertedClassNode = new ClassNode()
+    convertedClassNode.version = V22
+    convertedClassNode.access = ACC_PUBLIC
+    convertedClassNode.name = clonedFuncClassName
+    convertedClassNode.superName = "java/lang/Object"
+    convertedClassNode.interfaces.add(lambdaProxy.getFunctionalInterfaceClass)
+    buildFieldAndConstructor(convertedClassNode)
+    buildLambdaImplMethod(convertedClassNode)
+
+    // Define the converted class
+    val classWriter = new ClassWriter(ClassWriter.COMPUTE_FRAMES | ClassWriter.COMPUTE_MAXS)
+    convertedClassNode.accept(classWriter)
+    val bytes = classWriter.toByteArray
+    val lookup = MethodHandles.lookup()
+    val privateLookup = MethodHandles.privateLookupIn(originalFuncClass, lookup)
+    val clazz = privateLookup.defineClass(bytes)
+    val classLoader = originalFuncClass.getClassLoader
+    val classLoaderClass = classLoader.getClass
+
+    // For Ammonite, add the class to the SpecialClassLoader allowing to pass the class to the
+    // connect server
+    if (classLoaderClass.getName == "ammonite.runtime.SpecialClassLoader") {
+      val addClassMethod =
+        classLoaderClass.getMethod("addClassFile", classOf[String], classOf[Array[Byte]])
+      addClassMethod.invoke(classLoader, clazz.getName, bytes)
+    }
+    clazz
+  }
+
+  private def getLoadOpCode(t: Type): Int = {
+    t match {
+      case Type.BOOLEAN_TYPE | Type.BYTE_TYPE | Type.CHAR_TYPE |
+           Type.SHORT_TYPE | Type.INT_TYPE => ILOAD
+      case Type.FLOAT_TYPE => FLOAD
+      case Type.LONG_TYPE => LLOAD
+      case Type.DOUBLE_TYPE => DLOAD
+      case _ => ALOAD
+    }
+  }
+
+  private def getReturnOpCode(t: Type): Int = {
+    t match {
+      case Type.VOID_TYPE => RETURN
+      case Type.BOOLEAN_TYPE | Type.BYTE_TYPE | Type.CHAR_TYPE |
+           Type.SHORT_TYPE | Type.INT_TYPE => IRETURN
+      case Type.FLOAT_TYPE => FRETURN
+      case Type.LONG_TYPE => LRETURN
+      case Type.DOUBLE_TYPE => DRETURN
+      case _ => ARETURN
+    }
   }
 }
 
