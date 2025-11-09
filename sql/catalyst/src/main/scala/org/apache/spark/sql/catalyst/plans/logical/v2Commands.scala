@@ -895,12 +895,31 @@ case class MergeIntoTable(
   private lazy val sourceSchemaForEvolution: StructType =
     MergeIntoTable.sourceSchemaForSchemaEvolution(this)
 
-  lazy val needSchemaEvolution: Boolean = {
+  lazy val needSchemaEvolution: Boolean =
     schemaEvolutionEnabled &&
-      MergeIntoTable.schemaChanges(targetTable.schema, sourceSchemaForEvolution).nonEmpty
+      allAssignmentsResolvedOrEvolutionCandidate &&
+      (MergeIntoTable.assignmentForEvolutionCandidate(this).nonEmpty ||
+      MergeIntoTable.schemaChanges(targetTable.schema, sourceSchemaForEvolution).nonEmpty)
+
+  lazy val allAssignmentsResolvedOrEvolutionCandidate: Boolean = {
+    if ((!targetTable.resolved) || (!sourceTable.resolved)) {
+      false
+    } else {
+      val actions = matchedActions ++ notMatchedActions
+      val assignments = actions.collect {
+        case a: UpdateAction => a.assignments
+        case a: InsertAction => a.assignments
+      }.flatten
+
+      val matchingAssignments = MergeIntoTable.assignmentForEvolutionCandidate(this).toSet
+
+      assignments.forall { assignment =>
+        assignment.resolved || matchingAssignments.contains(assignment)
+      }
+    }
   }
 
-  private def schemaEvolutionEnabled: Boolean = withSchemaEvolution && {
+  def schemaEvolutionEnabled: Boolean = withSchemaEvolution && {
     EliminateSubqueryAliases(targetTable) match {
       case r: DataSourceV2Relation if r.autoSchemaEvolution() => true
       case _ => false
@@ -1039,6 +1058,46 @@ object MergeIntoTable {
       })
 
     filterSchema(merge.sourceTable.schema, Seq.empty)
+  }
+
+  /**
+   * Returns all assignments with keys that match exactly a source field path from
+   * sourceTable's schema.
+   */
+  def assignmentForEvolutionCandidate(merge: MergeIntoTable): Seq[Assignment] = {
+    // Collect all assignments from merge actions
+    val actions = merge.matchedActions ++ merge.notMatchedActions
+    val assignments = actions.collect {
+      case a: UpdateAction => a.assignments
+      case a: InsertAction => a.assignments
+    }.flatten
+
+    // Extract all field paths from source schema
+    def extractAllFieldPaths(schema: StructType, basePath: Seq[String] = Seq.empty):
+    Seq[Seq[String]] = {
+      schema.flatMap { field =>
+        val fieldPath = basePath :+ field.name
+        field.dataType match {
+          case struct: StructType =>
+            fieldPath +: extractAllFieldPaths(struct, fieldPath)
+          case _ =>
+            Seq(fieldPath)
+        }
+      }
+    }
+
+    val sourceFieldPaths = extractAllFieldPaths(merge.sourceTable.schema)
+    val targetFieldPaths = extractAllFieldPaths(merge.targetTable.schema)
+    val addedSourceFieldPaths = sourceFieldPaths.diff(targetFieldPaths)
+
+    // Filter assignments whose key matches exactly a source field path
+    assignments.filter { assignment =>
+      val keyPath = extractFieldPath(assignment.key)
+      addedSourceFieldPaths.exists { sourcePath =>
+        keyPath.length == sourcePath.length &&
+          isPrefix(keyPath, sourcePath)
+      }
+    }
   }
 
   // Helper method to extract field path from an Expression.

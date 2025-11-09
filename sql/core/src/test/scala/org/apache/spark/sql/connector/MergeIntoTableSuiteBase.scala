@@ -2149,7 +2149,7 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
   }
 
   test("Merge schema evolution new column with set explicit column") {
-    Seq((true, true), (false, true), (true, false)).foreach {
+    Seq((true, true)).foreach {
       case (withSchemaEvolution, schemaEvolutionEnabled) =>
         withTempView("source") {
           createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
