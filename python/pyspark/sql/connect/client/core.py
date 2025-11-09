@@ -1196,63 +1196,14 @@ class SparkConnectClient(object):
 
     def batch_execute(
         self,
-        plans: List[Tuple[pb2.Plan, Optional[str]]],
-        rollback_on_failure: bool = True,
-    ) -> pb2.BatchExecutePlanResponse:
-        """
-        Execute multiple plans in a batch.
-
-        Submits multiple execute plan requests sequentially to the server and returns
-        the operation IDs and submission status for each. Does not wait for execution results.
-
-        Note: rollback_on_failure only applies to submission failures (e.g., invalid operation
-        ID, duplicate operation ID), not execution failures. Once an operation is successfully
-        submitted, it executes independently. Use reattach_execute() to consume execution
-        results or errors.
-
-        Parameters
-        ----------
-        plans : list of (Plan, Optional[str])
-            List of (plan, operation_id) tuples. If operation_id is None, the server will
-            generate one.
-        rollback_on_failure : bool
-            If True, cancel all previously submitted operations if any submission fails.
-            Defaults to True. Does not apply to execution failures that occur after
-            successful submission.
-
-        Returns
-        -------
-        BatchExecutePlanResponse
-            Response containing submission status for each plan. A successful result indicates
-            the operation was submitted successfully, not that it executed successfully.
-        """
-        req = pb2.BatchExecutePlanRequest()
-        req.session_id = self._session_id
-        if self._user_id:
-            req.user_context.user_id = self._user_id
-        req.client_type = self._builder.userAgent
-        req.rollback_on_failure = rollback_on_failure
-
-        if self._server_side_session_id:
-            req.client_observed_server_side_session_id = self._server_side_session_id
-
-        for plan, op_id in plans:
-            plan_exec = req.plan_executions.add()
-            plan_exec.plan.CopyFrom(plan)
-            if op_id:
-                plan_exec.operation_id = op_id
-
-        metadata = self._builder.metadata()
-        return self._stub.BatchExecutePlan(req, metadata=metadata)
-
-    def batch_list_execute(
-        self,
         plan_sequences: List[List[Tuple[pb2.Plan, Optional[str]]]],
         sequence_operation_ids: Optional[List[Optional[str]]] = None,
-    ) -> pb2.BatchListExecutePlanResponse:
+    ) -> pb2.BatchExecutePlanResponse:
         """
-        Execute multiple sequences of plans in batch. Each sequence executes
-        sequentially, all sequences execute in parallel.
+        Execute multiple sequences of plans in batch.
+        
+        Each sequence executes sequentially, all sequences execute in parallel.
+        Single-plan batches are treated as sequences containing one plan.
 
         Parameters
         ----------
@@ -1263,12 +1214,12 @@ class SparkConnectClient(object):
 
         Returns
         -------
-        BatchListExecutePlanResponse
+        BatchExecutePlanResponse
             Response containing sequence operation IDs and query operation IDs
         """
         import uuid
 
-        req = pb2.BatchListExecutePlanRequest()
+        req = pb2.BatchExecutePlanRequest()
         req.session_id = self._session_id
         if self._user_id:
             req.user_context.user_id = self._user_id
@@ -1288,7 +1239,10 @@ class SparkConnectClient(object):
                     uuid.UUID(seq_op_ids[idx])
                     seq.sequence_operation_id = seq_op_ids[idx]
                 except ValueError:
-                    raise ValueError(f"Invalid sequence operation ID: {seq_op_ids[idx]}")
+                    raise PySparkValueError(
+                        error_class="INVALID_HANDLE.FORMAT",
+                        message_parameters={"handle": seq_op_ids[idx]},
+                    )
 
             # Add plans to sequence
             for plan, op_id in sequence:
@@ -1299,10 +1253,13 @@ class SparkConnectClient(object):
                         uuid.UUID(op_id)
                         plan_exec.operation_id = op_id
                     except ValueError:
-                        raise ValueError(f"Invalid operation ID: {op_id}")
+                        raise PySparkValueError(
+                            error_class="INVALID_HANDLE.FORMAT",
+                            message_parameters={"handle": op_id},
+                        )
 
         metadata = self._builder.metadata()
-        return self._stub.BatchListExecutePlan(req, metadata=metadata)
+        return self._stub.BatchExecutePlan(req, metadata=metadata)
 
     def reattach_execute(self, operation_id: str) -> Iterator[pb2.ExecutePlanResponse]:
         """
@@ -1328,9 +1285,9 @@ class SparkConnectClient(object):
         try:
             uuid.UUID(operation_id)
         except ValueError:
-            raise ValueError(
-                f"Invalid operationId: {operation_id}. The id must be an UUID string of "
-                "the format `00112233-4455-6677-8899-aabbccddeeff`"
+            raise PySparkValueError(
+                error_class="INVALID_HANDLE.FORMAT",
+                message_parameters={"handle": operation_id},
             )
 
         req = pb2.ReattachExecuteRequest()

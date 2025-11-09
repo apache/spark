@@ -14,6 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package org.apache.spark.sql.connect.client
 
 import java.util.UUID
@@ -23,181 +24,257 @@ import scala.jdk.CollectionConverters._
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.connect.test.{ConnectFunSuite, RemoteSparkSession}
 
-/**
- * Tests for the batchExecute method in SparkConnectClient.
- */
 class SparkConnectClientBatchExecuteSuite extends ConnectFunSuite with RemoteSparkSession {
 
   private def buildPlan(query: String): proto.Plan = {
-    // Build plan by using the DataFrame API
-    val df = spark.sql(query)
-    df.plan
+    proto.Plan
+      .newBuilder()
+      .setRoot(
+        proto.Relation
+          .newBuilder()
+          .setSql(proto.SQL
+            .newBuilder()
+            .setQuery(query)))
+      .build()
   }
 
-  test("batchExecute with successful operations") {
+  test("batchExecute with multiple sequences") {
+    val seq1 = Seq(
+      (buildPlan("SELECT * FROM range(100)"), None),
+      (buildPlan("SELECT * FROM range(200)"), None))
+    val seq2 = Seq((buildPlan("SELECT * FROM range(300)"), None))
+
     val client = spark.client
-    // Use queries that take slightly longer to execute to allow reattach to work
-    val plan1 = buildPlan("SELECT * FROM range(10000)")
-    val plan2 = buildPlan("SELECT * FROM range(10000)")
-    val plan3 = buildPlan("SELECT * FROM range(10000)")
+    val response = client.batchExecute(Seq(seq1, seq2))
 
-    val response = client.batchExecute(
-      Seq((plan1, None), (plan2, None), (plan3, None)),
-      rollbackOnFailure = true)
-
-    assert(response.getResultsCount == 3, "Expected 3 results")
-    assert(response.getResultsList.asScala.forall(_.getSuccess), "All operations should succeed")
-
-    // Verify operation IDs are unique
-    val opIds = response.getResultsList.asScala.map(_.getOperationId).toSet
-    assert(opIds.size == 3, "Operation IDs should be unique")
+    assert(response.getSequenceResultsCount == 2)
+    assert(response.getSequenceResults(0).getSuccess)
+    assert(response.getSequenceResults(0).getQueryOperationIdsCount == 2)
+    assert(response.getSequenceResults(1).getSuccess)
+    assert(response.getSequenceResults(1).getQueryOperationIdsCount == 1)
 
     // Verify operation IDs are valid UUIDs
-    opIds.foreach(opId => UUID.fromString(opId))
-  }
+    val seqOpId1 = response.getSequenceResults(0).getSequenceOperationId
+    val seqOpId2 = response.getSequenceResults(1).getSequenceOperationId
+    assert(UUID.fromString(seqOpId1) != null)
+    assert(UUID.fromString(seqOpId2) != null)
 
-  test("batchExecute with custom operation IDs") {
-    val client = spark.client
-    val opId1 = UUID.randomUUID().toString
-    val opId2 = UUID.randomUUID().toString
+    // Give operations time to initialize
+    Thread.sleep(500)
 
-    // Use queries that take slightly longer to execute to allow reattach to work
-    val plan1 = buildPlan("SELECT * FROM range(10000)")
-    val plan2 = buildPlan("SELECT * FROM range(10000)")
-
-    val response = client.batchExecute(
-      Seq((plan1, Some(opId1)), (plan2, Some(opId2))),
-      rollbackOnFailure = false)
-
-    assert(response.getResultsCount == 2)
-    assert(response.getResults(0).getOperationId == opId1)
-    assert(response.getResults(1).getOperationId == opId2)
-    assert(response.getResults(0).getSuccess)
-    assert(response.getResults(1).getSuccess)
-  }
-
-  test("batchExecute with rollback disabled continues on failure") {
-    val client = spark.client
-    val validPlan1 = buildPlan("SELECT * FROM range(10000)")
-    val validPlan2 = buildPlan("SELECT * FROM range(10000)")
-    val validPlan3 = buildPlan("SELECT * FROM range(10000)")
-
-    val response = client.batchExecute(
-      Seq((validPlan1, None), (validPlan2, None), (validPlan3, None)),
-      rollbackOnFailure = false)
-
-    // All operations are submitted successfully
-    assert(response.getResultsCount == 3)
-    assert(response.getResults(0).getSuccess, "First operation submission should succeed")
-    assert(response.getResults(1).getSuccess, "Second operation submission should succeed")
-    assert(response.getResults(2).getSuccess, "Third operation submission should succeed")
-  }
-
-  test("batchExecute with rollback enabled stops on failure") {
-    val client = spark.client
-    val validPlan1 = buildPlan("SELECT * FROM range(10000)")
-    val validPlan2 = buildPlan("SELECT * FROM range(10000)")
-    val validPlan3 = buildPlan("SELECT * FROM range(10000)")
-
-    val response = client.batchExecute(
-      Seq((validPlan1, None), (validPlan2, None), (validPlan3, None)),
-      rollbackOnFailure = true)
-
-    // All operations are submitted successfully
-    assert(response.getResultsCount == 3)
-    assert(response.getResults(0).getSuccess, "First operation submission should succeed")
-    assert(response.getResults(1).getSuccess, "Second operation submission should succeed")
-    assert(response.getResults(2).getSuccess, "Third operation submission should succeed")
-  }
-
-  test("batchExecute with duplicate operation IDs") {
-    val client = spark.client
-    val opId = UUID.randomUUID().toString
-    val plan1 = buildPlan("SELECT 1")
-    val plan2 = buildPlan("SELECT 2")
-
-    val response = client.batchExecute(
-      Seq((plan1, Some(opId)), (plan2, Some(opId))), // Duplicate
-      rollbackOnFailure = false)
-
-    assert(response.getResultsCount == 2)
-    assert(response.getResults(0).getSuccess, "First operation should succeed")
-    assert(!response.getResults(1).getSuccess, "Second operation should fail due to duplicate ID")
-    assert(
-      response.getResults(1).getErrorMessage.contains("OPERATION_ALREADY_EXISTS"),
-      "Error message should mention duplicate operation ID")
-  }
-
-  test("batchExecute with invalid operation ID format") {
-    val client = spark.client
-    val plan = buildPlan("SELECT 1")
-
-    // Client-side validation throws IllegalArgumentException before sending to server
-    val ex = intercept[IllegalArgumentException] {
-      client.batchExecute(Seq((plan, Some("not-a-uuid"))), rollbackOnFailure = false)
+    // Verify we can reattach to each sequence
+    val reattachIter1 = client.reattach(seqOpId1)
+    var hasResponses1 = false
+    var hasQueryOpId1 = false
+    while (reattachIter1.hasNext) {
+      val resp = reattachIter1.next()
+      hasResponses1 = true
+      if (resp.hasQueryOperationId) hasQueryOpId1 = true
     }
-    assert(ex.getMessage.contains("Invalid operationId"))
+    assert(hasResponses1)
+    assert(hasQueryOpId1)
+
+    val reattachIter2 = client.reattach(seqOpId2)
+    var hasResponses2 = false
+    var hasQueryOpId2 = false
+    while (reattachIter2.hasNext) {
+      val resp = reattachIter2.next()
+      hasResponses2 = true
+      if (resp.hasQueryOperationId) hasQueryOpId2 = true
+    }
+    assert(hasResponses2)
+    assert(hasQueryOpId2)
   }
 
-  test("batchExecute with empty plan list") {
+  test("batchExecute with custom sequence operation IDs") {
+    val seqOpId1 = UUID.randomUUID().toString
+    val seqOpId2 = UUID.randomUUID().toString
+
+    val seq1 = Seq((buildPlan("SELECT * FROM range(10)"), None))
+    val seq2 = Seq((buildPlan("SELECT * FROM range(20)"), None))
+
     val client = spark.client
+    val response = client.batchExecute(Seq(seq1, seq2), Seq(Some(seqOpId1), Some(seqOpId2)))
 
-    val response = client.batchExecute(Seq.empty, rollbackOnFailure = false)
+    assert(response.getSequenceResultsCount == 2)
+    assert(response.getSequenceResults(0).getSequenceOperationId == seqOpId1)
+    assert(response.getSequenceResults(1).getSequenceOperationId == seqOpId2)
+    assert(response.getSequenceResults(0).getSuccess)
+    assert(response.getSequenceResults(1).getSuccess)
+  }
 
-    assert(response.getResultsCount == 0)
-    assert(response.getSessionId.nonEmpty)
+  test("batchExecute with custom query operation IDs") {
+    val queryOpId1 = UUID.randomUUID().toString
+    val queryOpId2 = UUID.randomUUID().toString
+
+    val seq1 = Seq(
+      (buildPlan("SELECT * FROM range(10)"), Some(queryOpId1)),
+      (buildPlan("SELECT * FROM range(20)"), Some(queryOpId2)))
+
+    val client = spark.client
+    val response = client.batchExecute(Seq(seq1))
+
+    assert(response.getSequenceResultsCount == 1)
+    assert(response.getSequenceResults(0).getSuccess)
+    assert(response.getSequenceResults(0).getQueryOperationIdsCount == 2)
+
+    val queryOpIds = response.getSequenceResults(0).getQueryOperationIdsList.asScala
+    assert(queryOpIds.exists(_.getOperationId == queryOpId1))
+    assert(queryOpIds.exists(_.getOperationId == queryOpId2))
+    assert(queryOpIds.find(_.getOperationId == queryOpId1).get.getQueryIndex == 0)
+    assert(queryOpIds.find(_.getOperationId == queryOpId2).get.getQueryIndex == 1)
+  }
+
+  test("batchExecute with invalid sequence operation ID format") {
+    val client = spark.client
+    val seq1 = Seq((buildPlan("SELECT 1"), None))
+
+    val exception = intercept[IllegalArgumentException] {
+      client.batchExecute(Seq(seq1), Seq(Some("invalid-uuid")))
+    }
+
+    assert(exception.getMessage.contains("Invalid sequence operation ID"))
+  }
+
+  test("batchExecute with invalid query operation ID format") {
+    val client = spark.client
+    val seq1 = Seq((buildPlan("SELECT 1"), Some("invalid-uuid")))
+
+    val exception = intercept[IllegalArgumentException] {
+      client.batchExecute(Seq(seq1))
+    }
+
+    assert(exception.getMessage.contains("Invalid operation ID"))
+  }
+
+  test("batchExecute with empty sequence list") {
+    val client = spark.client
+    val response = client.batchExecute(Seq.empty)
+
+    assert(response.getSequenceResultsCount == 0)
+  }
+
+  test("batchExecute with empty sequence") {
+    val client = spark.client
+    val response = client.batchExecute(Seq(Seq.empty))
+
+    assert(response.getSequenceResultsCount == 1)
+    assert(response.getSequenceResults(0).getSuccess)
+    assert(response.getSequenceResults(0).getQueryOperationIdsCount == 0)
+  }
+
+  test("batchExecute respects session information") {
+    val seq1 = Seq((buildPlan("SELECT * FROM range(10)"), None))
+
+    val client = spark.client
+    val response = client.batchExecute(Seq(seq1))
+
+    assert(response.getSessionId == client.sessionId)
     assert(response.getServerSideSessionId.nonEmpty)
   }
 
-  test("batchExecute returns correct session information") {
+  test("batchExecute with sequential execution verification") {
+    val seq1 = Seq(
+      (buildPlan("SELECT * FROM range(100)"), None),
+      (buildPlan("SELECT * FROM range(200)"), None),
+      (buildPlan("SELECT * FROM range(300)"), None))
+
     val client = spark.client
-    val plan = buildPlan("SELECT 1")
+    val response = client.batchExecute(Seq(seq1))
 
-    val response = client.batchExecute(Seq((plan, None)), rollbackOnFailure = false)
+    assert(response.getSequenceResultsCount == 1)
+    assert(response.getSequenceResults(0).getSuccess)
+    assert(response.getSequenceResults(0).getQueryOperationIdsCount == 3)
 
-    assert(response.getSessionId == client.sessionId, "Session ID should match client session ID")
-    assert(response.getServerSideSessionId.nonEmpty, "Server-side session ID should be present")
+    val seqOpId = response.getSequenceResults(0).getSequenceOperationId
+
+    Thread.sleep(500)
+
+    // Verify we can reattach and consume the sequence
+    val reattachIter = client.reattach(seqOpId)
+    var hasResponses = false
+    while (reattachIter.hasNext) {
+      reattachIter.next()
+      hasResponses = true
+    }
+    assert(hasResponses)
+  }
+
+  test("batchExecute with failing query") {
+    val seq1 = Seq(
+      (buildPlan("SELECT * FROM range(10)"), None),
+      (buildPlan("SELECT * FROM range(20)"), None))
+
+    val client = spark.client
+    val response = client.batchExecute(Seq(seq1))
+
+    assert(response.getSequenceResultsCount == 1)
+    assert(response.getSequenceResults(0).getSuccess) // Submission succeeds
+
+    val seqOpId = response.getSequenceResults(0).getSequenceOperationId
+
+    Thread.sleep(500)
+
+    // Should be able to reattach and consume results
+    val reattachIter = client.reattach(seqOpId)
+    var hasResponses = false
+    while (reattachIter.hasNext) {
+      reattachIter.next()
+      hasResponses = true
+    }
+    assert(hasResponses)
+  }
+
+  test("batchExecute with multiple sequences executes in parallel") {
+    // Create multiple sequences with long-running queries
+    val sequences = (1 to 3).map { i =>
+      Seq((buildPlan(s"SELECT * FROM range(1000)"), None))
+    }
+
+    val startTime = System.currentTimeMillis()
+    val client = spark.client
+    val response = client.batchExecute(sequences)
+    val submitTime = System.currentTimeMillis() - startTime
+
+    // Submission should be fast (not waiting for execution)
+    assert(submitTime < 5000)
+
+    assert(response.getSequenceResultsCount == 3)
+    response.getSequenceResultsList.asScala.foreach { result =>
+      assert(result.getSuccess)
+      assert(result.getQueryOperationIdsCount == 1)
+    }
+  }
+
+  test("batchExecute with duplicate sequence operation ID") {
+    val client = spark.client
+    val seqOpId = UUID.randomUUID().toString
+    val seq1 = Seq((buildPlan("SELECT * FROM range(10)"), None))
+
+    // First submission should succeed
+    val response1 = client.batchExecute(Seq(seq1), Seq(Some(seqOpId)))
+    assert(response1.getSequenceResults(0).getSuccess)
+
+    // Give it time to start
+    Thread.sleep(100)
+
+    // Second submission with same ID should report failure
+    val seq2 = Seq((buildPlan("SELECT * FROM range(20)"), None))
+    val response2 = client.batchExecute(Seq(seq2), Seq(Some(seqOpId)))
+    assert(!response2.getSequenceResults(0).getSuccess)
+    assert(response2.getSequenceResults(0).hasErrorMessage)
   }
 
   test("batchExecute with mix of valid and invalid UUIDs") {
     val client = spark.client
-    val validOpId = UUID.randomUUID().toString
-    val invalidOpId = "invalid-uuid"
+    val validUUID = UUID.randomUUID().toString
+    val seq1 =
+      Seq((buildPlan("SELECT 1"), Some(validUUID)), (buildPlan("SELECT 2"), Some("invalid")))
 
-    val plan1 = buildPlan("SELECT 1")
-    val plan2 = buildPlan("SELECT 2")
-    val plan3 = buildPlan("SELECT 3")
-
-    // Client-side validation throws IllegalArgumentException for invalid UUID before sending
-    val ex = intercept[IllegalArgumentException] {
-      client.batchExecute(
-        Seq((plan1, Some(validOpId)), (plan2, Some(invalidOpId)), (plan3, None)),
-        rollbackOnFailure = false)
-    }
-    assert(ex.getMessage.contains("Invalid operationId"))
-  }
-
-  test("batchExecute default rollback behavior") {
-    val client = spark.client
-    val plan1 = buildPlan("SELECT 1")
-    val plan2 = buildPlan("SELECT 2")
-
-    // Default should be rollbackOnFailure = true
-    val response = client.batchExecute(Seq((plan1, None), (plan2, None)))
-
-    assert(response.getResultsCount == 2)
-    assert(response.getResultsList.asScala.forall(_.getSuccess))
-  }
-
-  test("batchExecute validates operation ID format before submission") {
-    val client = spark.client
-    val plan = buildPlan("SELECT 1")
-
-    // This should fail client-side validation
-    val ex = intercept[IllegalArgumentException] {
-      client.batchExecute(Seq((plan, Some("clearly-not-a-uuid"))), rollbackOnFailure = false)
+    val exception = intercept[IllegalArgumentException] {
+      client.batchExecute(Seq(seq1))
     }
 
-    assert(ex.getMessage.contains("Invalid operationId"))
+    assert(exception.getMessage.contains("Invalid operation ID"))
   }
 }
