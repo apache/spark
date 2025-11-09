@@ -40,10 +40,12 @@ class SqlScriptingInterpreterSuite
 
   protected override def beforeAll(): Unit = {
     super.beforeAll()
+    conf.setConf(SQLConf.SQL_SCRIPTING_ENABLED, true)
     conf.setConf(SQLConf.SQL_SCRIPTING_CONTINUE_HANDLER_ENABLED, true)
   }
 
   protected override def afterAll(): Unit = {
+    conf.unsetConf(SQLConf.SQL_SCRIPTING_ENABLED.key)
     conf.unsetConf(SQLConf.SQL_SCRIPTING_CONTINUE_HANDLER_ENABLED.key)
     super.afterAll()
   }
