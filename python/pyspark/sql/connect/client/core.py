@@ -114,7 +114,7 @@ if TYPE_CHECKING:
     from pyspark.sql.datasource import DataSource
 
 
-def _import_zstandard_if_available():
+def _import_zstandard_if_available() -> Optional[Any]:
     """
     Import zstandard if available, otherwise return None.
     This is used to handle the case when zstandard is not installed.
@@ -721,8 +721,8 @@ class SparkConnectClient(object):
         self._progress_handlers: List[ProgressHandler] = []
 
         self._zstd_module = _import_zstandard_if_available()
-        self._plan_compression_threshold = None  # Will be fetched lazily
-        self._plan_compression_algorithm = None  # Will be fetched lazily
+        self._plan_compression_threshold: Optional[int] = None  # Will be fetched lazily
+        self._plan_compression_algorithm: Optional[str] = None  # Will be fetched lazily
 
         # cleanup ml cache if possible
         atexit.register(self._cleanup_ml_cache)
@@ -2161,7 +2161,7 @@ class SparkConnectClient(object):
         self,
         plan: pb2.Plan,
         message: google.protobuf.message.Message,
-        op_type: pb2.Plan.CompressedOperation.OpType,
+        op_type: pb2.Plan.CompressedOperation.OpType.ValueType,
     ) -> None:
         """
         Tries to compress a protobuf message and sets it on the plan.
