@@ -60,6 +60,7 @@ from pyspark.sql.pandas.serializers import (
     CogroupPandasUDFSerializer,
     ArrowStreamUDFSerializer,
     ApplyInPandasWithStateSerializer,
+    GroupPandasIterUDFSerializer,
     GroupPandasUDFSerializer,
     TransformWithStateInPandasSerializer,
     TransformWithStateInPandasInitStateSerializer,
@@ -748,6 +749,39 @@ def wrap_grouped_map_pandas_udf(f, return_type, argspec, runner_conf):
     return lambda k, v: [(wrapped(k, v), arrow_return_type)]
 
 
+def wrap_grouped_map_pandas_iter_udf(f, return_type, argspec, runner_conf):
+    _use_large_var_types = use_large_var_types(runner_conf)
+    _assign_cols_by_name = assign_cols_by_name(runner_conf)
+
+    def wrapped(key_series_list, value_series_gen):
+        import pandas as pd
+
+        # value_series_gen is a generator that yields multiple lists of Series (one per batch)
+        # Convert each list of Series into a DataFrame
+        def dataframe_iter():
+            for value_series in value_series_gen:
+                yield pd.concat(value_series, axis=1)
+
+        # Extract key from the first batch
+        if len(argspec.args) == 1:
+            result = f(dataframe_iter())
+        elif len(argspec.args) == 2:
+            # key_series_list is a list of Series for the key columns from the first batch
+            key = tuple(s[0] for s in key_series_list)
+            result = f(key, dataframe_iter())
+
+        def verify_element(df):
+            verify_pandas_result(
+                df, return_type, _assign_cols_by_name, truncate_return_schema=False
+            )
+            return df
+
+        yield from map(verify_element, result)
+
+    arrow_return_type = to_arrow_type(return_type, _use_large_var_types)
+    return lambda k, v: (wrapped(k, v), arrow_return_type)
+
+
 def wrap_grouped_transform_with_state_pandas_udf(f, return_type, runner_conf):
     def wrapped(stateful_processor_api_client, mode, key, value_series_gen):
         result_iter = f(stateful_processor_api_client, mode, key, value_series_gen)
@@ -1124,17 +1158,19 @@ def wrap_kwargs_support(f, args_offsets, kwargs_offsets):
         return f, args_offsets
 
 
-def _supports_profiler(eval_type: int) -> bool:
-    return eval_type not in (
+def _is_iter_based(eval_type: int) -> bool:
+    return eval_type in (
         PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF,
         PythonEvalType.SQL_SCALAR_ARROW_ITER_UDF,
         PythonEvalType.SQL_MAP_PANDAS_ITER_UDF,
         PythonEvalType.SQL_MAP_ARROW_ITER_UDF,
         PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE,
+        PythonEvalType.SQL_GROUPED_MAP_ARROW_ITER_UDF,
+        PythonEvalType.SQL_GROUPED_MAP_PANDAS_ITER_UDF,
     )
 
 
-def wrap_perf_profiler(f, result_id):
+def wrap_perf_profiler(f, eval_type, result_id):
     import cProfile
     import pstats
 
@@ -1144,38 +1180,89 @@ def wrap_perf_profiler(f, result_id):
         SpecialAccumulatorIds.SQL_UDF_PROFIER, None, ProfileResultsParam
     )
 
-    def profiling_func(*args, **kwargs):
-        with cProfile.Profile() as pr:
-            ret = f(*args, **kwargs)
-        st = pstats.Stats(pr)
-        st.stream = None  # make it picklable
-        st.strip_dirs()
+    if _is_iter_based(eval_type):
 
-        accumulator.add({result_id: (st, None)})
+        def profiling_func(*args, **kwargs):
+            iterator = iter(f(*args, **kwargs))
+            pr = cProfile.Profile()
+            while True:
+                try:
+                    with pr:
+                        item = next(iterator)
+                    yield item
+                except StopIteration:
+                    break
 
-        return ret
+            st = pstats.Stats(pr)
+            st.stream = None  # make it picklable
+            st.strip_dirs()
+
+            accumulator.add({result_id: (st, None)})
+
+    else:
+
+        def profiling_func(*args, **kwargs):
+            with cProfile.Profile() as pr:
+                ret = f(*args, **kwargs)
+            st = pstats.Stats(pr)
+            st.stream = None  # make it picklable
+            st.strip_dirs()
+
+            accumulator.add({result_id: (st, None)})
+
+            return ret
 
     return profiling_func
 
 
-def wrap_memory_profiler(f, result_id):
+def wrap_memory_profiler(f, eval_type, result_id):
     from pyspark.sql.profiler import ProfileResultsParam
     from pyspark.profiler import UDFLineProfilerV2
+
+    if not has_memory_profiler:
+        return f
 
     accumulator = _deserialize_accumulator(
         SpecialAccumulatorIds.SQL_UDF_PROFIER, None, ProfileResultsParam
     )
 
-    def profiling_func(*args, **kwargs):
-        profiler = UDFLineProfilerV2()
+    if _is_iter_based(eval_type):
 
-        wrapped = profiler(f)
-        ret = wrapped(*args, **kwargs)
-        codemap_dict = {
-            filename: list(line_iterator) for filename, line_iterator in profiler.code_map.items()
-        }
-        accumulator.add({result_id: (None, codemap_dict)})
-        return ret
+        def profiling_func(*args, **kwargs):
+            profiler = UDFLineProfilerV2()
+            profiler.add_function(f)
+
+            iterator = iter(f(*args, **kwargs))
+
+            while True:
+                try:
+                    with profiler:
+                        item = next(iterator)
+                    yield item
+                except StopIteration:
+                    break
+
+            codemap_dict = {
+                filename: list(line_iterator)
+                for filename, line_iterator in profiler.code_map.items()
+            }
+            accumulator.add({result_id: (None, codemap_dict)})
+
+    else:
+
+        def profiling_func(*args, **kwargs):
+            profiler = UDFLineProfilerV2()
+            profiler.add_function(f)
+
+            with profiler:
+                ret = f(*args, **kwargs)
+
+            codemap_dict = {
+                filename: list(line_iterator)
+                for filename, line_iterator in profiler.code_map.items()
+            }
+            accumulator.add({result_id: (None, codemap_dict)})
+            return ret
 
     return profiling_func
 
@@ -1220,17 +1307,12 @@ def read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index, profil
     if profiler == "perf":
         result_id = read_long(infile)
 
-        if _supports_profiler(eval_type):
-            profiling_func = wrap_perf_profiler(chained_func, result_id)
-        else:
-            profiling_func = chained_func
+        profiling_func = wrap_perf_profiler(chained_func, eval_type, result_id)
 
     elif profiler == "memory":
         result_id = read_long(infile)
-        if _supports_profiler(eval_type) and has_memory_profiler:
-            profiling_func = wrap_memory_profiler(chained_func, result_id)
-        else:
-            profiling_func = chained_func
+
+        profiling_func = wrap_memory_profiler(chained_func, eval_type, result_id)
     else:
         profiling_func = chained_func
 
@@ -1262,6 +1344,11 @@ def read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index, profil
     elif eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF:
         argspec = inspect.getfullargspec(chained_func)  # signature was lost when wrapping it
         return args_offsets, wrap_grouped_map_pandas_udf(func, return_type, argspec, runner_conf)
+    elif eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_ITER_UDF:
+        argspec = inspect.getfullargspec(chained_func)  # signature was lost when wrapping it
+        return args_offsets, wrap_grouped_map_pandas_iter_udf(
+            func, return_type, argspec, runner_conf
+        )
     elif eval_type == PythonEvalType.SQL_GROUPED_MAP_ARROW_UDF:
         argspec = inspect.getfullargspec(chained_func)  # signature was lost when wrapping it
         return args_offsets, wrap_grouped_map_arrow_udf(func, return_type, argspec, runner_conf)
@@ -2565,6 +2652,7 @@ def read_udfs(pickleSer, infile, eval_type):
         PythonEvalType.SQL_MAP_PANDAS_ITER_UDF,
         PythonEvalType.SQL_MAP_ARROW_ITER_UDF,
         PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
+        PythonEvalType.SQL_GROUPED_MAP_PANDAS_ITER_UDF,
         PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF,
         PythonEvalType.SQL_GROUPED_AGG_ARROW_UDF,
         PythonEvalType.SQL_WINDOW_AGG_PANDAS_UDF,
@@ -2633,6 +2721,10 @@ def read_udfs(pickleSer, infile, eval_type):
             PythonEvalType.SQL_WINDOW_AGG_PANDAS_UDF,
         ):
             ser = GroupPandasUDFSerializer(
+                timezone, safecheck, _assign_cols_by_name, int_to_decimal_coercion_enabled
+            )
+        elif eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_ITER_UDF:
+            ser = GroupPandasIterUDFSerializer(
                 timezone, safecheck, _assign_cols_by_name, int_to_decimal_coercion_enabled
             )
         elif eval_type == PythonEvalType.SQL_COGROUPED_MAP_ARROW_UDF:
@@ -2893,6 +2985,36 @@ def read_udfs(pickleSer, infile, eval_type):
             keys = [a[o] for o in parsed_offsets[0][0]]
             vals = [a[o] for o in parsed_offsets[0][1]]
             return f(keys, vals)
+
+    elif eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_ITER_UDF:
+        # We assume there is only one UDF here because grouped map doesn't
+        # support combining multiple UDFs.
+        assert num_udfs == 1
+
+        # See FlatMapGroupsInPandasExec for how arg_offsets are used to
+        # distinguish between grouping attributes and data attributes
+        arg_offsets, f = read_single_udf(
+            pickleSer, infile, eval_type, runner_conf, udf_index=0, profiler=profiler
+        )
+        parsed_offsets = extract_key_value_indexes(arg_offsets)
+
+        # Create mapper similar to Arrow iterator:
+        # `a` is an iterator of Series lists (one list per batch, containing all columns)
+        # Materialize first batch to get keys, then create generator for value batches
+        def mapper(a):
+            import itertools
+
+            series_iter = iter(a)
+            # Need to materialize the first series list to get the keys
+            first_series_list = next(series_iter)
+
+            keys = [first_series_list[o] for o in parsed_offsets[0][0]]
+            value_series_gen = (
+                [series_list[o] for o in parsed_offsets[0][1]]
+                for series_list in itertools.chain((first_series_list,), series_iter)
+            )
+
+            return f(keys, value_series_gen)
 
     elif eval_type == PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_UDF:
         # We assume there is only one UDF here because grouped map doesn't

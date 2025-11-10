@@ -25,6 +25,8 @@ import org.apache.spark.util.VersionUtils
 
 class SparkConnectDatabaseMetaData(conn: SparkConnectConnection) extends DatabaseMetaData {
 
+  import conn.spark.implicits._
+
   override def allProceduresAreCallable: Boolean = false
 
   override def allTablesAreSelectable: Boolean = false
@@ -288,8 +290,14 @@ class SparkConnectDatabaseMetaData(conn: SparkConnectConnection) extends Databas
       columnNamePattern: String): ResultSet =
     throw new SQLFeatureNotSupportedException
 
-  override def getCatalogs: ResultSet =
-    throw new SQLFeatureNotSupportedException
+  override def getCatalogs: ResultSet = {
+    conn.checkOpen()
+
+    val df = conn.spark.sql("SHOW CATALOGS")
+      .select($"catalog".as("TABLE_CAT"))
+      .orderBy("TABLE_CAT")
+    new SparkConnectResultSet(df.collectResult())
+  }
 
   override def getSchemas: ResultSet =
     throw new SQLFeatureNotSupportedException

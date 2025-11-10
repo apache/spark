@@ -20,13 +20,14 @@ import shutil
 import tempfile
 import time
 import unittest
+import logging
 from datetime import date, datetime
 from decimal import Decimal
 from typing import cast
 
 from pyspark import TaskContext
-from pyspark.util import PythonEvalType
-from pyspark.sql import Column
+from pyspark.util import PythonEvalType, is_remote_only
+from pyspark.sql import Column, Row
 from pyspark.sql.functions import (
     array,
     col,
@@ -1916,6 +1917,132 @@ class ScalarPandasUDFTestsMixin:
             with self.subTest(type=t):
                 row = df.select(pandas_udf(lambda _: pd.Series(["123"]), t)(df.id)).first()
                 assert row[0] == 123
+
+    @unittest.skipIf(is_remote_only(), "Requires JVM access")
+    def test_scalar_pandas_udf_with_logging(self):
+        @pandas_udf("string", PandasUDFType.SCALAR)
+        def my_scalar_pandas_udf(x):
+            assert isinstance(x, pd.Series)
+            logger = logging.getLogger("test_scalar_pandas")
+            logger.warning(f"scalar pandas udf: {list(x)}")
+            return pd.Series(["scalar_pandas_" + str(val) for val in x])
+
+        with self.sql_conf({"spark.sql.pyspark.worker.logging.enabled": "true"}):
+            assertDataFrameEqual(
+                self.spark.range(3, numPartitions=2).select(
+                    my_scalar_pandas_udf("id").alias("result")
+                ),
+                [Row(result=f"scalar_pandas_{i}") for i in range(3)],
+            )
+
+        logs = self.spark.table("system.session.python_worker_logs")
+
+        assertDataFrameEqual(
+            logs.select("level", "msg", "context", "logger"),
+            [
+                Row(
+                    level="WARNING",
+                    msg=f"scalar pandas udf: {lst}",
+                    context={"func_name": my_scalar_pandas_udf.__name__},
+                    logger="test_scalar_pandas",
+                )
+                for lst in [[0], [1, 2]]
+            ],
+        )
+
+    @unittest.skipIf(is_remote_only(), "Requires JVM access")
+    def test_scalar_iter_pandas_udf_with_logging(self):
+        @pandas_udf("string", PandasUDFType.SCALAR_ITER)
+        def my_scalar_iter_pandas_udf(it):
+            logger = logging.getLogger("test_scalar_iter_pandas")
+            for x in it:
+                assert isinstance(x, pd.Series)
+                logger.warning(f"scalar iter pandas udf: {list(x)}")
+                yield pd.Series(["scalar_iter_pandas_" + str(val) for val in x])
+
+        with self.sql_conf(
+            {
+                "spark.sql.execution.arrow.maxRecordsPerBatch": "3",
+                "spark.sql.pyspark.worker.logging.enabled": "true",
+            }
+        ):
+            assertDataFrameEqual(
+                self.spark.range(9, numPartitions=2).select(
+                    my_scalar_iter_pandas_udf("id").alias("result")
+                ),
+                [Row(result=f"scalar_iter_pandas_{i}") for i in range(9)],
+            )
+
+        logs = self.spark.table("system.session.python_worker_logs")
+
+        assertDataFrameEqual(
+            logs.select("level", "msg", "context", "logger"),
+            [
+                Row(
+                    level="WARNING",
+                    msg=f"scalar iter pandas udf: {lst}",
+                    context={"func_name": my_scalar_iter_pandas_udf.__name__},
+                    logger="test_scalar_iter_pandas",
+                )
+                for lst in [[0, 1, 2], [3], [4, 5, 6], [7, 8]]
+            ],
+        )
+
+    def test_scalar_pandas_udf_with_compression_codec(self):
+        # Test scalar Pandas UDF with different compression codec settings
+        @pandas_udf("long")
+        def plus_one(v):
+            return v + 1
+
+        df = self.spark.range(100)
+        expected = [Row(result=i + 1) for i in range(100)]
+
+        for codec in ["none", "zstd", "lz4"]:
+            with self.subTest(compressionCodec=codec):
+                with self.sql_conf({"spark.sql.execution.arrow.compressionCodec": codec}):
+                    result = df.select(plus_one("id").alias("result")).collect()
+                    self.assertEqual(expected, result)
+
+    def test_scalar_pandas_udf_with_compression_codec_complex_types(self):
+        # Test scalar Pandas UDF with compression for complex types (strings, arrays)
+        @pandas_udf("string")
+        def concat_string(v):
+            return v.apply(lambda x: "value_" + str(x))
+
+        @pandas_udf(ArrayType(IntegerType()))
+        def create_array(v):
+            return v.apply(lambda x: [x, x * 2, x * 3])
+
+        df = self.spark.range(50)
+
+        for codec in ["none", "zstd", "lz4"]:
+            with self.subTest(compressionCodec=codec):
+                with self.sql_conf({"spark.sql.execution.arrow.compressionCodec": codec}):
+                    # Test string UDF
+                    result = df.select(concat_string("id").alias("result")).collect()
+                    expected = [Row(result=f"value_{i}") for i in range(50)]
+                    self.assertEqual(expected, result)
+
+                    # Test array UDF
+                    result = df.select(create_array("id").alias("result")).collect()
+                    expected = [Row(result=[i, i * 2, i * 3]) for i in range(50)]
+                    self.assertEqual(expected, result)
+
+    def test_scalar_iter_pandas_udf_with_compression_codec(self):
+        # Test scalar iterator Pandas UDF with compression
+        @pandas_udf("long", PandasUDFType.SCALAR_ITER)
+        def plus_two(iterator):
+            for s in iterator:
+                yield s + 2
+
+        df = self.spark.range(100)
+        expected = [Row(result=i + 2) for i in range(100)]
+
+        for codec in ["none", "zstd", "lz4"]:
+            with self.subTest(compressionCodec=codec):
+                with self.sql_conf({"spark.sql.execution.arrow.compressionCodec": codec}):
+                    result = df.select(plus_two("id").alias("result")).collect()
+                    self.assertEqual(expected, result)
 
 
 class ScalarPandasUDFTests(ScalarPandasUDFTestsMixin, ReusedSQLTestCase):

@@ -238,6 +238,7 @@ class UserDefinedFunction:
                 )
         elif (
             evalType == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF
+            or evalType == PythonEvalType.SQL_GROUPED_MAP_PANDAS_ITER_UDF
             or evalType == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE
         ):
             if isinstance(returnType, StructType):
@@ -256,6 +257,7 @@ class UserDefinedFunction:
                     errorClass="INVALID_RETURN_TYPE_FOR_PANDAS_UDF",
                     messageParameters={
                         "eval_type": "SQL_GROUPED_MAP_PANDAS_UDF or "
+                        "SQL_GROUPED_MAP_PANDAS_ITER_UDF or "
                         "SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE",
                         "return_type": str(returnType),
                     },
@@ -282,7 +284,10 @@ class UserDefinedFunction:
                         "return_type": str(returnType),
                     },
                 )
-        elif evalType == PythonEvalType.SQL_GROUPED_MAP_ARROW_UDF:
+        elif (
+            evalType == PythonEvalType.SQL_GROUPED_MAP_ARROW_UDF
+            or evalType == PythonEvalType.SQL_GROUPED_MAP_ARROW_ITER_UDF
+        ):
             if isinstance(returnType, StructType):
                 try:
                     to_arrow_type(returnType)
@@ -298,7 +303,7 @@ class UserDefinedFunction:
                 raise PySparkTypeError(
                     errorClass="INVALID_RETURN_TYPE_FOR_ARROW_UDF",
                     messageParameters={
-                        "eval_type": "SQL_GROUPED_MAP_ARROW_UDF",
+                        "eval_type": "SQL_GROUPED_MAP_ARROW_UDF or SQL_GROUPED_MAP_ARROW_ITER_UDF",
                         "return_type": str(returnType),
                     },
                 )

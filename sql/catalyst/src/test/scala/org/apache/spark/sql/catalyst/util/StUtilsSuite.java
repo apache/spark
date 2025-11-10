@@ -17,9 +17,13 @@
 
 package org.apache.spark.sql.catalyst.util;
 
+import org.apache.spark.SparkIllegalArgumentException;
 import org.apache.spark.unsafe.types.GeographyVal;
 import org.apache.spark.unsafe.types.GeometryVal;
 import org.junit.jupiter.api.Test;
+
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -35,24 +39,38 @@ class STUtilsSuite {
     0x00, 0x00, 0x00, (byte)0xF0, 0x3F, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x40};
 
   // A sample Geography byte array for testing purposes, representing a POINT(1 2) with SRID 4326.
-  private final byte[] testGeographySrid = new byte[] {(byte)0xE6, 0x10, 0x00, 0x00};
+  private final int testGeographySrid = 4326;
   private final byte[] testGeographyBytes;
 
   // A sample Geometry byte array for testing purposes, representing a POINT(1 2) with SRID 0.
-  private final byte[] testGeometrySrid = new byte[] {0x00, 0x00, 0x00, 0x00};
+  private final int testGeometrySrid = 0;
   private final byte[] testGeometryBytes;
 
   {
-    int sridLen = testGeographySrid.length;
-    int wkbLen = testWkb.length;
+    // Initialize headers.
+    ByteOrder end = Geo.DEFAULT_ENDIANNESS;
+    int sridLen = Geo.HEADER_SIZE;
+    byte[] geogSrid = ByteBuffer.allocate(sridLen).order(end).putInt(testGeographySrid).array();
+    byte[] geomSrid = ByteBuffer.allocate(sridLen).order(end).putInt(testGeometrySrid).array();
     // Initialize GEOGRAPHY.
+    int wkbLen = testWkb.length;
     testGeographyBytes = new byte[sridLen + wkbLen];
-    System.arraycopy(testGeographySrid, 0, testGeographyBytes, 0, sridLen);
+    System.arraycopy(geogSrid, 0, testGeographyBytes, 0, sridLen);
     System.arraycopy(testWkb, 0, testGeographyBytes, sridLen, wkbLen);
     // Initialize GEOMETRY.
     testGeometryBytes = new byte[sridLen + wkbLen];
-    System.arraycopy(testGeometrySrid, 0, testGeometryBytes, 0, sridLen);
+    System.arraycopy(geomSrid, 0, testGeometryBytes, 0, sridLen);
     System.arraycopy(testWkb, 0, testGeometryBytes, sridLen, wkbLen);
+  }
+
+  /** Geospatial type casting utility methods. */
+
+  @Test
+  void testGeographyToGeometry() {
+    GeographyVal geographyVal = GeographyVal.fromBytes(testGeographyBytes);
+    GeometryVal geometryVal = STUtils.geographyToGeometry(geographyVal);
+    assertNotNull(geometryVal);
+    assertArrayEquals(geographyVal.getBytes(), geometryVal.getBytes());
   }
 
   /** Tests for ST expression utility methods. */
@@ -88,6 +106,64 @@ class STUtilsSuite {
     GeometryVal geometryVal = STUtils.stGeomFromWKB(testWkb);
     assertNotNull(geometryVal);
     assertArrayEquals(testGeometryBytes, geometryVal.getBytes());
+  }
+
+  // ST_Srid
+  @Test
+  void testStSridGeography() {
+    GeographyVal geographyVal = GeographyVal.fromBytes(testGeographyBytes);
+    assertEquals(testGeographySrid, STUtils.stSrid(geographyVal));
+  }
+
+  @Test
+  void testStSridGeometry() {
+    GeometryVal geometryVal = GeometryVal.fromBytes(testGeometryBytes);
+    assertEquals(testGeometrySrid, STUtils.stSrid(geometryVal));
+  }
+
+  // ST_SetSrid
+  @Test
+  void testStSetSridGeography() {
+    for (int validGeographySrid : new int[]{4326}) {
+      GeographyVal geographyVal = GeographyVal.fromBytes(testGeographyBytes);
+      GeographyVal updatedGeographyVal = STUtils.stSetSrid(geographyVal, validGeographySrid);
+      assertNotNull(updatedGeographyVal);
+      Geography updatedGeography = Geography.fromBytes(updatedGeographyVal.getBytes());
+      assertEquals(validGeographySrid, updatedGeography.srid());
+    }
+  }
+
+  @Test
+  void testStSetSridGeographyInvalidSrid() {
+    for (int invalidGeographySrid : new int[]{-9999, -2, -1, 0, 1, 2, 3857, 9999}) {
+      GeographyVal geographyVal = GeographyVal.fromBytes(testGeographyBytes);
+      SparkIllegalArgumentException exception = assertThrows(SparkIllegalArgumentException.class,
+        () -> STUtils.stSetSrid(geographyVal, invalidGeographySrid));
+      assertEquals("ST_INVALID_SRID_VALUE", exception.getCondition());
+      assertTrue(exception.getMessage().contains("value: " + invalidGeographySrid + "."));
+    }
+  }
+
+  @Test
+  void testStSetSridGeometry() {
+    for (int validGeographySrid : new int[]{0, 3857, 4326}) {
+      GeometryVal geometryVal = GeometryVal.fromBytes(testGeometryBytes);
+      GeometryVal updatedGeometryVal = STUtils.stSetSrid(geometryVal, validGeographySrid);
+      assertNotNull(updatedGeometryVal);
+      Geometry updatedGeometry = Geometry.fromBytes(updatedGeometryVal.getBytes());
+      assertEquals(validGeographySrid, updatedGeometry.srid());
+    }
+  }
+
+  @Test
+  void testStSetSridGeometryInvalidSrid() {
+    for (int invalidGeometrySrid : new int[]{-9999, -2, -1, 1, 2, 9999}) {
+      GeometryVal geometryVal = GeometryVal.fromBytes(testGeometryBytes);
+      SparkIllegalArgumentException exception = assertThrows(SparkIllegalArgumentException.class,
+        () -> STUtils.stSetSrid(geometryVal, invalidGeometrySrid));
+      assertEquals("ST_INVALID_SRID_VALUE", exception.getCondition());
+      assertTrue(exception.getMessage().contains("value: " + invalidGeometrySrid + "."));
+    }
   }
 
 }

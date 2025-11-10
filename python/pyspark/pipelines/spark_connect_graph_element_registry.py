@@ -63,6 +63,7 @@ class SparkConnectGraphElementRegistry(GraphElementRegistry):
             table_details = pb2.PipelineCommand.DefineOutput.TableDetails(
                 table_properties=output.table_properties,
                 partition_cols=output.partition_cols,
+                clustering_columns=output.cluster_by,
                 format=output.format,
                 # Even though schema_string is not required, the generated Python code seems to
                 # erroneously think it is required.

@@ -187,3 +187,8 @@ class TimerSuite extends StateVariableSuiteBase {
     }
   }
 }
+
+/**
+ * Test suite that runs all TimerSuite tests with row checksum enabled.
+ */
+class TimerSuiteWithRowChecksum extends TimerSuite with EnableStateStoreRowChecksum

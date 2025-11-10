@@ -2026,4 +2026,69 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
     assert(partitionSchema.fieldNames.toSeq == Seq("year", "month"))
     assert(partitionSchema.fields.length == 2)
   }
+
+  test("corrupted view metadata: mismatch between viewQueryColumnNames and schema") {
+    withSQLConf("spark.sql.viewSchemaBinding.enabled" -> "true") {
+      val catalog = new SessionCatalog(newBasicCatalog())
+      val db = "test_db"
+      catalog.createDatabase(newDb(db), ignoreIfExists = false)
+
+      // First create a base table for the view to reference
+      val baseTable = CatalogTable(
+        identifier = TableIdentifier("base_table", Some(db)),
+        tableType = CatalogTableType.MANAGED,
+        storage = CatalogStorageFormat.empty,
+        schema = new StructType()
+          .add("id", IntegerType)
+          .add("name", StringType)
+          .add("value", DoubleType)
+      )
+      catalog.createTable(baseTable, ignoreIfExists = false)
+
+      // Create a view with corrupted metadata where viewQueryColumnNames length
+      // doesn't match schema length
+      // We need to set the properties to define viewQueryColumnNames
+      val properties = Map(
+        "view.query.out.numCols" -> "2",
+        "view.query.out.col.0" -> "id",
+        "view.query.out.col.1" -> "name",
+        "view.schema.mode" -> "binding"  // Ensure it's not SchemaEvolution
+      )
+      val corruptedView = CatalogTable(
+        identifier = TableIdentifier("corrupted_view", Some(db)),
+        tableType = CatalogTableType.VIEW,
+        storage = CatalogStorageFormat.empty,
+        schema = new StructType()
+          .add("id", IntegerType)
+          .add("name", StringType)
+          .add("value", DoubleType),
+        viewText = Some("SELECT * FROM test_db.base_table"),
+        provider = Some("spark"),  // Ensure it's not Hive-created
+        properties = properties  // Only 2 query column names but schema has 3 columns
+      )
+
+      catalog.createTable(corruptedView, ignoreIfExists = false)
+
+      // Verify the view was created with corrupted metadata
+      val retrievedView = catalog.getTableMetadata(TableIdentifier("corrupted_view", Some(db)))
+      assert(retrievedView.viewQueryColumnNames.length == 2)
+      assert(retrievedView.schema.length == 3)
+
+      // Attempting to look up the view should throw an assertion error with detailed message
+      val exception = intercept[AssertionError] {
+        catalog.lookupRelation(TableIdentifier("corrupted_view", Some(db)))
+      }
+
+      // The expected message pattern allows for optional catalog prefix
+      val expectedPattern =
+        "assertion failed: Corrupted view metadata detected for view " +
+        "(\\`\\w+\\`\\.)?\\`test_db\\`\\.\\`corrupted_view\\`\\. " +
+        "The number of view query column names 2 " +
+        "does not match the number of columns in the view schema 3\\. " +
+        "View query column names: \\[id, name\\], " +
+        "View schema columns: \\[id, name, value\\]\\. " +
+        "This indicates corrupted view metadata that needs to be repaired\\."
+      assert(exception.getMessage.matches(expectedPattern))
+    }
+  }
 }

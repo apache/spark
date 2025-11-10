@@ -36,7 +36,7 @@ abstract class BasePythonUDFRunner(
     argOffsets: Array[Array[Int]],
     pythonMetrics: Map[String, SQLMetric],
     jobArtifactUUID: Option[String],
-    sessionUUID: Option[String] = None)
+    sessionUUID: Option[String])
   extends BasePythonRunner[Array[Byte], Array[Byte]](
     funcs.map(_._1), evalType, argOffsets, jobArtifactUUID, pythonMetrics) {
 

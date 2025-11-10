@@ -399,11 +399,7 @@ class AddArtifactsHandlerSuite extends SharedSparkSession with ResourceHelper {
           handler.onNext(req)
         }
         assert(e.getStatus.getCode == Code.INTERNAL)
-        val statusProto = StatusProto.fromThrowable(e)
-        assert(statusProto.getDetailsCount == 1)
-        val details = statusProto.getDetails(0)
-        val info = details.unpack(classOf[ErrorInfo])
-        assert(info.getReason.contains("java.lang.IllegalArgumentException"))
+        assert(e.getMessage.contains("INVALID_ARTIFACT_PATH"))
       }
       handler.onCompleted()
     } finally {
@@ -422,11 +418,7 @@ class AddArtifactsHandlerSuite extends SharedSparkSession with ResourceHelper {
           handler.onNext(req)
         }
         assert(e.getStatus.getCode == Code.INTERNAL)
-        val statusProto = StatusProto.fromThrowable(e)
-        assert(statusProto.getDetailsCount == 1)
-        val details = statusProto.getDetails(0)
-        val info = details.unpack(classOf[ErrorInfo])
-        assert(info.getReason.contains("java.lang.IllegalArgumentException"))
+        assert(e.getMessage.contains("INVALID_ARTIFACT_PATH"))
       }
       handler.onCompleted()
     } finally {
