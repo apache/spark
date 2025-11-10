@@ -1999,7 +1999,7 @@ class ScalarPandasUDFTestsMixin:
 
         for codec in ["none", "zstd", "lz4"]:
             with self.subTest(compressionCodec=codec):
-                with self.sql_conf({"spark.sql.execution.arrow.compressionCodec": codec}):
+                with self.sql_conf({"spark.sql.execution.arrow.compression.codec": codec}):
                     result = df.select(plus_one("id").alias("result")).collect()
                     self.assertEqual(expected, result)
 
@@ -2017,7 +2017,7 @@ class ScalarPandasUDFTestsMixin:
 
         for codec in ["none", "zstd", "lz4"]:
             with self.subTest(compressionCodec=codec):
-                with self.sql_conf({"spark.sql.execution.arrow.compressionCodec": codec}):
+                with self.sql_conf({"spark.sql.execution.arrow.compression.codec": codec}):
                     # Test string UDF
                     result = df.select(concat_string("id").alias("result")).collect()
                     expected = [Row(result=f"value_{i}") for i in range(50)]
@@ -2040,7 +2040,7 @@ class ScalarPandasUDFTestsMixin:
 
         for codec in ["none", "zstd", "lz4"]:
             with self.subTest(compressionCodec=codec):
-                with self.sql_conf({"spark.sql.execution.arrow.compressionCodec": codec}):
+                with self.sql_conf({"spark.sql.execution.arrow.compression.codec": codec}):
                     result = df.select(plus_two("id").alias("result")).collect()
                     self.assertEqual(expected, result)
 

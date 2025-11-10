@@ -4064,7 +4064,7 @@ object SQLConf {
       .createWithDefaultString("64MB")
 
   val ARROW_EXECUTION_COMPRESSION_CODEC =
-    buildConf("spark.sql.execution.arrow.compressionCodec")
+    buildConf("spark.sql.execution.arrow.compression.codec")
       .doc("Compression codec used to compress Arrow IPC data when transferring data " +
         "between JVM and Python processes (e.g., toPandas, toArrow). This can significantly " +
         "reduce memory usage and network bandwidth when transferring large datasets. " +
@@ -4078,16 +4078,15 @@ object SQLConf {
       .createWithDefault("none")
 
   val ARROW_EXECUTION_ZSTD_COMPRESSION_LEVEL =
-    buildConf("spark.sql.execution.arrow.zstd.compressionLevel")
+    buildConf("spark.sql.execution.arrow.compression.zstd.level")
       .doc("Compression level for Zstandard (zstd) codec when compressing Arrow IPC data. " +
-        "This config is only used when spark.sql.execution.arrow.compressionCodec is set to " +
-        "'zstd'. Valid values are integers from 1 (fastest, lowest compression) to 22 " +
-        "(slowest, highest compression). The default value 3 provides a good balance between " +
-        "compression speed and compression ratio.")
+        "This config is only used when spark.sql.execution.arrow.compression.codec is set to " +
+        "'zstd'. Negative values provide ultra-fast compression with lower " +
+        "compression ratios. Positive values provide normal to maximum compression, " +
+        "with higher values giving better compression but slower speed. The default value 3 " +
+        "provides a good balance between compression speed and compression ratio.")
       .version("4.1.0")
       .intConf
-      .checkValue(level => level >= 1 && level <= 22,
-        "Zstd compression level must be between 1 and 22")
       .createWithDefault(3)
 
   val ARROW_TRANSFORM_WITH_STATE_IN_PYSPARK_MAX_STATE_RECORDS_PER_BATCH =

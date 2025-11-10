@@ -101,6 +101,9 @@ object TypeCoercion extends TypeCoercionBase {
       // We allow coercion from GEOGRAPHY(<srid>) types (i.e. fixed SRID types) to the
       // GEOGRAPHY(ANY) type (i.e. mixed SRID type). This coercion is always safe to do.
       case (t1: GeographyType, t2: GeographyType) if t1 != t2 => Some(GeographyType("ANY"))
+      // We allow coercion from GEOMETRY(<srid>) types (i.e. fixed SRID types) to the
+      // GEOMETRY(ANY) type (i.e. mixed SRID type). This coercion is always safe to do.
+      case (t1: GeometryType, t2: GeometryType) if t1 != t2 => Some(GeometryType("ANY"))
 
       case (t1, t2) => findTypeForComplex(t1, t2, findTightestCommonType)
   }

@@ -1418,7 +1418,7 @@ class ApplyInPandasTestsMixin:
 
         for codec in ["none", "zstd", "lz4"]:
             with self.subTest(compressionCodec=codec):
-                with self.sql_conf({"spark.sql.execution.arrow.compressionCodec": codec}):
+                with self.sql_conf({"spark.sql.execution.arrow.compression.codec": codec}):
                     result = df.groupby("id").apply(foo).sort("id").toPandas()
                     assert_frame_equal(expected, result)
 
@@ -1432,7 +1432,7 @@ class ApplyInPandasTestsMixin:
 
         for codec in ["none", "zstd", "lz4"]:
             with self.subTest(compressionCodec=codec):
-                with self.sql_conf({"spark.sql.execution.arrow.compressionCodec": codec}):
+                with self.sql_conf({"spark.sql.execution.arrow.compression.codec": codec}):
                     result = (
                         df.groupby("id")
                         .applyInPandas(stats, schema="id long, mean double")
@@ -1457,7 +1457,7 @@ class ApplyInPandasTestsMixin:
 
         for codec in ["none", "zstd", "lz4"]:
             with self.subTest(compressionCodec=codec):
-                with self.sql_conf({"spark.sql.execution.arrow.compressionCodec": codec}):
+                with self.sql_conf({"spark.sql.execution.arrow.compression.codec": codec}):
                     result = (
                         df.groupby("id")
                         .applyInPandas(sum_func, schema="v double")

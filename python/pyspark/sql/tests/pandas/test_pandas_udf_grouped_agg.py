@@ -872,7 +872,7 @@ class GroupedAggPandasUDFTestsMixin:
 
         for codec in ["none", "zstd", "lz4"]:
             with self.subTest(compressionCodec=codec):
-                with self.sql_conf({"spark.sql.execution.arrow.compressionCodec": codec}):
+                with self.sql_conf({"spark.sql.execution.arrow.compression.codec": codec}):
                     result = df.groupby("id").agg(sum_udf(df.v)).sort("id").toPandas()
                     assert_frame_equal(expected, result)
 
@@ -891,7 +891,7 @@ class GroupedAggPandasUDFTestsMixin:
 
         for codec in ["none", "zstd", "lz4"]:
             with self.subTest(compressionCodec=codec):
-                with self.sql_conf({"spark.sql.execution.arrow.compressionCodec": codec}):
+                with self.sql_conf({"spark.sql.execution.arrow.compression.codec": codec}):
                     result = (
                         df.groupby("id").agg(mean_udf(df.v), sum_udf(df.v)).sort("id").toPandas()
                     )
