@@ -30,14 +30,13 @@ import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
 import java.time.{Duration, Instant, LocalDate, LocalDateTime, LocalTime, Period, ZoneOffset}
 import java.util
-import java.util.Objects
+import java.util.{HexFormat, Objects}
 
 import scala.collection.{immutable, mutable}
 import scala.math.{BigDecimal, BigInt}
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.Try
 
-import org.apache.commons.codec.binary.{Hex => ApacheHex}
 import org.json4s.JsonAST._
 
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, FunctionIdentifier, InternalRow, ScalaReflection}
@@ -253,6 +252,8 @@ object Literal {
         case PhysicalNullType => true
         case PhysicalShortType => v.isInstanceOf[Short]
         case _: PhysicalStringType => v.isInstanceOf[UTF8String]
+        case _: PhysicalGeographyType => v.isInstanceOf[GeographyVal]
+        case _: PhysicalGeometryType => v.isInstanceOf[GeometryVal]
         case PhysicalVariantType => v.isInstanceOf[VariantVal]
         case st: PhysicalStructType =>
           v.isInstanceOf[InternalRow] && {
@@ -432,7 +433,7 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
 
   override def toString: String = value match {
     case null => "null"
-    case binary: Array[Byte] => "0x" + ApacheHex.encodeHexString(binary, false)
+    case binary: Array[Byte] => "0x" + HexFormat.of().withUpperCase().formatHex(binary)
     case d: ArrayBasedMapData => s"map(${d.toString})"
     case other =>
       dataType match {
@@ -578,7 +579,7 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
       s"TIMESTAMP_NTZ '$toString'"
     case (i: CalendarInterval, CalendarIntervalType) =>
       s"INTERVAL '${i.toString}'"
-    case (v: Array[Byte], BinaryType) => s"X'${ApacheHex.encodeHexString(v, false)}'"
+    case (v: Array[Byte], BinaryType) => s"X'${HexFormat.of().withUpperCase().formatHex(v)}'"
     case (i: Long, DayTimeIntervalType(startField, endField)) =>
       toDayTimeIntervalString(i, ANSI_STYLE, startField, endField)
     case (i: Int, YearMonthIntervalType(startField, endField)) =>

@@ -20,10 +20,9 @@ package org.apache.spark.io
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
 import java.util.Locale
 
-import com.google.common.io.ByteStreams
-
 import org.apache.spark.{SparkConf, SparkFunSuite, SparkIllegalArgumentException}
 import org.apache.spark.internal.config.IO_COMPRESSION_ZSTD_BUFFERPOOL_ENABLED
+import org.apache.spark.util.Utils
 
 class CompressionCodecSuite extends SparkFunSuite {
   val conf = new SparkConf(false)
@@ -158,7 +157,7 @@ class CompressionCodecSuite extends SparkFunSuite {
     }
     val concatenatedBytes = codec.compressedInputStream(new ByteArrayInputStream(bytes1 ++ bytes2))
     val decompressed: Array[Byte] = new Array[Byte](128)
-    ByteStreams.readFully(concatenatedBytes, decompressed)
+    Utils.readFully(concatenatedBytes, decompressed, 0, decompressed.length)
     assert(decompressed.toSeq === (0 to 127))
   }
 

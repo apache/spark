@@ -14,14 +14,18 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.execution.streaming
+// scalastyle:off line.size.limit
+package org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.statevariables
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.execution.metric.SQLMetric
+import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.StateTypesEncoder
+import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.statefulprocessor.TWSMetricsUtils
 import org.apache.spark.sql.execution.streaming.state.{NoPrefixKeyStateEncoderSpec, StateStore, StateStoreErrors}
 import org.apache.spark.sql.streaming.ListState
 import org.apache.spark.sql.types.StructType
+// scalastyle:on line.size.limit
 
 /**
  * Provides concrete implementation for list of values associated with a state variable
@@ -84,21 +88,15 @@ class ListStateImpl[S](
      validateNewState(newState)
 
      val encodedKey = stateTypesEncoder.encodeGroupingKey()
-     var isFirst = true
      var entryCount = 0L
      TWSMetricsUtils.resetMetric(metrics, "numUpdatedStateRows")
 
-     newState.foreach { v =>
-       val encodedValue = stateTypesEncoder.encodeValue(v)
-       if (isFirst) {
-         store.put(encodedKey, encodedValue, stateName)
-         isFirst = false
-       } else {
-         store.merge(encodedKey, encodedValue, stateName)
-       }
+     val encodedValues = newState.map { v =>
        entryCount += 1
        TWSMetricsUtils.incrementMetric(metrics, "numUpdatedStateRows")
+       stateTypesEncoder.encodeValue(v).copy()
      }
+     store.putList(encodedKey, encodedValues, stateName)
      updateEntryCount(encodedKey, entryCount)
    }
 
@@ -119,12 +117,12 @@ class ListStateImpl[S](
 
      val encodedKey = stateTypesEncoder.encodeGroupingKey()
      var entryCount = getEntryCount(encodedKey)
-     newState.foreach { v =>
-       val encodedValue = stateTypesEncoder.encodeValue(v)
-       store.merge(encodedKey, encodedValue, stateName)
+     val encodedValues = newState.map { v =>
        entryCount += 1
        TWSMetricsUtils.incrementMetric(metrics, "numUpdatedStateRows")
+       stateTypesEncoder.encodeValue(v).copy()
      }
+     store.mergeList(encodedKey, encodedValues, stateName)
      updateEntryCount(encodedKey, entryCount)
    }
 

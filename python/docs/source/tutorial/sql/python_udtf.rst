@@ -351,7 +351,7 @@ or a DDL string representing a struct type:
 
 .. code-block:: python
 
-    c1: string
+    c1 string
 
 Emitting Output Rows
 --------------------

@@ -25,14 +25,13 @@ import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.duration._
 import scala.jdk.CollectionConverters._
 
-import org.apache.commons.io.FileUtils
 import org.scalatest.concurrent.Eventually
 
 import org.apache.spark._
 import org.apache.spark.internal.config
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.StandaloneSchedulerBackend
-import org.apache.spark.util.{ResetSystemProperties, SystemClock, ThreadUtils}
+import org.apache.spark.util.{ResetSystemProperties, SystemClock, ThreadUtils, Utils}
 import org.apache.spark.util.ArrayImplicits._
 
 class BlockManagerDecommissionIntegrationSuite extends SparkFunSuite with LocalSparkContext
@@ -361,12 +360,8 @@ class BlockManagerDecommissionIntegrationSuite extends SparkFunSuite with LocalS
 
     val sparkTempDir = System.getProperty("java.io.tmpdir")
 
-    def shuffleFiles: Seq[File] = {
-      FileUtils
-        .listFiles(new File(sparkTempDir), Array("data", "index"), true)
-        .asScala
-        .toSeq
-    }
+    def shuffleFiles: Seq[File] = Utils.listFiles(new File(sparkTempDir)).asScala
+        .filter(f => Array("data", "index").exists(f.getName.endsWith)).toSeq
 
     val existingShuffleFiles = shuffleFiles
 

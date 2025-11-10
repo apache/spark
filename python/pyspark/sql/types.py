@@ -51,6 +51,7 @@ from pyspark.serializers import CloudPickleSerializer
 from pyspark.sql.utils import (
     get_active_spark_context,
     escape_meta_characters,
+    IllegalArgumentException,
     StringConcat,
 )
 from pyspark.sql.variant_utils import VariantUtils
@@ -62,6 +63,10 @@ from pyspark.errors import (
     PySparkRuntimeError,
     PySparkAttributeError,
     PySparkKeyError,
+)
+from pyspark.sql.geo_utils import (
+    GeographicSpatialReferenceSystemMapper as _GeographicSRSMapper,
+    CartesianSpatialReferenceSystemMapper as _CartesianSRSMapper,
 )
 
 if TYPE_CHECKING:
@@ -80,10 +85,13 @@ __all__ = [
     "BinaryType",
     "BooleanType",
     "DateType",
+    "TimeType",
     "TimestampType",
     "TimestampNTZType",
     "DecimalType",
     "DoubleType",
+    "Geography",
+    "Geometry",
     "FloatType",
     "ByteType",
     "IntegerType",
@@ -99,6 +107,8 @@ __all__ = [
     "StructType",
     "VariantType",
     "VariantVal",
+    "GeographyType",
+    "GeometryType",
 ]
 
 
@@ -215,6 +225,7 @@ class DataType:
                 VarcharType,
                 DayTimeIntervalType,
                 YearMonthIntervalType,
+                TimeType,
             ),
         ):
             return dataType.simpleString()
@@ -296,11 +307,8 @@ class StringType(AtomicType):
 
         return f"string collate {self.collation}"
 
-    # For backwards compatibility and compatibility with other readers all string types
-    # are serialized in json as regular strings and the collation info is written to
-    # struct field metadata
     def jsonValue(self) -> str:
-        return "string"
+        return self.simpleString()
 
     def __repr__(self) -> str:
         return (
@@ -367,7 +375,11 @@ class BooleanType(AtomicType, metaclass=DataTypeSingleton):
     pass
 
 
-class DateType(AtomicType, metaclass=DataTypeSingleton):
+class DatetimeType(AtomicType):
+    """Super class of all datetime data type."""
+
+
+class DateType(DatetimeType, metaclass=DataTypeSingleton):
     """Date (datetime.date) data type."""
 
     EPOCH_ORDINAL = datetime.datetime(1970, 1, 1).toordinal()
@@ -384,7 +396,49 @@ class DateType(AtomicType, metaclass=DataTypeSingleton):
             return datetime.date.fromordinal(v + self.EPOCH_ORDINAL)
 
 
-class TimestampType(AtomicType, metaclass=DataTypeSingleton):
+class AnyTimeType(DatetimeType):
+    """A TIME type of any valid precision."""
+
+    pass
+
+
+class TimeType(AnyTimeType):
+    """Time (datetime.time) data type."""
+
+    def __init__(self, precision: int = 6):
+        self.precision = precision
+
+    def needConversion(self) -> bool:
+        return True
+
+    def toInternal(self, t: datetime.time) -> int:
+        if t is not None:
+            return (
+                t.hour * 3_600_000_000_000
+                + t.minute * 60_000_000_000
+                + t.second * 1_000_000_000
+                + t.microsecond * 1_000
+            )
+
+    def fromInternal(self, nano: int) -> datetime.time:
+        if nano is not None:
+            hours, remainder = divmod(nano, 3_600_000_000_000)
+            minutes, remainder = divmod(remainder, 60_000_000_000)
+            seconds, remainder = divmod(remainder, 1_000_000_000)
+            microseconds = remainder // 1_000
+            return datetime.time(hours, minutes, seconds, microseconds)
+
+    def simpleString(self) -> str:
+        return "time(%d)" % (self.precision)
+
+    def jsonValue(self) -> str:
+        return "time(%d)" % (self.precision)
+
+    def __repr__(self) -> str:
+        return "TimeType(%d)" % (self.precision)
+
+
+class TimestampType(DatetimeType, metaclass=DataTypeSingleton):
     """Timestamp (datetime.datetime) data type."""
 
     def needConversion(self) -> bool:
@@ -403,7 +457,7 @@ class TimestampType(AtomicType, metaclass=DataTypeSingleton):
             return datetime.datetime.fromtimestamp(ts // 1000000).replace(microsecond=ts % 1000000)
 
 
-class TimestampNTZType(AtomicType, metaclass=DataTypeSingleton):
+class TimestampNTZType(DatetimeType, metaclass=DataTypeSingleton):
     """Timestamp (datetime.datetime) data type without timezone information."""
 
     def needConversion(self) -> bool:
@@ -471,6 +525,210 @@ class FloatType(FractionalType, metaclass=DataTypeSingleton):
     """Float data type, representing single precision floats."""
 
     pass
+
+
+class SpatialType(AtomicType):
+    """Super class of all spatial data types: GeographyType and GeometryType."""
+
+    # Mixed SRID value and the corresponding CRS for geospatial types (Geometry and Geography).
+    # These values represent a geospatial type that can hold different SRID values per row.
+    MIXED_SRID = -1
+    MIXED_CRS = "SRID:ANY"
+
+
+class GeographyType(SpatialType):
+    """
+    The data type representing GEOGRAPHY values which are spatial objects, as defined in the Open
+    Geospatial Consortium (OGC) Simple Feature Access specification
+    (https://portal.ogc.org/files/?artifact_id=25355), with a geographic coordinate system.
+
+    .. versionadded:: 4.1.0
+    """
+
+    # The default coordinate reference system (CRS) value and the default edge interpolation
+    # algorithm used for geographies, as specified by the Parquet, Delta, and Iceberg
+    # specifications. If CRS or algorithm values are omitted, they should default to these.
+    DEFAULT_CRS = "OGC:CRS84"
+    DEFAULT_ALG = "SPHERICAL"
+    DEFAULT_SRID = 4326
+
+    def __init__(self, srid: int | str):
+        # Special string value "ANY" is used to represent the mixed SRID GEOGRAPHY type.
+        if srid == "ANY":
+            self.srid = GeographyType.MIXED_SRID
+            self._crs = GeographyType.MIXED_CRS
+        # Otherwise, the parameterized GEOGRAPHY type requires a valid integer SRID value.
+        elif not isinstance(srid, int) or (crs := _GeographicSRSMapper.get_string_id(srid)) is None:
+            raise IllegalArgumentException(
+                errorClass="ST_INVALID_SRID_VALUE",
+                messageParameters={
+                    "srid": str(srid),
+                },
+            )
+        else:
+            self.srid = srid
+            self._crs = crs
+        self._alg = GeographyType.DEFAULT_ALG
+
+    @classmethod
+    def _from_crs(cls, crs: str, alg: str) -> "GeographyType":
+        # Algorithm value must be validated, although only SPHERICAL is supported currently.
+        if alg != cls.DEFAULT_ALG:
+            raise IllegalArgumentException(
+                errorClass="ST_INVALID_ALGORITHM_VALUE",
+                messageParameters={
+                    "alg": str(alg),
+                },
+            )
+        # Special CRS value "SRID:ANY" is used to represent the mixed SRID GEOGRAPHY type.
+        # Note: unlike the actual CRS values, the special "SRID:ANY" value is case-insensitive.
+        if crs.lower() == cls.MIXED_CRS.lower():
+            return GeographyType("ANY")
+        # Otherwise, JSON parsing for the GEOGRAPHY type requires a valid CRS value.
+        srid = _GeographicSRSMapper.get_srid(crs)
+        if srid is None:
+            raise IllegalArgumentException(
+                errorClass="ST_INVALID_CRS_VALUE",
+                messageParameters={
+                    "crs": str(crs),
+                },
+            )
+        geography = GeographyType(srid)
+        geography._crs = crs
+        geography._alg = alg
+        return geography
+
+    def simpleString(self) -> str:
+        if self.srid == GeographyType.MIXED_SRID:
+            # The mixed SRID type is displayed with a special string value "ANY".
+            return "geography(any)"
+        else:
+            # The fixed SRID type is displayed with the appropriate SRID value.
+            return f"geography({self.srid})"
+
+    def __repr__(self) -> str:
+        if self.srid == GeographyType.MIXED_SRID:
+            # The mixed SRID type is displayed with a special string value "ANY".
+            return "GeographyType(ANY)"
+        else:
+            # The fixed SRID type is displayed with the appropriate SRID value.
+            return f"GeographyType({self.srid})"
+
+    def jsonValue(self) -> Union[str, Dict[str, Any]]:
+        # The JSON representation always uses the CRS and algorithm value.
+        return f"geography({self._crs}, {self._alg})"
+
+    def needConversion(self) -> bool:
+        return True
+
+    def fromInternal(self, obj: Dict) -> Optional["Geography"]:
+        if obj is None or not all(key in obj for key in ["srid", "bytes"]):
+            return None
+        return Geography(obj["bytes"], obj["srid"])
+
+    def toInternal(self, geography: Any) -> Any:
+        if geography is None:
+            return None
+        assert isinstance(geography, Geography)
+        return {"srid": geography.srid, "wkb": geography.wkb}
+
+
+class GeometryType(SpatialType):
+    """
+    The data type representing GEOMETRY values which are spatial objects, as defined in the Open
+    Geospatial Consortium (OGC) Simple Feature Access specification
+    (https://portal.ogc.org/files/?artifact_id=25355), with a Cartesian coordinate system.
+
+    Parameters
+    ----------
+    srid : int or str
+        The Spatial Reference System Identifier (SRID) value for the GEOMETRY.
+
+    .. versionadded:: 4.1.0
+    """
+
+    # The default coordinate reference system (CRS) value used for geometries, as specified by the
+    # Parquet, Delta, and Iceberg specifications. If CRS is omitted, it should default to this.
+    DEFAULT_CRS = "OGC:CRS84"
+    DEFAULT_SRID = 4326
+
+    """ The constructor for the GEOMETRY type can accept either a single valid geometric integer
+    SRID value, or a special string value "ANY" used to represent a mixed SRID GEOMETRY type."""
+
+    def __init__(self, srid: int | str):
+        # Special string value "ANY" is used to represent the mixed SRID GEOMETRY type.
+        if srid == "ANY":
+            self.srid = GeometryType.MIXED_SRID
+            self._crs = GeometryType.MIXED_CRS
+        # Otherwise, the parameterized GEOMETRY type requires a valid integer SRID value.
+        elif not isinstance(srid, int) or (crs := _CartesianSRSMapper.get_string_id(srid)) is None:
+            raise IllegalArgumentException(
+                errorClass="ST_INVALID_SRID_VALUE",
+                messageParameters={
+                    "srid": str(srid),
+                },
+            )
+        # If the SRID is valid, initialize the GEOMETRY type with the corresponding CRS value.
+        else:
+            self.srid = srid
+            self._crs = crs
+
+    """ JSON parsing logic for the GEOMETRY type relies on the CRS value, instead of the SRID.
+    The method can accept either a single valid geometric string CRS value, or a special case
+    insensitive string value "SRID:ANY" used to represent a mixed SRID GEOMETRY type."""
+
+    @classmethod
+    def _from_crs(cls, crs: str) -> "GeometryType":
+        # Special CRS value "SRID:ANY" is used to represent the mixed SRID GEOMETRY type.
+        # Note: unlike the actual CRS values, the special "SRID:ANY" value is case-insensitive.
+        if crs.lower() == cls.MIXED_CRS.lower():
+            return GeometryType("ANY")
+        # Otherwise, JSON parsing for the GEOMETRY type requires a valid CRS value.
+        srid = _CartesianSRSMapper.get_srid(crs)
+        if srid is None:
+            raise IllegalArgumentException(
+                errorClass="ST_INVALID_CRS_VALUE",
+                messageParameters={
+                    "crs": str(crs),
+                },
+            )
+        geometry = GeometryType(srid)
+        geometry._crs = crs
+        return geometry
+
+    def simpleString(self) -> str:
+        if self.srid == GeometryType.MIXED_SRID:
+            # The mixed SRID type is displayed with a special string value "ANY".
+            return "geometry(any)"
+        else:
+            # The fixed SRID type is displayed with the appropriate SRID value.
+            return f"geometry({self.srid})"
+
+    def __repr__(self) -> str:
+        if self.srid == GeometryType.MIXED_SRID:
+            # The mixed SRID type is displayed with a special string value "ANY".
+            return "GeometryType(ANY)"
+        else:
+            # The fixed SRID type is displayed with the appropriate SRID value.
+            return f"GeometryType({self.srid})"
+
+    def jsonValue(self) -> Union[str, Dict[str, Any]]:
+        # The JSON representation always uses the CRS value.
+        return f"geometry({self._crs})"
+
+    def needConversion(self) -> bool:
+        return True
+
+    def fromInternal(self, obj: Dict) -> Optional["Geometry"]:
+        if obj is None or not all(key in obj for key in ["srid", "bytes"]):
+            return None
+        return Geometry(obj["bytes"], obj["srid"])
+
+    def toInternal(self, geometry: Any) -> Any:
+        if geometry is None:
+            return None
+        assert isinstance(geometry, Geometry)
+        return {"srid": geometry.srid, "wkb": geometry.wkb}
 
 
 class ByteType(IntegralType):
@@ -1010,10 +1268,38 @@ class StructField(DataType):
 
         return {
             "name": self.name,
-            "type": self.dataType.jsonValue(),
+            "type": self._dataTypeJsonValue(collationMetadata),
             "nullable": self.nullable,
             "metadata": metadata,
         }
+
+    def _dataTypeJsonValue(self, collationMetadata: Dict[str, str]) -> Union[str, Dict[str, Any]]:
+        if not collationMetadata:
+            return self.dataType.jsonValue()
+
+        def removeCollations(dt: DataType) -> DataType:
+            # Only recurse into map and array types as any child struct type
+            # will have already been processed.
+            if isinstance(dt, ArrayType):
+                return ArrayType(removeCollations(dt.elementType), dt.containsNull)
+            elif isinstance(dt, MapType):
+                return MapType(
+                    removeCollations(dt.keyType),
+                    removeCollations(dt.valueType),
+                    dt.valueContainsNull,
+                )
+            elif isinstance(dt, StringType):
+                return StringType()
+            elif isinstance(dt, VarcharType):
+                return VarcharType(dt.length)
+            elif isinstance(dt, CharType):
+                return CharType(dt.length)
+            else:
+                return dt
+
+        # As we want to be backwards compatible we should remove all collations information from the
+        # json and only keep that information in the metadata.
+        return removeCollations(self.dataType).jsonValue()
 
     @classmethod
     def fromJson(cls, json: Dict[str, Any]) -> "StructField":
@@ -1783,6 +2069,144 @@ class VariantVal:
         return VariantVal(value, metadata)
 
 
+class Geography:
+    """
+    A class to represent a Geography value in Python.
+
+    .. versionadded:: 4.1.0
+
+    Parameters
+    ----------
+    wkb : bytes
+        The bytes representing the WKB of Geography.
+
+    srid : integer
+        The integer value representing SRID of Geography.
+
+    Methods
+    -------
+    getBytes()
+        Returns the WKB of Geography.
+
+    getSrid()
+        Returns the SRID of Geography.
+
+    Examples
+    --------
+    >>> g = Geography.fromWKB(bytes.fromhex('010100000000000000000031400000000000001c40'), 4326)
+    >>> g.getBytes().hex()
+    '010100000000000000000031400000000000001c40'
+    >>> g.getSrid()
+    4326
+    """
+
+    def __init__(self, wkb: bytes, srid: int):
+        self.wkb = wkb
+        self.srid = srid
+
+    def __str__(self) -> str:
+        return "Geography(%r, %d)" % (self.wkb, self.srid)
+
+    def __repr__(self) -> str:
+        return "Geography(%r, %d)" % (self.wkb, self.srid)
+
+    def getSrid(self) -> int:
+        """
+        Returns the SRID of Geography.
+        """
+        return self.srid
+
+    def getBytes(self) -> bytes:
+        """
+        Returns the WKB of Geography.
+        """
+        return self.wkb
+
+    def __eq__(self, other: Any) -> bool:
+        if not isinstance(other, Geography):
+            # Don't attempt to compare against unrelated types.
+            return NotImplemented
+
+        return self.wkb == other.wkb and self.srid == other.srid
+
+    @classmethod
+    def fromWKB(cls, wkb: bytes, srid: int) -> "Geography":
+        """
+        Construct Python Geography object from WKB.
+        :return: Python representation of the Geography type value.
+        """
+        return Geography(wkb, srid)
+
+
+class Geometry:
+    """
+    A class to represent a Geometry value in Python.
+
+    .. versionadded:: 4.1.0
+
+    Parameters
+    ----------
+    wkb : bytes
+        The bytes representing the WKB of Geometry.
+
+    srid : integer
+        The integer value representing SRID of Geometry.
+
+    Methods
+    -------
+    getBytes()
+        Returns the WKB of Geometry.
+
+    getSrid()
+        Returns the SRID of Geometry.
+
+    Examples
+    --------
+    >>> g = Geometry.fromWKB(bytes.fromhex('010100000000000000000031400000000000001c40'), 0)
+    >>> g.getBytes().hex()
+    '010100000000000000000031400000000000001c40'
+    >>> g.getSrid()
+    0
+    """
+
+    def __init__(self, wkb: bytes, srid: int):
+        self.wkb = wkb
+        self.srid = srid
+
+    def __str__(self) -> str:
+        return "Geometry(%r, %d)" % (self.wkb, self.srid)
+
+    def __repr__(self) -> str:
+        return "Geometry(%r, %d)" % (self.wkb, self.srid)
+
+    def getSrid(self) -> int:
+        """
+        Returns the SRID of Geometry.
+        """
+        return self.srid
+
+    def getBytes(self) -> bytes:
+        """
+        Returns the WKB of Geometry.
+        """
+        return self.wkb
+
+    def __eq__(self, other: Any) -> bool:
+        if not isinstance(other, Geometry):
+            # Don't attempt to compare against unrelated types.
+            return NotImplemented
+
+        return self.wkb == other.wkb and self.srid == other.srid
+
+    @classmethod
+    def fromWKB(cls, wkb: bytes, srid: int) -> "Geometry":
+        """
+        Construct Python Geometry object from WKB.
+        :return: Python representation of the Geometry type value.
+        """
+        return Geometry(wkb, srid)
+
+
 _atomic_types: List[Type[DataType]] = [
     StringType,
     CharType,
@@ -1843,9 +2267,17 @@ _all_mappable_types: Dict[str, Type[DataType]] = {
 
 _LENGTH_CHAR = re.compile(r"char\(\s*(\d+)\s*\)")
 _LENGTH_VARCHAR = re.compile(r"varchar\(\s*(\d+)\s*\)")
+_STRING_WITH_COLLATION = re.compile(r"string\s+collate\s+(\w+)")
 _FIXED_DECIMAL = re.compile(r"decimal\(\s*(\d+)\s*,\s*(-?\d+)\s*\)")
 _INTERVAL_DAYTIME = re.compile(r"interval (day|hour|minute|second)( to (day|hour|minute|second))?")
 _INTERVAL_YEARMONTH = re.compile(r"interval (year|month)( to (year|month))?")
+_TIME = re.compile(r"time\(\s*(\d+)\s*\)")
+_GEOMETRY = re.compile(r"^geometry$")
+_GEOMETRY_CRS = re.compile(r"geometry\(\s*([\w]+:-?[\w]+)\s*\)")
+_GEOGRAPHY = re.compile(r"^geography$")
+_GEOGRAPHY_CRS = re.compile(r"geography\(\s*([\w]+:-?[\w]+)\s*\)")
+_GEOGRAPHY_CRS_ALG = re.compile(r"geography\(\s*([\w]+:-?[\w]+)\s*,\s*(\w+)\s*\)")
+_GEOGRAPHY_ALG = re.compile(r"geography\(\s*(\w+)\s*\)")
 
 _COLLATIONS_METADATA_KEY = "__COLLATIONS"
 
@@ -1972,7 +2404,7 @@ def _parse_datatype_json_string(json_string: str) -> DataType:
     return _parse_datatype_json_value(json.loads(json_string))
 
 
-def _parse_datatype_json_value(
+def _parse_datatype_json_value(  # type: ignore[return]
     json_value: Union[dict, str],
     fieldPath: str = "",
     collationsMap: Optional[Dict[str, str]] = None,
@@ -1987,6 +2419,9 @@ def _parse_datatype_json_value(
         elif _FIXED_DECIMAL.match(json_value):
             m = _FIXED_DECIMAL.match(json_value)
             return DecimalType(int(m.group(1)), int(m.group(2)))  # type: ignore[union-attr]
+        elif _TIME.match(json_value):
+            m = _TIME.match(json_value)
+            return TimeType(int(m.group(1)))  # type: ignore[union-attr]
         elif _INTERVAL_DAYTIME.match(json_value):
             m = _INTERVAL_DAYTIME.match(json_value)
             inverted_fields = DayTimeIntervalType._inverted_fields
@@ -2003,12 +2438,35 @@ def _parse_datatype_json_value(
             if first_field is not None and second_field is None:
                 return YearMonthIntervalType(first_field)
             return YearMonthIntervalType(first_field, second_field)
+        elif _STRING_WITH_COLLATION.match(json_value):
+            m = _STRING_WITH_COLLATION.match(json_value)
+            return StringType(m.group(1))  # type: ignore[union-attr]
         elif _LENGTH_CHAR.match(json_value):
             m = _LENGTH_CHAR.match(json_value)
             return CharType(int(m.group(1)))  # type: ignore[union-attr]
         elif _LENGTH_VARCHAR.match(json_value):
             m = _LENGTH_VARCHAR.match(json_value)
             return VarcharType(int(m.group(1)))  # type: ignore[union-attr]
+        elif _GEOMETRY.match(json_value):
+            return GeometryType._from_crs(GeometryType.DEFAULT_CRS)
+        elif _GEOMETRY_CRS.match(json_value):
+            crs = _GEOMETRY_CRS.match(json_value)
+            if crs is not None:
+                return GeometryType._from_crs(crs.group(1))
+        elif _GEOGRAPHY.match(json_value):
+            return GeographyType._from_crs(GeographyType.DEFAULT_CRS, GeographyType.DEFAULT_ALG)
+        elif _GEOGRAPHY_CRS.match(json_value):
+            crs = _GEOGRAPHY_CRS.match(json_value)
+            if crs is not None:
+                return GeographyType._from_crs(crs.group(1), GeographyType.DEFAULT_ALG)
+        elif _GEOGRAPHY_CRS_ALG.match(json_value):
+            crs_alg = _GEOGRAPHY_CRS_ALG.match(json_value)
+            if crs_alg is not None:
+                return GeographyType._from_crs(crs_alg.group(1), crs_alg.group(2))
+        elif _GEOGRAPHY_ALG.match(json_value):
+            alg = _GEOGRAPHY_ALG.match(json_value)
+            if alg is not None:
+                return GeographyType._from_crs(GeographyType.DEFAULT_CRS, alg.group(1))
         else:
             raise PySparkValueError(
                 errorClass="CANNOT_PARSE_DATATYPE",
@@ -2059,6 +2517,8 @@ def _assert_valid_collation_provider(provider: str) -> None:
 # Mapping Python types to Spark SQL DataType
 _type_mappings = {
     type(None): NullType,
+    Geometry: GeometryType,
+    Geography: GeographyType,
     bool: BooleanType,
     int: LongType,
     float: DoubleType,
@@ -2067,7 +2527,7 @@ _type_mappings = {
     decimal.Decimal: DecimalType,
     datetime.date: DateType,
     datetime.datetime: TimestampType,  # can be TimestampNTZType
-    datetime.time: TimestampType,  # can be TimestampNTZType
+    datetime.time: TimeType,
     datetime.timedelta: DayTimeIntervalType,
     bytes: BinaryType,
 }
@@ -2190,6 +2650,12 @@ def _infer_type(
         return obj.__UDT__
 
     dataType = _type_mappings.get(type(obj))
+    if dataType is GeographyType:
+        assert isinstance(obj, Geography)
+        return GeographyType(obj.getSrid())
+    if dataType is GeometryType:
+        assert isinstance(obj, Geometry)
+        return GeometryType(obj.getSrid())
     if dataType is DecimalType:
         # the precision and scale of `obj` may be different from row to row.
         return DecimalType(38, 18)
@@ -2457,6 +2923,10 @@ def _merge_type(
         return a
     elif isinstance(a, TimestampNTZType) and isinstance(b, TimestampType):
         return b
+    elif isinstance(a, GeometryType) and isinstance(b, GeometryType) and a.srid != b.srid:
+        return GeometryType("ANY")
+    elif isinstance(a, GeographyType) and isinstance(b, GeographyType) and a.srid != b.srid:
+        return GeographyType("ANY")
     elif isinstance(a, AtomicType) and isinstance(b, StringType):
         return b
     elif isinstance(a, StringType) and isinstance(b, AtomicType):
@@ -2603,12 +3073,15 @@ _acceptable_types = {
     VarcharType: (str,),
     BinaryType: (bytearray, bytes),
     DateType: (datetime.date, datetime.datetime),
+    TimeType: (datetime.time,),
     TimestampType: (datetime.datetime,),
     TimestampNTZType: (datetime.datetime,),
     DayTimeIntervalType: (datetime.timedelta,),
     ArrayType: (list, tuple, array),
     MapType: (dict,),
     StructType: (tuple, list, dict),
+    GeometryType: (Geometry,),
+    GeographyType: (Geography,),
     VariantType: (
         bool,
         int,
@@ -2707,7 +3180,9 @@ def _make_type_verifier(
             return "field %s in %s" % (n, name)
 
     def verify_nullability(obj: Any) -> bool:
-        if obj is None:
+        if obj is None or (isinstance(obj, decimal.Decimal) and obj.is_nan()):
+            # Spark's DecimalType doesn't support NaN,
+            # casting DoubleType NaN to DecimalType will return Null.
             if nullable:
                 return True
             else:
@@ -2957,6 +3432,24 @@ def _make_type_verifier(
             pass
 
         verify_value = verify_variant
+
+    elif isinstance(dataType, GeometryType):
+
+        def verify_geometry(obj: Any) -> None:
+            assert_acceptable_types(obj)
+            verify_acceptable_types(obj)
+            assert isinstance(obj, Geometry)
+
+        verify_value = verify_geometry
+
+    elif isinstance(dataType, GeographyType):
+
+        def verify_geography(obj: Any) -> None:
+            assert_acceptable_types(obj)
+            verify_acceptable_types(obj)
+            assert isinstance(obj, Geography)
+
+        verify_value = verify_geography
 
     else:
 
@@ -3209,6 +3702,17 @@ class DateConverter:
         return Date.valueOf(obj.strftime("%Y-%m-%d"))
 
 
+class TimeConverter:
+    def can_convert(self, obj: Any) -> bool:
+        return isinstance(obj, datetime.time)
+
+    def convert(self, obj: datetime.time, gateway_client: "GatewayClient") -> "JavaGateway":
+        from py4j.java_gateway import JavaClass
+
+        LocalTime = JavaClass("java.time.LocalTime", gateway_client)
+        return LocalTime.of(obj.hour, obj.minute, obj.second, obj.microsecond * 1000)
+
+
 class DatetimeConverter:
     def can_convert(self, obj: Any) -> bool:
         return isinstance(obj, datetime.datetime)
@@ -3337,6 +3841,7 @@ if not is_remote_only():
     register_input_converter(DatetimeNTZConverter())
     register_input_converter(DatetimeConverter())
     register_input_converter(DateConverter())
+    register_input_converter(TimeConverter())
     register_input_converter(DayTimeIntervalTypeConverter())
     register_input_converter(NumpyScalarConverter())
     # NumPy array satisfies py4j.java_collections.ListConverter,

@@ -22,6 +22,7 @@ from typing import IO
 
 from pyspark.accumulators import _accumulatorRegistry
 from pyspark.errors import PySparkAssertionError
+from pyspark.logger.worker_io import capture_outputs
 from pyspark.serializers import (
     read_bool,
     read_int,
@@ -101,33 +102,36 @@ def main(infile: IO, outfile: IO) -> None:
             )
         # Receive the `overwrite` flag.
         overwrite = read_bool(infile)
-        # Create the data source writer instance.
-        writer = data_source.streamWriter(schema=schema, overwrite=overwrite)
-        # Receive the commit messages.
-        num_messages = read_int(infile)
 
-        commit_messages = []
-        for _ in range(num_messages):
-            message = pickleSer._read_with_length(infile)
-            if message is not None and not isinstance(message, WriterCommitMessage):
-                raise PySparkAssertionError(
-                    errorClass="DATA_SOURCE_TYPE_MISMATCH",
-                    messageParameters={
-                        "expected": "an instance of WriterCommitMessage",
-                        "actual": f"'{type(message).__name__}'",
-                    },
-                )
-            commit_messages.append(message)
+        with capture_outputs():
+            # Create the data source writer instance.
+            writer = data_source.streamWriter(schema=schema, overwrite=overwrite)
+            # Receive the commit messages.
+            num_messages = read_int(infile)
 
-        batch_id = read_long(infile)
-        abort = read_bool(infile)
+            commit_messages = []
+            for _ in range(num_messages):
+                message = pickleSer._read_with_length(infile)
+                if message is not None and not isinstance(message, WriterCommitMessage):
+                    raise PySparkAssertionError(
+                        errorClass="DATA_SOURCE_TYPE_MISMATCH",
+                        messageParameters={
+                            "expected": "an instance of WriterCommitMessage",
+                            "actual": f"'{type(message).__name__}'",
+                        },
+                    )
+                commit_messages.append(message)
 
-        # Commit or abort the Python data source write.
-        # Note the commit messages can be None if there are failed tasks.
-        if abort:
-            writer.abort(commit_messages, batch_id)
-        else:
-            writer.commit(commit_messages, batch_id)
+            batch_id = read_long(infile)
+            abort = read_bool(infile)
+
+            # Commit or abort the Python data source write.
+            # Note the commit messages can be None if there are failed tasks.
+            if abort:
+                writer.abort(commit_messages, batch_id)
+            else:
+                writer.commit(commit_messages, batch_id)
+
         # Send a status code back to JVM.
         write_int(0, outfile)
         outfile.flush()

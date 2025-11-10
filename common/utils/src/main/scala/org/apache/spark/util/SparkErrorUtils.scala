@@ -16,12 +16,14 @@
  */
 package org.apache.spark.util
 
-import java.io.{Closeable, IOException, PrintWriter}
-import java.nio.charset.StandardCharsets.UTF_8
+import java.io.{Closeable, IOException}
 
+import scala.annotation.tailrec
+import scala.collection.mutable
 import scala.util.control.NonFatal
 
-import org.apache.spark.internal.{Logging, LogKeys, MDC}
+import org.apache.spark.internal.{Logging, LogKeys}
+import org.apache.spark.network.util.JavaUtils
 
 private[spark] trait SparkErrorUtils extends Logging {
   /**
@@ -45,7 +47,11 @@ private[spark] trait SparkErrorUtils extends Logging {
 
   def tryWithResource[R <: Closeable, T](createResource: => R)(f: R => T): T = {
     val resource = createResource
-    try f.apply(resource) finally resource.close()
+    try {
+      f.apply(resource)
+    } finally {
+      closeQuietly(resource)
+    }
   }
 
   /**
@@ -59,7 +65,7 @@ private[spark] trait SparkErrorUtils extends Logging {
       initialize(resource)
     } catch {
       case e: Throwable =>
-        resource.close()
+        closeQuietly(resource)
         throw e
     }
   }
@@ -97,13 +103,54 @@ private[spark] trait SparkErrorUtils extends Logging {
     }
   }
 
-  def stackTraceToString(t: Throwable): String = {
-    val out = new java.io.ByteArrayOutputStream
-    SparkErrorUtils.tryWithResource(new PrintWriter(out)) { writer =>
-      t.printStackTrace(writer)
-      writer.flush()
+  def stackTraceToString(t: Throwable): String = JavaUtils.stackTraceToString(t)
+
+  /**
+   * Walks the [[Throwable]] to obtain its root cause.
+   *
+   * This method walks through the exception chain until the last element,
+   * the root cause of the chain, using `getCause()`, and
+   * returns that exception.
+   *
+   * This method handles recursive cause chains that might
+   * otherwise cause infinite loops. The cause chain is processed until
+   * the end, or until the next item in the chain is already
+   * processed. If we detect a loop, then return the element before the loop.
+   *
+   * @param throwable the throwable to get the root cause for, may be null
+   * @return the root cause of the [[Throwable]], `null` if null throwable input
+   */
+  def getRootCause(throwable: Throwable): Throwable = {
+    @tailrec
+    def findRoot(
+        current: Throwable,
+        visited: mutable.Set[Throwable] = mutable.Set.empty): Throwable = {
+      if (current == null) null
+      else {
+        visited += current
+        val cause = current.getCause
+        if (cause == null) {
+          current
+        } else if (visited.contains(cause)) {
+          current
+        } else {
+          findRoot(cause, visited)
+        }
+      }
     }
-    new String(out.toByteArray, UTF_8)
+
+    findRoot(throwable)
+  }
+
+  /** Try to close by ignoring all exceptions. This is different from JavaUtils.closeQuietly. */
+  def closeQuietly(closeable: Closeable): Unit = {
+    if (closeable != null) {
+      try {
+        closeable.close()
+      } catch {
+        case _: Exception =>
+      }
+    }
   }
 }
 

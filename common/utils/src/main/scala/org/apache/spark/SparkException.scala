@@ -131,6 +131,14 @@ object SparkException {
       messageParameters: java.util.Map[String, String]): Map[String, String] = {
     messageParameters.asScala.toMap
   }
+
+  def mustOverrideOneMethodError(methodName: String): RuntimeException = {
+    val msg = s"You must override one `$methodName`. It's preferred to not override the " +
+      "deprecated one."
+    new SparkRuntimeException(
+      "INTERNAL_ERROR",
+      Map("message" -> msg))
+  }
 }
 
 /**
@@ -145,8 +153,8 @@ private[spark] class SparkDriverExecutionException(cause: Throwable)
  * Exception thrown when the main user code is run as a child process (e.g. pyspark) and we want
  * the parent SparkSubmit process to exit with the same exit code.
  */
-private[spark] case class SparkUserAppException(exitCode: Int)
-  extends SparkException(s"User application exited with $exitCode")
+private[spark] case class SparkUserAppException(exitCode: Int, cause: Throwable = null)
+  extends SparkException(s"User application exited with $exitCode", cause)
 
 /**
  * Exception thrown when the relative executor to access is dead.

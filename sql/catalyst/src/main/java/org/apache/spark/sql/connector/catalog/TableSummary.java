@@ -17,9 +17,9 @@
 
 package org.apache.spark.sql.connector.catalog;
 
-import org.apache.spark.annotation.Evolving;
+import java.util.Objects;
 
-import static com.google.common.base.Preconditions.checkNotNull;
+import org.apache.spark.annotation.Evolving;
 
 @Evolving
 public interface TableSummary {
@@ -38,7 +38,7 @@ public interface TableSummary {
 
 record TableSummaryImpl(Identifier identifier, String tableType) implements TableSummary {
     TableSummaryImpl {
-        checkNotNull(identifier, "Identifier of a table summary object cannot be null");
-        checkNotNull(tableType, "Table type of a table summary object cannot be null");
+      Objects.requireNonNull(identifier, "Identifier of a table summary object cannot be null");
+      Objects.requireNonNull(tableType, "Table type of a table summary object cannot be null");
     }
 }

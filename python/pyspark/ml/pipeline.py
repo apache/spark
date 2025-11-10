@@ -25,12 +25,10 @@ from pyspark.ml.util import (
     MLReadable,
     MLWritable,
     JavaMLWriter,
-    JavaMLReader,
     DefaultParamsReader,
     DefaultParamsWriter,
     MLWriter,
     MLReader,
-    JavaMLReadable,
     JavaMLWritable,
     try_remote_read,
     try_remote_write,
@@ -250,11 +248,8 @@ class PipelineReader(MLReader[Pipeline]):
 
     def load(self, path: str) -> Pipeline:
         metadata = DefaultParamsReader.loadMetadata(path, self.sparkSession)
-        if "language" not in metadata["paramMap"] or metadata["paramMap"]["language"] != "Python":
-            return JavaMLReader(cast(Type["JavaMLReadable[Pipeline]"], self.cls)).load(path)
-        else:
-            uid, stages = PipelineSharedReadWrite.load(metadata, self.sparkSession, path)
-            return Pipeline(stages=stages)._resetUid(uid)
+        uid, stages = PipelineSharedReadWrite.load(metadata, self.sparkSession, path)
+        return Pipeline(stages=stages)._resetUid(uid)
 
 
 @inherit_doc
@@ -287,11 +282,8 @@ class PipelineModelReader(MLReader["PipelineModel"]):
 
     def load(self, path: str) -> "PipelineModel":
         metadata = DefaultParamsReader.loadMetadata(path, self.sparkSession)
-        if "language" not in metadata["paramMap"] or metadata["paramMap"]["language"] != "Python":
-            return JavaMLReader(cast(Type["JavaMLReadable[PipelineModel]"], self.cls)).load(path)
-        else:
-            uid, stages = PipelineSharedReadWrite.load(metadata, self.sparkSession, path)
-            return PipelineModel(stages=cast(List[Transformer], stages))._resetUid(uid)
+        uid, stages = PipelineSharedReadWrite.load(metadata, self.sparkSession, path)
+        return PipelineModel(stages=cast(List[Transformer], stages))._resetUid(uid)
 
 
 @inherit_doc

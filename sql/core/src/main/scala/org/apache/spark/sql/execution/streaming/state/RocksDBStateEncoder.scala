@@ -36,7 +36,8 @@ import org.apache.spark.sql.avro.{AvroDeserializer, AvroOptions, AvroSerializer,
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{BoundReference, JoinedRow, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.expressions.codegen.UnsafeRowWriter
-import org.apache.spark.sql.execution.streaming.{CheckpointFileManager, StateStoreColumnFamilySchemaUtils}
+import org.apache.spark.sql.execution.streaming.checkpointing.CheckpointFileManager
+import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.StateStoreColumnFamilySchemaUtils
 import org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider.{SCHEMA_ID_PREFIX_BYTES, STATE_ENCODING_NUM_VERSION_BYTES, STATE_ENCODING_VERSION}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.Platform
@@ -53,6 +54,7 @@ sealed trait RocksDBValueStateEncoder {
   def encodeValue(row: UnsafeRow): Array[Byte]
   def decodeValue(valueBytes: Array[Byte]): UnsafeRow
   def decodeValues(valueBytes: Array[Byte]): Iterator[UnsafeRow]
+  def decodeValues(valueBytesIterator: Iterator[ArrayIndexRange[Byte]]): Iterator[UnsafeRow]
 }
 
 trait StateSchemaProvider extends Serializable {
@@ -1784,6 +1786,40 @@ class MultiValuedStateEncoder(
     }
   }
 
+  /** Takes in an iterator of [[ArrayIndexRange]], each index range presents the range of bytes
+   * for the current value in the underlying array. */
+  override def decodeValues(
+      valueBytesIterator: Iterator[ArrayIndexRange[Byte]]): Iterator[UnsafeRow] = {
+    if (valueBytesIterator == null) {
+      Seq().iterator
+    } else {
+      new Iterator[UnsafeRow] {
+        override def hasNext: Boolean = valueBytesIterator.hasNext
+
+        override def next(): UnsafeRow = {
+          // Get the index range of the next value
+          val valueBytesIndex = valueBytesIterator.next()
+          val allValuesBytes = valueBytesIndex.array
+          // convert array index to memory offset
+          var pos = valueBytesIndex.fromIndex + Platform.BYTE_ARRAY_OFFSET
+          // Get value length
+          val numBytes = Platform.getInt(allValuesBytes, pos)
+          pos += java.lang.Integer.BYTES
+
+          // Extract the bytes for this value
+          val encodedValue = new Array[Byte](numBytes)
+          Platform.copyMemory(
+            allValuesBytes, pos,
+            encodedValue, Platform.BYTE_ARRAY_OFFSET,
+            numBytes
+          )
+
+          dataEncoder.decodeValue(encodedValue)
+        }
+      }
+    }
+  }
+
   override def supportsMultipleValuesPerKey: Boolean = true
 }
 
@@ -1821,6 +1857,11 @@ class SingleValueStateEncoder(
   override def supportsMultipleValuesPerKey: Boolean = false
 
   override def decodeValues(valueBytes: Array[Byte]): Iterator[UnsafeRow] = {
+    throw new IllegalStateException("This encoder doesn't support multiple values!")
+  }
+
+  override def decodeValues(
+      valueBytesIterator: Iterator[ArrayIndexRange[Byte]]): Iterator[UnsafeRow] = {
     throw new IllegalStateException("This encoder doesn't support multiple values!")
   }
 }

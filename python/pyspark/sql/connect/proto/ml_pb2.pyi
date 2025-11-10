@@ -388,6 +388,26 @@ class MlCommand(google.protobuf.message.Message):
             field_name: typing_extensions.Literal["dataset", b"dataset", "model_ref", b"model_ref"],
         ) -> None: ...
 
+    class GetModelSize(google.protobuf.message.Message):
+        """This is for query the model estimated in-memory size"""
+
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        MODEL_REF_FIELD_NUMBER: builtins.int
+        @property
+        def model_ref(self) -> pyspark.sql.connect.proto.ml_common_pb2.ObjectRef: ...
+        def __init__(
+            self,
+            *,
+            model_ref: pyspark.sql.connect.proto.ml_common_pb2.ObjectRef | None = ...,
+        ) -> None: ...
+        def HasField(
+            self, field_name: typing_extensions.Literal["model_ref", b"model_ref"]
+        ) -> builtins.bool: ...
+        def ClearField(
+            self, field_name: typing_extensions.Literal["model_ref", b"model_ref"]
+        ) -> None: ...
+
     FIT_FIELD_NUMBER: builtins.int
     FETCH_FIELD_NUMBER: builtins.int
     DELETE_FIELD_NUMBER: builtins.int
@@ -397,6 +417,7 @@ class MlCommand(google.protobuf.message.Message):
     CLEAN_CACHE_FIELD_NUMBER: builtins.int
     GET_CACHE_INFO_FIELD_NUMBER: builtins.int
     CREATE_SUMMARY_FIELD_NUMBER: builtins.int
+    GET_MODEL_SIZE_FIELD_NUMBER: builtins.int
     @property
     def fit(self) -> global___MlCommand.Fit: ...
     @property
@@ -415,6 +436,8 @@ class MlCommand(google.protobuf.message.Message):
     def get_cache_info(self) -> global___MlCommand.GetCacheInfo: ...
     @property
     def create_summary(self) -> global___MlCommand.CreateSummary: ...
+    @property
+    def get_model_size(self) -> global___MlCommand.GetModelSize: ...
     def __init__(
         self,
         *,
@@ -427,6 +450,7 @@ class MlCommand(google.protobuf.message.Message):
         clean_cache: global___MlCommand.CleanCache | None = ...,
         get_cache_info: global___MlCommand.GetCacheInfo | None = ...,
         create_summary: global___MlCommand.CreateSummary | None = ...,
+        get_model_size: global___MlCommand.GetModelSize | None = ...,
     ) -> None: ...
     def HasField(
         self,
@@ -447,6 +471,8 @@ class MlCommand(google.protobuf.message.Message):
             b"fit",
             "get_cache_info",
             b"get_cache_info",
+            "get_model_size",
+            b"get_model_size",
             "read",
             b"read",
             "write",
@@ -472,6 +498,8 @@ class MlCommand(google.protobuf.message.Message):
             b"fit",
             "get_cache_info",
             b"get_cache_info",
+            "get_model_size",
+            b"get_model_size",
             "read",
             b"read",
             "write",
@@ -491,6 +519,7 @@ class MlCommand(google.protobuf.message.Message):
             "clean_cache",
             "get_cache_info",
             "create_summary",
+            "get_model_size",
         ]
         | None
     ): ...

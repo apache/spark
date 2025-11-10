@@ -29,7 +29,6 @@ import java.util.Map;
 import java.util.concurrent.TimeoutException;
 
 import com.google.common.collect.ImmutableMap;
-import com.google.common.collect.Sets;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.stubbing.Answer;
@@ -353,15 +352,15 @@ public class RetryingBlockTransferorSuite {
             new TimeoutException());
     IOException ioException = new IOException();
     List<? extends Map<String, Object>> interactions = Arrays.asList(
-            ImmutableMap.of("b0", saslExceptionInitial),
-            ImmutableMap.of("b0", ioException),
-            ImmutableMap.of("b0", saslExceptionInitial),
-            ImmutableMap.of("b0", ioException),
-            ImmutableMap.of("b0", saslExceptionFinal),
+            Map.of("b0", saslExceptionInitial),
+            Map.of("b0", ioException),
+            Map.of("b0", saslExceptionInitial),
+            Map.of("b0", ioException),
+            Map.of("b0", saslExceptionFinal),
             // will not get invoked because the connection fails
-            ImmutableMap.of("b0", ioException),
+            Map.of("b0", ioException),
             // will not get invoked
-            ImmutableMap.of("b0", block0)
+            Map.of("b0", block0)
     );
     configMap.put("spark.shuffle.sasl.enableRetries", "true");
     performInteractions(interactions, listener);
@@ -425,7 +424,7 @@ public class RetryingBlockTransferorSuite {
     Stubber stub = null;
 
     // Contains all blockIds that are referenced across all interactions.
-    LinkedHashSet<String> blockIds = Sets.newLinkedHashSet();
+    LinkedHashSet<String> blockIds = new LinkedHashSet<>();
 
     for (Map<String, Object> interaction : interactions) {
       blockIds.addAll(interaction.keySet());

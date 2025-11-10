@@ -236,8 +236,8 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
     // static sql configs
     checkError(
       exception = intercept[AnalysisException](sql(s"RESET ${StaticSQLConf.WAREHOUSE_PATH.key}")),
-      condition = "CANNOT_MODIFY_CONFIG",
-      parameters = Map("key" -> "\"spark.sql.warehouse.dir\"", "docroot" -> SPARK_DOC_ROOT))
+      condition = "CANNOT_MODIFY_STATIC_CONFIG",
+      parameters = Map("key" -> "\"spark.sql.warehouse.dir\""))
 
   }
 
@@ -348,13 +348,13 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
   test("cannot set/unset static SQL conf") {
     checkError(
       exception = intercept[AnalysisException](sql(s"SET ${GLOBAL_TEMP_DATABASE.key}=10")),
-      condition = "CANNOT_MODIFY_CONFIG",
-      parameters = Map("key" -> "\"spark.sql.globalTempDatabase\"", "docroot" -> SPARK_DOC_ROOT)
+      condition = "CANNOT_MODIFY_STATIC_CONFIG",
+      parameters = Map("key" -> "\"spark.sql.globalTempDatabase\"")
     )
     checkError(
       exception = intercept[AnalysisException](spark.conf.unset(GLOBAL_TEMP_DATABASE.key)),
-      condition = "CANNOT_MODIFY_CONFIG",
-      parameters = Map("key" -> "\"spark.sql.globalTempDatabase\"", "docroot" -> SPARK_DOC_ROOT)
+      condition = "CANNOT_MODIFY_STATIC_CONFIG",
+      parameters = Map("key" -> "\"spark.sql.globalTempDatabase\"")
     )
   }
 

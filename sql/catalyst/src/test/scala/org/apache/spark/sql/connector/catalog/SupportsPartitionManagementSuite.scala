@@ -258,8 +258,8 @@ class SupportsPartitionManagementSuite extends SparkFunSuite {
     assert(partTable.listPartitionIdentifiers(Array.empty, InternalRow.empty).length == 2)
 
     partTable.withData(Array(
-      new BufferedRows("3").withRow(InternalRow(0, "abc", "3")),
-      new BufferedRows("4").withRow(InternalRow(1, "def", "4"))
+      BufferedRows("3", partTable.columns()).withRow(InternalRow(0, "abc", "3")),
+      BufferedRows("4", partTable.columns()).withRow(InternalRow(1, "def", "4"))
     ))
 
     partTable.truncatePartition(partIdent)

@@ -21,6 +21,7 @@ import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import java.security.PrivilegedExceptionAction;
 import java.security.SecureRandom;
+import java.util.Base64;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
@@ -31,7 +32,6 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.ws.rs.core.NewCookie;
 
-import org.apache.commons.codec.binary.Base64;
 import org.apache.commons.codec.binary.StringUtils;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars;
@@ -178,7 +178,7 @@ public class ThriftHttpServlet extends TServlet {
           response.addCookie(hs2Cookie);
         }
         LOG.info("Cookie added for clientUserName {}",
-          MDC.of(LogKeys.USER_NAME$.MODULE$, clientUserName));
+          MDC.of(LogKeys.USER_NAME, clientUserName));
       }
       super.doPost(request, response);
     }
@@ -232,7 +232,7 @@ public class ThriftHttpServlet extends TServlet {
         String userName = HttpAuthUtils.getUserNameFromCookieToken(currValue);
 
         if (userName == null) {
-          LOG.warn("Invalid cookie token {}", MDC.of(LogKeys.TOKEN$.MODULE$, currValue));
+          LOG.warn("Invalid cookie token {}", MDC.of(LogKeys.TOKEN, currValue));
           continue;
         }
         //We have found a valid cookie in the client request.
@@ -423,7 +423,7 @@ public class ThriftHttpServlet extends TServlet {
         gssContext = manager.createContext(serverCreds);
         // Get service ticket from the authorization header
         String serviceTicketBase64 = getAuthHeader(request, authType);
-        byte[] inToken = Base64.decodeBase64(serviceTicketBase64.getBytes());
+        byte[] inToken = Base64.getDecoder().decode(serviceTicketBase64.getBytes());
         gssContext.acceptSecContext(inToken, 0, inToken.length);
         // Authenticate or deny based on its context completion
         if (!gssContext.isEstablished()) {
@@ -504,7 +504,7 @@ public class ThriftHttpServlet extends TServlet {
       String authType) throws HttpAuthenticationException {
     String authHeaderBase64 = getAuthHeader(request, authType);
     String authHeaderString = StringUtils.newStringUtf8(
-        Base64.decodeBase64(authHeaderBase64.getBytes()));
+      Base64.getDecoder().decode(authHeaderBase64.getBytes()));
     String[] creds = authHeaderString.split(":");
     return creds;
   }

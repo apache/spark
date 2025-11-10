@@ -23,7 +23,6 @@ import org.apache.kafka.clients.consumer.ConsumerRecord
 
 import org.apache.spark.{Partition, SparkContext, SparkException, TaskContext}
 import org.apache.spark.internal.LogKeys.{FROM_OFFSET, PARTITION_ID, TOPIC}
-import org.apache.spark.internal.MDC
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.kafka010.consumer.KafkaDataConsumer
 import org.apache.spark.storage.StorageLevel

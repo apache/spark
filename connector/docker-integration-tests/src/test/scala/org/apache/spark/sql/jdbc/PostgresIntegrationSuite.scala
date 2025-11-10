@@ -40,7 +40,7 @@ import org.apache.spark.tags.DockerTest
  * }}}
  */
 @DockerTest
-class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite with SharedJDBCIntegrationTests {
+class PostgresIntegrationSuite extends SharedJDBCIntegrationSuite {
   override val db = new PostgresDatabaseOnDocker
 
   override def dataPreparation(conn: Connection): Unit = {

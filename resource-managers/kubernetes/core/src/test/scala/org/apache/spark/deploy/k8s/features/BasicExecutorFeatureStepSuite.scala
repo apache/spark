@@ -120,6 +120,43 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
     assert(error.contains("You must specify an amount for gpu"))
   }
 
+  test("SPARK-52933: Verify if the executor cpu request exceeds limit") {
+    baseConf.set(KUBERNETES_EXECUTOR_REQUEST_CORES, "2")
+    baseConf.set(KUBERNETES_EXECUTOR_LIMIT_CORES, "1")
+    val error = intercept[SparkException] {
+      initDefaultProfile(baseConf)
+      val step = new BasicExecutorFeatureStep(newExecutorConf(), new SecurityManager(baseConf),
+        defaultProfile)
+      val executor = step.configurePod(SparkPod.initialPod())
+    }.getMessage()
+    assert(error.contains("cpu request (2) should be less than or equal to cpu limit (1)"))
+  }
+
+  test("SPARK-53096: Check the default value of terminationGracePeriodSeconds") {
+    initDefaultProfile(baseConf)
+    val step = new BasicExecutorFeatureStep(newExecutorConf(), new SecurityManager(baseConf),
+      defaultProfile)
+    val executor = step.configurePod(SparkPod.initialPod())
+    assert(executor.pod.getSpec.getTerminationGracePeriodSeconds === 30)
+  }
+
+  test("SPARK-53096: Support spark.kubernetes.executor.terminationGracePeriodSeconds") {
+    val m = intercept[SparkIllegalArgumentException] {
+      baseConf.set(KUBERNETES_EXECUTOR_TERMINATION_GRACE_PERIOD_SECONDS, -1L)
+      initDefaultProfile(baseConf)
+      new BasicExecutorFeatureStep(newExecutorConf(), new SecurityManager(baseConf),
+        defaultProfile).configurePod(SparkPod.initialPod())
+    }.getMessage
+    assert(m.contains("terminationGracePeriodSeconds must be non-negative"))
+
+    baseConf.set(KUBERNETES_EXECUTOR_TERMINATION_GRACE_PERIOD_SECONDS, 0L)
+    initDefaultProfile(baseConf)
+    val step = new BasicExecutorFeatureStep(newExecutorConf(), new SecurityManager(baseConf),
+      defaultProfile)
+    val executor = step.configurePod(SparkPod.initialPod())
+    assert(executor.pod.getSpec.getTerminationGracePeriodSeconds === 0L)
+  }
+
   test("basic executor pod with resources") {
     val fpgaResourceID = new ResourceID(SPARK_EXECUTOR_PREFIX, FPGA)
     val gpuExecutorResourceID = new ResourceID(SPARK_EXECUTOR_PREFIX, GPU)
@@ -201,7 +238,7 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
 
   test("SPARK-35460: invalid PodNamePrefixes") {
     withPodNamePrefix {
-      Seq("_123", "spark_exec", "spark@", "a" * 238).foreach { invalid =>
+      Seq("_123", "spark_exec", "spark@", "a".repeat(238)).foreach { invalid =>
         baseConf.set(KUBERNETES_EXECUTOR_POD_NAME_PREFIX, invalid)
         checkError(
           exception = intercept[SparkIllegalArgumentException](newExecutorConf()),
@@ -266,6 +303,20 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
     checkEnv(executor, conf, Map(
       ENV_EXECUTOR_ATTRIBUTE_APP_ID -> KubernetesTestConf.APP_ID,
       ENV_EXECUTOR_ATTRIBUTE_EXECUTOR_ID -> KubernetesTestConf.EXECUTOR_ID))
+  }
+
+  test("SPARK-53944: Support spark.kubernetes.executor.useDriverPodIP") {
+    Seq((false, "localhost"), (true, "bindAddress")).foreach {
+      case (flag, address) =>
+        val conf = baseConf.clone()
+          .set(DRIVER_BIND_ADDRESS, "bindAddress")
+          .set(KUBERNETES_EXECUTOR_USE_DRIVER_POD_IP, flag)
+        val kconf = KubernetesTestConf.createExecutorConf(sparkConf = conf)
+        val step = new BasicExecutorFeatureStep(kconf, new SecurityManager(conf), defaultProfile)
+        val executor = step.configurePod(SparkPod.initialPod())
+        checkEnv(executor, conf, Map(
+          ENV_DRIVER_URL -> s"spark://CoarseGrainedScheduler@$address:7098"))
+    }
   }
 
   test("test executor pyspark memory") {

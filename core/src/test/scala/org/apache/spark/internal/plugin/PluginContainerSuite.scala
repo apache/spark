@@ -18,7 +18,7 @@
 package org.apache.spark.internal.plugin
 
 import java.io.File
-import java.nio.charset.StandardCharsets
+import java.nio.file.Files
 import java.util.{Map => JMap}
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.atomic.AtomicInteger
@@ -27,7 +27,6 @@ import scala.concurrent.duration._
 import scala.jdk.CollectionConverters._
 
 import com.codahale.metrics.Gauge
-import com.google.common.io.Files
 import org.mockito.ArgumentMatchers.{any, eq => meq}
 import org.mockito.Mockito.{mock, spy, verify, when}
 import org.scalatest.concurrent.Eventually.{eventually, interval, timeout}
@@ -219,7 +218,7 @@ class PluginContainerSuite extends SparkFunSuite with LocalSparkContext {
       val execFiles =
         children.filter(_.getName.startsWith(NonLocalModeSparkPlugin.executorFileStr))
       assert(execFiles.length === 1)
-      val allLines = Files.readLines(execFiles(0), StandardCharsets.UTF_8)
+      val allLines = Files.readAllLines(execFiles(0).toPath)
       assert(allLines.size === 1)
       val addrs = NonLocalModeSparkPlugin.extractGpuAddrs(allLines.get(0))
       assert(addrs.length === 2)
@@ -410,7 +409,7 @@ object NonLocalModeSparkPlugin {
       resources: Map[String, ResourceInformation]): Unit = {
     val path = conf.get(TEST_PATH_CONF)
     val strToWrite = createFileStringWithGpuAddrs(id, resources)
-    Files.asCharSink(new File(path, s"$filePrefix$id"), StandardCharsets.UTF_8).write(strToWrite)
+    Files.writeString(new File(path, s"$filePrefix$id").toPath, strToWrite)
   }
 
   def reset(): Unit = {

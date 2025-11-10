@@ -159,6 +159,13 @@ private[spark] object History {
       .doubleConf
       .createWithDefault(0.7d)
 
+  val EVENT_LOG_ROLLING_ON_DEMAND_LOAD_ENABLED =
+    ConfigBuilder("spark.history.fs.eventLog.rolling.onDemandLoadEnabled")
+      .doc("Whether to look up rolling event log locations on demand manner before listing files.")
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val DRIVER_LOG_CLEANER_ENABLED = ConfigBuilder("spark.history.fs.driverlog.cleaner.enabled")
     .version("3.0.0")
     .doc("Specifies whether the History Server should periodically clean up driver logs from " +
@@ -218,6 +225,12 @@ private[spark] object History {
   val NUM_REPLAY_THREADS = ConfigBuilder("spark.history.fs.numReplayThreads")
     .version("2.0.0")
     .doc("Number of threads that will be used by history server to process event logs.")
+    .intConf
+    .createWithDefaultFunction(() => Math.ceil(Runtime.getRuntime.availableProcessors() / 4f).toInt)
+
+  val NUM_COMPACT_THREADS = ConfigBuilder("spark.history.fs.numCompactThreads")
+    .version("4.1.0")
+    .doc("Number of threads that will be used by history server to compact event logs.")
     .intConf
     .createWithDefaultFunction(() => Math.ceil(Runtime.getRuntime.availableProcessors() / 4f).toInt)
 

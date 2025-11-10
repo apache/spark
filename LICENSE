@@ -217,6 +217,7 @@ core/src/main/resources/org/apache/spark/ui/static/vis*
 connector/spark-ganglia-lgpl/src/main/java/com/codahale/metrics/ganglia/GangliaReporter.java
 core/src/main/resources/org/apache/spark/ui/static/d3-flamegraph.min.js
 core/src/main/resources/org/apache/spark/ui/static/d3-flamegraph.css
+mllib-local/src/main/scala/scala/collection/compat/package.scala
 
 Python Software Foundation License
 ----------------------------------

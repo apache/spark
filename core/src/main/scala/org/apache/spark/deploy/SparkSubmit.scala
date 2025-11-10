@@ -30,7 +30,6 @@ import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
 import scala.util.{Properties, Try}
 
-import org.apache.commons.lang3.StringUtils
 import org.apache.hadoop.conf.{Configuration => HadoopConfiguration}
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.security.UserGroupInformation
@@ -39,7 +38,7 @@ import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.spark._
 import org.apache.spark.api.r.RUtils
 import org.apache.spark.deploy.rest._
-import org.apache.spark.internal.{LogEntry, Logging, LogKeys, MDC}
+import org.apache.spark.internal.{LogEntry, Logging, LogKeys}
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.launcher.SparkLauncher
@@ -171,7 +170,7 @@ private[spark] class SparkSubmit extends Logging {
         // Here we are checking for client mode because when job is sumbitted in cluster
         // deploy mode with k8s resource manager, the spark submit in the driver container
         // is done in client mode.
-        val isKubernetesClusterModeDriver = args.master.startsWith("k8s") &&
+        val isKubernetesClusterModeDriver = SparkMasterRegex.isK8s(args.master) &&
           "client".equals(args.deployMode) &&
           sparkConf.getBoolean("spark.kubernetes.submitInDriver", false)
         if (isKubernetesClusterModeDriver) {
@@ -258,7 +257,7 @@ private[spark] class SparkSubmit extends Logging {
         v match {
           case "yarn" => YARN
           case m if m.startsWith("spark") => STANDALONE
-          case m if m.startsWith("k8s") => KUBERNETES
+          case m if SparkMasterRegex.isK8s(m) => KUBERNETES
           case m if m.startsWith("local") => LOCAL
           case _ =>
             error("Master must either be yarn or start with spark, k8s, or local")
@@ -368,7 +367,7 @@ private[spark] class SparkSubmit extends Logging {
 
       // install any R packages that may have been passed through --jars or --packages.
       // Spark Packages may contain R source code inside the jar.
-      if (args.isR && !StringUtils.isBlank(args.jars)) {
+      if (args.isR && !SparkStringUtils.isBlank(args.jars)) {
         RPackageUtils.checkAndBuildRPackage(args.jars, printStream, args.verbose)
       }
     }
@@ -997,14 +996,14 @@ private[spark] class SparkSubmit extends Logging {
           // TODO(SPARK-42375): Should point out the user-facing page here instead.
           logInfo("You need to specify Spark Connect jars with --jars or --packages.")
         }
-        throw new SparkUserAppException(CLASS_NOT_FOUND_EXIT_STATUS)
+        throw new SparkUserAppException(SparkExitCode.CLASS_NOT_FOUND)
       case e: NoClassDefFoundError =>
         logError(log"Failed to load ${MDC(LogKeys.CLASS_NAME, childMainClass)}", e)
         if (e.getMessage.contains("org/apache/hadoop/hive")) {
           logInfo("Failed to load hive class.")
           logInfo("You need to build Spark with -Phive and -Phive-thriftserver.")
         }
-        throw new SparkUserAppException(CLASS_NOT_FOUND_EXIT_STATUS)
+        throw new SparkUserAppException(SparkExitCode.CLASS_NOT_FOUND)
     }
 
     val app: SparkApplication = if (classOf[SparkApplication].isAssignableFrom(mainClass)) {
@@ -1023,13 +1022,26 @@ private[spark] class SparkSubmit extends Logging {
         e
     }
 
+    var exitCode: Int = 1
+    var cause: Throwable = null
     try {
       app.start(childArgs.toArray, sparkConf)
+      exitCode = 0
     } catch {
       case t: Throwable =>
-        throw findCause(t)
+        cause = findCause(t)
+        cause match {
+          case e: SparkUserAppException =>
+            exitCode = e.exitCode
+          case _ =>
+        }
+        // Store the diagnostics externally if enabled, but still throw to complete the application.
+        if (sparkConf.getBoolean("spark.kubernetes.driver.annotateExitException", false)) {
+          annotateExitException(args, sparkConf, cause)
+        }
+        throw cause
     } finally {
-      if (args.master.startsWith("k8s") && !isShell(args.primaryResource) &&
+      if (SparkMasterRegex.isK8s(args.master) && !isShell(args.primaryResource) &&
           !isSqlShell(args.mainClass) && !isThriftServer(args.mainClass) &&
           !isConnectServer(args.mainClass)) {
         try {
@@ -1038,12 +1050,36 @@ private[spark] class SparkSubmit extends Logging {
           case e: Throwable => logError("Failed to close SparkContext", e)
         }
       }
+      if (sparkConf.get(SUBMIT_CALL_SYSTEM_EXIT_ON_MAIN_EXIT)) {
+        logInfo(
+          log"Calling System.exit() with exit code ${MDC(LogKeys.EXIT_CODE, exitCode)} " +
+          log"because ${MDC(LogKeys.CONFIG, SUBMIT_CALL_SYSTEM_EXIT_ON_MAIN_EXIT.key)}=true")
+        exitFn(exitCode, Option(cause))
+      }
     }
   }
 
   /** Throw a SparkException with the given error message. */
   private def error(msg: String): Unit = throw new SparkException(msg)
 
+  /**
+   * Store the exit exception using the SparkDiagnosticsSetter.
+   */
+  private def annotateExitException(
+      args: SparkSubmitArguments,
+      sparkConf: SparkConf,
+      throwable: Throwable): Unit = {
+    // Swallow exceptions when storing diagnostics, this shouldn't fail the application.
+    try {
+      if (!isShell(args.primaryResource) && !isSqlShell(args.mainClass)
+          && !isThriftServer(args.mainClass) && !isConnectServer(args.mainClass)) {
+        SparkSubmitUtils.getSparkDiagnosticsSetters(args.master)
+          .foreach(_.setDiagnostics(throwable, sparkConf))
+      }
+    } catch {
+      case e: Throwable => logDebug(s"Failed to set diagnostics: $e")
+    }
+  }
 }
 
 
@@ -1080,8 +1116,6 @@ object SparkSubmit extends CommandLineUtils with Logging {
   private val CONNECT_SHELL = "connect-shell"
   private val SPARKR_PACKAGE_ARCHIVE = "sparkr.zip"
   private val R_PACKAGE_ARCHIVE = "rpkg.zip"
-
-  private val CLASS_NOT_FOUND_EXIT_STATUS = 101
 
   // Following constants are visible for testing.
   private[deploy] val YARN_CLUSTER_SUBMIT_CLASS =
@@ -1132,7 +1166,7 @@ object SparkSubmit extends CommandLineUtils with Logging {
           super.doSubmit(args)
         } catch {
           case e: SparkUserAppException =>
-            exitFn(e.exitCode)
+            exitFn(e.exitCode, Option(e.getCause))
         }
       }
 
@@ -1221,6 +1255,23 @@ private[spark] object SparkSubmitUtils {
       case _ => throw new SparkException(s"Spark config without '=': $pair")
     }
   }
+
+  private[deploy] def getSparkDiagnosticsSetters(
+      master: String): Option[SparkDiagnosticsSetter] = {
+    val loader = Utils.getContextOrSparkClassLoader
+    val serviceLoaders =
+      ServiceLoader.load(classOf[SparkDiagnosticsSetter], loader)
+        .asScala
+        .filter(_.supports(master))
+
+    serviceLoaders.size match {
+      case x if x > 1 =>
+        throw new SparkException(s"Multiple($x) external SparkDiagnosticsSetter registered.")
+      case 1 =>
+        Some(serviceLoaders.headOption.get)
+      case _ => None
+    }
+  }
 }
 
 /**
@@ -1242,4 +1293,21 @@ private[spark] trait SparkSubmitOperation {
   def printSubmissionStatus(submissionId: String, conf: SparkConf): Unit
 
   def supports(master: String): Boolean
+}
+
+/**
+ * Provides a hook to set the application failure details in some external system.
+ */
+private[spark] trait SparkDiagnosticsSetter {
+
+  /**
+   * Set the failure details.
+   */
+  def setDiagnostics(throwable: Throwable, conf: SparkConf): Unit
+
+  /**
+   * Whether this implementation of the SparkDiagnosticsSetter supports setting the exit
+   * exception for this application.
+   */
+  def supports(clusterManagerUrl: String): Boolean
 }

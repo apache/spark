@@ -40,7 +40,11 @@ import org.apache.spark.sql.execution.datasources.{WriteFiles, WriteFilesExec}
 import org.apache.spark.sql.execution.exchange.{REBALANCE_PARTITIONS_BY_COL, REBALANCE_PARTITIONS_BY_NONE, REPARTITION_BY_COL, REPARTITION_BY_NUM, ShuffleExchangeExec}
 import org.apache.spark.sql.execution.python._
 import org.apache.spark.sql.execution.python.streaming.{FlatMapGroupsInPandasWithStateExec, TransformWithStateInPySparkExec}
-import org.apache.spark.sql.execution.streaming._
+import org.apache.spark.sql.execution.streaming.operators.stateful.{EventTimeWatermarkExec, StreamingDeduplicateExec, StreamingDeduplicateWithinWatermarkExec, StreamingGlobalLimitExec, StreamingLocalLimitExec, UpdateEventTimeColumnExec}
+import org.apache.spark.sql.execution.streaming.operators.stateful.flatmapgroupswithstate.FlatMapGroupsWithStateExec
+import org.apache.spark.sql.execution.streaming.operators.stateful.join.StreamingSymmetricHashJoinExec
+import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.TransformWithStateExec
+import org.apache.spark.sql.execution.streaming.runtime.{StreamingExecutionRelation, StreamingRelation, StreamingRelationExec}
 import org.apache.spark.sql.execution.streaming.sources.MemoryPlan
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.OutputMode
@@ -417,13 +421,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
     }
   }
 
-  /**
-   * Used to plan streaming aggregation queries that are computed incrementally as part of a
-   * [[org.apache.spark.sql.streaming.StreamingQuery]]. Currently this rule is injected into the
-   * planner on-demand, only when planning in a
-   * [[org.apache.spark.sql.execution.streaming.StreamExecution]]
-   */
-  object StatefulAggregationStrategy extends Strategy {
+  object EventTimeWatermarkStrategy extends Strategy {
     override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case _ if !plan.isStreaming => Nil
 
@@ -441,6 +439,18 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
               "Please report your query to Spark user mailing list.")
         }
         UpdateEventTimeColumnExec(columnName, delay.get, None, planLater(child)) :: Nil
+    }
+  }
+
+  /**
+   * Used to plan streaming aggregation queries that are computed incrementally as part of a
+   * [[org.apache.spark.sql.streaming.StreamingQuery]]. Currently this rule is injected into the
+   * planner on-demand, only when planning in a
+   * [[org.apache.spark.sql.execution.streaming.StreamExecution]]
+   */
+  object StatefulAggregationStrategy extends Strategy {
+    override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
+      case _ if !plan.isStreaming => Nil
 
       case PhysicalAggregation(
         namedGroupingExpressions, aggregateExpressions, rewrittenResultExpressions, child) =>
@@ -671,7 +681,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
       case PhysicalWindow(
         WindowFunctionType.Python, windowExprs, partitionSpec, orderSpec, child) =>
-        execution.python.WindowInPandasExec(
+        execution.python.ArrowWindowPythonExec(
           windowExprs, partitionSpec, orderSpec, planLater(child)) :: Nil
 
       case _ => Nil
@@ -958,6 +968,8 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         execution.python.MapInArrowExec(func, output, planLater(child), isBarrier, profile) :: Nil
       case logical.AttachDistributedSequence(attr, child) =>
         execution.python.AttachDistributedSequenceExec(attr, planLater(child)) :: Nil
+      case logical.PythonWorkerLogs(jsonAttr) =>
+        execution.python.PythonWorkerLogsExec(jsonAttr) :: Nil
       case logical.MapElements(f, _, _, objAttr, child) =>
         execution.MapElementsExec(f, objAttr, planLater(child)) :: Nil
       case logical.AppendColumns(f, _, _, in, out, child) =>

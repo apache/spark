@@ -348,3 +348,837 @@ select aggregate(split('abcdefgh',''), array(array('')), (acc, x) -> array(array
 struct<aggregate(split(abcdefgh, , -1), array(array()), lambdafunction(array(array(namedlambdavariable())), namedlambdavariable(), namedlambdavariable()), lambdafunction(namedlambdavariable(), namedlambdavariable())):array<array<string>>>
 -- !query output
 [["h"]]
+
+
+-- !query
+select aggregate(array(1, 2, 3), 0, 100) as aggregate_int_literal
+-- !query schema
+struct<aggregate_int_literal:int>
+-- !query output
+100
+
+
+-- !query
+select aggregate(array(1, 2, 3), map(), map('result', 999)) as aggregate_map_literal
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"lambdafunction(map(result, 999), namedlambdavariable(), namedlambdavariable())\"",
+    "inputType" : "\"MAP<STRING, INT>\"",
+    "paramIndex" : "third",
+    "requiredType" : "\"MAP<VOID, VOID>\"",
+    "sqlExpr" : "\"aggregate(array(1, 2, 3), map(), lambdafunction(map(result, 999), namedlambdavariable(), namedlambdavariable()), lambdafunction(namedlambdavariable(), namedlambdavariable()))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 59,
+    "fragment" : "aggregate(array(1, 2, 3), map(), map('result', 999))"
+  } ]
+}
+
+
+-- !query
+select aggregate(array(1, 2, 3), struct('init', 0), struct('final', 999)) as aggregate_struct_literal
+-- !query schema
+struct<aggregate_struct_literal:struct<col1:string,col2:int>>
+-- !query output
+{"col1":"final","col2":999}
+
+
+-- !query
+select aggregate(array(1, 2, 3), array(), array('result')) as aggregate_array_literal
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"lambdafunction(array(result), namedlambdavariable(), namedlambdavariable())\"",
+    "inputType" : "\"ARRAY<STRING>\"",
+    "paramIndex" : "third",
+    "requiredType" : "\"ARRAY<VOID>\"",
+    "sqlExpr" : "\"aggregate(array(1, 2, 3), array(), lambdafunction(array(result), namedlambdavariable(), namedlambdavariable()), lambdafunction(namedlambdavariable(), namedlambdavariable()))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 58,
+    "fragment" : "aggregate(array(1, 2, 3), array(), array('result'))"
+  } ]
+}
+
+
+-- !query
+select array_sort(array(3, 1, 2), 1) as array_sort_int_literal
+-- !query schema
+struct<array_sort_int_literal:array<int>>
+-- !query output
+[3,1,2]
+
+
+-- !query
+select array_sort(array(3, 1, 2), map('compare', 0)) as array_sort_map_literal
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_RETURN_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "actualType" : "\"MAP<STRING, INT>\"",
+    "expectedType" : "\"INT\"",
+    "functionName" : "`lambdafunction`",
+    "sqlExpr" : "\"array_sort(array(3, 1, 2), lambdafunction(map(compare, 0), namedlambdavariable(), namedlambdavariable()))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 52,
+    "fragment" : "array_sort(array(3, 1, 2), map('compare', 0))"
+  } ]
+}
+
+
+-- !query
+select array_sort(array(3, 1, 2), struct('result', 0)) as array_sort_struct_literal
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_RETURN_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "actualType" : "\"STRUCT<col1: STRING NOT NULL, col2: INT NOT NULL>\"",
+    "expectedType" : "\"INT\"",
+    "functionName" : "`lambdafunction`",
+    "sqlExpr" : "\"array_sort(array(3, 1, 2), lambdafunction(struct(result, 0), namedlambdavariable(), namedlambdavariable()))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 54,
+    "fragment" : "array_sort(array(3, 1, 2), struct('result', 0))"
+  } ]
+}
+
+
+-- !query
+select array_sort(array(3, 1, 2), array(0)) as array_sort_array_literal
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_RETURN_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "actualType" : "\"ARRAY<INT>\"",
+    "expectedType" : "\"INT\"",
+    "functionName" : "`lambdafunction`",
+    "sqlExpr" : "\"array_sort(array(3, 1, 2), lambdafunction(array(0), namedlambdavariable(), namedlambdavariable()))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 43,
+    "fragment" : "array_sort(array(3, 1, 2), array(0))"
+  } ]
+}
+
+
+-- !query
+select exists(array(1, 2, 3), 1) as exists_int_literal
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"lambdafunction(1, namedlambdavariable())\"",
+    "inputType" : "\"INT\"",
+    "paramIndex" : "second",
+    "requiredType" : "\"BOOLEAN\"",
+    "sqlExpr" : "\"exists(array(1, 2, 3), lambdafunction(1, namedlambdavariable()))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 32,
+    "fragment" : "exists(array(1, 2, 3), 1)"
+  } ]
+}
+
+
+-- !query
+select exists(array(1, 2, 3), map('found', true)) as exists_map_literal
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"lambdafunction(map(found, true), namedlambdavariable())\"",
+    "inputType" : "\"MAP<STRING, BOOLEAN>\"",
+    "paramIndex" : "second",
+    "requiredType" : "\"BOOLEAN\"",
+    "sqlExpr" : "\"exists(array(1, 2, 3), lambdafunction(map(found, true), namedlambdavariable()))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 49,
+    "fragment" : "exists(array(1, 2, 3), map('found', true))"
+  } ]
+}
+
+
+-- !query
+select exists(array(1, 2, 3), struct('exists', true)) as exists_struct_literal
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"lambdafunction(struct(exists, true), namedlambdavariable())\"",
+    "inputType" : "\"STRUCT<col1: STRING NOT NULL, col2: BOOLEAN NOT NULL>\"",
+    "paramIndex" : "second",
+    "requiredType" : "\"BOOLEAN\"",
+    "sqlExpr" : "\"exists(array(1, 2, 3), lambdafunction(struct(exists, true), namedlambdavariable()))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 53,
+    "fragment" : "exists(array(1, 2, 3), struct('exists', true))"
+  } ]
+}
+
+
+-- !query
+select exists(array(1, 2, 3), array(true)) as exists_array_literal
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"lambdafunction(array(true), namedlambdavariable())\"",
+    "inputType" : "\"ARRAY<BOOLEAN>\"",
+    "paramIndex" : "second",
+    "requiredType" : "\"BOOLEAN\"",
+    "sqlExpr" : "\"exists(array(1, 2, 3), lambdafunction(array(true), namedlambdavariable()))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 42,
+    "fragment" : "exists(array(1, 2, 3), array(true))"
+  } ]
+}
+
+
+-- !query
+select filter(array(1, 2, 3), 1) as filter_int_literal
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"lambdafunction(1, namedlambdavariable())\"",
+    "inputType" : "\"INT\"",
+    "paramIndex" : "second",
+    "requiredType" : "\"BOOLEAN\"",
+    "sqlExpr" : "\"filter(array(1, 2, 3), lambdafunction(1, namedlambdavariable()))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 32,
+    "fragment" : "filter(array(1, 2, 3), 1)"
+  } ]
+}
+
+
+-- !query
+select filter(array(1, 2, 3), map('key', 'value')) as filter_map_literal
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"lambdafunction(map(key, value), namedlambdavariable())\"",
+    "inputType" : "\"MAP<STRING, STRING>\"",
+    "paramIndex" : "second",
+    "requiredType" : "\"BOOLEAN\"",
+    "sqlExpr" : "\"filter(array(1, 2, 3), lambdafunction(map(key, value), namedlambdavariable()))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 50,
+    "fragment" : "filter(array(1, 2, 3), map('key', 'value'))"
+  } ]
+}
+
+
+-- !query
+select filter(array(1, 2, 3), struct('valid', true)) as filter_struct_literal
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"lambdafunction(struct(valid, true), namedlambdavariable())\"",
+    "inputType" : "\"STRUCT<col1: STRING NOT NULL, col2: BOOLEAN NOT NULL>\"",
+    "paramIndex" : "second",
+    "requiredType" : "\"BOOLEAN\"",
+    "sqlExpr" : "\"filter(array(1, 2, 3), lambdafunction(struct(valid, true), namedlambdavariable()))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 52,
+    "fragment" : "filter(array(1, 2, 3), struct('valid', true))"
+  } ]
+}
+
+
+-- !query
+select filter(array(1, 2, 3), array(true, false)) as filter_array_literal
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"lambdafunction(array(true, false), namedlambdavariable())\"",
+    "inputType" : "\"ARRAY<BOOLEAN>\"",
+    "paramIndex" : "second",
+    "requiredType" : "\"BOOLEAN\"",
+    "sqlExpr" : "\"filter(array(1, 2, 3), lambdafunction(array(true, false), namedlambdavariable()))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 49,
+    "fragment" : "filter(array(1, 2, 3), array(true, false))"
+  } ]
+}
+
+
+-- !query
+select forall(array(1, 2, 3), 1) as forall_int_literal
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"lambdafunction(1, namedlambdavariable())\"",
+    "inputType" : "\"INT\"",
+    "paramIndex" : "second",
+    "requiredType" : "\"BOOLEAN\"",
+    "sqlExpr" : "\"forall(array(1, 2, 3), lambdafunction(1, namedlambdavariable()))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 32,
+    "fragment" : "forall(array(1, 2, 3), 1)"
+  } ]
+}
+
+
+-- !query
+select forall(array(1, 2, 3), map('all', true)) as forall_map_literal
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"lambdafunction(map(all, true), namedlambdavariable())\"",
+    "inputType" : "\"MAP<STRING, BOOLEAN>\"",
+    "paramIndex" : "second",
+    "requiredType" : "\"BOOLEAN\"",
+    "sqlExpr" : "\"forall(array(1, 2, 3), lambdafunction(map(all, true), namedlambdavariable()))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 47,
+    "fragment" : "forall(array(1, 2, 3), map('all', true))"
+  } ]
+}
+
+
+-- !query
+select forall(array(1, 2, 3), struct('all', true)) as forall_struct_literal
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"lambdafunction(struct(all, true), namedlambdavariable())\"",
+    "inputType" : "\"STRUCT<col1: STRING NOT NULL, col2: BOOLEAN NOT NULL>\"",
+    "paramIndex" : "second",
+    "requiredType" : "\"BOOLEAN\"",
+    "sqlExpr" : "\"forall(array(1, 2, 3), lambdafunction(struct(all, true), namedlambdavariable()))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 50,
+    "fragment" : "forall(array(1, 2, 3), struct('all', true))"
+  } ]
+}
+
+
+-- !query
+select forall(array(1, 2, 3), array(true, true)) as forall_array_literal
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"lambdafunction(array(true, true), namedlambdavariable())\"",
+    "inputType" : "\"ARRAY<BOOLEAN>\"",
+    "paramIndex" : "second",
+    "requiredType" : "\"BOOLEAN\"",
+    "sqlExpr" : "\"forall(array(1, 2, 3), lambdafunction(array(true, true), namedlambdavariable()))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 48,
+    "fragment" : "forall(array(1, 2, 3), array(true, true))"
+  } ]
+}
+
+
+-- !query
+select map_filter(map('a', 1, 'b', 2), 1) as map_filter_int_literal
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"lambdafunction(1, namedlambdavariable(), namedlambdavariable())\"",
+    "inputType" : "\"INT\"",
+    "paramIndex" : "second",
+    "requiredType" : "\"BOOLEAN\"",
+    "sqlExpr" : "\"map_filter(map(a, 1, b, 2), lambdafunction(1, namedlambdavariable(), namedlambdavariable()))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 41,
+    "fragment" : "map_filter(map('a', 1, 'b', 2), 1)"
+  } ]
+}
+
+
+-- !query
+select map_filter(map('a', 1, 'b', 2), map('keep', true)) as map_filter_map_literal
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"lambdafunction(map(keep, true), namedlambdavariable(), namedlambdavariable())\"",
+    "inputType" : "\"MAP<STRING, BOOLEAN>\"",
+    "paramIndex" : "second",
+    "requiredType" : "\"BOOLEAN\"",
+    "sqlExpr" : "\"map_filter(map(a, 1, b, 2), lambdafunction(map(keep, true), namedlambdavariable(), namedlambdavariable()))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 57,
+    "fragment" : "map_filter(map('a', 1, 'b', 2), map('keep', true))"
+  } ]
+}
+
+
+-- !query
+select map_filter(map('a', 1, 'b', 2), struct('filter', true)) as map_filter_struct_literal
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"lambdafunction(struct(filter, true), namedlambdavariable(), namedlambdavariable())\"",
+    "inputType" : "\"STRUCT<col1: STRING NOT NULL, col2: BOOLEAN NOT NULL>\"",
+    "paramIndex" : "second",
+    "requiredType" : "\"BOOLEAN\"",
+    "sqlExpr" : "\"map_filter(map(a, 1, b, 2), lambdafunction(struct(filter, true), namedlambdavariable(), namedlambdavariable()))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 62,
+    "fragment" : "map_filter(map('a', 1, 'b', 2), struct('filter', true))"
+  } ]
+}
+
+
+-- !query
+select map_filter(map('a', 1, 'b', 2), array(true)) as map_filter_array_literal
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"lambdafunction(array(true), namedlambdavariable(), namedlambdavariable())\"",
+    "inputType" : "\"ARRAY<BOOLEAN>\"",
+    "paramIndex" : "second",
+    "requiredType" : "\"BOOLEAN\"",
+    "sqlExpr" : "\"map_filter(map(a, 1, b, 2), lambdafunction(array(true), namedlambdavariable(), namedlambdavariable()))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 51,
+    "fragment" : "map_filter(map('a', 1, 'b', 2), array(true))"
+  } ]
+}
+
+
+-- !query
+select map_zip_with(map('a', 1), map('a', 10), 100) as map_zipwith_int_literal
+-- !query schema
+struct<map_zipwith_int_literal:map<string,int>>
+-- !query output
+{"a":100}
+
+
+-- !query
+select map_zip_with(map('a', 1), map('a', 10), map('merged', true)) as map_zipwith_map_literal
+-- !query schema
+struct<map_zipwith_map_literal:map<string,map<string,boolean>>>
+-- !query output
+{"a":{"merged":true}}
+
+
+-- !query
+select map_zip_with(map('a', 1), map('a', 10), struct('left', 1, 'right', 10)) as map_zipwith_struct_literal
+-- !query schema
+struct<map_zipwith_struct_literal:map<string,struct<col1:string,col2:int,col3:string,col4:int>>>
+-- !query output
+{"a":{"col1":"left","col2":1,"col3":"right","col4":10}}
+
+
+-- !query
+select map_zip_with(map('a', 1), map('a', 10), array('combined')) as map_zipwith_array_literal
+-- !query schema
+struct<map_zipwith_array_literal:map<string,array<string>>>
+-- !query output
+{"a":["combined"]}
+
+
+-- !query
+select reduce(array(1, 2, 3), 0, 100) as reduce_int_literal
+-- !query schema
+struct<reduce_int_literal:int>
+-- !query output
+100
+
+
+-- !query
+select reduce(array(1, 2, 3), map(), map('result', 999)) as reduce_map_literal
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"lambdafunction(map(result, 999), namedlambdavariable(), namedlambdavariable())\"",
+    "inputType" : "\"MAP<STRING, INT>\"",
+    "paramIndex" : "third",
+    "requiredType" : "\"MAP<VOID, VOID>\"",
+    "sqlExpr" : "\"reduce(array(1, 2, 3), map(), lambdafunction(map(result, 999), namedlambdavariable(), namedlambdavariable()), lambdafunction(namedlambdavariable(), namedlambdavariable()))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 56,
+    "fragment" : "reduce(array(1, 2, 3), map(), map('result', 999))"
+  } ]
+}
+
+
+-- !query
+select reduce(array(1, 2, 3), struct('init', 0), struct('final', 999)) as reduce_struct_literal
+-- !query schema
+struct<reduce_struct_literal:struct<col1:string,col2:int>>
+-- !query output
+{"col1":"final","col2":999}
+
+
+-- !query
+select reduce(array(1, 2, 3), array(), array('result')) as reduce_array_literal
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"lambdafunction(array(result), namedlambdavariable(), namedlambdavariable())\"",
+    "inputType" : "\"ARRAY<STRING>\"",
+    "paramIndex" : "third",
+    "requiredType" : "\"ARRAY<VOID>\"",
+    "sqlExpr" : "\"reduce(array(1, 2, 3), array(), lambdafunction(array(result), namedlambdavariable(), namedlambdavariable()), lambdafunction(namedlambdavariable(), namedlambdavariable()))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 55,
+    "fragment" : "reduce(array(1, 2, 3), array(), array('result'))"
+  } ]
+}
+
+
+-- !query
+select transform(array(1, 2, 3), 42) as transform_int_literal
+-- !query schema
+struct<transform_int_literal:array<int>>
+-- !query output
+[42,42,42]
+
+
+-- !query
+select transform(array(1, 2, 3), map('key', 'value')) as transform_map_literal
+-- !query schema
+struct<transform_map_literal:array<map<string,string>>>
+-- !query output
+[{"key":"value"},{"key":"value"},{"key":"value"}]
+
+
+-- !query
+select transform(array(1, 2, 3), struct('id', 99, 'name', 'test')) as transform_struct_literal
+-- !query schema
+struct<transform_struct_literal:array<struct<col1:string,col2:int,col3:string,col4:string>>>
+-- !query output
+[{"col1":"id","col2":99,"col3":"name","col4":"test"},{"col1":"id","col2":99,"col3":"name","col4":"test"},{"col1":"id","col2":99,"col3":"name","col4":"test"}]
+
+
+-- !query
+select transform(array(1, 2, 3), array('a', 'b')) as transform_array_literal
+-- !query schema
+struct<transform_array_literal:array<array<string>>>
+-- !query output
+[["a","b"],["a","b"],["a","b"]]
+
+
+-- !query
+select transform_keys(map('a', 1, 'b', 2), 42) as transform_keys_int_literal
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkRuntimeException
+{
+  "errorClass" : "DUPLICATED_MAP_KEY",
+  "sqlState" : "23505",
+  "messageParameters" : {
+    "key" : "42",
+    "mapKeyDedupPolicy" : "\"spark.sql.mapKeyDedupPolicy\""
+  }
+}
+
+
+-- !query
+select transform_keys(map('a', 1, 'b', 2), map('new', 'key')) as transform_keys_map_literal
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.INVALID_MAP_KEY_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "keyType" : "\"MAP<STRING, STRING>\"",
+    "sqlExpr" : "\"transform_keys(map(a, 1, b, 2), lambdafunction(map(new, key), namedlambdavariable(), namedlambdavariable()))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 61,
+    "fragment" : "transform_keys(map('a', 1, 'b', 2), map('new', 'key'))"
+  } ]
+}
+
+
+-- !query
+select transform_keys(map('a', 1, 'b', 2), struct('key', 'value')) as transform_keys_struct_literal
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkRuntimeException
+{
+  "errorClass" : "DUPLICATED_MAP_KEY",
+  "sqlState" : "23505",
+  "messageParameters" : {
+    "key" : "[key,value]",
+    "mapKeyDedupPolicy" : "\"spark.sql.mapKeyDedupPolicy\""
+  }
+}
+
+
+-- !query
+select transform_keys(map('a', 1, 'b', 2), array('new_key')) as transform_keys_array_literal
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkRuntimeException
+{
+  "errorClass" : "DUPLICATED_MAP_KEY",
+  "sqlState" : "23505",
+  "messageParameters" : {
+    "key" : "[new_key]",
+    "mapKeyDedupPolicy" : "\"spark.sql.mapKeyDedupPolicy\""
+  }
+}
+
+
+-- !query
+select transform_values(map('a', 1, 'b', 2), 999) as transform_values_int_literal
+-- !query schema
+struct<transform_values_int_literal:map<string,int>>
+-- !query output
+{"a":999,"b":999}
+
+
+-- !query
+select transform_values(map('a', 1, 'b', 2), map('new', 'value')) as transform_values_map_literal
+-- !query schema
+struct<transform_values_map_literal:map<string,map<string,string>>>
+-- !query output
+{"a":{"new":"value"},"b":{"new":"value"}}
+
+
+-- !query
+select transform_values(map('a', 1, 'b', 2), struct('val', 999)) as transform_values_struct_literal
+-- !query schema
+struct<transform_values_struct_literal:map<string,struct<col1:string,col2:int>>>
+-- !query output
+{"a":{"col1":"val","col2":999},"b":{"col1":"val","col2":999}}
+
+
+-- !query
+select transform_values(map('a', 1, 'b', 2), array('new_value')) as transform_values_array_literal
+-- !query schema
+struct<transform_values_array_literal:map<string,array<string>>>
+-- !query output
+{"a":["new_value"],"b":["new_value"]}
+
+
+-- !query
+select zip_with(array(1, 2, 3), array(4, 5, 6), 100) as zipwith_int_literal
+-- !query schema
+struct<zipwith_int_literal:array<int>>
+-- !query output
+[100,100,100]
+
+
+-- !query
+select zip_with(array(1, 2, 3), array(4, 5, 6), map('merged', true)) as zipwith_map_literal
+-- !query schema
+struct<zipwith_map_literal:array<map<string,boolean>>>
+-- !query output
+[{"merged":true},{"merged":true},{"merged":true}]
+
+
+-- !query
+select zip_with(array(1, 2, 3), array(4, 5, 6), struct('left', 1, 'right', 2)) as zipwith_struct_literal
+-- !query schema
+struct<zipwith_struct_literal:array<struct<col1:string,col2:int,col3:string,col4:int>>>
+-- !query output
+[{"col1":"left","col2":1,"col3":"right","col4":2},{"col1":"left","col2":1,"col3":"right","col4":2},{"col1":"left","col2":1,"col3":"right","col4":2}]
+
+
+-- !query
+select zip_with(array(1, 2, 3), array(4, 5, 6), array('combined')) as zipwith_array_literal
+-- !query schema
+struct<zipwith_array_literal:array<array<string>>>
+-- !query output
+[["combined"],["combined"],["combined"]]

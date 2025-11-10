@@ -233,8 +233,6 @@ private[spark] object Benchmark {
   def getJVMOSInfo(): String = {
     val vmName = System.getProperty("java.vm.name")
     val runtimeVersion = System.getProperty("java.runtime.version")
-    val osName = System.getProperty("os.name")
-    val osVersion = System.getProperty("os.version")
-    s"${vmName} ${runtimeVersion} on ${osName} ${osVersion}"
+    s"${vmName} ${runtimeVersion} on ${Utils.osName} ${Utils.osVersion}"
   }
 }

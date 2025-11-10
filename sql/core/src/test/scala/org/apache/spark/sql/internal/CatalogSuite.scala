@@ -19,7 +19,6 @@ package org.apache.spark.sql.internal
 
 import java.io.File
 
-import org.apache.commons.io.FileUtils
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql.{AnalysisException, DataFrame}
@@ -39,6 +38,7 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.util.Utils
 
 
 /**
@@ -999,7 +999,7 @@ class CatalogSuite extends SharedSparkSession with AnalysisTest with BeforeAndAf
       spark.catalog.cacheTable(tableName)
       assert(spark.table(tableName).collect().length == 1)
 
-      FileUtils.deleteDirectory(dir)
+      Utils.deleteRecursively(dir)
       assert(spark.table(tableName).collect().length == 1)
 
       spark.catalog.refreshTable(tableName)

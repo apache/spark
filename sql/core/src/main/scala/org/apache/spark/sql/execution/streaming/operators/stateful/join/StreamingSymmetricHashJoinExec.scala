@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.streaming
+package org.apache.spark.sql.execution.streaming.operators.stateful.join
 
 import java.util.concurrent.TimeUnit.NANOSECONDS
 
@@ -29,9 +29,10 @@ import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.execution.{BinaryExecNode, SparkPlan}
 import org.apache.spark.sql.execution.metric.SQLMetric
-import org.apache.spark.sql.execution.streaming.StreamingSymmetricHashJoinHelper._
+import org.apache.spark.sql.execution.streaming.operators.stateful.{SchemaValidationUtils, StatefulOperatorCustomMetric, StatefulOperatorCustomSumMetric, StatefulOperatorStateInfo, StatefulOperatorsUtils, StatefulOpStateStoreCheckpointInfo, StateStoreWriter, WatermarkSupport}
+import org.apache.spark.sql.execution.streaming.operators.stateful.join.StreamingSymmetricHashJoinHelper._
+import org.apache.spark.sql.execution.streaming.operators.stateful.join.SymmetricHashJoinStateManager.KeyToValuePair
 import org.apache.spark.sql.execution.streaming.state._
-import org.apache.spark.sql.execution.streaming.state.SymmetricHashJoinStateManager.KeyToValuePair
 import org.apache.spark.sql.internal.{SessionState, SQLConf}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.{CompletionIterator, SerializableConfiguration}
@@ -350,7 +351,7 @@ case class StreamingSymmetricHashJoinExec(
 
     assert(stateInfo.isDefined, "State info not defined")
     val checkpointIds = SymmetricHashJoinStateManager.getStateStoreCheckpointIds(
-      partitionId, stateInfo.get, useVirtualColumnFamilies)
+      partitionId, stateInfo.get.stateStoreCkptIds, useVirtualColumnFamilies)
 
     val inputSchema = left.output ++ right.output
     val postJoinFilter =
@@ -362,12 +363,12 @@ case class StreamingSymmetricHashJoinExec(
       new OneSideHashJoiner(
         LeftSide, left.output, leftKeys, leftInputIter,
         condition.leftSideOnly, postJoinFilter, stateWatermarkPredicates.left, partitionId,
-        checkpointIds.left.keyToNumValues, checkpointIds.left.valueToNumKeys,
+        checkpointIds.left.keyToNumValues, checkpointIds.left.keyWithIndexToValue,
         skippedNullValueCount, joinStateManagerStoreGenerator),
       new OneSideHashJoiner(
         RightSide, right.output, rightKeys, rightInputIter,
         condition.rightSideOnly, postJoinFilter, stateWatermarkPredicates.right, partitionId,
-        checkpointIds.right.keyToNumValues, checkpointIds.right.valueToNumKeys,
+        checkpointIds.right.keyToNumValues, checkpointIds.right.keyWithIndexToValue,
         skippedNullValueCount, joinStateManagerStoreGenerator))
 
     //  Join one side input using the other side's buffered/state rows. Here is how it is done.

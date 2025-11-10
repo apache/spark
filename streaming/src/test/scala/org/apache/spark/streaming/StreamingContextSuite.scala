@@ -18,7 +18,7 @@
 package org.apache.spark.streaming
 
 import java.io.{File, NotSerializableException}
-import java.nio.charset.StandardCharsets
+import java.nio.file.Files
 import java.util.Locale
 import java.util.concurrent.{CountDownLatch, TimeUnit}
 import java.util.concurrent.atomic.AtomicInteger
@@ -26,7 +26,6 @@ import java.util.concurrent.atomic.AtomicInteger
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.Queue
 
-import org.apache.commons.io.FileUtils
 import org.scalatest.{Assertions, PrivateMethodTester}
 import org.scalatest.concurrent.{Signaler, ThreadSignaler, TimeLimits}
 import org.scalatest.concurrent.Eventually._
@@ -910,7 +909,7 @@ class StreamingContextSuite
   def createCorruptedCheckpoint(): String = {
     val checkpointDirectory = Utils.createTempDir().getAbsolutePath()
     val fakeCheckpointFile = Checkpoint.checkpointFile(checkpointDirectory, Time(1000))
-    FileUtils.write(new File(fakeCheckpointFile.toString()), "blablabla", StandardCharsets.UTF_8)
+    Files.writeString(new File(fakeCheckpointFile.toString()).toPath, "blablabla")
     assert(Checkpoint.getCheckpointFiles(checkpointDirectory).nonEmpty)
     checkpointDirectory
   }

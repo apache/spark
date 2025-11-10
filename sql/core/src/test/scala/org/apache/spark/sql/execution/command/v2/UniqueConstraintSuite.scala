@@ -23,12 +23,12 @@ class UniqueConstraintSuite extends QueryTest with CommandSuiteBase with DDLComm
   override protected def command: String = "UNIQUE CONSTRAINT"
 
   private val validConstraintCharacteristics = Seq(
-    ("", "NOT ENFORCED UNVALIDATED NORELY"),
-    ("NOT ENFORCED", "NOT ENFORCED UNVALIDATED NORELY"),
-    ("NOT ENFORCED NORELY", "NOT ENFORCED UNVALIDATED NORELY"),
-    ("NORELY NOT ENFORCED", "NOT ENFORCED UNVALIDATED NORELY"),
-    ("NORELY", "NOT ENFORCED UNVALIDATED NORELY"),
-    ("RELY", "NOT ENFORCED UNVALIDATED RELY")
+    ("", "NOT ENFORCED NORELY"),
+    ("NOT ENFORCED", "NOT ENFORCED NORELY"),
+    ("NOT ENFORCED NORELY", "NOT ENFORCED NORELY"),
+    ("NORELY NOT ENFORCED", "NOT ENFORCED NORELY"),
+    ("NORELY", "NOT ENFORCED NORELY"),
+    ("RELY", "NOT ENFORCED RELY")
   )
 
   test("Add unique constraint") {
@@ -92,7 +92,7 @@ class UniqueConstraintSuite extends QueryTest with CommandSuiteBase with DDLComm
           condition = "CONSTRAINT_ALREADY_EXISTS",
           sqlState = "42710",
           parameters = Map("constraintName" -> "uk1",
-            "oldConstraint" -> "CONSTRAINT uk1 UNIQUE (id) NOT ENFORCED UNVALIDATED NORELY")
+            "oldConstraint" -> "CONSTRAINT uk1 UNIQUE (id) NOT ENFORCED NORELY")
         )
       }
     }
@@ -109,7 +109,7 @@ class UniqueConstraintSuite extends QueryTest with CommandSuiteBase with DDLComm
       val constraint = table.constraints.head
       assert(constraint.name() == "uk1")
       assert(constraint.toDDL ==
-        "CONSTRAINT uk1 UNIQUE (id1, id2) NOT ENFORCED UNVALIDATED NORELY")
+        "CONSTRAINT uk1 UNIQUE (id1, id2) NOT ENFORCED NORELY")
     }
   }
 }

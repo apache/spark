@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.types
 
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
 import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData}
@@ -131,4 +132,23 @@ private[spark] class ExampleSubTypeUDT extends UserDefinedType[IExampleSubType] 
   }
 
   override def userClass: Class[IExampleSubType] = classOf[IExampleSubType]
+}
+
+
+class ExampleIntRowUDT(cols: Int) extends UserDefinedType[Row] {
+  override def sqlType: DataType = {
+    StructType((0 until cols).map(i =>
+      StructField(s"col$i", IntegerType, nullable = false)))
+  }
+
+  override def serialize(obj: Row): InternalRow = {
+    InternalRow.fromSeq(obj.toSeq)
+  }
+
+  override def deserialize(datum: Any): Row = {
+    val internalRow = datum.asInstanceOf[InternalRow]
+    Row.fromSeq(internalRow.toSeq(sqlType.asInstanceOf[StructType]))
+  }
+
+  override def userClass: Class[Row] = classOf[Row]
 }

@@ -24,7 +24,7 @@ import scala.language.implicitConversions
 import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark.{SparkConf, SparkException}
-import org.apache.spark.sql.execution.streaming.MemoryStream
+import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.functions.count
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.STREAMING_CHECKPOINT_FILE_MANAGER_CLASS
@@ -252,7 +252,16 @@ class RocksDBCheckpointFailureInjectionSuite extends StreamTest
 
             db.load(1, checkpointId1)
 
-            db.put("version", "2.2")
+            val value = if (ifEnableStateStoreCheckpointIds) {
+              // We can write a different value since the files will have different checkpointId.
+              "2.2"
+            } else {
+              // We must write the same value or else checksum verification will fail.
+              // This test is only overwriting the state file without overwriting checksum file.
+              // Also, since batches are deterministic in checkpoint v1.
+              "2.1"
+            }
+            db.put("version", value)
             checkpointId2 = commitAndGetCheckpointId(db)
 
             assert(injectionState.delayedStreams.nonEmpty)
@@ -602,7 +611,8 @@ class RocksDBCheckpointFailureInjectionSuite extends StreamTest
         useColumnFamilies = true,
         enableStateStoreCheckpointIds = enableStateStoreCheckpointIds,
         partitionId = 0,
-        eventForwarder = None)
+        eventForwarder = None,
+        uniqueId = None)
       db.load(version, checkpointId)
       func(db)
     } finally {

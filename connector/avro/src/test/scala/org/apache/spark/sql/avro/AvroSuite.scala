@@ -32,7 +32,6 @@ import org.apache.avro.Schema.Type._
 import org.apache.avro.file.{DataFileReader, DataFileWriter}
 import org.apache.avro.generic.{GenericData, GenericDatumReader, GenericDatumWriter, GenericRecord}
 import org.apache.avro.generic.GenericData.{EnumSymbol, Fixed}
-import org.apache.commons.io.FileUtils
 
 import org.apache.spark.{SPARK_VERSION_SHORT, SparkConf, SparkException, SparkRuntimeException, SparkThrowable, SparkUpgradeException}
 import org.apache.spark.TestUtils.assertExceptionMsg
@@ -640,7 +639,7 @@ abstract class AvroSuite
 
   private def createDummyCorruptFile(dir: File): Unit = {
     Utils.tryWithResource {
-      FileUtils.forceMkdir(dir)
+      Files.createDirectories(dir.toPath)
       val corruptFile = new File(dir, "corrupt.avro")
       new BufferedWriter(new FileWriter(corruptFile))
     } { writer =>
@@ -760,12 +759,12 @@ abstract class AvroSuite
       spark.conf.set(SQLConf.AVRO_COMPRESSION_CODEC.key, ZSTANDARD.lowerCaseName())
       df.write.format("avro").save(zstandardDir)
 
-      val uncompressSize = FileUtils.sizeOfDirectory(new File(uncompressDir))
-      val bzip2Size = FileUtils.sizeOfDirectory(new File(bzip2Dir))
-      val xzSize = FileUtils.sizeOfDirectory(new File(xzDir))
-      val deflateSize = FileUtils.sizeOfDirectory(new File(deflateDir))
-      val snappySize = FileUtils.sizeOfDirectory(new File(snappyDir))
-      val zstandardSize = FileUtils.sizeOfDirectory(new File(zstandardDir))
+      val uncompressSize = Utils.sizeOf(new File(uncompressDir))
+      val bzip2Size = Utils.sizeOf(new File(bzip2Dir))
+      val xzSize = Utils.sizeOf(new File(xzDir))
+      val deflateSize = Utils.sizeOf(new File(deflateDir))
+      val snappySize = Utils.sizeOf(new File(snappyDir))
+      val zstandardSize = Utils.sizeOf(new File(zstandardDir))
 
       assert(uncompressSize > deflateSize)
       assert(snappySize > deflateSize)
@@ -1875,7 +1874,7 @@ abstract class AvroSuite
 
     intercept[FileNotFoundException] {
       withTempDir { dir =>
-        FileUtils.touch(new File(dir, "test"))
+        Utils.touch(new File(dir, "test"))
         withSQLConf(AvroFileFormat.IgnoreFilesWithoutExtensionProperty -> "true") {
           spark.read.format("avro").load(dir.toString)
         }
@@ -1884,7 +1883,7 @@ abstract class AvroSuite
 
     intercept[FileNotFoundException] {
       withTempDir { dir =>
-        FileUtils.touch(new File(dir, "test"))
+        Utils.touch(new File(dir, "test"))
 
         spark
           .read
@@ -3093,6 +3092,26 @@ abstract class AvroSuite
     assert(AvroOptions.isValidOption("enableStableIdentifiersForUnionType"))
     assert(AvroOptions.isValidOption("stableIdentifierPrefixForUnionType"))
     assert(AvroOptions.isValidOption("recursiveFieldMaxDepth"))
+  }
+
+  test("SPARK-53973: boolean Avro options reject non-boolean values") {
+    Seq(
+      AvroOptions.STABLE_ID_FOR_UNION_TYPE,
+      AvroOptions.POSITIONAL_FIELD_MATCHING,
+      AvroOptions.IGNORE_EXTENSION
+    ).foreach { opt =>
+      val e = intercept[AnalysisException] {
+        AvroOptions(Map(opt -> "not_bool"))
+      }
+      checkError(
+        exception = e,
+        condition = "STDS_INVALID_OPTION_VALUE.WITH_MESSAGE",
+        parameters = Map(
+          "optionName" -> opt,
+          "message" -> "Cannot cast value 'not_bool' to Boolean."
+        )
+      )
+    }
   }
 
   test("SPARK-46633: read file with empty blocks") {

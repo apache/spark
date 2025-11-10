@@ -20,7 +20,7 @@ import java.io.File
 import java.nio.file.Files
 import java.util.UUID
 
-import org.apache.spark.rdd.RDD
+import org.apache.spark.SparkConf
 import org.apache.spark.sql.{DataFrame, Encoders, QueryTest, Row}
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.internal.SQLConf
@@ -42,6 +42,11 @@ class XmlInferSchemaSuite
     with SharedSparkSession
     with TestXmlData
     with XmlSchemaInferenceCaseSensitivityTests {
+
+  protected val legacyParserEnabled: Boolean = false
+
+  override protected def sparkConf: SparkConf = super.sparkConf
+    .set("spark.sql.xml.legacyXMLParser.enabled", legacyParserEnabled.toString)
 
   private val baseOptions = Map("rowTag" -> "ROW")
 
@@ -407,9 +412,13 @@ class XmlInferSchemaSuite
   }
 
   test("XML with partitions") {
-    def makePartition(rdd: RDD[String], parent: File, partName: String, partValue: Any): File = {
+    def makePartition(rows: Seq[String], parent: File, partName: String, partValue: Any): File = {
+      val spark = this.spark
+      import spark.implicits._
       val p = new File(parent, s"$partName=${partValue.toString}")
-      rdd.saveAsTextFile(p.getCanonicalPath)
+      (Seq("<ROWS>") ++ rows ++ Seq("</ROWS>")).toDF("data")
+        .coalesce(1)
+        .write.text(p.getAbsolutePath)
       p
     }
 
@@ -418,7 +427,7 @@ class XmlInferSchemaSuite
         val d1 = new File(root, "d1=1")
         // root/d1=1/col1=abc
         makePartition(
-          sparkContext.parallelize(2 to 5).map(i => s"""<ROW><a>1</a><b>str$i</b></ROW>"""),
+          (2 to 5).map(i => s"""<ROW><a>1</a><b>str$i</b></ROW>"""),
           d1,
           "col1",
           "abc"
@@ -426,7 +435,7 @@ class XmlInferSchemaSuite
 
         // root/d1=1/col1=abd
         makePartition(
-          sparkContext.parallelize(6 to 10).map(i => s"""<ROW><a>1</a><c>str$i</c></ROW>"""),
+          (6 to 10).map(i => s"""<ROW><a>1</a><c>str$i</c></ROW>"""),
           d1,
           "col1",
           "abd"
@@ -649,7 +658,14 @@ trait XmlSchemaInferenceCaseSensitivityTests extends QueryTest {
       dir: File,
       multiline: Boolean = true,
       fileName: String = UUID.randomUUID().toString): String = {
-    val bytes = if (multiline) xmlString.getBytes() else xmlString.filter(_ >= ' ').getBytes
+    val xmlStringWithRootTag =
+      s"""
+         |<ROWS>
+         |$xmlString
+         |</ROWS>""".stripMargin
+    val bytes =
+      if (multiline) xmlStringWithRootTag.getBytes()
+      else xmlStringWithRootTag.filter(_ >= ' ').getBytes
     Files.write(new File(dir, fileName).toPath, bytes)
     dir.getCanonicalPath + s"/$fileName"
   }
@@ -657,6 +673,7 @@ trait XmlSchemaInferenceCaseSensitivityTests extends QueryTest {
   private val valueTagCaseSensitivityTestcase: XmlSchemaInferenceCaseSensitiveTestCase = {
     val caseSensitiveValueTag =
       """
+        |<ROWS>
         |<ROW>
         |    <a>
         |       1
@@ -668,6 +685,7 @@ trait XmlSchemaInferenceCaseSensitivityTests extends QueryTest {
         |       3
         |    </A>
         |</ROW>
+        |</ROWS>
         |""".stripMargin
     XmlSchemaInferenceCaseSensitiveTestCase(
       "value tag",
@@ -692,6 +710,7 @@ trait XmlSchemaInferenceCaseSensitivityTests extends QueryTest {
   private val arrayComplexCaseSensitivityTestcase: XmlSchemaInferenceCaseSensitiveTestCase = {
     val caseSensitiveArrayType =
       """
+        |<ROWS>
         |<ROW>
         |    <a>
         |        1
@@ -705,6 +724,7 @@ trait XmlSchemaInferenceCaseSensitivityTests extends QueryTest {
         |<ROW>
         |    <A>5</A>
         |</ROW>
+        |</ROWS>
         |""".stripMargin
     XmlSchemaInferenceCaseSensitiveTestCase(
       "array type - simple",
@@ -742,6 +762,7 @@ trait XmlSchemaInferenceCaseSensitivityTests extends QueryTest {
   private val arraySimpleCaseSensitivityTestcase: XmlSchemaInferenceCaseSensitiveTestCase = {
     val caseSensitiveArrayType =
       """
+        |<ROWS>
         |<ROW>
         |    <a>
         |        <b>1</b>
@@ -752,6 +773,7 @@ trait XmlSchemaInferenceCaseSensitivityTests extends QueryTest {
         |        <c>4</c>
         |    </A>
         |</ROW>
+        |</ROWS>
         |""".stripMargin
     XmlSchemaInferenceCaseSensitiveTestCase(
       "array type - complex",
@@ -942,3 +964,6 @@ trait XmlSchemaInferenceCaseSensitivityTests extends QueryTest {
   }
 }
 
+class XmlInferSchemaSuiteWithLegacyParser extends XmlInferSchemaSuite {
+  override val legacyParserEnabled: Boolean = true
+}

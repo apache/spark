@@ -19,6 +19,8 @@ package org.apache.spark.sql.connector
 
 import java.util.Collections
 
+import scala.jdk.CollectionConverters._
+
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.sql.{AnalysisException, DataFrame, Row, SaveMode}
 import org.apache.spark.sql.QueryTest.withQueryExecutionsCaptured
@@ -26,7 +28,8 @@ import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, CreateTableAsSelect, LogicalPlan, ReplaceTableAsSelect}
 import org.apache.spark.sql.connector.catalog.{Column, ColumnDefaultValue, DefaultValue, Identifier, InMemoryTableCatalog, TableInfo}
 import org.apache.spark.sql.connector.catalog.TableChange.{AddColumn, UpdateColumnDefaultValue}
-import org.apache.spark.sql.connector.expressions.{ApplyTransform, Cast => V2Cast, GeneralScalarExpression, LiteralValue, Transform}
+import org.apache.spark.sql.connector.expressions.{ApplyTransform, GeneralScalarExpression, LiteralValue, Transform}
+import org.apache.spark.sql.connector.expressions.filter.{AlwaysFalse, AlwaysTrue}
 import org.apache.spark.sql.execution.{QueryExecution, SparkPlan}
 import org.apache.spark.sql.execution.ExplainUtils.stripAQEPlan
 import org.apache.spark.sql.execution.datasources.v2.{AlterTableExec, CreateTableExec, DataSourceV2Relation, ReplaceTableExec}
@@ -369,21 +372,15 @@ class DataSourceV2DataFrameSuite
           null,
           new ColumnDefaultValue(
             "(100 + 23)",
-            new GeneralScalarExpression(
-              "+",
-              Array(LiteralValue(100, IntegerType), LiteralValue(23, IntegerType))),
+            LiteralValue(123, IntegerType),
             LiteralValue(123, IntegerType)),
           new ColumnDefaultValue(
             "('h' || 'r')",
-            new GeneralScalarExpression(
-              "CONCAT",
-              Array(
-                LiteralValue(UTF8String.fromString("h"), StringType),
-                LiteralValue(UTF8String.fromString("r"), StringType))),
+            LiteralValue(UTF8String.fromString("hr"), StringType),
             LiteralValue(UTF8String.fromString("hr"), StringType)),
           new ColumnDefaultValue(
             "CAST(1 AS BOOLEAN)",
-            new V2Cast(LiteralValue(1, IntegerType), IntegerType, BooleanType),
+            new AlwaysTrue,
             LiteralValue(true, BooleanType))))
 
       val df1 = Seq(1).toDF("id")
@@ -418,21 +415,15 @@ class DataSourceV2DataFrameSuite
           null,
           new ColumnDefaultValue(
             "(50 * 2)",
-            new GeneralScalarExpression(
-              "*",
-              Array(LiteralValue(50, IntegerType), LiteralValue(2, IntegerType))),
+            LiteralValue(100, IntegerType),
             LiteralValue(100, IntegerType)),
           new ColumnDefaultValue(
             "('un' || 'known')",
-            new GeneralScalarExpression(
-              "CONCAT",
-              Array(
-                LiteralValue(UTF8String.fromString("un"), StringType),
-                LiteralValue(UTF8String.fromString("known"), StringType))),
+            LiteralValue(UTF8String.fromString("unknown"), StringType),
             LiteralValue(UTF8String.fromString("unknown"), StringType)),
           new ColumnDefaultValue(
             "CAST(0 AS BOOLEAN)",
-            new V2Cast(LiteralValue(0, IntegerType), IntegerType, BooleanType),
+            new AlwaysFalse,
             LiteralValue(false, BooleanType))))
 
       val df3 = Seq(1).toDF("id")
@@ -467,21 +458,15 @@ class DataSourceV2DataFrameSuite
         Array(
           new ColumnDefaultValue(
             "(100 + 23)",
-            new GeneralScalarExpression(
-              "+",
-              Array(LiteralValue(100, IntegerType), LiteralValue(23, IntegerType))),
+            LiteralValue(123, IntegerType),
             LiteralValue(123, IntegerType)),
           new ColumnDefaultValue(
             "('h' || 'r')",
-            new GeneralScalarExpression(
-              "CONCAT",
-              Array(
-                LiteralValue(UTF8String.fromString("h"), StringType),
-                LiteralValue(UTF8String.fromString("r"), StringType))),
+            LiteralValue(UTF8String.fromString("hr"), StringType),
             LiteralValue(UTF8String.fromString("hr"), StringType)),
           new ColumnDefaultValue(
             "CAST(1 AS BOOLEAN)",
-            new V2Cast(LiteralValue(1, IntegerType), IntegerType, BooleanType),
+            new AlwaysTrue,
             LiteralValue(true, BooleanType))))
     }
   }
@@ -512,19 +497,13 @@ class DataSourceV2DataFrameSuite
         Array(
           new DefaultValue(
             "(123 + 56)",
-            new GeneralScalarExpression(
-              "+",
-              Array(LiteralValue(123, IntegerType), LiteralValue(56, IntegerType)))),
+            LiteralValue(179, IntegerType)),
           new DefaultValue(
             "('r' || 'l')",
-            new GeneralScalarExpression(
-              "CONCAT",
-              Array(
-                LiteralValue(UTF8String.fromString("r"), StringType),
-                LiteralValue(UTF8String.fromString("l"), StringType)))),
+            LiteralValue(UTF8String.fromString("rl"), StringType)),
           new DefaultValue(
             "CAST(0 AS BOOLEAN)",
-            new V2Cast(LiteralValue(0, IntegerType), IntegerType, BooleanType))))
+            new AlwaysFalse)))
     }
   }
 
@@ -690,7 +669,7 @@ class DataSourceV2DataFrameSuite
             LiteralValue(1542490413000000L, TimestampType)),
           new ColumnDefaultValue(
             "1",
-            new V2Cast(LiteralValue(1, IntegerType), IntegerType, DoubleType),
+            LiteralValue(1.0, DoubleType),
             LiteralValue(1.0, DoubleType))))
 
       val replaceExec = executeAndKeepPhysicalPlan[ReplaceTableExec] {
@@ -712,11 +691,7 @@ class DataSourceV2DataFrameSuite
             LiteralValue(1645624555000000L, TimestampType)),
           new ColumnDefaultValue(
             "(1 + 1)",
-            new V2Cast(
-              new GeneralScalarExpression("+", Array(LiteralValue(1, IntegerType),
-                LiteralValue(1, IntegerType))),
-              IntegerType,
-              DoubleType),
+            LiteralValue(2.0, DoubleType),
             LiteralValue(2.0, DoubleType))))
     }
   }
@@ -744,7 +719,7 @@ class DataSourceV2DataFrameSuite
               LiteralValue(1542490413000000L, TimestampType)),
             new ColumnDefaultValue(
               "1",
-              new V2Cast(LiteralValue(1, IntegerType), IntegerType, DoubleType),
+              LiteralValue(1.0, DoubleType),
               LiteralValue(1.0, DoubleType))))
 
         val alterCol1 = executeAndKeepPhysicalPlan[AlterTableExec] {
@@ -762,11 +737,7 @@ class DataSourceV2DataFrameSuite
               LiteralValue(1645624555000000L, TimestampType)),
             new DefaultValue(
               "(1 + 1)",
-              new V2Cast(
-                new GeneralScalarExpression("+", Array(LiteralValue(1, IntegerType),
-                  LiteralValue(1, IntegerType))),
-                IntegerType,
-                DoubleType))))
+              LiteralValue(2.0, DoubleType))))
       }
   }
 
@@ -846,6 +817,177 @@ class DataSourceV2DataFrameSuite
     }
   }
 
+  test("SPARK-52860: insert with schema evolution") {
+    val tableName = "testcat.ns1.ns2.tbl"
+    val ident = Identifier.of(Array("ns1", "ns2"), "tbl")
+    Seq(true, false).foreach { caseSensitive =>
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
+        withTable(tableName) {
+          val tableInfo = new TableInfo.Builder().
+            withColumns(
+              Array(Column.create("c1", IntegerType)))
+            .withProperties(
+              Map("accept-any-schema" -> "true").asJava)
+            .build()
+          catalog("testcat").createTable(ident, tableInfo)
+
+          val data = Seq((1, "a"), (2, "b"), (3, "c"))
+          val df = if (caseSensitive) {
+            data.toDF("c1", "C1")
+          } else {
+            data.toDF("c1", "c2")
+          }
+          df.writeTo(tableName).append()
+          checkAnswer(spark.table(tableName), df)
+
+          val cols = catalog("testcat").loadTable(ident).columns()
+          val expectedCols = if (caseSensitive) {
+            Array(
+              Column.create("c1", IntegerType),
+              Column.create("C1", StringType))
+          } else {
+            Array(
+              Column.create("c1", IntegerType),
+              Column.create("c2", StringType))
+          }
+          assert(cols === expectedCols)
+        }
+      }
+    }
+  }
+
+  test("test default value special column name conflicting with real column name: CREATE") {
+    val t = "testcat.ns.t"
+    withTable("t") {
+      val createExec = executeAndKeepPhysicalPlan[CreateTableExec] {
+        sql(s"""CREATE table $t (
+           c1 STRING,
+           current_date DATE DEFAULT CURRENT_DATE,
+           current_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+           current_time time DEFAULT CURRENT_TIME,
+           current_user STRING DEFAULT CURRENT_USER,
+           session_user STRING DEFAULT SESSION_USER,
+           user STRING DEFAULT USER,
+           current_database STRING DEFAULT CURRENT_DATABASE(),
+           current_catalog STRING DEFAULT CURRENT_CATALOG())""")
+      }
+
+      val columns = createExec.columns
+      checkDefaultValues(
+        columns,
+        Array(
+          null, // c1 has no default value
+          new ColumnDefaultValue("CURRENT_DATE", null),
+          new ColumnDefaultValue("CURRENT_TIMESTAMP", null),
+          new ColumnDefaultValue("CURRENT_TIME", null),
+          new ColumnDefaultValue("CURRENT_USER", null),
+          new ColumnDefaultValue("SESSION_USER", null),
+          new ColumnDefaultValue("USER", null),
+          new ColumnDefaultValue("CURRENT_DATABASE()", null),
+          new ColumnDefaultValue("CURRENT_CATALOG()", null)),
+        compareValue = false)
+
+      sql(s"INSERT INTO $t (c1) VALUES ('a')")
+      val result = sql(s"SELECT * FROM $t").collect()
+      assert(result.length == 1)
+      assert(result(0).getString(0) == "a")
+      Seq(1 to 8: _*).foreach(i => assert(result(0).get(i) != null))
+    }
+  }
+
+  test("test default value special column name conflicting with real column name: REPLACE") {
+    val t = "testcat.ns.t"
+    withTable("t") {
+      sql(s"""CREATE table $t (
+         c1 STRING)""")
+      val replaceExec = executeAndKeepPhysicalPlan[ReplaceTableExec] {
+        sql(
+          s"""REPLACE table $t (
+           c1 STRING,
+           current_date DATE DEFAULT CURRENT_DATE,
+           current_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+           current_time time DEFAULT CURRENT_TIME,
+           current_user STRING DEFAULT CURRENT_USER,
+           session_user STRING DEFAULT SESSION_USER,
+           user STRING DEFAULT USER,
+           current_database STRING DEFAULT CURRENT_DATABASE(),
+           current_catalog STRING DEFAULT CURRENT_CATALOG())""")
+      }
+
+      val columns = replaceExec.columns
+      checkDefaultValues(
+        columns,
+        Array(
+          null, // c1 has no default value
+          new ColumnDefaultValue("CURRENT_DATE", null),
+          new ColumnDefaultValue("CURRENT_TIMESTAMP", null),
+          new ColumnDefaultValue("CURRENT_TIME", null),
+          new ColumnDefaultValue("CURRENT_USER", null),
+          new ColumnDefaultValue("SESSION_USER", null),
+          new ColumnDefaultValue("USER", null),
+          new ColumnDefaultValue("CURRENT_DATABASE()", null),
+          new ColumnDefaultValue("CURRENT_CATALOG()", null)),
+        compareValue = false)
+
+      sql(s"INSERT INTO $t (c1) VALUES ('a')")
+      val result = sql(s"SELECT * FROM $t").collect()
+      assert(result.length == 1)
+      assert(result(0).getString(0) == "a")
+      Seq(1 to 8: _*).foreach(i => assert(result(0).get(i) != null))
+    }
+  }
+
+  test("create table with conflicting literal function value in nested default value") {
+    val tableName = "testcat.ns1.ns2.tbl"
+    withTable(tableName) {
+      val createExec = executeAndKeepPhysicalPlan[CreateTableExec] {
+        sql(
+          s"""
+             |CREATE TABLE $tableName (
+             |  c1 STRING,
+             |  current_date DATE DEFAULT DATE_ADD(current_date, 7)
+             |) USING foo
+             |""".stripMargin)
+      }
+
+      // Check that the table was created with the expected default value
+      val columns = createExec.columns
+      checkDefaultValues(
+        columns,
+        Array(
+          null, // c1 has no default value
+          new ColumnDefaultValue("DATE_ADD(current_date, 7)", null)),
+        compareValue = false)
+
+      val df1 = Seq("test1", "test2").toDF("c1")
+      df1.writeTo(tableName).append()
+
+      val result = sql(s"SELECT * FROM $tableName")
+      assert(result.count() == 2)
+      assert(result.collect().map(_.getString(0)).toSet == Set("test1", "test2"))
+      assert(result.collect().forall(_.get(1) != null))
+    }
+  }
+
+  test("test default value should not refer to real column") {
+    val t = "testcat.ns.t"
+    withTable("t") {
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"""CREATE table $t (
+           c1 timestamp,
+           current_timestamp TIMESTAMP DEFAULT c1)""")
+        },
+        condition = "INVALID_DEFAULT_VALUE.UNRESOLVED_EXPRESSION",
+        parameters = Map(
+          "statement" -> "CREATE TABLE",
+          "colName" -> "`current_timestamp`",
+          "defaultValue" -> "c1"
+        )
+      )
+    }
+  }
+
   private def executeAndKeepPhysicalPlan[T <: SparkPlan](func: => Unit): T = {
     val qe = withQueryExecutionsCaptured(spark) {
       func
@@ -855,15 +997,15 @@ class DataSourceV2DataFrameSuite
 
   private def checkDefaultValues(
       columns: Array[Column],
-      expectedDefaultValues: Array[ColumnDefaultValue]): Unit = {
+      expectedDefaultValues: Array[ColumnDefaultValue],
+      compareValue: Boolean = true): Unit = {
     assert(columns.length == expectedDefaultValues.length)
 
     columns.zip(expectedDefaultValues).foreach {
       case (column, expectedDefault) =>
-        assert(
-          column.defaultValue == expectedDefault,
-          s"Default value mismatch for column '${column.name}': " +
-          s"expected $expectedDefault but found ${column.defaultValue}")
+        assert(compareColumnDefaultValue(column.defaultValue(), expectedDefault, compareValue),
+          s"Default value mismatch for column '${column.toString}': " +
+            s"expected $expectedDefault but found ${column.defaultValue}")
     }
   }
 
@@ -901,5 +1043,18 @@ class DataSourceV2DataFrameSuite
       column.newCurrentDefault() == null,
       s"Default value mismatch for column '${column.toString}': " +
         s"expected empty but found ${column.newCurrentDefault()}")
+  }
+
+  private def compareColumnDefaultValue(
+      left: ColumnDefaultValue,
+      right: ColumnDefaultValue,
+      compareValue: Boolean) = {
+    (left, right) match {
+      case (null, null) => true
+      case (null, _) | (_, null) => false
+      case _ => left.getSql == right.getSql &&
+        left.getExpression == right.getExpression &&
+        (!compareValue || left.getValue == right.getValue)
+    }
   }
 }

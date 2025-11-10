@@ -32,6 +32,7 @@ class BaseStreamingArrowWriter(
     root: VectorSchemaRoot,
     writer: ArrowStreamWriter,
     arrowMaxRecordsPerBatch: Int,
+    arrowMaxBytesPerBatch: Long,
     arrowWriterForTest: ArrowWriter = null) {
   protected val arrowWriterForData: ArrowWriter = if (arrowWriterForTest == null) {
     ArrowWriter.create(root)
@@ -50,11 +51,12 @@ class BaseStreamingArrowWriter(
    *
    * @param dataRow The row to write for current batch.
    */
-  def writeRow(dataRow: InternalRow): Unit = {
+  def writeRow(dataRow: InternalRow): Boolean = {
     // If it exceeds the condition of batch (number of records) and there is more data for the
     // same group, finalize and construct a new batch.
 
-    if (totalNumRowsForBatch >= arrowMaxRecordsPerBatch) {
+    val isCurrentBatchFull = isBatchSizeLimitReached
+    if (isCurrentBatchFull) {
       finalizeCurrentChunk(isLastChunkForGroup = false)
       finalizeCurrentArrowBatch()
     }
@@ -63,6 +65,7 @@ class BaseStreamingArrowWriter(
 
     numRowsForCurrentChunk += 1
     totalNumRowsForBatch += 1
+    isCurrentBatchFull
   }
 
   /**
@@ -81,5 +84,14 @@ class BaseStreamingArrowWriter(
    */
   protected def finalizeCurrentChunk(isLastChunkForGroup: Boolean): Unit = {
     numRowsForCurrentChunk = 0
+  }
+
+  protected def isBatchSizeLimitReached: Boolean = {
+    // If we have either reached the records or bytes limit
+    totalNumRowsForBatch >= arrowMaxRecordsPerBatch ||
+      // Short circuit batch size calculation if the batch size is unlimited as computing batch
+      // size is computationally expensive.
+      ((arrowMaxBytesPerBatch != Int.MaxValue)
+        && (arrowWriterForData.sizeInBytes() >= arrowMaxBytesPerBatch))
   }
 }

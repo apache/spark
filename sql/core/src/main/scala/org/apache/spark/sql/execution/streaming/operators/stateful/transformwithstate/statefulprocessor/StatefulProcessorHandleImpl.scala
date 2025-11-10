@@ -14,7 +14,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.execution.streaming
+// scalastyle:off line.size.limit
+package org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.statefulprocessor
 
 import java.util
 import java.util.UUID
@@ -26,13 +27,19 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder}
 import org.apache.spark.sql.execution.metric.SQLMetric
-import org.apache.spark.sql.execution.streaming.StatefulProcessorHandleState.PRE_INIT
-import org.apache.spark.sql.execution.streaming.StateVariableType._
-import org.apache.spark.sql.execution.streaming.TransformWithStateKeyValueRowSchemaUtils.{getExpirationMsRowSchema, getTTLRowKeySchema}
+import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.{StateStoreColumnFamilySchemaUtils, TimerKeyEncoder, TransformWithStateVariableInfo, TransformWithStateVariableUtils}
+import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.StateVariableType._
+import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.TransformWithStateKeyValueRowSchemaUtils.{getExpirationMsRowSchema, getTTLRowKeySchema}
+import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.statefulprocessor.StatefulProcessorHandleState.PRE_INIT
+import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.statevariables.{ListStateImpl, MapStateImpl, ValueStateImpl}
+import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.timers.{TimerStateImpl, TimerStateUtils}
+import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.ttl.{ListStateImplWithTTL, MapStateImplWithTTL, TTLState, ValueStateImplWithTTL}
+import org.apache.spark.sql.execution.streaming.runtime.{MicroBatchExecution, StreamExecution}
 import org.apache.spark.sql.execution.streaming.state._
 import org.apache.spark.sql.streaming.{ListState, MapState, QueryInfo, TimeMode, TTLConfig, ValueState}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
+// scalastyle:on line.size.limit
 
 /**
  * Object used to assign/retrieve/remove grouping key passed implicitly for various state

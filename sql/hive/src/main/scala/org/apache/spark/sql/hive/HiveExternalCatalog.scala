@@ -34,7 +34,7 @@ import org.apache.hadoop.hive.serde.serdeConstants.SERIALIZATION_FORMAT
 import org.apache.thrift.TException
 
 import org.apache.spark.{SparkConf, SparkException}
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{DATABASE_NAME, INCOMPATIBLE_TYPES, PROVIDER, SCHEMA, SCHEMA2, TABLE_NAME}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
@@ -598,7 +598,17 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
 
     if (tableDefinition.tableType == VIEW) {
       val newTableProps = tableDefinition.properties ++ tableMetaToTableProps(tableDefinition).toMap
-      val newTable = tableDefinition.copy(properties = newTableProps)
+      val schemaWithNoCollation = removeCollation(tableDefinition.schema)
+      val hiveCompatibleSchema =
+        // Spark-created views do not have to be Hive compatible. If the data type is not
+        // Hive compatible, we can set schema to empty so that Spark can still read this
+        // view as the schema is also encoded in the table properties.
+        if (schemaWithNoCollation.exists(f => !isHiveCompatibleDataType(f.dataType))) {
+          EMPTY_DATA_SCHEMA
+        } else {
+          schemaWithNoCollation
+        }
+      val newTable = tableDefinition.copy(schema = hiveCompatibleSchema, properties = newTableProps)
       try {
         client.alterTable(newTable)
       } catch {

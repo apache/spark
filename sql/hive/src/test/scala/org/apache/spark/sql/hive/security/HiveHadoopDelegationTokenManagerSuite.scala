@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.hive.security
 
-import org.apache.commons.io.IOUtils
 import org.apache.hadoop.conf.Configuration
 import org.scalatest.Assertions._
 
@@ -65,7 +64,7 @@ class HiveHadoopDelegationTokenManagerSuite extends SparkFunSuite {
         val classFileName = name.replaceAll("\\.", "/") + ".class"
         val in = currentLoader.getResourceAsStream(classFileName)
         if (in != null) {
-          val bytes = IOUtils.toByteArray(in)
+          val bytes = in.readAllBytes()
           return defineClass(name, bytes, 0, bytes.length)
         }
 

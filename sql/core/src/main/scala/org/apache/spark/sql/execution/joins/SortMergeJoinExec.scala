@@ -103,7 +103,7 @@ case class SortMergeJoinExec(
     conf.sortMergeJoinExecBufferSpillThreshold
   }
 
-  private def getSpillSizeThreshold: Long = {
+  private def getSizeInBytesSpillThreshold: Long = {
     conf.sortMergeJoinExecBufferSpillSizeThreshold
   }
 
@@ -125,7 +125,7 @@ case class SortMergeJoinExec(
     val numOutputRows = longMetric("numOutputRows")
     val spillSize = longMetric("spillSize")
     val spillThreshold = getSpillThreshold
-    val spillSizeThreshold = getSpillSizeThreshold
+    val sizeInBytesSpillThreshold = getSizeInBytesSpillThreshold
     val inMemoryThreshold = getInMemoryThreshold
     val evaluatorFactory = new SortMergeJoinEvaluatorFactory(
       leftKeys,
@@ -137,7 +137,7 @@ case class SortMergeJoinExec(
       output,
       inMemoryThreshold,
       spillThreshold,
-      spillSizeThreshold,
+      sizeInBytesSpillThreshold,
       numOutputRows,
       spillSize,
       onlyBufferFirstMatchedRow
@@ -228,12 +228,15 @@ case class SortMergeJoinExec(
     val clsName = classOf[ExternalAppendOnlyUnsafeRowArray].getName
 
     val spillThreshold = getSpillThreshold
-    val spillSizeThreshold = getSpillSizeThreshold
+    val sizeInBytesSpillThreshold = getSizeInBytesSpillThreshold
     val inMemoryThreshold = getInMemoryThreshold
 
     // Inline mutable state since not many join operations in a task
     val matches = ctx.addMutableState(clsName, "matches",
-      v => s"$v = new $clsName($inMemoryThreshold, $spillThreshold, ${spillSizeThreshold}L);",
+      // TODO: shall we have a new config to specify the max in-memory buffer size
+      //       of ExternalAppendOnlyUnsafeRowArray?
+      v => s"$v = new $clsName($inMemoryThreshold, ${sizeInBytesSpillThreshold}L, " +
+        s"$spillThreshold, ${sizeInBytesSpillThreshold}L);",
       forceInline = true)
     // Copy the streamed keys as class members so they could be used in next function call.
     val matchedKeyVars = copyKeys(ctx, streamedKeyVars)
@@ -1052,7 +1055,8 @@ case class SortMergeJoinExec(
  * @param inMemoryThreshold Threshold for number of rows guaranteed to be held in memory by
  *                          internal buffer
  * @param spillThreshold Threshold for number of rows to be spilled by internal buffer
- * @param spillSizeThreshold Threshold for size of rows to be spilled by internal buffer
+ * @param sizeInBytesSpillThreshold Threshold for size in bytes of rows to be spilled by
+ *                                  internal buffer
  * @param eagerCleanupResources the eager cleanup function to be invoked when no join row found
  * @param onlyBufferFirstMatch [[bufferMatchingRows]] should buffer only the first matching row
  */
@@ -1064,7 +1068,7 @@ private[joins] class SortMergeJoinScanner(
     bufferedIter: RowIterator,
     inMemoryThreshold: Int,
     spillThreshold: Int,
-    spillSizeThreshold: Long,
+    sizeInBytesSpillThreshold: Long,
     spillSize: SQLMetric,
     eagerCleanupResources: () => Unit,
     onlyBufferFirstMatch: Boolean = false) {
@@ -1079,7 +1083,13 @@ private[joins] class SortMergeJoinScanner(
   private[this] var matchJoinKey: InternalRow = _
   /** Buffered rows from the buffered side of the join. This is empty if there are no matches. */
   private[this] val bufferedMatches: ExternalAppendOnlyUnsafeRowArray =
-    new ExternalAppendOnlyUnsafeRowArray(inMemoryThreshold, spillThreshold, spillSizeThreshold)
+    new ExternalAppendOnlyUnsafeRowArray(
+      inMemoryThreshold,
+      // TODO: shall we have a new config to specify the max in-memory buffer size
+      //       of ExternalAppendOnlyUnsafeRowArray?
+      sizeInBytesSpillThreshold,
+      spillThreshold,
+      sizeInBytesSpillThreshold)
 
   // At the end of the task, update the task's spill size for buffered side.
   TaskContext.get().addTaskCompletionListener[Unit](_ => {

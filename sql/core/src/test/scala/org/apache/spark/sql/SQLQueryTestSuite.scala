@@ -19,6 +19,7 @@ package org.apache.spark.sql
 
 import java.io.File
 import java.net.URI
+import java.nio.file.Files
 import java.util.Locale
 
 import org.apache.spark.{SparkConf, TestUtils}
@@ -27,8 +28,8 @@ import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.plans.logical.{Command, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
-import org.apache.spark.sql.catalyst.util.{fileToString, stringToFile}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.NANOS_PER_SECOND
+import org.apache.spark.sql.catalyst.util.stringToFile
 import org.apache.spark.sql.execution.WholeStageCodegenExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.TimestampTypes
@@ -119,6 +120,9 @@ import org.apache.spark.util.Utils
  *  - Scalar Pandas UDF test case with a Scalar Pandas UDF registered as the name 'udf'
  *    iff Python executable, pyspark, pandas and pyarrow are available.
  *
+ *  - Scalar Iterator Pandas UDF test case with a Scalar Iterator Pandas UDF registered
+ *    as the name 'udf' iff Python executable, pyspark, pandas and pyarrow are available.
+ *
  * Therefore, UDF test cases should have single input and output files but executed by three
  * different types of UDFs. See 'udf/udf-inner-join.sql' as an example.
  *
@@ -193,6 +197,12 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
           /* Do nothing */
         }
       case udfTestCase: SQLQueryTestSuite#UDFTest
+        if udfTestCase.udf.isInstanceOf[TestScalarIterPandasUDF] && !shouldTestPandasUDFs =>
+        ignore(s"${testCase.name} is skipped because pyspark," +
+          s"pandas and/or pyarrow were not available in [$pythonExec].") {
+          /* Do nothing */
+        }
+      case udfTestCase: SQLQueryTestSuite#UDFTest
           if udfTestCase.udf.isInstanceOf[TestGroupedAggPandasUDF] &&
             !shouldTestPandasUDFs =>
         ignore(s"${testCase.name} is skipped because pyspark," +
@@ -229,7 +239,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
 
   /** Run a test case. */
   protected def runSqlTestCase(testCase: TestCase, listTestCases: Seq[TestCase]): Unit = {
-    val input = fileToString(new File(testCase.inputFile))
+    val input = Files.readString(new File(testCase.inputFile).toPath)
     val (comments, code) = splitCommentsAndCodes(input)
     val queries = getQueries(code, comments, listTestCases)
     val settings = getSparkSettings(comments)
@@ -397,6 +407,10 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
         s"${testCase.name}${System.lineSeparator()}" +
           s"Python: $pythonVer Pandas: $pandasVer PyArrow: $pyarrowVer${System.lineSeparator()}"
       case udfTestCase: SQLQueryTestSuite#UDFTest
+          if udfTestCase.udf.isInstanceOf[TestScalarIterPandasUDF] && shouldTestPandasUDFs =>
+        s"${testCase.name}${System.lineSeparator()}" +
+          s"Python: $pythonVer Pandas: $pandasVer PyArrow: $pyarrowVer${System.lineSeparator()}"
+      case udfTestCase: SQLQueryTestSuite#UDFTest
           if udfTestCase.udf.isInstanceOf[TestGroupedAggPandasUDF] &&
             shouldTestPandasUDFs =>
         s"${testCase.name}${System.lineSeparator()}" +
@@ -445,12 +459,14 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
       // Create test cases of test types that depend on the input filename.
       val newTestCases: Seq[TestCase] = if (file.getAbsolutePath.startsWith(
         s"$inputFilePath${File.separator}udf${File.separator}postgreSQL")) {
-        Seq(TestScalaUDF("udf"), TestPythonUDF("udf"), TestScalarPandasUDF("udf")).map { udf =>
+        Seq(TestScalaUDF("udf"), TestPythonUDF("udf"),
+          TestScalarPandasUDF("udf"), TestScalarIterPandasUDF("udf")).map { udf =>
           UDFPgSQLTestCase(
             s"$testCaseName - ${udf.prettyName}", absPath, resultFile, udf)
         }
       } else if (file.getAbsolutePath.startsWith(s"$inputFilePath${File.separator}udf")) {
-        Seq(TestScalaUDF("udf"), TestPythonUDF("udf"), TestScalarPandasUDF("udf")).map { udf =>
+        Seq(TestScalaUDF("udf"), TestPythonUDF("udf"),
+          TestScalarPandasUDF("udf"), TestScalarIterPandasUDF("udf")).map { udf =>
           UDFTestCase(
             s"$testCaseName - ${udf.prettyName}", absPath, resultFile, udf)
         }
@@ -639,7 +655,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
       makeOutput: (String, Option[String], String) => QueryTestOutput): Unit = {
     // Read back the golden file.
     val expectedOutputs: Seq[QueryTestOutput] = {
-      val goldenOutput = fileToString(new File(resultFile))
+      val goldenOutput = Files.readString(new File(resultFile).toPath)
       val segments = goldenOutput.split("-- !query.*\n")
 
       val numSegments = outputs.map(_.numSegments).sum + 1

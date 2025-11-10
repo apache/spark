@@ -23,10 +23,11 @@ from pyspark.pipelines.flow import Flow, QueryFunction
 from pyspark.pipelines.source_code_location import (
     get_caller_source_code_location,
 )
-from pyspark.pipelines.dataset import (
+from pyspark.pipelines.output import (
     MaterializedView,
     StreamingTable,
     TemporaryView,
+    Sink,
 )
 from pyspark.sql.types import StructType
 
@@ -36,7 +37,6 @@ def append_flow(
     target: str,
     name: Optional[str] = None,
     spark_conf: Optional[Dict[str, str]] = None,
-    once: bool = False,
 ) -> Callable[[QueryFunction], None]:
     """
     Return a decorator on a query function to define a flow in a pipeline.
@@ -46,8 +46,6 @@ def append_flow(
     :param spark_conf: A dict whose keys are the conf names and values are the conf values. \
         These confs will be set when the flow is executed; they can override confs set for the \
         destination, for the pipeline, or on the cluster.
-    :param once: If True, indicates this flow should run only once. (It will be rerun upon a full \
-        refresh operation.)
     """
     if name is not None and type(name) is not str:
         raise PySparkTypeError(
@@ -67,7 +65,6 @@ def append_flow(
             target=target,
             spark_conf=spark_conf,
             source_code_location=source_code_location,
-            once=once,
             func=func,
         )
         get_active_graph_element_registry().register_flow(flow)
@@ -79,6 +76,7 @@ def _validate_stored_dataset_args(
     name: Optional[str],
     table_properties: Optional[Dict[str, str]],
     partition_cols: Optional[List[str]],
+    cluster_by: Optional[List[str]],
 ) -> None:
     if name is not None and type(name) is not str:
         raise PySparkTypeError(
@@ -94,6 +92,7 @@ def _validate_stored_dataset_args(
             },
         )
     validate_optional_list_of_str_arg(arg_name="partition_cols", arg_value=partition_cols)
+    validate_optional_list_of_str_arg(arg_name="cluster_by", arg_value=cluster_by)
 
 
 @overload
@@ -110,6 +109,7 @@ def table(
     spark_conf: Optional[Dict[str, str]] = None,
     table_properties: Optional[Dict[str, str]] = None,
     partition_cols: Optional[List[str]] = None,
+    cluster_by: Optional[List[str]] = None,
     schema: Optional[Union[StructType, str]] = None,
 ) -> Callable[[QueryFunction], None]:
     ...
@@ -123,6 +123,7 @@ def table(
     spark_conf: Optional[Dict[str, str]] = None,
     table_properties: Optional[Dict[str, str]] = None,
     partition_cols: Optional[List[str]] = None,
+    cluster_by: Optional[List[str]] = None,
     schema: Optional[Union[StructType, str]] = None,
     format: Optional[str] = None,
 ) -> Union[Callable[[QueryFunction], None], None]:
@@ -145,11 +146,12 @@ def table(
     :param table_properties: A dict where the keys are the property names and the values are the \
         property values. These properties will be set on the table.
     :param partition_cols: A list containing the column names of the partition columns.
+    :param cluster_by: A list containing the column names of the cluster columns.
     :param schema: Explicit Spark SQL schema to materialize this table with. Supports either a \
         Pyspark StructType or a SQL DDL string, such as "a INT, b STRING".
     :param format: The format of the table, e.g. "parquet".
     """
-    _validate_stored_dataset_args(name, table_properties, partition_cols)
+    _validate_stored_dataset_args(name, table_properties, partition_cols, cluster_by)
 
     source_code_location = get_caller_source_code_location(stacklevel=1)
 
@@ -160,12 +162,13 @@ def table(
 
         resolved_name = name or decorated.__name__
         registry = get_active_graph_element_registry()
-        registry.register_dataset(
+        registry.register_output(
             StreamingTable(
                 comment=comment,
                 name=resolved_name,
                 table_properties=table_properties or {},
                 partition_cols=partition_cols,
+                cluster_by=cluster_by,
                 schema=schema,
                 source_code_location=source_code_location,
                 format=format,
@@ -177,7 +180,6 @@ def table(
                 target=resolved_name,
                 spark_conf=spark_conf or {},
                 source_code_location=source_code_location,
-                once=False,
                 func=decorated,
             )
         )
@@ -213,6 +215,7 @@ def materialized_view(
     spark_conf: Optional[Dict[str, str]] = None,
     table_properties: Optional[Dict[str, str]] = None,
     partition_cols: Optional[List[str]] = None,
+    cluster_by: Optional[List[str]] = None,
     schema: Optional[Union[StructType, str]] = None,
 ) -> Callable[[QueryFunction], None]:
     ...
@@ -226,6 +229,7 @@ def materialized_view(
     spark_conf: Optional[Dict[str, str]] = None,
     table_properties: Optional[Dict[str, str]] = None,
     partition_cols: Optional[List[str]] = None,
+    cluster_by: Optional[List[str]] = None,
     schema: Optional[Union[StructType, str]] = None,
     format: Optional[str] = None,
 ) -> Union[Callable[[QueryFunction], None], None]:
@@ -248,11 +252,12 @@ def materialized_view(
     :param table_properties: A dict where the keys are the property names and the values are the \
         property values. These properties will be set on the table.
     :param partition_cols: A list containing the column names of the partition columns.
+    :param cluster_by: A list containing the column names of the cluster columns.
     :param schema: Explicit Spark SQL schema to materialize this table with. Supports either a \
         Pyspark StructType or a SQL DDL string, such as "a INT, b STRING".
     :param format: The format of the table, e.g. "parquet".
     """
-    _validate_stored_dataset_args(name, table_properties, partition_cols)
+    _validate_stored_dataset_args(name, table_properties, partition_cols, cluster_by)
 
     source_code_location = get_caller_source_code_location(stacklevel=1)
 
@@ -263,12 +268,13 @@ def materialized_view(
 
         resolved_name = name or decorated.__name__
         registry = get_active_graph_element_registry()
-        registry.register_dataset(
+        registry.register_output(
             MaterializedView(
                 comment=comment,
                 name=resolved_name,
                 table_properties=table_properties or {},
                 partition_cols=partition_cols,
+                cluster_by=cluster_by,
                 schema=schema,
                 source_code_location=source_code_location,
                 format=format,
@@ -280,7 +286,6 @@ def materialized_view(
                 target=resolved_name,
                 spark_conf=spark_conf or {},
                 source_code_location=source_code_location,
-                once=False,
                 func=decorated,
             )
         )
@@ -357,7 +362,7 @@ def temporary_view(
 
         resolved_name = name or decorated.__name__
         registry = get_active_graph_element_registry()
-        registry.register_dataset(
+        registry.register_output(
             TemporaryView(
                 comment=comment,
                 name=resolved_name,
@@ -371,7 +376,6 @@ def temporary_view(
                 spark_conf=spark_conf or {},
                 name=resolved_name,
                 source_code_location=source_code_location,
-                once=False,
             )
         )
 
@@ -407,9 +411,9 @@ def create_streaming_table(
     name: str,
     *,
     comment: Optional[str] = None,
-    spark_conf: Optional[Dict[str, str]] = None,
     table_properties: Optional[Dict[str, str]] = None,
     partition_cols: Optional[List[str]] = None,
+    cluster_by: Optional[List[str]] = None,
     schema: Optional[Union[StructType, str]] = None,
     format: Optional[str] = None,
 ) -> None:
@@ -421,12 +425,10 @@ def create_streaming_table(
 
     :param name: The name of the table.
     :param comment: Description of the table.
-    :param spark_conf: A dict whose keys are the conf names and values are the conf values. \
-        These confs will be set when the query for the dataset is executed and they can override \
-        confs set for the pipeline or on the cluster.
     :param table_properties: A dict where the keys are the property names and the values are the \
         property values. These properties will be set on the table.
     :param partition_cols: A list containing the column names of the partition columns.
+    :param cluster_by: A list containing the column names of the cluster columns.
     :param schema Explicit Spark SQL schema to materialize this table with. Supports either a \
         Pyspark StructType or a SQL DDL string, such as "a INT, b STRING".
     :param format: The format of the table, e.g. "parquet".
@@ -445,6 +447,7 @@ def create_streaming_table(
             },
         )
     validate_optional_list_of_str_arg(arg_name="partition_cols", arg_value=partition_cols)
+    validate_optional_list_of_str_arg(arg_name="cluster_by", arg_value=cluster_by)
 
     source_code_location = get_caller_source_code_location(stacklevel=1)
 
@@ -454,7 +457,50 @@ def create_streaming_table(
         source_code_location=source_code_location,
         table_properties=table_properties or {},
         partition_cols=partition_cols,
+        cluster_by=cluster_by,
         schema=schema,
         format=format,
     )
-    get_active_graph_element_registry().register_dataset(table)
+    get_active_graph_element_registry().register_output(table)
+
+
+def create_sink(
+    name: str,
+    format: str,
+    options: Optional[Dict[str, str]] = None,
+) -> None:
+    """
+    Creates a sink that can be targeted by streaming flows, providing a generic destination \
+    for flows to send data external to the pipeline.
+
+    :param name: The name of the sink.
+    :param format: The format of the sink, e.g. "parquet".
+    :param options: A dict where the keys are the property names and the values are the \
+        property values. These properties will be set on the sink.
+    """
+    if type(name) is not str:
+        raise PySparkTypeError(
+            errorClass="NOT_STR",
+            messageParameters={"arg_name": "name", "arg_type": type(name).__name__},
+        )
+    if type(format) is not str:
+        raise PySparkTypeError(
+            errorClass="NOT_STR",
+            messageParameters={"arg_name": "format", "arg_type": type(format).__name__},
+        )
+    if options is not None and not isinstance(options, dict):
+        raise PySparkTypeError(
+            errorClass="NOT_DICT",
+            messageParameters={
+                "arg_name": "options",
+                "arg_type": type(options).__name__,
+            },
+        )
+    sink = Sink(
+        name=name,
+        format=format,
+        options=options or {},
+        source_code_location=get_caller_source_code_location(stacklevel=1),
+        comment=None,
+    )
+    get_active_graph_element_registry().register_output(sink)

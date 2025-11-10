@@ -954,7 +954,7 @@ class QueryCompilationErrorsSuite
     }
     checkError(
       exception = intercept[AnalysisException] {
-        converter.convertField(StructField("test", dummyDataType))
+        converter.convertField(StructField("test", dummyDataType), inShredded = false)
       },
       condition = "INTERNAL_ERROR",
       parameters = Map("message" -> "Cannot convert Spark data type \"DUMMY\" to any Parquet type.")

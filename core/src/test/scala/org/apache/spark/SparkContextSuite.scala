@@ -19,13 +19,12 @@ package org.apache.spark
 
 import java.io.File
 import java.net.{MalformedURLException, URI}
-import java.nio.charset.StandardCharsets
+import java.nio.file.Files
 import java.util.concurrent.{CountDownLatch, Semaphore, TimeUnit}
 
 import scala.concurrent.duration._
 import scala.io.Source
 
-import com.google.common.io.Files
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.io.{BytesWritable, LongWritable, Text}
@@ -42,6 +41,7 @@ import org.apache.spark.executor.ExecutorExitCode
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Tests._
 import org.apache.spark.internal.config.UI._
+import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.resource.ResourceAllocation
 import org.apache.spark.resource.ResourceUtils._
 import org.apache.spark.resource.TestResourceIDs._
@@ -120,8 +120,8 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
       val absolutePath2 = file2.getAbsolutePath
 
       try {
-        Files.asCharSink(file1, StandardCharsets.UTF_8).write("somewords1")
-        Files.asCharSink(file2, StandardCharsets.UTF_8).write("somewords2")
+        Files.writeString(file1.toPath, "somewords1")
+        Files.writeString(file2.toPath, "somewords2")
         val length1 = file1.length()
         val length2 = file2.length()
 
@@ -179,10 +179,10 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
         s"${jarFile.getParent}/../${jarFile.getParentFile.getName}/${jarFile.getName}#zoo"
 
       try {
-        Files.asCharSink(file1, StandardCharsets.UTF_8).write("somewords1")
-        Files.asCharSink(file2, StandardCharsets.UTF_8).write("somewords22")
-        Files.asCharSink(file3, StandardCharsets.UTF_8).write("somewords333")
-        Files.asCharSink(file4, StandardCharsets.UTF_8).write("somewords4444")
+        Files.writeString(file1.toPath, "somewords1")
+        Files.writeString(file2.toPath, "somewords22")
+        Files.writeString(file3.toPath, "somewords333")
+        Files.writeString(file4.toPath, "somewords4444")
         val length1 = file1.length()
         val length2 = file2.length()
         val length3 = file1.length()
@@ -375,8 +375,8 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
       assert(subdir2.mkdir())
       val file1 = new File(subdir1, "file")
       val file2 = new File(subdir2, "file")
-      Files.asCharSink(file1, StandardCharsets.UTF_8).write("old")
-      Files.asCharSink(file2, StandardCharsets.UTF_8).write("new")
+      Files.writeString(file1.toPath, "old")
+      Files.writeString(file2.toPath, "new")
       sc = new SparkContext("local-cluster[1,1,1024]", "test")
       sc.addFile(file1.getAbsolutePath)
       def getAddedFileContents(): String = {
@@ -507,15 +507,12 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
 
         try {
           // Create 5 text files.
-          Files.asCharSink(file1, StandardCharsets.UTF_8)
-            .write("someline1 in file1\nsomeline2 in file1\nsomeline3 in file1")
-          Files.asCharSink(file2, StandardCharsets.UTF_8)
-            .write("someline1 in file2\nsomeline2 in file2")
-          Files.asCharSink(file3, StandardCharsets.UTF_8).write("someline1 in file3")
-          Files.asCharSink(file4, StandardCharsets.UTF_8)
-            .write("someline1 in file4\nsomeline2 in file4")
-          Files.asCharSink(file5, StandardCharsets.UTF_8)
-            .write("someline1 in file2\nsomeline2 in file5")
+          Files.writeString(file1.toPath,
+            "someline1 in file1\nsomeline2 in file1\nsomeline3 in file1")
+          Files.writeString(file2.toPath, "someline1 in file2\nsomeline2 in file2")
+          Files.writeString(file3.toPath, "someline1 in file3")
+          Files.writeString(file4.toPath, "someline1 in file4\nsomeline2 in file4")
+          Files.writeString(file5.toPath, "someline1 in file2\nsomeline2 in file5")
 
           sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
 
@@ -780,7 +777,7 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
     fs.initialize(new URI("file:///"), new Configuration())
     val file = File.createTempFile("SPARK19446", "temp")
     file.deleteOnExit()
-    Files.write(Array.ofDim[Byte](1000), file)
+    Files.write(file.toPath, Array.ofDim[Byte](1000))
     val path = new Path("file:///" + file.getCanonicalPath)
     val stream = fs.open(path)
     val exc = intercept[RuntimeException] {
@@ -1469,6 +1466,15 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
     sc.stop()
   }
 
+  test("SPARK-49984: Don't duplicate default Java options to extra Java options") {
+    val conf = new SparkConf().setAppName("test").setMaster("local")
+    conf.set(SparkLauncher.DRIVER_DEFAULT_JAVA_OPTIONS, "-Dfoo=bar")
+    conf.set(SparkLauncher.EXECUTOR_DEFAULT_JAVA_OPTIONS, "-Dfoo=bar")
+    sc = new SparkContext(conf)
+    assert(!sc.conf.get(SparkLauncher.DRIVER_EXTRA_JAVA_OPTIONS).contains("-Dfoo=bar"))
+    assert(!sc.conf.get(SparkLauncher.EXECUTOR_EXTRA_JAVA_OPTIONS).contains("-Dfoo=bar"))
+    sc.stop()
+  }
 }
 
 object SparkContextSuite {

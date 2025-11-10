@@ -116,7 +116,7 @@ FROM   (VALUES ('x', 'a', 10), ('y', 'b', 20) ) AS t (c1, c2, c3)
 GROUP  BY GROUPING SETS ( ( c1 ), ( c2 ) )
 HAVING GROUPING__ID > 1
 -- !query analysis
-Filter (grouping__id#xL > cast(1 as bigint))
+Filter (GROUPING__ID#xL > cast(1 as bigint))
 +- Aggregate [c1#x, c2#x, spark_grouping_id#xL], [c1#x, c2#x, sum(c3#x) AS sum(c3)#xL, spark_grouping_id#xL AS grouping__id#xL]
    +- Expand [[c1#x, c2#x, c3#x, c1#x, null, 1], [c1#x, c2#x, c3#x, null, c2#x, 2]], [c1#x, c2#x, c3#x, c1#x, c2#x, spark_grouping_id#xL]
       +- Project [c1#x, c2#x, c3#x, c1#x AS c1#x, c2#x AS c2#x]

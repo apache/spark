@@ -17,6 +17,8 @@
 
 package org.apache.spark.internal
 
+import java.util.Locale
+
 import scala.concurrent.duration._
 import scala.jdk.CollectionConverters._
 
@@ -29,7 +31,6 @@ import org.slf4j.{Logger, LoggerFactory}
 import org.slf4j.event.{Level => Slf4jLevel}
 
 import org.apache.spark.internal.Logging.SparkShellLoggingFilter
-import org.apache.spark.internal.LogKeys
 import org.apache.spark.util.SparkClassUtils
 
 /**
@@ -61,28 +62,15 @@ import org.apache.spark.util.SparkClassUtils
  * <p>
  *
  * If you want to output logs in `scala code` through the structured log framework,
- * you can define `custom LogKey` and use it in `scala` code as follows:
+ * you can define `custom LogKey` in `java` and use it in `scala` code as follows:
  * <p>
  *
- * // To add a `custom LogKey`, implement `LogKey`
- * case object CUSTOM_LOG_KEY extends LogKey
- * import org.apache.spark.internal.MDC;
+ * // Add a `CustomLogKeys`, implement `LogKey`
+ * public enum CustomLogKeys implements LogKey {
+ *   CUSTOM_LOG_KEY
+ * }
  * logInfo(log"${MDC(CUSTOM_LOG_KEY, "key")}")
  */
-
-/**
- * Mapped Diagnostic Context (MDC) that will be used in log messages.
- * The values of the MDC will be inline in the log message, while the key-value pairs will be
- * part of the ThreadContext.
- */
-case class MDC(key: LogKey, value: Any) {
-  require(!value.isInstanceOf[MessageWithContext],
-    "the class of value cannot be MessageWithContext")
-}
-
-object MDC {
-  def of(key: LogKey, value: Any): MDC = MDC(key, value)
-}
 
 /**
  * Wrapper class for log messages that include a logging context.
@@ -155,7 +143,7 @@ trait Logging {
         val value = if (mdc.value != null) mdc.value.toString else null
         sb.append(value)
         if (Logging.isStructuredLoggingEnabled) {
-          context.put(mdc.key.name, value)
+          context.put(mdc.key.name.toLowerCase(Locale.ROOT), value)
         }
 
         if (processedParts.hasNext) {
@@ -180,6 +168,12 @@ trait Logging {
     } finally {
       closeableThreadContextOpt.foreach(_.close())
     }
+  }
+
+  protected def MDC(key: LogKey, value: Any): MDC = {
+    require(!value.isInstanceOf[MessageWithContext],
+      "the class of value cannot be MessageWithContext")
+    new MDC(key, value)
   }
 
   // Log methods that take only a String
@@ -411,7 +405,6 @@ private[spark] object Logging {
   @volatile private var initialized = false
   @volatile private var defaultRootLevel: Level = null
   @volatile private var defaultSparkLog4jConfig = false
-  @volatile private var structuredLoggingEnabled = false
   @volatile private[spark] var sparkShellThresholdLevel: Level = null
   @volatile private[spark] var setLogLevelPrinted: Boolean = false
 
@@ -484,21 +477,21 @@ private[spark] object Logging {
    * Enable Structured logging framework.
    */
   private[spark] def enableStructuredLogging(): Unit = {
-    structuredLoggingEnabled = true
+    SparkLoggerFactory.enableStructuredLogging()
   }
 
   /**
    * Disable Structured logging framework.
    */
   private[spark] def disableStructuredLogging(): Unit = {
-    structuredLoggingEnabled = false
+    SparkLoggerFactory.disableStructuredLogging()
   }
 
   /**
    * Return true if Structured logging framework is enabled.
    */
   private[spark] def isStructuredLoggingEnabled: Boolean = {
-    structuredLoggingEnabled
+    SparkLoggerFactory.isStructuredLoggingEnabled
   }
 
   private[spark] class SparkShellLoggingFilter extends AbstractFilter {

@@ -27,7 +27,7 @@ import org.apache.spark.sql.connect.common.{ProtoDataTypes, ProtoUtils}
 class AbbreviateSuite extends SparkFunSuite {
 
   test("truncate string: simple SQL text") {
-    val message = proto.SQL.newBuilder().setQuery("x" * 1024).build()
+    val message = proto.SQL.newBuilder().setQuery("x".repeat(1024)).build()
 
     Seq(1, 16, 256, 512, 1024, 2048).foreach { threshold =>
       val truncated = ProtoUtils.abbreviate(message, threshold)
@@ -47,7 +47,7 @@ class AbbreviateSuite extends SparkFunSuite {
       .setSql(
         proto.SQL
           .newBuilder()
-          .setQuery("x" * 1024)
+          .setQuery("x".repeat(1024))
           .build())
       .build()
     val drop = proto.Relation
@@ -214,7 +214,10 @@ class AbbreviateSuite extends SparkFunSuite {
   test("truncate map<string, string>") {
     val read = proto.Read.NamedTable
       .newBuilder()
-      .putAllOptions(Map("k1" * 4096 -> "v1" * 4096, "k2" * 4096 -> "v2" * 4096).asJava)
+      .putAllOptions(
+        Map(
+          "k1".repeat(4096) -> "v1".repeat(4096),
+          "k2".repeat(4096) -> "v2".repeat(4096)).asJava)
       .build()
 
     val threshold = 1024
@@ -237,14 +240,14 @@ class AbbreviateSuite extends SparkFunSuite {
             .newBuilder()
             .setUnresolvedAttribute(proto.Expression.UnresolvedAttribute
               .newBuilder()
-              .setUnparsedIdentifier("v1" * 4096)
+              .setUnparsedIdentifier("v1".repeat(4096))
               .build())
             .build(),
           "k2" -> proto.Expression
             .newBuilder()
             .setUnresolvedAttribute(proto.Expression.UnresolvedAttribute
               .newBuilder()
-              .setUnparsedIdentifier("v2" * 4096)
+              .setUnparsedIdentifier("v2".repeat(4096))
               .build())
             .build()).asJava)
       .build()
@@ -272,7 +275,7 @@ class AbbreviateSuite extends SparkFunSuite {
           .newBuilder()
           .setQuery(
             // Level 5.
-            "x" * (threshold + 32))
+            "x".repeat(threshold + 32))
           .build())
       .build()
 

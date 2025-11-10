@@ -610,8 +610,7 @@ abstract class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTes
 
   test("roundtripping SparkListenerDriverAccumUpdates through JsonProtocol (SPARK-18462)") {
     val event = SparkListenerDriverAccumUpdates(1L, Seq((2L, 3L)))
-    val jsonProtocol = new JsonProtocol(new SparkConf())
-    val json = jsonProtocol.sparkEventToJsonString(event)
+    val json = JsonProtocol.sparkEventToJsonString(event)
     assertValidDataInJson(parse(json),
       parse("""
         |{
@@ -620,7 +619,7 @@ abstract class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTes
         |  "accumUpdates": [[2,3]]
         |}
       """.stripMargin))
-    jsonProtocol.sparkEventFromJson(json) match {
+    JsonProtocol.sparkEventFromJson(json) match {
       case SparkListenerDriverAccumUpdates(executionId, accums) =>
         assert(executionId == 1L)
         accums.foreach { case (a, b) =>
@@ -638,7 +637,7 @@ abstract class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTes
         |  "accumUpdates": [[4294967294,3]]
         |}
       """.stripMargin
-    jsonProtocol.sparkEventFromJson(longJson) match {
+    JsonProtocol.sparkEventFromJson(longJson) match {
       case SparkListenerDriverAccumUpdates(executionId, accums) =>
         assert(executionId == 4294967294L)
         accums.foreach { case (a, b) =>

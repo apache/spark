@@ -17,11 +17,11 @@
 
 import unittest
 
-from pyspark.sql.tests.arrow.test_arrow_grouped_map import GroupedMapInArrowTestsMixin
+from pyspark.sql.tests.arrow.test_arrow_grouped_map import ApplyInArrowTestsMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
 
 
-class GroupedApplyInArrowParityTests(GroupedMapInArrowTestsMixin, ReusedConnectTestCase):
+class ApplyInArrowParityTests(ApplyInArrowTestsMixin, ReusedConnectTestCase):
     pass
 
 

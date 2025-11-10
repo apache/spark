@@ -464,7 +464,7 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
       Row("www.apache")
     )
 
-    // TODO SPARK-48779 Move E2E SQL tests with column input to collations.sql golden file.
+    // TODO SPARK-48779 Move E2E SQL tests with column input to collations-basic.sql golden file.
     val testTable = "test_substring_index"
     withTable(testTable) {
       sql(s"CREATE TABLE $testTable (num int) USING parquet")

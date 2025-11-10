@@ -599,6 +599,34 @@ class StackTraceElement(google.protobuf.message.Message):
 
 global___StackTraceElement = StackTraceElement
 
+class ResolvedIdentifier(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    CATALOG_NAME_FIELD_NUMBER: builtins.int
+    NAMESPACE_FIELD_NUMBER: builtins.int
+    TABLE_NAME_FIELD_NUMBER: builtins.int
+    catalog_name: builtins.str
+    @property
+    def namespace(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]: ...
+    table_name: builtins.str
+    def __init__(
+        self,
+        *,
+        catalog_name: builtins.str = ...,
+        namespace: collections.abc.Iterable[builtins.str] | None = ...,
+        table_name: builtins.str = ...,
+    ) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "catalog_name", b"catalog_name", "namespace", b"namespace", "table_name", b"table_name"
+        ],
+    ) -> None: ...
+
+global___ResolvedIdentifier = ResolvedIdentifier
+
 class Bools(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 

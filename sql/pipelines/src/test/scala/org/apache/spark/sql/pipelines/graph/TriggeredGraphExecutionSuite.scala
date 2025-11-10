@@ -19,14 +19,14 @@ package org.apache.spark.sql.pipelines.graph
 
 import org.scalatest.time.{Seconds, Span}
 
-import org.apache.spark.sql.{functions, Row}
+import org.apache.spark.sql.{functions, Row, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.classic.{DataFrame, Dataset}
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Identifier, TableCatalog}
-import org.apache.spark.sql.execution.streaming.MemoryStream
+import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.pipelines.common.{FlowStatus, RunState}
 import org.apache.spark.sql.pipelines.graph.TriggeredGraphExecution.StreamState
-import org.apache.spark.sql.pipelines.logging.EventLevel
+import org.apache.spark.sql.pipelines.logging.{EventLevel, FlowProgress}
 import org.apache.spark.sql.pipelines.utils.{ExecutionTest, TestGraphRegistrationContext}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StringType, StructType}
@@ -68,7 +68,7 @@ class TriggeredGraphExecutionSuite extends ExecutionTest with SharedSparkSession
       resolvedGraph.resolvedFlows.filter(_.identifier == fullyQualifiedIdentifier("b")).head
     assert(bFlow.inputs == Set(fullyQualifiedIdentifier("a")))
 
-    val updateContext = TestPipelineUpdateContext(spark, unresolvedGraph)
+    val updateContext = TestPipelineUpdateContext(spark, unresolvedGraph, storageRoot)
     updateContext.pipelineExecution.runPipeline()
     updateContext.pipelineExecution.awaitCompletion()
 
@@ -128,7 +128,7 @@ class TriggeredGraphExecutionSuite extends ExecutionTest with SharedSparkSession
       resolvedGraph.resolvedFlows.filter(_.identifier == fullyQualifiedIdentifier("d")).head
     assert(dFlow.inputs == Set(fullyQualifiedIdentifier("c", isTemporaryView = true)))
 
-    val updateContext = TestPipelineUpdateContext(spark, unresolvedGraph)
+    val updateContext = TestPipelineUpdateContext(spark, unresolvedGraph, storageRoot)
     updateContext.pipelineExecution.runPipeline()
     updateContext.pipelineExecution.awaitCompletion()
 
@@ -183,6 +183,7 @@ class TriggeredGraphExecutionSuite extends ExecutionTest with SharedSparkSession
 
     // Construct pipeline
     val pipelineDef = new TestGraphRegistrationContext(spark) {
+      implicit val sparkSession: SparkSession = spark
       private val ints = MemoryStream[Int]
       ints.addData(1 until 10: _*)
       registerView("input", query = dfFlowFunc(ints.toDF()))
@@ -201,7 +202,7 @@ class TriggeredGraphExecutionSuite extends ExecutionTest with SharedSparkSession
     }
     val graph = pipelineDef.toDataflowGraph
 
-    val updateContext = TestPipelineUpdateContext(spark, graph)
+    val updateContext = TestPipelineUpdateContext(spark, graph, storageRoot)
     updateContext.pipelineExecution.runPipeline()
     updateContext.pipelineExecution.awaitCompletion()
 
@@ -259,6 +260,7 @@ class TriggeredGraphExecutionSuite extends ExecutionTest with SharedSparkSession
 
     // Construct pipeline
     val pipelineDef = new TestGraphRegistrationContext(spark) {
+      implicit val sparkSession: SparkSession = spark
       private val ints = MemoryStream[Int]
       registerView("input", query = dfFlowFunc(ints.toDF()))
       registerTable(
@@ -268,7 +270,7 @@ class TriggeredGraphExecutionSuite extends ExecutionTest with SharedSparkSession
     }
     val graph = pipelineDef.toDataflowGraph
 
-    val updateContext = TestPipelineUpdateContext(spark, graph)
+    val updateContext = TestPipelineUpdateContext(spark, graph, storageRoot)
     updateContext.pipelineExecution.runPipeline()
     updateContext.pipelineExecution.awaitCompletion()
 
@@ -309,6 +311,7 @@ class TriggeredGraphExecutionSuite extends ExecutionTest with SharedSparkSession
     })
 
     val pipelineDef = new TestGraphRegistrationContext(spark) {
+      implicit val sparkSession: SparkSession = spark
       private val memoryStream = MemoryStream[Int]
       memoryStream.addData(1, 2)
       registerView("input_view", query = dfFlowFunc(memoryStream.toDF()))
@@ -329,7 +332,7 @@ class TriggeredGraphExecutionSuite extends ExecutionTest with SharedSparkSession
       registerTable("z", query = Option(readStreamFlowFunc("x")))
     }
     val graph = pipelineDef.toDataflowGraph
-    val updateContext = TestPipelineUpdateContext(spark, graph)
+    val updateContext = TestPipelineUpdateContext(spark, graph, storageRoot)
     updateContext.pipelineExecution.runPipeline()
     updateContext.pipelineExecution.awaitCompletion()
 
@@ -437,7 +440,7 @@ class TriggeredGraphExecutionSuite extends ExecutionTest with SharedSparkSession
     }
 
     val graph1 = pipelineDef1.toDataflowGraph
-    val updateContext1 = TestPipelineUpdateContext(spark, graph1)
+    val updateContext1 = TestPipelineUpdateContext(spark, graph1, storageRoot)
     updateContext1.pipelineExecution.runPipeline()
     updateContext1.pipelineExecution.awaitCompletion()
     assertFlowProgressEvent(
@@ -458,7 +461,7 @@ class TriggeredGraphExecutionSuite extends ExecutionTest with SharedSparkSession
       )
     }
     val graph2 = pipelineDef2.toDataflowGraph
-    val updateContext2 = TestPipelineUpdateContext(spark, graph2)
+    val updateContext2 = TestPipelineUpdateContext(spark, graph2, storageRoot)
     updateContext2.pipelineExecution.runPipeline()
     updateContext2.pipelineExecution.awaitCompletion()
 
@@ -506,6 +509,7 @@ class TriggeredGraphExecutionSuite extends ExecutionTest with SharedSparkSession
     val ctx = TestPipelineUpdateContext(
       spark,
       pipelineDef.toDataflowGraph,
+      storageRoot,
       fullRefreshTables = AllTables,
       resetCheckpointFlows = AllFlows
     )
@@ -547,6 +551,7 @@ class TriggeredGraphExecutionSuite extends ExecutionTest with SharedSparkSession
 
     // Construct pipeline
     val pipelineDef = new TestGraphRegistrationContext(spark) {
+      implicit val sparkSession: SparkSession = spark
       private val memoryStream = MemoryStream[Int]
       memoryStream.addData(1, 2)
       registerView("input_view", query = dfFlowFunc(memoryStream.toDF()))
@@ -562,7 +567,7 @@ class TriggeredGraphExecutionSuite extends ExecutionTest with SharedSparkSession
     }
 
     val graph = pipelineDef.toDataflowGraph
-    val updateContext = TestPipelineUpdateContext(spark, graph)
+    val updateContext = TestPipelineUpdateContext(spark, graph, storageRoot)
     updateContext.pipelineExecution.startPipeline()
 
     val graphExecution = updateContext.pipelineExecution.graphExecution.get
@@ -626,7 +631,7 @@ class TriggeredGraphExecutionSuite extends ExecutionTest with SharedSparkSession
     }
 
     val graph = pipelineDef.toDataflowGraph
-    val updateContext = TestPipelineUpdateContext(spark, graph)
+    val updateContext = TestPipelineUpdateContext(spark, graph, storageRoot)
     updateContext.pipelineExecution.runPipeline()
     updateContext.pipelineExecution.awaitCompletion()
 
@@ -688,7 +693,7 @@ class TriggeredGraphExecutionSuite extends ExecutionTest with SharedSparkSession
     }
 
     val graph = pipelineDef.toDataflowGraph
-    val updateContext = TestPipelineUpdateContext(spark, graph)
+    val updateContext = TestPipelineUpdateContext(spark, graph, storageRoot)
     updateContext.pipelineExecution.runPipeline()
     updateContext.pipelineExecution.awaitCompletion()
 
@@ -767,7 +772,7 @@ class TriggeredGraphExecutionSuite extends ExecutionTest with SharedSparkSession
     }
 
     val graph = pipelineDef.toDataflowGraph
-    val updateContext = TestPipelineUpdateContext(spark, graph)
+    val updateContext = TestPipelineUpdateContext(spark, graph, storageRoot)
     updateContext.pipelineExecution.runPipeline()
     updateContext.pipelineExecution.awaitCompletion()
 
@@ -826,7 +831,7 @@ class TriggeredGraphExecutionSuite extends ExecutionTest with SharedSparkSession
       )
     }
     val graph = pipelineDef.toDataflowGraph
-    val updateContext = TestPipelineUpdateContext(spark, graph)
+    val updateContext = TestPipelineUpdateContext(spark, graph, storageRoot)
     updateContext.pipelineExecution.runPipeline()
     updateContext.pipelineExecution.awaitCompletion()
 
@@ -883,6 +888,7 @@ class TriggeredGraphExecutionSuite extends ExecutionTest with SharedSparkSession
     val updateContext1 = TestPipelineUpdateContext(
       spark = spark,
       unresolvedGraph = graph1,
+      storageRoot = storageRoot,
       refreshTables = SomeTables(
         Set(fullyQualifiedIdentifier("source"), fullyQualifiedIdentifier("all"))
       ),
@@ -932,6 +938,7 @@ class TriggeredGraphExecutionSuite extends ExecutionTest with SharedSparkSession
     val updateContext2 = TestPipelineUpdateContext(
       spark = spark,
       unresolvedGraph = graph1,
+      storageRoot = storageRoot,
       refreshTables = SomeTables(
         Set(fullyQualifiedIdentifier("source"), fullyQualifiedIdentifier("max_evens"))
       ),
@@ -986,7 +993,8 @@ class TriggeredGraphExecutionSuite extends ExecutionTest with SharedSparkSession
       registerTable("table3", query = Option(sqlFlowFunc(spark, "SELECT * FROM table1")))
     }.toDataflowGraph
 
-    val updateContext = TestPipelineUpdateContext(spark = spark, unresolvedGraph = graph)
+    val updateContext = TestPipelineUpdateContext(spark = spark,
+      unresolvedGraph = graph, storageRoot = storageRoot)
     updateContext.pipelineExecution.runPipeline()
 
     assertFlowProgressEvent(
@@ -1026,5 +1034,34 @@ class TriggeredGraphExecutionSuite extends ExecutionTest with SharedSparkSession
         )
       }
     )
+  }
+
+  test("consecutive failure event level is correct") {
+    val session = spark
+    import session.implicits._
+
+    val pipelineDef = new TestGraphRegistrationContext(spark) {
+      registerMaterializedView(
+        "retry_test",
+        partitionCols = Some(Seq("nonexistent_col")),
+        query = dfFlowFunc(spark.range(5).withColumn("id_mod", ($"id" % 2).cast("int")))
+      )
+    }
+
+    val graph = pipelineDef.toDataflowGraph
+    val updateContext = TestPipelineUpdateContext(spark, graph, storageRoot)
+    updateContext.pipelineExecution.runPipeline()
+    updateContext.pipelineExecution.awaitCompletion()
+
+    val failedEvents = updateContext.eventBuffer.getEvents.filter { e =>
+      e.details.isInstanceOf[FlowProgress] &&
+      e.details.asInstanceOf[FlowProgress].status == FlowStatus.FAILED
+    }
+
+    val warnCount = failedEvents.count(_.level == EventLevel.WARN)
+    // flowToNumConsecutiveFailure controls that the last failure should be logged as ERROR
+    val errorCount = failedEvents.count(_.level == EventLevel.ERROR)
+
+    assert(warnCount == 2 && errorCount == 1)
   }
 }

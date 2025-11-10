@@ -18,47 +18,38 @@
 package org.apache.spark.sql.pipelines.utils
 
 import java.io.{BufferedReader, FileNotFoundException, InputStreamReader}
-import java.nio.file.Files
 
 import scala.collection.mutable.ArrayBuffer
 import scala.util.{Failure, Try}
 import scala.util.control.NonFatal
 
 import org.scalactic.source
-import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach, Tag}
+import org.scalatest.Tag
 import org.scalatest.concurrent.Eventually
-import org.scalatest.matchers.should.Matchers
 
-import org.apache.spark.SparkFunSuite
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{Column, QueryTest, Row, SQLContext, TypedColumn}
+import org.apache.spark.sql.{Column, DataFrame, QueryTest, Row, TypedColumn}
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.classic.{DataFrame, Dataset, SparkSession}
+import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.pipelines.graph.{DataflowGraph, PipelineUpdateContextImpl, SqlGraphRegistrationContext}
-import org.apache.spark.sql.pipelines.utils.PipelineTest.{cleanupMetastore, createTempDir}
+import org.apache.spark.sql.pipelines.utils.PipelineTest.cleanupMetastore
+import org.apache.spark.sql.test.SQLTestUtils
 
 abstract class PipelineTest
-    extends SparkFunSuite
-    with BeforeAndAfterAll
-    with BeforeAndAfterEach
-    with Matchers
-    with SparkErrorTestMixin
-    with TargetCatalogAndDatabaseMixin
-    with Logging
-    with Eventually {
+  extends QueryTest
+  with StorageRootMixin
+  with SQLTestUtils
+  with SparkErrorTestMixin
+  with TargetCatalogAndDatabaseMixin
+  with Logging
+  with Eventually {
 
-  final protected val storageRoot = createTempDir()
-
-  protected def spark: SparkSession
-
-  protected implicit def sqlContext: SQLContext
-
-  def sql(text: String): DataFrame = spark.sql(text)
-
-  protected def startPipelineAndWaitForCompletion(unresolvedDataflowGraph: DataflowGraph): Unit = {
+  protected def startPipelineAndWaitForCompletion(
+       unresolvedDataflowGraph: DataflowGraph): Unit = {
     val updateContext = new PipelineUpdateContextImpl(
-      unresolvedDataflowGraph, eventCallback = _ => ())
+      unresolvedDataflowGraph, eventCallback = _ => (),
+      storageRoot = storageRoot)
     updateContext.pipelineExecution.runPipeline()
     updateContext.pipelineExecution.awaitCompletion()
   }
@@ -187,13 +178,6 @@ abstract class PipelineTest
     gridTest(testNamePrefix, paramName, testTags: _*)(Seq(true, false))(testFun)
   }
 
-  protected def namedGridTest[A](testNamePrefix: String, testTags: Tag*)(params: Map[String, A])(
-      testFun: A => Unit): Unit = {
-    for (param <- params) {
-      test(testNamePrefix + s" (${param._1})", testTags: _*)(testFun(param._2))
-    }
-  }
-
   protected def namedGridIgnore[A](testNamePrefix: String, testTags: Tag*)(params: Map[String, A])(
       testFun: A => Unit): Unit = {
     for (param <- params) {
@@ -221,14 +205,15 @@ abstract class PipelineTest
       df: => DataFrame,
       expectedAnswer: Seq[Row],
       checkPlan: Option[SparkPlan => Unit]): Unit = {
-    QueryTest.checkAnswer(df, expectedAnswer)
+    super.checkAnswer(df, expectedAnswer)
 
     // To help with test development, you can dump the plan to the log by passing
     // `--test_env=DUMP_PLAN=true` to `bazel test`.
+    val classicDf = df.asInstanceOf[org.apache.spark.sql.classic.DataFrame]
     if (Option(System.getenv("DUMP_PLAN")).exists(s => java.lang.Boolean.valueOf(s))) {
-      log.info(s"Spark plan:\n${df.queryExecution.executedPlan}")
+      log.info(s"Spark plan:\n${classicDf.queryExecution.executedPlan}")
     }
-    checkPlan.foreach(_.apply(df.queryExecution.executedPlan))
+    checkPlan.foreach(_.apply(classicDf.queryExecution.executedPlan))
   }
 
   /**
@@ -237,75 +222,14 @@ abstract class PipelineTest
    * @param df the `DataFrame` to be executed
    * @param expectedAnswer the expected result in a `Seq` of `Row`s.
    */
-  protected def checkAnswer(df: => DataFrame, expectedAnswer: Seq[Row]): Unit = {
+  override protected def checkAnswer(df: => DataFrame, expectedAnswer: Seq[Row]): Unit = {
     checkAnswerAndPlan(df, expectedAnswer, None)
-  }
-
-  protected def checkAnswer(df: => DataFrame, expectedAnswer: Row): Unit = {
-    checkAnswer(df, Seq(expectedAnswer))
   }
 
   case class ValidationArgs(
       ignoreFieldOrder: Boolean = false,
       ignoreFieldCase: Boolean = false
   )
-
-  /**
-   * Evaluates a dataset to make sure that the result of calling collect matches the given
-   * expected answer.
-   */
-  protected def checkDataset[T](ds: => Dataset[T], expectedAnswer: T*): Unit = {
-    val result = getResult(ds)
-
-    if (!QueryTest.compare(result.toSeq, expectedAnswer)) {
-      fail(s"""
-              |Decoded objects do not match expected objects:
-              |expected: $expectedAnswer
-              |actual:   ${result.toSeq}
-         """.stripMargin)
-    }
-  }
-
-  /**
-   * Evaluates a dataset to make sure that the result of calling collect matches the given
-   * expected answer, after sort.
-   */
-  protected def checkDatasetUnorderly[T: Ordering](result: Array[T], expectedAnswer: T*): Unit = {
-    if (!QueryTest.compare(result.toSeq.sorted, expectedAnswer.sorted)) {
-      fail(s"""
-              |Decoded objects do not match expected objects:
-              |expected: $expectedAnswer
-              |actual:   ${result.toSeq}
-         """.stripMargin)
-    }
-  }
-
-  protected def checkDatasetUnorderly[T: Ordering](ds: => Dataset[T], expectedAnswer: T*): Unit = {
-    val result = getResult(ds)
-    if (!QueryTest.compare(result.toSeq.sorted, expectedAnswer.sorted)) {
-      fail(s"""
-              |Decoded objects do not match expected objects:
-              |expected: $expectedAnswer
-              |actual:   ${result.toSeq}
-         """.stripMargin)
-    }
-  }
-
-  private def getResult[T](ds: => Dataset[T]): Array[T] = {
-    ds
-
-    try ds.collect()
-    catch {
-      case NonFatal(e) =>
-        fail(
-          s"""
-             |Exception collecting dataset as objects
-             |${ds.queryExecution}
-           """.stripMargin,
-          e
-        )
-    }
-  }
 
   /** Holds a parsed version along with the original json of a test. */
   private case class TestSequence(json: Seq[String], rows: Seq[Row]) {
@@ -374,11 +298,6 @@ object PipelineTest extends Logging {
     "system",
     "main"
   )
-
-  /** Creates a temporary directory. */
-  protected def createTempDir(): String = {
-    Files.createTempDirectory(getClass.getSimpleName).normalize.toString
-  }
 
   /**
    * Try to drop the schema in the catalog and return whether it is successfully dropped.

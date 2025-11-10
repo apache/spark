@@ -339,6 +339,9 @@ def try_remote_call(f: FuncT) -> FuncT:
                     session.client.execute_command(create_summary_command)  # type: ignore
 
                     return remote_call()
+
+                # for other unexpected error, re-raise it.
+                raise
         else:
             return f(self, name, *args)
 

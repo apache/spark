@@ -45,6 +45,13 @@ private[sql] class ObservationManager(session: SparkSession) {
     observations.putIfAbsent((observation.name, dataFrameId), observation)
   }
 
+  def getOrNewObservation(name: String, dataFrameId: Long): Observation =
+    observations.computeIfAbsent((name, dataFrameId), { _ =>
+      val observation = Observation(name)
+      observation.markRegistered()
+      observation
+    })
+
   private def tryComplete(qe: QueryExecution): Unit = {
     val allMetrics = qe.observedMetrics
     qe.logical.foreach {

@@ -65,6 +65,11 @@ object StateStoreErrors {
     new StateStoreRemovingColumnFamiliesNotSupportedException(stateStoreProvider)
   }
 
+  def storeBackendNotSupportedForTWS(stateStoreProvider: String):
+    StateStoreBackendNotSupportedForTWSException = {
+    new StateStoreBackendNotSupportedForTWSException(stateStoreProvider)
+  }
+
   def cannotUseColumnFamilyWithInvalidName(operationName: String, colFamilyName: String):
     StateStoreCannotUseColumnFamilyWithInvalidName = {
       new StateStoreCannotUseColumnFamilyWithInvalidName(operationName, colFamilyName)
@@ -90,6 +95,25 @@ object StateStoreErrors {
   def incorrectNumOrderingColsForPrefixScan(numPrefixCols: String):
     StateStoreIncorrectNumOrderingColsForPrefixScan = {
     new StateStoreIncorrectNumOrderingColsForPrefixScan(numPrefixCols)
+  }
+
+  def invalidStateMachineTransition(
+      oldState: String,
+      newState: String,
+      transition: String,
+      storeId: StateStoreId): StateStoreInvalidStateMachineTransition = {
+    new StateStoreInvalidStateMachineTransition(oldState, newState, transition, storeId)
+  }
+
+  def invalidStamp(providedStamp: Long, currentStamp: Long): StateStoreInvalidStamp = {
+    new StateStoreInvalidStamp(providedStamp, currentStamp)
+  }
+
+  def rowChecksumVerificationFailed(
+      storeId: String,
+      expectedChecksum: Int,
+      computedChecksum: Int): StateStoreRowChecksumVerificationFailed = {
+    new StateStoreRowChecksumVerificationFailed(storeId, expectedChecksum, computedChecksum)
   }
 
   def incorrectNumOrderingColsForRangeScan(numOrderingCols: String):
@@ -175,6 +199,11 @@ object StateStoreErrors {
       numSchemaFiles, schemaFilesThreshold, addedColFamilies, removedColFamilies)
   }
 
+  def streamingStateCheckpointLocationNotEmpty(checkpointLocation: String)
+    : StateStoreCheckpointLocationNotEmpty = {
+    new StateStoreCheckpointLocationNotEmpty(checkpointLocation)
+  }
+
   def stateStoreColumnFamilyMismatch(
       columnFamilyName: String,
       oldColumnFamilySchema: String,
@@ -204,6 +233,14 @@ object StateStoreErrors {
     new StateStoreInvalidConfigAfterRestart(configName, oldConfig, newConfig)
   }
 
+  def stateStoreCommitValidationFailed(
+      batchId: Long,
+      expectedCommits: Int,
+      actualCommits: Int,
+      missingCommits: String): StateStoreCommitValidationFailed = {
+    new StateStoreCommitValidationFailed(batchId, expectedCommits, actualCommits, missingCommits)
+  }
+
   def duplicateStateVariableDefined(stateName: String):
     StateStoreDuplicateStateVariableDefined = {
     new StateStoreDuplicateStateVariableDefined(stateName)
@@ -223,6 +260,22 @@ object StateStoreErrors {
     new StateStoreOperationOutOfOrder(errorMsg)
   }
 
+  def unexpectedEmptyFileInRocksDBZip(
+      fileName: String,
+      zipFileName: String): StateStoreUnexpectedEmptyFileInRocksDBZip = {
+    new StateStoreUnexpectedEmptyFileInRocksDBZip(fileName, zipFileName)
+  }
+
+  def autoSnapshotRepairFailed(
+      stateStoreId: String,
+      latestSnapshot: Long,
+      selectedSnapshots: Seq[Long],
+      eligibleSnapshots: Seq[Long],
+      cause: Throwable): StateStoreAutoSnapshotRepairFailed = {
+    new StateStoreAutoSnapshotRepairFailed(
+      stateStoreId, latestSnapshot, selectedSnapshots, eligibleSnapshots, cause)
+  }
+
   def cannotLoadStore(e: Throwable): Throwable = {
     e match {
       case e: SparkException
@@ -233,6 +286,10 @@ object StateStoreErrors {
       case e: Throwable =>
         QueryExecutionErrors.cannotLoadStore(e)
     }
+  }
+
+  def stateStoreCheckpointIdsNotSupported(msg: String): StateStoreCheckpointIdsNotSupported = {
+    new StateStoreCheckpointIdsNotSupported(msg)
   }
 }
 
@@ -276,6 +333,11 @@ class StateStoreMultipleColumnFamiliesNotSupportedException(stateStoreProvider: 
 class StateStoreRemovingColumnFamiliesNotSupportedException(stateStoreProvider: String)
   extends SparkUnsupportedOperationException(
     errorClass = "UNSUPPORTED_FEATURE.STATE_STORE_REMOVING_COLUMN_FAMILIES",
+    messageParameters = Map("stateStoreProvider" -> stateStoreProvider))
+
+class StateStoreBackendNotSupportedForTWSException(stateStoreProvider: String)
+  extends SparkUnsupportedOperationException(
+    errorClass = "UNSUPPORTED_FEATURE.STORE_BACKEND_NOT_SUPPORTED_FOR_TWS",
     messageParameters = Map("stateStoreProvider" -> stateStoreProvider))
 
 class StateStoreCannotUseColumnFamilyWithInvalidName(operationName: String, colFamilyName: String)
@@ -342,6 +404,30 @@ class StateStoreVariableSizeOrderingColsNotSupported(fieldName: String, index: S
   extends SparkUnsupportedOperationException(
     errorClass = "STATE_STORE_VARIABLE_SIZE_ORDERING_COLS_NOT_SUPPORTED",
     messageParameters = Map("fieldName" -> fieldName, "index" -> index))
+
+class StateStoreInvalidStateMachineTransition(
+    oldState: String,
+    newState: String,
+    operation: String,
+    storeId: StateStoreId)
+  extends SparkRuntimeException(
+    errorClass = "STATE_STORE_INVALID_STATE_MACHINE_TRANSITION",
+    messageParameters = Map(
+      "oldState" -> oldState,
+      "newState" -> newState,
+      "operation" -> operation,
+      "storeId" -> storeId.toString
+    )
+  )
+
+class StateStoreInvalidStamp(providedStamp: Long, currentStamp: Long)
+  extends SparkRuntimeException(
+    errorClass = "STATE_STORE_INVALID_STAMP",
+    messageParameters = Map(
+      "providedStamp" -> providedStamp.toString,
+      "currentStamp" -> currentStamp.toString
+    )
+  )
 
 class StateStoreNullTypeOrderingColsNotSupported(fieldName: String, index: String)
   extends SparkUnsupportedOperationException(
@@ -430,6 +516,13 @@ class StateStoreStateSchemaFilesThresholdExceeded(
       "addedColumnFamilies" -> addedColFamilies.mkString("(", ",", ")"),
       "removedColumnFamilies" -> removedColFamilies.mkString("(", ",", ")")))
 
+class StateStoreCheckpointLocationNotEmpty(
+    checkpointLocation: String)
+  extends SparkUnsupportedOperationException(
+    errorClass = "STATE_STORE_CHECKPOINT_LOCATION_NOT_EMPTY",
+    messageParameters = Map(
+      "checkpointLocation" -> checkpointLocation))
+
 class StateStoreSnapshotFileNotFound(fileToRead: String, clazz: String)
   extends SparkRuntimeException(
     errorClass = "CANNOT_LOAD_STATE_STORE.CANNOT_READ_MISSING_SNAPSHOT_FILE",
@@ -488,3 +581,59 @@ class StateStoreOperationOutOfOrder(errorMsg: String)
     errorClass = "STATE_STORE_OPERATION_OUT_OF_ORDER",
     messageParameters = Map("errorMsg" -> errorMsg)
   )
+
+class StateStoreCheckpointIdsNotSupported(msg: String)
+  extends SparkRuntimeException(
+    errorClass = "STATE_STORE_CHECKPOINT_IDS_NOT_SUPPORTED",
+    messageParameters = Map("msg" -> msg)
+  )
+
+class StateStoreCommitValidationFailed(
+    batchId: Long,
+    expectedCommits: Int,
+    actualCommits: Int,
+    missingCommits: String)
+  extends SparkRuntimeException(
+    errorClass = "STATE_STORE_COMMIT_VALIDATION_FAILED",
+    messageParameters = Map(
+      "batchId" -> batchId.toString,
+      "expectedCommits" -> expectedCommits.toString,
+      "actualCommits" -> actualCommits.toString,
+      "missingCommits" -> missingCommits
+    )
+  )
+
+class StateStoreRowChecksumVerificationFailed(
+    storeId: String,
+    expectedChecksum: Int,
+    computedChecksum: Int)
+  extends SparkException(
+    errorClass = "STATE_STORE_ROW_CHECKSUM_VERIFICATION_FAILED",
+    messageParameters = Map(
+      "stateStoreId" -> storeId,
+      "expectedChecksum" -> expectedChecksum.toString,
+      "computedChecksum" -> computedChecksum.toString),
+    cause = null)
+
+class StateStoreUnexpectedEmptyFileInRocksDBZip(fileName: String, zipFileName: String)
+  extends SparkException(
+    errorClass = "STATE_STORE_UNEXPECTED_EMPTY_FILE_IN_ROCKSDB_ZIP",
+    messageParameters = Map(
+      "fileName" -> fileName,
+      "zipFileName" -> zipFileName),
+    cause = null)
+
+class StateStoreAutoSnapshotRepairFailed(
+    stateStoreId: String,
+    latestSnapshot: Long,
+    selectedSnapshots: Seq[Long],
+    eligibleSnapshots: Seq[Long],
+    cause: Throwable)
+  extends SparkRuntimeException(
+    errorClass = "CANNOT_LOAD_STATE_STORE.AUTO_SNAPSHOT_REPAIR_FAILED",
+    messageParameters = Map(
+      "latestSnapshot" -> latestSnapshot.toString,
+      "stateStoreId" -> stateStoreId,
+      "selectedSnapshots" -> selectedSnapshots.mkString(","),
+      "eligibleSnapshots" -> eligibleSnapshots.mkString(",")),
+    cause)

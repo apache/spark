@@ -293,7 +293,7 @@ public class OperationManager extends AbstractService {
       Operation operation = removeTimedOutOperation(handle);
       if (operation != null) {
         LOG.warn("Operation {} is timed-out and will be closed",
-          MDC.of(LogKeys.OPERATION_HANDLE$.MODULE$, handle));
+          MDC.of(LogKeys.OPERATION_HANDLE, handle));
         removed.add(operation);
       }
     }

@@ -19,11 +19,12 @@ package org.apache.spark.sql.execution.streaming
 
 import java.io.File
 
-import org.apache.commons.io.FileUtils
-
 import org.apache.spark.sql.catalyst.util.stringToFile
+import org.apache.spark.sql.execution.streaming.checkpointing.{OffsetSeq, OffsetSeqLog, OffsetSeqMetadata}
+import org.apache.spark.sql.execution.streaming.runtime.{LongOffset, SerializedOffset}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.util.Utils
 
 class OffsetSeqLogSuite extends SharedSparkSession {
 
@@ -180,7 +181,7 @@ class OffsetSeqLogSuite extends SharedSparkSession {
       withTempDir { checkpointDir =>
         val resourceUri = this.getClass.getResource(
         "/structured-streaming/checkpoint-version-4.0.0-tws-" + storeEncodingFormat + "/").toURI
-        FileUtils.copyDirectory(new File(resourceUri), checkpointDir.getCanonicalFile)
+        Utils.copyDirectory(new File(resourceUri), checkpointDir.getCanonicalFile)
         verifyOffsetLogEntry(checkpointDir.getAbsolutePath, entryExists = true,
           storeEncodingFormat)
       }
@@ -191,9 +192,31 @@ class OffsetSeqLogSuite extends SharedSparkSession {
     withTempDir { checkpointDir =>
       val resourceUri = this.getClass.getResource(
         "/structured-streaming/checkpoint-version-3.5.1-streaming-deduplication/").toURI
-      FileUtils.copyDirectory(new File(resourceUri), checkpointDir.getCanonicalFile)
+      Utils.copyDirectory(new File(resourceUri), checkpointDir.getCanonicalFile)
       verifyOffsetLogEntry(checkpointDir.getAbsolutePath, entryExists = false,
         "unsaferow")
+    }
+  }
+
+  test("Row checksum disabled by default") {
+    val offsetSeqMetadata = OffsetSeqMetadata.apply(batchWatermarkMs = 0, batchTimestampMs = 0,
+      spark.conf)
+    assert(offsetSeqMetadata.conf.get(SQLConf.STATE_STORE_ROW_CHECKSUM_ENABLED.key) ===
+      Some(false.toString))
+  }
+
+  test("Row checksum disabled for existing checkpoint even if conf is enabled") {
+    val rowChecksumConf = SQLConf.STATE_STORE_ROW_CHECKSUM_ENABLED.key
+    withSQLConf(rowChecksumConf -> true.toString) {
+      val existingChkpt = "offset-log-version-2.1.0"
+      val (_, offsetSeq) = readFromResource(existingChkpt)
+      val offsetSeqMetadata = offsetSeq.metadata.get
+      // Not present in existing checkpoint
+      assert(offsetSeqMetadata.conf.get(rowChecksumConf) === None)
+
+      val clonedSqlConf = spark.sessionState.conf.clone()
+      OffsetSeqMetadata.setSessionConf(offsetSeqMetadata, clonedSqlConf)
+      assert(!clonedSqlConf.stateStoreRowChecksumEnabled)
     }
   }
 }

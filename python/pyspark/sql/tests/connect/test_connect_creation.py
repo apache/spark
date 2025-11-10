@@ -54,10 +54,21 @@ class SparkConnectCreationTests(ReusedMixedTestCase, PandasOnSparkTestUtils):
         self.assertEqual(rows[0][0], 3)
         self.assertEqual(rows[0][1], "c")
 
-        # Check correct behavior for empty DataFrame
-        pdf = pd.DataFrame({"a": []})
-        with self.assertRaises(ValueError):
-            self.connect.createDataFrame(pdf)
+    def test_from_empty_pandas_dataframe(self):
+        dfs = [
+            pd.DataFrame(),
+            pd.DataFrame({"a": []}),
+            pd.DataFrame(index=range(5)),
+        ]
+
+        for df in dfs:
+            with self.assertRaises(PySparkValueError) as pe:
+                self.connect.createDataFrame(df)
+            self.check_error(
+                exception=pe.exception,
+                errorClass="CANNOT_INFER_EMPTY_SCHEMA",
+                messageParameters={},
+            )
 
     def test_with_local_ndarray(self):
         """SPARK-41446: Test creating a dataframe using local list"""
@@ -530,12 +541,15 @@ class SparkConnectCreationTests(ReusedMixedTestCase, PandasOnSparkTestUtils):
         from pandas import Timestamp
         import pandas as pd
 
+        # Nanoseconds are truncated to microseconds in the serializer
+        # Arrow will throw an error if precision is lost
+        # (i.e., nanoseconds cannot be represented in microseconds)
         pdf = pd.DataFrame(
             {
                 "naive": [datetime(2019, 1, 1, 0)],
                 "aware": [
                     Timestamp(
-                        year=2019, month=1, day=1, nanosecond=500, tz=timezone(timedelta(hours=-8))
+                        year=2019, month=1, day=1, nanosecond=0, tz=timezone(timedelta(hours=-8))
                     )
                 ],
             }

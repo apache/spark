@@ -17,8 +17,10 @@
 
 package org.apache.spark.sql
 
+import java.nio.file.Files
+
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.util.{fileToString, stringToFile, CollationFactory}
+import org.apache.spark.sql.catalyst.util.{stringToFile, CollationFactory}
 import org.apache.spark.util.Utils
 
 // scalastyle:off line.size.limit
@@ -61,7 +63,7 @@ class ICUCollationsMapSuite extends SparkFunSuite {
   }
 
   test("ICU locales map breaking change") {
-    val goldenLines = fileToString(collationsMapFile).split('\n')
+    val goldenLines = Files.readString(collationsMapFile.toPath).split('\n')
     val goldenRelevantLines = goldenLines.slice(4, goldenLines.length) // skip header
     val input = goldenRelevantLines.map(
       s => (s.split('|')(2).strip(), s.split('|')(1).strip().toInt))

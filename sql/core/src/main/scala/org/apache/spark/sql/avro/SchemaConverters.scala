@@ -28,7 +28,7 @@ import org.apache.avro.Schema.Type._
 import org.apache.avro.SchemaBuilder.FieldAssembler
 
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{FIELD_NAME, FIELD_TYPE, RECURSIVE_DEPTH}
 import org.apache.spark.sql.avro.AvroOptions.RECURSIVE_FIELD_MAX_DEPTH_LIMIT
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser

@@ -825,7 +825,7 @@ class CsvFunctionsSuite extends QueryTest with SharedSparkSession {
 
     // In singleVariantColumn mode, from_csv normally treats all inputs as valid. The only exception
     // case is the input exceeds the variant size limit (16MiB).
-    val largeInput = "a" * (16 * 1024 * 1024)
+    val largeInput = "a".repeat(16 * 1024 * 1024)
     checkAnswer(
       Seq(largeInput).toDF("value").select(
         from_csv(

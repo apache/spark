@@ -26,52 +26,63 @@ import org.apache.spark.connect.{proto => sc}
 class TestPipelineDefinition(graphId: String) {
 
   private[connect] val tableDefs =
-    new scala.collection.mutable.ArrayBuffer[sc.PipelineCommand.DefineDataset]()
+    new scala.collection.mutable.ArrayBuffer[sc.PipelineCommand.DefineOutput]()
   private[connect] val viewDefs =
-    new scala.collection.mutable.ArrayBuffer[sc.PipelineCommand.DefineDataset]()
+    new scala.collection.mutable.ArrayBuffer[sc.PipelineCommand.DefineOutput]()
   private[connect] val flowDefs =
     new scala.collection.mutable.ArrayBuffer[sc.PipelineCommand.DefineFlow]()
 
   protected def createTable(
       name: String,
-      datasetType: sc.DatasetType,
+      outputType: sc.OutputType,
       query: Option[sc.Relation] = None,
       sparkConf: Map[String, String] = Map.empty,
       comment: Option[String] = None,
       // TODO: Add support for specifiedSchema
       // specifiedSchema: Option[StructType] = None,
       partitionCols: Option[Seq[String]] = None,
+      clusterCols: Option[Seq[String]] = None,
       properties: Map[String, String] = Map.empty): Unit = {
-    tableDefs += sc.PipelineCommand.DefineDataset
+    val tableDetails = sc.PipelineCommand.DefineOutput.TableDetails
       .newBuilder()
-      .setDataflowGraphId(graphId)
-      .setDatasetName(name)
-      .setDatasetType(datasetType)
-      .setComment(comment.getOrElse(""))
       .addAllPartitionCols(partitionCols.getOrElse(Seq()).asJava)
+      .addAllClusteringColumns(clusterCols.getOrElse(Seq()).asJava)
       .putAllTableProperties(properties.asJava)
       .build()
 
+    tableDefs += sc.PipelineCommand.DefineOutput
+      .newBuilder()
+      .setDataflowGraphId(graphId)
+      .setOutputName(name)
+      .setOutputType(outputType)
+      .setComment(comment.getOrElse(""))
+      .setTableDetails(tableDetails)
+      .build()
+
     query.foreach { q =>
+      val relationFlowDetails = sc.PipelineCommand.DefineFlow.WriteRelationFlowDetails
+        .newBuilder()
+        .setRelation(q)
+        .build()
+
       flowDefs += sc.PipelineCommand.DefineFlow
         .newBuilder()
         .setDataflowGraphId(graphId)
         .setFlowName(name)
         .setTargetDatasetName(name)
-        .setRelation(q)
+        .setRelationFlowDetails(relationFlowDetails)
         .putAllSqlConf(sparkConf.asJava)
-        .setOnce(false)
         .build()
     }
   }
 
   protected def createTable(
       name: String,
-      datasetType: sc.DatasetType,
+      outputType: sc.OutputType,
       sql: Option[String]): Unit = {
     createTable(
       name,
-      datasetType,
+      outputType,
       query = sql.map(s =>
         sc.Relation
           .newBuilder()
@@ -85,12 +96,17 @@ class TestPipelineDefinition(graphId: String) {
       sparkConf: Map[String, String] = Map.empty,
       comment: Option[String] = None,
       sqlText: Option[String] = None): Unit = {
-    tableDefs += sc.PipelineCommand.DefineDataset
+    tableDefs += sc.PipelineCommand.DefineOutput
       .newBuilder()
       .setDataflowGraphId(graphId)
-      .setDatasetName(name)
-      .setDatasetType(sc.DatasetType.TEMPORARY_VIEW)
+      .setOutputName(name)
+      .setOutputType(sc.OutputType.TEMPORARY_VIEW)
       .setComment(comment.getOrElse(""))
+      .build()
+
+    val relationFlowDetails = sc.PipelineCommand.DefineFlow.WriteRelationFlowDetails
+      .newBuilder()
+      .setRelation(query)
       .build()
 
     flowDefs += sc.PipelineCommand.DefineFlow
@@ -98,9 +114,8 @@ class TestPipelineDefinition(graphId: String) {
       .setDataflowGraphId(graphId)
       .setFlowName(name)
       .setTargetDatasetName(name)
-      .setRelation(query)
+      .setRelationFlowDetails(relationFlowDetails)
       .putAllSqlConf(sparkConf.asJava)
-      .setOnce(false)
       .build()
 
   }
@@ -120,14 +135,18 @@ class TestPipelineDefinition(graphId: String) {
       query: sc.Relation,
       sparkConf: Map[String, String] = Map.empty,
       once: Boolean = false): Unit = {
+    val relationFlowDetails = sc.PipelineCommand.DefineFlow.WriteRelationFlowDetails
+      .newBuilder()
+      .setRelation(query)
+      .build()
+
     flowDefs += sc.PipelineCommand.DefineFlow
       .newBuilder()
       .setDataflowGraphId(graphId)
       .setFlowName(name)
       .setTargetDatasetName(destinationName)
-      .setRelation(query)
+      .setRelationFlowDetails(relationFlowDetails)
       .putAllSqlConf(sparkConf.asJava)
-      .setOnce(once)
       .build()
   }
 }

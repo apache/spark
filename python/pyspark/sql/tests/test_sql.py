@@ -168,6 +168,12 @@ class SQLTestsMixin:
         self.assertEqual(df3.take(1), [Row(id=4)])
         self.assertEqual(df3.tail(1), [Row(id=9)])
 
+    def test_lit_time(self):
+        import datetime
+
+        actual = self.spark.sql("select TIME '12:34:56'").first()[0]
+        self.assertEqual(actual, datetime.time(12, 34, 56))
+
 
 class SQLTests(SQLTestsMixin, ReusedSQLTestCase):
     pass

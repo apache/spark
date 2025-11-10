@@ -25,6 +25,7 @@ from pyspark.sql.types import (
     MapType,
     NullType,
     DateType,
+    TimeType,
     TimestampType,
     TimestampNTZType,
     ByteType,
@@ -396,6 +397,7 @@ class SparkConnectColumnTests(ReusedMixedTestCase, PandasOnSparkTestUtils):
             ("sss", StringType()),
             (datetime.date(2022, 12, 13), DateType()),
             (datetime.datetime.now(), DateType()),
+            (datetime.time(1, 0, 0), TimeType()),
             (datetime.datetime.now(), TimestampType()),
             (datetime.datetime.now(), TimestampNTZType()),
             (datetime.timedelta(1, 2, 3), DayTimeIntervalType()),
@@ -441,6 +443,7 @@ class SparkConnectColumnTests(ReusedMixedTestCase, PandasOnSparkTestUtils):
             DoubleType(),
             DecimalType(),
             DateType(),
+            TimeType(),
             TimestampType(),
             TimestampNTZType(),
             DayTimeIntervalType(),
@@ -1040,6 +1043,33 @@ class SparkConnectColumnTests(ReusedMixedTestCase, PandasOnSparkTestUtils):
             SF.lit(123).cast("DOUBLE"),
         )
         self.assertEqual(cdf.columns, sdf.columns)
+
+    def test_transform(self):
+        # Test with built-in functions
+        cdf = self.connect.createDataFrame([("  hello  ",), ("  world  ",)], ["text"])
+        sdf = self.spark.createDataFrame([("  hello  ",), ("  world  ",)], ["text"])
+
+        self.assert_eq(
+            cdf.select(cdf.text.transform(CF.trim).transform(CF.upper)).toPandas(),
+            sdf.select(sdf.text.transform(SF.trim).transform(SF.upper)).toPandas(),
+        )
+
+        # Test with lambda functions
+        cdf = self.connect.createDataFrame([(10,), (20,), (30,)], ["value"])
+        sdf = self.spark.createDataFrame([(10,), (20,), (30,)], ["value"])
+
+        self.assert_eq(
+            cdf.select(
+                cdf.value.transform(lambda c: c + 5)
+                .transform(lambda c: c * 2)
+                .transform(lambda c: c - 10)
+            ).toPandas(),
+            sdf.select(
+                sdf.value.transform(lambda c: c + 5)
+                .transform(lambda c: c * 2)
+                .transform(lambda c: c - 10)
+            ).toPandas(),
+        )
 
 
 if __name__ == "__main__":

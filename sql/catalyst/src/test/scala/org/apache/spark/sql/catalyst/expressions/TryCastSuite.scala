@@ -61,6 +61,15 @@ class TryCastSuite extends CastWithAnsiOnSuite {
     checkEvaluation(cast(l, to), tryCastResult, InternalRow(l.value))
   }
 
+  override protected def checkInvalidCastFromNumericTypeToBinaryType(): Unit = {
+    // All numeric types: `CAST_WITHOUT_SUGGESTION`
+    Seq(1.toByte, 1.toShort, 1, 1L, 1.0.toFloat, 1.0).foreach { testValue =>
+      val expectedError =
+        createCastMismatch(Literal(testValue).dataType, BinaryType, "CAST_WITHOUT_SUGGESTION")
+      assert(cast(testValue, BinaryType).checkInputDataTypes() == expectedError)
+    }
+  }
+
   test("print string") {
     assert(cast(Literal("1"), IntegerType).toString == "try_cast(1 as int)")
     assert(cast(Literal("1"), IntegerType).sql == "TRY_CAST('1' AS INT)")

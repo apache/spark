@@ -200,7 +200,7 @@ class JdbcSQLQueryBuilder(dialect: JdbcDialect, options: JDBCOptions) {
        |$joinType
        |(${right.build()}) $rightSideQualifier
        |ON $joinCondition
-       |)""".stripMargin
+       |) ${JoinPushdownAliasGenerator.getSubqueryQualifier}""".stripMargin
     )
 
     this
@@ -208,7 +208,7 @@ class JdbcSQLQueryBuilder(dialect: JdbcDialect, options: JDBCOptions) {
 
   // If join has been pushed down, reuse join query as a subquery. Otherwise, fallback to
   // what is provided in options.
-  private def tableOrQuery = joinQuery.getOrElse(options.tableOrQuery)
+  protected final def tableOrQuery: String = joinQuery.getOrElse(options.tableOrQuery)
 
   /**
    * Build the final SQL query that following dialect's SQL syntax.
@@ -222,5 +222,13 @@ class JdbcSQLQueryBuilder(dialect: JdbcDialect, options: JDBCOptions) {
     options.prepareQuery +
       s"SELECT $hintClause$columnList FROM $tableOrQuery $tableSampleClause" +
       s" $whereClause $groupByClause $orderByClause $limitClause $offsetClause"
+  }
+}
+
+object JoinPushdownAliasGenerator {
+  private val subQueryId = new java.util.concurrent.atomic.AtomicLong()
+
+  def getSubqueryQualifier: String = {
+    "join_subquery_" + subQueryId.getAndIncrement()
   }
 }

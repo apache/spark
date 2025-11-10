@@ -14,7 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.jdbc
+package org.apache.spark.sql.jdbc.querytest
 
 import java.sql.{Connection, ResultSet, Statement}
 import java.util.Locale
@@ -24,6 +24,7 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.spark.sql.{QueryGeneratorHelper, QueryTest}
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.jdbc.{DockerJDBCIntegrationSuite, PostgresDatabaseOnDocker}
 import org.apache.spark.tags.DockerTest
 
 /**

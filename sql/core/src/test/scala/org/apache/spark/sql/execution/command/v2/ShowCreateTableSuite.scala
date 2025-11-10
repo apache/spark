@@ -181,4 +181,60 @@ class ShowCreateTableSuite extends command.ShowCreateTableSuiteBase with Command
       )
     }
   }
+
+  test("show table constraints") {
+    withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
+      withTable("other_table") {
+        sql(
+          s"""
+             |CREATE TABLE other_table (
+             |  id STRING PRIMARY KEY
+             |)
+             |USING parquet
+        """.stripMargin)
+        sql(
+          s"""
+             |CREATE TABLE $t (
+             |  a INT,
+             |  b STRING,
+             |  c STRING,
+             |  PRIMARY KEY (a),
+             |  CONSTRAINT uk_b UNIQUE (b),
+             |  CONSTRAINT fk_c FOREIGN KEY (c) REFERENCES other_table(id) RELY,
+             |  CONSTRAINT c1 CHECK (c IS NOT NULL),
+             |  CONSTRAINT c2 CHECK (a > 0)
+             |)
+             |$defaultUsing
+        """.stripMargin)
+        var showDDL = getShowCreateDDL(t)
+        val expectedDDLPrefix = Array(
+          s"CREATE TABLE $nonPartitionCatalog.ns.tbl (",
+          "a INT NOT NULL,",
+          "b STRING,",
+          "c STRING,",
+          "CONSTRAINT tbl_pk PRIMARY KEY (a) NOT ENFORCED NORELY,",
+          "CONSTRAINT uk_b UNIQUE (b) NOT ENFORCED NORELY,",
+          "CONSTRAINT fk_c FOREIGN KEY (c) REFERENCES other_table (id) NOT ENFORCED RELY,",
+          "CONSTRAINT c1 CHECK (c IS NOT NULL) ENFORCED NORELY,"
+        )
+        assert(showDDL === expectedDDLPrefix ++ Array(
+          "CONSTRAINT c2 CHECK (a > 0) ENFORCED NORELY)",
+          defaultUsing))
+
+        sql(s"ALTER TABLE $t ADD CONSTRAINT c3 CHECK (b IS NOT NULL) ENFORCED RELY")
+        showDDL = getShowCreateDDL(t)
+        val expectedDDLArrayWithNewConstraint = expectedDDLPrefix ++ Array(
+          "CONSTRAINT c2 CHECK (a > 0) ENFORCED NORELY,",
+          "CONSTRAINT c3 CHECK (b IS NOT NULL) ENFORCED RELY)",
+          defaultUsing
+        )
+        assert(showDDL === expectedDDLArrayWithNewConstraint)
+        sql(s"ALTER TABLE $t DROP CONSTRAINT c1")
+        showDDL = getShowCreateDDL(t)
+        val expectedDDLArrayAfterDrop = expectedDDLArrayWithNewConstraint.filterNot(
+          _.contains("c1 CHECK (c IS NOT NULL) ENFORCED NORELY"))
+        assert(showDDL === expectedDDLArrayAfterDrop)
+      }
+    }
+  }
 }

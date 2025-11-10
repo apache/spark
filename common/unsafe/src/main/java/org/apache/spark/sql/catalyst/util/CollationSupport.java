@@ -706,8 +706,10 @@ public final class CollationSupport {
   public static UTF8String lowercaseRegex(final UTF8String regex) {
     return UTF8String.concat(lowercaseRegexPrefix, regex);
   }
-  public static UTF8String collationAwareRegex(final UTF8String regex, final int collationId) {
-    return supportsLowercaseRegex(collationId) ? lowercaseRegex(regex) : regex;
+  public static UTF8String collationAwareRegex(
+      final UTF8String regex, final int collationId, boolean notIgnoreEmpty) {
+    return supportsLowercaseRegex(collationId) && (notIgnoreEmpty || regex.numBytes() != 0)
+      ? lowercaseRegex(regex) : regex;
   }
 
   /**

@@ -25,7 +25,7 @@ import org.apache.spark.{SparkConf, SparkContext, SparkMasterRegex}
 import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesUtils, SparkKubernetesClientFactory}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants.DEFAULT_EXECUTOR_CONTAINER_NAME
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.MASTER_URL
 import org.apache.spark.internal.config.TASK_MAX_FAILURES
 import org.apache.spark.scheduler.{ExternalClusterManager, SchedulerBackend, TaskScheduler, TaskSchedulerImpl}
@@ -35,7 +35,7 @@ import org.apache.spark.util.{Clock, SystemClock, ThreadUtils, Utils}
 private[spark] class KubernetesClusterManager extends ExternalClusterManager with Logging {
   import SparkMasterRegex._
 
-  override def canCreate(masterURL: String): Boolean = masterURL.startsWith("k8s")
+  override def canCreate(masterURL: String): Boolean = SparkMasterRegex.isK8s(masterURL)
 
   private def isLocal(conf: SparkConf): Boolean =
     conf.get(KUBERNETES_DRIVER_MASTER_URL).startsWith("local")

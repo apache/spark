@@ -284,7 +284,7 @@ INSERT INTO a PARTITION(a=timestamp_ntz'2018-11-17 13:33:33') VALUES (1)
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/a, [a=2018-11-17 13:33:33], false, [a#x], Parquet, [path=file:[not included in comparison]/{warehouse_dir}/a], Append, `spark_catalog`.`default`.`a`, org.apache.spark.sql.execution.datasources.CatalogFileIndex(file:[not included in comparison]/{warehouse_dir}/a), [b, a]
 +- Project [b#x, cast(2018-11-17 13:33:33 as timestamp_ntz) AS a#x]
-   +- Project [cast(col1#x as int) AS b#x]
+   +- Project [col1#x AS b#x]
       +- LocalRelation [col1#x]
 
 

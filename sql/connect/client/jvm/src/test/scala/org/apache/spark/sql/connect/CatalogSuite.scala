@@ -19,13 +19,12 @@ package org.apache.spark.sql.connect
 
 import java.io.{File, FilenameFilter}
 
-import org.apache.commons.io.FileUtils
-
 import org.apache.spark.SparkException
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.connect.test.{ConnectFunSuite, RemoteSparkSession, SQLHelper}
 import org.apache.spark.sql.types.{DoubleType, LongType, StructType}
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.util.SparkFileUtils
 
 class CatalogSuite extends ConnectFunSuite with RemoteSparkSession with SQLHelper {
 
@@ -258,7 +257,7 @@ class CatalogSuite extends ConnectFunSuite with RemoteSparkSession with SQLHelpe
           spark.catalog.cacheTable(tableName)
           assert(spark.table(tableName).collect().length == 1)
 
-          FileUtils.deleteDirectory(dir)
+          SparkFileUtils.deleteRecursively(dir)
           assert(spark.table(tableName).collect().length == 1)
 
           spark.catalog.refreshTable(tableName)

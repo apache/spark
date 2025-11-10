@@ -81,6 +81,14 @@ trait VariableManager {
    * @return true if at least one variable exists, false otherwise.
    */
   def isEmpty: Boolean
+
+  /**
+   *
+   * @param variableName Name of the variable
+   * @return variable name formatting for the error
+   */
+  def getVariableNameForError(variableName: String): String
+
 }
 
 /**
@@ -105,6 +113,9 @@ class TempVariableManager extends VariableManager with DataTypeErrorsBase {
   @GuardedBy("this")
   private val variables = new mutable.HashMap[String, VariableDefinition]
 
+  override def getVariableNameForError(variableName: String): String =
+    toSQLId(Seq(SYSTEM_CATALOG_NAME, SESSION_NAMESPACE, variableName))
+
   override def create(
       nameParts: Seq[String],
       varDef: VariableDefinition,
@@ -114,7 +125,7 @@ class TempVariableManager extends VariableManager with DataTypeErrorsBase {
       throw new AnalysisException(
         errorClass = "VARIABLE_ALREADY_EXISTS",
         messageParameters = Map(
-          "variableName" -> toSQLId(Seq(SYSTEM_CATALOG_NAME, SESSION_NAMESPACE, name))))
+          "variableName" -> getVariableNameForError(name)))
     }
     variables.put(name, varDef)
   }

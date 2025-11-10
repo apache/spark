@@ -2968,6 +2968,20 @@ abstract class Dataset[T] extends Serializable {
   }
 
   /**
+   * Repartition the Dataset into the given number of partitions using the specified partition ID
+   * expression.
+   *
+   * @param numPartitions
+   *   the number of partitions to use.
+   * @param partitionIdExpr
+   *   the expression to be used as the partition ID. Must be an integer type.
+   *
+   * @group typedrel
+   * @since 4.1.0
+   */
+  def repartitionById(numPartitions: Int, partitionIdExpr: Column): Dataset[T]
+
+  /**
    * Returns a new Dataset that has exactly `numPartitions` partitions, when the fewer partitions
    * are requested. If a larger number of partitions is requested, it will stay at the current
    * number of partitions. Similar to coalesce defined on an `RDD`, this operation results in a

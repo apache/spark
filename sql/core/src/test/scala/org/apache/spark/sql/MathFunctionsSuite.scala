@@ -246,7 +246,8 @@ class MathFunctionsSuite extends QueryTest with SharedSparkSession {
 
   test("SPARK-36229 inconsistently behaviour where returned value is above the 64 char threshold") {
     withSQLConf(SQLConf.ANSI_ENABLED.key -> false.toString) {
-      val df = Seq(("?" * 64), ("?" * 65), ("a" * 4 + "?" * 60), ("a" * 4 + "?" * 61)).toDF("num")
+      val df = Seq(("?".repeat(64)), ("?".repeat(65)), ("a".repeat(4) + "?".repeat(60)),
+          ("a".repeat(4) + "?".repeat(61))).toDF("num")
       val expectedResult = Seq(Row("0"), Row("0"), Row("43690"), Row("43690"))
       checkAnswer(df.select(conv($"num", 16, 10)), expectedResult)
       checkAnswer(df.select(conv($"num", 16, -10)), expectedResult)

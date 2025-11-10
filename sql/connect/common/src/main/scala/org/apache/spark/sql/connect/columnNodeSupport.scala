@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
 import org.apache.spark.sql.connect.ConnectConversions._
 import org.apache.spark.sql.connect.common.DataTypeProtoConverter
-import org.apache.spark.sql.connect.common.LiteralValueProtoConverter.toLiteralProtoBuilder
+import org.apache.spark.sql.connect.common.LiteralValueProtoConverter.{toLiteralProtoBuilderWithOptions, ToLiteralProtoOptions}
 import org.apache.spark.sql.expressions.{Aggregator, UserDefinedAggregateFunction, UserDefinedAggregator, UserDefinedFunction}
 import org.apache.spark.sql.internal.{Alias, CaseWhenOtherwise, Cast, ColumnNode, ColumnNodeLike, InvokeInlineUserDefinedFunction, LambdaFunction, LazyExpression, Literal, SortOrder, SqlExpression, SubqueryExpression, SubqueryType, UnresolvedAttribute, UnresolvedExtractValue, UnresolvedFunction, UnresolvedNamedLambdaVariable, UnresolvedRegex, UnresolvedStar, UpdateFields, Window, WindowFrame}
 
@@ -65,11 +65,12 @@ object ColumnNodeToProtoConverter extends (ColumnNode => proto.Expression) {
     val builder = proto.Expression.newBuilder()
     val n = additionalTransformation.map(_(node)).getOrElse(node)
     n match {
-      case Literal(value, None, _) =>
-        builder.setLiteral(toLiteralProtoBuilder(value))
-
-      case Literal(value, Some(dataType), _) =>
-        builder.setLiteral(toLiteralProtoBuilder(value, dataType))
+      case Literal(value, dataTypeOpt, _) =>
+        builder.setLiteral(
+          toLiteralProtoBuilderWithOptions(
+            value,
+            dataTypeOpt,
+            ToLiteralProtoOptions(useDeprecatedDataTypeFields = false)))
 
       case u @ UnresolvedAttribute(unparsedIdentifier, planId, isMetadataColumn, _) =>
         val escapedName = u.sql

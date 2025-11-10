@@ -590,26 +590,31 @@ private[sql] object CatalogV2Util {
   // rule will check the special metadata and change the DML input plan to fill the default value.
   private def encodeDefaultValue(defaultValue: ColumnDefaultValue, f: StructField): StructField = {
     Option(defaultValue).map { default =>
-      // The "exist default" is used to back-fill the existing data when new columns are added, and
+      // The "exists default" is used to back-fill the existing data when new columns are added, and
       // should be a fixed value which was evaluated at the definition time. For example, if the
-      // default value is `current_date()`, the "exist default" should be the value of
+      // default value is `current_date()`, the "exists default" should be the value of
       // `current_date()` when the column was defined/altered, instead of when back-fall happens.
       // Note: the back-fill here is a logical concept. The data source can keep the existing
-      //       data unchanged and let the data reader to return "exist default" for missing
+      //       data unchanged and let the data reader to return "exists default" for missing
       //       columns.
+      // The "exists default" may not be present if the data source has its own way for back-fill.
       val existsDefault = extractExistsDefault(default)
       val (sql, expr) = extractCurrentDefault(default)
-      val newMetadata = new MetadataBuilder()
-        .withMetadata(f.metadata)
-        .putString(EXISTS_DEFAULT_COLUMN_METADATA_KEY, existsDefault)
+      var metadataBuilder = new MetadataBuilder().withMetadata(f.metadata)
+      existsDefault.foreach { ed =>
+        metadataBuilder = metadataBuilder.putString(EXISTS_DEFAULT_COLUMN_METADATA_KEY, ed)
+      }
+      val metadata = metadataBuilder
         .putExpression(CURRENT_DEFAULT_COLUMN_METADATA_KEY, sql, expr)
         .build()
-      f.copy(metadata = newMetadata)
+      f.copy(metadata = metadata)
     }.getOrElse(f)
   }
 
-  private def extractExistsDefault(default: ColumnDefaultValue): String = {
-    Literal(default.getValue.value, default.getValue.dataType).sql
+  private def extractExistsDefault(default: ColumnDefaultValue): Option[String] = {
+    Option(default.getValue).map { literal =>
+      Literal(literal.value, literal.dataType).sql
+    }
   }
 
   private def extractCurrentDefault(default: ColumnDefaultValue): (String, Option[Expression]) = {
@@ -646,24 +651,26 @@ private[sql] object CatalogV2Util {
       }.build()
     }
 
-    val isDefaultColumn = f.getCurrentDefaultValue().isDefined &&
-      f.getExistenceDefaultValue().isDefined
+    val isDefaultColumn = f.getCurrentDefaultValue().isDefined
     val isGeneratedColumn = GeneratedColumn.isGeneratedColumn(f)
     val isIdentityColumn = IdentityColumn.isIdentityColumn(f)
     if (isDefaultColumn) {
       checkDefaultColumnConflicts(f)
 
-      val e = analyze(
-        f,
-        statementType = "Column analysis",
-        metadataKey = EXISTS_DEFAULT_COLUMN_METADATA_KEY)
+      val existsDefault = if (f.getExistenceDefaultValue().isDefined) {
+        val e = analyze(
+          f,
+          statementType = "Column analysis",
+          metadataKey = EXISTS_DEFAULT_COLUMN_METADATA_KEY)
 
-      assert(e.resolved && e.foldable,
-        "The existence default value must be a simple SQL string that is resolved and foldable, " +
-          "but got: " + f.getExistenceDefaultValue().get)
-
-      val defaultValue = new ColumnDefaultValue(
-        f.getCurrentDefaultValue().get, LiteralValue(e.eval(), f.dataType))
+        assert(e.resolved && e.foldable,
+          "The existence default value must be a simple SQL string that is resolved and " +
+            "foldable, but got: " + f.getExistenceDefaultValue().get)
+        LiteralValue(e.eval(), f.dataType)
+      } else {
+        null
+      }
+      val defaultValue = new ColumnDefaultValue(f.getCurrentDefaultValue().get, existsDefault)
       val cleanedMetadata = metadataWithKeysRemoved(
         Seq("comment", CURRENT_DEFAULT_COLUMN_METADATA_KEY, EXISTS_DEFAULT_COLUMN_METADATA_KEY))
       Column.create(f.name, f.dataType, f.nullable, f.getComment().orNull, defaultValue,

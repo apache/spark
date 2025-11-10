@@ -33,7 +33,6 @@ import com.google.protobuf.ByteString
 import io.grpc.StatusRuntimeException
 import io.grpc.stub.StreamObserver
 import org.apache.commons.codec.digest.DigestUtils.sha256Hex
-import org.apache.commons.lang3.StringUtils
 
 import org.apache.spark.SparkException
 import org.apache.spark.connect.proto
@@ -41,7 +40,7 @@ import org.apache.spark.connect.proto.AddArtifactsResponse
 import org.apache.spark.connect.proto.AddArtifactsResponse.ArtifactSummary
 import org.apache.spark.sql.Artifact
 import org.apache.spark.sql.Artifact.{newCacheArtifact, newIvyArtifacts}
-import org.apache.spark.util.{SparkFileUtils, SparkThreadUtils}
+import org.apache.spark.util.{SparkFileUtils, SparkStringUtils, SparkThreadUtils}
 
 /**
  * The Artifact Manager is responsible for handling and transferring artifacts from the local
@@ -173,7 +172,8 @@ class ArtifactManager(
       .addAllNames(Arrays.asList(artifactName))
       .build()
     val response = bstub.artifactStatus(request)
-    if (StringUtils.isNotEmpty(response.getSessionId) && response.getSessionId != sessionId) {
+    if (SparkStringUtils.isNotEmpty(response.getSessionId) &&
+      response.getSessionId != sessionId) {
       // In older versions of the Spark cluster, the session ID is not set in the response.
       // Ignore this check to keep compatibility.
       throw new IllegalStateException(
@@ -186,6 +186,38 @@ class ArtifactManager(
   }
 
   /**
+   * Batch check which artifacts are already cached on the server. Returns a Set of hashes that
+   * are already cached.
+   */
+  private[client] def getCachedArtifacts(hashes: Seq[String]): Set[String] = {
+    if (hashes.isEmpty) {
+      return Set.empty
+    }
+
+    val artifactNames = hashes.map(hash => s"${Artifact.CACHE_PREFIX}/$hash")
+    val request = proto.ArtifactStatusesRequest
+      .newBuilder()
+      .setUserContext(clientConfig.userContext)
+      .setClientType(clientConfig.userAgent)
+      .setSessionId(sessionId)
+      .addAllNames(artifactNames.asJava)
+      .build()
+
+    val response = bstub.artifactStatus(request)
+    if (SparkStringUtils.isNotEmpty(response.getSessionId) &&
+      response.getSessionId != sessionId) {
+      throw new IllegalStateException(
+        s"Session ID mismatch: $sessionId != ${response.getSessionId}")
+    }
+
+    val statuses = response.getStatusesMap
+    hashes.filter { hash =>
+      val artifactName = s"${Artifact.CACHE_PREFIX}/$hash"
+      statuses.containsKey(artifactName) && statuses.get(artifactName).getExists
+    }.toSet
+  }
+
+  /**
    * Cache the give blob at the session.
    */
   def cacheArtifact(blob: Array[Byte]): String = {
@@ -194,6 +226,38 @@ class ArtifactManager(
       addArtifacts(newCacheArtifact(hash, new Artifact.InMemory(blob)) :: Nil)
     }
     hash
+  }
+
+  /**
+   * Cache the given blobs at the session.
+   *
+   * This method batches artifact status checks and uploads to minimize RPC overhead. Returns the
+   * list of hashes corresponding to the input blobs.
+   */
+  def cacheArtifacts(blobs: Array[Array[Byte]]): Seq[String] = {
+    // Compute hashes for all blobs upfront
+    val hashes = blobs.map(sha256Hex).toSeq
+    val uniqueHashes = hashes.distinct
+
+    // Batch check which artifacts are already cached
+    val cachedHashes = getCachedArtifacts(uniqueHashes)
+
+    // Collect unique artifacts that need to be uploaded
+    val seenHashes = scala.collection.mutable.Set[String]()
+    val uniqueBlobsToUpload = scala.collection.mutable.ListBuffer[Artifact]()
+    for ((blob, hash) <- blobs.zip(hashes)) {
+      if (!cachedHashes.contains(hash) && !seenHashes.contains(hash)) {
+        uniqueBlobsToUpload += newCacheArtifact(hash, new Artifact.InMemory(blob))
+        seenHashes.add(hash)
+      }
+    }
+
+    // Batch upload all missing artifacts in a single RPC call
+    if (uniqueBlobsToUpload.nonEmpty) {
+      addArtifacts(uniqueBlobsToUpload.toList)
+    }
+
+    hashes
   }
 
   /**
@@ -248,7 +312,7 @@ class ArtifactManager(
     val responseHandler = new StreamObserver[proto.AddArtifactsResponse] {
       private val summaries = mutable.Buffer.empty[ArtifactSummary]
       override def onNext(v: AddArtifactsResponse): Unit = {
-        if (StringUtils.isNotEmpty(v.getSessionId) && v.getSessionId != sessionId) {
+        if (SparkStringUtils.isNotEmpty(v.getSessionId) && v.getSessionId != sessionId) {
           // In older versions of the Spark cluster, the session ID is not set in the response.
           // Ignore this check to keep compatibility.
           throw new IllegalStateException(s"Session ID mismatch: $sessionId != ${v.getSessionId}")

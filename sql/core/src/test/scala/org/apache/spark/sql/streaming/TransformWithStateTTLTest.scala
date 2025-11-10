@@ -20,7 +20,7 @@ package org.apache.spark.sql.streaming
 import java.sql.Timestamp
 import java.time.Duration
 
-import org.apache.spark.sql.execution.streaming.MemoryStream
+import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.execution.streaming.state.{AlsoTestWithEncodingTypes, AlsoTestWithRocksDBFeatures, RocksDBStateStoreProvider}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.util.StreamManualClock
@@ -42,7 +42,8 @@ case class OutputEvent(
  */
 abstract class TransformWithStateTTLTest
   extends StreamTest with AlsoTestWithEncodingTypes
-  with AlsoTestWithRocksDBFeatures {
+  with AlsoTestWithRocksDBFeatures
+  with StateStoreMetricsTest {
   import testImplicits._
 
   def getProcessor(ttlConfig: TTLConfig): StatefulProcessor[String, InputEvent, OutputEvent]

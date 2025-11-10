@@ -28,7 +28,7 @@ import scala.util.control.NonFatal
 import com.google.common.cache.CacheBuilder
 
 import org.apache.spark.{SparkEnv, SparkSQLException}
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{INTERVAL, SESSION_HOLD_INFO}
 import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.connect.config.Connect.{CONNECT_SESSION_MANAGER_CLOSED_SESSIONS_TOMBSTONES_SIZE, CONNECT_SESSION_MANAGER_DEFAULT_SESSION_TIMEOUT, CONNECT_SESSION_MANAGER_MAINTENANCE_INTERVAL}
@@ -112,6 +112,73 @@ class SparkConnectSessionManager extends Logging {
    */
   private[connect] def getIsolatedSessionIfPresent(key: SessionKey): Option[SessionHolder] = {
     Option(getSession(key, None))
+  }
+
+  /**
+   * Clone an existing session with a new session ID. Creates a new SessionHolder with a cloned
+   * SparkSession that shares configuration and catalog state but has independent caches and
+   * runtime state.
+   */
+  private[connect] def cloneSession(
+      sourceKey: SessionKey,
+      newSessionId: String,
+      previouslyObservedSessionId: Option[String]): SessionHolder = {
+
+    // Get source session (must exist)
+    val sourceSessionHolder = getIsolatedSession(sourceKey, None)
+
+    previouslyObservedSessionId.foreach(sessionId =>
+      validateSessionId(sourceKey, sourceSessionHolder.session.sessionUUID, sessionId))
+
+    val newKey = SessionKey(sourceKey.userId, newSessionId)
+
+    // Validate new sessionId for clone operation
+    validateCloneTargetSession(newKey)
+
+    // Create cloned session
+    val clonedSessionHolder = getSession(
+      newKey,
+      Some(() => {
+        val session = sessionStore.get(newKey)
+        if (session == null) {
+          // Clone the underlying SparkSession using cloneSession() which preserves
+          // configuration, catalog, session state, temporary views, and registered functions
+          val clonedSparkSession = sourceSessionHolder.session.cloneSession()
+
+          val newHolder = SessionHolder(newKey.userId, newKey.sessionId, clonedSparkSession)
+          newHolder.initializeSession()
+          newHolder
+        } else {
+          // A session was created in the meantime.
+          session
+        }
+      }))
+
+    clonedSessionHolder
+  }
+
+  private def validateCloneTargetSession(newKey: SessionKey): Unit = {
+    // Validate that sessionId is formatted like UUID before creating session.
+    try {
+      UUID.fromString(newKey.sessionId).toString
+    } catch {
+      case _: IllegalArgumentException =>
+        throw new SparkSQLException(
+          errorClass = "INVALID_CLONE_SESSION_REQUEST.TARGET_SESSION_ID_FORMAT",
+          messageParameters = Map("targetSessionId" -> newKey.sessionId))
+    }
+    // Validate that session with that key has not been already closed.
+    if (closedSessionsCache.getIfPresent(newKey) != null) {
+      throw new SparkSQLException(
+        errorClass = "INVALID_CLONE_SESSION_REQUEST.TARGET_SESSION_ID_ALREADY_CLOSED",
+        messageParameters = Map("targetSessionId" -> newKey.sessionId))
+    }
+    // Validate that session with that key does not already exist.
+    if (sessionStore.containsKey(newKey)) {
+      throw new SparkSQLException(
+        errorClass = "INVALID_CLONE_SESSION_REQUEST.TARGET_SESSION_ID_ALREADY_EXISTS",
+        messageParameters = Map("targetSessionId" -> newKey.sessionId))
+    }
   }
 
   private def getSession(key: SessionKey, default: Option[() => SessionHolder]): SessionHolder = {

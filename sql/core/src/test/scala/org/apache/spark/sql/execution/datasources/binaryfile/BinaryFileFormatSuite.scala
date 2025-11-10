@@ -23,7 +23,7 @@ import java.sql.Timestamp
 
 import scala.jdk.CollectionConverters._
 
-import com.google.common.io.{ByteStreams, Closeables}
+import com.google.common.io.Closeables
 import org.apache.hadoop.fs.{FileStatus, FileSystem, GlobFilter, Path}
 import org.mockito.Mockito.{mock, when}
 
@@ -134,7 +134,7 @@ class BinaryFileFormatSuite extends QueryTest with SharedSparkSession {
           val fcontent = {
             val stream = fs.open(fileStatus.getPath)
             val content = try {
-              ByteStreams.toByteArray(stream)
+              stream.readAllBytes()
             } finally {
               Closeables.close(stream, true)
             }

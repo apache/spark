@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.datasources.xml
 import java.io.CharArrayWriter
 import java.time.ZoneOffset
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row}
 import org.apache.spark.sql.catalyst.xml.{StaxXmlGenerator, StaxXmlParser, XmlOptions}
 import org.apache.spark.sql.functions.{col, variant_get}
@@ -30,6 +30,11 @@ import org.apache.spark.types.variant.{Variant, VariantBuilder}
 import org.apache.spark.unsafe.types.VariantVal
 
 class XmlVariantSuite extends QueryTest with SharedSparkSession with TestXmlData {
+
+  protected val legacyParserEnabled: Boolean = false
+
+  override protected def sparkConf: SparkConf = super.sparkConf
+    .set("spark.sql.xml.legacyXMLParser.enabled", legacyParserEnabled.toString)
 
   private val baseOptions = Map("rowTag" -> "ROW", "valueTag" -> "_VALUE", "attributePrefix" -> "_")
 
@@ -505,10 +510,14 @@ class XmlVariantSuite extends QueryTest with SharedSparkSession with TestXmlData
       singleVariantColumn = Some("var"),
       extraOptions = Map("mode" -> "PERMISSIVE")
     )
-    checkAnswer(
-      df.select(variant_get(col("var"), "$.year", "int")),
+    val expectedResult = if (legacyParserEnabled) {
       Seq(Row(2015), Row(null), Row(null))
-    )
+    } else {
+      // When the optimized parser is enabled, there are only two records:
+      // one is the valid xml record, the rest is treated as one malformed record
+      Seq(Row(2015), Row(null))
+    }
+    checkAnswer(df.select(variant_get(col("var"), "$.year", "int")), expectedResult)
 
     // DROPMALFORMED mode
     val df2 = createDSLDataFrame(
@@ -933,4 +942,28 @@ class XmlVariantSuite extends QueryTest with SharedSparkSession with TestXmlData
       .map(_.getString(0).replaceAll("\\s+", ""))
     assert(xmlResult.head === xmlStr)
   }
+
+  test(
+    "[SPARK-54099] XML variant parser should fall back to string " +
+    "when failing to parse decimal values"
+  ) {
+    // Decimals with extreme exponents. The variant parser should throw ArithmeticException when
+    // parsing these values as Decimal:
+    val decimalString = Seq(
+      "1E+2147483647",    // Maximum int exponent - scale would be -2147483647
+      "5E+1000000000",    // 1 billion exponent
+      "1.23E+999999999",  // Very large exponent
+      "0.001E+2147483640" // Still results in huge effective exponent
+    )
+    decimalString.foreach { str =>
+      testParser(
+        xml = s"<ROW><decimal>$str</decimal></ROW>",
+        expectedJsonStr = s"""{"decimal":"$str"}"""
+      )
+    }
+  }
+}
+
+class XmlVariantSuiteWithLegacyParser extends XmlVariantSuite {
+  override protected val legacyParserEnabled: Boolean = true
 }

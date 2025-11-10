@@ -19,6 +19,7 @@ import shutil
 import tempfile
 import time
 import unittest
+import logging
 from typing import cast
 
 from pyspark.sql import Row
@@ -33,7 +34,8 @@ from pyspark.testing.sqlutils import (
     pandas_requirement_message,
     pyarrow_requirement_message,
 )
-from pyspark.testing.utils import eventually
+from pyspark.testing.utils import assertDataFrameEqual, eventually
+from pyspark.util import is_remote_only
 
 if have_pandas:
     import pandas as pd
@@ -276,16 +278,17 @@ class MapInPandasTestsMixin:
             self.check_dataframes_with_incompatible_types()
 
     def check_dataframes_with_incompatible_types(self):
-        def func(iterator):
-            for pdf in iterator:
-                yield pdf.assign(id=pdf["id"].apply(str))
-
         for safely in [True, False]:
             with self.subTest(convertToArrowArraySafely=safely), self.sql_conf(
                 {"spark.sql.execution.pandas.convertToArrowArraySafely": safely}
             ):
                 # sometimes we see ValueErrors
                 with self.subTest(convert="string to double"):
+
+                    def func(iterator):
+                        for pdf in iterator:
+                            yield pdf.assign(id="test_string")
+
                     expected = (
                         r"ValueError: Exception thrown when converting pandas.Series "
                         r"\(object\) with name 'id' to Arrow Array \(double\)."
@@ -304,18 +307,31 @@ class MapInPandasTestsMixin:
                             .collect()
                         )
 
-                # sometimes we see TypeErrors
-                with self.subTest(convert="double to string"):
-                    with self.assertRaisesRegex(
-                        PythonException,
-                        r"TypeError: Exception thrown when converting pandas.Series "
-                        r"\(float64\) with name 'id' to Arrow Array \(string\).\n",
-                    ):
-                        (
-                            self.spark.range(10, numPartitions=3)
-                            .select(col("id").cast("double"))
-                            .mapInPandas(self.identity_dataframes_iter("id"), "id string")
-                            .collect()
+                with self.subTest(convert="float to int precision loss"):
+
+                    def func(iterator):
+                        for pdf in iterator:
+                            yield pdf.assign(id=pdf["id"] + 0.1)
+
+                    df = (
+                        self.spark.range(10, numPartitions=3)
+                        .select(col("id").cast("double"))
+                        .mapInPandas(func, "id int")
+                    )
+                    if safely:
+                        expected = (
+                            r"ValueError: Exception thrown when converting pandas.Series "
+                            r"\(float64\) with name 'id' to Arrow Array \(int32\)."
+                            " It can be caused by overflows or other "
+                            "unsafe conversions warned by Arrow. Arrow safe type check "
+                            "can be disabled by using SQL config "
+                            "`spark.sql.execution.pandas.convertToArrowArraySafely`."
+                        )
+                        with self.assertRaisesRegex(PythonException, expected + "\n"):
+                            df.collect()
+                    else:
+                        self.assertEqual(
+                            df.collect(), self.spark.range(10, numPartitions=3).collect()
                         )
 
     def test_empty_iterator(self):
@@ -471,6 +487,43 @@ class MapInPandasTestsMixin:
 
         df = self.spark.range(1)
         self.assertEqual([Row(a=2, b=1)], df.mapInPandas(func, "a int, b int").collect())
+
+    @unittest.skipIf(is_remote_only(), "Requires JVM access")
+    def test_map_in_pandas_with_logging(self):
+        import pandas as pd
+
+        def func_with_logging(iterator):
+            logger = logging.getLogger("test_pandas_map")
+            for pdf in iterator:
+                assert isinstance(pdf, pd.DataFrame)
+                logger.warning(f"pandas map: {list(pdf['id'])}")
+                yield pdf
+
+        with self.sql_conf(
+            {
+                "spark.sql.execution.arrow.maxRecordsPerBatch": "3",
+                "spark.sql.pyspark.worker.logging.enabled": "true",
+            }
+        ):
+            assertDataFrameEqual(
+                self.spark.range(9, numPartitions=2).mapInPandas(func_with_logging, "id long"),
+                [Row(id=i) for i in range(9)],
+            )
+
+        logs = self.spark.table("system.session.python_worker_logs")
+
+        assertDataFrameEqual(
+            logs.select("level", "msg", "context", "logger"),
+            [
+                Row(
+                    level="WARNING",
+                    msg=f"pandas map: {lst}",
+                    context={"func_name": func_with_logging.__name__},
+                    logger="test_pandas_map",
+                )
+                for lst in [[0, 1, 2], [3], [4, 5, 6], [7, 8]]
+            ],
+        )
 
 
 class MapInPandasTests(ReusedSQLTestCase, MapInPandasTestsMixin):

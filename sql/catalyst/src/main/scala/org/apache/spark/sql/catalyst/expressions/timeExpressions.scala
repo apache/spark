@@ -33,7 +33,7 @@ import org.apache.spark.sql.catalyst.util.TimeFormatter
 import org.apache.spark.sql.catalyst.util.TypeUtils.ordinalNumber
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.types.StringTypeWithCollation
-import org.apache.spark.sql.types.{AbstractDataType, AnyTimeType, ByteType, DataType, DayTimeIntervalType, DecimalType, IntegerType, ObjectType, TimeType}
+import org.apache.spark.sql.types.{AbstractDataType, AnyTimeType, ByteType, DataType, DayTimeIntervalType, DecimalType, IntegerType, LongType, ObjectType, TimeType}
 import org.apache.spark.sql.types.DayTimeIntervalType.{HOUR, SECOND}
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -629,4 +629,123 @@ case class SubtractTimes(left: Expression, right: Expression)
   override protected def withNewChildrenInternal(
       newLeft: Expression, newRight: Expression): SubtractTimes =
     copy(left = newLeft, right = newRight)
+}
+
+/**
+ * Returns the difference between two times, measured in specified units.
+ */
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = """
+    _FUNC_(unit, start, end) - Gets the difference between the times in the specified units.
+  """,
+  arguments = """
+    Arguments:
+      * unit - the unit of the difference between the given times
+          - "HOUR"
+          - "MINUTE"
+          - "SECOND"
+          - "MILLISECOND"
+          - "MICROSECOND"
+      * start - a starting TIME expression
+      * end - an ending TIME expression
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_('HOUR', TIME'20:30:29', TIME'21:30:28');
+       0
+      > SELECT _FUNC_('HOUR', TIME'20:30:29', TIME'21:30:29');
+       1
+      > SELECT _FUNC_('HOUR', TIME'20:30:29', TIME'12:00:00');
+       -8
+  """,
+  group = "datetime_funcs",
+  since = "4.1.0")
+// scalastyle:on line.size.limit
+case class TimeDiff(
+    unit: Expression,
+    start: Expression,
+    end: Expression)
+  extends TernaryExpression
+  with RuntimeReplaceable
+  with ImplicitCastInputTypes {
+
+  override def first: Expression = unit
+  override def second: Expression = start
+  override def third: Expression = end
+
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(StringTypeWithCollation(supportsTrimCollation = true), AnyTimeType, AnyTimeType)
+
+  override def dataType: DataType = LongType
+
+  override def prettyName: String = "time_diff"
+
+  override protected def withNewChildrenInternal(
+      newUnit: Expression, newStart: Expression, newEnd: Expression): TimeDiff = {
+    copy(unit = newUnit, start = newStart, end = newEnd)
+  }
+
+  override def replacement: Expression = {
+    StaticInvoke(
+      classOf[DateTimeUtils.type],
+      dataType,
+      "timeDiff",
+      Seq(unit, start, end),
+      Seq(unit.dataType, start.dataType, end.dataType)
+    )
+  }
+}
+
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = """
+    _FUNC_(unit, time) - Returns `time` truncated to the `unit`.
+  """,
+  arguments = """
+    Arguments:
+      * unit - the unit to truncate to
+          - "HOUR" - zero out the minutes and seconds with fraction part
+          - "MINUTE" - zero out the seconds with fraction part
+          - "SECOND" - zero out the fraction part of seconds
+          - "MILLISECOND" - zero out the microseconds
+          - "MICROSECOND" - zero out the nanoseconds
+      * time - a TIME expression
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_('HOUR', TIME'09:32:05.359');
+       09:00:00
+      > SELECT _FUNC_('MILLISECOND', TIME'09:32:05.123456');
+       09:32:05.123
+  """,
+  group = "datetime_funcs",
+  since = "4.1.0")
+// scalastyle:on line.size.limit
+case class TimeTrunc(unit: Expression, time: Expression)
+  extends BinaryExpression with RuntimeReplaceable with ImplicitCastInputTypes {
+
+  override def left: Expression = unit
+  override def right: Expression = time
+
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(StringTypeWithCollation(supportsTrimCollation = true), AnyTimeType)
+
+  override def dataType: DataType = time.dataType
+
+  override def prettyName: String = "time_trunc"
+
+  override protected def withNewChildrenInternal(
+      newUnit: Expression, newTime: Expression): TimeTrunc =
+    copy(unit = newUnit, time = newTime)
+
+  override def replacement: Expression = {
+    StaticInvoke(
+      classOf[DateTimeUtils.type],
+      dataType,
+      "timeTrunc",
+      Seq(unit, time),
+      Seq(unit.dataType, time.dataType)
+    )
+  }
 }

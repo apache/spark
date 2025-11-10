@@ -17,11 +17,10 @@
 package org.apache.spark.deploy.k8s.integrationtest
 
 import java.io.File
-import java.nio.charset.StandardCharsets
+import java.nio.file.Files
 
 import scala.jdk.CollectionConverters._
 
-import com.google.common.io.Files
 import io.fabric8.kubernetes.api.model.Pod
 import org.scalatest.concurrent.{Eventually, PatienceConfiguration}
 import org.scalatest.matchers.should.Matchers._
@@ -40,7 +39,7 @@ private[spark] trait DecommissionSuite { k8sSuite: KubernetesSuite =>
     val logConfFilePath = s"${sparkHomeDir.toFile}/conf/log4j2.properties"
 
     try {
-      Files.asCharSink(new File(logConfFilePath), StandardCharsets.UTF_8).write(
+      Files.writeString(new File(logConfFilePath).toPath,
         """rootLogger.level = info
           |rootLogger.appenderRef.stdout.ref = console
           |appender.console.type = Console

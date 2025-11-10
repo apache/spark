@@ -67,7 +67,7 @@ public class RocksDBProvider {
           tmpDb = RocksDB.open(dbOptions, dbFile.toString());
         } catch (RocksDBException e) {
           if (e.getStatus().getCode() == Status.Code.NotFound) {
-            logger.info("Creating state database at {}", MDC.of(LogKeys.PATH$.MODULE$, dbFile));
+            logger.info("Creating state database at {}", MDC.of(LogKeys.PATH, dbFile));
             dbOptions.setCreateIfMissing(true);
             try {
               tmpDb = RocksDB.open(dbOptions, dbFile.toString());
@@ -78,16 +78,16 @@ public class RocksDBProvider {
             // the RocksDB file seems to be corrupt somehow.  Let's just blow it away and create
             // a new one, so we can keep processing new apps
             logger.error("error opening rocksdb file {}. Creating new file, will not be able to " +
-              "recover state for existing applications", e, MDC.of(LogKeys.PATH$.MODULE$, dbFile));
+              "recover state for existing applications", e, MDC.of(LogKeys.PATH, dbFile));
             if (dbFile.isDirectory()) {
               for (File f : Objects.requireNonNull(dbFile.listFiles())) {
                 if (!f.delete()) {
-                  logger.warn("error deleting {}", MDC.of(LogKeys.PATH$.MODULE$, f.getPath()));
+                  logger.warn("error deleting {}", MDC.of(LogKeys.PATH, f.getPath()));
                 }
               }
             }
             if (!dbFile.delete()) {
-              logger.warn("error deleting {}", MDC.of(LogKeys.PATH$.MODULE$, dbFile.getPath()));
+              logger.warn("error deleting {}", MDC.of(LogKeys.PATH, dbFile.getPath()));
             }
             dbOptions.setCreateIfMissing(true);
             try {

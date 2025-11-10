@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, ExpressionSe
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Project}
 import org.apache.spark.sql.catalyst.trees.TreePattern.OUTER_REFERENCE
+import org.apache.spark.sql.catalyst.util.AUTO_GENERATED_ALIAS
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
@@ -1391,5 +1392,11 @@ class LateralColumnAliasSuite extends LateralColumnAliasSuiteBase {
         assert(outerProjectList.map(_.name) == Seq("a", "b", "c", "d"))
         assert(innerProjectList.map(_.name) == Seq("a", "b"))
     }
+  }
+
+  test("SPARK-53674: Strip metadata from lateral reference of complex type column") {
+    val schema = sql("SELECT array(1,2,3) AS a, a[1]").queryExecution.analyzed.schema
+    assert(!schema("a").metadata.contains(AUTO_GENERATED_ALIAS))
+    assert(schema("lateralAliasReference(a)[1]").metadata.contains(AUTO_GENERATED_ALIAS))
   }
 }

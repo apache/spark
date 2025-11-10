@@ -49,6 +49,7 @@ abstract class AbstractCommandBuilder {
   String master;
   String remote;
   protected String propertiesFile;
+  protected boolean loadSparkDefaults;
   final List<String> appArgs;
   final List<String> jars;
   final List<String> files;
@@ -64,6 +65,8 @@ abstract class AbstractCommandBuilder {
    * Indicate if the current app submission has to use Spark Connect.
    */
   protected boolean isRemote = System.getenv().containsKey("SPARK_REMOTE");
+
+  protected boolean isBeeLine = false;
 
   AbstractCommandBuilder() {
     this.appArgs = new ArrayList<>();
@@ -194,6 +197,10 @@ abstract class AbstractCommandBuilder {
           if (isRemote && "1".equals(getenv("SPARK_SCALA_SHELL")) && project.equals("sql/core")) {
             continue;
           }
+          if (isBeeLine && "1".equals(getenv("SPARK_CONNECT_BEELINE")) &&
+              project.equals("sql/core")) {
+            continue;
+          }
           // SPARK-49534: The assumption here is that if `spark-hive_xxx.jar` is not in the
           // classpath, then the `-Phive` profile was not used during package, and therefore
           // the Hive-related jars should also not be in the classpath. To avoid failure in
@@ -240,13 +247,13 @@ abstract class AbstractCommandBuilder {
         }
       }
 
-      if (isRemote) {
+      if (isRemote || (isBeeLine && "1".equals(getenv("SPARK_CONNECT_BEELINE")))) {
         for (File f: new File(jarsDir).listFiles()) {
-          // Exclude Spark Classic SQL and Spark Connect server jars
-          // if we're in Spark Connect Shell. Also exclude Spark SQL API and
-          // Spark Connect Common which Spark Connect client shades.
-          // Then, we add the Spark Connect shell and its dependencies in connect-repl
-          // See also SPARK-48936.
+          // Exclude Spark Classic SQL and Spark Connect server jars if we're in
+          // Spark Connect Shell or BeeLine with Connect JDBC driver. Also exclude
+          // Spark SQL API and Spark Connect Common which Spark Connect client shades.
+          // Then, we add the Spark Connect shell and its dependencies in connect-repl.
+          // See also SPARK-48936, SPARK-54002.
           if (f.isDirectory() && f.getName().equals("connect-repl")) {
             addToClassPath(cp, join(File.separator, f.toString(), "*"));
           } else if (
@@ -362,21 +369,35 @@ abstract class AbstractCommandBuilder {
   }
 
   /**
-   * Loads the configuration file for the application, if it exists. This is either the
-   * user-specified properties file, or the spark-defaults.conf file under the Spark configuration
-   * directory.
+   * Load the configuration file(s) for the application - from the user-specified properties
+   * file, and/or the spark-defaults.conf file under the Spark configuration directory, if exists.
+   * Configurations from user-specified properties file take precedence over spark-defaults.conf.
    */
   private Properties loadPropertiesFile() throws IOException {
     Properties props = new Properties();
-    File propsFile;
     if (propertiesFile != null) {
-      propsFile = new File(propertiesFile);
+      File propsFile = new File(propertiesFile);
       checkArgument(propsFile.isFile(), "Invalid properties file '%s'.", propertiesFile);
-    } else {
-      propsFile = new File(getConfDir(), DEFAULT_PROPERTIES_FILE);
+      props = loadPropertiesFile(propsFile);
     }
 
-    if (propsFile.isFile()) {
+    Properties defaultsProps = new Properties();
+    if (propertiesFile == null || loadSparkDefaults) {
+      defaultsProps = loadPropertiesFile(new File(getConfDir(), DEFAULT_PROPERTIES_FILE));
+    }
+
+    for (Map.Entry<Object, Object> entry : defaultsProps.entrySet()) {
+      if (!props.containsKey(entry.getKey())) {
+        props.put(entry.getKey(), entry.getValue());
+      }
+    }
+
+    return props;
+  }
+
+  private Properties loadPropertiesFile(File propsFile) throws IOException {
+    Properties props = new Properties();
+    if (propsFile != null && propsFile.isFile()) {
       try (InputStreamReader isr = new InputStreamReader(
           new FileInputStream(propsFile), StandardCharsets.UTF_8)) {
         props.load(isr);

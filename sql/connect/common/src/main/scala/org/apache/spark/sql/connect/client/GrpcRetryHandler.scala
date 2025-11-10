@@ -23,7 +23,6 @@ import io.grpc.stub.StreamObserver
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{ERROR, NUM_RETRY, POLICY, RETRY_WAIT_TIME}
-import org.apache.spark.internal.MDC
 
 private[sql] class GrpcRetryHandler(
     private val policies: Seq[RetryPolicy],
@@ -214,9 +213,8 @@ private[sql] object GrpcRetryHandler extends Logging {
         log"Non-Fatal error during RPC execution: ${MDC(ERROR, lastException)}, " +
           log"exceeded retries (currentRetryNum=${MDC(NUM_RETRY, currentRetryNum)})")
 
-      val error = new RetriesExceeded()
-      exceptionList.foreach(error.addSuppressed)
-      throw error
+      logWarning(log"[RETRIES_EXCEEDED] The maximum number of retries has been exceeded.")
+      throw lastException
     }
 
     def retry(): T = {

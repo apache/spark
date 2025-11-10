@@ -32,8 +32,9 @@ import com.amazonaws.services.dynamodbv2.AmazonDynamoDBClient
 import com.amazonaws.services.dynamodbv2.document.DynamoDB
 import com.amazonaws.services.kinesis.{AmazonKinesis, AmazonKinesisClient}
 import com.amazonaws.services.kinesis.model._
+import com.amazonaws.waiters.WaiterParameters
 
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{STREAM_NAME, TABLE_NAME}
 
 /**
@@ -60,6 +61,8 @@ private[kinesis] class KinesisTestUtils(streamShardCount: Int = 2) extends Loggi
     client.setEndpoint(endpointUrl)
     client
   }
+
+  private lazy val streamExistsWaiter = kinesisClient.waiters().streamExists()
 
   private lazy val dynamoDB = {
     val dynamoDBClient = new AmazonDynamoDBClient(new DefaultAWSCredentialsProviderChain())
@@ -184,18 +187,9 @@ private[kinesis] class KinesisTestUtils(streamShardCount: Int = 2) extends Loggi
   }
 
   private def waitForStreamToBeActive(streamNameToWaitFor: String): Unit = {
-    val startTimeNs = System.nanoTime()
-    while (System.nanoTime() - startTimeNs < TimeUnit.SECONDS.toNanos(createStreamTimeoutSeconds)) {
-      Thread.sleep(TimeUnit.SECONDS.toMillis(describeStreamPollTimeSeconds))
-      describeStream(streamNameToWaitFor).foreach { description =>
-        val streamStatus = description.getStreamStatus()
-        logDebug(s"\t- current state: $streamStatus\n")
-        if ("ACTIVE".equals(streamStatus)) {
-          return
-        }
-      }
-    }
-    require(false, s"Stream $streamName never became active")
+    val describeStreamRequest = new DescribeStreamRequest()
+      .withStreamName(streamNameToWaitFor)
+    streamExistsWaiter.run(new WaiterParameters(describeStreamRequest))
   }
 }
 

@@ -27,7 +27,8 @@ import org.apache.hadoop.fs._
 import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.util.quietly
-import org.apache.spark.sql.execution.streaming.CheckpointFileManager.CancellableFSDataOutputStream
+import org.apache.spark.sql.execution.streaming.checkpointing.{CheckpointFileManager, FileContextBasedCheckpointFileManager, FileSystemBasedCheckpointFileManager, HDFSMetadataLog}
+import org.apache.spark.sql.execution.streaming.checkpointing.CheckpointFileManager.CancellableFSDataOutputStream
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
@@ -39,14 +40,14 @@ abstract class CheckpointFileManagerTests extends SparkFunSuite {
 
   protected def createManager(path: Path): CheckpointFileManager
 
-  private implicit class RichCancellableStream(stream: CancellableFSDataOutputStream) {
+  protected implicit class RichCancellableStream(stream: CancellableFSDataOutputStream) {
     def writeContent(i: Int): CancellableFSDataOutputStream = {
       stream.writeInt(i)
       stream
     }
   }
 
-  private implicit class RichFSDataInputStream(stream: FSDataInputStream) {
+  protected implicit class RichFSDataInputStream(stream: FSDataInputStream) {
     def readContent(): Int = {
       val res = stream.readInt()
       stream.close()
@@ -111,6 +112,7 @@ abstract class CheckpointFileManagerTests extends SparkFunSuite {
         fm.open(path)
       }
       fm.delete(path) // should not throw exception
+      fm.close()
     }
   }
 }

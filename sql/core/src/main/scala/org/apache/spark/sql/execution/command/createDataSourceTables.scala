@@ -20,7 +20,6 @@ package org.apache.spark.sql.execution.command
 import java.net.URI
 
 import org.apache.spark.internal.LogKeys._
-import org.apache.spark.internal.MDC
 import org.apache.spark.sql.{AnalysisException, Row, SaveMode, SparkSession}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.plans.logical.{CTEInChildren, CTERelationDef, LogicalPlan, WithCTE}
@@ -119,9 +118,7 @@ case class CreateDataSourceTableCommand(table: CatalogTable, ignoreIfExists: Boo
 
     }
 
-    // We will return Nil or throw exception at the beginning if the table already exists, so when
-    // we reach here, the table should not exist and we should set `ignoreIfExists` to false.
-    sessionState.catalog.createTable(newTable, ignoreIfExists = false)
+    sessionState.catalog.createTable(newTable, ignoreIfExists)
 
     Seq.empty[Row]
   }

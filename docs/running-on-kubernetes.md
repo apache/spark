@@ -44,7 +44,7 @@ Cluster administrators should use [Pod Security Policies](https://kubernetes.io/
 
 # Prerequisites
 
-* A running Kubernetes cluster at version >= 1.31 with access configured to it using
+* A running Kubernetes cluster at version >= 1.32 with access configured to it using
 [kubectl](https://kubernetes.io/docs/reference/kubectl/).  If you do not already have a working Kubernetes cluster,
 you may set up a test cluster on your local machine using
 [minikube](https://kubernetes.io/docs/getting-started-guides/minikube/).
@@ -643,7 +643,8 @@ See the [configuration page](configuration.html) for information on Spark config
     Container image to use for the Spark application.
     This is usually of the form <code>example.com/repo/spark:v1.0.0</code>.
     This configuration is required and must be provided by the user, unless explicit
-    images are provided for each different container type.
+    images are provided for each different container type. Note that <code>{{SPARK_VERSION}}</code> 
+    is the built-in variable that will be substituted with current Spark's version.
   </td>
   <td>2.3.0</td>
 </tr>
@@ -651,7 +652,8 @@ See the [configuration page](configuration.html) for information on Spark config
   <td><code>spark.kubernetes.driver.container.image</code></td>
   <td><code>(value of spark.kubernetes.container.image)</code></td>
   <td>
-    Custom container image to use for the driver.
+    Custom container image to use for the driver. Note that <code>{{SPARK_VERSION}}</code> 
+    is the built-in variable that will be substituted with current Spark's version.
   </td>
   <td>2.3.0</td>
 </tr>
@@ -659,7 +661,8 @@ See the [configuration page](configuration.html) for information on Spark config
   <td><code>spark.kubernetes.executor.container.image</code></td>
   <td><code>(value of spark.kubernetes.container.image)</code></td>
   <td>
-    Custom container image to use for executors.
+    Custom container image to use for executors. Note that <code>{{SPARK_VERSION}}</code> 
+    is the built-in variable that will be substituted with current Spark's version.
   </td>
   <td>2.3.0</td>
 </tr>
@@ -696,6 +699,14 @@ See the [configuration page](configuration.html) for information on Spark config
     excessive CPU usage on the spark driver.
   </td>
   <td>2.3.0</td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.allocation.maximum</code></td>
+  <td><code>Int.MaxValue</code></td>
+  <td>
+    The maximum number of executor pods to try to create during the whole job lifecycle.
+  </td>
+  <td>4.1.0</td>
 </tr>
 <tr>
   <td><code>spark.kubernetes.jars.avoidDownloadSchemes</code></td>
@@ -1274,17 +1285,6 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>2.4.0</td>
 </tr>
 <tr>
-  <td><code>spark.kubernetes.pyspark.pythonVersion</code></td>
-  <td><code>"3"</code></td>
-  <td>
-   This sets the major Python version of the docker image used to run the driver and executor containers.
-   It can be only "3". This configuration was deprecated from Spark 3.1.0, and is effectively no-op.
-   Users should set 'spark.pyspark.python' and 'spark.pyspark.driver.python' configurations or
-   'PYSPARK_PYTHON' and 'PYSPARK_DRIVER_PYTHON' environment variables.
-  </td>
-  <td>2.4.0</td>
-</tr>
-<tr>
   <td><code>spark.kubernetes.kerberos.krb5.path</code></td>
   <td><code>(none)</code></td>
   <td>
@@ -1373,6 +1373,14 @@ See the [configuration page](configuration.html) for information on Spark config
   Specify whether executor pods should be deleted in case of failure or normal termination.
   </td>
   <td>3.0.0</td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.executor.terminationGracePeriodSeconds</code></td>
+  <td>30s</td>
+  <td>
+    Time to wait for graceful termination of executor pods.
+  </td>
+  <td>4.1.0</td>
 </tr>
 <tr>
   <td><code>spark.kubernetes.executor.checkAllContainers</code></td>
@@ -1601,6 +1609,15 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>3.2.0</td>
 </tr>
 <tr>
+  <td><code>spark.kubernetes.driver.pod.excludedFeatureSteps</code></td>
+  <td>(none)</td>
+  <td>
+    Class names of a driver pod feature step to exclude.
+    This is a developer API. Comma separated.
+  </td>
+  <td>4.1.0</td>
+</tr>
+<tr>
   <td><code>spark.kubernetes.executor.pod.featureSteps</code></td>
   <td>(none)</td>
   <td>
@@ -1611,6 +1628,15 @@ See the [configuration page](configuration.html) for information on Spark config
     is also available.
   </td>
   <td>3.2.0</td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.executor.pod.excludedFeatureSteps</code></td>
+  <td>(none)</td>
+  <td>
+    Class names of an executor pod feature step to exclude.
+    This is a developer API. Comma separated.
+  </td>
+  <td>4.1.0</td>
 </tr>
 <tr>
   <td><code>spark.kubernetes.allocation.maxPendingPods</code></td>
@@ -1988,10 +2014,10 @@ Install Apache YuniKorn:
 ```bash
 helm repo add yunikorn https://apache.github.io/yunikorn-release
 helm repo update
-helm install yunikorn yunikorn/yunikorn --namespace yunikorn --version 1.6.3 --create-namespace --set embedAdmissionController=false
+helm install yunikorn yunikorn/yunikorn --namespace yunikorn --version 1.7.0 --create-namespace --set embedAdmissionController=false
 ```
 
-The above steps will install YuniKorn v1.6.3 on an existing Kubernetes cluster.
+The above steps will install YuniKorn v1.7.0 on an existing Kubernetes cluster.
 
 ##### Get started
 

@@ -33,13 +33,26 @@ import com.typesafe.tools.mima.core.*
  */
 object MimaExcludes {
 
+  // Exclude rules for 4.2.x from 4.1.0
+  lazy val v42excludes = v41excludes ++ Seq(
+  )
+
   // Exclude rules for 4.1.x from 4.0.0
   lazy val v41excludes = defaultExcludes ++ Seq(
     // [SPARK-51261][ML][CONNECT] Introduce model size estimation to control ml cache
     ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.ml.linalg.Vector.getSizeInBytes"),
 
     // [SPARK-52221][SQL] Refactor SqlScriptingLocalVariableManager into more generic context manager
-    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.scripting.SqlScriptingExecution.withLocalVariableManager")
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.scripting.SqlScriptingExecution.withLocalVariableManager"),
+
+    // [SPARK-53391][CORE] Remove unused PrimitiveKeyOpenHashMap
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.util.collection.PrimitiveKeyOpenHashMap*"),
+
+    // [SPARK-54041][SQL] Enable Direct Passthrough Partitioning in the DataFrame API
+    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.Dataset.repartitionById"),
+
+    // [SPARK-54001][CONNECT] Replace block copying with ref-counting in ArtifactManager cloning
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.artifact.ArtifactManager.cachedBlockIdList")
   )
 
   // Default exclude rules
@@ -83,6 +96,13 @@ object MimaExcludes {
     // SPARK-51267: Match local Spark Connect server logic between Python and Scala
     ProblemFilters.exclude[MissingFieldProblem]("org.apache.spark.launcher.SparkLauncher.SPARK_LOCAL_REMOTE"),
 
+    // SPARK-53138: Split common/utils Java code into a new module common/utils-java
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.QueryContext"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.QueryContextType"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.api.java.function.*"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.network.util.ByteUnit"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.network.util.JavaUtils"),
+
     (problem: Problem) => problem match {
       case MissingClassProblem(cls) => !cls.fullName.startsWith("org.sparkproject.jpmml") &&
           !cls.fullName.startsWith("org.sparkproject.dmg.pmml")
@@ -91,6 +111,7 @@ object MimaExcludes {
   )
 
   def excludes(version: String): Seq[Problem => Boolean] = version match {
+    case v if v.startsWith("4.2") => v42excludes
     case v if v.startsWith("4.1") => v41excludes
     case _ => Seq()
   }

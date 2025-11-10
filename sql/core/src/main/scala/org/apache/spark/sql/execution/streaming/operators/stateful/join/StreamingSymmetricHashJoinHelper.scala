@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.streaming
+package org.apache.spark.sql.execution.streaming.operators.stateful.join
 
 import scala.reflect.ClassTag
 
@@ -26,7 +26,8 @@ import org.apache.spark.sql.catalyst.analysis.StreamingJoinHelper
 import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeSet, BoundReference, Expression, NamedExpression, PredicateHelper}
 import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark._
 import org.apache.spark.sql.execution.SparkPlan
-import org.apache.spark.sql.execution.streaming.WatermarkSupport.watermarkExpression
+import org.apache.spark.sql.execution.streaming.operators.stateful.{StatefulOperatorStateInfo, WatermarkSupport}
+import org.apache.spark.sql.execution.streaming.operators.stateful.WatermarkSupport.watermarkExpression
 import org.apache.spark.sql.execution.streaming.state.{StateStoreCheckpointInfo, StateStoreCoordinatorRef, StateStoreProviderId}
 
 
@@ -323,15 +324,15 @@ object StreamingSymmetricHashJoinHelper extends Logging {
 
   case class JoinerStateStoreCkptInfo(
       keyToNumValues: StateStoreCheckpointInfo,
-      valueToNumKeys: StateStoreCheckpointInfo)
+      keyWithIndexToValue: StateStoreCheckpointInfo)
 
   case class JoinStateStoreCkptInfo(
       left: JoinerStateStoreCkptInfo,
       right: JoinerStateStoreCkptInfo)
 
   case class JoinerStateStoreCheckpointId(
-       keyToNumValues: Option[String],
-       valueToNumKeys: Option[String])
+      keyToNumValues: Option[String],
+      keyWithIndexToValue: Option[String])
 
   case class JoinStateStoreCheckpointId(
        left: JoinerStateStoreCheckpointId,

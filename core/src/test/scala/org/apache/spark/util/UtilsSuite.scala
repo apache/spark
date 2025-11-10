@@ -18,11 +18,12 @@
 package org.apache.spark.util
 
 import java.io._
+import java.lang.management.ThreadInfo
 import java.lang.reflect.Field
 import java.net.{BindException, ServerSocket, URI}
 import java.nio.{ByteBuffer, ByteOrder}
 import java.nio.charset.StandardCharsets.UTF_8
-import java.nio.file.{Files => JFiles}
+import java.nio.file.Files
 import java.text.DecimalFormatSymbols
 import java.util.Locale
 import java.util.concurrent.TimeUnit
@@ -31,14 +32,15 @@ import java.util.zip.GZIPOutputStream
 import scala.collection.mutable.ListBuffer
 import scala.util.{Random, Try}
 
-import com.google.common.io.Files
-import org.apache.commons.io.IOUtils
 import org.apache.commons.math3.stat.inference.ChiSquareTest
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.fs.audit.CommonAuditContext.currentAuditContext
 import org.apache.hadoop.ipc.{CallerContext => HadoopCallerContext}
 import org.apache.logging.log4j.Level
+import org.mockito.Mockito.doReturn
+import org.scalatest.PrivateMethodTester
+import org.scalatestplus.mockito.MockitoSugar.mock
 
 import org.apache.spark.{SparkConf, SparkException, SparkFunSuite, TaskContext}
 import org.apache.spark.internal.config._
@@ -46,9 +48,10 @@ import org.apache.spark.internal.config.Tests.IS_TESTING
 import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.scheduler.SparkListener
+import org.apache.spark.util.collection.Utils.createArray
 import org.apache.spark.util.io.ChunkedByteBufferInputStream
 
-class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
+class UtilsSuite extends SparkFunSuite with ResetSystemProperties with PrivateMethodTester {
 
   test("timeConversion") {
     // Test -1
@@ -248,8 +251,8 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
         assert(mergedStream.read() === -1)
         assert(byteBufferInputStream.chunkedByteBuffer === null)
       } finally {
-        IOUtils.closeQuietly(mergedStream)
-        IOUtils.closeQuietly(in)
+        Utils.closeQuietly(mergedStream)
+        Utils.closeQuietly(in)
       }
     }
   }
@@ -343,7 +346,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
     } else {
       new FileOutputStream(path)
     }
-    IOUtils.write(content, outputStream)
+    outputStream.write(content)
     outputStream.close()
     content.length
   }
@@ -492,10 +495,10 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
     assert(Utils.createDirectory(testDirPath, "scenario1").exists())
 
     // 2. Illegal file path
-    val scenario2 = new File(testDir, "scenario2" * 256)
+    val scenario2 = new File(testDir, "scenario2".repeat(256))
     assert(!Utils.createDirectory(scenario2))
     assert(!scenario2.exists())
-    assertThrows[IOException](Utils.createDirectory(testDirPath, "scenario2" * 256))
+    assertThrows[IOException](Utils.createDirectory(testDirPath, "scenario2".repeat(256)))
 
     // 3. The parent directory cannot read
     val scenario3 = new File(testDir, "scenario3")
@@ -526,7 +529,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
 
     // The following 3 scenarios are only for the method: createDirectory(File)
     // 6. Symbolic link
-    val scenario6 = java.nio.file.Files.createSymbolicLink(new File(testDir, "scenario6")
+    val scenario6 = Files.createSymbolicLink(new File(testDir, "scenario6")
       .toPath, scenario1.toPath).toFile
     if (Utils.isJavaVersionAtLeast21) {
       assert(Utils.createDirectory(scenario6))
@@ -719,7 +722,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
 
     val tempDir2 = Utils.createTempDir()
     val sourceFile1 = new File(tempDir2, "foo.txt")
-    Files.touch(sourceFile1)
+    Utils.touch(sourceFile1)
     assert(sourceFile1.exists())
     Utils.deleteRecursively(sourceFile1)
     assert(!sourceFile1.exists())
@@ -727,7 +730,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
     val tempDir3 = new File(tempDir2, "subdir")
     assert(tempDir3.mkdir())
     val sourceFile2 = new File(tempDir3, "bar.txt")
-    Files.touch(sourceFile2)
+    Utils.touch(sourceFile2)
     assert(sourceFile2.exists())
     Utils.deleteRecursively(tempDir2)
     assert(!tempDir2.exists())
@@ -738,14 +741,14 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
   test("SPARK-50716: deleteRecursively - SymbolicLink To File") {
     val tempDir = Utils.createTempDir()
     val sourceFile = new File(tempDir, "foo.txt")
-    JFiles.write(sourceFile.toPath, "Some content".getBytes)
+    Files.writeString(sourceFile.toPath, "Some content")
     assert(sourceFile.exists())
 
     val symlinkFile = new File(tempDir, "bar.txt")
-    JFiles.createSymbolicLink(symlinkFile.toPath, sourceFile.toPath)
+    Files.createSymbolicLink(symlinkFile.toPath, sourceFile.toPath)
 
     // Check that the symlink was created successfully
-    assert(JFiles.isSymbolicLink(symlinkFile.toPath))
+    assert(Files.isSymbolicLink(symlinkFile.toPath))
     Utils.deleteRecursively(tempDir)
 
     // Verify that everything is deleted
@@ -757,13 +760,13 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
     val sourceDir = new File(tempDir, "sourceDir")
     assert(sourceDir.mkdir())
     val sourceFile = new File(sourceDir, "file.txt")
-    JFiles.write(sourceFile.toPath, "Some content".getBytes)
+    Files.writeString(sourceFile.toPath, "Some content")
 
     val symlinkDir = new File(tempDir, "targetDir")
-    JFiles.createSymbolicLink(symlinkDir.toPath, sourceDir.toPath)
+    Files.createSymbolicLink(symlinkDir.toPath, sourceDir.toPath)
 
     // Check that the symlink was created successfully
-    assert(JFiles.isSymbolicLink(symlinkDir.toPath))
+    assert(Files.isSymbolicLink(symlinkDir.toPath))
 
     // Now delete recursively
     Utils.deleteRecursively(tempDir)
@@ -776,7 +779,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
     withTempDir { tmpDir =>
       val outFile = File.createTempFile("test-load-spark-properties", "test", tmpDir)
       System.setProperty("spark.test.fileNameLoadB", "2")
-      Files.asCharSink(outFile, UTF_8).write("spark.test.fileNameLoadA true\n" +
+      Files.writeString(outFile.toPath, "spark.test.fileNameLoadA true\n" +
         "spark.test.fileNameLoadB 1\n")
       val properties = Utils.getPropertiesFromFile(outFile.getAbsolutePath)
       properties
@@ -806,7 +809,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
       val innerSourceDir = Utils.createTempDir(root = sourceDir.getPath)
       val sourceFile = File.createTempFile("someprefix", "somesuffix", innerSourceDir)
       val targetDir = new File(tempDir, "target-dir")
-      Files.asCharSink(sourceFile, UTF_8).write("some text")
+      Files.writeString(sourceFile.toPath, "some text")
 
       val path =
         if (Utils.isWindows) {
@@ -1072,7 +1075,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
            |trap "" SIGTERM
            |sleep 10
          """.stripMargin
-      Files.write(cmd.getBytes(UTF_8), file)
+      Files.writeString(file.toPath, cmd)
       file.getAbsoluteFile.setExecutable(true)
 
       process = new ProcessBuilder(file.getAbsolutePath).start()
@@ -1117,7 +1120,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
     val chi = new ChiSquareTest()
 
     // We expect an even distribution; this array will be rescaled by `chiSquareTest`
-    val expected = Array.fill(arraySize * arraySize)(1.0)
+    val expected = createArray(arraySize * arraySize, 1.0)
     val observed = results.flatten
 
     // Performs Pearson's chi-squared test. Using the sum-of-squares as the test statistic, gives
@@ -1125,6 +1128,42 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
     val pValue = chi.chiSquareTest(expected, observed)
 
     assert(pValue > threshold)
+  }
+
+  test("ThreadInfoOrdering") {
+    val task1T = mock[ThreadInfo]
+    doReturn(11L).when(task1T).getThreadId
+    doReturn("Executor task launch worker for task 1.0 in stage 1.0 (TID 11)")
+      .when(task1T).getThreadName
+    doReturn("Executor task launch worker for task 1.0 in stage 1.0 (TID 11)")
+      .when(task1T).toString
+
+    val task2T = mock[ThreadInfo]
+    doReturn(12L).when(task2T).getThreadId
+    doReturn("Executor task launch worker for task 2.0 in stage 1.0 (TID 22)")
+      .when(task2T).getThreadName
+    doReturn("Executor task launch worker for task 2.0 in stage 1.0 (TID 22)")
+      .when(task2T).toString
+
+    val connectExecuteOp1T = mock[ThreadInfo]
+    doReturn(21L).when(connectExecuteOp1T).getThreadId
+    doReturn("SparkConnectExecuteThread_opId=16148fb4-4189-43c3-b8d4-8b3b6ddd41c7")
+      .when(connectExecuteOp1T).getThreadName
+    doReturn("SparkConnectExecuteThread_opId=16148fb4-4189-43c3-b8d4-8b3b6ddd41c7")
+      .when(connectExecuteOp1T).toString
+
+    val connectExecuteOp2T = mock[ThreadInfo]
+    doReturn(22L).when(connectExecuteOp2T).getThreadId
+    doReturn("SparkConnectExecuteThread_opId=4e4d1cac-ffde-46c1-b7c2-808b726cb47e")
+      .when(connectExecuteOp2T).getThreadName
+    doReturn("SparkConnectExecuteThread_opId=4e4d1cac-ffde-46c1-b7c2-808b726cb47e")
+      .when(connectExecuteOp2T).toString
+
+    val threadInfoOrderingMethod =
+      PrivateMethod[Ordering[ThreadInfo]](Symbol("threadInfoOrdering"))
+    val sorted = Seq(connectExecuteOp1T, connectExecuteOp2T, task1T, task2T)
+      .sorted(Utils.invokePrivate(threadInfoOrderingMethod()))
+    assert(sorted === Seq(task1T, task2T, connectExecuteOp1T, connectExecuteOp2T))
   }
 
   test("redact sensitive information") {

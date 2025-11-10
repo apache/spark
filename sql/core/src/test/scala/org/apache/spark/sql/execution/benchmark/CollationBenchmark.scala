@@ -19,7 +19,9 @@ package org.apache.spark.sql.execution.benchmark
 import scala.concurrent.duration._
 
 import org.apache.spark.benchmark.{Benchmark, BenchmarkBase}
+import org.apache.spark.sql.catalyst.expressions.Murmur3HashFunction
 import org.apache.spark.sql.catalyst.util.{CollationFactory, CollationSupport}
+import org.apache.spark.sql.types.StringType
 import org.apache.spark.unsafe.types.UTF8String
 
 abstract class CollationBenchmarkBase extends BenchmarkBase {
@@ -92,7 +94,7 @@ abstract class CollationBenchmarkBase extends BenchmarkBase {
         sublistStrings.foreach { _ =>
           utf8Strings.foreach { s =>
             (0 to 3).foreach { _ =>
-              collation.hashFunction.applyAsLong(s)
+              Murmur3HashFunction.hash(s, StringType(collationType), 42L, true, false).toInt
             }
           }
         }

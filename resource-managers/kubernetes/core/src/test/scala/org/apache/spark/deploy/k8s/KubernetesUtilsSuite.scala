@@ -19,11 +19,12 @@ package org.apache.spark.deploy.k8s
 
 import java.io.File
 import java.nio.charset.StandardCharsets
+import java.nio.file.Files
+import java.nio.file.StandardOpenOption._
 
 import scala.jdk.CollectionConverters._
 
 import io.fabric8.kubernetes.api.model.{ContainerBuilder, EnvVarBuilder, EnvVarSourceBuilder, PodBuilder}
-import org.apache.commons.io.FileUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.scalatest.PrivateMethodTester
@@ -91,7 +92,7 @@ class KubernetesUtilsSuite extends SparkFunSuite with PrivateMethodTester {
         }
 
         def appendFileAndUpload(content: String, delSrc: Boolean, overwrite: Boolean): Unit = {
-          FileUtils.write(srcFile, content, StandardCharsets.UTF_8, true)
+          Files.writeString(srcFile.toPath, content, StandardCharsets.UTF_8, CREATE, WRITE, APPEND)
           KubernetesUtils.invokePrivate(upload(src, dest, fs, delSrc, overwrite))
         }
 
@@ -121,7 +122,7 @@ class KubernetesUtilsSuite extends SparkFunSuite with PrivateMethodTester {
 
         // Rewrite a new file, upload file with delSrc = true and overwrite = false.
         // Upload failed because dest exists, src still exists.
-        FileUtils.write(srcFile, "re-init-content", StandardCharsets.UTF_8, true)
+        Files.writeString(srcFile.toPath, "re-init-content")
         checkUploadException(delSrc = true, overwrite = false)
         assert(fs.exists(src))
       }

@@ -47,7 +47,7 @@ import org.apache.spark.sql.catalyst.util.sideBySide
 import org.apache.spark.sql.execution.{LogicalRDD, RDDScanExec, SQLExecution}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ShuffleExchangeExec}
-import org.apache.spark.sql.execution.streaming.MemoryStream
+import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.expressions.UserDefinedFunction
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -1012,7 +1012,7 @@ class DatasetSuite extends QueryTest
     assert(err.getMessage.contains("An Observation can be used with a Dataset only once"))
 
     // streaming datasets are not supported
-    val streamDf = new MemoryStream[Int](0, sqlContext).toDF()
+    val streamDf = new MemoryStream[Int](0, spark).toDF()
     val streamObservation = Observation("stream")
     val streamErr = intercept[IllegalArgumentException] {
       streamDf.observe(streamObservation, avg($"value").cast("int").as("avg_val"))

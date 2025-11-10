@@ -27,4 +27,6 @@ import org.apache.spark.annotation.Evolving;
 @Evolving
 public enum JoinType {
     INNER_JOIN,
+    LEFT_OUTER_JOIN,
+    RIGHT_OUTER_JOIN,
 }

@@ -18,6 +18,7 @@
 package org.apache.spark.sql.analysis
 
 import org.apache.spark.SparkConf
+import org.apache.spark.SparkNoSuchElementException
 import org.apache.spark.sql.SparkSessionExtensions
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -27,7 +28,7 @@ class AnalysisConfOverrideSuite extends SharedSparkSession {
 
   override protected def sparkConf: SparkConf = {
     super.sparkConf
-      .set("spark.sql.extensions", "com.databricks.sql.ConfOverrideValidationExtensions")
+      .set("spark.sql.extensions", classOf[ConfOverrideValidationExtensions].getName)
   }
 
   override def beforeAll(): Unit = {
@@ -47,7 +48,7 @@ class AnalysisConfOverrideSuite extends SharedSparkSession {
       val key = "spark.sql.catalog.x.y"
       val value = "true"
       withSQLConf(key -> value) {
-        f
+        f(key, value)
       }
     }
   }
@@ -107,18 +108,15 @@ class AnalysisConfOverrideSuite extends SharedSparkSession {
             |""".stripMargin
         )
         spark.sql(
-          """CREATE OR REPLACE FUNCTION f3(in bigint) RETURNS (out bigint)
+          """CREATE OR REPLACE FUNCTION f3(in bigint) RETURNS bigint
             |RETURN in + 1
             |""".stripMargin
         )
-        ValidateConfOverrideRule.withConfValidationEnabled(key, value) {
-          spark.sql("SELECT * FROM f1()")
-        }
-        ValidateConfOverrideRule.withConfValidationEnabled(key, value) {
-          spark.sql("SELECT * FROM f2()")
-        }
-        ValidateConfOverrideRule.withConfValidationEnabled(key, value) {
-          spark.sql("SELECT f3(1)")
+
+        ("SELECT * FROM f1()" :: "SELECT * FROM f2()" :: "SELECT f3(1)" :: Nil).foreach { query =>
+          ValidateConfOverrideRule.withConfValidationEnabled(key, value) {
+            spark.sql(query)
+          }
         }
       }
     }
@@ -142,24 +140,20 @@ class AnalysisConfOverrideSuite extends SharedSparkSession {
               |""".stripMargin
           )
           spark.sql(
-            """CREATE OR REPLACE FUNCTION f3(in bigint) RETURNS (out bigint)
+            """CREATE OR REPLACE FUNCTION f3(in bigint) RETURNS bigint
               |RETURN in + 1
               |""".stripMargin
           )
-          intercept[AssertionError] {
-            ValidateConfOverrideRule.withConfValidationEnabled(key, value) {
-              spark.sql("SELECT * FROM f1()")
-            }
-          }
-          intercept[AssertionError] {
-            ValidateConfOverrideRule.withConfValidationEnabled(key, value) {
-              spark.sql("SELECT * FROM f2()")
-            }
-          }
-          intercept[AssertionError] {
-            ValidateConfOverrideRule.withConfValidationEnabled(key, value) {
-              spark.sql("SELECT f3(1)")
-            }
+
+          ("SELECT * FROM f1()" :: "SELECT * FROM f2()" :: "SELECT f3(1)" :: Nil).foreach { query =>
+            checkError(
+              exception = intercept[SparkNoSuchElementException] {
+                ValidateConfOverrideRule.withConfValidationEnabled(key, value) {
+                  spark.sql(query)
+                }
+              },
+              condition = "SQL_CONF_NOT_FOUND",
+              parameters = Map("sqlConf" -> "\"spark.sql.catalog.x.y\""))
           }
         }
       }

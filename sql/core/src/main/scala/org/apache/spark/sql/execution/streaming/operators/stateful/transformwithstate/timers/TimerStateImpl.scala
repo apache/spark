@@ -14,13 +14,15 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.execution.streaming
+package org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.timers
 
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{EXPIRY_TIMESTAMP, KEY}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.TimerKeyEncoder
+import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.statefulprocessor.ImplicitGroupingKeyTracker
 import org.apache.spark.sql.execution.streaming.state._
 import org.apache.spark.sql.streaming.TimeMode
 import org.apache.spark.sql.types._
@@ -199,7 +201,9 @@ class TimerStateImpl(
         }
       }
 
-      override protected def close(): Unit = { }
+      override protected def close(): Unit = {
+        iter.close()
+      }
     }
   }
 }

@@ -950,13 +950,13 @@ class SparkSession(SparkConversionMixin):
 
     @property
     def profile(self) -> Profile:
-        """Returns a :class:`Profile` for performance/memory profiling.
+        """Returns a :class:`pyspark.sql.profile.Profile` for performance/memory profiling.
 
         .. versionadded:: 4.0.0
 
         Returns
         -------
-        :class:`Profile`
+        :class:`pyspark.sql.profile.Profile`
 
         Notes
         -----

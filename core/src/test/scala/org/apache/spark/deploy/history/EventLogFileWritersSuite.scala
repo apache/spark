@@ -322,7 +322,7 @@ class RollingEventLogFilesWriterSuite extends EventLogFileWritersSuite {
       writer.start()
 
       // write log more than 20m (intended to roll over to 3 files)
-      val dummyStr = "dummy" * 1024
+      val dummyStr = "dummy".repeat(1024)
       val expectedLines = writeTestEvents(writer, dummyStr, 1024 * 1024 * 21)
 
       val logDirPath = getAppEventLogDirPath(testDirPath.toUri, appId, attemptId)

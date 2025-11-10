@@ -14,7 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.execution.streaming
+package org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate
 
 import org.apache.spark.SparkThrowable
 import org.apache.spark.sql.catalyst.InternalRow
@@ -22,7 +22,10 @@ import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, SortOrde
 import org.apache.spark.sql.catalyst.plans.logical.{EventTime, ProcessingTime}
 import org.apache.spark.sql.catalyst.plans.physical.Distribution
 import org.apache.spark.sql.execution.{BinaryExecNode, SparkPlan}
-import org.apache.spark.sql.execution.streaming.state.{OperatorStateMetadata, TransformWithStateUserFunctionException}
+import org.apache.spark.sql.execution.streaming.operators.stateful.{StatefulOperatorCustomMetric, StatefulOperatorCustomSumMetric, StatefulOperatorPartitioning, StateStoreWriter, WatermarkSupport}
+import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.statefulprocessor.ImplicitGroupingKeyTracker
+import org.apache.spark.sql.execution.streaming.state.{OperatorStateMetadata, RocksDBStateStoreProvider, StateStoreErrors, TransformWithStateUserFunctionException}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.{OutputMode, TimeMode}
 import org.apache.spark.sql.types.{BinaryType, StructType}
 import org.apache.spark.util.NextIterator
@@ -50,6 +53,12 @@ abstract class TransformWithStateExecBase(
   with TransformWithStateMetadataUtils {
 
   override def operatorStateMetadataVersion: Int = 2
+
+  // Supported state store providers for TransformWithState.
+  // TransformWithState currently supports only RocksDBStateStoreProvider.
+  private val SUPPORTED_STATE_STORE_PROVIDERS = Set(
+    classOf[RocksDBStateStoreProvider].getName
+  )
 
   override def supportsSchemaEvolution: Boolean = true
 
@@ -211,6 +220,14 @@ abstract class TransformWithStateExecBase(
         TransformWithStateVariableUtils.validateTimeMode(timeMode, eventTimeWatermarkForEviction)
 
       case _ =>
+    }
+  }
+
+  /** Validates that the configured state store provider is supported by TransformWithState. */
+  protected def validateStateStoreProvider(isStreaming: Boolean): Unit = {
+    val providerName = conf.getConf(SQLConf.STATE_STORE_PROVIDER_CLASS)
+    if (isStreaming && !SUPPORTED_STATE_STORE_PROVIDERS.contains(providerName)) {
+      throw StateStoreErrors.storeBackendNotSupportedForTWS(providerName)
     }
   }
 

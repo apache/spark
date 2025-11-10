@@ -18,11 +18,9 @@
 package org.apache.spark.mllib.util
 
 import java.io.File
-import java.nio.charset.StandardCharsets
+import java.nio.file.Files
 
 import scala.io.Source
-
-import com.google.common.io.Files
 
 import org.apache.spark.{SparkException, SparkFunSuite, SparkRuntimeException}
 import org.apache.spark.mllib.linalg.{DenseVector, Matrices, SparseVector, Vector, Vectors}
@@ -93,7 +91,7 @@ class MLUtilsSuite extends SparkFunSuite with MLlibTestSparkContext {
       """.stripMargin
     val tempDir = Utils.createTempDir()
     val file = new File(tempDir.getPath, "part-00000")
-    Files.asCharSink(file, StandardCharsets.UTF_8).write(lines)
+    Files.writeString(file.toPath, lines)
     val path = tempDir.toURI.toString
 
     val pointsWithNumFeatures = loadLibSVMFile(sc, path, 6).collect()
@@ -126,7 +124,7 @@ class MLUtilsSuite extends SparkFunSuite with MLlibTestSparkContext {
       """.stripMargin
     val tempDir = Utils.createTempDir()
     val file = new File(tempDir.getPath, "part-00000")
-    Files.asCharSink(file, StandardCharsets.UTF_8).write(lines)
+    Files.writeString(file.toPath, lines)
     val path = tempDir.toURI.toString
 
     intercept[SparkException] {
@@ -143,7 +141,7 @@ class MLUtilsSuite extends SparkFunSuite with MLlibTestSparkContext {
       """.stripMargin
     val tempDir = Utils.createTempDir()
     val file = new File(tempDir.getPath, "part-00000")
-    Files.asCharSink(file, StandardCharsets.UTF_8).write(lines)
+    Files.writeString(file.toPath, lines)
     val path = tempDir.toURI.toString
 
     intercept[SparkException] {

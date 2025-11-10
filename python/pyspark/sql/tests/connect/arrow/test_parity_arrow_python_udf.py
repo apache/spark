@@ -15,6 +15,8 @@
 # limitations under the License.
 #
 
+import unittest
+
 from pyspark.sql.tests.connect.test_parity_udf import UDFParityTests
 from pyspark.sql.tests.arrow.test_arrow_python_udf import ArrowPythonUDFTestsMixin
 
@@ -31,6 +33,80 @@ class ArrowPythonUDFParityTests(UDFParityTests, ArrowPythonUDFTestsMixin):
             cls.spark.conf.unset("spark.sql.execution.pythonUDF.arrow.enabled")
         finally:
             super(ArrowPythonUDFParityTests, cls).tearDownClass()
+
+
+class ArrowPythonUDFParityLegacyTestsMixin(ArrowPythonUDFTestsMixin):
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.spark.conf.set("spark.sql.legacy.execution.pythonUDF.pandas.conversion.enabled", "true")
+
+    @classmethod
+    def tearDownClass(cls):
+        try:
+            cls.spark.conf.unset("spark.sql.legacy.execution.pythonUDF.pandas.conversion.enabled")
+        finally:
+            super().tearDownClass()
+
+    @unittest.skip("Duplicate test as it is already tested in ArrowPythonUDFLegacyTests.")
+    def test_udf_binary_type(self):
+        super().test_udf_binary_type(self)
+
+    @unittest.skip("Duplicate test as it is already tested in ArrowPythonUDFLegacyTests.")
+    def test_udf_binary_type_in_nested_structures(self):
+        super().test_udf_binary_type_in_nested_structures(self)
+
+
+class ArrowPythonUDFParityNonLegacyTestsMixin(ArrowPythonUDFTestsMixin):
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.spark.conf.set(
+            "spark.sql.legacy.execution.pythonUDF.pandas.conversion.enabled", "false"
+        )
+
+    @classmethod
+    def tearDownClass(cls):
+        try:
+            cls.spark.conf.unset("spark.sql.legacy.execution.pythonUDF.pandas.conversion.enabled")
+        finally:
+            super().tearDownClass()
+
+    @unittest.skip("Duplicate test as it is already tested in ArrowPythonUDFNonLegacyTests.")
+    def test_udf_binary_type(self):
+        super().test_udf_binary_type(self)
+
+    @unittest.skip("Duplicate test as it is already tested in ArrowPythonUDFLegacyTests.")
+    def test_udf_binary_type_in_nested_structures(self):
+        super().test_udf_binary_type_in_nested_structures(self)
+
+
+class ArrowPythonUDFParityLegacyTests(UDFParityTests, ArrowPythonUDFParityLegacyTestsMixin):
+    @classmethod
+    def setUpClass(cls):
+        super(ArrowPythonUDFParityLegacyTests, cls).setUpClass()
+        cls.spark.conf.set("spark.sql.execution.pythonUDF.arrow.enabled", "true")
+
+    @classmethod
+    def tearDownClass(cls):
+        try:
+            cls.spark.conf.unset("spark.sql.execution.pythonUDF.arrow.enabled")
+        finally:
+            super(ArrowPythonUDFParityLegacyTests, cls).tearDownClass()
+
+
+class ArrowPythonUDFParityNonLegacyTests(UDFParityTests, ArrowPythonUDFParityNonLegacyTestsMixin):
+    @classmethod
+    def setUpClass(cls):
+        super(ArrowPythonUDFParityNonLegacyTests, cls).setUpClass()
+        cls.spark.conf.set("spark.sql.execution.pythonUDF.arrow.enabled", "true")
+
+    @classmethod
+    def tearDownClass(cls):
+        try:
+            cls.spark.conf.unset("spark.sql.execution.pythonUDF.arrow.enabled")
+        finally:
+            super(ArrowPythonUDFParityNonLegacyTests, cls).tearDownClass()
 
 
 if __name__ == "__main__":

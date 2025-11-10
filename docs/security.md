@@ -1014,6 +1014,28 @@ It's up to the user to maintain an updated ticket cache that Spark can use.
 The location of the ticket cache can be customized by setting the `KRB5CCNAME` environment
 variable.
 
+## Proxy User
+
+Spark also provides `--proxy-user` parameter for `spark-submit` to enable Hadoop's
+[Proxy user](https://hadoop.apache.org/docs/stable/hadoop-project-dist/hadoop-common/Superusers.html) feature.
+
+If the target cluster, e.g., YARN, HDFS, is running in Secure Mode, the superuser must have a valid
+Kerberos ticket to log in. The impersonated user (proxy-user) does not need to have a Kerberos ticket.
+In addition, the superuser must be configured in the cluster to be allowed to impersonate the
+proxy user.
+
+The authentication happens on the target cluster side, and once the authentication is successful, the cluster will
+do resource allocation and file system access on behalf of the proxy user.
+
+Note that, depending on Spark's deployment mode, the proxy user might behave differently. For cluster mode, the JVM
+running the driver will be started by the proxy user, while for client mode, it will be started by the superuser instead. This is due to
+the Driver being initialized inside the progress of `SparkSubmit` client. This makes a difference in file system access
+for local file permissions. This is not considered a CVE issue, but users should be aware of this difference.
+
+Nowadays, many projects, such as Apache Kyuubi, provide a multi-tenant Spark service with impersonation. To prevent
+server-side local files from reading and leaking by superuser to other tenants, it is recommended to refer to their
+documentation to find out instructions on how to ensure cluster mode is used for a more secure purpose.
+
 ## Secure Interaction with Kubernetes
 
 When talking to Hadoop-based services behind Kerberos, it was noted that Spark needs to obtain delegation tokens

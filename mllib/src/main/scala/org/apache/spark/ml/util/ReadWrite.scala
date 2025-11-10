@@ -30,7 +30,6 @@ import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.{Failure, Success, Try, Using}
 
-import org.apache.commons.io.FileUtils
 import org.apache.hadoop.fs.Path
 import org.json4s._
 import org.json4s.{DefaultFormats, JObject}
@@ -39,7 +38,7 @@ import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.{SparkContext, SparkException}
 import org.apache.spark.annotation.{Since, Unstable}
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.PATH
 import org.apache.spark.ml._
 import org.apache.spark.ml.classification.{OneVsRest, OneVsRestModel}
@@ -822,7 +821,7 @@ private[spark] class FileSystemOverwrite extends Logging {
       val filePath = new File(path)
       if (filePath.exists()) {
         if (shouldOverwrite) {
-          FileUtils.deleteDirectory(filePath)
+          Utils.deleteRecursively(filePath)
         } else {
           throw new IOException(errMsg)
         }

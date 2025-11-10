@@ -178,6 +178,15 @@ case class AQEShuffleReadExec private(
     numPartitionsMetric.set(partitionSpecs.length)
     driverAccumUpdates += (numPartitionsMetric.id -> partitionSpecs.length.toLong)
 
+    val numEmptyPartitionsMetric = metrics("numEmptyPartitions")
+    val numEmptyPartitions = child match {
+      case s: ShuffleQueryStageExec =>
+        s.mapStats.map(stats => stats.bytesByPartitionId.count(_ == 0)).getOrElse(0)
+      case _ => 0
+    }
+    numEmptyPartitionsMetric.set(numEmptyPartitions)
+    driverAccumUpdates += (numEmptyPartitionsMetric.id -> numEmptyPartitions.toLong)
+
     if (hasSkewedPartition) {
       val skewedSpecs = partitionSpecs.collect {
         case p: PartialReducerPartitionSpec => p
@@ -200,15 +209,7 @@ case class AQEShuffleReadExec private(
       val numCoalescedPartitionsMetric = metrics("numCoalescedPartitions")
       val x = partitionSpecs.count(isCoalescedSpec)
       numCoalescedPartitionsMetric.set(x)
-      val numEmptyPartitionsMetric = metrics("numEmptyPartitions")
-      val y = child match {
-        case s: ShuffleQueryStageExec =>
-          s.mapStats.map(stats => stats.bytesByPartitionId.count(_ == 0)).getOrElse(0)
-        case _ => 0
-      }
-      numEmptyPartitionsMetric.set(y)
-      driverAccumUpdates ++= Seq(numCoalescedPartitionsMetric.id -> x,
-        numEmptyPartitionsMetric.id -> y)
+      driverAccumUpdates ++= Seq(numCoalescedPartitionsMetric.id -> x)
     }
 
     partitionDataSizes.foreach { dataSizes =>
@@ -223,7 +224,9 @@ case class AQEShuffleReadExec private(
 
   @transient override lazy val metrics: Map[String, SQLMetric] = {
     if (shuffleStage.isDefined) {
-      Map("numPartitions" -> SQLMetrics.createMetric(sparkContext, "number of partitions")) ++ {
+      Map("numPartitions" -> SQLMetrics.createMetric(sparkContext, "number of partitions"),
+        "numEmptyPartitions" ->
+          SQLMetrics.createMetric(sparkContext, "number of empty partitions")) ++ {
         if (isLocalRead) {
           // We split the mapper partition evenly when creating local shuffle read, so no
           // data size info is available.
@@ -244,9 +247,7 @@ case class AQEShuffleReadExec private(
       } ++ {
         if (hasCoalescedPartition) {
           Map("numCoalescedPartitions" ->
-            SQLMetrics.createMetric(sparkContext, "number of coalesced partitions"),
-            "numEmptyPartitions" ->
-              SQLMetrics.createMetric(sparkContext, "number of empty partitions"))
+            SQLMetrics.createMetric(sparkContext, "number of coalesced partitions"))
         } else {
           Map.empty
         }

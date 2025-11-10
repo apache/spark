@@ -29,7 +29,7 @@ import org.apache.spark.connect.proto.ExecutePlanResponse
 import org.apache.spark.connect.proto.StreamingQueryEventType
 import org.apache.spark.connect.proto.StreamingQueryListenerEvent
 import org.apache.spark.connect.proto.StreamingQueryListenerEventsResult
-import org.apache.spark.internal.{Logging, LogKeys, MDC}
+import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.sql.connect.execution.ExecuteResponseObserver
 import org.apache.spark.sql.streaming.StreamingQueryListener
 import org.apache.spark.util.ArrayImplicits._

@@ -268,7 +268,7 @@ class ConnectCompatibilityTestsMixin:
             "registerProgressHandler",
             "removeProgressHandler",
         }
-        expected_missing_classic_methods = set()
+        expected_missing_classic_methods = {"cloneSession"}
         self.check_compatibility(
             ClassicSparkSession,
             ConnectSparkSession,

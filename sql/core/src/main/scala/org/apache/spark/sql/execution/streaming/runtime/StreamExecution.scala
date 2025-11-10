@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.streaming
+package org.apache.spark.sql.execution.streaming.runtime
 
 import java.io.{InterruptedIOException, UncheckedIOException}
 import java.nio.channels.ClosedByInterruptException
@@ -33,7 +33,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.logging.log4j.CloseableThreadContext
 
 import org.apache.spark.{JobArtifactSet, SparkContext, SparkException, SparkThrowable}
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{CHECKPOINT_PATH, CHECKPOINT_ROOT, LOGICAL_PLAN, PATH, PRETTY_ID_STRING, QUERY_ID, RUN_ID, SPARK_DATA_STREAM}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
@@ -43,6 +43,9 @@ import org.apache.spark.sql.connector.read.streaming.{Offset => OffsetV2, ReadLi
 import org.apache.spark.sql.connector.write.{LogicalWriteInfoImpl, SupportsTruncate, Write}
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.command.StreamingExplainCommand
+import org.apache.spark.sql.execution.streaming.ContinuousTrigger
+import org.apache.spark.sql.execution.streaming.checkpointing.{CheckpointFileManager, CommitLog, OffsetSeqLog, OffsetSeqMetadata}
+import org.apache.spark.sql.execution.streaming.operators.stateful.{StatefulOperator, StateStoreWriter}
 import org.apache.spark.sql.execution.streaming.sources.{ForeachBatchUserFuncException, ForeachUserFuncException}
 import org.apache.spark.sql.execution.streaming.state.OperatorStateMetadataV2FileManager
 import org.apache.spark.sql.internal.SQLConf
@@ -152,7 +155,7 @@ abstract class StreamExecution(
   protected def sources: Seq[SparkDataStream]
 
   /** Isolated spark session to run the batches with. */
-  protected val sparkSessionForStream: SparkSession = sparkSession.cloneSession()
+  protected[sql] val sparkSessionForStream: SparkSession = sparkSession.cloneSession()
 
   /**
    * Manages the metadata from this checkpoint location.
@@ -302,8 +305,6 @@ abstract class StreamExecution(
 
       // While active, repeatedly attempt to run batches.
       sparkSessionForStream.withActive {
-        // Adaptive execution can change num shuffle partitions, disallow
-        sparkSessionForStream.conf.set(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, "false")
         // Disable cost-based join optimization as we do not want stateful operations
         // to be rearranged
         sparkSessionForStream.conf.set(SQLConf.CBO_ENABLED.key, "false")
@@ -312,6 +313,22 @@ abstract class StreamExecution(
         // details.
         sparkSessionForStream.conf.set(SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_DISTRIBUTION.key,
           "false")
+
+        if (trigger.isInstanceOf[ContinuousTrigger]) {
+          // SPARK-53941: AQE does not make sense for continuous processing, disable it.
+          logWarning("Disabling AQE since the query runs with continuous mode.")
+          sparkSessionForStream.conf.set(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, "false")
+        }
+
+        sparkSessionForStream.conf.get(SQLConf.STATEFUL_SHUFFLE_PARTITIONS_INTERNAL) match {
+          case Some(_) => // no-op
+          case None =>
+            // Take the default value of `spark.sql.shuffle.partitions`.
+            val shufflePartitionValue = sparkSessionForStream.conf.get(SQLConf.SHUFFLE_PARTITIONS)
+            sparkSessionForStream.conf.set(
+              SQLConf.STATEFUL_SHUFFLE_PARTITIONS_INTERNAL.key,
+              shufflePartitionValue)
+        }
 
         getLatestExecutionContext().updateStatusMessage("Initializing sources")
         // force initialization of the logical plan so that the sources can be created

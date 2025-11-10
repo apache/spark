@@ -17,7 +17,7 @@
 
 package org.apache.spark.input
 
-import com.google.common.io.{ByteStreams, Closeables}
+import com.google.common.io.Closeables
 import org.apache.hadoop.conf.{Configurable => HConfigurable, Configuration}
 import org.apache.hadoop.io.Text
 import org.apache.hadoop.mapreduce.InputSplit
@@ -71,7 +71,7 @@ private[spark] class WholeTextFileRecordReader(
   override def nextKeyValue(): Boolean = {
     if (!processed) {
       val fileIn = HadoopCodecStreams.createInputStream(getConf, path)
-      val innerBuffer = ByteStreams.toByteArray(fileIn)
+      val innerBuffer = fileIn.readAllBytes()
 
       value = new Text(innerBuffer)
       Closeables.close(fileIn, false)

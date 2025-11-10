@@ -29,13 +29,12 @@ import io.grpc.netty.NettyServerBuilder
 import io.grpc.protobuf.ProtoUtils
 import io.grpc.protobuf.services.ProtoReflectionService
 import io.grpc.stub.StreamObserver
-import org.apache.commons.lang3.StringUtils
 
 import org.apache.spark.{SparkContext, SparkEnv}
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.{AddArtifactsRequest, AddArtifactsResponse, SparkConnectServiceGrpc}
 import org.apache.spark.connect.proto.SparkConnectServiceGrpc.AsyncService
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.HOST
 import org.apache.spark.internal.config.UI.UI_ENABLED
 import org.apache.spark.scheduler.{LiveListenerBus, SparkListenerEvent}
@@ -225,6 +224,20 @@ class SparkConnectService(debug: Boolean) extends AsyncService with BindableServ
     } catch {
       ErrorUtils.handleError(
         "getErrorInfo",
+        observer = responseObserver,
+        userId = request.getUserContext.getUserId,
+        sessionId = request.getSessionId)
+    }
+  }
+
+  override def cloneSession(
+      request: proto.CloneSessionRequest,
+      responseObserver: StreamObserver[proto.CloneSessionResponse]): Unit = {
+    try {
+      new SparkConnectCloneSessionHandler(responseObserver).handle(request)
+    } catch {
+      ErrorUtils.handleError(
+        "cloneSession",
         observer = responseObserver,
         userId = request.getUserContext.getUserId,
         sessionId = request.getSessionId)
@@ -504,7 +517,7 @@ object SparkConnectService extends Logging {
   }
 
   def extractErrorMessage(st: Throwable): String = {
-    val message = StringUtils.abbreviate(st.getMessage, 2048)
+    val message = Utils.abbreviate(st.getMessage, 2048)
     convertNullString(message)
   }
 

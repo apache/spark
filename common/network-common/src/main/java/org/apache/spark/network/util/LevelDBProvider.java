@@ -50,7 +50,7 @@ public class LevelDBProvider {
         tmpDb = JniDBFactory.factory.open(dbFile, options);
       } catch (NativeDB.DBException e) {
         if (e.isNotFound() || e.getMessage().contains(" does not exist ")) {
-          logger.info("Creating state database at {}", MDC.of(LogKeys.PATH$.MODULE$, dbFile));
+          logger.info("Creating state database at {}", MDC.of(LogKeys.PATH, dbFile));
           options.createIfMissing(true);
           try {
             tmpDb = JniDBFactory.factory.open(dbFile, options);
@@ -61,16 +61,16 @@ public class LevelDBProvider {
           // the leveldb file seems to be corrupt somehow.  Lets just blow it away and create a new
           // one, so we can keep processing new apps
           logger.error("error opening leveldb file {}. Creating new file, will not be able to " +
-              "recover state for existing applications", e, MDC.of(LogKeys.PATH$.MODULE$, dbFile));
+              "recover state for existing applications", e, MDC.of(LogKeys.PATH, dbFile));
           if (dbFile.isDirectory()) {
             for (File f : dbFile.listFiles()) {
               if (!f.delete()) {
-                logger.warn("error deleting {}", MDC.of(LogKeys.PATH$.MODULE$, f.getPath()));
+                logger.warn("error deleting {}", MDC.of(LogKeys.PATH, f.getPath()));
               }
             }
           }
           if (!dbFile.delete()) {
-            logger.warn("error deleting {}", MDC.of(LogKeys.PATH$.MODULE$, dbFile.getPath()));
+            logger.warn("error deleting {}", MDC.of(LogKeys.PATH, dbFile.getPath()));
           }
           options.createIfMissing(true);
           try {

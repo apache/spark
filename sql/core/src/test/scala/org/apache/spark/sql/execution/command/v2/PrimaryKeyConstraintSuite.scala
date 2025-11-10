@@ -23,12 +23,12 @@ class PrimaryKeyConstraintSuite extends QueryTest with CommandSuiteBase with DDL
   override protected def command: String = "PRIMARY KEY CONSTRAINT"
 
   private val validConstraintCharacteristics = Seq(
-    ("", "NOT ENFORCED UNVALIDATED NORELY"),
-    ("NOT ENFORCED", "NOT ENFORCED UNVALIDATED NORELY"),
-    ("NOT ENFORCED NORELY", "NOT ENFORCED UNVALIDATED NORELY"),
-    ("NORELY NOT ENFORCED", "NOT ENFORCED UNVALIDATED NORELY"),
-    ("NORELY", "NOT ENFORCED UNVALIDATED NORELY"),
-    ("RELY", "NOT ENFORCED UNVALIDATED RELY")
+    ("", "NOT ENFORCED NORELY"),
+    ("NOT ENFORCED", "NOT ENFORCED NORELY"),
+    ("NOT ENFORCED NORELY", "NOT ENFORCED NORELY"),
+    ("NORELY NOT ENFORCED", "NOT ENFORCED NORELY"),
+    ("NORELY", "NOT ENFORCED NORELY"),
+    ("RELY", "NOT ENFORCED RELY")
   )
 
   test("Add primary key constraint") {
@@ -92,7 +92,7 @@ class PrimaryKeyConstraintSuite extends QueryTest with CommandSuiteBase with DDL
           condition = "CONSTRAINT_ALREADY_EXISTS",
           sqlState = "42710",
           parameters = Map("constraintName" -> "pk1",
-            "oldConstraint" -> "CONSTRAINT pk1 PRIMARY KEY (id) NOT ENFORCED UNVALIDATED NORELY")
+            "oldConstraint" -> "CONSTRAINT pk1 PRIMARY KEY (id) NOT ENFORCED NORELY")
         )
       }
     }
@@ -109,7 +109,7 @@ class PrimaryKeyConstraintSuite extends QueryTest with CommandSuiteBase with DDL
       val constraint = table.constraints.head
       assert(constraint.name() == "pk1")
       assert(constraint.toDDL ==
-        "CONSTRAINT pk1 PRIMARY KEY (id1, id2) NOT ENFORCED UNVALIDATED NORELY")
+        "CONSTRAINT pk1 PRIMARY KEY (id1, id2) NOT ENFORCED NORELY")
     }
   }
 }

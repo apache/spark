@@ -23,6 +23,8 @@ import org.scalatest.{BeforeAndAfterEach, PrivateMethodTester}
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.internal.config.Tests.TEST_USE_COMPRESSED_OOPS_KEY
+import org.apache.spark.util.Utils
+import org.apache.spark.util.collection.Utils.createArray
 
 class DummyClass1 {}
 
@@ -74,7 +76,7 @@ class SizeEstimatorSuite
   with ResetSystemProperties {
 
   // Save modified system properties so that we can restore them after tests.
-  val originalArch = System.getProperty("os.arch")
+  val originalArch = Utils.osArch
   val originalCompressedOops = System.getProperty(TEST_USE_COMPRESSED_OOPS_KEY)
 
   def reinitializeSizeEstimator(arch: String, useCompressedOops: String): Unit = {
@@ -183,16 +185,16 @@ class SizeEstimatorSuite
     // If an array contains the *same* element many times, we should only count it once.
     val d1 = new DummyClass1
     // 10 pointers plus 8-byte object
-    assertResult(72)(SizeEstimator.estimate(Array.fill(10)(d1)))
+    assertResult(72)(SizeEstimator.estimate(createArray(10, d1)))
     // 100 pointers plus 8-byte object
-    assertResult(432)(SizeEstimator.estimate(Array.fill(100)(d1)))
+    assertResult(432)(SizeEstimator.estimate(createArray(100, d1)))
 
     // Same thing with huge array containing the same element many times. Note that this won't
     // return exactly 4032 because it can't tell that *all* the elements will equal the first
     // one it samples, but it should be close to that.
 
     // TODO: If we sample 100 elements, this should always be 4176 ?
-    val estimatedSize = SizeEstimator.estimate(Array.fill(1000)(d1))
+    val estimatedSize = SizeEstimator.estimate(createArray(1000, d1))
     assert(estimatedSize >= 4000, "Estimated size " + estimatedSize + " should be more than 4000")
     assert(estimatedSize <= 4200, "Estimated size " + estimatedSize + " should be less than 4200")
   }

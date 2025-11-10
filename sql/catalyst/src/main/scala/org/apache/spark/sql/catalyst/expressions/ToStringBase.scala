@@ -472,7 +472,24 @@ object ToStringBase {
         (array: Array[Byte]) => UTF8String.fromString(SparkStringUtils.getHexString(array))
     }
   }
+
+  def getBinaryParser: BinaryParser = {
+    val style = SQLConf.get.getConf(SQLConf.BINARY_OUTPUT_STYLE)
+    style match {
+      case Some(BinaryOutputStyle.UTF8) =>
+        (utf8: UTF8String) => utf8.getBytes
+      case Some(BinaryOutputStyle.BASIC) =>
+        (utf8: UTF8String) =>
+          utf8.toString.stripPrefix("[").stripSuffix("]").split(",").map(_.trim.toByte)
+      case Some(BinaryOutputStyle.BASE64) =>
+        (utf8: UTF8String) => java.util.Base64.getDecoder.decode(utf8.getBytes)
+      case Some(BinaryOutputStyle.HEX) =>
+        (utf8: UTF8String) => Hex.unhex(utf8.getBytes)
+      case _ =>
+        (utf8: UTF8String) => SparkStringUtils.fromHexString(utf8.toString)
+    }
+  }
 }
 
 trait BinaryFormatter extends (Array[Byte] => UTF8String) with Serializable
-
+trait BinaryParser extends (UTF8String => Array[Byte]) with Serializable

@@ -545,61 +545,42 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     checkCast("0", false)
   }
 
-  protected def checkInvalidCastFromNumericType(to: DataType): Unit = {
-    cast(1.toByte, to).checkInputDataTypes() ==
-      DataTypeMismatch(
-        errorSubClass = "CAST_WITH_FUNC_SUGGESTION",
-        messageParameters = Map(
-          "srcType" -> toSQLType(Literal(1.toByte).dataType),
-          "targetType" -> toSQLType(to),
-          "functionNames" -> "`DATE_FROM_UNIX_DATE`"
-        )
-      )
-    cast(1.toShort, to).checkInputDataTypes() ==
-      DataTypeMismatch(
-        errorSubClass = "CAST_WITH_FUNC_SUGGESTION",
-        messageParameters = Map(
-          "srcType" -> toSQLType(Literal(1.toShort).dataType),
-          "targetType" -> toSQLType(to),
-          "functionNames" -> "`DATE_FROM_UNIX_DATE`"
-        )
-      )
-    cast(1, to).checkInputDataTypes() ==
-      DataTypeMismatch(
-        errorSubClass = "CAST_WITH_FUNC_SUGGESTION",
-        messageParameters = Map(
-          "srcType" -> toSQLType(Literal(1).dataType),
-          "targetType" -> toSQLType(to),
-          "functionNames" -> "`DATE_FROM_UNIX_DATE`"
-        )
-      )
-    cast(1L, to).checkInputDataTypes() ==
-      DataTypeMismatch(
-        errorSubClass = "CAST_WITH_FUNC_SUGGESTION",
-        messageParameters = Map(
-          "srcType" -> toSQLType(Literal(1L).dataType),
-          "targetType" -> toSQLType(to),
-          "functionNames" -> "`DATE_FROM_UNIX_DATE`"
-        )
-      )
-    cast(1.0.toFloat, to).checkInputDataTypes() ==
-      DataTypeMismatch(
-        errorSubClass = "CAST_WITH_FUNC_SUGGESTION",
-        messageParameters = Map(
-          "srcType" -> toSQLType(Literal(1.0.toFloat).dataType),
-          "targetType" -> toSQLType(to),
-          "functionNames" -> "`DATE_FROM_UNIX_DATE`"
-        )
-      )
-    cast(1.0, to).checkInputDataTypes() ==
-      DataTypeMismatch(
-        errorSubClass = "CAST_WITH_FUNC_SUGGESTION",
-        messageParameters = Map(
-          "srcType" -> toSQLType(Literal(1.0).dataType),
-          "targetType" -> toSQLType(to),
-          "functionNames" -> "`DATE_FROM_UNIX_DATE`"
-        )
-      )
+  protected def createCastMismatch(
+      srcType: DataType,
+      targetType: DataType,
+      errorSubClass: String,
+      extraParams: Map[String, String] = Map.empty): DataTypeMismatch = {
+    val baseParams = Map(
+      "srcType" -> toSQLType(srcType),
+      "targetType" -> toSQLType(targetType)
+    )
+    DataTypeMismatch(errorSubClass, baseParams ++ extraParams)
+  }
+
+  protected def checkInvalidCastFromNumericTypeToDateType(): Unit = {
+    val errorSubClass = if (evalMode == EvalMode.LEGACY) {
+      "CAST_WITHOUT_SUGGESTION"
+    } else {
+      "CAST_WITH_FUNC_SUGGESTION"
+    }
+    val funcParams = if (evalMode == EvalMode.LEGACY) {
+      Map.empty[String, String]
+    } else {
+      Map("functionNames" -> "`DATE_FROM_UNIX_DATE`")
+    }
+    Seq(1.toByte, 1.toShort, 1, 1L, 1.0.toFloat, 1.0).foreach { testValue =>
+      val expectedError =
+        createCastMismatch(Literal(testValue).dataType, DateType, errorSubClass, funcParams)
+      assert(cast(testValue, DateType).checkInputDataTypes() == expectedError)
+    }
+  }
+  protected def checkInvalidCastFromNumericTypeToTimestampNTZType(): Unit = {
+    // All numeric types: `CAST_WITHOUT_SUGGESTION`
+    Seq(1.toByte, 1.toShort, 1, 1L, 1.0.toFloat, 1.0).foreach { testValue =>
+      val expectedError =
+        createCastMismatch(Literal(testValue).dataType, TimestampNTZType, "CAST_WITHOUT_SUGGESTION")
+      assert(cast(testValue, TimestampNTZType).checkInputDataTypes() == expectedError)
+    }
   }
 
   test("SPARK-16729 type checking for casting to date type") {
@@ -614,7 +595,7 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
         )
       )
     )
-    checkInvalidCastFromNumericType(DateType)
+    checkInvalidCastFromNumericTypeToDateType()
   }
 
   test("SPARK-20302 cast with same structure") {
@@ -998,7 +979,7 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
 
   test("disallow type conversions between Numeric types and Timestamp without time zone type") {
     import DataTypeTestUtils.numericTypes
-    checkInvalidCastFromNumericType(TimestampNTZType)
+    checkInvalidCastFromNumericTypeToTimestampNTZType()
     verifyCastFailure(
       cast(Literal(0L), TimestampNTZType),
       DataTypeMismatch(
@@ -1471,6 +1452,119 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
 
     checkConsistencyBetweenInterpretedAndCodegen(
       (child: Expression) => Cast(child, StringType), TimeType())
+  }
+
+  test("Casting geospatial data types to/from other data types") {
+    val geoTypes: Seq[DataType] = Seq(
+      GeographyType(4326),
+      GeographyType("ANY"),
+      GeometryType(0),
+      GeometryType(3857),
+      GeometryType(4326),
+      GeometryType("ANY")
+    )
+    val otherTypes: Seq[DataType] = Seq(
+      BinaryType,
+      BooleanType,
+      ByteType,
+      StringType,
+      StringType("UTF8_LCASE"),
+      StringType("UNICODE_CI"),
+      ShortType,
+      IntegerType,
+      LongType,
+      FloatType,
+      DoubleType
+    )
+    // Iterate over the test cases and verify casting.
+    geoTypes.foreach { geoType =>
+      otherTypes.foreach { otherType =>
+        // Cast cannot be performed from `geoType` to `otherType`.
+        assert(!Cast.canCast(geoType, otherType))
+        assert(!Cast.canAnsiCast(geoType, otherType))
+        // Cast cannot be performed from `otherType` to `geoType`.
+        assert(!Cast.canCast(otherType, geoType))
+        assert(!Cast.canAnsiCast(otherType, geoType))
+      }
+    }
+  }
+
+  // The following tests are confirming the behavior of casting between geospatial types.
+
+  test("Casting GeographyType to GeographyType") {
+    // Casting from fixed SRID GEOGRAPHY(<srid>) to mixed SRID GEOGRAPHY(ANY) is always allowed.
+    // Type casting is always safe in this direction, so no additional constraints are imposed.
+    // Casting from mixed SRID GEOGRAPHY(ANY) to fixed SRID GEOGRAPHY(<srid>) is not allowed.
+    // Type casting can be unsafe in this direction, because per-row SRID values may be different.
+
+    // Valid cast test cases.
+    val canCastTestCases: Seq[(DataType, DataType)] = Seq(
+      (GeographyType(4326), GeographyType("ANY"))
+    )
+    // Iterate over the test cases and verify casting.
+    canCastTestCases.foreach { case (fromType, toType) =>
+      // Cast can be performed from `fromType` to `toType`.
+      assert(Cast.canCast(fromType, toType))
+      assert(Cast.canAnsiCast(fromType, toType))
+      // Cast cannot be performed from `toType` to `fromType`.
+      assert(!Cast.canCast(toType, fromType))
+      assert(!Cast.canAnsiCast(toType, fromType))
+    }
+  }
+
+  test("Casting GeographyType to GeometryType") {
+    // Casting from GEOGRAPHY to GEOMETRY is only allowed if the SRIDs are the same.
+
+    // Valid cast test cases.
+    val canAnsiCastTestCases: Seq[(DataType, DataType)] = Seq(
+      (GeographyType(4326), GeometryType(4326)),
+      (GeographyType("ANY"), GeometryType("ANY"))
+    )
+    // Iterate over the test cases and verify casting.
+    canAnsiCastTestCases.foreach { case (fromType, toType) =>
+      // Cast can be performed from `fromType` to `toType`.
+      assert(Cast.canCast(fromType, toType))
+      assert(Cast.canAnsiCast(fromType, toType))
+    }
+
+    // Invalid cast test cases.
+    val cannotAnsiCastTestCases: Seq[(DataType, DataType)] = Seq(
+      (GeographyType(4326), GeometryType(0)),
+      (GeographyType(4326), GeometryType(3857)),
+      (GeographyType(4326), GeometryType("ANY")),
+      (GeographyType("ANY"), GeometryType(0)),
+      (GeographyType("ANY"), GeometryType(3857)),
+      (GeographyType("ANY"), GeometryType(4326))
+    )
+    // Iterate over the test cases and verify casting.
+    cannotAnsiCastTestCases.foreach { case (fromType, toType) =>
+      // Cast cannot be performed from `fromType` to `toType`.
+      assert(!Cast.canCast(fromType, toType))
+      assert(!Cast.canAnsiCast(fromType, toType))
+    }
+  }
+
+  test("Casting GeometryType to GeometryType") {
+    // Casting from fixed SRID GEOMETRY(<srid>) to mixed SRID GEOMETRY(ANY) is always allowed.
+    // Type casting is always safe in this direction, so no additional constraints are imposed.
+    // Casting from mixed SRID GEOMETRY(ANY) to fixed SRID GEOMETRY(<srid>) is not allowed.
+    // Type casting can be unsafe in this direction, because per-row SRID values may be different.
+
+    // Valid cast test cases.
+    val canCastTestCases: Seq[(DataType, DataType)] = Seq(
+      (GeometryType(0), GeometryType("ANY")),
+      (GeometryType(3857), GeometryType("ANY")),
+      (GeometryType(4326), GeometryType("ANY"))
+    )
+    // Iterate over the test cases and verify casting.
+    canCastTestCases.foreach { case (fromType, toType) =>
+      // Cast can be performed from `fromType` to `toType`.
+      assert(Cast.canCast(fromType, toType))
+      assert(Cast.canAnsiCast(fromType, toType))
+      // Cast cannot be performed from `toType` to `fromType`.
+      assert(!Cast.canCast(toType, fromType))
+      assert(!Cast.canAnsiCast(toType, fromType))
+    }
   }
 
   test("cast string to time") {

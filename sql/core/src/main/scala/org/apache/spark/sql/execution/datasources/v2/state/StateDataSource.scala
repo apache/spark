@@ -33,10 +33,15 @@ import org.apache.spark.sql.execution.datasources.v2.state.StateSourceOptions.{J
 import org.apache.spark.sql.execution.datasources.v2.state.StateSourceOptions.JoinSideValues.JoinSideValues
 import org.apache.spark.sql.execution.datasources.v2.state.metadata.{StateMetadataPartitionReader, StateMetadataTableEntry}
 import org.apache.spark.sql.execution.datasources.v2.state.utils.SchemaUtil
-import org.apache.spark.sql.execution.streaming.{OffsetSeqMetadata, StatefulOperatorsUtils, StreamingQueryCheckpointMetadata, TimerStateUtils, TransformWithStateOperatorProperties, TransformWithStateVariableInfo}
-import org.apache.spark.sql.execution.streaming.StreamingCheckpointConstants.DIR_NAME_STATE
-import org.apache.spark.sql.execution.streaming.StreamingSymmetricHashJoinHelper.{LeftSide, RightSide}
-import org.apache.spark.sql.execution.streaming.state.{InMemoryStateSchemaProvider, KeyStateEncoderSpec, NoPrefixKeyStateEncoderSpec, PrefixKeyScanStateEncoderSpec, StateSchemaCompatibilityChecker, StateSchemaMetadata, StateSchemaProvider, StateStore, StateStoreColFamilySchema, StateStoreConf, StateStoreId, StateStoreProviderId, SymmetricHashJoinStateManager}
+import org.apache.spark.sql.execution.streaming.checkpointing.OffsetSeqMetadata
+import org.apache.spark.sql.execution.streaming.operators.stateful.StatefulOperatorsUtils
+import org.apache.spark.sql.execution.streaming.operators.stateful.join.StreamingSymmetricHashJoinHelper.{LeftSide, RightSide}
+import org.apache.spark.sql.execution.streaming.operators.stateful.join.SymmetricHashJoinStateManager
+import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.{TransformWithStateOperatorProperties, TransformWithStateVariableInfo}
+import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.timers.TimerStateUtils
+import org.apache.spark.sql.execution.streaming.runtime.StreamingCheckpointConstants.DIR_NAME_STATE
+import org.apache.spark.sql.execution.streaming.runtime.StreamingQueryCheckpointMetadata
+import org.apache.spark.sql.execution.streaming.state.{InMemoryStateSchemaProvider, KeyStateEncoderSpec, NoPrefixKeyStateEncoderSpec, PrefixKeyScanStateEncoderSpec, StateSchemaCompatibilityChecker, StateSchemaMetadata, StateSchemaProvider, StateStore, StateStoreColFamilySchema, StateStoreConf, StateStoreId, StateStoreProviderId}
 import org.apache.spark.sql.sources.DataSourceRegister
 import org.apache.spark.sql.streaming.TimeMode
 import org.apache.spark.sql.types.StructType
@@ -365,7 +370,9 @@ case class StateSourceOptions(
     readChangeFeedOptions: Option[ReadChangeFeedOptions],
     stateVarName: Option[String],
     readRegisteredTimers: Boolean,
-    flattenCollectionTypes: Boolean) {
+    flattenCollectionTypes: Boolean,
+    startOperatorStateUniqueIds: Option[Array[Array[String]]] = None,
+    endOperatorStateUniqueIds: Option[Array[Array[String]]] = None) {
   def stateCheckpointLocation: Path = new Path(resolvedCpLocation, DIR_NAME_STATE)
 
   override def toString: String = {
@@ -562,10 +569,52 @@ object StateSourceOptions extends DataSourceOptions {
       }
     }
 
+    val startBatchId = if (fromSnapshotOptions.isDefined) {
+      fromSnapshotOptions.get.snapshotStartBatchId
+    } else if (readChangeFeedOptions.isDefined) {
+      readChangeFeedOptions.get.changeStartBatchId
+    } else {
+      batchId.get
+    }
+
+    val endBatchId = if (readChangeFeedOptions.isDefined) {
+      readChangeFeedOptions.get.changeEndBatchId
+    } else {
+      batchId.get
+    }
+
+    val startOperatorStateUniqueIds = getOperatorStateUniqueIds(
+      sparkSession,
+      startBatchId,
+      operatorId,
+      resolvedCpLocation)
+
+    val endOperatorStateUniqueIds = if (startBatchId == endBatchId) {
+      startOperatorStateUniqueIds
+    } else {
+      getOperatorStateUniqueIds(
+        sparkSession,
+        endBatchId,
+        operatorId,
+        resolvedCpLocation)
+    }
+
+    if (startOperatorStateUniqueIds.isDefined != endOperatorStateUniqueIds.isDefined) {
+      val startFormatVersion = if (startOperatorStateUniqueIds.isDefined) 2 else 1
+      val endFormatVersion = if (endOperatorStateUniqueIds.isDefined) 2 else 1
+      throw StateDataSourceErrors.mixedCheckpointFormatVersionsNotSupported(
+        startBatchId,
+        endBatchId,
+        startFormatVersion,
+        endFormatVersion
+      )
+    }
+
     StateSourceOptions(
       resolvedCpLocation, batchId.get, operatorId, storeName, joinSide,
       readChangeFeed, fromSnapshotOptions, readChangeFeedOptions,
-      stateVarName, readRegisteredTimers, flattenCollectionTypes)
+      stateVarName, readRegisteredTimers, flattenCollectionTypes,
+      startOperatorStateUniqueIds, endOperatorStateUniqueIds)
   }
 
   private def resolvedCheckpointLocation(
@@ -582,6 +631,20 @@ object StateSourceOptions extends DataSourceOptions {
       case Some((lastId, _)) => lastId
       case None => throw StateDataSourceErrors.committedBatchUnavailable(checkpointLocation)
     }
+  }
+
+  private def getOperatorStateUniqueIds(
+    session: SparkSession,
+    batchId: Long,
+    operatorId: Long,
+    checkpointLocation: String): Option[Array[Array[String]]] = {
+    val commitLog = new StreamingQueryCheckpointMetadata(session, checkpointLocation).commitLog
+    val commitMetadata = commitLog.get(batchId) match {
+      case Some(commitMetadata) => commitMetadata
+      case None => throw StateDataSourceErrors.committedBatchUnavailable(checkpointLocation)
+    }
+
+    commitMetadata.stateUniqueIds.flatMap(_.get(operatorId))
   }
 
   // Modifies options due to external data. Returns modified options.

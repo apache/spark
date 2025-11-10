@@ -303,6 +303,24 @@ trait Row extends Serializable {
   def getDecimal(i: Int): java.math.BigDecimal = getAs[java.math.BigDecimal](i)
 
   /**
+   * Returns the value at position i of date type as org.apache.spark.sql.types.Geometry.
+   *
+   * @throws ClassCastException
+   *   when data type does not match.
+   */
+  def getGeometry(i: Int): org.apache.spark.sql.types.Geometry =
+    getAs[org.apache.spark.sql.types.Geometry](i)
+
+  /**
+   * Returns the value at position i of date type as org.apache.spark.sql.types.Geography.
+   *
+   * @throws ClassCastException
+   *   when data type does not match.
+   */
+  def getGeography(i: Int): org.apache.spark.sql.types.Geography =
+    getAs[org.apache.spark.sql.types.Geography](i)
+
+  /**
    * Returns the value at position i of date type as java.sql.Date.
    *
    * @throws ClassCastException

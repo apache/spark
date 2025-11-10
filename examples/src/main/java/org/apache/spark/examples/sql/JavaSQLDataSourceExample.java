@@ -17,7 +17,6 @@
 package org.apache.spark.examples.sql;
 
 // $example on:schema_merging$
-import com.google.common.collect.Lists;
 import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -534,7 +533,7 @@ public class JavaSQLDataSourceExample {
             "<person>" +
             "<name>laglangyue</name><job>Developer</job><age>28</age>" +
             "</person>");
-    Dataset<String> otherPeopleDataset = spark.createDataset(Lists.newArrayList(xmlData),
+    Dataset<String> otherPeopleDataset = spark.createDataset(new ArrayList<>(xmlData),
             Encoders.STRING());
 
     Dataset<Row> otherPeople = spark.read()

@@ -26,6 +26,7 @@ import org.scalatest.matchers.must.Matchers
 import org.scalatest.matchers.should.Matchers._
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.util.collection.Utils.createArray
 
 class RandomSamplerSuite extends SparkFunSuite with Matchers {
   /**
@@ -100,8 +101,8 @@ class RandomSamplerSuite extends SparkFunSuite with Matchers {
     assert(math.min(d1.length, d2.length) > 0)
     assert(math.min(d1.min, d2.min)  >=  0)
     val m = 1 + math.max(d1.max, d2.max)
-    val h1 = Array.fill[Int](m)(0)
-    val h2 = Array.fill[Int](m)(0)
+    val h1 = createArray(m, 0)
+    val h2 = createArray(m, 0)
     for (v <- d1) { h1(v) += 1 }
     for (v <- d2) { h2(v) += 1 }
     assert(h1.sum == h2.sum)

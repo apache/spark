@@ -24,7 +24,7 @@ import io.grpc.stub.{ServerCallStreamObserver, StreamObserver}
 
 import org.apache.spark.{SparkEnv, SparkSQLException}
 import org.apache.spark.connect.proto.ExecutePlanResponse
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.NANOS_PER_MILLIS
 import org.apache.spark.sql.connect.common.ProtoUtils
@@ -232,7 +232,8 @@ private[connect] class ExecuteGrpcResponseSender[T <: Message](
       // 2. has a response to send
       def gotResponse = response.nonEmpty
       // 3. sent everything from the stream and the stream is finished
-      def streamFinished = executionObserver.getLastResponseIndex().exists(nextIndex > _)
+      def streamFinished = executionObserver.getLastResponseIndex().exists(nextIndex > _) ||
+        executionObserver.isCleaned()
       // 4. time deadline or size limit reached
       def deadlineLimitReached =
         sentResponsesSize > maximumResponseSize || deadlineTimeNs < System.nanoTime()
@@ -262,7 +263,7 @@ private[connect] class ExecuteGrpcResponseSender[T <: Message](
               timeoutNs = Math.min(progressTimeout * NANOS_PER_MILLIS, timeoutNs)
             }
             logTrace(s"Wait for response to become available with timeout=$timeoutNs ns.")
-            executionObserver.responseLock.wait(timeoutNs / NANOS_PER_MILLIS)
+            executionObserver.responseLock.wait(Math.max(1, timeoutNs / NANOS_PER_MILLIS))
             enqueueProgressMessage(force = true)
             logTrace(s"Reacquired executionObserver lock after waiting.")
             sleepEnd = System.nanoTime()
@@ -383,7 +384,7 @@ private[connect] class ExecuteGrpcResponseSender[T <: Message](
           val timeoutNs = Math.max(1, deadlineTimeNs - System.nanoTime())
           var sleepStart = System.nanoTime()
           logTrace(s"Wait for grpcCallObserver to become ready with timeout=$timeoutNs ns.")
-          grpcCallObserverReadySignal.wait(timeoutNs / NANOS_PER_MILLIS)
+          grpcCallObserverReadySignal.wait(Math.max(1, timeoutNs / NANOS_PER_MILLIS))
           logTrace(s"Reacquired grpcCallObserverReadySignal lock after waiting.")
           sleepEnd = System.nanoTime()
         }

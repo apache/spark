@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.streaming
+package org.apache.spark.sql.execution.streaming.runtime
 
 import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReaderFactory}

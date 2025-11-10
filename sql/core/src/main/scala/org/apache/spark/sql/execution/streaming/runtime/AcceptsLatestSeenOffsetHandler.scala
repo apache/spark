@@ -15,10 +15,12 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.streaming
+package org.apache.spark.sql.execution.streaming.runtime
 
 import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.connector.read.streaming.{AcceptsLatestSeenOffset, SparkDataStream}
+import org.apache.spark.sql.execution.streaming.Source
+import org.apache.spark.sql.execution.streaming.checkpointing.OffsetSeq
 
 /**
  * This feeds "latest seen offset" to the sources that implement AcceptsLatestSeenOffset.

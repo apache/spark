@@ -22,17 +22,21 @@ import java.util.{Locale, TimeZone}
 
 import scala.jdk.CollectionConverters._
 
-import org.antlr.v4.runtime.{ParserRuleContext, Token}
+import org.antlr.v4.runtime.ParserRuleContext
 import org.antlr.v4.runtime.tree.TerminalNode
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{CurrentNamespace, GlobalTempView, LocalTempView, PersistedView, PlanWithUnresolvedIdentifier, SchemaEvolution, SchemaTypeEvolution, UnresolvedAttribute, UnresolvedFunctionName, UnresolvedIdentifier, UnresolvedNamespace}
+import org.apache.spark.sql.catalyst.analysis.{CurrentNamespace, GlobalTempView, LocalTempView,
+  PersistedView, PlanWithUnresolvedIdentifier, SchemaEvolution, SchemaTypeEvolution,
+  UnresolvedAttribute, UnresolvedFunctionName, UnresolvedIdentifier, UnresolvedNamespace}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.{Expression, Literal}
 import org.apache.spark.sql.catalyst.parser._
+import org.apache.spark.sql.catalyst.parser.SqlBaseParser
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryParsingErrors}
 import org.apache.spark.sql.execution.command._
@@ -50,8 +54,106 @@ class SparkSqlParser extends AbstractSqlParser {
 
   private val substitutor = new VariableSubstitution()
 
+  /**
+   * Parse SQL with explicit parameter context, avoiding thread-local usage.
+   * This is the preferred method for parsing SQL with parameters.
+   *
+   * @param command The SQL text to parse
+   * @param parameterContext The parameter context containing parameter values
+   * @param toResult Function to convert the parser result
+   * @return The parsed result
+   */
+  def parseWithParameters[T](
+      command: String,
+      parameterContext: ParameterContext)
+      (toResult: SqlBaseParser => T): T = {
+    parseInternal(command, Some(parameterContext))(toResult)
+  }
+
+  /**
+   * Parse SQL plan with explicit parameter context, avoiding thread-local usage.
+   * This is the preferred method for parsing SQL plans with parameters.
+   *
+   * @param sqlText The SQL text to parse
+   * @param parameterContext The parameter context containing parameter values
+   * @return The parsed logical plan
+   */
+  override def parsePlanWithParameters(
+      sqlText: String,
+      parameterContext: ParameterContext): LogicalPlan = {
+    parseWithParameters(sqlText, parameterContext) { parser =>
+      val ctx = parser.compoundOrSingleStatement()
+      withErrorHandling(ctx, Some(sqlText)) {
+        astBuilder.visitCompoundOrSingleStatement(ctx) match {
+          case compoundBody: CompoundPlanStatement => compoundBody
+          case plan: LogicalPlan => plan
+          case _ =>
+            val position = Origin(None, None)
+            throw QueryParsingErrors.sqlStatementUnsupportedError(sqlText, position)
+        }
+      }
+    }
+  }
+
   protected override def parse[T](command: String)(toResult: SqlBaseParser => T): T = {
-    super.parse(substitutor.substitute(command))(toResult)
+    parseInternal(command, None)(toResult)
+  }
+
+  /**
+   * Internal parse method that handles both parameter substitution and regular parsing.
+   *
+   * @param command The SQL text to parse
+   * @param parameterContext Optional parameter context for parameter substitution
+   * @param toResult Function to convert the parser result
+   * @return The parsed result
+   */
+  private def parseInternal[T](
+      command: String,
+      parameterContext: Option[ParameterContext])
+      (toResult: SqlBaseParser => T): T = {
+
+    // Step 1: Apply variable substitution to expand any variable references.
+    val variableSubstituted = substitutor.substitute(command)
+
+    // Step 2: Apply parameter substitution if a parameter context is provided.
+    val (paramSubstituted, positionMapper, hasParameters) = parameterContext match {
+      case Some(context) =>
+        if (SQLConf.get.legacyParameterSubstitutionConstantsOnly) {
+          // Legacy mode: Parameters are detected but substitution is deferred to analysis phase.
+          (variableSubstituted, PositionMapper.identity(variableSubstituted), true)
+        } else {
+          // Modern mode: Perform parameter substitution during parsing.
+          val (substituted, mapper) =
+            ParameterHandler.substituteParameters(variableSubstituted, context)
+          (substituted, mapper, true)
+        }
+      case None =>
+        // No parameter context provided; skip parameter substitution.
+        (variableSubstituted, PositionMapper.identity(variableSubstituted), false)
+    }
+
+    // Step 3: Set up the origin with SQL text and position mapper to enable
+    // parameter-aware error reporting.
+    val currentOrigin = CurrentOrigin.get
+    val originToUse = if (hasParameters) {
+      // Set up origin with the substituted SQL text and position mapper for
+      // proper error reporting.
+      currentOrigin.copy(
+        sqlText = Some(paramSubstituted),
+        startIndex = Some(0),
+        stopIndex = Some(paramSubstituted.length - 1),
+        positionMapper = Some(positionMapper)
+      )
+    } else {
+      // No substitution occurred; use the existing origin unchanged.
+      currentOrigin
+    }
+
+    // Parse with the origin containing position mapper.
+    // CurrentOrigin.withOrigin automatically restores the previous origin.
+    CurrentOrigin.withOrigin(originToUse) {
+      super.parse(paramSubstituted)(toResult)
+    }
   }
 }
 
@@ -982,9 +1084,9 @@ class SparkSqlAstBuilder extends AstBuilder {
   override protected def withScriptIOSchema(
       ctx: ParserRuleContext,
       inRowFormat: RowFormatContext,
-      recordWriter: Token,
+      recordWriter: StringLitContext,
       outRowFormat: RowFormatContext,
-      recordReader: Token,
+      recordReader: StringLitContext,
       schemaLess: Boolean): ScriptInputOutputSchema = {
     if (recordWriter != null || recordReader != null) {
       // TODO: what does this message mean?

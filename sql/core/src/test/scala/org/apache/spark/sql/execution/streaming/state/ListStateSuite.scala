@@ -23,7 +23,8 @@ import java.util.UUID
 import org.apache.spark.{SparkIllegalArgumentException, SparkUnsupportedOperationException}
 import org.apache.spark.sql.Encoders
 import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder}
-import org.apache.spark.sql.execution.streaming.{ImplicitGroupingKeyTracker, ListStateImplWithTTL, StatefulProcessorHandleImpl}
+import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.statefulprocessor.{ImplicitGroupingKeyTracker, StatefulProcessorHandleImpl}
+import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.ttl.ListStateImplWithTTL
 import org.apache.spark.sql.streaming.{ListState, TimeMode, TTLConfig, ValueState}
 
 /**
@@ -424,3 +425,8 @@ class ListStateSuite extends StateVariableSuiteBase {
     }
   }
 }
+
+/**
+ * Test suite that runs all ListStateSuite tests with row checksum enabled.
+ */
+class ListStateSuiteWithRowChecksum extends ListStateSuite with EnableStateStoreRowChecksum

@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.streaming
+package org.apache.spark.sql.execution.streaming.runtime
 
 import java.util.UUID
 
@@ -24,13 +24,14 @@ import scala.util.control.NonFatal
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.internal.LogKeys.{CHECKPOINT_LOCATION, CHECKPOINT_ROOT, CONFIG, PATH}
-import org.apache.spark.internal.MDC
 import org.apache.spark.sql.catalyst.analysis.UnsupportedOperationChecker
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.streaming.{WriteToStream, WriteToStreamStatement}
 import org.apache.spark.sql.connector.catalog.SupportsWrite
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
+import org.apache.spark.sql.execution.streaming.{ContinuousTrigger, RealTimeTrigger}
+import org.apache.spark.sql.execution.streaming.checkpointing.CheckpointFileManager
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.Utils
 
@@ -48,7 +49,12 @@ object ResolveWriteToStream extends Rule[LogicalPlan] {
       }
 
       if (conf.isUnsupportedOperationCheckEnabled) {
-        if (s.sink.isInstanceOf[SupportsWrite] && s.isContinuousTrigger) {
+        if (s.trigger.isInstanceOf[RealTimeTrigger]) {
+          UnsupportedOperationChecker.
+            checkAdditionalRealTimeModeConstraints(s.inputQuery, s.outputMode)
+        }
+
+        if (s.sink.isInstanceOf[SupportsWrite] && s.trigger.isInstanceOf[ContinuousTrigger]) {
           UnsupportedOperationChecker.checkForContinuous(s.inputQuery, s.outputMode)
         } else {
           UnsupportedOperationChecker.checkForStreaming(s.inputQuery, s.outputMode)

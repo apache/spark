@@ -28,7 +28,6 @@ from typing import (
 from warnings import warn
 
 from pyspark.errors.exceptions.captured import unwrap_spark_exception
-from pyspark.loose_version import LooseVersion
 from pyspark.util import _load_from_socket
 from pyspark.sql.pandas.serializers import ArrowCollectSerializer
 from pyspark.sql.pandas.types import _dedup_names
@@ -81,7 +80,9 @@ class PandasConversionMixin:
                 from pyspark.sql.pandas.utils import require_minimum_pyarrow_version
 
                 require_minimum_pyarrow_version()
-                to_arrow_schema(self.schema, prefers_large_types=jconf.arrowUseLargeVarTypes())
+                arrow_schema = to_arrow_schema(
+                    self.schema, prefers_large_types=jconf.arrowUseLargeVarTypes()
+                )
             except Exception as e:
                 if jconf.arrowPySparkFallbackEnabled():
                     msg = (
@@ -113,49 +114,40 @@ class PandasConversionMixin:
 
                     self_destruct = jconf.arrowPySparkSelfDestructEnabled()
                     batches = self._collect_as_arrow(split_batches=self_destruct)
+
+                    # Rename columns to avoid duplicated column names.
+                    temp_col_names = [f"col_{i}" for i in range(len(self.columns))]
                     if len(batches) > 0:
-                        table = pa.Table.from_batches(batches)
-                        # Ensure only the table has a reference to the batches, so that
-                        # self_destruct (if enabled) is effective
-                        del batches
-                        # Pandas DataFrame created from PyArrow uses datetime64[ns] for date type
-                        # values, but we should use datetime.date to match the behavior with when
-                        # Arrow optimization is disabled.
-                        pandas_options = {"date_as_object": True}
-
-                        if LooseVersion(pa.__version__) >= LooseVersion("13.0.0"):
-                            # A legacy option to coerce date32, date64, duration, and timestamp
-                            # time units to nanoseconds when converting to pandas.
-                            # This option can only be added since 13.0.0.
-                            pandas_options.update(
-                                {
-                                    "coerce_temporal_nanoseconds": True,
-                                }
-                            )
-
-                        if self_destruct:
-                            # Configure PyArrow to use as little memory as possible:
-                            # self_destruct - free columns as they are converted
-                            # split_blocks - create a separate Pandas block for each column
-                            # use_threads - convert one column at a time
-                            pandas_options.update(
-                                {
-                                    "self_destruct": True,
-                                    "split_blocks": True,
-                                    "use_threads": False,
-                                }
-                            )
-                        # Rename columns to avoid duplicated column names.
-                        pdf = table.rename_columns(
-                            [f"col_{i}" for i in range(table.num_columns)]
-                        ).to_pandas(**pandas_options)
-
-                        # Rename back to the original column names.
-                        pdf.columns = self.columns
+                        table = pa.Table.from_batches(batches).rename_columns(temp_col_names)
                     else:
-                        pdf = pd.DataFrame(columns=self.columns)
+                        # empty dataset
+                        table = arrow_schema.empty_table().rename_columns(temp_col_names)
 
-                    if len(pdf.columns) > 0:
+                    # Ensure only the table has a reference to the batches, so that
+                    # self_destruct (if enabled) is effective
+                    del batches
+
+                    # Pandas DataFrame created from PyArrow uses datetime64[ns] for date type
+                    # values, but we should use datetime.date to match the behavior with when
+                    # Arrow optimization is disabled.
+                    pandas_options = {
+                        "date_as_object": True,
+                        "coerce_temporal_nanoseconds": True,
+                    }
+                    if self_destruct:
+                        # Configure PyArrow to use as little memory as possible:
+                        # self_destruct - free columns as they are converted
+                        # split_blocks - create a separate Pandas block for each column
+                        # use_threads - convert one column at a time
+                        pandas_options.update(
+                            {
+                                "self_destruct": True,
+                                "split_blocks": True,
+                                "use_threads": False,
+                            }
+                        )
+
+                    if len(self.columns) > 0:
                         timezone = jconf.sessionLocalTimeZone()
                         struct_in_pandas = jconf.pandasStructHandlingMode()
 
@@ -164,7 +156,7 @@ class PandasConversionMixin:
                             error_on_duplicated_field_names = True
                             struct_in_pandas = "dict"
 
-                        return pd.concat(
+                        pdf = pd.concat(
                             [
                                 _create_converter_to_pandas(
                                     field.dataType,
@@ -172,13 +164,18 @@ class PandasConversionMixin:
                                     timezone=timezone,
                                     struct_in_pandas=struct_in_pandas,
                                     error_on_duplicated_field_names=error_on_duplicated_field_names,
-                                )(pser)
-                                for (_, pser), field in zip(pdf.items(), self.schema.fields)
+                                )(arrow_col.to_pandas(**pandas_options))
+                                for arrow_col, field in zip(table.columns, self.schema.fields)
                             ],
                             axis="columns",
                         )
                     else:
-                        return pdf
+                        # empty columns
+                        pdf = table.to_pandas(**pandas_options)
+
+                    pdf.columns = self.columns
+                    return pdf
+
                 except Exception as e:
                     # We might have to allow fallback here as well but multiple Spark jobs can
                     # be executed. So, simply fail in this case for now.
@@ -739,7 +736,7 @@ class SparkConversionMixin:
         jsparkSession = self._jsparkSession
 
         safecheck = self._jconf.arrowSafeTypeConversion()
-        ser = ArrowStreamPandasSerializer(timezone, safecheck)
+        ser = ArrowStreamPandasSerializer(timezone, safecheck, False)
 
         @no_type_check
         def reader_func(temp_filename):

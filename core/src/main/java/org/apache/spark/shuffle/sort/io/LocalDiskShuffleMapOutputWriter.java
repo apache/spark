@@ -125,7 +125,7 @@ public class LocalDiskShuffleMapOutputWriter implements ShuffleMapOutputWriter {
     cleanUp();
     if (outputTempFile != null && outputTempFile.exists() && !outputTempFile.delete()) {
       log.warn("Failed to delete temporary shuffle file at {}",
-        MDC.of(LogKeys.PATH$.MODULE$, outputTempFile.getAbsolutePath()));
+        MDC.of(LogKeys.PATH, outputTempFile.getAbsolutePath()));
     }
   }
 

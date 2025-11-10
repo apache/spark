@@ -17,7 +17,7 @@
 
 package org.apache.spark.streaming.util
 
-import org.apache.spark.internal.{Logging, LogKeys, MDC}
+import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.util.{Clock, SystemClock}
 
 private[streaming]

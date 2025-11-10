@@ -46,6 +46,10 @@ class PipelineExecution(context: PipelineUpdateContext) {
   def startPipeline(): Unit = synchronized {
     // Initialize the graph.
     val resolvedGraph = resolveGraph()
+    if (context.fullRefreshTables.nonEmpty) {
+      State.reset(resolvedGraph, context)
+    }
+
     val initializedGraph = DatasetManager.materializeDatasets(resolvedGraph, context)
 
     // Execute the graph.

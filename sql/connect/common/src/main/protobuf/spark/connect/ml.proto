@@ -39,6 +39,7 @@ message MlCommand {
     CleanCache clean_cache = 7;
     GetCacheInfo get_cache_info = 8;
     CreateSummary create_summary = 9;
+    GetModelSize get_model_size = 10;
   }
 
   // Command for estimator.fit(dataset)
@@ -108,6 +109,11 @@ message MlCommand {
   message CreateSummary {
     ObjectRef model_ref = 1;
     Relation dataset = 2;
+  }
+
+  // This is for query the model estimated in-memory size
+  message GetModelSize {
+    ObjectRef model_ref = 1;
   }
 }
 

@@ -22,8 +22,8 @@ import java.sql.Timestamp
 import org.apache.spark.{SparkContext, SparkException}
 import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskStart}
 import org.apache.spark.sql._
-import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.continuous._
+import org.apache.spark.sql.execution.streaming.runtime._
 import org.apache.spark.sql.execution.streaming.sources.ContinuousMemoryStream
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf.{CONTINUOUS_STREAMING_EPOCH_BACKLOG_QUEUE_SIZE, MIN_BATCHES_TO_RETAIN}
@@ -278,10 +278,12 @@ class ContinuousSuite extends ContinuousSuiteBase {
       s"Result set ${results.toSet} are not a superset of $expected!")
   }
 
-  Seq(TestScalaUDF("udf"), TestPythonUDF("udf"), TestScalarPandasUDF("udf")).foreach { udf =>
+  Seq(TestScalaUDF("udf"), TestPythonUDF("udf"),
+    TestScalarPandasUDF("udf"), TestScalarIterPandasUDF("udf")).foreach { udf =>
     test(s"continuous mode with various UDFs - ${udf.prettyName}") {
       assume(
         shouldTestPandasUDFs && udf.isInstanceOf[TestScalarPandasUDF] ||
+        shouldTestPandasUDFs && udf.isInstanceOf[TestScalarIterPandasUDF] ||
         shouldTestPythonUDFs && udf.isInstanceOf[TestPythonUDF] ||
         udf.isInstanceOf[TestScalaUDF])
 

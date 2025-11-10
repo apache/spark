@@ -33,7 +33,7 @@ import org.json4s.JsonDSL._
 
 import org.apache.spark.{Partitioner, SparkException}
 import org.apache.spark.annotation.Since
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.PATH
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.linalg.BLAS

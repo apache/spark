@@ -17,7 +17,6 @@
 
 package org.apache.spark.network.netty
 
-import java.io.InputStreamReader
 import java.nio._
 import java.nio.charset.StandardCharsets
 import java.util.concurrent.TimeUnit
@@ -26,7 +25,6 @@ import scala.concurrent.Promise
 import scala.concurrent.duration._
 import scala.util.{Failure, Success, Try}
 
-import com.google.common.io.CharStreams
 import org.mockito.Mockito._
 import org.scalatest.matchers.must.Matchers
 import org.scalatest.matchers.should.Matchers._
@@ -40,7 +38,7 @@ import org.apache.spark.network.buffer.{ManagedBuffer, NioManagedBuffer}
 import org.apache.spark.network.shuffle.BlockFetchingListener
 import org.apache.spark.serializer.{JavaSerializer, SerializerManager}
 import org.apache.spark.storage.{BlockId, ShuffleBlockId}
-import org.apache.spark.util.{SslTestUtils, ThreadUtils}
+import org.apache.spark.util.{SslTestUtils, ThreadUtils, Utils}
 
 class NettyBlockTransferSecuritySuite extends SparkFunSuite with MockitoSugar with Matchers {
 
@@ -150,9 +148,7 @@ class NettyBlockTransferSecuritySuite extends SparkFunSuite with MockitoSugar wi
 
     val result = fetchBlock(exec0, exec1, "1", blockId) match {
       case Success(buf) =>
-        val actualString = CharStreams.toString(
-          new InputStreamReader(buf.createInputStream(), StandardCharsets.UTF_8))
-        actualString should equal(blockString)
+        Utils.toString(buf.createInputStream()) should equal(blockString)
         buf.release()
         Success(())
       case Failure(t) =>

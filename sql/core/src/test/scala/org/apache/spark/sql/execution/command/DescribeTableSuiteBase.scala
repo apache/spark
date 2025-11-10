@@ -252,7 +252,6 @@ trait DescribeTableSuiteBase extends QueryTest with DDLCommandTestUtils {
       df.write.mode("append").clusterBy("col1", "col2.x").saveAsTable(tbl)
       val descriptionDf = sql(s"DESC $tbl")
 
-      descriptionDf.show(false)
       assert(descriptionDf.schema.map(field => (field.name, field.dataType)) === Seq(
         ("col_name", StringType),
         ("data_type", StringType),
@@ -277,7 +276,6 @@ trait DescribeTableSuiteBase extends QueryTest with DDLCommandTestUtils {
       df.writeTo(tbl).clusterBy("col1", "col2.x").create()
       val descriptionDf = sql(s"DESC $tbl")
 
-      descriptionDf.show(false)
       assert(descriptionDf.schema.map(field => (field.name, field.dataType)) === Seq(
         ("col_name", StringType),
         ("data_type", StringType),

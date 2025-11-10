@@ -21,12 +21,12 @@ import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
 import scala.Tuple2;
 
-import com.google.common.collect.Sets;
 import org.apache.spark.streaming.api.java.JavaDStream;
 import org.apache.spark.util.ManualClock;
 import org.junit.jupiter.api.Assertions;
@@ -105,24 +105,24 @@ public class JavaMapWithStateSuite extends LocalJavaStreamingContext implements 
     );
 
     List<Set<Integer>> outputData = Arrays.asList(
-        Collections.emptySet(),
-        Sets.newHashSet(1),
-        Sets.newHashSet(2, 1),
-        Sets.newHashSet(3, 2, 1),
-        Sets.newHashSet(4, 3),
-        Sets.newHashSet(5),
-        Collections.emptySet()
+        Set.of(),
+        Set.of(1),
+        Set.of(2, 1),
+        Set.of(3, 2, 1),
+        Set.of(4, 3),
+        Set.of(5),
+        Set.of()
     );
 
     @SuppressWarnings("unchecked")
     List<Set<Tuple2<String, Integer>>> stateData = Arrays.asList(
-        Collections.emptySet(),
-        Sets.newHashSet(new Tuple2<>("a", 1)),
-        Sets.newHashSet(new Tuple2<>("a", 2), new Tuple2<>("b", 1)),
-        Sets.newHashSet(new Tuple2<>("a", 3), new Tuple2<>("b", 2), new Tuple2<>("c", 1)),
-        Sets.newHashSet(new Tuple2<>("a", 4), new Tuple2<>("b", 3), new Tuple2<>("c", 1)),
-        Sets.newHashSet(new Tuple2<>("a", 5), new Tuple2<>("b", 3), new Tuple2<>("c", 1)),
-        Sets.newHashSet(new Tuple2<>("a", 5), new Tuple2<>("b", 3), new Tuple2<>("c", 1))
+        Set.of(),
+        Set.of(new Tuple2<>("a", 1)),
+        Set.of(new Tuple2<>("a", 2), new Tuple2<>("b", 1)),
+        Set.of(new Tuple2<>("a", 3), new Tuple2<>("b", 2), new Tuple2<>("c", 1)),
+        Set.of(new Tuple2<>("a", 4), new Tuple2<>("b", 3), new Tuple2<>("c", 1)),
+        Set.of(new Tuple2<>("a", 5), new Tuple2<>("b", 3), new Tuple2<>("c", 1)),
+        Set.of(new Tuple2<>("a", 5), new Tuple2<>("b", 3), new Tuple2<>("c", 1))
     );
 
     Function3<String, Optional<Integer>, State<Integer>, Integer> mappingFunc =
@@ -150,11 +150,11 @@ public class JavaMapWithStateSuite extends LocalJavaStreamingContext implements 
 
     List<Set<T>> collectedOutputs =
         Collections.synchronizedList(new ArrayList<>());
-    mapWithStateDStream.foreachRDD(rdd -> collectedOutputs.add(Sets.newHashSet(rdd.collect())));
+    mapWithStateDStream.foreachRDD(rdd -> collectedOutputs.add(new HashSet<>(rdd.collect())));
     List<Set<Tuple2<K, S>>> collectedStateSnapshots =
         Collections.synchronizedList(new ArrayList<>());
     mapWithStateDStream.stateSnapshots().foreachRDD(rdd ->
-        collectedStateSnapshots.add(Sets.newHashSet(rdd.collect())));
+        collectedStateSnapshots.add(new HashSet<>(rdd.collect())));
     BatchCounter batchCounter = new BatchCounter(ssc.ssc());
     ssc.start();
     ((ManualClock) ssc.ssc().scheduler().clock())

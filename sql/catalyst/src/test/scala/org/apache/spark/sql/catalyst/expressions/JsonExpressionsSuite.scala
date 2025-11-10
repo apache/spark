@@ -254,7 +254,7 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("some big value") {
-    val value = "x" * 3000
+    val value = "x".repeat(3000)
     checkEvaluation(
       GetJsonObject(NonFoldableLiteral((s"""{"big": "$value"}""")),
       NonFoldableLiteral("$.big")), value)

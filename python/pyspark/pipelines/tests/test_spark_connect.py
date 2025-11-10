@@ -31,7 +31,7 @@ from pyspark.pipelines.spark_connect_pipeline import (
     start_run,
     handle_pipeline_events,
 )
-from pyspark import pipelines as sdp
+from pyspark import pipelines as dp
 from pyspark.testing.connectutils import (
     ReusedConnectTestCase,
     should_test_connect,
@@ -47,7 +47,7 @@ class SparkConnectPipelinesTest(ReusedConnectTestCase):
 
         with graph_element_registration_context(registry):
 
-            @sdp.materialized_view
+            @dp.materialized_view
             def mv():
                 return self.spark.range(1)
 
@@ -58,6 +58,7 @@ class SparkConnectPipelinesTest(ReusedConnectTestCase):
             refresh=None,
             full_refresh_all=False,
             dry=True,
+            storage="storage_path",
         )
         handle_pipeline_events(result_iter)
 
@@ -67,7 +68,7 @@ class SparkConnectPipelinesTest(ReusedConnectTestCase):
 
         with graph_element_registration_context(registry):
 
-            @sdp.table
+            @dp.table
             def st():
                 # Invalid because a streaming query is expected
                 return self.spark.range(1)
@@ -79,6 +80,7 @@ class SparkConnectPipelinesTest(ReusedConnectTestCase):
             refresh=None,
             full_refresh_all=False,
             dry=True,
+            storage="storage_path",
         )
         with self.assertRaises(AnalysisException) as context:
             handle_pipeline_events(result_iter)

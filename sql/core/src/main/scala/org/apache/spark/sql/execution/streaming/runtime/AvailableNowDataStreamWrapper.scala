@@ -15,12 +15,13 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.streaming
+package org.apache.spark.sql.execution.streaming.runtime
 
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{DELEGATE, READ_LIMIT}
 import org.apache.spark.sql.connector.read.streaming.{MicroBatchStream, ReadLimit, SparkDataStream, SupportsAdmissionControl, SupportsTriggerAvailableNow}
 import org.apache.spark.sql.connector.read.streaming
+import org.apache.spark.sql.execution.streaming.Source
 
 /**
  * This class wraps a [[SparkDataStream]] and makes it support Trigger.AvailableNow, by overriding

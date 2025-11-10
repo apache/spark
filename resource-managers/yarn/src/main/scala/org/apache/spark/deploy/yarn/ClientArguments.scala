@@ -19,7 +19,7 @@ package org.apache.spark.deploy.yarn
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.ARGS
 
 // TODO: Add code and support for ensuring that yarn resource 'tasks' are location aware !

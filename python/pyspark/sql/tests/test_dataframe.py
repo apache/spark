@@ -220,6 +220,34 @@ class DataFrameTestsMixin:
         self.assertEqual(df4.columns, ["colA", "colB", "colC", "colC", "colD", "colE"])
         self.assertEqual(df4.count(), 1)
 
+    def test_drop_col_from_different_dataframe(self):
+        df1 = self.spark.range(10)
+        df2 = df1.withColumn("v0", lit(0))
+
+        # drop df2["id"] from df2
+        self.assertEqual(df2.drop(df2["id"]).columns, ["v0"])
+
+        # drop df1["id"] from df2, which is semantically equal to df2["id"]
+        # note that df1.drop(df2["id"]) works in Classic, but not in Connect
+        self.assertEqual(df2.drop(df1["id"]).columns, ["v0"])
+
+        df3 = df2.select("*", lit(1).alias("v1"))
+
+        # drop df3["id"] from df3
+        self.assertEqual(df3.drop(df3["id"]).columns, ["v0", "v1"])
+
+        # drop df2["id"] from df3, which is semantically equal to df3["id"]
+        self.assertEqual(df3.drop(df2["id"]).columns, ["v0", "v1"])
+
+        # drop df1["id"] from df3, which is semantically equal to df3["id"]
+        self.assertEqual(df3.drop(df1["id"]).columns, ["v0", "v1"])
+
+        # drop df3["v0"] from df3
+        self.assertEqual(df3.drop(df3["v0"]).columns, ["id", "v1"])
+
+        # drop df2["v0"] from df3, which is semantically equal to df3["v0"]
+        self.assertEqual(df3.drop(df2["v0"]).columns, ["id", "v1"])
+
     def test_drop_join(self):
         left_df = self.spark.createDataFrame(
             [(1, "a"), (2, "b"), (3, "c")],

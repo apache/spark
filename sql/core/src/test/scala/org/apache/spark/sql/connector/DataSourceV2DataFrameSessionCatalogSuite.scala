@@ -133,13 +133,13 @@ class InMemoryTableSessionCatalog extends TestV2SessionCatalogBase[InMemoryTable
         }
 
         val newTable = new InMemoryTable(table.name, schema, table.partitioning, properties)
-          .withData(table.data)
+          .alterTableWithData(table.data, schema)
 
         tables.put(ident, newTable)
 
         newTable
       case _ =>
-        throw QueryCompilationErrors.noSuchTableError(ident)
+        throw QueryCompilationErrors.noSuchTableError(name(), ident)
     }
   }
 }

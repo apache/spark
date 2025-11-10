@@ -24,7 +24,7 @@ import java.util.{Date, Locale}
 
 import scala.reflect.ClassTag
 
-import org.apache.hadoop.conf.{Configurable, Configuration}
+import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.hdfs.BlockMissingException
 import org.apache.hadoop.io.compress.CompressionCodecFactory
 import org.apache.hadoop.mapred._
@@ -39,7 +39,7 @@ import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.errors.SparkCoreErrors
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config._
 import org.apache.spark.rdd.HadoopRDD.HadoopMapPartitionsWithSplitRDD
@@ -214,14 +214,13 @@ class HadoopRDD[K, V](
     }
   }
 
-  protected def getInputFormat(conf: JobConf): InputFormat[K, V] = {
-    val newInputFormat = ReflectionUtils.newInstance(inputFormatClass.asInstanceOf[Class[_]], conf)
+  protected def getInputFormat(conf: JobConf): InputFormat[K, V] = try {
+    ReflectionUtils.newInstance(inputFormatClass.asInstanceOf[Class[_]], conf)
       .asInstanceOf[InputFormat[K, V]]
-    newInputFormat match {
-      case c: Configurable => c.setConf(conf)
-      case _ =>
-    }
-    newInputFormat
+  } catch {
+    case r: RuntimeException
+      if r.getCause != null && r.getCause.isInstanceOf[InstantiationException] =>
+      throw new RuntimeException(s"Failed to instantiate ${inputFormatClass.getName}", r.getCause)
   }
 
   override def getPartitions: Array[Partition] = {

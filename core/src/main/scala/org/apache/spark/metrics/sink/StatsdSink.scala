@@ -22,7 +22,7 @@ import java.util.concurrent.TimeUnit
 
 import com.codahale.metrics.{Metric, MetricFilter, MetricRegistry}
 
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.PREFIX
 import org.apache.spark.metrics.MetricsSystem
 

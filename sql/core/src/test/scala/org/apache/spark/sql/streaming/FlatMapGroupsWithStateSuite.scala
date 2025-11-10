@@ -21,7 +21,6 @@ import java.io.File
 import java.nio.ByteOrder
 import java.sql.Timestamp
 
-import org.apache.commons.io.FileUtils
 import org.scalatest.exceptions.TestFailedException
 
 import org.apache.spark.api.java.function.FlatMapGroupsWithStateFunction
@@ -33,8 +32,9 @@ import org.apache.spark.sql.catalyst.plans.physical.UnknownPartitioning
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
 import org.apache.spark.sql.execution.RDDScanExec
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
-import org.apache.spark.sql.execution.streaming._
-import org.apache.spark.sql.execution.streaming.state.{FlatMapGroupsWithStateExecHelper, MemoryStateStore, RocksDBStateStoreProvider, StateStore}
+import org.apache.spark.sql.execution.streaming.operators.stateful.flatmapgroupswithstate.{FlatMapGroupsWithStateExec, FlatMapGroupsWithStateExecHelper, FlatMapGroupsWithStateUserFuncException}
+import org.apache.spark.sql.execution.streaming.runtime._
+import org.apache.spark.sql.execution.streaming.state.{MemoryStateStore, RocksDBStateStoreProvider, StateStore}
 import org.apache.spark.sql.functions.timestamp_seconds
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.util.StreamManualClock
@@ -53,7 +53,7 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest {
   import testImplicits._
 
   import FlatMapGroupsWithStateSuite._
-  import GroupStateImpl._
+  import org.apache.spark.sql.execution.streaming.operators.stateful.flatmapgroupswithstate.GroupStateImpl._
   import GroupStateTimeout._
 
   /**
@@ -609,7 +609,7 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest {
     val checkpointDir = Utils.createTempDir().getCanonicalFile
     // Copy the checkpoint to a temp dir to prevent changes to the original.
     // Not doing this will lead to the test passing on the first run, but fail subsequent runs.
-    FileUtils.copyDirectory(new File(resourceUri), checkpointDir)
+    Utils.copyDirectory(new File(resourceUri), checkpointDir)
 
     inputData.addData(("a", 11), ("a", 13), ("a", 15))
     inputData.addData(("a", 4))

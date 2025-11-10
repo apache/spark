@@ -18,7 +18,6 @@
 package org.apache.spark.sql.execution.adaptive
 
 import org.apache.spark.internal.LogKeys.{BATCH_NAME, RULE_NAME}
-import org.apache.spark.internal.MDC
 import org.apache.spark.sql.catalyst.analysis.UpdateAttributeNullability
 import org.apache.spark.sql.catalyst.optimizer.{ConvertToLocalRelation, EliminateLimits, OptimizeOneRowPlan}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, LogicalPlanIntegrity}

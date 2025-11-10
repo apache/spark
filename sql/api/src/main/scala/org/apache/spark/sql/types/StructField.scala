@@ -70,9 +70,28 @@ case class StructField(
 
   private[sql] def jsonValue: JValue = {
     ("name" -> name) ~
-      ("type" -> dataType.jsonValue) ~
+      ("type" -> dataTypeJsonValue) ~
       ("nullable" -> nullable) ~
       ("metadata" -> metadataJson)
+  }
+
+  private[sql] def dataTypeJsonValue: JValue = {
+    if (collationMetadata.isEmpty) return dataType.jsonValue
+
+    def removeCollations(dt: DataType): DataType = dt match {
+      // Only recurse into map and array types as any child struct type
+      // will have already been processed.
+      case ArrayType(et, nullable) =>
+        ArrayType(removeCollations(et), nullable)
+      case MapType(kt, vt, nullable) =>
+        MapType(removeCollations(kt), removeCollations(vt), nullable)
+      case st: StringType => StringHelper.removeCollation(st)
+      case _ => dt
+    }
+
+    // As we want to be backwards compatible we should remove all collations information from the
+    // json and only keep that information in the metadata.
+    removeCollations(dataType).jsonValue
   }
 
   private def metadataJson: JValue = {

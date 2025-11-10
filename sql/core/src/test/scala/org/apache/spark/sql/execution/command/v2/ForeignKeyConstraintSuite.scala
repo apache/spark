@@ -23,12 +23,12 @@ class ForeignKeyConstraintSuite extends QueryTest with CommandSuiteBase with DDL
   override protected def command: String = "FOREIGN KEY CONSTRAINT"
 
   private val validConstraintCharacteristics = Seq(
-    ("", "NOT ENFORCED UNVALIDATED NORELY"),
-    ("NOT ENFORCED", "NOT ENFORCED UNVALIDATED NORELY"),
-    ("NOT ENFORCED NORELY", "NOT ENFORCED UNVALIDATED NORELY"),
-    ("NORELY NOT ENFORCED", "NOT ENFORCED UNVALIDATED NORELY"),
-    ("NORELY", "NOT ENFORCED UNVALIDATED NORELY"),
-    ("RELY", "NOT ENFORCED UNVALIDATED RELY")
+    ("", "NOT ENFORCED NORELY"),
+    ("NOT ENFORCED", "NOT ENFORCED NORELY"),
+    ("NOT ENFORCED NORELY", "NOT ENFORCED NORELY"),
+    ("NORELY NOT ENFORCED", "NOT ENFORCED NORELY"),
+    ("NORELY", "NOT ENFORCED NORELY"),
+    ("RELY", "NOT ENFORCED RELY")
   )
 
   test("Add foreign key constraint") {
@@ -104,7 +104,7 @@ class ForeignKeyConstraintSuite extends QueryTest with CommandSuiteBase with DDL
           parameters = Map("constraintName" -> "fk1",
             "oldConstraint" ->
               ("CONSTRAINT fk1 FOREIGN KEY (fk) " +
-                "REFERENCES test_catalog.ns.tbl_ref (id) NOT ENFORCED UNVALIDATED NORELY"))
+                "REFERENCES test_catalog.ns.tbl_ref (id) NOT ENFORCED NORELY"))
         )
       }
     }
@@ -124,7 +124,7 @@ class ForeignKeyConstraintSuite extends QueryTest with CommandSuiteBase with DDL
       assert(constraint.name() == "fk1")
       assert(constraint.toDDL ==
         s"CONSTRAINT fk1 FOREIGN KEY (fk1, fk2) " +
-          s"REFERENCES test_catalog.ns.tbl_ref (id1, id2) NOT ENFORCED UNVALIDATED NORELY")
+          s"REFERENCES test_catalog.ns.tbl_ref (id1, id2) NOT ENFORCED NORELY")
     }
   }
 }
