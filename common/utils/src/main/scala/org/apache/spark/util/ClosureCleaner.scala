@@ -20,6 +20,7 @@ package org.apache.spark.util
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
 import java.lang.invoke.{MethodHandleInfo, MethodHandles, SerializedLambda}
 import java.lang.reflect.{Field, Modifier}
+import java.nio.file.{Files, Paths}
 
 import scala.collection.mutable.{ArrayBuffer, Map, Queue, Set, Stack}
 import scala.jdk.CollectionConverters._
@@ -733,6 +734,7 @@ private[spark] object ClosureCleaner extends Logging {
     convertedClassNode.name = clonedFuncClassName
     convertedClassNode.superName = "java/lang/Object"
     convertedClassNode.interfaces.add(lambdaProxy.getFunctionalInterfaceClass)
+    convertedClassNode.interfaces.add("java/io/Serializable")
     buildFieldAndConstructor(convertedClassNode)
     buildLambdaImplMethod(convertedClassNode)
 
@@ -745,6 +747,13 @@ private[spark] object ClosureCleaner extends Logging {
     val clazz = privateLookup.defineClass(bytes)
     val classLoader = originalFuncClass.getClassLoader
     val classLoaderClass = classLoader.getClass
+
+    // For Scala REPL, write the class file to `spark.repl.classdir` for ExecutorClassLoader.
+    if (clazz.getName.startsWith("$line")) {
+      val replClassDir = System.getProperty("spark.repl.class.outputDir")
+      val path = Paths.get(replClassDir, clazz.getName.replace(".", "/") + ".class")
+      Files.write(path, bytes)
+    }
 
     // For Ammonite, add the class to the SpecialClassLoader allowing to pass the class to the
     // connect server
