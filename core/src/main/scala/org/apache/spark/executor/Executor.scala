@@ -387,7 +387,7 @@ private[spark] class Executor(
       case t: Throwable =>
         try {
           logError(log"Executor launch task ${MDC(TASK_NAME, taskDescription.name)} failed," +
-            log" reason: ${MDC(REASON, t.getCause)}")
+            log" reason: ${MDC(REASON, t.getMessage)}")
           context.statusUpdate(
             taskDescription.taskId,
             TaskState.FAILED,
@@ -395,11 +395,11 @@ private[spark] class Executor(
         } catch {
           case oom: OutOfMemoryError =>
             logError(log"Executor update launching task ${MDC(TASK_NAME, taskDescription.name)} " +
-              log"failed status failed, reason: ${MDC(REASON, oom)}")
+              log"failed status failed, reason: ${MDC(REASON, oom.getMessage)}")
             System.exit(SparkExitCode.OOM)
           case t: Throwable =>
             logError(log"Executor update launching task ${MDC(TASK_NAME, taskDescription.name)} " +
-              log"failed status failed, reason: ${MDC(REASON, t.getCause)}")
+              log"failed status failed, reason: ${MDC(REASON, t.getMessage)}")
             System.exit(-1)
         }
     }
