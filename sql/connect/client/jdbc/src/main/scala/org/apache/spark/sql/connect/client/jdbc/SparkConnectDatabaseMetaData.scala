@@ -345,11 +345,9 @@ class SparkConnectDatabaseMetaData(conn: SparkConnectConnection) extends Databas
     } else if (catalog == "") {
       // search only in current catalog
       internalGetSchemas(None, schemaFilterClause)
-        .withColumn("TABLE_CATALOG", lit(conn.getCatalog))
     } else {
       // search in the specific catalog
       internalGetSchemas(Some(catalog), schemaFilterClause)
-        .withColumn("TABLE_CATALOG", lit(catalog))
     }
   }
 
