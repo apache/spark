@@ -1976,6 +1976,12 @@ def _test() -> None:
     if not have_pyarrow:
         del pyspark.sql.dataframe.DataFrame.toArrow.__doc__
         del pyspark.sql.dataframe.DataFrame.mapInArrow.__doc__
+    else:
+        import pyarrow as pa
+        from pyspark.loose_version import LooseVersion
+
+        if LooseVersion(pa.__version__) < LooseVersion("17.0.0"):
+            del pyspark.sql.dataframe.DataFrame.mapInArrow.__doc__
 
     spark = (
         SparkSession.builder.master("local[4]").appName("sql.classic.dataframe tests").getOrCreate()
