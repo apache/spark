@@ -532,7 +532,7 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
 
   private lazy val metricForceSnapshot: StateStoreCustomMetric =
     StateStoreCustomSumMetric("forceSnapshotCount",
-      "number of stores that had forced snapshot")
+    "number of stores that had forced snapshot")
 
   private lazy val instanceMetricSnapshotLastUpload: StateStoreInstanceMetric =
     StateStoreSnapshotLastUploadInstanceMetric()

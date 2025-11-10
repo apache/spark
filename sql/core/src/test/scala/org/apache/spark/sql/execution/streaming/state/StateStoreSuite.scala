@@ -2735,7 +2735,7 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
     assert(encoderSpec == deserializedEncoderSpec)
   }
 
-  test("SPARK-54063: force snapshot when shouldForceSnapshotOnCommit is true") {
+  test("SPARK-54063: forceSnapshot metric populated when shouldForceSnapshotOnCommit is true") {
     withTempDir { dir =>
       tryWithProviderResource(newStoreProvider()) { provider =>
         val store = provider.getStore(0, forceSnapshotOnCommit = true)
