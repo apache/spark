@@ -20,6 +20,7 @@ package org.apache.spark.sql.connect.client.jdbc
 import java.sql.{Array => _, _}
 
 import org.apache.spark.SparkBuildInfo.{spark_version => SPARK_VERSION}
+import org.apache.spark.sql.catalyst.util.QuotingUtils._
 import org.apache.spark.sql.connect
 import org.apache.spark.sql.connect.client.jdbc.SparkConnectDatabaseMetaData._
 import org.apache.spark.sql.functions._
@@ -99,8 +100,7 @@ class SparkConnectDatabaseMetaData(conn: SparkConnectConnection) extends Databas
   override def getTimeDateFunctions: String =
     throw new SQLFeatureNotSupportedException
 
-  override def getSearchStringEscape: String =
-    throw new SQLFeatureNotSupportedException
+  override def getSearchStringEscape: String = "\\"
 
   override def getExtraNameCharacters: String = ""
 
@@ -316,8 +316,11 @@ class SparkConnectDatabaseMetaData(conn: SparkConnectConnection) extends Databas
   private def getSchemasDataFrame(
       catalog: String, schemaPattern: String): connect.DataFrame = {
 
-    val schemaFilterClause =
-      if (isNullOrWildcard(schemaPattern)) "1=1" else s"TABLE_SCHEM LIKE '$schemaPattern'"
+    val schemaFilterClause = if (isNullOrWildcard(schemaPattern)) {
+      "TRUE"
+    } else {
+      s"TABLE_SCHEM LIKE '${escapeSingleQuotedString(schemaPattern)}'"
+    }
 
     def internalGetSchemas(
         catalogOpt: Option[String],
@@ -325,7 +328,7 @@ class SparkConnectDatabaseMetaData(conn: SparkConnectConnection) extends Databas
       val catalog = catalogOpt.getOrElse(conn.getCatalog)
       // Spark SQL supports LIKE clause in SHOW SCHEMAS command, but we can't use that
       // because the LIKE pattern does not follow SQL standard.
-      conn.spark.sql(s"SHOW SCHEMAS IN `$catalog`")
+      conn.spark.sql(s"SHOW SCHEMAS IN ${quoteIdentifier(catalog)}")
         .select($"namespace".as("TABLE_SCHEM"))
         .filter(schemaFilterClause)
         .withColumn("TABLE_CATALOG", lit(catalog))
@@ -336,8 +339,8 @@ class SparkConnectDatabaseMetaData(conn: SparkConnectConnection) extends Databas
       val emptyDf = conn.spark.emptyDataFrame
         .withColumn("TABLE_SCHEM", lit(""))
         .withColumn("TABLE_CATALOG", lit(""))
-      conn.spark.catalog.listCatalogs().collect().map(_.name).map { catalog =>
-        internalGetSchemas(Some(catalog), schemaFilterClause)
+      conn.spark.catalog.listCatalogs().collect().map(_.name).map { c =>
+        internalGetSchemas(Some(c), schemaFilterClause)
       }.fold(emptyDf) { (l, r) => l.unionAll(r) }
     } else if (catalog == "") {
       // search only in current catalog
