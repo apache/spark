@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression, GetStructField}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, AttributeSet, Expression, GetStructField}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
@@ -42,12 +42,13 @@ object ResolveMergeIntoSchemaEvolution extends Rule[LogicalPlan] {
           case r : DataSourceV2Relation => performSchemaEvolution(r, m)
         }
 
-        // Unresolve the merge condition and all assignments
-        val unresolvedMergeCondition = unresolveCondition(m.mergeCondition)
-        val unresolvedMatchedActions = unresolveActions(m.matchedActions)
-        val unresolvedNotMatchedActions = unresolveActions(m.notMatchedActions)
+        // Unresolve all references based on old target output
+        val targetOutput = m.targetTable.output
+        val unresolvedMergeCondition = unresolveCondition(m.mergeCondition, targetOutput)
+        val unresolvedMatchedActions = unresolveActions(m.matchedActions, targetOutput)
+        val unresolvedNotMatchedActions = unresolveActions(m.notMatchedActions, targetOutput)
         val unresolvedNotMatchedBySourceActions =
-          unresolveActions(m.notMatchedBySourceActions)
+          unresolveActions(m.notMatchedBySourceActions, targetOutput)
 
         m.copy(
           targetTable = newTarget,
@@ -57,21 +58,25 @@ object ResolveMergeIntoSchemaEvolution extends Rule[LogicalPlan] {
           notMatchedBySourceActions = unresolvedNotMatchedBySourceActions)
   }
 
-  private def unresolveActions(actions: Seq[MergeAction]): Seq[MergeAction] = {
+  private def unresolveActions(actions: Seq[MergeAction], output: Seq[Attribute]):
+  Seq[MergeAction] = {
     actions.map {
       case UpdateAction(condition, assignments) =>
-        UpdateAction(condition.map(unresolveCondition), unresolveAssignmentKeys(assignments))
+        UpdateAction(condition.map(unresolveCondition(_, output)),
+          unresolveAssignmentKeys(assignments))
       case InsertAction(condition, assignments) =>
-        InsertAction(condition.map(unresolveCondition), unresolveAssignmentKeys(assignments))
+        InsertAction(condition.map(unresolveCondition(_, output)),
+          unresolveAssignmentKeys(assignments))
       case DeleteAction(condition) =>
-        DeleteAction(condition.map(unresolveCondition))
+        DeleteAction(condition.map(unresolveCondition(_, output)))
       case other => other
     }
   }
 
-  private def unresolveCondition(expr: Expression): Expression = {
+  private def unresolveCondition(expr: Expression, output: Seq[Attribute]): Expression = {
+    val outputSet = AttributeSet(output)
     expr.transform {
-      case attr: AttributeReference =>
+      case attr: AttributeReference if outputSet.contains(attr) =>
         val nameParts = if (attr.qualifier.nonEmpty) {
           attr.qualifier ++ Seq(attr.name)
         } else {
