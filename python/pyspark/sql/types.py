@@ -440,6 +440,11 @@ class TimeType(AnyTimeType):
 
 class TimestampType(DatetimeType, metaclass=DataTypeSingleton):
     """Timestamp (datetime.datetime) data type."""
+    # We need to cache the timezone info for datetime.datetime.fromtimestamp
+    # otherwise the forked process will be extremely slow to convert the timestamp.
+    # This is probably a glibc issue - the forked process will have a bad cache/lock
+    # status for the timezone info.
+    tz_info = datetime.datetime.now().astimezone().tzinfo
 
     def needConversion(self) -> bool:
         return True
@@ -454,7 +459,9 @@ class TimestampType(DatetimeType, metaclass=DataTypeSingleton):
     def fromInternal(self, ts: int) -> datetime.datetime:
         if ts is not None:
             # using int to avoid precision loss in float
-            return datetime.datetime.fromtimestamp(ts // 1000000).replace(microsecond=ts % 1000000)
+            return datetime.datetime.fromtimestamp(ts // 1000000, self.tz_info).replace(
+                microsecond=ts % 1000000
+            )
 
 
 class TimestampNTZType(DatetimeType, metaclass=DataTypeSingleton):
