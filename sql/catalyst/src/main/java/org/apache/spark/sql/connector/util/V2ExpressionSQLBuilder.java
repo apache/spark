@@ -85,6 +85,8 @@ public class V2ExpressionSQLBuilder {
     } else if (expr instanceof SortOrder sortOrder) {
       return visitSortOrder(
         build(sortOrder.expression()), sortOrder.direction(), sortOrder.nullOrdering());
+    } else if (expr instanceof GetArrayItem getArrayItem) {
+      return visitGetArrayItem(getArrayItem);
     } else if (expr instanceof GeneralScalarExpression e) {
       String name = e.name();
       return switch (name) {
@@ -128,7 +130,6 @@ public class V2ExpressionSQLBuilder {
         case "LTRIM" -> visitTrim("LEADING", expressionsToStringArray(e.children()));
         case "RTRIM" -> visitTrim("TRAILING", expressionsToStringArray(e.children()));
         case "OVERLAY" -> visitOverlay(expressionsToStringArray(e.children()));
-        case "GET_ARRAY_ITEM" -> visitGetArrayItem(expressionsToStringArray(e.children()));
         // TODO supports other expressions
         default -> visitUnexpectedExpr(expr);
       };
