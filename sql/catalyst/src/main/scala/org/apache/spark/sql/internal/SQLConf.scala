@@ -6117,7 +6117,9 @@ object SQLConf {
       .doc("The chunk size in bytes when splitting ChunkedCachedLocalRelation.data " +
         "into batches. A new chunk is created when either " +
         "spark.sql.session.localRelationChunkSizeBytes " +
-        "or spark.sql.session.localRelationChunkSizeRows is reached.")
+        "or spark.sql.session.localRelationChunkSizeRows is reached. " +
+        "Limited by the spark.sql.session.localRelationBatchOfChunksSizeBytes, " +
+        "a minimum of the two confs is used to determine the chunk size.")
       .version("4.1.0")
       .longConf
       .checkValue(_ > 0, "The chunk size in bytes must be positive")
@@ -6144,11 +6146,13 @@ object SQLConf {
   val LOCAL_RELATION_BATCH_OF_CHUNKS_SIZE_BYTES =
     buildConf(SqlApiConfHelper.LOCAL_RELATION_BATCH_OF_CHUNKS_SIZE_BYTES_KEY)
       .internal()
-      .doc("The batch size in bytes for uploading chunks of local relations to the server. " +
-        "The client collects multiple chunks into a single batch until this limit is reached, " +
-        "then uploads the batch of chunks to the server. This helps reduce memory pressure on " +
-        "the client when dealing with large local relations because the client does not have to " +
-        "materialize all chunks in memory.")
+      .doc("Limit on how much memory the client can use when uploading a local relation to the " +
+        "server. The client collects multiple local relation chunks into a single batch in " +
+        "memory until the limit is reached, then uploads the batch to the server. " +
+        "This helps reduce memory pressure on the client when dealing with very large local " +
+        "relations because the client does not have to materialize all chunks in memory. " +
+        "Limits the spark.sql.session.localRelationChunkSizeBytes, " +
+        "a minimum of the two confs is used to determine the chunk size.")
       .version("4.1.0")
       .longConf
       .checkValue(_ > 0, "The batch size in bytes must be positive")

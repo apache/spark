@@ -1092,7 +1092,7 @@ class SparkSession:
             current_batch_size += len(schema_chunk)
 
         data_chunks: Iterator[bytes] = local_relation._serialize_table_chunks(
-            max_chunk_size_rows, max_chunk_size_bytes
+            max_chunk_size_rows, min(max_chunk_size_bytes, max_batch_of_chunks_size_bytes)
         )
 
         for chunk in data_chunks:

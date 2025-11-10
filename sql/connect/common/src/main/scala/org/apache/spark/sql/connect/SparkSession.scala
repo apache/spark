@@ -129,7 +129,7 @@ class SparkSession private[sql] (
           encoder,
           allocator,
           maxRecordsPerBatch = maxChunkSizeRows,
-          maxBatchSize = maxChunkSizeBytes,
+          maxBatchSize = math.min(maxChunkSizeBytes, maxBatchOfChunksSize),
           timeZoneId = timeZoneId,
           largeVarTypes = largeVarTypes,
           batchSizeCheckInterval = math.min(1024, maxChunkSizeRows))
