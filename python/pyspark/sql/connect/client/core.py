@@ -2207,9 +2207,9 @@ class SparkConnectClient(object):
                     logger.debug("Plan compression not effective. Using original plan.")
 
         if op_type == pb2.Plan.CompressedOperation.OpType.OP_TYPE_RELATION:
-            plan.root.CopyFrom(message)
+            plan.root.CopyFrom(message)  # type: ignore[arg-type]
         else:
-            plan.command.CopyFrom(message)
+            plan.command.CopyFrom(message)  # type: ignore[arg-type]
 
     def _get_plan_compression_threshold_and_algorithm(self) -> Tuple[int, str]:
         if self._plan_compression_threshold is None or self._plan_compression_algorithm is None:
@@ -2232,7 +2232,7 @@ class SparkConnectClient(object):
                 logger.debug(
                     "Plan compression is disabled because the server does not support it.", e
                 )
-        return self._plan_compression_threshold, self._plan_compression_algorithm
+        return self._plan_compression_threshold, self._plan_compression_algorithm  # type: ignore[return-value]
 
     def clone(self, new_session_id: Optional[str] = None) -> "SparkConnectClient":
         """
