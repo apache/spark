@@ -20,6 +20,7 @@ package org.apache.spark.sql.connect.client.jdbc
 import java.sql.{Array => _, _}
 
 import org.apache.spark.SparkBuildInfo.{spark_version => SPARK_VERSION}
+import org.apache.spark.sql.Column
 import org.apache.spark.sql.catalyst.util.QuotingUtils._
 import org.apache.spark.sql.connect
 import org.apache.spark.sql.connect.client.jdbc.SparkConnectDatabaseMetaData._
@@ -316,21 +317,21 @@ class SparkConnectDatabaseMetaData(conn: SparkConnectConnection) extends Databas
   private def getSchemasDataFrame(
       catalog: String, schemaPattern: String): connect.DataFrame = {
 
-    val schemaFilterClause = if (isNullOrWildcard(schemaPattern)) {
-      "TRUE"
+    val schemaFilterExpr = if (isNullOrWildcard(schemaPattern)) {
+      lit(true)
     } else {
-      s"TABLE_SCHEM LIKE '${escapeSingleQuotedString(schemaPattern)}'"
+      $"TABLE_SCHEM".like(schemaPattern)
     }
 
     def internalGetSchemas(
         catalogOpt: Option[String],
-        schemaFilterClause: String): connect.DataFrame = {
+        schemaFilterExpr: Column): connect.DataFrame = {
       val catalog = catalogOpt.getOrElse(conn.getCatalog)
       // Spark SQL supports LIKE clause in SHOW SCHEMAS command, but we can't use that
       // because the LIKE pattern does not follow SQL standard.
       conn.spark.sql(s"SHOW SCHEMAS IN ${quoteIdentifier(catalog)}")
         .select($"namespace".as("TABLE_SCHEM"))
-        .filter(schemaFilterClause)
+        .filter(schemaFilterExpr)
         .withColumn("TABLE_CATALOG", lit(catalog))
     }
 
@@ -340,14 +341,14 @@ class SparkConnectDatabaseMetaData(conn: SparkConnectConnection) extends Databas
         .withColumn("TABLE_SCHEM", lit(""))
         .withColumn("TABLE_CATALOG", lit(""))
       conn.spark.catalog.listCatalogs().collect().map(_.name).map { c =>
-        internalGetSchemas(Some(c), schemaFilterClause)
+        internalGetSchemas(Some(c), schemaFilterExpr)
       }.fold(emptyDf) { (l, r) => l.unionAll(r) }
     } else if (catalog == "") {
       // search only in current catalog
-      internalGetSchemas(None, schemaFilterClause)
+      internalGetSchemas(None, schemaFilterExpr)
     } else {
       // search in the specific catalog
-      internalGetSchemas(Some(catalog), schemaFilterClause)
+      internalGetSchemas(Some(catalog), schemaFilterExpr)
     }
   }
 
