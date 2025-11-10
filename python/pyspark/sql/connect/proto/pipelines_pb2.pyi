@@ -263,6 +263,7 @@ class PipelineCommand(google.protobuf.message.Message):
                 self,
             ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
                 """Optional cluster columns for the table."""
+
             def __init__(
                 self,
                 *,
