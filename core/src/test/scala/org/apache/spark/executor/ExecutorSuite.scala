@@ -622,7 +622,7 @@ class ExecutorSuite extends SparkFunSuite
 
       // Create a mock ThreadPoolExecutor that throws an exception when execute is called
       val mockThreadPool = mock[ThreadPoolExecutor]
-      val testException = new RejectedExecutionException("Thread pool is shut down")
+      val testException = new OutOfMemoryError("unable to create new native thread")
       when(mockThreadPool.execute(any[Runnable])).thenThrow(testException)
       threadPoolField.set(executor, mockThreadPool)
 
@@ -642,8 +642,8 @@ class ExecutorSuite extends SparkFunSuite
         val failReason = serializer.newInstance()
           .deserialize[ExceptionFailure](failureData)
         assert(failReason.exception.isDefined)
-        assert(failReason.exception.get.isInstanceOf[RejectedExecutionException])
-        assert(failReason.exception.get.getMessage === "Thread pool is shut down")
+        assert(failReason.exception.get.isInstanceOf[OutOfMemoryError])
+        assert(failReason.exception.get.getMessage === "unable to create new native thread")
       } finally {
         // Restore the original threadPool
         threadPoolField.set(executor, originalThreadPool)
