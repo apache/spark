@@ -352,8 +352,8 @@ public class V2ExpressionSQLBuilder {
 
   protected String visitGetArrayItem(GetArrayItem getArrayItem) {
     throw new SparkUnsupportedOperationException(
-      "_LEGACY_ERROR_TEMP_3177",
-      Map.of("class", this.getClass().getSimpleName(), "funcName", "GET_ARRAY_ITEM")
+      "EXPRESSION_TRANSLATION_TO_V2_IS_NOT_SUPPORTED",
+      Map.of("expr", getArrayItem.toString())
     );
   }
 
