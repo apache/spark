@@ -220,7 +220,7 @@ class PandasConversionMixin:
             else:
                 columns_data = [[] for _ in self.schema.fields]
 
-            # Use concat with converted Series (pandas concat is highly optimized)
+            # Build DataFrame from columns
             pdf = pd.concat(
                 [
                     _create_converter_to_pandas(
