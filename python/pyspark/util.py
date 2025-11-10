@@ -918,7 +918,7 @@ def default_api_mode() -> str:
 
 
 if __name__ == "__main__":
-    if "pypy" not in platform.python_implementation().lower() and sys.version_info[:2] >= (3, 9):
+    if "pypy" not in platform.python_implementation().lower():
         import doctest
         import pyspark.util
         from pyspark.core.context import SparkContext
