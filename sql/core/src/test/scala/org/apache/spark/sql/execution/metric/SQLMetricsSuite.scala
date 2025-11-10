@@ -318,7 +318,6 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
       //       -> Exchange(nodeId = 2)
       //          -> SortAggregate(...)
       val df = testData2.groupBy($"a").count()
-      df.explain(true)
 
       // Test aggTime metric for grouped aggregate
       testSparkPlanMetricsWithPredicates(df, 1, Map(
