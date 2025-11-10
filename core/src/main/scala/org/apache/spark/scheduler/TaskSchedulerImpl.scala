@@ -145,6 +145,11 @@ private[spark] class TaskSchedulerImpl(
   // IDs of the tasks running on each executor
   private val executorIdToRunningTaskIds = new HashMap[String, HashSet[Long]]
 
+  // Executors we have requested the cluster manager to kill that have not died yet; maps
+  // the executor ID to whether it was explicitly killed by the driver (and thus shouldn't
+  // be considered an app-related failure). Visible for testing only.
+  val executorsPendingToRemove = new HashSet[String]()
+
   // We add executors here when we first get decommission notification for them. Executors can
   // continue to run even after being asked to decommission, but they will eventually exit.
   val executorsPendingDecommission = new HashMap[String, ExecutorDecommissionState]
@@ -163,8 +168,6 @@ private[spark] class TaskSchedulerImpl(
   // The set of executors we have on each host; this is used to compute hostsAlive, which
   // in turn is used to decide when we can attain data locality on a given host
   protected val hostToExecutors = new HashMap[String, HashSet[String]]
-
-  protected val availableHostsToExecutors = new HashMap[String, HashSet[String]]
 
   protected val hostsByRack = new HashMap[String, HashSet[String]]
 
@@ -497,12 +500,8 @@ private[spark] class TaskSchedulerImpl(
       if (!hostToExecutors.contains(o.host)) {
         hostToExecutors(o.host) = new HashSet[String]()
       }
-      if (!availableHostsToExecutors.contains(o.host)) {
-        availableHostsToExecutors(o.host) = new HashSet[String]()
-      }
       if (!executorIdToRunningTaskIds.contains(o.executorId)) {
         hostToExecutors(o.host) += o.executorId
-        availableHostsToExecutors(o.host) += o.executorId
         executorAdded(o.executorId, o.host)
         executorIdToHost(o.executorId) = o.host
         executorIdToRunningTaskIds(o.executorId) = HashSet[Long]()
@@ -595,7 +594,7 @@ private[spark] class TaskSchedulerImpl(
         }
 
         if (!launchedAnyTask) {
-          taskSet.getCompletelyExcludedTaskIfAny(availableHostsToExecutors).foreach { taskIndex =>
+          taskSet.getCompletelyExcludedTaskIfAny(hostToExecutors).foreach { taskIndex =>
               // If the taskSet is unschedulable we try to find an existing idle excluded
               // executor and kill the idle executor and kick off an abortTimer which if it doesn't
               // schedule a task within the timeout will abort the taskSet if we were unable to
@@ -1130,8 +1129,7 @@ private[spark] class TaskSchedulerImpl(
   }
 
   def isExecutorAvailable(execId: String): Boolean = synchronized {
-    executorIdToHost.get(execId)
-      .exists(availableHostsToExecutors.get(_).exists(_.contains(execId)))
+    !executorsPendingToRemove.contains(execId)
   }
 
   // exposed for test
@@ -1206,17 +1204,11 @@ private[spark] class TaskSchedulerImpl(
   }
 
   override def markExecutorPendingToRemove(executorId: String): Unit = synchronized {
-    removeAvailableExecutor(executorId)
+    executorsPendingToRemove.add(executorId)
   }
 
   private def removeAvailableExecutor(executorId: String): Unit = {
-    executorIdToHost.get(executorId).foreach { host =>
-      val execs = availableHostsToExecutors.getOrElse(host, new HashSet)
-      execs -= executorId
-      if (execs.isEmpty) {
-        availableHostsToExecutors -= host
-      }
-    }
+    executorsPendingToRemove.remove(executorId)
   }
 }
 
