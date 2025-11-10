@@ -109,6 +109,9 @@ public class VariantUtil {
   // Date value. Content is 4-byte little-endian signed integer that represents the number of days
   // from the Unix epoch.
   public static final int DATE = 11;
+  // Time value. Content is 8-byte little-endian signed integer that represents the number of
+  // nanoseconds elapsed since 00:00:00 wall clock time, which represents midnight (start of day).
+  public static final int TIME = 17;
   // Timestamp value. Content is 8-byte little-endian signed integer that represents the number of
   // microseconds elapsed since the Unix epoch, 1970-01-01 00:00:00 UTC. It is displayed to users in
   // their local time zones and may be displayed differently depending on the execution environment.
@@ -244,6 +247,7 @@ public class VariantUtil {
     DOUBLE,
     DECIMAL,
     DATE,
+    TIME,
     TIMESTAMP,
     TIMESTAMP_NTZ,
     FLOAT,
@@ -291,6 +295,8 @@ public class VariantUtil {
             return Type.DECIMAL;
           case DATE:
             return Type.DATE;
+          case TIME:
+            return Type.TIME;
           case TIMESTAMP:
             return Type.TIMESTAMP;
           case TIMESTAMP_NTZ:
@@ -342,6 +348,7 @@ public class VariantUtil {
             return 5;
           case INT8:
           case DOUBLE:
+          case TIME:
           case TIMESTAMP:
           case TIMESTAMP_NTZ:
             return 9;
@@ -379,17 +386,17 @@ public class VariantUtil {
   }
 
   // Get a long value from variant value `value[pos...]`.
-  // It is only legal to call it if `getType` returns one of `Type.LONG/DATE/TIMESTAMP/
+  // It is only legal to call it if `getType` returns one of `Type.LONG/DATE/TIME/TIMESTAMP/
   // TIMESTAMP_NTZ`. If the type is `DATE`, the return value is guaranteed to fit into an int and
-  // represents the number of days from the Unix epoch.
-  // If the type is `TIMESTAMP/TIMESTAMP_NTZ`, the return value represents the number of
-  // microseconds from the Unix epoch.
+  // represents the number of days from the Unix epoch. If the type is `TIME`, the return value
+  // represents the number of nanoseconds from midnight. If the type is `TIMESTAMP/TIMESTAMP_NTZ`,
+  // the return value represents the number of microseconds from the Unix epoch.
   // Throw `MALFORMED_VARIANT` if the variant is malformed.
   public static long getLong(byte[] value, int pos) {
     checkIndex(pos, value.length);
     int basicType = value[pos] & BASIC_TYPE_MASK;
     int typeInfo = (value[pos] >> BASIC_TYPE_BITS) & TYPE_INFO_MASK;
-    String exceptionMessage = "Expect type to be LONG/DATE/TIMESTAMP/TIMESTAMP_NTZ";
+    String exceptionMessage = "Expect type to be LONG/DATE/TIME/TIMESTAMP/TIMESTAMP_NTZ";
     if (basicType != PRIMITIVE) throw new IllegalStateException(exceptionMessage);
     switch (typeInfo) {
       case INT1:
@@ -400,6 +407,7 @@ public class VariantUtil {
       case DATE:
         return readLong(value, pos + 1, 4);
       case INT8:
+      case TIME:
       case TIMESTAMP:
       case TIMESTAMP_NTZ:
         return readLong(value, pos + 1, 8);

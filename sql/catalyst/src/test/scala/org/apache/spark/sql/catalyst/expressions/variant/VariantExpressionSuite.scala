@@ -1071,6 +1071,21 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkFailure(Map(1 -> 1), toVariantObject = true)
   }
 
+  test("cast to variant and then to string") {
+    // Test TIMESTAMP casting to Variant, and then to String.
+    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+      checkEvaluation(
+        Cast(Cast(Literal.create(0L, TimestampType), VariantType), StringType),
+        "1970-01-01 00:00:00"
+      )
+    }
+    // SPARK-52621: Test TIME casting to Variant, and then to String.
+    checkEvaluation(
+      Cast(Cast(Literal.create(0L, TimeType()), VariantType), StringType),
+      "00:00:00"
+    )
+  }
+
   test("schema_of_variant - unknown type") {
     val emptyMetadata = Array[Byte](VERSION, 0, 0)
 

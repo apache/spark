@@ -462,6 +462,7 @@ case object VariantGet {
             val d = Decimal(v.getDecimal)
             Literal(d, DecimalType(d.precision, d.scale))
           case Type.DATE => Literal(v.getLong.toInt, DateType)
+          case Type.TIME => Literal(v.getLong, TimeType())
           case Type.TIMESTAMP => Literal(v.getLong, TimestampType)
           case Type.TIMESTAMP_NTZ => Literal(v.getLong, TimestampNTZType)
           case Type.FLOAT => Literal(v.getFloat, FloatType)
@@ -877,6 +878,7 @@ object SchemaOfVariant {
       val d = Decimal(v.getDecimal)
       DecimalType(d.precision, d.scale)
     case Type.DATE => DateType
+    case Type.TIME => TimeType()
     case Type.TIMESTAMP => TimestampType
     case Type.TIMESTAMP_NTZ => TimestampNTZType
     case Type.FLOAT => FloatType
