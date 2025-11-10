@@ -43,7 +43,7 @@ class ExecutorPodsPollingSnapshotSource(
     conf: SparkConf,
     kubernetesClient: KubernetesClient,
     snapshotsStore: ExecutorPodsSnapshotsStore,
-    pollingExecutor: ScheduledExecutorService) extends Logging {
+    pollingExecutor: ScheduledExecutorService) extends ExecutorPodsSnapshotSource with Logging {
 
   private val pollingInterval = conf.get(KUBERNETES_EXECUTOR_API_POLLING_INTERVAL)
   private val pollingEnabled = conf.get(KUBERNETES_EXECUTOR_ENABLE_API_POLLING)

@@ -51,8 +51,7 @@ private[spark] class KubernetesClusterSchedulerBackend(
     snapshotsStore: ExecutorPodsSnapshotsStore,
     podAllocator: AbstractPodsAllocator,
     lifecycleEventHandler: ExecutorPodsLifecycleManager,
-    watchEvents: ExecutorPodsWatchSnapshotSource,
-    pollEvents: ExecutorPodsPollingSnapshotSource)
+    snapshotSources: Seq[ExecutorPodsSnapshotSource])
     extends CoarseGrainedSchedulerBackend(scheduler, sc.env.rpcEnv) {
   private val appId = KubernetesConf.getKubernetesAppId()
 
@@ -110,8 +109,7 @@ private[spark] class KubernetesClusterSchedulerBackend(
     val initExecs = Map(defaultProfile -> initialExecutors)
     podAllocator.setTotalExpectedExecutors(initExecs)
     lifecycleEventHandler.start(this)
-    watchEvents.start(applicationId())
-    pollEvents.start(applicationId())
+    snapshotSources.foreach(source => source.start(applicationId()))
     if (!conf.get(KUBERNETES_EXECUTOR_DISABLE_CONFIGMAP)) {
       setUpExecutorConfigMap(podAllocator.driverPod)
     }
@@ -128,12 +126,10 @@ private[spark] class KubernetesClusterSchedulerBackend(
       snapshotsStore.stop()
     }
 
-    Utils.tryLogNonFatalError {
-      watchEvents.stop()
-    }
-
-    Utils.tryLogNonFatalError {
-      pollEvents.stop()
+    snapshotSources.foreach { source =>
+      Utils.tryLogNonFatalError {
+        source.stop()
+      }
     }
 
     if (shouldDeleteDriverService) {
