@@ -213,16 +213,14 @@ class PandasConversionMixin:
             timezone = sessionLocalTimeZone
             struct_in_pandas = pandasStructHandlingMode
 
-            # Avoid intermediate pandas DataFrame creation by directly converting columns
+            # Extract columns from rows and apply converters
             if len(rows) > 0:
-                # Extract columns from rows
-                columns_data = list(zip(*rows))
-                series_list = [pd.Series(col_data) for col_data in columns_data]
+                # Convert to list of lists (faster than tuples for Series construction)
+                columns_data = [list(col) for col in zip(*rows)]
             else:
-                # Empty rows - create empty DataFrame and extract empty Series
-                pdf_temp = pd.DataFrame(columns=self.columns)
-                series_list = [pser for _, pser in pdf_temp.items()]
+                columns_data = [[] for _ in self.schema.fields]
 
+            # Use concat with converted Series (pandas concat is highly optimized)
             pdf = pd.concat(
                 [
                     _create_converter_to_pandas(
@@ -234,12 +232,12 @@ class PandasConversionMixin:
                         ),
                         error_on_duplicated_field_names=False,
                         timestamp_utc_localized=False,
-                    )(series)
-                    for series, field in zip(series_list, self.schema.fields)
+                    )(pd.Series(col_data, dtype=object))
+                    for col_data, field in zip(columns_data, self.schema.fields)
                 ],
-                axis="columns",
+                axis=1,
+                keys=self.columns,
             )
-            pdf.columns = self.columns
             return pdf
         else:
             return pd.DataFrame(columns=[], index=range(len(rows)))
