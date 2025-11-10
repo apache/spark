@@ -2232,7 +2232,10 @@ class SparkConnectClient(object):
                 logger.debug(
                     "Plan compression is disabled because the server does not support it.", e
                 )
-        return self._plan_compression_threshold, self._plan_compression_algorithm  # type: ignore[return-value]
+        return (
+            self._plan_compression_threshold,
+            self._plan_compression_algorithm,
+        )  # type: ignore[return-value]
 
     def clone(self, new_session_id: Optional[str] = None) -> "SparkConnectClient":
         """
