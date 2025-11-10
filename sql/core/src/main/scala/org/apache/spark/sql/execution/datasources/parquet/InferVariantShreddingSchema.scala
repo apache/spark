@@ -155,6 +155,7 @@ class InferVariantShreddingSchema(val schema: StructType) {
       val d = Decimal(v.getDecimalWithOriginalScale())
       DecimalType(d.precision, d.scale)
     case Type.DATE => DateType
+    case Type.TIME => TimeType()
     case Type.TIMESTAMP => TimestampType
     case Type.TIMESTAMP_NTZ => TimestampNTZType
     case Type.FLOAT => FloatType

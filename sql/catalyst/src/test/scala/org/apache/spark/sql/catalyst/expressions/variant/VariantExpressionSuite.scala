@@ -872,65 +872,74 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       BigInt(value).toByteArray.reverse.padTo(8, 0.toByte)
 
     val time1 = littleEndianLong(0)
+    val time2 = littleEndianLong(3723000000000L)
+    val time3 = littleEndianLong(3723456000000L)
+    val time4 = littleEndianLong(86399999999999L)
     // In America/Los_Angeles timezone, timestamp value `skippedTime` is 2011-03-13 03:00:00.
     // The next second of 2011-03-13 01:59:59 jumps to 2011-03-13 03:00:00.
     val skippedTime = 1300010400000000L
-    val time2 = littleEndianLong(skippedTime)
-    val time3 = littleEndianLong(skippedTime - 1)
-    val time4 = littleEndianLong(Long.MinValue)
-    val time5 = littleEndianLong(Long.MaxValue)
-    val time6 = littleEndianLong(-62198755200000000L)
+    val ts2 = littleEndianLong(skippedTime)
+    val ts3 = littleEndianLong(skippedTime - 1)
+    val ts4 = littleEndianLong(Long.MinValue)
+    val ts5 = littleEndianLong(Long.MaxValue)
+    val ts6 = littleEndianLong(-62198755200000000L)
+    val timeHeader = Array(primitiveHeader(TIME))
     val timestampHeader = Array(primitiveHeader(TIMESTAMP))
     val timestampNtzHeader = Array(primitiveHeader(TIMESTAMP_NTZ))
+
+    checkToJson(timeHeader ++ time1, "\"00:00\"")
+    checkToJson(timeHeader ++ time2, "\"01:02:03\"")
+    checkToJson(timeHeader ++ time3, "\"01:02:03.456\"")
+    checkToJson(timeHeader ++ time4, "\"23:59:59.999999999\"")
 
     for (timeZone <- Seq("UTC", "America/Los_Angeles")) {
       withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> timeZone) {
         checkToJson(timestampNtzHeader ++ time1, "\"1970-01-01 00:00:00\"")
-        checkToJson(timestampNtzHeader ++ time2, "\"2011-03-13 10:00:00\"")
-        checkToJson(timestampNtzHeader ++ time3, "\"2011-03-13 09:59:59.999999\"")
-        checkToJson(timestampNtzHeader ++ time4, "\"-290308-12-21 19:59:05.224192\"")
-        checkToJson(timestampNtzHeader ++ time5, "\"+294247-01-10 04:00:54.775807\"")
-        checkToJson(timestampNtzHeader ++ time6, "\"-0001-01-01 00:00:00\"")
+        checkToJson(timestampNtzHeader ++ ts2, "\"2011-03-13 10:00:00\"")
+        checkToJson(timestampNtzHeader ++ ts3, "\"2011-03-13 09:59:59.999999\"")
+        checkToJson(timestampNtzHeader ++ ts4, "\"-290308-12-21 19:59:05.224192\"")
+        checkToJson(timestampNtzHeader ++ ts5, "\"+294247-01-10 04:00:54.775807\"")
+        checkToJson(timestampNtzHeader ++ ts6, "\"-0001-01-01 00:00:00\"")
 
         checkCast(timestampNtzHeader ++ time1, DateType, 0)
-        checkCast(timestampNtzHeader ++ time2, DateType, 15046)
-        checkCast(timestampNtzHeader ++ time3, DateType, 15046)
-        checkCast(timestampNtzHeader ++ time4, DateType, -106751992)
-        checkCast(timestampNtzHeader ++ time5, DateType, 106751991)
-        checkCast(timestampNtzHeader ++ time6, DateType, -719893)
+        checkCast(timestampNtzHeader ++ ts2, DateType, 15046)
+        checkCast(timestampNtzHeader ++ ts3, DateType, 15046)
+        checkCast(timestampNtzHeader ++ ts4, DateType, -106751992)
+        checkCast(timestampNtzHeader ++ ts5, DateType, 106751991)
+        checkCast(timestampNtzHeader ++ ts6, DateType, -719893)
       }
     }
 
     withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
       checkToJson(timestampHeader ++ time1, "\"1970-01-01 00:00:00+00:00\"")
-      checkToJson(timestampHeader ++ time2, "\"2011-03-13 10:00:00+00:00\"")
-      checkToJson(timestampHeader ++ time3, "\"2011-03-13 09:59:59.999999+00:00\"")
-      checkToJson(timestampHeader ++ time4, "\"-290308-12-21 19:59:05.224192+00:00\"")
-      checkToJson(timestampHeader ++ time5, "\"+294247-01-10 04:00:54.775807+00:00\"")
-      checkToJson(timestampHeader ++ time6, "\"-0001-01-01 00:00:00+00:00\"")
+      checkToJson(timestampHeader ++ ts2, "\"2011-03-13 10:00:00+00:00\"")
+      checkToJson(timestampHeader ++ ts3, "\"2011-03-13 09:59:59.999999+00:00\"")
+      checkToJson(timestampHeader ++ ts4, "\"-290308-12-21 19:59:05.224192+00:00\"")
+      checkToJson(timestampHeader ++ ts5, "\"+294247-01-10 04:00:54.775807+00:00\"")
+      checkToJson(timestampHeader ++ ts6, "\"-0001-01-01 00:00:00+00:00\"")
 
       checkCast(timestampHeader ++ time1, DateType, 0)
-      checkCast(timestampHeader ++ time2, DateType, 15046)
-      checkCast(timestampHeader ++ time3, DateType, 15046)
-      checkCast(timestampHeader ++ time4, DateType, -106751992)
-      checkCast(timestampHeader ++ time5, DateType, 106751991)
-      checkCast(timestampHeader ++ time6, DateType, -719893)
+      checkCast(timestampHeader ++ ts2, DateType, 15046)
+      checkCast(timestampHeader ++ ts3, DateType, 15046)
+      checkCast(timestampHeader ++ ts4, DateType, -106751992)
+      checkCast(timestampHeader ++ ts5, DateType, 106751991)
+      checkCast(timestampHeader ++ ts6, DateType, -719893)
     }
 
     withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "America/Los_Angeles") {
       checkToJson(timestampHeader ++ time1, "\"1969-12-31 16:00:00-08:00\"")
-      checkToJson(timestampHeader ++ time2, "\"2011-03-13 03:00:00-07:00\"")
-      checkToJson(timestampHeader ++ time3, "\"2011-03-13 01:59:59.999999-08:00\"")
-      checkToJson(timestampHeader ++ time4, "\"-290308-12-21 12:06:07.224192-07:52\"")
-      checkToJson(timestampHeader ++ time5, "\"+294247-01-09 20:00:54.775807-08:00\"")
-      checkToJson(timestampHeader ++ time6, "\"-0002-12-31 16:07:02-07:52\"")
+      checkToJson(timestampHeader ++ ts2, "\"2011-03-13 03:00:00-07:00\"")
+      checkToJson(timestampHeader ++ ts3, "\"2011-03-13 01:59:59.999999-08:00\"")
+      checkToJson(timestampHeader ++ ts4, "\"-290308-12-21 12:06:07.224192-07:52\"")
+      checkToJson(timestampHeader ++ ts5, "\"+294247-01-09 20:00:54.775807-08:00\"")
+      checkToJson(timestampHeader ++ ts6, "\"-0002-12-31 16:07:02-07:52\"")
 
       checkCast(timestampHeader ++ time1, DateType, -1)
-      checkCast(timestampHeader ++ time2, DateType, 15046)
-      checkCast(timestampHeader ++ time3, DateType, 15046)
-      checkCast(timestampHeader ++ time4, DateType, -106751992)
-      checkCast(timestampHeader ++ time5, DateType, 106751990)
-      checkCast(timestampHeader ++ time6, DateType, -719894)
+      checkCast(timestampHeader ++ ts2, DateType, 15046)
+      checkCast(timestampHeader ++ ts3, DateType, 15046)
+      checkCast(timestampHeader ++ ts4, DateType, -106751992)
+      checkCast(timestampHeader ++ ts5, DateType, 106751990)
+      checkCast(timestampHeader ++ ts6, DateType, -719894)
     }
 
     checkToJson(Array(primitiveHeader(FLOAT)) ++
