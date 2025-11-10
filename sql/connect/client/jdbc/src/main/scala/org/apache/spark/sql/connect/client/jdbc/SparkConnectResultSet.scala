@@ -257,11 +257,17 @@ class SparkConnectResultSet(
   override def getCharacterStream(columnLabel: String): Reader =
     throw new SQLFeatureNotSupportedException
 
-  override def getBigDecimal(columnIndex: Int): java.math.BigDecimal =
-    throw new SQLFeatureNotSupportedException
+  override def getBigDecimal(columnIndex: Int): java.math.BigDecimal = {
+    if (currentRow.isNullAt(columnIndex - 1)) {
+      _wasNull = true
+      return null
+    }
+    _wasNull = false
+    currentRow.getDecimal(columnIndex - 1)
+  }
 
   override def getBigDecimal(columnLabel: String): java.math.BigDecimal =
-    throw new SQLFeatureNotSupportedException
+    getBigDecimal(findColumn(columnLabel))
 
   override def isBeforeFirst: Boolean = {
     checkOpen()
