@@ -70,7 +70,7 @@ class TwsTester[K, I, O](
     case _ =>
   }
 
-  def handleInitialState[S]() = {
+  private def handleInitialState[S]() : Unit = {
     val timerValues = new TimerValuesImpl(Some(clock.instant().toEpochMilli()), None)
     val p = processor.asInstanceOf[StatefulProcessorWithInitialState[K, I, O, S]]
     initialState.foreach {
