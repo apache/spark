@@ -1704,9 +1704,11 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
                   resolveAssignments(assignments, m, MergeResolvePolicy.BOTH,
                     throws = throws))
               case UpdateStarAction(updateCondition) =>
-                // Use only source columns.  Missing columns in target will be handled in
-                // ResolveRowLevelCommandAssignments.
+                // Expand star to top level source columns.  If source has less columns than target,
+                // assignments will be added by ResolveRowLevelCommandAssignments later.
                 val assignments = if (m.schemaEvolutionEnabled) {
+                  // For schema evolution case, generate assignments for missing target columns.
+                  // These columns will be added by ResolveMergeIntoTableSchemaEvolution later.
                   sourceTable.output.map(sourceAttr =>
                   findAttrInTarget(sourceAttr.name).map(
                       targetAttr => Assignment(targetAttr, sourceAttr))
@@ -1719,10 +1721,6 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
                       targetAttr => Assignment(targetAttr, sourceAttr))
                   }
                 }
-
- //                  sourceTable.output.find(
-//                      sourceCol => conf.resolver(sourceCol.name, targetAttr.name))
-//                    .map(Assignment(targetAttr, _))}
                 UpdateAction(
                   updateCondition.map(resolveExpressionByPlanChildren(_, m)),
                   // For UPDATE *, the value must be from source table.
@@ -1745,9 +1743,11 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
                 // access columns from the source table.
                 val resolvedInsertCondition = insertCondition.map(
                   resolveExpressionByPlanOutput(_, m.sourceTable))
-                // Use only source columns.  Missing columns in target will be handled in
-                // ResolveRowLevelCommandAssignments.
+                // Expand star to top level source columns.  If source has less columns than target,
+                // assignments will be added by ResolveRowLevelCommandAssignments later.
                 val assignments = if (m.schemaEvolutionEnabled) {
+                  // For schema evolution case, generate assignments for missing target columns.
+                  // These columns will be added by ResolveMergeIntoTableSchemaEvolution later.
                   sourceTable.output.map(sourceAttr =>
                     findAttrInTarget(sourceAttr.name).map(
                         targetAttr => Assignment(targetAttr, sourceAttr))
