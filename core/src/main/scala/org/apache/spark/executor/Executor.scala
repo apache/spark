@@ -384,16 +384,24 @@ private[spark] class Executor(
     try {
       threadPool.execute(tr)
     } catch {
-      case oom: OutOfMemoryError =>
-        log.error(s"Execute task ${taskDescription.taskId} failed", oom.getCause)
-        uncaughtExceptionHandler.uncaughtException(Thread.currentThread(), oom)
-      case e: Throwable =>
-        log.error(s"Execute task ${taskDescription.taskId} failed", e.getCause)
-        context.statusUpdate(
-          taskDescription.taskId,
-          TaskState.FAILED,
-          env.closureSerializer.newInstance().serialize(
-            new ExceptionFailure(e, Seq.empty)))
+      case t: Throwable =>
+        try {
+          logError(log"Executor launch task ${MDC(TASK_NAME, taskDescription.name)} failed," +
+            log" reason: ${MDC(REASON, t.getCause)}")
+          context.statusUpdate(
+            taskDescription.taskId,
+            TaskState.FAILED,
+            env.closureSerializer.newInstance().serialize(new ExceptionFailure(t, Seq.empty)))
+        } catch {
+          case oom: OutOfMemoryError =>
+            logError(log"Executor update launching task ${MDC(TASK_NAME, taskDescription.name)} " +
+              log"failed status failed, reason: ${MDC(REASON, oom)}")
+            System.exit(SparkExitCode.OOM)
+          case t: Throwable =>
+            logError(log"Executor update launching task ${MDC(TASK_NAME, taskDescription.name)} " +
+              log"failed status failed, reason: ${MDC(REASON, t.getCause)}")
+            System.exit(-1)
+        }
     }
     if (decommissioned) {
       log.error(s"Launching a task while in decommissioned state.")
