@@ -1817,7 +1817,7 @@ class ArrowTestsMixin:
 
         for codec in ["none", "zstd", "lz4"]:
             with self.subTest(compressionCodec=codec):
-                with self.sql_conf({"spark.sql.execution.arrow.compressionCodec": codec}):
+                with self.sql_conf({"spark.sql.execution.arrow.compression.codec": codec}):
                     pdf = df.toPandas()
                     assert_frame_equal(expected, pdf)
 
@@ -1846,7 +1846,7 @@ class ArrowTestsMixin:
 
         for codec in ["none", "zstd", "lz4"]:
             with self.subTest(compressionCodec=codec):
-                with self.sql_conf({"spark.sql.execution.arrow.compressionCodec": codec}):
+                with self.sql_conf({"spark.sql.execution.arrow.compression.codec": codec}):
                     t_out = df.toArrow()
                     self.assertTrue(t_out.equals(t_in))
 
@@ -1863,7 +1863,7 @@ class ArrowTestsMixin:
 
         for codec in ["none", "zstd", "lz4"]:
             with self.subTest(compressionCodec=codec):
-                with self.sql_conf({"spark.sql.execution.arrow.compressionCodec": codec}):
+                with self.sql_conf({"spark.sql.execution.arrow.compression.codec": codec}):
                     pdf = df.toPandas()
                     self.assertEqual(len(pdf), 10000)
                     self.assertEqual(pdf.columns.tolist(), ["id", "str_col", "mod_col"])
@@ -1880,7 +1880,7 @@ class ArrowTestsMixin:
 
         for codec in ["none", "zstd", "lz4"]:
             with self.subTest(compressionCodec=codec):
-                with self.sql_conf({"spark.sql.execution.arrow.compressionCodec": codec}):
+                with self.sql_conf({"spark.sql.execution.arrow.compression.codec": codec}):
                     t = df.toArrow()
                     self.assertEqual(t.num_rows, 10000)
                     self.assertEqual(t.column_names, ["id", "str_col", "mod_col"])
