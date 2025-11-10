@@ -2517,6 +2517,8 @@ def _assert_valid_collation_provider(provider: str) -> None:
 # Mapping Python types to Spark SQL DataType
 _type_mappings = {
     type(None): NullType,
+    Geometry: GeometryType,
+    Geography: GeographyType,
     bool: BooleanType,
     int: LongType,
     float: DoubleType,
@@ -2648,6 +2650,12 @@ def _infer_type(
         return obj.__UDT__
 
     dataType = _type_mappings.get(type(obj))
+    if dataType is GeographyType:
+        assert isinstance(obj, Geography)
+        return GeographyType(obj.getSrid())
+    if dataType is GeometryType:
+        assert isinstance(obj, Geometry)
+        return GeometryType(obj.getSrid())
     if dataType is DecimalType:
         # the precision and scale of `obj` may be different from row to row.
         return DecimalType(38, 18)
@@ -2915,6 +2923,10 @@ def _merge_type(
         return a
     elif isinstance(a, TimestampNTZType) and isinstance(b, TimestampType):
         return b
+    elif isinstance(a, GeometryType) and isinstance(b, GeometryType) and a.srid != b.srid:
+        return GeometryType("ANY")
+    elif isinstance(a, GeographyType) and isinstance(b, GeographyType) and a.srid != b.srid:
+        return GeographyType("ANY")
     elif isinstance(a, AtomicType) and isinstance(b, StringType):
         return b
     elif isinstance(a, StringType) and isinstance(b, AtomicType):
@@ -3068,6 +3080,8 @@ _acceptable_types = {
     ArrayType: (list, tuple, array),
     MapType: (dict,),
     StructType: (tuple, list, dict),
+    GeometryType: (Geometry,),
+    GeographyType: (Geography,),
     VariantType: (
         bool,
         int,
@@ -3418,6 +3432,24 @@ def _make_type_verifier(
             pass
 
         verify_value = verify_variant
+
+    elif isinstance(dataType, GeometryType):
+
+        def verify_geometry(obj: Any) -> None:
+            assert_acceptable_types(obj)
+            verify_acceptable_types(obj)
+            assert isinstance(obj, Geometry)
+
+        verify_value = verify_geometry
+
+    elif isinstance(dataType, GeographyType):
+
+        def verify_geography(obj: Any) -> None:
+            assert_acceptable_types(obj)
+            verify_acceptable_types(obj)
+            assert isinstance(obj, Geography)
+
+        verify_value = verify_geography
 
     else:
 

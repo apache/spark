@@ -203,6 +203,8 @@ private[connect] object PipelinesHandler extends Logging {
             },
             partitionCols = Option(tableDetails.getPartitionColsList.asScala.toSeq)
               .filter(_.nonEmpty),
+            clusterCols = Option(tableDetails.getClusteringColumnsList.asScala.toSeq)
+              .filter(_.nonEmpty),
             properties = tableDetails.getTablePropertiesMap.asScala.toMap,
             origin = QueryOrigin(
               filePath = Option.when(output.getSourceCodeLocation.hasFileName)(
@@ -265,6 +267,11 @@ private[connect] object PipelinesHandler extends Logging {
       flow: proto.PipelineCommand.DefineFlow,
       transformRelationFunc: Relation => LogicalPlan,
       sessionHolder: SessionHolder): TableIdentifier = {
+    if (flow.hasOnce) {
+      throw new AnalysisException(
+        "DEFINE_FLOW_ONCE_OPTION_NOT_SUPPORTED",
+        Map("flowName" -> flow.getFlowName))
+    }
     val dataflowGraphId = flow.getDataflowGraphId
     val graphElementRegistry =
       sessionHolder.dataflowGraphRegistry.getDataflowGraphOrThrow(dataflowGraphId)

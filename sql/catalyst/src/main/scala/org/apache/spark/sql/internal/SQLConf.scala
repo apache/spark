@@ -1552,6 +1552,13 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val PARQUET_VECTORIZED_READER_NULL_TYPE_ENABLED =
+    buildConf("spark.sql.parquet.enableNullTypeVectorizedReader")
+      .doc("Enables vectorized Parquet reader support for NullType columns.")
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val PARQUET_RECORD_FILTER_ENABLED = buildConf("spark.sql.parquet.recordLevelFilter.enabled")
     .doc("If true, enables Parquet's native record-level filtering using the pushed down " +
       "filters. " +
@@ -3094,6 +3101,13 @@ object SQLConf {
     .timeConf(TimeUnit.MILLISECONDS)
     .createWithDefault(5000)
 
+  val STREAMING_REAL_TIME_MODE_ALLOWLIST_CHECK = buildConf(
+    "spark.sql.streaming.realTimeMode.allowlistCheck")
+    .doc("Whether to check all operators, sinks used in real-time mode are in the allowlist.")
+    .version("4.1.0")
+    .booleanConf
+    .createWithDefault(true)
+
   val VARIABLE_SUBSTITUTE_ENABLED =
     buildConf("spark.sql.variable.substitute")
       .doc("This enables substitution using syntax like `${var}`, `${system:var}`, " +
@@ -4062,6 +4076,19 @@ object SQLConf {
       .transform(_.toLowerCase(java.util.Locale.ROOT))
       .checkValues(Set("none", "zstd", "lz4"))
       .createWithDefault("none")
+
+  val ARROW_EXECUTION_ZSTD_COMPRESSION_LEVEL =
+    buildConf("spark.sql.execution.arrow.zstd.compressionLevel")
+      .doc("Compression level for Zstandard (zstd) codec when compressing Arrow IPC data. " +
+        "This config is only used when spark.sql.execution.arrow.compressionCodec is set to " +
+        "'zstd'. Valid values are integers from 1 (fastest, lowest compression) to 22 " +
+        "(slowest, highest compression). The default value 3 provides a good balance between " +
+        "compression speed and compression ratio.")
+      .version("4.1.0")
+      .intConf
+      .checkValue(level => level >= 1 && level <= 22,
+        "Zstd compression level must be between 1 and 22")
+      .createWithDefault(3)
 
   val ARROW_TRANSFORM_WITH_STATE_IN_PYSPARK_MAX_STATE_RECORDS_PER_BATCH =
     buildConf("spark.sql.execution.arrow.transformWithStateInPySpark.maxStateRecordsPerBatch")
@@ -6902,6 +6929,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def parquetVectorizedReaderNestedColumnEnabled: Boolean =
     getConf(PARQUET_VECTORIZED_READER_NESTED_COLUMN_ENABLED)
 
+  def parquetVectorizedReaderNullTypeEnabled: Boolean =
+    getConf(PARQUET_VECTORIZED_READER_NULL_TYPE_ENABLED)
+
   def parquetVectorizedReaderBatchSize: Int = getConf(PARQUET_VECTORIZED_READER_BATCH_SIZE)
 
   def columnBatchSize: Int = getConf(COLUMN_BATCH_SIZE)
@@ -7423,6 +7453,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def arrowMaxBytesPerBatch: Long = getConf(ARROW_EXECUTION_MAX_BYTES_PER_BATCH)
 
   def arrowCompressionCodec: String = getConf(ARROW_EXECUTION_COMPRESSION_CODEC)
+
+  def arrowZstdCompressionLevel: Int = getConf(ARROW_EXECUTION_ZSTD_COMPRESSION_LEVEL)
 
   def arrowTransformWithStateInPySparkMaxStateRecordsPerBatch: Int =
     getConf(ARROW_TRANSFORM_WITH_STATE_IN_PYSPARK_MAX_STATE_RECORDS_PER_BATCH)

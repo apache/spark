@@ -1988,6 +1988,62 @@ class ScalarPandasUDFTestsMixin:
             ],
         )
 
+    def test_scalar_pandas_udf_with_compression_codec(self):
+        # Test scalar Pandas UDF with different compression codec settings
+        @pandas_udf("long")
+        def plus_one(v):
+            return v + 1
+
+        df = self.spark.range(100)
+        expected = [Row(result=i + 1) for i in range(100)]
+
+        for codec in ["none", "zstd", "lz4"]:
+            with self.subTest(compressionCodec=codec):
+                with self.sql_conf({"spark.sql.execution.arrow.compressionCodec": codec}):
+                    result = df.select(plus_one("id").alias("result")).collect()
+                    self.assertEqual(expected, result)
+
+    def test_scalar_pandas_udf_with_compression_codec_complex_types(self):
+        # Test scalar Pandas UDF with compression for complex types (strings, arrays)
+        @pandas_udf("string")
+        def concat_string(v):
+            return v.apply(lambda x: "value_" + str(x))
+
+        @pandas_udf(ArrayType(IntegerType()))
+        def create_array(v):
+            return v.apply(lambda x: [x, x * 2, x * 3])
+
+        df = self.spark.range(50)
+
+        for codec in ["none", "zstd", "lz4"]:
+            with self.subTest(compressionCodec=codec):
+                with self.sql_conf({"spark.sql.execution.arrow.compressionCodec": codec}):
+                    # Test string UDF
+                    result = df.select(concat_string("id").alias("result")).collect()
+                    expected = [Row(result=f"value_{i}") for i in range(50)]
+                    self.assertEqual(expected, result)
+
+                    # Test array UDF
+                    result = df.select(create_array("id").alias("result")).collect()
+                    expected = [Row(result=[i, i * 2, i * 3]) for i in range(50)]
+                    self.assertEqual(expected, result)
+
+    def test_scalar_iter_pandas_udf_with_compression_codec(self):
+        # Test scalar iterator Pandas UDF with compression
+        @pandas_udf("long", PandasUDFType.SCALAR_ITER)
+        def plus_two(iterator):
+            for s in iterator:
+                yield s + 2
+
+        df = self.spark.range(100)
+        expected = [Row(result=i + 2) for i in range(100)]
+
+        for codec in ["none", "zstd", "lz4"]:
+            with self.subTest(compressionCodec=codec):
+                with self.sql_conf({"spark.sql.execution.arrow.compressionCodec": codec}):
+                    result = df.select(plus_two("id").alias("result")).collect()
+                    self.assertEqual(expected, result)
+
 
 class ScalarPandasUDFTests(ScalarPandasUDFTestsMixin, ReusedSQLTestCase):
     @classmethod
