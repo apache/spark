@@ -1099,7 +1099,10 @@ class SparkSession:
             chunk_size = len(chunk)
 
             # Check if adding this chunk would exceed batch size
-            if len(current_batch) > 0 and current_batch_size + chunk_size > max_batch_of_chunks_size_bytes:
+            if (
+                len(current_batch) > 0
+                and current_batch_size + chunk_size > max_batch_of_chunks_size_bytes
+            ):
                 hashes += self._client.cache_artifacts(current_batch)
                 # start a new batch
                 current_batch = []
