@@ -60,18 +60,6 @@ class ArrowPythonUDFTestsMixin(BaseUDFTestsMixin):
     def test_register_java_udaf(self):
         super(ArrowPythonUDFTests, self).test_register_java_udaf()
 
-    @unittest.skip(
-        "TODO(SPARK-53976): Python worker logging is not supported for Arrow Python UDFs."
-    )
-    def test_udf_with_logging(self):
-        super().test_udf_with_logging()
-
-    @unittest.skip(
-        "TODO(SPARK-53976): Python worker logging is not supported for Arrow Python UDFs."
-    )
-    def test_multiple_udfs_with_logging(self):
-        super().test_multiple_udfs_with_logging()
-
     def test_complex_input_types(self):
         row = (
             self.spark.range(1)

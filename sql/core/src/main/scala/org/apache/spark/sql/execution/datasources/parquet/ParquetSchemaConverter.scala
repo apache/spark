@@ -246,7 +246,9 @@ class ParquetToSparkSchemaConverter(
       DecimalType(precision, scale)
     }
 
-    val sparkType = sparkReadType.getOrElse(typeName match {
+    val isUnknownType = typeAnnotation.isInstanceOf[UnknownLogicalTypeAnnotation]
+    val nullTypeOpt = Option.when(isUnknownType)(NullType)
+    val sparkType = sparkReadType.orElse(nullTypeOpt).getOrElse(typeName match {
       case BOOLEAN => BooleanType
 
       case FLOAT => FloatType
@@ -835,6 +837,10 @@ class SparkToParquetSchemaConverter(
 
       case udt: UserDefinedType[_] =>
         convertField(field.copy(dataType = udt.sqlType), inShredded)
+
+      case NullType => // Selected primitive type here doesn't have significance.
+        Types.primitive(BOOLEAN, repetition).named(field.name)
+          .withLogicalTypeAnnotation(LogicalTypeAnnotation.unknownType())
 
       case _ =>
         throw QueryCompilationErrors.cannotConvertDataTypeToParquetTypeError(field)

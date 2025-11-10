@@ -28,7 +28,7 @@ import org.apache.parquet.hadoop.api.{InitContext, ReadSupport}
 import org.apache.parquet.hadoop.api.ReadSupport.ReadContext
 import org.apache.parquet.io.api.RecordMaterializer
 import org.apache.parquet.schema._
-import org.apache.parquet.schema.LogicalTypeAnnotation.{ListLogicalTypeAnnotation, MapKeyValueTypeAnnotation, MapLogicalTypeAnnotation}
+import org.apache.parquet.schema.LogicalTypeAnnotation.{ListLogicalTypeAnnotation, MapKeyValueTypeAnnotation, MapLogicalTypeAnnotation, UnknownLogicalTypeAnnotation}
 import org.apache.parquet.schema.Type.Repetition
 
 import org.apache.spark.internal.Logging
@@ -562,6 +562,8 @@ object ParquetReadSupport extends Logging {
           }
         case primitiveType: PrimitiveType =>
           val cost = primitiveType.getPrimitiveTypeName match {
+            case _ if primitiveType.getLogicalTypeAnnotation
+              .isInstanceOf[UnknownLogicalTypeAnnotation] => 0 // NullType is always preferred
             case PrimitiveType.PrimitiveTypeName.BOOLEAN => 1
             case PrimitiveType.PrimitiveTypeName.INT32 => 4
             case PrimitiveType.PrimitiveTypeName.INT64 => 8

@@ -320,6 +320,11 @@
       "An error occurred during loading state."
     ],
     "subClass" : {
+      "AUTO_SNAPSHOT_REPAIR_FAILED" : {
+        "message" : [
+          "Failed to load snapshot version <latestSnapshot> for state store <stateStoreId>. An attempt to auto repair using snapshot versions (<selectedSnapshots>) out of available snapshots (<eligibleSnapshots>) also failed."
+        ]
+      },
       "CANNOT_FIND_BASE_SNAPSHOT_CHECKPOINT" : {
         "message" : [
           "Cannot find a base snapshot checkpoint with lineage: <lineage>."
@@ -625,6 +630,13 @@
       "The catalog <catalogName> not found. Consider to set the SQL config <config> to a catalog plugin."
     ],
     "sqlState" : "42P08"
+  },
+  "CHECKPOINT_FILE_CHECKSUM_VERIFICATION_FAILED" : {
+    "message" : [
+      "Checksum verification failed, the file may be corrupted. File: <fileName>",
+      "Expected (file size: <expectedSize>, checksum: <expectedChecksum>), Computed (file size: <computedSize>, checksum: <computedChecksum>)."
+    ],
+    "sqlState" : "XX000"
   },
   "CHECKPOINT_RDD_BLOCK_ID_NOT_FOUND" : {
     "message" : [
@@ -1400,6 +1412,12 @@
     ],
     "sqlState" : "42623"
   },
+  "DEFINE_FLOW_ONCE_OPTION_NOT_SUPPORTED" : {
+    "message" : [
+      "Defining a one-time flow <flowName> with the 'once' option is not supported."
+    ],
+    "sqlState" : "0A000"
+  },
   "DESCRIBE_JSON_NOT_EXTENDED" : {
     "message" : [
       "DESCRIBE TABLE ... AS JSON only supported when [EXTENDED|FORMATTED] is specified.",
@@ -1820,6 +1838,12 @@
     ],
     "sqlState" : "2203G"
   },
+  "FAILED_TO_CREATE_PLAN_FOR_DIRECT_QUERY" : {
+    "message" : [
+      "Failed to create plan for direct query on files: <dataSourceType>"
+    ],
+    "sqlState" : "58030"
+  },
   "FAILED_TO_LOAD_ROUTINE" : {
     "message" : [
       "Failed to load routine <routineName>."
@@ -1880,6 +1904,12 @@
       "A column cannot have both a default value and a generation expression but column <colName> has default value: (<defaultValue>) and generation expression: (<genExpr>)."
     ],
     "sqlState" : "42623"
+  },
+  "GEO_ENCODER_SRID_MISMATCH_ERROR" : {
+    "message" : [
+      "Failed to encode <type> value because provided SRID <valueSrid> of a value to encode does not match type SRID: <typeSrid>."
+    ],
+    "sqlState" : "42K09"
   },
   "GET_TABLES_BY_TYPE_UNSUPPORTED_BY_HIVE_VERSION" : {
     "message" : [
@@ -1958,6 +1988,12 @@
       "Invalid call to <function>; the `lgConfigK` value must be between <min> and <max>, inclusive: <value>."
     ],
     "sqlState" : "22546"
+  },
+  "HLL_K_MUST_BE_CONSTANT" : {
+    "message" : [
+      "Invalid call to <function>; the `K` value must be a constant value, but got a non-constant expression."
+    ],
+    "sqlState" : "42K0E"
   },
   "HLL_UNION_DIFFERENT_LG_K" : {
     "message" : [
@@ -2470,6 +2506,12 @@
       "The index <indexValue> is out of bounds. The array has <arraySize> elements. Use `try_element_at` to tolerate accessing element at invalid index and return NULL instead."
     ],
     "sqlState" : "22003"
+  },
+  "INVALID_ARTIFACT_PATH" : {
+    "message" : [
+      "Artifact with name <name> is invalid. The name must be a relative path and cannot reference parent/sibling/nephew directories."
+    ],
+    "sqlState" : "22023"
   },
   "INVALID_ATTRIBUTE_NAME_SYNTAX" : {
     "message" : [
@@ -3459,6 +3501,16 @@
           "expects an integer literal, but got <invalidValue>."
         ]
       },
+      "INTERRUPT_TYPE_OPERATION_ID_REQUIRES_ID" : {
+        "message" : [
+          "INTERRUPT_TYPE_OPERATION_ID requested, but no operation_id provided."
+        ]
+      },
+      "INTERRUPT_TYPE_TAG_REQUIRES_TAG" : {
+        "message" : [
+          "INTERRUPT_TYPE_TAG requested, but no operation_tag provided."
+        ]
+      },
       "LENGTH" : {
         "message" : [
           "Expects `length` greater than or equal to 0, but got <length>."
@@ -3487,6 +3539,11 @@
       "START" : {
         "message" : [
           "Expects a positive or a negative value for `start`, but got 0."
+        ]
+      },
+      "STREAMING_LISTENER_COMMAND_MISSING" : {
+        "message" : [
+          "Missing command in StreamingQueryListenerBusCommand."
         ]
       },
       "STRING" : {
@@ -4113,6 +4170,36 @@
       "The join condition <joinCondition> has the invalid type <conditionType>, expected \"BOOLEAN\"."
     ],
     "sqlState" : "42K0E"
+  },
+  "KLL_SKETCH_INCOMPATIBLE_MERGE" : {
+    "message" : [
+      "For function <functionName>, cannot merge KLL sketches: <reason>"
+    ],
+    "sqlState" : "22000"
+  },
+  "KLL_SKETCH_INVALID_INPUT" : {
+    "message" : [
+      "For function <functionName>, invalid KLL sketch binary data: <reason>"
+    ],
+    "sqlState" : "22000"
+  },
+  "KLL_SKETCH_INVALID_QUANTILE_RANGE" : {
+    "message" : [
+      "For function <functionName>, the quantile value must be between 0.0 and 1.0 (inclusive), but got <quantile>."
+    ],
+    "sqlState" : "22003"
+  },
+  "KLL_SKETCH_K_MUST_BE_CONSTANT" : {
+    "message" : [
+      "For function <functionName>, the k parameter must be a constant value, but got a non-constant expression."
+    ],
+    "sqlState" : "42K0E"
+  },
+  "KLL_SKETCH_K_OUT_OF_RANGE" : {
+    "message" : [
+      "For function <functionName>, the k parameter must be between 8 and 65535 (inclusive), but got <k>."
+    ],
+    "sqlState" : "22003"
   },
   "KRYO_BUFFER_OVERFLOW" : {
     "message" : [
@@ -5358,6 +5445,13 @@
     ],
     "sqlState" : "42K06"
   },
+  "STATE_STORE_ROW_CHECKSUM_VERIFICATION_FAILED" : {
+    "message" : [
+      "Row checksum verification failed for stateStore=<stateStoreId>. The row may be corrupted.",
+      "Expected checksum: <expectedChecksum>, Computed checksum: <computedChecksum>."
+    ],
+    "sqlState" : "XXKST"
+  },
   "STATE_STORE_STATE_SCHEMA_FILES_THRESHOLD_EXCEEDED" : {
     "message" : [
       "The number of state schema files <numStateSchemaFiles> exceeds the maximum number of state schema files for this query: <maxStateSchemaFiles>.",
@@ -5583,6 +5677,21 @@
         "message" : [
           "The input stream <className> is not supported in Real-time Mode."
         ]
+      },
+      "OPERATOR_OR_SINK_NOT_IN_ALLOWLIST" : {
+        "message" : [
+          "The <errorType>(s): <message> not in the <errorType> allowlist for Real-Time Mode. To bypass this check, set spark.sql.streaming.realTimeMode.allowlistCheck to false. By changing this, you agree to run the query at your own risk."
+        ]
+      },
+      "OUTPUT_MODE_NOT_SUPPORTED" : {
+        "message" : [
+          "The output mode <outputMode> is not supported. To work around this limitation, set the output mode to Update. In the future, <outputMode> may be supported."
+        ]
+      },
+      "SINK_NOT_SUPPORTED" : {
+        "message" : [
+          "The <className> sink is currently not supported. See the Real-Time Mode User Guide for a list of supported sinks."
+        ]
       }
     },
     "sqlState" : "0A000"
@@ -5722,6 +5831,12 @@
       "Invalid call to <function>; the `lgNomEntries` value must be between <min> and <max>, inclusive: <value>."
     ],
     "sqlState" : "22546"
+  },
+  "THETA_LG_NOM_ENTRIES_MUST_BE_CONSTANT" : {
+    "message" : [
+      "Invalid call to <function>; the `lgNomEntries` value must be a constant value, but got a non-constant expression."
+    ],
+    "sqlState" : "42K0E"
   },
   "TRAILING_COMMA_IN_SELECT" : {
     "message" : [
@@ -6345,6 +6460,11 @@
           "INSERT INTO <tableName> with IF NOT EXISTS in the PARTITION spec."
         ]
       },
+      "INTERRUPT_TYPE" : {
+        "message" : [
+          "Unsupported interrupt type: <interruptType>."
+        ]
+      },
       "LAMBDA_FUNCTION_WITH_PYTHON_UDF" : {
         "message" : [
           "Lambda function with Python UDF <funcName> in a higher order function."
@@ -6545,6 +6665,11 @@
       "STATE_STORE_TTL" : {
         "message" : [
           "State TTL with <stateStoreProvider> is not supported. Please use RocksDBStateStoreProvider."
+        ]
+      },
+      "STORE_BACKEND_NOT_SUPPORTED_FOR_TWS" : {
+        "message" : [
+          "Store backend <stateStoreProvider> is not supported by TransformWithState operator. Please use RocksDBStateStoreProvider."
         ]
       },
       "TABLE_OPERATION" : {

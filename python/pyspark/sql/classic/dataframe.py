@@ -1969,11 +1969,13 @@ def _test() -> None:
     globs = pyspark.sql.dataframe.__dict__.copy()
 
     if not have_pandas or not have_pyarrow:
-        del pyspark.sql.dataframe.DataFrame.toArrow.__doc__
         del pyspark.sql.dataframe.DataFrame.toPandas.__doc__
-        del pyspark.sql.dataframe.DataFrame.mapInArrow.__doc__
         del pyspark.sql.dataframe.DataFrame.mapInPandas.__doc__
         del pyspark.sql.dataframe.DataFrame.pandas_api.__doc__
+
+    if not have_pyarrow:
+        del pyspark.sql.dataframe.DataFrame.toArrow.__doc__
+        del pyspark.sql.dataframe.DataFrame.mapInArrow.__doc__
 
     spark = (
         SparkSession.builder.master("local[4]").appName("sql.classic.dataframe tests").getOrCreate()

@@ -32,6 +32,7 @@ import org.apache.spark.api.python.{BasePythonRunner, PythonFunction, PythonWork
 import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.internal.config.BUFFER_SIZE
 import org.apache.spark.internal.config.Python._
+import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.DirectByteBufferOutputStream
 
@@ -62,6 +63,12 @@ abstract class PythonPlannerRunner[T](func: PythonFunction) extends Logging {
     val workerMemoryMb = SQLConf.get.pythonPlannerExecMemory
 
     val jobArtifactUUID = JobArtifactSet.getCurrentJobArtifactState.map(_.uuid)
+    val sessionUUID = {
+      SparkSession.getActiveSession.collect {
+        case session if session.sessionState.conf.pythonWorkerLoggingEnabled =>
+          session.sessionUUID
+      }
+    }
 
     val envVars = new HashMap[String, String](func.envVars)
     val pythonExec = func.pythonExec
@@ -93,6 +100,9 @@ abstract class PythonPlannerRunner[T](func: PythonFunction) extends Logging {
     }
 
     envVars.put("SPARK_JOB_ARTIFACT_UUID", jobArtifactUUID.getOrElse("default"))
+    sessionUUID.foreach { uuid =>
+      envVars.put("PYSPARK_SPARK_SESSION_UUID", uuid)
+    }
 
     EvaluatePython.registerPicklers()
     val pickler = new Pickler(/* useMemo = */ true,

@@ -104,6 +104,14 @@ trait EncoderImplicits extends LowPrioritySQLImplicits with Serializable {
   implicit def newScalaDecimalEncoder: Encoder[scala.math.BigDecimal] =
     DEFAULT_SCALA_DECIMAL_ENCODER
 
+  /** @since 4.1.0 */
+  implicit def newGeometryEncoder: Encoder[org.apache.spark.sql.types.Geometry] =
+    DEFAULT_GEOMETRY_ENCODER
+
+  /** @since 4.1.0 */
+  implicit def newGeographyEncoder: Encoder[org.apache.spark.sql.types.Geography] =
+    DEFAULT_GEOGRAPHY_ENCODER
+
   /** @since 2.2.0 */
   implicit def newDateEncoder: Encoder[java.sql.Date] = Encoders.DATE
 

@@ -16,10 +16,11 @@
 #
 
 import unittest
+import logging
 
 from pyspark.sql.functions import arrow_udf, ArrowUDFType
-from pyspark.util import PythonEvalType
-from pyspark.sql import functions as sf
+from pyspark.util import PythonEvalType, is_remote_only
+from pyspark.sql import Row, functions as sf
 from pyspark.sql.window import Window
 from pyspark.errors import AnalysisException, PythonException, PySparkTypeError
 from pyspark.testing.utils import (
@@ -27,6 +28,7 @@ from pyspark.testing.utils import (
     numpy_requirement_message,
     have_pyarrow,
     pyarrow_requirement_message,
+    assertDataFrameEqual,
 )
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 
@@ -803,6 +805,49 @@ class WindowArrowUDFTestsMixin:
                         .collect()
                     )
                     self.assertEqual(expected2, result2)
+
+    @unittest.skipIf(is_remote_only(), "Requires JVM access")
+    def test_window_arrow_udf_with_logging(self):
+        import pyarrow as pa
+
+        @arrow_udf("double", ArrowUDFType.GROUPED_AGG)
+        def my_window_arrow_udf(x):
+            assert isinstance(x, pa.Array)
+            logger = logging.getLogger("test_window_arrow")
+            logger.warning(f"window arrow udf: {x.to_pylist()}")
+            return pa.compute.sum(x)
+
+        df = self.spark.createDataFrame(
+            [(1, 1.0), (1, 2.0), (2, 3.0), (2, 5.0), (2, 10.0)], ("id", "v")
+        )
+        w = Window.partitionBy("id").orderBy("v").rangeBetween(Window.unboundedPreceding, 0)
+
+        with self.sql_conf({"spark.sql.pyspark.worker.logging.enabled": "true"}):
+            assertDataFrameEqual(
+                df.select("id", my_window_arrow_udf("v").over(w).alias("result")),
+                [
+                    Row(id=1, result=1.0),
+                    Row(id=1, result=3.0),
+                    Row(id=2, result=3.0),
+                    Row(id=2, result=8.0),
+                    Row(id=2, result=18.0),
+                ],
+            )
+
+        logs = self.spark.table("system.session.python_worker_logs")
+
+        assertDataFrameEqual(
+            logs.select("level", "msg", "context", "logger"),
+            [
+                Row(
+                    level="WARNING",
+                    msg=f"window arrow udf: {lst}",
+                    context={"func_name": my_window_arrow_udf.__name__},
+                    logger="test_window_arrow",
+                )
+                for lst in [[1.0], [1.0, 2.0], [3.0], [3.0, 5.0], [3.0, 5.0, 10.0]]
+            ],
+        )
 
 
 class WindowArrowUDFTests(WindowArrowUDFTestsMixin, ReusedSQLTestCase):
