@@ -975,6 +975,26 @@ class RocksDB(
   }
 
   /**
+   * This method should gives a 100% guarantee of a correct result, whether the key exists or
+   * not.
+   *
+   * @param key The key to check
+   * @param cfName The column family name
+   * @return true if the key exists, false otherwise
+   */
+  def keyExists(
+      key: Array[Byte],
+      cfName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Boolean = {
+    updateMemoryUsageIfNeeded()
+    val keyWithPrefix = if (useColumnFamilies) {
+      encodeStateRowWithPrefix(key, cfName)
+    } else {
+      key
+    }
+    db.get(readOptions, keyWithPrefix) != null
+  }
+
+  /**
    * Get the values for a given key if present, that were merged (via merge).
    * This returns the values as an iterator of index range, to allow inline access
    * of each value bytes without copying, for better performance.

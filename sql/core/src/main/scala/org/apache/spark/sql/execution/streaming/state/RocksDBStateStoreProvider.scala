@@ -251,6 +251,15 @@ private[sql] class RocksDBStateStoreProvider
       value
     }
 
+    override def keyExists(key: UnsafeRow, colFamilyName: String): Boolean = {
+      validateAndTransitionState(UPDATE)
+      verify(key != null, "Key cannot be null")
+      verifyColFamilyOperations("keyExists", colFamilyName)
+
+      val kvEncoder = keyValueEncoderMap.get(colFamilyName)
+      rocksDB.keyExists(kvEncoder._1.encodeKey(key), colFamilyName)
+    }
+
     /**
      * Provides an iterator containing all values of a non-null key.
      *
