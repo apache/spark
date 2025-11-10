@@ -29,6 +29,7 @@ import org.apache.spark.sql.connector.expressions.Expression;
 import org.apache.spark.sql.connector.expressions.Extract;
 import org.apache.spark.sql.connector.expressions.NamedReference;
 import org.apache.spark.sql.connector.expressions.GeneralScalarExpression;
+import org.apache.spark.sql.connector.expressions.GetArrayItem;
 import org.apache.spark.sql.connector.expressions.Literal;
 import org.apache.spark.sql.connector.expressions.NullOrdering;
 import org.apache.spark.sql.connector.expressions.SortDirection;
@@ -349,7 +350,7 @@ public class V2ExpressionSQLBuilder {
     }
   }
 
-  protected String visitGetArrayItem(String[] inputs) {
+  protected String visitGetArrayItem(GetArrayItem getArrayItem) {
     throw new SparkUnsupportedOperationException(
       "_LEGACY_ERROR_TEMP_3177",
       Map.of("class", this.getClass().getSimpleName(), "funcName", "GET_ARRAY_ITEM")
