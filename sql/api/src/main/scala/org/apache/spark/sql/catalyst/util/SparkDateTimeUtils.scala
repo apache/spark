@@ -30,7 +30,7 @@ import org.apache.spark.QueryContext
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.RebaseDateTime.{rebaseGregorianToJulianDays, rebaseGregorianToJulianMicros, rebaseJulianToGregorianDays, rebaseJulianToGregorianMicros}
 import org.apache.spark.sql.errors.ExecutionErrors
-import org.apache.spark.sql.types.{DateType, TimestampType, TimeType}
+import org.apache.spark.sql.types.{DateType, Decimal, TimestampType, TimeType}
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.SparkClassUtils
 
@@ -705,6 +705,46 @@ trait SparkDateTimeUtils {
       Some(localDateTimeToMicros(localDateTime))
     } catch {
       case NonFatal(_) => None
+    }
+  }
+
+  def integralToTime(l: Long, precision: Int): Option[Long] = {
+    try {
+      val time: Long = LocalTime.ofNanoOfDay(l).toNanoOfDay
+      Some(truncateTimeToPrecision(time, precision))
+    } catch {
+      case NonFatal(_) =>
+        None
+    }
+  }
+
+  def integralToTimeAnsi(l: Long, precision: Int, context: QueryContext = null): Long = {
+    integralToTime(l, precision).getOrElse {
+      throw ExecutionErrors.invalidInputInCastToDatetimeError(l, TimeType(), context)
+    }
+  }
+
+  def decimalToTime(d: Decimal, precision: Int): Option[Long] = {
+    integralToTime(d.toBigDecimal.longValue, precision)
+  }
+
+  def decimalToTimeAnsi(d: Decimal, precision: Int, context: QueryContext = null): Long = {
+    integralToTimeAnsi(d.toBigDecimal.longValue, precision, context)
+  }
+
+  def doubleToTime(d: Double, precision: Int): Option[Long] = {
+    if (d.isNaN || d.isInfinite) {
+      None
+    } else {
+      integralToTime(d.toLong, precision)
+    }
+  }
+
+  def doubleToTimeAnsi(d: Double, precision: Int, context: QueryContext = null): Long = {
+    if (d.isNaN || d.isInfinite) {
+      throw ExecutionErrors.invalidInputInCastToDatetimeError(d, TimeType(), context)
+    } else {
+      integralToTimeAnsi(d.toLong, precision)
     }
   }
 

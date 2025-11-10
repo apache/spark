@@ -818,6 +818,39 @@ class CastWithAnsiOnSuite extends CastSuiteBase with QueryErrorsBase {
     checkEvaluation(cast(input, StringType), "0.000000123")
   }
 
+  test("cast invalid numeric input to time") {
+    // Values less than 0 are invalid for TIME.
+    Seq(
+      Literal.create(-1.toByte, ByteType),
+      Literal.create(-1.toShort, ShortType),
+      Literal.create(-1, IntegerType),
+      Literal.create(-1L, LongType),
+      Literal.create(Decimal(-1)),
+      Literal.create(-1.0, DoubleType),
+      Literal.create(-1.0f, FloatType)
+    ).foreach( { invalidInput =>
+      checkExceptionInExpression[DateTimeException](
+        Cast(invalidInput, TimeType()),
+        castErrMsg(-1L, TimeType(), LongType)
+      )
+    })
+    // Values greater than or equal to 86400 seconds are invalid for TIME.
+    Seq(
+      86400000000000L,
+      86400000000999L,
+      86400000999999L,
+      86400999999999L,
+      86401000000000L,
+      99999999999999L,
+      999999999999999999L
+    ).foreach({ invalidInput =>
+      checkExceptionInExpression[DateTimeException](
+        Cast(Literal.create(invalidInput, LongType), TimeType()),
+        castErrMsg(invalidInput, TimeType(), LongType)
+      )
+    })
+  }
+
   test("cast invalid string input to time") {
     Seq("a", "123", "00:00:00ABC", "24:00:00").foreach { invalidInput =>
       checkExceptionInExpression[DateTimeException](
