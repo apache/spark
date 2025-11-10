@@ -4253,6 +4253,1017 @@ struct<item_sk:int,d_date:date,web_sales:decimal(27,2),store_sales:decimal(27,2)
 
 
 -- !query
+table t
+| select x, y
+-- !query schema
+struct<x:int,y:string>
+-- !query output
+0	abc
+1	def
+
+
+-- !query
+table t
+| extend x + length(y) as z
+-- !query schema
+struct<x:int,y:string,z:int>
+-- !query output
+0	abc	3
+1	def	4
+
+
+-- !query
+table t
+| extend 1 as z
+| set z = x + length(y)
+-- !query schema
+struct<x:int,y:string,z:int>
+-- !query output
+0	abc	3
+1	def	4
+
+
+-- !query
+table t
+| drop y
+-- !query schema
+struct<x:int>
+-- !query output
+0
+1
+
+
+-- !query
+table t
+| as u
+| select u.x
+-- !query schema
+struct<x:int>
+-- !query output
+0
+1
+
+
+-- !query
+table t
+| where x < 2
+-- !query schema
+struct<x:int,y:string>
+-- !query output
+0	abc
+1	def
+
+
+-- !query
+table courseSales
+| select `year`, course, earnings
+| pivot (
+    sum(earnings)
+    for course in ('dotNET', 'Java')
+  )
+-- !query schema
+struct<year:int,dotNET:bigint,Java:bigint>
+-- !query output
+2012	15000	20000
+2013	48000	30000
+
+
+-- !query
+table courseEarnings
+| unpivot (
+    earningsYear for `year` in (`2012`, `2013`, `2014`)
+  )
+-- !query schema
+struct<course:string,year:string,earningsYear:int>
+-- !query output
+Java	2012	20000
+Java	2013	30000
+dotNET	2012	15000
+dotNET	2013	48000
+dotNET	2014	22500
+
+
+-- !query
+table t
+| tablesample (100 percent) repeatable (0)
+-- !query schema
+struct<x:int,y:string>
+-- !query output
+0	abc
+1	def
+
+
+-- !query
+table join_test_t1
+| inner join join_test_t2 using (a)
+-- !query schema
+struct<a:int>
+-- !query output
+1
+
+
+-- !query
+table t
+| union all table t
+-- !query schema
+struct<x:int,y:string>
+-- !query output
+0	abc
+0	abc
+1	def
+1	def
+
+
+-- !query
+table t
+| except table t
+-- !query schema
+struct<x:int,y:string>
+-- !query output
+
+
+
+-- !query
+table t
+| intersect table t
+-- !query schema
+struct<x:int,y:string>
+-- !query output
+0	abc
+1	def
+
+
+-- !query
+table t
+| minus table t
+-- !query schema
+struct<x:int,y:string>
+-- !query output
+
+
+
+-- !query
+table t
+| order by x
+-- !query schema
+struct<x:int,y:string>
+-- !query output
+0	abc
+1	def
+
+
+-- !query
+table t
+| limit 1
+-- !query schema
+struct<x:int,y:string>
+-- !query output
+1	def
+
+
+-- !query
+table t
+| offset 1
+-- !query schema
+struct<x:int,y:string>
+-- !query output
+0	abc
+
+
+-- !query
+table t
+| distribute by x
+-- !query schema
+struct<x:int,y:string>
+-- !query output
+0	abc
+1	def
+
+
+-- !query
+table t
+| cluster by x
+-- !query schema
+struct<x:int,y:string>
+-- !query output
+0	abc
+1	def
+
+
+-- !query
+table other
+| aggregate sum(b) as result group by a
+-- !query schema
+struct<a:int,result:bigint>
+-- !query output
+1	3
+2	4
+
+
+-- !query
+table windowTestData
+| select cate, sum(val) over w
+  window w as (partition by cate order by val)
+-- !query schema
+struct<cate:string,sum(val) OVER (PARTITION BY cate ORDER BY val ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):bigint>
+-- !query output
+NULL	3
+NULL	NULL
+a	2
+a	2
+a	4
+a	NULL
+b	1
+b	3
+b	6
+
+
+-- !query
+table t
+| select x, y
+| where x < 2
+| extend x + 1 as z
+| order by z
+| limit 1
+-- !query schema
+struct<x:int,y:string,z:int>
+-- !query output
+0	abc	1
+
+
+-- !query
+from store_sales ss1
+| where ss_store_sk = 4
+| aggregate avg(ss_net_profit) rank_col
+    group by ss_item_sk as item_sk
+| select item_sk, rank_col
+| where rank_col > 0
+| order by rank_col desc
+| limit 10
+-- !query schema
+struct<item_sk:int,rank_col:decimal(11,6)>
+-- !query output
+
+
+
+-- !query
+table t
+|> select x, y
+| where x < 2
+|> extend x + 1 as z
+| order by z
+-- !query schema
+struct<x:int,y:string,z:int>
+-- !query output
+0	abc	1
+1	def	2
+
+
+-- !query
+drop table if exists keyword_cols
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+create table keyword_cols(a int, b int) using csv
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+insert into keyword_cols values (1, 2), (4, 8), (16, 32)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+drop table if exists test_select_col
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+create table test_select_col(col1 int, `select` int) using csv
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+insert into test_select_col values (1, 2), (4, 8)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+select col1 | `select` as result from test_select_col
+-- !query schema
+struct<result:int>
+-- !query output
+12
+3
+
+
+-- !query
+drop table if exists test_extend_col
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+create table test_extend_col(col1 int, extend int) using csv
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+insert into test_extend_col values (1, 2), (4, 8)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+select col1 | extend as result from test_extend_col
+-- !query schema
+struct<result:int>
+-- !query output
+12
+3
+
+
+-- !query
+drop table if exists test_set_col
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+create table test_set_col(col1 int, `set` int) using csv
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+insert into test_set_col values (1, 2), (4, 8)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+select col1 | `set` as result from test_set_col
+-- !query schema
+struct<result:int>
+-- !query output
+12
+3
+
+
+-- !query
+drop table if exists test_drop_col
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+create table test_drop_col(col1 int, `drop` int) using csv
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+insert into test_drop_col values (1, 2), (4, 8)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+select col1 | `drop` as result from test_drop_col
+-- !query schema
+struct<result:int>
+-- !query output
+12
+3
+
+
+-- !query
+drop table if exists test_as_col
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+create table test_as_col(col1 int, `as` int) using csv
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+insert into test_as_col values (1, 2), (4, 8)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+select col1 | `as` as result from test_as_col
+-- !query schema
+struct<result:int>
+-- !query output
+12
+3
+
+
+-- !query
+drop table if exists test_where_col
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+create table test_where_col(col1 int, `where` int) using csv
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+insert into test_where_col values (1, 2), (4, 8)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+select col1 | `where` as result from test_where_col
+-- !query schema
+struct<result:int>
+-- !query output
+12
+3
+
+
+-- !query
+drop table if exists test_order_col
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+create table test_order_col(col1 int, `order` int) using csv
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+insert into test_order_col values (1, 2), (4, 8)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+select col1 | `order` as result from test_order_col
+-- !query schema
+struct<result:int>
+-- !query output
+12
+3
+
+
+-- !query
+drop table if exists test_limit_col
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+create table test_limit_col(col1 int, `limit` int) using csv
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+insert into test_limit_col values (1, 2), (4, 8)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+select col1 | `limit` as result from test_limit_col
+-- !query schema
+struct<result:int>
+-- !query output
+12
+3
+
+
+-- !query
+drop table if exists test_aggregate_col
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+create table test_aggregate_col(col1 int, aggregate int) using csv
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+insert into test_aggregate_col values (1, 2), (4, 8)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+select col1 | aggregate as result from test_aggregate_col
+-- !query schema
+struct<result:int>
+-- !query output
+12
+3
+
+
+-- !query
+drop table if exists test_window_col
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+create table test_window_col(col1 int, `window` int) using csv
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+insert into test_window_col values (1, 2), (4, 8)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+select col1 | `window` as result from test_window_col
+-- !query schema
+struct<result:int>
+-- !query output
+12
+3
+
+
+-- !query
+drop table if exists test_pivot_col
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+create table test_pivot_col(col1 int, pivot int) using csv
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+insert into test_pivot_col values (1, 2), (4, 8)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+select col1 | pivot as result from test_pivot_col
+-- !query schema
+struct<result:int>
+-- !query output
+12
+3
+
+
+-- !query
+drop table if exists test_unpivot_col
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+create table test_unpivot_col(col1 int, unpivot int) using csv
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+insert into test_unpivot_col values (1, 2), (4, 8)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+select col1 | unpivot as result from test_unpivot_col
+-- !query schema
+struct<result:int>
+-- !query output
+12
+3
+
+
+-- !query
+drop table if exists test_join_col
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+create table test_join_col(col1 int, `join` int) using csv
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+insert into test_join_col values (1, 2), (4, 8)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+select col1 | `join` as result from test_join_col
+-- !query schema
+struct<result:int>
+-- !query output
+12
+3
+
+
+-- !query
+drop table if exists test_union_col
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+create table test_union_col(col1 int, `union` int) using csv
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+insert into test_union_col values (1, 2), (4, 8)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+select col1 | `union` as result from test_union_col
+-- !query schema
+struct<result:int>
+-- !query output
+12
+3
+
+
+-- !query
+drop table if exists test_intersect_col
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+create table test_intersect_col(col1 int, `intersect` int) using csv
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+insert into test_intersect_col values (1, 2), (4, 8)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+select col1 | `intersect` as result from test_intersect_col
+-- !query schema
+struct<result:int>
+-- !query output
+12
+3
+
+
+-- !query
+drop table if exists test_except_col
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+create table test_except_col(col1 int, `except` int) using csv
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+insert into test_except_col values (1, 2), (4, 8)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+select col1 | `except` as result from test_except_col
+-- !query schema
+struct<result:int>
+-- !query output
+12
+3
+
+
+-- !query
+drop table if exists test_multi_keywords
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+create table test_multi_keywords(col1 int, `select` int, `where` int, `order` int) using csv
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+insert into test_multi_keywords values (1, 2, 4, 8)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+select col1 | `select` | `where` | `order` as result from test_multi_keywords
+-- !query schema
+struct<result:int>
+-- !query output
+15
+
+
+-- !query
+select (col1 | `select`) + (`where` | `order`) as complex_result from test_multi_keywords
+-- !query schema
+struct<complex_result:int>
+-- !query output
+15
+
+
+-- !query
+select col1 from test_multi_keywords where (col1 | `select`) > 2
+-- !query schema
+struct<col1:int>
+-- !query output
+1
+
+
+-- !query
+drop table if exists keyword_cols
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+drop table if exists test_select_col
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+drop table if exists test_extend_col
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+drop table if exists test_set_col
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+drop table if exists test_drop_col
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+drop table if exists test_as_col
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+drop table if exists test_where_col
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+drop table if exists test_order_col
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+drop table if exists test_limit_col
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+drop table if exists test_aggregate_col
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+drop table if exists test_window_col
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+drop table if exists test_pivot_col
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+drop table if exists test_unpivot_col
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+drop table if exists test_join_col
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+drop table if exists test_union_col
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+drop table if exists test_intersect_col
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+drop table if exists test_except_col
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+drop table if exists test_multi_keywords
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
 drop table t
 -- !query schema
 struct<>

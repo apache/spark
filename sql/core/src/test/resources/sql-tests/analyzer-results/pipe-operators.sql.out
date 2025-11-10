@@ -4739,6 +4739,974 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 
 
 -- !query
+table t
+| select x, y
+-- !query analysis
+Project [x#x, y#x]
++- SubqueryAlias spark_catalog.default.t
+   +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
+table t
+| extend x + length(y) as z
+-- !query analysis
+Project [x#x, y#x, (x#x + length(y#x)) AS z#x]
++- SubqueryAlias spark_catalog.default.t
+   +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
+table t
+| extend 1 as z
+| set z = x + length(y)
+-- !query analysis
+Project [x#x, y#x, (x#x + length(y#x)) AS z#x]
++- Project [x#x, y#x, 1 AS z#x]
+   +- SubqueryAlias spark_catalog.default.t
+      +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
+table t
+| drop y
+-- !query analysis
+Project [x#x]
++- SubqueryAlias spark_catalog.default.t
+   +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
+table t
+| as u
+| select u.x
+-- !query analysis
+Project [x#x]
++- SubqueryAlias u
+   +- SubqueryAlias spark_catalog.default.t
+      +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
+table t
+| where x < 2
+-- !query analysis
+Filter (x#x < 2)
++- PipeOperator
+   +- SubqueryAlias spark_catalog.default.t
+      +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
+table courseSales
+| select `year`, course, earnings
+| pivot (
+    sum(earnings)
+    for course in ('dotNET', 'Java')
+  )
+-- !query analysis
+Project [year#x, __pivot_sum(coursesales.earnings) AS `sum(coursesales.earnings)`#x[0] AS dotNET#xL, __pivot_sum(coursesales.earnings) AS `sum(coursesales.earnings)`#x[1] AS Java#xL]
++- Aggregate [year#x], [year#x, pivotfirst(course#x, sum(coursesales.earnings)#xL, dotNET, Java, 0, 0) AS __pivot_sum(coursesales.earnings) AS `sum(coursesales.earnings)`#x]
+   +- Aggregate [year#x, course#x], [year#x, course#x, sum(earnings#x) AS sum(coursesales.earnings)#xL]
+      +- Project [year#x, course#x, earnings#x]
+         +- SubqueryAlias coursesales
+            +- View (`courseSales`, [course#x, year#x, earnings#x])
+               +- Project [cast(course#x as string) AS course#x, cast(year#x as int) AS year#x, cast(earnings#x as int) AS earnings#x]
+                  +- Project [course#x, year#x, earnings#x]
+                     +- SubqueryAlias courseSales
+                        +- LocalRelation [course#x, year#x, earnings#x]
+
+
+-- !query
+table courseEarnings
+| unpivot (
+    earningsYear for `year` in (`2012`, `2013`, `2014`)
+  )
+-- !query analysis
+Filter isnotnull(coalesce(earningsYear#x))
++- Expand [[course#x, 2012, 2012#x], [course#x, 2013, 2013#x], [course#x, 2014, 2014#x]], [course#x, year#x, earningsYear#x]
+   +- SubqueryAlias courseearnings
+      +- View (`courseEarnings`, [course#x, 2012#x, 2013#x, 2014#x])
+         +- Project [cast(course#x as string) AS course#x, cast(2012#x as int) AS 2012#x, cast(2013#x as int) AS 2013#x, cast(2014#x as int) AS 2014#x]
+            +- Project [course#x, 2012#x, 2013#x, 2014#x]
+               +- SubqueryAlias courseEarnings
+                  +- LocalRelation [course#x, 2012#x, 2013#x, 2014#x]
+
+
+-- !query
+table t
+| tablesample (100 percent) repeatable (0)
+-- !query analysis
+Sample 0.0, 1.0, false, 0
++- SubqueryAlias spark_catalog.default.t
+   +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
+table join_test_t1
+| inner join join_test_t2 using (a)
+-- !query analysis
+Project [a#x]
++- Join Inner, (a#x = a#x)
+   :- SubqueryAlias join_test_t1
+   :  +- View (`join_test_t1`, [a#x])
+   :     +- Project [cast(a#x as int) AS a#x]
+   :        +- Project [a#x]
+   :           +- SubqueryAlias grouping
+   :              +- LocalRelation [a#x]
+   +- SubqueryAlias join_test_t2
+      +- View (`join_test_t2`, [a#x])
+         +- Project [cast(a#x as int) AS a#x]
+            +- Project [a#x]
+               +- SubqueryAlias grouping
+                  +- LocalRelation [a#x]
+
+
+-- !query
+table t
+| union all table t
+-- !query analysis
+Union false, false
+:- SubqueryAlias spark_catalog.default.t
+:  +- Relation spark_catalog.default.t[x#x,y#x] csv
++- SubqueryAlias spark_catalog.default.t
+   +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
+table t
+| except table t
+-- !query analysis
+Except false
+:- SubqueryAlias spark_catalog.default.t
+:  +- Relation spark_catalog.default.t[x#x,y#x] csv
++- SubqueryAlias spark_catalog.default.t
+   +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
+table t
+| intersect table t
+-- !query analysis
+Intersect false
+:- SubqueryAlias spark_catalog.default.t
+:  +- Relation spark_catalog.default.t[x#x,y#x] csv
++- SubqueryAlias spark_catalog.default.t
+   +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
+table t
+| minus table t
+-- !query analysis
+Except false
+:- SubqueryAlias spark_catalog.default.t
+:  +- Relation spark_catalog.default.t[x#x,y#x] csv
++- SubqueryAlias spark_catalog.default.t
+   +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
+table t
+| order by x
+-- !query analysis
+Sort [x#x ASC NULLS FIRST], true
++- PipeOperator
+   +- SubqueryAlias spark_catalog.default.t
+      +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
+table t
+| limit 1
+-- !query analysis
+GlobalLimit 1
++- LocalLimit 1
+   +- PipeOperator
+      +- SubqueryAlias spark_catalog.default.t
+         +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
+table t
+| offset 1
+-- !query analysis
+Offset 1
++- PipeOperator
+   +- SubqueryAlias spark_catalog.default.t
+      +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
+table t
+| distribute by x
+-- !query analysis
+RepartitionByExpression [x#x]
++- PipeOperator
+   +- SubqueryAlias spark_catalog.default.t
+      +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
+table t
+| cluster by x
+-- !query analysis
+Sort [x#x ASC NULLS FIRST], false
++- RepartitionByExpression [x#x]
+   +- PipeOperator
+      +- SubqueryAlias spark_catalog.default.t
+         +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
+table other
+| aggregate sum(b) as result group by a
+-- !query analysis
+Aggregate [a#x], [a#x, sum(b#x) AS result#xL]
++- SubqueryAlias spark_catalog.default.other
+   +- Relation spark_catalog.default.other[a#x,b#x] json
+
+
+-- !query
+table windowTestData
+| select cate, sum(val) over w
+  window w as (partition by cate order by val)
+-- !query analysis
+Project [cate#x, sum(val) OVER (PARTITION BY cate ORDER BY val ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#xL]
++- Project [cate#x, val#x, sum(val) OVER (PARTITION BY cate ORDER BY val ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#xL, sum(val) OVER (PARTITION BY cate ORDER BY val ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#xL]
+   +- Window [sum(val#x) windowspecdefinition(cate#x, val#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS sum(val) OVER (PARTITION BY cate ORDER BY val ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#xL], [cate#x], [val#x ASC NULLS FIRST]
+      +- Project [cate#x, val#x]
+         +- SubqueryAlias windowtestdata
+            +- View (`windowTestData`, [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x])
+               +- Project [cast(val#x as int) AS val#x, cast(val_long#xL as bigint) AS val_long#xL, cast(val_double#x as double) AS val_double#x, cast(val_date#x as date) AS val_date#x, cast(val_timestamp#x as timestamp) AS val_timestamp#x, cast(cate#x as string) AS cate#x]
+                  +- Project [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
+                     +- SubqueryAlias testData
+                        +- LocalRelation [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
+
+
+-- !query
+table t
+| select x, y
+| where x < 2
+| extend x + 1 as z
+| order by z
+| limit 1
+-- !query analysis
+GlobalLimit 1
++- LocalLimit 1
+   +- PipeOperator
+      +- Sort [z#x ASC NULLS FIRST], true
+         +- PipeOperator
+            +- Project [x#x, y#x, (x#x + 1) AS z#x]
+               +- Filter (x#x < 2)
+                  +- PipeOperator
+                     +- Project [x#x, y#x]
+                        +- SubqueryAlias spark_catalog.default.t
+                           +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
+from store_sales ss1
+| where ss_store_sk = 4
+| aggregate avg(ss_net_profit) rank_col
+    group by ss_item_sk as item_sk
+| select item_sk, rank_col
+| where rank_col > 0
+| order by rank_col desc
+| limit 10
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`store_sales`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 6,
+    "stopIndex" : 16,
+    "fragment" : "store_sales"
+  } ]
+}
+
+
+-- !query
+table t
+|> select x, y
+| where x < 2
+|> extend x + 1 as z
+| order by z
+-- !query analysis
+Sort [z#x ASC NULLS FIRST], true
++- PipeOperator
+   +- Project [x#x, y#x, (x#x + 1) AS z#x]
+      +- Filter (x#x < 2)
+         +- PipeOperator
+            +- Project [x#x, y#x]
+               +- SubqueryAlias spark_catalog.default.t
+                  +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
+drop table if exists keyword_cols
+-- !query analysis
+DropTable true, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.keyword_cols
+
+
+-- !query
+create table keyword_cols(a int, b int) using csv
+-- !query analysis
+CreateDataSourceTableCommand `spark_catalog`.`default`.`keyword_cols`, false
+
+
+-- !query
+insert into keyword_cols values (1, 2), (4, 8), (16, 32)
+-- !query analysis
+InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/keyword_cols, false, CSV, [path=file:[not included in comparison]/{warehouse_dir}/keyword_cols], Append, `spark_catalog`.`default`.`keyword_cols`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/keyword_cols), [a, b]
++- Project [col1#x AS a#x, col2#x AS b#x]
+   +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+drop table if exists test_select_col
+-- !query analysis
+DropTable true, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.test_select_col
+
+
+-- !query
+create table test_select_col(col1 int, `select` int) using csv
+-- !query analysis
+CreateDataSourceTableCommand `spark_catalog`.`default`.`test_select_col`, false
+
+
+-- !query
+insert into test_select_col values (1, 2), (4, 8)
+-- !query analysis
+InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/test_select_col, false, CSV, [path=file:[not included in comparison]/{warehouse_dir}/test_select_col], Append, `spark_catalog`.`default`.`test_select_col`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/test_select_col), [col1, select]
++- Project [col1#x AS col1#x, col2#x AS select#x]
+   +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+select col1 | `select` as result from test_select_col
+-- !query analysis
+Project [(col1#x | select#x) AS result#x]
++- SubqueryAlias spark_catalog.default.test_select_col
+   +- Relation spark_catalog.default.test_select_col[col1#x,select#x] csv
+
+
+-- !query
+drop table if exists test_extend_col
+-- !query analysis
+DropTable true, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.test_extend_col
+
+
+-- !query
+create table test_extend_col(col1 int, extend int) using csv
+-- !query analysis
+CreateDataSourceTableCommand `spark_catalog`.`default`.`test_extend_col`, false
+
+
+-- !query
+insert into test_extend_col values (1, 2), (4, 8)
+-- !query analysis
+InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/test_extend_col, false, CSV, [path=file:[not included in comparison]/{warehouse_dir}/test_extend_col], Append, `spark_catalog`.`default`.`test_extend_col`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/test_extend_col), [col1, extend]
++- Project [col1#x AS col1#x, col2#x AS extend#x]
+   +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+select col1 | extend as result from test_extend_col
+-- !query analysis
+Project [(col1#x | extend#x) AS result#x]
++- SubqueryAlias spark_catalog.default.test_extend_col
+   +- Relation spark_catalog.default.test_extend_col[col1#x,extend#x] csv
+
+
+-- !query
+drop table if exists test_set_col
+-- !query analysis
+DropTable true, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.test_set_col
+
+
+-- !query
+create table test_set_col(col1 int, `set` int) using csv
+-- !query analysis
+CreateDataSourceTableCommand `spark_catalog`.`default`.`test_set_col`, false
+
+
+-- !query
+insert into test_set_col values (1, 2), (4, 8)
+-- !query analysis
+InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/test_set_col, false, CSV, [path=file:[not included in comparison]/{warehouse_dir}/test_set_col], Append, `spark_catalog`.`default`.`test_set_col`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/test_set_col), [col1, set]
++- Project [col1#x AS col1#x, col2#x AS set#x]
+   +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+select col1 | `set` as result from test_set_col
+-- !query analysis
+Project [(col1#x | set#x) AS result#x]
++- SubqueryAlias spark_catalog.default.test_set_col
+   +- Relation spark_catalog.default.test_set_col[col1#x,set#x] csv
+
+
+-- !query
+drop table if exists test_drop_col
+-- !query analysis
+DropTable true, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.test_drop_col
+
+
+-- !query
+create table test_drop_col(col1 int, `drop` int) using csv
+-- !query analysis
+CreateDataSourceTableCommand `spark_catalog`.`default`.`test_drop_col`, false
+
+
+-- !query
+insert into test_drop_col values (1, 2), (4, 8)
+-- !query analysis
+InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/test_drop_col, false, CSV, [path=file:[not included in comparison]/{warehouse_dir}/test_drop_col], Append, `spark_catalog`.`default`.`test_drop_col`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/test_drop_col), [col1, drop]
++- Project [col1#x AS col1#x, col2#x AS drop#x]
+   +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+select col1 | `drop` as result from test_drop_col
+-- !query analysis
+Project [(col1#x | drop#x) AS result#x]
++- SubqueryAlias spark_catalog.default.test_drop_col
+   +- Relation spark_catalog.default.test_drop_col[col1#x,drop#x] csv
+
+
+-- !query
+drop table if exists test_as_col
+-- !query analysis
+DropTable true, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.test_as_col
+
+
+-- !query
+create table test_as_col(col1 int, `as` int) using csv
+-- !query analysis
+CreateDataSourceTableCommand `spark_catalog`.`default`.`test_as_col`, false
+
+
+-- !query
+insert into test_as_col values (1, 2), (4, 8)
+-- !query analysis
+InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/test_as_col, false, CSV, [path=file:[not included in comparison]/{warehouse_dir}/test_as_col], Append, `spark_catalog`.`default`.`test_as_col`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/test_as_col), [col1, as]
++- Project [col1#x AS col1#x, col2#x AS as#x]
+   +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+select col1 | `as` as result from test_as_col
+-- !query analysis
+Project [(col1#x | as#x) AS result#x]
++- SubqueryAlias spark_catalog.default.test_as_col
+   +- Relation spark_catalog.default.test_as_col[col1#x,as#x] csv
+
+
+-- !query
+drop table if exists test_where_col
+-- !query analysis
+DropTable true, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.test_where_col
+
+
+-- !query
+create table test_where_col(col1 int, `where` int) using csv
+-- !query analysis
+CreateDataSourceTableCommand `spark_catalog`.`default`.`test_where_col`, false
+
+
+-- !query
+insert into test_where_col values (1, 2), (4, 8)
+-- !query analysis
+InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/test_where_col, false, CSV, [path=file:[not included in comparison]/{warehouse_dir}/test_where_col], Append, `spark_catalog`.`default`.`test_where_col`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/test_where_col), [col1, where]
++- Project [col1#x AS col1#x, col2#x AS where#x]
+   +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+select col1 | `where` as result from test_where_col
+-- !query analysis
+Project [(col1#x | where#x) AS result#x]
++- SubqueryAlias spark_catalog.default.test_where_col
+   +- Relation spark_catalog.default.test_where_col[col1#x,where#x] csv
+
+
+-- !query
+drop table if exists test_order_col
+-- !query analysis
+DropTable true, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.test_order_col
+
+
+-- !query
+create table test_order_col(col1 int, `order` int) using csv
+-- !query analysis
+CreateDataSourceTableCommand `spark_catalog`.`default`.`test_order_col`, false
+
+
+-- !query
+insert into test_order_col values (1, 2), (4, 8)
+-- !query analysis
+InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/test_order_col, false, CSV, [path=file:[not included in comparison]/{warehouse_dir}/test_order_col], Append, `spark_catalog`.`default`.`test_order_col`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/test_order_col), [col1, order]
++- Project [col1#x AS col1#x, col2#x AS order#x]
+   +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+select col1 | `order` as result from test_order_col
+-- !query analysis
+Project [(col1#x | order#x) AS result#x]
++- SubqueryAlias spark_catalog.default.test_order_col
+   +- Relation spark_catalog.default.test_order_col[col1#x,order#x] csv
+
+
+-- !query
+drop table if exists test_limit_col
+-- !query analysis
+DropTable true, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.test_limit_col
+
+
+-- !query
+create table test_limit_col(col1 int, `limit` int) using csv
+-- !query analysis
+CreateDataSourceTableCommand `spark_catalog`.`default`.`test_limit_col`, false
+
+
+-- !query
+insert into test_limit_col values (1, 2), (4, 8)
+-- !query analysis
+InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/test_limit_col, false, CSV, [path=file:[not included in comparison]/{warehouse_dir}/test_limit_col], Append, `spark_catalog`.`default`.`test_limit_col`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/test_limit_col), [col1, limit]
++- Project [col1#x AS col1#x, col2#x AS limit#x]
+   +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+select col1 | `limit` as result from test_limit_col
+-- !query analysis
+Project [(col1#x | limit#x) AS result#x]
++- SubqueryAlias spark_catalog.default.test_limit_col
+   +- Relation spark_catalog.default.test_limit_col[col1#x,limit#x] csv
+
+
+-- !query
+drop table if exists test_aggregate_col
+-- !query analysis
+DropTable true, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.test_aggregate_col
+
+
+-- !query
+create table test_aggregate_col(col1 int, aggregate int) using csv
+-- !query analysis
+CreateDataSourceTableCommand `spark_catalog`.`default`.`test_aggregate_col`, false
+
+
+-- !query
+insert into test_aggregate_col values (1, 2), (4, 8)
+-- !query analysis
+InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/test_aggregate_col, false, CSV, [path=file:[not included in comparison]/{warehouse_dir}/test_aggregate_col], Append, `spark_catalog`.`default`.`test_aggregate_col`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/test_aggregate_col), [col1, aggregate]
++- Project [col1#x AS col1#x, col2#x AS aggregate#x]
+   +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+select col1 | aggregate as result from test_aggregate_col
+-- !query analysis
+Project [(col1#x | aggregate#x) AS result#x]
++- SubqueryAlias spark_catalog.default.test_aggregate_col
+   +- Relation spark_catalog.default.test_aggregate_col[col1#x,aggregate#x] csv
+
+
+-- !query
+drop table if exists test_window_col
+-- !query analysis
+DropTable true, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.test_window_col
+
+
+-- !query
+create table test_window_col(col1 int, `window` int) using csv
+-- !query analysis
+CreateDataSourceTableCommand `spark_catalog`.`default`.`test_window_col`, false
+
+
+-- !query
+insert into test_window_col values (1, 2), (4, 8)
+-- !query analysis
+InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/test_window_col, false, CSV, [path=file:[not included in comparison]/{warehouse_dir}/test_window_col], Append, `spark_catalog`.`default`.`test_window_col`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/test_window_col), [col1, window]
++- Project [col1#x AS col1#x, col2#x AS window#x]
+   +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+select col1 | `window` as result from test_window_col
+-- !query analysis
+Project [(col1#x | window#x) AS result#x]
++- SubqueryAlias spark_catalog.default.test_window_col
+   +- Relation spark_catalog.default.test_window_col[col1#x,window#x] csv
+
+
+-- !query
+drop table if exists test_pivot_col
+-- !query analysis
+DropTable true, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.test_pivot_col
+
+
+-- !query
+create table test_pivot_col(col1 int, pivot int) using csv
+-- !query analysis
+CreateDataSourceTableCommand `spark_catalog`.`default`.`test_pivot_col`, false
+
+
+-- !query
+insert into test_pivot_col values (1, 2), (4, 8)
+-- !query analysis
+InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/test_pivot_col, false, CSV, [path=file:[not included in comparison]/{warehouse_dir}/test_pivot_col], Append, `spark_catalog`.`default`.`test_pivot_col`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/test_pivot_col), [col1, pivot]
++- Project [col1#x AS col1#x, col2#x AS pivot#x]
+   +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+select col1 | pivot as result from test_pivot_col
+-- !query analysis
+Project [(col1#x | pivot#x) AS result#x]
++- SubqueryAlias spark_catalog.default.test_pivot_col
+   +- Relation spark_catalog.default.test_pivot_col[col1#x,pivot#x] csv
+
+
+-- !query
+drop table if exists test_unpivot_col
+-- !query analysis
+DropTable true, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.test_unpivot_col
+
+
+-- !query
+create table test_unpivot_col(col1 int, unpivot int) using csv
+-- !query analysis
+CreateDataSourceTableCommand `spark_catalog`.`default`.`test_unpivot_col`, false
+
+
+-- !query
+insert into test_unpivot_col values (1, 2), (4, 8)
+-- !query analysis
+InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/test_unpivot_col, false, CSV, [path=file:[not included in comparison]/{warehouse_dir}/test_unpivot_col], Append, `spark_catalog`.`default`.`test_unpivot_col`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/test_unpivot_col), [col1, unpivot]
++- Project [col1#x AS col1#x, col2#x AS unpivot#x]
+   +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+select col1 | unpivot as result from test_unpivot_col
+-- !query analysis
+Project [(col1#x | unpivot#x) AS result#x]
++- SubqueryAlias spark_catalog.default.test_unpivot_col
+   +- Relation spark_catalog.default.test_unpivot_col[col1#x,unpivot#x] csv
+
+
+-- !query
+drop table if exists test_join_col
+-- !query analysis
+DropTable true, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.test_join_col
+
+
+-- !query
+create table test_join_col(col1 int, `join` int) using csv
+-- !query analysis
+CreateDataSourceTableCommand `spark_catalog`.`default`.`test_join_col`, false
+
+
+-- !query
+insert into test_join_col values (1, 2), (4, 8)
+-- !query analysis
+InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/test_join_col, false, CSV, [path=file:[not included in comparison]/{warehouse_dir}/test_join_col], Append, `spark_catalog`.`default`.`test_join_col`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/test_join_col), [col1, join]
++- Project [col1#x AS col1#x, col2#x AS join#x]
+   +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+select col1 | `join` as result from test_join_col
+-- !query analysis
+Project [(col1#x | join#x) AS result#x]
++- SubqueryAlias spark_catalog.default.test_join_col
+   +- Relation spark_catalog.default.test_join_col[col1#x,join#x] csv
+
+
+-- !query
+drop table if exists test_union_col
+-- !query analysis
+DropTable true, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.test_union_col
+
+
+-- !query
+create table test_union_col(col1 int, `union` int) using csv
+-- !query analysis
+CreateDataSourceTableCommand `spark_catalog`.`default`.`test_union_col`, false
+
+
+-- !query
+insert into test_union_col values (1, 2), (4, 8)
+-- !query analysis
+InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/test_union_col, false, CSV, [path=file:[not included in comparison]/{warehouse_dir}/test_union_col], Append, `spark_catalog`.`default`.`test_union_col`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/test_union_col), [col1, union]
++- Project [col1#x AS col1#x, col2#x AS union#x]
+   +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+select col1 | `union` as result from test_union_col
+-- !query analysis
+Project [(col1#x | union#x) AS result#x]
++- SubqueryAlias spark_catalog.default.test_union_col
+   +- Relation spark_catalog.default.test_union_col[col1#x,union#x] csv
+
+
+-- !query
+drop table if exists test_intersect_col
+-- !query analysis
+DropTable true, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.test_intersect_col
+
+
+-- !query
+create table test_intersect_col(col1 int, `intersect` int) using csv
+-- !query analysis
+CreateDataSourceTableCommand `spark_catalog`.`default`.`test_intersect_col`, false
+
+
+-- !query
+insert into test_intersect_col values (1, 2), (4, 8)
+-- !query analysis
+InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/test_intersect_col, false, CSV, [path=file:[not included in comparison]/{warehouse_dir}/test_intersect_col], Append, `spark_catalog`.`default`.`test_intersect_col`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/test_intersect_col), [col1, intersect]
++- Project [col1#x AS col1#x, col2#x AS intersect#x]
+   +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+select col1 | `intersect` as result from test_intersect_col
+-- !query analysis
+Project [(col1#x | intersect#x) AS result#x]
++- SubqueryAlias spark_catalog.default.test_intersect_col
+   +- Relation spark_catalog.default.test_intersect_col[col1#x,intersect#x] csv
+
+
+-- !query
+drop table if exists test_except_col
+-- !query analysis
+DropTable true, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.test_except_col
+
+
+-- !query
+create table test_except_col(col1 int, `except` int) using csv
+-- !query analysis
+CreateDataSourceTableCommand `spark_catalog`.`default`.`test_except_col`, false
+
+
+-- !query
+insert into test_except_col values (1, 2), (4, 8)
+-- !query analysis
+InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/test_except_col, false, CSV, [path=file:[not included in comparison]/{warehouse_dir}/test_except_col], Append, `spark_catalog`.`default`.`test_except_col`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/test_except_col), [col1, except]
++- Project [col1#x AS col1#x, col2#x AS except#x]
+   +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+select col1 | `except` as result from test_except_col
+-- !query analysis
+Project [(col1#x | except#x) AS result#x]
++- SubqueryAlias spark_catalog.default.test_except_col
+   +- Relation spark_catalog.default.test_except_col[col1#x,except#x] csv
+
+
+-- !query
+drop table if exists test_multi_keywords
+-- !query analysis
+DropTable true, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.test_multi_keywords
+
+
+-- !query
+create table test_multi_keywords(col1 int, `select` int, `where` int, `order` int) using csv
+-- !query analysis
+CreateDataSourceTableCommand `spark_catalog`.`default`.`test_multi_keywords`, false
+
+
+-- !query
+insert into test_multi_keywords values (1, 2, 4, 8)
+-- !query analysis
+InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/test_multi_keywords, false, CSV, [path=file:[not included in comparison]/{warehouse_dir}/test_multi_keywords], Append, `spark_catalog`.`default`.`test_multi_keywords`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/test_multi_keywords), [col1, select, where, order]
++- Project [col1#x AS col1#x, col2#x AS select#x, col3#x AS where#x, col4#x AS order#x]
+   +- LocalRelation [col1#x, col2#x, col3#x, col4#x]
+
+
+-- !query
+select col1 | `select` | `where` | `order` as result from test_multi_keywords
+-- !query analysis
+Project [(((col1#x | select#x) | where#x) | order#x) AS result#x]
++- SubqueryAlias spark_catalog.default.test_multi_keywords
+   +- Relation spark_catalog.default.test_multi_keywords[col1#x,select#x,where#x,order#x] csv
+
+
+-- !query
+select (col1 | `select`) + (`where` | `order`) as complex_result from test_multi_keywords
+-- !query analysis
+Project [((col1#x | select#x) + (where#x | order#x)) AS complex_result#x]
++- SubqueryAlias spark_catalog.default.test_multi_keywords
+   +- Relation spark_catalog.default.test_multi_keywords[col1#x,select#x,where#x,order#x] csv
+
+
+-- !query
+select col1 from test_multi_keywords where (col1 | `select`) > 2
+-- !query analysis
+Project [col1#x]
++- Filter ((col1#x | select#x) > 2)
+   +- SubqueryAlias spark_catalog.default.test_multi_keywords
+      +- Relation spark_catalog.default.test_multi_keywords[col1#x,select#x,where#x,order#x] csv
+
+
+-- !query
+drop table if exists keyword_cols
+-- !query analysis
+DropTable true, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.keyword_cols
+
+
+-- !query
+drop table if exists test_select_col
+-- !query analysis
+DropTable true, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.test_select_col
+
+
+-- !query
+drop table if exists test_extend_col
+-- !query analysis
+DropTable true, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.test_extend_col
+
+
+-- !query
+drop table if exists test_set_col
+-- !query analysis
+DropTable true, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.test_set_col
+
+
+-- !query
+drop table if exists test_drop_col
+-- !query analysis
+DropTable true, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.test_drop_col
+
+
+-- !query
+drop table if exists test_as_col
+-- !query analysis
+DropTable true, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.test_as_col
+
+
+-- !query
+drop table if exists test_where_col
+-- !query analysis
+DropTable true, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.test_where_col
+
+
+-- !query
+drop table if exists test_order_col
+-- !query analysis
+DropTable true, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.test_order_col
+
+
+-- !query
+drop table if exists test_limit_col
+-- !query analysis
+DropTable true, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.test_limit_col
+
+
+-- !query
+drop table if exists test_aggregate_col
+-- !query analysis
+DropTable true, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.test_aggregate_col
+
+
+-- !query
+drop table if exists test_window_col
+-- !query analysis
+DropTable true, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.test_window_col
+
+
+-- !query
+drop table if exists test_pivot_col
+-- !query analysis
+DropTable true, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.test_pivot_col
+
+
+-- !query
+drop table if exists test_unpivot_col
+-- !query analysis
+DropTable true, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.test_unpivot_col
+
+
+-- !query
+drop table if exists test_join_col
+-- !query analysis
+DropTable true, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.test_join_col
+
+
+-- !query
+drop table if exists test_union_col
+-- !query analysis
+DropTable true, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.test_union_col
+
+
+-- !query
+drop table if exists test_intersect_col
+-- !query analysis
+DropTable true, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.test_intersect_col
+
+
+-- !query
+drop table if exists test_except_col
+-- !query analysis
+DropTable true, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.test_except_col
+
+
+-- !query
+drop table if exists test_multi_keywords
+-- !query analysis
+DropTable true, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.test_multi_keywords
+
+
+-- !query
 drop table t
 -- !query analysis
 DropTable false, false

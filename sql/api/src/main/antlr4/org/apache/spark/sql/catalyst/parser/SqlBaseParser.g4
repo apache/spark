@@ -46,6 +46,23 @@ options { tokenVocab = SqlBaseLexer; }
    * When true, parameter markers are allowed everywhere a literal is supported.
    */
   public boolean parameter_substitution_enabled = true;
+
+  /**
+   * Checks if the next token after PIPE can start an operator pipe right side.
+   * This disambiguates between bitwise OR (|) in expressions and pipe operator (|) in queries.
+   * Used to maintain backwards compatibility when allowing both | and |> as pipe operators.
+   */
+  public boolean isOperatorPipeStart() {
+    int la = _input.LA(2); // Look ahead 2 tokens (current is PIPE, check what follows)
+    return la == SELECT || la == EXTEND || la == SET || la == DROP || 
+           la == AS || la == WHERE || la == PIVOT || la == UNPIVOT ||
+           la == TABLESAMPLE || la == INNER || la == CROSS || la == LEFT ||
+           la == RIGHT || la == FULL || la == NATURAL || la == SEMI || 
+           la == ANTI || la == JOIN || la == UNION || la == EXCEPT || 
+           la == SETMINUS || la == INTERSECT || la == ORDER || la == CLUSTER ||
+           la == DISTRIBUTE || la == SORT || la == LIMIT || la == OFFSET ||
+           la == AGGREGATE || la == WINDOW || la == LATERAL;
+  }
 }
 
 compoundOrSingleStatement
@@ -712,6 +729,7 @@ queryTerm
     | left=queryTerm {!legacy_setops_precedence_enabled}?
         operator=(UNION | EXCEPT | SETMINUS) setQuantifier? right=queryTerm              #setOperation
     | left=queryTerm OPERATOR_PIPE operatorPipeRightSide                                 #operatorPipeStatement
+    | left=queryTerm {isOperatorPipeStart()}? PIPE operatorPipeRightSide                 #operatorPipeStatement
     ;
 
 queryPrimary
