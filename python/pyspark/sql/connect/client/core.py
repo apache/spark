@@ -2215,13 +2215,13 @@ class SparkConnectClient(object):
         if self._plan_compression_threshold is None or self._plan_compression_algorithm is None:
             try:
                 (
-                    self._plan_compression_threshold,
+                    plan_compression_threshold_str,
                     self._plan_compression_algorithm,
                 ) = self.get_configs(
                     "spark.connect.session.planCompression.threshold",
                     "spark.connect.session.planCompression.defaultAlgorithm",
                 )
-                self._plan_compression_threshold = int(self._plan_compression_threshold)
+                self._plan_compression_threshold = int(plan_compression_threshold_str)
                 logger.debug(
                     f"Plan compression threshold: {self._plan_compression_threshold}, "
                     f"algorithm: {self._plan_compression_algorithm}"
