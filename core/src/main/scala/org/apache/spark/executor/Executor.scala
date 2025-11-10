@@ -384,6 +384,9 @@ private[spark] class Executor(
     try {
       threadPool.execute(tr)
     } catch {
+      case oom: OutOfMemoryError =>
+        log.error(s"Execute task ${taskDescription.taskId} failed", oom.getCause)
+        uncaughtExceptionHandler.uncaughtException(Thread.currentThread(), oom)
       case e: Throwable =>
         log.error(s"Execute task ${taskDescription.taskId} failed", e.getCause)
         context.statusUpdate(
