@@ -440,6 +440,7 @@ class TimeType(AnyTimeType):
 
 class TimestampType(DatetimeType, metaclass=DataTypeSingleton):
     """Timestamp (datetime.datetime) data type."""
+
     # We need to cache the timezone info for datetime.datetime.fromtimestamp
     # otherwise the forked process will be extremely slow to convert the timestamp.
     # This is probably a glibc issue - the forked process will have a bad cache/lock
