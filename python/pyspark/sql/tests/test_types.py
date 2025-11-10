@@ -2468,7 +2468,7 @@ class TypesTestsMixin:
         self.assertIsInstance(pandas, pd.DataFrame)
         self.assertEqual(expected_values[0][2], test_record["str"])
         self.assertEqual(expected_values[1][2], test_record["short_str"])
-        
+
     def test_geospatial_encoding(self):
         df = self.spark.createDataFrame(
             [
