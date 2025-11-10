@@ -18,10 +18,9 @@ package org.apache.spark.deploy.k8s
 
 import java.util.Locale
 import java.util.concurrent.TimeUnit
-
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config.{ConfigBuilder, PYSPARK_DRIVER_PYTHON, PYSPARK_PYTHON}
+import org.apache.spark.internal.config.{ConfigBuilder, DYN_ALLOCATION_ENABLED, PYSPARK_DRIVER_PYTHON, PYSPARK_PYTHON}
 
 private[spark] object Config extends Logging {
 
@@ -460,15 +459,6 @@ private[spark] object Config extends Logging {
       .stringConf
       .createOptional
 
-  val KUBERNETES_EXECUTOR_POD_DELETION_COST =
-    ConfigBuilder("spark.kubernetes.executor.podDeletionCost")
-      .doc("Value to set for the controller.kubernetes.io/pod-deletion-cost" +
-        " annotation when Spark asks a deployment-based allocator to remove executor pods. This " +
-        "helps Kubernetes pick the same pods Spark selected when the deployment scales down.")
-      .version("4.2.0")
-      .intConf
-      .createOptional
-
   val KUBERNETES_ALLOCATION_PODS_ALLOCATOR =
     ConfigBuilder("spark.kubernetes.allocation.pods.allocator")
       .doc("Allocator to use for pods. Possible values are direct (the default), statefulset," +
@@ -478,6 +468,17 @@ private[spark] object Config extends Logging {
       .version("3.3.0")
       .stringConf
       .createWithDefault("direct")
+
+  val KUBERNETES_EXECUTOR_POD_DELETION_COST =
+    ConfigBuilder("spark.kubernetes.executor.podDeletionCost")
+      .doc("Value to set for the controller.kubernetes.io/pod-deletion-cost" +
+        " annotation when Spark asks a deployment-based allocator to remove executor pods. This " +
+        "helps Kubernetes pick the same pods Spark selected when the deployment scales down." +
+        s" This should only be enabled when both $KUBERNETES_ALLOCATION_PODS_ALLOCATOR is set to " +
+        s"deployment, and $DYN_ALLOCATION_ENABLED is enabled.")
+      .version("4.2.0")
+      .intConf
+      .createOptional
 
   val KUBERNETES_ALLOCATION_BATCH_SIZE =
     ConfigBuilder("spark.kubernetes.allocation.batch.size")
