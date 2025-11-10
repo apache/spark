@@ -991,7 +991,7 @@ class RocksDB(
     } else {
       key
     }
-    db.get(readOptions, keyWithPrefix) != null
+    db.keyExists(keyWithPrefix)
   }
 
   /**
