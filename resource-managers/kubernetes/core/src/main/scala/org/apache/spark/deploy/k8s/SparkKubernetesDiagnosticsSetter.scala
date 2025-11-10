@@ -20,7 +20,7 @@ import io.fabric8.kubernetes.api.model.{Pod, PodBuilder}
 import io.fabric8.kubernetes.client.KubernetesClient
 import org.apache.hadoop.util.StringUtils
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{SparkConf, SparkMasterRegex}
 import org.apache.spark.deploy.SparkDiagnosticsSetter
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants.EXIT_EXCEPTION_ANNOTATION
@@ -75,6 +75,6 @@ private[spark] class SparkKubernetesDiagnosticsSetter(clientProvider: Kubernetes
   }
 
   override def supports(clusterManagerUrl: String): Boolean = {
-    clusterManagerUrl.startsWith("k8s://")
+    SparkMasterRegex.isK8s(clusterManagerUrl)
   }
 }

@@ -427,6 +427,12 @@ class RocksDBFileManager(
     }
   }
 
+  /** Get all the snapshot versions that can be used to load this version */
+  def getEligibleSnapshotsForVersion(version: Long): Seq[Long] = {
+    SnapshotLoaderHelper.getEligibleSnapshotsForVersion(
+      version, fm, new Path(dfsRootDir), onlyZipFiles, fileSuffix = ".zip")
+  }
+
   /**
    * Based on the ground truth lineage loaded from changelog file (lineage), this function
    * does file listing to find all snapshot (version, uniqueId) pairs, and finds

@@ -549,6 +549,16 @@
       "<arg1> and <arg2> should be of the same length, got <arg1_length> and <arg2_length>."
     ]
   },
+  "MALFORMED_GEOGRAPHY": {
+    "message": [
+      "Geography binary is malformed. Please check the data source is valid."
+    ]
+  },
+  "MALFORMED_GEOMETRY": {
+    "message": [
+      "Geometry binary is malformed. Please check the data source is valid."
+    ]
+  },
   "MALFORMED_VARIANT": {
     "message": [
       "Variant binary is malformed. Please check the data source is valid."

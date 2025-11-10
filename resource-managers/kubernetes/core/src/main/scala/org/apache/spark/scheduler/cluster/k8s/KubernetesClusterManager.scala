@@ -35,7 +35,7 @@ import org.apache.spark.util.{Clock, SystemClock, ThreadUtils, Utils}
 private[spark] class KubernetesClusterManager extends ExternalClusterManager with Logging {
   import SparkMasterRegex._
 
-  override def canCreate(masterURL: String): Boolean = masterURL.startsWith("k8s")
+  override def canCreate(masterURL: String): Boolean = SparkMasterRegex.isK8s(masterURL)
 
   private def isLocal(conf: SparkConf): Boolean =
     conf.get(KUBERNETES_DRIVER_MASTER_URL).startsWith("local")
