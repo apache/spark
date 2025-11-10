@@ -1027,11 +1027,12 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
 
     // SPARK-52621: TimeType - simple types.
-    check(Literal(0L, TimeType()), "0") // 00:00:00
-    check(Literal(3723000000000L, TimeType()), "3723000000000") // 01:02:03
+    check(Literal(0L, TimeType()), "\"00:00\"")
+    check(Literal(3723000000000L, TimeType()), "\"01:02:03\"")
     // SPARK-52621: TimeType - complex types.
     val timeArray = Array(0L, 3723000000000L, 43200000000L)
-    check(Literal.create(timeArray, ArrayType(TimeType())), "[0,3723000000000,43200000000]")
+    check(Literal.create(timeArray, ArrayType(TimeType())),
+      "[\"00:00\",\"01:02:03\",\"00:00:43.200\"]")
 
     check(Array(null, "a", "b", "c"), """[null,"a","b","c"]""")
     check(Array(parseJson("""{"a": 1,"b": [1, 2, 3]}"""),
