@@ -6141,6 +6141,19 @@ object SQLConf {
       .bytesConf(ByteUnit.BYTE)
       .createWithDefaultString("3GB")
 
+  val LOCAL_RELATION_BATCH_OF_CHUNKS_SIZE_BYTES =
+    buildConf(SqlApiConfHelper.LOCAL_RELATION_BATCH_OF_CHUNKS_SIZE_BYTES_KEY)
+      .internal()
+      .doc("The batch size in bytes for uploading chunks of local relations to the server. " +
+        "The client collects multiple chunks into a single batch until this limit is reached, " +
+        "then uploads the batch of chunks to the server. This helps reduce memory pressure on " +
+        "the client when dealing with large local relations because the client does not have to " +
+        "materialize all chunks in memory.")
+      .version("4.1.0")
+      .longConf
+      .checkValue(_ > 0, "The batch size in bytes must be positive")
+      .createWithDefault(1 * 1024 * 1024 * 1024L)
+
   val DECORRELATE_JOIN_PREDICATE_ENABLED =
     buildConf("spark.sql.optimizer.decorrelateJoinPredicate.enabled")
       .internal()
