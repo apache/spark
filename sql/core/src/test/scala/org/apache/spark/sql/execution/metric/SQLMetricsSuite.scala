@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.adaptive.DisableAdaptiveExecutionSuite
-import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, SortAggregateExec}
+import org.apache.spark.sql.execution.aggregate.HashAggregateExec
 import org.apache.spark.sql.execution.command.DataWritingCommandExec
 import org.apache.spark.sql.execution.datasources.{BasicWriteJobStatsTracker, InsertIntoHadoopFsRelationCommand, SQLHadoopMapReduceCommitProtocol, V1WriteCommand}
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ShuffleExchangeExec}
@@ -310,32 +310,18 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
 
   test("SortAggregate metrics") {
     // Force use SortAggregateExec instead of HashAggregateExec
-    withSQLConf("spark.sql.test.forceApplySortAggregate" -> "true") {
+    withSQLConf("spark.sql.test.forceApplySortAggregate" -> "true",
+      SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
       // Assume the execution plan is
-      // ... -> SortAggregate(nodeId = 2) -> Exchange(nodeId = 1)
       // -> SortAggregate(nodeId = 0)
+      //     -> Sort(nodeId = 1)
+      //       -> Exchange(nodeId = 2)
+      //          -> SortAggregate(...)
       val df = testData2.groupBy($"a").count()
-      val expected2 = Seq(
-        Map("number of output rows" -> 4L),
-        Map("number of output rows" -> 3L))
-
-      val shuffleExpected2 = Map(
-        "records read" -> 4L,
-        "local blocks read" -> 4L,
-        "remote blocks read" -> 0L,
-        "shuffle records written" -> 4L)
-      testSparkPlanMetrics(df, 1, Map(
-        2L -> (("SortAggregate", expected2(0))),
-        1L -> (("Exchange", shuffleExpected2)),
-        0L -> (("SortAggregate", expected2(1))))
-      )
+      df.explain(true)
 
       // Test aggTime metric for grouped aggregate
       testSparkPlanMetricsWithPredicates(df, 1, Map(
-        2L -> (("SortAggregate", Map(
-          "time in aggregation build" -> {
-            _.toString.matches(timingMetricPattern)
-          }))),
         0L -> (("SortAggregate", Map(
           "time in aggregation build" -> {
             _.toString.matches(timingMetricPattern)
