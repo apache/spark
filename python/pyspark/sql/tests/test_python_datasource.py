@@ -16,7 +16,6 @@
 #
 import os
 import platform
-import sys
 import tempfile
 import unittest
 import logging
