@@ -2221,9 +2221,9 @@ class SparkConnectClient(object):
                     "spark.connect.session.planCompression.threshold",
                     "spark.connect.session.planCompression.defaultAlgorithm",
                 )
-                self._plan_compression_threshold = int(
-                    plan_compression_threshold_str
-                )  # type: ignore[arg-type]
+                self._plan_compression_threshold = (
+                    int(plan_compression_threshold_str) if plan_compression_threshold_str else -1
+                )
                 logger.debug(
                     f"Plan compression threshold: {self._plan_compression_threshold}, "
                     f"algorithm: {self._plan_compression_algorithm}"
