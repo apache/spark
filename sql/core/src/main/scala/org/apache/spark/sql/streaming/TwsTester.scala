@@ -130,7 +130,7 @@ class TwsTester[K, I, O](
     ans
   }
 
-  def updateWatermark(input: List[(K, I)]): Unit = {
+  private def updateWatermark(input: List[(K, I)]): Unit = {
     if (timeMode != TimeMode.EventTime || input.isEmpty) {
       return
     }
