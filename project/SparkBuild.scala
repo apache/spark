@@ -290,6 +290,7 @@ object SparkBuild extends PomBuild {
   lazy val sharedSettings = checkJavaVersionSettings ++
                             sparkGenjavadocSettings ++
                             compilerWarningSettings ++
+                            DependencyVersions.settings ++
       (if (noLintOnCompile) Nil else enableScalaStyle) ++ Seq(
     (Compile / exportJars) := true,
     (Test / exportJars) := false,
@@ -1177,12 +1178,33 @@ object KubernetesIntegrationTests {
   )
 }
 
+object DependencyVersions {
+  import java.util.Properties
+
+  private lazy val pomProperties = settingKey[Properties]("Effective POM properties")
+  lazy val jacksonVersion = settingKey[String]("Jackson version")
+  lazy val jacksonModuleID = settingKey[ModuleID]("Jackson Module ID")
+  lazy val settings = Seq(
+    pomProperties := SbtPomKeys.effectivePom.value.getProperties,
+    jacksonVersion := getVersion(pomProperties.value, "fasterxml.jackson"),
+    jacksonModuleID := ModuleID("com.fasterxml.jackson", "jackson-bom", jacksonVersion.value),
+  )
+
+  private def getVersionFromPom(pomProperties: Properties, property: String) : String = {
+    pomProperties.get(property).asInstanceOf[String]
+  }
+
+  private def getVersion(pomProperties: Properties, property: String) : String = {
+    val version = property + ".version"
+    sys.props.get(version).getOrElse(getVersionFromPom(pomProperties, version))
+  }
+}
+
 /**
  * Overrides to work around sbt's dependency resolution being different from Maven's.
  */
 object DependencyOverrides {
-  lazy val jacksonVersion = sys.props.get("fasterxml.jackson.version").getOrElse("2.20.1")
-  lazy val jacksonDeps = Bom.dependencies("com.fasterxml.jackson" % "jackson-bom" % jacksonVersion)
+  lazy val jacksonDeps = Bom.dependencies(DependencyVersions.jacksonModuleID)
   lazy val settings = jacksonDeps ++ Seq(
     dependencyOverrides ++= {
       val guavaVersion = sys.props.get("guava.version").getOrElse(
