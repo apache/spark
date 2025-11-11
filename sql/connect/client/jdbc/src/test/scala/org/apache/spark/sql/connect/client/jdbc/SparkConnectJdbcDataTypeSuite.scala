@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.connect.client.jdbc
 
-import java.sql.Types
+import java.sql.{ResultSet, SQLException, Types}
 
 import org.apache.spark.sql.connect.client.jdbc.test.JdbcHelper
 import org.apache.spark.sql.connect.test.{ConnectFunSuite, RemoteSparkSession}
@@ -246,6 +246,61 @@ class SparkConnectJdbcDataTypeSuite extends ConnectFunSuite with RemoteSparkSess
           assert(metaData.getColumnDisplaySize(1) === expectedColumnDisplaySize)
           assert(metaData.getColumnDisplaySize(1) >= value.size)
       }
+    }
+  }
+
+  test("getter functions column index out of bound") {
+    Seq(
+      ("'foo'", (rs: ResultSet) => rs.getString(999)),
+      ("true", (rs: ResultSet) => rs.getBoolean(999)),
+      ("cast(1 as byte)", (rs: ResultSet) => rs.getByte(999)),
+      ("cast(1 as short)", (rs: ResultSet) => rs.getShort(999)),
+      ("cast(1 as int)", (rs: ResultSet) => rs.getInt(999)),
+      ("cast(1 as bigint)", (rs: ResultSet) => rs.getLong(999)),
+      ("cast(1 as float)", (rs: ResultSet) => rs.getFloat(999)),
+      ("cast(1 as double)", (rs: ResultSet) => rs.getDouble(999)),
+      ("cast(1 as DECIMAL(10,5))", (rs: ResultSet) => rs.getBigDecimal(999))
+    ).foreach {
+      case (query, getter) =>
+        withExecuteQuery(s"SELECT $query") { rs =>
+          assert(rs.next())
+          withClue("SQLException is not thrown when the result set index goes out of bound") {
+            intercept[SQLException] {
+              getter(rs)
+            }
+          }
+        }
+    }
+  }
+
+  test("getter functions called after statement closed") {
+    Seq(
+      ("'foo'", (rs: ResultSet) => rs.getString(1), "foo"),
+      ("true", (rs: ResultSet) => rs.getBoolean(1), true),
+      ("cast(1 as byte)", (rs: ResultSet) => rs.getByte(1), 1.toByte),
+      ("cast(1 as short)", (rs: ResultSet) => rs.getShort(1), 1.toShort),
+      ("cast(1 as int)", (rs: ResultSet) => rs.getInt(1), 1.toInt),
+      ("cast(1 as bigint)", (rs: ResultSet) => rs.getLong(1), 1.toLong),
+      ("cast(1 as float)", (rs: ResultSet) => rs.getFloat(1), 1.toFloat),
+      ("cast(1 as double)", (rs: ResultSet) => rs.getDouble(1), 1.toDouble),
+      ("cast(1 as DECIMAL(10,5))", (rs: ResultSet) => rs.getBigDecimal(1),
+        new java.math.BigDecimal("1.00000"))
+    ).foreach {
+      case (query, getter, value) =>
+        var resultSet: Option[ResultSet] = None
+        withExecuteQuery(s"SELECT $query") { rs =>
+          assert(rs.next())
+          assert(getter(rs) === value)
+          assert(!rs.wasNull)
+          resultSet = Some(rs)
+        }
+        assert(resultSet.isDefined)
+        withClue(
+          "SQLException is not thrown when result set is used after JDBC statement is closed") {
+          intercept[SQLException] {
+            getter(resultSet.get)
+          }
+        }
     }
   }
 }

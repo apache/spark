@@ -76,6 +76,23 @@ class SparkConnectResultSet(
     }
   }
 
+  private[jdbc] def getField[T](columnIndex: Int)(get: Int => T): Option[T] = {
+    checkOpen()
+    if (columnIndex < 0 || columnIndex >= currentRow.length) {
+      throw new SQLException(s"The column index is out of range: $columnIndex, " +
+        s"number of columns: ${currentRow.length}.")
+    }
+
+    Option(currentRow.get(columnIndex)) match {
+      case Some(rawField) =>
+        _wasNull = false
+        Some(get(columnIndex))
+      case None =>
+        _wasNull = true
+        None
+    }
+  }
+
   override def findColumn(columnLabel: String): Int = {
     sparkResult.schema.getFieldIndex(columnLabel) match {
       case Some(i) => i + 1
@@ -85,75 +102,35 @@ class SparkConnectResultSet(
   }
 
   override def getString(columnIndex: Int): String = {
-    if (currentRow.isNullAt(columnIndex - 1)) {
-      _wasNull = true
-      return null
-    }
-    _wasNull = false
-    String.valueOf(currentRow.get(columnIndex - 1))
+    getField(columnIndex - 1) { idx => String.valueOf(currentRow.get(idx)) }.orNull
   }
 
   override def getBoolean(columnIndex: Int): Boolean = {
-    if (currentRow.isNullAt(columnIndex - 1)) {
-      _wasNull = true
-      return false
-    }
-    _wasNull = false
-    currentRow.getBoolean(columnIndex - 1)
+    getField(columnIndex - 1) { idx => currentRow.getBoolean(idx) }.getOrElse(false)
   }
 
   override def getByte(columnIndex: Int): Byte = {
-    if (currentRow.isNullAt(columnIndex - 1)) {
-      _wasNull = true
-      return 0.toByte
-    }
-    _wasNull = false
-    currentRow.getByte(columnIndex - 1)
+    getField(columnIndex - 1) { idx => currentRow.getByte(idx) }.getOrElse(0)
   }
 
   override def getShort(columnIndex: Int): Short = {
-    if (currentRow.isNullAt(columnIndex - 1)) {
-      _wasNull = true
-      return 0.toShort
-    }
-    _wasNull = false
-    currentRow.getShort(columnIndex - 1)
+    getField(columnIndex - 1) { idx => currentRow.getShort(idx) }.getOrElse(0)
   }
 
   override def getInt(columnIndex: Int): Int = {
-    if (currentRow.isNullAt(columnIndex - 1)) {
-      _wasNull = true
-      return 0
-    }
-    _wasNull = false
-    currentRow.getInt(columnIndex - 1)
+    getField(columnIndex - 1) { idx => currentRow.getInt(idx) }.getOrElse(0)
   }
 
   override def getLong(columnIndex: Int): Long = {
-    if (currentRow.isNullAt(columnIndex - 1)) {
-      _wasNull = true
-      return 0L
-    }
-    _wasNull = false
-    currentRow.getLong(columnIndex - 1)
+    getField(columnIndex - 1) { idx => currentRow.getLong(idx) }.getOrElse(0)
   }
 
   override def getFloat(columnIndex: Int): Float = {
-    if (currentRow.isNullAt(columnIndex - 1)) {
-      _wasNull = true
-      return 0.toFloat
-    }
-    _wasNull = false
-    currentRow.getFloat(columnIndex - 1)
+    getField(columnIndex - 1) { idx => currentRow.getFloat(idx) }.getOrElse(0)
   }
 
   override def getDouble(columnIndex: Int): Double = {
-    if (currentRow.isNullAt(columnIndex - 1)) {
-      _wasNull = true
-      return 0.toDouble
-    }
-    _wasNull = false
-    currentRow.getDouble(columnIndex - 1)
+    getField(columnIndex - 1) { idx => currentRow.getDouble(idx) }.getOrElse(0)
   }
 
   override def getBigDecimal(columnIndex: Int, scale: Int): java.math.BigDecimal =
@@ -240,12 +217,7 @@ class SparkConnectResultSet(
   }
 
   override def getObject(columnIndex: Int): AnyRef = {
-    if (currentRow.isNullAt(columnIndex - 1)) {
-      _wasNull = true
-      return null
-    }
-    _wasNull = false
-    currentRow.get(columnIndex - 1).asInstanceOf[AnyRef]
+    getField(columnIndex - 1) { idx => currentRow.get(idx).asInstanceOf[AnyRef] }.orNull
   }
 
   override def getObject(columnLabel: String): AnyRef =
@@ -258,12 +230,7 @@ class SparkConnectResultSet(
     throw new SQLFeatureNotSupportedException
 
   override def getBigDecimal(columnIndex: Int): java.math.BigDecimal = {
-    if (currentRow.isNullAt(columnIndex - 1)) {
-      _wasNull = true
-      return null
-    }
-    _wasNull = false
-    currentRow.getDecimal(columnIndex - 1)
+    getField(columnIndex - 1) { idx => currentRow.getDecimal(idx) }.orNull
   }
 
   override def getBigDecimal(columnLabel: String): java.math.BigDecimal =
