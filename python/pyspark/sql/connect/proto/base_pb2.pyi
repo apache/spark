@@ -57,42 +57,123 @@ else:
 
 DESCRIPTOR: google.protobuf.descriptor.FileDescriptor
 
+class _CompressionCodec:
+    ValueType = typing.NewType("ValueType", builtins.int)
+    V: typing_extensions.TypeAlias = ValueType
+
+class _CompressionCodecEnumTypeWrapper(
+    google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[_CompressionCodec.ValueType],
+    builtins.type,
+):  # noqa: F821
+    DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
+    COMPRESSION_CODEC_UNSPECIFIED: _CompressionCodec.ValueType  # 0
+    COMPRESSION_CODEC_ZSTD: _CompressionCodec.ValueType  # 1
+
+class CompressionCodec(_CompressionCodec, metaclass=_CompressionCodecEnumTypeWrapper):
+    """Compression codec for plan compression."""
+
+COMPRESSION_CODEC_UNSPECIFIED: CompressionCodec.ValueType  # 0
+COMPRESSION_CODEC_ZSTD: CompressionCodec.ValueType  # 1
+global___CompressionCodec = CompressionCodec
+
 class Plan(google.protobuf.message.Message):
     """A [[Plan]] is the structure that carries the runtime information for the execution from the
-    client to the server. A [[Plan]] can either be of the type [[Relation]] which is a reference
-    to the underlying logical plan or it can be of the [[Command]] type that is used to execute
-    commands on the server.
+    client to the server. A [[Plan]] can be one of the following:
+    - [[Relation]]: a reference to the underlying logical plan.
+    - [[Command]]: used to execute commands on the server.
+    - [[CompressedOperation]]: a compressed representation of either a Relation or a Command.
     """
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
+    class CompressedOperation(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        class _OpType:
+            ValueType = typing.NewType("ValueType", builtins.int)
+            V: typing_extensions.TypeAlias = ValueType
+
+        class _OpTypeEnumTypeWrapper(
+            google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[
+                Plan.CompressedOperation._OpType.ValueType
+            ],
+            builtins.type,
+        ):  # noqa: F821
+            DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
+            OP_TYPE_UNSPECIFIED: Plan.CompressedOperation._OpType.ValueType  # 0
+            OP_TYPE_RELATION: Plan.CompressedOperation._OpType.ValueType  # 1
+            OP_TYPE_COMMAND: Plan.CompressedOperation._OpType.ValueType  # 2
+
+        class OpType(_OpType, metaclass=_OpTypeEnumTypeWrapper): ...
+        OP_TYPE_UNSPECIFIED: Plan.CompressedOperation.OpType.ValueType  # 0
+        OP_TYPE_RELATION: Plan.CompressedOperation.OpType.ValueType  # 1
+        OP_TYPE_COMMAND: Plan.CompressedOperation.OpType.ValueType  # 2
+
+        DATA_FIELD_NUMBER: builtins.int
+        OP_TYPE_FIELD_NUMBER: builtins.int
+        COMPRESSION_CODEC_FIELD_NUMBER: builtins.int
+        data: builtins.bytes
+        op_type: global___Plan.CompressedOperation.OpType.ValueType
+        compression_codec: global___CompressionCodec.ValueType
+        def __init__(
+            self,
+            *,
+            data: builtins.bytes = ...,
+            op_type: global___Plan.CompressedOperation.OpType.ValueType = ...,
+            compression_codec: global___CompressionCodec.ValueType = ...,
+        ) -> None: ...
+        def ClearField(
+            self,
+            field_name: typing_extensions.Literal[
+                "compression_codec", b"compression_codec", "data", b"data", "op_type", b"op_type"
+            ],
+        ) -> None: ...
+
     ROOT_FIELD_NUMBER: builtins.int
     COMMAND_FIELD_NUMBER: builtins.int
+    COMPRESSED_OPERATION_FIELD_NUMBER: builtins.int
     @property
     def root(self) -> pyspark.sql.connect.proto.relations_pb2.Relation: ...
     @property
     def command(self) -> pyspark.sql.connect.proto.commands_pb2.Command: ...
+    @property
+    def compressed_operation(self) -> global___Plan.CompressedOperation: ...
     def __init__(
         self,
         *,
         root: pyspark.sql.connect.proto.relations_pb2.Relation | None = ...,
         command: pyspark.sql.connect.proto.commands_pb2.Command | None = ...,
+        compressed_operation: global___Plan.CompressedOperation | None = ...,
     ) -> None: ...
     def HasField(
         self,
         field_name: typing_extensions.Literal[
-            "command", b"command", "op_type", b"op_type", "root", b"root"
+            "command",
+            b"command",
+            "compressed_operation",
+            b"compressed_operation",
+            "op_type",
+            b"op_type",
+            "root",
+            b"root",
         ],
     ) -> builtins.bool: ...
     def ClearField(
         self,
         field_name: typing_extensions.Literal[
-            "command", b"command", "op_type", b"op_type", "root", b"root"
+            "command",
+            b"command",
+            "compressed_operation",
+            b"compressed_operation",
+            "op_type",
+            b"op_type",
+            "root",
+            b"root",
         ],
     ) -> None: ...
     def WhichOneof(
         self, oneof_group: typing_extensions.Literal["op_type", b"op_type"]
-    ) -> typing_extensions.Literal["root", "command"] | None: ...
+    ) -> typing_extensions.Literal["root", "command", "compressed_operation"] | None: ...
 
 global___Plan = Plan
 

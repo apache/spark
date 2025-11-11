@@ -864,7 +864,7 @@ class SparkConnectPlanTests(PlanOnlyTestFixture):
     def test_column_literals(self):
         df = self.connect.with_plan(Read("table"))
         lit_df = df.select(lit(10))
-        self.assertIsNotNone(lit_df._plan.to_proto(None))
+        self.assertIsNotNone(lit_df._plan.to_proto(self.connect))
 
         self.assertIsNotNone(lit(10).to_plan(None))
         plan = lit(10).to_plan(None)

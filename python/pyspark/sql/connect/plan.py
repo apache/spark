@@ -143,7 +143,8 @@ class LogicalPlan:
             if enabled, the proto plan will be printed.
         """
         plan = proto.Plan()
-        plan.root.CopyFrom(self.plan(session))
+        relation = self.plan(session)
+        session._set_relation_in_plan(plan, relation)
 
         if debug:
             print(plan)

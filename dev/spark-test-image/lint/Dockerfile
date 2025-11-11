@@ -84,6 +84,7 @@ RUN python3.11 -m pip install \
     'grpc-stubs==1.24.11' \
     'grpcio-status==1.76.0' \
     'grpcio==1.76.0' \
+    'zstandard==0.25.0' \
     'ipython' \
     'ipython_genutils' \
     'jinja2' \

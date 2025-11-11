@@ -33,17 +33,35 @@ option java_package = "org.apache.spark.connect.proto";
 option go_package = "internal/generated";
 
 // A [[Plan]] is the structure that carries the runtime information for the execution from the
-// client to the server. A [[Plan]] can either be of the type [[Relation]] which is a reference
-// to the underlying logical plan or it can be of the [[Command]] type that is used to execute
-// commands on the server.
+// client to the server. A [[Plan]] can be one of the following:
+// - [[Relation]]: a reference to the underlying logical plan.
+// - [[Command]]: used to execute commands on the server.
+// - [[CompressedOperation]]: a compressed representation of either a Relation or a Command.
 message Plan {
   oneof op_type {
     Relation root = 1;
     Command command = 2;
+    CompressedOperation compressed_operation = 3;
+  }
+
+  message CompressedOperation {
+    bytes data = 1;
+    OpType op_type = 2;
+    CompressionCodec compression_codec = 3;
+
+    enum OpType {
+      OP_TYPE_UNSPECIFIED = 0;
+      OP_TYPE_RELATION = 1;
+      OP_TYPE_COMMAND = 2;
+    }
   }
 }
 
-
+// Compression codec for plan compression.
+enum CompressionCodec {
+  COMPRESSION_CODEC_UNSPECIFIED = 0;
+  COMPRESSION_CODEC_ZSTD = 1;
+}
 
 // User Context is used to refer to one particular user session that is executing
 // queries in the backend.

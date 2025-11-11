@@ -20,7 +20,11 @@ package org.apache.spark.sql.connect.client.jdbc
 import java.sql.{Array => _, _}
 
 import org.apache.spark.SparkBuildInfo.{spark_version => SPARK_VERSION}
+import org.apache.spark.sql.Column
+import org.apache.spark.sql.catalyst.util.QuotingUtils._
+import org.apache.spark.sql.connect
 import org.apache.spark.sql.connect.client.jdbc.SparkConnectDatabaseMetaData._
+import org.apache.spark.sql.functions._
 import org.apache.spark.util.VersionUtils
 
 class SparkConnectDatabaseMetaData(conn: SparkConnectConnection) extends DatabaseMetaData {
@@ -97,8 +101,7 @@ class SparkConnectDatabaseMetaData(conn: SparkConnectConnection) extends Databas
   override def getTimeDateFunctions: String =
     throw new SQLFeatureNotSupportedException
 
-  override def getSearchStringEscape: String =
-    throw new SQLFeatureNotSupportedException
+  override def getSearchStringEscape: String = "\\"
 
   override def getExtraNameCharacters: String = ""
 
@@ -277,6 +280,9 @@ class SparkConnectDatabaseMetaData(conn: SparkConnectConnection) extends Databas
 
   override def dataDefinitionIgnoredInTransactions: Boolean = false
 
+  private def isNullOrWildcard(pattern: String): Boolean =
+    pattern == null || pattern == "%"
+
   override def getProcedures(
       catalog: String,
       schemaPattern: String,
@@ -299,11 +305,60 @@ class SparkConnectDatabaseMetaData(conn: SparkConnectConnection) extends Databas
     new SparkConnectResultSet(df.collectResult())
   }
 
-  override def getSchemas: ResultSet =
-    throw new SQLFeatureNotSupportedException
+  override def getSchemas: ResultSet = {
+    conn.checkOpen()
 
-  override def getSchemas(catalog: String, schemaPattern: String): ResultSet =
-    throw new SQLFeatureNotSupportedException
+    getSchemas(null, null)
+  }
+
+  // Schema of the returned DataFrame is:
+  // |-- TABLE_SCHEM: string (nullable = false)
+  // |-- TABLE_CATALOG: string (nullable = false)
+  private def getSchemasDataFrame(
+      catalog: String, schemaPattern: String): connect.DataFrame = {
+
+    val schemaFilterExpr = if (isNullOrWildcard(schemaPattern)) {
+      lit(true)
+    } else {
+      $"TABLE_SCHEM".like(schemaPattern)
+    }
+
+    def internalGetSchemas(
+        catalogOpt: Option[String],
+        schemaFilterExpr: Column): connect.DataFrame = {
+      val catalog = catalogOpt.getOrElse(conn.getCatalog)
+      // Spark SQL supports LIKE clause in SHOW SCHEMAS command, but we can't use that
+      // because the LIKE pattern does not follow SQL standard.
+      conn.spark.sql(s"SHOW SCHEMAS IN ${quoteIdentifier(catalog)}")
+        .select($"namespace".as("TABLE_SCHEM"))
+        .filter(schemaFilterExpr)
+        .withColumn("TABLE_CATALOG", lit(catalog))
+    }
+
+    if (catalog == null) {
+      // search in all catalogs
+      val emptyDf = conn.spark.emptyDataFrame
+        .withColumn("TABLE_SCHEM", lit(""))
+        .withColumn("TABLE_CATALOG", lit(""))
+      conn.spark.catalog.listCatalogs().collect().map(_.name).map { c =>
+        internalGetSchemas(Some(c), schemaFilterExpr)
+      }.fold(emptyDf) { (l, r) => l.unionAll(r) }
+    } else if (catalog == "") {
+      // search only in current catalog
+      internalGetSchemas(None, schemaFilterExpr)
+    } else {
+      // search in the specific catalog
+      internalGetSchemas(Some(catalog), schemaFilterExpr)
+    }
+  }
+
+  override def getSchemas(catalog: String, schemaPattern: String): ResultSet = {
+    conn.checkOpen()
+
+    val df = getSchemasDataFrame(catalog, schemaPattern)
+      .orderBy("TABLE_CATALOG", "TABLE_SCHEM")
+    new SparkConnectResultSet(df.collectResult())
+  }
 
   override def getTableTypes: ResultSet =
     throw new SQLFeatureNotSupportedException
