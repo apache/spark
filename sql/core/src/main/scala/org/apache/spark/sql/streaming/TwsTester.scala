@@ -70,7 +70,7 @@ class TwsTester[K, I, O](
     case _ =>
   }
 
-  private def handleInitialState[S]() : Unit = {
+  private def handleInitialState[S](): Unit = {
     val timerValues = new TimerValuesImpl(Some(clock.instant().toEpochMilli()), None)
     val p = processor.asInstanceOf[StatefulProcessorWithInitialState[K, I, O, S]]
     initialState.foreach {
@@ -83,6 +83,9 @@ class TwsTester[K, I, O](
 
   /**
    * Processes input rows through the stateful processor, grouped by key.
+   *
+   * This corresponds to processing one microbatch. {@code handleInputRows} will be called once for
+   * each key that appears in {@code input}.
    *
    * @param input list of (key, input row) tuples to process
    * @return all output rows produced by the processor
@@ -151,6 +154,23 @@ class TwsTester[K, I, O](
    * @return all output rows produced by the processor
    */
   def testOneRow(key: K, inputRow: I): List[O] = test(List((key, inputRow)))
+
+  /**
+   * Processes input rows through the stateful processor, one by one.
+   *
+   * This corresponds to running streaming query in real-time mode. {@code handleInputRows} will be
+   * called once for each row in {@code input}.
+   *
+   * @param input list of (key, input row) tuples to process
+   * @return all output rows produced by the processor
+   */
+  def testRowByRow(input: List[(K, I)]): List[O] = {
+    var ans: List[O] = List()
+    for (row <- input) {
+      ans ++= test(List(row))
+    }
+    ans
+  }
 
   /**
    * Tests how value state is changed after processing one row.

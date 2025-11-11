@@ -781,6 +781,21 @@ class TwsTesterSuite extends SparkFunSuite {
     val ans = tester.test(List(("a", "a"), ("c", "c")))
     assert(ans == List(("a", 11L), ("c", 1L)))
   }
+
+  test("TwsTester should test RunningCountProcessor row-by-row") {
+    val input: List[(String, String)] = List(
+      ("key1", "a"),
+      ("key2", "b"),
+      ("key1", "c"),
+      ("key2", "b"),
+      ("key1", "c"),
+      ("key1", "c"),
+      ("key3", "q")
+    )
+    val tester = new TwsTester(new RunningCountProcessor[String]())
+    val ans: List[(String, Long)] = tester.testRowByRow(input)
+    assert(ans == List(("key1", 1L), ("key2", 1L), ("key1", 2L), ("key2", 2L), ("key1", 3L), ("key1", 4L), ("key3", 1L)))
+  }
 }
 
 /**
