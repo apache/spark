@@ -583,18 +583,12 @@ class SparkConnectClientSuite extends ConnectFunSuite with BeforeAndAfterEach {
 
     // Small plan should not be compressed
     val plan = buildPlan("select * from range(10)")
-    client.analyze(
-      proto.AnalyzePlanRequest.AnalyzeCase.SCHEMA,
-      Some(plan)
-    )
+    client.analyze(proto.AnalyzePlanRequest.AnalyzeCase.SCHEMA, Some(plan))
     assert(service.getAndClearLatestInputPlan().hasRoot)
 
     // Large plan should be compressed
     val plan2 = buildPlan(s"select ${"Apache Spark" * 10000} as value")
-    client.analyze(
-      proto.AnalyzePlanRequest.AnalyzeCase.SCHEMA,
-      Some(plan2)
-    )
+    client.analyze(proto.AnalyzePlanRequest.AnalyzeCase.SCHEMA, Some(plan2))
     assert(service.getAndClearLatestInputPlan().hasCompressedOperation)
   }
 
@@ -606,7 +600,8 @@ class SparkConnectClientSuite extends ConnectFunSuite with BeforeAndAfterEach {
       .enableReattachableExecute()
       .build()
 
-    service.setErrorToThrowOnConfig("spark.connect.session.planCompression.defaultAlgorithm",
+    service.setErrorToThrowOnConfig(
+      "spark.connect.session.planCompression.defaultAlgorithm",
       new StatusRuntimeException(Status.INTERNAL.withDescription("SQL_CONF_NOT_FOUND")))
 
     // Execute a few queries to make sure the client fetches the configs only once.
@@ -773,13 +768,16 @@ class DummySparkConnectService() extends SparkConnectServiceGrpc.SparkConnectSer
     responseObserver.onCompleted()
   }
 
-  override def config(request: proto.ConfigRequest,
-                      responseObserver: StreamObserver[proto.ConfigResponse]): Unit = {
+  override def config(
+      request: proto.ConfigRequest,
+      responseObserver: StreamObserver[proto.ConfigResponse]): Unit = {
     inputConfigRequests.synchronized {
       inputConfigRequests.append(request)
     }
-    require(request.getOperation.hasGetOption, "Only GetOption is supported. Other operations " +
-      "can be implemented by following the same procedure below.")
+    require(
+      request.getOperation.hasGetOption,
+      "Only GetOption is supported. Other operations " +
+        "can be implemented by following the same procedure below.")
 
     val responseBuilder = proto.ConfigResponse.newBuilder().setSessionId(request.getSessionId)
     request.getOperation.getGetOption.getKeysList.asScala.iterator.foreach { key =>

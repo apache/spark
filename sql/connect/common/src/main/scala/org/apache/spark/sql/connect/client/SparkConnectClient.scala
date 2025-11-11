@@ -48,7 +48,7 @@ import org.apache.spark.util.SparkSystemUtils
 private[sql] class SparkConnectClient(
     private[sql] val configuration: SparkConnectClient.Configuration,
     private[sql] val channel: ManagedChannel)
-  extends Logging {
+    extends Logging {
 
   private val userContext: UserContext = configuration.userContext
 
@@ -82,25 +82,30 @@ private[sql] class SparkConnectClient(
     _planCompressionOptions match {
       case Some(options) => options
       case None =>
-        val options = try {
-          Some(
-            PlanCompressionOptions(
-              thresholdBytes = conf.get("spark.connect.session.planCompression.threshold").toInt,
-              algorithm = conf.get("spark.connect.session.planCompression.defaultAlgorithm")
-            )
-          )
-        } catch {
-          // Disable plan compression if the server does not support it. Other exceptions are not
-          // swallowed.
-          case e: NoSuchElementException =>
-            logWarning(log"Plan compression is disabled because the server does not support it", e)
-            None
-          case e: SparkThrowable if e.getCondition == "INVALID_CONF_VALUE"
-              || e.getCondition == "SQL_CONF_NOT_FOUND"
-              || e.getCondition == "CONFIG_NOT_AVAILABLE" =>
-            logWarning(log"Plan compression is disabled because the server does not support it", e)
-            None
-        }
+        val options =
+          try {
+            Some(
+              PlanCompressionOptions(
+                thresholdBytes =
+                  conf.get("spark.connect.session.planCompression.threshold").toInt,
+                algorithm = conf.get("spark.connect.session.planCompression.defaultAlgorithm")))
+          } catch {
+            // Disable plan compression if the server does not support it. Other exceptions are not
+            // swallowed.
+            case e: NoSuchElementException =>
+              logWarning(
+                log"Plan compression is disabled because the server does not support it",
+                e)
+              None
+            case e: SparkThrowable
+                if e.getCondition == "INVALID_CONF_VALUE"
+                  || e.getCondition == "SQL_CONF_NOT_FOUND"
+                  || e.getCondition == "CONFIG_NOT_AVAILABLE" =>
+              logWarning(
+                log"Plan compression is disabled because the server does not support it",
+                e)
+              None
+          }
         _planCompressionOptions = Some(options)
         options
     }
@@ -122,8 +127,9 @@ private[sql] class SparkConnectClient(
       // If the server cannot parse the compressed plan, disable plan compression for subsequent
       // requests on the session.
       case e: SparkThrowable if e.getCondition == "CONNECT_INVALID_PLAN.CANNOT_PARSE" =>
-        logWarning(log"Disabling plan compression for the session due to " +
-          log"CONNECT_INVALID_PLAN.CANNOT_PARSE error.")
+        logWarning(
+          log"Disabling plan compression for the session due to " +
+            log"CONNECT_INVALID_PLAN.CANNOT_PARSE error.")
         setPlanCompressionOptions(None)
         // Retry the code block without plan compression.
         fn
@@ -189,13 +195,12 @@ private[sql] class SparkConnectClient(
   /**
    * Try to compress the plan if it exceeds the threshold defined in the planCompressionOptions.
    * Return the original plan if compression is disabled, not needed, or not effective.
-   * */
+   */
   private def tryCompressPlan(plan: proto.Plan): proto.Plan = {
     def tryCompressMessage(
         message: protobuf.Message,
         opType: proto.Plan.CompressedOperation.OpType,
-        options: PlanCompressionOptions
-    ): Option[proto.Plan.CompressedOperation] = {
+        options: PlanCompressionOptions): Option[proto.Plan.CompressedOperation] = {
       val serialized = message.toByteArray
       if (serialized.length > options.thresholdBytes) {
         try {
@@ -205,18 +210,19 @@ private[sql] class SparkConnectClient(
           val compressed = Zstd.compress(serialized)
           val duration = (System.nanoTime() - startTime) / 1e9
           val savingRatio = 1 - compressed.length.toDouble / serialized.length
-          logDebug(log"Plan compression: original_size=${MDC(SIZE, serialized.length)}, " +
-            log"compressed_size=${MDC(SIZE, compressed.length)}, " +
-            log"saving_ratio=${MDC(RATIO, savingRatio)}, " +
-            log"duration_s=${MDC(TIME, duration)}")
+          logDebug(
+            log"Plan compression: original_size=${MDC(SIZE, serialized.length)}, " +
+              log"compressed_size=${MDC(SIZE, compressed.length)}, " +
+              log"saving_ratio=${MDC(RATIO, savingRatio)}, " +
+              log"duration_s=${MDC(TIME, duration)}")
           if (compressed.length < serialized.length) {
             return Some(
-              proto.Plan.CompressedOperation.newBuilder()
+              proto.Plan.CompressedOperation
+                .newBuilder()
                 .setData(ByteString.copyFrom(compressed))
                 .setOpType(opType)
                 .setCompressionCodec(proto.CompressionCodec.COMPRESSION_CODEC_ZSTD)
-                .build()
-            )
+                .build())
           } else {
             logDebug(log"Plan compression not effective. Using original plan.")
           }
@@ -225,8 +231,9 @@ private[sql] class SparkConnectClient(
             logInfo(log"Zstd library not available. Disabling plan compression.")
             setPlanCompressionOptions(None)
           case NonFatal(e) =>
-            logWarning(log"Failed to compress plan: ${MDC(ERROR, e.getMessage)}. Using original " +
-              log"plan and disabling plan compression.")
+            logWarning(
+              log"Failed to compress plan: ${MDC(ERROR, e.getMessage)}. Using original " +
+                log"plan and disabling plan compression.")
             setPlanCompressionOptions(None)
         }
       }
@@ -238,13 +245,10 @@ private[sql] class SparkConnectClient(
         message: protobuf.Message,
         opType: proto.Plan.CompressedOperation.OpType,
         clearFn: proto.Plan.Builder => proto.Plan.Builder,
-        options: PlanCompressionOptions
-    ): proto.Plan = {
+        options: PlanCompressionOptions): proto.Plan = {
       tryCompressMessage(message, opType, options) match {
         case Some(compressedOperation) =>
-          clearFn(
-            proto.Plan.newBuilder(plan)
-          ).setCompressedOperation(compressedOperation).build()
+          clearFn(proto.Plan.newBuilder(plan)).setCompressedOperation(compressedOperation).build()
         case None => plan
       }
     }
@@ -258,21 +262,20 @@ private[sql] class SparkConnectClient(
               plan.getRoot,
               proto.Plan.CompressedOperation.OpType.OP_TYPE_RELATION,
               _.clearRoot(),
-              options
-            )
+              options)
           case proto.Plan.OpTypeCase.COMMAND =>
             maybeCompressPlan(
               plan,
               plan.getCommand,
               proto.Plan.CompressedOperation.OpType.OP_TYPE_COMMAND,
               _.clearCommand(),
-              options
-            )
+              options)
           case _ => plan
         }
       case _ => plan
     }
   }
+
   /**
    * Execute the plan and return response iterator.
    *
@@ -310,7 +313,8 @@ private[sql] class SparkConnectClient(
             .build())
       }
 
-      serverSideSessionId.foreach(session => request.setClientObservedServerSideSessionId(session))
+      serverSideSessionId.foreach(session =>
+        request.setClientObservedServerSideSessionId(session))
       operationId.foreach { opId =>
         require(
           isValidUUID(opId),
