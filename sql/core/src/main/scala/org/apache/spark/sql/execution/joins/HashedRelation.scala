@@ -816,7 +816,8 @@ private[execution] final class LongToUnsafeRowMap(
 
   private def grow(inputRowSize: Int): Unit = {
     // There is 8 bytes for the pointer to next value
-    val neededNumWords = (cursor - page.getBaseOffset + 8 + inputRowSize + 7) / 8
+    val usedBytes = cursor - page.getBaseOffset
+    val neededNumWords = (usedBytes + 8 + inputRowSize + 7) / 8
     if (neededNumWords > page.size() / 8) {
       if (neededNumWords > (1 << 30)) {
         throw QueryExecutionErrors.cannotBuildHashedRelationLargerThan8GError()
@@ -824,9 +825,10 @@ private[execution] final class LongToUnsafeRowMap(
       val newNumWords = math.max(neededNumWords, math.min(page.size() / 8 * 2, 1 << 30))
       val newPage = allocatePage(newNumWords.toInt * 8)
       Platform.copyMemory(page.getBaseObject, page.getBaseOffset, newPage.getBaseObject,
-        newPage.getBaseOffset, cursor - page.getBaseOffset)
+        newPage.getBaseOffset, usedBytes)
       freePage(page)
       page = newPage
+      cursor = page.getBaseOffset + usedBytes
     }
   }
 
