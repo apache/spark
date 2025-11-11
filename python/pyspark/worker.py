@@ -3305,10 +3305,9 @@ def main(infile, outfile):
             sys.exit(-1)
         start_faulthandler_periodic_traceback()
 
-        tzname = os.environ.get("TZ", None)
+        tzname = os.environ.get("SPARK_SESSION_LOCAL_TIMEZONE", None)
         if tzname is not None:
             tz = zoneinfo.ZoneInfo(tzname)
-            time.tzset()
         else:
             tz = datetime.datetime.now().astimezone().tzinfo
         TimestampType.tz_info = tz

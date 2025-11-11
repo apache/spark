@@ -284,7 +284,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
       envVars.put("SPARK_SIMPLIFIED_TRACEBACK", "1")
     }
     if (sessionLocalTimeZone.isDefined) {
-      envVars.put("TZ", sessionLocalTimeZone.get)
+      envVars.put("SPARK_SESSION_LOCAL_TIMEZONE", sessionLocalTimeZone.get)
     }
     // SPARK-30299 this could be wrong with standalone mode when executor
     // cores might not be correct because it defaults to all cores on the box.
