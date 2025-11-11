@@ -83,13 +83,12 @@ class SparkConnectResultSet(
         s"number of columns: ${currentRow.length}.")
     }
 
-    Option(currentRow.get(columnIndex)) match {
-      case Some(_) =>
-        _wasNull = false
-        Some(get(columnIndex))
-      case None =>
-        _wasNull = true
-        None
+    if (currentRow.isNullAt(columnIndex)) {
+      _wasNull = true
+      None
+    } else {
+      _wasNull = false
+      Some(get(columnIndex))
     }
   }
 
