@@ -99,7 +99,7 @@ def require_minimum_googleapis_common_protos_version() -> None:
 
 def require_minimum_zstandard_version() -> None:
     """Raise ImportError if zstandard is not installed"""
-    minimum_zstandard_version = "0.23.0"
+    minimum_zstandard_version = "0.25.0"
 
     try:
         import zstandard  # noqa
