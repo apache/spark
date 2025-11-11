@@ -2389,6 +2389,104 @@ class SubquerySuite extends QueryTest
     }
   }
 
+  test("Merge non-grouping aggregates") {
+    Seq(false, true).foreach { enableAQE =>
+      withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> enableAQE.toString) {
+        val df = sql(
+          """
+            |SELECT *
+            |FROM (SELECT avg(key) FROM testData)
+            |JOIN (SELECT sum(key) FROM testData)
+            |JOIN (SELECT count(distinct key) FROM testData)
+          """.stripMargin)
+
+        checkAnswer(df, Row(50.5, 5050, 100) :: Nil)
+
+        val plan = df.queryExecution.executedPlan
+        val subqueryIds = collectWithSubqueries(plan) { case s: SubqueryExec => s.id }
+        val reusedSubqueryIds = collectWithSubqueries(plan) {
+          case rs: ReusedSubqueryExec => rs.child.id
+        }
+
+        assert(subqueryIds.size == 1, "Missing or unexpected SubqueryExec in the plan")
+        assert(reusedSubqueryIds.size == 2,
+          "Missing or unexpected reused ReusedSubqueryExec in the plan")
+      }
+    }
+  }
+
+  test("Merge non-grouping aggregates from different levels") {
+    Seq(false, true).foreach { enableAQE =>
+      withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> enableAQE.toString) {
+        val df = sql(
+          """
+            |SELECT
+            |  first(avg_key),
+            |  (
+            |    -- Using `testData2` makes the whole subquery plan non-mergeable to the
+            |    -- non-grouping aggregate subplan in the main plan, which uses `testData`, but its
+            |    -- aggregate subplan with `sum(key)` is mergeable
+            |    SELECT first(sum_key)
+            |    FROM (SELECT sum(key) AS sum_key FROM testData)
+            |    JOIN testData2
+            |  ),
+            |  first(count_key)
+            |FROM (SELECT avg(key) AS avg_key, count(distinct key) as count_key FROM testData)
+            |JOIN testData3
+          """.stripMargin)
+
+        checkAnswer(df, Row(50.5, 5050, 100) :: Nil)
+
+        val plan = df.queryExecution.executedPlan
+
+        val subqueryIds = collectWithSubqueries(plan) { case s: SubqueryExec => s.id }
+        val reusedSubqueryIds = collectWithSubqueries(plan) {
+          case rs: ReusedSubqueryExec => rs.child.id
+        }
+
+        assert(subqueryIds.size == 2, "Missing or unexpected SubqueryExec in the plan")
+        assert(reusedSubqueryIds.size == 2,
+          "Missing or unexpected reused ReusedSubqueryExec in the plan")
+      }
+    }
+  }
+
+  test("Merge non-grouping aggregate and subquery") {
+    Seq(false, true).foreach { enableAQE =>
+      withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> enableAQE.toString) {
+        val df = sql(
+          """
+            |SELECT
+            |  first(avg_key),
+            |  (
+            |    -- In this case the whole scalar subquery plan is mergeable to the non-grouping
+            |    -- aggregate subplan in the main plan.
+            |    SELECT sum(key) AS sum_key FROM testData
+            |  ),
+            |  first(count_key)
+            |FROM (SELECT avg(key) AS avg_key, count(distinct key) as count_key FROM testData)
+            |JOIN testData3
+          """.stripMargin)
+
+        checkAnswer(df, Row(50.5, 5050, 100) :: Nil)
+
+        val plan = df.queryExecution.executedPlan
+
+        val subqueryIds = collectWithSubqueries(plan) { case s: SubqueryExec => s.id }
+        val reusedSubqueryIds = collectWithSubqueries(plan) {
+          case rs: ReusedSubqueryExec => rs.child.id
+        }
+
+        assert(subqueryIds.size == 1, "Missing or unexpected SubqueryExec in the plan")
+        assert(reusedSubqueryIds.size == 2,
+          "Missing or unexpected reused ReusedSubqueryExec in the plan")
+      }
+    }
+  }
+
   test("SPARK-39355: Single column uses quoted to construct UnresolvedAttribute") {
     checkAnswer(
       sql("""
