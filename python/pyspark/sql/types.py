@@ -461,7 +461,7 @@ class TimestampType(DatetimeType, metaclass=DataTypeSingleton):
         if ts is not None:
             # using int to avoid precision loss in float
             return datetime.datetime.fromtimestamp(ts // 1000000, self.tz_info).replace(
-                microsecond=ts % 1000000
+                microsecond=ts % 1000000, tzinfo=None
             )
 
 
