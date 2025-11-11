@@ -87,7 +87,9 @@ import org.apache.spark.sql.types.{ArrayType, BinaryType, BooleanType, ByteType,
  *   SubqueryAlias(getIdentifierText(ctx.name), plan)
  * }}}
  */
-class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with DataTypeErrorsBase {
+abstract class DataTypeAstBuilder
+    extends SqlBaseParserBaseVisitor[AnyRef]
+    with DataTypeErrorsBase {
   protected def typedVisit[T](ctx: ParseTree): T = {
     ctx.accept(this).asInstanceOf[T]
   }
