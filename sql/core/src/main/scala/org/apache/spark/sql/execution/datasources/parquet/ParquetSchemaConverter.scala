@@ -373,6 +373,9 @@ class ParquetToSparkSchemaConverter(
 
     Option(field.getLogicalTypeAnnotation).fold(
       convertInternal(groupColumn, sparkReadType.map(_.asInstanceOf[StructType]))) {
+      case _: VariantLogicalTypeAnnotation if sparkReadType.isEmpty =>
+        convertInternal(groupColumn, None)
+
       // A Parquet list is represented as a 3-level structure:
       //
       //   <list-repetition> group <name> (LIST) {
