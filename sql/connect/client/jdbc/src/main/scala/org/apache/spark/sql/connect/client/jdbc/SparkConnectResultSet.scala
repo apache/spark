@@ -76,21 +76,21 @@ class SparkConnectResultSet(
     }
   }
 
-  private[jdbc] def getColumnValue[T](index: Int, defaultVal: T)(getter: Int => T): T = {
+  private[jdbc] def getColumnValue[T](columnIndex: Int, defaultVal: T)(getter: Int => T): T = {
     checkOpen()
     // the passed index value is 1-indexed, but the underlying array is 0-indexed
-    val columnIndex = index - 1
-    if (columnIndex < 0 || columnIndex >= currentRow.length) {
-      throw new SQLException(s"The column index is out of range: $index, " +
+    val index = columnIndex - 1
+    if (index < 0 || index >= currentRow.length) {
+      throw new SQLException(s"The column index is out of range: $columnIndex, " +
         s"number of columns: ${currentRow.length}.")
     }
 
-    if (currentRow.isNullAt(columnIndex)) {
+    if (currentRow.isNullAt(index)) {
       _wasNull = true
       defaultVal
     } else {
       _wasNull = false
-      getter(columnIndex)
+      getter(index)
     }
   }
 
