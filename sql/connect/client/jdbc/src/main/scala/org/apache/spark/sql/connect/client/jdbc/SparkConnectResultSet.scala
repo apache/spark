@@ -119,7 +119,7 @@ class SparkConnectResultSet(
   }
 
   override def getInt(columnIndex: Int): Int = {
-    getColumnValue(columnIndex, 0.toInt) { idx => currentRow.getInt(idx) }
+    getColumnValue(columnIndex, 0) { idx => currentRow.getInt(idx) }
   }
 
   override def getLong(columnIndex: Int): Long = {
