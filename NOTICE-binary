@@ -756,10 +756,6 @@ project. The following notice covers the Felix files:
   I. Included Software
 
   This product includes software developed at
-  The Apache Software Foundation (http://www.apache.org/).
-  Licensed under the Apache License 2.0.
-
-  This product includes software developed at
   The OSGi Alliance (http://www.osgi.org/).
   Copyright (c) OSGi Alliance (2000, 2007).
   Licensed under the Apache License 2.0.
@@ -1080,9 +1076,6 @@ The Android Open Source Project
 Apache Yetus - Audience Annotations
 Copyright 2015-2017 The Apache Software Foundation
 
-This product includes software developed at
-The Apache Software Foundation (http://www.apache.org/).
-
 Ehcache V3
 Copyright 2014-2016 Terracotta, Inc.
 
@@ -1092,18 +1085,8 @@ under the Apache License 2.0 (see: org.ehcache.impl.internal.classes.commonslang
 Apache Geronimo JCache Spec 1.0
 Copyright 2003-2014 The Apache Software Foundation
 
-This product includes software developed at
-The Apache Software Foundation (http://www.apache.org/).
-
-
-
-
 Token provider
 Copyright 2014-2017 The Apache Software Foundation
-
-This product includes software developed at
-The Apache Software Foundation (http://www.apache.org/).
-
 
 Metrics
 Copyright 2010-2013 Coda Hale and Yammer, Inc.
