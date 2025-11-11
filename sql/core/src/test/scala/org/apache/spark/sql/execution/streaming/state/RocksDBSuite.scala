@@ -1429,31 +1429,40 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
           case None =>
             presentKeysAll.foreach { k => db.put(k, s"v_$k") }
         }
-        db.commit()
 
         // Generate absent keys using a different prefix to avoid overlap
         val absentKeysAll = (0 until totalAbsent).map(i => s"absent_$i")
 
-        // Reload and test
-        db.load(0)
-        db.load(1)
-
-        cfNameOpt match {
-          case Some(cf) =>
-            presentKeysAll.foreach { k =>
-              assert(db.keyExists(k, cf), s"Expected keyExists(true) for present CF key $k")
-            }
-            absentKeysAll.foreach { k =>
-              assert(!db.keyExists(k, cf), s"Expected keyExists(false) for absent CF key $k")
-            }
-          case None =>
-            presentKeysAll.foreach { k =>
-              assert(db.keyExists(k), s"Expected keyExists(true) for present default key $k")
-            }
-            absentKeysAll.foreach { k =>
-              assert(!db.keyExists(k), s"Expected keyExists(false) for absent default key $k")
-            }
+        // Validation helper to avoid duplication
+        def validate(label: String): Unit = {
+          cfNameOpt match {
+            case Some(cf) =>
+              presentKeysAll.foreach { k =>
+                assert(db.keyExists(k, cf),
+                  s"$label Expected keyExists(true) for present CF key $k")
+              }
+              absentKeysAll.foreach { k =>
+                assert(!db.keyExists(k, cf),
+                  s"$label Expected keyExists(false) for absent CF key $k")
+              }
+            case None =>
+              presentKeysAll.foreach { k =>
+                assert(db.keyExists(k),
+                  s"$label Expected keyExists(true) for present default key $k")
+              }
+              absentKeysAll.foreach { k =>
+                assert(!db.keyExists(k),
+                  s"$label Expected keyExists(false) for absent default key $k")
+              }
+          }
         }
+
+        // First check before commit
+        validate("(pre-commit)")
+
+        // Commit and re-check
+        db.commit()
+        validate("(post-commit)")
       }
   }
 
