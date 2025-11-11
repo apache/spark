@@ -362,6 +362,8 @@ object SparkBuild extends PomBuild {
       "-sourcepath", (ThisBuild / baseDirectory).value.getAbsolutePath  // Required for relative source links in scaladoc
     ),
 
+    (Test / javaOptions) += s"-Dmvn.executable=${BuildCommons.sparkHome.getAbsolutePath}/build/mvn",
+
     SbtPomKeys.profiles := profiles,
 
     // Remove certain packages from Scaladoc
@@ -1305,7 +1307,7 @@ object SQL {
     // even if the project is not using it.
     PB.protocVersion := BuildCommons.protoVersion,
     // For some reason the resolution from the imported Maven build does not work for some
-    // of these dependendencies that we need to shade later on.
+    // of these dependencies that we need to shade later on.
     libraryDependencies ++= {
       Seq(
         "com.google.protobuf" % "protobuf-java" % protoVersion % "protobuf"
