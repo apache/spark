@@ -4362,6 +4362,59 @@
     },
     "sqlState" : "XX000"
   },
+  "MISSING_CATALOG_ABILITY" : {
+    "message" : [
+      "Catalog <plugin> does not support"
+    ],
+    "subClass" : {
+      "CREATE_FUNCTION": {
+        "message": [
+          "CREATE FUNCTION."
+        ]
+      },
+      "DROP_FUNCTION": {
+        "message": [
+          "DROP FUNCTION."
+        ]
+      },
+      "FUNCTIONS": {
+        "message": [
+          "functions."
+        ]
+      },
+      "NAMESPACES": {
+        "message": [
+          "namespaces."
+        ]
+      },
+      "PROCEDURES": {
+        "message": [
+          "procedures."
+        ]
+      },
+      "REFRESH_FUNCTION": {
+        "message": [
+          "REFRESH FUNCTION."
+        ]
+      },
+      "TABLES": {
+        "message": [
+          "tables."
+        ]
+      },
+      "TABLE_VALUED_FUNCTIONS": {
+        "message": [
+          "table-valued functions."
+        ]
+      },
+      "VIEWS": {
+        "message": [
+          "views."
+        ]
+      }
+    },
+    "sqlState" : "0A000"
+  },
   "MISSING_DATABASE_FOR_V1_SESSION_CATALOG" : {
     "message" : [
       "Database name is not specified in the v1 session catalog. Please ensure to provide a valid database name when interacting with the v1 catalog."
@@ -7858,11 +7911,6 @@
   "_LEGACY_ERROR_TEMP_1183" : {
     "message" : [
       "Cannot use \"INTERVAL\" type in the table schema."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1184" : {
-    "message" : [
-      "Catalog <plugin> does not support <ability>."
     ]
   },
   "_LEGACY_ERROR_TEMP_1186" : {
