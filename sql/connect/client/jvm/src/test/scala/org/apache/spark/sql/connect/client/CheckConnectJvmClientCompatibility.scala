@@ -226,10 +226,8 @@ object CheckConnectJvmClientCompatibility {
         "org.apache.spark.sql.streaming.TestGroupState"),
       ProblemFilters.exclude[MissingClassProblem](
         "org.apache.spark.sql.streaming.TestGroupState$"),
-      ProblemFilters.exclude[MissingClassProblem](
-        "org.apache.spark.sql.streaming.TwsTester"),
-      ProblemFilters.exclude[MissingClassProblem](
-        "org.apache.spark.sql.streaming.TwsTester$"),
+      ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.streaming.TwsTester"),
+      ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.streaming.TwsTester$"),
       ProblemFilters.exclude[MissingClassProblem](
         "org.apache.spark.sql.streaming.TwsTester$TestClock"),
       ProblemFilters.exclude[MissingClassProblem](
