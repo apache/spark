@@ -3381,8 +3381,7 @@ class AstBuilder extends DataTypeAstBuilder
     expression(ctx.base) match {
       case unresolved_attr @ UnresolvedAttribute(nameParts) =>
         // For regex check, we need the original text before identifier-lite resolution
-        val originalText = ctx.fieldName.getStart.getText
-        originalText match {
+        ctx.fieldName.getStart.getText match {
           case escapedIdentifier(columnNameRegex)
             if conf.supportQuotedRegexColumnName &&
               isRegex(columnNameRegex) && canApplyRegex(ctx) =>

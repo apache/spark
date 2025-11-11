@@ -201,9 +201,8 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with DataTypeE
   }
 
   /**
-   * Parse a string into a multi-part identifier. This method is intended to be overridden by
-   * subclasses that have access to a full SQL parser. The base implementation simply returns the
-   * input as a single-part identifier.
+   * Parse a string into a multi-part identifier. Subclasses MUST implement this method to provide
+   * proper multi-part identifier parsing with access to a full SQL parser.
    *
    * For example, in AstBuilder, this would parse "`catalog`.`schema`.`table`" into Seq("catalog",
    * "schema", "table").
@@ -213,11 +212,7 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with DataTypeE
    * @return
    *   Sequence of identifier parts.
    */
-  protected def parseMultipartIdentifier(identifier: String): Seq[String] = {
-    // Base implementation: just return the string as a single part.
-    // Subclasses with access to a full parser should override this.
-    Seq(identifier)
-  }
+  protected def parseMultipartIdentifier(identifier: String): Seq[String]
 
   /**
    * Get the identifier parts from a context, handling both regular identifiers and

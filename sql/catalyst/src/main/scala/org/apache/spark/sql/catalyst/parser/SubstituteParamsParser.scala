@@ -205,7 +205,8 @@ class SubstituteParamsParser extends Logging {
         (result(substitution.start - 1) == '\'' || result(substitution.start - 1) == '"') &&
         replacement.nonEmpty && !replacement(0).isWhitespace
 
-      result = prefix + (if (needsSpace) " " else "") + replacement + suffix
+      val space = if (needsSpace) " " else ""
+      result = s"$prefix$space$replacement$suffix"
     }
     result
   }
