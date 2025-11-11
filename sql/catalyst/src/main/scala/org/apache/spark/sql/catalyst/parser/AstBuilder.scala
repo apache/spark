@@ -3419,8 +3419,7 @@ class AstBuilder extends DataTypeAstBuilder
    */
   override def visitColumnReference(ctx: ColumnReferenceContext): Expression = withOrigin(ctx) {
     // For regex check, we need the original text before identifier-lite resolution
-    val originalText = ctx.getStart.getText
-    originalText match {
+    ctx.getStart.getText match {
       case escapedIdentifier(columnNameRegex)
         if conf.supportQuotedRegexColumnName &&
           isRegex(columnNameRegex) && canApplyRegex(ctx) =>
