@@ -150,20 +150,29 @@ class RocksDB(
       localTempDir: File,
       hadoopConf: Configuration,
       codecName: String,
-      loggingId: String): RocksDBFileManager = {
+      loggingId: String,
+      storeConf: StateStoreConf): RocksDBFileManager = {
     new RocksDBFileManager(
       dfsRootDir,
       localTempDir,
       hadoopConf,
       codecName,
       loggingId = loggingId,
+      storeConf,
       fileChecksumEnabled = conf.fileChecksumEnabled,
       fileChecksumThreadPoolSize = fileChecksumThreadPoolSize
     )
   }
 
-  private[spark] val fileManager = createFileManager(dfsRootDir, createTempDir("fileManager"),
-    hadoopConf, conf.compressionCodec, loggingId = loggingId)
+  private[spark] val fileManager = createFileManager(
+    dfsRootDir,
+    createTempDir("fileManager"),
+    hadoopConf,
+    conf.compressionCodec,
+    loggingId = loggingId,
+    storeConf = conf.stateStoreConf
+  )
+
   private val byteArrayPair = new ByteArrayPair()
   private val commitLatencyMs = new mutable.HashMap[String, Long]()
 
