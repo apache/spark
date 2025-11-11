@@ -7873,6 +7873,12 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
     }
   }
 
+  /** Return the value of Spark SQL configuration property for the given keys. */
+  @throws[NoSuchElementException]("if key is not set")
+  private[spark] def getConfs(keys: util.List[String]): Array[String] = {
+    Array.tabulate(keys.size())(i => this.getConfString(keys.get(i)))
+  }
+
   /**
    * Return all the configuration properties that have been set (i.e. not the default).
    * This creates a new copy of the config properties in the form of a Map.
