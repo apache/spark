@@ -95,9 +95,12 @@ EXECUTE IMMEDIATE 'SET VAR testVarA = 1' INTO testVarA;
 EXECUTE IMMEDIATE 'SELECT * FROM tbl_view WHERE ? = id' USING id;
 
 -- either positional or named parameters must be used
-EXECUTE IMMEDIATE 'SELECT * FROM tbl_view where ? = id and :first = name' USING 1, 'name2' as first;
+EXECUTE IMMEDIATE 'SELECT * FROM tbl_view where ? = id and :first = name' USING 1 as x, 'name2' as first;
 
--- all paramerers must be named
+-- all parameters must be named
+EXECUTE IMMEDIATE 'SELECT * FROM tbl_view where :x = id and :first = name' USING 1, 'name2' as first;
+
+-- all parameters must be named
 EXECUTE IMMEDIATE 'SELECT * FROM tbl_view where :first = name' USING 1, 'name2' as first;
 
 -- internal syntax error
@@ -183,4 +186,106 @@ EXECUTE IMMEDIATE 'SELECT :first' USING 2, 3;
 EXECUTE IMMEDIATE (SELECT c FROM (VALUES(1)) AS T(c));
 
 DROP TABLE x;
+
+-- Test data type conversion correctness for LiteralToSqlConverter
+-- Each test validates that the parameter is correctly converted to SQL and executed
+
+-- !query
+-- Basic numeric types
+EXECUTE IMMEDIATE 'SELECT typeof(:p) as type, :p as val' USING 5 AS p;
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT typeof(:p) as type, :p as val' USING 5L AS p;
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT typeof(:p) as type, :p as val' USING 5S AS p;
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT typeof(:p) as type, :p as val' USING 5Y AS p;
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT typeof(:p) as type, :p as val' USING 3.14F AS p;
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT typeof(:p) as type, :p as val' USING 3.14159D AS p;
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT typeof(:p) as type, :p as val' USING 123.45BD AS p;
+
+-- !query
+-- Boolean type
+EXECUTE IMMEDIATE 'SELECT typeof(:p) as type, :p as val' USING true AS p;
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT typeof(:p) as type, :p as val' USING false AS p;
+
+-- !query
+-- String types
+EXECUTE IMMEDIATE 'SELECT typeof(:p) as type, :p as val' USING 'hello world' AS p;
+
+-- !query
+-- String with single quotes (test escaping)
+EXECUTE IMMEDIATE 'SELECT typeof(:p) as type, :p as val' USING 'it''s a test' AS p;
+
+-- !query
+-- Date and timestamp types
+EXECUTE IMMEDIATE 'SELECT typeof(:p) as type, :p as val' USING DATE '2023-12-25' AS p;
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT typeof(:p) as type, :p as val' USING TIMESTAMP '2023-12-25 10:30:45' AS p;
+
+-- !query
+-- TimestampNTZ type
+EXECUTE IMMEDIATE 'SELECT typeof(:p) as type, :p as val' USING TIMESTAMP_NTZ '2023-12-25 10:30:45' AS p;
+
+-- !query
+-- Null values
+EXECUTE IMMEDIATE 'SELECT typeof(:p) as type, :p as val' USING CAST(NULL AS INT) AS p;
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT typeof(:p) as type, :p as val' USING CAST(NULL AS STRING) AS p;
+
+-- !query
+-- Binary type
+EXECUTE IMMEDIATE 'SELECT typeof(:p) as type, hex(:p) as val' USING X'010203FF' AS p;
+
+-- !query
+-- Interval types
+EXECUTE IMMEDIATE 'SELECT typeof(:p) as type, :p as val' USING INTERVAL '3' DAY AS p;
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT typeof(:p) as type, :p as val' USING INTERVAL '2' YEAR AS p;
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT typeof(:p) as type, :p as val' USING INTERVAL '1-2' YEAR TO MONTH AS p;
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT typeof(:p) as type, :p as val' USING INTERVAL '3 4:5:6' DAY TO SECOND AS p;
+
+-- !query
+-- Additional numeric type tests
+EXECUTE IMMEDIATE 'SELECT typeof(:p) as type, :p as val' USING 999.999BD AS p;
+
+-- !query
+-- Test multiple parameters with different types
+EXECUTE IMMEDIATE 'SELECT typeof(:p1) as type1, :p1 as val1, typeof(:p2) as type2, :p2 as val2' 
+  USING 42 as p1, 'test string' as p2;
+
+-- !query
+-- Array types (simple)
+EXECUTE IMMEDIATE 'SELECT typeof(:p) as type, :p as val' USING ARRAY(1, 2, 3) AS p;
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT typeof(:p) as type, :p as val' USING ARRAY('a', 'b', 'c') AS p;
+
+-- !query
+-- Nested array
+EXECUTE IMMEDIATE 'SELECT typeof(:p) as type, :p as val' USING ARRAY(ARRAY(1, 2), ARRAY(3, 4)) AS p;
+
+-- !query
+-- Map types
+EXECUTE IMMEDIATE 'SELECT typeof(:p) as type, :p as val' USING MAP('key1', 'value1', 'key2', 'value2') AS p;
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT typeof(:p) as type, :p as val' USING MAP(1, 'one', 2, 'two') AS p;
 

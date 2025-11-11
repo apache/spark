@@ -32,7 +32,7 @@ import org.apache.spark.SparkEnv
 import org.apache.spark.api.python.SimplePythonFunction
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.IntegratedUDFTestUtils
-import org.apache.spark.sql.connect.SparkConnectTestUtils
+import org.apache.spark.sql.connect.{PythonTestDepsChecker, SparkConnectTestUtils}
 import org.apache.spark.sql.connect.common.InvalidPlanInput
 import org.apache.spark.sql.connect.config.Connect
 import org.apache.spark.sql.connect.planner.{PythonStreamingQueryListener, SparkConnectPlanner, StreamingForeachBatchHelper}
@@ -180,6 +180,7 @@ class SparkConnectSessionHolderSuite extends SharedSparkSession {
   test("python listener process: process terminates after listener is removed") {
     // scalastyle:off assume
     assume(IntegratedUDFTestUtils.shouldTestPandasUDFs)
+    assume(PythonTestDepsChecker.isConnectDepsAvailable)
     // scalastyle:on assume
 
     val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
@@ -230,6 +231,7 @@ class SparkConnectSessionHolderSuite extends SharedSparkSession {
   test("python foreachBatch process: process terminates after query is stopped") {
     // scalastyle:off assume
     assume(IntegratedUDFTestUtils.shouldTestPandasUDFs)
+    assume(PythonTestDepsChecker.isConnectDepsAvailable)
     // scalastyle:on assume
 
     val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
@@ -433,8 +435,9 @@ class SparkConnectSessionHolderSuite extends SharedSparkSession {
     val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
     val graphId = "test_graph"
     val pipelineUpdateContext = new PipelineUpdateContextImpl(
-      new DataflowGraph(Seq(), Seq(), Seq()),
-      (_: PipelineEvent) => None)
+      new DataflowGraph(Seq(), Seq(), Seq(), Seq()),
+      (_: PipelineEvent) => None,
+      storageRoot = "test_storage_root")
     sessionHolder.cachePipelineExecution(graphId, pipelineUpdateContext)
     assert(
       sessionHolder.getPipelineExecution(graphId).nonEmpty,

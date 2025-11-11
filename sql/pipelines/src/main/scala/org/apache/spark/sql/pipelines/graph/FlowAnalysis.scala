@@ -46,7 +46,8 @@ object FlowAnalysis {
           allInputs: Set[TableIdentifier],
           availableInputs: Seq[Input],
           confs: Map[String, String],
-          queryContext: QueryContext
+          queryContext: QueryContext,
+          queryOrigin: QueryOrigin
       ): FlowFunctionResult = {
         val ctx = FlowAnalysisContext(
           allInputs = allInputs,

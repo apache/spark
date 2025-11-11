@@ -16,19 +16,16 @@
  */
 package org.apache.spark.sql.connect
 
-import java.io.ByteArrayInputStream
 import java.util.{TimeZone, UUID}
 
 import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.arrow.memory.RootAllocator
-import org.apache.arrow.vector.ipc.ArrowStreamReader
 import org.scalatest.concurrent.{Eventually, TimeLimits}
 import org.scalatest.time.Span
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.connect.proto
-import org.apache.spark.connect.proto.ExecutePlanResponse
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.connect.client.{CloseableIterator, CustomSparkConnectBlockingStub, ExecutePlanResponseReattachableIterator, RetryPolicy, SparkConnectClient, SparkConnectStubState}
 import org.apache.spark.sql.connect.client.arrow.ArrowSerializer
@@ -70,12 +67,12 @@ trait SparkConnectServerTest extends SharedSparkSession {
     super.afterAll()
   }
 
-  override def beforeEach(): Unit = {
+  protected override def beforeEach(): Unit = {
     super.beforeEach()
     clearAllExecutions()
   }
 
-  override def afterEach(): Unit = {
+  protected override def afterEach(): Unit = {
     clearAllExecutions()
     super.afterEach()
   }
@@ -322,44 +319,5 @@ trait SparkConnectServerTest extends SharedSparkSession {
   protected def runQuery(query: String, queryTimeout: Span, iterSleep: Long = 0): Unit = {
     val plan = buildPlan(query)
     runQuery(plan, queryTimeout, iterSleep)
-  }
-
-  protected def checkSqlCommandResponse(
-      result: ExecutePlanResponse.SqlCommandResult,
-      expected: Seq[Seq[Any]]): Unit = {
-    // Extract the serialized Arrow data as a byte array.
-    val dataBytes = result.getRelation.getLocalRelation.getData.toByteArray
-
-    // Create an ArrowStreamReader to deserialize the data.
-    val allocator = new RootAllocator(Long.MaxValue)
-    val inputStream = new ByteArrayInputStream(dataBytes)
-    val reader = new ArrowStreamReader(inputStream, allocator)
-
-    try {
-      // Read the schema and data.
-      val root = reader.getVectorSchemaRoot
-      // Load the first batch of data.
-      reader.loadNextBatch()
-
-      // Get dimensions.
-      val rowCount = root.getRowCount
-      val colCount = root.getFieldVectors.size
-      assert(rowCount == expected.length, "Row count mismatch")
-      assert(colCount == expected.head.length, "Column count mismatch")
-
-      // Compare to expected.
-      for (i <- 0 until rowCount) {
-        for (j <- 0 until colCount) {
-          val col = root.getFieldVectors.get(j)
-          val value = col.getObject(i)
-          print(value)
-          assert(value == expected(i)(j), s"Value mismatch at ($i, $j)")
-        }
-      }
-    } finally {
-      // Clean up resources.
-      reader.close()
-      allocator.close()
-    }
   }
 }

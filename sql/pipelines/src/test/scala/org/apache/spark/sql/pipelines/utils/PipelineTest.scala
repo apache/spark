@@ -18,7 +18,6 @@
 package org.apache.spark.sql.pipelines.utils
 
 import java.io.{BufferedReader, FileNotFoundException, InputStreamReader}
-import java.nio.file.Files
 
 import scala.collection.mutable.ArrayBuffer
 import scala.util.{Failure, Try}
@@ -34,22 +33,23 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.pipelines.graph.{DataflowGraph, PipelineUpdateContextImpl, SqlGraphRegistrationContext}
-import org.apache.spark.sql.pipelines.utils.PipelineTest.{cleanupMetastore, createTempDir}
+import org.apache.spark.sql.pipelines.utils.PipelineTest.cleanupMetastore
 import org.apache.spark.sql.test.SQLTestUtils
 
 abstract class PipelineTest
   extends QueryTest
+  with StorageRootMixin
   with SQLTestUtils
   with SparkErrorTestMixin
   with TargetCatalogAndDatabaseMixin
   with Logging
   with Eventually {
 
-  final protected val storageRoot = createTempDir()
-
-  protected def startPipelineAndWaitForCompletion(unresolvedDataflowGraph: DataflowGraph): Unit = {
+  protected def startPipelineAndWaitForCompletion(
+       unresolvedDataflowGraph: DataflowGraph): Unit = {
     val updateContext = new PipelineUpdateContextImpl(
-      unresolvedDataflowGraph, eventCallback = _ => ())
+      unresolvedDataflowGraph, eventCallback = _ => (),
+      storageRoot = storageRoot)
     updateContext.pipelineExecution.runPipeline()
     updateContext.pipelineExecution.awaitCompletion()
   }
@@ -231,11 +231,6 @@ abstract class PipelineTest
       ignoreFieldCase: Boolean = false
   )
 
-  /** Holds a parsed version along with the original json of a test. */
-  private case class TestSequence(json: Seq[String], rows: Seq[Row]) {
-    require(json.size == rows.size)
-  }
-
   /**
    * Helper method to verify unresolved column error message. We expect three elements to be present
    * in the message: error class, unresolved column name, list of suggested columns.
@@ -298,11 +293,6 @@ object PipelineTest extends Logging {
     "system",
     "main"
   )
-
-  /** Creates a temporary directory. */
-  protected def createTempDir(): String = {
-    Files.createTempDirectory(getClass.getSimpleName).normalize.toString
-  }
 
   /**
    * Try to drop the schema in the catalog and return whether it is successfully dropped.

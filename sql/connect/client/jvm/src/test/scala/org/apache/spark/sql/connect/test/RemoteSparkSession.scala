@@ -71,7 +71,7 @@ object SparkConnectServerUtils {
       findJar("sql/catalyst", "spark-catalyst", "spark-catalyst", test = true).getCanonicalPath
 
     val command = Seq.newBuilder[String]
-    command += "bin/spark-submit"
+    command += s"$sparkHome/bin/spark-submit"
     command += "--driver-class-path" += connectJar
     command += "--class" += "org.apache.spark.sql.connect.SimpleSparkConnectService"
     command += "--jars" += catalystTestJar
@@ -79,7 +79,14 @@ object SparkConnectServerUtils {
     command ++= testConfigs
     command ++= debugConfigs
     command += connectJar
-    val builder = new ProcessBuilder(command.result(): _*)
+    val cmds = command.result()
+    debug {
+      cmds.reduce[String] {
+        case (acc, cmd) if cmd startsWith "-" => acc + " \\\n    " + cmd
+        case (acc, cmd) => acc + " " + cmd
+      }
+    }
+    val builder = new ProcessBuilder(cmds: _*)
     builder.directory(new File(sparkHome))
     val environment = builder.environment()
     environment.remove("SPARK_DIST_CLASSPATH")
@@ -173,26 +180,35 @@ object SparkConnectServerUtils {
         val fileName = e.substring(e.lastIndexOf(File.separatorChar) + 1)
         fileName.endsWith(".jar") &&
         (fileName.startsWith("scalatest") || fileName.startsWith("scalactic") ||
-          (fileName.startsWith("spark-catalyst") && fileName.endsWith("-tests")))
+          (fileName.startsWith("spark-catalyst") && fileName.endsWith("-tests")) ||
+          fileName.startsWith("grpc-"))
       }
       .map(e => Paths.get(e).toUri)
     spark.client.artifactManager.addArtifacts(jars.toImmutableArraySeq)
   }
 
   def createSparkSession(): SparkSession = {
+    createSparkSession(identity)
+  }
+
+  def createSparkSession(
+      customBuilderFunc: SparkConnectClient.Builder => SparkConnectClient.Builder)
+      : SparkSession = {
     SparkConnectServerUtils.start()
 
+    var builder = SparkConnectClient
+      .builder()
+      .userId("test")
+      .port(port)
+      .retryPolicy(
+        RetryPolicy
+          .defaultPolicy()
+          .copy(maxRetries = Some(10), maxBackoff = Some(FiniteDuration(30, "s"))))
+
+    builder = customBuilderFunc(builder)
     val spark = SparkSession
       .builder()
-      .client(
-        SparkConnectClient
-          .builder()
-          .userId("test")
-          .port(port)
-          .retryPolicy(RetryPolicy
-            .defaultPolicy()
-            .copy(maxRetries = Some(10), maxBackoff = Some(FiniteDuration(30, "s"))))
-          .build())
+      .client(builder.build())
       .create()
 
     // Execute an RPC which will get retried until the server is up.

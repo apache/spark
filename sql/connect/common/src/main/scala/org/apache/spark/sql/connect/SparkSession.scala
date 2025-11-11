@@ -31,6 +31,7 @@ import scala.reflect.runtime.universe.TypeTag
 import scala.util.Try
 
 import com.google.common.cache.{CacheBuilder, CacheLoader}
+import com.google.protobuf.ByteString
 import io.grpc.ClientInterceptor
 import org.apache.arrow.memory.RootAllocator
 
@@ -116,16 +117,40 @@ class SparkSession private[sql] (
   private def createDataset[T](encoder: AgnosticEncoder[T], data: Iterator[T]): Dataset[T] = {
     newDataset(encoder) { builder =>
       if (data.nonEmpty) {
-        val arrowData =
-          ArrowSerializer.serialize(data, encoder, allocator, timeZoneId, largeVarTypes)
-        if (arrowData.size() <= conf.get(SqlApiConf.LOCAL_RELATION_CACHE_THRESHOLD_KEY).toInt) {
+        val threshold = conf.get(SqlApiConf.LOCAL_RELATION_CACHE_THRESHOLD_KEY).toInt
+        val maxRecordsPerBatch = conf.get(SqlApiConf.LOCAL_RELATION_CHUNK_SIZE_ROWS_KEY).toInt
+        val maxBatchSize = conf.get(SqlApiConf.LOCAL_RELATION_CHUNK_SIZE_BYTES_KEY).toInt
+        // Serialize with chunking support
+        val it = ArrowSerializer.serialize(
+          data,
+          encoder,
+          allocator,
+          maxRecordsPerBatch = maxRecordsPerBatch,
+          maxBatchSize = maxBatchSize,
+          timeZoneId = timeZoneId,
+          largeVarTypes = largeVarTypes,
+          batchSizeCheckInterval = math.min(1024, maxRecordsPerBatch))
+
+        val chunks =
+          try {
+            it.toArray
+          } finally {
+            it.close()
+          }
+
+        // If we got multiple chunks or a single large chunk, use ChunkedCachedLocalRelation
+        val totalSize = chunks.map(_.length).sum
+        if (chunks.length > 1 || totalSize > threshold) {
+          val (dataHashes, schemaHash) = client.cacheLocalRelation(chunks, encoder.schema.json)
+          builder.getChunkedCachedLocalRelationBuilder
+            .setSchemaHash(schemaHash)
+            .addAllDataHashes(dataHashes.asJava)
+        } else {
+          // Small data, use LocalRelation directly
+          val arrowData = ByteString.copyFrom(chunks(0))
           builder.getLocalRelationBuilder
             .setSchema(encoder.schema.json)
             .setData(arrowData)
-        } else {
-          val hash = client.cacheLocalRelation(arrowData, encoder.schema.json)
-          builder.getCachedLocalRelationBuilder
-            .setHash(hash)
         }
       } else {
         builder.getLocalRelationBuilder
@@ -682,6 +707,39 @@ class SparkSession private[sql] (
         observationOrNull.setMetricsAndNotify(SparkResult.transformObservedMetrics(metric))
       }
     }
+  }
+
+  /**
+   * Create a clone of this Spark Connect session on the server side. The server-side session is
+   * cloned with all its current state (SQL configurations, temporary views, registered functions,
+   * catalog state) copied over to a new independent session. The returned cloned session is
+   * isolated from this session - any subsequent changes to either session's server-side state
+   * will not be reflected in the other.
+   *
+   * @note
+   *   This creates a new server-side session with a new session ID while preserving the current
+   *   session's configuration and state.
+   */
+  @DeveloperApi
+  def cloneSession(): SparkSession = {
+    SparkSession.builder().client(client.cloneSession()).create()
+  }
+
+  /**
+   * Create a clone of this Spark Connect session on the server side with a custom session ID. The
+   * server-side session is cloned with all its current state (SQL configurations, temporary
+   * views, registered functions, catalog state) copied over to a new independent session with the
+   * specified session ID. The returned cloned session is isolated from this session.
+   *
+   * @param sessionId
+   *   The custom session ID to use for the cloned session (must be a valid UUID)
+   * @note
+   *   This creates a new server-side session with the specified session ID while preserving the
+   *   current session's configuration and state.
+   */
+  @DeveloperApi
+  def cloneSession(sessionId: String): SparkSession = {
+    SparkSession.builder().client(client.clone(sessionId)).create()
   }
 
   override private[sql] def isUsable: Boolean = client.isSessionValid

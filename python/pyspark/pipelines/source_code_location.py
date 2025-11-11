@@ -30,6 +30,34 @@ def get_caller_source_code_location(stacklevel: int) -> SourceCodeLocation:
     """
     Returns a SourceCodeLocation object representing the location code that invokes this function.
 
+    If this function is called from a decorator (ex. @sdp.table), note that the returned line
+    number is affected by how the decorator was triggered - i.e. whether @sdp.table or @sdp.table()
+    was called - AND what python version is being used
+
+    Case 1:
+    |@sdp.table()
+    |def fn
+
+    @sdp.table() is executed immediately, on line 1. This is true for all python versions.
+
+    Case 2:
+    |@sdp.table
+    |def fn
+
+    In python < 3.10, @sdp.table will expand to fn = sdp.table(fn), replacing the line that `fn` is
+    defined on. This would be line 2. More interestingly, this means:
+
+    |@sdp.table
+    |
+    |
+    |def fn
+
+    Will expand to fn = sdp.table(fn) on line 4, where `fn` is defined.
+
+    However, in python 3.10+, the line number in the stack trace will still be the line that the
+    decorator was defined on. In other words, case 2 will be treated the same as case 1, and the
+    line number will be 1.
+
     :param stacklevel: The number of stack frames to go up. 0 means the direct caller of this
         function, 1 means the caller of the caller, and so on.
     """

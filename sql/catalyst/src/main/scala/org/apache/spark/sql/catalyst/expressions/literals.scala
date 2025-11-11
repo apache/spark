@@ -252,6 +252,8 @@ object Literal {
         case PhysicalNullType => true
         case PhysicalShortType => v.isInstanceOf[Short]
         case _: PhysicalStringType => v.isInstanceOf[UTF8String]
+        case _: PhysicalGeographyType => v.isInstanceOf[GeographyVal]
+        case _: PhysicalGeometryType => v.isInstanceOf[GeometryVal]
         case PhysicalVariantType => v.isInstanceOf[VariantVal]
         case st: PhysicalStructType =>
           v.isInstanceOf[InternalRow] && {

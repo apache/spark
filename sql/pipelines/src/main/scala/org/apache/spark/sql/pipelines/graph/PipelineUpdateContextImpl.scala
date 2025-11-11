@@ -32,7 +32,8 @@ class PipelineUpdateContextImpl(
     override val unresolvedGraph: DataflowGraph,
     override val eventCallback: PipelineEvent => Unit,
     override val refreshTables: TableFilter = AllTables,
-    override val fullRefreshTables: TableFilter = NoTables
+    override val fullRefreshTables: TableFilter = NoTables,
+    override val storageRoot: String
 ) extends PipelineUpdateContext {
 
   override val spark: SparkSession = SparkSession.getActiveSession.getOrElse(

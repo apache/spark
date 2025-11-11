@@ -1333,4 +1333,63 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
       }
     }
   }
+
+  test("SPARK-53968 reading the view after allowPrecisionLoss is changed") {
+    import org.apache.spark.sql.internal.SQLConf
+    val partsTableName = "parts_tbl"
+    val ordersTableName = "orders_tbl"
+    val viewName = "view_spark_53968"
+    withTable(partsTableName, ordersTableName) {
+      spark.sql(s"""CREATE TABLE $partsTableName (
+           | part_number STRING
+           |) USING PARQUET
+           |""".stripMargin)
+      spark.sql(s"INSERT INTO $partsTableName VALUES ('part1'), ('part2')")
+
+      spark.sql(s"""CREATE TABLE $ordersTableName
+           |USING PARQUET AS
+           |SELECT * FROM VALUES
+           |('part1', CAST(100 AS DECIMAL(38,18)), CAST(NULL   AS DECIMAL(38,18))),
+           |('part2', CAST(100 AS DECIMAL(38,18)), CAST(0 AS DECIMAL(38,18))),
+           |('part3', CAST(200.23 AS DECIMAL(38,18)), CAST(100 AS DECIMAL(38,18)))
+           |AS t(part_number, unit_price, shipping_price);
+           |""".stripMargin)
+
+      Seq((true, false), (false, true)).foreach { case (oldValue, newValue) =>
+        withView(viewName) {
+          withSQLConf(SQLConf.DECIMAL_OPERATIONS_ALLOW_PREC_LOSS.key -> oldValue.toString) {
+            spark.sql(s"""
+                 |CREATE OR REPLACE VIEW $viewName AS
+                 |WITH order_details AS (
+                 |  SELECT
+                 |    orders.part_number,
+                 |    orders.unit_price
+                 |      + COALESCE(orders.shipping_price, CAST(0 AS DECIMAL(38, 18)))
+                 |      AS total_price
+                 |  FROM $ordersTableName orders
+                 |)
+                 |SELECT
+                 |  od.total_price
+                 |FROM order_details od LEFT JOIN $partsTableName pt
+                 |  ON pt.part_number = od.part_number
+                 |ORDER BY od.total_price
+            """.stripMargin)
+
+            val expectedResults = Seq(
+              Row(BigDecimal("100.00000000000000000")),
+              Row(BigDecimal("100.00000000000000000")),
+              Row(BigDecimal("300.23000000000000000")))
+
+            checkAnswer(spark.sql(s"SELECT * FROM $viewName"), expectedResults)
+
+            // Re-run the query with new value of the config, we should get the same result.
+            withSQLConf(SQLConf.DECIMAL_OPERATIONS_ALLOW_PREC_LOSS.key -> newValue.toString) {
+
+              checkAnswer(spark.sql(s"SELECT * FROM $viewName"), expectedResults)
+            }
+          }
+        }
+      }
+    }
+  }
 }

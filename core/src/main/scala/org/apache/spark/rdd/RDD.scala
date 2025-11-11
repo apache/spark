@@ -1773,7 +1773,7 @@ abstract class RDD[T: ClassTag](
   /**
    * Return whether this RDD is reliably checkpointed and materialized.
    */
-  private[rdd] def isReliablyCheckpointed: Boolean = {
+  private[spark] def isReliablyCheckpointed: Boolean = {
     checkpointData match {
       case Some(reliable: ReliableRDDCheckpointData[_]) if reliable.isCheckpointed => true
       case _ => false

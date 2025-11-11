@@ -34,6 +34,7 @@ import platform
 import urllib.parse
 import uuid
 import sys
+import time
 from typing import (
     Iterable,
     Iterator,
@@ -99,7 +100,7 @@ from pyspark.sql.connect.plan import (
 from pyspark.sql.connect.observation import Observation
 from pyspark.sql.connect.utils import get_python_ver
 from pyspark.sql.pandas.types import _create_converter_to_pandas, from_arrow_schema
-from pyspark.sql.types import DataType, StructType, TimestampType, _has_type
+from pyspark.sql.types import DataType, StructType, _has_type
 from pyspark.util import PythonEvalType
 from pyspark.storagelevel import StorageLevel
 from pyspark.errors import PySparkValueError, PySparkAssertionError, PySparkNotImplementedError
@@ -111,6 +112,19 @@ if TYPE_CHECKING:
     from pyspark.sql.connect._typing import DataTypeOrString
     from pyspark.sql.connect.session import SparkSession
     from pyspark.sql.datasource import DataSource
+
+
+def _import_zstandard_if_available() -> Optional[Any]:
+    """
+    Import zstandard if available, otherwise return None.
+    This is used to handle the case when zstandard is not installed.
+    """
+    try:
+        import zstandard
+
+        return zstandard
+    except ImportError:
+        return None
 
 
 class ChannelBuilder:
@@ -706,6 +720,10 @@ class SparkConnectClient(object):
 
         self._progress_handlers: List[ProgressHandler] = []
 
+        self._zstd_module = _import_zstandard_if_available()
+        self._plan_compression_threshold: Optional[int] = None  # Will be fetched lazily
+        self._plan_compression_algorithm: Optional[str] = None  # Will be fetched lazily
+
         # cleanup ml cache if possible
         atexit.register(self._cleanup_ml_cache)
 
@@ -962,12 +980,20 @@ class SparkConnectClient(object):
             logger.debug(f"Executing plan {self._proto_to_string(plan, True)}")
         req = self._execute_plan_request_with_metadata()
         req.plan.CopyFrom(plan)
-        (self_destruct_conf,) = self.get_config_with_defaults(
-            ("spark.sql.execution.arrow.pyspark.selfDestruct.enabled", "false"),
+
+        # Get all related configs in a batch
+        (
+            timezone,
+            struct_in_pandas,
+            self_destruct,
+        ) = self.get_configs(
+            "spark.sql.session.timeZone",
+            "spark.sql.execution.pandas.structHandlingMode",
+            "spark.sql.execution.arrow.pyspark.selfDestruct.enabled",
         )
-        self_destruct = cast(str, self_destruct_conf).lower() == "true"
+
         table, schema, metrics, observed_metrics, _ = self._execute_and_fetch(
-            req, observations, self_destruct=self_destruct
+            req, observations, self_destruct == "true"
         )
         assert table is not None
         ei = ExecutionInfo(metrics, observed_metrics)
@@ -985,7 +1011,7 @@ class SparkConnectClient(object):
             renamed_table = table.rename_columns([f"col_{i}" for i in range(table.num_columns)])
 
             pandas_options = {"coerce_temporal_nanoseconds": True}
-            if self_destruct:
+            if self_destruct == "true":
                 # Configure PyArrow to use as little memory as possible:
                 # self_destruct - free columns as they are converted
                 # split_blocks - create a separate Pandas block for each column
@@ -1001,20 +1027,12 @@ class SparkConnectClient(object):
             pdf.columns = schema.names
 
         if len(pdf.columns) > 0:
-            timezone: Optional[str] = None
-            if any(_has_type(f.dataType, TimestampType) for f in schema.fields):
-                (timezone,) = self.get_configs("spark.sql.session.timeZone")
-
-            struct_in_pandas: Optional[str] = None
             error_on_duplicated_field_names: bool = False
-            if any(_has_type(f.dataType, StructType) for f in schema.fields):
-                (struct_in_pandas,) = self.get_config_with_defaults(
-                    ("spark.sql.execution.pandas.structHandlingMode", "legacy"),
-                )
-
-                if struct_in_pandas == "legacy":
-                    error_on_duplicated_field_names = True
-                    struct_in_pandas = "dict"
+            if struct_in_pandas == "legacy" and any(
+                _has_type(f.dataType, StructType) for f in schema.fields
+            ):
+                error_on_duplicated_field_names = True
+                struct_in_pandas = "dict"
 
             pdf = pd.concat(
                 [
@@ -1156,7 +1174,7 @@ class SparkConnectClient(object):
         req = self._execute_plan_request_with_metadata()
         if self._user_id:
             req.user_context.user_id = self._user_id
-        req.plan.command.CopyFrom(command)
+        self._set_command_in_plan(req.plan, command)
         data, _, metrics, observed_metrics, properties = self._execute_and_fetch(
             req, observations or {}
         )
@@ -1182,7 +1200,7 @@ class SparkConnectClient(object):
         req = self._execute_plan_request_with_metadata()
         if self._user_id:
             req.user_context.user_id = self._user_id
-        req.plan.command.CopyFrom(command)
+        self._set_command_in_plan(req.plan, command)
         for response in self._execute_and_fetch_as_iterator(req, observations or {}):
             if isinstance(response, dict):
                 yield response
@@ -1963,6 +1981,17 @@ class SparkConnectClient(object):
                     if info.metadata.get("errorClass") == "INVALID_HANDLE.SESSION_CHANGED":
                         self._closed = True
 
+                    if info.metadata.get("errorClass") == "CONNECT_INVALID_PLAN.CANNOT_PARSE":
+                        # Disable plan compression if the server fails to interpret the plan.
+                        logger.info(
+                            "Disabling plan compression for the session due to "
+                            "CONNECT_INVALID_PLAN.CANNOT_PARSE error."
+                        )
+                        self._plan_compression_threshold, self._plan_compression_algorithm = (
+                            -1,
+                            "NONE",
+                        )
+
                     raise convert_exception(
                         info,
                         status.message,
@@ -2001,6 +2030,12 @@ class SparkConnectClient(object):
         for attempt in self._retrying():
             with attempt:
                 return self._artifact_manager.cache_artifact(blob)
+        raise SparkConnectException("Invalid state during retry exception handling.")
+
+    def cache_artifacts(self, blobs: list[bytes]) -> list[str]:
+        for attempt in self._retrying():
+            with attempt:
+                return self._artifact_manager.cache_artifacts(blobs)
         raise SparkConnectException("Invalid state during retry exception handling.")
 
     def _verify_response_integrity(
@@ -2105,3 +2140,167 @@ class SparkConnectClient(object):
 
         ml_command_result = properties["ml_command_result"]
         return ml_command_result.param.long
+
+    def _set_relation_in_plan(self, plan: pb2.Plan, relation: pb2.Relation) -> None:
+        """Sets the relation in the plan, attempting compression if configured."""
+        self._try_compress_and_set_plan(
+            plan=plan,
+            message=relation,
+            op_type=pb2.Plan.CompressedOperation.OpType.OP_TYPE_RELATION,
+        )
+
+    def _set_command_in_plan(self, plan: pb2.Plan, command: pb2.Command) -> None:
+        """Sets the command in the plan, attempting compression if configured."""
+        self._try_compress_and_set_plan(
+            plan=plan,
+            message=command,
+            op_type=pb2.Plan.CompressedOperation.OpType.OP_TYPE_COMMAND,
+        )
+
+    def _try_compress_and_set_plan(
+        self,
+        plan: pb2.Plan,
+        message: google.protobuf.message.Message,
+        op_type: pb2.Plan.CompressedOperation.OpType.ValueType,
+    ) -> None:
+        """
+        Tries to compress a protobuf message and sets it on the plan.
+        If compression is not enabled, not effective, or not available,
+        it falls back to the original message.
+        """
+        (
+            plan_compression_threshold,
+            plan_compression_algorithm,
+        ) = self._get_plan_compression_threshold_and_algorithm()
+        plan_compression_enabled = (
+            plan_compression_threshold is not None
+            and plan_compression_threshold >= 0
+            and plan_compression_algorithm is not None
+            and plan_compression_algorithm != "NONE"
+        )
+        if plan_compression_enabled:
+            serialized_msg = message.SerializeToString()
+            original_size = len(serialized_msg)
+            if (
+                original_size > plan_compression_threshold
+                and plan_compression_algorithm == "ZSTD"
+                and self._zstd_module
+            ):
+                start_time = time.time()
+                compressed_operation = pb2.Plan.CompressedOperation(
+                    data=self._zstd_module.compress(serialized_msg),
+                    op_type=op_type,
+                    compression_codec=pb2.CompressionCodec.COMPRESSION_CODEC_ZSTD,
+                )
+                duration = time.time() - start_time
+                compressed_size = len(compressed_operation.data)
+                logger.debug(
+                    f"Plan compression: original_size={original_size}, "
+                    f"compressed_size={compressed_size}, "
+                    f"saving_ratio={1 - compressed_size / original_size:.2f}, "
+                    f"duration_s={duration:.1f}"
+                )
+                if compressed_size < original_size:
+                    plan.compressed_operation.CopyFrom(compressed_operation)
+                    return
+                else:
+                    logger.debug("Plan compression not effective. Using original plan.")
+
+        if op_type == pb2.Plan.CompressedOperation.OpType.OP_TYPE_RELATION:
+            plan.root.CopyFrom(message)  # type: ignore[arg-type]
+        else:
+            plan.command.CopyFrom(message)  # type: ignore[arg-type]
+
+    def _get_plan_compression_threshold_and_algorithm(self) -> Tuple[int, str]:
+        if self._plan_compression_threshold is None or self._plan_compression_algorithm is None:
+            try:
+                (
+                    plan_compression_threshold_str,
+                    self._plan_compression_algorithm,
+                ) = self.get_configs(
+                    "spark.connect.session.planCompression.threshold",
+                    "spark.connect.session.planCompression.defaultAlgorithm",
+                )
+                self._plan_compression_threshold = (
+                    int(plan_compression_threshold_str) if plan_compression_threshold_str else -1
+                )
+                logger.debug(
+                    f"Plan compression threshold: {self._plan_compression_threshold}, "
+                    f"algorithm: {self._plan_compression_algorithm}"
+                )
+            except Exception as e:
+                self._plan_compression_threshold = -1
+                self._plan_compression_algorithm = "NONE"
+                logger.debug(
+                    "Plan compression is disabled because the server does not support it.", e
+                )
+        return (
+            self._plan_compression_threshold,
+            self._plan_compression_algorithm,
+        )  # type: ignore[return-value]
+
+    def clone(self, new_session_id: Optional[str] = None) -> "SparkConnectClient":
+        """
+        Clone this client session on the server side. The server-side session is cloned with
+        all its current state (SQL configurations, temporary views, registered functions,
+        catalog state) copied over to a new independent session. The returned client with the
+        cloned session is isolated from this client's session - any subsequent changes to
+        either session's server-side state will not be reflected in the other.
+
+        Parameters
+        ----------
+        new_session_id : str, optional
+            Custom session ID to use for the cloned session (must be a valid UUID).
+            If not provided, a new UUID will be generated.
+
+        Returns
+        -------
+        SparkConnectClient
+            A new SparkConnectClient instance with the cloned session.
+
+        Notes
+        -----
+        This creates a new server-side session with the specified or generated session ID
+        while preserving the current session's configuration and state.
+
+        .. note::
+            This is a developer API.
+        """
+        from pyspark.sql.connect.proto import base_pb2 as pb2
+
+        request = pb2.CloneSessionRequest(
+            session_id=self._session_id,
+            client_type="python",
+        )
+        if self._user_id is not None:
+            request.user_context.user_id = self._user_id
+
+        if new_session_id is not None:
+            request.new_session_id = new_session_id
+
+        for attempt in self._retrying():
+            with attempt:
+                response: pb2.CloneSessionResponse = self._stub.CloneSession(
+                    request, metadata=self._builder.metadata()
+                )
+
+        # Assert that the returned session ID matches the requested ID if one was provided
+        if new_session_id is not None:
+            assert response.new_session_id == new_session_id, (
+                f"Returned session ID '{response.new_session_id}' does not match "
+                f"requested ID '{new_session_id}'"
+            )
+
+        # Create a new client with the cloned session ID
+        new_connection = copy.deepcopy(self._builder)
+        new_connection.set(ChannelBuilder.PARAM_SESSION_ID, response.new_session_id)
+
+        # Create new client and explicitly set the session ID
+        new_client = SparkConnectClient(
+            connection=new_connection,
+            user_id=self._user_id,
+            use_reattachable_execute=self._use_reattachable_execute,
+        )
+        # Ensure the session ID is correctly set from the response
+        new_client._session_id = response.new_session_id
+        return new_client

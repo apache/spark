@@ -12018,6 +12018,20 @@ def xpath(xml: "ColumnOrName", path: "ColumnOrName") -> Column:
     +--------------------+
     |        [b1, b2, b3]|
     +--------------------+
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.from_xml`
+    :meth:`pyspark.sql.functions.schema_of_xml`
+    :meth:`pyspark.sql.functions.to_xml`
+    :meth:`pyspark.sql.functions.xpath_boolean`
+    :meth:`pyspark.sql.functions.xpath_double`
+    :meth:`pyspark.sql.functions.xpath_float`
+    :meth:`pyspark.sql.functions.xpath_int`
+    :meth:`pyspark.sql.functions.xpath_long`
+    :meth:`pyspark.sql.functions.xpath_number`
+    :meth:`pyspark.sql.functions.xpath_short`
+    :meth:`pyspark.sql.functions.xpath_string`
     """
     return _invoke_function_over_columns("xpath", xml, path)
 
@@ -12039,6 +12053,20 @@ def xpath_boolean(xml: "ColumnOrName", path: "ColumnOrName") -> Column:
     +---------------------+
     |                 true|
     +---------------------+
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.from_xml`
+    :meth:`pyspark.sql.functions.schema_of_xml`
+    :meth:`pyspark.sql.functions.to_xml`
+    :meth:`pyspark.sql.functions.xpath`
+    :meth:`pyspark.sql.functions.xpath_double`
+    :meth:`pyspark.sql.functions.xpath_float`
+    :meth:`pyspark.sql.functions.xpath_int`
+    :meth:`pyspark.sql.functions.xpath_long`
+    :meth:`pyspark.sql.functions.xpath_number`
+    :meth:`pyspark.sql.functions.xpath_short`
+    :meth:`pyspark.sql.functions.xpath_string`
     """
     return _invoke_function_over_columns("xpath_boolean", xml, path)
 
@@ -12061,6 +12089,20 @@ def xpath_double(xml: "ColumnOrName", path: "ColumnOrName") -> Column:
     +-------------------------+
     |                      3.0|
     +-------------------------+
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.from_xml`
+    :meth:`pyspark.sql.functions.schema_of_xml`
+    :meth:`pyspark.sql.functions.to_xml`
+    :meth:`pyspark.sql.functions.xpath`
+    :meth:`pyspark.sql.functions.xpath_boolean`
+    :meth:`pyspark.sql.functions.xpath_float`
+    :meth:`pyspark.sql.functions.xpath_int`
+    :meth:`pyspark.sql.functions.xpath_long`
+    :meth:`pyspark.sql.functions.xpath_number`
+    :meth:`pyspark.sql.functions.xpath_short`
+    :meth:`pyspark.sql.functions.xpath_string`
     """
     return _invoke_function_over_columns("xpath_double", xml, path)
 
@@ -12084,6 +12126,20 @@ def xpath_number(xml: "ColumnOrName", path: "ColumnOrName") -> Column:
     +-------------------------+
     |                      3.0|
     +-------------------------+
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.from_xml`
+    :meth:`pyspark.sql.functions.schema_of_xml`
+    :meth:`pyspark.sql.functions.to_xml`
+    :meth:`pyspark.sql.functions.xpath`
+    :meth:`pyspark.sql.functions.xpath_boolean`
+    :meth:`pyspark.sql.functions.xpath_double`
+    :meth:`pyspark.sql.functions.xpath_float`
+    :meth:`pyspark.sql.functions.xpath_int`
+    :meth:`pyspark.sql.functions.xpath_long`
+    :meth:`pyspark.sql.functions.xpath_short`
+    :meth:`pyspark.sql.functions.xpath_string`
     """
     return _invoke_function_over_columns("xpath_number", xml, path)
 
@@ -12106,6 +12162,20 @@ def xpath_float(xml: "ColumnOrName", path: "ColumnOrName") -> Column:
     +------------------------+
     |                     3.0|
     +------------------------+
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.from_xml`
+    :meth:`pyspark.sql.functions.schema_of_xml`
+    :meth:`pyspark.sql.functions.to_xml`
+    :meth:`pyspark.sql.functions.xpath`
+    :meth:`pyspark.sql.functions.xpath_boolean`
+    :meth:`pyspark.sql.functions.xpath_double`
+    :meth:`pyspark.sql.functions.xpath_int`
+    :meth:`pyspark.sql.functions.xpath_long`
+    :meth:`pyspark.sql.functions.xpath_number`
+    :meth:`pyspark.sql.functions.xpath_short`
+    :meth:`pyspark.sql.functions.xpath_string`
     """
     return _invoke_function_over_columns("xpath_float", xml, path)
 
@@ -12128,6 +12198,20 @@ def xpath_int(xml: "ColumnOrName", path: "ColumnOrName") -> Column:
     +----------------------+
     |                     3|
     +----------------------+
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.from_xml`
+    :meth:`pyspark.sql.functions.schema_of_xml`
+    :meth:`pyspark.sql.functions.to_xml`
+    :meth:`pyspark.sql.functions.xpath`
+    :meth:`pyspark.sql.functions.xpath_boolean`
+    :meth:`pyspark.sql.functions.xpath_double`
+    :meth:`pyspark.sql.functions.xpath_float`
+    :meth:`pyspark.sql.functions.xpath_long`
+    :meth:`pyspark.sql.functions.xpath_number`
+    :meth:`pyspark.sql.functions.xpath_short`
+    :meth:`pyspark.sql.functions.xpath_string`
     """
     return _invoke_function_over_columns("xpath_int", xml, path)
 
@@ -12150,6 +12234,20 @@ def xpath_long(xml: "ColumnOrName", path: "ColumnOrName") -> Column:
     +-----------------------+
     |                      3|
     +-----------------------+
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.from_xml`
+    :meth:`pyspark.sql.functions.schema_of_xml`
+    :meth:`pyspark.sql.functions.to_xml`
+    :meth:`pyspark.sql.functions.xpath`
+    :meth:`pyspark.sql.functions.xpath_boolean`
+    :meth:`pyspark.sql.functions.xpath_double`
+    :meth:`pyspark.sql.functions.xpath_float`
+    :meth:`pyspark.sql.functions.xpath_int`
+    :meth:`pyspark.sql.functions.xpath_number`
+    :meth:`pyspark.sql.functions.xpath_short`
+    :meth:`pyspark.sql.functions.xpath_string`
     """
     return _invoke_function_over_columns("xpath_long", xml, path)
 
@@ -12172,6 +12270,20 @@ def xpath_short(xml: "ColumnOrName", path: "ColumnOrName") -> Column:
     +------------------------+
     |                       3|
     +------------------------+
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.from_xml`
+    :meth:`pyspark.sql.functions.schema_of_xml`
+    :meth:`pyspark.sql.functions.to_xml`
+    :meth:`pyspark.sql.functions.xpath`
+    :meth:`pyspark.sql.functions.xpath_boolean`
+    :meth:`pyspark.sql.functions.xpath_double`
+    :meth:`pyspark.sql.functions.xpath_float`
+    :meth:`pyspark.sql.functions.xpath_int`
+    :meth:`pyspark.sql.functions.xpath_long`
+    :meth:`pyspark.sql.functions.xpath_number`
+    :meth:`pyspark.sql.functions.xpath_string`
     """
     return _invoke_function_over_columns("xpath_short", xml, path)
 
@@ -12193,6 +12305,20 @@ def xpath_string(xml: "ColumnOrName", path: "ColumnOrName") -> Column:
     +--------------------+
     |                  cc|
     +--------------------+
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.from_xml`
+    :meth:`pyspark.sql.functions.schema_of_xml`
+    :meth:`pyspark.sql.functions.to_xml`
+    :meth:`pyspark.sql.functions.xpath`
+    :meth:`pyspark.sql.functions.xpath_boolean`
+    :meth:`pyspark.sql.functions.xpath_double`
+    :meth:`pyspark.sql.functions.xpath_float`
+    :meth:`pyspark.sql.functions.xpath_int`
+    :meth:`pyspark.sql.functions.xpath_long`
+    :meth:`pyspark.sql.functions.xpath_number`
+    :meth:`pyspark.sql.functions.xpath_short`
     """
     return _invoke_function_over_columns("xpath_string", xml, path)
 
@@ -12708,6 +12834,49 @@ def timestamp_seconds(col: "ColumnOrName") -> Column:
     """
 
     return _invoke_function_over_columns("timestamp_seconds", col)
+
+
+@_try_remote_functions
+def time_diff(unit: "ColumnOrName", start: "ColumnOrName", end: "ColumnOrName") -> Column:
+    """
+    Returns the difference between two times, measured in specified units.
+
+    .. versionadded:: 4.1.0
+
+    Parameters
+    ----------
+    unit : :class:`~pyspark.sql.Column` or column name
+        The unit to truncate the time to. Supported units are: "HOUR", "MINUTE", "SECOND",
+        "MILLISECOND", and "MICROSECOND". The unit is case-insensitive.
+    start : :class:`~pyspark.sql.Column` or column name
+        A starting time.
+    end : :class:`~pyspark.sql.Column` or column name
+        An ending time.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        The difference between two times, in the specified units.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.date_diff`
+    :meth:`pyspark.sql.functions.timestamp_diff`
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame(
+    ...     [("HOUR", "13:08:15", "21:30:28")], ['unit', 'start', 'end']).withColumn("start",
+    ...     sf.col("start").cast("time")).withColumn("end", sf.col("end").cast("time"))
+    >>> df.select('*', sf.time_diff('unit', 'start', 'end')).show()
+    +----+--------+--------+---------------------------+
+    |unit|   start|     end|time_diff(unit, start, end)|
+    +----+--------+--------+---------------------------+
+    |HOUR|13:08:15|21:30:28|                          8|
+    +----+--------+--------+---------------------------+
+    """
+    return _invoke_function_over_columns("time_diff", unit, start, end)
 
 
 @_try_remote_functions
@@ -13919,12 +14088,12 @@ def assert_true(col: "ColumnOrName", errMsg: Optional[Union[Column, str]] = None
     --------
     >>> import pyspark.sql.functions as sf
     >>> df = spark.createDataFrame([(0, 1)], ['a', 'b'])
-    >>> df.select('*', sf.assert_true(df.a < df.b)).show() # doctest: +SKIP
-    +------------------------------------------------------+
-    |assert_true((a < b), '(a#788L < b#789L)' is not true!)|
-    +------------------------------------------------------+
-    |                                                  NULL|
-    +------------------------------------------------------+
+    >>> df.select('*', sf.assert_true(df.a < df.b)).show()
+    +---+---+--------------------------------------------+
+    |  a|  b|assert_true((a < b), '(a < b)' is not true!)|
+    +---+---+--------------------------------------------+
+    |  0|  1|                                        NULL|
+    +---+---+--------------------------------------------+
 
     >>> df.select('*', sf.assert_true(df.a < df.b, df.a)).show()
     +---+---+-----------------------+
@@ -16627,14 +16796,14 @@ def to_binary(col: "ColumnOrName", format: Optional["ColumnOrName"] = None) -> C
     >>> import pyspark.sql.functions as sf
     >>> df = spark.createDataFrame([("abc",)], ["e"])
     >>> df.select(sf.try_to_binary(df.e, sf.lit("utf-8")).alias('r')).collect()
-    [Row(r=bytearray(b'abc'))]
+    [Row(r=b'abc')]
 
     Example 2: Convert string to a timestamp without encoding specified
 
     >>> import pyspark.sql.functions as sf
     >>> df = spark.createDataFrame([("414243",)], ["e"])
     >>> df.select(sf.try_to_binary(df.e).alias('r')).collect()
-    [Row(r=bytearray(b'ABC'))]
+    [Row(r=b'ABC')]
     """
     if format is not None:
         return _invoke_function_over_columns("to_binary", col, format)
@@ -17650,14 +17819,14 @@ def try_to_binary(col: "ColumnOrName", format: Optional["ColumnOrName"] = None) 
     >>> import pyspark.sql.functions as sf
     >>> df = spark.createDataFrame([("abc",)], ["e"])
     >>> df.select(sf.try_to_binary(df.e, sf.lit("utf-8")).alias('r')).collect()
-    [Row(r=bytearray(b'abc'))]
+    [Row(r=b'abc')]
 
     Example 2: Convert string to a timestamp without encoding specified
 
     >>> import pyspark.sql.functions as sf
     >>> df = spark.createDataFrame([("414243",)], ["e"])
     >>> df.select(sf.try_to_binary(df.e).alias('r')).collect()
-    [Row(r=bytearray(b'ABC'))]
+    [Row(r=b'ABC')]
 
     Example 3: Converion failure results in NULL when ANSI mode is on
 
@@ -21425,6 +21594,20 @@ def from_xml(
     ... # Parse the XML column using the generated schema
     >>> df.select(sf.from_xml(df.value, schema).alias("xml")).collect()
     [Row(xml=Row(a=[1, 2]))]
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.schema_of_xml`
+    :meth:`pyspark.sql.functions.to_xml`
+    :meth:`pyspark.sql.functions.xpath`
+    :meth:`pyspark.sql.functions.xpath_boolean`
+    :meth:`pyspark.sql.functions.xpath_double`
+    :meth:`pyspark.sql.functions.xpath_float`
+    :meth:`pyspark.sql.functions.xpath_int`
+    :meth:`pyspark.sql.functions.xpath_long`
+    :meth:`pyspark.sql.functions.xpath_number`
+    :meth:`pyspark.sql.functions.xpath_short`
+    :meth:`pyspark.sql.functions.xpath_string`
     """
     from pyspark.sql.classic.column import _to_java_column
 
@@ -21504,6 +21687,20 @@ def schema_of_xml(xml: Union[Column, str], options: Optional[Mapping[str, str]] 
     ...     ).alias("xml")
     ... ).collect()
     [Row(xml='STRUCT<values: STRUCT<value: ARRAY<BIGINT>>>')]
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.from_xml`
+    :meth:`pyspark.sql.functions.to_xml`
+    :meth:`pyspark.sql.functions.xpath`
+    :meth:`pyspark.sql.functions.xpath_boolean`
+    :meth:`pyspark.sql.functions.xpath_double`
+    :meth:`pyspark.sql.functions.xpath_float`
+    :meth:`pyspark.sql.functions.xpath_int`
+    :meth:`pyspark.sql.functions.xpath_long`
+    :meth:`pyspark.sql.functions.xpath_number`
+    :meth:`pyspark.sql.functions.xpath_short`
+    :meth:`pyspark.sql.functions.xpath_string`
     """
     from pyspark.sql.classic.column import _to_java_column
 
@@ -21548,6 +21745,20 @@ def to_xml(col: "ColumnOrName", options: Optional[Mapping[str, str]] = None) -> 
     >>> df = spark.createDataFrame(data, ("key", "value"))
     >>> df.select(to_xml(df.value, {'rowTag':'person'}).alias("xml")).collect()
     [Row(xml='<person>\\n    <age>2</age>\\n    <name>Alice</name>\\n</person>')]
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.from_xml`
+    :meth:`pyspark.sql.functions.schema_of_xml`
+    :meth:`pyspark.sql.functions.xpath`
+    :meth:`pyspark.sql.functions.xpath_boolean`
+    :meth:`pyspark.sql.functions.xpath_double`
+    :meth:`pyspark.sql.functions.xpath_float`
+    :meth:`pyspark.sql.functions.xpath_int`
+    :meth:`pyspark.sql.functions.xpath_long`
+    :meth:`pyspark.sql.functions.xpath_number`
+    :meth:`pyspark.sql.functions.xpath_short`
+    :meth:`pyspark.sql.functions.xpath_string`
     """
     from pyspark.sql.classic.column import _to_java_column
 
@@ -24747,7 +24958,7 @@ def make_time(hour: "ColumnOrName", minute: "ColumnOrName", second: "ColumnOrNam
     return _invoke_function_over_columns("make_time", hour, minute, second)
 
 
-@_try_remote_functions
+@overload
 def make_timestamp(
     years: "ColumnOrName",
     months: "ColumnOrName",
@@ -24755,35 +24966,98 @@ def make_timestamp(
     hours: "ColumnOrName",
     mins: "ColumnOrName",
     secs: "ColumnOrName",
+) -> Column:
+    ...
+
+
+@overload
+def make_timestamp(
+    years: "ColumnOrName",
+    months: "ColumnOrName",
+    days: "ColumnOrName",
+    hours: "ColumnOrName",
+    mins: "ColumnOrName",
+    secs: "ColumnOrName",
+    timezone: "ColumnOrName",
+) -> Column:
+    ...
+
+
+@overload
+def make_timestamp(*, date: "ColumnOrName", time: "ColumnOrName") -> Column:
+    ...
+
+
+@overload
+def make_timestamp(
+    *, date: "ColumnOrName", time: "ColumnOrName", timezone: "ColumnOrName"
+) -> Column:
+    ...
+
+
+@_try_remote_functions
+def make_timestamp(
+    years: Optional["ColumnOrName"] = None,
+    months: Optional["ColumnOrName"] = None,
+    days: Optional["ColumnOrName"] = None,
+    hours: Optional["ColumnOrName"] = None,
+    mins: Optional["ColumnOrName"] = None,
+    secs: Optional["ColumnOrName"] = None,
     timezone: Optional["ColumnOrName"] = None,
+    date: Optional["ColumnOrName"] = None,
+    time: Optional["ColumnOrName"] = None,
 ) -> Column:
     """
-    Create timestamp from years, months, days, hours, mins, secs and timezone fields.
+    Create timestamp from years, months, days, hours, mins, secs, and (optional) timezone fields.
+    Alternatively, create timestamp from date, time, and (optional) timezone fields.
     The result data type is consistent with the value of configuration `spark.sql.timestampType`.
     If the configuration `spark.sql.ansi.enabled` is false, the function returns NULL
     on invalid inputs. Otherwise, it will throw an error instead.
 
     .. versionadded:: 3.5.0
 
+    .. versionchanged:: 4.1.0
+        Added support for creating timestamps from date and time.
+
     Parameters
     ----------
-    years : :class:`~pyspark.sql.Column` or column name
-        The year to represent, from 1 to 9999
-    months : :class:`~pyspark.sql.Column` or column name
-        The month-of-year to represent, from 1 (January) to 12 (December)
-    days : :class:`~pyspark.sql.Column` or column name
-        The day-of-month to represent, from 1 to 31
-    hours : :class:`~pyspark.sql.Column` or column name
-        The hour-of-day to represent, from 0 to 23
-    mins : :class:`~pyspark.sql.Column` or column name
-        The minute-of-hour to represent, from 0 to 59
-    secs : :class:`~pyspark.sql.Column` or column name
+    years : :class:`~pyspark.sql.Column` or column name, optional
+        The year to represent, from 1 to 9999.
+        Required when creating timestamps from individual components.
+        Must be used with months, days, hours, mins, and secs.
+    months : :class:`~pyspark.sql.Column` or column name, optional
+        The month-of-year to represent, from 1 (January) to 12 (December).
+        Required when creating timestamps from individual components.
+        Must be used with years, days, hours, mins, and secs.
+    days : :class:`~pyspark.sql.Column` or column name, optional
+        The day-of-month to represent, from 1 to 31.
+        Required when creating timestamps from individual components.
+        Must be used with years, months, hours, mins, and secs.
+    hours : :class:`~pyspark.sql.Column` or column name, optional
+        The hour-of-day to represent, from 0 to 23.
+        Required when creating timestamps from individual components.
+        Must be used with years, months, days, mins, and secs.
+    mins : :class:`~pyspark.sql.Column` or column name, optional
+        The minute-of-hour to represent, from 0 to 59.
+        Required when creating timestamps from individual components.
+        Must be used with years, months, days, hours, and secs.
+    secs : :class:`~pyspark.sql.Column` or column name, optional
         The second-of-minute and its micro-fraction to represent, from 0 to 60.
-        The value can be either an integer like 13 , or a fraction like 13.123.
+        The value can be either an integer like 13, or a fraction like 13.123.
         If the sec argument equals to 60, the seconds field is set
         to 0 and 1 minute is added to the final timestamp.
+        Required when creating timestamps from individual components.
+        Must be used with years, months, days, hours, and mins.
     timezone : :class:`~pyspark.sql.Column` or column name, optional
-        The time zone identifier. For example, CET, UTC and etc.
+        The time zone identifier. For example, CET, UTC, and etc.
+    date : :class:`~pyspark.sql.Column` or column name, optional
+        The date to represent, in valid DATE format.
+        Required when creating timestamps from date and time components.
+        Must be used with time parameter only.
+    time : :class:`~pyspark.sql.Column` or column name, optional
+        The time to represent, in valid TIME format.
+        Required when creating timestamps from date and time components.
+        Must be used with date parameter only.
 
     Returns
     -------
@@ -24805,7 +25079,7 @@ def make_timestamp(
     --------
     >>> spark.conf.set("spark.sql.session.timeZone", "America/Los_Angeles")
 
-    Example 1: Make timestamp from years, months, days, hours, mins and secs.
+    Example 1: Make timestamp from years, months, days, hours, mins, secs, and timezone.
 
     >>> import pyspark.sql.functions as sf
     >>> df = spark.createDataFrame([[2014, 12, 28, 6, 30, 45.887, 'CET']],
@@ -24819,11 +25093,11 @@ def make_timestamp(
     |2014-12-27 21:30:45.887                             |
     +----------------------------------------------------+
 
-    Example 2: Make timestamp without timezone.
+    Example 2: Make timestamp from years, months, days, hours, mins, and secs (without timezone).
 
     >>> import pyspark.sql.functions as sf
-    >>> df = spark.createDataFrame([[2014, 12, 28, 6, 30, 45.887, 'CET']],
-    ...     ['year', 'month', 'day', 'hour', 'min', 'sec', 'tz'])
+    >>> df = spark.createDataFrame([[2014, 12, 28, 6, 30, 45.887]],
+    ...     ['year', 'month', 'day', 'hour', 'min', 'sec'])
     >>> df.select(
     ...     sf.make_timestamp(df.year, df.month, df.day, 'hour', df.min, df.sec)
     ... ).show(truncate=False)
@@ -24833,19 +25107,88 @@ def make_timestamp(
     |2014-12-28 06:30:45.887                         |
     +------------------------------------------------+
 
+    Example 3: Make timestamp from date, time, and timezone.
+
+    >>> import pyspark.sql.functions as sf
+    >>> from datetime import date, time
+    >>> df = spark.range(1).select(
+    ...     sf.lit(date(2014, 12, 28)).alias("date"),
+    ...     sf.lit(time(6, 30, 45, 887000)).alias("time"),
+    ...     sf.lit("CET").alias("tz")
+    ... )
+    >>> df.select(
+    ...     sf.make_timestamp(date=df.date, time=df.time, timezone=df.tz)
+    ... ).show(truncate=False)
+    +------------------------------+
+    |make_timestamp(date, time, tz)|
+    +------------------------------+
+    |2014-12-27 21:30:45.887       |
+    +------------------------------+
+
+    Example 4: Make timestamp from date and time (without timezone).
+
+    >>> import pyspark.sql.functions as sf
+    >>> from datetime import date, time
+    >>> df = spark.range(1).select(
+    ...     sf.lit(date(2014, 12, 28)).alias("date"),
+    ...     sf.lit(time(6, 30, 45, 887000)).alias("time")
+    ... )
+    >>> df.select(sf.make_timestamp(date=df.date, time=df.time)).show(truncate=False)
+    +--------------------------+
+    |make_timestamp(date, time)|
+    +--------------------------+
+    |2014-12-28 06:30:45.887   |
+    +--------------------------+
+
     >>> spark.conf.unset("spark.sql.session.timeZone")
     """
-    if timezone is not None:
-        return _invoke_function_over_columns(
-            "make_timestamp", years, months, days, hours, mins, secs, timezone
-        )
+    if years is not None:
+        if any(arg is not None for arg in [date, time]):
+            raise PySparkValueError(
+                errorClass="CANNOT_SET_TOGETHER",
+                messageParameters={"arg_list": "years|months|days|hours|mins|secs and date|time"},
+            )
+        if timezone is not None:
+            return _invoke_function_over_columns(
+                "make_timestamp",
+                cast("ColumnOrName", years),
+                cast("ColumnOrName", months),
+                cast("ColumnOrName", days),
+                cast("ColumnOrName", hours),
+                cast("ColumnOrName", mins),
+                cast("ColumnOrName", secs),
+                cast("ColumnOrName", timezone),
+            )
+        else:
+            return _invoke_function_over_columns(
+                "make_timestamp",
+                cast("ColumnOrName", years),
+                cast("ColumnOrName", months),
+                cast("ColumnOrName", days),
+                cast("ColumnOrName", hours),
+                cast("ColumnOrName", mins),
+                cast("ColumnOrName", secs),
+            )
     else:
-        return _invoke_function_over_columns(
-            "make_timestamp", years, months, days, hours, mins, secs
-        )
+        if any(arg is not None for arg in [years, months, days, hours, mins, secs]):
+            raise PySparkValueError(
+                errorClass="CANNOT_SET_TOGETHER",
+                messageParameters={"arg_list": "years|months|days|hours|mins|secs and date|time"},
+            )
+        if timezone is not None:
+            return _invoke_function_over_columns(
+                "make_timestamp",
+                cast("ColumnOrName", date),
+                cast("ColumnOrName", time),
+                cast("ColumnOrName", timezone),
+            )
+        else:
+            return _invoke_function_over_columns(
+                "make_timestamp", cast("ColumnOrName", date), cast("ColumnOrName", time)
+            )
 
 
-@_try_remote_functions
+@overload
 def try_make_timestamp(
     years: "ColumnOrName",
     months: "ColumnOrName",
@@ -24853,34 +25196,97 @@ def try_make_timestamp(
     hours: "ColumnOrName",
     mins: "ColumnOrName",
     secs: "ColumnOrName",
+) -> Column:
+    ...
+
+
+@overload
+def try_make_timestamp(
+    years: "ColumnOrName",
+    months: "ColumnOrName",
+    days: "ColumnOrName",
+    hours: "ColumnOrName",
+    mins: "ColumnOrName",
+    secs: "ColumnOrName",
+    timezone: "ColumnOrName",
+) -> Column:
+    ...
+
+
+@overload
+def try_make_timestamp(*, date: "ColumnOrName", time: "ColumnOrName") -> Column:
+    ...
+
+
+@overload
+def try_make_timestamp(
+    *, date: "ColumnOrName", time: "ColumnOrName", timezone: "ColumnOrName"
+) -> Column:
+    ...
+
+
+@_try_remote_functions
+def try_make_timestamp(
+    years: Optional["ColumnOrName"] = None,
+    months: Optional["ColumnOrName"] = None,
+    days: Optional["ColumnOrName"] = None,
+    hours: Optional["ColumnOrName"] = None,
+    mins: Optional["ColumnOrName"] = None,
+    secs: Optional["ColumnOrName"] = None,
     timezone: Optional["ColumnOrName"] = None,
+    date: Optional["ColumnOrName"] = None,
+    time: Optional["ColumnOrName"] = None,
 ) -> Column:
     """
-    Try to create timestamp from years, months, days, hours, mins, secs and timezone fields.
+    Try to create timestamp from years, months, days, hours, mins, secs and (optional) timezone
+    fields. Alternatively, try to create timestamp from date, time, and (optional) timezone fields.
     The result data type is consistent with the value of configuration `spark.sql.timestampType`.
     The function returns NULL on invalid inputs.
 
     .. versionadded:: 4.0.0
 
+    .. versionchanged:: 4.1.0
+        Added support for creating timestamps from date and time.
+
     Parameters
     ----------
-    years : :class:`~pyspark.sql.Column` or column name
-        The year to represent, from 1 to 9999
-    months : :class:`~pyspark.sql.Column` or column name
-        The month-of-year to represent, from 1 (January) to 12 (December)
-    days : :class:`~pyspark.sql.Column` or column name
-        The day-of-month to represent, from 1 to 31
-    hours : :class:`~pyspark.sql.Column` or column name
-        The hour-of-day to represent, from 0 to 23
-    mins : :class:`~pyspark.sql.Column` or column name
-        The minute-of-hour to represent, from 0 to 59
-    secs : :class:`~pyspark.sql.Column` or column name
+    years : :class:`~pyspark.sql.Column` or column name, optional
+        The year to represent, from 1 to 9999.
+        Required when creating timestamps from individual components.
+        Must be used with months, days, hours, mins, and secs.
+    months : :class:`~pyspark.sql.Column` or column name, optional
+        The month-of-year to represent, from 1 (January) to 12 (December).
+        Required when creating timestamps from individual components.
+        Must be used with years, days, hours, mins, and secs.
+    days : :class:`~pyspark.sql.Column` or column name, optional
+        The day-of-month to represent, from 1 to 31.
+        Required when creating timestamps from individual components.
+        Must be used with years, months, hours, mins, and secs.
+    hours : :class:`~pyspark.sql.Column` or column name, optional
+        The hour-of-day to represent, from 0 to 23.
+        Required when creating timestamps from individual components.
+        Must be used with years, months, days, mins, and secs.
+    mins : :class:`~pyspark.sql.Column` or column name, optional
+        The minute-of-hour to represent, from 0 to 59.
+        Required when creating timestamps from individual components.
+        Must be used with years, months, days, hours, and secs.
+    secs : :class:`~pyspark.sql.Column` or column name, optional
         The second-of-minute and its micro-fraction to represent, from 0 to 60.
-        The value can be either an integer like 13 , or a fraction like 13.123.
+        The value can be either an integer like 13, or a fraction like 13.123.
         If the sec argument equals to 60, the seconds field is set
         to 0 and 1 minute is added to the final timestamp.
+        Required when creating timestamps from individual components.
+        Must be used with years, months, days, hours, and mins.
     timezone : :class:`~pyspark.sql.Column` or column name, optional
-        The time zone identifier. For example, CET, UTC and etc.
+        The time zone identifier. For example, CET, UTC, and etc.
+    date : :class:`~pyspark.sql.Column` or column name, optional
+        The date to represent, in valid DATE format.
+        Required when creating timestamps from date and time components.
+        Must be used with time parameter only.
+    time : :class:`~pyspark.sql.Column` or column name, optional
+        The time to represent, in valid TIME format.
+        Required when creating timestamps from date and time components.
+        Must be used with date parameter only.
 
     Returns
     -------
@@ -24902,7 +25308,7 @@ def try_make_timestamp(
     --------
     >>> spark.conf.set("spark.sql.session.timeZone", "America/Los_Angeles")
 
-    Example 1: Make timestamp from years, months, days, hours, mins and secs.
+    Example 1: Make timestamp from years, months, days, hours, mins, secs, and timezone.
 
     >>> import pyspark.sql.functions as sf
     >>> df = spark.createDataFrame([[2014, 12, 28, 6, 30, 45.887, 'CET']],
@@ -24916,7 +25322,7 @@ def try_make_timestamp(
     |2014-12-27 21:30:45.887                             |
     +----------------------------------------------------+
 
-    Example 2: Make timestamp without timezone.
+    Example 2: Make timestamp from years, months, days, hours, mins, and secs (without timezone).
 
     >>> import pyspark.sql.functions as sf
     >>> df = spark.createDataFrame([[2014, 12, 28, 6, 30, 45.887, 'CET']],
@@ -24929,7 +25335,6 @@ def try_make_timestamp(
     +----------------------------------------------------+
     |2014-12-28 06:30:45.887                             |
     +----------------------------------------------------+
-    >>> spark.conf.unset("spark.sql.session.timeZone")
 
     Example 3: Make timestamp with invalid input.
 
@@ -24945,16 +25350,85 @@ def try_make_timestamp(
     |NULL                                                |
     +----------------------------------------------------+
 
+    Example 4: Make timestamp from date, time, and timezone.
+
+    >>> import pyspark.sql.functions as sf
+    >>> from datetime import date, time
+    >>> df = spark.range(1).select(
+    ...     sf.lit(date(2014, 12, 28)).alias("date"),
+    ...     sf.lit(time(6, 30, 45, 887000)).alias("time"),
+    ...     sf.lit("CET").alias("tz")
+    ... )
+    >>> df.select(
+    ...     sf.try_make_timestamp(date=df.date, time=df.time, timezone=df.tz)
+    ... ).show(truncate=False)
+    +----------------------------------+
+    |try_make_timestamp(date, time, tz)|
+    +----------------------------------+
+    |2014-12-27 21:30:45.887           |
+    +----------------------------------+
+
+    Example 5: Make timestamp from date and time (without timezone).
+
+    >>> import pyspark.sql.functions as sf
+    >>> from datetime import date, time
+    >>> df = spark.range(1).select(
+    ...     sf.lit(date(2014, 12, 28)).alias("date"),
+    ...     sf.lit(time(6, 30, 45, 887000)).alias("time")
+    ... )
+    >>> df.select(sf.try_make_timestamp(date=df.date, time=df.time)).show(truncate=False)
+    +------------------------------+
+    |try_make_timestamp(date, time)|
+    +------------------------------+
+    |2014-12-28 06:30:45.887       |
+    +------------------------------+
+
     >>> spark.conf.unset("spark.sql.session.timeZone")
     """
-    if timezone is not None:
-        return _invoke_function_over_columns(
-            "try_make_timestamp", years, months, days, hours, mins, secs, timezone
-        )
+    if years is not None:
+        if any(arg is not None for arg in [date, time]):
+            raise PySparkValueError(
+                errorClass="CANNOT_SET_TOGETHER",
+                messageParameters={"arg_list": "years|months|days|hours|mins|secs and date|time"},
+            )
+        if timezone is not None:
+            return _invoke_function_over_columns(
+                "try_make_timestamp",
+                cast("ColumnOrName", years),
+                cast("ColumnOrName", months),
+                cast("ColumnOrName", days),
+                cast("ColumnOrName", hours),
+                cast("ColumnOrName", mins),
+                cast("ColumnOrName", secs),
+                cast("ColumnOrName", timezone),
+            )
+        else:
+            return _invoke_function_over_columns(
+                "try_make_timestamp",
+                cast("ColumnOrName", years),
+                cast("ColumnOrName", months),
+                cast("ColumnOrName", days),
+                cast("ColumnOrName", hours),
+                cast("ColumnOrName", mins),
+                cast("ColumnOrName", secs),
+            )
     else:
-        return _invoke_function_over_columns(
-            "try_make_timestamp", years, months, days, hours, mins, secs
-        )
+        if any(arg is not None for arg in [years, months, days, hours, mins, secs]):
+            raise PySparkValueError(
+                errorClass="CANNOT_SET_TOGETHER",
+                messageParameters={"arg_list": "years|months|days|hours|mins|secs and date|time"},
+            )
+        if timezone is not None:
+            return _invoke_function_over_columns(
+                "try_make_timestamp",
+                cast("ColumnOrName", date),
+                cast("ColumnOrName", time),
+                cast("ColumnOrName", timezone),
+            )
+        else:
+            return _invoke_function_over_columns(
+                "try_make_timestamp", cast("ColumnOrName", date), cast("ColumnOrName", time)
+            )
 
 
 @_try_remote_functions
@@ -25595,6 +26069,104 @@ def bucket(numBuckets: Union[Column, int], col: "ColumnOrName") -> Column:
     return partitioning.bucket(numBuckets, col)
 
 
+# Geospatial ST Functions
+
+
+@_try_remote_functions
+def st_asbinary(geo: "ColumnOrName") -> Column:
+    """Returns the input GEOGRAPHY or GEOMETRY value in WKB format.
+
+    .. versionadded:: 4.1.0
+
+    Parameters
+    ----------
+    geo : :class:`~pyspark.sql.Column` or str
+        A geospatial value, either a GEOGRAPHY or a GEOMETRY.
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(bytes.fromhex('0101000000000000000000F03F0000000000000040'),)], ['wkb'])  # noqa
+    >>> df.select(sf.hex(sf.st_asbinary(sf.st_geogfromwkb('wkb'))).alias('result')).collect()
+    [Row(result='0101000000000000000000F03F0000000000000040')]
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(bytes.fromhex('0101000000000000000000F03F0000000000000040'),)], ['wkb'])  # noqa
+    >>> df.select(sf.hex(sf.st_asbinary(sf.st_geomfromwkb('wkb'))).alias('result')).collect()
+    [Row(result='0101000000000000000000F03F0000000000000040')]
+    """
+    return _invoke_function_over_columns("st_asbinary", geo)
+
+
+@_try_remote_functions
+def st_geogfromwkb(wkb: "ColumnOrName") -> Column:
+    """Parses the input WKB description and returns the corresponding GEOGRAPHY value.
+
+    .. versionadded:: 4.1.0
+
+    Parameters
+    ----------
+    wkb : :class:`~pyspark.sql.Column` or str
+        A BINARY value in WKB format, representing a GEOGRAPHY value.
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(bytes.fromhex('0101000000000000000000F03F0000000000000040'),)], ['wkb'])  # noqa
+    >>> df.select(sf.hex(sf.st_asbinary(sf.st_geogfromwkb('wkb'))).alias('result')).collect()
+    [Row(result='0101000000000000000000F03F0000000000000040')]
+    """
+    return _invoke_function_over_columns("st_geogfromwkb", wkb)
+
+
+@_try_remote_functions
+def st_geomfromwkb(wkb: "ColumnOrName") -> Column:
+    """Parses the input WKB description and returns the corresponding GEOMETRY value.
+
+    .. versionadded:: 4.1.0
+
+    Parameters
+    ----------
+    wkb : :class:`~pyspark.sql.Column` or str
+        A BINARY value in WKB format, representing a GEOMETRY value.
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(bytes.fromhex('0101000000000000000000F03F0000000000000040'),)], ['wkb'])  # noqa
+    >>> df.select(sf.hex(sf.st_asbinary(sf.st_geomfromwkb('wkb'))).alias('result')).collect()
+    [Row(result='0101000000000000000000F03F0000000000000040')]
+    """
+    return _invoke_function_over_columns("st_geomfromwkb", wkb)
+
+
+@_try_remote_functions
+def st_srid(geo: "ColumnOrName") -> Column:
+    """Returns the SRID of the input GEOGRAPHY or GEOMETRY value.
+
+    .. versionadded:: 4.1.0
+
+    Parameters
+    ----------
+    geo : :class:`~pyspark.sql.Column` or str
+        A geospatial value, either a GEOGRAPHY or a GEOMETRY.
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(bytes.fromhex('0101000000000000000000F03F0000000000000040'),)], ['wkb'])  # noqa
+    >>> df.select(sf.st_srid(sf.st_geogfromwkb('wkb')).alias('result')).collect()
+    [Row(result=4326)]
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(bytes.fromhex('0101000000000000000000F03F0000000000000040'),)], ['wkb'])  # noqa
+    >>> df.select(sf.st_srid(sf.st_geomfromwkb('wkb')).alias('result')).collect()
+    [Row(result=0)]
+    """
+    return _invoke_function_over_columns("st_srid", geo)
+
+
+# Call Functions
+
+
 @_try_remote_functions
 def call_udf(udfName: str, *cols: "ColumnOrName") -> Column:
     """
@@ -25722,9 +26294,54 @@ def unwrap_udt(col: "ColumnOrName") -> Column:
 
     .. versionadded:: 3.4.0
 
-    Notes
-    -----
-    Supports Spark Connect.
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or column name
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        The underlying representation.
+
+    Examples
+    --------
+    Example 1: Unwrap ML-specific UDT - VectorUDT
+
+    >>> from pyspark.sql import functions as sf
+    >>> from pyspark.ml.linalg import Vectors
+    >>> vec1 = Vectors.dense(1, 2, 3)
+    >>> vec2 = Vectors.sparse(4, {1: 1.0, 3: 5.5})
+    >>> df = spark.createDataFrame([(vec1,), (vec2,)], ["vec"])
+    >>> df.select(sf.unwrap_udt("vec")).printSchema()
+    root
+     |-- unwrap_udt(vec): struct (nullable = true)
+     |    |-- type: byte (nullable = false)
+     |    |-- size: integer (nullable = true)
+     |    |-- indices: array (nullable = true)
+     |    |    |-- element: integer (containsNull = false)
+     |    |-- values: array (nullable = true)
+     |    |    |-- element: double (containsNull = false)
+
+    Example 2: Unwrap ML-specific UDT - MatrixUDT
+
+    >>> from pyspark.sql import functions as sf
+    >>> from pyspark.ml.linalg import Matrices
+    >>> mat1 = Matrices.dense(2, 2, range(4))
+    >>> mat2 = Matrices.sparse(2, 2, [0, 2, 3], [0, 1, 1], [2, 3, 4])
+    >>> df = spark.createDataFrame([(mat1,), (mat2,)], ["mat"])
+    >>> df.select(sf.unwrap_udt("mat")).printSchema()
+    root
+     |-- unwrap_udt(mat): struct (nullable = true)
+     |    |-- type: byte (nullable = false)
+     |    |-- numRows: integer (nullable = false)
+     |    |-- numCols: integer (nullable = false)
+     |    |-- colPtrs: array (nullable = true)
+     |    |    |-- element: integer (containsNull = false)
+     |    |-- rowIndices: array (nullable = true)
+     |    |    |-- element: integer (containsNull = false)
+     |    |-- values: array (nullable = true)
+     |    |    |-- element: double (containsNull = false)
+     |    |-- isTransposed: boolean (nullable = false)
     """
     from pyspark.sql.classic.column import _to_java_column
 
@@ -26085,6 +26702,624 @@ def theta_intersection_agg(col: "ColumnOrName") -> Column:
     """
     fn = "theta_intersection_agg"
     return _invoke_function_over_columns(fn, col)
+
+
+@_try_remote_functions
+def kll_sketch_agg_bigint(
+    col: "ColumnOrName",
+    k: Optional[Union[int, Column]] = None,
+) -> Column:
+    """
+    Aggregate function: returns the compact binary representation of the Datasketches
+    KllLongsSketch built with the values in the input column. The optional k parameter
+    controls the size and accuracy of the sketch (default 200, range 8-65535).
+
+    .. versionadded:: 4.1.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or column name
+        The column containing bigint values to aggregate
+    k : :class:`~pyspark.sql.Column` or int, optional
+        The k parameter that controls size and accuracy (default 200, range 8-65535)
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        The binary representation of the KllLongsSketch.
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([1,2,3,4,5], "INT")
+    >>> result = df.agg(sf.kll_sketch_agg_bigint("value")).first()[0]
+    >>> result is not None and len(result) > 0
+    True
+    """
+    fn = "kll_sketch_agg_bigint"
+    if k is None:
+        return _invoke_function_over_columns(fn, col)
+    else:
+        return _invoke_function_over_columns(fn, col, lit(k))
+
+
+@_try_remote_functions
+def kll_sketch_agg_float(
+    col: "ColumnOrName",
+    k: Optional[Union[int, Column]] = None,
+) -> Column:
+    """
+    Aggregate function: returns the compact binary representation of the Datasketches
+    KllFloatsSketch built with the values in the input column. The optional k parameter
+    controls the size and accuracy of the sketch (default 200, range 8-65535).
+
+    .. versionadded:: 4.1.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or column name
+        The column containing float values to aggregate
+    k : :class:`~pyspark.sql.Column` or int, optional
+        The k parameter that controls size and accuracy (default 200, range 8-65535)
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        The binary representation of the KllFloatsSketch.
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([1.0,2.0,3.0,4.0,5.0], "FLOAT")
+    >>> result = df.agg(sf.kll_sketch_agg_float("value")).first()[0]
+    >>> result is not None and len(result) > 0
+    True
+    """
+    fn = "kll_sketch_agg_float"
+    if k is None:
+        return _invoke_function_over_columns(fn, col)
+    else:
+        return _invoke_function_over_columns(fn, col, lit(k))
+
+
+@_try_remote_functions
+def kll_sketch_agg_double(
+    col: "ColumnOrName",
+    k: Optional[Union[int, Column]] = None,
+) -> Column:
+    """
+    Aggregate function: returns the compact binary representation of the Datasketches
+    KllDoublesSketch built with the values in the input column. The optional k parameter
+    controls the size and accuracy of the sketch (default 200, range 8-65535).
+
+    .. versionadded:: 4.1.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or column name
+        The column containing double values to aggregate
+    k : :class:`~pyspark.sql.Column` or int, optional
+        The k parameter that controls size and accuracy (default 200, range 8-65535)
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        The binary representation of the KllDoublesSketch.
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([1.0,2.0,3.0,4.0,5.0], "DOUBLE")
+    >>> result = df.agg(sf.kll_sketch_agg_double("value")).first()[0]
+    >>> result is not None and len(result) > 0
+    True
+    """
+    fn = "kll_sketch_agg_double"
+    if k is None:
+        return _invoke_function_over_columns(fn, col)
+    else:
+        return _invoke_function_over_columns(fn, col, lit(k))
+
+
+@_try_remote_functions
+def kll_sketch_to_string_bigint(col: "ColumnOrName") -> Column:
+    """
+    Returns a string with human readable summary information about the KLL bigint sketch.
+
+    .. versionadded:: 4.1.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or column name
+        The KLL bigint sketch binary representation
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        A string representation of the sketch.
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([1,2,3,4,5], "INT")
+    >>> sketch_df = df.agg(sf.kll_sketch_agg_bigint("value").alias("sketch"))
+    >>> result = sketch_df.select(sf.kll_sketch_to_string_bigint("sketch")).first()[0]
+    >>> "Kll" in result and "N" in result
+    True
+    """
+    fn = "kll_sketch_to_string_bigint"
+    return _invoke_function_over_columns(fn, col)
+
+
+@_try_remote_functions
+def kll_sketch_to_string_float(col: "ColumnOrName") -> Column:
+    """
+    Returns a string with human readable summary information about the KLL float sketch.
+
+    .. versionadded:: 4.1.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or column name
+        The KLL float sketch binary representation
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        A string representation of the sketch.
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([1.0,2.0,3.0,4.0,5.0], "FLOAT")
+    >>> sketch_df = df.agg(sf.kll_sketch_agg_float("value").alias("sketch"))
+    >>> result = sketch_df.select(sf.kll_sketch_to_string_float("sketch")).first()[0]
+    >>> "Kll" in result and "N" in result
+    True
+    """
+    fn = "kll_sketch_to_string_float"
+    return _invoke_function_over_columns(fn, col)
+
+
+@_try_remote_functions
+def kll_sketch_to_string_double(col: "ColumnOrName") -> Column:
+    """
+    Returns a string with human readable summary information about the KLL double sketch.
+
+    .. versionadded:: 4.1.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or column name
+        The KLL double sketch binary representation
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        A string representation of the sketch.
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([1.0,2.0,3.0,4.0,5.0], "DOUBLE")
+    >>> sketch_df = df.agg(sf.kll_sketch_agg_double("value").alias("sketch"))
+    >>> result = sketch_df.select(sf.kll_sketch_to_string_double("sketch")).first()[0]
+    >>> "Kll" in result and "N" in result
+    True
+    """
+    fn = "kll_sketch_to_string_double"
+    return _invoke_function_over_columns(fn, col)
+
+
+@_try_remote_functions
+def kll_sketch_get_n_bigint(col: "ColumnOrName") -> Column:
+    """
+    Returns the number of items collected in the KLL bigint sketch.
+
+    .. versionadded:: 4.1.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or column name
+        The KLL bigint sketch binary representation
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        The count of items in the sketch.
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([1,2,3,4,5], "INT")
+    >>> sketch_df = df.agg(sf.kll_sketch_agg_bigint("value").alias("sketch"))
+    >>> sketch_df.select(sf.kll_sketch_get_n_bigint("sketch")).show()
+    +-------------------------------+
+    |kll_sketch_get_n_bigint(sketch)|
+    +-------------------------------+
+    |                              5|
+    +-------------------------------+
+    """
+    fn = "kll_sketch_get_n_bigint"
+    return _invoke_function_over_columns(fn, col)
+
+
+@_try_remote_functions
+def kll_sketch_get_n_float(col: "ColumnOrName") -> Column:
+    """
+    Returns the number of items collected in the KLL float sketch.
+
+    .. versionadded:: 4.1.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or column name
+        The KLL float sketch binary representation
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        The count of items in the sketch.
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([1.0,2.0,3.0,4.0,5.0], "FLOAT")
+    >>> sketch_df = df.agg(sf.kll_sketch_agg_float("value").alias("sketch"))
+    >>> sketch_df.select(sf.kll_sketch_get_n_float("sketch")).show()
+    +------------------------------+
+    |kll_sketch_get_n_float(sketch)|
+    +------------------------------+
+    |                             5|
+    +------------------------------+
+    """
+    fn = "kll_sketch_get_n_float"
+    return _invoke_function_over_columns(fn, col)
+
+
+@_try_remote_functions
+def kll_sketch_get_n_double(col: "ColumnOrName") -> Column:
+    """
+    Returns the number of items collected in the KLL double sketch.
+
+    .. versionadded:: 4.1.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or column name
+        The KLL double sketch binary representation
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        The count of items in the sketch.
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([1.0,2.0,3.0,4.0,5.0], "DOUBLE")
+    >>> sketch_df = df.agg(sf.kll_sketch_agg_double("value").alias("sketch"))
+    >>> sketch_df.select(sf.kll_sketch_get_n_double("sketch")).show()
+    +-------------------------------+
+    |kll_sketch_get_n_double(sketch)|
+    +-------------------------------+
+    |                              5|
+    +-------------------------------+
+    """
+    fn = "kll_sketch_get_n_double"
+    return _invoke_function_over_columns(fn, col)
+
+
+@_try_remote_functions
+def kll_sketch_merge_bigint(left: "ColumnOrName", right: "ColumnOrName") -> Column:
+    """
+    Merges two KLL bigint sketch buffers together into one.
+
+    .. versionadded:: 4.1.0
+
+    Parameters
+    ----------
+    left : :class:`~pyspark.sql.Column` or column name
+        The first KLL bigint sketch
+    right : :class:`~pyspark.sql.Column` or column name
+        The second KLL bigint sketch
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        The merged KLL sketch.
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([1,2,3,4,5], "INT")
+    >>> sketch_df = df.agg(sf.kll_sketch_agg_bigint("value").alias("sketch"))
+    >>> result = sketch_df.select(sf.kll_sketch_merge_bigint("sketch", "sketch")).first()[0]
+    >>> result is not None and len(result) > 0
+    True
+    """
+    fn = "kll_sketch_merge_bigint"
+    return _invoke_function_over_columns(fn, left, right)
+
+
+@_try_remote_functions
+def kll_sketch_merge_float(left: "ColumnOrName", right: "ColumnOrName") -> Column:
+    """
+    Merges two KLL float sketch buffers together into one.
+
+    .. versionadded:: 4.1.0
+
+    Parameters
+    ----------
+    left : :class:`~pyspark.sql.Column` or column name
+        The first KLL float sketch
+    right : :class:`~pyspark.sql.Column` or column name
+        The second KLL float sketch
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        The merged KLL sketch.
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([1.0,2.0,3.0,4.0,5.0], "FLOAT")
+    >>> sketch_df = df.agg(sf.kll_sketch_agg_float("value").alias("sketch"))
+    >>> result = sketch_df.select(sf.kll_sketch_merge_float("sketch", "sketch")).first()[0]
+    >>> result is not None and len(result) > 0
+    True
+    """
+    fn = "kll_sketch_merge_float"
+    return _invoke_function_over_columns(fn, left, right)
+
+
+@_try_remote_functions
+def kll_sketch_merge_double(left: "ColumnOrName", right: "ColumnOrName") -> Column:
+    """
+    Merges two KLL double sketch buffers together into one.
+
+    .. versionadded:: 4.1.0
+
+    Parameters
+    ----------
+    left : :class:`~pyspark.sql.Column` or column name
+        The first KLL double sketch
+    right : :class:`~pyspark.sql.Column` or column name
+        The second KLL double sketch
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        The merged KLL sketch.
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([1.0,2.0,3.0,4.0,5.0], "DOUBLE")
+    >>> sketch_df = df.agg(sf.kll_sketch_agg_double("value").alias("sketch"))
+    >>> result = sketch_df.select(sf.kll_sketch_merge_double("sketch", "sketch")).first()[0]
+    >>> result is not None and len(result) > 0
+    True
+    """
+    fn = "kll_sketch_merge_double"
+    return _invoke_function_over_columns(fn, left, right)
+
+
+@_try_remote_functions
+def kll_sketch_get_quantile_bigint(sketch: "ColumnOrName", rank: "ColumnOrName") -> Column:
+    """
+    Extracts a quantile value from a KLL bigint sketch given an input rank value.
+    The rank can be a single value or an array.
+
+    .. versionadded:: 4.1.0
+
+    Parameters
+    ----------
+    sketch : :class:`~pyspark.sql.Column` or column name
+        The KLL bigint sketch binary representation
+    rank : :class:`~pyspark.sql.Column` or column name
+        The rank value(s) to extract (between 0.0 and 1.0)
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        The quantile value(s).
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([1,2,3,4,5], "INT")
+    >>> sketch_df = df.agg(sf.kll_sketch_agg_bigint("value").alias("sketch"))
+    >>> sketch_df.select(sf.kll_sketch_get_quantile_bigint("sketch", sf.lit(0.5))).show()
+    +-------------------------------------------+
+    |kll_sketch_get_quantile_bigint(sketch, 0.5)|
+    +-------------------------------------------+
+    |                                          3|
+    +-------------------------------------------+
+    """
+    fn = "kll_sketch_get_quantile_bigint"
+    return _invoke_function_over_columns(fn, sketch, rank)
+
+
+@_try_remote_functions
+def kll_sketch_get_quantile_float(sketch: "ColumnOrName", rank: "ColumnOrName") -> Column:
+    """
+    Extracts a quantile value from a KLL float sketch given an input rank value.
+    The rank can be a single value or an array.
+
+    .. versionadded:: 4.1.0
+
+    Parameters
+    ----------
+    sketch : :class:`~pyspark.sql.Column` or column name
+        The KLL float sketch binary representation
+    rank : :class:`~pyspark.sql.Column` or column name
+        The rank value(s) to extract (between 0.0 and 1.0)
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        The quantile value(s).
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([1.0,2.0,3.0,4.0,5.0], "FLOAT")
+    >>> sketch_df = df.agg(sf.kll_sketch_agg_float("value").alias("sketch"))
+    >>> sketch_df.select(sf.kll_sketch_get_quantile_float("sketch", sf.lit(0.5))).show()
+    +------------------------------------------+
+    |kll_sketch_get_quantile_float(sketch, 0.5)|
+    +------------------------------------------+
+    |                                       3.0|
+    +------------------------------------------+
+    """
+    fn = "kll_sketch_get_quantile_float"
+    return _invoke_function_over_columns(fn, sketch, rank)
+
+
+@_try_remote_functions
+def kll_sketch_get_quantile_double(sketch: "ColumnOrName", rank: "ColumnOrName") -> Column:
+    """
+    Extracts a quantile value from a KLL double sketch given an input rank value.
+    The rank can be a single value or an array.
+
+    .. versionadded:: 4.1.0
+
+    Parameters
+    ----------
+    sketch : :class:`~pyspark.sql.Column` or column name
+        The KLL double sketch binary representation
+    rank : :class:`~pyspark.sql.Column` or column name
+        The rank value(s) to extract (between 0.0 and 1.0)
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        The quantile value(s).
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([1.0,2.0,3.0,4.0,5.0], "DOUBLE")
+    >>> sketch_df = df.agg(sf.kll_sketch_agg_double("value").alias("sketch"))
+    >>> sketch_df.select(sf.kll_sketch_get_quantile_double("sketch", sf.lit(0.5))).show()
+    +-------------------------------------------+
+    |kll_sketch_get_quantile_double(sketch, 0.5)|
+    +-------------------------------------------+
+    |                                        3.0|
+    +-------------------------------------------+
+    """
+    fn = "kll_sketch_get_quantile_double"
+    return _invoke_function_over_columns(fn, sketch, rank)
+
+
+@_try_remote_functions
+def kll_sketch_get_rank_bigint(sketch: "ColumnOrName", quantile: "ColumnOrName") -> Column:
+    """
+    Extracts a rank value from a KLL bigint sketch given an input quantile value.
+    The quantile can be a single value or an array.
+
+    .. versionadded:: 4.1.0
+
+    Parameters
+    ----------
+    sketch : :class:`~pyspark.sql.Column` or column name
+        The KLL bigint sketch binary representation
+    quantile : :class:`~pyspark.sql.Column` or column name
+        The quantile value(s) to lookup
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        The rank value(s) (between 0.0 and 1.0).
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([1,2,3,4,5], "INT")
+    >>> sketch_df = df.agg(sf.kll_sketch_agg_bigint("value").alias("sketch"))
+    >>> sketch_df.select(sf.kll_sketch_get_rank_bigint("sketch", sf.lit(3))).show()
+    +-------------------------------------+
+    |kll_sketch_get_rank_bigint(sketch, 3)|
+    +-------------------------------------+
+    |                                  0.6|
+    +-------------------------------------+
+    """
+    fn = "kll_sketch_get_rank_bigint"
+    return _invoke_function_over_columns(fn, sketch, quantile)
+
+
+@_try_remote_functions
+def kll_sketch_get_rank_float(sketch: "ColumnOrName", quantile: "ColumnOrName") -> Column:
+    """
+    Extracts a rank value from a KLL float sketch given an input quantile value.
+    The quantile can be a single value or an array.
+
+    .. versionadded:: 4.1.0
+
+    Parameters
+    ----------
+    sketch : :class:`~pyspark.sql.Column` or column name
+        The KLL float sketch binary representation
+    quantile : :class:`~pyspark.sql.Column` or column name
+        The quantile value(s) to lookup
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        The rank value(s) (between 0.0 and 1.0).
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([1.0,2.0,3.0,4.0,5.0], "FLOAT")
+    >>> sketch_df = df.agg(sf.kll_sketch_agg_float("value").alias("sketch"))
+    >>> sketch_df.select(sf.kll_sketch_get_rank_float("sketch", sf.lit(3.0))).show()
+    +--------------------------------------+
+    |kll_sketch_get_rank_float(sketch, 3.0)|
+    +--------------------------------------+
+    |                                   0.6|
+    +--------------------------------------+
+    """
+    fn = "kll_sketch_get_rank_float"
+    return _invoke_function_over_columns(fn, sketch, quantile)
+
+
+@_try_remote_functions
+def kll_sketch_get_rank_double(sketch: "ColumnOrName", quantile: "ColumnOrName") -> Column:
+    """
+    Extracts a rank value from a KLL double sketch given an input quantile value.
+    The quantile can be a single value or an array.
+
+    .. versionadded:: 4.1.0
+
+    Parameters
+    ----------
+    sketch : :class:`~pyspark.sql.Column` or column name
+        The KLL double sketch binary representation
+    quantile : :class:`~pyspark.sql.Column` or column name
+        The quantile value(s) to lookup
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        The rank value(s) (between 0.0 and 1.0).
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([1.0,2.0,3.0,4.0,5.0], "DOUBLE")
+    >>> sketch_df = df.agg(sf.kll_sketch_agg_double("value").alias("sketch"))
+    >>> sketch_df.select(sf.kll_sketch_get_rank_double("sketch", sf.lit(3.0))).show()
+    +---------------------------------------+
+    |kll_sketch_get_rank_double(sketch, 3.0)|
+    +---------------------------------------+
+    |                                    0.6|
+    +---------------------------------------+
+    """
+    fn = "kll_sketch_get_rank_double"
+    return _invoke_function_over_columns(fn, sketch, quantile)
 
 
 @_try_remote_functions
@@ -27441,6 +28676,7 @@ def bitmap_or_agg(col: "ColumnOrName") -> Column:
     :meth:`pyspark.sql.functions.bitmap_bucket_number`
     :meth:`pyspark.sql.functions.bitmap_construct_agg`
     :meth:`pyspark.sql.functions.bitmap_count`
+    :meth:`pyspark.sql.functions.bitmap_and_agg`
 
     Parameters
     ----------
@@ -27459,6 +28695,41 @@ def bitmap_or_agg(col: "ColumnOrName") -> Column:
     +--------------------------------+
     """
     return _invoke_function_over_columns("bitmap_or_agg", col)
+
+
+@_try_remote_functions
+def bitmap_and_agg(col: "ColumnOrName") -> Column:
+    """
+    Returns a bitmap that is the bitwise AND of all of the bitmaps from the input column.
+    The input column should be bitmaps created from bitmap_construct_agg().
+
+    .. versionadded:: 4.1.0
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.bitmap_bit_position`
+    :meth:`pyspark.sql.functions.bitmap_bucket_number`
+    :meth:`pyspark.sql.functions.bitmap_construct_agg`
+    :meth:`pyspark.sql.functions.bitmap_count`
+    :meth:`pyspark.sql.functions.bitmap_or_agg`
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or column name
+        The input column should be bitmaps created from bitmap_construct_agg().
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([("F0",),("70",),("30",)], ["a"])
+    >>> df.select(sf.bitmap_and_agg(sf.to_binary(df.a, sf.lit("hex")))).show()
+    +---------------------------------+
+    |bitmap_and_agg(to_binary(a, hex))|
+    +---------------------------------+
+    |             [30 00 00 00 00 0...|
+    +---------------------------------+
+    """
+    return _invoke_function_over_columns("bitmap_and_agg", col)
 
 
 # ---------------------------- User Defined Function ----------------------------------
@@ -27895,8 +29166,14 @@ def _test() -> None:
     import doctest
     from pyspark.sql import SparkSession
     import pyspark.sql.functions.builtin
+    from pyspark.testing.utils import have_pandas, have_pyarrow
 
     globs = pyspark.sql.functions.builtin.__dict__.copy()
+
+    if not have_pandas or not have_pyarrow:
+        del pyspark.sql.functions.builtin.udf.__doc__
+        del pyspark.sql.functions.builtin.arrow_udtf.__doc__
+
     spark = (
         SparkSession.builder.master("local[4]").appName("sql.functions.builtin tests").getOrCreate()
     )

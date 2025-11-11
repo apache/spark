@@ -454,7 +454,7 @@ class KafkaTestUtils(
   }
 
   private def getOffsets(topics: Set[String], offsetSpec: OffsetSpec): Map[TopicPartition, Long] = {
-    val listOffsetsParams = adminClient.describeTopics(topics.asJava).all().get().asScala
+    val listOffsetsParams = adminClient.describeTopics(topics.asJava).allTopicNames().get().asScala
       .flatMap { topicDescription =>
         topicDescription._2.partitions().asScala.map { topicPartitionInfo =>
           new TopicPartition(topicDescription._1, topicPartitionInfo.partition())

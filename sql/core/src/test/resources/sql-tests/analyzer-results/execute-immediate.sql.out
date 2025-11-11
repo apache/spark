@@ -545,12 +545,25 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 
 
 -- !query
-EXECUTE IMMEDIATE 'SELECT * FROM tbl_view where ? = id and :first = name' USING 1, 'name2' as first
+EXECUTE IMMEDIATE 'SELECT * FROM tbl_view where ? = id and :first = name' USING 1 as x, 'name2' as first
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INVALID_QUERY_MIXED_QUERY_PARAMETERS",
   "sqlState" : "42613"
+}
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT * FROM tbl_view where :x = id and :first = name' USING 1, 'name2' as first
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "ALL_PARAMETERS_MUST_BE_NAMED",
+  "sqlState" : "07001",
+  "messageParameters" : {
+    "exprs" : "\"1\""
+  }
 }
 
 
@@ -579,11 +592,11 @@ org.apache.spark.sql.catalyst.parser.ParseException
     "hint" : ""
   },
   "queryContext" : [ {
-    "objectType" : "",
+    "objectType" : "EXECUTE IMMEDIATE",
     "objectName" : "",
     "startIndex" : 1,
-    "stopIndex" : 28,
-    "fragment" : "EXECUTE IMMEDIATE 'SELCT Fa'"
+    "stopIndex" : 8,
+    "fragment" : "SELCT Fa"
   } ]
 }
 
@@ -600,11 +613,11 @@ org.apache.spark.sql.catalyst.parser.ParseException
     "hint" : ""
   },
   "queryContext" : [ {
-    "objectType" : "",
+    "objectType" : "EXECUTE IMMEDIATE",
     "objectName" : "",
     "startIndex" : 1,
-    "stopIndex" : 40,
-    "fragment" : "EXECUTE IMMEDIATE 'SELCT Fa' INTO res_id"
+    "stopIndex" : 8,
+    "fragment" : "SELCT Fa"
   } ]
 }
 
@@ -868,11 +881,11 @@ org.apache.spark.sql.catalyst.parser.ParseException
     "hint" : ""
   },
   "queryContext" : [ {
-    "objectType" : "",
+    "objectType" : "EXECUTE IMMEDIATE",
     "objectName" : "",
     "startIndex" : 1,
-    "stopIndex" : 28,
-    "fragment" : "EXECUTE IMMEDIATE sql_string"
+    "stopIndex" : 1,
+    "fragment" : "5"
   } ]
 }
 
@@ -1016,3 +1029,198 @@ DROP TABLE x
 -- !query analysis
 DropTable false, false
 +- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.x
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT typeof(:p) as type, :p as val' USING 5 AS p
+-- !query analysis
+Project [typeof(5) AS type#x, 5 AS val#x]
++- OneRowRelation
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT typeof(:p) as type, :p as val' USING 5L AS p
+-- !query analysis
+Project [typeof(5) AS type#x, 5 AS val#xL]
++- OneRowRelation
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT typeof(:p) as type, :p as val' USING 5S AS p
+-- !query analysis
+Project [typeof(5) AS type#x, 5 AS val#x]
++- OneRowRelation
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT typeof(:p) as type, :p as val' USING 5Y AS p
+-- !query analysis
+Project [typeof(5) AS type#x, 5 AS val#x]
++- OneRowRelation
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT typeof(:p) as type, :p as val' USING 3.14F AS p
+-- !query analysis
+Project [typeof(cast(3.14 as float)) AS type#x, cast(3.14 as float) AS val#x]
++- OneRowRelation
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT typeof(:p) as type, :p as val' USING 3.14159D AS p
+-- !query analysis
+Project [typeof(3.14159) AS type#x, 3.14159 AS val#x]
++- OneRowRelation
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT typeof(:p) as type, :p as val' USING 123.45BD AS p
+-- !query analysis
+Project [typeof(123.45) AS type#x, 123.45 AS val#x]
++- OneRowRelation
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT typeof(:p) as type, :p as val' USING true AS p
+-- !query analysis
+Project [typeof(true) AS type#x, true AS val#x]
++- OneRowRelation
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT typeof(:p) as type, :p as val' USING false AS p
+-- !query analysis
+Project [typeof(false) AS type#x, false AS val#x]
++- OneRowRelation
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT typeof(:p) as type, :p as val' USING 'hello world' AS p
+-- !query analysis
+Project [typeof(hello world) AS type#x, hello world AS val#x]
++- OneRowRelation
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT typeof(:p) as type, :p as val' USING 'it''s a test' AS p
+-- !query analysis
+Project [typeof(it's a test) AS type#x, it's a test AS val#x]
++- OneRowRelation
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT typeof(:p) as type, :p as val' USING DATE '2023-12-25' AS p
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT typeof(:p) as type, :p as val' USING TIMESTAMP '2023-12-25 10:30:45' AS p
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT typeof(:p) as type, :p as val' USING TIMESTAMP_NTZ '2023-12-25 10:30:45' AS p
+-- !query analysis
+Project [typeof(2023-12-25 10:30:45) AS type#x, 2023-12-25 10:30:45 AS val#x]
++- OneRowRelation
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT typeof(:p) as type, :p as val' USING CAST(NULL AS INT) AS p
+-- !query analysis
+Project [typeof(cast(null as int)) AS type#x, cast(null as int) AS val#x]
++- OneRowRelation
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT typeof(:p) as type, :p as val' USING CAST(NULL AS STRING) AS p
+-- !query analysis
+Project [typeof(cast(null as string)) AS type#x, cast(null as string) AS val#x]
++- OneRowRelation
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT typeof(:p) as type, hex(:p) as val' USING X'010203FF' AS p
+-- !query analysis
+Project [typeof(0x010203FF) AS type#x, hex(0x010203FF) AS val#x]
++- OneRowRelation
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT typeof(:p) as type, :p as val' USING INTERVAL '3' DAY AS p
+-- !query analysis
+Project [typeof(INTERVAL '3' DAY) AS type#x, INTERVAL '3' DAY AS val#x]
++- OneRowRelation
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT typeof(:p) as type, :p as val' USING INTERVAL '2' YEAR AS p
+-- !query analysis
+Project [typeof(INTERVAL '2' YEAR) AS type#x, INTERVAL '2' YEAR AS val#x]
++- OneRowRelation
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT typeof(:p) as type, :p as val' USING INTERVAL '1-2' YEAR TO MONTH AS p
+-- !query analysis
+Project [typeof(INTERVAL '1-2' YEAR TO MONTH) AS type#x, INTERVAL '1-2' YEAR TO MONTH AS val#x]
++- OneRowRelation
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT typeof(:p) as type, :p as val' USING INTERVAL '3 4:5:6' DAY TO SECOND AS p
+-- !query analysis
+Project [typeof(INTERVAL '3 04:05:06' DAY TO SECOND) AS type#x, INTERVAL '3 04:05:06' DAY TO SECOND AS val#x]
++- OneRowRelation
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT typeof(:p) as type, :p as val' USING 999.999BD AS p
+-- !query analysis
+Project [typeof(999.999) AS type#x, 999.999 AS val#x]
++- OneRowRelation
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT typeof(:p1) as type1, :p1 as val1, typeof(:p2) as type2, :p2 as val2' 
+  USING 42 as p1, 'test string' as p2
+-- !query analysis
+Project [typeof(42) AS type1#x, 42 AS val1#x, typeof(test string) AS type2#x, test string AS val2#x]
++- OneRowRelation
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT typeof(:p) as type, :p as val' USING ARRAY(1, 2, 3) AS p
+-- !query analysis
+Project [typeof(array(1, 2, 3)) AS type#x, array(1, 2, 3) AS val#x]
++- OneRowRelation
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT typeof(:p) as type, :p as val' USING ARRAY('a', 'b', 'c') AS p
+-- !query analysis
+Project [typeof(array(a, b, c)) AS type#x, array(a, b, c) AS val#x]
++- OneRowRelation
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT typeof(:p) as type, :p as val' USING ARRAY(ARRAY(1, 2), ARRAY(3, 4)) AS p
+-- !query analysis
+Project [typeof(array(array(1, 2), array(3, 4))) AS type#x, array(array(1, 2), array(3, 4)) AS val#x]
++- OneRowRelation
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT typeof(:p) as type, :p as val' USING MAP('key1', 'value1', 'key2', 'value2') AS p
+-- !query analysis
+Project [typeof(map(key1, value1, key2, value2)) AS type#x, map(key1, value1, key2, value2) AS val#x]
++- OneRowRelation
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT typeof(:p) as type, :p as val' USING MAP(1, 'one', 2, 'two') AS p
+-- !query analysis
+Project [typeof(map(1, one, 2, two)) AS type#x, map(1, one, 2, two) AS val#x]
++- OneRowRelation

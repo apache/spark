@@ -565,10 +565,10 @@ class FileBasedDataSourceSuite extends QueryTest
     }
   }
 
-  test("SPARK-24204 error handling for unsupported Null data types - csv, parquet, orc") {
+  test("SPARK-24204 error handling for unsupported Null data types - csv, orc") {
     Seq(true, false).foreach { useV1 =>
       val useV1List = if (useV1) {
-        "csv,orc,parquet"
+        "csv,orc"
       } else {
         ""
       }
@@ -576,7 +576,7 @@ class FileBasedDataSourceSuite extends QueryTest
         withTempDir { dir =>
           val tempDir = new File(dir, "files").getCanonicalPath
 
-          Seq("parquet", "csv", "orc").foreach { format =>
+          Seq("csv", "orc").foreach { format =>
             // write path
             checkError(
               exception = intercept[AnalysisException] {

@@ -167,11 +167,12 @@ class BlockManagerMaster(
 
   /**
    * Remove the host from the candidate list of shuffle push mergers. This can be
-   * triggered if there is a FetchFailedException on the host
+   * triggered if there is a FetchFailedException on the host. Non-blocking.
    * @param host
    */
   def removeShufflePushMergerLocation(host: String): Unit = {
-    driverEndpoint.askSync[Unit](RemoveShufflePushMergerLocation(host))
+    logInfo(log"Request to remove shuffle push merger location ${MDC(HOST, host)}")
+    driverEndpoint.ask[Unit](RemoveShufflePushMergerLocation(host))
   }
 
   def getExecutorEndpointRef(executorId: String): Option[RpcEndpointRef] = {

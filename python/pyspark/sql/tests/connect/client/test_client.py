@@ -163,6 +163,20 @@ if should_test_connect:
             resp.session_id = self._session_id
             return resp
 
+        def Config(self, req: proto.ConfigRequest, metadata):
+            self.req = req
+            resp = proto.ConfigResponse()
+            resp.session_id = self._session_id
+            if req.operation.HasField("get"):
+                pair = resp.pairs.add()
+                pair.key = req.operation.get.keys[0]
+                pair.value = "true"  # Default value
+            elif req.operation.HasField("get_with_default"):
+                pair = resp.pairs.add()
+                pair.key = req.operation.get_with_default.pairs[0].key
+                pair.value = req.operation.get_with_default.pairs[0].value or "true"
+            return resp
+
     # The _cleanup_ml_cache invocation will hang in this test (no valid spark cluster)
     # and it blocks the test process exiting because it is registered as the atexit handler
     # in `SparkConnectClient` constructor. To bypass the issue, patch the method in the test.

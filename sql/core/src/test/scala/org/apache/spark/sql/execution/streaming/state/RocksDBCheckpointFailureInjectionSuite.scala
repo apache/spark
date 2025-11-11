@@ -252,7 +252,16 @@ class RocksDBCheckpointFailureInjectionSuite extends StreamTest
 
             db.load(1, checkpointId1)
 
-            db.put("version", "2.2")
+            val value = if (ifEnableStateStoreCheckpointIds) {
+              // We can write a different value since the files will have different checkpointId.
+              "2.2"
+            } else {
+              // We must write the same value or else checksum verification will fail.
+              // This test is only overwriting the state file without overwriting checksum file.
+              // Also, since batches are deterministic in checkpoint v1.
+              "2.1"
+            }
+            db.put("version", value)
             checkpointId2 = commitAndGetCheckpointId(db)
 
             assert(injectionState.delayedStreams.nonEmpty)

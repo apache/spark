@@ -13,6 +13,12 @@ AS testData(a, b), false, true, LocalTempView, UNSUPPORTED, true
 
 
 -- !query
+CREATE TABLE t1(col1 TIMESTAMP, col2 STRING)
+-- !query analysis
+CreateDataSourceTableCommand `spark_catalog`.`default`.`t1`, false
+
+
+-- !query
 SELECT a, COUNT(b) FROM testData
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
@@ -1225,3 +1231,100 @@ GROUP BY a
 Aggregate [a#x], [count(1) AS count(1)#xL]
 +- SubqueryAlias t
    +- LocalRelation [a#x]
+
+
+-- !query
+SELECT col1 FROM t1 GROUP BY ALL HAVING first(col2) = 'a'
+-- !query analysis
+Project [col1#x]
++- Filter (first(col2)#x = a)
+   +- Aggregate [col1#x], [col1#x, first(col2#x, false) AS first(col2)#x]
+      +- SubqueryAlias spark_catalog.default.t1
+         +- Relation spark_catalog.default.t1[col1#x,col2#x] parquet
+
+
+-- !query
+SELECT col1 FROM t1 GROUP BY col1 HAVING EXISTS (SELECT first(t1.col2) == 0)
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.CORRELATED_REFERENCE",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "sqlExprs" : "\"(first(col2) = 0) AS `(first(outer(spark_catalog.default.t1.col2)) = 0)`\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 50,
+    "stopIndex" : 75,
+    "fragment" : "SELECT first(t1.col2) == 0"
+  } ]
+}
+
+
+-- !query
+SELECT col1 FROM t1 GROUP BY ALL HAVING last(col2) = 'a'
+-- !query analysis
+Project [col1#x]
++- Filter (last(col2)#x = a)
+   +- Aggregate [col1#x], [col1#x, last(col2#x, false) AS last(col2)#x]
+      +- SubqueryAlias spark_catalog.default.t1
+         +- Relation spark_catalog.default.t1[col1#x,col2#x] parquet
+
+
+-- !query
+SELECT col1 FROM t1 GROUP BY col1 HAVING EXISTS (SELECT last(t1.col2) == 0)
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.CORRELATED_REFERENCE",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "sqlExprs" : "\"(last(col2) = 0) AS `(last(outer(spark_catalog.default.t1.col2)) = 0)`\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 50,
+    "stopIndex" : 74,
+    "fragment" : "SELECT last(t1.col2) == 0"
+  } ]
+}
+
+
+-- !query
+SELECT col1 FROM t1 GROUP BY ALL HAVING any_value(col2) = 'a'
+-- !query analysis
+Project [col1#x]
++- Filter (any_value(col2)#x = a)
+   +- Aggregate [col1#x], [col1#x, any_value(col2#x, false) AS any_value(col2)#x]
+      +- SubqueryAlias spark_catalog.default.t1
+         +- Relation spark_catalog.default.t1[col1#x,col2#x] parquet
+
+
+-- !query
+SELECT col1 FROM t1 GROUP BY col1 HAVING EXISTS (SELECT any_value(t1.col2) == 0)
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.CORRELATED_REFERENCE",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "sqlExprs" : "\"(any_value(col2) = 0) AS `(any_value(outer(spark_catalog.default.t1.col2)) = 0)`\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 50,
+    "stopIndex" : 79,
+    "fragment" : "SELECT any_value(t1.col2) == 0"
+  } ]
+}
+
+
+-- !query
+DROP TABLE t1
+-- !query analysis
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.t1

@@ -2692,6 +2692,17 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
       sqlConf = Some(getDefaultSQLConf(minDeltasForSnapshot, numOfVersToRetainInMemory)))
   }
 
+  override def newStoreProviderWithClonedConf(
+      storeId: StateStoreId): RocksDBStateStoreProvider = {
+    newStoreProvider(
+      storeId,
+      NoPrefixKeyStateEncoderSpec(keySchema),
+      sqlConf = Some(cloneSQLConf()))
+  }
+
+  override def newStoreProviderNoInit(): RocksDBStateStoreProvider =
+    new RocksDBStateStoreProvider
+
   override def getDefaultSQLConf(
     minDeltasForSnapshot: Int,
     numOfVersToRetainInMemory: Int): SQLConf = {
@@ -2742,4 +2753,11 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
         s"after load but was $threadId")
   }
 }
+
+/**
+ * Test suite that runs all RocksDBStateStoreSuite tests with row checksum enabled.
+ */
+@ExtendedSQLTest
+class RocksDBStateStoreSuiteWithRowChecksum extends RocksDBStateStoreSuite
+  with EnableStateStoreRowChecksum
 

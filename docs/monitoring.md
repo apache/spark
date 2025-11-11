@@ -402,6 +402,14 @@ Security options for the Spark History Server are covered more detail in the
     <td>3.0.0</td>
   </tr>
   <tr>
+    <td>spark.history.fs.eventLog.rolling.onDemandLoadEnabled</td>
+    <td>true</td>
+    <td>
+      Whether to look up rolling event log locations on demand manner before listing files.
+    </td>
+    <td>4.1.0</td>
+  </tr>
+  <tr>
     <td>spark.history.store.hybridStore.enabled</td>
     <td>false</td>
     <td>

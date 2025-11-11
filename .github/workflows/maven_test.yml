@@ -175,7 +175,7 @@ jobs:
       - name: Install Python packages (Python 3.11)
         if: contains(matrix.modules, 'resource-managers#yarn') || (contains(matrix.modules, 'sql#core')) || contains(matrix.modules, 'connect')
         run: |
-          python3.11 -m pip install 'numpy>=1.22' pyarrow pandas pyyaml scipy unittest-xml-reporting 'grpcio==1.67.0' 'grpcio-status==1.67.0' 'protobuf==5.29.5'
+          python3.11 -m pip install 'numpy>=1.22' pyarrow pandas pyyaml scipy unittest-xml-reporting 'grpcio==1.76.0' 'grpcio-status==1.76.0' 'protobuf==6.33.0'
           python3.11 -m pip list
       # Run the tests using script command.
       # BSD's script command doesn't support -c option, and the usage is different from Linux's one.
@@ -205,8 +205,11 @@ jobs:
           
           if [[ "$INCLUDED_TAGS" != "" ]]; then
             ./build/mvn $MAVEN_CLI_OPTS -pl "$TEST_MODULES" -Pyarn -Pkubernetes -Pvolcano -Phive -Phive-thriftserver -Phadoop-cloud -Pjvm-profiler -Pspark-ganglia-lgpl -Pkinesis-asl -Djava.version=${JAVA_VERSION/-ea} -Dtest.include.tags="$INCLUDED_TAGS" test -fae
-          elif [[ "$MODULES_TO_TEST" == "connect" ]]; then
+          elif [[ "$MODULES_TO_TEST" == "connect" && "$INPUT_BRANCH" == "branch-4.0" ]]; then
+            # SPARK-53914: Remove sql/connect/client/jdbc from `-pl` for branch-4.0, this branch can be deleted after the EOL of branch-4.0.
             ./build/mvn $MAVEN_CLI_OPTS -Djava.version=${JAVA_VERSION/-ea} -pl sql/connect/client/jvm,sql/connect/common,sql/connect/server test -fae
+          elif [[ "$MODULES_TO_TEST" == "connect" ]]; then
+            ./build/mvn $MAVEN_CLI_OPTS -Djava.version=${JAVA_VERSION/-ea} -pl sql/connect/client/jdbc,sql/connect/client/jvm,sql/connect/common,sql/connect/server test -fae
           elif [[ "$EXCLUDED_TAGS" != "" ]]; then
             ./build/mvn $MAVEN_CLI_OPTS -pl "$TEST_MODULES" -Pyarn -Pkubernetes -Pvolcano -Phive -Phive-thriftserver -Phadoop-cloud -Pjvm-profiler -Pspark-ganglia-lgpl -Pkinesis-asl -Djava.version=${JAVA_VERSION/-ea} -Dtest.exclude.tags="$EXCLUDED_TAGS" test -fae
           elif [[ "$MODULES_TO_TEST" == *"sql#hive-thriftserver"* ]]; then
@@ -231,7 +234,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: test-results-${{ matrix.modules }}-${{ matrix.comment }}-${{ matrix.java }}-${{ matrix.hadoop }}-${{ matrix.hive }}
-          path: "**/target/test-reports/*.xml"
+          path: |
+            **/target/test-reports/*.xml
+            **/target/surefire-reports/*.xml
       - name: Upload unit tests log files
         if: failure()
         uses: actions/upload-artifact@v4

@@ -167,6 +167,11 @@ class DataFrameCreationTestsMixin:
         with self.assertRaises(PySparkValueError):
             self.spark.createDataFrame(data=data, schema=schema)
 
+    def test_decimal_round(self):
+        df = self.spark.createDataFrame([(Decimal(1.234),)], ["d"])
+        rounded = df.first().d
+        self.assertEqual(rounded, Decimal("1.233999999999999986"))
+
     def test_invalid_argument_create_dataframe(self):
         with self.assertRaises(PySparkTypeError) as pe:
             self.spark.createDataFrame([(1, 2)], schema=123)

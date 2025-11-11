@@ -16,10 +16,11 @@
 #
 
 import unittest
+import logging
 
 from pyspark.sql.functions import arrow_udf, ArrowUDFType
-from pyspark.util import PythonEvalType
-from pyspark.sql import functions as sf
+from pyspark.util import PythonEvalType, is_remote_only
+from pyspark.sql import Row, functions as sf
 from pyspark.sql.window import Window
 from pyspark.errors import AnalysisException, PythonException, PySparkTypeError
 from pyspark.testing.utils import (
@@ -27,6 +28,7 @@ from pyspark.testing.utils import (
     numpy_requirement_message,
     have_pyarrow,
     pyarrow_requirement_message,
+    assertDataFrameEqual,
 )
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 
@@ -404,7 +406,7 @@ class WindowArrowUDFTestsMixin:
                         windowed.collect(), df.withColumn("wm", sf.mean(df.v).over(w)).collect()
                     )
 
-        with self.tempView("v"):
+        with self.tempView("v"), self.temp_func("weighted_mean"):
             df.createOrReplaceTempView("v")
             self.spark.udf.register("weighted_mean", weighted_mean)
 
@@ -435,7 +437,7 @@ class WindowArrowUDFTestsMixin:
         df = self.data
         weighted_mean = self.arrow_agg_weighted_mean_udf
 
-        with self.tempView("v"):
+        with self.tempView("v"), self.temp_func("weighted_mean"):
             df.createOrReplaceTempView("v")
             self.spark.udf.register("weighted_mean", weighted_mean)
 
@@ -505,7 +507,7 @@ class WindowArrowUDFTestsMixin:
                         windowed.collect(), df.withColumn("wm", sf.mean(df.v).over(w)).collect()
                     )
 
-        with self.tempView("v"):
+        with self.tempView("v"), self.temp_func("weighted_mean"):
             df.createOrReplaceTempView("v")
             self.spark.udf.register("weighted_mean", weighted_mean)
 
@@ -757,6 +759,95 @@ class WindowArrowUDFTestsMixin:
             np_avg_udf("id").over(w).alias("avg"),
         )
         self.assertEqual(expected.collect(), result.collect())
+
+    def test_arrow_batch_slicing(self):
+        import pyarrow as pa
+
+        df = self.spark.range(1000).select((sf.col("id") % 2).alias("key"), sf.col("id").alias("v"))
+
+        w1 = Window.partitionBy("key").orderBy("v")
+        w2 = (
+            Window.partitionBy("key")
+            .rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing)
+            .orderBy("v")
+        )
+
+        @arrow_udf("long", ArrowUDFType.GROUPED_AGG)
+        def arrow_sum(v):
+            return pa.compute.sum(v)
+
+        @arrow_udf("long", ArrowUDFType.GROUPED_AGG)
+        def arrow_sum_unbounded(v):
+            assert len(v) == 1000 / 2, len(v)
+            return pa.compute.sum(v)
+
+        expected1 = df.select("*", sf.sum("v").over(w1).alias("res")).sort("key", "v").collect()
+        expected2 = df.select("*", sf.sum("v").over(w2).alias("res")).sort("key", "v").collect()
+
+        for maxRecords, maxBytes in [(10, 2**31 - 1), (0, 64), (10, 64)]:
+            with self.subTest(maxRecords=maxRecords, maxBytes=maxBytes):
+                with self.sql_conf(
+                    {
+                        "spark.sql.execution.arrow.maxRecordsPerBatch": maxRecords,
+                        "spark.sql.execution.arrow.maxBytesPerBatch": maxBytes,
+                    }
+                ):
+                    result1 = (
+                        df.select("*", arrow_sum("v").over(w1).alias("res"))
+                        .sort("key", "v")
+                        .collect()
+                    )
+                    self.assertEqual(expected1, result1)
+
+                    result2 = (
+                        df.select("*", arrow_sum_unbounded("v").over(w2).alias("res"))
+                        .sort("key", "v")
+                        .collect()
+                    )
+                    self.assertEqual(expected2, result2)
+
+    @unittest.skipIf(is_remote_only(), "Requires JVM access")
+    def test_window_arrow_udf_with_logging(self):
+        import pyarrow as pa
+
+        @arrow_udf("double", ArrowUDFType.GROUPED_AGG)
+        def my_window_arrow_udf(x):
+            assert isinstance(x, pa.Array)
+            logger = logging.getLogger("test_window_arrow")
+            logger.warning(f"window arrow udf: {x.to_pylist()}")
+            return pa.compute.sum(x)
+
+        df = self.spark.createDataFrame(
+            [(1, 1.0), (1, 2.0), (2, 3.0), (2, 5.0), (2, 10.0)], ("id", "v")
+        )
+        w = Window.partitionBy("id").orderBy("v").rangeBetween(Window.unboundedPreceding, 0)
+
+        with self.sql_conf({"spark.sql.pyspark.worker.logging.enabled": "true"}):
+            assertDataFrameEqual(
+                df.select("id", my_window_arrow_udf("v").over(w).alias("result")),
+                [
+                    Row(id=1, result=1.0),
+                    Row(id=1, result=3.0),
+                    Row(id=2, result=3.0),
+                    Row(id=2, result=8.0),
+                    Row(id=2, result=18.0),
+                ],
+            )
+
+        logs = self.spark.table("system.session.python_worker_logs")
+
+        assertDataFrameEqual(
+            logs.select("level", "msg", "context", "logger"),
+            [
+                Row(
+                    level="WARNING",
+                    msg=f"window arrow udf: {lst}",
+                    context={"func_name": my_window_arrow_udf.__name__},
+                    logger="test_window_arrow",
+                )
+                for lst in [[1.0], [1.0, 2.0], [3.0], [3.0, 5.0], [3.0, 5.0, 10.0]]
+            ],
+        )
 
 
 class WindowArrowUDFTests(WindowArrowUDFTestsMixin, ReusedSQLTestCase):

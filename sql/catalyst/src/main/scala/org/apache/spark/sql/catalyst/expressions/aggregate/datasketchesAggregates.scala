@@ -66,6 +66,9 @@ case class HllSketchAgg(
   // Hllsketch config - mark as lazy so that they're not evaluated during tree transformation.
 
   lazy val lgConfigK: Int = {
+    if (!right.foldable) {
+      throw QueryExecutionErrors.hllKMustBeConstantError(prettyName)
+    }
     val lgConfigK = right.eval().asInstanceOf[Int]
     HllSketchAgg.checkLgK(lgConfigK)
     lgConfigK

@@ -22,6 +22,7 @@ import scala.collection.mutable
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.SQLConfHelper
+import org.apache.spark.sql.catalyst.analysis.TableOutputResolver.DefaultValueFillMode.{FILL, NONE, RECURSE}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.objects.AssertNotNull
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
@@ -37,6 +38,17 @@ import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy
 import org.apache.spark.sql.types._
 
 object TableOutputResolver extends SQLConfHelper with Logging {
+
+  /**
+   * Modes for filling in default or null values for missing columns.
+   * If FILL, fill missing top-level columns with their default values.
+   * If RECURSE, fill missing top-level columns and also recurse into nested struct
+   * fields to fill null.
+   * If NONE, do not fill any missing columns.
+   */
+  object DefaultValueFillMode extends Enumeration {
+    val FILL, RECURSE, NONE = Value
+  }
 
   def resolveVariableOutputColumns(
       expected: Seq[VariableReference],
@@ -87,8 +99,14 @@ object TableOutputResolver extends SQLConfHelper with Logging {
         tableName, expected.map(_.name), query.output)
     }
 
+    // If a top-level column does not have a corresponding value in the input query, fill with
+    // the column's default value. We need to pass `fillDefaultValue` as FILL here, if the
+    // `supportColDefaultValue` parameter is also true.
+    val defaultValueFillMode = if (supportColDefaultValue) FILL else NONE
+    // todo: if (byName && supportColDefaultValue) FILL else NONE
+
     val resolved = resolveColumns(tableName, query.output, expected,
-      conf, byName, supportColDefaultValue)
+      conf, byName, Nil, defaultValueFillMode)
 
     if (resolved == query.output) {
       query
@@ -103,18 +121,22 @@ object TableOutputResolver extends SQLConfHelper with Logging {
       col: Attribute,
       byName: Boolean,
       conf: SQLConf,
-      colPath: Seq[String]): NamedExpression = {
+      colPath: Seq[String],
+      defaultValueFillMode: DefaultValueFillMode.Value): NamedExpression = {
     val resolved = (value.dataType, col.dataType) match {
       // no need to reorder inner fields or cast if types are already compatible
       case (valueType, colType) if DataType.equalsIgnoreCompatibleNullability(valueType, colType) =>
         verifyCanWrite(tableName, valueType, colType, byName, conf, colPath)
         withNullabilityChecked(value, col, conf, colPath)
       case (valueType: StructType, colType: StructType) =>
-        resolveStructType(tableName, value, valueType, col, colType, byName, conf, colPath)
+        resolveStructType(tableName, value, valueType, col, colType, byName,
+          conf, colPath, defaultValueFillMode)
       case (valueType: ArrayType, colType: ArrayType) =>
-        resolveArrayType(tableName, value, valueType, col, colType, byName, conf, colPath)
+        resolveArrayType(tableName, value, valueType, col, colType, byName,
+          conf, colPath, defaultValueFillMode)
       case (valueType: MapType, colType: MapType) =>
-        resolveMapType(tableName, value, valueType, col, colType, byName, conf, colPath)
+        resolveMapType(tableName, value, valueType, col, colType, byName,
+          conf, colPath, defaultValueFillMode)
       case _ =>
         resolveBasicType(tableName, value, col, conf, colPath)
     }
@@ -245,15 +267,15 @@ object TableOutputResolver extends SQLConfHelper with Logging {
       expectedCols: Seq[Attribute],
       conf: SQLConf,
       byName: Boolean,
-      fillDefaultValue: Boolean,
-      colPath: Seq[String] = Nil): Seq[NamedExpression] = {
+      colPath: Seq[String],
+      defaultValueFillMode: DefaultValueFillMode.Value): Seq[NamedExpression] = {
     val actualExpectedCols = expectedCols.map { c =>
       CharVarcharUtils.getRawType(c.metadata).map(c.withDataType).getOrElse(c)
     }
 
     val resolved = if (byName) {
       reorderColumnsByName(tableName, inputCols, actualExpectedCols, conf,
-        colPath, fillDefaultValue)
+        colPath, defaultValueFillMode)
     } else {
       resolveColumnsByPosition(tableName, inputCols, actualExpectedCols, conf, colPath)
     }
@@ -270,13 +292,13 @@ object TableOutputResolver extends SQLConfHelper with Logging {
       expectedCols: Seq[Attribute],
       conf: SQLConf,
       colPath: Seq[String] = Nil,
-      fillDefaultValue: Boolean = false): Seq[NamedExpression] = {
+      defaultValueFillMode: DefaultValueFillMode.Value): Seq[NamedExpression] = {
     val matchedCols = mutable.HashSet.empty[String]
     val reordered = expectedCols.map { expectedCol =>
       val matched = inputCols.filter(col => conf.resolver(col.name, expectedCol.name))
       val newColPath = colPath :+ expectedCol.name
       if (matched.isEmpty) {
-        val defaultExpr = if (fillDefaultValue) {
+        val defaultExpr = if (Set(FILL, RECURSE).contains(defaultValueFillMode)) {
           getDefaultValueExprOrNullLit(expectedCol, conf.useNullsForMissingDefaultColumnValues)
         } else {
           None
@@ -294,7 +316,9 @@ object TableOutputResolver extends SQLConfHelper with Logging {
       } else {
         matchedCols += matched.head.name
         val matchedCol = matched.head
-        resolveField(tableName, matchedCol, expectedCol, byName = true, conf, newColPath)
+        val childFillMode = if (defaultValueFillMode == FILL) NONE else defaultValueFillMode
+        resolveField(tableName, matchedCol, expectedCol, byName = true, conf,
+          newColPath, childFillMode)
       }
     }
 
@@ -342,7 +366,7 @@ object TableOutputResolver extends SQLConfHelper with Logging {
 
     inputCols.zip(expectedCols).map { case (inputCol, expectedCol) =>
       val newColPath = colPath :+ expectedCol.name
-      resolveField(tableName, inputCol, expectedCol, byName = false, conf, newColPath)
+      resolveField(tableName, inputCol, expectedCol, byName = false, conf, newColPath, NONE)
     }
   }
 
@@ -377,14 +401,15 @@ object TableOutputResolver extends SQLConfHelper with Logging {
       expectedType: StructType,
       byName: Boolean,
       conf: SQLConf,
-      colPath: Seq[String]): Expression = {
+      colPath: Seq[String],
+      defaultValueFillMode: DefaultValueFillMode.Value): Expression = {
     val nullCheckedInput = withNullabilityChecked(input, expected, conf, colPath)
     val fields = inputType.zipWithIndex.map { case (f, i) =>
       // todo: this blows up input evaluation by each field!
       Alias(GetStructField(nullCheckedInput, i, Some(f.name)), f.name)()
     }
     val resolved = resolveColumns(tableName, fields, toAttributes(expectedType),
-      conf, byName, fillDefaultValue = false, colPath)
+      conf, byName, colPath, defaultValueFillMode)
 
     // This may reconstruct a struct unnecessarily, but hopefully it gets cleaned up by rewrites.
     val struct = CreateStruct(resolved)
@@ -403,13 +428,14 @@ object TableOutputResolver extends SQLConfHelper with Logging {
       expectedType: ArrayType,
       byName: Boolean,
       conf: SQLConf,
-      colPath: Seq[String]): Expression = {
+      colPath: Seq[String],
+      defaultValueFillMode: DefaultValueFillMode.Value): Expression = {
     val nullCheckedInput = withNullabilityChecked(input, expected, conf, colPath)
     val param = NamedLambdaVariable("element", inputType.elementType, inputType.containsNull)
     val fakeAttr =
       AttributeReference("element", expectedType.elementType, expectedType.containsNull)()
     val res = resolveColumns(tableName, Seq(param), Seq(fakeAttr),
-      conf, byName, fillDefaultValue = false, colPath)
+      conf, byName, colPath, defaultValueFillMode)
     if (res.head == param) {
       // If the element type is the same, we can reuse the input array directly.
       nullCheckedInput
@@ -428,20 +454,21 @@ object TableOutputResolver extends SQLConfHelper with Logging {
       expectedType: MapType,
       byName: Boolean,
       conf: SQLConf,
-      colPath: Seq[String]): Expression = {
+      colPath: Seq[String],
+      defaultValueFillMode: DefaultValueFillMode.Value): Expression = {
     val nullCheckedInput = withNullabilityChecked(input, expected, conf, colPath)
 
     val keyParam = NamedLambdaVariable("key", inputType.keyType, nullable = false)
     val fakeKeyAttr = AttributeReference("key", expectedType.keyType, nullable = false)()
     val resKey = resolveColumns(tableName, Seq(keyParam), Seq(fakeKeyAttr),
-      conf, byName, fillDefaultValue = false, colPath)
+      conf, byName, colPath, defaultValueFillMode)
 
     val valueParam =
       NamedLambdaVariable("value", inputType.valueType, inputType.valueContainsNull)
     val fakeValueAttr =
       AttributeReference("value", expectedType.valueType, expectedType.valueContainsNull)()
     val resValue = resolveColumns(tableName, Seq(valueParam), Seq(fakeValueAttr),
-      conf, byName, fillDefaultValue = false, colPath)
+      conf, byName, colPath, defaultValueFillMode)
 
     // If the key and value expressions have not changed, we just check original map field.
     // Otherwise, we construct a new map by adding transformations to the keys and values.
