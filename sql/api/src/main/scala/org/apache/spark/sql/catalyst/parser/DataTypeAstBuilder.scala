@@ -87,9 +87,7 @@ import org.apache.spark.sql.types.{ArrayType, BinaryType, BooleanType, ByteType,
  *   SubqueryAlias(getIdentifierText(ctx.name), plan)
  * }}}
  */
-abstract class DataTypeAstBuilder
-    extends SqlBaseParserBaseVisitor[AnyRef]
-    with DataTypeErrorsBase {
+class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with DataTypeErrorsBase {
   protected def typedVisit[T](ctx: ParseTree): T = {
     ctx.accept(this).asInstanceOf[T]
   }
@@ -203,18 +201,25 @@ abstract class DataTypeAstBuilder
   }
 
   /**
-   * Parse a string into a multi-part identifier. Subclasses MUST implement this method to provide
-   * proper multi-part identifier parsing with access to a full SQL parser.
+   * Parse a string into a multi-part identifier. Subclasses should override this method to
+   * provide proper multi-part identifier parsing with access to a full SQL parser.
    *
    * For example, in AstBuilder, this would parse "`catalog`.`schema`.`table`" into Seq("catalog",
    * "schema", "table").
+   *
+   * The base implementation fails with an assertion to catch cases where multi-part identifiers
+   * are used without a proper parser implementation.
    *
    * @param identifier
    *   The identifier string to parse, potentially containing dots and backticks.
    * @return
    *   Sequence of identifier parts.
    */
-  protected def parseMultipartIdentifier(identifier: String): Seq[String]
+  protected def parseMultipartIdentifier(identifier: String): Seq[String] = {
+    throw SparkException.internalError(
+      "parseMultipartIdentifier must be overridden by subclasses. " +
+        s"Attempted to parse: $identifier")
+  }
 
   /**
    * Get the identifier parts from a context, handling both regular identifiers and

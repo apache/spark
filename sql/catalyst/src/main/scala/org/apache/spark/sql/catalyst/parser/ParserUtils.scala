@@ -58,13 +58,8 @@ object ParserUtils extends SparkParserUtils {
    * @return The resolved identifier text as a dot-separated string.
    */
   def getMultipartIdentifierText(ctx: MultipartIdentifierContext): String = {
-    // Create a minimal DataTypeAstBuilder instance for identifier extraction.
-    // We delegate parseMultipartIdentifier to CatalystSqlParser.
-    val astBuilder = new DataTypeAstBuilder {
-      override protected def parseMultipartIdentifier(identifier: String): Seq[String] = {
-        CatalystSqlParser.parseMultipartIdentifier(identifier)
-      }
-    }
+    // Use DataTypeAstBuilder to properly extract identifier parts.
+    val astBuilder = new DataTypeAstBuilder()
     ctx.parts.asScala.flatMap { part =>
       astBuilder.extractIdentifierParts(part)
     }.mkString(".")

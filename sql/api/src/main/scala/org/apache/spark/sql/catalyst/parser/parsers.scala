@@ -430,15 +430,7 @@ case class UnclosedCommentProcessor(command: String, tokenStream: CommonTokenStr
 }
 
 object DataTypeParser extends AbstractParser {
-  override protected def astBuilder: DataTypeAstBuilder = new DataTypeAstBuilder {
-    // DataTypeParser only parses data types, not full SQL.
-    // Multi-part identifiers should never appear in IDENTIFIER() within type definitions.
-    override protected def parseMultipartIdentifier(identifier: String): Seq[String] = {
-      throw SparkException.internalError(
-        "DataTypeParser does not support multi-part identifiers in IDENTIFIER(). " +
-          s"Attempted to parse: $identifier")
-    }
-  }
+  override protected def astBuilder: DataTypeAstBuilder = new DataTypeAstBuilder
 }
 
 object AbstractParser extends Logging {
