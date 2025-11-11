@@ -658,7 +658,7 @@ class UDFRegistration:
             ...
             >>> _ = spark.udf.register("sum_udf", sum_udf)
             >>> q = "SELECT sum_udf(v1) FROM VALUES (3, 0), (2, 0), (1, 1) tbl(v1, v2) GROUP BY v2"
-            >>> spark.sql(q).collect()
+            >>> spark.sql(q).sort("sum_udf(v1)").collect()
             [Row(sum_udf(v1)=1), Row(sum_udf(v1)=5)]
         """
 
