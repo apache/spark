@@ -2206,6 +2206,118 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
     }
   }
 
+  test("Merge schema evolution new column with conditions on update and insert") {
+    Seq(true, false).foreach { withSchemaEvolution =>
+      withTempView("source") {
+        createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+          """{ "pk": 1, "salary": 100, "dep": "hr" }
+            |{ "pk": 2, "salary": 200, "dep": "software" }
+            |{ "pk": 3, "salary": 300, "dep": "hr" }
+            |{ "pk": 4, "salary": 400, "dep": "marketing" }
+            |{ "pk": 5, "salary": 500, "dep": "executive" }
+            |""".stripMargin)
+
+        // Two rows that could be updated (pk 4 and 5), but only one has salary > 450
+        // Two rows that could be inserted (pk 6 and 7), but only one has active = true
+        val sourceDF = Seq((4, 450, "finance", false),
+          (5, 550, "finance", true),
+          (6, 350, "sales", true),
+          (7, 250, "sales", false)).toDF("pk", "salary", "dep", "active")
+        sourceDF.createOrReplaceTempView("source")
+
+        val schemaEvolutionClause = if (withSchemaEvolution) "WITH SCHEMA EVOLUTION" else ""
+        val mergeStmt = s"""MERGE $schemaEvolutionClause
+                           |INTO $tableNameAsString t
+                           |USING source s
+                           |ON t.pk = s.pk
+                           |WHEN MATCHED AND s.salary > 450 THEN
+                           | UPDATE SET dep='updated', active=s.active
+                           |WHEN NOT MATCHED AND s.active = true THEN
+                           | INSERT (pk, salary, dep, active) VALUES (s.pk, s.salary, s.dep,
+                           | s.active)
+                           |""".stripMargin
+
+        if (withSchemaEvolution) {
+          sql(mergeStmt)
+          checkAnswer(
+            sql(s"SELECT * FROM $tableNameAsString"),
+            Seq(
+              Row(1, 100, "hr", null),
+              Row(2, 200, "software", null),
+              Row(3, 300, "hr", null),
+              Row(4, 400, "marketing", null), // pk=4 not updated (salary 450 is not > 450)
+              Row(5, 500, "updated", true),   // pk=5 updated (salary 550 > 450)
+              Row(6, 350, "sales", true)))    // pk=6 inserted (active = true)
+              // pk=7 not inserted (active = false)
+        } else {
+          val e = intercept[org.apache.spark.sql.AnalysisException] {
+            sql(mergeStmt)
+          }
+          assert(e.errorClass.get == "UNRESOLVED_COLUMN.WITH_SUGGESTION")
+          assert(e.getMessage.contains("A column, variable, or function parameter with name " +
+            "`active` cannot be resolved"))
+        }
+
+        sql(s"DROP TABLE $tableNameAsString")
+      }
+    }
+  }
+
+  test("Merge schema evolution with condition on new column from target") {
+    Seq(true, false).foreach { withSchemaEvolution =>
+      withTempView("source") {
+        createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+          """{ "pk": 1, "salary": 100, "dep": "hr" }
+            |{ "pk": 2, "salary": 200, "dep": "software" }
+            |{ "pk": 3, "salary": 300, "dep": "hr" }
+            |{ "pk": 4, "salary": 400, "dep": "marketing" }
+            |{ "pk": 5, "salary": 500, "dep": "executive" }
+            |""".stripMargin)
+
+        // Source has new 'active' column that doesn't exist in target
+        val sourceDF = Seq((4, 450, "finance", true),
+          (5, 550, "finance", false),
+          (6, 350, "sales", true)).toDF("pk", "salary", "dep", "active")
+        sourceDF.createOrReplaceTempView("source")
+
+        val schemaEvolutionClause = if (withSchemaEvolution) "WITH SCHEMA EVOLUTION" else ""
+        // Condition references t.active which doesn't exist yet in target
+        val mergeStmt = s"""MERGE $schemaEvolutionClause
+                           |INTO $tableNameAsString t
+                           |USING source s
+                           |ON t.pk = s.pk
+                           |WHEN MATCHED AND t.active IS NULL THEN
+                           | UPDATE SET salary=s.salary, dep=s.dep, active=s.active
+                           |WHEN NOT MATCHED THEN
+                           | INSERT (pk, salary, dep, active)
+                           |   VALUES (s.pk, s.salary, s.dep, s.active)
+                           |""".stripMargin
+
+        if (withSchemaEvolution) {
+          sql(mergeStmt)
+          checkAnswer(
+            sql(s"SELECT * FROM $tableNameAsString"),
+            Seq(
+              Row(1, 100, "hr", null),
+              Row(2, 200, "software", null),
+              Row(3, 300, "hr", null),
+              Row(4, 450, "finance", true),  // Updated (t.active was NULL)
+              Row(5, 550, "finance", false), // Updated (t.active was NULL)
+              Row(6, 350, "sales", true)))   // Inserted
+        } else {
+          val e = intercept[org.apache.spark.sql.AnalysisException] {
+            sql(mergeStmt)
+          }
+          assert(e.errorClass.get == "UNRESOLVED_COLUMN.WITH_SUGGESTION")
+          assert(e.getMessage.contains("A column, variable, or function parameter with name " +
+            "`active` cannot be resolved"))
+        }
+
+        sql(s"DROP TABLE $tableNameAsString")
+      }
+    }
+  }
+
   test("Merge schema evolution new column with set all columns") {
     Seq((true, true), (false, true), (true, false)).foreach {
       case (withSchemaEvolution, schemaEvolutionEnabled) =>
