@@ -830,7 +830,7 @@ class CastWithAnsiOnSuite extends CastSuiteBase with QueryErrorsBase {
       Literal.create(-1.0f, FloatType)
     ).foreach( { invalidInput =>
       checkExceptionInExpression[DateTimeException](
-        Cast(invalidInput, TimeType()),
+        cast(invalidInput, TimeType()),
         castErrMsg(-1L, TimeType(), LongType)
       )
     })
@@ -845,7 +845,7 @@ class CastWithAnsiOnSuite extends CastSuiteBase with QueryErrorsBase {
       999999999999999999L
     ).foreach({ invalidInput =>
       checkExceptionInExpression[DateTimeException](
-        Cast(Literal.create(invalidInput, LongType), TimeType()),
+        cast(Literal.create(invalidInput, LongType), TimeType()),
         castErrMsg(invalidInput, TimeType(), LongType)
       )
     })
