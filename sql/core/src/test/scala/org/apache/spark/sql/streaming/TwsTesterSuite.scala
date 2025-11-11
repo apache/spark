@@ -699,7 +699,7 @@ class TwsTesterSuite extends SparkFunSuite {
 
     // Advance to EXACTLY the new timer time (18000ms).
     // This tests that timers fire when current time equals expiry time.
-    testClock.advanceBy(Duration.ofMillis(2000L)) 
+    testClock.advanceBy(Duration.ofMillis(2000L))
     val result2 = tester.test(List())
     assert(result2.length == 1)
     assert(result2(0) == ("user1", "SESSION_TIMEOUT", 2L))
