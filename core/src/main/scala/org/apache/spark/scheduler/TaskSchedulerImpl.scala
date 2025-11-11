@@ -1128,7 +1128,7 @@ private[spark] class TaskSchedulerImpl(
   }
 
   private def isExecutorAvailable(execId: String): Boolean = synchronized {
-    !executorsPendingToRemove.contains(execId) && !executorsPendingDecommission.contains(execId)
+    !executorsPendingToRemove.contains(execId)
   }
 
   // exposed for test
