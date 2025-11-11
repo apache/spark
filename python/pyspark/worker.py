@@ -3309,10 +3309,9 @@ def main(infile, outfile):
         if tracebackDumpIntervalSeconds is not None and int(tracebackDumpIntervalSeconds) > 0:
             faulthandler.dump_traceback_later(int(tracebackDumpIntervalSeconds), repeat=True)
 
-        tzname = os.environ.get("TZ", None)
+        tzname = os.environ.get("SPARK_SESSION_LOCAL_TIMEZONE", None)
         if tzname is not None:
             tz = zoneinfo.ZoneInfo(tzname)
-            time.tzset()
         else:
             tz = datetime.datetime.now().astimezone().tzinfo
         TimestampType.tz_info = tz
