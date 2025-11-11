@@ -17,14 +17,14 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, AttributeSet, Expression, GetStructField}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
-import org.apache.spark.sql.connector.catalog.{CatalogV2Util, TableCatalog}
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, SupportsRowLevelOperations, TableCatalog, TableChange}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
+import org.apache.spark.sql.types.StructType
 
 
 /**
@@ -37,97 +37,31 @@ object ResolveMergeIntoSchemaEvolution extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     // This rule should run only if all assignments are resolved, except those
     // that will be satisfied by schema evolution
-    case m @ MergeIntoTable(_, _, _, _, _, _, _) if m.needSchemaEvolution =>
-        val newTarget = m.targetTable.transform {
-          case r : DataSourceV2Relation => performSchemaEvolution(r, m)
+    case m@MergeIntoTable(_, _, _, _, _, _, _) if m.evaluateSchemaEvolution =>
+      val changes = m.changesForSchemaEvolution
+      if (changes.isEmpty) {
+        m
+      } else {
+        m transformUpWithNewOutput {
+          case r @ DataSourceV2Relation(_: SupportsRowLevelOperations, _, _, _, _, _) =>
+            val referencedSourceSchema = MergeIntoTable.sourceSchemaForSchemaEvolution(m)
+            val newTarget = performSchemaEvolution(r, referencedSourceSchema, changes)
+            val oldTargetOutput = m.targetTable.output
+            val newTargetOutput = newTarget.output
+            val attributeMapping = oldTargetOutput.map(
+              oldAttr => (oldAttr, newTargetOutput.find(_.name == oldAttr.name).getOrElse(oldAttr))
+            )
+            newTarget -> attributeMapping
         }
-
-        // Unresolve all references based on old target output
-        val targetOutput = m.targetTable.output
-        val unresolvedMergeCondition = unresolveCondition(m.mergeCondition, targetOutput)
-        val unresolvedMatchedActions = unresolveActions(m.matchedActions, targetOutput)
-        val unresolvedNotMatchedActions = unresolveActions(m.notMatchedActions, targetOutput)
-        val unresolvedNotMatchedBySourceActions =
-          unresolveActions(m.notMatchedBySourceActions, targetOutput)
-
-        m.copy(
-          targetTable = newTarget,
-          mergeCondition = unresolvedMergeCondition,
-          matchedActions = unresolvedMatchedActions,
-          notMatchedActions = unresolvedNotMatchedActions,
-          notMatchedBySourceActions = unresolvedNotMatchedBySourceActions)
-  }
-
-  private def unresolveActions(actions: Seq[MergeAction], output: Seq[Attribute]):
-  Seq[MergeAction] = {
-    actions.map {
-      case UpdateAction(condition, assignments) =>
-        UpdateAction(condition.map(unresolveCondition(_, output)),
-          unresolveAssignmentKeys(assignments))
-      case InsertAction(condition, assignments) =>
-        InsertAction(condition.map(unresolveCondition(_, output)),
-          unresolveAssignmentKeys(assignments))
-      case DeleteAction(condition) =>
-        DeleteAction(condition.map(unresolveCondition(_, output)))
-      case other => other
-    }
-  }
-
-  private def unresolveCondition(expr: Expression, output: Seq[Attribute]): Expression = {
-    val outputSet = AttributeSet(output)
-    expr.transform {
-      case attr: AttributeReference if outputSet.contains(attr) =>
-        val nameParts = if (attr.qualifier.nonEmpty) {
-          attr.qualifier ++ Seq(attr.name)
-        } else {
-          Seq(attr.name)
-        }
-        UnresolvedAttribute(nameParts)
-    }
-  }
-
-  private def unresolveAssignmentKeys(assignments: Seq[Assignment]): Seq[Assignment] = {
-    assignments.map { assignment =>
-      val unresolvedKey = assignment.key match {
-        case _: UnresolvedAttribute => assignment.key
-        case gsf: GetStructField =>
-          // Recursively collect all nested GetStructField names and the base AttributeReference
-          val nameParts = collectStructFieldNames(gsf)
-          nameParts match {
-            case Some(names) => UnresolvedAttribute(names)
-            case None => assignment.key
-          }
-        case attr: AttributeReference =>
-          UnresolvedAttribute(Seq(attr.name))
-        case attr: Attribute =>
-          UnresolvedAttribute(Seq(attr.name))
-        case other => other
       }
-      Assignment(unresolvedKey, assignment.value)
-    }
   }
 
-  private def collectStructFieldNames(expr: Expression): Option[Seq[String]] = {
-    expr match {
-      case GetStructField(child, _, Some(fieldName)) =>
-        collectStructFieldNames(child) match {
-          case Some(childNames) => Some(childNames :+ fieldName)
-          case None => None
-        }
-      case attr: AttributeReference =>
-        Some(Seq(attr.name))
-      case _ =>
-        None
-    }
-  }
-
-  private def performSchemaEvolution(relation: DataSourceV2Relation, m: MergeIntoTable)
-    : DataSourceV2Relation = {
+  private def performSchemaEvolution(
+      relation: DataSourceV2Relation,
+      referencedSourceSchema: StructType,
+      changes: Array[TableChange]): DataSourceV2Relation = {
     (relation.catalog, relation.identifier) match {
       case (Some(c: TableCatalog), Some(i)) =>
-        val referencedSourceSchema = MergeIntoTable.sourceSchemaForSchemaEvolution(m)
-
-        val changes = MergeIntoTable.schemaChanges(relation.schema, referencedSourceSchema)
         c.alterTable(i, changes: _*)
         val newTable = c.loadTable(i)
         val newSchema = CatalogV2Util.v2ColumnsToStructType(newTable.columns())

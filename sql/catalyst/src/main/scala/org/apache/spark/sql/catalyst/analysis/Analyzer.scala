@@ -1672,12 +1672,10 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       case m @ MergeIntoTable(targetTable, sourceTable, _, _, _, _, _)
         if !m.resolved && targetTable.resolved && sourceTable.resolved =>
 
-        // Do not throw exception for schema evolution case if it has not had a chance to run.
+        // Do not throw exception for schema evolution case.
         // This allows unresolved assignment keys a chance to be resolved by a second pass
         // by newly column/nested fields added by schema evolution.
-        // If schema evolution has already had a chance to run, this will be the final pass
-        val throws = !m.schemaEvolutionEnabled ||
-          (m.canEvaluateSchemaEvolution && !m.schemaChangesNonEmpty)
+        val throws = !m.schemaEvolutionEnabled
 
         EliminateSubqueryAliases(targetTable) match {
           case r: NamedRelation if r.skipSchemaResolution =>
@@ -1709,12 +1707,11 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
                 val assignments = if (m.schemaEvolutionEnabled) {
                   // For schema evolution case, generate assignments for missing target columns.
                   // These columns will be added by ResolveMergeIntoTableSchemaEvolution later.
-                  sourceTable.output.map(sourceAttr =>
-                  findAttrInTarget(sourceAttr.name).map(
-                      targetAttr => Assignment(targetAttr, sourceAttr))
-                    .getOrElse(Assignment(
-                      UnresolvedAttribute(sourceAttr.name),
-                      sourceAttr)))
+                  sourceTable.output.map { sourceAttr =>
+                    val key = findAttrInTarget(sourceAttr.name).getOrElse(
+                      UnresolvedAttribute(sourceAttr.name))
+                    Assignment(key, sourceAttr)
+                  }
                 } else {
                   sourceTable.output.flatMap { sourceAttr =>
                     findAttrInTarget(sourceAttr.name).map(
@@ -1748,12 +1745,11 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
                 val assignments = if (m.schemaEvolutionEnabled) {
                   // For schema evolution case, generate assignments for missing target columns.
                   // These columns will be added by ResolveMergeIntoTableSchemaEvolution later.
-                  sourceTable.output.map(sourceAttr =>
-                    findAttrInTarget(sourceAttr.name).map(
-                        targetAttr => Assignment(targetAttr, sourceAttr))
-                      .getOrElse(Assignment(
-                        UnresolvedAttribute(sourceAttr.name),
-                        sourceAttr)))
+                  sourceTable.output.map { sourceAttr =>
+                    val key = findAttrInTarget(sourceAttr.name).getOrElse(
+                      UnresolvedAttribute(sourceAttr.name))
+                    Assignment(key, sourceAttr)
+                  }
                 } else {
                   sourceTable.output.flatMap { sourceAttr =>
                     findAttrInTarget(sourceAttr.name).map(

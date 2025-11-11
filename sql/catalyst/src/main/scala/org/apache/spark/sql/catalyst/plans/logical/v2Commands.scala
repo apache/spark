@@ -892,16 +892,19 @@ case class MergeIntoTable(
     case _ => false
   }
 
-  private lazy val sourceSchemaForEvolution: StructType =
-    MergeIntoTable.sourceSchemaForSchemaEvolution(this)
-
-  lazy val schemaChangesNonEmpty: Boolean =
-    MergeIntoTable.schemaChanges(targetTable.schema, sourceSchemaForEvolution).nonEmpty
-
   lazy val needSchemaEvolution: Boolean =
+    evaluateSchemaEvolution && changesForSchemaEvolution.nonEmpty
+
+  lazy val evaluateSchemaEvolution: Boolean =
     schemaEvolutionEnabled &&
-      canEvaluateSchemaEvolution &&
-      schemaChangesNonEmpty
+      canEvaluateSchemaEvolution
+
+  lazy val schemaEvolutionEnabled: Boolean = withSchemaEvolution && {
+    EliminateSubqueryAliases(targetTable) match {
+      case r: DataSourceV2Relation if r.autoSchemaEvolution() => true
+      case _ => false
+    }
+  }
 
   // Guard that assignments are either resolved or candidates for evolution before
   // evaluating schema evolution. We need to use resolved assignment values to check
@@ -924,13 +927,11 @@ case class MergeIntoTable(
       }
     }
 
+  private lazy val sourceSchemaForEvolution: StructType =
+    MergeIntoTable.sourceSchemaForSchemaEvolution(this)
 
-  def schemaEvolutionEnabled: Boolean = withSchemaEvolution && {
-    EliminateSubqueryAliases(targetTable) match {
-      case r: DataSourceV2Relation if r.autoSchemaEvolution() => true
-      case _ => false
-    }
-  }
+  lazy val changesForSchemaEvolution: Array[TableChange] =
+    MergeIntoTable.schemaChanges(targetTable.schema, sourceSchemaForEvolution)
 
   override def left: LogicalPlan = targetTable
   override def right: LogicalPlan = sourceTable
