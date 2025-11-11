@@ -3831,6 +3831,15 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val PIPE_OPERATOR_ALLOW_AGGREGATE_IN_SELECT =
+    buildConf("spark.sql.pipeOperator.allowAggregateInSelect")
+    .doc("When true, aggregate functions can be used in |> SELECT and other pipe operator " +
+      "clauses without requiring the |> AGGREGATE keyword. When false, aggregate functions " +
+      "must be used exclusively with the |> AGGREGATE clause for proper aggregation semantics.")
+    .version("4.1.0")
+    .booleanConf
+    .createWithDefault(true)
+
   val TVF_ALLOW_MULTIPLE_TABLE_ARGUMENTS_ENABLED =
     buildConf("spark.sql.tvf.allowMultipleTableArguments.enabled")
       .doc("When true, allows multiple table arguments for table-valued functions, " +
@@ -7583,6 +7592,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   override def exponentLiteralAsDecimalEnabled: Boolean =
     getConf(SQLConf.LEGACY_EXPONENT_LITERAL_AS_DECIMAL_ENABLED)
+
+  def pipeOperatorAllowAggregateInSelect: Boolean =
+    getConf(SQLConf.PIPE_OPERATOR_ALLOW_AGGREGATE_IN_SELECT)
 
   def allowNegativeScaleOfDecimalEnabled: Boolean =
     getConf(SQLConf.LEGACY_ALLOW_NEGATIVE_SCALE_OF_DECIMAL_ENABLED)

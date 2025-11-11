@@ -463,7 +463,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       ResolveProcedures ::
       BindProcedures ::
       ResolveTableSpec ::
-      ValidateAndStripPipeExpressions ::
+      ValidateAndStripPipeExpressions(conf.pipeOperatorAllowAggregateInSelect) ::
       ResolveSQLFunctions ::
       ResolveSQLTableFunctions ::
       ResolveAliases ::

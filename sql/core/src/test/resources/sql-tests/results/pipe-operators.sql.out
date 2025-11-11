@@ -583,24 +583,9 @@ struct<x:int>
 table t
 |> select sum(x) as result
 -- !query schema
-struct<>
+struct<result:bigint>
 -- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "PIPE_OPERATOR_CONTAINS_AGGREGATE_FUNCTION",
-  "sqlState" : "0A000",
-  "messageParameters" : {
-    "clause" : "SELECT",
-    "expr" : "sum(x#x)"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 19,
-    "stopIndex" : 24,
-    "fragment" : "sum(x)"
-  } ]
-}
+1
 
 
 -- !query
@@ -609,20 +594,16 @@ table t
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "PIPE_OPERATOR_CONTAINS_AGGREGATE_FUNCTION",
-  "sqlState" : "0A000",
-  "messageParameters" : {
-    "clause" : "SELECT",
-    "expr" : "sum(x#x)"
-  },
+  "errorClass" : "MISSING_GROUP_BY",
+  "sqlState" : "42803",
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 34,
-    "stopIndex" : 39,
-    "fragment" : "sum(x)"
+    "startIndex" : 12,
+    "stopIndex" : 49,
+    "fragment" : "select y, length(y) + sum(x) as result"
   } ]
 }
 
@@ -631,24 +612,9 @@ org.apache.spark.sql.AnalysisException
 from t
 |> select sum(x)
 -- !query schema
-struct<>
+struct<sum(x):bigint>
 -- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "PIPE_OPERATOR_CONTAINS_AGGREGATE_FUNCTION",
-  "sqlState" : "0A000",
-  "messageParameters" : {
-    "clause" : "SELECT",
-    "expr" : "sum(x#x)"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 18,
-    "stopIndex" : 23,
-    "fragment" : "sum(x)"
-  } ]
-}
+1
 
 
 -- !query
@@ -657,20 +623,16 @@ from t as t_alias
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "PIPE_OPERATOR_CONTAINS_AGGREGATE_FUNCTION",
-  "sqlState" : "0A000",
-  "messageParameters" : {
-    "clause" : "SELECT",
-    "expr" : "sum(x#x)"
-  },
+  "errorClass" : "MISSING_GROUP_BY",
+  "sqlState" : "42803",
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 32,
+    "startIndex" : 22,
     "stopIndex" : 37,
-    "fragment" : "sum(x)"
+    "fragment" : "select y, sum(x)"
   } ]
 }
 
@@ -821,20 +783,16 @@ table t
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "PIPE_OPERATOR_CONTAINS_AGGREGATE_FUNCTION",
-  "sqlState" : "0A000",
-  "messageParameters" : {
-    "clause" : "EXTEND",
-    "expr" : "sum(x#x)"
-  },
+  "errorClass" : "MISSING_GROUP_BY",
+  "sqlState" : "42803",
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 19,
-    "stopIndex" : 24,
-    "fragment" : "sum(x)"
+    "startIndex" : 1,
+    "stopIndex" : 29,
+    "fragment" : "table t\n|> extend sum(x) as z"
   } ]
 }
 
@@ -3327,30 +3285,6 @@ org.apache.spark.sql.AnalysisException
 
 -- !query
 table other
-|> select sum(a) as result
--- !query schema
-struct<>
--- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "PIPE_OPERATOR_CONTAINS_AGGREGATE_FUNCTION",
-  "sqlState" : "0A000",
-  "messageParameters" : {
-    "clause" : "SELECT",
-    "expr" : "sum(a#x)"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 23,
-    "stopIndex" : 28,
-    "fragment" : "sum(a)"
-  } ]
-}
-
-
--- !query
-table other
 |> aggregate
 -- !query schema
 struct<>
@@ -4250,6 +4184,172 @@ table web_v1
 struct<item_sk:int,d_date:date,web_sales:decimal(27,2),store_sales:decimal(27,2),web_cumulative:decimal(27,2),store_cumulative:decimal(27,2)>
 -- !query output
 
+
+
+-- !query
+table other
+|> select sum(a) as result
+-- !query schema
+struct<result:bigint>
+-- !query output
+4
+
+
+-- !query
+table other
+|> select sum(a) as total_a, avg(b) as avg_b
+-- !query schema
+struct<total_a:bigint,avg_b:double>
+-- !query output
+4	2.3333333333333335
+
+
+-- !query
+table other
+|> where b > 1
+|> select sum(a) as result
+-- !query schema
+struct<result:bigint>
+-- !query output
+3
+
+
+-- !query
+table other
+|> select sum(a) as total_a
+|> select total_a * 2 as doubled
+-- !query schema
+struct<doubled:bigint>
+-- !query output
+8
+
+
+-- !query
+table other
+|> select a, sum(b) as sum_b group by a
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'group'",
+    "hint" : ""
+  }
+}
+
+
+-- !query
+table other
+|> extend sum(a) as total_a
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "MISSING_GROUP_BY",
+  "sqlState" : "42803",
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 39,
+    "fragment" : "table other\n|> extend sum(a) as total_a"
+  } ]
+}
+
+
+-- !query
+table other
+|> where sum(a) > 5
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "INVALID_WHERE_CONDITION",
+  "sqlState" : "42903",
+  "messageParameters" : {
+    "condition" : "\"(sum(a) > 5)\"",
+    "expressionList" : "sum(spark_catalog.default.other.a)"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 31,
+    "fragment" : "table other\n|> where sum(a) > 5"
+  } ]
+}
+
+
+-- !query
+table other
+|> aggregate sum(a) as total_a
+-- !query schema
+struct<total_a:bigint>
+-- !query output
+4
+
+
+-- !query
+set spark.sql.pipeOperator.allowAggregateInSelect=false
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.pipeOperator.allowAggregateInSelect	false
+
+
+-- !query
+table other
+|> select sum(a) as result
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "PIPE_OPERATOR_CONTAINS_AGGREGATE_FUNCTION",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "clause" : "SELECT",
+    "expr" : "sum(a#x)"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 23,
+    "stopIndex" : 28,
+    "fragment" : "sum(a)"
+  } ]
+}
+
+
+-- !query
+table other
+|> aggregate sum(a) as total_a
+-- !query schema
+struct<total_a:bigint>
+-- !query output
+4
+
+
+-- !query
+set spark.sql.pipeOperator.allowAggregateInSelect=true
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.pipeOperator.allowAggregateInSelect	true
+
+
+-- !query
+table other
+|> select sum(a) as result
+-- !query schema
+struct<result:bigint>
+-- !query output
+4
 
 
 -- !query

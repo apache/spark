@@ -1157,10 +1157,6 @@ select 1 as x, 2 as y
 table other
 |> aggregate a;
 
--- Using aggregate functions without the AGGREGATE keyword is not allowed.
-table other
-|> select sum(a) as result;
-
 -- The AGGREGATE keyword requires a GROUP BY clause and/or aggregation function(s).
 table other
 |> aggregate;
@@ -1755,6 +1751,63 @@ table web_v1
 |> where web_cumulative > store_cumulative
 |> order by item_sk, d_date
 |> limit 100;
+
+-- Configuration test: allowing aggregates in SELECT with spark.sql.pipeOperator.allowAggregateInSelect.
+-------------------------------------------------------------------------------------------------------
+-- Test the configuration that controls whether aggregate functions can be used in |> SELECT
+-- and other pipe operator clauses without requiring the |> AGGREGATE keyword.
+
+-- Verify that the default behavior (enabled) allows aggregates in SELECT.
+table other
+|> select sum(a) as result;
+
+-- Aggregates in SELECT with multiple aggregate functions.
+table other
+|> select sum(a) as total_a, avg(b) as avg_b;
+
+-- Aggregates in SELECT with WHERE clause.
+table other
+|> where b > 1
+|> select sum(a) as result;
+
+-- Aggregates in SELECT with chaining.
+table other
+|> select sum(a) as total_a
+|> select total_a * 2 as doubled;
+
+-- Mixed aggregates and non-aggregates in SELECT (should work like regular aggregation).
+table other
+|> select a, sum(b) as sum_b group by a;
+
+-- Aggregates in EXTEND.
+table other
+|> extend sum(a) as total_a;
+
+-- Aggregates in WHERE should still fail (aggregates not allowed in WHERE generally).
+table other
+|> where sum(a) > 5;
+
+-- The |> AGGREGATE keyword should still work with the configuration enabled.
+table other
+|> aggregate sum(a) as total_a;
+
+-- Disable the configuration to test the legacy behavior.
+set spark.sql.pipeOperator.allowAggregateInSelect=false;
+
+-- With configuration disabled, aggregates in SELECT now fail (requires |> AGGREGATE).
+table other
+|> select sum(a) as result;
+
+-- The |> AGGREGATE keyword is required when configuration is disabled.
+table other
+|> aggregate sum(a) as total_a;
+
+-- Re-enable the configuration.
+set spark.sql.pipeOperator.allowAggregateInSelect=true;
+
+-- Verify that aggregates in SELECT work again.
+table other
+|> select sum(a) as result;
 
 -- Cleanup.
 -----------
