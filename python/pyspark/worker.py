@@ -29,6 +29,7 @@ import itertools
 import json
 from typing import Any, Callable, Iterable, Iterator, Optional, Tuple
 import faulthandler
+import zoneinfo
 
 from pyspark.accumulators import (
     SpecialAccumulatorIds,
@@ -3308,8 +3309,12 @@ def main(infile, outfile):
         if tracebackDumpIntervalSeconds is not None and int(tracebackDumpIntervalSeconds) > 0:
             faulthandler.dump_traceback_later(int(tracebackDumpIntervalSeconds), repeat=True)
 
-        tz = os.environ.get("TZ", datetime.datetime.now().astimezone().tzinfo)
-        time.tzset(tz)
+        tzname = os.environ.get("TZ", None)
+        if tzname is not None:
+            tz = zoneinfo.ZoneInfo(tzname)
+            time.tzset()
+        else:
+            tz = datetime.datetime.now().astimezone().tzinfo
         TimestampType.tz_info = tz
 
         check_python_version(infile)
