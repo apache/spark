@@ -460,14 +460,9 @@ class TimestampType(DatetimeType, metaclass=DataTypeSingleton):
     def fromInternal(self, ts: int) -> datetime.datetime:
         if ts is not None:
             # using int to avoid precision loss in float
-            if self.tz_info is None:
-                return datetime.datetime.fromtimestamp(ts // 1000000).replace(
-                    microsecond=ts % 1000000
-                )
-            else:
-                return datetime.datetime.fromtimestamp(ts // 1000000, self.tz_info).replace(
-                    microsecond=ts % 1000000, tzinfo=None
-                )
+            return datetime.datetime.fromtimestamp(ts // 1000000, self.tz_info).replace(
+                microsecond=ts % 1000000, tzinfo=None
+            )
 
 
 class TimestampNTZType(DatetimeType, metaclass=DataTypeSingleton):
