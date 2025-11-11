@@ -906,6 +906,28 @@
     },
     "sqlState" : "56K00"
   },
+  "CONNECT_INVALID_PLAN" : {
+    "message" : [
+      "The Spark Connect plan is invalid."
+    ],
+    "subClass" : {
+      "CANNOT_PARSE" : {
+        "message" : [
+          "Cannot decompress or parse the input plan (<errorMsg>)",
+          "This may be caused by a corrupted compressed plan.",
+          "To disable plan compression, set 'spark.connect.session.planCompression.threshold' to -1."
+        ]
+      },
+      "PLAN_SIZE_LARGER_THAN_MAX" : {
+        "message" : [
+          "The plan size is larger than max (<planSize> vs. <maxPlanSize>)",
+          "This typically occurs when building very complex queries with many operations, large literals, or deeply nested expressions.",
+          "Consider splitting the query into smaller parts using temporary views for intermediate results or reducing the number of operations."
+        ]
+      }
+    },
+    "sqlState" : "56K00"
+  },
   "CONNECT_ML" : {
     "message" : [
       "Generic Spark Connect ML error."
@@ -1411,6 +1433,12 @@
       "Failed to execute <statementType> command because DEFAULT values are not supported for target data source with table provider: \"<dataSource>\"."
     ],
     "sqlState" : "42623"
+  },
+  "DEFINE_FLOW_ONCE_OPTION_NOT_SUPPORTED" : {
+    "message" : [
+      "Defining a one-time flow <flowName> with the 'once' option is not supported."
+    ],
+    "sqlState" : "0A000"
   },
   "DESCRIBE_JSON_NOT_EXTENDED" : {
     "message" : [
@@ -5670,6 +5698,21 @@
       "INPUT_STREAM_NOT_SUPPORTED" : {
         "message" : [
           "The input stream <className> is not supported in Real-time Mode."
+        ]
+      },
+      "OPERATOR_OR_SINK_NOT_IN_ALLOWLIST" : {
+        "message" : [
+          "The <errorType>(s): <message> not in the <errorType> allowlist for Real-Time Mode. To bypass this check, set spark.sql.streaming.realTimeMode.allowlistCheck to false. By changing this, you agree to run the query at your own risk."
+        ]
+      },
+      "OUTPUT_MODE_NOT_SUPPORTED" : {
+        "message" : [
+          "The output mode <outputMode> is not supported. To work around this limitation, set the output mode to Update. In the future, <outputMode> may be supported."
+        ]
+      },
+      "SINK_NOT_SUPPORTED" : {
+        "message" : [
+          "The <className> sink is currently not supported. See the Real-Time Mode User Guide for a list of supported sinks."
         ]
       }
     },

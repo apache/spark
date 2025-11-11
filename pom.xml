@@ -184,7 +184,7 @@
     <scalafmt.validateOnly>true</scalafmt.validateOnly>
     <scalafmt.changedOnly>true</scalafmt.changedOnly>
     <!-- Should be consistent with SparkBuild.scala and docs -->
-    <fasterxml.jackson.version>2.20.0</fasterxml.jackson.version>
+    <fasterxml.jackson.version>2.20.1</fasterxml.jackson.version>
     <ws.xmlschema.version>2.3.1</ws.xmlschema.version>
     <snappy.version>1.1.10.8</snappy.version>
     <netlib.ludovic.dev.version>3.0.4</netlib.ludovic.dev.version>
@@ -198,8 +198,8 @@
     <!-- org.apache.commons/commons-pool2/-->
     <commons-pool2.version>2.12.1</commons-pool2.version>
     <datanucleus-core.version>4.1.17</datanucleus-core.version>
-    <guava.version>33.4.0-jre</guava.version>
-    <guava.failureaccess.version>1.0.2</guava.failureaccess.version>
+    <guava.version>33.4.8-jre</guava.version>
+    <guava.failureaccess.version>1.0.3</guava.failureaccess.version>
     <gson.version>2.11.0</gson.version>
     <janino.version>3.1.9</janino.version>
     <jersey.version>3.0.18</jersey.version>

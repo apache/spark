@@ -1552,6 +1552,13 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val PARQUET_VECTORIZED_READER_NULL_TYPE_ENABLED =
+    buildConf("spark.sql.parquet.enableNullTypeVectorizedReader")
+      .doc("Enables vectorized Parquet reader support for NullType columns.")
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val PARQUET_RECORD_FILTER_ENABLED = buildConf("spark.sql.parquet.recordLevelFilter.enabled")
     .doc("If true, enables Parquet's native record-level filtering using the pushed down " +
       "filters. " +
@@ -3094,6 +3101,13 @@ object SQLConf {
     .timeConf(TimeUnit.MILLISECONDS)
     .createWithDefault(5000)
 
+  val STREAMING_REAL_TIME_MODE_ALLOWLIST_CHECK = buildConf(
+    "spark.sql.streaming.realTimeMode.allowlistCheck")
+    .doc("Whether to check all operators, sinks used in real-time mode are in the allowlist.")
+    .version("4.1.0")
+    .booleanConf
+    .createWithDefault(true)
+
   val VARIABLE_SUBSTITUTE_ENABLED =
     buildConf("spark.sql.variable.substitute")
       .doc("This enables substitution using syntax like `${var}`, `${system:var}`, " +
@@ -3498,6 +3512,16 @@ object SQLConf {
       .doc("When true, checksum would be generated and verified for checkpoint files. " +
         "This is used to detect file corruption.")
       .version("4.1.0")
+      .booleanConf
+      .createWithDefault(true)
+
+  val STREAMING_CHECKPOINT_FILE_CHECKSUM_SKIP_CREATION_IF_FILE_MISSING_CHECKSUM =
+    buildConf("spark.sql.streaming.checkpoint.fileChecksum.skipCreationIfFileMissingChecksum")
+      .internal()
+      .doc("When true, if a microbatch is retried, if a file already exists but its checksum " +
+        "file does not exist, the file checksum will not be created. This is useful for " +
+        "compatibility with files created before file checksums were enabled.")
+      .version("4.2.0")
       .booleanConf
       .createWithDefault(true)
 
@@ -4050,7 +4074,7 @@ object SQLConf {
       .createWithDefaultString("64MB")
 
   val ARROW_EXECUTION_COMPRESSION_CODEC =
-    buildConf("spark.sql.execution.arrow.compressionCodec")
+    buildConf("spark.sql.execution.arrow.compression.codec")
       .doc("Compression codec used to compress Arrow IPC data when transferring data " +
         "between JVM and Python processes (e.g., toPandas, toArrow). This can significantly " +
         "reduce memory usage and network bandwidth when transferring large datasets. " +
@@ -4064,16 +4088,15 @@ object SQLConf {
       .createWithDefault("none")
 
   val ARROW_EXECUTION_ZSTD_COMPRESSION_LEVEL =
-    buildConf("spark.sql.execution.arrow.zstd.compressionLevel")
+    buildConf("spark.sql.execution.arrow.compression.zstd.level")
       .doc("Compression level for Zstandard (zstd) codec when compressing Arrow IPC data. " +
-        "This config is only used when spark.sql.execution.arrow.compressionCodec is set to " +
-        "'zstd'. Valid values are integers from 1 (fastest, lowest compression) to 22 " +
-        "(slowest, highest compression). The default value 3 provides a good balance between " +
-        "compression speed and compression ratio.")
+        "This config is only used when spark.sql.execution.arrow.compression.codec is set to " +
+        "'zstd'. Negative values provide ultra-fast compression with lower " +
+        "compression ratios. Positive values provide normal to maximum compression, " +
+        "with higher values giving better compression but slower speed. The default value 3 " +
+        "provides a good balance between compression speed and compression ratio.")
       .version("4.1.0")
       .intConf
-      .checkValue(level => level >= 1 && level <= 22,
-        "Zstd compression level must be between 1 and 22")
       .createWithDefault(3)
 
   val ARROW_TRANSFORM_WITH_STATE_IN_PYSPARK_MAX_STATE_RECORDS_PER_BATCH =
@@ -6842,6 +6865,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def checkpointFileChecksumEnabled: Boolean = getConf(STREAMING_CHECKPOINT_FILE_CHECKSUM_ENABLED)
 
+  def checkpointFileChecksumSkipCreationIfFileMissingChecksum: Boolean =
+    getConf(STREAMING_CHECKPOINT_FILE_CHECKSUM_SKIP_CREATION_IF_FILE_MISSING_CHECKSUM)
+
   def isUnsupportedOperationCheckEnabled: Boolean = getConf(UNSUPPORTED_OPERATION_CHECK_ENABLED)
 
   def useDeprecatedKafkaOffsetFetching: Boolean = getConf(USE_DEPRECATED_KAFKA_OFFSET_FETCHING)
@@ -6914,6 +6940,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def parquetVectorizedReaderNestedColumnEnabled: Boolean =
     getConf(PARQUET_VECTORIZED_READER_NESTED_COLUMN_ENABLED)
+
+  def parquetVectorizedReaderNullTypeEnabled: Boolean =
+    getConf(PARQUET_VECTORIZED_READER_NULL_TYPE_ENABLED)
 
   def parquetVectorizedReaderBatchSize: Int = getConf(PARQUET_VECTORIZED_READER_BATCH_SIZE)
 

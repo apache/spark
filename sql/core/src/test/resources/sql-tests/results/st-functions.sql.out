@@ -170,6 +170,168 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 
 
 -- !query
+SELECT typeof(array(ST_GeogFromWKB(wkb), ST_GeogFromWKB(wkb)::GEOGRAPHY(ANY))) FROM geodata
+-- !query schema
+struct<typeof(array(st_geogfromwkb(wkb), CAST(st_geogfromwkb(wkb) AS GEOGRAPHY(ANY)))):string>
+-- !query output
+array<geography(any)>
+array<geography(any)>
+
+
+-- !query
+SELECT typeof(array(ST_GeomFromWKB(wkb), ST_GeomFromWKB(wkb)::GEOMETRY(ANY))) FROM geodata
+-- !query schema
+struct<typeof(array(st_geomfromwkb(wkb), CAST(st_geomfromwkb(wkb) AS GEOMETRY(ANY)))):string>
+-- !query output
+array<geometry(any)>
+array<geometry(any)>
+
+
+-- !query
+SELECT typeof(map('a', ST_GeogFromWKB(wkb), 'b', ST_GeogFromWKB(wkb)::GEOGRAPHY(ANY))) FROM geodata
+-- !query schema
+struct<typeof(map(a, st_geogfromwkb(wkb), b, CAST(st_geogfromwkb(wkb) AS GEOGRAPHY(ANY)))):string>
+-- !query output
+map<string,geography(any)>
+map<string,geography(any)>
+
+
+-- !query
+SELECT typeof(map('a', ST_GeomFromWKB(wkb), 'b', ST_GeomFromWKB(wkb)::GEOMETRY(ANY))) FROM geodata
+-- !query schema
+struct<typeof(map(a, st_geomfromwkb(wkb), b, CAST(st_geomfromwkb(wkb) AS GEOMETRY(ANY)))):string>
+-- !query output
+map<string,geometry(any)>
+map<string,geometry(any)>
+
+
+-- !query
+SELECT typeof(array(named_struct('g1', ST_GeogFromWKB(wkb), 'g2', ST_GeogFromWKB(wkb)::GEOGRAPHY(ANY)), named_struct('g1', ST_GeogFromWKB(wkb)::GEOGRAPHY(ANY), 'g2', ST_GeogFromWKB(wkb)))) FROM geodata
+-- !query schema
+struct<typeof(array(named_struct(g1, st_geogfromwkb(wkb), g2, CAST(st_geogfromwkb(wkb) AS GEOGRAPHY(ANY))), named_struct(g1, CAST(st_geogfromwkb(wkb) AS GEOGRAPHY(ANY)), g2, st_geogfromwkb(wkb)))):string>
+-- !query output
+array<struct<g1:geography(any),g2:geography(any)>>
+array<struct<g1:geography(any),g2:geography(any)>>
+
+
+-- !query
+SELECT typeof(array(named_struct('g1', ST_GeomFromWKB(wkb), 'g2', ST_GeomFromWKB(wkb)::GEOMETRY(ANY)), named_struct('g1', ST_GeomFromWKB(wkb)::GEOMETRY(ANY), 'g2', ST_GeomFromWKB(wkb)))) FROM geodata
+-- !query schema
+struct<typeof(array(named_struct(g1, st_geomfromwkb(wkb), g2, CAST(st_geomfromwkb(wkb) AS GEOMETRY(ANY))), named_struct(g1, CAST(st_geomfromwkb(wkb) AS GEOMETRY(ANY)), g2, st_geomfromwkb(wkb)))):string>
+-- !query output
+array<struct<g1:geometry(any),g2:geometry(any)>>
+array<struct<g1:geometry(any),g2:geometry(any)>>
+
+
+-- !query
+SELECT typeof(named_struct('a', array(ST_GeogFromWKB(wkb), ST_GeogFromWKB(wkb)::GEOGRAPHY(ANY)), 'b', map('g', ST_GeogFromWKB(wkb), 'h', ST_GeogFromWKB(wkb)::GEOGRAPHY(ANY)))) FROM geodata
+-- !query schema
+struct<typeof(named_struct(a, array(st_geogfromwkb(wkb), CAST(st_geogfromwkb(wkb) AS GEOGRAPHY(ANY))), b, map(g, st_geogfromwkb(wkb), h, CAST(st_geogfromwkb(wkb) AS GEOGRAPHY(ANY))))):string>
+-- !query output
+struct<a:array<geography(any)>,b:map<string,geography(any)>>
+struct<a:array<geography(any)>,b:map<string,geography(any)>>
+
+
+-- !query
+SELECT typeof(named_struct('a', array(ST_GeomFromWKB(wkb), ST_GeomFromWKB(wkb)::GEOMETRY(ANY)), 'b', map('g', ST_GeomFromWKB(wkb), 'h', ST_GeomFromWKB(wkb)::GEOMETRY(ANY)))) FROM geodata
+-- !query schema
+struct<typeof(named_struct(a, array(st_geomfromwkb(wkb), CAST(st_geomfromwkb(wkb) AS GEOMETRY(ANY))), b, map(g, st_geomfromwkb(wkb), h, CAST(st_geomfromwkb(wkb) AS GEOMETRY(ANY))))):string>
+-- !query output
+struct<a:array<geometry(any)>,b:map<string,geometry(any)>>
+struct<a:array<geometry(any)>,b:map<string,geometry(any)>>
+
+
+-- !query
+SELECT typeof(nvl(ST_GeogFromWKB(wkb), ST_GeogFromWKB(wkb)::GEOGRAPHY(ANY))) FROM geodata
+-- !query schema
+struct<typeof(nvl(st_geogfromwkb(wkb), CAST(st_geogfromwkb(wkb) AS GEOGRAPHY(ANY)))):string>
+-- !query output
+geography(any)
+geography(any)
+
+
+-- !query
+SELECT typeof(nvl(ST_GeomFromWKB(wkb), ST_GeomFromWKB(wkb)::GEOMETRY(ANY))) FROM geodata
+-- !query schema
+struct<typeof(nvl(st_geomfromwkb(wkb), CAST(st_geomfromwkb(wkb) AS GEOMETRY(ANY)))):string>
+-- !query output
+geometry(any)
+geometry(any)
+
+
+-- !query
+SELECT typeof(nvl2(ST_GeogFromWKB(wkb), ST_GeogFromWKB(wkb)::GEOGRAPHY(ANY), ST_GeogFromWKB(wkb))) FROM geodata
+-- !query schema
+struct<typeof(nvl2(st_geogfromwkb(wkb), CAST(st_geogfromwkb(wkb) AS GEOGRAPHY(ANY)), st_geogfromwkb(wkb))):string>
+-- !query output
+geography(any)
+geography(any)
+
+
+-- !query
+SELECT typeof(nvl2(ST_GeomFromWKB(wkb), ST_GeomFromWKB(wkb)::GEOMETRY(ANY), ST_GeomFromWKB(wkb))) FROM geodata
+-- !query schema
+struct<typeof(nvl2(st_geomfromwkb(wkb), CAST(st_geomfromwkb(wkb) AS GEOMETRY(ANY)), st_geomfromwkb(wkb))):string>
+-- !query output
+geometry(any)
+geometry(any)
+
+
+-- !query
+SELECT typeof(CASE WHEN wkb IS NOT NULL THEN ST_GeogFromWKB(wkb)::GEOGRAPHY(ANY) ELSE ST_GeogFromWKB(wkb) END) FROM geodata
+-- !query schema
+struct<typeof(CASE WHEN (wkb IS NOT NULL) THEN CAST(st_geogfromwkb(wkb) AS GEOGRAPHY(ANY)) ELSE st_geogfromwkb(wkb) END):string>
+-- !query output
+geography(any)
+geography(any)
+
+
+-- !query
+SELECT typeof(CASE WHEN wkb IS NOT NULL THEN ST_GeomFromWKB(wkb)::GEOMETRY(ANY) ELSE ST_GeomFromWKB(wkb) END) FROM geodata
+-- !query schema
+struct<typeof(CASE WHEN (wkb IS NOT NULL) THEN CAST(st_geomfromwkb(wkb) AS GEOMETRY(ANY)) ELSE st_geomfromwkb(wkb) END):string>
+-- !query output
+geometry(any)
+geometry(any)
+
+
+-- !query
+SELECT typeof(coalesce(ST_GeogFromWKB(wkb), ST_GeogFromWKB(wkb)::GEOGRAPHY(ANY))) FROM geodata
+-- !query schema
+struct<typeof(coalesce(st_geogfromwkb(wkb), CAST(st_geogfromwkb(wkb) AS GEOGRAPHY(ANY)))):string>
+-- !query output
+geography(any)
+geography(any)
+
+
+-- !query
+SELECT typeof(coalesce(ST_GeomFromWKB(wkb), ST_GeomFromWKB(wkb)::GEOMETRY(ANY))) FROM geodata
+-- !query schema
+struct<typeof(coalesce(st_geomfromwkb(wkb), CAST(st_geomfromwkb(wkb) AS GEOMETRY(ANY)))):string>
+-- !query output
+geometry(any)
+geometry(any)
+
+
+-- !query
+SELECT typeof(IF(wkb IS NOT NULL, ST_GeogFromWKB(wkb)::GEOGRAPHY(ANY), ST_GeogFromWKB(wkb))) FROM geodata
+-- !query schema
+struct<typeof((IF((wkb IS NOT NULL), CAST(st_geogfromwkb(wkb) AS GEOGRAPHY(ANY)), st_geogfromwkb(wkb)))):string>
+-- !query output
+geography(any)
+geography(any)
+
+
+-- !query
+SELECT typeof(IF(wkb IS NOT NULL, ST_GeomFromWKB(wkb)::GEOMETRY(ANY), ST_GeomFromWKB(wkb))) FROM geodata
+-- !query schema
+struct<typeof((IF((wkb IS NOT NULL), CAST(st_geomfromwkb(wkb) AS GEOMETRY(ANY)), st_geomfromwkb(wkb)))):string>
+-- !query output
+geometry(any)
+geometry(any)
+
+
+-- !query
 SELECT hex(ST_AsBinary(ST_GeogFromWKB(X'0101000000000000000000f03f0000000000000040'))) AS result
 -- !query schema
 struct<result:string>

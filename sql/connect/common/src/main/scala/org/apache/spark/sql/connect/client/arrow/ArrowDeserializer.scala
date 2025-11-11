@@ -341,6 +341,14 @@ object ArrowDeserializers {
           }
         }
 
+      case (_: GeometryEncoder, StructVectors(struct, vectors)) =>
+        val gdser = new GeometryArrowSerDe
+        gdser.createDeserializer(struct, vectors, timeZoneId)
+
+      case (_: GeographyEncoder, StructVectors(struct, vectors)) =>
+        val gdser = new GeographyArrowSerDe
+        gdser.createDeserializer(struct, vectors, timeZoneId)
+
       case (VariantEncoder, StructVectors(struct, vectors)) =>
         assert(vectors.exists(_.getName == "value"))
         assert(
