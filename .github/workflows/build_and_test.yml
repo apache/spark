@@ -1380,7 +1380,7 @@ jobs:
       - name: Use Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: 20
+          node-version: 24.11.0
           cache: 'npm'
           cache-dependency-path: ui-test/package-lock.json
       - run: |
