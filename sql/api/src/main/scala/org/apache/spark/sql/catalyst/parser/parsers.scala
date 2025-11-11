@@ -476,6 +476,7 @@ object AbstractParser extends Logging {
     parser.SQL_standard_keyword_behavior = conf.enforceReservedKeywords
     parser.double_quoted_identifiers = conf.doubleQuotedIdentifiers
     parser.parameter_substitution_enabled = !conf.legacyParameterSubstitutionConstantsOnly
+    parser.single_character_pipe_operator_enabled = conf.singleCharacterPipeOperatorEnabled
   }
 
   /**

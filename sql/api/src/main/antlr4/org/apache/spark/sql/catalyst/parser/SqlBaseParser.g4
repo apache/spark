@@ -48,11 +48,21 @@ options { tokenVocab = SqlBaseLexer; }
   public boolean parameter_substitution_enabled = true;
 
   /**
+   * When true, the single character pipe token '|' can be used as an alternative to '|>' for
+   * SQL pipe operators. When false, only '|>' is recognized as a pipe operator.
+   */
+  public boolean single_character_pipe_operator_enabled = true;
+
+  /**
    * Checks if the next token after PIPE can start an operator pipe right side.
    * This disambiguates between bitwise OR (|) in expressions and pipe operator (|) in queries.
    * Used to maintain backwards compatibility when allowing both | and |> as pipe operators.
+   * Only applies when single_character_pipe_operator_enabled is true.
    */
   public boolean isOperatorPipeStart() {
+    if (!single_character_pipe_operator_enabled) {
+      return false;
+    }
     int la = _input.LA(2); // Look ahead 2 tokens (current is PIPE, check what follows)
     return la == SELECT || la == EXTEND || la == SET || la == DROP || 
            la == AS || la == WHERE || la == PIVOT || la == UNPIVOT ||

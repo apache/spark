@@ -2015,6 +2015,40 @@ drop table if exists test_intersect_col;
 drop table if exists test_except_col;
 drop table if exists test_multi_keywords;
 
+-- Single PIPE token with configuration disabled: negative tests.
+------------------------------------------------------------------
+-- Test that when spark.sql.parser.singleCharacterPipeOperator.enabled is set to false,
+-- the single pipe token (|) is only used for bitwise OR and not for pipe operators.
+
+-- Disable the single character pipe operator.
+set spark.sql.parser.singleCharacterPipeOperator.enabled=false;
+
+-- Verify that |> still works with the configuration disabled.
+table t
+|> select x, y;
+
+-- Try to use single pipe for SELECT - should fail with parse error.
+table t
+| select x, y;
+
+-- Try to use single pipe for WHERE - should fail with parse error.
+table t
+| where x < 2;
+
+-- Try to use single pipe for EXTEND - should fail with parse error.
+table t
+| extend x + 1 as z;
+
+-- Verify that bitwise OR still works with the configuration disabled.
+select 1 | 2 as result;
+
+-- Re-enable the single character pipe operator for remaining tests.
+set spark.sql.parser.singleCharacterPipeOperator.enabled=true;
+
+-- Verify that single pipe works again after re-enabling.
+table t
+| select x, y;
+
 -- Cleanup.
 -----------
 drop table t;

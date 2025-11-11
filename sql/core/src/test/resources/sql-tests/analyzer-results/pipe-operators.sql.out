@@ -5707,6 +5707,88 @@ DropTable true, false
 
 
 -- !query
+set spark.sql.parser.singleCharacterPipeOperator.enabled=false
+-- !query analysis
+SetCommand (spark.sql.parser.singleCharacterPipeOperator.enabled,Some(false))
+
+
+-- !query
+table t
+|> select x, y
+-- !query analysis
+Project [x#x, y#x]
++- SubqueryAlias spark_catalog.default.t
+   +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
+table t
+| select x, y
+-- !query analysis
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'|'",
+    "hint" : ""
+  }
+}
+
+
+-- !query
+table t
+| where x < 2
+-- !query analysis
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'|'",
+    "hint" : ""
+  }
+}
+
+
+-- !query
+table t
+| extend x + 1 as z
+-- !query analysis
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'|'",
+    "hint" : ""
+  }
+}
+
+
+-- !query
+select 1 | 2 as result
+-- !query analysis
+Project [(1 | 2) AS result#x]
++- OneRowRelation
+
+
+-- !query
+set spark.sql.parser.singleCharacterPipeOperator.enabled=true
+-- !query analysis
+SetCommand (spark.sql.parser.singleCharacterPipeOperator.enabled,Some(true))
+
+
+-- !query
+table t
+| select x, y
+-- !query analysis
+Project [x#x, y#x]
++- SubqueryAlias spark_catalog.default.t
+   +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
 drop table t
 -- !query analysis
 DropTable false, false
