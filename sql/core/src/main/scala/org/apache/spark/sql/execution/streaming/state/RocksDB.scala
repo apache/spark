@@ -2076,7 +2076,8 @@ case class RocksDBConf(
     compression: String,
     reportSnapshotUploadLag: Boolean,
     fileChecksumEnabled: Boolean,
-    maxVersionsToDeletePerMaintenance: Int)
+    maxVersionsToDeletePerMaintenance: Int,
+    stateStoreConf: StateStoreConf)
 
 object RocksDBConf {
   /** Common prefix of all confs in SQLConf that affects RocksDB */
@@ -2276,7 +2277,8 @@ object RocksDBConf {
       getStringConf(COMPRESSION_CONF),
       storeConf.reportSnapshotUploadLag,
       storeConf.checkpointFileChecksumEnabled,
-      storeConf.maxVersionsToDeletePerMaintenance)
+      storeConf.maxVersionsToDeletePerMaintenance,
+      storeConf)
   }
 
   def apply(): RocksDBConf = apply(new StateStoreConf())
