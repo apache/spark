@@ -34,6 +34,7 @@ def viztracer_wrapper(func):
         return result
     return wrapper
 
+
 if __name__ == "__main__":
     pyspark.worker.main = viztracer_wrapper(pyspark.worker.main)
 
