@@ -38,6 +38,6 @@ class ToStringSQLBuilder extends V2ExpressionSQLBuilder with Serializable {
   }
 
   override protected def visitGetArrayItem(getArrayItem: GetArrayItem): String = {
-    s"${getArrayItem.getChildArray.toString}[${getArrayItem.getOrdinal.toString}]"
+    s"${getArrayItem.childArray.toString}[${getArrayItem.ordinal.toString}]"
   }
 }

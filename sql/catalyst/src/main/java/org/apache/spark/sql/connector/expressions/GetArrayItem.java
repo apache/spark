@@ -46,10 +46,10 @@ public class GetArrayItem extends ExpressionWithToString {
     this.failOnError = failOnError;
   }
 
-  public Expression getChildArray() { return this.childArray; }
-  public Expression getOrdinal() { return this.ordinal; }
-  public boolean getFailOnError() { return this.failOnError; }
+  public Expression childArray() { return this.childArray; }
+  public Expression ordinal() { return this.ordinal; }
+  public boolean failOnError() { return this.failOnError; }
 
   @Override
-  public Expression[] children() { return new Expression[]{ getChildArray() }; }
+  public Expression[] children() { return new Expression[]{ childArray() }; }
 }
