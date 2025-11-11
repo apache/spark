@@ -84,7 +84,7 @@ class SparkConnectResultSet(
     }
 
     Option(currentRow.get(columnIndex)) match {
-      case Some(rawField) =>
+      case Some(_) =>
         _wasNull = false
         Some(get(columnIndex))
       case None =>
