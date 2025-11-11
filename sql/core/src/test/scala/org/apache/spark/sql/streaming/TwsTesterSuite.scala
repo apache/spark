@@ -27,16 +27,7 @@ import org.apache.spark.sql.Encoders
 import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.streaming.{
-  ExpiredTimerInfo,
-  OutputMode,
-  StatefulProcessor,
-  StatefulProcessorWithInitialState,
-  StreamTest,
-  TimeMode,
-  TimerValues,
-  TTLConfig
-}
+import org.apache.spark.sql.streaming.{ExpiredTimerInfo, OutputMode, StatefulProcessor, StatefulProcessorWithInitialState, StreamTest, TimeMode, TimerValues, TTLConfig}
 import org.apache.spark.sql.streaming.ListState
 import org.apache.spark.sql.streaming.MapState
 import org.apache.spark.sql.streaming.ValueState
@@ -794,7 +785,17 @@ class TwsTesterSuite extends SparkFunSuite {
     )
     val tester = new TwsTester(new RunningCountProcessor[String]())
     val ans: List[(String, Long)] = tester.testRowByRow(input)
-    assert(ans == List(("key1", 1L), ("key2", 1L), ("key1", 2L), ("key2", 2L), ("key1", 3L), ("key1", 4L), ("key3", 1L)))
+    assert(
+      ans == List(
+        ("key1", 1L),
+        ("key2", 1L),
+        ("key1", 2L),
+        ("key2", 2L),
+        ("key1", 3L),
+        ("key1", 4L),
+        ("key3", 1L)
+      )
+    )
   }
 }
 
