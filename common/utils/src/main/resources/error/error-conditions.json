@@ -5005,7 +5005,8 @@
   "PIPELINE_STORAGE_ROOT_INVALID" : {
     "message" : [
       "Pipeline storage root must be an absolute path with a URI scheme (e.g., file://, s3a://, hdfs://). Got: `<storage_root>`."
-    ]
+    ],
+    "sqlState" : "42K03"
   },
   "PIPE_OPERATOR_AGGREGATE_EXPRESSION_CONTAINS_NO_AGGREGATE_FUNCTION" : {
     "message" : [
