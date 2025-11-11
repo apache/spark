@@ -28,6 +28,7 @@ import inspect
 import itertools
 import json
 from typing import Any, Callable, Iterable, Iterator, Optional, Tuple
+import zoneinfo
 
 from pyspark.accumulators import (
     SpecialAccumulatorIds,
@@ -3304,8 +3305,12 @@ def main(infile, outfile):
             sys.exit(-1)
         start_faulthandler_periodic_traceback()
 
-        tz = os.environ.get("TZ", datetime.datetime.now().astimezone().tzinfo)
-        time.tzset(tz)
+        tzname = os.environ.get("TZ", None)
+        if tzname is not None:
+            tz = zoneinfo.ZoneInfo(tzname)
+            time.tzset()
+        else:
+            tz = datetime.datetime.now().astimezone().tzinfo
         TimestampType.tz_info = tz
 
         check_python_version(infile)
