@@ -268,7 +268,7 @@ class SparkConnectJdbcDataTypeSuite extends ConnectFunSuite with RemoteSparkSess
             getter(rs)
           }
           assert(exception.getMessage() ===
-            "The column index is out of range: 998, number of columns: 1.")
+            "The column index is out of range: 999, number of columns: 1.")
         }
     }
   }

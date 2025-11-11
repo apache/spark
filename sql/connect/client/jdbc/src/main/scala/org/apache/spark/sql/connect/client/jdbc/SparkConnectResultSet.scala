@@ -76,10 +76,12 @@ class SparkConnectResultSet(
     }
   }
 
-  private[jdbc] def getColumnValue[T](columnIndex: Int, defaultVal: T)(getter: Int => T): T = {
+  private[jdbc] def getColumnValue[T](index: Int, defaultVal: T)(getter: Int => T): T = {
     checkOpen()
+    // the passed index value is 1-indexed, but the underlying array is 0-indexed
+    val columnIndex = index - 1
     if (columnIndex < 0 || columnIndex >= currentRow.length) {
-      throw new SQLException(s"The column index is out of range: $columnIndex, " +
+      throw new SQLException(s"The column index is out of range: $index, " +
         s"number of columns: ${currentRow.length}.")
     }
 
@@ -101,35 +103,35 @@ class SparkConnectResultSet(
   }
 
   override def getString(columnIndex: Int): String = {
-    getColumnValue(columnIndex - 1, null: String) { idx => String.valueOf(currentRow.get(idx)) }
+    getColumnValue(columnIndex, null: String) { idx => String.valueOf(currentRow.get(idx)) }
   }
 
   override def getBoolean(columnIndex: Int): Boolean = {
-    getColumnValue(columnIndex - 1, false) { idx => currentRow.getBoolean(idx) }
+    getColumnValue(columnIndex, false) { idx => currentRow.getBoolean(idx) }
   }
 
   override def getByte(columnIndex: Int): Byte = {
-    getColumnValue(columnIndex - 1, 0.toByte) { idx => currentRow.getByte(idx) }
+    getColumnValue(columnIndex, 0.toByte) { idx => currentRow.getByte(idx) }
   }
 
   override def getShort(columnIndex: Int): Short = {
-    getColumnValue(columnIndex - 1, 0.toShort) { idx => currentRow.getShort(idx) }
+    getColumnValue(columnIndex, 0.toShort) { idx => currentRow.getShort(idx) }
   }
 
   override def getInt(columnIndex: Int): Int = {
-    getColumnValue(columnIndex - 1, 0.toInt) { idx => currentRow.getInt(idx) }
+    getColumnValue(columnIndex, 0.toInt) { idx => currentRow.getInt(idx) }
   }
 
   override def getLong(columnIndex: Int): Long = {
-    getColumnValue(columnIndex - 1, 0.toLong) { idx => currentRow.getLong(idx) }
+    getColumnValue(columnIndex, 0.toLong) { idx => currentRow.getLong(idx) }
   }
 
   override def getFloat(columnIndex: Int): Float = {
-    getColumnValue(columnIndex - 1, 0.toFloat) { idx => currentRow.getFloat(idx) }
+    getColumnValue(columnIndex, 0.toFloat) { idx => currentRow.getFloat(idx) }
   }
 
   override def getDouble(columnIndex: Int): Double = {
-    getColumnValue(columnIndex - 1, 0.toDouble) { idx => currentRow.getDouble(idx) }
+    getColumnValue(columnIndex, 0.toDouble) { idx => currentRow.getDouble(idx) }
   }
 
   override def getBigDecimal(columnIndex: Int, scale: Int): java.math.BigDecimal =
@@ -216,7 +218,7 @@ class SparkConnectResultSet(
   }
 
   override def getObject(columnIndex: Int): AnyRef = {
-    getColumnValue(columnIndex - 1, null: AnyRef) { idx =>
+    getColumnValue(columnIndex, null: AnyRef) { idx =>
       currentRow.get(idx).asInstanceOf[AnyRef]
     }
   }
@@ -231,7 +233,7 @@ class SparkConnectResultSet(
     throw new SQLFeatureNotSupportedException
 
   override def getBigDecimal(columnIndex: Int): java.math.BigDecimal = {
-    getColumnValue(columnIndex - 1, null: java.math.BigDecimal) { idx =>
+    getColumnValue(columnIndex, null: java.math.BigDecimal) { idx =>
       currentRow.getDecimal(idx)
     }
   }
