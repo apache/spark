@@ -76,7 +76,7 @@ class SparkConnectResultSet(
     }
   }
 
-  private[jdbc] def getColumnValue[T](columnIndex: Int, defaultVal: T)(getter: Int => T): T = {
+  private def getColumnValue[T](columnIndex: Int, defaultVal: T)(getter: Int => T): T = {
     checkOpen()
     // the passed index value is 1-indexed, but the underlying array is 0-indexed
     val index = columnIndex - 1
