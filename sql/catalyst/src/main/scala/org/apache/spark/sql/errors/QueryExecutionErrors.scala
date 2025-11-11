@@ -3243,6 +3243,16 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
         "validTypes" -> validTypes.mkString(", ")))
   }
 
+  def tupleInvalidOperationForSummaryType(
+      function: String,
+      summaryType: String): Throwable = {
+    new SparkRuntimeException(
+      errorClass = "TUPLE_INVALID_SUMMARY_TYPE_OPERATION",
+      messageParameters = Map(
+        "function" -> toSQLId(function),
+        "summaryType" -> summaryType))
+  }
+
   def tupleInvalidMode(function: String, mode: String, validModes: Seq[String]): Throwable = {
     new SparkRuntimeException(
       errorClass = "TUPLE_INVALID_SKETCH_MODE",
