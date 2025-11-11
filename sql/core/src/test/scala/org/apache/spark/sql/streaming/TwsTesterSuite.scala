@@ -574,7 +574,7 @@ class TwsTesterSuite extends SparkFunSuite {
     assert(tester.peekValueState[Long]("timer", "user1").isEmpty)
   }
 
-  test("TwsTester should process timers before input rows") {
+  test("TwsTester should process input before timers") {
     val testClock = new TwsTester.TestClock(Instant.ofEpochMilli(10000L))
     val processor = new SessionTimeoutProcessor(timeoutDurationMs = 5000L)
     val tester = new TwsTester(processor, testClock, timeMode = TimeMode.ProcessingTime)
@@ -586,16 +586,17 @@ class TwsTesterSuite extends SparkFunSuite {
     // Advance past timer expiry
     testClock.advanceBy(Duration.ofMillis(6000L)) // now at 16000ms, timer at 15000ms expired
 
-    // Process new input - timer should fire BEFORE input is processed
+    // Process new input - input should be processed BEFORE timer fires
     val result = tester.test(List(("user1", ("user1", "new_activity"))))
 
-    // First output should be timeout (from expired timer), second should be new activity
-    assert(result.length == 2)
-    assert(result(0) == ("user1", "SESSION_TIMEOUT", 1L)) // Timer fired first
-    assert(result(1) == ("user1", "ACTIVITY", 1L)) // Then new activity (count reset)
+    // Input is processed first: increments count to 2, deletes old timer, registers new one
+    // The expired timer at 15000ms is deleted during input processing, so it never fires
+    assert(result.length == 1)
+    assert(result(0) == ("user1", "ACTIVITY", 2L)) // Input processed, count incremented from 1 to 2
 
-    // After processing, should have new state
-    assert(tester.peekValueState[Long]("activityCount", "user1").get == 1L)
+    // After processing, should have updated state with new timer
+    assert(tester.peekValueState[Long]("activityCount", "user1").get == 2L)
+    assert(tester.peekValueState[Long]("timer", "user1").get == 21000L) // 16000 + 5000
   }
 
   test("TwsTester should handle multiple timers in same batch") {
@@ -751,16 +752,54 @@ class TwsTesterSuite extends SparkFunSuite {
 
     // Batch 4: Process another event with timestamp 25000
     // Watermark before batch = 21000, so timer at 20000 FIRES now!
-    // Then new event is processed, starting a new window
+    // Input is processed first, then timer fires
     // Watermark after batch = 25000 - 2000 = 23000
     val result4 = tester.test(List(("user1", ("event7", new Timestamp(25000L)))))
 
-    // Timer fires first (with count 6), then new event starts new window
+    // Input is processed first (increments count to 7), then timer fires (outputs final count 7)
     assert(result4.length == 2)
-    assert(result4(0) == ("user1", "WINDOW_END", 6L)) // Timer fired with final count
-    assert(result4(1) == ("user1", "WINDOW_START", 1L)) // New window started
-    assert(tester.peekValueState[Long]("eventCount", "user1").get == 1L)
-    assert(tester.peekValueState[Long]("windowEndTime", "user1").get == 35000L)
+    assert(result4(0) == ("user1", "WINDOW_CONTINUE", 7L)) // Input processed first
+    assert(result4(1) == ("user1", "WINDOW_END", 7L)) // Timer fired with count after input
+    // Timer clears state, so no state should exist after this batch
+    assert(tester.peekValueState[Long]("eventCount", "user1").isEmpty)
+    assert(tester.peekValueState[Long]("windowEndTime", "user1").isEmpty)
+  }
+
+  test("TwsTester should filter late events based on watermark") {
+    val processor = new EventTimeWindowProcessor(windowDurationMs = 10000L)
+    val tester = new TwsTester(processor, timeMode = TimeMode.EventTime)
+
+    // Configure watermark with 2 second delay
+    tester.withWatermark(
+      (input: (String, Timestamp)) => input._2,
+      "2 seconds"
+    )
+
+    // Batch 1: Process events with timestamps 10000, 12000, 15000
+    // Max event time = 15000, watermark after batch = 15000 - 2000 = 13000
+    val result1 = tester.test(
+      List(
+        ("user1", ("event1", new Timestamp(10000L))),
+        ("user1", ("event2", new Timestamp(12000L))),
+        ("user1", ("event3", new Timestamp(15000L)))
+      )
+    )
+    assert(result1 == List(("user1", "WINDOW_START", 3L)))
+
+    // Batch 2: Send mix of late and on-time events
+    // Watermark is currently 13000
+    // Event at 11000 is late (< 13000) and should be filtered
+    // Event at 14000 is on-time (>= 13000) and should be processed
+    val result2 = tester.test(
+      List(
+        ("user1", ("late_event", new Timestamp(11000L))), // LATE - should be filtered
+        ("user1", ("on_time_event", new Timestamp(14000L))) // ON-TIME - should be processed
+      )
+    )
+
+    // Only the on-time event should be processed, so count goes from 3 to 4
+    assert(result2 == List(("user1", "WINDOW_CONTINUE", 4L)))
+    assert(tester.peekValueState[Long]("eventCount", "user1").get == 4L)
   }
 
   test("TwsTester should call handleInitialState") {
