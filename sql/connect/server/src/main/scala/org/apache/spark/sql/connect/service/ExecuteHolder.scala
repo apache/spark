@@ -115,7 +115,14 @@ private[connect] class ExecuteHolder(
     ExecuteHolder.collectAllObservationAndPlanIds(request.getPlan).toMap
   }
 
-  private val runner: ExecuteThreadRunner = new ExecuteThreadRunner(this)
+  private var runner: ExecuteThreadRunner = new ExecuteThreadRunner(this)
+
+  /**
+   * Set a custom runner for this execution. Must be called before start().
+   */
+  private[service] def setRunner(customRunner: ExecuteThreadRunner): Unit = {
+    runner = customRunner
+  }
 
   /** System.nanoTime when this ExecuteHolder was created. */
   val creationTimeNs = System.nanoTime()
