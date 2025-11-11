@@ -253,22 +253,22 @@ class SparkConnectJdbcDataTypeSuite extends ConnectFunSuite with RemoteSparkSess
     Seq(
       ("'foo'", (rs: ResultSet) => rs.getString(999)),
       ("true", (rs: ResultSet) => rs.getBoolean(999)),
-      ("cast(1 as byte)", (rs: ResultSet) => rs.getByte(999)),
-      ("cast(1 as short)", (rs: ResultSet) => rs.getShort(999)),
-      ("cast(1 as int)", (rs: ResultSet) => rs.getInt(999)),
-      ("cast(1 as bigint)", (rs: ResultSet) => rs.getLong(999)),
-      ("cast(1 as float)", (rs: ResultSet) => rs.getFloat(999)),
-      ("cast(1 as double)", (rs: ResultSet) => rs.getDouble(999)),
-      ("cast(1 as DECIMAL(10,5))", (rs: ResultSet) => rs.getBigDecimal(999))
+      ("cast(1 AS BYTE)", (rs: ResultSet) => rs.getByte(999)),
+      ("cast(1 AS SHORT)", (rs: ResultSet) => rs.getShort(999)),
+      ("cast(1 AS INT)", (rs: ResultSet) => rs.getInt(999)),
+      ("cast(1 AS BIGINT)", (rs: ResultSet) => rs.getLong(999)),
+      ("cast(1 AS FLOAT)", (rs: ResultSet) => rs.getFloat(999)),
+      ("cast(1 AS DOUBLE)", (rs: ResultSet) => rs.getDouble(999)),
+      ("cast(1 AS DECIMAL(10,5))", (rs: ResultSet) => rs.getBigDecimal(999))
     ).foreach {
       case (query, getter) =>
         withExecuteQuery(s"SELECT $query") { rs =>
           assert(rs.next())
-          withClue("SQLException is not thrown when the result set index goes out of bound") {
-            intercept[SQLException] {
-              getter(rs)
-            }
+          val exception = intercept[SQLException] {
+            getter(rs)
           }
+          assert(exception.getMessage() ===
+            "The column index is out of range: 998, number of columns: 1.")
         }
     }
   }
@@ -277,30 +277,28 @@ class SparkConnectJdbcDataTypeSuite extends ConnectFunSuite with RemoteSparkSess
     Seq(
       ("'foo'", (rs: ResultSet) => rs.getString(1), "foo"),
       ("true", (rs: ResultSet) => rs.getBoolean(1), true),
-      ("cast(1 as byte)", (rs: ResultSet) => rs.getByte(1), 1.toByte),
-      ("cast(1 as short)", (rs: ResultSet) => rs.getShort(1), 1.toShort),
-      ("cast(1 as int)", (rs: ResultSet) => rs.getInt(1), 1.toInt),
-      ("cast(1 as bigint)", (rs: ResultSet) => rs.getLong(1), 1.toLong),
-      ("cast(1 as float)", (rs: ResultSet) => rs.getFloat(1), 1.toFloat),
-      ("cast(1 as double)", (rs: ResultSet) => rs.getDouble(1), 1.toDouble),
-      ("cast(1 as DECIMAL(10,5))", (rs: ResultSet) => rs.getBigDecimal(1),
+      ("cast(1 AS BYTE)", (rs: ResultSet) => rs.getByte(1), 1.toByte),
+      ("cast(1 AS SHORT)", (rs: ResultSet) => rs.getShort(1), 1.toShort),
+      ("cast(1 AS INT)", (rs: ResultSet) => rs.getInt(1), 1.toInt),
+      ("cast(1 AS BIGINT)", (rs: ResultSet) => rs.getLong(1), 1.toLong),
+      ("cast(1 AS FLOAT)", (rs: ResultSet) => rs.getFloat(1), 1.toFloat),
+      ("cast(1 AS DOUBLE)", (rs: ResultSet) => rs.getDouble(1), 1.toDouble),
+      ("cast(1 AS DECIMAL(10,5))", (rs: ResultSet) => rs.getBigDecimal(1),
         new java.math.BigDecimal("1.00000"))
     ).foreach {
       case (query, getter, expectedValue) =>
         var resultSet: Option[ResultSet] = None
         withExecuteQuery(s"SELECT $query") { rs =>
           assert(rs.next())
-          assert(getter(rs) === value)
+          assert(getter(rs) === expectedValue)
           assert(!rs.wasNull)
           resultSet = Some(rs)
         }
         assert(resultSet.isDefined)
-        withClue(
-          "SQLException is not thrown when result set is used after JDBC statement is closed") {
-          intercept[SQLException] {
-            getter(resultSet.get)
-          }
+        val exception = intercept[SQLException] {
+          getter(resultSet.get)
         }
+        assert(exception.getMessage() === "JDBC Statement is closed.")
     }
   }
 }
