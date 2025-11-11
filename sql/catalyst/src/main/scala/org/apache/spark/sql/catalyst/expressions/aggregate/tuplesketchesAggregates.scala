@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.trees.{QuaternaryLike, TernaryLike}
 import org.apache.spark.sql.catalyst.util.{ArrayData, CollationFactory, ThetaSketchUtils}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.types.StringTypeWithCollation
-import org.apache.spark.sql.types.{AbstractDataType, ArrayType, BinaryType, DataType, DoubleType, FloatType, IntegerType, LongType, StringType, StructType, TypeCollection}
+import org.apache.spark.sql.types.{AbstractDataType, ArrayType, BinaryType, DataType, DoubleType, FloatType, IntegerType, LongType, StringType, StructType}
 import org.apache.spark.unsafe.types.UTF8String
 
 sealed trait TupleSketchState {
@@ -161,15 +161,7 @@ case class TupleSketchAgg(
 
   override def inputTypes: Seq[AbstractDataType] =
     Seq(
-      TypeCollection(
-        ArrayType(IntegerType),
-        ArrayType(LongType),
-        BinaryType,
-        DoubleType,
-        FloatType,
-        IntegerType,
-        LongType,
-        StringTypeWithCollation(supportsTrimCollation = true)),
+      StructType,
       IntegerType,
       StringTypeWithCollation(supportsTrimCollation = true),
       StringTypeWithCollation(supportsTrimCollation = true))
@@ -179,7 +171,8 @@ case class TupleSketchAgg(
   override def nullable: Boolean = false
 
   override def first: Expression = child
-  override def second: Expression = Literal(lgNomEntriesInput)
+  override def second: Expression =
+    lgNomEntriesExpr.getOrElse(Literal(ThetaSketchUtils.DEFAULT_LG_NOM_LONGS))
   override def third: Expression = summaryTypeExpr
   override def fourth: Expression = modeExpr
 
@@ -477,7 +470,8 @@ case class TupleUnionAgg(
   override def nullable: Boolean = false
 
   override def first: Expression = child
-  override def second: Expression = Literal(lgNomEntriesInput)
+  override def second: Expression =
+    lgNomEntriesExpr.getOrElse(Literal(ThetaSketchUtils.DEFAULT_LG_NOM_LONGS))
   override def third: Expression = summaryTypeExpr
   override def fourth: Expression = modeExpr
 

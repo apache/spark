@@ -170,11 +170,11 @@ class ThetaSketchUtilsSuite extends SparkFunSuite with SQLHelper {
     val summaryFactory = new DoubleSummaryFactory(DoubleSummary.Mode.Sum)
     val updateSketch = new UpdatableSketchBuilder[java.lang.Double, DoubleSummary](summaryFactory)
       .build()
-    
+
     updateSketch.update("test1", 1.0)
     updateSketch.update("test2", 2.0)
     updateSketch.update("test3", 3.0)
-    
+
     val compactSketch = updateSketch.compact()
     val validBytes = compactSketch.toByteArray
 
@@ -199,7 +199,10 @@ class ThetaSketchUtilsSuite extends SparkFunSuite with SQLHelper {
           "test_function")
       },
       condition = "TUPLE_INVALID_INPUT_SKETCH_BUFFER",
-      parameters = Map("function" -> "`test_function`"))
+      parameters = Map("function" -> "`test_function`",
+        "reason" -> "Possible corruption: Invalid Family: COMPACT"
+      )
+    )
   }
 
   test("getDoubleSummaryMode: converts mode strings to DoubleSummary.Mode enum") {

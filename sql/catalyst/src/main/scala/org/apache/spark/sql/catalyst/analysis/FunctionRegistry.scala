@@ -821,6 +821,7 @@ object FunctionRegistry {
     expression[KllSketchGetQuantileDouble]("kll_sketch_get_quantile_double"),
     expression[KllSketchGetRankBigint]("kll_sketch_get_rank_bigint"),
     expression[KllSketchGetRankFloat]("kll_sketch_get_rank_float"),
+    expression[KllSketchGetRankDouble]("kll_sketch_get_rank_double"),
     expression[TupleSketchEstimate]("tuple_sketch_estimate"),
     expression[TupleSketchSummary]("tuple_sketch_summary"),
     expression[TupleUnion]("tuple_union"),

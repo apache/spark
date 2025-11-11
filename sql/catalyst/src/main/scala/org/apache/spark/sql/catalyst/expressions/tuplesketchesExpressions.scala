@@ -86,7 +86,7 @@ case class TupleSketchEstimate(left: Expression, right: Expression)
     Examples:
       > SELECT _FUNC_(tuple_sketch_agg(struct(col, value))) FROM VALUES (1, 1.0), (1, 2.0), (2, 3.0) tab(col, value);
        6.0
-      > SELECT _FUNC_(tuple_sketch_agg(struct(col, value)), 'double', 'max') FROM VALUES (1, 1.0), (1, 2.0), (2, 3.0) tab(col, value);
+      > SELECT _FUNC_(tuple_sketch_agg(struct(col, value))) FROM VALUES (1, 1.0), (1, 2.0), (2, 3.0) tab(col, value);
        3.0
   """,
   group = "misc_funcs",
