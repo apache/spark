@@ -1585,6 +1585,21 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val PARQUET_ANNOTATE_VARIANT_LOGICAL_TYPE =
+    buildConf("spark.sql.parquet.variant.annotateLogicalType.enabled")
+      .doc("When enabled, Spark annotates the variant groups written to Parquet as the parquet " +
+        "variant logical type.")
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  val PARQUET_WRITE_VARIANT_SPEC_VERSION =
+    buildConf("spark.sql.parquet.variant.specVersion")
+      .doc("The spec version of variant data to be written to Parquet. Must be a byte-sized value.")
+      .version("4.1.0")
+      .intConf
+      .createWithDefault(1)
+
   val PARQUET_FIELD_ID_READ_ENABLED =
     buildConf("spark.sql.parquet.fieldId.read.enabled")
       .doc("Field ID is a native field of the Parquet schema spec. When enabled, Parquet readers " +
@@ -7683,6 +7698,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def parquetFieldIdReadEnabled: Boolean = getConf(SQLConf.PARQUET_FIELD_ID_READ_ENABLED)
 
   def parquetFieldIdWriteEnabled: Boolean = getConf(SQLConf.PARQUET_FIELD_ID_WRITE_ENABLED)
+
+  def parquetAnnotateVariantLogicalType: Boolean = getConf(PARQUET_ANNOTATE_VARIANT_LOGICAL_TYPE)
 
   def ignoreMissingParquetFieldId: Boolean = getConf(SQLConf.IGNORE_MISSING_PARQUET_FIELD_ID)
 

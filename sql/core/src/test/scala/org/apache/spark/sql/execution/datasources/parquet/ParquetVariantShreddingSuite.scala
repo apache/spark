@@ -19,6 +19,8 @@ package org.apache.spark.sql.execution.datasources.parquet
 
 import java.io.File
 
+import scala.jdk.CollectionConverters._
+
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.parquet.hadoop.ParquetFileReader
@@ -154,6 +156,43 @@ class ParquetVariantShreddingSuite extends QueryTest with ParquetTest with Share
     }
   }
 
+  test("variant logical type annotation") {
+    Seq(false, true).foreach { annotateVariantLogicalType =>
+      Seq(false, true).foreach { shredVariant =>
+        withSQLConf(SQLConf.VARIANT_WRITE_SHREDDING_ENABLED.key -> shredVariant.toString,
+          SQLConf.VARIANT_INFER_SHREDDING_SCHEMA.key -> shredVariant.toString) {
+          withSQLConf(SQLConf.PARQUET_ANNOTATE_VARIANT_LOGICAL_TYPE.key ->
+            annotateVariantLogicalType.toString) {
+            withTempDir { dir =>
+              // write parquet file
+              // TODO: one top level, variant, one in struct, one in array, one in map
+              val df = spark.sql(
+                """
+                  | select
+                  |  to_variant_object(named_struct('id',id)) v from range(0,10,1,1)""".stripMargin)
+              df.write.mode("overwrite").parquet(dir.getAbsolutePath)
+              val file = dir.listFiles().find(_.getName.endsWith(".parquet")).get
+              val parquetFilePath = file.getAbsolutePath
+              val inputFile = HadoopInputFile.fromPath(new Path(parquetFilePath),
+                new Configuration())
+              val reader = ParquetFileReader.open(inputFile)
+              val footer = reader.getFooter
+              val schema = footer.getFileMetaData.getSchema
+              val vGroup = schema.getType(schema.getFieldIndex("v")).asGroupType()
+              if (annotateVariantLogicalType) {
+                assert(vGroup.getLogicalTypeAnnotation == LogicalTypeAnnotation.variantType(1))
+              } else {
+                assert(vGroup.getLogicalTypeAnnotation == null)
+              }
+              assert(vGroup.getFields.asScala.toSeq.exists(_.getName == "typed_value") ==
+                shredVariant)
+              reader.close()
+            }
+          }
+        }
+      }
+    }
+  }
 
   testWithTempDir("write shredded variant basic") { dir =>
     val schema = "a int, b string, c decimal(15, 1)"
