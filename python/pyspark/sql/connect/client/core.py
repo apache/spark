@@ -986,49 +986,46 @@ class SparkConnectClient(object):
         # SPARK-51112: If the table is empty, we avoid using pyarrow to_pandas to create the
         # DataFrame, as it may fail with a segmentation fault. Instead, we create an empty pandas
         # DataFrame manually with the correct schema.
-        if table.num_rows == 0:
-            pdf = pd.DataFrame(columns=schema.names, index=range(0))
+        pandas_options = {"coerce_temporal_nanoseconds": True}
+        if self_destruct == "true" and table.num_rows > 0:
+            # Configure PyArrow to use as little memory as possible:
+            # self_destruct - free columns as they are converted
+            # split_blocks - create a separate Pandas block for each column
+            # use_threads - convert one column at a time
+            pandas_options.update(
+                {
+                    "self_destruct": True,
+                    "split_blocks": True,
+                    "use_threads": False,
+                }
+            )
+
+        if len(schema.names) > 0:
+            error_on_duplicated_field_names: bool = False
+            if struct_in_pandas == "legacy" and any(
+                _has_type(f.dataType, StructType) for f in schema.fields
+            ):
+                error_on_duplicated_field_names = True
+                struct_in_pandas = "dict"
+
+            pdf = pd.concat(
+                [
+                    _create_converter_to_pandas(
+                        field.dataType,
+                        field.nullable,
+                        timezone=timezone,
+                        struct_in_pandas=struct_in_pandas,
+                        error_on_duplicated_field_names=error_on_duplicated_field_names,
+                    )(arrow_col.to_pandas(**pandas_options))
+                    for arrow_col, field in zip(table.columns, schema.fields)
+                ],
+                axis="columns",
+            )
         else:
-            pandas_options = {"coerce_temporal_nanoseconds": True}
-            if self_destruct == "true":
-                # Configure PyArrow to use as little memory as possible:
-                # self_destruct - free columns as they are converted
-                # split_blocks - create a separate Pandas block for each column
-                # use_threads - convert one column at a time
-                pandas_options.update(
-                    {
-                        "self_destruct": True,
-                        "split_blocks": True,
-                        "use_threads": False,
-                    }
-                )
+            # empty columns
+            pdf = table.to_pandas(**pandas_options)
 
-            if len(schema.names) > 0:
-                error_on_duplicated_field_names: bool = False
-                if struct_in_pandas == "legacy" and any(
-                    _has_type(f.dataType, StructType) for f in schema.fields
-                ):
-                    error_on_duplicated_field_names = True
-                    struct_in_pandas = "dict"
-
-                pdf = pd.concat(
-                    [
-                        _create_converter_to_pandas(
-                            field.dataType,
-                            field.nullable,
-                            timezone=timezone,
-                            struct_in_pandas=struct_in_pandas,
-                            error_on_duplicated_field_names=error_on_duplicated_field_names,
-                        )(arrow_col.to_pandas(**pandas_options))
-                        for arrow_col, field in zip(table.columns, schema.fields)
-                    ],
-                    axis="columns",
-                )
-            else:
-                # empty columns
-                pdf = table.to_pandas(**pandas_options)
-
-            pdf.columns = schema.names
+        pdf.columns = schema.names
 
         if len(metrics) > 0:
             pdf.attrs["metrics"] = metrics
