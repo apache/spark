@@ -1008,9 +1008,9 @@ class SparkConnectClient(object):
                 error_on_duplicated_field_names = True
                 struct_in_pandas = "dict"
 
-            pdf = pd.concat(
-                [
-                    _create_converter_to_pandas(
+            pdf = pd.DataFrame(
+                {
+                    field.name: _create_converter_to_pandas(
                         field.dataType,
                         field.nullable,
                         timezone=timezone,
@@ -1018,14 +1018,11 @@ class SparkConnectClient(object):
                         error_on_duplicated_field_names=error_on_duplicated_field_names,
                     )(arrow_col.to_pandas(**pandas_options))
                     for arrow_col, field in zip(table.columns, schema.fields)
-                ],
-                axis="columns",
+                }
             )
         else:
             # empty columns
             pdf = table.to_pandas(**pandas_options)
-
-        pdf.columns = schema.names
 
         if len(metrics) > 0:
             pdf.attrs["metrics"] = metrics
