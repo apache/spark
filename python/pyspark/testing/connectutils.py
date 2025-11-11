@@ -23,6 +23,7 @@ import unittest
 import uuid
 import contextlib
 
+import pyspark.sql.connect.proto as pb2
 from pyspark import Row, SparkConf
 from pyspark.util import is_remote_only
 from pyspark.testing.utils import PySparkErrorTestUtils
@@ -113,6 +114,16 @@ class PlanOnlyTestFixture(unittest.TestCase, PySparkErrorTestUtils):
         def _session_sql(cls, query):
             return cls._df_mock(SQL(query))
 
+        @classmethod
+        def _set_relation_in_plan(self, plan: pb2.Plan, relation: pb2.Relation) -> None:
+            # Skip plan compression in plan-only tests.
+            plan.root.CopyFrom(relation)
+
+        @classmethod
+        def _set_command_in_plan(self, plan: pb2.Plan, command: pb2.Command) -> None:
+            # Skip plan compression in plan-only tests.
+            plan.command.CopyFrom(command)
+
         if have_pandas:
 
             @classmethod
@@ -129,6 +140,8 @@ class PlanOnlyTestFixture(unittest.TestCase, PySparkErrorTestUtils):
             cls.connect.set_hook("range", cls._session_range)
             cls.connect.set_hook("sql", cls._session_sql)
             cls.connect.set_hook("with_plan", cls._with_plan)
+            cls.connect.set_hook("_set_relation_in_plan", cls._set_relation_in_plan)
+            cls.connect.set_hook("_set_command_in_plan", cls._set_command_in_plan)
 
         @classmethod
         def tearDownClass(cls):
