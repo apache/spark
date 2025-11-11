@@ -84,6 +84,11 @@
       <artifactId>failureaccess</artifactId>
       <scope>compile</scope>
     </dependency>
+    <dependency>
+      <groupId>com.github.luben</groupId>
+      <artifactId>zstd-jni</artifactId>
+      <scope>compile</scope>
+    </dependency>
     <!--
       When upgrading ammonite, consider upgrading semanticdb-shared too.
     -->
@@ -184,6 +189,7 @@
               <include>io.perfmark:*</include>
               <include>org.apache.arrow:*</include>
               <include>org.codehaus.mojo:*</include>
+              <include>com.github.luben:zstd-jni</include>
               <include>org.apache.spark:spark-connect-common_${scala.binary.version}</include>
               <include>org.apache.spark:spark-sql-api_${scala.binary.version}</include>
             </includes>
