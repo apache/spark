@@ -976,6 +976,38 @@ struct<CAST(12:34:56.789012 AS TIME(6)):time(6)>
 
 
 -- !query
+SELECT cast(0 as time)
+-- !query schema
+struct<CAST(0 AS TIME(6)):time(6)>
+-- !query output
+00:00:00
+
+
+-- !query
+SELECT cast(0.0 as time(3))
+-- !query schema
+struct<CAST(0.0 AS TIME(3)):time(3)>
+-- !query output
+00:00:00
+
+
+-- !query
+SELECT cast(86399999999999L as time(6))
+-- !query schema
+struct<CAST(86399999999999 AS TIME(6)):time(6)>
+-- !query output
+23:59:59.999999
+
+
+-- !query
+SELECT cast(0 as time without time zone)
+-- !query schema
+struct<CAST(0 AS TIME(6)):time(6)>
+-- !query output
+00:00:00
+
+
+-- !query
 SELECT cast(cast('12:00' as time(0)) as time(2))
 -- !query schema
 struct<CAST(CAST(12:00 AS TIME(0)) AS TIME(2)):time(2)>
