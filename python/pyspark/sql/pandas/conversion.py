@@ -215,10 +215,10 @@ class PandasConversionMixin:
 
             # Extract columns from rows and apply converters
             if len(rows) > 0:
-                # Convert to list of lists (faster than tuples for Series construction)
-                columns_data = [list(col) for col in zip(*rows)]
+                # Use iterator to avoid materializing intermediate data structure
+                columns_data = zip(*rows)
             else:
-                columns_data = [[] for _ in self.schema.fields]
+                columns_data = ([] for _ in self.schema.fields)
 
             # Build DataFrame from columns
             pdf = pd.concat(
