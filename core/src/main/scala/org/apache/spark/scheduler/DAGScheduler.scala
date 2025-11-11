@@ -2921,7 +2921,7 @@ private[spark] class DAGScheduler(
   }
 
   private[scheduler] def handleShuffleStatusNotFoundException(
-    ex: ShuffleStatusNotFoundException): Unit = {
+      ex: ShuffleStatusNotFoundException): Unit = {
     val stage = shuffleIdToMapStage.get(ex.shuffleId)
     val reason = "exceptions encountered while invoking " +
       s"MapOutputTracker.${ex.methodName} with shuffleId=${ex.shuffleId}"
