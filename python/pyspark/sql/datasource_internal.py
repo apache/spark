@@ -88,7 +88,11 @@ class _SimpleStreamReaderWrapper(DataSourceStreamReader):
             self.initial_offset = self.simple_reader.initialOffset()
         return self.initial_offset
 
-    def latestOffset(self) -> dict:
+    def latestOffset(
+        self, start_offset: Optional[dict] = None, read_limit: Optional[dict] = None
+    ) -> dict:
+        # SimpleStreamReader doesn't support admission control parameters, but we accept them
+        # for signature compatibility with the admission control feature.
         # when query start for the first time, use initial offset as the start offset.
         if self.current_offset is None:
             self.current_offset = self.initialOffset()

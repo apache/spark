@@ -15,7 +15,6 @@
  * limitations under the License.
  */
 
-
 package org.apache.spark.sql.execution.python.streaming
 
 import java.io.{BufferedInputStream, BufferedOutputStream, DataInputStream, DataOutputStream}
@@ -33,6 +32,7 @@ import org.apache.spark.internal.LogKeys.PYTHON_EXEC
 import org.apache.spark.internal.config.BUFFER_SIZE
 import org.apache.spark.internal.config.Python.PYTHON_AUTH_SOCKET_TIMEOUT
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.connector.read.streaming._
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
@@ -43,9 +43,10 @@ object PythonStreamingSourceRunner {
   // When the python process for python_streaming_source_runner receives one of the
   // integers below, it will invoke the corresponding function of StreamReader instance.
   val INITIAL_OFFSET_FUNC_ID = 884
-  val LATEST_OFFSET_FUNC_ID = 885
   val PARTITIONS_FUNC_ID = 886
   val COMMIT_FUNC_ID = 887
+  val LATEST_OFFSET_WITH_LIMIT_FUNC_ID = 888
+  val REPORT_LATEST_OFFSET_FUNC_ID = 889
   // Status code for JVM to decide how to receive prefetched record batches
   // for simple stream reader.
   val PREFETCHED_RECORDS_NOT_FOUND = 0
@@ -54,15 +55,14 @@ object PythonStreamingSourceRunner {
 }
 
 /**
- * This class is a proxy to invoke methods in Python DataSourceStreamReader from JVM.
- * A runner spawns a python worker process. In the main function, set up communication
- * between JVM and python process through socket and create a DataSourceStreamReader instance.
- * In an infinite loop, the python worker process poll information(function name and parameters)
- * from the socket, invoke the corresponding method of StreamReader and send return value to JVM.
+ * This class is a proxy to invoke methods in Python DataSourceStreamReader from JVM. A runner
+ * spawns a python worker process. In the main function, set up communication between JVM and
+ * python process through socket and create a DataSourceStreamReader instance. In an infinite
+ * loop, the python worker process poll information(function name and parameters) from the socket,
+ * invoke the corresponding method of StreamReader and send return value to JVM.
  */
-class PythonStreamingSourceRunner(
-    func: PythonFunction,
-    outputSchema: StructType) extends Logging  {
+class PythonStreamingSourceRunner(func: PythonFunction, outputSchema: StructType)
+    extends Logging {
   val workerModule = "pyspark.sql.streaming.python_streaming_source_runner"
 
   private val conf = SparkEnv.get.conf
@@ -99,8 +99,8 @@ class PythonStreamingSourceRunner(
     pythonWorker = Some(worker)
     pythonWorkerFactory = Some(workerFactory)
 
-    val stream = new BufferedOutputStream(
-      Channels.newOutputStream(pythonWorker.get.channel), bufferSize)
+    val stream =
+      new BufferedOutputStream(Channels.newOutputStream(pythonWorker.get.channel), bufferSize)
     dataOut = new DataOutputStream(stream)
 
     PythonWorkerUtils.writePythonVersion(pythonVer, dataOut)
@@ -125,23 +125,10 @@ class PythonStreamingSourceRunner(
     if (initStatus == SpecialLengths.PYTHON_EXCEPTION_THROWN) {
       val msg = PythonWorkerUtils.readUTF(dataIn)
       throw QueryCompilationErrors.pythonDataSourceError(
-        action = "plan", tpe = "initialize source", msg = msg)
+        action = "plan",
+        tpe = "initialize source",
+        msg = msg)
     }
-  }
-
-  /**
-   * Invokes latestOffset() function of the stream reader and receive the return value.
-   */
-  def latestOffset(): String = {
-    dataOut.writeInt(LATEST_OFFSET_FUNC_ID)
-    dataOut.flush()
-    val len = dataIn.readInt()
-    if (len == SpecialLengths.PYTHON_EXCEPTION_THROWN) {
-      val msg = PythonWorkerUtils.readUTF(dataIn)
-      throw QueryExecutionErrors.pythonStreamingDataSourceRuntimeError(
-        action = "latestOffset", msg)
-    }
-    PythonWorkerUtils.readUTF(len, dataIn)
   }
 
   /**
@@ -154,7 +141,8 @@ class PythonStreamingSourceRunner(
     if (len == SpecialLengths.PYTHON_EXCEPTION_THROWN) {
       val msg = PythonWorkerUtils.readUTF(dataIn)
       throw QueryExecutionErrors.pythonStreamingDataSourceRuntimeError(
-        action = "initialOffset", msg)
+        action = "initialOffset",
+        msg)
     }
     PythonWorkerUtils.readUTF(len, dataIn)
   }
@@ -162,8 +150,9 @@ class PythonStreamingSourceRunner(
   /**
    * Invokes partitions(start, end) function of the stream reader and receive the return value.
    */
-  def partitions(start: String, end: String): (Array[Array[Byte]], Option[Iterator[InternalRow]]) =
-  {
+  def partitions(
+      start: String,
+      end: String): (Array[Array[Byte]], Option[Iterator[InternalRow]]) = {
     dataOut.writeInt(PARTITIONS_FUNC_ID)
     PythonWorkerUtils.writeUTF(start, dataOut)
     PythonWorkerUtils.writeUTF(end, dataOut)
@@ -174,7 +163,8 @@ class PythonStreamingSourceRunner(
     if (numPartitions == SpecialLengths.PYTHON_EXCEPTION_THROWN) {
       val msg = PythonWorkerUtils.readUTF(dataIn)
       throw QueryExecutionErrors.pythonStreamingDataSourceRuntimeError(
-        action = "planPartitions", msg)
+        action = "planPartitions",
+        msg)
     }
     for (_ <- 0 until numPartitions) {
       val pickledPartition: Array[Byte] = PythonWorkerUtils.readBytes(dataIn)
@@ -188,12 +178,73 @@ class PythonStreamingSourceRunner(
       case SpecialLengths.PYTHON_EXCEPTION_THROWN =>
         val msg = PythonWorkerUtils.readUTF(dataIn)
         throw QueryExecutionErrors.pythonStreamingDataSourceRuntimeError(
-          action = "planPartitions", msg)
+          action = "planPartitions",
+          msg)
       case _ =>
         throw QueryExecutionErrors.pythonStreamingDataSourceRuntimeError(
-          action = "planPartitions", s"unknown status code $prefetchedRecordsStatus")
+          action = "planPartitions",
+          s"unknown status code $prefetchedRecordsStatus")
     }
     (pickledPartitions.toArray, iter)
+  }
+
+  /**
+   * Invokes latestOffset(startOffset, limit) function with admission control parameters.
+   */
+  def latestOffset(startOffset: String, limit: ReadLimit): String = {
+    dataOut.writeInt(LATEST_OFFSET_WITH_LIMIT_FUNC_ID)
+    PythonWorkerUtils.writeUTF(startOffset, dataOut)
+    PythonWorkerUtils.writeUTF(serializeReadLimit(limit), dataOut)
+    dataOut.flush()
+    val len = dataIn.readInt()
+    if (len == SpecialLengths.PYTHON_EXCEPTION_THROWN) {
+      val msg = PythonWorkerUtils.readUTF(dataIn)
+      throw QueryExecutionErrors.pythonStreamingDataSourceRuntimeError(
+        action = "latestOffset",
+        msg)
+    }
+    PythonWorkerUtils.readUTF(len, dataIn)
+  }
+
+  /**
+   * Invokes reportLatestOffset() function to get the true latest available offset.
+   */
+  def reportLatestOffset(): String = {
+    dataOut.writeInt(REPORT_LATEST_OFFSET_FUNC_ID)
+    dataOut.flush()
+    val len = dataIn.readInt()
+    if (len == SpecialLengths.PYTHON_EXCEPTION_THROWN) {
+      val msg = PythonWorkerUtils.readUTF(dataIn)
+      throw QueryExecutionErrors.pythonStreamingDataSourceRuntimeError(
+        action = "reportLatestOffset",
+        msg)
+    }
+    PythonWorkerUtils.readUTF(len, dataIn)
+  }
+
+  /**
+   * Serializes a ReadLimit to JSON format for Python.
+   */
+  private def serializeReadLimit(limit: ReadLimit): String = {
+    limit match {
+      case r: ReadMaxRows =>
+        s"""{"type":"maxRows","maxRows":${r.maxRows()}}"""
+      case r: ReadMaxFiles =>
+        s"""{"type":"maxFiles","maxFiles":${r.maxFiles()}}"""
+      case r: ReadMaxBytes =>
+        s"""{"type":"maxBytes","maxBytes":${r.maxBytes()}}"""
+      case r: ReadMinRows =>
+        s"""{"type":"minRows","minRows":${r.minRows()},""" +
+          s""""maxTriggerDelayMs":${r.maxTriggerDelayMs()}}"""
+      case _: ReadAllAvailable =>
+        """{"type":"allAvailable"}"""
+      case r: CompositeReadLimit =>
+        val limitsJson = r.getReadLimits.map(serializeReadLimit).mkString(",")
+        s"""{"type":"composite","limits":[$limitsJson]}"""
+      case _ =>
+        // Fallback for unknown types
+        """{"type":"allAvailable"}"""
+    }
   }
 
   /**
@@ -207,7 +258,8 @@ class PythonStreamingSourceRunner(
     if (status == SpecialLengths.PYTHON_EXCEPTION_THROWN) {
       val msg = PythonWorkerUtils.readUTF(dataIn)
       throw QueryExecutionErrors.pythonStreamingDataSourceRuntimeError(
-        action = "commitSource", msg)
+        action = "commitSource",
+        msg)
     }
   }
 
@@ -215,8 +267,9 @@ class PythonStreamingSourceRunner(
    * Stop the python worker process and invoke stop() on stream reader.
    */
   def stop(): Unit = {
-    logInfo(log"Stopping streaming runner for module: " +
-      log"${MDC(LogKeys.MODULE_NAME, workerModule)}.")
+    logInfo(
+      log"Stopping streaming runner for module: " +
+        log"${MDC(LogKeys.MODULE_NAME, workerModule)}.")
     try {
       pythonWorkerFactory.foreach { factory =>
         pythonWorker.foreach { worker =>
@@ -230,8 +283,8 @@ class PythonStreamingSourceRunner(
     }
   }
 
-  private val allocator = ArrowUtils.rootAllocator.newChildAllocator(
-    s"stream reader for $pythonExec", 0, Long.MaxValue)
+  private val allocator =
+    ArrowUtils.rootAllocator.newChildAllocator(s"stream reader for $pythonExec", 0, Long.MaxValue)
 
   def readArrowRecordBatches(): Iterator[InternalRow] = {
     val status = dataIn.readInt()
@@ -239,11 +292,13 @@ class PythonStreamingSourceRunner(
       case SpecialLengths.PYTHON_EXCEPTION_THROWN =>
         val msg = PythonWorkerUtils.readUTF(dataIn)
         throw QueryExecutionErrors.pythonStreamingDataSourceRuntimeError(
-        action = "prefetchArrowBatches", msg)
+          action = "prefetchArrowBatches",
+          msg)
       case SpecialLengths.START_ARROW_STREAM =>
       case _ =>
         throw QueryExecutionErrors.pythonStreamingDataSourceRuntimeError(
-          action = "prefetchArrowBatches", s"unknown status code $status")
+          action = "prefetchArrowBatches",
+          s"unknown status code $status")
     }
     val reader = new ArrowStreamReader(dataIn, allocator)
     val root = reader.getVectorSchemaRoot()
@@ -251,9 +306,13 @@ class PythonStreamingSourceRunner(
     val schema = ArrowUtils.fromArrowSchema(root.getSchema())
     assert(schema == outputSchema)
 
-    val vectors = root.getFieldVectors().asScala.map { vector =>
-      new ArrowColumnVector(vector)
-    }.toArray[ColumnVector]
+    val vectors = root
+      .getFieldVectors()
+      .asScala
+      .map { vector =>
+        new ArrowColumnVector(vector)
+      }
+      .toArray[ColumnVector]
     val rows = ArrayBuffer[InternalRow]()
     while (reader.loadNextBatch()) {
       val batch = new ColumnarBatch(vectors)

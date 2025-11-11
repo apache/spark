@@ -679,12 +679,11 @@ class PythonStreamingDataSourceSuite extends PythonDataSourceSuiteBase {
         stream.initialOffset()
     }
 
+    val offset = PythonStreamingSourceOffset("{\"offset\": \"2\"}")
     testMicroBatchStreamError("latestOffset", "[NOT_IMPLEMENTED] latestOffset is not implemented") {
       stream =>
-        stream.latestOffset()
+        stream.latestOffset(offset, ReadLimit.allAvailable())
     }
-
-    val offset = PythonStreamingSourceOffset("{\"offset\": \"2\"}")
     testMicroBatchStreamError("planPartitions", "[NOT_IMPLEMENTED] partitions is not implemented") {
       stream =>
         stream.planInputPartitions(offset, offset)

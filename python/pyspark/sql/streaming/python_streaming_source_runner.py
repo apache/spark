@@ -48,9 +48,10 @@ from pyspark.worker_util import (
 )
 
 INITIAL_OFFSET_FUNC_ID = 884
-LATEST_OFFSET_FUNC_ID = 885
 PARTITIONS_FUNC_ID = 886
 COMMIT_FUNC_ID = 887
+LATEST_OFFSET_WITH_LIMIT_FUNC_ID = 888
+REPORT_LATEST_OFFSET_FUNC_ID = 889
 
 PREFETCHED_RECORDS_NOT_FOUND = 0
 NON_EMPTY_PYARROW_RECORD_BATCHES = 1
@@ -62,8 +63,35 @@ def initial_offset_func(reader: DataSourceStreamReader, outfile: IO) -> None:
     write_with_length(json.dumps(offset).encode("utf-8"), outfile)
 
 
-def latest_offset_func(reader: DataSourceStreamReader, outfile: IO) -> None:
-    offset = reader.latestOffset()
+def latest_offset_with_limit_func(reader: DataSourceStreamReader, infile: IO, outfile: IO) -> None:
+    """Handle latestOffset with admission control parameters, with backward compatibility."""
+    import inspect
+
+    start_offset_json = utf8_deserializer.loads(infile)
+    read_limit_json = utf8_deserializer.loads(infile)
+
+    start_offset = json.loads(start_offset_json) if start_offset_json else None
+    read_limit = json.loads(read_limit_json) if read_limit_json else None
+
+    # Detect signature: does latestOffset accept parameters?
+    sig = inspect.signature(reader.latestOffset)
+    if len(sig.parameters) >= 2:
+        # New signature: latestOffset(start_offset, read_limit)
+        offset = reader.latestOffset(start_offset, read_limit)
+    else:
+        # Old signature: latestOffset() - ignore parameters for backward compatibility
+        offset = reader.latestOffset()
+
+    write_with_length(json.dumps(offset).encode("utf-8"), outfile)
+
+
+def report_latest_offset_func(reader: DataSourceStreamReader, outfile: IO) -> None:
+    """Report the true latest available offset."""
+    if hasattr(reader, "reportLatestOffset"):
+        offset = reader.reportLatestOffset()
+    else:
+        # Fallback: call latestOffset without parameters for backward compatibility
+        offset = reader.latestOffset()
     write_with_length(json.dumps(offset).encode("utf-8"), outfile)
 
 
@@ -168,11 +196,18 @@ def main(infile: IO, outfile: IO) -> None:
                 func_id = read_int(infile)
                 if func_id == INITIAL_OFFSET_FUNC_ID:
                     initial_offset_func(reader, outfile)
-                elif func_id == LATEST_OFFSET_FUNC_ID:
-                    latest_offset_func(reader, outfile)
+                elif func_id == LATEST_OFFSET_WITH_LIMIT_FUNC_ID:
+                    latest_offset_with_limit_func(reader, infile, outfile)
+                elif func_id == REPORT_LATEST_OFFSET_FUNC_ID:
+                    report_latest_offset_func(reader, outfile)
                 elif func_id == PARTITIONS_FUNC_ID:
                     partitions_func(
-                        reader, data_source, schema, max_arrow_batch_size, infile, outfile
+                        reader,
+                        data_source,
+                        schema,
+                        max_arrow_batch_size,
+                        infile,
+                        outfile,
                     )
                 elif func_id == COMMIT_FUNC_ID:
                     commit_func(reader, infile, outfile)
@@ -205,7 +240,8 @@ def main(infile: IO, outfile: IO) -> None:
 if __name__ == "__main__":
     # Read information about how to connect back to the JVM from the environment.
     conn_info = os.environ.get(
-        "PYTHON_WORKER_FACTORY_SOCK_PATH", int(os.environ.get("PYTHON_WORKER_FACTORY_PORT", -1))
+        "PYTHON_WORKER_FACTORY_SOCK_PATH",
+        int(os.environ.get("PYTHON_WORKER_FACTORY_PORT", -1)),
     )
     auth_secret = os.environ.get("PYTHON_WORKER_FACTORY_SECRET")
     (sock_file, sock) = local_connect_and_auth(conn_info, auth_secret)

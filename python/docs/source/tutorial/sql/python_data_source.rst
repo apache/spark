@@ -266,6 +266,168 @@ This is a dummy streaming data reader that generate 2 rows in every microbatch. 
             for i in range(start, end):
                 yield (i, str(i))
 
+Implementing Admission Control for Streaming Sources
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Admission control allows streaming sources to control batch sizes, ensuring predictable resource usage
+and preventing overload. This is essential for production systems that need to respect API rate limits,
+control memory usage, or maintain consistent processing times.
+
+**Understanding the Problem**
+
+Without admission control, a streaming source must process all available data in each microbatch,
+which can lead to:
+
+- Unpredictable batch sizes
+- Memory exhaustion during data bursts
+- Inability to honor external API rate limits
+- Difficult failure recovery
+
+**The Solution: Parameters in latestOffset()**
+
+The :meth:`DataSourceStreamReader.latestOffset` method now accepts optional parameters:
+
+- ``start_offset`` (dict): The current stream position
+- ``read_limit`` (dict): Configured batch size limits
+
+These parameters enable sources to return capped offsets that respect configured limits.
+
+**Example: Blockchain Source with Admission Control**
+
+Here's a complete example showing how to implement admission control for a blockchain-like streaming source:
+
+.. code-block:: python
+
+    from pyspark.sql.datasource import DataSource, DataSourceStreamReader, InputPartition
+
+    class BlockchainStreamReader(DataSourceStreamReader):
+        def __init__(self, initial_block=0, max_block=10000):
+            self.initial_block = initial_block
+            self.max_block = max_block
+        
+        def initialOffset(self) -> dict:
+            return {"block": self.initial_block}
+        
+        def latestOffset(self, start_offset=None, read_limit=None) -> dict:
+            """
+            Return capped offset respecting admission control limits.
+            """
+            # Determine current position
+            if start_offset is None:
+                start_block = self.initial_block
+            else:
+                start_block = start_offset["block"]
+            
+            # Get latest available block from blockchain
+            latest_available = self.get_chain_head()  # e.g., returns 5000
+            
+            # Apply admission control if configured
+            if read_limit and read_limit.get("type") == "maxRows":
+                max_blocks = read_limit["maxRows"]
+                # Cap the end block to respect batch size limit
+                end_block = min(start_block + max_blocks, latest_available)
+            else:
+                # No limit - process all available blocks
+                end_block = latest_available
+            
+            return {"block": end_block}
+        
+        def reportLatestOffset(self) -> dict:
+            """
+            Report true latest for monitoring (without limits applied).
+            """
+            return {"block": self.get_chain_head()}
+        
+        def partitions(self, start: dict, end: dict):
+            start_block = start["block"]
+            end_block = end["block"]
+            # Create partitions for the block range
+            return [InputPartition(f"{start_block}:{end_block}".encode())]
+        
+        def read(self, partition):
+            # Fetch and yield block data
+            range_str = partition.value.decode()
+            start_block, end_block = map(int, range_str.split(":"))
+            for block_num in range(start_block, end_block):
+                yield self.fetch_block(block_num)  # Returns block tuple
+
+**Configuring Admission Control**
+
+Use the ``maxRecordsPerBatch`` option when reading from the stream:
+
+.. code-block:: python
+
+    # Process maximum 50 blocks per microbatch
+    df = spark.readStream \\
+        .format("blockchain") \\
+        .option("maxRecordsPerBatch", "50") \\
+        .load()
+    
+    query = df.writeStream \\
+        .format("console") \\
+        .start()
+
+**Read Limit Types**
+
+The ``read_limit`` parameter supports several limit types:
+
+.. code-block:: python
+
+    # Maximum rows/records
+    {"type": "maxRows", "maxRows": 1000}
+    
+    # Maximum files (for file-based sources)
+    {"type": "maxFiles", "maxFiles": 10}
+    
+    # Maximum data size in bytes
+    {"type": "maxBytes", "maxBytes": 10485760}
+    
+    # Minimum rows with timeout (for low-throughput sources)
+    {"type": "minRows", "minRows": 100, "maxTriggerDelayMs": 30000}
+    
+    # Process all available data
+    {"type": "allAvailable"}
+    
+    # Composite limits (multiple constraints)
+    {"type": "composite", "limits": [
+        {"type": "minRows", "minRows": 100, "maxTriggerDelayMs": 30000},
+        {"type": "maxRows", "maxRows": 1000}
+    ]}
+
+**Best Practices**
+
+1. **Always handle None parameters**: For the first batch, ``start_offset`` will be None
+2. **Use min() for capping**: Ensure you don't exceed available data
+3. **Implement reportLatestOffset()**: Helps with monitoring when rate limiting is active
+4. **Validate limit types**: Check that the limit type is one your source supports
+5. **Test both modes**: Verify your source works with and without limits
+
+**Backward Compatibility**
+
+For backward compatibility, the parameters are optional. Existing sources that don't implement
+admission control can use the old signature and will continue to work. The framework automatically
+detects which signature is implemented:
+
+.. code-block:: python
+
+    def latestOffset(self):
+        # Old signature still works - framework detects this automatically
+        return {"offset": self.get_latest()}
+
+New sources can opt-in to admission control by accepting the parameters:
+
+.. code-block:: python
+
+    def latestOffset(self, start_offset=None, read_limit=None):
+        # New signature with admission control
+        if read_limit and read_limit.get("type") == "maxRows":
+            # Apply limit
+            ...
+        return {"offset": ...}
+
+Note: ``SimpleDataSourceStreamReader`` does not support admission control. If you need
+admission control, use ``DataSourceStreamReader`` instead.
+
 Alternative: Implement a Simple Streaming Reader
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 

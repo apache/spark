@@ -714,25 +714,174 @@ class DataSourceStreamReader(ABC):
             messageParameters={"feature": "initialOffset"},
         )
 
-    def latestOffset(self) -> dict:
+    def latestOffset(
+        self, start_offset: Optional[dict] = None, read_limit: Optional[dict] = None
+    ) -> dict:
         """
-        Returns the most recent offset available.
+        Returns the most recent offset available, optionally capped by a read limit.
+
+        This method supports admission control for streaming sources. When `read_limit` is provided,
+        the source should return a capped offset that respects the configured batch size limits.
+
+        Parameters
+        ----------
+        start_offset : dict, optional
+            The current stream position. This is the offset where the stream is currently at.
+            Use this to calculate how much new data is available since the last batch.
+            For the very first batch of a new query, this will be None.
+
+        read_limit : dict, optional
+            The configured read limit for this batch. This is a dictionary containing:
+            - 'type': The type of limit ('maxRows', 'maxFiles', 'maxBytes', 'minRows',
+              'allAvailable', or 'composite')
+            - Additional fields specific to the limit type
+
+            Common limit types:
+            - {"type": "maxRows", "maxRows": 1000}
+              Limit to maximum 1000 records/rows per batch
+            - {"type": "maxFiles", "maxFiles": 10}
+              Limit to maximum 10 files per batch (for file-based sources)
+            - {"type": "maxBytes", "maxBytes": 10485760}
+              Limit to maximum 10MB of data per batch
+            - {"type": "minRows", "minRows": 100, "maxTriggerDelayMs": 30000}
+              Wait for at least 100 rows, but no more than 30 seconds
+            - {"type": "allAvailable"}
+              Process all available data (default behavior)
+            - {"type": "composite", "limits": [<list of limits>]}
+              Combine multiple constraints
 
         Returns
         -------
         dict
-            A dict or recursive dict whose key and value are primitive types, which includes
-            Integer, String and Boolean.
+            The end offset for the next batch. If `read_limit` is provided, this should be
+            a capped offset that respects the configured limit. Otherwise, return the offset
+            representing all available data.
+
+            The offset format is source-specific and can be any dict whose keys and values
+            are primitive types (Integer, String, Boolean).
 
         Examples
         --------
-        >>> def latestOffset(self):
-        ...     return {"parititon-1": {"index": 3, "closed": True}, "partition-2": {"index": 5}}
+        Example 1: Blockchain source with maxRows limit
+
+        >>> def latestOffset(self, start_offset=None, read_limit=None):
+        ...     # Get current blockchain head
+        ...     latest_block = self.get_chain_head()  # e.g., 23629000
+        ...
+        ...     if start_offset is None:
+        ...         # First batch: start from configured initial block
+        ...         start_block = self.initial_block  # e.g., 23628000
+        ...     else:
+        ...         start_block = start_offset["block"]
+        ...
+        ...     # Calculate end block based on limit
+        ...     if read_limit and read_limit.get("type") == "maxRows":
+        ...         # Cap at configured limit
+        ...         max_blocks = read_limit["maxRows"]
+        ...         end_block = min(start_block + max_blocks, latest_block)
+        ...     else:
+        ...         # Process all available blocks
+        ...         end_block = latest_block
+        ...
+        ...     return {"block": end_block}
+
+        Example 2: File source with maxFiles limit
+
+        >>> def latestOffset(self, start_offset=None, read_limit=None):
+        ...     # List all new files since last batch
+        ...     last_file = start_offset.get("lastFile") if start_offset else None
+        ...     available_files = self.list_new_files(after=last_file)
+        ...
+        ...     # Apply file limit if configured
+        ...     if read_limit and read_limit.get("type") == "maxFiles":
+        ...         max_files = read_limit["maxFiles"]
+        ...         files_to_process = available_files[:max_files]
+        ...     else:
+        ...         files_to_process = available_files
+        ...
+        ...     if files_to_process:
+        ...         return {"lastFile": files_to_process[-1].name,
+        ...                 "files": [f.name for f in files_to_process]}
+        ...     else:
+        ...         return start_offset  # No new data
+
+        Example 3: API source with rate limiting
+
+        >>> def latestOffset(self, start_offset=None, read_limit=None):
+        ...     current_cursor = start_offset.get("cursor") if start_offset else 0
+        ...
+        ...     # Fetch available records from API
+        ...     available = self.api.get_available_count(after_cursor=current_cursor)
+        ...
+        ...     # Apply rate limit
+        ...     if read_limit and read_limit.get("type") == "maxRows":
+        ...         batch_size = min(read_limit["maxRows"], available)
+        ...     else:
+        ...         batch_size = available
+        ...
+        ...     return {"cursor": current_cursor + batch_size, "count": batch_size}
+
+        Notes
+        -----
+        - For backward compatibility, if your source doesn't need admission control,
+          you can ignore the parameters and return all available data.
+        - The offset you return will be committed to Spark's checkpoint. Your
+          `partitions()` method will later be called with `start=start_offset`
+          and `end=<the offset you return here>`.
+        - This method should be relatively fast as it's called on every trigger.
+          Avoid expensive operations; just calculate offsets, don't fetch data.
+        - Use the `reportLatestOffset()` method to return the true latest offset
+          for monitoring purposes when rate limiting is applied.
+
+        See Also
+        --------
+        reportLatestOffset : Report the true latest available offset for monitoring
+        partitions : Plan partitions between start and end offsets
+
+        .. versionchanged:: 4.0.0
+           Added `start_offset` and `read_limit` parameters for admission control support.
         """
         raise PySparkNotImplementedError(
             errorClass="NOT_IMPLEMENTED",
             messageParameters={"feature": "latestOffset"},
         )
+
+    def reportLatestOffset(self) -> Optional[dict]:
+        """
+        Returns the absolute latest offset available, without any limits applied.
+
+        This method is used by Spark for monitoring and metrics. The streaming engine uses
+        this to show how much data is available versus how much is being processed when
+        rate limiting is applied via `read_limit` in `latestOffset()`.
+
+        Returns
+        -------
+        dict, optional
+            The true latest offset available from the source, without any batch size limits.
+            Return None if you don't support this operation or if it's the same as the
+            result from `latestOffset()`.
+
+        Examples
+        --------
+        >>> def reportLatestOffset(self):
+        ...     # Return the actual chain head, not the capped offset
+        ...     latest_block = self.get_chain_head()
+        ...     return {"block": latest_block}
+
+        Notes
+        -----
+        - This method is optional. If not implemented or returns None, Spark will use
+          the result of `latestOffset()` for monitoring purposes.
+        - This method should return quickly. It's called on every trigger for monitoring.
+        - The offset returned here is NOT used for processing; it's purely informational.
+
+        See Also
+        --------
+        latestOffset : Get the capped offset for the next batch
+
+        .. versionadded:: 4.0.0
+        """
+        return None
 
     def partitions(self, start: dict, end: dict) -> Sequence[InputPartition]:
         """
@@ -1198,7 +1347,8 @@ class DataSourceRegistration:
         assert sc._jvm is not None
         jvm = sc._jvm
         ds = getattr(
-            jvm, "org.apache.spark.sql.execution.datasources.v2.python.UserDefinedPythonDataSource"
+            jvm,
+            "org.apache.spark.sql.execution.datasources.v2.python.UserDefinedPythonDataSource",
         )(wrapped)
         self.sparkSession._jsparkSession.dataSource().registerPython(name, ds)
 
