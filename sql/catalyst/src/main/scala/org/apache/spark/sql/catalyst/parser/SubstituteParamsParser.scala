@@ -16,7 +16,7 @@
  */
 package org.apache.spark.sql.catalyst.parser
 
-import org.antlr.v4.runtime.{CharStreams, CommonTokenStream}
+import org.sparkproject.antlr.v4.runtime.{CharStreams, CommonTokenStream}
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
