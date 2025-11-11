@@ -973,6 +973,7 @@ private[spark] class TaskSchedulerImpl(
       if (executorIdToHost.contains(executorId)) {
         executorsPendingDecommission(executorId) =
           ExecutorDecommissionState(clock.getTimeMillis(), decommissionInfo.workerHost)
+        removeAvailableExecutor(executorId)
       }
     }
     rootPool.executorDecommission(executorId)
@@ -1090,7 +1091,7 @@ private[spark] class TaskSchedulerImpl(
       }
     }
 
-    executorsPendingToRemove.remove(executorId)
+    removeAvailableExecutor(executorId)
     executorsPendingDecommission.remove(executorId)
       .foreach(executorsRemovedByDecom.put(executorId, _))
 
@@ -1127,7 +1128,7 @@ private[spark] class TaskSchedulerImpl(
     executorIdToRunningTaskIds.get(execId).exists(_.nonEmpty)
   }
 
-  private def isExecutorAvailable(execId: String): Boolean = synchronized {
+  def isExecutorAvailable(execId: String): Boolean = synchronized {
     !executorsPendingToRemove.contains(execId)
   }
 
@@ -1204,6 +1205,10 @@ private[spark] class TaskSchedulerImpl(
 
   override def markExecutorPendingToRemove(executorId: String): Unit = synchronized {
     executorsPendingToRemove.add(executorId)
+  }
+
+  private def removeAvailableExecutor(executorId: String): Unit = {
+    executorsPendingToRemove.remove(executorId)
   }
 }
 
