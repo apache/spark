@@ -232,7 +232,8 @@ class SparkConnectResultSet(
 
   override def getBigDecimal(columnIndex: Int): java.math.BigDecimal = {
     getColumnValue(columnIndex - 1, null: java.math.BigDecimal) { idx =>
-      currentRow.getDecimal(idx) }
+      currentRow.getDecimal(idx)
+    }
   }
 
   override def getBigDecimal(columnLabel: String): java.math.BigDecimal =
