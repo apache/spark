@@ -4367,48 +4367,48 @@
       "Catalog <plugin> does not support"
     ],
     "subClass" : {
-      "CREATE_FUNCTION": {
-        "message": [
+      "CREATE_FUNCTION" : {
+        "message" : [
           "CREATE FUNCTION."
         ]
       },
-      "DROP_FUNCTION": {
-        "message": [
+      "DROP_FUNCTION" : {
+        "message" : [
           "DROP FUNCTION."
         ]
       },
-      "FUNCTIONS": {
-        "message": [
+      "FUNCTIONS" : {
+        "message" : [
           "functions."
         ]
       },
-      "NAMESPACES": {
-        "message": [
+      "NAMESPACES" : {
+        "message" : [
           "namespaces."
         ]
       },
-      "PROCEDURES": {
-        "message": [
+      "PROCEDURES" : {
+        "message" : [
           "procedures."
         ]
       },
-      "REFRESH_FUNCTION": {
-        "message": [
+      "REFRESH_FUNCTION" : {
+        "message" : [
           "REFRESH FUNCTION."
         ]
       },
-      "TABLES": {
-        "message": [
+      "TABLES" : {
+        "message" : [
           "tables."
         ]
       },
-      "TABLE_VALUED_FUNCTIONS": {
-        "message": [
+      "TABLE_VALUED_FUNCTIONS" : {
+        "message" : [
           "table-valued functions."
         ]
       },
-      "VIEWS": {
-        "message": [
+      "VIEWS" : {
+        "message" : [
           "views."
         ]
       }
