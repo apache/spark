@@ -286,7 +286,7 @@ class SparkConnectJdbcDataTypeSuite extends ConnectFunSuite with RemoteSparkSess
       ("cast(1 as DECIMAL(10,5))", (rs: ResultSet) => rs.getBigDecimal(1),
         new java.math.BigDecimal("1.00000"))
     ).foreach {
-      case (query, getter, value) =>
+      case (query, getter, expectedValue) =>
         var resultSet: Option[ResultSet] = None
         withExecuteQuery(s"SELECT $query") { rs =>
           assert(rs.next())
