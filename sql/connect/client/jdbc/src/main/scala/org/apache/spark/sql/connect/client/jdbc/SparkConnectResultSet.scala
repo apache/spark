@@ -217,7 +217,8 @@ class SparkConnectResultSet(
 
   override def getObject(columnIndex: Int): AnyRef = {
     getColumnValue(columnIndex - 1, null: AnyRef) { idx =>
-      currentRow.get(idx).asInstanceOf[AnyRef] }
+      currentRow.get(idx).asInstanceOf[AnyRef]
+    }
   }
 
   override def getObject(columnLabel: String): AnyRef =
