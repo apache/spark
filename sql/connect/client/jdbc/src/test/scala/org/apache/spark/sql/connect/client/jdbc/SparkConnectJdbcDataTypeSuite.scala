@@ -259,7 +259,8 @@ class SparkConnectJdbcDataTypeSuite extends ConnectFunSuite with RemoteSparkSess
       ("cast(1 AS BIGINT)", (rs: ResultSet) => rs.getLong(999)),
       ("cast(1 AS FLOAT)", (rs: ResultSet) => rs.getFloat(999)),
       ("cast(1 AS DOUBLE)", (rs: ResultSet) => rs.getDouble(999)),
-      ("cast(1 AS DECIMAL(10,5))", (rs: ResultSet) => rs.getBigDecimal(999))
+      ("cast(1 AS DECIMAL(10,5))", (rs: ResultSet) => rs.getBigDecimal(999)),
+      ("CAST(X'0A0B0C' AS BINARY)", (rs: ResultSet) => rs.getBytes(999))
     ).foreach {
       case (query, getter) =>
         withExecuteQuery(s"SELECT $query") { rs =>
@@ -284,13 +285,18 @@ class SparkConnectJdbcDataTypeSuite extends ConnectFunSuite with RemoteSparkSess
       ("cast(1 AS FLOAT)", (rs: ResultSet) => rs.getFloat(1), 1.toFloat),
       ("cast(1 AS DOUBLE)", (rs: ResultSet) => rs.getDouble(1), 1.toDouble),
       ("cast(1 AS DECIMAL(10,5))", (rs: ResultSet) => rs.getBigDecimal(1),
-        new java.math.BigDecimal("1.00000"))
+        new java.math.BigDecimal("1.00000")),
+      ("CAST(X'0A0B0C' AS BINARY)", (rs: ResultSet) => rs.getBytes(1),
+        Array[Byte](0x0A, 0x0B, 0x0C))
     ).foreach {
       case (query, getter, expectedValue) =>
         var resultSet: Option[ResultSet] = None
         withExecuteQuery(s"SELECT $query") { rs =>
           assert(rs.next())
-          assert(getter(rs) === expectedValue)
+          expectedValue match {
+            case arr: Array[Byte] => assert(getter(rs).asInstanceOf[Array[Byte]].sameElements(arr))
+            case other => assert(getter(rs) === other)
+          }
           assert(!rs.wasNull)
           resultSet = Some(rs)
         }
@@ -406,6 +412,72 @@ class SparkConnectJdbcDataTypeSuite extends ConnectFunSuite with RemoteSparkSess
 
       val date = rs.getDate(1, null)
       assert(date === java.sql.Date.valueOf("2025-11-15"))
+      assert(!rs.wasNull)
+      assert(!rs.next())
+    }
+  }
+
+  test("get binary type") {
+    val testBytes = Array[Byte](0x01, 0x02, 0x03, 0x04, 0x05)
+    val hexString = testBytes.map(b => "%02X".format(b)).mkString
+    withExecuteQuery(s"SELECT CAST(X'$hexString' AS BINARY)") { rs =>
+      assert(rs.next())
+      val bytes = rs.getBytes(1)
+      assert(bytes !== null)
+      assert(bytes.length === testBytes.length)
+      assert(bytes.sameElements(testBytes))
+      assert(!rs.wasNull)
+      assert(!rs.next())
+
+      val metaData = rs.getMetaData
+      assert(metaData.getColumnCount === 1)
+      assert(metaData.getColumnType(1) === Types.BINARY)
+      assert(metaData.getColumnTypeName(1) === "BINARY")
+      assert(metaData.getColumnClassName(1) === "[B")
+      assert(metaData.isSigned(1) === false)
+    }
+  }
+
+  test("get binary type with null") {
+    withExecuteQuery("SELECT cast(null as binary)") { rs =>
+      assert(rs.next())
+      assert(rs.getBytes(1) === null)
+      assert(rs.wasNull)
+      assert(!rs.next())
+
+      val metaData = rs.getMetaData
+      assert(metaData.getColumnCount === 1)
+      assert(metaData.getColumnType(1) === Types.BINARY)
+      assert(metaData.getColumnTypeName(1) === "BINARY")
+      assert(metaData.getColumnClassName(1) === "[B")
+    }
+  }
+
+  test("get binary type by column label") {
+    val testBytes = Array[Byte](0x0A, 0x0B, 0x0C)
+    val hexString = testBytes.map(b => "%02X".format(b)).mkString
+    withExecuteQuery(s"SELECT CAST(X'$hexString' AS BINARY) as test_binary") { rs =>
+      assert(rs.next())
+      val bytes = rs.getBytes("test_binary")
+      assert(bytes !== null)
+      assert(bytes.length === testBytes.length)
+      assert(bytes.sameElements(testBytes))
+      assert(!rs.wasNull)
+      assert(!rs.next())
+
+      val metaData = rs.getMetaData
+      assert(metaData.getColumnCount === 1)
+      assert(metaData.getColumnName(1) === "test_binary")
+      assert(metaData.getColumnLabel(1) === "test_binary")
+    }
+  }
+
+  test("get empty binary") {
+    withExecuteQuery("SELECT CAST(X'' AS BINARY)") { rs =>
+      assert(rs.next())
+      val bytes = rs.getBytes(1)
+      assert(bytes !== null)
+      assert(bytes.length === 0)
       assert(!rs.wasNull)
       assert(!rs.next())
     }
