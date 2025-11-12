@@ -140,8 +140,9 @@ class SparkConnectResultSet(
   override def getBytes(columnIndex: Int): Array[Byte] =
     throw new SQLFeatureNotSupportedException
 
-  override def getDate(columnIndex: Int): Date =
-    throw new SQLFeatureNotSupportedException
+  override def getDate(columnIndex: Int): Date = {
+    getColumnValue(columnIndex, null: Date) { idx => currentRow.getDate(idx) }
+  }
 
   override def getTime(columnIndex: Int): Time =
     throw new SQLFeatureNotSupportedException
@@ -189,7 +190,7 @@ class SparkConnectResultSet(
     throw new SQLFeatureNotSupportedException
 
   override def getDate(columnLabel: String): Date =
-    throw new SQLFeatureNotSupportedException
+    getDate(findColumn(columnLabel))
 
   override def getTime(columnLabel: String): Time =
     throw new SQLFeatureNotSupportedException
@@ -496,11 +497,23 @@ class SparkConnectResultSet(
   override def getArray(columnLabel: String): JdbcArray =
     throw new SQLFeatureNotSupportedException
 
-  override def getDate(columnIndex: Int, cal: Calendar): Date =
-    throw new SQLFeatureNotSupportedException
+  override def getDate(columnIndex: Int, cal: Calendar): Date = {
+    val date = getDate(columnIndex)
+    if (date == null || cal == null) {
+      return date
+    }
+
+    val targetCalendar = cal.clone().asInstanceOf[Calendar]
+    targetCalendar.setTime(date)
+    targetCalendar.set(Calendar.HOUR_OF_DAY, 0)
+    targetCalendar.set(Calendar.MINUTE, 0)
+    targetCalendar.set(Calendar.SECOND, 0)
+    targetCalendar.set(Calendar.MILLISECOND, 0)
+    new Date(targetCalendar.getTimeInMillis)
+  }
 
   override def getDate(columnLabel: String, cal: Calendar): Date =
-    throw new SQLFeatureNotSupportedException
+    getDate(findColumn(columnLabel), cal)
 
   override def getTime(columnIndex: Int, cal: Calendar): Time =
     throw new SQLFeatureNotSupportedException

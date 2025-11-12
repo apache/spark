@@ -301,4 +301,113 @@ class SparkConnectJdbcDataTypeSuite extends ConnectFunSuite with RemoteSparkSess
         assert(exception.getMessage() === "JDBC Statement is closed.")
     }
   }
+
+  test("get date type") {
+    withExecuteQuery("SELECT date '2023-11-15'") { rs =>
+      assert(rs.next())
+      assert(rs.getDate(1) === java.sql.Date.valueOf("2023-11-15"))
+      assert(!rs.wasNull)
+      assert(!rs.next())
+
+      val metaData = rs.getMetaData
+      assert(metaData.getColumnCount === 1)
+      assert(metaData.getColumnName(1) === "DATE '2023-11-15'")
+      assert(metaData.getColumnLabel(1) === "DATE '2023-11-15'")
+      assert(metaData.getColumnType(1) === Types.DATE)
+      assert(metaData.getColumnTypeName(1) === "DATE")
+      assert(metaData.getColumnClassName(1) === "java.sql.Date")
+      assert(metaData.isSigned(1) === false)
+      assert(metaData.getPrecision(1) === 10)
+      assert(metaData.getScale(1) === 0)
+      assert(metaData.getColumnDisplaySize(1) === 10)
+    }
+  }
+
+  test("get date type with null") {
+    withExecuteQuery("SELECT cast(null as date)") { rs =>
+      assert(rs.next())
+      assert(rs.getDate(1) === null)
+      assert(rs.wasNull)
+      assert(!rs.next())
+
+      val metaData = rs.getMetaData
+      assert(metaData.getColumnCount === 1)
+      assert(metaData.getColumnName(1) === "CAST(NULL AS DATE)")
+      assert(metaData.getColumnLabel(1) === "CAST(NULL AS DATE)")
+      assert(metaData.getColumnType(1) === Types.DATE)
+      assert(metaData.getColumnTypeName(1) === "DATE")
+      assert(metaData.getColumnClassName(1) === "java.sql.Date")
+      assert(metaData.isSigned(1) === false)
+      assert(metaData.getPrecision(1) === 10)
+      assert(metaData.getScale(1) === 0)
+      assert(metaData.getColumnDisplaySize(1) === 10)
+    }
+  }
+
+  test("get date type by column label") {
+    withExecuteQuery("SELECT date '2025-11-15' as test_date") { rs =>
+      assert(rs.next())
+      assert(rs.getDate("test_date") === java.sql.Date.valueOf("2025-11-15"))
+      assert(!rs.wasNull)
+      assert(!rs.next())
+    }
+  }
+
+  test("get date type with calendar by column index") {
+    withExecuteQuery("SELECT date '2025-11-15'") { rs =>
+      assert(rs.next())
+
+      val calUTC = java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone("UTC"))
+      val dateUTC = rs.getDate(1, calUTC)
+      assert(dateUTC !== null)
+      assert(!rs.wasNull)
+
+      val calPST = java.util.Calendar.getInstance(
+        java.util.TimeZone.getTimeZone("America/Los_Angeles"))
+      val datePST = rs.getDate(1, calPST)
+      assert(datePST !== null)
+      assert(!rs.wasNull)
+      assert(!rs.next())
+    }
+  }
+
+  test("get date type with calendar by column label") {
+    withExecuteQuery("SELECT date '2025-11-15' as test_date") { rs =>
+      assert(rs.next())
+
+      val cal = java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone("UTC"))
+      val date = rs.getDate("test_date", cal)
+      assert(date !== null)
+      assert(!rs.wasNull)
+      assert(!rs.next())
+
+      val metaData = rs.getMetaData
+      assert(metaData.getColumnCount === 1)
+      assert(metaData.getColumnName(1) === "test_date")
+      assert(metaData.getColumnLabel(1) === "test_date")
+    }
+  }
+
+  test("get date type with calendar for null value") {
+    withExecuteQuery("SELECT cast(null as date)") { rs =>
+      assert(rs.next())
+
+      val cal = java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone("UTC"))
+      val date = rs.getDate(1, cal)
+      assert(date === null)
+      assert(rs.wasNull)
+      assert(!rs.next())
+    }
+  }
+
+  test("get date type with null calendar") {
+    withExecuteQuery("SELECT date '2025-11-15'") { rs =>
+      assert(rs.next())
+
+      val date = rs.getDate(1, null)
+      assert(date === java.sql.Date.valueOf("2025-11-15"))
+      assert(!rs.wasNull)
+      assert(!rs.next())
+    }
+  }
 }
