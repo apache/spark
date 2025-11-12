@@ -222,6 +222,9 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
           }
           TimeType(precision)
         case GEOGRAPHY =>
+          if (!SqlApiConf.get.geospatialEnabled) {
+            throw QueryParsingErrors.dataTypeUnsupportedError(typeCtx.getText, ctx)
+          }
           // Unparameterized geometry type isn't supported and will be caught by the default branch.
           // Here, we only handle the parameterized GEOGRAPHY type syntax, which comes in two forms:
           if (currentCtx.any != null) {
@@ -234,6 +237,9 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
             GeographyType(currentCtx.srid.getText.toInt)
           }
         case GEOMETRY =>
+          if (!SqlApiConf.get.geospatialEnabled) {
+            throw QueryParsingErrors.dataTypeUnsupportedError(typeCtx.getText, ctx)
+          }
           // Unparameterized geometry type isn't supported and will be caught by the default branch.
           // Here, we only handle the parameterized GEOMETRY type syntax, which comes in two forms:
           if (currentCtx.any != null) {

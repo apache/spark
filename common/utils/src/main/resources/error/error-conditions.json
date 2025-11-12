@@ -6445,6 +6445,11 @@
           "Drop the namespace <namespace>."
         ]
       },
+      "GEOSPATIAL_DISABLED" : {
+        "message" : [
+          "Geospatial feature is disabled. Set \"spark.sql.geospatial.enabled=true\" to enable."
+        ]
+      },
       "HIVE_TABLE_TYPE" : {
         "message" : [
           "The <tableName> is hive <tableType>."
