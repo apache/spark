@@ -51,6 +51,7 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
   var executorCores: String = null
   var totalExecutorCores: String = null
   var propertiesFile: String = null
+  var extraPropertiesFiles: Seq[String] = Nil
   private var loadSparkDefaults: Boolean = false
   var driverMemory: String = null
   var driverExtraClassPath: String = null
@@ -134,6 +135,7 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
   private def mergeDefaultSparkProperties(): Unit = {
     // Honor --conf before the specified properties file and defaults file
     loadPropertiesFromFile(propertiesFile)
+    extraPropertiesFiles.foreach(loadPropertiesFromFile)
 
     // Also load properties from `spark-defaults.conf` if they do not exist in the properties file
     // and --conf list when:
@@ -319,6 +321,7 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
     |  executorCores           $executorCores
     |  totalExecutorCores      $totalExecutorCores
     |  propertiesFile          $propertiesFile
+    |  extraPropertiesFiles    [${extraPropertiesFiles.mkString(", ")}]
     |  driverMemory            $driverMemory
     |  driverCores             $driverCores
     |  driverExtraClassPath    $driverExtraClassPath
@@ -341,7 +344,7 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
     |  verbose                 $verbose
     |
     |Spark properties used, including those specified through
-    | --conf and those from the properties file $propertiesFile:
+    | --conf and those from the properties files:
     |${Utils.redact(sparkProperties).sorted.mkString("  ", "\n  ", "\n")}
     """.stripMargin
   }
@@ -396,6 +399,9 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
 
       case PROPERTIES_FILE =>
         propertiesFile = value
+
+      case EXTRA_PROPERTIES_FILE =>
+        extraPropertiesFiles :+= value
 
       case LOAD_SPARK_DEFAULTS =>
         loadSparkDefaults = true
