@@ -136,11 +136,11 @@ if should_test_connect:
         def __init__(self, session_id: str):
             self._session_id = session_id
             self.req = None
-            self.client_user_context_extensions = []  # EDGE
+            self.client_user_context_extensions = []
 
         def ExecutePlan(self, req: proto.ExecutePlanRequest, metadata):
             self.req = req
-            self.client_user_context_extensions = req.user_context.extensions  # EDGE
+            self.client_user_context_extensions = req.user_context.extensions
             resp = proto.ExecutePlanResponse()
             resp.session_id = self._session_id
             resp.operation_id = req.operation_id
@@ -161,14 +161,14 @@ if should_test_connect:
 
         def Interrupt(self, req: proto.InterruptRequest, metadata):
             self.req = req
-            self.client_user_context_extensions = req.user_context.extensions  # EDGE
+            self.client_user_context_extensions = req.user_context.extensions
             resp = proto.InterruptResponse()
             resp.session_id = self._session_id
             return resp
 
         def Config(self, req: proto.ConfigRequest, metadata):
             self.req = req
-            self.client_user_context_extensions = req.user_context.extensions  # EDGE
+            self.client_user_context_extensions = req.user_context.extensions
             resp = proto.ConfigResponse()
             resp.session_id = self._session_id
             if req.operation.HasField("get"):
@@ -233,7 +233,6 @@ class SparkConnectClientTestCase(unittest.TestCase):
 
         self.assertEqual(client._user_id, "abc")
 
-    # BEGIN-EDGE
     def test_user_context_extension(self):
         client = SparkConnectClient("sc://foo/", use_reattachable_execute=False)
         mock = MockService(client._session_id)
@@ -320,8 +319,6 @@ class SparkConnectClientTestCase(unittest.TestCase):
         self.assertFalse(exglobal in mock.client_user_context_extensions)
         self.assertFalse(exlocal2 in mock.client_user_context_extensions)
         self.assertFalse(exglobal2 in mock.client_user_context_extensions)
-
-    # END-EDGE
 
     def test_interrupt_all(self):
         client = SparkConnectClient("sc://foo/;token=bar", use_reattachable_execute=False)

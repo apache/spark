@@ -42,7 +42,7 @@ from typing import (
     ClassVar,
 )
 
-import google.protobuf.any_pb2 as any_pb2  # EDGE
+import google.protobuf.any_pb2 as any_pb2
 import numpy as np
 import pandas as pd
 import pyarrow as pa
@@ -895,7 +895,6 @@ class SparkSession:
 
     clearTags.__doc__ = PySparkSession.clearTags.__doc__
 
-    # BEGIN-EDGE
     def addThreadlocalUserContextExtension(self, extension: any_pb2.Any) -> str:
         """
         Add a user context extension to the current session in the current thread.
@@ -949,8 +948,6 @@ class SparkSession:
         addThreadlocalUserContextExtension
         """
         self.client.clear_user_context_extensions()
-
-    # END-EDGE
 
     def stop(self) -> None:
         """

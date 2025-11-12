@@ -709,8 +709,8 @@ class SparkConnectClient(object):
         # cleanup ml cache if possible
         atexit.register(self._cleanup_ml_cache)
 
-        self.global_user_context_extensions = []  # EDGE
-        self.global_user_context_extensions_lock = threading.Lock()  # EDGE
+        self.global_user_context_extensions = []
+        self.global_user_context_extensions_lock = threading.Lock()
 
     @property
     def _stub(self) -> grpc_lib.SparkConnectServiceStub:
@@ -1243,7 +1243,6 @@ class SparkConnectClient(object):
         """
         return self._builder.token
 
-    # BEGIN-EDGE
     def _update_request_with_user_context_extensions(
         self,
         req: Union[
@@ -1261,8 +1260,6 @@ class SparkConnectClient(object):
             return
         for _, extension in self.thread_local.user_context_extensions:
             req.user_context.extensions.append(extension)
-
-    # END-EDGE
 
     def _execute_plan_request_with_metadata(
         self, operation_id: Optional[str] = None
@@ -1294,9 +1291,7 @@ class SparkConnectClient(object):
                     messageParameters={"arg_name": "operation_id", "origin": str(ve)},
                 )
             req.operation_id = operation_id
-        # BEGIN-EDGE
         self._update_request_with_user_context_extensions(req)
-        # END-EDGE
         return req
 
     def _analyze_plan_request_with_metadata(self) -> pb2.AnalyzePlanRequest:
@@ -1307,9 +1302,7 @@ class SparkConnectClient(object):
         req.client_type = self._builder.userAgent
         if self._user_id:
             req.user_context.user_id = self._user_id
-        # BEGIN-EDGE
         self._update_request_with_user_context_extensions(req)
-        # END-EDGE
         return req
 
     def _analyze(self, method: str, **kwargs: Any) -> AnalyzeResult:
@@ -1724,9 +1717,7 @@ class SparkConnectClient(object):
         req.client_type = self._builder.userAgent
         if self._user_id:
             req.user_context.user_id = self._user_id
-        # BEGIN-EDGE
         self._update_request_with_user_context_extensions(req)
-        # END-EDGE
         return req
 
     def get_configs(self, *keys: str) -> Tuple[Optional[str], ...]:
@@ -1902,7 +1893,6 @@ class SparkConnectClient(object):
                 messageParameters={"arg_name": "Spark Connect tag", "arg_value": tag},
             )
 
-    # BEGIN-EDGE
     def add_threadlocal_user_context_extension(self, extension: any_pb2.Any) -> str:
         if not hasattr(self.thread_local, "user_context_extensions"):
             self.thread_local.user_context_extensions = list()
@@ -1934,8 +1924,6 @@ class SparkConnectClient(object):
             self.thread_local.user_context_extensions = list()
         with self.global_user_context_extensions_lock:
             self.global_user_context_extensions = list()
-
-    # END-EDGE
 
     def _handle_error(self, error: Exception) -> NoReturn:
         """
@@ -1977,9 +1965,7 @@ class SparkConnectClient(object):
             req.client_observed_server_side_session_id = self._server_session_id
         if self._user_id:
             req.user_context.user_id = self._user_id
-        # BEGIN-EDGE
         self._update_request_with_user_context_extensions(req)
-        # END-EDGE
         try:
             return self._stub.FetchErrorDetails(req, metadata=self._builder.metadata())
         except grpc.RpcError:
