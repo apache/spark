@@ -226,7 +226,7 @@ case class TupleSketchAgg(
     val key = struct.get(0, this.keyType)
     val summaryValue = struct.get(1, this.valueType)
 
-    if (key == null) return updateBuffer
+    if (key == null || summaryValue == null) return updateBuffer
 
     // Initialized buffer should be UpdatableTupleSketchBuffer, else error out.
     val sketch = updateBuffer match {
@@ -501,11 +501,6 @@ case class TupleUnionAgg(
     // Return early for null values
     if (sketchBytes == null) return unionBuffer
 
-    child.dataType match {
-      case BinaryType => // Continue processing with a BinaryType.
-      case _ => throw QueryExecutionErrors.tupleInvalidInputSketchBuffer(prettyName)
-    }
-
     val bytes = sketchBytes.asInstanceOf[Array[Byte]]
     val inputSketch = ThetaSketchUtils.heapifyTupleSketch(bytes, summaryTypeInput, prettyName)
 
@@ -702,11 +697,6 @@ case class TupleIntersectionAgg(
 
     // Return early for null values
     if (sketchBytes == null) return intersectionBuffer
-
-    child.dataType match {
-      case BinaryType => // Continue processing with a BinaryType.
-      case _ => throw QueryExecutionErrors.tupleInvalidInputSketchBuffer(prettyName)
-    }
 
     val bytes = sketchBytes.asInstanceOf[Array[Byte]]
     val inputSketch = ThetaSketchUtils.heapifyTupleSketch(bytes, summaryTypeInput, prettyName)
