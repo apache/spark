@@ -68,7 +68,7 @@ abstract class DisableUnnecessaryBucketedScanSuite
     val bucketedScan = collect(plan) { case s: FileSourceScanExec if s.bucketedScan => s }
     assert(bucketedScan.length == expectedNumBucketedScan)
   }
-  
+
   private def checkDisableBucketedScan(
       query: String,
       expectedNumScanWithAutoScanEnabled: Int,
