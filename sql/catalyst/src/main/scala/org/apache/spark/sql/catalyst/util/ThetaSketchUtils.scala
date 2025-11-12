@@ -244,7 +244,7 @@ object ThetaSketchUtils {
    * Sketch[_ <: Summary] with the concrete type determined by the deserializer. The cast is safe
    * as type consistency is maintained through summaryTypeInput.
    *
-   * @param buffer
+   * @param bytes
    *   The binary sketch data to deserialize
    * @param summaryTypeInput
    *   The summary type string
@@ -254,13 +254,20 @@ object ThetaSketchUtils {
    *   A TupleSketchState containing the deserialized sketch
    */
   def heapifyTupleSketch(
-      buffer: Array[Byte],
+      bytes: Array[Byte],
       summaryTypeInput: String,
       prettyName: String): Sketch[Summary] = {
-    val mem = Memory.wrap(buffer)
+    val memory =
+      try {
+        Memory.wrap(bytes)
+      } catch {
+        case _: NullPointerException | _: MemoryBoundsException =>
+          throw QueryExecutionErrors.thetaInvalidInputSketchBuffer(prettyName)
+      }
+
     val sketch =
       try {
-        Sketches.heapifySketch(mem, getSummaryDeserializer(summaryTypeInput))
+        Sketches.heapifySketch(memory, getSummaryDeserializer(summaryTypeInput))
       } catch {
         case e: Exception =>
           throw QueryExecutionErrors.tupleInvalidInputSketchBuffer(prettyName, e.getMessage)
