@@ -179,6 +179,9 @@ case class TupleSketchAgg(
   /**
    * Extract and cache the key and summary value types from the input struct. Field 0 is the key
    * type, Field 1 is the summary value type.
+   *
+   * Note: The asInstanceOf[StructType] cast is safe because inputTypes enforces that the first
+   * parameter must be StructType. This is validated during query analysis before execution.
    */
   private lazy val structType = child.dataType.asInstanceOf[StructType]
   private lazy val keyType = structType.fields(0).dataType
@@ -222,6 +225,7 @@ case class TupleSketchAgg(
     val structValue = child.eval(input)
     if (structValue == null) return updateBuffer
 
+    // Safe: child.eval() returns InternalRow when child.dataType is StructType
     val struct = structValue.asInstanceOf[InternalRow]
     val key = struct.get(0, this.keyType)
     val summaryValue = struct.get(1, this.valueType)
@@ -294,6 +298,12 @@ case class TupleSketchAgg(
       UnionTupleAggregationBuffer(union)
     }
 
+    // Note: The asInstanceOf[Sketch[Summary]] casts below are safe because:
+    // 1. All sketches in a single aggregate are created with the same summaryTypeInput
+    // 2. This ensures type consistency (all DoubleSummary, all IntegerSummary, or all
+    //    ArrayOfStringsSummary)
+    // 3. We use type erasure to handle all summary types in one method rather than
+    //    duplicating code for each concrete summary type
     (updateBuffer, input) match {
       case (UnionTupleAggregationBuffer(union), UpdatableTupleSketchBuffer(sketch)) =>
         union.union(sketch.compact.asInstanceOf[Sketch[Summary]])

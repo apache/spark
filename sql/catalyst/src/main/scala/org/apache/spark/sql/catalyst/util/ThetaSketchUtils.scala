@@ -148,6 +148,12 @@ object ThetaSketchUtils {
    * UpdatableSketch instances that need to construct new summary objects. For numeric types
    * (double/integer), the factory is configured with the aggregation mode.
    *
+   * Note: The return type uses UpdatableSummary[Any] with asInstanceOf cast because we need to
+   * handle multiple concrete summary types (DoubleSummary, IntegerSummary, ArrayOfStringsSummary)
+   * in a single method. The actual concrete type is determined by summaryTypeInput and remains
+   * consistent within a single aggregate operation. This approach avoids code duplication for
+   * each summary type.
+   *
    * @param summaryTypeInput
    *   The summary type string
    * @param modeInput
@@ -173,6 +179,10 @@ object ThetaSketchUtils {
    * Creates the appropriate SummarySetOperations based on summary type and mode. Used for Union
    * and Intersection operations that need to merge summary values from multiple sketches
    * according to the specified aggregation mode.
+   *
+   * Note: The return type uses Summary with asInstanceOf cast because we need to handle multiple
+   * concrete summary types in a single method. The cast is safe as long as all operations within
+   * a single aggregate use the same summaryTypeInput.
    *
    * @param summaryTypeInput
    *   The summary type string
@@ -201,6 +211,10 @@ object ThetaSketchUtils {
    * Creates the appropriate SummaryDeserializer based on summary type. Used for deserializing
    * binary sketch representations back into CompactSketch objects.
    *
+   * Note: The return type uses Summary with asInstanceOf cast to handle multiple concrete
+   * deserializer types in a single method. Type consistency is guaranteed by the caller passing
+   * the same summaryTypeInput used during serialization.
+   *
    * @param summaryTypeInput
    *   The summary type string
    * @return
@@ -223,6 +237,10 @@ object ThetaSketchUtils {
    * Deserializes a binary sketch representation into a CompactSketch wrapped in
    * FinalizedTupleSketch state. If the buffer is empty, creates a new aggregation buffer. Uses
    * the appropriate deserializer based on the configured summary type.
+   *
+   * Note: The return type Sketch[Summary] uses asInstanceOf because heapifySketch returns
+   * Sketch[_ <: Summary] with the concrete type determined by the deserializer. The cast is safe
+   * as type consistency is maintained through summaryTypeInput.
    *
    * @param buffer
    *   The binary sketch data to deserialize
