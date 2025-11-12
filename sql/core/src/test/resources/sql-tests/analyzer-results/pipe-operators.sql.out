@@ -4793,22 +4793,9 @@ SetCommand (spark.sql.pipeOperator.allowAggregateInSelect,Some(false))
 table other
 |> select sum(a) as result
 -- !query analysis
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "PIPE_OPERATOR_CONTAINS_AGGREGATE_FUNCTION",
-  "sqlState" : "0A000",
-  "messageParameters" : {
-    "clause" : "SELECT",
-    "expr" : "sum(a#x)"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 23,
-    "stopIndex" : 28,
-    "fragment" : "sum(a)"
-  } ]
-}
+Aggregate [sum(a#x) AS result#xL]
++- SubqueryAlias spark_catalog.default.other
+   +- Relation spark_catalog.default.other[a#x,b#x] json
 
 
 -- !query

@@ -4306,24 +4306,9 @@ spark.sql.pipeOperator.allowAggregateInSelect	false
 table other
 |> select sum(a) as result
 -- !query schema
-struct<>
+struct<result:bigint>
 -- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "PIPE_OPERATOR_CONTAINS_AGGREGATE_FUNCTION",
-  "sqlState" : "0A000",
-  "messageParameters" : {
-    "clause" : "SELECT",
-    "expr" : "sum(a#x)"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 23,
-    "stopIndex" : 28,
-    "fragment" : "sum(a)"
-  } ]
-}
+4
 
 
 -- !query
