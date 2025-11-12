@@ -3831,15 +3831,6 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
-  val PIPE_OPERATOR_ALLOW_AGGREGATE_IN_SELECT =
-    buildConf("spark.sql.pipeOperator.allowAggregateInSelect")
-    .doc("When true, aggregate functions can be used in |> SELECT and other pipe operator " +
-      "clauses without requiring the |> AGGREGATE keyword. When false, aggregate functions " +
-      "must be used exclusively with the |> AGGREGATE clause for proper aggregation semantics.")
-    .version("4.1.0")
-    .booleanConf
-    .createWithDefault(true)
-
   val TVF_ALLOW_MULTIPLE_TABLE_ARGUMENTS_ENABLED =
     buildConf("spark.sql.tvf.allowMultipleTableArguments.enabled")
       .doc("When true, allows multiple table arguments for table-valued functions, " +
@@ -6200,6 +6191,15 @@ object SQLConf {
       .version("4.0.0")
       .booleanConf
       .createWithDefault(true)
+
+  val PIPE_OPERATOR_ALLOW_AGGREGATE_IN_SELECT =
+    buildConf("spark.sql.allowAggregateInSelectWithPipeOperator")
+    .doc("When true, aggregate functions can be used in |> SELECT and other pipe operator " +
+      "clauses without requiring the |> AGGREGATE keyword. When false, aggregate functions " +
+      "must be used exclusively with the |> AGGREGATE clause for proper aggregation semantics.")
+    .version("4.2.0")
+    .booleanConf
+    .createWithDefault(true)
 
   val LEGACY_PERCENTILE_DISC_CALCULATION = buildConf("spark.sql.legacy.percentileDiscCalculation")
     .internal()
