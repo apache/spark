@@ -51,5 +51,5 @@ public class GetArrayItem extends ExpressionWithToString {
   public boolean failOnError() { return this.failOnError; }
 
   @Override
-  public Expression[] children() { return new Expression[]{ childArray() }; }
+  public Expression[] children() { return new Expression[]{ childArray,  ordinal }; }
 }
