@@ -147,9 +147,6 @@ class ChannelBuilder:
             for key, value in channelOptions:
                 self.setChannelOption(key, value)
 
-        self.global_user_context_extensions = []  # EDGE
-        self.global_user_context_extensions_lock = threading.Lock()  # EDGE
-
     def get(self, key: str) -> Any:
         """
         Parameters
@@ -711,6 +708,9 @@ class SparkConnectClient(object):
 
         # cleanup ml cache if possible
         atexit.register(self._cleanup_ml_cache)
+
+        self.global_user_context_extensions = []  # EDGE
+        self.global_user_context_extensions_lock = threading.Lock()  # EDGE
 
     @property
     def _stub(self) -> grpc_lib.SparkConnectServiceStub:
