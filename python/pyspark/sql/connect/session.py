@@ -933,12 +933,12 @@ class SparkSession:
 
     def removeUserContextExtension(self, extension_id: str) -> None:
         """
-        Remove a user context extension previously added by addUserContextExtension.
+        Remove a user context extension previously added by addThreadlocalUserContextExtension.
 
         Parameters
         ----------
         extension_id: str
-            id returned by addUserContextExtension.
+            id returned by addThreadlocalUserContextExtension.
         """
         self.client.remove_user_context_extension(extension_id)
 
