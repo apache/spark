@@ -85,7 +85,7 @@ case class FinalizedTupleSketch[S <: Summary](sketch: Sketch[S]) extends TupleSk
   examples = """
     Examples:
       > SELECT tuple_sketch_estimate(_FUNC_(struct(col, 1.0D), 12, 'double', 'sum')) FROM VALUES (1), (1), (2), (2), (3) tab(col);
-       3
+       3.0
   """,
   group = "agg_funcs",
   since = "4.2.0")
@@ -388,7 +388,7 @@ case class TupleSketchAgg(
   examples = """
     Examples:
       > SELECT tuple_sketch_estimate(_FUNC_(sketch)) FROM (SELECT tuple_sketch_agg(struct(col, 1.0D)) as sketch FROM VALUES (1), (2), (3) tab(col) UNION ALL SELECT tuple_sketch_agg(struct(col, 1.0D)) as sketch FROM VALUES (2), (3), (4) tab(col));
-       4
+       4.0
   """,
   group = "agg_funcs",
   since = "4.2.0")
@@ -603,7 +603,7 @@ case class TupleUnionAgg(
   examples = """
     Examples:
       > SELECT tuple_sketch_estimate(_FUNC_(sketch)) FROM (SELECT tuple_sketch_agg(struct(col, 1.0D)) as sketch FROM VALUES (1), (2), (3) tab(col) UNION ALL SELECT tuple_sketch_agg(struct(col, 1.0D)) as sketch FROM VALUES (2), (3), (4) tab(col));
-       2
+       2.0
   """,
   group = "agg_funcs",
   since = "4.2.0")
