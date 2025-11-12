@@ -324,13 +324,22 @@ class PandasConversionMixin:
 
         assert isinstance(self, DataFrame)
 
-        jconf = self.sparkSession._jconf
-
         from pyspark.sql.pandas.types import to_arrow_schema
         from pyspark.sql.pandas.utils import require_minimum_pyarrow_version
 
         require_minimum_pyarrow_version()
-        prefers_large_var_types = jconf.arrowUseLargeVarTypes()
+
+        (
+            arrowUseLargeVarTypes,
+            arrowPySparkSelfDestructEnabled,
+        ) = self.sparkSession._jconf.getConfs(
+            [
+                "spark.sql.execution.arrow.useLargeVarTypes",
+                "spark.sql.execution.arrow.pyspark.selfDestruct.enabled",
+            ]
+        )
+
+        prefers_large_var_types = arrowUseLargeVarTypes == "true"
         schema = to_arrow_schema(
             self.schema,
             error_on_duplicated_field_names_in_struct=True,
@@ -339,7 +348,7 @@ class PandasConversionMixin:
 
         import pyarrow as pa
 
-        self_destruct = jconf.arrowPySparkSelfDestructEnabled()
+        self_destruct = arrowPySparkSelfDestructEnabled == "true"
         batches = self._collect_as_arrow(
             split_batches=self_destruct, empty_list_if_zero_records=False
         )
