@@ -84,7 +84,7 @@ case class FinalizedTupleSketch[S <: Summary](sketch: Sketch[S]) extends TupleSk
       `mode` (optional) is the aggregation mode for numeric summaries (sum, min, max, alwaysone). Default is sum. """,
   examples = """
     Examples:
-      > SELECT tuple_sketch_estimate(_FUNC_(struct(col, 1.0), 12, 'double', 'sum')) FROM VALUES (1), (1), (2), (2), (3) tab(col);
+      > SELECT tuple_sketch_estimate(_FUNC_(struct(col, 1.0D), 12, 'double', 'sum')) FROM VALUES (1), (1), (2), (2), (3) tab(col);
        3
   """,
   group = "agg_funcs",
@@ -225,6 +225,8 @@ case class TupleSketchAgg(
     val struct = structValue.asInstanceOf[InternalRow]
     val key = struct.get(0, this.keyType)
     val summaryValue = struct.get(1, this.valueType)
+
+    if (key == null) return updateBuffer
 
     // Initialized buffer should be UpdatableTupleSketchBuffer, else error out.
     val sketch = updateBuffer match {
@@ -375,15 +377,7 @@ case class TupleSketchAgg(
       `mode` (optional) is the aggregation mode for numeric summaries during union (sum, min, max, alwaysone). Default is sum. """,
   examples = """
     Examples:
-      > SELECT tuple_sketch_estimate(
-          _FUNC_(sketch, 12, 'double', 'sum')
-        ) FROM (
-          SELECT tuple_sketch_agg(struct(col, 1.0), 12, 'double', 'sum') as sketch
-          FROM VALUES (1), (2), (3) tab(col)
-          UNION ALL
-          SELECT tuple_sketch_agg(struct(col, 1.0), 12, 'double', 'sum') as sketch
-          FROM VALUES (2), (3), (4) tab(col)
-        );
+      > SELECT tuple_sketch_estimate(_FUNC_(sketch)) FROM (SELECT tuple_sketch_agg(struct(col, 1.0D)) as sketch FROM VALUES (1), (2), (3) tab(col) UNION ALL SELECT tuple_sketch_agg(struct(col, 1.0D)) as sketch FROM VALUES (2), (3), (4) tab(col));
        4
   """,
   group = "agg_funcs",
@@ -603,15 +597,7 @@ case class TupleUnionAgg(
       `mode` (optional) is the aggregation mode for numeric summaries during intersection (sum, min, max, alwaysone). Default is sum. """,
   examples = """
     Examples:
-      > SELECT tuple_sketch_estimate(
-          _FUNC_(sketch, 'double', 'sum')
-        ) FROM (
-          SELECT tuple_sketch_agg(struct(col, 1.0), 12, 'double', 'sum') as sketch
-          FROM VALUES (1), (2), (3) tab(col)
-          UNION ALL
-          SELECT tuple_sketch_agg(struct(col, 1.0), 12, 'double', 'sum') as sketch
-          FROM VALUES (2), (3), (4) tab(col)
-        );
+      > SELECT tuple_sketch_estimate(_FUNC_(sketch)) FROM (SELECT tuple_sketch_agg(struct(col, 1.0D)) as sketch FROM VALUES (1), (2), (3) tab(col) UNION ALL SELECT tuple_sketch_agg(struct(col, 1.0D)) as sketch FROM VALUES (2), (3), (4) tab(col));
        2
   """,
   group = "agg_funcs",

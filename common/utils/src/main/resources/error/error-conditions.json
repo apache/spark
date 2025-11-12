@@ -5860,21 +5860,15 @@
     ],
     "sqlState" : "22546"
   },
-  "TUPLE_INVALID_SUMMARY_TYPE_OPERATION" : {
-    "message" : [
-      "Invalid call to <function>: summary type '<summaryType>' is not supported for this operation."
-    ],
-    "sqlState" : "22546"
-  },
   "TUPLE_INVALID_SKETCH_SUMMARY_VALUE_TYPE" : {
     "message" : [
       "Invalid call to <function>: summary value type '<actualType>' is incompatible with configured summary type '<summaryType>'."
     ],
     "sqlState" : "22546"
   },
-  "TUPLE_SKETCH_PARAMETER_MUST_BE_CONSTANT" : {
+  "TUPLE_INVALID_SUMMARY_TYPE_OPERATION" : {
     "message" : [
-      "Invalid call to <functionName>: parameter '<parameter>' must be a constant value."
+      "Invalid call to <function>: summary type '<summaryType>' is not supported for this operation."
     ],
     "sqlState" : "22546"
   },
@@ -5889,6 +5883,12 @@
       "Due to Scala's limited support of tuple, tuples with more than 22 elements are not supported."
     ],
     "sqlState" : "54011"
+  },
+  "TUPLE_SKETCH_PARAMETER_MUST_BE_CONSTANT" : {
+    "message" : [
+      "Invalid call to <functionName>: parameter '<parameter>' must be a constant value."
+    ],
+    "sqlState" : "22546"
   },
   "UDTF_ALIAS_NUMBER_MISMATCH" : {
     "message" : [

@@ -271,8 +271,10 @@ object ThetaSketchUtils {
     (summaryTypeInput, summaryValue) match {
       case (SUMMARY_TYPE_DOUBLE, d: Double) => d
       case (SUMMARY_TYPE_DOUBLE, f: Float) => f.toDouble
-      case (SUMMARY_TYPE_INTEGER, i: Int) => i
-      case (SUMMARY_TYPE_STRING, s: UTF8String) => s
+      case (SUMMARY_TYPE_INTEGER, i: Integer) => i
+      case (SUMMARY_TYPE_STRING, arr: ArrayData) =>
+        (0 until arr.numElements()).map(i => arr.getUTF8String(i).toString).toArray
+      case (SUMMARY_TYPE_STRING, s: UTF8String) => Array(s.toString)
       case _ =>
         val actualType = summaryValue.getClass.getSimpleName
         throw QueryExecutionErrors.tupleInvalidSummaryValueType(

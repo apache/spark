@@ -36,7 +36,7 @@ import org.apache.spark.unsafe.types.UTF8String
     parameter can be 'double', 'integer', or 'string' (defaults to 'double'). """,
   examples = """
     Examples:
-      > SELECT _FUNC_(tuple_sketch_agg(struct(col, value))) FROM VALUES (1, 1.0), (1, 2.0), (2, 3.0) tab(col, value);
+      > SELECT _FUNC_(tuple_sketch_agg(struct(col, value))) FROM VALUES (1, 1.0D), (1, 2.0D), (2, 3.0D) tab(col, value);
        2
   """,
   group = "misc_funcs",
@@ -84,10 +84,8 @@ case class TupleSketchEstimate(left: Expression, right: Expression)
     (defaults to 'sum'). """,
   examples = """
     Examples:
-      > SELECT _FUNC_(tuple_sketch_agg(struct(col, value))) FROM VALUES (1, 1.0), (1, 2.0), (2, 3.0) tab(col, value);
+      > SELECT _FUNC_(tuple_sketch_agg(struct(col, value))) FROM VALUES (1, 1.0D), (1, 2.0D), (2, 3.0D) tab(col, value);
        6.0
-      > SELECT _FUNC_(tuple_sketch_agg(struct(col, value))) FROM VALUES (1, 1.0), (1, 2.0), (2, 3.0) tab(col, value);
-       3.0
   """,
   group = "misc_funcs",
   since = "4.2.0")
@@ -210,7 +208,7 @@ case class TupleSketchSummary(first: Expression, second: Expression, third: Expr
     (defaults to 'double'), and mode to 'sum', 'min', 'max', or 'alwaysone' (defaults to 'sum'). """,
   examples = """
     Examples:
-      > SELECT tuple_sketch_estimate(_FUNC_(tuple_sketch_agg(struct(col1, val1)), tuple_sketch_agg(struct(col2, val2)))) FROM VALUES (1, 1.0, 4, 4.0), (2, 2.0, 5, 5.0), (3, 3.0, 6, 6.0) tab(col1, val1, col2, val2);
+      > SELECT tuple_sketch_estimate(_FUNC_(tuple_sketch_agg(struct(col1, val1)), tuple_sketch_agg(struct(col2, val2)))) FROM VALUES (1, 1.0D, 4, 4.D), (2, 2.0D, 5, 5.0D), (3, 3.0D, 6, 6.0D) tab(col1, val1, col2, val2);
        6
   """,
   group = "misc_funcs",
@@ -282,7 +280,7 @@ case class TupleUnion(
     'max', or 'alwaysone' (defaults to 'sum'). """,
   examples = """
     Examples:
-      > SELECT tuple_sketch_estimate(_FUNC_(tuple_sketch_agg(struct(col1, val1)), theta_sketch_agg(col2))) FROM VALUES (1, 1.0, 4), (2, 2.0, 5), (3, 3.0, 6) tab(col1, val1, col2);
+      > SELECT tuple_sketch_estimate(_FUNC_(tuple_sketch_agg(struct(col1, val1)), theta_sketch_agg(col2))) FROM VALUES (1, 1.0D, 4), (2, 2.0D, 5), (3, 3.0D, 6) tab(col1, val1, col2);
        6
   """,
   group = "misc_funcs",
@@ -448,7 +446,7 @@ abstract class TupleUnionBase
     'max', or 'alwaysone' (defaults to 'sum'). """,
   examples = """
     Examples:
-      > SELECT tuple_sketch_estimate(_FUNC_(tuple_sketch_agg(struct(col1, val1)), tuple_sketch_agg(struct(col2, val2)))) FROM VALUES (1, 1.0, 1, 4.0), (2, 2.0, 2, 5.0), (3, 3.0, 4, 6.0) tab(col1, val1, col2, val2);
+      > SELECT tuple_sketch_estimate(_FUNC_(tuple_sketch_agg(struct(col1, val1)), tuple_sketch_agg(struct(col2, val2)))) FROM VALUES (1, 1.0D, 1, 4.0D), (2, 2.0D, 2, 5.0D), (3, 3.0D, 4, 6.0D) tab(col1, val1, col2, val2);
        2
   """,
   group = "misc_funcs",
@@ -506,7 +504,7 @@ case class TupleIntersection(
     'double'), and mode can be 'sum', 'min', 'max', or 'alwaysone' (defaults to 'sum'). """,
   examples = """
     Examples:
-      > SELECT tuple_sketch_estimate(_FUNC_(tuple_sketch_agg(struct(col1, val1)), theta_sketch_agg(col2))) FROM VALUES (1, 1.0, 1), (2, 2.0, 2), (3, 3.0, 4) tab(col1, val1, col2);
+      > SELECT tuple_sketch_estimate(_FUNC_(tuple_sketch_agg(struct(col1, val1)), theta_sketch_agg(col2))) FROM VALUES (1, 1.0D, 1), (2, 2.0D, 2), (3, 3.0D, 4) tab(col1, val1, col2);
        2
   """,
   group = "misc_funcs",
@@ -638,7 +636,7 @@ abstract class TupleIntersectionBase
     can be 'double', 'integer', or 'string' (defaults to 'double'). """,
   examples = """
     Examples:
-      > SELECT tuple_sketch_estimate(_FUNC_(tuple_sketch_agg(struct(col1, val1)), tuple_sketch_agg(struct(col2, val2)))) FROM VALUES (5, 5.0, 4, 4.0), (1, 1.0, 4, 4.0), (2, 2.0, 5, 5.0), (3, 3.0, 1, 1.0) tab(col1, val1, col2, val2);
+      > SELECT tuple_sketch_estimate(_FUNC_(tuple_sketch_agg(struct(col1, val1)), tuple_sketch_agg(struct(col2, val2)))) FROM VALUES (5, 5.0D, 4, 4.0D), (1, 1.0D, 4, 4.0D), (2, 2.0D, 5, 5.0D), (3, 3.0D, 1, 1.0D) tab(col1, val1, col2, val2);
        2
   """,
   group = "misc_funcs",
@@ -681,7 +679,7 @@ case class TupleDifference(first: Expression, second: Expression, third: Express
     'integer', or 'string' (defaults to 'double'). """,
   examples = """
     Examples:
-      > SELECT tuple_sketch_estimate(_FUNC_(tuple_sketch_agg(struct(col1, val1)), theta_sketch_agg(col2))) FROM VALUES (5, 5.0, 4), (1, 1.0, 4), (2, 2.0, 5), (3, 3.0, 1) tab(col1, val1, col2);
+      > SELECT tuple_sketch_estimate(_FUNC_(tuple_sketch_agg(struct(col1, val1)), theta_sketch_agg(col2))) FROM VALUES (5, 5.0D, 4), (1, 1.0D, 4), (2, 2.0D, 5), (3, 3.0D, 1) tab(col1, val1, col2);
        2
   """,
   group = "misc_funcs",
