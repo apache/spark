@@ -54,7 +54,9 @@ on:
         description: The upload token of codecov.
         required: false
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  # github.head_ref only exists for pull requests. This ensures that we
+  # only cancel workflows for pull requests, not commits on master
+  group: build-test-${{ github.workflow }}-${{ github.head_ref || github.run_id }}
   cancel-in-progress: true
 jobs:
   precondition:
