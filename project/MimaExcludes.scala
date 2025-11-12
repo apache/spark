@@ -52,7 +52,10 @@ object MimaExcludes {
     ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.Dataset.repartitionById"),
 
     // [SPARK-54001][CONNECT] Replace block copying with ref-counting in ArtifactManager cloning
-    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.artifact.ArtifactManager.cachedBlockIdList")
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.artifact.ArtifactManager.cachedBlockIdList"),
+
+    // [SPARK-54323][PYTHON] Change the way to access logs to TVF instead of system view
+    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.TableValuedFunction.python_worker_logs")
   )
 
   // Default exclude rules

@@ -33,7 +33,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.st._
 import org.apache.spark.sql.catalyst.expressions.variant._
 import org.apache.spark.sql.catalyst.expressions.xml._
-import org.apache.spark.sql.catalyst.plans.logical.{FunctionBuilderBase, Generate, LogicalPlan, OneRowRelation, Range}
+import org.apache.spark.sql.catalyst.plans.logical.{FunctionBuilderBase, Generate, LogicalPlan, OneRowRelation, PythonWorkerLogs, Range}
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
@@ -1233,7 +1233,8 @@ object TableFunctionRegistry {
     generator[Collations]("collations"),
     generator[SQLKeywords]("sql_keywords"),
     generatorBuilder("variant_explode", VariantExplodeGeneratorBuilder),
-    generatorBuilder("variant_explode_outer", VariantExplodeOuterGeneratorBuilder)
+    generatorBuilder("variant_explode_outer", VariantExplodeOuterGeneratorBuilder),
+    PythonWorkerLogs.functionBuilder
   )
 
   val builtin: SimpleTableFunctionRegistry = {

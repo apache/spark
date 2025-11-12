@@ -4419,4 +4419,15 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       origin = origin
     )
   }
+
+  def pythonWorkerLoggingNotEnabledError(): Throwable = {
+    new AnalysisException(
+      errorClass = "FEATURE_NOT_ENABLED",
+      messageParameters = Map(
+        "featureName" -> "Python Worker Logging",
+        "configKey" -> "spark.sql.pyspark.worker.logging.enabled",
+        "configValue" -> "true"
+      )
+    )
+  }
 }
