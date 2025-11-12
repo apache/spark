@@ -6192,7 +6192,7 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
-  val PIPE_OPERATOR_ALLOW_AGGREGATE_IN_SELECT =
+  val OPERATOR_PIPE_ALLOW_AGGREGATE_IN_SELECT =
     buildConf("spark.sql.allowAggregateInSelectWithPipeOperator")
     .doc("When true, aggregate functions can be used in |> SELECT and other pipe operator " +
       "clauses without requiring the |> AGGREGATE keyword. When false, aggregate functions " +
@@ -7594,7 +7594,7 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
     getConf(SQLConf.LEGACY_EXPONENT_LITERAL_AS_DECIMAL_ENABLED)
 
   def pipeOperatorAllowAggregateInSelect: Boolean =
-    getConf(SQLConf.PIPE_OPERATOR_ALLOW_AGGREGATE_IN_SELECT)
+    getConf(SQLConf.OPERATOR_PIPE_ALLOW_AGGREGATE_IN_SELECT)
 
   def allowNegativeScaleOfDecimalEnabled: Boolean =
     getConf(SQLConf.LEGACY_ALLOW_NEGATIVE_SCALE_OF_DECIMAL_ENABLED)
