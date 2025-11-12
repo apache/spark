@@ -18,7 +18,7 @@
 package org.apache.spark.util
 
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
-import java.lang.invoke.{MethodHandleInfo, MethodHandles, SerializedLambda}
+import java.lang.invoke.{MethodHandleInfo, MethodHandles, MethodType, SerializedLambda}
 import java.lang.reflect.{Field, Modifier}
 import java.nio.file.{Files, Paths}
 
@@ -61,6 +61,8 @@ private[spark] object ClosureCleaner extends Logging {
   private def isClosure(cls: Class[_]): Boolean = {
     cls.getName.contains("$anonfun$")
   }
+
+  private val methodLookup = MethodHandles.lookup()
 
   // Get a list of the outer objects and their classes of a given closure object, obj;
   // the outer objects are defined as any closures that obj is nested within, plus
@@ -253,7 +255,7 @@ private[spark] object ClosureCleaner extends Logging {
             return None
           } else {
             return Some(
-              convertIndyLambdaForJava22(func, cleanedOuterThis.get, lambdaProxy).getOrElse(func))
+              convertIndyLambda(func, cleanedOuterThis.get, lambdaProxy).getOrElse(func))
           }
         }
         cleanedFunc = cleanupAmmoniteReplClosure(func, lambdaProxy, outerThis, cleanTransitively)
@@ -431,7 +433,7 @@ private[spark] object ClosureCleaner extends Logging {
       logDebug(s" + cloning instance of REPL class ${capturingClass.getName}")
       val clonedOuterThis = cloneAndSetFields(
         parent = null, outerThis, capturingClass, accessedFields)
-      convertIndyLambdaForJava22(func, clonedOuterThis, lambdaProxy).getOrElse {
+      convertIndyLambda(func, clonedOuterThis, lambdaProxy).getOrElse {
         val outerField = func.getClass.getDeclaredField("arg$1")
         // SPARK-37072: When Java 17 is used and `outerField` is read-only,
         // the content of `outerField` cannot be set by reflect api directly.
@@ -563,7 +565,7 @@ private[spark] object ClosureCleaner extends Logging {
       cmdClones(outerThis.getClass)
     }
 
-    convertIndyLambdaForJava22(func, outerThisClone, lambdaProxy).getOrElse {
+    convertIndyLambda(func, outerThisClone, lambdaProxy).getOrElse {
       val outerField = func.getClass.getDeclaredField("arg$1")
       // update lambda capturing class reference
       setFieldAndIgnoreModifiers(func, outerField, outerThisClone)
@@ -613,12 +615,15 @@ private[spark] object ClosureCleaner extends Logging {
     obj
   }
 
-  def convertIndyLambdaForJava22[F <: AnyRef](
+  def convertIndyLambda[F <: AnyRef](
       indyLambda: F,
       outerThis: AnyRef,
       lambdaProxy: SerializedLambda): Option[F] = {
-    if (Runtime.version().feature() >= 22) {
-      val convertedLambdaClass = doConvertIndyLambda(indyLambda.getClass, lambdaProxy)
+    val javaVersion = Runtime.version().feature()
+    val convertLambda =
+      Option(System.getProperty("spark.closure.cleaner.convertLambda")).getOrElse("true").toBoolean
+    if ((javaVersion >= 18 && convertLambda) || javaVersion >= 22) {
+      val convertedLambdaClass = buildConvertedLambdaClass(indyLambda.getClass, lambdaProxy)
       val argTypesBuffer = new ArrayBuffer[Class[_]]()
       val argsBuffer = new ArrayBuffer[Object]()
       var i = 0
@@ -639,7 +644,7 @@ private[spark] object ClosureCleaner extends Logging {
     }
   }
 
-  private def doConvertIndyLambda(
+  private def buildConvertedLambdaClass(
       originalFuncClass: Class[_],
       lambdaProxy: SerializedLambda): Class[_] = {
     // Signature, args and return type of the impl method
@@ -742,8 +747,7 @@ private[spark] object ClosureCleaner extends Logging {
     val classWriter = new ClassWriter(ClassWriter.COMPUTE_FRAMES | ClassWriter.COMPUTE_MAXS)
     convertedClassNode.accept(classWriter)
     val bytes = classWriter.toByteArray
-    val lookup = MethodHandles.lookup()
-    val privateLookup = MethodHandles.privateLookupIn(originalFuncClass, lookup)
+    val privateLookup = MethodHandles.privateLookupIn(originalFuncClass, methodLookup)
     val clazz = privateLookup.defineClass(bytes)
     val classLoader = originalFuncClass.getClassLoader
     val classLoaderClass = classLoader.getClass
@@ -758,8 +762,8 @@ private[spark] object ClosureCleaner extends Logging {
     // For Ammonite, add the class to the SpecialClassLoader allowing to pass the class to the
     // connect server
     if (classLoaderClass.getName == "ammonite.runtime.SpecialClassLoader") {
-      val addClassMethod =
-        classLoaderClass.getMethod("addClassFile", classOf[String], classOf[Array[Byte]])
+      val methodType = MethodType.methodType(classOf[Unit], classOf[String], classOf[Array[Byte]])
+      val addClassMethod = methodLookup.findVirtual(classLoaderClass, "addClassFile", methodType)
       addClassMethod.invoke(classLoader, clazz.getName, bytes)
     }
     clazz
