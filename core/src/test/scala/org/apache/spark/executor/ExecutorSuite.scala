@@ -17,7 +17,7 @@
 
 package org.apache.spark.executor
 
-import java.io.{Externalizable, ObjectInput, ObjectOutput}
+import java.io.{Externalizable, ObjectInput, ObjectOutput, PrintWriter, StringWriter}
 import java.lang.Thread.UncaughtExceptionHandler
 import java.net.URL
 import java.nio.ByteBuffer
@@ -36,9 +36,10 @@ import org.mockito.ArgumentMatchers.{any, eq => meq}
 import org.mockito.Mockito.{inOrder, verify, when}
 import org.mockito.invocation.InvocationOnMock
 import org.mockito.stubbing.Answer
-import org.scalatest.Assertions._
 import org.scalatest.PrivateMethodTester
 import org.scalatest.concurrent.Eventually
+import org.scalatest.matchers.{Matcher, MatchResult}
+import org.scalatest.matchers.should.Matchers._
 import org.scalatestplus.mockito.MockitoSugar
 
 import org.apache.spark._
@@ -503,25 +504,33 @@ class ExecutorSuite extends SparkFunSuite
         e: => Throwable,
         depthToCheck: Int,
         isFatal: Boolean): Unit = {
-      import Executor.isFatalError
+
+      class BeFatalError(isFatal: Boolean) extends Matcher[Throwable] {
+        override def apply(t: Throwable): MatchResult = {
+          val stringWriter = new StringWriter()
+          t.printStackTrace(new PrintWriter(stringWriter))
+          val isFatalError = Executor.isFatalError(t, depthToCheck)
+          MatchResult(
+            isFatalError == isFatal,
+            s"Executor.isFatalError($t) is $isFatalError != $isFatal: " + stringWriter.toString,
+            s"Executor.isFatalError($t) is $isFatalError == $isFatal: " + stringWriter.toString
+          )
+        }
+      }
+
+      def beFatalError(isFatal: Boolean) = new BeFatalError(isFatal)
+
       // `e`'s depth is 1 so `depthToCheck` needs to be at least 3 to detect fatal errors.
-      assert(isFatalError(e, depthToCheck) == (depthToCheck >= 1 && isFatal))
+      e should beFatalError(depthToCheck >= 1 && isFatal)
       // `e`'s depth is 2 so `depthToCheck` needs to be at least 3 to detect fatal errors.
-      assert(isFatalError(errorInThreadPool(e), depthToCheck) == (depthToCheck >= 2 && isFatal))
-      assert(isFatalError(errorInGuavaCache(e), depthToCheck) == (depthToCheck >= 2 && isFatal))
-      assert(isFatalError(
-        new SparkException("foo", e),
-        depthToCheck) == (depthToCheck >= 2 && isFatal))
+      errorInThreadPool(e) should beFatalError(depthToCheck >= 2 && isFatal)
+      errorInGuavaCache(e) should beFatalError(depthToCheck >= 2 && isFatal)
+      new SparkException("foo", e) should beFatalError(depthToCheck >= 2 && isFatal)
       // `e`'s depth is 3 so `depthToCheck` needs to be at least 3 to detect fatal errors.
-      assert(isFatalError(
-        errorInThreadPool(errorInGuavaCache(e)),
-        depthToCheck) == (depthToCheck >= 3 && isFatal))
-      assert(isFatalError(
-        errorInGuavaCache(errorInThreadPool(e)),
-        depthToCheck) == (depthToCheck >= 3 && isFatal))
-      assert(isFatalError(
-        new SparkException("foo", new SparkException("foo", e)),
-        depthToCheck) == (depthToCheck >= 3 && isFatal))
+      errorInThreadPool(errorInGuavaCache(e)) should beFatalError(depthToCheck >= 3 && isFatal)
+      errorInGuavaCache(errorInThreadPool(e)) should beFatalError(depthToCheck >= 3 && isFatal)
+      new SparkException("foo", new SparkException("foo", e)) should
+        beFatalError(depthToCheck >= 3 && isFatal)
     }
 
     for (depthToCheck <- 0 to 5) {
