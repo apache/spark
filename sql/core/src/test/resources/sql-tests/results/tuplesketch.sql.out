@@ -1376,7 +1376,7 @@ org.apache.spark.SparkRuntimeException
   "errorClass" : "TUPLE_SKETCH_PARAMETER_MUST_BE_CONSTANT",
   "sqlState" : "22546",
   "messageParameters" : {
-    "functionName" : "`tuple_sketch_agg`",
+    "function" : "`tuple_sketch_agg`",
     "parameter" : "lgNomEntries"
   }
 }
@@ -1420,7 +1420,7 @@ org.apache.spark.SparkRuntimeException
   "errorClass" : "TUPLE_SKETCH_PARAMETER_MUST_BE_CONSTANT",
   "sqlState" : "22546",
   "messageParameters" : {
-    "functionName" : "`tuple_sketch_agg`",
+    "function" : "`tuple_sketch_agg`",
     "parameter" : "summaryType"
   }
 }
@@ -1455,7 +1455,7 @@ org.apache.spark.SparkRuntimeException
   "errorClass" : "TUPLE_SKETCH_PARAMETER_MUST_BE_CONSTANT",
   "sqlState" : "22546",
   "messageParameters" : {
-    "functionName" : "`tuple_sketch_agg`",
+    "function" : "`tuple_sketch_agg`",
     "parameter" : "mode"
   }
 }

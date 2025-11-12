@@ -3276,7 +3276,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
   def tupleSketchParameterMustBeConstant(function: String, parameter: String): Throwable = {
     new SparkRuntimeException(
       errorClass = "TUPLE_SKETCH_PARAMETER_MUST_BE_CONSTANT",
-      messageParameters = Map("functionName" -> toSQLId(function), "parameter" -> parameter))
+      messageParameters = Map("function" -> toSQLId(function), "parameter" -> parameter))
   }
 
   def tupleInvalidSummaryValueType(

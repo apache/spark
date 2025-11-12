@@ -5995,7 +5995,7 @@
   },
   "TUPLE_SKETCH_PARAMETER_MUST_BE_CONSTANT" : {
     "message" : [
-      "Invalid call to <functionName>: parameter '<parameter>' must be a constant value."
+      "Invalid call to <function>: parameter '<parameter>' must be a constant value."
     ],
     "sqlState" : "22546"
   },
