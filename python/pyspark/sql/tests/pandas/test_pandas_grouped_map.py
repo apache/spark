@@ -1000,20 +1000,20 @@ class ApplyInPandasTestsMixin:
                 df,
             )
 
-        logs = self.spark.table("system.session.python_worker_logs")
+            logs = self.spark.tvf.python_worker_logs()
 
-        assertDataFrameEqual(
-            logs.select("level", "msg", "context", "logger"),
-            [
-                Row(
-                    level="WARNING",
-                    msg=f"pandas grouped map: {dict(id=lst, value=[v*10 for v in lst])}",
-                    context={"func_name": func_with_logging.__name__},
-                    logger="test_pandas_grouped_map",
-                )
-                for lst in [[0, 2, 4, 6, 8], [1, 3, 5, 7]]
-            ],
-        )
+            assertDataFrameEqual(
+                logs.select("level", "msg", "context", "logger"),
+                [
+                    Row(
+                        level="WARNING",
+                        msg=f"pandas grouped map: {dict(id=lst, value=[v*10 for v in lst])}",
+                        context={"func_name": func_with_logging.__name__},
+                        logger="test_pandas_grouped_map",
+                    )
+                    for lst in [[0, 2, 4, 6, 8], [1, 3, 5, 7]]
+                ],
+            )
 
     def test_apply_in_pandas_iterator_basic(self):
         df = self.spark.createDataFrame(
