@@ -41,10 +41,8 @@ class BlockManagerMaster(
 
   val timeout = RpcUtils.askRpcTimeout(conf)
 
-  val waitBlockRemovalTimeout =
-    RpcTimeout(
-      conf,
-      Seq(CLEANER_REFERENCE_TRACKING_BLOCKING_TIMEOUT.key, NETWORK_TIMEOUT.key), "120s")
+  private val waitBlockRemovalTimeout =
+    RpcTimeout(conf, CLEANER_REFERENCE_TRACKING_BLOCKING_TIMEOUT.key, NETWORK_TIMEOUT.key)
 
   /** Remove a dead executor from the driver endpoint. This is only called on the driver side. */
   def removeExecutor(execId: String): Unit = {
