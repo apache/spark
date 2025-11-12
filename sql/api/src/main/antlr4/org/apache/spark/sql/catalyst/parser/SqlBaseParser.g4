@@ -99,7 +99,7 @@ sqlStateValue
     ;
 
 declareConditionStatement
-    : DECLARE multipartIdentifier CONDITION (FOR SQLSTATE VALUE? sqlStateValue)?
+    : DECLARE strictIdentifier CONDITION (FOR SQLSTATE VALUE? sqlStateValue)?
     ;
 
 conditionValue
@@ -132,11 +132,11 @@ repeatStatement
     ;
 
 leaveStatement
-    : LEAVE multipartIdentifier
+    : LEAVE strictIdentifier
     ;
 
 iterateStatement
-    : ITERATE multipartIdentifier
+    : ITERATE strictIdentifier
     ;
 
 caseStatement
@@ -151,7 +151,7 @@ loopStatement
     ;
 
 forStatement
-    : beginLabel? FOR (multipartIdentifier AS)? query DO compoundBody END FOR endLabel?
+    : beginLabel? FOR (strictIdentifier AS)? query DO compoundBody END FOR endLabel?
     ;
 
 singleStatement
@@ -159,11 +159,11 @@ singleStatement
     ;
 
 beginLabel
-    : multipartIdentifier COLON
+    : strictIdentifier COLON
     ;
 
 endLabel
-    : multipartIdentifier
+    : strictIdentifier
     ;
 
 singleExpression

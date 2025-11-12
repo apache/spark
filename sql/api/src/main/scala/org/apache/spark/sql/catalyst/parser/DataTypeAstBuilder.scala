@@ -207,8 +207,10 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with DataTypeE
    * For example, in AstBuilder, this would parse "`catalog`.`schema`.`table`" into Seq("catalog",
    * "schema", "table").
    *
-   * The base implementation fails with an assertion to catch cases where multi-part identifiers
-   * are used without a proper parser implementation.
+   * This method is only called when parsing IDENTIFIER('literal') where the literal contains a
+   * qualified identifier (e.g., IDENTIFIER('schema.table')). Since DataTypeAstBuilder only parses
+   * data types (not full SQL with qualified table names), this should never be called in
+   * practice. The base implementation throws an error to catch unexpected usage.
    *
    * @param identifier
    *   The identifier string to parse, potentially containing dots and backticks.

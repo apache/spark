@@ -264,12 +264,6 @@ class AstBuilder extends DataTypeAstBuilder
   private def visitDeclareConditionStatementImpl(
       ctx: DeclareConditionStatementContext): ErrorCondition = {
 
-    // Qualified user defined condition name is not allowed.
-    if (ctx.multipartIdentifier().parts.size() > 1) {
-      throw SqlScriptingErrors
-        .conditionCannotBeQualified(CurrentOrigin.get, ctx.multipartIdentifier().getText)
-    }
-
     // If SQLSTATE is not provided, default to 45000.
     val sqlState = Option(ctx.sqlStateValue())
       .map(sqlStateValueContext => string(visitStringLit(sqlStateValueContext.stringLit())))
@@ -278,7 +272,7 @@ class AstBuilder extends DataTypeAstBuilder
     assertSqlState(sqlState)
 
     // Get condition name.
-    val conditionName = visitMultipartIdentifier(ctx.multipartIdentifier()).head
+    val conditionName = getIdentifierText(ctx.strictIdentifier())
 
     assertConditionName(conditionName)
 
@@ -570,15 +564,15 @@ class AstBuilder extends DataTypeAstBuilder
     val query = withOrigin(queryCtx) {
       SingleStatement(visitQuery(queryCtx))
     }
-    parsingCtx.labelContext.enterForScope(Option(ctx.multipartIdentifier()))
-    val varName = Option(ctx.multipartIdentifier()).map(ParserUtils.getMultipartIdentifierText)
+    parsingCtx.labelContext.enterForScope(Option(ctx.strictIdentifier()))
+    val varName = Option(ctx.strictIdentifier()).map(getIdentifierText)
     val body = visitCompoundBodyImpl(
       ctx.compoundBody(),
       None,
       parsingCtx,
       isScope = false
     )
-    parsingCtx.labelContext.exitForScope(Option(ctx.multipartIdentifier()))
+    parsingCtx.labelContext.exitForScope(Option(ctx.strictIdentifier()))
     parsingCtx.labelContext.exitLabeledScope(Option(ctx.beginLabel()))
 
     ForStatement(query, varName, body, Some(labelText))
@@ -589,26 +583,26 @@ class AstBuilder extends DataTypeAstBuilder
     ctx match {
       case c: BeginEndCompoundBlockContext
         if Option(c.beginLabel()).exists { b =>
-          b.multipartIdentifier().getText.toLowerCase(Locale.ROOT).equals(label)
+          getIdentifierText(b.strictIdentifier()).toLowerCase(Locale.ROOT).equals(label)
         } => if (isIterate) {
           throw SqlScriptingErrors.invalidIterateLabelUsageForCompound(CurrentOrigin.get, label)
         }
         true
       case c: WhileStatementContext
         if Option(c.beginLabel()).exists { b =>
-          b.multipartIdentifier().getText.toLowerCase(Locale.ROOT).equals(label)
+          getIdentifierText(b.strictIdentifier()).toLowerCase(Locale.ROOT).equals(label)
         } => true
       case c: RepeatStatementContext
         if Option(c.beginLabel()).exists { b =>
-          b.multipartIdentifier().getText.toLowerCase(Locale.ROOT).equals(label)
+          getIdentifierText(b.strictIdentifier()).toLowerCase(Locale.ROOT).equals(label)
         } => true
       case c: LoopStatementContext
         if Option(c.beginLabel()).exists { b =>
-          b.multipartIdentifier().getText.toLowerCase(Locale.ROOT).equals(label)
+          getIdentifierText(b.strictIdentifier()).toLowerCase(Locale.ROOT).equals(label)
         } => true
       case c: ForStatementContext
         if Option(c.beginLabel()).exists { b =>
-          b.multipartIdentifier().getText.toLowerCase(Locale.ROOT).equals(label)
+          getIdentifierText(b.strictIdentifier()).toLowerCase(Locale.ROOT).equals(label)
         } => true
       case _ => false
     }
@@ -616,7 +610,7 @@ class AstBuilder extends DataTypeAstBuilder
 
   override def visitLeaveStatement(ctx: LeaveStatementContext): LeaveStatement =
     withOrigin(ctx) {
-      val labelText = ctx.multipartIdentifier().getText.toLowerCase(Locale.ROOT)
+      val labelText = getIdentifierText(ctx.strictIdentifier()).toLowerCase(Locale.ROOT)
       var parentCtx = ctx.parent
 
       while (Option(parentCtx).isDefined) {
@@ -632,7 +626,7 @@ class AstBuilder extends DataTypeAstBuilder
 
   override def visitIterateStatement(ctx: IterateStatementContext): IterateStatement =
     withOrigin(ctx) {
-      val labelText = ctx.multipartIdentifier().getText.toLowerCase(Locale.ROOT)
+      val labelText = getIdentifierText(ctx.strictIdentifier()).toLowerCase(Locale.ROOT)
       var parentCtx = ctx.parent
 
       while (Option(parentCtx).isDefined) {
