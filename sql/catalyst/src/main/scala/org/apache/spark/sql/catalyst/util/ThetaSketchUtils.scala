@@ -77,7 +77,7 @@ object ThetaSketchUtils {
   }
 
   /**
-   * Validates the summary type parameters. Throws a Spark SQL exception if the
+   * Validates the summary type parameter. Throws a Spark SQL exception if the
    * summary is invalid.
    *
    * @param summaryType
@@ -95,7 +95,7 @@ object ThetaSketchUtils {
   }
 
   /**
-   * Validates the aggregation mode parameter. Throws a Spark SQL exception if the
+   * Validates the mode parameter. Throws a Spark SQL exception if the
    * mode is invalid.
    *
    * @param mode
