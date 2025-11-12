@@ -1934,6 +1934,8 @@ class SparkConnectClient(object):
         with self.global_user_context_extensions_lock:
             self.global_user_context_extensions = list()
 
+    # END-EDGE
+
     def _handle_error(self, error: Exception) -> NoReturn:
         """
         Handle errors that occur during RPC calls.
