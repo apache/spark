@@ -977,7 +977,7 @@ private[execution] final class LongToUnsafeRowMap(
   }
 
   private class UnsafeLongArray(val length: Int) {
-    val memoryBlock = allocatePage(length * 8)
+    val memoryBlock: MemoryBlock = allocatePage(length * 8)
 
     for (i <- 0 until length) {
       update(i, 0)
