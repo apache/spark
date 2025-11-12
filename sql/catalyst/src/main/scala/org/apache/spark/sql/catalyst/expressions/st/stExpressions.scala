@@ -19,7 +19,6 @@ package org.apache.spark.sql.catalyst.expressions.st
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.expressions.objects._
@@ -32,26 +31,14 @@ import org.apache.spark.sql.types._
  * ST expressions are behind a feature flag while the geospatial module is under development.
  */
 
-private[sql] trait GeospatialAnalysisGuard extends Expression {
-  override def checkInputDataTypes(): TypeCheckResult = {
-    if (!SQLConf.get.geospatialEnabled) {
-      TypeCheckResult.TypeCheckFailure(
-        "Geospatial feature is disabled. Set \"spark.sql.geospatial.enabled=true\" to enable."
-      )
-    } else {
-      super.checkInputDataTypes()
-    }
-  }
-}
-
-private[sql] case class GeospatialEvalGuard(child: Expression)
+private[sql] case class GeospatialGuard(child: Expression)
     extends UnaryExpression
     with CodegenFallback {
 
   override def nullable: Boolean = child.nullable
   override def dataType: DataType = child.dataType
   override def prettyName: String = child.prettyName
-  override protected def withNewChildInternal(newChild: Expression): GeospatialEvalGuard =
+  override protected def withNewChildInternal(newChild: Expression): GeospatialGuard =
     copy(child = newChild)
 
   override def eval(input: InternalRow): Any = {
@@ -103,14 +90,13 @@ private[sql] object ExpressionDefaults {
 case class ST_AsBinary(geo: Expression)
     extends RuntimeReplaceable
     with ImplicitCastInputTypes
-    with UnaryLike[Expression]
-    with GeospatialAnalysisGuard {
+    with UnaryLike[Expression] {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(
     TypeCollection(GeographyType, GeometryType)
   )
 
-  override lazy val replacement: Expression = GeospatialEvalGuard(StaticInvoke(
+  override lazy val replacement: Expression = GeospatialGuard(StaticInvoke(
     classOf[STUtils],
     BinaryType,
     "stAsBinary",
@@ -152,12 +138,11 @@ case class ST_AsBinary(geo: Expression)
 case class ST_GeogFromWKB(wkb: Expression)
     extends RuntimeReplaceable
     with ImplicitCastInputTypes
-    with UnaryLike[Expression]
-    with GeospatialAnalysisGuard {
+    with UnaryLike[Expression] {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(BinaryType)
 
-  override lazy val replacement: Expression = GeospatialEvalGuard(StaticInvoke(
+  override lazy val replacement: Expression = GeospatialGuard(StaticInvoke(
     classOf[STUtils],
     GeographyType(ExpressionDefaults.DEFAULT_GEOGRAPHY_SRID),
     "stGeogFromWKB",
@@ -197,12 +182,11 @@ case class ST_GeogFromWKB(wkb: Expression)
 case class ST_GeomFromWKB(wkb: Expression)
     extends RuntimeReplaceable
     with ImplicitCastInputTypes
-    with UnaryLike[Expression]
-    with GeospatialAnalysisGuard {
+    with UnaryLike[Expression] {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(BinaryType)
 
-  override lazy val replacement: Expression = GeospatialEvalGuard(StaticInvoke(
+  override lazy val replacement: Expression = GeospatialGuard(StaticInvoke(
     classOf[STUtils],
     GeometryType(ExpressionDefaults.DEFAULT_GEOMETRY_SRID),
     "stGeomFromWKB",
@@ -246,14 +230,13 @@ case class ST_GeomFromWKB(wkb: Expression)
 case class ST_Srid(geo: Expression)
     extends RuntimeReplaceable
     with ImplicitCastInputTypes
-    with UnaryLike[Expression]
-    with GeospatialAnalysisGuard {
+    with UnaryLike[Expression] {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(
     TypeCollection(GeographyType, GeometryType)
   )
 
-  override lazy val replacement: Expression = GeospatialEvalGuard(StaticInvoke(
+  override lazy val replacement: Expression = GeospatialGuard(StaticInvoke(
     classOf[STUtils],
     IntegerType,
     "stSrid",
@@ -295,8 +278,7 @@ case class ST_Srid(geo: Expression)
 case class ST_SetSrid(geo: Expression, srid: Expression)
     extends RuntimeReplaceable
     with ImplicitCastInputTypes
-    with BinaryLike[Expression]
-    with GeospatialAnalysisGuard {
+    with BinaryLike[Expression] {
 
   override def inputTypes: Seq[AbstractDataType] =
     Seq(
@@ -304,7 +286,7 @@ case class ST_SetSrid(geo: Expression, srid: Expression)
       IntegerType
     )
 
-  override lazy val replacement: Expression = GeospatialEvalGuard(StaticInvoke(
+  override lazy val replacement: Expression = GeospatialGuard(StaticInvoke(
     classOf[STUtils],
     STExpressionUtils.geospatialTypeWithSrid(geo.dataType, srid),
     "stSetSrid",
