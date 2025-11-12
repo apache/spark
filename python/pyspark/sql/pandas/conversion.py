@@ -18,6 +18,7 @@ import sys
 from typing import (
     Any,
     Callable,
+    Iterator,
     List,
     Optional,
     Union,
@@ -216,9 +217,9 @@ class PandasConversionMixin:
             # Extract columns from rows and apply converters
             if len(rows) > 0:
                 # Use iterator to avoid materializing intermediate data structure
-                columns_data = zip(*rows)
+                columns_data: Iterator[Any] = iter(zip(*rows))
             else:
-                columns_data = ([] for _ in self.schema.fields)
+                columns_data = iter([] for _ in self.schema.fields)
 
             # Build DataFrame from columns
             pdf = pd.concat(
