@@ -63,6 +63,8 @@ object ThetaSketchUtils {
    *
    * @param lgNomLongs
    *   Log2 of nominal entries
+   * @param prettyName
+   *   The display name of the function/expression for error messages
    */
   def checkLgNomLongs(lgNomLongs: Int, prettyName: String): Unit = {
     if (lgNomLongs < MIN_LG_NOM_LONGS || lgNomLongs > MAX_LG_NOM_LONGS) {
@@ -75,8 +77,8 @@ object ThetaSketchUtils {
   }
 
   /**
-   * Validates and normalizes the summary type parameter. Converts the input to lowercase and
-   * trims whitespace, then validates it's one of the supported types.
+   * Validates the summary type parameters. Throws a Spark SQL exception if the
+   * summary is invalid.
    *
    * @param summaryType
    *   The summary type string to validate
@@ -93,8 +95,8 @@ object ThetaSketchUtils {
   }
 
   /**
-   * Validates and normalizes the aggregation mode parameter. Converts the input to lowercase and
-   * trims whitespace, then validates it's one of the supported modes.
+   * Validates the aggregation mode parameter. Throws a Spark SQL exception if the
+   * mode is invalid.
    *
    * @param mode
    *   The mode string to validate
@@ -234,8 +236,8 @@ object ThetaSketchUtils {
   }
 
   /**
-   * Deserializes a binary sketch representation into a CompactSketch wrapped in
-   * FinalizedTupleSketch state. If the buffer is empty, creates a new aggregation buffer. Uses
+   * Deserializes a binary tuple sketch representation into a CompactSketch.
+   * If the buffer is empty, creates a new aggregation buffer. Uses
    * the appropriate deserializer based on the configured summary type.
    *
    * Note: The return type Sketch[Summary] uses asInstanceOf because heapifySketch returns
@@ -279,8 +281,6 @@ object ThetaSketchUtils {
    *   The display name of the function/expression for error messages
    * @return
    *   The converted summary value as the appropriate type (Double, Int, or UTF8String)
-   * @throws QueryExecutionErrors
-   *   if the summary value type doesn't match or cannot be converted to the expected type
    */
   def convertSummaryValue(
       summaryTypeInput: String,
