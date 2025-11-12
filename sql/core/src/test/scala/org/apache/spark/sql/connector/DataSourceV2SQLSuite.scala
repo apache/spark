@@ -1322,8 +1322,8 @@ class DataSourceV2SQLSuiteV1Filter
   test("ShowViews: using v2 catalog, command not supported.") {
     checkError(
       exception = analysisException("SHOW VIEWS FROM testcat"),
-      condition = "_LEGACY_ERROR_TEMP_1184",
-      parameters = Map("plugin" -> "testcat", "ability" -> "views"))
+      condition = "MISSING_CATALOG_ABILITY.VIEWS",
+      parameters = Map("plugin" -> "testcat"))
   }
 
   test("create/replace/alter table - reserved properties") {
@@ -2517,8 +2517,8 @@ class DataSourceV2SQLSuiteV1Filter
     val v = "testcat.ns1.ns2.v"
     checkError(
       exception = analysisException(s"CREATE VIEW $v AS SELECT 1"),
-      condition = "_LEGACY_ERROR_TEMP_1184",
-      parameters = Map("plugin" -> "testcat", "ability" -> "views"))
+      condition = "MISSING_CATALOG_ABILITY.VIEWS",
+      parameters = Map("plugin" -> "testcat"))
   }
 
   test("global temp view should not be masked by v2 catalog") {
