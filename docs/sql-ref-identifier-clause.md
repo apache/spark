@@ -25,15 +25,22 @@ Converts a constant `STRING` expression into a SQL object name.
 The purpose of this clause is to allow for templating of identifiers in SQL statements without opening up the risk of SQL injection attacks.
 Typically, this clause is used with a parameter marker or a variable as argument.
 
+In its common form with a string literal argument, the clause  can be used anywhere a SQL identifier is expected.
+
+When used with a more complex string expression, such as a `||` operator combining literals and variables, the clause can be used to construct dynamic SQL object names.
 ### Syntax
 
 ```sql
+IDENTIFIER ( strLiteral )
+
 IDENTIFIER ( strExpr )
 ```
 
 ### Parameters
 
-- **strExpr**: A constant `STRING` expression. Typically, the expression includes a parameter marker.
+- **strLiteral**: A constant `STRING` literal which may be include string coalescing of strings and string parameter markers.
+
+- **strExpr**: A constant `STRING` expression. Typically, the expression includes a parameter marker or session variable.
 
 ### Returns
 
@@ -43,6 +50,7 @@ A (qualified) identifier which can be used as a:
 - namespace name
 - function name
 - qualified column or attribute reference
+- other SQL object names
 
 ### Examples
 
