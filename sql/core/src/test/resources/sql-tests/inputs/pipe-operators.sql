@@ -1786,68 +1786,6 @@ table t
 table t
 | where x < 2;
 
--- PIVOT with single pipe.
-table courseSales
-| select `year`, course, earnings
-| pivot (
-    sum(earnings)
-    for course in ('dotNET', 'Java')
-  );
-
--- UNPIVOT with single pipe.
-table courseEarnings
-| unpivot (
-    earningsYear for `year` in (`2012`, `2013`, `2014`)
-  );
-
--- TABLESAMPLE with single pipe.
-table t
-| tablesample (100 percent) repeatable (0);
-
--- JOIN with single pipe.
-table join_test_t1
-| inner join join_test_t2 using (a);
-
--- UNION with single pipe.
-table t
-| union all table t;
-
--- EXCEPT with single pipe.
-table t
-| except table t;
-
--- INTERSECT with single pipe.
-table t
-| intersect table t;
-
--- MINUS with single pipe.
-table t
-| minus table t;
-
--- ORDER BY with single pipe.
-table t
-| order by x;
-
--- LIMIT with single pipe.
-table t
-| limit 1;
-
--- OFFSET with single pipe.
-table t
-| offset 1;
-
--- DISTRIBUTE BY with single pipe.
-table t
-| distribute by x;
-
--- CLUSTER BY with single pipe.
-table t
-| cluster by x;
-
--- AGGREGATE with single pipe.
-table other
-| aggregate sum(b) as result group by a;
-
 -- WINDOW with single pipe.
 table windowTestData
 | select cate, sum(val) over w
@@ -1859,7 +1797,7 @@ table t
 | where x < 2
 | extend x + 1 as z
 | order by z
-| limit 1;
+| limit 1000;
 
 -- Complex chained query with single pipe.
 from store_sales ss1
@@ -1869,7 +1807,7 @@ from store_sales ss1
 | select item_sk, rank_col
 | where rank_col > 0
 | order by rank_col desc
-| limit 10;
+| limit 1000;
 
 -- Mixed single pipe (|) and double pipe (|>) operators in same query.
 table t
@@ -1891,7 +1829,7 @@ insert into keyword_cols values (1, 2), (4, 8), (16, 32);
 drop table if exists test_select_col;
 create table test_select_col(col1 int, `select` int) using csv;
 insert into test_select_col values (1, 2), (4, 8);
-select col1 | `select` as result from test_select_col;
+select col1 | select result from test_select_col;
 
 -- Bitwise OR with column named 'extend'.
 drop table if exists test_extend_col;

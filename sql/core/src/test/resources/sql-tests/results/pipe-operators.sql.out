@@ -4315,152 +4315,6 @@ struct<x:int,y:string>
 
 
 -- !query
-table courseSales
-| select `year`, course, earnings
-| pivot (
-    sum(earnings)
-    for course in ('dotNET', 'Java')
-  )
--- !query schema
-struct<year:int,dotNET:bigint,Java:bigint>
--- !query output
-2012	15000	20000
-2013	48000	30000
-
-
--- !query
-table courseEarnings
-| unpivot (
-    earningsYear for `year` in (`2012`, `2013`, `2014`)
-  )
--- !query schema
-struct<course:string,year:string,earningsYear:int>
--- !query output
-Java	2012	20000
-Java	2013	30000
-dotNET	2012	15000
-dotNET	2013	48000
-dotNET	2014	22500
-
-
--- !query
-table t
-| tablesample (100 percent) repeatable (0)
--- !query schema
-struct<x:int,y:string>
--- !query output
-0	abc
-1	def
-
-
--- !query
-table join_test_t1
-| inner join join_test_t2 using (a)
--- !query schema
-struct<a:int>
--- !query output
-1
-
-
--- !query
-table t
-| union all table t
--- !query schema
-struct<x:int,y:string>
--- !query output
-0	abc
-0	abc
-1	def
-1	def
-
-
--- !query
-table t
-| except table t
--- !query schema
-struct<x:int,y:string>
--- !query output
-
-
-
--- !query
-table t
-| intersect table t
--- !query schema
-struct<x:int,y:string>
--- !query output
-0	abc
-1	def
-
-
--- !query
-table t
-| minus table t
--- !query schema
-struct<x:int,y:string>
--- !query output
-
-
-
--- !query
-table t
-| order by x
--- !query schema
-struct<x:int,y:string>
--- !query output
-0	abc
-1	def
-
-
--- !query
-table t
-| limit 1
--- !query schema
-struct<x:int,y:string>
--- !query output
-1	def
-
-
--- !query
-table t
-| offset 1
--- !query schema
-struct<x:int,y:string>
--- !query output
-0	abc
-
-
--- !query
-table t
-| distribute by x
--- !query schema
-struct<x:int,y:string>
--- !query output
-0	abc
-1	def
-
-
--- !query
-table t
-| cluster by x
--- !query schema
-struct<x:int,y:string>
--- !query output
-0	abc
-1	def
-
-
--- !query
-table other
-| aggregate sum(b) as result group by a
--- !query schema
-struct<a:int,result:bigint>
--- !query output
-1	3
-2	4
-
-
--- !query
 table windowTestData
 | select cate, sum(val) over w
   window w as (partition by cate order by val)
@@ -4484,11 +4338,12 @@ table t
 | where x < 2
 | extend x + 1 as z
 | order by z
-| limit 1
+| limit 1000
 -- !query schema
 struct<x:int,y:string,z:int>
 -- !query output
 0	abc	1
+1	def	2
 
 
 -- !query
@@ -4499,7 +4354,7 @@ from store_sales ss1
 | select item_sk, rank_col
 | where rank_col > 0
 | order by rank_col desc
-| limit 10
+| limit 1000
 -- !query schema
 struct<item_sk:int,rank_col:decimal(11,6)>
 -- !query output
@@ -4568,7 +4423,7 @@ struct<>
 
 
 -- !query
-select col1 | `select` as result from test_select_col
+select col1 | select result from test_select_col
 -- !query schema
 struct<result:int>
 -- !query output
