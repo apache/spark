@@ -558,8 +558,7 @@ class SparkToParquetSchemaConverter(
       SQLConf.ParquetOutputTimestampType.INT96,
     useFieldId: Boolean = SQLConf.PARQUET_FIELD_ID_WRITE_ENABLED.defaultValue.get,
     annotateVariantLogicalType: Boolean =
-      SQLConf.PARQUET_ANNOTATE_VARIANT_LOGICAL_TYPE.defaultValue.get,
-    variantSpecVersion: Byte = SQLConf.PARQUET_WRITE_VARIANT_SPEC_VERSION.defaultValue.get.toByte) {
+      SQLConf.PARQUET_ANNOTATE_VARIANT_LOGICAL_TYPE.defaultValue.get) {
 
   def this(conf: SQLConf) = this(
     writeLegacyParquetFormat = conf.writeLegacyParquetFormat,
@@ -827,7 +826,7 @@ class SparkToParquetSchemaConverter(
 
       case VariantType =>
         (if (annotateVariantLogicalType) {
-          Types.buildGroup(repetition).as(LogicalTypeAnnotation.variantType(variantSpecVersion))
+          Types.buildGroup(repetition).as(LogicalTypeAnnotation.variantType(1))
         } else {
           Types.buildGroup(repetition)
         })
@@ -838,7 +837,7 @@ class SparkToParquetSchemaConverter(
       case s: StructType if SparkShreddingUtils.isVariantShreddingStruct(s) =>
         // Variant struct takes a Variant and writes to Parquet as a shredded schema.
         val group = if (annotateVariantLogicalType) {
-          Types.buildGroup(repetition).as(LogicalTypeAnnotation.variantType(variantSpecVersion))
+          Types.buildGroup(repetition).as(LogicalTypeAnnotation.variantType(1))
         } else {
           Types.buildGroup(repetition)
         }

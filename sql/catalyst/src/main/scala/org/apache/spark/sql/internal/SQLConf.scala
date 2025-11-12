@@ -1593,13 +1593,6 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
-  val PARQUET_WRITE_VARIANT_SPEC_VERSION =
-    buildConf("spark.sql.parquet.variant.specVersion")
-      .doc("The spec version of variant data to be written to Parquet. Must be a byte-sized value.")
-      .version("4.1.0")
-      .intConf
-      .createWithDefault(1)
-
   val PARQUET_FIELD_ID_READ_ENABLED =
     buildConf("spark.sql.parquet.fieldId.read.enabled")
       .doc("Field ID is a native field of the Parquet schema spec. When enabled, Parquet readers " +
