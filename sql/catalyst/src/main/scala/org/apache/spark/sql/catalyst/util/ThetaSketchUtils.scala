@@ -280,7 +280,7 @@ object ThetaSketchUtils {
    * @param prettyName
    *   The display name of the function/expression for error messages
    * @return
-   *   The converted summary value as the appropriate type (Double, Int, or UTF8String)
+   *   The converted summary value as the appropriate type
    */
   def convertSummaryValue(
       summaryTypeInput: String,
