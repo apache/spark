@@ -1986,17 +1986,18 @@ class AstBuilder extends DataTypeAstBuilder
     // this is needed to create unpivot and to filter unpivot for nulls further down
     val valueColumnNames =
       Option(ctx.unpivotOperator().unpivotSingleValueColumnClause())
-        .map(_.unpivotValueColumn().identifier().getText)
+        .map(vc => getIdentifierText(vc.unpivotValueColumn().identifier()))
         .map(Seq(_))
       .getOrElse(
         Option(ctx.unpivotOperator().unpivotMultiValueColumnClause())
-          .map(_.unpivotValueColumns.asScala.map(_.identifier().getText).toSeq)
+          .map(_.unpivotValueColumns.asScala.map(vc =>
+            getIdentifierText(vc.identifier())).toSeq)
           .get
       )
 
     val unpivot = if (ctx.unpivotOperator().unpivotSingleValueColumnClause() != null) {
       val unpivotClause = ctx.unpivotOperator().unpivotSingleValueColumnClause()
-      val variableColumnName = unpivotClause.unpivotNameColumn().identifier().getText
+      val variableColumnName = getIdentifierText(unpivotClause.unpivotNameColumn().identifier())
       val (unpivotColumns, unpivotAliases) =
         unpivotClause.unpivotColumns.asScala.map(visitUnpivotColumnAndAlias).toSeq.unzip
 
@@ -2011,7 +2012,7 @@ class AstBuilder extends DataTypeAstBuilder
       )
     } else {
       val unpivotClause = ctx.unpivotOperator().unpivotMultiValueColumnClause()
-      val variableColumnName = unpivotClause.unpivotNameColumn().identifier().getText
+      val variableColumnName = getIdentifierText(unpivotClause.unpivotNameColumn().identifier())
       val (unpivotColumns, unpivotAliases) =
         unpivotClause.unpivotColumnSets.asScala.map(visitUnpivotColumnSet).toSeq.unzip
 
@@ -2992,10 +2993,8 @@ class AstBuilder extends DataTypeAstBuilder
     } else {
       // If the parser is not in ansi mode, we should return `UnresolvedAttribute`, in case there
       // are columns named `CURRENT_DATE` or `CURRENT_TIMESTAMP` or `CURRENT_TIME`.
-      // scalastyle:off parser.gettext
       // ctx.name is a token, not an identifier context.
       UnresolvedAttribute.quoted(ctx.name.getText)
-      // scalastyle:on parser.gettext
     }
   }
 
@@ -6465,18 +6464,14 @@ class AstBuilder extends DataTypeAstBuilder
    */
   override def visitTimestampadd(ctx: TimestampaddContext): Expression = withOrigin(ctx) {
     if (ctx.invalidUnit != null) {
-      // scalastyle:off parser.gettext
       // ctx.name and ctx.invalidUnit are tokens, not identifier contexts.
       throw QueryParsingErrors.invalidDatetimeUnitError(
         ctx,
         ctx.name.getText,
         ctx.invalidUnit.getText)
-      // scalastyle:on parser.gettext
     } else {
-      // scalastyle:off parser.gettext
       // ctx.unit is a token, not an identifier context.
       TimestampAdd(ctx.unit.getText, expression(ctx.unitsAmount), expression(ctx.timestamp))
-      // scalastyle:on parser.gettext
     }
   }
 
@@ -6485,18 +6480,14 @@ class AstBuilder extends DataTypeAstBuilder
    */
   override def visitTimestampdiff(ctx: TimestampdiffContext): Expression = withOrigin(ctx) {
     if (ctx.invalidUnit != null) {
-      // scalastyle:off parser.gettext
       // ctx.name and ctx.invalidUnit are tokens, not identifier contexts.
       throw QueryParsingErrors.invalidDatetimeUnitError(
         ctx,
         ctx.name.getText,
         ctx.invalidUnit.getText)
-      // scalastyle:on parser.gettext
     } else {
-      // scalastyle:off parser.gettext
       // ctx.unit is a token, not an identifier context.
       TimestampDiff(ctx.unit.getText, expression(ctx.startTimestamp), expression(ctx.endTimestamp))
-      // scalastyle:on parser.gettext
     }
   }
 

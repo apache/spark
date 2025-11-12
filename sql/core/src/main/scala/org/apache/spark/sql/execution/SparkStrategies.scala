@@ -1125,11 +1125,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case r: NamedRelation =>
         r.name
       case _ =>
-        // Try to get name from SubqueryAlias before unwrapping
-        table match {
-          case logical.SubqueryAlias(name, _) => name.toString
-          case _ => "table"
-        }
+        "unknown"
     }
   }
 }

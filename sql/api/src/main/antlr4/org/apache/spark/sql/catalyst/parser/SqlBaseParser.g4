@@ -1593,7 +1593,6 @@ qualifiedName
 // valid expressions such as "a-b" can be recognized as an identifier
 errorCapturingIdentifier
     : identifier errorCapturingIdentifierExtra                         #errorCapturingIdentifierBase
-    | {!legacy_identifier_clause_only}? IDENTIFIER_KW LEFT_PAREN stringLit RIGHT_PAREN errorCapturingIdentifierExtra #identifierLiteralWithExtra
     ;
 
 // extra left-factoring grammar

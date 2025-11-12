@@ -2419,7 +2419,7 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
         stop = 12))
   }
 
-  test("detect unbound positional parameter with nop arguments") {
+  test("detect unbound positional parameter with no arguments") {
     val exception = intercept[AnalysisException] {
       spark.sql("SELECT ?")
     }

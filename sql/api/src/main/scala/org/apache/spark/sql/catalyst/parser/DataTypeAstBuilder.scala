@@ -242,12 +242,6 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with DataTypeE
         // Parse the string to handle qualified identifiers like "`cat`.`schema`".
         parseMultipartIdentifier(literalValue)
 
-      case idLitCtx: IdentifierLiteralWithExtraContext =>
-        // For IDENTIFIER('literal') in errorCapturingIdentifier.
-        val literalValue = string(visitStringLit(idLitCtx.stringLit()))
-        // Parse the string to handle qualified identifiers like "`cat`.`schema`".
-        parseMultipartIdentifier(literalValue)
-
       case base: ErrorCapturingIdentifierBaseContext =>
         // Regular identifier with errorCapturingIdentifierExtra.
         // Need to recursively handle identifier which might itself be IDENTIFIER('literal').
@@ -284,29 +278,10 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with DataTypeE
    */
   override def visitMultipartIdentifier(ctx: MultipartIdentifierContext): Seq[String] =
     withOrigin(ctx) {
-      ctx.parts.asScala.flatMap { part =>
-        // Each part is an errorCapturingIdentifier, which can be either:
-        // 1. identifier errorCapturingIdentifierExtra (regular path) - labeled as
-        //    #errorCapturingIdentifierBase
-        // 2. IDENTIFIER_KW LEFT_PAREN stringLit RIGHT_PAREN errorCapturingIdentifierExtra
-        //    (identifier-lite path) - labeled as #identifierLiteralWithExtra
-        part match {
-          case idLitWithExtra: IdentifierLiteralWithExtraContext =>
-            // This is identifier-lite: IDENTIFIER('string')
-            getIdentifierParts(idLitWithExtra)
-          case base: ErrorCapturingIdentifierBaseContext =>
-            // Regular identifier path
-            val identifierCtx = base.identifier()
-            if (identifierCtx != null && identifierCtx.strictIdentifier() != null) {
-              getIdentifierParts(identifierCtx.strictIdentifier())
-            } else {
-              Seq(part.getText)
-            }
-          case _ =>
-            // Fallback for other cases
-            Seq(part.getText)
-        }
-      }.toSeq
+      // Each part is an errorCapturingIdentifier (which wraps identifier).
+      // getIdentifierParts recursively handles IDENTIFIER('literal') syntax through
+      // identifier -> strictIdentifier -> identifierLiteral.
+      ctx.parts.asScala.flatMap(getIdentifierParts).toSeq
     }
 
   /**
