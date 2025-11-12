@@ -54,9 +54,7 @@ on:
         description: The upload token of codecov.
         required: false
 concurrency:
-  # github.head_ref only exists for pull requests. This ensures that we
-  # only cancel workflows for pull requests, not commits on master
-  group: build-test-${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  group: build-test-${{ github.workflow }}-${{ github.repository == 'apache/spark' && github.run_id || github.ref }}
   cancel-in-progress: true
 jobs:
   precondition:
