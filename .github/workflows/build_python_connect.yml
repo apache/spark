@@ -29,7 +29,7 @@ jobs:
   build:
     name: "Build modules: pyspark-client"
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 150
     if: github.repository == 'apache/spark'
     steps:
       - name: Checkout Spark repository
