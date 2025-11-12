@@ -150,20 +150,29 @@ class RocksDB(
       localTempDir: File,
       hadoopConf: Configuration,
       codecName: String,
-      loggingId: String): RocksDBFileManager = {
+      loggingId: String,
+      storeConf: StateStoreConf): RocksDBFileManager = {
     new RocksDBFileManager(
       dfsRootDir,
       localTempDir,
       hadoopConf,
       codecName,
       loggingId = loggingId,
+      storeConf,
       fileChecksumEnabled = conf.fileChecksumEnabled,
       fileChecksumThreadPoolSize = fileChecksumThreadPoolSize
     )
   }
 
-  private[spark] val fileManager = createFileManager(dfsRootDir, createTempDir("fileManager"),
-    hadoopConf, conf.compressionCodec, loggingId = loggingId)
+  private[spark] val fileManager = createFileManager(
+    dfsRootDir,
+    createTempDir("fileManager"),
+    hadoopConf,
+    conf.compressionCodec,
+    loggingId = loggingId,
+    storeConf = conf.stateStoreConf
+  )
+
   private val byteArrayPair = new ByteArrayPair()
   private val commitLatencyMs = new mutable.HashMap[String, Long]()
 
@@ -2067,7 +2076,8 @@ case class RocksDBConf(
     compression: String,
     reportSnapshotUploadLag: Boolean,
     fileChecksumEnabled: Boolean,
-    maxVersionsToDeletePerMaintenance: Int)
+    maxVersionsToDeletePerMaintenance: Int,
+    stateStoreConf: StateStoreConf)
 
 object RocksDBConf {
   /** Common prefix of all confs in SQLConf that affects RocksDB */
@@ -2267,7 +2277,8 @@ object RocksDBConf {
       getStringConf(COMPRESSION_CONF),
       storeConf.reportSnapshotUploadLag,
       storeConf.checkpointFileChecksumEnabled,
-      storeConf.maxVersionsToDeletePerMaintenance)
+      storeConf.maxVersionsToDeletePerMaintenance,
+      storeConf)
   }
 
   def apply(): RocksDBConf = apply(new StateStoreConf())

@@ -132,6 +132,7 @@ class RocksDBFileManager(
     hadoopConf: Configuration,
     codecName: String = CompressionCodec.ZSTD,
     loggingId: String = "",
+    storeConf: StateStoreConf = StateStoreConf.empty,
     fileChecksumEnabled: Boolean = false,
     fileChecksumThreadPoolSize: Option[Int] = None)
   extends Logging {
@@ -149,7 +150,9 @@ class RocksDBFileManager(
         mgr,
         // Allowing this for perf, since we do orphan checksum file cleanup in maintenance anyway
         allowConcurrentDelete = true,
-        numThreads = fileChecksumThreadPoolSize.get)
+        numThreads = fileChecksumThreadPoolSize.get,
+        skipCreationIfFileMissingChecksum
+          = storeConf.checkpointFileChecksumSkipCreationIfFileMissingChecksum)
     } else {
       mgr
     }
