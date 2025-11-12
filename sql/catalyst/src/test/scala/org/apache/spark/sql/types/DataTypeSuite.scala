@@ -23,11 +23,12 @@ import org.json4s.jackson.JsonMethods
 import org.apache.spark.{SparkException, SparkFunSuite, SparkIllegalArgumentException}
 import org.apache.spark.sql.catalyst.analysis.{caseInsensitiveResolution, caseSensitiveResolution}
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
+import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.{CollationFactory, StringConcat}
 import org.apache.spark.sql.types.DataTypeTestUtils.{dayTimeIntervalTypes, yearMonthIntervalTypes}
 
-class DataTypeSuite extends SparkFunSuite {
+class DataTypeSuite extends SparkFunSuite with SQLHelper {
 
   private val UNICODE_COLLATION_ID = CollationFactory.collationNameToId("UNICODE")
   private val UTF8_LCASE_COLLATION_ID = CollationFactory.collationNameToId("UTF8_LCASE")
@@ -279,25 +280,27 @@ class DataTypeSuite extends SparkFunSuite {
   checkDataTypeFromJson(VarcharType(10))
   checkDataTypeFromDDL(VarcharType(11))
 
-  // GEOMETRY type with default fixed SRID.
-  checkDataTypeFromJson(GeometryType(GeometryType.GEOMETRY_DEFAULT_SRID))
-  checkDataTypeFromDDL(GeometryType(GeometryType.GEOMETRY_DEFAULT_SRID))
+  withSQLConf("spark.sql.geospatial.enabled" -> "true") {
+    // GEOMETRY type with default fixed SRID.
+    checkDataTypeFromJson(GeometryType(GeometryType.GEOMETRY_DEFAULT_SRID))
+    checkDataTypeFromDDL(GeometryType(GeometryType.GEOMETRY_DEFAULT_SRID))
 
-  // GEOMETRY type with non-default fixed SRID.
-  checkDataTypeFromJson(GeometryType(3857))
-  checkDataTypeFromDDL(GeometryType(3857))
+    // GEOMETRY type with non-default fixed SRID.
+    checkDataTypeFromJson(GeometryType(3857))
+    checkDataTypeFromDDL(GeometryType(3857))
 
-  // GEOMETRY type with mixed SRID.
-  checkDataTypeFromJson(GeometryType("ANY"))
-  checkDataTypeFromDDL(GeometryType("ANY"))
+    // GEOMETRY type with mixed SRID.
+    checkDataTypeFromJson(GeometryType("ANY"))
+    checkDataTypeFromDDL(GeometryType("ANY"))
 
-  // GEOGRAPHY type with default fixed SRID.
-  checkDataTypeFromJson(GeographyType(GeographyType.GEOGRAPHY_DEFAULT_SRID))
-  checkDataTypeFromDDL(GeographyType(GeographyType.GEOGRAPHY_DEFAULT_SRID))
+    // GEOGRAPHY type with default fixed SRID.
+    checkDataTypeFromJson(GeographyType(GeographyType.GEOGRAPHY_DEFAULT_SRID))
+    checkDataTypeFromDDL(GeographyType(GeographyType.GEOGRAPHY_DEFAULT_SRID))
 
-  // GEOGRAPHY type with mixed SRID.
-  checkDataTypeFromJson(GeographyType("ANY"))
-  checkDataTypeFromDDL(GeographyType("ANY"))
+    // GEOGRAPHY type with mixed SRID.
+    checkDataTypeFromJson(GeographyType("ANY"))
+    checkDataTypeFromDDL(GeographyType("ANY"))
+  }
 
   dayTimeIntervalTypes.foreach(checkDataTypeFromJson)
   yearMonthIntervalTypes.foreach(checkDataTypeFromJson)

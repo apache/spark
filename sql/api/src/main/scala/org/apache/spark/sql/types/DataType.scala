@@ -223,14 +223,18 @@ object DataType {
       case STRING_WITH_COLLATION(collation) => StringType(collation)
       // If the coordinate reference system (CRS) value is omitted, Parquet and other storage
       // formats (Delta, Iceberg) consider "OGC:CRS84" to be the default value of the crs.
-      case "geometry" => GeometryType(GeometryType.GEOMETRY_DEFAULT_CRS)
-      case GEOMETRY_TYPE(crs) => GeometryType(crs)
-      case "geography" => GeographyType(GeographyType.GEOGRAPHY_DEFAULT_CRS)
-      case GEOGRAPHY_TYPE_CRS(crs) =>
+      case "geometry" if SqlApiConf.get.geospatialEnabled =>
+        GeometryType(GeometryType.GEOMETRY_DEFAULT_CRS)
+      case GEOMETRY_TYPE(crs) if SqlApiConf.get.geospatialEnabled =>
+        GeometryType(crs)
+      case "geography" if SqlApiConf.get.geospatialEnabled =>
+        GeographyType(GeographyType.GEOGRAPHY_DEFAULT_CRS)
+      case GEOGRAPHY_TYPE_CRS(crs) if SqlApiConf.get.geospatialEnabled =>
         GeographyType(crs, GeographyType.GEOGRAPHY_DEFAULT_ALGORITHM)
-      case GEOGRAPHY_TYPE_ALG(alg) =>
+      case GEOGRAPHY_TYPE_ALG(alg) if SqlApiConf.get.geospatialEnabled =>
         GeographyType(GeographyType.GEOGRAPHY_DEFAULT_CRS, alg)
-      case GEOGRAPHY_TYPE_CRS_ALG(crs, alg) => GeographyType(crs, alg)
+      case GEOGRAPHY_TYPE_CRS_ALG(crs, alg) if SqlApiConf.get.geospatialEnabled =>
+        GeographyType(crs, alg)
       // For backwards compatibility, previously the type name of NullType is "null"
       case "null" => NullType
       case "timestamp_ltz" => TimestampType

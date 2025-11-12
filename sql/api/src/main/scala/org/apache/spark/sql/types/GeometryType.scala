@@ -161,13 +161,13 @@ object GeometryType extends SpatialType {
    * Parquet, Delta, and Iceberg specifications. If crs is omitted, it should always default to
    * this.
    */
-  final val GEOMETRY_DEFAULT_SRID = 4326
-  final val GEOMETRY_DEFAULT_CRS = "OGC:CRS84"
+  final lazy val GEOMETRY_DEFAULT_SRID = 4326
+  final lazy val GEOMETRY_DEFAULT_CRS = "OGC:CRS84"
 
   /**
    * The default concrete GeometryType in SQL.
    */
-  private final val GEOMETRY_MIXED_TYPE: GeometryType =
+  private final lazy val GEOMETRY_MIXED_TYPE: GeometryType =
     GeometryType(MIXED_CRS)
 
   /** Returns whether the given SRID is supported. */
@@ -179,6 +179,7 @@ object GeometryType extends SpatialType {
    * Constructors for GeometryType.
    */
   def apply(srid: Int): GeometryType = {
+    assertGeospatialEnabled()
     val crs = CartesianSpatialReferenceSystemMapper.getStringId(srid)
     if (crs == null) {
       throw new SparkIllegalArgumentException(
@@ -189,6 +190,7 @@ object GeometryType extends SpatialType {
   }
 
   def apply(crs: String): GeometryType = {
+    assertGeospatialEnabled()
     crs match {
       case "ANY" =>
         // Special value "ANY" is used for mixed SRID values.

@@ -73,6 +73,7 @@ private[sql] object SqlApiConf {
   val PARSER_DFA_CACHE_FLUSH_RATIO_KEY: String =
     SqlApiConfHelper.PARSER_DFA_CACHE_FLUSH_RATIO_KEY
   val MANAGE_PARSER_CACHES_KEY: String = SqlApiConfHelper.MANAGE_PARSER_CACHES_KEY
+  val GEOSPATIAL_ENABLED_KEY: String = SqlApiConfHelper.GEOSPATIAL_ENABLED_KEY
 
   def get: SqlApiConf = SqlApiConfHelper.getConfGetter.get()()
 

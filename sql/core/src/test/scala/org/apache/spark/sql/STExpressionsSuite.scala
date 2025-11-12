@@ -30,12 +30,12 @@ class STExpressionsSuite
   with ExpressionEvalHelper {
 
   // Private common constants used across several tests.
-  private final val defaultGeographySrid: Int = ExpressionDefaults.DEFAULT_GEOGRAPHY_SRID
-  private final val defaultGeographyType: DataType = GeographyType(defaultGeographySrid)
-  private final val mixedSridGeographyType: DataType = GeographyType("ANY")
-  private final val defaultGeometrySrid: Int = ExpressionDefaults.DEFAULT_GEOMETRY_SRID
-  private final val defaultGeometryType: DataType = GeometryType(defaultGeometrySrid)
-  private final val mixedSridGeometryType: DataType = GeometryType("ANY")
+  private final lazy val defaultGeographySrid: Int = ExpressionDefaults.DEFAULT_GEOGRAPHY_SRID
+  private final lazy val defaultGeographyType: DataType = GeographyType(defaultGeographySrid)
+  private final lazy val mixedSridGeographyType: DataType = GeographyType("ANY")
+  private final lazy val defaultGeometrySrid: Int = ExpressionDefaults.DEFAULT_GEOMETRY_SRID
+  private final lazy val defaultGeometryType: DataType = GeometryType(defaultGeometrySrid)
+  private final lazy val mixedSridGeometryType: DataType = GeometryType("ANY")
 
   // Private helper method to assert the data type of a query result.
   private def assertType(query: String, expectedDataType: DataType) = {
