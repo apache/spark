@@ -58,7 +58,6 @@ concurrency:
   # only cancel workflows for pull requests, not commits on master
   group: build-test-${{ github.workflow }}-${{ github.head_ref || github.run_id }}
   cancel-in-progress: true
-
 jobs:
   precondition:
     name: Check changes
