@@ -1817,17 +1817,23 @@ class SparkSubmitSuite
   }
 
   test("SPARK-54313: handle multiple --extra-properties-file options") {
-    val clArgs = Seq(
-      "--class", "org.SomeClass",
-      "--properties-file", "base.conf",
-      "--extra-properties-file", "extra1.conf",
-      "--extra-properties-file", "extra2.conf",
-      "--master", "yarn",
-      "thejar.jar")
+    withPropertyFile("base.properties", Map.empty) { baseFile =>
+      withPropertyFile("extra1.properties", Map.empty) { extra1File =>
+        withPropertyFile("extra2.properties", Map.empty) { extra2File =>
+          val clArgs = Seq(
+            "--class", "org.SomeClass",
+            "--properties-file", baseFile,
+            "--extra-properties-file", extra1File,
+            "--extra-properties-file", extra2File,
+            "--master", "yarn",
+            "thejar.jar")
 
-    val appArgs = new SparkSubmitArguments(clArgs)
-    appArgs.propertiesFile should be ("base.conf")
-    appArgs.extraPropertiesFiles should be (Seq("extra1.conf", "extra2.conf"))
+          val appArgs = new SparkSubmitArguments(clArgs)
+          appArgs.propertiesFile should be (baseFile)
+          appArgs.extraPropertiesFiles should be (Seq(extra1File, extra2File))
+        }
+      }
+    }
   }
 
   test("SPARK-54313: extra properties files override base properties") {
