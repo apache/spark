@@ -70,6 +70,12 @@ case class CkptIdCollectingStateStoreWrapper(innerStore: StateStore) extends Sta
     innerStore.get(key, colFamilyName)
   }
 
+  override def keyExists(
+      key: UnsafeRow,
+      colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Boolean = {
+    innerStore.keyExists(key, colFamilyName)
+  }
+
   override def valuesIterator(
       key: UnsafeRow,
       colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Iterator[UnsafeRow] = {
@@ -1318,3 +1324,10 @@ class RocksDBStateStoreCheckpointFormatV2Suite extends StreamTest
     }
   }
 }
+
+/**
+ * Test suite that runs all RocksDBStateStoreCheckpointFormatV2Suite tests
+ * with row checksum enabled.
+ */
+class RocksDBStateStoreCheckpointFormatV2SuiteWithRowChecksum
+  extends RocksDBStateStoreCheckpointFormatV2Suite with EnableStateStoreRowChecksum

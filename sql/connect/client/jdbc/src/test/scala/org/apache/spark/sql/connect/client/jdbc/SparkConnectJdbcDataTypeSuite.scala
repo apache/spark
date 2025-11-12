@@ -215,4 +215,37 @@ class SparkConnectJdbcDataTypeSuite extends ConnectFunSuite with RemoteSparkSess
       assert(metaData.getColumnDisplaySize(1) === 255)
     }
   }
+
+  test("get decimal type") {
+    Seq(
+      ("123.45", 37, 2, 39),
+      ("-0.12345", 5, 5, 8),
+      ("-0.12345", 6, 5, 8),
+      ("-123.45", 5, 2, 7),
+      ("12345", 5, 0, 6),
+      ("-12345", 5, 0, 6)
+    ).foreach {
+      case (value, precision, scale, expectedColumnDisplaySize) =>
+        val decimalType = s"DECIMAL($precision,$scale)"
+        withExecuteQuery(s"SELECT cast('$value' as $decimalType)") { rs =>
+          assert(rs.next())
+          assert(rs.getBigDecimal(1) === new java.math.BigDecimal(value))
+          assert(!rs.wasNull)
+          assert(!rs.next())
+
+          val metaData = rs.getMetaData
+          assert(metaData.getColumnCount === 1)
+          assert(metaData.getColumnName(1) === s"CAST($value AS $decimalType)")
+          assert(metaData.getColumnLabel(1) === s"CAST($value AS $decimalType)")
+          assert(metaData.getColumnType(1) === Types.DECIMAL)
+          assert(metaData.getColumnTypeName(1) === decimalType)
+          assert(metaData.getColumnClassName(1) === "java.math.BigDecimal")
+          assert(metaData.isSigned(1) === true)
+          assert(metaData.getPrecision(1) === precision)
+          assert(metaData.getScale(1) === scale)
+          assert(metaData.getColumnDisplaySize(1) === expectedColumnDisplaySize)
+          assert(metaData.getColumnDisplaySize(1) >= value.size)
+      }
+    }
+  }
 }

@@ -493,3 +493,7 @@ abstract class StateVariableSuiteBase extends SharedSparkSession
   }
 }
 
+/**
+ * Test suite that runs all ValueStateSuite tests with row checksum enabled.
+ */
+class ValueStateSuiteWithRowChecksum extends ValueStateSuite with EnableStateStoreRowChecksum

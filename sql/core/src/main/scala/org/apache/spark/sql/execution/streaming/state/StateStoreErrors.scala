@@ -65,6 +65,11 @@ object StateStoreErrors {
     new StateStoreRemovingColumnFamiliesNotSupportedException(stateStoreProvider)
   }
 
+  def storeBackendNotSupportedForTWS(stateStoreProvider: String):
+    StateStoreBackendNotSupportedForTWSException = {
+    new StateStoreBackendNotSupportedForTWSException(stateStoreProvider)
+  }
+
   def cannotUseColumnFamilyWithInvalidName(operationName: String, colFamilyName: String):
     StateStoreCannotUseColumnFamilyWithInvalidName = {
       new StateStoreCannotUseColumnFamilyWithInvalidName(operationName, colFamilyName)
@@ -102,6 +107,13 @@ object StateStoreErrors {
 
   def invalidStamp(providedStamp: Long, currentStamp: Long): StateStoreInvalidStamp = {
     new StateStoreInvalidStamp(providedStamp, currentStamp)
+  }
+
+  def rowChecksumVerificationFailed(
+      storeId: String,
+      expectedChecksum: Int,
+      computedChecksum: Int): StateStoreRowChecksumVerificationFailed = {
+    new StateStoreRowChecksumVerificationFailed(storeId, expectedChecksum, computedChecksum)
   }
 
   def incorrectNumOrderingColsForRangeScan(numOrderingCols: String):
@@ -321,6 +333,11 @@ class StateStoreMultipleColumnFamiliesNotSupportedException(stateStoreProvider: 
 class StateStoreRemovingColumnFamiliesNotSupportedException(stateStoreProvider: String)
   extends SparkUnsupportedOperationException(
     errorClass = "UNSUPPORTED_FEATURE.STATE_STORE_REMOVING_COLUMN_FAMILIES",
+    messageParameters = Map("stateStoreProvider" -> stateStoreProvider))
+
+class StateStoreBackendNotSupportedForTWSException(stateStoreProvider: String)
+  extends SparkUnsupportedOperationException(
+    errorClass = "UNSUPPORTED_FEATURE.STORE_BACKEND_NOT_SUPPORTED_FOR_TWS",
     messageParameters = Map("stateStoreProvider" -> stateStoreProvider))
 
 class StateStoreCannotUseColumnFamilyWithInvalidName(operationName: String, colFamilyName: String)
@@ -585,6 +602,18 @@ class StateStoreCommitValidationFailed(
       "missingCommits" -> missingCommits
     )
   )
+
+class StateStoreRowChecksumVerificationFailed(
+    storeId: String,
+    expectedChecksum: Int,
+    computedChecksum: Int)
+  extends SparkException(
+    errorClass = "STATE_STORE_ROW_CHECKSUM_VERIFICATION_FAILED",
+    messageParameters = Map(
+      "stateStoreId" -> storeId,
+      "expectedChecksum" -> expectedChecksum.toString,
+      "computedChecksum" -> computedChecksum.toString),
+    cause = null)
 
 class StateStoreUnexpectedEmptyFileInRocksDBZip(fileName: String, zipFileName: String)
   extends SparkException(

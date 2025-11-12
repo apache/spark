@@ -2172,8 +2172,8 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
                 v1SessionCatalog.resolvePersistentTableFunction(
                   ident.asFunctionIdentifier, u.functionArgs)
               } else {
-                throw QueryCompilationErrors.missingCatalogAbilityError(
-                  catalog, "table-valued functions")
+                throw QueryCompilationErrors.missingCatalogTableValuedFunctionsAbilityError(
+                  catalog)
               }
             }
             resolvedFunc.transformAllExpressionsWithPruning(

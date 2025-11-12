@@ -16,7 +16,6 @@
 #
 import os
 import platform
-import sys
 import tempfile
 import unittest
 import logging
@@ -258,7 +257,6 @@ class BasePythonDataSourceTestsMixin:
         with self.assertRaisesRegex(PythonException, "DATA_SOURCE_INVALID_RETURN_TYPE"):
             df.collect()
 
-    @unittest.skipIf(sys.version_info > (3, 13), "SPARK-54065")
     def test_in_memory_data_source(self):
         class InMemDataSourceReader(DataSourceReader):
             DEFAULT_NUM_PARTITIONS: int = 3

@@ -82,8 +82,9 @@ RUN python3.11 -m pip install \
     'flake8==3.9.0' \
     'googleapis-common-protos-stubs==2.2.0' \
     'grpc-stubs==1.24.11' \
-    'grpcio-status==1.67.0' \
-    'grpcio==1.67.0' \
+    'grpcio-status==1.76.0' \
+    'grpcio==1.76.0' \
+    'zstandard==0.25.0' \
     'ipython' \
     'ipython_genutils' \
     'jinja2' \
@@ -94,7 +95,7 @@ RUN python3.11 -m pip install \
     'pandas' \
     'pandas-stubs==1.2.0.53' \
     'plotly>=4.8' \
-    'pyarrow>=21.0.0' \
+    'pyarrow>=22.0.0' \
     'pytest-mypy-plugins==1.9.3' \
     'pytest==7.1.3' \
     && python3.11 -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu \

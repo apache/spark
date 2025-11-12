@@ -180,7 +180,8 @@ object SparkConnectServerUtils {
         val fileName = e.substring(e.lastIndexOf(File.separatorChar) + 1)
         fileName.endsWith(".jar") &&
         (fileName.startsWith("scalatest") || fileName.startsWith("scalactic") ||
-          (fileName.startsWith("spark-catalyst") && fileName.endsWith("-tests")))
+          (fileName.startsWith("spark-catalyst") && fileName.endsWith("-tests")) ||
+          fileName.startsWith("grpc-"))
       }
       .map(e => Paths.get(e).toUri)
     spark.client.artifactManager.addArtifacts(jars.toImmutableArraySeq)

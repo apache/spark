@@ -906,6 +906,28 @@
     },
     "sqlState" : "56K00"
   },
+  "CONNECT_INVALID_PLAN" : {
+    "message" : [
+      "The Spark Connect plan is invalid."
+    ],
+    "subClass" : {
+      "CANNOT_PARSE" : {
+        "message" : [
+          "Cannot decompress or parse the input plan (<errorMsg>)",
+          "This may be caused by a corrupted compressed plan.",
+          "To disable plan compression, set 'spark.connect.session.planCompression.threshold' to -1."
+        ]
+      },
+      "PLAN_SIZE_LARGER_THAN_MAX" : {
+        "message" : [
+          "The plan size is larger than max (<planSize> vs. <maxPlanSize>)",
+          "This typically occurs when building very complex queries with many operations, large literals, or deeply nested expressions.",
+          "Consider splitting the query into smaller parts using temporary views for intermediate results or reducing the number of operations."
+        ]
+      }
+    },
+    "sqlState" : "56K00"
+  },
   "CONNECT_ML" : {
     "message" : [
       "Generic Spark Connect ML error."
@@ -1412,6 +1434,12 @@
     ],
     "sqlState" : "42623"
   },
+  "DEFINE_FLOW_ONCE_OPTION_NOT_SUPPORTED" : {
+    "message" : [
+      "Defining a one-time flow <flowName> with the 'once' option is not supported."
+    ],
+    "sqlState" : "0A000"
+  },
   "DESCRIBE_JSON_NOT_EXTENDED" : {
     "message" : [
       "DESCRIBE TABLE ... AS JSON only supported when [EXTENDED|FORMATTED] is specified.",
@@ -1831,6 +1859,12 @@
       "Failed to convert the row value <value> of the class <class> to the target SQL type <sqlType> in the JSON format."
     ],
     "sqlState" : "2203G"
+  },
+  "FAILED_TO_CREATE_PLAN_FOR_DIRECT_QUERY" : {
+    "message" : [
+      "Failed to create plan for direct query on files: <dataSourceType>"
+    ],
+    "sqlState" : "58030"
   },
   "FAILED_TO_LOAD_ROUTINE" : {
     "message" : [
@@ -4350,6 +4384,59 @@
     },
     "sqlState" : "XX000"
   },
+  "MISSING_CATALOG_ABILITY" : {
+    "message" : [
+      "Catalog <plugin> does not support"
+    ],
+    "subClass" : {
+      "CREATE_FUNCTION" : {
+        "message" : [
+          "CREATE FUNCTION."
+        ]
+      },
+      "DROP_FUNCTION" : {
+        "message" : [
+          "DROP FUNCTION."
+        ]
+      },
+      "FUNCTIONS" : {
+        "message" : [
+          "functions."
+        ]
+      },
+      "NAMESPACES" : {
+        "message" : [
+          "namespaces."
+        ]
+      },
+      "PROCEDURES" : {
+        "message" : [
+          "procedures."
+        ]
+      },
+      "REFRESH_FUNCTION" : {
+        "message" : [
+          "REFRESH FUNCTION."
+        ]
+      },
+      "TABLES" : {
+        "message" : [
+          "tables."
+        ]
+      },
+      "TABLE_VALUED_FUNCTIONS" : {
+        "message" : [
+          "table-valued functions."
+        ]
+      },
+      "VIEWS" : {
+        "message" : [
+          "views."
+        ]
+      }
+    },
+    "sqlState" : "0A000"
+  },
   "MISSING_DATABASE_FOR_V1_SESSION_CATALOG" : {
     "message" : [
       "Database name is not specified in the v1 session catalog. Please ensure to provide a valid database name when interacting with the v1 catalog."
@@ -5433,6 +5520,13 @@
     ],
     "sqlState" : "42K06"
   },
+  "STATE_STORE_ROW_CHECKSUM_VERIFICATION_FAILED" : {
+    "message" : [
+      "Row checksum verification failed for stateStore=<stateStoreId>. The row may be corrupted.",
+      "Expected checksum: <expectedChecksum>, Computed checksum: <computedChecksum>."
+    ],
+    "sqlState" : "XXKST"
+  },
   "STATE_STORE_STATE_SCHEMA_FILES_THRESHOLD_EXCEEDED" : {
     "message" : [
       "The number of state schema files <numStateSchemaFiles> exceeds the maximum number of state schema files for this query: <maxStateSchemaFiles>.",
@@ -5657,6 +5751,21 @@
       "INPUT_STREAM_NOT_SUPPORTED" : {
         "message" : [
           "The input stream <className> is not supported in Real-time Mode."
+        ]
+      },
+      "OPERATOR_OR_SINK_NOT_IN_ALLOWLIST" : {
+        "message" : [
+          "The <errorType>(s): <message> not in the <errorType> allowlist for Real-Time Mode. To bypass this check, set spark.sql.streaming.realTimeMode.allowlistCheck to false. By changing this, you agree to run the query at your own risk."
+        ]
+      },
+      "OUTPUT_MODE_NOT_SUPPORTED" : {
+        "message" : [
+          "The output mode <outputMode> is not supported. To work around this limitation, set the output mode to Update. In the future, <outputMode> may be supported."
+        ]
+      },
+      "SINK_NOT_SUPPORTED" : {
+        "message" : [
+          "The <className> sink is currently not supported. See the Real-Time Mode User Guide for a list of supported sinks."
         ]
       }
     },
@@ -6667,6 +6776,11 @@
       "STATE_STORE_TTL" : {
         "message" : [
           "State TTL with <stateStoreProvider> is not supported. Please use RocksDBStateStoreProvider."
+        ]
+      },
+      "STORE_BACKEND_NOT_SUPPORTED_FOR_TWS" : {
+        "message" : [
+          "Store backend <stateStoreProvider> is not supported by TransformWithState operator. Please use RocksDBStateStoreProvider."
         ]
       },
       "TABLE_OPERATION" : {
@@ -7855,11 +7969,6 @@
   "_LEGACY_ERROR_TEMP_1183" : {
     "message" : [
       "Cannot use \"INTERVAL\" type in the table schema."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1184" : {
-    "message" : [
-      "Catalog <plugin> does not support <ability>."
     ]
   },
   "_LEGACY_ERROR_TEMP_1186" : {

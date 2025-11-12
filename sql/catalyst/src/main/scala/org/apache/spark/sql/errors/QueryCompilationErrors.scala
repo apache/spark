@@ -1770,6 +1770,14 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map("provider" -> provider))
   }
 
+  def failedToCreatePlanForDirectQueryError(
+      dataSourceType: String, cause: Throwable): Throwable = {
+    new AnalysisException(
+      errorClass = "FAILED_TO_CREATE_PLAN_FOR_DIRECT_QUERY",
+      messageParameters = Map("dataSourceType" -> dataSourceType),
+      cause = Some(cause))
+  }
+
   def findMultipleDataSourceError(provider: String, sourceNames: Seq[String]): Throwable = {
     new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1141",
@@ -2198,12 +2206,58 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map.empty)
   }
 
-  def missingCatalogAbilityError(plugin: CatalogPlugin, ability: String): Throwable = {
+  def missingCatalogFunctionsAbilityError(plugin: CatalogPlugin): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1184",
-      messageParameters = Map(
-        "plugin" -> plugin.name,
-        "ability" -> ability))
+      errorClass = "MISSING_CATALOG_ABILITY.FUNCTIONS",
+      messageParameters = Map("plugin" -> plugin.name))
+  }
+
+  def missingCatalogTableValuedFunctionsAbilityError(plugin: CatalogPlugin): Throwable = {
+    new AnalysisException(
+      errorClass = "MISSING_CATALOG_ABILITY.TABLE_VALUED_FUNCTIONS",
+      messageParameters = Map("plugin" -> plugin.name))
+  }
+
+  def missingCatalogCreateFunctionAbilityError(plugin: CatalogPlugin): Throwable = {
+    new AnalysisException(
+      errorClass = "MISSING_CATALOG_ABILITY.CREATE_FUNCTION",
+      messageParameters = Map("plugin" -> plugin.name))
+  }
+
+  def missingCatalogDropFunctionAbilityError(plugin: CatalogPlugin): Throwable = {
+    new AnalysisException(
+      errorClass = "MISSING_CATALOG_ABILITY.DROP_FUNCTION",
+      messageParameters = Map("plugin" -> plugin.name))
+  }
+
+  def missingCatalogRefreshFunctionAbilityError(plugin: CatalogPlugin): Throwable = {
+    new AnalysisException(
+      errorClass = "MISSING_CATALOG_ABILITY.REFRESH_FUNCTION",
+      messageParameters = Map("plugin" -> plugin.name))
+  }
+
+  def missingCatalogNamespacesAbilityError(plugin: CatalogPlugin): Throwable = {
+    new AnalysisException(
+      errorClass = "MISSING_CATALOG_ABILITY.NAMESPACES",
+      messageParameters = Map("plugin" -> plugin.name))
+  }
+
+  def missingCatalogProceduresAbilityError(plugin: CatalogPlugin): Throwable = {
+    new AnalysisException(
+      errorClass = "MISSING_CATALOG_ABILITY.PROCEDURES",
+      messageParameters = Map("plugin" -> plugin.name))
+  }
+
+  def missingCatalogTablesAbilityError(plugin: CatalogPlugin): Throwable = {
+    new AnalysisException(
+      errorClass = "MISSING_CATALOG_ABILITY.TABLES",
+      messageParameters = Map("plugin" -> plugin.name))
+  }
+
+  def missingCatalogViewsAbilityError(plugin: CatalogPlugin): Throwable = {
+    new AnalysisException(
+      errorClass = "MISSING_CATALOG_ABILITY.VIEWS",
+      messageParameters = Map("plugin" -> plugin.name))
   }
 
   def tableValuedArgumentsNotYetImplementedForSqlFunctions(
