@@ -228,26 +228,6 @@ class ChannelBuilder:
             ChannelBuilder.PARAM_TOKEN, os.environ.get("SPARK_CONNECT_AUTHENTICATE_TOKEN")
         )
 
-    # BEGIN-EDGE
-    def _update_request_with_user_context_extensions(
-            self,
-            req: Union[
-                pb2.AnalyzePlanRequest,
-                pb2.ConfigRequest,
-                pb2.ExecutePlanRequest,
-                pb2.FetchErrorDetailsRequest,
-                pb2.InterruptRequest,
-            ],
-        ) -> None:
-            with self.global_user_context_extensions_lock:
-                for _, extension in self.global_user_context_extensions:
-                    req.user_context.extensions.append(extension)
-            if not hasattr(self.thread_local, "user_context_extensions"):
-                return
-            for _, extension in self.thread_local.user_context_extensions:
-                req.user_context.extensions.append(extension)
-    # END-EDGE
-
     def metadata(self) -> Iterable[Tuple[str, str]]:
         """
         Builds the GRPC specific metadata list to be injected into the request. All
@@ -1262,6 +1242,27 @@ class SparkConnectClient(object):
         If authentication is not using a bearer token, None will be returned.
         """
         return self._builder.token
+
+    # BEGIN-EDGE
+    def _update_request_with_user_context_extensions(
+        self,
+        req: Union[
+            pb2.AnalyzePlanRequest,
+            pb2.ConfigRequest,
+            pb2.ExecutePlanRequest,
+            pb2.FetchErrorDetailsRequest,
+            pb2.InterruptRequest,
+        ],
+    ) -> None:
+        with self.global_user_context_extensions_lock:
+            for _, extension in self.global_user_context_extensions:
+                req.user_context.extensions.append(extension)
+        if not hasattr(self.thread_local, "user_context_extensions"):
+            return
+        for _, extension in self.thread_local.user_context_extensions:
+            req.user_context.extensions.append(extension)
+
+    # END-EDGE
 
     def _execute_plan_request_with_metadata(
         self, operation_id: Optional[str] = None
