@@ -16,7 +16,6 @@
 #
 
 import base64
-import faulthandler
 import json
 import os
 import sys
@@ -25,6 +24,7 @@ from dataclasses import dataclass, field
 from typing import IO, Type, Union
 
 from pyspark.accumulators import _accumulatorRegistry
+from pyspark.debug import FaultHandlerIntegration
 from pyspark.errors import PySparkAssertionError, PySparkValueError
 from pyspark.errors.exceptions.base import PySparkNotImplementedError
 from pyspark.logger.worker_io import capture_outputs
@@ -140,18 +140,11 @@ def main(infile: IO, outfile: IO) -> None:
     on the reader and determines which filters are supported. The indices of the supported
     filters are sent back to the JVM, along with the list of partitions and the read function.
     """
-    faulthandler_log_path = os.environ.get("PYTHON_FAULTHANDLER_DIR", None)
-    tracebackDumpIntervalSeconds = os.environ.get("PYTHON_TRACEBACK_DUMP_INTERVAL_SECONDS", None)
+    fault_handler_integration = FaultHandlerIntegration()
     try:
-        if faulthandler_log_path:
-            faulthandler_log_path = os.path.join(faulthandler_log_path, str(os.getpid()))
-            faulthandler_log_file = open(faulthandler_log_path, "w")
-            faulthandler.enable(file=faulthandler_log_file)
+        fault_handler_integration.start()
 
         check_python_version(infile)
-
-        if tracebackDumpIntervalSeconds is not None and int(tracebackDumpIntervalSeconds) > 0:
-            faulthandler.dump_traceback_later(int(tracebackDumpIntervalSeconds), repeat=True)
 
         memory_limit_mb = int(os.environ.get("PYSPARK_PLANNER_MEMORY_MB", "-1"))
         setup_memory_limits(memory_limit_mb)
@@ -259,10 +252,7 @@ def main(infile: IO, outfile: IO) -> None:
         handle_worker_exception(e, outfile)
         sys.exit(-1)
     finally:
-        if faulthandler_log_path:
-            faulthandler.disable()
-            faulthandler_log_file.close()
-            os.remove(faulthandler_log_path)
+        fault_handler_integration.stop()
 
     send_accumulator_updates(outfile)
 
@@ -273,9 +263,6 @@ def main(infile: IO, outfile: IO) -> None:
         # write a different value to tell JVM to not reuse this worker
         write_int(SpecialLengths.END_OF_DATA_SECTION, outfile)
         sys.exit(-1)
-
-    # Force to cancel dump_traceback_later
-    faulthandler.cancel_dump_traceback_later()
 
 
 if __name__ == "__main__":

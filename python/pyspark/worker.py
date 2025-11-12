@@ -27,13 +27,13 @@ import inspect
 import itertools
 import json
 from typing import Any, Callable, Iterable, Iterator, Optional, Tuple
-import faulthandler
 
 from pyspark.accumulators import (
     SpecialAccumulatorIds,
     _accumulatorRegistry,
     _deserialize_accumulator,
 )
+from pyspark.debug import FaultHandlerIntegration
 from pyspark.sql.streaming.stateful_processor_api_client import StatefulProcessorApiClient
 from pyspark.sql.streaming.stateful_processor_util import TransformWithStateInPandasFuncMode
 from pyspark.taskcontext import BarrierTaskContext, TaskContext
@@ -3291,21 +3291,13 @@ def read_udfs(pickleSer, infile, eval_type):
 
 
 def main(infile, outfile):
-    faulthandler_log_path = os.environ.get("PYTHON_FAULTHANDLER_DIR", None)
-    tracebackDumpIntervalSeconds = os.environ.get("PYTHON_TRACEBACK_DUMP_INTERVAL_SECONDS", None)
+    fault_handler_integration = FaultHandlerIntegration()
     try:
-        if faulthandler_log_path:
-            faulthandler_log_path = os.path.join(faulthandler_log_path, str(os.getpid()))
-            faulthandler_log_file = open(faulthandler_log_path, "w")
-            faulthandler.enable(file=faulthandler_log_file)
-
+        fault_handler_integration.start()
         boot_time = time.time()
         split_index = read_int(infile)
         if split_index == -1:  # for unit tests
             sys.exit(-1)
-
-        if tracebackDumpIntervalSeconds is not None and int(tracebackDumpIntervalSeconds) > 0:
-            faulthandler.dump_traceback_later(int(tracebackDumpIntervalSeconds), repeat=True)
 
         check_python_version(infile)
 
@@ -3398,10 +3390,7 @@ def main(infile, outfile):
         handle_worker_exception(e, outfile)
         sys.exit(-1)
     finally:
-        if faulthandler_log_path:
-            faulthandler.disable()
-            faulthandler_log_file.close()
-            os.remove(faulthandler_log_path)
+        fault_handler_integration.stop()
     finish_time = time.time()
     report_times(outfile, boot_time, init_time, finish_time)
     write_long(shuffle.MemoryBytesSpilled, outfile)
@@ -3418,9 +3407,6 @@ def main(infile, outfile):
         # write a different value to tell JVM to not reuse this worker
         write_int(SpecialLengths.END_OF_DATA_SECTION, outfile)
         sys.exit(-1)
-
-    # Force to cancel dump_traceback_later
-    faulthandler.cancel_dump_traceback_later()
 
 
 if __name__ == "__main__":

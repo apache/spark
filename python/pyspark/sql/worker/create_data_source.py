@@ -14,13 +14,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-import faulthandler
 import inspect
 import os
 import sys
 from typing import IO
 
 from pyspark.accumulators import _accumulatorRegistry
+from pyspark.debug import FaultHandlerIntegration
 from pyspark.errors import PySparkAssertionError, PySparkTypeError
 from pyspark.logger.worker_io import capture_outputs
 from pyspark.serializers import (
@@ -62,18 +62,11 @@ def main(infile: IO, outfile: IO) -> None:
     This process then creates a `DataSource` instance using the above information and
     sends the pickled instance as well as the schema back to the JVM.
     """
-    faulthandler_log_path = os.environ.get("PYTHON_FAULTHANDLER_DIR", None)
-    tracebackDumpIntervalSeconds = os.environ.get("PYTHON_TRACEBACK_DUMP_INTERVAL_SECONDS", None)
+    fault_handler_integration = FaultHandlerIntegration()
     try:
-        if faulthandler_log_path:
-            faulthandler_log_path = os.path.join(faulthandler_log_path, str(os.getpid()))
-            faulthandler_log_file = open(faulthandler_log_path, "w")
-            faulthandler.enable(file=faulthandler_log_file)
+        fault_handler_integration.start()
 
         check_python_version(infile)
-
-        if tracebackDumpIntervalSeconds is not None and int(tracebackDumpIntervalSeconds) > 0:
-            faulthandler.dump_traceback_later(int(tracebackDumpIntervalSeconds), repeat=True)
 
         memory_limit_mb = int(os.environ.get("PYSPARK_PLANNER_MEMORY_MB", "-1"))
         setup_memory_limits(memory_limit_mb)
@@ -173,10 +166,7 @@ def main(infile: IO, outfile: IO) -> None:
         handle_worker_exception(e, outfile)
         sys.exit(-1)
     finally:
-        if faulthandler_log_path:
-            faulthandler.disable()
-            faulthandler_log_file.close()
-            os.remove(faulthandler_log_path)
+        fault_handler_integration.stop()
 
     send_accumulator_updates(outfile)
 
@@ -187,9 +177,6 @@ def main(infile: IO, outfile: IO) -> None:
         # write a different value to tell JVM to not reuse this worker
         write_int(SpecialLengths.END_OF_DATA_SECTION, outfile)
         sys.exit(-1)
-
-    # Force to cancel dump_traceback_later
-    faulthandler.cancel_dump_traceback_later()
 
 
 if __name__ == "__main__":
