@@ -1021,6 +1021,7 @@ class SparkConnectClient(object):
                 ],
                 axis="columns",
             )
+            pdf.columns = schema.names
         else:
             # empty columns
             pdf = table.to_pandas(**pandas_options)
