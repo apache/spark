@@ -1688,6 +1688,12 @@
     ],
     "sqlState" : "42846"
   },
+  "EXPRESSION_TRANSLATION_TO_V2_IS_NOT_SUPPORTED" : {
+    "message" : [
+      "Expression <expr> cannot be translated to v2 expression."
+    ],
+    "sqlState" : "0A000"
+  },
   "EXPRESSION_TYPE_IS_NOT_ORDERABLE" : {
     "message" : [
       "Column expression <expr> cannot be sorted because its type <exprType> is not orderable."
