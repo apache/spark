@@ -85,7 +85,6 @@ class SaveLoadSuite extends DataSourceTest with SharedSparkSession with BeforeAn
 
   test("save with string mode and path, and load") {
     spark.conf.set(SQLConf.DEFAULT_DATA_SOURCE_NAME.key, "org.apache.spark.sql.json")
-    path.createNewFile()
     df.write.mode("overwrite").save(path.toString)
     checkLoad()
   }
