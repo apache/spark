@@ -429,26 +429,6 @@ private[sql] class SparkConnectClient(
   }
 
   /**
-   * Cache the given local relation Arrow stream from a local file and return its hashes. The file
-   * is streamed in chunks and does not need to fit in memory.
-   *
-   * This method batches artifact status checks and uploads to minimize RPC overhead.
-   */
-  private[sql] def cacheLocalRelation(
-      data: Array[Array[Byte]],
-      schema: String): (Seq[String], String) = {
-    val schemaBytes = schema.getBytes
-    val allBlobs = data :+ schemaBytes
-    val allHashes = artifactManager.cacheArtifacts(allBlobs)
-
-    // Last hash is the schema hash, rest are data hashes
-    val dataHashes = allHashes.dropRight(1)
-    val schemaHash = allHashes.last
-
-    (dataHashes, schemaHash)
-  }
-
-  /**
    * Clone this client session, creating a new session with the same configuration and shared
    * state as the current session but with independent runtime state.
    *
