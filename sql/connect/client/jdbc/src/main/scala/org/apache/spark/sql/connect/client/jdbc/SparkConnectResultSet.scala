@@ -20,6 +20,7 @@ package org.apache.spark.sql.connect.client.jdbc
 import java.io.{InputStream, Reader}
 import java.net.URL
 import java.sql.{Array => JdbcArray, _}
+import java.time.LocalTime
 import java.util
 import java.util.Calendar
 
@@ -147,8 +148,22 @@ class SparkConnectResultSet(
     getColumnValue(columnIndex, null: Date) { idx => currentRow.getDate(idx) }
   }
 
-  override def getTime(columnIndex: Int): Time =
-    throw new SQLFeatureNotSupportedException
+  override def getTime(columnIndex: Int): Time = {
+    getColumnValue(columnIndex, null: Time) { idx =>
+      val localTime = currentRow.get(idx).asInstanceOf[LocalTime]
+      // Convert LocalTime to milliseconds since midnight to preserve fractional seconds.
+      // Note: java.sql.Time can only store up to millisecond precision (3 digits).
+      // For TIME types with higher precision (TIME(4-9)), microseconds/nanoseconds are truncated.
+      // If user needs full precision,
+      // should use: getObject(columnIndex, classOf[java.time.LocalTime])
+      val millisSinceMidnight =
+        localTime.getHour * 3600000L +
+        localTime.getMinute * 60000L +
+        localTime.getSecond * 1000L +
+        localTime.getNano / 1000000L  // Truncates microseconds/nanoseconds
+      new Time(millisSinceMidnight)
+    }
+  }
 
   override def getTimestamp(columnIndex: Int): Timestamp =
     throw new SQLFeatureNotSupportedException
@@ -196,7 +211,7 @@ class SparkConnectResultSet(
     getDate(findColumn(columnLabel))
 
   override def getTime(columnLabel: String): Time =
-    throw new SQLFeatureNotSupportedException
+    getTime(findColumn(columnLabel))
 
   override def getTimestamp(columnLabel: String): Timestamp =
     throw new SQLFeatureNotSupportedException
@@ -518,11 +533,19 @@ class SparkConnectResultSet(
   override def getDate(columnLabel: String, cal: Calendar): Date =
     getDate(findColumn(columnLabel), cal)
 
-  override def getTime(columnIndex: Int, cal: Calendar): Time =
-    throw new SQLFeatureNotSupportedException
+  override def getTime(columnIndex: Int, cal: Calendar): Time = {
+    val time = getTime(columnIndex)
+    if (time == null || cal == null) {
+      return time
+    }
+
+    val targetCalendar = cal.clone().asInstanceOf[Calendar]
+    targetCalendar.setTime(time)
+    new Time(targetCalendar.getTimeInMillis)
+  }
 
   override def getTime(columnLabel: String, cal: Calendar): Time =
-    throw new SQLFeatureNotSupportedException
+    getTime(findColumn(columnLabel), cal)
 
   override def getTimestamp(columnIndex: Int, cal: Calendar): Timestamp =
     throw new SQLFeatureNotSupportedException

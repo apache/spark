@@ -18,6 +18,7 @@
 package org.apache.spark.sql.connect.client.jdbc
 
 import java.sql.{ResultSet, SQLException, Types}
+import java.util.Calendar
 
 import org.apache.spark.sql.connect.client.jdbc.test.JdbcHelper
 import org.apache.spark.sql.connect.test.{ConnectFunSuite, RemoteSparkSession}
@@ -260,7 +261,9 @@ class SparkConnectJdbcDataTypeSuite extends ConnectFunSuite with RemoteSparkSess
       ("cast(1 AS FLOAT)", (rs: ResultSet) => rs.getFloat(999)),
       ("cast(1 AS DOUBLE)", (rs: ResultSet) => rs.getDouble(999)),
       ("cast(1 AS DECIMAL(10,5))", (rs: ResultSet) => rs.getBigDecimal(999)),
-      ("CAST(X'0A0B0C' AS BINARY)", (rs: ResultSet) => rs.getBytes(999))
+      ("CAST(X'0A0B0C' AS BINARY)", (rs: ResultSet) => rs.getBytes(999)),
+      ("date '2025-11-15'", (rs: ResultSet) => rs.getBytes(999)),
+      ("time '12:34:56.123456'", (rs: ResultSet) => rs.getBytes(999))
     ).foreach {
       case (query, getter) =>
         withExecuteQuery(s"SELECT $query") { rs =>
@@ -287,7 +290,13 @@ class SparkConnectJdbcDataTypeSuite extends ConnectFunSuite with RemoteSparkSess
       ("cast(1 AS DECIMAL(10,5))", (rs: ResultSet) => rs.getBigDecimal(1),
         new java.math.BigDecimal("1.00000")),
       ("CAST(X'0A0B0C' AS BINARY)", (rs: ResultSet) => rs.getBytes(1),
-        Array[Byte](0x0A, 0x0B, 0x0C))
+        Array[Byte](0x0A, 0x0B, 0x0C)),
+      ("date '2023-11-15'", (rs: ResultSet) => rs.getDate(1),
+          java.sql.Date.valueOf("2023-11-15")),
+      ("time '12:34:56.123456'", (rs: ResultSet) => rs.getTime(1), {
+        val millis = 12 * 3600000L + 34 * 60000L + 56 * 1000L + 123L
+        new java.sql.Time(millis)
+      })
     ).foreach {
       case (query, getter, expectedValue) =>
         var resultSet: Option[ResultSet] = None
@@ -363,12 +372,12 @@ class SparkConnectJdbcDataTypeSuite extends ConnectFunSuite with RemoteSparkSess
     withExecuteQuery("SELECT date '2025-11-15'") { rs =>
       assert(rs.next())
 
-      val calUTC = java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone("UTC"))
+      val calUTC = Calendar.getInstance(java.util.TimeZone.getTimeZone("UTC"))
       val dateUTC = rs.getDate(1, calUTC)
       assert(dateUTC !== null)
       assert(!rs.wasNull)
 
-      val calPST = java.util.Calendar.getInstance(
+      val calPST = Calendar.getInstance(
         java.util.TimeZone.getTimeZone("America/Los_Angeles"))
       val datePST = rs.getDate(1, calPST)
       assert(datePST !== null)
@@ -381,7 +390,7 @@ class SparkConnectJdbcDataTypeSuite extends ConnectFunSuite with RemoteSparkSess
     withExecuteQuery("SELECT date '2025-11-15' as test_date") { rs =>
       assert(rs.next())
 
-      val cal = java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone("UTC"))
+      val cal = Calendar.getInstance(java.util.TimeZone.getTimeZone("UTC"))
       val date = rs.getDate("test_date", cal)
       assert(date !== null)
       assert(!rs.wasNull)
@@ -398,7 +407,7 @@ class SparkConnectJdbcDataTypeSuite extends ConnectFunSuite with RemoteSparkSess
     withExecuteQuery("SELECT cast(null as date)") { rs =>
       assert(rs.next())
 
-      val cal = java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone("UTC"))
+      val cal = Calendar.getInstance(java.util.TimeZone.getTimeZone("UTC"))
       val date = rs.getDate(1, cal)
       assert(date === null)
       assert(rs.wasNull)
@@ -480,6 +489,193 @@ class SparkConnectJdbcDataTypeSuite extends ConnectFunSuite with RemoteSparkSess
       assert(bytes.length === 0)
       assert(!rs.wasNull)
       assert(!rs.next())
+    }
+  }
+
+  test("get time type") {
+    withExecuteQuery("SELECT time '12:34:56.123456'") { rs =>
+      assert(rs.next())
+      val time = rs.getTime(1)
+      // Verify milliseconds are preserved (123 from 123456 microseconds)
+      val expectedMillis = 12 * 3600000L + 34 * 60000L + 56 * 1000L + 123L
+      assert(time.getTime === expectedMillis)
+      assert(!rs.wasNull)
+      assert(!rs.next())
+
+      val metaData = rs.getMetaData
+      assert(metaData.getColumnCount === 1)
+      assert(metaData.getColumnName(1) === "TIME '12:34:56.123456'")
+      assert(metaData.getColumnLabel(1) === "TIME '12:34:56.123456'")
+      assert(metaData.getColumnType(1) === Types.TIME)
+      assert(metaData.getColumnTypeName(1) === "TIME(6)")
+      assert(metaData.getColumnClassName(1) === "java.sql.Time")
+      assert(metaData.isSigned(1) === false)
+      assert(metaData.getPrecision(1) === 6)
+      assert(metaData.getScale(1) === 0)
+      assert(metaData.getColumnDisplaySize(1) === 15)
+    }
+  }
+
+  test("get time type with null") {
+    withExecuteQuery("SELECT cast(null as time)") { rs =>
+      assert(rs.next())
+      assert(rs.getTime(1) === null)
+      assert(rs.wasNull)
+      assert(!rs.next())
+
+      val metaData = rs.getMetaData
+      assert(metaData.getColumnCount === 1)
+      assert(metaData.getColumnName(1) === "CAST(NULL AS TIME(6))")
+      assert(metaData.getColumnLabel(1) === "CAST(NULL AS TIME(6))")
+      assert(metaData.getColumnType(1) === Types.TIME)
+      assert(metaData.getColumnTypeName(1) === "TIME(6)")
+      assert(metaData.getColumnClassName(1) === "java.sql.Time")
+      assert(metaData.isSigned(1) === false)
+      assert(metaData.getPrecision(1) === 6)
+      assert(metaData.getScale(1) === 0)
+      assert(metaData.getColumnDisplaySize(1) === 15)
+    }
+  }
+
+  test("get time type by column label") {
+    withExecuteQuery("SELECT time '09:15:30.456789' as test_time") { rs =>
+      assert(rs.next())
+      val time = rs.getTime("test_time")
+      // Verify milliseconds are preserved (456 from 456789 microseconds)
+      val expectedMillis = 9 * 3600000L + 15 * 60000L + 30 * 1000L + 456L
+      assert(time.getTime === expectedMillis)
+      assert(!rs.wasNull)
+      assert(!rs.next())
+    }
+  }
+
+  test("get time type with calendar by column index") {
+    withExecuteQuery("SELECT time '14:25:45.123456'") { rs =>
+      assert(rs.next())
+
+      // Get time without calendar
+      val timeNoCalendar = rs.getTime(1)
+      val expectedMillis = 14 * 3600000L + 25 * 60000L + 45 * 1000L + 123L
+      assert(timeNoCalendar.getTime === expectedMillis)
+      assert(!rs.wasNull)
+
+      // Get time with UTC calendar
+      val calUTC = Calendar.getInstance(java.util.TimeZone.getTimeZone("UTC"))
+      val timeUTC = rs.getTime(1, calUTC)
+      assert(timeUTC !== null)
+      assert(!rs.wasNull)
+
+      // Get time with PST calendar
+      val calPST = Calendar.getInstance(
+        java.util.TimeZone.getTimeZone("America/Los_Angeles"))
+      val timePST = rs.getTime(1, calPST)
+      assert(timePST !== null)
+      assert(!rs.wasNull)
+
+      // Since TIME is timezone-independent, the calendar sets the time in that timezone's context
+      // but the underlying time-of-day remains the same
+      assert(timeUTC.toString === timeNoCalendar.toString,
+        "Time string representation should be consistent")
+      assert(timePST.toString === timeNoCalendar.toString,
+        "Time string representation should be consistent")
+
+      assert(!rs.next())
+    }
+  }
+
+  test("get time type with calendar by column label") {
+    withExecuteQuery("SELECT time '18:45:20.123456' as test_time") { rs =>
+      assert(rs.next())
+
+      // Get time without calendar
+      val timeNoCalendar = rs.getTime("test_time")
+      val expectedMillis = 18 * 3600000L + 45 * 60000L + 20 * 1000L + 123L
+      assert(timeNoCalendar.getTime === expectedMillis)
+      assert(!rs.wasNull)
+
+      // Get time with calendar
+      val cal = Calendar.getInstance(java.util.TimeZone.getTimeZone("UTC"))
+      val time = rs.getTime("test_time", cal)
+      assert(time !== null)
+      assert(!rs.wasNull)
+
+      // Verify both methods return the same time-of-day
+      assert(time.toString === timeNoCalendar.toString,
+        "Time with calendar should represent same time-of-day")
+
+      assert(!rs.next())
+
+      val metaData = rs.getMetaData
+      assert(metaData.getColumnCount === 1)
+      assert(metaData.getColumnName(1) === "test_time")
+      assert(metaData.getColumnLabel(1) === "test_time")
+    }
+  }
+
+  test("get time type with calendar for null value") {
+    withExecuteQuery("SELECT cast(null as time)") { rs =>
+      assert(rs.next())
+
+      val cal = Calendar.getInstance(java.util.TimeZone.getTimeZone("UTC"))
+      val time = rs.getTime(1, cal)
+      assert(time === null)
+      assert(rs.wasNull)
+      assert(!rs.next())
+    }
+  }
+
+  test("get time type with null calendar") {
+    withExecuteQuery("SELECT time '20:30:40.789012'") { rs =>
+      assert(rs.next())
+
+      val time = rs.getTime(1, null)
+      // Verify milliseconds are preserved (789 from 789012 microseconds)
+      val expectedMillis = 20 * 3600000L + 30 * 60000L + 40 * 1000L + 789L
+      assert(time.getTime === expectedMillis)
+      assert(!rs.wasNull)
+      assert(!rs.next())
+    }
+  }
+
+  test("get time type with different precisions") {
+    Seq(
+      // (timeValue, precision, expectedDisplaySize, expectedMillis)
+      // HH:MM:SS (no fractional)
+      ("15:45:30.123456", 0, 8, 15 * 3600000L + 45 * 60000L + 30 * 1000L + 0L),
+      // HH:MM:SS.f (100ms from .1)
+      ("10:20:30.123456", 1, 10, 10 * 3600000L + 20 * 60000L + 30 * 1000L + 100L),
+      // HH:MM:SS.fff (123ms)
+      ("08:15:45.123456", 3, 12, 8 * 3600000L + 15 * 60000L + 45 * 1000L + 123L),
+      // HH:MM:SS.fff (999ms) . Spark TIME values can have microsecond precision,
+      // but java.sql.Time can only store up to millisecond precision
+      ("23:59:59.999999", 6, 15, 23 * 3600000L + 59 * 60000L + 59 * 1000L + 999L)
+    ).foreach {
+      case (timeValue, precision, expectedDisplaySize, expectedMillis) =>
+        withExecuteQuery(s"SELECT cast(time '$timeValue' as time($precision))") { rs =>
+          assert(rs.next(), s"Failed to get next row for precision $precision")
+          val time = rs.getTime(1)
+          assert(time.getTime === expectedMillis,
+            s"Time millis mismatch for precision" +
+              s" $precision: expected $expectedMillis, got ${time.getTime}")
+          assert(!rs.wasNull, s"wasNull should be false for precision $precision")
+          assert(!rs.next(), s"Should have no more rows for precision $precision")
+
+          val metaData = rs.getMetaData
+          assert(metaData.getColumnCount === 1)
+          assert(metaData.getColumnType(1) === Types.TIME,
+            s"Column type mismatch for precision $precision")
+          assert(metaData.getColumnTypeName(1) === s"TIME($precision)",
+            s"Column type name mismatch for precision $precision")
+          assert(metaData.getColumnClassName(1) === "java.sql.Time",
+            s"Column class name mismatch for precision $precision")
+          assert(metaData.getPrecision(1) === precision,
+            s"Precision mismatch for precision $precision")
+          assert(metaData.getScale(1) === 0,
+            s"Scale should be 0 for precision $precision")
+          assert(metaData.getColumnDisplaySize(1) === expectedDisplaySize,
+            s"Display size mismatch for precision $precision: " +
+              s"expected $expectedDisplaySize, got ${metaData.getColumnDisplaySize(1)}")
+        }
     }
   }
 }
