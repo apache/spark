@@ -1797,57 +1797,65 @@ class ClientE2ETestSuite
 
   // SQL Scripting tests
   test("SQL Script result") {
-    val df = spark.sql("""BEGIN
-        |  IF 1=1 THEN
-        |    SELECT 1;
-        |  ELSE
-        |    SELECT 3;
-        |  END IF;
-        |END
-        |""".stripMargin)
-    checkAnswer(df, Seq(Row(1)))
+    withSQLConf("spark.sql.scripting.enabled" -> "true") {
+      val df = spark.sql("""BEGIN
+          |  IF 1=1 THEN
+          |    SELECT 1;
+          |  ELSE
+          |    SELECT 3;
+          |  END IF;
+          |END
+          |""".stripMargin)
+      checkAnswer(df, Seq(Row(1)))
+    }
   }
 
   test("SQL Script schema") {
-    withTable("script_tbl") {
-      val df = spark.sql("""BEGIN
-          |  CREATE TABLE script_tbl (a INT, b STRING);
-          |  INSERT INTO script_tbl VALUES (1, 'Hello'), (2, 'World');
-          |  SELECT * FROM script_tbl;
-          |END
-          |""".stripMargin)
-      assert(
-        df.schema == StructType(
-          StructField("a", IntegerType, nullable = true)
-            :: StructField("b", StringType, nullable = true)
-            :: Nil))
+    withSQLConf("spark.sql.scripting.enabled" -> "true") {
+      withTable("script_tbl") {
+        val df = spark.sql("""BEGIN
+            |  CREATE TABLE script_tbl (a INT, b STRING);
+            |  INSERT INTO script_tbl VALUES (1, 'Hello'), (2, 'World');
+            |  SELECT * FROM script_tbl;
+            |END
+            |""".stripMargin)
+        assert(
+          df.schema == StructType(
+            StructField("a", IntegerType, nullable = true)
+              :: StructField("b", StringType, nullable = true)
+              :: Nil))
+      }
     }
   }
 
   test("SQL Script empty result") {
-    withTable("script_tbl") {
-      val df = spark.sql("""BEGIN
-          |  CREATE TABLE script_tbl (a INT, b STRING);
-          |  SELECT * FROM script_tbl;
-          |END
-          |""".stripMargin)
-      assert(
-        df.schema == StructType(
-          StructField("a", IntegerType, nullable = true)
-            :: StructField("b", StringType, nullable = true)
-            :: Nil))
-      checkAnswer(df, Seq.empty)
+    withSQLConf("spark.sql.scripting.enabled" -> "true") {
+      withTable("script_tbl") {
+        val df = spark.sql("""BEGIN
+            |  CREATE TABLE script_tbl (a INT, b STRING);
+            |  SELECT * FROM script_tbl;
+            |END
+            |""".stripMargin)
+        assert(
+          df.schema == StructType(
+            StructField("a", IntegerType, nullable = true)
+              :: StructField("b", StringType, nullable = true)
+              :: Nil))
+        checkAnswer(df, Seq.empty)
+      }
     }
   }
 
   test("SQL Script no result") {
-    withTable("script_tbl") {
-      val df = spark.sql("""BEGIN
-          |  CREATE TABLE script_tbl (a INT, b STRING);
-          |END
-          |""".stripMargin)
-      assert(df.schema == StructType(Nil))
-      checkAnswer(df, Seq.empty)
+    withSQLConf("spark.sql.scripting.enabled" -> "true") {
+      withTable("script_tbl") {
+        val df = spark.sql("""BEGIN
+            |  CREATE TABLE script_tbl (a INT, b STRING);
+            |END
+            |""".stripMargin)
+        assert(df.schema == StructType(Nil))
+        checkAnswer(df, Seq.empty)
+      }
     }
   }
 

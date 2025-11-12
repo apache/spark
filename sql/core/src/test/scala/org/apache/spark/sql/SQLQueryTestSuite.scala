@@ -158,6 +158,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
     // regex magic.
     .set("spark.test.noSerdeInExplain", "true")
     .set(SQLConf.SCHEMA_LEVEL_COLLATIONS_ENABLED, true)
+    .set(SQLConf.SQL_SCRIPTING_ENABLED, true)
 
   // SPARK-32106 Since we add SQL test 'transform.sql' will use `cat` command,
   // here we need to ignore it.
