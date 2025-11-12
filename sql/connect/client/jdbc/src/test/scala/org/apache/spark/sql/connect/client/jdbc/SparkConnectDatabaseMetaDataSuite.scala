@@ -464,10 +464,10 @@ class SparkConnectDatabaseMetaDataSuite extends ConnectFunSuite with RemoteSpark
 
         // list tables with table types
         val se = intercept[SQLException] {
-          metadata.getTables("spark_catalog", "foo", "bar", Array("TABLE", "METERIALIZED VIEW"))
+          metadata.getTables("spark_catalog", "foo", "bar", Array("TABLE", "MATERIALIZED VIEW"))
         }
         assert(se.getMessage ===
-          "The requested table types contains unsupported items: METERIALIZED VIEW. " +
+          "The requested table types contains unsupported items: MATERIALIZED VIEW. " +
             "Available table types are: TABLE, VIEW.")
 
         verifyGetTables {
