@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution
 
+import java.util
+
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row}
@@ -561,6 +563,12 @@ class OneTableCatalog extends InMemoryCatalog {
     } else {
       super.loadTable(ident)
     }
+  }
+
+  override def loadTable(
+      ident: Identifier,
+      writePrivileges: util.Set[TableWritePrivilege]): Table = {
+    loadTable(ident)
   }
 }
 

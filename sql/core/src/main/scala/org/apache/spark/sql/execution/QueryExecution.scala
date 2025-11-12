@@ -215,10 +215,10 @@ class QueryExecution(
     }
   }
 
-  private[sql] def tableVersionsPinned: LogicalPlan = lazyTableVersionsRefreshed.get
+  private[sql] def tableVersionsRefreshed: LogicalPlan = lazyTableVersionsRefreshed.get
 
   private val lazyNormalized = LazyTry {
-    QueryExecution.normalize(sparkSession, tableVersionsPinned, Some(tracker))
+    QueryExecution.normalize(sparkSession, tableVersionsRefreshed, Some(tracker))
   }
 
   // The plan that has been normalized by custom rules, so that it's more likely to hit cache.
@@ -572,7 +572,7 @@ case object RemoveShuffleFiles extends ShuffleCleanupMode
 object QueryExecution {
   private val _nextExecutionId = new AtomicLong(0)
 
-  private def lastExecutionId: Long = _nextExecutionId.get
+  private def lastExecutionId: Long = Math.max(0, _nextExecutionId.get - 1)
 
   private def nextExecutionId: Long = _nextExecutionId.getAndIncrement
 

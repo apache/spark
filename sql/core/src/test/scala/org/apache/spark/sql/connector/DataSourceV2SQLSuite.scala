@@ -965,8 +965,14 @@ class DataSourceV2SQLSuiteV1Filter
           checkAnswer(sql(s"SELECT * FROM $view"), spark.table("source").select("id"))
 
           val oldView = spark.table(view)
+          assert(spark.sharedState.cacheManager.numCachedEntries == 1)
           sql(s"REPLACE TABLE $t (a bigint) USING foo")
-          assert(spark.sharedState.cacheManager.lookupCachedData(oldView).isEmpty)
+          // it is no longer valid to materialize oldView as underlying
+          // query execution captured original table before replace
+          // yet cache invalidation must work correctly
+          val e = intercept[AnalysisException] { oldView.collect() }
+          assert(e.message.contains("Table ID has changed"))
+          assert(spark.sharedState.cacheManager.isEmpty)
         }
       }
     }
@@ -3976,6 +3982,12 @@ class V2CatalogSupportBuiltinDataSource extends InMemoryCatalog {
       tracksPartitionsInCatalog = false
     )
     V1Table(sparkTable)
+  }
+
+  override def loadTable(
+      ident: Identifier,
+      writePrivileges: util.Set[TableWritePrivilege]): Table = {
+    loadTable(ident)
   }
 }
 
