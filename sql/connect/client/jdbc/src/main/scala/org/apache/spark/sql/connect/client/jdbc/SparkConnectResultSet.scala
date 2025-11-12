@@ -137,8 +137,11 @@ class SparkConnectResultSet(
   override def getBigDecimal(columnIndex: Int, scale: Int): java.math.BigDecimal =
     throw new SQLFeatureNotSupportedException
 
-  override def getBytes(columnIndex: Int): Array[Byte] =
-    throw new SQLFeatureNotSupportedException
+  override def getBytes(columnIndex: Int): Array[Byte] = {
+    getColumnValue(columnIndex, null: Array[Byte]) { idx =>
+      currentRow.get(idx).asInstanceOf[Array[Byte]]
+    }
+  }
 
   override def getDate(columnIndex: Int): Date = {
     getColumnValue(columnIndex, null: Date) { idx => currentRow.getDate(idx) }
@@ -187,7 +190,7 @@ class SparkConnectResultSet(
     throw new SQLFeatureNotSupportedException
 
   override def getBytes(columnLabel: String): Array[Byte] =
-    throw new SQLFeatureNotSupportedException
+    getBytes(findColumn(columnLabel))
 
   override def getDate(columnLabel: String): Date =
     getDate(findColumn(columnLabel))
