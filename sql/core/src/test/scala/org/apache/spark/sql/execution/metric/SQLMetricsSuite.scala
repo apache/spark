@@ -928,7 +928,7 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
 
             val df2 = sql("SELECT * FROM t1 WHERE id NOT IN (SELECT id FROM t2 WHERE 1 = 2)")
             df2.collect()
-            val plan2 = df1.queryExecution.executedPlan
+            val plan2 = df2.queryExecution.executedPlan
 
             val joins2 = plan2.collect {
               case s: BroadcastHashJoinExec => s
