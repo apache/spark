@@ -46,7 +46,7 @@ def init(name: str) -> None:
     project_dir = Path.cwd() / name
     project_dir.mkdir(parents=True, exist_ok=False)
 
-    # Create the pipeline-storage directory
+    # Create the storage directory
     storage_dir = project_dir / "pipeline-storage"
     storage_dir.mkdir(parents=True)
 

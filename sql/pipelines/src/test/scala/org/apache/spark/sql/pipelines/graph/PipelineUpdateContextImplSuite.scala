@@ -31,9 +31,7 @@ class PipelineUpdateContextImplSuite extends PipelineTest with SharedSparkSessio
       "abfss://container@account.dfs.core.windows.net/pipelines"
     )
 
-    validStorageRoots.foreach { storageRoot =>
-      PipelineUpdateContextImpl.validateStorageRoot(storageRoot)
-    }
+    validStorageRoots.foreach(PipelineUpdateContextImpl.validateStorageRoot)
   }
 
   test("validateStorageRoot should reject relative paths") {

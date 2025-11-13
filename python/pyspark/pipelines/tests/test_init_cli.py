@@ -52,11 +52,11 @@ class InitCLITests(ReusedConnectTestCase):
                 spec = load_pipeline_spec(spec_path)
                 assert spec.name == project_name
 
-                # Verify storage path is absolute URI with file scheme
+                # Verify that the storage path is an absolute URI with file scheme
                 expected_storage_path = f"file://{Path.cwd() / 'pipeline-storage'}"
                 self.assertEqual(spec.storage, expected_storage_path)
 
-                # Verify storage directory was created
+                # Verify that the storage directory was created
                 self.assertTrue((Path.cwd() / "pipeline-storage").exists())
 
                 registry = LocalGraphElementRegistry()
