@@ -516,36 +516,22 @@ class SparkConnectResultSet(
     throw new SQLFeatureNotSupportedException
 
   override def getDate(columnIndex: Int, cal: Calendar): Date = {
-    val date = getDate(columnIndex)
-    if (date == null || cal == null) {
-      return date
-    }
-
-    val targetCalendar = cal.clone().asInstanceOf[Calendar]
-    targetCalendar.setTime(date)
-    targetCalendar.set(Calendar.HOUR_OF_DAY, 0)
-    targetCalendar.set(Calendar.MINUTE, 0)
-    targetCalendar.set(Calendar.SECOND, 0)
-    targetCalendar.set(Calendar.MILLISECOND, 0)
-    new Date(targetCalendar.getTimeInMillis)
+    // The Calendar parameter in JDBC methods is meant for timezone-aware types,
+    // so ignore if for Date Type
+    getDate(columnIndex)
   }
 
   override def getDate(columnLabel: String, cal: Calendar): Date =
-    getDate(findColumn(columnLabel), cal)
+    getDate(findColumn(columnLabel))
 
   override def getTime(columnIndex: Int, cal: Calendar): Time = {
-    val time = getTime(columnIndex)
-    if (time == null || cal == null) {
-      return time
-    }
-
-    val targetCalendar = cal.clone().asInstanceOf[Calendar]
-    targetCalendar.setTime(time)
-    new Time(targetCalendar.getTimeInMillis)
+    // The Calendar parameter in JDBC methods is meant for timezone-aware types,
+    // so ignore if for Time Type
+    getTime(columnIndex)
   }
 
   override def getTime(columnLabel: String, cal: Calendar): Time =
-    getTime(findColumn(columnLabel), cal)
+    getTime(findColumn(columnLabel))
 
   override def getTimestamp(columnIndex: Int, cal: Calendar): Timestamp =
     throw new SQLFeatureNotSupportedException
