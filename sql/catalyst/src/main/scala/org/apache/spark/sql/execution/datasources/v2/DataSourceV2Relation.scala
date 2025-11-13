@@ -18,8 +18,9 @@
 package org.apache.spark.sql.execution.datasources.v2
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.catalyst.analysis.{MultiInstanceRelation, NamedRelation}
+import org.apache.spark.sql.catalyst.analysis.{MultiInstanceRelation, NamedRelation, TimeTravelSpec}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference, Expression, SortOrder}
+import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, ExposesMetadataColumns, Histogram, HistogramBin, LeafNode, LogicalPlan, Statistics}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.{quoteIfNeeded, truncatedString, CharVarcharUtils}
@@ -45,7 +46,8 @@ abstract class DataSourceV2RelationBase(
     output: Seq[AttributeReference],
     catalog: Option[CatalogPlugin],
     identifier: Option[Identifier],
-    options: CaseInsensitiveStringMap)
+    options: CaseInsensitiveStringMap,
+    timeTravelSpec: Option[TimeTravelSpec] = None)
   extends LeafNode with MultiInstanceRelation with NamedRelation {
 
   import DataSourceV2Implicits._
@@ -65,7 +67,12 @@ abstract class DataSourceV2RelationBase(
   override def skipSchemaResolution: Boolean = table.supports(TableCapability.ACCEPT_ANY_SCHEMA)
 
   override def simpleString(maxFields: Int): String = {
-    s"RelationV2${truncatedString(output, "[", ", ", "]", maxFields)} $name"
+    val outputString = truncatedString(output, "[", ", ", "]", maxFields)
+    val nameWithTimeTravelSpec = timeTravelSpec match {
+      case Some(spec) => s"$name $spec"
+      case _ => name
+    }
+    s"RelationV2$outputString $nameWithTimeTravelSpec"
   }
 
   override def computeStats(): Statistics = {
@@ -96,8 +103,9 @@ case class DataSourceV2Relation(
     override val output: Seq[AttributeReference],
     catalog: Option[CatalogPlugin],
     identifier: Option[Identifier],
-    options: CaseInsensitiveStringMap)
-  extends DataSourceV2RelationBase(table, output, catalog, identifier, options)
+    options: CaseInsensitiveStringMap,
+    timeTravelSpec: Option[TimeTravelSpec] = None)
+  extends DataSourceV2RelationBase(table, output, catalog, identifier, options, timeTravelSpec)
   with ExposesMetadataColumns {
 
   import DataSourceV2Implicits._
@@ -117,7 +125,7 @@ case class DataSourceV2Relation(
   def withMetadataColumns(): DataSourceV2Relation = {
     val newMetadata = metadataOutput.filterNot(outputSet.contains)
     if (newMetadata.nonEmpty) {
-      DataSourceV2Relation(table, output ++ newMetadata, catalog, identifier, options)
+      copy(output = output ++ newMetadata)
     } else {
       this
     }
@@ -151,7 +159,12 @@ case class DataSourceV2ScanRelation(
   override def name: String = relation.name
 
   override def simpleString(maxFields: Int): String = {
-    s"RelationV2${truncatedString(output, "[", ", ", "]", maxFields)} $name"
+    val outputString = truncatedString(output, "[", ", ", "]", maxFields)
+    val nameWithTimeTravelSpec = relation.timeTravelSpec match {
+      case Some(spec) => s"$name $spec"
+      case _ => name
+    }
+    s"RelationV2$outputString $nameWithTimeTravelSpec"
   }
 
   override def computeStats(): Statistics = {
@@ -162,6 +175,15 @@ case class DataSourceV2ScanRelation(
       case _ =>
         Statistics(sizeInBytes = conf.defaultSizeInBytes)
     }
+  }
+
+  override def doCanonicalize(): DataSourceV2ScanRelation = {
+    this.copy(
+      relation = this.relation.copy(
+        output = this.relation.output.map(QueryPlan.normalizeExpressions(_, this.relation.output))
+      ),
+      output = this.output.map(QueryPlan.normalizeExpressions(_, this.output))
+    )
   }
 }
 
@@ -176,7 +198,8 @@ case class StreamingDataSourceV2Relation(
     catalog: Option[CatalogPlugin],
     identifier: Option[Identifier],
     options: CaseInsensitiveStringMap,
-    metadataPath: String)
+    metadataPath: String,
+    realTimeModeDuration: Option[Long] = None)
   extends DataSourceV2RelationBase(table, output, catalog, identifier, options) {
 
   override def isStreaming: Boolean = true
@@ -235,17 +258,29 @@ object ExtractV2Table {
   def unapply(relation: DataSourceV2Relation): Option[Table] = Some(relation.table)
 }
 
+object ExtractV2CatalogAndIdentifier {
+  def unapply(relation: DataSourceV2Relation): Option[(CatalogPlugin, Identifier)] = {
+    relation match {
+      case DataSourceV2Relation(_, _, Some(catalog), Some(identifier), _, _) =>
+        Some((catalog, identifier))
+      case _ =>
+        None
+    }
+  }
+}
+
 object DataSourceV2Relation {
   def create(
       table: Table,
       catalog: Option[CatalogPlugin],
       identifier: Option[Identifier],
-      options: CaseInsensitiveStringMap): DataSourceV2Relation = {
+      options: CaseInsensitiveStringMap,
+      timeTravelSpec: Option[TimeTravelSpec] = None): DataSourceV2Relation = {
     import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
     // The v2 source may return schema containing char/varchar type. We replace char/varchar
     // with "annotated" string type here as the query engine doesn't support char/varchar yet.
     val schema = CharVarcharUtils.replaceCharVarcharWithStringInSchema(table.columns.asSchema)
-    DataSourceV2Relation(table, toAttributes(schema), catalog, identifier, options)
+    DataSourceV2Relation(table, toAttributes(schema), catalog, identifier, options, timeTravelSpec)
   }
 
   def create(

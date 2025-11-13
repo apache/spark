@@ -23,6 +23,7 @@ import unittest
 import uuid
 import contextlib
 
+import pyspark.sql.connect.proto as pb2
 from pyspark import Row, SparkConf
 from pyspark.util import is_remote_only
 from pyspark.testing.utils import PySparkErrorTestUtils
@@ -113,6 +114,16 @@ class PlanOnlyTestFixture(unittest.TestCase, PySparkErrorTestUtils):
         def _session_sql(cls, query):
             return cls._df_mock(SQL(query))
 
+        @classmethod
+        def _set_relation_in_plan(self, plan: pb2.Plan, relation: pb2.Relation) -> None:
+            # Skip plan compression in plan-only tests.
+            plan.root.CopyFrom(relation)
+
+        @classmethod
+        def _set_command_in_plan(self, plan: pb2.Plan, command: pb2.Command) -> None:
+            # Skip plan compression in plan-only tests.
+            plan.command.CopyFrom(command)
+
         if have_pandas:
 
             @classmethod
@@ -129,6 +140,8 @@ class PlanOnlyTestFixture(unittest.TestCase, PySparkErrorTestUtils):
             cls.connect.set_hook("range", cls._session_range)
             cls.connect.set_hook("sql", cls._session_sql)
             cls.connect.set_hook("with_plan", cls._with_plan)
+            cls.connect.set_hook("_set_relation_in_plan", cls._set_relation_in_plan)
+            cls.connect.set_hook("_set_command_in_plan", cls._set_command_in_plan)
 
         @classmethod
         def tearDownClass(cls):
@@ -176,6 +189,7 @@ class ReusedConnectTestCase(unittest.TestCase, SQLTestUtils, PySparkErrorTestUti
             .remote(cls.master())
             .getOrCreate()
         )
+        cls._client = cls.spark.client
         cls._legacy_sc = None
         if not is_remote_only():
             cls._legacy_sc = PySparkSession._instantiatedSession._sc
@@ -191,7 +205,16 @@ class ReusedConnectTestCase(unittest.TestCase, SQLTestUtils, PySparkErrorTestUti
 
     def setUp(self) -> None:
         # force to clean up the ML cache before each test
-        self.spark.client._cleanup_ml_cache()
+        self._client._cleanup_ml_cache()
+
+    def tearDown(self):
+        try:
+            if self._legacy_sc is not None and self._client._server_session_id is not None:
+                self._legacy_sc._jvm.PythonSQLUtils.cleanupPythonWorkerLogs(
+                    self._client._server_session_id, self._legacy_sc._jsc.sc()
+                )
+        finally:
+            super().tearDown()
 
     def test_assert_remote_mode(self):
         from pyspark.sql import is_remote
@@ -231,10 +254,6 @@ class ReusedMixedTestCase(ReusedConnectTestCase, SQLTestUtils):
             del os.environ["PYSPARK_NO_NAMESPACE_SHARE"]
         finally:
             super(ReusedMixedTestCase, cls).tearDownClass()
-
-    def setUp(self) -> None:
-        # force to clean up the ML cache before each test
-        self.connect.client._cleanup_ml_cache()
 
     def compare_by_show(self, df1, df2, n: int = 20, truncate: int = 20):
         from pyspark.sql.classic.dataframe import DataFrame as SDF

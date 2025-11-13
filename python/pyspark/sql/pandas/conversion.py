@@ -71,18 +71,36 @@ class PandasConversionMixin:
 
         import pandas as pd
 
-        jconf = self.sparkSession._jconf
+        (
+            sessionLocalTimeZone,
+            arrowPySparkEnabled,
+            arrowUseLargeVarTypes,
+            arrowPySparkFallbackEnabled,
+            arrowPySparkSelfDestructEnabled,
+            pandasStructHandlingMode,
+        ) = self.sparkSession._jconf.getConfs(
+            [
+                "spark.sql.session.timeZone",
+                "spark.sql.execution.arrow.pyspark.enabled",
+                "spark.sql.execution.arrow.useLargeVarTypes",
+                "spark.sql.execution.arrow.pyspark.fallback.enabled",
+                "spark.sql.execution.arrow.pyspark.selfDestruct.enabled",
+                "spark.sql.execution.pandas.structHandlingMode",
+            ]
+        )
 
-        if jconf.arrowPySparkEnabled():
+        if arrowPySparkEnabled == "true":
             use_arrow = True
             try:
                 from pyspark.sql.pandas.types import to_arrow_schema
                 from pyspark.sql.pandas.utils import require_minimum_pyarrow_version
 
                 require_minimum_pyarrow_version()
-                to_arrow_schema(self.schema, prefers_large_types=jconf.arrowUseLargeVarTypes())
+                arrow_schema = to_arrow_schema(
+                    self.schema, prefers_large_types=arrowUseLargeVarTypes == "true"
+                )
             except Exception as e:
-                if jconf.arrowPySparkFallbackEnabled():
+                if arrowPySparkFallbackEnabled == "true":
                     msg = (
                         "toPandas attempted Arrow optimization because "
                         "'spark.sql.execution.arrow.pyspark.enabled' is set to true; however, "
@@ -110,52 +128,51 @@ class PandasConversionMixin:
                 try:
                     import pyarrow as pa
 
-                    self_destruct = jconf.arrowPySparkSelfDestructEnabled()
+                    self_destruct = arrowPySparkSelfDestructEnabled == "true"
                     batches = self._collect_as_arrow(split_batches=self_destruct)
+
+                    # Rename columns to avoid duplicated column names.
+                    temp_col_names = [f"col_{i}" for i in range(len(self.columns))]
                     if len(batches) > 0:
-                        table = pa.Table.from_batches(batches)
-                        # Ensure only the table has a reference to the batches, so that
-                        # self_destruct (if enabled) is effective
-                        del batches
-                        # Pandas DataFrame created from PyArrow uses datetime64[ns] for date type
-                        # values, but we should use datetime.date to match the behavior with when
-                        # Arrow optimization is disabled.
-                        pandas_options = {
-                            "date_as_object": True,
-                            "coerce_temporal_nanoseconds": True,
-                        }
-                        if self_destruct:
-                            # Configure PyArrow to use as little memory as possible:
-                            # self_destruct - free columns as they are converted
-                            # split_blocks - create a separate Pandas block for each column
-                            # use_threads - convert one column at a time
-                            pandas_options.update(
-                                {
-                                    "self_destruct": True,
-                                    "split_blocks": True,
-                                    "use_threads": False,
-                                }
-                            )
-                        # Rename columns to avoid duplicated column names.
-                        pdf = table.rename_columns(
-                            [f"col_{i}" for i in range(table.num_columns)]
-                        ).to_pandas(**pandas_options)
-
-                        # Rename back to the original column names.
-                        pdf.columns = self.columns
+                        table = pa.Table.from_batches(batches).rename_columns(temp_col_names)
                     else:
-                        pdf = pd.DataFrame(columns=self.columns)
+                        # empty dataset
+                        table = arrow_schema.empty_table().rename_columns(temp_col_names)
 
-                    if len(pdf.columns) > 0:
-                        timezone = jconf.sessionLocalTimeZone()
-                        struct_in_pandas = jconf.pandasStructHandlingMode()
+                    # Ensure only the table has a reference to the batches, so that
+                    # self_destruct (if enabled) is effective
+                    del batches
+
+                    # Pandas DataFrame created from PyArrow uses datetime64[ns] for date type
+                    # values, but we should use datetime.date to match the behavior with when
+                    # Arrow optimization is disabled.
+                    pandas_options = {
+                        "date_as_object": True,
+                        "coerce_temporal_nanoseconds": True,
+                    }
+                    if self_destruct:
+                        # Configure PyArrow to use as little memory as possible:
+                        # self_destruct - free columns as they are converted
+                        # split_blocks - create a separate Pandas block for each column
+                        # use_threads - convert one column at a time
+                        pandas_options.update(
+                            {
+                                "self_destruct": True,
+                                "split_blocks": True,
+                                "use_threads": False,
+                            }
+                        )
+
+                    if len(self.columns) > 0:
+                        timezone = sessionLocalTimeZone
+                        struct_in_pandas = pandasStructHandlingMode
 
                         error_on_duplicated_field_names = False
                         if struct_in_pandas == "legacy":
                             error_on_duplicated_field_names = True
                             struct_in_pandas = "dict"
 
-                        return pd.concat(
+                        pdf = pd.concat(
                             [
                                 _create_converter_to_pandas(
                                     field.dataType,
@@ -163,13 +180,18 @@ class PandasConversionMixin:
                                     timezone=timezone,
                                     struct_in_pandas=struct_in_pandas,
                                     error_on_duplicated_field_names=error_on_duplicated_field_names,
-                                )(pser)
-                                for (_, pser), field in zip(pdf.items(), self.schema.fields)
+                                )(arrow_col.to_pandas(**pandas_options))
+                                for arrow_col, field in zip(table.columns, self.schema.fields)
                             ],
                             axis="columns",
                         )
                     else:
-                        return pdf
+                        # empty columns
+                        pdf = table.to_pandas(**pandas_options)
+
+                    pdf.columns = self.columns
+                    return pdf
+
                 except Exception as e:
                     # We might have to allow fallback here as well but multiple Spark jobs can
                     # be executed. So, simply fail in this case for now.
@@ -194,8 +216,8 @@ class PandasConversionMixin:
             pdf = pd.DataFrame(columns=self.columns)
 
         if len(pdf.columns) > 0:
-            timezone = jconf.sessionLocalTimeZone()
-            struct_in_pandas = jconf.pandasStructHandlingMode()
+            timezone = sessionLocalTimeZone
+            struct_in_pandas = pandasStructHandlingMode
 
             return pd.concat(
                 [

@@ -33,6 +33,7 @@ import org.apache.spark.sql.connect.service.{ExecuteHolder, ExecuteSessionTag, S
 import org.apache.spark.sql.connect.utils.ErrorUtils
 import org.apache.spark.sql.types.DataType
 import org.apache.spark.util.Utils
+import org.apache.spark.util.Utils.CONNECT_EXECUTE_THREAD_PREFIX
 
 /**
  * This class launches the actual execution in an execution thread. The execution pushes the
@@ -329,7 +330,7 @@ private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends
   }
 
   private class ExecutionThread()
-      extends Thread(s"SparkConnectExecuteThread_opId=${executeHolder.operationId}") {
+      extends Thread(s"${CONNECT_EXECUTE_THREAD_PREFIX}_opId=${executeHolder.operationId}") {
     override def run(): Unit = execute()
   }
 }

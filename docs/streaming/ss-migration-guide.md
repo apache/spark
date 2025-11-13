@@ -25,7 +25,7 @@ Please refer [Migration Guide: SQL, Datasets and DataFrame](../sql-migration-gui
 
 ## Upgrading from Structured Streaming 4.0 to 4.1
 
-- Since Spark 4.1, AQE is supported for stateless workloads, and it could affect the behavior of the query after upgrade (especially since AQE is turned on by default). In general, it helps to achieve better performance including resolution of skewed partition, but you can turn off AQE via changing `spark.sql.adaptive.enabled` to `false` to restore the behavior if you see regression.
+- Since Spark 4.1, AQE is supported for stateless workloads, and it could affect the behavior of the query after upgrade (especially since AQE is turned on by default). In general, it helps to achieve better performance including resolution of skewed partition, but you can turn off AQE via changing `spark.sql.adaptive.streaming.stateless.enabled` to `false` to restore the behavior if you see regression.
 
 ## Upgrading from Structured Streaming 3.5 to 4.0
 

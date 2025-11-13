@@ -41,6 +41,22 @@ private[arrow] object ArrowEncoderUtils {
   def unsupportedCollectionType(cls: Class[_]): Nothing = {
     throw new RuntimeException(s"Unsupported collection type: $cls")
   }
+
+  def assertMetadataPresent(
+      vectors: Seq[FieldVector],
+      expectedVectors: Seq[String],
+      expectedMetadata: Seq[(String, String)]): Unit = {
+    expectedVectors.foreach { vectorName =>
+      assert(vectors.exists(_.getName == vectorName))
+    }
+
+    expectedVectors.zip(expectedMetadata).foreach { case (vectorName, (key, value)) =>
+      assert(
+        vectors.exists(field =>
+          field.getName == vectorName && field.getField.getMetadata
+            .containsKey(key) && field.getField.getMetadata.get(key) == value))
+    }
+  }
 }
 
 private[arrow] object StructVectors {

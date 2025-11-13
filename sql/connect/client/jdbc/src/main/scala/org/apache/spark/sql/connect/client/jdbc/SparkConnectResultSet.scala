@@ -25,6 +25,7 @@ import java.util.Calendar
 
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.connect.client.SparkResult
+import org.apache.spark.sql.connect.client.jdbc.util.JdbcErrorUtils
 
 class SparkConnectResultSet(
     sparkResult: SparkResult[Row],
@@ -34,16 +35,25 @@ class SparkConnectResultSet(
 
   private var currentRow: Row = _
 
-  private var _wasNull: Boolean = false
+  // cursor is 1-based, range in [0, length + 1]
+  // - 0 means beforeFirstRow
+  // - value in [1, length] means the row number
+  // - length + 1 means afterLastRow
+  private var cursor: Int = 0
 
+  private var _wasNull: Boolean = false
   override def wasNull: Boolean = _wasNull
 
   override def next(): Boolean = {
     val hasNext = iterator.hasNext
     if (hasNext) {
       currentRow = iterator.next()
+      cursor += 1
     } else {
       currentRow = null
+      if (cursor > 0 && cursor == sparkResult.length) {
+        cursor += 1
+      }
     }
     hasNext
   }
@@ -66,6 +76,24 @@ class SparkConnectResultSet(
     }
   }
 
+  private def getColumnValue[T](columnIndex: Int, defaultVal: T)(getter: Int => T): T = {
+    checkOpen()
+    // the passed index value is 1-indexed, but the underlying array is 0-indexed
+    val index = columnIndex - 1
+    if (index < 0 || index >= currentRow.length) {
+      throw new SQLException(s"The column index is out of range: $columnIndex, " +
+        s"number of columns: ${currentRow.length}.")
+    }
+
+    if (currentRow.isNullAt(index)) {
+      _wasNull = true
+      defaultVal
+    } else {
+      _wasNull = false
+      getter(index)
+    }
+  }
+
   override def findColumn(columnLabel: String): Int = {
     sparkResult.schema.getFieldIndex(columnLabel) match {
       case Some(i) => i + 1
@@ -75,85 +103,49 @@ class SparkConnectResultSet(
   }
 
   override def getString(columnIndex: Int): String = {
-    if (currentRow.isNullAt(columnIndex - 1)) {
-      _wasNull = true
-      return null
-    }
-    _wasNull = false
-    String.valueOf(currentRow.get(columnIndex - 1))
+    getColumnValue(columnIndex, null: String) { idx => String.valueOf(currentRow.get(idx)) }
   }
 
   override def getBoolean(columnIndex: Int): Boolean = {
-    if (currentRow.isNullAt(columnIndex - 1)) {
-      _wasNull = true
-      return false
-    }
-    _wasNull = false
-    currentRow.getBoolean(columnIndex - 1)
+    getColumnValue(columnIndex, false) { idx => currentRow.getBoolean(idx) }
   }
 
   override def getByte(columnIndex: Int): Byte = {
-    if (currentRow.isNullAt(columnIndex - 1)) {
-      _wasNull = true
-      return 0.toByte
-    }
-    _wasNull = false
-    currentRow.getByte(columnIndex - 1)
+    getColumnValue(columnIndex, 0.toByte) { idx => currentRow.getByte(idx) }
   }
 
   override def getShort(columnIndex: Int): Short = {
-    if (currentRow.isNullAt(columnIndex - 1)) {
-      _wasNull = true
-      return 0.toShort
-    }
-    _wasNull = false
-    currentRow.getShort(columnIndex - 1)
+    getColumnValue(columnIndex, 0.toShort) { idx => currentRow.getShort(idx) }
   }
 
   override def getInt(columnIndex: Int): Int = {
-    if (currentRow.isNullAt(columnIndex - 1)) {
-      _wasNull = true
-      return 0
-    }
-    _wasNull = false
-    currentRow.getInt(columnIndex - 1)
+    getColumnValue(columnIndex, 0) { idx => currentRow.getInt(idx) }
   }
 
   override def getLong(columnIndex: Int): Long = {
-    if (currentRow.isNullAt(columnIndex - 1)) {
-      _wasNull = true
-      return 0L
-    }
-    _wasNull = false
-    currentRow.getLong(columnIndex - 1)
+    getColumnValue(columnIndex, 0.toLong) { idx => currentRow.getLong(idx) }
   }
 
   override def getFloat(columnIndex: Int): Float = {
-    if (currentRow.isNullAt(columnIndex - 1)) {
-      _wasNull = true
-      return 0.toFloat
-    }
-    _wasNull = false
-    currentRow.getFloat(columnIndex - 1)
+    getColumnValue(columnIndex, 0.toFloat) { idx => currentRow.getFloat(idx) }
   }
 
   override def getDouble(columnIndex: Int): Double = {
-    if (currentRow.isNullAt(columnIndex - 1)) {
-      _wasNull = true
-      return 0.toDouble
-    }
-    _wasNull = false
-    currentRow.getDouble(columnIndex - 1)
+    getColumnValue(columnIndex, 0.toDouble) { idx => currentRow.getDouble(idx) }
   }
 
   override def getBigDecimal(columnIndex: Int, scale: Int): java.math.BigDecimal =
     throw new SQLFeatureNotSupportedException
 
-  override def getBytes(columnIndex: Int): Array[Byte] =
-    throw new SQLFeatureNotSupportedException
+  override def getBytes(columnIndex: Int): Array[Byte] = {
+    getColumnValue(columnIndex, null: Array[Byte]) { idx =>
+      currentRow.get(idx).asInstanceOf[Array[Byte]]
+    }
+  }
 
-  override def getDate(columnIndex: Int): Date =
-    throw new SQLFeatureNotSupportedException
+  override def getDate(columnIndex: Int): Date = {
+    getColumnValue(columnIndex, null: Date) { idx => currentRow.getDate(idx) }
+  }
 
   override def getTime(columnIndex: Int): Time =
     throw new SQLFeatureNotSupportedException
@@ -198,10 +190,10 @@ class SparkConnectResultSet(
     throw new SQLFeatureNotSupportedException
 
   override def getBytes(columnLabel: String): Array[Byte] =
-    throw new SQLFeatureNotSupportedException
+    getBytes(findColumn(columnLabel))
 
   override def getDate(columnLabel: String): Date =
-    throw new SQLFeatureNotSupportedException
+    getDate(findColumn(columnLabel))
 
   override def getTime(columnLabel: String): Time =
     throw new SQLFeatureNotSupportedException
@@ -230,12 +222,9 @@ class SparkConnectResultSet(
   }
 
   override def getObject(columnIndex: Int): AnyRef = {
-    if (currentRow.isNullAt(columnIndex - 1)) {
-      _wasNull = true
-      return null
+    getColumnValue(columnIndex, null: AnyRef) { idx =>
+      currentRow.get(idx).asInstanceOf[AnyRef]
     }
-    _wasNull = false
-    currentRow.get(columnIndex - 1).asInstanceOf[AnyRef]
   }
 
   override def getObject(columnLabel: String): AnyRef =
@@ -247,19 +236,34 @@ class SparkConnectResultSet(
   override def getCharacterStream(columnLabel: String): Reader =
     throw new SQLFeatureNotSupportedException
 
-  override def getBigDecimal(columnIndex: Int): java.math.BigDecimal =
-    throw new SQLFeatureNotSupportedException
+  override def getBigDecimal(columnIndex: Int): java.math.BigDecimal = {
+    getColumnValue(columnIndex, null: java.math.BigDecimal) { idx =>
+      currentRow.getDecimal(idx)
+    }
+  }
 
   override def getBigDecimal(columnLabel: String): java.math.BigDecimal =
-    throw new SQLFeatureNotSupportedException
+    getBigDecimal(findColumn(columnLabel))
 
-  override def isBeforeFirst: Boolean = throw new SQLFeatureNotSupportedException
+  override def isBeforeFirst: Boolean = {
+    checkOpen()
+    cursor < 1 && sparkResult.length > 0
+  }
 
-  override def isAfterLast: Boolean = throw new SQLFeatureNotSupportedException
+  override def isFirst: Boolean = {
+    checkOpen()
+    cursor == 1
+  }
 
-  override def isFirst: Boolean = throw new SQLFeatureNotSupportedException
+  override def isLast: Boolean = {
+    checkOpen()
+    cursor > 0 && cursor == sparkResult.length
+  }
 
-  override def isLast: Boolean = throw new SQLFeatureNotSupportedException
+  override def isAfterLast: Boolean = {
+    checkOpen()
+    cursor > 0 && cursor > sparkResult.length
+  }
 
   override def beforeFirst(): Unit = throw new SQLFeatureNotSupportedException
 
@@ -269,7 +273,15 @@ class SparkConnectResultSet(
 
   override def last(): Boolean = throw new SQLFeatureNotSupportedException
 
-  override def getRow: Int = throw new SQLFeatureNotSupportedException
+  override def getRow: Int = {
+    checkOpen()
+
+    if (cursor < 1 || cursor > sparkResult.length) {
+      0
+    } else {
+      cursor
+    }
+  }
 
   override def absolute(row: Int): Boolean = throw new SQLFeatureNotSupportedException
 
@@ -277,11 +289,21 @@ class SparkConnectResultSet(
 
   override def previous(): Boolean = throw new SQLFeatureNotSupportedException
 
-  override def setFetchDirection(direction: Int): Unit =
-    throw new SQLFeatureNotSupportedException
+  override def setFetchDirection(direction: Int): Unit = {
+    checkOpen()
+    assert(this.getType == ResultSet.TYPE_FORWARD_ONLY)
 
-  override def getFetchDirection: Int =
-    throw new SQLFeatureNotSupportedException
+    if (direction != ResultSet.FETCH_FORWARD) {
+      throw new SQLException(
+        s"Fetch direction ${JdbcErrorUtils.stringifyFetchDirection(direction)} is not supported " +
+          s"for ${JdbcErrorUtils.stringifyResultSetType(ResultSet.TYPE_FORWARD_ONLY)} result set.")
+    }
+  }
+
+  override def getFetchDirection: Int = {
+    checkOpen()
+    ResultSet.FETCH_FORWARD
+  }
 
   override def setFetchSize(rows: Int): Unit =
     throw new SQLFeatureNotSupportedException
@@ -478,11 +500,23 @@ class SparkConnectResultSet(
   override def getArray(columnLabel: String): JdbcArray =
     throw new SQLFeatureNotSupportedException
 
-  override def getDate(columnIndex: Int, cal: Calendar): Date =
-    throw new SQLFeatureNotSupportedException
+  override def getDate(columnIndex: Int, cal: Calendar): Date = {
+    val date = getDate(columnIndex)
+    if (date == null || cal == null) {
+      return date
+    }
+
+    val targetCalendar = cal.clone().asInstanceOf[Calendar]
+    targetCalendar.setTime(date)
+    targetCalendar.set(Calendar.HOUR_OF_DAY, 0)
+    targetCalendar.set(Calendar.MINUTE, 0)
+    targetCalendar.set(Calendar.SECOND, 0)
+    targetCalendar.set(Calendar.MILLISECOND, 0)
+    new Date(targetCalendar.getTimeInMillis)
+  }
 
   override def getDate(columnLabel: String, cal: Calendar): Date =
-    throw new SQLFeatureNotSupportedException
+    getDate(findColumn(columnLabel), cal)
 
   override def getTime(columnIndex: Int, cal: Calendar): Time =
     throw new SQLFeatureNotSupportedException
