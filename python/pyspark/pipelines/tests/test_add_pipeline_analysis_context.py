@@ -61,6 +61,38 @@ class AddPipelineAnalysisContextTests(ReusedConnectTestCase):
         thread_local_extensions_after = self.spark.client.thread_local.user_context_extensions
         self.assertEqual(len(thread_local_extensions_after), 0)
 
+    def test_nested_add_pipeline_analysis_context(self):
+        import pyspark.sql.connect.proto as pb2
+
+        with add_pipeline_analysis_context(
+            self.spark, "test_dataflow_graph_id_1", flow_name_opt=None
+        ):
+            with add_pipeline_analysis_context(
+                self.spark, "test_dataflow_graph_id_2", flow_name_opt="test_flow_name"
+            ):
+                thread_local_extensions = self.spark.client.thread_local.user_context_extensions
+                self.assertEqual(len(thread_local_extensions), 2)
+                # Extension is stored as (id, extension), unpack the extensions
+                _, extension_1 = thread_local_extensions[0]
+                context_1 = pb2.PipelineAnalysisContext()
+                extension_1.Unpack(context_1)
+                self.assertEqual(context_1.dataflow_graph_id, "test_dataflow_graph_id_1")
+                self.assertEqual(context_1.flow_name, "")
+                _, extension_2 = thread_local_extensions[1]
+                context_2 = pb2.PipelineAnalysisContext()
+                extension_2.Unpack(context_2)
+                self.assertEqual(context_2.dataflow_graph_id, "test_dataflow_graph_id_2")
+                self.assertEqual(context_2.flow_name, "test_flow_name")
+            thread_local_extensions_after_1 = self.spark.client.thread_local.user_context_extensions
+            self.assertEqual(len(thread_local_extensions_after_1), 1)
+            _, extension_3 = thread_local_extensions_after_1[0]
+            context_3 = pb2.PipelineAnalysisContext()
+            extension_3.Unpack(context_3)
+            self.assertEqual(context_3.dataflow_graph_id, "test_dataflow_graph_id_1")
+            self.assertEqual(context_3.flow_name, "")
+        thread_local_extensions_after_2 = self.spark.client.thread_local.user_context_extensions
+        self.assertEqual(len(thread_local_extensions_after_2), 0)
+
 
 if __name__ == "__main__":
     try:

@@ -51,6 +51,32 @@ class SparkDeclarativePipelinesServerSuite
     }
   }
 
+  test(
+    "create dataflow graph set session catalog and database to pipeline " +
+      "default catalog and database") {
+    withRawBlockingStub { implicit stub =>
+      // Use default spark_catalog and create a test database
+      sql("CREATE DATABASE IF NOT EXISTS test_db")
+      try {
+        val graphId = sendPlan(
+          buildCreateDataflowGraphPlan(
+            proto.PipelineCommand.CreateDataflowGraph
+              .newBuilder()
+              .setDefaultCatalog("spark_catalog")
+              .setDefaultDatabase("test_db")
+              .build())).getPipelineCommandResult.getCreateDataflowGraphResult.getDataflowGraphId
+        val definition =
+          getDefaultSessionHolder.dataflowGraphRegistry.getDataflowGraphOrThrow(graphId)
+        assert(definition.defaultCatalog == "spark_catalog")
+        assert(definition.defaultDatabase == "test_db")
+        assert(getDefaultSessionHolder.session.catalog.currentCatalog() == "spark_catalog")
+        assert(getDefaultSessionHolder.session.catalog.currentDatabase == "test_db")
+      } finally {
+        sql("DROP DATABASE IF EXISTS test_db")
+      }
+    }
+  }
+
   test("Define a flow for a graph that does not exist") {
     val ex = intercept[Exception] {
       withRawBlockingStub { implicit stub =>
