@@ -2206,12 +2206,58 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map.empty)
   }
 
-  def missingCatalogAbilityError(plugin: CatalogPlugin, ability: String): Throwable = {
+  def missingCatalogFunctionsAbilityError(plugin: CatalogPlugin): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1184",
-      messageParameters = Map(
-        "plugin" -> plugin.name,
-        "ability" -> ability))
+      errorClass = "MISSING_CATALOG_ABILITY.FUNCTIONS",
+      messageParameters = Map("plugin" -> plugin.name))
+  }
+
+  def missingCatalogTableValuedFunctionsAbilityError(plugin: CatalogPlugin): Throwable = {
+    new AnalysisException(
+      errorClass = "MISSING_CATALOG_ABILITY.TABLE_VALUED_FUNCTIONS",
+      messageParameters = Map("plugin" -> plugin.name))
+  }
+
+  def missingCatalogCreateFunctionAbilityError(plugin: CatalogPlugin): Throwable = {
+    new AnalysisException(
+      errorClass = "MISSING_CATALOG_ABILITY.CREATE_FUNCTION",
+      messageParameters = Map("plugin" -> plugin.name))
+  }
+
+  def missingCatalogDropFunctionAbilityError(plugin: CatalogPlugin): Throwable = {
+    new AnalysisException(
+      errorClass = "MISSING_CATALOG_ABILITY.DROP_FUNCTION",
+      messageParameters = Map("plugin" -> plugin.name))
+  }
+
+  def missingCatalogRefreshFunctionAbilityError(plugin: CatalogPlugin): Throwable = {
+    new AnalysisException(
+      errorClass = "MISSING_CATALOG_ABILITY.REFRESH_FUNCTION",
+      messageParameters = Map("plugin" -> plugin.name))
+  }
+
+  def missingCatalogNamespacesAbilityError(plugin: CatalogPlugin): Throwable = {
+    new AnalysisException(
+      errorClass = "MISSING_CATALOG_ABILITY.NAMESPACES",
+      messageParameters = Map("plugin" -> plugin.name))
+  }
+
+  def missingCatalogProceduresAbilityError(plugin: CatalogPlugin): Throwable = {
+    new AnalysisException(
+      errorClass = "MISSING_CATALOG_ABILITY.PROCEDURES",
+      messageParameters = Map("plugin" -> plugin.name))
+  }
+
+  def missingCatalogTablesAbilityError(plugin: CatalogPlugin): Throwable = {
+    new AnalysisException(
+      errorClass = "MISSING_CATALOG_ABILITY.TABLES",
+      messageParameters = Map("plugin" -> plugin.name))
+  }
+
+  def missingCatalogViewsAbilityError(plugin: CatalogPlugin): Throwable = {
+    new AnalysisException(
+      errorClass = "MISSING_CATALOG_ABILITY.VIEWS",
+      messageParameters = Map("plugin" -> plugin.name))
   }
 
   def tableValuedArgumentsNotYetImplementedForSqlFunctions(
@@ -2247,13 +2293,17 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
   def identifierTooManyNamePartsError(originalIdentifier: String): Throwable = {
     new AnalysisException(
       errorClass = "IDENTIFIER_TOO_MANY_NAME_PARTS",
-      messageParameters = Map("identifier" -> toSQLId(originalIdentifier)))
+      messageParameters = Map(
+        "identifier" -> toSQLId(originalIdentifier),
+        "limit" -> "2"))
   }
 
   def identifierTooManyNamePartsError(names: Seq[String]): Throwable = {
     new AnalysisException(
       errorClass = "IDENTIFIER_TOO_MANY_NAME_PARTS",
-      messageParameters = Map("identifier" -> toSQLId(names)))
+      messageParameters = Map(
+        "identifier" -> toSQLId(names),
+        "limit" -> "2"))
   }
 
   def emptyMultipartIdentifierError(): Throwable = {
@@ -4371,6 +4421,17 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "hint" -> hint
       ),
       origin = origin
+    )
+  }
+
+  def pythonWorkerLoggingNotEnabledError(): Throwable = {
+    new AnalysisException(
+      errorClass = "FEATURE_NOT_ENABLED",
+      messageParameters = Map(
+        "featureName" -> "Python Worker Logging",
+        "configKey" -> "spark.sql.pyspark.worker.logging.enabled",
+        "configValue" -> "true"
+      )
     )
   }
 }

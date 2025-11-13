@@ -282,7 +282,8 @@ of the most common options to set are:
   <td>1g</td>
   <td>
     Amount of memory to use per executor process, in the same format as JVM memory strings with
-    a size unit suffix ("k", "m", "g" or "t") (e.g. <code>512m</code>, <code>2g</code>).
+    a size unit suffix ("k", "m", "g" or "t") (e.g. <code>512m</code>, <code>2g</code>),
+    and with minimum value <code>450m</code>.
   </td>
   <td>0.7.0</td>
 </tr>

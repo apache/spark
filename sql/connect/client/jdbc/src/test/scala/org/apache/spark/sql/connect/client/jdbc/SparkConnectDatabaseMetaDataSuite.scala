@@ -69,6 +69,7 @@ class SparkConnectDatabaseMetaDataSuite extends ConnectFunSuite with RemoteSpark
       assert(metadata.storesLowerCaseQuotedIdentifiers === false)
       assert(metadata.storesMixedCaseQuotedIdentifiers === false)
       assert(metadata.getIdentifierQuoteString === "`")
+      assert(metadata.getSearchStringEscape === "\\")
       assert(metadata.getExtraNameCharacters === "")
       assert(metadata.supportsAlterTableWithAddColumn === true)
       assert(metadata.supportsAlterTableWithDropColumn === true)
@@ -232,6 +233,317 @@ class SparkConnectDatabaseMetaDataSuite extends ConnectFunSuite with RemoteSpark
         }.toSeq
         // results are ordered by TABLE_CAT
         assert(catalogs === Seq("spark_catalog", "testcat", "testcat2"))
+      }
+    }
+  }
+
+  test("SparkConnectDatabaseMetaData getSchemas") {
+
+    def verifyGetSchemas(
+        getSchemas: () => ResultSet)(verify: Seq[(String, String)] => Unit): Unit = {
+      Using.resource(getSchemas()) { rs =>
+        val catalogDatabases = new Iterator[(String, String)] {
+          def hasNext: Boolean = rs.next()
+          def next(): (String, String) =
+            (rs.getString("TABLE_CATALOG"), rs.getString("TABLE_SCHEM"))
+        }.toSeq
+        verify(catalogDatabases)
+      }
+    }
+
+    withConnection { conn =>
+      implicit val spark: SparkSession = conn.asInstanceOf[SparkConnectConnection].spark
+
+      registerCatalog("test`cat", TEST_IN_MEMORY_CATALOG)
+
+      spark.sql("CREATE DATABASE IF NOT EXISTS `test``cat`.t_db1")
+      spark.sql("CREATE DATABASE IF NOT EXISTS `test``cat`.t_db2")
+      spark.sql("CREATE DATABASE IF NOT EXISTS `test``cat`.t_db_")
+
+      spark.sql("CREATE DATABASE IF NOT EXISTS spark_catalog.db1")
+      spark.sql("CREATE DATABASE IF NOT EXISTS spark_catalog.db2")
+      spark.sql("CREATE DATABASE IF NOT EXISTS spark_catalog.test_db3")
+
+      val metadata = conn.getMetaData
+
+      // no need to care about "test`cat" because it is memory based and session isolated,
+      // also is inaccessible from another SparkSession
+      withDatabase("spark_catalog.db1", "spark_catalog.db2", "spark_catalog.test_db3") {
+        // list schemas in all catalogs
+        val getSchemasInAllCatalogs = (() => metadata.getSchemas) ::
+          List(null, "%").map { database => () => metadata.getSchemas(null, database) } ::: Nil
+
+        getSchemasInAllCatalogs.foreach { getSchemas =>
+          verifyGetSchemas(getSchemas) { catalogDatabases =>
+            // results are ordered by TABLE_CATALOG, TABLE_SCHEM
+            assert {
+              catalogDatabases === Seq(
+                ("spark_catalog", "db1"),
+                ("spark_catalog", "db2"),
+                ("spark_catalog", "default"),
+                ("spark_catalog", "test_db3"),
+                ("test`cat", "t_db1"),
+                ("test`cat", "t_db2"),
+                ("test`cat", "t_db_"))
+            }
+          }
+        }
+
+        // list schemas in current catalog
+        assert(conn.getCatalog === "spark_catalog")
+        val getSchemasInCurrentCatalog =
+          List(null, "%").map { database => () => metadata.getSchemas("", database) }
+        getSchemasInCurrentCatalog.foreach { getSchemas =>
+          verifyGetSchemas(getSchemas) { catalogDatabases =>
+            // results are ordered by TABLE_CATALOG, TABLE_SCHEM
+            assert {
+              catalogDatabases === Seq(
+                ("spark_catalog", "db1"),
+                ("spark_catalog", "db2"),
+                ("spark_catalog", "default"),
+                ("spark_catalog", "test_db3"))
+            }
+          }
+        }
+
+        // list schemas with schema pattern
+        verifyGetSchemas { () => metadata.getSchemas(null, "db%") } { catalogDatabases =>
+          // results are ordered by TABLE_CATALOG, TABLE_SCHEM
+          assert {
+            catalogDatabases === Seq(
+              ("spark_catalog", "db1"),
+              ("spark_catalog", "db2"))
+          }
+        }
+
+        verifyGetSchemas { () => metadata.getSchemas(null, "db_") } { catalogDatabases =>
+          // results are ordered by TABLE_CATALOG, TABLE_SCHEM
+          assert {
+            catalogDatabases === Seq(
+              ("spark_catalog", "db1"),
+              ("spark_catalog", "db2"))
+          }
+        }
+
+        // escape backtick in catalog, and _ in schema pattern
+        verifyGetSchemas {
+          () => metadata.getSchemas("test`cat", "t\\_db\\_")
+        } { catalogDatabases =>
+          assert(catalogDatabases === Seq(("test`cat", "t_db_")))
+        }
+
+        // skip testing escape ', % in schema pattern, because Spark SQL does not
+        // allow using those chars in schema table name.
+        //
+        //   CREATE DATABASE IF NOT EXISTS `t_db1'`;
+        //
+        // the above SQL fails with error condition:
+        //   [INVALID_SCHEMA_OR_RELATION_NAME] `t_db1'` is not a valid name for tables/schemas.
+        //   Valid names only contain alphabet characters, numbers and _. SQLSTATE: 42602
+      }
+    }
+  }
+
+  test("SparkConnectDatabaseMetaData getTableTypes") {
+    withConnection { conn =>
+      val metadata = conn.getMetaData
+      Using.resource(metadata.getTableTypes) { rs =>
+        val types = new Iterator[String] {
+          def hasNext: Boolean = rs.next()
+          def next(): String = rs.getString("TABLE_TYPE")
+        }.toSeq
+        // results are ordered by TABLE_TYPE
+        assert(types === Seq("TABLE", "VIEW"))
+      }
+    }
+  }
+
+  test("SparkConnectDatabaseMetaData getTables") {
+
+    case class GetTableResult(
+       TABLE_CAT: String,
+       TABLE_SCHEM: String,
+       TABLE_NAME: String,
+       TABLE_TYPE: String,
+       REMARKS: String,
+       TYPE_CAT: String,
+       TYPE_SCHEM: String,
+       TYPE_NAME: String,
+       SELF_REFERENCING_COL_NAME: String,
+       REF_GENERATION: String)
+
+    def verifyEmptyStringFields(result: GetTableResult): Unit = {
+      assert(result.REMARKS === "")
+      assert(result.TYPE_CAT === "")
+      assert(result.TYPE_SCHEM === "")
+      assert(result.TYPE_NAME === "")
+      assert(result.SELF_REFERENCING_COL_NAME === "")
+      assert(result.REF_GENERATION === "")
+    }
+
+    def verifyGetTables(
+        getTables: () => ResultSet)(verify: Seq[GetTableResult] => Unit): Unit = {
+      Using.resource(getTables()) { rs =>
+        val getTableResults = new Iterator[GetTableResult] {
+          def hasNext: Boolean = rs.next()
+          def next(): GetTableResult = GetTableResult(
+            TABLE_CAT = rs.getString("TABLE_CAT"),
+            TABLE_SCHEM = rs.getString("TABLE_SCHEM"),
+            TABLE_NAME = rs.getString("TABLE_NAME"),
+            TABLE_TYPE = rs.getString("TABLE_TYPE"),
+            REMARKS = rs.getString("REMARKS"),
+            TYPE_CAT = rs.getString("TYPE_CAT"),
+            TYPE_SCHEM = rs.getString("TYPE_SCHEM"),
+            TYPE_NAME = rs.getString("TYPE_NAME"),
+            SELF_REFERENCING_COL_NAME = rs.getString("SELF_REFERENCING_COL_NAME"),
+            REF_GENERATION = rs.getString("REF_GENERATION"))
+        }.toSeq
+        verify(getTableResults)
+      }
+    }
+
+    withConnection { conn =>
+      implicit val spark: SparkSession = conn.asInstanceOf[SparkConnectConnection].spark
+
+      // this catalog does not support view
+      registerCatalog("testcat", TEST_IN_MEMORY_CATALOG)
+
+      spark.sql("CREATE DATABASE IF NOT EXISTS testcat.t_db1")
+      spark.sql("CREATE TABLE IF NOT EXISTS testcat.t_db1.t_t1 (id INT)")
+
+      spark.sql("CREATE DATABASE IF NOT EXISTS spark_catalog.db1")
+      spark.sql("CREATE TABLE IF NOT EXISTS spark_catalog.db1.t1 (id INT)")
+      spark.sql("CREATE TABLE IF NOT EXISTS spark_catalog.db1.t_2 (id INT)")
+      spark.sql(
+        """CREATE VIEW IF NOT EXISTS spark_catalog.db1.t1_v AS
+          |SELECT id FROM spark_catalog.db1.t1
+          |""".stripMargin)
+
+      spark.sql("CREATE DATABASE IF NOT EXISTS spark_catalog.db_2")
+      spark.sql("CREATE TABLE IF NOT EXISTS spark_catalog.db_2.t_2 (id INT)")
+      spark.sql(
+        """CREATE VIEW IF NOT EXISTS spark_catalog.db_2.t_2_v AS
+          |SELECT id FROM spark_catalog.db_2.t_2
+          |""".stripMargin)
+
+      spark.sql("CREATE DATABASE IF NOT EXISTS spark_catalog.db_")
+      spark.sql("CREATE TABLE IF NOT EXISTS spark_catalog.db_.t_ (id INT)")
+
+      val metadata = conn.getMetaData
+
+      // no need to care about "testcat" because it is memory based and session isolated,
+      // also is inaccessible from another SparkSession
+      withDatabase("spark_catalog.db1", "spark_catalog.db_2", "spark_catalog.db_") {
+        // list tables in all catalogs and schemas
+        val getTablesInAllCatalogsAndSchemas = List(null, "%").flatMap { database =>
+          List(null, "%").flatMap { table =>
+            List(null, Array("TABLE", "VIEW")).map { tableTypes =>
+              () => metadata.getTables(null, database, table, tableTypes)
+            }
+          }
+        }
+
+        getTablesInAllCatalogsAndSchemas.foreach { getTables =>
+          verifyGetTables(getTables) { getTableResults =>
+            // results are ordered by TABLE_TYPE, TABLE_CAT, TABLE_SCHEM and TABLE_NAME
+            assert {
+              getTableResults.map { result =>
+                (result.TABLE_TYPE, result.TABLE_CAT, result.TABLE_SCHEM, result.TABLE_NAME)
+              } === Seq(
+                ("TABLE", "spark_catalog", "db1", "t1"),
+                ("TABLE", "spark_catalog", "db1", "t_2"),
+                ("TABLE", "spark_catalog", "db_", "t_"),
+                ("TABLE", "spark_catalog", "db_2", "t_2"),
+                ("TABLE", "testcat", "t_db1", "t_t1"),
+                ("VIEW", "spark_catalog", "db1", "t1_v"),
+                ("VIEW", "spark_catalog", "db_2", "t_2_v"))
+            }
+            getTableResults.foreach(verifyEmptyStringFields)
+          }
+        }
+
+        // list tables with table types
+        val se = intercept[SQLException] {
+          metadata.getTables("spark_catalog", "foo", "bar", Array("TABLE", "MATERIALIZED VIEW"))
+        }
+        assert(se.getMessage ===
+          "The requested table types contains unsupported items: MATERIALIZED VIEW. " +
+            "Available table types are: TABLE, VIEW.")
+
+        verifyGetTables {
+          () => metadata.getTables("spark_catalog", "db1", "%", Array("TABLE"))
+        } { getTableResults =>
+          // results are ordered by TABLE_TYPE, TABLE_CAT, TABLE_SCHEM and TABLE_NAME
+          assert {
+            getTableResults.map { result =>
+              (result.TABLE_TYPE, result.TABLE_CAT, result.TABLE_SCHEM, result.TABLE_NAME)
+            } === Seq(
+              ("TABLE", "spark_catalog", "db1", "t1"),
+              ("TABLE", "spark_catalog", "db1", "t_2"))
+          }
+          getTableResults.foreach(verifyEmptyStringFields)
+        }
+
+        verifyGetTables {
+          () => metadata.getTables("spark_catalog", "db1", "%", Array("VIEW"))
+        } { getTableResults =>
+          // results are ordered by TABLE_TYPE, TABLE_CAT, TABLE_SCHEM and TABLE_NAME
+          assert {
+            getTableResults.map { result =>
+              (result.TABLE_TYPE, result.TABLE_CAT, result.TABLE_SCHEM, result.TABLE_NAME)
+            } === Seq(("VIEW", "spark_catalog", "db1", "t1_v"))
+          }
+          getTableResults.foreach(verifyEmptyStringFields)
+        }
+
+        // list tables in the current catalog and schema
+        conn.setCatalog("spark_catalog")
+        conn.setSchema("db1")
+        assert(conn.getCatalog === "spark_catalog")
+        assert(conn.getSchema === "db1")
+
+        verifyGetTables {
+          () => metadata.getTables("", "", "%", null)
+        } { getTableResults =>
+          assert {
+            getTableResults.map { result =>
+              (result.TABLE_TYPE, result.TABLE_CAT, result.TABLE_SCHEM, result.TABLE_NAME)
+            } === Seq(
+              ("TABLE", "spark_catalog", "db1", "t1"),
+              ("TABLE", "spark_catalog", "db1", "t_2"),
+              ("VIEW", "spark_catalog", "db1", "t1_v"))
+          }
+          getTableResults.foreach(verifyEmptyStringFields)
+        }
+
+        // list tables with schema pattern and table mame pattern
+        verifyGetTables {
+          () => metadata.getTables(null, "db%", "t_", null)
+        } { getTableResults =>
+          assert {
+            getTableResults.map { result =>
+              (result.TABLE_TYPE, result.TABLE_CAT, result.TABLE_SCHEM, result.TABLE_NAME)
+            } === Seq(
+              ("TABLE", "spark_catalog", "db1", "t1"),
+              ("TABLE", "spark_catalog", "db_", "t_"))
+          }
+          getTableResults.foreach(verifyEmptyStringFields)
+        }
+
+        // escape _ in schema pattern and table mame pattern
+        verifyGetTables {
+          () => metadata.getTables(null, "db\\_", "t\\_", null)
+        } { getTableResults =>
+          assert {
+            getTableResults.map { result =>
+              (result.TABLE_TYPE, result.TABLE_CAT, result.TABLE_SCHEM, result.TABLE_NAME)
+            } === Seq(("TABLE", "spark_catalog", "db_", "t_"))
+          }
+          getTableResults.foreach(verifyEmptyStringFields)
+        }
+
+        // skip testing escape ', % in schema pattern, because Spark SQL does not
+        // allow using those chars in schema table name.
       }
     }
   }

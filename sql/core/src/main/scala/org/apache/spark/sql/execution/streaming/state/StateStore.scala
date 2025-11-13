@@ -116,6 +116,23 @@ trait ReadStateStore {
       colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): UnsafeRow
 
   /**
+   * Check if a key exists in the store, with 100% guarantee of a correct result.
+   *
+   * Default implementation calls get() and checks if the result is null.
+   * Implementations backed by RocksDB should override this to use the native
+   * keyExists() method for better performance.
+   *
+   * @param key The key to check
+   * @param colFamilyName The column family name
+   * @return true if the key exists, false if it doesn't exist
+   */
+  def keyExists(
+      key: UnsafeRow,
+      colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Boolean = {
+    get(key, colFamilyName) != null
+  }
+
+  /**
    * Provides an iterator containing all values of a non-null key. If key does not exist,
    * an empty iterator is returned. Implementations should make sure to return an empty
    * iterator if the key does not exist.
@@ -304,6 +321,12 @@ class WrappedReadStateStore(store: StateStore) extends ReadStateStore {
   override def get(key: UnsafeRow,
     colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): UnsafeRow = store.get(key,
     colFamilyName)
+
+  override def keyExists(
+      key: UnsafeRow,
+      colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Boolean = {
+    store.keyExists(key, colFamilyName)
+  }
 
   override def iterator(colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME)
     : StateStoreIterator[UnsafeRowPair] = store.iterator(colFamilyName)
