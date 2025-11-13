@@ -47,6 +47,8 @@ class SparkConnectBatchExecutePlanHandler(
     extends Logging {
 
   def handle(request: proto.BatchExecutePlanRequest): Unit = {
+    logInfo(s"BatchExecutePlan handler called with ${request.getPlanSequencesCount} sequences")
+
     val previousSessionId = request.hasClientObservedServerSideSessionId match {
       case true => Some(request.getClientObservedServerSideSessionId)
       case false => None
@@ -64,17 +66,23 @@ class SparkConnectBatchExecutePlanHandler(
       try {
         // Generate or validate sequence operation ID
         val sequenceOperationId = if (planSequence.hasSequenceOperationId) {
+          val provided = planSequence.getSequenceOperationId
+          logInfo(s"Validating provided sequence operation ID: $provided")
           try {
-            UUID.fromString(planSequence.getSequenceOperationId)
-            planSequence.getSequenceOperationId
+            UUID.fromString(provided)
+            logInfo(s"Sequence operation ID is valid: $provided")
+            provided
           } catch {
-            case _: IllegalArgumentException =>
+            case e: IllegalArgumentException =>
+              logError(s"Invalid sequence operation ID format: $provided", e)
               throw new SparkSQLException(
                 errorClass = "INVALID_HANDLE.FORMAT",
-                messageParameters = Map("handle" -> planSequence.getSequenceOperationId))
+                messageParameters = Map("handle" -> provided))
           }
         } else {
-          UUID.randomUUID().toString
+          val generated = UUID.randomUUID().toString
+          logInfo(s"Generated new sequence operation ID: $generated")
+          generated
         }
 
         // Collect query operation IDs and validate them
@@ -85,17 +93,23 @@ class SparkConnectBatchExecutePlanHandler(
         planSequence.getPlanExecutionsList.asScala.zipWithIndex.foreach {
           case (planExecution, index) =>
             val queryOperationId = if (planExecution.hasOperationId) {
+              val provided = planExecution.getOperationId
+              logInfo(s"Validating provided query operation ID at index $index: $provided")
               try {
-                UUID.fromString(planExecution.getOperationId)
-                planExecution.getOperationId
+                UUID.fromString(provided)
+                logInfo(s"Query operation ID is valid: $provided")
+                provided
               } catch {
-                case _: IllegalArgumentException =>
+                case e: IllegalArgumentException =>
+                  logError(s"Invalid query operation ID format at index $index: $provided", e)
                   throw new SparkSQLException(
                     errorClass = "INVALID_HANDLE.FORMAT",
-                    messageParameters = Map("handle" -> planExecution.getOperationId))
+                    messageParameters = Map("handle" -> provided))
               }
             } else {
-              UUID.randomUUID().toString
+              val generated = UUID.randomUUID().toString
+              logInfo(s"Generated new query operation ID at index $index: $generated")
+              generated
             }
 
             queryOperationIds += proto.BatchExecutePlanResponse.QueryOperationId
@@ -111,6 +125,7 @@ class SparkConnectBatchExecutePlanHandler(
         }
 
         // Create a special ExecutePlanRequest that will be handled by SequenceExecuteThreadRunner
+        logInfo(s"Creating ExecutePlanRequest with sequence operation ID: $sequenceOperationId")
         val executePlanRequestBuilder = proto.ExecutePlanRequest
           .newBuilder()
           .setUserContext(request.getUserContext)
@@ -142,36 +157,52 @@ class SparkConnectBatchExecutePlanHandler(
           // Empty sequence - create a minimal valid plan
           proto.Plan
             .newBuilder()
-            .setRoot(proto.Relation.newBuilder().setLocalRelation(
-              proto.LocalRelation.newBuilder()))
+            .setRoot(
+              proto.Relation.newBuilder().setLocalRelation(proto.LocalRelation.newBuilder()))
             .build()
         }
         executePlanRequestBuilder.setPlan(firstPlan)
 
         val executePlanRequest = executePlanRequestBuilder.build()
+        logInfo(
+          s"Built ExecutePlanRequest: operationId=${executePlanRequest.getOperationId}, " +
+            s"hasOperationId=${executePlanRequest.hasOperationId}, " +
+            s"sessionId=${executePlanRequest.getSessionId}, " +
+            s"planType=${executePlanRequest.getPlan.getOpTypeCase}")
         val executeKey = ExecuteKey(executePlanRequest, sessionHolder)
+        logInfo(
+          s"Created ExecuteKey: userId=${executeKey.userId}, sessionId=${executeKey.sessionId}, " +
+            s"operationId=${executeKey.operationId}")
+
+        logInfo(s"Checking for duplicate operation ID: $sequenceOperationId")
 
         // Check if operation already exists
         if (SparkConnectService.executionManager.getExecuteHolder(executeKey).isDefined) {
+          logError(s"Operation ID already exists: $sequenceOperationId")
           throw new SparkSQLException(
             errorClass = "INVALID_HANDLE.OPERATION_ALREADY_EXISTS",
             messageParameters = Map("handle" -> sequenceOperationId))
         }
 
+        logInfo(s"Creating execute holder for sequence: $sequenceOperationId")
         // Create the execute holder with custom runner
         val executeHolder = SparkConnectService.executionManager.createExecuteHolder(
           executeKey,
           executePlanRequest,
           sessionHolder)
 
+        logInfo(s"Setting custom sequence runner for: $sequenceOperationId")
         // Replace the standard runner with our sequence runner
         val sequenceRunner = new SequenceExecuteThreadRunner(executeHolder, plansWithIds.toSeq)
         executeHolder.setRunner(sequenceRunner)
 
+        logInfo(s"Starting execution for sequence: $sequenceOperationId")
         // Start the execution
         executeHolder.eventsManager.postStarted()
         executeHolder.start()
         executeHolder.afterInitialRPC()
+
+        logInfo(s"Successfully started sequence: $sequenceOperationId")
 
         // Build success result
         sequenceResults += proto.BatchExecutePlanResponse.SequenceResult
@@ -192,16 +223,18 @@ class SparkConnectBatchExecutePlanHandler(
 
           val errorMessage = s"${e.getClass.getSimpleName}: ${e.getMessage}"
 
+          logError(s"Failed to submit sequence $sequenceOperationId: $errorMessage", e)
+
           sequenceResults += proto.BatchExecutePlanResponse.SequenceResult
             .newBuilder()
             .setSequenceOperationId(sequenceOperationId)
             .setSuccess(false)
             .setErrorMessage(errorMessage)
             .build()
-
-          logWarning(s"Failed to submit sequence $sequenceOperationId: $errorMessage")
       }
     }
+
+    logInfo(s"BatchExecutePlan completed, sending response with ${sequenceResults.size} results")
 
     // Build and send the response
     val response = proto.BatchExecutePlanResponse
@@ -215,4 +248,3 @@ class SparkConnectBatchExecutePlanHandler(
     responseObserver.onCompleted()
   }
 }
-

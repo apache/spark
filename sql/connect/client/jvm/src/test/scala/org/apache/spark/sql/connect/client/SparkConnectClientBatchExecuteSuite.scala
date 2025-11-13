@@ -48,9 +48,11 @@ class SparkConnectClientBatchExecuteSuite extends ConnectFunSuite with RemoteSpa
     val response = client.batchExecute(Seq(seq1, seq2))
 
     assert(response.getSequenceResultsCount == 2)
-    assert(response.getSequenceResults(0).getSuccess)
+    assert(response.getSequenceResults(0).getSuccess,
+      s"Sequence 1 failed: ${response.getSequenceResults(0).getErrorMessage}")
     assert(response.getSequenceResults(0).getQueryOperationIdsCount == 2)
-    assert(response.getSequenceResults(1).getSuccess)
+    assert(response.getSequenceResults(1).getSuccess,
+      s"Sequence 2 failed: ${response.getSequenceResults(1).getErrorMessage}")
     assert(response.getSequenceResults(1).getQueryOperationIdsCount == 1)
 
     // Verify operation IDs are valid UUIDs
