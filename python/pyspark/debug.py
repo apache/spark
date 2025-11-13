@@ -17,6 +17,7 @@
 import os
 import faulthandler
 
+
 class FaultHandlerIntegration:
     def __init__(self):
         self._log_path = None
@@ -25,7 +26,9 @@ class FaultHandlerIntegration:
 
     def start(self):
         self._log_path = os.environ.get("PYTHON_FAULTHANDLER_DIR", None)
-        tracebackDumpIntervalSeconds = os.environ.get("PYTHON_TRACEBACK_DUMP_INTERVAL_SECONDS", None)
+        tracebackDumpIntervalSeconds = os.environ.get(
+            "PYTHON_TRACEBACK_DUMP_INTERVAL_SECONDS", None
+        )
         if self._log_path:
             self._log_path = os.path.join(self._log_path, str(os.getpid()))
             self._log_file = open(self._log_path, "w")
