@@ -54,6 +54,10 @@ def generate_llms_txt(docs_path: Path, output_path: Path, version: str = "latest
             f"https://spark.apache.org/docs/{version}/api/python/getting_started/index.html",
         ),
         (
+            "RDD Programming Guide",
+            f"https://spark.apache.org/docs/{version}/rdd-programming-guide.html",
+        ),
+        (
             "Structured Streaming",
             f"https://spark.apache.org/docs/{version}/streaming-programming-guide.html",
         ),
