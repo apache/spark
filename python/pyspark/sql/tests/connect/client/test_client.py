@@ -20,6 +20,8 @@ import uuid
 from collections.abc import Generator
 from typing import Optional, Any, Union
 
+import google.protobuf.wrappers_pb2 as wrappers_pb2
+
 from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
 from pyspark.testing.utils import eventually
 
