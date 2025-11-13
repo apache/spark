@@ -6084,8 +6084,9 @@ class DataFrame:
         +-----+---+
 
         >>> def add_n(input_df, n):
-        ...     cols = [(sf.col(c) + n).alias(c) for c in input_df.columns])
+        ...     cols = [(sf.col(c) + n).alias(c) for c in input_df.columns]
         ...     return input_df.select(cols)
+        ...
         >>> df.transform(add_n, 1).transform(add_n, n=10).show()
         +---+-----+
         |int|float|
