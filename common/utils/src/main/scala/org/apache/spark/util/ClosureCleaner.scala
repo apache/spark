@@ -18,16 +18,15 @@
 package org.apache.spark.util
 
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
-import java.lang.invoke.{MethodHandleInfo, MethodHandles, MethodType, SerializedLambda}
+import java.lang.invoke.{LambdaMetafactory, MethodHandle, MethodHandleInfo, MethodHandles, MethodType, SerializedLambda}
 import java.lang.reflect.{Field, Modifier}
-import java.nio.file.{Files, Paths}
 
 import scala.collection.mutable.{ArrayBuffer, Map, Queue, Set, Stack}
 import scala.jdk.CollectionConverters._
 
-import org.apache.xbean.asm9.{ClassReader, ClassVisitor, ClassWriter, Handle, MethodVisitor, Type}
+import org.apache.xbean.asm9.{ClassReader, ClassVisitor, Handle, MethodVisitor, Type}
 import org.apache.xbean.asm9.Opcodes._
-import org.apache.xbean.asm9.tree.{ClassNode, FieldInsnNode, FieldNode, InsnNode, MethodInsnNode, MethodNode, VarInsnNode}
+import org.apache.xbean.asm9.tree.{ClassNode, MethodNode}
 
 import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
@@ -61,8 +60,6 @@ private[spark] object ClosureCleaner extends Logging {
   private def isClosure(cls: Class[_]): Boolean = {
     cls.getName.contains("$anonfun$")
   }
-
-  private val methodLookup = MethodHandles.lookup()
 
   // Get a list of the outer objects and their classes of a given closure object, obj;
   // the outer objects are defined as any closures that obj is nested within, plus
@@ -255,7 +252,7 @@ private[spark] object ClosureCleaner extends Logging {
             return None
           } else {
             return Some(
-              convertIndyLambda(func, cleanedOuterThis.get, lambdaProxy).getOrElse(func))
+              cloneIndyLambda(func, cleanedOuterThis.get, lambdaProxy).getOrElse(func))
           }
         }
         cleanedFunc = cleanupAmmoniteReplClosure(func, lambdaProxy, outerThis, cleanTransitively)
@@ -433,7 +430,7 @@ private[spark] object ClosureCleaner extends Logging {
       logDebug(s" + cloning instance of REPL class ${capturingClass.getName}")
       val clonedOuterThis = cloneAndSetFields(
         parent = null, outerThis, capturingClass, accessedFields)
-      convertIndyLambda(func, clonedOuterThis, lambdaProxy).getOrElse {
+      cloneIndyLambda(func, clonedOuterThis, lambdaProxy).getOrElse {
         val outerField = func.getClass.getDeclaredField("arg$1")
         // SPARK-37072: When Java 17 is used and `outerField` is read-only,
         // the content of `outerField` cannot be set by reflect api directly.
@@ -565,7 +562,7 @@ private[spark] object ClosureCleaner extends Logging {
       cmdClones(outerThis.getClass)
     }
 
-    convertIndyLambda(func, outerThisClone, lambdaProxy).getOrElse {
+    cloneIndyLambda(func, outerThisClone, lambdaProxy).getOrElse {
       val outerField = func.getClass.getDeclaredField("arg$1")
       // update lambda capturing class reference
       setFieldAndIgnoreModifiers(func, outerField, outerThisClone)
@@ -615,181 +612,89 @@ private[spark] object ClosureCleaner extends Logging {
     obj
   }
 
-  def convertIndyLambda[F <: AnyRef](
+  private def cloneIndyLambda[F <: AnyRef](
       indyLambda: F,
       outerThis: AnyRef,
       lambdaProxy: SerializedLambda): Option[F] = {
+    val useClone = Option(
+      System.getProperty("spark.closureCleaner.cloneIndyLambda")).getOrElse("true").toBoolean
     val javaVersion = Runtime.version().feature()
-    val convertLambda =
-      Option(System.getProperty("spark.closure.cleaner.convertLambda")).getOrElse("true").toBoolean
-    if ((javaVersion >= 18 && convertLambda) || javaVersion >= 22) {
-      val convertedLambdaClass = buildConvertedLambdaClass(indyLambda.getClass, lambdaProxy)
-      val argTypesBuffer = new ArrayBuffer[Class[_]]()
+
+    if (javaVersion >= 18 && useClone || javaVersion >= 22) {
+      val factory = makeClonedIndyLambdaFacory(indyLambda.getClass, lambdaProxy)
+
       val argsBuffer = new ArrayBuffer[Object]()
       var i = 0
       while (i < lambdaProxy.getCapturedArgCount) {
         val arg = lambdaProxy.getCapturedArg(i)
-        argTypesBuffer.append(arg.getClass)
         argsBuffer.append(arg)
         i += 1
       }
-
-      val convertedLambda = convertedLambdaClass
-        .getDeclaredConstructors.head
-        .newInstance(outerThis +: argsBuffer.tail.toArray: _*)
-        .asInstanceOf[F]
-      Some(convertedLambda)
+      val clonedLambda =
+        factory.invokeWithArguments(outerThis +: argsBuffer.tail.toArray: _*).asInstanceOf[F]
+      Some(clonedLambda)
     } else {
       None
     }
   }
 
-  private def buildConvertedLambdaClass(
+  private def makeClonedIndyLambdaFacory(
       originalFuncClass: Class[_],
-      lambdaProxy: SerializedLambda): Class[_] = {
-    // Signature, args and return type of the impl method
-    val implSig = lambdaProxy.getImplMethodSignature
-    val implArgTypes = Type.getArgumentTypes(implSig)
-    val implRet = Type.getReturnType(implSig)
-
-    // First args of the impl method are captured by the lambda and the rests are passed by the
-    // caller of the lambda.
-    val numCapturedArgs = lambdaProxy.getCapturedArgCount
-    val (capturedArgs, remainingArgs) = implArgTypes.splitAt(numCapturedArgs)
-    val capturedArgsWithIndex = capturedArgs.zipWithIndex
-
-    def buildFieldAndConstructor(classNode: ClassNode): Unit = {
-      val ctorArgDescBuilder = new StringBuilder("(")
-      capturedArgsWithIndex.foreach {
-        case (t, i) =>
-          val argName = "arg$" + (i + 1)
-          val argDesc = t.getDescriptor
-          val argField = new FieldNode(ACC_PRIVATE | ACC_FINAL, argName, argDesc, null, null)
-          classNode.fields.add(argField)
-          ctorArgDescBuilder.append(argDesc)
-      }
-      ctorArgDescBuilder.append(")V")
-
-      val ctorArgDesc = ctorArgDescBuilder.toString()
-      val ctor = new MethodNode(ACC_PUBLIC, "<init>", ctorArgDesc, null, null)
-
-      // super()
-      ctor.instructions.add(new VarInsnNode(ALOAD, 0))
-      ctor.instructions.add(
-        new MethodInsnNode(INVOKESPECIAL, "java/lang/Object", "<init>", "()V", false))
-
-      // this()
-      var ctorLocalSize = 1
-      capturedArgsWithIndex.foreach {
-        case (t, i) =>
-          ctor.instructions.add(new VarInsnNode(ALOAD, 0))
-          ctor.instructions.add(new VarInsnNode(getLoadOpCode(t), ctorLocalSize))
-          ctor.instructions.add(
-            new FieldInsnNode(PUTFIELD, classNode.name, "arg$" + (i + 1), t.getDescriptor))
-          ctorLocalSize += t.getSize
-      }
-
-      ctor.instructions.add(new InsnNode(RETURN))
-      // Stack the results of 2 load instructions at most.
-      ctor.maxStack = 2
-      ctor.maxLocals = ctorLocalSize
-      classNode.methods.add(ctor)
-    }
-
-    def buildLambdaImplMethod(classNode: ClassNode): Unit = {
-      val fMethodName = lambdaProxy.getFunctionalInterfaceMethodName
-      val fMethodSig = lambdaProxy.getFunctionalInterfaceMethodSignature
-      val lambdaImplMethod = new MethodNode (ACC_PUBLIC, fMethodName, fMethodSig, null, null)
-
-      capturedArgsWithIndex.foreach {
-        case (t, i) =>
-          lambdaImplMethod.instructions.add(new VarInsnNode (ALOAD, 0))
-          lambdaImplMethod.instructions.add(
-            new FieldInsnNode(GETFIELD, classNode.name, "arg$" + (i + 1), t.getDescriptor))
-      }
-
-      var implMethodLocalSize = 1
-      for (t <- remainingArgs) {
-        lambdaImplMethod.instructions.add(new VarInsnNode(getLoadOpCode(t), implMethodLocalSize))
-        implMethodLocalSize += t.getSize
-      }
-
-      lambdaImplMethod.instructions.add(
-        new MethodInsnNode (
-          INVOKESTATIC,
-          lambdaProxy.getImplClass,
-          lambdaProxy.getImplMethodName,
-          lambdaProxy.getImplMethodSignature,
-          false))
-      lambdaImplMethod.instructions.add(new InsnNode(getReturnOpCode(implRet)))
-      lambdaImplMethod.maxStack = implArgTypes.length
-      lambdaImplMethod.maxLocals = implMethodLocalSize
-      classNode.methods.add(lambdaImplMethod)
-    }
-
-    // Split the original lambda class name (like $Lambda/0x0000007801a0d278) and use the last
-    // part for the cloned function class name.
-    val clonedFuncClassName =
-      originalFuncClass.getName.replace("/", "_").replace(".", "/") + "Converted"
-
-    // Converted class
-    val convertedClassNode = new ClassNode()
-    convertedClassNode.version = V22
-    convertedClassNode.access = ACC_PUBLIC
-    convertedClassNode.name = clonedFuncClassName
-    convertedClassNode.superName = "java/lang/Object"
-    convertedClassNode.interfaces.add(lambdaProxy.getFunctionalInterfaceClass)
-    convertedClassNode.interfaces.add("java/io/Serializable")
-    buildFieldAndConstructor(convertedClassNode)
-    buildLambdaImplMethod(convertedClassNode)
-
-    // Define the converted class
-    val classWriter = new ClassWriter(ClassWriter.COMPUTE_FRAMES | ClassWriter.COMPUTE_MAXS)
-    convertedClassNode.accept(classWriter)
-    val bytes = classWriter.toByteArray
-    val privateLookup = MethodHandles.privateLookupIn(originalFuncClass, methodLookup)
-    val clazz = privateLookup.defineClass(bytes)
+      lambdaProxy: SerializedLambda): MethodHandle = {
     val classLoader = originalFuncClass.getClassLoader
-    val classLoaderClass = classLoader.getClass
 
-    // For Scala REPL, write the class file to `spark.repl.classdir` for ExecutorClassLoader.
-    if (clazz.getName.startsWith("$line")) {
-      val replClassDir = System.getProperty("spark.repl.class.outputDir")
-      val path = Paths.get(replClassDir, clazz.getName.replace(".", "/") + ".class")
-      Files.write(path, bytes)
-    }
+    // scalastyle:off classforname
+    val fInterface = Class.forName(
+      lambdaProxy.getFunctionalInterfaceClass.replace("/", "."), false, classLoader)
+    // scalastyle:on classforname
+    val numCapturedArgs = lambdaProxy.getCapturedArgCount
+    val implMethodType = MethodType.fromMethodDescriptorString(
+      lambdaProxy.getImplMethodSignature, classLoader)
+    val invokedMethodType = MethodType.methodType(
+      fInterface, (0 until numCapturedArgs).map(i => implMethodType.parameterType(i)).toArray)
 
-    // For Ammonite, add the class to the SpecialClassLoader allowing to pass the class to the
-    // connect server
-    if (classLoaderClass.getName == "ammonite.runtime.SpecialClassLoader") {
-      val methodType = MethodType.methodType(classOf[Unit], classOf[String], classOf[Array[Byte]])
-      val addClassMethod = methodLookup.findVirtual(classLoaderClass, "addClassFile", methodType)
-      addClassMethod.invoke(classLoader, clazz.getName, bytes)
-    }
-    clazz
+    // scalastyle:off classforname
+    val implClassName = lambdaProxy.getImplClass.replace("/", ".")
+    val implClass = Class.forName(implClassName, false, classLoader)
+    // scalastyle:on classforname
+    val replLookup = getFullPowerLookupFor(implClass)
+
+    val implMethodName = lambdaProxy.getImplMethodName
+    val implMethodHandle = replLookup.findStatic(implClass, implMethodName, implMethodType)
+    val funcMethodType = MethodType.fromMethodDescriptorString(
+      lambdaProxy.getFunctionalInterfaceMethodSignature, classLoader)
+    val instantiatedMethodType = MethodType.fromMethodDescriptorString(
+      lambdaProxy.getInstantiatedMethodType, classLoader)
+
+    val callSite = LambdaMetafactory.altMetafactory(
+      replLookup,
+      lambdaProxy.getFunctionalInterfaceMethodName,
+      invokedMethodType,
+      funcMethodType,
+      implMethodHandle,
+      instantiatedMethodType,
+      LambdaMetafactory.FLAG_SERIALIZABLE)
+
+    callSite.getTarget
   }
 
-  private def getLoadOpCode(t: Type): Int = {
-    t match {
-      case Type.BOOLEAN_TYPE | Type.BYTE_TYPE | Type.CHAR_TYPE |
-           Type.SHORT_TYPE | Type.INT_TYPE => ILOAD
-      case Type.FLOAT_TYPE => FLOAD
-      case Type.LONG_TYPE => LLOAD
-      case Type.DOUBLE_TYPE => DLOAD
-      case _ => ALOAD
-    }
-  }
-
-  private def getReturnOpCode(t: Type): Int = {
-    t match {
-      case Type.VOID_TYPE => RETURN
-      case Type.BOOLEAN_TYPE | Type.BYTE_TYPE | Type.CHAR_TYPE |
-           Type.SHORT_TYPE | Type.INT_TYPE => IRETURN
-      case Type.FLOAT_TYPE => FRETURN
-      case Type.LONG_TYPE => LRETURN
-      case Type.DOUBLE_TYPE => DRETURN
-      case _ => ARETURN
-    }
+  /**
+   * This method is used for full-power lookup for `targetClass` which is used for cloning lambdas
+   * crated at each REPL line. `targetClass` is expected the enclosing class of a lambda.
+   * `MethodHandles.privateLookupIn(targetClass, MethodHandles.lookup())` is not
+   * helpful for such use case because targetClass and `ClosureCleaner` which
+   * `MethodHandles.lookup()` calls are loaded into different class loaders, and the method returns
+   * a lookup which doesn't enough privilege to create a lambda using
+   * LambdaMetaFactory.altMetafactory.
+   */
+  private def getFullPowerLookupFor(targetClass: Class[_]): MethodHandles.Lookup = {
+    val replLookupCtor = classOf[MethodHandles.Lookup].getDeclaredConstructor(
+      classOf[Class[_]],
+      classOf[Class[_]],
+      classOf[Int])
+    replLookupCtor.setAccessible(true)
+    // -1 means full-power.
+    replLookupCtor.newInstance(targetClass, null, -1)
   }
 }
 
