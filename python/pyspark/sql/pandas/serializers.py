@@ -1185,6 +1185,72 @@ class ArrowStreamAggArrowUDFSerializer(ArrowStreamArrowUDFSerializer):
         return "ArrowStreamAggArrowUDFSerializer"
 
 
+# Serializer for SQL_GROUPED_AGG_ARROW_ITER_UDF
+class ArrowStreamAggArrowIterUDFSerializer(ArrowStreamArrowUDFSerializer):
+    def __init__(
+        self,
+        timezone,
+        safecheck,
+        assign_cols_by_name,
+        arrow_cast,
+    ):
+        super().__init__(
+            timezone=timezone,
+            safecheck=safecheck,
+            assign_cols_by_name=False,
+            arrow_cast=True,
+        )
+        self._timezone = timezone
+        self._safecheck = safecheck
+        self._assign_cols_by_name = assign_cols_by_name
+        self._arrow_cast = arrow_cast
+
+    def load_stream(self, stream):
+        """
+        Yield column iterators instead of concatenating batches.
+        Each group yields a structure where indexing by column offset gives an iterator of arrays.
+        """
+        import pyarrow as pa
+
+        dataframes_in_group = None
+
+        while dataframes_in_group is None or dataframes_in_group > 0:
+            dataframes_in_group = read_int(stream)
+
+            if dataframes_in_group == 1:
+                batches = list(ArrowStreamSerializer.load_stream(self, stream))
+                # Create a structure that can be indexed by column offset to get column iterators
+                # The mapper will do a[offset] to get each column's iterator
+                if len(batches) > 0:
+                    num_cols = batches[0].num_columns
+
+                    # Create a custom class that can be indexed to get column iterators
+                    class ColumnIterators:
+                        def __init__(self, batches, num_cols):
+                            self._batches = batches
+                            self._num_cols = num_cols
+
+                        def __getitem__(self, col_idx):
+                            return (batch.column(col_idx) for batch in self._batches)
+
+                        def __len__(self):
+                            return self._num_cols
+
+                    yield ColumnIterators(batches, num_cols)
+                else:
+                    # Empty group
+                    yield []
+
+            elif dataframes_in_group != 0:
+                raise PySparkValueError(
+                    errorClass="INVALID_NUMBER_OF_DATAFRAMES_IN_GROUP",
+                    messageParameters={"dataframes_in_group": str(dataframes_in_group)},
+                )
+
+    def __repr__(self):
+        return "ArrowStreamAggArrowIterUDFSerializer"
+
+
 # Serializer for SQL_GROUPED_AGG_PANDAS_UDF and SQL_WINDOW_AGG_PANDAS_UDF
 class ArrowStreamAggPandasUDFSerializer(ArrowStreamPandasUDFSerializer):
     def __init__(
