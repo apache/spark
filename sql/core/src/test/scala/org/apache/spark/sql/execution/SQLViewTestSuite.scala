@@ -553,13 +553,16 @@ class GlobalTempViewTestSuite extends TempViewTestSuite with SharedSparkSession 
 }
 
 class OneTableCatalog extends InMemoryCatalog {
+  // store table in variable to preserve its ID between load requests
+  private val table = new InMemoryTable(
+    "t",
+    StructType.fromDDL("c1 INT"),
+    Array.empty,
+    Map.empty[String, String].asJava)
+
   override def loadTable(ident: Identifier): Table = {
     if (ident.namespace.isEmpty && ident.name == "t") {
-      new InMemoryTable(
-        "t",
-        StructType.fromDDL("c1 INT"),
-        Array.empty,
-        Map.empty[String, String].asJava)
+      table
     } else {
       super.loadTable(ident)
     }
