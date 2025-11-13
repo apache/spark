@@ -6577,10 +6577,16 @@ class AstBuilder extends DataTypeAstBuilder
 
   private def visitOperatorPipeRightSide(
       ctx: OperatorPipeRightSideContext, left: LogicalPlan): LogicalPlan = {
-    if (!SQLConf.get.getConf(SQLConf.OPERATOR_PIPE_SYNTAX_ENABLED)) {
+    if (!conf.getConf(SQLConf.OPERATOR_PIPE_SYNTAX_ENABLED)) {
       operationNotAllowed("Operator pipe SQL syntax using |>", ctx)
     }
     Option(ctx.selectClause).map { c =>
+      // Check if GROUP BY is used with pipe SELECT when the config is disabled
+      if (ctx.aggregationClause != null && !conf.pipeOperatorAllowAggregateInSelect) {
+        operationNotAllowed(
+          "|> SELECT with a GROUP BY clause is not allowed when " +
+          "spark.sql.allowAggregateInSelectWithPipeOperator is disabled", ctx)
+      }
       withSelectQuerySpecification(
         ctx = ctx,
         selectClause = c,

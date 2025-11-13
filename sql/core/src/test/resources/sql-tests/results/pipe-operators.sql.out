@@ -4277,20 +4277,57 @@ struct<total_a:bigint>
 
 
 -- !query
-set spark.sql.pipeOperator.allowAggregateInSelect=false
+set spark.sql.allowAggregateInSelectWithPipeOperator=false
 -- !query schema
 struct<key:string,value:string>
 -- !query output
-spark.sql.pipeOperator.allowAggregateInSelect	false
+spark.sql.allowAggregateInSelectWithPipeOperator	false
 
 
 -- !query
 table other
 |> select sum(a) as result
 -- !query schema
-struct<result:bigint>
+struct<>
 -- !query output
-4
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "PIPE_OPERATOR_CONTAINS_AGGREGATE_FUNCTION",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "clause" : "SELECT",
+    "expr" : "sum(a#x)"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 23,
+    "stopIndex" : 28,
+    "fragment" : "sum(a)"
+  } ]
+}
+
+
+-- !query
+table other
+|> select a, sum(b) as sum_b group by a
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_0035",
+  "messageParameters" : {
+    "message" : "|> SELECT with a GROUP BY clause is not allowed when spark.sql.allowAggregateInSelectWithPipeOperator is disabled"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 51,
+    "fragment" : "table other\n|> select a, sum(b) as sum_b group by a"
+  } ]
+}
 
 
 -- !query
@@ -4303,11 +4340,11 @@ struct<total_a:bigint>
 
 
 -- !query
-set spark.sql.pipeOperator.allowAggregateInSelect=true
+set spark.sql.allowAggregateInSelectWithPipeOperator=true
 -- !query schema
 struct<key:string,value:string>
 -- !query output
-spark.sql.pipeOperator.allowAggregateInSelect	true
+spark.sql.allowAggregateInSelectWithPipeOperator	true
 
 
 -- !query

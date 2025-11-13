@@ -1794,18 +1794,22 @@ table other
 |> aggregate sum(a) as total_a;
 
 -- Disable the configuration to test the legacy behavior.
-set spark.sql.pipeOperator.allowAggregateInSelect=false;
+set spark.sql.allowAggregateInSelectWithPipeOperator=false;
 
 -- With configuration disabled, aggregates in SELECT now fail (requires |> AGGREGATE).
 table other
 |> select sum(a) as result;
+
+-- With configuration disabled, GROUP BY in SELECT also fails.
+table other
+|> select a, sum(b) as sum_b group by a;
 
 -- The |> AGGREGATE keyword is required when configuration is disabled.
 table other
 |> aggregate sum(a) as total_a;
 
 -- Re-enable the configuration.
-set spark.sql.pipeOperator.allowAggregateInSelect=true;
+set spark.sql.allowAggregateInSelectWithPipeOperator=true;
 
 -- Verify that aggregates in SELECT work again.
 table other
