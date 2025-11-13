@@ -23,7 +23,6 @@ import unittest
 import uuid
 import contextlib
 
-import pyspark.sql.connect.proto as pb2
 from pyspark import Row, SparkConf
 from pyspark.util import is_remote_only
 from pyspark.testing.utils import PySparkErrorTestUtils
@@ -53,6 +52,7 @@ if should_test_connect:
     from pyspark.sql.connect.dataframe import DataFrame
     from pyspark.sql.connect.plan import Read, Range, SQL, LogicalPlan
     from pyspark.sql.connect.session import SparkSession
+    import pyspark.sql.connect.proto as pb2
 
 
 class MockRemoteSession:
