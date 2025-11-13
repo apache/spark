@@ -1282,10 +1282,10 @@ class GroupPandasUDFSerializer(ArrowStreamPandasUDFSerializer):
                 batches = ArrowStreamSerializer.load_stream(self, stream)
                 result = self._convert_batches_to_pandas(batches)
 
-                # Yield result(s) - either the generator itself (iterator mode) or the single list (non-iterator)
+                # Yield result(s) - generator itself (iterator) or single list (regular)
                 yield from (result,) if self._use_iterator else result
 
-                # Ensure stream is fully consumed (no-op for non-iterator since already consumed)
+                # Ensure stream is fully consumed (no-op for regular mode)
                 for _ in result:
                     pass
 
@@ -1301,7 +1301,7 @@ class GroupPandasUDFSerializer(ArrowStreamPandasUDFSerializer):
         In iterator mode, flattens the (dataframes_generator, arrow_type) tuples.
         """
         if self._use_iterator:
-            # Flatten: (dataframes_generator, arrow_type) -> [(df, arrow_type)], [(df, arrow_type)], ...
+            # Flatten: (dataframes_generator, arrow_type) -> [(df, arrow_type)], ...
             iterator = (
                 [(df, arrow_type)]
                 for dataframes_gen, arrow_type in iterator
