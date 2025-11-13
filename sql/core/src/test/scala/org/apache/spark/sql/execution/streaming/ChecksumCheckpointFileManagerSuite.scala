@@ -26,6 +26,7 @@ import org.apache.hadoop.fs._
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.execution.streaming.checkpointing._
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * This inherits tests for the [[CheckpointFileManager]] from [[CheckpointFileManagerTests]].
@@ -57,8 +58,26 @@ abstract class ChecksumCheckpointFileManagerSuite extends CheckpointFileManagerT
         s"expected main files: $mainFilesForExistingChecksumFiles / actual files: $files")
   }
 
+  override def createManager(path: Path): CheckpointFileManager = {
+    createChecksumManager(
+      path,
+      skipCreationIfFileMissingChecksum =
+        SQLConf.STREAMING_CHECKPOINT_FILE_CHECKSUM_SKIP_CREATION_IF_FILE_MISSING_CHECKSUM
+        .defaultValue.get)
+  }
+
   /** Create a normal CheckpointFileManager (not the checksum checkpoint manager) */
   protected def createNoChecksumManager(path: Path): CheckpointFileManager
+
+  protected def createChecksumManager(
+    path: Path,
+    skipCreationIfFileMissingChecksum: Boolean): CheckpointFileManager = {
+    new ChecksumCheckpointFileManager(
+      createNoChecksumManager(path),
+      allowConcurrentDelete = true,
+      numThreads = 4,
+      skipCreationIfFileMissingChecksum = skipCreationIfFileMissingChecksum)
+  }
 
   private def makeDir(fm: CheckpointFileManager, dir: Path): Unit = {
     assert(!fm.exists(dir))
@@ -184,29 +203,62 @@ abstract class ChecksumCheckpointFileManagerSuite extends CheckpointFileManagerT
       assert(regularFm.open(path).readContent() == content)
     }
   }
+
+  test("skip checksum creation if file missing checksum") {
+    withTempHadoopPath { basePath =>
+      val regularFm = createNoChecksumManager(basePath)
+      // Mkdirs
+      val dir = new Path(s"$basePath/dir/subdir/subsubdir")
+      makeDir(regularFm, dir)
+
+      // Create a file using the regular file manager
+      val path = new Path(s"$dir/file")
+      regularFm.createAtomic(path, overwriteIfPossible = true).writeContent(content).close()
+      assert(regularFm.exists(path))
+
+      // Now try to write and read the file with the checksum manager with fallback.
+      val checksumFmWithFallback =
+        createChecksumManager(basePath, skipCreationIfFileMissingChecksum = true)
+      // Overwrite the file with a different content.
+      checksumFmWithFallback.createAtomic(
+        path, overwriteIfPossible = true).writeContent(content + 1).close()
+      assert(checksumFmWithFallback.open(path).readContent() == content + 1)
+      // Checksum should not be created since we fallback to the underlying file manager.
+      assert(!checksumFmWithFallback.exists(getChecksumPath(path)))
+
+      // Now try to write and read the file with the checksum manager without fallback.
+      val checksumFmWithoutFallback =
+        createChecksumManager(basePath, skipCreationIfFileMissingChecksum = false)
+      // Overwrite the file with a different content.
+      checksumFmWithoutFallback.createAtomic(
+        path, overwriteIfPossible = true).writeContent(content + 2).close()
+      assert(checksumFmWithoutFallback.open(path).readContent() == content + 2)
+      // Checksum should be created since we don't fallback to the underlying file manager.
+      assert(checksumFmWithoutFallback.exists(getChecksumPath(path)))
+
+      // Try to write and read the file with the checksum manager with fallback when the checksum
+      // file already exists.
+      checksumFmWithFallback.createAtomic(
+        path, overwriteIfPossible = true).writeContent(content + 3).close()
+      // This read should succeed since we do not fallback to the underlying file manager, since
+      // the checksum file already exists.
+      assert(checksumFmWithFallback.open(path).readContent() == content + 3)
+      assert(checksumFmWithFallback.exists(getChecksumPath(path)))
+
+      regularFm.close()
+      checksumFmWithFallback.close()
+      checksumFmWithoutFallback.close()
+    }
+  }
 }
 
 class FileContextChecksumCheckpointFileManagerSuite extends ChecksumCheckpointFileManagerSuite {
-  override def createManager(path: Path): CheckpointFileManager = {
-    new ChecksumCheckpointFileManager(
-      createNoChecksumManager(path),
-      allowConcurrentDelete = true,
-      numThreads = 4)
-  }
-
   protected def createNoChecksumManager(path: Path): CheckpointFileManager = {
     new FileContextBasedCheckpointFileManager(path, new Configuration())
   }
 }
 
 class FileSystemChecksumCheckpointFileManagerSuite extends ChecksumCheckpointFileManagerSuite {
-  override def createManager(path: Path): CheckpointFileManager = {
-    new ChecksumCheckpointFileManager(
-      createNoChecksumManager(path),
-      allowConcurrentDelete = true,
-      numThreads = 4)
-  }
-
   protected def createNoChecksumManager(path: Path): CheckpointFileManager = {
     new FileSystemBasedCheckpointFileManager(path, new Configuration())
   }

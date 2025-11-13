@@ -438,10 +438,12 @@ class ArrowTestsMixin:
             assert not df.filter(df["col2"].endswith(suffix)).isEmpty()
 
     def check_large_cached_local_relation_same_values(self):
-        data = [("C000000032", "R20", 0.2555)] * 500_000
+        row_count = 500_000
+        data = [("C000000032", "R20", 0.2555)] * row_count
         pdf = pd.DataFrame(data=data, columns=["Contrat", "Recommandation", "Distance"])
-        df = self.spark.createDataFrame(pdf)
-        df.collect()
+        for _ in range(2):
+            df = self.spark.createDataFrame(pdf)
+            assert df.count() == row_count
 
     def test_toArrow_keep_utc_timezone(self):
         df = self.spark.createDataFrame(self.data, schema=self.schema)

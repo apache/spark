@@ -18,6 +18,7 @@ import sys
 from typing import (
     Any,
     Callable,
+    Iterator,
     List,
     Optional,
     Union,
@@ -71,9 +72,25 @@ class PandasConversionMixin:
 
         import pandas as pd
 
-        jconf = self.sparkSession._jconf
+        (
+            sessionLocalTimeZone,
+            arrowPySparkEnabled,
+            arrowUseLargeVarTypes,
+            arrowPySparkFallbackEnabled,
+            arrowPySparkSelfDestructEnabled,
+            pandasStructHandlingMode,
+        ) = self.sparkSession._jconf.getConfs(
+            [
+                "spark.sql.session.timeZone",
+                "spark.sql.execution.arrow.pyspark.enabled",
+                "spark.sql.execution.arrow.useLargeVarTypes",
+                "spark.sql.execution.arrow.pyspark.fallback.enabled",
+                "spark.sql.execution.arrow.pyspark.selfDestruct.enabled",
+                "spark.sql.execution.pandas.structHandlingMode",
+            ]
+        )
 
-        if jconf.arrowPySparkEnabled():
+        if arrowPySparkEnabled == "true":
             use_arrow = True
             try:
                 from pyspark.sql.pandas.types import to_arrow_schema
@@ -81,10 +98,10 @@ class PandasConversionMixin:
 
                 require_minimum_pyarrow_version()
                 arrow_schema = to_arrow_schema(
-                    self.schema, prefers_large_types=jconf.arrowUseLargeVarTypes()
+                    self.schema, prefers_large_types=arrowUseLargeVarTypes == "true"
                 )
             except Exception as e:
-                if jconf.arrowPySparkFallbackEnabled():
+                if arrowPySparkFallbackEnabled == "true":
                     msg = (
                         "toPandas attempted Arrow optimization because "
                         "'spark.sql.execution.arrow.pyspark.enabled' is set to true; however, "
@@ -112,7 +129,7 @@ class PandasConversionMixin:
                 try:
                     import pyarrow as pa
 
-                    self_destruct = jconf.arrowPySparkSelfDestructEnabled()
+                    self_destruct = arrowPySparkSelfDestructEnabled == "true"
                     batches = self._collect_as_arrow(split_batches=self_destruct)
 
                     # Rename columns to avoid duplicated column names.
@@ -148,8 +165,8 @@ class PandasConversionMixin:
                         )
 
                     if len(self.columns) > 0:
-                        timezone = jconf.sessionLocalTimeZone()
-                        struct_in_pandas = jconf.pandasStructHandlingMode()
+                        timezone = sessionLocalTimeZone
+                        struct_in_pandas = pandasStructHandlingMode
 
                         error_on_duplicated_field_names = False
                         if struct_in_pandas == "legacy":
@@ -192,18 +209,20 @@ class PandasConversionMixin:
 
         # Below is toPandas without Arrow optimization.
         rows = self.collect()
-        if len(rows) > 0:
-            pdf = pd.DataFrame.from_records(
-                rows, index=range(len(rows)), columns=self.columns  # type: ignore[arg-type]
-            )
-        else:
-            pdf = pd.DataFrame(columns=self.columns)
 
-        if len(pdf.columns) > 0:
-            timezone = jconf.sessionLocalTimeZone()
-            struct_in_pandas = jconf.pandasStructHandlingMode()
+        if len(self.columns) > 0:
+            timezone = sessionLocalTimeZone
+            struct_in_pandas = pandasStructHandlingMode
 
-            return pd.concat(
+            # Extract columns from rows and apply converters
+            if len(rows) > 0:
+                # Use iterator to avoid materializing intermediate data structure
+                columns_data: Iterator[Any] = iter(zip(*rows))
+            else:
+                columns_data = iter([] for _ in self.schema.fields)
+
+            # Build DataFrame from columns
+            pdf = pd.concat(
                 [
                     _create_converter_to_pandas(
                         field.dataType,
@@ -214,13 +233,15 @@ class PandasConversionMixin:
                         ),
                         error_on_duplicated_field_names=False,
                         timestamp_utc_localized=False,
-                    )(pser)
-                    for (_, pser), field in zip(pdf.items(), self.schema.fields)
+                    )(pd.Series(col_data, dtype=object))
+                    for col_data, field in zip(columns_data, self.schema.fields)
                 ],
-                axis="columns",
+                axis=1,
+                keys=self.columns,
             )
-        else:
             return pdf
+        else:
+            return pd.DataFrame(columns=[], index=range(len(rows)))
 
     def toArrow(self) -> "pa.Table":
         from pyspark.sql.dataframe import DataFrame

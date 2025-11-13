@@ -34,6 +34,7 @@ import platform
 import urllib.parse
 import uuid
 import sys
+import time
 from typing import (
     Iterable,
     Iterator,
@@ -111,6 +112,19 @@ if TYPE_CHECKING:
     from pyspark.sql.connect._typing import DataTypeOrString
     from pyspark.sql.connect.session import SparkSession
     from pyspark.sql.datasource import DataSource
+
+
+def _import_zstandard_if_available() -> Optional[Any]:
+    """
+    Import zstandard if available, otherwise return None.
+    This is used to handle the case when zstandard is not installed.
+    """
+    try:
+        import zstandard
+
+        return zstandard
+    except ImportError:
+        return None
 
 
 class ChannelBuilder:
@@ -706,6 +720,10 @@ class SparkConnectClient(object):
 
         self._progress_handlers: List[ProgressHandler] = []
 
+        self._zstd_module = _import_zstandard_if_available()
+        self._plan_compression_threshold: Optional[int] = None  # Will be fetched lazily
+        self._plan_compression_algorithm: Optional[str] = None  # Will be fetched lazily
+
         # cleanup ml cache if possible
         atexit.register(self._cleanup_ml_cache)
 
@@ -983,32 +1001,28 @@ class SparkConnectClient(object):
         schema = schema or from_arrow_schema(table.schema, prefer_timestamp_ntz=True)
         assert schema is not None and isinstance(schema, StructType)
 
-        # SPARK-51112: If the table is empty, we avoid using pyarrow to_pandas to create the
-        # DataFrame, as it may fail with a segmentation fault. Instead, we create an empty pandas
-        # DataFrame manually with the correct schema.
-        if table.num_rows == 0:
-            pdf = pd.DataFrame(columns=schema.names, index=range(0))
-        else:
-            # Rename columns to avoid duplicated column names.
-            renamed_table = table.rename_columns([f"col_{i}" for i in range(table.num_columns)])
+        # Rename columns to avoid duplicated column names during processing
+        temp_col_names = [f"col_{i}" for i in range(len(schema.names))]
+        table = table.rename_columns(temp_col_names)
 
-            pandas_options = {"coerce_temporal_nanoseconds": True}
-            if self_destruct == "true":
-                # Configure PyArrow to use as little memory as possible:
-                # self_destruct - free columns as they are converted
-                # split_blocks - create a separate Pandas block for each column
-                # use_threads - convert one column at a time
-                pandas_options.update(
-                    {
-                        "self_destruct": True,
-                        "split_blocks": True,
-                        "use_threads": False,
-                    }
-                )
-            pdf = renamed_table.to_pandas(**pandas_options)
-            pdf.columns = schema.names
+        # Pandas DataFrame created from PyArrow uses datetime64[ns] for date type
+        # values, but we should use datetime.date to match the behavior with when
+        # Arrow optimization is disabled.
+        pandas_options = {"coerce_temporal_nanoseconds": True}
+        if self_destruct == "true" and table.num_rows > 0:
+            # Configure PyArrow to use as little memory as possible:
+            # self_destruct - free columns as they are converted
+            # split_blocks - create a separate Pandas block for each column
+            # use_threads - convert one column at a time
+            pandas_options.update(
+                {
+                    "self_destruct": True,
+                    "split_blocks": True,
+                    "use_threads": False,
+                }
+            )
 
-        if len(pdf.columns) > 0:
+        if len(schema.names) > 0:
             error_on_duplicated_field_names: bool = False
             if struct_in_pandas == "legacy" and any(
                 _has_type(f.dataType, StructType) for f in schema.fields
@@ -1016,19 +1030,42 @@ class SparkConnectClient(object):
                 error_on_duplicated_field_names = True
                 struct_in_pandas = "dict"
 
-            pdf = pd.concat(
-                [
-                    _create_converter_to_pandas(
-                        field.dataType,
-                        field.nullable,
-                        timezone=timezone,
-                        struct_in_pandas=struct_in_pandas,
-                        error_on_duplicated_field_names=error_on_duplicated_field_names,
-                    )(pser)
-                    for (_, pser), field, pa_field in zip(pdf.items(), schema.fields, table.schema)
-                ],
-                axis="columns",
-            )
+            # SPARK-51112: If the table is empty, we avoid using pyarrow to_pandas to create the
+            # DataFrame, as it may fail with a segmentation fault.
+            if table.num_rows == 0:
+                # For empty tables, create empty Series with converters to preserve dtypes
+                pdf = pd.concat(
+                    [
+                        _create_converter_to_pandas(
+                            field.dataType,
+                            field.nullable,
+                            timezone=timezone,
+                            struct_in_pandas=struct_in_pandas,
+                            error_on_duplicated_field_names=error_on_duplicated_field_names,
+                        )(pd.Series([], name=temp_col_names[i], dtype="object"))
+                        for i, field in enumerate(schema.fields)
+                    ],
+                    axis="columns",
+                )
+            else:
+                pdf = pd.concat(
+                    [
+                        _create_converter_to_pandas(
+                            field.dataType,
+                            field.nullable,
+                            timezone=timezone,
+                            struct_in_pandas=struct_in_pandas,
+                            error_on_duplicated_field_names=error_on_duplicated_field_names,
+                        )(arrow_col.to_pandas(**pandas_options))
+                        for arrow_col, field in zip(table.columns, schema.fields)
+                    ],
+                    axis="columns",
+                )
+            # Restore original column names (including duplicates)
+            pdf.columns = schema.names
+        else:
+            # empty columns
+            pdf = table.to_pandas(**pandas_options)
 
         if len(metrics) > 0:
             pdf.attrs["metrics"] = metrics
@@ -1156,7 +1193,7 @@ class SparkConnectClient(object):
         req = self._execute_plan_request_with_metadata()
         if self._user_id:
             req.user_context.user_id = self._user_id
-        req.plan.command.CopyFrom(command)
+        self._set_command_in_plan(req.plan, command)
         data, _, metrics, observed_metrics, properties = self._execute_and_fetch(
             req, observations or {}
         )
@@ -1182,7 +1219,7 @@ class SparkConnectClient(object):
         req = self._execute_plan_request_with_metadata()
         if self._user_id:
             req.user_context.user_id = self._user_id
-        req.plan.command.CopyFrom(command)
+        self._set_command_in_plan(req.plan, command)
         for response in self._execute_and_fetch_as_iterator(req, observations or {}):
             if isinstance(response, dict):
                 yield response
@@ -1963,6 +2000,17 @@ class SparkConnectClient(object):
                     if info.metadata.get("errorClass") == "INVALID_HANDLE.SESSION_CHANGED":
                         self._closed = True
 
+                    if info.metadata.get("errorClass") == "CONNECT_INVALID_PLAN.CANNOT_PARSE":
+                        # Disable plan compression if the server fails to interpret the plan.
+                        logger.info(
+                            "Disabling plan compression for the session due to "
+                            "CONNECT_INVALID_PLAN.CANNOT_PARSE error."
+                        )
+                        self._plan_compression_threshold, self._plan_compression_algorithm = (
+                            -1,
+                            "NONE",
+                        )
+
                     raise convert_exception(
                         info,
                         status.message,
@@ -2111,6 +2159,104 @@ class SparkConnectClient(object):
 
         ml_command_result = properties["ml_command_result"]
         return ml_command_result.param.long
+
+    def _set_relation_in_plan(self, plan: pb2.Plan, relation: pb2.Relation) -> None:
+        """Sets the relation in the plan, attempting compression if configured."""
+        self._try_compress_and_set_plan(
+            plan=plan,
+            message=relation,
+            op_type=pb2.Plan.CompressedOperation.OpType.OP_TYPE_RELATION,
+        )
+
+    def _set_command_in_plan(self, plan: pb2.Plan, command: pb2.Command) -> None:
+        """Sets the command in the plan, attempting compression if configured."""
+        self._try_compress_and_set_plan(
+            plan=plan,
+            message=command,
+            op_type=pb2.Plan.CompressedOperation.OpType.OP_TYPE_COMMAND,
+        )
+
+    def _try_compress_and_set_plan(
+        self,
+        plan: pb2.Plan,
+        message: google.protobuf.message.Message,
+        op_type: pb2.Plan.CompressedOperation.OpType.ValueType,
+    ) -> None:
+        """
+        Tries to compress a protobuf message and sets it on the plan.
+        If compression is not enabled, not effective, or not available,
+        it falls back to the original message.
+        """
+        (
+            plan_compression_threshold,
+            plan_compression_algorithm,
+        ) = self._get_plan_compression_threshold_and_algorithm()
+        plan_compression_enabled = (
+            plan_compression_threshold is not None
+            and plan_compression_threshold >= 0
+            and plan_compression_algorithm is not None
+            and plan_compression_algorithm != "NONE"
+        )
+        if plan_compression_enabled:
+            serialized_msg = message.SerializeToString()
+            original_size = len(serialized_msg)
+            if (
+                original_size > plan_compression_threshold
+                and plan_compression_algorithm == "ZSTD"
+                and self._zstd_module
+            ):
+                start_time = time.time()
+                compressed_operation = pb2.Plan.CompressedOperation(
+                    data=self._zstd_module.compress(serialized_msg),
+                    op_type=op_type,
+                    compression_codec=pb2.CompressionCodec.COMPRESSION_CODEC_ZSTD,
+                )
+                duration = time.time() - start_time
+                compressed_size = len(compressed_operation.data)
+                logger.debug(
+                    f"Plan compression: original_size={original_size}, "
+                    f"compressed_size={compressed_size}, "
+                    f"saving_ratio={1 - compressed_size / original_size:.2f}, "
+                    f"duration_s={duration:.1f}"
+                )
+                if compressed_size < original_size:
+                    plan.compressed_operation.CopyFrom(compressed_operation)
+                    return
+                else:
+                    logger.debug("Plan compression not effective. Using original plan.")
+
+        if op_type == pb2.Plan.CompressedOperation.OpType.OP_TYPE_RELATION:
+            plan.root.CopyFrom(message)  # type: ignore[arg-type]
+        else:
+            plan.command.CopyFrom(message)  # type: ignore[arg-type]
+
+    def _get_plan_compression_threshold_and_algorithm(self) -> Tuple[int, str]:
+        if self._plan_compression_threshold is None or self._plan_compression_algorithm is None:
+            try:
+                (
+                    plan_compression_threshold_str,
+                    self._plan_compression_algorithm,
+                ) = self.get_configs(
+                    "spark.connect.session.planCompression.threshold",
+                    "spark.connect.session.planCompression.defaultAlgorithm",
+                )
+                self._plan_compression_threshold = (
+                    int(plan_compression_threshold_str) if plan_compression_threshold_str else -1
+                )
+                logger.debug(
+                    f"Plan compression threshold: {self._plan_compression_threshold}, "
+                    f"algorithm: {self._plan_compression_algorithm}"
+                )
+            except Exception as e:
+                self._plan_compression_threshold = -1
+                self._plan_compression_algorithm = "NONE"
+                logger.debug(
+                    "Plan compression is disabled because the server does not support it.", e
+                )
+        return (
+            self._plan_compression_threshold,
+            self._plan_compression_algorithm,
+        )  # type: ignore[return-value]
 
     def clone(self, new_session_id: Optional[str] = None) -> "SparkConnectClient":
         """
