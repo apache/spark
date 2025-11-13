@@ -2312,8 +2312,10 @@ class DataSourceV2SQLSuiteV1Filter
         exception = intercept[SparkUnsupportedOperationException] {
           sql(s"UPDATE $t SET name='Robert', age=32 WHERE p=1")
         },
-        condition = "_LEGACY_ERROR_TEMP_2096",
-        parameters = Map("ddl" -> "UPDATE TABLE")
+        condition = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
+        parameters = Map(
+          "tableName" -> "`testcat`.`ns1`.`ns2`.`tbl`",
+          "operation" -> "UPDATE TABLE")
       )
     }
   }
@@ -2418,8 +2420,10 @@ class DataSourceV2SQLSuiteV1Filter
                |WHEN MATCHED AND (target.p > 0) THEN UPDATE SET *
                |WHEN NOT MATCHED THEN INSERT *""".stripMargin)
         },
-        condition = "_LEGACY_ERROR_TEMP_2096",
-        parameters = Map("ddl" -> "MERGE INTO TABLE"))
+        condition = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
+        parameters = Map(
+          "tableName" -> "`testcat`.`ns1`.`ns2`.`target`",
+          "operation" -> "MERGE INTO TABLE"))
     }
   }
 
