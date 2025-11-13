@@ -66,7 +66,7 @@ The following escape sequences are recognized in regular string literals (withou
 The unescaping rules above can be turned off by setting the SQL config `spark.sql.parser.escapedStringLiterals` to `true`.
 
 Chains of string literals are coalesced into a single string literal.
-This can be useful when constricting string that are too long to fit on a single line.
+This can be useful when constructing strings that are too long to fit on a single line.
 It also allows mixing of string literals and parameter marker into a single string literal.
 
 #### Examples

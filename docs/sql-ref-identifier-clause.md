@@ -28,8 +28,9 @@ The clause comes in two forms:
 
 - When passed a string-literal, which may include a coalesced string of literals and parameter markers, it can be used anywhere an identifier or qualified identifier can be used.
   The usage of this form is encouraged.
-- When passed a more complex constant string expression, which may also include variables, it can be used to reference dynamic SQL object references such as table names, column names, and function names.
+- When passed a more complex constant string expression, which may also include variables, it can be used in limited cases to reference dynamic SQL object references such as table names, column names, and function names.
   The usage of this form is discouraged unless necessary.
+  For example you cannot use this form to parameterize a table or column alias, or a column name in a `CREATE TABLE` statement.
 
 ### Syntax
 
@@ -49,19 +50,23 @@ IDENTIFIER ( strExpr )
 
   For example:
 
-  - `IDENTIFIER('default.' :tablename)`
-  - `IDENTIFIER(:catalog '.' :namespace '.' :tablename '.' :columnname)`
-  - `IDENTIFIER(:rootdirectory '/data/' :tablename)`
+  ```
+  IDENTIFIER('default.' :tablename)
+  IDENTIFIER(:catalog '.' :namespace '.' :tablename '.' :columnname)
+  IDENTIFIER(:rootdirectory '/data/' :tablename)
+  ```
 
 - **strExpr**: A constant `STRING` expression. Typically, the expression includes a parameter marker or session variable.
 
   The string must be a valid (qualified) identifier.
 
   For example:
-    
-  - `IDENTIFIER(session.schema || '.' || session.tablename)`
-  - `IDENTIFIER('`' || session.schema || '`.' || '`' || session.tablename || '`')`
-  - `IDENTIFIER(CONCAT(:catalog, '.', :namespace, '.', :tablename, '.', :columnname))`
+  
+  ```
+  IDENTIFIER(session.schema || '.' || session.tablename)
+  IDENTIFIER('`' || session.schema || '`.`' session.tablename || '`')
+  IDENTIFIER(CONCAT(:catalog, '.', :namespace, '.', :tablename, '.', :columnname))
+  ```
 
 ### Returns
 

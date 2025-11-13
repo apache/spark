@@ -50,7 +50,7 @@ Named parameter markers are typed placeholder variables. The API invoking the SQ
 
 ##### Parameters
 
-- **[named_parameter_name](/sql/language-manual/sql-ref-identifiers.md)**
+- **named_parameter_name**
 
   A reference to a supplied parameter marker in form of an unqualified identifier.
 
