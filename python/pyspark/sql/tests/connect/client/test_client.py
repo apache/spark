@@ -20,14 +20,13 @@ import uuid
 from collections.abc import Generator
 from typing import Optional, Any, Union
 
-import google.protobuf.wrappers_pb2 as wrappers_pb2
-
 from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
 from pyspark.testing.utils import eventually
 
 if should_test_connect:
     import grpc
     import google.protobuf.any_pb2 as any_pb2
+    import google.protobuf.wrappers_pb2 as wrappers_pb2
     from google.rpc import status_pb2
     from google.rpc.error_details_pb2 import ErrorInfo
     import pandas as pd
@@ -181,6 +180,15 @@ if should_test_connect:
                 pair = resp.pairs.add()
                 pair.key = req.operation.get_with_default.pairs[0].key
                 pair.value = req.operation.get_with_default.pairs[0].value or "true"
+            return resp
+
+        def AnalyzePlan(self, req: proto.AnalyzePlanRequest, metadata):
+            self.req = req
+            self.client_user_context_extensions = req.user_context.extensions
+            resp = proto.AnalyzePlanResponse()
+            resp.session_id = self._session_id
+            # Return a minimal response with a semantic hash
+            resp.semantic_hash.result = 12345
             return resp
 
     # The _cleanup_ml_cache invocation will hang in this test (no valid spark cluster)
