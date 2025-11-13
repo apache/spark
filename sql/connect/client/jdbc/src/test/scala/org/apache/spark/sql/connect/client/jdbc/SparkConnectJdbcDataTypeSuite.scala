@@ -19,6 +19,8 @@ package org.apache.spark.sql.connect.client.jdbc
 
 import java.sql.{ResultSet, SQLException, Types}
 
+import scala.util.Using
+
 import org.apache.spark.sql.connect.client.jdbc.test.JdbcHelper
 import org.apache.spark.sql.connect.test.{ConnectFunSuite, RemoteSparkSession}
 
@@ -529,6 +531,36 @@ class SparkConnectJdbcDataTypeSuite extends ConnectFunSuite with RemoteSparkSess
             s"Display size mismatch for precision $precision: " +
               s"expected $expectedDisplaySize, got ${metaData.getColumnDisplaySize(1)}")
         }
+    }
+  }
+
+  test("get date type with spark.sql.datetime.java8API.enabled") {
+    withStatement { stmt =>
+      Seq(true, false).foreach { java8APIEnabled =>
+        stmt.execute(s"set spark.sql.datetime.java8API.enabled=$java8APIEnabled")
+        Using.resource(stmt.executeQuery("SELECT date '2025-11-15'")) { rs =>
+          assert(rs.next())
+          assert(rs.getDate(1) === java.sql.Date.valueOf("2025-11-15"))
+          assert(!rs.wasNull)
+          assert(!rs.next())
+        }
+      }
+    }
+  }
+
+  test("get time type with spark.sql.datetime.java8API.enabled") {
+    withStatement { stmt =>
+      Seq(true, false).foreach { java8APIEnabled =>
+        stmt.execute(s"set spark.sql.datetime.java8API.enabled=$java8APIEnabled")
+        Using.resource(stmt.executeQuery("SELECT time '12:34:56.123456'")) { rs =>
+          assert(rs.next())
+          val time = rs.getTime(1)
+          val expectedMillis = 12 * 3600000L + 34 * 60000L + 56 * 1000L + 123L
+          assert(time.getTime === expectedMillis)
+          assert(!rs.wasNull)
+          assert(!rs.next())
+        }
+      }
     }
   }
 }
