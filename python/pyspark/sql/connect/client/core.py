@@ -100,6 +100,7 @@ from pyspark.sql.connect.plan import (
 from pyspark.sql.connect.observation import Observation
 from pyspark.sql.connect.utils import get_python_ver
 from pyspark.sql.pandas.types import _create_converter_to_pandas, from_arrow_schema
+from pyspark.sql.pandas.conversion import _convert_arrow_table_to_pandas
 from pyspark.sql.types import DataType, StructType, _has_type
 from pyspark.util import PythonEvalType
 from pyspark.storagelevel import StorageLevel
@@ -1030,37 +1031,15 @@ class SparkConnectClient(object):
                 error_on_duplicated_field_names = True
                 struct_in_pandas = "dict"
 
-            # SPARK-51112: If the table is empty, we avoid using pyarrow to_pandas to create the
-            # DataFrame, as it may fail with a segmentation fault.
-            if table.num_rows == 0:
-                # For empty tables, create empty Series with converters to preserve dtypes
-                pdf = pd.concat(
-                    [
-                        _create_converter_to_pandas(
-                            field.dataType,
-                            field.nullable,
-                            timezone=timezone,
-                            struct_in_pandas=struct_in_pandas,
-                            error_on_duplicated_field_names=error_on_duplicated_field_names,
-                        )(pd.Series([], name=temp_col_names[i], dtype="object"))
-                        for i, field in enumerate(schema.fields)
-                    ],
-                    axis="columns",
-                )
-            else:
-                pdf = pd.concat(
-                    [
-                        _create_converter_to_pandas(
-                            field.dataType,
-                            field.nullable,
-                            timezone=timezone,
-                            struct_in_pandas=struct_in_pandas,
-                            error_on_duplicated_field_names=error_on_duplicated_field_names,
-                        )(arrow_col.to_pandas(**pandas_options))
-                        for arrow_col, field in zip(table.columns, schema.fields)
-                    ],
-                    axis="columns",
-                )
+            pdf = _convert_arrow_table_to_pandas(
+                table,
+                schema.fields,
+                temp_col_names,
+                timezone,
+                struct_in_pandas,
+                error_on_duplicated_field_names,
+                pandas_options,
+            )
             # Restore original column names (including duplicates)
             pdf.columns = schema.names
         else:

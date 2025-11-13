@@ -36,6 +36,7 @@ from pyspark.sql.types import (
     MapType,
     TimestampType,
     StructType,
+    StructField,
     DataType,
     _create_row,
     StringType,
@@ -51,6 +52,81 @@ if TYPE_CHECKING:
 
     from pyspark.sql.pandas._typing import DataFrameLike as PandasDataFrameLike
     from pyspark.sql import DataFrame
+
+
+def _convert_arrow_table_to_pandas(
+    arrow_table: "pa.Table",
+    schema_fields: List["StructField"],
+    temp_col_names: List[str],
+    timezone: str,
+    struct_in_pandas: str,
+    error_on_duplicated_field_names: bool,
+    pandas_options: dict,
+) -> "PandasDataFrameLike":
+    """
+    Helper function to convert Arrow table columns to a pandas DataFrame.
+
+    This function applies Spark-specific type converters to Arrow columns and concatenates
+    them into a pandas DataFrame. For empty tables (num_rows == 0), it creates empty Series
+    with converters to preserve dtypes and avoid potential segmentation faults.
+
+    Parameters
+    ----------
+    arrow_table : pyarrow.Table
+        The Arrow table to convert
+    schema_fields : list of StructField
+        The schema fields corresponding to the columns
+    temp_col_names : list of str
+        Temporary column names to use during conversion
+    timezone : str
+        The timezone to use for timestamp conversions
+    struct_in_pandas : str
+        How to handle struct types in pandas ("dict", "row", or "legacy")
+    error_on_duplicated_field_names : bool
+        Whether to error on duplicated field names in structs
+    pandas_options : dict
+        Options to pass to Arrow's to_pandas method
+
+    Returns
+    -------
+    pandas.DataFrame
+        The converted pandas DataFrame
+    """
+    import pandas as pd
+    from pyspark.sql.pandas.types import _create_converter_to_pandas
+
+    # SPARK-51112: If the table is empty, we avoid using pyarrow to_pandas to create the
+    # DataFrame, as it may fail with a segmentation fault.
+    if arrow_table.num_rows == 0:
+        # For empty tables, create empty Series with converters to preserve dtypes
+        return pd.concat(
+            [
+                _create_converter_to_pandas(
+                    field.dataType,
+                    field.nullable,
+                    timezone=timezone,
+                    struct_in_pandas=struct_in_pandas,
+                    error_on_duplicated_field_names=error_on_duplicated_field_names,
+                )(pd.Series([], name=temp_col_names[i], dtype="object"))
+                for i, field in enumerate(schema_fields)
+            ],
+            axis="columns",
+        )
+    else:
+        # For non-empty tables, convert arrow columns directly to pandas
+        return pd.concat(
+            [
+                _create_converter_to_pandas(
+                    field.dataType,
+                    field.nullable,
+                    timezone=timezone,
+                    struct_in_pandas=struct_in_pandas,
+                    error_on_duplicated_field_names=error_on_duplicated_field_names,
+                )(arrow_col.to_pandas(**pandas_options))
+                for arrow_col, field in zip(arrow_table.columns, schema_fields)
+            ],
+            axis="columns",
+        )
 
 
 class PandasConversionMixin:
@@ -150,7 +226,7 @@ class PandasConversionMixin:
                         "date_as_object": True,
                         "coerce_temporal_nanoseconds": True,
                     }
-                    if self_destruct:
+                    if self_destruct and table.num_rows > 0:
                         # Configure PyArrow to use as little memory as possible:
                         # self_destruct - free columns as they are converted
                         # split_blocks - create a separate Pandas block for each column
@@ -172,24 +248,21 @@ class PandasConversionMixin:
                             error_on_duplicated_field_names = True
                             struct_in_pandas = "dict"
 
-                        pdf = pd.concat(
-                            [
-                                _create_converter_to_pandas(
-                                    field.dataType,
-                                    field.nullable,
-                                    timezone=timezone,
-                                    struct_in_pandas=struct_in_pandas,
-                                    error_on_duplicated_field_names=error_on_duplicated_field_names,
-                                )(arrow_col.to_pandas(**pandas_options))
-                                for arrow_col, field in zip(table.columns, self.schema.fields)
-                            ],
-                            axis="columns",
+                        pdf = _convert_arrow_table_to_pandas(
+                            table,
+                            self.schema.fields,
+                            temp_col_names,
+                            timezone,
+                            struct_in_pandas,
+                            error_on_duplicated_field_names,
+                            pandas_options,
                         )
+                        # Restore original column names (including duplicates)
+                        pdf.columns = self.columns
                     else:
                         # empty columns
                         pdf = table.to_pandas(**pandas_options)
 
-                    pdf.columns = self.columns
                     return pdf
 
                 except Exception as e:
