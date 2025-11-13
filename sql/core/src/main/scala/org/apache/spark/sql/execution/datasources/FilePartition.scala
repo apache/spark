@@ -97,7 +97,7 @@ object FilePartition extends SessionStateHelper with Logging {
         .map(f => (f, f.length))
         .sortBy(_._2)(Ordering.Long.reverse)
 
-    val partitions = Array.fill(outputPartitions)(mutable.ArrayBuffer.empty[PartitionedFile])
+    val partitions = Seq.fill(outputPartitions)(mutable.ArrayBuffer.empty[PartitionedFile])
 
     def addToBucket(
         heap: mutable.PriorityQueue[(Long, Int, Int)],
@@ -163,7 +163,9 @@ object FilePartition extends SessionStateHelper with Logging {
       }
     }
 
-    partitions.zipWithIndex.map { case (p, idx) => FilePartition(idx, p.toArray) }
+    partitions.zipWithIndex.map {
+      case (p, idx) => FilePartition(idx, p.toArray)
+    }
   }
 
   def getFilePartitions(
