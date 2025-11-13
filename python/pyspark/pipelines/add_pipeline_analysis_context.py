@@ -23,26 +23,26 @@ from typing import Any, cast
 
 @contextmanager
 def add_pipeline_analysis_context(
-    spark: SparkSession, dataflow_graph_id: str, flow_name_opt: Optional[str]
+    spark: SparkSession, dataflow_graph_id: str, flow_name: Optional[str]
 ) -> Generator[None, None, None]:
     """
     Context manager that add PipelineAnalysisContext extension to the user context
     used for pipeline specific analysis.
     """
-    _extension_id = None
-    _client = cast(Any, spark).client
+    extension_id = None
+    # Cast because mypy seems to think `spark` is a function, not an object.
+    # Likely related to SPARK-47544.
+    client = cast(Any, spark).client
     try:
         import pyspark.sql.connect.proto as pb2
         from google.protobuf import any_pb2
 
-        _analysis_context = pb2.PipelineAnalysisContext(dataflow_graph_id=dataflow_graph_id)
-        if flow_name_opt is not None:
-            _analysis_context.flow_name = flow_name_opt
-
-        _extension = any_pb2.Any()
-        _extension.Pack(_analysis_context)
-
-        _extension_id = _client.add_threadlocal_user_context_extension(_extension)
+        _analysis_context = pb2.PipelineAnalysisContext(
+            dataflow_graph_id=dataflow_graph_id, flow_name=flow_name
+        )
+        extension = any_pb2.Any()
+        extension.Pack(_analysis_context)
+        extension_id = client.add_threadlocal_user_context_extension(extension)
         yield
     finally:
-        _client.remove_user_context_extension(_extension_id)
+        client.remove_user_context_extension(extension_id)

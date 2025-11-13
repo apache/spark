@@ -113,7 +113,7 @@ class SparkConnectGraphElementRegistry(GraphElementRegistry):
 
     def register_flow(self, flow: Flow) -> None:
         with add_pipeline_analysis_context(
-            spark=self._spark, dataflow_graph_id=self._dataflow_graph_id, flow_name_opt=flow.name
+            spark=self._spark, dataflow_graph_id=self._dataflow_graph_id, flow_name=flow.name
         ):
             with block_spark_connect_execution_and_analysis():
                 df = flow.func()

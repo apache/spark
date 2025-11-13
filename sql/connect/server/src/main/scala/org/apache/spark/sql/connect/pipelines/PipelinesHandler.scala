@@ -132,10 +132,17 @@ private[connect] object PipelinesHandler extends Logging {
   }
 
   /**
-   * Block unsupported SQL commands that are not explicitly allowlisted.
+   * Block SQL commands that have side effects or modify data.
+   *
+   * Pipeline definitions should be declarative and side-effect free. This prevents users from
+   * inadvertently modifying catalogs, creating tables, or performing other stateful operations
+   * outside the pipeline API boundary during pipeline registration or analysis.
+   *
+   * This is a best-effort approach: we block known problematic commands while allowing a curated
+   * set of read-only operations (e.g., SHOW, DESCRIBE).
    */
   def blockUnsupportedSqlCommand(queryPlan: LogicalPlan): Unit = {
-    val supportedCommand = Set(
+    val allowlistedCommands = Set(
       classOf[DescribeRelation],
       classOf[ShowTables],
       classOf[ShowTableProperties],
@@ -145,16 +152,14 @@ private[connect] object PipelinesHandler extends Logging {
       classOf[ShowViews],
       classOf[ShowCatalogsCommand],
       classOf[ShowCreateTable])
-    val isSqlCommandExplicitlyAllowlisted = {
-      supportedCommand.exists(c => queryPlan.getClass.getName.equals(c.getName))
-    }
+    val isSqlCommandExplicitlyAllowlisted = allowlistedCommands.exists(_.isInstance(queryPlan))
     val isUnsupportedSqlPlan = if (isSqlCommandExplicitlyAllowlisted) {
       false
     } else {
-      // If the SQL command is not explicitly allowlisted, check whether it belongs to
-      // one of commands pipeline explicitly disallow.
-      // If not, the SQL command is supported.
+      // Disable all [[Command]] except the ones that are explicitly allowlisted
+      // in "allowlistedCommands".
       queryPlan.isInstanceOf[Command] ||
+      // Following commands are not subclasses of [[Command]] but have side effects.
       queryPlan.isInstanceOf[CreateTableAsSelect] ||
       queryPlan.isInstanceOf[CreateTable] ||
       queryPlan.isInstanceOf[CreateView] ||
@@ -163,7 +168,6 @@ private[connect] object PipelinesHandler extends Logging {
       queryPlan.isInstanceOf[CreateNamespace] ||
       queryPlan.isInstanceOf[DropView]
     }
-    // scalastyle:on
     if (isUnsupportedSqlPlan) {
       throw new AnalysisException(
         "UNSUPPORTED_PIPELINE_SPARK_SQL_COMMAND",

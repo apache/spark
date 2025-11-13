@@ -64,11 +64,9 @@ class AddPipelineAnalysisContextTests(ReusedConnectTestCase):
     def test_nested_add_pipeline_analysis_context(self):
         import pyspark.sql.connect.proto as pb2
 
-        with add_pipeline_analysis_context(
-            self.spark, "test_dataflow_graph_id_1", flow_name_opt=None
-        ):
+        with add_pipeline_analysis_context(self.spark, "test_dataflow_graph_id_1", flow_name=None):
             with add_pipeline_analysis_context(
-                self.spark, "test_dataflow_graph_id_2", flow_name_opt="test_flow_name"
+                self.spark, "test_dataflow_graph_id_2", flow_name="test_flow_name"
             ):
                 thread_local_extensions = self.spark.client.thread_local.user_context_extensions
                 self.assertEqual(len(thread_local_extensions), 2)

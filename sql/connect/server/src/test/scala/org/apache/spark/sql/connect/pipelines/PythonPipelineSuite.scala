@@ -83,7 +83,7 @@ class PythonPipelineSuite
          |
          |registry = SparkConnectGraphElementRegistry(spark, dataflow_graph_id)
          |with add_pipeline_analysis_context(
-         |    spark=spark, dataflow_graph_id=dataflow_graph_id, flow_name_opt=None
+         |    spark=spark, dataflow_graph_id=dataflow_graph_id, flow_name=None
          |):
          |    with graph_element_registration_context(registry):
          |$indentedPythonText
