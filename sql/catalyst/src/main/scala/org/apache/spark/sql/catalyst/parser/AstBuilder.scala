@@ -2553,8 +2553,7 @@ class AstBuilder extends DataTypeAstBuilder
 
   /**
    * Create a Sequence of Strings for an identifier list.
-   * Note: Each identifier in the list is kept as a single string, even if it's a qualified
-   * identifier-lite (e.g., IDENTIFIER('a.b') stays as "a.b", not split into parts).
+   * Each identifier must be unqualified. Handles both regular identifiers and IDENTIFIER('literal').
    */
   override def visitIdentifierSeq(ctx: IdentifierSeqContext): Seq[String] = withOrigin(ctx) {
     ctx.ident.asScala.map(id => getIdentifierText(id)).toSeq

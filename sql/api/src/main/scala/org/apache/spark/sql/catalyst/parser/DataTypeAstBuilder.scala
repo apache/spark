@@ -244,10 +244,10 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with DataTypeE
         // Parse the string to handle qualified identifiers like "`cat`.`schema`".
         parseMultipartIdentifier(literalValue)
 
-      case base: ErrorCapturingIdentifierBaseContext =>
+      case errCapture: ErrorCapturingIdentifierContext =>
         // Regular identifier with errorCapturingIdentifierExtra.
         // Need to recursively handle identifier which might itself be IDENTIFIER('literal').
-        Option(base.identifier())
+        Option(errCapture.identifier())
           .flatMap(id => Option(id.strictIdentifier()).map(getIdentifierParts))
           .getOrElse(Seq(ctx.getText))
 
