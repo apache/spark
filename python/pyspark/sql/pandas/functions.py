@@ -327,10 +327,10 @@ def arrow_udf(f=None, returnType=None, functionType=None):
         ...     [(1, 1.0), (1, 2.0), (2, 3.0), (2, 5.0), (2, 10.0)], ("id", "v"))
         >>> df.groupby("id").agg(arrow_mean(df['v'])).show()  # doctest: +SKIP
         +---+---------------+
-        | id|arrow_mean(v) |
+        | id|arrow_mean(v)  |
         +---+---------------+
-        |  1|           1.5|
-        |  2|           6.0|
+        |  1|            1.5|
+        |  2|            6.0|
         +---+---------------+
 
     * Iterator of Multiple Arrays to Scalar
