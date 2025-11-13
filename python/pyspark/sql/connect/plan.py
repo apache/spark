@@ -24,6 +24,7 @@ check_dependencies(__name__)
 
 from typing import (
     Any,
+    Iterator,
     List,
     Optional,
     Type,
@@ -143,7 +144,8 @@ class LogicalPlan:
             if enabled, the proto plan will be printed.
         """
         plan = proto.Plan()
-        plan.root.CopyFrom(self.plan(session))
+        relation = self.plan(session)
+        session._set_relation_in_plan(plan, relation)
 
         if debug:
             print(plan)
@@ -429,15 +431,80 @@ class LocalRelation(LogicalPlan):
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
         plan = self._create_proto_relation()
         if self._table is not None:
-            sink = pa.BufferOutputStream()
-            with pa.ipc.new_stream(sink, self._table.schema) as writer:
-                for b in self._table.to_batches():
-                    writer.write_batch(b)
-            plan.local_relation.data = sink.getvalue().to_pybytes()
+            plan.local_relation.data = self._serialize_table()
 
         if self._schema is not None:
             plan.local_relation.schema = self._schema
         return plan
+
+    def _serialize_table(self) -> bytes:
+        assert self._table is not None, "table cannot be None"
+        sink = pa.BufferOutputStream()
+        with pa.ipc.new_stream(sink, self._table.schema) as writer:
+            batches = self._table.to_batches()
+            for b in batches:
+                writer.write_batch(b)
+        return sink.getvalue().to_pybytes()
+
+    def _serialize_table_chunks(
+        self,
+        max_chunk_size_rows: int,
+        max_chunk_size_bytes: int,
+    ) -> Iterator[bytes]:
+        """
+        Serialize the table into multiple chunks, each up to max_chunk_size_bytes bytes
+        and max_chunk_size_rows rows.
+        Each chunk is a valid Arrow IPC stream.
+
+        This method processes the table in fixed-size batches (1024 rows) for
+        efficiency, matching the Scala implementation's batchSizeCheckInterval.
+
+        Yields chunks one at a time to avoid materializing all chunks in memory.
+        """
+        assert self._table is not None, "table cannot be None"
+        assert self._table.num_rows > 0, "table must have at least one row"
+        schema = self._table.schema
+
+        # Calculate schema serialization size once (empty table = just schema)
+        schema_size = len(self._serialize_batches_to_ipc([], schema))
+
+        current_batches: list[pa.RecordBatch] = []
+        current_size = schema_size
+
+        for batch in self._table.to_batches(max_chunksize=min(1024, max_chunk_size_rows)):
+            # Approximate batch size using raw column data (fast, ignores IPC overhead).
+            # Calculating the real batch size of the IPC stream would require serializing each
+            # batch separately, which adds overhead.
+            batch_size = sum(arr.nbytes for arr in batch.columns)
+
+            # If this batch would exceed limit and we have data, flush current chunk
+            if len(current_batches) > 0 and current_size + batch_size > max_chunk_size_bytes:
+                yield self._serialize_batches_to_ipc(current_batches, schema)
+                current_batches = []
+                current_size = schema_size
+
+            current_batches.append(batch)
+            current_size += batch_size
+
+        # Flush remaining batches (guaranteed to have at least one due to assertion)
+        yield self._serialize_batches_to_ipc(current_batches, schema)
+
+    def _serialize_batches_to_ipc(
+        self,
+        batches: list[pa.RecordBatch],
+        schema: pa.Schema,
+    ) -> bytes:
+        """Helper method to serialize Arrow batches to IPC stream format."""
+        combined = pa.Table.from_batches(batches, schema=schema)
+        sink = pa.BufferOutputStream()
+        with pa.ipc.new_stream(sink, schema) as writer:
+            writer.write_table(combined)
+        return sink.getvalue().to_pybytes()
+
+    def _serialize_schema(self) -> bytes:
+        # the server uses UTF-8 for decoding the schema
+        assert self._schema is not None, "schema cannot be None"
+        return self._schema.encode("utf-8")
 
     def serialize(self, session: "SparkConnectClient") -> bytes:
         p = self.plan(session)
@@ -454,29 +521,34 @@ class LocalRelation(LogicalPlan):
         """
 
 
-class CachedLocalRelation(LogicalPlan):
+class ChunkedCachedLocalRelation(LogicalPlan):
     """Creates a CachedLocalRelation plan object based on a hash of a LocalRelation."""
 
-    def __init__(self, hash: str) -> None:
+    def __init__(self, data_hashes: list[str], schema_hash: Optional[str]) -> None:
         super().__init__(None)
 
-        self._hash = hash
+        self._data_hashes = data_hashes
+        self._schema_hash = schema_hash
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
         plan = self._create_proto_relation()
-        clr = plan.cached_local_relation
+        clr = plan.chunked_cached_local_relation
 
-        clr.hash = self._hash
+        # Add hex string hashes directly to protobuf
+        for data_hash in self._data_hashes:
+            clr.dataHashes.append(data_hash)
+        if self._schema_hash is not None:
+            clr.schemaHash = self._schema_hash
 
         return plan
 
     def print(self, indent: int = 0) -> str:
-        return f"{' ' * indent}<CachedLocalRelation>\n"
+        return f"{' ' * indent}<ChunkedCachedLocalRelation>\n"
 
     def _repr_html_(self) -> str:
         return """
         <ul>
-            <li><b>CachedLocalRelation</b></li>
+            <li><b>ChunkedCachedLocalRelation</b></li>
         </ul>
         """
 

@@ -1,6 +1,7 @@
 create temporary view t as select * from values 0, 1, 2 as t(id);
 create temporary view t2 as select * from values 0, 1 as t(id);
 create temporary view t3 as select * from t;
+create table t4(col1 TIMESTAMP);
 
 -- WITH clause should not fall into infinite loop by referencing self
 WITH s AS (SELECT 1 FROM s) SELECT * FROM s;
@@ -268,7 +269,25 @@ WITH `a.b.c` AS (
 )
 SELECT * FROM `a.b.c`;
 
+-- Expression ID assignment in CTE with JOIN
+SELECT * FROM (
+  WITH cte1 AS (SELECT * FROM t4) SELECT t4.col1 FROM t4 JOIN cte1 USING (col1)
+);
+
+SELECT * FROM (
+  WITH cte1 AS (SELECT * FROM t4) SELECT cte1.col1 FROM t4 JOIN cte1 USING (col1)
+);
+
+SELECT * FROM (
+  WITH cte1 AS (SELECT * FROM t4) SELECT t4.col1 FROM cte1 JOIN t4 USING (col1)
+);
+
+SELECT * FROM (
+  WITH cte1 AS (SELECT * FROM t4) SELECT cte1.col1 FROM cte1 JOIN t4 USING (col1)
+);
+
 -- Clean up
 DROP VIEW IF EXISTS t;
 DROP VIEW IF EXISTS t2;
 DROP VIEW IF EXISTS t3;
+DROP TABLE IF EXISTS t4;

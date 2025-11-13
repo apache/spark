@@ -30,6 +30,7 @@ license: |
 - Since Spark 4.1, `java.lang.InternalError` encountered during file reading will no longer fail the task if the configuration `spark.sql.files.ignoreCorruptFiles` or the data source option `ignoreCorruptFiles` is set to `true`. 
 - Since Spark 4.1, Spark ignores `*.blacklist.*` alternative configuration names. To restore the behavior before Spark 4.1, you can use the corresponding configuration names instead which exists since Spark 3.1.0.
 - Since Spark 4.1, Spark will use multiple threads for LZF compression to compress data in parallel. To restore the behavior before Spark 4.1, you can set `spark.io.compression.lzf.parallel.enabled` to `false`.
+- Since Spark 4.1, Spark uses native Netty IO mode by default. To restore the behavior before Spark 4.1, you can set `spark.io.mode.default` to `NIO`.
 
 ## Upgrading from Core 3.5 to 4.0
 

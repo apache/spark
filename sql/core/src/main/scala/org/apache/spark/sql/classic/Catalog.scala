@@ -39,6 +39,7 @@ import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.{CatalogHelper,
 import org.apache.spark.sql.connector.catalog.CatalogV2Util.v2ColumnsToStructType
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.command.{ShowNamespacesCommand, ShowTablesCommand}
+import org.apache.spark.sql.execution.command.CommandUtils
 import org.apache.spark.sql.execution.datasources.{DataSource, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.connector.V1Function
@@ -810,20 +811,13 @@ class Catalog(sparkSession: SparkSession) extends catalog.Catalog {
    * @since 2.0.0
    */
   override def uncacheTable(tableName: String): Unit = {
-    // We first try to parse `tableName` to see if it is 2 part name. If so, then in HMS we check
-    // if it is a temp view and uncache the temp view from HMS, otherwise we uncache it from the
-    // cache manager.
-    // if `tableName` is not 2 part name, then we directly uncache it from the cache manager.
-    try {
-      val tableIdent = sparkSession.sessionState.sqlParser.parseTableIdentifier(tableName)
-      sessionCatalog.getLocalOrGlobalTempView(tableIdent).map(uncacheView).getOrElse {
-        sparkSession.sharedState.cacheManager.uncacheQuery(sparkSession.table(tableName),
-          cascade = true)
-      }
-    } catch {
-      case e: org.apache.spark.sql.catalyst.parser.ParseException =>
-        sparkSession.sharedState.cacheManager.uncacheQuery(sparkSession.table(tableName),
-          cascade = true)
+    // parse the table name and check if it's a temp view (must have 1-2 name parts)
+    // temp views are uncached using uncacheView which respects view text semantics (SPARK-33142)
+    // use CommandUtils for all tables (including with 3+ part names)
+    val nameParts = sparkSession.sessionState.sqlParser.parseMultipartIdentifier(tableName)
+    sessionCatalog.getLocalOrGlobalTempView(nameParts).map(uncacheView).getOrElse {
+      val relation = resolveRelation(tableName)
+      CommandUtils.uncacheTableOrView(sparkSession, relation, cascade = true)
     }
   }
 
@@ -868,7 +862,7 @@ class Catalog(sparkSession: SparkSession) extends catalog.Catalog {
    * @since 2.0.0
    */
   override def refreshTable(tableName: String): Unit = {
-    val relation = sparkSession.table(tableName).queryExecution.analyzed
+    val relation = resolveRelation(tableName)
 
     relation.refresh()
 
@@ -891,7 +885,11 @@ class Catalog(sparkSession: SparkSession) extends catalog.Catalog {
     // Note this is a no-op for the relation itself if it's not cached, but will clear all
     // caches referencing this relation. If this relation is cached as an InMemoryRelation,
     // this will clear the relation cache and caches of all its dependents.
-    sparkSession.sharedState.cacheManager.recacheByPlan(sparkSession, relation)
+    CommandUtils.recacheTableOrView(sparkSession, relation)
+  }
+
+  private def resolveRelation(tableName: String): LogicalPlan = {
+    sparkSession.table(tableName).queryExecution.analyzed
   }
 
   /**

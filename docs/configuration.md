@@ -282,7 +282,8 @@ of the most common options to set are:
   <td>1g</td>
   <td>
     Amount of memory to use per executor process, in the same format as JVM memory strings with
-    a size unit suffix ("k", "m", "g" or "t") (e.g. <code>512m</code>, <code>2g</code>).
+    a size unit suffix ("k", "m", "g" or "t") (e.g. <code>512m</code>, <code>2g</code>),
+    and with minimum value <code>450m</code>.
   </td>
   <td>0.7.0</td>
 </tr>
@@ -2649,6 +2650,18 @@ Apart from these, the following properties are also available, and may be useful
     How often to collect driver metrics (in milliseconds).
     If unset, the polling is done at the executor heartbeat interval.
     If set, the polling is done at this interval.
+  </td>
+  <td>4.1.0</td>
+</tr>
+<tr>
+  <td><code>spark.io.mode.default</code></td>
+  <td>AUTO</td>
+  <td>
+    The default IO mode for Netty transports.
+    One of <code>NIO</code>, <code>EPOLL</code>, <code>KQUEUE</code>, or <code>AUTO</code>.
+    The default value is <code>AUTO</code> which means to use native Netty libraries if available.
+    In other words, for Linux environments, <code>EPOLL</code> is used if available before using <code>NIO</code>.
+    For MacOS/BSD environments, <code>KQUEUE</code> is used if available before using <code>NIO</code>.
   </td>
   <td>4.1.0</td>
 </tr>

@@ -29,6 +29,7 @@ from threading import RLock
 from typing import (
     Optional,
     Any,
+    Iterator,
     Union,
     Dict,
     List,
@@ -61,7 +62,7 @@ from pyspark.sql.connect.plan import (
     Range,
     LocalRelation,
     LogicalPlan,
-    CachedLocalRelation,
+    ChunkedCachedLocalRelation,
     CachedRelation,
     CachedRemoteRelation,
     SubqueryAlias,
@@ -535,6 +536,9 @@ class SparkSession:
             "spark.sql.timestampType",
             "spark.sql.session.timeZone",
             "spark.sql.session.localRelationCacheThreshold",
+            "spark.sql.session.localRelationChunkSizeRows",
+            "spark.sql.session.localRelationChunkSizeBytes",
+            "spark.sql.session.localRelationBatchOfChunksSizeBytes",
             "spark.sql.execution.pandas.convertToArrowArraySafely",
             "spark.sql.execution.pandas.inferPandasDictAsMap",
             "spark.sql.pyspark.inferNestedDictAsStruct.enabled",
@@ -557,6 +561,11 @@ class SparkSession:
             # If no schema supplied by user then get the names of columns only
             if schema is None:
                 _cols = [str(x) if not isinstance(x, str) else x for x in data.columns]
+                if len(_cols) == 0:
+                    raise PySparkValueError(
+                        errorClass="CANNOT_INFER_EMPTY_SCHEMA",
+                        messageParameters={},
+                    )
                 infer_pandas_dict_as_map = (
                     configs["spark.sql.execution.pandas.inferPandasDictAsMap"] == "true"
                 )
@@ -755,10 +764,27 @@ class SparkSession:
         else:
             local_relation = LocalRelation(_table)
 
-        cache_threshold = configs["spark.sql.session.localRelationCacheThreshold"]
+        # get_config_dict throws [SQL_CONF_NOT_FOUND] if the key is not found.
+        cache_threshold = int(
+            configs["spark.sql.session.localRelationCacheThreshold"]  # type: ignore[arg-type]
+        )
+        max_chunk_size_rows = int(
+            configs["spark.sql.session.localRelationChunkSizeRows"]  # type: ignore[arg-type]
+        )
+        max_chunk_size_bytes = int(
+            configs["spark.sql.session.localRelationChunkSizeBytes"]  # type: ignore[arg-type]
+        )
+        max_batch_of_chunks_size_bytes = int(
+            configs["spark.sql.session.localRelationBatchOfChunksSizeBytes"]  # type: ignore[arg-type] # noqa: E501
+        )
         plan: LogicalPlan = local_relation
-        if cache_threshold is not None and int(cache_threshold) <= _table.nbytes:
-            plan = CachedLocalRelation(self._cache_local_relation(local_relation))
+        if cache_threshold <= _table.nbytes:
+            plan = self._cache_local_relation(
+                local_relation,
+                max_chunk_size_rows,
+                max_chunk_size_bytes,
+                max_batch_of_chunks_size_bytes,
+            )
 
         df = DataFrame(plan, self)
         if _cols is not None and len(_cols) > 0:
@@ -1031,12 +1057,68 @@ class SparkSession:
 
     addArtifact = addArtifacts
 
-    def _cache_local_relation(self, local_relation: LocalRelation) -> str:
+    def _cache_local_relation(
+        self,
+        local_relation: LocalRelation,
+        max_chunk_size_rows: int,
+        max_chunk_size_bytes: int,
+        max_batch_of_chunks_size_bytes: int,
+    ) -> ChunkedCachedLocalRelation:
         """
         Cache the local relation at the server side if it has not been cached yet.
+
+        This method serializes the input local relation into multiple data chunks and
+        a schema chunk (if the schema is available) and uploads these chunks as artifacts
+        to the server.
+
+        The method collects a batch of chunks of size up to max_batch_of_chunks_size_bytes and
+        uploads them together to the server.
+        Uploading each chunk separately would require an additional RPC call for each chunk.
+        Uploading all chunks together would require materializing all chunks in memory which
+        may cause high memory usage on the client.
+        Uploading batches of chunks is the middle-ground solution.
+
+        Should only be called on a LocalRelation with a non-empty _table.
         """
-        serialized = local_relation.serialize(self._client)
-        return self._client.cache_artifact(serialized)
+        assert local_relation._table is not None, "table cannot be None"
+        has_schema = local_relation._schema is not None
+
+        hashes = []
+        current_batch = []
+        current_batch_size = 0
+        if has_schema:
+            schema_chunk = local_relation._serialize_schema()
+            current_batch.append(schema_chunk)
+            current_batch_size += len(schema_chunk)
+
+        data_chunks: Iterator[bytes] = local_relation._serialize_table_chunks(
+            max_chunk_size_rows, min(max_chunk_size_bytes, max_batch_of_chunks_size_bytes)
+        )
+
+        for chunk in data_chunks:
+            chunk_size = len(chunk)
+
+            # Check if adding this chunk would exceed batch size
+            if (
+                len(current_batch) > 0
+                and current_batch_size + chunk_size > max_batch_of_chunks_size_bytes
+            ):
+                hashes += self._client.cache_artifacts(current_batch)
+                # start a new batch
+                current_batch = []
+                current_batch_size = 0
+
+            current_batch.append(chunk)
+            current_batch_size += chunk_size
+        hashes += self._client.cache_artifacts(current_batch)
+
+        if has_schema:
+            schema_hash = hashes[0]
+            data_hashes = hashes[1:]
+        else:
+            schema_hash = None
+            data_hashes = hashes
+        return ChunkedCachedLocalRelation(data_hashes, schema_hash)
 
     def copyFromLocalToFs(self, local_path: str, dest_path: str) -> None:
         if urllib.parse.urlparse(dest_path).scheme:

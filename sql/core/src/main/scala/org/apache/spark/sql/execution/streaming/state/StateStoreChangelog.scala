@@ -30,7 +30,7 @@ import org.apache.spark.internal.LogKeys._
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.execution.streaming.checkpointing.CheckpointFileManager
+import org.apache.spark.sql.execution.streaming.checkpointing.{CheckpointFileManager, ChecksumFSDataInputStream}
 import org.apache.spark.sql.execution.streaming.checkpointing.CheckpointFileManager.CancellableFSDataOutputStream
 import org.apache.spark.sql.execution.streaming.state.RecordType.RecordType
 import org.apache.spark.util.NextIterator
@@ -394,6 +394,15 @@ class StateStoreChangelogReaderFactory(
       }
     } finally {
       if (input != null) {
+        sourceStream match {
+          case c: ChecksumFSDataInputStream =>
+            // No need to do checksum verification since the reader is still going to read the
+            // entire file. To avoid double verification and since we only read version here.
+            // When input.close() below is called, nothing happens for sourceStream
+            // since it is already closed here.
+            c.closeWithoutChecksumVerification()
+          case _ =>
+        }
         input.close()
         // input is not set to null because it is effectively lazy.
       }
@@ -610,6 +619,7 @@ class StateStoreChangelogReaderV4(
  * store. In each iteration, it will return a tuple of (changeType: [[RecordType]],
  * nested key: [[UnsafeRow]], nested value: [[UnsafeRow]], batchId: [[Long]])
  *
+ * @param storeId id of the state store
  * @param fm checkpoint file manager used to manage streaming query checkpoint
  * @param stateLocation location of the state store
  * @param startVersion start version of the changelog file to read
@@ -618,16 +628,23 @@ class StateStoreChangelogReaderV4(
  * @param colFamilyNameOpt optional column family name to read from
  */
 abstract class StateStoreChangeDataReader(
+    storeId: StateStoreId,
     fm: CheckpointFileManager,
     stateLocation: Path,
     startVersion: Long,
     endVersion: Long,
     compressionCodec: CompressionCodec,
+    storeConf: StateStoreConf,
     colFamilyNameOpt: Option[String] = None)
   extends NextIterator[(RecordType.Value, UnsafeRow, UnsafeRow, Long)] with Logging {
 
   assert(startVersion >= 1)
   assert(endVersion >= startVersion)
+
+  protected val readVerifier: Option[KeyValueIntegrityVerifier] = KeyValueIntegrityVerifier.create(
+    storeId.toString,
+    storeConf.rowChecksumEnabled,
+    storeConf.rowChecksumReadVerificationRatio)
 
   /**
    * Iterator that iterates over the changelog files in the state store.

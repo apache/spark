@@ -21,6 +21,7 @@ import java.io.*;
 import java.nio.ByteBuffer;
 import java.nio.file.Files;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 
 import org.apache.spark.*;
 import org.apache.spark.network.shuffle.checksum.ShuffleChecksumHelper;
@@ -325,7 +326,7 @@ public class UnsafeShuffleWriterSuite implements ShuffleChecksumTestHelper {
   @Test
   public void writeChecksumFileWithoutSpill() throws Exception {
     IndexShuffleBlockResolver blockResolver =
-      new IndexShuffleBlockResolver(conf, blockManager, Collections.emptyMap());
+      new IndexShuffleBlockResolver(conf, blockManager, new ConcurrentHashMap<>());
     ShuffleChecksumBlockId checksumBlockId =
       new ShuffleChecksumBlockId(0, 0, IndexShuffleBlockResolver.NOOP_REDUCE_ID());
     String checksumAlgorithm = conf.get(package$.MODULE$.SHUFFLE_CHECKSUM_ALGORITHM());
@@ -356,7 +357,7 @@ public class UnsafeShuffleWriterSuite implements ShuffleChecksumTestHelper {
   @Test
   public void writeChecksumFileWithSpill() throws Exception {
     IndexShuffleBlockResolver blockResolver =
-      new IndexShuffleBlockResolver(conf, blockManager, Collections.emptyMap());
+      new IndexShuffleBlockResolver(conf, blockManager, new ConcurrentHashMap<>());
     ShuffleChecksumBlockId checksumBlockId =
       new ShuffleChecksumBlockId(0, 0, IndexShuffleBlockResolver.NOOP_REDUCE_ID());
     String checksumAlgorithm = conf.get(package$.MODULE$.SHUFFLE_CHECKSUM_ALGORITHM());

@@ -21,7 +21,7 @@ import java.util.concurrent.TimeUnit
 
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config.{ConfigBuilder, PYSPARK_DRIVER_PYTHON, PYSPARK_PYTHON}
+import org.apache.spark.internal.config.{ConfigBuilder, DYN_ALLOCATION_ENABLED}
 
 private[spark] object Config extends Logging {
 
@@ -462,13 +462,24 @@ private[spark] object Config extends Logging {
 
   val KUBERNETES_ALLOCATION_PODS_ALLOCATOR =
     ConfigBuilder("spark.kubernetes.allocation.pods.allocator")
-      .doc("Allocator to use for pods. Possible values are direct (the default) and statefulset " +
-        ", or a full class name of a class implementing AbstractPodsAllocator. " +
+      .doc("Allocator to use for pods. Possible values are direct (the default), statefulset," +
+        " deployment, or a full class name of a class implementing AbstractPodsAllocator. " +
         "Future version may add Job or replicaset. This is a developer API and may change " +
       "or be removed at anytime.")
       .version("3.3.0")
       .stringConf
       .createWithDefault("direct")
+
+  val KUBERNETES_EXECUTOR_POD_DELETION_COST =
+    ConfigBuilder("spark.kubernetes.executor.podDeletionCost")
+      .doc("Value to set for the controller.kubernetes.io/pod-deletion-cost" +
+        " annotation when Spark asks a deployment-based allocator to remove executor pods. This " +
+        "helps Kubernetes pick the same pods Spark selected when the deployment scales down." +
+        s" This should only be enabled when both $KUBERNETES_ALLOCATION_PODS_ALLOCATOR is set to " +
+        s"deployment, and $DYN_ALLOCATION_ENABLED is enabled.")
+      .version("4.2.0")
+      .intConf
+      .createOptional
 
   val KUBERNETES_ALLOCATION_BATCH_SIZE =
     ConfigBuilder("spark.kubernetes.allocation.batch.size")
@@ -587,22 +598,6 @@ private[spark] object Config extends Logging {
         "Ensure that memory overhead is non-negative")
       .createWithDefault(0.1)
 
-  val PYSPARK_MAJOR_PYTHON_VERSION =
-    ConfigBuilder("spark.kubernetes.pyspark.pythonVersion")
-      .doc(
-        s"(Deprecated since Spark 3.1, please set '${PYSPARK_PYTHON.key}' and " +
-        s"'${PYSPARK_DRIVER_PYTHON.key}' configurations or $ENV_PYSPARK_PYTHON and " +
-        s"$ENV_PYSPARK_DRIVER_PYTHON environment variables instead.)")
-      .version("2.4.0")
-      .stringConf
-      .checkValue("3" == _,
-        "Python 2 was dropped from Spark 3.1, and only 3 is allowed in " +
-          "this configuration. Note that this configuration was deprecated in Spark 3.1. " +
-          s"Please set '${PYSPARK_PYTHON.key}' and '${PYSPARK_DRIVER_PYTHON.key}' " +
-          s"configurations or $ENV_PYSPARK_PYTHON and $ENV_PYSPARK_DRIVER_PYTHON environment " +
-          "variables instead.")
-      .createOptional
-
   val KUBERNETES_KERBEROS_KRB5_FILE =
     ConfigBuilder("spark.kubernetes.kerberos.krb5.path")
       .doc("Specify the local location of the krb5.conf file to be mounted on the driver " +
@@ -716,6 +711,15 @@ private[spark] object Config extends Logging {
       .booleanConf
       .createWithDefault(true)
 
+  val KUBERNETES_DELETED_EXECUTORS_CACHE_TIMEOUT =
+    ConfigBuilder("spark.kubernetes.executor.deletedExecutorsCacheTimeout")
+      .internal()
+      .doc("Time-to-live (TTL) value for the cache for deleted executors")
+      .version("4.1.0")
+      .timeConf(TimeUnit.SECONDS)
+      .checkValue(_ >= 0, "deletedExecutorsCacheTimeout must be non-negative")
+      .createWithDefault(180)
+
   val KUBERNETES_EXECUTOR_TERMINATION_GRACE_PERIOD_SECONDS =
     ConfigBuilder("spark.kubernetes.executor.terminationGracePeriodSeconds")
       .doc("Time to wait for graceful termination of executor pods.")
@@ -778,6 +782,18 @@ private[spark] object Config extends Logging {
       .checkValue(value => value > 0, "Maximum number of pending pods should be a positive integer")
       .createWithDefault(Int.MaxValue)
 
+  val KUBERNETES_MAX_PENDING_PODS_PER_RPID =
+    ConfigBuilder("spark.kubernetes.allocation.maxPendingPodsPerRp")
+      .doc("Maximum number of pending PODs allowed per resource profile ID during executor " +
+        "allocation. This provides finer-grained control over pending pods by limiting them " +
+        "per resource profile rather than globally. When set, this limit is enforced " +
+        "independently for each resource profile ID.")
+      .version("4.1.0")
+      .intConf
+      .checkValue(value => value > 0,
+        "Maximum number of pending pods per rp id should be a positive integer")
+      .createWithDefault(Int.MaxValue)
+
   val KUBERNETES_EXECUTOR_SNAPSHOTS_SUBSCRIBERS_GRACE_PERIOD =
     ConfigBuilder("spark.kubernetes.executorSnapshotsSubscribersShutdownGracePeriod")
       .doc("Time to wait for graceful shutdown kubernetes-executor-snapshots-subscribers " +
@@ -790,6 +806,14 @@ private[spark] object Config extends Logging {
       .timeConf(TimeUnit.SECONDS)
       .checkValue(value => value > 0, "Gracefully shutdown period must be a positive time value")
       .createWithDefaultString("20s")
+
+  val KUBERNETES_ANNOTATE_EXIT_EXCEPTION =
+    ConfigBuilder("spark.kubernetes.driver.annotateExitException")
+      .doc("If set to true, Spark will store the exit exception failed applications in" +
+        s" the Kubernetes API server using the $EXIT_EXCEPTION_ANNOTATION annotation.")
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(false)
 
   val KUBERNETES_DRIVER_LABEL_PREFIX = "spark.kubernetes.driver.label."
   val KUBERNETES_DRIVER_ANNOTATION_PREFIX = "spark.kubernetes.driver.annotation."

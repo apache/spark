@@ -40,11 +40,11 @@ class SparkOptimizer(
       SchemaPruning,
       GroupBasedRowLevelOperationScanPlanning,
       V1Writes,
-      PushVariantIntoScan,
       V2ScanRelationPushDown,
       V2ScanPartitioningAndOrdering,
       V2Writes,
-      PruneFileSourcePartitions)
+      PruneFileSourcePartitions,
+      PushVariantIntoScan)
 
   override def preCBORules: Seq[Rule[LogicalPlan]] =
     Seq(OptimizeMetadataOnlyDeleteFromTable)

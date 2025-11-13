@@ -238,6 +238,74 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     verify(labeledPods, times(1)).delete()
   }
 
+  test("pending pod limit per resource profile ID") {
+    when(podOperations
+      .withField("status.phase", "Pending"))
+      .thenReturn(podOperations)
+    when(podOperations
+      .withLabel(SPARK_APP_ID_LABEL, TEST_SPARK_APP_ID))
+      .thenReturn(podOperations)
+    when(podOperations
+      .withLabel(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE))
+      .thenReturn(podOperations)
+    when(podOperations
+      .withLabelIn(meq(SPARK_EXECUTOR_ID_LABEL), any(classOf[Array[String]]): _*))
+      .thenReturn(podOperations)
+
+    val startTime = Instant.now.toEpochMilli
+    waitForExecutorPodsClock.setTime(startTime)
+
+    // Two resource profiles, default and rp
+    val rpb = new ResourceProfileBuilder()
+    val ereq = new ExecutorResourceRequests()
+    val treq = new TaskResourceRequests()
+    ereq.cores(4).memory("2g")
+    treq.cpus(2)
+    rpb.require(ereq).require(treq)
+    val rp = rpb.build()
+
+    val confWithLowMaxPendingPodsPerRpId = conf.clone
+      .set(KUBERNETES_MAX_PENDING_PODS_PER_RPID.key, "2")
+    podsAllocatorUnderTest = new ExecutorPodsAllocator(confWithLowMaxPendingPodsPerRpId, secMgr,
+      executorBuilder, kubernetesClient, snapshotsStore, waitForExecutorPodsClock)
+    podsAllocatorUnderTest.start(TEST_SPARK_APP_ID, schedulerBackend)
+
+    // Request more than the max per rp for one rp
+    podsAllocatorUnderTest.setTotalExpectedExecutors(Map(defaultProfile -> 2, rp -> 3))
+    // 2 for default, and 2 for rp
+    assert(podsAllocatorUnderTest.invokePrivate(numOutstandingPods).get() == 4)
+    verify(podsWithNamespace).resource(podWithAttachedContainerForId(1, defaultProfile.id))
+    verify(podsWithNamespace).resource(podWithAttachedContainerForId(2, defaultProfile.id))
+    verify(podsWithNamespace).resource(podWithAttachedContainerForId(3, rp.id))
+    verify(podsWithNamespace).resource(podWithAttachedContainerForId(4, rp.id))
+    verify(podResource, times(4)).create()
+
+    // Mark executor 2 and 3 as pending, leaving 2 as newly created but this does not free up
+    // any pending pod slot so no new pod is requested
+    snapshotsStore.updatePod(pendingExecutor(2, defaultProfile.id))
+    snapshotsStore.updatePod(pendingExecutor(3, rp.id))
+    snapshotsStore.notifySubscribers()
+    assert(podsAllocatorUnderTest.invokePrivate(numOutstandingPods).get() == 4)
+    verify(podResource, times(4)).create()
+    verify(labeledPods, never()).delete()
+
+    // Downscaling for defaultProfile resource ID with 1 executor to make one free slot
+    // for pendings pods, the non default should still be limited by the max pending pods per rp.
+    waitForExecutorPodsClock.advance(executorIdleTimeout * 2)
+    podsAllocatorUnderTest.setTotalExpectedExecutors(Map(defaultProfile -> 1, rp -> 3))
+    snapshotsStore.notifySubscribers()
+    assert(podsAllocatorUnderTest.invokePrivate(numOutstandingPods).get() == 3)
+    verify(labeledPods, times(1)).delete()
+
+    // Make one pod running from non-default rp so we have one more slot for pending pods.
+    snapshotsStore.updatePod(runningExecutor(3, rp.id))
+    snapshotsStore.updatePod(pendingExecutor(4, rp.id))
+    snapshotsStore.notifySubscribers()
+    assert(podsAllocatorUnderTest.invokePrivate(numOutstandingPods).get() == 3)
+    verify(podsWithNamespace).resource(podWithAttachedContainerForId(5, rp.id))
+    verify(labeledPods, times(1)).delete()
+  }
+
   test("Initially request executors in batches. Do not request another batch if the" +
     " first has not finished.") {
     podsAllocatorUnderTest.setTotalExpectedExecutors(Map(defaultProfile -> (podAllocationSize + 1)))

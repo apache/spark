@@ -27,7 +27,7 @@ import org.mockito.invocation.InvocationOnMock
 import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.{AnalysisException, SaveMode}
 import org.apache.spark.sql.catalyst.{AliasIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, AnalysisTest, Analyzer, EmptyFunctionRegistry, NoSuchTableException, ResolvedFieldName, ResolvedFieldPosition, ResolvedIdentifier, ResolvedTable, ResolveSessionCatalog, UnresolvedAttribute, UnresolvedFieldPosition, UnresolvedInlineTable, UnresolvedRelation, UnresolvedSubqueryColumnAliases, UnresolvedTable}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, AnalysisTest, Analyzer, AsOfVersion, EmptyFunctionRegistry, NoSuchTableException, RelationResolution, ResolvedFieldName, ResolvedFieldPosition, ResolvedIdentifier, ResolvedTable, ResolveSessionCatalog, TimeTravelSpec, UnresolvedAttribute, UnresolvedFieldPosition, UnresolvedInlineTable, UnresolvedRelation, UnresolvedSubqueryColumnAliases, UnresolvedTable}
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType, InMemoryCatalog, SessionCatalog, TempVariableManager}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Cast, EqualTo, Expression, InSubquery, IntegerLiteral, ListQuery, Literal, StringLiteral}
 import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
@@ -161,6 +161,15 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
         case "tablewithcolumnnameddefault" => tableWithColumnNamedDefault
         case "v2TableWithAcceptAnySchemaCapability" => tableWithAcceptAnySchemaCapability
         case name => throw new NoSuchTableException(Seq(name))
+      }
+    })
+    when(newCatalog.loadTable(any(), any[String]())).thenAnswer((invocation: InvocationOnMock) => {
+      val ident = invocation.getArguments()(0).asInstanceOf[Identifier]
+      val version = invocation.getArguments()(1).asInstanceOf[String]
+      (ident.name, version) match {
+        case ("tab", "v1") => table
+        case ("tab", _) => throw new RuntimeException("Unknown version: " + version)
+        case _ => throw new NoSuchTableException(Seq(ident.name))
       }
     })
     when(newCatalog.loadTable(any(), any[java.util.Set[TableWritePrivilege]]()))
@@ -1624,10 +1633,10 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
 
       if (starInUpdate) {
         assert(updateAssigns.size == 2)
-        assert(updateAssigns(0).key.asInstanceOf[AttributeReference].sameRef(ti))
-        assert(updateAssigns(0).value.asInstanceOf[AttributeReference].sameRef(si))
-        assert(updateAssigns(1).key.asInstanceOf[AttributeReference].sameRef(ts))
-        assert(updateAssigns(1).value.asInstanceOf[AttributeReference].sameRef(ss))
+        assert(updateAssigns(0).key.asInstanceOf[AttributeReference].sameRef(ts))
+        assert(updateAssigns(0).value.asInstanceOf[AttributeReference].sameRef(ss))
+        assert(updateAssigns(1).key.asInstanceOf[AttributeReference].sameRef(ti))
+        assert(updateAssigns(1).value.asInstanceOf[AttributeReference].sameRef(si))
       } else {
         assert(updateAssigns.size == 1)
         assert(updateAssigns.head.key.asInstanceOf[AttributeReference].sameRef(ts))
@@ -1639,15 +1648,25 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
         target: LogicalPlan,
         source: LogicalPlan,
         insertCondAttr: Option[AttributeReference],
-        insertAssigns: Seq[Assignment]): Unit = {
+        insertAssigns: Seq[Assignment],
+        starInInsert: Boolean = false): Unit = {
       val (si, ss) = getAttributes(source)
       val (ti, ts) = getAttributes(target)
       insertCondAttr.foreach(a => assert(a.sameRef(ss)))
-      assert(insertAssigns.size == 2)
-      assert(insertAssigns(0).key.asInstanceOf[AttributeReference].sameRef(ti))
-      assert(insertAssigns(0).value.asInstanceOf[AttributeReference].sameRef(si))
-      assert(insertAssigns(1).key.asInstanceOf[AttributeReference].sameRef(ts))
-      assert(insertAssigns(1).value.asInstanceOf[AttributeReference].sameRef(ss))
+
+      if (starInInsert) {
+        assert(insertAssigns.size == 2)
+        assert(insertAssigns(0).key.asInstanceOf[AttributeReference].sameRef(ts))
+        assert(insertAssigns(0).value.asInstanceOf[AttributeReference].sameRef(ss))
+        assert(insertAssigns(1).key.asInstanceOf[AttributeReference].sameRef(ti))
+        assert(insertAssigns(1).value.asInstanceOf[AttributeReference].sameRef(si))
+      } else {
+        assert(insertAssigns.size == 2)
+        assert(insertAssigns(0).key.asInstanceOf[AttributeReference].sameRef(ti))
+        assert(insertAssigns(0).value.asInstanceOf[AttributeReference].sameRef(si))
+        assert(insertAssigns(1).key.asInstanceOf[AttributeReference].sameRef(ts))
+        assert(insertAssigns(1).value.asInstanceOf[AttributeReference].sameRef(ss))
+      }
     }
 
     def checkNotMatchedBySourceClausesResolution(
@@ -1726,7 +1745,8 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
             checkMergeConditionResolution(target, source, mergeCondition)
             checkMatchedClausesResolution(target, source, Some(dl), Some(ul), updateAssigns,
               starInUpdate = true)
-            checkNotMatchedClausesResolution(target, source, Some(il), insertAssigns)
+            checkNotMatchedClausesResolution(target, source, Some(il), insertAssigns,
+              starInInsert = true)
             assert(withSchemaEvolution === false)
 
           case other => fail("Expect MergeIntoTable, but got:\n" + other.treeString)
@@ -1753,7 +1773,8 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
             checkMergeConditionResolution(target, source, mergeCondition)
             checkMatchedClausesResolution(target, source, None, None, updateAssigns,
               starInUpdate = true)
-            checkNotMatchedClausesResolution(target, source, None, insertAssigns)
+            checkNotMatchedClausesResolution(target, source, None, insertAssigns,
+              starInInsert = true)
             assert(withSchemaEvolution === false)
 
           case other => fail("Expect MergeIntoTable, but got:\n" + other.treeString)
@@ -3180,6 +3201,98 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
     val cmdAnalyzed = cmdNotAnalyzed.markAsAnalyzed(AnalysisContext.get)
     assert(cmdAnalyzed.innerChildren.length == 1)
     assert(cmdAnalyzed.children.isEmpty)
+  }
+
+  test("relation resolution - cache key behavior with time travel") {
+    AnalysisContext.withNewAnalysisContext {
+      val ctx = AnalysisContext.get
+      assert(ctx.relationCache.isEmpty)
+
+      // create two unresolved relations without time travel
+      val unresolved1 = UnresolvedRelation(Seq("testcat", "tab"))
+      val unresolved2 = UnresolvedRelation(Seq("testcat", "tab"))
+
+      // resolve both relations
+      val resolved1 = resolve(unresolved1)
+      val resolved2 = resolve(unresolved2)
+
+      // relations without time travel should have None for timeTravelSpec
+      assert(resolved1.timeTravelSpec.isEmpty)
+      assert(resolved2.timeTravelSpec.isEmpty)
+
+      // after first resolution, cache should have 1 entry (without time travel)
+      assert(ctx.relationCache.size == 1)
+      assert(ctx.relationCache.keys.head._2.isEmpty)
+
+      // create unresolved relation with time travel spec
+      val timeTravelSpec = AsOfVersion("v1")
+      val unresolved3 = UnresolvedRelation(Seq("testcat", "tab"))
+
+      // resolve with time travel
+      val resolved3 = resolve(unresolved3, Some(timeTravelSpec))
+
+      // relation with time travel should preserve the timeTravelSpec
+      assert(resolved3.timeTravelSpec.isDefined)
+      assert(resolved3.timeTravelSpec.get == timeTravelSpec)
+
+      // after time travel resolution, cache should have 2 entries (with and without time travel)
+      assert(ctx.relationCache.size == 2)
+    }
+  }
+
+  test("relation resolution - plan ID cloning on cache hit with time travel") {
+    AnalysisContext.withNewAnalysisContext {
+      val ctx = AnalysisContext.get
+      assert(ctx.relationCache.isEmpty)
+
+      val timeTravelSpec = AsOfVersion("v1")
+
+      // create first unresolved relation with a plan ID
+      val unresolved1 = UnresolvedRelation(Seq("testcat", "tab"))
+      val planId1 = 12345L
+      unresolved1.setTagValue(LogicalPlan.PLAN_ID_TAG, planId1)
+
+      // resolve first relation (this should populate the cache)
+      val resolved1 = resolve(unresolved1, Some(timeTravelSpec), planId = Some(planId1))
+
+      // cache should have 1 entry now
+      assert(ctx.relationCache.size == 1)
+
+      // create second unresolved relation with a different plan ID
+      val unresolved2 = UnresolvedRelation(Seq("testcat", "tab"))
+      val planId2 = 67890L
+      unresolved2.setTagValue(LogicalPlan.PLAN_ID_TAG, planId2)
+
+      // resolve second relation (this should hit the cache)
+      val resolved2 = resolve(unresolved2, Some(timeTravelSpec), planId = Some(planId2))
+
+      // cache should still have 1 entry (cache hit)
+      assert(ctx.relationCache.size == 1)
+
+      // verify the plans are different instances (cloned)
+      assert(resolved1 ne resolved2)
+
+      // verify the underlying table, catalog, identifier, and time travel spec are equal
+      assert(resolved1.table == resolved2.table)
+      assert(resolved1.catalog == resolved2.catalog)
+      assert(resolved1.identifier == resolved2.identifier)
+      assert(resolved1.timeTravelSpec == resolved2.timeTravelSpec)
+    }
+  }
+
+  private def resolve(
+      unresolvedRelation: UnresolvedRelation,
+      timeTravelSpec: Option[TimeTravelSpec] = None,
+      planId: Option[Long] = None): DataSourceV2Relation = {
+    val rule = new RelationResolution(catalogManagerWithDefault)
+    rule.resolveRelation(unresolvedRelation, timeTravelSpec) match {
+      case Some(p @ AsDataSourceV2Relation(relation)) =>
+        assert(unresolvedRelation.getTagValue(LogicalPlan.PLAN_ID_TAG) == planId)
+        assert(p.getTagValue(LogicalPlan.PLAN_ID_TAG) == planId)
+        relation
+      case _ =>
+        fail(s"failed to resolve $unresolvedRelation as v2 table")
+    }
   }
 
   // TODO: add tests for more commands.
