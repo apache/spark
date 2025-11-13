@@ -99,7 +99,7 @@ from pyspark.sql.connect.plan import (
 )
 from pyspark.sql.connect.observation import Observation
 from pyspark.sql.connect.utils import get_python_ver
-from pyspark.sql.pandas.types import _create_converter_to_pandas, from_arrow_schema
+from pyspark.sql.pandas.types import from_arrow_schema
 from pyspark.sql.pandas.conversion import _convert_arrow_table_to_pandas
 from pyspark.sql.types import DataType, StructType, _has_type
 from pyspark.util import PythonEvalType

@@ -250,12 +250,12 @@ class PandasConversionMixin:
 
                         pdf = _convert_arrow_table_to_pandas(
                             table,
-                            self.schema.fields,
-                            temp_col_names,
-                            timezone,
-                            struct_in_pandas,
-                            error_on_duplicated_field_names,
-                            pandas_options,
+                            schema_fields=self.schema.fields,
+                            temp_col_names=temp_col_names,
+                            timezone=timezone,
+                            struct_in_pandas=struct_in_pandas,
+                            error_on_duplicated_field_names=error_on_duplicated_field_names,
+                            pandas_options=pandas_options,
                         )
                         # Restore original column names (including duplicates)
                         pdf.columns = self.columns
