@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 from contextlib import contextmanager
-from typing import Callable, Generator, NoReturn
+from typing import Any, Callable, Generator
 
 from pyspark.errors import PySparkException
 from pyspark.sql.connect.proto.base_pb2_grpc import SparkConnectServiceStub
@@ -61,7 +61,7 @@ def block_spark_connect_execution_and_analysis() -> Generator[None, None, None]:
     def blocked_getattr(self: SparkConnectServiceStub, name: str) -> Callable:
         original_method = original_getattr(self, name)
 
-        def intercepted_method(*args: object, **kwargs: object):
+        def intercepted_method(*args: object, **kwargs: object) -> Any:
             # Allow all RPCs that are not AnalyzePlan or ExecutePlan
             if name not in BLOCKED_RPC_NAMES:
                 return original_method(*args, **kwargs)

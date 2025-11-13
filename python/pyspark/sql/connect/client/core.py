@@ -727,7 +727,7 @@ class SparkConnectClient(object):
         # cleanup ml cache if possible
         atexit.register(self._cleanup_ml_cache)
 
-        self.global_user_context_extensions = []
+        self.global_user_context_extensions: List[Tuple[str, any_pb2.Any]] = []
         self.global_user_context_extensions_lock = threading.Lock()
 
     @property
