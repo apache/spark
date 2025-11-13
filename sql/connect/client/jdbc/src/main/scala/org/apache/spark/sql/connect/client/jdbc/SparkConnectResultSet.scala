@@ -27,6 +27,7 @@ import java.util.Calendar
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.connect.client.SparkResult
 import org.apache.spark.sql.connect.client.jdbc.util.JdbcErrorUtils
+import org.apache.spark.sql.types.{TimestampNTZType, TimestampType}
 
 class SparkConnectResultSet(
     sparkResult: SparkResult[Row],
@@ -162,8 +163,27 @@ class SparkConnectResultSet(
     }
   }
 
-  override def getTimestamp(columnIndex: Int): Timestamp =
-    throw new SQLFeatureNotSupportedException
+  override def getTimestamp(columnIndex: Int): Timestamp = {
+    getColumnValue(columnIndex, null: Timestamp) { idx =>
+      val value = currentRow.get(idx)
+      if (value == null) {
+        null
+      } else {
+        sparkResult.schema.fields(idx).dataType match {
+          case TimestampNTZType =>
+            // TIMESTAMP_NTZ is represented as LocalDateTime
+            Timestamp.valueOf(value.asInstanceOf[java.time.LocalDateTime])
+          case TimestampType =>
+            // TIMESTAMP is represented as java.sql.Timestamp
+            value.asInstanceOf[Timestamp]
+          case other =>
+            throw new SQLException(
+              s"Cannot call getTimestamp() on column of type $other. " +
+                s"Expected TIMESTAMP or TIMESTAMP_NTZ.")
+        }
+      }
+    }
+  }
 
   override def getAsciiStream(columnIndex: Int): InputStream =
     throw new SQLFeatureNotSupportedException
@@ -211,7 +231,7 @@ class SparkConnectResultSet(
     getTime(findColumn(columnLabel))
 
   override def getTimestamp(columnLabel: String): Timestamp =
-    throw new SQLFeatureNotSupportedException
+    getTimestamp(findColumn(columnLabel))
 
   override def getAsciiStream(columnLabel: String): InputStream =
     throw new SQLFeatureNotSupportedException
@@ -558,11 +578,20 @@ class SparkConnectResultSet(
   override def getTime(columnLabel: String, cal: Calendar): Time =
     getTime(findColumn(columnLabel))
 
-  override def getTimestamp(columnIndex: Int, cal: Calendar): Timestamp =
-    throw new SQLFeatureNotSupportedException
+  /**
+   * Note: The Calendar parameter is ignored. Spark Connect handles timezone conversions
+   * server-side to avoid client/server timezone inconsistencies.
+   */
+  override def getTimestamp(columnIndex: Int, cal: Calendar): Timestamp = {
+    getTimestamp(columnIndex)
+  }
 
+  /**
+   * Note: The Calendar parameter is ignored. Spark Connect handles timezone conversions
+   * server-side to avoid client/server timezone inconsistencies.
+   */
   override def getTimestamp(columnLabel: String, cal: Calendar): Timestamp =
-    throw new SQLFeatureNotSupportedException
+    getTimestamp(findColumn(columnLabel), cal)
 
   override def getURL(columnIndex: Int): URL =
     throw new SQLFeatureNotSupportedException
