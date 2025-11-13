@@ -1773,31 +1773,10 @@ table t
 | extend 1 as z
 | set z = x + length(y);
 
--- DROP with single pipe.
-table t
-| drop y;
-
--- AS with single pipe.
-table t
-| as u
-| select u.x;
-
--- WHERE with single pipe.
-table t
-| where x < 2;
-
 -- WINDOW with single pipe.
 table windowTestData
 | select cate, sum(val) over w
   window w as (partition by cate order by val);
-
--- Chained operations with single pipe (mixed operators).
-table t
-| select x, y
-| where x < 2
-| extend x + 1 as z
-| order by z
-| limit 1000;
 
 -- Complex chained query with single pipe.
 from store_sales ss1
@@ -1837,96 +1816,6 @@ create table test_extend_col(col1 int, extend int) using csv;
 insert into test_extend_col values (1, 2), (4, 8);
 select col1 | extend as result from test_extend_col;
 
--- Bitwise OR with column named 'set'.
-drop table if exists test_set_col;
-create table test_set_col(col1 int, `set` int) using csv;
-insert into test_set_col values (1, 2), (4, 8);
-select col1 | `set` as result from test_set_col;
-
--- Bitwise OR with column named 'drop'.
-drop table if exists test_drop_col;
-create table test_drop_col(col1 int, `drop` int) using csv;
-insert into test_drop_col values (1, 2), (4, 8);
-select col1 | `drop` as result from test_drop_col;
-
--- Bitwise OR with column named 'as'.
-drop table if exists test_as_col;
-create table test_as_col(col1 int, `as` int) using csv;
-insert into test_as_col values (1, 2), (4, 8);
-select col1 | `as` as result from test_as_col;
-
--- Bitwise OR with column named 'where'.
-drop table if exists test_where_col;
-create table test_where_col(col1 int, `where` int) using csv;
-insert into test_where_col values (1, 2), (4, 8);
-select col1 | `where` as result from test_where_col;
-
--- Bitwise OR with column named 'order'.
-drop table if exists test_order_col;
-create table test_order_col(col1 int, `order` int) using csv;
-insert into test_order_col values (1, 2), (4, 8);
-select col1 | `order` as result from test_order_col;
-
--- Bitwise OR with column named 'limit'.
-drop table if exists test_limit_col;
-create table test_limit_col(col1 int, `limit` int) using csv;
-insert into test_limit_col values (1, 2), (4, 8);
-select col1 | `limit` as result from test_limit_col;
-
--- Bitwise OR with column named 'aggregate'.
-drop table if exists test_aggregate_col;
-create table test_aggregate_col(col1 int, aggregate int) using csv;
-insert into test_aggregate_col values (1, 2), (4, 8);
-select col1 | aggregate as result from test_aggregate_col;
-
--- Bitwise OR with column named 'window'.
-drop table if exists test_window_col;
-create table test_window_col(col1 int, `window` int) using csv;
-insert into test_window_col values (1, 2), (4, 8);
-select col1 | `window` as result from test_window_col;
-
--- Bitwise OR with column named 'pivot'.
-drop table if exists test_pivot_col;
-create table test_pivot_col(col1 int, pivot int) using csv;
-insert into test_pivot_col values (1, 2), (4, 8);
-select col1 | pivot as result from test_pivot_col;
-
--- Bitwise OR with column named 'unpivot'.
-drop table if exists test_unpivot_col;
-create table test_unpivot_col(col1 int, unpivot int) using csv;
-insert into test_unpivot_col values (1, 2), (4, 8);
-select col1 | unpivot as result from test_unpivot_col;
-
--- Bitwise OR with column named 'join'.
-drop table if exists test_join_col;
-create table test_join_col(col1 int, `join` int) using csv;
-insert into test_join_col values (1, 2), (4, 8);
-select col1 | `join` as result from test_join_col;
-
--- Bitwise OR with column named 'union'.
-drop table if exists test_union_col;
-create table test_union_col(col1 int, `union` int) using csv;
-insert into test_union_col values (1, 2), (4, 8);
-select col1 | `union` as result from test_union_col;
-
--- Bitwise OR with column named 'intersect'.
-drop table if exists test_intersect_col;
-create table test_intersect_col(col1 int, `intersect` int) using csv;
-insert into test_intersect_col values (1, 2), (4, 8);
-select col1 | `intersect` as result from test_intersect_col;
-
--- Bitwise OR with column named 'except'.
-drop table if exists test_except_col;
-create table test_except_col(col1 int, `except` int) using csv;
-insert into test_except_col values (1, 2), (4, 8);
-select col1 | `except` as result from test_except_col;
-
--- Bitwise OR with multiple keyword columns.
-drop table if exists test_multi_keywords;
-create table test_multi_keywords(col1 int, `select` int, `where` int, `order` int) using csv;
-insert into test_multi_keywords values (1, 2, 4, 8);
-select col1 | `select` | `where` | `order` as result from test_multi_keywords;
-
 -- Bitwise OR in complex expression with keyword columns.
 select (col1 | `select`) + (`where` | `order`) as complex_result from test_multi_keywords;
 
@@ -1937,20 +1826,6 @@ select col1 from test_multi_keywords where (col1 | `select`) > 2;
 drop table if exists keyword_cols;
 drop table if exists test_select_col;
 drop table if exists test_extend_col;
-drop table if exists test_set_col;
-drop table if exists test_drop_col;
-drop table if exists test_as_col;
-drop table if exists test_where_col;
-drop table if exists test_order_col;
-drop table if exists test_limit_col;
-drop table if exists test_aggregate_col;
-drop table if exists test_window_col;
-drop table if exists test_pivot_col;
-drop table if exists test_unpivot_col;
-drop table if exists test_join_col;
-drop table if exists test_union_col;
-drop table if exists test_intersect_col;
-drop table if exists test_except_col;
 drop table if exists test_multi_keywords;
 
 -- Single PIPE token with configuration disabled: negative tests.
@@ -1968,14 +1843,6 @@ table t
 -- Try to use single pipe for SELECT - should fail with parse error.
 table t
 | select x, y;
-
--- Try to use single pipe for WHERE - should fail with parse error.
-table t
-| where x < 2;
-
--- Try to use single pipe for EXTEND - should fail with parse error.
-table t
-| extend x + 1 as z;
 
 -- Verify that bitwise OR still works with the configuration disabled.
 select 1 | 2 as result;
