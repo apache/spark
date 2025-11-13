@@ -18,6 +18,7 @@
 package org.apache.spark.sql.connect.client.jdbc.util
 
 import java.lang.{Boolean => JBoolean, Byte => JByte, Double => JDouble, Float => JFloat, Long => JLong, Short => JShort}
+import java.math.{BigDecimal => JBigDecimal}
 import java.sql.{Array => _, _}
 
 import org.apache.spark.sql.types._
@@ -34,6 +35,9 @@ private[jdbc] object JdbcTypeUtils {
     case FloatType => Types.FLOAT
     case DoubleType => Types.DOUBLE
     case StringType => Types.VARCHAR
+    case _: DecimalType => Types.DECIMAL
+    case DateType => Types.DATE
+    case BinaryType => Types.BINARY
     case other =>
       throw new SQLFeatureNotSupportedException(s"DataType $other is not supported yet.")
   }
@@ -48,13 +52,17 @@ private[jdbc] object JdbcTypeUtils {
     case FloatType => classOf[JFloat].getName
     case DoubleType => classOf[JDouble].getName
     case StringType => classOf[String].getName
+    case _: DecimalType => classOf[JBigDecimal].getName
+    case DateType => classOf[Date].getName
+    case BinaryType => classOf[Array[Byte]].getName
     case other =>
       throw new SQLFeatureNotSupportedException(s"DataType $other is not supported yet.")
   }
 
   def isSigned(field: StructField): Boolean = field.dataType match {
-    case ByteType | ShortType | IntegerType | LongType | FloatType | DoubleType => true
-    case NullType | BooleanType | StringType => false
+    case ByteType | ShortType | IntegerType | LongType | FloatType | DoubleType |
+         _: DecimalType => true
+    case NullType | BooleanType | StringType | DateType | BinaryType => false
     case other =>
       throw new SQLFeatureNotSupportedException(s"DataType $other is not supported yet.")
   }
@@ -69,6 +77,9 @@ private[jdbc] object JdbcTypeUtils {
     case FloatType => 7
     case DoubleType => 15
     case StringType => 255
+    case DecimalType.Fixed(p, _) => p
+    case DateType => 10
+    case BinaryType => Int.MaxValue
     case other =>
       throw new SQLFeatureNotSupportedException(s"DataType $other is not supported yet.")
   }
@@ -76,7 +87,9 @@ private[jdbc] object JdbcTypeUtils {
   def getScale(field: StructField): Int = field.dataType match {
     case FloatType => 7
     case DoubleType => 15
-    case NullType | BooleanType | ByteType | ShortType | IntegerType | LongType | StringType => 0
+    case NullType | BooleanType | ByteType | ShortType | IntegerType | LongType | StringType |
+         DateType | BinaryType => 0
+    case DecimalType.Fixed(_, s) => s
     case other =>
       throw new SQLFeatureNotSupportedException(s"DataType $other is not supported yet.")
   }
@@ -90,6 +103,14 @@ private[jdbc] object JdbcTypeUtils {
     case DoubleType => 24
     case StringType =>
       getPrecision(field)
+    case DateType => 10 // length of `YYYY-MM-DD`
+    case BinaryType => Int.MaxValue
+    // precision + negative sign + leading zero + decimal point, like DECIMAL(5,5) = -0.12345
+    case DecimalType.Fixed(p, s) if p == s => p + 3
+    // precision + negative sign, like DECIMAL(5,0) = -12345
+    case DecimalType.Fixed(p, s) if s == 0 => p + 1
+    // precision + negative sign + decimal point, like DECIMAL(5,2) = -123.45
+    case DecimalType.Fixed(p, _) => p + 2
     case other =>
       throw new SQLFeatureNotSupportedException(s"DataType $other is not supported yet.")
   }

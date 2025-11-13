@@ -1201,20 +1201,20 @@ class ScalarArrowUDFTestsMixin:
                 [Row(result=f"scalar_arrow_{i}") for i in range(3)],
             )
 
-        logs = self.spark.table("system.session.python_worker_logs")
+            logs = self.spark.tvf.python_worker_logs()
 
-        assertDataFrameEqual(
-            logs.select("level", "msg", "context", "logger"),
-            [
-                Row(
-                    level="WARNING",
-                    msg=f"scalar arrow udf: {lst}",
-                    context={"func_name": my_scalar_arrow_udf.__name__},
-                    logger="test_scalar_arrow",
-                )
-                for lst in [[0], [1, 2]]
-            ],
-        )
+            assertDataFrameEqual(
+                logs.select("level", "msg", "context", "logger"),
+                [
+                    Row(
+                        level="WARNING",
+                        msg=f"scalar arrow udf: {lst}",
+                        context={"func_name": my_scalar_arrow_udf.__name__},
+                        logger="test_scalar_arrow",
+                    )
+                    for lst in [[0], [1, 2]]
+                ],
+            )
 
     @unittest.skipIf(is_remote_only(), "Requires JVM access")
     def test_scalar_iter_arrow_udf_with_logging(self):
@@ -1241,20 +1241,20 @@ class ScalarArrowUDFTestsMixin:
                 [Row(result=f"scalar_iter_arrow_{i}") for i in range(9)],
             )
 
-        logs = self.spark.table("system.session.python_worker_logs")
+            logs = self.spark.tvf.python_worker_logs()
 
-        assertDataFrameEqual(
-            logs.select("level", "msg", "context", "logger"),
-            [
-                Row(
-                    level="WARNING",
-                    msg=f"scalar iter arrow udf: {lst}",
-                    context={"func_name": my_scalar_iter_arrow_udf.__name__},
-                    logger="test_scalar_iter_arrow",
-                )
-                for lst in [[0, 1, 2], [3], [4, 5, 6], [7, 8]]
-            ],
-        )
+            assertDataFrameEqual(
+                logs.select("level", "msg", "context", "logger"),
+                [
+                    Row(
+                        level="WARNING",
+                        msg=f"scalar iter arrow udf: {lst}",
+                        context={"func_name": my_scalar_iter_arrow_udf.__name__},
+                        logger="test_scalar_iter_arrow",
+                    )
+                    for lst in [[0, 1, 2], [3], [4, 5, 6], [7, 8]]
+                ],
+            )
 
 
 class ScalarArrowUDFTests(ScalarArrowUDFTestsMixin, ReusedSQLTestCase):

@@ -926,45 +926,34 @@ private[spark] class MapOutputTrackerMaster(
     }
   }
 
+  private def getShuffleStatusOrError(shuffleId: Int, caller: String): ShuffleStatus = {
+    shuffleStatuses.get(shuffleId) match {
+      case Some(shuffleStatus) => shuffleStatus
+      case None => throw new ShuffleStatusNotFoundException(shuffleId, caller)
+    }
+  }
+
   def registerMapOutput(shuffleId: Int, mapIndex: Int, status: MapStatus): Boolean = {
-    shuffleStatuses(shuffleId).addMapOutput(mapIndex, status)
+    getShuffleStatusOrError(shuffleId, "registerMapOutput").addMapOutput(mapIndex, status)
   }
 
   /** Unregister map output information of the given shuffle, mapper and block manager */
   def unregisterMapOutput(shuffleId: Int, mapIndex: Int, bmAddress: BlockManagerId): Unit = {
-    shuffleStatuses.get(shuffleId) match {
-      case Some(shuffleStatus) =>
-        shuffleStatus.removeMapOutput(mapIndex, bmAddress)
-        incrementEpoch()
-      case None =>
-        throw new SparkException("unregisterMapOutput called for nonexistent shuffle ID")
-    }
+    getShuffleStatusOrError(shuffleId, "unregisterMapOutput").removeMapOutput(mapIndex, bmAddress)
+    incrementEpoch()
   }
 
   /** Unregister all map and merge output information of the given shuffle. */
   def unregisterAllMapAndMergeOutput(shuffleId: Int): Unit = {
-    try {
-      if (conf.get(SPARK_TTL_SHUFFLE_BLOCK_CLEANER).isDefined) {
-        shuffleAccessTime.remove(shuffleId)
-      }
-    } catch {
-      case NonFatal(e) =>
-        logWarning(log"Error removing ${MDC(SHUFFLE_ID, shuffleId)} from Shuffle TTL tracking", e)
-    }
-    shuffleStatuses.get(shuffleId) match {
-      case Some(shuffleStatus) =>
-        shuffleStatus.removeOutputsByFilter(x => true)
-        shuffleStatus.removeMergeResultsByFilter(x => true)
-        shuffleStatus.removeShuffleMergerLocations()
-        incrementEpoch()
-      case None =>
-        throw new SparkException(
-          s"unregisterAllMapAndMergeOutput called for nonexistent shuffle ID $shuffleId.")
-    }
+    val shuffleStatus = getShuffleStatusOrError(shuffleId, "unregisterAllMapAndMergeOutput")
+    shuffleStatus.removeOutputsByFilter(x => true)
+    shuffleStatus.removeMergeResultsByFilter(x => true)
+    shuffleStatus.removeShuffleMergerLocations()
+    incrementEpoch()
   }
 
   def registerMergeResult(shuffleId: Int, reduceId: Int, status: MergeStatus): Unit = {
-    shuffleStatuses(shuffleId).addMergeResult(reduceId, status)
+    getShuffleStatusOrError(shuffleId, "registerMergeResult").addMergeResult(reduceId, status)
   }
 
   def registerMergeResults(shuffleId: Int, statuses: Seq[(Int, MergeStatus)]): Unit = {
@@ -976,7 +965,8 @@ private[spark] class MapOutputTrackerMaster(
   def registerShufflePushMergerLocations(
       shuffleId: Int,
       shuffleMergers: Seq[BlockManagerId]): Unit = {
-    shuffleStatuses(shuffleId).registerShuffleMergerLocations(shuffleMergers)
+    getShuffleStatusOrError(shuffleId, "registerShufflePushMergerLocations")
+      .registerShuffleMergerLocations(shuffleMergers)
   }
 
   /**
@@ -995,28 +985,19 @@ private[spark] class MapOutputTrackerMaster(
       reduceId: Int,
       bmAddress: BlockManagerId,
       mapIndex: Option[Int] = None): Unit = {
-    shuffleStatuses.get(shuffleId) match {
-      case Some(shuffleStatus) =>
-        val mergeStatus = shuffleStatus.mergeStatuses(reduceId)
-        if (mergeStatus != null &&
-          (mapIndex.isEmpty || mergeStatus.tracker.contains(mapIndex.get))) {
-          shuffleStatus.removeMergeResult(reduceId, bmAddress)
-          incrementEpoch()
-        }
-      case None =>
-        throw new SparkException("unregisterMergeResult called for nonexistent shuffle ID")
+    val shuffleStatus = getShuffleStatusOrError(shuffleId, "unregisterMergeResult")
+    val mergeStatus = shuffleStatus.mergeStatuses(reduceId)
+    if (mergeStatus != null &&
+      (mapIndex.isEmpty || mergeStatus.tracker.contains(mapIndex.get))) {
+      shuffleStatus.removeMergeResult(reduceId, bmAddress)
+      incrementEpoch()
     }
   }
 
   def unregisterAllMergeResult(shuffleId: Int): Unit = {
-    shuffleStatuses.get(shuffleId) match {
-      case Some(shuffleStatus) =>
-        shuffleStatus.removeMergeResultsByFilter(x => true)
-        incrementEpoch()
-      case None =>
-        throw new SparkException(
-          s"unregisterAllMergeResult called for nonexistent shuffle ID $shuffleId.")
-    }
+    getShuffleStatusOrError(shuffleId, "unregisterAllMergeResult")
+      .removeMergeResultsByFilter(x => true)
+    incrementEpoch()
   }
 
   /** Unregister shuffle data */
@@ -1099,7 +1080,7 @@ private[spark] class MapOutputTrackerMaster(
    * Return statistics about all of the outputs for a given shuffle.
    */
   def getStatistics(dep: ShuffleDependency[_, _, _]): MapOutputStatistics = {
-    shuffleStatuses(dep.shuffleId).withMapStatuses { statuses =>
+    getShuffleStatusOrError(dep.shuffleId, "getStatistics").withMapStatuses { statuses =>
       val totalSizes = new Array[Long](dep.partitioner.numPartitions)
       val parallelAggThreshold = conf.get(
         SHUFFLE_MAP_OUTPUT_PARALLEL_AGGREGATION_THRESHOLD)
@@ -1363,6 +1344,9 @@ private[spark] class MapOutputTrackerMaster(
     shuffleStatuses.clear()
   }
 }
+
+case class ShuffleStatusNotFoundException(shuffleId: Int, methodName: String)
+  extends SparkException(s"$methodName called for nonexistent shuffle ID $shuffleId.")
 
 /**
  * Executor-side client for fetching map output info from the driver's MapOutputTrackerMaster.

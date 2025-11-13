@@ -70,7 +70,8 @@ trait MapInBatchExec extends UnaryExecNode with PythonSQLMetrics {
       pythonRunnerConf,
       pythonMetrics,
       jobArtifactUUID,
-      sessionUUID)
+      sessionUUID,
+      conf.pythonUDFProfiler)
 
     val rdd = if (isBarrier) {
       val rddBarrier = child.execute().barrier()

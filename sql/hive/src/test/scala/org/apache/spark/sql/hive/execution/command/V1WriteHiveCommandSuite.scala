@@ -26,7 +26,7 @@ import org.apache.spark.sql.hive.test.TestHiveSingleton
 class V1WriteHiveCommandSuite
     extends QueryTest with TestHiveSingleton with V1WriteCommandSuiteBase  {
 
-  def withCovnertMetastore(testFunc: Boolean => Any): Unit = {
+  def withConvertMetastore(testFunc: Boolean => Any): Unit = {
     Seq(true, false).foreach { enabled =>
       withSQLConf(
         CONVERT_METASTORE_PARQUET.key -> enabled.toString,
@@ -37,7 +37,7 @@ class V1WriteHiveCommandSuite
   }
 
   test("create hive table as select - no partition column") {
-    withCovnertMetastore { _ =>
+    withConvertMetastore { _ =>
       withPlannedWrite { enabled =>
         withTable("t") {
           executeAndCheckOrdering(hasLogicalSort = false, orderingMatched = true) {
@@ -49,7 +49,7 @@ class V1WriteHiveCommandSuite
   }
 
   test("create hive table as select") {
-    withCovnertMetastore { _ =>
+    withConvertMetastore { _ =>
       withPlannedWrite { enabled =>
         withTable("t") {
           withSQLConf("hive.exec.dynamic.partition.mode" -> "nonstrict") {
@@ -69,7 +69,7 @@ class V1WriteHiveCommandSuite
   }
 
   test("insert into hive table") {
-    withCovnertMetastore { _ =>
+    withConvertMetastore { _ =>
       withPlannedWrite { enabled =>
         withTable("t") {
           sql(
@@ -90,7 +90,7 @@ class V1WriteHiveCommandSuite
   }
 
   test("insert overwrite hive table") {
-    withCovnertMetastore { _ =>
+    withConvertMetastore { _ =>
       withPlannedWrite { enabled =>
         withTable("t") {
           withSQLConf("hive.exec.dynamic.partition.mode" -> "nonstrict") {
@@ -111,7 +111,7 @@ class V1WriteHiveCommandSuite
   }
 
   test("insert into hive table with static partitions only") {
-    withCovnertMetastore { _ =>
+    withConvertMetastore { _ =>
       withPlannedWrite { enabled =>
         withTable("t") {
           sql(
@@ -129,7 +129,7 @@ class V1WriteHiveCommandSuite
   }
 
   test("v1 write to hive table with sort by literal column preserve custom order") {
-    withCovnertMetastore { _ =>
+    withConvertMetastore { _ =>
       withPlannedWrite { enabled =>
         withSQLConf("hive.exec.dynamic.partition.mode" -> "nonstrict") {
           withTable("t") {

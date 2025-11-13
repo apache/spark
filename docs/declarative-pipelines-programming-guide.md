@@ -35,6 +35,16 @@ The key advantage of SDP is its declarative approach - you define what tables sh
 
 ![Dataflow Graph](img/declarative-pipelines-dataflow-graph.png)
 
+### Quick install
+
+A quick way to install SDP is with pip:
+
+```
+pip install pyspark[pipelines]
+```
+
+See the [downloads page](//spark.apache.org/downloads.html) for more installation options.
+
 ## Key Concepts
 
 ### Flows
@@ -67,8 +77,9 @@ A pipeline is the primary unit of development and execution in SDP. A pipeline c
 A pipeline project is a set of source files that contain code that define the datasets and flows that make up a pipeline. These source files can be `.py` or `.sql` files.
 
 A YAML-formatted pipeline spec file contains the top-level configuration for the pipeline project. It supports the following fields:
-- **definitions** (Required) - Paths where definition files can be found.
-- **database** (Optional) - The default target database for pipeline outputs.
+- **libraries** (Required) - Paths where source files can be found.
+- **storage** (Required) – A directory where checkpoints can be stored for streams within the pipeline.
+- **database** (Optional) - The default target database for pipeline outputs. **schema** can alternatively be used as an alias.
 - **catalog** (Optional) - The default target catalog for pipeline outputs.
 - **configuration** (Optional) - Map of Spark configuration properties.
 
@@ -76,11 +87,9 @@ An example pipeline spec file:
 
 ```yaml
 name: my_pipeline
-definitions:
+libraries:
   - glob:
-      include: transformations/**/*.py
-  - glob:
-      include: transformations/**/*.sql
+      include: transformations/**
 catalog: my_catalog
 database: my_db
 configuration:

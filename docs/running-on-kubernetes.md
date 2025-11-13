@@ -1285,17 +1285,6 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>2.4.0</td>
 </tr>
 <tr>
-  <td><code>spark.kubernetes.pyspark.pythonVersion</code></td>
-  <td><code>"3"</code></td>
-  <td>
-   This sets the major Python version of the docker image used to run the driver and executor containers.
-   It can be only "3". This configuration was deprecated from Spark 3.1.0, and is effectively no-op.
-   Users should set 'spark.pyspark.python' and 'spark.pyspark.driver.python' configurations or
-   'PYSPARK_PYTHON' and 'PYSPARK_DRIVER_PYTHON' environment variables.
-  </td>
-  <td>2.4.0</td>
-</tr>
-<tr>
   <td><code>spark.kubernetes.kerberos.krb5.path</code></td>
   <td><code>(none)</code></td>
   <td>
@@ -1486,6 +1475,16 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>3.3.0</td>
 </tr>
 <tr>
+  <td><code>spark.kubernetes.executor.podDeletionCost</code></td>
+  <td>(none)</td>
+  <td>
+    Value to apply to the <code>controller.kubernetes.io/pod-deletion-cost</code> annotation
+    when Spark tells a deployment-based allocator to remove executor pods. Set this to steer
+    Kubernetes to remove the same pods that Spark selected when the deployment scales down.
+  </td>
+  <td>4.2.0</td>
+</tr>
+<tr>
   <td><code>spark.kubernetes.executor.scheduler.name</code></td>
   <td>(none)</td>
   <td>
@@ -1665,10 +1664,10 @@ See the [configuration page](configuration.html) for information on Spark config
   <td><code>spark.kubernetes.allocation.pods.allocator</code></td>
   <td><code>direct</code></td>
   <td>
-    Allocator to use for pods. Possible values are <code>direct</code> (the default)
-    and <code>statefulset</code>, or a full class name of a class implementing `AbstractPodsAllocator`.
-    Future version may add Job or replicaset. This is a developer API and may change
-    or be removed at anytime.
+    Allocator to use for pods. Possible values are <code>direct</code> (the default),
+    <code>statefulset</code>, <code>deployment</code>, or a full class name of a class
+    implementing `AbstractPodsAllocator`. Future version may add Job or replicaset. 
+    This is a developer API and may change or be removed at anytime.  
   </td>
   <td>3.3.0</td>
 </tr>

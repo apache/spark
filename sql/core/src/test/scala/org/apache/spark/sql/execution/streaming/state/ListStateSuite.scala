@@ -425,3 +425,8 @@ class ListStateSuite extends StateVariableSuiteBase {
     }
   }
 }
+
+/**
+ * Test suite that runs all ListStateSuite tests with row checksum enabled.
+ */
+class ListStateSuiteWithRowChecksum extends ListStateSuite with EnableStateStoreRowChecksum
