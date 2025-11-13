@@ -29,6 +29,7 @@ import org.apache.spark.sql.connector.expressions.Expression;
 import org.apache.spark.sql.connector.expressions.Extract;
 import org.apache.spark.sql.connector.expressions.NamedReference;
 import org.apache.spark.sql.connector.expressions.GeneralScalarExpression;
+import org.apache.spark.sql.connector.expressions.GetArrayItem;
 import org.apache.spark.sql.connector.expressions.Literal;
 import org.apache.spark.sql.connector.expressions.NullOrdering;
 import org.apache.spark.sql.connector.expressions.SortDirection;
@@ -84,6 +85,8 @@ public class V2ExpressionSQLBuilder {
     } else if (expr instanceof SortOrder sortOrder) {
       return visitSortOrder(
         build(sortOrder.expression()), sortOrder.direction(), sortOrder.nullOrdering());
+    } else if (expr instanceof GetArrayItem getArrayItem) {
+      return visitGetArrayItem(getArrayItem);
     } else if (expr instanceof GeneralScalarExpression e) {
       String name = e.name();
       return switch (name) {
@@ -346,6 +349,13 @@ public class V2ExpressionSQLBuilder {
     } else {
       return "TRIM(" + direction + " " + inputs[1] + " FROM " + inputs[0] + ")";
     }
+  }
+
+  protected String visitGetArrayItem(GetArrayItem getArrayItem) {
+    throw new SparkUnsupportedOperationException(
+      "EXPRESSION_TRANSLATION_TO_V2_IS_NOT_SUPPORTED",
+      Map.of("expr", getArrayItem.toString())
+    );
   }
 
   protected String visitExtract(Extract extract) {

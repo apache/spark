@@ -2293,13 +2293,17 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
   def identifierTooManyNamePartsError(originalIdentifier: String): Throwable = {
     new AnalysisException(
       errorClass = "IDENTIFIER_TOO_MANY_NAME_PARTS",
-      messageParameters = Map("identifier" -> toSQLId(originalIdentifier)))
+      messageParameters = Map(
+        "identifier" -> toSQLId(originalIdentifier),
+        "limit" -> "2"))
   }
 
   def identifierTooManyNamePartsError(names: Seq[String]): Throwable = {
     new AnalysisException(
       errorClass = "IDENTIFIER_TOO_MANY_NAME_PARTS",
-      messageParameters = Map("identifier" -> toSQLId(names)))
+      messageParameters = Map(
+        "identifier" -> toSQLId(names),
+        "limit" -> "2"))
   }
 
   def emptyMultipartIdentifierError(): Throwable = {
@@ -4417,6 +4421,17 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "hint" -> hint
       ),
       origin = origin
+    )
+  }
+
+  def pythonWorkerLoggingNotEnabledError(): Throwable = {
+    new AnalysisException(
+      errorClass = "FEATURE_NOT_ENABLED",
+      messageParameters = Map(
+        "featureName" -> "Python Worker Logging",
+        "configKey" -> "spark.sql.pyspark.worker.logging.enabled",
+        "configValue" -> "true"
+      )
     )
   }
 }

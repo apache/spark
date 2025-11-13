@@ -38,6 +38,7 @@ private[jdbc] object JdbcTypeUtils {
     case _: DecimalType => Types.DECIMAL
     case DateType => Types.DATE
     case BinaryType => Types.BINARY
+    case _: TimeType => Types.TIME
     case other =>
       throw new SQLFeatureNotSupportedException(s"DataType $other is not supported yet.")
   }
@@ -55,6 +56,7 @@ private[jdbc] object JdbcTypeUtils {
     case _: DecimalType => classOf[JBigDecimal].getName
     case DateType => classOf[Date].getName
     case BinaryType => classOf[Array[Byte]].getName
+    case _: TimeType => classOf[Time].getName
     case other =>
       throw new SQLFeatureNotSupportedException(s"DataType $other is not supported yet.")
   }
@@ -62,7 +64,7 @@ private[jdbc] object JdbcTypeUtils {
   def isSigned(field: StructField): Boolean = field.dataType match {
     case ByteType | ShortType | IntegerType | LongType | FloatType | DoubleType |
          _: DecimalType => true
-    case NullType | BooleanType | StringType | DateType | BinaryType => false
+    case NullType | BooleanType | StringType | DateType | BinaryType | _: TimeType => false
     case other =>
       throw new SQLFeatureNotSupportedException(s"DataType $other is not supported yet.")
   }
@@ -80,6 +82,11 @@ private[jdbc] object JdbcTypeUtils {
     case DecimalType.Fixed(p, _) => p
     case DateType => 10
     case BinaryType => Int.MaxValue
+    // Returns the Spark SQL TIME type precision, even though java.sql.ResultSet.getTime()
+    // can only retrieve up to millisecond precision (3) due to java.sql.Time limitations.
+    // Users can call getObject(index, classOf[LocalTime]) to access full microsecond
+    // precision when the source type is TIME(4) or higher.
+    case TimeType(precision) => precision
     case other =>
       throw new SQLFeatureNotSupportedException(s"DataType $other is not supported yet.")
   }
@@ -88,7 +95,7 @@ private[jdbc] object JdbcTypeUtils {
     case FloatType => 7
     case DoubleType => 15
     case NullType | BooleanType | ByteType | ShortType | IntegerType | LongType | StringType |
-         DateType | BinaryType => 0
+         DateType | BinaryType | _: TimeType => 0
     case DecimalType.Fixed(_, s) => s
     case other =>
       throw new SQLFeatureNotSupportedException(s"DataType $other is not supported yet.")
@@ -105,6 +112,8 @@ private[jdbc] object JdbcTypeUtils {
       getPrecision(field)
     case DateType => 10 // length of `YYYY-MM-DD`
     case BinaryType => Int.MaxValue
+    case TimeType(precision) if precision > 0 => 8 + 1 + precision // length of `HH:MM:SS.ffffff`
+    case TimeType(_) => 8 // length of `HH:MM:SS`
     // precision + negative sign + leading zero + decimal point, like DECIMAL(5,5) = -0.12345
     case DecimalType.Fixed(p, s) if p == s => p + 3
     // precision + negative sign, like DECIMAL(5,0) = -12345

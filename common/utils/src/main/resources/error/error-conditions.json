@@ -1693,6 +1693,12 @@
     ],
     "sqlState" : "42846"
   },
+  "EXPRESSION_TRANSLATION_TO_V2_IS_NOT_SUPPORTED" : {
+    "message" : [
+      "Expression <expr> cannot be translated to v2 expression."
+    ],
+    "sqlState" : "0A000"
+  },
   "EXPRESSION_TYPE_IS_NOT_ORDERABLE" : {
     "message" : [
       "Column expression <expr> cannot be sorted because its type <exprType> is not orderable."
@@ -2058,7 +2064,7 @@
   },
   "IDENTIFIER_TOO_MANY_NAME_PARTS" : {
     "message" : [
-      "<identifier> is not a valid identifier as it has more than 2 name parts."
+      "<identifier> is not a valid identifier as it has more than <limit> name parts."
     ],
     "sqlState" : "42601"
   },
@@ -4995,6 +5001,12 @@
       "<codeLocation>"
     ],
     "sqlState" : "42000"
+  },
+  "PIPELINE_STORAGE_ROOT_INVALID" : {
+    "message" : [
+      "Pipeline storage root must be an absolute path with a URI scheme (e.g., file://, s3a://, hdfs://). Got: `<storage_root>`."
+    ],
+    "sqlState" : "42K03"
   },
   "PIPE_OPERATOR_AGGREGATE_EXPRESSION_CONTAINS_NO_AGGREGATE_FUNCTION" : {
     "message" : [
@@ -8648,11 +8660,6 @@
   "_LEGACY_ERROR_TEMP_2095" : {
     "message" : [
       "Failed to merge incompatible schemas <left> and <right>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2096" : {
-    "message" : [
-      "<ddl> is not supported temporarily."
     ]
   },
   "_LEGACY_ERROR_TEMP_2097" : {
