@@ -356,14 +356,14 @@ class ApplyInArrowTestsMixin:
         self.assertEqual(df2.join(df2).count(), 1)
 
     def test_arrow_batch_slicing(self):
-        df = self.spark.range(10000000).select(
-            (sf.col("id") % 2).alias("key"), sf.col("id").alias("v")
-        )
+        n = 100000
+
+        df = self.spark.range(n).select((sf.col("id") % 2).alias("key"), sf.col("id").alias("v"))
         cols = {f"col_{i}": sf.col("v") + i for i in range(20)}
         df = df.withColumns(cols)
 
         def min_max_v(table):
-            assert len(table) == 10000000 / 2, len(table)
+            assert len(table) == n / 2, len(table)
             return pa.Table.from_pydict(
                 {
                     "key": [table.column("key")[0].as_py()],
@@ -376,7 +376,7 @@ class ApplyInArrowTestsMixin:
             df.groupby("key").agg(sf.min("v").alias("min"), sf.max("v").alias("max")).sort("key")
         ).collect()
 
-        for maxRecords, maxBytes in [(1000, 2**31 - 1), (0, 1048576), (1000, 1048576)]:
+        for maxRecords, maxBytes in [(1000, 2**31 - 1), (0, 4096), (1000, 4096)]:
             with self.subTest(maxRecords=maxRecords, maxBytes=maxBytes):
                 with self.sql_conf(
                     {
