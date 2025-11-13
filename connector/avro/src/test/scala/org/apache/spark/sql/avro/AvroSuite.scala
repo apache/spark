@@ -1444,6 +1444,11 @@ abstract class AvroSuite
     // Should succeed without throwing AVRO_CANNOT_WRITE_NULL_FIELD
     val collected = result.collect()
     assert(collected.length == 1)
+
+    // Verify data correctness by round-tripping through from_avro
+    val roundTrip = result.select(avro.functions.from_avro($"avro", avroSchema).as("s"))
+    // final field order should be [a, b] as per avro schema
+    checkAnswer(roundTrip, Seq(Row(null, "B")))
   }
 
   test("to_avro with reordered fields fails with correct field name") {
