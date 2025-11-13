@@ -29,6 +29,7 @@ class SparkConnectCloneSessionSuite extends SharedSparkSession with BeforeAndAft
   override def beforeEach(): Unit = {
     super.beforeEach()
     SparkConnectService.sessionManager.invalidateAllSessions()
+    SparkConnectService.sessionManager.initializeBaseSession(spark.sparkContext)
   }
 
   test("clone session with invalid target session ID format") {
