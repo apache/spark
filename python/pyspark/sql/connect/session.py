@@ -42,7 +42,6 @@ from typing import (
     ClassVar,
 )
 
-import google.protobuf.any_pb2 as any_pb2
 import numpy as np
 import pandas as pd
 import pyarrow as pa
@@ -894,60 +893,6 @@ class SparkSession:
         return self.client.clear_tags()
 
     clearTags.__doc__ = PySparkSession.clearTags.__doc__
-
-    def addThreadlocalUserContextExtension(self, extension: any_pb2.Any) -> str:
-        """
-        Add a user context extension to the current session in the current thread.
-        It will be sent in the UserContext of every request sent from the current thread, until
-        it is removed with removeUserContextExtension using the returned id.
-
-        Parameters
-        ----------
-        extension: any_pb2.Any
-            Protobuf Any message to add as the extension to UserContext.
-
-        Returns
-        -------
-        str
-            Id that can be used with removeUserContextExtension to remove the extension.
-        """
-        return self.client.add_threadlocal_user_context_extension(extension)
-
-    def addGlobalUserContextExtension(self, extension: any_pb2.Any) -> str:
-        """
-        Add a user context extension to the current session, globally.
-        It will be sent in the UserContext of every request, until it is removed with
-        removeUserContextExtension using the returned id. It will precede any threadlocal extension.
-
-        Parameters
-        ----------
-        extension: any_pb2.Any
-            Protobuf Any message to add as the extension to UserContext.
-
-        Returns
-        -------
-        str
-            Id that can be used with removeUserContextExtension to remove the extension.
-        """
-        return self.client.add_global_user_context_extension(extension)
-
-    def removeUserContextExtension(self, extension_id: str) -> None:
-        """
-        Remove a user context extension previously added by addThreadlocalUserContextExtension.
-
-        Parameters
-        ----------
-        extension_id: str
-            id returned by addThreadlocalUserContextExtension.
-        """
-        self.client.remove_user_context_extension(extension_id)
-
-    def clearUserContextExtensions(self) -> None:
-        """
-        Clear all user context extensions previously added by addGlobalUserContextExtension and
-        addThreadlocalUserContextExtension
-        """
-        self.client.clear_user_context_extensions()
 
     def stop(self) -> None:
         """
