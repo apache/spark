@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.connect.pipelines
 
+import scala.collection.Seq
 import scala.jdk.CollectionConverters._
 import scala.util.Using
 
@@ -27,9 +28,10 @@ import org.apache.spark.connect.proto.{ExecutePlanResponse, PipelineCommandResul
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.plans.logical.{Command, CreateNamespace, CreateTable, CreateTableAsSelect, CreateView, DescribeRelation, DropView, InsertIntoStatement, LogicalPlan, RenameTable, ShowColumns, ShowCreateTable, ShowFunctions, ShowTableProperties, ShowTables, ShowViews}
 import org.apache.spark.sql.connect.common.DataTypeProtoConverter
 import org.apache.spark.sql.connect.service.SessionHolder
+import org.apache.spark.sql.execution.command.{ShowCatalogsCommand, ShowNamespacesCommand}
 import org.apache.spark.sql.pipelines.Language.Python
 import org.apache.spark.sql.pipelines.common.RunState.{CANCELED, FAILED}
 import org.apache.spark.sql.pipelines.graph.{AllTables, FlowAnalysis, GraphIdentifierManager, GraphRegistrationContext, IdentifierHelper, NoTables, PipelineUpdateContextImpl, QueryContext, QueryOrigin, QueryOriginType, Sink, SinkImpl, SomeTables, SqlGraphRegistrationContext, Table, TableFilter, TemporaryView, UnresolvedFlow}
@@ -129,6 +131,46 @@ private[connect] object PipelinesHandler extends Logging {
     }
   }
 
+  /**
+   * Block unsupported SQL commands that are not explicitly allowlisted.
+   */
+  def blockUnsupportedSqlCommand(queryPlan: LogicalPlan): Unit = {
+    val supportedCommand = Set(
+      classOf[DescribeRelation],
+      classOf[ShowTables],
+      classOf[ShowTableProperties],
+      classOf[ShowNamespacesCommand],
+      classOf[ShowColumns],
+      classOf[ShowFunctions],
+      classOf[ShowViews],
+      classOf[ShowCatalogsCommand],
+      classOf[ShowCreateTable])
+    val isSqlCommandExplicitlyAllowlisted = {
+      supportedCommand.exists(c => queryPlan.getClass.getName.equals(c.getName))
+    }
+    val isUnsupportedSqlPlan = if (isSqlCommandExplicitlyAllowlisted) {
+      false
+    } else {
+      // If the SQL command is not explicitly allowlisted, check whether it belongs to
+      // one of commands pipeline explicitly disallow.
+      // If not, the SQL command is supported.
+      queryPlan.isInstanceOf[Command] ||
+      queryPlan.isInstanceOf[CreateTableAsSelect] ||
+      queryPlan.isInstanceOf[CreateTable] ||
+      queryPlan.isInstanceOf[CreateView] ||
+      queryPlan.isInstanceOf[InsertIntoStatement] ||
+      queryPlan.isInstanceOf[RenameTable] ||
+      queryPlan.isInstanceOf[CreateNamespace] ||
+      queryPlan.isInstanceOf[DropView]
+    }
+    // scalastyle:on
+    if (isUnsupportedSqlPlan) {
+      throw new AnalysisException(
+        "UNSUPPORTED_PIPELINE_SPARK_SQL_COMMAND",
+        Map("command" -> queryPlan.getClass.getSimpleName))
+    }
+  }
+
   private def createDataflowGraph(
       cmd: proto.PipelineCommand.CreateDataflowGraph,
       sessionHolder: SessionHolder): String = {
@@ -147,6 +189,9 @@ private[connect] object PipelinesHandler extends Logging {
       }
 
     val defaultSqlConf = cmd.getSqlConfMap.asScala.toMap
+
+    sessionHolder.session.catalog.setCurrentCatalog(defaultCatalog)
+    sessionHolder.session.catalog.setCurrentDatabase(defaultDatabase)
 
     sessionHolder.dataflowGraphRegistry.createDataflowGraph(
       defaultCatalog = defaultCatalog,

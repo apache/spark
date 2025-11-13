@@ -6261,6 +6261,12 @@
     },
     "sqlState" : "0A000"
   },
+  "UNSUPPORTED_PIPELINE_SPARK_SQL_COMMAND": {
+    "message" : [
+      "'<command>' is not supported in spark.sql(\"...\") API in Spark Declarative Pipeline."
+    ],
+    "sqlState" : "0A000"
+  },
   "UNSUPPORTED_CHAR_OR_VARCHAR_AS_STRING" : {
     "message" : [
       "The char/varchar type can't be used in the table schema.",

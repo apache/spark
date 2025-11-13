@@ -24,6 +24,22 @@ from pyspark.sql.connect.proto.base_pb2_grpc import SparkConnectServiceStub
 BLOCKED_RPC_NAMES = ["AnalyzePlan", "ExecutePlan"]
 
 
+def _is_sql_command_request(request: object) -> bool:
+    """Check if the request is spark.sql() command (ExecutePlanRequest with a sql_command)."""
+    try:
+        if not hasattr(request, "plan"):
+            return False
+
+        plan = request.plan
+
+        if not plan.HasField("command"):
+            return False
+
+        return plan.command.HasField("sql_command")
+    except Exception:
+        return False
+
+
 @contextmanager
 def block_spark_connect_execution_and_analysis() -> Generator[None, None, None]:
     """
@@ -41,7 +57,17 @@ def block_spark_connect_execution_and_analysis() -> Generator[None, None, None]:
         if name not in BLOCKED_RPC_NAMES:
             return original_getattr(self, name)
 
-        def blocked_method(*args: object, **kwargs: object) -> NoReturn:
+        # Get the original method first
+        original_method = original_getattr(self, name)
+
+        def blocked_method(*args: object, **kwargs: object):
+            # allowlist spark.sql() command (ExecutePlan with sql_command)
+            if name == "ExecutePlan" and len(args) > 0:
+                request = args[0]
+                if _is_sql_command_request(request):
+                    return original_method(*args, **kwargs)
+
+            # Block all other ExecutePlan and AnalyzePlan calls
             raise PySparkException(
                 errorClass="ATTEMPT_ANALYSIS_IN_PIPELINE_QUERY_FUNCTION",
                 messageParameters={},
