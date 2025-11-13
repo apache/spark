@@ -54,7 +54,7 @@ on:
 jobs:
   # Build: build Spark and run the tests for specified modules using maven
   build:
-    name: "Build modules using Maven: ${{ matrix.modules }} ${{ matrix.comment }}"
+    name: "Build modules: ${{ matrix.modules }} ${{ matrix.comment }}"
     runs-on: ${{ inputs.os }}
     strategy:
       fail-fast: false

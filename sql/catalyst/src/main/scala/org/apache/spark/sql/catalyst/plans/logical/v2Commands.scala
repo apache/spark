@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.{SparkIllegalArgumentException, SparkUnsupportedOperationException}
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, AssignmentUtils, EliminateSubqueryAliases, FieldName, NamedRelation, PartitionSpec, ResolvedIdentifier, ResolvedProcedure, TypeCheckResult, UnresolvedException, UnresolvedProcedure, ViewSchemaMode}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, AssignmentUtils, EliminateSubqueryAliases, FieldName, NamedRelation, PartitionSpec, ResolvedIdentifier, ResolvedProcedure, TypeCheckResult, UnresolvedAttribute, UnresolvedException, UnresolvedProcedure, ViewSchemaMode}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.catalog.{FunctionResource, RoutineLanguage}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
@@ -893,15 +893,45 @@ case class MergeIntoTable(
   }
 
   lazy val needSchemaEvolution: Boolean =
-    schemaEvolutionEnabled &&
-      MergeIntoTable.schemaChanges(targetTable.schema, sourceTable.schema).nonEmpty
+    evaluateSchemaEvolution && changesForSchemaEvolution.nonEmpty
 
-  private def schemaEvolutionEnabled: Boolean = withSchemaEvolution && {
+  lazy val evaluateSchemaEvolution: Boolean =
+    schemaEvolutionEnabled &&
+      canEvaluateSchemaEvolution
+
+  lazy val schemaEvolutionEnabled: Boolean = withSchemaEvolution && {
     EliminateSubqueryAliases(targetTable) match {
       case r: DataSourceV2Relation if r.autoSchemaEvolution() => true
       case _ => false
     }
   }
+
+  // Guard that assignments are either resolved or candidates for evolution before
+  // evaluating schema evolution. We need to use resolved assignment values to check
+  // candidates, see MergeIntoTable.sourceSchemaForSchemaEvolution for details.
+  lazy val canEvaluateSchemaEvolution: Boolean = {
+    if ((!targetTable.resolved) || (!sourceTable.resolved)) {
+      false
+    } else {
+      val actions = matchedActions ++ notMatchedActions
+      val assignments = actions.collect {
+        case a: UpdateAction => a.assignments
+        case a: InsertAction => a.assignments
+      }.flatten
+
+      val sourcePaths = MergeIntoTable.extractAllFieldPaths(sourceTable.schema)
+      assignments.forall { assignment =>
+        assignment.resolved ||
+          sourcePaths.exists { path => MergeIntoTable.isEqual(assignment, path) }
+        }
+      }
+    }
+
+  private lazy val sourceSchemaForEvolution: StructType =
+    MergeIntoTable.sourceSchemaForSchemaEvolution(this)
+
+  lazy val changesForSchemaEvolution: Array[TableChange] =
+    MergeIntoTable.schemaChanges(targetTable.schema, sourceSchemaForEvolution)
 
   override def left: LogicalPlan = targetTable
   override def right: LogicalPlan = sourceTable
@@ -911,6 +941,7 @@ case class MergeIntoTable(
 }
 
 object MergeIntoTable {
+
   def getWritePrivileges(
       matchedActions: Iterable[MergeAction],
       notMatchedActions: Iterable[MergeAction],
@@ -948,11 +979,12 @@ object MergeIntoTable {
             case currentField: StructField if newFieldMap.contains(currentField.name) =>
               schemaChanges(currentField.dataType, newFieldMap(currentField.name).dataType,
                 originalTarget, originalSource, fieldPath ++ Seq(currentField.name))
-          }}.flatten
+          }
+        }.flatten
 
         // Identify the newly added fields and append to the end
         val currentFieldMap = toFieldMap(currentFields)
-        val adds = newFields.filterNot (f => currentFieldMap.contains (f.name))
+        val adds = newFields.filterNot(f => currentFieldMap.contains(f.name))
           .map(f => TableChange.addColumn(fieldPath ++ Set(f.name), f.dataType))
 
         updates ++ adds
@@ -989,6 +1021,97 @@ object MergeIntoTable {
     } else {
       CaseInsensitiveMap(fieldMap)
     }
+  }
+
+  // A pruned version of source schema that only contains columns/nested fields
+  // explicitly and directly assigned to a target counterpart in MERGE INTO actions,
+  // which are relevant for schema evolution.
+  // Examples:
+  // * UPDATE SET target.a = source.a
+  // * UPDATE SET nested.a = source.nested.a
+  // * INSERT (a, nested.b) VALUES (source.a, source.nested.b)
+  // New columns/nested fields in this schema that are not existing in target schema
+  // will be added for schema evolution.
+  def sourceSchemaForSchemaEvolution(merge: MergeIntoTable): StructType = {
+    val actions = merge.matchedActions ++ merge.notMatchedActions
+    val assignments = actions.collect {
+      case a: UpdateAction => a.assignments
+      case a: InsertAction => a.assignments
+    }.flatten
+
+    val containsStarAction = actions.exists {
+      case _: UpdateStarAction => true
+      case _: InsertStarAction => true
+      case _ => false
+    }
+
+    def filterSchema(sourceSchema: StructType, basePath: Seq[String]): StructType =
+      StructType(sourceSchema.flatMap { field =>
+        val fieldPath = basePath :+ field.name
+
+        field.dataType match {
+          // Specifically assigned to in one clause:
+          // always keep, including all nested attributes
+          case _ if assignments.exists(isEqual(_, fieldPath)) => Some(field)
+          // If this is a struct and one of the children is being assigned to in a merge clause,
+          // keep it and continue filtering children.
+          case struct: StructType if assignments.exists(assign =>
+            isPrefix(fieldPath, extractFieldPath(assign.key, allowUnresolved = true))) =>
+            Some(field.copy(dataType = filterSchema(struct, fieldPath)))
+          // The field isn't assigned to directly or indirectly (i.e. its children) in any non-*
+          // clause. Check if it should be kept with any * action.
+          case struct: StructType if containsStarAction =>
+            Some(field.copy(dataType = filterSchema(struct, fieldPath)))
+          case _ if containsStarAction => Some(field)
+          // The field and its children are not assigned to in any * or non-* action, drop it.
+          case _ => None
+        }
+      })
+
+    filterSchema(merge.sourceTable.schema, Seq.empty)
+  }
+
+  private def extractAllFieldPaths(schema: StructType, basePath: Seq[String] = Seq.empty):
+  Seq[Seq[String]] = {
+    schema.flatMap { field =>
+      val fieldPath = basePath :+ field.name
+      field.dataType match {
+        case struct: StructType =>
+          fieldPath +: extractAllFieldPaths(struct, fieldPath)
+        case _ =>
+          Seq(fieldPath)
+      }
+    }
+  }
+
+  // Helper method to extract field path from an Expression.
+  private def extractFieldPath(expr: Expression, allowUnresolved: Boolean): Seq[String] = {
+    expr match {
+      case UnresolvedAttribute(nameParts) if allowUnresolved => nameParts
+      case a: AttributeReference => Seq(a.name)
+      case GetStructField(child, ordinal, nameOpt) =>
+        extractFieldPath(child, allowUnresolved) :+ nameOpt.getOrElse(s"col$ordinal")
+      case _ => Seq.empty
+    }
+  }
+
+  // Helper method to check if a given field path is a prefix of another path.
+  private def isPrefix(prefix: Seq[String], path: Seq[String]): Boolean =
+    prefix.length <= path.length && prefix.zip(path).forall {
+      case (prefixNamePart, pathNamePart) =>
+        SQLConf.get.resolver(prefixNamePart, pathNamePart)
+    }
+
+  // Helper method to check if an assignment key is equal to a source column
+  // and if the assignment value is that same source column.
+  // Example: UPDATE SET target.a = source.a
+  private def isEqual(assignment: Assignment, sourceFieldPath: Seq[String]): Boolean = {
+    // key must be a non-qualified field path that may be added to target schema via evolution
+    val assignmenKeyExpr = extractFieldPath(assignment.key, allowUnresolved = true)
+    // value should always be resolved (from source)
+    val assignmentValueExpr = extractFieldPath(assignment.value, allowUnresolved = false)
+    assignmenKeyExpr == assignmentValueExpr &&
+      assignmenKeyExpr == sourceFieldPath
   }
 }
 

@@ -16,7 +16,7 @@
  */
 package org.apache.spark.sql.execution.streaming
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkException, SparkRuntimeException}
 
 /**
  * Object for grouping error messages from streaming query exceptions
@@ -37,6 +37,19 @@ object StreamingErrors {
       errorClass = "CANNOT_LOAD_CHECKPOINT_FILE_MANAGER.UNCATEGORIZED",
       messageParameters = Map("path" -> path),
       cause = err
+    )
+  }
+
+  def statefulOperatorMissingStateDirectory(
+      opsInCurBatch: Map[Long, String]): Throwable = {
+    def formatPairString(pair: (Long, String)): String =
+      s"(OperatorId: ${pair._1} -> OperatorName: ${pair._2})"
+
+    new SparkRuntimeException(
+      errorClass = "STREAMING_STATEFUL_OPERATOR_MISSING_STATE_DIRECTORY",
+      messageParameters = Map(
+        "OpsInCurBatchSeq" -> opsInCurBatch.map(formatPairString).mkString(", ")
+      )
     )
   }
 }
