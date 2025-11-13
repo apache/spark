@@ -415,6 +415,7 @@ class SparkConversionMixin:
         prefer_timestamp_ntz = timestampType == "TIMESTAMP_NTZ"
         prefers_large_var_types = arrowUseLargeVarTypes == "true"
         timezone = sessionLocalTimeZone
+        arrow_batch_size = int(arrowMaxRecordsPerBatch)
 
         if type(data).__name__ == "Table":
             # `data` is a PyArrow Table
@@ -448,8 +449,8 @@ class SparkConversionMixin:
                     schema,
                     timezone,
                     prefer_timestamp_ntz,
-                    int(arrowMaxRecordsPerBatch),
                     prefers_large_var_types,
+                    arrow_batch_size,
                 )
             except Exception as e:
                 if arrowPySparkFallbackEnabled == "true":
@@ -678,8 +679,8 @@ class SparkConversionMixin:
         schema: Union[StructType, List[str]],
         timezone: str,
         prefer_timestamp_ntz: bool,
-        arrow_batch_size: int,
         prefers_large_var_types: bool,
+        arrow_batch_size: int,
     ) -> "DataFrame":
         """
         Create a DataFrame from a given pandas.DataFrame by slicing it into partitions, converting
