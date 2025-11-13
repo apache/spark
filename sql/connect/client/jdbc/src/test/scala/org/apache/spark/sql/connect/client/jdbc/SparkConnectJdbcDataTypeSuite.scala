@@ -29,6 +29,10 @@ class SparkConnectJdbcDataTypeSuite extends ConnectFunSuite with RemoteSparkSess
 
   override def jdbcUrl: String = s"jdbc:sc://localhost:$serverPort"
 
+  private def timeToMillis(hour: Int, minute: Int, second: Int, millis: Int): Long = {
+    hour * 3600000L + minute * 60000L + second * 1000L + millis
+  }
+
   test("get null type") {
     withExecuteQuery("SELECT null") { rs =>
       assert(rs.next())
@@ -295,7 +299,7 @@ class SparkConnectJdbcDataTypeSuite extends ConnectFunSuite with RemoteSparkSess
       ("date '2023-11-15'", (rs: ResultSet) => rs.getDate(1),
           java.sql.Date.valueOf("2023-11-15")),
       ("time '12:34:56.123456'", (rs: ResultSet) => rs.getTime(1), {
-        val millis = 12 * 3600000L + 34 * 60000L + 56 * 1000L + 123L
+        val millis = timeToMillis(12, 34, 56, 123)
         new java.sql.Time(millis)
       })
     ).foreach {
@@ -440,7 +444,7 @@ class SparkConnectJdbcDataTypeSuite extends ConnectFunSuite with RemoteSparkSess
       assert(rs.next())
       val time = rs.getTime(1)
       // Verify milliseconds are preserved (123 from 123456 microseconds)
-      val expectedMillis = 12 * 3600000L + 34 * 60000L + 56 * 1000L + 123L
+      val expectedMillis = timeToMillis(12, 34, 56, 123)
       assert(time.getTime === expectedMillis)
       assert(!rs.wasNull)
       assert(!rs.next())
@@ -485,7 +489,7 @@ class SparkConnectJdbcDataTypeSuite extends ConnectFunSuite with RemoteSparkSess
       assert(rs.next())
       val time = rs.getTime("test_time")
       // Verify milliseconds are preserved (456 from 456789 microseconds)
-      val expectedMillis = 9 * 3600000L + 15 * 60000L + 30 * 1000L + 456L
+      val expectedMillis = timeToMillis(9, 15, 30, 456)
       assert(time.getTime === expectedMillis)
       assert(!rs.wasNull)
       assert(!rs.next())
@@ -496,14 +500,14 @@ class SparkConnectJdbcDataTypeSuite extends ConnectFunSuite with RemoteSparkSess
     Seq(
       // (timeValue, precision, expectedDisplaySize, expectedMillis)
       // HH:MM:SS (no fractional)
-      ("15:45:30.123456", 0, 8, 15 * 3600000L + 45 * 60000L + 30 * 1000L + 0L),
+      ("15:45:30.123456", 0, 8, timeToMillis(15, 45, 30, 0)),
       // HH:MM:SS.f (100ms from .1)
-      ("10:20:30.123456", 1, 10, 10 * 3600000L + 20 * 60000L + 30 * 1000L + 100L),
+      ("10:20:30.123456", 1, 10, timeToMillis(10, 20, 30, 100)),
       // HH:MM:SS.fff (123ms)
-      ("08:15:45.123456", 3, 12, 8 * 3600000L + 15 * 60000L + 45 * 1000L + 123L),
+      ("08:15:45.123456", 3, 12, timeToMillis(8, 15, 45, 123)),
       // HH:MM:SS.fff (999ms) . Spark TIME values can have microsecond precision,
       // but java.sql.Time can only store up to millisecond precision
-      ("23:59:59.999999", 6, 15, 23 * 3600000L + 59 * 60000L + 59 * 1000L + 999L)
+      ("23:59:59.999999", 6, 15, timeToMillis(23, 59, 59, 999))
     ).foreach {
       case (timeValue, precision, expectedDisplaySize, expectedMillis) =>
         withExecuteQuery(s"SELECT cast(time '$timeValue' as time($precision))") { rs =>
@@ -555,7 +559,7 @@ class SparkConnectJdbcDataTypeSuite extends ConnectFunSuite with RemoteSparkSess
         Using.resource(stmt.executeQuery("SELECT time '12:34:56.123456'")) { rs =>
           assert(rs.next())
           val time = rs.getTime(1)
-          val expectedMillis = 12 * 3600000L + 34 * 60000L + 56 * 1000L + 123L
+          val expectedMillis = timeToMillis(12, 34, 56, 123)
           assert(time.getTime === expectedMillis)
           assert(!rs.wasNull)
           assert(!rs.next())
