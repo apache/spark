@@ -60,8 +60,6 @@ from pyspark.sql.pandas.serializers import (
     CogroupPandasUDFSerializer,
     ArrowStreamUDFSerializer,
     ApplyInPandasWithStateSerializer,
-    GroupPandasIterUDFSerializer,
-    GroupPandasUDFSerializer,
     TransformWithStateInPandasSerializer,
     TransformWithStateInPandasInitStateSerializer,
     TransformWithStateInPySparkRowSerializer,
@@ -2729,8 +2727,8 @@ def read_udfs(pickleSer, infile, eval_type):
                 timezone, safecheck, _assign_cols_by_name, int_to_decimal_coercion_enabled
             )
         elif eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_ITER_UDF:
-            ser = GroupPandasIterUDFSerializer(
-                timezone, safecheck, _assign_cols_by_name, int_to_decimal_coercion_enabled
+            ser = GroupPandasUDFSerializer(
+                timezone, safecheck, _assign_cols_by_name, int_to_decimal_coercion_enabled, use_iterator=True
             )
         elif eval_type == PythonEvalType.SQL_COGROUPED_MAP_ARROW_UDF:
             ser = CogroupArrowUDFSerializer(_assign_cols_by_name)
