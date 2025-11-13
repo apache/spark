@@ -1439,7 +1439,7 @@ abstract class AvroSuite
     // Pass null for 'a' which is nullable in Avro - should succeed
     val df = Seq(("B", null.asInstanceOf[String])).toDF("b", "a")
       .select(struct($"b", $"a").as("s"))
-    val result = df.select(functions.to_avro($"s", avroSchema).as("avro"))
+    val result = df.select(avro.functions.to_avro($"s", avroSchema).as("avro"))
 
     // Should succeed without throwing AVRO_CANNOT_WRITE_NULL_FIELD
     val collected = result.collect()
@@ -1465,7 +1465,7 @@ abstract class AvroSuite
 
     checkError(
       exception = intercept[SparkRuntimeException] {
-        df.select(functions.to_avro($"s", avroSchema)).collect()
+        df.select(avro.functions.to_avro($"s", avroSchema)).collect()
       },
       condition = "AVRO_CANNOT_WRITE_NULL_FIELD",
       parameters = Map(
