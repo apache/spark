@@ -1573,50 +1573,66 @@ class BaseUDFTestsMixin(object):
                 logger.exception("exception")
             return "x"
 
+        # The TVF is not available when the feature is disabled.
+        with self.assertRaises(AnalysisException) as pe:
+            self.spark.tvf.python_worker_logs().count()
+
+        self.check_error(
+            exception=pe.exception,
+            errorClass="FEATURE_NOT_ENABLED",
+            messageParameters={
+                "featureName": "Python Worker Logging",
+                "configKey": "spark.sql.pyspark.worker.logging.enabled",
+                "configValue": "true",
+            },
+        )
+
         # Logging is disabled by default
         assertDataFrameEqual(
             self.spark.range(1).select(my_udf().alias("result")), [Row(result="x")]
         )
-        self.assertEqual(self.spark.table("system.session.python_worker_logs").count(), 0)
 
         with self.sql_conf({"spark.sql.pyspark.worker.logging.enabled": "true"}):
+            # The logs were not collected when the feature was disabled.
+            self.assertEqual(self.spark.tvf.python_worker_logs().count(), 0)
+
             assertDataFrameEqual(
                 self.spark.range(1).select(my_udf().alias("result")), [Row(result="x")]
             )
 
-        logs = self.spark.table("system.session.python_worker_logs")
+            logs = self.spark.tvf.python_worker_logs()
 
-        assertDataFrameEqual(
-            logs.select("level", "msg", "context", "logger"),
-            [
-                Row(
-                    level="INFO",
-                    msg="print to stdout ❤",
-                    context={"func_name": my_udf.__name__},
-                    logger="stdout",
-                ),
-                Row(
-                    level="ERROR",
-                    msg="print to stderr 😀",
-                    context={"func_name": my_udf.__name__},
-                    logger="stderr",
-                ),
-                Row(
-                    level="WARNING",
-                    msg="custom context",
-                    context={"func_name": my_udf.__name__, "abc": "123"},
-                    logger="test",
-                ),
-                Row(
-                    level="ERROR",
-                    msg="exception",
-                    context={"func_name": my_udf.__name__},
-                    logger="test",
-                ),
-            ],
-        )
+            assertDataFrameEqual(
+                logs.select("level", "msg", "context", "logger"),
+                [
+                    Row(
+                        level="INFO",
+                        msg="print to stdout ❤",
+                        context={"func_name": my_udf.__name__},
+                        logger="stdout",
+                    ),
+                    Row(
+                        level="ERROR",
+                        msg="print to stderr 😀",
+                        context={"func_name": my_udf.__name__},
+                        logger="stderr",
+                    ),
+                    Row(
+                        level="WARNING",
+                        msg="custom context",
+                        context={"func_name": my_udf.__name__, "abc": "123"},
+                        logger="test",
+                    ),
+                    Row(
+                        level="ERROR",
+                        msg="exception",
+                        context={"func_name": my_udf.__name__},
+                        logger="test",
+                    ),
+                ],
+            )
 
-        self.assertEqual(logs.where("exception is not null").select("exception").count(), 1)
+            self.assertEqual(logs.where("exception is not null").select("exception").count(), 1)
 
     @unittest.skipIf(is_remote_only(), "Requires JVM access")
     def test_multiple_udfs_with_logging(self):
@@ -1638,25 +1654,25 @@ class BaseUDFTestsMixin(object):
                 [Row(result="x", result2="y")],
             )
 
-        logs = self.spark.table("system.session.python_worker_logs")
+            logs = self.spark.tvf.python_worker_logs()
 
-        assertDataFrameEqual(
-            logs.select("level", "msg", "context", "logger"),
-            [
-                Row(
-                    level="WARNING",
-                    msg="test1",
-                    context={"func_name": my_udf1.__name__},
-                    logger="test1",
-                ),
-                Row(
-                    level="WARNING",
-                    msg="test2",
-                    context={"func_name": my_udf2.__name__},
-                    logger="test2",
-                ),
-            ],
-        )
+            assertDataFrameEqual(
+                logs.select("level", "msg", "context", "logger"),
+                [
+                    Row(
+                        level="WARNING",
+                        msg="test1",
+                        context={"func_name": my_udf1.__name__},
+                        logger="test1",
+                    ),
+                    Row(
+                        level="WARNING",
+                        msg="test2",
+                        context={"func_name": my_udf2.__name__},
+                        logger="test2",
+                    ),
+                ],
+            )
 
     @unittest.skipIf(is_remote_only(), "Requires JVM access")
     def test_udf_with_pyspark_logger(self):
@@ -1672,20 +1688,20 @@ class BaseUDFTestsMixin(object):
                 [Row(result=str(i)) for i in range(2)],
             )
 
-        logs = self.spark.table("system.session.python_worker_logs")
+            logs = self.spark.tvf.python_worker_logs()
 
-        assertDataFrameEqual(
-            logs.select("level", "msg", "context", "logger"),
-            [
-                Row(
-                    level="WARNING",
-                    msg="PySparkLogger test",
-                    context={"func_name": my_udf.__name__, "x": str(i)},
-                    logger="PySparkLogger",
-                )
-                for i in range(2)
-            ],
-        )
+            assertDataFrameEqual(
+                logs.select("level", "msg", "context", "logger"),
+                [
+                    Row(
+                        level="WARNING",
+                        msg="PySparkLogger test",
+                        context={"func_name": my_udf.__name__, "x": str(i)},
+                        logger="PySparkLogger",
+                    )
+                    for i in range(2)
+                ],
+            )
 
 
 class UDFTests(BaseUDFTestsMixin, ReusedSQLTestCase):

@@ -70,6 +70,12 @@ case class CkptIdCollectingStateStoreWrapper(innerStore: StateStore) extends Sta
     innerStore.get(key, colFamilyName)
   }
 
+  override def keyExists(
+      key: UnsafeRow,
+      colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Boolean = {
+    innerStore.keyExists(key, colFamilyName)
+  }
+
   override def valuesIterator(
       key: UnsafeRow,
       colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Iterator[UnsafeRow] = {

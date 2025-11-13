@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.connect.client.jdbc
 
-import java.sql.Types
+import java.sql.{ResultSet, SQLException, Types}
 
 import org.apache.spark.sql.connect.client.jdbc.test.JdbcHelper
 import org.apache.spark.sql.connect.test.{ConnectFunSuite, RemoteSparkSession}
@@ -246,6 +246,240 @@ class SparkConnectJdbcDataTypeSuite extends ConnectFunSuite with RemoteSparkSess
           assert(metaData.getColumnDisplaySize(1) === expectedColumnDisplaySize)
           assert(metaData.getColumnDisplaySize(1) >= value.size)
       }
+    }
+  }
+
+  test("getter functions column index out of bound") {
+    Seq(
+      ("'foo'", (rs: ResultSet) => rs.getString(999)),
+      ("true", (rs: ResultSet) => rs.getBoolean(999)),
+      ("cast(1 AS BYTE)", (rs: ResultSet) => rs.getByte(999)),
+      ("cast(1 AS SHORT)", (rs: ResultSet) => rs.getShort(999)),
+      ("cast(1 AS INT)", (rs: ResultSet) => rs.getInt(999)),
+      ("cast(1 AS BIGINT)", (rs: ResultSet) => rs.getLong(999)),
+      ("cast(1 AS FLOAT)", (rs: ResultSet) => rs.getFloat(999)),
+      ("cast(1 AS DOUBLE)", (rs: ResultSet) => rs.getDouble(999)),
+      ("cast(1 AS DECIMAL(10,5))", (rs: ResultSet) => rs.getBigDecimal(999)),
+      ("CAST(X'0A0B0C' AS BINARY)", (rs: ResultSet) => rs.getBytes(999))
+    ).foreach {
+      case (query, getter) =>
+        withExecuteQuery(s"SELECT $query") { rs =>
+          assert(rs.next())
+          val exception = intercept[SQLException] {
+            getter(rs)
+          }
+          assert(exception.getMessage() ===
+            "The column index is out of range: 999, number of columns: 1.")
+        }
+    }
+  }
+
+  test("getter functions called after statement closed") {
+    Seq(
+      ("'foo'", (rs: ResultSet) => rs.getString(1), "foo"),
+      ("true", (rs: ResultSet) => rs.getBoolean(1), true),
+      ("cast(1 AS BYTE)", (rs: ResultSet) => rs.getByte(1), 1.toByte),
+      ("cast(1 AS SHORT)", (rs: ResultSet) => rs.getShort(1), 1.toShort),
+      ("cast(1 AS INT)", (rs: ResultSet) => rs.getInt(1), 1.toInt),
+      ("cast(1 AS BIGINT)", (rs: ResultSet) => rs.getLong(1), 1.toLong),
+      ("cast(1 AS FLOAT)", (rs: ResultSet) => rs.getFloat(1), 1.toFloat),
+      ("cast(1 AS DOUBLE)", (rs: ResultSet) => rs.getDouble(1), 1.toDouble),
+      ("cast(1 AS DECIMAL(10,5))", (rs: ResultSet) => rs.getBigDecimal(1),
+        new java.math.BigDecimal("1.00000")),
+      ("CAST(X'0A0B0C' AS BINARY)", (rs: ResultSet) => rs.getBytes(1),
+        Array[Byte](0x0A, 0x0B, 0x0C))
+    ).foreach {
+      case (query, getter, expectedValue) =>
+        var resultSet: Option[ResultSet] = None
+        withExecuteQuery(s"SELECT $query") { rs =>
+          assert(rs.next())
+          expectedValue match {
+            case arr: Array[Byte] => assert(getter(rs).asInstanceOf[Array[Byte]].sameElements(arr))
+            case other => assert(getter(rs) === other)
+          }
+          assert(!rs.wasNull)
+          resultSet = Some(rs)
+        }
+        assert(resultSet.isDefined)
+        val exception = intercept[SQLException] {
+          getter(resultSet.get)
+        }
+        assert(exception.getMessage() === "JDBC Statement is closed.")
+    }
+  }
+
+  test("get date type") {
+    withExecuteQuery("SELECT date '2023-11-15'") { rs =>
+      assert(rs.next())
+      assert(rs.getDate(1) === java.sql.Date.valueOf("2023-11-15"))
+      assert(!rs.wasNull)
+      assert(!rs.next())
+
+      val metaData = rs.getMetaData
+      assert(metaData.getColumnCount === 1)
+      assert(metaData.getColumnName(1) === "DATE '2023-11-15'")
+      assert(metaData.getColumnLabel(1) === "DATE '2023-11-15'")
+      assert(metaData.getColumnType(1) === Types.DATE)
+      assert(metaData.getColumnTypeName(1) === "DATE")
+      assert(metaData.getColumnClassName(1) === "java.sql.Date")
+      assert(metaData.isSigned(1) === false)
+      assert(metaData.getPrecision(1) === 10)
+      assert(metaData.getScale(1) === 0)
+      assert(metaData.getColumnDisplaySize(1) === 10)
+    }
+  }
+
+  test("get date type with null") {
+    withExecuteQuery("SELECT cast(null as date)") { rs =>
+      assert(rs.next())
+      assert(rs.getDate(1) === null)
+      assert(rs.wasNull)
+      assert(!rs.next())
+
+      val metaData = rs.getMetaData
+      assert(metaData.getColumnCount === 1)
+      assert(metaData.getColumnName(1) === "CAST(NULL AS DATE)")
+      assert(metaData.getColumnLabel(1) === "CAST(NULL AS DATE)")
+      assert(metaData.getColumnType(1) === Types.DATE)
+      assert(metaData.getColumnTypeName(1) === "DATE")
+      assert(metaData.getColumnClassName(1) === "java.sql.Date")
+      assert(metaData.isSigned(1) === false)
+      assert(metaData.getPrecision(1) === 10)
+      assert(metaData.getScale(1) === 0)
+      assert(metaData.getColumnDisplaySize(1) === 10)
+    }
+  }
+
+  test("get date type by column label") {
+    withExecuteQuery("SELECT date '2025-11-15' as test_date") { rs =>
+      assert(rs.next())
+      assert(rs.getDate("test_date") === java.sql.Date.valueOf("2025-11-15"))
+      assert(!rs.wasNull)
+      assert(!rs.next())
+    }
+  }
+
+  test("get date type with calendar by column index") {
+    withExecuteQuery("SELECT date '2025-11-15'") { rs =>
+      assert(rs.next())
+
+      val calUTC = java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone("UTC"))
+      val dateUTC = rs.getDate(1, calUTC)
+      assert(dateUTC !== null)
+      assert(!rs.wasNull)
+
+      val calPST = java.util.Calendar.getInstance(
+        java.util.TimeZone.getTimeZone("America/Los_Angeles"))
+      val datePST = rs.getDate(1, calPST)
+      assert(datePST !== null)
+      assert(!rs.wasNull)
+      assert(!rs.next())
+    }
+  }
+
+  test("get date type with calendar by column label") {
+    withExecuteQuery("SELECT date '2025-11-15' as test_date") { rs =>
+      assert(rs.next())
+
+      val cal = java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone("UTC"))
+      val date = rs.getDate("test_date", cal)
+      assert(date !== null)
+      assert(!rs.wasNull)
+      assert(!rs.next())
+
+      val metaData = rs.getMetaData
+      assert(metaData.getColumnCount === 1)
+      assert(metaData.getColumnName(1) === "test_date")
+      assert(metaData.getColumnLabel(1) === "test_date")
+    }
+  }
+
+  test("get date type with calendar for null value") {
+    withExecuteQuery("SELECT cast(null as date)") { rs =>
+      assert(rs.next())
+
+      val cal = java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone("UTC"))
+      val date = rs.getDate(1, cal)
+      assert(date === null)
+      assert(rs.wasNull)
+      assert(!rs.next())
+    }
+  }
+
+  test("get date type with null calendar") {
+    withExecuteQuery("SELECT date '2025-11-15'") { rs =>
+      assert(rs.next())
+
+      val date = rs.getDate(1, null)
+      assert(date === java.sql.Date.valueOf("2025-11-15"))
+      assert(!rs.wasNull)
+      assert(!rs.next())
+    }
+  }
+
+  test("get binary type") {
+    val testBytes = Array[Byte](0x01, 0x02, 0x03, 0x04, 0x05)
+    val hexString = testBytes.map(b => "%02X".format(b)).mkString
+    withExecuteQuery(s"SELECT CAST(X'$hexString' AS BINARY)") { rs =>
+      assert(rs.next())
+      val bytes = rs.getBytes(1)
+      assert(bytes !== null)
+      assert(bytes.length === testBytes.length)
+      assert(bytes.sameElements(testBytes))
+      assert(!rs.wasNull)
+      assert(!rs.next())
+
+      val metaData = rs.getMetaData
+      assert(metaData.getColumnCount === 1)
+      assert(metaData.getColumnType(1) === Types.BINARY)
+      assert(metaData.getColumnTypeName(1) === "BINARY")
+      assert(metaData.getColumnClassName(1) === "[B")
+      assert(metaData.isSigned(1) === false)
+    }
+  }
+
+  test("get binary type with null") {
+    withExecuteQuery("SELECT cast(null as binary)") { rs =>
+      assert(rs.next())
+      assert(rs.getBytes(1) === null)
+      assert(rs.wasNull)
+      assert(!rs.next())
+
+      val metaData = rs.getMetaData
+      assert(metaData.getColumnCount === 1)
+      assert(metaData.getColumnType(1) === Types.BINARY)
+      assert(metaData.getColumnTypeName(1) === "BINARY")
+      assert(metaData.getColumnClassName(1) === "[B")
+    }
+  }
+
+  test("get binary type by column label") {
+    val testBytes = Array[Byte](0x0A, 0x0B, 0x0C)
+    val hexString = testBytes.map(b => "%02X".format(b)).mkString
+    withExecuteQuery(s"SELECT CAST(X'$hexString' AS BINARY) as test_binary") { rs =>
+      assert(rs.next())
+      val bytes = rs.getBytes("test_binary")
+      assert(bytes !== null)
+      assert(bytes.length === testBytes.length)
+      assert(bytes.sameElements(testBytes))
+      assert(!rs.wasNull)
+      assert(!rs.next())
+
+      val metaData = rs.getMetaData
+      assert(metaData.getColumnCount === 1)
+      assert(metaData.getColumnName(1) === "test_binary")
+      assert(metaData.getColumnLabel(1) === "test_binary")
+    }
+  }
+
+  test("get empty binary") {
+    withExecuteQuery("SELECT CAST(X'' AS BINARY)") { rs =>
+      assert(rs.next())
+      val bytes = rs.getBytes(1)
+      assert(bytes !== null)
+      assert(bytes.length === 0)
+      assert(!rs.wasNull)
+      assert(!rs.next())
     }
   }
 }

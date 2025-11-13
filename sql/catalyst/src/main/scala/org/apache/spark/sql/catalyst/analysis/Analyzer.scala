@@ -1670,7 +1670,12 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       case u: UpdateTable => resolveReferencesInUpdate(u)
 
       case m @ MergeIntoTable(targetTable, sourceTable, _, _, _, _, _)
-        if !m.resolved && targetTable.resolved && sourceTable.resolved && !m.needSchemaEvolution =>
+        if !m.resolved && targetTable.resolved && sourceTable.resolved =>
+
+        // Do not throw exception for schema evolution case.
+        // This allows unresolved assignment keys a chance to be resolved by a second pass
+        // by newly column/nested fields added by schema evolution.
+        val throws = !m.schemaEvolutionEnabled
 
         EliminateSubqueryAliases(targetTable) match {
           case r: NamedRelation if r.skipSchemaResolution =>
@@ -1680,6 +1685,9 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
             m
 
           case _ =>
+            def findAttrInTarget(name: String): Option[Attribute] = {
+              targetTable.output.find(targetAttr => conf.resolver(name, targetAttr.name))
+            }
             val newMatchedActions = m.matchedActions.map {
               case DeleteAction(deleteCondition) =>
                 val resolvedDeleteCondition = deleteCondition.map(
@@ -1691,18 +1699,30 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
                 UpdateAction(
                   resolvedUpdateCondition,
                   // The update value can access columns from both target and source tables.
-                  resolveAssignments(assignments, m, MergeResolvePolicy.BOTH))
+                  resolveAssignments(assignments, m, MergeResolvePolicy.BOTH,
+                    throws = throws))
               case UpdateStarAction(updateCondition) =>
-                // Use only source columns.  Missing columns in target will be handled in
-                // ResolveRowLevelCommandAssignments.
-                val assignments = targetTable.output.flatMap{ targetAttr =>
-                  sourceTable.output.find(
-                      sourceCol => conf.resolver(sourceCol.name, targetAttr.name))
-                    .map(Assignment(targetAttr, _))}
+                // Expand star to top level source columns.  If source has less columns than target,
+                // assignments will be added by ResolveRowLevelCommandAssignments later.
+                val assignments = if (m.schemaEvolutionEnabled) {
+                  // For schema evolution case, generate assignments for missing target columns.
+                  // These columns will be added by ResolveMergeIntoTableSchemaEvolution later.
+                  sourceTable.output.map { sourceAttr =>
+                    val key = findAttrInTarget(sourceAttr.name).getOrElse(
+                      UnresolvedAttribute(sourceAttr.name))
+                    Assignment(key, sourceAttr)
+                  }
+                } else {
+                  sourceTable.output.flatMap { sourceAttr =>
+                    findAttrInTarget(sourceAttr.name).map(
+                      targetAttr => Assignment(targetAttr, sourceAttr))
+                  }
+                }
                 UpdateAction(
                   updateCondition.map(resolveExpressionByPlanChildren(_, m)),
                   // For UPDATE *, the value must be from source table.
-                  resolveAssignments(assignments, m, MergeResolvePolicy.SOURCE))
+                  resolveAssignments(assignments, m, MergeResolvePolicy.SOURCE,
+                    throws = throws))
               case o => o
             }
             val newNotMatchedActions = m.notMatchedActions.map {
@@ -1713,21 +1733,33 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
                   resolveExpressionByPlanOutput(_, m.sourceTable))
                 InsertAction(
                   resolvedInsertCondition,
-                  resolveAssignments(assignments, m, MergeResolvePolicy.SOURCE))
+                  resolveAssignments(assignments, m, MergeResolvePolicy.SOURCE,
+                    throws = throws))
               case InsertStarAction(insertCondition) =>
                 // The insert action is used when not matched, so its condition and value can only
                 // access columns from the source table.
                 val resolvedInsertCondition = insertCondition.map(
                   resolveExpressionByPlanOutput(_, m.sourceTable))
-                // Use only source columns.  Missing columns in target will be handled in
-                // ResolveRowLevelCommandAssignments.
-                val assignments = targetTable.output.flatMap{ targetAttr =>
-                  sourceTable.output.find(
-                      sourceCol => conf.resolver(sourceCol.name, targetAttr.name))
-                    .map(Assignment(targetAttr, _))}
+                // Expand star to top level source columns.  If source has less columns than target,
+                // assignments will be added by ResolveRowLevelCommandAssignments later.
+                val assignments = if (m.schemaEvolutionEnabled) {
+                  // For schema evolution case, generate assignments for missing target columns.
+                  // These columns will be added by ResolveMergeIntoTableSchemaEvolution later.
+                  sourceTable.output.map { sourceAttr =>
+                    val key = findAttrInTarget(sourceAttr.name).getOrElse(
+                      UnresolvedAttribute(sourceAttr.name))
+                    Assignment(key, sourceAttr)
+                  }
+                } else {
+                  sourceTable.output.flatMap { sourceAttr =>
+                    findAttrInTarget(sourceAttr.name).map(
+                      targetAttr => Assignment(targetAttr, sourceAttr))
+                  }
+                }
                 InsertAction(
                   resolvedInsertCondition,
-                  resolveAssignments(assignments, m, MergeResolvePolicy.SOURCE))
+                  resolveAssignments(assignments, m, MergeResolvePolicy.SOURCE,
+                    throws = throws))
               case o => o
             }
             val newNotMatchedBySourceActions = m.notMatchedBySourceActions.map {
@@ -1741,7 +1773,8 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
                 UpdateAction(
                   resolvedUpdateCondition,
                   // The update value can access columns from the target table only.
-                  resolveAssignments(assignments, m, MergeResolvePolicy.TARGET))
+                  resolveAssignments(assignments, m, MergeResolvePolicy.TARGET,
+                    throws = throws))
               case o => o
             }
 
@@ -1818,11 +1851,12 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
     def resolveAssignments(
         assignments: Seq[Assignment],
         mergeInto: MergeIntoTable,
-        resolvePolicy: MergeResolvePolicy.Value): Seq[Assignment] = {
+        resolvePolicy: MergeResolvePolicy.Value,
+        throws: Boolean): Seq[Assignment] = {
       assignments.map { assign =>
         val resolvedKey = assign.key match {
           case c if !c.resolved =>
-            resolveMergeExprOrFail(c, Project(Nil, mergeInto.targetTable))
+            resolveMergeExpr(c, Project(Nil, mergeInto.targetTable), throws)
           case o => o
         }
         val resolvedValue = assign.value match {
@@ -1842,7 +1876,9 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
             } else {
               resolvedExpr
             }
-            checkResolvedMergeExpr(withDefaultResolved, resolvePlan)
+            if (throws) {
+              checkResolvedMergeExpr(withDefaultResolved, resolvePlan)
+            }
             withDefaultResolved
           case o => o
         }
@@ -1850,9 +1886,11 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       }
     }
 
-    private def resolveMergeExprOrFail(e: Expression, p: LogicalPlan): Expression = {
-      val resolved = resolveExprInAssignment(e, p)
-      checkResolvedMergeExpr(resolved, p)
+    private def resolveMergeExpr(e: Expression, p: LogicalPlan, throws: Boolean): Expression = {
+      val resolved = resolveExprInAssignment(e, p, throws)
+      if (throws) {
+        checkResolvedMergeExpr(resolved, p)
+      }
       resolved
     }
 
@@ -2172,8 +2210,8 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
                 v1SessionCatalog.resolvePersistentTableFunction(
                   ident.asFunctionIdentifier, u.functionArgs)
               } else {
-                throw QueryCompilationErrors.missingCatalogAbilityError(
-                  catalog, "table-valued functions")
+                throw QueryCompilationErrors.missingCatalogTableValuedFunctionsAbilityError(
+                  catalog)
               }
             }
             resolvedFunc.transformAllExpressionsWithPruning(

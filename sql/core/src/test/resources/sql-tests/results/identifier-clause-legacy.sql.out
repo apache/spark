@@ -1180,28 +1180,29 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "IDENTIFIER_TOO_MANY_NAME_PARTS",
+  "errorClass" : "PARSE_SYNTAX_ERROR",
   "sqlState" : "42601",
   "messageParameters" : {
-    "identifier" : "`x`.`win`",
-    "limit" : "1"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 26,
-    "stopIndex" : 44,
-    "fragment" : "IDENTIFIER('x.win')"
-  } ]
+    "error" : "''x.win''",
+    "hint" : ""
+  }
 }
 
 
 -- !query
 SELECT T1.c1 FROM VALUES(1) AS T1(c1) JOIN VALUES(1) AS T2(c1) USING (IDENTIFIER('c1'))
 -- !query schema
-struct<c1:int>
+struct<>
 -- !query output
-1
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'('",
+    "hint" : ""
+  }
+}
 
 
 -- !query
@@ -1230,17 +1231,33 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 SELECT map('a', 1).IDENTIFIER('a') FROM VALUES(1) AS T(c1)
 -- !query schema
-struct<map(a, 1)[a]:int>
+struct<>
 -- !query output
-1
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "''a''",
+    "hint" : ""
+  }
+}
 
 
 -- !query
 SELECT named_struct('a', 1).IDENTIFIER('a') FROM VALUES(1) AS T(c1)
 -- !query schema
-struct<named_struct(a, 1).a:int>
+struct<>
 -- !query output
-1
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "''a''",
+    "hint" : ""
+  }
+}
 
 
 -- !query
@@ -1248,20 +1265,14 @@ SELECT * FROM s.IDENTIFIER('tab')
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
+org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
-  "sqlState" : "42P01",
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
   "messageParameters" : {
-    "relationName" : "`s`.`tab`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 15,
-    "stopIndex" : 33,
-    "fragment" : "s.IDENTIFIER('tab')"
-  } ]
+    "error" : "'('",
+    "hint" : ""
+  }
 }
 
 
@@ -1270,20 +1281,14 @@ SELECT * FROM IDENTIFIER('s').IDENTIFIER('tab')
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
+org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
-  "sqlState" : "42P01",
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
   "messageParameters" : {
-    "relationName" : "`s`.`tab`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 15,
-    "stopIndex" : 47,
-    "fragment" : "IDENTIFIER('s').IDENTIFIER('tab')"
-  } ]
+    "error" : "'IDENTIFIER'",
+    "hint" : ""
+  }
 }
 
 
@@ -1292,61 +1297,95 @@ SELECT * FROM IDENTIFIER('s').tab
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
+org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
-  "sqlState" : "42P01",
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
   "messageParameters" : {
-    "relationName" : "`s`.`tab`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 15,
-    "stopIndex" : 33,
-    "fragment" : "IDENTIFIER('s').tab"
-  } ]
+    "error" : "'IDENTIFIER'",
+    "hint" : ""
+  }
 }
 
 
 -- !query
 SELECT row_number() OVER IDENTIFIER('win') FROM VALUES(1) AS T(c1) WINDOW win AS (ORDER BY c1)
 -- !query schema
-struct<row_number() OVER (ORDER BY c1 ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):int>
+struct<>
 -- !query output
-1
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "''win''",
+    "hint" : ""
+  }
+}
 
 
 -- !query
 SELECT row_number() OVER win FROM VALUES(1) AS T(c1) WINDOW IDENTIFIER('win') AS (ORDER BY c1)
 -- !query schema
-struct<row_number() OVER (ORDER BY c1 ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):int>
+struct<>
 -- !query output
-1
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'('",
+    "hint" : ": missing 'AS'"
+  }
+}
 
 
 -- !query
 SELECT 1 AS IDENTIFIER('col1')
 -- !query schema
-struct<col1:int>
+struct<>
 -- !query output
-1
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'('",
+    "hint" : ""
+  }
+}
 
 
 -- !query
 SELECT my_table.* FROM VALUES (1, 2) AS IDENTIFIER('my_table')(IDENTIFIER('c1'), IDENTIFIER('c2'))
 -- !query schema
-struct<c1:int,c2:int>
+struct<>
 -- !query output
-1	2
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "''my_table''",
+    "hint" : ""
+  }
+}
 
 
 -- !query
 WITH identifier('v')(identifier('c1')) AS (VALUES(1)) (SELECT c1 FROM v)
 -- !query schema
-struct<c1:int>
+struct<>
 -- !query output
-1
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "''v''",
+    "hint" : ""
+  }
+}
 
 
 -- !query
@@ -1354,15 +1393,37 @@ CREATE OR REPLACE VIEW v(IDENTIFIER('c1')) AS VALUES(1)
 -- !query schema
 struct<>
 -- !query output
-
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'('",
+    "hint" : ""
+  }
+}
 
 
 -- !query
 SELECT c1 FROM v
 -- !query schema
-struct<c1:int>
+struct<>
 -- !query output
-1
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`v`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 16,
+    "stopIndex" : 16,
+    "fragment" : "v"
+  } ]
+}
 
 
 -- !query
@@ -1370,7 +1431,15 @@ CREATE TABLE tab(IDENTIFIER('c1') INT) USING CSV
 -- !query schema
 struct<>
 -- !query output
-
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'('",
+    "hint" : ""
+  }
+}
 
 
 -- !query
@@ -1378,15 +1447,37 @@ INSERT INTO tab(IDENTIFIER('c1')) VALUES(1)
 -- !query schema
 struct<>
 -- !query output
-
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'('",
+    "hint" : ": missing ')'"
+  }
+}
 
 
 -- !query
 SELECT c1 FROM tab
 -- !query schema
-struct<c1:int>
+struct<>
 -- !query output
-1
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`tab`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 16,
+    "stopIndex" : 18,
+    "fragment" : "tab"
+  } ]
+}
 
 
 -- !query
@@ -1394,13 +1485,13 @@ ALTER TABLE IDENTIFIER('tab') RENAME COLUMN IDENTIFIER('c1') TO IDENTIFIER('col1
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "UNSUPPORTED_FEATURE.TABLE_OPERATION",
-  "sqlState" : "0A000",
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
   "messageParameters" : {
-    "operation" : "RENAME COLUMN",
-    "tableName" : "`spark_catalog`.`default`.`tab`"
+    "error" : "'('",
+    "hint" : ""
   }
 }
 
@@ -1412,18 +1503,17 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-  "sqlState" : "42703",
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
   "messageParameters" : {
-    "objectName" : "`col1`",
-    "proposal" : "`c1`"
+    "relationName" : "`tab`"
   },
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 11,
-    "fragment" : "col1"
+    "startIndex" : 18,
+    "stopIndex" : 20,
+    "fragment" : "tab"
   } ]
 }
 
@@ -1433,15 +1523,37 @@ ALTER TABLE IDENTIFIER('tab') ADD COLUMN IDENTIFIER('c2') INT
 -- !query schema
 struct<>
 -- !query output
-
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'('",
+    "hint" : ""
+  }
+}
 
 
 -- !query
 SELECT c2 FROM tab
 -- !query schema
-struct<c2:int>
+struct<>
 -- !query output
-NULL
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`tab`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 16,
+    "stopIndex" : 18,
+    "fragment" : "tab"
+  } ]
+}
 
 
 -- !query
@@ -1449,13 +1561,13 @@ ALTER TABLE IDENTIFIER('tab') DROP COLUMN IDENTIFIER('c2')
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "UNSUPPORTED_FEATURE.TABLE_OPERATION",
-  "sqlState" : "0A000",
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
   "messageParameters" : {
-    "operation" : "DROP COLUMN",
-    "tableName" : "`spark_catalog`.`default`.`tab`"
+    "error" : "'('",
+    "hint" : ""
   }
 }
 
@@ -1465,15 +1577,37 @@ ALTER TABLE IDENTIFIER('tab') RENAME TO IDENTIFIER('tab_renamed')
 -- !query schema
 struct<>
 -- !query output
-
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'('",
+    "hint" : ""
+  }
+}
 
 
 -- !query
 SELECT * FROM tab_renamed
 -- !query schema
-struct<c1:int,c2:int>
+struct<>
 -- !query output
-1	NULL
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`tab_renamed`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 15,
+    "stopIndex" : 25,
+    "fragment" : "tab_renamed"
+  } ]
+}
 
 
 -- !query
@@ -1497,7 +1631,15 @@ CREATE TABLE test_col_with_dot(IDENTIFIER('`col.with.dot`') INT) USING CSV
 -- !query schema
 struct<>
 -- !query output
-
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'('",
+    "hint" : ""
+  }
+}
 
 
 -- !query
@@ -1515,19 +1657,12 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "IDENTIFIER_TOO_MANY_NAME_PARTS",
+  "errorClass" : "PARSE_SYNTAX_ERROR",
   "sqlState" : "42601",
   "messageParameters" : {
-    "identifier" : "`schema`.`table`",
-    "limit" : "1"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 15,
-    "stopIndex" : 65,
-    "fragment" : "VALUES (1, 2) AS IDENTIFIER('schema.table')(c1, c2)"
-  } ]
+    "error" : "''schema.table''",
+    "hint" : ""
+  }
 }
 
 
@@ -1538,19 +1673,12 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "IDENTIFIER_TOO_MANY_NAME_PARTS",
+  "errorClass" : "PARSE_SYNTAX_ERROR",
   "sqlState" : "42601",
   "messageParameters" : {
-    "identifier" : "`col1`.`col2`",
-    "limit" : "1"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 35,
-    "fragment" : "1 AS IDENTIFIER('col1.col2')"
-  } ]
+    "error" : "'('",
+    "hint" : ""
+  }
 }
 
 
@@ -1711,7 +1839,15 @@ ALTER TABLE test_comment ALTER COLUMN IDENTIFIER('c1') COMMENT 'column comment'
 -- !query schema
 struct<>
 -- !query output
-
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'('",
+    "hint" : ""
+  }
+}
 
 
 -- !query
@@ -1783,15 +1919,23 @@ SET VAR IDENTIFIER('my_var') = 'new_value'
 -- !query schema
 struct<>
 -- !query output
-
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'('",
+    "hint" : ": missing EQ"
+  }
+}
 
 
 -- !query
 SELECT IDENTIFIER('my_var')
 -- !query schema
-struct<variablereference(system.session.my_var='new_value'):string>
+struct<variablereference(system.session.my_var='value'):string>
 -- !query output
-new_value
+value
 
 
 -- !query
@@ -1809,15 +1953,38 @@ RETURN IDENTIFIER('param1') + length(IDENTIFIER('param2'))
 -- !query schema
 struct<>
 -- !query output
-
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'('",
+    "hint" : ""
+  }
+}
 
 
 -- !query
 SELECT test_udf(5, 'hello')
 -- !query schema
-struct<test_udf(5, hello):int>
+struct<>
 -- !query output
-10
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNRESOLVED_ROUTINE",
+  "sqlState" : "42883",
+  "messageParameters" : {
+    "routineName" : "`test_udf`",
+    "searchPath" : "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`identifier_clause_test_schema`]"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 27,
+    "fragment" : "test_udf(5, 'hello')"
+  } ]
+}
 
 
 -- !query
@@ -1825,7 +1992,14 @@ DROP TEMPORARY FUNCTION test_udf
 -- !query schema
 struct<>
 -- !query output
-
+org.apache.spark.sql.catalyst.analysis.NoSuchTempFunctionException
+{
+  "errorClass" : "ROUTINE_NOT_FOUND",
+  "sqlState" : "42883",
+  "messageParameters" : {
+    "routineName" : "`test_udf`"
+  }
+}
 
 
 -- !query
@@ -1835,15 +2009,37 @@ RETURN SELECT IDENTIFIER('input_val'), 'result'
 -- !query schema
 struct<>
 -- !query output
-
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'('",
+    "hint" : ""
+  }
+}
 
 
 -- !query
 SELECT * FROM test_table_udf(42)
 -- !query schema
-struct<col1:int,col2:string>
+struct<>
 -- !query output
-42	result
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNRESOLVABLE_TABLE_VALUED_FUNCTION",
+  "sqlState" : "42883",
+  "messageParameters" : {
+    "name" : "`test_table_udf`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 15,
+    "stopIndex" : 32,
+    "fragment" : "test_table_udf(42)"
+  } ]
+}
 
 
 -- !query
@@ -1851,7 +2047,14 @@ DROP TEMPORARY FUNCTION test_table_udf
 -- !query schema
 struct<>
 -- !query output
-
+org.apache.spark.sql.catalyst.analysis.NoSuchTempFunctionException
+{
+  "errorClass" : "ROUTINE_NOT_FOUND",
+  "sqlState" : "42883",
+  "messageParameters" : {
+    "routineName" : "`test_table_udf`"
+  }
+}
 
 
 -- !query
@@ -1944,10 +2147,24 @@ struct<>
 EXECUTE IMMEDIATE 'SELECT t1.*, t2.* FROM IDENTIFIER(:t1) t1 JOIN IDENTIFIER(:t2) t2 USING (IDENTIFIER(:col)) ORDER BY ALL'
   USING 'integration_test' AS t1, 'integration_test2' AS t2, 'c1' AS col
 -- !query schema
-struct<c1:int,c2:string,c1:int,c3:string>
+struct<>
 -- !query output
-1	a	1	x
-2	b	2	y
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'('",
+    "hint" : ""
+  },
+  "queryContext" : [ {
+    "objectType" : "EXECUTE IMMEDIATE",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 103,
+    "fragment" : "SELECT t1.*, t2.* FROM IDENTIFIER(:t1) t1 JOIN IDENTIFIER(:t2) t2 USING (IDENTIFIER(:col)) ORDER BY ALL"
+  } ]
+}
 
 
 -- !query
@@ -1987,7 +2204,22 @@ EXECUTE IMMEDIATE 'INSERT INTO integration_test(IDENTIFIER(:col1), IDENTIFIER(:c
 -- !query schema
 struct<>
 -- !query output
-
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'('",
+    "hint" : ": missing ')'"
+  },
+  "queryContext" : [ {
+    "objectType" : "EXECUTE IMMEDIATE",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 88,
+    "fragment" : "INSERT INTO integration_test(IDENTIFIER(:col1), IDENTIFIER(:col2)) VALUES (:val1, :val2)"
+  } ]
+}
 
 
 -- !query
@@ -1998,18 +2230,18 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "IDENTIFIER_TOO_MANY_NAME_PARTS",
+  "errorClass" : "PARSE_SYNTAX_ERROR",
   "sqlState" : "42601",
   "messageParameters" : {
-    "identifier" : "`identifier_clause_test_schema`.`my_table`",
-    "limit" : "1"
+    "error" : "':'",
+    "hint" : ": extra input ':'"
   },
   "queryContext" : [ {
     "objectType" : "EXECUTE IMMEDIATE",
     "objectName" : "",
-    "startIndex" : 115,
-    "stopIndex" : 144,
-    "fragment" : "IDENTIFIER(:schema '.' :table)"
+    "startIndex" : 1,
+    "stopIndex" : 145,
+    "fragment" : "SELECT IDENTIFIER(concat(:schema, '.', :table, '.c1')) FROM VALUES(named_struct('c1', 100)) AS IDENTIFIER(:alias)(IDENTIFIER(:schema '.' :table))"
   } ]
 }
 
@@ -2018,9 +2250,24 @@ org.apache.spark.sql.catalyst.parser.ParseException
 EXECUTE IMMEDIATE 'WITH IDENTIFIER(:cte_name)(c1) AS (VALUES(1)) SELECT c1 FROM IDENTIFIER(:cte_name)'
   USING 'my_cte' AS cte_name
 -- !query schema
-struct<c1:int>
+struct<>
 -- !query output
-1
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "':'",
+    "hint" : ""
+  },
+  "queryContext" : [ {
+    "objectType" : "EXECUTE IMMEDIATE",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 82,
+    "fragment" : "WITH IDENTIFIER(:cte_name)(c1) AS (VALUES(1)) SELECT c1 FROM IDENTIFIER(:cte_name)"
+  } ]
+}
 
 
 -- !query
@@ -2029,16 +2276,45 @@ EXECUTE IMMEDIATE 'CREATE OR REPLACE TEMPORARY VIEW IDENTIFIER(:view_name)(IDENT
 -- !query schema
 struct<>
 -- !query output
-
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'('",
+    "hint" : ""
+  },
+  "queryContext" : [ {
+    "objectType" : "EXECUTE IMMEDIATE",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 91,
+    "fragment" : "CREATE OR REPLACE TEMPORARY VIEW IDENTIFIER(:view_name)(IDENTIFIER(:col_name)) AS VALUES(1)"
+  } ]
+}
 
 
 -- !query
 EXECUTE IMMEDIATE 'SELECT IDENTIFIER(:col) FROM IDENTIFIER(:view)'
   USING 'test_col' AS col, 'test_view' AS view
 -- !query schema
-struct<test_col:int>
+struct<>
 -- !query output
-1
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`test_view`"
+  },
+  "queryContext" : [ {
+    "objectType" : "EXECUTE IMMEDIATE",
+    "objectName" : "",
+    "startIndex" : 30,
+    "stopIndex" : 46,
+    "fragment" : "IDENTIFIER(:view)"
+  } ]
+}
 
 
 -- !query
@@ -2046,7 +2322,14 @@ DROP VIEW test_view
 -- !query schema
 struct<>
 -- !query output
-
+org.apache.spark.sql.catalyst.analysis.NoSuchTableException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`spark_catalog`.`identifier_clause_test_schema`.`test_view`"
+  }
+}
 
 
 -- !query
@@ -2055,7 +2338,22 @@ EXECUTE IMMEDIATE 'ALTER TABLE IDENTIFIER(:tab) ADD COLUMN IDENTIFIER(:new_col) 
 -- !query schema
 struct<>
 -- !query output
-
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'('",
+    "hint" : ""
+  },
+  "queryContext" : [ {
+    "objectType" : "EXECUTE IMMEDIATE",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 64,
+    "fragment" : "ALTER TABLE IDENTIFIER(:tab) ADD COLUMN IDENTIFIER(:new_col) INT"
+  } ]
+}
 
 
 -- !query
@@ -2064,14 +2362,21 @@ EXECUTE IMMEDIATE 'ALTER TABLE IDENTIFIER(:tab) RENAME COLUMN IDENTIFIER(:old_co
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "UNSUPPORTED_FEATURE.TABLE_OPERATION",
-  "sqlState" : "0A000",
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
   "messageParameters" : {
-    "operation" : "RENAME COLUMN",
-    "tableName" : "`spark_catalog`.`identifier_clause_test_schema`.`integration_test`"
-  }
+    "error" : "'('",
+    "hint" : ""
+  },
+  "queryContext" : [ {
+    "objectType" : "EXECUTE IMMEDIATE",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 87,
+    "fragment" : "ALTER TABLE IDENTIFIER(:tab) RENAME COLUMN IDENTIFIER(:old_col) TO IDENTIFIER(:new_col)"
+  } ]
 }
 
 
@@ -2079,9 +2384,24 @@ org.apache.spark.sql.AnalysisException
 EXECUTE IMMEDIATE 'SELECT map(:key, :val).IDENTIFIER(:key) AS result'
   USING 'mykey' AS key, 42 AS val
 -- !query schema
-struct<result:int>
+struct<>
 -- !query output
-42
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "':'",
+    "hint" : ""
+  },
+  "queryContext" : [ {
+    "objectType" : "EXECUTE IMMEDIATE",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 49,
+    "fragment" : "SELECT map(:key, :val).IDENTIFIER(:key) AS result"
+  } ]
+}
 
 
 -- !query
@@ -2090,20 +2410,20 @@ EXECUTE IMMEDIATE 'SELECT IDENTIFIER(:alias ''.c1'') FROM integration_test AS ID
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
+org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-  "sqlState" : "42703",
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
   "messageParameters" : {
-    "objectName" : "`t`.`c1`",
-    "proposal" : "`IDENTIFIER('t')`.`c1`, `IDENTIFIER('t')`.`c2`, `IDENTIFIER('t')`.`c4`"
+    "error" : "':'",
+    "hint" : ": extra input ':'"
   },
   "queryContext" : [ {
     "objectType" : "EXECUTE IMMEDIATE",
     "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 31,
-    "fragment" : "IDENTIFIER(:alias '.c1')"
+    "startIndex" : 1,
+    "stopIndex" : 88,
+    "fragment" : "SELECT IDENTIFIER(:alias '.c1') FROM integration_test AS IDENTIFIER(:alias) ORDER BY ALL"
   } ]
 }
 
@@ -2117,18 +2437,16 @@ struct<c1:int,c2:string>
 -- !query output
 1	a
 2	b
-3	c
 
 
 -- !query
 EXECUTE IMMEDIATE 'SELECT * FROM IDENTIFIER(:schema ''.'' :table) WHERE IDENTIFIER(concat(:tab_alias, ''.c1'')) > 0 ORDER BY ALL'
   USING 'identifier_clause_test_schema' AS schema, 'integration_test' AS table, 'integration_test' AS tab_alias
 -- !query schema
-struct<c1:int,c2:string,c4:int>
+struct<c1:int,c2:string>
 -- !query output
-1	a	NULL
-2	b	NULL
-3	c	NULL
+1	a
+2	b
 
 
 -- !query
@@ -2139,18 +2457,18 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "IDENTIFIER_TOO_MANY_NAME_PARTS",
+  "errorClass" : "PARSE_SYNTAX_ERROR",
   "sqlState" : "42601",
   "messageParameters" : {
-    "identifier" : "`identifier_clause_test_schema`.`col1`",
-    "limit" : "1"
+    "error" : "'('",
+    "hint" : ""
   },
   "queryContext" : [ {
     "objectType" : "EXECUTE IMMEDIATE",
     "objectName" : "",
-    "startIndex" : 8,
+    "startIndex" : 1,
     "stopIndex" : 40,
-    "fragment" : "1 AS IDENTIFIER(:schema '.' :col)"
+    "fragment" : "SELECT 1 AS IDENTIFIER(:schema '.' :col)"
   } ]
 }
 
@@ -2190,21 +2508,33 @@ struct<>
 -- !query
 SELECT * FROM lateral_test LATERAL VIEW explode(arr) IDENTIFIER('tbl') AS IDENTIFIER('col') ORDER BY ALL
 -- !query schema
-struct<arr:array<int>,col:int>
+struct<>
 -- !query output
-[1,2,3]	1
-[1,2,3]	2
-[1,2,3]	3
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'('",
+    "hint" : ""
+  }
+}
 
 
 -- !query
 SELECT * FROM lateral_test LATERAL VIEW OUTER explode(arr) IDENTIFIER('my_table') AS IDENTIFIER('my_col') ORDER BY ALL
 -- !query schema
-struct<arr:array<int>,my_col:int>
+struct<>
 -- !query output
-[1,2,3]	1
-[1,2,3]	2
-[1,2,3]	3
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'('",
+    "hint" : ""
+  }
+}
 
 
 -- !query
@@ -2234,19 +2564,33 @@ struct<>
 -- !query
 SELECT * FROM unpivot_test UNPIVOT (val FOR col IN (a AS IDENTIFIER('col_a'), b AS IDENTIFIER('col_b'))) ORDER BY ALL
 -- !query schema
-struct<id:int,c:int,col:string,val:int>
+struct<>
 -- !query output
-1	30	col_a	10
-1	30	col_b	20
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'('",
+    "hint" : ""
+  }
+}
 
 
 -- !query
 SELECT * FROM unpivot_test UNPIVOT ((v1, v2) FOR col IN ((a, b) AS IDENTIFIER('cols_ab'), (b, c) AS IDENTIFIER('cols_bc'))) ORDER BY ALL
 -- !query schema
-struct<id:int,col:string,v1:int,v2:int>
+struct<>
 -- !query output
-1	cols_ab	10	20
-1	cols_bc	20	30
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'('",
+    "hint" : ""
+  }
+}
 
 
 -- !query
@@ -2355,8 +2699,8 @@ org.apache.spark.sql.catalyst.parser.ParseException
   "errorClass" : "PARSE_SYNTAX_ERROR",
   "sqlState" : "42601",
   "messageParameters" : {
-    "error" : "'FROM'",
-    "hint" : ": missing ')'"
+    "error" : "'('",
+    "hint" : ""
   }
 }
 

@@ -642,25 +642,24 @@ class UDFRegistration:
             >>> spark.sql("SELECT random_udf()").collect()  # doctest: +SKIP
             [Row(random_udf()=82)]
 
-            >>> import pandas as pd  # doctest: +SKIP
+            >>> import pandas as pd
             >>> from pyspark.sql.functions import pandas_udf
-            >>> @pandas_udf("integer")  # doctest: +SKIP
+            >>> @pandas_udf("integer")
             ... def add_one(s: pd.Series) -> pd.Series:
             ...     return s + 1
             ...
-            >>> _ = spark.udf.register("add_one", add_one)  # doctest: +SKIP
-            >>> spark.sql("SELECT add_one(id) FROM range(3)").collect()  # doctest: +SKIP
+            >>> _ = spark.udf.register("add_one", add_one)
+            >>> spark.sql("SELECT add_one(id) FROM range(3)").collect()
             [Row(add_one(id)=1), Row(add_one(id)=2), Row(add_one(id)=3)]
 
-            >>> @pandas_udf("integer")  # doctest: +SKIP
+            >>> @pandas_udf("integer")
             ... def sum_udf(v: pd.Series) -> int:
             ...     return v.sum()
             ...
-            >>> _ = spark.udf.register("sum_udf", sum_udf)  # doctest: +SKIP
+            >>> _ = spark.udf.register("sum_udf", sum_udf)
             >>> q = "SELECT sum_udf(v1) FROM VALUES (3, 0), (2, 0), (1, 1) tbl(v1, v2) GROUP BY v2"
-            >>> spark.sql(q).collect()  # doctest: +SKIP
+            >>> spark.sql(q).sort("sum_udf(v1)").collect()
             [Row(sum_udf(v1)=1), Row(sum_udf(v1)=5)]
-
         """
 
         # This is to check whether the input function is from a user-defined function or
@@ -796,8 +795,13 @@ def _test() -> None:
     import doctest
     from pyspark.sql import SparkSession
     import pyspark.sql.udf
+    from pyspark.testing.utils import have_pandas, have_pyarrow
 
     globs = pyspark.sql.udf.__dict__.copy()
+
+    if not have_pandas or not have_pyarrow:
+        del pyspark.sql.udf.UDFRegistration.register.__doc__
+
     spark = SparkSession.builder.master("local[4]").appName("sql.udf tests").getOrCreate()
     globs["spark"] = spark
     (failure_count, test_count) = doctest.testmod(

@@ -1693,6 +1693,12 @@
     ],
     "sqlState" : "42846"
   },
+  "EXPRESSION_TRANSLATION_TO_V2_IS_NOT_SUPPORTED" : {
+    "message" : [
+      "Expression <expr> cannot be translated to v2 expression."
+    ],
+    "sqlState" : "0A000"
+  },
   "EXPRESSION_TYPE_IS_NOT_ORDERABLE" : {
     "message" : [
       "Column expression <expr> cannot be sorted because its type <exprType> is not orderable."
@@ -2058,7 +2064,7 @@
   },
   "IDENTIFIER_TOO_MANY_NAME_PARTS" : {
     "message" : [
-      "<identifier> is not a valid identifier as it has more than 2 name parts."
+      "<identifier> is not a valid identifier as it has more than <limit> name parts."
     ],
     "sqlState" : "42601"
   },
@@ -4384,6 +4390,59 @@
     },
     "sqlState" : "XX000"
   },
+  "MISSING_CATALOG_ABILITY" : {
+    "message" : [
+      "Catalog <plugin> does not support"
+    ],
+    "subClass" : {
+      "CREATE_FUNCTION" : {
+        "message" : [
+          "CREATE FUNCTION."
+        ]
+      },
+      "DROP_FUNCTION" : {
+        "message" : [
+          "DROP FUNCTION."
+        ]
+      },
+      "FUNCTIONS" : {
+        "message" : [
+          "functions."
+        ]
+      },
+      "NAMESPACES" : {
+        "message" : [
+          "namespaces."
+        ]
+      },
+      "PROCEDURES" : {
+        "message" : [
+          "procedures."
+        ]
+      },
+      "REFRESH_FUNCTION" : {
+        "message" : [
+          "REFRESH FUNCTION."
+        ]
+      },
+      "TABLES" : {
+        "message" : [
+          "tables."
+        ]
+      },
+      "TABLE_VALUED_FUNCTIONS" : {
+        "message" : [
+          "table-valued functions."
+        ]
+      },
+      "VIEWS" : {
+        "message" : [
+          "views."
+        ]
+      }
+    },
+    "sqlState" : "0A000"
+  },
   "MISSING_DATABASE_FOR_V1_SESSION_CATALOG" : {
     "message" : [
       "Database name is not specified in the v1 session catalog. Please ensure to provide a valid database name when interacting with the v1 catalog."
@@ -5717,6 +5776,15 @@
       }
     },
     "sqlState" : "0A000"
+  },
+  "STREAMING_STATEFUL_OPERATOR_MISSING_STATE_DIRECTORY" : {
+    "message" : [
+      "Cannot restart streaming query with stateful operators because the state directory is empty or missing.",
+      "Stateful operators in current batch: [<OpsInCurBatchSeq>].",
+      "This typically occurs when state files have been deleted or the streaming query was previously run without stateful operators but restarted with stateful operators.",
+      "Please remove the stateful operators, use a new checkpoint location, or restore the missing state files."
+    ],
+    "sqlState" : "42K03"
   },
   "STREAMING_STATEFUL_OPERATOR_NOT_MATCH_IN_STATE_METADATA" : {
     "message" : [
@@ -7882,11 +7950,6 @@
       "Cannot use \"INTERVAL\" type in the table schema."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1184" : {
-    "message" : [
-      "Catalog <plugin> does not support <ability>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1186" : {
     "message" : [
       "Multi-part identifier cannot be empty."
@@ -8585,11 +8648,6 @@
   "_LEGACY_ERROR_TEMP_2095" : {
     "message" : [
       "Failed to merge incompatible schemas <left> and <right>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2096" : {
-    "message" : [
-      "<ddl> is not supported temporarily."
     ]
   },
   "_LEGACY_ERROR_TEMP_2097" : {

@@ -407,7 +407,8 @@ package object config {
     .createWithDefault(1)
 
   private[spark] val EXECUTOR_MEMORY = ConfigBuilder(SparkLauncher.EXECUTOR_MEMORY)
-    .doc("Amount of memory to use per executor process, in MiB unless otherwise specified.")
+    .doc("Amount of memory to use per executor process, in MiB unless otherwise specified, " +
+      "and with minimum value 450m")
     .version("0.7.0")
     .bytesConf(ByteUnit.MiB)
     .createWithDefaultString("1g")

@@ -109,6 +109,11 @@ class TableValuedFunction:
 
     variant_explode_outer.__doc__ = PySparkTableValuedFunction.variant_explode_outer.__doc__
 
+    def python_worker_logs(self) -> "DataFrame":
+        return self._fn("python_worker_logs")
+
+    python_worker_logs.__doc__ = PySparkTableValuedFunction.python_worker_logs.__doc__
+
     def _fn(self, name: str, *args: "Column") -> "DataFrame":
         from pyspark.sql.connect.dataframe import DataFrame
         from pyspark.sql.connect.plan import UnresolvedTableValuedFunction

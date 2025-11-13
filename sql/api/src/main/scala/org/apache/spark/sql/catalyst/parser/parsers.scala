@@ -430,7 +430,15 @@ case class UnclosedCommentProcessor(command: String, tokenStream: CommonTokenStr
 }
 
 object DataTypeParser extends AbstractParser {
-  override protected def astBuilder: DataTypeAstBuilder = new DataTypeAstBuilder
+  override protected def astBuilder: DataTypeAstBuilder = new DataTypeAstBuilder {
+    // DataTypeParser only parses data types, not full SQL.
+    // Multi-part identifiers should not appear in IDENTIFIER() within type definitions.
+    override protected def parseMultipartIdentifier(identifier: String): Seq[String] = {
+      throw SparkException.internalError(
+        "DataTypeParser does not support multi-part identifiers in IDENTIFIER(). " +
+          s"Attempted to parse: $identifier")
+    }
+  }
 }
 
 object AbstractParser extends Logging {
@@ -476,6 +484,7 @@ object AbstractParser extends Logging {
     parser.SQL_standard_keyword_behavior = conf.enforceReservedKeywords
     parser.double_quoted_identifiers = conf.doubleQuotedIdentifiers
     parser.parameter_substitution_enabled = !conf.legacyParameterSubstitutionConstantsOnly
+    parser.legacy_identifier_clause_only = conf.legacyIdentifierClauseOnly
   }
 
   /**
