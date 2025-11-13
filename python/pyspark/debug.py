@@ -30,7 +30,7 @@ class FaultHandlerIntegration:
             self._log_path = os.path.join(self._log_path, str(os.getpid()))
             self._log_file = open(self._log_path, "w")
 
-            faulthandler.enable(file=log_file)
+            faulthandler.enable(file=self._log_file)
 
             if tracebackDumpIntervalSeconds is not None and int(tracebackDumpIntervalSeconds) > 0:
                 self._periodic_dump = True
