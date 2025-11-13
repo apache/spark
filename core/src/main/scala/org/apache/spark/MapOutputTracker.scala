@@ -788,28 +788,36 @@ private[spark] class MapOutputTrackerMaster(
             val maxAge = System.currentTimeMillis() - ttl
             // Find the elements to be removed & update oldest remaining time (if any)
             var oldest = System.currentTimeMillis()
-            val toBeRemoved = shuffleAccessTime.asScala.flatMap { case (shuffleId, atime) =>
-              if (atime < maxAge) {
-                Some(shuffleId)
-              } else {
-                if (atime < oldest) {
-                  oldest = atime
+            // Make a copy here to reduce change of CME -- still possible during the toList though.
+            try {
+              val toBeRemoved = shuffleAccessTime.asScala.toList.flatMap {
+                case (shuffleId, atime) =>
+                if (atime < maxAge) {
+                  Some(shuffleId)
+                } else {
+                  if (atime < oldest) {
+                    oldest = atime
+                  }
+                  None
                 }
-                None
+              }.toList
+              toBeRemoved.map { shuffleId =>
+                try {
+                  unregisterAllMapAndMergeOutput(shuffleId)
+                } catch {
+                  case NonFatal(e) =>
+                    logError(
+                      log"Error removing shuffle ${MDC(SHUFFLE_ID, shuffleId)} with TTL cleaner", e)
+                }
               }
-            }.toList
-            toBeRemoved.map { shuffleId =>
-              try {
-                unregisterAllMapAndMergeOutput(shuffleId)
-              } catch {
-                case NonFatal(e) =>
-                  logError(
-                    log"Error removing shuffle ${MDC(SHUFFLE_ID, shuffleId)} with TTL cleaner", e)
-              }
+              // Wait until the next possible element to be removed
+              val delay = math.max((oldest + ttl) - System.currentTimeMillis(), 1)
+              Thread.sleep(delay)
+            } catch {
+              case _: java.util.ConcurrentModificationException =>
+                // Just retry, blocks were stored while we were iterating
+                Thread.sleep(1)
             }
-            // Wait until the next possible element to be removed
-            val delay = math.max((oldest + ttl) - System.currentTimeMillis(), 1)
-            Thread.sleep(delay)
           }
         case None =>
           logDebug("Tried to start TTL cleaner when not configured.")
@@ -1344,7 +1352,7 @@ private[spark] class MapOutputTrackerMaster(
   override def stop(): Unit = {
     mapOutputTrackerMasterMessages.offer(PoisonPill)
     threadpool.shutdown()
-    cleanerThreadpool.map(_.shutdown())
+    cleanerThreadpool.map(_.shutdownNow())
     try {
       sendTracker(StopMapOutputTracker)
     } catch {

@@ -60,7 +60,7 @@ class BlockTTLIntegrationSuite extends SparkFunSuite with LocalSparkContext
     bme.getMapOutputTrackerMaster()
   }
 
-  test(s"Test that cache blocks are recorded.") {
+  test("Test that cache blocks are recorded.") {
     val conf = new SparkConf()
       .setAppName("test-blockmanager-decommissioner")
       .setMaster("local-cluster[2, 1, 1024]")
@@ -80,7 +80,7 @@ class BlockTTLIntegrationSuite extends SparkFunSuite with LocalSparkContext
     assert(!trackedRDDBlocks.isEmpty)
   }
 
-  test(s"Test that shuffle blocks are tracked properly and removed after TTL") {
+  test("Test that shuffle blocks are tracked properly and removed after TTL") {
     val ttl = 250L
     val conf = new SparkConf()
       .setAppName("test-blockmanager-ttls-shuffle-only")
@@ -148,7 +148,7 @@ class BlockTTLIntegrationSuite extends SparkFunSuite with LocalSparkContext
     }
   }
 
-  test(s"Test that blocks TTLS are not tracked when not enabled") {
+  test("Test that blocks TTLS are not tracked when not enabled") {
     val conf = new SparkConf()
       .setAppName("test-blockmanager-decommissioner")
       .setMaster("local-cluster[2, 1, 1024]")

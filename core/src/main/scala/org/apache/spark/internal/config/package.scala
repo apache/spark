@@ -2909,7 +2909,7 @@ package object config {
     ConfigBuilder("spark.cleaner.ttl.all")
       .doc("Add a TTL for all blocks tracked in Spark. By default blocks are only removed after " +
         " GC on driver which with DataFrames or RDDs at the global scope will not occur. " +
-        "This must be configured before starting the SparkContext (e.g. can not be added to a" +
+        "This must be configured before starting the SparkContext (e.g. can not be added to " +
         "a running Spark instance.)")
       .version("4.1.0")
       .timeConf(TimeUnit.MILLISECONDS)
@@ -2919,7 +2919,7 @@ package object config {
     ConfigBuilder("spark.cleaner.ttl.shuffle")
       .doc("Add a TTL for shuffle blocks tracked in Spark. By default blocks are only removed " +
         "after GC on driver which with DataFrames or RDDs at the global scope will not occur." +
-        "This must be configured before starting the SparkContext (e.g. can not be added to a" +
+        "This must be configured before starting the SparkContext (e.g. can not be added to " +
         "a running Spark instance.)")
       .version("4.1.0")
       .timeConf(TimeUnit.MILLISECONDS)
