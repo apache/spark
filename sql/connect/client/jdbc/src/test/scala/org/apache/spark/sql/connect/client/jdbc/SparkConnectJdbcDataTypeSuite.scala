@@ -18,7 +18,6 @@
 package org.apache.spark.sql.connect.client.jdbc
 
 import java.sql.{ResultSet, SQLException, Types}
-import java.util.Calendar
 
 import org.apache.spark.sql.connect.client.jdbc.test.JdbcHelper
 import org.apache.spark.sql.connect.test.{ConnectFunSuite, RemoteSparkSession}
