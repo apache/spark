@@ -2430,6 +2430,28 @@ object SQLConf {
     .checkValue(v => v > 0, "The maximum number of partitions must be a positive integer.")
     .createOptional
 
+  val FILES_PARTITION_STRATEGY = buildConf("spark.sql.files.partitionStrategy")
+    .doc("The strategy to coalesce small files into larger partitions when reading files. " +
+      "Options are `size_based` (coalesce based on size of files), and `file_based` "
+        + "(coalesce based on number of files). The number of output partitions depends on " +
+      "`spark.sql.files.maxPartitionBytes` and `spark.sql.files.maxPartitionNum`. " +
+      "This configuration is effective only when using file-based sources such as " +
+      "Parquet, JSON and ORC.")
+    .version("3.5.0")
+    .stringConf
+    .checkValues(Set("size_based", "file_based"))
+    .createWithDefault("size_based")
+
+  val SMALL_FILE_THRESHOLD =
+  buildConf("spark.sql.files.smallFileThreshold")
+    .doc(
+      "Defines the total size threshold for small files in a table scan. If the cumulative size " +
+        "of small files falls below this threshold, they are distributed across multiple " +
+        "partitions to avoid concentrating them in a single partition. This configuration is " +
+    "used when `spark.sql.files.coalesceStrategy` is set to `file_based`.")
+    .doubleConf
+    .createWithDefault(0.5)
+
   val IGNORE_CORRUPT_FILES = buildConf("spark.sql.files.ignoreCorruptFiles")
     .doc("Whether to ignore corrupt files. If true, the Spark jobs will continue to run when " +
       "encountering corrupted files and the contents that have been read will still be returned. " +
@@ -6948,6 +6970,10 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def filesMinPartitionNum: Option[Int] = getConf(FILES_MIN_PARTITION_NUM)
 
   def filesMaxPartitionNum: Option[Int] = getConf(FILES_MAX_PARTITION_NUM)
+
+  def filesPartitionStrategy: String = getConf(FILES_PARTITION_STRATEGY)
+
+  def smallFileThreshold: Double = getConf(SMALL_FILE_THRESHOLD)
 
   def ignoreCorruptFiles: Boolean = getConf(IGNORE_CORRUPT_FILES)
 

@@ -55,7 +55,7 @@ case class FilePartition(index: Int, files: Array[PartitionedFile])
 
 object FilePartition extends SessionStateHelper with Logging {
 
-  private def getFilePartitions(
+  private def getFilePartitionsBySize(
       partitionedFiles: Seq[PartitionedFile],
       maxSplitBytes: Long,
       openCostInBytes: Long): Seq[FilePartition] = {
@@ -75,7 +75,7 @@ object FilePartition extends SessionStateHelper with Logging {
     }
 
     // Assign files to partitions using "Next Fit Decreasing"
-    partitionedFiles.foreach { file =>
+    partitionedFiles.sortBy(_.length)(implicitly[Ordering[Long]].reverse).foreach { file =>
       if (currentSize + file.length > maxSplitBytes) {
         closePartition()
       }
@@ -87,6 +87,85 @@ object FilePartition extends SessionStateHelper with Logging {
     partitions.toSeq
   }
 
+  private def getFilePartitionsByFileNum(
+      partitionedFiles: Seq[PartitionedFile],
+      outputPartitions: Int,
+      smallFileThreshold: Double): Seq[FilePartition] = {
+    // Flatten and sort descending by file size.
+    val filesSorted: Seq[(PartitionedFile, Long)] =
+      partitionedFiles
+        .map(f => (f, f.length))
+        .sortBy(_._2)(Ordering.Long.reverse)
+
+    val partitions = Array.fill(outputPartitions)(mutable.ArrayBuffer.empty[PartitionedFile])
+
+    def addToBucket(
+        heap: mutable.PriorityQueue[(Long, Int, Int)],
+        file: PartitionedFile,
+        sz: Long): Unit = {
+      val (load, numFiles, idx) = heap.dequeue()
+      partitions(idx) += file
+      heap.enqueue((load + sz, numFiles + 1, idx))
+    }
+
+    // First by load, then by numFiles.
+    val heapByFileSize =
+      mutable.PriorityQueue.empty[(Long, Int, Int)](
+        Ordering
+          .by[(Long, Int, Int), (Long, Int)] {
+            case (load, numFiles, _) =>
+              (load, numFiles)
+          }
+          .reverse
+      )
+
+    if (smallFileThreshold > 0) {
+      val smallFileTotalSize = filesSorted.map(_._2).sum * smallFileThreshold
+      // First by numFiles, then by load.
+      val heapByFileNum =
+        mutable.PriorityQueue.empty[(Long, Int, Int)](
+          Ordering
+            .by[(Long, Int, Int), (Int, Long)] {
+              case (load, numFiles, _) =>
+                (numFiles, load)
+            }
+            .reverse
+        )
+
+      (0 until outputPartitions).foreach(i => heapByFileNum.enqueue((0L, 0, i)))
+
+      var numSmallFiles = 0
+      var smallFileSize = 0L
+      // Enqueue small files to the least number of files and the least load.
+      filesSorted.reverse.takeWhile(f => f._2 + smallFileSize <= smallFileTotalSize).foreach {
+        case (file, sz) =>
+          addToBucket(heapByFileNum, file, sz)
+          numSmallFiles += 1
+          smallFileSize += sz
+      }
+
+      // Move buckets from heapByFileNum to heapByFileSize.
+      while (heapByFileNum.nonEmpty) {
+        heapByFileSize.enqueue(heapByFileNum.dequeue())
+      }
+
+      // Finally, enqueue remaining files.
+      filesSorted.take(filesSorted.size - numSmallFiles).foreach {
+        case (file, sz) =>
+          addToBucket(heapByFileSize, file, sz)
+      }
+    } else {
+      (0 until outputPartitions).foreach(i => heapByFileSize.enqueue((0L, 0, i)))
+
+      filesSorted.foreach {
+        case (file, sz) =>
+          addToBucket(heapByFileSize, file, sz)
+      }
+    }
+
+    partitions.zipWithIndex.map { case (p, idx) => FilePartition(idx, p.toArray) }
+  }
+
   def getFilePartitions(
       sparkSession: SparkSession,
       partitionedFiles: Seq[PartitionedFile],
@@ -94,21 +173,28 @@ object FilePartition extends SessionStateHelper with Logging {
     val conf = getSqlConf(sparkSession)
     val openCostBytes = conf.filesOpenCostInBytes
     val maxPartNum = conf.filesMaxPartitionNum
-    val partitions = getFilePartitions(partitionedFiles, maxSplitBytes, openCostBytes)
-    if (maxPartNum.exists(partitions.size > _)) {
-      val totalSizeInBytes =
-        partitionedFiles.map(_.length + openCostBytes).map(BigDecimal(_)).sum[BigDecimal]
-      val desiredSplitBytes =
-        (totalSizeInBytes / BigDecimal(maxPartNum.get)).setScale(0, RoundingMode.UP).longValue
-      val desiredPartitions = getFilePartitions(partitionedFiles, desiredSplitBytes, openCostBytes)
-      logWarning(log"The number of partitions is ${MDC(NUM_PARTITIONS, partitions.size)}, " +
-        log"which exceeds the maximum number configured: " +
-        log"${MDC(MAX_NUM_PARTITIONS, maxPartNum.get)}. Spark rescales it to " +
-        log"${MDC(DESIRED_NUM_PARTITIONS, desiredPartitions.size)} by ignoring the " +
-        log"configuration of ${MDC(CONFIG, SQLConf.FILES_MAX_PARTITION_BYTES.key)}.")
-      desiredPartitions
-    } else {
-      partitions
+    val partitions = getFilePartitionsBySize(partitionedFiles, maxSplitBytes, openCostBytes)
+    conf.filesPartitionStrategy match {
+      case "file_based" =>
+        getFilePartitionsByFileNum(partitionedFiles, Math.min(partitions.size,
+          maxPartNum.getOrElse(Int.MaxValue)), conf.smallFileThreshold)
+      case "size_based" =>
+        if (maxPartNum.exists(partitions.size > _)) {
+          val totalSizeInBytes =
+            partitionedFiles.map(_.length + openCostBytes).map(BigDecimal(_)).sum[BigDecimal]
+          val desiredSplitBytes =
+            (totalSizeInBytes / BigDecimal(maxPartNum.get)).setScale(0, RoundingMode.UP).longValue
+          val desiredPartitions = getFilePartitionsBySize(
+            partitionedFiles, desiredSplitBytes, openCostBytes)
+          logWarning(log"The number of partitions is ${MDC(NUM_PARTITIONS, partitions.size)}, " +
+            log"which exceeds the maximum number configured: " +
+            log"${MDC(MAX_NUM_PARTITIONS, maxPartNum.get)}. Spark rescales it to " +
+            log"${MDC(DESIRED_NUM_PARTITIONS, desiredPartitions.size)} by ignoring the " +
+            log"configuration of ${MDC(CONFIG, SQLConf.FILES_MAX_PARTITION_BYTES.key)}.")
+          desiredPartitions
+        } else {
+          partitions
+        }
     }
   }
 
