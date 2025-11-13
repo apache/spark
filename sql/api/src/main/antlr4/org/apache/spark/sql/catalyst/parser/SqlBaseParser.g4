@@ -1229,7 +1229,7 @@ valueExpression
     | left=valueExpression shiftOperator right=valueExpression                               #shiftExpression
     | left=valueExpression operator=AMPERSAND right=valueExpression                          #arithmeticBinary
     | left=valueExpression operator=HAT right=valueExpression                                #arithmeticBinary
-    | left=valueExpression operator=PIPE right=valueExpression                               #arithmeticBinary
+    | left=valueExpression {!isOperatorPipeStart()}? operator=PIPE right=valueExpression     #arithmeticBinary
     | left=valueExpression comparisonOperator right=valueExpression                          #comparison
     ;
 

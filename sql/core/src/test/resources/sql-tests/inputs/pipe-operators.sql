@@ -1795,38 +1795,30 @@ table t
 |> extend x + 1 as z
 | order by z;
 
--- Single PIPE token syntax (|): negative tests (bitwise OR compatibility).
+-- Single PIPE token syntax (|): bitwise OR behavior.
 ----------------------------------------------------------------------------
--- Ensure bitwise OR operations still work correctly with column names that match pipe operator keywords.
 
--- Create test table with keyword column names.
-drop table if exists keyword_cols;
-create table keyword_cols(a int, b int) using csv;
-insert into keyword_cols values (1, 2), (4, 8), (16, 32);
+-- This query is ambiguous because it can be parsed as either a sequence of pipe operators or
+-- a bitwise OR operation like "select *, (x + 1 | extend) as y".
+-- We test it as a valid query both ways.
+-- This technically makes enabling the single-character pipe operator a breaking change;
+-- however, an analysis of SQL usage found no instances of SELECT/EXTEND/etc. keywords
+-- being used in bitwise OR operations.
+from t
+| extend 9 as `extend`
+| select *, x + 1
+| extend y;
 
--- Bitwise OR with column named 'select'.
-drop table if exists test_select_col;
-create table test_select_col(col1 int, `select` int) using csv;
-insert into test_select_col values (1, 2), (4, 8);
-select col1 | select result from test_select_col;
-
--- Bitwise OR with column named 'extend'.
-drop table if exists test_extend_col;
-create table test_extend_col(col1 int, extend int) using csv;
-insert into test_extend_col values (1, 2), (4, 8);
-select col1 | extend as result from test_extend_col;
-
--- Bitwise OR in complex expression with keyword columns.
-select (col1 | `select`) + (`where` | `order`) as complex_result from test_multi_keywords;
-
--- Bitwise OR with keyword columns in WHERE clause.
-select col1 from test_multi_keywords where (col1 | `select`) > 2;
-
--- Cleanup keyword test tables.
-drop table if exists keyword_cols;
-drop table if exists test_select_col;
-drop table if exists test_extend_col;
-drop table if exists test_multi_keywords;
+-- Here we define a variable named "extend" and then refer to it in a following query.
+-- However, with the single-character pipe operator feature enabled, we do not allow the bitwise
+-- OR operation to consume the "extend" reference. This decision is intentional since we wish to
+-- reserve the token sequence of | followed by SELECT/EXTEND/etc. for pipe syntax only.
+declare or replace extend int = 5;
+select 1 | extend y;
+set spark.sql.parser.singleCharacterPipeOperator.enabled=false;
+select 1 | extend y;
+set spark.sql.parser.singleCharacterPipeOperator.enabled=true;
+drop temporary variable extend;
 
 -- Single PIPE token with configuration disabled: negative tests.
 ------------------------------------------------------------------

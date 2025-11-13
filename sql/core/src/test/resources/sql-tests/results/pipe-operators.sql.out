@@ -4330,7 +4330,19 @@ struct<x:int,y:string,z:int>
 
 
 -- !query
-drop table if exists keyword_cols
+from t
+| extend 9 as `extend`
+| select *, x + 1
+| extend y
+-- !query schema
+struct<x:int,y:string,extend:int,(x + 1):int,y:string>
+-- !query output
+0	abc	9	1	abc
+1	def	9	2	def
+
+
+-- !query
+declare or replace extend int = 5
 -- !query schema
 struct<>
 -- !query output
@@ -4338,157 +4350,54 @@ struct<>
 
 
 -- !query
-create table keyword_cols(a int, b int) using csv
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-insert into keyword_cols values (1, 2), (4, 8), (16, 32)
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-drop table if exists test_select_col
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-create table test_select_col(col1 int, `select` int) using csv
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-insert into test_select_col values (1, 2), (4, 8)
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-select col1 | select result from test_select_col
--- !query schema
-struct<result:int>
--- !query output
-12
-3
-
-
--- !query
-drop table if exists test_extend_col
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-create table test_extend_col(col1 int, extend int) using csv
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-insert into test_extend_col values (1, 2), (4, 8)
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-select col1 | extend as result from test_extend_col
--- !query schema
-struct<result:int>
--- !query output
-12
-3
-
-
--- !query
-select (col1 | `select`) + (`where` | `order`) as complex_result from test_multi_keywords
+select 1 | extend y
 -- !query schema
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
-  "sqlState" : "42P01",
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
   "messageParameters" : {
-    "relationName" : "`test_multi_keywords`"
+    "objectName" : "`y`",
+    "proposal" : "`1`"
   },
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 71,
-    "stopIndex" : 89,
-    "fragment" : "test_multi_keywords"
+    "startIndex" : 19,
+    "stopIndex" : 19,
+    "fragment" : "y"
   } ]
 }
 
 
 -- !query
-select col1 from test_multi_keywords where (col1 | `select`) > 2
+set spark.sql.parser.singleCharacterPipeOperator.enabled=false
 -- !query schema
-struct<>
+struct<key:string,value:string>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
-  "sqlState" : "42P01",
-  "messageParameters" : {
-    "relationName" : "`test_multi_keywords`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 18,
-    "stopIndex" : 36,
-    "fragment" : "test_multi_keywords"
-  } ]
-}
+spark.sql.parser.singleCharacterPipeOperator.enabled	false
 
 
 -- !query
-drop table if exists keyword_cols
+select 1 | extend y
 -- !query schema
-struct<>
+struct<y:int>
 -- !query output
-
+5
 
 
 -- !query
-drop table if exists test_select_col
+set spark.sql.parser.singleCharacterPipeOperator.enabled=true
 -- !query schema
-struct<>
+struct<key:string,value:string>
 -- !query output
-
+spark.sql.parser.singleCharacterPipeOperator.enabled	true
 
 
 -- !query
-drop table if exists test_extend_col
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-drop table if exists test_multi_keywords
+drop temporary variable extend
 -- !query schema
 struct<>
 -- !query output
