@@ -15,77 +15,36 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.analysis
-
-import java.util.concurrent.TimeUnit
+package org.apache.spark.sql.execution.datasources.v2
 
 import scala.collection.mutable
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.SQLConfHelper
+import org.apache.spark.sql.catalyst.analysis.AsOfVersion
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.connector.catalog.Identifier
-import org.apache.spark.sql.connector.catalog.Table
-import org.apache.spark.sql.connector.catalog.TableCatalog
-import org.apache.spark.sql.connector.catalog.V2TableUtil
+import org.apache.spark.sql.connector.catalog.{Identifier, Table, TableCatalog, V2TableUtil}
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
-import org.apache.spark.sql.execution.datasources.v2.ExtractV2CatalogAndIdentifier
 
-private[sql] object TableRefreshUtil extends SQLConfHelper with Logging {
+private[sql] object V2TableRefreshUtil extends SQLConfHelper with Logging {
   /**
-   * Checks whether table references captured by the plan are stale.
+   * Pins table versions for all versioned tables in the plan.
    *
-   * This method analyzes all versioned tables and checks if a refresh is needed based on:
-   *  - Inconsistent versions: the same table appears multiple times with different versions
-   *  - Staleness: the latest table load time is older than the configured threshold
-   *  - Unknown table load times: the load time information is completely unavailable
+   * This method captures the current version of each versioned table by adding time travel
+   * specifications. Tables that already have time travel specifications or are not versioned
+   * are left unchanged.
    *
-   * @param plan the logical plan to analyze
-   * @return true if the plan should be refreshed, false otherwise
+   * @param plan the logical plan to pin versions for
+   * @return plan with pinned table versions
    */
-  def shouldRefresh(plan: LogicalPlan): Boolean = {
-    val accessLedgers = mutable.HashMap[(TableCatalog, Identifier), TableAccessLedger]()
-
-    plan foreach {
+  def pinVersions(plan: LogicalPlan): LogicalPlan = {
+    plan transform {
       case r @ ExtractV2CatalogAndIdentifier(catalog, ident)
           if r.table.currentVersion != null && r.timeTravelSpec.isEmpty =>
-        val accessLedger = accessLedgers.getOrElseUpdate((catalog, ident), new TableAccessLedger)
-        accessLedger.add(r.table.currentVersion, r.loadTimeNanos)
-      case _ =>
-        // ignore other nodes
-    }
-
-    // if no versioned tables found, no refresh needed
-    if (accessLedgers.isEmpty) {
-      return false
-    }
-
-    val currentTimeNanos = System.nanoTime()
-    val maxMetadataAgeNanos = TimeUnit.MILLISECONDS.toNanos(conf.tableMetadataMaxAge)
-
-    accessLedgers.exists { case ((catalog, ident), accessLedger) =>
-      val tableName = V2TableUtil.toQualifiedName(catalog, ident)
-
-      if (accessLedger.containsInconsistentVersions) {
-        logDebug(s"Plan references inconsistent versions of table $tableName, refresh needed")
-        return true
-      }
-
-      accessLedger.latestTableLoadTimeNanos match {
-        case Some(latestTableLoadTimeNanos) =>
-          val metadataAgeNanos = currentTimeNanos - latestTableLoadTimeNanos
-          if (metadataAgeNanos >= maxMetadataAgeNanos) {
-            val metadataAgeMillis = TimeUnit.NANOSECONDS.toMillis(metadataAgeNanos)
-            logDebug(s"Table $tableName metadata is stale (${metadataAgeMillis}ms), refresh needed")
-            true
-          } else {
-            false
-          }
-        case None =>
-          logDebug(s"All table $tableName references have unknown load time, refresh needed")
-          true
-      }
+        val tableName = V2TableUtil.toQualifiedName(catalog, ident)
+        val version = r.table.currentVersion
+        logDebug(s"Pinning table version for $tableName to $version")
+        r.copy(timeTravelSpec = Some(AsOfVersion(version)))
     }
   }
 
@@ -100,7 +59,7 @@ private[sql] object TableRefreshUtil extends SQLConfHelper with Logging {
    * @param plan the logical plan to refresh
    * @return plan with refreshed table metadata
    */
-  def refresh(plan: LogicalPlan): LogicalPlan = {
+  def refreshVersions(plan: LogicalPlan): LogicalPlan = {
     val cache = mutable.HashMap.empty[(TableCatalog, Identifier), Table]
     plan transform {
       case r @ ExtractV2CatalogAndIdentifier(catalog, ident)
@@ -137,22 +96,6 @@ private[sql] object TableRefreshUtil extends SQLConfHelper with Logging {
     val errors = V2TableUtil.validateCapturedMetadataColumns(currentTable, relation)
     if (errors.nonEmpty) {
       throw QueryCompilationErrors.metadataColumnsChangedAfterAnalysis(relation.name, errors)
-    }
-  }
-
-  private class TableAccessLedger {
-    private val accesses = mutable.ArrayBuffer[(String, Option[Long])]()
-
-    def add(version: String, tableLoadTimeNanos: Option[Long]): Unit = {
-      accesses += version -> tableLoadTimeNanos
-    }
-
-    def containsInconsistentVersions: Boolean = {
-      accesses.map(_._1).distinct.size > 1
-    }
-
-    def latestTableLoadTimeNanos: Option[Long] = {
-      accesses.flatMap(_._2).maxOption
     }
   }
 }

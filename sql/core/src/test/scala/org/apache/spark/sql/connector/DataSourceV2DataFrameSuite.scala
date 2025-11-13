@@ -34,6 +34,7 @@ import org.apache.spark.sql.connector.expressions.filter.{AlwaysFalse, AlwaysTru
 import org.apache.spark.sql.execution.{QueryExecution, SparkPlan}
 import org.apache.spark.sql.execution.ExplainUtils.stripAQEPlan
 import org.apache.spark.sql.execution.datasources.v2.{AlterTableExec, CreateTableExec, DataSourceV2Relation, ReplaceTableExec}
+import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{BooleanType, CalendarIntervalType, DoubleType, IntegerType, StringType, TimestampType}
 import org.apache.spark.sql.util.QueryExecutionListener
@@ -1303,6 +1304,51 @@ class DataSourceV2DataFrameSuite
       // execute first DataFrame that should trigger version refresh
       assertCached(df1)
       checkAnswer(df1, Seq(Row(1, "a", 10), Row(2, "b", 20), Row(3, "c", 30)))
+    }
+  }
+
+  test("SPARK-54157: replace table as select reading from same table") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, name STRING, data STRING, extra INT) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 'a', 'x', 100), (2, 'b', 'y', 200), (3, 'c', 'z', 300)")
+
+      checkAnswer(
+        spark.table(t),
+        Seq(Row(1, "a", "x", 100), Row(2, "b", "y", 200), Row(3, "c", "z", 300)))
+
+      // replace table with subset of columns from itself using DataFrame API
+      // RTAS drops original table before executing query so refresh is special
+      val df = spark.table(t).select($"id", $"name")
+      df.writeTo(t).replace()
+
+      // verify table was replaced with only selected columns
+      checkAnswer(
+        spark.table(t),
+        Seq(Row(1, "a"), Row(2, "b"), Row(3, "c")))
+    }
+  }
+
+  test("SPARK-54157: insert overwrite reading from same table") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, value INT, category STRING) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 10, 'A'), (2, 20, 'B'), (3, 30, 'A')")
+
+      checkAnswer(
+        spark.table(t),
+        Seq(Row(1, 10, "A"), Row(2, 20, "B"), Row(3, 30, "A")))
+
+      // overwrite with transformed data from same table using DataFrame API
+      val df = spark.table(t)
+        .filter($"category" === "A")
+        .select($"id", ($"value" * 2).as("value"), $"category")
+      df.writeTo(t).overwrite(lit(true))
+
+      // verify table was overwritten with transformed data
+      checkAnswer(
+        spark.table(t),
+        Seq(Row(1, 20, "A"), Row(3, 60, "A")))
     }
   }
 

@@ -41,8 +41,8 @@ import org.apache.spark.sql.catalyst.util.StringUtils.PlanStringConcat
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.execution.adaptive.{AdaptiveExecutionContext, InsertAdaptiveSparkPlan}
-import org.apache.spark.sql.execution.analysis.TableRefreshUtil
 import org.apache.spark.sql.execution.bucketing.{CoalesceBucketsInJoin, DisableUnnecessaryBucketedScan}
+import org.apache.spark.sql.execution.datasources.v2.V2TableRefreshUtil
 import org.apache.spark.sql.execution.dynamicpruning.PlanDynamicPruningFilters
 import org.apache.spark.sql.execution.exchange.EnsureRequirements
 import org.apache.spark.sql.execution.reuse.ReuseExchangeAndSubquery
@@ -204,15 +204,10 @@ class QueryExecution(
     }
   }
 
-  // refresh table versions before cache lookup in any of these cases:
-  // - there were other potentially interfering query executions created after this one (e.g. ALTER)
-  // - the current plan references stale table versions
+  // there may be delay between analysis and subsequent phases
+  // therefore, refresh captured table versions to reflect latest data
   private val lazyTableVersionsRefreshed = LazyTry {
-    if (QueryExecution.lastExecutionId != id || TableRefreshUtil.shouldRefresh(commandExecuted)) {
-      TableRefreshUtil.refresh(commandExecuted)
-    } else {
-      commandExecuted
-    }
+    V2TableRefreshUtil.refreshVersions(commandExecuted)
   }
 
   private[sql] def tableVersionsRefreshed: LogicalPlan = lazyTableVersionsRefreshed.get
@@ -571,8 +566,6 @@ case object RemoveShuffleFiles extends ShuffleCleanupMode
 
 object QueryExecution {
   private val _nextExecutionId = new AtomicLong(0)
-
-  private def lastExecutionId: Long = Math.max(0, _nextExecutionId.get - 1)
 
   private def nextExecutionId: Long = _nextExecutionId.getAndIncrement
 

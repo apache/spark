@@ -201,10 +201,10 @@ class RelationResolution(override val catalogManager: CatalogManager)
             )
           )
         } else {
-          val relation = DataSourceV2Relation.create(
-            table, Some(catalog), Some(ident), options, timeTravelSpec)
-          relation.setLoadTimeNanos(System.nanoTime())
-          SubqueryAlias(catalog.name +: ident.asMultipartIdentifier, relation)
+          SubqueryAlias(
+            catalog.name +: ident.asMultipartIdentifier,
+            DataSourceV2Relation.create(table, Some(catalog), Some(ident), options, timeTravelSpec)
+          )
         }
     }
   }

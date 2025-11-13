@@ -22,7 +22,6 @@ import org.apache.spark.sql.catalyst.analysis.{MultiInstanceRelation, NamedRelat
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference, Expression, SortOrder}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, ExposesMetadataColumns, Histogram, HistogramBin, LeafNode, LogicalPlan, Statistics}
-import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.{truncatedString, CharVarcharUtils}
 import org.apache.spark.sql.connector.catalog.{CatalogPlugin, FunctionCatalog, Identifier, SupportsMetadataColumns, Table, TableCapability, TableCatalog, V2TableUtil}
@@ -134,27 +133,6 @@ case class DataSourceV2Relation(
 
   def autoSchemaEvolution(): Boolean =
     table.capabilities().contains(TableCapability.AUTOMATIC_SCHEMA_EVOLUTION)
-
-  /**
-   * Sets the load time (in nanoseconds) for the table in this relation.
-   * This is used to track when the table metadata was loaded from the catalog,
-   * allowing refresh logic to determine if the table information is stale.
-   *
-   * @param nanos the load time in nanoseconds (typically from System.nanoTime())
-   */
-  def setLoadTimeNanos(nanos: Long): Unit = {
-    setTagValue(DataSourceV2Relation.TABLE_LOAD_TIME_TAG, nanos)
-  }
-
-  /**
-   * Returns the load time (in nanoseconds) for the table in this relation, if available.
-   * Returns None if the load time has not been set.
-   *
-   * @return load time if available, None otherwise
-   */
-  def loadTimeNanos: Option[Long] = {
-    getTagValue(DataSourceV2Relation.TABLE_LOAD_TIME_TAG)
-  }
 }
 
 /**
@@ -292,12 +270,6 @@ object ExtractV2CatalogAndIdentifier {
 }
 
 object DataSourceV2Relation {
-  /**
-   * Tag for tracking when the table metadata was loaded from the catalog.
-   * Used by version refresh logic to determine if table information is stale.
-   */
-  private[sql] val TABLE_LOAD_TIME_TAG = TreeNodeTag[Long]("table_load_time")
-
   def create(
       table: Table,
       catalog: Option[CatalogPlugin],
