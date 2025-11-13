@@ -372,16 +372,17 @@ class BloomFilterAggregateQuerySuite extends QueryTest with SharedSparkSession {
     val table = "bloom_filter_test"
     withTempView(table) {
       Seq(0).toDF("col").createOrReplaceTempView(table)
-      val df = sql(s"""
-             |SELECT
-             |  (SELECT
-             |    first(might_contain(
-             |      (SELECT bloom_filter_agg(col) FROM $table),
-             |      0L
-             |    ))
-             |  FROM $table)
-             |FROM $table
-             |""".stripMargin)
+      val df = sql(
+        s"""
+          |SELECT
+          |  (SELECT
+          |    first(might_contain(
+          |      (SELECT bloom_filter_agg(col) FROM $table),
+          |      0L
+          |    ))
+          |  FROM $table)
+          |FROM $table
+          |""".stripMargin)
       checkAnswer(df, Row(true))
     }
   }
