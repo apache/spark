@@ -581,81 +581,6 @@ struct<x:int>
 
 -- !query
 table t
-|> select sum(x) as result
--- !query schema
-struct<result:bigint>
--- !query output
-1
-
-
--- !query
-table t
-|> select y, length(y) + sum(x) as result
--- !query schema
-struct<>
--- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "MISSING_GROUP_BY",
-  "sqlState" : "42803",
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 12,
-    "stopIndex" : 49,
-    "fragment" : "select y, length(y) + sum(x) as result"
-  } ]
-}
-
-
--- !query
-from t
-|> select sum(x)
--- !query schema
-struct<sum(x):bigint>
--- !query output
-1
-
-
--- !query
-from t as t_alias
-|> select y, sum(x)
--- !query schema
-struct<>
--- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "MISSING_GROUP_BY",
-  "sqlState" : "42803",
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 22,
-    "stopIndex" : 37,
-    "fragment" : "select y, sum(x)"
-  } ]
-}
-
-
--- !query
-from t as t_alias
-|> select y, sum(x) group by y
--- !query schema
-struct<>
--- !query output
-org.apache.spark.sql.catalyst.parser.ParseException
-{
-  "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "42601",
-  "messageParameters" : {
-    "error" : "'group'",
-    "hint" : ""
-  }
-}
-
-
--- !query
-table t
 |> extend 1 as z
 -- !query schema
 struct<x:int,y:string,z:int>
@@ -783,16 +708,20 @@ table t
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
+org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "MISSING_GROUP_BY",
-  "sqlState" : "42803",
+  "errorClass" : "PIPE_OPERATOR_CONTAINS_AGGREGATE_FUNCTION",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "clause" : "EXTEND",
+    "expr" : "sum(x#x)"
+  },
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 29,
-    "fragment" : "table t\n|> extend sum(x) as z"
+    "startIndex" : 19,
+    "stopIndex" : 24,
+    "fragment" : "sum(x)"
   } ]
 }
 
@@ -4228,15 +4157,64 @@ struct<doubled:bigint>
 table other
 |> select a, sum(b) as sum_b group by a
 -- !query schema
+struct<a:int,sum_b:bigint>
+-- !query output
+1	3
+2	4
+
+
+-- !query
+select 1 as x, 2 as y, 3 as z
+|> select x, y, sum(z) as total group by x, y
+-- !query schema
+struct<x:int,y:int,total:bigint>
+-- !query output
+1	2	3
+
+
+-- !query
+table other
+|> select a, sum(b) as sum_b group by 1
+-- !query schema
+struct<a:int,sum_b:bigint>
+-- !query output
+1	3
+2	4
+
+
+-- !query
+table other
+|> select a, sum(b) as sum_b group by a
+|> where sum_b > 1
+-- !query schema
+struct<a:int,sum_b:bigint>
+-- !query output
+1	3
+2	4
+
+
+-- !query
+select 1 as x, 2 as y
+|> select x + 1 as x_plus_one, sum(y) as sum_y group by x + 1
+-- !query schema
+struct<x_plus_one:int,sum_y:bigint>
+-- !query output
+2	2
+
+
+-- !query
+table other
+|> select a, sum(b) as sum_b group by b
+-- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.parser.ParseException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "42601",
+  "errorClass" : "MISSING_AGGREGATION",
+  "sqlState" : "42803",
   "messageParameters" : {
-    "error" : "'group'",
-    "hint" : ""
+    "expression" : "\"a\"",
+    "expressionAnyValue" : "\"any_value(a)\""
   }
 }
 
@@ -4247,16 +4225,20 @@ table other
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
+org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "MISSING_GROUP_BY",
-  "sqlState" : "42803",
+  "errorClass" : "PIPE_OPERATOR_CONTAINS_AGGREGATE_FUNCTION",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "clause" : "EXTEND",
+    "expr" : "sum(a#x)"
+  },
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 39,
-    "fragment" : "table other\n|> extend sum(a) as total_a"
+    "startIndex" : 23,
+    "stopIndex" : 28,
+    "fragment" : "sum(a)"
   } ]
 }
 

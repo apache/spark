@@ -81,9 +81,14 @@ case class ValidateAndStripPipeExpressions(allowAggregateInSelect: Boolean)
           if (p.isAggregate && firstAggregateFunction.isEmpty) {
             throw QueryCompilationErrors
               .pipeOperatorAggregateExpressionContainsNoAggregateFunction(p.child)
-          } else if (!p.isAggregate && !allowAggregateInSelect) {
-            firstAggregateFunction.foreach { a =>
-              throw QueryCompilationErrors.pipeOperatorContainsAggregateFunction(a, p.clause)
+          } else if (!p.isAggregate) {
+            // For non-aggregate clauses, only allow aggregate functions in SELECT when the
+            // configuration is enabled. All other clauses (EXTEND, SET, etc.) disallow aggregates.
+            val aggregateAllowed = allowAggregateInSelect && p.clause == PipeOperators.selectClause
+            if (!aggregateAllowed) {
+              firstAggregateFunction.foreach { a =>
+                throw QueryCompilationErrors.pipeOperatorContainsAggregateFunction(a, p.clause)
+              }
             }
           }
           p.child

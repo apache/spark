@@ -6586,7 +6586,7 @@ class AstBuilder extends DataTypeAstBuilder
         selectClause = c,
         lateralView = new java.util.ArrayList[LateralViewContext](),
         whereClause = null,
-        aggregationClause = null,
+        aggregationClause = ctx.aggregationClause,
         havingClause = null,
         windowClause = ctx.windowClause,
         relation = left,

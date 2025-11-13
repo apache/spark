@@ -634,75 +634,6 @@ Repartition 3, true
 
 -- !query
 table t
-|> select sum(x) as result
--- !query analysis
-Aggregate [sum(x#x) AS result#xL]
-+- SubqueryAlias spark_catalog.default.t
-   +- Relation spark_catalog.default.t[x#x,y#x] csv
-
-
--- !query
-table t
-|> select y, length(y) + sum(x) as result
--- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "MISSING_GROUP_BY",
-  "sqlState" : "42803",
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 12,
-    "stopIndex" : 49,
-    "fragment" : "select y, length(y) + sum(x) as result"
-  } ]
-}
-
-
--- !query
-from t
-|> select sum(x)
--- !query analysis
-Aggregate [sum(x#x) AS sum(x)#xL]
-+- SubqueryAlias spark_catalog.default.t
-   +- Relation spark_catalog.default.t[x#x,y#x] csv
-
-
--- !query
-from t as t_alias
-|> select y, sum(x)
--- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "MISSING_GROUP_BY",
-  "sqlState" : "42803",
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 22,
-    "stopIndex" : 37,
-    "fragment" : "select y, sum(x)"
-  } ]
-}
-
-
--- !query
-from t as t_alias
-|> select y, sum(x) group by y
--- !query analysis
-org.apache.spark.sql.catalyst.parser.ParseException
-{
-  "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "42601",
-  "messageParameters" : {
-    "error" : "'group'",
-    "hint" : ""
-  }
-}
-
-
--- !query
-table t
 |> extend 1 as z
 -- !query analysis
 Project [x#x, y#x, 1 AS z#x]
@@ -834,16 +765,20 @@ Project [x#x, y#x, z#x, (z#x + 1) AS plus_one#x]
 table t
 |> extend sum(x) as z
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
+org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "MISSING_GROUP_BY",
-  "sqlState" : "42803",
+  "errorClass" : "PIPE_OPERATOR_CONTAINS_AGGREGATE_FUNCTION",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "clause" : "EXTEND",
+    "expr" : "sum(x#x)"
+  },
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 29,
-    "fragment" : "table t\n|> extend sum(x) as z"
+    "startIndex" : 19,
+    "stopIndex" : 24,
+    "fragment" : "sum(x)"
   } ]
 }
 
@@ -4723,13 +4658,61 @@ Project [(total_a#xL * cast(2 as bigint)) AS doubled#xL]
 table other
 |> select a, sum(b) as sum_b group by a
 -- !query analysis
-org.apache.spark.sql.catalyst.parser.ParseException
+Aggregate [a#x], [a#x, sum(b#x) AS sum_b#xL]
++- SubqueryAlias spark_catalog.default.other
+   +- Relation spark_catalog.default.other[a#x,b#x] json
+
+
+-- !query
+select 1 as x, 2 as y, 3 as z
+|> select x, y, sum(z) as total group by x, y
+-- !query analysis
+Aggregate [x#x, y#x], [x#x, y#x, sum(z#x) AS total#xL]
++- Project [1 AS x#x, 2 AS y#x, 3 AS z#x]
+   +- OneRowRelation
+
+
+-- !query
+table other
+|> select a, sum(b) as sum_b group by 1
+-- !query analysis
+Aggregate [a#x], [a#x, sum(b#x) AS sum_b#xL]
++- SubqueryAlias spark_catalog.default.other
+   +- Relation spark_catalog.default.other[a#x,b#x] json
+
+
+-- !query
+table other
+|> select a, sum(b) as sum_b group by a
+|> where sum_b > 1
+-- !query analysis
+Filter (sum_b#xL > cast(1 as bigint))
++- PipeOperator
+   +- Aggregate [a#x], [a#x, sum(b#x) AS sum_b#xL]
+      +- SubqueryAlias spark_catalog.default.other
+         +- Relation spark_catalog.default.other[a#x,b#x] json
+
+
+-- !query
+select 1 as x, 2 as y
+|> select x + 1 as x_plus_one, sum(y) as sum_y group by x + 1
+-- !query analysis
+Aggregate [(x#x + 1)], [(x#x + 1) AS x_plus_one#x, sum(y#x) AS sum_y#xL]
++- Project [1 AS x#x, 2 AS y#x]
+   +- OneRowRelation
+
+
+-- !query
+table other
+|> select a, sum(b) as sum_b group by b
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "42601",
+  "errorClass" : "MISSING_AGGREGATION",
+  "sqlState" : "42803",
   "messageParameters" : {
-    "error" : "'group'",
-    "hint" : ""
+    "expression" : "\"a\"",
+    "expressionAnyValue" : "\"any_value(a)\""
   }
 }
 
@@ -4738,16 +4721,20 @@ org.apache.spark.sql.catalyst.parser.ParseException
 table other
 |> extend sum(a) as total_a
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
+org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "MISSING_GROUP_BY",
-  "sqlState" : "42803",
+  "errorClass" : "PIPE_OPERATOR_CONTAINS_AGGREGATE_FUNCTION",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "clause" : "EXTEND",
+    "expr" : "sum(a#x)"
+  },
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 39,
-    "fragment" : "table other\n|> extend sum(a) as total_a"
+    "startIndex" : 23,
+    "stopIndex" : 28,
+    "fragment" : "sum(a)"
   } ]
 }
 

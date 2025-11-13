@@ -215,25 +215,6 @@ table t
 table t
 |> select /*+ repartition(3) */ all x;
 
--- SELECT operators: negative tests.
----------------------------------------
-
--- Aggregate functions are not allowed in the pipe operator SELECT list.
-table t
-|> select sum(x) as result;
-
-table t
-|> select y, length(y) + sum(x) as result;
-
-from t
-|> select sum(x);
-
-from t as t_alias
-|> select y, sum(x);
-
-from t as t_alias
-|> select y, sum(x) group by y;
-
 -- EXTEND operators: positive tests.
 ------------------------------------
 
@@ -1779,7 +1760,28 @@ table other
 table other
 |> select a, sum(b) as sum_b group by a;
 
--- Aggregates in EXTEND.
+-- Multiple grouping columns in SELECT.
+select 1 as x, 2 as y, 3 as z
+|> select x, y, sum(z) as total group by x, y;
+
+-- GROUP BY with ordinal position referring to input column.
+table other
+|> select a, sum(b) as sum_b group by 1;
+
+-- Chaining: GROUP BY followed by WHERE on aggregated result.
+table other
+|> select a, sum(b) as sum_b group by a
+|> where sum_b > 1;
+
+-- GROUP BY with expression and alias.
+select 1 as x, 2 as y
+|> select x + 1 as x_plus_one, sum(y) as sum_y group by x + 1;
+
+-- Non-aggregated column without being in GROUP BY should fail.
+table other
+|> select a, sum(b) as sum_b group by b;
+
+-- Aggregates in EXTEND. These are not allowed.
 table other
 |> extend sum(a) as total_a;
 
