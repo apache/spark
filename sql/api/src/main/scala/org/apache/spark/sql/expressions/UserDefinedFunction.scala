@@ -130,7 +130,8 @@ object SparkUserDefinedFunction {
       returnTypeTag: TypeTag[_],
       inputTypeTags: TypeTag[_]*): SparkUserDefinedFunction = {
     val outputEncoder = ScalaReflection.encoderFor(returnTypeTag)
-    // Return None for any input that is a Seq[Row]. This is a dirty hack for SPARK-53635
+    // Return None for any input that is a Seq[Row].
+    // This replicates the Spark 3 behavior of passing None as the encoder for such inputs.
     val seqRowType = typeOf[Seq[_]]
     val rowType = typeOf[Row]
     val inputEncoders = inputTypeTags.map { tag =>
