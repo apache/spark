@@ -27,8 +27,7 @@ trait SpatialType extends AbstractDataType {
     if (!SqlApiConf.get.geospatialEnabled) {
       throw new AnalysisException(
         errorClass = "UNSUPPORTED_FEATURE.GEOSPATIAL_DISABLED",
-        messageParameters = Map.empty
-      )
+        messageParameters = Map.empty)
     }
   }
 
