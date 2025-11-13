@@ -358,9 +358,7 @@ private class StateStoreCoordinator(
       // Remove the corresponding run id entries for report time and starting time
       lastFullSnapshotLagReportTimeMs -= runId
       // Remove the corresponding run id entries for snapshot upload lagging stores
-      if (forceSnapshotUploadOnLag) {
-        snapshotUploadLaggingStores.remove(runId)
-      }
+      snapshotUploadLaggingStores.remove(runId)
       logDebug(s"Deactivating instances related to checkpoint location $runId: " +
         storeIdsToRemove.mkString(", "))
       context.reply(true)

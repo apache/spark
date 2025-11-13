@@ -128,7 +128,6 @@ class StateStoreCoordinatorSuite extends SparkFunSuite with SharedSparkContext {
         SQLConf.STREAMING_MAINTENANCE_INTERVAL.key -> "100",
         SQLConf.STATE_STORE_MAINTENANCE_SHUTDOWN_TIMEOUT.key -> "3",
         SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.key -> "1",
-        SQLConf.STATE_STORE_COORDINATOR_REPORT_SNAPSHOT_UPLOAD_LAG.key -> "true",
         SQLConf.STATE_STORE_COORDINATOR_MULTIPLIER_FOR_MIN_VERSION_DIFF_TO_LOG.key -> "2",
         SQLConf.STATE_STORE_COORDINATOR_SNAPSHOT_LAG_REPORT_INTERVAL.key -> "0"
       ) {
@@ -241,7 +240,7 @@ class StateStoreCoordinatorSuite extends SparkFunSuite with SharedSparkContext {
           if (badPartitions.contains(partitionId)) {
             assert(latestSnapshotVersion.getOrElse(0) == 0)
           } else {
-            assert(latestSnapshotVersion.get >= 0)
+            assert(latestSnapshotVersion.get > 0)
           }
         }
     }
@@ -274,16 +273,8 @@ class StateStoreCoordinatorSuite extends SparkFunSuite with SharedSparkContext {
     ) {
       withCoordinatorAndSQLConf(
         sc,
-        SQLConf.SHUFFLE_PARTITIONS.key -> "5",
-        SQLConf.STREAMING_MAINTENANCE_INTERVAL.key -> "100",
-        SQLConf.STATE_STORE_MAINTENANCE_SHUTDOWN_TIMEOUT.key -> "3",
-        SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.key -> "1",
-        SQLConf.STATE_STORE_PROVIDER_CLASS.key -> providerClassName,
-        RocksDBConf.ROCKSDB_SQL_CONF_NAME_PREFIX + ".changelogCheckpointing.enabled" -> "true",
-        SQLConf.STATE_STORE_COORDINATOR_REPORT_SNAPSHOT_UPLOAD_LAG.key -> "true",
-        SQLConf.STATE_STORE_COORDINATOR_MULTIPLIER_FOR_MIN_VERSION_DIFF_TO_LOG.key -> "2",
-        SQLConf.STATE_STORE_COORDINATOR_SNAPSHOT_LAG_REPORT_INTERVAL.key -> "0",
-        SQLConf.STATE_STORE_FORCE_SNAPSHOT_UPLOAD_ON_LAG.key -> "true"
+        (StateStoreCoordinatorSuite.spark54063CommonConfigs :+
+          (SQLConf.STATE_STORE_PROVIDER_CLASS.key -> providerClassName)): _*
       ) {
         case (coordRef, spark) =>
           import spark.implicits._
@@ -380,17 +371,9 @@ class StateStoreCoordinatorSuite extends SparkFunSuite with SharedSparkContext {
     ) {
       withCoordinatorAndSQLConf(
         sc,
-        SQLConf.SHUFFLE_PARTITIONS.key -> "5",
-        SQLConf.STREAMING_MAINTENANCE_INTERVAL.key -> "100",
-        SQLConf.STATE_STORE_MAINTENANCE_SHUTDOWN_TIMEOUT.key -> "3",
-        SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.key -> "1",
-        SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
-        classOf[RocksDBSkipMaintenanceOnCertainPartitionsProvider].getName,
-        RocksDBConf.ROCKSDB_SQL_CONF_NAME_PREFIX + ".changelogCheckpointing.enabled" -> "true",
-        SQLConf.STATE_STORE_COORDINATOR_REPORT_SNAPSHOT_UPLOAD_LAG.key -> "true",
-        SQLConf.STATE_STORE_COORDINATOR_MULTIPLIER_FOR_MIN_VERSION_DIFF_TO_LOG.key -> "2",
-        SQLConf.STATE_STORE_COORDINATOR_SNAPSHOT_LAG_REPORT_INTERVAL.key -> "0",
-        SQLConf.STATE_STORE_FORCE_SNAPSHOT_UPLOAD_ON_LAG.key -> "true"
+        (StateStoreCoordinatorSuite.spark54063CommonConfigs :+
+          (SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+            classOf[RocksDBSkipMaintenanceOnCertainPartitionsProvider].getName)): _*
       ) {
         case (coordRef, spark) =>
           import spark.implicits._
@@ -952,6 +935,19 @@ class StateStoreCoordinatorStreamingSuite extends StreamTest {
 }
 
 object StateStoreCoordinatorSuite {
+  // Common configuration for SPARK-54063 tests
+  private val spark54063CommonConfigs: Seq[(String, String)] = Seq(
+    SQLConf.SHUFFLE_PARTITIONS.key -> "5",
+    SQLConf.STREAMING_MAINTENANCE_INTERVAL.key -> "100",
+    SQLConf.STATE_STORE_MAINTENANCE_SHUTDOWN_TIMEOUT.key -> "3",
+    SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.key -> "1",
+    RocksDBConf.ROCKSDB_SQL_CONF_NAME_PREFIX + ".changelogCheckpointing.enabled" -> "true",
+    SQLConf.STATE_STORE_COORDINATOR_REPORT_SNAPSHOT_UPLOAD_LAG.key -> "true",
+    SQLConf.STATE_STORE_COORDINATOR_MULTIPLIER_FOR_MIN_VERSION_DIFF_TO_LOG.key -> "2",
+    SQLConf.STATE_STORE_COORDINATOR_SNAPSHOT_LAG_REPORT_INTERVAL.key -> "0",
+    SQLConf.STATE_STORE_FORCE_SNAPSHOT_UPLOAD_ON_LAG.key -> "true"
+  )
+
   def withCoordinatorRef(sc: SparkContext)(body: StateStoreCoordinatorRef => Unit): Unit = {
     var coordinatorRef: StateStoreCoordinatorRef = null
     try {
