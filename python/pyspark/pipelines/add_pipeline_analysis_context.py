@@ -37,11 +37,11 @@ def add_pipeline_analysis_context(
         import pyspark.sql.connect.proto as pb2
         from google.protobuf import any_pb2
 
-        _analysis_context = pb2.PipelineAnalysisContext(
+        analysis_context = pb2.PipelineAnalysisContext(
             dataflow_graph_id=dataflow_graph_id, flow_name=flow_name
         )
         extension = any_pb2.Any()
-        extension.Pack(_analysis_context)
+        extension.Pack(analysis_context)
         extension_id = client.add_threadlocal_user_context_extension(extension)
         yield
     finally:
