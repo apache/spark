@@ -251,7 +251,7 @@ class SparkConnectJdbcDataTypeSuite extends ConnectFunSuite with RemoteSparkSess
           assert(metaData.getScale(1) === scale)
           assert(metaData.getColumnDisplaySize(1) === expectedColumnDisplaySize)
           assert(metaData.getColumnDisplaySize(1) >= value.size)
-      }
+        }
     }
   }
 
@@ -268,7 +268,9 @@ class SparkConnectJdbcDataTypeSuite extends ConnectFunSuite with RemoteSparkSess
       ("cast(1 AS DECIMAL(10,5))", (rs: ResultSet) => rs.getBigDecimal(999)),
       ("CAST(X'0A0B0C' AS BINARY)", (rs: ResultSet) => rs.getBytes(999)),
       ("date '2025-11-15'", (rs: ResultSet) => rs.getBytes(999)),
-      ("time '12:34:56.123456'", (rs: ResultSet) => rs.getBytes(999))
+      ("time '12:34:56.123456'", (rs: ResultSet) => rs.getBytes(999)),
+      ("timestamp '2025-11-15 10:30:45.123456'", (rs: ResultSet) => rs.getTimestamp(999)),
+      ("timestamp_ntz '2025-11-15 10:30:45.789012'", (rs: ResultSet) => rs.getTimestamp(999))
     ).foreach {
       case (query, getter) =>
         withExecuteQuery(s"SELECT $query") { rs =>
@@ -562,6 +564,184 @@ class SparkConnectJdbcDataTypeSuite extends ConnectFunSuite with RemoteSparkSess
           val expectedMillis = timeToMillis(12, 34, 56, 123)
           assert(time.getTime === expectedMillis)
           assert(!rs.wasNull)
+          assert(!rs.next())
+        }
+      }
+    }
+  }
+
+  test("get timestamp type") {
+    withExecuteQuery("SELECT timestamp '2025-11-15 10:30:45.123456'") { rs =>
+      assert(rs.next())
+      val timestamp = rs.getTimestamp(1)
+      assert(timestamp !== null)
+      assert(timestamp === java.sql.Timestamp.valueOf("2025-11-15 10:30:45.123456"))
+      assert(!rs.wasNull)
+      assert(!rs.next())
+
+      val metaData = rs.getMetaData
+      assert(metaData.getColumnCount === 1)
+      assert(metaData.getColumnName(1) === "TIMESTAMP '2025-11-15 10:30:45.123456'")
+      assert(metaData.getColumnLabel(1) === "TIMESTAMP '2025-11-15 10:30:45.123456'")
+      assert(metaData.getColumnType(1) === Types.TIMESTAMP)
+      assert(metaData.getColumnTypeName(1) === "TIMESTAMP")
+      assert(metaData.getColumnClassName(1) === "java.sql.Timestamp")
+      assert(metaData.isSigned(1) === false)
+      assert(metaData.getPrecision(1) === 29)
+      assert(metaData.getScale(1) === 6)
+      assert(metaData.getColumnDisplaySize(1) === 29)
+    }
+  }
+
+  test("get timestamp type with null") {
+    withExecuteQuery("SELECT cast(null as timestamp)") { rs =>
+      assert(rs.next())
+      assert(rs.getTimestamp(1) === null)
+      assert(rs.wasNull)
+      assert(!rs.next())
+
+      val metaData = rs.getMetaData
+      assert(metaData.getColumnCount === 1)
+      assert(metaData.getColumnName(1) === "CAST(NULL AS TIMESTAMP)")
+      assert(metaData.getColumnLabel(1) === "CAST(NULL AS TIMESTAMP)")
+      assert(metaData.getColumnType(1) === Types.TIMESTAMP)
+      assert(metaData.getColumnTypeName(1) === "TIMESTAMP")
+      assert(metaData.getColumnClassName(1) === "java.sql.Timestamp")
+      assert(metaData.isSigned(1) === false)
+      assert(metaData.getPrecision(1) === 29)
+      assert(metaData.getScale(1) === 6)
+      assert(metaData.getColumnDisplaySize(1) === 29)
+    }
+  }
+
+  test("get timestamp type by column label and with calendar") {
+    withExecuteQuery("SELECT timestamp '2025-11-15 10:30:45.987654' as test_timestamp") { rs =>
+      assert(rs.next())
+
+      // Test by column label
+      val timestamp = rs.getTimestamp("test_timestamp")
+      assert(timestamp !== null)
+      assert(timestamp === java.sql.Timestamp.valueOf("2025-11-15 10:30:45.987654"))
+      assert(!rs.wasNull)
+
+      // Test with calendar - should return same value (Calendar is ignored)
+      // Note: Spark Connect handles timezone at server, Calendar param is for API compliance
+      val calUTC = java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone("UTC"))
+      val timestampUTC = rs.getTimestamp(1, calUTC)
+      assert(timestampUTC !== null)
+      assert(timestampUTC.getTime === timestamp.getTime)
+
+      val calPST = java.util.Calendar.getInstance(
+        java.util.TimeZone.getTimeZone("America/Los_Angeles"))
+      val timestampPST = rs.getTimestamp(1, calPST)
+      assert(timestampPST !== null)
+      // Same value regardless of calendar
+      assert(timestampPST.getTime === timestamp.getTime)
+      assert(timestampUTC.getTime === timestampPST.getTime)
+
+      // Test with calendar by label
+      val timestampLabel = rs.getTimestamp("test_timestamp", calUTC)
+      assert(timestampLabel !== null)
+      assert(timestampLabel.getTime === timestamp.getTime)
+
+      // Test with null calendar - returns same value
+      val timestampNullCal = rs.getTimestamp(1, null)
+      assert(timestampNullCal !== null)
+      assert(timestampNullCal.getTime === timestamp.getTime)
+
+      assert(!rs.next())
+    }
+  }
+
+  test("get timestamp type with calendar for null value") {
+    withExecuteQuery("SELECT cast(null as timestamp)") { rs =>
+      assert(rs.next())
+
+      // Calendar parameter should not affect null handling
+      val cal = java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone("UTC"))
+      val timestamp = rs.getTimestamp(1, cal)
+      assert(timestamp === null)
+      assert(rs.wasNull)
+      assert(!rs.next())
+    }
+  }
+
+  test("get timestamp_ntz type") {
+    withExecuteQuery("SELECT timestamp_ntz '2025-11-15 10:30:45.123456'") { rs =>
+      assert(rs.next())
+      val timestamp = rs.getTimestamp(1)
+      assert(timestamp !== null)
+      assert(timestamp === java.sql.Timestamp.valueOf("2025-11-15 10:30:45.123456"))
+      assert(!rs.wasNull)
+      assert(!rs.next())
+
+      val metaData = rs.getMetaData
+      assert(metaData.getColumnCount === 1)
+      assert(metaData.getColumnName(1) === "TIMESTAMP_NTZ '2025-11-15 10:30:45.123456'")
+      assert(metaData.getColumnLabel(1) === "TIMESTAMP_NTZ '2025-11-15 10:30:45.123456'")
+      assert(metaData.getColumnType(1) === Types.TIMESTAMP)
+      assert(metaData.getColumnTypeName(1) === "TIMESTAMP_NTZ")
+      assert(metaData.getColumnClassName(1) === "java.sql.Timestamp")
+      assert(metaData.isSigned(1) === false)
+      assert(metaData.getPrecision(1) === 29)
+      assert(metaData.getScale(1) === 6)
+      assert(metaData.getColumnDisplaySize(1) === 29)
+    }
+  }
+
+  test("get timestamp_ntz type by label, null, and with calendar") {
+    // Test with non-null value
+    withExecuteQuery("SELECT timestamp_ntz '2025-11-15 14:22:33.789456' as test_ts_ntz") { rs =>
+      assert(rs.next())
+
+      // Test by column label
+      val timestamp = rs.getTimestamp("test_ts_ntz")
+      assert(timestamp !== null)
+      assert(timestamp === java.sql.Timestamp.valueOf("2025-11-15 14:22:33.789456"))
+      assert(!rs.wasNull)
+
+      // Test with calendar - should return same value (Calendar is ignored)
+      val calUTC = java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone("UTC"))
+      val timestampCal = rs.getTimestamp(1, calUTC)
+      assert(timestampCal !== null)
+      assert(timestampCal.getTime === timestamp.getTime)
+
+      assert(!rs.next())
+    }
+
+    // Test with null value
+    withExecuteQuery("SELECT cast(null as timestamp_ntz)") { rs =>
+      assert(rs.next())
+      assert(rs.getTimestamp(1) === null)
+      assert(rs.wasNull)
+      assert(!rs.next())
+    }
+  }
+
+  test("get timestamp types with spark.sql.datetime.java8API.enabled") {
+    withStatement { stmt =>
+      Seq(true, false).foreach { java8APIEnabled =>
+        stmt.execute(s"set spark.sql.datetime.java8API.enabled=$java8APIEnabled")
+
+        Using.resource(stmt.executeQuery(
+          """SELECT
+            |  timestamp '2025-11-15 10:30:45.123456' as ts,
+            |  timestamp_ntz '2025-11-15 14:22:33.789012' as ts_ntz
+            |""".stripMargin)) { rs =>
+          assert(rs.next())
+
+          // Test TIMESTAMP type
+          val timestamp = rs.getTimestamp(1)
+          assert(timestamp !== null)
+          assert(timestamp === java.sql.Timestamp.valueOf("2025-11-15 10:30:45.123456"))
+          assert(!rs.wasNull)
+
+          // Test TIMESTAMP_NTZ type
+          val timestampNtz = rs.getTimestamp(2)
+          assert(timestampNtz !== null)
+          assert(timestampNtz === java.sql.Timestamp.valueOf("2025-11-15 14:22:33.789012"))
+          assert(!rs.wasNull)
+
           assert(!rs.next())
         }
       }
