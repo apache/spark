@@ -265,6 +265,7 @@ def write_read_func_and_partitions(
         # in each microbatch during query execution.
         write_int(0, outfile)
 
+
 @with_fault_handler
 def main(infile: IO, outfile: IO) -> None:
     """

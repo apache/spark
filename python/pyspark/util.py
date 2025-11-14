@@ -917,6 +917,7 @@ def default_api_mode() -> str:
     else:
         return "classic"
 
+
 class _FaultHandlerIntegration:
     def __init__(self):
         self._log_path = None
@@ -957,6 +958,7 @@ def with_fault_handler(func: Callable):
     After function execution is over the faulthandler registration is cleaned as well,
     including any files created for the integration. Not reentrant.
     """
+
     @functools.wraps(func)
     def wrapper(*args: Any, **kwargs: Any) -> Any:
         fault_handler = _FaultHandlerIntegration()
@@ -965,6 +967,7 @@ def with_fault_handler(func: Callable):
             return func(*args, **kwargs)
         finally:
             fault_handler.stop()
+
     return wrapper
 
 

@@ -43,6 +43,7 @@ from pyspark.worker_util import (
     utf8_deserializer,
 )
 
+
 @with_fault_handler
 def main(infile: IO, outfile: IO) -> None:
     """

@@ -98,6 +98,7 @@ def read_arguments(infile: IO) -> Tuple[List[AnalyzeArgument], Dict[str, Analyze
             args.append(argument)
     return args, kwargs
 
+
 @with_fault_handler
 def main(infile: IO, outfile: IO) -> None:
     """

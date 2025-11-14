@@ -117,6 +117,7 @@ def deserializeFilter(jsonDict: dict) -> Filter:
         filter = Not(filter)
     return filter
 
+
 @with_fault_handler
 def main(infile: IO, outfile: IO) -> None:
     """
