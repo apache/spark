@@ -172,7 +172,6 @@ if should_test_connect:
             # Always returns SemanticHash message
             self.req = req
             self.client_user_context_extensions = req.user_context.extensions
-            self._update_client_call_context()
             resp = proto.AnalyzePlanResponse(
                 session_id=self._session_id,
                 semantic_hash=proto.AnalyzePlanResponse.SemanticHash(result=0),
