@@ -41,8 +41,10 @@ import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.collection.CompactBuffer
 
 class HashedRelationSuite extends SharedSparkSession {
-  val umm = UnifiedMemoryManager(
-    new SparkConf().set(MEMORY_OFFHEAP_ENABLED.key, "false"), 1)
+  val umm = new UnifiedMemoryManager(
+    new SparkConf().set(MEMORY_OFFHEAP_ENABLED.key, "false"),
+    Runtime.getRuntime.maxMemory,
+    Runtime.getRuntime.maxMemory / 2, 1)
 
   val mm = new TaskMemoryManager(umm, 0)
 

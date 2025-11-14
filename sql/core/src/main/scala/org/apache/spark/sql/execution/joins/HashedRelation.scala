@@ -141,8 +141,10 @@ private[execution] object HashedRelation {
       ignoresDuplicatedKey: Boolean = false): HashedRelation = {
     val mm = Option(taskMemoryManager).getOrElse {
       new TaskMemoryManager(
-        UnifiedMemoryManager(
-          new SparkConf().set(MEMORY_OFFHEAP_ENABLED.key, "false"), 1),
+        new UnifiedMemoryManager(
+          new SparkConf().set(MEMORY_OFFHEAP_ENABLED.key, "false"),
+          Runtime.getRuntime.maxMemory,
+          Runtime.getRuntime.maxMemory / 2, 1),
         0)
     }
 
@@ -396,8 +398,10 @@ private[joins] class UnsafeHashedRelation(
     // TODO(josh): This needs to be revisited before we merge this patch; making this change now
     // so that tests compile:
     val taskMemoryManager = new TaskMemoryManager(
-      UnifiedMemoryManager(
-        new SparkConf().set(MEMORY_OFFHEAP_ENABLED.key, "false"), 1),
+      new UnifiedMemoryManager(
+        new SparkConf().set(MEMORY_OFFHEAP_ENABLED.key, "false"),
+        Runtime.getRuntime.maxMemory,
+        Runtime.getRuntime.maxMemory / 2, 1),
       0)
 
     val pageSizeBytes = Option(SparkEnv.get).map(_.memoryManager.pageSizeBytes)
@@ -568,8 +572,10 @@ private[execution] final class LongToUnsafeRowMap(
   def this() = {
     this(
       new TaskMemoryManager(
-        UnifiedMemoryManager(
-          new SparkConf().set(MEMORY_OFFHEAP_ENABLED.key, "false"), 1),
+        new UnifiedMemoryManager(
+          new SparkConf().set(MEMORY_OFFHEAP_ENABLED.key, "false"),
+          Runtime.getRuntime.maxMemory,
+          Runtime.getRuntime.maxMemory / 2, 1),
         0),
       0)
   }
