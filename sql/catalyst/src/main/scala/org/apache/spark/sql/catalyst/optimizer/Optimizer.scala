@@ -2076,13 +2076,8 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
     case f @ Filter(condition, project @ Project(fields, grandChild))
       if fields.forall(_.deterministic) && canPushThroughCondition(grandChild, condition) =>
       val aliasMap = getAliasMap(project)
-      // Projection aliases that the filter references
-      val filterAliasesBuf = mutable.ArrayBuffer.empty[Alias]
-      // Projection aliases that are not used in the filter, so we don't need to push
-      var leftBehindAliases: Map[ExprId, Alias] = aliasMap.baseMap.values.map {
-        kv => (kv._2.exprId, kv._2)
-      }.toMap
-      val (cheap, expensive) = splitConjunctivePredicates(condition).partition { cond =>
+
+      val (pushDown, stayUp) = splitConjunctivePredicates(condition).partition { cond =>
         if (!SQLConf.get.avoidDoubleFilterEvail) {
           // If we are always pushing through short circuit the check.
           true
@@ -2097,72 +2092,25 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
             // We may wish to improve this heuristic in the future.
             true
           } else {
-            // This is an expensive replacement so we see resolve it
-            usedAliases.iterator.foreach {
-              e: (Attribute, Alias) =>
-              if (leftBehindAliases.contains(e._2.exprId)) {
-                leftBehindAliases = leftBehindAliases.removed(e._2.exprId)
-                filterAliasesBuf += e._2
-              }
-            }
+            // This is an expensive replacement so do not want to push it down.
             false
           }
         }
       }
 
-      val filterAliases = filterAliasesBuf.toArray.toSeq
-
-      // If filter aliases is empty we don't need to move projections with the filters
-      // we can just move the filter (either because not used projections or "cheap").
-      if (filterAliases.isEmpty) {
-        project.copy(child = Filter(replaceAlias(condition, aliasMap), child = grandChild))
-      } else if (leftBehindAliases.isEmpty) {
-        // If there are no left behind aliases then we've used all of the aliases in our filter.
-        // We don't need to introduce any more projections since we already have the "minimal"
-        // projection for our expensive conditions, but we might be able to move the "cheap"
-        // conditions.
-        if (!cheap.isEmpty) {
-          val expensiveFilterCond = expensive.reduce(And)
-          // Replace the aliases in the cheap filter since we are pushing them down.
-          val cheapFilterCond = replaceAlias(cheap.reduce(And), aliasMap)
-          Filter(expensiveFilterCond, project.copy(child = Filter(cheapFilterCond, grandChild)))
-        } else {
+      (pushDown, stayUp) match {
+        case (Nil, _) =>
+          // Nothing to push down
           f
-        }
-      } else {
-        // If were pushing something through the projection we may need to
-        // introduce a new projection which projects the elements used in the filter.
-        // Base level projection is going to be all refs from our current projection +
-        // the alias map that we used in the filtering.
-        val projectionReferences = project.references.toSeq
-
-        val expensiveCondition = expensive.reduce(And)
-
-        // If we don't have any cheap conditions we do:
-        // non-expensive-filter-used Project -> Filter -> Used Expensive Projections
-        // If we do we go:
-        // non-expensive-filter-used Project -> Filter -> Used Expensive Projections -> Cheap Filter
-        val filterChild = if (cheap.isEmpty) {
-          project.copy(
-            projectList = (projectionReferences ++ filterAliases))
-        } else {
-          val cheapCondition = replaceAlias(cheap.reduce(And), aliasMap)
-          project.copy(
-            projectList = (projectionReferences ++ filterAliases),
-            child = Filter(cheapCondition, grandChild))
-        }
-
-
-        // Our top level projection is going to be the existing projection minus the
-        // leftBehindAliases + all of the output fields which we've effectively pushed down.
-        val pushedAliasNames = project.output.filter(
-          a => !leftBehindAliases.contains(a.exprId)).toSeq
-        val remainingAliasesToEval = leftBehindAliases.iterator.map(_._2).toSeq
-        val topLevelProjection = project.copy(
-          projectList = matchColumnOrdering(fields, pushedAliasNames ++ remainingAliasesToEval),
-          child = Filter(expensiveCondition, child = filterChild)
-        )
-        topLevelProjection
+        case (_, Nil) =>
+          // We can push everything down
+          project.copy(child = Filter(replaceAlias(condition, aliasMap), child = grandChild))
+        case _ =>
+          // Some stay up some go down.
+          val stayUpFilterCond = stayUp.reduce(And)
+          // Replace the aliases in the cheap filter since we are pushing them down.
+          val pushedFilterCond = replaceAlias(cheap.reduce(And), aliasMap)
+          Filter(stayUpFilterCond, project.copy(child = Filter(pushedFilterCond, grandChild)))
       }
 
     // We can push down deterministic predicate through Aggregate, including throwable predicate.
