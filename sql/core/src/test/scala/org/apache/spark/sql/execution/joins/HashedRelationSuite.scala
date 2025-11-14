@@ -764,5 +764,6 @@ class HashedRelationSuite extends SharedSparkSession {
     }
     // Releases the allocated memory.
     relations.foreach(_.close())
+    mm.cleanUpAllAllocatedMemory
   }
 }
