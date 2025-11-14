@@ -109,6 +109,6 @@ private[sql] object DefaultSqlApiConf extends SqlApiConf {
   override def parserDfaCacheFlushThreshold: Int = -1
   override def parserDfaCacheFlushRatio: Double = -1.0
   override def legacyParameterSubstitutionConstantsOnly: Boolean = false
-  override def geospatialEnabled: Boolean = false
+  override def geospatialEnabled: Boolean = System.getProperty("spark.testing") != null
   override def legacyIdentifierClauseOnly: Boolean = false
 }
