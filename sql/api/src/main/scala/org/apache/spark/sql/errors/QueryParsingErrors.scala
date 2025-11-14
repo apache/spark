@@ -19,7 +19,7 @@ package org.apache.spark.sql.errors
 
 import java.util.Locale
 
-import org.antlr.v4.runtime.ParserRuleContext
+import org.sparkproject.antlr.v4.runtime.ParserRuleContext
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.parser.ParseException

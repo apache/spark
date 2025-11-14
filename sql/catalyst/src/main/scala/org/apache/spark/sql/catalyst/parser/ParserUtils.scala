@@ -22,9 +22,9 @@ import java.util.Locale
 import scala.collection.{immutable, mutable}
 import scala.util.matching.Regex
 
-import org.antlr.v4.runtime.{ParserRuleContext, Token}
-import org.antlr.v4.runtime.misc.Interval
-import org.antlr.v4.runtime.tree.{ParseTree, TerminalNodeImpl}
+import org.sparkproject.antlr.v4.runtime.{ParserRuleContext, Token}
+import org.sparkproject.antlr.v4.runtime.misc.Interval
+import org.sparkproject.antlr.v4.runtime.tree.{ParseTree, TerminalNodeImpl}
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.analysis.UnresolvedIdentifier
