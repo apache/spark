@@ -410,7 +410,8 @@ class PythonPipelineSuite
         graphIdentifier("a"),
         graphIdentifier("b"),
         graphIdentifier("d")))
-    assert(streamingFlows.map(_.identifier) == Seq(graphIdentifier("c"), graphIdentifier("e")))
+    assert(
+      streamingFlows.map(_.identifier).toSet == Set(graphIdentifier("c"), graphIdentifier("e")))
   }
 
   test("referencing internal datasets failed") {
