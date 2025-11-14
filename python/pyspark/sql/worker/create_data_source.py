@@ -20,7 +20,6 @@ import sys
 from typing import IO
 
 from pyspark.accumulators import _accumulatorRegistry
-from pyspark.debug import FaultHandlerIntegration
 from pyspark.errors import PySparkAssertionError, PySparkTypeError
 from pyspark.logger.worker_io import capture_outputs
 from pyspark.serializers import (
@@ -32,7 +31,7 @@ from pyspark.serializers import (
 )
 from pyspark.sql.datasource import DataSource, CaseInsensitiveDict
 from pyspark.sql.types import _parse_datatype_json_string, StructType
-from pyspark.util import handle_worker_exception, local_connect_and_auth
+from pyspark.util import handle_worker_exception, local_connect_and_auth, with_fault_handler
 from pyspark.worker_util import (
     check_python_version,
     read_command,
@@ -44,7 +43,7 @@ from pyspark.worker_util import (
     utf8_deserializer,
 )
 
-
+@with_fault_handler
 def main(infile: IO, outfile: IO) -> None:
     """
     Main method for creating a Python data source instance.
@@ -62,10 +61,7 @@ def main(infile: IO, outfile: IO) -> None:
     This process then creates a `DataSource` instance using the above information and
     sends the pickled instance as well as the schema back to the JVM.
     """
-    fault_handler_integration = FaultHandlerIntegration()
     try:
-        fault_handler_integration.start()
-
         check_python_version(infile)
 
         memory_limit_mb = int(os.environ.get("PYSPARK_PLANNER_MEMORY_MB", "-1"))
@@ -165,8 +161,6 @@ def main(infile: IO, outfile: IO) -> None:
     except BaseException as e:
         handle_worker_exception(e, outfile)
         sys.exit(-1)
-    finally:
-        fault_handler_integration.stop()
 
     send_accumulator_updates(outfile)
 

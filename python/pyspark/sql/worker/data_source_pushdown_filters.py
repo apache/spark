@@ -24,7 +24,6 @@ from dataclasses import dataclass, field
 from typing import IO, Type, Union
 
 from pyspark.accumulators import _accumulatorRegistry
-from pyspark.debug import FaultHandlerIntegration
 from pyspark.errors import PySparkAssertionError, PySparkValueError
 from pyspark.errors.exceptions.base import PySparkNotImplementedError
 from pyspark.logger.worker_io import capture_outputs
@@ -49,7 +48,7 @@ from pyspark.sql.datasource import (
 )
 from pyspark.sql.types import StructType, VariantVal, _parse_datatype_json_string
 from pyspark.sql.worker.plan_data_source_read import write_read_func_and_partitions
-from pyspark.util import handle_worker_exception, local_connect_and_auth
+from pyspark.util import handle_worker_exception, local_connect_and_auth, with_fault_handler
 from pyspark.worker_util import (
     check_python_version,
     pickleSer,
@@ -118,7 +117,7 @@ def deserializeFilter(jsonDict: dict) -> Filter:
         filter = Not(filter)
     return filter
 
-
+@with_fault_handler
 def main(infile: IO, outfile: IO) -> None:
     """
     Main method for planning a data source read with filter pushdown.
@@ -140,10 +139,7 @@ def main(infile: IO, outfile: IO) -> None:
     on the reader and determines which filters are supported. The indices of the supported
     filters are sent back to the JVM, along with the list of partitions and the read function.
     """
-    fault_handler_integration = FaultHandlerIntegration()
     try:
-        fault_handler_integration.start()
-
         check_python_version(infile)
 
         memory_limit_mb = int(os.environ.get("PYSPARK_PLANNER_MEMORY_MB", "-1"))
@@ -251,8 +247,6 @@ def main(infile: IO, outfile: IO) -> None:
     except BaseException as e:
         handle_worker_exception(e, outfile)
         sys.exit(-1)
-    finally:
-        fault_handler_integration.stop()
 
     send_accumulator_updates(outfile)
 

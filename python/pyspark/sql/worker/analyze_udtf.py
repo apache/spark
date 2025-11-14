@@ -22,7 +22,6 @@ from textwrap import dedent
 from typing import Dict, List, IO, Tuple
 
 from pyspark.accumulators import _accumulatorRegistry
-from pyspark.debug import FaultHandlerIntegration
 from pyspark.errors import PySparkRuntimeError, PySparkValueError
 from pyspark.logger.worker_io import capture_outputs, context_provider as default_context_provider
 from pyspark.serializers import (
@@ -35,7 +34,7 @@ from pyspark.serializers import (
 from pyspark.sql.functions import OrderingColumn, PartitioningColumn, SelectedColumn
 from pyspark.sql.types import _parse_datatype_json_string, StructType
 from pyspark.sql.udtf import AnalyzeArgument, AnalyzeResult
-from pyspark.util import handle_worker_exception, local_connect_and_auth
+from pyspark.util import handle_worker_exception, local_connect_and_auth, with_fault_handler
 from pyspark.worker_util import (
     check_python_version,
     read_command,
@@ -99,7 +98,7 @@ def read_arguments(infile: IO) -> Tuple[List[AnalyzeArgument], Dict[str, Analyze
             args.append(argument)
     return args, kwargs
 
-
+@with_fault_handler
 def main(infile: IO, outfile: IO) -> None:
     """
     Runs the Python UDTF's `analyze` static method.
@@ -108,10 +107,7 @@ def main(infile: IO, outfile: IO) -> None:
     in JVM and receive the Python UDTF and its arguments for the `analyze` static method,
     and call the `analyze` static method, and send back a AnalyzeResult as a result of the method.
     """
-    fault_handler_integration = FaultHandlerIntegration()
     try:
-        fault_handler_integration.start()
-
         check_python_version(infile)
 
         memory_limit_mb = int(os.environ.get("PYSPARK_PLANNER_MEMORY_MB", "-1"))
@@ -259,8 +255,6 @@ def main(infile: IO, outfile: IO) -> None:
     except BaseException as e:
         handle_worker_exception(e, outfile)
         sys.exit(-1)
-    finally:
-        fault_handler_integration.stop()
 
     send_accumulator_updates(outfile)
 

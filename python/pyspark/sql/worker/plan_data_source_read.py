@@ -23,7 +23,6 @@ from itertools import islice, chain
 from typing import IO, List, Iterator, Iterable, Tuple, Union
 
 from pyspark.accumulators import _accumulatorRegistry
-from pyspark.debug import FaultHandlerIntegration
 from pyspark.errors import PySparkAssertionError, PySparkRuntimeError
 from pyspark.logger.worker_io import capture_outputs
 from pyspark.serializers import (
@@ -47,7 +46,7 @@ from pyspark.sql.types import (
     BinaryType,
     StructType,
 )
-from pyspark.util import handle_worker_exception, local_connect_and_auth
+from pyspark.util import handle_worker_exception, local_connect_and_auth, with_fault_handler
 from pyspark.worker_util import (
     check_python_version,
     read_command,
@@ -266,7 +265,7 @@ def write_read_func_and_partitions(
         # in each microbatch during query execution.
         write_int(0, outfile)
 
-
+@with_fault_handler
 def main(infile: IO, outfile: IO) -> None:
     """
     Main method for planning a data source read.
@@ -287,10 +286,7 @@ def main(infile: IO, outfile: IO) -> None:
     The partition values and the Arrow Batch are then serialized and sent back to the JVM
     via the socket.
     """
-    fault_handler_integration = FaultHandlerIntegration()
     try:
-        fault_handler_integration.start()
-
         check_python_version(infile)
 
         memory_limit_mb = int(os.environ.get("PYSPARK_PLANNER_MEMORY_MB", "-1"))
@@ -395,8 +391,6 @@ def main(infile: IO, outfile: IO) -> None:
     except BaseException as e:
         handle_worker_exception(e, outfile)
         sys.exit(-1)
-    finally:
-        fault_handler_integration.stop()
 
     send_accumulator_updates(outfile)
 

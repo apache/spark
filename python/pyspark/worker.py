@@ -33,7 +33,6 @@ from pyspark.accumulators import (
     _accumulatorRegistry,
     _deserialize_accumulator,
 )
-from pyspark.debug import FaultHandlerIntegration
 from pyspark.sql.streaming.stateful_processor_api_client import StatefulProcessorApiClient
 from pyspark.sql.streaming.stateful_processor_util import TransformWithStateInPandasFuncMode
 from pyspark.taskcontext import BarrierTaskContext, TaskContext
@@ -84,7 +83,7 @@ from pyspark.sql.types import (
     _create_row,
     _parse_datatype_json_string,
 )
-from pyspark.util import fail_on_stopiteration, handle_worker_exception
+from pyspark.util import fail_on_stopiteration, handle_worker_exception, with_fault_handler
 from pyspark import shuffle
 from pyspark.errors import PySparkRuntimeError, PySparkTypeError, PySparkValueError
 from pyspark.worker_util import (
@@ -3290,10 +3289,9 @@ def read_udfs(pickleSer, infile, eval_type):
     return func, None, ser, ser
 
 
+@with_fault_handler
 def main(infile, outfile):
-    fault_handler_integration = FaultHandlerIntegration()
     try:
-        fault_handler_integration.start()
         boot_time = time.time()
         split_index = read_int(infile)
         if split_index == -1:  # for unit tests
@@ -3389,8 +3387,6 @@ def main(infile, outfile):
     except BaseException as e:
         handle_worker_exception(e, outfile)
         sys.exit(-1)
-    finally:
-        fault_handler_integration.stop()
     finish_time = time.time()
     report_times(outfile, boot_time, init_time, finish_time)
     write_long(shuffle.MemoryBytesSpilled, outfile)

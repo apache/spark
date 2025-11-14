@@ -20,7 +20,6 @@ import sys
 from typing import IO, Iterable, Iterator
 
 from pyspark.accumulators import _accumulatorRegistry
-from pyspark.debug import FaultHandlerIntegration
 from pyspark.sql.conversion import ArrowTableToRowsConversion
 from pyspark.errors import PySparkAssertionError, PySparkRuntimeError, PySparkTypeError
 from pyspark.logger.worker_io import capture_outputs
@@ -46,7 +45,7 @@ from pyspark.sql.types import (
     BinaryType,
     _create_row,
 )
-from pyspark.util import handle_worker_exception, local_connect_and_auth
+from pyspark.util import handle_worker_exception, local_connect_and_auth, with_fault_handler
 from pyspark.worker_util import (
     check_python_version,
     read_command,
@@ -59,6 +58,7 @@ from pyspark.worker_util import (
 )
 
 
+@with_fault_handler
 def main(infile: IO, outfile: IO) -> None:
     """
     Main method for saving into a Python data source.
@@ -78,10 +78,7 @@ def main(infile: IO, outfile: IO) -> None:
     instance and send a function using the writer instance that can be used
     in mapInPandas/mapInArrow back to the JVM.
     """
-    fault_handler_integration = FaultHandlerIntegration()
     try:
-        fault_handler_integration.start()
-
         check_python_version(infile)
 
         memory_limit_mb = int(os.environ.get("PYSPARK_PLANNER_MEMORY_MB", "-1"))
@@ -257,8 +254,6 @@ def main(infile: IO, outfile: IO) -> None:
     except BaseException as e:
         handle_worker_exception(e, outfile)
         sys.exit(-1)
-    finally:
-        fault_handler_integration.stop()
 
     send_accumulator_updates(outfile)
 
