@@ -1448,7 +1448,7 @@ abstract class AvroSuite
     // Verify data correctness by round-tripping through from_avro
     val roundTrip = result.select(avro.functions.from_avro($"avro", avroSchema).as("s"))
     // final field order should be [a, b] as per avro schema
-    checkAnswer(roundTrip, Seq(Row(null, "B")))
+    checkAnswer(roundTrip, Row(Row(null, "B")))
   }
 
   test("to_avro with reordered fields fails with correct field name") {
