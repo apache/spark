@@ -2977,7 +2977,10 @@ def read_udfs(pickleSer, infile, eval_type):
             idx += offsets_len
         return parsed
 
-    if eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF:
+    if (
+        eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF
+        or eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_ITER_UDF
+    ):
         # We assume there is only one UDF here because grouped map doesn't
         # support combining multiple UDFs.
         assert num_udfs == 1
@@ -2989,53 +2992,21 @@ def read_udfs(pickleSer, infile, eval_type):
         )
         parsed_offsets = extract_key_value_indexes(arg_offsets)
 
-        # Create function like this:
-        #   mapper a: f([a[0]], [a[0], a[1]])
-        # Note: `a` is now an iterator of Series lists (one list per batch)
-        # Extract keys from first batch and create value generator from all batches
-        def mapper(a):
-            import itertools
+        def series_from_offset(series_list, offsets):
+            return [series_list[o] for o in offsets]
 
-            series_iter = iter(a)
-            # Materialize first batch to get keys
+        def mapper(series_lists_iter):
+            # `series_lists_iter` is an iterator of Series lists (one list per batch)
+            # Materialize first batch to extract keys (guaranteed to exist for grouped operations)
+            series_iter = iter(series_lists_iter)
             first_series_list = next(series_iter)
 
-            keys = [first_series_list[o] for o in parsed_offsets[0][0]]
+            keys = series_from_offset(first_series_list, parsed_offsets[0][0])
             # Create generator for value series from all batches
             value_series_gen = (
-                [series_list[o] for o in parsed_offsets[0][1]]
+                series_from_offset(series_list, parsed_offsets[0][1])
                 for series_list in itertools.chain((first_series_list,), series_iter)
             )
-            return f(keys, value_series_gen)
-
-    elif eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_ITER_UDF:
-        # We assume there is only one UDF here because grouped map doesn't
-        # support combining multiple UDFs.
-        assert num_udfs == 1
-
-        # See FlatMapGroupsInPandasExec for how arg_offsets are used to
-        # distinguish between grouping attributes and data attributes
-        arg_offsets, f = read_single_udf(
-            pickleSer, infile, eval_type, runner_conf, udf_index=0, profiler=profiler
-        )
-        parsed_offsets = extract_key_value_indexes(arg_offsets)
-
-        # Create mapper similar to Arrow iterator:
-        # `a` is an iterator of Series lists (one list per batch, containing all columns)
-        # Materialize first batch to get keys, then create generator for value batches
-        def mapper(a):
-            import itertools
-
-            series_iter = iter(a)
-            # Need to materialize the first series list to get the keys
-            first_series_list = next(series_iter)
-
-            keys = [first_series_list[o] for o in parsed_offsets[0][0]]
-            value_series_gen = (
-                [series_list[o] for o in parsed_offsets[0][1]]
-                for series_list in itertools.chain((first_series_list,), series_iter)
-            )
-
             return f(keys, value_series_gen)
 
     elif eval_type == PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_UDF:
