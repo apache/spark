@@ -1,0 +1,209 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package org.apache.spark.sql.metricview.serde
+
+import scala.util.{Failure, Success, Try}
+
+import com.fasterxml.jackson.annotation.{JsonIgnoreProperties, JsonInclude, JsonProperty}
+import com.fasterxml.jackson.annotation.JsonInclude.Include
+
+import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
+import org.apache.spark.sql.metricview.serde.ColumnType.ColumnType
+import org.apache.spark.sql.metricview.serde.SourceType.SourceType
+
+// Trait representing the capability to validate an object
+trait Validatable {
+  def validate(): Try[Unit]
+}
+
+sealed abstract class MetricViewSerdeException(message: String, cause: Option[Throwable] = None)
+  extends Exception(message, cause.orNull)
+
+case class MetricViewValidationException(message: String, cause: Option[Throwable] = None)
+  extends MetricViewSerdeException(message, cause)
+
+case class MetricViewFromProtoException(message: String, cause: Option[Throwable] = None)
+  extends MetricViewSerdeException(message, cause)
+
+case class MetricViewYAMLParsingException(message: String, cause: Option[Throwable] = None)
+  extends MetricViewSerdeException(message, cause)
+
+// Expression types in a Metric View
+sealed trait Expression extends Validatable {
+  def expr: String
+
+  // Validate that expression is not empty
+  def validate(): Try[Unit] = {
+    if (expr.isEmpty) {
+      Failure(MetricViewValidationException("expr cannot be empty"))
+    } else Success(())
+  }
+}
+
+// Dimension expression representing a scalar value
+case class DimensionExpression(expr: String) extends Expression
+
+// Measure expression representing an aggregated value
+case class MeasureExpression(expr: String) extends Expression
+
+object SourceType extends Enumeration {
+  type SourceType = Value
+  val ASSET, SQL = Value
+
+  def fromString(sourceType: String): SourceType = {
+    values.find(_.toString.equalsIgnoreCase(sourceType)).getOrElse {
+      throw MetricViewFromProtoException(
+        s"Unsupported source type: $sourceType"
+      )
+    }
+  }
+}
+
+// Representation of a source in the Metric View
+sealed trait Source extends Validatable {
+  def sourceType: SourceType
+
+  def validate(): Try[Unit]
+}
+
+// Asset source, representing a UC table, view, or Metric View, etc.
+case class AssetSource(name: String) extends Source {
+  val sourceType: SourceType = SourceType.ASSET
+
+  def validate(): Try[Unit] = {
+    if (name.isEmpty) {
+      Failure(
+        MetricViewValidationException("Source cannot be empty")
+      )
+    } else Success(())
+  }
+
+  override def toString: String = this.name
+}
+
+// SQL source, representing a SQL query
+case class SQLSource(sql: String) extends Source {
+  val sourceType: SourceType = SourceType.SQL
+
+  def validate(): Try[Unit] = {
+    if (sql.isEmpty) {
+      Failure(
+        MetricViewValidationException("Source cannot be empty")
+      )
+    } else Success(())
+  }
+
+  override def toString: String = this.sql
+}
+
+object Source {
+  def apply(sourceText: String): Source = {
+    if (sourceText.isEmpty) {
+      throw MetricViewValidationException("Source cannot be empty")
+    }
+    Try(CatalystSqlParser.parseTableIdentifier(sourceText)) match {
+      case Success(_) => AssetSource(sourceText)
+      case Failure(_) =>
+        Try(CatalystSqlParser.parseQuery(sourceText)) match {
+          case Success(_) => SQLSource(sourceText)
+          case Failure(queryEx) =>
+            throw queryEx
+        }
+    }
+  }
+}
+
+case class Column[T <: Expression](
+    name: String,
+    expression: T,
+    ordinal: Int) extends Validatable {
+  override def validate(): Try[Unit] = {
+    Success(())
+  }
+
+  def columnType: ColumnType = expression match {
+    case _: DimensionExpression => ColumnType.Dimension
+    case _: MeasureExpression => ColumnType.Measure
+    case _ =>
+      throw MetricViewValidationException(
+        s"Unsupported expression type: ${expression.getClass.getName}"
+      )
+  }
+
+  def getColumnMetadata: ColumnMetadata = {
+    val truncatedExpr = expression.expr.take(Constants.MAXIMUM_PROPERTY_SIZE)
+    ColumnMetadata(columnType.toString, truncatedExpr)
+  }
+}
+
+object ColumnType extends Enumeration {
+  type ColumnType = Value
+  val Dimension: ColumnType = Value("dimension")
+  val Measure: ColumnType = Value("measure")
+
+  // Method to match case-insensitively and return the correct value
+  def fromString(columnType: String): ColumnType = {
+    values.find(_.toString.equalsIgnoreCase(columnType)).getOrElse {
+      throw MetricViewFromProtoException(
+        s"Unsupported column type: $columnType"
+      )
+    }
+  }
+}
+
+@JsonIgnoreProperties(ignoreUnknown = true)
+@JsonInclude(Include.NON_ABSENT)
+case class ColumnMetadata(
+    @JsonProperty(value = Constants.COLUMN_TYPE_PROPERTY_KEY, required = true)
+    columnType: String, // "type" -> "metric_view.type"
+    @JsonProperty(value = Constants.COLUMN_EXPR_PROPERTY_KEY, required = true)
+    expr: String // "expr" -> "metric_view.expr"
+)
+
+// Only parse the "version" field and ignore all others
+@JsonIgnoreProperties(ignoreUnknown = true)
+case class YAMLVersion(version: String) extends Validatable {
+  def validYAMLVersions: Set[String] = Set("0.1")
+  def validate(): Try[Unit] = {
+    if (!validYAMLVersions.contains(version)) {
+      Failure(
+        MetricViewValidationException(
+          s"Invalid YAML version: $version"
+        )
+      )
+    } else Success(())
+  }
+}
+
+object YAMLVersion {
+  def apply(version: String): YAMLVersion = {
+    val yamlVersion = new YAMLVersion(version)
+    yamlVersion.validate() match {
+      case Success(_) => yamlVersion
+      case Failure(e) => throw e
+    }
+  }
+}
+
+case class MetricView(
+    version: String,
+    from: Source,
+    where: Option[String] = None,
+    select: Seq[Column[_ <: Expression]]) {
+
+}
