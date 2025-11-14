@@ -920,9 +920,13 @@ case class MergeIntoTable(
       }.flatten
 
       val sourcePaths = MergeIntoTable.extractAllFieldPaths(sourceTable.schema)
+      // Only allow unresolved assignment keys to be candidates for schema evolution
+      // if they are directly assigned from source fields, ie UPDATE SET new = source.new
       assignments.forall { assignment =>
         assignment.resolved ||
-          sourcePaths.exists { path => MergeIntoTable.isEqual(assignment, path) }
+          (assignment.value.resolved && sourcePaths.exists {
+            path => MergeIntoTable.isEqual(assignment, path)
+          })
         }
       }
     }
