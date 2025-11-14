@@ -1973,7 +1973,6 @@ package object config {
       .version("4.1.0")
       .fallbackConf(Network.NETWORK_TIMEOUT)
 
-
   private[spark] val EXECUTOR_LOGS_ROLLING_STRATEGY =
     ConfigBuilder("spark.executor.logs.rolling.strategy")
       .version("1.1.0")
