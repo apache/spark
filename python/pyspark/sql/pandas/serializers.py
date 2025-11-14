@@ -1203,23 +1203,10 @@ class ArrowStreamAggArrowUDFSerializer(ArrowStreamArrowUDFSerializer):
 class GroupPandasUDFSerializer(ArrowStreamPandasUDFSerializer):
     """
     Serializer for grouped map Pandas UDFs.
-
-    Supports both regular mode (loads all batches at once) and iterator mode
-    (loads batches lazily as an iterator).
-
-    Parameters
-    ----------
-    timezone : str
-        A timezone to respect when handling timestamp values
-    safecheck : bool
-        If True, conversion from Arrow to Pandas checks for overflow/truncation
-    assign_cols_by_name : bool
-        If True, then Pandas DataFrames will get columns by name
-    int_to_decimal_coercion_enabled : bool
-        If True, applies additional coercions in Python before converting to Arrow
-    use_iterator : bool, optional
-        If True, loads batches as an iterator (for Iterator[pandas.DataFrame] API).
-        If False, loads all batches at once (default behavior).
+    
+    Always yields an iterator of pandas.Series lists (one list per batch).
+    The wrapper functions handle whether to concatenate all batches (regular mode)
+    or pass the iterator through (iterator mode).
     """
 
     def __init__(
@@ -1228,7 +1215,6 @@ class GroupPandasUDFSerializer(ArrowStreamPandasUDFSerializer):
         safecheck,
         assign_cols_by_name,
         int_to_decimal_coercion_enabled,
-        use_iterator=False,
     ):
         super(GroupPandasUDFSerializer, self).__init__(
             timezone=timezone,
@@ -1241,52 +1227,33 @@ class GroupPandasUDFSerializer(ArrowStreamPandasUDFSerializer):
             input_types=None,
             int_to_decimal_coercion_enabled=int_to_decimal_coercion_enabled,
         )
-        self._use_iterator = use_iterator
-
-    def _convert_batches_to_pandas(self, batches):
-        """
-        Helper method to convert Arrow batches to pandas Series.
-
-        Parameters
-        ----------
-        batches : list of pa.RecordBatch or Iterator[pa.RecordBatch]
-            Arrow batches to convert
-
-        Yields
-        ------
-        list of pandas.Series
-            In iterator mode, yields one list per batch (multiple yields).
-            In regular mode, yields a single list containing all batches' data.
-        """
-        import pyarrow as pa
-
-        # Iterator mode: process each batch individually; Regular mode: process all batches at once
-        batch_groups = ([batch] for batch in batches) if self._use_iterator else [list(batches)]
-        for batch_group in batch_groups:
-            yield [
-                self.arrow_to_pandas(c, i)
-                for i, c in enumerate(pa.Table.from_batches(batch_group).itercolumns())
-            ]
 
     def load_stream(self, stream):
         """
-        Deserialize Grouped ArrowRecordBatches to a tuple of Arrow tables and yield as a
-        list of pandas.Series or as a generator of pandas.Series lists (if use_iterator=True).
+        Deserialize Grouped ArrowRecordBatches and yield an iterator of pandas.Series lists.
+        Each list contains all columns for one batch.
         """
+        import pyarrow as pa
+
+        def process_group(batches: "Iterator[pa.RecordBatch]"):
+            # Convert each Arrow batch to pandas Series list, yielding one list per batch
+            for batch in batches:
+                series = [
+                    self.arrow_to_pandas(c, i)
+                    for i, c in enumerate(pa.Table.from_batches([batch]).itercolumns())
+                ]
+                yield series
+
         dataframes_in_group = None
 
         while dataframes_in_group is None or dataframes_in_group > 0:
             dataframes_in_group = read_int(stream)
 
             if dataframes_in_group == 1:
-                batches = ArrowStreamSerializer.load_stream(self, stream)
-                result = self._convert_batches_to_pandas(batches)
-
-                # Yield result(s) - generator itself (iterator) or single list (regular)
-                yield from (result,) if self._use_iterator else result
-
-                # Ensure stream is fully consumed (no-op for regular mode)
-                for _ in result:
+                batch_iter = process_group(ArrowStreamSerializer.load_stream(self, stream))
+                yield batch_iter
+                # Make sure the batches are fully iterated before getting the next group
+                for _ in batch_iter:
                     pass
 
             elif dataframes_in_group != 0:
@@ -1298,17 +1265,17 @@ class GroupPandasUDFSerializer(ArrowStreamPandasUDFSerializer):
     def dump_stream(self, iterator, stream):
         """
         Serialize results to Arrow RecordBatches.
-        In iterator mode, flattens the (dataframes_generator, arrow_type) tuples.
+        Handles both regular mode and iterator mode outputs from wrapper functions.
+        Both modes now return (generator, arrow_type) tuples.
         """
-        if self._use_iterator:
-            # Flatten: (dataframes_generator, arrow_type) -> [(df, arrow_type)], ...
-            iterator = (
-                [(df, arrow_type)]
-                for dataframes_gen, arrow_type in iterator
-                for df in dataframes_gen
-            )
+        # Flatten the (generator_of_dfs, arrow_type) tuples into [(df, arrow_type)] format
+        def flatten():
+            for dataframes_gen, arrow_type in iterator:
+                # Both regular and iterator modes yield DataFrames from the generator
+                for df in dataframes_gen:
+                    yield [(df, arrow_type)]
 
-        super(GroupPandasUDFSerializer, self).dump_stream(iterator, stream)
+        super(GroupPandasUDFSerializer, self).dump_stream(flatten(), stream)
 
     def __repr__(self):
         return "GroupPandasUDFSerializer"
