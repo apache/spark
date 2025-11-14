@@ -217,7 +217,7 @@ private[hive] class SparkGetColumnsOperation(
           null, // SQL_DATA_TYPE
           null, // SQL_DATETIME_SUB
           null, // CHAR_OCTET_LENGTH
-          pos.asInstanceOf[AnyRef], // ORDINAL_POSITION
+          (pos + 1).asInstanceOf[AnyRef], // ORDINAL_POSITION, 1-based
           "YES", // IS_NULLABLE
           null, // SCOPE_CATALOG
           null, // SCOPE_SCHEMA
