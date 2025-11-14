@@ -44,8 +44,11 @@ object HashedRelationMetricsBenchmark extends SqlBasedBenchmark {
       val benchmark = new Benchmark("LongToUnsafeRowMap metrics", numRows, output = output)
       benchmark.addCase("LongToUnsafeRowMap") { iter =>
         val taskMemoryManager = new TaskMemoryManager(
-          UnifiedMemoryManager(
-            new SparkConf().set(MEMORY_OFFHEAP_ENABLED.key, "false"), 1),
+          new UnifiedMemoryManager(
+            new SparkConf().set(MEMORY_OFFHEAP_ENABLED.key, "false"),
+            Long.MaxValue,
+            Long.MaxValue / 2,
+            1),
           0)
         val unsafeProj = UnsafeProjection.create(Seq(BoundReference(0, LongType, false)))
 
