@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.catalyst.util
 
-import javax.annotation.concurrent.GuardedBy
-
 import scala.collection.mutable
 
 import org.apache.spark.SparkException
@@ -30,8 +28,8 @@ import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.array.ByteArrayMethods
 
 /**
- * A thread-safe builder of [[ArrayBasedMapData]], which fails if a null map key is detected,
- * and removes duplicated map keys w.r.t. the last wins policy.
+ * A builder of [[ArrayBasedMapData]], which fails if a null map key is detected, and removes
+ * duplicated map keys w.r.t. the last wins policy.
  */
 class ArrayBasedMapBuilder(keyType: DataType, valueType: DataType) extends Serializable {
   assert(!keyType.existsRecursively(_.isInstanceOf[MapType]), "key of map cannot be/contain map")
@@ -70,10 +68,8 @@ class ArrayBasedMapBuilder(keyType: DataType, valueType: DataType) extends Seria
       case _ => identity
     }
 
-  private val lock = new Object()
 
-  @GuardedBy("lock")
-  def put(key: Any, value: Any): Unit = lock.synchronized {
+  def put(key: Any, value: Any): Unit = {
     if (key == null) {
       throw QueryExecutionErrors.nullAsMapKeyNotAllowedError()
     }
@@ -100,16 +96,14 @@ class ArrayBasedMapBuilder(keyType: DataType, valueType: DataType) extends Seria
   }
 
   // write a 2-field row, the first field is key and the second field is value.
-  @GuardedBy("lock")
-  def put(entry: InternalRow): Unit = lock.synchronized {
+  def put(entry: InternalRow): Unit = {
     if (entry.isNullAt(0)) {
       throw QueryExecutionErrors.nullAsMapKeyNotAllowedError()
     }
     put(keyGetter(entry, 0), valueGetter(entry, 1))
   }
 
-  @GuardedBy("lock")
-  def putAll(keyArray: ArrayData, valueArray: ArrayData): Unit = lock.synchronized {
+  def putAll(keyArray: ArrayData, valueArray: ArrayData): Unit = {
     if (keyArray.numElements() != valueArray.numElements()) {
       throw QueryExecutionErrors.mapDataKeyArrayLengthDiffersFromValueArrayLengthError()
     }
@@ -131,28 +125,18 @@ class ArrayBasedMapBuilder(keyType: DataType, valueType: DataType) extends Seria
    * Builds the result [[ArrayBasedMapData]] and reset this builder to free up the resources. The
    * builder becomes fresh afterward and is ready to take input and build another map.
    */
-  @GuardedBy("lock")
-  def build(): ArrayBasedMapData = lock.synchronized {
+  def build(): ArrayBasedMapData = {
     val map = new ArrayBasedMapData(
       new GenericArrayData(keys.toArray), new GenericArrayData(values.toArray))
     reset()
     map
   }
 
-  @GuardedBy("lock")
-  def from(iterator: Iterator[(Any, Any)]): ArrayBasedMapData = lock.synchronized {
-    iterator.foreach { case (key, value) =>
-      put(key, value)
-    }
-    build()
-  }
-
   /**
    * Builds a [[ArrayBasedMapData]] from the given key and value array and reset this builder. The
    * builder becomes fresh afterward and is ready to take input and build another map.
    */
-  @GuardedBy("lock")
-  def from(keyArray: ArrayData, valueArray: ArrayData): ArrayBasedMapData = lock.synchronized {
+  def from(keyArray: ArrayData, valueArray: ArrayData): ArrayBasedMapData = {
     assert(keyToIndex.isEmpty, "'from' can only be called with a fresh ArrayBasedMapBuilder.")
     putAll(keyArray, valueArray)
     if (keyToIndex.size == keyArray.numElements()) {
@@ -168,6 +152,5 @@ class ArrayBasedMapBuilder(keyType: DataType, valueType: DataType) extends Seria
   /**
    * Returns the current size of the map which is going to be produced by the current builder.
    */
-  @GuardedBy("lock")
-  def size: Int = lock.synchronized { keys.size }
+  def size: Int = keys.size
 }

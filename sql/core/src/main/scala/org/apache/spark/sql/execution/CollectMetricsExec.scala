@@ -56,7 +56,17 @@ case class CollectMetricsExec(
       .asInstanceOf[InternalRow => Row]
   }
 
-  def collectedMetrics: Row = toRowConverter(accumulator.value)
+  def collectedMetrics: Row = {
+    // collectedMetrics may be accessed concurrently by multiple threads,
+    // so we need to synchronize both the accumulator and the toRowConverter
+    // to avoid race conditions.
+    val value = accumulator.synchronized {
+      accumulator.value
+    }
+    toRowConverter.synchronized {
+      toRowConverter(value)
+    }
+  }
 
   override def output: Seq[Attribute] = child.output
 

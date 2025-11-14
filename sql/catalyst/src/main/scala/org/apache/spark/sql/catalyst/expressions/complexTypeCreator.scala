@@ -252,8 +252,12 @@ case class CreateMap(children: Seq[Expression], useStringTypeWhenEmpty: Boolean)
   override def stateful: Boolean = true
 
   override def eval(input: InternalRow): Any = {
-    mapBuilder.from(
-      Iterator.from(0).take(keys.length).map(i => (keys(i).eval(input), values(i).eval(input))))
+    var i = 0
+    while (i < keys.length) {
+      mapBuilder.put(keys(i).eval(input), values(i).eval(input))
+      i += 1
+    }
+    mapBuilder.build()
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
