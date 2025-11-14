@@ -937,6 +937,7 @@ class StateStoreCoordinatorStreamingSuite extends StreamTest {
 object StateStoreCoordinatorSuite {
   // Common configuration for SPARK-54063 tests
   private val spark54063CommonConfigs: Seq[(String, String)] = Seq(
+    SQLConf.STATE_STORE_FORCE_SNAPSHOT_UPLOAD_ON_LAG.key -> "true",
     SQLConf.SHUFFLE_PARTITIONS.key -> "5",
     SQLConf.STREAMING_MAINTENANCE_INTERVAL.key -> "100",
     SQLConf.STATE_STORE_MAINTENANCE_SHUTDOWN_TIMEOUT.key -> "3",
@@ -944,8 +945,7 @@ object StateStoreCoordinatorSuite {
     RocksDBConf.ROCKSDB_SQL_CONF_NAME_PREFIX + ".changelogCheckpointing.enabled" -> "true",
     SQLConf.STATE_STORE_COORDINATOR_REPORT_SNAPSHOT_UPLOAD_LAG.key -> "true",
     SQLConf.STATE_STORE_COORDINATOR_MULTIPLIER_FOR_MIN_VERSION_DIFF_TO_LOG.key -> "2",
-    SQLConf.STATE_STORE_COORDINATOR_SNAPSHOT_LAG_REPORT_INTERVAL.key -> "0",
-    SQLConf.STATE_STORE_FORCE_SNAPSHOT_UPLOAD_ON_LAG.key -> "true"
+    SQLConf.STATE_STORE_COORDINATOR_SNAPSHOT_LAG_REPORT_INTERVAL.key -> "0"
   )
 
   def withCoordinatorRef(sc: SparkContext)(body: StateStoreCoordinatorRef => Unit): Unit = {
