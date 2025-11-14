@@ -204,44 +204,32 @@ class SparkConnectClientTestCase(unittest.TestCase):
         mock = MockService(client._session_id)
         client._stub = mock
 
-        try:
-            command = proto.Command()
-            client.execute_command(command)
+        command = proto.Command()
+        client.execute_command(command)
 
-            self.assertIsNotNone(mock.req, "ExecutePlan API was not called when expected")
-            self.assertRegex(mock.req.client_type, r"^bar spark/[^ ]+ os/[^ ]+ python/[^ ]+$")
-        finally:
-            client.close()
+        self.assertIsNotNone(mock.req, "ExecutePlan API was not called when expected")
+        self.assertRegex(mock.req.client_type, r"^bar spark/[^ ]+ os/[^ ]+ python/[^ ]+$")
 
     def test_user_agent_default(self):
         client = SparkConnectClient("sc://foo/", use_reattachable_execute=False)
         mock = MockService(client._session_id)
         client._stub = mock
 
-        try:
-            command = proto.Command()
-            client.execute_command(command)
+        command = proto.Command()
+        client.execute_command(command)
 
-            self.assertIsNotNone(mock.req, "ExecutePlan API was not called when expected")
-            self.assertRegex(
-                mock.req.client_type, r"^_SPARK_CONNECT_PYTHON spark/[^ ]+ os/[^ ]+ python/[^ ]+$"
-            )
-        finally:
-            client.close()
+        self.assertIsNotNone(mock.req, "ExecutePlan API was not called when expected")
+        self.assertRegex(
+            mock.req.client_type, r"^_SPARK_CONNECT_PYTHON spark/[^ ]+ os/[^ ]+ python/[^ ]+$"
+        )
 
     def test_properties(self):
         client = SparkConnectClient("sc://foo/;token=bar", use_reattachable_execute=False)
-        try:
-            self.assertEqual(client.token, "bar")
-            self.assertEqual(client.host, "foo")
-        finally:
-            client.close()
+        self.assertEqual(client.token, "bar")
+        self.assertEqual(client.host, "foo")
 
         client = SparkConnectClient("sc://foo/", use_reattachable_execute=False)
-        try:
-            self.assertIsNone(client.token)
-        finally:
-            client.close()
+        self.assertIsNone(client.token)
 
     def test_channel_builder(self):
         class CustomChannelBuilder(DefaultChannelBuilder):
@@ -253,10 +241,7 @@ class SparkConnectClientTestCase(unittest.TestCase):
             CustomChannelBuilder("sc://foo/"), use_reattachable_execute=False
         )
 
-        try:
-            self.assertEqual(client._user_id, "abc")
-        finally:
-            client.close()
+        self.assertEqual(client._user_id, "abc")
 
     def test_user_context_extension(self):
         client = SparkConnectClient("sc://foo/", use_reattachable_execute=False)
@@ -353,11 +338,8 @@ class SparkConnectClientTestCase(unittest.TestCase):
         mock = MockService(client._session_id)
         client._stub = mock
 
-        try:
-            client.interrupt_all()
-            self.assertIsNotNone(mock.req, "Interrupt API was not called when expected")
-        finally:
-            client.close()
+        client.interrupt_all()
+        self.assertIsNotNone(mock.req, "Interrupt API was not called when expected")
 
     def test_is_closed(self):
         client = SparkConnectClient("sc://foo/;token=bar", use_reattachable_execute=False)
@@ -370,10 +352,7 @@ class SparkConnectClientTestCase(unittest.TestCase):
         dummy = str(uuid.uuid4())
         chan = DefaultChannelBuilder(f"sc://foo/;session_id={dummy}")
         client = SparkConnectClient(chan)
-        try:
-            self.assertEqual(client._session_id, chan.session_id)
-        finally:
-            client.close()
+        self.assertEqual(client._session_id, chan.session_id)
 
     def test_session_hook(self):
         inits = 0
@@ -411,14 +390,11 @@ class SparkConnectClientTestCase(unittest.TestCase):
         client = SparkConnectClient("sc://foo/;token=bar", use_reattachable_execute=False)
         mock = MockService(client._session_id)
         client._stub = mock
-        try:
-            req = client._execute_plan_request_with_metadata(
-                operation_id="10a4c38e-7e87-40ee-9d6f-60ff0751e63b"
-            )
-            for resp in client._stub.ExecutePlan(req, metadata=None):
-                assert resp.operation_id == "10a4c38e-7e87-40ee-9d6f-60ff0751e63b"
-        finally:
-            client.close()
+        req = client._execute_plan_request_with_metadata(
+            operation_id="10a4c38e-7e87-40ee-9d6f-60ff0751e63b"
+        )
+        for resp in client._stub.ExecutePlan(req, metadata=None):
+            assert resp.operation_id == "10a4c38e-7e87-40ee-9d6f-60ff0751e63b"
 
 
 @unittest.skipIf(not should_test_connect, connect_requirement_message)
@@ -600,16 +576,13 @@ class SparkConnectClientReattachTestCase(unittest.TestCase):
         client = SparkConnectClient(
             "sc://foo", use_reattachable_execute=False, retry_policy=dict(max_retries=0)
         )
-        try:
-            with self.assertRaises(SparkConnectGrpcException) as cm:
-                command = proto.Command()
-                client.execute_command(command)
-            err = cm.exception
-            self.assertEqual(err.getGrpcStatusCode(), grpc.StatusCode.UNAVAILABLE)
-            self.assertEqual(err.getErrorClass(), None)
-            self.assertEqual(err.getSqlState(), None)
-        finally:
-            client.close()
+        with self.assertRaises(SparkConnectGrpcException) as cm:
+            command = proto.Command()
+            client.execute_command(command)
+        err = cm.exception
+        self.assertEqual(err.getGrpcStatusCode(), grpc.StatusCode.UNAVAILABLE)
+        self.assertEqual(err.getErrorClass(), None)
+        self.assertEqual(err.getSqlState(), None)
 
     def test_error_codes(self):
         msg = "Something went wrong on the server"
@@ -672,17 +645,14 @@ class SparkConnectClientReattachTestCase(unittest.TestCase):
             client = SparkConnectClient(
                 "sc://foo", use_reattachable_execute=False, retry_policy=dict(max_retries=0)
             )
-            try:
-                client._stub = self._stub_with([response_function])
-                with self.assertRaises(SparkConnectGrpcException) as cm:
-                    command = proto.Command()
-                    client.execute_command(command)
-                err = cm.exception
-                self.assertEqual(err.getGrpcStatusCode(), expected_status_code)
-                self.assertEqual(err.getErrorClass(), expected_error_class)
-                self.assertEqual(err.getSqlState(), expected_sql_state)
-            finally:
-                client.close()
+            client._stub = self._stub_with([response_function])
+            with self.assertRaises(SparkConnectGrpcException) as cm:
+                command = proto.Command()
+                client.execute_command(command)
+            err = cm.exception
+            self.assertEqual(err.getGrpcStatusCode(), expected_status_code)
+            self.assertEqual(err.getErrorClass(), expected_error_class)
+            self.assertEqual(err.getSqlState(), expected_sql_state)
 
 
 if __name__ == "__main__":
