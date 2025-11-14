@@ -24,6 +24,7 @@ import sys
 import traceback
 import time
 import gc
+import faulthandler
 from errno import EINTR, EAGAIN
 from socket import AF_INET, AF_INET6, SOCK_STREAM, SOMAXCONN
 from signal import SIGHUP, SIGTERM, SIGCHLD, SIG_DFL, SIG_IGN, SIGINT
@@ -85,7 +86,12 @@ def worker(sock, authenticated):
         try:
             outfile.flush()
         except Exception:
-            pass
+            faulthandler_log_path = os.environ.get("PYTHON_FAULTHANDLER_DIR", None)
+            if faulthandler_log_path:
+                faulthandler_log_path = os.path.join(faulthandler_log_path, str(os.getpid()))
+                with open(faulthandler_log_path, "w") as faulthandler_log_file:
+                    faulthandler.dump_traceback(file=faulthandler_log_file)
+            raise
     return exit_code
 
 
