@@ -6248,15 +6248,6 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
-  val OPERATOR_PIPE_ALLOW_AGGREGATE_IN_SELECT =
-    buildConf("spark.sql.allowAggregateInSelectWithPipeOperator")
-    .doc("When true, aggregate functions can be used in |> SELECT and other pipe operator " +
-      "clauses without requiring the |> AGGREGATE keyword. When false, aggregate functions " +
-      "must be used exclusively with the |> AGGREGATE clause for proper aggregation semantics.")
-    .version("4.2.0")
-    .booleanConf
-    .createWithDefault(true)
-
   val LEGACY_PERCENTILE_DISC_CALCULATION = buildConf("spark.sql.legacy.percentileDiscCalculation")
     .internal()
     .doc("If true, the old bogus percentile_disc calculation is used. The old calculation " +
@@ -7654,9 +7645,6 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def singleCharacterPipeOperatorEnabled: Boolean =
     getConf(SQLConf.SINGLE_CHARACTER_PIPE_OPERATOR_ENABLED)
-
-  def pipeOperatorAllowAggregateInSelect: Boolean =
-    getConf(SQLConf.OPERATOR_PIPE_ALLOW_AGGREGATE_IN_SELECT)
 
   def allowNegativeScaleOfDecimalEnabled: Boolean =
     getConf(SQLConf.LEGACY_ALLOW_NEGATIVE_SCALE_OF_DECIMAL_ENABLED)
