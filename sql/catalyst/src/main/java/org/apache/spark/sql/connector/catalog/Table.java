@@ -51,6 +51,16 @@ public interface Table {
   String name();
 
   /**
+   * An ID of the table that can be used to reliably check if two table objects refer to the same
+   * metastore entity. If a table is dropped and recreated again with the same name, the new table
+   * ID must be different. This method must return null if connectors don't support the notion of
+   * table ID.
+   */
+  default String id() {
+    return null;
+  }
+
+  /**
    * Returns the schema of this table. If the table is not readable and doesn't have a schema, an
    * empty schema can be returned here.
    * <p>

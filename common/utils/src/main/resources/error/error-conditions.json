@@ -906,6 +906,28 @@
     },
     "sqlState" : "56K00"
   },
+  "CONNECT_INVALID_PLAN" : {
+    "message" : [
+      "The Spark Connect plan is invalid."
+    ],
+    "subClass" : {
+      "CANNOT_PARSE" : {
+        "message" : [
+          "Cannot decompress or parse the input plan (<errorMsg>)",
+          "This may be caused by a corrupted compressed plan.",
+          "To disable plan compression, set 'spark.connect.session.planCompression.threshold' to -1."
+        ]
+      },
+      "PLAN_SIZE_LARGER_THAN_MAX" : {
+        "message" : [
+          "The plan size is larger than max (<planSize> vs. <maxPlanSize>)",
+          "This typically occurs when building very complex queries with many operations, large literals, or deeply nested expressions.",
+          "Consider splitting the query into smaller parts using temporary views for intermediate results or reducing the number of operations."
+        ]
+      }
+    },
+    "sqlState" : "56K00"
+  },
   "CONNECT_ML" : {
     "message" : [
       "Generic Spark Connect ML error."
@@ -1671,6 +1693,12 @@
     ],
     "sqlState" : "42846"
   },
+  "EXPRESSION_TRANSLATION_TO_V2_IS_NOT_SUPPORTED" : {
+    "message" : [
+      "Expression <expr> cannot be translated to v2 expression."
+    ],
+    "sqlState" : "0A000"
+  },
   "EXPRESSION_TYPE_IS_NOT_ORDERABLE" : {
     "message" : [
       "Column expression <expr> cannot be sorted because its type <exprType> is not orderable."
@@ -2036,7 +2064,7 @@
   },
   "IDENTIFIER_TOO_MANY_NAME_PARTS" : {
     "message" : [
-      "<identifier> is not a valid identifier as it has more than 2 name parts."
+      "<identifier> is not a valid identifier as it has more than <limit> name parts."
     ],
     "sqlState" : "42601"
   },
@@ -2181,6 +2209,31 @@
       "View <datasetIdentifier> is a streaming view and must be referenced using SparkSession#readStream. This check can be disabled by setting Spark conf pipelines.incompatibleViewCheck.enabled = false."
     ],
     "sqlState" : "42000"
+  },
+  "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS" : {
+    "message" : [
+      "Detected incompatible changes to table <tableName> after DataFrame/Dataset has been resolved and analyzed, meaning the underlying plan is out of sync. Please, re-create DataFrame/Dataset before attempting to execute the query again."
+    ],
+    "subClass" : {
+      "COLUMNS_MISMATCH" : {
+        "message" : [
+          "Data columns have changed:",
+          "<errors>"
+        ]
+      },
+      "METADATA_COLUMNS_MISMATCH" : {
+        "message" : [
+          "Metadata columns have changed:",
+          "<errors>"
+        ]
+      },
+      "TABLE_ID_MISMATCH" : {
+        "message" : [
+          "Table ID has changed from <capturedTableId> to <currentTableId>."
+        ]
+      }
+    },
+    "sqlState" : "51024"
   },
   "INCOMPATIBLE_VIEW_SCHEMA_CHANGE" : {
     "message" : [
@@ -4362,6 +4415,59 @@
     },
     "sqlState" : "XX000"
   },
+  "MISSING_CATALOG_ABILITY" : {
+    "message" : [
+      "Catalog <plugin> does not support"
+    ],
+    "subClass" : {
+      "CREATE_FUNCTION" : {
+        "message" : [
+          "CREATE FUNCTION."
+        ]
+      },
+      "DROP_FUNCTION" : {
+        "message" : [
+          "DROP FUNCTION."
+        ]
+      },
+      "FUNCTIONS" : {
+        "message" : [
+          "functions."
+        ]
+      },
+      "NAMESPACES" : {
+        "message" : [
+          "namespaces."
+        ]
+      },
+      "PROCEDURES" : {
+        "message" : [
+          "procedures."
+        ]
+      },
+      "REFRESH_FUNCTION" : {
+        "message" : [
+          "REFRESH FUNCTION."
+        ]
+      },
+      "TABLES" : {
+        "message" : [
+          "tables."
+        ]
+      },
+      "TABLE_VALUED_FUNCTIONS" : {
+        "message" : [
+          "table-valued functions."
+        ]
+      },
+      "VIEWS" : {
+        "message" : [
+          "views."
+        ]
+      }
+    },
+    "sqlState" : "0A000"
+  },
   "MISSING_DATABASE_FOR_V1_SESSION_CATALOG" : {
     "message" : [
       "Database name is not specified in the v1 session catalog. Please ensure to provide a valid database name when interacting with the v1 catalog."
@@ -4920,6 +5026,12 @@
       "<codeLocation>"
     ],
     "sqlState" : "42000"
+  },
+  "PIPELINE_STORAGE_ROOT_INVALID" : {
+    "message" : [
+      "Pipeline storage root must be an absolute path with a URI scheme (e.g., file://, s3a://, hdfs://). Got: `<storage_root>`."
+    ],
+    "sqlState" : "42K03"
   },
   "PIPE_OPERATOR_AGGREGATE_EXPRESSION_CONTAINS_NO_AGGREGATE_FUNCTION" : {
     "message" : [
@@ -5695,6 +5807,15 @@
       }
     },
     "sqlState" : "0A000"
+  },
+  "STREAMING_STATEFUL_OPERATOR_MISSING_STATE_DIRECTORY" : {
+    "message" : [
+      "Cannot restart streaming query with stateful operators because the state directory is empty or missing.",
+      "Stateful operators in current batch: [<OpsInCurBatchSeq>].",
+      "This typically occurs when state files have been deleted or the streaming query was previously run without stateful operators but restarted with stateful operators.",
+      "Please remove the stateful operators, use a new checkpoint location, or restore the missing state files."
+    ],
+    "sqlState" : "42K03"
   },
   "STREAMING_STATEFUL_OPERATOR_NOT_MATCH_IN_STATE_METADATA" : {
     "message" : [
@@ -7860,11 +7981,6 @@
       "Cannot use \"INTERVAL\" type in the table schema."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1184" : {
-    "message" : [
-      "Catalog <plugin> does not support <ability>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1186" : {
     "message" : [
       "Multi-part identifier cannot be empty."
@@ -8563,11 +8679,6 @@
   "_LEGACY_ERROR_TEMP_2095" : {
     "message" : [
       "Failed to merge incompatible schemas <left> and <right>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2096" : {
-    "message" : [
-      "<ddl> is not supported temporarily."
     ]
   },
   "_LEGACY_ERROR_TEMP_2097" : {
