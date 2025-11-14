@@ -612,6 +612,7 @@ class ConfigResult:
             warnings=list(pb.warnings),
         )
 
+
 def _is_pyspark_source(filename: str) -> bool:
     """Check if the given filename is from the pyspark package."""
     return filename.startswith(PYSPARK_ROOT)
@@ -628,11 +629,12 @@ def _retrieve_stack_frames() -> List[CallSite]:
         filename, lineno, func, _ = frame
         if _is_pyspark_source(filename):
             break
-        if i+1 < len(frames):
-            _, _, func, _ = frames[i+1]
+        if i + 1 < len(frames):
+            _, _, func, _ = frames[i + 1]
         filtered_stack_frames.append(CallSite(function=func, file=filename, linenum=lineno))
 
     return filtered_stack_frames
+
 
 def _build_call_stack_trace() -> List[any_pb2.Any]:
     """
@@ -1308,8 +1310,6 @@ class SparkConnectClient(object):
         """
         return self._builder.token
 
-    
-
     def _execute_plan_request_with_metadata(
         self, operation_id: Optional[str] = None
     ) -> pb2.ExecutePlanRequest:
@@ -1774,7 +1774,7 @@ class SparkConnectClient(object):
         req.client_type = self._builder.userAgent
         if self._user_id:
             req.user_context.user_id = self._user_id
-        
+
         call_stack_trace = _build_call_stack_trace()
         if call_stack_trace:
             req.user_context.extensions.extend(call_stack_trace)

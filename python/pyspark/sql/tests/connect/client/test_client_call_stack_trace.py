@@ -35,29 +35,29 @@ if should_test_connect:
     from pyspark.traceback_utils import CallSite
     from google.protobuf import any_pb2
 
-
     # The _cleanup_ml_cache invocation will hang in this test (no valid spark cluster)
     # and it blocks the test process exiting because it is registered as the atexit handler
     # in `SparkConnectClient` constructor. To bypass the issue, patch the method in the test.
     SparkConnectClient._cleanup_ml_cache = lambda _: None
 
-# SPARK-54314: Improve Server-Side debuggability in Spark Connect by capturing client application's 
+# SPARK-54314: Improve Server-Side debuggability in Spark Connect by capturing client application's
 # file name and line numbers in PySpark
 # https://issues.apache.org/jira/browse/SPARK-54314
+
 
 @unittest.skipIf(not should_test_connect, connect_requirement_message)
 class CallStackTraceTestCase(unittest.TestCase):
     """Test cases for call stack trace functionality in Spark Connect client."""
 
     def setUp(self):
-        # Since this test itself is under pyspark module path, stack frames for test functions inside 
-        # this file - for example, user_function() - will normally be filtered out. So here we 
-        # set the PYSPARK_ROOT to more specific pyspaark.sql.connect that doesn't include this 
-        # test file to ensure that the stack frames for user functions inside this test file are 
+        # Since this test itself is under pyspark module path, stack frames for test functions inside
+        # this file - for example, user_function() - will normally be filtered out. So here we
+        # set the PYSPARK_ROOT to more specific pyspaark.sql.connect that doesn't include this
+        # test file to ensure that the stack frames for user functions inside this test file are
         # not filtered out.
         self.original_pyspark_root = core.PYSPARK_ROOT
         core.PYSPARK_ROOT = os.path.dirname(pyspark.sql.connect.__file__)
-    
+
     def tearDown(self):
         # Restore the original PYSPARK_ROOT
         core.PYSPARK_ROOT = self.original_pyspark_root
@@ -93,30 +93,38 @@ class CallStackTraceTestCase(unittest.TestCase):
 
     def test_retrieve_stack_frames_filters_pyspark_frames(self):
         """Test that _retrieve_stack_frames filters out PySpark internal frames."""
+
         def user_function():
             return _retrieve_stack_frames()
 
         stack_frames = user_function()
-        
+
         # Verify we have at least some frames
         self.assertGreater(len(stack_frames), 0, "Expected at least some stack frames")
-        
+
         # Verify that none of the returned frames are from PySpark internal code
         for frame in stack_frames:
             # Check that this frame is not from pyspark internal code
             self.assertFalse(
                 _is_pyspark_source(frame.file),
-                f"Expected frame from {frame.file} (function: {frame.function}) to be filtered out as PySpark internal frame"
+                f"Expected frame from {frame.file} (function: {frame.function}) to be filtered out as PySpark internal frame",
             )
-        
+
         # Verify that user function names are present (confirming user frames are included)
         function_names = [frame.function for frame in stack_frames]
         expected_functions = ["user_function", "test_retrieve_stack_frames_filters_pyspark_frames"]
-        self.assertTrue("user_function" in function_names, f"Expected user function names not found in: {function_names}")
-        self.assertTrue("test_retrieve_stack_frames_filters_pyspark_frames" in function_names, f"Expected user function names not found in: {function_names}")
+        self.assertTrue(
+            "user_function" in function_names,
+            f"Expected user function names not found in: {function_names}",
+        )
+        self.assertTrue(
+            "test_retrieve_stack_frames_filters_pyspark_frames" in function_names,
+            f"Expected user function names not found in: {function_names}",
+        )
 
     def test_retrieve_stack_frames_includes_user_frames(self):
         """Test that _retrieve_stack_frames includes user code frames."""
+
         def user_function():
             """Simulate a user function."""
             return _retrieve_stack_frames()
@@ -124,7 +132,7 @@ class CallStackTraceTestCase(unittest.TestCase):
         def another_user_function():
             """Another level of user code."""
             return user_function()
-        
+
         stack_frames = another_user_function()
 
         # We should have at least some frames from the test
@@ -133,12 +141,22 @@ class CallStackTraceTestCase(unittest.TestCase):
         # Check that we have frames with function names we expect
         function_names = [frame.function for frame in stack_frames]
         # At least one of our test functions should be in the stack
-        self.assertTrue("user_function" in function_names, f"Expected user function names not found in: {function_names}")
-        self.assertTrue("another_user_function" in function_names, f"Expected user function names not found in: {function_names}")
-        self.assertTrue("test_retrieve_stack_frames_includes_user_frames" in function_names, f"Expected user function names not found in: {function_names}")
+        self.assertTrue(
+            "user_function" in function_names,
+            f"Expected user function names not found in: {function_names}",
+        )
+        self.assertTrue(
+            "another_user_function" in function_names,
+            f"Expected user function names not found in: {function_names}",
+        )
+        self.assertTrue(
+            "test_retrieve_stack_frames_includes_user_frames" in function_names,
+            f"Expected user function names not found in: {function_names}",
+        )
 
     def test_retrieve_stack_frames_captures_correct_info(self):
         """Test that _retrieve_stack_frames captures correct frame information."""
+
         def user_function():
             return _retrieve_stack_frames()
 
@@ -157,9 +175,14 @@ class CallStackTraceTestCase(unittest.TestCase):
             self.assertIsInstance(frame.file, str)
             self.assertIsInstance(frame.linenum, int)
             self.assertGreater(frame.linenum, 0)
-        
-        self.assertTrue("user_function" in functions, f"Expected user function names not found in: {functions}")
-        self.assertTrue("test_retrieve_stack_frames_captures_correct_info" in functions, f"Expected user function names not found in: {functions}")
+
+        self.assertTrue(
+            "user_function" in functions, f"Expected user function names not found in: {functions}"
+        )
+        self.assertTrue(
+            "test_retrieve_stack_frames_captures_correct_info" in functions,
+            f"Expected user function names not found in: {functions}",
+        )
         self.assertTrue(__file__ in files, f"Expected user function names not found in: {files}")
 
     def test_build_call_stack_trace_without_env_var(self):
@@ -182,9 +205,7 @@ class CallStackTraceTestCase(unittest.TestCase):
 
             self.assertIsInstance(call_stack, list)
             # Should have at least one frame (this test function)
-            self.assertGreater(
-                len(call_stack), 0, "Expected non-empty list when env var is set"
-            )
+            self.assertGreater(len(call_stack), 0, "Expected non-empty list when env var is set")
 
             # Verify each element is an Any protobuf message
             functions = set()
@@ -205,9 +226,14 @@ class CallStackTraceTestCase(unittest.TestCase):
                 self.assertEqual(
                     stack_trace_element.declaring_class, "", "declaring_class should be empty"
                 )
-            
-            self.assertTrue("test_build_call_stack_trace_with_env_var_set" in functions, f"Expected user function names not found in: {functions}")
-            self.assertTrue(__file__ in files, f"Expected user function names not found in: {files}")
+
+            self.assertTrue(
+                "test_build_call_stack_trace_with_env_var_set" in functions,
+                f"Expected user function names not found in: {functions}",
+            )
+            self.assertTrue(
+                __file__ in files, f"Expected user function names not found in: {files}"
+            )
 
     def test_build_call_stack_trace_with_env_var_empty_string(self):
         """Test that _build_call_stack_trace returns empty list when env var is empty string."""
@@ -215,9 +241,7 @@ class CallStackTraceTestCase(unittest.TestCase):
             call_stack = _build_call_stack_trace()
 
             self.assertIsInstance(call_stack, list)
-            self.assertEqual(
-                len(call_stack), 0, "Expected empty list when env var is empty string"
-            )
+            self.assertEqual(len(call_stack), 0, "Expected empty list when env var is empty string")
 
     def test_build_call_stack_trace_with_various_env_var_values(self):
         """Test _build_call_stack_trace behavior with various env var values."""
@@ -232,9 +256,7 @@ class CallStackTraceTestCase(unittest.TestCase):
 
         for env_value, expected_behavior, message in test_cases:
             with self.subTest(env_value=env_value):
-                with patch.dict(
-                    os.environ, {"SPARK_CONNECT_DEBUG_CLIENT_CALL_STACK": env_value}
-                ):
+                with patch.dict(os.environ, {"SPARK_CONNECT_DEBUG_CLIENT_CALL_STACK": env_value}):
                     call_stack = _build_call_stack_trace()
                     if expected_behavior == 0:
                         self.assertEqual(len(call_stack), 0, message)
@@ -249,14 +271,14 @@ class CallStackTraceIntegrationTestCase(unittest.TestCase):
     def setUp(self):
         """Set up test fixtures."""
         self.client = SparkConnectClient("sc://localhost:15002", use_reattachable_execute=False)
-        # Since this test itself is under pyspark module path, stack frames for test functions inside 
-        # this file - for example, user_function() - will normally be filtered out. So here we 
-        # set the PYSPARK_ROOT to more specific pyspaark.sql.connect that doesn't include this 
-        # test file to ensure that the stack frames for user functions inside this test file are 
+        # Since this test itself is under pyspark module path, stack frames for test functions inside
+        # this file - for example, user_function() - will normally be filtered out. So here we
+        # set the PYSPARK_ROOT to more specific pyspaark.sql.connect that doesn't include this
+        # test file to ensure that the stack frames for user functions inside this test file are
         # not filtered out.
         self.original_pyspark_root = core.PYSPARK_ROOT
         core.PYSPARK_ROOT = os.path.dirname(pyspark.sql.connect.__file__)
-    
+
     def tearDown(self):
         # Restore the original PYSPARK_ROOT
         core.PYSPARK_ROOT = self.original_pyspark_root
@@ -298,9 +320,14 @@ class CallStackTraceIntegrationTestCase(unittest.TestCase):
                 files.add(stack_trace_element.file_name)
                 self.assertIsInstance(stack_trace_element.method_name, str)
                 self.assertIsInstance(stack_trace_element.file_name, str)
-            
-            self.assertTrue("test_execute_plan_request_includes_call_stack_with_env_var" in functions, f"Expected user function names not found in: {functions}")
-            self.assertTrue(__file__ in files, f"Expected user function names not found in: {files}")
+
+            self.assertTrue(
+                "test_execute_plan_request_includes_call_stack_with_env_var" in functions,
+                f"Expected user function names not found in: {functions}",
+            )
+            self.assertTrue(
+                __file__ in files, f"Expected user function names not found in: {files}"
+            )
 
     def test_analyze_plan_request_includes_call_stack_without_env_var(self):
         """Test that _analyze_plan_request_with_metadata doesn't include call stack without env var."""
@@ -340,8 +367,13 @@ class CallStackTraceIntegrationTestCase(unittest.TestCase):
                 self.assertIsInstance(stack_trace_element.method_name, str)
                 self.assertIsInstance(stack_trace_element.file_name, str)
 
-            self.assertTrue("test_analyze_plan_request_includes_call_stack_with_env_var" in functions, f"Expected user function names not found in: {functions}")
-            self.assertTrue(__file__ in files, f"Expected user function names not found in: {files}")
+            self.assertTrue(
+                "test_analyze_plan_request_includes_call_stack_with_env_var" in functions,
+                f"Expected user function names not found in: {functions}",
+            )
+            self.assertTrue(
+                __file__ in files, f"Expected user function names not found in: {files}"
+            )
 
     def test_config_request_includes_call_stack_without_env_var(self):
         """Test that _config_request_with_metadata doesn't include call stack without env var."""
@@ -381,8 +413,13 @@ class CallStackTraceIntegrationTestCase(unittest.TestCase):
                 self.assertIsInstance(stack_trace_element.method_name, str)
                 self.assertIsInstance(stack_trace_element.file_name, str)
 
-            self.assertTrue("test_config_request_includes_call_stack_with_env_var" in functions, f"Expected user function names not found in: {functions}")
-            self.assertTrue(__file__ in files, f"Expected user function names not found in: {files}")
+            self.assertTrue(
+                "test_config_request_includes_call_stack_with_env_var" in functions,
+                f"Expected user function names not found in: {functions}",
+            )
+            self.assertTrue(
+                __file__ in files, f"Expected user function names not found in: {files}"
+            )
 
     def test_call_stack_trace_captures_correct_calling_context(self):
         """Test that call stack trace captures the correct calling context."""
@@ -414,11 +451,21 @@ class CallStackTraceIntegrationTestCase(unittest.TestCase):
             extension.Unpack(stack_trace_element)
             functions.add(stack_trace_element.method_name)
             files.add(stack_trace_element.file_name)
-            self.assertGreater(stack_trace_element.line_number, 0, f"Expected line number to be greater than 0, got: {stack_trace_element.line_number}")
+            self.assertGreater(
+                stack_trace_element.line_number,
+                0,
+                f"Expected line number to be greater than 0, got: {stack_trace_element.line_number}",
+            )
 
-        self.assertTrue("level1" in functions, f"Expected user function names not found in: {functions}")
-        self.assertTrue("level2" in functions, f"Expected user function names not found in: {functions}")
-        self.assertTrue("level3" in functions, f"Expected user function names not found in: {functions}")
+        self.assertTrue(
+            "level1" in functions, f"Expected user function names not found in: {functions}"
+        )
+        self.assertTrue(
+            "level2" in functions, f"Expected user function names not found in: {functions}"
+        )
+        self.assertTrue(
+            "level3" in functions, f"Expected user function names not found in: {functions}"
+        )
         self.assertTrue(__file__ in files, f"Expected user function names not found in: {files}")
 
 
@@ -432,4 +479,3 @@ if __name__ == "__main__":
     except ImportError:
         testRunner = None
     unittest.main(testRunner=testRunner, verbosity=2)
-
