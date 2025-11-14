@@ -18,7 +18,7 @@
 package org.apache.spark.sql.classic
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.execution.streaming.state.{OfflineStateRepartitionBatchRunner, OfflineStateRepartitionErrors}
+import org.apache.spark.sql.execution.streaming.state.{OfflineStateRepartitionErrors, OfflineStateRepartitionRunner}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming
 
@@ -44,7 +44,7 @@ private[spark] class StreamingCheckpointManager(
       throw OfflineStateRepartitionErrors.parameterIsNotGreaterThanZeroError("numPartitions")
     }
 
-    val runner = new OfflineStateRepartitionBatchRunner(
+    val runner = new OfflineStateRepartitionRunner(
       sparkSession,
       checkpointLocation,
       numPartitions,

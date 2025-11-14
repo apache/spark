@@ -27,7 +27,7 @@ import org.apache.spark.sql.execution.streaming.runtime.StreamingQueryCheckpoint
 import org.apache.spark.sql.internal.SQLConf
 
 /**
- * Offline batch runner for repartitioning the state stores used by a streaming query.
+ * Runs repartitioning for the state stores used by a streaming query.
  *
  * This class handles the process of creating a new microbatch, repartitioning state data
  * across new partitions, and committing the changes to the checkpoint i.e.
@@ -42,7 +42,7 @@ import org.apache.spark.sql.internal.SQLConf
  * @param enforceExactlyOnceSink if we shouldn't allow skipping failed batches,
  *                               to avoid duplicates in exactly once sinks.
  */
-class OfflineStateRepartitionBatchRunner(
+class OfflineStateRepartitionRunner(
     sparkSession: SparkSession,
     checkpointLocation: String,
     numPartitions: Int,
