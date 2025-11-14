@@ -627,6 +627,7 @@ class ConfigResult:
             warnings=list(pb.warnings),
         )
 
+
 def _is_pyspark_source(filename: str) -> bool:
     """Check if the given filename is from the pyspark package."""
     return filename.startswith(PYSPARK_ROOT)
@@ -643,11 +644,12 @@ def _retrieve_stack_frames() -> List[CallSite]:
         filename, lineno, func, _ = frame
         if _is_pyspark_source(filename):
             break
-        if i+1 < len(frames):
-            _, _, func, _ = frames[i+1]
+        if i + 1 < len(frames):
+            _, _, func, _ = frames[i + 1]
         filtered_stack_frames.append(CallSite(function=func, file=filename, linenum=lineno))
 
     return filtered_stack_frames
+
 
 def _build_call_stack_trace() -> List[any_pb2.Any]:
     """
