@@ -20,12 +20,14 @@ import uuid
 from collections.abc import Generator
 from typing import Optional, Any, Union
 
+import google.protobuf.any_pb2 as any_pb2
+import google.protobuf.wrappers_pb2 as wrappers_pb2
+
 from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
 from pyspark.testing.utils import eventually
 
 if should_test_connect:
     import grpc
-    import google.protobuf.any_pb2 as any_pb2
     from google.rpc import status_pb2
     from google.rpc.error_details_pb2 import ErrorInfo
     import pandas as pd
@@ -136,9 +138,11 @@ if should_test_connect:
         def __init__(self, session_id: str):
             self._session_id = session_id
             self.req = None
+            self.client_user_context_extensions = []
 
         def ExecutePlan(self, req: proto.ExecutePlanRequest, metadata):
             self.req = req
+            self.client_user_context_extensions = req.user_context.extensions
             resp = proto.ExecutePlanResponse()
             resp.session_id = self._session_id
             resp.operation_id = req.operation_id
@@ -159,12 +163,25 @@ if should_test_connect:
 
         def Interrupt(self, req: proto.InterruptRequest, metadata):
             self.req = req
+            self.client_user_context_extensions = req.user_context.extensions
             resp = proto.InterruptResponse()
             resp.session_id = self._session_id
             return resp
 
+        def AnalyzePlan(self, req: proto.AnalyzePlanRequest, metadata):
+            # Always returns SemanticHash message
+            self.req = req
+            self.client_user_context_extensions = req.user_context.extensions
+            self._update_client_call_context()
+            resp = proto.AnalyzePlanResponse(
+                session_id=self._session_id,
+                semantic_hash=proto.AnalyzePlanResponse.SemanticHash(result=0),
+            )
+            return resp
+
         def Config(self, req: proto.ConfigRequest, metadata):
             self.req = req
+            self.client_user_context_extensions = req.user_context.extensions
             resp = proto.ConfigResponse()
             resp.session_id = self._session_id
             if req.operation.HasField("get"):
@@ -228,6 +245,93 @@ class SparkConnectClientTestCase(unittest.TestCase):
         )
 
         self.assertEqual(client._user_id, "abc")
+
+    def test_user_context_extension(self):
+        client = SparkConnectClient("sc://foo/", use_reattachable_execute=False)
+        mock = MockService(client._session_id)
+        client._stub = mock
+
+        exlocal = any_pb2.Any()
+        exlocal.Pack(wrappers_pb2.StringValue(value="abc"))
+        exlocal2 = any_pb2.Any()
+        exlocal2.Pack(wrappers_pb2.StringValue(value="def"))
+        exglobal = any_pb2.Any()
+        exglobal.Pack(wrappers_pb2.StringValue(value="ghi"))
+        exglobal2 = any_pb2.Any()
+        exglobal2.Pack(wrappers_pb2.StringValue(value="jkl"))
+
+        exlocal_id = client.add_threadlocal_user_context_extension(exlocal)
+        exglobal_id = client.add_global_user_context_extension(exglobal)
+
+        mock.client_user_context_extensions = []
+        command = proto.Command()
+        client.execute_command(command)
+        self.assertTrue(exlocal in mock.client_user_context_extensions)
+        self.assertTrue(exglobal in mock.client_user_context_extensions)
+        self.assertFalse(exlocal2 in mock.client_user_context_extensions)
+        self.assertFalse(exglobal2 in mock.client_user_context_extensions)
+
+        client.add_threadlocal_user_context_extension(exlocal2)
+
+        mock.client_user_context_extensions = []
+        plan = proto.Plan()
+        client.semantic_hash(plan)  # use semantic_hash to test analyze
+        self.assertTrue(exlocal in mock.client_user_context_extensions)
+        self.assertTrue(exglobal in mock.client_user_context_extensions)
+        self.assertTrue(exlocal2 in mock.client_user_context_extensions)
+        self.assertFalse(exglobal2 in mock.client_user_context_extensions)
+
+        client.add_global_user_context_extension(exglobal2)
+
+        mock.client_user_context_extensions = []
+        client.interrupt_all()
+        self.assertTrue(exlocal in mock.client_user_context_extensions)
+        self.assertTrue(exglobal in mock.client_user_context_extensions)
+        self.assertTrue(exlocal2 in mock.client_user_context_extensions)
+        self.assertTrue(exglobal2 in mock.client_user_context_extensions)
+
+        client.remove_user_context_extension(exlocal_id)
+
+        mock.client_user_context_extensions = []
+        client.get_configs("foo", "bar")
+        self.assertFalse(exlocal in mock.client_user_context_extensions)
+        self.assertTrue(exglobal in mock.client_user_context_extensions)
+        self.assertTrue(exlocal2 in mock.client_user_context_extensions)
+        self.assertTrue(exglobal2 in mock.client_user_context_extensions)
+
+        client.remove_user_context_extension(exglobal_id)
+
+        mock.client_user_context_extensions = []
+        command = proto.Command()
+        client.execute_command(command)
+        self.assertFalse(exlocal in mock.client_user_context_extensions)
+        self.assertFalse(exglobal in mock.client_user_context_extensions)
+        self.assertTrue(exlocal2 in mock.client_user_context_extensions)
+        self.assertTrue(exglobal2 in mock.client_user_context_extensions)
+
+        client.clear_user_context_extensions()
+
+        mock.client_user_context_extensions = []
+        plan = proto.Plan()
+        client.semantic_hash(plan)  # use semantic_hash to test analyze
+        self.assertFalse(exlocal in mock.client_user_context_extensions)
+        self.assertFalse(exglobal in mock.client_user_context_extensions)
+        self.assertFalse(exlocal2 in mock.client_user_context_extensions)
+        self.assertFalse(exglobal2 in mock.client_user_context_extensions)
+
+        mock.client_user_context_extensions = []
+        client.interrupt_all()
+        self.assertFalse(exlocal in mock.client_user_context_extensions)
+        self.assertFalse(exglobal in mock.client_user_context_extensions)
+        self.assertFalse(exlocal2 in mock.client_user_context_extensions)
+        self.assertFalse(exglobal2 in mock.client_user_context_extensions)
+
+        mock.client_user_context_extensions = []
+        client.get_configs("foo", "bar")
+        self.assertFalse(exlocal in mock.client_user_context_extensions)
+        self.assertFalse(exglobal in mock.client_user_context_extensions)
+        self.assertFalse(exlocal2 in mock.client_user_context_extensions)
+        self.assertFalse(exglobal2 in mock.client_user_context_extensions)
 
     def test_interrupt_all(self):
         client = SparkConnectClient("sc://foo/;token=bar", use_reattachable_execute=False)
