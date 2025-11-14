@@ -55,6 +55,7 @@ if TYPE_CHECKING:
 
 
 def _convert_arrow_table_to_pandas(
+    *,
     arrow_table: "pa.Table",
     schema_fields: List["StructField"],
     temp_col_names: List[str],
@@ -249,7 +250,7 @@ class PandasConversionMixin:
                             struct_in_pandas = "dict"
 
                         pdf = _convert_arrow_table_to_pandas(
-                            table,
+                            arrow_table=table,
                             schema_fields=self.schema.fields,
                             temp_col_names=temp_col_names,
                             timezone=timezone,
