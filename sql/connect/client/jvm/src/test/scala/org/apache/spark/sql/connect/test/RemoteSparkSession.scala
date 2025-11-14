@@ -129,8 +129,6 @@ object SparkConnectServerUtils {
       "spark.sql.catalog.testcat=org.apache.spark.sql.connector.catalog.InMemoryTableCatalog",
       // Try to use the hive catalog, fallback to in-memory if it is not there.
       "spark.sql.catalogImplementation=" + catalogImplementation,
-      // Enable geospatial feature for Connect tests
-      "spark.sql.geospatial.enabled=true",
       // Make the server terminate reattachable streams every 1 second and 123 bytes,
       // to make the tests exercise reattach.
       "spark.connect.execute.reattachable.senderMaxStreamDuration=1s",
