@@ -17,14 +17,13 @@
 
 package org.apache.spark.sql.types
 
-import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.internal.SqlApiConf
+import org.apache.spark.sql.{AnalysisException, SparkSession}
 
 trait SpatialType extends AbstractDataType {
 
   /** Geospatial feature is disabled. */
   protected def assertGeospatialEnabled(): Unit = {
-    if (!SqlApiConf.get.geospatialEnabled) {
+    if (!SparkSession.getActiveSession.get.geospatialEnabled) {
       throw new AnalysisException(
         errorClass = "UNSUPPORTED_FEATURE.GEOSPATIAL_DISABLED",
         messageParameters = Map.empty)

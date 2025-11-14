@@ -29,6 +29,7 @@ import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.{SparkIllegalArgumentException, SparkThrowable}
 import org.apache.spark.annotation.Stable
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.analysis.SqlApiAnalysis
 import org.apache.spark.sql.catalyst.parser.DataTypeParser
 import org.apache.spark.sql.catalyst.util.{CollationFactory, StringConcat}
@@ -223,17 +224,18 @@ object DataType {
       case STRING_WITH_COLLATION(collation) => StringType(collation)
       // If the coordinate reference system (CRS) value is omitted, Parquet and other storage
       // formats (Delta, Iceberg) consider "OGC:CRS84" to be the default value of the crs.
-      case "geometry" if SqlApiConf.get.geospatialEnabled =>
+      case "geometry" if SparkSession.getActiveSession.get.geospatialEnabled =>
         GeometryType(GeometryType.GEOMETRY_DEFAULT_CRS)
-      case GEOMETRY_TYPE(crs) if SqlApiConf.get.geospatialEnabled =>
+      case GEOMETRY_TYPE(crs) if SparkSession.getActiveSession.get.geospatialEnabled =>
         GeometryType(crs)
-      case "geography" if SqlApiConf.get.geospatialEnabled =>
+      case "geography" if SparkSession.getActiveSession.get.geospatialEnabled =>
         GeographyType(GeographyType.GEOGRAPHY_DEFAULT_CRS)
-      case GEOGRAPHY_TYPE_CRS(crs) if SqlApiConf.get.geospatialEnabled =>
+      case GEOGRAPHY_TYPE_CRS(crs) if SparkSession.getActiveSession.get.geospatialEnabled =>
         GeographyType(crs, GeographyType.GEOGRAPHY_DEFAULT_ALGORITHM)
-      case GEOGRAPHY_TYPE_ALG(alg) if SqlApiConf.get.geospatialEnabled =>
+      case GEOGRAPHY_TYPE_ALG(alg) if SparkSession.getActiveSession.get.geospatialEnabled =>
         GeographyType(GeographyType.GEOGRAPHY_DEFAULT_CRS, alg)
-      case GEOGRAPHY_TYPE_CRS_ALG(crs, alg) if SqlApiConf.get.geospatialEnabled =>
+      case GEOGRAPHY_TYPE_CRS_ALG(crs, alg)
+          if SparkSession.getActiveSession.get.geospatialEnabled =>
         GeographyType(crs, alg)
       // For backwards compatibility, previously the type name of NullType is "null"
       case "null" => NullType

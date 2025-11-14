@@ -61,7 +61,6 @@ class ArrowEncoderSuite extends ConnectFunSuite with RemoteSparkSession with Bef
 
   override def beforeAll(): Unit = {
     super.beforeAll()
-    System.setProperty("spark.testing", "true")
     SparkSession.getActiveSession.get.conf.set("spark.sql.geospatial.enabled", "true")
   }
 
