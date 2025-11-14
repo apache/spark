@@ -141,7 +141,7 @@ if should_test_connect:
 
         def ExecutePlan(self, req: proto.ExecutePlanRequest, metadata):
             self.req = req
-            self.client_user_context_extensions = req.user_context.extensions
+            # self.client_user_context_extensions = req.user_context.extensions
             resp = proto.ExecutePlanResponse()
             resp.session_id = self._session_id
             resp.operation_id = req.operation_id
@@ -162,14 +162,14 @@ if should_test_connect:
 
         def Interrupt(self, req: proto.InterruptRequest, metadata):
             self.req = req
-            self.client_user_context_extensions = req.user_context.extensions
+            # self.client_user_context_extensions = req.user_context.extensions
             resp = proto.InterruptResponse()
             resp.session_id = self._session_id
             return resp
 
         def Config(self, req: proto.ConfigRequest, metadata):
             self.req = req
-            self.client_user_context_extensions = req.user_context.extensions
+            # self.client_user_context_extensions = req.user_context.extensions
             resp = proto.ConfigResponse()
             resp.session_id = self._session_id
             if req.operation.HasField("get"):
@@ -184,7 +184,7 @@ if should_test_connect:
 
         def AnalyzePlan(self, req: proto.AnalyzePlanRequest, metadata):
             self.req = req
-            self.client_user_context_extensions = req.user_context.extensions
+            # self.client_user_context_extensions = req.user_context.extensions
             resp = proto.AnalyzePlanResponse()
             resp.session_id = self._session_id
             # Return a minimal response with a semantic hash
