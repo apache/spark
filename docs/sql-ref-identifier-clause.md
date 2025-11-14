@@ -23,26 +23,54 @@ license: |
 
 Converts a constant `STRING` expression into a SQL object name.
 The purpose of this clause is to allow for templating of identifiers in SQL statements without opening up the risk of SQL injection attacks.
-Typically, this clause is used with a parameter marker or a variable as argument.
+
+The clause comes in two forms:
+
+- When passed a string-literal, which may include a coalesced string of literals and parameter markers, it can be used anywhere an identifier or qualified identifier can be used.
+  The usage of this form is encouraged.
+- When passed a more complex constant string expression, which may also include variables, it can be used in limited cases to reference dynamic SQL object references such as table names, column names, and function names.
+  The usage of this form is discouraged unless necessary.
+  For example you cannot use this form to parameterize a table or column alias, or a column name in a `CREATE TABLE` statement.
 
 ### Syntax
 
 ```sql
+IDENTIFIER ( strLiteral )
+
 IDENTIFIER ( strExpr )
 ```
 
 ### Parameters
 
-- **strExpr**: A constant `STRING` expression. Typically, the expression includes a parameter marker.
+- **strLiteral**
+
+  A constant `STRING` literal which may include string coalescing of strings and string parameter markers.
+
+  The string must be a valid (qualified) identifier.
+
+  For example:
+
+  ```
+  IDENTIFIER('default.' :tablename)
+  IDENTIFIER(:catalog '.' :namespace '.' :tablename '.' :columnname)
+  IDENTIFIER(:rootdirectory '/data/' :tablename)
+  ```
+
+- **strExpr**: A constant `STRING` expression. Typically, the expression includes a parameter marker or session variable.
+
+  The string must be a valid (qualified) identifier.
+
+  For example:
+  
+  ```
+  IDENTIFIER(session.schema || '.' || session.tablename)
+  IDENTIFIER('`' || session.schema || '`.`' session.tablename || '`')
+  IDENTIFIER(CONCAT(:catalog, '.', :namespace, '.', :tablename, '.', :columnname))
+  ```
 
 ### Returns
 
-A (qualified) identifier which can be used as a:
-
-- qualified table name
-- namespace name
-- function name
-- qualified column or attribute reference
+A (qualified) identifier.
 
 ### Examples
 
@@ -88,7 +116,7 @@ spark.sql("SELECT * FROM IDENTIFIER(:myschema).mytab", args = Map("mychema" -> "
 [PARSE_SYNTAX_ERROR]
 
 // Dropping a table with separate schema and table parameters.
-spark.sql("DROP TABLE IDENTIFIER(:myschema || '.' || :mytab)", args = Map("myschema" -> "default", "mytab" -> "tab1")).show()
+spark.sql("DROP TABLE IDENTIFIER(:myschema '.' :mytab)", args = Map("myschema" -> "default", "mytab" -> "tab1")).show()
 
 // A parameterized column reference
 spark.sql("SELECT IDENTIFIER(:col) FROM VALUES(1) AS T(c1)", args = Map("col" -> "t.c1")).show()
@@ -117,7 +145,7 @@ DECLARE mytab = 'tab1';
 -- Creation of a table using variable.
 CREATE TABLE IDENTIFIER(mytab)(c1 INT);
 
-DESCRIBE IDENTIFIER(mytab);
+EXECUTE IMMEDIATE 'DESCRIBE IDENTIFIER(:mytab)' USING mytab;
 +--------+---------+-------+
 |col_name|data_type|comment|
 +--------+---------+-------+
@@ -125,10 +153,10 @@ DESCRIBE IDENTIFIER(mytab);
 +--------+---------+-------+
 
 -- Altering a table with a fixed schema and a parameterized table name. 
-ALTER TABLE IDENTIFIER('default.' || mytab) ADD COLUMN c2 INT;
+EXECUTE IMMEDIATE 'ALTER TABLE IDENTIFIER('default.' || :mytab) ADD COLUMN :col INT' USING mytab, 'c2' AS col;
 
 SET VAR mytab = '`default`.`tab1`';
-DESCRIBE IDENTIFIER(mytab);
+EXECUTE IMMEDIATE 'DESCRIBE IDENTIFIER(:mytab)' USING mytab;
 +--------+---------+-------+
 |col_name|data_type|comment|
 +--------+---------+-------+
@@ -137,21 +165,19 @@ DESCRIBE IDENTIFIER(mytab);
 +--------+---------+-------+
 
 -- A parameterized reference to a table in a query. This table name is qualified and uses back-ticks.
-SELECT * FROM IDENTIFIER(mytab);
+EXECUTE IMMEDIATE 'SELECT * FROM IDENTIFIER(mytab)' USING mytab;
 +---+---+
 | c1| c2|
 +---+---+
-+---+---+
-
 
 -- Dropping a table with separate schema and table parameters.
 DECLARE myschema = 'default';
 SET VAR mytab = 'tab1';
-DROP TABLE IDENTIFIER(myschema || '.' || mytab);
+EXECUTE IMMEDIATE 'DROP TABLE IDENTIFIER(:myschema '.' :mytab)' USING myschema, mytab;
 
 -- A parameterized column reference
-DECLARE col = 't.c1';
-SELECT IDENTIFIER(col) FROM VALUES(1) AS T(c1);
+DECLARE col = 'c1';
+EXECUTE IMEMDIATE 'SELECT IDENTIFIER(:col) FROM VALUES(1) AS T(IDENTIFIER(:col))' USING col;
 +---+
 | c1|
 +---+
@@ -159,8 +185,7 @@ SELECT IDENTIFIER(col) FROM VALUES(1) AS T(c1);
 +---+
 
 -- Passing in a function name as a parameter
-DECLARE func = 'abs';
-SELECT IDENTIFIER(func)(-1);
+EXECUTE IMMEDIATE 'SELECT IDENTIFIER(:func)(-1)' USING 'abs' AS func;
 +-------+
 |abs(-1)|
 +-------+

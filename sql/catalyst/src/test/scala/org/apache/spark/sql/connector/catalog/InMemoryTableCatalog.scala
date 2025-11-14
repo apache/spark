@@ -46,9 +46,11 @@ class BasicInMemoryTableCatalog extends TableCatalog {
   private val invalidatedTables: util.Set[Identifier] = ConcurrentHashMap.newKeySet()
 
   private var _name: Option[String] = None
+  private var copyOnLoad: Boolean = false
 
   override def initialize(name: String, options: CaseInsensitiveStringMap): Unit = {
     _name = Some(name)
+    copyOnLoad = options.getBoolean("copyOnLoad", false)
   }
 
   override def name: String = _name.get
@@ -57,7 +59,22 @@ class BasicInMemoryTableCatalog extends TableCatalog {
     tables.keySet.asScala.filter(_.namespace.sameElements(namespace)).toArray
   }
 
+  // load table for scans
   override def loadTable(ident: Identifier): Table = {
+    Option(tables.get(ident)) match {
+      case Some(table: InMemoryTable) if copyOnLoad =>
+        table.copy() // copy to validate logical table equality
+      case Some(table) =>
+        table
+      case _ =>
+        throw new NoSuchTableException(ident.asMultipartIdentifier)
+    }
+  }
+
+  // load table for writes
+  override def loadTable(
+      ident: Identifier,
+      writePrivileges: util.Set[TableWritePrivilege]): Table = {
     Option(tables.get(ident)) match {
       case Some(table) =>
         table
@@ -169,7 +186,8 @@ class BasicInMemoryTableCatalog extends TableCatalog {
       columns = CatalogV2Util.structTypeToV2Columns(schema),
       partitioning = finalPartitioning,
       properties = properties,
-      constraints = constraints)
+      constraints = constraints,
+      id = table.id)
       .alterTableWithData(table.data, schema)
     newTable.setCurrentVersion(currentVersion)
     changes.foreach {

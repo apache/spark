@@ -20,7 +20,7 @@ import java.util.Locale
 
 import scala.jdk.CollectionConverters._
 
-import org.antlr.v4.runtime.Token
+import org.antlr.v4.runtime.{ParserRuleContext, Token}
 import org.antlr.v4.runtime.tree.ParseTree
 
 import org.apache.spark.SparkException
@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.catalyst.util.SparkParserUtils.{string, withOrigin}
 import org.apache.spark.sql.connector.catalog.IdentityColumnSpec
-import org.apache.spark.sql.errors.QueryParsingErrors
+import org.apache.spark.sql.errors.{DataTypeErrorsBase, QueryParsingErrors}
 import org.apache.spark.sql.internal.SqlApiConf
 import org.apache.spark.sql.types.{ArrayType, BinaryType, BooleanType, ByteType, CalendarIntervalType, CharType, DataType, DateType, DayTimeIntervalType, DecimalType, DoubleType, FloatType, GeographyType, GeometryType, IntegerType, LongType, MapType, MetadataBuilder, NullType, ShortType, StringType, StructField, StructType, TimestampNTZType, TimestampType, TimeType, VarcharType, VariantType, YearMonthIntervalType}
 
@@ -60,10 +60,50 @@ import org.apache.spark.sql.types.{ArrayType, BinaryType, BooleanType, ByteType,
  *
  * @see
  *   [[org.apache.spark.sql.catalyst.parser.AstBuilder]] for the full SQL statement parser
+ *
+ * ==CRITICAL: Extracting Identifier Names==
+ *
+ * When extracting identifier names from parser contexts, you MUST use the helper methods provided
+ * by this class instead of calling ctx.getText() directly:
+ *
+ *   - '''getIdentifierText(ctx)''': For single identifiers (column names, aliases, window names)
+ *   - '''getIdentifierParts(ctx)''': For qualified identifiers (table names, schema.table)
+ *
+ * '''DO NOT use ctx.getText() or ctx.identifier.getText()''' directly! These methods do not
+ * handle the IDENTIFIER('literal') syntax and will cause incorrect behavior.
+ *
+ * The IDENTIFIER('literal') syntax allows string literals to be used as identifiers at parse time
+ * (e.g., IDENTIFIER('my_col') resolves to the identifier my_col). If you use getText(), you'll
+ * get the raw text "IDENTIFIER('my_col')" instead of "my_col", breaking the feature.
+ *
+ * Example:
+ * {{{
+ *   // WRONG - does not handle IDENTIFIER('literal'):
+ *   val name = ctx.identifier.getText
+ *   SubqueryAlias(ctx.name.getText, plan)
+ *
+ *   // CORRECT - handles both regular identifiers and IDENTIFIER('literal'):
+ *   val name = getIdentifierText(ctx.identifier)
+ *   SubqueryAlias(getIdentifierText(ctx.name), plan)
+ * }}}
  */
-class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
+class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with DataTypeErrorsBase {
   protected def typedVisit[T](ctx: ParseTree): T = {
     ctx.accept(this).asInstanceOf[T]
+  }
+
+  /**
+   * Public helper to extract identifier parts from a context. This is exposed as public to allow
+   * utility classes like ParserUtils to reuse the identifier resolution logic without duplicating
+   * code.
+   *
+   * @param ctx
+   *   The parser context containing the identifier.
+   * @return
+   *   Sequence of identifier parts.
+   */
+  def extractIdentifierParts(ctx: ParserRuleContext): Seq[String] = {
+    getIdentifierParts(ctx)
   }
 
   override def visitSingleDataType(ctx: SingleDataTypeContext): DataType = withOrigin(ctx) {
@@ -161,11 +201,89 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
   }
 
   /**
-   * Create a multi-part identifier.
+   * Parse a string into a multi-part identifier. Subclasses should override this method to
+   * provide proper multi-part identifier parsing with access to a full SQL parser.
+   *
+   * For example, in AstBuilder, this would parse "`catalog`.`schema`.`table`" into Seq("catalog",
+   * "schema", "table").
+   *
+   * This method is only called when parsing IDENTIFIER('literal') where the literal contains a
+   * qualified identifier (e.g., IDENTIFIER('schema.table')). Since DataTypeAstBuilder only parses
+   * data types (not full SQL with qualified table names), this should never be called in
+   * practice. The base implementation throws an error to catch unexpected usage.
+   *
+   * @param identifier
+   *   The identifier string to parse, potentially containing dots and backticks.
+   * @return
+   *   Sequence of identifier parts.
+   */
+  protected def parseMultipartIdentifier(identifier: String): Seq[String] = {
+    throw SparkException.internalError(
+      "parseMultipartIdentifier must be overridden by subclasses. " +
+        s"Attempted to parse: $identifier")
+  }
+
+  /**
+   * Get the identifier parts from a context, handling both regular identifiers and
+   * IDENTIFIER('literal'). This method is used to support identifier-lite syntax where
+   * IDENTIFIER('string') is folded at parse time. For qualified identifiers like
+   * IDENTIFIER('`catalog`.`schema`'), this will parse the string and return multiple parts.
+   *
+   * Subclasses should override this method to provide actual parsing logic.
+   */
+  protected def getIdentifierParts(ctx: ParserRuleContext): Seq[String] = {
+    ctx match {
+      case idCtx: IdentifierContext =>
+        // identifier can be either strictIdentifier or strictNonReserved.
+        // Recursively process the strictIdentifier.
+        Option(idCtx.strictIdentifier()).map(getIdentifierParts).getOrElse(Seq(ctx.getText))
+
+      case idLitCtx: IdentifierLiteralContext =>
+        // For IDENTIFIER('literal') in strictIdentifier.
+        val literalValue = string(visitStringLit(idLitCtx.stringLit()))
+        // Parse the string to handle qualified identifiers like "`cat`.`schema`".
+        parseMultipartIdentifier(literalValue)
+
+      case errCapture: ErrorCapturingIdentifierContext =>
+        // Regular identifier with errorCapturingIdentifierExtra.
+        // Need to recursively handle identifier which might itself be IDENTIFIER('literal').
+        Option(errCapture.identifier())
+          .flatMap(id => Option(id.strictIdentifier()).map(getIdentifierParts))
+          .getOrElse(Seq(ctx.getText))
+
+      case _ =>
+        // For regular identifiers, just return the text as a single part.
+        Seq(ctx.getText)
+    }
+  }
+
+  /**
+   * Get the text of a SINGLE identifier, handling both regular identifiers and
+   * IDENTIFIER('literal'). This method REQUIRES that the identifier be unqualified (single part
+   * only). If IDENTIFIER('qualified.name') is used where a single identifier is required, this
+   * will error.
+   */
+  protected def getIdentifierText(ctx: ParserRuleContext): String = {
+    val parts = getIdentifierParts(ctx)
+    if (parts.size > 1) {
+      throw new ParseException(
+        errorClass = "IDENTIFIER_TOO_MANY_NAME_PARTS",
+        messageParameters = Map("identifier" -> toSQLId(parts), "limit" -> "1"),
+        ctx)
+    }
+    parts.head
+  }
+
+  /**
+   * Create a multi-part identifier. Handles identifier-lite with qualified identifiers like
+   * IDENTIFIER('`cat`.`schema`').table
    */
   override def visitMultipartIdentifier(ctx: MultipartIdentifierContext): Seq[String] =
     withOrigin(ctx) {
-      ctx.parts.asScala.map(_.getText).toSeq
+      // Each part is an errorCapturingIdentifier (which wraps identifier).
+      // getIdentifierParts recursively handles IDENTIFIER('literal') syntax through
+      // identifier -> strictIdentifier -> identifierLiteral.
+      ctx.parts.asScala.flatMap(getIdentifierParts).toSeq
     }
 
   /**
@@ -351,7 +469,7 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
     }
 
     StructField(
-      name = colName.getText,
+      name = getIdentifierText(colName),
       dataType = typedVisit[DataType](ctx.dataType),
       nullable = NULL == null,
       metadata = builder.build())

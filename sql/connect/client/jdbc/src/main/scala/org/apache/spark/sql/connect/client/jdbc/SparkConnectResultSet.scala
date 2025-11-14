@@ -20,12 +20,14 @@ package org.apache.spark.sql.connect.client.jdbc
 import java.io.{InputStream, Reader}
 import java.net.URL
 import java.sql.{Array => JdbcArray, _}
+import java.time.LocalTime
 import java.util
 import java.util.Calendar
 
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.connect.client.SparkResult
 import org.apache.spark.sql.connect.client.jdbc.util.JdbcErrorUtils
+import org.apache.spark.sql.types.{TimestampNTZType, TimestampType}
 
 class SparkConnectResultSet(
     sparkResult: SparkResult[Row],
@@ -147,11 +149,41 @@ class SparkConnectResultSet(
     getColumnValue(columnIndex, null: Date) { idx => currentRow.getDate(idx) }
   }
 
-  override def getTime(columnIndex: Int): Time =
-    throw new SQLFeatureNotSupportedException
+  override def getTime(columnIndex: Int): Time = {
+    getColumnValue(columnIndex, null: Time) { idx =>
+      val localTime = currentRow.get(idx).asInstanceOf[LocalTime]
+      // Convert LocalTime to milliseconds since midnight to preserve fractional seconds.
+      // Note: java.sql.Time can only store up to millisecond precision (3 digits).
+      // For TIME types with higher precision (TIME(4-9)), microseconds/nanoseconds are truncated.
+      // If user needs full precision,
+      // should use: getObject(columnIndex, classOf[java.time.LocalTime])
+      val millisSinceMidnight =
+        java.time.temporal.ChronoUnit.MILLIS.between(LocalTime.MIDNIGHT, localTime)
+      new Time(millisSinceMidnight)
+    }
+  }
 
-  override def getTimestamp(columnIndex: Int): Timestamp =
-    throw new SQLFeatureNotSupportedException
+  override def getTimestamp(columnIndex: Int): Timestamp = {
+    getColumnValue(columnIndex, null: Timestamp) { idx =>
+      val value = currentRow.get(idx)
+      if (value == null) {
+        null
+      } else {
+        sparkResult.schema.fields(idx).dataType match {
+          case TimestampNTZType =>
+            // TIMESTAMP_NTZ is represented as LocalDateTime
+            Timestamp.valueOf(value.asInstanceOf[java.time.LocalDateTime])
+          case TimestampType =>
+            // TIMESTAMP is represented as java.sql.Timestamp
+            value.asInstanceOf[Timestamp]
+          case other =>
+            throw new SQLException(
+              s"Cannot call getTimestamp() on column of type $other. " +
+                s"Expected TIMESTAMP or TIMESTAMP_NTZ.")
+        }
+      }
+    }
+  }
 
   override def getAsciiStream(columnIndex: Int): InputStream =
     throw new SQLFeatureNotSupportedException
@@ -196,10 +228,10 @@ class SparkConnectResultSet(
     getDate(findColumn(columnLabel))
 
   override def getTime(columnLabel: String): Time =
-    throw new SQLFeatureNotSupportedException
+    getTime(findColumn(columnLabel))
 
   override def getTimestamp(columnLabel: String): Timestamp =
-    throw new SQLFeatureNotSupportedException
+    getTimestamp(findColumn(columnLabel))
 
   override def getAsciiStream(columnLabel: String): InputStream =
     throw new SQLFeatureNotSupportedException
@@ -500,35 +532,66 @@ class SparkConnectResultSet(
   override def getArray(columnLabel: String): JdbcArray =
     throw new SQLFeatureNotSupportedException
 
+  /**
+   * Gets the value of the designated column in the current row as a java.sql.Date object.
+   * The Calendar parameter is ignored for Date type since it is not timezone-aware.
+   *
+   * @param columnIndex the first column is 1, the second is 2, ...
+   * @param cal the Calendar to use in constructing the date (ignored for Date type)
+   * @return the column value; if the value is SQL NULL, the value returned is null
+   */
   override def getDate(columnIndex: Int, cal: Calendar): Date = {
-    val date = getDate(columnIndex)
-    if (date == null || cal == null) {
-      return date
-    }
-
-    val targetCalendar = cal.clone().asInstanceOf[Calendar]
-    targetCalendar.setTime(date)
-    targetCalendar.set(Calendar.HOUR_OF_DAY, 0)
-    targetCalendar.set(Calendar.MINUTE, 0)
-    targetCalendar.set(Calendar.SECOND, 0)
-    targetCalendar.set(Calendar.MILLISECOND, 0)
-    new Date(targetCalendar.getTimeInMillis)
+    getDate(columnIndex)
   }
 
+  /**
+   * Gets the value of the designated column in the current row as a java.sql.Date object.
+   * The Calendar parameter is ignored for Date type since it is not timezone-aware.
+   *
+   * @param columnLabel the label for the column specified with the SQL AS clause
+   * @param cal the Calendar to use in constructing the date (ignored for Date type)
+   * @return the column value; if the value is SQL NULL, the value returned is null
+   */
   override def getDate(columnLabel: String, cal: Calendar): Date =
-    getDate(findColumn(columnLabel), cal)
+    getDate(findColumn(columnLabel))
 
-  override def getTime(columnIndex: Int, cal: Calendar): Time =
-    throw new SQLFeatureNotSupportedException
+  /**
+   * Gets the value of the designated column in the current row as a java.sql.Time object.
+   * The Calendar parameter is ignored for Time type since it is not timezone-aware.
+   *
+   * @param columnIndex the first column is 1, the second is 2, ...
+   * @param cal the Calendar to use in constructing the time (ignored for Time type)
+   * @return the column value; if the value is SQL NULL, the value returned is null
+   */
+  override def getTime(columnIndex: Int, cal: Calendar): Time = {
+    getTime(columnIndex)
+  }
 
+  /**
+   * Gets the value of the designated column in the current row as a java.sql.Time object.
+   * The Calendar parameter is ignored for Time type since it is not timezone-aware.
+   *
+   * @param columnLabel the label for the column specified with the SQL AS clause
+   * @param cal the Calendar to use in constructing the time (ignored for Time type)
+   * @return the column value; if the value is SQL NULL, the value returned is null
+   */
   override def getTime(columnLabel: String, cal: Calendar): Time =
-    throw new SQLFeatureNotSupportedException
+    getTime(findColumn(columnLabel))
 
-  override def getTimestamp(columnIndex: Int, cal: Calendar): Timestamp =
-    throw new SQLFeatureNotSupportedException
+  /**
+   * Note: The Calendar parameter is ignored. Spark Connect handles timezone conversions
+   * server-side to avoid client/server timezone inconsistencies.
+   */
+  override def getTimestamp(columnIndex: Int, cal: Calendar): Timestamp = {
+    getTimestamp(columnIndex)
+  }
 
+  /**
+   * Note: The Calendar parameter is ignored. Spark Connect handles timezone conversions
+   * server-side to avoid client/server timezone inconsistencies.
+   */
   override def getTimestamp(columnLabel: String, cal: Calendar): Timestamp =
-    throw new SQLFeatureNotSupportedException
+    getTimestamp(findColumn(columnLabel), cal)
 
   override def getURL(columnIndex: Int): URL =
     throw new SQLFeatureNotSupportedException

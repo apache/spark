@@ -316,15 +316,28 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
             return self._jdf.showString(n, int_truncate, vertical)
 
     def __repr__(self) -> str:
-        if not self._support_repr_html and self.sparkSession._jconf.isReplEagerEvalEnabled():
-            vertical = False
-            return self._jdf.showString(
-                self.sparkSession._jconf.replEagerEvalMaxNumRows(),
-                self.sparkSession._jconf.replEagerEvalTruncate(),
-                vertical,
+        if not self._support_repr_html:
+            (
+                isReplEagerEvalEnabled,
+                replEagerEvalMaxNumRows,
+                replEagerEvalTruncate,
+            ) = self.sparkSession._jconf.getConfs(
+                [
+                    "spark.sql.repl.eagerEval.enabled",
+                    "spark.sql.repl.eagerEval.maxNumRows",
+                    "spark.sql.repl.eagerEval.truncate",
+                ]
             )
-        else:
-            return "DataFrame[%s]" % (", ".join("%s: %s" % c for c in self.dtypes))
+
+            if isReplEagerEvalEnabled == "true":
+                vertical = False
+                return self._jdf.showString(
+                    int(replEagerEvalMaxNumRows),
+                    int(replEagerEvalTruncate),
+                    vertical,
+                )
+
+        return "DataFrame[%s]" % (", ".join("%s: %s" % c for c in self.dtypes))
 
     def _repr_html_(self) -> Optional[str]:
         """Returns a :class:`DataFrame` with html code when you enabled eager evaluation
@@ -333,10 +346,23 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
         """
         if not self._support_repr_html:
             self._support_repr_html = True
-        if self.sparkSession._jconf.isReplEagerEvalEnabled():
+
+        (
+            isReplEagerEvalEnabled,
+            replEagerEvalMaxNumRows,
+            replEagerEvalTruncate,
+        ) = self.sparkSession._jconf.getConfs(
+            [
+                "spark.sql.repl.eagerEval.enabled",
+                "spark.sql.repl.eagerEval.maxNumRows",
+                "spark.sql.repl.eagerEval.truncate",
+            ]
+        )
+
+        if isReplEagerEvalEnabled == "true":
             return self._jdf.htmlString(
-                self.sparkSession._jconf.replEagerEvalMaxNumRows(),
-                self.sparkSession._jconf.replEagerEvalTruncate(),
+                int(replEagerEvalMaxNumRows),
+                int(replEagerEvalTruncate),
             )
         else:
             return None

@@ -42,6 +42,7 @@ import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.execution.adaptive.{AdaptiveExecutionContext, InsertAdaptiveSparkPlan}
 import org.apache.spark.sql.execution.bucketing.{CoalesceBucketsInJoin, DisableUnnecessaryBucketedScan}
+import org.apache.spark.sql.execution.datasources.v2.V2TableRefreshUtil
 import org.apache.spark.sql.execution.dynamicpruning.PlanDynamicPruningFilters
 import org.apache.spark.sql.execution.exchange.EnsureRequirements
 import org.apache.spark.sql.execution.reuse.ReuseExchangeAndSubquery
@@ -203,8 +204,16 @@ class QueryExecution(
     }
   }
 
+  // there may be delay between analysis and subsequent phases
+  // therefore, refresh captured table versions to reflect latest data
+  private val lazyTableVersionsRefreshed = LazyTry {
+    V2TableRefreshUtil.refreshVersions(commandExecuted)
+  }
+
+  private[sql] def tableVersionsRefreshed: LogicalPlan = lazyTableVersionsRefreshed.get
+
   private val lazyNormalized = LazyTry {
-    QueryExecution.normalize(sparkSession, commandExecuted, Some(tracker))
+    QueryExecution.normalize(sparkSession, tableVersionsRefreshed, Some(tracker))
   }
 
   // The plan that has been normalized by custom rules, so that it's more likely to hit cache.

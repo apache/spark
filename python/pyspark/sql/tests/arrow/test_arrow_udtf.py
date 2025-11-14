@@ -1721,20 +1721,20 @@ class ArrowUDTFTestsMixin:
                 [Row(id=i, doubled=i * 2) for i in range(9)],
             )
 
-        logs = self.spark.table("system.session.python_worker_logs")
+            logs = self.spark.tvf.python_worker_logs()
 
-        assertDataFrameEqual(
-            logs.select("level", "msg", "context", "logger"),
-            [
-                Row(
-                    level="WARNING",
-                    msg=f"arrow udtf: {dict(id=lst)}",
-                    context={"class_name": "TestArrowUDTFWithLogging", "func_name": "eval"},
-                    logger="test_arrow_udtf",
-                )
-                for lst in [[0, 1, 2], [3], [4, 5, 6], [7, 8]]
-            ],
-        )
+            assertDataFrameEqual(
+                logs.select("level", "msg", "context", "logger"),
+                [
+                    Row(
+                        level="WARNING",
+                        msg=f"arrow udtf: {dict(id=lst)}",
+                        context={"class_name": "TestArrowUDTFWithLogging", "func_name": "eval"},
+                        logger="test_arrow_udtf",
+                    )
+                    for lst in [[0, 1, 2], [3], [4, 5, 6], [7, 8]]
+                ],
+            )
 
 
 class ArrowUDTFTests(ArrowUDTFTestsMixin, ReusedSQLTestCase):

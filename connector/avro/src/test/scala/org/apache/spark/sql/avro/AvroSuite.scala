@@ -1423,6 +1423,61 @@ abstract class AvroSuite
     }
   }
 
+  test("to_avro with reordered fields and nullable target succeeds") {
+    // Test that when Catalyst and Avro field orders differ, null values
+    // are correctly validated against the mapped Avro field's nullability
+    val avroSchema = """{
+      "type": "record",
+      "name": "ReorderedRecord",
+      "fields": [
+        {"name": "a", "type": ["null", "string"]},
+        {"name": "b", "type": "string"}
+      ]
+    }"""
+
+    // Catalyst has fields in order [b, a], Avro has [a, b]
+    // Pass null for 'a' which is nullable in Avro - should succeed
+    val df = Seq(("B", null.asInstanceOf[String])).toDF("b", "a")
+      .select(struct($"b", $"a").as("s"))
+    val result = df.select(avro.functions.to_avro($"s", avroSchema).as("avro"))
+
+    // Should succeed without throwing AVRO_CANNOT_WRITE_NULL_FIELD
+    val collected = result.collect()
+    assert(collected.length == 1)
+
+    // Verify data correctness by round-tripping through from_avro
+    val roundTrip = result.select(avro.functions.from_avro($"avro", avroSchema).as("s"))
+    // final field order should be [a, b] as per avro schema
+    checkAnswer(roundTrip, Row(Row(null, "B")))
+  }
+
+  test("to_avro with reordered fields fails with correct field name") {
+    // Test that when Catalyst and Avro field orders differ and we try to write
+    // null to a non-nullable field, the error message references the correct field name
+    val avroSchema = """{
+      "type": "record",
+      "name": "ReorderedRecord",
+      "fields": [
+        {"name": "a", "type": ["null", "string"]},
+        {"name": "b", "type": "string"}
+      ]
+    }"""
+
+    // Catalyst has fields in order [b, a], Avro has [a, b]
+    // Pass null for 'b' which is non-nullable in Avro - should fail with correct field name 'b'
+    val df = Seq((null.asInstanceOf[String], "A")).toDF("b", "a")
+      .select(struct($"b", $"a").as("s"))
+
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        df.select(avro.functions.to_avro($"s", avroSchema)).collect()
+      },
+      condition = "AVRO_CANNOT_WRITE_NULL_FIELD",
+      parameters = Map(
+        "name" -> "`b`",
+        "dataType" -> "\"string\""))
+  }
+
   test("support user provided avro schema for writing nullable fixed type") {
     withTempPath { tempDir =>
       val avroSchema =

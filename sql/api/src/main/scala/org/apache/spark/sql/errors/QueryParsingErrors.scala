@@ -477,7 +477,7 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
       ctx)
   }
 
-  def showFunctionsUnsupportedError(identifier: String, ctx: IdentifierContext): Throwable = {
+  def showFunctionsUnsupportedError(identifier: String, ctx: ParserRuleContext): Throwable = {
     new ParseException(
       errorClass = "INVALID_SQL_SYNTAX.SHOW_FUNCTIONS_INVALID_SCOPE",
       messageParameters = Map("scope" -> toSQLId(identifier)),

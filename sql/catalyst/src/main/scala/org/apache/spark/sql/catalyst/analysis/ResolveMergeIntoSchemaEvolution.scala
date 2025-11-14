@@ -48,9 +48,7 @@ object ResolveMergeIntoSchemaEvolution extends Rule[LogicalPlan] {
             val newTarget = performSchemaEvolution(r, referencedSourceSchema, changes)
             val oldTargetOutput = m.targetTable.output
             val newTargetOutput = newTarget.output
-            val attributeMapping = oldTargetOutput.map(
-              oldAttr => (oldAttr, newTargetOutput.find(_.name == oldAttr.name).getOrElse(oldAttr))
-            )
+            val attributeMapping = oldTargetOutput.zip(newTargetOutput)
             newTarget -> attributeMapping
         }
       }

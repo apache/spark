@@ -396,20 +396,20 @@ class CogroupedMapInArrowTestsMixin:
                 + [Row(id=2, v1=20, v2=200)],
             )
 
-        logs = self.spark.table("system.session.python_worker_logs")
+            logs = self.spark.tvf.python_worker_logs()
 
-        assertDataFrameEqual(
-            logs.select("level", "msg", "context", "logger"),
-            [
-                Row(
-                    level="WARNING",
-                    msg=f"arrow cogrouped map: {dict(v1=v1, v2=v2)}",
-                    context={"func_name": func_with_logging.__name__},
-                    logger="test_arrow_cogrouped_map",
-                )
-                for v1, v2 in [([10, 30], [100, 300]), ([20], [200])]
-            ],
-        )
+            assertDataFrameEqual(
+                logs.select("level", "msg", "context", "logger"),
+                [
+                    Row(
+                        level="WARNING",
+                        msg=f"arrow cogrouped map: {dict(v1=v1, v2=v2)}",
+                        context={"func_name": func_with_logging.__name__},
+                        logger="test_arrow_cogrouped_map",
+                    )
+                    for v1, v2 in [([10, 30], [100, 300]), ([20], [200])]
+                ],
+            )
 
 
 class CogroupedMapInArrowTests(CogroupedMapInArrowTestsMixin, ReusedSQLTestCase):

@@ -834,20 +834,20 @@ class WindowArrowUDFTestsMixin:
                 ],
             )
 
-        logs = self.spark.table("system.session.python_worker_logs")
+            logs = self.spark.tvf.python_worker_logs()
 
-        assertDataFrameEqual(
-            logs.select("level", "msg", "context", "logger"),
-            [
-                Row(
-                    level="WARNING",
-                    msg=f"window arrow udf: {lst}",
-                    context={"func_name": my_window_arrow_udf.__name__},
-                    logger="test_window_arrow",
-                )
-                for lst in [[1.0], [1.0, 2.0], [3.0], [3.0, 5.0], [3.0, 5.0, 10.0]]
-            ],
-        )
+            assertDataFrameEqual(
+                logs.select("level", "msg", "context", "logger"),
+                [
+                    Row(
+                        level="WARNING",
+                        msg=f"window arrow udf: {lst}",
+                        context={"func_name": my_window_arrow_udf.__name__},
+                        logger="test_window_arrow",
+                    )
+                    for lst in [[1.0], [1.0, 2.0], [3.0], [3.0, 5.0], [3.0, 5.0, 10.0]]
+                ],
+            )
 
 
 class WindowArrowUDFTests(WindowArrowUDFTestsMixin, ReusedSQLTestCase):

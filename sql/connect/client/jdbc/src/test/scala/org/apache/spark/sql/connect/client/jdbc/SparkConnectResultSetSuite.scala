@@ -122,4 +122,68 @@ class SparkConnectResultSetSuite extends ConnectFunSuite with RemoteSparkSession
       assert(rs.isAfterLast)
     }
   }
+
+  test("getTimestamp with multiple columns, rows, and types") {
+    withExecuteQuery(
+      """SELECT ts_tz, ts_ntz, id FROM VALUES
+        |  (timestamp '2025-01-15 10:30:45.123456', timestamp_ntz '2025-06-20 14:22:33.789012', 1),
+        |  (null, timestamp_ntz '2025-03-01 18:30:45.456789', 2),
+        |  (timestamp '2025-10-31 23:59:59.999999', null, 3)
+        |  AS t(ts_tz, ts_ntz, id)
+        |""".stripMargin) { rs =>
+
+      // Test findColumn
+      assert(rs.findColumn("ts_tz") === 1)
+      assert(rs.findColumn("ts_ntz") === 2)
+      assert(rs.findColumn("id") === 3)
+
+      // Verify metadata
+      val metaData = rs.getMetaData
+      assert(metaData.getColumnCount === 3)
+      assert(metaData.getColumnTypeName(1) === "TIMESTAMP")
+      assert(metaData.getColumnTypeName(2) === "TIMESTAMP_NTZ")
+
+      // Row 1: Both timestamps have values
+      assert(rs.next())
+      assert(rs.getRow === 1)
+
+      val ts1 = rs.getTimestamp(1)
+      assert(ts1 !== null)
+      assert(ts1 === java.sql.Timestamp.valueOf("2025-01-15 10:30:45.123456"))
+      assert(!rs.wasNull)
+
+      val tsNtz1 = rs.getTimestamp("ts_ntz")
+      assert(tsNtz1 !== null)
+      assert(tsNtz1 === java.sql.Timestamp.valueOf("2025-06-20 14:22:33.789012"))
+      assert(!rs.wasNull)
+
+      // Row 2: TIMESTAMP is null, TIMESTAMP_NTZ has value
+      assert(rs.next())
+      assert(rs.getRow === 2)
+
+      val ts2 = rs.getTimestamp(1)
+      assert(ts2 === null)
+      assert(rs.wasNull)
+
+      val tsNtz2 = rs.getTimestamp(2)
+      assert(tsNtz2 !== null)
+      assert(tsNtz2 === java.sql.Timestamp.valueOf("2025-03-01 18:30:45.456789"))
+      assert(!rs.wasNull)
+
+      // Row 3: TIMESTAMP has value, TIMESTAMP_NTZ is null
+      assert(rs.next())
+      assert(rs.getRow === 3)
+
+      val ts3 = rs.getTimestamp("ts_tz")
+      assert(ts3 !== null)
+      assert(ts3 === java.sql.Timestamp.valueOf("2025-10-31 23:59:59.999999"))
+      assert(!rs.wasNull)
+
+      val tsNtz3 = rs.getTimestamp(2)
+      assert(tsNtz3 === null)
+      assert(rs.wasNull)
+
+      assert(!rs.next())
+    }
+  }
 }

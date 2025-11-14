@@ -187,6 +187,9 @@ class SparkConnectClientSuite extends ConnectFunSuite with BeforeAndAfterEach {
       .builder()
       .connectionString(s"sc://localhost:${server.getPort}")
       .build()
+    // Disable plan compression to make sure there is only one RPC request in client.analyze,
+    // so the interceptor can capture the initial header.
+    client.setPlanCompressionOptions(None)
 
     val session = SparkSession.builder().client(client).create()
     val df = session.range(10)
@@ -521,6 +524,9 @@ class SparkConnectClientSuite extends ConnectFunSuite with BeforeAndAfterEach {
       .connectionString(s"sc://localhost:${server.getPort}")
       .enableReattachableExecute()
       .build()
+    // Disable plan compression to make sure there is only one RPC request in client.analyze,
+    // so the interceptor can capture the initial header.
+    client.setPlanCompressionOptions(None)
 
     val plan = buildPlan("select * from range(10000000)")
     val dummyUUID = "10a4c38e-7e87-40ee-9d6f-60ff0751e63b"
@@ -533,6 +539,87 @@ class SparkConnectClientSuite extends ConnectFunSuite with BeforeAndAfterEach {
       assert(resp.getOperationId == dummyUUID)
     }
   }
+
+  test("Plan compression works correctly for execution") {
+    startDummyServer(0)
+    client = SparkConnectClient
+      .builder()
+      .connectionString(s"sc://localhost:${server.getPort}")
+      .enableReattachableExecute()
+      .build()
+    // Set plan compression options for testing
+    client.setPlanCompressionOptions(Some(PlanCompressionOptions(1000, "ZSTD")))
+
+    // Small plan should not be compressed
+    val plan = buildPlan("select * from range(10)")
+    val iter = client.execute(plan)
+    val reattachableIter =
+      ExecutePlanResponseReattachableIterator.fromIterator(iter)
+    while (reattachableIter.hasNext) {
+      reattachableIter.next()
+    }
+    assert(service.getAndClearLatestInputPlan().hasRoot)
+
+    // Large plan should be compressed
+    val plan2 = buildPlan(s"select ${"Apache Spark" * 10000} as value")
+    val iter2 = client.execute(plan2)
+    val reattachableIter2 =
+      ExecutePlanResponseReattachableIterator.fromIterator(iter2)
+    while (reattachableIter2.hasNext) {
+      reattachableIter2.next()
+    }
+    assert(service.getAndClearLatestInputPlan().hasCompressedOperation)
+  }
+
+  test("Plan compression works correctly for analysis") {
+    startDummyServer(0)
+    client = SparkConnectClient
+      .builder()
+      .connectionString(s"sc://localhost:${server.getPort}")
+      .enableReattachableExecute()
+      .build()
+    // Set plan compression options for testing
+    client.setPlanCompressionOptions(Some(PlanCompressionOptions(1000, "ZSTD")))
+
+    // Small plan should not be compressed
+    val plan = buildPlan("select * from range(10)")
+    client.analyze(proto.AnalyzePlanRequest.AnalyzeCase.SCHEMA, Some(plan))
+    assert(service.getAndClearLatestInputPlan().hasRoot)
+
+    // Large plan should be compressed
+    val plan2 = buildPlan(s"select ${"Apache Spark" * 10000} as value")
+    client.analyze(proto.AnalyzePlanRequest.AnalyzeCase.SCHEMA, Some(plan2))
+    assert(service.getAndClearLatestInputPlan().hasCompressedOperation)
+  }
+
+  test("Plan compression will be disabled if the configs are not defined on the server") {
+    startDummyServer(0)
+    client = SparkConnectClient
+      .builder()
+      .connectionString(s"sc://localhost:${server.getPort}")
+      .enableReattachableExecute()
+      .build()
+
+    service.setErrorToThrowOnConfig(
+      "spark.connect.session.planCompression.defaultAlgorithm",
+      new StatusRuntimeException(Status.INTERNAL.withDescription("SQL_CONF_NOT_FOUND")))
+
+    // Execute a few queries to make sure the client fetches the configs only once.
+    (1 to 3).foreach { _ =>
+      val plan = buildPlan(s"select ${"Apache Spark" * 10000} as value")
+      val iter = client.execute(plan)
+      val reattachableIter =
+        ExecutePlanResponseReattachableIterator.fromIterator(iter)
+      while (reattachableIter.hasNext) {
+        reattachableIter.next()
+      }
+      assert(service.getAndClearLatestInputPlan().hasRoot)
+    }
+    // The plan compression options should be empty.
+    assert(client.getPlanCompressionOptions.isEmpty)
+    // The client should try to fetch the config only once.
+    assert(service.getAndClearLatestConfigRequests().size == 1)
+  }
 }
 
 class DummySparkConnectService() extends SparkConnectServiceGrpc.SparkConnectServiceImplBase {
@@ -540,8 +627,16 @@ class DummySparkConnectService() extends SparkConnectServiceGrpc.SparkConnectSer
   private var inputPlan: proto.Plan = _
   private val inputArtifactRequests: mutable.ListBuffer[AddArtifactsRequest] =
     mutable.ListBuffer.empty
+  private val inputConfigRequests = mutable.ListBuffer.empty[proto.ConfigRequest]
+  private val sparkConfigs = mutable.Map.empty[String, String]
 
   var errorToThrowOnExecute: Option[Throwable] = None
+
+  private var errorToThrowOnConfig: Map[String, Throwable] = Map.empty
+
+  private[sql] def setErrorToThrowOnConfig(key: String, error: Throwable): Unit = synchronized {
+    errorToThrowOnConfig = errorToThrowOnConfig + (key -> error)
+  }
 
   private[sql] def getAndClearLatestInputPlan(): proto.Plan = synchronized {
     val plan = inputPlan
@@ -553,6 +648,13 @@ class DummySparkConnectService() extends SparkConnectServiceGrpc.SparkConnectSer
     synchronized {
       val requests = inputArtifactRequests.toSeq
       inputArtifactRequests.clear()
+      requests
+    }
+
+  private[sql] def getAndClearLatestConfigRequests(): Seq[proto.ConfigRequest] =
+    synchronized {
+      val requests = inputConfigRequests.clone().toSeq
+      inputConfigRequests.clear()
       requests
     }
 
@@ -663,6 +765,38 @@ class DummySparkConnectService() extends SparkConnectServiceGrpc.SparkConnectSer
       builder.putStatuses(name, status.setExists(exists).build())
     }
     responseObserver.onNext(builder.build())
+    responseObserver.onCompleted()
+  }
+
+  override def config(
+      request: proto.ConfigRequest,
+      responseObserver: StreamObserver[proto.ConfigResponse]): Unit = {
+    inputConfigRequests.synchronized {
+      inputConfigRequests.append(request)
+    }
+    require(
+      request.getOperation.hasGetOption,
+      "Only GetOption is supported. Other operations " +
+        "can be implemented by following the same procedure below.")
+
+    val responseBuilder = proto.ConfigResponse.newBuilder().setSessionId(request.getSessionId)
+    request.getOperation.getGetOption.getKeysList.asScala.iterator.foreach { key =>
+      if (errorToThrowOnConfig.contains(key)) {
+        val error = errorToThrowOnConfig(key)
+        responseObserver.onError(error)
+        return
+      }
+
+      val kvBuilder = proto.KeyValue.newBuilder()
+      synchronized {
+        sparkConfigs.get(key).foreach { value =>
+          kvBuilder.setKey(key)
+          kvBuilder.setValue(value)
+        }
+      }
+      responseBuilder.addPairs(kvBuilder.build())
+    }
+    responseObserver.onNext(responseBuilder.build())
     responseObserver.onCompleted()
   }
 

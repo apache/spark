@@ -291,12 +291,12 @@ private[sql] class AvroSerializer(
       var i = 0
       while (i < numFields) {
         if (row.isNullAt(i)) {
-          if (!isSchemaNullable(i)) {
+          if (!isSchemaNullable(avroIndices(i))) {
             throw new SparkRuntimeException(
               errorClass = "AVRO_CANNOT_WRITE_NULL_FIELD",
               messageParameters = Map(
-                "name" -> toSQLId(avroFields.get(i).name),
-                "dataType" -> avroFields.get(i).schema().toString))
+                "name" -> toSQLId(avroFields.get(avroIndices(i)).name),
+                "dataType" -> avroFields.get(avroIndices(i)).schema().toString))
           }
           result.put(avroIndices(i), null)
         } else {

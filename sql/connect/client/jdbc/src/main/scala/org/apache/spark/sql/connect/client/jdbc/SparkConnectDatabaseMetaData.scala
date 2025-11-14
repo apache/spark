@@ -18,6 +18,7 @@
 package org.apache.spark.sql.connect.client.jdbc
 
 import java.sql.{Array => _, _}
+import java.sql.DatabaseMetaData._
 
 import org.apache.spark.SparkBuildInfo.{spark_version => SPARK_VERSION}
 import org.apache.spark.SparkThrowable
@@ -25,6 +26,7 @@ import org.apache.spark.sql.Column
 import org.apache.spark.sql.catalyst.util.QuotingUtils._
 import org.apache.spark.sql.connect
 import org.apache.spark.sql.connect.client.jdbc.SparkConnectDatabaseMetaData._
+import org.apache.spark.sql.connect.client.jdbc.util.JdbcTypeUtils
 import org.apache.spark.sql.functions._
 import org.apache.spark.util.VersionUtils
 
@@ -479,8 +481,91 @@ class SparkConnectDatabaseMetaData(conn: SparkConnectConnection) extends Databas
       catalog: String,
       schemaPattern: String,
       tableNamePattern: String,
-      columnNamePattern: String): ResultSet =
-    throw new SQLFeatureNotSupportedException
+      columnNamePattern: String): ResultSet = {
+    conn.checkOpen()
+
+    val columnNameFilterExpr = if (isNullOrWildcard(columnNamePattern)) {
+      lit(true)
+    } else {
+      $"COLUMN_NAME".like(columnNamePattern)
+    }
+
+    val emptyDf = conn.spark.emptyDataFrame
+      .withColumn("TABLE_CAT", lit(""))
+      .withColumn("TABLE_SCHEM", lit(""))
+      .withColumn("TABLE_NAME", lit(""))
+      .withColumn("COLUMN_NAME", lit(""))
+      .withColumn("DATA_TYPE", lit(0))
+      .withColumn("TYPE_NAME", lit(""))
+      .withColumn("COLUMN_SIZE", lit(0))
+      .withColumn("BUFFER_LENGTH", lit(0))
+      .withColumn("DECIMAL_DIGITS", lit(0))
+      .withColumn("NUM_PREC_RADIX", lit(0))
+      .withColumn("NULLABLE", lit(0))
+      .withColumn("REMARKS", lit(""))
+      .withColumn("COLUMN_DEF", lit(""))
+      .withColumn("SQL_DATA_TYPE", lit(0))
+      .withColumn("SQL_DATETIME_SUB", lit(0))
+      .withColumn("CHAR_OCTET_LENGTH", lit(0))
+      .withColumn("ORDINAL_POSITION", lit(0))
+      .withColumn("IS_NULLABLE", lit(""))
+      .withColumn("SCOPE_CATALOG", lit(""))
+      .withColumn("SCOPE_SCHEMA", lit(""))
+      .withColumn("SCOPE_TABLE", lit(""))
+      .withColumn("SOURCE_DATA_TYPE", lit(0.toShort))
+      .withColumn("IS_AUTOINCREMENT", lit(""))
+      .withColumn("IS_GENERATEDCOLUMN", lit(""))
+
+    val catalogSchemaTables =
+      getTablesDataFrame(catalog, schemaPattern, tableNamePattern)
+        .select("TABLE_CAT", "TABLE_SCHEM", "TABLE_NAME")
+        .collect().map { row => (row.getString(0), row.getString(1), row.getString(2)) }
+
+    val df = catalogSchemaTables.map { case (catalog, schema, table) =>
+      val columns = conn.spark.table(quoteNameParts(Seq(catalog, schema, table)))
+        .schema.zipWithIndex.map { case (field, i) =>
+          (
+            field.name, // COLUMN_NAME
+            JdbcTypeUtils.getColumnType(field), // DATA_TYPE
+            field.dataType.sql, // TYPE_NAME
+            JdbcTypeUtils.getDisplaySize(field), // COLUMN_SIZE
+            JdbcTypeUtils.getDecimalDigits(field), // DECIMAL_DIGITS
+            JdbcTypeUtils.getNumPrecRadix(field), // NUM_PREC_RADIX
+            if (field.nullable) columnNullable else columnNoNulls, // NULLABLE
+            field.getComment().orNull, // REMARKS
+            field.getCurrentDefaultValue().orNull, // COLUMN_DEF
+            0, // CHAR_OCTET_LENGTH
+            i + 1, // ORDINAL_POSITION
+            if (field.nullable) "YES" else "NO", // IS_NULLABLE
+            "", // IS_AUTOINCREMENT
+            "" // IS_GENERATEDCOLUMN
+          )
+        }
+        columns.toDF("COLUMN_NAME", "DATA_TYPE", "TYPE_NAME", "COLUMN_SIZE", "DECIMAL_DIGITS",
+            "NUM_PREC_RADIX", "NULLABLE", "REMARKS", "COLUMN_DEF", "CHAR_OCTET_LENGTH",
+            "ORDINAL_POSITION", "IS_NULLABLE", "IS_AUTOINCREMENT", "IS_GENERATEDCOLUMN")
+          .filter(columnNameFilterExpr)
+          .withColumn("TABLE_CAT", lit(catalog))
+          .withColumn("TABLE_SCHEM", lit(schema))
+          .withColumn("TABLE_NAME", lit(table))
+          .withColumn("BUFFER_LENGTH", lit(0))
+          .withColumn("SQL_DATA_TYPE", lit(0))
+          .withColumn("SQL_DATETIME_SUB", lit(0))
+          .withColumn("SCOPE_CATALOG", lit(""))
+          .withColumn("SCOPE_SCHEMA", lit(""))
+          .withColumn("SCOPE_TABLE", lit(""))
+          .withColumn("SOURCE_DATA_TYPE", lit(0.toShort))
+          .select("TABLE_CAT", "TABLE_SCHEM", "TABLE_NAME", "COLUMN_NAME", "DATA_TYPE",
+            "TYPE_NAME", "COLUMN_SIZE", "BUFFER_LENGTH", "DECIMAL_DIGITS", "NUM_PREC_RADIX",
+            "NULLABLE", "REMARKS", "COLUMN_DEF", "SQL_DATA_TYPE", "SQL_DATETIME_SUB",
+            "CHAR_OCTET_LENGTH", "ORDINAL_POSITION", "IS_NULLABLE", "SCOPE_CATALOG",
+            "SCOPE_SCHEMA", "SCOPE_TABLE", "SOURCE_DATA_TYPE", "IS_AUTOINCREMENT",
+            "IS_GENERATEDCOLUMN")
+      }.fold(emptyDf) { (l, r) => l.unionAll(r) }
+      .orderBy("TABLE_CAT", "TABLE_SCHEM", "TABLE_NAME", "ORDINAL_POSITION")
+
+    new SparkConnectResultSet(df.collectResult())
+  }
 
   override def getColumnPrivileges(
       catalog: String,

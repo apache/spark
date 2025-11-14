@@ -48,29 +48,22 @@ def generate_llms_txt(docs_path: Path, output_path: Path, version: str = "latest
     content.append("")
     programming_guides = [
         ("Quick Start", f"https://spark.apache.org/docs/{version}/quick-start.html"),
+        ("Spark SQL", f"https://spark.apache.org/docs/{version}/sql-programming-guide.html"),
+        (
+            "PySpark",
+            f"https://spark.apache.org/docs/{version}/api/python/getting_started/index.html",
+        ),
         (
             "RDD Programming Guide",
             f"https://spark.apache.org/docs/{version}/rdd-programming-guide.html",
         ),
         (
-            "Spark SQL, Datasets, and DataFrames",
-            f"https://spark.apache.org/docs/{version}/sql-programming-guide.html",
-        ),
-        (
             "Structured Streaming",
-            f"https://spark.apache.org/docs/{version}/structured-streaming-programming-guide.html",
-        ),
-        (
-            "Spark Streaming",
             f"https://spark.apache.org/docs/{version}/streaming-programming-guide.html",
         ),
         ("MLlib", f"https://spark.apache.org/docs/{version}/ml-guide.html"),
         ("GraphX", f"https://spark.apache.org/docs/{version}/graphx-programming-guide.html"),
         ("SparkR", f"https://spark.apache.org/docs/{version}/sparkr.html"),
-        (
-            "PySpark",
-            f"https://spark.apache.org/docs/{version}/api/python/getting_started/index.html",
-        ),
         (
             "Spark SQL CLI",
             f"https://spark.apache.org/docs/{version}/"
@@ -139,7 +132,6 @@ def generate_llms_txt(docs_path: Path, output_path: Path, version: str = "latest
             f"https://spark.apache.org/docs/{version}/cloud-integration.html",
         ),
         ("Migration Guide", f"https://spark.apache.org/docs/{version}/migration-guide.html"),
-        ("Building Spark", f"https://spark.apache.org/docs/{version}/building-spark.html"),
     ]
     for title, url in other_docs:
         content.append(f"- [{title}]({url})")

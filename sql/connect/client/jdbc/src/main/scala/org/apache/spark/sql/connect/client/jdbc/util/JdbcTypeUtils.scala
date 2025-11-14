@@ -37,7 +37,10 @@ private[jdbc] object JdbcTypeUtils {
     case StringType => Types.VARCHAR
     case _: DecimalType => Types.DECIMAL
     case DateType => Types.DATE
+    case TimestampType => Types.TIMESTAMP
+    case TimestampNTZType => Types.TIMESTAMP
     case BinaryType => Types.BINARY
+    case _: TimeType => Types.TIME
     case other =>
       throw new SQLFeatureNotSupportedException(s"DataType $other is not supported yet.")
   }
@@ -54,7 +57,10 @@ private[jdbc] object JdbcTypeUtils {
     case StringType => classOf[String].getName
     case _: DecimalType => classOf[JBigDecimal].getName
     case DateType => classOf[Date].getName
+    case TimestampType => classOf[Timestamp].getName
+    case TimestampNTZType => classOf[Timestamp].getName
     case BinaryType => classOf[Array[Byte]].getName
+    case _: TimeType => classOf[Time].getName
     case other =>
       throw new SQLFeatureNotSupportedException(s"DataType $other is not supported yet.")
   }
@@ -62,7 +68,8 @@ private[jdbc] object JdbcTypeUtils {
   def isSigned(field: StructField): Boolean = field.dataType match {
     case ByteType | ShortType | IntegerType | LongType | FloatType | DoubleType |
          _: DecimalType => true
-    case NullType | BooleanType | StringType | DateType | BinaryType => false
+    case NullType | BooleanType | StringType | DateType | BinaryType | _: TimeType |
+         TimestampType | TimestampNTZType => false
     case other =>
       throw new SQLFeatureNotSupportedException(s"DataType $other is not supported yet.")
   }
@@ -79,7 +86,14 @@ private[jdbc] object JdbcTypeUtils {
     case StringType => 255
     case DecimalType.Fixed(p, _) => p
     case DateType => 10
+    case TimestampType => 29
+    case TimestampNTZType => 29
     case BinaryType => Int.MaxValue
+    // Returns the Spark SQL TIME type precision, even though java.sql.ResultSet.getTime()
+    // can only retrieve up to millisecond precision (3) due to java.sql.Time limitations.
+    // Users can call getObject(index, classOf[LocalTime]) to access full microsecond
+    // precision when the source type is TIME(4) or higher.
+    case TimeType(precision) => precision
     case other =>
       throw new SQLFeatureNotSupportedException(s"DataType $other is not supported yet.")
   }
@@ -87,8 +101,10 @@ private[jdbc] object JdbcTypeUtils {
   def getScale(field: StructField): Int = field.dataType match {
     case FloatType => 7
     case DoubleType => 15
+    case TimestampType => 6
+    case TimestampNTZType => 6
     case NullType | BooleanType | ByteType | ShortType | IntegerType | LongType | StringType |
-         DateType | BinaryType => 0
+         DateType | BinaryType | _: TimeType => 0
     case DecimalType.Fixed(_, s) => s
     case other =>
       throw new SQLFeatureNotSupportedException(s"DataType $other is not supported yet.")
@@ -104,7 +120,11 @@ private[jdbc] object JdbcTypeUtils {
     case StringType =>
       getPrecision(field)
     case DateType => 10 // length of `YYYY-MM-DD`
+    case TimestampType => 29 // length of `YYYY-MM-DD HH:MM:SS.SSSSSS`
+    case TimestampNTZType => 29 // length of `YYYY-MM-DD HH:MM:SS.SSSSSS`
     case BinaryType => Int.MaxValue
+    case TimeType(precision) if precision > 0 => 8 + 1 + precision // length of `HH:MM:SS.ffffff`
+    case TimeType(_) => 8 // length of `HH:MM:SS`
     // precision + negative sign + leading zero + decimal point, like DECIMAL(5,5) = -0.12345
     case DecimalType.Fixed(p, s) if p == s => p + 3
     // precision + negative sign, like DECIMAL(5,0) = -12345
@@ -113,5 +133,20 @@ private[jdbc] object JdbcTypeUtils {
     case DecimalType.Fixed(p, _) => p + 2
     case other =>
       throw new SQLFeatureNotSupportedException(s"DataType $other is not supported yet.")
+  }
+
+  def getDecimalDigits(field: StructField): Integer = field.dataType match {
+    case BooleanType | _: IntegralType => 0
+    case FloatType => 7
+    case DoubleType => 15
+    case d: DecimalType => d.scale
+    case TimeType(scale) => scale
+    case TimestampType | TimestampNTZType => 6
+    case _ => null
+  }
+
+  def getNumPrecRadix(field: StructField): Integer = field.dataType match {
+    case _: NumericType => 10
+    case _ => null
   }
 }

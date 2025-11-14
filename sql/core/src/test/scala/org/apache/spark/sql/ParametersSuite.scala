@@ -2374,4 +2374,76 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
       expectedStopPos = Some(46) // End of "nonexistent_table" in inner query
     )
   }
+
+  test("detect unbound named parameter with empty map") {
+    // When sql() is called with empty map, parameter markers should still be detected
+    val exception = intercept[AnalysisException] {
+      spark.sql("SELECT :param", Map.empty[String, Any])
+    }
+    checkError(
+      exception = exception,
+      condition = "UNBOUND_SQL_PARAMETER",
+      parameters = Map("name" -> "param"),
+      context = ExpectedContext(
+        fragment = ":param",
+        start = 7,
+        stop = 12))
+  }
+
+  test("detect unbound positional parameter with empty array") {
+    // When sql() is called with empty array, parameter markers should still be detected
+    val exception = intercept[AnalysisException] {
+      spark.sql("SELECT ?", Array.empty[Any])
+    }
+    checkError(
+      exception = exception,
+      condition = "UNBOUND_SQL_PARAMETER",
+      parameters = Map("name" -> "_7"),
+      context = ExpectedContext(
+        fragment = "?",
+        start = 7,
+        stop = 7))
+  }
+
+  test("detect unbound named parameter with no arguments") {
+    val exception = intercept[AnalysisException] {
+      spark.sql("SELECT :param")
+    }
+    checkError(
+      exception = exception,
+      condition = "UNBOUND_SQL_PARAMETER",
+      parameters = Map("name" -> "param"),
+      context = ExpectedContext(
+        fragment = ":param",
+        start = 7,
+        stop = 12))
+  }
+
+  test("detect unbound positional parameter with no arguments") {
+    val exception = intercept[AnalysisException] {
+      spark.sql("SELECT ?")
+    }
+    checkError(
+      exception = exception,
+      condition = "UNBOUND_SQL_PARAMETER",
+      parameters = Map("name" -> "_7"),
+      context = ExpectedContext(
+        fragment = "?",
+        start = 7,
+        stop = 7))
+  }
+
+  test("empty map with no parameters - should succeed") {
+    // When there are no parameter markers, empty map should work fine
+    checkAnswer(
+      spark.sql("SELECT 1", Map.empty[String, Any]),
+      Row(1))
+  }
+
+  test("empty array with no parameters - should succeed") {
+    // When there are no parameter markers, empty array should work fine
+    checkAnswer(
+      spark.sql("SELECT 1", Array.empty[Any]),
+      Row(1))
+  }
 }

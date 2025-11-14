@@ -4739,6 +4739,215 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 
 
 -- !query
+table t
+| select x, y
+-- !query analysis
+Project [x#x, y#x]
++- SubqueryAlias spark_catalog.default.t
+   +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
+table t
+| extend x + length(y) as z
+-- !query analysis
+Project [x#x, y#x, (x#x + length(y#x)) AS z#x]
++- SubqueryAlias spark_catalog.default.t
+   +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
+table t
+| extend 1 as z
+| set z = x + length(y)
+-- !query analysis
+Project [x#x, y#x, (x#x + length(y#x)) AS z#x]
++- Project [x#x, y#x, 1 AS z#x]
+   +- SubqueryAlias spark_catalog.default.t
+      +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
+table windowTestData
+| select cate, sum(val) over w
+  window w as (partition by cate order by val)
+-- !query analysis
+Project [cate#x, sum(val) OVER (PARTITION BY cate ORDER BY val ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#xL]
++- Project [cate#x, val#x, sum(val) OVER (PARTITION BY cate ORDER BY val ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#xL, sum(val) OVER (PARTITION BY cate ORDER BY val ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#xL]
+   +- Window [sum(val#x) windowspecdefinition(cate#x, val#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS sum(val) OVER (PARTITION BY cate ORDER BY val ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#xL], [cate#x], [val#x ASC NULLS FIRST]
+      +- Project [cate#x, val#x]
+         +- SubqueryAlias windowtestdata
+            +- View (`windowTestData`, [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x])
+               +- Project [cast(val#x as int) AS val#x, cast(val_long#xL as bigint) AS val_long#xL, cast(val_double#x as double) AS val_double#x, cast(val_date#x as date) AS val_date#x, cast(val_timestamp#x as timestamp) AS val_timestamp#x, cast(cate#x as string) AS cate#x]
+                  +- Project [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
+                     +- SubqueryAlias testData
+                        +- LocalRelation [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
+
+
+-- !query
+from store_sales ss1
+| where ss_store_sk = 4
+| aggregate avg(ss_net_profit) rank_col
+    group by ss_item_sk as item_sk
+| select item_sk, rank_col
+| where rank_col > 0
+| order by rank_col desc
+| limit 1000
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`store_sales`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 6,
+    "stopIndex" : 16,
+    "fragment" : "store_sales"
+  } ]
+}
+
+
+-- !query
+table t
+|> select x, y
+| where x < 2
+|> extend x + 1 as z
+| order by z
+-- !query analysis
+Sort [z#x ASC NULLS FIRST], true
++- PipeOperator
+   +- Project [x#x, y#x, (x#x + 1) AS z#x]
+      +- Filter (x#x < 2)
+         +- PipeOperator
+            +- Project [x#x, y#x]
+               +- SubqueryAlias spark_catalog.default.t
+                  +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
+from t
+| extend 9 as `extend`
+| select *, x + 1
+| extend y
+-- !query analysis
+Project [x#x, y#x, extend#x, (x + 1)#x, y#x]
++- Project [x#x, y#x, extend#x, (x#x + 1) AS (x + 1)#x]
+   +- Project [x#x, y#x, 9 AS extend#x]
+      +- SubqueryAlias spark_catalog.default.t
+         +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
+declare or replace extend int = 5
+-- !query analysis
+CreateVariable defaultvalueexpression(cast(5 as int), 5), true
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.extend
+
+
+-- !query
+select 1 | extend y
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`y`",
+    "proposal" : "`1`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 19,
+    "stopIndex" : 19,
+    "fragment" : "y"
+  } ]
+}
+
+
+-- !query
+set spark.sql.parser.singleCharacterPipeOperator.enabled=false
+-- !query analysis
+SetCommand (spark.sql.parser.singleCharacterPipeOperator.enabled,Some(false))
+
+
+-- !query
+select 1 | extend y
+-- !query analysis
+Project [(1 | variablereference(system.session.extend=5)) AS y#x]
++- OneRowRelation
+
+
+-- !query
+set spark.sql.parser.singleCharacterPipeOperator.enabled=true
+-- !query analysis
+SetCommand (spark.sql.parser.singleCharacterPipeOperator.enabled,Some(true))
+
+
+-- !query
+drop temporary variable extend
+-- !query analysis
+DropVariable false
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.extend
+
+
+-- !query
+set spark.sql.parser.singleCharacterPipeOperator.enabled=false
+-- !query analysis
+SetCommand (spark.sql.parser.singleCharacterPipeOperator.enabled,Some(false))
+
+
+-- !query
+table t
+|> select x, y
+-- !query analysis
+Project [x#x, y#x]
++- SubqueryAlias spark_catalog.default.t
+   +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
+table t
+| select x, y
+-- !query analysis
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'|'",
+    "hint" : ""
+  }
+}
+
+
+-- !query
+select 1 | 2 as result
+-- !query analysis
+Project [(1 | 2) AS result#x]
++- OneRowRelation
+
+
+-- !query
+set spark.sql.parser.singleCharacterPipeOperator.enabled=true
+-- !query analysis
+SetCommand (spark.sql.parser.singleCharacterPipeOperator.enabled,Some(true))
+
+
+-- !query
+table t
+| select x, y
+-- !query analysis
+Project [x#x, y#x]
++- SubqueryAlias spark_catalog.default.t
+   +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
 drop table t
 -- !query analysis
 DropTable false, false

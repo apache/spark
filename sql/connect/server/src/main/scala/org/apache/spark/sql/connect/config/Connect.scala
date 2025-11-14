@@ -434,7 +434,8 @@ object Connect {
   val CONNECT_SESSION_PLAN_COMPRESSION_THRESHOLD =
     buildConf("spark.connect.session.planCompression.threshold")
       .doc("The threshold in bytes for the size of proto plan to be compressed. " +
-        "If the size of proto plan is smaller than this threshold, it will not be compressed.")
+        "If the size of proto plan is smaller than this threshold, it will not be compressed. " +
+        "Set to -1 to disable plan compression.")
       .version("4.1.0")
       .internal()
       .intConf

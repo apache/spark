@@ -19,7 +19,7 @@ from pathlib import Path
 
 SPEC = """
 name: {{ name }}
-storage: storage-root
+storage: {{ storage_root }}
 libraries:
   - glob:
       include: transformations/**
@@ -46,10 +46,18 @@ def init(name: str) -> None:
     project_dir = Path.cwd() / name
     project_dir.mkdir(parents=True, exist_ok=False)
 
+    # Create the storage directory
+    storage_dir = project_dir / "pipeline-storage"
+    storage_dir.mkdir(parents=True)
+
+    # Create absolute file URI for storage path
+    storage_path = f"file://{storage_dir.resolve()}"
+
     # Write the spec file to the project directory
     spec_file = project_dir / "pipeline.yml"
     with open(spec_file, "w") as f:
-        f.write(SPEC.replace("{{ name }}", name))
+        spec_content = SPEC.replace("{{ name }}", name).replace("{{ storage_root }}", storage_path)
+        f.write(spec_content)
 
     # Create the transformations directory
     transformations_dir = project_dir / "transformations"

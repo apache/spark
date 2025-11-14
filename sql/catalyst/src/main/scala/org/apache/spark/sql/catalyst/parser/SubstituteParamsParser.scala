@@ -186,6 +186,8 @@ class SubstituteParamsParser extends Logging {
 
   /**
    * Apply a list of substitutions to the SQL text.
+   * Inserts a space separator when a parameter is immediately preceded by a quote
+   * to avoid back-to-back quotes after substitution.
    */
   private def applySubstitutions(sqlText: String, substitutions: List[Substitution]): String = {
     // Sort substitutions by start position in reverse order to avoid offset issues
@@ -193,9 +195,18 @@ class SubstituteParamsParser extends Logging {
 
     var result = sqlText
     sortedSubstitutions.foreach { substitution =>
-      result = result.substring(0, substitution.start) +
-        substitution.replacement +
-        result.substring(substitution.end)
+      val prefix = result.substring(0, substitution.start)
+      val replacement = substitution.replacement
+      val suffix = result.substring(substitution.end)
+
+      // Check if replacement is immediately preceded by a quote and doesn't already
+      // start with whitespace
+      val needsSpace = substitution.start > 0 &&
+        (result(substitution.start - 1) == '\'' || result(substitution.start - 1) == '"') &&
+        replacement.nonEmpty && !replacement(0).isWhitespace
+
+      val space = if (needsSpace) " " else ""
+      result = s"$prefix$space$replacement$suffix"
     }
     result
   }
@@ -211,4 +222,3 @@ object SubstituteParamsParser {
       positionalParams: List[String] = List.empty): (String, Int, PositionMapper) =
     instance.substitute(sqlText, namedParams, positionalParams)
 }
-

@@ -1224,3 +1224,43 @@ EXECUTE IMMEDIATE 'SELECT typeof(:p) as type, :p as val' USING MAP(1, 'one', 2, 
 -- !query analysis
 Project [typeof(map(1, one, 2, two)) AS type#x, map(1, one, 2, two) AS val#x]
 +- OneRowRelation
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT :param'
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNBOUND_SQL_PARAMETER",
+  "sqlState" : "42P02",
+  "messageParameters" : {
+    "name" : "param"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 13,
+    "fragment" : ":param"
+  } ]
+}
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT ?'
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNBOUND_SQL_PARAMETER",
+  "sqlState" : "42P02",
+  "messageParameters" : {
+    "name" : "_7"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 8,
+    "fragment" : "?"
+  } ]
+}

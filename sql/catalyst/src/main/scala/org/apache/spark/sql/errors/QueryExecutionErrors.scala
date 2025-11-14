@@ -1120,10 +1120,12 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       cause = e)
   }
 
-  def ddlUnsupportedTemporarilyError(ddl: String): SparkUnsupportedOperationException = {
+  def ddlUnsupportedTemporarilyError(
+      ddl: String,
+      tableName: String): SparkUnsupportedOperationException = {
     new SparkUnsupportedOperationException(
-      errorClass = "_LEGACY_ERROR_TEMP_2096",
-      messageParameters = Map("ddl" -> ddl))
+      errorClass = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
+      messageParameters = Map("tableName" -> toSQLId(tableName), "operation" -> ddl))
   }
 
   def executeBroadcastTimeoutError(timeout: Long, ex: Option[TimeoutException]): Throwable = {

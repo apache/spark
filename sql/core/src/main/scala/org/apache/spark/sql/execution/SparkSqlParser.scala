@@ -118,14 +118,22 @@ class SparkSqlParser extends AbstractSqlParser {
     // Step 2: Apply parameter substitution if a parameter context is provided.
     val (paramSubstituted, positionMapper, hasParameters) = parameterContext match {
       case Some(context) =>
+        // Check if the context actually contains parameters
+        val contextHasParams = context match {
+          case NamedParameterContext(params) => params.nonEmpty
+          case PositionalParameterContext(params) => params.nonEmpty
+          case HybridParameterContext(args, _) => args.nonEmpty
+        }
         if (SQLConf.get.legacyParameterSubstitutionConstantsOnly) {
           // Legacy mode: Parameters are detected but substitution is deferred to analysis phase.
-          (variableSubstituted, PositionMapper.identity(variableSubstituted), true)
+          // Only set hasParameters if the context actually contains parameters.
+          (variableSubstituted, PositionMapper.identity(variableSubstituted), contextHasParams)
         } else {
           // Modern mode: Perform parameter substitution during parsing.
           val (substituted, mapper) =
             ParameterHandler.substituteParameters(variableSubstituted, context)
-          (substituted, mapper, true)
+          // Only set hasParameters if the context actually contains parameters.
+          (substituted, mapper, contextHasParams)
         }
       case None =>
         // No parameter context provided; skip parameter substitution.
@@ -629,7 +637,8 @@ class SparkSqlAstBuilder extends AstBuilder {
 
     val userSpecifiedColumns = Option(ctx.identifierCommentList).toSeq.flatMap { icl =>
       icl.identifierComment.asScala.map { ic =>
-        ic.identifier.getText -> Option(ic.commentSpec()).map(visitCommentSpec)
+        // Use getIdentifierText to handle both regular identifiers and IDENTIFIER('literal')
+        getIdentifierText(ic.identifier) -> Option(ic.commentSpec()).map(visitCommentSpec)
       }
     }
 

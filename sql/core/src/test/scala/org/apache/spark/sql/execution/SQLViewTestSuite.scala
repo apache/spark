@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution
 
+import java.util
+
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row}
@@ -551,16 +553,25 @@ class GlobalTempViewTestSuite extends TempViewTestSuite with SharedSparkSession 
 }
 
 class OneTableCatalog extends InMemoryCatalog {
+  // store table in variable to preserve its ID between load requests
+  private val table = new InMemoryTable(
+    "t",
+    StructType.fromDDL("c1 INT"),
+    Array.empty,
+    Map.empty[String, String].asJava)
+
   override def loadTable(ident: Identifier): Table = {
     if (ident.namespace.isEmpty && ident.name == "t") {
-      new InMemoryTable(
-        "t",
-        StructType.fromDDL("c1 INT"),
-        Array.empty,
-        Map.empty[String, String].asJava)
+      table
     } else {
       super.loadTable(ident)
     }
+  }
+
+  override def loadTable(
+      ident: Identifier,
+      writePrivileges: util.Set[TableWritePrivilege]): Table = {
+    loadTable(ident)
   }
 }
 

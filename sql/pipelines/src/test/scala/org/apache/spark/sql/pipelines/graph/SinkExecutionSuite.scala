@@ -115,7 +115,7 @@ class SinkExecutionSuite extends ExecutionTest with SharedSparkSession {
       sinkIdentifier: TableIdentifier,
       flowIdentifier: TableIdentifier): Unit = {
     val expectedCheckpointLocation = new Path(
-      "file://" + rootDirectory + s"/_checkpoints/${sinkIdentifier.table}/${flowIdentifier.table}/0"
+      rootDirectory + s"/_checkpoints/${sinkIdentifier.table}/${flowIdentifier.table}/0"
     )
     val streamingQuery = graphExecution
       .flowExecutions(flowIdentifier)

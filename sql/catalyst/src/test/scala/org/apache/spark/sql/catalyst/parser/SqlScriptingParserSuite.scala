@@ -2273,11 +2273,11 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
         |  END;
         |END""".stripMargin
     checkError(
-      exception = intercept[SqlScriptingException] {
+      exception = intercept[ParseException] {
         parsePlan(sqlScriptText)
       },
-      condition = "INVALID_LABEL_USAGE.QUALIFIED_LABEL_NAME",
-      parameters = Map("labelName" -> "PART1.PART2"))
+      condition = "PARSE_SYNTAX_ERROR",
+      parameters = Map("error" -> "'.'", "hint" -> ""))
   }
 
   test("qualified label name: label cannot be qualified + end label") {
@@ -2288,11 +2288,11 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
         |  END part1.part2;
         |END""".stripMargin
     checkError(
-      exception = intercept[SqlScriptingException] {
+      exception = intercept[ParseException] {
         parsePlan(sqlScriptText)
       },
-      condition = "INVALID_LABEL_USAGE.QUALIFIED_LABEL_NAME",
-      parameters = Map("labelName" -> "PART1.PART2"))
+      condition = "PARSE_SYNTAX_ERROR",
+      parameters = Map("error" -> "'.'", "hint" -> ""))
   }
 
   test("unique label names: nested labeled scope statements") {
@@ -2785,13 +2785,13 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
         |BEGIN
         |  DECLARE TEST.CONDITION CONDITION FOR SQLSTATE '12345';
         |END""".stripMargin
-    val exception = intercept[SqlScriptingException] {
+    val exception = intercept[ParseException] {
       parsePlan(sqlScriptText)
     }
     checkError(
       exception = exception,
-      condition = "INVALID_ERROR_CONDITION_DECLARATION.QUALIFIED_CONDITION_NAME",
-      parameters = Map("conditionName" -> "TEST.CONDITION"))
+      condition = "PARSE_SYNTAX_ERROR",
+      parameters = Map("error" -> "'FOR'", "hint" -> ": missing ';'"))
     assert(exception.origin.line.contains(3))
   }
 
