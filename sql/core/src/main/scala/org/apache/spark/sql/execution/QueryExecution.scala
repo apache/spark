@@ -20,7 +20,6 @@ package org.apache.spark.sql.execution
 import java.io.{BufferedWriter, OutputStreamWriter}
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicLong
-import javax.annotation.concurrent.GuardedBy
 
 import scala.util.control.NonFatal
 
@@ -298,13 +297,8 @@ class QueryExecution(
    */
   def toRdd: RDD[InternalRow] = lazyToRdd.get
 
-  private val observedMetricsLock = new Object
-
   /** Get the metrics observed during the execution of the query plan. */
-  @GuardedBy("observedMetricsLock")
-  def observedMetrics: Map[String, Row] = observedMetricsLock.synchronized {
-    CollectMetricsExec.collect(executedPlan)
-  }
+  def observedMetrics: Map[String, Row] = CollectMetricsExec.collect(executedPlan)
 
   protected def preparations: Seq[Rule[SparkPlan]] = {
     QueryExecution.preparations(sparkSession,
