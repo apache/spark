@@ -86,12 +86,20 @@ def worker(sock, authenticated):
         try:
             outfile.flush()
         except Exception:
-            faulthandler_log_path = os.environ.get("PYTHON_FAULTHANDLER_DIR", None)
-            if faulthandler_log_path:
-                faulthandler_log_path = os.path.join(faulthandler_log_path, str(os.getpid()))
-                with open(faulthandler_log_path, "w") as faulthandler_log_file:
-                    faulthandler.dump_traceback(file=faulthandler_log_file)
-            raise
+            if os.environ.get("PYTHON_DAEMON_KILL_WORKER_ON_FLUSH_FAILURE", False):
+                faulthandler_log_path = os.environ.get("PYTHON_FAULTHANDLER_DIR", None)
+                if faulthandler_log_path:
+                    faulthandler_log_path = os.path.join(faulthandler_log_path, str(os.getpid()))
+                    with open(faulthandler_log_path, "w") as faulthandler_log_file:
+                        faulthandler.dump_traceback(file=faulthandler_log_file)
+                raise
+            else:
+                print(
+                    "PySpark daemon failed to flush the output to the worker process. ",
+                    file=sys.stderr,
+                )
+                traceback.print_exc(file=sys.stderr)
+                pass
     return exit_code
 
 

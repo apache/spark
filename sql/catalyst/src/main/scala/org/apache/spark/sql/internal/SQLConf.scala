@@ -3985,6 +3985,14 @@ object SQLConf {
       .version("4.1.0")
       .fallbackConf(Python.PYTHON_WORKER_TRACEBACK_DUMP_INTERVAL_SECONDS)
 
+  val PYTHON_UDF_DAEMON_KILL_WORKER_ON_FLUSH_FAILURE =
+    buildConf("spark.sql.execution.pyspark.udf.daemonKillWorkerOnFlushFailure")
+      .doc(
+        s"Same as ${Python.PYTHON_DAEMON_KILL_WORKER_ON_FLUSH_FAILURE.key} " +
+          "for Python execution with DataFrame and SQL. It can change during runtime.")
+      .version("4.1.0")
+      .fallbackConf(Python.PYTHON_DAEMON_KILL_WORKER_ON_FLUSH_FAILURE)
+
   val PYTHON_WORKER_LOGGING_ENABLED =
     buildConf("spark.sql.pyspark.worker.logging.enabled")
       .doc("When set to true, this configuration enables comprehensive logging within " +
@@ -7489,6 +7497,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def pythonUDFWorkerTracebackDumpIntervalSeconds: Long =
     getConf(PYTHON_UDF_WORKER_TRACEBACK_DUMP_INTERVAL_SECONDS)
+
+  def pythonUDFDaemonKillWorkerOnFlushFailure: Boolean =
+    getConf(PYTHON_UDF_DAEMON_KILL_WORKER_ON_FLUSH_FAILURE)
 
   def pythonWorkerLoggingEnabled: Boolean = getConf(PYTHON_WORKER_LOGGING_ENABLED)
 
