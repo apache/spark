@@ -99,7 +99,6 @@ def worker(sock, authenticated):
                     file=sys.stderr,
                 )
                 traceback.print_exc(file=sys.stderr)
-                pass
     return exit_code
 
 
