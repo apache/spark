@@ -919,12 +919,12 @@ def default_api_mode() -> str:
 
 
 class _FaultHandlerIntegration:
-    def __init__(self):
+    def __init__(self) -> None:
         self._log_path = None
         self._log_file = None
         self._periodic_dump = False
 
-    def start(self):
+    def start(self) -> None:
         self._log_path = os.environ.get("PYTHON_FAULTHANDLER_DIR", None)
         tracebackDumpIntervalSeconds = os.environ.get(
             "PYTHON_TRACEBACK_DUMP_INTERVAL_SECONDS", None
@@ -939,7 +939,7 @@ class _FaultHandlerIntegration:
                 self._periodic_dump = True
                 faulthandler.dump_traceback_later(int(tracebackDumpIntervalSeconds), repeat=True)
 
-    def stop(self):
+    def stop(self) -> None:
         if self._periodic_dump:
             faulthandler.cancel_dump_traceback_later()
             self._periodic_dump = False
