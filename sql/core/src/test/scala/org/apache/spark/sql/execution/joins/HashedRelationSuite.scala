@@ -27,7 +27,8 @@ import org.apache.spark.SparkConf
 import org.apache.spark.SparkException
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Kryo._
-import org.apache.spark.memory.{TaskMemoryManager, UnifiedMemoryManager}
+import org.apache.spark.memory.{SparkOutOfMemoryError, TaskMemoryManager, UnifiedMemoryManager}
+import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.serializer.KryoSerializer
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
@@ -40,11 +41,8 @@ import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.collection.CompactBuffer
 
 class HashedRelationSuite extends SharedSparkSession {
-  val umm = new UnifiedMemoryManager(
-    new SparkConf().set(MEMORY_OFFHEAP_ENABLED.key, "false"),
-    Long.MaxValue,
-    Long.MaxValue / 2,
-    1)
+  val umm = UnifiedMemoryManager(
+    new SparkConf().set(MEMORY_OFFHEAP_ENABLED.key, "false"), 1)
 
   val mm = new TaskMemoryManager(umm, 0)
 
@@ -752,5 +750,18 @@ class HashedRelationSuite extends SharedSparkSession {
       assert(it.hasNext != ignoresDuplicatedKey)
       map.free()
     }
+  }
+
+  test("UnsafeHashedRelation should throw OOM when there isn't enough memory") {
+    val relations = mutable.ArrayBuffer[HashedRelation]()
+    // We should finally see an OOM thrown since we are keeping allocating hashed relations.
+    assertThrows[SparkOutOfMemoryError] {
+      while (true) {
+        relations += UnsafeHashedRelation(
+          Iterator.empty, Nil, ByteUnit.MiB.toBytes(200).toInt, mm)
+      }
+    }
+    // Releases the allocated memory.
+    relations.foreach(_.close())
   }
 }

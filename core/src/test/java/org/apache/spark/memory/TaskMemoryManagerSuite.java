@@ -30,11 +30,8 @@ public class TaskMemoryManagerSuite {
   @Test
   public void leakedPageMemoryIsDetected() {
     final TaskMemoryManager manager = new TaskMemoryManager(
-      new UnifiedMemoryManager(
-        new SparkConf().set(package$.MODULE$.MEMORY_OFFHEAP_ENABLED(), false),
-        Long.MAX_VALUE,
-        Long.MAX_VALUE / 2,
-        1),
+      UnifiedMemoryManager.apply(
+        new SparkConf().set(package$.MODULE$.MEMORY_OFFHEAP_ENABLED(), false), 1),
       0);
     final MemoryConsumer c = new TestMemoryConsumer(manager);
     manager.allocatePage(4096, c);  // leak memory
