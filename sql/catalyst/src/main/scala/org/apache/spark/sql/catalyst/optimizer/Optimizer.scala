@@ -2077,7 +2077,7 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
       if fields.forall(_.deterministic) && canPushThroughCondition(grandChild, condition) =>
       val aliasMap = getAliasMap(project)
       // Projection aliases that the filter references
-      val filterAliasesBuf = mutable.ArrayBuffer.empty[Alias]
+      val expensiveFilterAliasesBuf = mutable.ArrayBuffer.empty[Alias]
       // Projection aliases that are not used in the filter, so we don't need to push
       var leftBehindAliases: Map[ExprId, Alias] = aliasMap.baseMap.values.map {
         kv => (kv._2.exprId, kv._2)
@@ -2102,7 +2102,7 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
               e: (Attribute, Alias) =>
               if (leftBehindAliases.contains(e._2.exprId)) {
                 leftBehindAliases = leftBehindAliases.removed(e._2.exprId)
-                filterAliasesBuf += e._2
+                expensiveFilterAliasesBuf += e._2
               }
             }
             false
@@ -2110,11 +2110,14 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
         }
       }
 
-      val filterAliases = filterAliasesBuf.toArray.toSeq
+      val expensiveFilterAliases = expensiveFilterAliasesBuf.toArray.toSeq
+      val expensiveLeftBehindAliases: Map[ExprId, Alias] = leftBehindAliases.filter {
+        kv => kv._2.child.expensive
+      }
 
-      // If filter aliases is empty we don't need to move projections with the filters
-      // we can just move the filter (either because not used projections or "cheap").
-      if (filterAliases.isEmpty) {
+      if (expensiveFilterAliases.isEmpty) {
+        // If the filter does not reference any expensive aliases then we
+        // just push the filter while resolving the non-expensive aliases.
         project.copy(child = Filter(replaceAlias(condition, aliasMap), child = grandChild))
       } else if (leftBehindAliases.isEmpty) {
         // If there are no left behind aliases then we've used all of the aliases in our filter.
@@ -2129,11 +2132,15 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
         } else {
           f
         }
+      } else if (expensiveLeftBehindAliases.isEmpty) {
+        // If there are no expensive left behind aliases then introducing
+        // a new projection might not be worth the overhead.
+        project.copy(child = Filter(replaceAlias(condition, aliasMap), child = grandChild))
       } else {
-        // If were pushing something through the projection we may need to
-        // introduce a new projection which projects the elements used in the filter.
-        // Base level projection is going to be all refs from our current projection +
-        // the alias map that we used in the filtering.
+        // If we're here then we have a filter with an expensive alias along with
+        // some left behind aliases which are also expensive to compute. In this case we will
+        // add a new projection which computes the expensive aliases needed for the filter then
+        // filter and then the final top level projection with the remaining aliases.
         val projectionReferences = project.references.toSeq
 
         val expensiveCondition = expensive.reduce(And)
@@ -2144,11 +2151,11 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
         // non-expensive-filter-used Project -> Filter -> Used Expensive Projections -> Cheap Filter
         val filterChild = if (cheap.isEmpty) {
           project.copy(
-            projectList = (projectionReferences ++ filterAliases))
+            projectList = (projectionReferences ++ expensiveFilterAliases))
         } else {
           val cheapCondition = replaceAlias(cheap.reduce(And), aliasMap)
           project.copy(
-            projectList = (projectionReferences ++ filterAliases),
+            projectList = (projectionReferences ++ expensiveFilterAliases),
             child = Filter(cheapCondition, grandChild))
         }
 
