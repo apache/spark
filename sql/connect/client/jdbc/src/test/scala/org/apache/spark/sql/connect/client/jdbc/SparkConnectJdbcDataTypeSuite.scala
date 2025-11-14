@@ -251,7 +251,7 @@ class SparkConnectJdbcDataTypeSuite extends ConnectFunSuite with RemoteSparkSess
           assert(metaData.getScale(1) === scale)
           assert(metaData.getColumnDisplaySize(1) === expectedColumnDisplaySize)
           assert(metaData.getColumnDisplaySize(1) >= value.size)
-      }
+        }
     }
   }
 
@@ -270,7 +270,7 @@ class SparkConnectJdbcDataTypeSuite extends ConnectFunSuite with RemoteSparkSess
       ("date '2025-11-15'", (rs: ResultSet) => rs.getBytes(999)),
       ("time '12:34:56.123456'", (rs: ResultSet) => rs.getBytes(999)),
       ("timestamp '2025-11-15 10:30:45.123456'", (rs: ResultSet) => rs.getTimestamp(999)),
-      ("timestamp_ntz '2025-11-15 10:30:45.789012'", (rs: ResultSet) => rs.getTimestamp(999)),
+      ("timestamp_ntz '2025-11-15 10:30:45.789012'", (rs: ResultSet) => rs.getTimestamp(999))
     ).foreach {
       case (query, getter) =>
         withExecuteQuery(s"SELECT $query") { rs =>
@@ -570,7 +570,7 @@ class SparkConnectJdbcDataTypeSuite extends ConnectFunSuite with RemoteSparkSess
     }
   }
 
-test("get timestamp type") {
+  test("get timestamp type") {
     withExecuteQuery("SELECT timestamp '2025-11-15 10:30:45.123456'") { rs =>
       assert(rs.next())
       val timestamp = rs.getTimestamp(1)
