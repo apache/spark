@@ -1736,7 +1736,7 @@ class DataFrame(ParentDataFrame):
                 errorClass="JVM_ATTRIBUTE_NOT_SUPPORTED", messageParameters={"attr_name": name}
             )
 
-        if os.environ.get("PYSPARK_VALIDATE_COLUMN_NAME_LEGACY", "1") == "1" and not any(
+        if os.environ.get("PYSPARK_VALIDATE_COLUMN_NAME_LEGACY") == "1" and not any(
             field.name == name for field in self._schema
         ):
             raise PySparkAttributeError(
