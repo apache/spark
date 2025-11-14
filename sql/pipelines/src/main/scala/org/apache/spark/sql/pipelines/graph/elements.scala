@@ -19,8 +19,6 @@ package org.apache.spark.sql.pipelines.graph
 
 import java.util
 
-import scala.util.control.NonFatal
-
 import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.Row
@@ -29,12 +27,7 @@ import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.classic.{DataFrame, SparkSession}
 import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.pipelines.common.DatasetType
-import org.apache.spark.sql.pipelines.util.{
-  BatchReadOptions,
-  InputReadOptions,
-  SchemaInferenceUtils,
-  StreamingReadOptions
-}
+import org.apache.spark.sql.pipelines.util.SchemaInferenceUtils
 import org.apache.spark.sql.types.StructType
 
 /** An element in a [[DataflowGraph]]. */
@@ -68,10 +61,9 @@ trait Input extends GraphElement {
 
   /**
    * Returns a DataFrame that is a result of loading data from this [[Input]].
-   * @param readOptions Type of input. Used to determine streaming/batch
    * @return Streaming or batch DataFrame of this Input's data.
    */
-  def load(readOptions: InputReadOptions): DataFrame
+  def load: DataFrame
 }
 
 /**
@@ -102,7 +94,7 @@ sealed trait Dataset extends Output {
 }
 
 /** A type of [[Input]] where data is loaded from a table. */
-sealed trait TableInput extends Input {
+sealed trait TableElement extends GraphElement {
 
   /** The user-specified schema for this table. */
   def specifiedSchema: Option[StructType]
@@ -132,28 +124,8 @@ case class Table(
     override val origin: QueryOrigin,
     isStreamingTable: Boolean,
     format: Option[String]
-) extends TableInput
+) extends TableElement
     with Dataset {
-
-  // Load this table's data from underlying storage.
-  override def load(readOptions: InputReadOptions): DataFrame = {
-    try {
-      lazy val tableName = identifier.quotedString
-
-      val df = readOptions match {
-        case sro: StreamingReadOptions =>
-          spark.readStream.options(sro.userOptions).table(tableName)
-        case _: BatchReadOptions =>
-          spark.read.table(tableName)
-        case _ =>
-          throw new IllegalArgumentException("Unhandled `InputReadOptions` type when loading table")
-      }
-
-      df
-    } catch {
-      case NonFatal(e) => throw LoadTableException(displayName, Option(e))
-    }
-  }
 
   /** Returns the normalized storage location to this [[Table]]. */
   override def path: String = {
@@ -176,42 +148,50 @@ case class Table(
 }
 
 /**
- * A type of [[TableInput]] that returns data from a specified schema or from the inferred
- * [[Flow]]s that write to the table.
+ * A virtual table is a representation of a pipeline table used during analysis. During analysis we
+ * only care about the schemas of declared tables, and its possible the declared tables do not yet
+ * exist in the catalog. Hence we represent all tables in the graph with their "virtual"
+ * counterparts, which are simply empty dataframes but with the same schemas.
+ *
+ * We refer to the declared table that the virtual counterpart represents as the "parent" table
+ * below.
+ *
+ * @param identifier  The identifier of the parent table.
+ * @param specifiedSchema The user-specified schema for the parent table.
+ * @param incomingFlowIdentifiers The identifiers of all flows that write to the parent table.
+ * @param availableFlows  All resolved flows that write to the parent table.
+ * @param isStreamingTable  Whether the parent table is a streaming table or not.
  */
 case class VirtualTableInput(
     identifier: TableIdentifier,
     specifiedSchema: Option[StructType],
     incomingFlowIdentifiers: Set[TableIdentifier],
-    availableFlows: Seq[ResolvedFlow] = Nil
-) extends TableInput
+    availableFlows: Seq[ResolvedFlow] = Nil,
+    isStreamingTable: Boolean
+) extends TableElement with Input
     with Logging {
   override def origin: QueryOrigin = QueryOrigin()
 
   assert(availableFlows.forall(_.destinationIdentifier == identifier))
-  override def load(readOptions: InputReadOptions): DataFrame = {
-    // Infer the schema for this virtual table
-    def getFinalSchema: StructType = {
-      specifiedSchema match {
-        // This is not a backing table, and we have a user-specified schema, so use it directly.
-        case Some(ss) => ss
-        // Otherwise infer the schema from a combination of the incoming flows and the
-        // user-specified schema, if provided.
-        case _ =>
-          SchemaInferenceUtils.inferSchemaFromFlows(availableFlows, specifiedSchema)
-      }
+  override def load: DataFrame = {
+    val deducedSchema = specifiedSchema match {
+      // If the user specified a schema, use it directly.
+      case Some(ss) => ss
+      // Otherwise infer the schema from a combination of the incoming flows and the
+      // user-specified schema, if provided.
+      case _ =>
+        SchemaInferenceUtils.inferSchemaFromFlows(availableFlows, specifiedSchema)
     }
 
-    // create empty streaming/batch df based on input type.
-    def createEmptyDF(schema: StructType): DataFrame = readOptions match {
-      case _: StreamingReadOptions =>
-        MemoryStream[Row](ExpressionEncoder(schema, lenient = false), spark)
-          .toDF()
-      case _ => spark.createDataFrame(new util.ArrayList[Row](), schema)
+    // Produce either a streaming or batch dataframe, depending on whether this is a virtual
+    // representation of a streaming or non-streaming table. Return the [empty] dataframe with the
+    // deduced schema.
+    if (isStreamingTable) {
+      MemoryStream[Row](ExpressionEncoder(deducedSchema, lenient = false), spark)
+        .toDF()
+    } else {
+      spark.createDataFrame(new util.ArrayList[Row](), deducedSchema)
     }
-
-    val df = createEmptyDF(getFinalSchema)
-    df
   }
 }
 
