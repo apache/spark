@@ -20,7 +20,6 @@ package org.apache.spark.sql.catalyst.expressions
 import java.util.Locale
 
 import org.apache.spark.{QueryContext, SparkException}
-import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TypeCheckResult, TypeCoercion}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
@@ -407,14 +406,13 @@ abstract class Expression extends TreeNode[Expression] {
     }
 
   /**
-   * A developer API for marking if an expression is likely to be expensive.
+   * Mark if an expression is likely to be expensive.
    * The current only consumer of this is the pushdown optimizer.
    * By default an expression is expensive if any of it's children are expensive.
    */
-  @DeveloperApi
-  def expensive: Boolean = _expensive
+  def expensive: Boolean = hasExpensiveChild
 
-  private lazy val _expensive: Boolean = children.map(_.expensive).exists(_ == true)
+  private lazy val hasExpensiveChild: Boolean = children.map(_.expensive).exists(_ == true)
 }
 
 object ExpressionPatternBitMask {

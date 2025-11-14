@@ -134,7 +134,6 @@ case class GetJsonObject(json: Expression, path: Expression)
   override protected def withNewChildrenInternal(
       newLeft: Expression, newRight: Expression): GetJsonObject =
     copy(json = newLeft, path = newRight)
-
 }
 
 // scalastyle:off line.size.limit line.contains.tab
@@ -265,7 +264,6 @@ case class JsonToStructs(
   with CodegenFallback
   with ExpectsInputTypes
   with QueryErrorsBase {
-
 
   // The JSON input data might be missing certain fields. We force the nullability
   // of the user-provided schema to avoid data corruptions. In particular, the parquet-mr encoder
