@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.statsEstimation.StatsTestPlan
 import org.apache.spark.sql.connector.catalog.functions._
 import org.apache.spark.sql.execution.{DummySparkPlan, SortExec}
 import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.execution.joins.{ShuffledHashJoinExec, SortMergeJoinExec}
 import org.apache.spark.sql.execution.python.FlatMapCoGroupsInPandasExec
 import org.apache.spark.sql.execution.window.WindowExec
@@ -44,6 +45,17 @@ class EnsureRequirementsSuite extends SharedSparkSession {
   private val exprD = Literal(4)
 
   private val EnsureRequirements = new EnsureRequirements()
+
+  /** Helper to add dummy BatchScanExec child to a dummy plan (to ensure SPJ can kick in). */
+  private implicit class DummySparkPlanExt(dummyPlan: DummySparkPlan) {
+    def withDummyBatchScanChild: DummySparkPlan = {
+      dummyPlan.copy(
+        children = Seq(BatchScanExec(Seq.empty, null, Seq.empty, table = null)),
+        requiredChildDistribution = Seq(UnspecifiedDistribution),
+        requiredChildOrdering = Seq(Seq.empty)
+      )
+    }
+  }
 
   test("reorder should handle PartitioningCollection") {
     val plan1 = DummySparkPlan(
@@ -95,11 +107,11 @@ class EnsureRequirementsSuite extends SharedSparkSession {
     val plan1 = DummySparkPlan(
       outputPartitioning = KeyGroupedPartitioning(Seq(
         years(exprA), bucket(4, exprB), days(exprC)), 4)
-    )
+    ).withDummyBatchScanChild
     val plan2 = DummySparkPlan(
       outputPartitioning = KeyGroupedPartitioning(Seq(
         years(exprB), bucket(4, exprA), days(exprD)), 4)
-    )
+    ).withDummyBatchScanChild
     val smjExec = SortMergeJoinExec(
       exprB :: exprC :: exprA :: Nil, exprA :: exprD :: exprB :: Nil,
       Inner, None, plan1, plan2
@@ -117,7 +129,7 @@ class EnsureRequirementsSuite extends SharedSparkSession {
     val plan3 = DummySparkPlan(
       outputPartitioning = KeyGroupedPartitioning(Seq(
         bucket(4, exprD), days(exprA), years(exprC)), 4)
-    )
+    ).withDummyBatchScanChild
     val smjExec2 = SortMergeJoinExec(
       exprB :: exprD :: exprC :: Nil, exprA :: exprC :: exprD :: Nil,
       Inner, None, plan1, plan3
@@ -780,8 +792,10 @@ class EnsureRequirementsSuite extends SharedSparkSession {
     // simplest case: identity transforms
     var plan1 = DummySparkPlan(
       outputPartitioning = KeyGroupedPartitioning(exprA :: exprB :: Nil, 5))
+      .withDummyBatchScanChild
     var plan2 = DummySparkPlan(
       outputPartitioning = KeyGroupedPartitioning(exprA :: exprC :: Nil, 5))
+      .withDummyBatchScanChild
     var smjExec = SortMergeJoinExec(
       exprA :: exprB :: Nil, exprA :: exprC :: Nil, Inner, None, plan1, plan2)
     EnsureRequirements.apply(smjExec) match {
@@ -797,11 +811,11 @@ class EnsureRequirementsSuite extends SharedSparkSession {
     plan1 = DummySparkPlan(
       outputPartitioning = KeyGroupedPartitioning(
         bucket(4, exprA) :: bucket(16, exprB) :: Nil, 4)
-    )
+    ).withDummyBatchScanChild
     plan2 = DummySparkPlan(
       outputPartitioning = KeyGroupedPartitioning(
         bucket(4, exprA) :: bucket(16, exprC) :: Nil, 4)
-    )
+    ).withDummyBatchScanChild
     smjExec = SortMergeJoinExec(
       exprA :: exprB :: Nil, exprA :: exprC :: Nil, Inner, None, plan1, plan2)
     EnsureRequirements.apply(smjExec) match {
@@ -817,13 +831,13 @@ class EnsureRequirementsSuite extends SharedSparkSession {
     plan1 = DummySparkPlan(
       outputPartitioning = KeyGroupedPartitioning(
         bucket(4, exprA) :: bucket(16, exprB) :: Nil, 4)
-    )
+    ).withDummyBatchScanChild
     plan2 = DummySparkPlan(
       outputPartitioning = PartitioningCollection(Seq(
         KeyGroupedPartitioning(bucket(4, exprA) :: bucket(16, exprC) :: Nil, 4),
         KeyGroupedPartitioning(bucket(4, exprA) :: bucket(16, exprC) :: Nil, 4))
       )
-    )
+    ).withDummyBatchScanChild
     smjExec = SortMergeJoinExec(
       exprA :: exprB :: Nil, exprA :: exprC :: Nil, Inner, None, plan1, plan2)
     EnsureRequirements.apply(smjExec) match {
@@ -846,10 +860,10 @@ class EnsureRequirementsSuite extends SharedSparkSession {
     // bucket + years transforms from both sides
     plan1 = DummySparkPlan(
       outputPartitioning = KeyGroupedPartitioning(bucket(4, exprA) :: years(exprB) :: Nil, 4)
-    )
+    ).withDummyBatchScanChild
     plan2 = DummySparkPlan(
       outputPartitioning = KeyGroupedPartitioning(bucket(4, exprA) :: years(exprC) :: Nil, 4)
-    )
+    ).withDummyBatchScanChild
     smjExec = SortMergeJoinExec(
       exprA :: exprB :: Nil, exprA :: exprC :: Nil, Inner, None, plan1, plan2)
     EnsureRequirements.apply(smjExec) match {
@@ -866,11 +880,11 @@ class EnsureRequirementsSuite extends SharedSparkSession {
     plan1 = DummySparkPlan(
       outputPartitioning = KeyGroupedPartitioning(
         bucket(4, exprA) :: bucket(4, exprB) :: Nil, 4)
-    )
+    ).withDummyBatchScanChild
     plan2 = DummySparkPlan(
       outputPartitioning = KeyGroupedPartitioning(
         bucket(4, exprA) :: bucket(4, exprC) :: Nil, 4)
-    )
+    ).withDummyBatchScanChild
     smjExec = SortMergeJoinExec(
       exprA :: exprB :: exprB :: Nil, exprA :: exprC :: exprC :: Nil, Inner, None, plan1, plan2)
     EnsureRequirements.apply(smjExec) match {
@@ -887,11 +901,11 @@ class EnsureRequirementsSuite extends SharedSparkSession {
     var plan1 = DummySparkPlan(
       outputPartitioning = KeyGroupedPartitioning(
         bucket(4, exprB) :: years(exprC) :: Nil, 4)
-    )
+    ).withDummyBatchScanChild
     var plan2 = DummySparkPlan(
       outputPartitioning = KeyGroupedPartitioning(
         bucket(4, exprC) :: years(exprB) :: Nil, 4)
-    )
+    ).withDummyBatchScanChild
 
     // simple case
     var smjExec = SortMergeJoinExec(
@@ -909,11 +923,11 @@ class EnsureRequirementsSuite extends SharedSparkSession {
     plan1 = DummySparkPlan(
       outputPartitioning = KeyGroupedPartitioning(
         bucket(4, exprA) :: years(exprB) :: Nil, 4)
-    )
+    ).withDummyBatchScanChild
     plan2 = DummySparkPlan(
       outputPartitioning = KeyGroupedPartitioning(
         bucket(4, exprA) :: years(exprC) :: Nil, 4)
-    )
+    ).withDummyBatchScanChild
     smjExec = SortMergeJoinExec(
       exprA :: exprB :: exprB :: Nil, exprA :: exprC :: exprC :: Nil, Inner, None, plan1, plan2)
     applyEnsureRequirementsWithSubsetKeys(smjExec) match {
@@ -929,9 +943,11 @@ class EnsureRequirementsSuite extends SharedSparkSession {
     plan1 = DummySparkPlan(
       outputPartitioning = KeyGroupedPartitioning(
         years(exprA) :: bucket(4, exprB) :: days(exprA) :: Nil, 5))
+      .withDummyBatchScanChild
     plan2 = DummySparkPlan(
       outputPartitioning = KeyGroupedPartitioning(
         years(exprA) :: bucket(4, exprC) :: days(exprA) :: Nil, 5))
+      .withDummyBatchScanChild
     smjExec = SortMergeJoinExec(
       exprA :: exprB :: exprB :: Nil, exprA :: exprC :: exprC :: Nil, Inner, None, plan1, plan2)
     applyEnsureRequirementsWithSubsetKeys(smjExec) match {
@@ -947,11 +963,11 @@ class EnsureRequirementsSuite extends SharedSparkSession {
     plan1 = DummySparkPlan(
       outputPartitioning = KeyGroupedPartitioning(
         bucket(4, exprA) :: bucket(4, exprB) :: Nil, 4)
-    )
+    ).withDummyBatchScanChild
     plan2 = DummySparkPlan(
       outputPartitioning = KeyGroupedPartitioning(
         bucket(4, exprB) :: bucket(4, exprC) :: Nil, 4)
-    )
+    ).withDummyBatchScanChild
 
     smjExec = SortMergeJoinExec(
       exprA :: exprB :: exprC :: Nil, exprA :: exprB :: exprC :: Nil, Inner, None, plan1, plan2)
@@ -968,11 +984,11 @@ class EnsureRequirementsSuite extends SharedSparkSession {
     plan1 = DummySparkPlan(
       outputPartitioning = KeyGroupedPartitioning(
         bucket(4, exprA) :: bucket(4, exprB) :: Nil, 4)
-    )
+    ).withDummyBatchScanChild
     plan2 = DummySparkPlan(
       outputPartitioning = KeyGroupedPartitioning(
         bucket(4, exprA) :: bucket(8, exprC) :: Nil, 4)
-    )
+    ).withDummyBatchScanChild
     smjExec = SortMergeJoinExec(
       exprA :: exprB :: exprB :: Nil, exprA :: exprC :: exprC :: Nil, Inner, None, plan1, plan2)
     applyEnsureRequirementsWithSubsetKeys(smjExec) match {
@@ -987,10 +1003,10 @@ class EnsureRequirementsSuite extends SharedSparkSession {
     // invalid case: partition key positions match but with different transforms
     plan1 = DummySparkPlan(
       outputPartitioning = KeyGroupedPartitioning(years(exprA) :: bucket(4, exprB) :: Nil, 4)
-    )
+    ).withDummyBatchScanChild
     plan2 = DummySparkPlan(
       outputPartitioning = KeyGroupedPartitioning(days(exprA) :: bucket(4, exprC) :: Nil, 4)
-    )
+    ).withDummyBatchScanChild
     smjExec = SortMergeJoinExec(
       exprA :: exprB :: exprB :: Nil, exprA :: exprC :: exprC :: Nil, Inner, None, plan1, plan2)
     applyEnsureRequirementsWithSubsetKeys(smjExec) match {
@@ -1007,11 +1023,11 @@ class EnsureRequirementsSuite extends SharedSparkSession {
     plan1 = DummySparkPlan(
       outputPartitioning = KeyGroupedPartitioning(
         years(exprA) :: buckets(4, Seq(exprB, exprC)) :: Nil, 4)
-    )
+    ).withDummyBatchScanChild
     plan2 = DummySparkPlan(
       outputPartitioning = KeyGroupedPartitioning(
         years(exprA) :: buckets(4, Seq(exprB, exprC)) :: Nil, 4)
-    )
+    ).withDummyBatchScanChild
     smjExec = SortMergeJoinExec(
       exprA :: exprB :: exprB :: Nil, exprA :: exprC :: exprC :: Nil, Inner, None, plan1, plan2)
     applyEnsureRequirementsWithSubsetKeys(smjExec) match {
@@ -1033,11 +1049,11 @@ class EnsureRequirementsSuite extends SharedSparkSession {
       var plan1 = DummySparkPlan(
         outputPartitioning = KeyGroupedPartitioning(bucket(4, exprB) :: bucket(8, exprC) :: Nil,
           leftPartValues.length, leftPartValues)
-      )
+      ).withDummyBatchScanChild
       var plan2 = DummySparkPlan(
         outputPartitioning = KeyGroupedPartitioning(bucket(4, exprC) :: bucket(8, exprB) :: Nil,
           rightPartValues.length, rightPartValues)
-      )
+      ).withDummyBatchScanChild
 
       // simple case
       var smjExec = SortMergeJoinExec(
@@ -1059,7 +1075,7 @@ class EnsureRequirementsSuite extends SharedSparkSession {
             KeyGroupedPartitioning(bucket(4, exprB) :: bucket(8, exprC) :: Nil,
               leftPartValues.length, leftPartValues))
         )
-      )
+      ).withDummyBatchScanChild
 
       smjExec = SortMergeJoinExec(
         exprA :: exprB :: exprC :: Nil, exprA :: exprC :: exprB :: Nil, Inner, None, plan1, plan2)
@@ -1093,7 +1109,7 @@ class EnsureRequirementsSuite extends SharedSparkSession {
                     rightPartValues.length, rightPartValues)))
           )
         )
-      )
+      ).withDummyBatchScanChild
 
       smjExec = SortMergeJoinExec(
         exprA :: exprB :: exprC :: Nil, exprA :: exprC :: exprB :: Nil, Inner, None, plan1, plan2)
@@ -1121,6 +1137,7 @@ class EnsureRequirementsSuite extends SharedSparkSession {
       val partitionValue = Seq(50, 51, 52).map(v => InternalRow.fromSeq(Seq(v)))
       val plan1 = DummySparkPlan(outputPartitioning = KeyGroupedPartitioning(
           identity(a1) :: Nil, 4, partitionValue))
+        .withDummyBatchScanChild
       val plan2 = DummySparkPlan(outputPartitioning = SinglePartition)
 
       val smjExec = ShuffledHashJoinExec(
