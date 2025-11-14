@@ -143,7 +143,8 @@ object FlowAnalysis {
    * All the public APIs that read from a dataset should call this function to read the dataset.
    *
    * @param name the name of the Dataset to be read.
-   * @param batchReadOptions Options for this batch read
+   * @param batchReader the batch dataframe reader, possibly with options, to execute the read
+   *                    with.
    * @return batch DataFrame that represents data from the specified Dataset.
    */
   final private def readBatchInput(
@@ -174,7 +175,6 @@ object FlowAnalysis {
    *
    * @param name the name of the Dataset to be read.
    * @param streamReader The [[DataStreamReader]] that may hold read options specified by the user.
-   * @param streamingReadOptions Options for this streaming read.
    * @return streaming DataFrame that represents data from the specified Dataset.
    */
   final private def readStreamInput(
@@ -226,7 +226,15 @@ object FlowAnalysis {
       // Dataset is resolved, so we can read from it
       ctx.availableInput(datasetIdentifier)
     }
-    val inputDF = i.load
+    val inputDF = i match {
+      case vt: VirtualTableInput =>
+        // Unlike temporary views (which would have been substituted into flows by this point), we
+        // allow tables to batch read a streaming dataset. We do not allow the opposite however,
+        // which is checked on the resolved graph during graph validation.
+        vt.load(asStreaming = isStreamingRead)
+      case _ => i.load
+    }
+
     i match {
       // If the referenced input is a [[Flow]], because the query plans will be fused
       // together, we also need to fuse their confs.

@@ -173,7 +173,14 @@ case class VirtualTableInput(
   override def origin: QueryOrigin = QueryOrigin()
 
   assert(availableFlows.forall(_.destinationIdentifier == identifier))
-  override def load: DataFrame = {
+
+  /**
+   * Loads this virtual table as a dataframe
+   *
+   * @param asStreaming whether to load as a streaming DF or batch DF. There are cases where we may
+   *                    want to batch read from a streaming table, for example.
+   */
+  def load(asStreaming: Boolean): DataFrame = {
     val deducedSchema = specifiedSchema match {
       // If the user specified a schema, use it directly.
       case Some(ss) => ss
@@ -186,12 +193,17 @@ case class VirtualTableInput(
     // Produce either a streaming or batch dataframe, depending on whether this is a virtual
     // representation of a streaming or non-streaming table. Return the [empty] dataframe with the
     // deduced schema.
-    if (isStreamingTable) {
+    if (asStreaming) {
       MemoryStream[Row](ExpressionEncoder(deducedSchema, lenient = false), spark)
         .toDF()
     } else {
       spark.createDataFrame(new util.ArrayList[Row](), deducedSchema)
     }
+  }
+
+  /** Default load virtual table into dataframe. */
+  override def load: DataFrame = {
+    load(asStreaming = isStreamingTable)
   }
 }
 
