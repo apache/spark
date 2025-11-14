@@ -28,7 +28,6 @@ import org.apache.spark.SparkException
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Kryo._
 import org.apache.spark.memory.{SparkOutOfMemoryError, TaskMemoryManager, UnifiedMemoryManager}
-import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.serializer.KryoSerializer
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
@@ -759,8 +758,8 @@ class HashedRelationSuite extends SharedSparkSession {
     // We should finally see an OOM thrown since we are keeping allocating hashed relations.
     assertThrows[SparkOutOfMemoryError] {
       while (true) {
-        relations += UnsafeHashedRelation(
-          Iterator.empty, Nil, ByteUnit.MiB.toBytes(200).toInt, mm)
+        // Allocates ~128 MiB each time.
+        relations += UnsafeHashedRelation(Iterator.empty, Nil, 1 << 22, mm)
       }
     }
     // Releases the allocated memory.
