@@ -248,87 +248,90 @@ class SparkConnectClientTestCase(unittest.TestCase):
         mock = MockService(client._session_id)
         client._stub = mock
 
-        exlocal = any_pb2.Any()
-        exlocal.Pack(wrappers_pb2.StringValue(value="abc"))
-        exlocal2 = any_pb2.Any()
-        exlocal2.Pack(wrappers_pb2.StringValue(value="def"))
-        exglobal = any_pb2.Any()
-        exglobal.Pack(wrappers_pb2.StringValue(value="ghi"))
-        exglobal2 = any_pb2.Any()
-        exglobal2.Pack(wrappers_pb2.StringValue(value="jkl"))
+        try:
+            exlocal = any_pb2.Any()
+            exlocal.Pack(wrappers_pb2.StringValue(value="abc"))
+            exlocal2 = any_pb2.Any()
+            exlocal2.Pack(wrappers_pb2.StringValue(value="def"))
+            exglobal = any_pb2.Any()
+            exglobal.Pack(wrappers_pb2.StringValue(value="ghi"))
+            exglobal2 = any_pb2.Any()
+            exglobal2.Pack(wrappers_pb2.StringValue(value="jkl"))
 
-        exlocal_id = client.add_threadlocal_user_context_extension(exlocal)
-        exglobal_id = client.add_global_user_context_extension(exglobal)
+            exlocal_id = client.add_threadlocal_user_context_extension(exlocal)
+            exglobal_id = client.add_global_user_context_extension(exglobal)
 
-        mock.client_user_context_extensions = []
-        command = proto.Command()
-        client.execute_command(command)
-        self.assertTrue(exlocal in mock.client_user_context_extensions)
-        self.assertTrue(exglobal in mock.client_user_context_extensions)
-        self.assertFalse(exlocal2 in mock.client_user_context_extensions)
-        self.assertFalse(exglobal2 in mock.client_user_context_extensions)
+            mock.client_user_context_extensions = []
+            command = proto.Command()
+            client.execute_command(command)
+            self.assertTrue(exlocal in mock.client_user_context_extensions)
+            self.assertTrue(exglobal in mock.client_user_context_extensions)
+            self.assertFalse(exlocal2 in mock.client_user_context_extensions)
+            self.assertFalse(exglobal2 in mock.client_user_context_extensions)
 
-        client.add_threadlocal_user_context_extension(exlocal2)
+            client.add_threadlocal_user_context_extension(exlocal2)
 
-        mock.client_user_context_extensions = []
-        plan = proto.Plan()
-        client.semantic_hash(plan)  # use semantic_hash to test analyze
-        self.assertTrue(exlocal in mock.client_user_context_extensions)
-        self.assertTrue(exglobal in mock.client_user_context_extensions)
-        self.assertTrue(exlocal2 in mock.client_user_context_extensions)
-        self.assertFalse(exglobal2 in mock.client_user_context_extensions)
+            mock.client_user_context_extensions = []
+            plan = proto.Plan()
+            client.semantic_hash(plan)  # use semantic_hash to test analyze
+            self.assertTrue(exlocal in mock.client_user_context_extensions)
+            self.assertTrue(exglobal in mock.client_user_context_extensions)
+            self.assertTrue(exlocal2 in mock.client_user_context_extensions)
+            self.assertFalse(exglobal2 in mock.client_user_context_extensions)
 
-        client.add_global_user_context_extension(exglobal2)
+            client.add_global_user_context_extension(exglobal2)
 
-        mock.client_user_context_extensions = []
-        client.interrupt_all()
-        self.assertTrue(exlocal in mock.client_user_context_extensions)
-        self.assertTrue(exglobal in mock.client_user_context_extensions)
-        self.assertTrue(exlocal2 in mock.client_user_context_extensions)
-        self.assertTrue(exglobal2 in mock.client_user_context_extensions)
+            mock.client_user_context_extensions = []
+            client.interrupt_all()
+            self.assertTrue(exlocal in mock.client_user_context_extensions)
+            self.assertTrue(exglobal in mock.client_user_context_extensions)
+            self.assertTrue(exlocal2 in mock.client_user_context_extensions)
+            self.assertTrue(exglobal2 in mock.client_user_context_extensions)
 
-        client.remove_user_context_extension(exlocal_id)
+            client.remove_user_context_extension(exlocal_id)
 
-        mock.client_user_context_extensions = []
-        client.get_configs("foo", "bar")
-        self.assertFalse(exlocal in mock.client_user_context_extensions)
-        self.assertTrue(exglobal in mock.client_user_context_extensions)
-        self.assertTrue(exlocal2 in mock.client_user_context_extensions)
-        self.assertTrue(exglobal2 in mock.client_user_context_extensions)
+            mock.client_user_context_extensions = []
+            client.get_configs("foo", "bar")
+            self.assertFalse(exlocal in mock.client_user_context_extensions)
+            self.assertTrue(exglobal in mock.client_user_context_extensions)
+            self.assertTrue(exlocal2 in mock.client_user_context_extensions)
+            self.assertTrue(exglobal2 in mock.client_user_context_extensions)
 
-        client.remove_user_context_extension(exglobal_id)
+            client.remove_user_context_extension(exglobal_id)
 
-        mock.client_user_context_extensions = []
-        command = proto.Command()
-        client.execute_command(command)
-        self.assertFalse(exlocal in mock.client_user_context_extensions)
-        self.assertFalse(exglobal in mock.client_user_context_extensions)
-        self.assertTrue(exlocal2 in mock.client_user_context_extensions)
-        self.assertTrue(exglobal2 in mock.client_user_context_extensions)
+            mock.client_user_context_extensions = []
+            command = proto.Command()
+            client.execute_command(command)
+            self.assertFalse(exlocal in mock.client_user_context_extensions)
+            self.assertFalse(exglobal in mock.client_user_context_extensions)
+            self.assertTrue(exlocal2 in mock.client_user_context_extensions)
+            self.assertTrue(exglobal2 in mock.client_user_context_extensions)
 
-        client.clear_user_context_extensions()
+            client.clear_user_context_extensions()
 
-        mock.client_user_context_extensions = []
-        plan = proto.Plan()
-        client.semantic_hash(plan)  # use semantic_hash to test analyze
-        self.assertFalse(exlocal in mock.client_user_context_extensions)
-        self.assertFalse(exglobal in mock.client_user_context_extensions)
-        self.assertFalse(exlocal2 in mock.client_user_context_extensions)
-        self.assertFalse(exglobal2 in mock.client_user_context_extensions)
+            mock.client_user_context_extensions = []
+            plan = proto.Plan()
+            client.semantic_hash(plan)  # use semantic_hash to test analyze
+            self.assertFalse(exlocal in mock.client_user_context_extensions)
+            self.assertFalse(exglobal in mock.client_user_context_extensions)
+            self.assertFalse(exlocal2 in mock.client_user_context_extensions)
+            self.assertFalse(exglobal2 in mock.client_user_context_extensions)
 
-        mock.client_user_context_extensions = []
-        client.interrupt_all()
-        self.assertFalse(exlocal in mock.client_user_context_extensions)
-        self.assertFalse(exglobal in mock.client_user_context_extensions)
-        self.assertFalse(exlocal2 in mock.client_user_context_extensions)
-        self.assertFalse(exglobal2 in mock.client_user_context_extensions)
+            mock.client_user_context_extensions = []
+            client.interrupt_all()
+            self.assertFalse(exlocal in mock.client_user_context_extensions)
+            self.assertFalse(exglobal in mock.client_user_context_extensions)
+            self.assertFalse(exlocal2 in mock.client_user_context_extensions)
+            self.assertFalse(exglobal2 in mock.client_user_context_extensions)
 
-        mock.client_user_context_extensions = []
-        client.get_configs("foo", "bar")
-        self.assertFalse(exlocal in mock.client_user_context_extensions)
-        self.assertFalse(exglobal in mock.client_user_context_extensions)
-        self.assertFalse(exlocal2 in mock.client_user_context_extensions)
-        self.assertFalse(exglobal2 in mock.client_user_context_extensions)
+            mock.client_user_context_extensions = []
+            client.get_configs("foo", "bar")
+            self.assertFalse(exlocal in mock.client_user_context_extensions)
+            self.assertFalse(exglobal in mock.client_user_context_extensions)
+            self.assertFalse(exlocal2 in mock.client_user_context_extensions)
+            self.assertFalse(exglobal2 in mock.client_user_context_extensions)
+        finally:
+            client.close()
 
     def test_interrupt_all(self):
         client = SparkConnectClient("sc://foo/;token=bar", use_reattachable_execute=False)
