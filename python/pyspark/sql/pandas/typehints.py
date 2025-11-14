@@ -234,6 +234,15 @@ def infer_arrow_eval_type(
     if is_iterator_array:
         return ArrowUDFType.SCALAR_ITER
 
+    # pa.Array, ... -> Any
+    is_array_agg = all(a == pa.Array for a in parameters_sig) and (
+        return_annotation != pa.Array
+        and not check_iterator_annotation(return_annotation)
+        and not check_tuple_annotation(return_annotation)
+    )
+    if is_array_agg:
+        return ArrowUDFType.GROUPED_AGG
+
     # Iterator[Tuple[pa.Array, ...]] -> Any
     is_iterator_tuple_array_agg = (
         len(parameters_sig) == 1
@@ -268,15 +277,6 @@ def infer_arrow_eval_type(
     )
     if is_iterator_array_agg:
         return ArrowUDFType.GROUPED_AGG_ITER
-
-    # pa.Array, ... -> Any
-    is_array_agg = all(a == pa.Array for a in parameters_sig) and (
-        return_annotation != pa.Array
-        and not check_iterator_annotation(return_annotation)
-        and not check_tuple_annotation(return_annotation)
-    )
-    if is_array_agg:
-        return ArrowUDFType.GROUPED_AGG
 
     return None
 

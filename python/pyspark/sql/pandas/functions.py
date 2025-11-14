@@ -311,7 +311,6 @@ def arrow_udf(f=None, returnType=None, functionType=None):
         iteratively, which is more memory-efficient than loading all data at once. The returned
         scalar can be a python primitive type, a numpy data type, or a `pyarrow.Scalar` instance.
 
-        >>> import pandas as pd
         >>> from typing import Iterator
         >>> @arrow_udf("double")
         ... def arrow_mean(it: Iterator[pa.Array]) -> float:
@@ -325,7 +324,7 @@ def arrow_udf(f=None, returnType=None, functionType=None):
         ...
         >>> df = spark.createDataFrame(
         ...     [(1, 1.0), (1, 2.0), (2, 3.0), (2, 5.0), (2, 10.0)], ("id", "v"))
-        >>> df.groupby("id").agg(arrow_mean(df['v'])).show()  # doctest: +SKIP
+        >>> df.groupby("id").agg(arrow_mean(df['v'])).show()
         +---+---------------+
         | id|arrow_mean(v)  |
         +---+---------------+
@@ -355,12 +354,12 @@ def arrow_udf(f=None, returnType=None, functionType=None):
         >>> df = spark.createDataFrame(
         ...     [(1, 1.0, 1.0), (1, 2.0, 2.0), (2, 3.0, 1.0), (2, 5.0, 2.0), (2, 10.0, 3.0)],
         ...     ("id", "v", "w"))
-        >>> df.groupby("id").agg(arrow_weighted_mean(df["v"], df["w"])).show()  # doctest: +SKIP
+        >>> df.groupby("id").agg(arrow_weighted_mean(df["v"], df["w"])).show()
         +---+---------------------------------+
         | id|arrow_weighted_mean(v, w)        |
         +---+---------------------------------+
-        |  1|               1.6666666666666667|
-        |  2|                7.166666666666667|
+        |  1|               1.6666666666666...|
+        |  2|                7.166666666666...|
         +---+---------------------------------+
 
     Notes
