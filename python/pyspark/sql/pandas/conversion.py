@@ -59,8 +59,8 @@ def _convert_arrow_table_to_pandas(
     arrow_table: "pa.Table",
     schema_fields: List["StructField"],
     temp_col_names: List[str],
-    timezone: str,
-    struct_in_pandas: str,
+    timezone: Optional[str],
+    struct_in_pandas: Optional[str],
     error_on_duplicated_field_names: bool,
     pandas_options: dict,
 ) -> "PandasDataFrameLike":
@@ -79,10 +79,11 @@ def _convert_arrow_table_to_pandas(
         The schema fields corresponding to the columns
     temp_col_names : list of str
         Temporary column names to use during conversion
-    timezone : str
-        The timezone to use for timestamp conversions
-    struct_in_pandas : str
-        How to handle struct types in pandas ("dict", "row", or "legacy")
+    timezone : str or None
+        The timezone to use for timestamp conversions (can be None if not configured)
+    struct_in_pandas : str or None
+        How to handle struct types in pandas ("dict", "row", or "legacy", can be None
+         if not configured)
     error_on_duplicated_field_names : bool
         Whether to error on duplicated field names in structs
     pandas_options : dict
