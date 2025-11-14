@@ -37,6 +37,7 @@ private[sql] trait SqlApiConf {
   def exponentLiteralAsDecimalEnabled: Boolean
   def enforceReservedKeywords: Boolean
   def doubleQuotedIdentifiers: Boolean
+  def singleCharacterPipeOperatorEnabled: Boolean
   def timestampType: AtomicType
   def allowNegativeScaleOfDecimalEnabled: Boolean
   def charVarcharAsString: Boolean
@@ -93,6 +94,7 @@ private[sql] object DefaultSqlApiConf extends SqlApiConf {
   override def exponentLiteralAsDecimalEnabled: Boolean = false
   override def enforceReservedKeywords: Boolean = false
   override def doubleQuotedIdentifiers: Boolean = false
+  override def singleCharacterPipeOperatorEnabled: Boolean = true
   override def timestampType: AtomicType = TimestampType
   override def allowNegativeScaleOfDecimalEnabled: Boolean = false
   override def charVarcharAsString: Boolean = false

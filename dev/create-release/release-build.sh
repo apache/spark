@@ -835,11 +835,12 @@ if [[ "$1" == "docs" ]]; then
   PRODUCTION=1 RELEASE_VERSION="$SPARK_VERSION" bundle exec jekyll build
 
   # Generate llms.txt for LLM consumption
+  # Note this doc is currently versionless and need to be placed at the documentation root.
   echo "Generating llms.txt..."
   python "$SELF/generate-llms-txt.py" \
     --docs-path . \
-    --output "$SELF/_site/llms.txt" \
-    --version "$SPARK_VERSION"
+    --output "$SELF/llms.txt" \
+    --version "latest"
 
   cd ..
   cd ..

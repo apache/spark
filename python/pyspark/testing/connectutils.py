@@ -16,7 +16,6 @@
 #
 import shutil
 import tempfile
-import typing
 import os
 import functools
 import unittest
@@ -133,7 +132,6 @@ class PlanOnlyTestFixture(unittest.TestCase, PySparkErrorTestUtils):
         @classmethod
         def setUpClass(cls):
             cls.connect = MockRemoteSession()
-            cls.session = SparkSession.builder.remote().getOrCreate()
             cls.tbl_name = "test_connect_plan_only_table_1"
 
             cls.connect.set_hook("readTable", cls._read_table)
