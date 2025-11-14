@@ -215,25 +215,6 @@ table t
 table t
 |> select /*+ repartition(3) */ all x;
 
--- SELECT operators: negative tests.
----------------------------------------
-
--- Aggregate functions are not allowed in the pipe operator SELECT list.
-table t
-|> select sum(x) as result;
-
-table t
-|> select y, length(y) + sum(x) as result;
-
-from t
-|> select sum(x);
-
-from t as t_alias
-|> select y, sum(x);
-
-from t as t_alias
-|> select y, sum(x) group by y;
-
 -- EXTEND operators: positive tests.
 ------------------------------------
 
@@ -1157,10 +1138,6 @@ select 1 as x, 2 as y
 table other
 |> aggregate a;
 
--- Using aggregate functions without the AGGREGATE keyword is not allowed.
-table other
-|> select sum(a) as result;
-
 -- The AGGREGATE keyword requires a GROUP BY clause and/or aggregation function(s).
 table other
 |> aggregate;
@@ -1845,6 +1822,68 @@ set spark.sql.parser.singleCharacterPipeOperator.enabled=true;
 -- Verify that single pipe works again after re-enabling.
 table t
 | select x, y;
+
+-- Aggregates in SELECT: positive tests.
+------------------------------------------
+-- Aggregate functions can be used in |> SELECT without requiring the |> AGGREGATE keyword.
+
+-- Aggregates in SELECT.
+table other
+|> select sum(a) as result;
+
+-- Aggregates in SELECT with multiple aggregate functions.
+table other
+|> select sum(a) as total_a, avg(b) as avg_b;
+
+-- Aggregates in SELECT with WHERE clause.
+table other
+|> where b > 1
+|> select sum(a) as result;
+
+-- Aggregates in SELECT with chaining.
+table other
+|> select sum(a) as total_a
+|> select total_a * 2 as doubled;
+
+-- Mixed aggregates and non-aggregates in SELECT (should work like regular aggregation).
+table other
+|> select a, sum(b) as sum_b group by a;
+
+-- Multiple grouping columns in SELECT.
+select 1 as x, 2 as y, 3 as z
+|> select x, y, sum(z) as total group by x, y;
+
+-- GROUP BY with ordinal position referring to input column.
+table other
+|> select a, sum(b) as sum_b group by 1;
+
+-- Chaining: GROUP BY followed by WHERE on aggregated result.
+table other
+|> select a, sum(b) as sum_b group by a
+|> where sum_b > 1;
+
+-- GROUP BY with expression and alias.
+select 1 as x, 2 as y
+|> select x + 1 as x_plus_one, sum(y) as sum_y group by x + 1;
+
+-- Non-aggregated column without being in GROUP BY should fail.
+table other
+|> select a, sum(b) as sum_b group by b;
+
+-- Aggregates in SELECT: negative tests.
+------------------------------------------
+
+-- Aggregates in EXTEND are not allowed.
+table other
+|> extend sum(a) as total_a;
+
+-- Aggregates in WHERE are not allowed.
+table other
+|> where sum(a) > 5;
+
+-- The |> AGGREGATE keyword also works for aggregation.
+table other
+|> aggregate sum(a) as total_a;
 
 -- Cleanup.
 -----------

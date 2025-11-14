@@ -1793,7 +1793,7 @@ version
     ;
 
 operatorPipeRightSide
-    : selectClause windowClause?
+    : selectClause aggregationClause? windowClause?
     | EXTEND extendList=namedExpressionSeq
     | SET operatorPipeSetAssignmentSeq
     | DROP identifierSeq
