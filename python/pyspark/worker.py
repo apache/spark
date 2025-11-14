@@ -2735,7 +2735,10 @@ def read_udfs(pickleSer, infile, eval_type):
             PythonEvalType.SQL_WINDOW_AGG_PANDAS_UDF,
         ):
             ser = GroupPandasUDFSerializer(
-                timezone, safecheck, _assign_cols_by_name, int_to_decimal_coercion_enabled
+                timezone=timezone,
+                safecheck=safecheck,
+                assign_cols_by_name=_assign_cols_by_name,
+                int_to_decimal_coercion_enabled=int_to_decimal_coercion_enabled,
             )
         elif eval_type == PythonEvalType.SQL_COGROUPED_MAP_ARROW_UDF:
             ser = CogroupArrowUDFSerializer(_assign_cols_by_name)

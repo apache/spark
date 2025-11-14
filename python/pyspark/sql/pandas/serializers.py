@@ -1204,9 +1204,28 @@ class GroupPandasUDFSerializer(ArrowStreamPandasUDFSerializer):
     """
     Serializer for grouped map Pandas UDFs.
 
-    Always yields an iterator of pandas.Series lists (one list per batch).
-    The wrapper functions handle whether to concatenate all batches (regular mode)
-    or pass the iterator through (iterator mode).
+    Data Flow:
+    ----------
+    **Deserialization (load_stream):**
+        Arrow RecordBatches -> Iterator of pandas.Series lists
+        - Each iteration yields one list of Series (one Series per column)
+        - Each Series list represents one Arrow batch
+
+    **Serialization (dump_stream):**
+        (generator, arrow_type) tuples -> Arrow RecordBatches
+        - Receives tuples where the first element is a generator of DataFrames
+        - Flattens the generators to individual DataFrames before serialization
+
+    Parameters
+    ----------
+    timezone : str
+        A timezone to respect when handling timestamp values
+    safecheck : bool
+        If True, conversion from Arrow to Pandas checks for overflow/truncation
+    assign_cols_by_name : bool
+        If True, then Pandas DataFrames will get columns by name
+    int_to_decimal_coercion_enabled : bool
+        If True, applies additional coercions in Python before converting to Arrow
     """
 
     def __init__(
