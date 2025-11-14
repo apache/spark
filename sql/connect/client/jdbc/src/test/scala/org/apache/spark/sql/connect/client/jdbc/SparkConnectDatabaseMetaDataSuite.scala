@@ -547,4 +547,87 @@ class SparkConnectDatabaseMetaDataSuite extends ConnectFunSuite with RemoteSpark
       }
     }
   }
+  test("SparkConnectDatabaseMetaData getTables") {
+
+     case class GetColumnResult(
+       TABLE_CAT: String,
+       TABLE_SCHEM: String,
+       TABLE_NAME: String,
+       COLUMN_NAME: String,
+       DATA_TYPE: Int,
+       TYPE_NAME: String,
+       COLUMN_SIZE: Int,
+       BUFFER_LENGTH: Int,
+       DECIMAL_DIGITS: Int,
+       NUM_PREC_RADIX: Int,
+       NULLABLE: Int,
+       REMARKS: String,
+       COLUMN_DEF: String,
+       SQL_DATA_TYPE: Int,
+       SQL_DATETIME_SUB: Int,
+       CHAR_OCTET_LENGTH: Int,
+       ORDINAL_POSITION: Int,
+       IS_NULLABLE: String,
+       SCOPE_CATALOG: String,
+       SCOPE_SCHEMA: String,
+       SCOPE_TABLE: String,
+       SOURCE_DATA_TYPE: Short,
+       IS_AUTOINCREMENT: String,
+       IS_GENERATEDCOLUMN: String)
+
+    def verifyEmptyFields(result: GetColumnResult): Unit = {
+        assert(result.BUFFER_LENGTH === 0)
+        assert(result.SQL_DATA_TYPE === 0)
+        assert(result.SQL_DATETIME_SUB === 0)
+        assert(result.SCOPE_CATALOG === "")
+        assert(result.SCOPE_SCHEMA === "")
+        assert(result.SCOPE_TABLE === "")
+        assert(result.SOURCE_DATA_TYPE === 0.toShort)
+    }
+
+    def verifyGetColumns(
+        getColumns: () => ResultSet)(verify: Seq[GetColumnResult] => Unit): Unit = {
+      Using.resource(getColumns()) { rs =>
+        val getTableResults = new Iterator[GetColumnResult] {
+          def hasNext: Boolean = rs.next()
+
+          def next(): GetColumnResult = GetColumnResult(
+            TABLE_CAT = rs.getString("TABLE_CAT"),
+            TABLE_SCHEM = rs.getString("TABLE_SCHEM"),
+            TABLE_NAME = rs.getString("TABLE_NAME"),
+            COLUMN_NAME = rs.getString("COLUMN_NAME"),
+            DATA_TYPE = rs.getInt("DATA_TYPE"),
+            TYPE_NAME = rs.getString("TYPE_NAME"),
+            COLUMN_SIZE = rs.getInt("COLUMN_SIZE"),
+            BUFFER_LENGTH = rs.getInt("BUFFER_LENGTH"),
+            DECIMAL_DIGITS = rs.getInt("DECIMAL_DIGITS"),
+            NUM_PREC_RADIX = rs.getInt("NUM_PREC_RADIX"),
+            NULLABLE = rs.getInt("NULLABLE"),
+            REMARKS = rs.getString("REMARKS"),
+            COLUMN_DEF = rs.getString("COLUMN_DEF"),
+            SQL_DATA_TYPE = rs.getShort("SQL_DATA_TYPE"),
+            SQL_DATETIME_SUB = rs.getInt("SQL_DATETIME_SUB"),
+            CHAR_OCTET_LENGTH = rs.getInt("CHAR_OCTET_LENGTH"),
+            ORDINAL_POSITION = rs.getInt("ORDINAL_POSITION"),
+            IS_NULLABLE = rs.getString("IS_NULLABLE"),
+            SCOPE_CATALOG = rs.getString("SCOPE_CATALOG"),
+            SCOPE_SCHEMA = rs.getString("SCOPE_SCHEMA"),
+            SCOPE_TABLE = rs.getString("SCOPE_TABLE"),
+            SOURCE_DATA_TYPE = rs.getShort("SOURCE_DATA_TYPE"),
+            IS_AUTOINCREMENT = rs.getString("IS_AUTOINCREMENT"),
+            IS_GENERATEDCOLUMN = rs.getString("IS_GENERATEDCOLUMN"))
+        }.toSeq
+        verify(getTableResults)
+      }
+    }
+
+    withConnection { conn =>
+      implicit val spark: SparkSession = conn.asInstanceOf[SparkConnectConnection].spark
+
+      // this catalog does not support view
+      registerCatalog("testcat", TEST_IN_MEMORY_CATALOG)
+
+      // TODO
+    }
+  }
 }
