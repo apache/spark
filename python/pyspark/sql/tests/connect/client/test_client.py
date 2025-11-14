@@ -168,16 +168,6 @@ if should_test_connect:
             resp.session_id = self._session_id
             return resp
 
-        def AnalyzePlan(self, req: proto.AnalyzePlanRequest, metadata):
-            # Always returns SemanticHash message
-            self.req = req
-            self.client_user_context_extensions = req.user_context.extensions
-            resp = proto.AnalyzePlanResponse(
-                session_id=self._session_id,
-                semantic_hash=proto.AnalyzePlanResponse.SemanticHash(result=0),
-            )
-            return resp
-
         def Config(self, req: proto.ConfigRequest, metadata):
             self.req = req
             self.client_user_context_extensions = req.user_context.extensions
