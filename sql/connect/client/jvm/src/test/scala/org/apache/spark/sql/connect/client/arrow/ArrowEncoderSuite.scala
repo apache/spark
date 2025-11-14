@@ -43,7 +43,7 @@ import org.apache.spark.sql.catalyst.util.SparkDateTimeUtils._
 import org.apache.spark.sql.catalyst.util.SparkIntervalUtils._
 import org.apache.spark.sql.connect.client.CloseableIterator
 import org.apache.spark.sql.connect.client.arrow.FooEnum.FooEnum
-import org.apache.spark.sql.connect.test.ConnectFunSuite
+import org.apache.spark.sql.connect.test.{ConnectFunSuite, RemoteSparkSession, SQLHelper}
 import org.apache.spark.sql.types.{ArrayType, DataType, DayTimeIntervalType, Decimal, DecimalType, Geography, Geometry, IntegerType, Metadata, SQLUserDefinedType, StringType, StructType, UserDefinedType, YearMonthIntervalType}
 import org.apache.spark.unsafe.types.VariantVal
 import org.apache.spark.util.{MaybeNull, SparkStringUtils}
@@ -51,14 +51,20 @@ import org.apache.spark.util.{MaybeNull, SparkStringUtils}
 /**
  * Tests for encoding external data to and from arrow.
  */
-class ArrowEncoderSuite extends ConnectFunSuite with BeforeAndAfterAll {
+class ArrowEncoderSuite extends ConnectFunSuite
+    with RemoteSparkSession with SQLHelper with BeforeAndAfterAll {
   private val allocator = new RootAllocator()
 
   private def newAllocator(name: String): BufferAllocator = {
     allocator.newChildAllocator(name, 0, allocator.getLimit)
   }
 
-  protected override def afterAll(): Unit = {
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    System.setProperty("spark.testing", "true")
+  }
+
+  override def afterAll(): Unit = {
     super.afterAll()
     allocator.close()
   }
@@ -264,50 +270,52 @@ class ArrowEncoderSuite extends ConnectFunSuite with BeforeAndAfterAll {
   }
 
   test("geography round trip") {
-    val point1 = "010100000000000000000031400000000000001C40"
-      .grouped(2)
-      .map(Integer.parseInt(_, 16).toByte)
-      .toArray
-    val point2 = "010100000000000000000035400000000000001E40"
-      .grouped(2)
-      .map(Integer.parseInt(_, 16).toByte)
-      .toArray
+    withSQLConf("spark.sql.geospatial.enabled" -> "true") {
+      val point1 = "010100000000000000000031400000000000001C40"
+        .grouped(2)
+        .map(Integer.parseInt(_, 16).toByte)
+        .toArray
+      val point2 = "010100000000000000000035400000000000001E40"
+        .grouped(2)
+        .map(Integer.parseInt(_, 16).toByte)
+        .toArray
 
-    val geographyEncoder = toRowEncoder(new StructType().add("g", "geography(4326)"))
-    roundTripAndCheckIdentical(geographyEncoder) { () =>
-      val maybeNull = MaybeNull(7)
-      Iterator.tabulate(101)(i => Row(maybeNull(Geography.fromWKB(point1, 4326))))
-    }
+      val geographyEncoder = toRowEncoder(new StructType().add("g", "geography(4326)"))
+      roundTripAndCheckIdentical(geographyEncoder) { () =>
+        val maybeNull = MaybeNull(7)
+        Iterator.tabulate(101)(i => Row(maybeNull(Geography.fromWKB(point1, 4326))))
+      }
 
-    val nestedGeographyEncoder = toRowEncoder(
-      new StructType()
-        .add(
-          "s",
-          new StructType()
-            .add("i1", "int")
-            .add("g0", "geography(4326)")
-            .add("i2", "int")
-            .add("g4326", "geography(4326)"))
-        .add("a", "array<geography(4326)>")
-        .add("m", "map<string, geography(ANY)>"))
+      val nestedGeographyEncoder = toRowEncoder(
+        new StructType()
+          .add(
+            "s",
+            new StructType()
+              .add("i1", "int")
+              .add("g0", "geography(4326)")
+              .add("i2", "int")
+              .add("g4326", "geography(4326)"))
+          .add("a", "array<geography(4326)>")
+          .add("m", "map<string, geography(ANY)>"))
 
-    roundTripAndCheckIdentical(nestedGeographyEncoder) { () =>
-      val maybeNull5 = MaybeNull(5)
-      val maybeNull7 = MaybeNull(7)
-      val maybeNull11 = MaybeNull(11)
-      val maybeNull13 = MaybeNull(13)
-      val maybeNull17 = MaybeNull(17)
-      Iterator
-        .tabulate(100)(i =>
-          Row(
-            maybeNull5(
-              Row(
-                i,
-                maybeNull7(Geography.fromWKB(point1)),
-                i + 1,
-                maybeNull11(Geography.fromWKB(point2, 4326)))),
-            maybeNull7((0 until 10).map(j => Geography.fromWKB(point2, 0))),
-            maybeNull13(Map((i.toString, maybeNull17(Geography.fromWKB(point1, 4326)))))))
+      roundTripAndCheckIdentical(nestedGeographyEncoder) { () =>
+        val maybeNull5 = MaybeNull(5)
+        val maybeNull7 = MaybeNull(7)
+        val maybeNull11 = MaybeNull(11)
+        val maybeNull13 = MaybeNull(13)
+        val maybeNull17 = MaybeNull(17)
+        Iterator
+          .tabulate(100)(i =>
+            Row(
+              maybeNull5(
+                Row(
+                  i,
+                  maybeNull7(Geography.fromWKB(point1)),
+                  i + 1,
+                  maybeNull11(Geography.fromWKB(point2, 4326)))),
+              maybeNull7((0 until 10).map(j => Geography.fromWKB(point2, 0))),
+              maybeNull13(Map((i.toString, maybeNull17(Geography.fromWKB(point1, 4326)))))))
+      }
     }
   }
 
