@@ -16,7 +16,8 @@
 #
 import os
 import faulthandler
-
+from functools import wraps
+from typing import Any, Callable
 
 class FaultHandlerIntegration:
     def __init__(self):
@@ -50,3 +51,14 @@ class FaultHandlerIntegration:
                 self._log_file = None
             os.remove(self._log_path)
             self._log_path = None
+
+def with_fault_handler(func: Callable):
+    @wraps(func)
+    def wrapper(*args: Any, **kwargs: Any) -> Any:
+        fault_handler = FaultHandlerIntegration()
+        try:
+            fault_handler.start()
+            return func(*args, **kwargs)
+        finally:
+            fault_handler.stop()
+    return wrapper
