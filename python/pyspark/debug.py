@@ -39,7 +39,7 @@ class FaultHandlerIntegration:
                 self._periodic_dump = True
                 faulthandler.dump_traceback_later(int(tracebackDumpIntervalSeconds), repeat=True)
 
-    def stop():
+    def stop(self):
         if self._periodic_dump:
             faulthandler.cancel_dump_traceback_later()
             self._periodic_dump = False
