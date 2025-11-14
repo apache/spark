@@ -223,6 +223,8 @@ class SparkSession private(
   @Unstable
   def streams: StreamingQueryManager = sessionState.streamingQueryManager
 
+  private[spark] def streamingCheckpointManager = sessionState.streamingCheckpointManager
+
   /**
    * Returns an `ArtifactManager` that supports adding, managing and using session-scoped artifacts
    * (jars, classfiles, etc).
