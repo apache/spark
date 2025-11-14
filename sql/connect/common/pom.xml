@@ -87,6 +87,10 @@
             <artifactId>netty-transport-native-unix-common</artifactId>
             <version>${netty.version}</version>
         </dependency>
+        <dependency>
+            <groupId>com.github.luben</groupId>
+            <artifactId>zstd-jni</artifactId>
+        </dependency>
         <!--
           This spark-tags test-dep is needed even though it isn't used in this module,
           otherwise testing-cmds that excludethem will yield errors.
