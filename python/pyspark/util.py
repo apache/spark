@@ -920,8 +920,8 @@ def default_api_mode() -> str:
 
 class _FaultHandlerIntegration:
     def __init__(self) -> None:
-        self._log_path = None
-        self._log_file = None
+        self._log_path: Optional[str] = None
+        self._log_file: Optional[TextIO] = None
         self._periodic_dump = False
 
     def start(self) -> None:
@@ -952,7 +952,7 @@ class _FaultHandlerIntegration:
             self._log_path = None
 
 
-def with_fault_handler(func: Callable):
+def with_fault_handler(func: Callable) -> Callable:
     """
     Registers fault handler for the duration of function execution.
     After function execution is over the faulthandler registration is cleaned as well,
