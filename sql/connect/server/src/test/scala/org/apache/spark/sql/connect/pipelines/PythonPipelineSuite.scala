@@ -476,17 +476,17 @@ class PythonPipelineSuite
   test("reading external datasets outside query function works") {
     sql("CREATE TABLE spark_catalog.default.src AS SELECT * FROM RANGE(5)")
     val graph = buildGraph(s"""
-                    |spark_sql_df = spark.sql("SELECT * FROM spark_catalog.default.src")
-                    |read_table_df = spark.read.table("spark_catalog.default.src")
-                    |
-                    |@dp.materialized_view
-                    |def mv_from_spark_sql_df():
-                    |  return spark_sql_df
-                    |
-                    |@dp.materialized_view
-                    |def mv_from_read_table_df():
-                    |  return read_table_df
-                    |""".stripMargin).resolve().validate()
+        |spark_sql_df = spark.sql("SELECT * FROM spark_catalog.default.src")
+        |read_table_df = spark.read.table("spark_catalog.default.src")
+        |
+        |@dp.materialized_view
+        |def mv_from_spark_sql_df():
+        |  return spark_sql_df
+        |
+        |@dp.materialized_view
+        |def mv_from_read_table_df():
+        |  return read_table_df
+        |""".stripMargin).resolve().validate()
 
     assert(
       graph.resolvedFlows.map(_.identifier).toSet == Set(
@@ -1046,12 +1046,12 @@ class PythonPipelineSuite
     unsupportedSqlCommandList) { unsupportedSqlCommand =>
     val ex = intercept[RuntimeException] {
       buildGraph(s"""
-                    |spark.sql("$unsupportedSqlCommand")
-                    |
-                    |@dp.materialized_view()
-                    |def mv():
-                    |  return spark.range(5)
-                    |""".stripMargin)
+        |spark.sql("$unsupportedSqlCommand")
+        |
+        |@dp.materialized_view()
+        |def mv():
+        |  return spark.range(5)
+        |""".stripMargin)
     }
     assert(ex.getMessage.contains("UNSUPPORTED_PIPELINE_SPARK_SQL_COMMAND"))
   }
@@ -1060,11 +1060,11 @@ class PythonPipelineSuite
     unsupportedSqlCommandList) { unsupportedSqlCommand =>
     val ex = intercept[RuntimeException] {
       buildGraph(s"""
-                    |@dp.materialized_view()
-                    |def mv():
-                    |  spark.sql("$unsupportedSqlCommand")
-                    |  return spark.range(5)
-                    |""".stripMargin)
+        |@dp.materialized_view()
+        |def mv():
+        |  spark.sql("$unsupportedSqlCommand")
+        |  return spark.range(5)
+        |""".stripMargin)
     }
     assert(ex.getMessage.contains("UNSUPPORTED_PIPELINE_SPARK_SQL_COMMAND"))
   }
@@ -1087,22 +1087,22 @@ class PythonPipelineSuite
     supportedSqlCommand =>
       sql("CREATE TABLE spark_catalog.default.src AS SELECT * FROM RANGE(5)")
       buildGraph(s"""
-                    |spark.sql("$supportedSqlCommand")
-                    |
-                    |@dp.materialized_view()
-                    |def mv():
-                    |  return spark.range(5)
-                    |""".stripMargin)
+        |spark.sql("$supportedSqlCommand")
+        |
+        |@dp.materialized_view()
+        |def mv():
+        |  return spark.range(5)
+        |""".stripMargin)
   }
 
   gridTest("Supported SQL command inside query function should work")(supportedSqlCommandList) {
     supportedSqlCommand =>
       sql("CREATE TABLE spark_catalog.default.src AS SELECT * FROM RANGE(5)")
       buildGraph(s"""
-                    |@dp.materialized_view()
-                    |def mv():
-                    |  spark.sql("$supportedSqlCommand")
-                    |  return spark.range(5)
-                    |""".stripMargin)
+        |@dp.materialized_view()
+        |def mv():
+        |  spark.sql("$supportedSqlCommand")
+        |  return spark.range(5)
+        |""".stripMargin)
   }
 }
