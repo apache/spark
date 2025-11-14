@@ -412,7 +412,7 @@ abstract class Expression extends TreeNode[Expression] {
    */
   def expensive: Boolean = hasExpensiveChild
 
-  private lazy val hasExpensiveChild: Boolean = children.map(_.expensive).exists(_ == true)
+  protected lazy val hasExpensiveChild: Boolean = children.map(_.expensive).exists(_ == true)
 }
 
 object ExpressionPatternBitMask {
