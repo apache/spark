@@ -41,7 +41,9 @@ if should_test_connect:
     # in `SparkConnectClient` constructor. To bypass the issue, patch the method in the test.
     SparkConnectClient._cleanup_ml_cache = lambda _: None
 
-
+# SPARK-54314: Improve Server-Side debuggability in Spark Connect by capturing client application's 
+# file name and line numbers in PySpark
+# https://issues.apache.org/jira/browse/SPARK-54314
 
 @unittest.skipIf(not should_test_connect, connect_requirement_message)
 class CallStackTraceTestCase(unittest.TestCase):
