@@ -1203,7 +1203,7 @@ class ArrowStreamAggArrowUDFSerializer(ArrowStreamArrowUDFSerializer):
 class GroupPandasUDFSerializer(ArrowStreamPandasUDFSerializer):
     """
     Serializer for grouped map Pandas UDFs.
-    
+
     Always yields an iterator of pandas.Series lists (one list per batch).
     The wrapper functions handle whether to concatenate all batches (regular mode)
     or pass the iterator through (iterator mode).
@@ -1268,6 +1268,7 @@ class GroupPandasUDFSerializer(ArrowStreamPandasUDFSerializer):
         Handles both regular mode and iterator mode outputs from wrapper functions.
         Both modes now return (generator, arrow_type) tuples.
         """
+
         # Flatten the (generator_of_dfs, arrow_type) tuples into [(df, arrow_type)] format
         def flatten():
             for dataframes_gen, arrow_type in iterator:

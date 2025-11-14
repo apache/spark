@@ -743,7 +743,7 @@ def wrap_grouped_map_pandas_udf(f, return_type, argspec, runner_conf):
         for value_series in value_series_gen:
             batch_df = pd.concat(value_series, axis=1)
             batch_dfs.append(batch_df)
-        
+
         # Concatenate all batches row-wise
         df = pd.concat(batch_dfs, axis=0, ignore_index=True) if batch_dfs else pd.DataFrame()
 
@@ -2999,7 +2999,7 @@ def read_udfs(pickleSer, infile, eval_type):
             series_iter = iter(a)
             # Materialize first batch to get keys
             first_series_list = next(series_iter)
-            
+
             keys = [first_series_list[o] for o in parsed_offsets[0][0]]
             # Create generator for value series from all batches
             value_series_gen = (
