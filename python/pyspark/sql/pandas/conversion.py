@@ -55,7 +55,6 @@ if TYPE_CHECKING:
 
 
 def _convert_arrow_table_to_pandas(
-    *,
     arrow_table: "pa.Table",
     schema_fields: List["StructField"],
     temp_col_names: List[str],
