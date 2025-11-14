@@ -18,6 +18,7 @@
 package org.apache.spark.sql.hive.execution.command
 
 import org.apache.spark.sql.QueryTest
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, SortOrder}
 import org.apache.spark.sql.execution.datasources.V1WriteCommandSuiteBase
 import org.apache.spark.sql.hive.HiveUtils._
 import org.apache.spark.sql.hive.test.TestHiveSingleton
@@ -25,7 +26,7 @@ import org.apache.spark.sql.hive.test.TestHiveSingleton
 class V1WriteHiveCommandSuite
     extends QueryTest with TestHiveSingleton with V1WriteCommandSuiteBase  {
 
-  def withCovnertMetastore(testFunc: Boolean => Any): Unit = {
+  def withConvertMetastore(testFunc: Boolean => Any): Unit = {
     Seq(true, false).foreach { enabled =>
       withSQLConf(
         CONVERT_METASTORE_PARQUET.key -> enabled.toString,
@@ -36,7 +37,7 @@ class V1WriteHiveCommandSuite
   }
 
   test("create hive table as select - no partition column") {
-    withCovnertMetastore { _ =>
+    withConvertMetastore { _ =>
       withPlannedWrite { enabled =>
         withTable("t") {
           executeAndCheckOrdering(hasLogicalSort = false, orderingMatched = true) {
@@ -48,7 +49,7 @@ class V1WriteHiveCommandSuite
   }
 
   test("create hive table as select") {
-    withCovnertMetastore { _ =>
+    withConvertMetastore { _ =>
       withPlannedWrite { enabled =>
         withTable("t") {
           withSQLConf("hive.exec.dynamic.partition.mode" -> "nonstrict") {
@@ -68,7 +69,7 @@ class V1WriteHiveCommandSuite
   }
 
   test("insert into hive table") {
-    withCovnertMetastore { _ =>
+    withConvertMetastore { _ =>
       withPlannedWrite { enabled =>
         withTable("t") {
           sql(
@@ -89,7 +90,7 @@ class V1WriteHiveCommandSuite
   }
 
   test("insert overwrite hive table") {
-    withCovnertMetastore { _ =>
+    withConvertMetastore { _ =>
       withPlannedWrite { enabled =>
         withTable("t") {
           withSQLConf("hive.exec.dynamic.partition.mode" -> "nonstrict") {
@@ -110,7 +111,7 @@ class V1WriteHiveCommandSuite
   }
 
   test("insert into hive table with static partitions only") {
-    withCovnertMetastore { _ =>
+    withConvertMetastore { _ =>
       withPlannedWrite { enabled =>
         withTable("t") {
           sql(
@@ -121,6 +122,39 @@ class V1WriteHiveCommandSuite
           // No dynamic partition so no sort is needed.
           executeAndCheckOrdering(hasLogicalSort = false, orderingMatched = true) {
             sql("INSERT INTO t PARTITION (k='0') SELECT i, j FROM t0 WHERE k = '0'")
+          }
+        }
+      }
+    }
+  }
+
+  test("v1 write to hive table with sort by literal column preserve custom order") {
+    withConvertMetastore { _ =>
+      withPlannedWrite { enabled =>
+        withSQLConf("hive.exec.dynamic.partition.mode" -> "nonstrict") {
+          withTable("t") {
+            sql(
+              """
+                |CREATE TABLE t(i INT, j INT, k STRING) STORED AS PARQUET
+                |PARTITIONED BY (k)
+                |""".stripMargin)
+            // Skip checking orderingMatched temporarily to avoid touching `FileFormatWriter`,
+            // see details at https://github.com/apache/spark/pull/52584#issuecomment-3407716019
+            executeAndCheckOrderingAndCustomValidate(
+              hasLogicalSort = true, orderingMatched = None) {
+              sql(
+                """
+                  |INSERT OVERWRITE t
+                  |SELECT i, j, '0' as k FROM t0 SORT BY k, i
+                  |""".stripMargin)
+            } { optimizedPlan =>
+              assert {
+                optimizedPlan.outputOrdering.exists {
+                  case SortOrder(attr: AttributeReference, _, _, _) => attr.name == "i"
+                  case _ => false
+                }
+              }
+            }
           }
         }
       }

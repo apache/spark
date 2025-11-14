@@ -24,6 +24,14 @@ struct<>
 
 
 -- !query
+create table t4(col1 TIMESTAMP)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
 WITH s AS (SELECT 1 FROM s) SELECT * FROM s
 -- !query schema
 struct<>
@@ -727,6 +735,46 @@ struct<1:int>
 
 
 -- !query
+SELECT * FROM (
+  WITH cte1 AS (SELECT * FROM t4) SELECT t4.col1 FROM t4 JOIN cte1 USING (col1)
+)
+-- !query schema
+struct<col1:timestamp>
+-- !query output
+
+
+
+-- !query
+SELECT * FROM (
+  WITH cte1 AS (SELECT * FROM t4) SELECT cte1.col1 FROM t4 JOIN cte1 USING (col1)
+)
+-- !query schema
+struct<col1:timestamp>
+-- !query output
+
+
+
+-- !query
+SELECT * FROM (
+  WITH cte1 AS (SELECT * FROM t4) SELECT t4.col1 FROM cte1 JOIN t4 USING (col1)
+)
+-- !query schema
+struct<col1:timestamp>
+-- !query output
+
+
+
+-- !query
+SELECT * FROM (
+  WITH cte1 AS (SELECT * FROM t4) SELECT cte1.col1 FROM cte1 JOIN t4 USING (col1)
+)
+-- !query schema
+struct<col1:timestamp>
+-- !query output
+
+
+
+-- !query
 DROP VIEW IF EXISTS t
 -- !query schema
 struct<>
@@ -744,6 +792,14 @@ struct<>
 
 -- !query
 DROP VIEW IF EXISTS t3
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP TABLE IF EXISTS t4
 -- !query schema
 struct<>
 -- !query output

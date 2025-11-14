@@ -61,8 +61,15 @@ case class SQLFunction(
     owner: Option[String] = None,
     createTimeMs: Long = System.currentTimeMillis) extends UserDefinedFunction {
 
-  assert(exprText.nonEmpty || queryText.nonEmpty)
-  assert((isTableFunc && returnType.isRight) || (!isTableFunc && returnType.isLeft))
+  assert(exprText.nonEmpty || queryText.nonEmpty,
+    "SQL function '" + name + "' is missing function body. " +
+    "Either exprText or queryText must be defined. " +
+    "Found: exprText=" + exprText + ", queryText=" + queryText + ".")
+  assert((isTableFunc && returnType.isRight) || (!isTableFunc && returnType.isLeft),
+    "SQL function '" + name + "' has mismatched function type and return type. " +
+    "isTableFunc=" + isTableFunc + ", returnType.isRight=" + returnType.isRight + ", " +
+    "returnType.isLeft=" + returnType.isLeft + ". " +
+    "Table functions require Right[StructType] and scalar functions require Left[DataType].")
 
   import SQLFunction._
 

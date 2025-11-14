@@ -207,6 +207,9 @@ message Expression {
       Time time = 26;
     }
 
+    // Reserved for Geometry and Geography.
+    reserved 27, 28;
+
     // Data type information for the literal.
     // This field is required only in the root literal message for null values or
     // for data types (e.g., array, map, or struct) with non-trivial information.

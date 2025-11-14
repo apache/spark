@@ -41,7 +41,8 @@ class PythonStreamingPartitionReaderFactory(
     source: UserDefinedPythonDataSource,
     pickledReadFunc: Array[Byte],
     outputSchema: StructType,
-    jobArtifactUUID: Option[String])
+    jobArtifactUUID: Option[String],
+    sessionUUID: Option[String])
   extends PartitionReaderFactory with Logging {
 
   override def createReader(partition: InputPartition): PartitionReader[InternalRow] = {
@@ -70,7 +71,8 @@ class PythonStreamingPartitionReaderFactory(
           UserDefinedPythonDataSource.readInputSchema,
           outputSchema,
           metrics,
-          jobArtifactUUID)
+          jobArtifactUUID,
+          sessionUUID)
 
         evaluatorFactory.createEvaluator().eval(
           part.index, Iterator.single(InternalRow(part.pickedPartition)))

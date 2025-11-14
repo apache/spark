@@ -27,7 +27,6 @@ import org.apache.spark.sql.errors.QueryExecutionErrors;
 import org.apache.spark.sql.types.StructType;
 
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.Map;
 import java.util.Set;
 
@@ -96,7 +95,7 @@ public interface TableCatalog extends CatalogPlugin {
   /**
    * @return the set of capabilities for this TableCatalog
    */
-  default Set<TableCatalogCapability> capabilities() { return Collections.emptySet(); }
+  default Set<TableCatalogCapability> capabilities() { return Set.of(); }
 
   /**
    * List the tables in a namespace from the catalog.

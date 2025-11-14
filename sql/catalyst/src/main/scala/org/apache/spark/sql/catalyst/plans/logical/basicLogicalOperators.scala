@@ -2064,6 +2064,8 @@ case class CollectMetrics(
   override def doCanonicalize(): LogicalPlan = {
     super.doCanonicalize().asInstanceOf[CollectMetrics].copy(dataframeId = 0L)
   }
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(COLLECT_METRICS)
 }
 
 /**

@@ -54,10 +54,21 @@ class SparkConnectCreationTests(ReusedMixedTestCase, PandasOnSparkTestUtils):
         self.assertEqual(rows[0][0], 3)
         self.assertEqual(rows[0][1], "c")
 
-        # Check correct behavior for empty DataFrame
-        pdf = pd.DataFrame({"a": []})
-        with self.assertRaises(ValueError):
-            self.connect.createDataFrame(pdf)
+    def test_from_empty_pandas_dataframe(self):
+        dfs = [
+            pd.DataFrame(),
+            pd.DataFrame({"a": []}),
+            pd.DataFrame(index=range(5)),
+        ]
+
+        for df in dfs:
+            with self.assertRaises(PySparkValueError) as pe:
+                self.connect.createDataFrame(df)
+            self.check_error(
+                exception=pe.exception,
+                errorClass="CANNOT_INFER_EMPTY_SCHEMA",
+                messageParameters={},
+            )
 
     def test_with_local_ndarray(self):
         """SPARK-41446: Test creating a dataframe using local list"""

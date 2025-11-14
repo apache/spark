@@ -165,22 +165,30 @@ case class EnsureRequirements(
       // Check if the following conditions are satisfied:
       //   1. There are exactly two children (e.g., join). Note that Spark doesn't support
       //      multi-way join at the moment, so this check should be sufficient.
-      //   2. All children are of `KeyGroupedPartitioning`, and they are compatible with each other
+      //   2. All children are of the compatible key group partitioning or
+      //      compatible shuffle partition id pass through partitioning
       // If both are true, skip shuffle.
-      val isKeyGroupCompatible = parent.isDefined &&
+      val areChildrenCompatible = parent.isDefined &&
           children.length == 2 && childrenIndexes.length == 2 && {
         val left = children.head
         val right = children(1)
+
+        // key group compatibility check
         val newChildren = checkKeyGroupCompatible(
           parent.get, left, right, requiredChildDistributions)
         if (newChildren.isDefined) {
           children = newChildren.get
+          true
+        } else {
+          // If key group check fails, check ShufflePartitionIdPassThrough compatibility
+          checkShufflePartitionIdPassThroughCompatible(
+            left, right, requiredChildDistributions)
         }
-        newChildren.isDefined
       }
 
       children = children.zip(requiredChildDistributions).zipWithIndex.map {
-        case ((child, _), idx) if isKeyGroupCompatible || !childrenIndexes.contains(idx) =>
+        case ((child, _), idx) if areChildrenCompatible ||
+            !childrenIndexes.contains(idx) =>
           child
         case ((child, dist), idx) =>
           if (bestSpecOpt.isDefined && bestSpecOpt.get.isCompatibleWith(specs(idx))) {
@@ -598,6 +606,23 @@ case class EnsureRequirements(
     }
 
     if (isCompatible) Some(Seq(newLeft, newRight)) else None
+  }
+
+  private def checkShufflePartitionIdPassThroughCompatible(
+      left: SparkPlan,
+      right: SparkPlan,
+      requiredChildDistribution: Seq[Distribution]): Boolean = {
+    (left.outputPartitioning, right.outputPartitioning) match {
+      case (p1: ShufflePartitionIdPassThrough, p2: ShufflePartitionIdPassThrough) =>
+        assert(requiredChildDistribution.length == 2)
+        val leftSpec = p1.createShuffleSpec(
+          requiredChildDistribution.head.asInstanceOf[ClusteredDistribution])
+        val rightSpec = p2.createShuffleSpec(
+          requiredChildDistribution(1).asInstanceOf[ClusteredDistribution])
+        leftSpec.isCompatibleWith(rightSpec)
+      case _ =>
+        false
+    }
   }
 
   // Similar to `OptimizeSkewedJoin.canSplitRightSide`

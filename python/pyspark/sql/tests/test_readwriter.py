@@ -20,9 +20,17 @@ import shutil
 import tempfile
 
 from pyspark.errors import AnalysisException
+from pyspark.sql import Row
 from pyspark.sql.functions import col, lit
 from pyspark.sql.readwriter import DataFrameWriterV2
-from pyspark.sql.types import StructType, StructField, StringType
+from pyspark.sql.types import (
+    StructType,
+    StructField,
+    StringType,
+    BinaryType,
+    ArrayType,
+    MapType,
+)
 from pyspark.testing import assertDataFrameEqual
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 
@@ -237,6 +245,46 @@ class ReadwriterTestsMixin:
                 join2 = df3.join(join1, how="left", on=join1.index == df3.id)
 
                 self.assertEqual(join2.columns, ["id", "value_1", "index", "value_2"])
+
+    def test_binary_type(self):
+        """Test that binary type in data sources respects binaryAsBytes config"""
+        schema = StructType(
+            [
+                StructField("id", StringType()),
+                StructField("bin", BinaryType()),
+                StructField("arr_bin", ArrayType(BinaryType())),
+                StructField("map_bin", MapType(StringType(), BinaryType())),
+            ]
+        )
+        # Create DataFrame with binary data (can use either bytes or bytearray)
+        data = [Row(id="1", bin=b"hello", arr_bin=[b"a"], map_bin={"key": b"value"})]
+        df = self.spark.createDataFrame(data, schema)
+
+        tmpPath = tempfile.mkdtemp()
+        try:
+            # Write to parquet
+            df.write.mode("overwrite").parquet(tmpPath)
+
+            for conf_value in ["true", "false"]:
+                expected_type = bytes if conf_value == "true" else bytearray
+                expected_bin = b"hello" if conf_value == "true" else bytearray(b"hello")
+                expected_arr = b"a" if conf_value == "true" else bytearray(b"a")
+                expected_map = b"value" if conf_value == "true" else bytearray(b"value")
+
+                with self.sql_conf({"spark.sql.execution.pyspark.binaryAsBytes": conf_value}):
+                    result = self.spark.read.parquet(tmpPath).collect()
+                    row = result[0]
+                    # Check binary field
+                    self.assertIsInstance(row.bin, expected_type)
+                    self.assertEqual(row.bin, expected_bin)
+                    # Check array of binary
+                    self.assertIsInstance(row.arr_bin[0], expected_type)
+                    self.assertEqual(row.arr_bin[0], expected_arr)
+                    # Check map value
+                    self.assertIsInstance(row.map_bin["key"], expected_type)
+                    self.assertEqual(row.map_bin["key"], expected_map)
+        finally:
+            shutil.rmtree(tmpPath)
 
     # "[SPARK-51182]: DataFrameWriter should throw dataPathNotSpecifiedError when path is not
     # specified"

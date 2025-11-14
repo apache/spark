@@ -54,7 +54,7 @@ class MicroBatchExecutionSuite extends StreamTest with BeforeAndAfter with Match
   test("async log purging") {
     withSQLConf(SQLConf.MIN_BATCHES_TO_RETAIN.key -> "2", SQLConf.ASYNC_LOG_PURGE.key -> "true") {
       withTempDir { checkpointLocation =>
-        val inputData = new MemoryStream[Int](id = 0, sqlContext = sqlContext)
+        val inputData = new MemoryStream[Int](id = 0, spark)
         val ds = inputData.toDS()
         testStream(ds)(
           StartStream(checkpointLocation = checkpointLocation.getCanonicalPath),
@@ -99,7 +99,7 @@ class MicroBatchExecutionSuite extends StreamTest with BeforeAndAfter with Match
   test("error notifier test") {
     withSQLConf(SQLConf.MIN_BATCHES_TO_RETAIN.key -> "2", SQLConf.ASYNC_LOG_PURGE.key -> "true") {
       withTempDir { checkpointLocation =>
-        val inputData = new MemoryStream[Int](id = 0, sqlContext = sqlContext)
+        val inputData = new MemoryStream[Int](id = 0, spark)
         val ds = inputData.toDS()
         val e = intercept[StreamingQueryException] {
 

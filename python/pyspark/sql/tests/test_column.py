@@ -250,6 +250,21 @@ class ColumnTestsMixin:
         ).withColumn("square_value", mapping_expr[sf.col("key")])
         self.assertEqual(df.count(), 3)
 
+    def test_alias_metadata(self):
+        df = self.spark.createDataFrame([("",)], ["a"])
+        df = df.withMetadata("a", {"foo": "bar"})
+        self.assertEqual(df.schema["a"].metadata, {"foo": "bar"})
+
+        # SPARK-51426: Ensure setting metadata to '{]' clears it
+        df = df.select([sf.col("a").alias("a", metadata={})])
+        self.assertEqual(df.schema["a"].metadata, {})
+
+        df = df.withMetadata("a", {"baz": "burr"})
+        self.assertEqual(df.schema["a"].metadata, {"baz": "burr"})
+
+        df = df.withMetadata("a", {})
+        self.assertEqual(df.schema["a"].metadata, {})
+
     def test_alias_negative(self):
         with self.assertRaises(PySparkValueError) as pe:
             self.spark.range(1).id.alias("a", "b", metadata={})
@@ -467,6 +482,24 @@ class ColumnTestsMixin:
 
         for r, c, e in zip(result, cols, expected):
             self.assertEqual(r, e, str(c))
+
+    def test_transform(self):
+        # Test with built-in functions
+        df = self.spark.createDataFrame([("  hello  ",), ("  world  ",)], ["text"])
+        result = df.select(df.text.transform(sf.trim).transform(sf.upper)).collect()
+        self.assertEqual(result[0][0], "HELLO")
+        self.assertEqual(result[1][0], "WORLD")
+
+        # Test with lambda functions
+        df = self.spark.createDataFrame([(10,), (20,), (30,)], ["value"])
+        result = df.select(
+            df.value.transform(lambda c: c + 5)
+            .transform(lambda c: c * 2)
+            .transform(lambda c: c - 10)
+        ).collect()
+        self.assertEqual(result[0][0], 20)
+        self.assertEqual(result[1][0], 40)
+        self.assertEqual(result[2][0], 60)
 
 
 class ColumnTests(ColumnTestsMixin, ReusedSQLTestCase):

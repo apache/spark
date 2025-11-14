@@ -28,7 +28,7 @@ import org.antlr.v4.runtime.tree.{ParseTree, TerminalNodeImpl}
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.analysis.UnresolvedIdentifier
-import org.apache.spark.sql.catalyst.parser.SqlBaseParser.{BeginLabelContext, EndLabelContext, MultipartIdentifierContext}
+import org.apache.spark.sql.catalyst.parser.SqlBaseParser.{BeginLabelContext, EndLabelContext, StrictIdentifierContext}
 import org.apache.spark.sql.catalyst.plans.logical.{CreateVariable, ErrorCondition}
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin
 import org.apache.spark.sql.catalyst.util.SparkParserUtils
@@ -279,34 +279,49 @@ class SqlScriptingLabelContext {
    * @param beginLabelCtx Begin label context.
    * @param endLabelCtx The end label context.
    */
+  /**
+   * Get label text from label context, handling IDENTIFIER() syntax.
+   */
+  private def getLabelText(ctx: ParserRuleContext): String = {
+    val astBuilder = new DataTypeAstBuilder {
+      override protected def parseMultipartIdentifier(identifier: String): Seq[String] = {
+        CatalystSqlParser.parseMultipartIdentifier(identifier)
+      }
+    }
+    val parts = astBuilder.extractIdentifierParts(ctx)
+    if (parts.size > 1) {
+      throw new ParseException(
+        errorClass = "IDENTIFIER_TOO_MANY_NAME_PARTS",
+        messageParameters = Map("identifier" -> parts.map(part => s"`$part`").mkString("."),
+          "limit" -> "1"),
+        ctx)
+    }
+    parts.head
+  }
+
   private def checkLabels(
       beginLabelCtx: Option[BeginLabelContext],
-      endLabelCtx: Option[EndLabelContext]) : Unit = {
+      endLabelCtx: Option[EndLabelContext]): Unit = {
+    // Check label matching and other constraints.
     (beginLabelCtx, endLabelCtx) match {
       // Throw an error if labels do not match.
-      case (Some(bl: BeginLabelContext), Some(el: EndLabelContext))
-        if bl.multipartIdentifier().getText.toLowerCase(Locale.ROOT) !=
-            el.multipartIdentifier().getText.toLowerCase(Locale.ROOT) =>
-        withOrigin(bl) {
-          throw SqlScriptingErrors.labelsMismatch(
-            CurrentOrigin.get,
-            bl.multipartIdentifier().getText,
-            el.multipartIdentifier().getText)
-        }
-      // Throw an error if label is qualified.
-      case (Some(bl: BeginLabelContext), _)
-        if bl.multipartIdentifier().parts.size() > 1 =>
-        withOrigin(bl) {
-          throw SqlScriptingErrors.labelCannotBeQualified(
-            CurrentOrigin.get,
-            bl.multipartIdentifier().getText.toLowerCase(Locale.ROOT)
-          )
+      case (Some(bl: BeginLabelContext), Some(el: EndLabelContext)) =>
+        val beginLabel = getLabelText(bl.strictIdentifier()).toLowerCase(Locale.ROOT)
+        val endLabel = getLabelText(el.strictIdentifier()).toLowerCase(Locale.ROOT)
+        if (beginLabel != endLabel) {
+          withOrigin(bl) {
+            throw SqlScriptingErrors.labelsMismatch(
+              CurrentOrigin.get,
+              getLabelText(bl.strictIdentifier()),
+              getLabelText(el.strictIdentifier()))
+          }
         }
       // Throw an error if end label exists without begin label.
       case (None, Some(el: EndLabelContext)) =>
         withOrigin(el) {
           throw SqlScriptingErrors.endLabelWithoutBeginLabel(
-            CurrentOrigin.get, el.multipartIdentifier().getText)
+            CurrentOrigin.get,
+            getLabelText(el.strictIdentifier()))
         }
       case _ =>
     }
@@ -314,7 +329,7 @@ class SqlScriptingLabelContext {
 
   /** Check if the label is defined. */
   private def isLabelDefined(beginLabelCtx: Option[BeginLabelContext]): Boolean = {
-    beginLabelCtx.map(_.multipartIdentifier().getText).isDefined
+    beginLabelCtx.isDefined
   }
 
   /**
@@ -322,13 +337,13 @@ class SqlScriptingLabelContext {
    * If the identifier is contained within seenLabels, raise an exception.
    */
   private def assertIdentifierNotInSeenLabels(
-      identifierCtx: Option[MultipartIdentifierContext]): Unit = {
+      identifierCtx: Option[StrictIdentifierContext]): Unit = {
     identifierCtx.foreach { ctx =>
-      val identifierName = ctx.getText
-      if (seenLabels.contains(identifierName.toLowerCase(Locale.ROOT))) {
+      val identifierName = getLabelText(ctx).toLowerCase(Locale.ROOT)
+      if (seenLabels.contains(identifierName)) {
         withOrigin(ctx) {
           throw SqlScriptingErrors
-            .duplicateLabels(CurrentOrigin.get, identifierName.toLowerCase(Locale.ROOT))
+            .duplicateLabels(CurrentOrigin.get, identifierName)
         }
       }
     }
@@ -348,7 +363,7 @@ class SqlScriptingLabelContext {
 
     // Get label text and add it to seenLabels.
     val labelText = if (isLabelDefined(beginLabelCtx)) {
-      val txt = beginLabelCtx.get.multipartIdentifier().getText.toLowerCase(Locale.ROOT)
+      val txt = getLabelText(beginLabelCtx.get.strictIdentifier()).toLowerCase(Locale.ROOT)
       if (seenLabels.contains(txt)) {
         withOrigin(beginLabelCtx.get) {
           throw SqlScriptingErrors.duplicateLabels(CurrentOrigin.get, txt)
@@ -374,18 +389,18 @@ class SqlScriptingLabelContext {
    */
   def exitLabeledScope(beginLabelCtx: Option[BeginLabelContext]): Unit = {
     if (isLabelDefined(beginLabelCtx)) {
-      seenLabels.remove(beginLabelCtx.get.multipartIdentifier().getText.toLowerCase(Locale.ROOT))
+      seenLabels.remove(getLabelText(beginLabelCtx.get.strictIdentifier()).toLowerCase(Locale.ROOT))
     }
   }
 
   /**
    * Enter a for loop scope.
-   * If the for loop variable is defined, it will be asserted to not be inside seenLabels;
+   * If the for loop variable is defined, it will be asserted to not be inside seenLabels.
    * Then, if the for loop variable is defined, it will be added to seenLabels.
    */
-  def enterForScope(identifierCtx: Option[MultipartIdentifierContext]): Unit = {
+  def enterForScope(identifierCtx: Option[StrictIdentifierContext]): Unit = {
     identifierCtx.foreach { ctx =>
-      val identifierName = ctx.getText
+      val identifierName = getLabelText(ctx)
       assertIdentifierNotInSeenLabels(identifierCtx)
       seenLabels.add(identifierName.toLowerCase(Locale.ROOT))
 
@@ -403,9 +418,9 @@ class SqlScriptingLabelContext {
    * Exit a for loop scope.
    * If the for loop variable is defined, it will be removed from seenLabels.
    */
-  def exitForScope(identifierCtx: Option[MultipartIdentifierContext]): Unit = {
+  def exitForScope(identifierCtx: Option[StrictIdentifierContext]): Unit = {
     identifierCtx.foreach { ctx =>
-      val identifierName = ctx.getText
+      val identifierName = getLabelText(ctx)
       seenLabels.remove(identifierName.toLowerCase(Locale.ROOT))
     }
   }

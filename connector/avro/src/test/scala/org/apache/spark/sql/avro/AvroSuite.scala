@@ -3094,6 +3094,26 @@ abstract class AvroSuite
     assert(AvroOptions.isValidOption("recursiveFieldMaxDepth"))
   }
 
+  test("SPARK-53973: boolean Avro options reject non-boolean values") {
+    Seq(
+      AvroOptions.STABLE_ID_FOR_UNION_TYPE,
+      AvroOptions.POSITIONAL_FIELD_MATCHING,
+      AvroOptions.IGNORE_EXTENSION
+    ).foreach { opt =>
+      val e = intercept[AnalysisException] {
+        AvroOptions(Map(opt -> "not_bool"))
+      }
+      checkError(
+        exception = e,
+        condition = "STDS_INVALID_OPTION_VALUE.WITH_MESSAGE",
+        parameters = Map(
+          "optionName" -> opt,
+          "message" -> "Cannot cast value 'not_bool' to Boolean."
+        )
+      )
+    }
+  }
+
   test("SPARK-46633: read file with empty blocks") {
     for (maxPartitionBytes <- Seq(100, 100000, 100000000)) {
       withSQLConf(SQLConf.FILES_MAX_PARTITION_BYTES.key -> s"$maxPartitionBytes") {

@@ -49,6 +49,10 @@ class ArrowUtilsSuite extends SparkFunSuite {
     roundtrip(BinaryType)
     roundtrip(DecimalType.SYSTEM_DEFAULT)
     roundtrip(DateType)
+    roundtrip(GeometryType("ANY"))
+    roundtrip(GeometryType(4326))
+    roundtrip(GeographyType("ANY"))
+    roundtrip(GeographyType(4326))
     roundtrip(YearMonthIntervalType())
     roundtrip(DayTimeIntervalType())
     checkError(

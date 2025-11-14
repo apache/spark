@@ -20,7 +20,9 @@ import unittest
 from pyspark.errors import PySparkException
 from pyspark.pipelines.graph_element_registry import graph_element_registration_context
 from pyspark import pipelines as dp
+from pyspark.pipelines.output import Sink
 from pyspark.pipelines.tests.local_graph_element_registry import LocalGraphElementRegistry
+from typing import cast
 
 
 class GraphElementRegistryTest(unittest.TestCase):
@@ -46,7 +48,15 @@ class GraphElementRegistryTest(unittest.TestCase):
             def flow2():
                 raise NotImplementedError()
 
-        self.assertEqual(len(registry.outputs), 3)
+            dp.create_sink(
+                name="sink",
+                format="parquet",
+                options={
+                    "key1": "value1",
+                },
+            )
+
+        self.assertEqual(len(registry.outputs), 4)
         self.assertEqual(len(registry.flows), 4)
 
         mv_obj = registry.outputs[0]
@@ -80,6 +90,12 @@ class GraphElementRegistryTest(unittest.TestCase):
         self.assertEqual(st2_flow1_obj.name, "flow2")
         self.assertEqual(st2_flow1_obj.target, "st2")
         assert mv_flow_obj.source_code_location.filename.endswith("test_graph_element_registry.py")
+
+        sink_obj = cast(Sink, registry.outputs[3])
+        self.assertEqual(sink_obj.name, "sink")
+        self.assertEqual(sink_obj.format, "parquet")
+        self.assertEqual(sink_obj.options["key1"], "value1")
+        assert sink_obj.source_code_location.filename.endswith("test_graph_element_registry.py")
 
     def test_definition_without_graph_element_registry(self):
         for decorator in [dp.table, dp.temporary_view, dp.materialized_view]:

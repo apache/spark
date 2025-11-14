@@ -257,6 +257,68 @@ org.apache.spark.SparkRuntimeException
 
 
 -- !query
+SELECT hll_sketch_agg(col, CAST(NULL AS INT)) AS k_is_null
+FROM VALUES (15), (16), (17) tab(col)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkRuntimeException
+{
+  "errorClass" : "HLL_INVALID_LG_K",
+  "sqlState" : "22546",
+  "messageParameters" : {
+    "function" : "`hll_sketch_agg`",
+    "max" : "21",
+    "min" : "4",
+    "value" : "0"
+  }
+}
+
+
+-- !query
+SELECT hll_sketch_agg(col, CAST(col AS INT)) AS k_non_constant
+FROM VALUES (15), (16), (17) tab(col)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkRuntimeException
+{
+  "errorClass" : "HLL_K_MUST_BE_CONSTANT",
+  "sqlState" : "42K0E",
+  "messageParameters" : {
+    "function" : "`hll_sketch_agg`"
+  }
+}
+
+
+-- !query
+SELECT hll_sketch_agg(col, '15')
+FROM VALUES (50), (60), (60) tab(col)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"15\"",
+    "inputType" : "\"STRING\"",
+    "paramIndex" : "second",
+    "requiredType" : "\"INT\"",
+    "sqlExpr" : "\"hll_sketch_agg(col, 15)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 32,
+    "fragment" : "hll_sketch_agg(col, '15')"
+  } ]
+}
+
+
+-- !query
 SELECT hll_union(
     hll_sketch_agg(col1, 12),
     hll_sketch_agg(col2, 13))

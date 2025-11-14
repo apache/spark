@@ -549,6 +549,16 @@
       "<arg1> and <arg2> should be of the same length, got <arg1_length> and <arg2_length>."
     ]
   },
+  "MALFORMED_GEOGRAPHY": {
+    "message": [
+      "Geography binary is malformed. Please check the data source is valid."
+    ]
+  },
+  "MALFORMED_GEOMETRY": {
+    "message": [
+      "Geometry binary is malformed. Please check the data source is valid."
+    ]
+  },
   "MALFORMED_VARIANT": {
     "message": [
       "Variant binary is malformed. Please check the data source is valid."
@@ -1133,6 +1143,24 @@
     "message": [
       "Cannot serialize the function `<name>`. If you accessed the Spark session, or a DataFrame defined outside of the function, or any object that contains a Spark session, please be aware that they are not allowed in Spark Connect. For `foreachBatch`, please access the Spark session using `df.sparkSession`, where `df` is the first parameter in your `foreachBatch` function. For `StreamingQueryListener`, please access the Spark session using `self.spark`. For details please check out the PySpark doc for `foreachBatch` and `StreamingQueryListener`."
     ]
+  },
+  "ST_INVALID_ALGORITHM_VALUE" : {
+    "message" : [
+      "Invalid or unsupported edge interpolation algorithm value: '<alg>'."
+    ],
+    "sqlState" : "22023"
+  },
+  "ST_INVALID_CRS_VALUE" : {
+    "message" : [
+      "Invalid or unsupported CRS (coordinate reference system) value: '<crs>'."
+    ],
+    "sqlState" : "22023"
+  },
+  "ST_INVALID_SRID_VALUE" : {
+    "message" : [
+      "Invalid or unsupported SRID (spatial reference identifier) value: <srid>."
+    ],
+    "sqlState" : "22023"
   },
   "TEST_CLASS_NOT_COMPILED": {
     "message": [

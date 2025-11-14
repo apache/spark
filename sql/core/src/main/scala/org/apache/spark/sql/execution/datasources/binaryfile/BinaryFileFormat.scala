@@ -83,6 +83,8 @@ case class BinaryFileFormat() extends FileFormat
 
   override def shortName(): String = BINARY_FILE
 
+  override def toString: String = "BINARYFILE"
+
   override protected def buildReader(
       sparkSession: SparkSession,
       dataSchema: StructType,

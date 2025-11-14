@@ -161,8 +161,8 @@ class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
         exception = intercept[AnalysisException](
           sql("SELECT testcat.strlen('abc')").collect()
         ),
-        condition = "_LEGACY_ERROR_TEMP_1184",
-        parameters = Map("plugin" -> "testcat", "ability" -> "functions")
+        condition = "MISSING_CATALOG_ABILITY.FUNCTIONS",
+        parameters = Map("plugin" -> "testcat")
       )
     }
   }
@@ -174,11 +174,8 @@ class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
       exception = intercept[AnalysisException] {
         sql("DESCRIBE FUNCTION testcat.abc")
       },
-      condition = "_LEGACY_ERROR_TEMP_1184",
-      parameters = Map(
-        "plugin" -> "testcat",
-        "ability" -> "functions"
-      )
+      condition = "MISSING_CATALOG_ABILITY.FUNCTIONS",
+      parameters = Map("plugin" -> "testcat")
     )
 
     checkError(

@@ -93,3 +93,9 @@ WITH
 SELECT t1.key
 FROM t1 FULL OUTER JOIN t2 USING (key)
 WHERE t1.key NOT LIKE 'bb.%';
+
+-- ResolvesNameByHiddenOutput.retainOriginalOutput shouldn't change NameScope output
+SELECT *
+FROM
+    ( SELECT col1 FROM VALUES(false) ) LEFT JOIN ( SELECT col1 FROM VALUES(false) ) b USING(col1)
+WHERE b.col1;

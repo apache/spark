@@ -467,3 +467,26 @@ struct<a:int>
 1
 1
 1
+
+
+-- !query
+SELECT col1 AS a FROM VALUES (NAMED_STRUCT('f1', 1)) GROUP BY a.f1
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`a`.`f1`",
+    "proposal" : "`col1`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 63,
+    "stopIndex" : 66,
+    "fragment" : "a.f1"
+  } ]
+}

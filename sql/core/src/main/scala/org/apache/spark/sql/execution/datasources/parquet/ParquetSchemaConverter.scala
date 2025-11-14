@@ -246,7 +246,9 @@ class ParquetToSparkSchemaConverter(
       DecimalType(precision, scale)
     }
 
-    val sparkType = sparkReadType.getOrElse(typeName match {
+    val isUnknownType = typeAnnotation.isInstanceOf[UnknownLogicalTypeAnnotation]
+    val nullTypeOpt = Option.when(isUnknownType)(NullType)
+    val sparkType = sparkReadType.orElse(nullTypeOpt).getOrElse(typeName match {
       case BOOLEAN => BooleanType
 
       case FLOAT => FloatType
@@ -349,8 +351,32 @@ class ParquetToSparkSchemaConverter(
       groupColumn: GroupColumnIO,
       sparkReadType: Option[DataType] = None): ParquetColumn = {
     val field = groupColumn.getType.asGroupType()
+
+    /*
+     * We need to use the Spark SQL type if available, since conversion from Parquet to Spark could
+     * cause precision loss. For instance, Spark read schema is smallint/tinyint but Parquet only
+     * supports int. This is only applicable to primitive types, as the Spark type and the Parquet
+     * converted type for complex types should be largely the same (the only difference can be at
+     * the leaves or if we are adding non-requested struct fields for detecting struct nullability).
+     * @param sparkReadType Matching Spark schema field type for the Parquet field
+     * @param converted ParquetColumn that is recursively converted from the Parquet field
+     * @return `sparkReadType` if it is defined and not a complex type, otherwise the type of
+     *         `converted`
+     */
+    def getSparkTypeIfApplicable(
+        sparkReadType: Option[DataType],
+        converted: ParquetColumn): DataType = {
+      sparkReadType
+        .filterNot(ParquetSchemaConverter.isComplexType)
+        .getOrElse(converted.sparkType)
+    }
+
     Option(field.getLogicalTypeAnnotation).fold(
       convertInternal(groupColumn, sparkReadType.map(_.asInstanceOf[StructType]))) {
+      // Temporary workaround to read Shredded variant data
+      case v: VariantLogicalTypeAnnotation if v.getSpecVersion == 1 && sparkReadType.isEmpty =>
+        convertInternal(groupColumn, None)
+
       // A Parquet list is represented as a 3-level structure:
       //
       //   <list-repetition> group <name> (LIST) {
@@ -379,7 +405,7 @@ class ParquetToSparkSchemaConverter(
 
         if (isElementType(repeatedType, field.getName)) {
           var converted = convertField(repeated, sparkReadElementType)
-          val convertedType = sparkReadElementType.getOrElse(converted.sparkType)
+          val convertedType = getSparkTypeIfApplicable(sparkReadElementType, converted)
 
           // legacy format such as:
           //   optional group my_list (LIST) {
@@ -393,7 +419,7 @@ class ParquetToSparkSchemaConverter(
         } else {
           val element = repeated.asInstanceOf[GroupColumnIO].getChild(0)
           val converted = convertField(element, sparkReadElementType)
-          val convertedType = sparkReadElementType.getOrElse(converted.sparkType)
+          val convertedType = getSparkTypeIfApplicable(sparkReadElementType, converted)
           val optional = element.getType.isRepetition(OPTIONAL)
           ParquetColumn(ArrayType(convertedType, containsNull = optional),
             groupColumn, Seq(converted))
@@ -423,8 +449,8 @@ class ParquetToSparkSchemaConverter(
         val sparkReadValueType = sparkReadType.map(_.asInstanceOf[MapType].valueType)
         val convertedKey = convertField(key, sparkReadKeyType)
         val convertedValue = convertField(value, sparkReadValueType)
-        val convertedKeyType = sparkReadKeyType.getOrElse(convertedKey.sparkType)
-        val convertedValueType = sparkReadValueType.getOrElse(convertedValue.sparkType)
+        val convertedKeyType = getSparkTypeIfApplicable(sparkReadKeyType, convertedKey)
+        val convertedValueType = getSparkTypeIfApplicable(sparkReadValueType, convertedValue)
         val valueOptional = value.getType.isRepetition(OPTIONAL)
         ParquetColumn(
           MapType(convertedKeyType, convertedValueType,
@@ -530,7 +556,9 @@ class SparkToParquetSchemaConverter(
     writeLegacyParquetFormat: Boolean = SQLConf.PARQUET_WRITE_LEGACY_FORMAT.defaultValue.get,
     outputTimestampType: SQLConf.ParquetOutputTimestampType.Value =
       SQLConf.ParquetOutputTimestampType.INT96,
-    useFieldId: Boolean = SQLConf.PARQUET_FIELD_ID_WRITE_ENABLED.defaultValue.get) {
+    useFieldId: Boolean = SQLConf.PARQUET_FIELD_ID_WRITE_ENABLED.defaultValue.get,
+    annotateVariantLogicalType: Boolean =
+      SQLConf.PARQUET_ANNOTATE_VARIANT_LOGICAL_TYPE.defaultValue.get) {
 
   def this(conf: SQLConf) = this(
     writeLegacyParquetFormat = conf.writeLegacyParquetFormat,
@@ -541,7 +569,9 @@ class SparkToParquetSchemaConverter(
     writeLegacyParquetFormat = conf.get(SQLConf.PARQUET_WRITE_LEGACY_FORMAT.key).toBoolean,
     outputTimestampType = SQLConf.ParquetOutputTimestampType.withName(
       conf.get(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key)),
-    useFieldId = conf.get(SQLConf.PARQUET_FIELD_ID_WRITE_ENABLED.key).toBoolean)
+    useFieldId = conf.get(SQLConf.PARQUET_FIELD_ID_WRITE_ENABLED.key).toBoolean,
+    annotateVariantLogicalType =
+      conf.get(SQLConf.PARQUET_ANNOTATE_VARIANT_LOGICAL_TYPE.key).toBoolean)
 
   /**
    * Converts a Spark SQL [[StructType]] to a Parquet [[MessageType]].
@@ -795,14 +825,22 @@ class SparkToParquetSchemaConverter(
       // ===========
 
       case VariantType =>
-        Types.buildGroup(repetition)
+        (if (annotateVariantLogicalType) {
+          Types.buildGroup(repetition).as(LogicalTypeAnnotation.variantType(1))
+        } else {
+          Types.buildGroup(repetition)
+        })
           .addField(convertField(StructField("value", BinaryType, nullable = false), inShredded))
           .addField(convertField(StructField("metadata", BinaryType, nullable = false), inShredded))
           .named(field.name)
 
       case s: StructType if SparkShreddingUtils.isVariantShreddingStruct(s) =>
         // Variant struct takes a Variant and writes to Parquet as a shredded schema.
-        val group = Types.buildGroup(repetition)
+        val group = if (annotateVariantLogicalType) {
+          Types.buildGroup(repetition).as(LogicalTypeAnnotation.variantType(1))
+        } else {
+          Types.buildGroup(repetition)
+        }
         s.fields.foreach { f =>
           group.addField(convertField(f, inShredded = true))
         }
@@ -815,6 +853,10 @@ class SparkToParquetSchemaConverter(
 
       case udt: UserDefinedType[_] =>
         convertField(field.copy(dataType = udt.sqlType), inShredded)
+
+      case NullType => // Selected primitive type here doesn't have significance.
+        Types.primitive(BOOLEAN, repetition).named(field.name)
+          .withLogicalTypeAnnotation(LogicalTypeAnnotation.unknownType())
 
       case _ =>
         throw QueryCompilationErrors.cannotConvertDataTypeToParquetTypeError(field)
@@ -833,6 +875,18 @@ private[sql] object ParquetSchemaConverter {
       throw new AnalysisException(
         errorClass = "_LEGACY_ERROR_TEMP_3071",
         messageParameters = Map("msg" -> message))
+    }
+  }
+
+  /**
+   * Whether a [[DataType]] is complex. Complex [[DataType]] is not equivalent to
+   * non-[[AtomicType]]. For example, [[CalendarIntervalType]] is not complex, but it's not an
+   * [[AtomicType]] either.
+   */
+  def isComplexType(dataType: DataType): Boolean = {
+    dataType match {
+      case _: ArrayType | _: MapType | _: StructType => true
+      case _ => false
     }
   }
 }

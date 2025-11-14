@@ -53,6 +53,12 @@ case class ArrowEvalPythonUDTFExec(
   private val largeVarTypes = conf.arrowUseLargeVarTypes
   private val pythonRunnerConf = ArrowPythonRunner.getPythonRunnerConfMap(conf)
   private[this] val jobArtifactUUID = JobArtifactSet.getCurrentJobArtifactState.map(_.uuid)
+  private[this] val sessionUUID = {
+    Option(session).collect {
+      case session if session.sessionState.conf.pythonWorkerLoggingEnabled =>
+        session.sessionUUID
+    }
+  }
 
   override protected def evaluate(
       argMetas: Array[ArgumentMetadata],
@@ -75,7 +81,8 @@ case class ArrowEvalPythonUDTFExec(
       largeVarTypes,
       pythonRunnerConf,
       pythonMetrics,
-      jobArtifactUUID).compute(batchIter, context.partitionId(), context)
+      jobArtifactUUID,
+      sessionUUID).compute(batchIter, context.partitionId(), context)
 
     columnarBatchIter.map { batch =>
       // UDTF returns a StructType column in ColumnarBatch. Flatten the columnar batch here.

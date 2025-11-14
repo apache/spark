@@ -18,11 +18,17 @@
 package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.resource.ResourceProfile
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet, Expression, PythonUDF, PythonUDTF}
+import org.apache.spark.sql.catalyst.SQLConfHelper
+import org.apache.spark.sql.catalyst.analysis.{FunctionRegistryBase, MultiInstanceRelation, UnresolvedAttribute, UnresolvedStar}
+import org.apache.spark.sql.catalyst.analysis.TableFunctionRegistry.TableFunctionBuilder
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeSet, Expression, ExpressionDescription, ExpressionInfo, JsonToStructs, PythonUDF, PythonUDTF}
 import org.apache.spark.sql.catalyst.trees.TreePattern._
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.truncatedString
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.streaming.{GroupStateTimeout, OutputMode, TimeMode}
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{StringType, StructField, StructType}
+import org.apache.spark.util.LogUtils
 
 /**
  * FlatMap groups using a udf: pandas.Dataframe -> pandas.DataFrame.
@@ -379,5 +385,65 @@ case class AttachDistributedSequence(
     val truncatedOutputString = truncatedString(output, "[", ", ", "]", maxFields)
     val indexColumn = s"Index: $sequenceAttr"
     s"$nodeName$truncatedOutputString $indexColumn"
+  }
+}
+
+// scalastyle:off line.contains.tab line.size.limit
+@ExpressionDescription(
+  usage = """
+    _FUNC_() - Returns a table of logs collected from Python workers.
+  """,
+  examples = """
+    Examples:
+      > SET spark.sql.pyspark.worker.logging.enabled=true;
+        spark.sql.pyspark.worker.logging.enabled	true
+      > SELECT * FROM _FUNC_();
+
+  """,
+  since = "4.1.0",
+  group = "table_funcs")
+// scalastyle:on line.contains.tab line.size.limit
+case class PythonWorkerLogs(jsonAttr: Attribute)
+  extends LeafNode with MultiInstanceRelation with SQLConfHelper {
+
+  def this() = this(DataTypeUtils.toAttribute(StructField("message", StringType)))
+
+  override def output: Seq[Attribute] = Seq(jsonAttr)
+
+  override def newInstance(): PythonWorkerLogs =
+    copy(jsonAttr = jsonAttr.newInstance())
+
+  override protected def stringArgs: Iterator[Any] = Iterator(output)
+
+  override def computeStats(): Statistics = Statistics(
+    // TODO: Instead of returning a default value here, find a way to return a meaningful size
+    // estimate for RDDs. See PR 1238 for more discussions.
+    sizeInBytes = BigInt(conf.defaultSizeInBytes)
+  )
+}
+
+object PythonWorkerLogs extends SQLConfHelper {
+  val TableFunctionName = "python_worker_logs"
+
+  val functionBuilder: (String, (ExpressionInfo, TableFunctionBuilder)) = {
+    val (info, builder) = FunctionRegistryBase.build[PythonWorkerLogs](
+      TableFunctionName, None)
+    val funcBuilder = (expressions: Seq[Expression]) => {
+      if (conf.pythonWorkerLoggingEnabled) {
+        Project(
+          Seq(UnresolvedStar(Some(Seq("from_json")))),
+          Project(
+            Seq(Alias(
+              JsonToStructs(
+                schema = StructType.fromDDL(LogUtils.SPARK_LOG_SCHEMA),
+                options = Map.empty,
+                child = UnresolvedAttribute("message")),
+              "from_json")()),
+            builder(expressions)))
+      } else {
+        throw QueryCompilationErrors.pythonWorkerLoggingNotEnabledError()
+      }
+    }
+    TableFunctionName -> (info, funcBuilder)
   }
 }

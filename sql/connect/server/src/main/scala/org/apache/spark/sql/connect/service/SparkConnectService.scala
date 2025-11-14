@@ -230,6 +230,20 @@ class SparkConnectService(debug: Boolean) extends AsyncService with BindableServ
     }
   }
 
+  override def cloneSession(
+      request: proto.CloneSessionRequest,
+      responseObserver: StreamObserver[proto.CloneSessionResponse]): Unit = {
+    try {
+      new SparkConnectCloneSessionHandler(responseObserver).handle(request)
+    } catch {
+      ErrorUtils.handleError(
+        "cloneSession",
+        observer = responseObserver,
+        userId = request.getUserContext.getUserId,
+        sessionId = request.getSessionId)
+    }
+  }
+
   private def methodWithCustomMarshallers(
       methodDesc: MethodDescriptor[Message, Message]): MethodDescriptor[Message, Message] = {
     val recursionLimit =

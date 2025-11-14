@@ -192,7 +192,10 @@ class InMemoryCatalog(
   override def createTable(
       tableDefinition: CatalogTable,
       ignoreIfExists: Boolean): Unit = synchronized {
-    assert(tableDefinition.identifier.database.isDefined)
+    assert(tableDefinition.identifier.database.isDefined,
+      "Table identifier " + tableDefinition.identifier.quotedString +
+      " is missing database name. " +
+      "Cannot create table without a database specified.")
     val db = tableDefinition.identifier.database.get
     requireDbExists(db)
     val table = tableDefinition.identifier.table
@@ -313,7 +316,10 @@ class InMemoryCatalog(
   }
 
   override def alterTable(tableDefinition: CatalogTable): Unit = synchronized {
-    assert(tableDefinition.identifier.database.isDefined)
+    assert(tableDefinition.identifier.database.isDefined,
+      "Table identifier " + tableDefinition.identifier.quotedString +
+      " is missing database name. " +
+      "Cannot alter table without a database specified.")
     val db = tableDefinition.identifier.database.get
     requireTableExists(db, tableDefinition.identifier.table)
     val updatedProperties = tableDefinition.properties.filter(kv => kv._1 != "comment")

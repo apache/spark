@@ -16,7 +16,7 @@
  */
 
 
-import '../../core/src/main/resources/org/apache/spark/ui/static/jquery-3.5.1.min.js';
+import '../../core/src/main/resources/org/apache/spark/ui/static/jquery.min.js';
 import '../../core/src/main/resources/org/apache/spark/ui/static/d3.min.js';
 import '../../core/src/main/resources/org/apache/spark/ui/static/d3-flamegraph.min.js';
 import '../../core/src/main/resources/org/apache/spark/ui/static/flamegraph.js';

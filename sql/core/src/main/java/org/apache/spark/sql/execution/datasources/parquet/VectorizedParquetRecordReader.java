@@ -48,10 +48,10 @@ import org.apache.spark.sql.execution.vectorized.ConstantColumnVector;
 import org.apache.spark.sql.execution.vectorized.OffHeapColumnVector;
 import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector;
 import org.apache.spark.sql.execution.vectorized.WritableColumnVector;
+import org.apache.spark.sql.internal.SQLConf$;
+import org.apache.spark.sql.types.*;
 import org.apache.spark.sql.vectorized.ColumnVector;
 import org.apache.spark.sql.vectorized.ColumnarBatch;
-import org.apache.spark.sql.types.StructField;
-import org.apache.spark.sql.types.StructType;
 
 /**
  * A specialized RecordReader that reads into InternalRows or ColumnarBatches directly using the
@@ -265,7 +265,15 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
       MemoryMode memMode,
       StructType partitionColumns,
       InternalRow partitionValues) {
-    StructType batchSchema = new StructType(sparkSchema.fields());
+    boolean returnNullStructIfAllFieldsMissing = configuration.getBoolean(
+      SQLConf$.MODULE$.LEGACY_PARQUET_RETURN_NULL_STRUCT_IF_ALL_FIELDS_MISSING().key(),
+      (boolean) SQLConf$.MODULE$.LEGACY_PARQUET_RETURN_NULL_STRUCT_IF_ALL_FIELDS_MISSING()
+        .defaultValue().get());
+    StructType batchSchema = returnNullStructIfAllFieldsMissing
+      ? new StructType(sparkSchema.fields())
+      // Truncate to match requested schema to make sure extra struct field that we read for
+      // nullability is not included in columnarBatch and exposed outside.
+      : (StructType) truncateType(sparkSchema, sparkRequestedSchema);
 
     int constantColumnLength = 0;
     if (partitionColumns != null) {
@@ -287,7 +295,8 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
         defaultValue = ResolveDefaultColumns.existenceDefaultValues(sparkRequestedSchema)[i];
       }
       columnVectors[i] = new ParquetColumnVector(parquetColumn.children().apply(i),
-        (WritableColumnVector) vectors[i], capacity, memMode, missingColumns, true, defaultValue);
+        (WritableColumnVector) vectors[i], capacity, missingColumns, /* isTopLevel= */ true,
+        defaultValue);
     }
 
     if (partitionColumns != null) {
@@ -307,6 +316,58 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
 
   public void initBatch(StructType partitionColumns, InternalRow partitionValues) {
     initBatch(MEMORY_MODE, partitionColumns, partitionValues);
+  }
+
+  /**
+   * Keeps the hierarchy and fields of readType, recursively truncating struct fields from the end
+   * of the fields list to match the same number of fields in requestedType. This is used to get rid
+   * of the extra fields that are added to the structs when the fields we wanted to read initially
+   * were missing in the file schema. So this returns a type that we would be reading if everything
+   * was present in the file, matching Spark's expected schema.
+   *
+   * <p> Example: <pre>{@code
+   * readType:      array<struct<a:int,b:long,c:int>>
+   * requestedType: array<struct<a:int,b:long>>
+   * returns:       array<struct<a:int,b:long>>
+   * }</pre>
+   * We cannot return requestedType here because there might be slight differences, like nullability
+   * of fields or the type precision (smallint/int)
+   */
+  @VisibleForTesting
+  static DataType truncateType(DataType readType, DataType requestedType) {
+    if (requestedType instanceof UserDefinedType<?> requestedUDT) {
+      requestedType = requestedUDT.sqlType();
+    }
+
+    if (readType instanceof StructType readStruct &&
+        requestedType instanceof StructType requestedStruct) {
+      StructType result = new StructType();
+      for (int i = 0; i < requestedStruct.fields().length; i++) {
+        StructField readField = readStruct.fields()[i];
+        StructField requestedField = requestedStruct.fields()[i];
+        DataType truncatedType = truncateType(readField.dataType(), requestedField.dataType());
+        result = result.add(readField.copy(
+          readField.name(), truncatedType, readField.nullable(), readField.metadata()));
+      }
+      return result;
+    }
+
+    if (readType instanceof ArrayType readArray &&
+        requestedType instanceof ArrayType requestedArray) {
+      DataType truncatedElementType = truncateType(
+        readArray.elementType(), requestedArray.elementType());
+      return readArray.copy(truncatedElementType, readArray.containsNull());
+    }
+
+    if (readType instanceof MapType readMap && requestedType instanceof MapType requestedMap) {
+      DataType truncatedKeyType = truncateType(readMap.keyType(), requestedMap.keyType());
+      DataType truncatedValueType = truncateType(readMap.valueType(), requestedMap.valueType());
+      return readMap.copy(truncatedKeyType, truncatedValueType, readMap.valueContainsNull());
+    }
+
+    assert !ParquetSchemaConverter.isComplexType(readType);
+    assert !ParquetSchemaConverter.isComplexType(requestedType);
+    return readType;
   }
 
   /**

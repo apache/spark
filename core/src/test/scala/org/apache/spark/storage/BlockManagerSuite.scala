@@ -20,6 +20,7 @@ package org.apache.spark.storage
 import java.io.{File, InputStream, IOException}
 import java.nio.ByteBuffer
 import java.nio.file.Files
+import java.util.UUID
 import java.util.concurrent.ThreadLocalRandom
 
 import scala.collection.mutable
@@ -64,6 +65,8 @@ import org.apache.spark.serializer.{DeserializationStream, JavaSerializer, KryoD
 import org.apache.spark.shuffle.{MigratableResolver, ShuffleBlockInfo, ShuffleBlockResolver, ShuffleManager}
 import org.apache.spark.shuffle.sort.SortShuffleManager
 import org.apache.spark.storage.BlockManagerMessages._
+import org.apache.spark.storage.LogBlockType.LogBlockType
+import org.apache.spark.storage.StorageLevel._
 import org.apache.spark.util._
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.collection.Utils.createArray
@@ -2502,6 +2505,133 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
       taskId, blockId, StorageLevel.MEMORY_ONLY, classTag[Int], makeIterator)
     // Accumulator should be updated even though block already exists.
     assert(acc.value === 6)
+  }
+
+  test("SPARK-53755: LogBlock should be DISK_ONLY") {
+    val store = makeBlockManager(8000, "executor1")
+    val data = Seq("log line 1", "log line 2")
+    val logBlockId = TestLogBlockId(1234L, store.executorId)
+
+    Seq(DISK_ONLY_2, DISK_ONLY_3,
+      MEMORY_ONLY, MEMORY_ONLY_2, MEMORY_ONLY_SER,
+      MEMORY_ONLY_SER_2, MEMORY_AND_DISK, MEMORY_AND_DISK_2,
+      MEMORY_AND_DISK_SER, MEMORY_AND_DISK_SER_2, OFF_HEAP).foreach { level =>
+      val exception = intercept[SparkException] {
+        store.putIterator[String](logBlockId, data.iterator, level, tellMaster = true)
+      }
+      assert(exception.getMessage.contains("Log blocks must be stored with DISK_ONLY."))
+    }
+
+    assert(store.putIterator[String](logBlockId, data.iterator, DISK_ONLY, tellMaster = true))
+  }
+
+  test("SPARK-53755: Log block write/read") {
+    val store = makeBlockManager(8000, "executor1")
+    val logBlockWriter = store.getLogBlockWriter(LogBlockType.TEST)
+    val logBlockId = TestLogBlockId(1L, store.executorId)
+    val log1 = TestLogLine(0L, 1, "Log message 1")
+    val log2 = TestLogLine(1L, 2, "Log message 2")
+
+    logBlockWriter.writeLog(log1)
+    logBlockWriter.writeLog(log2)
+    logBlockWriter.save(logBlockId)
+
+    val status = store.getStatus(logBlockId)
+    assert(status.isDefined)
+    status.foreach { s =>
+      assert(s.storageLevel === DISK_ONLY)
+      assert(s.memSize === 0)
+      assert(s.diskSize > 0)
+    }
+
+    val data = store.get[TestLogLine](logBlockId).get.data.toSeq
+    assert(data === Seq(log1, log2))
+  }
+
+  test("SPARK-53755: rolling log block write/read") {
+    val store = makeBlockManager(8000, "executor1")
+
+    val logBlockIdGenerator = new LogBlockIdGenerator {
+      override def logBlockType: LogBlockType = LogBlockType.TEST
+
+      override protected def genUniqueBlockId(
+          lastLogTime: Long, executorId: String): LogBlockId = {
+        TestLogBlockId(lastLogTime, executorId)
+      }
+    }
+
+    val logBlockWriter = store.getRollingLogWriter(logBlockIdGenerator, 100)
+    val log1 = TestLogLine(0L, 1, "Log message 1")
+    val log2 = TestLogLine(1L, 2, "Log message 2")
+    val log3 = TestLogLine(2L, 3, "Log message 3")
+    val log4 = TestLogLine(3L, 4, "Log message 4")
+
+    // 65 bytes for each log line, 2 log lines for each block
+    logBlockWriter.writeLog(log1)
+    logBlockWriter.writeLog(log2)
+    // Flush and update bytes written, so that the next write will go to a new block.
+    logBlockWriter.flush()
+    logBlockWriter.writeLog(log3)
+    logBlockWriter.writeLog(log4)
+    logBlockWriter.close()
+
+    val logBlockId1 = TestLogBlockId(2L, store.executorId)
+    val logBlockId2 = TestLogBlockId(3L, store.executorId)
+    val logBlockIds = store
+      .getMatchingBlockIds(_.isInstanceOf[TestLogBlockId])
+      .distinct
+    assert(logBlockIds.size === 2)
+    assert(logBlockIds.contains(logBlockId1) && logBlockIds.contains(logBlockId2))
+  }
+
+  test("PythonWorkerLog block write/read") {
+    val store = makeBlockManager(8000, "executor1")
+    val logBlockWriter = store.getLogBlockWriter(LogBlockType.PYTHON_WORKER)
+    val logBlockId = PythonWorkerLogBlockId(
+      1L, store.executorId, UUID.randomUUID.toString, "1234")
+
+    assert(BlockId(logBlockId.name) == logBlockId)
+
+    val log1 = PythonWorkerLogLine(0L, 1L, "json1")
+    val log2 = PythonWorkerLogLine(1L, 2L, "json2")
+
+    logBlockWriter.writeLog(log1)
+    logBlockWriter.writeLog(log2)
+    logBlockWriter.save(logBlockId)
+
+    val status = store.getStatus(logBlockId)
+    assert(status.isDefined)
+
+    assert(store.getMatchingBlockIds(b => logBlockId.equals(b)).nonEmpty)
+
+    val data = store.get[PythonWorkerLogLine](logBlockId).get.data.toSeq
+    assert(data === Seq(log1, log2))
+  }
+
+  test("rolling python worker log block write/read") {
+    val store = makeBlockManager(8000, "executor1")
+
+    val sessionId = UUID.randomUUID.toString
+    val workerId = "1234"
+    val logBlockIdGenerator = new PythonWorkerLogBlockIdGenerator(sessionId, workerId)
+
+    val logBlockWriter = store.getRollingLogWriter(logBlockIdGenerator, 100)
+    val log1 = PythonWorkerLogLine(0L, 1L, "json 1")
+    val log2 = PythonWorkerLogLine(1L, 2L, "json 2")
+    val log3 = PythonWorkerLogLine(2L, 3L, "json 3")
+    val log4 = PythonWorkerLogLine(3L, 4L, "json 4")
+    logBlockWriter.writeLog(log1)
+    logBlockWriter.writeLog(log2)
+    logBlockWriter.flush()
+    logBlockWriter.writeLog(log3)
+    logBlockWriter.writeLog(log4)
+    logBlockWriter.close()
+
+    val logBlockId1 = PythonWorkerLogBlockId(2L, store.executorId, sessionId, workerId)
+    val logBlockId2 = PythonWorkerLogBlockId(3L, store.executorId, sessionId, workerId)
+    val logBlockIds = store.getMatchingBlockIds(_.isInstanceOf[PythonWorkerLogBlockId]).distinct
+    assert(logBlockIds.size === 2)
+    assert(logBlockIds.contains(logBlockId1) && logBlockIds.contains(logBlockId2))
   }
 
   private def createKryoSerializerWithDiskCorruptedInputStream(): KryoSerializer = {

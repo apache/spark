@@ -32,7 +32,7 @@ import org.apache.spark.sql.connector.expressions.Expressions._
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
-import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
+import org.apache.spark.sql.execution.exchange.{ShuffleExchangeExec, ShuffleExchangeLike}
 import org.apache.spark.sql.execution.joins.SortMergeJoinExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf._
@@ -299,13 +299,13 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
         Row("bbb", 20, 250.0), Row("bbb", 20, 350.0), Row("ccc", 30, 400.50)))
   }
 
-  private def collectAllShuffles(plan: SparkPlan): Seq[ShuffleExchangeExec] = {
+  protected def collectAllShuffles(plan: SparkPlan): Seq[ShuffleExchangeLike] = {
     collect(plan) {
       case s: ShuffleExchangeExec => s
     }
   }
 
-  private def collectShuffles(plan: SparkPlan): Seq[ShuffleExchangeExec] = {
+  protected def collectShuffles(plan: SparkPlan): Seq[ShuffleExchangeLike] = {
     // here we skip collecting shuffle operators that are not associated with SMJ
     collect(plan) {
       case s: SortMergeJoinExec => s

@@ -487,6 +487,14 @@ object ArrowSerializer {
               extractor = (v: Any) => v.asInstanceOf[VariantVal].getMetadata,
               serializerFor(BinaryEncoder, struct.getChild("metadata")))))
 
+      case (_: GeographyEncoder, StructVectors(struct, vectors)) =>
+        val gser = new GeographyArrowSerDe
+        gser.createSerializer(struct, vectors)
+
+      case (_: GeometryEncoder, StructVectors(struct, vectors)) =>
+        val gser = new GeometryArrowSerDe
+        gser.createSerializer(struct, vectors)
+
       case (JavaBeanEncoder(tag, fields), StructVectors(struct, vectors)) =>
         structSerializerFor(fields, struct, vectors) { (field, _) =>
           val getter = methodLookup.findVirtual(
@@ -585,12 +593,14 @@ object ArrowSerializer {
     }
   }
 
-  private class StructFieldSerializer(val extractor: Any => Any, val serializer: Serializer) {
+  private[arrow] class StructFieldSerializer(
+      val extractor: Any => Any,
+      val serializer: Serializer) {
     def write(index: Int, value: Any): Unit = serializer.write(index, extractor(value))
     def writeNull(index: Int): Unit = serializer.write(index, null)
   }
 
-  private class StructSerializer(
+  private[arrow] class StructSerializer(
       struct: StructVector,
       fieldSerializers: Seq[StructFieldSerializer])
       extends Serializer {

@@ -61,7 +61,7 @@ public class GangliaReporter extends ScheduledReporter {
         private MetricFilter filter;
         private ScheduledExecutorService executor;
         private boolean shutdownExecutorOnStop;
-        private Set<MetricAttribute> disabledMetricAttributes = Collections.emptySet();
+        private Set<MetricAttribute> disabledMetricAttributes = Set.of();
 
         private Builder(MetricRegistry registry) {
             this.registry = registry;

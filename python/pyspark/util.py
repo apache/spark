@@ -62,6 +62,7 @@ if typing.TYPE_CHECKING:
         ArrowGroupedMapUDFType,
         ArrowGroupedMapIterUDFType,
         ArrowCogroupedMapUDFType,
+        PandasGroupedMapIterUDFType,
         PandasGroupedMapUDFTransformWithStateType,
         PandasGroupedMapUDFTransformWithStateInitStateType,
         GroupedMapUDFTransformWithStateType,
@@ -652,6 +653,7 @@ class PythonEvalType:
         214
     )
     SQL_GROUPED_MAP_ARROW_ITER_UDF: "ArrowGroupedMapIterUDFType" = 215
+    SQL_GROUPED_MAP_PANDAS_ITER_UDF: "PandasGroupedMapIterUDFType" = 216
 
     # Arrow UDFs
     SQL_SCALAR_ARROW_UDF: "ArrowScalarUDFType" = 250
@@ -916,7 +918,7 @@ def default_api_mode() -> str:
 
 
 if __name__ == "__main__":
-    if "pypy" not in platform.python_implementation().lower() and sys.version_info[:2] >= (3, 9):
+    if "pypy" not in platform.python_implementation().lower():
         import doctest
         import pyspark.util
         from pyspark.core.context import SparkContext

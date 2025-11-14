@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
+import org.apache.spark.sql.catalyst.expressions.st.STExpressionUtils.isGeoSpatialType
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.types.{PhysicalFractionalType, PhysicalIntegralType, PhysicalNumericType}
@@ -37,7 +38,7 @@ import org.apache.spark.sql.catalyst.util.IntervalUtils.{dayTimeIntervalToByte, 
 import org.apache.spark.sql.errors.{QueryErrorsBase, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.{UTF8String, VariantVal}
+import org.apache.spark.unsafe.types.{GeographyVal, UTF8String, VariantVal}
 import org.apache.spark.unsafe.types.UTF8String.{IntWrapper, LongWrapper}
 import org.apache.spark.util.ArrayImplicits._
 
@@ -92,6 +93,9 @@ object Cast extends QueryErrorsBase {
     case (fromType, toType) if fromType == toType => true
 
     case (NullType, _) => true
+
+    // Geospatial types cannot be cast to/from other data types.
+    case (fromType, toType) if isGeoSpatialType(fromType) != isGeoSpatialType(toType) => false
 
     case (_, _: StringType) => true
 
@@ -160,6 +164,16 @@ object Cast extends QueryErrorsBase {
 
     case (udt1: UserDefinedType[_], udt2: UserDefinedType[_]) if udt2.acceptsType(udt1) => true
 
+    // Casts from concrete GEOGRAPHY(srid) to mixed GEOGRAPHY(ANY) is allowed.
+    case (gt1: GeographyType, gt2: GeographyType) if !gt1.isMixedSrid && gt2.isMixedSrid =>
+      true
+    // Casting from GEOGRAPHY to GEOMETRY with the same SRID is allowed.
+    case (geog: GeographyType, geom: GeometryType) if geog.srid == geom.srid =>
+      true
+    // Casts from concrete GEOMETRY(srid) to mixed GEOMETRY(ANY) is allowed.
+    case (gt1: GeometryType, gt2: GeometryType) if !gt1.isMixedSrid && gt2.isMixedSrid =>
+      true
+
     case _ => false
   }
 
@@ -207,6 +221,9 @@ object Cast extends QueryErrorsBase {
     case (fromType, toType) if fromType == toType => true
 
     case (NullType, _) => true
+
+    // Geospatial types cannot be cast to/from other data types.
+    case (fromType, toType) if isGeoSpatialType(fromType) != isGeoSpatialType(toType) => false
 
     case (_, _: StringType) => true
 
@@ -282,6 +299,16 @@ object Cast extends QueryErrorsBase {
         }
 
     case (udt1: UserDefinedType[_], udt2: UserDefinedType[_]) if udt2.acceptsType(udt1) => true
+
+    // Casts from concrete GEOGRAPHY(srid) to mixed GEOGRAPHY(ANY) is allowed.
+    case (gt1: GeographyType, gt2: GeographyType) if !gt1.isMixedSrid && gt2.isMixedSrid =>
+      true
+    // Casting from GEOGRAPHY to GEOMETRY with the same SRID is allowed.
+    case (geog: GeographyType, geom: GeometryType) if geog.srid == geom.srid =>
+      true
+    // Casts from concrete GEOMETRY(srid) to mixed GEOMETRY(ANY) is allowed.
+    case (gt1: GeometryType, gt2: GeometryType) if !gt1.isMixedSrid && gt2.isMixedSrid =>
+      true
 
     case _ => false
   }
@@ -1132,6 +1159,14 @@ case class Cast(
       b => numeric.toFloat(b)
   }
 
+  // GeometryConverter
+  private[this] def castToGeometry(from: DataType): Any => Any = from match {
+    case _: GeographyType =>
+      buildCast[GeographyVal](_, STUtils.geographyToGeometry)
+    case _: GeometryType =>
+      identity
+  }
+
   private[this] def castArray(fromType: DataType, toType: DataType): Any => Any = {
     val elementCast = cast(fromType, toType)
     // TODO: Could be faster?
@@ -1211,6 +1246,8 @@ case class Cast(
         case FloatType => castToFloat(from)
         case LongType => castToLong(from)
         case DoubleType => castToDouble(from)
+        case _: GeographyType => identity
+        case _: GeometryType => castToGeometry(from)
         case array: ArrayType =>
           castArray(from.asInstanceOf[ArrayType].elementType, array.elementType)
         case map: MapType => castMap(from.asInstanceOf[MapType], map)
@@ -1319,6 +1356,8 @@ case class Cast(
     case FloatType => castToFloatCode(from, ctx)
     case LongType => castToLongCode(from, ctx)
     case DoubleType => castToDoubleCode(from, ctx)
+    case _: GeographyType => (c, evPrim, _) => code"$evPrim = $c;"
+    case _: GeometryType => castToGeometryCode(from)
 
     case array: ArrayType =>
       castArrayCode(from.asInstanceOf[ArrayType].elementType, array.elementType, ctx)
@@ -2162,6 +2201,17 @@ case class Cast(
         (c, evPrim, evNull) => code"$evPrim = $c.toDouble();"
       case x: NumericType =>
         (c, evPrim, evNull) => code"$evPrim = (double) $c;"
+    }
+  }
+
+  private[this] def castToGeometryCode(from: DataType): CastFunction = {
+    from match {
+      case _: GeographyType =>
+        (c, evPrim, _) =>
+          code"$evPrim = org.apache.spark.sql.catalyst.util.STUtils.geographyToGeometry($c);"
+      case _: GeometryType =>
+        (c, evPrim, _) =>
+          code"$evPrim = $c;"
     }
   }
 

@@ -31,6 +31,7 @@ import scala.reflect.runtime.universe.TypeTag
 import scala.util.Try
 
 import com.google.common.cache.{CacheBuilder, CacheLoader}
+import com.google.protobuf.ByteString
 import io.grpc.ClientInterceptor
 import org.apache.arrow.memory.RootAllocator
 
@@ -116,16 +117,74 @@ class SparkSession private[sql] (
   private def createDataset[T](encoder: AgnosticEncoder[T], data: Iterator[T]): Dataset[T] = {
     newDataset(encoder) { builder =>
       if (data.nonEmpty) {
-        val arrowData =
-          ArrowSerializer.serialize(data, encoder, allocator, timeZoneId, largeVarTypes)
-        if (arrowData.size() <= conf.get(SqlApiConf.LOCAL_RELATION_CACHE_THRESHOLD_KEY).toInt) {
-          builder.getLocalRelationBuilder
-            .setSchema(encoder.schema.json)
-            .setData(arrowData)
-        } else {
-          val hash = client.cacheLocalRelation(arrowData, encoder.schema.json)
-          builder.getCachedLocalRelationBuilder
-            .setHash(hash)
+        val threshold = conf.get(SqlApiConf.LOCAL_RELATION_CACHE_THRESHOLD_KEY).toInt
+        val maxChunkSizeRows = conf.get(SqlApiConf.LOCAL_RELATION_CHUNK_SIZE_ROWS_KEY).toInt
+        val maxChunkSizeBytes = conf.get(SqlApiConf.LOCAL_RELATION_CHUNK_SIZE_BYTES_KEY).toInt
+        val maxBatchOfChunksSize =
+          conf.get(SqlApiConf.LOCAL_RELATION_BATCH_OF_CHUNKS_SIZE_BYTES_KEY).toLong
+
+        // Serialize with chunking support
+        val it = ArrowSerializer.serialize(
+          data,
+          encoder,
+          allocator,
+          maxRecordsPerBatch = maxChunkSizeRows,
+          maxBatchSize = math.min(maxChunkSizeBytes, maxBatchOfChunksSize),
+          timeZoneId = timeZoneId,
+          largeVarTypes = largeVarTypes,
+          batchSizeCheckInterval = math.min(1024, maxChunkSizeRows))
+
+        try {
+          val schemaBytes = encoder.schema.json.getBytes
+          // Schema is the first chunk, data chunks follow from the iterator
+          val currentBatch = scala.collection.mutable.ArrayBuffer[Array[Byte]](schemaBytes)
+          var totalChunks = 1
+          var currentBatchSize = schemaBytes.length.toLong
+          var totalSize = currentBatchSize
+
+          // store all hashes of uploaded chunks. The first hash is schema, rest are data hashes
+          val allHashes = scala.collection.mutable.ArrayBuffer[String]()
+          while (it.hasNext) {
+            val chunk = it.next()
+            val chunkSize = chunk.length
+            totalChunks += 1
+            totalSize += chunkSize
+
+            // Check if adding this chunk would exceed batch size
+            if (currentBatchSize + chunkSize > maxBatchOfChunksSize) {
+              // Upload current batch
+              allHashes ++= client.artifactManager.cacheArtifacts(currentBatch.toArray)
+              // Start new batch
+              currentBatch.clear()
+              currentBatchSize = 0
+            }
+
+            currentBatch += chunk
+            currentBatchSize += chunkSize
+          }
+
+          // Decide whether to use LocalRelation or ChunkedCachedLocalRelation
+          if (totalChunks == 2 && totalSize <= threshold) {
+            // Schema + single small data chunk: use LocalRelation with inline data
+            val arrowData = ByteString.copyFrom(currentBatch.last)
+            builder.getLocalRelationBuilder
+              .setSchema(encoder.schema.json)
+              .setData(arrowData)
+          } else {
+            // Multiple data chunks or large data: use ChunkedCachedLocalRelation
+            // Upload remaining batch
+            allHashes ++= client.artifactManager.cacheArtifacts(currentBatch.toArray)
+
+            // First hash is schema, rest are data
+            val schemaHash = allHashes.head
+            val dataHashes = allHashes.tail
+
+            builder.getChunkedCachedLocalRelationBuilder
+              .setSchemaHash(schemaHash)
+              .addAllDataHashes(dataHashes.asJava)
+          }
+        } finally {
+          it.close()
         }
       } else {
         builder.getLocalRelationBuilder
@@ -682,6 +741,39 @@ class SparkSession private[sql] (
         observationOrNull.setMetricsAndNotify(SparkResult.transformObservedMetrics(metric))
       }
     }
+  }
+
+  /**
+   * Create a clone of this Spark Connect session on the server side. The server-side session is
+   * cloned with all its current state (SQL configurations, temporary views, registered functions,
+   * catalog state) copied over to a new independent session. The returned cloned session is
+   * isolated from this session - any subsequent changes to either session's server-side state
+   * will not be reflected in the other.
+   *
+   * @note
+   *   This creates a new server-side session with a new session ID while preserving the current
+   *   session's configuration and state.
+   */
+  @DeveloperApi
+  def cloneSession(): SparkSession = {
+    SparkSession.builder().client(client.cloneSession()).create()
+  }
+
+  /**
+   * Create a clone of this Spark Connect session on the server side with a custom session ID. The
+   * server-side session is cloned with all its current state (SQL configurations, temporary
+   * views, registered functions, catalog state) copied over to a new independent session with the
+   * specified session ID. The returned cloned session is isolated from this session.
+   *
+   * @param sessionId
+   *   The custom session ID to use for the cloned session (must be a valid UUID)
+   * @note
+   *   This creates a new server-side session with the specified session ID while preserving the
+   *   current session's configuration and state.
+   */
+  @DeveloperApi
+  def cloneSession(sessionId: String): SparkSession = {
+    SparkSession.builder().client(client.clone(sessionId)).create()
   }
 
   override private[sql] def isUsable: Boolean = client.isSessionValid

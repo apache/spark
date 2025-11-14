@@ -21,10 +21,7 @@ from pyspark.testing.connectutils import ReusedConnectTestCase
 
 
 class ApplyInPandasTests(ApplyInPandasTestsMixin, ReusedConnectTestCase):
-    # TODO(SPARK-42857): Support CreateDataFrame from Decimal128
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_supported_types(self):
-        super().test_supported_types()
+    pass
 
 
 if __name__ == "__main__":

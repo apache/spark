@@ -295,6 +295,20 @@ function renderDagVizForJob(svgContainer) {
         .append("g")
     }
 
+    // Now we need to shift the container for this stage so it doesn't overlap with
+    // existing ones, taking into account the position and width of the last stage's
+    // container. We do not need to do this for the first stage of this job.
+    if (i > 0) {
+      const lastStage = svgContainer.selectAll("g.cluster.stage")
+        .filter((d, i, nodes) => i === nodes.length - 1);
+      if (lastStage) {
+        const lastStageWidth = toFloat(lastStage.select("rect").attr("width"));
+        const lastStagePosition = getAbsolutePosition(lastStage);
+        const offset = lastStagePosition.x + lastStageWidth + VizConstants.stageSep;
+        container.attr("transform", `translate(${offset}, 0)`);
+      }
+    }
+
     var g = graphlibDot.read(dot);
     // Actually render the stage
     renderDot(g, container, true);
@@ -311,20 +325,6 @@ function renderDagVizForJob(svgContainer) {
       .selectAll("rect")
       .attr("rx", "4")
       .attr("ry", "4");
-
-    // Now we need to shift the container for this stage so it doesn't overlap with
-    // existing ones, taking into account the position and width of the last stage's
-    // container. We do not need to do this for the first stage of this job.
-    if (i > 0) {
-      var existingStages = svgContainer.selectAll("g.cluster.stage").nodes();
-      if (existingStages.length > 0) {
-        var lastStage = d3.select(existingStages.pop());
-        var lastStageWidth = toFloat(lastStage.select("rect").attr("width"));
-        var lastStagePosition = getAbsolutePosition(lastStage);
-        var offset = lastStagePosition.x + lastStageWidth + VizConstants.stageSep;
-        container.attr("transform", "translate(" + offset + ", 0)");
-      }
-    }
 
     // If there are any incoming edges into this graph, keep track of them to render
     // them separately later. Note that we cannot draw them now because we need to

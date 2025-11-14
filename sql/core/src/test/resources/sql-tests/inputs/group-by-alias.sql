@@ -89,3 +89,6 @@ SELECT 1 AS col FROM testData GROUP BY `col`;
 
 -- GROUP BY attribute takes precedence over alias
 SELECT 1 AS a FROM testData GROUP BY `a`;
+
+-- GROUP BY alias cannot reference nested fields
+SELECT col1 AS a FROM VALUES (NAMED_STRUCT('f1', 1)) GROUP BY a.f1;

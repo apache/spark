@@ -107,6 +107,7 @@ object Constants {
   val DEFAULT_EXECUTOR_CONTAINER_NAME = "spark-kubernetes-executor"
   val NON_JVM_MEMORY_OVERHEAD_FACTOR = 0.4d
   val CONNECT_GRPC_BINDING_PORT = "spark.connect.grpc.binding.port"
+  val EXIT_EXCEPTION_ANNOTATION = "spark.exit-exception"
 
   // Hadoop Configuration
   val HADOOP_CONF_VOLUME = "hadoop-properties"

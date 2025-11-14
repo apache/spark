@@ -942,6 +942,26 @@ class XmlVariantSuite extends QueryTest with SharedSparkSession with TestXmlData
       .map(_.getString(0).replaceAll("\\s+", ""))
     assert(xmlResult.head === xmlStr)
   }
+
+  test(
+    "[SPARK-54099] XML variant parser should fall back to string " +
+    "when failing to parse decimal values"
+  ) {
+    // Decimals with extreme exponents. The variant parser should throw ArithmeticException when
+    // parsing these values as Decimal:
+    val decimalString = Seq(
+      "1E+2147483647",    // Maximum int exponent - scale would be -2147483647
+      "5E+1000000000",    // 1 billion exponent
+      "1.23E+999999999",  // Very large exponent
+      "0.001E+2147483640" // Still results in huge effective exponent
+    )
+    decimalString.foreach { str =>
+      testParser(
+        xml = s"<ROW><decimal>$str</decimal></ROW>",
+        expectedJsonStr = s"""{"decimal":"$str"}"""
+      )
+    }
+  }
 }
 
 class XmlVariantSuiteWithLegacyParser extends XmlVariantSuite {

@@ -38,7 +38,7 @@ trait StorageRootMixin extends BeforeAndAfterEach { self: Suite =>
   override protected def beforeEach(): Unit = {
     super.beforeEach()
     storageRoot =
-      Files.createTempDirectory(getClass.getSimpleName).normalize.toString
+      s"file://${Files.createTempDirectory(getClass.getSimpleName).normalize.toString}"
   }
 
   override protected def afterEach(): Unit = {

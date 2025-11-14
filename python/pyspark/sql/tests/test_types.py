@@ -29,6 +29,8 @@ from pyspark.sql import Row
 from pyspark.sql import functions as F
 from pyspark.errors import (
     AnalysisException,
+    IllegalArgumentException,
+    SparkRuntimeException,
     ParseException,
     PySparkTypeError,
     PySparkValueError,
@@ -51,6 +53,8 @@ from pyspark.sql.types import (
     MapType,
     StringType,
     CharType,
+    Geography,
+    Geometry,
     VarcharType,
     StructType,
     StructField,
@@ -60,6 +64,8 @@ from pyspark.sql.types import (
     DecimalType,
     BinaryType,
     BooleanType,
+    GeographyType,
+    GeometryType,
     NullType,
     VariantType,
     VariantVal,
@@ -921,6 +927,98 @@ class TypesTestsMixin:
 
         self.assertRaises(PySparkValueError, lambda: _parse_datatype_json_string(schema_json))
 
+    def test_geography_json_serde(self):
+        from pyspark.sql.types import _parse_datatype_json_value, _parse_datatype_json_string
+
+        valid_test_cases = [
+            ("geography", GeographyType(4326)),
+            ("geography(OGC:CRS84)", GeographyType(4326)),
+            ("geography(OGC:CRS84, SPHERICAL)", GeographyType(4326)),
+            ("geography(SPHERICAL)", GeographyType(4326)),
+            ("geography(SRID:ANY)", GeographyType("ANY")),
+            ("geography(srid:any)", GeographyType("ANY")),
+        ]
+        for json, expected in valid_test_cases:
+            python_datatype = _parse_datatype_json_value(json)
+            self.assertEqual(python_datatype, expected)
+            self.assertEqual(expected, _parse_datatype_json_string(expected.json()))
+
+        invalid_test_cases = [
+            "geography()",
+            "geography(())",
+            "geography(0)",
+            "geography(1)",
+            "geography(3857)",
+            "geography(4326)",
+            "geography(ANY)",
+            "geography(any)",
+            "geography(SRID)",
+            "geography(srid)",
+            "geography(CRS)",
+            "geography(crs)",
+            "geography(asdf)",
+            "geography(asdf:fdsa)",
+            "geography(123:123)",
+            "geography(srid:srid)",
+            "geography(SRID:0)",
+            "geography(SRID:1)",
+            "geography(SRID:123)",
+            "geography(EPSG:123)",
+            "geography(ESRI:123)",
+            "geography(OCG:123)",
+            "geography(OCG:CRS123)",
+            "geography(SRID:0,)",
+            "geography(SRID0)",
+            "geography(SRID:4326, ALG)",
+        ]
+        for json in invalid_test_cases:
+            with self.assertRaises(Exception):
+                _parse_datatype_json_value(json)
+
+    def test_geometry_json_serde(self):
+        from pyspark.sql.types import _parse_datatype_json_value, _parse_datatype_json_string
+
+        valid_test_cases = [
+            ("geometry", GeometryType(4326)),
+            ("geometry(OGC:CRS84)", GeometryType(4326)),
+            ("geometry(SRID:ANY)", GeometryType("ANY")),
+            ("geometry(srid:any)", GeometryType("ANY")),
+        ]
+        for json, expected in valid_test_cases:
+            python_datatype = _parse_datatype_json_value(json)
+            self.assertEqual(python_datatype, expected)
+            self.assertEqual(expected, _parse_datatype_json_string(expected.json()))
+
+        invalid_test_cases = [
+            "geometry()",
+            "geometry(())",
+            "geometry(0)",
+            "geometry(1)",
+            "geometry(3857)",
+            "geometry(4326)",
+            "geometry(ANY)",
+            "geometry(any)",
+            "geometry(SRID)",
+            "geometry(srid)",
+            "geometry(CRS)",
+            "geometry(crs)",
+            "geometry(asdf)",
+            "geometry(asdf:fdsa)",
+            "geometry(123:123)",
+            "geometry(srid:srid)",
+            "geometry(SRID:1)",
+            "geometry(SRID:123)",
+            "geometry(EPSG:123)",
+            "geometry(ESRI:123)",
+            "geometry(OCG:123)",
+            "geometry(OCG:CRS123)",
+            "geometry(SRID:0,)",
+            "geometry(SRID0)",
+        ]
+        for json in invalid_test_cases:
+            with self.assertRaises(Exception):
+                _parse_datatype_json_value(json)
+
     def test_udt(self):
         from pyspark.sql.types import _parse_datatype_json_string, _infer_type, _make_type_verifier
 
@@ -1002,9 +1100,10 @@ class TypesTestsMixin:
             if x > 0:
                 return PythonOnlyPoint(float(x), float(x))
 
-        self.spark.catalog.registerFunction("udf", myudf, PythonOnlyUDT())
-        rows = [r[0] for r in df.selectExpr("udf(id)").take(2)]
-        self.assertEqual(rows, [None, PythonOnlyPoint(1, 1)])
+        with self.temp_func("udf"):
+            self.spark.catalog.registerFunction("udf", myudf, PythonOnlyUDT())
+            rows = [r[0] for r in df.selectExpr("udf(id)").take(2)]
+            self.assertEqual(rows, [None, PythonOnlyPoint(1, 1)])
 
     def test_infer_schema_with_udt(self):
         row = Row(label=1.0, point=ExamplePoint(1.0, 2.0))
@@ -1268,6 +1367,11 @@ class TypesTestsMixin:
             TimestampType(),
             TimestampNTZType(),
             NullType(),
+            GeographyType(4326),
+            GeographyType("ANY"),
+            GeometryType(0),
+            GeometryType(4326),
+            GeometryType("ANY"),
             VariantType(),
             YearMonthIntervalType(),
             YearMonthIntervalType(YearMonthIntervalType.YEAR),
@@ -2347,6 +2451,340 @@ class TypesTestsMixin:
         # Rows in createDataFrame cannot be of type VariantVal
         with self.assertRaises(PySparkValueError, msg="Rows cannot be of type VariantVal"):
             self.spark.createDataFrame([VariantVal.parseJson("2")], "v variant")
+
+    def test_variant_to_pandas(self):
+        import pandas as pd
+        import json
+
+        expected_values = [
+            ("str", '"%s"' % ("0123456789" * 10), "0123456789" * 10),
+            ("short_str", '"abc"', "abc"),
+        ]
+        json_str = "{%s}" % ",".join(['"%s": %s' % (t[0], t[1]) for t in expected_values])
+        df = self.spark.createDataFrame([({"json": json_str})])
+        df_variant = df.select(F.parse_json(df.json).alias("v"))
+        pandas = df_variant.toPandas()
+        test_record = json.loads(pandas["v"].iloc[0].toJson())
+        self.assertIsInstance(pandas, pd.DataFrame)
+        self.assertEqual(expected_values[0][2], test_record["str"])
+        self.assertEqual(expected_values[1][2], test_record["short_str"])
+
+    def test_geospatial_encoding(self):
+        df = self.spark.createDataFrame(
+            [
+                (
+                    bytes.fromhex("0101000000000000000000F03F0000000000000040"),
+                    4326,
+                )
+            ],
+            ["wkb", "srid"],
+        )
+        row = df.select(
+            F.st_geomfromwkb(df.wkb).alias("geom"),
+            F.st_geogfromwkb(df.wkb).alias("geog"),
+        ).collect()[0]
+
+        self.assertEqual(type(row["geom"]), Geometry)
+        self.assertEqual(type(row["geog"]), Geography)
+        self.assertEqual(
+            row["geom"].getBytes(), bytes.fromhex("0101000000000000000000F03F0000000000000040")
+        )
+        self.assertEqual(row["geom"].getSrid(), 0)
+        self.assertEqual(
+            row["geog"].getBytes(), bytes.fromhex("0101000000000000000000F03F0000000000000040")
+        )
+        self.assertEqual(row["geog"].getSrid(), 4326)
+
+    def test_geospatial_create_dataframe_rdd(self):
+        schema = StructType(
+            [
+                StructField("id", IntegerType(), True),
+                StructField("geom", GeometryType(0), True),
+                StructField("geom4326", GeometryType(4326), True),
+                StructField("geog", GeographyType(4326), True),
+            ]
+        )
+        geospatial_data = [
+            (
+                1,
+                Geometry.fromWKB(bytes.fromhex("010100000000000000000031400000000000001c40"), 0),
+                Geometry.fromWKB(bytes.fromhex("010100000000000000000031400000000000001c40"), 4326),
+                Geography.fromWKB(
+                    bytes.fromhex("010100000000000000000031400000000000001c40"), 4326
+                ),
+            ),
+            (
+                2,
+                Geometry.fromWKB(bytes.fromhex("010100000000000000000014400000000000001440"), 0),
+                Geometry.fromWKB(bytes.fromhex("010100000000000000000014400000000000001440"), 4326),
+                Geography.fromWKB(
+                    bytes.fromhex("010100000000000000000014400000000000001440"), 4326
+                ),
+            ),
+        ]
+        rdd_data = self.sc.parallelize(geospatial_data)
+        df = self.spark.createDataFrame(rdd_data, schema)
+        rows = df.select(
+            F.st_asbinary(df.geom).alias("geom_wkb"),
+            F.st_srid(df.geom).alias("geom_srid"),
+            F.st_asbinary(df.geom4326).alias("geom4326_wkb"),
+            F.st_srid(df.geom4326).alias("geom4326_srid"),
+            F.st_asbinary(df.geog).alias("geog_wkb"),
+            F.st_srid(df.geog).alias("geog_srid"),
+        ).collect()
+
+        point0_wkb = bytes.fromhex("010100000000000000000031400000000000001c40")
+        point1_wkb = bytes.fromhex("010100000000000000000014400000000000001440")
+        self.assertEqual(rows[0]["geom_wkb"], point0_wkb)
+        self.assertEqual(rows[0]["geom4326_wkb"], point0_wkb)
+        self.assertEqual(rows[0]["geog_wkb"], point0_wkb)
+        self.assertEqual(rows[1]["geom_wkb"], point1_wkb)
+        self.assertEqual(rows[1]["geom4326_wkb"], point1_wkb)
+        self.assertEqual(rows[1]["geog_wkb"], point1_wkb)
+        self.assertEqual(rows[0]["geom_srid"], 0)
+        self.assertEqual(rows[0]["geom4326_srid"], 4326)
+        self.assertEqual(rows[0]["geog_srid"], 4326)
+        self.assertEqual(rows[1]["geom_srid"], 0)
+        self.assertEqual(rows[1]["geom4326_srid"], 4326)
+        self.assertEqual(rows[1]["geog_srid"], 4326)
+        schema_df = self.spark.createDataFrame(rdd_data).select(
+            F.col("_1").alias("id"),
+            F.col("_2").alias("geom"),
+            F.col("_3").alias("geom4326"),
+            F.col("_4").alias("geog"),
+        )
+        self.assertEqual(df.collect(), schema_df.collect())
+
+    def test_geospatial_create_dataframe(self):
+        # Positive Test: Creating DataFrame from a list of tuples with explicit schema
+        geospatial_data = [
+            (
+                1,
+                Geometry.fromWKB(bytes.fromhex("010100000000000000000031400000000000001c40"), 0),
+                Geometry.fromWKB(bytes.fromhex("010100000000000000000031400000000000001c40"), 4326),
+                Geography.fromWKB(
+                    bytes.fromhex("010100000000000000000031400000000000001c40"), 4326
+                ),
+            ),
+            (
+                2,
+                Geometry.fromWKB(bytes.fromhex("010100000000000000000014400000000000001440"), 0),
+                Geometry.fromWKB(bytes.fromhex("010100000000000000000014400000000000001440"), 4326),
+                Geography.fromWKB(
+                    bytes.fromhex("010100000000000000000014400000000000001440"), 4326
+                ),
+            ),
+        ]
+        named_geospatial_data = [
+            {
+                "id": 1,
+                "geom": Geometry.fromWKB(
+                    bytes.fromhex("010100000000000000000031400000000000001c40"), 0
+                ),
+                "geom4326": Geometry.fromWKB(
+                    bytes.fromhex("010100000000000000000031400000000000001c40"), 4326
+                ),
+                "geog": Geography.fromWKB(
+                    bytes.fromhex("010100000000000000000031400000000000001c40"), 4326
+                ),
+            },
+            {
+                "id": 2,
+                "geom": Geometry.fromWKB(
+                    bytes.fromhex("010100000000000000000014400000000000001440"), 0
+                ),
+                "geom4326": Geometry.fromWKB(
+                    bytes.fromhex("010100000000000000000014400000000000001440"), 4326
+                ),
+                "geog": Geography.fromWKB(
+                    bytes.fromhex("010100000000000000000014400000000000001440"), 4326
+                ),
+            },
+        ]
+        GeospatialRow = Row("id", "geom", "geom4326", "geog")
+        spark_row_data = [
+            GeospatialRow(
+                1,
+                Geometry.fromWKB(bytes.fromhex("010100000000000000000031400000000000001c40"), 0),
+                Geometry.fromWKB(bytes.fromhex("010100000000000000000031400000000000001c40"), 4326),
+                Geography.fromWKB(
+                    bytes.fromhex("010100000000000000000031400000000000001c40"), 4326
+                ),
+            ),
+            GeospatialRow(
+                2,
+                Geometry.fromWKB(bytes.fromhex("010100000000000000000014400000000000001440"), 0),
+                Geometry.fromWKB(bytes.fromhex("010100000000000000000014400000000000001440"), 4326),
+                Geography.fromWKB(
+                    bytes.fromhex("010100000000000000000014400000000000001440"), 4326
+                ),
+            ),
+        ]
+        schema = StructType(
+            [
+                StructField("id", IntegerType(), True),
+                StructField("geom", GeometryType(0), True),
+                StructField("geom4326", GeometryType(4326), True),
+                StructField("geog", GeographyType(4326), True),
+            ]
+        )
+        # Negative Test: Schema mismatch
+        mismatched_schema = StructType(
+            [
+                StructField("id", IntegerType(), True),  # Should be GeometryType
+                StructField("geom", GeometryType(4326), True),  # Should be GeometryType
+                StructField("geom4326", GeometryType(4326), True),  # Should be GeometryType
+                StructField("geog", GeographyType(4326), True),  # Should be GeographyType
+            ]
+        )
+
+        # Explicitly validate single test case
+        # rest will be compared with this one.
+        df = self.spark.createDataFrame(geospatial_data, schema)
+        rows = df.select(
+            F.st_asbinary(df.geom).alias("geom_wkb"),
+            F.st_srid(df.geom).alias("geom_srid"),
+            F.st_asbinary(df.geom4326).alias("geom4326_wkb"),
+            F.st_srid(df.geom4326).alias("geom4326_srid"),
+            F.st_asbinary(df.geog).alias("geog_wkb"),
+            F.st_srid(df.geog).alias("geog_srid"),
+        ).collect()
+
+        point0_wkb = bytes.fromhex("010100000000000000000031400000000000001c40")
+        point1_wkb = bytes.fromhex("010100000000000000000014400000000000001440")
+        self.assertEqual(rows[0]["geom_wkb"], point0_wkb)
+        self.assertEqual(rows[0]["geom4326_wkb"], point0_wkb)
+        self.assertEqual(rows[0]["geog_wkb"], point0_wkb)
+        self.assertEqual(rows[1]["geom_wkb"], point1_wkb)
+        self.assertEqual(rows[1]["geom4326_wkb"], point1_wkb)
+        self.assertEqual(rows[1]["geog_wkb"], point1_wkb)
+        self.assertEqual(rows[0]["geom_srid"], 0)
+        self.assertEqual(rows[0]["geom4326_srid"], 4326)
+        self.assertEqual(rows[0]["geog_srid"], 4326)
+        self.assertEqual(rows[1]["geom_srid"], 0)
+        self.assertEqual(rows[1]["geom4326_srid"], 4326)
+        self.assertEqual(rows[1]["geog_srid"], 4326)
+
+        # Just the data set without parameters.
+        self.assertEqual(
+            self.spark.createDataFrame(named_geospatial_data)
+            .select("id", "geom", "geom4326", "geog")
+            .collect(),
+            df.collect(),
+        )
+        self.assertEqual(self.spark.createDataFrame(geospatial_data).collect(), df.collect())
+        self.assertEqual(self.spark.createDataFrame(spark_row_data).collect(), df.collect())
+
+        # Define DataFrame creation methods
+        datasets = [named_geospatial_data, geospatial_data, spark_row_data]
+        schemas = [
+            schema,
+            "id INT, geom GEOMETRY(0), geom4326 GEOMETRY(4326), geog GEOGRAPHY(4326)",
+            ["id", "geom", "geom4326", "geog"],
+        ]
+
+        for dataset_to_check, schema_to_check in zip(datasets, schemas):
+            df_to_check = self.spark.createDataFrame(dataset_to_check, schema_to_check).select(
+                "id", "geom", "geom4326", "geog"
+            )
+            self.assertEqual(df_to_check.collect(), df.collect(), "DataFrame creation with schema")
+
+        # Negative Test: Schema mismatch
+        for dataset_to_check in datasets:
+            with self.assertRaises(SparkRuntimeException) as pe:
+                self.spark.createDataFrame(dataset_to_check, mismatched_schema).collect()
+
+            self.check_error(
+                exception=pe.exception,
+                errorClass="GEO_ENCODER_SRID_MISMATCH_ERROR",
+                messageParameters={"type": "GEOMETRY", "typeSrid": "4326", "valueSrid": "0"},
+            )
+
+    def test_geospatial_schema_inferrence(self):
+        # Mixed data with different SRIDs
+        wkb = bytes.fromhex("010100000000000000000031400000000000001c40")
+        geometry_dataset = [
+            (Geometry.fromWKB(wkb, 0), Geometry.fromWKB(wkb, 4326), Geometry.fromWKB(wkb, 4326)),
+            (Geometry.fromWKB(wkb, 0), Geometry.fromWKB(wkb, 4326), Geometry.fromWKB(wkb, 0)),
+            (Geometry.fromWKB(wkb, 0), Geometry.fromWKB(wkb, 4326), Geometry.fromWKB(wkb, 4326)),
+            (Geometry.fromWKB(wkb, 0), Geometry.fromWKB(wkb, 4326), Geometry.fromWKB(wkb, 0)),
+        ]
+        # Create DataFrame with mixed data types
+        df = self.spark.createDataFrame(geometry_dataset, ["geom0", "geom4326", "geom_any"])
+        expected_schema = StructType(
+            [
+                StructField("geom0", GeometryType(0), True),
+                StructField("geom4326", GeometryType(4326), True),
+                StructField("geom_any", GeometryType("ANY"), True),
+            ]
+        )
+        self.assertEqual(df.schema, expected_schema)
+
+        rows = df.select(
+            F.st_asbinary("geom0").alias("geom0_wkb"),
+            F.st_srid("geom0").alias("geom0_srid"),
+            F.st_asbinary("geom4326").alias("geom4326_wkb"),
+            F.st_srid("geom4326").alias("geom4326_srid"),
+            F.st_asbinary("geom_any").alias("geom_any_wkb"),
+            F.st_srid("geom_any").alias("geom_any_srid"),
+        ).collect()
+
+        point_wkb = bytes.fromhex("010100000000000000000031400000000000001c40")
+        self.assertEqual(rows[0]["geom0_wkb"], point_wkb)
+        self.assertEqual(rows[1]["geom0_wkb"], point_wkb)
+        self.assertEqual(rows[0]["geom4326_wkb"], point_wkb)
+        self.assertEqual(rows[1]["geom4326_wkb"], point_wkb)
+        self.assertEqual(rows[0]["geom_any_wkb"], point_wkb)
+        self.assertEqual(rows[1]["geom_any_wkb"], point_wkb)
+        self.assertEqual(rows[0]["geom0_srid"], 0)
+        self.assertEqual(rows[1]["geom0_srid"], 0)
+        self.assertEqual(rows[0]["geom4326_srid"], 4326)
+        self.assertEqual(rows[1]["geom4326_srid"], 4326)
+        self.assertEqual(rows[0]["geom_any_srid"], 4326)
+        self.assertEqual(rows[1]["geom_any_srid"], 0)
+
+    def test_geospatial_mixed_check_srid_validity(self):
+        geometry_mixed_invalid_data = [
+            (1, Geometry.fromWKB(bytes.fromhex("010100000000000000000031400000000000001c40"), 0)),
+            (2, Geometry.fromWKB(bytes.fromhex("010100000000000000000031400000000000001c40"), 1)),
+        ]
+
+        with self.assertRaises(IllegalArgumentException) as pe:
+            self.spark.createDataFrame(geometry_mixed_invalid_data).collect()
+        self.check_error(
+            exception=pe.exception,
+            errorClass="ST_INVALID_SRID_VALUE",
+            messageParameters={"srid": "1"},
+        )
+
+        with self.assertRaises(IllegalArgumentException) as pe:
+            self.spark.createDataFrame(
+                geometry_mixed_invalid_data, "id INT, geom GEOMETRY(ANY)"
+            ).collect()
+        self.check_error(
+            exception=pe.exception,
+            errorClass="ST_INVALID_SRID_VALUE",
+            messageParameters={"srid": "1"},
+        )
+
+    def test_geospatial_result_encoding(self):
+        point_wkb = "010100000000000000000031400000000000001c40"
+        point_bytes = bytes.fromhex(point_wkb)
+        df = self.spark.sql(
+            f"""
+            SELECT ST_GeomFromWKB(X'{point_wkb}') AS geom,
+            ST_GeogFromWKB(X'{point_wkb}') AS geog"""
+        )
+        GeospatialRow = Row("geom", "geog")
+        self.assertEqual(
+            df.collect(),
+            [
+                GeospatialRow(
+                    Geometry.fromWKB(point_bytes, 0),
+                    Geography.fromWKB(point_bytes, 4326),
+                )
+            ],
+        )
 
     def test_to_ddl(self):
         schema = StructType().add("a", NullType()).add("b", BooleanType()).add("c", BinaryType())

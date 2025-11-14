@@ -17,9 +17,6 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
-import java.lang
-import java.util
-
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.{SparkEnv, SparkException, TaskContext}
@@ -34,10 +31,11 @@ import org.apache.spark.sql.catalyst.util.RowDeltaUtils.{DELETE_OPERATION, INSER
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Column, Identifier, StagedTable, StagingTableCatalog, Table, TableCatalog, TableInfo, TableWritePrivilege}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.connector.metric.CustomMetric
-import org.apache.spark.sql.connector.write.{BatchWrite, DataWriter, DataWriterFactory, DeltaWrite, DeltaWriter, PhysicalWriteInfoImpl, Write, WriterCommitMessage}
+import org.apache.spark.sql.connector.write.{BatchWrite, DataWriter, DataWriterFactory, DeltaWrite, DeltaWriter, MergeSummaryImpl, PhysicalWriteInfoImpl, RowLevelOperationTable, Write, WriterCommitMessage, WriteSummary}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.{SparkPlan, SQLExecution, UnaryExecNode}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
+import org.apache.spark.sql.execution.joins.BaseJoinExec
 import org.apache.spark.sql.execution.metric.{CustomMetrics, SQLMetric, SQLMetrics}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.{LongAccumulator, Utils}
@@ -156,7 +154,7 @@ case class ReplaceTableAsSelectExec(
     tableSpec: TableSpec,
     writeOptions: Map[String, String],
     orCreate: Boolean,
-    invalidateCache: (TableCatalog, Table, Identifier) => Unit)
+    invalidateCache: (TableCatalog, Identifier) => Unit)
   extends V2CreateTableAsSelectBaseExec {
 
   val properties = CatalogV2Util.convertTableProperties(tableSpec)
@@ -171,8 +169,7 @@ case class ReplaceTableAsSelectExec(
     // 2. Writing to the new table fails,
     // 3. The table returned by catalog.createTable doesn't support writing.
     if (catalog.tableExists(ident)) {
-      val table = catalog.loadTable(ident)
-      invalidateCache(catalog, table, ident)
+      invalidateCache(catalog, ident)
       catalog.dropTable(ident)
     } else if (!orCreate) {
       throw QueryCompilationErrors.cannotReplaceMissingTableError(ident)
@@ -208,7 +205,7 @@ case class AtomicReplaceTableAsSelectExec(
     tableSpec: TableSpec,
     writeOptions: Map[String, String],
     orCreate: Boolean,
-    invalidateCache: (TableCatalog, Table, Identifier) => Unit)
+    invalidateCache: (TableCatalog, Identifier) => Unit)
   extends V2CreateTableAsSelectBaseExec {
 
   val properties = CatalogV2Util.convertTableProperties(tableSpec)
@@ -219,8 +216,7 @@ case class AtomicReplaceTableAsSelectExec(
   override protected def run(): Seq[InternalRow] = {
     val columns = getV2Columns(query.schema, catalog.useNullableQuerySchema)
     if (catalog.tableExists(ident)) {
-      val table = catalog.loadTable(ident)
-      invalidateCache(catalog, table, ident)
+      invalidateCache(catalog, ident)
     }
     val staged = if (orCreate) {
       val tableInfo = new TableInfo.Builder()
@@ -455,9 +451,12 @@ trait V2TableWriteExec extends V2CommandExec with UnaryExecNode with AdaptiveSpa
         }
       )
 
-      val operationMetrics = getOperationMetrics(query)
+      val writeSummary = getWriteSummary(query)
       logInfo(log"Data source write support ${MDC(LogKeys.BATCH_WRITE, batchWrite)} is committing.")
-      batchWrite.commit(messages, operationMetrics)
+      writeSummary match {
+        case Some(summary) => batchWrite.commit(messages, summary)
+        case None => batchWrite.commit(messages)
+      }
       logInfo(log"Data source write support ${MDC(LogKeys.BATCH_WRITE, batchWrite)} committed.")
       commitProgress = Some(StreamWriterCommitProgress(totalNumRowsAccumulator.value))
     } catch {
@@ -480,10 +479,56 @@ trait V2TableWriteExec extends V2CommandExec with UnaryExecNode with AdaptiveSpa
     Nil
   }
 
-  private def getOperationMetrics(query: SparkPlan): util.Map[String, lang.Long] = {
-    collectFirst(query) { case m: MergeRowsExec => m }.map{ n =>
-      n.metrics.map { case (name, metric) => s"merge.$name" -> lang.Long.valueOf(metric.value) }
-    }.getOrElse(Map.empty[String, lang.Long]).asJava
+  private def getWriteSummary(query: SparkPlan): Option[WriteSummary] = {
+    collectFirst(query) { case m: MergeRowsExec => m }.map { n =>
+      val metrics = n.metrics
+      val numSourceRows = getNumSourceRows(n)
+      MergeSummaryImpl(
+        numSourceRows,
+        metrics.get("numTargetRowsCopied").map(_.value).getOrElse(-1L),
+        metrics.get("numTargetRowsDeleted").map(_.value).getOrElse(-1L),
+        metrics.get("numTargetRowsUpdated").map(_.value).getOrElse(-1L),
+        metrics.get("numTargetRowsInserted").map(_.value).getOrElse(-1L),
+        metrics.get("numTargetRowsMatchedUpdated").map(_.value).getOrElse(-1L),
+        metrics.get("numTargetRowsMatchedDeleted").map(_.value).getOrElse(-1L),
+        metrics.get("numTargetRowsNotMatchedBySourceUpdated").map(_.value).getOrElse(-1L),
+        metrics.get("numTargetRowsNotMatchedBySourceDeleted").map(_.value).getOrElse(-1L)
+      )
+    }
+  }
+
+  private def getNumSourceRows(mergeRowsExec: MergeRowsExec): Long = {
+    def hasTargetTable(plan: SparkPlan): Boolean = {
+      collectFirst(plan) {
+        case scan @ BatchScanExec(_, _, _, _, _: RowLevelOperationTable, _) => scan
+      }.isDefined
+    }
+
+    def findSourceScan(join: BaseJoinExec): Option[SparkPlan] = {
+      val leftHasTarget = hasTargetTable(join.left)
+      val rightHasTarget = hasTargetTable(join.right)
+
+      val sourceSide = if (leftHasTarget) {
+        Some(join.right)
+      } else if (rightHasTarget) {
+        Some(join.left)
+      } else {
+        None
+      }
+
+      sourceSide.flatMap { side =>
+        collectFirst(side) {
+          case source if source.metrics.contains("numOutputRows") =>
+          source
+        }
+      }
+    }
+
+    (for {
+      join <- collectFirst(mergeRowsExec.child) { case j: BaseJoinExec => j }
+      sourceScan <- findSourceScan(join)
+      metric <- sourceScan.metrics.get("numOutputRows")
+    } yield metric.value).getOrElse(-1L)
   }
 }
 

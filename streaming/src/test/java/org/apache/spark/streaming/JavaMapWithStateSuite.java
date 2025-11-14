@@ -105,18 +105,18 @@ public class JavaMapWithStateSuite extends LocalJavaStreamingContext implements 
     );
 
     List<Set<Integer>> outputData = Arrays.asList(
-        Collections.emptySet(),
+        Set.of(),
         Set.of(1),
         Set.of(2, 1),
         Set.of(3, 2, 1),
         Set.of(4, 3),
         Set.of(5),
-        Collections.emptySet()
+        Set.of()
     );
 
     @SuppressWarnings("unchecked")
     List<Set<Tuple2<String, Integer>>> stateData = Arrays.asList(
-        Collections.emptySet(),
+        Set.of(),
         Set.of(new Tuple2<>("a", 1)),
         Set.of(new Tuple2<>("a", 2), new Tuple2<>("b", 1)),
         Set.of(new Tuple2<>("a", 3), new Tuple2<>("b", 2), new Tuple2<>("c", 1)),

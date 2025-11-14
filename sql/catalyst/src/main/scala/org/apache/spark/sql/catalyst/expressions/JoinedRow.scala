@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.{ArrayData, MapData}
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String, VariantVal}
+import org.apache.spark.unsafe.types._
 
 /**
  * A mutable wrapper that makes two rows appear as a single concatenated row.  Designed to
@@ -113,6 +113,12 @@ class JoinedRow extends InternalRow {
 
   override def getBinary(i: Int): Array[Byte] =
     if (i < row1.numFields) row1.getBinary(i) else row2.getBinary(i - row1.numFields)
+
+  override def getGeography(i: Int): GeographyVal =
+    if (i < row1.numFields) row1.getGeography(i) else row2.getGeography(i - row1.numFields)
+
+  override def getGeometry(i: Int): GeometryVal =
+    if (i < row1.numFields) row1.getGeometry(i) else row2.getGeometry(i - row1.numFields)
 
   override def getArray(i: Int): ArrayData =
     if (i < row1.numFields) row1.getArray(i) else row2.getArray(i - row1.numFields)

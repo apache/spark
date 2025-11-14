@@ -36,11 +36,23 @@ class AnalysisException protected (
     val cause: Option[Throwable] = None,
     val errorClass: Option[String] = None,
     val messageParameters: Map[String, String] = Map.empty,
-    val context: Array[QueryContext] = Array.empty)
+    val context: Array[QueryContext] = Array.empty,
+    val sqlState: Option[String] = None,
+    val messageTemplate: Option[String] = None)
     extends Exception(message, cause.orNull)
     with SparkThrowable
     with Serializable
     with WithOrigin {
+
+  def this(
+      message: String,
+      line: Option[Int],
+      startPosition: Option[Int],
+      cause: Option[Throwable],
+      errorClass: Option[String],
+      messageParameters: Map[String, String],
+      context: Array[QueryContext]) =
+    this(message, line, startPosition, cause, errorClass, messageParameters, context, None, None)
 
   def this(errorClass: String, messageParameters: Map[String, String], cause: Option[Throwable]) =
     this(
@@ -60,6 +72,33 @@ class AnalysisException protected (
       messageParameters = messageParameters,
       context = context,
       cause = cause)
+
+  /**
+   * External constructor for callers that want to supply error fields directly, without requiring
+   * a local JSON definition for the error class.
+   *
+   * If `message` is provided (Some), it is used verbatim. Otherwise, the message is rendered from
+   * (errorClass, sqlState, messageTemplate, messageParameters).
+   *
+   * `messageTemplate` is always persisted into the exception so clients can read it via
+   * SparkThrowable.getDefaultMessageTemplate().
+   */
+  def this(
+      errorClass: String,
+      sqlState: String,
+      messageTemplate: String,
+      messageParameters: Map[String, String],
+      cause: Option[Throwable],
+      message: Option[String]) =
+    this(
+      message = message.getOrElse(
+        SparkThrowableHelper
+          .getMessage(errorClass, sqlState, messageTemplate, messageParameters)),
+      cause = cause,
+      errorClass = Option(errorClass),
+      messageParameters = messageParameters,
+      sqlState = Option(sqlState),
+      messageTemplate = Option(messageTemplate))
 
   def this(
       errorClass: String,
@@ -100,13 +139,13 @@ class AnalysisException protected (
       cause = cause)
 
   def copy(
-      message: String = this.message,
-      line: Option[Int] = this.line,
-      startPosition: Option[Int] = this.startPosition,
-      cause: Option[Throwable] = this.cause,
-      errorClass: Option[String] = this.errorClass,
-      messageParameters: Map[String, String] = this.messageParameters,
-      context: Array[QueryContext] = this.context): AnalysisException =
+      message: String,
+      line: Option[Int],
+      startPosition: Option[Int],
+      cause: Option[Throwable],
+      errorClass: Option[String],
+      messageParameters: Map[String, String],
+      context: Array[QueryContext]): AnalysisException =
     new AnalysisException(
       message,
       line,
@@ -114,7 +153,30 @@ class AnalysisException protected (
       cause,
       errorClass,
       messageParameters,
-      context)
+      context,
+      this.sqlState,
+      this.messageTemplate)
+
+  def copy(
+      message: String = this.message,
+      line: Option[Int] = this.line,
+      startPosition: Option[Int] = this.startPosition,
+      cause: Option[Throwable] = this.cause,
+      errorClass: Option[String] = this.errorClass,
+      messageParameters: Map[String, String] = this.messageParameters,
+      context: Array[QueryContext] = this.context,
+      sqlState: Option[String] = this.sqlState,
+      messageTemplate: Option[String] = this.messageTemplate): AnalysisException =
+    new AnalysisException(
+      message,
+      line,
+      startPosition,
+      cause,
+      errorClass,
+      messageParameters,
+      context,
+      sqlState,
+      messageTemplate)
 
   def withPosition(origin: Origin): AnalysisException = {
     val newException = this.copy(
@@ -124,6 +186,11 @@ class AnalysisException protected (
     newException.setStackTrace(getStackTrace)
     newException
   }
+
+  override def getDefaultMessageTemplate: String =
+    messageTemplate.getOrElse(super.getDefaultMessageTemplate)
+
+  override def getSqlState: String = sqlState.getOrElse(super.getSqlState)
 
   override def getMessage: String = getSimpleMessage
 

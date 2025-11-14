@@ -23,7 +23,7 @@ import io.fabric8.kubernetes.api.model.Pod
 import io.fabric8.kubernetes.client.KubernetesClient
 import io.fabric8.kubernetes.client.dsl.PodResource
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{SparkConf, SparkMasterRegex}
 import org.apache.spark.deploy.SparkSubmitOperation
 import org.apache.spark.deploy.k8s.{KubernetesUtils, SparkKubernetesClientFactory}
 import org.apache.spark.deploy.k8s.Config.{KUBERNETES_AUTH_SUBMISSION_CONF_PREFIX, KUBERNETES_SUBMIT_GRACE_PERIOD}
@@ -165,7 +165,7 @@ private[spark] class K8SSparkSubmitOperation extends SparkSubmitOperation
   }
 
   override def supports(master: String): Boolean = {
-    master.startsWith("k8s://")
+    SparkMasterRegex.isK8s(master)
   }
 }
 

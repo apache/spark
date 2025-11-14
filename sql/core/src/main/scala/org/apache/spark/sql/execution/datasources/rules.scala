@@ -65,12 +65,8 @@ class ResolveSQLOnFile(sparkSession: SparkSession) extends Rule[LogicalPlan] {
                 messageParameters = e.getMessageParameters.asScala.toMap)
             case _: ClassNotFoundException => None
             case e: Exception if !e.isInstanceOf[AnalysisException] =>
-              // the provider is valid, but failed to create a logical plan
-              u.failAnalysis(
-                errorClass = "UNSUPPORTED_DATASOURCE_FOR_DIRECT_QUERY",
-                messageParameters = Map("dataSourceType" -> u.multipartIdentifier.head),
-                cause = e
-              )
+              throw QueryCompilationErrors.failedToCreatePlanForDirectQueryError(
+                u.multipartIdentifier.head, e)
           }
         case _ =>
           None

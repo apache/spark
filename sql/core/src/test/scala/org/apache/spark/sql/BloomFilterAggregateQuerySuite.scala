@@ -367,4 +367,23 @@ class BloomFilterAggregateQuerySuite extends QueryTest with SharedSparkSession {
     checkNumBits(100, 2935)
     checkNumBits(1, 38)
   }
+
+  test("SPARK-54336: Fix BloomFilterMightContain type check with ScalarSubqueryReference") {
+    val table = "bloom_filter_test"
+    withTempView(table) {
+      Seq(0).toDF("col").createOrReplaceTempView(table)
+      val df = sql(
+        s"""
+          |SELECT
+          |  (SELECT
+          |    first(might_contain(
+          |      (SELECT bloom_filter_agg(col) FROM $table),
+          |      0L
+          |    ))
+          |  FROM $table)
+          |FROM $table
+          |""".stripMargin)
+      checkAnswer(df, Row(true))
+    }
+  }
 }

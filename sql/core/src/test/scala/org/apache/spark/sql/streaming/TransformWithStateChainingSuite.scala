@@ -24,7 +24,7 @@ import org.apache.spark.{SparkRuntimeException, SparkThrowable}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.ExtendedAnalysisException
 import org.apache.spark.sql.execution.streaming.runtime.{MemoryStream, StreamExecution}
-import org.apache.spark.sql.execution.streaming.state.{AlsoTestWithEncodingTypes, AlsoTestWithRocksDBFeatures, RocksDBStateStoreProvider}
+import org.apache.spark.sql.execution.streaming.state.{AlsoTestWithEncodingTypes, AlsoTestWithRocksDBFeatures, EnableStateStoreRowChecksum, RocksDBStateStoreProvider}
 import org.apache.spark.sql.functions.window
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.tags.SlowSQLTest
@@ -433,3 +433,10 @@ class TransformWithStateChainingSuite extends StreamTest
     }
   }
 }
+
+/**
+ * Test suite that runs all TransformWithStateChainingSuite tests with row checksum enabled.
+ */
+@SlowSQLTest
+class TransformWithStateChainingSuiteWithRowChecksum
+  extends TransformWithStateChainingSuite with EnableStateStoreRowChecksum

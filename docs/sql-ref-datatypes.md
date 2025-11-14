@@ -131,7 +131,7 @@ from pyspark.sql.types import *
 |**StringType**|str|StringType()|
 |**CharType(length)**|str|CharType(length)|
 |**VarcharType(length)**|str|VarcharType(length)|
-|**BinaryType**|bytearray|BinaryType()|
+|**BinaryType**|bytes|BinaryType()|
 |**BooleanType**|bool|BooleanType()|
 |**TimestampType**|datetime.datetime|TimestampType()|
 |**TimestampNTZType**|datetime.datetime|TimestampNTZType()|

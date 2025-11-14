@@ -6,22 +6,22 @@ OpenJDK 64-Bit Server VM 21.0.8+9-LTS on Linux 6.11.0-1018-azure
 AMD EPYC 7763 64-Core Processor
 long/nullable int/string to string:                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ---------------------------------------------------------------------------------------------------------------------------------
-long/nullable int/string to string wholestage off            102            117          20          1.0        1022.8       1.0X
-long/nullable int/string to string wholestage on              56             67           9          1.8         562.4       1.8X
+long/nullable int/string to string wholestage off             80             97          23          1.2         802.9       1.0X
+long/nullable int/string to string wholestage on              57             67          12          1.8         565.2       1.4X
 
 OpenJDK 64-Bit Server VM 21.0.8+9-LTS on Linux 6.11.0-1018-azure
 AMD EPYC 7763 64-Core Processor
 long/nullable int/string to option:                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ---------------------------------------------------------------------------------------------------------------------------------
-long/nullable int/string to option wholestage off             41             41           1          2.5         406.0       1.0X
-long/nullable int/string to option wholestage on              38             44           5          2.6         381.5       1.1X
+long/nullable int/string to option wholestage off             43             47           5          2.3         432.2       1.0X
+long/nullable int/string to option wholestage on              50             54           2          2.0         496.6       0.9X
 
 OpenJDK 64-Bit Server VM 21.0.8+9-LTS on Linux 6.11.0-1018-azure
 AMD EPYC 7763 64-Core Processor
 long/nullable int/string to primitive:                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------------------
-long/nullable int/string to primitive wholestage off             32             32           1          3.2         315.4       1.0X
-long/nullable int/string to primitive wholestage on              27             32           5          3.8         265.5       1.2X
+long/nullable int/string to primitive wholestage off             36             37           1          2.8         362.6       1.0X
+long/nullable int/string to primitive wholestage on              29             32           2          3.5         285.8       1.3X
 
 
 ================================================================================================
@@ -32,28 +32,28 @@ OpenJDK 64-Bit Server VM 21.0.8+9-LTS on Linux 6.11.0-1018-azure
 AMD EPYC 7763 64-Core Processor
 long/nullable int to string:                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 --------------------------------------------------------------------------------------------------------------------------
-long/nullable int to string wholestage off             29             29           1          3.5         286.4       1.0X
-long/nullable int to string wholestage on              29             32           4          3.5         288.9       1.0X
+long/nullable int to string wholestage off             29             29           1          3.5         286.3       1.0X
+long/nullable int to string wholestage on              31             36           7          3.3         306.8       0.9X
 
 OpenJDK 64-Bit Server VM 21.0.8+9-LTS on Linux 6.11.0-1018-azure
 AMD EPYC 7763 64-Core Processor
 long/nullable int to option:                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 --------------------------------------------------------------------------------------------------------------------------
-long/nullable int to option wholestage off             21             24           4          4.7         213.9       1.0X
-long/nullable int to option wholestage on              21             23           3          4.8         208.1       1.0X
+long/nullable int to option wholestage off             22             22           0          4.5         219.9       1.0X
+long/nullable int to option wholestage on              23             29           7          4.4         229.3       1.0X
 
 OpenJDK 64-Bit Server VM 21.0.8+9-LTS on Linux 6.11.0-1018-azure
 AMD EPYC 7763 64-Core Processor
 long/nullable int to primitive:                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 -----------------------------------------------------------------------------------------------------------------------------
-long/nullable int to primitive wholestage off             17             23           9          6.1         165.1       1.0X
-long/nullable int to primitive wholestage on              17             22           4          5.8         172.9       1.0X
+long/nullable int to primitive wholestage off             18             18           0          5.7         176.3       1.0X
+long/nullable int to primitive wholestage on              18             20           1          5.5         182.2       1.0X
 
 OpenJDK 64-Bit Server VM 21.0.8+9-LTS on Linux 6.11.0-1018-azure
 AMD EPYC 7763 64-Core Processor
 UDF identity overhead:                    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Baseline                                             12             14           1          8.4         118.8       1.0X
-With identity UDF                                    14             15           1          7.2         139.5       0.9X
+Baseline                                             12             12           0          8.2         122.4       1.0X
+With identity UDF                                    17             21           3          6.1         165.1       0.7X
 
 

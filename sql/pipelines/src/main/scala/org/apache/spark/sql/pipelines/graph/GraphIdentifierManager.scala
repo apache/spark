@@ -155,6 +155,27 @@ object GraphIdentifierManager {
   }
 
   /**
+   * Parses and validates the sink identifier from the raw sink identifier.
+   *
+   * @param rawSinkIdentifier the raw view identifier
+   * @return the parsed sink identifier
+   */
+  @throws[AnalysisException]
+  def parseAndValidateSinkIdentifier(rawSinkIdentifier: TableIdentifier): TableIdentifier = {
+    val internalDatasetIdentifier = parseAndValidatePipelineDatasetIdentifier(
+      rawDatasetIdentifier = rawSinkIdentifier
+    )
+    // Sinks are not persisted to the catalog in use, therefore should not be qualified.
+    if (!isSinglePartIdentifier(internalDatasetIdentifier.identifier)) {
+      throw new AnalysisException(
+        "MULTIPART_SINK_NAME_NOT_SUPPORTED",
+        Map("viewName" -> rawSinkIdentifier.unquotedString)
+      )
+    }
+    internalDatasetIdentifier.identifier
+  }
+
+  /**
    * Parses and validates the view identifier from the raw view identifier for persisted views.
    *
    * @param rawViewIdentifier the raw view identifier

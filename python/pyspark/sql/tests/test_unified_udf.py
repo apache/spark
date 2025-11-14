@@ -53,11 +53,10 @@ class UnifiedUDFTestsMixin:
         result1 = df.select(pd_add1("id").alias("res")).collect()
         self.assertEqual(result1, expected)
 
-        self.spark.sql("DROP TEMPORARY FUNCTION IF EXISTS pd_add1")
-        self.spark.udf.register("pd_add1", pd_add1)
-        result2 = self.spark.sql("SELECT pd_add1(id) AS res FROM range(0, 10)").collect()
-        self.assertEqual(result2, expected)
-        self.spark.sql("DROP TEMPORARY FUNCTION pd_add1")
+        with self.temp_func("pd_add1"):
+            self.spark.udf.register("pd_add1", pd_add1)
+            result2 = self.spark.sql("SELECT pd_add1(id) AS res FROM range(0, 10)").collect()
+            self.assertEqual(result2, expected)
 
     def test_scalar_pandas_udf_II(self):
         import pandas as pd
@@ -76,11 +75,10 @@ class UnifiedUDFTestsMixin:
         result1 = df.select(pd_add("id", "id").alias("res")).collect()
         self.assertEqual(result1, expected)
 
-        self.spark.sql("DROP TEMPORARY FUNCTION IF EXISTS pd_add")
-        self.spark.udf.register("pd_add", pd_add)
-        result2 = self.spark.sql("SELECT pd_add(id, id) AS res FROM range(0, 10)").collect()
-        self.assertEqual(result2, expected)
-        self.spark.sql("DROP TEMPORARY FUNCTION pd_add")
+        with self.temp_func("pd_add"):
+            self.spark.udf.register("pd_add", pd_add)
+            result2 = self.spark.sql("SELECT pd_add(id, id) AS res FROM range(0, 10)").collect()
+            self.assertEqual(result2, expected)
 
     def test_scalar_pandas_iter_udf(self):
         import pandas as pd
@@ -99,11 +97,10 @@ class UnifiedUDFTestsMixin:
         result1 = df.select(pd_add1_iter("id").alias("res")).collect()
         self.assertEqual(result1, expected)
 
-        self.spark.sql("DROP TEMPORARY FUNCTION IF EXISTS pd_add1_iter")
-        self.spark.udf.register("pd_add1_iter", pd_add1_iter)
-        result2 = self.spark.sql("SELECT pd_add1_iter(id) AS res FROM range(0, 10)").collect()
-        self.assertEqual(result2, expected)
-        self.spark.sql("DROP TEMPORARY FUNCTION pd_add1_iter")
+        with self.temp_func("pd_add1_iter"):
+            self.spark.udf.register("pd_add1_iter", pd_add1_iter)
+            result2 = self.spark.sql("SELECT pd_add1_iter(id) AS res FROM range(0, 10)").collect()
+            self.assertEqual(result2, expected)
 
     def test_scalar_pandas_iter_udf_II(self):
         import pandas as pd
@@ -123,11 +120,12 @@ class UnifiedUDFTestsMixin:
         result1 = df.select(pd_add_iter("id", "id").alias("res")).collect()
         self.assertEqual(result1, expected)
 
-        self.spark.sql("DROP TEMPORARY FUNCTION IF EXISTS pd_add_iter")
-        self.spark.udf.register("pd_add_iter", pd_add_iter)
-        result2 = self.spark.sql("SELECT pd_add_iter(id, id) AS res FROM range(0, 10)").collect()
-        self.assertEqual(result2, expected)
-        self.spark.sql("DROP TEMPORARY FUNCTION pd_add_iter")
+        with self.temp_func("pd_add_iter"):
+            self.spark.udf.register("pd_add_iter", pd_add_iter)
+            result2 = self.spark.sql(
+                "SELECT pd_add_iter(id, id) AS res FROM range(0, 10)"
+            ).collect()
+            self.assertEqual(result2, expected)
 
     def test_grouped_agg_pandas_udf(self):
         import pandas as pd
@@ -145,11 +143,10 @@ class UnifiedUDFTestsMixin:
         result1 = df.select(pd_max("id").alias("res")).collect()
         self.assertEqual(result1, expected)
 
-        self.spark.sql("DROP TEMPORARY FUNCTION IF EXISTS pd_max")
-        self.spark.udf.register("pd_max", pd_max)
-        result2 = self.spark.sql("SELECT pd_max(id) AS res FROM range(0, 10)").collect()
-        self.assertEqual(result2, expected)
-        self.spark.sql("DROP TEMPORARY FUNCTION pd_max")
+        with self.temp_func("pd_max"):
+            self.spark.udf.register("pd_max", pd_max)
+            result2 = self.spark.sql("SELECT pd_max(id) AS res FROM range(0, 10)").collect()
+            self.assertEqual(result2, expected)
 
     def test_window_agg_pandas_udf(self):
         import pandas as pd
@@ -180,9 +177,8 @@ class UnifiedUDFTestsMixin:
         result1 = df.withColumn("res", pd_win_max("v").over(w)).collect()
         self.assertEqual(result1, expected)
 
-        with self.tempView("pd_tbl"):
+        with self.tempView("pd_tbl"), self.temp_func("pd_win_max"):
             df.createOrReplaceTempView("pd_tbl")
-            self.spark.sql("DROP TEMPORARY FUNCTION IF EXISTS pd_win_max")
             self.spark.udf.register("pd_win_max", pd_win_max)
 
             result2 = self.spark.sql(
@@ -195,7 +191,6 @@ class UnifiedUDFTestsMixin:
                 """
             ).collect()
             self.assertEqual(result2, expected)
-            self.spark.sql("DROP TEMPORARY FUNCTION pd_win_max")
 
     def test_scalar_arrow_udf(self):
         import pyarrow as pa
@@ -213,11 +208,10 @@ class UnifiedUDFTestsMixin:
         result1 = df.select(pa_add1("id").alias("res")).collect()
         self.assertEqual(result1, expected)
 
-        self.spark.sql("DROP TEMPORARY FUNCTION IF EXISTS pa_add1")
-        self.spark.udf.register("pa_add1", pa_add1)
-        result2 = self.spark.sql("SELECT pa_add1(id) AS res FROM range(0, 10)").collect()
-        self.assertEqual(result2, expected)
-        self.spark.sql("DROP TEMPORARY FUNCTION pa_add1")
+        with self.temp_func("pa_add1"):
+            self.spark.udf.register("pa_add1", pa_add1)
+            result2 = self.spark.sql("SELECT pa_add1(id) AS res FROM range(0, 10)").collect()
+            self.assertEqual(result2, expected)
 
     def test_scalar_arrow_udf_II(self):
         import pyarrow as pa
@@ -236,11 +230,10 @@ class UnifiedUDFTestsMixin:
         result1 = df.select(pa_add("id", "id").alias("res")).collect()
         self.assertEqual(result1, expected)
 
-        self.spark.sql("DROP TEMPORARY FUNCTION IF EXISTS pa_add")
-        self.spark.udf.register("pa_add", pa_add)
-        result2 = self.spark.sql("SELECT pa_add(id, id) AS res FROM range(0, 10)").collect()
-        self.assertEqual(result2, expected)
-        self.spark.sql("DROP TEMPORARY FUNCTION pa_add")
+        with self.temp_func("pa_add"):
+            self.spark.udf.register("pa_add", pa_add)
+            result2 = self.spark.sql("SELECT pa_add(id, id) AS res FROM range(0, 10)").collect()
+            self.assertEqual(result2, expected)
 
     def test_scalar_arrow_iter_udf(self):
         import pyarrow as pa
@@ -259,11 +252,10 @@ class UnifiedUDFTestsMixin:
         result1 = df.select(pa_add1_iter("id").alias("res")).collect()
         self.assertEqual(result1, expected)
 
-        self.spark.sql("DROP TEMPORARY FUNCTION IF EXISTS pa_add1_iter")
-        self.spark.udf.register("pa_add1_iter", pa_add1_iter)
-        result2 = self.spark.sql("SELECT pa_add1_iter(id) AS res FROM range(0, 10)").collect()
-        self.assertEqual(result2, expected)
-        self.spark.sql("DROP TEMPORARY FUNCTION pa_add1_iter")
+        with self.temp_func("pa_add1_iter"):
+            self.spark.udf.register("pa_add1_iter", pa_add1_iter)
+            result2 = self.spark.sql("SELECT pa_add1_iter(id) AS res FROM range(0, 10)").collect()
+            self.assertEqual(result2, expected)
 
     def test_scalar_arrow_iter_udf_II(self):
         import pyarrow as pa
@@ -283,11 +275,12 @@ class UnifiedUDFTestsMixin:
         result1 = df.select(pa_add_iter("id", "id").alias("res")).collect()
         self.assertEqual(result1, expected)
 
-        self.spark.sql("DROP TEMPORARY FUNCTION IF EXISTS pa_add_iter")
-        self.spark.udf.register("pa_add_iter", pa_add_iter)
-        result2 = self.spark.sql("SELECT pa_add_iter(id, id) AS res FROM range(0, 10)").collect()
-        self.assertEqual(result2, expected)
-        self.spark.sql("DROP TEMPORARY FUNCTION pa_add_iter")
+        with self.temp_func("pa_add_iter"):
+            self.spark.udf.register("pa_add_iter", pa_add_iter)
+            result2 = self.spark.sql(
+                "SELECT pa_add_iter(id, id) AS res FROM range(0, 10)"
+            ).collect()
+            self.assertEqual(result2, expected)
 
     def test_grouped_agg_arrow_udf(self):
         import pyarrow as pa
@@ -305,11 +298,10 @@ class UnifiedUDFTestsMixin:
         result1 = df.select(pa_max("id").alias("res")).collect()
         self.assertEqual(result1, expected)
 
-        self.spark.sql("DROP TEMPORARY FUNCTION IF EXISTS pa_max")
-        self.spark.udf.register("pa_max", pa_max)
-        result2 = self.spark.sql("SELECT pa_max(id) AS res FROM range(0, 10)").collect()
-        self.assertEqual(result2, expected)
-        self.spark.sql("DROP TEMPORARY FUNCTION pa_max")
+        with self.temp_func("pa_max"):
+            self.spark.udf.register("pa_max", pa_max)
+            result2 = self.spark.sql("SELECT pa_max(id) AS res FROM range(0, 10)").collect()
+            self.assertEqual(result2, expected)
 
     def test_window_agg_arrow_udf(self):
         import pyarrow as pa
@@ -340,9 +332,8 @@ class UnifiedUDFTestsMixin:
         result1 = df.withColumn("mean_v", pa_win_max("v").over(w)).collect()
         self.assertEqual(result1, expected)
 
-        with self.tempView("pa_tbl"):
+        with self.tempView("pa_tbl"), self.temp_func("pa_win_max"):
             df.createOrReplaceTempView("pa_tbl")
-            self.spark.sql("DROP TEMPORARY FUNCTION IF EXISTS pa_win_max")
             self.spark.udf.register("pa_win_max", pa_win_max)
 
             result2 = self.spark.sql(
@@ -355,7 +346,6 @@ class UnifiedUDFTestsMixin:
                 """
             ).collect()
             self.assertEqual(result2, expected)
-            self.spark.sql("DROP TEMPORARY FUNCTION pa_win_max")
 
     def test_regular_python_udf(self):
         import pandas as pd

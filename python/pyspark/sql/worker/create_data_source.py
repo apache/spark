@@ -22,6 +22,7 @@ from typing import IO
 
 from pyspark.accumulators import _accumulatorRegistry
 from pyspark.errors import PySparkAssertionError, PySparkTypeError
+from pyspark.logger.worker_io import capture_outputs
 from pyspark.serializers import (
     read_bool,
     read_int,
@@ -106,55 +107,57 @@ def main(infile: IO, outfile: IO) -> None:
         # Receive the provider name.
         provider = utf8_deserializer.loads(infile)
 
-        # Check if the provider name matches the data source's name.
-        if provider.lower() != data_source_cls.name().lower():
-            raise PySparkAssertionError(
-                errorClass="DATA_SOURCE_TYPE_MISMATCH",
-                messageParameters={
-                    "expected": f"provider with name {data_source_cls.name()}",
-                    "actual": f"'{provider}'",
-                },
-            )
-
-        # Receive the user-specified schema
-        user_specified_schema = None
-        if read_bool(infile):
-            user_specified_schema = _parse_datatype_json_string(utf8_deserializer.loads(infile))
-            if not isinstance(user_specified_schema, StructType):
+        with capture_outputs():
+            # Check if the provider name matches the data source's name.
+            name = data_source_cls.name()
+            if provider.lower() != name.lower():
                 raise PySparkAssertionError(
                     errorClass="DATA_SOURCE_TYPE_MISMATCH",
                     messageParameters={
-                        "expected": "the user-defined schema to be a 'StructType'",
-                        "actual": f"'{type(data_source_cls).__name__}'",
+                        "expected": f"provider with name {name}",
+                        "actual": f"'{provider}'",
                     },
                 )
 
-        # Receive the options.
-        options = CaseInsensitiveDict()
-        num_options = read_int(infile)
-        for _ in range(num_options):
-            key = utf8_deserializer.loads(infile)
-            value = utf8_deserializer.loads(infile)
-            options[key] = value
+            # Receive the user-specified schema
+            user_specified_schema = None
+            if read_bool(infile):
+                user_specified_schema = _parse_datatype_json_string(utf8_deserializer.loads(infile))
+                if not isinstance(user_specified_schema, StructType):
+                    raise PySparkAssertionError(
+                        errorClass="DATA_SOURCE_TYPE_MISMATCH",
+                        messageParameters={
+                            "expected": "the user-defined schema to be a 'StructType'",
+                            "actual": f"'{type(data_source_cls).__name__}'",
+                        },
+                    )
 
-        # Instantiate a data source.
-        data_source = data_source_cls(options=options)  # type: ignore
+            # Receive the options.
+            options = CaseInsensitiveDict()
+            num_options = read_int(infile)
+            for _ in range(num_options):
+                key = utf8_deserializer.loads(infile)
+                value = utf8_deserializer.loads(infile)
+                options[key] = value
 
-        # Get the schema of the data source.
-        # If user_specified_schema is not None, use user_specified_schema.
-        # Otherwise, use the schema of the data source.
-        # Throw exception if the data source does not implement schema().
-        is_ddl_string = False
-        if user_specified_schema is None:
-            schema = data_source.schema()
-            if isinstance(schema, str):
-                # Here we cannot use _parse_datatype_string to parse the DDL string schema.
-                # as it requires an active Spark session.
-                is_ddl_string = True
-        else:
-            schema = user_specified_schema  # type: ignore
+            # Instantiate a data source.
+            data_source = data_source_cls(options=options)  # type: ignore
 
-        assert schema is not None
+            # Get the schema of the data source.
+            # If user_specified_schema is not None, use user_specified_schema.
+            # Otherwise, use the schema of the data source.
+            # Throw exception if the data source does not implement schema().
+            is_ddl_string = False
+            if user_specified_schema is None:
+                schema = data_source.schema()
+                if isinstance(schema, str):
+                    # Here we cannot use _parse_datatype_string to parse the DDL string schema.
+                    # as it requires an active Spark session.
+                    is_ddl_string = True
+            else:
+                schema = user_specified_schema  # type: ignore
+
+            assert schema is not None
 
         # Return the pickled data source instance.
         pickleSer._write_with_length(data_source, outfile)

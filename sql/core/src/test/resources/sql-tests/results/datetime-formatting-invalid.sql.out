@@ -306,8 +306,15 @@ select date_format('2018-11-17 13:33:33.333', 'V')
 -- !query schema
 struct<>
 -- !query output
-java.lang.IllegalArgumentException
-Pattern letter count must be 2: V
+org.apache.spark.SparkRuntimeException
+{
+  "errorClass" : "INVALID_DATETIME_PATTERN.WITH_SUGGESTION",
+  "sqlState" : "22007",
+  "messageParameters" : {
+    "docroot" : "https://spark.apache.org/docs/latest",
+    "pattern" : "'V'"
+  }
+}
 
 
 -- !query
@@ -332,8 +339,15 @@ select date_format('2018-11-17 13:33:33.333', 'XXXXXX')
 -- !query schema
 struct<>
 -- !query output
-java.lang.IllegalArgumentException
-Too many pattern letters: X
+org.apache.spark.SparkRuntimeException
+{
+  "errorClass" : "INVALID_DATETIME_PATTERN.WITH_SUGGESTION",
+  "sqlState" : "22007",
+  "messageParameters" : {
+    "docroot" : "https://spark.apache.org/docs/latest",
+    "pattern" : "'XXXXXX'"
+  }
+}
 
 
 -- !query
@@ -358,8 +372,15 @@ select date_format('2018-11-17 13:33:33.333', 'OO')
 -- !query schema
 struct<>
 -- !query output
-java.lang.IllegalArgumentException
-Pattern letter count must be 1 or 4: O
+org.apache.spark.SparkRuntimeException
+{
+  "errorClass" : "INVALID_DATETIME_PATTERN.WITH_SUGGESTION",
+  "sqlState" : "22007",
+  "messageParameters" : {
+    "docroot" : "https://spark.apache.org/docs/latest",
+    "pattern" : "'OO'"
+  }
+}
 
 
 -- !query
@@ -367,8 +388,15 @@ select date_format('2018-11-17 13:33:33.333', 'xxxxxx')
 -- !query schema
 struct<>
 -- !query output
-java.lang.IllegalArgumentException
-Too many pattern letters: x
+org.apache.spark.SparkRuntimeException
+{
+  "errorClass" : "INVALID_DATETIME_PATTERN.WITH_SUGGESTION",
+  "sqlState" : "22007",
+  "messageParameters" : {
+    "docroot" : "https://spark.apache.org/docs/latest",
+    "pattern" : "'xxxxxx'"
+  }
+}
 
 
 -- !query
@@ -554,8 +582,15 @@ select date_format('2018-11-17 13:33:33.333', 'C')
 -- !query schema
 struct<>
 -- !query output
-java.lang.IllegalArgumentException
-Unknown pattern letter: C
+org.apache.spark.SparkRuntimeException
+{
+  "errorClass" : "INVALID_DATETIME_PATTERN.WITH_SUGGESTION",
+  "sqlState" : "22007",
+  "messageParameters" : {
+    "docroot" : "https://spark.apache.org/docs/latest",
+    "pattern" : "'C'"
+  }
+}
 
 
 -- !query
@@ -563,5 +598,12 @@ select date_format('2018-11-17 13:33:33.333', 'I')
 -- !query schema
 struct<>
 -- !query output
-java.lang.IllegalArgumentException
-Unknown pattern letter: I
+org.apache.spark.SparkRuntimeException
+{
+  "errorClass" : "INVALID_DATETIME_PATTERN.WITH_SUGGESTION",
+  "sqlState" : "22007",
+  "messageParameters" : {
+    "docroot" : "https://spark.apache.org/docs/latest",
+    "pattern" : "'I'"
+  }
+}

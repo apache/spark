@@ -1865,6 +1865,34 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
     }
   }
 
+  test("inline COLLATE expressions in join conditions should not use nested loop join") {
+    withTable("table1", "table2", "table3") {
+      sql("CREATE TABLE table1 (id STRING, col1 STRING) USING PARQUET")
+      sql("INSERT INTO table1 VALUES ('1', 'a'), ('2', 'b')")
+
+      sql("CREATE TABLE table2 (id STRING, col1 STRING) USING PARQUET")
+      sql("INSERT INTO table2 VALUES ('1', 'a'), ('2', 'b')")
+
+      sql("CREATE TABLE table3 (col1 STRING COLLATE UTF8_LCASE_RTRIM) USING PARQUET")
+      sql("INSERT INTO table3 VALUES ('a'), ('b')")
+
+      val df = sql(
+        """SELECT t1.col1 COLLATE UTF8_LCASE_RTRIM AS result
+          |FROM table1 t1
+          |INNER JOIN table2 t2 ON t2.id = t1.id
+          |INNER JOIN table3 t3 ON t3.col1 = t1.col1 COLLATE UTF8_LCASE_RTRIM
+          |""".stripMargin
+      )
+
+      checkAnswer(df, Seq(Row("a"), Row("b")))
+
+      val queryPlan = df.queryExecution.executedPlan
+      assert(collectFirst(queryPlan) {
+        case _: BroadcastNestedLoopJoinExec => ()
+      }.isEmpty)
+    }
+  }
+
   test("hll sketch aggregate should respect collation") {
     case class HllSketchAggTestCase[R](c: String, result: R)
     val testCases = Seq(

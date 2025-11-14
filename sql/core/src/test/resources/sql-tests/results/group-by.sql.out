@@ -10,6 +10,14 @@ struct<>
 
 
 -- !query
+CREATE TABLE t1(col1 TIMESTAMP, col2 STRING)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
 SELECT a, COUNT(b) FROM testData
 -- !query schema
 struct<>
@@ -1170,3 +1178,101 @@ struct<count(1):bigint>
 -- !query output
 1
 2
+
+
+-- !query
+SELECT col1 FROM t1 GROUP BY ALL HAVING first(col2) = 'a'
+-- !query schema
+struct<col1:timestamp>
+-- !query output
+
+
+
+-- !query
+SELECT col1 FROM t1 GROUP BY col1 HAVING EXISTS (SELECT first(t1.col2) == 0)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.CORRELATED_REFERENCE",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "sqlExprs" : "\"(first(col2) = 0) AS `(first(outer(spark_catalog.default.t1.col2)) = 0)`\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 50,
+    "stopIndex" : 75,
+    "fragment" : "SELECT first(t1.col2) == 0"
+  } ]
+}
+
+
+-- !query
+SELECT col1 FROM t1 GROUP BY ALL HAVING last(col2) = 'a'
+-- !query schema
+struct<col1:timestamp>
+-- !query output
+
+
+
+-- !query
+SELECT col1 FROM t1 GROUP BY col1 HAVING EXISTS (SELECT last(t1.col2) == 0)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.CORRELATED_REFERENCE",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "sqlExprs" : "\"(last(col2) = 0) AS `(last(outer(spark_catalog.default.t1.col2)) = 0)`\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 50,
+    "stopIndex" : 74,
+    "fragment" : "SELECT last(t1.col2) == 0"
+  } ]
+}
+
+
+-- !query
+SELECT col1 FROM t1 GROUP BY ALL HAVING any_value(col2) = 'a'
+-- !query schema
+struct<col1:timestamp>
+-- !query output
+
+
+
+-- !query
+SELECT col1 FROM t1 GROUP BY col1 HAVING EXISTS (SELECT any_value(t1.col2) == 0)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.CORRELATED_REFERENCE",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "sqlExprs" : "\"(any_value(col2) = 0) AS `(any_value(outer(spark_catalog.default.t1.col2)) = 0)`\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 50,
+    "stopIndex" : 79,
+    "fragment" : "SELECT any_value(t1.col2) == 0"
+  } ]
+}
+
+
+-- !query
+DROP TABLE t1
+-- !query schema
+struct<>
+-- !query output
+

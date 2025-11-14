@@ -20,7 +20,7 @@ package org.apache.spark.sql.streaming
 import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.sql.Encoders
 import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
-import org.apache.spark.sql.execution.streaming.state.{AlsoTestWithEncodingTypes, AlsoTestWithRocksDBFeatures, RocksDBStateStoreProvider}
+import org.apache.spark.sql.execution.streaming.state.{AlsoTestWithEncodingTypes, AlsoTestWithRocksDBFeatures, EnableStateStoreRowChecksum, RocksDBStateStoreProvider}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.tags.SlowSQLTest
 
@@ -353,3 +353,10 @@ class TransformWithMapStateSuite extends StreamTest
     }
   }
 }
+
+/**
+ * Test suite that runs all TransformWithMapStateSuite tests with row checksum enabled.
+ */
+@SlowSQLTest
+class TransformWithMapStateSuiteWithRowChecksum
+  extends TransformWithMapStateSuite with EnableStateStoreRowChecksum

@@ -7,19 +7,19 @@ OpenJDK 64-Bit Server VM 21.0.8+9-LTS on Linux 6.11.0-1018-azure
 AMD EPYC 7763 64-Core Processor
 from_json as subExpr in Project:          Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-subExprElimination false, codegen: true            6356           6511         154          0.0    63562019.6       1.0X
-subExprElimination false, codegen: false           6308           6384          66          0.0    63084255.4       1.0X
-subExprElimination true, codegen: true             1210           1265          93          0.0    12099184.7       5.3X
-subExprElimination true, codegen: false            1236           1299          99          0.0    12360076.2       5.1X
+subExprElimination false, codegen: true            6482           6576         115          0.0    64817097.2       1.0X
+subExprElimination false, codegen: false           6256           6366         122          0.0    62559229.6       1.0X
+subExprElimination true, codegen: true             1305           1370          73          0.0    13050067.5       5.0X
+subExprElimination true, codegen: false            1203           1254          47          0.0    12034630.0       5.4X
 
 Preparing data for benchmarking ...
 OpenJDK 64-Bit Server VM 21.0.8+9-LTS on Linux 6.11.0-1018-azure
 AMD EPYC 7763 64-Core Processor
 from_json as subExpr in Filter:           Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-subExprElimination false, codegen: true            6485           6649         174          0.0    64852199.5       1.0X
-subExprElimination false, codegen: false           6390           6489          87          0.0    63895276.1       1.0X
-subExprElimination true, codegen: true             1580           1633          52          0.0    15799544.7       4.1X
-subExprElimination true, codegen: false            1619           1649          27          0.0    16193983.0       4.0X
+subExprElimination false, codegen: true            6576           6688         106          0.0    65758532.4       1.0X
+subExprElimination false, codegen: false           6414           6531         108          0.0    64137549.9       1.0X
+subExprElimination true, codegen: true             1547           1635         125          0.0    15466346.0       4.3X
+subExprElimination true, codegen: false            1629           1647          16          0.0    16291000.1       4.0X
 
 

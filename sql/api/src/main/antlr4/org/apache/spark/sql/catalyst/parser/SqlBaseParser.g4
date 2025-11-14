@@ -40,6 +40,19 @@ options { tokenVocab = SqlBaseLexer; }
    * When true, double quoted literals are identifiers rather than STRINGs.
    */
   public boolean double_quoted_identifiers = false;
+
+  /**
+   * When false, parameter markers (? and :param) are only allowed in constant contexts.
+   * When true, parameter markers are allowed everywhere a literal is supported.
+   */
+  public boolean parameter_substitution_enabled = true;
+
+  /**
+   * When false (default), IDENTIFIER('literal') is resolved to an identifier at parse time (identifier-lite).
+   * When true, only the legacy IDENTIFIER(expression) function syntax is allowed.
+   * Controlled by spark.sql.legacy.identifierClause configuration.
+   */
+  public boolean legacy_identifier_clause_only = false;
 }
 
 compoundOrSingleStatement
@@ -86,7 +99,7 @@ sqlStateValue
     ;
 
 declareConditionStatement
-    : DECLARE multipartIdentifier CONDITION (FOR SQLSTATE VALUE? sqlStateValue)?
+    : DECLARE strictIdentifier CONDITION (FOR SQLSTATE VALUE? sqlStateValue)?
     ;
 
 conditionValue
@@ -119,11 +132,11 @@ repeatStatement
     ;
 
 leaveStatement
-    : LEAVE multipartIdentifier
+    : LEAVE strictIdentifier
     ;
 
 iterateStatement
-    : ITERATE multipartIdentifier
+    : ITERATE strictIdentifier
     ;
 
 caseStatement
@@ -138,7 +151,7 @@ loopStatement
     ;
 
 forStatement
-    : beginLabel? FOR (multipartIdentifier AS)? query DO compoundBody END FOR endLabel?
+    : beginLabel? FOR (strictIdentifier AS)? query DO compoundBody END FOR endLabel?
     ;
 
 singleStatement
@@ -146,11 +159,11 @@ singleStatement
     ;
 
 beginLabel
-    : multipartIdentifier COLON
+    : strictIdentifier COLON
     ;
 
 endLabel
-    : multipartIdentifier
+    : strictIdentifier
     ;
 
 singleExpression
@@ -309,13 +322,13 @@ statement
     | SHOW TABLE EXTENDED ((FROM | IN) ns=identifierReference)?
         LIKE pattern=stringLit partitionSpec?                             #showTableExtended
     | SHOW TBLPROPERTIES table=identifierReference
-        (LEFT_PAREN key=propertyKey RIGHT_PAREN)?                      #showTblProperties
+        (LEFT_PAREN key=propertyKeyOrStringLit RIGHT_PAREN)?           #showTblProperties
     | SHOW COLUMNS (FROM | IN) table=identifierReference
         ((FROM | IN) ns=multipartIdentifier)?                          #showColumns
     | SHOW VIEWS ((FROM | IN) identifierReference)?
         (LIKE? pattern=stringLit)?                                        #showViews
     | SHOW PARTITIONS identifierReference partitionSpec?               #showPartitions
-    | SHOW identifier? FUNCTIONS ((FROM | IN) ns=identifierReference)?
+    | SHOW functionScope=simpleIdentifier? FUNCTIONS ((FROM | IN) ns=identifierReference)?
         (LIKE? (legacy=multipartIdentifier | pattern=stringLit))?      #showFunctions
     | SHOW PROCEDURES ((FROM | IN) identifierReference)?               #showProcedures
     | SHOW CREATE TABLE identifierReference (AS SERDE)?                #showCreateTable
@@ -376,8 +389,10 @@ createPipelineDatasetHeader
     ;
 
 streamRelationPrimary
-    : STREAM multipartIdentifier optionsClause? tableAlias                             #streamTableName
-    | STREAM LEFT_PAREN multipartIdentifier RIGHT_PAREN optionsClause? tableAlias     #streamTableName
+    : STREAM multipartIdentifier optionsClause? watermarkClause?
+      tableAlias                                                       #streamTableName
+    | STREAM LEFT_PAREN multipartIdentifier RIGHT_PAREN
+      optionsClause? watermarkClause? tableAlias                       #streamTableName
     ;
 
 setResetStatement
@@ -480,7 +495,7 @@ clusterBySpec
 bucketSpec
     : CLUSTERED BY identifierList
       (SORTED BY orderedIdentifierList)?
-      INTO INTEGER_VALUE BUCKETS
+      INTO integerValue BUCKETS
     ;
 
 skewSpec
@@ -570,7 +585,7 @@ ctes
     ;
 
 namedQuery
-    : name=errorCapturingIdentifier (columnAliases=identifierList)? (MAX RECURSION LEVEL INTEGER_VALUE)? AS? LEFT_PAREN query RIGHT_PAREN
+    : name=errorCapturingIdentifier (columnAliases=identifierList)? (MAX RECURSION LEVEL integerValue)? AS? LEFT_PAREN query RIGHT_PAREN
     ;
 
 tableProvider
@@ -596,12 +611,22 @@ propertyList
     ;
 
 property
-    : key=propertyKey (EQ? value=propertyValue)?
+    : key=propertyKeyOrStringLit EQ value=propertyValue               #propertyWithKeyAndEquals
+    | key=propertyKeyOrStringLitNoCoalesce value=propertyValue?       #propertyWithKeyNoEquals
     ;
 
 propertyKey
     : errorCapturingIdentifier (DOT errorCapturingIdentifier)*
+    ;
+
+propertyKeyOrStringLit
+    : propertyKey
     | stringLit
+    ;
+
+propertyKeyOrStringLitNoCoalesce
+    : propertyKey
+    | singleStringLit
     ;
 
 propertyValue
@@ -616,7 +641,8 @@ expressionPropertyList
     ;
 
 expressionProperty
-    : key=propertyKey (EQ? value=expression)?
+    : key=propertyKeyOrStringLit EQ value=expression                  #expressionPropertyWithKeyAndEquals
+    | key=propertyKeyOrStringLitNoCoalesce value=expression?          #expressionPropertyWithKeyNoEquals
     ;
 
 constantList
@@ -814,8 +840,8 @@ hint
     ;
 
 hintStatement
-    : hintName=identifier
-    | hintName=identifier LEFT_PAREN parameters+=primaryExpression (COMMA parameters+=primaryExpression)* RIGHT_PAREN
+    : hintName=simpleIdentifier
+    | hintName=simpleIdentifier LEFT_PAREN parameters+=primaryExpression (COMMA parameters+=primaryExpression)* RIGHT_PAREN
     ;
 
 fromClause
@@ -921,6 +947,10 @@ lateralView
     : LATERAL VIEW (OUTER)? qualifiedName LEFT_PAREN (expression (COMMA expression)*)? RIGHT_PAREN tblName=identifier (AS? colName+=identifier (COMMA colName+=identifier)*)?
     ;
 
+watermarkClause
+    : WATERMARK colName=namedExpression DELAY OF delay=interval
+    ;
+
 setQuantifier
     : DISTINCT
     | ALL
@@ -957,13 +987,13 @@ joinCriteria
     ;
 
 sample
-    : TABLESAMPLE LEFT_PAREN sampleMethod? RIGHT_PAREN (REPEATABLE LEFT_PAREN seed=INTEGER_VALUE RIGHT_PAREN)?
+    : TABLESAMPLE LEFT_PAREN sampleMethod? RIGHT_PAREN (REPEATABLE LEFT_PAREN seed=integerValue RIGHT_PAREN)?
     ;
 
 sampleMethod
-    : negativeSign=MINUS? percentage=(INTEGER_VALUE | DECIMAL_VALUE) PERCENTLIT   #sampleByPercentile
+    : negativeSign=MINUS? (integerValue | DECIMAL_VALUE) PERCENTLIT   #sampleByPercentile
     | expression ROWS                                                             #sampleByRows
-    | sampleType=BUCKET numerator=INTEGER_VALUE OUT OF denominator=INTEGER_VALUE
+    | sampleType=BUCKET numerator=integerValue OUT OF denominator=integerValue
         (ON (identifier | qualifiedName LEFT_PAREN RIGHT_PAREN))?                 #sampleByBucket
     | bytes=expression                                                            #sampleByBytes
     ;
@@ -995,9 +1025,11 @@ identifierComment
 relationPrimary
     : streamRelationPrimary                                 #streamRelation
     | identifierReference temporalClause?
-      optionsClause? sample? tableAlias                     #tableName
-    | LEFT_PAREN query RIGHT_PAREN sample? tableAlias       #aliasedQuery
-    | LEFT_PAREN relation RIGHT_PAREN sample? tableAlias    #aliasedRelation
+      optionsClause? sample? watermarkClause? tableAlias    #tableName
+    | LEFT_PAREN query RIGHT_PAREN sample? watermarkClause?
+      tableAlias                                            #aliasedQuery
+    | LEFT_PAREN relation RIGHT_PAREN sample?
+       watermarkClause? tableAlias                          #aliasedRelation
     | inlineTable                                           #inlineTableDefault2
     | functionTable                                         #tableValuedFunction
     ;
@@ -1006,6 +1038,8 @@ optionsClause
     : WITH options=propertyList
     ;
 
+// Unlike all other types of expression for relation, we do not support watermarkClause for
+// inlineTable.
 inlineTable
     : VALUES expression (COMMA expression)* tableAlias
     ;
@@ -1042,10 +1076,13 @@ functionTableArgument
     | functionArgument
     ;
 
+// This is only used in relationPrimary where having watermarkClause makes sense. If this becomes
+// referred by other clause, please check wheter watermarkClause makes sense to the clause.
+// If not, consider separate this rule.
 functionTable
     : funcName=functionName LEFT_PAREN
       (functionTableArgument (COMMA functionTableArgument)*)?
-      RIGHT_PAREN tableAlias
+      RIGHT_PAREN watermarkClause? tableAlias
     ;
 
 tableAlias
@@ -1211,7 +1248,7 @@ primaryExpression
     | identifier                                                                               #columnReference
     | base=primaryExpression DOT fieldName=identifier                                          #dereference
     | LEFT_PAREN expression RIGHT_PAREN                                                        #parenthesizedExpression
-    | EXTRACT LEFT_PAREN field=identifier FROM source=valueExpression RIGHT_PAREN              #extract
+    | EXTRACT LEFT_PAREN field=simpleIdentifier FROM source=valueExpression RIGHT_PAREN              #extract
     | (SUBSTR | SUBSTRING) LEFT_PAREN str=valueExpression (FROM | COMMA) pos=valueExpression
       ((FOR | COMMA) len=valueExpression)? RIGHT_PAREN                                         #substring
     | TRIM LEFT_PAREN trimOption=(BOTH | LEADING | TRAILING)? (trimStr=valueExpression)?
@@ -1236,13 +1273,13 @@ jsonPathBracketedIdentifier
 jsonPathFirstPart
     : jsonPathIdentifier
     | jsonPathBracketedIdentifier
-    | LEFT_BRACKET INTEGER_VALUE RIGHT_BRACKET
+    | LEFT_BRACKET integerValue RIGHT_BRACKET
     ;
 
 jsonPathParts
     : DOT jsonPathIdentifier
     | jsonPathBracketedIdentifier
-    | LEFT_BRACKET INTEGER_VALUE RIGHT_BRACKET
+    | LEFT_BRACKET integerValue RIGHT_BRACKET
     | LEFT_BRACKET identifier RIGHT_BRACKET
     ;
 
@@ -1258,14 +1295,17 @@ literalType
 constant
     : NULL                                                                                     #nullLiteral
     | QUESTION                                                                                 #posParameterLiteral
-    | COLON identifier                                                                         #namedParameterLiteral
+    | namedParameterMarker                                                                     #namedParameterLiteral
     | interval                                                                                 #intervalLiteral
-    | literalType stringLit                                                                    #typeConstructor
+    | literalType singleStringLitWithoutMarker                                                     #typeConstructor
     | number                                                                                   #numericLiteral
     | booleanValue                                                                             #booleanLiteral
-    | stringLit+                                                                               #stringLiteral
+    | stringLit                                                                                #stringLiteral
     ;
 
+namedParameterMarker
+    : COLON simpleIdentifier
+    ;
 comparisonOperator
     : EQ | NEQ | NEQJ | LT | LTE | GT | GTE | NSEQ
     ;
@@ -1331,15 +1371,17 @@ collateClause
 
 nonTrivialPrimitiveType
     : STRING collateClause?
-    | (CHARACTER | CHAR) (LEFT_PAREN length=INTEGER_VALUE RIGHT_PAREN)?
-    | VARCHAR (LEFT_PAREN length=INTEGER_VALUE RIGHT_PAREN)?
+    | (CHARACTER | CHAR) (LEFT_PAREN length=integerValue RIGHT_PAREN)?
+    | VARCHAR (LEFT_PAREN length=integerValue RIGHT_PAREN)?
     | (DECIMAL | DEC | NUMERIC)
-        (LEFT_PAREN precision=INTEGER_VALUE (COMMA scale=INTEGER_VALUE)? RIGHT_PAREN)?
+        (LEFT_PAREN precision=integerValue (COMMA scale=integerValue)? RIGHT_PAREN)?
     | INTERVAL
         (fromYearMonth=(YEAR | MONTH) (TO to=MONTH)? |
          fromDayTime=(DAY | HOUR | MINUTE | SECOND) (TO to=(HOUR | MINUTE | SECOND))?)?
     | TIMESTAMP (WITHOUT TIME ZONE)?
-    | TIME (LEFT_PAREN precision=INTEGER_VALUE RIGHT_PAREN)? (WITHOUT TIME ZONE)?
+    | TIME (LEFT_PAREN precision=integerValue RIGHT_PAREN)? (WITHOUT TIME ZONE)?
+    | GEOGRAPHY LEFT_PAREN (srid=integerValue | any=ANY) RIGHT_PAREN
+    | GEOMETRY LEFT_PAREN (srid=integerValue | any=ANY) RIGHT_PAREN
     ;
 
 trivialPrimitiveType
@@ -1360,7 +1402,7 @@ trivialPrimitiveType
 primitiveType
     : nonTrivialPrimitiveType
     | trivialPrimitiveType
-    | unsupportedType=identifier (LEFT_PAREN INTEGER_VALUE(COMMA INTEGER_VALUE)* RIGHT_PAREN)?
+    | unsupportedType=identifier (LEFT_PAREN integerValue(COMMA integerValue)* RIGHT_PAREN)?
     ;
 
 dataType
@@ -1441,7 +1483,7 @@ sequenceGeneratorOption
     ;
 
 sequenceGeneratorStartOrStep
-    : MINUS? INTEGER_VALUE
+    : MINUS? integerValue
     | MINUS? BIGINT_LITERAL
     ;
 
@@ -1564,11 +1606,30 @@ identifier
     | {!SQL_standard_keyword_behavior}? strictNonReserved
     ;
 
+// simpleIdentifier: like identifier but without IDENTIFIER('literal') support
+// Use this for contexts where IDENTIFIER() syntax is not appropriate:
+//   - Named parameters (:param_name)
+//   - Extract field names (EXTRACT(field FROM ...))
+//   - Other keyword-like or string-like uses
+simpleIdentifier
+    : simpleStrictIdentifier
+    | {!SQL_standard_keyword_behavior}? strictNonReserved
+    ;
+
 strictIdentifier
     : IDENTIFIER              #unquotedIdentifier
     | quotedIdentifier        #quotedIdentifierAlternative
+    | {!legacy_identifier_clause_only}? IDENTIFIER_KW LEFT_PAREN stringLit RIGHT_PAREN  #identifierLiteral
     | {SQL_standard_keyword_behavior}? ansiNonReserved #unquotedIdentifier
     | {!SQL_standard_keyword_behavior}? nonReserved    #unquotedIdentifier
+    ;
+
+// simpleStrictIdentifier: like strictIdentifier but without IDENTIFIER('literal') support
+simpleStrictIdentifier
+    : IDENTIFIER              #simpleUnquotedIdentifier
+    | quotedIdentifier        #simpleQuotedIdentifierAlternative
+    | {SQL_standard_keyword_behavior}? ansiNonReserved #simpleUnquotedIdentifier
+    | {!SQL_standard_keyword_behavior}? nonReserved    #simpleUnquotedIdentifier
     ;
 
 quotedIdentifier
@@ -1591,6 +1652,11 @@ number
     | MINUS? DOUBLE_LITERAL           #doubleLiteral
     | MINUS? FLOAT_LITERAL            #floatLiteral
     | MINUS? BIGDECIMAL_LITERAL       #bigDecimalLiteral
+    ;
+
+integerValue
+    : INTEGER_VALUE                                                                          #integerVal
+    | parameterMarker                                                                        #parameterIntegerValue
     ;
 
 columnConstraintDefinition
@@ -1666,9 +1732,26 @@ alterColumnAction
     | dropDefault=DROP DEFAULT
     ;
 
+// Matches exactly one string literal without coalescing or parameter markers.
+// Used in type constructors where coalescing is not allowed.
+singleStringLitWithoutMarker
+    : STRING_LITERAL                                                                           #singleStringLiteralValue
+    | {!double_quoted_identifiers}? DOUBLEQUOTED_STRING                                        #singleDoubleQuotedStringLiteralValue
+    ;
+
+// Matches one string literal or parameter marker (no coalescing).
+singleStringLit
+    : singleStringLitWithoutMarker
+    | parameterMarker
+    ;
+
+parameterMarker
+    : {parameter_substitution_enabled}? namedParameterMarker                                   #namedParameterMarkerRule
+    | {parameter_substitution_enabled}? QUESTION                                               #positionalParameterMarkerRule
+    ;
+
 stringLit
-    : STRING_LITERAL
-    | {!double_quoted_identifiers}? DOUBLEQUOTED_STRING
+    : singleStringLit+
     ;
 
 comment
@@ -1793,6 +1876,7 @@ ansiNonReserved
     | DEFAULT
     | DEFINED
     | DEFINER
+    | DELAY
     | DELETE
     | DELIMITED
     | DESC
@@ -1832,6 +1916,8 @@ ansiNonReserved
     | FUNCTION
     | FUNCTIONS
     | GENERATED
+    | GEOGRAPHY
+    | GEOMETRY
     | GLOBAL
     | GROUPING
     | HANDLER
@@ -2035,6 +2121,7 @@ ansiNonReserved
     | WEEK
     | WEEKS
     | WHILE
+    | WATERMARK
     | WINDOW
     | WITHOUT
     | YEAR
@@ -2160,6 +2247,7 @@ nonReserved
     | DEFAULT
     | DEFINED
     | DEFINER
+    | DELAY
     | DELETE
     | DELIMITED
     | DESC
@@ -2210,6 +2298,8 @@ nonReserved
     | FUNCTION
     | FUNCTIONS
     | GENERATED
+    | GEOGRAPHY
+    | GEOMETRY
     | GLOBAL
     | GRANT
     | GROUP
@@ -2439,6 +2529,7 @@ nonReserved
     | VIEW
     | VIEWS
     | VOID
+    | WATERMARK
     | WEEK
     | WEEKS
     | WHILE

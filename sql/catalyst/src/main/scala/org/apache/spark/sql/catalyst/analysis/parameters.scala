@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.catalyst.expressions.{Alias, CreateArray, CreateMap, CreateNamedStruct, Expression, LeafExpression, Literal, MapFromArrays, MapFromEntries, SubqueryExpression, Unevaluable, VariableReference}
+import org.apache.spark.sql.catalyst.expressions.{Expression, LeafExpression, SubqueryExpression, Unevaluable}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SupervisingCommand}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{COMMAND, PARAMETER, PARAMETERIZED_QUERY, TreePattern, UNRESOLVED_WITH}
@@ -173,19 +173,6 @@ object MoveParameterizedQueriesDown extends Rule[LogicalPlan] {
  * from the user-specified arguments.
  */
 object BindParameters extends Rule[LogicalPlan] with QueryErrorsBase {
-  private def checkArgs(args: Iterable[(String, Expression)]): Unit = {
-    def isNotAllowed(expr: Expression): Boolean = expr.exists {
-      case _: Literal | _: CreateArray | _: CreateNamedStruct |
-        _: CreateMap | _: MapFromArrays |  _: MapFromEntries | _: VariableReference => false
-      case a: Alias => isNotAllowed(a.child)
-      case _ => true
-    }
-    args.find(arg => isNotAllowed(arg._2)).foreach { case (name, expr) =>
-      expr.failAnalysis(
-        errorClass = "INVALID_SQL_ARG",
-        messageParameters = Map("name" -> name))
-    }
-  }
 
   private def bind(p0: LogicalPlan)(f: PartialFunction[Expression, Expression]): LogicalPlan = {
     var stop = false
@@ -210,7 +197,7 @@ object BindParameters extends Rule[LogicalPlan] with QueryErrorsBase {
             s"must be equal to the number of argument values ${argValues.length}.")
         }
         val args = argNames.zip(argValues).toMap
-        checkArgs(args)
+        ParameterizedQueryArgumentsValidator(args)
         bind(child) { case NamedParameter(name) if args.contains(name) => args(name) }
 
       case PosParameterizedQuery(child, args)
@@ -218,7 +205,7 @@ object BindParameters extends Rule[LogicalPlan] with QueryErrorsBase {
           args.forall(_.resolved) =>
 
         val indexedArgs = args.zipWithIndex
-        checkArgs(indexedArgs.map(arg => (s"_${arg._2}", arg._1)))
+        ParameterizedQueryArgumentsValidator(indexedArgs.map(arg => (s"_${arg._2}", arg._1)))
 
         val positions = scala.collection.mutable.Set.empty[Int]
         bind(child) { case p @ PosParameter(pos) => positions.add(pos); p }
@@ -238,7 +225,7 @@ object BindParameters extends Rule[LogicalPlan] with QueryErrorsBase {
           val finalName = if (name.isEmpty) s"_$index" else name
           finalName -> arg
         }
-        checkArgs(allArgs)
+        ParameterizedQueryArgumentsValidator(allArgs)
 
         // Collect parameter types used in the query to enforce invariants
         var hasNamedParam = false

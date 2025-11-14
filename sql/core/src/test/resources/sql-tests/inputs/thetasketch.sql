@@ -457,6 +457,18 @@ FROM (SELECT theta_sketch_agg(col, 12) as sketch
       SELECT theta_sketch_agg(col, 20) as sketch
         FROM VALUES (1) AS tab(col));
 
+-- lgNomEntries parameter is NULL
+SELECT theta_sketch_agg(col, CAST(NULL AS INT)) AS lg_nom_entries_is_null
+FROM VALUES (15), (16), (17) tab(col);
+
+-- lgNomEntries parameter is not foldable (non-constant)
+SELECT theta_sketch_agg(col, CAST(col AS INT)) AS lg_nom_entries_non_constant
+FROM VALUES (15), (16), (17) tab(col);
+
+-- lgNomEntries parameter has wrong type (STRING instead of INT)
+SELECT theta_sketch_agg(col, '15')
+FROM VALUES (50), (60), (60) tab(col);
+
 -- Test theta_union with integers (1, 2) instead of binary sketch data - should fail
 SELECT theta_union(1, 2)
   FROM VALUES

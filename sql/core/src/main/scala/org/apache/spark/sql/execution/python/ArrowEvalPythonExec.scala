@@ -82,6 +82,12 @@ case class ArrowEvalPythonExec(
   }
 
   private[this] val jobArtifactUUID = JobArtifactSet.getCurrentJobArtifactState.map(_.uuid)
+  private[this] val sessionUUID = {
+    Option(session).collect {
+      case session if session.sessionState.conf.pythonWorkerLoggingEnabled =>
+        session.sessionUUID
+    }
+  }
 
   override protected def evaluatorFactory: EvalPythonEvaluatorFactory = {
     new ArrowEvalPythonEvaluatorFactory(
@@ -95,6 +101,7 @@ case class ArrowEvalPythonExec(
       ArrowPythonRunner.getPythonRunnerConfMap(conf),
       pythonMetrics,
       jobArtifactUUID,
+      sessionUUID,
       conf.pythonUDFProfiler)
   }
 
@@ -121,6 +128,7 @@ class ArrowEvalPythonEvaluatorFactory(
     pythonRunnerConf: Map[String, String],
     pythonMetrics: Map[String, SQLMetric],
     jobArtifactUUID: Option[String],
+    sessionUUID: Option[String],
     profiler: Option[String])
   extends EvalPythonEvaluatorFactory(childOutput, udfs, output) {
 
@@ -147,6 +155,7 @@ class ArrowEvalPythonEvaluatorFactory(
       pythonRunnerConf,
       pythonMetrics,
       jobArtifactUUID,
+      sessionUUID,
       profiler) with BatchedPythonArrowInput
     val columnarBatchIter = pyRunner.compute(batchIter, context.partitionId(), context)
 

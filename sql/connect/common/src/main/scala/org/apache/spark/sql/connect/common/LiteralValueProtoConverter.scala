@@ -285,6 +285,7 @@ object LiteralValueProtoConverter {
       case None =>
         val builder = toLiteralProtoBuilderInternal(literal, options)
         if (!options.useDeprecatedDataTypeFields) {
+          @scala.annotation.tailrec
           def unwrapArraySeq(value: Any): Any = value match {
             case arraySeq: mutable.ArraySeq[_] => unwrapArraySeq(arraySeq.array)
             case arraySeq: immutable.ArraySeq[_] => unwrapArraySeq(arraySeq.unsafeArray)

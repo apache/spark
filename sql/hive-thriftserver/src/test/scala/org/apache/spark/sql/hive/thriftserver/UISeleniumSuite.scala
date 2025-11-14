@@ -156,7 +156,7 @@ class UISeleniumSuite
       }
 
       val sessionLink =
-        find(cssSelector("table#sessionstat td a")).head.underlying.getAttribute("href")
+        find(cssSelector("table#sessionstat td a")).head.underlying.getDomProperty("href")
       eventually(timeout(10.seconds), interval(50.milliseconds)) {
         go to sessionLink
         val statements = findAll(

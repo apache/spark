@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.command.v2
 
 import org.apache.spark.SparkRuntimeException
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
+import org.apache.spark.sql.catalyst.plans.logical.Filter
 import org.apache.spark.sql.connector.catalog.Table
 import org.apache.spark.sql.connector.catalog.constraints.Check
 import org.apache.spark.sql.execution.command.DDLCommandTestUtils
@@ -1147,6 +1148,49 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
         checkAnswer(spark.table(target),
           Seq(Row(1, 10, Seq(5, 6)), Row(2, 20, Seq(7, 8)),
             Row(3, 30, null), Row(4, 40, null)))
+      }
+    }
+  }
+
+  test("Check constraint with constant valid expression should be optimized out") {
+    Seq(
+      "1 > 0",
+      "abs(-99) < 100",
+      "null",
+      "current_date() > DATE'2023-01-01'"
+    ).foreach { constant =>
+      withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
+        sql(s"CREATE TABLE $t (id INT, value INT," +
+          s" CONSTRAINT positive_id CHECK ($constant)) $defaultUsing")
+        val optimizedPlan =
+          sql(s"INSERT INTO $t VALUES (1, 10), (2, 20)").queryExecution.optimizedPlan
+        val filter = optimizedPlan.collectFirst {
+          case f: Filter => f
+        }
+        assert(filter.isEmpty)
+      }
+    }
+  }
+
+  test("Check constraint with constant invalid expression should throw error") {
+    Seq(
+      "1 < 0",
+      "abs(-99) > 100",
+      "current_date() < DATE'2023-01-01'"
+    ).foreach { constant =>
+      withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
+        sql(s"CREATE TABLE $t (id INT, value INT," +
+          s" CONSTRAINT positive_id CHECK ($constant)) $defaultUsing")
+        val error = intercept[SparkRuntimeException] {
+          sql(s"INSERT INTO $t VALUES (1, 10), (2, 20)")
+        }
+        checkError(
+          exception = error,
+          condition = "CHECK_CONSTRAINT_VIOLATION",
+          sqlState = "23001",
+          parameters = Map("constraintName" -> "positive_id", "expression" -> constant,
+            "values" -> "")
+        )
       }
     }
   }

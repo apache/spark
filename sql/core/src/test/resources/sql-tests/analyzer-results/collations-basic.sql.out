@@ -1137,6 +1137,14 @@ Project [try_validate_utf8(collate(utf8_binary#x, utf8_lcase_rtrim)) AS try_vali
 
 
 -- !query
+SELECT CASE WHEN utf8_lcase = 'XX' THEN 'XX' ELSE utf8_lcase END FROM t1
+-- !query analysis
+Project [CASE WHEN (utf8_lcase#x = XX) THEN XX ELSE utf8_lcase#x END AS CASE WHEN (utf8_lcase = 'XX' collate UTF8_LCASE) THEN 'XX' collate UTF8_LCASE ELSE utf8_lcase END#x]
++- SubqueryAlias spark_catalog.default.t1
+   +- Relation spark_catalog.default.t1[s#x,utf8_binary#x,utf8_lcase#x] parquet
+
+
+-- !query
 drop table t1
 -- !query analysis
 DropTable false, false

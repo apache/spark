@@ -71,6 +71,21 @@ object DataTypeProtoConverter {
       case proto.DataType.KindCase.MAP => toCatalystMapType(t.getMap)
       case proto.DataType.KindCase.VARIANT => VariantType
 
+      case proto.DataType.KindCase.GEOMETRY =>
+        val srid = t.getGeometry.getSrid
+        if (srid == GeometryType.MIXED_SRID) {
+          GeometryType("ANY")
+        } else {
+          GeometryType(srid)
+        }
+      case proto.DataType.KindCase.GEOGRAPHY =>
+        val srid = t.getGeography.getSrid
+        if (srid == GeographyType.MIXED_SRID) {
+          GeographyType("ANY")
+        } else {
+          GeographyType(srid)
+        }
+
       case proto.DataType.KindCase.UDT => toCatalystUDT(t.getUdt)
 
       case _ =>
@@ -304,6 +319,26 @@ object DataTypeProtoConverter {
               .setKeyType(toConnectProtoTypeInternal(keyType, bytesToBinary))
               .setValueType(toConnectProtoTypeInternal(valueType, bytesToBinary))
               .setValueContainsNull(valueContainsNull)
+              .build())
+          .build()
+
+      case g: GeographyType =>
+        proto.DataType
+          .newBuilder()
+          .setGeography(
+            proto.DataType.Geography
+              .newBuilder()
+              .setSrid(g.srid)
+              .build())
+          .build()
+
+      case g: GeometryType =>
+        proto.DataType
+          .newBuilder()
+          .setGeometry(
+            proto.DataType.Geometry
+              .newBuilder()
+              .setSrid(g.srid)
               .build())
           .build()
 

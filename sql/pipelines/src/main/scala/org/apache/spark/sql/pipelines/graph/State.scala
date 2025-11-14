@@ -52,7 +52,18 @@ object State extends Logging {
       }
     }
 
-    specifiedTablesToReset.flatMap(t => t +: graph.resolvedFlowsTo(t.identifier))
+    val specifiedSinksToReset = {
+      env.fullRefreshTables match {
+        case SomeTables(tablesAndSinks) =>
+          graph.sinks.filter(sink => tablesAndSinks.contains(sink.identifier))
+        case AllTables =>
+          graph.sinks
+        case NoTables => Seq.empty
+      }
+    }
+
+    specifiedTablesToReset.flatMap(t => t +: graph.resolvedFlowsTo(t.identifier)) ++
+    specifiedSinksToReset.flatMap(s => graph.resolvedFlowsTo(s.identifier))
   }
 
   /**

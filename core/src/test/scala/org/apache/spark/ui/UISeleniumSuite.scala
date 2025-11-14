@@ -417,7 +417,7 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers {
         // Instead, it's safer to check that each row contains a link to a stage details page.
         findAll(cssSelector("tbody tr")).foreach { row =>
           val link = row.underlying.findElement(By.xpath("./td/div/a"))
-          link.getAttribute("href") should include ("stage")
+          link.getDomProperty("href") should include ("stage")
         }
       }
     }
@@ -473,7 +473,7 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers {
         // Instead, it's safer to check that each row contains a link to a stage details page.
         findAll(cssSelector("tbody tr")).foreach { row =>
           val link = row.underlying.findElement(By.xpath(".//a"))
-          link.getAttribute("href") should include ("stage")
+          link.getDomProperty("href") should include ("stage")
         }
       }
     }

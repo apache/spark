@@ -61,8 +61,13 @@ class SeriesMissingDataMixin:
 
         self.assert_eq(psser.fillna(0), pser.fillna(0))
         self.assert_eq(psser.fillna(method="ffill"), pser.fillna(method="ffill"))
-        self.assert_eq(psser.fillna(method="bfill"), pser.fillna(method="bfill"))
-        self.assert_eq(psser.fillna(method="backfill"), pser.fillna(method="backfill"))
+        self.assert_eq(
+            psser.fillna(method="bfill").sort_index(), pser.fillna(method="bfill").sort_index()
+        )
+        self.assert_eq(
+            psser.fillna(method="backfill").sort_index(),
+            pser.fillna(method="backfill").sort_index(),
+        )
 
         # inplace fillna on non-nullable column
         pdf = pd.DataFrame({"a": [1, 2, None], "b": [1, 2, 3]})
@@ -172,14 +177,14 @@ class SeriesMissingDataMixin:
         pser = pdf.x
         psser = psdf.x
 
-        self.assert_eq(psser.bfill(), pser.bfill())
-        self.assert_eq(psser.bfill()[0], pser.bfill()[0])
+        self.assert_eq(psser.bfill().sort_index(), pser.bfill().sort_index())
+        self.assert_eq(psser.bfill().sort_index()[0], pser.bfill().sort_index()[0])
 
         psser.bfill(inplace=True)
         pser.bfill(inplace=True)
-        self.assert_eq(psser, pser)
-        self.assert_eq(psser[0], pser[0])
-        self.assert_eq(psdf, pdf)
+        self.assert_eq(psser.sort_index(), pser.sort_index())
+        self.assert_eq(psser.sort_index()[0], pser.sort_index()[0])
+        self.assert_eq(psdf.sort_index(), pdf.sort_index())
 
     def test_ffill(self):
         pdf = pd.DataFrame({"x": [np.nan, 2, 3, 4, np.nan, 6], "y": [np.nan, 2, 3, 4, np.nan, 6]})
@@ -215,13 +220,13 @@ class SeriesMissingDataMixin:
         psdf = ps.from_pandas(pdf)
         pser, psser = pdf.x, psdf.x
 
-        self.assert_eq(pser.backfill(), psser.backfill())
+        self.assert_eq(pser.backfill().sort_index(), psser.backfill().sort_index())
 
         # Test `inplace=True`
         pser.backfill(inplace=True)
         psser.backfill(inplace=True)
-        self.assert_eq(pser, psser)
-        self.assert_eq(pdf, psdf)
+        self.assert_eq(pser.sort_index(), psser.sort_index())
+        self.assert_eq(pdf.sort_index(), psdf.sort_index())
 
 
 class SeriesMissingDataTests(

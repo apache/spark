@@ -19,8 +19,6 @@ package org.apache.spark.sql.connector.write;
 
 import org.apache.spark.annotation.Evolving;
 
-import java.util.Map;
-
 /**
  * An interface that defines how to write the data to data source for batch processing.
  * <p>
@@ -91,7 +89,7 @@ public interface BatchWrite {
   void commit(WriterCommitMessage[] messages);
 
   /**
-   * Commits this writing job with a list of commit messages and operation metrics.
+   * Commits this writing job with a list of commit messages and write summary.
    * <p>
    * If this method fails (by throwing an exception), this writing job is considered to to have been
    * failed, and {@link #abort(WriterCommitMessage[])} would be called. The state of the destination
@@ -105,31 +103,11 @@ public interface BatchWrite {
    * <p>
    * @param messages a list of commit messages from successful data writers, produced by
    *                 {@link DataWriter#commit()}.
-   * @param metrics a map of operation metrics collected from the query producing write.
-   *                The keys will be prefixed by operation type, eg `merge`.
-   *                <p>
-   *                Currently supported metrics are:
-   *                <ul>
-   *                  <li>Operation Type = `merge`
-   *                    <ul>
-   *                      <li>`numTargetRowsCopied`: number of target rows copied unmodified because
-   *                      they did not match any action</li>
-   *                      <li>`numTargetRowsDeleted`: number of target rows deleted</li>
-   *                      <li>`numTargetRowsUpdated`: number of target rows updated</li>
-   *                      <li>`numTargetRowsInserted`: number of target rows inserted</li>
-   *                      <li>`numTargetRowsMatchedUpdated`: number of target rows updated by a
-   *                      matched clause</li>
-   *                      <li>`numTargetRowsMatchedDeleted`: number of target rows deleted by a
-   *                      matched clause</li>
-   *                      <li>`numTargetRowsNotMatchedBySourceUpdated`: number of target rows
-   *                      updated by a not matched by source clause</li>
-   *                      <li>`numTargetRowsNotMatchedBySourceDeleted`: number of target rows
-   *                      deleted by a not matched by source clause</li>
-   *                    </ul>
-   *                  </li>
-   *                </ul>
+   * @param summary an informational summary collected in a best-effort from the operation
+   *                producing write. Currently supported summary fields are provided through
+   *                implementations of {@link WriteSummary}.
    */
-  default void commit(WriterCommitMessage[] messages, Map<String, Long> metrics) {
+  default void commit(WriterCommitMessage[] messages, WriteSummary summary) {
     commit(messages);
   }
 

@@ -6,11 +6,11 @@ OpenJDK 64-Bit Server VM 21.0.8+9-LTS on Linux 6.11.0-1018-azure
 AMD EPYC 7763 64-Core Processor
 radix sort 25000000:                      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-reference TimSort key prefix array                 8401           8446          64          3.0         336.0       1.0X
-reference Arrays.sort                              2180           2204          35         11.5          87.2       3.9X
-radix sort one byte                                  65             67           2        384.8           2.6     129.3X
-radix sort two bytes                                121            130           7        207.3           4.8      69.6X
-radix sort eight bytes                              467            472           5         53.6          18.7      18.0X
-radix sort key prefix array                         558            560           2         44.8          22.3      15.1X
+reference TimSort key prefix array                 8328           8473         205          3.0         333.1       1.0X
+reference Arrays.sort                              2061           2086          35         12.1          82.4       4.0X
+radix sort one byte                                  67             73           6        371.4           2.7     123.7X
+radix sort two bytes                                124            140          20        202.1           4.9      67.3X
+radix sort eight bytes                              487            505          28         51.3          19.5      17.1X
+radix sort key prefix array                         571            580           8         43.8          22.9      14.6X
 
 

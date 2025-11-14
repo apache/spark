@@ -132,7 +132,7 @@ object UserDefinedFunction {
    */
   private def getObjectMapper: ObjectMapper = {
     val mapper = new ObjectMapper with ClassTagExtensions
-    mapper.setSerializationInclusion(Include.NON_ABSENT)
+    mapper.setDefaultPropertyInclusion(Include.NON_ABSENT)
     mapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
     mapper.registerModule(DefaultScalaModule)
     mapper

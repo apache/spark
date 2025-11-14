@@ -127,6 +127,26 @@ class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
       Set(("main.suffix", "v1"), ("main2.suffix", "v2"), ("main3.extra1.suffix", "v3")))
   }
 
+  test("more flexible getAllWithPrefix") {
+    val prefix = "spark.fs.s3a."
+    val newPrefix = "spark.hadoop.fs.s3a."
+    val conf = new SparkConf(false)
+    conf.set("spark.fs.s3a.config1", "v1")
+    val f = (k: String) => {
+      val keyWithoutPrefix = k.substring(prefix.length)
+      newPrefix + keyWithoutPrefix
+    }
+    assert(conf.getAllWithPrefix(prefix, f).toSet ===
+      Set(("spark.hadoop.fs.s3a.config1", "v1")))
+
+    conf.set("spark.fs.s3a.config1.suffix", "v2")
+    conf.set("spark.fs.s3a.config1.extra.suffix", "v3")
+    conf.set("spark.notMatching.main4", "v4")
+
+    assert(conf.getAllWithPrefix(prefix).toSet ===
+      Set(("config1", "v1"), ("config1.suffix", "v2"), ("config1.extra.suffix", "v3")))
+  }
+
   test("creating SparkContext without master and app name") {
     val conf = new SparkConf(false)
     intercept[SparkException] { sc = new SparkContext(conf) }

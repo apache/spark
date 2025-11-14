@@ -25,6 +25,7 @@ import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.{SparkConf, SparkContext, SparkEnv, SparkException}
+import org.apache.spark.SparkMasterRegex._
 import org.apache.spark.annotation.{Evolving, Since}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys._
@@ -178,8 +179,8 @@ class ResourceProfile(
   // only applies to yarn/k8s
   private def shouldCheckExecutorCores(sparkConf: SparkConf): Boolean = {
     val master = sparkConf.getOption("spark.master")
-    sparkConf.contains(EXECUTOR_CORES) ||
-      (master.isDefined && (master.get.equalsIgnoreCase("yarn") || master.get.startsWith("k8s")))
+    sparkConf.contains(EXECUTOR_CORES) || isK8s(master) ||
+      (master.isDefined && master.get.equalsIgnoreCase("yarn"))
   }
 
   /**

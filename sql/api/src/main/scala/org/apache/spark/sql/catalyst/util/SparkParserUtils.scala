@@ -171,6 +171,15 @@ trait SparkParserUtils {
   /** Convert a string token into a string. */
   def string(token: Token): String = unescapeSQLString(token.getText)
 
+  /** Convert an array of string tokens into a concatenated string. */
+  def string(tokens: Array[Token]): String = {
+    if (tokens == null || tokens.isEmpty) {
+      ""
+    } else {
+      tokens.map(token => unescapeSQLString(token.getText)).mkString
+    }
+  }
+
   /** Convert a string token into a string and remove `""` and `''`. */
   def stringIgnoreQuoteQuote(token: Token): String = unescapeSQLString(token.getText, true)
 
@@ -187,13 +196,19 @@ trait SparkParserUtils {
    * Register the origin of the context. Any TreeNode created in the closure will be assigned the
    * registered origin. This method restores the previously set origin after completion of the
    * closure.
+   *
+   * This method is parameter substitution-aware. If parameter substitution occurred before
+   * parsing, it will automatically adjust the positions and SQL text to refer to the original SQL
+   * (before substitution) instead of the substituted SQL.
    */
   def withOrigin[T](ctx: ParserRuleContext, sqlText: Option[String] = None)(f: => T): T = {
     val current = CurrentOrigin.get
     val text = sqlText.orElse(current.sqlText)
+
     if (text.isEmpty) {
       CurrentOrigin.set(position(ctx.getStart))
     } else {
+      // Use the standard position method with the provided SQL text
       CurrentOrigin.set(
         positionAndText(
           ctx.getStart,
@@ -205,6 +220,8 @@ trait SparkParserUtils {
     try {
       f
     } finally {
+      // When restoring origin, preserve the original context to prevent contamination
+      // across unrelated parsing operations.
       CurrentOrigin.set(current)
     }
   }
@@ -217,14 +234,30 @@ trait SparkParserUtils {
       objectName: Option[String]): Origin = {
     val startOpt = Option(startToken)
     val stopOpt = Option(stopToken)
+
+    // Get the current origin to check for position mapper.
+    val currentOrigin = CurrentOrigin.get
+
+    // Don't map positions yet - store them as-is along with the mapper.
+    // Position mapping will be applied when creating query context for errors.
+    val (text, mapper) = currentOrigin.positionMapper match {
+      case Some(mapper) =>
+        // Store the mapper for later mapping.
+        (Some(mapper.originalText), Some(mapper))
+      case None =>
+        // No position mapper - use SQL text as-is.
+        (Some(sqlText), None)
+    }
+
     Origin(
       line = startOpt.map(_.getLine),
       startPosition = startOpt.map(_.getCharPositionInLine),
       startIndex = startOpt.map(_.getStartIndex),
       stopIndex = stopOpt.map(_.getStopIndex),
-      sqlText = Some(sqlText),
+      sqlText = text,
       objectType = objectType,
-      objectName = objectName)
+      objectName = objectName,
+      positionMapper = mapper)
   }
 
   /** Get the command which created the token. */

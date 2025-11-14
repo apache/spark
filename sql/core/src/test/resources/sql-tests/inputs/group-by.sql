@@ -7,6 +7,7 @@
 CREATE OR REPLACE TEMPORARY VIEW testData AS SELECT * FROM VALUES
 (1, 1), (1, 2), (2, 1), (2, 2), (3, 1), (3, 2), (null, 1), (3, null), (null, null)
 AS testData(a, b);
+CREATE TABLE t1(col1 TIMESTAMP, col2 STRING);
 
 -- Aggregate with empty GroupBy expressions.
 SELECT a, COUNT(b) FROM testData;
@@ -327,3 +328,13 @@ GROUP BY a;
 SELECT count(*)
 FROM VALUES (Map(1, Array(Map(1,2)), 2, Array(Map(2, 3, 1, 2)))), (Map(2, Array(Map(1, 2, 2,3)), 1, Array(Map(1, 2)))), (Map(1, Array(Map(1,2)), 2, Array(Map(2, 4)))) as t(a)
 GROUP BY a;
+
+-- Attributes under Last, First, AnyValue can be resolved using the hidden output.
+SELECT col1 FROM t1 GROUP BY ALL HAVING first(col2) = 'a';
+SELECT col1 FROM t1 GROUP BY col1 HAVING EXISTS (SELECT first(t1.col2) == 0);
+SELECT col1 FROM t1 GROUP BY ALL HAVING last(col2) = 'a';
+SELECT col1 FROM t1 GROUP BY col1 HAVING EXISTS (SELECT last(t1.col2) == 0);
+SELECT col1 FROM t1 GROUP BY ALL HAVING any_value(col2) = 'a';
+SELECT col1 FROM t1 GROUP BY col1 HAVING EXISTS (SELECT any_value(t1.col2) == 0);
+
+DROP TABLE t1;

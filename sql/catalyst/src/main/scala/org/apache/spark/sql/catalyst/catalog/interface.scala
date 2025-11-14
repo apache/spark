@@ -278,7 +278,7 @@ case class ClusterBySpec(columnNames: Seq[NamedReference]) {
 object ClusterBySpec {
   private val mapper = {
     val ret = new ObjectMapper() with ClassTagExtensions
-    ret.setSerializationInclusion(Include.NON_ABSENT)
+    ret.setDefaultPropertyInclusion(Include.NON_ABSENT)
     ret.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
     ret.registerModule(DefaultScalaModule)
     ret
@@ -451,7 +451,15 @@ case class CatalogTable(
    */
   def partitionSchema: StructType = {
     val partitionFields = schema.takeRight(partitionColumnNames.length)
-    assert(partitionFields.map(_.name) == partitionColumnNames)
+    val actualPartitionColumnNames = partitionFields.map(_.name)
+
+    assert(actualPartitionColumnNames == partitionColumnNames,
+      "Corrupted table metadata detected for table " + identifier.quotedString + ". " +
+      "The partition column names in the table schema " +
+      "do not match the declared partition columns. " +
+      "Table schema columns: [" + schema.fieldNames.mkString(", ") + "] " +
+      "Declared partition columns: [" + partitionColumnNames.mkString(", ") + "]. " +
+      "This indicates corrupted table metadata that needs to be repaired.")
 
     StructType(partitionFields)
   }
@@ -1062,7 +1070,9 @@ case class UnresolvedCatalogRelation(
     tableMeta: CatalogTable,
     options: CaseInsensitiveStringMap = CaseInsensitiveStringMap.empty(),
     override val isStreaming: Boolean = false) extends UnresolvedLeafNode {
-  assert(tableMeta.identifier.database.isDefined)
+  assert(tableMeta.identifier.database.isDefined,
+    "Table identifier " + tableMeta.identifier.quotedString + " is missing database name. " +
+    "UnresolvedCatalogRelation requires a fully qualified table identifier with database.")
 }
 
 /**
@@ -1089,7 +1099,9 @@ case class HiveTableRelation(
     tableStats: Option[Statistics] = None,
     @transient prunedPartitions: Option[Seq[CatalogTablePartition]] = None)
   extends LeafNode with MultiInstanceRelation with NormalizeableRelation {
-  assert(tableMeta.identifier.database.isDefined)
+  assert(tableMeta.identifier.database.isDefined,
+    "Table identifier " + tableMeta.identifier.quotedString + " is missing database name. " +
+    "HiveTableRelation requires a fully qualified table identifier with database.")
   assert(DataTypeUtils.sameType(tableMeta.partitionSchema, partitionCols.toStructType))
   assert(DataTypeUtils.sameType(tableMeta.dataSchema, dataCols.toStructType))
 

@@ -284,11 +284,11 @@ The connection may also be programmatically created using _SparkSession#builder_
 
 <div data-lang="python"  markdown="1">
 
-First, install PySpark with `pip install pyspark[connect]=={{site.SPARK_VERSION_SHORT}}` or if building a packaged PySpark application/library,
+First, install PySpark with `pip install pyspark-client=={{site.SPARK_VERSION_SHORT}}` or if building a packaged PySpark application/library,
 add it your setup.py file as:
 {% highlight python %}
 install_requires=[
-'pyspark[connect]=={{site.SPARK_VERSION_SHORT}}'
+'pyspark-client=={{site.SPARK_VERSION_SHORT}}'
 ]
 {% endhighlight %}
 

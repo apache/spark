@@ -1069,6 +1069,49 @@ Aggregate [theta_union_agg(sketch#x, 27, 0, 0) AS theta_union_agg(sketch, 27)#x]
 
 
 -- !query
+SELECT theta_sketch_agg(col, CAST(NULL AS INT)) AS lg_nom_entries_is_null
+FROM VALUES (15), (16), (17) tab(col)
+-- !query analysis
+Aggregate [theta_sketch_agg(col#x, cast(null as int), 0, 0) AS lg_nom_entries_is_null#x]
++- SubqueryAlias tab
+   +- LocalRelation [col#x]
+
+
+-- !query
+SELECT theta_sketch_agg(col, CAST(col AS INT)) AS lg_nom_entries_non_constant
+FROM VALUES (15), (16), (17) tab(col)
+-- !query analysis
+Aggregate [theta_sketch_agg(col#x, cast(col#x as int), 0, 0) AS lg_nom_entries_non_constant#x]
++- SubqueryAlias tab
+   +- LocalRelation [col#x]
+
+
+-- !query
+SELECT theta_sketch_agg(col, '15')
+FROM VALUES (50), (60), (60) tab(col)
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"15\"",
+    "inputType" : "\"STRING\"",
+    "paramIndex" : "second",
+    "requiredType" : "\"INT\"",
+    "sqlExpr" : "\"theta_sketch_agg(col, 15)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 34,
+    "fragment" : "theta_sketch_agg(col, '15')"
+  } ]
+}
+
+
+-- !query
 SELECT theta_union(1, 2)
   FROM VALUES
     (1, 4),

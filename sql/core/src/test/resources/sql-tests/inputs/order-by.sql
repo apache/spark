@@ -55,9 +55,18 @@ SELECT SUM(a) + 1 + MIN(a) FROM testData ORDER BY 1 + 1 + 1 + MIN(a) + 1 + SUM(a
 SELECT SUM(b) + 1 FROM testData HAVING SUM(b) + 1 > 0 ORDER BY SUM(b) + 1;
 
 -- Missing attribute (col2) in ORDER BY is added only once
-
 SELECT col1 FROM VALUES(1,2) GROUP BY col1, col2 ORDER BY col2, col2;
 SELECT col1 AS a, a AS b FROM VALUES(1,2) GROUP BY col1, col2 ORDER BY col2, col2;
+
+-- Replacing SortOrder expression with alias from below
+SELECT col1, col1 AS a FROM VALUES(1) GROUP BY col1 ORDER BY col1 ASC;
+SELECT col1 AS a, col1 FROM VALUES(1) GROUP BY col1 ORDER BY col1 ASC;
+SELECT make_date(col1, col2, col3) AS a, a AS b FROM VALUES(1,2,3) GROUP BY make_date(col1, col2, col3) ORDER BY make_date(col1, col2, col3);
+SELECT 1 AS a, 1 / a AS b, ZEROIFNULL(SUM(col1)) FROM VALUES(1) GROUP BY 1 ORDER BY ZEROIFNULL(SUM(col1));
+SELECT col1 AS a, SUM(col2) AS b, CASE WHEN col1 = 1 THEN 1 END AS c FROM VALUES(1,2) GROUP BY col1 ORDER BY CASE WHEN col1 = 1 THEN 1 END ASC;
+
+-- Priority of aliases when replacing them in ORDER BY should be determined by name
+SELECT col1+1 AS ltrl2, col1+1 AS ltrl1 FROM VALUES(1) GROUP BY col1+1 ORDER BY col1+1;
 
 -- Clean up
 DROP VIEW IF EXISTS testData;

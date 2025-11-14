@@ -86,6 +86,7 @@ object RuleIdCollection {
       "org.apache.spark.sql.catalyst.analysis.EliminateUnions" ::
       "org.apache.spark.sql.catalyst.analysis.ResolveCollationName" ::
       "org.apache.spark.sql.catalyst.analysis.ResolveDefaultColumns" ::
+      "org.apache.spark.sql.catalyst.analysis.ResolveEventTimeWatermark" ::
       "org.apache.spark.sql.catalyst.analysis.ResolveExecuteImmediate" ::
       "org.apache.spark.sql.catalyst.analysis.ResolveExpressionsWithNamePlaceholders" ::
       "org.apache.spark.sql.catalyst.analysis.ResolveGroupByAll" ::
@@ -178,6 +179,7 @@ object RuleIdCollection {
       "org.apache.spark.sql.catalyst.optimizer.SimplifyCaseConversionExpressions" ::
       "org.apache.spark.sql.catalyst.optimizer.SimplifyCasts" ::
       "org.apache.spark.sql.catalyst.optimizer.SimplifyConditionals" ::
+      "org.apache.spark.sql.catalyst.optimizer.SimplifyDateTimeConversions" ::
       "org.apache.spark.sql.catalyst.optimizer.SimplifyExtractValueOps" ::
       "org.apache.spark.sql.catalyst.optimizer.TransposeWindow" ::
       "org.apache.spark.sql.catalyst.optimizer.UnwrapCastInBinaryComparison" ::  Nil

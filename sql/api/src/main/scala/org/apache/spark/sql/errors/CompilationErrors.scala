@@ -131,6 +131,18 @@ private[sql] trait CompilationErrors extends DataTypeErrorsBase {
       errorClass = "SPECIFY_CLUSTER_BY_WITH_BUCKETING_IS_NOT_ALLOWED",
       messageParameters = Map.empty)
   }
+
+  def cannotModifyValueOfStaticConfigError(key: String): Throwable = {
+    new AnalysisException(
+      errorClass = "CANNOT_MODIFY_STATIC_CONFIG",
+      messageParameters = Map("key" -> toSQLConf(key)))
+  }
+
+  def cannotModifyValueOfSparkConfigError(key: String, docroot: String): Throwable = {
+    new AnalysisException(
+      errorClass = "CANNOT_MODIFY_CONFIG",
+      messageParameters = Map("key" -> toSQLConf(key), "docroot" -> docroot))
+  }
 }
 
 private[sql] object CompilationErrors extends CompilationErrors

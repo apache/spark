@@ -31,6 +31,7 @@ import org.apache.spark.sql.classic.Dataset
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
 import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.execution.command.{CreateViewCommand, DropTempViewCommand}
+import org.apache.spark.sql.execution.command.CommandUtils
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.Utils
 
@@ -127,7 +128,7 @@ case class UncacheTableExec(
     relation: LogicalPlan,
     cascade: Boolean) extends LeafV2CommandExec {
   override def run(): Seq[InternalRow] = {
-    session.sharedState.cacheManager.uncacheQuery(session, relation, cascade)
+    CommandUtils.uncacheTableOrView(session, relation, cascade)
     Seq.empty
   }
 

@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression,
 import org.apache.spark.sql.catalyst.expressions.objects.{Invoke, StaticInvoke}
 import org.apache.spark.sql.catalyst.optimizer.ConstantFolding
 import org.apache.spark.sql.connector.catalog.functions.ScalarFunction
-import org.apache.spark.sql.connector.expressions.{Cast => V2Cast, Expression => V2Expression, Extract => V2Extract, FieldReference, GeneralScalarExpression, LiteralValue, NullOrdering, SortDirection, SortValue, UserDefinedScalarFunc}
+import org.apache.spark.sql.connector.expressions.{Cast => V2Cast, Expression => V2Expression, Extract => V2Extract, FieldReference, GeneralScalarExpression, GetArrayItem => V2GetArrayItem, LiteralValue, NullOrdering, SortDirection, SortValue, UserDefinedScalarFunc}
 import org.apache.spark.sql.connector.expressions.aggregate.{AggregateFunc, Avg, Count, CountStar, GeneralAggregateFunc, Max, Min, Sum, UserDefinedAggregateFunc}
 import org.apache.spark.sql.connector.expressions.filter.{AlwaysFalse, AlwaysTrue, And => V2And, Not => V2Not, Or => V2Or, Predicate => V2Predicate}
 import org.apache.spark.sql.internal.SQLConf
@@ -326,6 +326,13 @@ class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) extends L
     case _: Sha2 => generateExpressionWithName("SHA2", expr, isPredicate)
     case _: StringLPad => generateExpressionWithName("LPAD", expr, isPredicate)
     case _: StringRPad => generateExpressionWithName("RPAD", expr, isPredicate)
+    case GetArrayItem(child, ordinal, failOnError) =>
+      (generateExpression(child), generateExpression(ordinal)) match {
+        case (Some(v2ArrayChild), Some(v2Ordinal)) =>
+          Some(new V2GetArrayItem(v2ArrayChild, v2Ordinal, failOnError))
+        case _ =>
+          None
+      }
     // TODO supports other expressions
     case ApplyFunctionExpression(function, children) =>
       val childrenExpressions = children.flatMap(generateExpression(_))

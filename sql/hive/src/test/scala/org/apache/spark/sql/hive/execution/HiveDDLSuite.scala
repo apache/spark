@@ -37,6 +37,7 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
+import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogV2Util, Identifier, TableChange, TableInfo}
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces.PROP_OWNER
@@ -2587,16 +2588,8 @@ class HiveDDLSuite
   test("SPARK-36241: support creating tables with void datatype") {
     // CTAS with void type
     withTable("t1", "t2", "t3") {
-      checkError(
-        exception = intercept[AnalysisException] {
-          sql("CREATE TABLE t1 USING PARQUET AS SELECT NULL AS null_col")
-        },
-        condition = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
-        parameters = Map(
-          "columnName" -> "`null_col`",
-          "columnType" -> "\"VOID\"",
-          "format" -> "Parquet")
-      )
+      sql("CREATE TABLE t1 USING PARQUET AS SELECT NULL AS null_col")
+      checkAnswer(sql("SELECT * FROM t1"), Row(null))
 
       checkError(
         exception = intercept[AnalysisException] {
@@ -2614,15 +2607,8 @@ class HiveDDLSuite
 
     // Create table with void type
     withTable("t1", "t2", "t3", "t4") {
-      checkError(
-        exception = intercept[AnalysisException] {
-          sql("CREATE TABLE t1 (v VOID) USING PARQUET")
-        },
-        condition = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
-        parameters = Map(
-          "columnName" -> "`v`",
-          "columnType" -> "\"VOID\"",
-          "format" -> "Parquet"))
+      sql("CREATE TABLE t1 (v VOID) USING PARQUET")
+      checkAnswer(sql("SELECT * FROM t1"), Seq.empty)
 
       checkError(
         exception = intercept[AnalysisException] {
@@ -2654,7 +2640,7 @@ class HiveDDLSuite
     import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
     import testImplicits._
 
-    implicit val _sqlContext = spark.sqlContext
+    implicit val sparkSession: SparkSession = spark
 
     withTempView("t1") {
       Seq((1, "one"), (2, "two"), (4, "four")).toDF("number", "word").createOrReplaceTempView("t1")

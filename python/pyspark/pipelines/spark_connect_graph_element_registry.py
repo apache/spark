@@ -24,6 +24,7 @@ from pyspark.pipelines.output import (
     Output,
     MaterializedView,
     Table,
+    Sink,
     StreamingTable,
     TemporaryView,
 )
@@ -46,6 +47,8 @@ class SparkConnectGraphElementRegistry(GraphElementRegistry):
         self._dataflow_graph_id = dataflow_graph_id
 
     def register_output(self, output: Output) -> None:
+        table_details = None
+        sink_details = None
         if isinstance(output, Table):
             if isinstance(output.schema, str):
                 schema_string = output.schema
@@ -60,6 +63,7 @@ class SparkConnectGraphElementRegistry(GraphElementRegistry):
             table_details = pb2.PipelineCommand.DefineOutput.TableDetails(
                 table_properties=output.table_properties,
                 partition_cols=output.partition_cols,
+                clustering_columns=output.cluster_by,
                 format=output.format,
                 # Even though schema_string is not required, the generated Python code seems to
                 # erroneously think it is required.
@@ -79,6 +83,12 @@ class SparkConnectGraphElementRegistry(GraphElementRegistry):
         elif isinstance(output, TemporaryView):
             output_type = pb2.OutputType.TEMPORARY_VIEW
             table_details = None
+        elif isinstance(output, Sink):
+            output_type = pb2.OutputType.SINK
+            sink_details = pb2.PipelineCommand.DefineOutput.SinkDetails(
+                options=output.options,
+                format=output.format,
+            )
         else:
             raise PySparkTypeError(
                 errorClass="UNSUPPORTED_PIPELINES_DATASET_TYPE",
@@ -90,6 +100,7 @@ class SparkConnectGraphElementRegistry(GraphElementRegistry):
             output_name=output.name,
             output_type=output_type,
             comment=output.comment,
+            sink_details=sink_details,
             table_details=table_details,
             source_code_location=source_code_location_to_proto(output.source_code_location),
         )

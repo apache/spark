@@ -23,7 +23,7 @@ import java.util.concurrent.TimeUnit
 import scala.concurrent.duration.Duration
 
 import org.apache.spark.api.python.PythonUtils
-import org.apache.spark.sql.connect.SparkConnectServerTest
+import org.apache.spark.sql.connect.{PythonTestDepsChecker, SparkConnectServerTest}
 import org.apache.spark.sql.pipelines.utils.{APITest, PipelineReference, PipelineSourceFile, PipelineTest, TestPipelineConfiguration, TestPipelineSpec}
 
 case class PipelineReferenceImpl(executionProcess: Process) extends PipelineReference
@@ -111,6 +111,8 @@ class EndToEndAPISuite extends PipelineTest with APITest with SparkConnectServer
   }
 
   override def awaitPipelineTermination(pipeline: PipelineReference, duration: Duration): Unit = {
+    assume(PythonTestDepsChecker.isConnectDepsAvailable)
+    assume(PythonTestDepsChecker.isYamlAvailable)
     pipeline match {
       case ref: PipelineReferenceImpl =>
         val process = ref.executionProcess

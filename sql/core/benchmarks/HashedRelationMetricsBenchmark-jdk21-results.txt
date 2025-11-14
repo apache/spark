@@ -6,6 +6,6 @@ OpenJDK 64-Bit Server VM 21.0.8+9-LTS on Linux 6.11.0-1018-azure
 AMD EPYC 7763 64-Core Processor
 LongToUnsafeRowMap metrics:               Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-LongToUnsafeRowMap                                  267            271           4          1.9         534.8       1.0X
+LongToUnsafeRowMap                                  268            273           6          1.9         536.5       1.0X
 
 

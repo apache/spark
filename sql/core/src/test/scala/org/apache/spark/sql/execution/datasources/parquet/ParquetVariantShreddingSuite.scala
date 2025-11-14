@@ -19,11 +19,13 @@ package org.apache.spark.sql.execution.datasources.parquet
 
 import java.io.File
 
+import scala.jdk.CollectionConverters._
+
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.parquet.hadoop.ParquetFileReader
 import org.apache.parquet.hadoop.util.HadoopInputFile
-import org.apache.parquet.schema.{LogicalTypeAnnotation, PrimitiveType}
+import org.apache.parquet.schema.{LogicalTypeAnnotation, PrimitiveType, Type}
 import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName
 
 import org.apache.spark.sql.{QueryTest, Row}
@@ -154,6 +156,73 @@ class ParquetVariantShreddingSuite extends QueryTest with ParquetTest with Share
     }
   }
 
+  test("variant logical type annotation") {
+    Seq(false, true).foreach { annotateVariantLogicalType =>
+      Seq(false, true).foreach { shredVariant =>
+        Seq(false, true).foreach { allowReadingShredded =>
+          withSQLConf(SQLConf.VARIANT_WRITE_SHREDDING_ENABLED.key -> shredVariant.toString,
+            SQLConf.VARIANT_INFER_SHREDDING_SCHEMA.key -> shredVariant.toString,
+            SQLConf.VARIANT_ALLOW_READING_SHREDDED.key ->
+              (allowReadingShredded || shredVariant).toString,
+            SQLConf.PARQUET_ANNOTATE_VARIANT_LOGICAL_TYPE.key ->
+              annotateVariantLogicalType.toString) {
+            def validateAnnotation(g: Type): Unit = {
+              if (annotateVariantLogicalType) {
+                assert(g.getLogicalTypeAnnotation == LogicalTypeAnnotation.variantType(1))
+              } else {
+                assert(g.getLogicalTypeAnnotation == null)
+              }
+            }
+            withTempDir { dir =>
+              // write parquet file
+              val df = spark.sql(
+                """
+                  | select
+                  |  id * 2 i,
+                  |  to_variant_object(named_struct('id', id)) v,
+                  |  named_struct('i', (id * 2)::string,
+                  |     'nv', to_variant_object(named_struct('id', 30 + id))) ns,
+                  |  array(to_variant_object(named_struct('id', 10 + id))) av,
+                  |  map('v2', to_variant_object(named_struct('id', 20 + id))) mv
+                  |  from range(0,3,1,1)""".stripMargin)
+              df.write.mode("overwrite").parquet(dir.getAbsolutePath)
+              val file = dir.listFiles().find(_.getName.endsWith(".parquet")).get
+              val parquetFilePath = file.getAbsolutePath
+              val inputFile = HadoopInputFile.fromPath(new Path(parquetFilePath),
+                new Configuration())
+              val reader = ParquetFileReader.open(inputFile)
+              val footer = reader.getFooter
+              val schema = footer.getFileMetaData.getSchema
+              val vGroup = schema.getType(schema.getFieldIndex("v"))
+              validateAnnotation(vGroup)
+              assert(vGroup.asGroupType().getFields.asScala.toSeq
+                .exists(_.getName == "typed_value") == shredVariant)
+              val nsGroup = schema.getType(schema.getFieldIndex("ns")).asGroupType()
+              val nvGroup = nsGroup.getType(nsGroup.getFieldIndex("nv"))
+              validateAnnotation(nvGroup)
+              val avGroup = schema.getType(schema.getFieldIndex("av")).asGroupType()
+              val avList = avGroup.getType(avGroup.getFieldIndex("list")).asGroupType()
+              val avElement = avList.getType(avList.getFieldIndex("element"))
+              validateAnnotation(avElement)
+              val mvGroup = schema.getType(schema.getFieldIndex("mv")).asGroupType()
+              val mvList = mvGroup.getType(mvGroup.getFieldIndex("key_value")).asGroupType()
+              val mvValue = mvList.getType(mvList.getFieldIndex("value"))
+              validateAnnotation(mvValue)
+              // verify result
+              val result = spark.read.format("parquet")
+                .schema("v variant, ns struct<nv variant>, av array<variant>, " +
+                  "mv map<string, variant>")
+                .load(dir.getAbsolutePath)
+                .selectExpr("v:id::int i1", "ns.nv:id::int i2", "av[0]:id::int i3",
+                  "mv['v2']:id::int i4")
+              checkAnswer(result, Array(Row(0, 30, 10, 20), Row(1, 31, 11, 21), Row(2, 32, 12, 22)))
+              reader.close()
+            }
+          }
+        }
+      }
+    }
+  }
 
   testWithTempDir("write shredded variant basic") { dir =>
     val schema = "a int, b string, c decimal(15, 1)"

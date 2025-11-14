@@ -322,6 +322,7 @@ def arrow_udf(f=None, returnType=None, functionType=None):
     pyspark.sql.GroupedData.applyInArrow
     pyspark.sql.PandasCogroupedOps.applyInArrow
     pyspark.sql.UDFRegistration.register
+    pyspark.sql.GroupedData.applyInPandas
     """
     require_minimum_pyarrow_version()
 
@@ -345,6 +346,9 @@ def pandas_udf(f=None, returnType=None, functionType=None):
 
     .. versionchanged:: 4.0.0
         Supports keyword-arguments in SCALAR and GROUPED_AGG type.
+
+    .. versionchanged:: 4.1.0
+        Supports iterator API in GROUPED_MAP type.
 
     Parameters
     ----------
@@ -690,6 +694,7 @@ def vectorized_udf(
         PythonEvalType.SQL_SCALAR_PANDAS_UDF,
         PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF,
         PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
+        PythonEvalType.SQL_GROUPED_MAP_PANDAS_ITER_UDF,
         PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF,
         PythonEvalType.SQL_MAP_PANDAS_ITER_UDF,
         PythonEvalType.SQL_MAP_ARROW_ITER_UDF,
@@ -771,6 +776,7 @@ def _validate_vectorized_udf(f, evalType, kind: str = "pandas") -> int:
         )
     elif evalType in [
         PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
+        PythonEvalType.SQL_GROUPED_MAP_PANDAS_ITER_UDF,
         PythonEvalType.SQL_MAP_PANDAS_ITER_UDF,
         PythonEvalType.SQL_MAP_ARROW_ITER_UDF,
         PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF,
@@ -833,6 +839,19 @@ def _validate_vectorized_udf(f, evalType, kind: str = "pandas") -> int:
                 "detail": f"{kind_str} with function type GROUPED_MAP or the function in "
                 "groupby.applyInPandas must take either one argument (data) or "
                 "two arguments (key, data).",
+            },
+        )
+
+    if evalType == PythonEvalType.SQL_GROUPED_MAP_PANDAS_ITER_UDF and len(argspec.args) not in (
+        1,
+        2,
+    ):
+        raise PySparkValueError(
+            errorClass="INVALID_PANDAS_UDF",
+            messageParameters={
+                "detail": "the function in groupby.applyInPandas with iterator API must take "
+                "either one argument (batches: Iterator[pandas.DataFrame]) or two arguments "
+                "(key, batches: Iterator[pandas.DataFrame]).",
             },
         )
 

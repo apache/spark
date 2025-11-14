@@ -1423,13 +1423,13 @@ trait CommutativeExpression extends Expression {
   protected def buildCanonicalizedPlan(
       collectOperands: PartialFunction[Expression, Seq[Expression]],
       buildBinaryOp: (Expression, Expression) => Expression,
-      evalMode: Option[EvalMode.Value] = None): Expression = {
+      evalContext: Option[NumericEvalContext] = None): Expression = {
     val operands = orderCommutative(collectOperands)
     val reorderResult =
       if (operands.length < SQLConf.get.getConf(MULTI_COMMUTATIVE_OP_OPT_THRESHOLD)) {
         operands.reduce(buildBinaryOp)
       } else {
-        MultiCommutativeOp(operands, this.getClass, evalMode)(this)
+        MultiCommutativeOp(operands, this.getClass, evalContext)(this)
       }
     reorderResult
   }
@@ -1446,7 +1446,7 @@ trait CommutativeExpression extends Expression {
  *      Add, Multiply, And, Or, BitwiseAnd, BitwiseOr, BitwiseXor.
  * @param operands A sequence of operands that produces a commutative expression tree.
  * @param opCls The class of the root operator of the expression tree.
- * @param evalMode The optional expression evaluation mode.
+ * @param evalContext The optional expression evaluation context.
  * @param originalRoot Root operator of the commutative expression tree before canonicalization.
  *                     This object reference is used to deduce the return dataType of Add and
  *                     Multiply operations when the input datatype is decimal.
@@ -1454,7 +1454,7 @@ trait CommutativeExpression extends Expression {
 case class MultiCommutativeOp(
     operands: Seq[Expression],
     opCls: Class[_],
-    evalMode: Option[EvalMode.Value])(originalRoot: Expression) extends Unevaluable {
+    evalContext: Option[NumericEvalContext])(originalRoot: Expression) extends Unevaluable {
   // Helper method to deduce the data type of a single operation.
   private def singleOpDataType(lType: DataType, rType: DataType): DataType = {
     originalRoot match {

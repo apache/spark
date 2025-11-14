@@ -38,6 +38,7 @@ import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, MergingSessi
 import org.apache.spark.sql.execution.datasources.v2.state.metadata.StateMetadataPartitionReader
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeLike
 import org.apache.spark.sql.execution.python.streaming.{FlatMapGroupsInPandasWithStateExec, TransformWithStateInPySparkExec}
+import org.apache.spark.sql.execution.streaming.{StreamingErrors, StreamingQueryPlanTraverseHelper}
 import org.apache.spark.sql.execution.streaming.checkpointing.{CheckpointFileManager, OffsetSeqMetadata}
 import org.apache.spark.sql.execution.streaming.operators.stateful.{SessionWindowStateStoreRestoreExec, SessionWindowStateStoreSaveExec, StatefulOperator, StatefulOperatorStateInfo, StateStoreRestoreExec, StateStoreSaveExec, StateStoreWriter, StreamingDeduplicateExec, StreamingDeduplicateWithinWatermarkExec, StreamingGlobalLimitExec, StreamingLocalLimitExec, UpdateEventTimeColumnExec}
 import org.apache.spark.sql.execution.streaming.operators.stateful.flatmapgroupswithstate.FlatMapGroupsWithStateExec
@@ -104,7 +105,8 @@ class IncrementalExecution(
 
   private lazy val hadoopConf = sparkSession.sessionState.newHadoopConf()
 
-  private[sql] val numStateStores = offsetSeqMetadata.conf.get(SQLConf.SHUFFLE_PARTITIONS.key)
+  private[sql] val numStateStores = OffsetSeqMetadata.readValueOpt(offsetSeqMetadata,
+      SQLConf.STATEFUL_SHUFFLE_PARTITIONS_INTERNAL)
     .map(SQLConf.SHUFFLE_PARTITIONS.valueConverter)
     .getOrElse(sparkSession.sessionState.conf.numShufflePartitions)
 
@@ -561,6 +563,18 @@ class IncrementalExecution(
           stateStoreWriter.getStateInfo.operatorId -> stateStoreWriter.shortName
       }.toMap
 
+      // Check if state directory is empty when we have stateful operators
+      if (opMapInPhysicalPlan.nonEmpty) {
+        val stateDirPath = new Path(new Path(checkpointLocation).getParent, "state")
+        val fileManager = CheckpointFileManager.create(stateDirPath, hadoopConf)
+
+        val stateDirectoryEmpty = !fileManager.exists(stateDirPath) ||
+          fileManager.list(stateDirPath).isEmpty
+        if (stateDirectoryEmpty) {
+          throw StreamingErrors.statefulOperatorMissingStateDirectory(opMapInPhysicalPlan)
+        }
+      }
+
       // A map of all (operatorId -> operatorName) in the state metadata
       val opMapInMetadata: Map[Long, String] = {
         var ret = Map.empty[Long, String]
@@ -638,10 +652,11 @@ class IncrementalExecution(
   def shouldRunAnotherBatch(newMetadata: OffsetSeqMetadata): Boolean = {
     val tentativeBatchId = currentBatchId + 1
     watermarkPropagator.propagate(tentativeBatchId, executedPlan, newMetadata.batchWatermarkMs)
-    executedPlan.collect {
-      case p: StateStoreWriter => p.shouldRunAnotherBatch(
-        watermarkPropagator.getInputWatermarkForEviction(tentativeBatchId,
-          p.stateInfo.get.operatorId))
-    }.exists(_ == true)
+    StreamingQueryPlanTraverseHelper
+      .collectFromUnfoldedPlan(executedPlan) {
+        case p: StateStoreWriter => p.shouldRunAnotherBatch(
+          watermarkPropagator.getInputWatermarkForEviction(tentativeBatchId,
+            p.stateInfo.get.operatorId))
+      }.exists(_ == true)
   }
 }

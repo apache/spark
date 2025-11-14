@@ -67,7 +67,7 @@ public class CleanupNonShuffleServiceServedFilesSuite {
 
   @Test
   public void cleanupOnRemovedExecutorWithoutFilesToKeep() throws IOException {
-    cleanupOnRemovedExecutor(false, getConf(true), Collections.emptySet());
+    cleanupOnRemovedExecutor(false, getConf(true), Set.of());
   }
 
   private void cleanupOnRemovedExecutor(
@@ -124,7 +124,7 @@ public class CleanupNonShuffleServiceServedFilesSuite {
 
   @Test
   public void cleanupOnlyRemovedExecutorWithoutFilesToKeep() throws IOException {
-    cleanupOnlyRemovedExecutor(false, getConf(true) , Collections.emptySet());
+    cleanupOnlyRemovedExecutor(false, getConf(true) , Set.of());
   }
 
   private void cleanupOnlyRemovedExecutor(
@@ -170,7 +170,7 @@ public class CleanupNonShuffleServiceServedFilesSuite {
 
   @Test
   public void cleanupOnlyRegisteredExecutorWithoutFilesToKeep() throws IOException {
-    cleanupOnlyRegisteredExecutor(false, getConf(true), Collections.emptySet());
+    cleanupOnlyRegisteredExecutor(false, getConf(true), Set.of());
   }
 
   private void cleanupOnlyRegisteredExecutor(

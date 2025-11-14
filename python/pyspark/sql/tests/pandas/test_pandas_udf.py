@@ -183,8 +183,9 @@ class PandasUDFTestsMixin:
                 exception=pe.exception,
                 errorClass="INVALID_RETURN_TYPE_FOR_PANDAS_UDF",
                 messageParameters={
-                    "eval_type": "SQL_GROUPED_MAP_PANDAS_UDF "
-                    "or SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE",
+                    "eval_type": "SQL_GROUPED_MAP_PANDAS_UDF or "
+                    "SQL_GROUPED_MAP_PANDAS_ITER_UDF or "
+                    "SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE",
                     "return_type": "DoubleType()",
                 },
             )

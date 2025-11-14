@@ -30,6 +30,7 @@ import org.apache.spark.{SparkException, SparkRuntimeException, SparkUnsupported
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{Dataset, Encoders, Row}
 import org.apache.spark.sql.catalyst.util.stringToFile
+import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.execution.datasources.v2.state.StateSourceOptions
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.execution.streaming.checkpointing.CheckpointFileManager
@@ -1008,7 +1009,7 @@ abstract class TransformWithStateSuite extends StateStoreMetricsTest
   }
 
   test("transformWithState - lazy iterators can properly get/set keyed state") {
-    val spark = this.spark
+    implicit val spark: SparkSession = this.spark
     import spark.implicits._
 
     class ProcessorWithLazyIterators
@@ -2569,7 +2570,7 @@ class TransformWithStateValidationSuite extends StateStoreMetricsTest {
 
     testStream(result, OutputMode.Update())(
       AddData(inputData, "a"),
-      ExpectFailure[StateStoreMultipleColumnFamiliesNotSupportedException] { t =>
+      ExpectFailure[StateStoreBackendNotSupportedForTWSException] { t =>
         assert(t.getMessage.contains("not supported"))
       }
     )
@@ -2835,7 +2836,7 @@ class TransformWithStateValidationSuite extends StateStoreMetricsTest {
       )
     testStream(result, OutputMode.Update())(
       AddData(inputData, InitInputRow("a", "add", -1.0)),
-      ExpectFailure[StateStoreMultipleColumnFamiliesNotSupportedException] {
+      ExpectFailure[StateStoreBackendNotSupportedForTWSException] {
         (t: Throwable) => {
           assert(t.getMessage.contains("not supported"))
         }
