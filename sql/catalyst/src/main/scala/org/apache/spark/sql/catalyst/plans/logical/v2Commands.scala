@@ -690,7 +690,7 @@ case class ReplaceTableAsSelect(
 
   override def markAsAnalyzed(ac: AnalysisContext): LogicalPlan = {
     // RTAS may drop and recreate table before query execution, breaking self-references
-    // refresh and pin versions here to read from correct table versions
+    // refresh and pin versions here to read from correct table versions instead of the newly created empty table.
     val refreshedQuery = V2TableRefreshUtil.refreshVersions(query)
     val pinnedQuery = V2TableRefreshUtil.pinVersions(refreshedQuery)
     copy(query = pinnedQuery, isAnalyzed = true)
