@@ -40,6 +40,7 @@ import org.apache.spark.sql.connector.write.RowLevelOperation.Command.{DELETE, M
 import org.apache.spark.sql.errors.DataTypeErrors.toSQLType
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, ExtractV2Table}
+import org.apache.spark.sql.execution.datasources.v2.V2TableRefreshUtil
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{ArrayType, AtomicType, BooleanType, DataType, IntegerType, MapType, MetadataBuilder, StringType, StructField, StructType}
 import org.apache.spark.util.ArrayImplicits._
@@ -687,7 +688,14 @@ case class ReplaceTableAsSelect(
     isAnalyzed: Boolean = false)
   extends V2CreateTableAsSelectPlan {
 
-  override def markAsAnalyzed(ac: AnalysisContext): LogicalPlan = copy(isAnalyzed = true)
+  override def markAsAnalyzed(ac: AnalysisContext): LogicalPlan = {
+    // RTAS may drop and recreate table before query execution, breaking self-references
+    // refresh and pin versions here to read from original table versions instead of
+    // newly created empty table that is meant to serve as target for append/overwrite
+    val refreshedQuery = V2TableRefreshUtil.refreshVersions(query)
+    val pinnedQuery = V2TableRefreshUtil.pinVersions(refreshedQuery)
+    copy(query = pinnedQuery, isAnalyzed = true)
+  }
 
   override def withPartitioning(rewritten: Seq[Transform]): V2CreateTablePlan = {
     this.copy(partitioning = rewritten)
