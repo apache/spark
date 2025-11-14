@@ -2210,6 +2210,31 @@
     ],
     "sqlState" : "42000"
   },
+  "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS" : {
+    "message" : [
+      "Detected incompatible changes to table <tableName> after DataFrame/Dataset has been resolved and analyzed, meaning the underlying plan is out of sync. Please, re-create DataFrame/Dataset before attempting to execute the query again."
+    ],
+    "subClass" : {
+      "COLUMNS_MISMATCH" : {
+        "message" : [
+          "Data columns have changed:",
+          "<errors>"
+        ]
+      },
+      "METADATA_COLUMNS_MISMATCH" : {
+        "message" : [
+          "Metadata columns have changed:",
+          "<errors>"
+        ]
+      },
+      "TABLE_ID_MISMATCH" : {
+        "message" : [
+          "Table ID has changed from <capturedTableId> to <currentTableId>."
+        ]
+      }
+    },
+    "sqlState" : "51024"
+  },
   "INCOMPATIBLE_VIEW_SCHEMA_CHANGE" : {
     "message" : [
       "The SQL query of view <viewName> has an incompatible schema change and column <colName> cannot be resolved. Expected <expectedNum> columns named <colName> but got <actualCols>.",
@@ -5001,6 +5026,12 @@
       "<codeLocation>"
     ],
     "sqlState" : "42000"
+  },
+  "PIPELINE_STORAGE_ROOT_INVALID" : {
+    "message" : [
+      "Pipeline storage root must be an absolute path with a URI scheme (e.g., file://, s3a://, hdfs://). Got: `<storage_root>`."
+    ],
+    "sqlState" : "42K03"
   },
   "PIPE_OPERATOR_AGGREGATE_EXPRESSION_CONTAINS_NO_AGGREGATE_FUNCTION" : {
     "message" : [
