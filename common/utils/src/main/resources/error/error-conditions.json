@@ -5229,6 +5229,42 @@
     ],
     "sqlState" : "0A000"
   },
+  "STATEFUL_PROCESSOR_CANNOT_PERFORM_OPERATION_WITH_INVALID_HANDLE_STATE" : {
+    "message" : [
+      "Failed to perform stateful processor operation=<operationType> with invalid handle state=<handleState>."
+    ],
+    "sqlState" : "42802"
+  },
+  "STATEFUL_PROCESSOR_CANNOT_PERFORM_OPERATION_WITH_INVALID_TIME_MODE" : {
+    "message" : [
+      "Failed to perform stateful processor operation=<operationType> with invalid timeMode=<timeMode>"
+    ],
+    "sqlState" : "42802"
+  },
+  "STATEFUL_PROCESSOR_DUPLICATE_STATE_VARIABLE_DEFINED" : {
+    "message" : [
+      "State variable with name <stateVarName> has already been defined in the StatefulProcessor."
+    ],
+    "sqlState" : "42802"
+  },
+  "STATEFUL_PROCESSOR_INCORRECT_TIME_MODE_TO_ASSIGN_TTL" : {
+    "message" : [
+      "Cannot use TTL for state=<stateName> in timeMode=<timeMode>, use TimeMode.ProcessingTime() instead."
+    ],
+    "sqlState" : "42802"
+  },
+  "STATEFUL_PROCESSOR_TTL_DURATION_MUST_BE_POSITIVE" : {
+    "message" : [
+      "TTL duration must be greater than zero for State store operation=<operationType> on state=<stateName>."
+    ],
+    "sqlState" : "42802"
+  },
+  "STATEFUL_PROCESSOR_UNKNOWN_TIME_MODE" : {
+    "message" : [
+      "Unknown time mode <timeMode>. Accepted timeMode modes are 'none', 'processingTime', 'eventTime'"
+    ],
+    "sqlState" : "42802"
+  },
   "STATE_REPARTITION_INVALID_CHECKPOINT" : {
     "message" : [
       "The provided checkpoint location '<checkpointLocation>' is in an invalid state."
@@ -5245,7 +5281,7 @@
       "LAST_BATCH_FAILED" : {
         "message" : [
           "The last batch ID <lastBatchId> didn't finish successfully. Please make sure the streaming query finishes successfully, before repartitioning.",
-          "If using ProcessingTime trigger, you can use AvailableNow trigger instead, which will make sure the query terminates successfully by itself.", 
+          "If using ProcessingTime trigger, you can use AvailableNow trigger instead, which will make sure the query terminates successfully by itself.",
           "If you want to skip this check, set enforceExactlyOnceSink parameter in repartition to false.",
           "But this can cause duplicate output records from the failed batch when using exactly-once sinks."
         ]
@@ -5307,42 +5343,6 @@
       }
     },
     "sqlState" : "42616"
-  },
-  "STATEFUL_PROCESSOR_CANNOT_PERFORM_OPERATION_WITH_INVALID_HANDLE_STATE" : {
-    "message" : [
-      "Failed to perform stateful processor operation=<operationType> with invalid handle state=<handleState>."
-    ],
-    "sqlState" : "42802"
-  },
-  "STATEFUL_PROCESSOR_CANNOT_PERFORM_OPERATION_WITH_INVALID_TIME_MODE" : {
-    "message" : [
-      "Failed to perform stateful processor operation=<operationType> with invalid timeMode=<timeMode>"
-    ],
-    "sqlState" : "42802"
-  },
-  "STATEFUL_PROCESSOR_DUPLICATE_STATE_VARIABLE_DEFINED" : {
-    "message" : [
-      "State variable with name <stateVarName> has already been defined in the StatefulProcessor."
-    ],
-    "sqlState" : "42802"
-  },
-  "STATEFUL_PROCESSOR_INCORRECT_TIME_MODE_TO_ASSIGN_TTL" : {
-    "message" : [
-      "Cannot use TTL for state=<stateName> in timeMode=<timeMode>, use TimeMode.ProcessingTime() instead."
-    ],
-    "sqlState" : "42802"
-  },
-  "STATEFUL_PROCESSOR_TTL_DURATION_MUST_BE_POSITIVE" : {
-    "message" : [
-      "TTL duration must be greater than zero for State store operation=<operationType> on state=<stateName>."
-    ],
-    "sqlState" : "42802"
-  },
-  "STATEFUL_PROCESSOR_UNKNOWN_TIME_MODE" : {
-    "message" : [
-      "Unknown time mode <timeMode>. Accepted timeMode modes are 'none', 'processingTime', 'eventTime'"
-    ],
-    "sqlState" : "42802"
   },
   "STATE_STORE_CANNOT_CREATE_COLUMN_FAMILY_WITH_RESERVED_CHARS" : {
     "message" : [
