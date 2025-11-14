@@ -4253,6 +4253,219 @@ struct<item_sk:int,d_date:date,web_sales:decimal(27,2),store_sales:decimal(27,2)
 
 
 -- !query
+table t
+| select x, y
+-- !query schema
+struct<x:int,y:string>
+-- !query output
+0	abc
+1	def
+
+
+-- !query
+table t
+| extend x + length(y) as z
+-- !query schema
+struct<x:int,y:string,z:int>
+-- !query output
+0	abc	3
+1	def	4
+
+
+-- !query
+table t
+| extend 1 as z
+| set z = x + length(y)
+-- !query schema
+struct<x:int,y:string,z:int>
+-- !query output
+0	abc	3
+1	def	4
+
+
+-- !query
+table windowTestData
+| select cate, sum(val) over w
+  window w as (partition by cate order by val)
+-- !query schema
+struct<cate:string,sum(val) OVER (PARTITION BY cate ORDER BY val ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):bigint>
+-- !query output
+NULL	3
+NULL	NULL
+a	2
+a	2
+a	4
+a	NULL
+b	1
+b	3
+b	6
+
+
+-- !query
+from store_sales ss1
+| where ss_store_sk = 4
+| aggregate avg(ss_net_profit) rank_col
+    group by ss_item_sk as item_sk
+| select item_sk, rank_col
+| where rank_col > 0
+| order by rank_col desc
+| limit 1000
+-- !query schema
+struct<item_sk:int,rank_col:decimal(11,6)>
+-- !query output
+
+
+
+-- !query
+table t
+|> select x, y
+| where x < 2
+|> extend x + 1 as z
+| order by z
+-- !query schema
+struct<x:int,y:string,z:int>
+-- !query output
+0	abc	1
+1	def	2
+
+
+-- !query
+from t
+| extend 9 as `extend`
+| select *, x + 1
+| extend y
+-- !query schema
+struct<x:int,y:string,extend:int,(x + 1):int,y:string>
+-- !query output
+0	abc	9	1	abc
+1	def	9	2	def
+
+
+-- !query
+declare or replace extend int = 5
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+select 1 | extend y
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`y`",
+    "proposal" : "`1`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 19,
+    "stopIndex" : 19,
+    "fragment" : "y"
+  } ]
+}
+
+
+-- !query
+set spark.sql.parser.singleCharacterPipeOperator.enabled=false
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.parser.singleCharacterPipeOperator.enabled	false
+
+
+-- !query
+select 1 | extend y
+-- !query schema
+struct<y:int>
+-- !query output
+5
+
+
+-- !query
+set spark.sql.parser.singleCharacterPipeOperator.enabled=true
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.parser.singleCharacterPipeOperator.enabled	true
+
+
+-- !query
+drop temporary variable extend
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+set spark.sql.parser.singleCharacterPipeOperator.enabled=false
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.parser.singleCharacterPipeOperator.enabled	false
+
+
+-- !query
+table t
+|> select x, y
+-- !query schema
+struct<x:int,y:string>
+-- !query output
+0	abc
+1	def
+
+
+-- !query
+table t
+| select x, y
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'|'",
+    "hint" : ""
+  }
+}
+
+
+-- !query
+select 1 | 2 as result
+-- !query schema
+struct<result:int>
+-- !query output
+3
+
+
+-- !query
+set spark.sql.parser.singleCharacterPipeOperator.enabled=true
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.parser.singleCharacterPipeOperator.enabled	true
+
+
+-- !query
+table t
+| select x, y
+-- !query schema
+struct<x:int,y:string>
+-- !query output
+0	abc
+1	def
+
+
+-- !query
 drop table t
 -- !query schema
 struct<>

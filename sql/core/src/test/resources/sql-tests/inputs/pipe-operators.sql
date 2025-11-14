@@ -1756,6 +1756,96 @@ table web_v1
 |> order by item_sk, d_date
 |> limit 100;
 
+-- Single PIPE token syntax (|): positive tests.
+--------------------------------------------------
+-- Test that the single PIPE token (|) works as an alternative to OPERATOR_PIPE (|>) for all pipe operators.
+
+-- SELECT with single pipe.
+table t
+| select x, y;
+
+-- EXTEND with single pipe.
+table t
+| extend x + length(y) as z;
+
+-- SET with single pipe.
+table t
+| extend 1 as z
+| set z = x + length(y);
+
+-- WINDOW with single pipe.
+table windowTestData
+| select cate, sum(val) over w
+  window w as (partition by cate order by val);
+
+-- Complex chained query with single pipe.
+from store_sales ss1
+| where ss_store_sk = 4
+| aggregate avg(ss_net_profit) rank_col
+    group by ss_item_sk as item_sk
+| select item_sk, rank_col
+| where rank_col > 0
+| order by rank_col desc
+| limit 1000;
+
+-- Mixed single pipe (|) and double pipe (|>) operators in same query.
+table t
+|> select x, y
+| where x < 2
+|> extend x + 1 as z
+| order by z;
+
+-- Single PIPE token syntax (|): bitwise OR behavior.
+----------------------------------------------------------------------------
+
+-- This query is ambiguous because it can be parsed as either a sequence of pipe operators or
+-- a bitwise OR operation like "select *, (x + 1 | extend) as y".
+-- We test it as a valid query both ways.
+-- This technically makes enabling the single-character pipe operator a breaking change;
+-- however, an analysis of SQL usage found no instances of SELECT/EXTEND/etc. keywords
+-- being used in bitwise OR operations.
+from t
+| extend 9 as `extend`
+| select *, x + 1
+| extend y;
+
+-- Here we define a variable named "extend" and then refer to it in a following query.
+-- However, with the single-character pipe operator feature enabled, we do not allow the bitwise
+-- OR operation to consume the "extend" reference. This decision is intentional since we wish to
+-- reserve the token sequence of | followed by SELECT/EXTEND/etc. for pipe syntax only.
+declare or replace extend int = 5;
+select 1 | extend y;
+set spark.sql.parser.singleCharacterPipeOperator.enabled=false;
+select 1 | extend y;
+set spark.sql.parser.singleCharacterPipeOperator.enabled=true;
+drop temporary variable extend;
+
+-- Single PIPE token with configuration disabled: negative tests.
+------------------------------------------------------------------
+-- Test that when spark.sql.parser.singleCharacterPipeOperator.enabled is set to false,
+-- the single pipe token (|) is only used for bitwise OR and not for pipe operators.
+
+-- Disable the single character pipe operator.
+set spark.sql.parser.singleCharacterPipeOperator.enabled=false;
+
+-- Verify that |> still works with the configuration disabled.
+table t
+|> select x, y;
+
+-- Try to use single pipe for SELECT - should fail with parse error.
+table t
+| select x, y;
+
+-- Verify that bitwise OR still works with the configuration disabled.
+select 1 | 2 as result;
+
+-- Re-enable the single character pipe operator for remaining tests.
+set spark.sql.parser.singleCharacterPipeOperator.enabled=true;
+
+-- Verify that single pipe works again after re-enabling.
+table t
+| select x, y;
+
 -- Cleanup.
 -----------
 drop table t;
