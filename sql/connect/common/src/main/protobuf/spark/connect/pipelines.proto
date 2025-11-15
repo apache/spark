@@ -299,6 +299,8 @@ message PipelineAnalysisContext {
   optional string dataflow_graph_id = 1;
   // The path of the top-level pipeline file determined at runtime during pipeline initialization.
   optional string definition_path = 2;
+  // The name of the Flow involved in this analysis
+  optional string flow_name = 3;
 
   // Reserved field for protocol extensions.
   repeated google.protobuf.Any extension = 999;
