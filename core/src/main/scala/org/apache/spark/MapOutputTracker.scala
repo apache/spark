@@ -781,46 +781,51 @@ private[spark] class MapOutputTrackerMaster(
 
   private class TTLCleaner extends Runnable {
     override def run(): Unit = {
-      // Poll the shuffle access times if we're configured for it.
-      conf.get(SPARK_TTL_SHUFFLE_BLOCK_CLEANER) match {
-        case Some(ttl) =>
-          while (true) {
-            val maxAge = System.currentTimeMillis() - ttl
-            // Find the elements to be removed & update oldest remaining time (if any)
-            var oldest = System.currentTimeMillis()
-            // Make a copy here to reduce change of CME -- still possible during the toList though.
-            try {
-              val toBeRemoved = shuffleAccessTime.asScala.toList.flatMap {
-                case (shuffleId, atime) =>
-                if (atime < maxAge) {
-                  Some(shuffleId)
-                } else {
-                  if (atime < oldest) {
-                    oldest = atime
+      try {
+        // Poll the shuffle access times if we're configured for it.
+        conf.get(SPARK_TTL_SHUFFLE_BLOCK_CLEANER) match {
+          case Some(ttl) =>
+            while (true) {
+              val maxAge = System.currentTimeMillis() - ttl
+              // Find the elements to be removed & update oldest remaining time (if any)
+              var oldest = System.currentTimeMillis()
+              // Make a copy here to reduce the chance of CME
+              try {
+                val toBeRemoved = shuffleAccessTime.asScala.toList.flatMap {
+                  case (shuffleId, atime) =>
+                    if (atime < maxAge) {
+                      Some(shuffleId)
+                    } else {
+                      if (atime < oldest) {
+                        oldest = atime
+                      }
+                      None
+                    }
+                }.toList
+                toBeRemoved.map { shuffleId =>
+                  try {
+                    unregisterAllMapAndMergeOutput(shuffleId)
+                  } catch {
+                    case NonFatal(e) =>
+                      logDebug(
+                        log"Error removing shuffle ${MDC(SHUFFLE_ID, shuffleId)}", e)
                   }
-                  None
                 }
-              }.toList
-              toBeRemoved.map { shuffleId =>
-                try {
-                  unregisterAllMapAndMergeOutput(shuffleId)
-                } catch {
-                  case NonFatal(e) =>
-                    logError(
-                      log"Error removing shuffle ${MDC(SHUFFLE_ID, shuffleId)} with TTL cleaner", e)
-                }
+                // Wait until the next possible element to be removed
+                val delay = math.max((oldest + ttl) - System.currentTimeMillis(), 100)
+                Thread.sleep(delay)
+              } catch {
+                case _: java.util.ConcurrentModificationException =>
+                  // Just retry, blocks were stored while we were iterating
+                  Thread.sleep(100)
               }
-              // Wait until the next possible element to be removed
-              val delay = math.max((oldest + ttl) - System.currentTimeMillis(), 1)
-              Thread.sleep(delay)
-            } catch {
-              case _: java.util.ConcurrentModificationException =>
-                // Just retry, blocks were stored while we were iterating
-                Thread.sleep(1)
             }
-          }
-        case None =>
-          logDebug("Tried to start TTL cleaner when not configured.")
+          case None =>
+            logDebug("Tried to start TTL cleaner when not configured.")
+        }
+      } catch {
+        case _: InterruptedException =>
+          logInfo("MapOutputTrackerMaster TTLCleaner thread interrupted, exiting.")
       }
     }
   }
