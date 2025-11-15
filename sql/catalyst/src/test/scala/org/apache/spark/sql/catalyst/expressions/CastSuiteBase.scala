@@ -1567,6 +1567,64 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
+  test("cast numeric to time") {
+    val fromTypes: Seq[DataType] = Seq(ByteType, ShortType, IntegerType, LongType, DoubleType,
+      FloatType, DecimalType.USER_DEFAULT, DecimalType(10, 5), DecimalType.SYSTEM_DEFAULT)
+    val toTypes: Seq[DataType] = Seq(TimeType(), TimeType(3), TimeType(6))
+    for {
+      fromType <- fromTypes
+      toType <- toTypes
+    } {
+      // Cast can be performed from `fromType` to `toType`.
+      assert(Cast.canCast(fromType, toType))
+      assert(Cast.canAnsiCast(fromType, toType))
+    }
+    // TINYINT
+    checkEvaluation(cast(Literal.create(0.toByte, ByteType), TimeType()), 0L)
+    checkEvaluation(cast(Literal.create(100.toByte, ByteType), TimeType()), 0L)
+    // SMALLINT
+    checkEvaluation(cast(Literal.create(0.toShort, ShortType), TimeType()), 0L)
+    checkEvaluation(cast(Literal.create(100.toShort, ShortType), TimeType()), 0L)
+    checkEvaluation(cast(Literal.create(999.toShort, ShortType), TimeType()), 0L)
+    checkEvaluation(cast(Literal.create(10999.toShort, ShortType), TimeType()), 10000L)
+    // INT
+    checkEvaluation(cast(Literal.create(0, IntegerType), TimeType()), 0L)
+    checkEvaluation(cast(Literal.create(100, IntegerType), TimeType()), 0L)
+    checkEvaluation(cast(Literal.create(999, IntegerType), TimeType()), 0L)
+    checkEvaluation(cast(Literal.create(10999, IntegerType), TimeType()), 10000L)
+    checkEvaluation(cast(Literal.create(1000999, IntegerType), TimeType()), 1000000L)
+    checkEvaluation(cast(Literal.create(2000000999, IntegerType), TimeType()), 2000000000L)
+    // BIGINT
+    checkEvaluation(cast(Literal.create(0L, LongType), TimeType()), 0L)
+    checkEvaluation(cast(Literal.create(100L, LongType), TimeType()), 0L)
+    checkEvaluation(cast(Literal.create(999L, LongType), TimeType()), 0L)
+    checkEvaluation(cast(Literal.create(10999L, LongType), TimeType()), 10000L)
+    checkEvaluation(cast(Literal.create(1000999L, LongType), TimeType()), 1000000L)
+    checkEvaluation(cast(Literal.create(2000000999L, LongType), TimeType()), 2000000000L)
+    checkEvaluation(cast(Literal.create(86399999999999L, LongType), TimeType()), 86399999999000L)
+    // DECIMAL
+    checkEvaluation(cast(Literal.create(Decimal(0)), TimeType()), 0L)
+    checkEvaluation(cast(Literal.create(Decimal(100)), TimeType()), 0L)
+    checkEvaluation(cast(Literal.create(Decimal(999)), TimeType()), 0L)
+    checkEvaluation(cast(Literal.create(Decimal(10999)), TimeType()), 10000L)
+    checkEvaluation(cast(Literal.create(Decimal(1000999)), TimeType()), 1000000L)
+    checkEvaluation(cast(Literal.create(Decimal(2000000999)), TimeType()), 2000000000L)
+    checkEvaluation(cast(Literal.create(Decimal(86399999999999L)), TimeType()), 86399999999000L)
+    // DOUBLE
+    checkEvaluation(cast(Literal.create(0.0, DoubleType), TimeType()), 0L)
+    checkEvaluation(cast(Literal.create(100.0, DoubleType), TimeType()), 0L)
+    checkEvaluation(cast(Literal.create(999.0, DoubleType), TimeType()), 0L)
+    checkEvaluation(cast(Literal.create(10999.0, DoubleType), TimeType()), 10000L)
+    checkEvaluation(cast(Literal.create(1000999.0, DoubleType), TimeType()), 1000000L)
+    checkEvaluation(cast(Literal.create(86399999999999.0, DoubleType), TimeType()), 86399999999000L)
+    // FLOAT
+    checkEvaluation(cast(Literal.create(0.0f, FloatType), TimeType()), 0L)
+    checkEvaluation(cast(Literal.create(100.0f, FloatType), TimeType()), 0L)
+    checkEvaluation(cast(Literal.create(999.0f, FloatType), TimeType()), 0L)
+    checkEvaluation(cast(Literal.create(10999.0f, FloatType), TimeType()), 10000L)
+    checkEvaluation(cast(Literal.create(1000999.0f, FloatType), TimeType()), 1000000L)
+  }
+
   test("cast string to time") {
     checkEvaluation(cast(Literal.create("0:0:0"), TimeType()), 0L)
     checkEvaluation(cast(Literal.create(" 01:2:3.01   "), TimeType(2)), localTime(1, 2, 3, 10000))

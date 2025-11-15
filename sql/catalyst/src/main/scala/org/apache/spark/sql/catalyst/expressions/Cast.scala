@@ -108,6 +108,7 @@ object Cast extends QueryErrorsBase {
     case (DateType, TimestampType) => true
     case (TimestampNTZType, TimestampType) => true
     case (_: NumericType, TimestampType) => true
+    case (_: NumericType, _: TimeType) => true
 
     case (_: StringType, TimestampNTZType) => true
     case (DateType, TimestampNTZType) => true
@@ -238,6 +239,7 @@ object Cast extends QueryErrorsBase {
     case (_: StringType, TimestampType) => true
     case (BooleanType, TimestampType) => true
     case (DateType, TimestampType) => true
+    case (_: NumericType, _: TimeType) => true
     case (_: NumericType, TimestampType) => true
     case (TimestampNTZType, TimestampType) => true
 
@@ -410,6 +412,8 @@ object Cast extends QueryErrorsBase {
     case (DateType, TimestampType) => false
     case (DateType, _) => true
     case (_, CalendarIntervalType) => true
+
+    case (_: NumericType, _: TimeType) => true
 
     case (_, to: DecimalType) if !canNullSafeCastToDecimal(from, to) => true
     case (_: FractionalType, _: IntegralType) => true  // NaN, infinity
@@ -784,6 +788,62 @@ case class Cast(
         buildCast[UTF8String](_, s => DateTimeUtils.stringToTimeAnsi(s, getContextOrNull()))
       } else {
         buildCast[UTF8String](_, s => DateTimeUtils.stringToTime(s).orNull)
+      }
+    case ByteType =>
+      if (ansiEnabled) {
+        buildCast[Byte](_, b =>
+          DateTimeUtils.integralToTimeAnsi(b.toLong, to.precision, getContextOrNull()))
+      } else {
+        buildCast[Byte](_, b =>
+          DateTimeUtils.integralToTime(b.toLong, to.precision).orNull)
+      }
+    case ShortType =>
+      if (ansiEnabled) {
+        buildCast[Short](_, s =>
+          DateTimeUtils.integralToTimeAnsi(s.toLong, to.precision, getContextOrNull()))
+      } else {
+        buildCast[Short](_, s =>
+          DateTimeUtils.integralToTime(s.toLong, to.precision).orNull)
+      }
+    case IntegerType =>
+      if (ansiEnabled) {
+        buildCast[Int](_, i =>
+          DateTimeUtils.integralToTimeAnsi(i.toLong, to.precision, getContextOrNull()))
+      } else {
+        buildCast[Int](_, i =>
+          DateTimeUtils.integralToTime(i.toLong, to.precision).orNull)
+      }
+    case LongType =>
+      if (ansiEnabled) {
+        buildCast[Long](_, l =>
+          DateTimeUtils.integralToTimeAnsi(l, to.precision, getContextOrNull()))
+      } else {
+        buildCast[Long](_, l =>
+          DateTimeUtils.integralToTime(l, to.precision).orNull)
+      }
+    case DecimalType() =>
+      if (ansiEnabled) {
+        buildCast[Decimal](_, d =>
+          DateTimeUtils.decimalToTimeAnsi(d, to.precision, getContextOrNull()))
+      } else {
+        buildCast[Decimal](_, d =>
+          DateTimeUtils.decimalToTime(d, to.precision).orNull)
+      }
+    case DoubleType =>
+      if (ansiEnabled) {
+        buildCast[Double](_, d =>
+          doubleToTimeAnsi(d, to.precision, getContextOrNull()))
+      } else {
+        buildCast[Double](_, d =>
+          doubleToTime(d, to.precision).orNull)
+      }
+    case FloatType =>
+      if (ansiEnabled) {
+        buildCast[Float](_, f =>
+          doubleToTimeAnsi(f.toDouble, to.precision, getContextOrNull()))
+      } else {
+        buildCast[Float](_, f =>
+          doubleToTime(f.toDouble, to.precision).orNull)
       }
     case _: TimeType =>
       buildCast[Long](_, nanos => DateTimeUtils.truncateTimeToPrecision(nanos, to.precision))
@@ -1455,6 +1515,86 @@ case class Cast(
           } else {
             code"""
               scala.Option<Long> $longOpt = $dateTimeUtilsCls.stringToTime($c);
+              if ($longOpt.isDefined()) {
+                $evPrim = ((Long) $longOpt.get()).longValue();
+              } else {
+                $evNull = true;
+              }
+            """
+          }
+      case _: IntegralType =>
+        val longOpt = ctx.freshVariable("longOpt", classOf[Option[Long]])
+        (c, evPrim, evNull) =>
+          if (ansiEnabled) {
+            val errorContext = getContextOrNullCode(ctx)
+            code"""
+              $evPrim =
+                $dateTimeUtilsCls.integralToTimeAnsi((long) $c, ${to.precision}, $errorContext);
+            """
+          } else {
+            code"""
+              scala.Option<Long> $longOpt =
+                $dateTimeUtilsCls.integralToTime((long) $c, ${to.precision});
+              if ($longOpt.isDefined()) {
+                $evPrim = ((Long) $longOpt.get()).longValue();
+              } else {
+                $evNull = true;
+              }
+            """
+          }
+      case _: DecimalType =>
+        val longOpt = ctx.freshVariable("longOpt", classOf[Option[Long]])
+        (c, evPrim, evNull) =>
+          if (ansiEnabled) {
+            val errorContext = getContextOrNullCode(ctx)
+            code"""
+              $evPrim =
+                $dateTimeUtilsCls.decimalToTimeAnsi($c, ${to.precision}, $errorContext);
+            """
+          } else {
+            code"""
+              scala.Option<Long> $longOpt =
+                $dateTimeUtilsCls.decimalToTime($c, ${to.precision});
+              if ($longOpt.isDefined()) {
+                $evPrim = ((Long) $longOpt.get()).longValue();
+              } else {
+                $evNull = true;
+              }
+            """
+          }
+      case _: DoubleType =>
+        val longOpt = ctx.freshVariable("longOpt", classOf[Option[Long]])
+        (c, evPrim, evNull) =>
+          if (ansiEnabled) {
+            val errorContext = getContextOrNullCode(ctx)
+            code"""
+            $evPrim =
+              $dateTimeUtilsCls.doubleToTimeAnsi((double) $c, ${to.precision}, $errorContext);
+          """
+          } else {
+            code"""
+            scala.Option<Long> $longOpt =
+              $dateTimeUtilsCls.doubleToTime((double) $c, ${to.precision});
+            if ($longOpt.isDefined()) {
+              $evPrim = ((Long) $longOpt.get()).longValue();
+            } else {
+              $evNull = true;
+            }
+          """
+          }
+      case _: FloatType =>
+        val longOpt = ctx.freshVariable("longOpt", classOf[Option[Long]])
+        (c, evPrim, evNull) =>
+          if (ansiEnabled) {
+            val errorContext = getContextOrNullCode(ctx)
+            code"""
+              $evPrim =
+                $dateTimeUtilsCls.doubleToTimeAnsi((double) $c, ${to.precision}, $errorContext);
+            """
+          } else {
+            code"""
+              scala.Option<Long> $longOpt =
+                $dateTimeUtilsCls.doubleToTime((double) $c, ${to.precision});
               if ($longOpt.isDefined()) {
                 $evPrim = ((Long) $longOpt.get()).longValue();
               } else {
