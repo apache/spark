@@ -17,12 +17,40 @@
 
 package org.apache.spark.sql.catalyst.expressions.st
 
+import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.expressions.objects._
 import org.apache.spark.sql.catalyst.trees._
 import org.apache.spark.sql.catalyst.util.{Geography, Geometry, STUtils}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
+/**
+ * ST expressions are behind a feature flag while the geospatial module is under development.
+ */
+
+private[sql] case class GeospatialGuard(child: Expression)
+    extends UnaryExpression
+    with CodegenFallback {
+
+  override def nullable: Boolean = child.nullable
+  override def dataType: DataType = child.dataType
+  override def prettyName: String = child.prettyName
+  override protected def withNewChildInternal(newChild: Expression): GeospatialGuard =
+    copy(child = newChild)
+
+  override def eval(input: InternalRow): Any = {
+    if (!SQLConf.get.geospatialEnabled) {
+      throw new AnalysisException(
+        errorClass = "UNSUPPORTED_FEATURE.GEOSPATIAL_DISABLED",
+        messageParameters = Map.empty
+      )
+    }
+    child.eval(input)
+  }
+}
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // This file defines expressions for geospatial operations.
@@ -68,13 +96,13 @@ case class ST_AsBinary(geo: Expression)
     TypeCollection(GeographyType, GeometryType)
   )
 
-  override lazy val replacement: Expression = StaticInvoke(
+  override lazy val replacement: Expression = GeospatialGuard(StaticInvoke(
     classOf[STUtils],
     BinaryType,
     "stAsBinary",
     Seq(geo),
     returnNullable = false
-  )
+  ))
 
   override def prettyName: String = "st_asbinary"
 
@@ -114,13 +142,13 @@ case class ST_GeogFromWKB(wkb: Expression)
 
   override def inputTypes: Seq[AbstractDataType] = Seq(BinaryType)
 
-  override lazy val replacement: Expression = StaticInvoke(
+  override lazy val replacement: Expression = GeospatialGuard(StaticInvoke(
     classOf[STUtils],
     GeographyType(ExpressionDefaults.DEFAULT_GEOGRAPHY_SRID),
     "stGeogFromWKB",
     Seq(wkb),
     returnNullable = false
-  )
+  ))
 
   override def prettyName: String = "st_geogfromwkb"
 
@@ -158,13 +186,13 @@ case class ST_GeomFromWKB(wkb: Expression)
 
   override def inputTypes: Seq[AbstractDataType] = Seq(BinaryType)
 
-  override lazy val replacement: Expression = StaticInvoke(
+  override lazy val replacement: Expression = GeospatialGuard(StaticInvoke(
     classOf[STUtils],
     GeometryType(ExpressionDefaults.DEFAULT_GEOMETRY_SRID),
     "stGeomFromWKB",
     Seq(wkb),
     returnNullable = false
-  )
+  ))
 
   override def prettyName: String = "st_geomfromwkb"
 
@@ -208,13 +236,13 @@ case class ST_Srid(geo: Expression)
     TypeCollection(GeographyType, GeometryType)
   )
 
-  override lazy val replacement: Expression = StaticInvoke(
+  override lazy val replacement: Expression = GeospatialGuard(StaticInvoke(
     classOf[STUtils],
     IntegerType,
     "stSrid",
     Seq(geo),
     returnNullable = false
-  )
+  ))
 
   override def prettyName: String = "st_srid"
 
@@ -258,13 +286,13 @@ case class ST_SetSrid(geo: Expression, srid: Expression)
       IntegerType
     )
 
-  override lazy val replacement: Expression = StaticInvoke(
+  override lazy val replacement: Expression = GeospatialGuard(StaticInvoke(
     classOf[STUtils],
     STExpressionUtils.geospatialTypeWithSrid(geo.dataType, srid),
     "stSetSrid",
     Seq(geo, srid),
     returnNullable = false
-  )
+  ))
 
   override def prettyName: String = "st_setsrid"
 

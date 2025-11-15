@@ -17,7 +17,9 @@
 
 package org.apache.spark.sql.catalyst.expressions.st
 
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 private[sql] object STExpressionUtils {
@@ -26,6 +28,7 @@ private[sql] object STExpressionUtils {
    * Checks if the given data type is a geospatial type (i.e. GeometryType or GeographyType).
    */
   def isGeoSpatialType(dt: DataType): Boolean = dt match {
+    case _ if !SQLConf.get.geospatialEnabled => false
     case _: GeometryType | _: GeographyType => true
     case _ => false
   }
@@ -36,6 +39,11 @@ private[sql] object STExpressionUtils {
    */
   def geospatialTypeWithSrid(sourceType: DataType, srid: Expression): DataType = {
     sourceType match {
+      case _ if !SQLConf.get.geospatialEnabled =>
+        throw new AnalysisException(
+          errorClass = "UNSUPPORTED_FEATURE.GEOSPATIAL_DISABLED",
+          messageParameters = Map.empty
+        )
       case _: GeometryType =>
         geometryTypeWithSrid(srid)
       case _: GeographyType =>

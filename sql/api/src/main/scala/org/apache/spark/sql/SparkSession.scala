@@ -806,6 +806,10 @@ abstract class SparkSession extends Serializable with Closeable {
       SparkSession.setActiveSession(old)
     }
   }
+
+  lazy val geospatialEnabled: Boolean = {
+    conf.getOption("spark.sql.geospatial.enabled").exists(_.toBoolean)
+  }
 }
 
 object SparkSession extends SparkSessionCompanion {

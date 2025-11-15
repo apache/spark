@@ -163,19 +163,19 @@ object GeographyType extends SpatialType {
    * Default CRS value for GeographyType depends on storage specification. Parquet and Iceberg use
    * OGC:CRS84, which translates to SRID 4326 here.
    */
-  final val GEOGRAPHY_DEFAULT_SRID = 4326
-  final val GEOGRAPHY_DEFAULT_CRS = "OGC:CRS84"
+  final lazy val GEOGRAPHY_DEFAULT_SRID = 4326
+  final lazy val GEOGRAPHY_DEFAULT_CRS = "OGC:CRS84"
 
   // The default edge interpolation algorithm value for GeographyType.
-  final val GEOGRAPHY_DEFAULT_ALGORITHM = EdgeInterpolationAlgorithm.SPHERICAL
+  final lazy val GEOGRAPHY_DEFAULT_ALGORITHM = EdgeInterpolationAlgorithm.SPHERICAL
 
   // Another way to represent the default parquet crs value (OGC:CRS84).
-  final val GEOGRAPHY_DEFAULT_EPSG_CRS = s"EPSG:$GEOGRAPHY_DEFAULT_SRID"
+  final lazy val GEOGRAPHY_DEFAULT_EPSG_CRS = s"EPSG:$GEOGRAPHY_DEFAULT_SRID"
 
   /**
    * The default concrete GeographyType in SQL.
    */
-  private final val GEOGRAPHY_MIXED_TYPE: GeographyType =
+  private final lazy val GEOGRAPHY_MIXED_TYPE: GeographyType =
     GeographyType(MIXED_CRS, GEOGRAPHY_DEFAULT_ALGORITHM)
 
   /** Returns whether the given SRID is supported. */
@@ -187,6 +187,7 @@ object GeographyType extends SpatialType {
    * Constructors for GeographyType.
    */
   def apply(srid: Int): GeographyType = {
+    assertGeospatialEnabled()
     val crs = GeographicSpatialReferenceSystemMapper.getStringId(srid)
     if (crs == null) {
       throw new SparkIllegalArgumentException(
@@ -197,6 +198,7 @@ object GeographyType extends SpatialType {
   }
 
   def apply(crs: String): GeographyType = {
+    assertGeospatialEnabled()
     crs match {
       case "ANY" =>
         // Special value "ANY" is used for mixed SRID values.
@@ -210,6 +212,7 @@ object GeographyType extends SpatialType {
   }
 
   def apply(crs: String, algorithm: String): GeographyType = {
+    assertGeospatialEnabled()
     EdgeInterpolationAlgorithm.fromString(algorithm) match {
       case Some(alg) => GeographyType(crs, alg)
       case None =>
@@ -220,6 +223,7 @@ object GeographyType extends SpatialType {
   }
 
   def apply(crs: String, algorithm: EdgeInterpolationAlgorithm): GeographyType = {
+    assertGeospatialEnabled()
     new GeographyType(crs, algorithm)
   }
 
