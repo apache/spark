@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.execution.metric.SQLMetrics
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 /**
@@ -63,7 +64,20 @@ case class GenerateExec(
     child: SparkPlan)
   extends UnaryExecNode with CodegenSupport {
 
-  override def output: Seq[Attribute] = requiredChildOutput ++ generatorOutput
+  override def output: Seq[Attribute] = requiredChildOutput ++ correctedGeneratorOutput
+
+  /**
+   * SPARK-47230: Create corrected generator output attributes with data types from the
+   * bound generator's element schema. This ensures projections use the correct ordinals
+   * after schema pruning.
+   */
+  private lazy val correctedGeneratorOutput: Seq[Attribute] = {
+    val elementFields = boundGenerator.elementSchema.fields
+    generatorOutput.zip(elementFields).map { case (attr, field) =>
+      // Create a new attribute with the correct data type from the generator's schema
+      attr.withDataType(field.dataType)
+    }
+  }
 
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
@@ -72,11 +86,31 @@ case class GenerateExec(
 
   override def outputPartitioning: Partitioning = child.outputPartitioning
 
-  lazy val boundGenerator: Generator = BindReferences.bindReference(generator, child.output)
+  lazy val boundGenerator: Generator = {
+    try {
+      BindReferences.bindReference(generator, child.output)
+    } catch {
+      case _: IllegalStateException =>
+        val childOutput = child.output
+        val resolver = SQLConf.get.resolver
+        val remapped = generator.transform {
+          case attr: AttributeReference =>
+            childOutput
+              .find(_.exprId == attr.exprId)
+              .orElse(childOutput.find { o =>
+                resolver(o.name, attr.name) && o.dataType == attr.dataType
+              })
+              .orElse(childOutput.find(_.dataType == attr.dataType))
+              .getOrElse(attr)
+        }.asInstanceOf[Generator]
+        BindReferences.bindReference(remapped, childOutput)
+    }
+  }
 
   protected override def doExecute(): RDD[InternalRow] = {
     // boundGenerator.terminate() should be triggered after all of the rows in the partition
     val numOutputRows = longMetric("numOutputRows")
+
     child.execute().mapPartitionsWithIndexInternal { (index, iter) =>
       boundGenerator.foreach {
         case n: Nondeterministic => n.initialize(index)
