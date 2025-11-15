@@ -172,6 +172,16 @@ class RocksDBStateMachine(
     }
   }
 
+  // Return the task ID from the active TaskContext if exists for logging purposes
+  private def taskID: String = {
+    val taskContext = TaskContext.get()
+    if (taskContext != null) {
+      taskContext.taskAttemptId().toString
+    } else {
+      "N/A"
+    }
+  }
+
   /**
    * Validates a state operation and updates the internal state if the transition is legal.
    *
@@ -217,7 +227,8 @@ class RocksDBStateMachine(
     logInfo(log"Transitioned state from ${MDC(LogKeys.STATE_STORE_STATE, oldState)} " +
       log"to ${MDC(LogKeys.STATE_STORE_STATE, newState)} " +
       log"with operation ${MDC(LogKeys.OPERATION, operation.toString)} " +
-      log"for StateStoreId ${MDC(LogKeys.STATE_STORE_ID, stateStoreId)}")
+      log"for StateStoreId ${MDC(LogKeys.STATE_STORE_ID, stateStoreId)}" +
+      log"by TaskID ${MDC(LogKeys.TASK_ID, taskID)}")
     (oldState, newState)
   }
 
@@ -231,6 +242,8 @@ class RocksDBStateMachine(
   def verifyStamp(stamp: Long): Unit = {
     val currentStamp = currentValidStamp.get()
     if (stamp != currentStamp) {
+      logWarning(log"Invalid stamp=${MDC(LogKeys.STAMP, stamp)} " +
+        log"used by TaskID=${MDC(LogKeys.TASK_ID, taskID)}")
       throw StateStoreErrors.invalidStamp(stamp, currentStamp)
     }
   }
