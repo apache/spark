@@ -29,7 +29,9 @@ object State extends Logging {
    * @param graph The graph to reset.
    * @param env The current update context.
    */
-  private def findElementsToReset(graph: DataflowGraph, env: PipelineUpdateContext): Seq[Input] = {
+  private def findElementsToReset(
+      graph: DataflowGraph,
+      env: PipelineUpdateContext): Seq[GraphElement] = {
     // If tableFilter is an instance of SomeTables, this is a refresh selection and all tables
     // to reset should be resettable; Otherwise, this is a full graph update, and we reset all
     // tables that are resettable.
@@ -71,8 +73,8 @@ object State extends Logging {
    * - Clearing checkpoint data
    * - Truncating table data
    */
-  def reset(resolvedGraph: DataflowGraph, env: PipelineUpdateContext): Seq[Input] = {
-    val elementsToReset: Seq[Input] = findElementsToReset(resolvedGraph, env)
+  def reset(resolvedGraph: DataflowGraph, env: PipelineUpdateContext): Seq[GraphElement] = {
+    val elementsToReset: Seq[GraphElement] = findElementsToReset(resolvedGraph, env)
 
     elementsToReset.foreach {
       case f: ResolvedFlow => reset(f, env, resolvedGraph)

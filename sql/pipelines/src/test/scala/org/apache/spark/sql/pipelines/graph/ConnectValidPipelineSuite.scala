@@ -411,7 +411,7 @@ class ConnectValidPipelineSuite extends PipelineTest with SharedSparkSession {
       mem.addData(1, 2)
       registerPersistedView("complete-view", query = dfFlowFunc(Seq(1, 2).toDF("x")))
       registerPersistedView("incremental-view", query = dfFlowFunc(mem.toDF()))
-      registerTable("`complete-table`", query = Option(readFlowFunc("complete-view")))
+      registerTable("`complete-table`", query = Option(readFlowFunc("`complete-view`")))
       registerTable("`incremental-table`")
       registerFlow(
         "`incremental-table`",
