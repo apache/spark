@@ -22,6 +22,7 @@ from pathlib import Path
 
 from pyspark.errors import PySparkException
 from pyspark.testing.connectutils import (
+    ReusedConnectTestCase,
     should_test_connect,
     connect_requirement_message,
 )
@@ -45,7 +46,7 @@ if should_test_connect and have_yaml:
     not should_test_connect or not have_yaml,
     connect_requirement_message or yaml_requirement_message,
 )
-class CLIUtilityTests(unittest.TestCase):
+class CLIUtilityTests(ReusedConnectTestCase):
     def test_load_pipeline_spec(self):
         with tempfile.NamedTemporaryFile(mode="w") as tmpfile:
             tmpfile.write(
@@ -294,7 +295,9 @@ class CLIUtilityTests(unittest.TestCase):
                 )
 
             registry = LocalGraphElementRegistry()
-            register_definitions(outer_dir / "pipeline.yaml", registry, spec)
+            register_definitions(
+                outer_dir / "pipeline.yaml", registry, spec, self.spark, "test_graph_id"
+            )
             self.assertEqual(len(registry.outputs), 1)
             self.assertEqual(registry.outputs[0].name, "mv1")
 
@@ -315,7 +318,9 @@ class CLIUtilityTests(unittest.TestCase):
 
             registry = LocalGraphElementRegistry()
             with self.assertRaises(RuntimeError) as context:
-                register_definitions(outer_dir / "pipeline.yml", registry, spec)
+                register_definitions(
+                    outer_dir / "pipeline.yml", registry, spec, self.spark, "test_graph_id"
+                )
             self.assertIn("This is a test exception", str(context.exception))
 
     def test_register_definitions_unsupported_file_extension_matches_glob(self):
@@ -334,7 +339,7 @@ class CLIUtilityTests(unittest.TestCase):
 
             registry = LocalGraphElementRegistry()
             with self.assertRaises(PySparkException) as context:
-                register_definitions(outer_dir, registry, spec)
+                register_definitions(outer_dir, registry, spec, self.spark, "test_graph_id")
             self.assertEqual(
                 context.exception.getCondition(), "PIPELINE_UNSUPPORTED_DEFINITIONS_FILE_EXTENSION"
             )
@@ -382,6 +387,8 @@ class CLIUtilityTests(unittest.TestCase):
                         configuration={},
                         libraries=[LibrariesGlob(include="defs.py")],
                     ),
+                    self.spark,
+                    "test_graph_id",
                 )
 
     def test_full_refresh_all_conflicts_with_full_refresh(self):

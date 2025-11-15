@@ -24,13 +24,20 @@ import java.util.concurrent.Executor
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 import scala.util.Properties
+import scala.util.control.NonFatal
 
+import com.google.protobuf
+import com.google.protobuf.ByteString
 import io.grpc._
 
 import org.apache.spark.SparkBuildInfo.{spark_version => SPARK_VERSION}
+import org.apache.spark.SparkThrowable
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.UserContext
+import org.apache.spark.internal.Logging
+import org.apache.spark.internal.LogKeys.{ERROR, RATIO, SIZE, TIME}
+import org.apache.spark.sql.connect.RuntimeConfig
 import org.apache.spark.sql.connect.common.ProtoUtils
 import org.apache.spark.sql.connect.common.config.ConnectCommon
 import org.apache.spark.util.SparkSystemUtils
@@ -40,7 +47,8 @@ import org.apache.spark.util.SparkSystemUtils
  */
 private[sql] class SparkConnectClient(
     private[sql] val configuration: SparkConnectClient.Configuration,
-    private[sql] val channel: ManagedChannel) {
+    private[sql] val channel: ManagedChannel)
+    extends Logging {
 
   private val userContext: UserContext = configuration.userContext
 
@@ -63,6 +71,70 @@ private[sql] class SparkConnectClient(
   // concurrent Spark sessions of the same user. If the channel is closed, creating
   // a new client will create a new session ID.
   private[sql] val sessionId: String = configuration.sessionId.getOrElse(UUID.randomUUID.toString)
+
+  private val conf: RuntimeConfig = new RuntimeConfig(this)
+
+  // Cached plan compression options.
+  private var _planCompressionOptions: Option[Option[PlanCompressionOptions]] = None
+
+  // Get the plan compression options. The options are cached after the first call.
+  private[sql] def getPlanCompressionOptions: Option[PlanCompressionOptions] = {
+    _planCompressionOptions match {
+      case Some(options) => options
+      case None =>
+        val options =
+          try {
+            Some(
+              PlanCompressionOptions(
+                thresholdBytes =
+                  conf.get("spark.connect.session.planCompression.threshold").toInt,
+                algorithm = conf.get("spark.connect.session.planCompression.defaultAlgorithm")))
+          } catch {
+            // Disable plan compression if the server does not support it. Other exceptions are not
+            // swallowed.
+            case e: NoSuchElementException =>
+              logWarning(
+                log"Plan compression is disabled because the server does not support it",
+                e)
+              None
+            case e: SparkThrowable
+                if e.getCondition == "INVALID_CONF_VALUE"
+                  || e.getCondition == "SQL_CONF_NOT_FOUND"
+                  || e.getCondition == "CONFIG_NOT_AVAILABLE" =>
+              logWarning(
+                log"Plan compression is disabled because the server does not support it",
+                e)
+              None
+          }
+        _planCompressionOptions = Some(options)
+        options
+    }
+  }
+
+  // For testing and internal use only.
+  private[sql] def setPlanCompressionOptions(
+      planCompressionOptions: Option[PlanCompressionOptions]): Unit = {
+    _planCompressionOptions = Some(planCompressionOptions)
+  }
+
+  /**
+   * Handle plan compression errors.
+   */
+  private def handlePlanCompressionErrors[E](fn: => E): E = {
+    try {
+      fn
+    } catch {
+      // If the server cannot parse the compressed plan, disable plan compression for subsequent
+      // requests on the session.
+      case e: SparkThrowable if e.getCondition == "CONNECT_INVALID_PLAN.CANNOT_PARSE" =>
+        logWarning(
+          log"Disabling plan compression for the session due to " +
+            log"CONNECT_INVALID_PLAN.CANNOT_PARSE error.")
+        setPlanCompressionOptions(None)
+        // Retry the code block without plan compression.
+        fn
+    }
+  }
 
   /**
    * Hijacks the stored server side session ID with the given suffix. Used for testing to make
@@ -121,6 +193,90 @@ private[sql] class SparkConnectClient(
   }
 
   /**
+   * Try to compress the plan if it exceeds the threshold defined in the planCompressionOptions.
+   * Return the original plan if compression is disabled, not needed, or not effective.
+   */
+  private def tryCompressPlan(plan: proto.Plan): proto.Plan = {
+    def tryCompressMessage(
+        message: protobuf.Message,
+        opType: proto.Plan.CompressedOperation.OpType,
+        options: PlanCompressionOptions): Option[proto.Plan.CompressedOperation] = {
+      val serialized = message.toByteArray
+      if (serialized.length > options.thresholdBytes) {
+        try {
+          import com.github.luben.zstd.Zstd
+
+          val startTime = System.nanoTime()
+          val compressed = Zstd.compress(serialized)
+          val duration = (System.nanoTime() - startTime) / 1e9
+          val savingRatio = 1 - compressed.length.toDouble / serialized.length
+          logDebug(
+            log"Plan compression: original_size=${MDC(SIZE, serialized.length)}, " +
+              log"compressed_size=${MDC(SIZE, compressed.length)}, " +
+              log"saving_ratio=${MDC(RATIO, savingRatio)}, " +
+              log"duration_s=${MDC(TIME, duration)}")
+          if (compressed.length < serialized.length) {
+            return Some(
+              proto.Plan.CompressedOperation
+                .newBuilder()
+                .setData(ByteString.copyFrom(compressed))
+                .setOpType(opType)
+                .setCompressionCodec(proto.CompressionCodec.COMPRESSION_CODEC_ZSTD)
+                .build())
+          } else {
+            logDebug(log"Plan compression not effective. Using original plan.")
+          }
+        } catch {
+          case _: NoClassDefFoundError | _: ClassNotFoundException =>
+            logInfo(log"Zstd library not available. Disabling plan compression.")
+            setPlanCompressionOptions(None)
+          case NonFatal(e) =>
+            logWarning(
+              log"Failed to compress plan: ${MDC(ERROR, e.getMessage)}. Using original " +
+                log"plan and disabling plan compression.")
+            setPlanCompressionOptions(None)
+        }
+      }
+      None
+    }
+
+    def maybeCompressPlan(
+        plan: proto.Plan,
+        message: protobuf.Message,
+        opType: proto.Plan.CompressedOperation.OpType,
+        clearFn: proto.Plan.Builder => proto.Plan.Builder,
+        options: PlanCompressionOptions): proto.Plan = {
+      tryCompressMessage(message, opType, options) match {
+        case Some(compressedOperation) =>
+          clearFn(proto.Plan.newBuilder(plan)).setCompressedOperation(compressedOperation).build()
+        case None => plan
+      }
+    }
+
+    getPlanCompressionOptions match {
+      case Some(options) if options.algorithm == "ZSTD" && options.thresholdBytes >= 0 =>
+        plan.getOpTypeCase match {
+          case proto.Plan.OpTypeCase.ROOT =>
+            maybeCompressPlan(
+              plan,
+              plan.getRoot,
+              proto.Plan.CompressedOperation.OpType.OP_TYPE_RELATION,
+              _.clearRoot(),
+              options)
+          case proto.Plan.OpTypeCase.COMMAND =>
+            maybeCompressPlan(
+              plan,
+              plan.getCommand,
+              proto.Plan.CompressedOperation.OpType.OP_TYPE_COMMAND,
+              _.clearCommand(),
+              options)
+          case _ => plan
+        }
+      case _ => plan
+    }
+  }
+
+  /**
    * Execute the plan and return response iterator.
    *
    * It returns CloseableIterator. For resource management it is better to close it once you are
@@ -131,41 +287,46 @@ private[sql] class SparkConnectClient(
       plan: proto.Plan,
       operationId: Option[String] = None): CloseableIterator[proto.ExecutePlanResponse] = {
     artifactManager.uploadAllClassFileArtifacts()
-    val request = proto.ExecutePlanRequest
-      .newBuilder()
-      .setPlan(plan)
-      .setUserContext(userContext)
-      .setSessionId(sessionId)
-      .setClientType(userAgent)
-      .addAllTags(tags.get.toSeq.asJava)
-
-    // Add request option to allow result chunking.
-    if (configuration.allowArrowBatchChunking) {
-      val chunkingOptionsBuilder = proto.ResultChunkingOptions
+    handlePlanCompressionErrors {
+      // Compress the plan if needed.
+      val maybeCompressedPlan = tryCompressPlan(plan)
+      val request = proto.ExecutePlanRequest
         .newBuilder()
-        .setAllowArrowBatchChunking(true)
-      configuration.preferredArrowChunkSize.foreach { size =>
-        chunkingOptionsBuilder.setPreferredArrowChunkSize(size)
-      }
-      request.addRequestOptions(
-        proto.ExecutePlanRequest.RequestOption
-          .newBuilder()
-          .setResultChunkingOptions(chunkingOptionsBuilder.build())
-          .build())
-    }
+        .setPlan(maybeCompressedPlan)
+        .setUserContext(userContext)
+        .setSessionId(sessionId)
+        .setClientType(userAgent)
+        .addAllTags(tags.get.toSeq.asJava)
 
-    serverSideSessionId.foreach(session => request.setClientObservedServerSideSessionId(session))
-    operationId.foreach { opId =>
-      require(
-        isValidUUID(opId),
-        s"Invalid operationId: $opId. The id must be an UUID string of " +
-          "the format `00112233-4455-6677-8899-aabbccddeeff`")
-      request.setOperationId(opId)
-    }
-    if (configuration.useReattachableExecute) {
-      bstub.executePlanReattachable(request.build())
-    } else {
-      bstub.executePlan(request.build())
+      // Add request option to allow result chunking.
+      if (configuration.allowArrowBatchChunking) {
+        val chunkingOptionsBuilder = proto.ResultChunkingOptions
+          .newBuilder()
+          .setAllowArrowBatchChunking(true)
+        configuration.preferredArrowChunkSize.foreach { size =>
+          chunkingOptionsBuilder.setPreferredArrowChunkSize(size)
+        }
+        request.addRequestOptions(
+          proto.ExecutePlanRequest.RequestOption
+            .newBuilder()
+            .setResultChunkingOptions(chunkingOptionsBuilder.build())
+            .build())
+      }
+
+      serverSideSessionId.foreach(session =>
+        request.setClientObservedServerSideSessionId(session))
+      operationId.foreach { opId =>
+        require(
+          isValidUUID(opId),
+          s"Invalid operationId: $opId. The id must be an UUID string of " +
+            "the format `00112233-4455-6677-8899-aabbccddeeff`")
+        request.setOperationId(opId)
+      }
+      if (configuration.useReattachableExecute) {
+        bstub.executePlanReattachable(request.build())
+      } else {
+        bstub.executePlan(request.build())
+      }
     }
   }
 
@@ -196,71 +357,87 @@ private[sql] class SparkConnectClient(
       plan: Option[proto.Plan] = None,
       explainMode: Option[proto.AnalyzePlanRequest.Explain.ExplainMode] = None)
       : proto.AnalyzePlanResponse = {
-    val builder = proto.AnalyzePlanRequest.newBuilder()
-    method match {
-      case proto.AnalyzePlanRequest.AnalyzeCase.SCHEMA =>
-        assert(plan.isDefined)
-        builder.setSchema(
-          proto.AnalyzePlanRequest.Schema
-            .newBuilder()
-            .setPlan(plan.get)
-            .build())
-      case proto.AnalyzePlanRequest.AnalyzeCase.EXPLAIN =>
-        if (explainMode.isEmpty) {
-          throw new IllegalArgumentException(s"ExplainMode is required in Explain request")
-        }
-        assert(plan.isDefined)
-        builder.setExplain(
-          proto.AnalyzePlanRequest.Explain
-            .newBuilder()
-            .setPlan(plan.get)
-            .setExplainMode(explainMode.get)
-            .build())
-      case proto.AnalyzePlanRequest.AnalyzeCase.IS_LOCAL =>
-        assert(plan.isDefined)
-        builder.setIsLocal(
-          proto.AnalyzePlanRequest.IsLocal
-            .newBuilder()
-            .setPlan(plan.get)
-            .build())
-      case proto.AnalyzePlanRequest.AnalyzeCase.IS_STREAMING =>
-        assert(plan.isDefined)
-        builder.setIsStreaming(
-          proto.AnalyzePlanRequest.IsStreaming
-            .newBuilder()
-            .setPlan(plan.get)
-            .build())
-      case proto.AnalyzePlanRequest.AnalyzeCase.INPUT_FILES =>
-        assert(plan.isDefined)
-        builder.setInputFiles(
-          proto.AnalyzePlanRequest.InputFiles
-            .newBuilder()
-            .setPlan(plan.get)
-            .build())
-      case proto.AnalyzePlanRequest.AnalyzeCase.SPARK_VERSION =>
-        builder.setSparkVersion(proto.AnalyzePlanRequest.SparkVersion.newBuilder().build())
-      case other => throw new IllegalArgumentException(s"Unknown Analyze request $other")
+    handlePlanCompressionErrors {
+      val builder = proto.AnalyzePlanRequest.newBuilder()
+      // Compress the plan if needed.
+      val maybeCompressedPlan = plan match {
+        case Some(p) => Some(tryCompressPlan(p))
+        case None => None
+      }
+      method match {
+        case proto.AnalyzePlanRequest.AnalyzeCase.SCHEMA =>
+          assert(maybeCompressedPlan.isDefined)
+          builder.setSchema(
+            proto.AnalyzePlanRequest.Schema
+              .newBuilder()
+              .setPlan(maybeCompressedPlan.get)
+              .build())
+        case proto.AnalyzePlanRequest.AnalyzeCase.EXPLAIN =>
+          if (explainMode.isEmpty) {
+            throw new IllegalArgumentException(s"ExplainMode is required in Explain request")
+          }
+          assert(maybeCompressedPlan.isDefined)
+          builder.setExplain(
+            proto.AnalyzePlanRequest.Explain
+              .newBuilder()
+              .setPlan(maybeCompressedPlan.get)
+              .setExplainMode(explainMode.get)
+              .build())
+        case proto.AnalyzePlanRequest.AnalyzeCase.IS_LOCAL =>
+          assert(maybeCompressedPlan.isDefined)
+          builder.setIsLocal(
+            proto.AnalyzePlanRequest.IsLocal
+              .newBuilder()
+              .setPlan(maybeCompressedPlan.get)
+              .build())
+        case proto.AnalyzePlanRequest.AnalyzeCase.IS_STREAMING =>
+          assert(maybeCompressedPlan.isDefined)
+          builder.setIsStreaming(
+            proto.AnalyzePlanRequest.IsStreaming
+              .newBuilder()
+              .setPlan(maybeCompressedPlan.get)
+              .build())
+        case proto.AnalyzePlanRequest.AnalyzeCase.INPUT_FILES =>
+          assert(maybeCompressedPlan.isDefined)
+          builder.setInputFiles(
+            proto.AnalyzePlanRequest.InputFiles
+              .newBuilder()
+              .setPlan(maybeCompressedPlan.get)
+              .build())
+        case proto.AnalyzePlanRequest.AnalyzeCase.SPARK_VERSION =>
+          builder.setSparkVersion(proto.AnalyzePlanRequest.SparkVersion.newBuilder().build())
+        case other => throw new IllegalArgumentException(s"Unknown Analyze request $other")
+      }
+      analyze(builder)
     }
-    analyze(builder)
   }
 
   def sameSemantics(plan: proto.Plan, otherPlan: proto.Plan): proto.AnalyzePlanResponse = {
-    val builder = proto.AnalyzePlanRequest.newBuilder()
-    builder.setSameSemantics(
-      proto.AnalyzePlanRequest.SameSemantics
-        .newBuilder()
-        .setTargetPlan(plan)
-        .setOtherPlan(otherPlan))
-    analyze(builder)
+    handlePlanCompressionErrors {
+      val builder = proto.AnalyzePlanRequest.newBuilder()
+      // Compress the plan if needed.
+      val maybeCompressedPlan = tryCompressPlan(plan)
+      val otherMaybeCompressedPlan = tryCompressPlan(otherPlan)
+      builder.setSameSemantics(
+        proto.AnalyzePlanRequest.SameSemantics
+          .newBuilder()
+          .setTargetPlan(maybeCompressedPlan)
+          .setOtherPlan(otherMaybeCompressedPlan))
+      analyze(builder)
+    }
   }
 
   def semanticHash(plan: proto.Plan): proto.AnalyzePlanResponse = {
-    val builder = proto.AnalyzePlanRequest.newBuilder()
-    builder.setSemanticHash(
-      proto.AnalyzePlanRequest.SemanticHash
-        .newBuilder()
-        .setPlan(plan))
-    analyze(builder)
+    handlePlanCompressionErrors {
+      val builder = proto.AnalyzePlanRequest.newBuilder()
+      // Compress the plan if needed.
+      val maybeCompressedPlan = tryCompressPlan(plan)
+      builder.setSemanticHash(
+        proto.AnalyzePlanRequest.SemanticHash
+          .newBuilder()
+          .setPlan(maybeCompressedPlan))
+      analyze(builder)
+    }
   }
 
   private[sql] def analyze(
@@ -478,6 +655,9 @@ private[sql] class SparkConnectClient(
     new SparkConnectClient(newConfiguration, configuration.createChannel())
   }
 }
+
+// Options for plan compression
+case class PlanCompressionOptions(thresholdBytes: Int, algorithm: String)
 
 object SparkConnectClient {
 
