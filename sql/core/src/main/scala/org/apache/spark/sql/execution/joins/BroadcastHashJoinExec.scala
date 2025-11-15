@@ -129,7 +129,10 @@ case class BroadcastHashJoinExec(
         val hashed = broadcastRelation.value.asReadOnlyCopy()
         TaskContext.get().taskMetrics().incPeakExecutionMemory(hashed.estimatedSize)
         if (hashed == EmptyHashedRelation) {
-          streamedIter
+          streamedIter.map { row =>
+            numOutputRows += 1
+            row
+          }
         } else if (hashed == HashedRelationWithAllNullKeys) {
           Iterator.empty
         } else {

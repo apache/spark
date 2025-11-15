@@ -915,16 +915,27 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
           withTable("t1", "t2") {
             spark.range(4).write.saveAsTable("t1")
             spark.range(2).write.saveAsTable("t2")
-            val df = sql("SELECT * FROM t1 WHERE id NOT IN (SELECT id FROM t2)")
-            df.collect()
-            val plan = df.queryExecution.executedPlan
+            val df1 = sql("SELECT * FROM t1 WHERE id NOT IN (SELECT id FROM t2)")
+            df1.collect()
+            val plan1 = df1.queryExecution.executedPlan
 
-            val joins = plan.collect {
+            val joins1 = plan1.collect {
               case s: BroadcastHashJoinExec => s
             }
 
-            assert(joins.size === 1)
-            testMetricsInSparkPlanOperator(joins.head, Map("numOutputRows" -> 2))
+            assert(joins1.size === 1)
+            testMetricsInSparkPlanOperator(joins1.head, Map("numOutputRows" -> 2))
+
+            val df2 = sql("SELECT * FROM t1 WHERE id NOT IN (SELECT id FROM t2 WHERE 1 = 2)")
+            df2.collect()
+            val plan2 = df2.queryExecution.executedPlan
+
+            val joins2 = plan2.collect {
+              case s: BroadcastHashJoinExec => s
+            }
+
+            assert(joins2.size === 1)
+            testMetricsInSparkPlanOperator(joins2.head, Map("numOutputRows" -> 4))
           }
         }
       }
