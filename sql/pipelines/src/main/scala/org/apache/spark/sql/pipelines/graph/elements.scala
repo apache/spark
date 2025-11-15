@@ -268,4 +268,4 @@ case class SinkImpl(
    format: String,
    options: Map[String, String],
    origin: QueryOrigin
- ) extends Sink {}
+) extends Sink {}

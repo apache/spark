@@ -29,7 +29,7 @@ class CreateMaterializedViewAsSelectParserSuite
 
   test("Cannot create materialized view without subquery") {
     val ex = intercept[ParseException] {
-      parser.parsePlan(s"CREATE MATERIALIZED VIEW table")
+      parser.parsePlan(s"CREATE $datasetSqlSyntax table")
     }
     assert(ex.getMessage.contains(s"Unable to find query for CREATE $datasetSqlSyntax statement."))
   }

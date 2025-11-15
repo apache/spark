@@ -27,7 +27,7 @@ import org.apache.spark.sql.pipelines.graph.QueryOrigin
  * @param timestamp The time of the event
  * @param origin Where the event originated from
  * @param level Security level of the event
- * @param message A user friendly description of the event
+ * @param message A user-friendly description of the event
  * @param details The details of the event
  * @param error An error that occurred during the event
  */
@@ -38,8 +38,7 @@ case class PipelineEvent(
     level: EventLevel,
     message: String,
     details: EventDetails,
-    error: Option[Throwable]
-) {
+    error: Option[Throwable]) {
   /** Combines the message and error (if any) into a single string */
   def messageWithError: String = {
     if (error.nonEmpty) {
@@ -49,7 +48,7 @@ case class PipelineEvent(
           Option(throwable.getCause).map(getExceptionMessages).getOrElse(Nil)
       }
       val errorMessages = getExceptionMessages(error.get)
-      s"""${message}
+      s"""$message
          |Error: ${errorMessages.mkString("\n")}""".stripMargin
     } else {
       message

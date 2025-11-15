@@ -50,20 +50,26 @@ class GraphRegistrationContext(
     sinks += sinkDef
   }
 
-  def getViews(): Seq[View] = {
-    return views.toSeq
+  def getViews: Seq[View] = {
+    views.toSeq
   }
 
-  def getSinks: Seq[Sink] = sinks.toSeq
+  def getSinks: Seq[Sink] = {
+    sinks.toSeq
+  }
 
   def registerFlow(flowDef: UnresolvedFlow): Unit = {
     flows += flowDef.copy(sqlConf = defaultSqlConf ++ flowDef.sqlConf)
   }
 
+  private def isEmpty: Boolean = {
+    tables.isEmpty && views.collect { case v: PersistedView =>
+      v
+    }.isEmpty && sinks.isEmpty
+  }
+
   def toDataflowGraph: DataflowGraph = {
-    if (tables.isEmpty && views.collect { case v: PersistedView =>
-        v
-      }.isEmpty  && sinks.isEmpty) {
+    if (isEmpty) {
       throw new AnalysisException(
         errorClass = "RUN_EMPTY_PIPELINE",
         messageParameters = Map.empty)
@@ -137,11 +143,22 @@ class GraphRegistrationContext(
     }
   }
 
+  /**
+   * Throws an exception if the given flow's identifier is used by multiple flows.
+   *
+   * @param flow The flow to check.
+   * @param datasetType The type of dataset the flow writes to.
+   * @param flows All flows in the graph.
+   * @throws AnalysisException If the flow's identifier is used by multiple flows.
+   */
   private def assertFlowIdentifierIsUnique(
       flow: UnresolvedFlow,
       flows: Seq[UnresolvedFlow]): Unit = {
-    flows.groupBy(i => i.identifier).get(flow.identifier).filter(_.size > 1).foreach {
-      duplicateFlows =>
+    flows
+      .groupBy(i => i.identifier)
+      .get(flow.identifier)
+      .filter(_.size > 1)
+      .foreach { duplicateFlows =>
         val duplicateFlow = duplicateFlows.filter(_ != flow).head
         throw new AnalysisException(
           errorClass = "PIPELINE_DUPLICATE_IDENTIFIERS.FLOW",
