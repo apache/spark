@@ -1,4 +1,12 @@
-# Python Linting Rules for Apache Spark
+# Apache Spark Development Rules
+
+## 🚨 CRITICAL RULE: NEVER SKIP ANY CHECK 🚨
+
+**ABSOLUTE REQUIREMENT:**
+- **NEVER skip any check** - If a tool is missing, install it first
+- **NEVER assume a check will pass** - Always verify it passes
+- **NEVER commit without running ALL applicable checks**
+- **NEVER be lazy** - Run every check that CI will run
 
 ## CRITICAL: ALWAYS Run These Checks Before Committing/Pushing
 
@@ -34,13 +42,16 @@ If flake8 or mypy are not installed, install them FIRST:
 pip3 install flake8 mypy
 ```
 
-## CRITICAL RULES
+## CRITICAL RULES - NEVER SKIP ANY CHECK
 
-1. **NEVER commit without running all three checks** (black, flake8, mypy)
-2. **NEVER skip linting checks** - If tools are missing, install them first
-3. **NEVER push code that fails local linting** - CI will fail, wasting time
-4. **ALWAYS verify all three checks pass** before git commit
-5. If `./dev/lint-python` skips a check due to missing tool, use `python3 -m <tool>` directly
+1. **NEVER skip ANY check** - If a tool is missing, install it first, then run the check
+2. **NEVER commit without running ALL applicable checks** (black, flake8, mypy, license, packaging, scala, etc.)
+3. **NEVER assume a check will pass** - Always verify it actually passes
+4. **NEVER push code that fails local checks** - CI will fail, wasting everyone's time
+5. **NEVER be lazy** - Run every check that CI will run, locally first
+6. If `./dev/lint-python` skips a check due to missing tool, use `python3 -m <tool>` directly - DO NOT SKIP
+7. If a check seems unnecessary, run it anyway - CI will run it, so you should too
+8. **If you're unsure whether to run a check, RUN IT** - Better safe than sorry
 
 ## Pre-Commit Checklist (MANDATORY)
 
@@ -96,8 +107,15 @@ git commit -m "Fix: ..."
 git push
 ```
 
-## Remember
+## Remember - NEVER SKIP CHECKS
 
-**If you don't run flake8 and mypy before committing, CI will fail and waste everyone's time.**
-**Always verify all three checks pass before committing.**
+**🚨 CRITICAL: NEVER SKIP ANY CHECK 🚨**
+
+- If you don't run ALL checks before committing, CI will fail and waste everyone's time
+- If a tool is missing, install it - DO NOT skip the check
+- If a check seems redundant, run it anyway - CI will run it
+- If you're being lazy and want to skip a check, DON'T - run it
+- **When in doubt, RUN THE CHECK** - Better to spend 2 minutes locally than 40 minutes in CI
+
+**The only acceptable reason to skip a check is if it's physically impossible to run (e.g., requires hardware you don't have). Otherwise, RUN IT.**
 
