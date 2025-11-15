@@ -157,8 +157,13 @@ object StateSpec {
   def function[KeyType, ValueType, StateType, MappedType](
       mappingFunction: (Time, KeyType, Option[ValueType], State[StateType]) => Option[MappedType]
     ): StateSpec[KeyType, ValueType, StateType, MappedType] = {
-    SparkClosureCleaner.clean(mappingFunction, checkSerializable = true)
-    new StateSpecImpl(mappingFunction)
+    val cleanedFunction = if (Runtime.version().feature() > 21) {
+      SparkClosureCleaner.cleanAndRet(mappingFunction, checkSerializable = true)
+    } else {
+      SparkClosureCleaner.clean(mappingFunction, checkSerializable = true)
+      mappingFunction
+    }
+    new StateSpecImpl(cleanedFunction)
   }
 
   /**
@@ -175,10 +180,15 @@ object StateSpec {
   def function[KeyType, ValueType, StateType, MappedType](
       mappingFunction: (KeyType, Option[ValueType], State[StateType]) => MappedType
     ): StateSpec[KeyType, ValueType, StateType, MappedType] = {
-    SparkClosureCleaner.clean(mappingFunction, checkSerializable = true)
+    val cleanedFunction = if (Runtime.version().feature() > 21) {
+      SparkClosureCleaner.cleanAndRet(mappingFunction, checkSerializable = true)
+    } else {
+      SparkClosureCleaner.clean(mappingFunction, checkSerializable = true)
+      mappingFunction
+    }
     val wrappedFunction =
       (time: Time, key: KeyType, value: Option[ValueType], state: State[StateType]) => {
-        Some(mappingFunction(key, value, state))
+        Some(cleanedFunction(key, value, state))
       }
     new StateSpecImpl(wrappedFunction)
   }
