@@ -63,9 +63,7 @@ def initial_offset_func(reader: DataSourceStreamReader, outfile: IO) -> None:
     write_with_length(json.dumps(offset).encode("utf-8"), outfile)
 
 
-def latest_offset_with_limit_func(
-    reader: DataSourceStreamReader, infile: IO, outfile: IO
-) -> None:
+def latest_offset_with_limit_func(reader: DataSourceStreamReader, infile: IO, outfile: IO) -> None:
     """Handle latestOffset with admission control parameters, with backward compatibility."""
     import inspect
 
@@ -144,9 +142,7 @@ def send_batch_func(
     max_arrow_batch_size: int,
     data_source: DataSource,
 ) -> None:
-    batches = list(
-        records_to_arrow_batches(rows, max_arrow_batch_size, schema, data_source)
-    )
+    batches = list(records_to_arrow_batches(rows, max_arrow_batch_size, schema, data_source))
     if len(batches) != 0:
         write_int(NON_EMPTY_PYARROW_RECORD_BATCHES, outfile)
         write_int(SpecialLengths.START_ARROW_STREAM, outfile)
