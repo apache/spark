@@ -18,6 +18,7 @@
 """
 Worker that receives input from Piped RDD.
 """
+import datetime
 import itertools
 import os
 import sys
@@ -28,6 +29,7 @@ import itertools
 import json
 from typing import Any, Callable, Iterable, Iterator, Optional, Tuple
 import faulthandler
+import zoneinfo
 
 from pyspark.accumulators import (
     SpecialAccumulatorIds,
@@ -72,7 +74,7 @@ from pyspark.sql.pandas.serializers import (
     ArrowStreamUDTFSerializer,
     ArrowStreamArrowUDTFSerializer,
 )
-from pyspark.sql.pandas.types import to_arrow_type
+from pyspark.sql.pandas.types import to_arrow_type, TimestampType
 from pyspark.sql.types import (
     ArrayType,
     BinaryType,
@@ -3306,6 +3308,13 @@ def main(infile, outfile):
 
         if tracebackDumpIntervalSeconds is not None and int(tracebackDumpIntervalSeconds) > 0:
             faulthandler.dump_traceback_later(int(tracebackDumpIntervalSeconds), repeat=True)
+
+        tzname = os.environ.get("SPARK_SESSION_LOCAL_TIMEZONE", None)
+        if tzname is not None:
+            tz = zoneinfo.ZoneInfo(tzname)
+        else:
+            tz = datetime.datetime.now().astimezone().tzinfo
+        TimestampType.tz_info = tz
 
         check_python_version(infile)
 
