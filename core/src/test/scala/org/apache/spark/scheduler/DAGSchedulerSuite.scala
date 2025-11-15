@@ -244,6 +244,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
       executorId: String): Option[ExecutorDecommissionState] = {
       executorsPendingDecommission.get(executorId)
     }
+    override def markExecutorPendingToRemove(executorId: String): Unit = {}
   }
 
   /**
@@ -965,6 +966,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
         decommissionInfo: ExecutorDecommissionInfo): Unit = {}
       override def getExecutorDecommissionState(
         executorId: String): Option[ExecutorDecommissionState] = None
+      override def markExecutorPendingToRemove(executorId: String): Unit = {}
     }
     val noKillScheduler = new DAGScheduler(
       sc,
