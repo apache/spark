@@ -36,6 +36,7 @@ RUN apt-get update && apt-get install -y \
     gfortran \
     git \
     gnupg \
+    libbrotli-dev \
     libcurl4-openssl-dev \
     libfontconfig1-dev \
     libfreetype6-dev \
@@ -44,13 +45,16 @@ RUN apt-get update && apt-get install -y \
     libharfbuzz-dev \
     libjpeg-dev \
     liblapack-dev \
+    liblz4-dev \
     libopenblas-dev \
     libpng-dev \
     libpython3-dev \
+    libsnappy-dev \
     libssl-dev \
     libtiff5-dev \
     libwebp-dev \
     libxml2-dev \
+    libzstd-dev \
     openjdk-17-jdk-headless \
     pkg-config \
     qpdf \
