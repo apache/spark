@@ -30,8 +30,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.COMMAND
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.plans.logical.CommandResult
-import org.apache.spark.sql.classic.ClassicConversions._
-import org.apache.spark.sql.execution.{QueryExecution, QueryExecutionException, SQLExecution}
+  import org.apache.spark.sql.execution.{QueryExecution, QueryExecutionException, SQLExecution}
 import org.apache.spark.sql.execution.HiveResult.hiveResultString
 import org.apache.spark.sql.internal.{SQLConf, VariableSubstitution}
 import org.apache.spark.util.Utils
@@ -67,7 +66,7 @@ private[hive] class SparkSQLDriver(val sparkSession: SparkSession = SparkSQLEnv.
         new VariableSubstitution().substitute(command)
       }
       sparkSession.sparkContext.setJobDescription(substitutorCommand)
-      val execution = sparkSession.sessionState.executePlan(sparkSession.sql(command).logicalPlan)
+      val execution = sparkSession.sql(command).queryExecution
       // The SQL command has been executed above via `executePlan`, therefore we don't need to
       // wrap it again with a new execution ID when getting Hive result.
       execution.logical match {

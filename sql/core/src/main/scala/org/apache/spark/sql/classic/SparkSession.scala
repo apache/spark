@@ -581,7 +581,8 @@ class SparkSession private(
         }
         queryPlan
       }
-      Dataset.ofRows(self, plan, tracker)
+      Dataset.ofRows(self, plan, tracker,
+        QueryExecution.determineShuffleCleanupMode(sessionState.conf))
     }
 
   /** @inheritdoc */
