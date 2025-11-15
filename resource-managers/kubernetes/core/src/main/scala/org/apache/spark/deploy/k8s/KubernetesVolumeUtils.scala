@@ -132,6 +132,16 @@ object KubernetesVolumeUtils {
           options(pathKey),
           options(serverKey))
 
+      case KUBERNETES_VOLUMES_CSI_TYPE =>
+        val driverNameKey =
+          s"$volumeType.$volumeName.$KUBERNETES_VOLUMES_OPTIONS_CSI_DRIVER_NAME_KEY"
+        val volumeConfPrefix = s"$volumeType.$volumeName.options."
+        val attributes = options.filter { case (k, v) => k.startsWith(volumeConfPrefix) }
+          .map { case (k, v) => (k.substring(volumeConfPrefix.length), v) }
+        KubernetesCSIVolumeConf(
+          options(driverNameKey),
+          attributes)
+
       case _ =>
         throw new IllegalArgumentException(s"Kubernetes Volume type `$volumeType` is not supported")
     }
