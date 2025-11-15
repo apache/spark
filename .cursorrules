@@ -1,44 +1,88 @@
 # Python Linting Rules for Apache Spark
 
-## Always Run These Checks Before Committing/Pushing
+## CRITICAL: ALWAYS Run These Checks Before Committing/Pushing
 
-When working with Python code in Apache Spark, **ALWAYS** run these three linting checks:
+**MANDATORY WORKFLOW - DO NOT SKIP:**
 
-1. **Black formatting**: `./dev/lint-python --black` or `./dev/reformat-python`
-2. **Flake8**: `./dev/lint-python --flake8` OR `python3 -m flake8 --append-config dev/tox.ini --count --show-source --statistics .`
-3. **Mypy**: `./dev/lint-python --mypy` OR `python3 -m mypy <files>`
+When working with Python code in Apache Spark, you **MUST** run these three linting checks **BEFORE** every commit:
 
-**If the dev script skips checks due to missing tools, use `python3 -m <tool>` directly.**
+1. **Black formatting**: 
+   ```bash
+   ./dev/lint-python --black
+   # OR if black not found: python3 -m black --config dev/pyproject.toml <files>
+   ```
+   **MUST PASS** - Fix any formatting issues before proceeding
+
+2. **Flake8**: 
+   ```bash
+   ./dev/lint-python --flake8
+   # OR if flake8 not found: python3 -m flake8 --append-config dev/tox.ini --count --show-source --statistics .
+   ```
+   **MUST PASS** - Fix all style errors (F401, E501, W293, W391, etc.) before proceeding
+
+3. **Mypy**: 
+   ```bash
+   ./dev/lint-python --mypy
+   # OR if mypy not found: python3 -m mypy <files>
+   ```
+   **MUST PASS** - Fix all type errors before proceeding
 
 ## Installation
 
-If flake8 or mypy are not installed:
+If flake8 or mypy are not installed, install them FIRST:
 ```bash
 pip3 install flake8 mypy
 ```
 
-## Important Notes
+## CRITICAL RULES
 
-- **Never skip linting checks** - If tools are missing, install them first
-- **Always run all three checks** (black, flake8, mypy) before pushing code
-- CI will catch these errors, but fix them locally first to avoid CI failures
-- If a tool is not available, install it rather than skipping the check
+1. **NEVER commit without running all three checks** (black, flake8, mypy)
+2. **NEVER skip linting checks** - If tools are missing, install them first
+3. **NEVER push code that fails local linting** - CI will fail, wasting time
+4. **ALWAYS verify all three checks pass** before git commit
+5. If `./dev/lint-python` skips a check due to missing tool, use `python3 -m <tool>` directly
 
-## Common Issues to Check Manually
+## Pre-Commit Checklist (MANDATORY)
 
-Even if tools aren't installed, manually check for:
-- Unused imports (F401)
-- Line length violations (E501, >100 chars)
-- Trailing whitespace (W293)
-- Missing newline at end of file (W391)
-- Type annotation issues
+Before EVERY commit, verify:
+- [ ] `./dev/lint-python --black` passes (or `python3 -m black` if needed)
+- [ ] `./dev/lint-python --flake8` passes (or `python3 -m flake8` if needed)  
+- [ ] `./dev/lint-python --mypy` passes (or `python3 -m mypy` if needed)
+- [ ] Tests pass: `python/run-tests --testnames <test_module>`
+- [ ] Only then: `git commit` and `git push`
 
-## Workflow
+## Common Flake8 Errors to Fix
 
-Before every commit/push:
-1. Run `./dev/lint-python --black` - fix formatting
-2. Run `./dev/lint-python --flake8` - fix style errors
-3. Run `./dev/lint-python --mypy` - fix type errors
-4. Run tests: `python/run-tests --testnames <test_module>`
-5. Only then commit and push
+- F401: Unused imports - Remove them
+- E501: Line too long (>100 chars) - Split or add `# noqa: E501`
+- W293: Blank line contains whitespace - Remove whitespace
+- W391: Blank line at end of file - Add newline
+- E402: Module level import not at top of file - Move imports
+
+## Example Workflow
+
+```bash
+# 1. Make code changes
+vim python/pyspark/sql/tests/streaming/test_file.py
+
+# 2. Run ALL linting checks (MANDATORY)
+./dev/lint-python --black
+./dev/lint-python --flake8  
+./dev/lint-python --mypy
+
+# 3. If any fail, fix them and re-run
+
+# 4. Run tests
+python/run-tests --testnames pyspark.sql.tests.streaming.test_file
+
+# 5. Only then commit
+git add .
+git commit -m "Fix: ..."
+git push
+```
+
+## Remember
+
+**If you don't run flake8 and mypy before committing, CI will fail and waste everyone's time.**
+**Always verify all three checks pass before committing.**
 
