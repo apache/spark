@@ -25,6 +25,7 @@ import org.apache.spark.sql.execution.streaming.checkpointing.{CommitMetadata, O
 import org.apache.spark.sql.execution.streaming.runtime.StreamingQueryCheckpointMetadata
 import org.apache.spark.sql.execution.streaming.utils.StreamingUtils
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.util.Utils
 
 /**
  * Runs repartitioning for the state stores used by a streaming query.
@@ -67,24 +68,40 @@ class OfflineStateRepartitionRunner(
   def run(): Long = {
     logInfo(log"Starting offline state repartitioning for " +
       log"checkpointLocation=${MDC(CHECKPOINT_LOCATION, checkpointLocation)}, " +
-      log"numPartitions=${MDC(NUM_PARTITIONS, numPartitions)}")
+      log"numPartitions=${MDC(NUM_PARTITIONS, numPartitions)}, " +
+      log"enforceExactlyOnceSink=${MDC(ENFORCE_EXACTLY_ONCE, enforceExactlyOnceSink)}")
 
-    val lastCommittedBatchId = getLastCommittedBatchId()
-    val lastBatchId = getLastBatchId()
+    try {
+      val (repartitionBatchId, durationMs) = Utils.timeTakenMs {
+        val lastCommittedBatchId = getLastCommittedBatchId()
+        val lastBatchId = getLastBatchId()
 
-    val newBatchId = createNewBatchIfNeeded(lastBatchId, lastCommittedBatchId)
+        val newBatchId = createNewBatchIfNeeded(lastBatchId, lastCommittedBatchId)
 
-    // todo: Do the repartitioning here, in subsequent PR
+        // todo(SPARK-54365): Do the repartitioning here, in subsequent PR
 
-    // todo: update operator metadata in subsequent PR.
+        // todo(SPARK-54365): update operator metadata in subsequent PR.
 
-    // Commit the repartition batch
-    commitBatch(newBatchId, lastCommittedBatchId)
+        // Commit the repartition batch
+        commitBatch(newBatchId, lastCommittedBatchId)
+        newBatchId
+      }
 
-    logInfo(log"Completed state repartitioning with new " +
-      log"batchId=${MDC(BATCH_ID, newBatchId)}")
+      logInfo(log"Completed state repartitioning for " +
+        log"checkpointLocation=${MDC(CHECKPOINT_LOCATION, checkpointLocation)}, " +
+        log"numPartitions=${MDC(NUM_PARTITIONS, numPartitions)}, " +
+        log"enforceExactlyOnceSink=${MDC(ENFORCE_EXACTLY_ONCE, enforceExactlyOnceSink)}, " +
+        log"repartitionBatchId=${MDC(BATCH_ID, repartitionBatchId)}, " +
+        log"durationMs=${MDC(DURATION, durationMs)}")
 
-    newBatchId
+      repartitionBatchId
+    } catch {
+      case e: Throwable =>
+        logError(log"State repartitioning failed for " +
+          log"checkpointLocation=${MDC(CHECKPOINT_LOCATION, checkpointLocation)}, " +
+          log"numPartitions=${MDC(NUM_PARTITIONS, numPartitions)}", e)
+        throw e
+    }
   }
 
   private def getLastCommittedBatchId(): Long = {
