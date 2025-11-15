@@ -307,7 +307,8 @@ object FailureInjectionRocksDBStateStoreProvider {
           localTempDir: File,
           hadoopConf: Configuration,
           codecName: String,
-          loggingId: String): RocksDBFileManager = {
+          loggingId: String,
+          storeConf: StateStoreConf): RocksDBFileManager = {
         new RocksDBFileManager(
           dfsRootDir,
           localTempDir,
@@ -315,7 +316,8 @@ object FailureInjectionRocksDBStateStoreProvider {
           codecName,
           loggingId = loggingId,
           fileChecksumEnabled = this.conf.fileChecksumEnabled,
-          fileChecksumThreadPoolSize = this.fileChecksumThreadPoolSize) {
+          fileChecksumThreadPoolSize = this.fileChecksumThreadPoolSize,
+          storeConf = this.conf.stateStoreConf) {
           override def getFileSystem(
               myDfsRootDir: String,
               myHadoopConf: Configuration): FileSystem = {

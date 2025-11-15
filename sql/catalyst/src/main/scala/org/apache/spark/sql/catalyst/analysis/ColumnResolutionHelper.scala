@@ -425,7 +425,8 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
   def resolveExpressionByPlanChildren(
       e: Expression,
       q: LogicalPlan,
-      includeLastResort: Boolean = false): Expression = {
+      includeLastResort: Boolean = false,
+      throws: Boolean = true): Expression = {
     resolveExpression(
       tryResolveDataFrameColumns(e, q.children),
       resolveColumnByName = nameParts => {
@@ -435,7 +436,7 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
         assert(q.children.length == 1)
         q.children.head.output
       },
-      throws = true,
+      throws,
       includeLastResort = includeLastResort)
   }
 
@@ -475,8 +476,14 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
     resolveVariables(resolveOuterRef(e))
   }
 
-  def resolveExprInAssignment(expr: Expression, hostPlan: LogicalPlan): Expression = {
-    resolveExpressionByPlanChildren(expr, hostPlan) match {
+  def resolveExprInAssignment(
+      expr: Expression,
+      hostPlan: LogicalPlan,
+      throws: Boolean = true): Expression = {
+    resolveExpressionByPlanChildren(expr,
+      hostPlan,
+      includeLastResort = false,
+      throws = throws) match {
       // Assignment key and value does not need the alias when resolving nested columns.
       case Alias(child: ExtractValue, _) => child
       case other => other

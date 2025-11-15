@@ -1158,17 +1158,19 @@ def wrap_kwargs_support(f, args_offsets, kwargs_offsets):
         return f, args_offsets
 
 
-def _supports_profiler(eval_type: int) -> bool:
-    return eval_type not in (
+def _is_iter_based(eval_type: int) -> bool:
+    return eval_type in (
         PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF,
         PythonEvalType.SQL_SCALAR_ARROW_ITER_UDF,
         PythonEvalType.SQL_MAP_PANDAS_ITER_UDF,
         PythonEvalType.SQL_MAP_ARROW_ITER_UDF,
         PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE,
+        PythonEvalType.SQL_GROUPED_MAP_ARROW_ITER_UDF,
+        PythonEvalType.SQL_GROUPED_MAP_PANDAS_ITER_UDF,
     )
 
 
-def wrap_perf_profiler(f, result_id):
+def wrap_perf_profiler(f, eval_type, result_id):
     import cProfile
     import pstats
 
@@ -1178,38 +1180,89 @@ def wrap_perf_profiler(f, result_id):
         SpecialAccumulatorIds.SQL_UDF_PROFIER, None, ProfileResultsParam
     )
 
-    def profiling_func(*args, **kwargs):
-        with cProfile.Profile() as pr:
-            ret = f(*args, **kwargs)
-        st = pstats.Stats(pr)
-        st.stream = None  # make it picklable
-        st.strip_dirs()
+    if _is_iter_based(eval_type):
 
-        accumulator.add({result_id: (st, None)})
+        def profiling_func(*args, **kwargs):
+            iterator = iter(f(*args, **kwargs))
+            pr = cProfile.Profile()
+            while True:
+                try:
+                    with pr:
+                        item = next(iterator)
+                    yield item
+                except StopIteration:
+                    break
 
-        return ret
+            st = pstats.Stats(pr)
+            st.stream = None  # make it picklable
+            st.strip_dirs()
+
+            accumulator.add({result_id: (st, None)})
+
+    else:
+
+        def profiling_func(*args, **kwargs):
+            with cProfile.Profile() as pr:
+                ret = f(*args, **kwargs)
+            st = pstats.Stats(pr)
+            st.stream = None  # make it picklable
+            st.strip_dirs()
+
+            accumulator.add({result_id: (st, None)})
+
+            return ret
 
     return profiling_func
 
 
-def wrap_memory_profiler(f, result_id):
+def wrap_memory_profiler(f, eval_type, result_id):
     from pyspark.sql.profiler import ProfileResultsParam
     from pyspark.profiler import UDFLineProfilerV2
+
+    if not has_memory_profiler:
+        return f
 
     accumulator = _deserialize_accumulator(
         SpecialAccumulatorIds.SQL_UDF_PROFIER, None, ProfileResultsParam
     )
 
-    def profiling_func(*args, **kwargs):
-        profiler = UDFLineProfilerV2()
+    if _is_iter_based(eval_type):
 
-        wrapped = profiler(f)
-        ret = wrapped(*args, **kwargs)
-        codemap_dict = {
-            filename: list(line_iterator) for filename, line_iterator in profiler.code_map.items()
-        }
-        accumulator.add({result_id: (None, codemap_dict)})
-        return ret
+        def profiling_func(*args, **kwargs):
+            profiler = UDFLineProfilerV2()
+            profiler.add_function(f)
+
+            iterator = iter(f(*args, **kwargs))
+
+            while True:
+                try:
+                    with profiler:
+                        item = next(iterator)
+                    yield item
+                except StopIteration:
+                    break
+
+            codemap_dict = {
+                filename: list(line_iterator)
+                for filename, line_iterator in profiler.code_map.items()
+            }
+            accumulator.add({result_id: (None, codemap_dict)})
+
+    else:
+
+        def profiling_func(*args, **kwargs):
+            profiler = UDFLineProfilerV2()
+            profiler.add_function(f)
+
+            with profiler:
+                ret = f(*args, **kwargs)
+
+            codemap_dict = {
+                filename: list(line_iterator)
+                for filename, line_iterator in profiler.code_map.items()
+            }
+            accumulator.add({result_id: (None, codemap_dict)})
+            return ret
 
     return profiling_func
 
@@ -1254,17 +1307,12 @@ def read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index, profil
     if profiler == "perf":
         result_id = read_long(infile)
 
-        if _supports_profiler(eval_type):
-            profiling_func = wrap_perf_profiler(chained_func, result_id)
-        else:
-            profiling_func = chained_func
+        profiling_func = wrap_perf_profiler(chained_func, eval_type, result_id)
 
     elif profiler == "memory":
         result_id = read_long(infile)
-        if _supports_profiler(eval_type) and has_memory_profiler:
-            profiling_func = wrap_memory_profiler(chained_func, result_id)
-        else:
-            profiling_func = chained_func
+
+        profiling_func = wrap_memory_profiler(chained_func, eval_type, result_id)
     else:
         profiling_func = chained_func
 

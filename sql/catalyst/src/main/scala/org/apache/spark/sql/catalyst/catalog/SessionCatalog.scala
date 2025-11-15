@@ -1663,7 +1663,9 @@ class SessionCatalog(
         .putString("__funcInputAlias", "true")
         .build()
     }
-    assert(!function.isTableFunc)
+    assert(!function.isTableFunc,
+      "Function '" + function.name + "' is a table function. " +
+      "Use makeSQLTableFunctionPlan() instead of makeSQLFunctionPlan().")
     val funcName = function.name.funcName
 
     // Use captured SQL configs when parsing a SQL function.
@@ -1674,7 +1676,10 @@ class SessionCatalog(
       val inputParam = function.inputParam
       val returnType = function.getScalarFuncReturnType
       val (expression, query) = function.getExpressionAndQuery(parser, isTableFunc = false)
-      assert(expression.isDefined || query.isDefined)
+      assert(expression.isDefined || query.isDefined,
+        "SQL function '" + function.name + "' could not be parsed. " +
+        "Neither expression nor query could be extracted from function body. " +
+        "exprText=" + function.exprText + ", queryText=" + function.queryText + ".")
 
       // Check function arguments
       val paramSize = inputParam.map(_.size).getOrElse(0)
@@ -1763,12 +1768,17 @@ class SessionCatalog(
       function: SQLFunction,
       input: Seq[Expression],
       outputAttrs: Seq[Attribute]): LogicalPlan = {
-    assert(function.isTableFunc)
+    assert(function.isTableFunc,
+      "Function '" + function.name + "' is a scalar function. " +
+      "Use makeSQLFunctionPlan() instead of makeSQLTableFunctionPlan().")
     val funcName = function.name.funcName
     val inputParam = function.inputParam
     val returnParam = function.getTableFuncReturnCols
     val (_, query) = function.getExpressionAndQuery(parser, isTableFunc = true)
-    assert(query.isDefined)
+    assert(query.isDefined,
+      "SQL table function '" + function.name + "' could not be parsed. " +
+      "Query could not be extracted from function body. " +
+      "queryText=" + function.queryText + ".")
 
     // Check function arguments
     val paramSize = inputParam.map(_.size).getOrElse(0)
@@ -1807,7 +1817,12 @@ class SessionCatalog(
       query.get
     }
 
-    assert(returnParam.length == outputAttrs.length)
+    assert(returnParam.length == outputAttrs.length,
+      "SQL table function '" + function.name + "' has mismatched return columns. " +
+      "Expected " + outputAttrs.length + " output attributes but found " +
+      returnParam.length + " return parameters. " +
+      "Return parameters: [" + returnParam.fieldNames.mkString(", ") + "], " +
+      "Output attributes: [" + outputAttrs.map(_.name).mkString(", ") + "].")
     val output = returnParam.fields.zipWithIndex.map { case (param, i) =>
       // Since we cannot get the output of a unresolved logical plan, we need
       // to reference the output column of the lateral join by its position.
@@ -2390,7 +2405,9 @@ class SessionCatalog(
     requireTableNotExists(newName)
     val oldTable = getTableMetadata(oldName)
     if (oldTable.tableType == CatalogTableType.MANAGED) {
-      assert(oldName.database.nonEmpty)
+      assert(oldName.database.nonEmpty,
+        "Table identifier " + oldName.quotedString + " is missing database name. " +
+        "Managed tables must have a database defined.")
       val databaseLocation =
         externalCatalog.getDatabase(oldName.database.get).locationUri
       val newTableLocation = new Path(new Path(databaseLocation), format(newName.table))

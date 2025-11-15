@@ -109,14 +109,6 @@ class DataflowGraphTransformer(graph: DataflowGraph) extends AutoCloseable {
     this
   }
 
-  private def defaultOnFailedDependentTables(
-      failedTableDependencies: Map[TableIdentifier, Seq[Table]]): Unit = {
-    require(
-      failedTableDependencies.isEmpty,
-      "Dependency failure happened and some tables were not resolved"
-    )
-  }
-
   /**
    * Example graph: [Flow1, Flow 2] -> ST -> Flow3 -> MV
    * Order of processing: Flow1, Flow2, ST, Flow3, MV.
