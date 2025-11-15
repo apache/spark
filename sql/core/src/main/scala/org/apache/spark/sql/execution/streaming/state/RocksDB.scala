@@ -1469,12 +1469,16 @@ class RocksDB(
    * - Create a RocksDB checkpoint in a new local dir
    * - Sync the checkpoint dir files to DFS
    */
-  def commit(): (Long, StateStoreCheckpointInfo) = {
+  def commit(forceSnapshot: Boolean = false): (Long, StateStoreCheckpointInfo) = {
     commitLatencyMs.clear()
     updateMemoryUsageIfNeeded()
     val newVersion = loadedVersion + 1
     try {
       logInfo(log"Flushing updates for ${MDC(LogKeys.VERSION_NUM, newVersion)}")
+
+      if (forceSnapshot) {
+        shouldForceSnapshot.set(true)
+      }
 
       var snapshot: Option[RocksDBSnapshot] = None
       if (shouldCreateSnapshot() || shouldForceSnapshot.get()) {

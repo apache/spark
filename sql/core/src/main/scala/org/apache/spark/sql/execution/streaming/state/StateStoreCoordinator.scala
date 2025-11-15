@@ -47,6 +47,17 @@ private case class ReportActiveInstance(
     providerIdsToCheck: Seq[StateStoreProviderId])
   extends StateStoreCoordinatorMessage
 
+/**
+ * Response from coordinator for ReportActiveInstance
+ * @param shouldForceSnapshotUpload Whether the current provider should force a snapshot
+ * upload on next commit
+ * @param providerIdsToUnload The list of provider IDs that should be unloaded from the executor.
+ */
+case class ReportActiveInstanceResponse(
+    shouldForceSnapshotUpload: Boolean,
+    providerIdsToUnload: Seq[StateStoreProviderId])
+  extends Serializable
+
 private case class VerifyIfInstanceActive(storeId: StateStoreProviderId, executorId: String)
   extends StateStoreCoordinatorMessage
 
@@ -113,6 +124,14 @@ private case class GetLaggingStoresForTesting(
     isTerminatingTrigger: Boolean)
   extends StateStoreCoordinatorMessage
 
+/**
+ * Message used for testing.
+ * This message is used to check if a specific state store provider should force
+ * snapshot upload based on current lag status, without modifying coordinator state.
+ */
+private case class CheckIfShouldForceSnapshotUploadForTesting(providerId: StateStoreProviderId)
+  extends StateStoreCoordinatorMessage
+
 private object StopCoordinator
   extends StateStoreCoordinatorMessage
 
@@ -155,8 +174,8 @@ class StateStoreCoordinatorRef private(rpcEndpointRef: RpcEndpointRef) {
       stateStoreProviderId: StateStoreProviderId,
       host: String,
       executorId: String,
-      otherProviderIds: Seq[StateStoreProviderId]): Seq[StateStoreProviderId] = {
-    rpcEndpointRef.askSync[Seq[StateStoreProviderId]](
+      otherProviderIds: Seq[StateStoreProviderId]): ReportActiveInstanceResponse = {
+    rpcEndpointRef.askSync[ReportActiveInstanceResponse](
       ReportActiveInstance(stateStoreProviderId, host, executorId, otherProviderIds))
   }
 
@@ -240,6 +259,17 @@ class StateStoreCoordinatorRef private(rpcEndpointRef: RpcEndpointRef) {
     )
   }
 
+  /**
+   * Endpoint used for testing.
+   * Check if a specific state store should force snapshot upload based on current lag status.
+   * This is a read-only operation that does not modify coordinator state.
+   */
+  private[state] def checkIfShouldForceSnapshotUploadForTesting(
+      providerId: StateStoreProviderId): Boolean = {
+    rpcEndpointRef.askSync[Boolean](
+      CheckIfShouldForceSnapshotUploadForTesting(providerId))
+  }
+
   private[state] def stop(): Unit = {
     rpcEndpointRef.askSync[Boolean](StopCoordinator)
   }
@@ -255,6 +285,9 @@ private class StateStoreCoordinator(
     val sqlConf: SQLConf)
   extends ThreadSafeRpcEndpoint with Logging {
   private val instances = new mutable.HashMap[StateStoreProviderId, ExecutorCacheTaskLocation]
+  // Key: queryRunId -> Value: HashSet of state store provider IDs
+  private val snapshotUploadLaggingStores =
+    new mutable.HashMap[UUID, mutable.HashSet[StateStoreProviderId]]
 
   // Stores the latest snapshot upload event for a specific state store
   private val stateStoreLatestUploadedSnapshot =
@@ -275,6 +308,9 @@ private class StateStoreCoordinator(
   private def shouldCoordinatorReportSnapshotLag: Boolean =
     sqlConf.stateStoreCoordinatorReportSnapshotUploadLag
 
+  private def forceSnapshotUploadOnLag: Boolean =
+    sqlConf.stateStoreForceSnapshotUploadOnLag
+
   private def coordinatorLagReportInterval: Long =
     sqlConf.stateStoreCoordinatorSnapshotLagReportInterval
 
@@ -290,7 +326,11 @@ private class StateStoreCoordinator(
         // This provider is is already loaded in other executor. Marked it to unload.
         providerLoc.map(_ != taskLocation).getOrElse(false)
       }
-      context.reply(providerIdsToUnload)
+      // Check if the store is lagging behind in snapshot uploads
+      val shouldForceSnapshotUpload = shouldForceSnapshotUploadForProvider(id)
+      context.reply(ReportActiveInstanceResponse(
+        shouldForceSnapshotUpload,
+        providerIdsToUnload))
 
     case VerifyIfInstanceActive(id, execId) =>
       val response = instances.get(id) match {
@@ -317,6 +357,8 @@ private class StateStoreCoordinator(
       stateStoreLatestUploadedSnapshot --= storeIdsToRemove
       // Remove the corresponding run id entries for report time and starting time
       lastFullSnapshotLagReportTimeMs -= runId
+      // Remove the corresponding run id entries for snapshot upload lagging stores
+      snapshotUploadLaggingStores.remove(runId)
       logDebug(s"Deactivating instances related to checkpoint location $runId: " +
         storeIdsToRemove.mkString(", "))
       context.reply(true)
@@ -338,6 +380,11 @@ private class StateStoreCoordinator(
       if (shouldCoordinatorReportSnapshotLag) {
         val laggingStores =
           findLaggingStores(queryRunId, latestVersion, currentTimestamp, isTerminatingTrigger)
+        if (forceSnapshotUploadOnLag) {
+          // findLaggingStores will always get a complete list of lagging stores of a query run.
+          // Therefore, we can assign the new set to the snapshotUploadLaggingStores map.
+          snapshotUploadLaggingStores.put(queryRunId, mutable.HashSet(laggingStores: _*))
+        }
         if (laggingStores.nonEmpty) {
           logWarning(
             log"StateStoreCoordinator Snapshot Lag Report for " +
@@ -445,10 +492,21 @@ private class StateStoreCoordinator(
         context.reply(Seq.empty)
       }
 
+    case CheckIfShouldForceSnapshotUploadForTesting(providerId) =>
+      val shouldForceSnapshotUpload = shouldForceSnapshotUploadForProvider(providerId)
+      context.reply(shouldForceSnapshotUpload)
+
     case StopCoordinator =>
       stop() // Stop before replying to ensure that endpoint name has been deregistered
       logInfo("StateStoreCoordinator stopped")
       context.reply(true)
+  }
+
+  private def shouldForceSnapshotUploadForProvider(
+      providerId: StateStoreProviderId): Boolean = {
+    forceSnapshotUploadOnLag && snapshotUploadLaggingStores
+      .getOrElse(providerId.queryRunId, mutable.HashSet.empty)
+      .contains(providerId)
   }
 
   private def findLaggingStores(
