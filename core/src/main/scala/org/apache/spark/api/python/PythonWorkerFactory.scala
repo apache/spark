@@ -233,6 +233,8 @@ private[spark] class PythonWorkerFactory(
       workerEnv.put("PYTHONPATH", pythonPath)
       // This is equivalent to setting the -u flag; we use it because ipython doesn't support -u:
       workerEnv.put("PYTHONUNBUFFERED", "YES")
+      // add TMPDIR environment variable with the value of java.io.tmpdir
+      workerEnv.put("TMPDIR", System.getProperty("java.io.tmpdir"))
       if (isUnixDomainSock) {
         workerEnv.put("PYTHON_WORKER_FACTORY_SOCK_PATH", sockPath.getPath)
         workerEnv.put("PYTHON_UNIX_DOMAIN_ENABLED", "True")
@@ -321,6 +323,8 @@ private[spark] class PythonWorkerFactory(
         }
         // This is equivalent to setting the -u flag; we use it because ipython doesn't support -u:
         workerEnv.put("PYTHONUNBUFFERED", "YES")
+        // add TMPDIR environment variable with the value of java.io.tmpdir
+        workerEnv.put("TMPDIR", System.getProperty("java.io.tmpdir"))
         daemon = pb.start()
 
         val in = new DataInputStream(daemon.getInputStream)
