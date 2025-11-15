@@ -225,6 +225,45 @@ class RelationResolution(override val catalogManager: CatalogManager)
     }
   }
 
+  def resolveReference(ref: V2TableReference): LogicalPlan = {
+    val relation = getOrLoadRelation(ref)
+    val planId = ref.getTagValue(LogicalPlan.PLAN_ID_TAG)
+    cloneWithPlanId(relation, planId)
+  }
+
+  private def getOrLoadRelation(ref: V2TableReference): LogicalPlan = {
+    val key = toCacheKey(ref.catalog, ref.identifier)
+    relationCache.get(key) match {
+      case Some(cached) =>
+        adaptCachedRelation(cached, ref)
+      case None =>
+        val relation = loadRelation(ref)
+        relationCache.update(key, relation)
+        relation
+    }
+  }
+
+  private def loadRelation(ref: V2TableReference): LogicalPlan = {
+    val table = ref.catalog.loadTable(ref.identifier)
+    V2TableReferenceUtils.validateLoadedTable(table, ref)
+    val tableName = ref.identifier.toQualifiedNameParts(ref.catalog)
+    SubqueryAlias(tableName, ref.toRelation(table))
+  }
+
+  private def adaptCachedRelation(cached: LogicalPlan, ref: V2TableReference): LogicalPlan = {
+    cached transform {
+      case r: DataSourceV2Relation if matchesReference(r, ref) =>
+        V2TableReferenceUtils.validateLoadedTable(r.table, ref)
+        r.copy(output = ref.output, options = ref.options)
+    }
+  }
+
+  private def matchesReference(
+      relation: DataSourceV2Relation,
+      ref: V2TableReference): Boolean = {
+    relation.catalog.contains(ref.catalog) && relation.identifier.contains(ref.identifier)
+  }
+
   private def isResolvingView: Boolean = AnalysisContext.get.catalogAndNamespace.nonEmpty
 
   private def isReferredTempViewName(nameParts: Seq[String]): Boolean = {

@@ -97,7 +97,7 @@ private[sql] object V2TableUtil extends SQLConfHelper {
   }
 
   // extracts original column info for all metadata attributes in relation
-  private def extractMetadataColumns(relation: DataSourceV2Relation): Seq[MetadataColumn] = {
+  def extractMetadataColumns(relation: DataSourceV2Relation): Seq[MetadataColumn] = {
     val metaAttrs = relation.output.filter(_.isMetadataCol)
     if (metaAttrs.nonEmpty) {
       val metaCols = metadataColumns(relation.table)
