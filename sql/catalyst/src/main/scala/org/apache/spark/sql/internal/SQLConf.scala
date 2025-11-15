@@ -7221,6 +7221,20 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   }
 
   /**
+   * Returns the lower case representation of a string if `caseSensitiveAnalysis` is enabled.
+   * Otherwise, returns the original string.
+   */
+  def canonicalize(s: String): String = {
+    if (!caseSensitiveAnalysis) {
+      // scalastyle:off caselocale
+      s.toLowerCase
+      // scalastyle:on caselocale
+    } else {
+      s
+    }
+  }
+
+  /**
    * Returns the error handler for handling hint errors.
    */
   def hintErrorHandler: HintErrorHandler = HintErrorLogger
