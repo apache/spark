@@ -79,6 +79,8 @@ class ApplyInPandasWithStatePythonRunner(
   override val killOnIdleTimeout: Boolean = SQLConf.get.pythonUDFWorkerKillOnIdleTimeout
   override val tracebackDumpIntervalSeconds: Long =
     SQLConf.get.pythonUDFWorkerTracebackDumpIntervalSeconds
+  override val killWorkerOnFlushFailure: Boolean =
+    SQLConf.get.pythonUDFDaemonKillWorkerOnFlushFailure
 
   private val sqlConf = SQLConf.get
 
