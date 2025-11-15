@@ -21,9 +21,9 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.execution.streaming.StreamingUtils
 import org.apache.spark.sql.execution.streaming.checkpointing.{CommitMetadata, OffsetSeq, OffsetSeqLog, OffsetSeqMetadata}
 import org.apache.spark.sql.execution.streaming.runtime.StreamingQueryCheckpointMetadata
+import org.apache.spark.sql.execution.streaming.utils.StreamingUtils
 import org.apache.spark.sql.internal.SQLConf
 
 /**
