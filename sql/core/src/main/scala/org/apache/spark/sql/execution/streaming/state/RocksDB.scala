@@ -69,7 +69,7 @@ case object StoreTaskCompletionListener extends RocksDBOpType("store_task_comple
 class RocksDB(
     dfsRootDir: String,
     val conf: RocksDBConf,
-    localRootDir: File = Utils.createTempDir(),
+    val localRootDir: File = Utils.createTempDir(),
     hadoopConf: Configuration = new Configuration,
     loggingId: String = "",
     useColumnFamilies: Boolean = false,
