@@ -1358,7 +1358,7 @@ class SparkSession(SparkConversionMixin):
     def createDataFrame(  # type: ignore[misc]
         self,
         data: Union["RDD[Any]", Iterable[Any], "PandasDataFrameLike", "ArrayLike", "pa.Table"],
-        schema: Optional[Union[AtomicType, StructType, str]] = None,
+        schema: Optional[Union[AtomicType, StructType, str, List[str], Tuple[str, ...]]] = None,
         samplingRatio: Optional[float] = None,
         verifySchema: bool = True,
     ) -> DataFrame:
@@ -1539,9 +1539,8 @@ class SparkSession(SparkConversionMixin):
 
         if isinstance(schema, str):
             schema = cast(Union[AtomicType, StructType, str], self._parse_ddl(schema))
-        elif isinstance(schema, (list, tuple)):
-            # Must re-encode any unicode strings to be consistent with StructField names
-            schema = [x.encode("utf-8") if not isinstance(x, str) else x for x in schema]
+        elif isinstance(schema, tuple):
+            schema = list(schema)
 
         try:
             import pandas as pd
