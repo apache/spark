@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.connector.catalog
 
+import java.io.Closeable
+
 import scala.collection.mutable
 
 import org.apache.spark.internal.Logging
@@ -40,7 +42,7 @@ import org.apache.spark.sql.internal.SQLConf
 private[sql]
 class CatalogManager(
     defaultSessionCatalog: CatalogPlugin,
-    val v1SessionCatalog: SessionCatalog) extends SQLConfHelper with Logging {
+    val v1SessionCatalog: SessionCatalog) extends SQLConfHelper with Logging with Closeable {
   import CatalogManager.SESSION_CATALOG_NAME
   import CatalogV2Util._
 
@@ -55,6 +57,21 @@ class CatalogManager(
     } else {
       catalogs.getOrElseUpdate(name, Catalogs.load(name, conf))
     }
+  }
+
+  override def close(): Unit = synchronized {
+    val allCatalogs = (catalogs.values.toSet + defaultSessionCatalog).toSeq
+    allCatalogs.foreach {
+      case c: Closeable =>
+        try {
+          c.close()
+        } catch {
+          case e: Throwable =>
+            logWarning(s"Failed to close catalog of class ${c.getClass.getName}", e)
+        }
+      case _ =>
+    }
+    catalogs.clear()
   }
 
   def isCatalogRegistered(name: String): Boolean = {

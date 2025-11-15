@@ -40,9 +40,24 @@ import org.apache.spark.sql.connect.planner.StreamingForeachBatchHelper.RunnerCl
 import org.apache.spark.sql.pipelines.graph.{DataflowGraph, PipelineUpdateContextImpl}
 import org.apache.spark.sql.pipelines.logging.PipelineEvent
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.ArrayImplicits._
 
 class SparkConnectSessionHolderSuite extends SharedSparkSession {
+
+  test("SessionHolder.close should close catalogs") {
+    val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
+    val catalogName = "my_closeable_catalog"
+    sessionHolder.session.conf.set(
+      s"spark.sql.catalog.$catalogName",
+      classOf[CloseableCatalog].getName)
+
+    val catalog = sessionHolder.session.sessionState.catalogManager.catalog(catalogName)
+    val closeableCatalog = catalog.asInstanceOf[CloseableCatalog]
+    assert(!closeableCatalog.isClosed)
+    sessionHolder.close()
+    assert(closeableCatalog.isClosed)
+}
 
   test("DataFrame cache: Successful put and get") {
     val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
@@ -483,4 +498,22 @@ class SparkConnectSessionHolderSuite extends SharedSparkSession {
     }
     assertPlanCache(sessionHolder, Some(expected))
   }
+}
+
+class CloseableCatalog
+  extends org.apache.spark.sql.connector.catalog.CatalogPlugin
+    with java.io.Closeable {
+  private var _name: String = _
+  private var closed = false
+
+  override def initialize(name: String, options: CaseInsensitiveStringMap): Unit = {
+    _name = name
+  }
+
+  override def name(): String = _name
+  override def close(): Unit = {
+    closed = true
+  }
+
+  def isClosed: Boolean = closed
 }

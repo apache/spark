@@ -55,6 +55,8 @@ class V2SessionCatalog(catalog: SessionCatalog)
   // This class is instantiated by Spark, so `initialize` method will not be called.
   override def initialize(name: String, options: CaseInsensitiveStringMap): Unit = {}
 
+  override def close(): Unit = {}
+
   override def capabilities(): util.Set[TableCatalogCapability] = {
     Set(
       TableCatalogCapability.SUPPORT_COLUMN_DEFAULT_VALUE

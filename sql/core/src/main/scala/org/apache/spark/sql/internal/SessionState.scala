@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.internal
 
-import java.io.File
+import java.io.{Closeable, File}
 import java.net.URI
 
 import org.apache.hadoop.conf.Configuration
@@ -91,7 +91,7 @@ private[sql] class SessionState(
     val columnarRules: Seq[ColumnarRule],
     val adaptiveRulesHolder: AdaptiveRulesHolder,
     val planNormalizationRules: Seq[Rule[LogicalPlan]],
-    val artifactManagerBuilder: () => ArtifactManager) {
+    val artifactManagerBuilder: () => ArtifactManager) extends Closeable {
 
   // The following fields are lazy to avoid creating the Hive client when creating SessionState.
   lazy val catalog: SessionCatalog = catalogBuilder()
@@ -109,6 +109,10 @@ private[sql] class SessionState(
   lazy val artifactManager: ArtifactManager = artifactManagerBuilder()
 
   def catalogManager: CatalogManager = analyzer.catalogManager
+
+  override def close(): Unit = {
+    catalogManager.close()
+  }
 
   def newHadoopConf(): Configuration = SessionState.newHadoopConf(
     sharedState.sparkContext.hadoopConfiguration,

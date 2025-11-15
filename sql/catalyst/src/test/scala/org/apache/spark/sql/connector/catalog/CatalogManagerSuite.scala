@@ -127,6 +127,18 @@ class CatalogManagerSuite extends SparkFunSuite with SQLHelper {
       }
     }
   }
+
+  test("CatalogManager.close should close all closeable catalogs") {
+    val catalogManager = new CatalogManager(FakeV2SessionCatalog, createSessionCatalog())
+    withSQLConf("spark.sql.catalog.dummy" -> classOf[DummyCatalog].getName,
+      "spark.sql.catalog.closeable" -> classOf[CloseableCatalog].getName) {
+      catalogManager.setCurrentCatalog("dummy")
+      val closeable = catalogManager.catalog("closeable").asInstanceOf[CloseableCatalog]
+      assert(!closeable.isClosed)
+      catalogManager.close()
+      assert(closeable.isClosed)
+    }
+  }
 }
 
 class DummyCatalog extends CatalogPlugin {
@@ -136,4 +148,13 @@ class DummyCatalog extends CatalogPlugin {
   private var _name: String = null
   override def name(): String = _name
   override def defaultNamespace(): Array[String] = Array("a", "b")
+  override def close(): Unit = {}
+}
+
+class CloseableCatalog extends DummyCatalog with java.io.Closeable {
+  private var closed = false
+  override def close(): Unit = {
+    closed = true
+  }
+  def isClosed: Boolean = closed
 }
