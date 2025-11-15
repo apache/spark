@@ -48,7 +48,7 @@ import org.apache.spark.util.ArrayImplicits._
  * For instance, temporary views with fully resolved logical plans don't allow schema changes
  * in underlying tables.
  */
-case class V2TableReference private(
+private[sql] case class V2TableReference private(
     catalog: TableCatalog,
     identifier: Identifier,
     options: CaseInsensitiveStringMap,
@@ -75,7 +75,7 @@ case class V2TableReference private(
   }
 }
 
-object V2TableReference {
+private[sql] object V2TableReference {
 
   case class TableInfo(
       columns: Seq[Column],
@@ -103,7 +103,7 @@ object V2TableReference {
   }
 }
 
-object V2TableReferenceUtils extends SQLConfHelper {
+private[sql] object V2TableReferenceUtils extends SQLConfHelper {
 
   def validateLoadedTable(table: Table, ref: V2TableReference): Unit = {
     ref.context match {

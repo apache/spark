@@ -253,6 +253,7 @@ class RelationResolution(override val catalogManager: CatalogManager)
   private def adaptCachedRelation(cached: LogicalPlan, ref: V2TableReference): LogicalPlan = {
     cached transform {
       case r: DataSourceV2Relation if matchesReference(r, ref) =>
+        V2TableReferenceUtils.validateLoadedTable(r.table, ref)
         r.copy(output = ref.output, options = ref.options)
     }
   }
