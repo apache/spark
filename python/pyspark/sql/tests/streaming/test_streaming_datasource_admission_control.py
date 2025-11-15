@@ -17,7 +17,7 @@
 
 import unittest
 
-from pyspark.sql.datasource import DataSource, DataSourceStreamReader, InputPartition
+from pyspark.sql.datasource import DataSourceStreamReader, InputPartition
 
 
 class MockStreamReaderWithAdmissionControl(DataSourceStreamReader):
