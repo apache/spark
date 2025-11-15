@@ -58,8 +58,8 @@ case class MergedPlan(plan: LogicalPlan, merged: Boolean)
  * 2. Merge a new plan with a cached plan by combining their outputs
  *
  * The merging process preserves semantic equivalence while combining outputs from multiple
- * plans into a single plan. This is primarily used by [[MergeScalarSubqueries]] to deduplicate
- * scalar subquery execution.
+ * plans into a single plan. This is primarily used by [[MergeSubplans]] to deduplicate subplan
+ * execution.
  *
  * Supported plan types for merging:
  * - [[Project]]: Merges project lists
@@ -88,16 +88,21 @@ class PlanMerger {
    * 3. If no merge is possible, add as a new cache entry
    *
    * @param plan The logical plan to merge or cache.
+   * @param subqueryPlan If the logical plan is a subquery plan.
    * @return A [[MergeResult]] containing:
    *         - The merged/cached plan to use
    *         - Its index in the cache
    *         - An attribute mapping for rewriting expressions
    */
-  def merge(plan: LogicalPlan): MergeResult = {
+  def merge(plan: LogicalPlan, subqueryPlan: Boolean): MergeResult = {
     cache.zipWithIndex.collectFirst(Function.unlift {
       case (mp, i) =>
         checkIdenticalPlans(plan, mp.plan).map { outputMap =>
-          val newMergePlan = MergedPlan(mp.plan, true)
+          // Identical subquery expression plans are not marked as `merged` as the
+          // `ReusedSubqueryExec` rule can handle them without extracting the plans to CTEs.
+          // But, when a non-subquery subplan is identical to a cached plan we need to mark the plan
+          // `merged` and so extract it to a CTE later.
+          val newMergePlan = MergedPlan(mp.plan, cache(i).merged || !subqueryPlan)
           cache(i) = newMergePlan
           MergeResult(newMergePlan, i, outputMap)
         }.orElse {

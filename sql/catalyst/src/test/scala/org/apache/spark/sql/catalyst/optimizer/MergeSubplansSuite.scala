@@ -25,14 +25,14 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 
-class MergeScalarSubqueriesSuite extends PlanTest {
+class MergeSubplansSuite extends PlanTest {
 
   override def beforeEach(): Unit = {
     CTERelationDef.curId.set(0)
   }
 
   private object Optimize extends RuleExecutor[LogicalPlan] {
-    val batches = Batch("MergeScalarSubqueries", Once, MergeScalarSubqueries) :: Nil
+    val batches = Batch("MergeSubplans", Once, MergeSubplans) :: Nil
   }
 
   val testRelation = LocalRelation($"a".int, $"b".int, $"c".string)
@@ -586,6 +586,137 @@ class MergeScalarSubqueriesSuite extends PlanTest {
           extractorExpression(0, analyzedMergedSubquery.output, 0),
           extractorExpression(0, analyzedMergedSubquery.output, 1),
           extractorExpression(0, analyzedMergedSubquery.output, 2)),
+      Seq(definitionNode(analyzedMergedSubquery, 0)))
+
+    comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer.analyze)
+  }
+
+  test("Merge aggregates") {
+    val agg1 = testRelation.groupBy()(min($"a").as("min_a"))
+    val agg2 = testRelation.groupBy()(max($"a").as("max_a"))
+    val originalQuery = agg1.join(agg2)
+
+    val mergedSubquery = testRelation
+      .groupBy()(
+        min($"a").as("min_a"),
+        max($"a").as("max_a")
+      )
+      .select(
+        CreateNamedStruct(Seq(
+          Literal("min_a"), $"min_a",
+          Literal("max_a"), $"max_a"
+        )).as("mergedValue"))
+    val analyzedMergedSubquery = mergedSubquery.analyze
+    val correctAnswer = WithCTE(
+      OneRowRelation().select(extractorExpression(0, analyzedMergedSubquery.output, 0, "min_a"))
+        .join(
+          OneRowRelation()
+            .select(extractorExpression(0, analyzedMergedSubquery.output, 1, "max_a"))),
+      Seq(definitionNode(analyzedMergedSubquery, 0)))
+
+    comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer.analyze)
+  }
+
+  test("Merge non-siblig aggregates") {
+    val agg1 = testRelation.groupBy()(min($"a").as("min_a"))
+    val agg2 = testRelation.groupBy()(max($"a").as("max_a"))
+    val originalQuery = agg1.join(testRelation).join(agg2)
+
+    val mergedSubquery = testRelation
+      .groupBy()(
+        min($"a").as("min_a"),
+        max($"a").as("max_a")
+      )
+      .select(
+        CreateNamedStruct(Seq(
+          Literal("min_a"), $"min_a",
+          Literal("max_a"), $"max_a"
+        )).as("mergedValue"))
+    val analyzedMergedSubquery = mergedSubquery.analyze
+    val correctAnswer = WithCTE(
+      OneRowRelation().select(extractorExpression(0, analyzedMergedSubquery.output, 0, "min_a"))
+        .join(testRelation)
+        .join(
+          OneRowRelation()
+            .select(extractorExpression(0, analyzedMergedSubquery.output, 1, "max_a"))),
+      Seq(definitionNode(analyzedMergedSubquery, 0)))
+
+    comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer.analyze)
+  }
+
+  test("Merge subqueries and aggregates") {
+    val subquery1 = ScalarSubquery(testRelation.groupBy()(min($"a").as("min_a")))
+    val subquery2 = ScalarSubquery(testRelation.groupBy()(max($"a").as("max_a")))
+    val agg1 = testRelation.groupBy()(sum($"a").as("sum_a"))
+    val agg2 = testRelation.groupBy()(avg($"a").as("avg_a"))
+    val originalQuery =
+      testRelation
+        .select(
+          subquery1,
+          subquery2)
+        .join(agg1)
+        .join(agg2)
+
+    val mergedSubquery = testRelation
+      .groupBy()(
+        min($"a").as("min_a"),
+        max($"a").as("max_a"),
+        sum($"a").as("sum_a"),
+        avg($"a").as("avg_a")
+      )
+      .select(
+        CreateNamedStruct(Seq(
+          Literal("min_a"), $"min_a",
+          Literal("max_a"), $"max_a",
+          Literal("sum_a"), $"sum_a",
+          Literal("avg_a"), $"avg_a"
+        )).as("mergedValue"))
+    val analyzedMergedSubquery = mergedSubquery.analyze
+    val correctAnswer = WithCTE(
+      testRelation
+        .select(
+          extractorExpression(0, analyzedMergedSubquery.output, 0),
+          extractorExpression(0, analyzedMergedSubquery.output, 1))
+        .join(
+          OneRowRelation()
+            .select(extractorExpression(0, analyzedMergedSubquery.output, 2, "sum_a")))
+        .join(
+          OneRowRelation()
+            .select(extractorExpression(0, analyzedMergedSubquery.output, 3, "avg_a"))),
+      Seq(definitionNode(analyzedMergedSubquery, 0)))
+
+    comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer.analyze)
+  }
+
+  test("Merge identical subqueries and aggregates") {
+    val subquery1 = ScalarSubquery(testRelation.groupBy()(min($"a").as("min_a")))
+    val subquery2 = ScalarSubquery(testRelation.groupBy()(min($"a").as("min_a_2")))
+    val agg1 = testRelation.groupBy()(min($"a").as("min_a_3"))
+    val agg2 = testRelation.groupBy()(min($"a").as("min_a_4"))
+    val originalQuery =
+      testRelation
+        .select(
+          subquery1,
+          subquery2)
+        .join(agg1)
+        .join(agg2)
+
+    val mergedSubquery = testRelation
+      .groupBy()(min($"a").as("min_a"))
+      .select(
+        CreateNamedStruct(Seq(Literal("min_a"), $"min_a")).as("mergedValue"))
+    val analyzedMergedSubquery = mergedSubquery.analyze
+    val correctAnswer = WithCTE(
+      testRelation
+        .select(
+          extractorExpression(0, analyzedMergedSubquery.output, 0),
+          extractorExpression(0, analyzedMergedSubquery.output, 0))
+        .join(
+          OneRowRelation()
+            .select(extractorExpression(0, analyzedMergedSubquery.output, 0, "min_a_3")))
+        .join(
+          OneRowRelation()
+            .select(extractorExpression(0, analyzedMergedSubquery.output, 0, "min_a_4"))),
       Seq(definitionNode(analyzedMergedSubquery, 0)))
 
     comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer.analyze)

@@ -150,6 +150,7 @@ object TreePattern extends Enumeration  {
   val LOCAL_RELATION: Value = Value
   val LOGICAL_QUERY_STAGE: Value = Value
   val NATURAL_LIKE_JOIN: Value = Value
+  val NO_GROUPING_AGGREGATE_REFERENCE: Value = Value
   val OFFSET: Value = Value
   val OUTER_JOIN: Value = Value
   val PARAMETERIZED_QUERY: Value = Value
