@@ -119,16 +119,16 @@ private class ClassicConstructorCommitProtocol(arg1: String, arg2: String)
 private class FullConstructorCommitProtocol(
   arg1: String,
   arg2: String,
-  b: Boolean,
+  arg3: String,
   val argCount: Int)
-  extends HadoopMapReduceCommitProtocol(arg1, arg2, b) {
+  extends HadoopMapReduceCommitProtocol(arg1, arg2, arg3) {
 
   def this(arg1: String, arg2: String) = {
-    this(arg1, arg2, false, 2)
+    this(arg1, arg2, "", 2)
   }
 
-  def this(arg1: String, arg2: String, b: Boolean) = {
-    this(arg1, arg2, false, 3)
+  def this(arg1: String, arg2: String, args: String) = {
+    this(arg1, arg2, "", 3)
   }
 }
 

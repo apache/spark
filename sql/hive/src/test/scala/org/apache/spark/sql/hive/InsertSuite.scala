@@ -20,20 +20,27 @@ package org.apache.spark.sql.hive
 import java.io.File
 import java.nio.file.Files
 import java.util.Locale
+import java.util.concurrent.Callable
+
+import scala.jdk.CollectionConverters._
+import scala.util.Random
 
 import org.apache.hadoop.fs.Path
+import org.apache.hadoop.mapreduce.JobContext
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.SparkException
+import org.apache.spark.internal.io.FileCommitProtocol.TaskCommitMessage
 import org.apache.spark.sql.{QueryTest, _}
 import org.apache.spark.sql.catalyst.expressions.Hex
 import org.apache.spark.sql.catalyst.parser.ParseException
+import org.apache.spark.sql.execution.datasources.SQLHadoopMapReduceCommitProtocol
 import org.apache.spark.sql.hive.execution.HiveTempPath
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{ThreadUtils, Utils}
 
 case class TestData(key: Int, value: String)
 
@@ -926,5 +933,204 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
       SQLConf.USE_NULLS_FOR_MISSING_DEFAULT_COLUMN_VALUES.key -> "true") {
       testDefaultColumn
     }
+  }
+
+  test("SPARK-54003: concurrent write partition table") {
+    withSQLConf(SQLConf.FILE_COMMIT_PROTOCOL_CLASS.key ->
+      classOf[RandomDelayForCommitJobCommitProtocol].getName) {
+      def concurrentWrite(insertStatement: Int => String,
+                          expectedAnswer: Seq[Row],
+                          concurrent: Int = 5): Unit = {
+        withTable("t") {
+          sql("CREATE TABLE t (c1 int, c2 int) USING PARQUET PARTITIONED BY (c3 int)")
+          val tasks: Seq[Callable[Unit]] = (1 to concurrent).map(i => () => sql(insertStatement(i)))
+          ThreadUtils.newForkJoinPool("test-thread-pool", concurrent).invokeAll(tasks.toList.asJava)
+          checkAnswer(
+            sql("SELECT count(*), c3 FROM t GROUP BY c3 ORDER BY c3"),
+            expectedAnswer)
+        }
+      }
+
+      // source temp view
+      (1 to 10000).map(i => (i, i)).toDF("_1", "_2").createOrReplaceTempView("s")
+
+      // Concurrent overwrite to different dynamic partitions
+      concurrentWrite(
+        (i: Int) => s"INSERT OVERWRITE TABLE t PARTITION(c3=3$i)" +
+          s" SELECT _1 AS c1, _2 AS c2 FROM s LIMIT ${i * 2000}",
+        (1 to 5).map(i => Row(i * 2000, s"3$i".toInt))
+      )
+    }
+  }
+
+  def insertCustomPartitionedTableTest(): Unit = {
+    withTempDir { d =>
+      withTable("t") {
+        sql("create table t(c1 int, p1 int) partitioned by (p1) stored as parquet")
+        sql(s"alter table t add partition(p1=2) location '${d.getAbsolutePath}/custom_path/2'")
+        sql("insert into table t partition(p1=2) select 1 as c1;")
+        checkAnswer(sql("select * from t order by c1"), Row(1, 2))
+
+        sql("insert into table t partition(p1=2) select 2 as c1;")
+        checkAnswer(sql("select * from t order by c1"), Row(1, 2)::Row(2, 2)::Nil)
+
+        sql("insert overwrite table t partition(p1=2) select 3 as c1;")
+        checkAnswer(sql("select * from t order by c1"), Row(3, 2)::Nil)
+      }
+    }
+  }
+
+  def insertStaticPartitionedTableTest(): Unit = {
+    withTable("t") {
+      sql("create table t(c1 int, p1 int) partitioned by (p1) stored as parquet")
+      sql("insert into table t partition(p1=2) select 1 as c1;")
+      checkAnswer(sql("select * from t order by c1"), Row(1, 2))
+
+      sql("insert into table t partition(p1=2) select 2 as c1;")
+      checkAnswer(sql("select * from t order by c1"), Row(1, 2)::Row(2, 2)::Nil)
+
+      sql("insert overwrite table t partition(p1=2) select 3 as c1;")
+      checkAnswer(sql("select * from t order by c1"), Row(3, 2)::Nil)
+    }
+  }
+
+  def insertNonPartitionedTableTest(): Unit = {
+    withTable("t") {
+      sql("create table t(c1 int, p1 int) stored as parquet")
+      sql("insert into table t select 1 as c1, 2 as p1;")
+      checkAnswer(sql("select * from t order by c1"), Row(1, 2))
+
+      sql("insert into table t select 2 as c1, 2 as p1;")
+      checkAnswer(sql("select * from t order by c1"), Row(1, 2)::Row(2, 2)::Nil)
+
+      sql("insert overwrite table t select 3 as c1, 2 as p1;;")
+      checkAnswer(sql("select * from t order by c1"), Row(3, 2)::Nil)
+    }
+  }
+
+  def insertDynamicPartitionedTableTest(): Unit = {
+    withTable("t") {
+      sql("create table t(c1 int, p1 int) partitioned by (p1) stored as parquet")
+      sql("insert into table t partition(p1) select 1 as c1, 2 as p1;")
+      checkAnswer(sql("select * from t order by c1"), Row(1, 2))
+
+      sql("insert into table t partition(p1) select 2 as c1, 2 as p1;")
+      checkAnswer(sql("select * from t order by c1"), Row(1, 2)::Row(2, 2)::Nil)
+
+      sql("insert overwrite table t partition(p1) select 3 as c1, 2 as p1;")
+      checkAnswer(sql("select * from t order by c1"), Row(3, 2)::Nil)
+    }
+  }
+
+  def insertTowLevelCustomPartitionedTableTest(): Unit = {
+    withTempDir { d =>
+      withTable("t") {
+        sql("create table t(c1 int, p1 int, p2 int) partitioned by (p1, p2) stored as parquet")
+        sql(s"alter table t add partition(p1=2, p2=3) location " +
+          s"'${d.getAbsolutePath}/custom_path/2'")
+        sql("insert into table t partition(p1=2, p2=3) select 1 as c1;")
+        checkAnswer(sql("select * from t order by c1"), Row(1, 2, 3))
+
+        sql("insert into table t partition(p1=2, p2=3) select 2 as c1;")
+        checkAnswer(sql("select * from t order by c1"), Row(1, 2, 3)::Row(2, 2, 3)::Nil)
+
+        sql("insert overwrite table t partition(p1=2, p2=3) select 3 as c1;")
+        checkAnswer(sql("select * from t order by c1"), Row(3, 2, 3)::Nil)
+      }
+    }
+  }
+
+  def insertStaticTowLevelPartitionedTableTest(): Unit = {
+    withTable("t") {
+      sql("create table t(c1 int, p1 int, p2 int) partitioned by (p1, p2) stored as parquet")
+      sql("insert into table t partition(p1=2, p2=3) select 1 as c1;")
+      checkAnswer(sql("select * from t order by c1, p1, p2"), Row(1, 2, 3))
+
+      sql("insert into table t partition(p1=2, p2=3) select 2 as c1;")
+      checkAnswer(sql("select * from t order by c1, p1, p2"), Row(1, 2, 3)::Row(2, 2, 3)::Nil)
+
+      sql("insert overwrite table t partition(p1=2, p2=3) select 3 as c1;")
+      checkAnswer(sql("select * from t order by c1, p1, p2"), Row(3, 2, 3)::Nil)
+    }
+  }
+
+  def insertDynamicTowLevelPartitionedTableTest(): Unit = {
+    withTable("t") {
+      sql("create table t(c1 int, p1 int, p2 int) partitioned by (p1, p2) stored as parquet")
+      sql("insert into table t partition(p1, p2) select 1 as c1, 2 as p1, 3 as p2;")
+      checkAnswer(sql("select * from t order by c1, p1, p2"), Row(1, 2, 3))
+
+      sql("insert into table t partition(p1, p2) select 2 as c1, 2 as p1, 3 as p2;")
+      checkAnswer(sql("select * from t order by c1, p1, p2"), Row(1, 2, 3)::Row(2, 2, 3)::Nil)
+
+      sql("insert overwrite table t partition(p1, p2) select 3 as c1, 2 as p1, 3 as p2;")
+      checkAnswer(sql("select * from t order by c1, p1, p2"), Row(3, 2, 3)::Nil)
+    }
+  }
+
+  def insertOverwriteDynamicPartitionedTableWithDynamicMode(): Unit = {
+    withTable("t") {
+      sql("create table t(c1 int, p1 int, p2 int) partitioned by (p1, p2) stored as parquet")
+
+      sql("insert into table t partition(p1, p2) select 1 as c1, 2 as p1, 3 as p2;")
+      checkAnswer(sql("select * from t order by c1, p1, p2"), Row(1, 2, 3))
+
+      sql("insert overwrite table t partition(p1, p2) select 2 as c1, 2 as p1, 4 as p2;")
+      checkAnswer(sql("select * from t order by c1, p1, p2"), Row(1, 2, 3)::Row(2, 2, 4)::Nil)
+
+      sql("insert overwrite table t partition(p1, p2) select 3 as c1, 2 as p1, 4 as p2;")
+      checkAnswer(sql("select * from t order by c1, p1, p2"), Row(1, 2, 3)::Row(3, 2, 4)::Nil)
+
+      sql("insert overwrite table t partition(p1, p2) select 4 as c1, 3 as p1, 4 as p2;")
+      checkAnswer(sql("select * from t order by c1, p1, p2"),
+        Row(1, 2, 3)::Row(3, 2, 4)::Row(4, 3, 4)::Nil)
+
+      sql("insert overwrite table t partition(p1, p2) select 5 as c1, 3 as p1, 4 as p2;")
+      checkAnswer(sql("select * from t order by c1, p1, p2"),
+        Row(1, 2, 3)::Row(3, 2, 4)::Row(5, 3, 4)::Nil)
+    }
+  }
+
+  test("SPARK-54003: test insert overwrite or into different table") {
+    Seq("true", "false").foreach { v =>
+      withSQLConf("spark.sql.hive.convertMetastoreParquet" -> v,
+          "hive.exec.dynamic.partition.mode" -> "nonstrict") {
+        // 1 Test custom partitioned table
+        insertCustomPartitionedTableTest()
+
+        // 2 Test static partitioned table
+        insertCustomPartitionedTableTest()
+
+        // 3 Test non-partitioned table
+        insertNonPartitionedTableTest()
+
+        // 4 Test dynamic partitioned table
+        insertDynamicPartitionedTableTest()
+
+        // 5 Test multi level custom partitioned table
+        insertTowLevelCustomPartitionedTableTest()
+
+        // 6 Test multi level static partitioned table
+        insertStaticTowLevelPartitionedTableTest()
+
+        // 7 Test multi level dynamic partitioned table
+        insertDynamicTowLevelPartitionedTableTest()
+
+        // 8 Test dynamic partitioned mode
+        insertOverwriteDynamicPartitionedTableWithDynamicMode()
+      }
+    }
+  }
+
+}
+
+private class RandomDelayForCommitJobCommitProtocol(jobId: String, path: String, mode: String)
+  extends SQLHadoopMapReduceCommitProtocol(jobId, path, mode) {
+
+  override def commitJob(jobContext: JobContext, taskCommits: Seq[TaskCommitMessage]): Unit = {
+    val rand = new Random()
+    val delay = rand.nextInt(5000)
+    Thread.sleep(delay)
+    super.commitJob(jobContext, taskCommits)
   }
 }
