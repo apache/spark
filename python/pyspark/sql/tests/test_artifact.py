@@ -16,6 +16,7 @@
 #
 import unittest
 import os
+import platform
 import tempfile
 
 from pyspark.sql.tests.connect.client.test_artifact import ArtifactTestsMixin
@@ -23,6 +24,9 @@ from pyspark.testing.sqlutils import ReusedSQLTestCase
 from pyspark.errors import PySparkRuntimeError
 
 
+@unittest.skipIf(
+    "pypy" in platform.python_implementation().lower(), "cannot run in environment pypy"
+)
 class ArtifactTests(ArtifactTestsMixin, ReusedSQLTestCase):
     @classmethod
     def root(cls):

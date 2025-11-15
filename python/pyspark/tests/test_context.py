@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 import os
+import platform
 import shutil
 import stat
 import tempfile
@@ -28,6 +29,9 @@ from pyspark.testing.sqlutils import SPARK_HOME
 from pyspark.testing.utils import ReusedPySparkTestCase, PySparkTestCase, QuietTest
 
 
+@unittest.skipIf(
+    "pypy" in platform.python_implementation().lower(), "cannot run in environment pypy"
+)
 class CheckpointTests(ReusedPySparkTestCase):
     def setUp(self):
         self.checkpointDir = tempfile.NamedTemporaryFile(delete=False)
@@ -76,6 +80,9 @@ class CheckpointTests(ReusedPySparkTestCase):
         self.assertEqual([1, 2, 3, 4], recovered.collect())
 
 
+@unittest.skipIf(
+    "pypy" in platform.python_implementation().lower(), "cannot run in environment pypy"
+)
 class LocalCheckpointTests(ReusedPySparkTestCase):
     def test_basic_localcheckpointing(self):
         parCollection = self.sc.parallelize([1, 2, 3, 4])
@@ -92,6 +99,9 @@ class LocalCheckpointTests(ReusedPySparkTestCase):
         self.assertEqual(flatMappedRDD.collect(), result)
 
 
+@unittest.skipIf(
+    "pypy" in platform.python_implementation().lower(), "cannot run in environment pypy"
+)
 class AddFileTests(PySparkTestCase):
     def test_add_py_file(self):
         # To ensure that we're actually testing addPyFile's effects, check that
@@ -172,6 +182,9 @@ class AddFileTests(PySparkTestCase):
         self.assertEqual(["My Server"], self.sc.parallelize(range(1)).map(func).collect())
 
 
+@unittest.skipIf(
+    "pypy" in platform.python_implementation().lower(), "cannot run in environment pypy"
+)
 class ContextTests(unittest.TestCase):
     def test_failed_sparkcontext_creation(self):
         # Regression test for SPARK-1550
@@ -304,6 +317,9 @@ class ContextTests(unittest.TestCase):
             sc.range(2).foreach(lambda _: create_spark_context())
 
 
+@unittest.skipIf(
+    "pypy" in platform.python_implementation().lower(), "cannot run in environment pypy"
+)
 class ContextTestsWithResources(unittest.TestCase):
     def setUp(self):
         class_name = self.__class__.__name__
