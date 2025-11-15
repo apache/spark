@@ -122,14 +122,13 @@ class HadoopMapReduceCommitProtocol(
     val filename = getFilename(taskContext, spec)
 
     val stagingDir: Path = committer match {
-      // For FileOutputCommitter it has its own staging path called "work path".
       case f: FileOutputCommitter =>
         if (dynamicPartitionOverwrite) {
           assert(dir.isDefined,
             "The dataset to be written must be partitioned when dynamicPartitionOverwrite is true.")
           partitionPaths += dir.get
         }
-        new Path(Option(f.getWorkPath).map(_.toString).getOrElse(path))
+        f.getTaskAttemptPath(taskContext)
       case _ => new Path(path)
     }
 
