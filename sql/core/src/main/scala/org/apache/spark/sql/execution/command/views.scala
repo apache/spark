@@ -27,7 +27,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.{CapturesConfig, SQLConfHelper, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, GlobalTempView, LocalTempView, SchemaEvolution, SchemaUnsupported, ViewSchemaMode, ViewType}
-import org.apache.spark.sql.catalyst.analysis.TableReference
+import org.apache.spark.sql.catalyst.analysis.V2TableReference
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType, TemporaryViewRelation}
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, SubqueryExpression, VariableReference}
 import org.apache.spark.sql.catalyst.plans.logical.{AnalysisOnlyCommand, CreateTempView, CTEInChildren, CTERelationDef, LogicalPlan, Project, View, WithCTE}
@@ -745,7 +745,7 @@ object ViewHelper extends SQLConfHelper with Logging with CapturesConfig {
     plan transform {
       case r: DataSourceV2Relation
           if r.catalog.isDefined && r.identifier.isDefined && r.timeTravelSpec.isEmpty =>
-        TableReference.createForTempView(r, viewName.nameParts)
+        V2TableReference.createForTempView(r, viewName.nameParts)
     }
   }
 

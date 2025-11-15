@@ -1224,7 +1224,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       case u: UnresolvedRelation =>
         resolveRelation(u).map(resolveViews(_, u.options)).getOrElse(u)
 
-      case r: TableReference =>
+      case r: V2TableReference =>
         relationResolution.resolveReference(r)
 
       case r @ RelationTimeTravel(u: UnresolvedRelation, timestamp, version)

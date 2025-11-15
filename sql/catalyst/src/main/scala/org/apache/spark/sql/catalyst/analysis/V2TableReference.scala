@@ -19,9 +19,9 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.SQLConfHelper
-import org.apache.spark.sql.catalyst.analysis.TableReference.Context
-import org.apache.spark.sql.catalyst.analysis.TableReference.TableInfo
-import org.apache.spark.sql.catalyst.analysis.TableReference.TemporaryViewContext
+import org.apache.spark.sql.catalyst.analysis.V2TableReference.Context
+import org.apache.spark.sql.catalyst.analysis.V2TableReference.TableInfo
+import org.apache.spark.sql.catalyst.analysis.V2TableReference.TemporaryViewContext
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.plans.logical.LeafNode
 import org.apache.spark.sql.catalyst.plans.logical.Statistics
@@ -39,7 +39,16 @@ import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.ArrayImplicits._
 
-case class TableReference private (
+/**
+ * A reference to a V2 table.
+ *
+ * References are placeholders for the latest table metadata and are replaced with actual table
+ * versions during analysis, allowing Spark to reload tables with up-to-date metadata. The newly
+ * loaded table metadata is validated against the original metadata depending on the context.
+ * For instance, temporary views with fully resolved logical plans don't allow schema changes
+ * in underlying tables.
+ */
+case class V2TableReference private(
     catalog: TableCatalog,
     identifier: Identifier,
     options: CaseInsensitiveStringMap,
@@ -50,7 +59,7 @@ case class TableReference private (
 
   override def name: String = V2TableUtil.toQualifiedName(catalog, identifier)
 
-  override def newInstance(): TableReference = {
+  override def newInstance(): V2TableReference = {
     copy(output = output.map(_.newInstance()))
   }
 
@@ -66,7 +75,7 @@ case class TableReference private (
   }
 }
 
-object TableReference {
+object V2TableReference {
 
   case class TableInfo(
       columns: Seq[Column],
@@ -75,12 +84,12 @@ object TableReference {
   sealed trait Context
   case class TemporaryViewContext(viewName: Seq[String]) extends Context
 
-  def createForTempView(relation: DataSourceV2Relation, viewName: Seq[String]): TableReference = {
+  def createForTempView(relation: DataSourceV2Relation, viewName: Seq[String]): V2TableReference = {
     create(relation, TemporaryViewContext(viewName))
   }
 
-  private def create(relation: DataSourceV2Relation, context: Context): TableReference = {
-    val ref = TableReference(
+  private def create(relation: DataSourceV2Relation, context: Context): V2TableReference = {
+    val ref = V2TableReference(
       relation.catalog.get.asTableCatalog,
       relation.identifier.get,
       relation.options,
@@ -94,9 +103,9 @@ object TableReference {
   }
 }
 
-object TableReferenceUtils extends SQLConfHelper {
+object V2TableReferenceUtils extends SQLConfHelper {
 
-  def validateLoadedTable(table: Table, ref: TableReference): Unit = {
+  def validateLoadedTable(table: Table, ref: V2TableReference): Unit = {
     ref.context match {
       case ctx: TemporaryViewContext =>
         validateLoadedTableInTempView(table, ref, ctx)
@@ -107,7 +116,7 @@ object TableReferenceUtils extends SQLConfHelper {
 
   private def validateLoadedTableInTempView(
       table: Table,
-      ref: TableReference,
+      ref: V2TableReference,
       ctx: TemporaryViewContext): Unit = {
     val tableName = ref.identifier.toQualifiedNameParts(ref.catalog)
 

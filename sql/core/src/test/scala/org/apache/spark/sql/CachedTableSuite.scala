@@ -2457,10 +2457,18 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
     }
   }
 
-  test("SPARK-53924: insert into DSv2 table invalidates cache of SQL temp views with plans") {
+  test("SPARK-53924: insert into DSv2 table invalidates cache of SQL temp view (plan)") {
+    checkInsertInvalidatesCacheOfSQLTempView(storePlan = true)
+  }
+
+  test("SPARK-53924: insert into DSv2 table invalidates cache of SQL temp view (text)") {
+    checkInsertInvalidatesCacheOfSQLTempView(storePlan = false)
+  }
+
+  private def checkInsertInvalidatesCacheOfSQLTempView(storePlan: Boolean): Unit = {
     val t = "testcat.tbl"
     withTable(t, "v") {
-      withSQLConf(SQLConf.STORE_ANALYZED_PLAN_FOR_VIEW.key -> "true") {
+      withSQLConf(SQLConf.STORE_ANALYZED_PLAN_FOR_VIEW.key -> storePlan.toString) {
         sql(s"CREATE TABLE $t (id int, data string) USING foo")
         sql(s"INSERT INTO $t VALUES (1, 'a'), (2, 'b')")
 
@@ -2487,10 +2495,18 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
     }
   }
 
-  test("SPARK-53924: uncache DSv2 table using SQL uncaches SQL temp views with plans") {
+  test("SPARK-53924: uncache DSv2 table uncaches SQL temp views (plan)") {
+    checkUncacheTableUncachesSQLTempView(storePlan = true)
+  }
+
+  test("SPARK-53924: uncache DSv2 table uncaches SQL temp views (text)") {
+    checkUncacheTableUncachesSQLTempView(storePlan = false)
+  }
+
+  private def checkUncacheTableUncachesSQLTempView(storePlan: Boolean): Unit = {
     val t = "testcat.tbl"
     withTable(t, "v") {
-      withSQLConf(SQLConf.STORE_ANALYZED_PLAN_FOR_VIEW.key -> "true") {
+      withSQLConf(SQLConf.STORE_ANALYZED_PLAN_FOR_VIEW.key -> storePlan.toString) {
         sql(s"CREATE TABLE $t (id int, data string) USING foo")
         sql(s"INSERT INTO $t VALUES (1, 'a'), (2, 'b')")
 
