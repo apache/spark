@@ -23,7 +23,7 @@ import java.time.Instant
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.Encoders
+import org.apache.spark.sql.{Dataset, Encoders}
 import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider
 import org.apache.spark.sql.internal.SQLConf
@@ -744,25 +744,28 @@ class TwsTesterSuite extends SparkFunSuite {
     assert(tester.peekValueState[Long]("eventCount", "user1").get == 5L)
 
     // Batch 3: Process event with timestamp 23000
-    // Watermark before batch = 18000, so timer at 20000 doesn't fire yet
+    // Watermark before batch = 18000 (for filtering late events)
     // Max event time = 23000, watermark after batch = 23000 - 2000 = 21000
-    val result3 = tester.test(List(("user1", ("event6", new Timestamp(23000L)))))
-    assert(result3 == List(("user1", "WINDOW_CONTINUE", 6L)))
-    assert(tester.peekValueState[Long]("eventCount", "user1").get == 6L)
-
-    // Batch 4: Process another event with timestamp 25000
-    // Watermark before batch = 21000, so timer at 20000 FIRES now!
+    // Timer at 20000 FIRES because updated watermark (21000) > timer (20000)
     // Input is processed first, then timer fires
-    // Watermark after batch = 25000 - 2000 = 23000
-    val result4 = tester.test(List(("user1", ("event7", new Timestamp(25000L)))))
-
-    // Input is processed first (increments count to 7), then timer fires (outputs final count 7)
-    assert(result4.length == 2)
-    assert(result4(0) == ("user1", "WINDOW_CONTINUE", 7L)) // Input processed first
-    assert(result4(1) == ("user1", "WINDOW_END", 7L)) // Timer fired with count after input
+    val result3 = tester.test(List(("user1", ("event6", new Timestamp(23000L)))))
+    // Input is processed first (increments count to 6), then timer fires (outputs final count 6)
+    assert(result3.length == 2)
+    assert(result3(0) == ("user1", "WINDOW_CONTINUE", 6L)) // Input processed first
+    assert(result3(1) == ("user1", "WINDOW_END", 6L)) // Timer fired with count after input
     // Timer clears state, so no state should exist after this batch
     assert(tester.peekValueState[Long]("eventCount", "user1").isEmpty)
     assert(tester.peekValueState[Long]("windowEndTime", "user1").isEmpty)
+
+    // Batch 4: Process another event with timestamp 25000
+    // State was cleared in batch 3, so this starts a new window
+    // Watermark before batch = 21000
+    // Max event time = 25000, watermark after batch = 25000 - 2000 = 23000
+    val result4 = tester.test(List(("user1", ("event7", new Timestamp(25000L)))))
+    // Since state was cleared, this starts a new window
+    assert(result4 == List(("user1", "WINDOW_START", 1L)))
+    assert(tester.peekValueState[Long]("eventCount", "user1").get == 1L)
+    assert(tester.peekValueState[Long]("windowEndTime", "user1").get == 35000L) // 25000 + 10000
   }
 
   test("TwsTester should filter late events based on watermark") {
@@ -853,39 +856,59 @@ class TwsTesterFuzzTestSuite extends StreamTest {
   override protected val enableAutoThreadAudit = false
 
   /**
-   * Processes given input using TwsTester and real transformWithState+testStream.
-   *
-   * Asserts that results are identical.
+    * Asserts that {@code tester} is equivalent to streaming query transforming {@code inputStream}
+    * to {@code result}, when both are fed with data from {@code batches}.
+    */
+  def checkTwsTester[
+      K: org.apache.spark.sql.Encoder,
+      I: org.apache.spark.sql.Encoder,
+      O: org.apache.spark.sql.Encoder](
+      tester: TwsTester[K, I, O],
+      batches: List[List[(K, I)]],
+      inputStream: MemoryStream[(K, I)],
+      result: Dataset[O]): Unit = {
+    withSQLConf(
+      SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[RocksDBStateStoreProvider].getName,
+      SQLConf.SHUFFLE_PARTITIONS.key -> "5"
+    ) {
+      val expectedResults: List[List[O]] = batches.map(batch => tester.test(batch)).toList
+      assert(batches.size == expectedResults.size)
+      
+      val actions: Seq[StreamAction] = (batches zip expectedResults).flatMap {
+          case (batch, expected) =>
+            Seq(
+              AddData(inputStream, batch: _*),
+              CheckNewAnswer(expected.head, expected.tail: _*)
+            )
+        } :+ StopStream
+      testStream(result, OutputMode.Append())(actions: _*)
+    }
+  }
+
+  /**
+   * Asserts that {@code tester} processes given {@code input} in the same way as Spark streaming
+   * query with {@code transformWithState} would.
+   * 
+   * This is simplified version of {@code checkTwsTester} for the case where there is only one batch
+   * and no timers (time mode is TimeMode.None).
    */
-  def compareTws[
+  def checkTwsTesterOneBatch[
       K: org.apache.spark.sql.Encoder,
       I: org.apache.spark.sql.Encoder,
       O: org.apache.spark.sql.Encoder](
       processor: StatefulProcessor[K, I, O],
       input: List[(K, I)]): Unit = {
-    withSQLConf(
-      SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[RocksDBStateStoreProvider].getName,
-      SQLConf.SHUFFLE_PARTITIONS.key -> "5"
-    ) {
-      val outputMode = OutputMode.Append()
-      implicit val tupleEncoder = org.apache.spark.sql.Encoders.tuple(
-        implicitly[org.apache.spark.sql.Encoder[K]],
-        implicitly[org.apache.spark.sql.Encoder[I]]
-      )
-      val inputStream = MemoryStream[(K, I)]
-      val result = inputStream
-        .toDS()
-        .groupByKey(_._1)
-        .mapValues(_._2)
-        .transformWithState(processor, TimeMode.None(), outputMode)
-
-      val output: List[O] = new TwsTester(processor).test(input)
-      testStream(result, outputMode)(
-        AddData(inputStream, input: _*),
-        CheckNewAnswer(output.head, output.tail: _*),
-        StopStream
-      )
-    }
+    implicit val tupleEncoder = org.apache.spark.sql.Encoders.tuple(
+      implicitly[org.apache.spark.sql.Encoder[K]],
+      implicitly[org.apache.spark.sql.Encoder[I]]
+    )
+    val inputStream = MemoryStream[(K, I)]
+    val result = inputStream
+      .toDS()
+      .groupByKey(_._1)
+      .mapValues(_._2)
+      .transformWithState(processor, TimeMode.None(), OutputMode.Append())
+    checkTwsTester(new TwsTester(processor), List(input), inputStream, result)
   }
 
   test("fuzz test with RunningCountProcessor") {
@@ -894,7 +917,7 @@ class TwsTesterFuzzTestSuite extends StreamTest {
       (s"key${random.nextInt(10)}", random.alphanumeric.take(5).mkString)
     }
     val processor = new RunningCountProcessor[String]()
-    compareTws(processor, input)
+    checkTwsTesterOneBatch(processor, input)
   }
 
   test("fuzz test with TopKProcessor") {
@@ -906,7 +929,7 @@ class TwsTesterFuzzTestSuite extends StreamTest {
       )
     }
     val processor = new TopKProcessor(5)
-    compareTws(processor, input)
+    checkTwsTesterOneBatch(processor, input)
   }
 
   test("fuzz test with WordFrequencyProcessor") {
@@ -916,6 +939,56 @@ class TwsTesterFuzzTestSuite extends StreamTest {
       (s"key${random.nextInt(10)}", ("", words(random.nextInt(words.length))))
     }
     val processor = new WordFrequencyProcessor()
-    compareTws(processor, input)
+    checkTwsTesterOneBatch(processor, input)
+  }
+
+  test("fuzz test with EventTimeWindowProcessor") {
+    val inputStream = MemoryStream[(String, (String, Timestamp))]
+    val processor = new EventTimeWindowProcessor(windowDurationMs = 10000L)
+    val result = inputStream
+      .toDS()
+      .select($"_1", $"_2", $"_2._2".as("timestamp"))
+      .withWatermark("timestamp", "2 seconds")
+      .as[(String, (String, Timestamp), Timestamp)]
+      .groupByKey(_._1)
+      .mapValues(_._2)
+      .transformWithState(processor, TimeMode.EventTime(), OutputMode.Append())
+
+    // Generate 10 random batches, each with ~100 events, 10 users, with timestamps increasing.
+    val random = new scala.util.Random(0)
+    val numBatches = 10
+    val numUsers = 10
+    val eventsPerBatch = 100
+    val eventGapMs = 1000L
+    val userIds = (1 to numUsers).map(i => s"user$i").toArray
+
+    var currentTimestamp = 0L
+    val batches: List[List[(String, (String, Timestamp))]] =
+      (0 until numBatches).map { batchIdx =>
+        val batchStart = currentTimestamp
+        val usersInThisBatch = random.shuffle(userIds.toList)
+        // Assign variable number of events to each user in this batch
+        val perUserEvents = Array.fill(numUsers)(random.nextInt(5) + 5) // 5-9 events per user
+        val events =
+          usersInThisBatch.zip(perUserEvents).flatMap {
+            case (user, numEventsForUser) =>
+              (0 until numEventsForUser).map { evtIdx =>
+                // Make timestamp within this batch but always increasing overall
+                val ts = new Timestamp(currentTimestamp)
+                val evtId = s"event${batchIdx}_${user}_$evtIdx"
+                currentTimestamp += eventGapMs
+                (user, (evtId, ts))
+              }
+          }
+        random
+          .shuffle(events)
+          .take(eventsPerBatch)
+          .toList // Shuffle and trim to ~100 events per batch
+      }.toList
+
+    val tester = new TwsTester(processor, timeMode = TimeMode.EventTime())
+    tester.withWatermark(_._2, "2 seconds")
+
+    checkTwsTester(tester, batches, inputStream, result)
   }
 }

@@ -92,7 +92,7 @@ class TwsTester[K, I, O](
    */
   def test(input: List[(K, I)]): List[O] = {
     val currentTimeMs: Long = clock.instant().toEpochMilli()
-    val timerValues = new TimerValuesImpl(Some(currentTimeMs), currentWatermarkMs)
+    var timerValues = new TimerValuesImpl(Some(currentTimeMs), currentWatermarkMs)
     var ans: List[O] = List()
     val filteredInput = filterLateEvents(input)
 
@@ -101,12 +101,10 @@ class TwsTester[K, I, O](
       ans = ans ++ processor.handleInputRows(key, v.map(_._2).iterator, timerValues).toList
       ImplicitGroupingKeyTracker.removeImplicitKey()
     }
-
-    ans = ans ++ handleExpiredTimers(timerValues)
-
+    
     updateWatermark(input)
-
-    ans
+    timerValues = new TimerValuesImpl(Some(currentTimeMs), currentWatermarkMs)
+    ans ++ handleExpiredTimers(timerValues)
   }
 
   // Filters late events in EventTime mode.
