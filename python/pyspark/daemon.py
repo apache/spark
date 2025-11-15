@@ -95,10 +95,10 @@ def worker(sock, authenticated):
                 raise
             else:
                 print(
-                    "PySpark daemon failed to flush the output to the worker process. ",
+                    "PySpark daemon failed to flush the output to the worker process:\n"
+                    + traceback.format_exc(),
                     file=sys.stderr,
                 )
-                traceback.print_exc(file=sys.stderr)
     return exit_code
 
 
