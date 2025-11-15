@@ -265,6 +265,8 @@ Regression
     RandomForestRegressionModel
     FMRegressor
     FMRegressionModel
+    ArimaRegression
+    ArimaRegressionModel
 
 
 Statistics
