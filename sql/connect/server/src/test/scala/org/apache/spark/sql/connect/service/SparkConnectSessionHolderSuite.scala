@@ -48,16 +48,15 @@ class SparkConnectSessionHolderSuite extends SharedSparkSession {
   test("SessionHolder.close should close catalogs") {
     val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
     val catalogName = "my_closeable_catalog"
-    sessionHolder.session.conf.set(
-      s"spark.sql.catalog.$catalogName",
-      classOf[CloseableCatalog].getName)
+    sessionHolder.session.conf
+      .set(s"spark.sql.catalog.$catalogName", classOf[CloseableCatalog].getName)
 
     val catalog = sessionHolder.session.sessionState.catalogManager.catalog(catalogName)
     val closeableCatalog = catalog.asInstanceOf[CloseableCatalog]
     assert(!closeableCatalog.isClosed)
     sessionHolder.close()
     assert(closeableCatalog.isClosed)
-}
+  }
 
   test("DataFrame cache: Successful put and get") {
     val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
@@ -501,7 +500,7 @@ class SparkConnectSessionHolderSuite extends SharedSparkSession {
 }
 
 class CloseableCatalog
-  extends org.apache.spark.sql.connector.catalog.CatalogPlugin
+    extends org.apache.spark.sql.connector.catalog.CatalogPlugin
     with java.io.Closeable {
   private var _name: String = _
   private var closed = false
