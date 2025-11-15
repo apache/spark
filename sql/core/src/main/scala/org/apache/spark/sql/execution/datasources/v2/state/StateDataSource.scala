@@ -42,6 +42,7 @@ import org.apache.spark.sql.execution.streaming.operators.stateful.transformwith
 import org.apache.spark.sql.execution.streaming.runtime.StreamingCheckpointConstants.DIR_NAME_STATE
 import org.apache.spark.sql.execution.streaming.runtime.StreamingQueryCheckpointMetadata
 import org.apache.spark.sql.execution.streaming.state.{InMemoryStateSchemaProvider, KeyStateEncoderSpec, NoPrefixKeyStateEncoderSpec, PrefixKeyScanStateEncoderSpec, StateSchemaCompatibilityChecker, StateSchemaMetadata, StateSchemaProvider, StateStore, StateStoreColFamilySchema, StateStoreConf, StateStoreId, StateStoreProviderId}
+import org.apache.spark.sql.execution.streaming.utils.StreamingUtils
 import org.apache.spark.sql.sources.DataSourceRegister
 import org.apache.spark.sql.streaming.TimeMode
 import org.apache.spark.sql.types.StructType
@@ -481,7 +482,8 @@ object StateSourceOptions extends DataSourceOptions {
       throw StateDataSourceErrors.conflictOptions(Seq(JOIN_SIDE, STORE_NAME))
     }
 
-    val resolvedCpLocation = resolvedCheckpointLocation(hadoopConf, checkpointLocation)
+    val resolvedCpLocation = StreamingUtils.resolvedCheckpointLocation(
+      hadoopConf, checkpointLocation)
 
     var batchId = Option(options.get(BATCH_ID)).map(_.toLong)
 
@@ -615,14 +617,6 @@ object StateSourceOptions extends DataSourceOptions {
       readChangeFeed, fromSnapshotOptions, readChangeFeedOptions,
       stateVarName, readRegisteredTimers, flattenCollectionTypes,
       startOperatorStateUniqueIds, endOperatorStateUniqueIds)
-  }
-
-  private def resolvedCheckpointLocation(
-      hadoopConf: Configuration,
-      checkpointLocation: String): String = {
-    val checkpointPath = new Path(checkpointLocation)
-    val fs = checkpointPath.getFileSystem(hadoopConf)
-    checkpointPath.makeQualified(fs.getUri, fs.getWorkingDirectory).toUri.toString
   }
 
   private def getLastCommittedBatch(session: SparkSession, checkpointLocation: String): Long = {
