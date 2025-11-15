@@ -108,7 +108,10 @@ class ResolverSuite extends QueryTest with SharedSparkSession {
   }
 
   private def createResolver(extensions: Seq[ResolverExtension] = Seq.empty): Resolver = {
-    new Resolver(spark.sessionState.catalogManager, extensions)
+    new Resolver(
+      spark.sessionState.catalogManager,
+      nameParts => spark.sharedState.cacheManager.lookupCachedTable(nameParts, conf),
+      extensions)
   }
 
   private class TestRelationResolver extends ResolverExtension {

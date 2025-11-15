@@ -26,15 +26,17 @@ import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
 import org.apache.spark.sql.catalyst.expressions.{Attribute, SubqueryExpression}
 import org.apache.spark.sql.catalyst.optimizer.EliminateResolvedHint
 import org.apache.spark.sql.catalyst.plans.logical.{IgnoreCachedData, LogicalPlan, ResolvedHint, View}
+import org.apache.spark.sql.catalyst.plans.logical.Project
 import org.apache.spark.sql.catalyst.trees.TreePattern.PLAN_EXPRESSION
 import org.apache.spark.sql.catalyst.util.sideBySide
 import org.apache.spark.sql.classic.{Dataset, SparkSession}
-import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.IdentifierHelper
+import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.{IdentifierHelper, MultipartIdentifierHelper}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
 import org.apache.spark.sql.execution.command.CommandUtils
 import org.apache.spark.sql.execution.datasources.{FileIndex, HadoopFsRelation, LogicalRelation, LogicalRelationWithTable}
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, ExtractV2Table, FileTable}
+import org.apache.spark.sql.execution.datasources.v2.ExtractV2CatalogAndIdentifier
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.storage.StorageLevel.MEMORY_AND_DISK
@@ -238,26 +240,27 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
       name: Seq[String],
       conf: SQLConf,
       includeTimeTravel: Boolean): Boolean = {
-    def isSameName(nameInCache: Seq[String]): Boolean = {
-      nameInCache.length == name.length && nameInCache.zip(name).forall(conf.resolver.tupled)
-    }
 
     EliminateSubqueryAliases(plan) match {
       case LogicalRelationWithTable(_, Some(catalogTable)) =>
-        isSameName(catalogTable.identifier.nameParts)
+        isSameName(name, catalogTable.identifier.nameParts, conf)
 
       case DataSourceV2Relation(_, _, Some(catalog), Some(v2Ident), _, timeTravelSpec) =>
         val nameInCache = v2Ident.toQualifiedNameParts(catalog)
-        isSameName(nameInCache) && (includeTimeTravel || timeTravelSpec.isEmpty)
+        isSameName(name, nameInCache, conf) && (includeTimeTravel || timeTravelSpec.isEmpty)
 
       case v: View =>
-        isSameName(v.desc.identifier.nameParts)
+        isSameName(name, v.desc.identifier.nameParts, conf)
 
       case HiveTableRelation(catalogTable, _, _, _, _) =>
-        isSameName(catalogTable.identifier.nameParts)
+        isSameName(name, catalogTable.identifier.nameParts, conf)
 
       case _ => false
     }
+  }
+
+  private def isSameName(name: Seq[String], nameInCache: Seq[String], conf: SQLConf): Boolean = {
+    nameInCache.length == name.length && nameInCache.zip(name).forall(conf.resolver.tupled)
   }
 
   private def uncacheByCondition(
@@ -362,6 +365,41 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
             log"${MDC(DATAFRAME_CACHE_ENTRY, recomputedPlan)}")
         }
       }
+    }
+  }
+
+  private[sql] def lookupCachedTable(
+      name: Seq[String],
+      conf: SQLConf): Option[LogicalPlan] = {
+    val cachedRelations = findCachedRelations(name, conf)
+    cachedRelations match {
+      case cachedRelation +: _ =>
+        CacheManager.logCacheOperation(
+          log"Relation cache hit for table ${MDC(TABLE_NAME, name.quoted)}")
+        Some(cachedRelation)
+      case _ =>
+        None
+    }
+  }
+
+  private def findCachedRelations(
+      name: Seq[String],
+      conf: SQLConf): Seq[LogicalPlan] = {
+    cachedData.flatMap { cd =>
+      unwrapCachedPlan(cd) match {
+        case r @ ExtractV2CatalogAndIdentifier(catalog, ident) =>
+          val nameInCache = ident.toQualifiedNameParts(catalog)
+          Option.when(isSameName(name, nameInCache, conf) && r.timeTravelSpec.isEmpty)(r)
+        case _ =>
+          None
+      }
+    }
+  }
+
+  private def unwrapCachedPlan(cachedData: CachedData): LogicalPlan = {
+    EliminateSubqueryAliases(cachedData.plan) match {
+      case p @ Project(_, r) if p.sameOutput(r) => r
+      case other => other
     }
   }
 
