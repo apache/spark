@@ -2210,6 +2210,31 @@
     ],
     "sqlState" : "42000"
   },
+  "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS" : {
+    "message" : [
+      "Detected incompatible changes to table <tableName> after DataFrame/Dataset has been resolved and analyzed, meaning the underlying plan is out of sync. Please, re-create DataFrame/Dataset before attempting to execute the query again."
+    ],
+    "subClass" : {
+      "COLUMNS_MISMATCH" : {
+        "message" : [
+          "Data columns have changed:",
+          "<errors>"
+        ]
+      },
+      "METADATA_COLUMNS_MISMATCH" : {
+        "message" : [
+          "Metadata columns have changed:",
+          "<errors>"
+        ]
+      },
+      "TABLE_ID_MISMATCH" : {
+        "message" : [
+          "Table ID has changed from <capturedTableId> to <currentTableId>."
+        ]
+      }
+    },
+    "sqlState" : "51024"
+  },
   "INCOMPATIBLE_VIEW_SCHEMA_CHANGE" : {
     "message" : [
       "The SQL query of view <viewName> has an incompatible schema change and column <colName> cannot be resolved. Expected <expectedNum> columns named <colName> but got <actualCols>.",
@@ -6933,6 +6958,12 @@
   "UNSUPPORTED_PARTITION_TRANSFORM" : {
     "message" : [
       "Unsupported partition transform: <transform>. The supported transforms are `identity`, `bucket`, and `clusterBy`. Ensure your transform expression uses one of these."
+    ],
+    "sqlState" : "0A000"
+  },
+  "UNSUPPORTED_PIPELINE_SPARK_SQL_COMMAND" : {
+    "message" : [
+      "'<command>' is not supported in spark.sql(\"...\") API in Spark Declarative Pipeline."
     ],
     "sqlState" : "0A000"
   },

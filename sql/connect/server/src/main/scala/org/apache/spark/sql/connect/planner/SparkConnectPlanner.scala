@@ -21,11 +21,12 @@ import java.util.{HashMap, Properties, UUID}
 
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
+import scala.reflect.ClassTag
 import scala.util.Try
 import scala.util.control.NonFatal
 
 import com.google.common.collect.Lists
-import com.google.protobuf.{Any => ProtoAny, ByteString}
+import com.google.protobuf.{Any => ProtoAny, ByteString, Message}
 import io.grpc.{Context, Status, StatusRuntimeException}
 import io.grpc.stub.StreamObserver
 
@@ -33,7 +34,7 @@ import org.apache.spark.{SparkClassNotFoundException, SparkEnv, SparkException, 
 import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.api.python.{PythonEvalType, SimplePythonFunction}
 import org.apache.spark.connect.proto
-import org.apache.spark.connect.proto.{CheckpointCommand, CreateResourceProfileCommand, ExecutePlanResponse, SqlCommand, StreamingForeachFunction, StreamingQueryCommand, StreamingQueryCommandResult, StreamingQueryInstanceId, StreamingQueryManagerCommand, StreamingQueryManagerCommandResult, WriteStreamOperationStart, WriteStreamOperationStartResult}
+import org.apache.spark.connect.proto.{CheckpointCommand, CreateResourceProfileCommand, ExecutePlanResponse, PipelineAnalysisContext, SqlCommand, StreamingForeachFunction, StreamingQueryCommand, StreamingQueryCommandResult, StreamingQueryInstanceId, StreamingQueryManagerCommand, StreamingQueryManagerCommandResult, WriteStreamOperationStart, WriteStreamOperationStartResult}
 import org.apache.spark.connect.proto.ExecutePlanResponse.SqlCommandResult
 import org.apache.spark.connect.proto.Parse.ParseFormat
 import org.apache.spark.connect.proto.StreamingQueryManagerCommandResult.StreamingQueryInstance
@@ -2941,10 +2942,28 @@ class SparkConnectPlanner(
         .build())
   }
 
+  private def getExtensionList[T <: Message: ClassTag](
+      extensions: mutable.Buffer[ProtoAny]): Seq[T] = {
+    val cls = implicitly[ClassTag[T]].runtimeClass
+      .asInstanceOf[Class[_ <: Message]]
+    extensions.collect {
+      case any if any.is(cls) => any.unpack(cls).asInstanceOf[T]
+    }.toSeq
+  }
+
   private def handleSqlCommand(
       command: SqlCommand,
       responseObserver: StreamObserver[ExecutePlanResponse]): Unit = {
     val tracker = executeHolder.eventsManager.createQueryPlanningTracker()
+    val userContextExtensions = executeHolder.request.getUserContext.getExtensionsList.asScala
+    val pipelineAnalysisContextList = {
+      getExtensionList[PipelineAnalysisContext](userContextExtensions)
+    }
+    val hasPipelineAnalysisContext = pipelineAnalysisContextList.nonEmpty
+    val insidePipelineFlowFunction = pipelineAnalysisContextList.exists(_.hasFlowName)
+    // To avoid explicit handling of the result on the client, we build the expected input
+    // of the relation on the server. The client has to simply forward the result.
+    val result = SqlCommandResult.newBuilder()
 
     val relation = if (command.hasInput) {
       command.getInput
@@ -2962,6 +2981,18 @@ class SparkConnectPlanner(
             .addAllPosArguments(command.getPosArgumentsList)
             .build())
         .build()
+    }
+
+    // Block unsupported SQL commands if the request comes from Spark Declarative Pipelines.
+    if (hasPipelineAnalysisContext) {
+      PipelinesHandler.blockUnsupportedSqlCommand(queryPlan = transformRelation(relation))
+    }
+
+    // If the spark.sql() is called inside a pipeline flow function, we don't need to execute
+    // the SQL command and defer the actual analysis and execution to the flow function.
+    if (insidePipelineFlowFunction) {
+      result.setRelation(relation)
+      return
     }
 
     val df = relation.getRelTypeCase match {
@@ -2982,9 +3013,6 @@ class SparkConnectPlanner(
       case _ => Seq.empty
     }
 
-    // To avoid explicit handling of the result on the client, we build the expected input
-    // of the relation on the server. The client has to simply forward the result.
-    val result = SqlCommandResult.newBuilder()
     // Only filled when isCommand
     val metrics = ExecutePlanResponse.Metrics.newBuilder()
     if (isCommand || isSqlScript) {

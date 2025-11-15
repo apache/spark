@@ -60,7 +60,7 @@ class InitCLITests(ReusedConnectTestCase):
                 self.assertTrue((Path.cwd() / "pipeline-storage").exists())
 
                 registry = LocalGraphElementRegistry()
-                register_definitions(spec_path, registry, spec)
+                register_definitions(spec_path, registry, spec, self.spark, "test_graph_id")
                 self.assertEqual(len(registry.outputs), 1)
                 self.assertEqual(registry.outputs[0].name, "example_python_materialized_view")
                 self.assertEqual(len(registry.flows), 1)
