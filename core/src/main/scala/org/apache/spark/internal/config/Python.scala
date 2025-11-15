@@ -144,10 +144,9 @@ private[spark] object Python {
       .doc("When enabled, exceptions raised during output flush operations in the Python " +
         "worker managed under Python daemon are not caught, causing the worker to terminate " +
         "with the exception. This allows Spark to detect the failure and retry the task. " +
-        "When disabled (default), flush exceptions are caught and logged, " +
-        "but the worker continues, " +
+        "When disabled, flush exceptions are caught and logged but the worker continues, " +
         "which could cause the worker to get stuck due to protocol mismatch.")
       .version("4.1.0")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 }
