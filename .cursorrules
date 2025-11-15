@@ -44,11 +44,26 @@ pip3 install flake8 mypy
 
 ## Pre-Commit Checklist (MANDATORY)
 
-Before EVERY commit, verify:
+Before EVERY commit, verify ALL applicable checks:
+
+### Python Files:
 - [ ] `./dev/lint-python --black` passes (or `python3 -m black` if needed)
 - [ ] `./dev/lint-python --flake8` passes (or `python3 -m flake8` if needed)  
 - [ ] `./dev/lint-python --mypy` passes (or `python3 -m mypy` if needed)
+- [ ] `./dev/check-license` passes (license headers check)
 - [ ] Tests pass: `python/run-tests --testnames <test_module>`
+- [ ] If packaging changed: `./dev/run-pip-tests` (verify pip install works)
+
+### Scala Files:
+- [ ] `./dev/scalastyle` passes (code style validation)
+- [ ] `./dev/scalafmt` passes (code formatting)
+- [ ] `./dev/lint-scala` passes (comprehensive lint checks)
+
+### Java Files:
+- [ ] `./dev/lint-java` or `./dev/sbt-checkstyle` passes
+
+### All Files:
+- [ ] `./dev/check-license` passes (Apache RAT license check)
 - [ ] Only then: `git commit` and `git push`
 
 ## Common Flake8 Errors to Fix
