@@ -62,11 +62,20 @@ RUN apt-get update && apt-get install -y \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
+ARG BASIC_PIP_PKGS="numpy six==1.16.0 pandas==2.3.3 scipy plotly<6.0.0 coverage matplotlib openpyxl memory-profiler>=0.61.0 scikit-learn>=1.3.2"
+# Python deps for Spark Connect
+ARG CONNECT_PIP_PKGS="grpcio==1.76.0 grpcio-status==1.76.0 protobuf==6.33.0 googleapis-common-protos==1.71.0 zstandard==0.25.0 graphviz==0.20.3"
 
-RUN add-apt-repository ppa:pypy/ppa
 RUN mkdir -p /usr/local/pypy/pypy3.11 && \
     curl -sqL https://downloads.python.org/pypy/pypy3.11-v7.3.20-linux64.tar.bz2 | tar xjf - -C /usr/local/pypy/pypy3.11 --strip-components=1 && \
     ln -sf /usr/local/pypy/pypy3.11/bin/pypy /usr/local/bin/pypy3.11 && \
     ln -sf /usr/local/pypy/pypy3.11/bin/pypy /usr/local/bin/pypy3
 RUN curl -sS https://bootstrap.pypa.io/get-pip.py | pypy3
-RUN pypy3 -m pip install numpy 'six==1.16.0' 'pandas==2.3.3' scipy coverage matplotlib lxml
+# Note: PyArrow, mlflow, and PyTorch are skipped for PyPy due to compatibility issues
+# PyArrow requires CPython-specific APIs, mlflow depends on PyArrow, and PyTorch has no PyPy wheels
+# Create a constraints file to prevent PyArrow from being installed as a transitive dependency
+RUN echo "pyarrow==99.99.99 ; python_version >= '0'" > /tmp/constraints.txt
+RUN pypy3 -m pip install --no-deps numpy six==1.16.0 && \
+    PIP_CONSTRAINT=/tmp/constraints.txt pypy3 -m pip install pandas==2.3.3 scipy plotly\<6.0.0 coverage matplotlib openpyxl memory-profiler\>=0.61.0 scikit-learn\>=1.3.2 unittest-xml-reporting && \
+    PIP_CONSTRAINT=/tmp/constraints.txt pypy3 -m pip install $CONNECT_PIP_PKGS && \
+    pypy3 -m pip cache purge
