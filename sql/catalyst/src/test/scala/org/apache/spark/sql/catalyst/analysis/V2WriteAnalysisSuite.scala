@@ -345,11 +345,11 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
       assertArrayField(ArrayType(CharType(7)), ArrayType(CharType(8)), hasTransform = true)
       // VARCHAR to STRING widening doesn't really require transform, but does require type change.
       assertArrayField(ArrayType(VarcharType(7)), ArrayType(StringType), hasTransform = true)
-      // Exact match could avoid transform, but structs always transform today...
+      // Exact match avoids transform, even for structs
       assertArrayField(
         ArrayType(new StructType().add("x", VarcharType(7)).add("y", CharType(2))),
         ArrayType(new StructType().add("x", VarcharType(7)).add("y", CharType(2))),
-        hasTransform = true)
+        hasTransform = false)
       // struct needs to be reordered
       assertArrayField(
         ArrayType(new StructType().add("x", VarcharType(7)).add("y", CharType(2))),
