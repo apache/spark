@@ -75,6 +75,9 @@ ARG BASIC_PIP_PKGS="numpy pyarrow>=22.0.0 six==1.16.0 pandas==2.3.3 scipy plotly
 # Python deps for Spark Connect
 ARG CONNECT_PIP_PKGS="grpcio==1.76.0 grpcio-status==1.76.0 protobuf==6.33.0 googleapis-common-protos==1.71.0 zstandard==0.25.0 graphviz==0.20.3"
 
+# Forces pyarrow to compile
+ENV PYARROW_BUNDLE_ARROW_CPP=1
+
 RUN add-apt-repository ppa:pypy/ppa
 RUN mkdir -p /usr/local/pypy/pypy3.11 && \
     curl -sqL https://downloads.python.org/pypy/pypy3.11-v7.3.20-linux64.tar.bz2 | tar xjf - -C /usr/local/pypy/pypy3.11 --strip-components=1 && \
