@@ -290,6 +290,7 @@ object SparkBuild extends PomBuild {
   lazy val sharedSettings = checkJavaVersionSettings ++
                             sparkGenjavadocSettings ++
                             compilerWarningSettings ++
+                            DependencyVersions.settings ++
       (if (noLintOnCompile) Nil else enableScalaStyle) ++ Seq(
     (Compile / exportJars) := true,
     (Test / exportJars) := false,
@@ -1181,8 +1182,7 @@ object KubernetesIntegrationTests {
  * Overrides to work around sbt's dependency resolution being different from Maven's.
  */
 object DependencyOverrides {
-  lazy val jacksonVersion = sys.props.get("fasterxml.jackson.version").getOrElse("2.20.1")
-  lazy val jacksonDeps = Bom.dependencies("com.fasterxml.jackson" % "jackson-bom" % jacksonVersion)
+  lazy val jacksonDeps = SparkBom.dependencies(DependencyVersions.jacksonModuleID)
   lazy val settings = jacksonDeps ++ Seq(
     dependencyOverrides ++= {
       val guavaVersion = sys.props.get("guava.version").getOrElse(
@@ -1927,4 +1927,101 @@ object TestSettings {
     }
   )
 
+}
+
+object DependencyVersions {
+  import java.util.Properties
+
+  private lazy val properties = settingKey[Properties]("Effective POM properties")
+  lazy val jacksonVersion = settingKey[String]("Jackson version")
+  lazy val jacksonModuleID = settingKey[ModuleID]("Jackson Module ID")
+  lazy val settings = Seq(
+    properties := SbtPomKeys.effectivePom.value.getProperties,
+    jacksonVersion := getVersion(properties.value, "fasterxml.jackson"),
+    jacksonModuleID := ModuleID("com.fasterxml.jackson", "jackson-bom", jacksonVersion.value),
+  )
+
+  private def getVersionFromPom(properties: Properties, property: String) : String = {
+    properties.get(property).asInstanceOf[String]
+  }
+
+  private def getVersion(properties: Properties, property: String) : String = {
+    val version = property + ".version"
+    sys.props.get(version).getOrElse(getVersionFromPom(properties, version))
+  }
+}
+
+// SparkBom can be removed once https://github.com/heremaps/here-sbt-bom/pull/47 is merged
+object SparkBom {
+  import java.util.concurrent.atomic.AtomicInteger
+  import com.here.bom.internal.{BomReader, DependencyResolutionProxy, IvyPomLocator}
+  import org.apache.ivy.util.url.CredentialsStore
+  import sbt.File
+  import sbt.librarymanagement.ivy.IvyDependencyResolution
+
+  private val counter = new AtomicInteger()
+
+  def apply(bomArtifact: SettingKey[ModuleID]): Def.Setting[Bom] = read(bomArtifact)(identity[Bom])
+
+  def read[T: Manifest](bomArtifact: SettingKey[ModuleID])(extract: Bom => T): Def.Setting[T] = {
+    val name = s"bom_${bomArtifact.key.toString}_${counter.getAndIncrement()}"
+    val key = SettingKey[T](name)
+    key := {
+      val logger = (update / sLog).value
+      val res = (update / resolvers).value ++ (update / appResolvers).value.getOrElse(Seq.empty)
+      val options = (update / updateOptions).value
+      val ivyPaths = (update / Keys.ivyPaths).value
+      read(bomArtifact.value, logger, res, options, ivyPaths, scalaBinaryVersion.value)(extract)
+    }
+  }
+
+  private def read[T: Manifest](
+      bomArtifact: ModuleID,
+      logger: Logger,
+      resolvers: Seq[Resolver],
+      updateOptions: UpdateOptions,
+      ivyPaths: IvyPaths,
+      scalaBinaryVersion: String)(extract: Bom => T): T = {
+    val ivyConfig = InlineIvyConfiguration()
+        .withResolvers(resolvers.toVector)
+        .withUpdateOptions(updateOptions)
+    loadCredentials(logger)
+    logger.debug(f"Ivy configuration used for the BOM dependency resolution: $ivyConfig")
+    val depRes = new DependencyResolutionProxy(IvyDependencyResolution(ivyConfig))
+    val ivyHome = ivyPaths.ivyHome.get
+    IvyPomLocator.tweakIvyHome(logger)
+    val pomLocator = new IvyPomLocator(depRes, ivyHome, logger)
+    val reader = new BomReader(pomLocator, logger, scalaBinaryVersion)
+    val bom = reader.makeBom(bomArtifact)
+    extract(bom)
+  }
+
+  def dependencies(bomArtifact: SettingKey[ModuleID]): Def.Setting[Seq[ModuleID]] = {
+    read(bomArtifact)(bom => bom.bomDependencies)
+  }
+
+
+  private def loadCredentials(logger: Logger): Unit = {
+    val credentialFiles = Seq(
+      Option(sys.props("sbt.boot.credentials"))
+          .filter(s => s != null && s.nonEmpty)
+          .map(new File(_)),
+      sys.env.get("SBT_CREDENTIALS").map(new File(_)),
+      Some(Path.userHome / ".ivy2" / ".credentials"),
+      Some(Path.userHome / ".sbt" / ".credentials")
+    )
+    logger.debug(s"Credentials load order: $credentialFiles")
+    val filePaths: Seq[File] = credentialFiles.flatten
+    filePaths.find(_.exists()) match {
+      case Some(file) =>
+        logger.debug(s"Loading credentials from file $file")
+        Credentials.loadCredentials(file) match {
+          case Right(d) =>
+            logger.debug(s"Credentials loaded from file $file")
+            CredentialsStore.INSTANCE.addCredentials(d.realm, d.host, d.userName, d.passwd)
+          case Left(error) => logger.warn(s"Failed to load credentials: $error")
+        }
+      case None =>
+    }
+  }
 }
