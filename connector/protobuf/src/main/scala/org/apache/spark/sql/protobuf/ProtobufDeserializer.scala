@@ -460,6 +460,7 @@ private[sql] class ProtobufDeserializer(
         || record.hasField(field)
         || field.hasDefaultValue
         || (!field.hasPresence && this.emitDefaultValues)
+        || field.getContainingType.getFullName == "google.protobuf.BoolValue"
     ) {
       record.getField(field)
     } else {
