@@ -18,7 +18,7 @@ package org.apache.spark.sql.classic
 
 import java.util.concurrent.ConcurrentHashMap
 
-import org.apache.spark.sql.Observation
+import org.apache.spark.sql.{Observation, Row}
 import org.apache.spark.sql.catalyst.plans.logical.CollectMetrics
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.util.QueryExecutionListener
@@ -52,8 +52,7 @@ private[sql] class ObservationManager(session: SparkSession) {
       observation
     })
 
-  private def tryComplete(qe: QueryExecution): Unit = {
-    val allMetrics = qe.observedMetrics
+  def tryComplete(qe: QueryExecution, allMetrics: Map[String, Row]): Unit = {
     qe.logical.foreach {
       case c: CollectMetrics =>
         allMetrics.get(c.name).foreach { metrics =>
@@ -64,6 +63,10 @@ private[sql] class ObservationManager(session: SparkSession) {
         }
       case _ =>
     }
+  }
+
+  private def tryComplete(qe: QueryExecution): Unit = {
+    tryComplete(qe, qe.observedMetrics)
   }
 
   private object Listener extends QueryExecutionListener {
