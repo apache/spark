@@ -683,7 +683,7 @@ class Resolver(
         isStreaming = cteRelationDef.isStreaming,
         output = cteRelationDef.output,
         recursive = false,
-        maxRows = cteRelationDef.maxRows
+        _maxRows = cteRelationDef.maxRows
       )
     )
   }

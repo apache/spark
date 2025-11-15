@@ -46,7 +46,7 @@ import org.apache.spark.util.random.RandomSampler
  * at the top of the logical query plan.
  */
 case class ReturnAnswer(child: LogicalPlan) extends UnaryNode {
-  override def maxRows: Option[Long] = child.maxRows
+  override lazy val maxRows: Option[Long] = child.maxRows
   override def output: Seq[Attribute] = child.output
   override protected def withNewChildInternal(newChild: LogicalPlan): ReturnAnswer =
     copy(child = newChild)
@@ -74,8 +74,8 @@ case class Project(projectList: Seq[NamedExpression], child: LogicalPlan)
     extends OrderPreservingUnaryNode {
   override def output: Seq[Attribute] = projectList.map(_.toAttribute)
   override protected def outputExpressions: Seq[NamedExpression] = projectList
-  override def maxRows: Option[Long] = child.maxRows
-  override def maxRowsPerPartition: Option[Long] = child.maxRowsPerPartition
+  override lazy val maxRows: Option[Long] = child.maxRows
+  override lazy val maxRowsPerPartition: Option[Long] = child.maxRowsPerPartition
 
   final override val nodePatterns: Seq[TreePattern] = Seq(PROJECT)
 
@@ -257,8 +257,8 @@ object Project {
 case class DataFrameDropColumns(dropList: Seq[Expression], child: LogicalPlan) extends UnaryNode {
   override def output: Seq[Attribute] = Nil
 
-  override def maxRows: Option[Long] = child.maxRows
-  override def maxRowsPerPartition: Option[Long] = child.maxRowsPerPartition
+  override lazy val maxRows: Option[Long] = child.maxRows
+  override lazy val maxRowsPerPartition: Option[Long] = child.maxRowsPerPartition
 
   final override val nodePatterns: Seq[TreePattern] = Seq(DF_DROP_COLUMNS)
 
@@ -336,12 +336,12 @@ case class Filter(condition: Expression, child: LogicalPlan)
   extends OrderPreservingUnaryNode with PredicateHelper {
   override def output: Seq[Attribute] = child.output
 
-  override def maxRows: Option[Long] = condition match {
+  override lazy val maxRows: Option[Long] = condition match {
     case Literal.FalseLiteral => Some(0L)
     case _ => child.maxRows
   }
 
-  override def maxRowsPerPartition: Option[Long] = condition match {
+  override lazy val maxRowsPerPartition: Option[Long] = condition match {
     case Literal.FalseLiteral => Some(0L)
     case _ => child.maxRowsPerPartition
   }
@@ -406,7 +406,7 @@ case class Intersect(
   override protected lazy val validConstraints: ExpressionSet =
     leftConstraints.union(rightConstraints)
 
-  override def maxRows: Option[Long] = {
+  override lazy val maxRows: Option[Long] = {
     if (children.exists(_.maxRows.isEmpty)) {
       None
     } else {
@@ -451,7 +451,7 @@ case class Except(
 
   override protected lazy val validConstraints: ExpressionSet = leftConstraints
 
-  override def maxRows: Option[Long] = left.maxRows
+  override lazy val maxRows: Option[Long] = left.maxRows
 
   override protected def withNewChildrenInternal(
     newLeft: LogicalPlan, newRight: LogicalPlan): Except = copy(left = newLeft, right = newRight)
@@ -580,19 +580,18 @@ case class Union(
     allowMissingCol: Boolean = false) extends UnionBase {
   assert(!allowMissingCol || byName, "`allowMissingCol` can be true only if `byName` is true.")
 
-  override def maxRows: Option[Long] = {
-    var sum = BigInt(0)
-    children.foreach { child =>
-      if (child.maxRows.isDefined) {
-        sum += child.maxRows.get
-        if (!sum.isValidLong) {
-          return None
+  override lazy val maxRows: Option[Long] = {
+    val sum = children.foldLeft(Option(BigInt(0))) {
+      case (Some(acc), child) =>
+        child.maxRows match {
+          case Some(n) =>
+            val newSum = acc + n
+            if (newSum.isValidLong) Some(newSum) else None
+          case None => None
         }
-      } else {
-        return None
-      }
+      case (None, _) => None
     }
-    Some(sum.toLong)
+    sum.map(_.toLong)
   }
 
   final override val nodePatterns: Seq[TreePattern] = Seq(UNION)
@@ -600,19 +599,18 @@ case class Union(
   /**
    * Note the definition has assumption about how union is implemented physically.
    */
-  override def maxRowsPerPartition: Option[Long] = {
-    var sum = BigInt(0)
-    children.foreach { child =>
-      if (child.maxRowsPerPartition.isDefined) {
-        sum += child.maxRowsPerPartition.get
-        if (!sum.isValidLong) {
-          return None
+  override lazy val maxRowsPerPartition: Option[Long] = {
+    val sum = children.foldLeft(Option(BigInt(0))) {
+      case (Some(acc), child) =>
+        child.maxRowsPerPartition match {
+          case Some(n) =>
+            val newSum = acc + n
+            if (newSum.isValidLong) Some(newSum) else None
+          case None => None
         }
-      } else {
-        return None
-      }
+      case (None, _) => None
     }
-    Some(sum.toLong)
+    sum.map(_.toLong)
   }
 
   private def duplicatesResolvedPerBranch: Boolean =
@@ -666,7 +664,7 @@ case class Join(
     hint: JoinHint)
   extends BinaryNode with PredicateHelper {
 
-  override def maxRows: Option[Long] = {
+  override lazy val maxRows: Option[Long] = {
     joinType match {
       case Inner | Cross | FullOuter | LeftOuter | RightOuter | LeftSingle
           if left.maxRows.isDefined && right.maxRows.isDefined =>
@@ -908,8 +906,8 @@ case class Sort(
     child: LogicalPlan,
     hint: Option[SortHint] = None) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
-  override def maxRows: Option[Long] = child.maxRows
-  override def maxRowsPerPartition: Option[Long] = {
+  override lazy val maxRows: Option[Long] = child.maxRows
+  override lazy val maxRowsPerPartition: Option[Long] = {
     if (global) maxRows else child.maxRowsPerPartition
   }
   override def outputOrdering: Seq[SortOrder] = order
@@ -1047,7 +1045,7 @@ case class Range(
     s"Range ($start, $end, step=$step$splits)"
   }
 
-  override def maxRows: Option[Long] = {
+  override lazy val maxRows: Option[Long] = {
     if (numElements.isValidLong) {
       Some(numElements.toLong)
     } else {
@@ -1055,7 +1053,7 @@ case class Range(
     }
   }
 
-  override def maxRowsPerPartition: Option[Long] = {
+  override lazy val maxRowsPerPartition: Option[Long] = {
     if (numSlices.isDefined) {
       var m = numElements / numSlices.get
       if (numElements % numSlices.get != 0) m += 1
@@ -1173,7 +1171,7 @@ case class Aggregate(
 
   override def output: Seq[Attribute] = aggregateExpressions.map(_.toAttribute)
   override def metadataOutput: Seq[Attribute] = Nil
-  override def maxRows: Option[Long] = {
+  override lazy val maxRows: Option[Long] = {
     if (groupingExpressions.isEmpty) {
       Some(1L)
     } else {
@@ -1235,7 +1233,7 @@ case class Window(
     orderSpec: Seq[SortOrder],
     child: LogicalPlan,
     hint: Option[WindowHint] = None) extends UnaryNode {
-  override def maxRows: Option[Long] = child.maxRows
+  override lazy val maxRows: Option[Long] = child.maxRows
   override def output: Seq[Attribute] =
     child.output ++ windowExpressions.map(_.toAttribute)
 
@@ -1258,8 +1256,8 @@ case class WindowGroupLimit(
   assert(orderSpec.nonEmpty && limit > 0)
 
   override def output: Seq[Attribute] = child.output
-  override def maxRows: Option[Long] = child.maxRows
-  override def maxRowsPerPartition: Option[Long] = child.maxRowsPerPartition
+  override lazy val maxRows: Option[Long] = child.maxRows
+  override lazy val maxRowsPerPartition: Option[Long] = child.maxRowsPerPartition
   final override val nodePatterns: Seq[TreePattern] = Seq(WINDOW_GROUP_LIMIT)
   override protected def withNewChildInternal(newChild: LogicalPlan): WindowGroupLimit =
     copy(child = newChild)
@@ -1374,13 +1372,13 @@ case class Expand(
   override lazy val references: AttributeSet =
     AttributeSet(projections.flatten.flatMap(_.references))
 
-  override def maxRows: Option[Long] = child.maxRows match {
+  override lazy val maxRows: Option[Long] = child.maxRows match {
     case Some(m) =>
       val n = BigInt(m) * projections.length
       if (n.isValidLong) Some(n.toLong) else None
     case _ => None
   }
-  override def maxRowsPerPartition: Option[Long] = child.maxRowsPerPartition match {
+  override lazy val maxRowsPerPartition: Option[Long] = child.maxRowsPerPartition match {
     case Some(m) =>
       val n = BigInt(m) * projections.length
       if (n.isValidLong) Some(n.toLong) else None
@@ -1405,7 +1403,7 @@ case class Expand(
  */
 case class Offset(offsetExpr: Expression, child: LogicalPlan) extends OrderPreservingUnaryNode {
   override def output: Seq[Attribute] = child.output
-  override def maxRows: Option[Long] = {
+  override lazy val maxRows: Option[Long] = {
     import scala.math.max
     offsetExpr match {
       case IntegerLiteral(offset) => child.maxRows.map { x => max(x - offset, 0) }
@@ -1624,7 +1622,7 @@ object Limit {
  */
 case class GlobalLimit(limitExpr: Expression, child: LogicalPlan) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
-  override def maxRows: Option[Long] = {
+  override lazy val maxRows: Option[Long] = {
     limitExpr match {
       case IntegerLiteral(limit) => Some(limit)
       case _ => None
@@ -1646,7 +1644,7 @@ case class GlobalLimit(limitExpr: Expression, child: LogicalPlan) extends UnaryN
 case class LocalLimit(limitExpr: Expression, child: LogicalPlan) extends OrderPreservingUnaryNode {
   override def output: Seq[Attribute] = child.output
 
-  override def maxRowsPerPartition: Option[Long] = {
+  override lazy val maxRowsPerPartition: Option[Long] = {
     limitExpr match {
       case IntegerLiteral(limit) => Some(limit)
       case _ => None
@@ -1711,7 +1709,7 @@ object LimitAndOffset {
  */
 case class Tail(limitExpr: Expression, child: LogicalPlan) extends OrderPreservingUnaryNode {
   override def output: Seq[Attribute] = child.output
-  override def maxRows: Option[Long] = {
+  override lazy val maxRows: Option[Long] = {
     limitExpr match {
       case IntegerLiteral(limit) => Some(limit)
       case _ => None
@@ -1750,7 +1748,7 @@ case class SubqueryAlias(
     }
   }
 
-  override def maxRows: Option[Long] = child.maxRows
+  override lazy val maxRows: Option[Long] = child.maxRows
 
   override def doCanonicalize(): LogicalPlan = child.canonicalized
 
@@ -1816,10 +1814,10 @@ case class Sample(
 
   // when withReplacement is true, PoissonSampler is applied in SampleExec,
   // which may output more rows than child.
-  override def maxRows: Option[Long] = {
+  override lazy val maxRows: Option[Long] = {
     if (withReplacement) None else child.maxRows
   }
-  override def maxRowsPerPartition: Option[Long] = {
+  override lazy val maxRowsPerPartition: Option[Long] = {
     if (withReplacement) None else child.maxRowsPerPartition
   }
 
@@ -1833,7 +1831,7 @@ case class Sample(
  * Returns a new logical plan that dedups input rows.
  */
 case class Distinct(child: LogicalPlan) extends UnaryNode {
-  override def maxRows: Option[Long] = child.maxRows
+  override lazy val maxRows: Option[Long] = child.maxRows
   override def output: Seq[Attribute] = child.output
   final override val nodePatterns: Seq[TreePattern] = Seq(DISTINCT_LIKE)
   override protected def withNewChildInternal(newChild: LogicalPlan): Distinct =
@@ -1846,7 +1844,7 @@ case class Distinct(child: LogicalPlan) extends UnaryNode {
 abstract class RepartitionOperation extends UnaryNode {
   def shuffle: Boolean
   def numPartitions: Int
-  override final def maxRows: Option[Long] = child.maxRows
+  override final lazy val maxRows: Option[Long] = child.maxRows
   override def output: Seq[Attribute] = child.output
   final override val nodePatterns: Seq[TreePattern] = Seq(REPARTITION_OPERATION)
   def partitioning: Partitioning
@@ -1970,7 +1968,7 @@ case class RebalancePartitions(
 
   require(optNumPartitions.isEmpty || optAdvisoryPartitionSize.isEmpty)
 
-  override def maxRows: Option[Long] = child.maxRows
+  override lazy val maxRows: Option[Long] = child.maxRows
   override def output: Seq[Attribute] = child.output
   override val nodePatterns: Seq[TreePattern] = Seq(REBALANCE_PARTITIONS)
 
@@ -1984,7 +1982,7 @@ case class RebalancePartitions(
  * A relation with one row. This is used in "SELECT ..." without a from clause.
  */
 case class OneRowRelation() extends LeafNode {
-  override def maxRows: Option[Long] = Some(1)
+  override lazy val maxRows: Option[Long] = Some(1)
   override def output: Seq[Attribute] = Nil
   override def computeStats(): Statistics = Statistics(sizeInBytes = 1)
 
@@ -2000,7 +1998,7 @@ case class OneRowRelation() extends LeafNode {
 case class Deduplicate(
     keys: Seq[Attribute],
     child: LogicalPlan) extends UnaryNode {
-  override def maxRows: Option[Long] = child.maxRows
+  override lazy val maxRows: Option[Long] = child.maxRows
   override def output: Seq[Attribute] = child.output
   final override val nodePatterns: Seq[TreePattern] = Seq(DISTINCT_LIKE)
   override protected def withNewChildInternal(newChild: LogicalPlan): Deduplicate =
@@ -2011,7 +2009,7 @@ case class DeduplicateWithinWatermark(keys: Seq[Attribute], child: LogicalPlan) 
   // Ensure that references include event time columns so they are not pruned away.
   override def references: AttributeSet = AttributeSet(keys) ++
     AttributeSet(child.output.filter(_.metadata.contains(EventTimeWatermark.delayKey)))
-  override def maxRows: Option[Long] = child.maxRows
+  override lazy val maxRows: Option[Long] = child.maxRows
   override def output: Seq[Attribute] = child.output
   final override val nodePatterns: Seq[TreePattern] = Seq(DISTINCT_LIKE)
   override protected def withNewChildInternal(newChild: LogicalPlan): DeduplicateWithinWatermark =
@@ -2054,8 +2052,8 @@ case class CollectMetrics(
     name.nonEmpty && metrics.nonEmpty && metrics.forall(_.resolved) && childrenResolved
   }
 
-  override def maxRows: Option[Long] = child.maxRows
-  override def maxRowsPerPartition: Option[Long] = child.maxRowsPerPartition
+  override lazy val maxRows: Option[Long] = child.maxRows
+  override lazy val maxRowsPerPartition: Option[Long] = child.maxRowsPerPartition
   override def output: Seq[Attribute] = child.output
 
   override protected def withNewChildInternal(newChild: LogicalPlan): CollectMetrics =
