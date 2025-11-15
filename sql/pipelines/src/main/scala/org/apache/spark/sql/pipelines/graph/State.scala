@@ -63,7 +63,7 @@ object State extends Logging {
     }
 
     specifiedTablesToReset.flatMap(t => t +: graph.resolvedFlowsTo(t.identifier)) ++
-    specifiedSinksToReset.flatMap(s => graph.resolvedFlowsTo(s.identifier))
+    specifiedSinksToReset.flatMap(s => graph.resolvedFlowsTo.getOrElse(s.identifier, None))
   }
 
   /**
