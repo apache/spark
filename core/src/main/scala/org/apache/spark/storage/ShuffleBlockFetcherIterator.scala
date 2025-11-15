@@ -101,6 +101,7 @@ final class ShuffleBlockFetcherIterator(
     checksumAlgorithm: String,
     shuffleMetrics: ShuffleReadMetricsReporter,
     doBatchFetch: Boolean,
+    fallbackStorage: Option[FallbackStorage],
   clock: Clock = new SystemClock())
   extends Iterator[(BlockId, InputStream)] with DownloadFileManager with Logging {
 
@@ -973,14 +974,28 @@ final class ShuffleBlockFetcherIterator(
           }
 
         case FailureFetchResult(blockId, mapIndex, address, e) =>
+          var error = e
           var errorMsg: String = null
           if (e.isInstanceOf[OutOfDirectMemoryError]) {
             val logMessage = log"Block ${MDC(BLOCK_ID, blockId)} fetch failed after " +
               log"${MDC(MAX_ATTEMPTS, maxAttemptsOnNettyOOM)} retries due to Netty OOM"
             logError(logMessage)
             errorMsg = logMessage.message
+          } else if (fallbackStorage.isDefined) {
+            try {
+              val buf = fallbackStorage.get.read(blockId)
+              results.put(SuccessFetchResult(blockId, mapIndex, address, buf.size(), buf,
+                isNetworkReqDone = false))
+              result = null
+              error = null
+            } catch {
+              case t: Throwable =>
+                logInfo(s"Failed to read block from fallback storage: $blockId", t)
+            }
           }
-          throwFetchFailedException(blockId, mapIndex, address, e, Some(errorMsg))
+          if (error != null) {
+            throwFetchFailedException(blockId, mapIndex, address, error, Some(errorMsg))
+          }
 
         case DeferFetchRequestResult(request) =>
           val address = request.address
