@@ -1659,7 +1659,7 @@ private[spark] class DAGScheduler(
     stage.makeNewStageAttempt(partitionsToCompute.size, taskIdToLocations.values.toSeq)
 
     // If there are tasks to execute, record the submission time of the stage. Otherwise,
-    // post the even without the submission time, which indicates that this stage was
+    // post the event without the submission time, which indicates that this stage was
     // skipped.
     if (partitionsToCompute.nonEmpty) {
       stage.latestInfo.submissionTime = Some(clock.getTimeMillis())
