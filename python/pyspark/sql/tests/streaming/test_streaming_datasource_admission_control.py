@@ -18,8 +18,6 @@
 import unittest
 
 from pyspark.sql.datasource import DataSource, DataSourceStreamReader, InputPartition
-from pyspark.sql.types import StructType, StructField, IntegerType, StringType
-from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 
 class MockStreamReaderWithAdmissionControl(DataSourceStreamReader):
@@ -208,7 +206,9 @@ class StreamReaderBackwardCompatibilityTests(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.sql.tests.streaming.test_streaming_datasource_admission_control import *  # noqa: F401
+    from pyspark.sql.tests.streaming.test_streaming_datasource_admission_control import (  # noqa: F401,E501
+        *  # noqa: F401
+    )
 
     try:
         import xmlrunner
