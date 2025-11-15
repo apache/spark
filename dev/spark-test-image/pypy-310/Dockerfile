@@ -60,11 +60,18 @@ RUN apt-get update && apt-get install -y \
     zlib1g-dev \
     rustc \
     cargo \
-    cmake \
     && apt-get autoremove --purge -y \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
+
+#need a newer cmake version for building pyarrow
+RUN wget https://github.com/Kitware/CMake/releases/download/v3.28.3/cmake-3.28.3-linux-x86_64.sh \
+    -q -O /tmp/cmake-install.sh \
+    && chmod u+x /tmp/cmake-install.sh \
+    && /tmp/cmake-install.sh --skip-license --prefix=/usr/local \
+    && rm /tmp/cmake-install.sh
+    
 ARG BASIC_PIP_PKGS="numpy pyarrow>=22.0.0 six==1.16.0 pandas==2.3.3 scipy plotly<6.0.0 mlflow>=2.8.1 coverage matplotlib openpyxl memory-profiler>=0.61.0 scikit-learn>=1.3.2"
 # Python deps for Spark Connect
 ARG CONNECT_PIP_PKGS="grpcio==1.76.0 grpcio-status==1.76.0 protobuf==6.33.0 googleapis-common-protos==1.71.0 zstandard==0.25.0 graphviz==0.20.3"
