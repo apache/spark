@@ -25,9 +25,10 @@ import scala.util.Random
 
 import org.apache.spark.SparkConf
 import org.apache.spark.SparkException
-import org.apache.spark.internal.config._
+import org.apache.spark.internal.config.{MEMORY_OFFHEAP_ENABLED, MEMORY_OFFHEAP_SIZE}
 import org.apache.spark.internal.config.Kryo._
 import org.apache.spark.memory.{TaskMemoryManager, UnifiedMemoryManager}
+import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.serializer.KryoSerializer
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
@@ -39,9 +40,13 @@ import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.collection.CompactBuffer
 
-class HashedRelationSuite extends SharedSparkSession {
+abstract class HashedRelationSuite extends SharedSparkSession {
+  protected def useOffHeapMemoryMode: Boolean
+
   val umm = new UnifiedMemoryManager(
-    new SparkConf().set(MEMORY_OFFHEAP_ENABLED.key, "false"),
+    new SparkConf()
+      .set(MEMORY_OFFHEAP_ENABLED, useOffHeapMemoryMode)
+      .set(MEMORY_OFFHEAP_SIZE, ByteUnit.GiB.toBytes(1L)),
     Long.MaxValue,
     Long.MaxValue / 2,
     1)
@@ -141,6 +146,9 @@ class HashedRelationSuite extends SharedSparkSession {
       Seq(BoundReference(0, LongType, false), BoundReference(1, IntegerType, true)))
     val rows = (0 until 100).map(i => unsafeProj(InternalRow(Int.int2long(i), i + 1)).copy())
     val key = Seq(BoundReference(0, LongType, false))
+    while (true) {
+      LongHashedRelation(rows.iterator, key, 10, mm)
+    }
     val longRelation = LongHashedRelation(rows.iterator, key, 10, mm)
     assert(longRelation.keyIsUnique)
     (0 until 100).foreach { i =>
@@ -753,4 +761,12 @@ class HashedRelationSuite extends SharedSparkSession {
       map.free()
     }
   }
+}
+
+class HashedRelationOnHeapSuite extends HashedRelationSuite {
+  override protected def useOffHeapMemoryMode: Boolean = false
+}
+
+class HashedRelationOffHeapSuite extends HashedRelationSuite {
+  override protected def useOffHeapMemoryMode: Boolean = true
 }

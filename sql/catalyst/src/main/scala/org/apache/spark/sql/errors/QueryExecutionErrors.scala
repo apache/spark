@@ -1178,13 +1178,6 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       cause = null)
   }
 
-  def cannotAcquireMemoryToBuildLongHashedRelationError(size: Long, got: Long): Throwable = {
-    new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_2106",
-      messageParameters = Map("size" -> size.toString(), "got" -> got.toString()),
-      cause = null)
-  }
-
   def cannotAcquireMemoryToBuildUnsafeHashedRelationError(): Throwable = {
     new SparkOutOfMemoryError(
       "_LEGACY_ERROR_TEMP_2107",
