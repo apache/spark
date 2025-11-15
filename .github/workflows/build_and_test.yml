@@ -1314,6 +1314,11 @@ jobs:
           key: k8s-integration-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
           restore-keys: |
             k8s-integration-coursier-
+      - name: Free up disk space
+        run: |
+          if [ -f ./dev/free_disk_space ]; then
+            ./dev/free_disk_space
+          fi
       - name: Install Java ${{ inputs.java }}
         uses: actions/setup-java@v4
         with:
