@@ -1883,8 +1883,14 @@ object TestSettings {
       sys.props.get("test.include.tags").map { tags =>
         Seq("--include-categories=" + tags)
       }.getOrElse(Nil): _*),
-    // Show full stack trace and duration in test cases.
-    (Test / testOptions) += Tests.Argument("-oDF"),
+    // Show full stack trace (F) and duration (D) in test cases.
+    (Test / testOptions) += Tests.Argument(TestFrameworks.ScalaTest, "-oDF"),
+    (Test / testOptions) += Tests.Argument(TestFrameworks.ScalaTest,
+      // Output scala test result to the same location as maven scala test plugin
+      "-u", s"${baseDirectory.value}/target/surefire-reports",
+      // without color (W), show all durations (D), show full stack traces (F),
+      // show reminder of failed and canceled tests without stack traces (I)
+      "-fWDFI", s"${baseDirectory.value}/target/surefire-reports/SparkTestSuite.txt"),
     // Slowpoke notifications: receive notifications every 5 minute of tests that have been running
     // longer than two minutes.
     (Test / testOptions) += Tests.Argument(TestFrameworks.ScalaTest, "-W", "120", "300"),
