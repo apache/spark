@@ -3855,7 +3855,7 @@ object SQLConf {
       "for SQL pipe operators. When false, only '|>' is recognized as a pipe operator, and '|' " +
       "is only used for bitwise OR operations. This provides syntax compatibility with other " +
       "languages like Splunk SPL and Kusto that use '|' for pipe operations.")
-    .version("4.1.0")
+    .version("4.2.0")
     .booleanConf
     .createWithDefault(true)
 
