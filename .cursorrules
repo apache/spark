@@ -1,0 +1,44 @@
+# Python Linting Rules for Apache Spark
+
+## Always Run These Checks Before Committing/Pushing
+
+When working with Python code in Apache Spark, **ALWAYS** run these three linting checks:
+
+1. **Black formatting**: `./dev/lint-python --black` or `./dev/reformat-python`
+2. **Flake8**: `./dev/lint-python --flake8` OR `python3 -m flake8 --append-config dev/tox.ini --count --show-source --statistics .`
+3. **Mypy**: `./dev/lint-python --mypy` OR `python3 -m mypy <files>`
+
+**If the dev script skips checks due to missing tools, use `python3 -m <tool>` directly.**
+
+## Installation
+
+If flake8 or mypy are not installed:
+```bash
+pip3 install flake8 mypy
+```
+
+## Important Notes
+
+- **Never skip linting checks** - If tools are missing, install them first
+- **Always run all three checks** (black, flake8, mypy) before pushing code
+- CI will catch these errors, but fix them locally first to avoid CI failures
+- If a tool is not available, install it rather than skipping the check
+
+## Common Issues to Check Manually
+
+Even if tools aren't installed, manually check for:
+- Unused imports (F401)
+- Line length violations (E501, >100 chars)
+- Trailing whitespace (W293)
+- Missing newline at end of file (W391)
+- Type annotation issues
+
+## Workflow
+
+Before every commit/push:
+1. Run `./dev/lint-python --black` - fix formatting
+2. Run `./dev/lint-python --flake8` - fix style errors
+3. Run `./dev/lint-python --mypy` - fix type errors
+4. Run tests: `python/run-tests --testnames <test_module>`
+5. Only then commit and push
+

@@ -206,9 +206,7 @@ class StreamReaderBackwardCompatibilityTests(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.sql.tests.streaming.test_streaming_datasource_admission_control import (  # noqa: F401,E501
-        *  # noqa: F401
-    )
+    from pyspark.sql.tests.streaming.test_streaming_datasource_admission_control import *  # noqa: F401,E501
 
     try:
         import xmlrunner
