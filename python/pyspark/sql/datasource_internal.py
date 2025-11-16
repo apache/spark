@@ -19,7 +19,7 @@
 import json
 import copy
 from itertools import chain
-from typing import Iterator, List, Optional, Sequence, Tuple
+from typing import Iterator, List, Optional, Sequence, Tuple, Union
 
 from pyspark.sql.datasource import (
     DataSource,
@@ -31,7 +31,9 @@ from pyspark.sql.types import StructType
 from pyspark.errors import PySparkNotImplementedError
 
 
-def _streamReader(datasource: DataSource, schema: StructType) -> "DataSourceStreamReader":
+def _streamReader(
+    datasource: DataSource, schema: StructType
+) -> "DataSourceStreamReader":
     """
     Fallback to simpleStreamReader() method when streamReader() is not implemented.
     This should be invoked whenever a DataSourceStreamReader needs to be created instead of
@@ -88,14 +90,67 @@ class _SimpleStreamReaderWrapper(DataSourceStreamReader):
             self.initial_offset = self.simple_reader.initialOffset()
         return self.initial_offset
 
-    def latestOffset(self) -> dict:
+    def latestOffset(
+        self, start: Optional[dict] = None, limit: Optional[dict] = None
+    ) -> Union[dict, Tuple[dict, dict]]:
         # when query start for the first time, use initial offset as the start offset.
         if self.current_offset is None:
             self.current_offset = self.initialOffset()
-        (iter, end) = self.simple_reader.read(self.current_offset)
-        self.cache.append(PrefetchedCacheEntry(self.current_offset, end, iter))
-        self.current_offset = end
-        return end
+
+        # For backward compatibility: if called without parameters, use old behavior
+        if start is None and limit is None:
+            # Old behavior - no admission control
+            (full_iter, true_end) = self.simple_reader.read(self.current_offset)
+            self.cache.append(
+                PrefetchedCacheEntry(self.current_offset, true_end, full_iter)
+            )
+            self.current_offset = true_end
+            return true_end
+
+        # New behavior with admission control support
+        # If start is not provided, use current offset
+        if start is None:
+            start = self.current_offset
+
+        # Call simple reader's read() to get all available data
+        (full_iter, true_end) = self.simple_reader.read(start)
+
+        # Check if admission control is enabled
+        if limit is not None and limit.get("type") == "maxRows":
+            max_rows = limit["maxRows"]
+            # Convert iterator to list to allow length calculation and slicing
+            data_list = list(full_iter)
+
+            if len(data_list) <= max_rows:
+                # All data fits within limit
+                capped_iter = iter(data_list)
+                capped_end = true_end
+            else:
+                # Cap the data to max_rows
+                capped_data = data_list[:max_rows]
+                capped_iter = iter(capped_data)
+                # Calculate capped offset based on how many rows we're actually taking
+                # For simple offset structures like {"offset": N}, we can calculate precisely
+                if (
+                    isinstance(start, dict)
+                    and "offset" in start
+                    and isinstance(true_end, dict)
+                    and "offset" in true_end
+                ):
+                    capped_end = {"offset": start["offset"] + len(capped_data)}
+                else:
+                    # For complex offsets, we can't reliably calculate partial offsets
+                    # User should use Full API (DataSourceStreamReader) for complex offset logic
+                    capped_end = true_end
+
+            self.cache.append(PrefetchedCacheEntry(start, capped_end, capped_iter))
+            self.current_offset = capped_end
+            return (capped_end, true_end)
+        else:
+            # No limit or allAvailable - return all data
+            self.cache.append(PrefetchedCacheEntry(start, true_end, full_iter))
+            self.current_offset = true_end
+            return (true_end, true_end)
 
     def commit(self, end: dict) -> None:
         if self.current_offset is None:
@@ -136,11 +191,15 @@ class _SimpleStreamReaderWrapper(DataSourceStreamReader):
             return None  # type: ignore[return-value]
         # Chain all the data iterator between start offset and end offset
         # need to copy here to avoid exhausting the original data iterator.
-        entries = [copy.copy(entry.iterator) for entry in self.cache[start_idx : end_idx + 1]]
+        entries = [
+            copy.copy(entry.iterator) for entry in self.cache[start_idx : end_idx + 1]
+        ]
         it = chain(*entries)
         return it
 
     def read(
         self, input_partition: SimpleInputPartition  # type: ignore[override]
     ) -> Iterator[Tuple]:
-        return self.simple_reader.readBetweenOffsets(input_partition.start, input_partition.end)
+        return self.simple_reader.readBetweenOffsets(
+            input_partition.start, input_partition.end
+        )

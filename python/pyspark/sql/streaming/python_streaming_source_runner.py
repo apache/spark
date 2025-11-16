@@ -51,6 +51,9 @@ INITIAL_OFFSET_FUNC_ID = 884
 LATEST_OFFSET_FUNC_ID = 885
 PARTITIONS_FUNC_ID = 886
 COMMIT_FUNC_ID = 887
+LATEST_OFFSET_WITH_LIMIT_FUNC_ID = 888
+REPORT_LATEST_OFFSET_FUNC_ID = 889
+LATEST_OFFSET_WITH_REPORT_FUNC_ID = 890
 
 PREFETCHED_RECORDS_NOT_FOUND = 0
 NON_EMPTY_PYARROW_RECORD_BATCHES = 1
@@ -99,6 +102,64 @@ def commit_func(reader: DataSourceStreamReader, infile: IO, outfile: IO) -> None
     write_int(0, outfile)
 
 
+def latest_offset_with_report_func(
+    reader: DataSourceStreamReader, infile: IO, outfile: IO
+) -> None:
+    """
+    Handler for function ID 890: latestOffset with admission control parameters.
+
+    This function supports both old and new reader implementations:
+    - Old readers: latestOffset() with no parameters -> no admission control
+    - New readers: latestOffset(start, limit) with parameters -> admission control enabled
+    """
+    start_offset = json.loads(utf8_deserializer.loads(infile))
+    limit = json.loads(utf8_deserializer.loads(infile))
+
+    # Type declarations for mypy
+    capped_offset: dict
+    true_latest_offset: dict
+
+    try:
+        # Try calling with optional parameters (new signature)
+        result = reader.latestOffset(start_offset, limit)
+
+        # Check return type to determine behavior
+        if isinstance(result, tuple):
+            # New behavior: returns (capped_offset, true_latest_offset)
+            capped_offset, true_latest_offset = result
+        else:
+            # Old behavior or no admission control: single offset
+            capped_offset = true_latest_offset = result
+
+    except TypeError:
+        # Old signature that doesn't accept parameters - fallback
+        try:
+            fallback_result = reader.latestOffset()
+            # Handle both return types for backward compatibility
+            if isinstance(fallback_result, tuple):
+                capped_offset, true_latest_offset = fallback_result
+            else:
+                capped_offset = true_latest_offset = fallback_result
+        except Exception as fallback_error:
+            raise IllegalArgumentException(
+                errorClass="UNSUPPORTED_OPERATION",
+                messageParameters={
+                    "operation": f"latestOffset call failed: {str(fallback_error)}"
+                },
+            )
+    except Exception as e:
+        raise IllegalArgumentException(
+            errorClass="UNSUPPORTED_OPERATION",
+            messageParameters={
+                "operation": f"latestOffset with limit failed: {str(e)}"
+            },
+        )
+
+    # Send both offsets back to JVM
+    write_with_length(json.dumps(capped_offset).encode("utf-8"), outfile)
+    write_with_length(json.dumps(true_latest_offset).encode("utf-8"), outfile)
+
+
 def send_batch_func(
     rows: Iterator[Tuple],
     outfile: IO,
@@ -106,7 +167,9 @@ def send_batch_func(
     max_arrow_batch_size: int,
     data_source: DataSource,
 ) -> None:
-    batches = list(records_to_arrow_batches(rows, max_arrow_batch_size, schema, data_source))
+    batches = list(
+        records_to_arrow_batches(rows, max_arrow_batch_size, schema, data_source)
+    )
     if len(batches) != 0:
         write_int(NON_EMPTY_PYARROW_RECORD_BATCHES, outfile)
         write_int(SpecialLengths.START_ARROW_STREAM, outfile)
@@ -172,10 +235,17 @@ def main(infile: IO, outfile: IO) -> None:
                     latest_offset_func(reader, outfile)
                 elif func_id == PARTITIONS_FUNC_ID:
                     partitions_func(
-                        reader, data_source, schema, max_arrow_batch_size, infile, outfile
+                        reader,
+                        data_source,
+                        schema,
+                        max_arrow_batch_size,
+                        infile,
+                        outfile,
                     )
                 elif func_id == COMMIT_FUNC_ID:
                     commit_func(reader, infile, outfile)
+                elif func_id == LATEST_OFFSET_WITH_REPORT_FUNC_ID:
+                    latest_offset_with_report_func(reader, infile, outfile)
                 else:
                     raise IllegalArgumentException(
                         errorClass="UNSUPPORTED_OPERATION",
@@ -205,7 +275,8 @@ def main(infile: IO, outfile: IO) -> None:
 if __name__ == "__main__":
     # Read information about how to connect back to the JVM from the environment.
     conn_info = os.environ.get(
-        "PYTHON_WORKER_FACTORY_SOCK_PATH", int(os.environ.get("PYTHON_WORKER_FACTORY_PORT", -1))
+        "PYTHON_WORKER_FACTORY_SOCK_PATH",
+        int(os.environ.get("PYTHON_WORKER_FACTORY_PORT", -1)),
     )
     auth_secret = os.environ.get("PYTHON_WORKER_FACTORY_SECRET")
     (sock_file, sock) = local_connect_and_auth(conn_info, auth_secret)

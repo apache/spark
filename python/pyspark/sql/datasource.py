@@ -714,20 +714,46 @@ class DataSourceStreamReader(ABC):
             messageParameters={"feature": "initialOffset"},
         )
 
-    def latestOffset(self) -> dict:
+    def latestOffset(
+        self, start: Optional[dict] = None, limit: Optional[dict] = None
+    ) -> Union[dict, Tuple[dict, dict]]:
         """
         Returns the most recent offset available.
 
+        Parameters (optional - added in Spark 4.2 for admission control)
+        -------------------------------------------------------------------
+        start : dict, optional
+            The starting offset. Enables admission control when provided.
+        limit : dict, optional
+            Admission control limit with structure:
+            - {"type": "maxRows", "maxRows": N}
+            - {"type": "maxFiles", "maxFiles": N}
+            - {"type": "maxBytes", "maxBytes": N}
+            - {"type": "allAvailable"}
+
         Returns
         -------
-        dict
-            A dict or recursive dict whose key and value are primitive types, which includes
-            Integer, String and Boolean.
+        dict or Tuple[dict, dict]
+            - Old behavior (no params): returns single offset dict
+            - New behavior (with params): returns (capped_offset, true_latest_offset)
 
         Examples
         --------
+        Old implementation (backward compatible):
+
         >>> def latestOffset(self):
-        ...     return {"parititon-1": {"index": 3, "closed": True}, "partition-2": {"index": 5}}
+        ...     return {"partition-1": {"index": 3, "closed": True}, "partition-2": {"index": 5}}
+
+        New implementation (with admission control):
+
+        >>> def latestOffset(self, start=None, limit=None):
+        ...     if start is None or limit is None:
+        ...         return {"offset": self.get_latest()}
+        ...     if limit["type"] == "maxRows":
+        ...         capped = self.calc_capped(start, limit["maxRows"])
+        ...         true_latest = self.get_latest()
+        ...         return (capped, true_latest)
+        ...     return (self.get_latest(), self.get_latest())
         """
         raise PySparkNotImplementedError(
             errorClass="NOT_IMPLEMENTED",

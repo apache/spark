@@ -487,6 +487,101 @@ We can also use the same data source in streaming reader and writer
 
     query = spark.readStream.format("fake").load().writeStream.format("fake").start("/output_path")
 
+**Admission Control for Streaming Sources**
+
+Spark supports admission control for streaming sources to limit the amount of data processed in each micro-batch. This helps control resource usage and maintain consistent processing times. Python streaming data sources support three types of admission control options:
+
+- **maxRecordsPerBatch**: Limit the maximum number of rows per batch
+- **maxFilesPerBatch**: Limit the maximum number of files per batch
+- **maxBytesPerBatch**: Limit the maximum bytes per batch (in bytes)
+
+These options can be specified when reading from a streaming source:
+
+.. code-block:: python
+
+    # Limit to 1000 rows per batch
+    query = spark.readStream \
+        .format("fake") \
+        .option("maxRecordsPerBatch", "1000") \
+        .load() \
+        .writeStream \
+        .format("console") \
+        .start()
+
+    # Limit to 100 files per batch
+    query = spark.readStream \
+        .format("fake") \
+        .option("maxFilesPerBatch", "100") \
+        .load() \
+        .writeStream \
+        .format("console") \
+        .start()
+
+    # Limit to 10 MB per batch
+    query = spark.readStream \
+        .format("fake") \
+        .option("maxBytesPerBatch", str(10 * 1024 * 1024)) \
+        .load() \
+        .writeStream \
+        .format("console") \
+        .start()
+
+**Note**: 
+
+- Only one admission control option should be specified at a time
+- All admission control values must be positive integers. If an invalid value is provided (negative, zero, or non-numeric), an ``IllegalArgumentException`` will be thrown
+- These options apply to both ``streamReader()`` and ``simpleStreamReader()`` implementations
+- This behavior is consistent with Spark's built-in streaming sources (e.g., ``maxFilesPerTrigger``, ``maxBytesPerTrigger`` for file sources)
+
+**Implementing Admission Control in Custom Data Sources (Advanced)**
+
+For users implementing the full ``DataSourceStreamReader`` API (not ``SimpleDataSourceStreamReader``), admission control is enabled through optional parameters on the ``latestOffset()`` method. As of Spark 4.2, the ``latestOffset()`` method signature has been enhanced to accept optional parameters:
+
+.. code-block:: python
+
+    from pyspark.sql.datasource import DataSourceStreamReader
+    from typing import Optional, Union, Tuple
+    
+    class MyStreamReader(DataSourceStreamReader):
+        def latestOffset(
+            self, 
+            start: Optional[dict] = None, 
+            limit: Optional[dict] = None
+        ) -> Union[dict, Tuple[dict, dict]]:
+            # For backward compatibility: old implementations without parameters still work
+            if start is None and limit is None:
+                # Old behavior: return latest offset without admission control
+                return {"offset": self.get_latest_offset()}
+            
+            # New behavior: with admission control support
+            true_latest = self.get_latest_offset()
+            
+            # Apply admission control if configured
+            if limit and limit.get("type") == "maxRows":
+                max_rows = limit["maxRows"]
+                capped_offset = self.calculate_capped_offset(start, max_rows)
+                # Return tuple: (capped_offset, true_latest_offset)
+                return (capped_offset, true_latest)
+            elif limit and limit.get("type") == "maxFiles":
+                max_files = limit["maxFiles"]
+                capped_offset = self.calculate_capped_offset_by_files(start, max_files)
+                return (capped_offset, true_latest)
+            else:
+                # No limit or allAvailable
+                return (true_latest, true_latest)
+
+**Key Points:**
+
+- **Backward Compatibility**: Old implementations that don't accept parameters continue to work without modification
+- **Optional Parameters**: Both ``start`` and ``limit`` are optional; if not provided, implement old behavior
+- **Return Type**: Return a single ``dict`` for old behavior, or a ``Tuple[dict, dict]`` for new behavior with admission control
+- **Limit Structure**: The ``limit`` parameter is a dictionary with:
+  - ``{"type": "maxRows", "maxRows": N}`` for row-based limits
+  - ``{"type": "maxFiles", "maxFiles": N}`` for file-based limits  
+  - ``{"type": "maxBytes", "maxBytes": N}`` for byte-based limits
+  - ``{"type": "allAvailable"}`` for no limit
+- **SimpleDataSourceStreamReader**: Users of the simple API don't need to implement this; the framework handles admission control automatically
+
 Python Data Source Reader with direct Arrow Batch support for improved performance
 ----------------------------------------------------------------------------------
 The Python Datasource Reader supports direct yielding of Arrow Batches, which can significantly improve data processing performance. By using the efficient Arrow format,
