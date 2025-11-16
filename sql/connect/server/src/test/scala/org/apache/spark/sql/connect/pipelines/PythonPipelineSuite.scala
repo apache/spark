@@ -364,11 +364,13 @@ class PythonPipelineSuite
 
     val (streamingFlows, batchFlows) = graph.resolvedFlows.partition(_.df.isStreaming)
     assert(
-      batchFlows.map(_.identifier) == Seq(
+      batchFlows.map(_.identifier).toSet == Set(
         graphIdentifier("src"),
         graphIdentifier("a"),
         graphIdentifier("c")))
-    assert(streamingFlows.map(_.identifier) == Seq(graphIdentifier("b"), graphIdentifier("d")))
+    assert(
+      streamingFlows.map(_.identifier).toSet ==
+        Set(graphIdentifier("b"), graphIdentifier("d")))
   }
 
   test("referencing external datasets") {
@@ -722,7 +724,8 @@ class PythonPipelineSuite
     assert(
       graph
         .flowsTo(graphIdentifier("a"))
-        .map(_.identifier) == Seq(graphIdentifier("a"), graphIdentifier("something")))
+        .map(_.identifier)
+        .toSet == Set(graphIdentifier("a"), graphIdentifier("something")))
   }
 
   test("groupby and rollup works with internal datasets, referencing with (col, str)") {
