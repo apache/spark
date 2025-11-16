@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.datasources.v2.python
 import org.apache.spark.SparkEnv
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReaderFactory}
-import org.apache.spark.sql.connector.read.streaming.{AcceptsLatestSeenOffset, MicroBatchStream, Offset}
+import org.apache.spark.sql.connector.read.streaming.{AcceptsLatestSeenOffset, MicroBatchStream, Offset, ReadLimit, SupportsAdmissionControl}
 import org.apache.spark.sql.execution.datasources.v2.python.PythonMicroBatchStream.nextStreamId
 import org.apache.spark.sql.execution.python.streaming.PythonStreamingSourceRunner
 import org.apache.spark.sql.types.StructType
@@ -32,11 +32,11 @@ class PythonMicroBatchStream(
     ds: PythonDataSourceV2,
     shortName: String,
     outputSchema: StructType,
-    options: CaseInsensitiveStringMap
-  )
-  extends MicroBatchStream
-  with Logging
-  with AcceptsLatestSeenOffset {
+    options: CaseInsensitiveStringMap)
+    extends MicroBatchStream
+    with Logging
+    with AcceptsLatestSeenOffset
+    with SupportsAdmissionControl {
   private def createDataSourceFunc =
     ds.source.createPythonFunction(
       ds.getOrCreateDataSourceInPython(shortName, options, Some(outputSchema)).dataSource)
@@ -55,7 +55,11 @@ class PythonMicroBatchStream(
 
   override def initialOffset(): Offset = PythonStreamingSourceOffset(runner.initialOffset())
 
-  override def latestOffset(): Offset = PythonStreamingSourceOffset(runner.latestOffset())
+  override def latestOffset(): Offset = PythonStreamingSourceOffset(runner.latestOffset(None))
+
+  override def latestOffset(start: Offset, limit: ReadLimit): Offset = {
+    PythonStreamingSourceOffset(runner.latestOffset(Some(start), Some(limit)))
+  }
 
   override def planInputPartitions(start: Offset, end: Offset): Array[InputPartition] = {
     val startOffsetJson = start.asInstanceOf[PythonStreamingSourceOffset].json
@@ -72,7 +76,10 @@ class PythonMicroBatchStream(
       nextBlockId = nextBlockId + 1
       val blockId = PythonStreamBlockId(streamId, nextBlockId)
       SparkEnv.get.blockManager.putIterator(
-        blockId, rows.get, StorageLevel.MEMORY_AND_DISK_SER, true)
+        blockId,
+        rows.get,
+        StorageLevel.MEMORY_AND_DISK_SER,
+        true)
       val partition = PythonStreamingInputPartition(0, partitions.head, Some(blockId))
       cachedInputPartition.foreach(_._3.dropCache())
       cachedInputPartition = Some((startOffsetJson, endOffsetJson, partition))
@@ -94,8 +101,7 @@ class PythonMicroBatchStream(
   }
 
   override def createReaderFactory(): PartitionReaderFactory = {
-    new PythonStreamingPartitionReaderFactory(
-      ds.source, readInfo.func, outputSchema, None, None)
+    new PythonStreamingPartitionReaderFactory(ds.source, readInfo.func, outputSchema, None, None)
   }
 
   override def commit(end: Offset): Unit = {

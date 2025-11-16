@@ -21,31 +21,61 @@ import json
 from typing import IO, Iterator, Tuple
 
 from pyspark.accumulators import _accumulatorRegistry
-from pyspark.errors import IllegalArgumentException, PySparkAssertionError
+from pyspark.errors import PySparkRuntimeError
+from pyspark.rdd import PythonRDD, set_python_broadcast
 from pyspark.serializers import (
+    ArrowStreamPandasSerializer,
+    BatchedSerializer,
+    CPickleSerializer,
+    CloudPickleSerializer,
+    FramedSerializer,
+    UTF8Deserializer,
+    UTF8Serializer,
+)
+from pyspark.sql.types import StructType
+from pyspark.util import (
+    _exception_from_last_cause,
+    _get_daemon_build_info,
+    _print_missing_requirements,
+    _print_local_python_versions,
+    _print_current_working_directory,
+    _print_filepath_on_worker,
+    _print_python_path,
+    _print_java_version,
+    _print_py4j_version,
+    _print_python_version,
+    _print_system_path,
+    _print_spark_home,
+    _print_user_envs,
+    _check_python_version,
+    _check_py4j_version,
+    _check_java_version,
+    _check_spark_home,
+    _check_system_path,
+    _check_user_envs,
+    _check_current_working_directory,
+    _check_filepath_on_worker,
+    _check_python_path,
+    _check_python_versions,
+    _check_daemon_build_info,
+)
+from pyspark.worker import (
+    accum_from_bytes,
+    bytearray_to_bytes,
+    get_accumulator_manager,
+    pickleSer,
+    read_command,
     read_int,
-    write_int,
-    write_with_length,
+    read_long,
+    read_with_length,
     SpecialLengths,
+    write_with_length,
+    read_bool,
 )
 from pyspark.sql.datasource import DataSource, DataSourceStreamReader
 from pyspark.sql.datasource_internal import _SimpleStreamReaderWrapper, _streamReader
 from pyspark.sql.pandas.serializers import ArrowStreamSerializer
-from pyspark.sql.types import (
-    _parse_datatype_json_string,
-    StructType,
-)
 from pyspark.sql.worker.plan_data_source_read import records_to_arrow_batches
-from pyspark.util import handle_worker_exception, local_connect_and_auth
-from pyspark.worker_util import (
-    check_python_version,
-    read_command,
-    pickleSer,
-    send_accumulator_updates,
-    setup_memory_limits,
-    setup_spark_files,
-    utf8_deserializer,
-)
 
 INITIAL_OFFSET_FUNC_ID = 884
 LATEST_OFFSET_FUNC_ID = 885
@@ -169,7 +199,13 @@ def main(infile: IO, outfile: IO) -> None:
                 if func_id == INITIAL_OFFSET_FUNC_ID:
                     initial_offset_func(reader, outfile)
                 elif func_id == LATEST_OFFSET_FUNC_ID:
-                    latest_offset_func(reader, outfile)
+                    has_start = read_bool(infile)
+                    if has_start:
+                        start = read_with_length(infile)
+                    else:
+                        start = None
+                    read_limit = json.loads(read_with_length(infile))
+                    write_with_length(reader.latestOffset(start, read_limit))
                 elif func_id == PARTITIONS_FUNC_ID:
                     partitions_func(
                         reader, data_source, schema, max_arrow_batch_size, infile, outfile
