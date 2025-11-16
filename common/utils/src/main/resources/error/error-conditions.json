@@ -2123,6 +2123,15 @@
     ],
     "sqlState" : "42000"
   },
+  "INCOMPATIBLE_COLUMN_CHANGES_AFTER_VIEW_WITH_PLAN_CREATION" : {
+    "message" : [
+      "View <viewName> plan references table <tableName> whose <colType> columns changed since the view plan was initially captured.",
+      "Column changes:",
+      "<errors>",
+      "This indicates the table has evolved and the view based on the plan must be recreated."
+    ],
+    "sqlState" : "51024"
+  },
   "INCOMPATIBLE_COLUMN_TYPE" : {
     "message" : [
       "<operator> can only be performed on tables with compatible column types. The <columnOrdinalNumber> column of the <tableOrdinalNumber> table is <dataType1> type which is not compatible with <dataType2> at the same column of the first table.<hint>."
