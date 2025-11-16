@@ -300,7 +300,7 @@ class Filter(ABC):
 
     +---------------------+--------------------------------------------+
     | SQL filter          | Representation                             |
-    +---------------------+--------------------------------------------+
+    +---------------------+---------------------------------------------+
     | `a.b.c = 1`         | `EqualTo(("a", "b", "c"), 1)`              |
     | `a = 1`             | `EqualTo(("a",), 1)`                       |
     | `a = 'hi'`          | `EqualTo(("a",), "hi")`                    |
@@ -685,56 +685,23 @@ class DataSourceReader(ABC):
 
 class DataSourceStreamReader(ABC):
     """
-    A base class for streaming data source readers. Data source stream readers are responsible
-    for outputting data from a streaming data source.
+    An interface for streaming data source.
 
     .. versionadded: 4.0.0
     """
 
-    def initialOffset(self) -> dict:
-        """
-        Return the initial offset of the streaming data source.
-        A new streaming query starts reading data from the initial offset.
-        If Spark is restarting an existing query, it will restart from the check-pointed offset
-        rather than the initial one.
+    def initialOffset(self) -> str:
+        pass
 
-        Returns
-        -------
-        dict
-            A dict or recursive dict whose key and value are primitive types, which includes
-            Integer, String and Boolean.
-
-        Examples
-        --------
-        >>> def initialOffset(self):
-        ...     return {"parititon-1": {"index": 3, "closed": True}, "partition-2": {"index": 5}}
-        """
-        raise PySparkNotImplementedError(
-            errorClass="NOT_IMPLEMENTED",
-            messageParameters={"feature": "initialOffset"},
-        )
-
-    def latestOffset(self) -> dict:
+    @abstractmethod
+    def latestOffset(self) -> str:
         """
         Returns the most recent offset available.
-
-        Returns
-        -------
-        dict
-            A dict or recursive dict whose key and value are primitive types, which includes
-            Integer, String and Boolean.
-
-        Examples
-        --------
-        >>> def latestOffset(self):
-        ...     return {"parititon-1": {"index": 3, "closed": True}, "partition-2": {"index": 5}}
         """
-        raise PySparkNotImplementedError(
-            errorClass="NOT_IMPLEMENTED",
-            messageParameters={"feature": "latestOffset"},
-        )
+        pass
 
-    def partitions(self, start: dict, end: dict) -> Sequence[InputPartition]:
+    @abstractmethod
+    def partitions(self, start: str, end: str) -> List[bytes]:
         """
         Returns a list of InputPartition given the start and end offsets. Each InputPartition
         represents a data split that can be processed by one Spark task. This may be called with

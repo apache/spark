@@ -19,7 +19,7 @@
 import json
 import copy
 from itertools import chain
-from typing import Iterator, List, Optional, Sequence, Tuple
+from typing import Iterator, List, Optional, Sequence, Tuple, TYPE_CHECKING
 
 from pyspark.sql.datasource import (
     DataSource,
@@ -77,25 +77,22 @@ class _SimpleStreamReaderWrapper(DataSourceStreamReader):
     replayed by reading data between start and end offset through readBetweenOffsets(start, end).
     """
 
-    def __init__(self, simple_reader: SimpleDataSourceStreamReader):
-        self.simple_reader = simple_reader
-        self.initial_offset: Optional[dict] = None
-        self.current_offset: Optional[dict] = None
-        self.cache: List[PrefetchedCacheEntry] = []
+    def __init__(self, reader: "DataSourceStreamReader"):
+        self.reader = reader
 
     def initialOffset(self) -> dict:
-        if self.initial_offset is None:
-            self.initial_offset = self.simple_reader.initialOffset()
-        return self.initial_offset
+        return self.reader.initialOffset()
 
-    def latestOffset(self) -> dict:
-        # when query start for the first time, use initial offset as the start offset.
-        if self.current_offset is None:
-            self.current_offset = self.initialOffset()
-        (iter, end) = self.simple_reader.read(self.current_offset)
-        self.cache.append(PrefetchedCacheEntry(self.current_offset, end, iter))
-        self.current_offset = end
-        return end
+    def latestOffset(self, start: Optional[dict], read_limit: Dict) -> dict:
+        # For backward compatibility, `latestOffset` with two arguments is not an abstract method.
+        # If the user-defined stream reader does not implement that, it will fall back to
+        # the `latestOffset` with no argument.
+        if hasattr(self.reader, "latestOffset") and not isinstance(
+            self.reader, SimpleDataSourceStreamReader
+        ):
+            return self.reader.latestOffset(start, read_limit)
+        else:
+            return self.reader.latestOffset()
 
     def commit(self, end: dict) -> None:
         if self.current_offset is None:

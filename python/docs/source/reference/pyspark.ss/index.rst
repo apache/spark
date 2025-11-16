@@ -28,3 +28,4 @@ This page gives an overview of all public Structured Streaming API.
     core_classes
     io
     query_management
+    ../../sql_streaming

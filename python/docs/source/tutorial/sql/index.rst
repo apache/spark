@@ -27,5 +27,6 @@ Spark SQL
    arrow_python_udtf
    python_udtf
    python_data_source
+   sql_streaming
    type_conversions
 

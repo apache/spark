@@ -27,6 +27,8 @@ from pyspark.serializers import (
     write_int,
     write_with_length,
     SpecialLengths,
+    read_bool,
+    read_with_length,
 )
 from pyspark.sql.datasource import DataSource, DataSourceStreamReader
 from pyspark.sql.datasource_internal import _SimpleStreamReaderWrapper, _streamReader
@@ -169,7 +171,13 @@ def main(infile: IO, outfile: IO) -> None:
                 if func_id == INITIAL_OFFSET_FUNC_ID:
                     initial_offset_func(reader, outfile)
                 elif func_id == LATEST_OFFSET_FUNC_ID:
-                    latest_offset_func(reader, outfile)
+                    has_start = read_bool(infile)
+                    if has_start:
+                        start = read_with_length(infile)
+                    else:
+                        start = None
+                    read_limit = json.loads(read_with_length(infile))
+                    write_with_length(reader.latestOffset(start, read_limit))
                 elif func_id == PARTITIONS_FUNC_ID:
                     partitions_func(
                         reader, data_source, schema, max_arrow_batch_size, infile, outfile
