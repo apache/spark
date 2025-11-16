@@ -56,6 +56,7 @@ jobs:
   build:
     name: "Build modules using Maven: ${{ matrix.modules }} ${{ matrix.comment }}"
     runs-on: ${{ inputs.os }}
+    timeout-minutes: 150
     strategy:
       fail-fast: false
       matrix:
