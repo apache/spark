@@ -1996,6 +1996,34 @@
             <groupId>com.jayway.jsonpath</groupId>
             <artifactId>json-path</artifactId>
           </exclusion>
+          <exclusion>
+            <groupId>om.amazonaws.secretsmanager</groupId>
+            <artifactId>caws-secretsmanager-caching-java</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.graalvm.js</groupId>
+            <artifactId>js-scriptengine</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.graalvm.js</groupId>
+            <artifactId>js</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.apache.atlas</groupId>
+            <artifactId>atlas-client-v2</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.apache.atlas</groupId>
+            <artifactId>atlas-client-common</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>com.amazonaws.secretsmanager</groupId>
+            <artifactId>aws-secretsmanager-caching-java</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.apache.commons</groupId>
+            <artifactId>commons-dbcp2</artifactId>
+          </exclusion>
         </exclusions>
       </dependency>
       <dependency>
@@ -2382,6 +2410,22 @@
           <exclusion>
             <groupId>com.github.joshelser</groupId>
             <artifactId>dropwizard-metrics-hadoop-metrics2-reporter</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.apache.orc</groupId>
+            <artifactId>orc-core</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>io.grpc</groupId>
+            <artifactId>grpc-netty-shaded</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>io.grpc</groupId>
+            <artifactId>grpc-protobuf</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>io.grpc</groupId>
+            <artifactId>grpc-stub</artifactId>
           </exclusion>
         </exclusions>
       </dependency>

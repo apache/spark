@@ -165,6 +165,32 @@
       <groupId>org.apache.calcite</groupId>
       <artifactId>calcite-core</artifactId>
       <scope>${calcite.deps.scope}</scope>
+      <exclusions>
+        <exclusion>
+          <groupId>org.locationtech.jts.io</groupId>
+          <artifactId>jts-io-common</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>com.google.uzaygezen</groupId>
+          <artifactId>uzaygezen-core</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>com.jayway.jsonpath</groupId>
+          <artifactId>json-path</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>com.yahoo.datasketches</groupId>
+          <artifactId>sketches-core</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>org.apiguardian</groupId>
+          <artifactId>apiguardian-api</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>net.hydromatic</groupId>
+          <artifactId>aggdesigner-algorithm</artifactId>
+        </exclusion>
+      </exclusions>
     </dependency>
     <dependency>
       <groupId>org.apache.hadoop</groupId>
