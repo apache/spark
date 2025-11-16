@@ -19,7 +19,7 @@
 import json
 import copy
 from itertools import chain
-from typing import Iterator, List, Optional, Sequence, Tuple, TYPE_CHECKING
+from typing import Iterator, List, Optional, Sequence, Tuple, Dict, TYPE_CHECKING
 
 from pyspark.sql.datasource import (
     DataSource,

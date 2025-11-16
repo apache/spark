@@ -1,0 +1,5 @@
+rules:
+  - description: "Do not suggest whitespace or formatting changes to existing code if it's not adding any functionality."
+    pattern: ".*"
+    actions:
+      - "ignore"
