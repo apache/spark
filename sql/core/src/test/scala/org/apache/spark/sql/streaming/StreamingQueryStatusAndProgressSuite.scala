@@ -954,3 +954,4 @@ object StreamingQueryStatusAndProgressSuite {
 
   val testStatus = new StreamingQueryStatus("active", true, false)
 }
+
