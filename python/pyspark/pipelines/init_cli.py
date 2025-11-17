@@ -44,6 +44,11 @@ WHERE id % 2 = 0
 def init(name: str) -> None:
     """Generates a simple pipeline project."""
     project_dir = Path.cwd() / name
+    if project_dir.exists():
+        raise FileExistsError(
+            f"Directory '{name}' already exists. "
+            "Please choose a different name or remove the existing directory."
+        )
     project_dir.mkdir(parents=True, exist_ok=False)
 
     # Create the storage directory
