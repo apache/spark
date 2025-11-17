@@ -125,8 +125,9 @@ class PythonMicroBatchStream(
   }
 
   override def latestOffset(): Offset = {
-    throw new UnsupportedOperationException(
-      "latestOffset(Offset, ReadLimit) should be called instead of this method")
+    // Bridge to new signature with default read limit for backward compatibility
+    // Use initialOffset as start if we don't have a better alternative
+    latestOffset(initialOffset(), getDefaultReadLimit)
   }
 
   /**
