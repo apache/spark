@@ -11132,7 +11132,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
     # TODO(SPARK-46166): axis and **kwargs should be implemented.
     def any(
         self, axis: Axis = 0, bool_only: Optional[bool] = None, skipna: bool = True
-    ) -> Union["Series", bool]:
+    ) -> "Series":
         """
         Return whether any element is True.
 
@@ -11243,7 +11243,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             )
         else:
             # axis=None case - return single boolean value
-            return self.any(axis=1).any()
+            raise NotImplementedError('axis should be 0, 1, "index", or "columns" currently.')
 
     def _bool_column_labels(self, column_labels: List[Label]) -> List[Label]:
         """
