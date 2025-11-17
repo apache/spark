@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.util.{BoundInternalRowComparableWrapper}
+import org.apache.spark.sql.catalyst.util.InternalRowComparableWrapper
 import org.apache.spark.sql.connector.catalog.functions.Reducer
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
@@ -580,20 +580,18 @@ case class EnsureRequirements(
               val spec = if (replicateLeftSide) rightSpec else leftSpec
               val partValues = spec.partitioning.originalPartitionValues
               val partitionDataTypes = partitionExprs.map(_.dataType)
-              val (structType, ordering) =
-                BoundInternalRowComparableWrapper.getStructTypeAndOrdering(partitionDataTypes)
+              val internalRowComparableWrapperFactory =
+                InternalRowComparableWrapper.getInternalRowComparableWrapperFactory(
+                  partitionDataTypes)
 
               val numExpectedPartitions = partValues
-                .map(
-                  new BoundInternalRowComparableWrapper(
-                    _, partitionDataTypes, ordering, structType))
+                .map(internalRowComparableWrapperFactory)
                 .groupBy(identity)
                 .transform((_, v) => v.size)
 
               mergedPartValues = mergedPartValues.map { case (partVal, numParts) =>
                 (partVal, numExpectedPartitions.getOrElse(
-                  new BoundInternalRowComparableWrapper(
-                    partVal, partitionDataTypes, ordering, structType), numParts))
+                  internalRowComparableWrapperFactory(partVal), numParts))
               }
 
               logInfo(log"After applying partially clustered distribution, there are " +
@@ -687,11 +685,12 @@ case class EnsureRequirements(
     reducers match {
       case Some(reducers) =>
         val partitionDataTypes = expressions.map(_.dataType)
-        val (structType, ordering) =
-          BoundInternalRowComparableWrapper.getStructTypeAndOrdering(partitionDataTypes)
+        val internalRowComparableWrapperFactory =
+          InternalRowComparableWrapper.getInternalRowComparableWrapperFactory(
+            partitionDataTypes)
         partValues.map { row =>
           KeyGroupedShuffleSpec.reducePartitionValue(
-            row, reducers, partitionDataTypes, ordering, structType)
+            row, reducers, partitionDataTypes, internalRowComparableWrapperFactory)
         }.distinct.map(_.row)
       case _ => partValues
     }
@@ -749,22 +748,20 @@ case class EnsureRequirements(
       partitionExpression: Seq[Expression],
       joinType: JoinType): Seq[InternalRow] = {
     val partitionDataTypes = partitionExpression.map(_.dataType)
-    val (structType, ordering) =
-      BoundInternalRowComparableWrapper.getStructTypeAndOrdering(partitionDataTypes)
+    val internalRowComparableWrapperFactory =
+      InternalRowComparableWrapper.getInternalRowComparableWrapperFactory(partitionDataTypes)
 
     val merged = if (SQLConf.get.getConf(SQLConf.V2_BUCKETING_PARTITION_FILTER_ENABLED)) {
       joinType match {
-        case Inner => BoundInternalRowComparableWrapper.mergePartitions(
-          leftPartitioning, rightPartitioning, partitionExpression, intersect = true)
-        case LeftOuter => leftPartitioning.map(
-          new BoundInternalRowComparableWrapper(_, partitionDataTypes, ordering, structType))
-        case RightOuter => rightPartitioning.map(
-          new BoundInternalRowComparableWrapper(_, partitionDataTypes, ordering, structType))
-        case _ => BoundInternalRowComparableWrapper.mergePartitions(leftPartitioning,
+        case Inner => InternalRowComparableWrapper.mergePartitions(
+          leftPartitioning, rightPartitioning, partitionExpression)
+        case LeftOuter => leftPartitioning.map(internalRowComparableWrapperFactory)
+        case RightOuter => rightPartitioning.map(internalRowComparableWrapperFactory)
+        case _ => InternalRowComparableWrapper.mergePartitions(leftPartitioning,
           rightPartitioning, partitionExpression)
       }
     } else {
-      BoundInternalRowComparableWrapper.mergePartitions(leftPartitioning, rightPartitioning,
+      InternalRowComparableWrapper.mergePartitions(leftPartitioning, rightPartitioning,
         partitionExpression)
     }
 

@@ -33,11 +33,17 @@ import org.apache.spark.util.NonFateSharingCache
  *
  * @param dataTypes the data types for the row
  */
-class InternalRowComparableWrapper(val row: InternalRow, val dataTypes: Seq[DataType]) {
-  import InternalRowComparableWrapper._
+class InternalRowComparableWrapper private (
+    val row: InternalRow,
+    val dataTypes: Seq[DataType],
+    val structType: StructType,
+    val ordering: BaseOrdering) {
 
-  private val structType = structTypeCache.get(dataTypes)
-  private val ordering = orderingCache.get(dataTypes)
+  def this(row: InternalRow, dataTypes: Seq[DataType]) = this(
+    row,
+    dataTypes,
+    InternalRowComparableWrapper.structTypeCache.get(dataTypes),
+    InternalRowComparableWrapper.orderingCache.get(dataTypes))
 
   override def hashCode(): Int = Murmur3HashFunction.hash(
     row,
@@ -96,12 +102,14 @@ object InternalRowComparableWrapper {
       intersect: Boolean = false): Seq[InternalRowComparableWrapper] = {
     val partitionDataTypes = partitionExpression.map(_.dataType)
     val leftPartitionSet = new mutable.HashSet[InternalRowComparableWrapper]
+    val internalRowComparableWrapperFactory =
+      getInternalRowComparableWrapperFactory(partitionDataTypes)
     leftPartitioning
-      .map(new InternalRowComparableWrapper(_, partitionDataTypes))
+      .map(internalRowComparableWrapperFactory)
       .foreach(partition => leftPartitionSet.add(partition))
     val rightPartitionSet = new mutable.HashSet[InternalRowComparableWrapper]
     rightPartitioning
-      .map(new InternalRowComparableWrapper(_, partitionDataTypes))
+      .map(internalRowComparableWrapperFactory)
       .foreach(partition => rightPartitionSet.add(partition))
 
     val result = if (intersect) {
@@ -111,66 +119,11 @@ object InternalRowComparableWrapper {
     }
     result.toSeq
   }
-}
 
-/**
- * Effectively the same as [[InternalRowComparableWrapper]], but using a precomputed `ordering`
- * and `structType` to avoid the cache lookup for each row.
- */
-class BoundInternalRowComparableWrapper(
-  val row: InternalRow,
-  val dataTypes: Seq[DataType],
-  val ordering: BaseOrdering,
-  val structType: StructType) {
-
-  override def hashCode(): Int = Murmur3HashFunction.hash(
-    row,
-    structType,
-    42L,
-    isCollationAware = true,
-    // legacyCollationAwareHashing only matters when isCollationAware is false.
-    legacyCollationAwareHashing = false).toInt
-
-  override def equals(other: Any): Boolean = {
-    if (!other.isInstanceOf[BoundInternalRowComparableWrapper]) {
-      return false
-    }
-    val otherWrapper = other.asInstanceOf[BoundInternalRowComparableWrapper]
-    if (!otherWrapper.dataTypes.equals(this.dataTypes)) {
-      return false
-    }
-    ordering.compare(row, otherWrapper.row) == 0
-  }
-}
-
-object BoundInternalRowComparableWrapper {
-  /** Compute the schema and row ordering for a given list of data types. */
-  def getStructTypeAndOrdering(dataTypes: Seq[DataType]): (StructType, BaseOrdering) =
-    StructType(dataTypes.map(t => StructField("f", t))) ->
-      RowOrdering.createNaturalAscendingOrdering(dataTypes)
-
-  def mergePartitions(
-      leftPartitioning: Seq[InternalRow],
-      rightPartitioning: Seq[InternalRow],
-      partitionExpression: Seq[Expression],
-      intersect: Boolean = false): Seq[BoundInternalRowComparableWrapper] = {
-    val partitionDataTypes = partitionExpression.map(_.dataType)
-    val (structType, ordering) = getStructTypeAndOrdering(partitionDataTypes)
-
-    val leftPartitionSet = new mutable.HashSet[BoundInternalRowComparableWrapper]
-    leftPartitioning
-      .map(new BoundInternalRowComparableWrapper(_, partitionDataTypes, ordering, structType))
-      .foreach(partition => leftPartitionSet.add(partition))
-    val rightPartitionSet = new mutable.HashSet[BoundInternalRowComparableWrapper]
-    rightPartitioning
-      .map(new BoundInternalRowComparableWrapper(_, partitionDataTypes, ordering, structType))
-      .foreach(partition => rightPartitionSet.add(partition))
-
-    val result = if (intersect) {
-      leftPartitionSet.intersect(rightPartitionSet)
-    } else {
-      leftPartitionSet.union(rightPartitionSet)
-    }
-    result.toSeq
+  def getInternalRowComparableWrapperFactory(
+      dataTypes: Seq[DataType]): InternalRow => InternalRowComparableWrapper = {
+    val structType = structTypeCache.get(dataTypes)
+    val ordering = orderingCache.get(dataTypes)
+    row: InternalRow => new InternalRowComparableWrapper(row, dataTypes, structType, ordering)
   }
 }
