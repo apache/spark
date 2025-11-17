@@ -99,6 +99,8 @@
       url: sql-ref-literals.html
     - text: Null Semantics
       url: sql-ref-null-semantics.html
+    - text: Parameter Markers
+      url: sql-ref-parameter-markers.html
     - text: SQL Syntax
       url: sql-ref-syntax.html
       subitems:

@@ -34,6 +34,7 @@ import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAM
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces.PROP_OWNER
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.types._
+import org.apache.spark.util.Utils
 
 class InMemorySessionCatalogSuite extends SessionCatalogSuite {
   protected val utils = new CatalogTestUtils {
@@ -2090,5 +2091,182 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
         "This indicates corrupted view metadata that needs to be repaired\\."
       assert(exception.getMessage.matches(expectedPattern))
     }
+  }
+
+  test("UnresolvedCatalogRelation requires database in identifier") {
+    val catalog = new SessionCatalog(newEmptyCatalog())
+    catalog.createDatabase(newDb("default"), ignoreIfExists = true)
+    val db = "test_db"
+    catalog.createDatabase(newDb(db), ignoreIfExists = true)
+
+    // Create a table with database
+    val validTable = CatalogTable(
+      identifier = TableIdentifier("test_table", Some(db)),
+      tableType = CatalogTableType.MANAGED,
+      storage = CatalogStorageFormat.empty,
+      schema = new StructType().add("id", IntegerType)
+    )
+    catalog.createTable(validTable, ignoreIfExists = false)
+
+    // Try to create UnresolvedCatalogRelation without database - should fail
+    val tableMetaWithoutDb = validTable.copy(
+      identifier = TableIdentifier("test_table", None)
+    )
+
+    val exception = intercept[AssertionError] {
+      UnresolvedCatalogRelation(tableMetaWithoutDb)
+    }
+
+    val expectedMessage =
+      "assertion failed: Table identifier `test_table` is missing database name. " +
+      "UnresolvedCatalogRelation requires a fully qualified table identifier with database."
+    assert(exception.getMessage === expectedMessage)
+  }
+
+  test("HiveTableRelation requires database in identifier") {
+    val catalog = new SessionCatalog(newEmptyCatalog())
+    catalog.createDatabase(newDb("default"), ignoreIfExists = true)
+    val db = "test_db"
+    catalog.createDatabase(newDb(db), ignoreIfExists = true)
+
+    // Create a table with database
+    val validTable = CatalogTable(
+      identifier = TableIdentifier("test_table", Some(db)),
+      tableType = CatalogTableType.MANAGED,
+      storage = CatalogStorageFormat.empty,
+      schema = new StructType()
+        .add("id", IntegerType)
+        .add("name", StringType)
+    )
+
+    // Try to create HiveTableRelation without database - should fail
+    val tableMetaWithoutDb = validTable.copy(
+      identifier = TableIdentifier("test_table", None)
+    )
+
+    val exception = intercept[AssertionError] {
+      HiveTableRelation(
+        tableMetaWithoutDb,
+        Seq(AttributeReference("id", IntegerType)()),
+        Seq.empty
+      )
+    }
+
+    val expectedMessage =
+      "assertion failed: Table identifier `test_table` is missing database name. " +
+      "HiveTableRelation requires a fully qualified table identifier with database."
+    assert(exception.getMessage === expectedMessage)
+  }
+
+  test("SQLFunction requires either exprText or queryText") {
+    // Test case 1: Neither exprText nor queryText provided
+    val exception1 = intercept[AssertionError] {
+      SQLFunction(
+        name = FunctionIdentifier("test_func"),
+        inputParam = None,
+        returnType = scala.util.Left(IntegerType),
+        exprText = None,
+        queryText = None,
+        comment = None,
+        deterministic = Some(true),
+        containsSQL = Some(false),
+        isTableFunc = false,
+        properties = Map.empty
+      )
+    }
+
+    val expectedMessage = "assertion failed: SQL function 'test_func' is missing function body. " +
+      "Either exprText or queryText must be defined. " +
+      "Found: exprText=None, queryText=None."
+    assert(exception1.getMessage === expectedMessage)
+  }
+
+  test("SQLFunction return type must match function type") {
+    // Test case: isTableFunc=true but returnType is Left (scalar type)
+    val exception = intercept[AssertionError] {
+      SQLFunction(
+        name = FunctionIdentifier("test_func"),
+        inputParam = None,
+        returnType = scala.util.Left(IntegerType),  // Scalar return type
+        exprText = Some("SELECT 1"),
+        queryText = None,
+        comment = None,
+        deterministic = Some(true),
+        containsSQL = Some(true),
+        isTableFunc = true,  // But marked as table function
+        properties = Map.empty
+      )
+    }
+
+    val expectedMessage =
+      "assertion failed: SQL function 'test_func' has mismatched function type " +
+      "and return type. " +
+      "isTableFunc=true, returnType.isRight=false, returnType.isLeft=true. " +
+      "Table functions require Right[StructType] and scalar functions require Left[DataType]."
+    assert(exception.getMessage === expectedMessage)
+  }
+
+  test("InMemoryCatalog.createTable requires database in identifier") {
+    val catalog = new InMemoryCatalog()
+    val db = "test_db"
+    val dbDefinition = CatalogDatabase(
+      name = db,
+      description = "test database",
+      locationUri = Utils.createTempDir().toURI,
+      properties = Map.empty
+    )
+    catalog.createDatabase(dbDefinition, ignoreIfExists = false)
+
+    // Try to create table without database - should fail
+    val tableWithoutDb = CatalogTable(
+      identifier = TableIdentifier("test_table", None),
+      tableType = CatalogTableType.MANAGED,
+      storage = CatalogStorageFormat.empty,
+      schema = new StructType().add("id", IntegerType)
+    )
+
+    val exception = intercept[AssertionError] {
+      catalog.createTable(tableWithoutDb, ignoreIfExists = false)
+    }
+
+    val expectedMessage =
+      "assertion failed: Table identifier `test_table` is missing database name. " +
+      "Cannot create table without a database specified."
+    assert(exception.getMessage === expectedMessage)
+  }
+
+  test("InMemoryCatalog.alterTable requires database in identifier") {
+    val catalog = new InMemoryCatalog()
+    val db = "test_db"
+    val dbDefinition = CatalogDatabase(
+      name = db,
+      description = "test database",
+      locationUri = Utils.createTempDir().toURI,
+      properties = Map.empty
+    )
+    catalog.createDatabase(dbDefinition, ignoreIfExists = false)
+
+    // First create a valid table
+    val validTable = CatalogTable(
+      identifier = TableIdentifier("test_table", Some(db)),
+      tableType = CatalogTableType.MANAGED,
+      storage = CatalogStorageFormat.empty,
+      schema = new StructType().add("id", IntegerType)
+    )
+    catalog.createTable(validTable, ignoreIfExists = false)
+
+    // Try to alter table with identifier without database - should fail
+    val tableWithoutDb = validTable.copy(
+      identifier = TableIdentifier("test_table", None)
+    )
+
+    val exception = intercept[AssertionError] {
+      catalog.alterTable(tableWithoutDb)
+    }
+
+    val expectedMessage =
+      "assertion failed: Table identifier `test_table` is missing database name. " +
+      "Cannot alter table without a database specified."
+    assert(exception.getMessage === expectedMessage)
   }
 }

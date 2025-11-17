@@ -49,6 +49,8 @@ from pyspark.pipelines.spark_connect_pipeline import (
     handle_pipeline_events,
 )
 
+from pyspark.pipelines.add_pipeline_analysis_context import add_pipeline_analysis_context
+
 PIPELINE_SPEC_FILE_NAMES = ["pipeline.yaml", "pipeline.yml"]
 
 
@@ -216,7 +218,11 @@ def validate_str_dict(d: Mapping[str, str], field_name: str) -> Mapping[str, str
 
 
 def register_definitions(
-    spec_path: Path, registry: GraphElementRegistry, spec: PipelineSpec
+    spec_path: Path,
+    registry: GraphElementRegistry,
+    spec: PipelineSpec,
+    spark: SparkSession,
+    dataflow_graph_id: str,
 ) -> None:
     """Register the graph element definitions in the pipeline spec with the given registry.
     - Looks for Python files matching the glob patterns in the spec and imports them.
@@ -245,8 +251,11 @@ def register_definitions(
                         assert (
                             module_spec.loader is not None
                         ), f"Module spec has no loader for {file}"
-                        with block_session_mutations():
-                            module_spec.loader.exec_module(module)
+                        with add_pipeline_analysis_context(
+                            spark=spark, dataflow_graph_id=dataflow_graph_id, flow_name=None
+                        ):
+                            with block_session_mutations():
+                                module_spec.loader.exec_module(module)
                     elif file.suffix == ".sql":
                         log_with_curr_timestamp(f"Registering SQL file {file}...")
                         with file.open("r") as f:
@@ -324,7 +333,7 @@ def run(
 
     log_with_curr_timestamp("Registering graph elements...")
     registry = SparkConnectGraphElementRegistry(spark, dataflow_graph_id)
-    register_definitions(spec_path, registry, spec)
+    register_definitions(spec_path, registry, spec, spark, dataflow_graph_id)
 
     log_with_curr_timestamp("Starting run...")
     result_iter = start_run(
