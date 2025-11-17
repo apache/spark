@@ -29,7 +29,10 @@ from pyspark.serializers import (
     SpecialLengths,
 )
 from pyspark.sql.datasource import DataSource, DataSourceStreamReader
-from pyspark.sql.datasource_internal import _SimpleStreamReaderWrapper, _streamReader
+from pyspark.sql.datasource_internal import (
+    _SimpleStreamReaderWrapper,
+    _streamReader,
+)
 from pyspark.sql.pandas.serializers import ArrowStreamSerializer
 from pyspark.sql.types import (
     _parse_datatype_json_string,
@@ -91,24 +94,33 @@ def partitions_func(
         if it is None:
             write_int(PREFETCHED_RECORDS_NOT_FOUND, outfile)
         else:
-            send_batch_func(it, outfile, schema, max_arrow_batch_size, data_source)
+            send_batch_func(  # noqa: E501
+                it, outfile, schema, max_arrow_batch_size, data_source
+            )
     else:
         write_int(PREFETCHED_RECORDS_NOT_FOUND, outfile)
 
 
-def commit_func(reader: DataSourceStreamReader, infile: IO, outfile: IO) -> None:
+def commit_func(  # noqa: E501
+    reader: DataSourceStreamReader, infile: IO, outfile: IO
+) -> None:
     end_offset = json.loads(utf8_deserializer.loads(infile))
     reader.commit(end_offset)
     write_int(0, outfile)
 
 
-def latest_offset_with_report_func(reader: DataSourceStreamReader, infile: IO, outfile: IO) -> None:
+def latest_offset_with_report_func(
+    reader: DataSourceStreamReader, infile: IO, outfile: IO
+) -> None:
     """
-    Handler for function ID 890: latestOffset with admission control parameters.
+    Handler for function ID 890: latestOffset with admission control
+    parameters.
 
     This function supports both old and new reader implementations:
-    - Old readers: latestOffset() with no parameters -> no admission control
-    - New readers: latestOffset(start, limit) with parameters -> admission control enabled
+    - Old readers: latestOffset() with no parameters -> no admission
+      control
+    - New readers: latestOffset(start, limit) with parameters ->
+      admission control enabled
     """
     start_offset_str = utf8_deserializer.loads(infile)
     # Handle empty string as None for backward compatibility
@@ -143,12 +155,16 @@ def latest_offset_with_report_func(reader: DataSourceStreamReader, infile: IO, o
         except Exception as fallback_error:
             raise IllegalArgumentException(
                 errorClass="UNSUPPORTED_OPERATION",
-                messageParameters={"operation": f"latestOffset call failed: {str(fallback_error)}"},
+                messageParameters={
+                    "operation": f"latestOffset call failed: {str(fallback_error)}"  # noqa: E501
+                },
             )
     except Exception as e:
         raise IllegalArgumentException(
             errorClass="UNSUPPORTED_OPERATION",
-            messageParameters={"operation": f"latestOffset with limit failed: {str(e)}"},
+            messageParameters={
+                "operation": f"latestOffset with limit failed: {str(e)}"
+            },
         )
 
     # Send both offsets back to JVM
@@ -163,7 +179,9 @@ def send_batch_func(
     max_arrow_batch_size: int,
     data_source: DataSource,
 ) -> None:
-    batches = list(records_to_arrow_batches(rows, max_arrow_batch_size, schema, data_source))
+    batches = list(
+        records_to_arrow_batches(rows, max_arrow_batch_size, schema, data_source)  # noqa: E501
+    )
     if len(batches) != 0:
         write_int(NON_EMPTY_PYARROW_RECORD_BATCHES, outfile)
         write_int(SpecialLengths.START_ARROW_STREAM, outfile)
@@ -178,7 +196,9 @@ def main(infile: IO, outfile: IO) -> None:
         check_python_version(infile)
         setup_spark_files(infile)
 
-        memory_limit_mb = int(os.environ.get("PYSPARK_PLANNER_MEMORY_MB", "-1"))
+        memory_limit_mb = int(  # noqa: E501
+            os.environ.get("PYSPARK_PLANNER_MEMORY_MB", "-1")
+        )
         setup_memory_limits(memory_limit_mb)
 
         _accumulatorRegistry.clear()
@@ -190,7 +210,9 @@ def main(infile: IO, outfile: IO) -> None:
             raise PySparkAssertionError(
                 errorClass="DATA_SOURCE_TYPE_MISMATCH",
                 messageParameters={
-                    "expected": "a Python data source instance of type 'DataSource'",
+                    "expected": (
+                        "a Python data source instance of type " "'DataSource'"
+                    ),
                     "actual": f"'{type(data_source).__name__}'",
                 },
             )
@@ -244,7 +266,10 @@ def main(infile: IO, outfile: IO) -> None:
                     raise IllegalArgumentException(
                         errorClass="UNSUPPORTED_OPERATION",
                         messageParameters={
-                            "operation": "Function call id not recognized by stream reader"
+                            "operation": (
+                                "Function call id not recognized by "  # noqa: E501
+                                "stream reader"
+                            )
                         },
                     )
                 outfile.flush()
@@ -267,14 +292,16 @@ def main(infile: IO, outfile: IO) -> None:
 
 
 if __name__ == "__main__":
-    # Read information about how to connect back to the JVM from the environment.
+    # Read information about how to connect back to the JVM from the
+    # environment.
     conn_info = os.environ.get(
         "PYTHON_WORKER_FACTORY_SOCK_PATH",
         int(os.environ.get("PYTHON_WORKER_FACTORY_PORT", -1)),
     )
     auth_secret = os.environ.get("PYTHON_WORKER_FACTORY_SECRET")
     (sock_file, sock) = local_connect_and_auth(conn_info, auth_secret)
-    # Prevent the socket from timeout error when query trigger interval is large.
+    # Prevent socket timeout error when query trigger interval is
+    # large.
     sock.settimeout(None)
     write_int(os.getpid(), sock_file)
     sock_file.flush()
