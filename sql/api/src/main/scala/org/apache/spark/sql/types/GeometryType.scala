@@ -20,7 +20,7 @@ package org.apache.spark.sql.types
 import org.json4s.JsonAST.{JString, JValue}
 
 import org.apache.spark.{SparkIllegalArgumentException, SparkRuntimeException}
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.Unstable
 import org.apache.spark.sql.internal.types.CartesianSpatialReferenceSystemMapper
 
 /**
@@ -28,7 +28,7 @@ import org.apache.spark.sql.internal.types.CartesianSpatialReferenceSystemMapper
  * Geospatial Consortium (OGC) Simple Feature Access specification
  * (https://portal.ogc.org/files/?artifact_id=25355), with a Cartesian coordinate system.
  */
-@Experimental
+@Unstable
 class GeometryType private (val crs: String) extends AtomicType with Serializable {
 
   /**
@@ -153,7 +153,7 @@ class GeometryType private (val crs: String) extends AtomicType with Serializabl
   }
 }
 
-@Experimental
+@Unstable
 object GeometryType extends SpatialType {
 
   /**
@@ -161,8 +161,8 @@ object GeometryType extends SpatialType {
    * Parquet, Delta, and Iceberg specifications. If crs is omitted, it should always default to
    * this.
    */
-  final lazy val GEOMETRY_DEFAULT_SRID = 4326
-  final lazy val GEOMETRY_DEFAULT_CRS = "OGC:CRS84"
+  final val GEOMETRY_DEFAULT_SRID = 4326
+  final val GEOMETRY_DEFAULT_CRS = "OGC:CRS84"
 
   /**
    * The default concrete GeometryType in SQL.
@@ -179,7 +179,6 @@ object GeometryType extends SpatialType {
    * Constructors for GeometryType.
    */
   def apply(srid: Int): GeometryType = {
-    assertGeospatialEnabled()
     val crs = CartesianSpatialReferenceSystemMapper.getStringId(srid)
     if (crs == null) {
       throw new SparkIllegalArgumentException(
@@ -190,7 +189,6 @@ object GeometryType extends SpatialType {
   }
 
   def apply(crs: String): GeometryType = {
-    assertGeospatialEnabled()
     crs match {
       case "ANY" =>
         // Special value "ANY" is used for mixed SRID values.

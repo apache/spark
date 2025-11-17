@@ -20,7 +20,7 @@ package org.apache.spark.sql.types
 import org.json4s.JsonAST.{JString, JValue}
 
 import org.apache.spark.{SparkIllegalArgumentException, SparkRuntimeException}
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.Unstable
 import org.apache.spark.sql.internal.types.GeographicSpatialReferenceSystemMapper
 
 /**
@@ -28,7 +28,7 @@ import org.apache.spark.sql.internal.types.GeographicSpatialReferenceSystemMappe
  * Geospatial Consortium (OGC) Simple Feature Access specification
  * (https://portal.ogc.org/files/?artifact_id=25355), with a geographic coordinate system.
  */
-@Experimental
+@Unstable
 class GeographyType private (val crs: String, val algorithm: EdgeInterpolationAlgorithm)
     extends AtomicType
     with Serializable {
@@ -156,21 +156,21 @@ class GeographyType private (val crs: String, val algorithm: EdgeInterpolationAl
   }
 }
 
-@Experimental
+@Unstable
 object GeographyType extends SpatialType {
 
   /**
    * Default CRS value for GeographyType depends on storage specification. Parquet and Iceberg use
    * OGC:CRS84, which translates to SRID 4326 here.
    */
-  final lazy val GEOGRAPHY_DEFAULT_SRID = 4326
-  final lazy val GEOGRAPHY_DEFAULT_CRS = "OGC:CRS84"
+  final val GEOGRAPHY_DEFAULT_SRID = 4326
+  final val GEOGRAPHY_DEFAULT_CRS = "OGC:CRS84"
 
   // The default edge interpolation algorithm value for GeographyType.
-  final lazy val GEOGRAPHY_DEFAULT_ALGORITHM = EdgeInterpolationAlgorithm.SPHERICAL
+  final val GEOGRAPHY_DEFAULT_ALGORITHM = EdgeInterpolationAlgorithm.SPHERICAL
 
   // Another way to represent the default parquet crs value (OGC:CRS84).
-  final lazy val GEOGRAPHY_DEFAULT_EPSG_CRS = s"EPSG:$GEOGRAPHY_DEFAULT_SRID"
+  final val GEOGRAPHY_DEFAULT_EPSG_CRS = s"EPSG:$GEOGRAPHY_DEFAULT_SRID"
 
   /**
    * The default concrete GeographyType in SQL.
@@ -187,7 +187,6 @@ object GeographyType extends SpatialType {
    * Constructors for GeographyType.
    */
   def apply(srid: Int): GeographyType = {
-    assertGeospatialEnabled()
     val crs = GeographicSpatialReferenceSystemMapper.getStringId(srid)
     if (crs == null) {
       throw new SparkIllegalArgumentException(
@@ -198,7 +197,6 @@ object GeographyType extends SpatialType {
   }
 
   def apply(crs: String): GeographyType = {
-    assertGeospatialEnabled()
     crs match {
       case "ANY" =>
         // Special value "ANY" is used for mixed SRID values.
@@ -212,7 +210,6 @@ object GeographyType extends SpatialType {
   }
 
   def apply(crs: String, algorithm: String): GeographyType = {
-    assertGeospatialEnabled()
     EdgeInterpolationAlgorithm.fromString(algorithm) match {
       case Some(alg) => GeographyType(crs, alg)
       case None =>
@@ -223,7 +220,6 @@ object GeographyType extends SpatialType {
   }
 
   def apply(crs: String, algorithm: EdgeInterpolationAlgorithm): GeographyType = {
-    assertGeospatialEnabled()
     new GeographyType(crs, algorithm)
   }
 

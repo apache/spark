@@ -24,7 +24,6 @@ import org.antlr.v4.runtime.{ParserRuleContext, Token}
 import org.antlr.v4.runtime.tree.ParseTree
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.catalyst.util.SparkParserUtils.{string, withOrigin}
@@ -340,7 +339,7 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with DataTypeE
             currentCtx.precision.getText.toInt
           }
           TimeType(precision)
-        case GEOGRAPHY if SparkSession.getActiveSession.get.geospatialEnabled =>
+        case GEOGRAPHY =>
           // Unparameterized geometry type isn't supported and will be caught by the default branch.
           // Here, we only handle the parameterized GEOGRAPHY type syntax, which comes in two forms:
           if (currentCtx.any != null) {
@@ -352,7 +351,7 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with DataTypeE
             // This implies a fixed GEOGRAPHY type, with a single fixed SRID value across all rows.
             GeographyType(currentCtx.srid.getText.toInt)
           }
-        case GEOMETRY if SparkSession.getActiveSession.get.geospatialEnabled =>
+        case GEOMETRY =>
           // Unparameterized geometry type isn't supported and will be caught by the default branch.
           // Here, we only handle the parameterized GEOMETRY type syntax, which comes in two forms:
           if (currentCtx.any != null) {

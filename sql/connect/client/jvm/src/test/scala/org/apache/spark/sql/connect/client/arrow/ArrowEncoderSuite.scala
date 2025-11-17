@@ -41,10 +41,9 @@ import org.apache.spark.sql.catalyst.util.DateTimeConstants.MICROS_PER_SECOND
 import org.apache.spark.sql.catalyst.util.IntervalStringStyles.ANSI_STYLE
 import org.apache.spark.sql.catalyst.util.SparkDateTimeUtils._
 import org.apache.spark.sql.catalyst.util.SparkIntervalUtils._
-import org.apache.spark.sql.connect.SparkSession
 import org.apache.spark.sql.connect.client.CloseableIterator
 import org.apache.spark.sql.connect.client.arrow.FooEnum.FooEnum
-import org.apache.spark.sql.connect.test.{ConnectFunSuite, RemoteSparkSession}
+import org.apache.spark.sql.connect.test.ConnectFunSuite
 import org.apache.spark.sql.types.{ArrayType, DataType, DayTimeIntervalType, Decimal, DecimalType, Geography, Geometry, IntegerType, Metadata, SQLUserDefinedType, StringType, StructType, UserDefinedType, YearMonthIntervalType}
 import org.apache.spark.unsafe.types.VariantVal
 import org.apache.spark.util.{MaybeNull, SparkStringUtils}
@@ -52,19 +51,14 @@ import org.apache.spark.util.{MaybeNull, SparkStringUtils}
 /**
  * Tests for encoding external data to and from arrow.
  */
-class ArrowEncoderSuite extends ConnectFunSuite with RemoteSparkSession with BeforeAndAfterAll {
+class ArrowEncoderSuite extends ConnectFunSuite with BeforeAndAfterAll {
   private val allocator = new RootAllocator()
 
   private def newAllocator(name: String): BufferAllocator = {
     allocator.newChildAllocator(name, 0, allocator.getLimit)
   }
 
-  override def beforeAll(): Unit = {
-    super.beforeAll()
-    SparkSession.getActiveSession.get.conf.set("spark.sql.geospatial.enabled", "true")
-  }
-
-  override def afterAll(): Unit = {
+  protected override def afterAll(): Unit = {
     super.afterAll()
     allocator.close()
   }

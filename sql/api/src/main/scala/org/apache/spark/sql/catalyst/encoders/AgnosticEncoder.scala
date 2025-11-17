@@ -279,9 +279,9 @@ object AgnosticEncoders {
     ScalaDecimalEncoder(DecimalType.SYSTEM_DEFAULT)
   val DEFAULT_JAVA_DECIMAL_ENCODER: JavaDecimalEncoder =
     JavaDecimalEncoder(DecimalType.SYSTEM_DEFAULT, lenientSerialization = false)
-  lazy val DEFAULT_GEOMETRY_ENCODER: GeometryEncoder =
+  val DEFAULT_GEOMETRY_ENCODER: GeometryEncoder =
     GeometryEncoder(GeometryType(Geometry.DEFAULT_SRID))
-  lazy val DEFAULT_GEOGRAPHY_ENCODER: GeographyEncoder =
+  val DEFAULT_GEOGRAPHY_ENCODER: GeographyEncoder =
     GeographyEncoder(GeographyType(Geography.DEFAULT_SRID))
 
   /**
