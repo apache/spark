@@ -428,13 +428,13 @@ case class KeyGroupedPartitioning(
   }
 
   lazy val uniquePartitionValues: Seq[InternalRow] = {
-    val dataTypes = expressions.map(_.dataType)
     val internalRowComparableFactory =
-      InternalRowComparableWrapper.getInternalRowComparableWrapperFactory(dataTypes)
+      InternalRowComparableWrapper.getInternalRowComparableWrapperFactory(
+        expressions.map(_.dataType))
     partitionValues
-      .map(internalRowComparableFactory)
-      .distinct
-      .map(_.row)
+        .map(internalRowComparableFactory)
+        .distinct
+        .map(_.row)
   }
 
   override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Expression =
@@ -451,9 +451,9 @@ object KeyGroupedPartitioning {
     val projectedPartitionValues = partitionValues.map(project(expressions, projectionPositions, _))
     val projectedOriginalPartitionValues =
       originalPartitionValues.map(project(expressions, projectionPositions, _))
-    val dataTypes = projectedExpressions.map(_.dataType)
     val internalRowComparableFactory =
-      InternalRowComparableWrapper.getInternalRowComparableWrapperFactory(dataTypes)
+      InternalRowComparableWrapper.getInternalRowComparableWrapperFactory(
+        projectedExpressions.map(_.dataType))
 
     val finalPartitionValues = projectedPartitionValues
       .map(internalRowComparableFactory)
@@ -873,9 +873,9 @@ case class KeyGroupedShuffleSpec(
     //        transform functions.
     //  4. the partition values from both sides are following the same order.
     case otherSpec @ KeyGroupedShuffleSpec(otherPartitioning, otherDistribution, _) =>
-      lazy val dataTypes = partitioning.expressions.map(_.dataType)
       lazy val internalRowComparableFactory =
-        InternalRowComparableWrapper.getInternalRowComparableWrapperFactory(dataTypes)
+        InternalRowComparableWrapper.getInternalRowComparableWrapperFactory(
+          partitioning.expressions.map(_.dataType))
       distribution.clustering.length == otherDistribution.clustering.length &&
         numPartitions == other.numPartitions && areKeysCompatible(otherSpec) &&
           partitioning.partitionValues.zip(otherPartitioning.partitionValues).forall {

@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.exchange
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.internal.LogKeys
+import org.apache.spark.internal.{LogKeys}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
@@ -579,10 +579,9 @@ case class EnsureRequirements(
               // In partially clustered distribution, we should use un-grouped partition values
               val spec = if (replicateLeftSide) rightSpec else leftSpec
               val partValues = spec.partitioning.originalPartitionValues
-              val partitionDataTypes = partitionExprs.map(_.dataType)
               val internalRowComparableWrapperFactory =
                 InternalRowComparableWrapper.getInternalRowComparableWrapperFactory(
-                  partitionDataTypes)
+                  partitionExprs.map(_.dataType))
 
               val numExpectedPartitions = partValues
                 .map(internalRowComparableWrapperFactory)
@@ -747,9 +746,9 @@ case class EnsureRequirements(
       rightPartitioning: Seq[InternalRow],
       partitionExpression: Seq[Expression],
       joinType: JoinType): Seq[InternalRow] = {
-    val partitionDataTypes = partitionExpression.map(_.dataType)
     val internalRowComparableWrapperFactory =
-      InternalRowComparableWrapper.getInternalRowComparableWrapperFactory(partitionDataTypes)
+      InternalRowComparableWrapper.getInternalRowComparableWrapperFactory(
+        partitionExpression.map(_.dataType))
 
     val merged = if (SQLConf.get.getConf(SQLConf.V2_BUCKETING_PARTITION_FILTER_ENABLED)) {
       joinType match {

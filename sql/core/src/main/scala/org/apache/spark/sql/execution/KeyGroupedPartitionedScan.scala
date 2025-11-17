@@ -50,9 +50,9 @@ trait KeyGroupedPartitionedScan[T] {
       case None =>
         spjParams.joinKeyPositions match {
           case Some(projectionPositions) =>
-            val dataTypes = expressions.map(_.dataType)
             val internalRowComparableWrapperFactory =
-              InternalRowComparableWrapper.getInternalRowComparableWrapperFactory(dataTypes)
+              InternalRowComparableWrapper.getInternalRowComparableWrapperFactory(
+                expressions.map(_.dataType))
             basePartitioning.partitionValues.map { r =>
             val projectedRow = KeyGroupedPartitioning.project(expressions,
               projectionPositions, r)
@@ -87,9 +87,9 @@ trait KeyGroupedPartitionedScan[T] {
     val (groupedPartitions, partExpressions) = spjParams.joinKeyPositions match {
       case Some(projectPositions) =>
         val projectedExpressions = projectPositions.map(i => expressions(i))
-        val projectedTypes = projectedExpressions.map(_.dataType)
         val internalRowComparableWrapperFactory =
-          InternalRowComparableWrapper.getInternalRowComparableWrapperFactory(projectedTypes)
+          InternalRowComparableWrapper.getInternalRowComparableWrapperFactory(
+            projectedExpressions.map(_.dataType))
         val parts = filteredPartitions.flatten.groupBy(part => {
           val row = partitionValueAccessor(part)
           val projectedRow = KeyGroupedPartitioning.project(

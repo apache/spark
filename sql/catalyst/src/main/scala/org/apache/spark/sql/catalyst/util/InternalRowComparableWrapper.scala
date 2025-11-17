@@ -39,6 +39,12 @@ class InternalRowComparableWrapper private (
     val structType: StructType,
     val ordering: BaseOrdering) {
 
+  /**
+   * Previous constructor for binary compatibility. Prefer using
+   * `getInternalRowComparableWrapperFactory` for the creation of InternalRowComparableWrapper's in
+   * hot paths to avoid excessive cache lookups.
+   */
+  @deprecated
   def this(row: InternalRow, dataTypes: Seq[DataType]) = this(
     row,
     dataTypes,
@@ -120,6 +126,7 @@ object InternalRowComparableWrapper {
     result.toSeq
   }
 
+  /** Creates a shared factory method for a given row schema to avoid excessive cache lookups. */
   def getInternalRowComparableWrapperFactory(
       dataTypes: Seq[DataType]): InternalRow => InternalRowComparableWrapper = {
     val structType = structTypeCache.get(dataTypes)
