@@ -28,7 +28,7 @@ from pyspark.serializers import (
     SpecialLengths,
 )
 from pyspark.sql.datasource import DataSource
-from pyspark.util import handle_worker_exception, local_connect_and_auth, with_fault_handler
+from pyspark.util import handle_worker_exception, local_connect_and_auth, with_faulthandler
 from pyspark.worker_util import (
     check_python_version,
     pickleSer,
@@ -39,7 +39,7 @@ from pyspark.worker_util import (
 )
 
 
-@with_fault_handler
+@with_faulthandler
 def main(infile: IO, outfile: IO) -> None:
     """
     Main method for looking up the available Python Data Sources in Python path.

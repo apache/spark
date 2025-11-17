@@ -34,7 +34,7 @@ from pyspark.serializers import (
 from pyspark.sql.functions import OrderingColumn, PartitioningColumn, SelectedColumn
 from pyspark.sql.types import _parse_datatype_json_string, StructType
 from pyspark.sql.udtf import AnalyzeArgument, AnalyzeResult
-from pyspark.util import handle_worker_exception, local_connect_and_auth, with_fault_handler
+from pyspark.util import handle_worker_exception, local_connect_and_auth, with_faulthandler
 from pyspark.worker_util import (
     check_python_version,
     read_command,
@@ -99,7 +99,7 @@ def read_arguments(infile: IO) -> Tuple[List[AnalyzeArgument], Dict[str, Analyze
     return args, kwargs
 
 
-@with_fault_handler
+@with_faulthandler
 def main(infile: IO, outfile: IO) -> None:
     """
     Runs the Python UDTF's `analyze` static method.

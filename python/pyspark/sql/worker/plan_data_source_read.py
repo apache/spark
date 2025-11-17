@@ -46,7 +46,7 @@ from pyspark.sql.types import (
     BinaryType,
     StructType,
 )
-from pyspark.util import handle_worker_exception, local_connect_and_auth, with_fault_handler
+from pyspark.util import handle_worker_exception, local_connect_and_auth, with_faulthandler
 from pyspark.worker_util import (
     check_python_version,
     read_command,
@@ -266,7 +266,7 @@ def write_read_func_and_partitions(
         write_int(0, outfile)
 
 
-@with_fault_handler
+@with_faulthandler
 def main(infile: IO, outfile: IO) -> None:
     """
     Main method for planning a data source read.

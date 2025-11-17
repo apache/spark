@@ -918,15 +918,17 @@ def default_api_mode() -> str:
         return "classic"
 
 
-class _FaultHandlerIntegration:
+class _FaulthandlerHelper:
     def __init__(self) -> None:
         self._log_path: Optional[str] = None
         self._log_file: Optional[TextIO] = None
         self._periodic_dump = False
 
     def start(self) -> None:
+        if self._log_path:
+            raise Exception("Fault handler is already registered. No second registration allowed")
         self._log_path = os.environ.get("PYTHON_FAULTHANDLER_DIR", None)
-        tracebackDumpIntervalSeconds = os.environ.get(
+        traceback_dump_interval_seconds = os.environ.get(
             "PYTHON_TRACEBACK_DUMP_INTERVAL_SECONDS", None
         )
         if self._log_path:
@@ -935,9 +937,12 @@ class _FaultHandlerIntegration:
 
             faulthandler.enable(file=self._log_file)
 
-            if tracebackDumpIntervalSeconds is not None and int(tracebackDumpIntervalSeconds) > 0:
+            if (
+                traceback_dump_interval_seconds is not None
+                and int(traceback_dump_interval_seconds) > 0
+            ):
                 self._periodic_dump = True
-                faulthandler.dump_traceback_later(int(tracebackDumpIntervalSeconds), repeat=True)
+                faulthandler.dump_traceback_later(int(traceback_dump_interval_seconds), repeat=True)
 
     def stop(self) -> None:
         if self._periodic_dump:
@@ -948,27 +953,30 @@ class _FaultHandlerIntegration:
             if self._log_file:
                 self._log_file.close()
                 self._log_file = None
-            os.remove(self._log_path)
-            self._log_path = None
+            try:
+                os.remove(self._log_path)
+            finally:
+                self._log_path = None
+
+    def with_faulthandler(self, func: Callable) -> Callable:
+        """
+        Registers fault handler for the duration of function execution.
+        After function execution is over the faulthandler registration is cleaned as well,
+        including any files created for the integration.
+        """
+
+        @functools.wraps(func)
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
+            try:
+                self.start()
+                return func(*args, **kwargs)
+            finally:
+                self.stop()
+
+        return wrapper
 
 
-def with_fault_handler(func: Callable) -> Callable:
-    """
-    Registers fault handler for the duration of function execution.
-    After function execution is over the faulthandler registration is cleaned as well,
-    including any files created for the integration. Not reentrant.
-    """
-
-    @functools.wraps(func)
-    def wrapper(*args: Any, **kwargs: Any) -> Any:
-        fault_handler = _FaultHandlerIntegration()
-        try:
-            fault_handler.start()
-            return func(*args, **kwargs)
-        finally:
-            fault_handler.stop()
-
-    return wrapper
+with_fault_handler = _FaulthandlerHelper().with_faulthandler
 
 
 if __name__ == "__main__":

@@ -48,7 +48,7 @@ from pyspark.sql.datasource import (
 )
 from pyspark.sql.types import StructType, VariantVal, _parse_datatype_json_string
 from pyspark.sql.worker.plan_data_source_read import write_read_func_and_partitions
-from pyspark.util import handle_worker_exception, local_connect_and_auth, with_fault_handler
+from pyspark.util import handle_worker_exception, local_connect_and_auth, with_faulthandler
 from pyspark.worker_util import (
     check_python_version,
     pickleSer,
@@ -118,7 +118,7 @@ def deserializeFilter(jsonDict: dict) -> Filter:
     return filter
 
 
-@with_fault_handler
+@with_faulthandler
 def main(infile: IO, outfile: IO) -> None:
     """
     Main method for planning a data source read with filter pushdown.

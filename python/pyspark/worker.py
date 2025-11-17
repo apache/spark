@@ -83,7 +83,7 @@ from pyspark.sql.types import (
     _create_row,
     _parse_datatype_json_string,
 )
-from pyspark.util import fail_on_stopiteration, handle_worker_exception, with_fault_handler
+from pyspark.util import fail_on_stopiteration, handle_worker_exception, with_faulthandler
 from pyspark import shuffle
 from pyspark.errors import PySparkRuntimeError, PySparkTypeError, PySparkValueError
 from pyspark.worker_util import (
@@ -3289,7 +3289,7 @@ def read_udfs(pickleSer, infile, eval_type):
     return func, None, ser, ser
 
 
-@with_fault_handler
+@with_faulthandler
 def main(infile, outfile):
     try:
         boot_time = time.time()
