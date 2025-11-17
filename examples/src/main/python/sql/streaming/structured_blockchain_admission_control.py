@@ -34,6 +34,7 @@ demonstrating admission control.
 """
 import sys
 import time
+from typing import Any, Dict, Iterator, List, Optional, Tuple, Union
 
 from pyspark.sql import SparkSession
 from pyspark.sql.datasource import (
@@ -41,20 +42,25 @@ from pyspark.sql.datasource import (
     DataSourceStreamReader,
     InputPartition,
 )
+from pyspark.sql.types import StructType
 
 
 class SimpleBlockchainReader(DataSourceStreamReader):
     """A simple streaming source that generates sequential blockchain blocks."""  # noqa: E501
 
-    def __init__(self, max_block=1000):
+    def __init__(self, max_block: int = 1000) -> None:
         self.max_block = max_block
         self.current_block = 0
 
-    def initialOffset(self):
+    def initialOffset(self) -> Dict[str, int]:
         """Start from block 0."""
         return {"block": self.current_block}
 
-    def latestOffset(self, start=None, limit=None):
+    def latestOffset(
+        self,
+        start: Optional[Dict[str, int]] = None,
+        limit: Optional[Dict[str, Any]] = None,
+    ) -> Union[Dict[str, int], Tuple[Dict[str, int], Dict[str, int]]]:
         """
         Return the latest offset, respecting admission control limits.
 
@@ -89,13 +95,15 @@ class SimpleBlockchainReader(DataSourceStreamReader):
             print(f"  [No Limit] Start: {start_block}, End: {end_block}")
             return {"block": end_block}
 
-    def partitions(self, start, end):
+    def partitions(
+        self, start: Dict[str, int], end: Dict[str, int]
+    ) -> List[InputPartition]:
         """Create a single partition for the block range."""
         start_block = start["block"]
         end_block = end["block"]
         return [InputPartition(f"{start_block}:{end_block}".encode())]
 
-    def read(self, partition):
+    def read(self, partition: InputPartition) -> Iterator[Tuple[int, int, str]]:
         """Generate block data for the partition."""
         # Parse the block range
         range_str = partition.value.decode()
@@ -110,7 +118,7 @@ class SimpleBlockchainReader(DataSourceStreamReader):
                 f"0x{'0' * 60}{block_num:04x}",
             )
 
-    def commit(self, end):
+    def commit(self, end: Dict[str, int]) -> None:
         """Mark this offset as committed."""
         pass
 
@@ -119,13 +127,13 @@ class SimpleBlockchainSource(DataSource):
     """Data source for simple blockchain streaming."""
 
     @classmethod
-    def name(cls):
+    def name(cls) -> str:
         return "simple_blockchain"
 
-    def schema(self):
+    def schema(self) -> str:
         return "block_number INT, timestamp LONG, block_hash STRING"
 
-    def streamReader(self, schema):
+    def streamReader(self, schema: StructType) -> SimpleBlockchainReader:
         return SimpleBlockchainReader(max_block=1000)
 
 
