@@ -22,7 +22,6 @@ from typing import (
     Optional,
     Sequence,
     Union,
-    Iterable,
     cast,
     no_type_check,
     overload,
