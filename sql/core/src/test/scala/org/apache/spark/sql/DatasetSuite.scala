@@ -19,9 +19,12 @@ package org.apache.spark.sql
 
 import java.io.{Externalizable, ObjectInput, ObjectOutput}
 import java.sql.{Date, Timestamp}
+import java.util.concurrent.Executors
 
 import scala.collection.immutable.HashSet
 import scala.collection.mutable
+import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.duration.Duration
 import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 import scala.util.Random
@@ -44,7 +47,7 @@ import org.apache.spark.sql.catalyst.expressions.{CodegenObjectFactoryMode, Expr
 import org.apache.spark.sql.catalyst.plans.JoinType
 import org.apache.spark.sql.catalyst.trees.DataFrameQueryContext
 import org.apache.spark.sql.catalyst.util.sideBySide
-import org.apache.spark.sql.execution.{LogicalRDD, RDDScanExec, SQLExecution}
+import org.apache.spark.sql.execution.{CollectMetricsExec, LogicalRDD, RDDScanExec, SQLExecution}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ShuffleExchangeExec}
 import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
@@ -55,6 +58,7 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.ArrayImplicits._
+import org.apache.spark.util.SparkThreadUtils
 
 case class TestDataPoint(x: Int, y: Double, s: String, t: TestDataPoint2)
 case class TestDataPoint2(x: Int, s: String)
@@ -1073,6 +1077,28 @@ class DatasetSuite extends QueryTest
 
     assert(namedObservation1.get === expected1)
     assert(namedObservation2.get === expected2)
+  }
+
+  test("SPARK-54353: concurrent CollectMetricsExec.collect()") {
+    val df = spark
+      .range(10)
+      .observe(Observation("result"), map(lit("count"), count(lit(1))))
+    df.collect()
+    val threadPool = Executors.newFixedThreadPool(2)
+    val executionContext = ExecutionContext.fromExecutorService(threadPool)
+    try {
+      Seq(
+        Future { CollectMetricsExec.collect(df.queryExecution.executedPlan) }(executionContext),
+        Future { CollectMetricsExec.collect(df.queryExecution.executedPlan) }(executionContext)
+      ).foreach { future =>
+        val result = SparkThreadUtils.awaitResult(future, Duration.Inf)
+        assert(result.size === 1)
+        assert(result.get("result") === Some(Row(Map("count" -> 10))))
+      }
+    } finally {
+      executionContext.shutdown()
+      threadPool.shutdown()
+    }
   }
 
   test("sample with replacement") {
