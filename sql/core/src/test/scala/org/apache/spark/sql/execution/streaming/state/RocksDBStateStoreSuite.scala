@@ -30,7 +30,7 @@ import org.scalatest.PrivateMethodTester
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.time.SpanSugar._
 
-import org.apache.spark.{SparkConf, SparkException, SparkRuntimeException, SparkThrowable, SparkUnsupportedOperationException, TaskContext}
+import org.apache.spark.{SparkConf, SparkException, SparkRuntimeException, SparkUnsupportedOperationException, TaskContext}
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.sql.LocalSparkSession.withSparkSession
 import org.apache.spark.sql.SparkSession
@@ -2563,7 +2563,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
     }
   }
 
-  test("State store loading fails when TaskContext has failed") {
+  test("SPARK-54389: State store loading fails when TaskContext has failed") {
     // Timeline of this test (* means thread is active):
     // STATE | MAIN THREAD            | STATE STORE THREAD          |
     // ------| ---------------------- | --------------------------- |
@@ -2609,6 +2609,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
         }
       }
 
+      val ex = new IllegalStateException("failure")
       stateLock.synchronized {
         // -------------------- STATE 2 --------------------
         // Wait until we have entered state 2 (state store thread set task context)
@@ -2617,7 +2618,6 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
         }
 
         // Mark the task as failed
-        val ex = new IllegalStateException("failure")
         taskContext.markTaskFailed(ex)
 
         // Signal that we have entered state 3
@@ -2628,13 +2628,14 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
       // Wait for the future to complete and verify the exception
       val thrown = intercept[SparkException] {
         ThreadUtils.awaitResult(stateStoreFuture, timeout)
-      }.getCause.asInstanceOf[SparkThrowable]
+      }.getCause.asInstanceOf[SparkException]
 
       checkError(
         thrown,
         condition = "CANNOT_LOAD_STATE_STORE.UNCATEGORIZED",
         parameters = Map.empty
       )
+      assert(thrown.getCause == ex)
     }
   }
 
