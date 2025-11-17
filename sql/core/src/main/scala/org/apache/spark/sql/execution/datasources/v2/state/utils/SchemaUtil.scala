@@ -28,7 +28,8 @@ import org.apache.spark.sql.execution.datasources.v2.state.{StateDataSourceError
 import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.{StateVariableType, TransformWithStateVariableInfo}
 import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.StateVariableType._
 import org.apache.spark.sql.execution.streaming.state.{ReadStateStore, StateStoreColFamilySchema, UnsafeRowPair}
-import org.apache.spark.sql.types.{ArrayType, DataType, IntegerType, LongType, MapType, StringType, StructType}
+import org.apache.spark.sql.types.{ArrayType, BinaryType, DataType, IntegerType, LongType, MapType, StringType, StructType}
+import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.ArrayImplicits._
 
 object SchemaUtil {
@@ -60,6 +61,12 @@ object SchemaUtil {
         .add("key", keySchema)
         .add("value", valueSchema)
         .add("partition_id", IntegerType)
+    } else if (sourceOptions.readAllColumnFamilies) {
+      new StructType()
+        .add("partition_id", IntegerType)
+        .add("key_bytes", BinaryType)
+        .add("value_bytes", BinaryType)
+        .add("column_family_name", StringType)
     } else {
       new StructType()
         .add("key", keySchema)
@@ -73,6 +80,24 @@ object SchemaUtil {
     row.update(0, pair._1)
     row.update(1, pair._2)
     row.update(2, partition)
+    row
+  }
+
+  /**
+   * Creates a unified row from raw key and value bytes.
+   * This is an alias for unifyStateRowPairAsBytes that takes individual byte arrays
+   * instead of a tuple for better readability.
+   */
+  def unifyStateRowPairAsRawBytes(
+     partition: Int,
+     keyBytes: Array[Byte],
+     valueBytes: Array[Byte],
+     colFamilyName: String): InternalRow = {
+    val row = new GenericInternalRow(4)
+    row.update(0, partition)
+    row.update(1, keyBytes)
+    row.update(2, valueBytes)
+    row.update(3, UTF8String.fromString(colFamilyName))
     row
   }
 
@@ -231,7 +256,10 @@ object SchemaUtil {
       "user_map_key" -> classOf[StructType],
       "user_map_value" -> classOf[StructType],
       "expiration_timestamp_ms" -> classOf[LongType],
-      "partition_id" -> classOf[IntegerType])
+      "partition_id" -> classOf[IntegerType],
+      "key_bytes"->classOf[BinaryType],
+      "value_bytes"->classOf[BinaryType],
+      "column_family_name"->classOf[StringType])
 
     val expectedFieldNames = if (transformWithStateVariableInfoOpt.isDefined) {
       val stateVarInfo = transformWithStateVariableInfoOpt.get
@@ -272,6 +300,8 @@ object SchemaUtil {
       }
     } else if (sourceOptions.readChangeFeed) {
       Seq("batch_id", "change_type", "key", "value", "partition_id")
+    } else if (sourceOptions.readAllColumnFamilies) {
+      Seq("partition_id", "key_bytes", "value_bytes", "column_family_name")
     } else {
       Seq("key", "value", "partition_id")
     }
