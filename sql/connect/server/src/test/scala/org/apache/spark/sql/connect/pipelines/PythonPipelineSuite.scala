@@ -530,6 +530,7 @@ class PythonPipelineSuite
       "eager analysis or execution will fail")(
     Seq("""spark.sql("SELECT * FROM src")""", """spark.read.table("src").collect()""")) {
     command =>
+      assume(PythonTestDepsChecker.isConnectDepsAvailable)
       val ex = intercept[RuntimeException] {
         buildGraph(s"""
         |@dp.materialized_view
@@ -1047,6 +1048,7 @@ class PythonPipelineSuite
 
   gridTest("Unsupported SQL command outside query function should result in a failure")(
     unsupportedSqlCommandList) { unsupportedSqlCommand =>
+    assume(PythonTestDepsChecker.isConnectDepsAvailable)
     val ex = intercept[RuntimeException] {
       buildGraph(s"""
         |spark.sql("$unsupportedSqlCommand")
@@ -1061,6 +1063,7 @@ class PythonPipelineSuite
 
   gridTest("Unsupported SQL command inside query function should result in a failure")(
     unsupportedSqlCommandList) { unsupportedSqlCommand =>
+    assume(PythonTestDepsChecker.isConnectDepsAvailable)
     val ex = intercept[RuntimeException] {
       buildGraph(s"""
         |@dp.materialized_view()
