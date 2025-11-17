@@ -11224,10 +11224,11 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                             self._internal.spark_column_for(label).cast("boolean"),
                             # When skipna=True, nulls count as False and vice versa
                             F.lit(not skipna),
-                        ) for label in column_labels
+                        )
+                        for label in column_labels
                     ],
                     F.lit(False),  # Handle one-column DataFrame case
-                ).alias(SPARK_DEFAULT_SERIES_NAME)
+                ).alias(SPARK_DEFAULT_SERIES_NAME),
             )
             return first_series(
                 DataFrame(
