@@ -19,7 +19,7 @@ package org.apache.spark.sql.connect.test
 import java.io.{File, IOException, OutputStream}
 import java.lang.ProcessBuilder.Redirect
 import java.nio.file.Paths
-import java.util.concurrent.TimeUnit
+import java.util.concurrent.{Executors, ExecutorService, TimeUnit}
 
 import scala.concurrent.duration.FiniteDuration
 
@@ -60,7 +60,7 @@ object SparkConnectServerUtils {
 
   private var consoleOut: OutputStream = _
   private val serverStopCommand = "q"
-
+  private var processOutputConsumers: Option[ExecutorService] = None
   private lazy val sparkConnect: java.lang.Process = {
     debug("Starting the Spark Connect Server...")
     val connectJar =
@@ -96,6 +96,24 @@ object SparkConnectServerUtils {
     }
 
     val process = builder.start()
+
+    if (!isDebug) {
+      val processOutputHandlers = Executors.newFixedThreadPool(2)
+      val prcErrReader = process.errorReader()
+      val prcInputReader = process.inputReader()
+      processOutputHandlers.submit(new Runnable {
+        override def run(): Unit = {
+          while (prcErrReader.readLine() ne null) {}
+        }
+      })
+
+      processOutputHandlers.submit(new Runnable {
+        override def run(): Unit = {
+          while (prcInputReader.readLine() ne null) {}
+        }
+      })
+      this.processOutputConsumers = Some(processOutputHandlers)
+    }
     consoleOut = process.getOutputStream
 
     // Adding JVM shutdown hook
@@ -156,6 +174,7 @@ object SparkConnectServerUtils {
       }
       val code = sparkConnect.exitValue()
       debug(s"Spark Connect Server is stopped with exit code: $code")
+      processOutputConsumers.foreach(_.shutdown())
       code
     } catch {
       case e: IOException if e.getMessage.contains("Stream closed") =>
