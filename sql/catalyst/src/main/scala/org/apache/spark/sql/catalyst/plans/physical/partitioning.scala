@@ -23,10 +23,10 @@ import scala.collection.mutable
 import org.apache.spark.{SparkException, SparkUnsupportedOperationException}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.util.InternalRowComparableWrapper
+import org.apache.spark.sql.catalyst.util.BoundInternalRowComparableWrapper
 import org.apache.spark.sql.connector.catalog.functions.Reducer
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{DataType, IntegerType}
+import org.apache.spark.sql.types.{DataType, IntegerType, StructType}
 
 /**
  * Specifies how tuples that share common expressions will be distributed when a query is executed
@@ -428,10 +428,13 @@ case class KeyGroupedPartitioning(
   }
 
   lazy val uniquePartitionValues: Seq[InternalRow] = {
+    val dataTypes = expressions.map(_.dataType)
+    val (structType, ordering) =
+      BoundInternalRowComparableWrapper.getStructTypeAndOrdering(dataTypes)
     partitionValues
-        .map(InternalRowComparableWrapper(_, expressions))
-        .distinct
-        .map(_.row)
+      .map(new BoundInternalRowComparableWrapper(_, dataTypes, ordering, structType))
+      .distinct
+      .map(_.row)
   }
 
   override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Expression =
@@ -448,11 +451,14 @@ object KeyGroupedPartitioning {
     val projectedPartitionValues = partitionValues.map(project(expressions, projectionPositions, _))
     val projectedOriginalPartitionValues =
       originalPartitionValues.map(project(expressions, projectionPositions, _))
+    val dataTypes = projectedExpressions.map(_.dataType)
+    val (structType, ordering) =
+      BoundInternalRowComparableWrapper.getStructTypeAndOrdering(dataTypes)
 
     val finalPartitionValues = projectedPartitionValues
-        .map(InternalRowComparableWrapper(_, projectedExpressions))
-        .distinct
-        .map(_.row)
+      .map(new BoundInternalRowComparableWrapper(_, dataTypes, ordering, structType))
+      .distinct
+      .map(_.row)
 
     KeyGroupedPartitioning(projectedExpressions, finalPartitionValues.length,
       finalPartitionValues, projectedOriginalPartitionValues)
@@ -867,12 +873,16 @@ case class KeyGroupedShuffleSpec(
     //        transform functions.
     //  4. the partition values from both sides are following the same order.
     case otherSpec @ KeyGroupedShuffleSpec(otherPartitioning, otherDistribution, _) =>
+      lazy val dataTypes = partitioning.expressions.map(_.dataType)
+      lazy val (structType, ordering) =
+        BoundInternalRowComparableWrapper.getStructTypeAndOrdering(dataTypes)
       distribution.clustering.length == otherDistribution.clustering.length &&
         numPartitions == other.numPartitions && areKeysCompatible(otherSpec) &&
           partitioning.partitionValues.zip(otherPartitioning.partitionValues).forall {
             case (left, right) =>
-              InternalRowComparableWrapper(left, partitioning.expressions)
-                .equals(InternalRowComparableWrapper(right, partitioning.expressions))
+              new BoundInternalRowComparableWrapper(left, dataTypes, ordering, structType)
+                .equals(
+                  new BoundInternalRowComparableWrapper(right, dataTypes, ordering, structType))
           }
     case ShuffleSpecCollection(specs) =>
       specs.exists(isCompatibleWith)
@@ -957,15 +967,17 @@ case class KeyGroupedShuffleSpec(
 object KeyGroupedShuffleSpec {
   def reducePartitionValue(
       row: InternalRow,
-      expressions: Seq[Expression],
-      reducers: Seq[Option[Reducer[_, _]]]):
-    InternalRowComparableWrapper = {
-    val partitionVals = row.toSeq(expressions.map(_.dataType))
+      reducers: Seq[Option[Reducer[_, _]]],
+      dataTypes: Seq[DataType],
+      ordering: BaseOrdering,
+      structType: StructType): BoundInternalRowComparableWrapper = {
+    val partitionVals = row.toSeq(dataTypes)
     val reducedRow = partitionVals.zip(reducers).map{
       case (v, Some(reducer: Reducer[Any, Any])) => reducer.reduce(v)
       case (v, _) => v
     }.toArray
-    InternalRowComparableWrapper(new GenericInternalRow(reducedRow), expressions)
+    new BoundInternalRowComparableWrapper(
+      new GenericInternalRow(reducedRow), dataTypes, ordering, structType)
   }
 }
 

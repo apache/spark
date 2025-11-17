@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.RowOrdering
 import org.apache.spark.sql.catalyst.plans.physical.{KeyGroupedPartitioning, KeyGroupedShuffleSpec}
-import org.apache.spark.sql.catalyst.util.InternalRowComparableWrapper
+import org.apache.spark.sql.catalyst.util.BoundInternalRowComparableWrapper
 import org.apache.spark.sql.execution.joins.StoragePartitionJoinParams
 
 /** Base trait for a data source scan capable of producing a key-grouped output. */
@@ -50,9 +50,12 @@ trait KeyGroupedPartitionedScan[T] {
       case None =>
         spjParams.joinKeyPositions match {
           case Some(projectionPositions) => basePartitioning.partitionValues.map { r =>
+            val dataTypes = expressions.map(_.dataType)
+            val (structType, ordering) =
+              BoundInternalRowComparableWrapper.getStructTypeAndOrdering(dataTypes)
             val projectedRow = KeyGroupedPartitioning.project(expressions,
               projectionPositions, r)
-            InternalRowComparableWrapper(projectedRow, expressions)
+            new BoundInternalRowComparableWrapper(projectedRow, dataTypes, ordering, structType)
           }.distinct.map(_.row)
           case _ => basePartitioning.partitionValues
         }
@@ -83,11 +86,14 @@ trait KeyGroupedPartitionedScan[T] {
     val (groupedPartitions, partExpressions) = spjParams.joinKeyPositions match {
       case Some(projectPositions) =>
         val projectedExpressions = projectPositions.map(i => expressions(i))
+        val projectedTypes = projectedExpressions.map(_.dataType)
+        val (structType, ordering) =
+          BoundInternalRowComparableWrapper.getStructTypeAndOrdering(projectedTypes)
         val parts = filteredPartitions.flatten.groupBy(part => {
           val row = partitionValueAccessor(part)
           val projectedRow = KeyGroupedPartitioning.project(
             expressions, projectPositions, row)
-          InternalRowComparableWrapper(projectedRow, projectedExpressions)
+          new BoundInternalRowComparableWrapper(projectedRow, projectedTypes, ordering, structType)
         }).map { case (wrapper, splits) => (wrapper.row, splits) }.toSeq
         (parts, projectedExpressions)
       case _ =>
@@ -99,10 +105,14 @@ trait KeyGroupedPartitionedScan[T] {
     }
 
     // Also re-group the partitions if we are reducing compatible partition expressions
+    val partitionDataTypes = partExpressions.map(_.dataType)
+    val (structType, ordering) =
+      BoundInternalRowComparableWrapper.getStructTypeAndOrdering(partitionDataTypes)
     val finalGroupedPartitions = spjParams.reducers match {
       case Some(reducers) =>
         val result = groupedPartitions.groupBy { case (row, _) =>
-          KeyGroupedShuffleSpec.reducePartitionValue(row, partExpressions, reducers)
+          KeyGroupedShuffleSpec.reducePartitionValue(
+            row, reducers, partitionDataTypes, ordering, structType)
         }.map { case (wrapper, splits) => (wrapper.row, splits.flatMap(_._2)) }.toSeq
         val rowOrdering = RowOrdering.createNaturalAscendingOrdering(
           partExpressions.map(_.dataType))
@@ -118,17 +128,21 @@ trait KeyGroupedPartitionedScan[T] {
       // should contain.
       val commonPartValuesMap = spjParams.commonPartitionValues
           .get
-          .map(t => (InternalRowComparableWrapper(t._1, partExpressions), t._2))
+          .map(t => (new BoundInternalRowComparableWrapper(
+            t._1, partitionDataTypes, ordering, structType), t._2))
           .toMap
       val filteredGroupedPartitions = finalGroupedPartitions.filter {
         case (partValues, _) =>
          commonPartValuesMap.keySet.contains(
-          InternalRowComparableWrapper(partValues, partExpressions))
+          new BoundInternalRowComparableWrapper(
+            partValues, partitionDataTypes, ordering, structType))
       }
       val nestGroupedPartitions = filteredGroupedPartitions.map { case (partValue, splits) =>
         // `commonPartValuesMap` should contain the part value since it's the super set.
         val numSplits = commonPartValuesMap
-            .get(InternalRowComparableWrapper(partValue, partExpressions))
+            .get(
+              new BoundInternalRowComparableWrapper(
+                partValue, partitionDataTypes, ordering, structType))
         assert(numSplits.isDefined, s"Partition value $partValue does not exist in " +
             "common partition values from Spark plan")
 
@@ -143,7 +157,11 @@ trait KeyGroupedPartitionedScan[T] {
           // sides of a join will have the same number of partitions & splits.
           splits.map(Seq(_)).padTo(numSplits.get, Seq.empty)
         }
-        (InternalRowComparableWrapper(partValue, partExpressions), newSplits)
+        (
+          new BoundInternalRowComparableWrapper(
+            partValue, partitionDataTypes, ordering, structType),
+          newSplits
+        )
       }
 
       // Now fill missing partition keys with empty partitions
@@ -152,14 +170,16 @@ trait KeyGroupedPartitionedScan[T] {
         case (partValue, numSplits) =>
           // Use empty partition for those partition values that are not present.
           partitionMapping.getOrElse(
-            InternalRowComparableWrapper(partValue, partExpressions),
+            new BoundInternalRowComparableWrapper(
+              partValue, partitionDataTypes, ordering, structType),
             Seq.fill(numSplits)(Seq.empty))
       }
     } else {
       // either `commonPartitionValues` is not defined, or it is defined but
       // `applyPartialClustering` is false.
       val partitionMapping = finalGroupedPartitions.map { case (partValue, splits) =>
-        InternalRowComparableWrapper(partValue, partExpressions) -> splits
+        new BoundInternalRowComparableWrapper(
+          partValue, partitionDataTypes, ordering, structType) -> splits
       }.toMap
 
       // In case `commonPartitionValues` is not defined (e.g., SPJ is not used), there
@@ -169,7 +189,8 @@ trait KeyGroupedPartitionedScan[T] {
       p.uniquePartitionValues.map { partValue =>
         // Use empty partition for those partition values that are not present
         partitionMapping.getOrElse(
-          InternalRowComparableWrapper(partValue, partExpressions), Seq.empty)
+          new BoundInternalRowComparableWrapper(
+            partValue, partitionDataTypes, ordering, structType), Seq.empty)
       }
     }
   }
