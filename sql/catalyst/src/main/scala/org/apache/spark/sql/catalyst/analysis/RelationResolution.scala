@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.catalog.{
   TemporaryViewRelation,
   UnresolvedCatalogRelation
 }
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, PythonWorkerLogs, SubqueryAlias}
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias}
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
 import org.apache.spark.sql.connector.catalog.{
   CatalogManager,
@@ -112,8 +112,6 @@ class RelationResolution(override val catalogManager: CatalogManager)
       u.isStreaming,
       finalTimeTravelSpec.isDefined
     ).orElse {
-      resolveSystemSessionView(u.multipartIdentifier)
-    }.orElse {
       expandIdentifier(u.multipartIdentifier) match {
         case CatalogAndIdentifier(catalog, ident) =>
           val key = toCacheKey(catalog, ident, finalTimeTravelSpec)
@@ -227,6 +225,45 @@ class RelationResolution(override val catalogManager: CatalogManager)
     }
   }
 
+  def resolveReference(ref: V2TableReference): LogicalPlan = {
+    val relation = getOrLoadRelation(ref)
+    val planId = ref.getTagValue(LogicalPlan.PLAN_ID_TAG)
+    cloneWithPlanId(relation, planId)
+  }
+
+  private def getOrLoadRelation(ref: V2TableReference): LogicalPlan = {
+    val key = toCacheKey(ref.catalog, ref.identifier)
+    relationCache.get(key) match {
+      case Some(cached) =>
+        adaptCachedRelation(cached, ref)
+      case None =>
+        val relation = loadRelation(ref)
+        relationCache.update(key, relation)
+        relation
+    }
+  }
+
+  private def loadRelation(ref: V2TableReference): LogicalPlan = {
+    val table = ref.catalog.loadTable(ref.identifier)
+    V2TableReferenceUtils.validateLoadedTable(table, ref)
+    val tableName = ref.identifier.toQualifiedNameParts(ref.catalog)
+    SubqueryAlias(tableName, ref.toRelation(table))
+  }
+
+  private def adaptCachedRelation(cached: LogicalPlan, ref: V2TableReference): LogicalPlan = {
+    cached transform {
+      case r: DataSourceV2Relation if matchesReference(r, ref) =>
+        V2TableReferenceUtils.validateLoadedTable(r.table, ref)
+        r.copy(output = ref.output, options = ref.options)
+    }
+  }
+
+  private def matchesReference(
+      relation: DataSourceV2Relation,
+      ref: V2TableReference): Boolean = {
+    relation.catalog.contains(ref.catalog) && relation.identifier.contains(ref.identifier)
+  }
+
   private def isResolvingView: Boolean = AnalysisContext.get.catalogAndNamespace.nonEmpty
 
   private def isReferredTempViewName(nameParts: Seq[String]): Boolean = {
@@ -236,22 +273,6 @@ class RelationResolution(override val catalogManager: CatalogManager)
         case (a, b) => resolver(a, b)
       }
     }
-  }
-
-  private def isSystemSessionIdentifier(identifier: Seq[String]): Boolean = {
-    identifier.length > 2 &&
-      identifier(0).equalsIgnoreCase(CatalogManager.SYSTEM_CATALOG_NAME) &&
-      identifier(1).equalsIgnoreCase(CatalogManager.SESSION_NAMESPACE)
-  }
-
-  private def resolveSystemSessionView(
-      identifier: Seq[String]): Option[LogicalPlan] = {
-    if (isSystemSessionIdentifier(identifier)) {
-      Option(identifier.drop(2)).collect {
-        case Seq(viewName) if viewName.equalsIgnoreCase(PythonWorkerLogs.ViewName) =>
-          PythonWorkerLogs.viewDefinition()
-      }
-    } else None
   }
 
   private def toCacheKey(

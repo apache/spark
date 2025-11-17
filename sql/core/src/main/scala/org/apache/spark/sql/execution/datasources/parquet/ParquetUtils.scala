@@ -45,7 +45,7 @@ import org.apache.spark.sql.execution.datasources.{AggregatePushDownUtils, Outpu
 import org.apache.spark.sql.execution.datasources.v2.V2ColumnUtils
 import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
 import org.apache.spark.sql.internal.SQLConf.PARQUET_AGGREGATE_PUSHDOWN_ENABLED
-import org.apache.spark.sql.types.{ArrayType, AtomicType, DataType, MapType, StructField, StructType, UserDefinedType, VariantType}
+import org.apache.spark.sql.types.{ArrayType, AtomicType, DataType, MapType, NullType, StructField, StructType, UserDefinedType, VariantType}
 import org.apache.spark.util.ArrayImplicits._
 
 object ParquetUtils extends Logging {
@@ -209,6 +209,8 @@ object ParquetUtils extends Logging {
   def isBatchReadSupported(sqlConf: SQLConf, dt: DataType): Boolean = dt match {
     case _: AtomicType =>
       true
+    case _: NullType =>
+      sqlConf.parquetVectorizedReaderNullTypeEnabled
     case at: ArrayType =>
       sqlConf.parquetVectorizedReaderNestedColumnEnabled &&
         isBatchReadSupported(sqlConf, at.elementType)
@@ -520,6 +522,10 @@ object ParquetUtils extends Logging {
     conf.set(
       SQLConf.LEGACY_PARQUET_NANOS_AS_LONG.key,
       sqlConf.legacyParquetNanosAsLong.toString)
+
+    conf.set(
+      SQLConf.PARQUET_ANNOTATE_VARIANT_LOGICAL_TYPE.key,
+      sqlConf.parquetAnnotateVariantLogicalType.toString)
 
     // Sets compression scheme
     conf.set(ParquetOutputFormat.COMPRESSION, parquetOptions.compressionCodecClassName)

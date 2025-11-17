@@ -34,7 +34,7 @@ import org.apache.spark.sql.connector.catalog.{
   TableInfo
 }
 import org.apache.spark.sql.connector.catalog.CatalogV2Util.v2ColumnsToStructType
-import org.apache.spark.sql.connector.expressions.Expressions
+import org.apache.spark.sql.connector.expressions.{ClusterByTransform, Expressions}
 import org.apache.spark.sql.execution.command.CreateViewCommand
 import org.apache.spark.sql.pipelines.graph.QueryOrigin.ExceptionHelpers
 import org.apache.spark.sql.pipelines.util.SchemaInferenceUtils.diffSchemas
@@ -266,6 +266,19 @@ object DatasetManager extends Logging {
     )
     val mergedProperties = resolveTableProperties(table, identifier)
     val partitioning = table.partitionCols.toSeq.flatten.map(Expressions.identity)
+    val clustering = table.clusterCols.map(cols =>
+      ClusterByTransform(cols.map(col => Expressions.column(col)))
+    ).toSeq
+
+    // Validate that partition and cluster columns don't coexist
+    if (partitioning.nonEmpty && clustering.nonEmpty) {
+      throw new AnalysisException(
+        errorClass = "SPECIFY_CLUSTER_BY_WITH_PARTITIONED_BY_IS_NOT_ALLOWED",
+        messageParameters = Map.empty
+      )
+    }
+
+    val allTransforms = partitioning ++ clustering
 
     val existingTableOpt = if (catalog.tableExists(identifier)) {
       Some(catalog.loadTable(identifier))
@@ -273,15 +286,15 @@ object DatasetManager extends Logging {
       None
     }
 
-    // Error if partitioning doesn't match
+    // Error if partitioning/clustering doesn't match
     if (existingTableOpt.isDefined) {
-      val existingPartitioning = existingTableOpt.get.partitioning().toSeq
-      if (existingPartitioning != partitioning) {
+      val existingTransforms = existingTableOpt.get.partitioning().toSeq
+      if (existingTransforms != allTransforms) {
         throw new AnalysisException(
           errorClass = "CANNOT_UPDATE_PARTITION_COLUMNS",
           messageParameters = Map(
-            "existingPartitionColumns" -> existingPartitioning.mkString(", "),
-            "requestedPartitionColumns" -> partitioning.mkString(", ")
+            "existingPartitionColumns" -> existingTransforms.mkString(", "),
+            "requestedPartitionColumns" -> allTransforms.mkString(", ")
           )
         )
       }
@@ -314,7 +327,7 @@ object DatasetManager extends Logging {
         new TableInfo.Builder()
           .withProperties(mergedProperties.asJava)
           .withColumns(CatalogV2Util.structTypeToV2Columns(outputSchema))
-          .withPartitions(partitioning.toArray)
+          .withPartitions(allTransforms.toArray)
           .build()
       )
     }

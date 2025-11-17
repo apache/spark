@@ -19,11 +19,13 @@ package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.sql.catalyst.SQLConfHelper
-import org.apache.spark.sql.catalyst.analysis.{MultiInstanceRelation, UnresolvedAttribute, UnresolvedStar}
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeSet, Expression, JsonToStructs, PythonUDF, PythonUDTF}
+import org.apache.spark.sql.catalyst.analysis.{FunctionRegistryBase, MultiInstanceRelation, UnresolvedAttribute, UnresolvedStar}
+import org.apache.spark.sql.catalyst.analysis.TableFunctionRegistry.TableFunctionBuilder
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeSet, Expression, ExpressionDescription, ExpressionInfo, JsonToStructs, PythonUDF, PythonUDTF}
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.truncatedString
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.streaming.{GroupStateTimeout, OutputMode, TimeMode}
 import org.apache.spark.sql.types.{StringType, StructField, StructType}
 import org.apache.spark.util.LogUtils
@@ -386,8 +388,25 @@ case class AttachDistributedSequence(
   }
 }
 
+// scalastyle:off line.contains.tab line.size.limit
+@ExpressionDescription(
+  usage = """
+    _FUNC_() - Returns a table of logs collected from Python workers.
+  """,
+  examples = """
+    Examples:
+      > SET spark.sql.pyspark.worker.logging.enabled=true;
+        spark.sql.pyspark.worker.logging.enabled	true
+      > SELECT * FROM _FUNC_();
+
+  """,
+  since = "4.1.0",
+  group = "table_funcs")
+// scalastyle:on line.contains.tab line.size.limit
 case class PythonWorkerLogs(jsonAttr: Attribute)
   extends LeafNode with MultiInstanceRelation with SQLConfHelper {
+
+  def this() = this(DataTypeUtils.toAttribute(StructField("message", StringType)))
 
   override def output: Seq[Attribute] = Seq(jsonAttr)
 
@@ -403,23 +422,28 @@ case class PythonWorkerLogs(jsonAttr: Attribute)
   )
 }
 
-object PythonWorkerLogs {
-  val ViewName = "python_worker_logs"
+object PythonWorkerLogs extends SQLConfHelper {
+  val TableFunctionName = "python_worker_logs"
 
-  def apply(): LogicalPlan = {
-    PythonWorkerLogs(DataTypeUtils.toAttribute(StructField("message", StringType)))
-  }
-
-  def viewDefinition(): LogicalPlan = {
-    Project(
-      Seq(UnresolvedStar(Some(Seq("from_json")))),
-      Project(
-        Seq(Alias(
-          JsonToStructs(
-            schema = StructType.fromDDL(LogUtils.SPARK_LOG_SCHEMA),
-            options = Map.empty,
-            child = UnresolvedAttribute("message")),
-          "from_json")()),
-        PythonWorkerLogs()))
+  val functionBuilder: (String, (ExpressionInfo, TableFunctionBuilder)) = {
+    val (info, builder) = FunctionRegistryBase.build[PythonWorkerLogs](
+      TableFunctionName, None)
+    val funcBuilder = (expressions: Seq[Expression]) => {
+      if (conf.pythonWorkerLoggingEnabled) {
+        Project(
+          Seq(UnresolvedStar(Some(Seq("from_json")))),
+          Project(
+            Seq(Alias(
+              JsonToStructs(
+                schema = StructType.fromDDL(LogUtils.SPARK_LOG_SCHEMA),
+                options = Map.empty,
+                child = UnresolvedAttribute("message")),
+              "from_json")()),
+            builder(expressions)))
+      } else {
+        throw QueryCompilationErrors.pythonWorkerLoggingNotEnabledError()
+      }
+    }
+    TableFunctionName -> (info, funcBuilder)
   }
 }

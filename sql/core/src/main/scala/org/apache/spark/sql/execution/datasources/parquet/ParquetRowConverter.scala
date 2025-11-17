@@ -315,6 +315,13 @@ private[parquet] class ParquetRowConverter(
     }
 
     catalystType match {
+      case NullType
+        if parquetType.getLogicalTypeAnnotation.isInstanceOf[UnknownLogicalTypeAnnotation] =>
+        val parentUpdater = updater
+        // A converter that throws upon any add... call, as we don't expect any value for NullType.
+        new PrimitiveConverter with HasParentContainerUpdater {
+          override def updater: ParentContainerUpdater = parentUpdater
+        }
       case LongType if isUnsignedIntTypeMatched(32) =>
         new ParquetPrimitiveConverter(updater) {
           override def addInt(value: Int): Unit =

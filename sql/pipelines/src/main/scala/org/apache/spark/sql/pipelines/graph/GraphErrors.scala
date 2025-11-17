@@ -39,25 +39,6 @@ object GraphErrors {
   }
 
   /**
-   * Throws when the catalog or schema name in the "USE CATALOG | SCHEMA" command is invalid
-   *
-   * @param command string "USE CATALOG" or "USE SCHEMA"
-   * @param name the invalid catalog or schema name
-   * @param reason the reason why the name is invalid
-   */
-  def invalidNameInUseCommandError(
-      command: String,
-      name: String,
-      reason: String
-  ): SparkException = {
-    new SparkException(
-      errorClass = "INVALID_NAME_IN_USE_COMMAND",
-      messageParameters = Map("command" -> command, "name" -> name, "reason" -> reason),
-      cause = null
-    )
-  }
-
-  /**
    * Throws when a table path is unresolved, i.e. the table identifier
    * does not exist in the catalog.
    *

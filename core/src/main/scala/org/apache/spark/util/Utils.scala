@@ -2878,7 +2878,7 @@ private[spark] object Utils
    * in canCreate to determine if the KubernetesClusterManager should be used.
    */
   def checkAndGetK8sMasterUrl(rawMasterURL: String): String = {
-    require(rawMasterURL.startsWith("k8s://"),
+    require(SparkMasterRegex.isK8s(rawMasterURL),
       "Kubernetes master URL must start with k8s://.")
     val masterWithoutK8sPrefix = rawMasterURL.substring("k8s://".length)
 

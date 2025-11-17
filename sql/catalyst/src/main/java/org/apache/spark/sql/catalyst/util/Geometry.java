@@ -162,7 +162,20 @@ public final class Geometry implements Geo {
   @Override
   public int srid() {
     // This method gets the SRID value from the in-memory Geometry representation header.
-    return ByteBuffer.wrap(getBytes()).order(DEFAULT_ENDIANNESS).getInt(SRID_OFFSET);
+    return getWrapper().getInt(SRID_OFFSET);
+  }
+
+  @Override
+  public void setSrid(int srid) {
+    // This method sets the SRID value in the in-memory Geometry representation header.
+    getWrapper().putInt(SRID_OFFSET, srid);
+  }
+
+  /** Other private helper/utility methods used for implementation. */
+
+  // Returns a byte buffer wrapper over the byte buffer of this geometry value.
+  private ByteBuffer getWrapper() {
+    return ByteBuffer.wrap(getBytes()).order(DEFAULT_ENDIANNESS);
   }
 
 }

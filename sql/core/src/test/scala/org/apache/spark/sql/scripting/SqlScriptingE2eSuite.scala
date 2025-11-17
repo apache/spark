@@ -273,4 +273,66 @@ class SqlScriptingE2eSuite extends QueryTest with SharedSparkSession {
       condition = "INVALID_QUERY_MIXED_QUERY_PARAMETERS",
       parameters = Map())
   }
+
+  test("SQL Script labels with identifier") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  IDENTIFIER('loop_label'): LOOP
+        |    SELECT 1;
+        |    LEAVE IDENTIFIER('loop_label');
+        |  END LOOP IDENTIFIER('loop_label');
+        |END""".stripMargin
+    verifySqlScriptResult(sqlScript, Seq(Row(1)))
+  }
+
+  test("SQL Script with labeled BEGIN/END block using identifier") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  IDENTIFIER('block_label'): BEGIN
+        |    DECLARE IDENTIFIER('x') INT DEFAULT 1;
+        |    SELECT x;
+        |  END IDENTIFIER('block_label');
+        |END""".stripMargin
+    verifySqlScriptResult(sqlScript, Seq(Row(1)))
+  }
+
+  test("WHILE loop with identifier label") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE counter INT DEFAULT 0;
+        |  IDENTIFIER('while_label'): WHILE counter < 3 DO
+        |    SET IDENTIFIER('counter') = counter + 1;
+        |  END WHILE IDENTIFIER('while_label');
+        |  SELECT counter;
+        |END""".stripMargin
+    verifySqlScriptResult(sqlScript, Seq(Row(3)))
+  }
+
+  test("REPEAT loop with identifier label") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE cnt INT DEFAULT 0;
+        |  repeat_label: REPEAT
+        |    SET cnt = cnt + 1;
+        |  UNTIL cnt >= 2
+        |  END REPEAT IDENTIFIER('repeat_label');
+        |  SELECT cnt;
+        |END""".stripMargin
+    verifySqlScriptResult(sqlScript, Seq(Row(2)))
+  }
+
+  test("FOR loop with identifier") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  IDENTIFIER('for_label'): FOR IDENTIFIER('row') AS SELECT 1 AS c1 DO
+        |    SELECT row.c1;
+        |  END FOR for_label;
+        |END""".stripMargin
+    verifySqlScriptResult(sqlScript, Seq(Row(1)))
+  }
 }
