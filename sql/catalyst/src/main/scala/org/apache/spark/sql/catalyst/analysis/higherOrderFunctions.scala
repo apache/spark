@@ -41,16 +41,6 @@ object ResolveLambdaVariables extends Rule[LogicalPlan] {
 
   type LambdaVariableMap = Map[String, NamedExpression]
 
-  private def canonicalizer = {
-    if (!conf.caseSensitiveAnalysis) {
-      // scalastyle:off caselocale
-      s: String => s.toLowerCase
-      // scalastyle:on caselocale
-    } else {
-      s: String => s
-    }
-  }
-
   override def apply(plan: LogicalPlan): LogicalPlan = {
     plan.resolveOperatorsWithPruning(
       _.containsAnyPattern(HIGH_ORDER_FUNCTION, LAMBDA_FUNCTION, LAMBDA_VARIABLE), ruleId) {
@@ -80,11 +70,11 @@ object ResolveLambdaVariables extends Rule[LogicalPlan] {
             "actualNumArgs" -> argInfo.size.toString))
       }
 
-      if (names.map(a => canonicalizer(a.name)).distinct.size < names.size) {
+      if (names.map(a => conf.canonicalize(a.name)).distinct.size < names.size) {
         e.failAnalysis(
           errorClass = "INVALID_LAMBDA_FUNCTION_CALL.DUPLICATE_ARG_NAMES",
           messageParameters = Map(
-            "args" -> names.map(a => canonicalizer(a.name)).map(toSQLId(_)).mkString(", "),
+            "args" -> names.map(a => conf.canonicalize(a.name)).map(toSQLId(_)).mkString(", "),
             "caseSensitiveConfig" -> toSQLConf(SQLConf.CASE_SENSITIVE.key)))
       }
 
@@ -124,11 +114,11 @@ object ResolveLambdaVariables extends Rule[LogicalPlan] {
       l
 
     case l: LambdaFunction if !l.hidden =>
-      val lambdaMap = l.arguments.map(v => canonicalizer(v.name) -> v).toMap
+      val lambdaMap = l.arguments.map(v => conf.canonicalize(v.name) -> v).toMap
       l.mapChildren(resolve(_, parentLambdaMap ++ lambdaMap))
 
     case u @ UnresolvedNamedLambdaVariable(name +: nestedFields) =>
-      parentLambdaMap.get(canonicalizer(name)) match {
+      parentLambdaMap.get(conf.canonicalize(name)) match {
         case Some(lambda) =>
           nestedFields.foldLeft(lambda: Expression) { (expr, fieldName) =>
             ExtractValue(expr, Literal(fieldName), conf.resolver)
