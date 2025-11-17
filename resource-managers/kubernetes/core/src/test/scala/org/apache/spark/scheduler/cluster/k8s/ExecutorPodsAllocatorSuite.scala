@@ -28,7 +28,7 @@ import io.fabric8.kubernetes.client.{KubernetesClient, KubernetesClientException
 import io.fabric8.kubernetes.client.dsl.PodResource
 import org.mockito.{Mock, MockitoAnnotations}
 import org.mockito.ArgumentMatchers.{any, anyString, eq => meq}
-import org.mockito.Mockito.{never, times, verify, when}
+import org.mockito.Mockito.{doReturn, never, times, verify, when}
 import org.mockito.invocation.InvocationOnMock
 import org.mockito.stubbing.Answer
 import org.scalatest.BeforeAndAfter
@@ -1026,5 +1026,161 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
       val k8sConf: KubernetesExecutorConf = invocation.getArgument(0)
       KubernetesExecutorSpec(executorPodWithId(k8sConf.executorId.toInt,
         k8sConf.resourceProfileId.toInt), Seq.empty)
+  }
+
+  test("backoff: enters on pod failures and creation timeout, " +
+    "limits to 1 pod with exponential delay, exits backoff on success") {
+    val backoffConf = conf.clone
+      .set(KUBERNETES_ALLOCATION_EXECUTOR_BACKOFF_ENABLED, true)
+      .set(KUBERNETES_ALLOCATION_EXECUTOR_BACKOFF_FAILURE_THRESHOLD, 2)
+      .set(KUBERNETES_ALLOCATION_EXECUTOR_BACKOFF_INITIAL_DELAY, 5000L) // 5s
+      .set(KUBERNETES_ALLOCATION_EXECUTOR_BACKOFF_MAX_DELAY, 15000L) // 15s
+      .set(KUBERNETES_ALLOCATION_EXECUTOR_TIMEOUT, 20000L) // 20s
+
+    val startTime = Instant.now.toEpochMilli
+    waitForExecutorPodsClock.setTime(startTime)
+
+    podsAllocatorUnderTest = new ExecutorPodsAllocator(backoffConf, secMgr, executorBuilder,
+      kubernetesClient, snapshotsStore, waitForExecutorPodsClock)
+    podsAllocatorUnderTest.start(TEST_SPARK_APP_ID, schedulerBackend)
+
+    val metricsSource = podsAllocatorUnderTest.metricsSources.head
+      .asInstanceOf[ExecutorPodsBackoffControllerSource]
+    val startupFailureCounter = metricsSource.startupFailureCounter
+    val backoffEntryCounter = metricsSource.backoffEntryCounter
+    val backoffExitCounter = metricsSource.backoffExitCounter
+    assert(startupFailureCounter.getCount == 0)
+    assert(backoffEntryCounter.getCount == 0)
+    assert(backoffExitCounter.getCount == 0)
+
+    // request 8 executors - should create batch of 5 initially (Normal state)
+    podsAllocatorUnderTest.setTotalExpectedExecutors(Map(defaultProfile -> 8))
+    assert(podsAllocatorUnderTest.invokePrivate(numOutstandingPods)
+      .get() == 5)
+    verify(podResource, times(5)).create()
+
+    // executor 1 fails with pod failure, executor 2 never appears (will timeout)
+    snapshotsStore.updatePod(failedExecutorWithoutDeletion(1))
+    snapshotsStore.updatePod(runningExecutor(3))
+    snapshotsStore.updatePod(runningExecutor(4))
+    snapshotsStore.updatePod(pendingExecutor(5))
+    snapshotsStore.notifySubscribers()
+
+    // still in Normal state - only 1 failure so far (pod failure for executor 1)
+    assert(startupFailureCounter.getCount == 1)
+    assert(backoffEntryCounter.getCount == 0)
+    assert(backoffExitCounter.getCount == 0)
+    assert(podsAllocatorUnderTest.invokePrivate(numOutstandingPods)
+      .get() == 2) // 5 pending, 2 newly created
+
+    // advance clock past pod creation timeout - executor 2 times out. Timeout failure
+    // counts towards startup failures and together with pod failure triggers backoff
+    waitForExecutorPodsClock.advance(20000L + 1)
+    snapshotsStore.notifySubscribers()
+
+    // after failures we're in Backoff, need to wait for delay
+    assert(startupFailureCounter.getCount == 2)
+    assert(backoffEntryCounter.getCount == 1)
+    assert(backoffExitCounter.getCount == 0)
+    assert(podsAllocatorUnderTest.invokePrivate(numOutstandingPods)
+      .get() == 1) // pending executor 5
+    verify(podResource, times(5)).create() // no new pods yet due to backoff delay
+
+    // try to request before delay - should not create new pod
+    waitForExecutorPodsClock.advance(4999)
+    snapshotsStore.notifySubscribers()
+    assert(podsAllocatorUnderTest.invokePrivate(numOutstandingPods)
+      .get() == 1) // pending executor 5
+    verify(podResource, times(5)).create() // no new pods
+
+    // delay is over (5s), in Backoff mode, should only request 1 executor at a time
+    waitForExecutorPodsClock.advance(1)
+    snapshotsStore.notifySubscribers()
+    verify(podResource, times(6)).create() // executor 6 requested
+    assert(podsAllocatorUnderTest.invokePrivate(numOutstandingPods)
+      .get() == 2) // 5 pending, 6 newly created
+
+    // fail executor 6 - next delay is 10s
+    snapshotsStore.updatePod(failedExecutorWithoutDeletion(6))
+    snapshotsStore.notifySubscribers()
+    waitForExecutorPodsClock.advance(10000)
+    snapshotsStore.notifySubscribers()
+    verify(podResource, times(7)).create() // executor 7 requested
+
+    // fail executor 7 - next delay would be 20s but capped at max 15s
+    snapshotsStore.updatePod(failedExecutorWithoutDeletion(7))
+    snapshotsStore.notifySubscribers()
+    waitForExecutorPodsClock.advance(15000)
+    snapshotsStore.notifySubscribers()
+    verify(podResource, times(8)).create() // executor 8 requested
+
+    // change pending executor 5 to running - should not exit backoff
+    // (it was requested before entering Backoff state)
+    snapshotsStore.updatePod(runningExecutor(5))
+    snapshotsStore.notifySubscribers()
+    assert(startupFailureCounter.getCount == 4)
+    assert(backoffEntryCounter.getCount == 1)
+    assert(backoffExitCounter.getCount == 0)
+
+    // executor 8 registers successfully - exits Backoff
+    podsAllocatorUnderTest.onRegisterExecutorMsgReceived("8")
+    snapshotsStore.updatePod(runningExecutor(8))
+    snapshotsStore.notifySubscribers()
+
+    // back to Normal - should request multiple executors at once (up to batch size)
+    // running: 3,4,5,8 = 4; target = 8; need 4 more
+    verify(podResource, times(12)).create() // 4 more executors (9,10,11,12)
+    assert(podsAllocatorUnderTest.invokePrivate(numOutstandingPods).get() == 4)
+    assert(startupFailureCounter.getCount == 4)
+    assert(backoffEntryCounter.getCount == 1)
+    assert(backoffExitCounter.getCount == 1)
+  }
+
+  test("backoff: pod creation exceptions count as failures and trigger backoff") {
+    val backoffConf = conf.clone
+      .set(KUBERNETES_ALLOCATION_EXECUTOR_BACKOFF_ENABLED, true)
+      .set(KUBERNETES_ALLOCATION_EXECUTOR_BACKOFF_FAILURE_THRESHOLD, 2)
+      .set(KUBERNETES_ALLOCATION_EXECUTOR_BACKOFF_INITIAL_DELAY, 5000L)
+
+    val startTime = Instant.now.toEpochMilli
+    waitForExecutorPodsClock.setTime(startTime)
+
+    podsAllocatorUnderTest = new ExecutorPodsAllocator(backoffConf, secMgr, executorBuilder,
+      kubernetesClient, snapshotsStore, waitForExecutorPodsClock)
+    podsAllocatorUnderTest.start(TEST_SPARK_APP_ID, schedulerBackend)
+
+    // make pod creation fail from the start
+    when(podResource.create()).thenThrow(new KubernetesClientException("Pod creation failed"))
+
+    // request 5 executors - first pod creation fails, stops remaining requests
+    intercept[KubernetesClientException] {
+      podsAllocatorUnderTest.setTotalExpectedExecutors(Map(defaultProfile -> 5))
+    }
+    // only 1 create attempted - exception stops the batch
+    verify(podResource, times(1)).create()
+    assert(podsAllocatorUnderTest.invokePrivate(numOutstandingPods).get() == 0)
+
+    // second failed request - records 2nd failure, triggers backoff
+    intercept[KubernetesClientException] {
+      snapshotsStore.notifySubscribers()
+    }
+    // only 1 more create attempted - exception stops the batch again
+    verify(podResource, times(2)).create()
+
+    // now in Backoff state - restore pod creation and verify delay is respected
+    // use doReturn instead of when().thenReturn() because the latter invokes create()
+    // during stub setup, which would throw since it's still configured to throw
+    doReturn(podWithAttachedContainerForId(3)).when(podResource).create()
+
+    // try before delay - should not create pod
+    waitForExecutorPodsClock.advance(4999)
+    snapshotsStore.notifySubscribers()
+    verify(podResource, times(2)).create() // still 2, delay not passed
+
+    // after delay - should create only 1 pod (backoff limits to 1)
+    waitForExecutorPodsClock.advance(2)
+    snapshotsStore.notifySubscribers()
+    verify(podResource, times(3)).create()
+    assert(podsAllocatorUnderTest.invokePrivate(numOutstandingPods).get() == 1)
   }
 }

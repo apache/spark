@@ -252,6 +252,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
 
       case RegisterExecutor(executorId, executorRef, hostname, cores, logUrls,
           attributes, resources, resourceProfileId) =>
+        onRegisterExecutorMsgReceived(executorId)
         if (executorDataMap.contains(executorId)) {
           context.sendFailure(new IllegalStateException(s"Duplicate executor ID: $executorId"))
         } else if (scheduler.excludedNodes().contains(hostname) ||
@@ -371,6 +372,12 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
       case e =>
         logError(log"Received unexpected ask ${MDC(ERROR, e)}")
     }
+
+    /**
+     * Hook method called when RegisterExecutor message received.
+     * Subclasses can override this to perform additional actions.
+     */
+    protected def onRegisterExecutorMsgReceived(executorId: String): Unit = {}
 
     // Make fake resource offers on all executors
     private def makeOffers(): Unit = {
