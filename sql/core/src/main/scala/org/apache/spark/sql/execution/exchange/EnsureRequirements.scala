@@ -423,8 +423,6 @@ case class EnsureRequirements(
   private def canPushDownSPJParamsToScan(plan: SparkPlan): Boolean = {
     plan.collectLeaves().forall {
       case _: KeyGroupedPartitionedScan[_] => true
-      case f: FileSourceScanExec =>
-        f.relation.location.isInstanceOf[KeyGroupedPartitionedScan[_]]
       case _ => false
     }
   }
