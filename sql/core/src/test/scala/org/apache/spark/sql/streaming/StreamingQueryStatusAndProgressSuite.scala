@@ -814,7 +814,7 @@ object StreamingQueryStatusAndProgressSuite {
       "event2" -> row(schema2, 1L, "hello", "world")).asJava)
   )
 
-    val testProgress5 = new StreamingQueryProgress(
+  val testProgress5 = new StreamingQueryProgress(
     id = UUID.randomUUID,
     runId = UUID.randomUUID,
     name = null, // should not be present in the json
