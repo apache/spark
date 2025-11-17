@@ -1935,20 +1935,20 @@ class ScalarPandasUDFTestsMixin:
                 [Row(result=f"scalar_pandas_{i}") for i in range(3)],
             )
 
-        logs = self.spark.table("system.session.python_worker_logs")
+            logs = self.spark.tvf.python_worker_logs()
 
-        assertDataFrameEqual(
-            logs.select("level", "msg", "context", "logger"),
-            [
-                Row(
-                    level="WARNING",
-                    msg=f"scalar pandas udf: {lst}",
-                    context={"func_name": my_scalar_pandas_udf.__name__},
-                    logger="test_scalar_pandas",
-                )
-                for lst in [[0], [1, 2]]
-            ],
-        )
+            assertDataFrameEqual(
+                logs.select("level", "msg", "context", "logger"),
+                [
+                    Row(
+                        level="WARNING",
+                        msg=f"scalar pandas udf: {lst}",
+                        context={"func_name": my_scalar_pandas_udf.__name__},
+                        logger="test_scalar_pandas",
+                    )
+                    for lst in [[0], [1, 2]]
+                ],
+            )
 
     @unittest.skipIf(is_remote_only(), "Requires JVM access")
     def test_scalar_iter_pandas_udf_with_logging(self):
@@ -1973,20 +1973,20 @@ class ScalarPandasUDFTestsMixin:
                 [Row(result=f"scalar_iter_pandas_{i}") for i in range(9)],
             )
 
-        logs = self.spark.table("system.session.python_worker_logs")
+            logs = self.spark.tvf.python_worker_logs()
 
-        assertDataFrameEqual(
-            logs.select("level", "msg", "context", "logger"),
-            [
-                Row(
-                    level="WARNING",
-                    msg=f"scalar iter pandas udf: {lst}",
-                    context={"func_name": my_scalar_iter_pandas_udf.__name__},
-                    logger="test_scalar_iter_pandas",
-                )
-                for lst in [[0, 1, 2], [3], [4, 5, 6], [7, 8]]
-            ],
-        )
+            assertDataFrameEqual(
+                logs.select("level", "msg", "context", "logger"),
+                [
+                    Row(
+                        level="WARNING",
+                        msg=f"scalar iter pandas udf: {lst}",
+                        context={"func_name": my_scalar_iter_pandas_udf.__name__},
+                        logger="test_scalar_iter_pandas",
+                    )
+                    for lst in [[0, 1, 2], [3], [4, 5, 6], [7, 8]]
+                ],
+            )
 
     def test_scalar_pandas_udf_with_compression_codec(self):
         # Test scalar Pandas UDF with different compression codec settings
@@ -1999,7 +1999,7 @@ class ScalarPandasUDFTestsMixin:
 
         for codec in ["none", "zstd", "lz4"]:
             with self.subTest(compressionCodec=codec):
-                with self.sql_conf({"spark.sql.execution.arrow.compressionCodec": codec}):
+                with self.sql_conf({"spark.sql.execution.arrow.compression.codec": codec}):
                     result = df.select(plus_one("id").alias("result")).collect()
                     self.assertEqual(expected, result)
 
@@ -2017,7 +2017,7 @@ class ScalarPandasUDFTestsMixin:
 
         for codec in ["none", "zstd", "lz4"]:
             with self.subTest(compressionCodec=codec):
-                with self.sql_conf({"spark.sql.execution.arrow.compressionCodec": codec}):
+                with self.sql_conf({"spark.sql.execution.arrow.compression.codec": codec}):
                     # Test string UDF
                     result = df.select(concat_string("id").alias("result")).collect()
                     expected = [Row(result=f"value_{i}") for i in range(50)]
@@ -2040,7 +2040,7 @@ class ScalarPandasUDFTestsMixin:
 
         for codec in ["none", "zstd", "lz4"]:
             with self.subTest(compressionCodec=codec):
-                with self.sql_conf({"spark.sql.execution.arrow.compressionCodec": codec}):
+                with self.sql_conf({"spark.sql.execution.arrow.compression.codec": codec}):
                     result = df.select(plus_two("id").alias("result")).collect()
                     self.assertEqual(expected, result)
 

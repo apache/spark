@@ -965,8 +965,14 @@ class DataSourceV2SQLSuiteV1Filter
           checkAnswer(sql(s"SELECT * FROM $view"), spark.table("source").select("id"))
 
           val oldView = spark.table(view)
+          assert(spark.sharedState.cacheManager.numCachedEntries == 1)
           sql(s"REPLACE TABLE $t (a bigint) USING foo")
-          assert(spark.sharedState.cacheManager.lookupCachedData(oldView).isEmpty)
+          // it is no longer valid to materialize oldView as underlying
+          // query execution captured original table before replace
+          // yet cache invalidation must work correctly
+          val e = intercept[AnalysisException] { oldView.collect() }
+          assert(e.message.contains("Table ID has changed"))
+          assert(spark.sharedState.cacheManager.isEmpty)
         }
       }
     }
@@ -1322,8 +1328,8 @@ class DataSourceV2SQLSuiteV1Filter
   test("ShowViews: using v2 catalog, command not supported.") {
     checkError(
       exception = analysisException("SHOW VIEWS FROM testcat"),
-      condition = "_LEGACY_ERROR_TEMP_1184",
-      parameters = Map("plugin" -> "testcat", "ability" -> "views"))
+      condition = "MISSING_CATALOG_ABILITY.VIEWS",
+      parameters = Map("plugin" -> "testcat"))
   }
 
   test("create/replace/alter table - reserved properties") {
@@ -2312,8 +2318,10 @@ class DataSourceV2SQLSuiteV1Filter
         exception = intercept[SparkUnsupportedOperationException] {
           sql(s"UPDATE $t SET name='Robert', age=32 WHERE p=1")
         },
-        condition = "_LEGACY_ERROR_TEMP_2096",
-        parameters = Map("ddl" -> "UPDATE TABLE")
+        condition = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
+        parameters = Map(
+          "tableName" -> "`testcat`.`ns1`.`ns2`.`tbl`",
+          "operation" -> "UPDATE TABLE")
       )
     }
   }
@@ -2418,8 +2426,10 @@ class DataSourceV2SQLSuiteV1Filter
                |WHEN MATCHED AND (target.p > 0) THEN UPDATE SET *
                |WHEN NOT MATCHED THEN INSERT *""".stripMargin)
         },
-        condition = "_LEGACY_ERROR_TEMP_2096",
-        parameters = Map("ddl" -> "MERGE INTO TABLE"))
+        condition = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
+        parameters = Map(
+          "tableName" -> "`testcat`.`ns1`.`ns2`.`target`",
+          "operation" -> "MERGE INTO TABLE"))
     }
   }
 
@@ -2517,8 +2527,8 @@ class DataSourceV2SQLSuiteV1Filter
     val v = "testcat.ns1.ns2.v"
     checkError(
       exception = analysisException(s"CREATE VIEW $v AS SELECT 1"),
-      condition = "_LEGACY_ERROR_TEMP_1184",
-      parameters = Map("plugin" -> "testcat", "ability" -> "views"))
+      condition = "MISSING_CATALOG_ABILITY.VIEWS",
+      parameters = Map("plugin" -> "testcat"))
   }
 
   test("global temp view should not be masked by v2 catalog") {
@@ -3972,6 +3982,12 @@ class V2CatalogSupportBuiltinDataSource extends InMemoryCatalog {
       tracksPartitionsInCatalog = false
     )
     V1Table(sparkTable)
+  }
+
+  override def loadTable(
+      ident: Identifier,
+      writePrivileges: util.Set[TableWritePrivilege]): Table = {
+    loadTable(ident)
   }
 }
 

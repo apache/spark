@@ -487,7 +487,9 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
         // (one for main file and another for checksum file).
         // Since this fm is used by both query task and maintenance thread,
         // then we need 2 * 2 = 4 threads.
-        numThreads = 4)
+        numThreads = 4,
+        skipCreationIfFileMissingChecksum =
+          storeConf.checkpointFileChecksumSkipCreationIfFileMissingChecksum)
     } else {
       mgr
     }

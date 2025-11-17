@@ -1585,6 +1585,14 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val PARQUET_ANNOTATE_VARIANT_LOGICAL_TYPE =
+    buildConf("spark.sql.parquet.variant.annotateLogicalType.enabled")
+      .doc("When enabled, Spark annotates the variant groups written to Parquet as the parquet " +
+        "variant logical type.")
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val PARQUET_FIELD_ID_READ_ENABLED =
     buildConf("spark.sql.parquet.fieldId.read.enabled")
       .doc("Field ID is a native field of the Parquet schema spec. When enabled, Parquet readers " +
@@ -3515,6 +3523,16 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val STREAMING_CHECKPOINT_FILE_CHECKSUM_SKIP_CREATION_IF_FILE_MISSING_CHECKSUM =
+    buildConf("spark.sql.streaming.checkpoint.fileChecksum.skipCreationIfFileMissingChecksum")
+      .internal()
+      .doc("When true, if a microbatch is retried, if a file already exists but its checksum " +
+        "file does not exist, the file checksum will not be created. This is useful for " +
+        "compatibility with files created before file checksums were enabled.")
+      .version("4.2.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val PARALLEL_FILE_LISTING_IN_STATS_COMPUTATION =
     buildConf("spark.sql.statistics.parallelFileListingInStatsComputation.enabled")
       .internal()
@@ -3831,6 +3849,16 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val SINGLE_CHARACTER_PIPE_OPERATOR_ENABLED =
+    buildConf("spark.sql.parser.singleCharacterPipeOperator.enabled")
+    .doc("When true, the single character pipe token '|' can be used as an alternative to '|>' " +
+      "for SQL pipe operators. When false, only '|>' is recognized as a pipe operator, and '|' " +
+      "is only used for bitwise OR operations. This provides syntax compatibility with other " +
+      "languages like Splunk SPL and Kusto that use '|' for pipe operations.")
+    .version("4.2.0")
+    .booleanConf
+    .createWithDefault(true)
+
   val TVF_ALLOW_MULTIPLE_TABLE_ARGUMENTS_ENABLED =
     buildConf("spark.sql.tvf.allowMultipleTableArguments.enabled")
       .doc("When true, allows multiple table arguments for table-valued functions, " +
@@ -4064,7 +4092,7 @@ object SQLConf {
       .createWithDefaultString("64MB")
 
   val ARROW_EXECUTION_COMPRESSION_CODEC =
-    buildConf("spark.sql.execution.arrow.compressionCodec")
+    buildConf("spark.sql.execution.arrow.compression.codec")
       .doc("Compression codec used to compress Arrow IPC data when transferring data " +
         "between JVM and Python processes (e.g., toPandas, toArrow). This can significantly " +
         "reduce memory usage and network bandwidth when transferring large datasets. " +
@@ -4078,16 +4106,15 @@ object SQLConf {
       .createWithDefault("none")
 
   val ARROW_EXECUTION_ZSTD_COMPRESSION_LEVEL =
-    buildConf("spark.sql.execution.arrow.zstd.compressionLevel")
+    buildConf("spark.sql.execution.arrow.compression.zstd.level")
       .doc("Compression level for Zstandard (zstd) codec when compressing Arrow IPC data. " +
-        "This config is only used when spark.sql.execution.arrow.compressionCodec is set to " +
-        "'zstd'. Valid values are integers from 1 (fastest, lowest compression) to 22 " +
-        "(slowest, highest compression). The default value 3 provides a good balance between " +
-        "compression speed and compression ratio.")
+        "This config is only used when spark.sql.execution.arrow.compression.codec is set to " +
+        "'zstd'. Negative values provide ultra-fast compression with lower " +
+        "compression ratios. Positive values provide normal to maximum compression, " +
+        "with higher values giving better compression but slower speed. The default value 3 " +
+        "provides a good balance between compression speed and compression ratio.")
       .version("4.1.0")
       .intConf
-      .checkValue(level => level >= 1 && level <= 22,
-        "Zstd compression level must be between 1 and 22")
       .createWithDefault(3)
 
   val ARROW_TRANSFORM_WITH_STATE_IN_PYSPARK_MAX_STATE_RECORDS_PER_BATCH =
@@ -5046,6 +5073,17 @@ object SQLConf {
       .doc("When set to true, a literal with an exponent (e.g. 1E-30) would be parsed " +
         "as Decimal rather than Double.")
       .version("3.0.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  val LEGACY_IDENTIFIER_CLAUSE_ONLY =
+    buildConf("spark.sql.legacy.identifierClause")
+      .internal()
+      .doc("When set to false, IDENTIFIER('literal') is resolved to an identifier at parse time " +
+        "anywhere identifiers can occur. When set to true, only the legacy " +
+        " IDENTIFIER(constantExpr) clause is allowed, which evaluates the expression at analysis " +
+        " and is limited to a narrow subset of scenarios.")
+      .version("4.1.0")
       .booleanConf
       .createWithDefault(false)
 
@@ -6108,7 +6146,9 @@ object SQLConf {
       .doc("The chunk size in bytes when splitting ChunkedCachedLocalRelation.data " +
         "into batches. A new chunk is created when either " +
         "spark.sql.session.localRelationChunkSizeBytes " +
-        "or spark.sql.session.localRelationChunkSizeRows is reached.")
+        "or spark.sql.session.localRelationChunkSizeRows is reached. " +
+        "Limited by the spark.sql.session.localRelationBatchOfChunksSizeBytes, " +
+        "a minimum of the two confs is used to determine the chunk size.")
       .version("4.1.0")
       .longConf
       .checkValue(_ > 0, "The chunk size in bytes must be positive")
@@ -6131,6 +6171,21 @@ object SQLConf {
       .version("4.1.0")
       .bytesConf(ByteUnit.BYTE)
       .createWithDefaultString("3GB")
+
+  val LOCAL_RELATION_BATCH_OF_CHUNKS_SIZE_BYTES =
+    buildConf(SqlApiConfHelper.LOCAL_RELATION_BATCH_OF_CHUNKS_SIZE_BYTES_KEY)
+      .internal()
+      .doc("Limit on how much memory the client can use when uploading a local relation to the " +
+        "server. The client collects multiple local relation chunks into a single batch in " +
+        "memory until the limit is reached, then uploads the batch to the server. " +
+        "This helps reduce memory pressure on the client when dealing with very large local " +
+        "relations because the client does not have to materialize all chunks in memory. " +
+        "Limits the spark.sql.session.localRelationChunkSizeBytes, " +
+        "a minimum of the two confs is used to determine the chunk size.")
+      .version("4.1.0")
+      .longConf
+      .checkValue(_ > 0, "The batch size in bytes must be positive")
+      .createWithDefault(1 * 1024 * 1024 * 1024L)
 
   val DECORRELATE_JOIN_PREDICATE_ENABLED =
     buildConf("spark.sql.optimizer.decorrelateJoinPredicate.enabled")
@@ -6856,6 +6911,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def checkpointFileChecksumEnabled: Boolean = getConf(STREAMING_CHECKPOINT_FILE_CHECKSUM_ENABLED)
 
+  def checkpointFileChecksumSkipCreationIfFileMissingChecksum: Boolean =
+    getConf(STREAMING_CHECKPOINT_FILE_CHECKSUM_SKIP_CREATION_IF_FILE_MISSING_CHECKSUM)
+
   def isUnsupportedOperationCheckEnabled: Boolean = getConf(UNSUPPORTED_OPERATION_CHECK_ENABLED)
 
   def useDeprecatedKafkaOffsetFetching: Boolean = getConf(USE_DEPRECATED_KAFKA_OFFSET_FETCHING)
@@ -7159,6 +7217,20 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
       org.apache.spark.sql.catalyst.analysis.caseSensitiveResolution
     } else {
       org.apache.spark.sql.catalyst.analysis.caseInsensitiveResolution
+    }
+  }
+
+  /**
+   * Returns the lower case representation of a string if `caseSensitiveAnalysis` is enabled.
+   * Otherwise, returns the original string.
+   */
+  def canonicalize(s: String): String = {
+    if (!caseSensitiveAnalysis) {
+      // scalastyle:off caselocale
+      s.toLowerCase
+      // scalastyle:on caselocale
+    } else {
+      s
     }
   }
 
@@ -7585,6 +7657,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   override def exponentLiteralAsDecimalEnabled: Boolean =
     getConf(SQLConf.LEGACY_EXPONENT_LITERAL_AS_DECIMAL_ENABLED)
 
+  def singleCharacterPipeOperatorEnabled: Boolean =
+    getConf(SQLConf.SINGLE_CHARACTER_PIPE_OPERATOR_ENABLED)
+
   def allowNegativeScaleOfDecimalEnabled: Boolean =
     getConf(SQLConf.LEGACY_ALLOW_NEGATIVE_SCALE_OF_DECIMAL_ENABLED)
 
@@ -7685,6 +7760,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def parquetFieldIdWriteEnabled: Boolean = getConf(SQLConf.PARQUET_FIELD_ID_WRITE_ENABLED)
 
+  def parquetAnnotateVariantLogicalType: Boolean = getConf(PARQUET_ANNOTATE_VARIANT_LOGICAL_TYPE)
+
   def ignoreMissingParquetFieldId: Boolean = getConf(SQLConf.IGNORE_MISSING_PARQUET_FIELD_ID)
 
   def legacyParquetNanosAsLong: Boolean = getConf(SQLConf.LEGACY_PARQUET_NANOS_AS_LONG)
@@ -7732,6 +7809,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   override def legacyParameterSubstitutionConstantsOnly: Boolean =
     getConf(SQLConf.LEGACY_PARAMETER_SUBSTITUTION_CONSTANTS_ONLY)
+
+  override def legacyIdentifierClauseOnly: Boolean =
+    getConf(SQLConf.LEGACY_IDENTIFIER_CLAUSE_ONLY)
 
   def streamStatePollingInterval: Long = getConf(SQLConf.PIPELINES_STREAM_STATE_POLLING_INTERVAL)
 
@@ -7872,6 +7952,12 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
           logWarning("SQL configurations from Hive module is not loaded", e)
       }
     }
+  }
+
+  /** Return the value of Spark SQL configuration property for the given keys. */
+  @throws[NoSuchElementException]("if key is not set")
+  private[spark] def getConfs(keys: util.List[String]): Array[String] = {
+    Array.tabulate(keys.size())(i => this.getConfString(keys.get(i)))
   }
 
   /**

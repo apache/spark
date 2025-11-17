@@ -247,12 +247,12 @@ class MapInArrowTestsMixin(object):
                 [Row(id=i) for i in range(9)],
             )
 
-        logs = self.spark.table("system.session.python_worker_logs")
+            logs = self.spark.tvf.python_worker_logs()
 
-        assertDataFrameEqual(
-            logs.select("level", "msg", "context", "logger"),
-            self._expected_logs_for_test_map_in_arrow_with_logging(func_with_logging.__name__),
-        )
+            assertDataFrameEqual(
+                logs.select("level", "msg", "context", "logger"),
+                self._expected_logs_for_test_map_in_arrow_with_logging(func_with_logging.__name__),
+            )
 
     def _expected_logs_for_test_map_in_arrow_with_logging(self, func_name):
         return [
