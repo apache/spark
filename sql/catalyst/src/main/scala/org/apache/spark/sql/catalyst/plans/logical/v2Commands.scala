@@ -873,7 +873,7 @@ case class MergeIntoTable(
   lazy val aligned: Boolean = {
     val actions = matchedActions ++ notMatchedActions ++ notMatchedBySourceActions
     actions.forall {
-      case UpdateAction(_, assignments) =>
+      case UpdateAction(_, assignments, _) =>
         AssignmentUtils.aligned(targetTable.output, assignments)
       case _: DeleteAction =>
         true
@@ -926,10 +926,7 @@ case class MergeIntoTable(
         case a: UpdateAction => a.assignments
         case a: InsertAction => a.assignments
       }.flatten
-
-      val sourcePaths = MergeIntoTable.extractAllFieldPaths(sourceTable.schema)
-      // Only allow unresolved assignment keys to be candidates for schema evolution
-      // if they are directly assigned from source fields, ie UPDATE SET new = source.new
+      val sourcePaths = DataTypeUtils.extractAllFieldPaths(sourceTable.schema)
       assignments.forall { assignment =>
         assignment.resolved ||
           (assignment.value.resolved && sourcePaths.exists {
@@ -1083,19 +1080,6 @@ object MergeIntoTable {
     filterSchema(merge.sourceTable.schema, Seq.empty)
   }
 
-  private def extractAllFieldPaths(schema: StructType, basePath: Seq[String] = Seq.empty):
-  Seq[Seq[String]] = {
-    schema.flatMap { field =>
-      val fieldPath = basePath :+ field.name
-      field.dataType match {
-        case struct: StructType =>
-          fieldPath +: extractAllFieldPaths(struct, fieldPath)
-        case _ =>
-          Seq(fieldPath)
-      }
-    }
-  }
-
   // Helper method to extract field path from an Expression.
   private def extractFieldPath(expr: Expression, allowUnresolved: Boolean): Seq[String] = {
     expr match {
@@ -1142,7 +1126,8 @@ case class DeleteAction(condition: Option[Expression]) extends MergeAction {
 
 case class UpdateAction(
     condition: Option[Expression],
-    assignments: Seq[Assignment]) extends MergeAction {
+    assignments: Seq[Assignment],
+    fromStar: Boolean = false) extends MergeAction {
   override def children: Seq[Expression] = condition.toSeq ++ assignments
 
   override protected def withNewChildrenInternal(

@@ -40,7 +40,7 @@ class AlignMergeAssignmentsSuite extends AlignAssignmentsSuiteBase {
           | UPDATE SET t.txt = "error", t.i = CAST(null AS INT)""".stripMargin)
 
     matchedActions match {
-      case Seq(UpdateAction(None, assignments)) =>
+      case Seq(UpdateAction(None, assignments, _)) =>
         assignments match {
           case Seq(
               Assignment(i: AttributeReference, AssertNotNull(iValue: AttributeReference, _)),
@@ -80,7 +80,7 @@ class AlignMergeAssignmentsSuite extends AlignAssignmentsSuiteBase {
     }
 
     notMatchedBySourceActions match {
-      case Seq(UpdateAction(None, assignments)) =>
+      case Seq(UpdateAction(None, assignments, _)) =>
         assignments match {
           case Seq(
               Assignment(i: AttributeReference, AssertNotNull(_: Cast, _)),
@@ -138,7 +138,7 @@ class AlignMergeAssignmentsSuite extends AlignAssignmentsSuiteBase {
     }
 
     matchedActions match {
-      case Seq(UpdateAction(None, assignments)) =>
+      case Seq(UpdateAction(None, assignments, _)) =>
         assignments match {
           case Seq(
               Assignment(i: AttributeReference, iValue: AttributeReference),
@@ -184,7 +184,7 @@ class AlignMergeAssignmentsSuite extends AlignAssignmentsSuiteBase {
     }
 
     notMatchedBySourceActions match {
-      case Seq(UpdateAction(None, assignments)) =>
+      case Seq(UpdateAction(None, assignments, _)) =>
         assignments match {
           case Seq(
               Assignment(i: AttributeReference, iValue: AttributeReference),
@@ -217,7 +217,7 @@ class AlignMergeAssignmentsSuite extends AlignAssignmentsSuiteBase {
           |""".stripMargin)
 
     matchedActions match {
-      case Seq(UpdateAction(None, assignments)) =>
+      case Seq(UpdateAction(None, assignments, _)) =>
         assignments match {
           case Seq(
               Assignment(i: AttributeReference, iValue: AttributeReference),
@@ -280,7 +280,7 @@ class AlignMergeAssignmentsSuite extends AlignAssignmentsSuiteBase {
     }
 
     matchedActions match {
-      case Seq(UpdateAction(None, assignments)) =>
+      case Seq(UpdateAction(None, assignments, _)) =>
         assignments match {
           case Seq(
               Assignment(i: AttributeReference, iValue: AttributeReference),
@@ -342,7 +342,7 @@ class AlignMergeAssignmentsSuite extends AlignAssignmentsSuiteBase {
     }
 
     notMatchedBySourceActions match {
-      case Seq(UpdateAction(None, assignments)) =>
+      case Seq(UpdateAction(None, assignments, _)) =>
         assignments match {
           case Seq(
               Assignment(i: AttributeReference, iValue: AttributeReference),
@@ -463,7 +463,7 @@ class AlignMergeAssignmentsSuite extends AlignAssignmentsSuiteBase {
     }
 
     matchedActions match {
-      case Seq(UpdateAction(None, assignments)) =>
+      case Seq(UpdateAction(None, assignments, _)) =>
         assignments match {
           case Seq(
               Assignment(c: AttributeReference, cValue: StaticInvoke),
@@ -531,7 +531,7 @@ class AlignMergeAssignmentsSuite extends AlignAssignmentsSuiteBase {
     }
 
     notMatchedBySourceActions match {
-      case Seq(UpdateAction(None, assignments)) =>
+      case Seq(UpdateAction(None, assignments, _)) =>
         assignments match {
           case Seq(
               Assignment(c: AttributeReference, cValue: StaticInvoke),
@@ -745,7 +745,7 @@ class AlignMergeAssignmentsSuite extends AlignAssignmentsSuiteBase {
 
         val actions = if (matchedActions.nonEmpty) matchedActions else notMatchedBySourceActions
         actions match {
-          case Seq(UpdateAction(_, assignments)) =>
+          case Seq(UpdateAction(_, assignments, _)) =>
             assignments match {
               case Seq(
                   Assignment(
@@ -947,7 +947,7 @@ class AlignMergeAssignmentsSuite extends AlignAssignmentsSuiteBase {
           | UPDATE SET t.i = DEFAULT""".stripMargin)
 
     matchedActions match {
-      case Seq(UpdateAction(None, assignments)) =>
+      case Seq(UpdateAction(None, assignments, _)) =>
         assignments match {
           case Seq(
               Assignment(b: AttributeReference, bValue: AttributeReference),
@@ -1001,7 +1001,7 @@ class AlignMergeAssignmentsSuite extends AlignAssignmentsSuiteBase {
     }
 
     notMatchedBySourceActions match {
-      case Seq(UpdateAction(None, assignments)) =>
+      case Seq(UpdateAction(None, assignments, _)) =>
         assignments match {
           case Seq(
               Assignment(b: AttributeReference, bValue: AttributeReference),

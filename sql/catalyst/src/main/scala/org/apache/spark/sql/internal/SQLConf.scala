@@ -6695,6 +6695,18 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val MERGE_INTO_SOURCE_NESTED_TYPE_UPDATE_BY_FIELD =
+    buildConf("spark.sql.merge.nested.type.assign.by.fieldv2")
+      .internal()
+      .doc("If enabled and spark.sql.merge.source.nested.type.coercion.enabled is true," +
+        "allow MERGE INTO with UPDATE SET * action to set nested structs field by field. " +
+        "In updated rows, target structs will preserve the original value for fields missing " +
+        "in the the source struct. If disabled, the entire target struct will be replaced, " +
+        "and fields missing in the source struct will be null.")
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(true)
+
   /**
    * Holds information about keys that have been deprecated.
    *
@@ -7892,8 +7904,11 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def legacyXMLParserEnabled: Boolean =
     getConf(SQLConf.LEGACY_XML_PARSER_ENABLED)
 
-  def coerceMergeNestedTypes: Boolean =
+  def mergeCoerceNestedTypes: Boolean =
     getConf(SQLConf.MERGE_INTO_SOURCE_NESTED_TYPE_COERCION_ENABLED)
+
+  def mergeUpdateStructsByField: Boolean =
+    getConf(SQLConf.MERGE_INTO_SOURCE_NESTED_TYPE_UPDATE_BY_FIELD)
 
   /** ********************** SQLConf functionality methods ************ */
 
