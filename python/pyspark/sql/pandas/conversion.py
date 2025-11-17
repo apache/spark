@@ -36,7 +36,7 @@ from pyspark.sql.types import (
     MapType,
     TimestampType,
     StructType,
-    StructField,
+    _has_type,
     DataType,
     _create_row,
     StringType,
@@ -56,37 +56,35 @@ if TYPE_CHECKING:
 
 def _convert_arrow_table_to_pandas(
     arrow_table: "pa.Table",
-    schema_fields: List["StructField"],
-    temp_col_names: List[str],
-    timezone: Optional[str],
-    struct_in_pandas: Optional[str],
-    error_on_duplicated_field_names: bool,
-    pandas_options: dict,
+    schema: "StructType",
+    *,
+    timezone: Optional[str] = None,
+    struct_handling_mode: Optional[str] = None,
+    date_as_object: bool = False,
+    self_destruct: bool = False,
 ) -> "PandasDataFrameLike":
     """
     Helper function to convert Arrow table columns to a pandas DataFrame.
 
     This function applies Spark-specific type converters to Arrow columns and concatenates
-    them into a pandas DataFrame. For empty tables (num_rows == 0), it creates empty Series
-    with converters to preserve dtypes and avoid potential segmentation faults.
+    them into a pandas DataFrame.
 
     Parameters
     ----------
     arrow_table : pyarrow.Table
         The Arrow table to convert
-    schema_fields : list of StructField
-        The schema fields corresponding to the columns
-    temp_col_names : list of str
-        Temporary column names to use during conversion
+    schema : StructType
+        The schema of the DataFrame
     timezone : str or None
         The timezone to use for timestamp conversions (can be None if not configured)
-    struct_in_pandas : str or None
+    struct_handling_mode : str or None
         How to handle struct types in pandas ("dict", "row", or "legacy", can be None
-         if not configured)
-    error_on_duplicated_field_names : bool
-        Whether to error on duplicated field names in structs
-    pandas_options : dict
-        Options to pass to Arrow's to_pandas method
+         if not configured). If "legacy", it will be converted to "dict" and error checking
+         for duplicated field names will be enabled when StructType fields are present.
+    date_as_object : bool
+        Whether to convert date values to Python datetime.date objects (default: False)
+    self_destruct : bool
+        Whether to enable memory-efficient self-destruct mode for large tables (default: False)
 
     Returns
     -------
@@ -96,38 +94,74 @@ def _convert_arrow_table_to_pandas(
     import pandas as pd
     from pyspark.sql.pandas.types import _create_converter_to_pandas
 
+    # Build pandas options
+    # Pandas DataFrame created from PyArrow uses datetime64[ns] for date type
+    # values, but we should use datetime.date to match the behavior with when
+    # Arrow optimization is disabled.
+    pandas_options = {"coerce_temporal_nanoseconds": True}
+    if date_as_object:
+        pandas_options["date_as_object"] = True
+
+    # Handle empty columns case
+    if len(schema.fields) == 0:
+        return arrow_table.to_pandas(**pandas_options)
+
+    # Rename columns to avoid duplicated column names during processing
+    temp_col_names = [f"col_{i}" for i in range(len(schema.names))]
+    arrow_table = arrow_table.rename_columns(temp_col_names)
+
+    # Configure self-destruct mode for memory efficiency
+    if self_destruct and arrow_table.num_rows > 0:
+        # Configure PyArrow to use as little memory as possible:
+        # self_destruct - free columns as they are converted
+        # split_blocks - create a separate Pandas block for each column
+        # use_threads - convert one column at a time
+        pandas_options.update(
+            {
+                "self_destruct": True,
+                "split_blocks": True,
+                "use_threads": False,
+            }
+        )
+
+    # Handle legacy struct handling mode
+    error_on_duplicated_field_names = False
+    if struct_handling_mode == "legacy" and any(
+        _has_type(f.dataType, StructType) for f in schema.fields
+    ):
+        error_on_duplicated_field_names = True
+        struct_handling_mode = "dict"
+
     # SPARK-51112: If the table is empty, we avoid using pyarrow to_pandas to create the
     # DataFrame, as it may fail with a segmentation fault.
     if arrow_table.num_rows == 0:
-        # For empty tables, create empty Series with converters to preserve dtypes
-        return pd.concat(
-            [
-                _create_converter_to_pandas(
-                    field.dataType,
-                    field.nullable,
-                    timezone=timezone,
-                    struct_in_pandas=struct_in_pandas,
-                    error_on_duplicated_field_names=error_on_duplicated_field_names,
-                )(pd.Series([], name=temp_col_names[i], dtype="object"))
-                for i, field in enumerate(schema_fields)
-            ],
-            axis="columns",
+        # For empty tables, create empty Series to preserve dtypes
+        column_data = (
+            pd.Series([], name=temp_col_names[i], dtype="object") for i in range(len(schema.fields))
         )
     else:
-        # For non-empty tables, convert arrow columns directly to pandas
-        return pd.concat(
-            [
-                _create_converter_to_pandas(
-                    field.dataType,
-                    field.nullable,
-                    timezone=timezone,
-                    struct_in_pandas=struct_in_pandas,
-                    error_on_duplicated_field_names=error_on_duplicated_field_names,
-                )(arrow_col.to_pandas(**pandas_options))
-                for arrow_col, field in zip(arrow_table.columns, schema_fields)
-            ],
-            axis="columns",
-        )
+        # For non-empty tables, convert arrow columns directly
+        column_data = (arrow_col.to_pandas(**pandas_options) for arrow_col in arrow_table.columns)
+
+    # Apply Spark-specific type converters to each column
+    pdf = pd.concat(
+        (
+            _create_converter_to_pandas(
+                field.dataType,
+                field.nullable,
+                timezone=timezone,
+                struct_in_pandas=struct_handling_mode,
+                error_on_duplicated_field_names=error_on_duplicated_field_names,
+            )(series)
+            for series, field in zip(column_data, schema.fields)
+        ),
+        axis="columns",
+    )
+
+    # Restore original column names (including duplicates)
+    pdf.columns = schema.names
+
+    return pdf
 
 
 class PandasConversionMixin:
@@ -205,64 +239,28 @@ class PandasConversionMixin:
                 try:
                     import pyarrow as pa
 
-                    self_destruct = arrowPySparkSelfDestructEnabled == "true"
-                    batches = self._collect_as_arrow(split_batches=self_destruct)
+                    batches = self._collect_as_arrow(
+                        split_batches=arrowPySparkSelfDestructEnabled == "true"
+                    )
 
-                    # Rename columns to avoid duplicated column names.
-                    temp_col_names = [f"col_{i}" for i in range(len(self.columns))]
                     if len(batches) > 0:
-                        table = pa.Table.from_batches(batches).rename_columns(temp_col_names)
+                        table = pa.Table.from_batches(batches)
                     else:
                         # empty dataset
-                        table = arrow_schema.empty_table().rename_columns(temp_col_names)
+                        table = arrow_schema.empty_table()
 
                     # Ensure only the table has a reference to the batches, so that
                     # self_destruct (if enabled) is effective
                     del batches
 
-                    # Pandas DataFrame created from PyArrow uses datetime64[ns] for date type
-                    # values, but we should use datetime.date to match the behavior with when
-                    # Arrow optimization is disabled.
-                    pandas_options = {
-                        "date_as_object": True,
-                        "coerce_temporal_nanoseconds": True,
-                    }
-                    if self_destruct and table.num_rows > 0:
-                        # Configure PyArrow to use as little memory as possible:
-                        # self_destruct - free columns as they are converted
-                        # split_blocks - create a separate Pandas block for each column
-                        # use_threads - convert one column at a time
-                        pandas_options.update(
-                            {
-                                "self_destruct": True,
-                                "split_blocks": True,
-                                "use_threads": False,
-                            }
-                        )
-
-                    if len(self.columns) > 0:
-                        timezone = sessionLocalTimeZone
-                        struct_in_pandas = pandasStructHandlingMode
-
-                        error_on_duplicated_field_names = False
-                        if struct_in_pandas == "legacy":
-                            error_on_duplicated_field_names = True
-                            struct_in_pandas = "dict"
-
-                        pdf = _convert_arrow_table_to_pandas(
-                            arrow_table=table,
-                            schema_fields=self.schema.fields,
-                            temp_col_names=temp_col_names,
-                            timezone=timezone,
-                            struct_in_pandas=struct_in_pandas,
-                            error_on_duplicated_field_names=error_on_duplicated_field_names,
-                            pandas_options=pandas_options,
-                        )
-                        # Restore original column names (including duplicates)
-                        pdf.columns = self.columns
-                    else:
-                        # empty columns
-                        pdf = table.to_pandas(**pandas_options)
+                    pdf = _convert_arrow_table_to_pandas(
+                        arrow_table=table,
+                        schema=self.schema,
+                        timezone=sessionLocalTimeZone,
+                        struct_handling_mode=pandasStructHandlingMode,
+                        date_as_object=True,
+                        self_destruct=arrowPySparkSelfDestructEnabled == "true",
+                    )
 
                     return pdf
 
