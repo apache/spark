@@ -55,7 +55,7 @@ which contains two batches of two objects:
 
 import sys
 import os
-from itertools import batched, chain, product
+from itertools import chain, product
 import marshal
 import struct
 import types
@@ -204,7 +204,9 @@ class BatchedSerializer(Serializer):
         if self.batchSize == self.UNLIMITED_BATCH_SIZE:
             yield list(iterator)
         else:
-            yield from map(list(batched(iterator, self.batchSize)))
+            it = iter(iterator)
+            while batch := list(itertools.islice(it, self.batchSize)):
+                yield batch
 
     def dump_stream(self, iterator, stream):
         self.serializer.dump_stream(self._batched(iterator), stream)
