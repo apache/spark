@@ -144,7 +144,7 @@ case class EnsureRequirements(
             // To choose a KeyGroupedShuffleSpec, we must be able to push down SPJ parameters into
             // the scan (for join key positions). If these parameters can't be pushed down, this
             // spec can't be used to shuffle other children.
-            case (idx, _: KeyGroupedShuffleSpec) =>  canPushDownSPJParamsToScan(children(idx))
+            case (idx, _: KeyGroupedShuffleSpec) => canPushDownSPJParamsToScan(children(idx))
             case _ => true
           }
           .filter(p => !shouldConsiderMinParallelism ||
