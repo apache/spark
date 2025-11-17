@@ -31,9 +31,7 @@ from pyspark.sql.types import StructType
 from pyspark.errors import PySparkNotImplementedError
 
 
-def _streamReader(
-    datasource: DataSource, schema: StructType
-) -> "DataSourceStreamReader":
+def _streamReader(datasource: DataSource, schema: StructType) -> "DataSourceStreamReader":
     """
     Fallback to simpleStreamReader() method when streamReader() is not implemented.
     This should be invoked whenever a DataSourceStreamReader needs to be created instead of
@@ -101,9 +99,7 @@ class _SimpleStreamReaderWrapper(DataSourceStreamReader):
         if start is None and limit is None:
             # Old behavior - no admission control
             (full_iter, true_end) = self.simple_reader.read(self.current_offset)
-            self.cache.append(
-                PrefetchedCacheEntry(self.current_offset, true_end, full_iter)
-            )
+            self.cache.append(PrefetchedCacheEntry(self.current_offset, true_end, full_iter))
             self.current_offset = true_end
             return true_end
 
@@ -191,15 +187,11 @@ class _SimpleStreamReaderWrapper(DataSourceStreamReader):
             return None  # type: ignore[return-value]
         # Chain all the data iterator between start offset and end offset
         # need to copy here to avoid exhausting the original data iterator.
-        entries = [
-            copy.copy(entry.iterator) for entry in self.cache[start_idx : end_idx + 1]
-        ]
+        entries = [copy.copy(entry.iterator) for entry in self.cache[start_idx : end_idx + 1]]
         it = chain(*entries)
         return it
 
     def read(
         self, input_partition: SimpleInputPartition  # type: ignore[override]
     ) -> Iterator[Tuple]:
-        return self.simple_reader.readBetweenOffsets(
-            input_partition.start, input_partition.end
-        )
+        return self.simple_reader.readBetweenOffsets(input_partition.start, input_partition.end)

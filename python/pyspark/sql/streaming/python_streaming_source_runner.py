@@ -94,24 +94,18 @@ def partitions_func(
         if it is None:
             write_int(PREFETCHED_RECORDS_NOT_FOUND, outfile)
         else:
-            send_batch_func(
-                it, outfile, schema, max_arrow_batch_size, data_source
-            )  # noqa: E501
+            send_batch_func(it, outfile, schema, max_arrow_batch_size, data_source)  # noqa: E501
     else:
         write_int(PREFETCHED_RECORDS_NOT_FOUND, outfile)
 
 
-def commit_func(
-    reader: DataSourceStreamReader, infile: IO, outfile: IO
-) -> None:  # noqa: E501
+def commit_func(reader: DataSourceStreamReader, infile: IO, outfile: IO) -> None:  # noqa: E501
     end_offset = json.loads(utf8_deserializer.loads(infile))
     reader.commit(end_offset)
     write_int(0, outfile)
 
 
-def latest_offset_with_report_func(
-    reader: DataSourceStreamReader, infile: IO, outfile: IO
-) -> None:
+def latest_offset_with_report_func(reader: DataSourceStreamReader, infile: IO, outfile: IO) -> None:
     """
     Handler for function ID 890: latestOffset with admission control
     parameters.
@@ -162,9 +156,7 @@ def latest_offset_with_report_func(
     except Exception as e:
         raise IllegalArgumentException(
             errorClass="UNSUPPORTED_OPERATION",
-            messageParameters={
-                "operation": f"latestOffset with limit failed: {str(e)}"
-            },
+            messageParameters={"operation": f"latestOffset with limit failed: {str(e)}"},
         )
 
     # Send both offsets back to JVM
@@ -180,9 +172,7 @@ def send_batch_func(
     data_source: DataSource,
 ) -> None:
     batches = list(
-        records_to_arrow_batches(
-            rows, max_arrow_batch_size, schema, data_source
-        )  # noqa: E501
+        records_to_arrow_batches(rows, max_arrow_batch_size, schema, data_source)  # noqa: E501
     )
     if len(batches) != 0:
         write_int(NON_EMPTY_PYARROW_RECORD_BATCHES, outfile)
@@ -198,9 +188,7 @@ def main(infile: IO, outfile: IO) -> None:
         check_python_version(infile)
         setup_spark_files(infile)
 
-        memory_limit_mb = int(
-            os.environ.get("PYSPARK_PLANNER_MEMORY_MB", "-1")
-        )  # noqa: E501
+        memory_limit_mb = int(os.environ.get("PYSPARK_PLANNER_MEMORY_MB", "-1"))  # noqa: E501
         setup_memory_limits(memory_limit_mb)
 
         _accumulatorRegistry.clear()
@@ -212,9 +200,7 @@ def main(infile: IO, outfile: IO) -> None:
             raise PySparkAssertionError(
                 errorClass="DATA_SOURCE_TYPE_MISMATCH",
                 messageParameters={
-                    "expected": (
-                        "a Python data source instance of type " "'DataSource'"
-                    ),
+                    "expected": ("a Python data source instance of type " "'DataSource'"),
                     "actual": f"'{type(data_source).__name__}'",
                 },
             )
