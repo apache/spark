@@ -20,7 +20,10 @@ from typing import (
     Callable,
     List,
     Optional,
+    Sequence,
     Union,
+    Iterable,
+    cast,
     no_type_check,
     overload,
     TYPE_CHECKING,
@@ -145,15 +148,18 @@ def _convert_arrow_table_to_pandas(
 
     # Apply Spark-specific type converters to each column
     pdf = pd.concat(
-        (
-            _create_converter_to_pandas(
-                field.dataType,
-                field.nullable,
-                timezone=timezone,
-                struct_in_pandas=struct_handling_mode,
-                error_on_duplicated_field_names=error_on_duplicated_field_names,
-            )(series)
-            for series, field in zip(column_data, schema.fields)
+        objs=cast(
+            Sequence[pd.Series],
+            (
+                _create_converter_to_pandas(
+                    field.dataType,
+                    field.nullable,
+                    timezone=timezone,
+                    struct_in_pandas=struct_handling_mode,
+                    error_on_duplicated_field_names=error_on_duplicated_field_names,
+                )(series)
+                for series, field in zip(column_data, schema.fields)
+            ),
         ),
         axis="columns",
     )
