@@ -240,7 +240,8 @@ class PythonStreamingSourceRunner(func: PythonFunction, outputSchema: StructType
    */
   def latestOffsetWithReport(startOffset: String, limit: ReadLimit): (String, String) = {
     dataOut.writeInt(LATEST_OFFSET_WITH_REPORT_FUNC_ID)
-    PythonWorkerUtils.writeUTF(startOffset, dataOut)
+    // Handle null startOffset by writing empty string
+    PythonWorkerUtils.writeUTF(Option(startOffset).getOrElse(""), dataOut)
     PythonWorkerUtils.writeUTF(serializeReadLimit(limit), dataOut)
     dataOut.flush()
 
@@ -249,7 +250,7 @@ class PythonStreamingSourceRunner(func: PythonFunction, outputSchema: StructType
     if (cappedLen == SpecialLengths.PYTHON_EXCEPTION_THROWN) {
       val msg = PythonWorkerUtils.readUTF(dataIn)
       throw QueryExecutionErrors.pythonStreamingDataSourceRuntimeError(
-        action = "latestOffsetWithReport",
+        action = "latestOffset",
         msg)
     }
     val cappedOffset = PythonWorkerUtils.readUTF(cappedLen, dataIn)
@@ -259,7 +260,7 @@ class PythonStreamingSourceRunner(func: PythonFunction, outputSchema: StructType
     if (trueLen == SpecialLengths.PYTHON_EXCEPTION_THROWN) {
       val msg = PythonWorkerUtils.readUTF(dataIn)
       throw QueryExecutionErrors.pythonStreamingDataSourceRuntimeError(
-        action = "latestOffsetWithReport",
+        action = "latestOffset",
         msg)
     }
     val trueLatest = PythonWorkerUtils.readUTF(trueLen, dataIn)

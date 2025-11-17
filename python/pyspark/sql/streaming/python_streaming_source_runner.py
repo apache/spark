@@ -102,9 +102,7 @@ def commit_func(reader: DataSourceStreamReader, infile: IO, outfile: IO) -> None
     write_int(0, outfile)
 
 
-def latest_offset_with_report_func(
-    reader: DataSourceStreamReader, infile: IO, outfile: IO
-) -> None:
+def latest_offset_with_report_func(reader: DataSourceStreamReader, infile: IO, outfile: IO) -> None:
     """
     Handler for function ID 890: latestOffset with admission control parameters.
 
@@ -112,7 +110,9 @@ def latest_offset_with_report_func(
     - Old readers: latestOffset() with no parameters -> no admission control
     - New readers: latestOffset(start, limit) with parameters -> admission control enabled
     """
-    start_offset = json.loads(utf8_deserializer.loads(infile))
+    start_offset_str = utf8_deserializer.loads(infile)
+    # Handle empty string as None for backward compatibility
+    start_offset = json.loads(start_offset_str) if start_offset_str else None
     limit = json.loads(utf8_deserializer.loads(infile))
 
     # Type declarations for mypy
@@ -143,16 +143,12 @@ def latest_offset_with_report_func(
         except Exception as fallback_error:
             raise IllegalArgumentException(
                 errorClass="UNSUPPORTED_OPERATION",
-                messageParameters={
-                    "operation": f"latestOffset call failed: {str(fallback_error)}"
-                },
+                messageParameters={"operation": f"latestOffset call failed: {str(fallback_error)}"},
             )
     except Exception as e:
         raise IllegalArgumentException(
             errorClass="UNSUPPORTED_OPERATION",
-            messageParameters={
-                "operation": f"latestOffset with limit failed: {str(e)}"
-            },
+            messageParameters={"operation": f"latestOffset with limit failed: {str(e)}"},
         )
 
     # Send both offsets back to JVM
@@ -167,9 +163,7 @@ def send_batch_func(
     max_arrow_batch_size: int,
     data_source: DataSource,
 ) -> None:
-    batches = list(
-        records_to_arrow_batches(rows, max_arrow_batch_size, schema, data_source)
-    )
+    batches = list(records_to_arrow_batches(rows, max_arrow_batch_size, schema, data_source))
     if len(batches) != 0:
         write_int(NON_EMPTY_PYARROW_RECORD_BATCHES, outfile)
         write_int(SpecialLengths.START_ARROW_STREAM, outfile)
