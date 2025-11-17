@@ -11132,7 +11132,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
     # TODO(SPARK-46166): axis and **kwargs should be implemented.
     def any(
         self, axis: Axis = 0, bool_only: Optional[bool] = None, skipna: bool = True
-    ) -> "Series":
+    ) -> Union["Series", bool]:
         """
         Return whether any element is True.
 
@@ -11195,29 +11195,54 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         >>> df[[]].any()
         Series([], dtype: bool)
         """
-        axis = validate_axis(axis)
-        if axis != 0:
-            raise NotImplementedError('axis should be either 0 or "index" currently.')
-
         column_labels = self._internal.column_labels
         if bool_only:
             column_labels = self._bool_column_labels(column_labels)
         if len(column_labels) == 0:
             return ps.Series([], dtype=bool)
+        if axis == 0:
+            applied: List[PySparkColumn] = []
+            for label in column_labels:
+                scol = self._internal.spark_column_for(label)
+                if skipna:
+                    # When skipna=True, nulls count as False
+                    any_col = F.max(scol.cast("boolean"))
+                    applied.append(F.when(any_col.isNull(), False).otherwise(any_col))
+                else:
+                    # When skipna=False, nulls count as True
+                    any_col = F.max(scol.cast("boolean"))
+                    applied.append(F.when(any_col.isNull(), True).otherwise(any_col))
+            return self._result_aggregated(column_labels, applied)
+        elif axis == 1:
+            from pyspark.pandas.series import first_series
 
-        applied: List[PySparkColumn] = []
-        for label in column_labels:
-            scol = self._internal.spark_column_for(label)
-            if skipna:
-                # When skipna=True, nulls count as False
-                any_col = F.max(scol.cast("boolean"))
-                applied.append(F.when(any_col.isNull(), False).otherwise(any_col))
-            else:
-                # When skipna=False, nulls count as True
-                any_col = F.max(scol.cast("boolean"))
-                applied.append(F.when(any_col.isNull(), True).otherwise(any_col))
-
-        return self._result_aggregated(column_labels, applied)
+            sdf = self._internal.spark_frame.select(
+                *self._internal_frame.index_spark_columns,
+                F.greatest(
+                    *[
+                        F.coalesce(
+                            self._internal.spark_column_for(label).cast("boolean"),
+                            # When skipna=True, nulls count as False and vice versa
+                            F.lit(not skipna),
+                        ) for label in column_labels
+                    ],
+                    F.lit(False),  # Handle one-column DataFrame case
+                ).alias(SPARK_DEFAULT_SERIES_NAME)
+            )
+            return first_series(
+                DataFrame(
+                    InternalFrame(
+                        spark_frame=sdf,
+                        index_spark_columns=self._internal.index_spark_columns,
+                        index_names=self._internal.index_names,
+                        index_fields=self._internal.index_fields,
+                        column_labels=[None],
+                    )
+                )
+            )
+        else:
+            # axis=None case - return single boolean value
+            return self.any(axis=1).any()
 
     def _bool_column_labels(self, column_labels: List[Label]) -> List[Label]:
         """
