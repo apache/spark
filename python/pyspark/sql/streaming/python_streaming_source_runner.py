@@ -94,16 +94,16 @@ def partitions_func(
         if it is None:
             write_int(PREFETCHED_RECORDS_NOT_FOUND, outfile)
         else:
-            send_batch_func(  # noqa: E501
+            send_batch_func(
                 it, outfile, schema, max_arrow_batch_size, data_source
-            )
+            )  # noqa: E501
     else:
         write_int(PREFETCHED_RECORDS_NOT_FOUND, outfile)
 
 
-def commit_func(  # noqa: E501
+def commit_func(
     reader: DataSourceStreamReader, infile: IO, outfile: IO
-) -> None:
+) -> None:  # noqa: E501
     end_offset = json.loads(utf8_deserializer.loads(infile))
     reader.commit(end_offset)
     write_int(0, outfile)
@@ -180,7 +180,9 @@ def send_batch_func(
     data_source: DataSource,
 ) -> None:
     batches = list(
-        records_to_arrow_batches(rows, max_arrow_batch_size, schema, data_source)  # noqa: E501
+        records_to_arrow_batches(
+            rows, max_arrow_batch_size, schema, data_source
+        )  # noqa: E501
     )
     if len(batches) != 0:
         write_int(NON_EMPTY_PYARROW_RECORD_BATCHES, outfile)
@@ -196,9 +198,9 @@ def main(infile: IO, outfile: IO) -> None:
         check_python_version(infile)
         setup_spark_files(infile)
 
-        memory_limit_mb = int(  # noqa: E501
+        memory_limit_mb = int(
             os.environ.get("PYSPARK_PLANNER_MEMORY_MB", "-1")
-        )
+        )  # noqa: E501
         setup_memory_limits(memory_limit_mb)
 
         _accumulatorRegistry.clear()

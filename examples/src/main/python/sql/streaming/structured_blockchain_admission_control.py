@@ -19,26 +19,32 @@
 Demonstrates admission control in Python streaming data sources.
 
 This example implements a simple blockchain-like streaming source that generates
-sequential blocks and shows how to use admission control to limit batch sizes.
+sequential blocks and shows how to use admission control to limit batch sizes.  # noqa: E501
 
 Usage: structured_blockchain_admission_control.py [<max-blocks-per-batch>]
-  <max-blocks-per-batch> Maximum number of blocks to process per microbatch (default: 10)
+  <max-blocks-per-batch> Maximum number of blocks to process per microbatch
+                         (default: 10)
 
 Run the example:
    `$ bin/spark-submit examples/src/main/python/sql/streaming/\\
 structured_blockchain_admission_control.py 5`
 
-The example will process blocks in controlled batches of 5, demonstrating admission control.
+The example will process blocks in controlled batches of 5,
+demonstrating admission control.
 """
 import sys
 import time
 
 from pyspark.sql import SparkSession
-from pyspark.sql.datasource import DataSource, DataSourceStreamReader, InputPartition
+from pyspark.sql.datasource import (
+    DataSource,
+    DataSourceStreamReader,
+    InputPartition,
+)
 
 
 class SimpleBlockchainReader(DataSourceStreamReader):
-    """A simple streaming source that generates sequential blockchain blocks."""
+    """A simple streaming source that generates sequential blockchain blocks."""  # noqa: E501
 
     def __init__(self, max_block=1000):
         self.max_block = max_block
@@ -71,8 +77,9 @@ class SimpleBlockchainReader(DataSourceStreamReader):
             # Cap at the configured limit
             end_block = min(start_block + max_blocks, latest_available)
             print(
-                f"  [Admission Control] Start: {start_block}, Available: {latest_available}, "
-                f"Capped: {end_block} (limit: {max_blocks})"
+                f"  [Admission Control] Start: {start_block}, "
+                f"Available: {latest_available}, Capped: {end_block} "
+                f"(limit: {max_blocks})"
             )
             # Return tuple: (capped_offset, true_latest_offset)
             return ({"block": end_block}, {"block": latest_available})
@@ -139,10 +146,9 @@ only {max_blocks_per_batch} blocks at a time, even when more data is available.
 =================================================================
 """
     )
-
-    spark = (
-        SparkSession.builder.appName("StructuredBlockchainAdmissionControl").getOrCreate()
-    )
+    # fmt: off
+    spark = SparkSession.builder.appName("StructuredBlockchainAdmissionControl").getOrCreate()  # noqa: E501
+    # fmt: on
 
     # Register the custom data source
     spark.dataSource.register(SimpleBlockchainSource)
