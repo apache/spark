@@ -16,6 +16,7 @@
  */
 package org.apache.spark.sql.catalyst.util;
 
+import org.apache.spark.annotation.Unstable;
 import org.apache.spark.sql.errors.QueryExecutionErrors;
 import org.apache.spark.sql.types.GeographyType;
 import org.apache.spark.sql.types.GeometryType;
@@ -23,6 +24,7 @@ import org.apache.spark.unsafe.types.GeographyVal;
 import org.apache.spark.unsafe.types.GeometryVal;
 
 // This class defines static methods that used to implement ST expressions using `StaticInvoke`.
+@Unstable
 public final class STUtils {
 
   /** Conversion methods from physical values to Geography/Geometry objects. */

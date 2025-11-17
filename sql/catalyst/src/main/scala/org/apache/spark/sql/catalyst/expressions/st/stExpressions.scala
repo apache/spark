@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions.st
 
+import org.apache.spark.annotation.Unstable
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
@@ -87,6 +88,7 @@ private[sql] object ExpressionDefaults {
   since = "4.1.0",
   group = "st_funcs"
 )
+@Unstable
 case class ST_AsBinary(geo: Expression)
     extends RuntimeReplaceable
     with ImplicitCastInputTypes
@@ -135,6 +137,7 @@ case class ST_AsBinary(geo: Expression)
   since = "4.1.0",
   group = "st_funcs"
 )
+@Unstable
 case class ST_GeogFromWKB(wkb: Expression)
     extends RuntimeReplaceable
     with ImplicitCastInputTypes
@@ -179,6 +182,7 @@ case class ST_GeogFromWKB(wkb: Expression)
   since = "4.1.0",
   group = "st_funcs"
 )
+@Unstable
 case class ST_GeomFromWKB(wkb: Expression)
     extends RuntimeReplaceable
     with ImplicitCastInputTypes
@@ -227,6 +231,7 @@ case class ST_GeomFromWKB(wkb: Expression)
   since = "4.1.0",
   group = "st_funcs"
 )
+@Unstable
 case class ST_Srid(geo: Expression)
     extends RuntimeReplaceable
     with ImplicitCastInputTypes
@@ -275,6 +280,7 @@ case class ST_Srid(geo: Expression)
   since = "4.1.0",
   group = "st_funcs"
 )
+@Unstable
 case class ST_SetSrid(geo: Expression, srid: Expression)
     extends RuntimeReplaceable
     with ImplicitCastInputTypes

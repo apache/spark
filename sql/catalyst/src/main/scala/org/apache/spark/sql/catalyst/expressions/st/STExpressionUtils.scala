@@ -17,11 +17,13 @@
 
 package org.apache.spark.sql.catalyst.expressions.st
 
+import org.apache.spark.annotation.Unstable
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
+@Unstable
 private[sql] object STExpressionUtils {
 
   /**

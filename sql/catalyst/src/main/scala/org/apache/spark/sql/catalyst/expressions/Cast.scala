@@ -92,10 +92,11 @@ object Cast extends QueryErrorsBase {
   def canAnsiCast(from: DataType, to: DataType): Boolean = (from, to) match {
     case (fromType, toType) if fromType == toType => true
 
-    case (NullType, _) => true
-
     // Geospatial types cannot be cast to/from other data types.
-    case (fromType, toType) if isGeoSpatialType(fromType) != isGeoSpatialType(toType) => false
+    case (fromType, toType) if SQLConf.get.geospatialEnabled &&
+        isGeoSpatialType(fromType) != isGeoSpatialType(toType) => false
+
+    case (NullType, _) => true
 
     case (_, _: StringType) => true
 
@@ -165,13 +166,16 @@ object Cast extends QueryErrorsBase {
     case (udt1: UserDefinedType[_], udt2: UserDefinedType[_]) if udt2.acceptsType(udt1) => true
 
     // Casts from concrete GEOGRAPHY(srid) to mixed GEOGRAPHY(ANY) is allowed.
-    case (gt1: GeographyType, gt2: GeographyType) if !gt1.isMixedSrid && gt2.isMixedSrid =>
+    case (gt1: GeographyType, gt2: GeographyType) if SQLConf.get.geospatialEnabled
+        && !gt1.isMixedSrid && gt2.isMixedSrid =>
       true
     // Casting from GEOGRAPHY to GEOMETRY with the same SRID is allowed.
-    case (geog: GeographyType, geom: GeometryType) if geog.srid == geom.srid =>
+    case (geog: GeographyType, geom: GeometryType) if SQLConf.get.geospatialEnabled
+        && geog.srid == geom.srid =>
       true
     // Casts from concrete GEOMETRY(srid) to mixed GEOMETRY(ANY) is allowed.
-    case (gt1: GeometryType, gt2: GeometryType) if !gt1.isMixedSrid && gt2.isMixedSrid =>
+    case (gt1: GeometryType, gt2: GeometryType) if SQLConf.get.geospatialEnabled
+        && !gt1.isMixedSrid && gt2.isMixedSrid =>
       true
 
     case _ => false
@@ -220,10 +224,11 @@ object Cast extends QueryErrorsBase {
   def canCast(from: DataType, to: DataType): Boolean = (from, to) match {
     case (fromType, toType) if fromType == toType => true
 
-    case (NullType, _) => true
-
     // Geospatial types cannot be cast to/from other data types.
-    case (fromType, toType) if isGeoSpatialType(fromType) != isGeoSpatialType(toType) => false
+    case (fromType, toType) if SQLConf.get.geospatialEnabled &&
+        isGeoSpatialType(fromType) != isGeoSpatialType(toType) => false
+
+    case (NullType, _) => true
 
     case (_, _: StringType) => true
 
@@ -301,13 +306,16 @@ object Cast extends QueryErrorsBase {
     case (udt1: UserDefinedType[_], udt2: UserDefinedType[_]) if udt2.acceptsType(udt1) => true
 
     // Casts from concrete GEOGRAPHY(srid) to mixed GEOGRAPHY(ANY) is allowed.
-    case (gt1: GeographyType, gt2: GeographyType) if !gt1.isMixedSrid && gt2.isMixedSrid =>
+    case (gt1: GeographyType, gt2: GeographyType) if SQLConf.get.geospatialEnabled
+        && !gt1.isMixedSrid && gt2.isMixedSrid =>
       true
     // Casting from GEOGRAPHY to GEOMETRY with the same SRID is allowed.
-    case (geog: GeographyType, geom: GeometryType) if geog.srid == geom.srid =>
+    case (geog: GeographyType, geom: GeometryType) if SQLConf.get.geospatialEnabled
+        && geog.srid == geom.srid =>
       true
     // Casts from concrete GEOMETRY(srid) to mixed GEOMETRY(ANY) is allowed.
-    case (gt1: GeometryType, gt2: GeometryType) if !gt1.isMixedSrid && gt2.isMixedSrid =>
+    case (gt1: GeometryType, gt2: GeometryType) if SQLConf.get.geospatialEnabled
+        && !gt1.isMixedSrid && gt2.isMixedSrid =>
       true
 
     case _ => false
@@ -1246,8 +1254,8 @@ case class Cast(
         case FloatType => castToFloat(from)
         case LongType => castToLong(from)
         case DoubleType => castToDouble(from)
-        case _: GeographyType => identity
-        case _: GeometryType => castToGeometry(from)
+        case _: GeographyType if SQLConf.get.geospatialEnabled => identity
+        case _: GeometryType if SQLConf.get.geospatialEnabled => castToGeometry(from)
         case array: ArrayType =>
           castArray(from.asInstanceOf[ArrayType].elementType, array.elementType)
         case map: MapType => castMap(from.asInstanceOf[MapType], map)
@@ -1356,8 +1364,8 @@ case class Cast(
     case FloatType => castToFloatCode(from, ctx)
     case LongType => castToLongCode(from, ctx)
     case DoubleType => castToDoubleCode(from, ctx)
-    case _: GeographyType => (c, evPrim, _) => code"$evPrim = $c;"
-    case _: GeometryType => castToGeometryCode(from)
+    case _: GeographyType if SQLConf.get.geospatialEnabled => (c, evPrim, _) => code"$evPrim = $c;"
+    case _: GeometryType if SQLConf.get.geospatialEnabled => castToGeometryCode(from)
 
     case array: ArrayType =>
       castArrayCode(from.asInstanceOf[ArrayType].elementType, array.elementType, ctx)
