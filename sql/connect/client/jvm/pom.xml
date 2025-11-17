@@ -84,6 +84,11 @@
       <artifactId>failureaccess</artifactId>
       <scope>compile</scope>
     </dependency>
+    <dependency>
+      <groupId>com.github.luben</groupId>
+      <artifactId>zstd-jni</artifactId>
+      <scope>compile</scope>
+    </dependency>
     <!--
       When upgrading ammonite, consider upgrading semanticdb-shared too.
     -->

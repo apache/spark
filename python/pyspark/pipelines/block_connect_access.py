@@ -15,13 +15,34 @@
 # limitations under the License.
 #
 from contextlib import contextmanager
-from typing import Callable, Generator, NoReturn
+from typing import Any, Callable, Generator
 
 from pyspark.errors import PySparkException
 from pyspark.sql.connect.proto.base_pb2_grpc import SparkConnectServiceStub
 
 
 BLOCKED_RPC_NAMES = ["AnalyzePlan", "ExecutePlan"]
+
+
+def _is_sql_command_request(rpc_name: str, args: tuple) -> bool:
+    """
+    Check if the RPC call is a spark.sql() command (ExecutePlan with sql_command).
+
+    :param rpc_name: Name of the RPC being called
+    :param args: Arguments passed to the RPC
+    :return: True if this is an ExecutePlan request with a sql_command
+    """
+    if rpc_name != "ExecutePlan" or len(args) == 0:
+        return False
+
+    request = args[0]
+    if not hasattr(request, "plan"):
+        return False
+    plan = request.plan
+    if not plan.HasField("command"):
+        return False
+    command = plan.command
+    return command.HasField("sql_command")
 
 
 @contextmanager
@@ -38,16 +59,23 @@ def block_spark_connect_execution_and_analysis() -> Generator[None, None, None]:
 
     # Define a new __getattribute__ method that blocks RPC calls
     def blocked_getattr(self: SparkConnectServiceStub, name: str) -> Callable:
-        if name not in BLOCKED_RPC_NAMES:
-            return original_getattr(self, name)
+        original_method = original_getattr(self, name)
 
-        def blocked_method(*args: object, **kwargs: object) -> NoReturn:
-            raise PySparkException(
-                errorClass="ATTEMPT_ANALYSIS_IN_PIPELINE_QUERY_FUNCTION",
-                messageParameters={},
-            )
+        def intercepted_method(*args: object, **kwargs: object) -> Any:
+            # Allow all RPCs that are not AnalyzePlan or ExecutePlan
+            if name not in BLOCKED_RPC_NAMES:
+                return original_method(*args, **kwargs)
+            # Allow spark.sql() commands (ExecutePlan with sql_command)
+            elif _is_sql_command_request(name, args):
+                return original_method(*args, **kwargs)
+            # Block all other AnalyzePlan and ExecutePlan calls
+            else:
+                raise PySparkException(
+                    errorClass="ATTEMPT_ANALYSIS_IN_PIPELINE_QUERY_FUNCTION",
+                    messageParameters={},
+                )
 
-        return blocked_method
+        return intercepted_method
 
     try:
         # Apply our custom __getattribute__ method
