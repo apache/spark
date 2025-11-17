@@ -6511,6 +6511,7 @@ object SQLConf {
 
   val PIPELINES_STREAM_STATE_POLLING_INTERVAL = {
     buildConf("spark.sql.pipelines.execution.streamstate.pollingInterval")
+      .internal()
       .doc(
         "Interval in seconds at which the stream state is polled for changes. This is used to " +
           "check if the stream has failed and needs to be restarted."
@@ -6522,6 +6523,7 @@ object SQLConf {
 
   val PIPELINES_WATCHDOG_MIN_RETRY_TIME_IN_SECONDS = {
     buildConf("spark.sql.pipelines.execution.watchdog.minRetryTime")
+      .internal()
       .doc(
         "Initial duration in seconds between the time when we notice a flow has failed and " +
           "when we try to restart the flow. The interval between flow restarts doubles with " +
@@ -6536,6 +6538,7 @@ object SQLConf {
 
   val PIPELINES_WATCHDOG_MAX_RETRY_TIME_IN_SECONDS = {
     buildConf("spark.sql.pipelines.execution.watchdog.maxRetryTime")
+      .internal()
       .doc(
         "Maximum time interval in seconds at which flows will be restarted."
       )
@@ -6546,6 +6549,7 @@ object SQLConf {
 
   val PIPELINES_MAX_CONCURRENT_FLOWS = {
     buildConf("spark.sql.pipelines.execution.maxConcurrentFlows")
+      .internal()
       .doc(
         "Max number of flows to execute at once. Used to tune performance for triggered " +
           "pipelines. Has no effect on continuous pipelines."
@@ -6558,6 +6562,7 @@ object SQLConf {
 
   val PIPELINES_TIMEOUT_MS_FOR_TERMINATION_JOIN_AND_LOCK = {
     buildConf("spark.sql.pipelines.timeoutMsForTerminationJoinAndLock")
+      .internal()
       .doc("Timeout in milliseconds to grab a lock for stopping update - default is 1hr.")
       .version("4.1.0")
       .timeConf(TimeUnit.MILLISECONDS)
@@ -6575,6 +6580,7 @@ object SQLConf {
 
   val PIPELINES_EVENT_QUEUE_CAPACITY = {
     buildConf("spark.sql.pipelines.event.queue.capacity")
+      .internal()
       .doc("Capacity of the event queue used in pipelined execution. When the queue is full, " +
         "non-terminal FlowProgressEvents will be dropped.")
       .version("4.1.0")
