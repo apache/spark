@@ -5288,7 +5288,7 @@
       },
       "MISSING_OFFSET_SEQ_METADATA" : {
         "message" : [
-          "The OffsetSeq (v<version>) metadata is missing for batch ID <batchId>. Please make sure the checkpoint is from a supported Spark version."
+          "The OffsetSeq (v<version>) metadata is missing for batch ID <batchId>. Please make sure the checkpoint is from a supported Spark version (Spark 4.0+)."
         ]
       },
       "NO_BATCH_FOUND" : {
@@ -5315,7 +5315,7 @@
       },
       "UNSUPPORTED_OFFSET_SEQ_VERSION" : {
         "message" : [
-          "Unsupported offset sequence version <version>. Please make sure the checkpoint is from a supported Spark version."
+          "Unsupported offset sequence version <version>. Please make sure the checkpoint is from a supported Spark version (Spark 4.0+)."
         ]
       }
     },

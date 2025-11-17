@@ -157,13 +157,16 @@ class OfflineStateRepartitionSuite extends StreamTest {
   test("Query last batch failed before repartitioning") {
     withTempDir { dir =>
       val originalPartitions = 3
-      // Run the query twice to produce two batches
       val input = MemoryStream[Int]
-      val firstBatchId = runSimpleStreamQuery(originalPartitions, dir.getAbsolutePath, input)
-      val lastBatchId = runSimpleStreamQuery(originalPartitions, dir.getAbsolutePath, input)
+      // Run 3 batches
+      val firstBatchId = 0
+      val lastBatchId = firstBatchId + 2
+      (firstBatchId to lastBatchId).foreach { _ =>
+        runSimpleStreamQuery(originalPartitions, dir.getAbsolutePath, input)
+      }
       val checkpointMetadata = new StreamingQueryCheckpointMetadata(spark, dir.getAbsolutePath)
 
-      // lets delete the last batch commit to simulate last query batch failed
+      // Lets keep only the first commit to simulate multiple failed batches
       checkpointMetadata.commitLog.purgeAfter(firstBatchId)
 
       // Now repartitioning should fail
@@ -187,7 +190,7 @@ class OfflineStateRepartitionSuite extends StreamTest {
         checkpointMetadata,
         dir.getAbsolutePath,
         originalPartitions + 1,
-        // Repartition should be based on the first batch, since we skipped the last one
+        // Repartition should be based on the first batch, since we skipped the others
         baseBatchId = Some(firstBatchId))
     }
   }
