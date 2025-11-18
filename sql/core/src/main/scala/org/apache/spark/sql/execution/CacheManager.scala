@@ -36,6 +36,7 @@ import org.apache.spark.sql.execution.columnar.InMemoryRelation
 import org.apache.spark.sql.execution.command.CommandUtils
 import org.apache.spark.sql.execution.datasources.{FileIndex, HadoopFsRelation, LogicalRelation, LogicalRelationWithTable}
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, ExtractV2Table, FileTable}
+import org.apache.spark.sql.execution.datasources.v2.V2TableRefreshUtil
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.storage.StorageLevel.MEMORY_AND_DISK
@@ -352,11 +353,12 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
     needToRecache.foreach { cd =>
       cd.cachedRepresentation.cacheBuilder.clearCache()
       val sessionWithConfigsOff = getOrCloneSessionWithConfigsOff(spark)
-      val newCache = sessionWithConfigsOff.withActive {
-        val qe = sessionWithConfigsOff.sessionState.executePlan(cd.plan)
-        InMemoryRelation(cd.cachedRepresentation.cacheBuilder, qe)
+      val (newKey, newCache) = sessionWithConfigsOff.withActive {
+        val refreshedPlan = V2TableRefreshUtil.refresh(cd.plan)
+        val qe = sessionWithConfigsOff.sessionState.executePlan(refreshedPlan)
+        qe.normalized -> InMemoryRelation(cd.cachedRepresentation.cacheBuilder, qe)
       }
-      val recomputedPlan = cd.copy(cachedRepresentation = newCache)
+      val recomputedPlan = cd.copy(plan = newKey, cachedRepresentation = newCache)
       this.synchronized {
         if (lookupCachedDataInternal(recomputedPlan.plan).nonEmpty) {
           logWarning("While recaching, data was already added to cache.")
