@@ -1173,6 +1173,34 @@ class DataSourceV2DataFrameSuite
     }
   }
 
+  test("SPARK-54157: cached temp view detects schema changes after analysis") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, data STRING) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 'a')")
+
+      // create a temp view on top of the DSv2 table and cache the view
+      spark.table(t).createOrReplaceTempView("v")
+      sql("CACHE TABLE v")
+      assertCached(sql("SELECT * FROM v"))
+
+      // change table schema after the view has been analyzed and cached
+      sql(s"ALTER TABLE $t ADD COLUMN extra INT")
+
+      // execution should fail with column mismatch even though the view is cached
+      checkError(
+        exception = intercept[AnalysisException] { spark.table("v").collect() },
+        condition = "INCOMPATIBLE_COLUMN_CHANGES_AFTER_VIEW_WITH_PLAN_CREATION",
+        parameters = Map(
+          "viewName" -> "`v`",
+          "tableName" -> "`testcat`.`ns1`.`ns2`.`tbl`",
+          "colType" -> "data",
+          "errors" ->
+            """
+              |- `extra` INT has been added""".stripMargin))
+    }
+  }
+
   test("SPARK-54157: detect nested struct field changes after DataFrame analysis") {
     val t = "testcat.ns1.ns2.tbl"
     withTable(t) {
