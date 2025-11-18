@@ -43,7 +43,6 @@ private[sql] object UdfToProtoUtils {
       SparkSerDeUtils.deserialize(bytes, SparkClassUtils.getContextOrSparkClassLoader)
     } catch {
       case e: ClassCastException if e.getMessage.contains(LAMBDA_DESERIALIZATION_ERR_MSG) =>
-        e.printStackTrace()
         throw new SparkException(
           "UDF cannot be executed on a Spark cluster: it cannot be deserialized. " +
             "This is very likely to be caused by the lambda function (the UDF) having a " +
@@ -62,7 +61,6 @@ private[sql] object UdfToProtoUtils {
     val cleanedFunction = ClosureCleaner
       .clean(function, cleanTransitively = true, mutable.Map.empty)
       .getOrElse(function)
-    // scalastyle:off
     val bytes =
       SparkSerDeUtils.serialize(UdfPacket(cleanedFunction, inputEncoders, outputEncoder))
     checkDeserializable(bytes)
