@@ -26,7 +26,7 @@ import org.apache.spark.sql.execution.streaming.operators.stateful.join.Symmetri
 import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.{StateVariableType, TransformWithStateVariableInfo}
 import org.apache.spark.sql.execution.streaming.state._
 import org.apache.spark.sql.execution.streaming.state.RecordType.{getRecordTypeAsString, RecordType}
-import org.apache.spark.sql.types.{BinaryType, NullType, StructField, StructType}
+import org.apache.spark.sql.types.{NullType, StructField, StructType}
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.{NextIterator, SerializableConfiguration}
 
@@ -85,20 +85,16 @@ abstract class StatePartitionReaderBase(
   private val schemaForValueRow: StructType =
     StructType(Array(StructField("__dummy__", NullType)))
 
-  protected val keySchema = {
+  protected lazy val keySchema = {
     if (SchemaUtil.checkVariableType(stateVariableInfoOpt, StateVariableType.MapState)) {
       SchemaUtil.getCompositeKeySchema(schema, partition.sourceOptions)
-    } else if (partition.sourceOptions.readAllColumnFamilies) {
-      new StructType().add("keyBytes", BinaryType, nullable = false)
     } else {
       SchemaUtil.getSchemaAsDataType(schema, "key").asInstanceOf[StructType]
     }
   }
 
-  protected val valueSchema = if (stateVariableInfoOpt.isDefined) {
+  protected lazy val valueSchema = if (stateVariableInfoOpt.isDefined) {
     schemaForValueRow
-  } else if (partition.sourceOptions.readAllColumnFamilies) {
-    new StructType().add("valueBytes", BinaryType, nullable = false)
   } else {
     SchemaUtil.getSchemaAsDataType(
       schema, "value").asInstanceOf[StructType]
@@ -289,9 +285,10 @@ class StatePartitionReaderAllColumnFamilies(
     // loading data from disk, so we disable it for raw bytes mode.
     val modifiedStoreConf = storeConf.withFormatValidationDisabled()
 
-    val keyStateEncoderSpec = NoPrefixKeyStateEncoderSpec(keySchema)
+    val keyStateEncoderSpec = NoPrefixKeyStateEncoderSpec(new StructType())
+    // Pass in empty keySchema, valueSchema and dummy encoder because we don't encode any data
     val provider = StateStoreProvider.createAndInit(
-      stateStoreProviderId, keySchema, valueSchema, keyStateEncoderSpec,
+      stateStoreProviderId, new StructType(), new StructType(), keyStateEncoderSpec,
       useColumnFamilies = colFamilyNames.nonEmpty, modifiedStoreConf, hadoopConf.value, false, None)
 
     provider
