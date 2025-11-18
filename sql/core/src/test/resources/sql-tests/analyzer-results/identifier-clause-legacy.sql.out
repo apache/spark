@@ -1288,6 +1288,19 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 
 
 -- !query
+DROP VIEW v
+-- !query analysis
+org.apache.spark.sql.catalyst.analysis.NoSuchTableException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`spark_catalog`.`default`.`v`"
+  }
+}
+
+
+-- !query
 CREATE TABLE tab(IDENTIFIER('c1') INT) USING CSV
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException

@@ -1366,6 +1366,14 @@ struct<c1:int>
 
 
 -- !query
+DROP VIEW v
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
 CREATE TABLE tab(IDENTIFIER('c1') INT) USING CSV
 -- !query schema
 struct<>
