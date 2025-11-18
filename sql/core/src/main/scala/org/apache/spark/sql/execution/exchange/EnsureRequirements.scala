@@ -753,7 +753,7 @@ case class EnsureRequirements(
     val merged = if (SQLConf.get.getConf(SQLConf.V2_BUCKETING_PARTITION_FILTER_ENABLED)) {
       joinType match {
         case Inner => InternalRowComparableWrapper.mergePartitions(
-          leftPartitioning, rightPartitioning, partitionExpression)
+          leftPartitioning, rightPartitioning, partitionExpression, intersect = true)
         case LeftOuter => leftPartitioning.map(internalRowComparableWrapperFactory)
         case RightOuter => rightPartitioning.map(internalRowComparableWrapperFactory)
         case _ => InternalRowComparableWrapper.mergePartitions(leftPartitioning,
