@@ -309,7 +309,11 @@ abstract class TaskContext extends Serializable {
   /** Marks the task as completed and triggers the completion listeners. */
   private[spark] def markTaskCompleted(error: Option[Throwable]): Unit
 
-  /** If the task fails, the exception that caused it, otherwise None */
+  /**
+   * ::DeveloperApi::
+   * If the task fails, the exception that caused it, otherwise None
+   */
+  @DeveloperApi
   private[spark] def getTaskFailure: Option[Throwable]
 
   /** Optionally returns the stored fetch failure in the task. */
