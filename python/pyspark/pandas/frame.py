@@ -11195,6 +11195,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         >>> df[[]].any()
         Series([], dtype: bool)
         """
+        axis = validate_axis(axis)
         column_labels = self._internal.column_labels
         if bool_only:
             column_labels = self._bool_column_labels(column_labels)

@@ -140,6 +140,24 @@ class FrameAnyAllMixin:
         self.assert_eq(psdf.any(axis=1, bool_only=True), pdf.any(axis=1, bool_only=True))
         self.assert_eq(psdf.any(axis=1, bool_only=False), pdf.any(axis=1, bool_only=False))
 
+        # Test axis='index'
+        self.assert_eq(psdf.any(axis="index"), pdf.any(axis="index"))
+        self.assert_eq(
+            psdf.any(axis="index", bool_only=True), pdf.any(axis="index", bool_only=True)
+        )
+        self.assert_eq(
+            psdf.any(axis="index", bool_only=False), pdf.any(axis="index", bool_only=False)
+        )
+
+        # Test axis='columns'
+        self.assert_eq(psdf.any(axis="columns"), pdf.any(axis="columns"))
+        self.assert_eq(
+            psdf.any(axis="columns", bool_only=True), pdf.any(axis="columns", bool_only=True)
+        )
+        self.assert_eq(
+            psdf.any(axis="columns", bool_only=False), pdf.any(axis="columns", bool_only=False)
+        )
+
         columns.names = ["X", "Y"]
         pdf.columns = columns
         psdf.columns = columns
