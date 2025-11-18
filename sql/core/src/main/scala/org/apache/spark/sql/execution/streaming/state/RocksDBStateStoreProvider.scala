@@ -46,7 +46,8 @@ private[sql] class RocksDBStateStoreProvider
   class RocksDBStateStore(
       lastVersion: Long,
       private[RocksDBStateStoreProvider] val stamp: Long,
-      private[RocksDBStateStoreProvider] var readOnly: Boolean) extends StateStore {
+      private[RocksDBStateStoreProvider] var readOnly: Boolean,
+      private[RocksDBStateStoreProvider] var forceSnapshotOnCommit: Boolean) extends StateStore {
 
     private sealed trait OPERATION
     private case object UPDATE extends OPERATION
@@ -448,7 +449,7 @@ private[sql] class RocksDBStateStoreProvider
       validateState(UPDATING)
       try {
         stateMachine.verifyStamp(stamp)
-        val (newVersion, newCheckpointInfo) = rocksDB.commit()
+        val (newVersion, newCheckpointInfo) = rocksDB.commit(forceSnapshotOnCommit)
         checkpointInfo = Some(newCheckpointInfo)
         storedMetrics = rocksDB.metricsOpt
         validateAndTransitionState(COMMIT)
@@ -568,7 +569,8 @@ private[sql] class RocksDBStateStoreProvider
           CUSTOM_METRIC_NUM_INTERNAL_COL_FAMILIES_KEYS -> rocksDBMetrics.numInternalKeys,
           CUSTOM_METRIC_NUM_EXTERNAL_COL_FAMILIES -> internalColFamilyCnt(),
           CUSTOM_METRIC_NUM_INTERNAL_COL_FAMILIES -> externalColFamilyCnt(),
-          CUSTOM_METRIC_NUM_SNAPSHOTS_AUTO_REPAIRED -> rocksDBMetrics.numSnapshotsAutoRepaired
+          CUSTOM_METRIC_NUM_SNAPSHOTS_AUTO_REPAIRED -> rocksDBMetrics.numSnapshotsAutoRepaired,
+          CUSTOM_METRIC_FORCE_SNAPSHOT -> (if (forceSnapshotOnCommit) 1L else 0L)
         ) ++ rocksDBMetrics.zipFileBytesUncompressed.map(bytes =>
           Map(CUSTOM_METRIC_ZIP_FILE_BYTES_UNCOMPRESSED -> bytes)).getOrElse(Map())
 
@@ -716,13 +718,15 @@ private[sql] class RocksDBStateStoreProvider
    * @param uniqueId Optional unique identifier for checkpoint
    * @param readOnly Whether to open the store in read-only mode
    * @param existingStore Optional existing store to reuse instead of creating a new one
+   * @param forceSnapshotOnCommit Whether to force a snapshot upload on commit
    * @return The loaded state store
    */
   private def loadStateStore(
       version: Long,
       uniqueId: Option[String] = None,
       readOnly: Boolean,
-      existingStore: Option[RocksDBStateStore] = None): StateStore = {
+      existingStore: Option[RocksDBStateStore] = None,
+      forceSnapshotOnCommit: Boolean = false): StateStore = {
     var acquiredStamp: Option[Long] = None
     var storeLoaded = false
     try {
@@ -761,11 +765,12 @@ private[sql] class RocksDBStateStoreProvider
         case Some(store: RocksDBStateStore) =>
           // Mark store as being used for write operations
           store.readOnly = readOnly
+          store.forceSnapshotOnCommit = forceSnapshotOnCommit
           store
         case None =>
           // Create new store instance. The stamp should be defined
           // in this case
-          new RocksDBStateStore(version, stamp.get, readOnly)
+          new RocksDBStateStore(version, stamp.get, readOnly, forceSnapshotOnCommit)
       }
       storeLoaded = true
       store
@@ -792,14 +797,22 @@ private[sql] class RocksDBStateStoreProvider
   }
 
   override def getStore(
-      version: Long, uniqueId: Option[String] = None): StateStore = {
-    loadStateStore(version, uniqueId, readOnly = false)
+      version: Long,
+      uniqueId: Option[String] = None,
+      forceSnapshotOnCommit: Boolean = false): StateStore = {
+    loadStateStore(
+      version,
+      uniqueId,
+      readOnly = false,
+      forceSnapshotOnCommit = forceSnapshotOnCommit
+    )
   }
 
   override def upgradeReadStoreToWriteStore(
       readStore: ReadStateStore,
       version: Long,
-      uniqueId: Option[String] = None): StateStore = {
+      uniqueId: Option[String] = None,
+      forceSnapshotOnCommit: Boolean = false): StateStore = {
     assert(version == readStore.version,
       s"Can only upgrade readStore to writeStore with the same version," +
         s" readStoreVersion: ${readStore.version}, writeStoreVersion: ${version}")
@@ -807,8 +820,11 @@ private[sql] class RocksDBStateStoreProvider
       " the same stateStoreId")
     assert(readStore.isInstanceOf[RocksDBStateStore], "Can only upgrade state store if it is a " +
       "RocksDBStateStore")
-    loadStateStore(version, uniqueId, readOnly = false, existingStore =
-      Some(readStore.asInstanceOf[RocksDBStateStore]))
+    loadStateStore(version,
+      uniqueId,
+      readOnly = false,
+      existingStore = Some(readStore.asInstanceOf[RocksDBStateStore]),
+      forceSnapshotOnCommit = forceSnapshotOnCommit)
   }
 
   override def getReadStore(
@@ -932,7 +948,7 @@ private[sql] class RocksDBStateStoreProvider
           endVersion,
           snapshotVersionStateStoreCkptId,
           endVersionStateStoreCkptId)
-        new RocksDBStateStore(endVersion, stamp, readOnly)
+        new RocksDBStateStore(endVersion, stamp, readOnly, forceSnapshotOnCommit = false)
       } catch {
         case e: Throwable =>
           stateMachine.releaseStamp(stamp)
@@ -1283,6 +1299,9 @@ object RocksDBStateStoreProvider {
     "rocksdbNumSnapshotsAutoRepaired",
     "RocksDB: number of snapshots that were automatically repaired during store load")
 
+  val CUSTOM_METRIC_FORCE_SNAPSHOT = StateStoreCustomSumMetric(
+    "rocksdbForceSnapshotCount", "RocksDB: number of stores that had forced snapshot on commit")
+
   val ALL_CUSTOM_METRICS = Seq(
     CUSTOM_METRIC_SST_FILE_SIZE, CUSTOM_METRIC_GET_TIME, CUSTOM_METRIC_PUT_TIME,
     CUSTOM_METRIC_FLUSH_TIME, CUSTOM_METRIC_COMMIT_COMPACT_TIME,
@@ -1297,7 +1316,8 @@ object RocksDBStateStoreProvider {
     CUSTOM_METRIC_PINNED_BLOCKS_MEM_USAGE, CUSTOM_METRIC_NUM_INTERNAL_COL_FAMILIES_KEYS,
     CUSTOM_METRIC_NUM_EXTERNAL_COL_FAMILIES, CUSTOM_METRIC_NUM_INTERNAL_COL_FAMILIES,
     CUSTOM_METRIC_LOAD_FROM_SNAPSHOT_TIME, CUSTOM_METRIC_LOAD_TIME, CUSTOM_METRIC_REPLAY_CHANGE_LOG,
-    CUSTOM_METRIC_NUM_REPLAY_CHANGE_LOG_FILES, CUSTOM_METRIC_NUM_SNAPSHOTS_AUTO_REPAIRED)
+    CUSTOM_METRIC_NUM_REPLAY_CHANGE_LOG_FILES, CUSTOM_METRIC_NUM_SNAPSHOTS_AUTO_REPAIRED,
+    CUSTOM_METRIC_FORCE_SNAPSHOT)
 
   val CUSTOM_INSTANCE_METRIC_SNAPSHOT_LAST_UPLOADED = StateStoreSnapshotLastUploadInstanceMetric()
 

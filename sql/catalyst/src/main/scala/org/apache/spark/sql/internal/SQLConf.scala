@@ -2710,6 +2710,18 @@ object SQLConf {
       .checkValue(k => k >= 0, "Must be greater than or equal to 0")
       .createWithDefault(if (Utils.isTesting) 1 else 0)
 
+  val STATE_STORE_FORCE_SNAPSHOT_UPLOAD_ON_LAG =
+    buildConf("spark.sql.streaming.stateStore.forceSnapshotUploadOnLag")
+      .internal()
+      .doc(
+        "When enabled, state stores with lagging snapshot uploads will automatically trigger " +
+        "a snapshot on the next commit. Requires spark.sql.streaming.stateStore.coordinator" +
+        "ReportSnapshotUploadLag to be true."
+      )
+      .version("4.2.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val STATEFUL_SHUFFLE_PARTITIONS_INTERNAL =
     buildConf("spark.sql.streaming.internal.stateStore.partitions")
       .doc("WARN: This config is used internally and is not intended to be user-facing. This " +
@@ -6920,6 +6932,17 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def stateStoreRowChecksumReadVerificationRatio: Long =
     getConf(STATE_STORE_ROW_CHECKSUM_READ_VERIFICATION_RATIO)
+
+  def stateStoreForceSnapshotUploadOnLag: Boolean = {
+    val value = getConf(STATE_STORE_FORCE_SNAPSHOT_UPLOAD_ON_LAG)
+    if (value && !stateStoreCoordinatorReportSnapshotUploadLag) {
+      throw new IllegalArgumentException(
+        "spark.sql.streaming.stateStore.forceSnapshotUploadOnLag can only be true if " +
+        "spark.sql.streaming.stateStore.coordinatorReportSnapshotUploadLag is also true."
+      )
+    }
+    value
+  }
 
   def checkpointLocation: Option[String] = getConf(CHECKPOINT_LOCATION)
 
