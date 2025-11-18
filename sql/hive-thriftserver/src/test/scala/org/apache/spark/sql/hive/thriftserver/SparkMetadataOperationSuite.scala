@@ -689,21 +689,24 @@ class SparkMetadataOperationSuite extends HiveThriftServer2TestBase {
 
   test("SPARK-54350: SparkGetColumnsOperation respects useZeroBasedColumnOrdinalPosition config") {
     Seq(true, false).foreach { zeroBasedOrdinal =>
-      val tableName = "column_ordinal_position"
-      val ddl = s"CREATE TABLE $tableName (id INT, name STRING)"
+      val viewName = "view_column_ordinal_position"
+      val ddl = s"CREATE OR REPLACE GLOBAL TEMPORARY VIEW $viewName AS " +
+        "SELECT 1 AS id, 'foo' AS name"
 
-      withJdbcStatement(tableName) { statement =>
+      withJdbcStatement(viewName) { statement =>
         statement.execute(
           s"SET ${HiveUtils.LEGACY_STS_ZERO_BASED_COLUMN_ORDINAL.key}=$zeroBasedOrdinal")
         statement.execute(ddl)
         val data = statement.getConnection.getMetaData
-        val rowSet = data.getColumns("", "", tableName, null)
+        val rowSet = data.getColumns("", "global_temp", viewName, null)
         assert(rowSet.next())
-        assert(rowSet.getString("TABLE_NAME") === tableName)
+        assert(rowSet.getString("TABLE_SCHEM") === "global_temp")
+        assert(rowSet.getString("TABLE_NAME") === viewName)
         assert(rowSet.getString("COLUMN_NAME") === "id")
         assert(rowSet.getInt("ORDINAL_POSITION") === (if (zeroBasedOrdinal) 0 else 1))
         assert(rowSet.next())
-        assert(rowSet.getString("TABLE_NAME") === tableName)
+        assert(rowSet.getString("TABLE_SCHEM") === "global_temp")
+        assert(rowSet.getString("TABLE_NAME") === viewName)
         assert(rowSet.getString("COLUMN_NAME") === "name")
         assert(rowSet.getInt("ORDINAL_POSITION") === (if (zeroBasedOrdinal) 1 else 2))
         assert(!rowSet.next())
