@@ -67,7 +67,7 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
       StateSourceOptions.apply(session, hadoopConf, properties))
     val stateConf = buildStateStoreConf(sourceOptions.resolvedCpLocation, sourceOptions.batchId)
     if (sourceOptions.readAllColumnFamilies) {
-      // For readAllColumnFamilies mode, we don't need specific metadata
+      // For readAllColumnFamilies mode, we don't need specific encoder because it returns raw data
       val keyStateEncoderSpec = NoPrefixKeyStateEncoderSpec(new StructType())
       new StateTable(session, schema, sourceOptions, stateConf, keyStateEncoderSpec,
         None, None, None, None)
