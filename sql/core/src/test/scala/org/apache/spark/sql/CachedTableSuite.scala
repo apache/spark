@@ -68,6 +68,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
 
   override def sparkConf: SparkConf = super.sparkConf
     .set("spark.sql.catalog.testcat", classOf[InMemoryCatalog].getName)
+    .set("spark.sql.catalog.testcat.copyOnLoad", "true")
 
   setupTestData()
 

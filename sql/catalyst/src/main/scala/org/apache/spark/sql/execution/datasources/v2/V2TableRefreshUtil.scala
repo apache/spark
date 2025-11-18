@@ -40,7 +40,7 @@ private[sql] object V2TableRefreshUtil extends SQLConfHelper with Logging {
   def pinVersions(plan: LogicalPlan): LogicalPlan = {
     plan transform {
       case r @ ExtractV2CatalogAndIdentifier(catalog, ident)
-          if r.table.currentVersion != null && r.timeTravelSpec.isEmpty =>
+          if r.isVersioned && r.timeTravelSpec.isEmpty =>
         val tableName = V2TableUtil.toQualifiedName(catalog, ident)
         val version = r.table.currentVersion
         logDebug(s"Pinning table version for $tableName to $version")
@@ -49,21 +49,25 @@ private[sql] object V2TableRefreshUtil extends SQLConfHelper with Logging {
   }
 
   /**
-   * Refreshes table metadata for all versioned tables in the plan.
+   * Refreshes table metadata for tables in the plan.
    *
    * This method reloads table metadata from the catalog and validates:
    *  - Table identity: Ensures table ID has not changed
    *  - Data columns: Verifies captured columns match the current schema
    *  - Metadata columns: Checks metadata column consistency
    *
+   * Tables with time travel specifications are skipped as they reference a specific point
+   * in time and don't have to be refreshed.
+   *
    * @param plan the logical plan to refresh
+   * @param versionedOnly indicates whether to refresh only versioned tables
    * @return plan with refreshed table metadata
    */
-  def refreshVersions(plan: LogicalPlan): LogicalPlan = {
+  def refresh(plan: LogicalPlan, versionedOnly: Boolean = false): LogicalPlan = {
     val cache = mutable.HashMap.empty[(TableCatalog, Identifier), Table]
     plan transform {
       case r @ ExtractV2CatalogAndIdentifier(catalog, ident)
-          if r.table.currentVersion != null && r.timeTravelSpec.isEmpty =>
+          if (r.isVersioned || !versionedOnly) && r.timeTravelSpec.isEmpty =>
         val currentTable = cache.getOrElseUpdate((catalog, ident), {
           val tableName = V2TableUtil.toQualifiedName(catalog, ident)
           logDebug(s"Refreshing table metadata for $tableName")

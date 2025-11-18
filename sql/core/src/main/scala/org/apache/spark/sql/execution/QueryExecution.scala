@@ -207,7 +207,7 @@ class QueryExecution(
   // there may be delay between analysis and subsequent phases
   // therefore, refresh captured table versions to reflect latest data
   private val lazyTableVersionsRefreshed = LazyTry {
-    V2TableRefreshUtil.refreshVersions(commandExecuted)
+    V2TableRefreshUtil.refresh(commandExecuted, versionedOnly = true)
   }
 
   private[sql] def tableVersionsRefreshed: LogicalPlan = lazyTableVersionsRefreshed.get
