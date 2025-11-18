@@ -58,4 +58,20 @@ class STFunctionsSuite extends QueryTest with SharedSparkSession {
       Row(4326, 0))
   }
 
+  /** ST modifier expressions. */
+
+  test("st_setsrid") {
+    // Test data: Well-Known Binary (WKB) representations.
+    val df = Seq[(String, Int)](
+      (
+        "0101000000000000000000f03f0000000000000040", 4326
+      )).toDF("wkb", "srid")
+    // ST_GeogFromWKB/ST_GeomFromWKB and ST_Srid.
+    checkAnswer(
+      df.select(
+        st_srid(st_setsrid(st_geogfromwkb(unhex($"wkb")), $"srid")).as("col0"),
+        st_srid(st_setsrid(st_geomfromwkb(unhex($"wkb")), $"srid")).as("col1")),
+      Row(4326, 4326))
+  }
+
 }

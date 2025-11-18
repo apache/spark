@@ -4969,6 +4969,13 @@ def st_geomfromwkb(wkb: "ColumnOrName") -> Column:
 st_geomfromwkb.__doc__ = pysparkfuncs.st_geomfromwkb.__doc__
 
 
+def st_setsrid(geo: "ColumnOrName", srid: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("st_setsrid", geo, srid)
+
+
+st_setsrid.__doc__ = pysparkfuncs.st_setsrid.__doc__
+
+
 def st_srid(geo: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("st_srid", geo)
 
