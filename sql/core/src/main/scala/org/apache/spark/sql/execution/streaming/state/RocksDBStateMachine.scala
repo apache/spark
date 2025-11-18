@@ -172,13 +172,16 @@ class RocksDBStateMachine(
     }
   }
 
-  // Return the task ID from the active TaskContext if exists for logging purposes
+  /**
+   * Return the task ID from the active TaskContext if exists for logging purposes.
+   * Returns "undefined" if no TaskContext is active.
+   */
   private def taskID: String = {
     val taskContext = TaskContext.get()
     if (taskContext != null) {
       taskContext.taskAttemptId().toString
     } else {
-      "N/A"
+      "undefined"
     }
   }
 
