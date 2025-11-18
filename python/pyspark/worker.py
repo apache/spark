@@ -83,7 +83,12 @@ from pyspark.sql.types import (
     _create_row,
     _parse_datatype_json_string,
 )
-from pyspark.util import fail_on_stopiteration, handle_worker_exception, with_faulthandler
+from pyspark.util import (
+    fail_on_stopiteration,
+    handle_worker_exception,
+    with_faulthandler,
+    start_faulthandler_periodic_traceback
+)
 from pyspark import shuffle
 from pyspark.errors import PySparkRuntimeError, PySparkTypeError, PySparkValueError
 from pyspark.worker_util import (
@@ -3296,7 +3301,7 @@ def main(infile, outfile):
         split_index = read_int(infile)
         if split_index == -1:  # for unit tests
             sys.exit(-1)
-
+        start_faulthandler_periodic_traceback()
         check_python_version(infile)
 
         # read inputs only for a barrier task

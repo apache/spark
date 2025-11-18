@@ -922,32 +922,19 @@ class _FaulthandlerHelper:
     def __init__(self) -> None:
         self._log_path: Optional[str] = None
         self._log_file: Optional[TextIO] = None
-        self._periodic_dump = False
+        self._periodic_traceback = False
 
     def start(self) -> None:
         if self._log_path:
             raise Exception("Fault handler is already registered. No second registration allowed")
         self._log_path = os.environ.get("PYTHON_FAULTHANDLER_DIR", None)
-        traceback_dump_interval_seconds = os.environ.get(
-            "PYTHON_TRACEBACK_DUMP_INTERVAL_SECONDS", None
-        )
         if self._log_path:
             self._log_path = os.path.join(self._log_path, str(os.getpid()))
             self._log_file = open(self._log_path, "w")
 
             faulthandler.enable(file=self._log_file)
 
-            if (
-                traceback_dump_interval_seconds is not None
-                and int(traceback_dump_interval_seconds) > 0
-            ):
-                self._periodic_dump = True
-                faulthandler.dump_traceback_later(int(traceback_dump_interval_seconds), repeat=True)
-
     def stop(self) -> None:
-        if self._periodic_dump:
-            faulthandler.cancel_dump_traceback_later()
-            self._periodic_dump = False
         if self._log_path:
             faulthandler.disable()
             if self._log_file:
@@ -957,6 +944,24 @@ class _FaulthandlerHelper:
                 os.remove(self._log_path)
             finally:
                 self._log_path = None
+        if self._periodic_traceback:
+            faulthandler.cancel_dump_traceback_later()
+            self._periodic_traceback = False
+
+    def start_periodic_traceback(self) -> None:
+        # If the registration is already done - do nothing
+        if self._periodic_traceback:
+            return
+
+        traceback_dump_interval_seconds = os.environ.get(
+            "PYTHON_TRACEBACK_DUMP_INTERVAL_SECONDS", None
+        )
+        if (
+                traceback_dump_interval_seconds is not None
+                and int(traceback_dump_interval_seconds) > 0
+        ):
+            self._periodic_traceback = True
+            faulthandler.dump_traceback_later(int(traceback_dump_interval_seconds), repeat=True)
 
     def with_faulthandler(self, func: Callable) -> Callable:
         """
@@ -975,8 +980,10 @@ class _FaulthandlerHelper:
 
         return wrapper
 
+_faulthandler_helper = _FaulthandlerHelper()
+with_faulthandler = _faulthandler_helper.with_faulthandler
+start_faulthandler_periodic_traceback = _faulthandler_helper.start_periodic_traceback
 
-with_fault_handler = _FaulthandlerHelper().with_faulthandler
 
 
 if __name__ == "__main__":

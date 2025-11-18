@@ -45,7 +45,12 @@ from pyspark.sql.types import (
     BinaryType,
     _create_row,
 )
-from pyspark.util import handle_worker_exception, local_connect_and_auth, with_faulthandler
+from pyspark.util import (
+    handle_worker_exception,
+    local_connect_and_auth,
+    with_faulthandler,
+    start_faulthandler_periodic_traceback
+)
 from pyspark.worker_util import (
     check_python_version,
     read_command,
@@ -80,6 +85,8 @@ def main(infile: IO, outfile: IO) -> None:
     """
     try:
         check_python_version(infile)
+
+        start_faulthandler_periodic_traceback()
 
         memory_limit_mb = int(os.environ.get("PYSPARK_PLANNER_MEMORY_MB", "-1"))
         setup_memory_limits(memory_limit_mb)
