@@ -128,11 +128,11 @@ private[spark] case class ChainedPythonFunctions(funcs: Seq[PythonFunction])
 /** Thrown for exceptions in user Python code. */
 private[spark] class PythonException(
     msg: String,
-    cause: Option[Throwable],
+    cause: Throwable,
     errorClass: Option[String],
     messageParameters: Map[String, String],
     context: Array[QueryContext])
-  extends RuntimeException(msg, cause.orNull) with SparkThrowable {
+  extends RuntimeException(msg, cause) with SparkThrowable {
 
   def this(
       errorClass: String,
@@ -142,7 +142,7 @@ private[spark] class PythonException(
       summary: String = "") = {
     this(
       SparkThrowableHelper.getMessage(errorClass, messageParameters, summary),
-      Option(cause),
+      cause,
       Option(errorClass),
       messageParameters,
       context
