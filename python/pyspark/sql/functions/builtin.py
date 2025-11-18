@@ -26616,14 +26616,9 @@ def theta_sketch_agg(
     +---------------------------------------------------------+
     """
     fn = "theta_sketch_agg"
-    if lgNomEntries is None and family is None:
-        return _invoke_function_over_columns(fn, col)
-    elif family is None:
-        return _invoke_function_over_columns(fn, col, lit(lgNomEntries))
-    else:
-        if lgNomEntries is None:
-            lgNomEntries = 12  # default value
-        return _invoke_function_over_columns(fn, col, lit(lgNomEntries), lit(family))
+    _lgNomEntries = lit(12) if lgNomEntries is None else lit(lgNomEntries)
+    _family = lit("QUICKSELECT") if family is None else lit(family)
+    return _invoke_function_over_columns(fn, col, _lgNomEntries, _family)
 
 
 @_try_remote_functions

@@ -38,13 +38,12 @@ object ThetaSketchUtils {
   final val MAX_LG_NOM_LONGS = 26
   final val DEFAULT_LG_NOM_LONGS = 12
 
-  /*
-   * QUICKSELECT is optimized for speed and is the default choice for most use cases,
-   * providing faster updates and queries with slightly higher error rates. ALPHA offers
-   * better accuracy with slightly higher resource consumption, making it suitable when
-   * precision is more important than performance. The choice primarily affects the speed
-   * vs accuracy trade-off.
-   */
+  /** ALPHA is optimized for speed and offers slightly better initial accuracy (lower error)
+   * for simple updates. Its estimation * precision reverts to the standard level if merged with
+   * other sketches.
+   * QUICKSELECT is the default and more flexible choice, providing the standard level of accuracy
+   * and full support for all set operations (Union, Intersection, etc.).
+   * */
   final val FAMILY_QUICKSELECT = "QUICKSELECT"
   final val FAMILY_ALPHA = "ALPHA"
   final val DEFAULT_FAMILY = FAMILY_QUICKSELECT

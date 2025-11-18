@@ -3231,8 +3231,10 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       messageParameters = Map(
         "functionName" -> toSQLId(function),
         "k" -> toSQLValue(k, IntegerType)))
+  }
 
-  def thetaInvalidFamily(function: String, value: String, validFamilies: Seq[String]): Throwable = {
+  def thetaInvalidFamily(function: String, value: String, validFamilies:
+      Seq[String]): Throwable = {
     new SparkRuntimeException(
       errorClass = "THETA_INVALID_FAMILY",
       messageParameters = Map(

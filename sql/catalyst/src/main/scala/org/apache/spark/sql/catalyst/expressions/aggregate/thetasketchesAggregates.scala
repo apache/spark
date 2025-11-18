@@ -316,8 +316,7 @@ case class ThetaSketchAgg(
   }
 
   override protected def withNewChildrenInternal(newFirst: Expression, newSecond: Expression,
-     newThird: Expression): Expression = copy(newFirst, newSecond,
-    newThird, mutableAggBufferOffset, inputAggBufferOffset)
+     newThird: Expression): ThetaSketchAgg = copy(newFirst, newSecond, newThird)
 }
 
 /**
