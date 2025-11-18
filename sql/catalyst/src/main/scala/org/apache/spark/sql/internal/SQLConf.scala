@@ -2717,6 +2717,18 @@ object SQLConf {
       .checkValue(k => k >= 0, "Must be greater than or equal to 0")
       .createWithDefault(if (Utils.isTesting) 1 else 0)
 
+  val STATE_STORE_FORCE_SNAPSHOT_UPLOAD_ON_LAG =
+    buildConf("spark.sql.streaming.stateStore.forceSnapshotUploadOnLag")
+      .internal()
+      .doc(
+        "When enabled, state stores with lagging snapshot uploads will automatically trigger " +
+        "a snapshot on the next commit. Requires spark.sql.streaming.stateStore.coordinator" +
+        "ReportSnapshotUploadLag to be true."
+      )
+      .version("4.2.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val STATEFUL_SHUFFLE_PARTITIONS_INTERNAL =
     buildConf("spark.sql.streaming.internal.stateStore.partitions")
       .doc("WARN: This config is used internally and is not intended to be user-facing. This " +
@@ -3856,6 +3868,16 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val SINGLE_CHARACTER_PIPE_OPERATOR_ENABLED =
+    buildConf("spark.sql.parser.singleCharacterPipeOperator.enabled")
+    .doc("When true, the single character pipe token '|' can be used as an alternative to '|>' " +
+      "for SQL pipe operators. When false, only '|>' is recognized as a pipe operator, and '|' " +
+      "is only used for bitwise OR operations. This provides syntax compatibility with other " +
+      "languages like Splunk SPL and Kusto that use '|' for pipe operations.")
+    .version("4.2.0")
+    .booleanConf
+    .createWithDefault(true)
+
   val TVF_ALLOW_MULTIPLE_TABLE_ARGUMENTS_ENABLED =
     buildConf("spark.sql.tvf.allowMultipleTableArguments.enabled")
       .doc("When true, allows multiple table arguments for table-valued functions, " +
@@ -3981,6 +4003,14 @@ object SQLConf {
           "for Python execution with DataFrame and SQL. It can change during runtime.")
       .version("4.1.0")
       .fallbackConf(Python.PYTHON_WORKER_TRACEBACK_DUMP_INTERVAL_SECONDS)
+
+  val PYTHON_UDF_DAEMON_KILL_WORKER_ON_FLUSH_FAILURE =
+    buildConf("spark.sql.execution.pyspark.udf.daemonKillWorkerOnFlushFailure")
+      .doc(
+        s"Same as ${Python.PYTHON_DAEMON_KILL_WORKER_ON_FLUSH_FAILURE.key} " +
+          "for Python execution with DataFrame and SQL. It can change during runtime.")
+      .version("4.1.0")
+      .fallbackConf(Python.PYTHON_DAEMON_KILL_WORKER_ON_FLUSH_FAILURE)
 
   val PYTHON_WORKER_LOGGING_ENABLED =
     buildConf("spark.sql.pyspark.worker.logging.enabled")
@@ -6508,6 +6538,7 @@ object SQLConf {
 
   val PIPELINES_STREAM_STATE_POLLING_INTERVAL = {
     buildConf("spark.sql.pipelines.execution.streamstate.pollingInterval")
+      .internal()
       .doc(
         "Interval in seconds at which the stream state is polled for changes. This is used to " +
           "check if the stream has failed and needs to be restarted."
@@ -6519,6 +6550,7 @@ object SQLConf {
 
   val PIPELINES_WATCHDOG_MIN_RETRY_TIME_IN_SECONDS = {
     buildConf("spark.sql.pipelines.execution.watchdog.minRetryTime")
+      .internal()
       .doc(
         "Initial duration in seconds between the time when we notice a flow has failed and " +
           "when we try to restart the flow. The interval between flow restarts doubles with " +
@@ -6533,6 +6565,7 @@ object SQLConf {
 
   val PIPELINES_WATCHDOG_MAX_RETRY_TIME_IN_SECONDS = {
     buildConf("spark.sql.pipelines.execution.watchdog.maxRetryTime")
+      .internal()
       .doc(
         "Maximum time interval in seconds at which flows will be restarted."
       )
@@ -6543,6 +6576,7 @@ object SQLConf {
 
   val PIPELINES_MAX_CONCURRENT_FLOWS = {
     buildConf("spark.sql.pipelines.execution.maxConcurrentFlows")
+      .internal()
       .doc(
         "Max number of flows to execute at once. Used to tune performance for triggered " +
           "pipelines. Has no effect on continuous pipelines."
@@ -6555,6 +6589,7 @@ object SQLConf {
 
   val PIPELINES_TIMEOUT_MS_FOR_TERMINATION_JOIN_AND_LOCK = {
     buildConf("spark.sql.pipelines.timeoutMsForTerminationJoinAndLock")
+      .internal()
       .doc("Timeout in milliseconds to grab a lock for stopping update - default is 1hr.")
       .version("4.1.0")
       .timeConf(TimeUnit.MILLISECONDS)
@@ -6572,6 +6607,7 @@ object SQLConf {
 
   val PIPELINES_EVENT_QUEUE_CAPACITY = {
     buildConf("spark.sql.pipelines.event.queue.capacity")
+      .internal()
       .doc("Capacity of the event queue used in pipelined execution. When the queue is full, " +
         "non-terminal FlowProgressEvents will be dropped.")
       .version("4.1.0")
@@ -6906,6 +6942,17 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def stateStoreRowChecksumReadVerificationRatio: Long =
     getConf(STATE_STORE_ROW_CHECKSUM_READ_VERIFICATION_RATIO)
 
+  def stateStoreForceSnapshotUploadOnLag: Boolean = {
+    val value = getConf(STATE_STORE_FORCE_SNAPSHOT_UPLOAD_ON_LAG)
+    if (value && !stateStoreCoordinatorReportSnapshotUploadLag) {
+      throw new IllegalArgumentException(
+        "spark.sql.streaming.stateStore.forceSnapshotUploadOnLag can only be true if " +
+        "spark.sql.streaming.stateStore.coordinatorReportSnapshotUploadLag is also true."
+      )
+    }
+    value
+  }
+
   def checkpointLocation: Option[String] = getConf(CHECKPOINT_LOCATION)
 
   def checkpointFileChecksumEnabled: Boolean = getConf(STREAMING_CHECKPOINT_FILE_CHECKSUM_ENABLED)
@@ -7220,6 +7267,20 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   }
 
   /**
+   * Returns the lower case representation of a string if `caseSensitiveAnalysis` is enabled.
+   * Otherwise, returns the original string.
+   */
+  def canonicalize(s: String): String = {
+    if (!caseSensitiveAnalysis) {
+      // scalastyle:off caselocale
+      s.toLowerCase
+      // scalastyle:on caselocale
+    } else {
+      s
+    }
+  }
+
+  /**
    * Returns the error handler for handling hint errors.
    */
   def hintErrorHandler: HintErrorHandler = HintErrorLogger
@@ -7489,6 +7550,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def pythonUDFWorkerTracebackDumpIntervalSeconds: Long =
     getConf(PYTHON_UDF_WORKER_TRACEBACK_DUMP_INTERVAL_SECONDS)
 
+  def pythonUDFDaemonKillWorkerOnFlushFailure: Boolean =
+    getConf(PYTHON_UDF_DAEMON_KILL_WORKER_ON_FLUSH_FAILURE)
+
   def pythonWorkerLoggingEnabled: Boolean = getConf(PYTHON_WORKER_LOGGING_ENABLED)
 
   def pythonUDFArrowConcurrencyLevel: Option[Int] = getConf(PYTHON_UDF_ARROW_CONCURRENCY_LEVEL)
@@ -7641,6 +7705,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   override def exponentLiteralAsDecimalEnabled: Boolean =
     getConf(SQLConf.LEGACY_EXPONENT_LITERAL_AS_DECIMAL_ENABLED)
+
+  def singleCharacterPipeOperatorEnabled: Boolean =
+    getConf(SQLConf.SINGLE_CHARACTER_PIPE_OPERATOR_ENABLED)
 
   def allowNegativeScaleOfDecimalEnabled: Boolean =
     getConf(SQLConf.LEGACY_ALLOW_NEGATIVE_SCALE_OF_DECIMAL_ENABLED)

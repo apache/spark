@@ -753,7 +753,7 @@ class SparkConnectPlanTests(PlanOnlyTestFixture):
         self.assertIsInstance(col, Column)
         self.assertEqual("Column<'UnresolvedRegex(col_name)'>", str(col))
 
-        col_plan = col.to_plan(self.session.client)
+        col_plan = col.to_plan(None)
         self.assertIsNotNone(col_plan)
         self.assertEqual(col_plan.unresolved_regex.col_name, "col_name")
 
@@ -937,7 +937,7 @@ class SparkConnectPlanTests(PlanOnlyTestFixture):
         self.assertEqual("Column<'a AS martin'>", str(col0))
 
         col0 = col("a").alias("martin", metadata={"pii": True})
-        plan = col0.to_plan(self.session.client)
+        plan = col0.to_plan(None)
         self.assertIsNotNone(plan)
         self.assertEqual(plan.alias.metadata, '{"pii": true}')
 

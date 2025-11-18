@@ -485,6 +485,7 @@ object AbstractParser extends Logging {
     parser.double_quoted_identifiers = conf.doubleQuotedIdentifiers
     parser.parameter_substitution_enabled = !conf.legacyParameterSubstitutionConstantsOnly
     parser.legacy_identifier_clause_only = conf.legacyIdentifierClauseOnly
+    parser.single_character_pipe_operator_enabled = conf.singleCharacterPipeOperatorEnabled
   }
 
   /**

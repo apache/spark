@@ -2121,6 +2121,38 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     }
   }
 
+  def tableIdChangedAfterAnalysis(
+      tableName: String,
+      capturedTableId: String,
+      currentTableId: String): Throwable = {
+    new AnalysisException(
+      errorClass = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.TABLE_ID_MISMATCH",
+      messageParameters = Map(
+        "tableName" -> toSQLId(tableName),
+        "capturedTableId" -> capturedTableId,
+        "currentTableId" -> currentTableId))
+  }
+
+  def columnsChangedAfterAnalysis(
+      tableName: String,
+      errors: Seq[String]): Throwable = {
+    new AnalysisException(
+      errorClass = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMNS_MISMATCH",
+      messageParameters = Map(
+        "tableName" -> toSQLId(tableName),
+        "errors" -> errors.mkString("\n- ", "\n- ", "")))
+  }
+
+  def metadataColumnsChangedAfterAnalysis(
+      tableName: String,
+      errors: Seq[String]): Throwable = {
+    new AnalysisException(
+      errorClass = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.METADATA_COLUMNS_MISMATCH",
+      messageParameters = Map(
+        "tableName" -> toSQLId(tableName),
+        "errors" -> errors.mkString("\n- ", "\n- ", "")))
+  }
+
   def numberOfPartitionsNotAllowedWithUnspecifiedDistributionError(): Throwable = {
     new AnalysisException(
       errorClass = "INVALID_WRITE_DISTRIBUTION.PARTITION_NUM_WITH_UNSPECIFIED_DISTRIBUTION",
@@ -4433,5 +4465,31 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "configValue" -> "true"
       )
     )
+  }
+
+  def columnsChangedAfterViewWithPlanCreation(
+      viewName: Seq[String],
+      tableName: Seq[String],
+      errors: Seq[String]): Throwable = {
+    new AnalysisException(
+      errorClass = "INCOMPATIBLE_COLUMN_CHANGES_AFTER_VIEW_WITH_PLAN_CREATION",
+      messageParameters = Map(
+        "viewName" -> toSQLId(viewName),
+        "tableName" -> toSQLId(tableName),
+        "colType" -> "data",
+        "errors" -> errors.mkString("\n- ", "\n- ", "")))
+  }
+
+  def metadataColumnsChangedAfterViewWithPlanCreation(
+      viewName: Seq[String],
+      tableName: Seq[String],
+      errors: Seq[String]): Throwable = {
+    new AnalysisException(
+      errorClass = "INCOMPATIBLE_COLUMN_CHANGES_AFTER_VIEW_WITH_PLAN_CREATION",
+      messageParameters = Map(
+        "viewName" -> toSQLId(viewName),
+        "tableName" -> toSQLId(tableName),
+        "colType" -> "metadata",
+        "errors" -> errors.mkString("\n- ", "\n- ", "")))
   }
 }

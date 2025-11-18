@@ -21,7 +21,9 @@ from typing import (
     Iterator,
     List,
     Optional,
+    Sequence,
     Union,
+    cast,
     no_type_check,
     overload,
     TYPE_CHECKING,
@@ -37,11 +39,11 @@ from pyspark.sql.types import (
     MapType,
     TimestampType,
     StructType,
+    _has_type,
     DataType,
     _create_row,
     StringType,
 )
-from pyspark.sql.utils import is_timestamp_ntz_preferred
 from pyspark.traceback_utils import SCCallSiteSync
 from pyspark.errors import PySparkTypeError, PySparkValueError
 
@@ -52,6 +54,119 @@ if TYPE_CHECKING:
 
     from pyspark.sql.pandas._typing import DataFrameLike as PandasDataFrameLike
     from pyspark.sql import DataFrame
+
+
+def _convert_arrow_table_to_pandas(
+    arrow_table: "pa.Table",
+    schema: "StructType",
+    *,
+    timezone: Optional[str] = None,
+    struct_handling_mode: Optional[str] = None,
+    date_as_object: bool = False,
+    self_destruct: bool = False,
+) -> "PandasDataFrameLike":
+    """
+    Helper function to convert Arrow table columns to a pandas DataFrame.
+
+    This function applies Spark-specific type converters to Arrow columns and concatenates
+    them into a pandas DataFrame.
+
+    Parameters
+    ----------
+    arrow_table : pyarrow.Table
+        The Arrow table to convert
+    schema : StructType
+        The schema of the DataFrame
+    timezone : str or None
+        The timezone to use for timestamp conversions (can be None if not configured)
+    struct_handling_mode : str or None
+        How to handle struct types in pandas ("dict", "row", or "legacy", can be None
+         if not configured). If "legacy", it will be converted to "dict" and error checking
+         for duplicated field names will be enabled when StructType fields are present.
+    date_as_object : bool
+        Whether to convert date values to Python datetime.date objects (default: False)
+    self_destruct : bool
+        Whether to enable memory-efficient self-destruct mode for large tables (default: False)
+
+    Returns
+    -------
+    pandas.DataFrame
+        The converted pandas DataFrame
+    """
+    import pandas as pd
+    from pyspark.sql.pandas.types import _create_converter_to_pandas
+
+    # Build pandas options
+    # Pandas DataFrame created from PyArrow uses datetime64[ns] for date type
+    # values, but we should use datetime.date to match the behavior with when
+    # Arrow optimization is disabled.
+    pandas_options = {"coerce_temporal_nanoseconds": True}
+    if date_as_object:
+        pandas_options["date_as_object"] = True
+
+    # Handle empty columns case
+    if len(schema.fields) == 0:
+        return arrow_table.to_pandas(**pandas_options)
+
+    # Rename columns to avoid duplicated column names during processing
+    temp_col_names = [f"col_{i}" for i in range(len(schema.names))]
+    arrow_table = arrow_table.rename_columns(temp_col_names)
+
+    # Configure self-destruct mode for memory efficiency
+    if self_destruct and arrow_table.num_rows > 0:
+        # Configure PyArrow to use as little memory as possible:
+        # self_destruct - free columns as they are converted
+        # split_blocks - create a separate Pandas block for each column
+        # use_threads - convert one column at a time
+        pandas_options.update(
+            {
+                "self_destruct": True,
+                "split_blocks": True,
+                "use_threads": False,
+            }
+        )
+
+    # Handle legacy struct handling mode
+    error_on_duplicated_field_names = False
+    if struct_handling_mode == "legacy" and any(
+        _has_type(f.dataType, StructType) for f in schema.fields
+    ):
+        error_on_duplicated_field_names = True
+        struct_handling_mode = "dict"
+
+    # SPARK-51112: If the table is empty, we avoid using pyarrow to_pandas to create the
+    # DataFrame, as it may fail with a segmentation fault.
+    if arrow_table.num_rows == 0:
+        # For empty tables, create empty Series to preserve dtypes
+        column_data = (
+            pd.Series([], name=temp_col_names[i], dtype="object") for i in range(len(schema.fields))
+        )
+    else:
+        # For non-empty tables, convert arrow columns directly
+        column_data = (arrow_col.to_pandas(**pandas_options) for arrow_col in arrow_table.columns)
+
+    # Apply Spark-specific type converters to each column
+    pdf = pd.concat(
+        objs=cast(
+            Sequence[pd.Series],
+            (
+                _create_converter_to_pandas(
+                    field.dataType,
+                    field.nullable,
+                    timezone=timezone,
+                    struct_in_pandas=struct_handling_mode,
+                    error_on_duplicated_field_names=error_on_duplicated_field_names,
+                )(series)
+                for series, field in zip(column_data, schema.fields)
+            ),
+        ),
+        axis="columns",
+    )
+
+    # Restore original column names (including duplicates)
+    pdf.columns = schema.names
+
+    return pdf
 
 
 class PandasConversionMixin:
@@ -129,68 +244,29 @@ class PandasConversionMixin:
                 try:
                     import pyarrow as pa
 
-                    self_destruct = arrowPySparkSelfDestructEnabled == "true"
-                    batches = self._collect_as_arrow(split_batches=self_destruct)
+                    batches = self._collect_as_arrow(
+                        split_batches=arrowPySparkSelfDestructEnabled == "true"
+                    )
 
-                    # Rename columns to avoid duplicated column names.
-                    temp_col_names = [f"col_{i}" for i in range(len(self.columns))]
                     if len(batches) > 0:
-                        table = pa.Table.from_batches(batches).rename_columns(temp_col_names)
+                        table = pa.Table.from_batches(batches)
                     else:
                         # empty dataset
-                        table = arrow_schema.empty_table().rename_columns(temp_col_names)
+                        table = arrow_schema.empty_table()
 
                     # Ensure only the table has a reference to the batches, so that
                     # self_destruct (if enabled) is effective
                     del batches
 
-                    # Pandas DataFrame created from PyArrow uses datetime64[ns] for date type
-                    # values, but we should use datetime.date to match the behavior with when
-                    # Arrow optimization is disabled.
-                    pandas_options = {
-                        "date_as_object": True,
-                        "coerce_temporal_nanoseconds": True,
-                    }
-                    if self_destruct:
-                        # Configure PyArrow to use as little memory as possible:
-                        # self_destruct - free columns as they are converted
-                        # split_blocks - create a separate Pandas block for each column
-                        # use_threads - convert one column at a time
-                        pandas_options.update(
-                            {
-                                "self_destruct": True,
-                                "split_blocks": True,
-                                "use_threads": False,
-                            }
-                        )
+                    pdf = _convert_arrow_table_to_pandas(
+                        arrow_table=table,
+                        schema=self.schema,
+                        timezone=sessionLocalTimeZone,
+                        struct_handling_mode=pandasStructHandlingMode,
+                        date_as_object=True,
+                        self_destruct=arrowPySparkSelfDestructEnabled == "true",
+                    )
 
-                    if len(self.columns) > 0:
-                        timezone = sessionLocalTimeZone
-                        struct_in_pandas = pandasStructHandlingMode
-
-                        error_on_duplicated_field_names = False
-                        if struct_in_pandas == "legacy":
-                            error_on_duplicated_field_names = True
-                            struct_in_pandas = "dict"
-
-                        pdf = pd.concat(
-                            [
-                                _create_converter_to_pandas(
-                                    field.dataType,
-                                    field.nullable,
-                                    timezone=timezone,
-                                    struct_in_pandas=struct_in_pandas,
-                                    error_on_duplicated_field_names=error_on_duplicated_field_names,
-                                )(arrow_col.to_pandas(**pandas_options))
-                                for arrow_col, field in zip(table.columns, self.schema.fields)
-                            ],
-                            axis="columns",
-                        )
-                    else:
-                        # empty columns
-                        pdf = table.to_pandas(**pandas_options)
-
-                    pdf.columns = self.columns
                     return pdf
 
                 except Exception as e:
@@ -400,7 +476,28 @@ class SparkConversionMixin:
 
         assert isinstance(self, SparkSession)
 
-        timezone = self._jconf.sessionLocalTimeZone()
+        (
+            timestampType,
+            sessionLocalTimeZone,
+            arrowPySparkEnabled,
+            arrowUseLargeVarTypes,
+            arrowPySparkFallbackEnabled,
+            arrowMaxRecordsPerBatch,
+        ) = self._jconf.getConfs(
+            [
+                "spark.sql.timestampType",
+                "spark.sql.session.timeZone",
+                "spark.sql.execution.arrow.pyspark.enabled",
+                "spark.sql.execution.arrow.useLargeVarTypes",
+                "spark.sql.execution.arrow.pyspark.fallback.enabled",
+                "spark.sql.execution.arrow.maxRecordsPerBatch",
+            ]
+        )
+
+        prefer_timestamp_ntz = timestampType == "TIMESTAMP_NTZ"
+        prefers_large_var_types = arrowUseLargeVarTypes == "true"
+        timezone = sessionLocalTimeZone
+        arrow_batch_size = int(arrowMaxRecordsPerBatch)
 
         if type(data).__name__ == "Table":
             # `data` is a PyArrow Table
@@ -416,7 +513,7 @@ class SparkConversionMixin:
             if schema is None:
                 schema = data.schema.names
 
-            return self._create_from_arrow_table(data, schema, timezone)
+            return self._create_from_arrow_table(data, schema, timezone, prefer_timestamp_ntz)
 
         # `data` is a PandasDataFrameLike object
         from pyspark.sql.pandas.utils import require_minimum_pandas_version
@@ -427,11 +524,18 @@ class SparkConversionMixin:
         if schema is None:
             schema = [str(x) if not isinstance(x, str) else x for x in data.columns]
 
-        if self._jconf.arrowPySparkEnabled() and len(data) > 0:
+        if arrowPySparkEnabled == "true" and len(data) > 0:
             try:
-                return self._create_from_pandas_with_arrow(data, schema, timezone)
+                return self._create_from_pandas_with_arrow(
+                    data,
+                    schema,
+                    timezone,
+                    prefer_timestamp_ntz,
+                    prefers_large_var_types,
+                    arrow_batch_size,
+                )
             except Exception as e:
-                if self._jconf.arrowPySparkFallbackEnabled():
+                if arrowPySparkFallbackEnabled == "true":
                     msg = (
                         "createDataFrame attempted Arrow optimization because "
                         "'spark.sql.execution.arrow.pyspark.enabled' is set to true; however, "
@@ -451,11 +555,15 @@ class SparkConversionMixin:
                     )
                     warn(msg)
                     raise
-        converted_data = self._convert_from_pandas(data, schema, timezone)
+        converted_data = self._convert_from_pandas(data, schema, timezone, prefer_timestamp_ntz)
         return self._create_dataframe(converted_data, schema, samplingRatio, verifySchema)
 
     def _convert_from_pandas(
-        self, pdf: "PandasDataFrameLike", schema: Union[StructType, str, List[str]], timezone: str
+        self,
+        pdf: "PandasDataFrameLike",
+        schema: Union[StructType, str, List[str]],
+        timezone: str,
+        prefer_timestamp_ntz: bool,
     ) -> List:
         """
         Convert a pandas.DataFrame to list of records that can be used to make a DataFrame
@@ -571,7 +679,7 @@ class SparkConversionMixin:
                     )
                     copied = True
             else:
-                should_localize = not is_timestamp_ntz_preferred()
+                should_localize = not prefer_timestamp_ntz
                 for column, series in pdf.items():
                     s = series
                     if (
@@ -648,7 +756,13 @@ class SparkConversionMixin:
         return np.dtype(record_type_list) if has_rec_fix else None
 
     def _create_from_pandas_with_arrow(
-        self, pdf: "PandasDataFrameLike", schema: Union[StructType, List[str]], timezone: str
+        self,
+        pdf: "PandasDataFrameLike",
+        schema: Union[StructType, List[str]],
+        timezone: str,
+        prefer_timestamp_ntz: bool,
+        prefers_large_var_types: bool,
+        arrow_batch_size: int,
     ) -> "DataFrame":
         """
         Create a DataFrame from a given pandas.DataFrame by slicing it into partitions, converting
@@ -688,7 +802,6 @@ class SparkConversionMixin:
         # Create the Spark schema from list of names passed in with Arrow types
         if isinstance(schema, (list, tuple)):
             arrow_schema = pa.Schema.from_pandas(pdf, preserve_index=False)
-            prefer_timestamp_ntz = is_timestamp_ntz_preferred()
             struct = StructType()
             if infer_pandas_dict_as_map:
                 spark_type: Union[MapType, DataType]
@@ -734,12 +847,11 @@ class SparkConversionMixin:
             ]
 
         # Slice the DataFrame to be batched
-        step = self._jconf.arrowMaxRecordsPerBatch()
+        step = arrow_batch_size
         step = step if step > 0 else len(pdf)
         pdf_slices = (pdf.iloc[start : start + step] for start in range(0, len(pdf), step))
 
         # Create list of Arrow (columns, arrow_type, spark_type) for serializer dump_stream
-        prefers_large_var_types = self._jconf.arrowUseLargeVarTypes()
         arrow_data = [
             [
                 (
@@ -776,7 +888,11 @@ class SparkConversionMixin:
         return df
 
     def _create_from_arrow_table(
-        self, table: "pa.Table", schema: Union[StructType, List[str]], timezone: str
+        self,
+        table: "pa.Table",
+        schema: Union[StructType, List[str]],
+        timezone: str,
+        prefer_timestamp_ntz: bool,
     ) -> "DataFrame":
         """
         Create a DataFrame from a given pyarrow.Table by slicing it into partitions then
@@ -797,8 +913,6 @@ class SparkConversionMixin:
         from pyspark.sql.pandas.utils import require_minimum_pyarrow_version
 
         require_minimum_pyarrow_version()
-
-        prefer_timestamp_ntz = is_timestamp_ntz_preferred()
 
         # Create the Spark schema from list of names passed in with Arrow types
         if isinstance(schema, (list, tuple)):
