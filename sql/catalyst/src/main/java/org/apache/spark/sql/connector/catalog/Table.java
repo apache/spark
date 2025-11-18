@@ -104,8 +104,8 @@ public interface Table {
   default Constraint[] constraints() { return new Constraint[0]; }
 
   /**
-   * Returns the current table version if implementation supports versioning.
+   * Returns this table version without refreshing state if implementation supports versioning.
    * If the table is not versioned, null can be returned here.
    */
-  default String currentVersion() { return null; }
+  default String version() { return null; }
 }
