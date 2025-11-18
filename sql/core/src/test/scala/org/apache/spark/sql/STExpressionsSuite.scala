@@ -634,4 +634,48 @@ class STExpressionsSuite
     }
   }
 
+  test("verify that geospatial type casting is disabled when the config is off") {
+    withSQLConf(SQLConf.GEOSPATIAL_ENABLED.key -> "false") {
+      // Verify that type casting with geospatial types throws the expected exception.
+      Seq(
+        "SELECT NULL::GEOGRAPHY(4326)",
+        "SELECT NULL::GEOGRAPHY(ANY)",
+        "SELECT NULL::GEOMETRY(4326)",
+        "SELECT NULL::GEOMETRY(ANY)"
+      ).foreach { query =>
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql(query).collect()
+          },
+          condition = "UNSUPPORTED_FEATURE.GEOSPATIAL_DISABLED")
+      }
+    }
+  }
+
+  test("verify that geospatial type coercion is disabled when the config is off") {
+    withSQLConf(SQLConf.GEOSPATIAL_ENABLED.key -> "false") {
+      // Verify that type coercion with geospatial types throws the expected exception.
+      val value = "NULL"
+      Seq(
+        ("GEOGRAPHY(4326)", "GEOGRAPHY(ANY)"),
+        ("GEOMETRY(4326)", "GEOMETRY(ANY)"),
+        ("GEOMETRY(ANY)", "GEOMETRY(0)"),
+        ("GEOMETRY(3857)", "GEOMETRY(4326)")
+      ).foreach { case (type1, type2) =>
+        val geo1 = s"CAST($value AS $type1)"
+        val geo2 = s"CAST($value AS $type2)"
+        Seq(
+          s"SELECT array($geo1, $geo2)",
+          s"SELECT nvl($geo1, $geo2)"
+        ).foreach { query =>
+          checkError(
+            exception = intercept[AnalysisException] {
+              sql(query).collect()
+            },
+            condition = "UNSUPPORTED_FEATURE.GEOSPATIAL_DISABLED")
+        }
+      }
+    }
+  }
+
 }
