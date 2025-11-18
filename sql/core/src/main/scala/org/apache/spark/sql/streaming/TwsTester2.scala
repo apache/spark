@@ -32,11 +32,7 @@ class TwsTester2[
     O: org.apache.spark.sql.Encoder](
     val processor: StatefulProcessor[K, I, O]
 )(implicit sparkSession: SparkSession) {
-  
-  // Save original config values and set required configs for TwsTester2
-  private val originalStateStoreProvider = sparkSession.conf.getOption(SQLConf.STATE_STORE_PROVIDER_CLASS.key)
-  private val originalShufflePartitions = sparkSession.conf.getOption(SQLConf.SHUFFLE_PARTITIONS.key)
-  
+ 
   sparkSession.conf.set(SQLConf.STATE_STORE_PROVIDER_CLASS.key, classOf[InMemoryStateStoreProvider].getName)
   sparkSession.conf.set(SQLConf.SHUFFLE_PARTITIONS.key, "1")
   
@@ -110,17 +106,7 @@ class TwsTester2[
   }
   
   def stop(): Unit = {
-    query.stop()
-    
-    // Restore original config values
-    originalStateStoreProvider match {
-      case Some(value) => sparkSession.conf.set(SQLConf.STATE_STORE_PROVIDER_CLASS.key, value)
-      case None => sparkSession.conf.unset(SQLConf.STATE_STORE_PROVIDER_CLASS.key)
-    }
-    originalShufflePartitions match {
-      case Some(value) => sparkSession.conf.set(SQLConf.SHUFFLE_PARTITIONS.key, value)
-      case None => sparkSession.conf.unset(SQLConf.SHUFFLE_PARTITIONS.key)
-    }
+    query.stop() 
   }
   
   /**
