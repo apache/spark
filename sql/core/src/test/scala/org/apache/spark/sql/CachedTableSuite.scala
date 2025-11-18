@@ -68,6 +68,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
 
   override def sparkConf: SparkConf = super.sparkConf
     .set("spark.sql.catalog.testcat", classOf[InMemoryCatalog].getName)
+    .set("spark.sql.catalog.testcat.copyOnLoad", "true")
 
   setupTestData()
 
@@ -2454,6 +2455,79 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
       sql("USE testcat.ns1.ns2")
       spark.catalog.uncacheTable("tbl")
       assertNotCached(sql(s"SELECT * FROM $t"))
+    }
+  }
+
+  test("SPARK-53924: insert into DSv2 table invalidates cache of SQL temp view (plan)") {
+    checkInsertInvalidatesCacheOfSQLTempView(storePlan = true)
+  }
+
+  test("SPARK-53924: insert into DSv2 table invalidates cache of SQL temp view (text)") {
+    checkInsertInvalidatesCacheOfSQLTempView(storePlan = false)
+  }
+
+  private def checkInsertInvalidatesCacheOfSQLTempView(storePlan: Boolean): Unit = {
+    val t = "testcat.tbl"
+    withTable(t, "v") {
+      withSQLConf(SQLConf.STORE_ANALYZED_PLAN_FOR_VIEW.key -> storePlan.toString) {
+        sql(s"CREATE TABLE $t (id int, data string) USING foo")
+        sql(s"INSERT INTO $t VALUES (1, 'a'), (2, 'b')")
+
+        // create and cache SQL temp view
+        sql(s"CREATE TEMPORARY VIEW v AS SELECT id FROM $t")
+        sql("SELECT * FROM v").cache()
+
+        // verify view is cached
+        assertCached(sql("SELECT * FROM v"))
+        checkAnswer(sql("SELECT * FROM v"), Seq(Row(1), Row(2)))
+
+        // insert data into base table
+        sql(s"INSERT INTO $t VALUES (3, 'c'), (4, 'd')")
+
+        // verify cache was refreshed and will pick up new data
+        checkCacheLoading(sql(s"SELECT * FROM v"), isLoaded = false)
+
+        // verify view is recached correctly
+        assertCached(sql("SELECT * FROM v"))
+        checkAnswer(
+          sql("SELECT * FROM v"),
+          Seq(Row(1), Row(2), Row(3), Row(4)))
+      }
+    }
+  }
+
+  test("SPARK-53924: uncache DSv2 table uncaches SQL temp views (plan)") {
+    checkUncacheTableUncachesSQLTempView(storePlan = true)
+  }
+
+  test("SPARK-53924: uncache DSv2 table uncaches SQL temp views (text)") {
+    checkUncacheTableUncachesSQLTempView(storePlan = false)
+  }
+
+  private def checkUncacheTableUncachesSQLTempView(storePlan: Boolean): Unit = {
+    val t = "testcat.tbl"
+    withTable(t, "v") {
+      withSQLConf(SQLConf.STORE_ANALYZED_PLAN_FOR_VIEW.key -> storePlan.toString) {
+        sql(s"CREATE TABLE $t (id int, data string) USING foo")
+        sql(s"INSERT INTO $t VALUES (1, 'a'), (2, 'b')")
+
+        // cache table
+        sql(s"CACHE TABLE $t")
+        assertCached(sql(s"SELECT * FROM $t"))
+        checkAnswer(sql(s"SELECT * FROM $t"), Seq(Row(1, "a"), Row(2, "b")))
+
+        // create and cache SQL temp view
+        sql(s"CREATE TEMPORARY VIEW v AS SELECT id FROM $t")
+        sql("SELECT * FROM v").cache()
+        assertCached(sql("SELECT * FROM v"))
+        checkAnswer(sql("SELECT * FROM v"), Seq(Row(1), Row(2)))
+
+        // uncache table must invalidate view cache (cascading)
+        sql(s"UNCACHE TABLE $t")
+
+        // verify view is not cached anymore
+        assertNotCached(sql("SELECT * FROM v"))
+      }
     }
   }
 

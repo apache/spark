@@ -27,12 +27,14 @@ import org.apache.spark.sql.QueryTest.withQueryExecutionsCaptured
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, CreateTableAsSelect, LogicalPlan, ReplaceTableAsSelect}
 import org.apache.spark.sql.connector.catalog.{Column, ColumnDefaultValue, DefaultValue, Identifier, InMemoryTableCatalog, TableInfo}
+import org.apache.spark.sql.connector.catalog.BasicInMemoryTableCatalog
 import org.apache.spark.sql.connector.catalog.TableChange.{AddColumn, UpdateColumnDefaultValue}
 import org.apache.spark.sql.connector.expressions.{ApplyTransform, GeneralScalarExpression, LiteralValue, Transform}
 import org.apache.spark.sql.connector.expressions.filter.{AlwaysFalse, AlwaysTrue}
 import org.apache.spark.sql.execution.{QueryExecution, SparkPlan}
 import org.apache.spark.sql.execution.ExplainUtils.stripAQEPlan
 import org.apache.spark.sql.execution.datasources.v2.{AlterTableExec, CreateTableExec, DataSourceV2Relation, ReplaceTableExec}
+import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{BooleanType, CalendarIntervalType, DoubleType, IntegerType, StringType, TimestampType}
 import org.apache.spark.sql.util.QueryExecutionListener
@@ -46,6 +48,7 @@ class DataSourceV2DataFrameSuite
   override protected def sparkConf: SparkConf = super.sparkConf
     .set(SQLConf.ANSI_ENABLED, true)
     .set("spark.sql.catalog.testcat", classOf[InMemoryTableCatalog].getName)
+    .set("spark.sql.catalog.testcat.copyOnLoad", "true")
     .set("spark.sql.catalog.testcat2", classOf[InMemoryTableCatalog].getName)
 
   after {
@@ -1055,6 +1058,596 @@ class DataSourceV2DataFrameSuite
       case _ => left.getSql == right.getSql &&
         left.getExpression == right.getExpression &&
         (!compareValue || left.getValue == right.getValue)
+    }
+  }
+
+  test("SPARK-54157: detect table ID change after DataFrame analysis") {
+    val t = "testcat.ns1.ns2.tbl"
+    val ident = Identifier.of(Array("ns1", "ns2"), "tbl")
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, data STRING) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 'a'), (2, 'b')")
+
+      // create DataFrame and trigger analysis
+      val df = spark.table(t)
+
+      // capture original table
+      val originalTable = catalog("testcat").loadTable(ident)
+      val originalId = originalTable.id()
+
+      // drop and recreate table with same name and schema
+      sql(s"DROP TABLE $t")
+      sql(s"CREATE TABLE $t (id INT, data STRING) USING foo")
+      sql(s"INSERT INTO $t VALUES (3, 'c')")
+
+      // load new table
+      val newTable = catalog("testcat").loadTable(ident)
+      val newId = newTable.id()
+
+      // verify IDs are different
+      assert(originalId != newId)
+
+      // execution should fail with table ID mismatch
+      checkError(
+        exception = intercept[AnalysisException] { df.collect() },
+        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.TABLE_ID_MISMATCH",
+        sqlState = Some("51024"),
+        parameters = Map(
+          "tableName" -> "`testcat`.`ns1`.`ns2`.`tbl`",
+          "capturedTableId" -> originalId,
+          "currentTableId" -> newId))
+    }
+  }
+
+  test("SPARK-54157: detect column removal after DataFrame analysis") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, data STRING, extra STRING) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 'a', 'x')")
+
+      // create DataFrame and trigger analysis
+      val df = spark.table(t).select($"id", $"data", $"extra")
+
+      // remove column in table
+      sql(s"ALTER TABLE $t DROP COLUMN extra")
+
+      // execution should fail with column mismatch
+      checkError(
+        exception = intercept[AnalysisException] { df.collect() },
+        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMNS_MISMATCH",
+        parameters = Map(
+          "tableName" -> "`testcat`.`ns1`.`ns2`.`tbl`",
+          "errors" -> "\n- `extra` STRING has been removed"))
+    }
+  }
+
+  test("SPARK-54157: detect column addition after DataFrame analysis") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, data STRING) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 'a')")
+
+      // create DataFrame and trigger analysis
+      val df = spark.table(t)
+
+      // add columns to table
+      sql(s"ALTER TABLE $t ADD COLUMN new_col1 INT")
+      sql(s"ALTER TABLE $t ADD COLUMN new_col2 INT")
+
+      // execution should fail with column mismatch
+      checkError(
+        exception = intercept[AnalysisException] { df.collect() },
+        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMNS_MISMATCH",
+        parameters = Map(
+          "tableName" -> "`testcat`.`ns1`.`ns2`.`tbl`",
+          "errors" ->
+            """
+              |- `new_col1` INT has been added
+              |- `new_col2` INT has been added""".stripMargin))
+    }
+  }
+
+  test("SPARK-54157: detect multiple change types after DataFrame analysis") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (col1 INT, col2 STRING, col3 BOOLEAN, col4 STRING) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 'a', true, 'x')")
+
+      // create DataFrame and trigger analysis
+      val df = spark.table(t).select($"col1", $"col2", $"col3", $"col4")
+
+      // make multiple changes in table
+      sql(s"ALTER TABLE $t DROP COLUMN col4")
+      sql(s"ALTER TABLE $t ADD COLUMN col5 INT")
+
+      // execution should fail with column mismatch
+      checkError(
+        exception = intercept[AnalysisException] { df.collect() },
+        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMNS_MISMATCH",
+        parameters = Map(
+          "tableName" -> "`testcat`.`ns1`.`ns2`.`tbl`",
+          "errors" ->
+            """
+              |- `col4` STRING has been removed
+              |- `col5` INT has been added""".stripMargin))
+    }
+  }
+
+  test("SPARK-54157: cached temp view detects schema changes after analysis") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, data STRING) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 'a')")
+
+      // create a temp view on top of the DSv2 table and cache the view
+      spark.table(t).createOrReplaceTempView("v")
+      sql("CACHE TABLE v")
+      assertCached(sql("SELECT * FROM v"))
+
+      // change table schema after the view has been analyzed and cached
+      sql(s"ALTER TABLE $t ADD COLUMN extra INT")
+
+      // execution should fail with column mismatch even though the view is cached
+      checkError(
+        exception = intercept[AnalysisException] { spark.table("v").collect() },
+        condition = "INCOMPATIBLE_COLUMN_CHANGES_AFTER_VIEW_WITH_PLAN_CREATION",
+        parameters = Map(
+          "viewName" -> "`v`",
+          "tableName" -> "`testcat`.`ns1`.`ns2`.`tbl`",
+          "colType" -> "data",
+          "errors" ->
+            """
+              |- `extra` INT has been added""".stripMargin))
+    }
+  }
+
+  test("SPARK-54157: detect nested struct field changes after DataFrame analysis") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, person STRUCT<name: STRING, age: INT>) USING foo")
+      sql(s"INSERT INTO $t SELECT 1, named_struct('name', 'Alice', 'age', 30)")
+
+      // create DataFrame and trigger analysis
+      val df = spark.table(t)
+
+      // add nested field to struct column
+      sql(s"ALTER TABLE $t ADD COLUMN person.city STRING")
+
+      // execution should fail with column mismatch
+      checkError(
+        exception = intercept[AnalysisException] { df.collect() },
+        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMNS_MISMATCH",
+        parameters = Map(
+          "tableName" -> "`testcat`.`ns1`.`ns2`.`tbl`",
+          "errors" ->
+            ("\n- `person` type has changed from STRUCT<name: STRING, age: INT> " +
+              "to STRUCT<name: STRING, age: INT, city: STRING>")))
+    }
+  }
+
+  test("SPARK-54157: detect schema changes in join with same table") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, name STRING, value INT) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 'a', 10), (2, 'b', 20)")
+
+      // create first DataFrame
+      val df1 = spark.table(t)
+      checkAnswer(df1, Seq(Row(1, "a", 10), Row(2, "b", 20)))
+
+      // insert more data
+      sql(s"INSERT INTO $t VALUES (3, 'c', 30)")
+
+      // create second DataFrame with new data
+      val df2 = spark.table(t)
+      checkAnswer(df2, Seq(Row(1, "a", 10), Row(2, "b", 20), Row(3, "c", 30)))
+
+      // it should be valid to join df1 and df2
+      // Spark will refresh versions in joined DataFrame before execution
+      assert(df1.join(df2, df1("id") === df2("id")).count() == 3)
+
+      // df1 has been executed that must have pinned the version
+      checkAnswer(df1, Seq(Row(1, "a", 10), Row(2, "b", 20)))
+
+      // add column and insert more data
+      sql(s"ALTER TABLE $t ADD COLUMN extra STRING")
+      sql(s"INSERT INTO $t VALUES (4, 'd', 40, 'x')")
+
+      // create third DataFrame with new data and schema
+      val df3 = spark.table(t)
+      checkAnswer(df3, Seq(
+        Row(1, "a", 10, null),
+        Row(2, "b", 20, null),
+        Row(3, "c", 30, null),
+        Row(4, "d", 40, "x")))
+
+      // join between df1 and df3 should fail as refreshing versions is not
+      // sufficient because df1 was resolved with old schema
+      checkError(
+        exception = intercept[AnalysisException] {
+          df1.join(df3, df1("id") === df3("id")).collect()
+        },
+        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMNS_MISMATCH",
+        parameters = Map(
+          "tableName" -> "`testcat`.`ns1`.`ns2`.`tbl`",
+          "errors" -> "\n- `extra` STRING has been added"))
+
+      // DataFrame execution before joins must have pinned used versions
+      // subsequent version refreshes must not be visible in original DataFrames
+      checkAnswer(df1, Seq(Row(1, "a", 10), Row(2, "b", 20)))
+      checkAnswer(df2, Seq(Row(1, "a", 10), Row(2, "b", 20), Row(3, "c", 30)))
+      checkAnswer(df3, Seq(
+        Row(1, "a", 10, null),
+        Row(2, "b", 20, null),
+        Row(3, "c", 30, null),
+        Row(4, "d", 40, "x")))
+    }
+  }
+
+  test("SPARK-54157: join time travel and current version") {
+    val t = "testcat.ns1.ns2.tbl"
+    val ident = Identifier.of(Array("ns1", "ns2"), "tbl")
+    val version = "v1"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, name STRING, value INT) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 'a', 10), (2, 'b', 20)")
+
+      pinTable("testcat", ident, version)
+
+      // insert data
+      sql(s"INSERT INTO $t VALUES (3, 'c', 30)")
+
+      // create first DataFrame pointing to current version
+      val df1 = spark.table(t)
+      checkAnswer(df1, Seq(Row(1, "a", 10), Row(2, "b", 20), Row(3, "c", 30)))
+
+      // create second DataFrame with time travel
+      val df2 = spark.sql(s"SELECT * FROM $t VERSION AS OF '$version'")
+      checkAnswer(df2, Seq(Row(1, "a", 10), Row(2, "b", 20)))
+
+      // it should be valid to join df1 and df2 despite version mismatch
+      // as df2 was created using time travel
+      assert(df1.join(df2, df1("id") === df2("id")).count() == 2)
+    }
+  }
+
+  test("SPARK-54157: version is refreshed before cache lookup") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, name STRING, value INT) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 'a', 10), (2, 'b', 20)")
+
+      // create first DataFrame without executing it
+      val df1 = spark.table(t)
+
+      // insert data
+      sql(s"INSERT INTO $t VALUES (3, 'c', 30)")
+
+      // create second DataFrame and cache it
+      val df2 = spark.table(t)
+      df2.cache()
+      assertCached(df2)
+      checkAnswer(df2, Seq(Row(1, "a", 10), Row(2, "b", 20), Row(3, "c", 30)))
+
+      // execute first DataFrame that should trigger version refresh
+      assertCached(df1)
+      checkAnswer(df1, Seq(Row(1, "a", 10), Row(2, "b", 20), Row(3, "c", 30)))
+    }
+  }
+
+  test("SPARK-54157: replace table as select reading from same table") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, name STRING, data STRING, extra INT) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 'a', 'x', 100), (2, 'b', 'y', 200), (3, 'c', 'z', 300)")
+
+      checkAnswer(
+        spark.table(t),
+        Seq(Row(1, "a", "x", 100), Row(2, "b", "y", 200), Row(3, "c", "z", 300)))
+
+      // replace table with subset of columns from itself using DataFrame API
+      // RTAS drops original table before executing query so refresh is special
+      val df = spark.table(t).select($"id", $"name")
+      df.writeTo(t).replace()
+
+      // verify table was replaced with only selected columns
+      checkAnswer(
+        spark.table(t),
+        Seq(Row(1, "a"), Row(2, "b"), Row(3, "c")))
+    }
+  }
+
+  test("SPARK-54157: insert overwrite reading from same table") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, value INT, category STRING) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 10, 'A'), (2, 20, 'B'), (3, 30, 'A')")
+
+      checkAnswer(
+        spark.table(t),
+        Seq(Row(1, 10, "A"), Row(2, 20, "B"), Row(3, 30, "A")))
+
+      // overwrite with transformed data from same table using DataFrame API
+      val df = spark.table(t)
+        .filter($"category" === "A")
+        .select($"id", ($"value" * 2).as("value"), $"category")
+      df.writeTo(t).overwrite(lit(true))
+
+      // verify table was overwritten with transformed data
+      checkAnswer(
+        spark.table(t),
+        Seq(Row(1, 20, "A"), Row(3, 60, "A")))
+    }
+  }
+
+  test("SPARK-53924: temp view on DSv2 table detects added columns") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id bigint, data string) USING foo")
+
+      // create temp view using DataFrame API
+      spark.table(t).createOrReplaceTempView("v")
+      checkAnswer(spark.table("v"), Seq.empty)
+
+      // add column to underlying table
+      sql(s"ALTER TABLE $t ADD COLUMN age int")
+
+      // accessing temp view should detect schema change
+      checkError(
+        exception = intercept[AnalysisException] { spark.table("v").collect() },
+        condition = "INCOMPATIBLE_COLUMN_CHANGES_AFTER_VIEW_WITH_PLAN_CREATION",
+        parameters = Map(
+          "viewName" -> "`v`",
+          "tableName" -> "`testcat`.`ns1`.`ns2`.`tbl`",
+          "colType" -> "data",
+          "errors" -> "\n- `age` INT has been added"))
+    }
+  }
+
+  test("SPARK-53924: temp view on DSv2 table detects removed columns") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id bigint, data string, age int) USING foo")
+
+      // create temp view
+      spark.table(t).createOrReplaceTempView("v")
+      checkAnswer(spark.table("v"), Seq.empty)
+
+      // drop column from underlying table
+      sql(s"ALTER TABLE $t DROP COLUMN age")
+
+      // accessing temp view should detect schema change
+      checkError(
+        exception = intercept[AnalysisException] { spark.table("v").collect() },
+        condition = "INCOMPATIBLE_COLUMN_CHANGES_AFTER_VIEW_WITH_PLAN_CREATION",
+        parameters = Map(
+          "viewName" -> "`v`",
+          "tableName" -> "`testcat`.`ns1`.`ns2`.`tbl`",
+          "colType" -> "data",
+          "errors" -> "\n- `age` INT has been removed"))
+    }
+  }
+
+  test("SPARK-53924: temp view on DSv2 table detects nullability changes") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id bigint, data string NOT NULL) USING foo")
+
+      // create temp view
+      spark.table(t).createOrReplaceTempView("v")
+      checkAnswer(spark.table("v"), Seq.empty)
+
+      // change nullability constraint using ALTER TABLE
+      sql(s"ALTER TABLE $t ALTER COLUMN data DROP NOT NULL")
+
+      // accessing temp view should detect schema change
+      checkError(
+        exception = intercept[AnalysisException] { spark.table("v").collect() },
+        condition = "INCOMPATIBLE_COLUMN_CHANGES_AFTER_VIEW_WITH_PLAN_CREATION",
+        parameters = Map(
+          "viewName" -> "`v`",
+          "tableName" -> "`testcat`.`ns1`.`ns2`.`tbl`",
+          "colType" -> "data",
+          "errors" -> "\n- `data` type has changed from STRING NOT NULL to STRING"))
+    }
+  }
+
+  test("SPARK-53924: temp view on DSv2 table accepts table ID changes") {
+    val t = "testcat.ns1.ns2.tbl"
+    val ident = Identifier.of(Array("ns1", "ns2"), "tbl")
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id bigint, data string) USING foo")
+      val df = Seq((1L, "a"), (2L, "b")).toDF("id", "data")
+      df.write.insertInto(t)
+
+      // create temp view
+      spark.table(t).createOrReplaceTempView("v")
+      checkAnswer(spark.table("v"), df)
+
+      // capture the original table ID
+      val originalTableId = catalog("testcat").loadTable(ident).id
+
+      // drop and recreate table (this changes the table ID)
+      sql(s"DROP TABLE $t")
+      sql(s"CREATE TABLE $t (id bigint, data string) USING foo")
+
+      // verify table ID changed
+      val newTableId = catalog("testcat").loadTable(ident).id
+      assert(originalTableId != newTableId)
+
+      // accessing temp view should work despite table ID change (returns empty data)
+      checkAnswer(spark.table("v"), Seq.empty)
+
+      // insert new data and verify view reflects it
+      val newDF = Seq((3L, "c"), (4L, "d")).toDF("id", "data")
+      newDF.write.insertInto(t)
+      checkAnswer(spark.table("v"), newDF)
+    }
+  }
+
+  test("SPARK-53924: createOrReplaceTempView works after schema change") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id bigint) USING foo")
+
+      spark.table(t).createOrReplaceTempView("v")
+      checkAnswer(spark.table("v"), Seq.empty)
+
+      // alter table
+      sql(s"ALTER TABLE $t ADD COLUMN data string")
+
+      // old view fails
+      intercept[AnalysisException] { spark.table("v").collect() }
+
+      // recreate view with updated schema
+      spark.table(t).createOrReplaceTempView("v")
+      checkAnswer(spark.table("v"), Seq.empty)
+
+      // now it should work with new schema
+      val df = Seq((1L, "a"), (2L, "b")).toDF("id", "data")
+      df.write.insertInto(t)
+      checkAnswer(spark.table("v"), df)
+    }
+  }
+
+
+  test("SPARK-53924: temp view on DSv2 table with read options") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id bigint, data string) USING foo")
+
+      // create temp view with options
+      val df = spark.read.option("fakeOption", "testValue").table(t)
+      df.createOrReplaceTempView("v")
+
+      // verify options are preserved in the view
+      val options = spark.table("v").queryExecution.analyzed.collectFirst {
+        case d: DataSourceV2Relation => d.options
+      }.get
+      assert(options.get("fakeOption") == "testValue")
+
+      // schema changes should still be detected
+      sql(s"ALTER TABLE $t ADD COLUMN age int")
+
+      // accessing temp view should detect schema change
+      checkError(
+        exception = intercept[AnalysisException] { spark.table("v").collect() },
+        condition = "INCOMPATIBLE_COLUMN_CHANGES_AFTER_VIEW_WITH_PLAN_CREATION",
+        parameters = Map(
+          "viewName" -> "`v`",
+          "tableName" -> "`testcat`.`ns1`.`ns2`.`tbl`",
+          "colType" -> "data",
+          "errors" -> "\n- `age` INT has been added"))
+    }
+  }
+
+  test("SPARK-53924: temp view on DSv2 table created using SQL with plan detects changes") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      withSQLConf(SQLConf.STORE_ANALYZED_PLAN_FOR_VIEW.key -> "true") {
+        sql(s"CREATE TABLE $t (id bigint, data string) USING foo")
+
+        // create temp view using SQL that should capture plan
+        sql(s"CREATE OR REPLACE TEMPORARY VIEW v AS SELECT * FROM $t")
+        checkAnswer(spark.table("v"), Seq.empty)
+
+        // verify that view stores analyzed plan
+        val Some(view) = spark.sessionState.catalog.getRawTempView("v")
+        assert(view.plan.isDefined)
+
+        // add column to underlying table
+        sql(s"ALTER TABLE $t ADD COLUMN age int")
+
+        // accessing temp view should detect schema change
+        checkError(
+          exception = intercept[AnalysisException] { spark.table("v").collect() },
+          condition = "INCOMPATIBLE_COLUMN_CHANGES_AFTER_VIEW_WITH_PLAN_CREATION",
+          parameters = Map(
+            "viewName" -> "`v`",
+            "tableName" -> "`testcat`.`ns1`.`ns2`.`tbl`",
+            "colType" -> "data",
+            "errors" -> "\n- `age` INT has been added"))
+      }
+    }
+  }
+
+  test("SPARK-53924: temp view on DSv2 table detects VARCHAR/CHAR type changes") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id bigint, name VARCHAR(10)) USING foo")
+
+      // create temp view
+      spark.table(t).createOrReplaceTempView("v")
+      checkAnswer(spark.table("v"), Seq.empty)
+
+      // change VARCHAR(10) to VARCHAR(20)
+      sql(s"ALTER TABLE $t ALTER COLUMN name TYPE VARCHAR(20)")
+
+      // accessing temp view should detect type change
+      checkError(
+        exception = intercept[AnalysisException] { spark.table("v").collect() },
+        condition = "INCOMPATIBLE_COLUMN_CHANGES_AFTER_VIEW_WITH_PLAN_CREATION",
+        parameters = Map(
+          "viewName" -> "`v`",
+          "tableName" -> "`testcat`.`ns1`.`ns2`.`tbl`",
+          "colType" -> "data",
+          "errors" -> "\n- `name` type has changed from VARCHAR(10) to VARCHAR(20)"))
+    }
+  }
+
+  test("SPARK-53924: temp view on DSv2 table works after inserting data") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id bigint, data string) USING foo")
+
+      // create temp view
+      spark.table(t).createOrReplaceTempView("v")
+      checkAnswer(spark.table("v"), Seq.empty)
+
+      // insert data into underlying table (no schema change)
+      val df = Seq((1L, "a"), (2L, "b")).toDF("id", "data")
+      df.write.insertInto(t)
+
+      // accessing temp view should work and reflect new data
+      checkAnswer(spark.table("v"), df)
+
+      // insert more data
+      val df2 = Seq((3L, "c"), (4L, "d")).toDF("id", "data")
+      df2.write.insertInto(t)
+
+      // view should reflect all data
+      checkAnswer(spark.table("v"), df.union(df2))
+    }
+  }
+
+  test("cached DSv2 table DataFrame is refreshed and reused after insert") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id bigint, data string) USING foo")
+      val df1 = Seq((1L, "a"), (2L, "b")).toDF("id", "data")
+      df1.write.insertInto(t)
+
+      // cache DataFrame pointing to table
+      val readDF1 = spark.table(t)
+      readDF1.cache()
+      assertCached(readDF1)
+      checkAnswer(readDF1, Seq(Row(1L, "a"), Row(2L, "b")))
+
+      // insert more data, invalidating and refreshing cache entry
+      val df2 = Seq((3L, "c"), (4L, "d")).toDF("id", "data")
+      df2.write.insertInto(t)
+
+      // verify underlying plan is recached and picks up new data
+      val readDF2 = spark.table(t)
+      assertCached(readDF2)
+      checkAnswer(readDF2, Seq(Row(1L, "a"), Row(2L, "b"), Row(3L, "c"), Row(4L, "d")))
+    }
+  }
+
+  private def pinTable(catalogName: String, ident: Identifier, version: String): Unit = {
+    catalog(catalogName) match {
+      case inMemory: BasicInMemoryTableCatalog => inMemory.pinTable(ident, version)
+      case _ => fail(s"can't pin $ident in $catalogName")
     }
   }
 }
