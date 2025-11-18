@@ -2089,10 +2089,6 @@ class SessionCatalog(
       arguments: Seq[Expression],
       isBuiltin: FunctionIdentifier => Boolean,
       registry: FunctionRegistryBase[T]): Option[T] = synchronized {
-    // ST functions are behind a feature flag while the geospatial module is under development.
-    if (!SQLConf.get.geospatialEnabled && name.toLowerCase(Locale.ROOT).startsWith("st_")) {
-      return None
-    }
     val funcIdent = FunctionIdentifier(name)
     if (!registry.functionExists(funcIdent)) {
       None

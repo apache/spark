@@ -1258,8 +1258,8 @@ case class Cast(
         case FloatType => castToFloat(from)
         case LongType => castToLong(from)
         case DoubleType => castToDouble(from)
-        case _: GeographyType if SQLConf.get.geospatialEnabled => identity
-        case _: GeometryType if SQLConf.get.geospatialEnabled => castToGeometry(from)
+        case _: GeographyType => identity
+        case _: GeometryType => castToGeometry(from)
         case array: ArrayType =>
           castArray(from.asInstanceOf[ArrayType].elementType, array.elementType)
         case map: MapType => castMap(from.asInstanceOf[MapType], map)
@@ -1368,8 +1368,8 @@ case class Cast(
     case FloatType => castToFloatCode(from, ctx)
     case LongType => castToLongCode(from, ctx)
     case DoubleType => castToDoubleCode(from, ctx)
-    case _: GeographyType if SQLConf.get.geospatialEnabled => (c, evPrim, _) => code"$evPrim = $c;"
-    case _: GeometryType if SQLConf.get.geospatialEnabled => castToGeometryCode(from)
+    case _: GeographyType => (c, evPrim, _) => code"$evPrim = $c;"
+    case _: GeometryType => castToGeometryCode(from)
 
     case array: ArrayType =>
       castArrayCode(from.asInstanceOf[ArrayType].elementType, array.elementType, ctx)

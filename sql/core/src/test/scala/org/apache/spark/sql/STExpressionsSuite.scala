@@ -590,16 +590,16 @@ class STExpressionsSuite
 
   test("verify that geospatial functions are disabled when the config is off") {
     withSQLConf(SQLConf.GEOSPATIAL_ENABLED.key -> "false") {
-      val dummyArgument = "abcd"
-      val childExpression = Literal.create(dummyArgument)
+      val dummyArgument = "NULL"
+      val dummyExpression = Literal.create(null)
 
       // Verify that catalyst ST expressions throw the expected exception.
       Seq(
-        ST_AsBinary(childExpression),
-        ST_GeogFromWKB(childExpression),
-        ST_GeomFromWKB(childExpression),
-        ST_Srid(childExpression),
-        ST_SetSrid(ST_GeogFromWKB(childExpression), childExpression)
+        ST_AsBinary(dummyExpression),
+        ST_GeogFromWKB(dummyExpression),
+        ST_GeomFromWKB(dummyExpression),
+        ST_Srid(dummyExpression),
+        ST_SetSrid(ST_GeogFromWKB(dummyExpression), dummyExpression)
       ).foreach { expr =>
         checkError(
           exception = intercept[AnalysisException] {
@@ -611,24 +611,17 @@ class STExpressionsSuite
 
       // Verify that SQL ST functions throw the expected exception.
       Seq(
-        s"ST_AsBinary('$dummyArgument')",
-        s"ST_GeogFromWKB('$dummyArgument')",
-        s"ST_GeomFromWKB('$dummyArgument')",
-        s"ST_Srid('$dummyArgument')",
-        s"ST_SetSrid('$dummyArgument', '$dummyArgument')"
+        s"ST_AsBinary($dummyArgument)",
+        s"ST_GeogFromWKB($dummyArgument)",
+        s"ST_GeomFromWKB($dummyArgument)",
+        s"ST_Srid($dummyArgument)",
+        s"ST_SetSrid($dummyArgument, $dummyArgument)"
       ).foreach { query =>
         checkError(
           exception = intercept[AnalysisException] {
             sql(s"SELECT $query").collect()
           },
-          condition = "ROUTINE_NOT_FOUND",
-          // scalastyle:off caselocale
-          parameters = Map("routineName" -> s"`default`.`${query.split('(').head.toLowerCase}`"),
-          // scalastyle:on caselocale
-          queryContext = Array(ExpectedContext(
-            fragment = query,
-            start = 7,
-            stop = 7 + query.length - 1))
+          condition = "UNSUPPORTED_FEATURE.GEOSPATIAL_DISABLED"
         )
       }
     }

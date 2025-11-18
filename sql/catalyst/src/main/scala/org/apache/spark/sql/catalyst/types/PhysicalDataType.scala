@@ -20,7 +20,6 @@ package org.apache.spark.sql.catalyst.types
 import scala.reflect.runtime.universe.TypeTag
 import scala.reflect.runtime.universe.typeTag
 
-import org.apache.spark.annotation.Unstable
 import org.apache.spark.sql.catalyst.expressions.{Ascending, BoundReference, InterpretedOrdering, SortOrder}
 import org.apache.spark.sql.catalyst.util.{ArrayData, CollationFactory, MapData, SQLOrderingUtil}
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -415,22 +414,18 @@ object UninitializedPhysicalType extends PhysicalDataType {
   @transient private[sql] lazy val tag = typeTag[InternalType]
 }
 
-@Unstable
 case class PhysicalGeographyType() extends PhysicalDataType {
   private[sql] type InternalType = GeographyVal
   @transient private[sql] lazy val tag = typeTag[InternalType]
   private[sql] val ordering = implicitly[Ordering[InternalType]]
 }
 
-@Unstable
 object PhysicalGeographyType extends PhysicalGeographyType
 
-@Unstable
 case class PhysicalGeometryType() extends PhysicalDataType {
   private[sql] type InternalType = GeometryVal
   @transient private[sql] lazy val tag = typeTag[InternalType]
   private[sql] val ordering = implicitly[Ordering[InternalType]]
 }
 
-@Unstable
 object PhysicalGeometryType extends PhysicalGeometryType

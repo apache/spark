@@ -6537,7 +6537,7 @@
       },
       "GEOSPATIAL_DISABLED" : {
         "message" : [
-          "Geospatial feature is disabled. Set \"spark.sql.geospatial.enabled=true\" to enable."
+          "Geospatial feature is disabled."
         ]
       },
       "HIVE_TABLE_TYPE" : {

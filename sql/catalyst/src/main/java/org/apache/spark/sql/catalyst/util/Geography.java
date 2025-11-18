@@ -16,7 +16,6 @@
  */
 package org.apache.spark.sql.catalyst.util;
 
-import org.apache.spark.annotation.Unstable;
 import org.apache.spark.unsafe.types.GeographyVal;
 
 import java.nio.ByteBuffer;
@@ -24,7 +23,6 @@ import java.nio.ByteOrder;
 import java.util.Arrays;
 
 // Catalyst-internal server-side execution wrapper for GEOGRAPHY.
-@Unstable
 public final class Geography implements Geo {
 
   /** Geography internal implementation. */

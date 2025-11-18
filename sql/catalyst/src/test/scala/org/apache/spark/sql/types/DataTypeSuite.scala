@@ -280,27 +280,25 @@ class DataTypeSuite extends SparkFunSuite with SQLHelper {
   checkDataTypeFromJson(VarcharType(10))
   checkDataTypeFromDDL(VarcharType(11))
 
-  withSQLConf("spark.sql.geospatial.enabled" -> "true") {
-    // GEOMETRY type with default fixed SRID.
-    checkDataTypeFromJson(GeometryType(GeometryType.GEOMETRY_DEFAULT_SRID))
-    checkDataTypeFromDDL(GeometryType(GeometryType.GEOMETRY_DEFAULT_SRID))
+  // GEOMETRY type with default fixed SRID.
+  checkDataTypeFromJson(GeometryType(GeometryType.GEOMETRY_DEFAULT_SRID))
+  checkDataTypeFromDDL(GeometryType(GeometryType.GEOMETRY_DEFAULT_SRID))
 
-    // GEOMETRY type with non-default fixed SRID.
-    checkDataTypeFromJson(GeometryType(3857))
-    checkDataTypeFromDDL(GeometryType(3857))
+  // GEOMETRY type with non-default fixed SRID.
+  checkDataTypeFromJson(GeometryType(3857))
+  checkDataTypeFromDDL(GeometryType(3857))
 
-    // GEOMETRY type with mixed SRID.
-    checkDataTypeFromJson(GeometryType("ANY"))
-    checkDataTypeFromDDL(GeometryType("ANY"))
+  // GEOMETRY type with mixed SRID.
+  checkDataTypeFromJson(GeometryType("ANY"))
+  checkDataTypeFromDDL(GeometryType("ANY"))
 
-    // GEOGRAPHY type with default fixed SRID.
-    checkDataTypeFromJson(GeographyType(GeographyType.GEOGRAPHY_DEFAULT_SRID))
-    checkDataTypeFromDDL(GeographyType(GeographyType.GEOGRAPHY_DEFAULT_SRID))
+  // GEOGRAPHY type with default fixed SRID.
+  checkDataTypeFromJson(GeographyType(GeographyType.GEOGRAPHY_DEFAULT_SRID))
+  checkDataTypeFromDDL(GeographyType(GeographyType.GEOGRAPHY_DEFAULT_SRID))
 
-    // GEOGRAPHY type with mixed SRID.
-    checkDataTypeFromJson(GeographyType("ANY"))
-    checkDataTypeFromDDL(GeographyType("ANY"))
-  }
+  // GEOGRAPHY type with mixed SRID.
+  checkDataTypeFromJson(GeographyType("ANY"))
+  checkDataTypeFromDDL(GeographyType("ANY"))
 
   dayTimeIntervalTypes.foreach(checkDataTypeFromJson)
   yearMonthIntervalTypes.foreach(checkDataTypeFromJson)
