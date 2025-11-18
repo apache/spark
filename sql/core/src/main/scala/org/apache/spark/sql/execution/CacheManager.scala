@@ -22,6 +22,7 @@ import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.spark.internal.{Logging, MessageWithContext}
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
+import org.apache.spark.sql.catalyst.analysis.V2TableReference
 import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
 import org.apache.spark.sql.catalyst.expressions.{Attribute, SubqueryExpression}
 import org.apache.spark.sql.catalyst.optimizer.EliminateResolvedHint
@@ -35,6 +36,7 @@ import org.apache.spark.sql.execution.columnar.InMemoryRelation
 import org.apache.spark.sql.execution.command.CommandUtils
 import org.apache.spark.sql.execution.datasources.{FileIndex, HadoopFsRelation, LogicalRelation, LogicalRelationWithTable}
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, ExtractV2Table, FileTable}
+import org.apache.spark.sql.execution.datasources.v2.V2TableRefreshUtil
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.storage.StorageLevel.MEMORY_AND_DISK
@@ -250,6 +252,9 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
         val nameInCache = v2Ident.toQualifiedNameParts(catalog)
         isSameName(nameInCache) && (includeTimeTravel || timeTravelSpec.isEmpty)
 
+      case r: V2TableReference =>
+        isSameName(r.identifier.toQualifiedNameParts(r.catalog))
+
       case v: View =>
         isSameName(v.desc.identifier.nameParts)
 
@@ -348,11 +353,12 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
     needToRecache.foreach { cd =>
       cd.cachedRepresentation.cacheBuilder.clearCache()
       val sessionWithConfigsOff = getOrCloneSessionWithConfigsOff(spark)
-      val newCache = sessionWithConfigsOff.withActive {
-        val qe = sessionWithConfigsOff.sessionState.executePlan(cd.plan)
-        InMemoryRelation(cd.cachedRepresentation.cacheBuilder, qe)
+      val (newKey, newCache) = sessionWithConfigsOff.withActive {
+        val refreshedPlan = V2TableRefreshUtil.refresh(cd.plan)
+        val qe = sessionWithConfigsOff.sessionState.executePlan(refreshedPlan)
+        qe.normalized -> InMemoryRelation(cd.cachedRepresentation.cacheBuilder, qe)
       }
-      val recomputedPlan = cd.copy(cachedRepresentation = newCache)
+      val recomputedPlan = cd.copy(plan = newKey, cachedRepresentation = newCache)
       this.synchronized {
         if (lookupCachedDataInternal(recomputedPlan.plan).nonEmpty) {
           logWarning("While recaching, data was already added to cache.")

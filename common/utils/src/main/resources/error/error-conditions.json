@@ -2128,6 +2128,15 @@
     ],
     "sqlState" : "42000"
   },
+  "INCOMPATIBLE_COLUMN_CHANGES_AFTER_VIEW_WITH_PLAN_CREATION" : {
+    "message" : [
+      "View <viewName> plan references table <tableName> whose <colType> columns changed since the view plan was initially captured.",
+      "Column changes:",
+      "<errors>",
+      "This indicates the table has evolved and the view based on the plan must be recreated."
+    ],
+    "sqlState" : "51024"
+  },
   "INCOMPATIBLE_COLUMN_TYPE" : {
     "message" : [
       "<operator> can only be performed on tables with compatible column types. The <columnOrdinalNumber> column of the <tableOrdinalNumber> table is <dataType1> type which is not compatible with <dataType2> at the same column of the first table.<hint>."
@@ -2209,6 +2218,31 @@
       "View <datasetIdentifier> is a streaming view and must be referenced using SparkSession#readStream. This check can be disabled by setting Spark conf pipelines.incompatibleViewCheck.enabled = false."
     ],
     "sqlState" : "42000"
+  },
+  "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS" : {
+    "message" : [
+      "Detected incompatible changes to table <tableName> after DataFrame/Dataset has been resolved and analyzed, meaning the underlying plan is out of sync. Please, re-create DataFrame/Dataset before attempting to execute the query again."
+    ],
+    "subClass" : {
+      "COLUMNS_MISMATCH" : {
+        "message" : [
+          "Data columns have changed:",
+          "<errors>"
+        ]
+      },
+      "METADATA_COLUMNS_MISMATCH" : {
+        "message" : [
+          "Metadata columns have changed:",
+          "<errors>"
+        ]
+      },
+      "TABLE_ID_MISMATCH" : {
+        "message" : [
+          "Table ID has changed from <capturedTableId> to <currentTableId>."
+        ]
+      }
+    },
+    "sqlState" : "51024"
   },
   "INCOMPATIBLE_VIEW_SCHEMA_CHANGE" : {
     "message" : [
@@ -5002,6 +5036,12 @@
     ],
     "sqlState" : "42000"
   },
+  "PIPELINE_STORAGE_ROOT_INVALID" : {
+    "message" : [
+      "Pipeline storage root must be an absolute path with a URI scheme (e.g., file://, s3a://, hdfs://). Got: `<storage_root>`."
+    ],
+    "sqlState" : "42K03"
+  },
   "PIPE_OPERATOR_AGGREGATE_EXPRESSION_CONTAINS_NO_AGGREGATE_FUNCTION" : {
     "message" : [
       "Non-grouping expression <expr> is provided as an argument to the |> AGGREGATE pipe operator but does not contain any aggregate function; please update it to include an aggregate function and then retry the query again."
@@ -6927,6 +6967,12 @@
   "UNSUPPORTED_PARTITION_TRANSFORM" : {
     "message" : [
       "Unsupported partition transform: <transform>. The supported transforms are `identity`, `bucket`, and `clusterBy`. Ensure your transform expression uses one of these."
+    ],
+    "sqlState" : "0A000"
+  },
+  "UNSUPPORTED_PIPELINE_SPARK_SQL_COMMAND" : {
+    "message" : [
+      "'<command>' is not supported in spark.sql(\"...\") API in Spark Declarative Pipeline."
     ],
     "sqlState" : "0A000"
   },

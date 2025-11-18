@@ -1185,6 +1185,18 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       }
     }
 
+    private def resolveAsV2Relation(plan: LogicalPlan): Option[DataSourceV2Relation] = {
+      plan match {
+        case ref: V2TableReference =>
+          EliminateSubqueryAliases(relationResolution.resolveReference(ref)) match {
+            case r: DataSourceV2Relation => Some(r)
+            case _ => None
+          }
+        case r: DataSourceV2Relation => Some(r)
+        case _ => None
+      }
+    }
+
     def apply(plan: LogicalPlan)
         : LogicalPlan = plan.resolveOperatorsUpWithPruning(AlwaysProcess.fn, ruleId) {
       case i @ InsertIntoStatement(table, _, _, _, _, _, _) =>
@@ -1210,19 +1222,23 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
             resolveRelation(u).map(unwrapRelationPlan).map {
               case v: View => throw QueryCompilationErrors.writeIntoViewNotAllowedError(
                 v.desc.identifier, write)
-              case r: DataSourceV2Relation => write.withNewTable(r)
               case u: UnresolvedCatalogRelation =>
                 throw QueryCompilationErrors.writeIntoV1TableNotAllowedError(
                   u.tableMeta.identifier, write)
-              case other =>
-                throw QueryCompilationErrors.writeIntoTempViewNotAllowedError(
-                  u.multipartIdentifier.quoted)
+              case plan =>
+                resolveAsV2Relation(plan).map(write.withNewTable).getOrElse {
+                  throw QueryCompilationErrors.writeIntoTempViewNotAllowedError(
+                    u.multipartIdentifier.quoted)
+                }
             }.getOrElse(write)
           case _ => write
         }
 
       case u: UnresolvedRelation =>
         resolveRelation(u).map(resolveViews(_, u.options)).getOrElse(u)
+
+      case r: V2TableReference =>
+        relationResolution.resolveReference(r)
 
       case r @ RelationTimeTravel(u: UnresolvedRelation, timestamp, version)
           if timestamp.forall(ts => ts.resolved && !SubqueryExpression.hasSubquery(ts)) =>
