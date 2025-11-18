@@ -42,7 +42,6 @@ import org.apache.spark.sql.pipelines.logging.EventLevel
 import org.apache.spark.sql.pipelines.utils.{EventVerificationTestHelpers, TestPipelineUpdateContextMixin}
 import org.apache.spark.sql.types.StructType
 
-
 /**
  * Test suite that starts a Spark Connect server and executes Spark Declarative Pipelines Python
  * code to define tables in the pipeline.
