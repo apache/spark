@@ -2737,8 +2737,35 @@ class DataSourceV2SQLSuiteV1Filter
     // Session catalog is used.
     withTable("t") {
       sql("CREATE TABLE t(k int) USING json")
+
+      // Verify no comment initially
+      val noCommentRows1 = sql("DESC EXTENDED t").toDF("k", "v", "c")
+        .where("k='Comment'")
+        .collect()
+      assert(noCommentRows1.isEmpty || noCommentRows1.head.getString(1).isEmpty,
+        "Expected no comment initially")
+
+      // Set a comment
       checkTableComment("t", "minor revision")
+
+      // Verify comment is set
+      val commentRows1 = sql("DESC EXTENDED t").toDF("k", "v", "c")
+        .where("k='Comment'")
+        .collect()
+      assert(commentRows1.nonEmpty && commentRows1.head.getString(1) === "minor revision",
+        "Expected comment to be set to 'minor revision'")
+
+      // Remove comment by setting to NULL
       checkTableComment("t", null)
+
+      // Verify comment is removed
+      val removedCommentRows1 = sql("DESC EXTENDED t").toDF("k", "v", "c")
+        .where("k='Comment'")
+        .collect()
+      assert(removedCommentRows1.isEmpty || removedCommentRows1.head.getString(1).isEmpty,
+        "Expected comment to be removed")
+
+      // Set comment to literal "NULL" string
       checkTableComment("t", "NULL")
     }
     val sql1 = "COMMENT ON TABLE abc IS NULL"
@@ -2751,8 +2778,35 @@ class DataSourceV2SQLSuiteV1Filter
     // V2 non-session catalog is used.
     withTable("testcat.ns1.ns2.t") {
       sql("CREATE TABLE testcat.ns1.ns2.t(k int) USING foo")
+
+      // Verify no comment initially
+      val noCommentRows2 = sql("DESC EXTENDED testcat.ns1.ns2.t").toDF("k", "v", "c")
+        .where("k='Comment'")
+        .collect()
+      assert(noCommentRows2.isEmpty || noCommentRows2.head.getString(1).isEmpty,
+        "Expected no comment initially for testcat table")
+
+      // Set a comment
       checkTableComment("testcat.ns1.ns2.t", "minor revision")
+
+      // Verify comment is set
+      val commentRows2 = sql("DESC EXTENDED testcat.ns1.ns2.t").toDF("k", "v", "c")
+        .where("k='Comment'")
+        .collect()
+      assert(commentRows2.nonEmpty && commentRows2.head.getString(1) === "minor revision",
+        "Expected comment to be set to 'minor revision' for testcat table")
+
+      // Remove comment by setting to NULL
       checkTableComment("testcat.ns1.ns2.t", null)
+
+      // Verify comment is removed
+      val removedCommentRows2 = sql("DESC EXTENDED testcat.ns1.ns2.t").toDF("k", "v", "c")
+        .where("k='Comment'")
+        .collect()
+      assert(removedCommentRows2.isEmpty || removedCommentRows2.head.getString(1).isEmpty,
+        "Expected comment to be removed from testcat table")
+
+      // Set comment to literal "NULL" string
       checkTableComment("testcat.ns1.ns2.t", "NULL")
     }
     val sql2 = "COMMENT ON TABLE testcat.abc IS NULL"
@@ -2778,10 +2832,19 @@ class DataSourceV2SQLSuiteV1Filter
 
   private def checkTableComment(tableName: String, comment: String): Unit = {
     sql(s"COMMENT ON TABLE $tableName IS " + Option(comment).map("'" + _ + "'").getOrElse("NULL"))
-    val expectedComment = Option(comment).getOrElse("")
-    assert(sql(s"DESC extended $tableName").toDF("k", "v", "c")
-      .where(s"k='${TableCatalog.PROP_COMMENT.capitalize}'")
-      .head().getString(1) === expectedComment)
+    if (comment == null) {
+      // When comment is NULL, the property should be removed completely
+      val commentRows = sql(s"DESC extended $tableName").toDF("k", "v", "c")
+        .where("k='Comment'")
+        .collect()
+      assert(commentRows.isEmpty || commentRows.head.getString(1).isEmpty,
+        "Expected comment to be removed")
+    } else {
+      val expectedComment = comment
+      assert(sql(s"DESC extended $tableName").toDF("k", "v", "c")
+        .where("k='Comment'")
+        .head().getString(1) === expectedComment)
+    }
   }
 
   test("SPARK-31015: star expression should work for qualified column names for v2 tables") {
