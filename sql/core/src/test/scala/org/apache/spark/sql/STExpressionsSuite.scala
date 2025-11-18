@@ -591,24 +591,6 @@ class STExpressionsSuite
   test("verify that geospatial functions are disabled when the config is off") {
     withSQLConf(SQLConf.GEOSPATIAL_ENABLED.key -> "false") {
       val dummyArgument = "NULL"
-      val dummyExpression = Literal.create(null)
-
-      // Verify that catalyst ST expressions throw the expected exception.
-      Seq(
-        ST_AsBinary(dummyExpression),
-        ST_GeogFromWKB(dummyExpression),
-        ST_GeomFromWKB(dummyExpression),
-        ST_Srid(dummyExpression),
-        ST_SetSrid(ST_GeogFromWKB(dummyExpression), dummyExpression)
-      ).foreach { expr =>
-        checkError(
-          exception = intercept[AnalysisException] {
-            expr.eval()
-          },
-          condition = "UNSUPPORTED_FEATURE.GEOSPATIAL_DISABLED"
-        )
-      }
-
       // Verify that SQL ST functions throw the expected exception.
       Seq(
         s"ST_AsBinary($dummyArgument)",
