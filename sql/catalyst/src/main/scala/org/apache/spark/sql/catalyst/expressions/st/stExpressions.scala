@@ -86,16 +86,6 @@ case class ST_AsBinary(geo: Expression)
     TypeCollection(GeographyType, GeometryType)
   )
 
-  override def checkInputDataTypes(): TypeCheckResult = {
-    if (!SQLConf.get.geospatialEnabled) {
-      throw new AnalysisException(
-        errorClass = "UNSUPPORTED_FEATURE.GEOSPATIAL_DISABLED",
-        messageParameters = Map.empty
-      )
-    }
-    super.checkInputDataTypes()
-  }
-
   override lazy val replacement: Expression = StaticInvoke(
     classOf[STUtils],
     BinaryType,
