@@ -389,17 +389,18 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
     withBasicCatalog { catalog =>
       val tempTable1 = Range(1, 10, 1, 10)
       val tempTable2 = Range(1, 20, 2, 10)
-      createTempView(catalog, "tbl1", tempTable1, overrideIfExists = false)
-      createTempView(catalog, "tbl2", tempTable2, overrideIfExists = false)
+      createTempView(catalog, "tbl1", tempTable1, ignoreIfExists = false, overrideIfExists = false)
+      createTempView(catalog, "tbl2", tempTable2, ignoreIfExists = false, overrideIfExists = false)
       assert(getTempViewRawPlan(catalog.getTempView("tbl1")) == Option(tempTable1))
       assert(getTempViewRawPlan(catalog.getTempView("tbl2")) == Option(tempTable2))
       assert(getTempViewRawPlan(catalog.getTempView("tbl3")).isEmpty)
       // Temporary view already exists
       intercept[TempTableAlreadyExistsException] {
-        createTempView(catalog, "tbl1", tempTable1, overrideIfExists = false)
+        createTempView(catalog, "tbl1", tempTable1,
+          ignoreIfExists = false, overrideIfExists = false)
       }
       // Temporary view already exists but we override it
-      createTempView(catalog, "tbl1", tempTable2, overrideIfExists = true)
+      createTempView(catalog, "tbl1", tempTable2, ignoreIfExists = false, overrideIfExists = true)
       assert(getTempViewRawPlan(catalog.getTempView("tbl1")) == Option(tempTable2))
     }
   }
@@ -440,7 +441,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
   test("drop temp table") {
     withBasicCatalog { catalog =>
       val tempTable = Range(1, 10, 2, 10)
-      createTempView(catalog, "tbl1", tempTable, overrideIfExists = false)
+      createTempView(catalog, "tbl1", tempTable, ignoreIfExists = false, overrideIfExists = false)
       catalog.setCurrentDatabase("db2")
       assert(getTempViewRawPlan(catalog.getTempView("tbl1")) == Some(tempTable))
       assert(catalog.externalCatalog.listTables("db2").toSet == Set("tbl1", "tbl2"))
@@ -452,7 +453,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
       catalog.dropTable(TableIdentifier("tbl1"), ignoreIfNotExists = false, purge = false)
       assert(catalog.externalCatalog.listTables("db2").toSet == Set("tbl2"))
       // If database is specified, temp tables are never dropped
-      createTempView(catalog, "tbl1", tempTable, overrideIfExists = false)
+      createTempView(catalog, "tbl1", tempTable, ignoreIfExists = false, overrideIfExists = false)
       catalog.createTable(newTable("tbl1", "db2"), ignoreIfExists = false)
       catalog.dropTable(TableIdentifier("tbl1", Some("db2")), ignoreIfNotExists = false,
         purge = false)
@@ -507,7 +508,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
   test("rename temp table") {
     withBasicCatalog { catalog =>
       val tempTable = Range(1, 10, 2, 10)
-      createTempView(catalog, "tbl1", tempTable, overrideIfExists = false)
+      createTempView(catalog, "tbl1", tempTable, ignoreIfExists = false, overrideIfExists = false)
       catalog.setCurrentDatabase("db2")
       assert(getTempViewRawPlan(catalog.getTempView("tbl1")) == Option(tempTable))
       assert(catalog.externalCatalog.listTables("db2").toSet == Set("tbl1", "tbl2"))
@@ -740,7 +741,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
     withBasicCatalog { catalog =>
       val tempTable1 = Range(1, 10, 1, 10)
       val metastoreTable1 = catalog.externalCatalog.getTable("db2", "tbl1")
-      createTempView(catalog, "tbl1", tempTable1, overrideIfExists = false)
+      createTempView(catalog, "tbl1", tempTable1, ignoreIfExists = false, overrideIfExists = false)
       catalog.setCurrentDatabase("db2")
       // If we explicitly specify the database, we'll look up the relation in that database
       assert(catalog.lookupRelation(TableIdentifier("tbl1", Some("db2"))).children.head
@@ -834,7 +835,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
       assert(catalog.tableExists(TableIdentifier("tbl1")))
       assert(catalog.tableExists(TableIdentifier("tbl2")))
 
-      createTempView(catalog, "tbl3", tempTable, overrideIfExists = false)
+      createTempView(catalog, "tbl3", tempTable, ignoreIfExists = false, overrideIfExists = false)
       // tableExists should not check temp view.
       assert(!catalog.tableExists(TableIdentifier("tbl3")))
 
@@ -863,7 +864,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
           s"`${CatalogManager.SESSION_CATALOG_NAME}`.`default`.`view1`")
       )
 
-      createTempView(catalog, "view1", tempTable, overrideIfExists = false)
+      createTempView(catalog, "view1", tempTable, ignoreIfExists = false, overrideIfExists = false)
       assert(catalog.getTempViewOrPermanentTableMetadata(
         TableIdentifier("view1")).identifier.table == "view1")
       assert(catalog.getTempViewOrPermanentTableMetadata(
@@ -883,8 +884,8 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
   test("list tables without pattern") {
     withBasicCatalog { catalog =>
       val tempTable = Range(1, 10, 2, 10)
-      createTempView(catalog, "tbl1", tempTable, overrideIfExists = false)
-      createTempView(catalog, "tbl4", tempTable, overrideIfExists = false)
+      createTempView(catalog, "tbl1", tempTable, ignoreIfExists = false, overrideIfExists = false)
+      createTempView(catalog, "tbl4", tempTable, ignoreIfExists = false, overrideIfExists = false)
       assert(catalog.listTables("db1").toSet ==
         Set(TableIdentifier("tbl1"), TableIdentifier("tbl4")))
       assert(catalog.listTables("db2").toSet ==
@@ -901,8 +902,8 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
   test("list tables with pattern") {
     withBasicCatalog { catalog =>
       val tempTable = Range(1, 10, 2, 10)
-      createTempView(catalog, "tbl1", tempTable, overrideIfExists = false)
-      createTempView(catalog, "tbl4", tempTable, overrideIfExists = false)
+      createTempView(catalog, "tbl1", tempTable, ignoreIfExists = false, overrideIfExists = false)
+      createTempView(catalog, "tbl4", tempTable, ignoreIfExists = false, overrideIfExists = false)
       assert(catalog.listTables("db1", "*").toSet == catalog.listTables("db1").toSet)
       assert(catalog.listTables("db2", "*").toSet == catalog.listTables("db2").toSet)
       assert(catalog.listTables("db2", "tbl*").toSet ==
@@ -924,8 +925,10 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
       catalog.createTable(newTable("tbl1", "mydb"), ignoreIfExists = false)
       catalog.createTable(newTable("tbl2", "mydb"), ignoreIfExists = false)
       val tempTable = Range(1, 10, 2, 10)
-      createTempView(catalog, "temp_view1", tempTable, overrideIfExists = false)
-      createTempView(catalog, "temp_view4", tempTable, overrideIfExists = false)
+      createTempView(catalog, "temp_view1", tempTable,
+        ignoreIfExists = false, overrideIfExists = false)
+      createTempView(catalog, "temp_view4", tempTable,
+        ignoreIfExists = false, overrideIfExists = false)
 
       assert(catalog.listTables("mydb").toSet == catalog.listTables("mydb", "*").toSet)
       assert(catalog.listTables("mydb").toSet == catalog.listTables("mydb", "*", true).toSet)
@@ -951,8 +954,10 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
   test("list temporary view with pattern") {
     withBasicCatalog { catalog =>
       val tempTable = Range(1, 10, 2, 10)
-      createTempView(catalog, "temp_view1", tempTable, overrideIfExists = false)
-      createTempView(catalog, "temp_view4", tempTable, overrideIfExists = false)
+      createTempView(catalog, "temp_view1", tempTable,
+        ignoreIfExists = false, overrideIfExists = false)
+      createTempView(catalog, "temp_view4", tempTable,
+        ignoreIfExists = false, overrideIfExists = false)
       assert(catalog.listLocalTempViews("*").toSet ==
         Set(TableIdentifier("temp_view1"), TableIdentifier("temp_view4")))
       assert(catalog.listLocalTempViews("temp_view*").toSet ==
@@ -965,10 +970,14 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
   test("list global temporary view and local temporary view with pattern") {
     withBasicCatalog { catalog =>
       val tempTable = Range(1, 10, 2, 10)
-      createTempView(catalog, "temp_view1", tempTable, overrideIfExists = false)
-      createTempView(catalog, "temp_view4", tempTable, overrideIfExists = false)
-      createGlobalTempView(catalog, "global_temp_view1", tempTable, overrideIfExists = false)
-      createGlobalTempView(catalog, "global_temp_view2", tempTable, overrideIfExists = false)
+      createTempView(catalog, "temp_view1", tempTable,
+        ignoreIfExists = false, overrideIfExists = false)
+      createTempView(catalog, "temp_view4", tempTable,
+        ignoreIfExists = false, overrideIfExists = false)
+      createGlobalTempView(catalog, "global_temp_view1", tempTable,
+        ignoreIfExists = false, overrideIfExists = false)
+      createGlobalTempView(catalog, "global_temp_view2", tempTable,
+        ignoreIfExists = false, overrideIfExists = false)
       assert(catalog.listTables(catalog.globalTempDatabase, "*").toSet ==
         Set(TableIdentifier("temp_view1"),
           TableIdentifier("temp_view4"),
@@ -1866,7 +1875,8 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
   test("copy SessionCatalog state - temp views") {
     withEmptyCatalog { original =>
       val tempTable1 = Range(1, 10, 1, 10)
-      createTempView(original, "copytest1", tempTable1, overrideIfExists = false)
+      createTempView(original, "copytest1", tempTable1,
+        ignoreIfExists = false, overrideIfExists = false)
 
       // check if tables copied over
       val clone = new SessionCatalog(original.externalCatalog)
@@ -1880,7 +1890,8 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
       assert(getTempViewRawPlan(original.getTempView("copytest1")) == Some(tempTable1))
 
       val tempTable2 = Range(1, 20, 2, 10)
-      createTempView(original, "copytest2", tempTable2, overrideIfExists = false)
+      createTempView(original, "copytest2", tempTable2,
+        ignoreIfExists = false, overrideIfExists = false)
       assert(clone.getTempView("copytest2").isEmpty)
     }
   }
@@ -1938,13 +1949,15 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
 
   test("SPARK-34197: refreshTable should not invalidate the relation cache for temporary views") {
     withBasicCatalog { catalog =>
-      createTempView(catalog, "tbl1", Range(1, 10, 1, 10), false)
+      createTempView(catalog, "tbl1", Range(1, 10, 1, 10),
+        ignoreIfExists = false, overrideIfExists = false)
       val qualifiedName1 = QualifiedTableName(SESSION_CATALOG_NAME, "default", "tbl1")
       catalog.cacheTable(qualifiedName1, Range(1, 10, 1, 10))
       catalog.refreshTable(TableIdentifier("tbl1"))
       assert(catalog.getCachedTable(qualifiedName1) != null)
 
-      createGlobalTempView(catalog, "tbl2", Range(2, 10, 1, 10), false)
+      createGlobalTempView(catalog, "tbl2", Range(2, 10, 1, 10),
+        ignoreIfExists = false, overrideIfExists = false)
       val qualifiedName2 =
         QualifiedTableName(SESSION_CATALOG_NAME, catalog.globalTempDatabase, "tbl2")
       catalog.cacheTable(qualifiedName2, Range(2, 10, 1, 10))

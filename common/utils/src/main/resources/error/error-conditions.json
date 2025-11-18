@@ -1003,6 +1003,12 @@
     ],
     "sqlState" : "0A000"
   },
+  "CREATE_OR_REPLACE_WITH_IF_NOT_EXISTS_IS_NOT_ALLOWED" : {
+    "message" : [
+      "CREATE OR REPLACE <resourceType> with IF NOT EXISTS is not allowed."
+    ],
+    "sqlState" : "42000"
+  },
   "CREATE_PERMANENT_VIEW_WITHOUT_ALIAS" : {
     "message" : [
       "Not allowed to create the permanent view <name> without explicitly assigning an alias for the expression <attr>."
@@ -6076,7 +6082,7 @@
   "TEMP_TABLE_OR_VIEW_ALREADY_EXISTS" : {
     "message" : [
       "Cannot create the temporary view <relationName> because it already exists.",
-      "Choose a different name, drop or replace the existing view."
+      "Choose a different name, drop or replace the existing view, or add the IF NOT EXISTS clause to tolerate pre-existing views."
     ],
     "sqlState" : "42P07"
   },
@@ -7654,16 +7660,6 @@
   "_LEGACY_ERROR_TEMP_0051" : {
     "message" : [
       "Empty set in <element> grouping sets is not supported."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_0052" : {
-    "message" : [
-      "CREATE VIEW with both IF NOT EXISTS and REPLACE is not allowed."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_0053" : {
-    "message" : [
-      "It is not allowed to define a TEMPORARY view with IF NOT EXISTS."
     ]
   },
   "_LEGACY_ERROR_TEMP_0056" : {

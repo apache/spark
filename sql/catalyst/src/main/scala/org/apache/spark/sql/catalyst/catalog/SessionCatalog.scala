@@ -670,10 +670,18 @@ class SessionCatalog(
   def createTempView(
       name: String,
       viewDefinition: TemporaryViewRelation,
+      ignoreIfExists: Boolean,
       overrideIfExists: Boolean): Unit = synchronized {
+    if (ignoreIfExists && overrideIfExists) {
+      throw QueryCompilationErrors.createViewWithBothIfNotExistsAndReplaceError()
+    }
     val normalized = format(name)
-    if (tempViews.contains(normalized) && !overrideIfExists) {
-      throw new TempTableAlreadyExistsException(name)
+    if (tempViews.contains(normalized)) {
+      if (ignoreIfExists) {
+        return
+      } else if (!overrideIfExists) {
+        throw new TempTableAlreadyExistsException(name)
+      }
     }
     tempViews.put(normalized, viewDefinition)
   }
@@ -684,8 +692,10 @@ class SessionCatalog(
   def createGlobalTempView(
       name: String,
       viewDefinition: TemporaryViewRelation,
+      ignoreIfExists: Boolean,
       overrideIfExists: Boolean): Unit = {
-    globalTempViewManager.create(format(name), viewDefinition, overrideIfExists)
+    globalTempViewManager.create(
+      format(name), viewDefinition, ignoreIfExists, overrideIfExists)
   }
 
   /**
@@ -698,7 +708,8 @@ class SessionCatalog(
     val viewName = format(name.table)
     if (name.database.isEmpty) {
       if (tempViews.contains(viewName)) {
-        createTempView(viewName, viewDefinition, overrideIfExists = true)
+        createTempView(
+          viewName, viewDefinition, ignoreIfExists = false, overrideIfExists = true)
         true
       } else {
         false
