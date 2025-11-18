@@ -16,10 +16,10 @@
  */
 package org.apache.spark.sql.execution.datasources.v2.state
 
-import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
-import org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider
+import org.apache.spark.sql.execution.streaming.state.{HDFSBackedStateStoreProvider, RocksDBStateStoreProvider}
 import org.apache.spark.sql.functions.{count, sum}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.OutputMode
@@ -38,21 +38,12 @@ class StatePartitionReaderAllColumnFamiliesSuite extends StateDataSourceTestBase
   /**
    * Returns a set of (partitionId, key, value) tuples from a normal state read.
    */
-  private def getNormalReadData(checkpointDir: String): Set[(Int, Row, Row)] = {
-    val normalReadDf = spark.read
+  private def getNormalReadData(checkpointDir: String): DataFrame = {
+    spark.read
       .format("statestore")
       .option(StateSourceOptions.PATH, checkpointDir)
       .load()
       .selectExpr("partition_id", "key", "value")
-
-    normalReadDf.collect()
-      .map { row =>
-        val partitionId = row.getInt(0)
-        val key = row.getStruct(1)
-        val value = row.getStruct(2)
-        (partitionId, key, value)
-      }
-      .toSet
   }
 
   /**
@@ -108,9 +99,14 @@ class StatePartitionReaderAllColumnFamiliesSuite extends StateDataSourceTestBase
 
   /**
    * Parses the bytes read DataFrame into a set of (partitionId, key, value, columnFamily) tuples.
+   * For RocksDB provider, skipVersionBytes should be true.
+   * For HDFS provider, skipVersionBytes should be false.
    */
   private def parseBytesReadData(
-       df: DataFrame, numOfKey: Int, numOfValue: Int): Set[(Int, UnsafeRow, UnsafeRow, String)] = {
+       df: DataFrame,
+       numOfKey: Int,
+       numOfValue: Int,
+       skipVersionBytes: Boolean = true): Set[(Int, UnsafeRow, UnsafeRow, String)] = {
     df.selectExpr("partition_id", "key_bytes", "value_bytes", "column_family_name")
       .collect()
       .map { row =>
@@ -120,20 +116,38 @@ class StatePartitionReaderAllColumnFamiliesSuite extends StateDataSourceTestBase
         val columnFamily = row.getString(3)
 
         // Deserialize key bytes to UnsafeRow
-        // Skip the version byte (STATE_ENCODING_NUM_VERSION_BYTES) at the beginning
         val keyRow = new UnsafeRow(numOfKey)
-        keyRow.pointTo(
-          keyBytes,
-          Platform.BYTE_ARRAY_OFFSET + RocksDBStateStoreProvider.STATE_ENCODING_NUM_VERSION_BYTES,
-          keyBytes.length - RocksDBStateStoreProvider.STATE_ENCODING_NUM_VERSION_BYTES)
+        if (skipVersionBytes) {
+          // Skip the version byte (STATE_ENCODING_NUM_VERSION_BYTES) at the beginning
+          // This is for RocksDB provider
+          keyRow.pointTo(
+            keyBytes,
+            Platform.BYTE_ARRAY_OFFSET + RocksDBStateStoreProvider.STATE_ENCODING_NUM_VERSION_BYTES,
+            keyBytes.length - RocksDBStateStoreProvider.STATE_ENCODING_NUM_VERSION_BYTES)
+        } else {
+          // HDFS provider doesn't add version bytes, use bytes directly
+          keyRow.pointTo(
+            keyBytes,
+            Platform.BYTE_ARRAY_OFFSET,
+            keyBytes.length)
+        }
 
         // Deserialize value bytes to UnsafeRow
-        // Skip the version byte (STATE_ENCODING_NUM_VERSION_BYTES) at the beginning
         val valueRow = new UnsafeRow(numOfValue)
-        valueRow.pointTo(
-          valueBytes,
-          Platform.BYTE_ARRAY_OFFSET + RocksDBStateStoreProvider.STATE_ENCODING_NUM_VERSION_BYTES,
-          valueBytes.length - RocksDBStateStoreProvider.STATE_ENCODING_NUM_VERSION_BYTES)
+        if (skipVersionBytes) {
+          // Skip the version byte (STATE_ENCODING_NUM_VERSION_BYTES) at the beginning
+          // This is for RocksDB provider
+          valueRow.pointTo(
+            valueBytes,
+            Platform.BYTE_ARRAY_OFFSET + RocksDBStateStoreProvider.STATE_ENCODING_NUM_VERSION_BYTES,
+            valueBytes.length - RocksDBStateStoreProvider.STATE_ENCODING_NUM_VERSION_BYTES)
+        } else {
+          // HDFS provider doesn't add version bytes, use bytes directly
+          valueRow.pointTo(
+            valueBytes,
+            Platform.BYTE_ARRAY_OFFSET,
+            valueBytes.length)
+        }
 
         (partitionId, keyRow.copy(), valueRow.copy(), columnFamily)
       }
@@ -144,24 +158,31 @@ class StatePartitionReaderAllColumnFamiliesSuite extends StateDataSourceTestBase
    * Compares normal read data with bytes read data for a specific column family.
    */
   private def compareNormalAndBytesData(
-      normalData: Set[(Int, Row, Row)],
-      bytesData: Set[(Int, UnsafeRow, UnsafeRow, String)],
+      normalReadDf: DataFrame,
+      bytesReadDf: DataFrame,
       columnFamily: String,
       keySchema: StructType,
-      valueSchema: StructType): Unit = {
+      valueSchema: StructType,
+      skipVersionBytes: Boolean): Unit = {
+
     // Filter bytes data for the specified column family
+    val bytesData = parseBytesReadData(bytesReadDf, keySchema.length, valueSchema.length,
+      skipVersionBytes)
     val filteredBytesData = bytesData.filter(_._4 == columnFamily)
 
-    // Verify same number of rows
-    assert(filteredBytesData.size == normalData.size,
-      s"Row count mismatch for column family '$columnFamily': " +
-        s"normal read has ${filteredBytesData.size} rows, bytes read has ${normalData.size} rows")
     // Convert to comparable format (extract field values)
-    val normalSet = normalData.map { case (partId, key, value) =>
+    val normalSet = normalReadDf.collect().map { row =>
+      val partitionId = row.getInt(0)
+      val key = row.getStruct(1)
+      val value = row.getStruct(2)
       val keyFields = (0 until key.length).map(i => key.get(i))
       val valueFields = (0 until value.length).map(i => value.get(i))
-      (partId, keyFields, valueFields)
-    }
+      (partitionId, keyFields, valueFields)
+    }.toSet
+    // Verify same number of rows
+    assert(filteredBytesData.size == normalSet.size,
+      s"Row count mismatch for column family '$columnFamily': " +
+        s"normal read has ${filteredBytesData.size} rows, bytes read has ${normalSet.size} rows")
 
     val bytesSet = filteredBytesData.map { case (partId, keyRow, valueRow, _) =>
       val keyFields = (0 until keySchema.length).map(i =>
@@ -174,67 +195,70 @@ class StatePartitionReaderAllColumnFamiliesSuite extends StateDataSourceTestBase
     assert(normalSet == bytesSet)
   }
 
-  test("read all column families with simple operator") {
-    withTempDir { tempDir =>
-      withSQLConf(
-        SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
-          classOf[RocksDBStateStoreProvider].getName,
-        SQLConf.SHUFFLE_PARTITIONS.key -> "2") {
+  Seq(
+    ("RocksDBStateStoreProvider", classOf[RocksDBStateStoreProvider], true),
+    ("HDFSBackedStateStoreProvider", classOf[HDFSBackedStateStoreProvider], false)
+  ).foreach { case (providerName, providerClass, skipVersionBytes) =>
+    test(s"read all column families with simple operator - $providerName") {
+      withTempDir { tempDir =>
+        withSQLConf(
+          SQLConf.STATE_STORE_PROVIDER_CLASS.key -> providerClass.getName,
+          SQLConf.SHUFFLE_PARTITIONS.key -> "2") {
 
-        val inputData = MemoryStream[Int]
-        val aggregated = inputData.toDF()
-          .selectExpr("value", "value % 10 AS groupKey")
-          .groupBy($"groupKey")
-          .agg(
-            count("*").as("cnt"),
-            sum("value").as("sum")
+          val inputData = MemoryStream[Int]
+          val aggregated = inputData.toDF()
+            .selectExpr("value", "value % 10 AS groupKey")
+            .groupBy($"groupKey")
+            .agg(
+              count("*").as("cnt"),
+              sum("value").as("sum")
+            )
+            .as[(Int, Long, Long)]
+
+          testStream(aggregated, OutputMode.Update)(
+            StartStream(checkpointLocation = tempDir.getAbsolutePath),
+            // batch 0
+            AddData(inputData, 0 until 20: _*),
+            CheckLastBatch(
+              (0, 2, 10), // 0, 10
+              (1, 2, 12), // 1, 11
+              (2, 2, 14), // 2, 12
+              (3, 2, 16), // 3, 13
+              (4, 2, 18), // 4, 14
+              (5, 2, 20), // 5, 15
+              (6, 2, 22), // 6, 16
+              (7, 2, 24), // 7, 17
+              (8, 2, 26), // 8, 18
+              (9, 2, 28) // 9, 19
+            ),
+            StopStream
           )
-          .as[(Int, Long, Long)]
 
-        testStream(aggregated, OutputMode.Update)(
-          StartStream(checkpointLocation = tempDir.getAbsolutePath),
-          // batch 0
-          AddData(inputData, 0 until 20: _*),
-          CheckLastBatch(
-            (0, 2, 10), // 0, 10
-            (1, 2, 12), // 1, 11
-            (2, 2, 14), // 2, 12
-            (3, 2, 16), // 3, 13
-            (4, 2, 18), // 4, 14
-            (5, 2, 20), // 5, 15
-            (6, 2, 22), // 6, 16
-            (7, 2, 24), // 7, 17
-            (8, 2, 26), // 8, 18
-            (9, 2, 28) // 9, 19
-          ),
-          StopStream
-        )
+          // Read state data once with READ_ALL_COLUMN_FAMILIES = true
+          val bytesReadDf = getBytesReadDf(tempDir.getAbsolutePath)
 
-        // Read state data once with READ_ALL_COLUMN_FAMILIES = true
-        val bytesReadDf = getBytesReadDf(tempDir.getAbsolutePath)
+          // Verify schema and column families
+          validateBytesReadSchema(bytesReadDf,
+            expectedRowCount = 10,
+            expectedColumnFamilies = Seq("default"))
 
-        // Verify schema and column families
-        validateBytesReadSchema(bytesReadDf,
-          expectedRowCount = 10,
-          expectedColumnFamilies = Seq("default"))
+          // Compare normal and bytes data for default column family
+          val keySchema: StructType = StructType(Array(
+            StructField("key", IntegerType, nullable = false)
+          ))
 
-        // Get normal read data for comparison
-        val normalData = getNormalReadData(tempDir.getAbsolutePath)
+          // Value schema for the aggregation: count and sum columns
+          val valueSchema: StructType = StructType(Array(
+            StructField("count", LongType, nullable = false),
+            StructField("sum", LongType, nullable = false)
+          ))
+          // Parse bytes read data
 
-        // Compare normal and bytes data for default column family
-        val keySchema: StructType = StructType(Array(
-          StructField("key", IntegerType, nullable = false)
-        ))
-
-        // Value schema for the aggregation: count and sum columns
-        val valueSchema: StructType = StructType(Array(
-          StructField("count", LongType, nullable = false),
-          StructField("sum", LongType, nullable = false)
-        ))
-        // Parse bytes read data
-        val bytesData = parseBytesReadData(bytesReadDf, keySchema.length, valueSchema.length)
-
-        compareNormalAndBytesData(normalData, bytesData, "default", keySchema, valueSchema)
+          // Get normal read data for comparison
+          val normalData = getNormalReadData(tempDir.getAbsolutePath)
+          compareNormalAndBytesData(
+            normalData, bytesReadDf, "default", keySchema, valueSchema, skipVersionBytes)
+        }
       }
     }
   }

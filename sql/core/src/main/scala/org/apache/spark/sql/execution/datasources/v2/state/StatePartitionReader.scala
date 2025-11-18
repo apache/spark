@@ -283,10 +283,16 @@ class StatePartitionReaderAllColumnFamilies(
       partition.sourceOptions.operatorId, partition.partition, partition.sourceOptions.storeName)
     val stateStoreProviderId = StateStoreProviderId(stateStoreId, partition.queryId)
 
+    // Disable format validation when reading raw bytes.
+    // We use binary schemas (keyBytes/valueBytes) which don't match the actual schema
+    // of the stored data. Validation would fail in HDFSBackedStateStoreProvider when
+    // loading data from disk, so we disable it for raw bytes mode.
+    val modifiedStoreConf = storeConf.withFormatValidationDisabled()
+
     val keyStateEncoderSpec = NoPrefixKeyStateEncoderSpec(keySchema)
     val provider = StateStoreProvider.createAndInit(
       stateStoreProviderId, keySchema, valueSchema, keyStateEncoderSpec,
-      useColumnFamilies = colFamilyNames.nonEmpty, storeConf, hadoopConf.value, false, None)
+      useColumnFamilies = colFamilyNames.nonEmpty, modifiedStoreConf, hadoopConf.value, false, None)
 
     provider
   }

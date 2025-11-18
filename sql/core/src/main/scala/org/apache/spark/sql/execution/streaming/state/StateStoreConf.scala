@@ -163,6 +163,26 @@ class StateStoreConf(
    */
   val sqlConfs: Map[String, String] =
     sqlConf.getAllConfs.filter(_._1.startsWith("spark.sql.streaming.stateStore."))
+
+  /**
+   * Creates a copy of this StateStoreConf with format validation disabled.
+   * This is useful when reading raw bytes where the schema used (binary) doesn't match
+   * the actual stored data schema.
+   */
+  def withFormatValidationDisabled(): StateStoreConf = {
+    val reconstructedSqlConf = {
+        // Reconstruct a SQLConf with the all settings preserved because sqlConf is transient
+        val conf = new SQLConf()
+        // Restore all state store related settings
+        sqlConfs.foreach { case (key, value) =>
+          conf.setConfString(key, value)
+        }
+      conf
+    }
+    new StateStoreConf(reconstructedSqlConf, extraOptions) {
+      override val formatValidationEnabled: Boolean = false
+    }
+  }
 }
 
 object StateStoreConf {
