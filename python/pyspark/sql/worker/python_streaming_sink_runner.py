@@ -38,7 +38,7 @@ from pyspark.util import (
     handle_worker_exception,
     local_connect_and_auth,
     with_faulthandler,
-    start_faulthandler_periodic_traceback
+    start_faulthandler_periodic_traceback,
 )
 from pyspark.worker_util import (
     check_python_version,
@@ -66,7 +66,7 @@ def main(infile: IO, outfile: IO) -> None:
         check_python_version(infile)
 
         start_faulthandler_periodic_traceback()
-        
+
         setup_spark_files(infile)
         setup_broadcasts(infile)
 

@@ -87,7 +87,7 @@ from pyspark.util import (
     fail_on_stopiteration,
     handle_worker_exception,
     with_faulthandler,
-    start_faulthandler_periodic_traceback
+    start_faulthandler_periodic_traceback,
 )
 from pyspark import shuffle
 from pyspark.errors import PySparkRuntimeError, PySparkTypeError, PySparkValueError

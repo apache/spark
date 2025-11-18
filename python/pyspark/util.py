@@ -956,10 +956,7 @@ class _FaulthandlerHelper:
         traceback_dump_interval_seconds = os.environ.get(
             "PYTHON_TRACEBACK_DUMP_INTERVAL_SECONDS", None
         )
-        if (
-                traceback_dump_interval_seconds is not None
-                and int(traceback_dump_interval_seconds) > 0
-        ):
+        if traceback_dump_interval_seconds is not None and int(traceback_dump_interval_seconds) > 0:
             self._periodic_traceback = True
             faulthandler.dump_traceback_later(int(traceback_dump_interval_seconds), repeat=True)
 
@@ -980,10 +977,10 @@ class _FaulthandlerHelper:
 
         return wrapper
 
+
 _faulthandler_helper = _FaulthandlerHelper()
 with_faulthandler = _faulthandler_helper.with_faulthandler
 start_faulthandler_periodic_traceback = _faulthandler_helper.start_periodic_traceback
-
 
 
 if __name__ == "__main__":
