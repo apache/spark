@@ -2028,6 +2028,7 @@ class TransformWithStateInPandasInitStateSerializer(TransformWithStateInPandasSe
                             batch_key = tuple(row[s] for s in self.init_key_offsets)
                             yield (batch_key, None, row)
 
+            EMPTY_DATAFRAME = pd.DataFrame()
             for batch_key, group_rows in groupby(row_stream(), key=lambda x: x[0]):
                 rows = []
                 init_state_rows = []
@@ -2042,11 +2043,19 @@ class TransformWithStateInPandasInitStateSerializer(TransformWithStateInPandasSe
                             total_len >= self.arrow_max_records_per_batch
                             or total_len * self.average_arrow_row_size >= self.arrow_max_bytes_per_batch
                     ):
-                        yield (batch_key, pd.DataFrame(rows), pd.DataFrame(init_state_rows))
+                        yield (
+                            batch_key,
+                            pd.DataFrame(rows) if len(rows) > 0 else EMPTY_DATAFRAME.copy(),
+                            pd.DataFrame(init_state_rows) if len(init_state_rows) > 0 else EMPTY_DATAFRAME.copy()
+                        )
                         rows = []
                         init_state_rows = []
                 if rows or init_state_rows:
-                    yield (batch_key, pd.DataFrame(rows), pd.DataFrame(init_state_rows))
+                    yield (
+                        batch_key,
+                        pd.DataFrame(rows) if len(rows) > 0 else EMPTY_DATAFRAME.copy(),
+                        pd.DataFrame(init_state_rows) if len(init_state_rows) > 0 else EMPTY_DATAFRAME.copy()
+                    )
 
         _batches = super(ArrowStreamPandasSerializer, self).load_stream(stream)
         data_batches = generate_data_batches(_batches)
