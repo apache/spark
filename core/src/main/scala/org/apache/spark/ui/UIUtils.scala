@@ -32,6 +32,7 @@ import scala.xml.transform.{RewriteRule, RuleTransformer}
 
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.ws.rs.core.{MediaType, MultivaluedMap, Response}
+import org.eclipse.jetty.server.Request
 import org.glassfish.jersey.internal.util.collection.MultivaluedStringMap
 
 import org.apache.spark.internal.Logging
@@ -186,14 +187,22 @@ private[spark] object UIUtils extends Logging {
   }
 
   // Yarn has to go through a proxy so the base uri is provided and has to be on all links
-  def uiRoot(request: HttpServletRequest): String = {
+  def uiRoot(knoxBasePathGetter: String => String): String = {
     // Knox uses X-Forwarded-Context to notify the application the base path
-    val knoxBasePath = Option(request.getHeader("X-Forwarded-Context"))
+    val knoxBasePath = Option(knoxBasePathGetter("X-Forwarded-Context"))
     // SPARK-11484 - Use the proxyBase set by the AM, if not found then use env.
     sys.props.get("spark.ui.proxyBase")
       .orElse(sys.env.get("APPLICATION_WEB_PROXY_BASE"))
       .orElse(knoxBasePath)
       .getOrElse("")
+  }
+
+  def uiRoot(request: HttpServletRequest): String = {
+    uiRoot(request.getHeader _)
+  }
+
+  def uiRoot(request: Request): String = {
+    uiRoot(request.getHeaders.get: String => String)
   }
 
   def prependBaseUri(
