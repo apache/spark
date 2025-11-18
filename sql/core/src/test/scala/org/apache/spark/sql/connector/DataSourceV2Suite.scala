@@ -633,6 +633,7 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
     Seq(classOf[SimpleDataSourceV2], classOf[JavaSimpleDataSourceV2]).foreach { cls =>
       withClue(cls.getName) {
         sql(s"CREATE or REPLACE TEMPORARY VIEW s1 USING ${cls.getName}")
+        sql(s"CREATE TEMPORARY VIEW IF NOT EXISTS s1 USING ${cls.getName}")
         checkAnswer(sql("select * from s1"), (0 until 10).map(i => Row(i, -i)))
         checkAnswer(sql("select j from s1"), (0 until 10).map(i => Row(-i)))
         checkAnswer(sql("select * from s1 where i > 5"),

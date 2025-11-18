@@ -323,7 +323,7 @@ statement
          (PARTITIONED ON identifierList) |
          (TBLPROPERTIES propertyList))*
         AS query                                                       #createView
-    | CREATE (OR REPLACE)? GLOBAL? TEMPORARY VIEW
+    | CREATE (OR REPLACE)? GLOBAL? TEMPORARY VIEW (IF errorCapturingNot EXISTS)?
         tableIdentifier (LEFT_PAREN colTypeList RIGHT_PAREN)? tableProvider
         (OPTIONS propertyList)?                                        #createTempViewUsing
     | ALTER VIEW identifierReference AS? query                         #alterViewQuery

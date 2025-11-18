@@ -790,6 +790,15 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
           sql("select c1, c2 from testview order by c1 limit 1"),
           Row("1997", "Ford") :: Nil)
 
+        // column names are changed, perform noop with IF NOT EXISTS when view exists
+        sql(s"CREATE TEMPORARY VIEW IF NOT EXISTS testview (d1 String, d2 String)  USING " +
+          "org.apache.spark.sql.execution.datasources.csv.CSVFileFormat  " +
+          s"OPTIONS (PATH '${tmpFile.toURI}')")
+
+        checkAnswer(
+          sql("select c1, c2 from testview order by c1 limit 1"),
+          Row("1997", "Ford") :: Nil)
+
         // Fails if creating a new view with the same name
         checkError(
           exception = intercept[TempTableAlreadyExistsException] {
