@@ -30,7 +30,6 @@ private[sql] object STExpressionUtils {
    * Checks if the given data type is a geospatial type (i.e. GeometryType or GeographyType).
    */
   def isGeoSpatialType(dt: DataType): Boolean = dt match {
-    case _ if !SQLConf.get.geospatialEnabled => false
     case _: GeometryType | _: GeographyType => true
     case _ => false
   }

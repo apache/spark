@@ -90,13 +90,18 @@ object Cast extends QueryErrorsBase {
    *   - String <=> Binary
    */
   def canAnsiCast(from: DataType, to: DataType): Boolean = (from, to) match {
+    case (fromType, toType) if !SQLConf.get.geospatialEnabled &&
+        (isGeoSpatialType(fromType) || isGeoSpatialType(toType)) =>
+      throw new org.apache.spark.sql.AnalysisException(
+        errorClass = "UNSUPPORTED_FEATURE.GEOSPATIAL_DISABLED",
+        messageParameters = scala.collection.immutable.Map.empty)
+
     case (fromType, toType) if fromType == toType => true
 
-    // Geospatial types cannot be cast to/from other data types.
-    case (fromType, toType) if SQLConf.get.geospatialEnabled &&
-        isGeoSpatialType(fromType) != isGeoSpatialType(toType) => false
-
     case (NullType, _) => true
+
+    // Geospatial types cannot be cast to/from other data types.
+    case (fromType, toType) if isGeoSpatialType(fromType) != isGeoSpatialType(toType) => false
 
     case (_, _: StringType) => true
 
@@ -166,16 +171,13 @@ object Cast extends QueryErrorsBase {
     case (udt1: UserDefinedType[_], udt2: UserDefinedType[_]) if udt2.acceptsType(udt1) => true
 
     // Casts from concrete GEOGRAPHY(srid) to mixed GEOGRAPHY(ANY) is allowed.
-    case (gt1: GeographyType, gt2: GeographyType) if SQLConf.get.geospatialEnabled
-        && !gt1.isMixedSrid && gt2.isMixedSrid =>
+    case (gt1: GeographyType, gt2: GeographyType) if !gt1.isMixedSrid && gt2.isMixedSrid =>
       true
     // Casting from GEOGRAPHY to GEOMETRY with the same SRID is allowed.
-    case (geog: GeographyType, geom: GeometryType) if SQLConf.get.geospatialEnabled
-        && geog.srid == geom.srid =>
+    case (geog: GeographyType, geom: GeometryType) if geog.srid == geom.srid =>
       true
     // Casts from concrete GEOMETRY(srid) to mixed GEOMETRY(ANY) is allowed.
-    case (gt1: GeometryType, gt2: GeometryType) if SQLConf.get.geospatialEnabled
-        && !gt1.isMixedSrid && gt2.isMixedSrid =>
+    case (gt1: GeometryType, gt2: GeometryType) if !gt1.isMixedSrid && gt2.isMixedSrid =>
       true
 
     case _ => false
@@ -222,13 +224,18 @@ object Cast extends QueryErrorsBase {
    * Returns true iff we can cast `from` type to `to` type.
    */
   def canCast(from: DataType, to: DataType): Boolean = (from, to) match {
+    case (fromType, toType) if !SQLConf.get.geospatialEnabled &&
+        (isGeoSpatialType(fromType) || isGeoSpatialType(toType)) =>
+      throw new org.apache.spark.sql.AnalysisException(
+        errorClass = "UNSUPPORTED_FEATURE.GEOSPATIAL_DISABLED",
+        messageParameters = scala.collection.immutable.Map.empty)
+
     case (fromType, toType) if fromType == toType => true
 
-    // Geospatial types cannot be cast to/from other data types.
-    case (fromType, toType) if SQLConf.get.geospatialEnabled &&
-        isGeoSpatialType(fromType) != isGeoSpatialType(toType) => false
-
     case (NullType, _) => true
+
+    // Geospatial types cannot be cast to/from other data types.
+    case (fromType, toType) if isGeoSpatialType(fromType) != isGeoSpatialType(toType) => false
 
     case (_, _: StringType) => true
 
@@ -306,16 +313,13 @@ object Cast extends QueryErrorsBase {
     case (udt1: UserDefinedType[_], udt2: UserDefinedType[_]) if udt2.acceptsType(udt1) => true
 
     // Casts from concrete GEOGRAPHY(srid) to mixed GEOGRAPHY(ANY) is allowed.
-    case (gt1: GeographyType, gt2: GeographyType) if SQLConf.get.geospatialEnabled
-        && !gt1.isMixedSrid && gt2.isMixedSrid =>
+    case (gt1: GeographyType, gt2: GeographyType) if !gt1.isMixedSrid && gt2.isMixedSrid =>
       true
     // Casting from GEOGRAPHY to GEOMETRY with the same SRID is allowed.
-    case (geog: GeographyType, geom: GeometryType) if SQLConf.get.geospatialEnabled
-        && geog.srid == geom.srid =>
+    case (geog: GeographyType, geom: GeometryType) if geog.srid == geom.srid =>
       true
     // Casts from concrete GEOMETRY(srid) to mixed GEOMETRY(ANY) is allowed.
-    case (gt1: GeometryType, gt2: GeometryType) if SQLConf.get.geospatialEnabled
-        && !gt1.isMixedSrid && gt2.isMixedSrid =>
+    case (gt1: GeometryType, gt2: GeometryType) if !gt1.isMixedSrid && gt2.isMixedSrid =>
       true
 
     case _ => false

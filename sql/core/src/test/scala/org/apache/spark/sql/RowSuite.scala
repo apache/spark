@@ -19,6 +19,7 @@ package org.apache.spark.sql
 
 import org.apache.spark.{SparkFunSuite, SparkRuntimeException, SparkUnsupportedOperationException}
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, SpecificInternalRow}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -146,5 +147,31 @@ class RowSuite extends SparkFunSuite with SharedSparkSession {
 
     assert(row.getGeometry(0).getBytes() == point)
     assert(row.getGeography(1).getBytes() == point)
+  }
+
+  test("geospatial feature disabled") {
+    // A test WKB value corresponding to: POINT (17 7).
+    val point = "010100000000000000000031400000000000001C40"
+      .grouped(2).map(Integer.parseInt(_, 16).toByte).toArray
+    withSQLConf(SQLConf.GEOSPATIAL_ENABLED.key -> "false") {
+      // Creating a DataFrame with geometry and collecting it should fail.
+      val geom = Geometry.fromWKB(point)
+      val geomSchema = StructType(Seq(StructField("geom", GeometryType(0))))
+      checkError(
+        exception = intercept[AnalysisException] {
+          spark.createDataFrame(java.util.Arrays.asList(Row(geom)), geomSchema).collect()
+        },
+        condition = "UNSUPPORTED_FEATURE.GEOSPATIAL_DISABLED"
+      )
+      // Creating a DataFrame with geography and collecting it should fail.
+      val geog = Geography.fromWKB(point, 4326)
+      val geogSchema = StructType(Seq(StructField("geog", GeographyType(4326))))
+      checkError(
+        exception = intercept[AnalysisException] {
+          spark.createDataFrame(java.util.Arrays.asList(Row(geog)), geogSchema).collect()
+        },
+        condition = "UNSUPPORTED_FEATURE.GEOSPATIAL_DISABLED"
+      )
+    }
   }
 }

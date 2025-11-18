@@ -254,8 +254,10 @@ object GeographyType extends SpatialType {
  * Edge interpolation algorithm for Geography logical type. Currently, Spark only supports
  * spherical algorithm.
  */
+@Unstable
 sealed abstract class EdgeInterpolationAlgorithm
 
+@Unstable
 object EdgeInterpolationAlgorithm {
   case object SPHERICAL extends EdgeInterpolationAlgorithm
 
