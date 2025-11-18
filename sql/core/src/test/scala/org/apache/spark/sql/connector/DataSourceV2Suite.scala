@@ -1010,7 +1010,7 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
       "Canonicalized DataSourceV2ScanRelation instances should be equal")
   }
 
-  test("SPARK-54163: scan canonicalization with partitioning and ordering aware data source") {
+  test("SPARK-54163: scan canonicalization for partitioning and ordering aware data source") {
     val options = new CaseInsensitiveStringMap(Map(
       "partitionKeys" -> "i",
       "orderKeys" -> "i,j"
@@ -1044,6 +1044,12 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
     assert(scanRelation1.relation.output.map(_.exprId).toSet !=
       scanRelation2.relation.output.map(_.exprId).toSet,
       "Relation output attributes should have different expression IDs before canonicalization")
+    assert(scanRelation1.keyGroupedPartitioning.get.flatMap(_.references.map(_.exprId)).toSet !=
+      scanRelation2.keyGroupedPartitioning.get.flatMap(_.references.map(_.exprId)).toSet,
+      "Partitioning columns should have different expression IDs before canonicalization")
+    assert(scanRelation1.ordering.get.flatMap(_.references.map(_.exprId)).toSet !=
+      scanRelation2.ordering.get.flatMap(_.references.map(_.exprId)).toSet,
+      "Ordering columns should have different expression IDs before canonicalization")
 
     // After canonicalization, the two instances should be equal
     assert(scanRelation1.canonicalized == scanRelation2.canonicalized,
@@ -1095,7 +1101,9 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
     checkAnswer(query, Row(9, 0))
   }
 
-  test("SPARK-54163: check mergeScalarSubqueries is effective") {
+  test(
+    "SPARK-54163: check mergeScalarSubqueries is effective for OrderAndPartitionAwareDataSource"
+  ) {
     withSQLConf(SQLConf.V2_BUCKETING_ENABLED.key -> "true") {
       val options = Map(
         "partitionKeys" -> "i",
