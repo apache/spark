@@ -211,8 +211,8 @@ private[deploy] class Worker(
 
   private var registerMasterFutures: Array[JFuture[_]] = null
   private var registrationRetryTimer: Option[JScheduledFuture[_]] = None
-  private[worker] var heartbeatTask: Option[JScheduledFuture[_]] = None
-  private[worker] var workDirCleanupTask: Option[JScheduledFuture[_]] = None
+  private var heartbeatTask: Option[JScheduledFuture[_]] = None
+  private var workDirCleanupTask: Option[JScheduledFuture[_]] = None
 
   // A thread pool for registering with masters. Because registering with a master is a blocking
   // action, this thread pool must be able to create "masterRpcAddresses.size" threads at the same

@@ -18,6 +18,7 @@
 package org.apache.spark.deploy.worker
 
 import java.io.{File, IOException}
+import java.util.concurrent.{ScheduledFuture => JScheduledFuture}
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.function.Supplier
 
@@ -406,7 +407,7 @@ class WorkerSuite extends SparkFunSuite with Matchers with BeforeAndAfter with P
     assert(m.contains("Whitespace is not allowed"))
   }
 
-  test("heartbeat task and workdir cleanup task should only be scheduled once " +
+  test("SPARK-54312: heartbeat task and workdir cleanup task should only be scheduled once " +
     "across multiple registrations") {
     val worker = spy(makeWorker())
     val masterWebUiUrl = "https://1.2.3.4:8080"
@@ -414,20 +415,32 @@ class WorkerSuite extends SparkFunSuite with Matchers with BeforeAndAfter with P
     val masterRef = mock(classOf[RpcEndpointRef])
     when(masterRef.address).thenReturn(masterAddress)
 
+    def getHeartbeatTask(worker: Worker): Option[JScheduledFuture[_]] = {
+      val _heartbeatTask =
+        PrivateMethod[Option[JScheduledFuture[_]]](Symbol("heartbeatTask"))
+      worker.invokePrivate(_heartbeatTask())
+    }
+
+    def getWorkDirCleanupTask(worker: Worker): Option[JScheduledFuture[_]] = {
+      val _workDirCleanupTask =
+        PrivateMethod[Option[JScheduledFuture[_]]](Symbol("workDirCleanupTask"))
+      worker.invokePrivate(_workDirCleanupTask())
+    }
+
     // Tasks should not be scheduled yet before registration
-    assert(worker.heartbeatTask.isEmpty && worker.workDirCleanupTask.isEmpty)
+    assert(getHeartbeatTask(worker).isEmpty && getWorkDirCleanupTask(worker).isEmpty)
 
     val msg = RegisteredWorker(masterRef, masterWebUiUrl, masterAddress, duplicate = false)
     // Simulate first registration - this should schedule both tasks
     worker.receive(msg)
-    val heartbeatTask = worker.heartbeatTask
-    val workDirCleanupTask = worker.workDirCleanupTask
+    val heartbeatTask = getHeartbeatTask(worker)
+    val workDirCleanupTask = getWorkDirCleanupTask(worker)
     assert(heartbeatTask.isDefined && workDirCleanupTask.isDefined)
 
     // Simulate disconnection and re-registration
     worker.receive(msg)
     // After re-registration, the task references should be the same (not rescheduled)
-    assert(worker.heartbeatTask == heartbeatTask)
-    assert(worker.workDirCleanupTask == workDirCleanupTask)
+    assert(getHeartbeatTask(worker) == heartbeatTask)
+    assert(getWorkDirCleanupTask(worker) == workDirCleanupTask)
   }
 }
