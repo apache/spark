@@ -2631,8 +2631,8 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
   test("SPARK-53322: checkpointed scans avoid shuffles for aggregates") {
     withTempDir { dir =>
       spark.sparkContext.setCheckpointDir(dir.getPath)
-      val items_partitions = Array(identity("id"))
-      createTable(items, itemsColumns, items_partitions)
+      val itemsPartitions = Array(identity("id"))
+      createTable(items, itemsColumns, itemsPartitions)
       sql(s"INSERT INTO testcat.ns.$items VALUES " +
         s"(1, 'aa', 40.0, cast('2020-01-01' as timestamp)), " +
         s"(1, 'aa', 41.0, cast('2020-01-02' as timestamp)), " +
@@ -2652,8 +2652,8 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
   test("SPARK-53322: checkpointed scans aren't used for SPJ") {
     withTempDir { dir =>
       spark.sparkContext.setCheckpointDir(dir.getPath)
-      val items_partitions = Array(identity("id"))
-      createTable(items, itemsColumns, items_partitions)
+      val itemsPartitions = Array(identity("id"))
+      createTable(items, itemsColumns, itemsPartitions)
       sql(s"INSERT INTO testcat.ns.$items VALUES " +
         s"(1, 'aa', 41.0, cast('2020-01-01' as timestamp)), " +
         s"(2, 'bb', 10.0, cast('2020-01-02' as timestamp)), " +
@@ -2698,8 +2698,8 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
   test("SPARK-53322: checkpointed scans can't shuffle other children on SPJ") {
     withTempDir { dir =>
       spark.sparkContext.setCheckpointDir(dir.getPath)
-      val items_partitions = Array(identity("id"))
-      createTable(items, itemsColumns, items_partitions)
+      val itemsPartitions = Array(identity("id"))
+      createTable(items, itemsColumns, itemsPartitions)
       sql(s"INSERT INTO testcat.ns.$items VALUES " +
         s"(1, 'aa', 41.0, cast('2020-01-01' as timestamp)), " +
         s"(2, 'bb', 10.0, cast('2020-01-02' as timestamp)), " +
@@ -2737,8 +2737,8 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
   test("SPARK-53322: checkpointed scans can be shuffled by children on SPJ") {
     withTempDir { dir =>
       spark.sparkContext.setCheckpointDir(dir.getPath)
-      val items_partitions = Array(identity("id"))
-      createTable(items, itemsColumns, items_partitions)
+      val itemsPartitions = Array(identity("id"))
+      createTable(items, itemsColumns, itemsPartitions)
       sql(s"INSERT INTO testcat.ns.$items VALUES " +
         s"(1, 'aa', 41.0, cast('2020-01-01' as timestamp)), " +
         s"(2, 'bb', 10.0, cast('2020-01-02' as timestamp)), " +
