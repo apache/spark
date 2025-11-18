@@ -881,7 +881,6 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
       String mergeDirInfo =
         shuffleManagerMeta.substring(shuffleManagerMeta.indexOf(SHUFFLE_META_DELIMITER) + 1);
       try {
-        ObjectMapper mapper = new ObjectMapper();
         TypeReference<Map<String, String>> typeRef
           = new TypeReference<Map<String, String>>(){};
         Map<String, String> metaMap = mapper.readValue(mergeDirInfo, typeRef);
