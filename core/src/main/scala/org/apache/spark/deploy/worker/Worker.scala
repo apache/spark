@@ -474,7 +474,7 @@ private[deploy] class Worker(
       resources))
   }
 
-  private[worker] def handleRegisterResponse(msg: RegisterWorkerResponse): Unit = synchronized {
+  private def handleRegisterResponse(msg: RegisterWorkerResponse): Unit = synchronized {
     msg match {
       case RegisteredWorker(masterRef, masterWebUiUrl, masterAddress, duplicate) =>
         val preferredMasterAddress = if (preferConfiguredMasterAddress) {
