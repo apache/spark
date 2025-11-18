@@ -38,6 +38,7 @@ private[spark] abstract class StreamingCheckpointManager {
    *
    * @note
    *   This operation should only be performed after the streaming query has been stopped.
+   *   If not, can lead to undefined behavior or checkpoint corruption.
    * @param checkpointLocation
    *   The checkpoint location of the streaming query, should be the `checkpointLocation` option
    *   on the DataStreamWriter.
