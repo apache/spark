@@ -119,6 +119,9 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
 
   private static final ObjectMapper mapper = new ObjectMapper();
 
+  private static final TypeReference<Map<String, String>> typeRef =
+    new TypeReference<Map<String, String>>(){};
+
   /**
    * This a common prefix to the key for each app shuffle partition we add to leveldb, so they
    * are easy to find, since leveldb lets you search based on prefix.
@@ -881,8 +884,6 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
       String mergeDirInfo =
         shuffleManagerMeta.substring(shuffleManagerMeta.indexOf(SHUFFLE_META_DELIMITER) + 1);
       try {
-        TypeReference<Map<String, String>> typeRef
-          = new TypeReference<Map<String, String>>(){};
         Map<String, String> metaMap = mapper.readValue(mergeDirInfo, typeRef);
         String mergeDir = metaMap.get(MERGE_DIR_KEY);
         int attemptId = Integer.valueOf(
