@@ -579,15 +579,18 @@ case class EnsureRequirements(
               // In partially clustered distribution, we should use un-grouped partition values
               val spec = if (replicateLeftSide) rightSpec else leftSpec
               val partValues = spec.partitioning.originalPartitionValues
+              val internalRowComparableWrapperFactory =
+                InternalRowComparableWrapper.getInternalRowComparableWrapperFactory(
+                  partitionExprs.map(_.dataType))
 
               val numExpectedPartitions = partValues
-                .map(InternalRowComparableWrapper(_, partitionExprs))
+                .map(internalRowComparableWrapperFactory)
                 .groupBy(identity)
                 .transform((_, v) => v.size)
 
               mergedPartValues = mergedPartValues.map { case (partVal, numParts) =>
                 (partVal, numExpectedPartitions.getOrElse(
-                  InternalRowComparableWrapper(partVal, partitionExprs), numParts))
+                  internalRowComparableWrapperFactory(partVal), numParts))
               }
 
               logInfo(log"After applying partially clustered distribution, there are " +
@@ -679,9 +682,15 @@ case class EnsureRequirements(
       expressions: Seq[Expression],
       reducers: Option[Seq[Option[Reducer[_, _]]]]) = {
     reducers match {
-      case Some(reducers) => partValues.map { row =>
-        KeyGroupedShuffleSpec.reducePartitionValue(row, expressions, reducers)
-      }.distinct.map(_.row)
+      case Some(reducers) =>
+        val partitionDataTypes = expressions.map(_.dataType)
+        val internalRowComparableWrapperFactory =
+          InternalRowComparableWrapper.getInternalRowComparableWrapperFactory(
+            partitionDataTypes)
+        partValues.map { row =>
+          KeyGroupedShuffleSpec.reducePartitionValue(
+            row, reducers, partitionDataTypes, internalRowComparableWrapperFactory)
+        }.distinct.map(_.row)
       case _ => partValues
     }
   }
@@ -737,15 +746,16 @@ case class EnsureRequirements(
       rightPartitioning: Seq[InternalRow],
       partitionExpression: Seq[Expression],
       joinType: JoinType): Seq[InternalRow] = {
+    val internalRowComparableWrapperFactory =
+      InternalRowComparableWrapper.getInternalRowComparableWrapperFactory(
+        partitionExpression.map(_.dataType))
 
     val merged = if (SQLConf.get.getConf(SQLConf.V2_BUCKETING_PARTITION_FILTER_ENABLED)) {
       joinType match {
         case Inner => InternalRowComparableWrapper.mergePartitions(
           leftPartitioning, rightPartitioning, partitionExpression, intersect = true)
-        case LeftOuter => leftPartitioning.map(
-          InternalRowComparableWrapper(_, partitionExpression))
-        case RightOuter => rightPartitioning.map(
-          InternalRowComparableWrapper(_, partitionExpression))
+        case LeftOuter => leftPartitioning.map(internalRowComparableWrapperFactory)
+        case RightOuter => rightPartitioning.map(internalRowComparableWrapperFactory)
         case _ => InternalRowComparableWrapper.mergePartitions(leftPartitioning,
           rightPartitioning, partitionExpression)
       }
