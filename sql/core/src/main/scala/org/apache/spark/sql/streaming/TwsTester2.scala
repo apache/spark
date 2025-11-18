@@ -218,22 +218,7 @@ class TwsTester2[
    */
   def setMapState[MK: org.apache.spark.sql.Encoder, MV: org.apache.spark.sql.Encoder](
       stateName: String, key: K, values: Map[MK, MV]): Unit = {
-    val mapKeyEncoder = encoderFor[MK].resolveAndBind()
-    val mapValueEncoder = encoderFor[MV].resolveAndBind()
-    
-    val keyRow = keyEncoder.createSerializer()(key).asInstanceOf[UnsafeRow].copy()
-    
-    // Create the nested map of (mapKey -> mapValue) - store value directly, not composite
-    val innerMap = mutable.Map.empty[UnsafeRow, UnsafeRow]
-    values.foreach { case (mk, mv) =>
-      val mapKeyRow = mapKeyEncoder.createSerializer()(mk).asInstanceOf[UnsafeRow].copy()
-      val mapValueRow = mapValueEncoder.createSerializer()(mv).asInstanceOf[UnsafeRow].copy()
-      innerMap(mapKeyRow) = mapValueRow
-    }
-    
-    val mapStores = stateStoreProvider.getMapStores()
-    val mapStore = mapStores.getOrElseUpdate(stateName, mutable.Map.empty)
-    mapStore(keyRow) = innerMap
+
   }
 
   /**
@@ -245,20 +230,7 @@ class TwsTester2[
    */
   def peekMapState[MK: org.apache.spark.sql.Encoder, MV: org.apache.spark.sql.Encoder](
       stateName: String, key: K): Map[MK, MV] = {
-    val mapKeyEncoder = encoderFor[MK].resolveAndBind()
-    val mapKeyDeserializer = mapKeyEncoder.createDeserializer()
-    val mapValueEncoder = encoderFor[MV].resolveAndBind()
-    val mapValueDeserializer = mapValueEncoder.createDeserializer()
-    
-    val keyRow = keyEncoder.createSerializer()(key).asInstanceOf[UnsafeRow]
-    
-    val mapStores = stateStoreProvider.getMapStores()
-    mapStores.get(stateName).flatMap(_.get(keyRow)).map { innerMap =>
-      innerMap.iterator.map { case (mapKeyRow, mapValueRow) =>
-        // innerMap stores mapKey -> mapValue directly
-        (mapKeyDeserializer(mapKeyRow), mapValueDeserializer(mapValueRow))
-      }.toMap
-    }.getOrElse(Map.empty[MK, MV])
+    Map.empty[MK, MV]
   }
 
 }
