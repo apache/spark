@@ -28,7 +28,6 @@ import inspect
 import itertools
 import json
 from typing import Any, Callable, Iterable, Iterator, Optional, Tuple
-import zoneinfo
 
 from pyspark.accumulators import (
     SpecialAccumulatorIds,
