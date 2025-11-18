@@ -144,6 +144,9 @@ class TransformWithStateInPySparkPythonInitialStateRunner(
 
   private var pandasWriter: BaseStreamingArrowWriter = _
 
+  private var currentDataIterator: Iterator[InternalRow] = _
+  private var isCurrentIterFromInitState: Option[Boolean] = None
+
   override protected def writeNextBatchToArrowStream(
       root: VectorSchemaRoot,
       writer: ArrowStreamWriter,
@@ -158,30 +161,50 @@ class TransformWithStateInPySparkPythonInitialStateRunner(
       )
     }
 
-    if (inputIterator.hasNext) {
-      val startData = dataOut.size()
-      // a new grouping key with data & init state iter
-      val next = inputIterator.next()
-      val dataIter = next._2
-      val initIter = next._3
 
-      while (dataIter.hasNext || initIter.hasNext) {
-        val dataRow =
-          if (dataIter.hasNext) dataIter.next()
-          else InternalRow.empty
-        val initRow =
-          if (initIter.hasNext) initIter.next()
-          else InternalRow.empty
-        pandasWriter.writeRow(InternalRow(dataRow, initRow))
+    // If we don't have data left for the current group, move to the next group.
+    if (currentDataIterator == null && inputIterator.hasNext) {
+      val ((_, data), isInitState) = inputIterator.next()
+      currentDataIterator = data
+      val isPrevIterFromInitState = isCurrentIterFromInitState
+      isCurrentIterFromInitState = Some(isInitState)
+      if (isPrevIterFromInitState.isDefined &&
+        isPrevIterFromInitState.get != isInitState &&
+        pandasWriter.getTotalNumRowsForBatch > 0) {
+        // So we won't have batches with mixed data and init state.
+        pandasWriter.finalizeCurrentArrowBatch()
+        return true
       }
-      pandasWriter.finalizeCurrentArrowBatch()
-      val deltaData = dataOut.size() - startData
-      pythonMetrics("pythonDataSent") += deltaData
+    }
+
+    val startData = dataOut.size()
+
+    val hasInput = if (currentDataIterator != null) {
+      var isCurrentBatchFull = false
+      // Stop writing when the current arrowBatch is finalized/full. If we have rows left
+      while (currentDataIterator.hasNext && !isCurrentBatchFull) {
+        val dataRow = currentDataIterator.next()
+        isCurrentBatchFull = if (isCurrentIterFromInitState.get) {
+          pandasWriter.writeRow(InternalRow(null, dataRow))
+        } else {
+          pandasWriter.writeRow(InternalRow(dataRow, null))
+        }
+      }
+
+      if (!currentDataIterator.hasNext) {
+        currentDataIterator = null
+      }
+
       true
     } else {
+      pandasWriter.finalizeCurrentArrowBatch()
       super[PythonArrowInput].close()
       false
     }
+
+    val deltaData = dataOut.size() - startData
+    pythonMetrics("pythonDataSent") += deltaData
+    hasInput
   }
 }
 
@@ -392,5 +415,7 @@ trait TransformWithStateInPySparkPythonRunnerUtils extends Logging {
 
 object TransformWithStateInPySparkPythonRunner {
   type InType = (InternalRow, Iterator[InternalRow])
-  type GroupedInType = (InternalRow, Iterator[InternalRow], Iterator[InternalRow])
+
+  // ((key, rows), isInitState)
+  type GroupedInType = ((InternalRow, Iterator[InternalRow]), Boolean)
 }

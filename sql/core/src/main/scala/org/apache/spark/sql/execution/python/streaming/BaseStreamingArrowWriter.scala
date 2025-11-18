@@ -94,4 +94,8 @@ class BaseStreamingArrowWriter(
       ((arrowMaxBytesPerBatch != Int.MaxValue)
         && (arrowWriterForData.sizeInBytes() >= arrowMaxBytesPerBatch))
   }
+
+  def getTotalNumRowsForBatch: Int = {
+    totalNumRowsForBatch
+  }
 }

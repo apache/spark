@@ -1946,6 +1946,7 @@ class TransformWithStateInPandasInitStateSerializer(TransformWithStateInPandasSe
 
     def load_stream(self, stream):
         import pyarrow as pa
+        import pandas as pd
         from pyspark.sql.streaming.stateful_processor_util import (
             TransformWithStateInPandasFuncMode,
         )
@@ -1964,6 +1965,12 @@ class TransformWithStateInPandasInitStateSerializer(TransformWithStateInPandasSe
 
             def flatten_columns(cur_batch, col_name):
                 state_column = cur_batch.column(cur_batch.schema.get_field_index(col_name))
+
+                # Check if the entire column is null
+                if state_column.null_count == len(state_column):
+                    # Return empty table with no columns
+                    return pa.Table.from_arrays([], names=[])
+
                 state_field_names = [
                     state_column.type[i].name for i in range(state_column.type.num_fields)
                 ]
@@ -1981,30 +1988,65 @@ class TransformWithStateInPandasInitStateSerializer(TransformWithStateInPandasSe
                 .add("inputData", dataSchema)
                 .add("initState", initStateSchema)
             We'll parse batch into Tuples of (key, inputData, initState) and pass into the Python
-             data generator. All rows in the same batch have the same grouping key.
+             data generator. Rows in the same batch may have different grouping keys,
+             but each batch will have either init_data or input_data, not mix.
             """
-            for batch in batches:
-                flatten_state_table = flatten_columns(batch, "inputData")
-                data_pandas = [
-                    self.arrow_to_pandas(c, i)
-                    for i, c in enumerate(flatten_state_table.itercolumns())
-                ]
+            def row_stream():
+                for batch in batches:
+                    if self.arrow_max_bytes_per_batch != 2**31 - 1 and batch.num_rows > 0:
+                        batch_bytes = sum(
+                            buf.size
+                            for col in batch.columns
+                            for buf in col.buffers()
+                            if buf is not None
+                        )
+                        self.total_bytes += batch_bytes
+                        self.total_rows += batch.num_rows
+                        self.average_arrow_row_size = self.total_bytes / self.total_rows
 
-                flatten_init_table = flatten_columns(batch, "initState")
-                init_data_pandas = [
-                    self.arrow_to_pandas(c, i)
-                    for i, c in enumerate(flatten_init_table.itercolumns())
-                ]
-                key_series = [data_pandas[o] for o in self.key_offsets]
-                init_key_series = [init_data_pandas[o] for o in self.init_key_offsets]
+                    flatten_state_table = flatten_columns(batch, "inputData")
+                    data_pandas = [
+                        self.arrow_to_pandas(c, i)
+                        for i, c in enumerate(flatten_state_table.itercolumns())
+                    ]
 
-                if any(s.empty for s in key_series):
-                    # If any row is empty, assign batch_key using init_key_series
-                    batch_key = tuple(s[0] for s in init_key_series)
-                else:
-                    # If all rows are non-empty, create batch_key from key_series
-                    batch_key = tuple(s[0] for s in key_series)
-                yield (batch_key, data_pandas, init_data_pandas)
+                    flatten_init_table = flatten_columns(batch, "initState")
+                    init_data_pandas = [
+                        self.arrow_to_pandas(c, i)
+                        for i, c in enumerate(flatten_init_table.itercolumns())
+                    ]
+
+                    # Determine which column has data
+                    has_input_data = bool(data_pandas)
+
+                    if has_input_data:
+                        for row in pd.concat(data_pandas, axis=1).itertuples(index=False):
+                            batch_key = tuple(row[s] for s in self.key_offsets)
+                            yield (batch_key, row, None)
+                    else:
+                        for row in pd.concat(init_data_pandas, axis=1).itertuples(index=False):
+                            batch_key = tuple(row[s] for s in self.init_key_offsets)
+                            yield (batch_key, None, row)
+
+            for batch_key, group_rows in groupby(row_stream(), key=lambda x: x[0]):
+                rows = []
+                init_state_rows = []
+                for _, row, init_state_row in group_rows:
+                    if row is not None:
+                        rows.append(row)
+                    if init_state_row is not None:
+                        init_state_rows.append(init_state_row)
+
+                    total_len = len(rows) + len(init_state_rows)
+                    if (
+                            total_len >= self.arrow_max_records_per_batch
+                            or total_len * self.average_arrow_row_size >= self.arrow_max_bytes_per_batch
+                    ):
+                        yield (batch_key, pd.DataFrame(rows), pd.DataFrame(init_state_rows))
+                        rows = []
+                        init_state_rows = []
+                if rows or init_state_rows:
+                    yield (batch_key, pd.DataFrame(rows), pd.DataFrame(init_state_rows))
 
         _batches = super(ArrowStreamPandasSerializer, self).load_stream(stream)
         data_batches = generate_data_batches(_batches)
@@ -2122,7 +2164,6 @@ class TransformWithStateInPySparkRowInitStateSerializer(TransformWithStateInPySp
         self.init_key_offsets = None
 
     def load_stream(self, stream):
-        import itertools
         import pyarrow as pa
         from pyspark.sql.streaming.stateful_processor_util import (
             TransformWithStateInPandasFuncMode,
@@ -2141,6 +2182,11 @@ class TransformWithStateInPySparkRowInitStateSerializer(TransformWithStateInPySp
 
             def extract_rows(cur_batch, col_name, key_offsets):
                 data_column = cur_batch.column(cur_batch.schema.get_field_index(col_name))
+
+                # Check if the entire column is null
+                if data_column.null_count == len(data_column):
+                    return None
+
                 data_field_names = [
                     data_column.type[i].name for i in range(data_column.type.num_fields)
                 ]
@@ -2153,18 +2199,17 @@ class TransformWithStateInPySparkRowInitStateSerializer(TransformWithStateInPySp
                 table = pa.Table.from_arrays(data_field_arrays, names=data_field_names)
 
                 if table.num_rows == 0:
-                    return (None, iter([]))
-                else:
-                    batch_key = tuple(table.column(o)[0].as_py() for o in key_offsets)
+                    return None
 
-                    rows = []
+                def row_iterator():
                     for row_idx in range(table.num_rows):
+                        key = tuple(table.column(o)[row_idx].as_py() for o in key_offsets)
                         row = DataRow(
                             *(table.column(i)[row_idx].as_py() for i in range(table.num_columns))
                         )
-                        rows.append(row)
+                        yield (key, row)
 
-                    return (batch_key, iter(rows))
+                return row_iterator()
 
             """
             The arrow batch is written in the schema:
@@ -2172,49 +2217,44 @@ class TransformWithStateInPySparkRowInitStateSerializer(TransformWithStateInPySp
                 .add("inputData", dataSchema)
                 .add("initState", initStateSchema)
             We'll parse batch into Tuples of (key, inputData, initState) and pass into the Python
-             data generator. All rows in the same batch have the same grouping key.
+             data generator. Each batch will have either init_data or input_data, not mix.
             """
             for batch in batches:
-                (input_batch_key, input_data_iter) = extract_rows(
-                    batch, "inputData", self.key_offsets
-                )
-                (init_batch_key, init_state_iter) = extract_rows(
-                    batch, "initState", self.init_key_offsets
-                )
+                # Detect which column has data - each batch contains only one type
+                input_result = extract_rows(batch, "inputData", self.key_offsets)
 
-                if input_batch_key is None:
-                    batch_key = init_batch_key
+                if input_result is not None:
+                    for key, input_data_row in input_result:
+                        yield (key, input_data_row, None)
                 else:
-                    batch_key = input_batch_key
-
-                for init_state_row in init_state_iter:
-                    yield (batch_key, None, init_state_row)
-
-                for input_data_row in input_data_iter:
-                    yield (batch_key, input_data_row, None)
+                    init_result = extract_rows(batch, "initState", self.init_key_offsets)
+                    if init_result is not None:
+                        for key, init_state_row in init_result:
+                            yield (key, None, init_state_row)
 
         _batches = super(ArrowStreamUDFSerializer, self).load_stream(stream)
         data_batches = generate_data_batches(_batches)
 
         for k, g in groupby(data_batches, key=lambda x: x[0]):
-            # g: list(batch_key, input_data_iter, init_state_iter)
-
-            # they are sharing the iterator, hence need to copy
-            input_values_iter, init_state_iter = itertools.tee(g, 2)
-
-            chained_input_values = itertools.chain(map(lambda x: x[1], input_values_iter))
-            chained_init_state_values = itertools.chain(map(lambda x: x[2], init_state_iter))
-
-            chained_input_values_without_none = filter(
-                lambda x: x is not None, chained_input_values
-            )
-            chained_init_state_values_without_none = filter(
-                lambda x: x is not None, chained_init_state_values
-            )
-
-            ret_tuple = (chained_input_values_without_none, chained_init_state_values_without_none)
-
-            yield (TransformWithStateInPandasFuncMode.PROCESS_DATA, k, ret_tuple)
+            input_rows = []
+            init_rows = []
+            
+            for batch_key, input_row, init_row in g:
+                if input_row is not None:
+                    input_rows.append(input_row)
+                if init_row is not None:
+                    init_rows.append(init_row)
+                
+                total_len = len(input_rows) + len(init_rows)
+                if total_len >= self.arrow_max_records_per_batch:
+                    ret_tuple = (iter(input_rows), iter(init_rows))
+                    yield (TransformWithStateInPandasFuncMode.PROCESS_DATA, k, ret_tuple)
+                    input_rows = []
+                    init_rows = []
+            
+            if input_rows or init_rows:
+                ret_tuple = (iter(input_rows), iter(init_rows))
+                yield (TransformWithStateInPandasFuncMode.PROCESS_DATA, k, ret_tuple)
 
         yield (TransformWithStateInPandasFuncMode.PROCESS_TIMER, None, None)
 

@@ -797,12 +797,14 @@ def wrap_grouped_transform_with_state_pandas_udf(f, return_type, runner_conf):
 
 def wrap_grouped_transform_with_state_pandas_init_state_udf(f, return_type, runner_conf):
     def wrapped(stateful_processor_api_client, mode, key, value_series_gen):
-        import pandas as pd
-
+        # Split the generator into two using itertools.tee
         state_values_gen, init_states_gen = itertools.tee(value_series_gen, 2)
-        state_values = (df for x, _ in state_values_gen if not (df := pd.concat(x, axis=1)).empty)
-        init_states = (df for _, x in init_states_gen if not (df := pd.concat(x, axis=1)).empty)
 
+        # Extract just the data DataFrames (first element of each tuple)
+        state_values = (data_df for data_df, _ in state_values_gen if not data_df.empty)
+
+        # Extract just the init DataFrames (second element of each tuple)
+        init_states = (init_df for _, init_df in init_states_gen if not init_df.empty)
         result_iter = f(stateful_processor_api_client, mode, key, state_values, init_states)
 
         # TODO(SPARK-49100): add verification that elements in result_iter are
@@ -3067,6 +3069,7 @@ def read_udfs(pickleSer, infile, eval_type):
         ser.init_key_offsets = parsed_offsets[1][0]
         stateful_processor_api_client = StatefulProcessorApiClient(state_server_port, key_schema)
 
+        import pandas as pd
         def mapper(a):
             mode = a[0]
 
@@ -3075,8 +3078,12 @@ def read_udfs(pickleSer, infile, eval_type):
 
                 def values_gen():
                     for x in a[2]:
-                        retVal = [x[1][o] for o in parsed_offsets[0][1]]
-                        initVal = [x[2][o] for o in parsed_offsets[1][1]]
+                        retVal = pd.DataFrame()
+                        initVal = pd.DataFrame()
+                        if not x[1].empty:
+                            retVal = x[1]
+                        if not x[2].empty:
+                            initVal = x[2]
                         yield retVal, initVal
 
                 # This must be generator comprehension - do not materialize.
@@ -3230,6 +3237,7 @@ def read_udfs(pickleSer, infile, eval_type):
 
         parsed_offsets = extract_key_value_indexes(arg_offsets)
 
+        import pandas as pd
         def mapper(a):
             df1_keys = [a[0][o] for o in parsed_offsets[0][0]]
             df1_vals = [a[0][o] for o in parsed_offsets[0][1]]
