@@ -49,7 +49,7 @@ CreateViewCommand `view_3`, SELECT 1 as col1, false, false, GlobalTempView, UNSU
 -- !query
 CREATE TEMPORARY VIEW view_4(e INT) USING parquet
 -- !query analysis
-CreateTempViewUsing [tableIdent:`view_4` StructType(StructField(e,IntegerType,true)) replace:false provider:parquet Map()
+CreateTempViewUsing [tableIdent:`view_4` StructType(StructField(e,IntegerType,true)) ignoreIfExists:false replace:false provider:parquet Map()
 
 
 -- !query
