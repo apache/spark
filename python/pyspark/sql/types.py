@@ -1995,6 +1995,10 @@ class UserDefinedType(DataType):
     def __eq__(self, other: Any) -> bool:
         return type(self) == type(other)
 
+    # __hash__ should be defined together with __eq__, otherwise it is not hashable
+    def __hash__(self) -> int:
+        return hash(str(self))
+
 
 class VariantVal:
     """
