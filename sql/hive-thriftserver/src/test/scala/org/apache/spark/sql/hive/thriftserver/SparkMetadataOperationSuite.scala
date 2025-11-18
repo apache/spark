@@ -24,6 +24,7 @@ import org.apache.hive.service.cli.HiveSQLException
 
 import org.apache.spark.SPARK_VERSION
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
+import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.util.VersionUtils
@@ -682,6 +683,30 @@ class SparkMetadataOperationSuite extends HiveThriftServer2TestBase {
         assert(rowSet.getInt("NULLABLE") === 0)
         assert(rowSet.getInt("ORDINAL_POSITION") === idx + 1)
         idx += 1
+      }
+    }
+  }
+
+  test("SPARK-54350: SparkGetColumnsOperation respects useZeroBasedColumnOrdinalPosition config") {
+    Seq(true, false).foreach { zeroBasedOrdinal =>
+      val tableName = "column_ordinal_position"
+      val ddl = s"CREATE TABLE $tableName (id INT, name STRING)"
+
+      withJdbcStatement(tableName) { statement =>
+        statement.execute(
+          s"SET ${HiveUtils.LEGACY_STS_ZERO_BASED_COLUMN_ORDINAL.key}=$zeroBasedOrdinal")
+        statement.execute(ddl)
+        val data = statement.getConnection.getMetaData
+        val rowSet = data.getColumns("", "", tableName, null)
+        assert(rowSet.next())
+        assert(rowSet.getString("TABLE_NAME") === tableName)
+        assert(rowSet.getString("COLUMN_NAME") === "id")
+        assert(rowSet.getInt("ORDINAL_POSITION") === (if (zeroBasedOrdinal) 0 else 1))
+        assert(rowSet.next())
+        assert(rowSet.getString("TABLE_NAME") === tableName)
+        assert(rowSet.getString("COLUMN_NAME") === "name")
+        assert(rowSet.getInt("ORDINAL_POSITION") === (if (zeroBasedOrdinal) 1 else 2))
+        assert(!rowSet.next())
       }
     }
   }
