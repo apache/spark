@@ -143,7 +143,7 @@ private[sql] class InMemoryStateStore(
   }
 
   override def metrics: StateStoreMetrics = {
-    throw new UnsupportedOperationException("metrics not supported in InMemoryStateStore")
+    new StateStoreMetrics(0L, 0L, Map.empty)
   }
 
   override def hasCommitted: Boolean = committed
