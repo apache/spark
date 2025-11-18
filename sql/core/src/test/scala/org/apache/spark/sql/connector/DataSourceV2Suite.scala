@@ -1021,6 +1021,7 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
       val relation = DataSourceV2Relation.create(table, None, None, options)
       val scan = relation.table.asReadable.newScanBuilder(relation.options).build()
       val scanRelation = DataSourceV2ScanRelation(relation, scan, relation.output)
+      // Attach partitioning and ordering information to DataSourceV2ScanRelation
       V2ScanPartitioningAndOrdering.apply(scanRelation).asInstanceOf[DataSourceV2ScanRelation]
     }
 
@@ -1032,8 +1033,7 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
     assert(scanRelation1.keyGroupedPartitioning.isDefined &&
       scanRelation1.keyGroupedPartitioning.get.nonEmpty,
       "DataSourceV2ScanRelation should have key grouped partitioning")
-    assert(scanRelation1.ordering.isDefined &&
-      scanRelation1.ordering.get.nonEmpty,
+    assert(scanRelation1.ordering.isDefined && scanRelation1.ordering.get.nonEmpty,
       "DataSourceV2ScanRelation should have ordering")
 
     // the two instances should not be the same, as they should have different attribute IDs
