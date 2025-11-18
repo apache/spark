@@ -17,23 +17,17 @@
 package org.apache.spark.sql.streaming
 
 import java.sql.Timestamp
-import java.time.Clock
-import java.time.Duration
-import java.time.Instant
-import java.time.ZoneId
+import java.time.{Clock, Duration, Instant, ZoneId}
 
 import scala.reflect.ClassTag
 
 import org.apache.spark.sql.catalyst.util.IntervalUtils
 import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.statefulprocessor.ImplicitGroupingKeyTracker
 import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.testing.InMemoryStatefulProcessorHandleImpl
-import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.timers.ExpiredTimerInfoImpl
-import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.timers.TimerValuesImpl
-import org.apache.spark.sql.streaming.OutputMode
-import org.apache.spark.sql.streaming.StatefulProcessor
-import org.apache.spark.sql.streaming.StatefulProcessorWithInitialState
-import org.apache.spark.sql.streaming.TimeMode
-import org.apache.spark.sql.streaming.TimerValues
+import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.timers.{
+  ExpiredTimerInfoImpl,
+  TimerValuesImpl
+}
 
 /**
  * Testing utility for transformWithState stateful processors. Provides in-memory state management

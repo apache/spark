@@ -18,8 +18,8 @@ package org.apache.spark.sql.streaming
 
 import scala.collection.mutable
 
-import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder}
+import org.apache.spark.sql.{Dataset, SparkSession}
+import org.apache.spark.sql.catalyst.encoders.{ExpressionEncoder, encoderFor}
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.classic.ClassicConversions.castToImpl
 import org.apache.spark.sql.execution.streaming.runtime.{MemoryStream, StreamingQueryWrapper}
@@ -45,8 +45,8 @@ class TwsTester2[
       implicitly[org.apache.spark.sql.Encoder[K]],
       implicitly[org.apache.spark.sql.Encoder[I]]
     )
-  val inputStream: MemoryStream[(K, I)] = MemoryStream[(K, I)]
-  val resultDs = inputStream
+  private val inputStream: MemoryStream[(K, I)] = MemoryStream[(K, I)]
+  private val resultDs: Dataset[O] = inputStream
     .toDS()
     .groupByKey(_._1)
     .mapValues(_._2)

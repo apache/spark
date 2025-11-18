@@ -57,7 +57,8 @@ abstract class TransformWithStateExecBase(
   // Supported state store providers for TransformWithState.
   // TransformWithState currently supports only RocksDBStateStoreProvider.
   private val SUPPORTED_STATE_STORE_PROVIDERS = Set(
-    classOf[RocksDBStateStoreProvider].getName
+    classOf[RocksDBStateStoreProvider].getName,
+    "org.apache.spark.sql.streaming.InMemoryStateStoreProvider"
   )
 
   override def supportsSchemaEvolution: Boolean = true
