@@ -3078,12 +3078,8 @@ def read_udfs(pickleSer, infile, eval_type):
 
                 def values_gen():
                     for x in a[2]:
-                        retVal = pd.DataFrame()
-                        initVal = pd.DataFrame()
-                        if not x[1].empty:
-                            retVal = x[1]
-                        if not x[2].empty:
-                            initVal = x[2]
+                        retVal = x[1]
+                        initVal = x[2]
                         yield retVal, initVal
 
                 # This must be generator comprehension - do not materialize.
