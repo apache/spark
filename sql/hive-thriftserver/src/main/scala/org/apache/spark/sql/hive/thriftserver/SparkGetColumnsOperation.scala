@@ -31,6 +31,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.types._
 
 /**
@@ -200,6 +201,11 @@ private[hive] class SparkGetColumnsOperation(
     schema.zipWithIndex.foreach { case (column, pos) =>
       if (columnPattern != null && !columnPattern.matcher(column.name).matches()) {
       } else {
+        val ordinal = if (session.conf.get(HiveUtils.LEGACY_STS_ZERO_BASED_COLUMN_ORDINAL)) {
+          pos
+        } else {
+          pos + 1
+        }
         val rowData = Array[AnyRef](
           null, // TABLE_CAT
           dbName, // TABLE_SCHEM
@@ -217,7 +223,7 @@ private[hive] class SparkGetColumnsOperation(
           null, // SQL_DATA_TYPE
           null, // SQL_DATETIME_SUB
           null, // CHAR_OCTET_LENGTH
-          pos.asInstanceOf[AnyRef], // ORDINAL_POSITION
+          ordinal.asInstanceOf[AnyRef], // ORDINAL_POSITION, 1-based
           "YES", // IS_NULLABLE
           null, // SCOPE_CATALOG
           null, // SCOPE_SCHEMA
