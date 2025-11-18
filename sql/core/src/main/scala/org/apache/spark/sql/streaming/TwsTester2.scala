@@ -89,21 +89,8 @@ class TwsTester2[
     // Trigger initialization by processing an empty batch
     inputStream.addData(List.empty)
     query.processAllAvailable()
-    
-    // Wait for provider to be registered
-    var providerOpt = InMemoryStateStoreProvider.getProvider()
-    var retries = 0
-    while (providerOpt.isEmpty && retries < 10) {
-      Thread.sleep(100)
-      providerOpt = InMemoryStateStoreProvider.getProvider()
-      retries += 1
-    }
-    
-    require(providerOpt.isDefined, "No InMemoryStateStoreProvider instance found. " +
-      "Ensure SQLConf.STATE_STORE_PROVIDER_CLASS is set to InMemoryStateStoreProvider.")
-    
-    // Return the provider (only 1 since we use 1 partition)
-    providerOpt.get
+
+    InMemoryStateStoreProvider.getProvider().get
   }
 
   def test(input: List[(K, I)]): List[O] = {
