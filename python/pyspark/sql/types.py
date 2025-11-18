@@ -460,6 +460,9 @@ class TimestampType(DatetimeType, metaclass=DataTypeSingleton):
     def fromInternal(self, ts: int) -> datetime.datetime:
         if ts is not None:
             # using int to avoid precision loss in float
+            # If TimestampType.tz_info is not None, we need to use it to convert the timestamp.
+            # Otherwise, we need to use the default timezone.
+            # We need to replace the tzinfo to None to keep backward compatibility
             return datetime.datetime.fromtimestamp(ts // 1000000, self.tz_info).replace(
                 microsecond=ts % 1000000, tzinfo=None
             )
