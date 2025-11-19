@@ -204,6 +204,7 @@ class PandasConversionMixin:
                 "spark.sql.execution.pandas.structHandlingMode",
             ]
         )
+        prefers_large_var_types = arrowUseLargeVarTypes == "true"
 
         if arrowPySparkEnabled == "true":
             use_arrow = True
@@ -213,7 +214,7 @@ class PandasConversionMixin:
 
                 require_minimum_pyarrow_version()
                 arrow_schema = to_arrow_schema(
-                    self.schema, prefers_large_types=arrowUseLargeVarTypes == "true"
+                    self.schema, prefers_large_types=prefers_large_var_types
                 )
             except Exception as e:
                 if arrowPySparkFallbackEnabled == "true":
@@ -245,7 +246,8 @@ class PandasConversionMixin:
                     import pyarrow as pa
 
                     batches = self._collect_as_arrow(
-                        split_batches=arrowPySparkSelfDestructEnabled == "true"
+                        split_batches=arrowPySparkSelfDestructEnabled == "true",
+                        prefers_large_var_types=prefers_large_var_types,
                     )
 
                     if len(batches) > 0:
@@ -350,7 +352,9 @@ class PandasConversionMixin:
 
         self_destruct = arrowPySparkSelfDestructEnabled == "true"
         batches = self._collect_as_arrow(
-            split_batches=self_destruct, empty_list_if_zero_records=False
+            split_batches=self_destruct,
+            empty_list_if_zero_records=False,
+            prefers_large_var_types=prefers_large_var_types,
         )
         table = pa.Table.from_batches(batches).cast(schema)
         # Ensure only the table has a reference to the batches, so that
@@ -362,6 +366,7 @@ class PandasConversionMixin:
         self,
         split_batches: bool = False,
         empty_list_if_zero_records: bool = True,
+        prefers_large_var_types: bool = False,
     ) -> List["pa.RecordBatch"]:
         """
         Returns all records as a list of Arrow RecordBatches. PyArrow must be installed
@@ -430,7 +435,6 @@ class PandasConversionMixin:
             from pyspark.sql.pandas.types import to_arrow_schema
             import pyarrow as pa
 
-            prefers_large_var_types = self.sparkSession._jconf.arrowUseLargeVarTypes()
             schema = to_arrow_schema(self.schema, prefers_large_types=prefers_large_var_types)
             empty_arrays = [pa.array([], type=field.type) for field in schema]
             return [pa.RecordBatch.from_arrays(empty_arrays, schema=schema)]
