@@ -6554,6 +6554,11 @@
           "Drop the namespace <namespace>."
         ]
       },
+      "GEOSPATIAL_DISABLED" : {
+        "message" : [
+          "Geospatial feature is disabled."
+        ]
+      },
       "HIVE_TABLE_TYPE" : {
         "message" : [
           "The <tableName> is hive <tableType>."
