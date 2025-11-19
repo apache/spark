@@ -19,3 +19,19 @@
 branch = true
 parallel = true
 data_file = ${COVERAGE_DIR}/coverage_data/coverage
+omit =
+    # Not our code
+    */pyspark/cloudpickle/*
+    */pyspark/sql/connect/proto/*
+    */pyspark/loose_version.py
+    # Tests
+    */pyspark/errors/tests/*
+    */pyspark/ml/tests/*
+    */pyspark/mllib/tests/*
+    */pyspark/pandas/tests/*
+    */pyspark/pipelines/tests/*
+    */pyspark/resource/tests/*
+    */pyspark/sql/tests/*
+    */pyspark/streaming/tests/*
+    */pyspark/tests/*
+    */pyspark/testing/tests/*
