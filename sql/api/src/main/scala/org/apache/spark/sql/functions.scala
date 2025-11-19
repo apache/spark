@@ -9480,6 +9480,12 @@ object functions {
   def st_setsrid(geo: Column, srid: Column): Column =
     Column.fn("st_setsrid", geo, srid)
 
+  /**
+   * Returns a new GEOGRAPHY or GEOMETRY value whose SRID is the specified SRID value.
+   *
+   * @group st_funcs
+   * @since 4.1.0
+   */
   def st_setsrid(geo: Column, srid: Int): Column =
     Column.fn("st_setsrid", geo, lit(srid))
 
