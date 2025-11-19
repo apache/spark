@@ -295,7 +295,6 @@ private[orc] class OrcOutputWriter(
   }
 
   override def write(row: InternalRow): Unit = {
-    // getOrCreateInternalWriter()
     recordWriter.write(NullWritable.get(), serializer.serialize(row))
   }
 
@@ -317,8 +316,6 @@ private[orc] class OrcOutputWriter(
       // For empty write task, we need to create it manually to record our meta.
       val options = OrcFile.writerOptions(context.getConfiguration)
         .inspector(serializer.structOI)
-        // .setProlepticGregorian(true)
-        // .useUTCTimestamp(true)
       writer = OrcFile.createWriter(new Path(path), options)
       // set the writer to make it flush meta on close
       writerField.set(recordWriter, writer)
