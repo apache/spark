@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.datasources.v2.state
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.catalyst.expressions.{GenericRowWithSchema, UnsafeRow}
 import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
-import org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider
+import org.apache.spark.sql.execution.streaming.state.{HDFSBackedStateStoreProvider, RocksDBStateStoreProvider}
 import org.apache.spark.sql.functions.{count, sum}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.OutputMode
@@ -197,6 +197,47 @@ class StatePartitionReaderAllColumnFamiliesSuite extends StateDataSourceTestBase
           val normalData = getNormalReadData(tempDir.getAbsolutePath)
           compareNormalAndBytesData(
             normalData, bytesReadDf, "default", keySchema, valueSchema)
+      }
+    }
+  }
+
+  test("internalOnlyReadAllColumnFamilies should fail with HDFS-backed state store") {
+    withTempDir { tempDir =>
+      withSQLConf(
+        SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[HDFSBackedStateStoreProvider].getName,
+        SQLConf.SHUFFLE_PARTITIONS.key -> "2") {
+
+        val inputData = MemoryStream[Int]
+        val aggregated = inputData.toDF()
+          .selectExpr("value", "value % 10 AS groupKey")
+          .groupBy($"groupKey")
+          .agg(
+            count("*").as("cnt"),
+            sum("value").as("sum")
+          )
+          .as[(Int, Long, Long)]
+
+        testStream(aggregated, OutputMode.Update)(
+          StartStream(checkpointLocation = tempDir.getAbsolutePath),
+          // batch 0
+          AddData(inputData, 0 until 1: _*),
+          CheckLastBatch(
+            (0, 1, 0)
+          ),
+          StopStream
+        )
+
+        // Attempt to read with internalOnlyReadAllColumnFamilies=true should fail
+        val e = intercept[StateDataSourceException] {
+          spark.read
+            .format("statestore")
+            .option(StateSourceOptions.PATH, tempDir.getAbsolutePath)
+            .option(StateSourceOptions.INTERNAL_ONLY_READ_ALL_COLUMN_FAMILIES, "true")
+            .load()
+            .collect()
+        }
+        assert(e.getMessage.contains("internalOnlyReadAllColumnFamilies=true is only " +
+          s"supported with RocksDBStateStoreProvider"))
       }
     }
   }

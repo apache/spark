@@ -70,8 +70,8 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
       && !stateConf.providerClass.contains("RocksDB")) {
       throw StateDataSourceErrors.invalidOptionValue(
         StateSourceOptions.INTERNAL_ONLY_READ_ALL_COLUMN_FAMILIES,
-        "internalOnlyReadAllColumnFamilies is only supported with RocksDBStateStoreProvider. " +
-          s"Current provider: ${stateConf.providerClass}")
+        "internalOnlyReadAllColumnFamilies=true is only supported with " +
+          s"RocksDBStateStoreProvider. Current provider: ${stateConf.providerClass}")
     }
     val stateStoreReaderInfo: StateStoreReaderInfo = getStoreMetadataAndRunChecks(
       sourceOptions)

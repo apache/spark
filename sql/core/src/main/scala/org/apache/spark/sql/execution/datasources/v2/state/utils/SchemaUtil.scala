@@ -101,7 +101,6 @@ object SchemaUtil {
     row.update(1, pair._1.getBytes)
     row.update(2, pair._2.getBytes)
     row.update(3, UTF8String.fromString(colFamilyName))
-//    row.update(4, pair._2)
     row
   }
 
