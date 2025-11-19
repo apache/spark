@@ -30,7 +30,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.COMMAND
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.plans.logical.CommandResult
-  import org.apache.spark.sql.execution.{QueryExecution, QueryExecutionException, SQLExecution}
+import org.apache.spark.sql.execution.{QueryExecution, QueryExecutionException, SQLExecution}
 import org.apache.spark.sql.execution.HiveResult.hiveResultString
 import org.apache.spark.sql.internal.{SQLConf, VariableSubstitution}
 import org.apache.spark.util.Utils
