@@ -23,8 +23,9 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, Attri
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, ExposesMetadataColumns, Histogram, HistogramBin, LeafNode, LogicalPlan, Statistics}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
-import org.apache.spark.sql.catalyst.util.{quoteIfNeeded, truncatedString, CharVarcharUtils}
-import org.apache.spark.sql.connector.catalog.{CatalogPlugin, FunctionCatalog, Identifier, SupportsMetadataColumns, Table, TableCapability}
+import org.apache.spark.sql.catalyst.util.{truncatedString, CharVarcharUtils}
+import org.apache.spark.sql.connector.catalog.{CatalogPlugin, FunctionCatalog, Identifier, SupportsMetadataColumns, Table, TableCapability, TableCatalog, V2TableUtil}
+import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.CatalogHelper
 import org.apache.spark.sql.connector.read.{Scan, Statistics => V2Statistics, SupportsReportStatistics}
 import org.apache.spark.sql.connector.read.streaming.{Offset, SparkDataStream}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -57,9 +58,8 @@ abstract class DataSourceV2RelationBase(
   }
 
   override def name: String = {
-    import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
     (catalog, identifier) match {
-      case (Some(cat), Some(ident)) => s"${quoteIfNeeded(cat.name())}.${ident.quoted}"
+      case (Some(cat), Some(ident)) => V2TableUtil.toQualifiedName(cat, ident)
       case _ => table.name()
     }
   }
@@ -133,6 +133,8 @@ case class DataSourceV2Relation(
 
   def autoSchemaEvolution(): Boolean =
     table.capabilities().contains(TableCapability.AUTOMATIC_SCHEMA_EVOLUTION)
+
+  def isVersioned: Boolean = table.currentVersion != null
 }
 
 /**
@@ -182,7 +184,13 @@ case class DataSourceV2ScanRelation(
       relation = this.relation.copy(
         output = this.relation.output.map(QueryPlan.normalizeExpressions(_, this.relation.output))
       ),
-      output = this.output.map(QueryPlan.normalizeExpressions(_, this.output))
+      output = this.output.map(QueryPlan.normalizeExpressions(_, this.output)),
+      keyGroupedPartitioning = keyGroupedPartitioning.map(
+        _.map(QueryPlan.normalizeExpressions(_, output))
+      ),
+      ordering = ordering.map(
+        _.map(o => o.copy(child = QueryPlan.normalizeExpressions(o.child, output)))
+      )
     )
   }
 }
@@ -259,10 +267,10 @@ object ExtractV2Table {
 }
 
 object ExtractV2CatalogAndIdentifier {
-  def unapply(relation: DataSourceV2Relation): Option[(CatalogPlugin, Identifier)] = {
+  def unapply(relation: DataSourceV2Relation): Option[(TableCatalog, Identifier)] = {
     relation match {
       case DataSourceV2Relation(_, _, Some(catalog), Some(identifier), _, _) =>
-        Some((catalog, identifier))
+        Some((catalog.asTableCatalog, identifier))
       case _ =>
         None
     }

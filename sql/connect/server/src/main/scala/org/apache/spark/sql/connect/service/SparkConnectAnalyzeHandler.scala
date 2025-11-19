@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.classic.{DataFrame, Dataset}
 import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, InvalidPlanInput, StorageLevelProtoConverter}
 import org.apache.spark.sql.connect.planner.SparkConnectPlanner
+import org.apache.spark.sql.connect.utils.PlanCompressionUtils
 import org.apache.spark.sql.execution.{CodegenMode, CommandExecutionMode, CostMode, ExtendedMode, FormattedMode, SimpleMode}
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.util.ArrayImplicits._
@@ -63,6 +64,9 @@ private[connect] class SparkConnectAnalyzeHandler(
     val builder = proto.AnalyzePlanResponse.newBuilder()
 
     def transformRelation(rel: proto.Relation) = planner.transformRelation(rel, cachePlan = true)
+    def transformRelationPlan(plan: proto.Plan) = {
+      transformRelation(PlanCompressionUtils.decompressPlan(plan).getRoot)
+    }
 
     def getDataFrameWithoutExecuting(rel: LogicalPlan): DataFrame = {
       val qe = session.sessionState.executePlan(rel, CommandExecutionMode.SKIP)
@@ -71,7 +75,7 @@ private[connect] class SparkConnectAnalyzeHandler(
 
     request.getAnalyzeCase match {
       case proto.AnalyzePlanRequest.AnalyzeCase.SCHEMA =>
-        val rel = transformRelation(request.getSchema.getPlan.getRoot)
+        val rel = transformRelationPlan(request.getSchema.getPlan)
         val schema = getDataFrameWithoutExecuting(rel).schema
         builder.setSchema(
           proto.AnalyzePlanResponse.Schema
@@ -79,7 +83,7 @@ private[connect] class SparkConnectAnalyzeHandler(
             .setSchema(DataTypeProtoConverter.toConnectProtoType(schema))
             .build())
       case proto.AnalyzePlanRequest.AnalyzeCase.EXPLAIN =>
-        val rel = transformRelation(request.getExplain.getPlan.getRoot)
+        val rel = transformRelationPlan(request.getExplain.getPlan)
         val queryExecution = getDataFrameWithoutExecuting(rel).queryExecution
         val explainString = request.getExplain.getExplainMode match {
           case proto.AnalyzePlanRequest.Explain.ExplainMode.EXPLAIN_MODE_SIMPLE =>
@@ -101,7 +105,7 @@ private[connect] class SparkConnectAnalyzeHandler(
             .build())
 
       case proto.AnalyzePlanRequest.AnalyzeCase.TREE_STRING =>
-        val rel = transformRelation(request.getTreeString.getPlan.getRoot)
+        val rel = transformRelationPlan(request.getTreeString.getPlan)
         val schema = getDataFrameWithoutExecuting(rel).schema
         val treeString = if (request.getTreeString.hasLevel) {
           schema.treeString(request.getTreeString.getLevel)
@@ -115,7 +119,7 @@ private[connect] class SparkConnectAnalyzeHandler(
             .build())
 
       case proto.AnalyzePlanRequest.AnalyzeCase.IS_LOCAL =>
-        val rel = transformRelation(request.getIsLocal.getPlan.getRoot)
+        val rel = transformRelationPlan(request.getIsLocal.getPlan)
         val isLocal = getDataFrameWithoutExecuting(rel).isLocal
         builder.setIsLocal(
           proto.AnalyzePlanResponse.IsLocal
@@ -124,7 +128,7 @@ private[connect] class SparkConnectAnalyzeHandler(
             .build())
 
       case proto.AnalyzePlanRequest.AnalyzeCase.IS_STREAMING =>
-        val rel = transformRelation(request.getIsStreaming.getPlan.getRoot)
+        val rel = transformRelationPlan(request.getIsStreaming.getPlan)
         val isStreaming = getDataFrameWithoutExecuting(rel).isStreaming
         builder.setIsStreaming(
           proto.AnalyzePlanResponse.IsStreaming
@@ -133,7 +137,7 @@ private[connect] class SparkConnectAnalyzeHandler(
             .build())
 
       case proto.AnalyzePlanRequest.AnalyzeCase.INPUT_FILES =>
-        val rel = transformRelation(request.getInputFiles.getPlan.getRoot)
+        val rel = transformRelationPlan(request.getInputFiles.getPlan)
         val inputFiles = getDataFrameWithoutExecuting(rel).inputFiles
         builder.setInputFiles(
           proto.AnalyzePlanResponse.InputFiles
@@ -157,8 +161,8 @@ private[connect] class SparkConnectAnalyzeHandler(
             .build())
 
       case proto.AnalyzePlanRequest.AnalyzeCase.SAME_SEMANTICS =>
-        val targetRel = transformRelation(request.getSameSemantics.getTargetPlan.getRoot)
-        val otherRel = transformRelation(request.getSameSemantics.getOtherPlan.getRoot)
+        val targetRel = transformRelationPlan(request.getSameSemantics.getTargetPlan)
+        val otherRel = transformRelationPlan(request.getSameSemantics.getOtherPlan)
         val target = getDataFrameWithoutExecuting(targetRel)
         val other = getDataFrameWithoutExecuting(otherRel)
         builder.setSameSemantics(
@@ -167,7 +171,7 @@ private[connect] class SparkConnectAnalyzeHandler(
             .setResult(target.sameSemantics(other)))
 
       case proto.AnalyzePlanRequest.AnalyzeCase.SEMANTIC_HASH =>
-        val rel = transformRelation(request.getSemanticHash.getPlan.getRoot)
+        val rel = transformRelationPlan(request.getSemanticHash.getPlan)
         val semanticHash = getDataFrameWithoutExecuting(rel)
           .semanticHash()
         builder.setSemanticHash(

@@ -18,9 +18,16 @@
 package org.apache.spark.sql.connect.client.jdbc
 
 import java.sql.{Array => _, _}
+import java.sql.DatabaseMetaData._
 
 import org.apache.spark.SparkBuildInfo.{spark_version => SPARK_VERSION}
+import org.apache.spark.SparkThrowable
+import org.apache.spark.sql.Column
+import org.apache.spark.sql.catalyst.util.QuotingUtils._
+import org.apache.spark.sql.connect
 import org.apache.spark.sql.connect.client.jdbc.SparkConnectDatabaseMetaData._
+import org.apache.spark.sql.connect.client.jdbc.util.JdbcTypeUtils
+import org.apache.spark.sql.functions._
 import org.apache.spark.util.VersionUtils
 
 class SparkConnectDatabaseMetaData(conn: SparkConnectConnection) extends DatabaseMetaData {
@@ -97,8 +104,7 @@ class SparkConnectDatabaseMetaData(conn: SparkConnectConnection) extends Databas
   override def getTimeDateFunctions: String =
     throw new SQLFeatureNotSupportedException
 
-  override def getSearchStringEscape: String =
-    throw new SQLFeatureNotSupportedException
+  override def getSearchStringEscape: String = "\\"
 
   override def getExtraNameCharacters: String = ""
 
@@ -277,6 +283,9 @@ class SparkConnectDatabaseMetaData(conn: SparkConnectConnection) extends Databas
 
   override def dataDefinitionIgnoredInTransactions: Boolean = false
 
+  private def isNullOrWildcard(pattern: String): Boolean =
+    pattern == null || pattern == "%"
+
   override def getProcedures(
       catalog: String,
       schemaPattern: String,
@@ -299,28 +308,264 @@ class SparkConnectDatabaseMetaData(conn: SparkConnectConnection) extends Databas
     new SparkConnectResultSet(df.collectResult())
   }
 
-  override def getSchemas: ResultSet =
-    throw new SQLFeatureNotSupportedException
+  override def getSchemas: ResultSet = {
+    conn.checkOpen()
 
-  override def getSchemas(catalog: String, schemaPattern: String): ResultSet =
-    throw new SQLFeatureNotSupportedException
+    getSchemas(null, null)
+  }
 
-  override def getTableTypes: ResultSet =
-    throw new SQLFeatureNotSupportedException
+  // Schema of the returned DataFrame is:
+  // |-- TABLE_SCHEM: string (nullable = false)
+  // |-- TABLE_CATALOG: string (nullable = false)
+  private def getSchemasDataFrame(
+      catalog: String, schemaPatternOpt: Option[String]): connect.DataFrame = {
+
+    val schemaFilterExpr = schemaPatternOpt match {
+      case None => $"TABLE_SCHEM".equalTo(conn.spark.catalog.currentDatabase)
+      case Some(schemaPattern) if isNullOrWildcard(schemaPattern) => lit(true)
+      case Some(schemaPattern) => $"TABLE_SCHEM".like(schemaPattern)
+    }
+
+    def internalGetSchemas(
+        catalogOpt: Option[String],
+        schemaFilterExpr: Column): connect.DataFrame = {
+      val catalog = catalogOpt.getOrElse(conn.getCatalog)
+      // Spark SQL supports LIKE clause in SHOW SCHEMAS command, but we can't use that
+      // because the LIKE pattern does not follow SQL standard.
+      conn.spark.sql(s"SHOW SCHEMAS IN ${quoteIdentifier(catalog)}")
+        .select($"namespace".as("TABLE_SCHEM"))
+        .filter(schemaFilterExpr)
+        .withColumn("TABLE_CATALOG", lit(catalog))
+    }
+
+    if (catalog == null) {
+      // search in all catalogs
+      val emptyDf = conn.spark.emptyDataFrame
+        .withColumn("TABLE_SCHEM", lit(""))
+        .withColumn("TABLE_CATALOG", lit(""))
+      conn.spark.catalog.listCatalogs().collect().map(_.name).map { c =>
+        internalGetSchemas(Some(c), schemaFilterExpr)
+      }.fold(emptyDf) { (l, r) => l.unionAll(r) }
+    } else if (catalog == "") {
+      // search only in current catalog
+      internalGetSchemas(None, schemaFilterExpr)
+    } else {
+      // search in the specific catalog
+      internalGetSchemas(Some(catalog), schemaFilterExpr)
+    }
+  }
+
+  override def getSchemas(catalog: String, schemaPattern: String): ResultSet = {
+    conn.checkOpen()
+
+    val df = getSchemasDataFrame(catalog, Some(schemaPattern))
+      .orderBy("TABLE_CATALOG", "TABLE_SCHEM")
+    new SparkConnectResultSet(df.collectResult())
+  }
+
+  override def getTableTypes: ResultSet = {
+    conn.checkOpen()
+
+    val df = TABLE_TYPES.toDF("TABLE_TYPE")
+      .orderBy("TABLE_TYPE")
+    new SparkConnectResultSet(df.collectResult())
+  }
+
+  // Schema of the returned DataFrame is:
+  // |-- TABLE_CAT: string (nullable = false)
+  // |-- TABLE_SCHEM: string (nullable = false)
+  // |-- TABLE_NAME: string (nullable = false)
+  // |-- TABLE_TYPE: string (nullable = false)
+  // |-- REMARKS: string (nullable = false)
+  // |-- TYPE_CAT: string (nullable = false)
+  // |-- TYPE_SCHEM: string (nullable = false)
+  // |-- TYPE_NAME: string (nullable = false)
+  // |-- SELF_REFERENCING_COL_NAME: string (nullable = false)
+  // |-- REF_GENERATION: string (nullable = false)
+  private def getTablesDataFrame(
+      catalog: String,
+      schemaPattern: String,
+      tableNamePattern: String): connect.DataFrame = {
+
+    val catalogSchemasDf = if (schemaPattern == "") {
+      getSchemasDataFrame(catalog, None)
+    } else {
+      getSchemasDataFrame(catalog, Some(schemaPattern))
+    }
+
+    val catalogSchemas = catalogSchemasDf.collect()
+      .map { row => (row.getString(1), row.getString(0)) }
+
+    val tableNameFilterExpr = if (isNullOrWildcard(tableNamePattern)) {
+      lit(true)
+    } else {
+      $"TABLE_NAME".like(tableNamePattern)
+    }
+
+    val emptyDf = conn.spark.emptyDataFrame
+      .withColumn("TABLE_CAT", lit(""))
+      .withColumn("TABLE_SCHEM", lit(""))
+      .withColumn("TABLE_NAME", lit(""))
+      .withColumn("TABLE_TYPE", lit(""))
+      .withColumn("REMARKS", lit(""))
+      .withColumn("TYPE_CAT", lit(""))
+      .withColumn("TYPE_SCHEM", lit(""))
+      .withColumn("TYPE_NAME", lit(""))
+      .withColumn("SELF_REFERENCING_COL_NAME", lit(""))
+      .withColumn("REF_GENERATION", lit(""))
+
+    catalogSchemas.map { case (catalog, schema) =>
+      val viewDf = try {
+        conn.spark
+          .sql(s"SHOW VIEWS IN ${quoteNameParts(Seq(catalog, schema))}")
+          .select($"namespace".as("TABLE_SCHEM"), $"viewName".as("TABLE_NAME"))
+          .filter(tableNameFilterExpr)
+      } catch {
+        case st: SparkThrowable if st.getCondition == "MISSING_CATALOG_ABILITY.VIEWS" =>
+          emptyDf.select("TABLE_SCHEM", "TABLE_NAME")
+      }
+
+      val tableDf = try {
+        conn.spark
+          .sql(s"SHOW TABLES IN ${quoteNameParts(Seq(catalog, schema))}")
+          .select($"namespace".as("TABLE_SCHEM"), $"tableName".as("TABLE_NAME"))
+          .filter(tableNameFilterExpr)
+          .exceptAll(viewDf)
+      } catch {
+        case st: SparkThrowable if st.getCondition == "MISSING_CATALOG_ABILITY.TABLES" =>
+          emptyDf.select("TABLE_SCHEM", "TABLE_NAME")
+      }
+
+      tableDf.withColumn("TABLE_TYPE", lit("TABLE"))
+        .unionAll(viewDf.withColumn("TABLE_TYPE", lit("VIEW")))
+        .withColumn("TABLE_CAT", lit(catalog))
+        .withColumn("REMARKS", lit(""))
+        .withColumn("TYPE_CAT", lit(""))
+        .withColumn("TYPE_SCHEM", lit(""))
+        .withColumn("TYPE_NAME", lit(""))
+        .withColumn("SELF_REFERENCING_COL_NAME", lit(""))
+        .withColumn("REF_GENERATION", lit(""))
+        .select("TABLE_CAT", "TABLE_SCHEM", "TABLE_NAME", "TABLE_TYPE", "REMARKS",
+          "TYPE_CAT", "TYPE_SCHEM", "TYPE_NAME", "SELF_REFERENCING_COL_NAME",
+          "REF_GENERATION")
+    }.fold(emptyDf) { (l, r) => l.unionAll(r) }
+  }
 
   override def getTables(
       catalog: String,
       schemaPattern: String,
       tableNamePattern: String,
-      types: Array[String]): ResultSet =
-    throw new SQLFeatureNotSupportedException
+      types: Array[String]): ResultSet = {
+    conn.checkOpen()
+
+    if (types != null) {
+      val unsupported = types.diff(TABLE_TYPES)
+      if (unsupported.nonEmpty) {
+        throw new SQLException(
+          "The requested table types contains unsupported items: " +
+            s"${unsupported.mkString(", ")}. Available table types are: " +
+            s"${TABLE_TYPES.mkString(", ")}.")
+      }
+    }
+
+    var df = getTablesDataFrame(catalog, schemaPattern, tableNamePattern)
+      .orderBy("TABLE_TYPE", "TABLE_CAT", "TABLE_SCHEM", "TABLE_NAME")
+
+    if (types != null) {
+      df = df.filter($"TABLE_TYPE".isInCollection(types))
+    }
+    new SparkConnectResultSet(df.collectResult())
+  }
 
   override def getColumns(
       catalog: String,
       schemaPattern: String,
       tableNamePattern: String,
-      columnNamePattern: String): ResultSet =
-    throw new SQLFeatureNotSupportedException
+      columnNamePattern: String): ResultSet = {
+    conn.checkOpen()
+
+    val columnNameFilterExpr = if (isNullOrWildcard(columnNamePattern)) {
+      lit(true)
+    } else {
+      $"COLUMN_NAME".like(columnNamePattern)
+    }
+
+    val emptyDf = conn.spark.emptyDataFrame
+      .withColumn("TABLE_CAT", lit(""))
+      .withColumn("TABLE_SCHEM", lit(""))
+      .withColumn("TABLE_NAME", lit(""))
+      .withColumn("COLUMN_NAME", lit(""))
+      .withColumn("DATA_TYPE", lit(0))
+      .withColumn("TYPE_NAME", lit(""))
+      .withColumn("COLUMN_SIZE", lit(0))
+      .withColumn("BUFFER_LENGTH", lit(0))
+      .withColumn("DECIMAL_DIGITS", lit(0))
+      .withColumn("NUM_PREC_RADIX", lit(0))
+      .withColumn("NULLABLE", lit(0))
+      .withColumn("REMARKS", lit(""))
+      .withColumn("COLUMN_DEF", lit(""))
+      .withColumn("SQL_DATA_TYPE", lit(0))
+      .withColumn("SQL_DATETIME_SUB", lit(0))
+      .withColumn("CHAR_OCTET_LENGTH", lit(0))
+      .withColumn("ORDINAL_POSITION", lit(0))
+      .withColumn("IS_NULLABLE", lit(""))
+      .withColumn("SCOPE_CATALOG", lit(""))
+      .withColumn("SCOPE_SCHEMA", lit(""))
+      .withColumn("SCOPE_TABLE", lit(""))
+      .withColumn("SOURCE_DATA_TYPE", lit(0.toShort))
+      .withColumn("IS_AUTOINCREMENT", lit(""))
+      .withColumn("IS_GENERATEDCOLUMN", lit(""))
+
+    val catalogSchemaTables =
+      getTablesDataFrame(catalog, schemaPattern, tableNamePattern)
+        .select("TABLE_CAT", "TABLE_SCHEM", "TABLE_NAME")
+        .collect().map { row => (row.getString(0), row.getString(1), row.getString(2)) }
+
+    val df = catalogSchemaTables.map { case (catalog, schema, table) =>
+      val columns = conn.spark.table(quoteNameParts(Seq(catalog, schema, table)))
+        .schema.zipWithIndex.map { case (field, i) =>
+          (
+            field.name, // COLUMN_NAME
+            JdbcTypeUtils.getColumnType(field), // DATA_TYPE
+            field.dataType.sql, // TYPE_NAME
+            JdbcTypeUtils.getDisplaySize(field), // COLUMN_SIZE
+            JdbcTypeUtils.getDecimalDigits(field), // DECIMAL_DIGITS
+            JdbcTypeUtils.getNumPrecRadix(field), // NUM_PREC_RADIX
+            if (field.nullable) columnNullable else columnNoNulls, // NULLABLE
+            field.getComment().orNull, // REMARKS
+            field.getCurrentDefaultValue().orNull, // COLUMN_DEF
+            0, // CHAR_OCTET_LENGTH
+            i + 1, // ORDINAL_POSITION
+            if (field.nullable) "YES" else "NO", // IS_NULLABLE
+            "", // IS_AUTOINCREMENT
+            "" // IS_GENERATEDCOLUMN
+          )
+        }
+        columns.toDF("COLUMN_NAME", "DATA_TYPE", "TYPE_NAME", "COLUMN_SIZE", "DECIMAL_DIGITS",
+            "NUM_PREC_RADIX", "NULLABLE", "REMARKS", "COLUMN_DEF", "CHAR_OCTET_LENGTH",
+            "ORDINAL_POSITION", "IS_NULLABLE", "IS_AUTOINCREMENT", "IS_GENERATEDCOLUMN")
+          .filter(columnNameFilterExpr)
+          .withColumn("TABLE_CAT", lit(catalog))
+          .withColumn("TABLE_SCHEM", lit(schema))
+          .withColumn("TABLE_NAME", lit(table))
+          .withColumn("BUFFER_LENGTH", lit(0))
+          .withColumn("SQL_DATA_TYPE", lit(0))
+          .withColumn("SQL_DATETIME_SUB", lit(0))
+          .withColumn("SCOPE_CATALOG", lit(""))
+          .withColumn("SCOPE_SCHEMA", lit(""))
+          .withColumn("SCOPE_TABLE", lit(""))
+          .withColumn("SOURCE_DATA_TYPE", lit(0.toShort))
+          .select("TABLE_CAT", "TABLE_SCHEM", "TABLE_NAME", "COLUMN_NAME", "DATA_TYPE",
+            "TYPE_NAME", "COLUMN_SIZE", "BUFFER_LENGTH", "DECIMAL_DIGITS", "NUM_PREC_RADIX",
+            "NULLABLE", "REMARKS", "COLUMN_DEF", "SQL_DATA_TYPE", "SQL_DATETIME_SUB",
+            "CHAR_OCTET_LENGTH", "ORDINAL_POSITION", "IS_NULLABLE", "SCOPE_CATALOG",
+            "SCOPE_SCHEMA", "SCOPE_TABLE", "SOURCE_DATA_TYPE", "IS_AUTOINCREMENT",
+            "IS_GENERATEDCOLUMN")
+      }.fold(emptyDf) { (l, r) => l.unionAll(r) }
+      .orderBy("TABLE_CAT", "TABLE_SCHEM", "TABLE_NAME", "ORDINAL_POSITION")
+
+    new SparkConnectResultSet(df.collectResult())
+  }
 
   override def getColumnPrivileges(
       catalog: String,
@@ -563,4 +808,6 @@ object SparkConnectDatabaseMetaData {
     "XMLFOREST", "XMLNAMESPACES", "XMLPARSE", "XMLPI", "XMLROOT", "XMLSERIALIZE",
     "YEAR"
   )
+
+  private[jdbc] val TABLE_TYPES = Seq("TABLE", "VIEW")
 }

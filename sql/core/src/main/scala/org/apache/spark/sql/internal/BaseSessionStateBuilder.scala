@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.optimizer.Optimizer
 import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.classic.{SparkSession, Strategy, StreamingQueryManager, UDFRegistration}
+import org.apache.spark.sql.classic.{SparkSession, Strategy, StreamingCheckpointManager, StreamingQueryManager, UDFRegistration}
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.{ColumnarRule, CommandExecutionMode, QueryExecution, SparkOptimizer, SparkPlanner, SparkSqlParser}
@@ -419,6 +419,12 @@ abstract class BaseSessionStateBuilder(
     new StreamingQueryManager(session, conf)
 
   /**
+   * Interface to manage streaming query checkpoints.
+   */
+  private[spark] def streamingCheckpointManager: StreamingCheckpointManager =
+    new StreamingCheckpointManager(session, conf)
+
+  /**
    * An interface to register custom [[org.apache.spark.sql.util.QueryExecutionListener]]s
    * that listen for execution metrics.
    *
@@ -465,6 +471,7 @@ abstract class BaseSessionStateBuilder(
       () => optimizer,
       planner,
       () => streamingQueryManager,
+      () => streamingCheckpointManager,
       listenerManager,
       () => resourceLoader,
       createQueryExecution,

@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.connect.pipelines
 
+import scala.collection.Seq
 import scala.jdk.CollectionConverters._
 import scala.util.Using
 
@@ -27,9 +28,10 @@ import org.apache.spark.connect.proto.{ExecutePlanResponse, PipelineCommandResul
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.plans.logical.{Command, CreateNamespace, CreateTable, CreateTableAsSelect, CreateView, DescribeRelation, DropView, InsertIntoStatement, LogicalPlan, RenameTable, ShowColumns, ShowCreateTable, ShowFunctions, ShowTableProperties, ShowTables, ShowViews}
 import org.apache.spark.sql.connect.common.DataTypeProtoConverter
 import org.apache.spark.sql.connect.service.SessionHolder
+import org.apache.spark.sql.execution.command.{ShowCatalogsCommand, ShowNamespacesCommand}
 import org.apache.spark.sql.pipelines.Language.Python
 import org.apache.spark.sql.pipelines.common.RunState.{CANCELED, FAILED}
 import org.apache.spark.sql.pipelines.graph.{AllTables, FlowAnalysis, GraphIdentifierManager, GraphRegistrationContext, IdentifierHelper, NoTables, PipelineUpdateContextImpl, QueryContext, QueryOrigin, QueryOriginType, Sink, SinkImpl, SomeTables, SqlGraphRegistrationContext, Table, TableFilter, TemporaryView, UnresolvedFlow}
@@ -129,6 +131,50 @@ private[connect] object PipelinesHandler extends Logging {
     }
   }
 
+  /**
+   * Block SQL commands that have side effects or modify data.
+   *
+   * Pipeline definitions should be declarative and side-effect free. This prevents users from
+   * inadvertently modifying catalogs, creating tables, or performing other stateful operations
+   * outside the pipeline API boundary during pipeline registration or analysis.
+   *
+   * This is a best-effort approach: we block known problematic commands while allowing a curated
+   * set of read-only operations (e.g., SHOW, DESCRIBE).
+   */
+  def blockUnsupportedSqlCommand(queryPlan: LogicalPlan): Unit = {
+    val allowlistedCommands = Set(
+      classOf[DescribeRelation],
+      classOf[ShowTables],
+      classOf[ShowTableProperties],
+      classOf[ShowNamespacesCommand],
+      classOf[ShowColumns],
+      classOf[ShowFunctions],
+      classOf[ShowViews],
+      classOf[ShowCatalogsCommand],
+      classOf[ShowCreateTable])
+    val isSqlCommandExplicitlyAllowlisted = allowlistedCommands.exists(_.isInstance(queryPlan))
+    val isUnsupportedSqlPlan = if (isSqlCommandExplicitlyAllowlisted) {
+      false
+    } else {
+      // Disable all [[Command]] except the ones that are explicitly allowlisted
+      // in "allowlistedCommands".
+      queryPlan.isInstanceOf[Command] ||
+      // Following commands are not subclasses of [[Command]] but have side effects.
+      queryPlan.isInstanceOf[CreateTableAsSelect] ||
+      queryPlan.isInstanceOf[CreateTable] ||
+      queryPlan.isInstanceOf[CreateView] ||
+      queryPlan.isInstanceOf[InsertIntoStatement] ||
+      queryPlan.isInstanceOf[RenameTable] ||
+      queryPlan.isInstanceOf[CreateNamespace] ||
+      queryPlan.isInstanceOf[DropView]
+    }
+    if (isUnsupportedSqlPlan) {
+      throw new AnalysisException(
+        "UNSUPPORTED_PIPELINE_SPARK_SQL_COMMAND",
+        Map("command" -> queryPlan.getClass.getSimpleName))
+    }
+  }
+
   private def createDataflowGraph(
       cmd: proto.PipelineCommand.CreateDataflowGraph,
       sessionHolder: SessionHolder): String = {
@@ -147,6 +193,9 @@ private[connect] object PipelinesHandler extends Logging {
       }
 
     val defaultSqlConf = cmd.getSqlConfMap.asScala.toMap
+
+    sessionHolder.session.catalog.setCurrentCatalog(defaultCatalog)
+    sessionHolder.session.catalog.setCurrentDatabase(defaultDatabase)
 
     sessionHolder.dataflowGraphRegistry.createDataflowGraph(
       defaultCatalog = defaultCatalog,

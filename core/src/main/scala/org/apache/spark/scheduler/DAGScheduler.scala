@@ -2920,6 +2920,21 @@ private[spark] class DAGScheduler(
     }
   }
 
+  private[scheduler] def handleShuffleStatusNotFoundException(
+      ex: ShuffleStatusNotFoundException): Unit = {
+    val stage = shuffleIdToMapStage.get(ex.shuffleId)
+    val reason = "exceptions encountered while invoking " +
+      s"MapOutputTracker.${ex.methodName} with shuffleId=${ex.shuffleId}"
+    if (stage.isDefined) {
+      abortStage(stage.get, reason, Some(ex))
+      logWarning(s"Aborting stage because of $reason. It is possible that the stage is " +
+        "being cancelled.")
+    } else {
+      logWarning(s"Tried aborting stage because of $reason, but the stage was not found. " +
+        "It is possible that the stage has been cancelled earlier.")
+    }
+  }
+
   /**
    * Marks a stage as finished and removes it from the list of running stages.
    */
@@ -3192,6 +3207,9 @@ private[scheduler] class DAGSchedulerEventProcessLoop(dagScheduler: DAGScheduler
     val timerContext = timer.time()
     try {
       doOnReceive(event)
+    } catch {
+      case ex: ShuffleStatusNotFoundException =>
+        dagScheduler.handleShuffleStatusNotFoundException(ex)
     } finally {
       timerContext.stop()
     }
