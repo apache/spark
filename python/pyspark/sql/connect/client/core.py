@@ -1279,7 +1279,6 @@ class SparkConnectClient(object):
         """
         return self._builder.token
 
-
     def _update_request_with_user_context_extensions(
         self,
         req: Union[
@@ -1297,7 +1296,6 @@ class SparkConnectClient(object):
             return
         for _, extension in self.thread_local.user_context_extensions:
             req.user_context.extensions.append(extension)
-
 
     def _execute_plan_request_with_metadata(
         self, operation_id: Optional[str] = None

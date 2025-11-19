@@ -201,12 +201,16 @@ class CallStackTraceTestCase(unittest.TestCase):
         # Set the env var to enable call stack tracing
         with patch.dict(os.environ, {"SPARK_CONNECT_DEBUG_CLIENT_CALL_STACK": "1"}):
             stack_trace_details = _build_call_stack_trace()
-            self.assertIsNotNone(stack_trace_details, "Expected non-None call stack when env var is set")
+            self.assertIsNotNone(
+                stack_trace_details, "Expected non-None call stack when env var is set"
+            )
             error = pb2.FetchErrorDetailsResponse.Error()
             if not stack_trace_details.Unpack(error):
                 self.assertTrue(False, "Expected to unpack stack trace details into Error object")
             # Should have at least one frame (this test function)
-            self.assertGreater(len(error.stack_trace), 0, "Expected > 0 call stack frames when env var is set")
+            self.assertGreater(
+                len(error.stack_trace), 0, "Expected > 0 call stack frames when env var is set"
+            )
 
             # Verify each element is an Any protobuf message
             functions = set()
