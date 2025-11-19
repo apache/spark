@@ -18,6 +18,7 @@
 """
 Worker that receives input from Piped RDD.
 """
+import datetime
 import itertools
 import os
 import sys
@@ -71,7 +72,7 @@ from pyspark.sql.pandas.serializers import (
     ArrowStreamUDTFSerializer,
     ArrowStreamArrowUDTFSerializer,
 )
-from pyspark.sql.pandas.types import to_arrow_type
+from pyspark.sql.pandas.types import to_arrow_type, TimestampType
 from pyspark.sql.types import (
     ArrayType,
     BinaryType,
@@ -3302,6 +3303,11 @@ def main(infile, outfile):
         if split_index == -1:  # for unit tests
             sys.exit(-1)
         start_faulthandler_periodic_traceback()
+
+        # Use the local timezone to convert the timestamp
+        tz = datetime.datetime.now().astimezone().tzinfo
+        TimestampType.tz_info = tz
+
         check_python_version(infile)
 
         # read inputs only for a barrier task
