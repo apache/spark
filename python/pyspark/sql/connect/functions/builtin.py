@@ -4969,6 +4969,15 @@ def st_geomfromwkb(wkb: "ColumnOrName") -> Column:
 st_geomfromwkb.__doc__ = pysparkfuncs.st_geomfromwkb.__doc__
 
 
+def st_setsrid(geo: "ColumnOrName", srid: Union["ColumnOrName", int]) -> Column:
+    srid = _enum_to_value(srid)
+    srid = lit(srid) if isinstance(srid, int) else srid
+    return _invoke_function_over_columns("st_setsrid", geo, srid)
+
+
+st_setsrid.__doc__ = pysparkfuncs.st_setsrid.__doc__
+
+
 def st_srid(geo: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("st_srid", geo)
 
