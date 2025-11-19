@@ -668,7 +668,8 @@ trait StateStoreProvider {
    * */
   def getStore(
       version: Long,
-      stateStoreCkptId: Option[String] = None): StateStore
+      stateStoreCkptId: Option[String] = None,
+      forceSnapshotOnCommit: Boolean = false): StateStore
 
   /**
    * Return an instance of [[ReadStateStore]] representing state data of the given version
@@ -701,7 +702,9 @@ trait StateStoreProvider {
   def upgradeReadStoreToWriteStore(
       readStore: ReadStateStore,
       version: Long,
-      uniqueId: Option[String] = None): StateStore = getStore(version, uniqueId)
+      uniqueId: Option[String] = None,
+      forceSnapshotOnCommit: Boolean = false): StateStore =
+    getStore(version, uniqueId, forceSnapshotOnCommit)
 
 
   /** Optional method for providers to allow for background maintenance (e.g. compactions) */
@@ -1180,7 +1183,7 @@ object StateStore extends Logging {
     if (version < 0) {
       throw QueryExecutionErrors.unexpectedStateStoreVersion(version)
     }
-    val storeProvider = getStateStoreProvider(storeProviderId, keySchema, valueSchema,
+    val (storeProvider, _) = getStateStoreProvider(storeProviderId, keySchema, valueSchema,
       keyStateEncoderSpec, useColumnFamilies, storeConf, hadoopConf, useMultipleValuesPerKey,
       stateSchemaBroadcast)
     storeProvider.getReadStore(version, stateStoreCkptId)
@@ -1230,10 +1233,11 @@ object StateStore extends Logging {
     if (version < 0) {
       throw QueryExecutionErrors.unexpectedStateStoreVersion(version)
     }
-    val storeProvider = getStateStoreProvider(storeProviderId, keySchema, valueSchema,
-      keyStateEncoderSpec, useColumnFamilies, storeConf, hadoopConf, useMultipleValuesPerKey,
-      stateSchemaBroadcast)
-    storeProvider.upgradeReadStoreToWriteStore(readStore, version, stateStoreCkptId)
+    val (storeProvider, shouldForceSnapshotUpload) = getStateStoreProvider(storeProviderId,
+      keySchema, valueSchema, keyStateEncoderSpec, useColumnFamilies, storeConf, hadoopConf,
+      useMultipleValuesPerKey, stateSchemaBroadcast)
+    storeProvider.upgradeReadStoreToWriteStore(readStore, version, stateStoreCkptId,
+      shouldForceSnapshotUpload)
   }
 
   /** Get or create a store associated with the id. */
@@ -1253,13 +1257,18 @@ object StateStore extends Logging {
     if (version < 0) {
       throw QueryExecutionErrors.unexpectedStateStoreVersion(version)
     }
-    val storeProvider = getStateStoreProvider(storeProviderId, keySchema, valueSchema,
-      keyStateEncoderSpec, useColumnFamilies, storeConf, hadoopConf, useMultipleValuesPerKey,
-      stateSchemaBroadcast)
-    storeProvider.getStore(version, stateStoreCkptId)
+    val (storeProvider, shouldForceSnapshotUpload) = getStateStoreProvider(storeProviderId,
+      keySchema, valueSchema, keyStateEncoderSpec, useColumnFamilies, storeConf, hadoopConf,
+      useMultipleValuesPerKey, stateSchemaBroadcast)
+    storeProvider.getStore(version, stateStoreCkptId, shouldForceSnapshotUpload)
   }
   // scalastyle:on
 
+  /*
+   * @return (StateStoreProvider, shouldForceSnapshotUpload)
+   *         shouldForceSnapshotUpload is true if the state store provider is lagging
+   *         behind in snapshot uploads and should force a snapshot upload on next commit.
+   */
   private def getStateStoreProvider(
       storeProviderId: StateStoreProviderId,
       keySchema: StructType,
@@ -1269,7 +1278,7 @@ object StateStore extends Logging {
       storeConf: StateStoreConf,
       hadoopConf: Configuration,
       useMultipleValuesPerKey: Boolean,
-      stateSchemaBroadcast: Option[StateSchemaBroadcast]): StateStoreProvider = {
+      stateSchemaBroadcast: Option[StateSchemaBroadcast]): (StateStoreProvider, Boolean) = {
     loadedProviders.synchronized {
       startMaintenanceIfNeeded(storeConf)
 
@@ -1295,13 +1304,13 @@ object StateStore extends Logging {
       // Only tell the state store coordinator we are active if we will remain active
       // after the task. When we unload after committing, there's no need for the coordinator
       // to track which executor has which provider
-      if (!storeConf.unloadOnCommit) {
+      val shouldForceSnapshotUpload = if (!storeConf.unloadOnCommit) {
         val otherProviderIds = loadedProviders.keys.filter(_ != storeProviderId).toSeq
-        val providerIdsToUnload = reportActiveStoreInstance(storeProviderId, otherProviderIds)
+        val providerStatus = reportActiveStoreInstance(storeProviderId, otherProviderIds)
         val taskContextIdLogLine = Option(TaskContext.get()).map { tc =>
           log"taskId=${MDC(LogKeys.TASK_ID, tc.taskAttemptId())}"
         }.getOrElse(log"")
-        providerIdsToUnload.foreach(id => {
+        providerStatus.providerIdsToUnload.foreach(id => {
           loadedProviders.remove(id).foreach( provider => {
             // Trigger maintenance thread to immediately do maintenance on and close the provider.
             // Doing maintenance first allows us to do maintenance for a constantly-moving state
@@ -1313,9 +1322,12 @@ object StateStore extends Logging {
               id, provider, storeConf, MaintenanceTaskType.FromTaskThread)
           })
         })
+        providerStatus.shouldForceSnapshotUpload
+      } else {
+        false
       }
 
-      provider
+      (provider, shouldForceSnapshotUpload)
     }
   }
 
@@ -1599,20 +1611,26 @@ object StateStore extends Logging {
 
   private def reportActiveStoreInstance(
       storeProviderId: StateStoreProviderId,
-      otherProviderIds: Seq[StateStoreProviderId]): Seq[StateStoreProviderId] = {
+      otherProviderIds: Seq[StateStoreProviderId]): ReportActiveInstanceResponse = {
     if (SparkEnv.get != null) {
       val host = SparkEnv.get.blockManager.blockManagerId.host
       val executorId = SparkEnv.get.blockManager.blockManagerId.executorId
-      val providerIdsToUnload = coordinatorRef
+      val storeStatus = coordinatorRef
         .map(_.reportActiveInstance(storeProviderId, host, executorId, otherProviderIds))
-        .getOrElse(Seq.empty[StateStoreProviderId])
+        .getOrElse(ReportActiveInstanceResponse(
+          shouldForceSnapshotUpload = false,
+          providerIdsToUnload = Seq.empty[StateStoreProviderId]))
       logInfo(log"Reported that the loaded instance " +
-        log"${MDC(LogKeys.STATE_STORE_PROVIDER_ID, storeProviderId)} is active")
+        log"${MDC(LogKeys.STATE_STORE_PROVIDER_ID, storeProviderId)} is active" +
+        log", shouldForceSnapshotUpload=" +
+        log"${MDC(LogKeys.STREAM_SHOULD_FORCE_SNAPSHOT, storeStatus.shouldForceSnapshotUpload)}")
       logDebug(log"The loaded instances are going to unload: " +
-        log"${MDC(LogKeys.STATE_STORE_PROVIDER_IDS, providerIdsToUnload)}")
-      providerIdsToUnload
+        log"${MDC(LogKeys.STATE_STORE_PROVIDER_IDS, storeStatus.providerIdsToUnload)}")
+      storeStatus
     } else {
-      Seq.empty[StateStoreProviderId]
+      ReportActiveInstanceResponse(
+        shouldForceSnapshotUpload = false,
+        providerIdsToUnload = Seq.empty[StateStoreProviderId])
     }
   }
 

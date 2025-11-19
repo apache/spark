@@ -222,6 +222,14 @@ private[spark] object HiveUtils extends Logging {
     .booleanConf
     .createWithDefault(true)
 
+  val LEGACY_STS_ZERO_BASED_COLUMN_ORDINAL =
+    buildConf("spark.sql.legacy.hive.thriftServer.useZeroBasedColumnOrdinalPosition")
+      .doc("When set to true, Hive Thrift server returns 0-based ORDINAL_POSITION in the " +
+        "result of GetColumns operation, instead of the corrected 1-based.")
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val USE_DELEGATE_FOR_SYMLINK_TEXT_INPUT_FORMAT =
     buildConf("spark.sql.hive.useDelegateForSymlinkTextInputFormat")
       .internal()

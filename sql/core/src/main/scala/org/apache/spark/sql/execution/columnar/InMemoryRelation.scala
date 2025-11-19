@@ -406,11 +406,12 @@ object InMemoryRelation {
   def apply(cacheBuilder: CachedRDDBuilder, qe: QueryExecution): InMemoryRelation = {
     val optimizedPlan = qe.optimizedPlan
     val serializer = cacheBuilder.serializer
-    val newBuilder = if (serializer.supportsColumnarInput(optimizedPlan.output)) {
-      cacheBuilder.copy(cachedPlan = serializer.convertToColumnarPlanIfPossible(qe.executedPlan))
+    val newCachedPlan = if (serializer.supportsColumnarInput(optimizedPlan.output)) {
+      serializer.convertToColumnarPlanIfPossible(qe.executedPlan)
     } else {
-      cacheBuilder.copy(cachedPlan = qe.executedPlan)
+      qe.executedPlan
     }
+    val newBuilder = cacheBuilder.copy(cachedPlan = newCachedPlan, logicalPlan = qe.logical)
     val relation = new InMemoryRelation(
       newBuilder.cachedPlan.output, newBuilder, optimizedPlan.outputOrdering)
     relation.statsOfPlanToCache = optimizedPlan.stats

@@ -3967,8 +3967,10 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
       }
     }
 
-    override def commit(): (Long, StateStoreCheckpointInfo) = {
-      val ret = super.commit()
+    override def commit(
+        forceSnapshotOnCommit: Boolean = false
+      ): (Long, StateStoreCheckpointInfo) = {
+      val ret = super.commit(forceSnapshotOnCommit)
       // update versionToUniqueId from lineageManager
       lineageManager.getLineageForCurrVersion().foreach {
         case LineageItem(version, id) => versionToUniqueId.getOrElseUpdate(version, id)
