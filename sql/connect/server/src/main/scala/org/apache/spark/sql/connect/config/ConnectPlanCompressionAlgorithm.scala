@@ -17,5 +17,5 @@
 package org.apache.spark.sql.connect.config
 
 object ConnectPlanCompressionAlgorithm extends Enumeration {
-  val ZSTD = Value
+  val ZSTD, NONE = Value
 }

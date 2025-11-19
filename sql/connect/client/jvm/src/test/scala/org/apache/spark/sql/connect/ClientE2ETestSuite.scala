@@ -41,7 +41,7 @@ import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.StringEncoder
 import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.connect.ConnectConversions._
-import org.apache.spark.sql.connect.client.{RetryPolicy, SparkConnectClient, SparkResult}
+import org.apache.spark.sql.connect.client.{PlanCompressionOptions, RetryPolicy, SparkConnectClient, SparkResult}
 import org.apache.spark.sql.connect.test.{ConnectFunSuite, IntegrationTestUtils, QueryTest, RemoteSparkSession, SQLHelper}
 import org.apache.spark.sql.connect.test.SparkConnectServerUtils.{createSparkSession, port}
 import org.apache.spark.sql.functions._
@@ -2003,6 +2003,22 @@ class ClientE2ETestSuite
           }
           arrowBatchInterceptor.clear()
         }
+    }
+  }
+
+  test("Plan compression works correctly") {
+    val originalPlanCompressionOptions = spark.client.getPlanCompressionOptions
+    assert(originalPlanCompressionOptions.nonEmpty)
+    assert(originalPlanCompressionOptions.get.thresholdBytes > 0)
+    assert(originalPlanCompressionOptions.get.algorithm == "ZSTD")
+    try {
+      spark.client.setPlanCompressionOptions(Some(PlanCompressionOptions(1000, "ZSTD")))
+      // Execution should work
+      assert(spark.sql(s"select '${"Apache Spark" * 10000}' as value").collect().length == 1)
+      // Analysis should work
+      assert(spark.sql(s"select '${"Apache Spark" * 10000}' as value").columns.length == 1)
+    } finally {
+      spark.client.setPlanCompressionOptions(originalPlanCompressionOptions)
     }
   }
 }

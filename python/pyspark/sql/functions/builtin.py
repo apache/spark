@@ -26085,14 +26085,18 @@ def st_asbinary(geo: "ColumnOrName") -> Column:
 
     Examples
     --------
+
+    Example 1: Getting WKB from GEOGRAPHY.
     >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([(bytes.fromhex('0101000000000000000000F03F0000000000000040'),)], ['wkb'])  # noqa
-    >>> df.select(sf.hex(sf.st_asbinary(sf.st_geogfromwkb('wkb'))).alias('result')).collect()
-    [Row(result='0101000000000000000000F03F0000000000000040')]
+    >>> df.select(sf.hex(sf.st_asbinary(sf.st_geogfromwkb('wkb')))).collect()
+    [Row(hex(st_asbinary(st_geogfromwkb(wkb)))='0101000000000000000000F03F0000000000000040')]
+
+    Example 2: Getting WKB from GEOMETRY.
     >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([(bytes.fromhex('0101000000000000000000F03F0000000000000040'),)], ['wkb'])  # noqa
-    >>> df.select(sf.hex(sf.st_asbinary(sf.st_geomfromwkb('wkb'))).alias('result')).collect()
-    [Row(result='0101000000000000000000F03F0000000000000040')]
+    >>> df.select(sf.hex(sf.st_asbinary(sf.st_geomfromwkb('wkb')))).collect()
+    [Row(hex(st_asbinary(st_geomfromwkb(wkb)))='0101000000000000000000F03F0000000000000040')]
     """
     return _invoke_function_over_columns("st_asbinary", geo)
 
@@ -26112,8 +26116,8 @@ def st_geogfromwkb(wkb: "ColumnOrName") -> Column:
     --------
     >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([(bytes.fromhex('0101000000000000000000F03F0000000000000040'),)], ['wkb'])  # noqa
-    >>> df.select(sf.hex(sf.st_asbinary(sf.st_geogfromwkb('wkb'))).alias('result')).collect()
-    [Row(result='0101000000000000000000F03F0000000000000040')]
+    >>> df.select(sf.hex(sf.st_asbinary(sf.st_geogfromwkb('wkb')))).collect()
+    [Row(hex(st_asbinary(st_geogfromwkb(wkb)))='0101000000000000000000F03F0000000000000040')]
     """
     return _invoke_function_over_columns("st_geogfromwkb", wkb)
 
@@ -26133,10 +26137,43 @@ def st_geomfromwkb(wkb: "ColumnOrName") -> Column:
     --------
     >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([(bytes.fromhex('0101000000000000000000F03F0000000000000040'),)], ['wkb'])  # noqa
-    >>> df.select(sf.hex(sf.st_asbinary(sf.st_geomfromwkb('wkb'))).alias('result')).collect()
-    [Row(result='0101000000000000000000F03F0000000000000040')]
+    >>> df.select(sf.hex(sf.st_asbinary(sf.st_geomfromwkb('wkb')))).collect()
+    [Row(hex(st_asbinary(st_geomfromwkb(wkb)))='0101000000000000000000F03F0000000000000040')]
     """
     return _invoke_function_over_columns("st_geomfromwkb", wkb)
+
+
+@_try_remote_functions
+def st_setsrid(geo: "ColumnOrName", srid: Union["ColumnOrName", int]) -> Column:
+    """Returns a new GEOGRAPHY or GEOMETRY value whose SRID is the specified SRID value.
+
+    .. versionadded:: 4.1.0
+
+    Parameters
+    ----------
+    geo : :class:`~pyspark.sql.Column` or str
+        A geospatial value, either a GEOGRAPHY or a GEOMETRY.
+    srid : :class:`~pyspark.sql.Column` or int
+        An INTEGER representing the new SRID of the geospatial value.
+
+    Examples
+    --------
+
+    Example 1: Setting the SRID on GEOGRAPHY with SRID from another column.
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(bytes.fromhex('0101000000000000000000F03F0000000000000040'), 4326)], ['wkb', 'srid'])  # noqa
+    >>> df.select(sf.st_srid(sf.st_setsrid(sf.st_geogfromwkb('wkb'), 'srid'))).collect()
+    [Row(st_srid(st_setsrid(st_geogfromwkb(wkb), srid))=4326)]
+
+    Example 2: Setting the SRID on GEOMETRY with SRID as an integer literal.
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(bytes.fromhex('0101000000000000000000F03F0000000000000040'),)], ['wkb'])  # noqa
+    >>> df.select(sf.st_srid(sf.st_setsrid(sf.st_geomfromwkb('wkb'), 4326))).collect()
+    [Row(st_srid(st_setsrid(st_geomfromwkb(wkb), 4326))=4326)]
+    """
+    srid = _enum_to_value(srid)
+    srid = lit(srid) if isinstance(srid, int) else srid
+    return _invoke_function_over_columns("st_setsrid", geo, srid)
 
 
 @_try_remote_functions
@@ -26152,14 +26189,18 @@ def st_srid(geo: "ColumnOrName") -> Column:
 
     Examples
     --------
+
+    Example 1: Getting the SRID of GEOGRAPHY.
     >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([(bytes.fromhex('0101000000000000000000F03F0000000000000040'),)], ['wkb'])  # noqa
-    >>> df.select(sf.st_srid(sf.st_geogfromwkb('wkb')).alias('result')).collect()
-    [Row(result=4326)]
+    >>> df.select(sf.st_srid(sf.st_geogfromwkb('wkb'))).collect()
+    [Row(st_srid(st_geogfromwkb(wkb))=4326)]
+
+    Example 2: Getting the SRID of GEOMETRY.
     >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([(bytes.fromhex('0101000000000000000000F03F0000000000000040'),)], ['wkb'])  # noqa
-    >>> df.select(sf.st_srid(sf.st_geomfromwkb('wkb')).alias('result')).collect()
-    [Row(result=0)]
+    >>> df.select(sf.st_srid(sf.st_geomfromwkb('wkb'))).collect()
+    [Row(st_srid(st_geomfromwkb(wkb))=0)]
     """
     return _invoke_function_over_columns("st_srid", geo)
 

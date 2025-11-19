@@ -428,8 +428,11 @@ case class KeyGroupedPartitioning(
   }
 
   lazy val uniquePartitionValues: Seq[InternalRow] = {
+    val internalRowComparableFactory =
+      InternalRowComparableWrapper.getInternalRowComparableWrapperFactory(
+        expressions.map(_.dataType))
     partitionValues
-        .map(InternalRowComparableWrapper(_, expressions))
+        .map(internalRowComparableFactory)
         .distinct
         .map(_.row)
   }
@@ -448,11 +451,14 @@ object KeyGroupedPartitioning {
     val projectedPartitionValues = partitionValues.map(project(expressions, projectionPositions, _))
     val projectedOriginalPartitionValues =
       originalPartitionValues.map(project(expressions, projectionPositions, _))
+    val internalRowComparableFactory =
+      InternalRowComparableWrapper.getInternalRowComparableWrapperFactory(
+        projectedExpressions.map(_.dataType))
 
     val finalPartitionValues = projectedPartitionValues
-        .map(InternalRowComparableWrapper(_, projectedExpressions))
-        .distinct
-        .map(_.row)
+      .map(internalRowComparableFactory)
+      .distinct
+      .map(_.row)
 
     KeyGroupedPartitioning(projectedExpressions, finalPartitionValues.length,
       finalPartitionValues, projectedOriginalPartitionValues)
@@ -867,12 +873,14 @@ case class KeyGroupedShuffleSpec(
     //        transform functions.
     //  4. the partition values from both sides are following the same order.
     case otherSpec @ KeyGroupedShuffleSpec(otherPartitioning, otherDistribution, _) =>
+      lazy val internalRowComparableFactory =
+        InternalRowComparableWrapper.getInternalRowComparableWrapperFactory(
+          partitioning.expressions.map(_.dataType))
       distribution.clustering.length == otherDistribution.clustering.length &&
         numPartitions == other.numPartitions && areKeysCompatible(otherSpec) &&
           partitioning.partitionValues.zip(otherPartitioning.partitionValues).forall {
             case (left, right) =>
-              InternalRowComparableWrapper(left, partitioning.expressions)
-                .equals(InternalRowComparableWrapper(right, partitioning.expressions))
+              internalRowComparableFactory(left).equals(internalRowComparableFactory(right))
           }
     case ShuffleSpecCollection(specs) =>
       specs.exists(isCompatibleWith)
@@ -957,15 +965,16 @@ case class KeyGroupedShuffleSpec(
 object KeyGroupedShuffleSpec {
   def reducePartitionValue(
       row: InternalRow,
-      expressions: Seq[Expression],
-      reducers: Seq[Option[Reducer[_, _]]]):
-    InternalRowComparableWrapper = {
-    val partitionVals = row.toSeq(expressions.map(_.dataType))
+      reducers: Seq[Option[Reducer[_, _]]],
+      dataTypes: Seq[DataType],
+      internalRowComparableWrapperFactory: InternalRow => InternalRowComparableWrapper
+  ): InternalRowComparableWrapper = {
+    val partitionVals = row.toSeq(dataTypes)
     val reducedRow = partitionVals.zip(reducers).map{
       case (v, Some(reducer: Reducer[Any, Any])) => reducer.reduce(v)
       case (v, _) => v
     }.toArray
-    InternalRowComparableWrapper(new GenericInternalRow(reducedRow), expressions)
+    internalRowComparableWrapperFactory(new GenericInternalRow(reducedRow))
   }
 }
 
