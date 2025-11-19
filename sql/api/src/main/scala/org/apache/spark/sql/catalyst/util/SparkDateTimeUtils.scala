@@ -708,9 +708,17 @@ trait SparkDateTimeUtils {
     }
   }
 
-  def integralToTime(l: Long, precision: Int): Option[Long] = {
+  /**
+   * Returns a long corresponding to TIME (in nanos) constructed as the number of seconds since
+   * 1970-01-01 00:00:00 UTC modulo 86400. Since Unix Epoch does not consider leap seconds, this
+   * equates to the time at the number of seconds since midnight UTC. Consequently, if the input
+   * long value is negative, the time is counted as absolute number of seconds before midnight.
+   */
+  def integralToTime(seconds: Long, precision: Int): Option[Long] = {
     try {
-      val time: Long = LocalTime.ofNanoOfDay(l).toNanoOfDay
+      val SECONDS_PER_DAY = 24 * 60 * 60
+      val wrappedSeconds = Math.floorMod(seconds, SECONDS_PER_DAY)
+      val time: Long = LocalTime.ofSecondOfDay(wrappedSeconds).toNanoOfDay
       Some(truncateTimeToPrecision(time, precision))
     } catch {
       case NonFatal(_) =>
@@ -718,20 +726,36 @@ trait SparkDateTimeUtils {
     }
   }
 
-  def integralToTimeAnsi(l: Long, precision: Int, context: QueryContext = null): Long = {
-    integralToTime(l, precision).getOrElse {
-      throw ExecutionErrors.invalidInputInCastToDatetimeError(l, TimeType(), context)
+  /** ANSI version of the `integralToTime` method, throwing an error instead of returning NULL. */
+  def integralToTimeAnsi(seconds: Long, precision: Int, context: QueryContext = null): Long = {
+    integralToTime(seconds, precision).getOrElse {
+      throw ExecutionErrors.invalidInputInCastToDatetimeError(seconds, TimeType(), context)
     }
   }
 
+  /**
+   * Returns a long corresponding to TIME (in nanos) constructed as the number of seconds since
+   * 1970-01-01 00:00:00 UTC modulo 86400. Since Unix Epoch does not consider leap seconds, this
+   * equates to the time at the number of seconds since midnight UTC. Consequently, if the input
+   * long value is negative, the time is counted as absolute number of seconds before midnight.
+   * Note that fractions smaller than nanoseconds are truncated, because max TIME precision is 9.
+   */
   def decimalToTime(d: Decimal, precision: Int): Option[Long] = {
     integralToTime(d.toBigDecimal.longValue, precision)
   }
 
+  /** ANSI version of the `decimalToTime` method, throwing an error instead of returning NULL. */
   def decimalToTimeAnsi(d: Decimal, precision: Int, context: QueryContext = null): Long = {
     integralToTimeAnsi(d.toBigDecimal.longValue, precision, context)
   }
 
+  /**
+   * Returns a long corresponding to TIME (in nanos) constructed as the number of seconds since
+   * 1970-01-01 00:00:00 UTC modulo 86400. Since Unix Epoch does not consider leap seconds, this
+   * equates to the time at the number of seconds since midnight UTC. Consequently, if the input
+   * long value is negative, the time is counted as absolute number of seconds before midnight.
+   * Note that fractions smaller than nanoseconds are truncated, because max TIME precision is 9.
+   */
   def doubleToTime(d: Double, precision: Int): Option[Long] = {
     if (d.isNaN || d.isInfinite) {
       None
@@ -740,6 +764,7 @@ trait SparkDateTimeUtils {
     }
   }
 
+  /** ANSI version of the `doubleToTime` method, throwing an error instead of returning NULL. */
   def doubleToTimeAnsi(d: Double, precision: Int, context: QueryContext = null): Long = {
     if (d.isNaN || d.isInfinite) {
       throw ExecutionErrors.invalidInputInCastToDatetimeError(d, TimeType(), context)

@@ -902,46 +902,6 @@ class CastWithAnsiOffSuite extends CastSuiteBase {
     }
   }
 
-  test("cast invalid numeric input to time") {
-    // TINYINT
-    checkEvaluation(cast(Literal.create(-1.toByte, ByteType), TimeType()), null)
-    checkEvaluation(cast(Literal.create(-128.toByte, ByteType), TimeType()), null)
-    // SMALLINT
-    checkEvaluation(cast(Literal.create(-1.toShort, ShortType), TimeType()), null)
-    checkEvaluation(cast(Literal.create(-128.toShort, ShortType), TimeType()), null)
-    checkEvaluation(cast(Literal.create(-32768.toShort, ShortType), TimeType()), null)
-    // INT
-    checkEvaluation(cast(Literal.create(-1, IntegerType), TimeType()), null)
-    checkEvaluation(cast(Literal.create(-128, IntegerType), TimeType()), null)
-    checkEvaluation(cast(Literal.create(-32768, IntegerType), TimeType()), null)
-    checkEvaluation(cast(Literal.create(-2147483648, IntegerType), TimeType()), null)
-    // BIGINT
-    checkEvaluation(cast(Literal.create(-1L, LongType), TimeType()), null)
-    checkEvaluation(cast(Literal.create(-128L, LongType), TimeType()), null)
-    checkEvaluation(cast(Literal.create(-32768L, LongType), TimeType()), null)
-    checkEvaluation(cast(Literal.create(-2147483648L, LongType), TimeType()), null)
-    checkEvaluation(cast(Literal.create(-9223372036854775808L, LongType), TimeType()), null)
-    checkEvaluation(cast(Literal.create(86400000000000L, LongType), TimeType()), null)
-    checkEvaluation(cast(Literal.create(86400000000001L, LongType), TimeType()), null)
-    checkEvaluation(cast(Literal.create(99999999999999L, LongType), TimeType()), null)
-    checkEvaluation(cast(Literal.create(999999999999999999L, LongType), TimeType()), null)
-    // DECIMAL
-    checkEvaluation(cast(Literal.create(Decimal(-1)), TimeType()), null)
-    checkEvaluation(cast(Literal.create(Decimal(-128)), TimeType()), null)
-    checkEvaluation(cast(Literal.create(Decimal(-32768)), TimeType()), null)
-    checkEvaluation(cast(Literal.create(Decimal(-2147483648)), TimeType()), null)
-    checkEvaluation(cast(Literal.create(Decimal(-9223372036854775808L)), TimeType()), null)
-    checkEvaluation(cast(Literal.create(Decimal(86400000000000L)), TimeType()), null)
-    checkEvaluation(cast(Literal.create(Decimal(86400000000001L)), TimeType()), null)
-    checkEvaluation(cast(Literal.create(Decimal(99999999999999L)), TimeType()), null)
-    checkEvaluation(cast(Literal.create(Decimal(999999999999999999L)), TimeType()), null)
-    // FLOAT
-    checkEvaluation(cast(Literal.create(-1.0f, FloatType), TimeType()), null)
-    checkEvaluation(cast(Literal.create(-128.0f, FloatType), TimeType()), null)
-    checkEvaluation(cast(Literal.create(-32768.0f, FloatType), TimeType()), null)
-    checkEvaluation(cast(Literal.create(-2147483648.0f, FloatType), TimeType()), null)
-  }
-
   test("cast invalid string input to time") {
     Seq("a", "123", "00:00:00ABC", "24:00:00").foreach { invalidInput =>
       checkEvaluation(cast(invalidInput, TimeType()), null)
