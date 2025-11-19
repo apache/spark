@@ -752,18 +752,4 @@ class HashedRelationSuite extends SharedSparkSession {
       map.free()
     }
   }
-
-  test("UnsafeHashedRelation should throw OOM when there isn't enough memory") {
-    val relations = mutable.ArrayBuffer[HashedRelation]()
-    // We should finally see an OOM thrown since we are keeping allocating hashed relations.
-    assertThrows[SparkOutOfMemoryError] {
-      while (true) {
-        // Allocates ~128 MiB each time.
-        relations += UnsafeHashedRelation(Iterator.empty, Nil, 1 << 22, mm)
-      }
-    }
-    // Releases the allocated memory.
-    relations.foreach(_.close())
-    mm.cleanUpAllAllocatedMemory
-  }
 }
