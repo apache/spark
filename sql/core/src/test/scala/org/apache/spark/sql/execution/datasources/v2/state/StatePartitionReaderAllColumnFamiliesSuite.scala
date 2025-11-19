@@ -16,7 +16,7 @@
  */
 package org.apache.spark.sql.execution.datasources.v2.state
 
-import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.catalyst.expressions.{GenericRowWithSchema, UnsafeRow}
 import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider
@@ -60,10 +60,7 @@ class StatePartitionReaderAllColumnFamiliesSuite extends StateDataSourceTestBase
   /**
    * Validates the schema and column families of the bytes read DataFrame.
    */
-  private def validateBytesReadSchema(
-      df: DataFrame,
-      expectedRowCount: Int,
-      expectedColumnFamilies: Seq[String]): Unit = {
+  private def validateBytesReadSchema(df: DataFrame): Unit = {
     // Verify schema
     val schema = df.schema
     assert(schema.fieldNames === Array(
@@ -72,50 +69,25 @@ class StatePartitionReaderAllColumnFamiliesSuite extends StateDataSourceTestBase
     assert(schema("key_bytes").dataType.typeName === "binary")
     assert(schema("value_bytes").dataType.typeName === "binary")
     assert(schema("column_family_name").dataType.typeName === "string")
-
-    // Verify data
-    val rows = df
-      .selectExpr("partition_key", "key_bytes", "value_bytes", "column_family_name")
-      .collect()
-    assert(rows.length == expectedRowCount,
-      s"Expected $expectedRowCount rows but got: ${rows.length}")
-
-    val columnFamilies = rows.map(r => Option(r.getString(3)).getOrElse("null")).distinct.sorted
-    assert(columnFamilies.length == expectedColumnFamilies.length,
-      s"Expected ${expectedColumnFamilies.length} column families, " +
-        s"but got ${columnFamilies.length}: ${columnFamilies.mkString(", ")}")
-
-    expectedColumnFamilies.foreach { expectedCF =>
-      assert(columnFamilies.contains(expectedCF),
-        s"Expected column family '$expectedCF', " +
-          s"but got: ${columnFamilies.mkString(", ")}")
-    }
   }
 
-  private def parseBytesReadData(
-       df: DataFrame)
+  private def parseBytesReadData(df: Array[Row], keyLength: Int, valueLength: Int)
     : Set[(GenericRowWithSchema, UnsafeRow, UnsafeRow, String)] = {
-    df.selectExpr("partition_key", "key_bytes", "value_bytes", "column_family_name")
-      .collect()
-      .map { row =>
+    df.map { row =>
         val partitionKey = row.getAs[GenericRowWithSchema](0)
         val keyBytes = row.getAs[Array[Byte]](1)
         val valueBytes = row.getAs[Array[Byte]](2)
         val columnFamily = row.getString(3)
 
         // Deserialize key bytes to UnsafeRow
-        val keyRow = new UnsafeRow(1)
-        // Skip the version byte (STATE_ENCODING_NUM_VERSION_BYTES) at the beginning
-        // This is for RocksDB provider
+        val keyRow = new UnsafeRow(keyLength)
         keyRow.pointTo(
           keyBytes,
           Platform.BYTE_ARRAY_OFFSET,
           keyBytes.length)
 
         // Deserialize value bytes to UnsafeRow
-        val valueRow = new UnsafeRow(2)
-        // Skip the version byte (STATE_ENCODING_NUM_VERSION_BYTES) at the beginning
-        // This is for RocksDB provider
+        val valueRow = new UnsafeRow(valueLength)
         valueRow.pointTo(
           valueBytes,
           Platform.BYTE_ARRAY_OFFSET,
@@ -134,9 +106,15 @@ class StatePartitionReaderAllColumnFamiliesSuite extends StateDataSourceTestBase
       columnFamily: String,
       keySchema: StructType,
       valueSchema: StructType): Unit = {
+    // Verify data
+    val bytesDf = bytesReadDf
+      .selectExpr("partition_key", "key_bytes", "value_bytes", "column_family_name")
+      .collect()
+    assert(bytesDf.length == 10,
+      s"Expected 10 rows but got: ${bytesDf.length}")
 
     // Filter bytes data for the specified column family
-    val bytesData = parseBytesReadData(bytesReadDf)
+    val bytesData = parseBytesReadData(bytesDf, keySchema.length, valueSchema.length)
     val filteredBytesData = bytesData.filter(_._4 == columnFamily)
 
     // Apply the projection
@@ -203,10 +181,7 @@ class StatePartitionReaderAllColumnFamiliesSuite extends StateDataSourceTestBase
           val bytesReadDf = getBytesReadDf(tempDir.getAbsolutePath)
 
           // Verify schema and column families
-          validateBytesReadSchema(bytesReadDf,
-            expectedRowCount = 10,
-            expectedColumnFamilies = Seq("default"))
-
+          validateBytesReadSchema(bytesReadDf)
           // Compare normal and bytes data for default column family
           val keySchema: StructType = StructType(Array(
             StructField("key", IntegerType, nullable = false)
@@ -217,7 +192,6 @@ class StatePartitionReaderAllColumnFamiliesSuite extends StateDataSourceTestBase
             StructField("count", LongType, nullable = false),
             StructField("sum", LongType, nullable = false)
           ))
-          // Parse bytes read data
 
           // Get normal read data for comparison
           val normalData = getNormalReadData(tempDir.getAbsolutePath)
