@@ -4466,4 +4466,30 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       )
     )
   }
+
+  def columnsChangedAfterViewWithPlanCreation(
+      viewName: Seq[String],
+      tableName: Seq[String],
+      errors: Seq[String]): Throwable = {
+    new AnalysisException(
+      errorClass = "INCOMPATIBLE_COLUMN_CHANGES_AFTER_VIEW_WITH_PLAN_CREATION",
+      messageParameters = Map(
+        "viewName" -> toSQLId(viewName),
+        "tableName" -> toSQLId(tableName),
+        "colType" -> "data",
+        "errors" -> errors.mkString("\n- ", "\n- ", "")))
+  }
+
+  def metadataColumnsChangedAfterViewWithPlanCreation(
+      viewName: Seq[String],
+      tableName: Seq[String],
+      errors: Seq[String]): Throwable = {
+    new AnalysisException(
+      errorClass = "INCOMPATIBLE_COLUMN_CHANGES_AFTER_VIEW_WITH_PLAN_CREATION",
+      messageParameters = Map(
+        "viewName" -> toSQLId(viewName),
+        "tableName" -> toSQLId(tableName),
+        "colType" -> "metadata",
+        "errors" -> errors.mkString("\n- ", "\n- ", "")))
+  }
 }

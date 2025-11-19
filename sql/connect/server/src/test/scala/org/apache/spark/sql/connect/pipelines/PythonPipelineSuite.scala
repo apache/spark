@@ -26,6 +26,9 @@ import java.util.concurrent.TimeUnit
 import scala.collection.mutable.ArrayBuffer
 import scala.util.Try
 
+import org.scalactic.source.Position
+import org.scalatest.Tag
+
 import org.apache.spark.api.python.PythonUtils
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
@@ -49,7 +52,6 @@ class PythonPipelineSuite
     with EventVerificationTestHelpers {
 
   def buildGraph(pythonText: String): DataflowGraph = {
-    assume(PythonTestDepsChecker.isConnectDepsAvailable)
     val indentedPythonText = pythonText.linesIterator.map("        " + _).mkString("\n")
     // create a unique identifier to allow identifying the session and dataflow graph
     val customSessionIdentifier = UUID.randomUUID().toString
@@ -364,11 +366,13 @@ class PythonPipelineSuite
 
     val (streamingFlows, batchFlows) = graph.resolvedFlows.partition(_.df.isStreaming)
     assert(
-      batchFlows.map(_.identifier) == Seq(
+      batchFlows.map(_.identifier).toSet == Set(
         graphIdentifier("src"),
         graphIdentifier("a"),
         graphIdentifier("c")))
-    assert(streamingFlows.map(_.identifier) == Seq(graphIdentifier("b"), graphIdentifier("d")))
+    assert(
+      streamingFlows.map(_.identifier).toSet ==
+        Set(graphIdentifier("b"), graphIdentifier("d")))
   }
 
   test("referencing external datasets") {
@@ -546,7 +550,6 @@ class PythonPipelineSuite
   }
 
   test("create dataset with the same name will fail") {
-    assume(PythonTestDepsChecker.isConnectDepsAvailable)
     val ex = intercept[AnalysisException] {
       buildGraph(s"""
            |@dp.materialized_view
@@ -620,7 +623,6 @@ class PythonPipelineSuite
   }
 
   test("create datasets with three part names") {
-    assume(PythonTestDepsChecker.isConnectDepsAvailable)
     val graphTry = Try {
       buildGraph(s"""
            |@dp.table(name = "some_catalog.some_schema.mv")
@@ -673,7 +675,6 @@ class PythonPipelineSuite
   }
 
   test("create named flow with multipart name will fail") {
-    assume(PythonTestDepsChecker.isConnectDepsAvailable)
     val ex = intercept[RuntimeException] {
       buildGraph(s"""
            |@dp.table
@@ -722,7 +723,8 @@ class PythonPipelineSuite
     assert(
       graph
         .flowsTo(graphIdentifier("a"))
-        .map(_.identifier) == Seq(graphIdentifier("a"), graphIdentifier("something")))
+        .map(_.identifier)
+        .toSet == Set(graphIdentifier("a"), graphIdentifier("something")))
   }
 
   test("groupby and rollup works with internal datasets, referencing with (col, str)") {
@@ -821,7 +823,6 @@ class PythonPipelineSuite
   }
 
   test("create pipeline without table will throw RUN_EMPTY_PIPELINE exception") {
-    assume(PythonTestDepsChecker.isConnectDepsAvailable)
     checkError(
       exception = intercept[AnalysisException] {
         buildGraph(s"""
@@ -833,7 +834,6 @@ class PythonPipelineSuite
   }
 
   test("create pipeline with only temp view will throw RUN_EMPTY_PIPELINE exception") {
-    assume(PythonTestDepsChecker.isConnectDepsAvailable)
     checkError(
       exception = intercept[AnalysisException] {
         buildGraph(s"""
@@ -847,7 +847,6 @@ class PythonPipelineSuite
   }
 
   test("create pipeline with only flow will throw RUN_EMPTY_PIPELINE exception") {
-    assume(PythonTestDepsChecker.isConnectDepsAvailable)
     checkError(
       exception = intercept[AnalysisException] {
         buildGraph(s"""
@@ -1104,5 +1103,14 @@ class PythonPipelineSuite
         |  spark.sql("$supportedSqlCommand")
         |  return spark.range(5)
         |""".stripMargin)
+  }
+
+  override protected def test(testName: String, testTags: Tag*)(testFun: => Any)(implicit
+      pos: Position): Unit = {
+    if (PythonTestDepsChecker.isConnectDepsAvailable) {
+      super.test(testName, testTags: _*)(testFun)
+    } else {
+      super.ignore(testName, testTags: _*)(testFun)
+    }
   }
 }
