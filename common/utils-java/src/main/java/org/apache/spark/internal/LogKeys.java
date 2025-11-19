@@ -192,6 +192,7 @@ public enum LogKeys implements LogKey {
   END_INDEX,
   END_POINT,
   END_VERSION,
+  ENFORCE_EXACTLY_ONCE,
   ENGINE,
   EPOCH,
   ERROR,
