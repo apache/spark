@@ -627,8 +627,7 @@ class MicroBatchExecution(
 
         // update offset metadata
         nextOffsets.metadataOpt.foreach { metadata =>
-          OffsetSeqMetadata.setSessionConf(
-            metadata.asInstanceOf[OffsetSeqMetadata], sparkSessionToRunBatches.sessionState.conf)
+          OffsetSeqMetadata.setSessionConf(metadata, sparkSessionToRunBatches.sessionState.conf)
           execCtx.offsetSeqMetadata = OffsetSeqMetadata(
             metadata.batchWatermarkMs, metadata.batchTimestampMs, sparkSessionToRunBatches.conf)
           watermarkTracker = WatermarkTracker(sparkSessionToRunBatches.conf, logicalPlan)

@@ -131,7 +131,7 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
         )
 
         val clonedSqlConf = session.sessionState.conf.clone()
-        OffsetSeqMetadata.setSessionConf(metadata.asInstanceOf[OffsetSeqMetadata], clonedSqlConf)
+        OffsetSeqMetadata.setSessionConf(metadata, clonedSqlConf)
         StateStoreConf(clonedSqlConf)
 
       case _ =>

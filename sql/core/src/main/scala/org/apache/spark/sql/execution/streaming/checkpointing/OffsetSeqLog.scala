@@ -132,7 +132,7 @@ class OffsetSeqLog(sparkSession: SparkSession, path: String)
     if (batchId < 0) {
       None
     } else {
-      get(batchId).flatMap(_.metadataOpt.map(_.asInstanceOf[OffsetSeqMetadata]))
+      get(batchId).flatMap(_.metadataOpt)
     }
   }
 }

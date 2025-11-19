@@ -21,7 +21,7 @@ import scala.collection.immutable
 
 import org.apache.spark.sql.connector.read.streaming.{Offset => OffsetV2, SparkDataStream}
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.execution.streaming.checkpointing.{OffsetMap, OffsetSeq, OffsetSeqBase, OffsetSeqLog, OffsetSeqMetadata, OffsetSeqMetadataBase}
+import org.apache.spark.sql.execution.streaming.checkpointing.{OffsetMap, OffsetSeq, OffsetSeqBase, OffsetSeqLog, OffsetSeqMetadata}
 
 /**
  * A helper class that looks like a Map[Source, Offset].
@@ -38,7 +38,7 @@ class StreamProgress(
   def toOffsets(
       sources: Seq[SparkDataStream],
       sourceIdMap: Map[String, SparkDataStream],
-      metadata: OffsetSeqMetadataBase): OffsetSeqBase = {
+      metadata: OffsetSeqMetadata): OffsetSeqBase = {
     metadata.version match {
       case OffsetSeqLog.VERSION_1 =>
         toOffsetSeq(sources, metadata)
@@ -49,15 +49,15 @@ class StreamProgress(
     }
   }
 
-  private def toOffsetSeq(
+  def toOffsetSeq(
       source: Seq[SparkDataStream],
-      metadata: OffsetSeqMetadataBase): OffsetSeqBase = {
-    OffsetSeq(source.map(get), Some(metadata.asInstanceOf[OffsetSeqMetadata]))
+      metadata: OffsetSeqMetadata): OffsetSeq = {
+    OffsetSeq(source.map(get), Some(metadata))
   }
 
   private def toOffsetMap(
       sourceIdMap: Map[String, SparkDataStream],
-      metadata: OffsetSeqMetadataBase): OffsetMap = {
+      metadata: OffsetSeqMetadata): OffsetMap = {
     // Compute reverse mapping only when needed
     val sourceToIdMap = sourceIdMap.map(_.swap)
     val offsetsMap = baseMap.map { case (source, offset) =>
@@ -65,11 +65,7 @@ class StreamProgress(
         throw new IllegalArgumentException(s"Source $source not found in sourceToIdMap"))
       sourceId -> Some(offset)
     }
-    OffsetMap(offsetsMap, Some(metadata.asInstanceOf[OffsetSeqMetadata]))
-  }
-
-  def toOffsetSeq(source: Seq[SparkDataStream], metadata: OffsetSeqMetadata): OffsetSeq = {
-    OffsetSeq(source.map(get), Some(metadata))
+    OffsetMap(offsetsMap, Some(metadata))
   }
 
   override def toString: String =

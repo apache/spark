@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.streaming.state
 
-import org.apache.spark.sql.execution.streaming.checkpointing.{CommitLog, CommitMetadata, OffsetSeqMetadata}
+import org.apache.spark.sql.execution.streaming.checkpointing.{CommitLog, CommitMetadata}
 import org.apache.spark.sql.execution.streaming.runtime.{MemoryStream, StreamingQueryCheckpointMetadata}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming._
@@ -258,8 +258,7 @@ class OfflineStateRepartitionSuite extends StreamTest {
     assert(lastBatchId == batchId)
 
     val lastBatch = checkpointMetadata.offsetLog.get(lastBatchId).get
-    val lastBatchShufflePartitions = getShufflePartitions(
-      lastBatch.metadataOpt.get.asInstanceOf[OffsetSeqMetadata]).get
+    val lastBatchShufflePartitions = getShufflePartitions(lastBatch.metadataOpt.get).get
     assert(lastBatchShufflePartitions == expectedShufflePartitions)
 
     // Verify the commit log
@@ -278,8 +277,7 @@ class OfflineStateRepartitionSuite extends StreamTest {
       s"Offsets should be identical between batch $previousBatchId and $batchId")
 
     // Verify metadata is the same except for shuffle partitions config
-    (lastBatch.metadataOpt.map(_.asInstanceOf[OffsetSeqMetadata]),
-     previousBatch.metadataOpt.map(_.asInstanceOf[OffsetSeqMetadata])) match {
+    (lastBatch.metadataOpt, previousBatch.metadataOpt) match {
       case (Some(lastMetadata), Some(previousMetadata)) =>
         // Check watermark and timestamp are the same
         assert(lastMetadata.batchWatermarkMs == previousMetadata.batchWatermarkMs,

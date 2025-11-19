@@ -38,7 +38,7 @@ import org.apache.spark.sql.internal.SQLConf._
 trait OffsetSeqBase {
   def offsets: Seq[Option[OffsetV2]]
 
-  def metadataOpt: Option[OffsetSeqMetadataBase]
+  def metadataOpt: Option[OffsetSeqMetadata]
 
   override def toString: String = this match {
     case offsetMap: OffsetMap =>
@@ -95,7 +95,7 @@ case class OffsetSeq(
     offsets: Seq[Option[OffsetV2]],
     metadata: Option[OffsetSeqMetadata] = None) extends OffsetSeqBase {
 
-  override def metadataOpt: Option[OffsetSeqMetadataBase] = metadata
+  override def metadataOpt: Option[OffsetSeqMetadata] = metadata
 }
 
 object OffsetSeq {
@@ -115,13 +115,6 @@ object OffsetSeq {
   }
 }
 
-trait OffsetSeqMetadataBase extends Serializable {
-  def batchWatermarkMs: Long
-  def batchTimestampMs: Long
-  def conf: Map[String, String]
-  def json: String
-  def version: Int
-}
 
 /**
  * A map-based collection of offsets, used to track the progress of processing data from one or more
@@ -158,8 +151,8 @@ case class OffsetMap(
 case class OffsetSeqMetadata(
     batchWatermarkMs: Long = 0,
     batchTimestampMs: Long = 0,
-    conf: Map[String, String] = Map.empty) extends OffsetSeqMetadataBase {
-  override def version: Int = 1
+    conf: Map[String, String] = Map.empty,
+    version: Int = 1) {
   def json: String = Serialization.write(this)(OffsetSeqMetadata.format)
 }
 

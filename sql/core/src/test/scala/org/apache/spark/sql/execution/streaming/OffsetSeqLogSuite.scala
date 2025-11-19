@@ -171,8 +171,7 @@ class OffsetSeqLogSuite extends SharedSparkSession {
     }
 
     val clonedSqlConf = spark.sessionState.conf.clone()
-    OffsetSeqMetadata.setSessionConf(
-      offsetSeqMetadata.asInstanceOf[OffsetSeqMetadata], clonedSqlConf)
+    OffsetSeqMetadata.setSessionConf(offsetSeqMetadata, clonedSqlConf)
     assert(clonedSqlConf.stateStoreEncodingFormat == encodingFormat)
   }
 
@@ -216,8 +215,7 @@ class OffsetSeqLogSuite extends SharedSparkSession {
       assert(offsetSeqMetadata.conf.get(rowChecksumConf) === None)
 
       val clonedSqlConf = spark.sessionState.conf.clone()
-      OffsetSeqMetadata.setSessionConf(
-        offsetSeqMetadata.asInstanceOf[OffsetSeqMetadata], clonedSqlConf)
+      OffsetSeqMetadata.setSessionConf(offsetSeqMetadata, clonedSqlConf)
       assert(!clonedSqlConf.stateStoreRowChecksumEnabled)
     }
   }
@@ -235,7 +233,7 @@ class OffsetSeqLogSuite extends SharedSparkSession {
 
     // Verify metadata
     assert(offsetSeq.metadataOpt.isDefined)
-    val metadata = offsetSeq.metadataOpt.get.asInstanceOf[OffsetSeqMetadata]
+    val metadata = offsetSeq.metadataOpt.get
     assert(metadata.batchWatermarkMs === 0)
     assert(metadata.batchTimestampMs === 1758651405232L)
   }
