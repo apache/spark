@@ -66,38 +66,35 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
     val sourceOptions = StateSourceOptions.modifySourceOptions(hadoopConf,
       StateSourceOptions.apply(session, hadoopConf, properties))
     val stateConf = buildStateStoreConf(sourceOptions.resolvedCpLocation, sourceOptions.batchId)
-    if (sourceOptions.readAllColumnFamilies) {
-      // For readAllColumnFamilies mode, we don't need specific encoder because it returns raw data
-      val keyStateEncoderSpec = NoPrefixKeyStateEncoderSpec(new StructType())
-      new StateTable(session, schema, sourceOptions, stateConf, keyStateEncoderSpec,
-        None, None, None, None)
-    } else {
-      val stateStoreReaderInfo: StateStoreReaderInfo = getStoreMetadataAndRunChecks(
-        sourceOptions)
-
-      // The key state encoder spec should be available for all operators except stream-stream joins
-      val keyStateEncoderSpec = if (stateStoreReaderInfo.keyStateEncoderSpecOpt.isDefined) {
-        stateStoreReaderInfo.keyStateEncoderSpecOpt.get
-      } else {
-        val keySchema = SchemaUtil.getSchemaAsDataType(schema, "key").asInstanceOf[StructType]
-        NoPrefixKeyStateEncoderSpec(keySchema)
-      }
-      new StateTable(session, schema, sourceOptions, stateConf, keyStateEncoderSpec,
-        stateStoreReaderInfo.transformWithStateVariableInfoOpt,
-        stateStoreReaderInfo.stateStoreColFamilySchemaOpt,
-        stateStoreReaderInfo.stateSchemaProviderOpt,
-        stateStoreReaderInfo.joinColFamilyOpt)
+    if (sourceOptions.internalOnlyReadAllColumnFamilies
+      && !stateConf.providerClass.contains("RocksDB")) {
+      throw StateDataSourceErrors.invalidOptionValue(
+        StateSourceOptions.INTERNAL_ONLY_READ_ALL_COLUMN_FAMILIES,
+        "internalOnlyReadAllColumnFamilies is only supported with RocksDBStateStoreProvider. " +
+          s"Current provider: ${stateConf.providerClass}")
     }
+    val stateStoreReaderInfo: StateStoreReaderInfo = getStoreMetadataAndRunChecks(
+      sourceOptions)
+
+    // The key state encoder spec should be available for all operators except stream-stream joins
+    val keyStateEncoderSpec = if (stateStoreReaderInfo.keyStateEncoderSpecOpt.isDefined) {
+      stateStoreReaderInfo.keyStateEncoderSpecOpt.get
+    } else {
+      val keySchema = SchemaUtil.getSchemaAsDataType(schema, "key").asInstanceOf[StructType]
+      NoPrefixKeyStateEncoderSpec(keySchema)
+    }
+
+    new StateTable(session, schema, sourceOptions, stateConf, keyStateEncoderSpec,
+      stateStoreReaderInfo.transformWithStateVariableInfoOpt,
+      stateStoreReaderInfo.stateStoreColFamilySchemaOpt,
+      stateStoreReaderInfo.stateSchemaProviderOpt,
+      stateStoreReaderInfo.joinColFamilyOpt)
   }
 
   override def inferSchema(options: CaseInsensitiveStringMap): StructType = {
     val sourceOptions = StateSourceOptions.modifySourceOptions(hadoopConf,
       StateSourceOptions.apply(session, hadoopConf, options))
-    if (sourceOptions.readAllColumnFamilies) {
-      // For readAllColumnFamilies mode, return the binary schema directly
-      return SchemaUtil.getSourceSchema(
-        sourceOptions, new StructType(), new StructType(), None, None)
-    }
+
     val stateStoreReaderInfo: StateStoreReaderInfo = getStoreMetadataAndRunChecks(
       sourceOptions)
     val oldSchemaFilePaths = StateDataSource.getOldSchemaFilePaths(sourceOptions, hadoopConf)
@@ -382,7 +379,7 @@ case class StateSourceOptions(
     stateVarName: Option[String],
     readRegisteredTimers: Boolean,
     flattenCollectionTypes: Boolean,
-    readAllColumnFamilies: Boolean,
+    internalOnlyReadAllColumnFamilies: Boolean,
     startOperatorStateUniqueIds: Option[Array[Array[String]]] = None,
     endOperatorStateUniqueIds: Option[Array[Array[String]]] = None) {
   def stateCheckpointLocation: Path = new Path(resolvedCpLocation, DIR_NAME_STATE)
@@ -392,7 +389,7 @@ case class StateSourceOptions(
       s"operatorId=$operatorId, storeName=$storeName, joinSide=$joinSide, " +
       s"stateVarName=${stateVarName.getOrElse("None")}, +" +
       s"flattenCollectionTypes=$flattenCollectionTypes" +
-      s"readAllColumnFamilies=$readAllColumnFamilies"
+      s"internalOnlyReadAllColumnFamilies=$internalOnlyReadAllColumnFamilies"
     if (fromSnapshotOptions.isDefined) {
       desc += s", snapshotStartBatchId=${fromSnapshotOptions.get.snapshotStartBatchId}"
       desc += s", snapshotPartitionId=${fromSnapshotOptions.get.snapshotPartitionId}"
@@ -419,7 +416,7 @@ object StateSourceOptions extends DataSourceOptions {
   val STATE_VAR_NAME = newOption("stateVarName")
   val READ_REGISTERED_TIMERS = newOption("readRegisteredTimers")
   val FLATTEN_COLLECTION_TYPES = newOption("flattenCollectionTypes")
-  val READ_ALL_COLUMN_FAMILIES = newOption("readAllColumnFamilies")
+  val INTERNAL_ONLY_READ_ALL_COLUMN_FAMILIES = newOption("internalOnlyReadAllColumnFamilies")
 
   object JoinSideValues extends Enumeration {
     type JoinSideValues = Value
@@ -505,25 +502,28 @@ object StateSourceOptions extends DataSourceOptions {
 
     val readChangeFeed = Option(options.get(READ_CHANGE_FEED)).exists(_.toBoolean)
 
-    val readAllColumnFamilies = try {
-      Option(options.get(READ_ALL_COLUMN_FAMILIES))
+    val internalOnlyReadAllColumnFamilies = try {
+      Option(options.get(INTERNAL_ONLY_READ_ALL_COLUMN_FAMILIES))
         .map(_.toBoolean).getOrElse(false)
     } catch {
       case _: IllegalArgumentException =>
-        throw StateDataSourceErrors.invalidOptionValue(READ_ALL_COLUMN_FAMILIES,
+        throw StateDataSourceErrors.invalidOptionValue(INTERNAL_ONLY_READ_ALL_COLUMN_FAMILIES,
           "Boolean value is expected")
     }
 
-    if (readAllColumnFamilies && stateVarName.isDefined) {
-      throw StateDataSourceErrors.conflictOptions(Seq(READ_ALL_COLUMN_FAMILIES, STATE_VAR_NAME))
+    if (internalOnlyReadAllColumnFamilies && stateVarName.isDefined) {
+      throw StateDataSourceErrors.conflictOptions(
+        Seq(INTERNAL_ONLY_READ_ALL_COLUMN_FAMILIES, STATE_VAR_NAME))
     }
 
-    if (readAllColumnFamilies && joinSide != JoinSideValues.none) {
-      throw StateDataSourceErrors.conflictOptions(Seq(READ_ALL_COLUMN_FAMILIES, JOIN_SIDE))
+    if (internalOnlyReadAllColumnFamilies && joinSide != JoinSideValues.none) {
+      throw StateDataSourceErrors.conflictOptions(
+        Seq(INTERNAL_ONLY_READ_ALL_COLUMN_FAMILIES, JOIN_SIDE))
     }
 
-    if (readAllColumnFamilies && readChangeFeed) {
-      throw StateDataSourceErrors.conflictOptions(Seq(READ_ALL_COLUMN_FAMILIES, READ_CHANGE_FEED))
+    if (internalOnlyReadAllColumnFamilies && readChangeFeed) {
+      throw StateDataSourceErrors.conflictOptions(
+        Seq(INTERNAL_ONLY_READ_ALL_COLUMN_FAMILIES, READ_CHANGE_FEED))
     }
 
     val changeStartBatchId = Option(options.get(CHANGE_START_BATCH_ID)).map(_.toLong)
@@ -650,7 +650,7 @@ object StateSourceOptions extends DataSourceOptions {
       resolvedCpLocation, batchId.get, operatorId, storeName, joinSide,
       readChangeFeed, fromSnapshotOptions, readChangeFeedOptions,
       stateVarName, readRegisteredTimers, flattenCollectionTypes,
-      readAllColumnFamilies, startOperatorStateUniqueIds, endOperatorStateUniqueIds)
+      internalOnlyReadAllColumnFamilies, startOperatorStateUniqueIds, endOperatorStateUniqueIds)
   }
 
   private def getLastCommittedBatch(session: SparkSession, checkpointLocation: String): Long = {
