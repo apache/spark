@@ -22,6 +22,10 @@ license: |
 * Table of contents
 {:toc}
 
+## Upgrading from Core 4.1 to 4.2
+
+- Since Spark 4.2, Spark will allocate executor pods with a batch size of `20`. To restore the legacy behavior, you can set `spark.kubernetes.allocation.batch.size` to `10`.
+
 ## Upgrading from Core 4.0 to 4.1
 
 - Since Spark 4.1, Spark Master deamon provides REST API by default. To restore the behavior before Spark 4.1, you can set `spark.master.rest.enabled` to `false`.
