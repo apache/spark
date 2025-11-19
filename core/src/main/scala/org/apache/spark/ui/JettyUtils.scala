@@ -398,7 +398,7 @@ private[spark] object JettyUtils extends Logging {
     redirectHandler.setContextPath("/")
     redirectHandler.setVirtualHosts(toVirtualHosts(REDIRECT_CONNECTOR_NAME))
     redirectHandler.addFilter(
-    new FilterHolder(new HttpsRedirectFilter(scheme, securePort)), "/*", null)
+      new FilterHolder(new HttpsRedirectFilter(scheme, securePort)), "/*", null)
     redirectHandler
   }
 
