@@ -847,6 +847,137 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
+CREATE TABLE t(col1 INT)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT * FROM IDENTIFIER((SELECT 't'))
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "NOT_A_CONSTANT_STRING.NOT_CONSTANT",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "expr" : "scalarsubquery()",
+    "name" : "IDENTIFIER"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 26,
+    "stopIndex" : 37,
+    "fragment" : "(SELECT 't')"
+  } ]
+}
+
+
+-- !query
+SELECT * FROM (SELECT IDENTIFIER((SELECT 'col1')) FROM IDENTIFIER((SELECT 't')))
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "NOT_A_CONSTANT_STRING.NOT_CONSTANT",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "expr" : "scalarsubquery()",
+    "name" : "IDENTIFIER"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 67,
+    "stopIndex" : 78,
+    "fragment" : "(SELECT 't')"
+  } ]
+}
+
+
+-- !query
+SELECT IDENTIFIER((SELECT 'col1')) FROM VALUES(1)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "NOT_A_CONSTANT_STRING.NOT_CONSTANT",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "expr" : "scalarsubquery()",
+    "name" : "IDENTIFIER"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 19,
+    "stopIndex" : 33,
+    "fragment" : "(SELECT 'col1')"
+  } ]
+}
+
+
+-- !query
+SELECT col1, IDENTIFIER((SELECT col1)) FROM VALUES(1)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "NOT_A_CONSTANT_STRING.NOT_CONSTANT",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "expr" : "scalarsubquery(col1)",
+    "name" : "IDENTIFIER"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 25,
+    "stopIndex" : 37,
+    "fragment" : "(SELECT col1)"
+  } ]
+}
+
+
+-- !query
+SELECT IDENTIFIER((SELECT 'col1', 'col2')) FROM VALUES(1,2)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "UNSUPPORTED_TYPED_LITERAL",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "supportedTypes" : "\"DATE\", \"TIMESTAMP_NTZ\", \"TIMESTAMP_LTZ\", \"TIMESTAMP\", \"INTERVAL\", \"X\", \"TIME\"",
+    "unsupportedType" : "\"SELECT\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 20,
+    "stopIndex" : 32,
+    "fragment" : "SELECT 'col1'"
+  } ]
+}
+
+
+-- !query
+DROP TABLE t
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
 CREATE TABLE IDENTIFIER(1)(c1 INT) USING csv
 -- !query schema
 struct<>
