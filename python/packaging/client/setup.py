@@ -139,6 +139,7 @@ try:
     _minimum_grpc_version = "1.76.0"
     _minimum_googleapis_common_protos_version = "1.71.0"
     _minimum_pyyaml_version = "3.11"
+    _minimum_zstandard_version = "0.25.0"
 
     with open("README.md") as f:
         long_description = f.read()
@@ -211,6 +212,7 @@ try:
             "grpcio>=%s" % _minimum_grpc_version,
             "grpcio-status>=%s" % _minimum_grpc_version,
             "googleapis-common-protos>=%s" % _minimum_googleapis_common_protos_version,
+            "zstandard>=%s" % _minimum_zstandard_version,
             "numpy>=%s" % _minimum_numpy_version,
             "pyyaml>=%s" % _minimum_pyyaml_version,
         ],

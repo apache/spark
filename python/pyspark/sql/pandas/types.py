@@ -23,6 +23,8 @@ import datetime
 import itertools
 from typing import Any, Callable, Iterable, List, Optional, Union, TYPE_CHECKING
 
+from pyspark.errors import PySparkTypeError, UnsupportedOperationException, PySparkValueError
+from pyspark.loose_version import LooseVersion
 from pyspark.sql.types import (
     cast,
     BooleanType,
@@ -56,8 +58,6 @@ from pyspark.sql.types import (
     Geography,
     _create_row,
 )
-from pyspark.errors import PySparkTypeError, UnsupportedOperationException, PySparkValueError
-from pyspark.loose_version import LooseVersion
 
 if TYPE_CHECKING:
     import pandas as pd
@@ -1157,6 +1157,8 @@ def _create_converter_to_pandas(
         elif isinstance(dt, VariantType):
 
             def convert_variant(value: Any) -> Any:
+                if isinstance(value, VariantVal):
+                    return value
                 if (
                     isinstance(value, dict)
                     and all(key in value for key in ["value", "metadata"])

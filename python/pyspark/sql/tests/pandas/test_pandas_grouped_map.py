@@ -938,14 +938,14 @@ class ApplyInPandasTestsMixin:
                 self.assertEqual(row[1], 123)
 
     def test_arrow_batch_slicing(self):
-        df = self.spark.range(10000000).select(
-            (sf.col("id") % 2).alias("key"), sf.col("id").alias("v")
-        )
+        n = 100000
+
+        df = self.spark.range(n).select((sf.col("id") % 2).alias("key"), sf.col("id").alias("v"))
         cols = {f"col_{i}": sf.col("v") + i for i in range(20)}
         df = df.withColumns(cols)
 
         def min_max_v(pdf):
-            assert len(pdf) == 10000000 / 2, len(pdf)
+            assert len(pdf) == n / 2, len(pdf)
             return pd.DataFrame(
                 {
                     "key": [pdf.key.iloc[0]],
@@ -958,7 +958,7 @@ class ApplyInPandasTestsMixin:
             df.groupby("key").agg(sf.min("v").alias("min"), sf.max("v").alias("max")).sort("key")
         ).collect()
 
-        for maxRecords, maxBytes in [(1000, 2**31 - 1), (0, 1048576), (1000, 1048576)]:
+        for maxRecords, maxBytes in [(1000, 2**31 - 1), (0, 4096), (1000, 4096)]:
             with self.subTest(maxRecords=maxRecords, maxBytes=maxBytes):
                 with self.sql_conf(
                     {
@@ -1000,20 +1000,20 @@ class ApplyInPandasTestsMixin:
                 df,
             )
 
-        logs = self.spark.table("system.session.python_worker_logs")
+            logs = self.spark.tvf.python_worker_logs()
 
-        assertDataFrameEqual(
-            logs.select("level", "msg", "context", "logger"),
-            [
-                Row(
-                    level="WARNING",
-                    msg=f"pandas grouped map: {dict(id=lst, value=[v*10 for v in lst])}",
-                    context={"func_name": func_with_logging.__name__},
-                    logger="test_pandas_grouped_map",
-                )
-                for lst in [[0, 2, 4, 6, 8], [1, 3, 5, 7]]
-            ],
-        )
+            assertDataFrameEqual(
+                logs.select("level", "msg", "context", "logger"),
+                [
+                    Row(
+                        level="WARNING",
+                        msg=f"pandas grouped map: {dict(id=lst, value=[v*10 for v in lst])}",
+                        context={"func_name": func_with_logging.__name__},
+                        logger="test_pandas_grouped_map",
+                    )
+                    for lst in [[0, 2, 4, 6, 8], [1, 3, 5, 7]]
+                ],
+            )
 
     def test_apply_in_pandas_iterator_basic(self):
         df = self.spark.createDataFrame(
@@ -1057,7 +1057,7 @@ class ApplyInPandasTestsMixin:
         self.assertEqual(result[1][1], 18.0)
 
     def test_apply_in_pandas_iterator_batch_slicing(self):
-        df = self.spark.range(10000000).select(
+        df = self.spark.range(100000).select(
             (sf.col("id") % 2).alias("key"), sf.col("id").alias("v")
         )
         cols = {f"col_{i}": sf.col("v") + i for i in range(20)}
@@ -1073,7 +1073,7 @@ class ApplyInPandasTestsMixin:
                     key_val = batch.key.iloc[0]
 
             combined = pd.concat(all_data, ignore_index=True)
-            assert len(combined) == 10000000 / 2, len(combined)
+            assert len(combined) == 100000 / 2, len(combined)
 
             yield pd.DataFrame(
                 {
@@ -1092,7 +1092,7 @@ class ApplyInPandasTestsMixin:
             .sort("key")
         ).collect()
 
-        for maxRecords, maxBytes in [(1000, 2**31 - 1), (0, 1048576), (1000, 1048576)]:
+        for maxRecords, maxBytes in [(1000, 4096), (0, 4096), (1000, 4096)]:
             with self.subTest(maxRecords=maxRecords, maxBytes=maxBytes):
                 with self.sql_conf(
                     {
@@ -1109,7 +1109,7 @@ class ApplyInPandasTestsMixin:
                     self.assertEqual(expected, result)
 
     def test_apply_in_pandas_iterator_with_keys_batch_slicing(self):
-        df = self.spark.range(10000000).select(
+        df = self.spark.range(100000).select(
             (sf.col("id") % 2).alias("key"), sf.col("id").alias("v")
         )
         cols = {f"col_{i}": sf.col("v") + i for i in range(20)}
@@ -1124,7 +1124,7 @@ class ApplyInPandasTestsMixin:
                 all_data.append(batch)
 
             combined = pd.concat(all_data, ignore_index=True)
-            assert len(combined) == 10000000 / 2, len(combined)
+            assert len(combined) == 100000 / 2, len(combined)
 
             yield pd.DataFrame(
                 {
@@ -1138,7 +1138,7 @@ class ApplyInPandasTestsMixin:
             df.groupby("key").agg(sf.min("v").alias("min"), sf.max("v").alias("max")).sort("key")
         ).collect()
 
-        for maxRecords, maxBytes in [(1000, 2**31 - 1), (0, 1048576), (1000, 1048576)]:
+        for maxRecords, maxBytes in [(1000, 4096), (0, 4096), (1000, 4096)]:
             with self.subTest(maxRecords=maxRecords, maxBytes=maxBytes):
                 with self.sql_conf(
                     {

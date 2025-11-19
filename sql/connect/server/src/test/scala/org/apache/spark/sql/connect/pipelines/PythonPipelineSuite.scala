@@ -26,6 +26,9 @@ import java.util.concurrent.TimeUnit
 import scala.collection.mutable.ArrayBuffer
 import scala.util.Try
 
+import org.scalactic.source.Position
+import org.scalatest.Tag
+
 import org.apache.spark.api.python.PythonUtils
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
@@ -49,8 +52,7 @@ class PythonPipelineSuite
     with EventVerificationTestHelpers {
 
   def buildGraph(pythonText: String): DataflowGraph = {
-    assume(PythonTestDepsChecker.isConnectDepsAvailable)
-    val indentedPythonText = pythonText.linesIterator.map("    " + _).mkString("\n")
+    val indentedPythonText = pythonText.linesIterator.map("        " + _).mkString("\n")
     // create a unique identifier to allow identifying the session and dataflow graph
     val customSessionIdentifier = UUID.randomUUID().toString
     val pythonCode =
@@ -63,6 +65,9 @@ class PythonPipelineSuite
          |from pyspark.pipelines.spark_connect_pipeline import create_dataflow_graph
          |from pyspark.pipelines.graph_element_registry import (
          |    graph_element_registration_context,
+         |)
+         |from pyspark.pipelines.add_pipeline_analysis_context import (
+         |    add_pipeline_analysis_context
          |)
          |
          |spark = SparkSession.builder \\
@@ -79,7 +84,10 @@ class PythonPipelineSuite
          |)
          |
          |registry = SparkConnectGraphElementRegistry(spark, dataflow_graph_id)
-         |with graph_element_registration_context(registry):
+         |with add_pipeline_analysis_context(
+         |    spark=spark, dataflow_graph_id=dataflow_graph_id, flow_name=None
+         |):
+         |    with graph_element_registration_context(registry):
          |$indentedPythonText
          |""".stripMargin
 
@@ -143,7 +151,7 @@ class PythonPipelineSuite
           QueryOrigin(
             language = Option(Python()),
             filePath = Option("<string>"),
-            line = Option(28),
+            line = Option(34),
             objectName = Option("spark_catalog.default.table1"),
             objectType = Option(QueryOriginType.Flow.toString))),
       errorChecker = ex =>
@@ -195,7 +203,7 @@ class PythonPipelineSuite
             QueryOrigin(
               language = Option(Python()),
               filePath = Option("<string>"),
-              line = Option(34),
+              line = Option(40),
               objectName = Option("spark_catalog.default.mv2"),
               objectType = Option(QueryOriginType.Flow.toString))),
         expectedEventLevel = EventLevel.INFO)
@@ -209,7 +217,7 @@ class PythonPipelineSuite
             QueryOrigin(
               language = Option(Python()),
               filePath = Option("<string>"),
-              line = Option(38),
+              line = Option(44),
               objectName = Option("spark_catalog.default.mv"),
               objectType = Option(QueryOriginType.Flow.toString))),
         expectedEventLevel = EventLevel.INFO)
@@ -227,7 +235,7 @@ class PythonPipelineSuite
               QueryOrigin(
                 language = Option(Python()),
                 filePath = Option("<string>"),
-                line = Option(28),
+                line = Option(34),
                 objectName = Option("spark_catalog.default.table1"),
                 objectType = Option(QueryOriginType.Flow.toString))),
           expectedEventLevel = EventLevel.INFO)
@@ -241,7 +249,7 @@ class PythonPipelineSuite
               QueryOrigin(
                 language = Option(Python()),
                 filePath = Option("<string>"),
-                line = Option(43),
+                line = Option(49),
                 objectName = Option("spark_catalog.default.standalone_flow1"),
                 objectType = Option(QueryOriginType.Flow.toString))),
           expectedEventLevel = EventLevel.INFO)
@@ -334,21 +342,37 @@ class PythonPipelineSuite
       |@dp.table
       |def b():
       |  return spark.readStream.table("src")
+      |
+      |@dp.materialized_view
+      |def c():
+      |  return spark.sql("SELECT * FROM src")
+      |
+      |@dp.table
+      |def d():
+      |  return spark.sql("SELECT * FROM STREAM src")
       |""".stripMargin).resolve().validate()
 
     assert(
       graph.table.keySet == Set(
         graphIdentifier("src"),
         graphIdentifier("a"),
-        graphIdentifier("b")))
-    Seq("a", "b").foreach { flowName =>
+        graphIdentifier("b"),
+        graphIdentifier("c"),
+        graphIdentifier("d")))
+    Seq("a", "b", "c").foreach { flowName =>
       // dependency is properly tracked
       assert(graph.resolvedFlow(graphIdentifier(flowName)).inputs == Set(graphIdentifier("src")))
     }
 
     val (streamingFlows, batchFlows) = graph.resolvedFlows.partition(_.df.isStreaming)
-    assert(batchFlows.map(_.identifier) == Seq(graphIdentifier("src"), graphIdentifier("a")))
-    assert(streamingFlows.map(_.identifier) == Seq(graphIdentifier("b")))
+    assert(
+      batchFlows.map(_.identifier).toSet == Set(
+        graphIdentifier("src"),
+        graphIdentifier("a"),
+        graphIdentifier("c")))
+    assert(
+      streamingFlows.map(_.identifier).toSet ==
+        Set(graphIdentifier("b"), graphIdentifier("d")))
   }
 
   test("referencing external datasets") {
@@ -365,18 +389,33 @@ class PythonPipelineSuite
         |@dp.table
         |def c():
         |  return spark.readStream.table("spark_catalog.default.src")
+        |
+        |@dp.materialized_view
+        |def d():
+        |  return spark.sql("SELECT * FROM spark_catalog.default.src")
+        |
+        |@dp.table
+        |def e():
+        |  return spark.sql("SELECT * FROM STREAM spark_catalog.default.src")
         |""".stripMargin).resolve().validate()
 
     assert(
       graph.tables.map(_.identifier).toSet == Set(
         graphIdentifier("a"),
         graphIdentifier("b"),
-        graphIdentifier("c")))
+        graphIdentifier("c"),
+        graphIdentifier("d"),
+        graphIdentifier("e")))
     // dependency is not tracked
     assert(graph.resolvedFlows.forall(_.inputs.isEmpty))
     val (streamingFlows, batchFlows) = graph.resolvedFlows.partition(_.df.isStreaming)
-    assert(batchFlows.map(_.identifier).toSet == Set(graphIdentifier("a"), graphIdentifier("b")))
-    assert(streamingFlows.map(_.identifier) == Seq(graphIdentifier("c")))
+    assert(
+      batchFlows.map(_.identifier).toSet == Set(
+        graphIdentifier("a"),
+        graphIdentifier("b"),
+        graphIdentifier("d")))
+    assert(
+      streamingFlows.map(_.identifier).toSet == Set(graphIdentifier("c"), graphIdentifier("e")))
   }
 
   test("referencing internal datasets failed") {
@@ -392,9 +431,17 @@ class PythonPipelineSuite
         |@dp.table
         |def c():
         |  return spark.readStream.table("src")
+        |
+        |@dp.materialized_view
+        |def d():
+        |  return spark.sql("SELECT * FROM src")
+        |
+        |@dp.table
+        |def e():
+        |  return spark.sql("SELECT * FROM STREAM src")
         |""".stripMargin).resolve()
 
-    assert(graph.resolutionFailedFlows.size == 3)
+    assert(graph.resolutionFailedFlows.size == 5)
     graph.resolutionFailedFlows.foreach { flow =>
       assert(flow.failure.head.getMessage.contains("[TABLE_OR_VIEW_NOT_FOUND]"))
       assert(flow.failure.head.getMessage.contains("`src`"))
@@ -414,14 +461,95 @@ class PythonPipelineSuite
         |@dp.materialized_view
         |def c():
         |  return spark.readStream.table("spark_catalog.default.src")
+        |
+        |@dp.materialized_view
+        |def d():
+        |  return spark.sql("SELECT * FROM spark_catalog.default.src")
+        |
+        |@dp.table
+        |def e():
+        |  return spark.sql("SELECT * FROM STREAM spark_catalog.default.src")
         |""".stripMargin).resolve()
+    assert(graph.resolutionFailedFlows.size == 5)
     graph.resolutionFailedFlows.foreach { flow =>
-      assert(flow.failure.head.getMessage.contains("[TABLE_OR_VIEW_NOT_FOUND] The table or view"))
+      assert(flow.failure.head.getMessage.contains("[TABLE_OR_VIEW_NOT_FOUND]"))
+      assert(flow.failure.head.getMessage.contains("`spark_catalog`.`default`.`src`"))
     }
   }
 
+  test("reading external datasets outside query function works") {
+    sql("CREATE TABLE spark_catalog.default.src AS SELECT * FROM RANGE(5)")
+    val graph = buildGraph(s"""
+        |spark_sql_df = spark.sql("SELECT * FROM spark_catalog.default.src")
+        |read_table_df = spark.read.table("spark_catalog.default.src")
+        |
+        |@dp.materialized_view
+        |def mv_from_spark_sql_df():
+        |  return spark_sql_df
+        |
+        |@dp.materialized_view
+        |def mv_from_read_table_df():
+        |  return read_table_df
+        |""".stripMargin).resolve().validate()
+
+    assert(
+      graph.resolvedFlows.map(_.identifier).toSet == Set(
+        graphIdentifier("mv_from_spark_sql_df"),
+        graphIdentifier("mv_from_read_table_df")))
+    assert(graph.resolvedFlows.forall(_.inputs.isEmpty))
+    assert(graph.resolvedFlows.forall(!_.df.isStreaming))
+  }
+
+  test(
+    "reading internal datasets outside query function that don't trigger " +
+      "eager analysis or execution") {
+    val graph = buildGraph("""
+        |@dp.materialized_view
+        |def src():
+        |  return spark.range(5)
+        |
+        |read_table_df = spark.read.table("src")
+        |
+        |@dp.materialized_view
+        |def mv_from_read_table_df():
+        |  return read_table_df
+        |
+        |""".stripMargin).resolve().validate()
+    assert(
+      graph.resolvedFlows.map(_.identifier).toSet == Set(
+        graphIdentifier("mv_from_read_table_df"),
+        graphIdentifier("src")))
+    assert(graph.resolvedFlows.forall(!_.df.isStreaming))
+    assert(
+      graph
+        .resolvedFlow(graphIdentifier("mv_from_read_table_df"))
+        .inputs
+        .contains(graphIdentifier("src")))
+  }
+
+  gridTest(
+    "reading internal datasets outside query function that trigger " +
+      "eager analysis or execution will fail")(
+    Seq("""spark.sql("SELECT * FROM src")""", """spark.read.table("src").collect()""")) {
+    command =>
+      val ex = intercept[RuntimeException] {
+        buildGraph(s"""
+        |@dp.materialized_view
+        |def src():
+        |  return spark.range(5)
+        |
+        |spark_sql_df = $command
+        |
+        |@dp.materialized_view
+        |def mv_from_spark_sql_df():
+        |  return spark_sql_df
+        |""".stripMargin)
+      }
+      assert(ex.getMessage.contains("TABLE_OR_VIEW_NOT_FOUND"))
+      assert(ex.getMessage.contains("`src`"))
+  }
+
   test("create dataset with the same name will fail") {
-    assume(PythonTestDepsChecker.isConnectDepsAvailable)
     val ex = intercept[AnalysisException] {
       buildGraph(s"""
            |@dp.materialized_view
@@ -495,7 +623,6 @@ class PythonPipelineSuite
   }
 
   test("create datasets with three part names") {
-    assume(PythonTestDepsChecker.isConnectDepsAvailable)
     val graphTry = Try {
       buildGraph(s"""
            |@dp.table(name = "some_catalog.some_schema.mv")
@@ -548,7 +675,6 @@ class PythonPipelineSuite
   }
 
   test("create named flow with multipart name will fail") {
-    assume(PythonTestDepsChecker.isConnectDepsAvailable)
     val ex = intercept[RuntimeException] {
       buildGraph(s"""
            |@dp.table
@@ -597,7 +723,8 @@ class PythonPipelineSuite
     assert(
       graph
         .flowsTo(graphIdentifier("a"))
-        .map(_.identifier) == Seq(graphIdentifier("a"), graphIdentifier("something")))
+        .map(_.identifier)
+        .toSet == Set(graphIdentifier("a"), graphIdentifier("something")))
   }
 
   test("groupby and rollup works with internal datasets, referencing with (col, str)") {
@@ -696,7 +823,6 @@ class PythonPipelineSuite
   }
 
   test("create pipeline without table will throw RUN_EMPTY_PIPELINE exception") {
-    assume(PythonTestDepsChecker.isConnectDepsAvailable)
     checkError(
       exception = intercept[AnalysisException] {
         buildGraph(s"""
@@ -708,7 +834,6 @@ class PythonPipelineSuite
   }
 
   test("create pipeline with only temp view will throw RUN_EMPTY_PIPELINE exception") {
-    assume(PythonTestDepsChecker.isConnectDepsAvailable)
     checkError(
       exception = intercept[AnalysisException] {
         buildGraph(s"""
@@ -722,7 +847,6 @@ class PythonPipelineSuite
   }
 
   test("create pipeline with only flow will throw RUN_EMPTY_PIPELINE exception") {
-    assume(PythonTestDepsChecker.isConnectDepsAvailable)
     checkError(
       exception = intercept[AnalysisException] {
         buildGraph(s"""
@@ -900,6 +1024,93 @@ class PythonPipelineSuite
       assert(
         stTransforms.isEmpty,
         s"Table should have no transforms, but got: ${stTransforms.mkString(", ")}")
+    }
+  }
+
+  // List of unsupported SQL commands that should result in a failure.
+  private val unsupportedSqlCommandList: Seq[String] = Seq(
+    "SET CATALOG some_catalog",
+    "USE SCHEMA some_schema",
+    "SET `test_conf` = `true`",
+    "CREATE TABLE some_table (id INT)",
+    "CREATE VIEW some_view AS SELECT * FROM some_table",
+    "INSERT INTO some_table VALUES (1)",
+    "ALTER TABLE some_table RENAME TO some_new_table",
+    "CREATE NAMESPACE some_namespace",
+    "DROP VIEW some_view",
+    "CREATE MATERIALIZED VIEW some_view AS SELECT * FROM some_table",
+    "CREATE STREAMING TABLE some_table AS SELECT * FROM some_table")
+
+  gridTest("Unsupported SQL command outside query function should result in a failure")(
+    unsupportedSqlCommandList) { unsupportedSqlCommand =>
+    val ex = intercept[RuntimeException] {
+      buildGraph(s"""
+        |spark.sql("$unsupportedSqlCommand")
+        |
+        |@dp.materialized_view()
+        |def mv():
+        |  return spark.range(5)
+        |""".stripMargin)
+    }
+    assert(ex.getMessage.contains("UNSUPPORTED_PIPELINE_SPARK_SQL_COMMAND"))
+  }
+
+  gridTest("Unsupported SQL command inside query function should result in a failure")(
+    unsupportedSqlCommandList) { unsupportedSqlCommand =>
+    val ex = intercept[RuntimeException] {
+      buildGraph(s"""
+        |@dp.materialized_view()
+        |def mv():
+        |  spark.sql("$unsupportedSqlCommand")
+        |  return spark.range(5)
+        |""".stripMargin)
+    }
+    assert(ex.getMessage.contains("UNSUPPORTED_PIPELINE_SPARK_SQL_COMMAND"))
+  }
+
+  // List of supported SQL commands that should work.
+  val supportedSqlCommandList: Seq[String] = Seq(
+    "DESCRIBE TABLE spark_catalog.default.src",
+    "SHOW TABLES",
+    "SHOW TBLPROPERTIES spark_catalog.default.src",
+    "SHOW NAMESPACES",
+    "SHOW COLUMNS FROM spark_catalog.default.src",
+    "SHOW FUNCTIONS",
+    "SHOW VIEWS",
+    "SHOW CATALOGS",
+    "SHOW CREATE TABLE spark_catalog.default.src",
+    "SELECT * FROM RANGE(5)",
+    "SELECT * FROM spark_catalog.default.src")
+
+  gridTest("Supported SQL command outside query function should work")(supportedSqlCommandList) {
+    supportedSqlCommand =>
+      sql("CREATE TABLE spark_catalog.default.src AS SELECT * FROM RANGE(5)")
+      buildGraph(s"""
+        |spark.sql("$supportedSqlCommand")
+        |
+        |@dp.materialized_view()
+        |def mv():
+        |  return spark.range(5)
+        |""".stripMargin)
+  }
+
+  gridTest("Supported SQL command inside query function should work")(supportedSqlCommandList) {
+    supportedSqlCommand =>
+      sql("CREATE TABLE spark_catalog.default.src AS SELECT * FROM RANGE(5)")
+      buildGraph(s"""
+        |@dp.materialized_view()
+        |def mv():
+        |  spark.sql("$supportedSqlCommand")
+        |  return spark.range(5)
+        |""".stripMargin)
+  }
+
+  override protected def test(testName: String, testTags: Tag*)(testFun: => Any)(implicit
+      pos: Position): Unit = {
+    if (PythonTestDepsChecker.isConnectDepsAvailable) {
+      super.test(testName, testTags: _*)(testFun)
+    } else {
+      super.ignore(testName, testTags: _*)(testFun)
     }
   }
 }

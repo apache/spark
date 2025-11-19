@@ -1856,16 +1856,6 @@ private[spark] object Utils
   }
 
   /**
-   * Whether the underlying Java version is at most 17.
-   */
-  val isJavaVersionAtMost17 = Runtime.version().feature() <= 17
-
-  /**
-   * Whether the underlying Java version is at least 21.
-   */
-  val isJavaVersionAtLeast21 = Runtime.version().feature() >= 21
-
-  /**
    * Whether the underlying JVM prefer IPv6 addresses.
    */
   val preferIPv6 = "true".equals(System.getProperty("java.net.preferIPv6Addresses"))

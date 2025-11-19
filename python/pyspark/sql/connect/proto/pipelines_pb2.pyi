@@ -1499,11 +1499,14 @@ class PipelineAnalysisContext(google.protobuf.message.Message):
 
     DATAFLOW_GRAPH_ID_FIELD_NUMBER: builtins.int
     DEFINITION_PATH_FIELD_NUMBER: builtins.int
+    FLOW_NAME_FIELD_NUMBER: builtins.int
     EXTENSION_FIELD_NUMBER: builtins.int
     dataflow_graph_id: builtins.str
     """Unique identifier of the dataflow graph associated with this pipeline."""
     definition_path: builtins.str
     """The path of the top-level pipeline file determined at runtime during pipeline initialization."""
+    flow_name: builtins.str
+    """The name of the Flow involved in this analysis"""
     @property
     def extension(
         self,
@@ -1516,6 +1519,7 @@ class PipelineAnalysisContext(google.protobuf.message.Message):
         *,
         dataflow_graph_id: builtins.str | None = ...,
         definition_path: builtins.str | None = ...,
+        flow_name: builtins.str | None = ...,
         extension: collections.abc.Iterable[google.protobuf.any_pb2.Any] | None = ...,
     ) -> None: ...
     def HasField(
@@ -1525,10 +1529,14 @@ class PipelineAnalysisContext(google.protobuf.message.Message):
             b"_dataflow_graph_id",
             "_definition_path",
             b"_definition_path",
+            "_flow_name",
+            b"_flow_name",
             "dataflow_graph_id",
             b"dataflow_graph_id",
             "definition_path",
             b"definition_path",
+            "flow_name",
+            b"flow_name",
         ],
     ) -> builtins.bool: ...
     def ClearField(
@@ -1538,12 +1546,16 @@ class PipelineAnalysisContext(google.protobuf.message.Message):
             b"_dataflow_graph_id",
             "_definition_path",
             b"_definition_path",
+            "_flow_name",
+            b"_flow_name",
             "dataflow_graph_id",
             b"dataflow_graph_id",
             "definition_path",
             b"definition_path",
             "extension",
             b"extension",
+            "flow_name",
+            b"flow_name",
         ],
     ) -> None: ...
     @typing.overload
@@ -1554,5 +1566,9 @@ class PipelineAnalysisContext(google.protobuf.message.Message):
     def WhichOneof(
         self, oneof_group: typing_extensions.Literal["_definition_path", b"_definition_path"]
     ) -> typing_extensions.Literal["definition_path"] | None: ...
+    @typing.overload
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["_flow_name", b"_flow_name"]
+    ) -> typing_extensions.Literal["flow_name"] | None: ...
 
 global___PipelineAnalysisContext = PipelineAnalysisContext
