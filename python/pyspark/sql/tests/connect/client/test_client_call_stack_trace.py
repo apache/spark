@@ -22,6 +22,7 @@ from unittest.mock import patch
 
 import pyspark
 from pyspark.sql import functions
+from pyspark.sql.connect.proto.base_pb2 import FetchErrorDetailsResponse
 from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
 
 if should_test_connect:
@@ -193,29 +194,24 @@ class CallStackTraceTestCase(unittest.TestCase):
                 del os.environ["SPARK_CONNECT_DEBUG_CLIENT_CALL_STACK"]
 
             call_stack = _build_call_stack_trace()
-
-            self.assertIsInstance(call_stack, list)
-            self.assertEqual(len(call_stack), 0, "Expected empty list when env var is not set")
+            self.assertIsNone(call_stack, "Expected None when env var is not set")
 
     def test_build_call_stack_trace_with_env_var_set(self):
         """Test that _build_call_stack_trace builds trace when env var is set."""
         # Set the env var to enable call stack tracing
         with patch.dict(os.environ, {"SPARK_CONNECT_DEBUG_CLIENT_CALL_STACK": "1"}):
-            call_stack = _build_call_stack_trace()
-
-            self.assertIsInstance(call_stack, list)
+            stack_trace_details = _build_call_stack_trace()
+            self.assertIsNotNone(stack_trace_details, "Expected non-None call stack when env var is set")
+            error = pb2.FetchErrorDetailsResponse.Error()
+            if not stack_trace_details.Unpack(error):
+                self.assertTrue(False, "Expected to unpack stack trace details into Error object")
             # Should have at least one frame (this test function)
-            self.assertGreater(len(call_stack), 0, "Expected non-empty list when env var is set")
+            self.assertGreater(len(error.stack_trace), 0, "Expected > 0 call stack frames when env var is set")
 
             # Verify each element is an Any protobuf message
             functions = set()
             files = set()
-            for stack_frame in call_stack:
-                self.assertIsInstance(stack_frame, any_pb2.Any)
-
-                # Unpack and verify it's a StackTraceElement
-                stack_trace_element = pb2.FetchErrorDetailsResponse.StackTraceElement()
-                stack_frame.Unpack(stack_trace_element)
+            for stack_trace_element in error.stack_trace:
                 functions.add(stack_trace_element.method_name)
                 files.add(stack_trace_element.file_name)
 
@@ -239,9 +235,7 @@ class CallStackTraceTestCase(unittest.TestCase):
         """Test that _build_call_stack_trace returns empty list when env var is empty string."""
         with patch.dict(os.environ, {"SPARK_CONNECT_DEBUG_CLIENT_CALL_STACK": ""}):
             call_stack = _build_call_stack_trace()
-
-            self.assertIsInstance(call_stack, list)
-            self.assertEqual(len(call_stack), 0, "Expected empty list when env var is empty string")
+            self.assertIsNone(call_stack, "Expected empty list when env var is empty string")
 
     def test_build_call_stack_trace_with_various_env_var_values(self):
         """Test _build_call_stack_trace behavior with various env var values."""
@@ -259,9 +253,9 @@ class CallStackTraceTestCase(unittest.TestCase):
                 with patch.dict(os.environ, {"SPARK_CONNECT_DEBUG_CLIENT_CALL_STACK": env_value}):
                     call_stack = _build_call_stack_trace()
                     if expected_behavior == 0:
-                        self.assertEqual(len(call_stack), 0, message)
+                        self.assertIsNone(call_stack, message)
                     else:
-                        self.assertGreater(len(call_stack), 0, message)
+                        self.assertIsNotNone(call_stack, message)
 
 
 @unittest.skipIf(not should_test_connect, connect_requirement_message)
@@ -310,16 +304,18 @@ class CallStackTraceIntegrationTestCase(unittest.TestCase):
                 "Expected extensions with env var set",
             )
 
-            # Verify each extension can be unpacked as StackTraceElement
+            # Verify each extension can be unpacked as Error containing StackTraceElements
             files = set()
             functions = set()
             for extension in req.user_context.extensions:
-                stack_trace_element = pb2.FetchErrorDetailsResponse.StackTraceElement()
-                extension.Unpack(stack_trace_element)
-                functions.add(stack_trace_element.method_name)
-                files.add(stack_trace_element.file_name)
-                self.assertIsInstance(stack_trace_element.method_name, str)
-                self.assertIsInstance(stack_trace_element.file_name, str)
+                error = pb2.FetchErrorDetailsResponse.Error()
+                if extension.Unpack(error):
+                    # Process stack trace elements within the Error
+                    for stack_trace_element in error.stack_trace:
+                        functions.add(stack_trace_element.method_name)
+                        files.add(stack_trace_element.file_name)
+                        self.assertIsInstance(stack_trace_element.method_name, str)
+                        self.assertIsInstance(stack_trace_element.file_name, str)
 
             self.assertTrue(
                 "test_execute_plan_request_includes_call_stack_with_env_var" in functions,
@@ -356,16 +352,18 @@ class CallStackTraceIntegrationTestCase(unittest.TestCase):
                 "Expected extensions with env var set",
             )
 
-            # Verify each extension can be unpacked as StackTraceElement
+            # Verify each extension can be unpacked as Error containing StackTraceElements
             files = set()
             functions = set()
             for extension in req.user_context.extensions:
-                stack_trace_element = pb2.FetchErrorDetailsResponse.StackTraceElement()
-                extension.Unpack(stack_trace_element)
-                functions.add(stack_trace_element.method_name)
-                files.add(stack_trace_element.file_name)
-                self.assertIsInstance(stack_trace_element.method_name, str)
-                self.assertIsInstance(stack_trace_element.file_name, str)
+                error = pb2.FetchErrorDetailsResponse.Error()
+                if extension.Unpack(error):
+                    # Process stack trace elements within the Error
+                    for stack_trace_element in error.stack_trace:
+                        functions.add(stack_trace_element.method_name)
+                        files.add(stack_trace_element.file_name)
+                        self.assertIsInstance(stack_trace_element.method_name, str)
+                        self.assertIsInstance(stack_trace_element.file_name, str)
 
             self.assertTrue(
                 "test_analyze_plan_request_includes_call_stack_with_env_var" in functions,
@@ -402,16 +400,18 @@ class CallStackTraceIntegrationTestCase(unittest.TestCase):
                 "Expected extensions with env var set",
             )
 
-            # Verify each extension can be unpacked as StackTraceElement
+            # Verify each extension can be unpacked as Error containing StackTraceElements
             files = set()
             functions = set()
             for extension in req.user_context.extensions:
-                stack_trace_element = pb2.FetchErrorDetailsResponse.StackTraceElement()
-                extension.Unpack(stack_trace_element)
-                functions.add(stack_trace_element.method_name)
-                files.add(stack_trace_element.file_name)
-                self.assertIsInstance(stack_trace_element.method_name, str)
-                self.assertIsInstance(stack_trace_element.file_name, str)
+                error = pb2.FetchErrorDetailsResponse.Error()
+                if extension.Unpack(error):
+                    # Process stack trace elements within the Error
+                    for stack_trace_element in error.stack_trace:
+                        functions.add(stack_trace_element.method_name)
+                        files.add(stack_trace_element.file_name)
+                        self.assertIsInstance(stack_trace_element.method_name, str)
+                        self.assertIsInstance(stack_trace_element.file_name, str)
 
             self.assertTrue(
                 "test_config_request_includes_call_stack_with_env_var" in functions,
@@ -447,15 +447,17 @@ class CallStackTraceIntegrationTestCase(unittest.TestCase):
         functions = set()
         files = set()
         for extension in req.user_context.extensions:
-            stack_trace_element = pb2.FetchErrorDetailsResponse.StackTraceElement()
-            extension.Unpack(stack_trace_element)
-            functions.add(stack_trace_element.method_name)
-            files.add(stack_trace_element.file_name)
-            self.assertGreater(
-                stack_trace_element.line_number,
-                0,
-                f"Expected line number to be greater than 0, got: {stack_trace_element.line_number}",
-            )
+            error = pb2.FetchErrorDetailsResponse.Error()
+            if extension.Unpack(error):
+                # Process stack trace elements within the Error
+                for stack_trace_element in error.stack_trace:
+                    functions.add(stack_trace_element.method_name)
+                    files.add(stack_trace_element.file_name)
+                    self.assertGreater(
+                        stack_trace_element.line_number,
+                        0,
+                        f"Expected line number to be greater than 0, got: {stack_trace_element.line_number}",
+                    )
 
         self.assertTrue(
             "level1" in functions, f"Expected user function names not found in: {functions}"

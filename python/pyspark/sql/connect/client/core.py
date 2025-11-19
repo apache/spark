@@ -23,6 +23,7 @@ __all__ = [
 import atexit
 
 import pyspark
+from pyspark.sql.connect.proto.base_pb2 import FetchErrorDetailsResponse
 from pyspark.sql.connect.utils import check_dependencies
 
 check_dependencies(__name__)
@@ -651,26 +652,28 @@ def _retrieve_stack_frames() -> List[CallSite]:
     return filtered_stack_frames
 
 
-def _build_call_stack_trace() -> List[any_pb2.Any]:
+def _build_call_stack_trace() -> any_pb2.Any:
     """
     Build a call stack trace for the current Spark Connect action
     Returns
     -------
-    List[any_pb2.Any]: A list of Any objects, each representing a stack frame in the call stack trace in the user code.
+    FetchErrorDetailsResponse.Error: An Error object containing list of stack frames of the user code packed as Any protobuf.
     """
-    call_stack_trace = []
     if os.getenv("SPARK_CONNECT_DEBUG_CLIENT_CALL_STACK", "false").lower() in ("true", "1"):
         stack_frames = _retrieve_stack_frames()
-        for i, call_site in enumerate(stack_frames):
+        call_stack = FetchErrorDetailsResponse.Error()
+        for call_site in stack_frames:
             stack_trace_element = pb2.FetchErrorDetailsResponse.StackTraceElement()
             stack_trace_element.declaring_class = ""  # unknown information
             stack_trace_element.method_name = call_site.function
             stack_trace_element.file_name = call_site.file
             stack_trace_element.line_number = call_site.linenum
-            stack_frame = any_pb2.Any()
-            stack_frame.Pack(stack_trace_element)
-            call_stack_trace.append(stack_frame)
-    return call_stack_trace
+            call_stack.stack_trace.append(stack_trace_element)
+        if len(call_stack.stack_trace) > 0:
+            call_stack_details = any_pb2.Any()
+            call_stack_details.Pack(call_stack)
+            return call_stack_details
+    return None
 
 
 class SparkConnectClient(object):
@@ -1348,7 +1351,7 @@ class SparkConnectClient(object):
 
         call_stack_trace = _build_call_stack_trace()
         if call_stack_trace:
-            req.user_context.extensions.extend(call_stack_trace)
+            req.user_context.extensions.append(call_stack_trace)
         return req
 
     def _analyze_plan_request_with_metadata(self) -> pb2.AnalyzePlanRequest:
@@ -1362,7 +1365,7 @@ class SparkConnectClient(object):
         self._update_request_with_user_context_extensions(req)
         call_stack_trace = _build_call_stack_trace()
         if call_stack_trace:
-            req.user_context.extensions.extend(call_stack_trace)
+            req.user_context.extensions.append(call_stack_trace)
         return req
 
     def _analyze(self, method: str, **kwargs: Any) -> AnalyzeResult:
@@ -1780,7 +1783,7 @@ class SparkConnectClient(object):
         self._update_request_with_user_context_extensions(req)
         call_stack_trace = _build_call_stack_trace()
         if call_stack_trace:
-            req.user_context.extensions.extend(call_stack_trace)
+            req.user_context.extensions.append(call_stack_trace)
         return req
 
     def get_configs(self, *keys: str) -> Tuple[Optional[str], ...]:
