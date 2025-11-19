@@ -113,11 +113,13 @@ case class ThetaSketchAgg(
   }
 
   private lazy val family: Family = {
+    if (!third.foldable) {
+      throw QueryExecutionErrors.thetaFamilyMustBeConstantError(prettyName)
+    }
     val familyName = third.eval().asInstanceOf[UTF8String]
     ThetaSketchUtils.parseFamily(familyName.toString, prettyName)
   }
 
-  // Constructors
   def this(child: Expression) = {
     this(child,
       Literal(ThetaSketchUtils.DEFAULT_LG_NOM_LONGS),
@@ -360,7 +362,7 @@ case class ThetaUnionAgg(
   // ThetaSketch config - mark as lazy so that they're not evaluated during tree transformation.
 
 
-  private lazy val lgNomEntries: Int = {
+  lazy val lgNomEntries: Int = {
     if (!right.foldable) {
       throw QueryExecutionErrors.thetaLgNomEntriesMustBeConstantError(prettyName)
     }

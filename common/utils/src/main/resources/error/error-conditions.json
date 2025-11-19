@@ -5950,6 +5950,12 @@
     ],
     "sqlState" : "428EK"
   },
+  "THETA_FAMILY_MUST_BE_CONSTANT" : {
+    "message" : [
+      "Invalid call to <function>; the `family` value must be a constant value, but got a non-constant expression."
+    ],
+    "sqlState" : "42K0E"
+  },
   "THETA_INVALID_FAMILY" : {
     "message" : [
       "Invalid call to <function>; the `family` parameter must be one of: <validFamilies>, but got: <value>."

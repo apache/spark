@@ -3195,6 +3195,12 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       messageParameters = Map("function" -> toSQLId(function)))
   }
 
+  def thetaFamilyMustBeConstantError(function: String): Throwable = {
+    new SparkRuntimeException(
+      errorClass = "THETA_FAMILY_MUST_BE_CONSTANT",
+      messageParameters = Map("function" -> toSQLId(function)))
+  }
+
   def kllSketchInvalidQuantileRangeError(function: String, quantile: Double): Throwable = {
     new SparkRuntimeException(
       errorClass = "KLL_SKETCH_INVALID_QUANTILE_RANGE",

@@ -1012,6 +1012,22 @@ org.apache.spark.SparkRuntimeException
 
 
 -- !query
+SELECT theta_sketch_agg(col, 12, CAST(col AS STRING)) AS family_non_constant
+FROM VALUES ('QUICKSELECT'), ('ALPHA'), ('QUICKSELECT') tab(col)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkRuntimeException
+{
+  "errorClass" : "THETA_FAMILY_MUST_BE_CONSTANT",
+  "sqlState" : "42K0E",
+  "messageParameters" : {
+    "function" : "`theta_sketch_agg`"
+  }
+}
+
+
+-- !query
 SELECT theta_sketch_agg(col, '15')
 FROM VALUES (50), (60), (60) tab(col)
 -- !query schema
@@ -1026,7 +1042,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "inputType" : "\"STRING\"",
     "paramIndex" : "second",
     "requiredType" : "\"INT\"",
-    "sqlExpr" : "\"theta_sketch_agg(col, 15)\""
+    "sqlExpr" : "\"theta_sketch_agg(col, 15, QUICKSELECT)\""
   },
   "queryContext" : [ {
     "objectType" : "",

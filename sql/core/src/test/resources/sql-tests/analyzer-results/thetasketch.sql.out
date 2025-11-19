@@ -1072,7 +1072,7 @@ Aggregate [theta_union_agg(sketch#x, 27, 0, 0) AS theta_union_agg(sketch, 27)#x]
 SELECT theta_sketch_agg(col, CAST(NULL AS INT)) AS lg_nom_entries_is_null
 FROM VALUES (15), (16), (17) tab(col)
 -- !query analysis
-Aggregate [theta_sketch_agg(col#x, cast(null as int), 0, 0) AS lg_nom_entries_is_null#x]
+Aggregate [theta_sketch_agg(col#x, cast(null as int), QUICKSELECT, 0, 0) AS lg_nom_entries_is_null#x]
 +- SubqueryAlias tab
    +- LocalRelation [col#x]
 
@@ -1081,7 +1081,16 @@ Aggregate [theta_sketch_agg(col#x, cast(null as int), 0, 0) AS lg_nom_entries_is
 SELECT theta_sketch_agg(col, CAST(col AS INT)) AS lg_nom_entries_non_constant
 FROM VALUES (15), (16), (17) tab(col)
 -- !query analysis
-Aggregate [theta_sketch_agg(col#x, cast(col#x as int), 0, 0) AS lg_nom_entries_non_constant#x]
+Aggregate [theta_sketch_agg(col#x, cast(col#x as int), QUICKSELECT, 0, 0) AS lg_nom_entries_non_constant#x]
++- SubqueryAlias tab
+   +- LocalRelation [col#x]
+
+
+-- !query
+SELECT theta_sketch_agg(col, 12, CAST(col AS STRING)) AS family_non_constant
+FROM VALUES ('QUICKSELECT'), ('ALPHA'), ('QUICKSELECT') tab(col)
+-- !query analysis
+Aggregate [theta_sketch_agg(col#x, 12, cast(col#x as string), 0, 0) AS family_non_constant#x]
 +- SubqueryAlias tab
    +- LocalRelation [col#x]
 
@@ -1099,7 +1108,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "inputType" : "\"STRING\"",
     "paramIndex" : "second",
     "requiredType" : "\"INT\"",
-    "sqlExpr" : "\"theta_sketch_agg(col, 15)\""
+    "sqlExpr" : "\"theta_sketch_agg(col, 15, QUICKSELECT)\""
   },
   "queryContext" : [ {
     "objectType" : "",
