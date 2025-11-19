@@ -26140,7 +26140,7 @@ def st_geomfromwkb(wkb: "ColumnOrName") -> Column:
 
 
 @_try_remote_functions
-def st_setsrid(geo: "ColumnOrName", srid: "ColumnOrName") -> Column:
+def st_setsrid(geo: "ColumnOrName", srid: Union["ColumnOrName", int]) -> Column:
     """Returns a new GEOGRAPHY or GEOMETRY value whose SRID is the specified SRID value.
 
     .. versionadded:: 4.1.0
@@ -26149,20 +26149,22 @@ def st_setsrid(geo: "ColumnOrName", srid: "ColumnOrName") -> Column:
     ----------
     geo : :class:`~pyspark.sql.Column` or str
         A geospatial value, either a GEOGRAPHY or a GEOMETRY.
-    srid : :class:`~pyspark.sql.Column` or str
+    srid : :class:`~pyspark.sql.Column` or int
         An INTEGER representing the new SRID of the geospatial value.
 
     Examples
     --------
     >>> from pyspark.sql import functions as sf
-    >>> df = spark.createDataFrame([(bytes.fromhex('0101000000000000000000F03F0000000000000040'),)], ['wkb'])  # noqa
-    >>> df.select(sf.st_srid(sf.st_setsrid(sf.st_geogfromwkb('wkb'), 4326)).alias('result')).collect()  # noqa
-    [Row(result=4326)]
+    >>> df = spark.createDataFrame([(bytes.fromhex('0101000000000000000000F03F0000000000000040'), 4326)], ['wkb', 'srid'])  # noqa
+    >>> df.select(sf.st_srid(sf.st_setsrid(sf.st_geogfromwkb('wkb'), 'srid'))).collect()
+    [Row(st_srid(st_setsrid(st_geogfromwkb(wkb), srid))=4326)]
     >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([(bytes.fromhex('0101000000000000000000F03F0000000000000040'),)], ['wkb'])  # noqa
-    >>> df.select(sf.st_srid(sf.st_setsrid(sf.st_geomfromwkb('wkb'), 4326)).alias('result')).collect()  # noqa
-    [Row(result=4326)]
+    >>> df.select(sf.st_srid(sf.st_setsrid(sf.st_geomfromwkb('wkb'), 4326))).collect()
+    [Row(st_srid(st_setsrid(st_geomfromwkb(wkb), 4326))=4326)]
     """
+    srid = _enum_to_value(srid)
+    srid = lit(srid) if isinstance(srid, int) else srid
     return _invoke_function_over_columns("st_setsrid", geo, srid)
 
 

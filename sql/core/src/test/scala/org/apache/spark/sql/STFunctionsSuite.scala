@@ -70,8 +70,10 @@ class STFunctionsSuite extends QueryTest with SharedSparkSession {
     checkAnswer(
       df.select(
         st_srid(st_setsrid(st_geogfromwkb(unhex($"wkb")), $"srid")).as("col0"),
-        st_srid(st_setsrid(st_geomfromwkb(unhex($"wkb")), $"srid")).as("col1")),
-      Row(4326, 4326))
+        st_srid(st_setsrid(st_geomfromwkb(unhex($"wkb")), $"srid")).as("col1"),
+        st_srid(st_setsrid(st_geomfromwkb(unhex($"wkb")), 4326)).as("col1"),
+        st_srid(st_setsrid(st_geomfromwkb(unhex($"wkb")), 4326)).as("col1")),
+      Row(4326, 4326, 4326, 4326))
   }
 
 }
