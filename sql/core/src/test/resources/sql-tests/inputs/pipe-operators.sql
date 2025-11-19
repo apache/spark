@@ -215,25 +215,6 @@ table t
 table t
 |> select /*+ repartition(3) */ all x;
 
--- SELECT operators: negative tests.
----------------------------------------
-
--- Aggregate functions are not allowed in the pipe operator SELECT list.
-table t
-|> select sum(x) as result;
-
-table t
-|> select y, length(y) + sum(x) as result;
-
-from t
-|> select sum(x);
-
-from t as t_alias
-|> select y, sum(x);
-
-from t as t_alias
-|> select y, sum(x) group by y;
-
 -- EXTEND operators: positive tests.
 ------------------------------------
 
@@ -1157,10 +1138,6 @@ select 1 as x, 2 as y
 table other
 |> aggregate a;
 
--- Using aggregate functions without the AGGREGATE keyword is not allowed.
-table other
-|> select sum(a) as result;
-
 -- The AGGREGATE keyword requires a GROUP BY clause and/or aggregation function(s).
 table other
 |> aggregate;
@@ -1755,6 +1732,158 @@ table web_v1
 |> where web_cumulative > store_cumulative
 |> order by item_sk, d_date
 |> limit 100;
+
+-- Single PIPE token syntax (|): positive tests.
+--------------------------------------------------
+-- Test that the single PIPE token (|) works as an alternative to OPERATOR_PIPE (|>) for all pipe operators.
+
+-- SELECT with single pipe.
+table t
+| select x, y;
+
+-- EXTEND with single pipe.
+table t
+| extend x + length(y) as z;
+
+-- SET with single pipe.
+table t
+| extend 1 as z
+| set z = x + length(y);
+
+-- WINDOW with single pipe.
+table windowTestData
+| select cate, sum(val) over w
+  window w as (partition by cate order by val);
+
+-- Complex chained query with single pipe.
+from store_sales ss1
+| where ss_store_sk = 4
+| aggregate avg(ss_net_profit) rank_col
+    group by ss_item_sk as item_sk
+| select item_sk, rank_col
+| where rank_col > 0
+| order by rank_col desc
+| limit 1000;
+
+-- Mixed single pipe (|) and double pipe (|>) operators in same query.
+table t
+|> select x, y
+| where x < 2
+|> extend x + 1 as z
+| order by z;
+
+-- Single PIPE token syntax (|): bitwise OR behavior.
+----------------------------------------------------------------------------
+
+-- This query is ambiguous because it can be parsed as either a sequence of pipe operators or
+-- a bitwise OR operation like "select *, (x + 1 | extend) as y".
+-- We test it as a valid query both ways.
+-- This technically makes enabling the single-character pipe operator a breaking change;
+-- however, an analysis of SQL usage found no instances of SELECT/EXTEND/etc. keywords
+-- being used in bitwise OR operations.
+from t
+| extend 9 as `extend`
+| select *, x + 1
+| extend y;
+
+-- Here we define a variable named "extend" and then refer to it in a following query.
+-- However, with the single-character pipe operator feature enabled, we do not allow the bitwise
+-- OR operation to consume the "extend" reference. This decision is intentional since we wish to
+-- reserve the token sequence of | followed by SELECT/EXTEND/etc. for pipe syntax only.
+declare or replace extend int = 5;
+select 1 | extend y;
+set spark.sql.parser.singleCharacterPipeOperator.enabled=false;
+select 1 | extend y;
+set spark.sql.parser.singleCharacterPipeOperator.enabled=true;
+drop temporary variable extend;
+
+-- Single PIPE token with configuration disabled: negative tests.
+------------------------------------------------------------------
+-- Test that when spark.sql.parser.singleCharacterPipeOperator.enabled is set to false,
+-- the single pipe token (|) is only used for bitwise OR and not for pipe operators.
+
+-- Disable the single character pipe operator.
+set spark.sql.parser.singleCharacterPipeOperator.enabled=false;
+
+-- Verify that |> still works with the configuration disabled.
+table t
+|> select x, y;
+
+-- Try to use single pipe for SELECT - should fail with parse error.
+table t
+| select x, y;
+
+-- Verify that bitwise OR still works with the configuration disabled.
+select 1 | 2 as result;
+
+-- Re-enable the single character pipe operator for remaining tests.
+set spark.sql.parser.singleCharacterPipeOperator.enabled=true;
+
+-- Verify that single pipe works again after re-enabling.
+table t
+| select x, y;
+
+-- Aggregates in SELECT: positive tests.
+------------------------------------------
+-- Aggregate functions can be used in |> SELECT without requiring the |> AGGREGATE keyword.
+
+-- Aggregates in SELECT.
+table other
+|> select sum(a) as result;
+
+-- Aggregates in SELECT with multiple aggregate functions.
+table other
+|> select sum(a) as total_a, avg(b) as avg_b;
+
+-- Aggregates in SELECT with WHERE clause.
+table other
+|> where b > 1
+|> select sum(a) as result;
+
+-- Aggregates in SELECT with chaining.
+table other
+|> select sum(a) as total_a
+|> select total_a * 2 as doubled;
+
+-- Mixed aggregates and non-aggregates in SELECT (should work like regular aggregation).
+table other
+|> select a, sum(b) as sum_b group by a;
+
+-- Multiple grouping columns in SELECT.
+select 1 as x, 2 as y, 3 as z
+|> select x, y, sum(z) as total group by x, y;
+
+-- GROUP BY with ordinal position referring to input column.
+table other
+|> select a, sum(b) as sum_b group by 1;
+
+-- Chaining: GROUP BY followed by WHERE on aggregated result.
+table other
+|> select a, sum(b) as sum_b group by a
+|> where sum_b > 1;
+
+-- GROUP BY with expression and alias.
+select 1 as x, 2 as y
+|> select x + 1 as x_plus_one, sum(y) as sum_y group by x + 1;
+
+-- Non-aggregated column without being in GROUP BY should fail.
+table other
+|> select a, sum(b) as sum_b group by b;
+
+-- Aggregates in SELECT: negative tests.
+------------------------------------------
+
+-- Aggregates in EXTEND are not allowed.
+table other
+|> extend sum(a) as total_a;
+
+-- Aggregates in WHERE are not allowed.
+table other
+|> where sum(a) > 5;
+
+-- The |> AGGREGATE keyword also works for aggregation.
+table other
+|> aggregate sum(a) as total_a;
 
 -- Cleanup.
 -----------

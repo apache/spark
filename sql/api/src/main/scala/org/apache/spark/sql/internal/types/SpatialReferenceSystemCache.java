@@ -17,12 +17,15 @@
 
 package org.apache.spark.sql.internal.types;
 
+import org.apache.spark.annotation.Unstable;
+
 import java.util.HashMap;
 import java.util.List;
 
 /**
  * Class for maintaining the mappings between supported SRID/CRS values and the corresponding SRS.
  */
+@Unstable
 public class SpatialReferenceSystemCache {
 
   // Private constructor to prevent external instantiation of this singleton class.

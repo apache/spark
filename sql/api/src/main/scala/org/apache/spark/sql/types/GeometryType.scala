@@ -20,7 +20,7 @@ package org.apache.spark.sql.types
 import org.json4s.JsonAST.{JString, JValue}
 
 import org.apache.spark.{SparkIllegalArgumentException, SparkRuntimeException}
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.Unstable
 import org.apache.spark.sql.internal.types.CartesianSpatialReferenceSystemMapper
 
 /**
@@ -28,7 +28,7 @@ import org.apache.spark.sql.internal.types.CartesianSpatialReferenceSystemMapper
  * Geospatial Consortium (OGC) Simple Feature Access specification
  * (https://portal.ogc.org/files/?artifact_id=25355), with a Cartesian coordinate system.
  */
-@Experimental
+@Unstable
 class GeometryType private (val crs: String) extends AtomicType with Serializable {
 
   /**
@@ -153,7 +153,7 @@ class GeometryType private (val crs: String) extends AtomicType with Serializabl
   }
 }
 
-@Experimental
+@Unstable
 object GeometryType extends SpatialType {
 
   /**
@@ -167,7 +167,7 @@ object GeometryType extends SpatialType {
   /**
    * The default concrete GeometryType in SQL.
    */
-  private final val GEOMETRY_MIXED_TYPE: GeometryType =
+  private final lazy val GEOMETRY_MIXED_TYPE: GeometryType =
     GeometryType(MIXED_CRS)
 
   /** Returns whether the given SRID is supported. */

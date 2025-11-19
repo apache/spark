@@ -134,4 +134,19 @@ private[jdbc] object JdbcTypeUtils {
     case other =>
       throw new SQLFeatureNotSupportedException(s"DataType $other is not supported yet.")
   }
+
+  def getDecimalDigits(field: StructField): Integer = field.dataType match {
+    case BooleanType | _: IntegralType => 0
+    case FloatType => 7
+    case DoubleType => 15
+    case d: DecimalType => d.scale
+    case TimeType(scale) => scale
+    case TimestampType | TimestampNTZType => 6
+    case _ => null
+  }
+
+  def getNumPrecRadix(field: StructField): Integer = field.dataType match {
+    case _: NumericType => 10
+    case _ => null
+  }
 }
