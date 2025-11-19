@@ -110,7 +110,7 @@ class HadoopTableReader(
    */
   def makeRDDForTable(
       hiveTable: HiveTable,
-      abstractSerDeClass: Class[_ <: AbstractSerDe],
+      deserializerClass: Class[_ <: AbstractSerDe],
       filterOpt: Option[PathFilter]): RDD[InternalRow] = {
 
     assert(!hiveTable.isPartitioned,
@@ -133,11 +133,11 @@ class HadoopTableReader(
 
     val deserializedHadoopRDD = hadoopRDD.mapPartitions { iter =>
       val hconf = broadcastedHadoopConf.value.value
-      val abstractSerDe = abstractSerDeClass.getConstructor().newInstance()
+      val deserializer = deserializerClass.getConstructor().newInstance()
       DeserializerLock.synchronized {
-        abstractSerDe.initialize(hconf, localTableDesc.getProperties, null)
+        deserializer.initialize(hconf, localTableDesc.getProperties, null)
       }
-      HadoopTableReader.fillObject(iter, abstractSerDe, attrsWithIndex, mutableRow, abstractSerDe)
+      HadoopTableReader.fillObject(iter, deserializer, attrsWithIndex, mutableRow, deserializer)
     }
 
     deserializedHadoopRDD
@@ -181,7 +181,7 @@ class HadoopTableReader(
       }
 
       val broadcastedHiveConf = _broadcastedHadoopConf
-      val localAbstractSerDeClass = partDeserializerClass
+      val localDeserializerClass = partDeserializerClass
       val mutableRow = new SpecificInternalRow(attributes.map(_.dataType))
 
       // Splits all attributes into two groups, partition key attributes and those that are not.
@@ -210,7 +210,7 @@ class HadoopTableReader(
 
       createHadoopRDD(partDesc, inputPathStr).mapPartitions { iter =>
         val hconf = broadcastedHiveConf.value.value
-        val deserializer = localAbstractSerDeClass.getConstructor().newInstance()
+        val deserializer = localDeserializerClass.getConstructor().newInstance()
           .asInstanceOf[AbstractSerDe]
         // SPARK-13709: For SerDes like AvroSerDe, some essential information (e.g. Avro schema
         // information) may be defined in table properties. Here we should merge table properties

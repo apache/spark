@@ -520,7 +520,6 @@ private[client] class Shim_v2_0 extends Shim with Logging {
   override def alterTable(hive: Hive, tableName: String, table: Table): Unit = {
     recordHiveCall()
     alterTableMethod.invoke(hive, tableName, table)
-    // hive.alterTable(tableName, table, )
   }
 
   override def alterPartitions(hive: Hive, tableName: String, newParts: JList[Partition]): Unit = {
