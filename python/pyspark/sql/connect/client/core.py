@@ -644,6 +644,7 @@ def _retrieve_stack_frames() -> List[CallSite]:
     for i, frame in enumerate(frames):
         filename, lineno, func, _ = frame
         if _is_pyspark_source(filename):
+            # Do not include PySpark internal frames as they are not user application code
             break
         if i + 1 < len(frames):
             _, _, func, _ = frames[i + 1]
