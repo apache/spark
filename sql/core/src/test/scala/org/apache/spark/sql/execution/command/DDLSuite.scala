@@ -782,8 +782,8 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
     // to a temp file by withResourceTempPath
     withResourceTempPath("test-data/cars.csv") { tmpFile =>
       withTempView("testview") {
-        sql(s"CREATE OR REPLACE TEMPORARY VIEW testview (c1 String, c2 String)  USING " +
-          "org.apache.spark.sql.execution.datasources.csv.CSVFileFormat  " +
+        sql(s"CREATE OR REPLACE TEMPORARY VIEW testview (c1 String, c2 String) " +
+          s"USING org.apache.spark.sql.execution.datasources.csv.CSVFileFormat " +
           s"OPTIONS (PATH '${tmpFile.toURI}')")
 
         checkAnswer(
@@ -791,8 +791,8 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
           Row("1997", "Ford") :: Nil)
 
         // column names are changed, perform noop with IF NOT EXISTS when view exists
-        sql(s"CREATE TEMPORARY VIEW IF NOT EXISTS testview (d1 String, d2 String)  USING " +
-          "org.apache.spark.sql.execution.datasources.csv.CSVFileFormat  " +
+        sql(s"CREATE TEMPORARY VIEW IF NOT EXISTS testview (d1 String, d2 String) " +
+          s"USING org.apache.spark.sql.execution.datasources.csv.CSVFileFormat " +
           s"OPTIONS (PATH '${tmpFile.toURI}')")
 
         checkAnswer(
