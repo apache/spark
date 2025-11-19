@@ -23,7 +23,7 @@ import java.net.URI
 import org.apache.logging.log4j.Level
 import org.scalatest.PrivateMethodTester
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent, SparkListenerJobStart}
 import org.apache.spark.shuffle.sort.SortShuffleManager
@@ -69,17 +69,8 @@ class AdaptiveQueryExecSuite
 
   setupTestData()
 
-  protected override def beforeAll(): Unit = {
-    super.beforeAll()
-    // Tests depend on intermediate results that would otherwise be cleaned up when
-    // shuffle clean up is enabled, causing test failures.
-    sqlConf.setConf(SQLConf.CLASSIC_SHUFFLE_DEPENDENCY_FILE_CLEANUP_ENABLED, false)
-  }
-
-  protected override def afterAll(): Unit = {
-    sqlConf.setConf(SQLConf.CLASSIC_SHUFFLE_DEPENDENCY_FILE_CLEANUP_ENABLED, true)
-    super.afterAll()
-  }
+  override def sparkConf: SparkConf = super.sparkConf
+    .set(SQLConf.CLASSIC_SHUFFLE_DEPENDENCY_FILE_CLEANUP_ENABLED, false)
 
   private def runAdaptiveAndVerifyResult(query: String,
       skipCheckAnswer: Boolean = false): (SparkPlan, SparkPlan) = {
