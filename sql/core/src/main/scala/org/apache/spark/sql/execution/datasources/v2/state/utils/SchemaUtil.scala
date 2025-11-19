@@ -61,12 +61,17 @@ object SchemaUtil {
         .add("key", keySchema)
         .add("value", valueSchema)
         .add("partition_id", IntegerType)
-    } else if (sourceOptions.readAllColumnFamilies) {
+    } else if (sourceOptions.internalOnlyReadAllColumnFamilies) {
       new StructType()
-        .add("partition_id", IntegerType)
+        // todo: change this to some more specific type after we
+        //  can extract partition key from keySchema
+        .add("partition_key", keySchema)
         .add("key_bytes", BinaryType)
         .add("value_bytes", BinaryType)
         .add("column_family_name", StringType)
+        // need key and value schema so that state store can encode data
+        .add("value", valueSchema)
+        .add("key", keySchema)
     } else {
       new StructType()
         .add("key", keySchema)
@@ -89,15 +94,14 @@ object SchemaUtil {
    * instead of a tuple for better readability.
    */
   def unifyStateRowPairAsRawBytes(
-     partition: Int,
-     keyBytes: Array[Byte],
-     valueBytes: Array[Byte],
+     pair: (UnsafeRow, UnsafeRow),
      colFamilyName: String): InternalRow = {
-    val row = new GenericInternalRow(4)
-    row.update(0, partition)
-    row.update(1, keyBytes)
-    row.update(2, valueBytes)
+    val row = new GenericInternalRow(6)
+    row.update(0, pair._1)
+    row.update(1, pair._1.getBytes)
+    row.update(2, pair._2.getBytes)
     row.update(3, UTF8String.fromString(colFamilyName))
+//    row.update(4, pair._2)
     row
   }
 
@@ -257,6 +261,7 @@ object SchemaUtil {
       "user_map_value" -> classOf[StructType],
       "expiration_timestamp_ms" -> classOf[LongType],
       "partition_id" -> classOf[IntegerType],
+      "partition_key" -> classOf[StructType],
       "key_bytes"->classOf[BinaryType],
       "value_bytes"->classOf[BinaryType],
       "column_family_name"->classOf[StringType])
@@ -300,8 +305,8 @@ object SchemaUtil {
       }
     } else if (sourceOptions.readChangeFeed) {
       Seq("batch_id", "change_type", "key", "value", "partition_id")
-    } else if (sourceOptions.readAllColumnFamilies) {
-      Seq("partition_id", "key_bytes", "value_bytes", "column_family_name")
+    } else if (sourceOptions.internalOnlyReadAllColumnFamilies) {
+      Seq("partition_key", "key_bytes", "value_bytes", "column_family_name", "value", "key")
     } else {
       Seq("key", "value", "partition_id")
     }

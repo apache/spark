@@ -20,7 +20,6 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeRow}
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader, PartitionReaderFactory}
-import org.apache.spark.sql.execution.datasources.v2.state.metadata.StateMetadataPartitionReader
 import org.apache.spark.sql.execution.datasources.v2.state.utils.SchemaUtil
 import org.apache.spark.sql.execution.streaming.operators.stateful.join.SymmetricHashJoinStateManager
 import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.{StateVariableType, TransformWithStateVariableInfo}
@@ -50,9 +49,9 @@ class StatePartitionReaderFactory(
 
   override def createReader(partition: InputPartition): PartitionReader[InternalRow] = {
     val stateStoreInputPartition = partition.asInstanceOf[StateStoreInputPartition]
-    if (stateStoreInputPartition.sourceOptions.readAllColumnFamilies) {
+    if (stateStoreInputPartition.sourceOptions.internalOnlyReadAllColumnFamilies) {
       new StatePartitionReaderAllColumnFamilies(storeConf, hadoopConf,
-        stateStoreInputPartition, schema)
+        stateStoreInputPartition, schema, keyStateEncoderSpec)
     } else if (stateStoreInputPartition.sourceOptions.readChangeFeed) {
       new StateStoreChangeDataPartitionReader(storeConf, hadoopConf,
         stateStoreInputPartition, schema, keyStateEncoderSpec, stateVariableInfoOpt,
@@ -85,7 +84,7 @@ abstract class StatePartitionReaderBase(
   private val schemaForValueRow: StructType =
     StructType(Array(StructField("__dummy__", NullType)))
 
-  protected lazy val keySchema = {
+  protected val keySchema = {
     if (SchemaUtil.checkVariableType(stateVariableInfoOpt, StateVariableType.MapState)) {
       SchemaUtil.getCompositeKeySchema(schema, partition.sourceOptions)
     } else {
@@ -93,7 +92,7 @@ abstract class StatePartitionReaderBase(
     }
   }
 
-  protected lazy val valueSchema = if (stateVariableInfoOpt.isDefined) {
+  protected val valueSchema = if (stateVariableInfoOpt.isDefined) {
     schemaForValueRow
   } else {
     SchemaUtil.getSchemaAsDataType(
@@ -249,16 +248,10 @@ class StatePartitionReaderAllColumnFamilies(
     storeConf: StateStoreConf,
     hadoopConf: SerializableConfiguration,
     partition: StateStoreInputPartition,
-    schema: StructType)
+    schema: StructType,
+    keyStateEncoderSpec: KeyStateEncoderSpec)
   extends StatePartitionReaderBase(storeConf, hadoopConf, partition, schema,
-    NoPrefixKeyStateEncoderSpec(new StructType()), None, None, None, None) {
-
-  val allStateStoreMetadata = {
-    new StateMetadataPartitionReader(
-      partition.sourceOptions.resolvedCpLocation,
-      new SerializableConfiguration(hadoopConf.value),
-      partition.sourceOptions.batchId).stateMetadata.toArray
-  }
+    keyStateEncoderSpec, None, None, None, None) {
 
   private lazy val store: ReadStateStore = {
     assert(getStartStoreUniqueId == getEndStoreUniqueId,
@@ -269,56 +262,14 @@ class StatePartitionReaderAllColumnFamilies(
     )
   }
 
-  val colFamilyNames: Seq[String] = {
-    // todo: Support operator with multiple column family names in next PR
-    Seq[String]()
-  }
-
-  override protected lazy val provider: StateStoreProvider = {
-    val stateStoreId = StateStoreId(partition.sourceOptions.stateCheckpointLocation.toString,
-      partition.sourceOptions.operatorId, partition.partition, partition.sourceOptions.storeName)
-    val stateStoreProviderId = StateStoreProviderId(stateStoreId, partition.queryId)
-
-    // Disable format validation when reading raw bytes.
-    // We use binary schemas (keyBytes/valueBytes) which don't match the actual schema
-    // of the stored data. Validation would fail in HDFSBackedStateStoreProvider when
-    // loading data from disk, so we disable it for raw bytes mode.
-    val modifiedStoreConf = storeConf.withFormatValidationDisabled()
-
-    val keyStateEncoderSpec = NoPrefixKeyStateEncoderSpec(new StructType())
-    // Pass in empty keySchema, valueSchema and dummy encoder because we don't encode any data
-    val provider = StateStoreProvider.createAndInit(
-      stateStoreProviderId, new StructType(), new StructType(), keyStateEncoderSpec,
-      useColumnFamilies = colFamilyNames.nonEmpty, modifiedStoreConf, hadoopConf.value, false, None)
-
-    provider
-  }
-
   override lazy val iter: Iterator[InternalRow] = {
     // Single store with column families (join v3, transformWithState, or simple operators)
-    require(store.isInstanceOf[SupportsRawBytesRead],
-      s"State store ${store.getClass.getName} does not support raw bytes reading")
-
-    val rawStore = store.asInstanceOf[SupportsRawBytesRead]
-    if (colFamilyNames.isEmpty) {
-      rawStore
-        .rawIterator()
-        .map { case (keyBytes, valueBytes) =>
-          SchemaUtil.unifyStateRowPairAsRawBytes(
-            partition.partition, keyBytes, valueBytes, StateStore.DEFAULT_COL_FAMILY_NAME)
-        }
-    } else {
-      colFamilyNames.iterator.flatMap { colFamilyName =>
-        rawStore
-          .rawIterator(colFamilyName)
-          .map { case (keyBytes, valueBytes) =>
-            SchemaUtil.unifyStateRowPairAsRawBytes(partition.partition,
-              keyBytes,
-              valueBytes,
-              colFamilyName)
-          }
+    store
+      .iterator()
+      .map { pair =>
+        SchemaUtil.unifyStateRowPairAsRawBytes(
+          (pair.key, pair.value), StateStore.DEFAULT_COL_FAMILY_NAME)
       }
-    }
   }
 
   override def close(): Unit = {
