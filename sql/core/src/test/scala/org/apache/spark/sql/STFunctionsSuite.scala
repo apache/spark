@@ -18,6 +18,7 @@
 package org.apache.spark.sql
 
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
 class STFunctionsSuite extends QueryTest with SharedSparkSession {
@@ -74,6 +75,28 @@ class STFunctionsSuite extends QueryTest with SharedSparkSession {
         st_srid(st_setsrid(st_geomfromwkb(unhex($"wkb")), 4326)).as("col1"),
         st_srid(st_setsrid(st_geomfromwkb(unhex($"wkb")), 4326)).as("col1")),
       Row(4326, 4326, 4326, 4326))
+  }
+
+  /** Geospatial feature is disabled. */
+
+  test("verify that geospatial functions are disabled when the config is off") {
+    withSQLConf(SQLConf.GEOSPATIAL_ENABLED.key -> "false") {
+      val df = Seq[String](null).toDF("col")
+      Seq(
+        st_asbinary(lit(null)).as("res"),
+        st_geogfromwkb(lit(null)).as("res"),
+        st_geomfromwkb(lit(null)).as("res"),
+        st_srid(lit(null)).as("res"),
+        st_setsrid(lit(null), lit(null)).as("res")
+      ).foreach { func =>
+        checkError(
+          exception = intercept[AnalysisException] {
+            df.select(func).collect()
+          },
+          condition = "UNSUPPORTED_FEATURE.GEOSPATIAL_DISABLED"
+        )
+      }
+    }
   }
 
 }
