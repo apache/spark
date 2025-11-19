@@ -20,7 +20,7 @@ package org.apache.spark.sql.types
 import org.json4s.JsonAST.{JString, JValue}
 
 import org.apache.spark.{SparkIllegalArgumentException, SparkRuntimeException}
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.Unstable
 import org.apache.spark.sql.internal.types.GeographicSpatialReferenceSystemMapper
 
 /**
@@ -28,7 +28,7 @@ import org.apache.spark.sql.internal.types.GeographicSpatialReferenceSystemMappe
  * Geospatial Consortium (OGC) Simple Feature Access specification
  * (https://portal.ogc.org/files/?artifact_id=25355), with a geographic coordinate system.
  */
-@Experimental
+@Unstable
 class GeographyType private (val crs: String, val algorithm: EdgeInterpolationAlgorithm)
     extends AtomicType
     with Serializable {
@@ -156,7 +156,7 @@ class GeographyType private (val crs: String, val algorithm: EdgeInterpolationAl
   }
 }
 
-@Experimental
+@Unstable
 object GeographyType extends SpatialType {
 
   /**
@@ -175,7 +175,7 @@ object GeographyType extends SpatialType {
   /**
    * The default concrete GeographyType in SQL.
    */
-  private final val GEOGRAPHY_MIXED_TYPE: GeographyType =
+  private final lazy val GEOGRAPHY_MIXED_TYPE: GeographyType =
     GeographyType(MIXED_CRS, GEOGRAPHY_DEFAULT_ALGORITHM)
 
   /** Returns whether the given SRID is supported. */
@@ -254,8 +254,10 @@ object GeographyType extends SpatialType {
  * Edge interpolation algorithm for Geography logical type. Currently, Spark only supports
  * spherical algorithm.
  */
+@Unstable
 sealed abstract class EdgeInterpolationAlgorithm
 
+@Unstable
 object EdgeInterpolationAlgorithm {
   case object SPHERICAL extends EdgeInterpolationAlgorithm
 

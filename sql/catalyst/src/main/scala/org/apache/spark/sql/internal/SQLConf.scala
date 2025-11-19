@@ -570,6 +570,13 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val GEOSPATIAL_ENABLED =
+    buildConf("spark.sql.geospatial.enabled")
+      .doc("When true, enables geospatial types (GEOGRAPHY/GEOMETRY) and ST functions.")
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefaultFunction(() => Utils.isTesting)
+
   val EXTENDED_EXPLAIN_PROVIDERS = buildConf("spark.sql.extendedExplainProviders")
     .doc("A comma-separated list of classes that implement the" +
       " org.apache.spark.sql.ExtendedExplainGenerator trait. If provided, Spark will print" +
@@ -6861,6 +6868,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def expressionTreeChangeLogLevel: Level = getConf(EXPRESSION_TREE_CHANGE_LOG_LEVEL)
 
   def nameResolutionLogLevel: Level = getConf(NAME_RESOLUTION_LOG_LEVEL)
+
+  def geospatialEnabled: Boolean = getConf(GEOSPATIAL_ENABLED)
 
   def dataSourceV2JoinPushdown: Boolean = getConf(DATA_SOURCE_V2_JOIN_PUSHDOWN)
 
