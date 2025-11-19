@@ -24,7 +24,7 @@ class TwsTester2Suite extends SharedSparkSession {
   import testImplicits._
   
   // ===== ValueState Tests (IMPLEMENTED) =====
-  
+
   test("TwsTester2 should correctly test RunningCountProcessor") {
     val input: List[(String, String)] = List(
       ("key1", "a"),
@@ -119,8 +119,80 @@ class TwsTester2Suite extends SharedSparkSession {
 
   // ===== MapState Tests (IMPLEMENTED) =====
   
-  // TODO: "TwsTester2 should correctly test WordFrequencyProcessor"
-  // TODO: "TwsTester2 should allow direct access to MapState"
+ test("TwsTester should correctly test WordFrequencyProcessor") {
+    val input: List[(String, (String, String))] = List(
+      ("user1", ("", "hello")),
+      ("user1", ("", "world")),
+      ("user1", ("", "hello")),
+      ("user2", ("", "hello")),
+      ("user2", ("", "spark")),
+      ("user1", ("", "world"))
+    )
+    val tester = new TwsTester2(new WordFrequencyProcessor())
+    val ans1 = tester.test(input)
+
+    assert(
+      ans1.sorted == List(
+        ("user1", "hello", 1L),
+        ("user1", "hello", 2L),
+        ("user1", "world", 1L),
+        ("user1", "world", 2L),
+        ("user2", "hello", 1L),
+        ("user2", "spark", 1L)
+      ).sorted
+    )
+
+    // Check state using peekMapState
+    assert(
+      tester.peekMapState[String, Long]("frequencies", "user1") == Map("hello" -> 2L, "world" -> 2L)
+    )
+    assert(
+      tester.peekMapState[String, Long]("frequencies", "user2") == Map("hello" -> 1L, "spark" -> 1L)
+    )
+    assert(tester.peekMapState[String, Long]("frequencies", "user3") == Map())
+    assert(tester.peekMapState[String, Long]("frequencies", "user3").isEmpty)
+
+    // Process more data for user1
+    val ans2 = tester.test(List(("user1", ("", "hello")), ("user1", ("", "test"))))
+    assert(ans2.sorted == List(("user1", "hello", 3L), ("user1", "test", 1L)).sorted)
+    assert(
+      tester.peekMapState[String, Long]("frequencies", "user1") == Map(
+        "hello" -> 3L,
+        "world" -> 2L,
+        "test" -> 1L
+      )
+    )
+    
+    tester.stop()
+  }
+
+  test("TwsTester should allow direct access to MapState") {
+    val tester = new TwsTester2(new WordFrequencyProcessor())
+
+    // Set initial state directly
+    tester.setMapState("frequencies", "user1", Map("hello" -> 5L, "world" -> 3L))
+    tester.setMapState("frequencies", "user2", Map("spark" -> 10L))
+
+    // Process new words
+    tester.testOneRow("user1", ("", "hello"))
+    tester.testOneRow("user1", ("", "goodbye"))
+    tester.testOneRow("user2", ("", "spark"))
+    tester.testOneRow("user3", ("", "new"))
+
+    // Verify updated state
+    assert(
+      tester.peekMapState[String, Long]("frequencies", "user1") == Map(
+        "hello" -> 6L,
+        "world" -> 3L,
+        "goodbye" -> 1L
+      )
+    )
+    assert(tester.peekMapState[String, Long]("frequencies", "user2") == Map("spark" -> 11L))
+    assert(tester.peekMapState[String, Long]("frequencies", "user3") == Map("new" -> 1L))
+    assert(tester.peekMapState[String, Long]("frequencies", "user4") == Map())
+
+    tester.stop()
+  }
 
   // ===== TTL Tests (NOT YET IMPLEMENTED) =====
   

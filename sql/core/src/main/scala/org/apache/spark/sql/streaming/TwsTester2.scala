@@ -16,14 +16,15 @@
  */
 package org.apache.spark.sql.streaming
 
-import scala.collection.mutable
-
-import org.apache.spark.sql.{Dataset, SparkSession}
+import org.apache.spark.sql.{Dataset, Encoder, SparkSession}
 import org.apache.spark.sql.catalyst.encoders.{ExpressionEncoder, encoderFor}
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.classic.ClassicConversions.castToImpl
+import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.statefulprocessor.ImplicitGroupingKeyTracker
+import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.statevariables.MapStateImpl
 import org.apache.spark.sql.execution.streaming.runtime.{MemoryStream, StreamingQueryWrapper}
 import org.apache.spark.sql.execution.streaming.sources.MemorySink
+import org.apache.spark.sql.execution.streaming.state.StateStore
 import org.apache.spark.sql.internal.SQLConf
 
 class TwsTester2[
@@ -32,10 +33,11 @@ class TwsTester2[
     O: org.apache.spark.sql.Encoder](
     val processor: StatefulProcessor[K, I, O]
 )(implicit sparkSession: SparkSession) {
- 
-  sparkSession.conf.set(SQLConf.STATE_STORE_PROVIDER_CLASS.key, classOf[InMemoryStateStoreProvider].getName)
+
+  sparkSession.conf
+    .set(SQLConf.STATE_STORE_PROVIDER_CLASS.key, classOf[InMemoryStateStoreProvider].getName)
   sparkSession.conf.set(SQLConf.SHUFFLE_PARTITIONS.key, "1")
-  
+
   implicit val tupleEncoder: org.apache.spark.sql.Encoder[(K, I)] =
     org.apache.spark.sql.Encoders.tuple(
       implicitly[org.apache.spark.sql.Encoder[K]],
@@ -50,36 +52,40 @@ class TwsTester2[
 
   // Create MemorySink and start the streaming query once
   private val sink = new MemorySink()
-  private val checkpointDir = org.apache.spark.util.Utils.createTempDir(
-    namePrefix = "streaming.metadata").getCanonicalPath
-  
+  private val checkpointDir =
+    org.apache.spark.util.Utils.createTempDir(namePrefix = "streaming.metadata").getCanonicalPath
+
   private val classicSession = castToImpl(sparkSession)
-  private val query = classicSession.streams.startQuery(
-    userSpecifiedName = None,
-    userSpecifiedCheckpointLocation = Some(checkpointDir),
-    df = resultDs.toDF(),
-    extraOptions = Map.empty,
-    sink = sink,
-    outputMode = OutputMode.Append(),
-    useTempCheckpointLocation = false,
-    recoverFromCheckpointLocation = true,
-    trigger = Trigger.ProcessingTime(0),
-    triggerClock = new org.apache.spark.util.SystemClock()
-  ).asInstanceOf[StreamingQueryWrapper].streamingQuery
-  
+  private val query = classicSession.streams
+    .startQuery(
+      userSpecifiedName = None,
+      userSpecifiedCheckpointLocation = Some(checkpointDir),
+      df = resultDs.toDF(),
+      extraOptions = Map.empty,
+      sink = sink,
+      outputMode = OutputMode.Append(),
+      useTempCheckpointLocation = false,
+      recoverFromCheckpointLocation = true,
+      trigger = Trigger.ProcessingTime(0),
+      triggerClock = new org.apache.spark.util.SystemClock()
+    )
+    .asInstanceOf[StreamingQueryWrapper]
+    .streamingQuery
+
   query.awaitInitialization(30000)
-  
+
   // Encoder/decoder to convert Row to O
   private val outputEncoder = encoderFor[O]
   private val rowSerializer = ExpressionEncoder(outputEncoder.schema)
-    .resolveAndBind().createSerializer()
+    .resolveAndBind()
+    .createSerializer()
   private val rowDeserializer = outputEncoder.resolveAndBind().createDeserializer()
-  
+
   private var lastBatchId: Long = -1L
-  
+
   // Key encoder for state access
   private val keyEncoder = encoderFor[K].resolveAndBind()
-  
+
   // State store provider for accessing state (lazy initialization)
   private lazy val stateStoreProvider: InMemoryStateStoreProvider = {
     // Trigger initialization by processing an empty batch
@@ -92,7 +98,7 @@ class TwsTester2[
   def test(input: List[(K, I)]): List[O] = {
     inputStream.addData(input)
     query.processAllAvailable()
-    
+
     // Get only new data since last batch
     val rows = if (lastBatchId == -1L) {
       sink.allData
@@ -100,15 +106,21 @@ class TwsTester2[
       sink.dataSinceBatch(lastBatchId)
     }
     lastBatchId = sink.latestBatchId.getOrElse(-1L)
-    
+
     // Convert external Rows to O via InternalRow
     rows.map(row => rowDeserializer(rowSerializer(row))).toList
   }
-  
+
+  def testOneRow(key: K, inputRow: I): List[O] = test(List((key, inputRow)))
+
   def stop(): Unit = {
-    query.stop() 
+    query.stop()
   }
-  
+
+  def keyToRow(key: K) = keyEncoder.createSerializer()(key).asInstanceOf[UnsafeRow].copy()
+
+  private def stateStore: StateStore = stateStoreProvider.getLatestStore()
+
   /**
    * Sets the value state for a given key.
    *
@@ -117,16 +129,11 @@ class TwsTester2[
    * @param value the value to set in the state
    */
   def setValueState[T: org.apache.spark.sql.Encoder](stateName: String, key: K, value: T): Unit = {
-    val valueEncoder = encoderFor[T].resolveAndBind()
-    
-    val keyRow = keyEncoder.createSerializer()(key).asInstanceOf[UnsafeRow].copy()
-    val valueRow = valueEncoder.createSerializer()(value).asInstanceOf[UnsafeRow].copy()
-    
-    val stores = stateStoreProvider.getStores()
-    val stateStore = stores.getOrElseUpdate(stateName, mutable.Map.empty[UnsafeRow, UnsafeRow])
-    stateStore(keyRow) = valueRow
+    val serializer = encoderFor[T].resolveAndBind().createSerializer()
+    val valueRow = serializer(value).asInstanceOf[UnsafeRow].copy()
+    stateStore.put(keyToRow(key), valueRow, stateName)
   }
-  
+
   /**
    * Retrieves the value state for a given key without modifying it.
    *
@@ -135,14 +142,8 @@ class TwsTester2[
    * @return Some(value) if the state exists, None otherwise
    */
   def peekValueState[T: org.apache.spark.sql.Encoder](stateName: String, key: K): Option[T] = {
-    val valueEncoder = encoderFor[T].resolveAndBind()
-    
-    val keyRow = keyEncoder.createSerializer()(key).asInstanceOf[UnsafeRow]
-    
-    val stores = stateStoreProvider.getStores()
-    stores.get(stateName).flatMap(_.get(keyRow)).map { valueRow =>
-      valueEncoder.createDeserializer()(valueRow)
-    }
+    val deserializer = encoderFor[T].resolveAndBind().createDeserializer()
+    Option(stateStore.get(keyToRow(key), stateName)).map(deserializer)
   }
 
   /**
@@ -152,15 +153,14 @@ class TwsTester2[
    * @param key the grouping key
    * @param values the list of values to set
    */
-  def setListState[T: org.apache.spark.sql.Encoder](stateName: String, key: K, values: List[T]): Unit = {
-    val valueEncoder = encoderFor[T].resolveAndBind()
-    
-    val keyRow = keyEncoder.createSerializer()(key).asInstanceOf[UnsafeRow].copy()
-    val valueRows = values.map(v => valueEncoder.createSerializer()(v).asInstanceOf[UnsafeRow].copy()).toArray
-    
-    val listStores = stateStoreProvider.getListStores()
-    val listStore = listStores.getOrElseUpdate(stateName, mutable.Map.empty[UnsafeRow, Array[UnsafeRow]])
-    listStore(keyRow) = valueRows
+  def setListState[T: org.apache.spark.sql.Encoder](
+      stateName: String,
+      key: K,
+      values: List[T]): Unit = {
+    val serializer = encoderFor[T].resolveAndBind().createSerializer()
+    val valueRows =
+      values.map(v => serializer(v).asInstanceOf[UnsafeRow].copy()).toArray
+    stateStore.putList(keyToRow(key), valueRows, stateName)
   }
 
   /**
@@ -171,15 +171,8 @@ class TwsTester2[
    * @return the list of values, or an empty list if no state exists for the key
    */
   def peekListState[T: org.apache.spark.sql.Encoder](stateName: String, key: K): List[T] = {
-    val valueEncoder = encoderFor[T].resolveAndBind()
-    val deserializer = valueEncoder.createDeserializer()
-    
-    val keyRow = keyEncoder.createSerializer()(key).asInstanceOf[UnsafeRow]
-    
-    val listStores = stateStoreProvider.getListStores()
-    listStores.get(stateName).flatMap(_.get(keyRow)).map { valueRows =>
-      valueRows.iterator.map(row => deserializer(row)).toList
-    }.getOrElse(List.empty[T])
+    val deserializer = encoderFor[T].resolveAndBind().createDeserializer()
+    stateStore.valuesIterator(keyToRow(key), stateName).map(deserializer).toList
   }
 
   /**
@@ -190,8 +183,20 @@ class TwsTester2[
    * @param values the map of key-value pairs to set
    */
   def setMapState[MK: org.apache.spark.sql.Encoder, MV: org.apache.spark.sql.Encoder](
-      stateName: String, key: K, values: Map[MK, MV]): Unit = {
+      stateName: String,
+      key: K,
+      values: Map[MK, MV]): Unit = {
 
+    val mapState: MapStateImpl[MK, MV] = new MapStateImpl(
+      stateStore, stateName, 
+      encoderFor[K].resolveAndBind().asInstanceOf[ExpressionEncoder[Any]],
+      encoderFor[MK].resolveAndBind().asInstanceOf[ExpressionEncoder[Any]],
+      encoderFor[MV].resolveAndBind().asInstanceOf[ExpressionEncoder[Any]]
+    )
+    ImplicitGroupingKeyTracker.setImplicitKey(key)
+    mapState.clear()
+    values.foreachEntry((k,v) => mapState.updateValue(k,v))    
+    
   }
 
   /**
@@ -201,10 +206,23 @@ class TwsTester2[
    * @param key the grouping key
    * @return the map of key-value pairs, or an empty map if no state exists for the key
    */
-  def peekMapState[MK: org.apache.spark.sql.Encoder, MV: org.apache.spark.sql.Encoder](
-      stateName: String, key: K): Map[MK, MV] = {
-    Map.empty[MK, MV]
+  def peekMapState[MK: Encoder, MV: Encoder](
+      stateName: String,
+      key: K): Map[MK, MV] = {
+    val mapState = new MapStateImpl(
+      stateStore, stateName, 
+      encoderFor[K].resolveAndBind().asInstanceOf[ExpressionEncoder[Any]],
+      encoderFor[MK].resolveAndBind().asInstanceOf[ExpressionEncoder[Any]],
+      encoderFor[MV].resolveAndBind().asInstanceOf[ExpressionEncoder[Any]]
+    )
+    /*val mapKeyDeserializer = encoderFor[MK].resolveAndBind().createDeserializer()
+    val valueDeserializer = encoderFor[MV].resolveAndBind().createDeserializer()
+    val x = stateStore.prefixScan(keyToRow(key), stateName)
+    val ans: Iterator[(MK, MV)] = x
+      .map(pair => (exractSecondPairAndConvertTo[MK](pair.key), valueDeserializer(pair.value)))
+    ans.toMap*/
+    ImplicitGroupingKeyTracker.setImplicitKey(key)
+    mapState.iterator().toMap
   }
 
 }
-
