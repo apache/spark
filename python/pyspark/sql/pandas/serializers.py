@@ -1260,7 +1260,10 @@ class GroupPandasUDFSerializer(ArrowStreamPandasUDFSerializer):
 
         # Flatten iterator of (generator, arrow_type) into (df, arrow_type) for parent class
         def flatten_iterator():
-            for batches_gen, arrow_type in iterator:  # tuple constructed in wrap_grouped_*_pandas_udf
+            for (
+                batches_gen,
+                arrow_type,
+            ) in iterator:  # tuple constructed in wrap_grouped_*_pandas_udf
                 # batches_gen yields df for single UDF or [(df1, type1), (df2, type2), ...] for multiple UDFs
                 for item in batches_gen:
                     if isinstance(item, list) and len(item) > 0 and isinstance(item[0], tuple):

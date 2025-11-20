@@ -3302,7 +3302,7 @@ def read_udfs(pickleSer, infile, eval_type):
 
             # Call UDFs and get list of (generator, arrow_type) tuples
             results = [f(*[series_list[o] for o in arg_offsets]) for arg_offsets, f in udfs]
-            
+
             # Return (generator, arrow_type)
             # For single UDF: directly return wrapper result
             # For multiple UDFs: combine generators using zip
@@ -3312,10 +3312,12 @@ def read_udfs(pickleSer, infile, eval_type):
                 # Multiple UDFs: zip generators together
                 gens = [gen for gen, _ in results]
                 types = [arrow_type for _, arrow_type in results]
+
                 def combined_gen():
                     for combined_dfs in zip(*gens):
                         # Yield list of (df, arrow_type) tuples for _create_batch
                         yield [(df, arrow_type) for df, arrow_type in zip(combined_dfs, types)]
+
                 return (combined_gen(), types[0])
 
         def func(_, it):
