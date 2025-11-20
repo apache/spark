@@ -51,7 +51,7 @@ from pyspark.pipelines.spark_connect_pipeline import (
 
 from pyspark.pipelines.add_pipeline_analysis_context import add_pipeline_analysis_context
 
-PIPELINE_SPEC_FILE_NAMES = ["pipeline.yaml", "pipeline.yml"]
+PIPELINE_SPEC_FILE_NAMES = ["spark-pipeline.yaml", "spark-pipeline.yml"]
 
 
 @dataclass(frozen=True)
