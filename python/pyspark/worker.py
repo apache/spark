@@ -756,7 +756,6 @@ def wrap_grouped_map_pandas_udf(f, return_type, argspec, runner_conf):
             result, return_type, _assign_cols_by_name, truncate_return_schema=False
         )
 
-        # Return as list to match GroupArrowUDFSerializer format: [([DataFrame], arrow_type)]
         yield result
 
     arrow_return_type = to_arrow_type(return_type, _use_large_var_types)
@@ -968,8 +967,7 @@ def wrap_grouped_agg_pandas_udf(f, args_offsets, kwargs_offsets, return_type, ru
         import pandas as pd
 
         result = func(*series)
-        # Return generator yielding (Series, arrow_type), aligned with GroupArrowUDFSerializer
-        # Generator directly yields data, not wrapped in list
+        # Return generator yielding Series
         yield pd.Series([result])
 
     return (
@@ -3020,9 +3018,6 @@ def read_udfs(pickleSer, infile, eval_type):
             # Call wrapped function which returns (generator, arrow_type)
             return f(keys, value_series_gen)
 
-        def func(_, it):
-            return map(mapper, it)
-
     elif eval_type == PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_UDF:
         # We assume there is only one UDF here because grouped map doesn't
         # support combining multiple UDFs.
@@ -3278,6 +3273,35 @@ def read_udfs(pickleSer, infile, eval_type):
     ):
         import pandas as pd
 
+        def merge_batches_to_series_list(a):
+            """Merge iterator of batches into a single Series list."""
+            if isinstance(a, (list, tuple)):
+                return a
+            # If not list/tuple, assume it's an iterator of batches and merge them incrementally
+            series_list = None
+            for batch in a:
+                if series_list is None:
+                    series_list = list(batch)
+                else:
+                    series_list = [
+                        pd.concat([series_list[i], s], ignore_index=True)
+                        for i, s in enumerate(batch)
+                    ]
+            return series_list if series_list is not None else []
+
+        def combine_multiple_udf_results(results):
+            """Combine multiple UDF results into a single (generator, arrow_type) tuple."""
+            if len(results) == 1:
+                return results[0]
+
+            gens, types = zip(*results)
+
+            def combined_gen():
+                for combined_dfs in zip(*gens):
+                    yield [(df, arrow_type) for df, arrow_type in zip(combined_dfs, types)]
+
+            return (combined_gen(), types[0])
+
         udfs = [
             read_single_udf(
                 pickleSer, infile, eval_type, runner_conf, udf_index=i, profiler=profiler
@@ -3286,42 +3310,9 @@ def read_udfs(pickleSer, infile, eval_type):
         ]
 
         def mapper(a):
-            # Merge all batches into a single Series list
-            if hasattr(a, "__iter__") and not isinstance(a, (list, tuple)):
-                series_list = []
-                for batch in a:
-                    if series_list:
-                        series_list = [
-                            pd.concat([series_list[i], s], ignore_index=True)
-                            for i, s in enumerate(batch)
-                        ]
-                    else:
-                        series_list = list(batch)
-            else:
-                series_list = a
-
-            # Call UDFs and get list of (generator, arrow_type) tuples
+            series_list = merge_batches_to_series_list(a)
             results = [f(*[series_list[o] for o in arg_offsets]) for arg_offsets, f in udfs]
-
-            # Return (generator, arrow_type)
-            # For single UDF: directly return wrapper result
-            # For multiple UDFs: combine generators using zip
-            if len(results) == 1:
-                return results[0]
-            else:
-                # Multiple UDFs: zip generators together
-                gens = [gen for gen, _ in results]
-                types = [arrow_type for _, arrow_type in results]
-
-                def combined_gen():
-                    for combined_dfs in zip(*gens):
-                        # Yield list of (df, arrow_type) tuples for _create_batch
-                        yield [(df, arrow_type) for df, arrow_type in zip(combined_dfs, types)]
-
-                return (combined_gen(), types[0])
-
-        def func(_, it):
-            return map(mapper, it)
+            return combine_multiple_udf_results(results)
 
     else:
         udfs = []
@@ -3341,8 +3332,8 @@ def read_udfs(pickleSer, infile, eval_type):
             else:
                 return result
 
-        def func(_, it):
-            return map(mapper, it)
+    def func(_, it):
+        return map(mapper, it)
 
     # profiling is not supported for UDF
     return func, None, ser, ser
