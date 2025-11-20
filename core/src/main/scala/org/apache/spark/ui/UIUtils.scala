@@ -467,7 +467,7 @@ private[spark] object UIUtils extends Logging {
         { s"$completed/$total" +
             (if (failed == 0 && skipped == 0 && started > 0) s" ($started running)" else "") +
             (if (failed > 0) s" ($failed failed)" else "") +
-            (if (skipped > 0) s"($skipped skipped)" else "") +
+            (if (skipped > 0) s" ($skipped skipped)" else "") +
             killTaskReasonText }
       </span>
       <div class="progress-bar progress-completed" style={completeWidth}></div>
