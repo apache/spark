@@ -2010,23 +2010,20 @@ class TransformWithStateInPandasInitStateSerializer(TransformWithStateInPandasSe
                         for i, c in enumerate(flatten_state_table.itercolumns())
                     ]
 
-                    flatten_init_table = flatten_columns(batch, "initState")
-                    init_data_pandas = [
-                        self.arrow_to_pandas(c, i)
-                        for i, c in enumerate(flatten_init_table.itercolumns())
-                    ]
-
-                    # Determine which column has data
-                    has_input_data = bool(data_pandas)
-
-                    if has_input_data:
+                    if bool(data_pandas):
                         for row in pd.concat(data_pandas, axis=1).itertuples(index=False):
                             batch_key = tuple(row[s] for s in self.key_offsets)
                             yield (batch_key, row, None)
                     else:
-                        for row in pd.concat(init_data_pandas, axis=1).itertuples(index=False):
-                            batch_key = tuple(row[s] for s in self.init_key_offsets)
-                            yield (batch_key, None, row)
+                        flatten_init_table = flatten_columns(batch, "initState")
+                        init_data_pandas = [
+                            self.arrow_to_pandas(c, i)
+                            for i, c in enumerate(flatten_init_table.itercolumns())
+                        ]
+                        if bool(init_data_pandas):
+                            for row in pd.concat(init_data_pandas, axis=1).itertuples(index=False):
+                                batch_key = tuple(row[s] for s in self.init_key_offsets)
+                                yield (batch_key, None, row)
 
             EMPTY_DATAFRAME = pd.DataFrame()
             for batch_key, group_rows in groupby(row_stream(), key=lambda x: x[0]):

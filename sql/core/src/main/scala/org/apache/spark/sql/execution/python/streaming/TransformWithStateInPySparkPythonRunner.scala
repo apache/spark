@@ -197,7 +197,9 @@ class TransformWithStateInPySparkPythonInitialStateRunner(
 
       true
     } else {
-      pandasWriter.finalizeCurrentArrowBatch()
+      if (pandasWriter.getTotalNumRowsForBatch > 0) {
+        pandasWriter.finalizeCurrentArrowBatch()
+      }
       super[PythonArrowInput].close()
       false
     }
