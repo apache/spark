@@ -21,6 +21,31 @@
 # variable is set or not. If set, it starts to run the coverage.
 try:
     import coverage
-    coverage.process_startup()
+    cov = coverage.process_startup()
+    if cov:
+        import os
+
+        def patch_worker():
+            import sys
+            frame = sys._getframe(1)
+            if (
+                frame.f_code.co_name == "manager" and
+                "daemon.py" in frame.f_code.co_filename and
+                "worker" in frame.f_globals
+            ):
+                with open(f"./coverage_{os.getpid()}.txt", "a") as f:
+                    f.write(f"{frame}")
+
+                def save_when_exit(func):
+                    def wrapper(*args, **kwargs):
+                        result = func(*args, **kwargs)
+                        cov.save()
+                        return result
+                    return wrapper
+
+                frame.f_globals["worker"] = save_when_exit(frame.f_globals["worker"])
+
+        os.register_at_fork(after_in_child=patch_worker)
+
 except ImportError:
     pass
