@@ -3018,6 +3018,53 @@ def read_udfs(pickleSer, infile, eval_type):
             # Call wrapped function which returns (generator, arrow_type)
             return f(keys, value_series_gen)
 
+    elif eval_type in (
+        PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF,
+        PythonEvalType.SQL_WINDOW_AGG_PANDAS_UDF,
+    ):
+        import pandas as pd
+
+        def merge_batches_to_series_list(a):
+            """Merge iterator of batches into a single Series list."""
+            if isinstance(a, (list, tuple)):
+                return a
+            # If not list/tuple, assume it's an iterator of batches and merge them incrementally
+            series_list = None
+            for batch in a:
+                if series_list is None:
+                    series_list = list(batch)
+                else:
+                    series_list = [
+                        pd.concat([series_list[i], s], ignore_index=True)
+                        for i, s in enumerate(batch)
+                    ]
+            return series_list if series_list is not None else []
+
+        def combine_multiple_udf_results(results):
+            """Combine multiple UDF results into a single (generator, arrow_type) tuple."""
+            if len(results) == 1:
+                return results[0]
+
+            gens, types = zip(*results)
+
+            def combined_gen():
+                for combined_dfs in zip(*gens):
+                    yield [(df, arrow_type) for df, arrow_type in zip(combined_dfs, types)]
+
+            return (combined_gen(), types[0])
+
+        udfs = [
+            read_single_udf(
+                pickleSer, infile, eval_type, runner_conf, udf_index=i, profiler=profiler
+            )
+            for i in range(num_udfs)
+        ]
+
+        def mapper(a):
+            series_list = merge_batches_to_series_list(a)
+            results = [f(*[series_list[o] for o in arg_offsets]) for arg_offsets, f in udfs]
+            return combine_multiple_udf_results(results)
+
     elif eval_type == PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_UDF:
         # We assume there is only one UDF here because grouped map doesn't
         # support combining multiple UDFs.
@@ -3266,53 +3313,6 @@ def read_udfs(pickleSer, infile, eval_type):
             df2_keys = table_from_batches(a[1], parsed_offsets[1][0])
             df2_vals = table_from_batches(a[1], parsed_offsets[1][1])
             return f(df1_keys, df1_vals, df2_keys, df2_vals)
-
-    elif eval_type in (
-        PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF,
-        PythonEvalType.SQL_WINDOW_AGG_PANDAS_UDF,
-    ):
-        import pandas as pd
-
-        def merge_batches_to_series_list(a):
-            """Merge iterator of batches into a single Series list."""
-            if isinstance(a, (list, tuple)):
-                return a
-            # If not list/tuple, assume it's an iterator of batches and merge them incrementally
-            series_list = None
-            for batch in a:
-                if series_list is None:
-                    series_list = list(batch)
-                else:
-                    series_list = [
-                        pd.concat([series_list[i], s], ignore_index=True)
-                        for i, s in enumerate(batch)
-                    ]
-            return series_list if series_list is not None else []
-
-        def combine_multiple_udf_results(results):
-            """Combine multiple UDF results into a single (generator, arrow_type) tuple."""
-            if len(results) == 1:
-                return results[0]
-
-            gens, types = zip(*results)
-
-            def combined_gen():
-                for combined_dfs in zip(*gens):
-                    yield [(df, arrow_type) for df, arrow_type in zip(combined_dfs, types)]
-
-            return (combined_gen(), types[0])
-
-        udfs = [
-            read_single_udf(
-                pickleSer, infile, eval_type, runner_conf, udf_index=i, profiler=profiler
-            )
-            for i in range(num_udfs)
-        ]
-
-        def mapper(a):
-            series_list = merge_batches_to_series_list(a)
-            results = [f(*[series_list[o] for o in arg_offsets]) for arg_offsets, f in udfs]
-            return combine_multiple_udf_results(results)
 
     else:
         udfs = []
