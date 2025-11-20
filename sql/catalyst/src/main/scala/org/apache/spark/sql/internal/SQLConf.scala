@@ -1595,6 +1595,7 @@ object SQLConf {
 
   val PARQUET_IGNORE_VARIANT_ANNOTATION =
     buildConf("spark.sql.parquet.ignoreVariantAnnotation")
+      .internal()
       .doc("When true, ignore the variant logical type annotation and treat the Parquet " +
         "column in the same way as the underlying struct type")
       .version("4.1.0")

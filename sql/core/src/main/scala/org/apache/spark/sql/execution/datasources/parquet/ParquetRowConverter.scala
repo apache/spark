@@ -876,7 +876,10 @@ private[parquet] class ParquetRowConverter(
     }
   }
 
-  /** Parquet converter for unshredded Variant */
+  // Parquet converter for unshredded Variant.
+  @deprecated("We use this converter when the `spark.sql.variant.allowReadingShredded` config " +
+    "is set to false. This option just exists to fall back to legacy logic which will " +
+    "eventually be removed.", "4.1.0")
   private final class ParquetUnshreddedVariantConverter(
      parquetType: GroupType,
      updater: ParentContainerUpdater)
