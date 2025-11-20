@@ -2736,7 +2736,6 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
   }
 
   test("SPARK-54063: forceSnapshot metric populated when shouldForceSnapshotOnCommit is true") {
-    withTempDir { dir =>
       tryWithProviderResource(newStoreProvider()) { provider =>
         val store = provider.getStore(0, forceSnapshotOnCommit = true)
         put(store, "a", 0, 1)
@@ -2748,7 +2747,6 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
         }
         assert(metricPair.isDefined)
         assert(metricPair.get._2 == 1L, s"forceSnapshot should be 1 but was ${metricPair.get._2}")
-      }
     }
   }
 
