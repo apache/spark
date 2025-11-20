@@ -1256,34 +1256,19 @@ class GroupPandasUDFSerializer(ArrowStreamPandasUDFSerializer):
 
     def dump_stream(self, iterator, stream):
         import pyarrow as pa
+        import pandas as pd
 
-        # Flatten ([series], arrow_type) format to (series, arrow_type) for parent class
+        # Flatten iterator of (generator, arrow_type) into (df, arrow_type) for parent class
         def flatten_iterator():
-            import pandas as pd
-
-            for item in iterator:
-                # Normalize to list: single UDF becomes [(data, type)], multiple UDFs is already list
-                items = (
-                    [item]
-                    if isinstance(item, tuple)
-                    and len(item) == 2
-                    and not (isinstance(item[0], tuple) and len(item[0]) == 2)
-                    else (item if isinstance(item, (list, tuple)) else [item])
-                )
-
-                combined = []
-                for data_list, arrow_type in items:
-                    dfs = data_list if isinstance(data_list, (list, tuple)) else [data_list]
-                    combined.extend([(df, arrow_type) for df in dfs])
-
-                if len(items) == 1:
-                    # Single UDF: yield each (df, arrow_type) separately
-                    for df, arrow_type in combined:
-                        yield (df, arrow_type)
-                else:
-                    # Multiple UDFs: yield combined list for _create_batch
-                    if combined:
-                        yield combined
+            for batches_gen, arrow_type in iterator:  # tuple constructed in wrap_grouped_*_pandas_udf
+                # batches_gen yields df for single UDF or [(df1, type1), (df2, type2), ...] for multiple UDFs
+                for item in batches_gen:
+                    if isinstance(item, list) and len(item) > 0 and isinstance(item[0], tuple):
+                        # Multiple UDFs: item is [(df1, type1), (df2, type2), ...]
+                        yield item
+                    else:
+                        # Single UDF: item is df, wrap with arrow_type
+                        yield (item, arrow_type)
 
         super(GroupPandasUDFSerializer, self).dump_stream(flatten_iterator(), stream)
 

@@ -968,7 +968,9 @@ def wrap_grouped_agg_pandas_udf(f, args_offsets, kwargs_offsets, return_type, ru
         import pandas as pd
 
         result = func(*series)
-        return pd.Series([result])
+        # Return generator yielding (Series, arrow_type), aligned with GroupArrowUDFSerializer
+        # Generator directly yields data, not wrapped in list
+        yield pd.Series([result])
 
     return (
         args_kwargs_offsets,
@@ -1052,7 +1054,8 @@ def wrap_unbounded_window_agg_pandas_udf(f, args_offsets, kwargs_offsets, return
         import pandas as pd
 
         result = func(*series)
-        return pd.Series([result]).repeat(len(series[0]))
+        # Return generator yielding Series
+        yield pd.Series([result]).repeat(len(series[0]))
 
     return (
         args_kwargs_offsets,
@@ -1117,7 +1120,8 @@ def wrap_bounded_window_agg_pandas_udf(f, args_offsets, kwargs_offsets, return_t
             #       reasons we don't do it here.
             series_slices = [s.iloc[begin_array[i] : end_array[i]] for s in series]
             result.append(func(*series_slices))
-        return pd.Series(result)
+        # Return generator yielding Series
+        yield pd.Series(result)
 
     return (
         args_offsets[:2] + args_kwargs_offsets,
@@ -3014,9 +3018,7 @@ def read_udfs(pickleSer, infile, eval_type):
                 for series_list in itertools.chain((first_series_list,), series_iter)
             )
             # Call wrapped function which returns (generator, arrow_type)
-            result_gen, arrow_type = f(keys, value_series_gen)
-            # Convert generator to list to match GroupPandasUDFSerializer format: ([DataFrame], arrow_type)
-            return (list(result_gen), arrow_type)
+            return f(keys, value_series_gen)
 
         def func(_, it):
             return map(mapper, it)
@@ -3284,10 +3286,6 @@ def read_udfs(pickleSer, infile, eval_type):
         ]
 
         def mapper(a):
-            # Always return list of (data, arrow_type) tuples for unified processing
-            return [f(*[a[o] for o in arg_offsets]) for arg_offsets, f in udfs]
-
-        def process_item(a):
             # Merge all batches into a single Series list
             if hasattr(a, "__iter__") and not isinstance(a, (list, tuple)):
                 series_list = []
@@ -3302,23 +3300,26 @@ def read_udfs(pickleSer, infile, eval_type):
             else:
                 series_list = a
 
-            results = mapper(series_list)
-
-            # Convert each (data, arrow_type) to ([data], arrow_type) format
-            def wrap_data(data, arrow_type):
-                if hasattr(data, "__iter__") and not isinstance(
-                    data, (list, tuple, pd.Series, pd.DataFrame)
-                ):
-                    return (list(data), arrow_type)
-                return ([data], arrow_type)
-
-            # Single UDF: return ([data], arrow_type)
-            # Multiple UDFs: return (([data1], type1), ([data2], type2), ...)
-            wrapped = [wrap_data(data, arrow_type) for data, arrow_type in results]
-            return wrapped[0] if len(wrapped) == 1 else tuple(wrapped)
+            # Call UDFs and get list of (generator, arrow_type) tuples
+            results = [f(*[series_list[o] for o in arg_offsets]) for arg_offsets, f in udfs]
+            
+            # Return (generator, arrow_type)
+            # For single UDF: directly return wrapper result
+            # For multiple UDFs: combine generators using zip
+            if len(results) == 1:
+                return results[0]
+            else:
+                # Multiple UDFs: zip generators together
+                gens = [gen for gen, _ in results]
+                types = [arrow_type for _, arrow_type in results]
+                def combined_gen():
+                    for combined_dfs in zip(*gens):
+                        # Yield list of (df, arrow_type) tuples for _create_batch
+                        yield [(df, arrow_type) for df, arrow_type in zip(combined_dfs, types)]
+                return (combined_gen(), types[0])
 
         def func(_, it):
-            return map(process_item, it)
+            return map(mapper, it)
 
     else:
         udfs = []
