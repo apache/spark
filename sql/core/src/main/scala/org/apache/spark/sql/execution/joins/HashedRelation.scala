@@ -144,7 +144,8 @@ private[execution] object HashedRelation {
         new UnifiedMemoryManager(
           new SparkConf().set(MEMORY_OFFHEAP_ENABLED.key, "false"),
           Runtime.getRuntime.maxMemory,
-          Runtime.getRuntime.maxMemory / 2, 1),
+          Runtime.getRuntime.maxMemory / 2,
+          1),
         0)
     }
 
