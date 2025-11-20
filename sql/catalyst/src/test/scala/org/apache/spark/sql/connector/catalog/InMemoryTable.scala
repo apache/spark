@@ -69,7 +69,7 @@ class InMemoryTable(
     import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
     dataMap --= InMemoryTable
       .filtersToKeys(dataMap.keys, partCols.map(_.toSeq.quoted).toImmutableArraySeq, filters)
-    increaseCurrentVersion()
+    increaseVersion()
   }
 
   override def withData(data: Array[BufferedRows]): InMemoryTable = {
@@ -109,7 +109,7 @@ class InMemoryTable(
           row.getInt(0) == InMemoryTable.uncommittableValue()))) {
         throw new IllegalArgumentException(s"Test only mock write failure")
       }
-      increaseCurrentVersion()
+      increaseVersion()
       this
     }
   }
@@ -155,7 +155,7 @@ class InMemoryTable(
 
     copiedTable.commits ++= commits.map(_.copy())
 
-    copiedTable.setCurrentVersion(currentVersion())
+    copiedTable.setVersion(version())
     if (validatedVersion() != null) {
       copiedTable.setValidatedVersion(validatedVersion())
     }
@@ -165,12 +165,12 @@ class InMemoryTable(
 
   override def equals(other: Any): Boolean = other match {
     case that: InMemoryTable =>
-      this.id == that.id && this.currentVersion() == that.currentVersion()
+      this.id == that.id && this.version() == that.version()
     case _ => false
   }
 
   override def hashCode(): Int = {
-    Objects.hash(id, currentVersion())
+    Objects.hash(id, version())
   }
 
   class InMemoryWriterBuilderWithOverWrite(override val info: LogicalWriteInfo)
