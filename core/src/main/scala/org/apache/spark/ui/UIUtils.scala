@@ -463,7 +463,7 @@ private[spark] object UIUtils extends Logging {
 
     // scalastyle:off line.size.limit
     <div class="progress">
-      <span style="text-align:center; position:absolute; width:100%; height:100%; align-content: center" title={progressTitle}>
+      <span style="display: flex; align-items: center; justify-content: center; position:absolute; width:100%; height:100%; text-align:center;" title={progressTitle}>
         { s"$completed/$total" +
             (if (failed == 0 && skipped == 0 && started > 0) s" ($started running)" else "") +
             (if (failed > 0) s" ($failed failed)" else "") +
