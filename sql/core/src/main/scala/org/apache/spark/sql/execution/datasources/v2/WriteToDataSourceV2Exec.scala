@@ -168,6 +168,11 @@ case class ReplaceTableAsSelectExec(
     // 1. Creating the new table fails,
     // 2. Writing to the new table fails,
     // 3. The table returned by catalog.createTable doesn't support writing.
+    //
+    // RTAS must refresh and pin versions in query to read from original table versions instead of
+    // newly created empty table that is meant to serve as target for append/overwrite
+    val refreshedQuery = V2TableRefreshUtil.refresh(session, query, versionedOnly = true)
+    val pinnedQuery = V2TableRefreshUtil.pinVersions(refreshedQuery)
     if (catalog.tableExists(ident)) {
       invalidateCache(catalog, ident)
       catalog.dropTable(ident)
@@ -175,13 +180,13 @@ case class ReplaceTableAsSelectExec(
       throw QueryCompilationErrors.cannotReplaceMissingTableError(ident)
     }
     val tableInfo = new TableInfo.Builder()
-      .withColumns(getV2Columns(query.schema, catalog.useNullableQuerySchema))
+      .withColumns(getV2Columns(pinnedQuery.schema, catalog.useNullableQuerySchema))
       .withPartitions(partitioning.toArray)
       .withProperties(properties.asJava)
       .build()
     val table = Option(catalog.createTable(ident, tableInfo))
       .getOrElse(catalog.loadTable(ident, Set(TableWritePrivilege.INSERT).asJava))
-    writeToTable(catalog, table, writeOptions, ident, query, overwrite = true)
+    writeToTable(catalog, table, writeOptions, ident, pinnedQuery, overwrite = true)
   }
 }
 

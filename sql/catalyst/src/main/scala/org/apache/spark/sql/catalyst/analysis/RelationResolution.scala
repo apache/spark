@@ -46,7 +46,9 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.ArrayImplicits._
 
-class RelationResolution(override val catalogManager: CatalogManager)
+class RelationResolution(
+    override val catalogManager: CatalogManager,
+    sharedRelationCache: RelationCache)
     extends DataTypeErrorsBase
     with Logging
     with LookupCatalog
@@ -118,34 +120,60 @@ class RelationResolution(override val catalogManager: CatalogManager)
           val planId = u.getTagValue(LogicalPlan.PLAN_ID_TAG)
           relationCache
             .get(key)
-            .map { cache =>
-              val cachedRelation = cache.transform {
-                case multi: MultiInstanceRelation =>
-                  val newRelation = multi.newInstance()
-                  newRelation.copyTagsFrom(multi)
-                  newRelation
-              }
-              cloneWithPlanId(cachedRelation, planId)
-            }
+            .map(adaptCachedRelation(_, planId))
             .orElse {
-              val writePrivilegesString =
-                Option(u.options.get(UnresolvedRelation.REQUIRED_WRITE_PRIVILEGES))
-              val table =
-                CatalogV2Util.loadTable(catalog, ident, finalTimeTravelSpec, writePrivilegesString)
-              val loaded = createRelation(
+              val writePrivileges = u.options.get(UnresolvedRelation.REQUIRED_WRITE_PRIVILEGES)
+              val finalOptions = u.clearWritePrivileges.options
+              val table = CatalogV2Util.loadTable(
                 catalog,
                 ident,
-                table,
-                u.clearWritePrivileges.options,
-                u.isStreaming,
-                finalTimeTravelSpec
-              )
-              loaded.foreach(relationCache.update(key, _))
-              loaded.map(cloneWithPlanId(_, planId))
-            }
+                finalTimeTravelSpec,
+                Option(writePrivileges))
+
+              val sharedRelationCacheMatch = for {
+                t <- table
+                if finalTimeTravelSpec.isEmpty && writePrivileges == null && !u.isStreaming
+                cached <- lookupSharedRelationCache(catalog, ident, t)
+              } yield {
+                val updatedRelation = cached.copy(options = finalOptions)
+                val nameParts = ident.toQualifiedNameParts(catalog)
+                val aliasedRelation = SubqueryAlias(nameParts, updatedRelation)
+                relationCache.update(key, aliasedRelation)
+                adaptCachedRelation(aliasedRelation, planId)
+              }
+
+              sharedRelationCacheMatch.orElse {
+                val loaded = createRelation(
+                  catalog,
+                  ident,
+                  table,
+                  finalOptions,
+                  u.isStreaming,
+                  finalTimeTravelSpec)
+                loaded.foreach(relationCache.update(key, _))
+                loaded.map(cloneWithPlanId(_, planId))
+              }
+          }
         case _ => None
       }
     }
+  }
+
+  private def lookupSharedRelationCache(
+      catalog: CatalogPlugin,
+      ident: Identifier,
+      table: Table): Option[DataSourceV2Relation] = {
+    CatalogV2Util.lookupCachedRelation(sharedRelationCache, catalog, ident, table, conf)
+  }
+
+  private def adaptCachedRelation(cached: LogicalPlan, planId: Option[Long]): LogicalPlan = {
+    val plan = cached transform {
+      case multi: MultiInstanceRelation =>
+        val newRelation = multi.newInstance()
+        newRelation.copyTagsFrom(multi)
+        newRelation
+    }
+    cloneWithPlanId(plan, planId)
   }
 
   private def createRelation(

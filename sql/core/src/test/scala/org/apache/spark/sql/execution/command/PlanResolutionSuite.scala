@@ -3284,7 +3284,9 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
       unresolvedRelation: UnresolvedRelation,
       timeTravelSpec: Option[TimeTravelSpec] = None,
       planId: Option[Long] = None): DataSourceV2Relation = {
-    val rule = new RelationResolution(catalogManagerWithDefault)
+    val rule = new RelationResolution(
+      catalogManagerWithDefault,
+      spark.sharedState.relationCache)
     rule.resolveRelation(unresolvedRelation, timeTravelSpec) match {
       case Some(p @ AsDataSourceV2Relation(relation)) =>
         assert(unresolvedRelation.getTagValue(LogicalPlan.PLAN_ID_TAG) == planId)

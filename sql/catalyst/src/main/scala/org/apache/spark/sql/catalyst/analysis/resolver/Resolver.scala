@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.analysis.{
   AnalysisErrorAt,
   FunctionResolution,
   MultiInstanceRelation,
+  RelationCache,
   RelationResolution,
   ResolvedInlineTable,
   UnresolvedHaving,
@@ -71,6 +72,7 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
  */
 class Resolver(
     catalogManager: CatalogManager,
+    sharedRelationCache: RelationCache = RelationCache.empty,
     override val extensions: Seq[ResolverExtension] = Seq.empty,
     metadataResolverExtensions: Seq[ResolverExtension] = Seq.empty,
     externalRelationResolution: Option[RelationResolution] = None)
@@ -81,8 +83,9 @@ class Resolver(
   private val cteRegistry = new CteRegistry
   private val subqueryRegistry = new SubqueryRegistry
   private val identifierAndCteSubstitutor = new IdentifierAndCteSubstitutor
-  private val relationResolution =
-    externalRelationResolution.getOrElse(Resolver.createRelationResolution(catalogManager))
+  private val relationResolution = externalRelationResolution.getOrElse {
+    Resolver.createRelationResolution(catalogManager, sharedRelationCache)
+  }
   private val functionResolution = new FunctionResolution(catalogManager, relationResolution)
   private val expressionResolver = new ExpressionResolver(this, functionResolution, planLogger)
   private val aggregateResolver = new AggregateResolver(this, expressionResolver)
@@ -788,7 +791,9 @@ object Resolver {
   /**
    * Create a new instance of the [[RelationResolution]].
    */
-  def createRelationResolution(catalogManager: CatalogManager): RelationResolution = {
-    new RelationResolution(catalogManager)
+  def createRelationResolution(
+      catalogManager: CatalogManager,
+      sharedRelationCache: RelationCache = RelationCache.empty): RelationResolution = {
+    new RelationResolution(catalogManager, sharedRelationCache)
   }
 }

@@ -176,6 +176,8 @@ abstract class BaseSessionStateBuilder(
 
   protected lazy val catalogManager = new CatalogManager(v2SessionCatalog, catalog)
 
+  protected lazy val sharedRelationCache = session.sharedState.relationCache
+
   /**
    * Interface exposed to the user for registering user-defined functions.
    *
@@ -197,7 +199,7 @@ abstract class BaseSessionStateBuilder(
    *
    * Note: this depends on the `conf` and `catalog` fields.
    */
-  protected def analyzer: Analyzer = new Analyzer(catalogManager) {
+  protected def analyzer: Analyzer = new Analyzer(catalogManager, sharedRelationCache) {
     override val hintResolutionRules: Seq[Rule[LogicalPlan]] =
       customHintResolutionRules
 
