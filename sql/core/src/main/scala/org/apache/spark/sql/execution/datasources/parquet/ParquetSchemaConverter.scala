@@ -381,7 +381,6 @@ class ParquetToSparkSchemaConverter(
 
     Option(field.getLogicalTypeAnnotation).fold(
       convertInternal(groupColumn, sparkReadType.map(_.asInstanceOf[StructType]))) {
-      // Temporary workaround to read Shredded variant data
       case v: VariantLogicalTypeAnnotation if v.getSpecVersion == 1 =>
         if (ignoreVariantAnnotation) {
           convertInternal(groupColumn)
