@@ -3069,8 +3069,8 @@ def read_udfs(pickleSer, infile, eval_type):
         ser.init_key_offsets = parsed_offsets[1][0]
         stateful_processor_api_client = StatefulProcessorApiClient(state_server_port, key_schema)
 
-        import pandas as pd
         def mapper(a):
+            import pandas as pd
             mode = a[0]
 
             if mode == TransformWithStateInPandasFuncMode.PROCESS_DATA:
@@ -3233,7 +3233,6 @@ def read_udfs(pickleSer, infile, eval_type):
 
         parsed_offsets = extract_key_value_indexes(arg_offsets)
 
-        import pandas as pd
         def mapper(a):
             df1_keys = [a[0][o] for o in parsed_offsets[0][0]]
             df1_vals = [a[0][o] for o in parsed_offsets[0][1]]

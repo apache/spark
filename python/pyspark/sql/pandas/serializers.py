@@ -2174,8 +2174,9 @@ class TransformWithStateInPySparkRowInitStateSerializer(TransformWithStateInPySp
         from pyspark.sql.streaming.stateful_processor_util import (
             TransformWithStateInPandasFuncMode,
         )
+        from typing import Iterator, Any, Optional, Tuple
 
-        def generate_data_batches(batches):
+        def generate_data_batches(batches) -> Iterator[Tuple[Any, Optional[Any], Optional[Any]]]:
             """
             Deserialize ArrowRecordBatches and return a generator of Row.
             The deserialization logic assumes that Arrow RecordBatches contain the data with the
@@ -2186,7 +2187,7 @@ class TransformWithStateInPySparkRowInitStateSerializer(TransformWithStateInPySp
              into the data generator.
             """
 
-            def extract_rows(cur_batch, col_name, key_offsets):
+            def extract_rows(cur_batch, col_name, key_offsets) -> Optional[Iterator[Tuple[Any, Any]]]:
                 data_column = cur_batch.column(cur_batch.schema.get_field_index(col_name))
 
                 # Check if the entire column is null
