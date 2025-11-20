@@ -1466,7 +1466,7 @@ class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
         self.result_state_pdf_arrow_type = to_arrow_type(
             self.result_state_df_type, prefers_large_types=prefers_large_var_types
         )
-        self.arrow_max_records_per_batch = arrow_max_records_per_batch
+        self.arrow_max_records_per_batch = arrow_max_records_per_batch if arrow_max_records_per_batch > 0 else 2**31 - 1
 
     def load_stream(self, stream):
         """
@@ -1821,12 +1821,29 @@ class TransformWithStateInPandasSerializer(ArrowStreamPandasUDFSerializer):
             int_to_decimal_coercion_enabled=int_to_decimal_coercion_enabled,
             arrow_cast=True,
         )
-        self.arrow_max_records_per_batch = arrow_max_records_per_batch
+        self.arrow_max_records_per_batch = arrow_max_records_per_batch if arrow_max_records_per_batch > 0 else 2**31 - 1
         self.arrow_max_bytes_per_batch = arrow_max_bytes_per_batch
         self.key_offsets = None
         self.average_arrow_row_size = 0
         self.total_bytes = 0
         self.total_rows = 0
+
+    def _update_batch_size_stats(self, batch):
+        """
+        Update batch size statistics for adaptive batching.
+        """
+        # Short circuit batch size calculation if the batch size is
+        # unlimited as computing batch size is computationally expensive.
+        if self.arrow_max_bytes_per_batch != 2**31 - 1 and batch.num_rows > 0:
+            batch_bytes = sum(
+                buf.size
+                for col in batch.columns
+                for buf in col.buffers()
+                if buf is not None
+            )
+            self.total_bytes += batch_bytes
+            self.total_rows += batch.num_rows
+            self.average_arrow_row_size = self.total_bytes / self.total_rows
 
     def load_stream(self, stream):
         """
@@ -1855,18 +1872,7 @@ class TransformWithStateInPandasSerializer(ArrowStreamPandasUDFSerializer):
 
             def row_stream():
                 for batch in batches:
-                    # Short circuit batch size calculation if the batch size is
-                    # unlimited as computing batch size is computationally expensive.
-                    if self.arrow_max_bytes_per_batch != 2**31 - 1 and batch.num_rows > 0:
-                        batch_bytes = sum(
-                            buf.size
-                            for col in batch.columns
-                            for buf in col.buffers()
-                            if buf is not None
-                        )
-                        self.total_bytes += batch_bytes
-                        self.total_rows += batch.num_rows
-                        self.average_arrow_row_size = self.total_bytes / self.total_rows
+                    self._update_batch_size_stats(batch)
                     data_pandas = [
                         self.arrow_to_pandas(c, i)
                         for i, c in enumerate(pa.Table.from_batches([batch]).itercolumns())
@@ -1993,16 +1999,7 @@ class TransformWithStateInPandasInitStateSerializer(TransformWithStateInPandasSe
             """
             def row_stream():
                 for batch in batches:
-                    if self.arrow_max_bytes_per_batch != 2**31 - 1 and batch.num_rows > 0:
-                        batch_bytes = sum(
-                            buf.size
-                            for col in batch.columns
-                            for buf in col.buffers()
-                            if buf is not None
-                        )
-                        self.total_bytes += batch_bytes
-                        self.total_rows += batch.num_rows
-                        self.average_arrow_row_size = self.total_bytes / self.total_rows
+                    self._update_batch_size_stats(batch)
 
                     flatten_state_table = flatten_columns(batch, "inputData")
                     data_pandas = [
@@ -2078,7 +2075,7 @@ class TransformWithStateInPySparkRowSerializer(ArrowStreamUDFSerializer):
 
     def __init__(self, arrow_max_records_per_batch):
         super(TransformWithStateInPySparkRowSerializer, self).__init__()
-        self.arrow_max_records_per_batch = arrow_max_records_per_batch
+        self.arrow_max_records_per_batch = arrow_max_records_per_batch if arrow_max_records_per_batch > 0 else 2**31 - 1
         self.key_offsets = None
 
     def load_stream(self, stream):
