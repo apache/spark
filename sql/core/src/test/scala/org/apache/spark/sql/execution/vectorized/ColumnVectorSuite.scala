@@ -171,17 +171,14 @@ class ColumnVectorSuite extends SparkFunSuite with SQLHelper {
     val valueChild = variantCol.getChild(0)
     val metadataChild = variantCol.getChild(1)
 
-    // Row 0: non-null variant
     variantCol.putNotNull(0)
     valueChild.appendByteArray(Array[Byte](1, 2, 3), 0, 3)
     metadataChild.appendByteArray(Array[Byte](10, 11), 0, 2)
 
-    // Row 1: non-null variant
     variantCol.putNotNull(1)
     valueChild.appendByteArray(Array[Byte](4, 5), 0, 2)
     metadataChild.appendByteArray(Array[Byte](12, 13, 14), 0, 3)
 
-    // Row 2: null variant
     variantCol.putNull(2)
     valueChild.appendNull()
     metadataChild.appendNull()
