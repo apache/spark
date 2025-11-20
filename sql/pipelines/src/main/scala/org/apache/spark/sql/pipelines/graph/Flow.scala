@@ -22,8 +22,6 @@ import scala.util.Try
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.{AliasIdentifier, TableIdentifier}
 import org.apache.spark.sql.classic.DataFrame
-import org.apache.spark.sql.pipelines.AnalysisWarning
-import org.apache.spark.sql.pipelines.util.InputReadOptions
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -99,8 +97,7 @@ case class FlowFunctionResult(
     streamingInputs: Set[ResolvedInput],
     usedExternalInputs: Set[TableIdentifier],
     dataFrame: Try[DataFrame],
-    sqlConf: Map[String, String],
-    analysisWarnings: Seq[AnalysisWarning] = Nil) {
+    sqlConf: Map[String, String]) {
 
   /**
    * Returns the names of all of the [[Input]]s used when resolving this [[Flow]]. If the
@@ -165,7 +162,7 @@ trait ResolvedFlow extends ResolutionCompletedFlow with Input {
 
   /** Returns the schema of the output of this [[Flow]]. */
   def schema: StructType = df.schema
-  override def load(readOptions: InputReadOptions): DataFrame = df
+  override def load: DataFrame = df
   def inputs: Set[TableIdentifier] = funcResult.inputs
 }
 

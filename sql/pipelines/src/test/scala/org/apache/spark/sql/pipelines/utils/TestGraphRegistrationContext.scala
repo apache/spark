@@ -36,6 +36,9 @@ class TestGraphRegistrationContext(
       defaultSqlConf = sqlConf
     ) {
 
+  /** Expose all registered flows for tests */
+  def getFlows: List[UnresolvedFlow] = flows.toList
+
   // scalastyle:off
   // Disable scalastyle to ignore argument count.
   /** Registers a streaming table in this [[TestGraphRegistrationContext]] */
@@ -355,19 +358,31 @@ class TestGraphRegistrationContext(
   /**
    * Creates a flow function from a logical plan that reads from a table with the given name.
    */
-  def readFlowFunc(name: String): FlowFunction = {
-    FlowAnalysis.createFlowFunctionFromLogicalPlan(UnresolvedRelation(TableIdentifier(name)))
+  def readFlowFunc(
+       name: String,
+       extraOptions: CaseInsensitiveStringMap = CaseInsensitiveStringMap.empty()
+  ): FlowFunction = {
+    FlowAnalysis.createFlowFunctionFromLogicalPlan(
+      UnresolvedRelation(
+        tableIdentifier = GraphIdentifierManager.parseTableIdentifier(name, spark),
+        extraOptions = extraOptions,
+        isStreaming = false
+      )
+    )
   }
 
   /**
    * Creates a flow function from a logical plan that reads a stream from a table with the given
    * name.
    */
-  def readStreamFlowFunc(name: String): FlowFunction = {
+  def readStreamFlowFunc(
+       name: String,
+       extraOptions: CaseInsensitiveStringMap = CaseInsensitiveStringMap.empty()
+  ): FlowFunction = {
     FlowAnalysis.createFlowFunctionFromLogicalPlan(
       UnresolvedRelation(
-        TableIdentifier(name),
-        extraOptions = CaseInsensitiveStringMap.empty(),
+        tableIdentifier = GraphIdentifierManager.parseTableIdentifier(name, spark),
+        extraOptions = extraOptions,
         isStreaming = true
       )
     )

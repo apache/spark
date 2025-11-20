@@ -18,11 +18,9 @@
 package org.apache.spark.sql.pipelines.graph
 
 import scala.collection.mutable
-import scala.collection.mutable.ListBuffer
 
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.classic.SparkSession
-import org.apache.spark.sql.pipelines.AnalysisWarning
 
 /**
  * A context used when evaluating a `Flow`'s query into a concrete DataFrame.
@@ -44,7 +42,6 @@ private[pipelines] case class FlowAnalysisContext(
     streamingInputs: mutable.HashSet[ResolvedInput] = mutable.HashSet.empty,
     requestedInputs: mutable.HashSet[TableIdentifier] = mutable.HashSet.empty,
     shouldLowerCaseNames: Boolean = false,
-    analysisWarnings: mutable.Buffer[AnalysisWarning] = new ListBuffer[AnalysisWarning],
     spark: SparkSession,
     externalInputs: mutable.HashSet[TableIdentifier] = mutable.HashSet.empty
 ) {

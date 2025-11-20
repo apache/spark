@@ -86,7 +86,8 @@ class CoreDataflowNodeProcessor(rawGraph: DataflowGraph) {
           identifier = table.identifier,
           specifiedSchema = table.specifiedSchema,
           incomingFlowIdentifiers = flowsToTable.map(_.identifier).toSet,
-          availableFlows = resolvedFlowsToTable
+          availableFlows = resolvedFlowsToTable,
+          isStreamingTable = table.isStreamingTable
         )
         resolvedInputs.put(table.identifier, virtualTableInput)
         Seq(table)
