@@ -756,9 +756,11 @@ def wrap_grouped_map_pandas_udf(f, return_type, argspec, runner_conf):
             result, return_type, _assign_cols_by_name, truncate_return_schema=False
         )
 
+        # Return as list to match GroupArrowUDFSerializer format: [([DataFrame], arrow_type)]
         yield result
 
     arrow_return_type = to_arrow_type(return_type, _use_large_var_types)
+    # Return (generator, arrow_type) - mapper will convert generator to list
     return lambda k, v: (wrapped(k, v), arrow_return_type)
 
 
@@ -792,6 +794,7 @@ def wrap_grouped_map_pandas_iter_udf(f, return_type, argspec, runner_conf):
         yield from map(verify_element, result)
 
     arrow_return_type = to_arrow_type(return_type, _use_large_var_types)
+    # Return (generator, arrow_type) - mapper will convert generator to list
     return lambda k, v: (wrapped(k, v), arrow_return_type)
 
 
@@ -3010,7 +3013,13 @@ def read_udfs(pickleSer, infile, eval_type):
                 series_from_offset(series_list, parsed_offsets[0][1])
                 for series_list in itertools.chain((first_series_list,), series_iter)
             )
-            return f(keys, value_series_gen)
+            # Call wrapped function which returns (generator, arrow_type)
+            result_gen, arrow_type = f(keys, value_series_gen)
+            # Convert generator to list to match GroupPandasUDFSerializer format: ([DataFrame], arrow_type)
+            return (list(result_gen), arrow_type)
+
+        def func(_, it):
+            return map(mapper, it)
 
     elif eval_type == PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_UDF:
         # We assume there is only one UDF here because grouped map doesn't
@@ -3261,6 +3270,56 @@ def read_udfs(pickleSer, infile, eval_type):
             df2_vals = table_from_batches(a[1], parsed_offsets[1][1])
             return f(df1_keys, df1_vals, df2_keys, df2_vals)
 
+    elif eval_type in (
+        PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF,
+        PythonEvalType.SQL_WINDOW_AGG_PANDAS_UDF,
+    ):
+        import pandas as pd
+
+        udfs = [
+            read_single_udf(
+                pickleSer, infile, eval_type, runner_conf, udf_index=i, profiler=profiler
+            )
+            for i in range(num_udfs)
+        ]
+
+        def mapper(a):
+            # Always return list of (data, arrow_type) tuples for unified processing
+            return [f(*[a[o] for o in arg_offsets]) for arg_offsets, f in udfs]
+
+        def process_item(a):
+            # Merge all batches into a single Series list
+            if hasattr(a, "__iter__") and not isinstance(a, (list, tuple)):
+                series_list = []
+                for batch in a:
+                    if series_list:
+                        series_list = [
+                            pd.concat([series_list[i], s], ignore_index=True)
+                            for i, s in enumerate(batch)
+                        ]
+                    else:
+                        series_list = list(batch)
+            else:
+                series_list = a
+
+            results = mapper(series_list)
+
+            # Convert each (data, arrow_type) to ([data], arrow_type) format
+            def wrap_data(data, arrow_type):
+                if hasattr(data, "__iter__") and not isinstance(
+                    data, (list, tuple, pd.Series, pd.DataFrame)
+                ):
+                    return (list(data), arrow_type)
+                return ([data], arrow_type)
+
+            # Single UDF: return ([data], arrow_type)
+            # Multiple UDFs: return (([data1], type1), ([data2], type2), ...)
+            wrapped = [wrap_data(data, arrow_type) for data, arrow_type in results]
+            return wrapped[0] if len(wrapped) == 1 else tuple(wrapped)
+
+        def func(_, it):
+            return map(process_item, it)
+
     else:
         udfs = []
         for i in range(num_udfs):
@@ -3279,8 +3338,8 @@ def read_udfs(pickleSer, infile, eval_type):
             else:
                 return result
 
-    def func(_, it):
-        return map(mapper, it)
+        def func(_, it):
+            return map(mapper, it)
 
     # profiling is not supported for UDF
     return func, None, ser, ser

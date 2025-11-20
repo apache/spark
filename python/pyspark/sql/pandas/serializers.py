@@ -1201,33 +1201,6 @@ class ArrowStreamAggArrowUDFSerializer(ArrowStreamArrowUDFSerializer):
 
 
 class GroupPandasUDFSerializer(ArrowStreamPandasUDFSerializer):
-    """
-    Serializer for grouped map Pandas UDFs.
-
-    Data Flow:
-    ----------
-    **Deserialization (load_stream):**
-        Arrow RecordBatches -> Iterator of pandas.Series lists
-        - Each iteration yields one list of Series (one Series per column)
-        - Each Series list represents one Arrow batch
-
-    **Serialization (dump_stream):**
-        (generator, arrow_type) tuples -> Arrow RecordBatches
-        - Receives tuples where the first element is a generator of DataFrames
-        - Flattens the generators to individual DataFrames before serialization
-
-    Parameters
-    ----------
-    timezone : str
-        A timezone to respect when handling timestamp values
-    safecheck : bool
-        If True, conversion from Arrow to Pandas checks for overflow/truncation
-    assign_cols_by_name : bool
-        If True, then Pandas DataFrames will get columns by name
-    int_to_decimal_coercion_enabled : bool
-        If True, applies additional coercions in Python before converting to Arrow
-    """
-
     def __init__(
         self,
         timezone,
@@ -1282,20 +1255,37 @@ class GroupPandasUDFSerializer(ArrowStreamPandasUDFSerializer):
                 )
 
     def dump_stream(self, iterator, stream):
-        """
-        Serialize results to Arrow RecordBatches.
-        Handles both regular mode and iterator mode outputs from wrapper functions.
-        Both modes now return (generator, arrow_type) tuples.
-        """
+        import pyarrow as pa
 
-        # Flatten the (generator_of_dfs, arrow_type) tuples into [(df, arrow_type)] format
-        def flatten():
-            for dataframes_gen, arrow_type in iterator:
-                # Both regular and iterator modes yield DataFrames from the generator
-                for df in dataframes_gen:
-                    yield [(df, arrow_type)]
+        # Flatten ([series], arrow_type) format to (series, arrow_type) for parent class
+        def flatten_iterator():
+            import pandas as pd
 
-        super(GroupPandasUDFSerializer, self).dump_stream(flatten(), stream)
+            for item in iterator:
+                # Normalize to list: single UDF becomes [(data, type)], multiple UDFs is already list
+                items = (
+                    [item]
+                    if isinstance(item, tuple)
+                    and len(item) == 2
+                    and not (isinstance(item[0], tuple) and len(item[0]) == 2)
+                    else (item if isinstance(item, (list, tuple)) else [item])
+                )
+
+                combined = []
+                for data_list, arrow_type in items:
+                    dfs = data_list if isinstance(data_list, (list, tuple)) else [data_list]
+                    combined.extend([(df, arrow_type) for df in dfs])
+
+                if len(items) == 1:
+                    # Single UDF: yield each (df, arrow_type) separately
+                    for df, arrow_type in combined:
+                        yield (df, arrow_type)
+                else:
+                    # Multiple UDFs: yield combined list for _create_batch
+                    if combined:
+                        yield combined
+
+        super(GroupPandasUDFSerializer, self).dump_stream(flatten_iterator(), stream)
 
     def __repr__(self):
         return "GroupPandasUDFSerializer"
