@@ -26,6 +26,9 @@ try:
         import os
 
         def patch_worker():
+            # If it's a worker forked from the daemon, we need to patch it to save
+            # the coverage data. Otherwise the worker will be killed by a signal and
+            # the coverage data will not be saved.
             import sys
             frame = sys._getframe(1)
             if (
@@ -33,8 +36,6 @@ try:
                 "daemon.py" in frame.f_code.co_filename and
                 "worker" in frame.f_globals
             ):
-                with open(f"./coverage_{os.getpid()}.txt", "a") as f:
-                    f.write(f"{frame}")
 
                 def save_when_exit(func):
                     def wrapper(*args, **kwargs):
