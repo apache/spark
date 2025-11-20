@@ -42,7 +42,7 @@ private[sql] object V2TableRefreshUtil extends SQLConfHelper with Logging {
       case r @ ExtractV2CatalogAndIdentifier(catalog, ident)
           if r.isVersioned && r.timeTravelSpec.isEmpty =>
         val tableName = V2TableUtil.toQualifiedName(catalog, ident)
-        val version = r.table.currentVersion
+        val version = r.table.version
         logDebug(s"Pinning table version for $tableName to $version")
         r.copy(timeTravelSpec = Some(AsOfVersion(version)))
     }
