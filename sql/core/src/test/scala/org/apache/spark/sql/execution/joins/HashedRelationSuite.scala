@@ -146,9 +146,6 @@ abstract class HashedRelationSuite extends SharedSparkSession {
       Seq(BoundReference(0, LongType, false), BoundReference(1, IntegerType, true)))
     val rows = (0 until 100).map(i => unsafeProj(InternalRow(Int.int2long(i), i + 1)).copy())
     val key = Seq(BoundReference(0, LongType, false))
-    while (true) {
-      LongHashedRelation(rows.iterator, key, 10, mm)
-    }
     val longRelation = LongHashedRelation(rows.iterator, key, 10, mm)
     assert(longRelation.keyIsUnique)
     (0 until 100).foreach { i =>
