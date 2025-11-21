@@ -32,7 +32,7 @@ Implements a SQL Script block that can contain a sequence of SQL statements, con
       END [ label ]
 
 declare_variable
-  DECLARE variable_name datatype [ DEFAULT default_expr ]
+  DECLARE variable_name [, ...] datatype [ DEFAULT default_expr ]
 
 declare_condition
   DECLARE condition_name CONDITION [ FOR SQLSTATE [ VALUE ] sqlstate ]
@@ -162,6 +162,3 @@ END;
 - [FOR Statement](../control-flow/for-stmt.html)
 - [ITERATE Statement](../control-flow/iterate-stmt.html)
 - [LEAVE Statement](../control-flow/leave-stmt.html)
-- [SIGNAL Statement](../control-flow/signal-stmt.html)
-- [RESIGNAL Statement](../control-flow/resignal-stmt.html)
-- [GET DIAGNOSTICS Statement](../control-flow/get-diagnostics-stmt.html)

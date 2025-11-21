@@ -97,14 +97,11 @@ You use SQL scripting to execute procedural logic in SQL.
 * [CASE](control-flow/case-stmt.html)
 * [compound statement](control-flow/compound-stmt.html)
 * [FOR](control-flow/for-stmt.html)
-* [GET DIAGNOSTICS](control-flow/get-diagnostics-stmt.html)
 * [IF](control-flow/if-stmt.html)
 * [ITERATE](control-flow/iterate-stmt.html)
 * [LEAVE](control-flow/leave-stmt.html)
 * [LOOP](control-flow/loop-stmt.html)
 * [REPEAT](control-flow/repeat-stmt.html)
-* [RESIGNAL](control-flow/resignal-stmt.html)
-* [SIGNAL](control-flow/signal-stmt.html)
 * [WHILE](control-flow/while-stmt.html)
 
 ### Auxiliary Statements

@@ -48,14 +48,13 @@ You can use the optional compound statement labels to disambiguate duplicate var
 ## Condition handling
 
 SQL Scripting supports condition handlers, which are used to intercept and process exceptions to `EXIT` processing of the SQL script.
-Within the condition handler, you can [RESIGNAL](control-flow/resignal-stmt.html) the original exception, [SIGNAL](control-flow/signal-stmt.html) a new exception, or exit the compound statement without an exception.
 
 Condition handlers can be defined to handle three distinct classes of conditions:
 
 - One or more named conditions that can be a specific Spark-defined error class such as `DIVIDE_BY_ZERO` or a user-declared condition.
   These handlers handle these specific conditions.
 
-- One or more `SQLSTATE`s, that can be raised by Spark or a user `SIGNAL` statement.
+- One or more `SQLSTATE`s, that can be raised by Spark.
   These handlers can handle any condition associated with that `SQLSTATE`.
 
 - A generic `SQLEXCEPTION` handler can catch all conditions falling into the `SQLEXCEPTION` (any `SQLSTATE` which is not `XX***` and not `02***`).
@@ -71,19 +70,16 @@ This condition handler is called the **most appropriate handler**:
   For example, a handler on a named condition is more specific than one on a named `SQLSTATE`.
   A generic `EXCEPTION` handler is the least specific.
 
-Unless a handler `SIGNAL`s or `RESIGNAL`s a condition of its own, the outcome of a condition handler is to execute the statement following the compound statement that declared the handler to execute next.
+The outcome of a condition handler is to execute the statement following the compound statement that declared the handler to execute next.
 
 The following is a list of supported control flow statements:
 
 * [CASE](control-flow/case-stmt.html)
 * [compound statement](control-flow/compound-stmt.html)
 * [FOR](control-flow/for-stmt.html)
-* [GET DIAGNOSTICS](control-flow/get-diagnostics-stmt.html)
 * [IF](control-flow/if-stmt.html)
 * [ITERATE](control-flow/iterate-stmt.html)
 * [LEAVE](control-flow/leave-stmt.html)
 * [LOOP](control-flow/loop-stmt.html)
 * [REPEAT](control-flow/repeat-stmt.html)
-* [RESIGNAL](control-flow/resignal-stmt.html)
-* [SIGNAL](control-flow/signal-stmt.html)
 * [WHILE](control-flow/while-stmt.html)
