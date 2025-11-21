@@ -889,10 +889,13 @@ class SparkDeclarativePipelinesServerSuite
         .newBuilder()
         .setUserContext(userContext)
         .setPlan(relation)
+        .setSessionId(UUID.randomUUID().toString)
         .build()
       val sparkSqlResponse = stub.executePlan(sparkSqlRequest).next()
       assert(sparkSqlResponse.hasSqlCommandResult)
-      assert(sparkSqlResponse.getSqlCommandResult.getRelation == relation)
+      assert(
+        sparkSqlResponse.getSqlCommandResult.getRelation ==
+          relation.getCommand.getSqlCommand.getInput)
     }
   }
 }
