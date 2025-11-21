@@ -96,7 +96,7 @@ configuration:
   spark.sql.shuffle.partitions: "1000"
 ```
 
-It's conventional to name pipeline spec files `pipeline.yml`.
+It's conventional to name pipeline spec files `spark-pipeline.yml`.
 
 The `spark-pipelines init` command, described below, makes it easy to generate a pipeline project with default configuration and directory structure.
 
@@ -113,7 +113,7 @@ The `spark-pipelines` command line interface (CLI) is the primary way to execute
 
 ### `spark-pipelines run`
 
-`spark-pipelines run` launches an execution of a pipeline and monitors its progress until it completes. The `--spec` parameter allows selecting the pipeline spec file. If not provided, the CLI will look in the current directory and parent directories for a file named `pipeline.yml` or `pipeline.yaml`.
+`spark-pipelines run` launches an execution of a pipeline and monitors its progress until it completes. The `--spec` parameter allows selecting the pipeline spec file. If not provided, the CLI will look in the current directory and parent directories for a file named `spark-pipeline.yml` or `spark-pipeline.yaml`.
 
 ### `spark-pipelines dry-run`
 

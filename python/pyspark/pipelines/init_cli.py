@@ -59,7 +59,7 @@ def init(name: str) -> None:
     storage_path = f"file://{storage_dir.resolve()}"
 
     # Write the spec file to the project directory
-    spec_file = project_dir / "pipeline.yml"
+    spec_file = project_dir / "spark-pipeline.yml"
     with open(spec_file, "w") as f:
         spec_content = SPEC.replace("{{ name }}", name).replace("{{ storage_root }}", storage_path)
         f.write(spec_content)
