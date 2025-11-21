@@ -646,7 +646,9 @@ case object SparkShreddingUtils {
   def parquetTypeToSparkType(parquetType: ParquetType): DataType = {
     val messageType = ParquetTypes.buildMessage().addField(parquetType).named("foo")
     val column = new ColumnIOFactory().getColumnIO(messageType)
-    new ParquetToSparkSchemaConverter().convertField(column.getChild(0)).sparkType
+    // We need the underlying file type regardless of the ignoreVariantAnnotation config.
+    val converter = new ParquetToSparkSchemaConverter(ignoreVariantAnnotation = true)
+    converter.convertField(column.getChild(0)).sparkType
   }
 
   class SparkShreddedResult(schema: VariantSchema) extends VariantShreddingWriter.ShreddedResult {
