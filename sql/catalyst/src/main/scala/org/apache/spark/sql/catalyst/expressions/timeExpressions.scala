@@ -25,15 +25,17 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, TypeCheckResult}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.expressions.Cast.{toSQLExpr, toSQLId, toSQLType, toSQLValue}
+import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.expressions.objects.{Invoke, StaticInvoke}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{CURRENT_LIKE, TreePattern}
+import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.catalyst.util.TimeFormatter
 import org.apache.spark.sql.catalyst.util.TypeUtils.ordinalNumber
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.types.StringTypeWithCollation
-import org.apache.spark.sql.types.{AbstractDataType, AnyTimeType, ByteType, DataType, DayTimeIntervalType, DecimalType, IntegerType, LongType, ObjectType, TimeType}
+import org.apache.spark.sql.types.{AbstractDataType, AnyTimeType, ByteType, DataType, DayTimeIntervalType, Decimal, DecimalType, DoubleType, FloatType, IntegerType, IntegralType, LongType, NumericType, ObjectType, TimeType}
 import org.apache.spark.sql.types.DayTimeIntervalType.{HOUR, SECOND}
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -748,4 +750,289 @@ case class TimeTrunc(unit: Expression, time: Expression)
       Seq(unit.dataType, time.dataType)
     )
   }
+}
+
+abstract class IntegralToTimeBase
+  extends UnaryExpression with ExpectsInputTypes with CodegenFallback {
+  protected def upScaleFactor: Long
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(IntegralType)
+  override def dataType: DataType = TimeType(TimeType.MICROS_PRECISION)
+  override def nullable: Boolean = true
+  override def nullIntolerant: Boolean = true
+
+  @inline
+  protected final def validateTimeNanos(nanos: Long): Any = {
+    if (nanos < 0 || nanos >= NANOS_PER_DAY) null else nanos
+  }
+
+  override protected def nullSafeEval(input: Any): Any = {
+    val nanos = Math.multiplyExact(input.asInstanceOf[Number].longValue(), upScaleFactor)
+    validateTimeNanos(nanos)
+  }
+}
+
+abstract class TimeToLongBase extends UnaryExpression with ExpectsInputTypes {
+  protected def scaleFactor: Long
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(AnyTimeType)
+  override def dataType: DataType = LongType
+  override def nullIntolerant: Boolean = true
+
+  override def nullSafeEval(input: Any): Any = {
+    Math.floorDiv(input.asInstanceOf[Number].longValue(), scaleFactor)
+  }
+
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    if (scaleFactor == 1) {
+      defineCodeGen(ctx, ev, c => c)
+    } else {
+      defineCodeGen(ctx, ev, c => s"java.lang.Math.floorDiv($c, ${scaleFactor}L)")
+    }
+  }
+}
+
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(seconds) - Creates a TIME value from seconds since midnight.",
+  arguments = """
+    Arguments:
+      * seconds - seconds since midnight (0 to 86399.999999).
+                  Supports decimals for fractional seconds.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_(0);
+       00:00:00
+      > SELECT _FUNC_(52200);
+       14:30:00
+      > SELECT _FUNC_(52200.5);
+       14:30:00.5
+      > SELECT _FUNC_(86399.999999);
+       23:59:59.999999
+      > SELECT _FUNC_(90000);
+       NULL
+      > SELECT _FUNC_(-1);
+       NULL
+  """,
+  since = "4.2.0",
+  group = "datetime_funcs")
+// scalastyle:on line.size.limit
+case class TimeFromSeconds(child: Expression)
+  extends UnaryExpression with ExpectsInputTypes with CodegenFallback {
+  override def inputTypes: Seq[AbstractDataType] = Seq(NumericType)
+  override def dataType: DataType = TimeType(TimeType.MICROS_PRECISION)
+  override def nullable: Boolean = true
+  override def nullIntolerant: Boolean = true
+
+  @inline
+  private def validateTimeNanos(nanos: Long): Any = {
+    if (nanos < 0 || nanos >= NANOS_PER_DAY) null else nanos
+  }
+
+  @transient
+  private lazy val evalFunc: Any => Any = child.dataType match {
+    case _: IntegralType => input =>
+      val nanos = Math.multiplyExact(input.asInstanceOf[Number].longValue(), NANOS_PER_SECOND)
+      validateTimeNanos(nanos)
+    case _: DecimalType => input =>
+      val operand = new java.math.BigDecimal(NANOS_PER_SECOND)
+      val nanos = input.asInstanceOf[Decimal].toJavaBigDecimal.multiply(operand).longValueExact()
+      validateTimeNanos(nanos)
+    case _: FloatType => input =>
+      val f = input.asInstanceOf[Float]
+      if (f.isNaN || f.isInfinite) {
+        null
+      } else {
+        val nanos = (f.toDouble * NANOS_PER_SECOND).toLong
+        validateTimeNanos(nanos)
+      }
+    case _: DoubleType => input =>
+      val d = input.asInstanceOf[Double]
+      if (d.isNaN || d.isInfinite) {
+        null
+      } else {
+        val nanos = (d * NANOS_PER_SECOND).toLong
+        validateTimeNanos(nanos)
+      }
+  }
+
+  override def nullSafeEval(input: Any): Any = evalFunc(input)
+
+  override def prettyName: String = "time_from_seconds"
+
+  override protected def withNewChildInternal(newChild: Expression): TimeFromSeconds =
+    copy(child = newChild)
+}
+
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(millis) - Creates a TIME value from milliseconds since midnight.",
+  arguments = """
+    Arguments:
+      * millis - milliseconds since midnight (0 to 86399999)
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_(0);
+       00:00:00
+      > SELECT _FUNC_(52200000);
+       14:30:00
+      > SELECT _FUNC_(52200500);
+       14:30:00.5
+      > SELECT _FUNC_(86399999);
+       23:59:59.999
+  """,
+  since = "4.2.0",
+  group = "datetime_funcs")
+// scalastyle:on line.size.limit
+case class TimeFromMillis(child: Expression)
+  extends IntegralToTimeBase {
+
+  override def upScaleFactor: Long = NANOS_PER_MILLIS
+
+  override def prettyName: String = "time_from_millis"
+
+  override protected def withNewChildInternal(newChild: Expression): TimeFromMillis =
+    copy(child = newChild)
+}
+
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(micros) - Creates a TIME value from microseconds since midnight.",
+  arguments = """
+    Arguments:
+      * micros - microseconds since midnight (0 to 86399999999)
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_(0);
+       00:00:00
+      > SELECT _FUNC_(52200000000);
+       14:30:00
+      > SELECT _FUNC_(52200500000);
+       14:30:00.5
+      > SELECT _FUNC_(86399999999);
+       23:59:59.999999
+  """,
+  since = "4.2.0",
+  group = "datetime_funcs")
+// scalastyle:on line.size.limit
+case class TimeFromMicros(child: Expression)
+  extends IntegralToTimeBase {
+
+  override def upScaleFactor: Long = NANOS_PER_MICROS
+
+  override def prettyName: String = "time_from_micros"
+
+  override protected def withNewChildInternal(newChild: Expression): TimeFromMicros =
+    copy(child = newChild)
+}
+
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage =
+    "_FUNC_(time) - Returns the number of seconds since midnight for the given TIME value.",
+  arguments = """
+    Arguments:
+      * time - TIME value to convert
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_(TIME'00:00:00');
+       0.000000
+      > SELECT _FUNC_(TIME'14:30:00');
+       52200.000000
+      > SELECT _FUNC_(TIME'14:30:00.5');
+       52200.500000
+      > SELECT _FUNC_(TIME'23:59:59.999999');
+       86399.999999
+  """,
+  since = "4.2.0",
+  group = "datetime_funcs")
+// scalastyle:on line.size.limit
+case class TimeToSeconds(child: Expression)
+  extends UnaryExpression with ImplicitCastInputTypes with CodegenFallback {
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(AnyTimeType)
+  override def dataType: DataType = DecimalType(14, 6)
+  override def nullable: Boolean = true
+  override def nullIntolerant: Boolean = true
+
+  protected override def nullSafeEval(input: Any): Any = {
+    val nanos = input.asInstanceOf[Long]
+    val result = Decimal(nanos) / Decimal(NANOS_PER_SECOND)
+    if (result.changePrecision(14, 6)) result else null
+  }
+
+  override def prettyName: String = "time_to_seconds"
+
+  override protected def withNewChildInternal(newChild: Expression): TimeToSeconds =
+    copy(child = newChild)
+}
+
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage =
+    "_FUNC_(time) - Returns the number of milliseconds since midnight for the given TIME value.",
+  arguments = """
+    Arguments:
+      * time - TIME value to convert
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_(TIME'00:00:00');
+       0
+      > SELECT _FUNC_(TIME'14:30:00');
+       52200000
+      > SELECT _FUNC_(TIME'14:30:00.5');
+       52200500
+      > SELECT _FUNC_(TIME'23:59:59.999');
+       86399999
+  """,
+  since = "4.2.0",
+  group = "datetime_funcs")
+// scalastyle:on line.size.limit
+case class TimeToMillis(child: Expression)
+  extends TimeToLongBase {
+
+  override def scaleFactor: Long = NANOS_PER_MILLIS
+
+  override def prettyName: String = "time_to_millis"
+
+  override protected def withNewChildInternal(newChild: Expression): TimeToMillis =
+    copy(child = newChild)
+}
+
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage =
+    "_FUNC_(time) - Returns the number of microseconds since midnight for the given TIME value.",
+  arguments = """
+    Arguments:
+      * time - TIME value to convert
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_(TIME'00:00:00');
+       0
+      > SELECT _FUNC_(TIME'14:30:00');
+       52200000000
+      > SELECT _FUNC_(TIME'14:30:00.5');
+       52200500000
+      > SELECT _FUNC_(TIME'23:59:59.999999');
+       86399999999
+  """,
+  since = "4.2.0",
+  group = "datetime_funcs")
+// scalastyle:on line.size.limit
+case class TimeToMicros(child: Expression)
+  extends TimeToLongBase {
+
+  override def scaleFactor: Long = NANOS_PER_MICROS
+
+  override def prettyName: String = "time_to_micros"
+
+  override protected def withNewChildInternal(newChild: Expression): TimeToMicros =
+    copy(child = newChild)
 }

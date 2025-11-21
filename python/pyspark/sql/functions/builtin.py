@@ -24958,6 +24958,162 @@ def make_time(hour: "ColumnOrName", minute: "ColumnOrName", second: "ColumnOrNam
     return _invoke_function_over_columns("make_time", hour, minute, second)
 
 
+@_try_remote_functions
+def time_from_seconds(col: "ColumnOrName") -> Column:
+    """
+    Creates a TIME value from seconds since midnight (supports fractional seconds).
+
+    .. versionadded:: 4.2.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or column name
+        Seconds since midnight (0 to 86399.999999).
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(52200.5,)], ['seconds'])
+    >>> df.select(sf.time_from_seconds('seconds')).show()
+    +--------------------------+
+    |time_from_seconds(seconds)|
+    +--------------------------+
+    |                14:30:00.5|
+    +--------------------------+
+    """
+    return _invoke_function_over_columns("time_from_seconds", col)
+
+
+@_try_remote_functions
+def time_from_millis(col: "ColumnOrName") -> Column:
+    """
+    Creates a TIME value from milliseconds since midnight.
+
+    .. versionadded:: 4.2.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or column name
+        Milliseconds since midnight (0 to 86399999).
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(52200500,)], ['millis'])
+    >>> df.select(sf.time_from_millis('millis')).show()
+    +------------------------+
+    |time_from_millis(millis)|
+    +------------------------+
+    |              14:30:00.5|
+    +------------------------+
+    """
+    return _invoke_function_over_columns("time_from_millis", col)
+
+
+@_try_remote_functions
+def time_from_micros(col: "ColumnOrName") -> Column:
+    """
+    Creates a TIME value from microseconds since midnight.
+
+    .. versionadded:: 4.2.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or column name
+        Microseconds since midnight (0 to 86399999999).
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(52200500000,)], ['micros'])
+    >>> df.select(sf.time_from_micros('micros')).show()
+    +------------------------+
+    |time_from_micros(micros)|
+    +------------------------+
+    |              14:30:00.5|
+    +------------------------+
+    """
+    return _invoke_function_over_columns("time_from_micros", col)
+
+
+@_try_remote_functions
+def time_to_seconds(col: "ColumnOrName") -> Column:
+    """
+    Extracts seconds from TIME value (returns DECIMAL to preserve fractional seconds).
+
+    .. versionadded:: 4.2.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or column name
+        TIME value to convert.
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.sql("SELECT TIME'14:30:00.5' as time")
+    >>> df.select(sf.time_to_seconds('time')).show()
+    +---------------------+
+    |time_to_seconds(time)|
+    +---------------------+
+    |         52200.500000|
+    +---------------------+
+    """
+    return _invoke_function_over_columns("time_to_seconds", col)
+
+
+@_try_remote_functions
+def time_to_millis(col: "ColumnOrName") -> Column:
+    """
+    Extracts milliseconds from TIME value.
+
+    .. versionadded:: 4.2.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or column name
+        TIME value to convert.
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.sql("SELECT TIME'14:30:00.5' as time")
+    >>> df.select(sf.time_to_millis('time')).show()
+    +--------------------+
+    |time_to_millis(time)|
+    +--------------------+
+    |            52200500|
+    +--------------------+
+    """
+    return _invoke_function_over_columns("time_to_millis", col)
+
+
+@_try_remote_functions
+def time_to_micros(col: "ColumnOrName") -> Column:
+    """
+    Extracts microseconds from TIME value.
+
+    .. versionadded:: 4.2.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or column name
+        TIME value to convert.
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.sql("SELECT TIME'14:30:00.5' as time")
+    >>> df.select(sf.time_to_micros('time')).show()
+    +--------------------+
+    |time_to_micros(time)|
+    +--------------------+
+    |         52200500000|
+    +--------------------+
+    """
+    return _invoke_function_over_columns("time_to_micros", col)
+
+
 @overload
 def make_timestamp(
     years: "ColumnOrName",
