@@ -250,7 +250,7 @@ def split_and_validate_testnames(testnames):
                 # "{module.class.testcase_name}"
                 index = len(testname)
                 while (index := testname.rfind(".", 0, index)) != -1:
-                    module, testcase = testname[:index], testname[index+1:]
+                    module, testcase = testname[:index], testname[index + 1:]
                     if module_exists(module):
                         testnames_to_test.append(f"{module} {testcase}")
                         break
