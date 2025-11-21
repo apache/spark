@@ -5520,6 +5520,19 @@
     },
     "sqlState" : "42616"
   },
+  "STATE_REPARTITION_INVALID_STATE_STORE_CONFIG": {
+    "message" : [
+      "StateStoreConfig <configName> is invalid:"
+    ],
+    "subClass" : {
+      "UNSUPPORTED_PROVIDER" : {
+        "message" : [
+          "<provider> is not supported"
+        ]
+      }
+    },
+    "sqlState" : "42617"
+  },
   "STATE_STORE_CANNOT_CREATE_COLUMN_FAMILY_WITH_RESERVED_CHARS" : {
     "message" : [
       "Failed to create column family with unsupported starting character and name=<colFamilyName>."

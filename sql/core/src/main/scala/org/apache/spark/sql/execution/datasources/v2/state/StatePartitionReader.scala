@@ -50,7 +50,11 @@ class StatePartitionReaderFactory(
   override def createReader(partition: InputPartition): PartitionReader[InternalRow] = {
     val stateStoreInputPartition = partition.asInstanceOf[StateStoreInputPartition]
     if (stateStoreInputPartition.sourceOptions.internalOnlyReadAllColumnFamilies) {
-      new StatePartitionReaderAllColumnFamilies(storeConf, hadoopConf,
+      val modifiedStoreConf = storeConf.withExtraOptions(Map(
+        StateStoreConf.FORMAT_VALIDATION_ENABLED_CONFIG -> "false",
+        StateStoreConf.FORMAT_VALIDATION_CHECK_VALUE_CONFIG -> "false"
+      ))
+      new StatePartitionAllColumnFamiliesReader(modifiedStoreConf, hadoopConf,
         stateStoreInputPartition, schema, keyStateEncoderSpec)
     } else if (stateStoreInputPartition.sourceOptions.readChangeFeed) {
       new StateStoreChangeDataPartitionReader(storeConf, hadoopConf,
@@ -87,12 +91,16 @@ abstract class StatePartitionReaderBase(
   protected val keySchema = {
     if (SchemaUtil.checkVariableType(stateVariableInfoOpt, StateVariableType.MapState)) {
       SchemaUtil.getCompositeKeySchema(schema, partition.sourceOptions)
+    } else if (partition.sourceOptions.internalOnlyReadAllColumnFamilies) {
+      schemaForValueRow
     } else {
       SchemaUtil.getSchemaAsDataType(schema, "key").asInstanceOf[StructType]
     }
   }
 
   protected val valueSchema = if (stateVariableInfoOpt.isDefined) {
+    schemaForValueRow
+  } else if (partition.sourceOptions.internalOnlyReadAllColumnFamilies) {
     schemaForValueRow
   } else {
     SchemaUtil.getSchemaAsDataType(
@@ -243,14 +251,17 @@ class StatePartitionReader(
 /**
  * An implementation of [[StatePartitionReaderBase]] for reading all column families
  * in binary format. This reader returns raw key and value bytes along with column family names.
+ * We are returning key/value bytes because each column family can have different schema
  */
-class StatePartitionReaderAllColumnFamilies(
+class StatePartitionAllColumnFamiliesReader(
     storeConf: StateStoreConf,
     hadoopConf: SerializableConfiguration,
     partition: StateStoreInputPartition,
     schema: StructType,
     keyStateEncoderSpec: KeyStateEncoderSpec)
-  extends StatePartitionReaderBase(storeConf, hadoopConf, partition, schema,
+  extends StatePartitionReaderBase(
+    storeConf,
+    hadoopConf, partition, schema,
     keyStateEncoderSpec, None, None, None, None) {
 
   private lazy val store: ReadStateStore = {
@@ -263,7 +274,6 @@ class StatePartitionReaderAllColumnFamilies(
   }
 
   override lazy val iter: Iterator[InternalRow] = {
-    // Single store with column families (join v3, transformWithState, or simple operators)
     store
       .iterator()
       .map { pair =>

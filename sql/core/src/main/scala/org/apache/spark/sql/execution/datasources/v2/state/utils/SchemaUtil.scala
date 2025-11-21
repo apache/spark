@@ -63,15 +63,12 @@ object SchemaUtil {
         .add("partition_id", IntegerType)
     } else if (sourceOptions.internalOnlyReadAllColumnFamilies) {
       new StructType()
-        // todo: change this to some more specific type after we
+        // todo [SPARK-54443]: change keySchema to more specific type after we
         //  can extract partition key from keySchema
         .add("partition_key", keySchema)
         .add("key_bytes", BinaryType)
         .add("value_bytes", BinaryType)
         .add("column_family_name", StringType)
-        // need key and value schema so that state store can encode data
-        .add("value", valueSchema)
-        .add("key", keySchema)
     } else {
       new StructType()
         .add("key", keySchema)
@@ -89,14 +86,18 @@ object SchemaUtil {
   }
 
   /**
-   * Creates a unified row from raw key and value bytes.
-   * This is an alias for unifyStateRowPairAsBytes that takes individual byte arrays
-   * instead of a tuple for better readability.
+   * Returns an InternalRow representing
+   * 1. partitionKey
+   * 2. key in bytes
+   * 3. value in bytes
+   * 4. column family name
    */
   def unifyStateRowPairAsRawBytes(
-     pair: (UnsafeRow, UnsafeRow),
-     colFamilyName: String): InternalRow = {
-    val row = new GenericInternalRow(6)
+      pair: (UnsafeRow, UnsafeRow),
+      colFamilyName: String): InternalRow = {
+    val row = new GenericInternalRow(4)
+    // todo [SPARK-54443]: change keySchema to more specific type after we
+    //  can extract partition key from keySchema
     row.update(0, pair._1)
     row.update(1, pair._1.getBytes)
     row.update(2, pair._2.getBytes)
@@ -261,9 +262,9 @@ object SchemaUtil {
       "expiration_timestamp_ms" -> classOf[LongType],
       "partition_id" -> classOf[IntegerType],
       "partition_key" -> classOf[StructType],
-      "key_bytes"->classOf[BinaryType],
-      "value_bytes"->classOf[BinaryType],
-      "column_family_name"->classOf[StringType])
+      "key_bytes" -> classOf[BinaryType],
+      "value_bytes" -> classOf[BinaryType],
+      "column_family_name" -> classOf[StringType])
 
     val expectedFieldNames = if (transformWithStateVariableInfoOpt.isDefined) {
       val stateVarInfo = transformWithStateVariableInfoOpt.get
@@ -305,7 +306,7 @@ object SchemaUtil {
     } else if (sourceOptions.readChangeFeed) {
       Seq("batch_id", "change_type", "key", "value", "partition_id")
     } else if (sourceOptions.internalOnlyReadAllColumnFamilies) {
-      Seq("partition_key", "key_bytes", "value_bytes", "column_family_name", "value", "key")
+      Seq("partition_key", "key_bytes", "value_bytes", "column_family_name")
     } else {
       Seq("key", "value", "partition_id")
     }
