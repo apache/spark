@@ -387,7 +387,8 @@ class ParquetToSparkSchemaConverter(
         } else {
           ParquetSchemaConverter.checkConversionRequirement(
             sparkReadType.forall(_.isInstanceOf[VariantType]),
-            s"Invalid Spark read type: expected $field to be variant type but found $sparkReadType")
+            s"Invalid Spark read type: expected $field to be variant type but found " +
+              s"${if (sparkReadType.isEmpty) { "None" } else {sparkReadType.get.sql} }")
           if (SQLConf.get.getConf(SQLConf.VARIANT_ALLOW_READING_SHREDDED)) {
             val col = convertInternal(groupColumn)
             col.copy(sparkType = VariantType, variantFileType = Some(col))

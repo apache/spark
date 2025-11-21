@@ -28,7 +28,8 @@ import org.apache.parquet.hadoop.util.HadoopInputFile
 import org.apache.parquet.schema.{LogicalTypeAnnotation, PrimitiveType, Type}
 import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName
 
-import org.apache.spark.sql.{QueryTest, Row}
+import org.apache.spark.SparkException
+import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.ParquetOutputTimestampType
 import org.apache.spark.sql.test.SharedSparkSession
@@ -222,6 +223,64 @@ class ParquetVariantShreddingSuite extends QueryTest with ParquetTest with Share
                 reader.close()
               }
             }
+          }
+        }
+      }
+    }
+  }
+
+  test("variant logical type annotation - ignore variant annotation") {
+    Seq(true, false).foreach { ignoreVariantAnnotation =>
+      withSQLConf(SQLConf.PARQUET_ANNOTATE_VARIANT_LOGICAL_TYPE.key -> "true",
+        SQLConf.PARQUET_IGNORE_VARIANT_ANNOTATION.key -> ignoreVariantAnnotation.toString
+      ) {
+        withTempDir { dir =>
+          // write parquet file
+          val df = spark.sql(
+            """
+              | select
+              |  id * 2 i,
+              |  1::variant v,
+              |  named_struct('i', (id * 2)::string, 'nv', 1::variant) ns,
+              |  array(1::variant) av,
+              |  map('v2', 1::variant) mv
+              |  from range(0,1,1,1)""".stripMargin)
+          df.write.mode("overwrite").parquet(dir.getAbsolutePath)
+          // verify result
+          val normal_result = spark.read.format("parquet")
+            .schema("v variant, ns struct<nv variant>, av array<variant>, " +
+              "mv map<string, variant>")
+            .load(dir.getAbsolutePath)
+            .selectExpr("v::int i1", "ns.nv::int i2", "av[0]::int i3",
+              "mv['v2']::int i4")
+          checkAnswer(normal_result, Array(Row(1, 1, 1, 1)))
+          val struct_result = spark.read.format("parquet")
+            .schema("v struct<value binary, metadata binary>, " +
+              "ns struct<nv struct<value binary, metadata binary>>, " +
+              "av array<struct<value binary, metadata binary>>, " +
+              "mv map<string, struct<value binary, metadata binary>>")
+            .load(dir.getAbsolutePath)
+            .selectExpr("v", "ns.nv", "av[0]", "mv['v2']")
+          if (ignoreVariantAnnotation) {
+            checkAnswer(
+              struct_result,
+              Seq(Row(
+                Row(Array[Byte](12, 1), Array[Byte](1, 0, 0)),
+                Row(Array[Byte](12, 1), Array[Byte](1, 0, 0)),
+                Row(Array[Byte](12, 1), Array[Byte](1, 0, 0)),
+                Row(Array[Byte](12, 1), Array[Byte](1, 0, 0))
+              ))
+            )
+          } else {
+            val exception = intercept[SparkException]{
+              struct_result.collect()
+            }
+            checkError(
+              exception = exception.getCause.asInstanceOf[AnalysisException],
+              condition = "_LEGACY_ERROR_TEMP_3071",
+              parameters = Map("msg" -> "Invalid Spark read type[\\s\\S]*"),
+              matchPVals = true
+            )
           }
         }
       }
