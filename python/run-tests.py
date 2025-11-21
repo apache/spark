@@ -20,6 +20,7 @@
 import logging
 from argparse import ArgumentParser
 import os
+import importlib
 import platform
 import re
 import shutil
@@ -224,6 +225,42 @@ def get_default_python_executables():
     return python_execs
 
 
+def split_and_validate_testnames(testnames):
+    testnames_to_test = []
+
+    def module_exists(module):
+        try:
+            return importlib.util.find_spec(module) is not None
+        except ModuleNotFoundError:
+            return False
+
+    for testname in testnames.split(','):
+        if " " in testname:
+            # "{module} {class.testcase_name}"
+            module, testcase = testname.split(" ")
+            if not module_exists(module):
+                print(f"Error: Can't find module '{module}'.")
+                sys.exit(-1)
+            testnames_to_test.append(f"{module} {testcase}")
+        else:
+            if module_exists(testname):
+                # "{module}"
+                testnames_to_test.append(testname)
+            else:
+                # "{module.class.testcase_name}"
+                index = len(testname)
+                while (index := testname.rfind(".", 0, index)) != -1:
+                    module, testcase = testname[:index], testname[index+1:]
+                    if module_exists(module):
+                        testnames_to_test.append(f"{module} {testcase}")
+                        break
+                else:
+                    print(f"Error: Invalid testname '{testname}'.")
+                    sys.exit(-1)
+
+    return testnames_to_test
+
+
 def parse_opts():
     parser = ArgumentParser(
         prog="run-tests"
@@ -312,7 +349,7 @@ def main():
                 sys.exit(-1)
         LOGGER.info("Will test the following Python modules: %s", [x.name for x in modules_to_test])
     else:
-        testnames_to_test = opts.testnames.split(',')
+        testnames_to_test = split_and_validate_testnames(opts.testnames)
         LOGGER.info("Will test the following Python tests: %s", testnames_to_test)
 
     task_queue = Queue.PriorityQueue()
