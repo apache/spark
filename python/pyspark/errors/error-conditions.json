@@ -908,7 +908,7 @@
   },
   "PIPELINE_SPEC_FILE_NOT_FOUND": {
     "message": [
-      "No pipeline.yaml or pipeline.yml file provided in arguments or found in directory `<dir_path>` or readable ancestor directories."
+      "No spark-pipeline.yaml or spark-pipeline.yml file provided in arguments or found in directory `<dir_path>` or readable ancestor directories."
     ]
   },
   "PIPELINE_SPEC_INVALID_GLOB_PATTERN": {

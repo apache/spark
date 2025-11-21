@@ -179,8 +179,8 @@ class BasicInMemoryTableCatalog extends TableCatalog {
       throw new IllegalArgumentException(s"Cannot drop all fields")
     }
 
-    table.increaseCurrentVersion()
-    val currentVersion = table.currentVersion()
+    table.increaseVersion()
+    val currentVersion = table.version()
     val newTable = new InMemoryTable(
       name = table.name,
       columns = CatalogV2Util.structTypeToV2Columns(schema),
@@ -189,7 +189,7 @@ class BasicInMemoryTableCatalog extends TableCatalog {
       constraints = constraints,
       id = table.id)
       .alterTableWithData(table.data, schema)
-    newTable.setCurrentVersion(currentVersion)
+    newTable.setVersion(currentVersion)
     changes.foreach {
       case a: TableChange.AddConstraint =>
         newTable.setValidatedVersion(a.validatedTableVersion())
@@ -209,7 +209,7 @@ class BasicInMemoryTableCatalog extends TableCatalog {
 
     Option(tables.remove(oldIdent)) match {
       case Some(table: InMemoryBaseTable) =>
-        table.increaseCurrentVersion()
+        table.increaseVersion()
         tables.put(newIdent, table)
       case _ =>
         throw new NoSuchTableException(oldIdent.asMultipartIdentifier)
