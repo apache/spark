@@ -1549,9 +1549,7 @@ class TransformWithStateTestsMixin:
                 ),
             )
 
-        with self.sql_conf(
-            {"spark.sql.execution.arrow.maxRecordsPerBatch": "-1"}
-        ):
+        with self.sql_conf({"spark.sql.execution.arrow.maxRecordsPerBatch": "-1"}):
             self._test_transform_with_state_basic(
                 ChunkCountProcessorFactory(),
                 make_check_results(result_with_large_limit),

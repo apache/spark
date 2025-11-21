@@ -3070,7 +3070,6 @@ def read_udfs(pickleSer, infile, eval_type):
         stateful_processor_api_client = StatefulProcessorApiClient(state_server_port, key_schema)
 
         def mapper(a):
-            import pandas as pd
             mode = a[0]
 
             if mode == TransformWithStateInPandasFuncMode.PROCESS_DATA:

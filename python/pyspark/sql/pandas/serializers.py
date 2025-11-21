@@ -1466,7 +1466,9 @@ class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
         self.result_state_pdf_arrow_type = to_arrow_type(
             self.result_state_df_type, prefers_large_types=prefers_large_var_types
         )
-        self.arrow_max_records_per_batch = arrow_max_records_per_batch if arrow_max_records_per_batch > 0 else 2**31 - 1
+        self.arrow_max_records_per_batch = (
+            arrow_max_records_per_batch if arrow_max_records_per_batch > 0 else 2**31 - 1
+        )
 
     def load_stream(self, stream):
         """
@@ -1821,7 +1823,9 @@ class TransformWithStateInPandasSerializer(ArrowStreamPandasUDFSerializer):
             int_to_decimal_coercion_enabled=int_to_decimal_coercion_enabled,
             arrow_cast=True,
         )
-        self.arrow_max_records_per_batch = arrow_max_records_per_batch if arrow_max_records_per_batch > 0 else 2**31 - 1
+        self.arrow_max_records_per_batch = (
+            arrow_max_records_per_batch if arrow_max_records_per_batch > 0 else 2**31 - 1
+        )
         self.arrow_max_bytes_per_batch = arrow_max_bytes_per_batch
         self.key_offsets = None
         self.average_arrow_row_size = 0
@@ -1836,10 +1840,7 @@ class TransformWithStateInPandasSerializer(ArrowStreamPandasUDFSerializer):
         # unlimited as computing batch size is computationally expensive.
         if self.arrow_max_bytes_per_batch != 2**31 - 1 and batch.num_rows > 0:
             batch_bytes = sum(
-                buf.size
-                for col in batch.columns
-                for buf in col.buffers()
-                if buf is not None
+                buf.size for col in batch.columns for buf in col.buffers() if buf is not None
             )
             self.total_bytes += batch_bytes
             self.total_rows += batch.num_rows
@@ -1997,6 +1998,7 @@ class TransformWithStateInPandasInitStateSerializer(TransformWithStateInPandasSe
              data generator. Rows in the same batch may have different grouping keys,
              but each batch will have either init_data or input_data, not mix.
             """
+
             def row_stream():
                 for batch in batches:
                     self._update_batch_size_stats(batch)
@@ -2034,13 +2036,15 @@ class TransformWithStateInPandasInitStateSerializer(TransformWithStateInPandasSe
 
                     total_len = len(rows) + len(init_state_rows)
                     if (
-                            total_len >= self.arrow_max_records_per_batch
-                            or total_len * self.average_arrow_row_size >= self.arrow_max_bytes_per_batch
+                        total_len >= self.arrow_max_records_per_batch
+                        or total_len * self.average_arrow_row_size >= self.arrow_max_bytes_per_batch
                     ):
                         yield (
                             batch_key,
                             pd.DataFrame(rows) if len(rows) > 0 else EMPTY_DATAFRAME.copy(),
-                            pd.DataFrame(init_state_rows) if len(init_state_rows) > 0 else EMPTY_DATAFRAME.copy()
+                            pd.DataFrame(init_state_rows)
+                            if len(init_state_rows) > 0
+                            else EMPTY_DATAFRAME.copy(),
                         )
                         rows = []
                         init_state_rows = []
@@ -2048,7 +2052,9 @@ class TransformWithStateInPandasInitStateSerializer(TransformWithStateInPandasSe
                     yield (
                         batch_key,
                         pd.DataFrame(rows) if len(rows) > 0 else EMPTY_DATAFRAME.copy(),
-                        pd.DataFrame(init_state_rows) if len(init_state_rows) > 0 else EMPTY_DATAFRAME.copy()
+                        pd.DataFrame(init_state_rows)
+                        if len(init_state_rows) > 0
+                        else EMPTY_DATAFRAME.copy(),
                     )
 
         _batches = super(ArrowStreamPandasSerializer, self).load_stream(stream)
@@ -2075,7 +2081,9 @@ class TransformWithStateInPySparkRowSerializer(ArrowStreamUDFSerializer):
 
     def __init__(self, arrow_max_records_per_batch):
         super(TransformWithStateInPySparkRowSerializer, self).__init__()
-        self.arrow_max_records_per_batch = arrow_max_records_per_batch if arrow_max_records_per_batch > 0 else 2**31 - 1
+        self.arrow_max_records_per_batch = (
+            arrow_max_records_per_batch if arrow_max_records_per_batch > 0 else 2**31 - 1
+        )
         self.key_offsets = None
 
     def load_stream(self, stream):
@@ -2184,7 +2192,9 @@ class TransformWithStateInPySparkRowInitStateSerializer(TransformWithStateInPySp
              into the data generator.
             """
 
-            def extract_rows(cur_batch, col_name, key_offsets) -> Optional[Iterator[Tuple[Any, Any]]]:
+            def extract_rows(
+                cur_batch, col_name, key_offsets
+            ) -> Optional[Iterator[Tuple[Any, Any]]]:
                 data_column = cur_batch.column(cur_batch.schema.get_field_index(col_name))
 
                 # Check if the entire column is null
@@ -2242,20 +2252,20 @@ class TransformWithStateInPySparkRowInitStateSerializer(TransformWithStateInPySp
         for k, g in groupby(data_batches, key=lambda x: x[0]):
             input_rows = []
             init_rows = []
-            
+
             for batch_key, input_row, init_row in g:
                 if input_row is not None:
                     input_rows.append(input_row)
                 if init_row is not None:
                     init_rows.append(init_row)
-                
+
                 total_len = len(input_rows) + len(init_rows)
                 if total_len >= self.arrow_max_records_per_batch:
                     ret_tuple = (iter(input_rows), iter(init_rows))
                     yield (TransformWithStateInPandasFuncMode.PROCESS_DATA, k, ret_tuple)
                     input_rows = []
                     init_rows = []
-            
+
             if input_rows or init_rows:
                 ret_tuple = (iter(input_rows), iter(init_rows))
                 yield (TransformWithStateInPandasFuncMode.PROCESS_DATA, k, ret_tuple)
