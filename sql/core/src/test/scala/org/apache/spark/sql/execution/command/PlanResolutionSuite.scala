@@ -201,7 +201,8 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
     new InMemoryCatalog,
     EmptyFunctionRegistry,
     new SQLConf().copy(SQLConf.CASE_SENSITIVE -> true))
-  createTempView(v1SessionCatalog, "v", LocalRelation(Nil), false)
+  createTempView(v1SessionCatalog, "v", LocalRelation(Nil),
+    ignoreIfExists = false, overrideIfExists = false)
 
   private val tempVariableManager = new TempVariableManager
 

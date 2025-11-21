@@ -55,9 +55,17 @@ class GlobalTempViewManager(database: String) {
   def create(
       name: String,
       viewDefinition: TemporaryViewRelation,
+      ignoreIfExists: Boolean,
       overrideIfExists: Boolean): Unit = synchronized {
-    if (!overrideIfExists && viewDefinitions.contains(name)) {
-      throw new TempTableAlreadyExistsException(name)
+    if (ignoreIfExists && overrideIfExists) {
+      throw QueryCompilationErrors.createViewWithBothIfNotExistsAndReplaceError()
+    }
+    if (viewDefinitions.contains(name)) {
+      if (ignoreIfExists) {
+        return
+      } else if (!overrideIfExists) {
+        throw new TempTableAlreadyExistsException(name)
+      }
     }
     viewDefinitions.put(name, viewDefinition)
   }

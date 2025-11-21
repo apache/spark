@@ -40,7 +40,7 @@ import org.apache.spark.util.Utils
  * To re-generate the error class file, run:
  * {{{
  *   SPARK_GENERATE_GOLDEN_FILES=1 build/sbt \
- *     "core/testOnly *SparkThrowableSuite -- -t \"Error conditions are correctly formatted\""
+ *     'core/testOnly *SparkThrowableSuite -- -t "Error conditions are correctly formatted"'
  * }}}
  */
 class SparkThrowableSuite extends SparkFunSuite {

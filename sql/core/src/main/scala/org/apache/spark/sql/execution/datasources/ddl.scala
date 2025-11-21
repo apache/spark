@@ -29,7 +29,7 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.command.{DDLUtils, LeafRunnableCommand}
 import org.apache.spark.sql.execution.command.ViewHelper.createTemporaryViewRelation
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Utils
-import org.apache.spark.sql.internal.StaticSQLConf
+import org.apache.spark.sql.internal.{SessionStateHelper, StaticSQLConf}
 import org.apache.spark.sql.types._
 
 /**
@@ -76,10 +76,11 @@ case class CreateTable(
 case class CreateTempViewUsing(
     tableIdent: TableIdentifier,
     userSpecifiedSchema: Option[StructType],
+    ignoreIfExists: Boolean,
     replace: Boolean,
     global: Boolean,
     provider: String,
-    options: Map[String, String]) extends LeafRunnableCommand {
+    options: Map[String, String]) extends LeafRunnableCommand with SessionStateHelper {
 
   if (tableIdent.database.isDefined) {
     throw QueryCompilationErrors.cannotSpecifyDatabaseForTempViewError(tableIdent)
@@ -88,6 +89,7 @@ case class CreateTempViewUsing(
   override def argString(maxFields: Int): String = {
     s"[tableIdent:$tableIdent " +
       userSpecifiedSchema.map(_.toString() + " ").getOrElse("") +
+      s"ignoreIfExists:$ignoreIfExists " +
       s"replace:$replace " +
       s"provider:$provider " +
       conf.redactOptions(options)
@@ -98,8 +100,9 @@ case class CreateTempViewUsing(
       throw QueryCompilationErrors.cannotCreateTempViewUsingHiveDataSourceError()
     }
 
-    val catalog = sparkSession.sessionState.catalog
-    val unresolvedPlan = DataSource.lookupDataSourceV2(provider, sparkSession.sessionState.conf)
+    val conf = getSqlConf(sparkSession)
+    val catalog = sessionState(sparkSession).catalog
+    val unresolvedPlan = DataSource.lookupDataSourceV2(provider, conf)
       .flatMap { tblProvider =>
         DataSourceV2Utils.loadV2Source(sparkSession, tblProvider, userSpecifiedSchema,
           CaseInsensitiveMap(options), provider)
@@ -111,10 +114,10 @@ case class CreateTempViewUsing(
           options = options)
         LogicalRelation(dataSource.resolveRelation())
       }
-    val analyzedPlan = sparkSession.sessionState.analyzer.execute(unresolvedPlan)
+    val analyzedPlan = sessionState(sparkSession).analyzer.execute(unresolvedPlan)
 
     if (global) {
-      val db = sparkSession.sessionState.conf.getConf(StaticSQLConf.GLOBAL_TEMP_DATABASE)
+      val db = conf.getConf(StaticSQLConf.GLOBAL_TEMP_DATABASE)
       val viewIdent = TableIdentifier(tableIdent.table, Option(db))
       val viewDefinition = createTemporaryViewRelation(
         viewIdent,
@@ -125,7 +128,7 @@ case class CreateTempViewUsing(
         analyzedPlan,
         aliasedPlan = analyzedPlan,
         referredTempFunctions = Seq.empty)
-      catalog.createGlobalTempView(tableIdent.table, viewDefinition, replace)
+      catalog.createGlobalTempView(tableIdent.table, viewDefinition, ignoreIfExists, replace)
     } else {
       val viewDefinition = createTemporaryViewRelation(
         tableIdent,
@@ -136,7 +139,7 @@ case class CreateTempViewUsing(
         analyzedPlan,
         aliasedPlan = analyzedPlan,
         referredTempFunctions = Seq.empty)
-      catalog.createTempView(tableIdent.table, viewDefinition, replace)
+      catalog.createTempView(tableIdent.table, viewDefinition, ignoreIfExists, replace)
     }
 
     Seq.empty[Row]
