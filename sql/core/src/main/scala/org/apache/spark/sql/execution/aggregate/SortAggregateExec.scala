@@ -66,7 +66,7 @@ case class SortAggregateExec(
       // Because the constructor of an aggregation iterator will read at least the first row,
       // we need to get the value of iter.hasNext first.
       val hasInput = iter.hasNext
-      val res = if (!hasInput && groupingExpressions.nonEmpty) {
+      if (!hasInput && groupingExpressions.nonEmpty) {
         // This is a grouped aggregate and the input iterator is empty,
         // so return an empty iterator.
         Iterator[UnsafeRow]()
@@ -82,7 +82,8 @@ case class SortAggregateExec(
           resultExpressions,
           (expressions, inputSchema) =>
             MutableProjection.create(expressions, inputSchema),
-          numOutputRows)
+          numOutputRows,
+          aggTime)
         if (!hasInput && groupingExpressions.isEmpty) {
           // There is no input and there is no grouping expressions.
           // We need to output a single row as the output.
@@ -92,8 +93,6 @@ case class SortAggregateExec(
           outputIter
         }
       }
-      aggTime += NANOSECONDS.toMillis(System.nanoTime() - beforeAgg)
-      res
     }
   }
 
