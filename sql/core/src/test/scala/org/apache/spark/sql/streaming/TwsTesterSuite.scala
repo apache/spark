@@ -45,7 +45,7 @@ class TwsTesterSuite extends SparkFunSuite {
     assert(tester.peekValueState[Long]("count", "key3").get == 1L)
     assert(tester.peekValueState[Long]("count", "key4").isEmpty)
 
-    val ans2 = tester.testOneRow("key1", "q")
+    val ans2 = tester.test(List(("key1", "q")))
     assert(ans2 == List(("key1", 5L)))
     assert(tester.peekValueState[Long]("count", "key1").get == 5L)
     assert(tester.peekValueState[Long]("count", "key2").get == 2L)
@@ -98,9 +98,9 @@ class TwsTesterSuite extends SparkFunSuite {
     val tester = new TwsTester(new TopKProcessor(2))
     tester.setListState("topK", "a", List(6.0, 5.0))
     tester.setListState("topK", "b", List(8.0, 7.0))
-    tester.testOneRow("a", ("", 10.0))
-    tester.testOneRow("b", ("", 7.5))
-    tester.testOneRow("c", ("", 1.0))
+    tester.test(List(("a", ("", 10.0))))
+    tester.test(List(("b", ("", 7.5))))
+    tester.test(List(("c", ("", 1.0))))
 
     assert(tester.peekListState[Double]("topK", "a") == List(10.0, 6.0))
     assert(tester.peekListState[Double]("topK", "b") == List(8.0, 7.5))
@@ -161,10 +161,10 @@ class TwsTesterSuite extends SparkFunSuite {
     tester.setMapState("frequencies", "user2", Map("spark" -> 10L))
 
     // Process new words
-    tester.testOneRow("user1", ("", "hello"))
-    tester.testOneRow("user1", ("", "goodbye"))
-    tester.testOneRow("user2", ("", "spark"))
-    tester.testOneRow("user3", ("", "new"))
+    tester.test(List(("user1", ("", "hello"))))
+    tester.test(List(("user1", ("", "goodbye"))))
+    tester.test(List(("user2", ("", "spark"))))
+    tester.test(List(("user3", ("", "new"))))
 
     // Verify updated state
     assert(
@@ -179,13 +179,19 @@ class TwsTesterSuite extends SparkFunSuite {
     assert(tester.peekMapState[String, Long]("frequencies", "user4") == Map())
   }
 
-  test("TwsTester should test one row with value state") {
+  test("TwsTester can be used to test step function") {
     val processor = new RunningCountProcessor[String]()
     val tester = new TwsTester(processor)
 
-    val (rows, newState) = tester.testOneRowWithValueState("key1", "a", "count", 10L)
-    assert(rows == List(("key1", 11L)))
-    assert(newState == 11L)
+    // Example of helper function using TwsTester to inspect how processing a single row changes
+    // state.
+    def testStepFunction(key: String, inputRow: String, stateIn: Long): Long = {
+      tester.setValueState[Long]("count", key, stateIn)
+      tester.test(List((key, inputRow)))
+      tester.peekValueState("count", key).get
+    }
+
+    assert(testStepFunction("key1", "a", 10L) == 11L)
   }
 
   test("TwsTester should call handleInitialState") {
@@ -199,6 +205,14 @@ class TwsTesterSuite extends SparkFunSuite {
   }
 
   test("TwsTester should test RunningCountProcessor row-by-row") {
+    val tester = new TwsTester(new RunningCountProcessor[String]())
+
+    // Example of helper function to test how TransformWithState processes rows one-by-one, which
+    // is can be used to simulate real-time mode.
+    def testRowByRow(input: List[(String, String)]): List[(String, Long)] = {
+      input.flatMap(row => tester.test(List(row)))
+    }
+
     val input: List[(String, String)] = List(
       ("key1", "a"),
       ("key2", "b"),
@@ -208,8 +222,7 @@ class TwsTesterSuite extends SparkFunSuite {
       ("key1", "c"),
       ("key3", "q")
     )
-    val tester = new TwsTester(new RunningCountProcessor[String]())
-    val ans: List[(String, Long)] = tester.testRowByRow(input)
+    val ans: List[(String, Long)] = testRowByRow(input)
     assert(
       ans == List(
         ("key1", 1L),
@@ -225,51 +238,55 @@ class TwsTesterSuite extends SparkFunSuite {
 
   test("TwsTester should exercise all state methods") {
     val tester = new TwsTester(new AllMethodsTestProcessor())
-    val results = tester.test(List(
-      ("k", "value-exists"),       // false
-      ("k", "value-set"),          // set to 42
-      ("k", "value-exists"),       // true
-      ("k", "value-clear"),        // clear
-      ("k", "value-exists"),       // false again
-      ("k", "list-exists"),        // false
-      ("k", "list-append"),        // append a, b
-      ("k", "list-exists"),        // true
-      ("k", "list-append-array"),  // append c, d
-      ("k", "list-get"),           // a,b,c,d
-      ("k", "map-exists"),         // false
-      ("k", "map-add"),            // add x=1, y=2, z=3
-      ("k", "map-exists"),         // true
-      ("k", "map-keys"),           // x,y,z
-      ("k", "map-values"),         // 1,2,3
-      ("k", "map-iterator"),       // x=1,y=2,z=3
-      ("k", "map-remove"),         // remove y
-      ("k", "map-keys"),           // x,z
-      ("k", "map-clear"),          // clear map
-      ("k", "map-exists")         // false
-    ))
+    val results = tester.test(
+      List(
+        ("k", "value-exists"), // false
+        ("k", "value-set"), // set to 42
+        ("k", "value-exists"), // true
+        ("k", "value-clear"), // clear
+        ("k", "value-exists"), // false again
+        ("k", "list-exists"), // false
+        ("k", "list-append"), // append a, b
+        ("k", "list-exists"), // true
+        ("k", "list-append-array"), // append c, d
+        ("k", "list-get"), // a,b,c,d
+        ("k", "map-exists"), // false
+        ("k", "map-add"), // add x=1, y=2, z=3
+        ("k", "map-exists"), // true
+        ("k", "map-keys"), // x,y,z
+        ("k", "map-values"), // 1,2,3
+        ("k", "map-iterator"), // x=1,y=2,z=3
+        ("k", "map-remove"), // remove y
+        ("k", "map-keys"), // x,z
+        ("k", "map-clear"), // clear map
+        ("k", "map-exists") // false
+      )
+    )
 
-    assert(results == List(
-      ("k", "value-exists:false"),
-      ("k", "value-set:done"),
-      ("k", "value-exists:true"),
-      ("k", "value-clear:done"),
-      ("k", "value-exists:false"),
-      ("k", "list-exists:false"),
-      ("k", "list-append:done"),
-      ("k", "list-exists:true"),
-      ("k", "list-append-array:done"),
-      ("k", "list-get:a,b,c,d"),
-      ("k", "map-exists:false"),
-      ("k", "map-add:done"),
-      ("k", "map-exists:true"),
-      ("k", "map-keys:x,y,z"),
-      ("k", "map-values:1,2,3"),
-      ("k", "map-iterator:x=1,y=2,z=3"),
-      ("k", "map-remove:done"),
-      ("k", "map-keys:x,z"),
-      ("k", "map-clear:done"),
-      ("k", "map-exists:false")
-    ))
+    assert(
+      results == List(
+        ("k", "value-exists:false"),
+        ("k", "value-set:done"),
+        ("k", "value-exists:true"),
+        ("k", "value-clear:done"),
+        ("k", "value-exists:false"),
+        ("k", "list-exists:false"),
+        ("k", "list-append:done"),
+        ("k", "list-exists:true"),
+        ("k", "list-append-array:done"),
+        ("k", "list-get:a,b,c,d"),
+        ("k", "map-exists:false"),
+        ("k", "map-add:done"),
+        ("k", "map-exists:true"),
+        ("k", "map-keys:x,y,z"),
+        ("k", "map-values:1,2,3"),
+        ("k", "map-iterator:x=1,y=2,z=3"),
+        ("k", "map-remove:done"),
+        ("k", "map-keys:x,z"),
+        ("k", "map-clear:done"),
+        ("k", "map-exists:false")
+      )
+    )
   }
 }
 
@@ -291,7 +308,7 @@ class TwsTesterFuzzTestSuite extends StreamTest {
    * Asserts that {@code tester} is equivalent to streaming query transforming {@code inputStream}
    * to {@code result}, when both are fed with data from {@code batches}.
    */
-  def checkTwsTester[
+  private def checkTwsTesterEndToEnd[
       K: org.apache.spark.sql.Encoder,
       I: org.apache.spark.sql.Encoder,
       O: org.apache.spark.sql.Encoder](
@@ -318,18 +335,15 @@ class TwsTesterFuzzTestSuite extends StreamTest {
   }
 
   /**
-   * Asserts that {@code tester} processes given {@code input} in the same way as Spark streaming
+   * Asserts that {@code tester} processes given {@code batches} in the same way as Spark streaming
    * query with {@code transformWithState} would.
-   *
-   * This is simplified version of {@code checkTwsTester} for the case where there is only one batch
-   * and no timers (time mode is TimeMode.None).
    */
-  def checkTwsTesterOneBatch[
+  private def checkTwsTester[
       K: org.apache.spark.sql.Encoder,
       I: org.apache.spark.sql.Encoder,
       O: org.apache.spark.sql.Encoder](
       processor: StatefulProcessor[K, I, O],
-      input: List[(K, I)]): Unit = {
+      batches: List[List[(K, I)]]): Unit = {
     implicit val tupleEncoder = org.apache.spark.sql.Encoders.tuple(
       implicitly[org.apache.spark.sql.Encoder[K]],
       implicitly[org.apache.spark.sql.Encoder[I]]
@@ -340,7 +354,15 @@ class TwsTesterFuzzTestSuite extends StreamTest {
       .groupByKey(_._1)
       .mapValues(_._2)
       .transformWithState(processor, TimeMode.None(), OutputMode.Append())
-    checkTwsTester(new TwsTester(processor), List(input), inputStream, result)
+    checkTwsTesterEndToEnd(new TwsTester(processor), batches, inputStream, result)
+  }
+
+  private def split[T](xs: List[T], numParts: Int): List[List[T]] = {
+    require(numParts > 0 && xs.size % numParts == 0)
+    val partSize = xs.size / numParts
+    (0 until numParts).map { i =>
+      xs.slice(i * partSize, (i + 1) * partSize)
+    }.toList
   }
 
   test("fuzz test with RunningCountProcessor") {
@@ -349,7 +371,7 @@ class TwsTesterFuzzTestSuite extends StreamTest {
       (s"key${random.nextInt(10)}", random.alphanumeric.take(5).mkString)
     }
     val processor = new RunningCountProcessor[String]()
-    checkTwsTesterOneBatch(processor, input)
+    checkTwsTester(processor, split(input, 2))
   }
 
   test("fuzz test with TopKProcessor") {
@@ -361,7 +383,7 @@ class TwsTesterFuzzTestSuite extends StreamTest {
       )
     }
     val processor = new TopKProcessor(5)
-    checkTwsTesterOneBatch(processor, input)
+    checkTwsTester(processor, split(input, 2))
   }
 
   test("fuzz test with WordFrequencyProcessor") {
@@ -371,21 +393,31 @@ class TwsTesterFuzzTestSuite extends StreamTest {
       (s"key${random.nextInt(10)}", ("", words(random.nextInt(words.length))))
     }
     val processor = new WordFrequencyProcessor()
-    checkTwsTesterOneBatch(processor, input)
+    checkTwsTester(processor, split(input, 2))
   }
 
   test("fuzz test for AllMethodsTestProcessor") {
     val random = new scala.util.Random(0)
     val commands = Array(
-      "value-exists", "value-set", "value-clear",
-      "list-exists", "list-append", "list-append-array", "list-get",
-      "map-exists", "map-add", "map-keys", "map-values", "map-iterator",
-      "map-remove", "map-clear"
+      "value-exists",
+      "value-set",
+      "value-clear",
+      "list-exists",
+      "list-append",
+      "list-append-array",
+      "list-get",
+      "map-exists",
+      "map-add",
+      "map-keys",
+      "map-values",
+      "map-iterator",
+      "map-remove",
+      "map-clear"
     )
     val input = List.fill(500) {
       (s"key${random.nextInt(5)}", commands(random.nextInt(commands.length)))
     }
     val processor = new AllMethodsTestProcessor()
-    checkTwsTesterOneBatch(processor, input)
+    checkTwsTester(processor, split(input, 2))
   }
 }
