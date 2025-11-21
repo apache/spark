@@ -134,7 +134,7 @@ def determine_modules_to_test(changed_modules, deduplicated=True):
     ... # doctest: +NORMALIZE_WHITESPACE
     ['avro', 'catalyst', 'connect', 'core', 'docker-integration-tests', 'examples', 'graphx',
      'hive', 'hive-thriftserver', 'mllib', 'mllib-local', 'protobuf', 'pyspark-connect',
-     'pyspark-core', 'pyspark-ml', 'pyspark-ml-connect', 'pyspark-mllib', 'pyspark-pandas',
+     'pyspark-core', 'pyspark-install', 'pyspark-ml', 'pyspark-ml-connect', 'pyspark-mllib', 'pyspark-pandas',
      'pyspark-pandas-connect', 'pyspark-pandas-slow', 'pyspark-pandas-slow-connect',
      'pyspark-pipelines', 'pyspark-resource', 'pyspark-sql', 'pyspark-streaming',
      'pyspark-structured-streaming', 'pyspark-structured-streaming-connect',
