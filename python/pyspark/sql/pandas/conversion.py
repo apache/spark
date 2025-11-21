@@ -513,6 +513,7 @@ class SparkConversionMixin:
         prefers_large_var_types = arrowUseLargeVarTypes == "true"
         timezone = sessionLocalTimeZone
         arrow_batch_size = int(arrowMaxRecordsPerBatch)
+        selfcheck = arrowSafeTypeConversion == "true"
 
         if type(data).__name__ == "Table":
             # `data` is a PyArrow Table
