@@ -20,6 +20,7 @@ package org.apache.spark.sql.pipelines.graph
 import scala.util.Try
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{AliasIdentifier, TableIdentifier}
 import org.apache.spark.sql.classic.DataFrame
 import org.apache.spark.sql.types.StructType
@@ -162,7 +163,22 @@ trait ResolvedFlow extends ResolutionCompletedFlow with Input {
 
   /** Returns the schema of the output of this [[Flow]]. */
   def schema: StructType = df.schema
-  override def load: DataFrame = df
+
+  override def load(asStreaming: Boolean): DataFrame = {
+    if (asStreaming && !df.isStreaming) {
+      throw new AnalysisException(
+        "INCOMPATIBLE_FLOW_READ.BATCH_READ_ON_STREAMING_FLOW",
+        Map("flowIdentifier" -> identifier.quotedString)
+      )
+    }
+    if (!asStreaming && df.isStreaming) {
+      throw new AnalysisException(
+        "INCOMPATIBLE_FLOW_READ.STREAMING_READ_ON_BATCH_FLOW",
+        Map("flowIdentifier" -> identifier.quotedString)
+      )
+    }
+    df
+  }
   def inputs: Set[TableIdentifier] = funcResult.inputs
 }
 

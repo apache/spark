@@ -61,9 +61,10 @@ trait Input extends GraphElement {
 
   /**
    * Returns a DataFrame that is a result of loading data from this [[Input]].
+   * @param asStreaming whether to try loading this input as a streaming or batch input.
    * @return Streaming or batch DataFrame of this Input's data.
    */
-  def load: DataFrame
+  def load(asStreaming: Boolean): DataFrame
 }
 
 /**
@@ -199,11 +200,6 @@ case class VirtualTableInput(
     } else {
       spark.createDataFrame(new util.ArrayList[Row](), deducedSchema)
     }
-  }
-
-  /** Default load virtual table into dataframe. */
-  override def load: DataFrame = {
-    load(asStreaming = isStreamingTable)
   }
 }
 

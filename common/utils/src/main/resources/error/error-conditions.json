@@ -2198,6 +2198,24 @@
     },
     "sqlState" : "KD000"
   },
+  "INCOMPATIBLE_FLOW_READ" : {
+    "message" : [
+      "Incompatible read issued for flow <flowIdentifier>."
+    ],
+    "subClass" : {
+      "BATCH_READ_ON_STREAMING_FLOW" : {
+        "message" : [
+          "Attempted to issue batch read on a streaming flow."
+        ]
+      },
+      "STREAMING_READ_ON_BATCH_FLOW" : {
+        "message" : [
+          "Attempted to issue a streaming read on a batch flow"
+        ]
+      }
+    },
+    "sqlState": "42000"
+  },
   "INCOMPATIBLE_JOIN_TYPES" : {
     "message" : [
       "The join types <joinType1> and <joinType2> are incompatible."

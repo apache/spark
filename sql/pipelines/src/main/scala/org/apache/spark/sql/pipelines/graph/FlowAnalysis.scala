@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.pipelines.graph
 
-import scala.util.Try
+import scala.util.{Failure, Success, Try}
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{AliasIdentifier, TableIdentifier}
@@ -226,13 +226,30 @@ object FlowAnalysis {
       // Dataset is resolved, so we can read from it
       ctx.availableInput(datasetIdentifier)
     }
-    val inputDF = i match {
-      case vt: VirtualTableInput =>
-        // Unlike temporary views (which would have been substituted into flows by this point), we
-        // allow tables to batch read a streaming dataset. We do not allow the opposite however,
-        // which is checked on the resolved graph during graph validation.
-        vt.load(asStreaming = isStreamingRead)
-      case _ => i.load
+
+    val inputDF = Try {
+      i.load(asStreaming = isStreamingRead)
+    } match {
+      case Success(df) => df
+      case Failure(ex: AnalysisException) => ex.errorClass match {
+        // Views are simply resolved as the flows they read from during graph construction, so we
+        // know a flow load exception here directly corresponds to a reading a view specifically.
+        // Rethrow relevant exceptions appropriately, with the view's identifier.
+        case Some("INCOMPATIBLE_FLOW_READ.BATCH_READ_ON_STREAMING_FLOW") =>
+          throw new AnalysisException(
+            "INCOMPATIBLE_BATCH_VIEW_READ",
+            Map("datasetIdentifier" -> datasetIdentifier.toString)
+          )
+        case Some("INCOMPATIBLE_FLOW_READ.STREAMING_READ_ON_BATCH_FLOW") =>
+          throw new AnalysisException(
+            "INCOMPATIBLE_STREAMING_VIEW_READ",
+            Map("datasetIdentifier" -> datasetIdentifier.toString)
+          )
+        case _ =>
+          throw ex
+      }
+      case Failure(ex: Throwable) =>
+        throw ex
     }
 
     i match {
@@ -241,9 +258,6 @@ object FlowAnalysis {
       case f: Flow => f.sqlConf.foreach { case (k, v) => ctx.setConf(k, v) }
       case _ =>
     }
-
-    val incompatibleViewReadCheck =
-      ctx.spark.conf.get("pipelines.incompatibleViewCheck.enabled", "true").toBoolean
 
     // Wrap the DF in an alias so that columns in the DF can be referenced with
     // the following in the query:
@@ -256,20 +270,8 @@ object FlowAnalysis {
     )
 
     if (isStreamingRead) {
-      if (!inputDF.isStreaming && incompatibleViewReadCheck) {
-        throw new AnalysisException(
-          "INCOMPATIBLE_BATCH_VIEW_READ",
-          Map("datasetIdentifier" -> datasetIdentifier.toString)
-        )
-      }
       ctx.streamingInputs += ResolvedInput(i, aliasIdentifier)
     } else {
-      if (inputDF.isStreaming && incompatibleViewReadCheck) {
-        throw new AnalysisException(
-          "INCOMPATIBLE_STREAMING_VIEW_READ",
-          Map("datasetIdentifier" -> datasetIdentifier.toString)
-        )
-      }
       ctx.batchInputs += ResolvedInput(i, aliasIdentifier)
     }
     Dataset.ofRows(
