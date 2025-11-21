@@ -876,10 +876,11 @@ private[parquet] class ParquetRowConverter(
     }
   }
 
-  // Parquet converter for unshredded Variant.
-  @deprecated("We use this converter when the `spark.sql.variant.allowReadingShredded` config " +
-    "is set to false. This option just exists to fall back to legacy logic which will " +
-    "eventually be removed.", "4.1.0")
+  /**
+   * Parquet converter for unshredded Variant. We use this converter when the
+   * `spark.sql.variant.allowReadingShredded` config is set to false. This option just exists to
+   * fall back to legacy logic which will eventually be removed.
+   */
   private final class ParquetUnshreddedVariantConverter(
      parquetType: GroupType,
      updater: ParentContainerUpdater)
@@ -893,7 +894,7 @@ private[parquet] class ParquetRowConverter(
         // We may allow more than two children in the future, so consider this unsupported.
         throw QueryCompilationErrors.invalidVariantWrongNumFieldsError()
       }
-      val Seq(v, m) = Seq("value", "metadata").map { colName =>
+      val Seq(value, metadata) = Seq("value", "metadata").map { colName =>
         val idx = (0 until parquetType.getFieldCount())
           .find(parquetType.getFieldName(_) == colName)
           .getOrElse(throw QueryCompilationErrors.invalidVariantMissingFieldError(colName))
@@ -905,12 +906,14 @@ private[parquet] class ParquetRowConverter(
         idx
       }
       val result = new Array[Converter with HasParentContainerUpdater](2)
-      result(v) = newConverter(parquetType.getType(v), BinaryType, new ParentContainerUpdater {
-        override def set(value: Any): Unit = currentValue = value
-      })
-      result(m) = newConverter(parquetType.getType(m), BinaryType, new ParentContainerUpdater {
-        override def set(value: Any): Unit = currentMetadata = value
-      })
+      result(value) =
+        newConverter(parquetType.getType(value), BinaryType, new ParentContainerUpdater {
+          override def set(value: Any): Unit = currentValue = value
+        })
+      result(metadata) =
+        newConverter(parquetType.getType(metadata), BinaryType, new ParentContainerUpdater {
+          override def set(value: Any): Unit = currentMetadata = value
+        })
       result
     }
 
