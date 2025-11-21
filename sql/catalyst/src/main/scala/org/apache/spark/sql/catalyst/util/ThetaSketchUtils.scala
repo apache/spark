@@ -68,7 +68,7 @@ object ThetaSketchUtils {
    */
   def checkLgNomLongs(lgNomLongs: Int, prettyName: String): Unit = {
     if (lgNomLongs < MIN_LG_NOM_LONGS || lgNomLongs > MAX_LG_NOM_LONGS) {
-      throw QueryExecutionErrors.thetaInvalidLgNomEntries(
+      throw QueryExecutionErrors.sketchInvalidLgNomEntries(
         function = prettyName,
         min = MIN_LG_NOM_LONGS,
         max = MAX_LG_NOM_LONGS,

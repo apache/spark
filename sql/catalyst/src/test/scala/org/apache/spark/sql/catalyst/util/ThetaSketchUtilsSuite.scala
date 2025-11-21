@@ -42,7 +42,7 @@ class ThetaSketchUtilsSuite extends SparkFunSuite with SQLHelper {
         exception = intercept[SparkRuntimeException] {
           ThetaSketchUtils.checkLgNomLongs(value, "test_function")
         },
-        condition = "THETA_INVALID_LG_NOM_ENTRIES",
+        condition = "SKETCH_INVALID_LG_NOM_ENTRIES",
         parameters = Map(
           "function" -> "`test_function`",
           "min" -> ThetaSketchUtils.MIN_LG_NOM_LONGS.toString,
@@ -58,7 +58,7 @@ class ThetaSketchUtilsSuite extends SparkFunSuite with SQLHelper {
         exception = intercept[SparkRuntimeException] {
           ThetaSketchUtils.checkLgNomLongs(value, "test_function")
         },
-        condition = "THETA_INVALID_LG_NOM_ENTRIES",
+        condition = "SKETCH_INVALID_LG_NOM_ENTRIES",
         parameters = Map(
           "function" -> "`test_function`",
           "min" -> ThetaSketchUtils.MIN_LG_NOM_LONGS.toString,

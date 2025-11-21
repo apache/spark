@@ -3177,9 +3177,9 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       messageParameters = Map("function" -> toSQLId(function)))
   }
 
-  def thetaInvalidLgNomEntries(function: String, min: Int, max: Int, value: Int): Throwable = {
+  def sketchInvalidLgNomEntries(function: String, min: Int, max: Int, value: Int): Throwable = {
     new SparkRuntimeException(
-      errorClass = "THETA_INVALID_LG_NOM_ENTRIES",
+      errorClass = "SKETCH_INVALID_LG_NOM_ENTRIES",
       messageParameters = Map(
         "function" -> toSQLId(function),
         "min" -> toSQLValue(min, IntegerType),
@@ -3271,12 +3271,6 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
         "function" -> toSQLId(function),
         "mode" -> mode,
         "validModes" -> validModes.mkString(", ")))
-  }
-
-  def tupleSketchParameterMustBeConstant(function: String, parameter: String): Throwable = {
-    new SparkRuntimeException(
-      errorClass = "TUPLE_SKETCH_PARAMETER_MUST_BE_CONSTANT",
-      messageParameters = Map("function" -> toSQLId(function), "parameter" -> parameter))
   }
 
   def tupleInvalidSummaryValueType(

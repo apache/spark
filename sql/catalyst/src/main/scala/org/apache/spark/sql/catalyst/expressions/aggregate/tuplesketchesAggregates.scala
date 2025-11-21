@@ -21,6 +21,8 @@ import org.apache.datasketches.tuple.{Intersection, Sketch, Summary, Union, Upda
 
 import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.{ExpectsInputTypes, Expression, ExpressionDescription, Literal}
 import org.apache.spark.sql.catalyst.expressions.aggregate.TypedImperativeAggregate
 import org.apache.spark.sql.catalyst.trees.{QuaternaryLike, TernaryLike}
@@ -167,6 +169,30 @@ case class TupleSketchAgg(
       StringTypeWithCollation(supportsTrimCollation = true))
 
   override def dataType: DataType = BinaryType
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    val defaultCheck = super.checkInputDataTypes()
+    if (defaultCheck.isFailure) {
+      return defaultCheck
+    }
+
+    val structCheck = checkStructFieldCount()
+    if (structCheck.isFailure) {
+      return structCheck
+    }
+
+    val lgNomEntriesCheck = checkLgNomEntriesParameter()
+    if (lgNomEntriesCheck.isFailure) {
+      return lgNomEntriesCheck
+    }
+
+    val summaryTypeCheck = checkSummaryTypeParameter()
+    if (summaryTypeCheck.isFailure) {
+      return summaryTypeCheck
+    }
+
+    checkModeParameter()
+  }
 
   override def nullable: Boolean = false
 
@@ -471,6 +497,25 @@ case class TupleUnionAgg(
 
   override def dataType: DataType = BinaryType
 
+  override def checkInputDataTypes(): TypeCheckResult = {
+    val defaultCheck = super.checkInputDataTypes()
+    if (defaultCheck.isFailure) {
+      return defaultCheck
+    }
+
+    val lgNomEntriesCheck = checkLgNomEntriesParameter()
+    if (lgNomEntriesCheck.isFailure) {
+      return lgNomEntriesCheck
+    }
+
+    val summaryTypeCheck = checkSummaryTypeParameter()
+    if (summaryTypeCheck.isFailure) {
+      return summaryTypeCheck
+    }
+
+    checkModeParameter()
+  }
+
   override def nullable: Boolean = false
 
   override def first: Expression = child
@@ -665,6 +710,20 @@ case class TupleIntersectionAgg(
 
   override def dataType: DataType = BinaryType
 
+  override def checkInputDataTypes(): TypeCheckResult = {
+    val defaultCheck = super.checkInputDataTypes()
+    if (defaultCheck.isFailure) {
+      return defaultCheck
+    }
+
+    val summaryTypeCheck = checkSummaryTypeParameter()
+    if (summaryTypeCheck.isFailure) {
+      return summaryTypeCheck
+    }
+
+    checkModeParameter()
+  }
+
   override def nullable: Boolean = false
 
   // lgNomEntriesExpr is not used in Tuple Sketch intersection.
@@ -779,9 +838,9 @@ case class TupleIntersectionAgg(
 
 /**
  * Base trait for TupleSketch aggregation functions that provides common functionality for
- * parameter validation, factory creation, and sketch deserialization.
+ * parameter validation.
  */
-trait TupleSketchAggregateBase {
+trait TupleSketchAggregateBase extends Expression {
 
   /** Optional log-base-2 of nominal entries (determines sketch size). */
   val lgNomEntriesExpr: Option[Expression]
@@ -795,6 +854,109 @@ trait TupleSketchAggregateBase {
   /** Returns the pretty name of the aggregation function for error messages. */
   protected def prettyName: String
 
+  /** Child expression for struct input validation (only used by TupleSketchAgg). */
+  def child: Expression
+
+  /**
+   * Validates that lgNomEntries parameter is a constant and within valid range (4-26).
+   */
+  protected def checkLgNomEntriesParameter(): TypeCheckResult = {
+    lgNomEntriesExpr match {
+      case Some(expr) =>
+        if (!expr.foldable) {
+          return DataTypeMismatch(
+            errorSubClass = "NON_FOLDABLE_INPUT",
+            messageParameters = Map(
+              "inputName" -> "lgNomEntries",
+              "inputType" -> "int",
+              "inputExpr" -> expr.sql))
+        } else if (expr.eval() == null) {
+          return DataTypeMismatch(
+            errorSubClass = "UNEXPECTED_NULL",
+            messageParameters = Map("exprName" -> "lgNomEntries"))
+        } else {
+          val lgNomEntriesVal = expr.eval().asInstanceOf[Int]
+          try {
+            ThetaSketchUtils.checkLgNomLongs(lgNomEntriesVal, prettyName)
+          } catch {
+            case e: Exception =>
+              return TypeCheckResult.TypeCheckFailure(e.getMessage)
+          }
+        }
+      case None => // OK, will use default
+    }
+    TypeCheckResult.TypeCheckSuccess
+  }
+
+  /**
+   * Validates that summaryType parameter is a constant string (double, integer, or string).
+   */
+  protected def checkSummaryTypeParameter(): TypeCheckResult = {
+    if (!summaryTypeExpr.foldable) {
+      return DataTypeMismatch(
+        errorSubClass = "NON_FOLDABLE_INPUT",
+        messageParameters = Map(
+          "inputName" -> "summaryType",
+          "inputType" -> "string",
+          "inputExpr" -> summaryTypeExpr.sql))
+    } else if (summaryTypeExpr.eval() == null) {
+      return DataTypeMismatch(
+        errorSubClass = "UNEXPECTED_NULL",
+        messageParameters = Map("exprName" -> "summaryType"))
+    } else {
+      val summaryTypeStr = summaryTypeExpr.eval().asInstanceOf[UTF8String].toString
+      try {
+        ThetaSketchUtils.checkSummaryType(summaryTypeStr, prettyName)
+      } catch {
+        case e: Exception =>
+          return TypeCheckResult.TypeCheckFailure(e.getMessage)
+      }
+    }
+    TypeCheckResult.TypeCheckSuccess
+  }
+
+  /**
+   * Validates that mode parameter is a constant string (sum, min, max, alwaysone).
+   */
+  protected def checkModeParameter(): TypeCheckResult = {
+    if (!modeExpr.foldable) {
+      return DataTypeMismatch(
+        errorSubClass = "NON_FOLDABLE_INPUT",
+        messageParameters = Map(
+          "inputName" -> "mode",
+          "inputType" -> "string",
+          "inputExpr" -> modeExpr.sql))
+    } else if (modeExpr.eval() == null) {
+      return DataTypeMismatch(
+        errorSubClass = "UNEXPECTED_NULL",
+        messageParameters = Map("exprName" -> "mode"))
+    } else {
+      val modeStr = modeExpr.eval().asInstanceOf[UTF8String].toString
+      try {
+        ThetaSketchUtils.checkMode(modeStr, prettyName)
+      } catch {
+        case e: Exception =>
+          return TypeCheckResult.TypeCheckFailure(e.getMessage)
+      }
+    }
+    TypeCheckResult.TypeCheckSuccess
+  }
+
+  /**
+   * Validates that the child struct has exactly 2 fields (key and summary value).
+   * Only used by TupleSketchAgg.
+   */
+  protected def checkStructFieldCount(): TypeCheckResult = {
+    child.dataType match {
+      case st: StructType if st.fields.length != 2 =>
+        TypeCheckResult.TypeCheckFailure(
+          s"The struct input to $prettyName must have exactly 2 fields (key, summary value), " +
+          s"but got ${st.fields.length} fields")
+      case _ =>
+        TypeCheckResult.TypeCheckSuccess
+    }
+  }
+
   /**
    * Validates and extracts the lgNomEntries parameter value. Ensures the value is a constant and
    * within valid range (4-26). Defaults to 12 if not specified.
@@ -802,15 +964,8 @@ trait TupleSketchAggregateBase {
   protected lazy val lgNomEntriesInput: Int = {
     lgNomEntriesExpr match {
       case Some(expr) =>
-        if (!expr.foldable) {
-          throw QueryExecutionErrors.tupleSketchParameterMustBeConstant(
-            prettyName,
-            "lgNomEntries")
-        }
         val lgNomEntriesVal = expr.eval().asInstanceOf[Int]
-        ThetaSketchUtils.checkLgNomLongs(lgNomEntriesVal, prettyName)
         lgNomEntriesVal
-
       case None => ThetaSketchUtils.DEFAULT_LG_NOM_LONGS
     }
   }
@@ -820,12 +975,7 @@ trait TupleSketchAggregateBase {
    * string (double, integer, or string). Defaults to "double" if not specified.
    */
   protected lazy val summaryTypeInput: String = {
-    if (!summaryTypeExpr.foldable) {
-      throw QueryExecutionErrors.tupleSketchParameterMustBeConstant(prettyName, "summaryType")
-    }
-    val summaryTypeStr = summaryTypeExpr.eval().asInstanceOf[UTF8String].toString
-    ThetaSketchUtils.checkSummaryType(summaryTypeStr, prettyName)
-    summaryTypeStr
+    summaryTypeExpr.eval().asInstanceOf[UTF8String].toString
   }
 
   /**
@@ -833,11 +983,6 @@ trait TupleSketchAggregateBase {
    * string and one of: sum, min, max, alwaysone. Defaults to "sum" if not specified.
    */
   protected lazy val modeInput: String = {
-    if (!modeExpr.foldable) {
-      throw QueryExecutionErrors.tupleSketchParameterMustBeConstant(prettyName, "mode")
-    }
-    val modeStr = modeExpr.eval().asInstanceOf[UTF8String].toString
-    ThetaSketchUtils.checkMode(modeStr, prettyName)
-    modeStr
+    modeExpr.eval().asInstanceOf[UTF8String].toString
   }
 }

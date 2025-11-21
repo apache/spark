@@ -684,6 +684,14 @@ FROM VALUES (15, 1.0D), (16, 2.0D), (17, 3.0D) tab(col, val);
 SELECT tuple_sketch_agg(struct(col, val), 12, 'double', 'invalid_mode')
 FROM VALUES (50, 1.0D), (60, 2.0D), (60, 3.0D) tab(col, val);
 
+-- Invalid struct input - not a struct
+SELECT tuple_sketch_agg(col, 15)
+FROM VALUES (50, 1.0D), (60, 2.0D), (60, 3.0D) tab(col, val);
+
+-- Invalid struct input - struct # of elements is not 2
+SELECT tuple_sketch_agg(struct(col, val, 2.0D), 15)
+FROM VALUES (50, 1.0D), (60, 2.0D), (60, 3.0D) tab(col, val);
+
 -- Test tuple_union with integers (1, 2) instead of binary sketch data - should fail
 SELECT tuple_union(1, 2)
 FROM VALUES

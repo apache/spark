@@ -5276,6 +5276,12 @@
     ],
     "sqlState" : "42K05"
   },
+  "SKETCH_INVALID_LG_NOM_ENTRIES" : {
+    "message" : [
+      "Invalid call to <function>; the `lgNomEntries` value must be between <min> and <max>, inclusive: <value>."
+    ],
+    "sqlState" : "22003"
+  },
   "SORT_BY_WITHOUT_BUCKETING" : {
     "message" : [
       "sortBy must be used together with bucketBy."
@@ -5899,13 +5905,7 @@
     "message" : [
       "Invalid call to <function>; only valid Theta sketch buffers are supported as inputs (such as those produced by the `theta_sketch_agg` function)."
     ],
-    "sqlState" : "22546"
-  },
-  "THETA_INVALID_LG_NOM_ENTRIES" : {
-    "message" : [
-      "Invalid call to <function>; the `lgNomEntries` value must be between <min> and <max>, inclusive: <value>."
-    ],
-    "sqlState" : "22546"
+    "sqlState" : "22000"
   },
   "THETA_LG_NOM_ENTRIES_MUST_BE_CONSTANT" : {
     "message" : [
@@ -5955,31 +5955,31 @@
     "message" : [
       "Invalid call to <function>: <reason>. Only valid Tuple sketch buffers are supported as inputs (such as those produced by the `tuple_sketch_agg` function)."
     ],
-    "sqlState" : "22546"
+    "sqlState" : "22000"
   },
   "TUPLE_INVALID_SKETCH_MODE" : {
     "message" : [
       "Invalid call to <function>: mode '<mode>' is not supported. Valid modes are: <validModes>."
     ],
-    "sqlState" : "22546"
+    "sqlState" : "22023"
   },
   "TUPLE_INVALID_SKETCH_SUMMARY_TYPE" : {
     "message" : [
       "Invalid call to <function>: summary type '<summaryType>' is not supported. Valid summary types are: <validTypes>."
     ],
-    "sqlState" : "22546"
+    "sqlState" : "22023"
   },
   "TUPLE_INVALID_SKETCH_SUMMARY_VALUE_TYPE" : {
     "message" : [
       "Invalid call to <function>: summary value type '<actualType>' is incompatible with configured summary type '<summaryType>'."
     ],
-    "sqlState" : "22546"
+    "sqlState" : "22023"
   },
   "TUPLE_INVALID_SUMMARY_TYPE_OPERATION" : {
     "message" : [
       "Invalid call to <function>: summary type '<summaryType>' is not supported for this operation."
     ],
-    "sqlState" : "22546"
+    "sqlState" : "22023"
   },
   "TUPLE_IS_EMPTY" : {
     "message" : [
@@ -5992,12 +5992,6 @@
       "Due to Scala's limited support of tuple, tuples with more than 22 elements are not supported."
     ],
     "sqlState" : "54011"
-  },
-  "TUPLE_SKETCH_PARAMETER_MUST_BE_CONSTANT" : {
-    "message" : [
-      "Invalid call to <function>: parameter '<parameter>' must be a constant value."
-    ],
-    "sqlState" : "22546"
   },
   "UDTF_ALIAS_NUMBER_MISMATCH" : {
     "message" : [

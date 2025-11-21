@@ -1268,16 +1268,22 @@ FROM VALUES (50, 1.0D), (60, 2.0D), (60, 3.0D) tab(col, val)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.SparkRuntimeException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "THETA_INVALID_LG_NOM_ENTRIES",
-  "sqlState" : "22546",
+  "errorClass" : "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
+  "sqlState" : "42K09",
   "messageParameters" : {
-    "function" : "`tuple_sketch_agg`",
-    "max" : "26",
-    "min" : "4",
-    "value" : "2"
-  }
+    "hint" : "",
+    "msg" : "[SKETCH_INVALID_LG_NOM_ENTRIES] Invalid call to `tuple_sketch_agg`; the `lgNomEntries` value must be between 4 and 26, inclusive: 2. SQLSTATE: 22003",
+    "sqlExpr" : "\"tuple_sketch_agg(struct(col, val), 2, double, sum)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 44,
+    "fragment" : "tuple_sketch_agg(struct(col, val), 2)"
+  } ]
 }
 
 
@@ -1287,16 +1293,22 @@ FROM VALUES (50, 1.0D), (60, 2.0D), (60, 3.0D) tab(col, val)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.SparkRuntimeException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "THETA_INVALID_LG_NOM_ENTRIES",
-  "sqlState" : "22546",
+  "errorClass" : "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
+  "sqlState" : "42K09",
   "messageParameters" : {
-    "function" : "`tuple_sketch_agg`",
-    "max" : "26",
-    "min" : "4",
-    "value" : "40"
-  }
+    "hint" : "",
+    "msg" : "[SKETCH_INVALID_LG_NOM_ENTRIES] Invalid call to `tuple_sketch_agg`; the `lgNomEntries` value must be between 4 and 26, inclusive: 40. SQLSTATE: 22003",
+    "sqlExpr" : "\"tuple_sketch_agg(struct(col, val), 40, double, sum)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 45,
+    "fragment" : "tuple_sketch_agg(struct(col, val), 40)"
+  } ]
 }
 
 
@@ -1310,16 +1322,22 @@ FROM (SELECT tuple_sketch_agg(struct(col, val), 12) as sketch
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.SparkRuntimeException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "THETA_INVALID_LG_NOM_ENTRIES",
-  "sqlState" : "22546",
+  "errorClass" : "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
+  "sqlState" : "42K09",
   "messageParameters" : {
-    "function" : "`tuple_union_agg`",
-    "max" : "26",
-    "min" : "4",
-    "value" : "3"
-  }
+    "hint" : "",
+    "msg" : "[SKETCH_INVALID_LG_NOM_ENTRIES] Invalid call to `tuple_union_agg`; the `lgNomEntries` value must be between 4 and 26, inclusive: 3. SQLSTATE: 22003",
+    "sqlExpr" : "\"tuple_union_agg(sketch, 3, double, sum)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 50,
+    "fragment" : "tuple_union_agg(sketch, 3, 'double', 'sum')"
+  } ]
 }
 
 
@@ -1333,16 +1351,22 @@ FROM (SELECT tuple_sketch_agg(struct(col, val), 12) as sketch
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.SparkRuntimeException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "THETA_INVALID_LG_NOM_ENTRIES",
-  "sqlState" : "22546",
+  "errorClass" : "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
+  "sqlState" : "42K09",
   "messageParameters" : {
-    "function" : "`tuple_union_agg`",
-    "max" : "26",
-    "min" : "4",
-    "value" : "27"
-  }
+    "hint" : "",
+    "msg" : "[SKETCH_INVALID_LG_NOM_ENTRIES] Invalid call to `tuple_union_agg`; the `lgNomEntries` value must be between 4 and 26, inclusive: 27. SQLSTATE: 22003",
+    "sqlExpr" : "\"tuple_union_agg(sketch, 27, double, sum)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 51,
+    "fragment" : "tuple_union_agg(sketch, 27, 'double', 'sum')"
+  } ]
 }
 
 
@@ -1352,16 +1376,21 @@ FROM VALUES (15, 1.0D), (16, 2.0D), (17, 3.0D) tab(col, val)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.SparkRuntimeException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "THETA_INVALID_LG_NOM_ENTRIES",
-  "sqlState" : "22546",
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_NULL",
+  "sqlState" : "42K09",
   "messageParameters" : {
-    "function" : "`tuple_sketch_agg`",
-    "max" : "26",
-    "min" : "4",
-    "value" : "0"
-  }
+    "exprName" : "lgNomEntries",
+    "sqlExpr" : "\"tuple_sketch_agg(struct(col, val), CAST(NULL AS INT), double, sum)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 60,
+    "fragment" : "tuple_sketch_agg(struct(col, val), CAST(NULL AS INT))"
+  } ]
 }
 
 
@@ -1371,14 +1400,23 @@ FROM VALUES (15, 1.0D), (16, 2.0D), (17, 3.0D) tab(col, val)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.SparkRuntimeException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "TUPLE_SKETCH_PARAMETER_MUST_BE_CONSTANT",
-  "sqlState" : "22546",
+  "errorClass" : "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
+  "sqlState" : "42K09",
   "messageParameters" : {
-    "function" : "`tuple_sketch_agg`",
-    "parameter" : "lgNomEntries"
-  }
+    "inputExpr" : "CAST(tab.col AS INT)",
+    "inputName" : "lgNomEntries",
+    "inputType" : "int",
+    "sqlExpr" : "\"tuple_sketch_agg(struct(col, val), CAST(col AS INT), double, sum)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 59,
+    "fragment" : "tuple_sketch_agg(struct(col, val), CAST(col AS INT))"
+  } ]
 }
 
 
@@ -1415,14 +1453,23 @@ FROM VALUES (15, 1.0D), (16, 2.0D), (17, 3.0D) tab(col, val)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.SparkRuntimeException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "TUPLE_SKETCH_PARAMETER_MUST_BE_CONSTANT",
-  "sqlState" : "22546",
+  "errorClass" : "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
+  "sqlState" : "42K09",
   "messageParameters" : {
-    "function" : "`tuple_sketch_agg`",
-    "parameter" : "summaryType"
-  }
+    "inputExpr" : "CAST(tab.col AS STRING)",
+    "inputName" : "summaryType",
+    "inputType" : "string",
+    "sqlExpr" : "\"tuple_sketch_agg(struct(col, val), 12, CAST(col AS STRING), sum)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 66,
+    "fragment" : "tuple_sketch_agg(struct(col, val), 12, CAST(col AS STRING))"
+  } ]
 }
 
 
@@ -1432,15 +1479,22 @@ FROM VALUES (50, 1.0D), (60, 2.0D), (60, 3.0D) tab(col, val)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.SparkRuntimeException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "TUPLE_INVALID_SKETCH_SUMMARY_TYPE",
-  "sqlState" : "22546",
+  "errorClass" : "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
+  "sqlState" : "42K09",
   "messageParameters" : {
-    "function" : "`tuple_sketch_agg`",
-    "summaryType" : "invalid_type",
-    "validTypes" : "double, integer, string"
-  }
+    "hint" : "",
+    "msg" : "[TUPLE_INVALID_SKETCH_SUMMARY_TYPE] Invalid call to `tuple_sketch_agg`: summary type 'invalid_type' is not supported. Valid summary types are: double, integer, string. SQLSTATE: 22023",
+    "sqlExpr" : "\"tuple_sketch_agg(struct(col, val), 12, invalid_type, sum)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 61,
+    "fragment" : "tuple_sketch_agg(struct(col, val), 12, 'invalid_type')"
+  } ]
 }
 
 
@@ -1450,14 +1504,23 @@ FROM VALUES (15, 1.0D), (16, 2.0D), (17, 3.0D) tab(col, val)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.SparkRuntimeException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "TUPLE_SKETCH_PARAMETER_MUST_BE_CONSTANT",
-  "sqlState" : "22546",
+  "errorClass" : "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
+  "sqlState" : "42K09",
   "messageParameters" : {
-    "function" : "`tuple_sketch_agg`",
-    "parameter" : "mode"
-  }
+    "inputExpr" : "CAST(tab.col AS STRING)",
+    "inputName" : "mode",
+    "inputType" : "string",
+    "sqlExpr" : "\"tuple_sketch_agg(struct(col, val), 12, double, CAST(col AS STRING))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 76,
+    "fragment" : "tuple_sketch_agg(struct(col, val), 12, 'double', CAST(col AS STRING))"
+  } ]
 }
 
 
@@ -1467,15 +1530,74 @@ FROM VALUES (50, 1.0D), (60, 2.0D), (60, 3.0D) tab(col, val)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.SparkRuntimeException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "TUPLE_INVALID_SKETCH_MODE",
-  "sqlState" : "22546",
+  "errorClass" : "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
+  "sqlState" : "42K09",
   "messageParameters" : {
-    "function" : "`tuple_sketch_agg`",
-    "mode" : "invalid_mode",
-    "validModes" : "sum, min, max, alwaysone"
-  }
+    "hint" : "",
+    "msg" : "[TUPLE_INVALID_SKETCH_MODE] Invalid call to `tuple_sketch_agg`: mode 'invalid_mode' is not supported. Valid modes are: sum, min, max, alwaysone. SQLSTATE: 22023",
+    "sqlExpr" : "\"tuple_sketch_agg(struct(col, val), 12, double, invalid_mode)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 71,
+    "fragment" : "tuple_sketch_agg(struct(col, val), 12, 'double', 'invalid_mode')"
+  } ]
+}
+
+
+-- !query
+SELECT tuple_sketch_agg(col, 15)
+FROM VALUES (50, 1.0D), (60, 2.0D), (60, 3.0D) tab(col, val)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"col\"",
+    "inputType" : "\"INT\"",
+    "paramIndex" : "first",
+    "requiredType" : "\"STRUCT\"",
+    "sqlExpr" : "\"tuple_sketch_agg(col, 15, double, sum)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 32,
+    "fragment" : "tuple_sketch_agg(col, 15)"
+  } ]
+}
+
+
+-- !query
+SELECT tuple_sketch_agg(struct(col, val, 2.0D), 15)
+FROM VALUES (50, 1.0D), (60, 2.0D), (60, 3.0D) tab(col, val)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "hint" : "",
+    "msg" : "The struct input to tuple_sketch_agg must have exactly 2 fields (key, summary value), but got 3 fields",
+    "sqlExpr" : "\"tuple_sketch_agg(struct(col, val, 2.0), 15, double, sum)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 51,
+    "fragment" : "tuple_sketch_agg(struct(col, val, 2.0D), 15)"
+  } ]
 }
 
 
@@ -1641,7 +1763,7 @@ struct<>
 org.apache.spark.SparkRuntimeException
 {
   "errorClass" : "TUPLE_INVALID_INPUT_SKETCH_BUFFER",
-  "sqlState" : "22546",
+  "sqlState" : "22000",
   "messageParameters" : {
     "function" : "`tuple_sketch_estimate`",
     "reason" : "reqOffset: 3, reqLength: 1, (reqOff + reqLen): 4, allocSize: 3"
@@ -1657,7 +1779,7 @@ struct<>
 org.apache.spark.SparkRuntimeException
 {
   "errorClass" : "TUPLE_INVALID_INPUT_SKETCH_BUFFER",
-  "sqlState" : "22546",
+  "sqlState" : "22000",
   "messageParameters" : {
     "function" : "`tuple_union`",
     "reason" : "reqOffset: 3, reqLength: 1, (reqOff + reqLen): 4, allocSize: 3"
@@ -1673,7 +1795,7 @@ struct<>
 org.apache.spark.SparkRuntimeException
 {
   "errorClass" : "TUPLE_INVALID_INPUT_SKETCH_BUFFER",
-  "sqlState" : "22546",
+  "sqlState" : "22000",
   "messageParameters" : {
     "function" : "`tuple_intersection`",
     "reason" : "reqOffset: 3, reqLength: 1, (reqOff + reqLen): 4, allocSize: 3"
@@ -1689,7 +1811,7 @@ struct<>
 org.apache.spark.SparkRuntimeException
 {
   "errorClass" : "TUPLE_INVALID_INPUT_SKETCH_BUFFER",
-  "sqlState" : "22546",
+  "sqlState" : "22000",
   "messageParameters" : {
     "function" : "`tuple_difference`",
     "reason" : "reqOffset: 3, reqLength: 1, (reqOff + reqLen): 4, allocSize: 3"
@@ -1706,7 +1828,7 @@ struct<>
 org.apache.spark.SparkRuntimeException
 {
   "errorClass" : "TUPLE_INVALID_INPUT_SKETCH_BUFFER",
-  "sqlState" : "22546",
+  "sqlState" : "22000",
   "messageParameters" : {
     "function" : "`tuple_union_agg`",
     "reason" : "reqOffset: 3, reqLength: 1, (reqOff + reqLen): 4, allocSize: 3"
@@ -1723,7 +1845,7 @@ struct<>
 org.apache.spark.SparkRuntimeException
 {
   "errorClass" : "TUPLE_INVALID_INPUT_SKETCH_BUFFER",
-  "sqlState" : "22546",
+  "sqlState" : "22000",
   "messageParameters" : {
     "function" : "`tuple_intersection_agg`",
     "reason" : "reqOffset: 3, reqLength: 1, (reqOff + reqLen): 4, allocSize: 3"
@@ -1740,7 +1862,7 @@ struct<>
 org.apache.spark.SparkRuntimeException
 {
   "errorClass" : "TUPLE_INVALID_SUMMARY_TYPE_OPERATION",
-  "sqlState" : "22546",
+  "sqlState" : "22023",
   "messageParameters" : {
     "function" : "`tuple_sketch_summary`",
     "summaryType" : "string"
@@ -1759,7 +1881,7 @@ struct<>
 org.apache.spark.SparkRuntimeException
 {
   "errorClass" : "TUPLE_INVALID_INPUT_SKETCH_BUFFER",
-  "sqlState" : "22546",
+  "sqlState" : "22000",
   "messageParameters" : {
     "function" : "`tuple_union_theta`",
     "reason" : "Invalid Sketch Type 62"
@@ -1778,7 +1900,7 @@ struct<>
 org.apache.spark.SparkRuntimeException
 {
   "errorClass" : "TUPLE_INVALID_INPUT_SKETCH_BUFFER",
-  "sqlState" : "22546",
+  "sqlState" : "22000",
   "messageParameters" : {
     "function" : "`tuple_intersection_theta`",
     "reason" : "Invalid Sketch Type 62"
@@ -1797,7 +1919,7 @@ struct<>
 org.apache.spark.SparkRuntimeException
 {
   "errorClass" : "TUPLE_INVALID_INPUT_SKETCH_BUFFER",
-  "sqlState" : "22546",
+  "sqlState" : "22000",
   "messageParameters" : {
     "function" : "`tuple_difference_theta`",
     "reason" : "Invalid Sketch Type 62"
@@ -1814,7 +1936,7 @@ struct<>
 org.apache.spark.SparkRuntimeException
 {
   "errorClass" : "TUPLE_INVALID_SKETCH_SUMMARY_VALUE_TYPE",
-  "sqlState" : "22546",
+  "sqlState" : "22023",
   "messageParameters" : {
     "actualType" : "UTF8String",
     "function" : "`tuple_sketch_agg`",
@@ -1832,7 +1954,7 @@ struct<>
 org.apache.spark.SparkRuntimeException
 {
   "errorClass" : "TUPLE_INVALID_SKETCH_SUMMARY_VALUE_TYPE",
-  "sqlState" : "22546",
+  "sqlState" : "22023",
   "messageParameters" : {
     "actualType" : "Double",
     "function" : "`tuple_sketch_agg`",
@@ -1850,7 +1972,7 @@ struct<>
 org.apache.spark.SparkRuntimeException
 {
   "errorClass" : "TUPLE_INVALID_INPUT_SKETCH_BUFFER",
-  "sqlState" : "22546",
+  "sqlState" : "22000",
   "messageParameters" : {
     "function" : "`tuple_sketch_estimate`",
     "reason" : "Index 70 out of bounds for length 4"
