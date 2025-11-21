@@ -143,8 +143,8 @@ private[execution] object HashedRelation {
       new TaskMemoryManager(
         new UnifiedMemoryManager(
           new SparkConf().set(MEMORY_OFFHEAP_ENABLED.key, "false"),
-          Long.MaxValue,
-          Long.MaxValue / 2,
+          Runtime.getRuntime.maxMemory,
+          Runtime.getRuntime.maxMemory / 2,
           1),
         0)
     }
@@ -401,8 +401,8 @@ private[joins] class UnsafeHashedRelation(
     val taskMemoryManager = new TaskMemoryManager(
       new UnifiedMemoryManager(
         new SparkConf().set(MEMORY_OFFHEAP_ENABLED.key, "false"),
-        Long.MaxValue,
-        Long.MaxValue / 2,
+        Runtime.getRuntime.maxMemory,
+        Runtime.getRuntime.maxMemory / 2,
         1),
       0)
 
@@ -576,8 +576,8 @@ private[execution] final class LongToUnsafeRowMap(
       new TaskMemoryManager(
         new UnifiedMemoryManager(
           new SparkConf().set(MEMORY_OFFHEAP_ENABLED.key, "false"),
-          Long.MaxValue,
-          Long.MaxValue / 2,
+          Runtime.getRuntime.maxMemory,
+          Runtime.getRuntime.maxMemory / 2,
           1),
         0),
       0)
