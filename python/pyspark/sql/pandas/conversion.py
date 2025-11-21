@@ -496,6 +496,7 @@ class SparkConversionMixin:
             arrowUseLargeVarTypes,
             arrowPySparkFallbackEnabled,
             arrowMaxRecordsPerBatch,
+            arrowSafeTypeConversion,
         ) = self._jconf.getConfs(
             [
                 "spark.sql.timestampType",
@@ -504,6 +505,7 @@ class SparkConversionMixin:
                 "spark.sql.execution.arrow.useLargeVarTypes",
                 "spark.sql.execution.arrow.pyspark.fallback.enabled",
                 "spark.sql.execution.arrow.maxRecordsPerBatch",
+                "spark.sql.execution.pandas.convertToArrowArraySafely",
             ]
         )
 
@@ -511,6 +513,7 @@ class SparkConversionMixin:
         prefers_large_var_types = arrowUseLargeVarTypes == "true"
         timezone = sessionLocalTimeZone
         arrow_batch_size = int(arrowMaxRecordsPerBatch)
+        selfcheck = arrowSafeTypeConversion == "true"
 
         if type(data).__name__ == "Table":
             # `data` is a PyArrow Table
@@ -526,7 +529,14 @@ class SparkConversionMixin:
             if schema is None:
                 schema = data.schema.names
 
-            return self._create_from_arrow_table(data, schema, timezone, prefer_timestamp_ntz)
+            return self._create_from_arrow_table(
+                data,
+                schema,
+                timezone,
+                prefer_timestamp_ntz,
+                prefers_large_var_types,
+                arrow_batch_size,
+            )
 
         # `data` is a PandasDataFrameLike object
         from pyspark.sql.pandas.utils import require_minimum_pandas_version
@@ -546,6 +556,7 @@ class SparkConversionMixin:
                     prefer_timestamp_ntz,
                     prefers_large_var_types,
                     arrow_batch_size,
+                    selfcheck,
                 )
             except Exception as e:
                 if arrowPySparkFallbackEnabled == "true":
@@ -776,6 +787,7 @@ class SparkConversionMixin:
         prefer_timestamp_ntz: bool,
         prefers_large_var_types: bool,
         arrow_batch_size: int,
+        safecheck: bool,
     ) -> "DataFrame":
         """
         Create a DataFrame from a given pandas.DataFrame by slicing it into partitions, converting
@@ -881,7 +893,6 @@ class SparkConversionMixin:
 
         jsparkSession = self._jsparkSession
 
-        safecheck = self._jconf.arrowSafeTypeConversion()
         ser = ArrowStreamPandasSerializer(timezone, safecheck, False)
 
         @no_type_check
@@ -906,6 +917,8 @@ class SparkConversionMixin:
         schema: Union[StructType, List[str]],
         timezone: str,
         prefer_timestamp_ntz: bool,
+        prefers_large_var_types: bool,
+        arrow_batch_size: int,
     ) -> "DataFrame":
         """
         Create a DataFrame from a given pyarrow.Table by slicing it into partitions then
@@ -943,7 +956,6 @@ class SparkConversionMixin:
         if not isinstance(schema, StructType):
             schema = from_arrow_schema(table.schema, prefer_timestamp_ntz=prefer_timestamp_ntz)
 
-        prefers_large_var_types = self._jconf.arrowUseLargeVarTypes()
         table = _check_arrow_table_timestamps_localize(table, schema, True, timezone).cast(
             to_arrow_schema(
                 schema,
@@ -953,7 +965,7 @@ class SparkConversionMixin:
         )
 
         # Chunk the Arrow Table into RecordBatches
-        chunk_size = self._jconf.arrowMaxRecordsPerBatch()
+        chunk_size = arrow_batch_size
         arrow_data = table.to_batches(max_chunksize=chunk_size)
 
         jsparkSession = self._jsparkSession
