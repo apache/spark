@@ -850,4 +850,49 @@ class SparkDeclarativePipelinesServerSuite
       }
     }
   }
+
+  test("spark.sql() inside a pipeline flow function should return a sql_command_result") {
+    withRawBlockingStub { implicit stub =>
+      val graphId = createDataflowGraph
+      val pipelineAnalysisContext = proto.PipelineAnalysisContext
+        .newBuilder()
+        .setDataflowGraphId(graphId)
+        .setFlowName("flow1")
+        .build()
+      val userContext = proto.UserContext
+        .newBuilder()
+        .addExtensions(com.google.protobuf.Any.pack(pipelineAnalysisContext))
+        .setUserId("test_user")
+        .build()
+
+      val relation = proto.Plan
+        .newBuilder()
+        .setCommand(
+          proto.Command
+            .newBuilder()
+            .setSqlCommand(
+              proto.SqlCommand
+                .newBuilder()
+                .setInput(
+                  proto.Relation
+                    .newBuilder()
+                    .setRead(proto.Read
+                      .newBuilder()
+                      .setNamedTable(
+                        proto.Read.NamedTable.newBuilder().setUnparsedIdentifier("table"))
+                      .build())
+                    .build()))
+            .build())
+        .build()
+
+      val sparkSqlRequest = proto.ExecutePlanRequest
+        .newBuilder()
+        .setUserContext(userContext)
+        .setPlan(relation)
+        .build()
+      val sparkSqlResponse = stub.executePlan(sparkSqlRequest).next()
+      assert(sparkSqlResponse.hasSqlCommandResult)
+      assert(sparkSqlResponse.getSqlCommandResult.getRelation == relation)
+    }
+  }
 }
