@@ -1,0 +1,702 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package org.apache.spark.sql.streaming
+
+import java.sql.Timestamp
+import java.time.{Duration, Instant}
+
+import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.Dataset
+import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
+import org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.streaming.processors._
+
+/** Test suite for TwsTester utility class. */
+class TwsTesterSuite extends SparkFunSuite {
+
+  test("TwsTester should correctly test RunningCountProcessor") {
+    val input: List[(String, String)] = List(
+      ("key1", "a"),
+      ("key2", "b"),
+      ("key1", "c"),
+      ("key2", "b"),
+      ("key1", "c"),
+      ("key1", "c"),
+      ("key3", "q")
+    )
+    val tester = new TwsTester(new RunningCountProcessor[String]())
+    val ans1: List[(String, Long)] = tester.test(input)
+    assert(ans1.sorted == List(("key1", 4L), ("key2", 2L), ("key3", 1L)).sorted)
+
+    assert(tester.peekValueState[Long]("count", "key1").get == 4L)
+    assert(tester.peekValueState[Long]("count", "key2").get == 2L)
+    assert(tester.peekValueState[Long]("count", "key3").get == 1L)
+    assert(tester.peekValueState[Long]("count", "key4").isEmpty)
+
+    val ans2 = tester.testOneRow("key1", "q")
+    assert(ans2 == List(("key1", 5L)))
+    assert(tester.peekValueState[Long]("count", "key1").get == 5L)
+    assert(tester.peekValueState[Long]("count", "key2").get == 2L)
+
+    val ans3 = tester.test(List(("key1", "a"), ("key2", "a")))
+    assert(ans3.sorted == List(("key1", 6L), ("key2", 3L)))
+  }
+
+  test("TwsTester should allow direct access to ValueState") {
+    val processor = new RunningCountProcessor[String]()
+    val tester = new TwsTester[String, String, (String, Long)](processor)
+    tester.setValueState[Long]("count", "foo", 5)
+    tester.test(List(("foo", "a")))
+    assert(tester.peekValueState[Long]("count", "foo").get == 6L)
+  }
+
+  test("TwsTester should correctly test TopKProcessor") {
+    val input: List[(String, (String, Double))] = List(
+      ("key2", ("c", 30.0)),
+      ("key2", ("d", 40.0)),
+      ("key1", ("b", 2.0)),
+      ("key1", ("c", 3.0)),
+      ("key2", ("a", 10.0)),
+      ("key2", ("b", 20.0)),
+      ("key3", ("a", 100.0)),
+      ("key1", ("a", 1.0))
+    )
+    val tester = new TwsTester(new TopKProcessor(2))
+    val ans1 = tester.test(input)
+    assert(
+      ans1.sorted == List(
+        ("key1", 2.0),
+        ("key1", 3.0),
+        ("key2", 30.0),
+        ("key2", 40.0),
+        ("key3", 100.0)
+      )
+    )
+    assert(tester.peekListState[Double]("topK", "key1") == List(3.0, 2.0))
+    assert(tester.peekListState[Double]("topK", "key2") == List(40.0, 30.0))
+    assert(tester.peekListState[Double]("topK", "key3") == List(100.0))
+    assert(tester.peekListState[Double]("topK", "key4").isEmpty)
+
+    val ans2 = tester.test(List(("key1", ("a", 10.0))))
+    assert(ans2.sorted == List(("key1", 3.0), ("key1", 10.0)))
+    assert(tester.peekListState[Double]("topK", "key1") == List(10.0, 3.0))
+  }
+
+  test("TwsTester should allow direct access to ListState") {
+    val tester = new TwsTester(new TopKProcessor(2))
+    tester.setListState("topK", "a", List(6.0, 5.0))
+    tester.setListState("topK", "b", List(8.0, 7.0))
+    tester.testOneRow("a", ("", 10.0))
+    tester.testOneRow("b", ("", 7.5))
+    tester.testOneRow("c", ("", 1.0))
+
+    assert(tester.peekListState[Double]("topK", "a") == List(10.0, 6.0))
+    assert(tester.peekListState[Double]("topK", "b") == List(8.0, 7.5))
+    assert(tester.peekListState[Double]("topK", "c") == List(1.0))
+    assert(tester.peekListState[Double]("topK", "d") == List())
+  }
+
+  test("TwsTester should correctly test WordFrequencyProcessor") {
+    val input: List[(String, (String, String))] = List(
+      ("user1", ("", "hello")),
+      ("user1", ("", "world")),
+      ("user1", ("", "hello")),
+      ("user2", ("", "hello")),
+      ("user2", ("", "spark")),
+      ("user1", ("", "world"))
+    )
+    val tester = new TwsTester(new WordFrequencyProcessor())
+    val ans1 = tester.test(input)
+
+    assert(
+      ans1.sorted == List(
+        ("user1", "hello", 1L),
+        ("user1", "hello", 2L),
+        ("user1", "world", 1L),
+        ("user1", "world", 2L),
+        ("user2", "hello", 1L),
+        ("user2", "spark", 1L)
+      ).sorted
+    )
+
+    // Check state using peekMapState
+    assert(
+      tester.peekMapState[String, Long]("frequencies", "user1") == Map("hello" -> 2L, "world" -> 2L)
+    )
+    assert(
+      tester.peekMapState[String, Long]("frequencies", "user2") == Map("hello" -> 1L, "spark" -> 1L)
+    )
+    assert(tester.peekMapState[String, Long]("frequencies", "user3") == Map())
+    assert(tester.peekMapState[String, Long]("frequencies", "user3").isEmpty)
+
+    // Process more data for user1
+    val ans2 = tester.test(List(("user1", ("", "hello")), ("user1", ("", "test"))))
+    assert(ans2.sorted == List(("user1", "hello", 3L), ("user1", "test", 1L)).sorted)
+    assert(
+      tester.peekMapState[String, Long]("frequencies", "user1") == Map(
+        "hello" -> 3L,
+        "world" -> 2L,
+        "test" -> 1L
+      )
+    )
+  }
+
+  test("TwsTester should allow direct access to MapState") {
+    val tester = new TwsTester(new WordFrequencyProcessor())
+
+    // Set initial state directly
+    tester.setMapState("frequencies", "user1", Map("hello" -> 5L, "world" -> 3L))
+    tester.setMapState("frequencies", "user2", Map("spark" -> 10L))
+
+    // Process new words
+    tester.testOneRow("user1", ("", "hello"))
+    tester.testOneRow("user1", ("", "goodbye"))
+    tester.testOneRow("user2", ("", "spark"))
+    tester.testOneRow("user3", ("", "new"))
+
+    // Verify updated state
+    assert(
+      tester.peekMapState[String, Long]("frequencies", "user1") == Map(
+        "hello" -> 6L,
+        "world" -> 3L,
+        "goodbye" -> 1L
+      )
+    )
+    assert(tester.peekMapState[String, Long]("frequencies", "user2") == Map("spark" -> 11L))
+    assert(tester.peekMapState[String, Long]("frequencies", "user3") == Map("new" -> 1L))
+    assert(tester.peekMapState[String, Long]("frequencies", "user4") == Map())
+  }
+
+  test("TwsTester should expire old value state according to TTL") {
+    val processor = new RunningCountProcessor[String](TTLConfig(Duration.ofSeconds(100)))
+    val testClock = new TwsTester.TestClock(Instant.EPOCH)
+    val tester = new TwsTester(processor, testClock)
+
+    tester.testOneRow("key1", "b")
+    assert(tester.peekValueState[Long]("count", "key1").get == 1L)
+    testClock.advanceBy(Duration.ofSeconds(101))
+    assert(tester.peekValueState[Long]("count", "key1").isEmpty)
+  }
+
+  test("TwsTester should expire old list state according to TTL") {
+    val testClock = new TwsTester.TestClock(Instant.EPOCH)
+    val ttlConfig = TTLConfig(Duration.ofSeconds(100))
+    val processor = new TopKProcessor(2, ttlConfig)
+    val tester = new TwsTester(processor, testClock)
+
+    tester.testOneRow("key1", ("a", 1.0))
+    tester.testOneRow("key2", ("a", 1.5))
+    assert(tester.peekListState[Double]("topK", "key1") == List(1.0))
+    assert(tester.peekListState[Double]("topK", "key2") == List(1.5))
+
+    testClock.advanceBy(Duration.ofSeconds(50))
+    tester.testOneRow("key2", ("a", 2.0))
+    assert(tester.peekListState[Double]("topK", "key1") == List(1.0))
+    assert(tester.peekListState[Double]("topK", "key2") == List(2.0, 1.5))
+
+    testClock.advanceBy(Duration.ofSeconds(51))
+    assert(tester.peekListState[Double]("topK", "key1") == List())
+    assert(tester.peekListState[Double]("topK", "key2") == List(2.0, 1.5))
+
+    testClock.advanceBy(Duration.ofSeconds(50))
+    assert(tester.peekListState[Double]("topK", "key1") == List())
+    assert(tester.peekListState[Double]("topK", "key2") == List())
+  }
+
+  test("TwsTester should expire old map state according to TTL") {
+    val testClock = new TwsTester.TestClock(Instant.EPOCH)
+    val ttlConfig = TTLConfig(Duration.ofSeconds(100))
+    val processor = new WordFrequencyProcessor(ttlConfig)
+    val tester = new TwsTester(processor, testClock)
+
+    tester.testOneRow("key1", ("a", "spark"))
+    tester.testOneRow("key2", ("a", "beta"))
+    assert(tester.peekMapState[String, Long]("frequencies", "key1") == Map("spark" -> 1L))
+    assert(tester.peekMapState[String, Long]("frequencies", "key2") == Map("beta" -> 1L))
+
+    testClock.advanceBy(Duration.ofSeconds(50))
+    tester.testOneRow("key2", ("a", "spark"))
+    assert(tester.peekMapState[String, Long]("frequencies", "key1") == Map("spark" -> 1L))
+    assert(
+      tester.peekMapState[String, Long]("frequencies", "key2") == Map("beta" -> 1L, "spark" -> 1L)
+    )
+
+    testClock.advanceBy(Duration.ofSeconds(51))
+    assert(tester.peekMapState[String, Long]("frequencies", "key1") == Map())
+    assert(
+      tester.peekMapState[String, Long]("frequencies", "key2") == Map("beta" -> 1L, "spark" -> 1L)
+    )
+
+    testClock.advanceBy(Duration.ofSeconds(50))
+    assert(tester.peekMapState[String, Long]("frequencies", "key1") == Map())
+    assert(tester.peekMapState[String, Long]("frequencies", "key2") == Map())
+  }
+
+  test("TwsTester should test one row with value state") {
+    val processor = new RunningCountProcessor[String]()
+    val tester = new TwsTester(processor)
+
+    val (rows, newState) = tester.testOneRowWithValueState("key1", "a", "count", 10L)
+    assert(rows == List(("key1", 11L)))
+    assert(newState == 11L)
+  }
+
+  test("TwsTester should handle session timeout with timer") {
+    val testClock = new TwsTester.TestClock(Instant.ofEpochMilli(10000L))
+    val processor = new SessionTimeoutProcessor(timeoutDurationMs = 5000L)
+    val tester = new TwsTester(processor, testClock, timeMode = TimeMode.ProcessingTime)
+
+    // First activity - should register timer at 15000ms
+    val result1 = tester.test(List(("user1", ("user1", "login"))))
+    assert(result1 == List(("user1", "ACTIVITY", 1L)))
+    assert(tester.peekValueState[Long]("activityCount", "user1").get == 1L)
+    assert(tester.peekValueState[Long]("timer", "user1").get == 15000L)
+
+    // Second activity before timeout - should update timer to 20000ms
+    testClock.advanceBy(Duration.ofMillis(3000L)) // now at 13000ms
+    val result2 = tester.test(List(("user1", ("user1", "click"))))
+    assert(result2 == List(("user1", "ACTIVITY", 2L)))
+    assert(tester.peekValueState[Long]("activityCount", "user1").get == 2L)
+    assert(tester.peekValueState[Long]("timer", "user1").get == 18000L)
+
+    // Advance time past timeout - timer should fire
+    testClock.advanceBy(Duration.ofMillis(6000L)) // now at 19000ms, timer at 18000ms should fire
+    val result3 = tester.test(List()) // empty input, but timer should fire
+    assert(result3 == List(("user1", "SESSION_TIMEOUT", 2L)))
+    assert(tester.peekValueState[Long]("activityCount", "user1").isEmpty)
+    assert(tester.peekValueState[Long]("timer", "user1").isEmpty)
+  }
+
+  test("TwsTester should process input before timers") {
+    val testClock = new TwsTester.TestClock(Instant.ofEpochMilli(10000L))
+    val processor = new SessionTimeoutProcessor(timeoutDurationMs = 5000L)
+    val tester = new TwsTester(processor, testClock, timeMode = TimeMode.ProcessingTime)
+
+    // Register initial activity and timer
+    tester.test(List(("user1", ("user1", "start"))))
+    assert(tester.peekValueState[Long]("activityCount", "user1").get == 1L)
+
+    // Advance past timer expiry
+    testClock.advanceBy(Duration.ofMillis(6000L)) // now at 16000ms, timer at 15000ms expired
+
+    // Process new input - input should be processed BEFORE timer fires
+    val result = tester.test(List(("user1", ("user1", "new_activity"))))
+
+    // Input is processed first: increments count to 2, deletes old timer, registers new one
+    // The expired timer at 15000ms is deleted during input processing, so it never fires
+    assert(result.length == 1)
+    assert(result(0) == ("user1", "ACTIVITY", 2L)) // Input processed, count incremented from 1 to 2
+
+    // After processing, should have updated state with new timer
+    assert(tester.peekValueState[Long]("activityCount", "user1").get == 2L)
+    assert(tester.peekValueState[Long]("timer", "user1").get == 21000L) // 16000 + 5000
+  }
+
+  test("TwsTester should handle multiple timers in same batch") {
+    val testClock = new TwsTester.TestClock(Instant.ofEpochMilli(10000L))
+    val processor = new MultiTimerProcessor()
+    val tester = new TwsTester(processor, testClock, timeMode = TimeMode.ProcessingTime)
+
+    // Register all three timers (SHORT=11000ms, MEDIUM=13000ms, LONG=15000ms)
+    val result1 = tester.test(List(("user1", ("user1", "start"))))
+    assert(result1.isEmpty)
+
+    // Advance to fire SHORT timer only
+    testClock.advanceBy(Duration.ofMillis(1500L)) // now at 11500ms
+    val result2 = tester.test(List())
+    assert(result2.length == 1)
+    assert(result2(0) == ("user1", "SHORT", 11000L))
+
+    // Advance to fire MEDIUM and LONG timers together
+    testClock.advanceBy(Duration.ofMillis(4000L)) // now at 15500ms
+    val result3 = tester.test(List())
+
+    // Timers should fire in order of expiry time
+    assert(result3.length == 2)
+    assert(result3(0) == ("user1", "MEDIUM", 13000L))
+    assert(result3(1) == ("user1", "LONG", 15000L))
+  }
+
+  test("TwsTester should not process timers twice") {
+    val testClock = new TwsTester.TestClock(Instant.ofEpochMilli(10000L))
+    val processor = new SessionTimeoutProcessor(timeoutDurationMs = 5000L)
+    val tester = new TwsTester(processor, testClock, timeMode = TimeMode.ProcessingTime)
+
+    // Register timer at 15000ms
+    tester.test(List(("user1", ("user1", "start"))))
+    assert(tester.peekValueState[Long]("activityCount", "user1").get == 1L)
+
+    // Advance past timer and process - timer fires
+    testClock.advanceBy(Duration.ofMillis(6000L)) // now at 16000ms
+    val result1 = tester.test(List())
+    assert(result1.length == 1)
+    assert(result1(0) == ("user1", "SESSION_TIMEOUT", 1L))
+    assert(tester.peekValueState[Long]("activityCount", "user1").isEmpty)
+
+    // Process again at same time - timer should NOT fire again
+    val result2 = tester.test(List())
+    assert(result2.isEmpty)
+
+    // Process again with even later time - timer should still not fire
+    testClock.advanceBy(Duration.ofMillis(10000L)) // now at 26000ms
+    val result3 = tester.test(List())
+    assert(result3.isEmpty)
+  }
+
+  test("TwsTester should handle timers for multiple keys independently") {
+    val testClock = new TwsTester.TestClock(Instant.ofEpochMilli(10000L))
+    val processor = new SessionTimeoutProcessor(timeoutDurationMs = 5000L)
+    val tester = new TwsTester(processor, testClock, timeMode = TimeMode.ProcessingTime)
+
+    // Register activities for two users at different times
+    tester.test(List(("user1", ("user1", "start")))) // timer at 15000ms
+    testClock.advanceBy(Duration.ofMillis(2000L)) // now at 12000ms
+    tester.test(List(("user2", ("user2", "start")))) // timer at 17000ms
+
+    // Advance to fire only user1's timer
+    testClock.advanceBy(Duration.ofMillis(4000L)) // now at 16000ms
+    val result1 = tester.test(List())
+    assert(result1.length == 1)
+    assert(result1(0) == ("user1", "SESSION_TIMEOUT", 1L))
+    assert(tester.peekValueState[Long]("activityCount", "user1").isEmpty)
+    assert(tester.peekValueState[Long]("activityCount", "user2").get == 1L) // user2 still active
+
+    // Advance to fire user2's timer
+    testClock.advanceBy(Duration.ofMillis(2000L)) // now at 18000ms
+    val result2 = tester.test(List())
+    assert(result2.length == 1)
+    assert(result2(0) == ("user2", "SESSION_TIMEOUT", 1L))
+    assert(tester.peekValueState[Long]("activityCount", "user2").isEmpty)
+  }
+
+  test("TwsTester should handle timer deletion correctly") {
+    val testClock = new TwsTester.TestClock(Instant.ofEpochMilli(10000L))
+    val processor = new SessionTimeoutProcessor(timeoutDurationMs = 5000L)
+    val tester = new TwsTester(processor, testClock, timeMode = TimeMode.ProcessingTime)
+
+    // Register initial timer at 15000ms
+    tester.test(List(("user1", ("user1", "start"))))
+    assert(tester.peekValueState[Long]("timer", "user1").get == 15000L)
+
+    // New activity deletes old timer and registers new one at 18000ms
+    testClock.advanceBy(Duration.ofMillis(3000L)) // now at 13000ms
+    tester.test(List(("user1", ("user1", "activity"))))
+    assert(tester.peekValueState[Long]("timer", "user1").get == 18000L)
+
+    // Advance past original timer time (15000ms) but before new timer (18000ms)
+    testClock.advanceBy(Duration.ofMillis(3000L)) // now at 16000ms
+    val result = tester.test(List())
+    // Old timer at 15000ms should NOT fire since it was deleted
+    assert(result.isEmpty)
+    assert(tester.peekValueState[Long]("activityCount", "user1").get == 2L) // still active
+
+    // Advance to EXACTLY the new timer time (18000ms).
+    // This tests that timers fire when current time equals expiry time.
+    testClock.advanceBy(Duration.ofMillis(2000L))
+    val result2 = tester.test(List())
+    assert(result2.length == 1)
+    assert(result2(0) == ("user1", "SESSION_TIMEOUT", 2L))
+  }
+
+  test("TwsTester should handle EventTime mode with watermark") {
+    val processor = new EventTimeWindowProcessor(windowDurationMs = 10000L)
+    val tester = new TwsTester(processor, timeMode = TimeMode.EventTime)
+
+    // Configure watermark: extract timestamp from input, 2 second delay
+    // In real Spark, the watermark column must be of Timestamp type
+    tester.withWatermark(
+      (input: (String, Timestamp)) => input._2,
+      "2 seconds"
+    )
+
+    // Batch 1: Process events with timestamps 10000, 12000, 15000
+    // Max event time = 15000, watermark after batch = 15000 - 2000 = 13000
+    val result1 = tester.test(
+      List(
+        ("user1", ("event1", new Timestamp(10000L))),
+        ("user1", ("event2", new Timestamp(12000L))),
+        ("user1", ("event3", new Timestamp(15000L)))
+      )
+    )
+    // First batch: registers timer at 20000 (10000 + 10000), no timers fire yet
+    assert(result1 == List(("user1", "WINDOW_START", 3L)))
+    assert(tester.peekValueState[Long]("eventCount", "user1").get == 3L)
+    assert(tester.peekValueState[Long]("windowEndTime", "user1").get == 20000L)
+
+    // Batch 2: Process more events with timestamps 18000, 20000
+    // Watermark before batch = 13000, so timer at 20000 doesn't fire yet
+    // Max event time = 20000, watermark after batch = 20000 - 2000 = 18000
+    // Timer at 20000 still doesn't fire (watermark < timer)
+    val result2 = tester.test(
+      List(
+        ("user1", ("event4", new Timestamp(18000L))),
+        ("user1", ("event5", new Timestamp(20000L)))
+      )
+    )
+    assert(result2 == List(("user1", "WINDOW_CONTINUE", 5L)))
+    assert(tester.peekValueState[Long]("eventCount", "user1").get == 5L)
+
+    // Batch 3: Process event with timestamp 23000
+    // Watermark before batch = 18000 (for filtering late events)
+    // Max event time = 23000, watermark after batch = 23000 - 2000 = 21000
+    // Timer at 20000 FIRES because updated watermark (21000) > timer (20000)
+    // Input is processed first, then timer fires
+    val result3 = tester.test(List(("user1", ("event6", new Timestamp(23000L)))))
+    // Input is processed first (increments count to 6), then timer fires (outputs final count 6)
+    assert(result3.length == 2)
+    assert(result3(0) == ("user1", "WINDOW_CONTINUE", 6L)) // Input processed first
+    assert(result3(1) == ("user1", "WINDOW_END", 6L)) // Timer fired with count after input
+    // Timer clears state, so no state should exist after this batch
+    assert(tester.peekValueState[Long]("eventCount", "user1").isEmpty)
+    assert(tester.peekValueState[Long]("windowEndTime", "user1").isEmpty)
+
+    // Batch 4: Process another event with timestamp 25000
+    // State was cleared in batch 3, so this starts a new window
+    // Watermark before batch = 21000
+    // Max event time = 25000, watermark after batch = 25000 - 2000 = 23000
+    val result4 = tester.test(List(("user1", ("event7", new Timestamp(25000L)))))
+    // Since state was cleared, this starts a new window
+    assert(result4 == List(("user1", "WINDOW_START", 1L)))
+    assert(tester.peekValueState[Long]("eventCount", "user1").get == 1L)
+    assert(tester.peekValueState[Long]("windowEndTime", "user1").get == 35000L) // 25000 + 10000
+  }
+
+  test("TwsTester should filter late events based on watermark") {
+    val processor = new EventTimeWindowProcessor(windowDurationMs = 10000L)
+    val tester = new TwsTester(processor, timeMode = TimeMode.EventTime)
+
+    // Configure watermark with 2 second delay
+    tester.withWatermark(
+      (input: (String, Timestamp)) => input._2,
+      "2 seconds"
+    )
+
+    // Batch 1: Process events with timestamps 10000, 12000, 15000
+    // Max event time = 15000, watermark after batch = 15000 - 2000 = 13000
+    val result1 = tester.test(
+      List(
+        ("user1", ("event1", new Timestamp(10000L))),
+        ("user1", ("event2", new Timestamp(12000L))),
+        ("user1", ("event3", new Timestamp(15000L)))
+      )
+    )
+    assert(result1 == List(("user1", "WINDOW_START", 3L)))
+
+    // Batch 2: Send mix of late and on-time events
+    // Watermark is currently 13000
+    // Event at 11000 is late (< 13000) and should be filtered
+    // Event at 14000 is on-time (>= 13000) and should be processed
+    val result2 = tester.test(
+      List(
+        ("user1", ("late_event", new Timestamp(11000L))), // LATE - should be filtered
+        ("user1", ("on_time_event", new Timestamp(14000L))) // ON-TIME - should be processed
+      )
+    )
+
+    // Only the on-time event should be processed, so count goes from 3 to 4
+    assert(result2 == List(("user1", "WINDOW_CONTINUE", 4L)))
+    assert(tester.peekValueState[Long]("eventCount", "user1").get == 4L)
+  }
+
+  test("TwsTester should call handleInitialState") {
+    val processor = new RunningCountProcessor[String]()
+    val tester = new TwsTester(processor, initialState = List(("a", 10L), ("b", 20L)))
+    assert(tester.peekValueState[Long]("count", "a").get == 10L)
+    assert(tester.peekValueState[Long]("count", "b").get == 20L)
+
+    val ans = tester.test(List(("a", "a"), ("c", "c")))
+    assert(ans == List(("a", 11L), ("c", 1L)))
+  }
+
+  test("TwsTester should test RunningCountProcessor row-by-row") {
+    val input: List[(String, String)] = List(
+      ("key1", "a"),
+      ("key2", "b"),
+      ("key1", "c"),
+      ("key2", "b"),
+      ("key1", "c"),
+      ("key1", "c"),
+      ("key3", "q")
+    )
+    val tester = new TwsTester(new RunningCountProcessor[String]())
+    val ans: List[(String, Long)] = tester.testRowByRow(input)
+    assert(
+      ans == List(
+        ("key1", 1L),
+        ("key2", 1L),
+        ("key1", 2L),
+        ("key2", 2L),
+        ("key1", 3L),
+        ("key1", 4L),
+        ("key3", 1L)
+      )
+    )
+  }
+}
+
+/**
+ * Integration test suite that compares TwsTester results with real streaming execution.
+ * Thread auditing is disabled because this suite runs actual streaming queries with RocksDB
+ * and shuffle operations, which spawn daemon threads (e.g., Netty boss/worker threads,
+ * file client threads, ForkJoinPool workers, and cleaner threads) that shut down
+ * asynchronously after SparkContext.stop().
+ */
+class TwsTesterFuzzTestSuite extends StreamTest {
+  import testImplicits._
+
+  // Disable thread auditing for this suite since it runs integration tests with
+  // real streaming queries that create asynchronously-stopped threads
+  override protected val enableAutoThreadAudit = false
+
+  /**
+    * Asserts that {@code tester} is equivalent to streaming query transforming {@code inputStream}
+    * to {@code result}, when both are fed with data from {@code batches}.
+    */
+  def checkTwsTester[
+      K: org.apache.spark.sql.Encoder,
+      I: org.apache.spark.sql.Encoder,
+      O: org.apache.spark.sql.Encoder](
+      tester: TwsTester[K, I, O],
+      batches: List[List[(K, I)]],
+      inputStream: MemoryStream[(K, I)],
+      result: Dataset[O]): Unit = {
+    withSQLConf(
+      SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[RocksDBStateStoreProvider].getName,
+      SQLConf.SHUFFLE_PARTITIONS.key -> "5"
+    ) {
+      val expectedResults: List[List[O]] = batches.map(batch => tester.test(batch)).toList
+      assert(batches.size == expectedResults.size)
+      
+      val actions: Seq[StreamAction] = (batches zip expectedResults).flatMap {
+          case (batch, expected) =>
+            Seq(
+              AddData(inputStream, batch: _*),
+              CheckNewAnswer(expected.head, expected.tail: _*)
+            )
+        } :+ StopStream
+      testStream(result, OutputMode.Append())(actions: _*)
+    }
+  }
+
+  /**
+   * Asserts that {@code tester} processes given {@code input} in the same way as Spark streaming
+   * query with {@code transformWithState} would.
+   * 
+   * This is simplified version of {@code checkTwsTester} for the case where there is only one batch
+   * and no timers (time mode is TimeMode.None).
+   */
+  def checkTwsTesterOneBatch[
+      K: org.apache.spark.sql.Encoder,
+      I: org.apache.spark.sql.Encoder,
+      O: org.apache.spark.sql.Encoder](
+      processor: StatefulProcessor[K, I, O],
+      input: List[(K, I)]): Unit = {
+    implicit val tupleEncoder = org.apache.spark.sql.Encoders.tuple(
+      implicitly[org.apache.spark.sql.Encoder[K]],
+      implicitly[org.apache.spark.sql.Encoder[I]]
+    )
+    val inputStream = MemoryStream[(K, I)]
+    val result = inputStream
+      .toDS()
+      .groupByKey(_._1)
+      .mapValues(_._2)
+      .transformWithState(processor, TimeMode.None(), OutputMode.Append())
+    checkTwsTester(new TwsTester(processor), List(input), inputStream, result)
+  }
+
+  test("fuzz test with RunningCountProcessor") {
+    val random = new scala.util.Random(0)
+    val input = List.fill(1000) {
+      (s"key${random.nextInt(10)}", random.alphanumeric.take(5).mkString)
+    }
+    val processor = new RunningCountProcessor[String]()
+    checkTwsTesterOneBatch(processor, input)
+  }
+
+  test("fuzz test with TopKProcessor") {
+    val random = new scala.util.Random(0)
+    val input = List.fill(1000) {
+      (
+        s"key${random.nextInt(10)}",
+        (random.alphanumeric.take(5).mkString, random.nextDouble() * 100)
+      )
+    }
+    val processor = new TopKProcessor(5)
+    checkTwsTesterOneBatch(processor, input)
+  }
+
+  test("fuzz test with WordFrequencyProcessor") {
+    val random = new scala.util.Random(0)
+    val words = Array("spark", "scala", "flink", "kafka", "hadoop", "hive", "presto", "trino")
+    val input = List.fill(1000) {
+      (s"key${random.nextInt(10)}", ("", words(random.nextInt(words.length))))
+    }
+    val processor = new WordFrequencyProcessor()
+    checkTwsTesterOneBatch(processor, input)
+  }
+
+  test("fuzz test with EventTimeWindowProcessor") {
+    val inputStream = MemoryStream[(String, (String, Timestamp))]
+    val processor = new EventTimeWindowProcessor(windowDurationMs = 10000L)
+    val result = inputStream
+      .toDS()
+      .select($"_1", $"_2", $"_2._2".as("timestamp"))
+      .withWatermark("timestamp", "2 seconds")
+      .as[(String, (String, Timestamp), Timestamp)]
+      .groupByKey(_._1)
+      .mapValues(_._2)
+      .transformWithState(processor, TimeMode.EventTime(), OutputMode.Append())
+
+    // Generate 10 random batches, each with ~100 events, 10 users, with timestamps increasing.
+    val random = new scala.util.Random(0)
+    val numBatches = 10
+    val numUsers = 10
+    val eventsPerBatch = 100
+    val eventGapMs = 1000L
+    val userIds = (1 to numUsers).map(i => s"user$i").toArray
+
+    var currentTimestamp = 0L
+    val batches: List[List[(String, (String, Timestamp))]] =
+      (0 until numBatches).map { batchIdx =>
+        val batchStart = currentTimestamp
+        val usersInThisBatch = random.shuffle(userIds.toList)
+        // Assign variable number of events to each user in this batch
+        val perUserEvents = Array.fill(numUsers)(random.nextInt(5) + 5) // 5-9 events per user
+        val events =
+          usersInThisBatch.zip(perUserEvents).flatMap {
+            case (user, numEventsForUser) =>
+              (0 until numEventsForUser).map { evtIdx =>
+                // Make timestamp within this batch but always increasing overall
+                val ts = new Timestamp(currentTimestamp)
+                val evtId = s"event${batchIdx}_${user}_$evtIdx"
+                currentTimestamp += eventGapMs
+                (user, (evtId, ts))
+              }
+          }
+        random
+          .shuffle(events)
+          .take(eventsPerBatch)
+          .toList // Shuffle and trim to ~100 events per batch
+      }.toList
+
+    val tester = new TwsTester(processor, timeMode = TimeMode.EventTime())
+    tester.withWatermark(_._2, "2 seconds")
+
+    checkTwsTester(tester, batches, inputStream, result)
+  }
+}
