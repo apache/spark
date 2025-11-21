@@ -6019,7 +6019,7 @@
   "TEMP_TABLE_OR_VIEW_ALREADY_EXISTS" : {
     "message" : [
       "Cannot create the temporary view <relationName> because it already exists.",
-      "Choose a different name, drop or replace the existing view,  or add the IF NOT EXISTS clause to tolerate pre-existing views."
+      "Choose a different name, drop or replace the existing view."
     ],
     "sqlState" : "42P07"
   },
