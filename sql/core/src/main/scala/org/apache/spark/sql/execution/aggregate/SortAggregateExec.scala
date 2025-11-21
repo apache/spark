@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.execution.aggregate
 
-import java.util.concurrent.TimeUnit.NANOSECONDS
-
 import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
