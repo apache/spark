@@ -19,11 +19,10 @@ package org.apache.spark.ml.util
 
 import java.io.{
   BufferedInputStream, BufferedOutputStream, DataInputStream, DataOutputStream,
-  File, FileInputStream, FileOutputStream, IOException, ObjectInputStream,
-  ObjectOutputStream
+  File, FileInputStream, FileOutputStream, IOException
 }
 import java.nio.file.{Files, Paths}
-import java.util.{ArrayList, Locale, ServiceLoader}
+import java.util.{Locale, ServiceLoader}
 
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
@@ -47,7 +46,7 @@ import org.apache.spark.ml.feature.RFormulaModel
 import org.apache.spark.ml.linalg.{DenseMatrix, DenseVector, Matrix, SparseMatrix, SparseVector, Vector}
 import org.apache.spark.ml.param.{ParamPair, Params}
 import org.apache.spark.ml.tuning.ValidatorParams
-import org.apache.spark.sql.{DataFrame, Row, SparkSession, SQLContext}
+import org.apache.spark.sql.{DataFrame, SparkSession, SQLContext}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.{Utils, VersionUtils}
 
@@ -1151,17 +1150,21 @@ private[spark] object ReadWriteUtils {
       Files.createDirectories(filePath.getParent)
 
       Using.resource(
-        new ObjectOutputStream(new BufferedOutputStream(new FileOutputStream(filePath.toFile)))
-      ) { oos =>
+        new DataOutputStream(new BufferedOutputStream(new FileOutputStream(filePath.toFile)))
+      ) { dos =>
+        dos.writeUTF("ARROW") // format
+
         val schema: StructType = df.schema
-        oos.writeObject(schema)
-        val it = df.toLocalIterator()
-        while (it.hasNext) {
-          oos.writeBoolean(true) // hasNext = True
-          val row: Row = it.next()
-          oos.writeObject(row)
+        dos.writeUTF(schema.json)
+
+        val iter = DatasetUtils.toArrowBatchRDD(df, "UTC").toLocalIterator
+        while (iter.hasNext) {
+          val bytes = iter.next()
+          require(bytes != null)
+          dos.writeInt(bytes.length)
+          dos.write(bytes)
         }
-        oos.writeBoolean(false) // hasNext = False
+        dos.writeInt(-1) // End
       }
     } else {
       df.write.parquet(path)
@@ -1170,18 +1173,33 @@ private[spark] object ReadWriteUtils {
 
   def loadDataFrame(path: String, spark: SparkSession): DataFrame = {
     if (localSavingModeState.get()) {
+      val sc = spark match {
+        case s: org.apache.spark.sql.classic.SparkSession => s.sparkContext
+      }
+
       Using.resource(
-        new ObjectInputStream(new BufferedInputStream(new FileInputStream(path)))
-      ) { ois =>
-        val schema = ois.readObject().asInstanceOf[StructType]
-        val rows = new ArrayList[Row]
-        var hasNext = ois.readBoolean()
-        while (hasNext) {
-          val row = ois.readObject().asInstanceOf[Row]
-          rows.add(row)
-          hasNext = ois.readBoolean()
+        new DataInputStream(new BufferedInputStream(new FileInputStream(path)))
+      ) { dis =>
+        val format = dis.readUTF()
+        require(format == "ARROW")
+
+        val schema: StructType = StructType.fromString(dis.readUTF())
+
+        val buff = mutable.ListBuffer.empty[Array[Byte]]
+        var nextBytes = dis.readInt()
+        while (nextBytes >= 0) {
+          val bytes = dis.readNBytes(nextBytes)
+          buff.append(bytes)
+          nextBytes = dis.readInt()
         }
-        spark.createDataFrame(rows, schema)
+        require(nextBytes == -1)
+
+        DatasetUtils.fromArrowBatchRDD(
+          sc.parallelize[Array[Byte]](buff.result()),
+          schema,
+          "UTC",
+          spark
+        )
       }
     } else {
       spark.read.parquet(path)
