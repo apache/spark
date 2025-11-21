@@ -40,7 +40,6 @@ class TopKProcessor(k: Int, ttl: TTLConfig = TTLConfig.NONE)
     // Load existing list into a buffer
     val current = ArrayBuffer[Double]()
     topKState.get().foreach(current += _)
-    println(s"AAA loaded state for key=$key: $current")
 
     // Add new values and recompute top-K
     inputRows.foreach {
@@ -48,7 +47,6 @@ class TopKProcessor(k: Int, ttl: TTLConfig = TTLConfig.NONE)
         current += score
     }
     val updatedTopK = current.sorted(Ordering[Double].reverse).take(k)
-    println(s"AAA updatedTopK for key=$key: $updatedTopK")
 
     // Persist back
     topKState.clear()

@@ -16,18 +16,10 @@
  */
 package org.apache.spark.sql.streaming
 
-import java.sql.Timestamp
-import java.time.{Clock, Duration, Instant, ZoneId}
-
 import scala.reflect.ClassTag
 
-import org.apache.spark.sql.catalyst.util.IntervalUtils
 import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.statefulprocessor.ImplicitGroupingKeyTracker
 import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.testing.InMemoryStatefulProcessorHandleImpl
-import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.timers.{
-  ExpiredTimerInfoImpl,
-  TimerValuesImpl
-}
 
 /**
  * Testing utility for transformWithState stateful processors. Provides in-memory state management
@@ -45,19 +37,10 @@ import org.apache.spark.sql.execution.streaming.operators.stateful.transformwith
  */
 class TwsTester[K, I, O](
     val processor: StatefulProcessor[K, I, O],
-    val clock: Clock = Clock.systemUTC(),
-    val timeMode: TimeMode = TimeMode.None,
-    val outputMode: OutputMode = OutputMode.Append,
     val initialState: List[(K, Any)] = List()) {
-  private val handle = new InMemoryStatefulProcessorHandleImpl(timeMode, null, clock)
-
-  private var eventTimeFunc: (I => Timestamp) = null
-  private var delayThresholdMs: Long = 0
-  private var currentWatermarkMs: Option[Long] = None
-
+  private val handle = new InMemoryStatefulProcessorHandleImpl()
   processor.setHandle(handle)
-  processor.init(outputMode, timeMode)
-
+  processor.init(OutputMode.Append, TimeMode.None)
   processor match {
     case p: StatefulProcessorWithInitialState[K @unchecked, I @unchecked, O @unchecked, s] =>
       handleInitialState[s]()
@@ -65,13 +48,11 @@ class TwsTester[K, I, O](
   }
 
   private def handleInitialState[S](): Unit = {
-    val timerValues = new TimerValuesImpl(Some(clock.instant().toEpochMilli()), None)
     val p = processor.asInstanceOf[StatefulProcessorWithInitialState[K, I, O, S]]
     initialState.foreach {
       case (key, state) =>
         ImplicitGroupingKeyTracker.setImplicitKey(key)
-        p.handleInitialState(key, state.asInstanceOf[S], timerValues)
-        ImplicitGroupingKeyTracker.removeImplicitKey()
+        p.handleInitialState(key, state.asInstanceOf[S], null)
     }
   }
 
@@ -85,64 +66,12 @@ class TwsTester[K, I, O](
    * @return all output rows produced by the processor
    */
   def test(input: List[(K, I)]): List[O] = {
-    val currentTimeMs: Long = clock.instant().toEpochMilli()
-    var timerValues = new TimerValuesImpl(Some(currentTimeMs), currentWatermarkMs)
     var ans: List[O] = List()
-    val filteredInput = filterLateEvents(input)
-
-    for ((key, v) <- filteredInput.groupBy(_._1)) {
+    for ((key, v) <- input.groupBy(_._1)) {
       ImplicitGroupingKeyTracker.setImplicitKey(key)
-      ans = ans ++ processor.handleInputRows(key, v.map(_._2).iterator, timerValues).toList
-      ImplicitGroupingKeyTracker.removeImplicitKey()
-    }
-    
-    updateWatermark(input)
-    timerValues = new TimerValuesImpl(Some(currentTimeMs), currentWatermarkMs)
-    ans ++ handleExpiredTimers(timerValues)
-  }
-
-  // Filters late events in EventTime mode.
-  private def filterLateEvents(input: List[(K, I)]): List[(K, I)] = {
-    if (timeMode != TimeMode.EventTime || !currentWatermarkMs.isDefined) {
-      return input
-    }
-    require(eventTimeFunc != null, "call withWatermark if timeMode is EventTime")
-    input.filter { case (_, row) => eventTimeFunc(row).getTime() >= currentWatermarkMs.get }
-  }
-
-  private def handleExpiredTimers(timerValues: TimerValues): List[O] = {
-    if (timeMode == TimeMode.None) {
-      return List()
-    }
-    val currentTimeMs: Long =
-      if (timeMode == TimeMode.EventTime) timerValues.getCurrentWatermarkInMs()
-      else timerValues.getCurrentProcessingTimeInMs()
-
-    var ans: List[O] = List()
-    for (key <- handle.getAllKeysWithTimers[K]()) {
-      ImplicitGroupingKeyTracker.setImplicitKey(key)
-      val expiredTimers: List[Long] = handle.listTimers().filter(_ <= currentTimeMs).toList
-      for (timerExpiryTimeMs <- expiredTimers) {
-        val expiredTimerInfo = new ExpiredTimerInfoImpl(Some(timerExpiryTimeMs))
-        ans = ans ++ processor.handleExpiredTimer(key, timerValues, expiredTimerInfo).toList
-        handle.deleteTimer(timerExpiryTimeMs)
-      }
-      ImplicitGroupingKeyTracker.removeImplicitKey()
-    }
+      ans = ans ++ processor.handleInputRows(key, v.map(_._2).iterator, null).toList
+    }    
     ans
-  }
-
-  private def updateWatermark(input: List[(K, I)]): Unit = {
-    if (timeMode != TimeMode.EventTime || input.isEmpty) {
-      return
-    }
-    require(eventTimeFunc != null, "call withWatermark if timeMode is EventTime")
-    currentWatermarkMs = Some(
-      math.max(
-        currentWatermarkMs.getOrElse(0L),
-        input.map(v => eventTimeFunc(v._2).getTime()).max - delayThresholdMs
-      )
-    )
   }
 
   /**
@@ -279,46 +208,5 @@ class TwsTester[K, I, O](
     val result: Map[MK, MV] = handle.peekMapState[MK, MV](stateName)
     ImplicitGroupingKeyTracker.removeImplicitKey()
     return result
-  }
-
-  /**
-   * Sets watermark for EventTime time mode.
-   *
-   * @param eventTime function used to extract timestamp column from input rows.
-   * @param delayThreshold a string specifying the minimum delay to wait to data to arrive late,
-   *     relative to the latest record that has been processed in the form of an interval (e.g.
-   *     "1 minute" or "5 hours")
-   */
-  def withWatermark(eventTime: (I => Timestamp), delayThreshold: String): Unit = {
-    require(timeMode == TimeMode.EventTime, "withWatermark is only usable with TimeMode.EventTime")
-    val parsedDelay = IntervalUtils.fromIntervalString(delayThreshold)
-    require(
-      !IntervalUtils.isNegative(parsedDelay),
-      s"delay threshold ($delayThreshold) should not be negative."
-    )
-    eventTimeFunc = eventTime
-    delayThresholdMs =
-      IntervalUtils.getDuration(parsedDelay, java.util.concurrent.TimeUnit.MILLISECONDS, 30)
-  }
-}
-
-object TwsTester {
-
-  /** Fake implementation of {@code java.time.CLock} to be used with TwsTester to simulate time. */
-  class TestClock(
-      var currentInstant: Instant = Instant.EPOCH,
-      zone: ZoneId = ZoneId.systemDefault())
-      extends Clock {
-    override def getZone: ZoneId = zone
-    override def withZone(zone: ZoneId): Clock = new TestClock(currentInstant, zone)
-    override def instant(): Instant = currentInstant
-
-    def setInstant(instant: Instant): Unit = {
-      currentInstant = instant
-    }
-
-    def advanceBy(duration: Duration): Unit = {
-      currentInstant = currentInstant.plus(duration)
-    }
   }
 }

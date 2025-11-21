@@ -16,67 +16,27 @@
  */
 package org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.testing
 
-import java.time.Clock
-import java.time.Instant
 import java.util.UUID
 
 import scala.collection.mutable
 import scala.reflect.ClassTag
 
 import org.apache.spark.sql.Encoder
-import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.statefulprocessor.ImplicitGroupingKeyTracker
 import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.statefulprocessor.QueryInfoImpl
-import org.apache.spark.sql.streaming.ListState
-import org.apache.spark.sql.streaming.MapState
-import org.apache.spark.sql.streaming.QueryInfo
-import org.apache.spark.sql.streaming.StatefulProcessorHandle
-import org.apache.spark.sql.streaming.TimeMode
-import org.apache.spark.sql.streaming.TTLConfig
-import org.apache.spark.sql.streaming.ValueState
+import org.apache.spark.sql.streaming.{ListState, MapState, QueryInfo, StatefulProcessorHandle, TTLConfig, ValueState}
 
-/** Helper to track expired keys. */
-class TtlTracker(val clock: Clock, ttl: TTLConfig) {
-  require(!ttl.ttlDuration.isNegative())
-  private val keyToLastUpdatedTime = mutable.Map[Any, Instant]()
-
-  def isKeyExpired(): Boolean = {
-    if (ttl.ttlDuration.isZero()) {
-      return false
-    }
-    val key = ImplicitGroupingKeyTracker.getImplicitKeyOption.get
-    if (!keyToLastUpdatedTime.contains(key)) {
-      return false
-    }
-    val expiration: Instant = keyToLastUpdatedTime.get(key).get.plus(ttl.ttlDuration)
-    return expiration.isBefore(clock.instant())
-  }
-
-  def onKeyUpdated(): Unit = {
-    val key = ImplicitGroupingKeyTracker.getImplicitKeyOption.get
-    keyToLastUpdatedTime.put(key, clock.instant())
-  }
-}
-
-class InMemoryValueState[T](clock: Clock, ttl: TTLConfig) extends ValueState[T] {
+class InMemoryValueState[T] extends ValueState[T] {
   private val keyToStateValue = mutable.Map[Any, T]()
-  private val ttlTracker = new TtlTracker(clock, ttl)
 
   private def getValue: Option[T] = {
-    if (ttlTracker.isKeyExpired()) {
-      return None
-    }
     keyToStateValue.get(ImplicitGroupingKeyTracker.getImplicitKeyOption.get)
   }
 
-  override def exists(): Boolean = {
-    getValue.isDefined
-  }
-
+  override def exists(): Boolean = getValue.isDefined
   override def get(): T = getValue.getOrElse(null.asInstanceOf[T])
 
   override def update(newState: T): Unit = {
-    ttlTracker.onKeyUpdated()
     keyToStateValue.put(ImplicitGroupingKeyTracker.getImplicitKeyOption.get, newState)
   }
 
@@ -85,14 +45,10 @@ class InMemoryValueState[T](clock: Clock, ttl: TTLConfig) extends ValueState[T] 
   }
 }
 
-class InMemoryListState[T](clock: Clock, ttl: TTLConfig) extends ListState[T] {
+class InMemoryListState[T] extends ListState[T] {
   private val keyToStateValue = mutable.Map[Any, mutable.ArrayBuffer[T]]()
-  private val ttlTracker = new TtlTracker(clock, ttl)
 
   private def getList: Option[mutable.ArrayBuffer[T]] = {
-    if (ttlTracker.isKeyExpired()) {
-      return None
-    }
     keyToStateValue.get(ImplicitGroupingKeyTracker.getImplicitKeyOption.get)
   }
 
@@ -103,7 +59,6 @@ class InMemoryListState[T](clock: Clock, ttl: TTLConfig) extends ListState[T] {
   }
 
   override def put(newState: Array[T]): Unit = {
-    ttlTracker.onKeyUpdated()
     keyToStateValue.put(
       ImplicitGroupingKeyTracker.getImplicitKeyOption.get,
       mutable.ArrayBuffer.empty[T] ++ newState
@@ -111,7 +66,6 @@ class InMemoryListState[T](clock: Clock, ttl: TTLConfig) extends ListState[T] {
   }
 
   override def appendValue(newState: T): Unit = {
-    ttlTracker.onKeyUpdated()
     if (!exists()) {
       keyToStateValue.put(
         ImplicitGroupingKeyTracker.getImplicitKeyOption.get,
@@ -122,7 +76,6 @@ class InMemoryListState[T](clock: Clock, ttl: TTLConfig) extends ListState[T] {
   }
 
   override def appendList(newState: Array[T]): Unit = {
-    ttlTracker.onKeyUpdated()
     if (!exists()) {
       keyToStateValue.put(
         ImplicitGroupingKeyTracker.getImplicitKeyOption.get,
@@ -137,14 +90,10 @@ class InMemoryListState[T](clock: Clock, ttl: TTLConfig) extends ListState[T] {
   }
 }
 
-class InMemoryMapState[K, V](clock: Clock, ttl: TTLConfig) extends MapState[K, V] {
+class InMemoryMapState[K, V] extends MapState[K, V] {
   private val keyToStateValue = mutable.Map[Any, mutable.HashMap[K, V]]()
-  private val ttlTracker = new TtlTracker(clock, ttl)
 
   private def getMap: Option[mutable.HashMap[K, V]] = {
-    if (ttlTracker.isKeyExpired()) {
-      return None
-    }
     keyToStateValue.get(ImplicitGroupingKeyTracker.getImplicitKeyOption.get)
   }
 
@@ -165,7 +114,6 @@ class InMemoryMapState[K, V](clock: Clock, ttl: TTLConfig) extends MapState[K, V
   }
 
   override def updateValue(key: K, value: V): Unit = {
-    ttlTracker.onKeyUpdated()
     if (!exists()) {
       keyToStateValue.put(
         ImplicitGroupingKeyTracker.getImplicitKeyOption.get,
@@ -211,44 +159,7 @@ class InMemoryMapState[K, V](clock: Clock, ttl: TTLConfig) extends MapState[K, V
   }
 }
 
-class InMemoryTimers {
-  private val keyToTimers = mutable.Map[Any, mutable.TreeSet[Long]]()
-
-  def registerTimer(expiryTimestampMs: Long): Unit = {
-    val groupingKey = ImplicitGroupingKeyTracker.getImplicitKeyOption.get
-    if (!keyToTimers.contains(groupingKey)) {
-      keyToTimers.put(groupingKey, mutable.TreeSet[Long]())
-    }
-    keyToTimers(groupingKey).add(expiryTimestampMs)
-  }
-
-  def deleteTimer(expiryTimestampMs: Long): Unit = {
-    val groupingKey = ImplicitGroupingKeyTracker.getImplicitKeyOption.get
-    if (keyToTimers.contains(groupingKey)) {
-      keyToTimers(groupingKey).remove(expiryTimestampMs)
-      if (keyToTimers(groupingKey).isEmpty) {
-        keyToTimers.remove(groupingKey)
-      }
-    }
-  }
-
-  def listTimers(): Iterator[Long] = {
-    val groupingKey = ImplicitGroupingKeyTracker.getImplicitKeyOption.get
-    keyToTimers.get(groupingKey) match {
-      case Some(timers) => timers.iterator
-      case None => Iterator.empty
-    }
-  }
-
-  def getAllKeysWithTimers(): Iterator[Any] = {
-    keyToTimers.keys.iterator
-  }
-}
-
-class InMemoryStatefulProcessorHandleImpl(
-    timeMode: TimeMode,
-    keyExprEnc: ExpressionEncoder[Any],
-    clock: Clock = Clock.systemUTC())
+class InMemoryStatefulProcessorHandleImpl()
     extends StatefulProcessorHandle {
 
   private val states = mutable.Map[String, Any]()
@@ -260,7 +171,7 @@ class InMemoryStatefulProcessorHandleImpl(
   ): ValueState[T] = {
     require(!states.contains(stateName), s"State $stateName already defined.")
     states
-      .getOrElseUpdate(stateName, new InMemoryValueState[T](clock, ttlConfig))
+      .getOrElseUpdate(stateName, new InMemoryValueState[T]())
       .asInstanceOf[InMemoryValueState[T]]
   }
 
@@ -275,7 +186,7 @@ class InMemoryStatefulProcessorHandleImpl(
   ): ListState[T] = {
     require(!states.contains(stateName), s"State $stateName already defined.")
     states
-      .getOrElseUpdate(stateName, new InMemoryListState[T](clock, ttlConfig))
+      .getOrElseUpdate(stateName, new InMemoryListState[T]())
       .asInstanceOf[InMemoryListState[T]]
   }
 
@@ -291,7 +202,7 @@ class InMemoryStatefulProcessorHandleImpl(
   ): MapState[K, V] = {
     require(!states.contains(stateName), s"State $stateName already defined.")
     states
-      .getOrElseUpdate(stateName, new InMemoryMapState[K, V](clock, ttlConfig))
+      .getOrElseUpdate(stateName, new InMemoryMapState[K, V]())
       .asInstanceOf[InMemoryMapState[K, V]]
   }
 
@@ -306,21 +217,16 @@ class InMemoryStatefulProcessorHandleImpl(
     new QueryInfoImpl(UUID.randomUUID(), UUID.randomUUID(), 0L)
   }
 
-  private val timers = new InMemoryTimers()
-
   override def registerTimer(expiryTimestampMs: Long): Unit = {
-    require(timeMode != TimeMode.None, "Timers are not supported with TimeMode.None.")
-    timers.registerTimer(expiryTimestampMs)
+    throw new UnsupportedOperationException("Timers are not supported.")
   }
 
   override def deleteTimer(expiryTimestampMs: Long): Unit = {
-    require(timeMode != TimeMode.None, "Timers are not supported with TimeMode.None.")
-    timers.deleteTimer(expiryTimestampMs)
+    throw new UnsupportedOperationException("Timers are not supported.")
   }
 
   override def listTimers(): Iterator[Long] = {
-    require(timeMode != TimeMode.None, "Timers are not supported with TimeMode.None.")
-    timers.listTimers()
+    throw new UnsupportedOperationException("Timers are not supported.")
   }
 
   override def deleteIfExists(stateName: String): Unit = {
@@ -358,9 +264,5 @@ class InMemoryStatefulProcessorHandleImpl(
   def peekMapState[MK, MV](stateName: String): Map[MK, MV] = {
     require(states.contains(stateName), s"State $stateName has not been initialized.")
     states(stateName).asInstanceOf[InMemoryMapState[MK, MV]].iterator().toMap
-  }
-
-  def getAllKeysWithTimers[K](): Iterator[K] = {
-    timers.getAllKeysWithTimers().map(_.asInstanceOf[K])
   }
 }
