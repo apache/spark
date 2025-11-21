@@ -32,7 +32,7 @@ trait ArimaParams extends Params {
   /** The moving average order (q). */
   final val q: IntParam = new IntParam(this, "q", "Moving average order (q)")
 
-  setDefault(p -> 1, d -> 1, q -> 1)
+  setDefault(p -> 1, d -> 0, q -> 0)
 
   def getP: Int = $(p)
   def getD: Int = $(d)
