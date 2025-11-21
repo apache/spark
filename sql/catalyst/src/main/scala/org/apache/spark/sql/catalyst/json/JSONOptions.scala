@@ -130,8 +130,7 @@ class JSONOptions(
     parameters.getOrElse(TIMESTAMP_NTZ_FORMAT, s"${DateFormatter.defaultPattern}'T'HH:mm:ss[.SSS]")
 
   val timeFormatInRead: Option[String] = parameters.get(TIME_FORMAT)
-  val timeFormatInWrite: String =
-    parameters.getOrElse(TIME_FORMAT, TimeFormatter.defaultPattern)
+  val timeFormatInWrite: String = parameters.getOrElse(TIME_FORMAT, TimeFormatter.defaultPattern)
 
   // SPARK-39731: Enables the backward compatible parsing behavior.
   // Generally, this config should be set to false to avoid producing potentially incorrect results
