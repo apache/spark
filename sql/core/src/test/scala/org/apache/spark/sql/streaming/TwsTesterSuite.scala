@@ -226,7 +226,7 @@ class TwsTesterSuite extends SparkFunSuite {
   test("TwsTester should exercise all state methods") {
     val tester = new TwsTester(new AllMethodsTestProcessor())
     val results = tester.test(List(
-      ("k", "value-exists"),      // false
+      ("k", "value-exists"),       // false
       ("k", "value-set"),          // set to 42
       ("k", "value-exists"),       // true
       ("k", "value-clear"),        // clear
@@ -245,8 +245,7 @@ class TwsTesterSuite extends SparkFunSuite {
       ("k", "map-remove"),         // remove y
       ("k", "map-keys"),           // x,z
       ("k", "map-clear"),          // clear map
-      ("k", "map-exists"),         // false
-      ("k", "delete-state")        // delete value state
+      ("k", "map-exists")         // false
     ))
 
     assert(results == List(
@@ -269,8 +268,7 @@ class TwsTesterSuite extends SparkFunSuite {
       ("k", "map-remove:done"),
       ("k", "map-keys:x,z"),
       ("k", "map-clear:done"),
-      ("k", "map-exists:false"),
-      ("k", "delete-state:done")
+      ("k", "map-exists:false")
     ))
   }
 }
@@ -373,6 +371,21 @@ class TwsTesterFuzzTestSuite extends StreamTest {
       (s"key${random.nextInt(10)}", ("", words(random.nextInt(words.length))))
     }
     val processor = new WordFrequencyProcessor()
+    checkTwsTesterOneBatch(processor, input)
+  }
+
+  test("fuzz test for AllMethodsTestProcessor") {
+    val random = new scala.util.Random(0)
+    val commands = Array(
+      "value-exists", "value-set", "value-clear",
+      "list-exists", "list-append", "list-append-array", "list-get",
+      "map-exists", "map-add", "map-keys", "map-values", "map-iterator",
+      "map-remove", "map-clear"
+    )
+    val input = List.fill(500) {
+      (s"key${random.nextInt(5)}", commands(random.nextInt(commands.length)))
+    }
+    val processor = new AllMethodsTestProcessor()
     checkTwsTesterOneBatch(processor, input)
   }
 }

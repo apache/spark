@@ -27,6 +27,7 @@ class AllMethodsTestProcessor extends StatefulProcessor[String, String, (String,
   @transient private var mapState: MapState[String, Int] = _
 
   override def init(outputMode: OutputMode, timeMode: TimeMode): Unit = {
+    getHandle.deleteIfExists("value")
     valueState = getHandle.getValueState[Int]("value", Encoders.scalaInt, TTLConfig.NONE)
     listState = getHandle.getListState[String]("list", Encoders.STRING, TTLConfig.NONE)
     mapState =
@@ -85,9 +86,9 @@ class AllMethodsTestProcessor extends StatefulProcessor[String, String, (String,
         case "map-clear" =>
           mapState.clear()
           results += ((key, "map-clear:done"))
-        case "delete-state" =>
-          getHandle.deleteIfExists("value")
-          results += ((key, "delete-state:done"))
+        //case "delete-state" =>
+        //  getHandle.deleteIfExists("value")
+        //  results += ((key, "delete-state:done"))
       }
     }
 

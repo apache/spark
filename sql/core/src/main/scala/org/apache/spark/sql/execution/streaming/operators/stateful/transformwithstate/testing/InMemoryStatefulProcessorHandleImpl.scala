@@ -63,7 +63,8 @@ class InMemoryListState[T] extends ListState[T] {
     keyToStateValue.get(ImplicitGroupingKeyTracker.getImplicitKeyOption.get).get
   }
 
-  override def get(): Iterator[T] = getList.iterator
+  override def get(): Iterator[T] =
+    if (exists()) getList.iterator else Iterator.empty
 
   override def put(newState: Array[T]): Unit =
     keyToStateValue.put(
@@ -93,22 +94,29 @@ class InMemoryMapState[K, V] extends MapState[K, V] {
         mutable.HashMap.empty[K, V]
       )
     }
-    keyToStateValue.get(ImplicitGroupingKeyTracker.getImplicitKeyOption.get).get
+    keyToStateValue(ImplicitGroupingKeyTracker.getImplicitKeyOption.get)
   }
 
-  override def getValue(key: K): V = getMap.getOrElse(key, null.asInstanceOf[V])
+  private def getMapIfExists: Option[mutable.HashMap[K, V]] = {
+    keyToStateValue.get(ImplicitGroupingKeyTracker.getImplicitKeyOption.get)
+  }
 
-  override def containsKey(key: K): Boolean = getMap.contains(key)
+  override def getValue(key: K): V =
+    getMapIfExists.flatMap(_.get(key)).getOrElse(null.asInstanceOf[V])
+
+  override def containsKey(key: K): Boolean = getMapIfExists.exists(_.contains(key))
 
   override def updateValue(key: K, value: V): Unit = getMap.put(key, value)
 
-  override def iterator(): Iterator[(K, V)] = getMap.iterator
+  override def iterator(): Iterator[(K, V)] =
+    getMapIfExists.map(_.iterator).getOrElse(Iterator.empty)
 
-  override def keys(): Iterator[K] = getMap.keys.iterator
+  override def keys(): Iterator[K] = getMapIfExists.map(_.keys.iterator).getOrElse(Iterator.empty)
 
-  override def values(): Iterator[V] = getMap.values.iterator
+  override def values(): Iterator[V] =
+    getMapIfExists.map(_.values.iterator).getOrElse(Iterator.empty)
 
-  override def removeKey(key: K): Unit = getMap.remove(key)
+  override def removeKey(key: K): Unit = getMapIfExists.foreach(_.remove(key))
 
   override def clear(): Unit =
     keyToStateValue.remove(ImplicitGroupingKeyTracker.getImplicitKeyOption.get)
@@ -116,8 +124,8 @@ class InMemoryMapState[K, V] extends MapState[K, V] {
 
 /**
  * In-memory implementation of StatefulProcessorHandle.
- * 
- * Doesn't support timers and TTL.
+ *
+ * Doesn't support timers and TTL. Support directly accessing state.
  */
 class InMemoryStatefulProcessorHandleImpl() extends StatefulProcessorHandle {
   private val states = mutable.Map[String, Any]()
