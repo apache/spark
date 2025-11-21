@@ -402,7 +402,8 @@ private[joins] class UnsafeHashedRelation(
       new UnifiedMemoryManager(
         new SparkConf().set(MEMORY_OFFHEAP_ENABLED.key, "false"),
         Runtime.getRuntime.maxMemory,
-        Runtime.getRuntime.maxMemory / 2, 1),
+        Runtime.getRuntime.maxMemory / 2,
+        1),
       0)
 
     val pageSizeBytes = Option(SparkEnv.get).map(_.memoryManager.pageSizeBytes)
@@ -576,7 +577,8 @@ private[execution] final class LongToUnsafeRowMap(
         new UnifiedMemoryManager(
           new SparkConf().set(MEMORY_OFFHEAP_ENABLED.key, "false"),
           Runtime.getRuntime.maxMemory,
-          Runtime.getRuntime.maxMemory / 2, 1),
+          Runtime.getRuntime.maxMemory / 2,
+          1),
         0),
       0)
   }

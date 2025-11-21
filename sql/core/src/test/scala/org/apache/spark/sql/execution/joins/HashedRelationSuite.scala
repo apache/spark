@@ -43,7 +43,8 @@ class HashedRelationSuite extends SharedSparkSession {
   val umm = new UnifiedMemoryManager(
     new SparkConf().set(MEMORY_OFFHEAP_ENABLED.key, "false"),
     Runtime.getRuntime.maxMemory,
-    Runtime.getRuntime.maxMemory / 2, 1)
+    Runtime.getRuntime.maxMemory / 2,
+    1)
 
   val mm = new TaskMemoryManager(umm, 0)
 
