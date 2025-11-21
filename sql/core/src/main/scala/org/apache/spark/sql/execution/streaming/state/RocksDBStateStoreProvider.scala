@@ -185,6 +185,13 @@ private[sql] class RocksDBStateStoreProvider
       ctxt.addTaskFailureListener((_, _) => {
         if (!hasCommitted) abort()
       })
+      // Failure/completion listeners were invoked during adding if the task has
+      // failed already. Prevent further access (resulting in invalid stamp error)
+      // by throwing an error here.
+      ctxt.getTaskFailure match {
+        case Some(failure) => throw failure
+        case None =>
+      }
     }
 
     override def createColFamilyIfAbsent(
