@@ -19,10 +19,11 @@ package org.apache.spark.ml.util
 
 import java.io.{
   BufferedInputStream, BufferedOutputStream, DataInputStream, DataOutputStream,
-  File, FileInputStream, FileOutputStream, IOException
+  File, FileInputStream, FileOutputStream, IOException, ObjectInputStream,
+  ObjectOutputStream
 }
 import java.nio.file.{Files, Paths}
-import java.util.{Locale, ServiceLoader}
+import java.util.{ArrayList, Locale, ServiceLoader}
 
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
@@ -46,7 +47,8 @@ import org.apache.spark.ml.feature.RFormulaModel
 import org.apache.spark.ml.linalg.{DenseMatrix, DenseVector, Matrix, SparseMatrix, SparseVector, Vector}
 import org.apache.spark.ml.param.{ParamPair, Params}
 import org.apache.spark.ml.tuning.ValidatorParams
-import org.apache.spark.sql.{SparkSession, SQLContext}
+import org.apache.spark.sql.{DataFrame, Row, SparkSession, SQLContext}
+import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.{Utils, VersionUtils}
 
 /**
@@ -1140,6 +1142,49 @@ private[spark] object ReadWriteUtils {
     } else {
       import spark.implicits._
       spark.read.parquet(path).as[T].collect()
+    }
+  }
+
+  def saveDataFrame(path: String, df: DataFrame): Unit = {
+    if (localSavingModeState.get()) {
+      val filePath = Paths.get(path)
+      Files.createDirectories(filePath.getParent)
+
+      Using.resource(
+        new ObjectOutputStream(new BufferedOutputStream(new FileOutputStream(filePath.toFile)))
+      ) { oos =>
+        val schema: StructType = df.schema
+        oos.writeObject(schema)
+        val it = df.toLocalIterator()
+        while (it.hasNext) {
+          oos.writeBoolean(true) // hasNext = True
+          val row: Row = it.next()
+          oos.writeObject(row)
+        }
+        oos.writeBoolean(false) // hasNext = False
+      }
+    } else {
+      df.write.parquet(path)
+    }
+  }
+
+  def loadDataFrame(path: String, spark: SparkSession): DataFrame = {
+    if (localSavingModeState.get()) {
+      Using.resource(
+        new ObjectInputStream(new BufferedInputStream(new FileInputStream(path)))
+      ) { ois =>
+        val schema = ois.readObject().asInstanceOf[StructType]
+        val rows = new ArrayList[Row]
+        var hasNext = ois.readBoolean()
+        while (hasNext) {
+          val row = ois.readObject().asInstanceOf[Row]
+          rows.add(row)
+          hasNext = ois.readBoolean()
+        }
+        spark.createDataFrame(rows, schema)
+      }
+    } else {
+      spark.read.parquet(path)
     }
   }
 }
