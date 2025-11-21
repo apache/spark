@@ -90,17 +90,8 @@ class AlignUpdateAssignmentsSuite extends AlignAssignmentsSuiteBase {
         sValue.children match {
           case Seq(
               StringLiteral("n_i"), GetStructField(_, _, Some("n_i")),
-              StringLiteral("n_s"), nsValue: CreateNamedStruct) =>
-
-            nsValue.children match {
-              case Seq(
-                  StringLiteral("dn_i"), GetStructField(_, _, Some("dn_i")),
-                  StringLiteral("dn_l"), GetStructField(_, _, Some("dn_l"))) =>
-                // OK
-
-              case nsValueChildren =>
-                fail(s"Unexpected children for 's.n_s': $nsValueChildren")
-            }
+              StringLiteral("n_s"), GetStructField(_, _, Some("n_s"))) =>
+            // OK
 
           case sValueChildren =>
             fail(s"Unexpected children for 's': $sValueChildren")

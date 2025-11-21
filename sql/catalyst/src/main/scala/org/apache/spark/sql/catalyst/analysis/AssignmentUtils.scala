@@ -129,8 +129,8 @@ object AssignmentUtils extends SQLConfHelper with CastSupport {
         val actualAttr = restoreActualType(attr)
         val value = matchingAssignments.head.value
         val coerceMode = if (coerceNestedTypes) RECURSE else NONE
-        TableOutputResolver.resolveUpdate(
-          "", value, actualAttr, conf, err => errors += err, colPath, coerceMode)
+        TableOutputResolver.resolveField("", value, actualAttr, byName = true,
+          conf, colPath, coerceMode)
       }
       Assignment(attr, resolvedValue)
     }
@@ -172,11 +172,11 @@ object AssignmentUtils extends SQLConfHelper with CastSupport {
       addError(s"Conflicting assignments for '${colPath.quoted}': $conflictingAssignmentsStr")
       colExpr
     } else if (exactAssignments.isEmpty && fieldAssignments.isEmpty) {
-      TableOutputResolver.checkNullability(colExpr, col, conf, colPath)
+      TableOutputResolver.withNullabilityChecked(colExpr, col, conf, colPath)
     } else if (exactAssignments.nonEmpty) {
       val value = exactAssignments.head.value
       val coerceMode = if (coerceNestedTypes) RECURSE else NONE
-      TableOutputResolver.resolveUpdate("", value, col, conf, addError, colPath, coerceMode)
+      TableOutputResolver.resolveField("", value, col, byName = true, conf, colPath, coerceMode)
     } else {
       applyFieldAssignments(col, colExpr, fieldAssignments, addError, colPath, coerceNestedTypes)
     }
