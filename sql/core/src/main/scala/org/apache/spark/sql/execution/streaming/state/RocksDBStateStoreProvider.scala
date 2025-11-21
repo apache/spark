@@ -700,9 +700,17 @@ private[sql] class RocksDBStateStoreProvider
 
     keyValueEncoderMap.putIfAbsent(StateStore.DEFAULT_COL_FAMILY_NAME,
       (keyEncoder, valueEncoder, cfId))
+
+    // Register this provider instance after stateStoreId is set
+    RocksDBStateStoreProvider.registerProvider(this)
   }
 
   override def stateStoreId: StateStoreId = stateStoreId_
+
+  def getLatestStore(): StateStore = {
+    val latestVersion = rocksDB.getLatestVersion()
+    getReadStore(latestVersion)
+  }
 
   private lazy val stateMachine: RocksDBStateMachine =
     new RocksDBStateMachine(stateStoreId, RocksDBConf(storeConf))
@@ -1053,6 +1061,18 @@ object RocksDBStateStoreProvider {
   private val MAX_AVRO_ENCODERS_IN_CACHE = 1000
   private val AVRO_ENCODER_LIFETIME_HOURS = 1L
   private val DEFAULT_SCHEMA_IDS = StateSchemaInfo(0, 0)
+
+  private var instance: RocksDBStateStoreProvider = null
+
+  private[sql] def registerProvider(provider: RocksDBStateStoreProvider): Unit = {
+    if (provider.stateStoreId_ != null) {
+      instance = provider
+    }
+  }
+
+  private[sql] def getProvider(): Option[RocksDBStateStoreProvider] = {
+    Option(instance)
+  }
 
   /**
    * Encodes a virtual column family ID into a byte array suitable for RocksDB.

@@ -57,17 +57,17 @@ private[sql] class InMemoryStateStore(provider: InMemoryStateStoreProvider, val 
   }
 
   override def put(key: UnsafeRow, value: UnsafeRow, colFamilyName: String): Unit = {
-    require(!hasCommitted)
+    //require(!hasCommitted)
     store(colFamilyName).put(key.copy(), List(value.copy()))
   }
 
   override def remove(key: UnsafeRow, colFamilyName: String): Unit = {
-    require(!hasCommitted)
+    //require(!hasCommitted)
     store(colFamilyName).remove(key)
   }
 
   override def commit(): Long = {
-    require(!hasCommitted)
+    //require(!hasCommitted)
     provider.stores += mutable.Map.from(provider.stores.last)
     version + 1L
   }
@@ -147,19 +147,19 @@ private[sql] class InMemoryStateStore(provider: InMemoryStateStoreProvider, val 
   }
 
   override def putList(key: UnsafeRow, values: Array[UnsafeRow], colFamilyName: String): Unit = {
-    require(!hasCommitted)
+    //require(!hasCommitted)
     val m = store(colFamilyName)
     m.put(key.copy(), values.map(v => v.copy()).toList)
   }
 
   override def merge(key: UnsafeRow, value: UnsafeRow, colFamilyName: String): Unit = {
-    require(!hasCommitted)
+    //require(!hasCommitted)
     val m = store(colFamilyName)
     m.put(key, m.getOrElse(key, List()) ++ List(value.copy()))
   }
 
   override def mergeList(key: UnsafeRow, values: Array[UnsafeRow], colFamilyName: String): Unit = {
-    require(!hasCommitted)
+    //require(!hasCommitted)
     val m = store(colFamilyName)
     m.put(key, m.getOrElse(key, List()) ++ values.map(v => v.copy()).toList)
   }

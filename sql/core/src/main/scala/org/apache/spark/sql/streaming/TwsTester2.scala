@@ -24,18 +24,23 @@ import org.apache.spark.sql.execution.streaming.operators.stateful.transformwith
 import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.statevariables.MapStateImpl
 import org.apache.spark.sql.execution.streaming.runtime.{MemoryStream, StreamingQueryWrapper}
 import org.apache.spark.sql.execution.streaming.sources.MemorySink
-import org.apache.spark.sql.execution.streaming.state.StateStore
+import org.apache.spark.sql.execution.streaming.state.{RocksDBStateStoreProvider, StateStore}
 import org.apache.spark.sql.internal.SQLConf
 
 class TwsTester2[
     K: org.apache.spark.sql.Encoder,
     I: org.apache.spark.sql.Encoder,
     O: org.apache.spark.sql.Encoder](
-    val processor: StatefulProcessor[K, I, O]
+    val processor: StatefulProcessor[K, I, O],
+    val useRocksDB: Boolean = false
 )(implicit sparkSession: SparkSession) {
 
   sparkSession.conf
-    .set(SQLConf.STATE_STORE_PROVIDER_CLASS.key, classOf[InMemoryStateStoreProvider].getName)
+    .set(
+      SQLConf.STATE_STORE_PROVIDER_CLASS.key,
+      if (useRocksDB) classOf[RocksDBStateStoreProvider].getName
+      else classOf[InMemoryStateStoreProvider].getName
+    )
   sparkSession.conf.set(SQLConf.SHUFFLE_PARTITIONS.key, "1")
 
   implicit val tupleEncoder: org.apache.spark.sql.Encoder[(K, I)] =
@@ -83,6 +88,9 @@ class TwsTester2[
 
   private var lastBatchId: Long = -1L
 
+  // Track the current state version for manual state modifications
+  private var currentStateVersion: Long = 0
+
   // Key encoder for state access
   private val keyEncoder = encoderFor[K].resolveAndBind()
 
@@ -93,6 +101,15 @@ class TwsTester2[
     query.processAllAvailable()
 
     InMemoryStateStoreProvider.getProvider().get
+  }
+
+  // RocksDB State store provider for accessing state (lazy initialization)
+  private lazy val rocksDBStateStoreProvider: RocksDBStateStoreProvider = {
+    // Trigger initialization by processing an empty batch
+    inputStream.addData(List.empty)
+    query.processAllAvailable()
+
+    RocksDBStateStoreProvider.getProvider().get
   }
 
   def test(input: List[(K, I)]): List[O] = {
@@ -107,6 +124,9 @@ class TwsTester2[
     }
     lastBatchId = sink.latestBatchId.getOrElse(-1L)
 
+    // Update current state version - batch N commits to version N+1
+    currentStateVersion = lastBatchId + 1
+
     // Convert external Rows to O via InternalRow
     rows.map(row => rowDeserializer(rowSerializer(row))).toList
   }
@@ -119,7 +139,26 @@ class TwsTester2[
 
   def keyToRow(key: K) = keyEncoder.createSerializer()(key).asInstanceOf[UnsafeRow].copy()
 
-  private def stateStore: StateStore = stateStoreProvider.getLatestStore()
+  /**
+   * Gets a WRITABLE state store at the current state version.
+   * This is needed for setValueState/setListState/setMapState to work.
+   */
+  private def getWritableStateStore: StateStore = {
+    val provider = if (useRocksDB) rocksDBStateStoreProvider else stateStoreProvider
+    // Get a writable store at the current version
+    provider.getStore(currentStateVersion)
+  }
+
+  /**
+   * Gets a READ-ONLY state store for peeking at state.
+   */
+  private def getReadOnlyStateStore: StateStore = {
+    if (useRocksDB) {
+      rocksDBStateStoreProvider.getLatestStore()
+    } else {
+      stateStoreProvider.getLatestStore()
+    }
+  }
 
   /**
    * Sets the value state for a given key.
@@ -128,10 +167,17 @@ class TwsTester2[
    * @param key the grouping key
    * @param value the value to set in the state
    */
-  def setValueState[T: org.apache.spark.sql.Encoder](stateName: String, key: K, value: T): Unit = {
+  def setValueState[T: Encoder](stateName: String, key: K, value: T): Unit = {
+    //val valueState = processor.getHandle.getValueState[T](stateName, TTLConfig.NONE)
+    //ImplicitGroupingKeyTracker.setImplicitKey(key)
+    //valueState.update(value)
     val serializer = encoderFor[T].resolveAndBind().createSerializer()
     val valueRow = serializer(value).asInstanceOf[UnsafeRow].copy()
-    stateStore.put(keyToRow(key), valueRow, stateName)
+    val store = getWritableStateStore
+    store.put(keyToRow(key), valueRow, stateName)
+    val newVersion = store.commit()
+    // Update currentStateVersion to the version we just committed
+    currentStateVersion = newVersion
   }
 
   /**
@@ -142,8 +188,17 @@ class TwsTester2[
    * @return Some(value) if the state exists, None otherwise
    */
   def peekValueState[T: org.apache.spark.sql.Encoder](stateName: String, key: K): Option[T] = {
+    //val valueState = processor.getHandle.getValueState[T](stateName, TTLConfig.NONE)
+    //ImplicitGroupingKeyTracker.setImplicitKey(key)
+    //Option(valueState.get())
+
     val deserializer = encoderFor[T].resolveAndBind().createDeserializer()
-    Option(stateStore.get(keyToRow(key), stateName)).map(deserializer)
+    println("AAA calling store.get...")
+    val store = getReadOnlyStateStore
+    val ans = store.get(keyToRow(key), stateName)
+    store.abort() // Clean up the store after reading
+    println("AAA store.get returned.")
+    Option(ans).map(deserializer)
   }
 
   /**
@@ -160,7 +215,10 @@ class TwsTester2[
     val serializer = encoderFor[T].resolveAndBind().createSerializer()
     val valueRows =
       values.map(v => serializer(v).asInstanceOf[UnsafeRow].copy()).toArray
-    stateStore.putList(keyToRow(key), valueRows, stateName)
+    val store = getWritableStateStore
+    store.putList(keyToRow(key), valueRows, stateName)
+    val newVersion = store.commit()
+    currentStateVersion = newVersion
   }
 
   /**
@@ -172,7 +230,10 @@ class TwsTester2[
    */
   def peekListState[T: org.apache.spark.sql.Encoder](stateName: String, key: K): List[T] = {
     val deserializer = encoderFor[T].resolveAndBind().createDeserializer()
-    stateStore.valuesIterator(keyToRow(key), stateName).map(deserializer).toList
+    val store = getReadOnlyStateStore
+    val result = store.valuesIterator(keyToRow(key), stateName).map(deserializer).toList
+    store.abort() // Clean up the store after reading
+    result
   }
 
   /**
@@ -186,17 +247,19 @@ class TwsTester2[
       stateName: String,
       key: K,
       values: Map[MK, MV]): Unit = {
-
+    val store = getWritableStateStore
     val mapState: MapStateImpl[MK, MV] = new MapStateImpl(
-      stateStore, stateName, 
+      store,
+      stateName,
       encoderFor[K].resolveAndBind().asInstanceOf[ExpressionEncoder[Any]],
       encoderFor[MK].resolveAndBind().asInstanceOf[ExpressionEncoder[Any]],
       encoderFor[MV].resolveAndBind().asInstanceOf[ExpressionEncoder[Any]]
     )
     ImplicitGroupingKeyTracker.setImplicitKey(key)
     mapState.clear()
-    values.foreachEntry((k,v) => mapState.updateValue(k,v))    
-    
+    values.foreachEntry((k, v) => mapState.updateValue(k, v))
+    val newVersion = store.commit()
+    currentStateVersion = newVersion
   }
 
   /**
@@ -206,23 +269,19 @@ class TwsTester2[
    * @param key the grouping key
    * @return the map of key-value pairs, or an empty map if no state exists for the key
    */
-  def peekMapState[MK: Encoder, MV: Encoder](
-      stateName: String,
-      key: K): Map[MK, MV] = {
+  def peekMapState[MK: Encoder, MV: Encoder](stateName: String, key: K): Map[MK, MV] = {
+    val store = getReadOnlyStateStore
     val mapState = new MapStateImpl(
-      stateStore, stateName, 
+      store,
+      stateName,
       encoderFor[K].resolveAndBind().asInstanceOf[ExpressionEncoder[Any]],
       encoderFor[MK].resolveAndBind().asInstanceOf[ExpressionEncoder[Any]],
       encoderFor[MV].resolveAndBind().asInstanceOf[ExpressionEncoder[Any]]
     )
-    /*val mapKeyDeserializer = encoderFor[MK].resolveAndBind().createDeserializer()
-    val valueDeserializer = encoderFor[MV].resolveAndBind().createDeserializer()
-    val x = stateStore.prefixScan(keyToRow(key), stateName)
-    val ans: Iterator[(MK, MV)] = x
-      .map(pair => (exractSecondPairAndConvertTo[MK](pair.key), valueDeserializer(pair.value)))
-    ans.toMap*/
     ImplicitGroupingKeyTracker.setImplicitKey(key)
-    mapState.iterator().toMap
+    val result: Map[MK, MV] = mapState.iterator().toMap
+    store.abort() // Clean up the store after reading
+    result
   }
 
 }
