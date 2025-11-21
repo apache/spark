@@ -41,7 +41,8 @@ import org.apache.spark.sql.execution.streaming.operators.stateful.transformwith
 import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.timers.TimerStateUtils
 import org.apache.spark.sql.execution.streaming.runtime.StreamingCheckpointConstants.DIR_NAME_STATE
 import org.apache.spark.sql.execution.streaming.runtime.StreamingQueryCheckpointMetadata
-import org.apache.spark.sql.execution.streaming.state.{InMemoryStateSchemaProvider, KeyStateEncoderSpec, NoPrefixKeyStateEncoderSpec, PrefixKeyScanStateEncoderSpec, StateSchemaCompatibilityChecker, StateSchemaMetadata, StateSchemaProvider, StateStore, StateStoreColFamilySchema, StateStoreConf, StateStoreId, StateStoreProviderId}
+import org.apache.spark.sql.execution.streaming.state.{InMemoryStateSchemaProvider, KeyStateEncoderSpec, NoPrefixKeyStateEncoderSpec, PrefixKeyScanStateEncoderSpec, RocksDBStateStoreProvider, StateSchemaCompatibilityChecker, StateSchemaMetadata, StateSchemaProvider, StateStore, StateStoreColFamilySchema, StateStoreConf, StateStoreId, StateStoreProviderId}
+import org.apache.spark.sql.execution.streaming.state.OfflineStateRepartitionErrors
 import org.apache.spark.sql.execution.streaming.utils.StreamingUtils
 import org.apache.spark.sql.sources.DataSourceRegister
 import org.apache.spark.sql.streaming.TimeMode
@@ -67,11 +68,9 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
       StateSourceOptions.apply(session, hadoopConf, properties))
     val stateConf = buildStateStoreConf(sourceOptions.resolvedCpLocation, sourceOptions.batchId)
     if (sourceOptions.internalOnlyReadAllColumnFamilies
-      && !stateConf.providerClass.contains("RocksDB")) {
-      throw StateDataSourceErrors.invalidOptionValue(
-        StateSourceOptions.INTERNAL_ONLY_READ_ALL_COLUMN_FAMILIES,
-        "internalOnlyReadAllColumnFamilies=true is only supported with " +
-          s"RocksDBStateStoreProvider. Current provider: ${stateConf.providerClass}")
+      && stateConf.providerClass != classOf[RocksDBStateStoreProvider].getName) {
+      throw OfflineStateRepartitionErrors.unsupportedStateStoreProviderError(
+        stateConf.providerClass)
     }
     val stateStoreReaderInfo: StateStoreReaderInfo = getStoreMetadataAndRunChecks(
       sourceOptions)
@@ -379,7 +378,7 @@ case class StateSourceOptions(
     stateVarName: Option[String],
     readRegisteredTimers: Boolean,
     flattenCollectionTypes: Boolean,
-    internalOnlyReadAllColumnFamilies: Boolean,
+    internalOnlyReadAllColumnFamilies: Boolean = false,
     startOperatorStateUniqueIds: Option[Array[Array[String]]] = None,
     endOperatorStateUniqueIds: Option[Array[Array[String]]] = None) {
   def stateCheckpointLocation: Path = new Path(resolvedCpLocation, DIR_NAME_STATE)
