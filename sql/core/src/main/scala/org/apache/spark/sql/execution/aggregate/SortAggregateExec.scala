@@ -60,7 +60,6 @@ case class SortAggregateExec(
     val numOutputRows = longMetric("numOutputRows")
     val aggTime = longMetric("aggTime")
     child.execute().mapPartitionsWithIndexInternal { (partIndex, iter) =>
-      val beforeAgg = System.nanoTime()
       // Because the constructor of an aggregation iterator will read at least the first row,
       // we need to get the value of iter.hasNext first.
       val hasInput = iter.hasNext
