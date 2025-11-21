@@ -222,6 +222,57 @@ class TwsTesterSuite extends SparkFunSuite {
       )
     )
   }
+
+  test("TwsTester should exercise all state methods") {
+    val tester = new TwsTester(new AllMethodsTestProcessor())
+    val results = tester.test(List(
+      ("k", "value-exists"),      // false
+      ("k", "value-set"),          // set to 42
+      ("k", "value-exists"),       // true
+      ("k", "value-clear"),        // clear
+      ("k", "value-exists"),       // false again
+      ("k", "list-exists"),        // false
+      ("k", "list-append"),        // append a, b
+      ("k", "list-exists"),        // true
+      ("k", "list-append-array"),  // append c, d
+      ("k", "list-get"),           // a,b,c,d
+      ("k", "map-exists"),         // false
+      ("k", "map-add"),            // add x=1, y=2, z=3
+      ("k", "map-exists"),         // true
+      ("k", "map-keys"),           // x,y,z
+      ("k", "map-values"),         // 1,2,3
+      ("k", "map-iterator"),       // x=1,y=2,z=3
+      ("k", "map-remove"),         // remove y
+      ("k", "map-keys"),           // x,z
+      ("k", "map-clear"),          // clear map
+      ("k", "map-exists"),         // false
+      ("k", "delete-state")        // delete value state
+    ))
+
+    assert(results == List(
+      ("k", "value-exists:false"),
+      ("k", "value-set:done"),
+      ("k", "value-exists:true"),
+      ("k", "value-clear:done"),
+      ("k", "value-exists:false"),
+      ("k", "list-exists:false"),
+      ("k", "list-append:done"),
+      ("k", "list-exists:true"),
+      ("k", "list-append-array:done"),
+      ("k", "list-get:a,b,c,d"),
+      ("k", "map-exists:false"),
+      ("k", "map-add:done"),
+      ("k", "map-exists:true"),
+      ("k", "map-keys:x,y,z"),
+      ("k", "map-values:1,2,3"),
+      ("k", "map-iterator:x=1,y=2,z=3"),
+      ("k", "map-remove:done"),
+      ("k", "map-keys:x,z"),
+      ("k", "map-clear:done"),
+      ("k", "map-exists:false"),
+      ("k", "delete-state:done")
+    ))
+  }
 }
 
 /**

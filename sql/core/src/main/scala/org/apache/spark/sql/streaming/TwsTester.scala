@@ -74,13 +74,7 @@ class TwsTester[K, I, O](
     ans
   }
 
-  /**
-   * Convenience method to process a single input row for a given key.
-   *
-   * @param key the grouping key
-   * @param inputRow the input row to process
-   * @return all output rows produced by the processor
-   */
+  /** Convenience method to process a single input row for a given key. */
   def testOneRow(key: K, inputRow: I): List[O] = test(List((key, inputRow)))
 
   /**
@@ -120,93 +114,39 @@ class TwsTester[K, I, O](
     (outputRows, peekValueState[S](stateName, key).get)
   }
 
-  /**
-   * Sets the value state for a given key.
-   *
-   * @param stateName the name of the value state variable
-   * @param key the grouping key
-   * @param value the value to set
-   * @tparam T the type of the state value
-   */
+  /** Sets the value state for a given key. */
   def setValueState[T](stateName: String, key: K, value: T): Unit = {
     ImplicitGroupingKeyTracker.setImplicitKey(key)
     handle.setValueState[T](stateName, value)
-    ImplicitGroupingKeyTracker.removeImplicitKey()
   }
 
-  /**
-   * Retrieves the value state for a given key without modifying it.
-   *
-   * @param stateName the name of the value state variable
-   * @param key the grouping key
-   * @tparam T the type of the state value
-   * @return Some(value) if state exists for the key, None otherwise
-   */
+  /** Retrieves the value state for a given key. */
   def peekValueState[T](stateName: String, key: K): Option[T] = {
     ImplicitGroupingKeyTracker.setImplicitKey(key)
-    val result: Option[T] = handle.peekValueState[T](stateName)
-    ImplicitGroupingKeyTracker.removeImplicitKey()
-    return result
+    handle.peekValueState[T](stateName)
   }
 
-  /**
-   * Sets the list state for a given key.
-   *
-   * @param stateName the name of the list state variable
-   * @param key the grouping key
-   * @param value the list of values to set
-   * @param ct implicit class tag for type T
-   * @tparam T the type of elements in the list state
-   */
+  /** Sets the list state for a given key. */
   def setListState[T](stateName: String, key: K, value: List[T])(implicit ct: ClassTag[T]): Unit = {
     ImplicitGroupingKeyTracker.setImplicitKey(key)
     handle.setListState[T](stateName, value)
-    ImplicitGroupingKeyTracker.removeImplicitKey()
   }
 
-  /**
-   * Retrieves the list state for a given key without modifying it.
-   *
-   * @param stateName the name of the list state variable
-   * @param key the grouping key
-   * @tparam T the type of elements in the list state
-   * @return the list of values, or an empty list if no state exists for the key
-   */
+  /** Retrieves the list state for a given key. */
   def peekListState[T](stateName: String, key: K): List[T] = {
     ImplicitGroupingKeyTracker.setImplicitKey(key)
-    val result: List[T] = handle.peekListState[T](stateName)
-    ImplicitGroupingKeyTracker.removeImplicitKey()
-    return result
+    handle.peekListState[T](stateName)
   }
 
-  /**
-   * Sets the map state for a given key.
-   *
-   * @param stateName the name of the map state variable
-   * @param key the grouping key
-   * @param value the map of key-value pairs to set
-   * @tparam MK the type of keys in the map state
-   * @tparam MV the type of values in the map state
-   */
+  /** Sets the map state for a given key. */
   def setMapState[MK, MV](stateName: String, key: K, value: Map[MK, MV]): Unit = {
     ImplicitGroupingKeyTracker.setImplicitKey(key)
     handle.setMapState[MK, MV](stateName, value)
-    ImplicitGroupingKeyTracker.removeImplicitKey()
   }
 
-  /**
-   * Retrieves the map state for a given key without modifying it.
-   *
-   * @param stateName the name of the map state variable
-   * @param key the grouping key
-   * @tparam MK the type of keys in the map state
-   * @tparam MV the type of values in the map state
-   * @return the map of key-value pairs, or an empty map if no state exists for the key
-   */
+  /** Retrieves the map state for a given key. */
   def peekMapState[MK, MV](stateName: String, key: K): Map[MK, MV] = {
     ImplicitGroupingKeyTracker.setImplicitKey(key)
-    val result: Map[MK, MV] = handle.peekMapState[MK, MV](stateName)
-    ImplicitGroupingKeyTracker.removeImplicitKey()
-    return result
+    handle.peekMapState[MK, MV](stateName)
   }
 }

@@ -26,142 +26,100 @@ import org.apache.spark.sql.execution.streaming.operators.stateful.transformwith
 import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.statefulprocessor.QueryInfoImpl
 import org.apache.spark.sql.streaming.{ListState, MapState, QueryInfo, StatefulProcessorHandle, TTLConfig, ValueState}
 
+/** In-memory implementation of ValueState. */
 class InMemoryValueState[T] extends ValueState[T] {
   private val keyToStateValue = mutable.Map[Any, T]()
 
-  private def getValue: Option[T] = {
-    keyToStateValue.get(ImplicitGroupingKeyTracker.getImplicitKeyOption.get)
-  }
+  override def exists(): Boolean =
+    keyToStateValue.contains(ImplicitGroupingKeyTracker.getImplicitKeyOption.get)
 
-  override def exists(): Boolean = getValue.isDefined
-  override def get(): T = getValue.getOrElse(null.asInstanceOf[T])
+  override def get(): T =
+    keyToStateValue.getOrElse(
+      ImplicitGroupingKeyTracker.getImplicitKeyOption.get,
+      null.asInstanceOf[T]
+    )
 
-  override def update(newState: T): Unit = {
+  override def update(newState: T): Unit =
     keyToStateValue.put(ImplicitGroupingKeyTracker.getImplicitKeyOption.get, newState)
-  }
 
-  override def clear(): Unit = {
+  override def clear(): Unit =
     keyToStateValue.remove(ImplicitGroupingKeyTracker.getImplicitKeyOption.get)
-  }
 }
 
+/** In-memory implementation of ListState. */
 class InMemoryListState[T] extends ListState[T] {
   private val keyToStateValue = mutable.Map[Any, mutable.ArrayBuffer[T]]()
 
-  private def getList: Option[mutable.ArrayBuffer[T]] = {
-    keyToStateValue.get(ImplicitGroupingKeyTracker.getImplicitKeyOption.get)
+  override def exists(): Boolean =
+    keyToStateValue.contains(ImplicitGroupingKeyTracker.getImplicitKeyOption.get)
+
+  private def getList: mutable.ArrayBuffer[T] = {
+    if (!exists()) {
+      keyToStateValue.put(
+        ImplicitGroupingKeyTracker.getImplicitKeyOption.get,
+        mutable.ArrayBuffer.empty[T]
+      )
+    }
+    keyToStateValue.get(ImplicitGroupingKeyTracker.getImplicitKeyOption.get).get
   }
 
-  override def exists(): Boolean = getList.isDefined
+  override def get(): Iterator[T] = getList.iterator
 
-  override def get(): Iterator[T] = {
-    getList.orElse(Some(mutable.ArrayBuffer.empty[T])).get.iterator
-  }
-
-  override def put(newState: Array[T]): Unit = {
+  override def put(newState: Array[T]): Unit =
     keyToStateValue.put(
       ImplicitGroupingKeyTracker.getImplicitKeyOption.get,
       mutable.ArrayBuffer.empty[T] ++ newState
     )
-  }
 
-  override def appendValue(newState: T): Unit = {
-    if (!exists()) {
-      keyToStateValue.put(
-        ImplicitGroupingKeyTracker.getImplicitKeyOption.get,
-        mutable.ArrayBuffer.empty[T]
-      )
-    }
-    keyToStateValue(ImplicitGroupingKeyTracker.getImplicitKeyOption.get) += newState
-  }
+  override def appendValue(newState: T): Unit = getList += newState
 
-  override def appendList(newState: Array[T]): Unit = {
-    if (!exists()) {
-      keyToStateValue.put(
-        ImplicitGroupingKeyTracker.getImplicitKeyOption.get,
-        mutable.ArrayBuffer.empty[T]
-      )
-    }
-    keyToStateValue(ImplicitGroupingKeyTracker.getImplicitKeyOption.get) ++= newState
-  }
+  override def appendList(newState: Array[T]): Unit = getList ++= newState
 
-  override def clear(): Unit = {
+  override def clear(): Unit =
     keyToStateValue.remove(ImplicitGroupingKeyTracker.getImplicitKeyOption.get)
-  }
 }
 
+/** In-memory implementation of MapState. */
 class InMemoryMapState[K, V] extends MapState[K, V] {
   private val keyToStateValue = mutable.Map[Any, mutable.HashMap[K, V]]()
 
-  private def getMap: Option[mutable.HashMap[K, V]] = {
-    keyToStateValue.get(ImplicitGroupingKeyTracker.getImplicitKeyOption.get)
-  }
+  override def exists(): Boolean =
+    keyToStateValue.contains(ImplicitGroupingKeyTracker.getImplicitKeyOption.get)
 
-  override def exists(): Boolean = getMap.isDefined
-
-  override def getValue(key: K): V = {
-    getMap
-      .orElse(Some(mutable.HashMap.empty[K, V]))
-      .get
-      .getOrElse(key, null.asInstanceOf[V])
-  }
-
-  override def containsKey(key: K): Boolean = {
-    getMap
-      .orElse(Some(mutable.HashMap.empty[K, V]))
-      .get
-      .contains(key)
-  }
-
-  override def updateValue(key: K, value: V): Unit = {
+  private def getMap: mutable.HashMap[K, V] = {
     if (!exists()) {
       keyToStateValue.put(
         ImplicitGroupingKeyTracker.getImplicitKeyOption.get,
         mutable.HashMap.empty[K, V]
       )
     }
-
-    keyToStateValue(ImplicitGroupingKeyTracker.getImplicitKeyOption.get) += (key -> value)
+    keyToStateValue.get(ImplicitGroupingKeyTracker.getImplicitKeyOption.get).get
   }
 
-  override def iterator(): Iterator[(K, V)] = {
-    getMap
-      .orElse(Some(mutable.HashMap.empty[K, V]))
-      .get
-      .iterator
-  }
+  override def getValue(key: K): V = getMap.getOrElse(key, null.asInstanceOf[V])
 
-  override def keys(): Iterator[K] = {
-    getMap
-      .orElse(Some(mutable.HashMap.empty[K, V]))
-      .get
-      .keys
-      .iterator
-  }
+  override def containsKey(key: K): Boolean = getMap.contains(key)
 
-  override def values(): Iterator[V] = {
-    getMap
-      .orElse(Some(mutable.HashMap.empty[K, V]))
-      .get
-      .values
-      .iterator
-  }
+  override def updateValue(key: K, value: V): Unit = getMap.put(key, value)
 
-  override def removeKey(key: K): Unit = {
-    getMap
-      .orElse(Some(mutable.HashMap.empty[K, V]))
-      .get
-      .remove(key)
-  }
+  override def iterator(): Iterator[(K, V)] = getMap.iterator
 
-  override def clear(): Unit = {
+  override def keys(): Iterator[K] = getMap.keys.iterator
+
+  override def values(): Iterator[V] = getMap.values.iterator
+
+  override def removeKey(key: K): Unit = getMap.remove(key)
+
+  override def clear(): Unit =
     keyToStateValue.remove(ImplicitGroupingKeyTracker.getImplicitKeyOption.get)
-  }
 }
 
-class InMemoryStatefulProcessorHandleImpl()
-    extends StatefulProcessorHandle {
-
+/**
+ * In-memory implementation of StatefulProcessorHandle.
+ * 
+ * Doesn't support timers and TTL.
+ */
+class InMemoryStatefulProcessorHandleImpl() extends StatefulProcessorHandle {
   private val states = mutable.Map[String, Any]()
 
   override def getValueState[T](
@@ -175,9 +133,8 @@ class InMemoryStatefulProcessorHandleImpl()
       .asInstanceOf[InMemoryValueState[T]]
   }
 
-  override def getValueState[T: Encoder](stateName: String, ttlConfig: TTLConfig): ValueState[T] = {
+  override def getValueState[T: Encoder](stateName: String, ttlConfig: TTLConfig): ValueState[T] =
     getValueState(stateName, implicitly[Encoder[T]], ttlConfig)
-  }
 
   override def getListState[T](
       stateName: String,
@@ -190,9 +147,8 @@ class InMemoryStatefulProcessorHandleImpl()
       .asInstanceOf[InMemoryListState[T]]
   }
 
-  override def getListState[T: Encoder](stateName: String, ttlConfig: TTLConfig): ListState[T] = {
+  override def getListState[T: Encoder](stateName: String, ttlConfig: TTLConfig): ListState[T] =
     getListState(stateName, implicitly[Encoder[T]], ttlConfig)
-  }
 
   override def getMapState[K, V](
       stateName: String,
@@ -206,32 +162,24 @@ class InMemoryStatefulProcessorHandleImpl()
       .asInstanceOf[InMemoryMapState[K, V]]
   }
 
-  override def  getMapState[K: Encoder, V: Encoder](
+  override def getMapState[K: Encoder, V: Encoder](
       stateName: String,
-      ttlConfig: TTLConfig
-  ): MapState[K, V] = {
+      ttlConfig: TTLConfig): MapState[K, V] =
     getMapState(stateName, implicitly[Encoder[K]], implicitly[Encoder[V]], ttlConfig)
-  }
 
-  override def getQueryInfo(): QueryInfo = {
+  override def getQueryInfo(): QueryInfo =
     new QueryInfoImpl(UUID.randomUUID(), UUID.randomUUID(), 0L)
-  }
 
-  override def registerTimer(expiryTimestampMs: Long): Unit = {
+  override def registerTimer(expiryTimestampMs: Long): Unit =
     throw new UnsupportedOperationException("Timers are not supported.")
-  }
 
-  override def deleteTimer(expiryTimestampMs: Long): Unit = {
+  override def deleteTimer(expiryTimestampMs: Long): Unit =
     throw new UnsupportedOperationException("Timers are not supported.")
-  }
 
-  override def listTimers(): Iterator[Long] = {
+  override def listTimers(): Iterator[Long] =
     throw new UnsupportedOperationException("Timers are not supported.")
-  }
 
-  override def deleteIfExists(stateName: String): Unit = {
-    states.remove(stateName)
-  }
+  override def deleteIfExists(stateName: String): Unit = states.remove(stateName)
 
   def setValueState[T](stateName: String, value: T): Unit = {
     require(states.contains(stateName), s"State $stateName has not been initialized.")
@@ -240,8 +188,7 @@ class InMemoryStatefulProcessorHandleImpl()
 
   def peekValueState[T](stateName: String): Option[T] = {
     require(states.contains(stateName), s"State $stateName has not been initialized.")
-    val value: T = states(stateName).asInstanceOf[InMemoryValueState[T]].get()
-    Option(value)
+    Option(states(stateName).asInstanceOf[InMemoryValueState[T]].get())
   }
 
   def setListState[T](stateName: String, value: List[T])(implicit ct: ClassTag[T]): Unit = {
