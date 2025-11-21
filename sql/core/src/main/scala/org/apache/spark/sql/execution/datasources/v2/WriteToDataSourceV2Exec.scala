@@ -38,6 +38,7 @@ import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.joins.BaseJoinExec
 import org.apache.spark.sql.execution.metric.{CustomMetrics, SQLMetric, SQLMetrics}
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.util.SchemaValidationMode.PROHIBIT_CHANGES
 import org.apache.spark.util.{LongAccumulator, Utils}
 import org.apache.spark.util.ArrayImplicits._
 
@@ -171,7 +172,11 @@ case class ReplaceTableAsSelectExec(
     //
     // RTAS must refresh and pin versions in query to read from original table versions instead of
     // newly created empty table that is meant to serve as target for append/overwrite
-    val refreshedQuery = V2TableRefreshUtil.refresh(session, query, versionedOnly = true)
+    val refreshedQuery = V2TableRefreshUtil.refresh(
+      session,
+      query,
+      versionedOnly = true,
+      schemaValidationMode = PROHIBIT_CHANGES)
     val pinnedQuery = V2TableRefreshUtil.pinVersions(refreshedQuery)
     if (catalog.tableExists(ident)) {
       invalidateCache(catalog, ident)
