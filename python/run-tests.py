@@ -293,6 +293,7 @@ def parse_opts():
             "For example, 'pyspark.sql.foo' to run the module as unittests or doctests, "
             "'pyspark.sql.tests FooTests' to run the specific class of unittests, "
             "'pyspark.sql.tests FooTests.test_foo' to run the specific unittest in the class. "
+            "'pyspark.sql.tests.FooTests.test_foo' will work too. "
             "'--modules' option is ignored if they are given.")
     )
     group.add_argument(
