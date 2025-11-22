@@ -75,6 +75,13 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
               <strong>Duration: </strong>{UIUtils.formatDuration(duration)}
             </li>
             {
+              if (executionUIData.sqlScriptId.isDefined) {
+                <li>
+                  <Strong>SQL Script ID: </Strong>{executionUIData.sqlScriptId.get}
+                </li>
+              }
+            }
+            {
               if (executionUIData.rootExecutionId != executionId) {
                 <li>
                   <strong>Parent Execution: </strong>
