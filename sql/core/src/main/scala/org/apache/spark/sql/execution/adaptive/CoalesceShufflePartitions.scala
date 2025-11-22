@@ -132,7 +132,14 @@ case class CoalesceShufflePartitions(session: SparkSession) extends AQEShuffleRe
     if (coalesceGroup.hasExplodingJoin) {
       return conf.getConf(SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_SIZE)
     }
-    val defaultAdvisorySize = conf.getConf(SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES)
+
+    val defaultAdvisorySize = if (coalesceGroup.shuffleStages.exists(_.shuffleStage.addedByRebalance
+      .contains(false))) {
+      conf.getConf(SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES)
+    } else {
+      conf.getConf(SQLConf.REBALANCE_ADVISORY_PARTITION_SIZE_IN_BYTES)
+    }
+
     coalesceGroup.shuffleStages match {
       case Seq(stage) =>
         stage.shuffleStage.advisoryPartitionSize.getOrElse(defaultAdvisorySize)
