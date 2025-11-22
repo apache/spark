@@ -67,6 +67,8 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
     val sourceOptions = StateSourceOptions.modifySourceOptions(hadoopConf,
       StateSourceOptions.apply(session, hadoopConf, properties))
     val stateConf = buildStateStoreConf(sourceOptions.resolvedCpLocation, sourceOptions.batchId)
+    // We only support RocksDB because the repartition work that this reader
+    // is built for only supports RocksDB
     if (sourceOptions.internalOnlyReadAllColumnFamilies
       && stateConf.providerClass != classOf[RocksDBStateStoreProvider].getName) {
       throw OfflineStateRepartitionErrors.unsupportedStateStoreProviderError(
@@ -386,8 +388,8 @@ case class StateSourceOptions(
   override def toString: String = {
     var desc = s"StateSourceOptions(checkpointLocation=$resolvedCpLocation, batchId=$batchId, " +
       s"operatorId=$operatorId, storeName=$storeName, joinSide=$joinSide, " +
-      s"stateVarName=${stateVarName.getOrElse("None")}, +" +
-      s"flattenCollectionTypes=$flattenCollectionTypes" +
+      s"stateVarName=${stateVarName.getOrElse("None")}, " +
+      s"flattenCollectionTypes=$flattenCollectionTypes, " +
       s"internalOnlyReadAllColumnFamilies=$internalOnlyReadAllColumnFamilies"
     if (fromSnapshotOptions.isDefined) {
       desc += s", snapshotStartBatchId=${fromSnapshotOptions.get.snapshotStartBatchId}"
@@ -502,8 +504,7 @@ object StateSourceOptions extends DataSourceOptions {
     val readChangeFeed = Option(options.get(READ_CHANGE_FEED)).exists(_.toBoolean)
 
     val internalOnlyReadAllColumnFamilies = try {
-      Option(options.get(INTERNAL_ONLY_READ_ALL_COLUMN_FAMILIES))
-        .map(_.toBoolean).getOrElse(false)
+      Option(options.get(INTERNAL_ONLY_READ_ALL_COLUMN_FAMILIES)).exists(_.toBoolean)
     } catch {
       case _: IllegalArgumentException =>
         throw StateDataSourceErrors.invalidOptionValue(INTERNAL_ONLY_READ_ALL_COLUMN_FAMILIES,
@@ -648,8 +649,8 @@ object StateSourceOptions extends DataSourceOptions {
     StateSourceOptions(
       resolvedCpLocation, batchId.get, operatorId, storeName, joinSide,
       readChangeFeed, fromSnapshotOptions, readChangeFeedOptions,
-      stateVarName, readRegisteredTimers, flattenCollectionTypes,
-      internalOnlyReadAllColumnFamilies, startOperatorStateUniqueIds, endOperatorStateUniqueIds)
+      stateVarName, readRegisteredTimers, flattenCollectionTypes, internalOnlyReadAllColumnFamilies,
+      startOperatorStateUniqueIds, endOperatorStateUniqueIds)
   }
 
   private def getLastCommittedBatch(session: SparkSession, checkpointLocation: String): Long = {

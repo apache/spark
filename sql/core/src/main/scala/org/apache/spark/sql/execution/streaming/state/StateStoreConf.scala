@@ -95,9 +95,10 @@ class StateStoreConf(
   val providerClass: String = sqlConf.stateStoreProviderClass
 
   /** Whether validate the underlying format or not. */
-  val formatValidationEnabled: Boolean = extraOptions.getOrElse(
-    StateStoreConf.FORMAT_VALIDATION_ENABLED_CONFIG,
-    sqlConf.stateStoreFormatValidationEnabled) == "true"
+  val formatValidationEnabled: Boolean = extraOptions.get(
+      StateStoreConf.FORMAT_VALIDATION_ENABLED_CONFIG)
+    .map(_ == "true")
+    .getOrElse(sqlConf.stateStoreFormatValidationEnabled)
 
   /**
    * Whether to validate StateStore commits for ForeachBatch sinks to ensure all partitions
