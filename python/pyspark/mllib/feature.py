@@ -59,12 +59,10 @@ class VectorTransformer:
     """
 
     @overload
-    def transform(self, vector: "VectorLike") -> Vector:
-        ...
+    def transform(self, vector: "VectorLike") -> Vector: ...
 
     @overload
-    def transform(self, vector: RDD["VectorLike"]) -> RDD[Vector]:
-        ...
+    def transform(self, vector: RDD["VectorLike"]) -> RDD[Vector]: ...
 
     def transform(
         self, vector: Union["VectorLike", RDD["VectorLike"]]
@@ -119,12 +117,10 @@ class Normalizer(VectorTransformer):
         self.p = float(p)
 
     @overload
-    def transform(self, vector: "VectorLike") -> Vector:
-        ...
+    def transform(self, vector: "VectorLike") -> Vector: ...
 
     @overload
-    def transform(self, vector: RDD["VectorLike"]) -> RDD[Vector]:
-        ...
+    def transform(self, vector: RDD["VectorLike"]) -> RDD[Vector]: ...
 
     def transform(
         self, vector: Union["VectorLike", RDD["VectorLike"]]
@@ -158,12 +154,10 @@ class JavaVectorTransformer(JavaModelWrapper, VectorTransformer):
     """
 
     @overload
-    def transform(self, vector: "VectorLike") -> Vector:
-        ...
+    def transform(self, vector: "VectorLike") -> Vector: ...
 
     @overload
-    def transform(self, vector: RDD["VectorLike"]) -> RDD[Vector]:
-        ...
+    def transform(self, vector: RDD["VectorLike"]) -> RDD[Vector]: ...
 
     def transform(
         self, vector: Union["VectorLike", RDD["VectorLike"]]
@@ -197,12 +191,10 @@ class StandardScalerModel(JavaVectorTransformer):
     """
 
     @overload
-    def transform(self, vector: "VectorLike") -> Vector:
-        ...
+    def transform(self, vector: "VectorLike") -> Vector: ...
 
     @overload
-    def transform(self, vector: RDD["VectorLike"]) -> RDD[Vector]:
-        ...
+    def transform(self, vector: RDD["VectorLike"]) -> RDD[Vector]: ...
 
     def transform(
         self, vector: Union["VectorLike", RDD["VectorLike"]]
@@ -357,12 +349,10 @@ class ChiSqSelectorModel(JavaVectorTransformer):
     """
 
     @overload
-    def transform(self, vector: "VectorLike") -> Vector:
-        ...
+    def transform(self, vector: "VectorLike") -> Vector: ...
 
     @overload
-    def transform(self, vector: RDD["VectorLike"]) -> RDD[Vector]:
-        ...
+    def transform(self, vector: RDD["VectorLike"]) -> RDD[Vector]: ...
 
     def transform(
         self, vector: Union["VectorLike", RDD["VectorLike"]]
@@ -628,12 +618,10 @@ class HashingTF:
         return hash(term) % self.numFeatures
 
     @overload
-    def transform(self, document: Iterable[Hashable]) -> Vector:
-        ...
+    def transform(self, document: Iterable[Hashable]) -> Vector: ...
 
     @overload
-    def transform(self, document: RDD[Iterable[Hashable]]) -> RDD[Vector]:
-        ...
+    def transform(self, document: RDD[Iterable[Hashable]]) -> RDD[Vector]: ...
 
     @since("1.2.0")
     def transform(
@@ -662,12 +650,10 @@ class IDFModel(JavaVectorTransformer):
     """
 
     @overload
-    def transform(self, x: "VectorLike") -> Vector:
-        ...
+    def transform(self, x: "VectorLike") -> Vector: ...
 
     @overload
-    def transform(self, x: RDD["VectorLike"]) -> RDD[Vector]:
-        ...
+    def transform(self, x: RDD["VectorLike"]) -> RDD[Vector]: ...
 
     def transform(self, x: Union["VectorLike", RDD["VectorLike"]]) -> Union[Vector, RDD[Vector]]:
         """
@@ -1043,12 +1029,10 @@ class ElementwiseProduct(VectorTransformer):
         self.scalingVector = _convert_to_vector(scalingVector)
 
     @overload
-    def transform(self, vector: "VectorLike") -> Vector:
-        ...
+    def transform(self, vector: "VectorLike") -> Vector: ...
 
     @overload
-    def transform(self, vector: RDD["VectorLike"]) -> RDD[Vector]:
-        ...
+    def transform(self, vector: RDD["VectorLike"]) -> RDD[Vector]: ...
 
     def transform(
         self, vector: Union["VectorLike", RDD["VectorLike"]]
