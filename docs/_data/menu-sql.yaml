@@ -101,6 +101,10 @@
       url: sql-ref-null-semantics.html
     - text: Parameter Markers
       url: sql-ref-parameter-markers.html
+    - text: Name Resolution
+      url: sql-ref-name-resolution.html
+    - text: SQL Scripting
+      url: sql-ref-scripting.html
     - text: SQL Syntax
       url: sql-ref-syntax.html
       subitems:
@@ -110,6 +114,8 @@
           url: sql-ref-syntax.html#dml-statements
         - text: Data Retrieval(Queries)
           url: sql-ref-syntax.html#data-retrieval-statements
+        - text: SQL Scripting Statements
+          url: sql-ref-syntax.html#sql-scripting-statements
         - text: Auxiliary Statements
           url: sql-ref-syntax.html#auxiliary-statements
         - text: Pipe Syntax
