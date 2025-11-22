@@ -29,7 +29,7 @@ import org.scalatest.time.{Seconds, Span}
 import org.apache.spark.TestUtils
 import org.apache.spark.sql._
 import org.apache.spark.sql.connector.read.streaming
-import org.apache.spark.sql.execution.streaming.checkpointing.{AsyncCommitLog, AsyncOffsetSeqLog, OffsetSeq}
+import org.apache.spark.sql.execution.streaming.checkpointing.{AsyncCommitLog, AsyncOffsetSeqLog}
 import org.apache.spark.sql.execution.streaming.runtime.{AsyncProgressTrackingMicroBatchExecution, MemoryStream, StreamExecution}
 import org.apache.spark.sql.execution.streaming.runtime.AsyncProgressTrackingMicroBatchExecution.{ASYNC_PROGRESS_TRACKING_CHECKPOINTING_INTERVAL_MS, ASYNC_PROGRESS_TRACKING_ENABLED, ASYNC_PROGRESS_TRACKING_OVERRIDE_SINK_SUPPORT_CHECK}
 import org.apache.spark.sql.functions.{column, window}
@@ -835,7 +835,7 @@ class AsyncProgressTrackingMicroBatchExecutionSuite
     val offsetLog = new AsyncOffsetSeqLog(ds.sparkSession, checkpointLocation + "/offsets", null, 0)
     // commits received at source should match up to the ones found in the offset log
     for (i <- 0 until inputData.commits.length) {
-      val offsetOnDisk: OffsetSeq = offsetLog.get(offsetLogFiles(i)).get
+      val offsetOnDisk = offsetLog.get(offsetLogFiles(i)).get
 
       val sourceCommittedOffset: streaming.Offset = inputData.commits(i)
 

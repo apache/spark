@@ -129,7 +129,8 @@ class OfflineStateRepartitionRunner(
         // If it is a failed repartition batch, lets check if the shuffle partitions
         // is the same as the requested. If same, then we can retry the batch.
         val lastBatch = checkpointMetadata.offsetLog.get(lastBatchId).get
-        val lastBatchShufflePartitions = getShufflePartitions(lastBatch.metadata.get).get
+        val lastBatchShufflePartitions = getShufflePartitions(
+          lastBatch.metadataOpt.get).get
         if (lastBatchShufflePartitions == numPartitions) {
           // We can retry the repartition batch.
           logInfo(log"The last batch is a failed repartition batch " +
@@ -193,7 +194,7 @@ class OfflineStateRepartitionRunner(
         .offsetSeqNotFoundError(checkpointLocation, lastCommittedBatchId))
 
     // Missing offset metadata not supported
-    val lastCommittedMetadata = lastCommittedOffsetSeq.metadata.getOrElse(
+    val lastCommittedMetadata = lastCommittedOffsetSeq.metadataOpt.getOrElse(
       throw OfflineStateRepartitionErrors.missingOffsetSeqMetadataError(
         checkpointLocation, version = 1, batchId = lastCommittedBatchId)
     )
@@ -253,11 +254,11 @@ object OfflineStateRepartitionUtils {
           throw OfflineStateRepartitionErrors
             .offsetSeqNotFoundError(checkpointLocation, prevBatchId))
 
-        val batchMetadata = batch.metadata.getOrElse(throw OfflineStateRepartitionErrors
+        val batchMetadata = batch.metadataOpt.getOrElse(throw OfflineStateRepartitionErrors
           .missingOffsetSeqMetadataError(checkpointLocation, version = 1, batchId = batchId))
         val shufflePartitions = getShufflePartitions(batchMetadata).get
 
-        val previousBatchMetadata = previousBatch.metadata.getOrElse(
+        val previousBatchMetadata = previousBatch.metadataOpt.getOrElse(
           throw OfflineStateRepartitionErrors
             .missingOffsetSeqMetadataError(checkpointLocation, version = 1, batchId = prevBatchId))
         val previousShufflePartitions = getShufflePartitions(previousBatchMetadata).get

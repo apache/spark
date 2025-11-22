@@ -42,7 +42,7 @@ import org.apache.spark.sql.execution.{SparkPlan, SQLExecution}
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, RealTimeStreamScanExec, StreamingDataSourceV2Relation, StreamingDataSourceV2ScanRelation, StreamWriterCommitProgress, WriteToDataSourceV2Exec}
 import org.apache.spark.sql.execution.streaming.{AvailableNowTrigger, Offset, OneTimeTrigger, ProcessingTimeTrigger, RealTimeModeAllowlist, RealTimeTrigger, Sink, Source, StreamingQueryPlanTraverseHelper}
-import org.apache.spark.sql.execution.streaming.checkpointing.{CheckpointFileManager, CommitMetadata, OffsetSeq, OffsetSeqMetadata}
+import org.apache.spark.sql.execution.streaming.checkpointing.{CheckpointFileManager, CommitMetadata, OffsetSeqBase, OffsetSeqMetadata}
 import org.apache.spark.sql.execution.streaming.operators.stateful.{StatefulOperatorStateInfo, StatefulOpStateStoreCheckpointInfo, StateStoreWriter}
 import org.apache.spark.sql.execution.streaming.runtime.AcceptsLatestSeenOffsetHandler
 import org.apache.spark.sql.execution.streaming.runtime.StreamingCheckpointConstants.{DIR_NAME_COMMITS, DIR_NAME_OFFSETS, DIR_NAME_STATE}
@@ -99,6 +99,14 @@ class MicroBatchExecution(
   protected[sql] val errorNotifier = new ErrorNotifier()
 
   @volatile protected var sources: Seq[SparkDataStream] = Seq.empty
+
+  // Source ID mapping for OffsetMap support
+  // Using index as sourceId initially, can be extended to support user-provided names
+  // This is initialized in the same path as the sources Seq (defined above) and is used
+  // in the same way, when OffsetLog v2 is used.
+  @volatile protected var sourceIdMap: Map[String, SparkDataStream] = Map.empty
+
+  override protected def sourceToIdMap: Map[SparkDataStream, String] = sourceIdMap.map(_.swap)
 
   @volatile protected[sql] var triggerExecutor: TriggerExecutor = _
 
@@ -242,6 +250,11 @@ class MicroBatchExecution(
       // v2 source
       case r: StreamingDataSourceV2ScanRelation => r.stream
     }
+
+    // Create source ID mapping for OffsetMap support
+    sourceIdMap = sources.zipWithIndex.map {
+      case (source, index) => index.toString -> source
+    }.toMap
 
     // Inform the source if it is in real time mode
     if (trigger.isInstanceOf[RealTimeTrigger]) {
@@ -399,7 +412,10 @@ class MicroBatchExecution(
     }
 
     AcceptsLatestSeenOffsetHandler.setLatestSeenOffsetOnSources(
-      offsetLog.getLatest().map(_._2), sources)
+      offsetLog.getLatest().map(_._2),
+      sources,
+      sourceIdMap
+    )
 
     val execCtx = new MicroBatchExecutionContext(id, runId, name, triggerClock, sources, sink,
       progressReporter, -1, sparkSession, None)
@@ -552,7 +568,7 @@ class MicroBatchExecution(
    * @param latestBatchId the batch id of the current micro batch
    * @return A option that contains the offset of the previously written batch
    */
-  def validateOffsetLogAndGetPrevOffset(latestBatchId: Long): Option[OffsetSeq] = {
+  def validateOffsetLogAndGetPrevOffset(latestBatchId: Long): Option[OffsetSeqBase] = {
     if (latestBatchId != 0) {
       Some(offsetLog.get(latestBatchId - 1).getOrElse {
         logError(log"The offset log for batch ${MDC(LogKeys.BATCH_ID, latestBatchId - 1)} " +
@@ -601,16 +617,16 @@ class MicroBatchExecution(
          * in the offset log */
         execCtx.batchId = latestBatchId
         execCtx.isCurrentBatchConstructed = true
-        execCtx.endOffsets = nextOffsets.toStreamProgress(sources)
+        execCtx.endOffsets = nextOffsets.toStreamProgress(sources, sourceIdMap)
 
         // validate the integrity of offset log and get the previous offset from the offset log
         val secondLatestOffsets = validateOffsetLogAndGetPrevOffset(latestBatchId)
         secondLatestOffsets.foreach { offset =>
-          execCtx.startOffsets = offset.toStreamProgress(sources)
+          execCtx.startOffsets = offset.toStreamProgress(sources, sourceIdMap)
         }
 
         // update offset metadata
-        nextOffsets.metadata.foreach { metadata =>
+        nextOffsets.metadataOpt.foreach { metadata =>
           OffsetSeqMetadata.setSessionConf(metadata, sparkSessionToRunBatches.sessionState.conf)
           execCtx.offsetSeqMetadata = OffsetSeqMetadata(
             metadata.batchWatermarkMs, metadata.batchTimestampMs, sparkSessionToRunBatches.conf)
@@ -846,8 +862,8 @@ class MicroBatchExecution(
     shouldConstructNextBatch
   }
 
-  protected def commitSources(offsetSeq: OffsetSeq): Unit = {
-    offsetSeq.toStreamProgress(sources).foreach {
+  protected def commitSources(offsetSeq: OffsetSeqBase): Unit = {
+    offsetSeq.toStreamProgress(sources, sourceIdMap).foreach {
       case (src: Source, off: Offset) => src.commit(off)
       case (stream: MicroBatchStream, off) =>
         stream.commit(stream.deserializeOffset(off.json))
@@ -1106,7 +1122,7 @@ class MicroBatchExecution(
     if (!trigger.isInstanceOf[RealTimeTrigger]) {
       if (!offsetLog.add(
           execCtx.batchId,
-          execCtx.endOffsets.toOffsetSeq(sources, execCtx.offsetSeqMetadata)
+          execCtx.endOffsets.toOffsets(sources, sourceIdMap, execCtx.offsetSeqMetadata)
         )) {
         throw QueryExecutionErrors.concurrentStreamLogUpdate(execCtx.batchId)
       }
@@ -1262,7 +1278,7 @@ class MicroBatchExecution(
       execCtx.reportTimeTaken("walCommit") {
         if (!offsetLog.add(
           execCtx.batchId,
-          execCtx.endOffsets.toOffsetSeq(sources, execCtx.offsetSeqMetadata)
+          execCtx.endOffsets.toOffsets(sources, sourceIdMap, execCtx.offsetSeqMetadata)
           )) {
           throw QueryExecutionErrors.concurrentStreamLogUpdate(execCtx.batchId)
         }

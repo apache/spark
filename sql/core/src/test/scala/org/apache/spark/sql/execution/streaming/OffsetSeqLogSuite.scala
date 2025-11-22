@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.streaming
 import java.io.File
 
 import org.apache.spark.sql.catalyst.util.stringToFile
-import org.apache.spark.sql.execution.streaming.checkpointing.{OffsetSeq, OffsetSeqLog, OffsetSeqMetadata}
+import org.apache.spark.sql.execution.streaming.checkpointing.{OffsetMap, OffsetSeq, OffsetSeqBase, OffsetSeqLog, OffsetSeqMetadata}
 import org.apache.spark.sql.execution.streaming.runtime.{LongOffset, SerializedOffset}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -109,7 +109,7 @@ class OffsetSeqLogSuite extends SharedSparkSession {
         log.get(0)
       }
       Seq(
-        s"maximum supported log version is v${OffsetSeqLog.VERSION}, but encountered v99999",
+        s"maximum supported log version is v${OffsetSeqLog.MAX_VERSION}, but encountered v99999",
         "produced by a newer version of Spark and cannot be read by this version"
       ).foreach { message =>
         assert(e.getMessage.contains(message))
@@ -124,10 +124,10 @@ class OffsetSeqLogSuite extends SharedSparkSession {
       Some(SerializedOffset("""{"logOffset":345}""")),
       Some(SerializedOffset("""{"topic-0":{"0":1}}"""))
     ))
-    assert(offsetSeq.metadata === Some(OffsetSeqMetadata(0L, 1480981499528L)))
+    assert(offsetSeq.metadataOpt === Some(OffsetSeqMetadata(0L, 1480981499528L)))
   }
 
-  private def readFromResource(dir: String): (Long, OffsetSeq) = {
+  private def readFromResource(dir: String): (Long, OffsetSeqBase) = {
     val input = getClass.getResource(s"/structured-streaming/$dir")
     val log = new OffsetSeqLog(spark, input.toString)
     log.getLatest().get
@@ -161,7 +161,7 @@ class OffsetSeqLogSuite extends SharedSparkSession {
 
     // Read the latest offset log
     val offsetSeq = log.get(latestBatchId.get).get
-    val offsetSeqMetadata = offsetSeq.metadata.get
+    val offsetSeqMetadata = offsetSeq.metadataOpt.get
 
     if (entryExists) {
       val encodingFormatOpt = offsetSeqMetadata.conf.get(
@@ -210,7 +210,7 @@ class OffsetSeqLogSuite extends SharedSparkSession {
     withSQLConf(rowChecksumConf -> true.toString) {
       val existingChkpt = "offset-log-version-2.1.0"
       val (_, offsetSeq) = readFromResource(existingChkpt)
-      val offsetSeqMetadata = offsetSeq.metadata.get
+      val offsetSeqMetadata = offsetSeq.metadataOpt.get
       // Not present in existing checkpoint
       assert(offsetSeqMetadata.conf.get(rowChecksumConf) === None)
 
@@ -218,5 +218,23 @@ class OffsetSeqLogSuite extends SharedSparkSession {
       OffsetSeqMetadata.setSessionConf(offsetSeqMetadata, clonedSqlConf)
       assert(!clonedSqlConf.stateStoreRowChecksumEnabled)
     }
+  }
+
+  test("OffsetMap golden file compatibility test - VERSION_2 format") {
+    val (batchId, offsetSeq) = readFromResource("offset-map")
+    assert(batchId === 3)
+
+    // Verify it's an OffsetMap (VERSION_2)
+    assert(offsetSeq.isInstanceOf[OffsetMap])
+    val offsetMap = offsetSeq.asInstanceOf[OffsetMap]
+
+    // Verify the offset data
+    assert(offsetMap.offsetsMap === Map("0" -> Some(SerializedOffset("3"))))
+
+    // Verify metadata
+    assert(offsetSeq.metadataOpt.isDefined)
+    val metadata = offsetSeq.metadataOpt.get
+    assert(metadata.batchWatermarkMs === 0)
+    assert(metadata.batchTimestampMs === 1758651405232L)
   }
 }

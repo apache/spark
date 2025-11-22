@@ -258,7 +258,7 @@ class OfflineStateRepartitionSuite extends StreamTest {
     assert(lastBatchId == batchId)
 
     val lastBatch = checkpointMetadata.offsetLog.get(lastBatchId).get
-    val lastBatchShufflePartitions = getShufflePartitions(lastBatch.metadata.get).get
+    val lastBatchShufflePartitions = getShufflePartitions(lastBatch.metadataOpt.get).get
     assert(lastBatchShufflePartitions == expectedShufflePartitions)
 
     // Verify the commit log
@@ -277,7 +277,7 @@ class OfflineStateRepartitionSuite extends StreamTest {
       s"Offsets should be identical between batch $previousBatchId and $batchId")
 
     // Verify metadata is the same except for shuffle partitions config
-    (lastBatch.metadata, previousBatch.metadata) match {
+    (lastBatch.metadataOpt, previousBatch.metadataOpt) match {
       case (Some(lastMetadata), Some(previousMetadata)) =>
         // Check watermark and timestamp are the same
         assert(lastMetadata.batchWatermarkMs == previousMetadata.batchWatermarkMs,
