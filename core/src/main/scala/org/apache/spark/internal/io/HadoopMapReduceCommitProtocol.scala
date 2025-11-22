@@ -68,13 +68,15 @@ import org.apache.spark.mapred.SparkHadoopMapRedUtil
 class HadoopMapReduceCommitProtocol(
     jobId: String,
     path: String,
-    dynamicPartitionOverwrite: Boolean = false)
+    mode: String = "")
   extends FileCommitProtocol with Serializable with Logging {
 
   import FileCommitProtocol._
 
+  protected val dynamicPartitionOverwrite: Boolean = mode.equals(DYNAMIC_PARTITION_OVERWRITE)
+
   /** OutputCommitter from Hadoop is not serializable so marking it transient. */
-  @transient private var committer: OutputCommitter = _
+  @transient protected var committer: OutputCommitter = _
 
   /**
    * Checks whether there are files to be committed to a valid output location.
@@ -84,7 +86,7 @@ class HadoopMapReduceCommitProtocol(
    * [[HadoopMapReduceCommitProtocol#path]] need not be a valid [[org.apache.hadoop.fs.Path]] for
    * committers not writing to distributed file systems.
    */
-  private val hasValidPath = Try { new Path(path) }.isSuccess
+  protected val hasValidPath = Try { new Path(path) }.isSuccess
 
   /**
    * Tracks files staged by this task for absolute output paths. These outputs are not managed by
@@ -137,6 +139,24 @@ class HadoopMapReduceCommitProtocol(
       new Path(new Path(stagingDir, d), filename).toString
     }.getOrElse {
       new Path(stagingDir, filename).toString
+    }
+  }
+
+  override def newTaskTempFile(taskContext: TaskAttemptContext, partDir: Option[String],
+      customPath: Option[String], spec: FileNameSpec): String = {
+    val filename = getFilename(taskContext, spec)
+
+    val workDir: Path = committer match {
+      // For FileOutputCommitter it has its own staging path called "work path".
+      case f: FileOutputCommitter =>
+        new Path(Option(f.getWorkPath).map(_.toString).getOrElse(path))
+      case _ => new Path(path)
+    }
+
+    partDir.map { d =>
+      new Path(new Path(workDir, d), filename).toString
+    }.getOrElse {
+      new Path(workDir, filename).toString
     }
   }
 
