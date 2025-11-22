@@ -2395,7 +2395,7 @@ class DataFrameAggregateSuite extends QueryTest
           .agg(theta_sketch_agg("value", 1).as("thetasketch"))
           .collect()
       },
-      condition = "THETA_INVALID_LG_NOM_ENTRIES",
+      condition = "SKETCH_INVALID_LG_NOM_ENTRIES",
       parameters = Map(
         "function" -> "`theta_sketch_agg`",
         "min" -> "4",
@@ -2411,7 +2411,7 @@ class DataFrameAggregateSuite extends QueryTest
           .agg(theta_sketch_agg("value", 28).as("thetasketch"))
           .collect()
       },
-      condition = "THETA_INVALID_LG_NOM_ENTRIES",
+      condition = "SKETCH_INVALID_LG_NOM_ENTRIES",
       parameters = Map(
         "function" -> "`theta_sketch_agg`",
         "min" -> "4",
