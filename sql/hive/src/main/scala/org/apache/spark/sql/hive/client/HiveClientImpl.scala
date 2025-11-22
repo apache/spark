@@ -28,6 +28,7 @@ import scala.annotation.tailrec
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
+import scala.util.{Failure, Success, Try, Using}
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
@@ -35,11 +36,13 @@ import org.apache.hadoop.hive.common.StatsSetupConst
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.metastore.{HiveMetaStoreClient, IMetaStoreClient, RetryingMetaStoreClient, TableType => HiveTableType}
 import org.apache.hadoop.hive.metastore.api.{Database => HiveDatabase, Table => MetaStoreApiTable, _}
-import org.apache.hadoop.hive.ql.Driver
+import org.apache.hadoop.hive.metastore.conf.MetastoreConf
+import org.apache.hadoop.hive.metastore.conf.MetastoreConf.ConfVars.{AUTO_CREATE_ALL, METASTORE_METADATA_TRANSFORMER_CLASS, SCHEMA_VERIFICATION, STATS_AUTO_GATHER}
+import org.apache.hadoop.hive.ql.IDriver
 import org.apache.hadoop.hive.ql.metadata.{Hive, HiveException, Partition => HivePartition, Table => HiveTable}
-import org.apache.hadoop.hive.ql.parse.BaseSemanticAnalyzer.HIVE_COLUMN_ORDER_ASC
-import org.apache.hadoop.hive.ql.processors._
+import org.apache.hadoop.hive.ql.processors.CommandProcessorException
 import org.apache.hadoop.hive.ql.session.SessionState
+import org.apache.hadoop.hive.ql.util.DirectionUtils
 import org.apache.hadoop.hive.serde.serdeConstants
 import org.apache.hadoop.hive.serde2.MetadataTypedColumnsetSerDe
 import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
@@ -67,6 +70,7 @@ import org.apache.spark.sql.hive.{HiveExternalCatalog, HiveUtils}
 import org.apache.spark.sql.hive.HiveExternalCatalog.DATASOURCE_SCHEMA
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.{CircularBuffer, Utils}
 
 /**
@@ -193,6 +197,9 @@ private[hive] class HiveClientImpl(
   /** Returns the configuration for the current session. */
   def conf: HiveConf = {
     val hiveConf = state.getConf
+    // Since HIVE-17626(Hive 3.0.0), need to set hive.query.reexecution.enabled=false.
+    HiveConf.setBoolVar(hiveConf, HiveConf.ConfVars.HIVE_QUERY_REEXECUTION_ENABLED, false)
+
     // Hive changed the default of datanucleus.schema.autoCreateAll from true to false
     // and hive.metastore.schema.verification from false to true since Hive 2.0.
     // For details, see the JIRA HIVE-6113, HIVE-12463 and HIVE-1841.
@@ -207,8 +214,12 @@ private[hive] class HiveClientImpl(
         (msConnUrl != null && msConnUrl.startsWith("jdbc:derby"))
     }
     if (isEmbeddedMetaStore) {
-      hiveConf.setBoolean("hive.metastore.schema.verification", false)
-      hiveConf.setBoolean("datanucleus.schema.autoCreateAll", true)
+      MetastoreConf.setBoolVar(hiveConf, SCHEMA_VERIFICATION, false)
+      MetastoreConf.setBoolVar(hiveConf, AUTO_CREATE_ALL, true)
+      MetastoreConf.setVar(hiveConf, METASTORE_METADATA_TRANSFORMER_CLASS, "")
+      MetastoreConf.setBoolVar(hiveConf, STATS_AUTO_GATHER, true)
+      // TODO: check if this can be enabled back
+      // MetastoreConf.setBoolVar(hiveConf, MetastoreConf.ConfVars.TRY_DIRECT_SQL, false)
     }
     hiveConf
   }
@@ -473,7 +484,7 @@ private[hive] class HiveClientImpl(
       // are sorted in ascending order, only then propagate the sortedness information
       // to downstream processing / optimizations in Spark
       // TODO: In future we can have Spark support columns sorted in descending order
-      val allAscendingSorted = sortColumnOrders.forall(_.getOrder == HIVE_COLUMN_ORDER_ASC)
+      val allAscendingSorted = sortColumnOrders.forall(_.getOrder == DirectionUtils.ASCENDING_CODE)
 
       val sortColumnNames = if (allAscendingSorted) {
         sortColumnOrders.map(_.getCol)
@@ -868,28 +879,8 @@ private[hive] class HiveClientImpl(
    * in the sequence is one row.
    * Since upgrading the built-in Hive to 2.3, hive-llap-client is needed when
    * running MapReduce jobs with `runHive`.
-   * Since HIVE-17626(Hive 3.0.0), need to set hive.query.reexecution.enabled=false.
    */
   protected def runHive(cmd: String, maxRows: Int = 1000): Seq[String] = withHiveState {
-    def closeDriver(driver: Driver): Unit = {
-      // Since HIVE-18238(Hive 3.0.0), the Driver.close function's return type changed
-      // and the CommandProcessorFactory.clean function removed.
-      driver.getClass.getMethod("close").invoke(driver)
-      if (version != hive.v3_0 && version != hive.v3_1 && version != hive.v4_0) {
-        CommandProcessorFactory.clean(conf)
-      }
-    }
-
-    def getResponseCode(response: CommandProcessorResponse): Int = {
-      if (version < hive.v4_0) {
-        response.getResponseCode
-      } else {
-        // Since Hive 4.0, response code is removed from CommandProcessorResponse.
-        // Here we simply return 0 for the positive cases as for error cases it will
-        // throw exceptions early.
-        0
-      }
-    }
 
     // Hive query needs to start SessionState.
     SessionState.start(state)
@@ -900,47 +891,34 @@ private[hive] class HiveClientImpl(
       val tokens: Array[String] = cmd_trimmed.split("\\s+")
       // The remainder of the command.
       val cmd_1: String = cmd_trimmed.substring(tokens(0).length()).trim()
-      val proc = shim.getCommandProcessor(tokens(0), conf)
-      proc match {
-        case driver: Driver =>
-          try {
-            val response: CommandProcessorResponse = driver.run(cmd)
-            if (getResponseCode(response) != 0) {
-              // Throw an exception if there is an error in query processing.
-              // This works for hive 3.x and earlier versions.
-              throw new QueryExecutionException(response.getErrorMessage)
-            }
-            driver.setMaxRows(maxRows)
-            val results = shim.getDriverResults(driver)
-            results
-          } catch {
-            case e @ (_: QueryExecutionException | _: SparkThrowable) =>
-              throw e
-            case e: Exception =>
-              // Wrap the original hive error with QueryExecutionException and throw it
-              // if there is an error in query processing.
-              // This works for hive 4.x and later versions.
-              throw new QueryExecutionException(Utils.stackTraceToString(e))
-          } finally {
-            closeDriver(driver)
-          }
-
-        case _ =>
+      val results: Try[Seq[String]] = Using(shim.getCommandProcessor(tokens(0), conf)) {
+        case driver: IDriver =>
+          driver.run(cmd)
+          driver.setMaxRows(maxRows)
+          shim.getDriverResults(driver)
+        case proc =>
           val out = state.getClass.getField("out").get(state)
           if (out != null) {
             // scalastyle:off println
             out.asInstanceOf[PrintStream].println(tokens(0) + " " + cmd_1)
             // scalastyle:on println
           }
-          val response: CommandProcessorResponse = proc.run(cmd_1)
-          val responseCode = getResponseCode(response)
-          if (responseCode != 0) {
-            // Throw an exception if there is an error in query processing.
-            // This works for hive 3.x and earlier versions. For 4.x and later versions,
-            // It will go to the catch block directly.
-            throw new QueryExecutionException(response.getErrorMessage)
+          proc.run(cmd_1)
+          Seq.empty
+      }
+      results match {
+        case Success(s) =>
+          s
+        case Failure(e) =>
+          e match {
+            case e@(_: QueryExecutionException | _: SparkThrowable) =>
+              throw e
+            case e: CommandProcessorException =>
+              // Wrap the original hive error with QueryExecutionException and throw it
+              // if there is an error in query processing.
+              // This works for hive 4.x and later versions.
+              throw new QueryExecutionException(Utils.stackTraceToString(e))
           }
-          Seq(responseCode.toString)
       }
     } catch {
       case e: Exception =>
@@ -1063,12 +1041,7 @@ private[hive] class HiveClientImpl(
       val t = table.getTableName
       logDebug(s"Deleting table $t")
       try {
-        shim.getIndexes(client, "default", t, 255).foreach { index =>
-          shim.dropIndex(client, "default", t, index.getIndexName)
-        }
-        if (!table.isIndexTable) {
-          shim.dropTable(client, "default", t)
-        }
+        shim.dropTable(client, "default", t)
       } catch {
         case _: NoSuchMethodError =>
           // HIVE-18448 Hive 3.0 remove index APIs
@@ -1198,18 +1171,25 @@ private[hive] object HiveClientImpl extends Logging {
     }
 
     table.bucketSpec match {
-      case Some(bucketSpec) if !HiveExternalCatalog.isDatasourceTable(table) =>
-        hiveTable.setNumBuckets(bucketSpec.numBuckets)
-        hiveTable.setBucketCols(bucketSpec.bucketColumnNames.toList.asJava)
+      case Some(bucketSpec) =>
+        def setBuckets(): Unit = {
+          if (HiveExternalCatalog.isDatasourceTable(table)) {
+            hiveTable.setNumBuckets(0)
+          } else {
+            hiveTable.setNumBuckets(bucketSpec.numBuckets)
+            hiveTable.setBucketCols(bucketSpec.bucketColumnNames.toList.asJava)
 
-        if (bucketSpec.sortColumnNames.nonEmpty) {
-          hiveTable.setSortCols(
-            bucketSpec.sortColumnNames
-              .map(col => new Order(col, HIVE_COLUMN_ORDER_ASC))
-              .toList
-              .asJava
-          )
+            if (bucketSpec.sortColumnNames.nonEmpty) {
+              hiveTable.setSortCols(
+                bucketSpec.sortColumnNames
+                  .map(col => new Order(col, DirectionUtils.ASCENDING_CODE))
+                  .toList
+                  .asJava
+              )
+            }
+          }
         }
+        setBuckets()
       case _ =>
     }
 
@@ -1224,8 +1204,9 @@ private[hive] object HiveClientImpl extends Logging {
       p: CatalogTablePartition,
       ht: HiveTable): HivePartition = {
     val tpart = new org.apache.hadoop.hive.metastore.api.Partition
+    val spec = new CaseInsensitiveStringMap(p.spec.asJava).asScala.view
     val partValues = ht.getPartCols.asScala.map { hc =>
-      p.spec.getOrElse(hc.getName, throw new IllegalArgumentException(
+      spec.getOrElse(hc.getName, throw new IllegalArgumentException(
         s"Partition spec is missing a value for column '${hc.getName}': ${p.spec}"))
     }
     val storageDesc = new StorageDescriptor
@@ -1373,6 +1354,8 @@ private[hive] object HiveClientImpl extends Logging {
     SQLConf.get.redactOptions(confMap).foreach { case (k, v) =>
       logDebug(s"Applying Hadoop/Hive/Spark and extra properties to Hive Conf:$k=$v")
     }
+    // Since HIVE-17626(Hive 3.0.0), need to set hive.query.reexecution.enabled=false.
+    HiveConf.setBoolVar(hiveConf, HiveConf.ConfVars.HIVE_QUERY_REEXECUTION_ENABLED, false)
     // Disable CBO because we removed the Calcite dependency.
     hiveConf.setBoolean("hive.cbo.enable", false)
     // If this is true, SessionState.start will create a file to log hive job which will not be
@@ -1414,25 +1397,7 @@ private[hive] object HiveClientImpl extends Logging {
       case _ =>
         new HiveConf(conf, classOf[HiveConf])
     }
-    val hive = try {
-      Hive.getWithoutRegisterFns(hiveConf)
-    } catch {
-      // SPARK-37069: not all Hive versions have the above method (e.g., Hive 2.3.9 has it but
-      // 2.3.8 doesn't), therefore here we fallback when encountering the exception.
-      case _: NoSuchMethodError =>
-        Hive.get(hiveConf)
-    }
-
-    // Follow behavior of HIVE-26633 (4.0.0), only apply the max message size when
-    // `hive.thrift.client.max.message.size` is set and the value is positive
-    Option(hiveConf.get("hive.thrift.client.max.message.size"))
-      .map(HiveConf.toSizeBytes(_).toInt).filter(_ > 0)
-      .foreach { maxMessageSize =>
-        logDebug(s"Trying to set metastore client thrift max message to $maxMessageSize")
-        configureMaxThriftMessageSize(hiveConf, hive.getMSC, maxMessageSize)
-      }
-
-    hive
+    Hive.getWithoutRegisterFns(hiveConf)
   }
 
   private def getFieldValue[T](obj: Any, fieldName: String): T = {

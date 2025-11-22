@@ -130,7 +130,11 @@
     </dependency>
     <dependency>
       <groupId>${hive.group}</groupId>
-      <artifactId>hive-storage-api</artifactId>
+      <artifactId>hive-common</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>${hive.group}</groupId>
+      <artifactId>hive-serde</artifactId>
     </dependency>
     <dependency>
       <groupId>org.apache.parquet</groupId>
@@ -289,6 +293,10 @@
     <dependency>
       <groupId>org.apache.arrow</groupId>
       <artifactId>arrow-compression</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.maven.shared</groupId>
+      <artifactId>maven-invoker</artifactId>
     </dependency>
   </dependencies>
   <build>

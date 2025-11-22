@@ -76,8 +76,8 @@ public class GetTypeInfoOperation extends MetadataOperation {
 
   protected final RowSet rowSet;
 
-  protected GetTypeInfoOperation(HiveSession parentSession) {
-    super(parentSession, OperationType.GET_TYPE_INFO);
+  protected GetTypeInfoOperation(HiveSession parentSession, OperationManager operationManager) {
+    super(parentSession, operationManager, OperationType.GET_TYPE_INFO);
     rowSet = RowSetFactory.create(RESULT_SET_SCHEMA, getProtocolVersion(), false);
   }
 
