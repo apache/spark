@@ -30,7 +30,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       actions: read
-      check: write
+      checks: write
       contents: read
     steps:
     - name: Download test results to report
