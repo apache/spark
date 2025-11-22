@@ -88,10 +88,14 @@ class BaseStreamingArrowWriter(
 
   protected def isBatchSizeLimitReached: Boolean = {
     // If we have either reached the records or bytes limit
-    totalNumRowsForBatch >= arrowMaxRecordsPerBatch ||
+    (arrowMaxRecordsPerBatch > 0 && totalNumRowsForBatch >= arrowMaxRecordsPerBatch) ||
       // Short circuit batch size calculation if the batch size is unlimited as computing batch
       // size is computationally expensive.
       ((arrowMaxBytesPerBatch != Int.MaxValue)
         && (arrowWriterForData.sizeInBytes() >= arrowMaxBytesPerBatch))
+  }
+
+  def getTotalNumRowsForBatch: Int = {
+    totalNumRowsForBatch
   }
 }

@@ -95,4 +95,43 @@ class BaseStreamingArrowWriterSuite extends SparkFunSuite with BeforeAndAfterEac
     verify(writer, times(2)).writeBatch()
     verify(arrowWriter, times(2)).reset()
   }
+
+  test("test negative or zero arrowMaxRecordsPerBatch is unlimited") {
+    val root: VectorSchemaRoot = mock(classOf[VectorSchemaRoot])
+    val dataRow = mock(classOf[InternalRow])
+
+    // Test with negative value
+    transformWithStateInPySparkWriter = new BaseStreamingArrowWriter(
+      root, writer, -1, arrowMaxBytesPerBatch, arrowWriter)
+
+    // Write many rows (more than typical batch size)
+    for (_ <- 1 to 10) {
+      transformWithStateInPySparkWriter.writeRow(dataRow)
+    }
+
+    // Verify all rows were written but batch was not finalized
+    verify(arrowWriter, times(10)).write(dataRow)
+    verify(writer, never()).writeBatch()
+
+    // Only finalize when explicitly called
+    transformWithStateInPySparkWriter.finalizeCurrentArrowBatch()
+    verify(writer).writeBatch()
+
+    // Test with zero value
+    transformWithStateInPySparkWriter = new BaseStreamingArrowWriter(
+      root, writer, 0, arrowMaxBytesPerBatch, arrowWriter)
+
+    // Write many rows again
+    for (_ <- 1 to 10) {
+      transformWithStateInPySparkWriter.writeRow(dataRow)
+    }
+
+    // Verify rows were written but batch was not finalized
+    verify(arrowWriter, times(20)).write(dataRow)
+    verify(writer).writeBatch()  // still 1 from before
+
+    // Only finalize when explicitly called
+    transformWithStateInPySparkWriter.finalizeCurrentArrowBatch()
+    verify(writer, times(2)).writeBatch()
+  }
 }
