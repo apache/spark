@@ -2003,9 +2003,6 @@ class UserDefinedType(DataType):
             UDT = getattr(m, pyClass)
         return UDT()
 
-    def __eq__(self, other: Any) -> bool:
-        return type(self) == type(other)
-
 
 class VariantVal:
     """
