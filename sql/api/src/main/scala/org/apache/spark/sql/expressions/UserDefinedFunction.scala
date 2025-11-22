@@ -17,11 +17,11 @@
 
 package org.apache.spark.sql.expressions
 
-import scala.reflect.runtime.universe.TypeTag
+import scala.reflect.runtime.universe.{typeOf, TypeTag}
 import scala.util.Try
 
 import org.apache.spark.annotation.Stable
-import org.apache.spark.sql.{Column, Encoder}
+import org.apache.spark.sql.{Column, Encoder, Row}
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
 import org.apache.spark.sql.internal.{InvokeInlineUserDefinedFunction, UserDefinedFunctionLike}
@@ -130,8 +130,17 @@ object SparkUserDefinedFunction {
       returnTypeTag: TypeTag[_],
       inputTypeTags: TypeTag[_]*): SparkUserDefinedFunction = {
     val outputEncoder = ScalaReflection.encoderFor(returnTypeTag)
+    // Return None for any input that is a Seq[Row].
+    // This replicates the Spark 3 behavior of passing None as the encoder for such inputs.
+    val seqRowType = typeOf[Seq[_]]
+    val rowType = typeOf[Row]
     val inputEncoders = inputTypeTags.map { tag =>
-      Try(ScalaReflection.encoderFor(tag)).toOption
+      val tpe = tag.tpe
+      if (tpe <:< seqRowType && tpe.typeArgs.nonEmpty && tpe.typeArgs.head =:= rowType) {
+        None
+      } else {
+        Try(ScalaReflection.encoderFor(tag)).toOption
+      }
     }
     SparkUserDefinedFunction(
       f = function,
