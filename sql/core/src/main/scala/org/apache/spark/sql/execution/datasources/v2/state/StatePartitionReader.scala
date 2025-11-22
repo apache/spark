@@ -49,7 +49,19 @@ class StatePartitionReaderFactory(
 
   override def createReader(partition: InputPartition): PartitionReader[InternalRow] = {
     val stateStoreInputPartition = partition.asInstanceOf[StateStoreInputPartition]
-    if (stateStoreInputPartition.sourceOptions.readChangeFeed) {
+    if (stateStoreInputPartition.sourceOptions.internalOnlyReadAllColumnFamilies) {
+      // Disable format validation because the schema returned by
+      // StatePartitionAllColumnFamiliesReader does not contain the corresponding
+      // keySchema or valueSchema.
+      // It's safe to do so we also don't expect the caller of StatePartitionAllColumnFamiliesReader
+      // to extract specific fields out of the returning row.
+      val modifiedStoreConf = storeConf.withExtraOptions(Map(
+        StateStoreConf.FORMAT_VALIDATION_ENABLED_CONFIG -> "false",
+        StateStoreConf.FORMAT_VALIDATION_CHECK_VALUE_CONFIG -> "false"
+      ))
+      new StatePartitionAllColumnFamiliesReader(modifiedStoreConf, hadoopConf,
+        stateStoreInputPartition, schema, keyStateEncoderSpec)
+    } else if (stateStoreInputPartition.sourceOptions.readChangeFeed) {
       new StateStoreChangeDataPartitionReader(storeConf, hadoopConf,
         stateStoreInputPartition, schema, keyStateEncoderSpec, stateVariableInfoOpt,
         stateStoreColFamilySchemaOpt, stateSchemaProviderOpt, joinColFamilyOpt)
@@ -78,19 +90,24 @@ abstract class StatePartitionReaderBase(
   extends PartitionReader[InternalRow] with Logging {
   // Used primarily as a placeholder for the value schema in the context of
   // state variables used within the transformWithState operator.
-  private val schemaForValueRow: StructType =
+  // Also used as a placeholder for both key and value schema for
+  // StatePartitionAllColumnFamiliesReader
+  private val placeholderSchema: StructType =
     StructType(Array(StructField("__dummy__", NullType)))
 
   protected val keySchema = {
     if (SchemaUtil.checkVariableType(stateVariableInfoOpt, StateVariableType.MapState)) {
       SchemaUtil.getCompositeKeySchema(schema, partition.sourceOptions)
+    } else if (partition.sourceOptions.internalOnlyReadAllColumnFamilies) {
+      placeholderSchema
     } else {
       SchemaUtil.getSchemaAsDataType(schema, "key").asInstanceOf[StructType]
     }
   }
 
-  protected val valueSchema = if (stateVariableInfoOpt.isDefined) {
-    schemaForValueRow
+  protected val valueSchema = if (stateVariableInfoOpt.isDefined ||
+      partition.sourceOptions.internalOnlyReadAllColumnFamilies) {
+    placeholderSchema
   } else {
     SchemaUtil.getSchemaAsDataType(
       schema, "value").asInstanceOf[StructType]
@@ -229,6 +246,47 @@ class StatePartitionReader(
           SchemaUtil.unifyStateRowPair((pair.key, pair.value), partition.partition)
         }
     }
+  }
+
+  override def close(): Unit = {
+    store.release()
+    super.close()
+  }
+}
+
+/**
+ * An implementation of [[StatePartitionReaderBase]] for reading all column families
+ * in binary format. This reader returns raw key and value bytes along with column family names.
+ * We are returning key/value bytes because each column family can have different schema
+ * It will also return the partition key
+ */
+class StatePartitionAllColumnFamiliesReader(
+    storeConf: StateStoreConf,
+    hadoopConf: SerializableConfiguration,
+    partition: StateStoreInputPartition,
+    schema: StructType,
+    keyStateEncoderSpec: KeyStateEncoderSpec)
+  extends StatePartitionReaderBase(
+    storeConf,
+    hadoopConf, partition, schema,
+    keyStateEncoderSpec, None, None, None, None) {
+
+  private lazy val store: ReadStateStore = {
+    assert(getStartStoreUniqueId == getEndStoreUniqueId,
+      "Start and end store unique IDs must be the same when reading all column families")
+    provider.getReadStore(
+      partition.sourceOptions.batchId + 1,
+      getStartStoreUniqueId
+    )
+  }
+
+  override lazy val iter: Iterator[InternalRow] = {
+    store
+      .iterator()
+      .map { pair =>
+        SchemaUtil.unifyStateRowPairAsRawBytes(
+          (pair.key, pair.value), StateStore.DEFAULT_COL_FAMILY_NAME)
+      }
   }
 
   override def close(): Unit = {
