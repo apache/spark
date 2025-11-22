@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution
 
+import scala.util.control.NonFatal
+
 import org.apache.hadoop.fs.{FileSystem, Path}
 
 import org.apache.spark.internal.{Logging, MessageWithContext}
@@ -35,8 +37,7 @@ import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
 import org.apache.spark.sql.execution.command.CommandUtils
 import org.apache.spark.sql.execution.datasources.{FileIndex, HadoopFsRelation, LogicalRelation, LogicalRelationWithTable}
-import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, ExtractV2Table, FileTable}
-import org.apache.spark.sql.execution.datasources.v2.V2TableRefreshUtil
+import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, ExtractV2Table, FileTable, V2TableRefreshUtil}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.storage.StorageLevel.MEMORY_AND_DISK
@@ -352,22 +353,35 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
     }
     needToRecache.foreach { cd =>
       cd.cachedRepresentation.cacheBuilder.clearCache()
+      tryRebuildCacheEntry(spark, cd).foreach { entry =>
+        this.synchronized {
+          if (lookupCachedDataInternal(entry.plan).nonEmpty) {
+            logWarning("While recaching, data was already added to cache.")
+          } else {
+            cachedData = entry +: cachedData
+            CacheManager.logCacheOperation(log"Re-cached Dataframe cache entry:" +
+              log"${MDC(DATAFRAME_CACHE_ENTRY, entry)}")
+          }
+        }
+      }
+    }
+  }
+
+  private def tryRebuildCacheEntry(
+      spark: SparkSession,
+      cd: CachedData): Option[CachedData] = {
+    try {
       val sessionWithConfigsOff = getOrCloneSessionWithConfigsOff(spark)
       val (newKey, newCache) = sessionWithConfigsOff.withActive {
         val refreshedPlan = V2TableRefreshUtil.refresh(cd.plan)
         val qe = sessionWithConfigsOff.sessionState.executePlan(refreshedPlan)
         qe.normalized -> InMemoryRelation(cd.cachedRepresentation.cacheBuilder, qe)
       }
-      val recomputedPlan = cd.copy(plan = newKey, cachedRepresentation = newCache)
-      this.synchronized {
-        if (lookupCachedDataInternal(recomputedPlan.plan).nonEmpty) {
-          logWarning("While recaching, data was already added to cache.")
-        } else {
-          cachedData = recomputedPlan +: cachedData
-          CacheManager.logCacheOperation(log"Re-cached Dataframe cache entry:" +
-            log"${MDC(DATAFRAME_CACHE_ENTRY, recomputedPlan)}")
-        }
-      }
+      Some(cd.copy(plan = newKey, cachedRepresentation = newCache))
+    } catch {
+      case NonFatal(e) =>
+        logWarning(log"Failed to recache query", e)
+        None
     }
   }
 
