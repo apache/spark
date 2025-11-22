@@ -53,6 +53,9 @@ on:
       codecov_token:
         description: The upload token of codecov.
         required: false
+concurrency:
+  group: build-test-${{ github.workflow }}-${{ github.repository == 'apache/spark' && github.run_id || github.ref }}
+  cancel-in-progress: true
 jobs:
   precondition:
     name: Check changes
