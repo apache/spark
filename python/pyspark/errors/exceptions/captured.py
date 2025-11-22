@@ -234,26 +234,20 @@ def _convert_exception(e: "Py4JJavaError") -> CapturedException:
         return SparkUpgradeException(origin=e)
     elif is_instance_of(gw, e, "org.apache.spark.SparkNoSuchElementException"):
         return SparkNoSuchElementException(origin=e)
-
-    c: "Py4JJavaError" = e.getCause()
-    stacktrace: str = getattr(jvm, "org.apache.spark.util.Utils").exceptionString(e)
-    if c is not None and (
-        is_instance_of(gw, c, "org.apache.spark.api.python.PythonException")
+    elif is_instance_of(gw, e, "org.apache.spark.api.python.PythonException"):
         # To make sure this only catches Python UDFs.
-        and any(
+        stacktrace = getattr(jvm, "org.apache.spark.util.Utils").exceptionString(e)
+        if any(
             map(
-                lambda v: "org.apache.spark.sql.execution.python" in v.toString(), c.getStackTrace()
+                lambda v: "org.apache.spark.sql.execution.python" in v.toString(), e.getStackTrace()
             )
-        )
-    ):
-        msg = (
-            "\n  An exception was thrown from the Python worker. "
-            "Please see the stack trace below.\n%s" % c.getMessage()
-        )
-        return PythonException(msg, stacktrace)
-
-    return UnknownException(desc=e.toString(), stackTrace=stacktrace, cause=c)
-
+        ):
+            msg = (
+                "\n  An exception was thrown from the Python worker. "
+                "Please see the stack trace below.\n%s" % e.getMessage()
+            )
+            return PythonException(msg, stacktrace)
+    return UnknownException(desc=e.toString(), stackTrace=getattr(jvm, "org.apache.spark.util.Utils").exceptionString(e), cause=e.getCause())
 
 def capture_sql_exception(f: Callable[..., Any]) -> Callable[..., Any]:
     def deco(*a: Any, **kw: Any) -> Any:

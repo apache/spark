@@ -177,10 +177,12 @@ object StreamingForeachBatchHelper extends Logging {
                 log"completed (ret: 0)")
           case SpecialLengths.PYTHON_EXCEPTION_THROWN =>
             val msg = PythonWorkerUtils.readUTF(dataIn)
-            throw new PythonException(
+            val errorMsg =
               s"[session: ${sessionHolder.sessionId}] [userId: ${sessionHolder.userId}] " +
-                s"Found error inside foreachBatch Python process: $msg",
-              null)
+                s"Found error inside foreachBatch Python process: $msg"
+            throw new PythonException(
+              errorClass = "PYTHON_EXCEPTION",
+              messageParameters = Map("msg" -> errorMsg))
           case otherValue =>
             throw new IllegalStateException(
               s"[session: ${sessionHolder.sessionId}] [userId: ${sessionHolder.userId}] " +
