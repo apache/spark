@@ -24,6 +24,7 @@ import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.functions.expr
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming._
+import org.apache.spark.tags.ExtendedSQLTest
 
 // RocksDBSkipMaintenanceOnCertainPartitionsProvider is a test-only provider that skips running
 // maintenance for partitions 0 and 1 (these are arbitrary choices). This is used to test
@@ -49,6 +50,7 @@ class HDFSBackedSkipMaintenanceOnCertainPartitionsProvider extends HDFSBackedSta
   }
 }
 
+@ExtendedSQLTest
 class StateStoreInstanceMetricSuite extends StreamTest with AlsoTestWithRocksDBFeatures {
   import testImplicits._
 
