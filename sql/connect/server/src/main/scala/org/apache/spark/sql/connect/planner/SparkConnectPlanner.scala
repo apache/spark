@@ -2992,6 +2992,14 @@ class SparkConnectPlanner(
     // the SQL command and defer the actual analysis and execution to the flow function.
     if (insidePipelineFlowFunction) {
       result.setRelation(relation)
+      executeHolder.eventsManager.postFinished()
+      responseObserver.onNext(
+        ExecutePlanResponse
+          .newBuilder()
+          .setSessionId(sessionHolder.sessionId)
+          .setServerSideSessionId(sessionHolder.serverSessionId)
+          .setSqlCommandResult(result)
+          .build)
       return
     }
 
