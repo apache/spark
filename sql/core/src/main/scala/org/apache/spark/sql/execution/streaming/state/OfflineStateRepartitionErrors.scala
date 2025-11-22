@@ -17,7 +17,8 @@
 
 package org.apache.spark.sql.execution.streaming.state
 
-import org.apache.spark.{SparkIllegalArgumentException, SparkIllegalStateException, SparkRuntimeException}
+import org.apache.spark.{SparkIllegalArgumentException, SparkIllegalStateException, SparkUnsupportedOperationException}
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * Errors thrown by Offline state repartitioning.
@@ -211,15 +212,13 @@ class StateRepartitionUnsupportedOffsetSeqVersionError(
 abstract class StateRepartitionInvalidStateStoreConfigError(
     configName: String,
     subClass: String,
-    messageParameters: Map[String, String] = Map.empty,
-    cause: Throwable = null)
-  extends SparkRuntimeException(
+    messageParameters: Map[String, String] = Map.empty)
+  extends SparkUnsupportedOperationException(
     errorClass = s"STATE_REPARTITION_INVALID_STATE_STORE_CONFIG.$subClass",
-    messageParameters = Map("configName" -> configName) ++ messageParameters,
-    cause = cause)
+    messageParameters = Map("configName" -> configName) ++ messageParameters)
 
 class StateRepartitionInvalidStateStoreConfigUnsupportedProviderError(
     provider: String) extends StateRepartitionInvalidStateStoreConfigError(
-    "SQLConf.STATE_STORE_PROVIDER_CLASS.key",
+    SQLConf.STATE_STORE_PROVIDER_CLASS.key,
     subClass = "UNSUPPORTED_PROVIDER",
     messageParameters = Map("provider" -> provider))

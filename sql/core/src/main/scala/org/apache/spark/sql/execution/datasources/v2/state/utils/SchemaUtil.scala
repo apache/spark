@@ -63,7 +63,7 @@ object SchemaUtil {
         .add("partition_id", IntegerType)
     } else if (sourceOptions.internalOnlyReadAllColumnFamilies) {
       new StructType()
-        // todo [SPARK-54443]: change keySchema to more specific type after we
+        // todo [SPARK-54443]: change keySchema to a more specific type after we
         //  can extract partition key from keySchema
         .add("partition_key", keySchema)
         .add("key_bytes", BinaryType)

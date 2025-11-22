@@ -50,6 +50,11 @@ class StatePartitionReaderFactory(
   override def createReader(partition: InputPartition): PartitionReader[InternalRow] = {
     val stateStoreInputPartition = partition.asInstanceOf[StateStoreInputPartition]
     if (stateStoreInputPartition.sourceOptions.internalOnlyReadAllColumnFamilies) {
+      // Disable format validation because the schema returned by
+      // StatePartitionAllColumnFamiliesReader does not contain the corresponding
+      // keySchema or valueSchema.
+      // It's safe to do so we also don't expect the caller of StatePartitionAllColumnFamiliesReader
+      // to extract specific fields out of the returning row.
       val modifiedStoreConf = storeConf.withExtraOptions(Map(
         StateStoreConf.FORMAT_VALIDATION_ENABLED_CONFIG -> "false",
         StateStoreConf.FORMAT_VALIDATION_CHECK_VALUE_CONFIG -> "false"
@@ -85,23 +90,24 @@ abstract class StatePartitionReaderBase(
   extends PartitionReader[InternalRow] with Logging {
   // Used primarily as a placeholder for the value schema in the context of
   // state variables used within the transformWithState operator.
-  private val schemaForValueRow: StructType =
+  // Also used as a placeholder for both key and value schema for
+  // StatePartitionAllColumnFamiliesReader
+  private val placeholderSchema: StructType =
     StructType(Array(StructField("__dummy__", NullType)))
 
   protected val keySchema = {
     if (SchemaUtil.checkVariableType(stateVariableInfoOpt, StateVariableType.MapState)) {
       SchemaUtil.getCompositeKeySchema(schema, partition.sourceOptions)
     } else if (partition.sourceOptions.internalOnlyReadAllColumnFamilies) {
-      schemaForValueRow
+      placeholderSchema
     } else {
       SchemaUtil.getSchemaAsDataType(schema, "key").asInstanceOf[StructType]
     }
   }
 
-  protected val valueSchema = if (stateVariableInfoOpt.isDefined) {
-    schemaForValueRow
-  } else if (partition.sourceOptions.internalOnlyReadAllColumnFamilies) {
-    schemaForValueRow
+  protected val valueSchema = if (stateVariableInfoOpt.isDefined ||
+      partition.sourceOptions.internalOnlyReadAllColumnFamilies) {
+    placeholderSchema
   } else {
     SchemaUtil.getSchemaAsDataType(
       schema, "value").asInstanceOf[StructType]
@@ -252,6 +258,7 @@ class StatePartitionReader(
  * An implementation of [[StatePartitionReaderBase]] for reading all column families
  * in binary format. This reader returns raw key and value bytes along with column family names.
  * We are returning key/value bytes because each column family can have different schema
+ * It will also return the partition key
  */
 class StatePartitionAllColumnFamiliesReader(
     storeConf: StateStoreConf,

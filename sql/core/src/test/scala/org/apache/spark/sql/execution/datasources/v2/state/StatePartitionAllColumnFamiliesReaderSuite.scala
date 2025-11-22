@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.datasources.v2.state
 import java.nio.ByteOrder
 import java.util.Arrays
 
-import org.apache.spark.SparkRuntimeException
+import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
 import org.apache.spark.sql.catalyst.InternalRow
@@ -100,20 +100,16 @@ class StatePartitionAllColumnFamiliesReaderSuite extends StateDataSourceTestBase
 
     // Create projections to convert Row to UnsafeRow bytes
     val keyProjection = UnsafeProjection.create(keySchema)
-    val valueProjection = if (valueSchema.isEmpty) null else UnsafeProjection.create(valueSchema)
+    val valueProjection = UnsafeProjection.create(valueSchema)
 
     // Create converters to convert external Row types to internal Catalyst types
     val keyConverter = CatalystTypeConverters.createToCatalystConverter(keySchema)
-    val valueConverter = if (valueSchema.isEmpty) {
-      null
-    } else {
-      CatalystTypeConverters.createToCatalystConverter(valueSchema)
-    }
+    val valueConverter = CatalystTypeConverters.createToCatalystConverter(valueSchema)
 
     // Convert normal data to bytes
     val normalAsBytes = normalDf.map { row =>
       val key = row.getStruct(1)
-      val value = if (row.isNullAt(2) || valueSchema.isEmpty) null else row.getStruct(2)
+      val value = if (row.isNullAt(2)) null else row.getStruct(2)
 
       // Convert key to InternalRow, then to UnsafeRow, then get bytes
       val keyInternalRow = keyConverter(key).asInstanceOf[InternalRow]
@@ -123,7 +119,7 @@ class StatePartitionAllColumnFamiliesReaderSuite extends StateDataSourceTestBase
       val keyBytes = keyUnsafeRow.getBytes.clone()
 
       // Convert value to bytes
-      val valueBytes = if (value == null || valueSchema.isEmpty) {
+      val valueBytes = if (value == null) {
         Array.empty[Byte]
       } else {
         val valueInternalRow = valueConverter(value).asInstanceOf[InternalRow]
@@ -433,7 +429,7 @@ class StatePartitionAllColumnFamiliesReaderSuite extends StateDataSourceTestBase
         )
 
         checkError(
-          exception = intercept[SparkRuntimeException] {
+          exception = intercept[SparkUnsupportedOperationException] {
             spark.read
               .format("statestore")
               .option(StateSourceOptions.PATH, tempDir.getAbsolutePath)
@@ -443,7 +439,7 @@ class StatePartitionAllColumnFamiliesReaderSuite extends StateDataSourceTestBase
           },
           condition = "STATE_REPARTITION_INVALID_STATE_STORE_CONFIG.UNSUPPORTED_PROVIDER",
           parameters = Map(
-            "configName" -> "SQLConf.STATE_STORE_PROVIDER_CLASS.key",
+            "configName" -> SQLConf.STATE_STORE_PROVIDER_CLASS.key,
             "provider" -> classOf[HDFSBackedStateStoreProvider].getName
           )
         )
