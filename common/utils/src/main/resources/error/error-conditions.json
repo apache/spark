@@ -1633,6 +1633,12 @@
     ],
     "sqlState" : "42702"
   },
+  "EXECUTOR_KUBERNETES_SERVICE_REQUIRES_BLOCK_MANAGER_PORT" : {
+    "message" : [
+      "Enabling the executor Kubernetes service requires <blockManagerPortConfigKey> to be set to a positive number, for instance <defaultShuffleServicePort>."
+    ],
+    "sqlState" : "42000"
+  },
   "EXEC_IMMEDIATE_DUPLICATE_ARGUMENT_ALIASES" : {
     "message" : [
       "The USING clause of this EXECUTE IMMEDIATE command contained multiple arguments with same alias (<aliases>), which is invalid; please update the command to specify unique aliases and then try it again."

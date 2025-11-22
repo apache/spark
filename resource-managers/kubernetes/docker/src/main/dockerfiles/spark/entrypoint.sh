@@ -102,7 +102,8 @@ case "$1" in
       --executor-id $SPARK_EXECUTOR_ID
       --cores $SPARK_EXECUTOR_CORES
       --app-id $SPARK_APPLICATION_ID
-      --hostname $SPARK_EXECUTOR_POD_IP
+      ${EXECUTOR_SERVICE_NAME:+--bind-address $SPARK_EXECUTOR_POD_IP}
+      --hostname ${EXECUTOR_SERVICE_NAME:-$SPARK_EXECUTOR_POD_IP}
       --resourceProfileId $SPARK_RESOURCE_PROFILE_ID
       --podName $SPARK_EXECUTOR_POD_NAME
     )
