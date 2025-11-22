@@ -4409,6 +4409,12 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val EXISTS_PRUNING_ENABLED =
+    buildConf("spark.sql.optimizer.existsPruning.enabled")
+      .doc("Enable extra Project node insertion for EXISTS subqueries to allow pruning.")
+      .booleanConf
+      .createWithDefault(false)
+
   val PLAN_MERGE_FILTER_PROPAGATION_MAX_COST =
     buildConf("spark.sql.planMerge.filterPropagation.maxCost")
       .internal()
