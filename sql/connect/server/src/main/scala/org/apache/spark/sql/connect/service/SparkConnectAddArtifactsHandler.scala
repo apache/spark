@@ -16,7 +16,7 @@
  */
 package org.apache.spark.sql.connect.service
 
-import java.io.File
+import java.io.{Closeable, File}
 import java.nio.file.{Files, Path, Paths}
 import java.util.zip.{CheckedOutputStream, CRC32}
 
@@ -33,6 +33,7 @@ import org.apache.spark.connect.proto.AddArtifactsResponse.ArtifactSummary
 import org.apache.spark.sql.artifact.ArtifactManager
 import org.apache.spark.sql.connect.utils.ErrorUtils
 import org.apache.spark.sql.util.ArtifactUtils
+import org.apache.spark.util.SparkErrorUtils
 import org.apache.spark.util.Utils
 
 /**
@@ -141,7 +142,17 @@ class SparkConnectAddArtifactsHandler(val responseObserver: StreamObserver[AddAr
     summaries
   }
 
-  protected def cleanUpStagedArtifacts(): Unit = Utils.deleteRecursively(stagingDir.toFile)
+  protected def cleanUpStagedArtifacts(): Unit = {
+    // Close all staged artifacts to release file handles and stream resources
+    stagedArtifacts.foreach(SparkErrorUtils.closeQuietly)
+    // Close the chunked artifact if it's still active
+    if (chunkedArtifact != null) {
+      SparkErrorUtils.closeQuietly(chunkedArtifact)
+      chunkedArtifact = null
+    }
+    Utils.deleteRecursively(stagingDir.toFile)
+    stagedArtifacts.clear()
+  }
 
   override def onCompleted(): Unit = {
     try {
@@ -198,7 +209,7 @@ class SparkConnectAddArtifactsHandler(val responseObserver: StreamObserver[AddAr
   /**
    * Handles rebuilding an artifact from bytes sent over the wire.
    */
-  class StagedArtifact(val name: String) {
+  class StagedArtifact(val name: String) extends Closeable {
     // Workaround to keep the fragment.
     val (canonicalFileName: String, fragment: Option[String]) =
       if (name.startsWith(s"archives${File.separator}")) {
@@ -259,6 +270,7 @@ class SparkConnectAddArtifactsHandler(val responseObserver: StreamObserver[AddAr
 
     def close(): Unit = {
       if (artifactSummary == null) {
+        // Closing checksumOut cascades: checksumOut -> countingOut -> fileOut
         checksumOut.close()
         artifactSummary = builder
           .setName(name)
