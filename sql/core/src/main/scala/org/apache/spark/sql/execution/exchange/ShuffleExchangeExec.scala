@@ -182,6 +182,11 @@ case object REBALANCE_PARTITIONS_BY_COL extends ShuffleOrigin
 // change it.
 case object REQUIRED_BY_STATEFUL_OPERATOR extends ShuffleOrigin
 
+// Indicates that the shuffle operator was added by the consolidation shuffle optimization to
+// consolidate shuffle data from earlier stages and upload it to remote storage.
+case object SHUFFLE_CONSOLIDATION extends ShuffleOrigin
+
+
 /**
  * Performs a shuffle that will result in the desired partitioning.
  */
@@ -201,7 +206,13 @@ case class ShuffleExchangeExec(
     "numPartitions" -> SQLMetrics.createMetric(sparkContext, "number of partitions")
   ) ++ readMetrics ++ writeMetrics
 
-  override def nodeName: String = "Exchange"
+  override def nodeName: String = {
+    if (shuffleOrigin == SHUFFLE_CONSOLIDATION) {
+      "Consolidation exchange"
+    } else {
+      "Exchange"
+    }
+  }
 
   private lazy val serializer: Serializer =
     new UnsafeRowSerializer(child.output.size, longMetric("dataSize"))
@@ -246,7 +257,8 @@ case class ShuffleExchangeExec(
       child.output,
       outputPartitioning,
       serializer,
-      writeMetrics)
+      writeMetrics,
+      shuffleOrigin)
     metrics("numPartitions").set(dep.partitioner.numPartitions)
     val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
     SQLMetrics.postDriverMetricUpdates(
@@ -258,6 +270,7 @@ case class ShuffleExchangeExec(
     // The ShuffleRowRDD will be cached in SparkPlan.executeRDD and reused if this plan is used by
     // multiple plans.
     new ShuffledRowRDD(shuffleDependency, readMetrics)
+
   }
 
   override protected def withNewChildInternal(newChild: SparkPlan): ShuffleExchangeExec =
@@ -336,7 +349,8 @@ object ShuffleExchangeExec {
       outputAttributes: Seq[Attribute],
       newPartitioning: Partitioning,
       serializer: Serializer,
-      writeMetrics: Map[String, SQLMetric])
+      writeMetrics: Map[String, SQLMetric],
+      shuffleOrigin: ShuffleOrigin = ENSURE_REQUIREMENTS)
     : ShuffleDependency[Int, InternalRow, InternalRow] = {
     val part: Partitioner = newPartitioning match {
       case RoundRobinPartitioning(numPartitions) => new HashPartitioner(numPartitions)
@@ -493,7 +507,7 @@ object ShuffleExchangeExec {
         rddWithPartitionIds,
         new PartitionIdPassthrough(part.numPartitions),
         serializer,
-        shuffleWriterProcessor = createShuffleWriteProcessor(writeMetrics),
+        shuffleWriterProcessor = createShuffleWriteProcessor(writeMetrics, shuffleOrigin),
         rowBasedChecksums = UnsafeRowChecksum.createUnsafeRowChecksums(checksumSize),
         checksumMismatchFullRetryEnabled = SQLConf.get.shuffleChecksumMismatchFullRetryEnabled)
 
@@ -503,13 +517,34 @@ object ShuffleExchangeExec {
   /**
    * Create a customized [[ShuffleWriteProcessor]] for SQL which wrap the default metrics reporter
    * with [[SQLShuffleWriteMetricsReporter]] as new reporter for [[ShuffleWriteProcessor]].
+   *
+   * For consolidation shuffles, the processor is marked with [[ConsolidationShuffleMarker]]
+   * to indicate that remote storage should be used.
    */
-  def createShuffleWriteProcessor(metrics: Map[String, SQLMetric]): ShuffleWriteProcessor = {
-    new ShuffleWriteProcessor {
-      override protected def createMetricsReporter(
-          context: TaskContext): ShuffleWriteMetricsReporter = {
-        new SQLShuffleWriteMetricsReporter(context.taskMetrics().shuffleWriteMetrics, metrics)
+  def createShuffleWriteProcessor(
+      metrics: Map[String, SQLMetric],
+      shuffleOrigin: ShuffleOrigin): ShuffleWriteProcessor = {
+    if (shuffleOrigin == SHUFFLE_CONSOLIDATION) {
+      new ShuffleWriteProcessor with ConsolidationShuffleMarker {
+        override protected def createMetricsReporter(
+            context: TaskContext): ShuffleWriteMetricsReporter = {
+          new SQLShuffleWriteMetricsReporter(context.taskMetrics().shuffleWriteMetrics, metrics)
+        }
+      }
+    } else {
+      new ShuffleWriteProcessor {
+        override protected def createMetricsReporter(
+            context: TaskContext): ShuffleWriteMetricsReporter = {
+          new SQLShuffleWriteMetricsReporter(context.taskMetrics().shuffleWriteMetrics, metrics)
+        }
       }
     }
   }
 }
+
+/**
+ * Marker trait to identify shuffle write processors for consolidation shuffles.
+ * Shuffle writers can check if a processor implements this trait to determine
+ * whether to use remote storage for shuffle data.
+ */
+private[spark] trait ConsolidationShuffleMarker

@@ -48,6 +48,8 @@ private[spark] class ShuffleWriteProcessor extends Serializable with Logging {
       context: TaskContext): MapStatus = {
     var writer: ShuffleWriter[Any, Any] = null
     try {
+      context.getLocalProperties.setProperty("consolidation.write",
+        dep.shuffleWriterProcessor.isInstanceOf[org.apache.spark.sql.execution.exchange.ConsolidationShuffleMarker].toString)
       val manager = SparkEnv.get.shuffleManager
       writer = manager.getWriter[Any, Any](
         dep.shuffleHandle,
@@ -85,6 +87,7 @@ private[spark] class ShuffleWriteProcessor extends Serializable with Logging {
           }
         }
       }
+
       mapStatus.get
     } catch {
       case e: Exception =>

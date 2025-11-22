@@ -22,7 +22,7 @@ import scala.collection.mutable
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.plans.physical.SinglePartition
 import org.apache.spark.sql.execution.{ShufflePartitionSpec, SparkPlan, UnaryExecNode, UnionExec}
-import org.apache.spark.sql.execution.exchange.{ENSURE_REQUIREMENTS, REBALANCE_PARTITIONS_BY_COL, REBALANCE_PARTITIONS_BY_NONE, REPARTITION_BY_COL, ShuffleExchangeLike, ShuffleOrigin}
+import org.apache.spark.sql.execution.exchange.{ENSURE_REQUIREMENTS, REBALANCE_PARTITIONS_BY_COL, REBALANCE_PARTITIONS_BY_NONE, REPARTITION_BY_COL, SHUFFLE_CONSOLIDATION, ShuffleExchangeLike, ShuffleOrigin}
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, BroadcastNestedLoopJoinExec, CartesianProductExec}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.Utils
@@ -37,14 +37,22 @@ case class CoalesceShufflePartitions(session: SparkSession) extends AQEShuffleRe
 
   override val supportedShuffleOrigins: Seq[ShuffleOrigin] =
     Seq(ENSURE_REQUIREMENTS, REPARTITION_BY_COL, REBALANCE_PARTITIONS_BY_NONE,
-      REBALANCE_PARTITIONS_BY_COL)
+      REBALANCE_PARTITIONS_BY_COL, SHUFFLE_CONSOLIDATION)
 
   override def isSupported(shuffle: ShuffleExchangeLike): Boolean = {
-    shuffle.outputPartitioning != SinglePartition && super.isSupported(shuffle)
+    shuffle.outputPartitioning != SinglePartition && canApply(shuffle)
+      super.isSupported(shuffle)
+  }
+
+  def canApply(shuffle: ShuffleExchangeLike): Boolean = {
+    shuffle.shuffleOrigin match {
+      case ENSURE_REQUIREMENTS => !conf.shuffleConsolidationEnabled
+      case _ => true
+    }
   }
 
   override def apply(plan: SparkPlan): SparkPlan = {
-    if (!conf.coalesceShufflePartitionsEnabled) {
+    if (!conf.coalesceShufflePartitionsEnabled || conf.shuffleConsolidationEnabled) {
       return plan
     }
 
