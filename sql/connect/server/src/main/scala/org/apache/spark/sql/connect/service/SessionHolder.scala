@@ -380,6 +380,7 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
 
     mlCache.clear()
 
+    session.sessionState.close()
     session.cleanupPythonWorkerLogs()
 
     eventManager.postClosed()
