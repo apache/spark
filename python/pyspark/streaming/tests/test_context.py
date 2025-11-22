@@ -15,14 +15,19 @@
 # limitations under the License.
 #
 import os
+import platform
 import struct
 import tempfile
 import time
+import unittest
 
 from pyspark.streaming import StreamingContext
 from pyspark.testing.streamingutils import PySparkStreamingTestCase
 
 
+@unittest.skipIf(
+    "pypy" in platform.python_implementation().lower(), "cannot run in environment pypy"
+)
 class StreamingContextTests(PySparkStreamingTestCase):
     duration = 0.1
     setupCalled = False
@@ -171,7 +176,6 @@ class StreamingContextTests(PySparkStreamingTestCase):
 
 
 if __name__ == "__main__":
-    import unittest
     from pyspark.streaming.tests.test_context import *  # noqa: F401
 
     try:

@@ -51,6 +51,7 @@ RUN apt-get update && apt-get install -y \
     libtiff5-dev \
     libwebp-dev \
     libxml2-dev \
+    libxslt-dev \
     openjdk-17-jdk-headless \
     pkg-config \
     qpdf \
@@ -64,9 +65,9 @@ RUN apt-get update && apt-get install -y \
 
 
 RUN add-apt-repository ppa:pypy/ppa
-RUN mkdir -p /usr/local/pypy/pypy3.10 && \
-    curl -sqL https://downloads.python.org/pypy/pypy3.10-v7.3.17-linux64.tar.bz2 | tar xjf - -C /usr/local/pypy/pypy3.10 --strip-components=1 && \
-    ln -sf /usr/local/pypy/pypy3.10/bin/pypy /usr/local/bin/pypy3.10 && \
-    ln -sf /usr/local/pypy/pypy3.10/bin/pypy /usr/local/bin/pypy3
+RUN mkdir -p /usr/local/pypy/pypy3.11 && \
+    curl -sqL https://downloads.python.org/pypy/pypy3.11-v7.3.20-linux64.tar.bz2 | tar xjf - -C /usr/local/pypy/pypy3.11 --strip-components=1 && \
+    ln -sf /usr/local/pypy/pypy3.11/bin/pypy /usr/local/bin/pypy3.10 && \
+    ln -sf /usr/local/pypy/pypy3.11/bin/pypy /usr/local/bin/pypy3
 RUN curl -sS https://bootstrap.pypa.io/get-pip.py | pypy3
 RUN pypy3 -m pip install numpy 'six==1.16.0' 'pandas==2.3.3' scipy coverage matplotlib lxml
