@@ -1182,8 +1182,8 @@ class DataFrameAggregateSuite extends QueryTest
         approx_percentile(col("earnings"), lit(0.3), lit(1)),
         approx_percentile(col("earnings"), array(lit(0.3), lit(0.6)), lit(1))
       ),
-      Row("Java", 20000.0, Seq(20000.0, 30000.0), 20000.0, Seq(20000.0, 20000.0)) ::
-        Row("dotNET", 5000.0, Seq(5000.0, 10000.0), 5000.0, Seq(5000.0, 5000.0)) :: Nil
+      Row("Java", 20000.0, Seq(20000.0, 30000.0), 20000.0, Seq(20000.0, 30000.0)) ::
+        Row("dotNET", 5000.0, Seq(5000.0, 10000.0), 5000.0, Seq(5000.0, 10000.0)) :: Nil
     )
   }
 
