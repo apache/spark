@@ -612,6 +612,7 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
       provider,
       nullable = true))
       .resolveAndBind()
+    assert(encoder.isInstanceOf[Serializable])
     assert(encoder.schema == new StructType().add("value", BinaryType))
     val toRow = encoder.createSerializer()
     val fromRow = encoder.createDeserializer()
