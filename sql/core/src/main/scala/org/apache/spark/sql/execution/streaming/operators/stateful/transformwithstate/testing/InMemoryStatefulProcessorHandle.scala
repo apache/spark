@@ -135,7 +135,6 @@ class InMemoryStatefulProcessorHandle() extends StatefulProcessorHandle {
       valEncoder: Encoder[T],
       ttlConfig: TTLConfig
   ): ValueState[T] = {
-    require(!states.contains(stateName), s"State $stateName already defined.")
     states
       .getOrElseUpdate(stateName, new InMemoryValueState[T]())
       .asInstanceOf[InMemoryValueState[T]]
@@ -149,7 +148,6 @@ class InMemoryStatefulProcessorHandle() extends StatefulProcessorHandle {
       valEncoder: Encoder[T],
       ttlConfig: TTLConfig
   ): ListState[T] = {
-    require(!states.contains(stateName), s"State $stateName already defined.")
     states
       .getOrElseUpdate(stateName, new InMemoryListState[T]())
       .asInstanceOf[InMemoryListState[T]]
@@ -164,7 +162,6 @@ class InMemoryStatefulProcessorHandle() extends StatefulProcessorHandle {
       valEncoder: Encoder[V],
       ttlConfig: TTLConfig
   ): MapState[K, V] = {
-    require(!states.contains(stateName), s"State $stateName already defined.")
     states
       .getOrElseUpdate(stateName, new InMemoryMapState[K, V]())
       .asInstanceOf[InMemoryMapState[K, V]]

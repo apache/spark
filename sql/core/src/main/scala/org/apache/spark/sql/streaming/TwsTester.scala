@@ -22,15 +22,31 @@ import org.apache.spark.sql.execution.streaming.operators.stateful.transformwith
 import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.testing.InMemoryStatefulProcessorHandle
 
 /**
- * Testing utility for transformWithState stateful processors. Provides in-memory state management
- * and simplified input processing for unit testing StatefulProcessor implementations.
+ * Testing utility for transformWithState stateful processors.
+ *
+ * This class enables unit testing of StatefulProcessor business logic by simulating the
+ * behavior of transformWithState. It processes input rows and returns output rows equivalent
+ * to those that would be produced by the processor in an actual Spark streaming query.
+ *
+ * '''Supported:'''
+ *  - Processing input rows and producing output rows via `test()`.
+ *  - Initial state setup via constructor parameter.
+ *  - Direct state manipulation via `setValueState`, `setListState`, `setMapState`.
+ *  - Direct state inspection via `peekValueState`, `peekListState`, `peekMapState`.
+ *
+ * '''Not Supported:'''
+ *  - '''Timers''': Only TimeMode.None is supported. If the processor attempts to register or
+ *    use timers (as if in TimeMode.EventTime or TimeMode.ProcessingTime), a NullPointerException
+ *    will be thrown.
+ *  - '''TTL''': State TTL configurations are ignored. All state persists indefinitely.
+ *
+ * '''Use Cases:'''
+ *  - '''Primary''': Unit testing business logic in `handleInputRows` implementations.
+ *  - '''Not recommended''': End-to-end testing or performance testing - use actual Spark
+ *    streaming queries for those scenarios.
  *
  * @param processor the StatefulProcessor to test
- * @param clock the clock to use for time-based operations, defaults to system UTC
- * @param timeMode time mode that will be passed to transformWithState (defaults to TimeMode.None)
- * @param outputMode output mode that will be passed to transformWithState (defaults to
- *                   OutputMode.Append)
- * @param initialState initial state for each key
+ * @param initialState initial state for each key as a list of (key, state) tuples
  * @tparam K the type of grouping key
  * @tparam I the type of input rows
  * @tparam O the type of output rows
@@ -61,6 +77,9 @@ class TwsTester[K, I, O](
    *
    * This corresponds to processing one microbatch. {@code handleInputRows} will be called once for
    * each key that appears in {@code input}.
+   * 
+   * To simulate real-time mode, call this method repeatedly in a loop, passing a list with a single
+   * (key, input row) tuple per call.
    *
    * @param input list of (key, input row) tuples to process
    * @return all output rows produced by the processor
