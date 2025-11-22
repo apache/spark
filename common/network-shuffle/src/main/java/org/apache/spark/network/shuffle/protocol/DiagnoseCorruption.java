@@ -24,25 +24,19 @@ import org.apache.spark.network.protocol.Encoders;
 public class DiagnoseCorruption extends BlockTransferMessage {
   public final String appId;
   public final String execId;
-  public final int shuffleId;
-  public final long mapId;
-  public final int reduceId;
+  public final String blockId;
   public final long checksum;
   public final String algorithm;
 
   public DiagnoseCorruption(
       String appId,
       String execId,
-      int shuffleId,
-      long mapId,
-      int reduceId,
+      String blockId,
       long checksum,
       String algorithm) {
     this.appId = appId;
     this.execId = execId;
-    this.shuffleId = shuffleId;
-    this.mapId = mapId;
-    this.reduceId = reduceId;
+    this.blockId = blockId;
     this.checksum = checksum;
     this.algorithm = algorithm;
   }
@@ -54,8 +48,8 @@ public class DiagnoseCorruption extends BlockTransferMessage {
 
   @Override
   public String toString() {
-    return "DiagnoseCorruption[appId=" + appId + ",execId=" + execId + ",shuffleId=" + shuffleId +
-        ",mapId=" + mapId + ",reduceId=" + reduceId + ",checksum=" + checksum +
+    return "DiagnoseCorruption[appId=" + appId + ",execId=" + execId +
+        ",blockId=" + blockId + ",checksum=" + checksum +
         ",algorithm=" + algorithm + "]";
   }
 
@@ -67,9 +61,7 @@ public class DiagnoseCorruption extends BlockTransferMessage {
     DiagnoseCorruption that = (DiagnoseCorruption) o;
 
     if (checksum != that.checksum) return false;
-    if (shuffleId != that.shuffleId) return false;
-    if (mapId != that.mapId) return false;
-    if (reduceId != that.reduceId) return false;
+    if (!blockId.equals(that.blockId)) return false;
     if (!algorithm.equals(that.algorithm)) return false;
     if (!appId.equals(that.appId)) return false;
     if (!execId.equals(that.execId)) return false;
@@ -80,9 +72,7 @@ public class DiagnoseCorruption extends BlockTransferMessage {
   public int hashCode() {
     int result = appId.hashCode();
     result = 31 * result + execId.hashCode();
-    result = 31 * result + Integer.hashCode(shuffleId);
-    result = 31 * result + Long.hashCode(mapId);
-    result = 31 * result + Integer.hashCode(reduceId);
+    result = 31 * result + blockId.hashCode();
     result = 31 * result + Long.hashCode(checksum);
     result = 31 * result + algorithm.hashCode();
     return result;
@@ -92,9 +82,7 @@ public class DiagnoseCorruption extends BlockTransferMessage {
   public int encodedLength() {
     return Encoders.Strings.encodedLength(appId)
       + Encoders.Strings.encodedLength(execId)
-      + 4 /* encoded length of shuffleId */
-      + 8 /* encoded length of mapId */
-      + 4 /* encoded length of reduceId */
+      + Encoders.Strings.encodedLength(blockId)
       + 8 /* encoded length of checksum */
       + Encoders.Strings.encodedLength(algorithm); /* encoded length of algorithm */
   }
@@ -103,9 +91,7 @@ public class DiagnoseCorruption extends BlockTransferMessage {
   public void encode(ByteBuf buf) {
     Encoders.Strings.encode(buf, appId);
     Encoders.Strings.encode(buf, execId);
-    buf.writeInt(shuffleId);
-    buf.writeLong(mapId);
-    buf.writeInt(reduceId);
+    Encoders.Strings.encode(buf, blockId);
     buf.writeLong(checksum);
     Encoders.Strings.encode(buf, algorithm);
   }
@@ -113,11 +99,9 @@ public class DiagnoseCorruption extends BlockTransferMessage {
   public static DiagnoseCorruption decode(ByteBuf buf) {
     String appId = Encoders.Strings.decode(buf);
     String execId = Encoders.Strings.decode(buf);
-    int shuffleId = buf.readInt();
-    long mapId = buf.readLong();
-    int reduceId = buf.readInt();
+    String blockId = Encoders.Strings.decode(buf);
     long checksum = buf.readLong();
     String algorithm = Encoders.Strings.decode(buf);
-    return new DiagnoseCorruption(appId, execId, shuffleId, mapId, reduceId, checksum, algorithm);
+    return new DiagnoseCorruption(appId, execId, blockId, checksum, algorithm);
   }
 }
