@@ -3232,7 +3232,7 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
   test("merge into schema evolution replace column with nested struct and set all columns") {
     Seq(true, false).foreach { withSchemaEvolution =>
       Seq(true, false).foreach { updateByFields =>
-        withSQLConf(SQLConf.MERGE_INTO_SOURCE_NESTED_TYPE_UPDATE_BY_FIELD.key ->
+        withSQLConf(SQLConf.MERGE_INTO_NESTED_TYPE_UPDATE_BY_FIELD.key ->
           updateByFields.toString) {
           withTempView("source") {
             // Create table using Spark SQL
@@ -3326,7 +3326,7 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
     "top level struct") {
     Seq(true, false).foreach { withSchemaEvolution =>
       Seq(true, false).foreach { updateByFields =>
-        withSQLConf(SQLConf.MERGE_INTO_SOURCE_NESTED_TYPE_UPDATE_BY_FIELD.key ->
+        withSQLConf(SQLConf.MERGE_INTO_NESTED_TYPE_UPDATE_BY_FIELD.key ->
           updateByFields.toString) {
           withTempView("source") {
             // Create table using Spark SQL
@@ -4662,7 +4662,7 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
 
   test("merge with null struct") {
     Seq(true, false).foreach { updateByFields =>
-      withSQLConf(SQLConf.MERGE_INTO_SOURCE_NESTED_TYPE_UPDATE_BY_FIELD.key ->
+      withSQLConf(SQLConf.MERGE_INTO_NESTED_TYPE_UPDATE_BY_FIELD.key ->
         updateByFields.toString) {
         withTempView("source") {
           createAndInitTable(
@@ -4712,7 +4712,7 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
 
   test("merge with null struct - update field") {
     Seq(true, false).foreach { updateByFields =>
-      withSQLConf(SQLConf.MERGE_INTO_SOURCE_NESTED_TYPE_UPDATE_BY_FIELD.key ->
+      withSQLConf(SQLConf.MERGE_INTO_NESTED_TYPE_UPDATE_BY_FIELD.key ->
         updateByFields.toString) {
         withTempView("source") {
           createAndInitTable(
@@ -4762,7 +4762,7 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
 
   test("merge with null struct into non-nullable struct column") {
     Seq(true, false).foreach { updateByFields =>
-      withSQLConf(SQLConf.MERGE_INTO_SOURCE_NESTED_TYPE_UPDATE_BY_FIELD.key ->
+      withSQLConf(SQLConf.MERGE_INTO_NESTED_TYPE_UPDATE_BY_FIELD.key ->
         updateByFields.toString) {
         withTempView("source") {
           createAndInitTable(
@@ -4813,9 +4813,9 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
     Seq(true, false).foreach { updateByFields =>
       Seq(true, false).foreach { coerceNestedTypes =>
         withSQLConf(
-          SQLConf.MERGE_INTO_SOURCE_NESTED_TYPE_UPDATE_BY_FIELD.key ->
+          SQLConf.MERGE_INTO_NESTED_TYPE_UPDATE_BY_FIELD.key ->
             updateByFields.toString,
-          SQLConf.MERGE_INTO_SOURCE_NESTED_TYPE_COERCION_ENABLED.key ->
+          SQLConf.MERGE_INTO_NESTED_TYPE_COERCION_ENABLED.key ->
             coerceNestedTypes.toString) {
           withTempView("source") {
             // Target table has nested struct with fields c1 and c2
@@ -4887,9 +4887,9 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
       Seq(true, false).foreach { withSchemaEvolution =>
         Seq(true, false).foreach { coerceNestedTypes =>
           withSQLConf(
-            SQLConf.MERGE_INTO_SOURCE_NESTED_TYPE_UPDATE_BY_FIELD.key ->
+            SQLConf.MERGE_INTO_NESTED_TYPE_UPDATE_BY_FIELD.key ->
               updateByFields.toString,
-            SQLConf.MERGE_INTO_SOURCE_NESTED_TYPE_COERCION_ENABLED.key ->
+            SQLConf.MERGE_INTO_NESTED_TYPE_COERCION_ENABLED.key ->
               coerceNestedTypes.toString) {
             withTempView("source") {
               // Target table has nested struct with fields c1 and c2
@@ -4977,8 +4977,8 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
     "and extra nested fields") {
 
     withSQLConf(
-      SQLConf.MERGE_INTO_SOURCE_NESTED_TYPE_UPDATE_BY_FIELD.key -> "true",
-      SQLConf.MERGE_INTO_SOURCE_NESTED_TYPE_COERCION_ENABLED.key -> "true") {
+      SQLConf.MERGE_INTO_NESTED_TYPE_UPDATE_BY_FIELD.key -> "true",
+      SQLConf.MERGE_INTO_NESTED_TYPE_COERCION_ENABLED.key -> "true") {
       withTempView("source") {
         // Target table has nested struct with NON-NULLABLE field b
         createAndInitTable(
@@ -5034,7 +5034,7 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
 
   test("merge with null struct using default value") {
     Seq(true, false).foreach { updateByFields =>
-      withSQLConf(SQLConf.MERGE_INTO_SOURCE_NESTED_TYPE_UPDATE_BY_FIELD.key ->
+      withSQLConf(SQLConf.MERGE_INTO_NESTED_TYPE_UPDATE_BY_FIELD.key ->
         updateByFields.toString) {
         withTempView("source") {
           // Target table has nested struct with a default value
@@ -5108,7 +5108,7 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
 
   test("merge with source missing struct column with default value") {
     Seq(true, false).foreach { updateByFields =>
-      withSQLConf(SQLConf.MERGE_INTO_SOURCE_NESTED_TYPE_UPDATE_BY_FIELD.key ->
+      withSQLConf(SQLConf.MERGE_INTO_NESTED_TYPE_UPDATE_BY_FIELD.key ->
         updateByFields.toString) {
         withTempView("source") {
           // Target table has nested struct with a default value
@@ -5177,9 +5177,9 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
   test("merge into with source missing fields in nested struct") {
     Seq(true, false).foreach { nestedTypeCoercion =>
       Seq(true, false).foreach { updateByFields =>
-        withSQLConf(SQLConf.MERGE_INTO_SOURCE_NESTED_TYPE_UPDATE_BY_FIELD.key
+        withSQLConf(SQLConf.MERGE_INTO_NESTED_TYPE_UPDATE_BY_FIELD.key
           -> updateByFields.toString,
-          SQLConf.MERGE_INTO_SOURCE_NESTED_TYPE_COERCION_ENABLED.key
+          SQLConf.MERGE_INTO_NESTED_TYPE_COERCION_ENABLED.key
             -> nestedTypeCoercion.toString) {
           withTempView("source") {
             // Target table has nested struct: s.c1, s.c2.a, s.c2.b
@@ -5278,7 +5278,7 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
         .createOrReplaceTempView("source")
 
       Seq(true, false).foreach { coerceNestedTypes =>
-        withSQLConf(SQLConf.MERGE_INTO_SOURCE_NESTED_TYPE_COERCION_ENABLED.key ->
+        withSQLConf(SQLConf.MERGE_INTO_NESTED_TYPE_COERCION_ENABLED.key ->
           coerceNestedTypes.toString) {
           // Test UPDATE with named_struct missing non-nullable field c2
           val e = intercept[AnalysisException] {

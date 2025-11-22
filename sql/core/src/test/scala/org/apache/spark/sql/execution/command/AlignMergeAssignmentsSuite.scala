@@ -691,7 +691,7 @@ class AlignMergeAssignmentsSuite extends AlignAssignmentsSuiteBase {
         assertNullCheckExists(plan4, Seq("s", "n_s", "dn_i"))
 
         Seq(true, false).foreach { coerceNestedTypes =>
-          withSQLConf(SQLConf.MERGE_INTO_SOURCE_NESTED_TYPE_COERCION_ENABLED.key ->
+          withSQLConf(SQLConf.MERGE_INTO_NESTED_TYPE_COERCION_ENABLED.key ->
             coerceNestedTypes.toString) {
             val mergeStmt =
               s"""MERGE INTO nested_struct_table t USING nested_struct_table src
@@ -858,7 +858,7 @@ class AlignMergeAssignmentsSuite extends AlignAssignmentsSuiteBase {
         assertNullCheckExists(plan4, Seq("s", "n_s", "dn_i"))
 
         Seq(true, false).foreach { coerceNestedTypes =>
-          withSQLConf(SQLConf.MERGE_INTO_SOURCE_NESTED_TYPE_COERCION_ENABLED.key ->
+          withSQLConf(SQLConf.MERGE_INTO_NESTED_TYPE_COERCION_ENABLED.key ->
             coerceNestedTypes.toString) {
             val mergeStmt =
               s"""MERGE INTO nested_struct_table t USING nested_struct_table src

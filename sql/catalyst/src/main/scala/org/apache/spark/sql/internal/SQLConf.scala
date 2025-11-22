@@ -6686,8 +6686,8 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
-  val MERGE_INTO_SOURCE_NESTED_TYPE_COERCION_ENABLED =
-    buildConf("spark.sql.merge.source.nested.type.coercion.enabled")
+  val MERGE_INTO_NESTED_TYPE_COERCION_ENABLED =
+    buildConf("spark.sql.merge.nested.type.coercion.enabled")
       .internal()
       .doc("If enabled, allow MERGE INTO to coerce source nested types if they have less" +
         "nested fields than the target table's nested types.")
@@ -6695,8 +6695,8 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
-  val MERGE_INTO_SOURCE_NESTED_TYPE_UPDATE_BY_FIELD =
-    buildConf("spark.sql.merge.nested.type.assign.by.fieldv2")
+  val MERGE_INTO_NESTED_TYPE_UPDATE_BY_FIELD =
+    buildConf("spark.sql.merge.nested.type.assign.by.field")
       .internal()
       .doc("If enabled and spark.sql.merge.source.nested.type.coercion.enabled is true," +
         "allow MERGE INTO with UPDATE SET * action to set nested structs field by field. " +
@@ -7905,10 +7905,10 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
     getConf(SQLConf.LEGACY_XML_PARSER_ENABLED)
 
   def mergeCoerceNestedTypes: Boolean =
-    getConf(SQLConf.MERGE_INTO_SOURCE_NESTED_TYPE_COERCION_ENABLED)
+    getConf(SQLConf.MERGE_INTO_NESTED_TYPE_COERCION_ENABLED)
 
   def mergeUpdateStructsByField: Boolean =
-    getConf(SQLConf.MERGE_INTO_SOURCE_NESTED_TYPE_UPDATE_BY_FIELD)
+    getConf(SQLConf.MERGE_INTO_NESTED_TYPE_UPDATE_BY_FIELD)
 
   /** ********************** SQLConf functionality methods ************ */
 
