@@ -1709,14 +1709,15 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
                 val resolvedDeleteCondition = deleteCondition.map(
                   resolveExpressionByPlanChildren(_, m))
                 DeleteAction(resolvedDeleteCondition)
-              case UpdateAction(updateCondition, assignments) =>
+              case UpdateAction(updateCondition, assignments, fromStar) =>
                 val resolvedUpdateCondition = updateCondition.map(
                   resolveExpressionByPlanChildren(_, m))
                 UpdateAction(
                   resolvedUpdateCondition,
                   // The update value can access columns from both target and source tables.
                   resolveAssignments(assignments, m, MergeResolvePolicy.BOTH,
-                    throws = throws))
+                    throws = throws),
+                  fromStar)
               case UpdateStarAction(updateCondition) =>
                 // Expand star to top level source columns.  If source has less columns than target,
                 // assignments will be added by ResolveRowLevelCommandAssignments later.
@@ -1738,7 +1739,8 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
                   updateCondition.map(resolveExpressionByPlanChildren(_, m)),
                   // For UPDATE *, the value must be from source table.
                   resolveAssignments(assignments, m, MergeResolvePolicy.SOURCE,
-                    throws = throws))
+                    throws = throws),
+                  fromStar = true)
               case o => o
             }
             val newNotMatchedActions = m.notMatchedActions.map {
@@ -1783,14 +1785,15 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
                 val resolvedDeleteCondition = deleteCondition.map(
                   resolveExpressionByPlanOutput(_, targetTable))
                 DeleteAction(resolvedDeleteCondition)
-              case UpdateAction(updateCondition, assignments) =>
+              case UpdateAction(updateCondition, assignments, fromStar) =>
                 val resolvedUpdateCondition = updateCondition.map(
                   resolveExpressionByPlanOutput(_, targetTable))
                 UpdateAction(
                   resolvedUpdateCondition,
                   // The update value can access columns from the target table only.
                   resolveAssignments(assignments, m, MergeResolvePolicy.TARGET,
-                    throws = throws))
+                    throws = throws),
+                  fromStar)
               case o => o
             }
 
