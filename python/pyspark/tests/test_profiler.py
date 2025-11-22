@@ -17,6 +17,7 @@
 
 import os
 import sys
+import platform
 import tempfile
 import unittest
 from io import StringIO
@@ -29,6 +30,9 @@ from pyspark.errors import PythonException, PySparkRuntimeError
 from pyspark.testing.utils import PySparkTestCase, PySparkErrorTestUtils
 
 
+@unittest.skipIf(
+    "pypy" in platform.python_implementation().lower(), "cannot run in environment pypy"
+)
 class ProfilerTests(PySparkTestCase):
     def setUp(self):
         self._old_sys_path = list(sys.path)
@@ -84,6 +88,9 @@ class ProfilerTests(PySparkTestCase):
         rdd.foreach(heavy_foo)
 
 
+@unittest.skipIf(
+    "pypy" in platform.python_implementation().lower(), "cannot run in environment pypy"
+)
 class ProfilerTests2(unittest.TestCase, PySparkErrorTestUtils):
     def test_profiler_disabled(self):
         sc = SparkContext(

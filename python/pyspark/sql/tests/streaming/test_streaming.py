@@ -16,9 +16,11 @@
 #
 
 import os
+import platform
 import shutil
 import tempfile
 import time
+import unittest
 
 from pyspark.sql import Row
 from pyspark.sql.functions import lit
@@ -503,6 +505,9 @@ class StreamingTestsMixin:
         self.assertTrue(len(result) >= 6 and len(result) <= 9)
 
 
+@unittest.skipIf(
+    "pypy" in platform.python_implementation().lower(), "cannot run in environment pypy"
+)
 class StreamingTests(StreamingTestsMixin, ReusedSQLTestCase):
     def _assert_exception_tree_contains_msg(self, exception, msg):
         e = exception
@@ -514,7 +519,6 @@ class StreamingTests(StreamingTestsMixin, ReusedSQLTestCase):
 
 
 if __name__ == "__main__":
-    import unittest
     from pyspark.sql.tests.streaming.test_streaming import *  # noqa: F401
 
     try:
