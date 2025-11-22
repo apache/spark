@@ -27,6 +27,7 @@ import time
 import inspect
 import itertools
 import json
+import zoneinfo
 from typing import Any, Callable, Iterable, Iterator, Optional, Tuple
 
 from pyspark.accumulators import (
@@ -3304,8 +3305,12 @@ def main(infile, outfile):
             sys.exit(-1)
         start_faulthandler_periodic_traceback()
 
-        # Use the local timezone to convert the timestamp
-        tz = datetime.datetime.now().astimezone().tzinfo
+        tzname = os.environ.get("SPARK_SESSION_LOCAL_TIMEZONE", None)
+        if tzname:
+            tz = zoneinfo.ZoneInfo(tzname)
+        else:
+            # Use the local timezone to convert the timestamp
+            tz = datetime.datetime.now().astimezone().tzinfo
         TimestampType.tz_info = tz
 
         check_python_version(infile)
