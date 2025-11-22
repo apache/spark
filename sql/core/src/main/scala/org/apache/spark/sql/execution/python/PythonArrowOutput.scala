@@ -88,6 +88,14 @@ private[python] trait PythonArrowOutput[OUT <: AnyRef] { self: BasePythonRunner[
         super.handleEndOfDataSection()
       }
 
+      protected override def handleTimingData(): Unit = {
+        // Get data size from pythonMetrics which is already being tracked
+        totalDataReceived = pythonMetrics.get("pythonDataReceived")
+          .map(_.value)
+          .getOrElse(0L)
+        super.handleTimingData()
+      }
+
       protected override def read(): OUT = {
         if (writer.exception.isDefined) {
           throw writer.exception.get
@@ -96,6 +104,7 @@ private[python] trait PythonArrowOutput[OUT <: AnyRef] { self: BasePythonRunner[
           if (reader != null && batchLoaded) {
             batchLoaded = processor.loadBatch()
             if (batchLoaded) {
+              batchesProcessed += 1
               val batch = processor.produceBatch()
               deserializeColumnarBatch(batch, schema)
             } else {
