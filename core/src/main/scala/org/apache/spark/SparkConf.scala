@@ -24,6 +24,7 @@ import scala.collection.mutable.LinkedHashSet
 import scala.jdk.CollectionConverters._
 
 import org.apache.avro.{Schema, SchemaNormalization}
+import org.apache.commons.text.StringEscapeUtils
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys
@@ -314,7 +315,12 @@ class SparkConf(loadDefaults: Boolean)
 
   /** Set a configuration variable. */
   def set(key: String, value: String): SparkConf = {
-    set(key, value, false)
+    if (key == "spark.app.name") {
+      // Escape HTML in the app name
+      set(key, StringEscapeUtils.escapeHtml4(value), false)
+    } else {
+      set(key, value, false)
+    }
   }
 
   private[spark] def set(key: String, value: String, silent: Boolean): SparkConf = {
