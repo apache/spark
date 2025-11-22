@@ -19,7 +19,7 @@ package org.apache.spark.sql.streaming
 import scala.reflect.ClassTag
 
 import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.statefulprocessor.ImplicitGroupingKeyTracker
-import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.testing.InMemoryStatefulProcessorHandleImpl
+import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.testing.InMemoryStatefulProcessorHandle
 
 /**
  * Testing utility for transformWithState stateful processors. Provides in-memory state management
@@ -38,7 +38,7 @@ import org.apache.spark.sql.execution.streaming.operators.stateful.transformwith
 class TwsTester[K, I, O](
     val processor: StatefulProcessor[K, I, O],
     val initialState: List[(K, Any)] = List()) {
-  private val handle = new InMemoryStatefulProcessorHandleImpl()
+  private val handle = new InMemoryStatefulProcessorHandle()
   processor.setHandle(handle)
   processor.init(OutputMode.Append, TimeMode.None)
   processor match {

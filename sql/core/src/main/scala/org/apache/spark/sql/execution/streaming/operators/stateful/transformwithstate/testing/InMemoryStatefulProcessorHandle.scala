@@ -125,9 +125,9 @@ class InMemoryMapState[K, V] extends MapState[K, V] {
 /**
  * In-memory implementation of StatefulProcessorHandle.
  *
- * Doesn't support timers and TTL. Support directly accessing state.
+ * Doesn't support timers and TTL. Supports directly accessing state.
  */
-class InMemoryStatefulProcessorHandleImpl() extends StatefulProcessorHandle {
+class InMemoryStatefulProcessorHandle() extends StatefulProcessorHandle {
   private val states = mutable.Map[String, Any]()
 
   override def getValueState[T](
