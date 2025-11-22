@@ -375,31 +375,39 @@ abstract class ExplodeBase extends UnaryExpression with CollectionGenerator with
   }
 
   override def eval(input: InternalRow): IterableOnce[InternalRow] = {
-    child.dataType match {
-      case ArrayType(et, _) =>
-        val inputArray = child.eval(input).asInstanceOf[ArrayData]
-        if (inputArray == null) {
-          Nil
-        } else {
-          val rows = new Array[InternalRow](inputArray.numElements())
-          inputArray.foreach(et, (i, e) => {
-            rows(i) = if (position) InternalRow(i, e) else InternalRow(e)
-          })
-          rows
-        }
-      case MapType(kt, vt, _) =>
-        val inputMap = child.eval(input).asInstanceOf[MapData]
-        if (inputMap == null) {
-          Nil
-        } else {
-          val rows = new Array[InternalRow](inputMap.numElements())
-          var i = 0
-          inputMap.foreach(kt, vt, (k, v) => {
-            rows(i) = if (position) InternalRow(i, k, v) else InternalRow(k, v)
-            i += 1
-          })
-          rows
-        }
+    (child.dataType, child.eval(input)) match {
+      case (ArrayType(et, _), inputArray: ArrayData) if inputArray != null =>
+          new IterableOnce[InternalRow] {
+            override def iterator: Iterator[InternalRow] = new Iterator[InternalRow] {
+              val numElements = inputArray.numElements()
+              var currentIndex = -1
+
+              override def hasNext: Boolean = currentIndex + 1 < numElements
+
+              override def next(): InternalRow = {
+                currentIndex += 1
+                val element = inputArray.get(currentIndex, et)
+                if (position) InternalRow(currentIndex, element) else InternalRow(element)
+              }
+            }
+          }
+      case (MapType(kt, vt, _), inputMap: MapData) if inputMap != null =>
+          new IterableOnce[InternalRow] {
+            override def iterator: Iterator[InternalRow] = new Iterator[InternalRow] {
+              val numElements = inputMap.numElements()
+              var currentIndex = -1
+
+              override def hasNext: Boolean = currentIndex + 1 < numElements
+
+              override def next(): InternalRow = {
+                currentIndex += 1
+                val k = inputMap.keyArray().get(currentIndex, kt)
+                val v = inputMap.valueArray().get(currentIndex, vt)
+                if (position) InternalRow(currentIndex, k, v) else InternalRow(k, v)
+              }
+            }
+          }
+      case _ => Nil
     }
   }
 
