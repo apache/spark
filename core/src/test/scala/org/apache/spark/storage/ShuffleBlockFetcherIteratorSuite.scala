@@ -38,6 +38,7 @@ import org.mockito.stubbing.Answer
 import org.roaringbitmap.RoaringBitmap
 
 import org.apache.spark.{MapOutputTracker, SparkFunSuite, TaskContext}
+import org.apache.spark.ExecutorDeadException
 import org.apache.spark.MapOutputTracker.SHUFFLE_PUSH_MAP_ID
 import org.apache.spark.network._
 import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer}
@@ -80,6 +81,27 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite {
 
       for (blockId <- blocks) {
         if (data.contains(BlockId(blockId))) {
+          listener.onBlockFetchSuccess(blockId, data(BlockId(blockId)))
+        } else {
+          listener.onBlockFetchFailure(blockId, new BlockNotFoundException(blockId))
+        }
+      }
+    }
+  }
+
+  /** Configures `transfer` (mock [[BlockTransferService]]) to simulate a removed Executor. */
+  private def configureMockTransferDeadExecutor(data: Map[BlockId, ManagedBuffer]): Unit = {
+    var hasThrown = false
+    answerFetchBlocks { invocation =>
+      val blocks = invocation.getArgument[Array[String]](3)
+      val listener = invocation.getArgument[BlockFetchingListener](4)
+
+      for (blockId <- blocks) {
+        if (data.contains(BlockId(blockId))) {
+          if (!hasThrown) {
+            listener.onBlockFetchFailure(blockId, new ExecutorDeadException("dead :("))
+            hasThrown = true
+          }
           listener.onBlockFetchSuccess(blockId, data(BlockId(blockId)))
         } else {
           listener.onBlockFetchFailure(blockId, new BlockNotFoundException(blockId))
@@ -2075,5 +2097,42 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite {
     assert(iterator.next()._1 === ShuffleBlockId(0, 0, 0))
     assert(iterator.next()._1 === ShuffleBlockId(0, 1, 0))
     assert(!iterator.hasNext)
+  }
+
+  test("SPARK-52090: Update block location when encountering a deadExecutorException") {
+    val blockManager = createMockBlockManager()
+
+    val remoteBmId1 = BlockManagerId("test-remote-client-1", "test-remote-host-1", 2)
+    val remoteBmId2 = BlockManagerId("test-remote-client-2", "test-remote-host-2", 2)
+
+    val remoteBlocks = Map[BlockId, ManagedBuffer](
+      ShuffleBlockId(0, 0, 0) -> createMockManagedBuffer()
+    )
+
+    configureMockTransferDeadExecutor(remoteBlocks)
+
+    val blocksByAddress = Map[BlockManagerId, Seq[(BlockId, Long, Int)]](
+      (remoteBmId1, toBlockList(remoteBlocks.keys, 1L, 0))
+    )
+
+    val migratedBlocksByAddress = Seq[(BlockManagerId, Seq[(BlockId, Long, Int)])](
+      (remoteBmId2, toBlockList(remoteBlocks.keys, 1L, 0))
+    )
+    when(mapOutputTracker.getMapSizesByExecutorId(any(), any(), any(), any(), any()))
+      .thenReturn(migratedBlocksByAddress.iterator)
+
+    val iterator = createShuffleBlockIteratorWithDefaults(
+      blocksByAddress = blocksByAddress
+    )
+
+    // fetch all blocks from the iterator
+    while (iterator.hasNext) {
+      val (blockId, inputStream) = iterator.next()
+    }
+
+    verify (mapOutputTracker, times(1)).unregisterShuffle(any())
+    verify (
+      mapOutputTracker, times(1)).getMapSizesByExecutorId(any(), any(), any(), any(), any()
+      )
   }
 }
