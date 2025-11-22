@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.util
 import java.time.{Duration, Period}
 import java.util.concurrent.TimeUnit
 
-import org.apache.spark.{SparkFunSuite, SparkIllegalArgumentException}
+import org.apache.spark.{SparkArithmeticException, SparkFunSuite, SparkIllegalArgumentException}
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.millisToMicros
@@ -364,10 +364,29 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
     assert(duration("1 microsecond", TimeUnit.MICROSECONDS, 30) === 1)
     assert(duration("1 month -30 days", TimeUnit.DAYS, 31) === 1)
 
-    val e = intercept[ArithmeticException] {
-      duration(s"${Integer.MAX_VALUE} month", TimeUnit.SECONDS, 31)
+    checkError(
+      exception = intercept[SparkArithmeticException] {
+        duration(s"${Integer.MAX_VALUE} month", TimeUnit.SECONDS, 31)
+      },
+      condition = "INTERVAL_ARITHMETIC_OVERFLOW.WITHOUT_SUGGESTION",
+      parameters = Map.empty
+    )
+  }
+
+  test("interval overflow with large day values") {
+    // Test case for SPARK-50072: handling ArithmeticException during interval parsing
+    // The value 106751991 days causes overflow when converted to microseconds
+    def duration(s: String, unit: TimeUnit): Long = {
+      IntervalUtils.getDuration(stringToInterval(UTF8String.fromString(s)), unit)
     }
-    assert(e.getMessage.contains("overflow"))
+
+    checkError(
+      exception = intercept[SparkArithmeticException] {
+        duration("106751991 days 4 hours 0 minutes 54.776 seconds", TimeUnit.MICROSECONDS)
+      },
+      condition = "INTERVAL_ARITHMETIC_OVERFLOW.WITHOUT_SUGGESTION",
+      parameters = Map.empty
+    )
   }
 
   test("negative interval") {
