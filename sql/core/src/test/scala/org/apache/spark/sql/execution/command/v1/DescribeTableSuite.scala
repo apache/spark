@@ -237,6 +237,34 @@ trait DescribeTableSuiteBase extends command.DescribeTableSuiteBase
     }
   }
 
+  test("DESCRIBE table_name column_name should show default value") {
+    withTable("t") {
+      sql(s"""CREATE TABLE t(
+        |  id INT,
+        |  name STRING COMMENT 'name column' DEFAULT 'default',
+        |  value DOUBLE
+        |) $defaultUsing""".stripMargin)
+      val descriptionDf = sql("DESCRIBE t name")
+      QueryTest.checkAnswer(
+        descriptionDf,
+        Seq(
+          Row("col_name", "name"),
+          Row("data_type", "string"),
+          Row("comment", "name column"),
+          Row("default", "'default'")))
+    }
+  }
+
+  test("DESCRIBE EXTENDED table_name column_name should not duplicate default value") {
+    withTable("t") {
+      sql(s"CREATE TABLE t(name STRING DEFAULT 'test') $defaultUsing")
+      val descriptionDf = sql("DESCRIBE TABLE EXTENDED t name")
+      val defaultRows = descriptionDf.collect().filter(_.getString(0) == "default")
+      assert(defaultRows.length == 1, "Default value should appear only once")
+      assert(defaultRows(0).getString(1) == "'test'")
+    }
+  }
+
   test("DESCRIBE AS JSON partitions, clusters, buckets") {
     withNamespaceAndTable("ns", "table") { t =>
       val tableCreationStr =
