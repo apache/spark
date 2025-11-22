@@ -46,7 +46,8 @@ import org.apache.spark.ml.feature.RFormulaModel
 import org.apache.spark.ml.linalg.{DenseMatrix, DenseVector, Matrix, SparseMatrix, SparseVector, Vector}
 import org.apache.spark.ml.param.{ParamPair, Params}
 import org.apache.spark.ml.tuning.ValidatorParams
-import org.apache.spark.sql.{SparkSession, SQLContext}
+import org.apache.spark.sql.{DataFrame, SparkSession, SQLContext}
+import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.{Utils, VersionUtils}
 
 /**
@@ -1140,6 +1141,68 @@ private[spark] object ReadWriteUtils {
     } else {
       import spark.implicits._
       spark.read.parquet(path).as[T].collect()
+    }
+  }
+
+  def saveDataFrame(path: String, df: DataFrame): Unit = {
+    if (localSavingModeState.get()) {
+      val filePath = Paths.get(path)
+      Files.createDirectories(filePath.getParent)
+
+      Using.resource(
+        new DataOutputStream(new BufferedOutputStream(new FileOutputStream(filePath.toFile)))
+      ) { dos =>
+        dos.writeUTF("ARROW") // format
+
+        val schema: StructType = df.schema
+        dos.writeUTF(schema.json)
+
+        val iter = DatasetUtils.toArrowBatchRDD(df, "UTC").toLocalIterator
+        while (iter.hasNext) {
+          val bytes = iter.next()
+          require(bytes != null)
+          dos.writeInt(bytes.length)
+          dos.write(bytes)
+        }
+        dos.writeInt(-1) // End
+      }
+    } else {
+      df.write.parquet(path)
+    }
+  }
+
+  def loadDataFrame(path: String, spark: SparkSession): DataFrame = {
+    if (localSavingModeState.get()) {
+      val sc = spark match {
+        case s: org.apache.spark.sql.classic.SparkSession => s.sparkContext
+      }
+
+      Using.resource(
+        new DataInputStream(new BufferedInputStream(new FileInputStream(path)))
+      ) { dis =>
+        val format = dis.readUTF()
+        require(format == "ARROW")
+
+        val schema: StructType = StructType.fromString(dis.readUTF())
+
+        val buff = mutable.ListBuffer.empty[Array[Byte]]
+        var nextBytes = dis.readInt()
+        while (nextBytes >= 0) {
+          val bytes = dis.readNBytes(nextBytes)
+          buff.append(bytes)
+          nextBytes = dis.readInt()
+        }
+        require(nextBytes == -1)
+
+        DatasetUtils.fromArrowBatchRDD(
+          sc.parallelize[Array[Byte]](buff.result()),
+          schema,
+          "UTC",
+          spark
+        )
+      }
+    } else {
+      spark.read.parquet(path)
     }
   }
 }
