@@ -724,6 +724,65 @@ class SparkSqlAstBuilder extends AstBuilder {
     }
   }
 
+  override def visitCodeLiteral(ctx: CodeLiteralContext): String = {
+    assert(ctx != null)
+    dollarQuotedString(ctx.DOLLAR_QUOTED_STRING_BODY())
+  }
+
+  override def visitCreateMetricView(ctx: CreateMetricViewContext): LogicalPlan = withOrigin(ctx) {
+    checkDuplicateClauses(ctx.commentSpec(), "COMMENT", ctx)
+    checkDuplicateClauses(ctx.TBLPROPERTIES, "TBLPROPERTIES", ctx)
+    checkDuplicateClauses(ctx.routineLanguage(), "LANGUAGE", ctx)
+    checkDuplicateClauses(ctx.METRICS(), "WITH METRICS", ctx)
+    val userSpecifiedColumns = Option(ctx.identifierCommentList).toSeq.flatMap { icl =>
+      icl.identifierComment.asScala.map { ic =>
+        ic.identifier.getText -> Option(ic.commentSpec()).map(visitCommentSpec)
+      }
+    }
+
+    if (ctx.EXISTS != null && ctx.REPLACE != null) {
+      throw QueryParsingErrors.createViewWithBothIfNotExistsAndReplaceError(ctx)
+    }
+
+    if (ctx.METRICS(0) == null) {
+      throw QueryParsingErrors.missingClausesForOperation(
+        ctx, "WITH METRICS", "CREATE METRIC VIEW")
+    }
+
+    if (ctx.routineLanguage(0) == null) {
+      throw QueryParsingErrors.missingClausesForOperation(
+        ctx, "LANGUAGE", "CREATE METRIC VIEW")
+    }
+
+    val languageCtx = ctx.routineLanguage(0)
+    withOrigin(languageCtx) {
+      if (languageCtx.SQL() != null) {
+        operationNotAllowed("Unsupported language for metric view: SQL", ctx)
+      }
+      val name: String = languageCtx.IDENTIFIER().getText
+      if (!name.equalsIgnoreCase("YAML")) {
+        operationNotAllowed(s"Unsupported language for metric view: $name", ctx)
+      }
+    }
+
+    val properties = ctx.propertyList.asScala.headOption
+      .map(visitPropertyKeyValues)
+      .getOrElse(Map.empty)
+    val codeLiteral = visitCodeLiteral(ctx.codeLiteral())
+
+    withIdentClause(ctx.identifierReference(), ident => {
+      CreateMetricViewCommand(
+        UnresolvedIdentifier(ident),
+        userSpecifiedColumns,
+        visitCommentSpecList(ctx.commentSpec()),
+        properties,
+        codeLiteral,
+        allowExisting = ctx.EXISTS != null,
+        replace = ctx.REPLACE != null
+      )
+    })
+  }
+
   /**
    * Create a [[CreateFunctionCommand]].
    *

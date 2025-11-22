@@ -133,7 +133,7 @@ case class CreateViewCommand(
     SchemaUtils.checkIndeterminateCollationInSchema(plan.schema)
 
     if (viewType == LocalTempView) {
-      val aliasedPlan = aliasPlan(sparkSession, analyzedPlan)
+      val aliasedPlan = aliasPlan(sparkSession, analyzedPlan, userSpecifiedColumns)
       val tableDefinition = createTemporaryViewRelation(
         name,
         sparkSession,
@@ -148,7 +148,7 @@ case class CreateViewCommand(
     } else if (viewType == GlobalTempView) {
       val db = sparkSession.sessionState.conf.getConf(StaticSQLConf.GLOBAL_TEMP_DATABASE)
       val viewIdent = TableIdentifier(name.table, Option(db))
-      val aliasedPlan = aliasPlan(sparkSession, analyzedPlan)
+      val aliasedPlan = aliasPlan(sparkSession, analyzedPlan, userSpecifiedColumns)
       val tableDefinition = createTemporaryViewRelation(
         viewIdent,
         sparkSession,
@@ -178,7 +178,10 @@ case class CreateViewCommand(
         // Handles `CREATE OR REPLACE VIEW v0 AS SELECT ...`
         // Nothing we need to retain from the old view, so just drop and create a new one
         catalog.dropTable(viewIdent, ignoreIfNotExists = false, purge = false)
-        catalog.createTable(prepareTable(sparkSession, analyzedPlan), ignoreIfExists = false)
+        catalog.createTable(
+          prepareTable(
+            sparkSession, name, originalText, analyzedPlan, userSpecifiedColumns, properties,
+            viewSchemaMode, comment, collation), ignoreIfExists = false)
       } else {
         // Handles `CREATE VIEW v0 AS SELECT ...`. Throws exception when the target view already
         // exists.
@@ -186,54 +189,12 @@ case class CreateViewCommand(
       }
     } else {
       // Create the view if it doesn't exist.
-      catalog.createTable(prepareTable(sparkSession, analyzedPlan), ignoreIfExists = allowExisting)
+      catalog.createTable(
+        prepareTable(
+          sparkSession, name, originalText, analyzedPlan, userSpecifiedColumns, properties,
+          viewSchemaMode, comment, collation), ignoreIfExists = allowExisting)
     }
     Seq.empty[Row]
-  }
-
-  /**
-   * If `userSpecifiedColumns` is defined, alias the analyzed plan to the user specified columns,
-   * else return the analyzed plan directly.
-   */
-  private def aliasPlan(session: SparkSession, analyzedPlan: LogicalPlan): LogicalPlan = {
-    if (userSpecifiedColumns.isEmpty) {
-      analyzedPlan
-    } else {
-      val projectList = analyzedPlan.output.zip(userSpecifiedColumns).map {
-        case (attr, (colName, None)) => Alias(attr, colName)()
-        case (attr, (colName, Some(colComment))) =>
-          val meta = new MetadataBuilder().putString("comment", colComment).build()
-          Alias(attr, colName)(explicitMetadata = Some(meta))
-      }
-      session.sessionState.executePlan(Project(projectList, analyzedPlan)).analyzed
-    }
-  }
-
-  /**
-   * Returns a [[CatalogTable]] that can be used to save in the catalog. Generate the view-specific
-   * properties(e.g. view default database, view query output column names) and store them as
-   * properties in the CatalogTable, and also creates the proper schema for the view.
-   */
-  private def prepareTable(session: SparkSession, analyzedPlan: LogicalPlan): CatalogTable = {
-    if (originalText.isEmpty) {
-      throw QueryCompilationErrors.createPersistedViewFromDatasetAPINotAllowedError()
-    }
-    val aliasedSchema = CharVarcharUtils.getRawSchema(
-      aliasPlan(session, analyzedPlan).schema, session.sessionState.conf)
-    val newProperties = generateViewProperties(
-      properties, session, analyzedPlan.schema.fieldNames, aliasedSchema.fieldNames, viewSchemaMode)
-
-    CatalogTable(
-      identifier = name,
-      tableType = CatalogTableType.VIEW,
-      storage = CatalogStorageFormat.empty,
-      schema = aliasedSchema,
-      properties = newProperties,
-      viewOriginalText = originalText,
-      viewText = originalText,
-      comment = comment,
-      collation = collation
-    )
   }
 
   override def withCTEDefs(cteDefs: Seq[CTERelationDef]): LogicalPlan = {
@@ -811,5 +772,71 @@ object ViewHelper extends SQLConfHelper with Logging with CapturesConfig {
       schema = analyzedPlan.schema,
       properties = Map((VIEW_STORING_ANALYZED_PLAN, "true")),
       collation = collation)
+  }
+
+
+  /**
+   * Returns a [[CatalogTable]] that can be used to save in the catalog. Generate the view-specific
+   * properties(e.g. view default database, view query output column names) and store them as
+   * properties in the CatalogTable, and also creates the proper schema for the view.
+   */
+  def prepareTable(
+      session: SparkSession,
+      name: TableIdentifier,
+      originalText: Option[String],
+      analyzedPlan: LogicalPlan,
+      userSpecifiedColumns: Seq[(String, Option[String])],
+      properties: Map[String, String],
+      viewSchemaMode: ViewSchemaMode,
+      comment: Option[String],
+      collation: Option[String],
+      isMetricView: Boolean = false): CatalogTable = {
+    if (originalText.isEmpty) {
+      throw QueryCompilationErrors.createPersistedViewFromDatasetAPINotAllowedError()
+    }
+    val aliasedSchema = CharVarcharUtils.getRawSchema(
+      aliasPlan(session, analyzedPlan, userSpecifiedColumns).schema, session.sessionState.conf)
+    val newProperties = generateViewProperties(
+      properties, session, analyzedPlan.schema.fieldNames, aliasedSchema.fieldNames, viewSchemaMode)
+
+    // Add property to indicate if this is a metric view
+    val finalProperties = if (isMetricView) {
+      newProperties + (CatalogTable.VIEW_WITH_METRICS -> "true")
+    } else {
+      newProperties
+    }
+
+    CatalogTable(
+      identifier = name,
+      tableType = CatalogTableType.VIEW,
+      storage = CatalogStorageFormat.empty,
+      schema = aliasedSchema,
+      properties = finalProperties,
+      viewOriginalText = originalText,
+      viewText = originalText,
+      comment = comment,
+      collation = collation
+    )
+  }
+
+  /**
+   * If `userSpecifiedColumns` is defined, alias the analyzed plan to the user specified columns,
+   * else return the analyzed plan directly.
+   */
+  def aliasPlan(
+      session: SparkSession,
+      analyzedPlan: LogicalPlan,
+      userSpecifiedColumns: Seq[(String, Option[String])]): LogicalPlan = {
+    if (userSpecifiedColumns.isEmpty) {
+      analyzedPlan
+    } else {
+      val projectList = analyzedPlan.output.zip(userSpecifiedColumns).map {
+        case (attr, (colName, None)) => Alias(attr, colName)()
+        case (attr, (colName, Some(colComment))) =>
+          val meta = new MetadataBuilder().putString("comment", colComment).build()
+          Alias(attr, colName)(explicitMetadata = Some(meta))
+      }
+      session.sessionState.executePlan(Project(projectList, analyzedPlan)).analyzed
+    }
   }
 }
