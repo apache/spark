@@ -169,21 +169,148 @@ class StreamingQueryStatusAndProgressSuite extends StreamTest with Eventually wi
          |}
       """.stripMargin.trim)
     assert(compact(parse(json2)) === testProgress2.json)
+
+    val json5 = testProgress5.prettyJson
+    assertJson(
+      json5,
+      s"""
+         |{
+         |  "id" : "${testProgress5.id.toString}",
+         |  "runId" : "${testProgress5.runId.toString}",
+         |  "name" : null,
+         |  "timestamp" : "2025-08-22T00:00:00.111Z",
+         |  "batchId" : 97,
+         |  "batchDuration" : 12,
+         |  "numInputRows" : 201,
+         |  "inputRowsPerSecond" : 20.1,
+         |  "processedRowsPerSecond" : 20.1,
+         |  "stateOperators" : [ ],
+         |  "sources" : [ {
+         |    "description" : "kafka",
+         |    "startOffset" : {
+         |      "topic" : {
+         |        "0" : 123
+         |      }
+         |    },
+         |    "endOffset" : {
+         |      "topic" : {
+         |        "0" : 456
+         |      }
+         |    },
+         |    "latestOffset" : {
+         |      "topic" : {
+         |        "0" : 789
+         |      }
+         |    },
+         |    "numInputRows" : 100,
+         |    "inputRowsPerSecond" : 10.0,
+         |    "processedRowsPerSecond" : 10.0
+         |  }, {
+         |    "description" : "kinesis",
+         |    "startOffset" : [ {
+         |      "shard" : {
+         |        "stream" : "stream1",
+         |        "shardId" : "shard1"
+         |      },
+         |      "firstSeqNum" : null,
+         |      "lastSeqNum" : "123",
+         |      "closed" : false,
+         |      "msBehindLatest" : null,
+         |      "lastRecordSeqNum" : null
+         |    } ],
+         |    "endOffset" : [ {
+         |      "shard" : {
+         |        "stream" : "stream1",
+         |        "shardId" : "shard1"
+         |      },
+         |      "firstSeqNum" : null,
+         |      "lastSeqNum" : "456",
+         |      "closed" : false,
+         |      "msBehindLatest" : null,
+         |      "lastRecordSeqNum" : null
+         |    } ],
+         |    "latestOffset" : [ {
+         |      "shard" : {
+         |        "stream" : "stream1",
+         |        "shardId" : "shard1"
+         |      },
+         |      "firstSeqNum" : null,
+         |      "lastSeqNum" : "789",
+         |      "closed" : false,
+         |      "msBehindLatest" : null,
+         |      "lastRecordSeqNum" : null
+         |    } ],
+         |    "numInputRows" : 101,
+         |    "inputRowsPerSecond" : 10.1,
+         |    "processedRowsPerSecond" : 10.1
+         |  } ],
+         |  "sink" : {
+         |    "description" : "sink",
+         |    "numOutputRows" : -1
+         |  }
+         |}
+      """.stripMargin.trim)
+    assert(compact(parse(json5)) === testProgress5.json)
+
+    val json6 = testProgress6.prettyJson
+    assertJson(
+      json6,
+      s"""
+         |{
+         |  "id" : "${testProgress6.id.toString}",
+         |  "runId" : "${testProgress6.runId.toString}",
+         |  "name" : "myName",
+         |  "timestamp" : "2025-09-19T00:00:00.111Z",
+         |  "batchId" : 97,
+         |  "batchDuration" : 12,
+         |  "numInputRows" : 1001,
+         |  "stateOperators" : [ ],
+         |  "sources" : [ {
+         |    "description" : "kafka",
+         |    "startOffset" : 1000,
+         |    "endOffset" : 2000,
+         |    "latestOffset" : 3000,
+         |    "numInputRows" : 1001
+         |  } ],
+         |  "sink" : {
+         |    "description" : "sink",
+         |    "numOutputRows" : -1
+         |  }
+         |}
+      """.stripMargin.trim)
+    assert(compact(parse(json6)) === testProgress6.json)
   }
 
   test("StreamingQueryProgress - json") {
     assert(compact(parse(testProgress1.json)) === testProgress1.json)
     assert(compact(parse(testProgress2.json)) === testProgress2.json)
     assert(compact(parse(testProgress3.json)) === testProgress3.json)
+    assert(compact(parse(testProgress4.json, useBigDecimalForDouble = true)) === testProgress4.json)
+    assert(compact(parse(testProgress5.json)) === testProgress5.json)
+    assert(compact(parse(testProgress6.json)) === testProgress6.json)
+    assert(compact(parse(testProgress7.json)) === testProgress7.json)
   }
 
   test("StreamingQueryProgress - toString") {
     assert(testProgress1.toString === testProgress1.prettyJson)
     assert(testProgress2.toString === testProgress2.prettyJson)
+    assert(testProgress3.toString === testProgress3.prettyJson)
+    assert(testProgress4.toString === testProgress4.prettyJson)
+    assert(testProgress5.toString === testProgress5.prettyJson)
+    assert(testProgress6.toString === testProgress6.prettyJson)
+    assert(testProgress7.toString === testProgress7.prettyJson)
   }
 
   test("StreamingQueryProgress - jsonString and fromJson") {
-    Seq(testProgress1, testProgress2).foreach { input =>
+    Seq(
+      testProgress1,
+      testProgress2,
+      testProgress3,
+      testProgress4,
+      testProgress5,
+      testProgress6,
+      testProgress7
+    ).foreach { input =>
       val jsonString = StreamingQueryProgress.jsonString(input)
       val result = StreamingQueryProgress.fromJson(jsonString)
       assert(input.id == result.id)
@@ -221,7 +348,11 @@ class StreamingQueryStatusAndProgressSuite extends StreamTest with Eventually wi
         } else {
           assert(s1.inputRowsPerSecond == s2.inputRowsPerSecond)
         }
-        assert(s1.processedRowsPerSecond == s2.processedRowsPerSecond)
+        if (s1.processedRowsPerSecond.isNaN) {
+          assert(s2.processedRowsPerSecond.isNaN)
+        } else {
+          assert(s1.processedRowsPerSecond == s2.processedRowsPerSecond)
+        }
         assert(s1.metrics == s2.metrics)
       }
 
@@ -232,10 +363,14 @@ class StreamingQueryStatusAndProgressSuite extends StreamTest with Eventually wi
       }
 
       val resultObservedMetrics = result.observedMetrics
-      assert(input.observedMetrics.size() == resultObservedMetrics.size())
-      assert(input.observedMetrics.keySet() == resultObservedMetrics.keySet())
-      input.observedMetrics.entrySet().forEach { e =>
-        assert(e.getValue == resultObservedMetrics.get(e.getKey))
+      if (resultObservedMetrics != null) {
+        assert(input.observedMetrics.size() == resultObservedMetrics.size())
+        assert(input.observedMetrics.keySet() == resultObservedMetrics.keySet())
+        input.observedMetrics.entrySet().forEach { e =>
+          assert(e.getValue == resultObservedMetrics.get(e.getKey))
+        }
+      } else {
+        assert(input.observedMetrics == null)
       }
     }
   }
@@ -437,8 +572,8 @@ class StreamingQueryStatusAndProgressSuite extends StreamTest with Eventually wi
   }
 
   test("SPARK-53690: avgOffsetsBehindLatest should never be in scientific notation") {
-    val progress = testProgress5.jsonValue
-    val progressPretty = testProgress5.prettyJson
+    val progress = testProgress7.jsonValue
+    val progressPretty = testProgress7.prettyJson
 
     // Actual values
     val avgOffsetsBehindLatest: Double = 2.70941269E8
@@ -465,8 +600,8 @@ class StreamingQueryStatusAndProgressSuite extends StreamTest with Eventually wi
     progressPretty shouldBe
       s"""
          |{
-         |  "id" : "${testProgress5.id.toString}",
-         |  "runId" : "${testProgress5.runId.toString}",
+         |  "id" : "${testProgress7.id.toString}",
+         |  "runId" : "${testProgress7.runId.toString}",
          |  "name" : "KafkaMetricsTest",
          |  "timestamp" : "2025-09-23T06:00:00.000Z",
          |  "batchId" : 1250,
@@ -680,6 +815,104 @@ object StreamingQueryStatusAndProgressSuite {
   )
 
   val testProgress5 = new StreamingQueryProgress(
+    id = UUID.randomUUID,
+    runId = UUID.randomUUID,
+    name = null, // should not be present in the json
+    timestamp = "2025-08-22T00:00:00.111Z",
+    batchId = 97L,
+    batchDuration = 12L,
+    durationMs = null,
+    // empty maps should be handled correctly
+    eventTime = null,
+    stateOperators = Array(),
+    sources = Array(
+      new SourceProgress(
+        description = "kafka",
+        startOffset = """{"topic":{"0":123}}""",
+        endOffset = """{"topic":{"0":456}}""",
+        latestOffset = """{"topic":{"0":789}}""",
+        numInputRows = 100,
+        inputRowsPerSecond = 10.0,
+        processedRowsPerSecond = 10.0
+      ),
+      new SourceProgress(
+        description = "kinesis",
+        startOffset =
+          """
+            |[{
+            |  "shard": {
+            |    "stream": "stream1",
+            |    "shardId": "shard1"
+            |  },
+            |  "firstSeqNum": null,
+            |  "lastSeqNum": "123",
+            |  "closed": false,
+            |  "msBehindLatest": null,
+            |  "lastRecordSeqNum": null
+            |}]
+          """.stripMargin,
+        endOffset =
+          """
+            |[{
+            |  "shard": {
+            |    "stream": "stream1",
+            |    "shardId": "shard1"
+            |  },
+            |  "firstSeqNum": null,
+            |  "lastSeqNum": "456",
+            |  "closed": false,
+            |  "msBehindLatest": null,
+            |  "lastRecordSeqNum": null
+            |}]
+          """.stripMargin,
+        latestOffset =
+          """
+            |[{
+            |  "shard": {
+            |    "stream": "stream1",
+            |    "shardId": "shard1"
+            |  },
+            |  "firstSeqNum": null,
+            |  "lastSeqNum": "789",
+            |  "closed": false,
+            |  "msBehindLatest": null,
+            |  "lastRecordSeqNum": null
+            |}]
+          """.stripMargin,
+        numInputRows = 101,
+        inputRowsPerSecond = 10.1,
+        processedRowsPerSecond = 10.1
+      )
+    ),
+    sink = SinkProgress("sink", None),
+    observedMetrics = new java.util.HashMap(Map().asJava)
+  )
+
+  val testProgress6 = new StreamingQueryProgress(
+    id = UUID.randomUUID,
+    runId = UUID.randomUUID,
+    name = "myName",
+    timestamp = "2025-09-19T00:00:00.111Z",
+    batchId = 97L,
+    batchDuration = 12L,
+    durationMs = null,
+    eventTime = null,
+    stateOperators = Array(),
+    sources = Array(new SourceProgress(
+        description = "kafka",
+        startOffset = "1000",
+        endOffset = "2000",
+        latestOffset = "3000",
+        numInputRows = 1001
+        // inputRowsPerSecond and processedRowsPerSecond should be Double.NaN
+        // and not present in the json
+      )
+    ),
+    sink = SinkProgress("sink", None),
+    observedMetrics = new java.util.HashMap(Map().asJava)
+  )
+
+  val testProgress7 = new StreamingQueryProgress(
     id = UUID.randomUUID,
     runId = UUID.randomUUID,
     name = "KafkaMetricsTest",
