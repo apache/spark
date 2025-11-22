@@ -876,8 +876,6 @@ case object SparkShreddingUtils {
     val converter = new RowToColumnConverter(StructType(Array(StructField("", output.dataType()))))
     val converterVectors = Array(output)
     val converterRow = new GenericInternalRow(1)
-    output.reset()
-    output.reserve(input.getElementsAppended)
     var i = 0
     while (i < numRows) {
       if (input.isNullAt(i)) {
