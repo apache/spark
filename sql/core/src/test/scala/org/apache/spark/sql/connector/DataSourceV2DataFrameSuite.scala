@@ -1120,7 +1120,7 @@ class DataSourceV2DataFrameSuite
         condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMNS_MISMATCH",
         parameters = Map(
           "tableName" -> "`testcat`.`ns1`.`ns2`.`tbl`",
-          "errors" -> "\n- `extra` STRING has been removed"))
+          "errors" -> "- `extra` STRING has been removed"))
     }
   }
 
@@ -1144,8 +1144,7 @@ class DataSourceV2DataFrameSuite
         parameters = Map(
           "tableName" -> "`testcat`.`ns1`.`ns2`.`tbl`",
           "errors" ->
-            """
-              |- `new_col1` INT has been added
+            """- `new_col1` INT has been added
               |- `new_col2` INT has been added""".stripMargin))
     }
   }
@@ -1170,8 +1169,7 @@ class DataSourceV2DataFrameSuite
         parameters = Map(
           "tableName" -> "`testcat`.`ns1`.`ns2`.`tbl`",
           "errors" ->
-            """
-              |- `col4` STRING has been removed
+            """- `col4` STRING has been removed
               |- `col5` INT has been added""".stripMargin))
     }
   }
@@ -1198,9 +1196,7 @@ class DataSourceV2DataFrameSuite
           "viewName" -> "`v`",
           "tableName" -> "`testcat`.`ns1`.`ns2`.`tbl`",
           "colType" -> "data",
-          "errors" ->
-            """
-              |- `extra` INT has been added""".stripMargin))
+          "errors" -> "- `extra` INT has been added"))
     }
   }
 
@@ -1223,7 +1219,7 @@ class DataSourceV2DataFrameSuite
         parameters = Map(
           "tableName" -> "`testcat`.`ns1`.`ns2`.`tbl`",
           "errors" ->
-            ("\n- `person` type has changed from STRUCT<name: STRING, age: INT> " +
+            ("- `person` type has changed from STRUCT<name: STRING, age: INT> " +
               "to STRUCT<name: STRING, age: INT, city: STRING>")))
     }
   }
@@ -1273,7 +1269,7 @@ class DataSourceV2DataFrameSuite
         condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMNS_MISMATCH",
         parameters = Map(
           "tableName" -> "`testcat`.`ns1`.`ns2`.`tbl`",
-          "errors" -> "\n- `extra` STRING has been added"))
+          "errors" -> "- `extra` STRING has been added"))
 
       // DataFrame execution before joins must have pinned used versions
       // subsequent version refreshes must not be visible in original DataFrames
@@ -1403,7 +1399,7 @@ class DataSourceV2DataFrameSuite
           "viewName" -> "`v`",
           "tableName" -> "`testcat`.`ns1`.`ns2`.`tbl`",
           "colType" -> "data",
-          "errors" -> "\n- `age` INT has been added"))
+          "errors" -> "- `age` INT has been added"))
     }
   }
 
@@ -1427,7 +1423,7 @@ class DataSourceV2DataFrameSuite
           "viewName" -> "`v`",
           "tableName" -> "`testcat`.`ns1`.`ns2`.`tbl`",
           "colType" -> "data",
-          "errors" -> "\n- `age` INT has been removed"))
+          "errors" -> "- `age` INT has been removed"))
     }
   }
 
@@ -1451,7 +1447,7 @@ class DataSourceV2DataFrameSuite
           "viewName" -> "`v`",
           "tableName" -> "`testcat`.`ns1`.`ns2`.`tbl`",
           "colType" -> "data",
-          "errors" -> "\n- `data` type has changed from STRING NOT NULL to STRING"))
+          "errors" -> "- `data` type has changed from STRING NOT NULL to STRING"))
     }
   }
 
@@ -1540,7 +1536,7 @@ class DataSourceV2DataFrameSuite
           "viewName" -> "`v`",
           "tableName" -> "`testcat`.`ns1`.`ns2`.`tbl`",
           "colType" -> "data",
-          "errors" -> "\n- `age` INT has been added"))
+          "errors" -> "- `age` INT has been added"))
     }
   }
 
@@ -1569,7 +1565,7 @@ class DataSourceV2DataFrameSuite
             "viewName" -> "`v`",
             "tableName" -> "`testcat`.`ns1`.`ns2`.`tbl`",
             "colType" -> "data",
-            "errors" -> "\n- `age` INT has been added"))
+            "errors" -> "- `age` INT has been added"))
       }
     }
   }
@@ -1594,7 +1590,7 @@ class DataSourceV2DataFrameSuite
           "viewName" -> "`v`",
           "tableName" -> "`testcat`.`ns1`.`ns2`.`tbl`",
           "colType" -> "data",
-          "errors" -> "\n- `name` type has changed from VARCHAR(10) to VARCHAR(20)"))
+          "errors" -> "- `name` type has changed from VARCHAR(10) to VARCHAR(20)"))
     }
   }
 

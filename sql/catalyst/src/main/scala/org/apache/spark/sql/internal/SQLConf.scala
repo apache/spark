@@ -570,6 +570,13 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val GEOSPATIAL_ENABLED =
+    buildConf("spark.sql.geospatial.enabled")
+      .doc("When true, enables geospatial types (GEOGRAPHY/GEOMETRY) and ST functions.")
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefaultFunction(() => Utils.isTesting)
+
   val EXTENDED_EXPLAIN_PROVIDERS = buildConf("spark.sql.extendedExplainProviders")
     .doc("A comma-separated list of classes that implement the" +
       " org.apache.spark.sql.ExtendedExplainGenerator trait. If provided, Spark will print" +
@@ -1589,6 +1596,15 @@ object SQLConf {
     buildConf("spark.sql.parquet.variant.annotateLogicalType.enabled")
       .doc("When enabled, Spark annotates the variant groups written to Parquet as the parquet " +
         "variant logical type.")
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  val PARQUET_IGNORE_VARIANT_ANNOTATION =
+    buildConf("spark.sql.parquet.ignoreVariantAnnotation")
+      .internal()
+      .doc("When true, ignore the variant logical type annotation and treat the Parquet " +
+        "column in the same way as the underlying struct type")
       .version("4.1.0")
       .booleanConf
       .createWithDefault(false)
@@ -5585,7 +5601,7 @@ object SQLConf {
         "When false, it only reads unshredded variant.")
       .version("4.0.0")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   val PUSH_VARIANT_INTO_SCAN =
     buildConf("spark.sql.variant.pushVariantIntoScan")
@@ -6679,11 +6695,23 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
-  val MERGE_INTO_SOURCE_NESTED_TYPE_COERCION_ENABLED =
-    buildConf("spark.sql.merge.source.nested.type.coercion.enabled")
+  val MERGE_INTO_NESTED_TYPE_COERCION_ENABLED =
+    buildConf("spark.sql.merge.nested.type.coercion.enabled")
       .internal()
       .doc("If enabled, allow MERGE INTO to coerce source nested types if they have less" +
         "nested fields than the target table's nested types.")
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(true)
+
+  val MERGE_INTO_NESTED_TYPE_UPDATE_BY_FIELD =
+    buildConf("spark.sql.merge.nested.type.assign.by.field")
+      .internal()
+      .doc("If enabled and spark.sql.merge.source.nested.type.coercion.enabled is true," +
+        "allow MERGE INTO with UPDATE SET * action to set nested structs field by field. " +
+        "In updated rows, target structs will preserve the original value for fields missing " +
+        "in the the source struct. If disabled, the entire target struct will be replaced, " +
+        "and fields missing in the source struct will be null.")
       .version("4.1.0")
       .booleanConf
       .createWithDefault(true)
@@ -6861,6 +6889,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def expressionTreeChangeLogLevel: Level = getConf(EXPRESSION_TREE_CHANGE_LOG_LEVEL)
 
   def nameResolutionLogLevel: Level = getConf(NAME_RESOLUTION_LOG_LEVEL)
+
+  def geospatialEnabled: Boolean = getConf(GEOSPATIAL_ENABLED)
 
   def dataSourceV2JoinPushdown: Boolean = getConf(DATA_SOURCE_V2_JOIN_PUSHDOWN)
 
@@ -7802,6 +7832,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def parquetAnnotateVariantLogicalType: Boolean = getConf(PARQUET_ANNOTATE_VARIANT_LOGICAL_TYPE)
 
+  def parquetIgnoreVariantAnnotation: Boolean = getConf(SQLConf.PARQUET_IGNORE_VARIANT_ANNOTATION)
+
   def ignoreMissingParquetFieldId: Boolean = getConf(SQLConf.IGNORE_MISSING_PARQUET_FIELD_ID)
 
   def legacyParquetNanosAsLong: Boolean = getConf(SQLConf.LEGACY_PARQUET_NANOS_AS_LONG)
@@ -7883,8 +7915,11 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def legacyXMLParserEnabled: Boolean =
     getConf(SQLConf.LEGACY_XML_PARSER_ENABLED)
 
-  def coerceMergeNestedTypes: Boolean =
-    getConf(SQLConf.MERGE_INTO_SOURCE_NESTED_TYPE_COERCION_ENABLED)
+  def mergeCoerceNestedTypes: Boolean =
+    getConf(SQLConf.MERGE_INTO_NESTED_TYPE_COERCION_ENABLED)
+
+  def mergeUpdateStructsByField: Boolean =
+    getConf(SQLConf.MERGE_INTO_NESTED_TYPE_UPDATE_BY_FIELD)
 
   /** ********************** SQLConf functionality methods ************ */
 

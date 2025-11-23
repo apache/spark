@@ -1357,24 +1357,24 @@ class CatalogSuite extends SparkFunSuite {
     intercept[NoSuchFunctionException](catalog.loadFunction(Identifier.of(Array("ns1"), "func")))
   }
 
-  test("currentVersion") {
+  test("version") {
     val catalog = newCatalog()
 
     val table = catalog.createTable(testIdent, columns, emptyTrans, emptyProps)
       .asInstanceOf[InMemoryTable]
-    assert(table.currentVersion() == "0")
+    assert(table.version() == "0")
     table.withData(Array(
       BufferedRows("3", table.columns()).withRow(InternalRow(0, "abc", "3")),
       BufferedRows("4", table.columns()).withRow(InternalRow(1, "def", "4"))))
-    assert(table.currentVersion() == "1")
+    assert(table.version() == "1")
 
     table.truncateTable()
-    assert(catalog.loadTable(testIdent).currentVersion() == "2")
+    assert(catalog.loadTable(testIdent).version() == "2")
 
     catalog.alterTable(testIdent, TableChange.setProperty("prop-1", "1"))
-    assert(catalog.loadTable(testIdent).currentVersion() == "3")
+    assert(catalog.loadTable(testIdent).version() == "3")
 
     catalog.alterTable(testIdent, TableChange.addConstraint(constraints.apply(0), "3"))
-    assert(catalog.loadTable(testIdent).currentVersion() == "4")
+    assert(catalog.loadTable(testIdent).version() == "4")
   }
 }

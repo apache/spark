@@ -876,7 +876,11 @@ private[parquet] class ParquetRowConverter(
     }
   }
 
-  /** Parquet converter for unshredded Variant */
+  /**
+   * Parquet converter for unshredded Variant. We use this converter when the
+   * `spark.sql.variant.allowReadingShredded` config is set to false. This option just exists to
+   * fall back to legacy logic which will eventually be removed.
+   */
   private final class ParquetUnshreddedVariantConverter(
      parquetType: GroupType,
      updater: ParentContainerUpdater)
@@ -890,29 +894,27 @@ private[parquet] class ParquetRowConverter(
         // We may allow more than two children in the future, so consider this unsupported.
         throw QueryCompilationErrors.invalidVariantWrongNumFieldsError()
       }
-      val valueAndMetadata = Seq("value", "metadata").map { colName =>
+      val Seq(value, metadata) = Seq("value", "metadata").map { colName =>
         val idx = (0 until parquetType.getFieldCount())
-            .find(parquetType.getFieldName(_) == colName)
-        if (idx.isEmpty) {
-          throw QueryCompilationErrors.invalidVariantMissingFieldError(colName)
-        }
-        val child = parquetType.getType(idx.get)
+          .find(parquetType.getFieldName(_) == colName)
+          .getOrElse(throw QueryCompilationErrors.invalidVariantMissingFieldError(colName))
+        val child = parquetType.getType(idx)
         if (!child.isPrimitive || child.getRepetition != Type.Repetition.REQUIRED ||
-            child.asPrimitiveType().getPrimitiveTypeName != BINARY) {
+          child.asPrimitiveType().getPrimitiveTypeName != BINARY) {
           throw QueryCompilationErrors.invalidVariantNullableOrNotBinaryFieldError(colName)
         }
-        child
+        idx
       }
-      Array(
-        // Converter for value
-        newConverter(valueAndMetadata(0), BinaryType, new ParentContainerUpdater {
+      val result = new Array[Converter with HasParentContainerUpdater](2)
+      result(value) =
+        newConverter(parquetType.getType(value), BinaryType, new ParentContainerUpdater {
           override def set(value: Any): Unit = currentValue = value
-        }),
-
-        // Converter for metadata
-        newConverter(valueAndMetadata(1), BinaryType, new ParentContainerUpdater {
+        })
+      result(metadata) =
+        newConverter(parquetType.getType(metadata), BinaryType, new ParentContainerUpdater {
           override def set(value: Any): Unit = currentMetadata = value
-      }))
+        })
+      result
     }
 
     override def getConverter(fieldIndex: Int): Converter = converters(fieldIndex)

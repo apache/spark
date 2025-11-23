@@ -34,13 +34,13 @@ Please see [Spark Security](security.html) and the specific security sections in
 
 Images built from the project provided Dockerfiles contain a default [`USER`](https://docs.docker.com/engine/reference/builder/#user) directive with a default UID of `185`.  This means that the resulting images will be running the Spark processes as this UID inside the container. Security conscious deployments should consider providing custom images with `USER` directives specifying their desired unprivileged UID and GID.  The resulting UID should include the root group in its supplementary groups in order to be able to run the Spark executables.  Users building their own images with the provided `docker-image-tool.sh` script can use the `-u <uid>` option to specify the desired UID.
 
-Alternatively the [Pod Template](#pod-template) feature can be used to add a [Security Context](https://kubernetes.io/docs/tasks/configure-pod-container/security-context/#volumes-and-file-systems) with a `runAsUser` to the pods that Spark submits.  This can be used to override the `USER` directives in the images themselves.  Please bear in mind that this requires cooperation from your users and as such may not be a suitable solution for shared environments.  Cluster administrators should use [Pod Security Policies](https://kubernetes.io/docs/concepts/policy/pod-security-policy/#users-and-groups) if they wish to limit the users that pods may run as.
+Alternatively the [Pod Template](#pod-template) feature can be used to add a [Security Context](https://kubernetes.io/docs/tasks/configure-pod-container/security-context/#volumes-and-file-systems) with a `runAsUser` to the pods that Spark submits.  This can be used to override the `USER` directives in the images themselves.  Please bear in mind that this requires cooperation from your users and as such may not be a suitable solution for shared environments.  Cluster administrators should use the [Pod Security Admission Controller](https://kubernetes.io/docs/concepts/security/pod-security-admission/) if they wish to limit the users that pods may run as.
 
 ## Volume Mounts
 
 As described later in this document under [Using Kubernetes Volumes](#using-kubernetes-volumes) Spark on K8S provides configuration options that allow for mounting certain volume types into the driver and executor pods.  In particular it allows for [`hostPath`](https://kubernetes.io/docs/concepts/storage/volumes/#hostpath) volumes which as described in the Kubernetes documentation have known security vulnerabilities.
 
-Cluster administrators should use [Pod Security Policies](https://kubernetes.io/docs/concepts/policy/pod-security-policy/) to limit the ability to mount `hostPath` volumes appropriately for their environments.
+Cluster administrators should use the [Pod Security Admission Controller](https://kubernetes.io/docs/concepts/security/pod-security-admission/) to limit the ability to mount `hostPath` volumes appropriately for their environments.
 
 # Prerequisites
 
@@ -685,7 +685,7 @@ See the [configuration page](configuration.html) for information on Spark config
 </tr>
 <tr>
   <td><code>spark.kubernetes.allocation.batch.size</code></td>
-  <td><code>10</code></td>
+  <td><code>20</code></td>
   <td>
     Number of pods to launch at once in each round of executor pod allocation.
   </td>

@@ -140,6 +140,13 @@ case class EnsureRequirements(
       // Choose all the specs that can be used to shuffle other children
       val candidateSpecs = specs
           .filter(_._2.canCreatePartitioning)
+          .filter {
+            // To choose a KeyGroupedShuffleSpec, we must be able to push down SPJ parameters into
+            // the scan (for join key positions). If these parameters can't be pushed down, this
+            // spec can't be used to shuffle other children.
+            case (idx, _: KeyGroupedShuffleSpec) => canPushDownSPJParamsToScan(children(idx))
+            case _ => true
+          }
           .filter(p => !shouldConsiderMinParallelism ||
               children(p._1).outputPartitioning.numPartitions >= conf.defaultNumShufflePartitions)
       val bestSpecOpt = if (candidateSpecs.isEmpty) {
@@ -403,6 +410,24 @@ case class EnsureRequirements(
   }
 
   /**
+   * Whether SPJ params can be pushed down to the leaf nodes of a physical plan. For a plan to be
+   * eligible for SPJ parameter pushdown, all leaf nodes must be a KeyGroupedPartitioning-aware
+   * scan.
+   *
+   * Notably, if the leaf of `plan` is an [[RDDScanExec]] created by checkpointing a DSv2 scan, the
+   * reported partitioning will be a [[KeyGroupedPartitioning]], but this plan will _not_ be
+   * eligible for SPJ parameter pushdown (as the partitioning is static and can't be easily
+   * re-grouped or padded with empty partitions according to the partition values on the other side
+   * of the join).
+   */
+  private def canPushDownSPJParamsToScan(plan: SparkPlan): Boolean = {
+    plan.collectLeaves().forall {
+      case _: KeyGroupedPartitionedScan[_] => true
+      case _ => false
+    }
+  }
+
+  /**
    * Checks whether two children, `left` and `right`, of a join operator have compatible
    * `KeyGroupedPartitioning`, and can benefit from storage-partitioned join.
    *
@@ -413,6 +438,12 @@ case class EnsureRequirements(
       left: SparkPlan,
       right: SparkPlan,
       requiredChildDistribution: Seq[Distribution]): Option[Seq[SparkPlan]] = {
+    // If SPJ params can't be pushed down to either the left or right side, it's unsafe to do an
+    // SPJ.
+    if (!canPushDownSPJParamsToScan(left) || !canPushDownSPJParamsToScan(right)) {
+      return None
+    }
+
     parent match {
       case smj: SortMergeJoinExec =>
         checkKeyGroupCompatible(left, right, smj.joinType, requiredChildDistribution)
@@ -579,15 +610,18 @@ case class EnsureRequirements(
               // In partially clustered distribution, we should use un-grouped partition values
               val spec = if (replicateLeftSide) rightSpec else leftSpec
               val partValues = spec.partitioning.originalPartitionValues
+              val internalRowComparableWrapperFactory =
+                InternalRowComparableWrapper.getInternalRowComparableWrapperFactory(
+                  partitionExprs.map(_.dataType))
 
               val numExpectedPartitions = partValues
-                .map(InternalRowComparableWrapper(_, partitionExprs))
+                .map(internalRowComparableWrapperFactory)
                 .groupBy(identity)
                 .transform((_, v) => v.size)
 
               mergedPartValues = mergedPartValues.map { case (partVal, numParts) =>
                 (partVal, numExpectedPartitions.getOrElse(
-                  InternalRowComparableWrapper(partVal, partitionExprs), numParts))
+                  internalRowComparableWrapperFactory(partVal), numParts))
               }
 
               logInfo(log"After applying partially clustered distribution, there are " +
@@ -679,9 +713,15 @@ case class EnsureRequirements(
       expressions: Seq[Expression],
       reducers: Option[Seq[Option[Reducer[_, _]]]]) = {
     reducers match {
-      case Some(reducers) => partValues.map { row =>
-        KeyGroupedShuffleSpec.reducePartitionValue(row, expressions, reducers)
-      }.distinct.map(_.row)
+      case Some(reducers) =>
+        val partitionDataTypes = expressions.map(_.dataType)
+        val internalRowComparableWrapperFactory =
+          InternalRowComparableWrapper.getInternalRowComparableWrapperFactory(
+            partitionDataTypes)
+        partValues.map { row =>
+          KeyGroupedShuffleSpec.reducePartitionValue(
+            row, reducers, partitionDataTypes, internalRowComparableWrapperFactory)
+        }.distinct.map(_.row)
       case _ => partValues
     }
   }
@@ -737,15 +777,16 @@ case class EnsureRequirements(
       rightPartitioning: Seq[InternalRow],
       partitionExpression: Seq[Expression],
       joinType: JoinType): Seq[InternalRow] = {
+    val internalRowComparableWrapperFactory =
+      InternalRowComparableWrapper.getInternalRowComparableWrapperFactory(
+        partitionExpression.map(_.dataType))
 
     val merged = if (SQLConf.get.getConf(SQLConf.V2_BUCKETING_PARTITION_FILTER_ENABLED)) {
       joinType match {
         case Inner => InternalRowComparableWrapper.mergePartitions(
           leftPartitioning, rightPartitioning, partitionExpression, intersect = true)
-        case LeftOuter => leftPartitioning.map(
-          InternalRowComparableWrapper(_, partitionExpression))
-        case RightOuter => rightPartitioning.map(
-          InternalRowComparableWrapper(_, partitionExpression))
+        case LeftOuter => leftPartitioning.map(internalRowComparableWrapperFactory)
+        case RightOuter => rightPartitioning.map(internalRowComparableWrapperFactory)
         case _ => InternalRowComparableWrapper.mergePartitions(leftPartitioning,
           rightPartitioning, partitionExpression)
       }

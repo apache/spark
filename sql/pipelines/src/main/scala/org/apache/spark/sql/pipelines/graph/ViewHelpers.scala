@@ -25,7 +25,7 @@ object ViewHelpers {
   def persistedViewIdentifierToFlow(graph: DataflowGraph): Map[TableIdentifier, ResolvedFlow] = {
     graph.persistedViews.map { v =>
       require(
-        graph.flowsTo.get(v.identifier).isDefined,
+        graph.flowsTo.contains(v.identifier),
         s"No flows to view ${v.identifier} were found"
       )
       val flowsToView = graph.resolvedFlowsTo(v.identifier)

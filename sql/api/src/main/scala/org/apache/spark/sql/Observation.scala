@@ -95,18 +95,6 @@ class Observation(val name: String) {
   def getAsJava: java.util.Map[String, Any] = get.asJava
 
   /**
-   * Get the observed metrics. This returns the metrics if they are available, otherwise an empty.
-   *
-   * @return
-   *   the observed metrics as a `Map[String, Any]`
-   */
-  @throws[InterruptedException]
-  private[sql] def getOrEmpty: Map[String, Any] = {
-    val row = getRowOrEmpty.getOrElse(Row.empty)
-    row.getValuesMap(row.schema.map(_.name))
-  }
-
-  /**
    * Mark this Observation as registered.
    */
   private[sql] def markRegistered(): Unit = {

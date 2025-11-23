@@ -545,7 +545,6 @@ case class CreateTableAsSelect(
  * The base command representation for a statement that can be part of a Declarative Pipeline to
  * define a pipeline dataset (MV or ST).
  */
-
 trait CreatePipelineDataset extends Command {
   // The name of the dataset.
   val name: LogicalPlan
@@ -566,7 +565,8 @@ trait CreatePipelineDataset extends Command {
 /**
  * An extension of the base command representation that represents a CTAS style CREATE statement.
  */
-trait CreatePipelineDatasetAsSelect extends BinaryCommand
+trait CreatePipelineDatasetAsSelect
+  extends BinaryCommand
   with CreatePipelineDataset
   with CTEInChildren {
 
@@ -867,7 +867,7 @@ case class MergeIntoTable(
   lazy val aligned: Boolean = {
     val actions = matchedActions ++ notMatchedActions ++ notMatchedBySourceActions
     actions.forall {
-      case UpdateAction(_, assignments) =>
+      case UpdateAction(_, assignments, _) =>
         AssignmentUtils.aligned(targetTable.output, assignments)
       case _: DeleteAction =>
         true
@@ -920,10 +920,7 @@ case class MergeIntoTable(
         case a: UpdateAction => a.assignments
         case a: InsertAction => a.assignments
       }.flatten
-
-      val sourcePaths = MergeIntoTable.extractAllFieldPaths(sourceTable.schema)
-      // Only allow unresolved assignment keys to be candidates for schema evolution
-      // if they are directly assigned from source fields, ie UPDATE SET new = source.new
+      val sourcePaths = DataTypeUtils.extractAllFieldPaths(sourceTable.schema)
       assignments.forall { assignment =>
         assignment.resolved ||
           (assignment.value.resolved && sourcePaths.exists {
@@ -1077,19 +1074,6 @@ object MergeIntoTable {
     filterSchema(merge.sourceTable.schema, Seq.empty)
   }
 
-  private def extractAllFieldPaths(schema: StructType, basePath: Seq[String] = Seq.empty):
-  Seq[Seq[String]] = {
-    schema.flatMap { field =>
-      val fieldPath = basePath :+ field.name
-      field.dataType match {
-        case struct: StructType =>
-          fieldPath +: extractAllFieldPaths(struct, fieldPath)
-        case _ =>
-          Seq(fieldPath)
-      }
-    }
-  }
-
   // Helper method to extract field path from an Expression.
   private def extractFieldPath(expr: Expression, allowUnresolved: Boolean): Seq[String] = {
     expr match {
@@ -1136,7 +1120,8 @@ case class DeleteAction(condition: Option[Expression]) extends MergeAction {
 
 case class UpdateAction(
     condition: Option[Expression],
-    assignments: Seq[Assignment]) extends MergeAction {
+    assignments: Seq[Assignment],
+    fromStar: Boolean = false) extends MergeAction {
   override def children: Seq[Expression] = condition.toSeq ++ assignments
 
   override protected def withNewChildrenInternal(
@@ -1997,7 +1982,7 @@ case class Call(
  * representation of the matching SQL syntax and cannot be executed. Instead, it is interpreted by
  * the pipelines submodule during a pipeline execution
  *
- * @param name  the name of this flow
+ * @param name the name of this flow
  * @param flowOperation the logical plan of the actual transformation this flow should execute
  * @param comment an optional comment describing this flow
  */

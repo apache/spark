@@ -585,6 +585,7 @@ class UDFProfiler2TestsMixin:
         for id in self.profile_results:
             self.assert_udf_profile_present(udf_id=id, expected_line_count_prefix=2)
 
+    @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
     def test_perf_profiler_data_source(self):
         class TestDataSourceReader(DataSourceReader):
             def __init__(self, schema):
