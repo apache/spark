@@ -29,6 +29,6 @@ jobs:
     permissions:
       packages: write
     name: Run
-    uses: ./.github/workflows/build_maven.yml
+    uses: ./.github/workflows/maven_test.yml
     secrets:
       codecov_token: ${{ secrets.CODECOV_TOKEN }}
