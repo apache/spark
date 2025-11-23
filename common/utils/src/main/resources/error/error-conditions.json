@@ -2832,6 +2832,12 @@
     },
     "sqlState" : "42602"
   },
+  "INVALID_DESTINATION_WITH_MULTIPLE_FLOWS" : {
+    "message" : [
+      "Invalid destination <tableName> with multiple flows: <flows>."
+    ],
+    "sqlState" : "42000"
+  },
   "INVALID_DRIVER_MEMORY" : {
     "message" : [
       "System memory <systemMemory> must be at least <minSystemMemory>.",
@@ -5027,6 +5033,12 @@
       }
     },
     "sqlState" : "42710"
+  },
+  "PIPELINE_GRAPH_NOT_TOPOLOGICALLY_SORTED" : {
+    "message" : [
+      "Pipeline graph must be topologically sorted (flow <flowName> with unvisited input <inputName>)"
+    ],
+    "sqlState" : "42000"
   },
   "PIPELINE_SQL_GRAPH_ELEMENT_REGISTRATION_ERROR" : {
     "message" : [

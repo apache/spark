@@ -44,10 +44,13 @@ trait GraphValidations extends Logging {
       .foreach {
         case (dest, flows) =>
           throw new AnalysisException(
-            "MATERIALIZED_VIEW_WITH_MULTIPLE_QUERIES",
+            "INVALID_DESTINATION_WITH_MULTIPLE_FLOWS",
             Map(
               "tableName" -> dest.unquotedString,
-              "queries" -> flows.map(_.identifier).mkString(",")
+              "flows" -> flows
+                .map(_.displayName)
+                .sorted
+                .mkString(", ")
             )
           )
       }
@@ -150,7 +153,7 @@ trait GraphValidations extends Logging {
           throw new AnalysisException(
             "PIPELINE_GRAPH_NOT_TOPOLOGICALLY_SORTED",
             Map(
-              "flowName" -> f.identifier.unquotedString,
+              "flowName" -> f.displayName,
               "inputName" -> unvisitedInput.unquotedString
             )
           )
