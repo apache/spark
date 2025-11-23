@@ -1380,6 +1380,12 @@ Project [c1#x]
 
 
 -- !query
+DROP VIEW IF EXISTS v
+-- !query analysis
+DropTableCommand `spark_catalog`.`default`.`v`, true, true, false
+
+
+-- !query
 CREATE TABLE tab(IDENTIFIER('c1') INT) USING CSV
 -- !query analysis
 CreateDataSourceTableCommand `spark_catalog`.`default`.`tab`, false

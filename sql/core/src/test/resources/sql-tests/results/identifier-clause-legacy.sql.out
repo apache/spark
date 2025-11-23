@@ -1558,6 +1558,14 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 
 
 -- !query
+DROP VIEW IF EXISTS v
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
 CREATE TABLE tab(IDENTIFIER('c1') INT) USING CSV
 -- !query schema
 struct<>
