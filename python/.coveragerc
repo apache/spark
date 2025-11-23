@@ -27,6 +27,8 @@ omit =
     # Tests
     */pyspark/errors/tests/*
     */pyspark/ml/tests/*
+    */pyspark/ml/deepspeed/tests/*
+    */pyspark/ml/torch/tests/*
     */pyspark/mllib/tests/*
     */pyspark/pandas/tests/*
     */pyspark/pipelines/tests/*
