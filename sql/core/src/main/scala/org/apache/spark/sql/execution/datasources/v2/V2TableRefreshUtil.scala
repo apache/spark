@@ -23,7 +23,9 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.analysis.AsOfVersion
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.connector.catalog.{Identifier, Table, TableCatalog, V2TableUtil}
+import org.apache.spark.sql.connector.catalog.CatalogV2Util
 import org.apache.spark.sql.errors.QueryCompilationErrors
 
 private[sql] object V2TableRefreshUtil extends SQLConfHelper with Logging {
@@ -59,25 +61,43 @@ private[sql] object V2TableRefreshUtil extends SQLConfHelper with Logging {
    * Tables with time travel specifications are skipped as they reference a specific point
    * in time and don't have to be refreshed.
    *
+   * @param spark the currently active Spark session
    * @param plan the logical plan to refresh
    * @param versionedOnly indicates whether to refresh only versioned tables
    * @return plan with refreshed table metadata
    */
-  def refresh(plan: LogicalPlan, versionedOnly: Boolean = false): LogicalPlan = {
-    val cache = mutable.HashMap.empty[(TableCatalog, Identifier), Table]
+  def refresh(
+      spark: SparkSession,
+      plan: LogicalPlan,
+      versionedOnly: Boolean = false): LogicalPlan = {
+    val currentTables = mutable.HashMap.empty[(TableCatalog, Identifier), Table]
     plan transform {
       case r @ ExtractV2CatalogAndIdentifier(catalog, ident)
           if (r.isVersioned || !versionedOnly) && r.timeTravelSpec.isEmpty =>
-        val currentTable = cache.getOrElseUpdate((catalog, ident), {
+        val currentTable = currentTables.getOrElseUpdate((catalog, ident), {
           val tableName = V2TableUtil.toQualifiedName(catalog, ident)
-          logDebug(s"Refreshing table metadata for $tableName")
-          catalog.loadTable(ident)
+          lookupCachedRelation(spark, catalog, ident, r.table) match {
+            case Some(cached) =>
+              logDebug(s"Refreshing table metadata for $tableName using shared relation cache")
+              cached.table
+            case None =>
+              logDebug(s"Refreshing table metadata for $tableName using catalog")
+              catalog.loadTable(ident)
+          }
         })
         validateTableIdentity(currentTable, r)
         validateDataColumns(currentTable, r)
         validateMetadataColumns(currentTable, r)
         r.copy(table = currentTable)
     }
+  }
+
+  private def lookupCachedRelation(
+      spark: SparkSession,
+      catalog: TableCatalog,
+      ident: Identifier,
+      table: Table): Option[DataSourceV2Relation] = {
+    CatalogV2Util.lookupCachedRelation(spark.sharedState.relationCache, catalog, ident, table, conf)
   }
 
   private def validateTableIdentity(currentTable: Table, relation: DataSourceV2Relation): Unit = {
