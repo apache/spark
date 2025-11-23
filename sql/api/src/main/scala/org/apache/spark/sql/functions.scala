@@ -6890,6 +6890,22 @@ object functions {
   }
 
   /**
+   * Converts a time to a string in the specified format.
+   *
+   * @param time
+   *   A column of time values to be formatted.
+   * @param format
+   *   A time format string. for valid patterns.
+   * @return
+   *   String representation of the time in the specified format.
+   * @group datetime_funcs
+   * @since 4.2.0
+   */
+  def time_format(time: Column, format: String): Column = {
+    Column.fn("time_format", time, lit(format))
+  }
+
+  /**
    * Returns `time` truncated to the `unit`.
    *
    * @param unit

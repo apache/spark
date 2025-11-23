@@ -2761,3 +2761,511 @@ SELECT time_from_micros(time_to_micros(TIME'14:30:00.5'))
 struct<time_from_micros(time_to_micros(TIME '14:30:00.5')):time(6)>
 -- !query output
 14:30:00.5
+
+
+-- !query
+SELECT time_format(TIME'14:30:45', 'HH:mm:ss')
+-- !query schema
+struct<time_format(TIME '14:30:45', HH:mm:ss):string>
+-- !query output
+14:30:45
+
+
+-- !query
+SELECT time_format(TIME'14:30:45', 'hh:mm:ss a')
+-- !query schema
+struct<time_format(TIME '14:30:45', hh:mm:ss a):string>
+-- !query output
+02:30:45 PM
+
+
+-- !query
+SELECT time_format(TIME'09:15:30', 'hh:mm:ss a')
+-- !query schema
+struct<time_format(TIME '09:15:30', hh:mm:ss a):string>
+-- !query output
+09:15:30 AM
+
+
+-- !query
+SELECT time_format(TIME'14:30:45.123', 'HH:mm:ss.SSS')
+-- !query schema
+struct<time_format(TIME '14:30:45.123', HH:mm:ss.SSS):string>
+-- !query output
+14:30:45.123
+
+
+-- !query
+SELECT time_format(TIME'14:30:45.123456', 'HH:mm:ss.SSSSSS')
+-- !query schema
+struct<time_format(TIME '14:30:45.123456', HH:mm:ss.SSSSSS):string>
+-- !query output
+14:30:45.123456
+
+
+-- !query
+SELECT time_format(TIME'14:30:45', 'HH:mm')
+-- !query schema
+struct<time_format(TIME '14:30:45', HH:mm):string>
+-- !query output
+14:30
+
+
+-- !query
+SELECT time_format(TIME'14:30:45', 'HH')
+-- !query schema
+struct<time_format(TIME '14:30:45', HH):string>
+-- !query output
+14
+
+
+-- !query
+SELECT time_format(TIME'09:05:00', 'H:mm a')
+-- !query schema
+struct<time_format(TIME '09:05:00', H:mm a):string>
+-- !query output
+9:05 AM
+
+
+-- !query
+SELECT time_format(TIME'00:00:00', 'HH:mm:ss')
+-- !query schema
+struct<time_format(TIME '00:00:00', HH:mm:ss):string>
+-- !query output
+00:00:00
+
+
+-- !query
+SELECT time_format(TIME'00:00:00', 'hh:mm:ss a')
+-- !query schema
+struct<time_format(TIME '00:00:00', hh:mm:ss a):string>
+-- !query output
+12:00:00 AM
+
+
+-- !query
+SELECT time_format(TIME'12:00:00', 'HH:mm:ss')
+-- !query schema
+struct<time_format(TIME '12:00:00', HH:mm:ss):string>
+-- !query output
+12:00:00
+
+
+-- !query
+SELECT time_format(TIME'12:00:00', 'hh:mm:ss a')
+-- !query schema
+struct<time_format(TIME '12:00:00', hh:mm:ss a):string>
+-- !query output
+12:00:00 PM
+
+
+-- !query
+SELECT time_format(TIME'23:59:59', 'HH:mm:ss')
+-- !query schema
+struct<time_format(TIME '23:59:59', HH:mm:ss):string>
+-- !query output
+23:59:59
+
+
+-- !query
+SELECT time_format(TIME'23:59:59.999999', 'HH:mm:ss.SSSSSS')
+-- !query schema
+struct<time_format(TIME '23:59:59.999999', HH:mm:ss.SSSSSS):string>
+-- !query output
+23:59:59.999999
+
+
+-- !query
+SELECT time_format(NULL, 'HH:mm:ss')
+-- !query schema
+struct<time_format(NULL, HH:mm:ss):string>
+-- !query output
+NULL
+
+
+-- !query
+SELECT time_format(TIME'14:30:45', NULL)
+-- !query schema
+struct<time_format(TIME '14:30:45', NULL):string>
+-- !query output
+NULL
+
+
+-- !query
+SELECT time_format(CAST(NULL AS TIME), 'HH:mm:ss')
+-- !query schema
+struct<time_format(CAST(NULL AS TIME(6)), HH:mm:ss):string>
+-- !query output
+NULL
+
+
+-- !query
+SELECT time_format(TIME'14:30:45', 'hh-mm-ss a')
+-- !query schema
+struct<time_format(TIME '14:30:45', hh-mm-ss a):string>
+-- !query output
+02-30-45 PM
+
+
+-- !query
+SELECT time_format(TIME'14:30:45', 'HH.mm.ss')
+-- !query schema
+struct<time_format(TIME '14:30:45', HH.mm.ss):string>
+-- !query output
+14.30.45
+
+
+-- !query
+SELECT time_format(TIME'14:30:45', 'HH_mm_ss')
+-- !query schema
+struct<time_format(TIME '14:30:45', HH_mm_ss):string>
+-- !query output
+14_30_45
+
+
+-- !query
+SELECT time_format(TIME'14:30:45', '''Time:'' HH:mm:ss')
+-- !query schema
+struct<time_format(TIME '14:30:45', 'Time:' HH:mm:ss):string>
+-- !query output
+Time: 14:30:45
+
+
+-- !query
+SELECT time_format(TIME'02:20:30.040', 'H ''hours'' mm ''mins'' ss ''seconds'' SSS ''milliseconds''')
+-- !query schema
+struct<time_format(TIME '02:20:30.04', H 'hours' mm 'mins' ss 'seconds' SSS 'milliseconds'):string>
+-- !query output
+2 hours 20 mins 30 seconds 040 milliseconds
+
+
+-- !query
+SELECT time_format(TIME'14:05:15', 'H ''hours,'' mm ''minutes and'' ss ''seconds''')
+-- !query schema
+struct<time_format(TIME '14:05:15', H 'hours,' mm 'minutes and' ss 'seconds'):string>
+-- !query output
+14 hours, 05 minutes and 15 seconds
+
+
+-- !query
+SELECT time_format(TIME'00:00:00', 'a')
+-- !query schema
+struct<time_format(TIME '00:00:00', a):string>
+-- !query output
+AM
+
+
+-- !query
+SELECT time_format(TIME'11:59:59', 'a')
+-- !query schema
+struct<time_format(TIME '11:59:59', a):string>
+-- !query output
+AM
+
+
+-- !query
+SELECT time_format(TIME'12:00:00', 'a')
+-- !query schema
+struct<time_format(TIME '12:00:00', a):string>
+-- !query output
+PM
+
+
+-- !query
+SELECT time_format(TIME'13:00:00', 'a')
+-- !query schema
+struct<time_format(TIME '13:00:00', a):string>
+-- !query output
+PM
+
+
+-- !query
+SELECT time_format(TIME'23:59:59', 'a')
+-- !query schema
+struct<time_format(TIME '23:59:59', a):string>
+-- !query output
+PM
+
+
+-- !query
+SELECT time_format(TIME'00:00:00', 'hh:mm a')
+-- !query schema
+struct<time_format(TIME '00:00:00', hh:mm a):string>
+-- !query output
+12:00 AM
+
+
+-- !query
+SELECT time_format(TIME'00:30:00', 'hh:mm a')
+-- !query schema
+struct<time_format(TIME '00:30:00', hh:mm a):string>
+-- !query output
+12:30 AM
+
+
+-- !query
+SELECT time_format(TIME'01:00:00', 'hh:mm a')
+-- !query schema
+struct<time_format(TIME '01:00:00', hh:mm a):string>
+-- !query output
+01:00 AM
+
+
+-- !query
+SELECT time_format(TIME'11:00:00', 'hh:mm a')
+-- !query schema
+struct<time_format(TIME '11:00:00', hh:mm a):string>
+-- !query output
+11:00 AM
+
+
+-- !query
+SELECT time_format(TIME'12:00:00', 'hh:mm a')
+-- !query schema
+struct<time_format(TIME '12:00:00', hh:mm a):string>
+-- !query output
+12:00 PM
+
+
+-- !query
+SELECT time_format(TIME'13:00:00', 'hh:mm a')
+-- !query schema
+struct<time_format(TIME '13:00:00', hh:mm a):string>
+-- !query output
+01:00 PM
+
+
+-- !query
+SELECT time_format(TIME'09:15:30', 'H:mm:ss')
+-- !query schema
+struct<time_format(TIME '09:15:30', H:mm:ss):string>
+-- !query output
+9:15:30
+
+
+-- !query
+SELECT time_format(TIME'09:15:30', 'HH:mm:ss')
+-- !query schema
+struct<time_format(TIME '09:15:30', HH:mm:ss):string>
+-- !query output
+09:15:30
+
+
+-- !query
+SELECT time_format(TIME'09:15:30', 'h:mm a')
+-- !query schema
+struct<time_format(TIME '09:15:30', h:mm a):string>
+-- !query output
+9:15 AM
+
+
+-- !query
+SELECT time_format(TIME'09:15:30', 'hh:mm a')
+-- !query schema
+struct<time_format(TIME '09:15:30', hh:mm a):string>
+-- !query output
+09:15 AM
+
+
+-- !query
+SELECT time_format(TIME'14:30:45.1', 'HH:mm:ss.S')
+-- !query schema
+struct<time_format(TIME '14:30:45.1', HH:mm:ss.S):string>
+-- !query output
+14:30:45.1
+
+
+-- !query
+SELECT time_format(TIME'14:30:45.12', 'HH:mm:ss.SS')
+-- !query schema
+struct<time_format(TIME '14:30:45.12', HH:mm:ss.SS):string>
+-- !query output
+14:30:45.12
+
+
+-- !query
+SELECT coalesce(time_format(NULL, 'HH:mm'), 'N/A')
+-- !query schema
+struct<coalesce(time_format(NULL, HH:mm), N/A):string>
+-- !query output
+N/A
+
+
+-- !query
+SELECT coalesce(time_format(TIME'14:30:45', NULL), 'N/A')
+-- !query schema
+struct<coalesce(time_format(TIME '14:30:45', NULL), N/A):string>
+-- !query output
+N/A
+
+
+-- !query
+SELECT concat('The time is ', time_format(TIME'14:30:45', 'hh:mm a'))
+-- !query schema
+struct<concat(The time is , time_format(TIME '14:30:45', hh:mm a)):string>
+-- !query output
+The time is 02:30 PM
+
+
+-- !query
+SELECT time_format(TIME'14:30:45', 'HH:mm:ss (hh:mm:ss a)')
+-- !query schema
+struct<time_format(TIME '14:30:45', HH:mm:ss (hh:mm:ss a)):string>
+-- !query output
+14:30:45 (02:30:45 PM)
+
+
+-- !query
+SELECT time_format(TIME'09:15:30', 'HH:mm (h:mm a)')
+-- !query schema
+struct<time_format(TIME '09:15:30', HH:mm (h:mm a)):string>
+-- !query output
+09:15 (9:15 AM)
+
+
+-- !query
+SELECT time_format(TIME'23:45:00', '''24hr:'' HH:mm ''12hr:'' hh:mm a')
+-- !query schema
+struct<time_format(TIME '23:45:00', '24hr:' HH:mm '12hr:' hh:mm a):string>
+-- !query output
+24hr: 23:45 12hr: 11:45 PM
+
+
+-- !query
+SELECT time_format(TIME'00:30:00', 'HH:mm:ss = hh:mm:ss a')
+-- !query schema
+struct<time_format(TIME '00:30:00', HH:mm:ss = hh:mm:ss a):string>
+-- !query output
+00:30:00 = 12:30:00 AM
+
+
+-- !query
+SELECT time_format(TIME'14:30:45', 'HH:mm:ss ''(24h)'' / hh:mm:ss a ''(12h)''')
+-- !query schema
+struct<time_format(TIME '14:30:45', HH:mm:ss '(24h)' / hh:mm:ss a '(12h)'):string>
+-- !query output
+14:30:45 (24h) / 02:30:45 PM (12h)
+
+
+-- !query
+SELECT time_format(TIME'14:30:45', 'HH:mm:ss'), time_format(TIME'14:30:45', 'hh:mm:ss a')
+-- !query schema
+struct<time_format(TIME '14:30:45', HH:mm:ss):string,time_format(TIME '14:30:45', hh:mm:ss a):string>
+-- !query output
+14:30:45	02:30:45 PM
+
+
+-- !query
+SELECT time_format(TIME'09:15:30', 'HH:mm'), time_format(TIME'09:15:30', 'h:mm a')
+-- !query schema
+struct<time_format(TIME '09:15:30', HH:mm):string,time_format(TIME '09:15:30', h:mm a):string>
+-- !query output
+09:15	9:15 AM
+
+
+-- !query
+SELECT
+  time_format(TIME'14:30:45.123456', 'HH:mm:ss') as format_24hr,
+  time_format(TIME'14:30:45.123456', 'hh:mm:ss a') as format_12hr,
+  time_format(TIME'14:30:45.123456', 'HH:mm:ss.SSSSSS') as format_with_micros
+-- !query schema
+struct<format_24hr:string,format_12hr:string,format_with_micros:string>
+-- !query output
+14:30:45	02:30:45 PM	14:30:45.123456
+
+
+-- !query
+SELECT time_format(TIME'14:30:45', 'HH:mm:ss ''UTC''')
+-- !query schema
+struct<time_format(TIME '14:30:45', HH:mm:ss 'UTC'):string>
+-- !query output
+14:30:45 UTC
+
+
+-- !query
+SELECT time_format(TIME'14:30:45', '[HH:mm:ss]')
+-- !query schema
+struct<time_format(TIME '14:30:45', [HH:mm:ss]):string>
+-- !query output
+14:30:45
+
+
+-- !query
+SELECT time_format(TIME'14:30:45', 'HH|mm|ss')
+-- !query schema
+struct<time_format(TIME '14:30:45', HH|mm|ss):string>
+-- !query output
+14|30|45
+
+
+-- !query
+SELECT time_format(TIME'14:30:45', 'HH-mm-ss')
+-- !query schema
+struct<time_format(TIME '14:30:45', HH-mm-ss):string>
+-- !query output
+14-30-45
+
+
+-- !query
+SELECT time_format(TIME'14:30:45', 'HH:MM:ss')
+-- !query schema
+struct<>
+-- !query output
+java.time.temporal.UnsupportedTemporalTypeException
+Unsupported field: MonthOfYear
+
+
+-- !query
+SELECT time_format(TIME'14:30:45.000', 'HH:mm:ss.SSS')
+-- !query schema
+struct<time_format(TIME '14:30:45', HH:mm:ss.SSS):string>
+-- !query output
+14:30:45.000
+
+
+-- !query
+SELECT time_format(TIME'14:30:45.999', 'HH:mm:ss.SSS')
+-- !query schema
+struct<time_format(TIME '14:30:45.999', HH:mm:ss.SSS):string>
+-- !query output
+14:30:45.999
+
+
+-- !query
+SELECT time_format(TIME'14:30:45.001', 'HH:mm:ss.SSS')
+-- !query schema
+struct<time_format(TIME '14:30:45.001', HH:mm:ss.SSS):string>
+-- !query output
+14:30:45.001
+
+
+-- !query
+SELECT time_format(TIME'14:30:45.000000', 'HH:mm:ss.SSSSSS')
+-- !query schema
+struct<time_format(TIME '14:30:45', HH:mm:ss.SSSSSS):string>
+-- !query output
+14:30:45.000000
+
+
+-- !query
+SELECT time_format(TIME'14:30:45.999999', 'HH:mm:ss.SSSSSS')
+-- !query schema
+struct<time_format(TIME '14:30:45.999999', HH:mm:ss.SSSSSS):string>
+-- !query output
+14:30:45.999999
+
+
+-- !query
+SELECT time_format(TIME'14:30:45.000001', 'HH:mm:ss.SSSSSS')
+-- !query schema
+struct<time_format(TIME '14:30:45.000001', HH:mm:ss.SSSSSS):string>
+-- !query output
+14:30:45.000001
+
+
+-- !query
+SELECT cast(time_format(TIME'14:30:45', 'HH:mm:ss') as string)
+-- !query schema
+struct<CAST(time_format(TIME '14:30:45', HH:mm:ss) AS STRING):string>
+-- !query output
+14:30:45

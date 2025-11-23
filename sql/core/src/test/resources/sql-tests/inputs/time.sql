@@ -365,3 +365,119 @@ SELECT time_to_millis(time_from_millis(52200500));
 SELECT time_from_millis(time_to_millis(TIME'14:30:00.5'));
 SELECT time_to_micros(time_from_micros(52200500000));
 SELECT time_from_micros(time_to_micros(TIME'14:30:00.5'));
+
+-- TIME_FORMAT function tests
+-- Test basic 24-hour format
+SELECT time_format(TIME'14:30:45', 'HH:mm:ss');
+
+-- Test 12-hour format with AM/PM
+SELECT time_format(TIME'14:30:45', 'hh:mm:ss a');
+SELECT time_format(TIME'09:15:30', 'hh:mm:ss a');
+
+-- Test with different precisions
+SELECT time_format(TIME'14:30:45.123', 'HH:mm:ss.SSS');
+SELECT time_format(TIME'14:30:45.123456', 'HH:mm:ss.SSSSSS');
+
+-- Test various format patterns
+SELECT time_format(TIME'14:30:45', 'HH:mm');
+SELECT time_format(TIME'14:30:45', 'HH');
+SELECT time_format(TIME'09:05:00', 'H:mm a');
+
+-- Test edge cases - midnight
+SELECT time_format(TIME'00:00:00', 'HH:mm:ss');
+SELECT time_format(TIME'00:00:00', 'hh:mm:ss a');
+
+-- Test edge cases - noon
+SELECT time_format(TIME'12:00:00', 'HH:mm:ss');
+SELECT time_format(TIME'12:00:00', 'hh:mm:ss a');
+
+-- Test edge cases - end of day
+SELECT time_format(TIME'23:59:59', 'HH:mm:ss');
+SELECT time_format(TIME'23:59:59.999999', 'HH:mm:ss.SSSSSS');
+
+-- Test null handling
+SELECT time_format(NULL, 'HH:mm:ss');
+SELECT time_format(TIME'14:30:45', NULL);
+SELECT time_format(CAST(NULL AS TIME), 'HH:mm:ss');
+
+-- Test custom formats with different separators
+SELECT time_format(TIME'14:30:45', 'hh-mm-ss a');
+SELECT time_format(TIME'14:30:45', 'HH.mm.ss');
+SELECT time_format(TIME'14:30:45', 'HH_mm_ss');
+
+-- Test with text literals
+SELECT time_format(TIME'14:30:45', '''Time:'' HH:mm:ss');
+
+-- Test verbose formats
+SELECT time_format(TIME'02:20:30.040', 'H ''hours'' mm ''mins'' ss ''seconds'' SSS ''milliseconds''');
+SELECT time_format(TIME'14:05:15', 'H ''hours,'' mm ''minutes and'' ss ''seconds''');
+
+-- Test AM/PM edge cases
+SELECT time_format(TIME'00:00:00', 'a');
+SELECT time_format(TIME'11:59:59', 'a');
+SELECT time_format(TIME'12:00:00', 'a');
+SELECT time_format(TIME'13:00:00', 'a');
+SELECT time_format(TIME'23:59:59', 'a');
+
+-- Test hour edge cases for 12-hour format
+SELECT time_format(TIME'00:00:00', 'hh:mm a');
+SELECT time_format(TIME'00:30:00', 'hh:mm a');
+SELECT time_format(TIME'01:00:00', 'hh:mm a');
+SELECT time_format(TIME'11:00:00', 'hh:mm a');
+SELECT time_format(TIME'12:00:00', 'hh:mm a');
+SELECT time_format(TIME'13:00:00', 'hh:mm a');
+
+-- Test single vs double digit hour (H vs HH)
+SELECT time_format(TIME'09:15:30', 'H:mm:ss');
+SELECT time_format(TIME'09:15:30', 'HH:mm:ss');
+SELECT time_format(TIME'09:15:30', 'h:mm a');
+SELECT time_format(TIME'09:15:30', 'hh:mm a');
+
+-- Test precision variations (additional subsecond formats)
+SELECT time_format(TIME'14:30:45.1', 'HH:mm:ss.S');
+SELECT time_format(TIME'14:30:45.12', 'HH:mm:ss.SS');
+
+-- Test with COALESCE
+SELECT coalesce(time_format(NULL, 'HH:mm'), 'N/A');
+SELECT coalesce(time_format(TIME'14:30:45', NULL), 'N/A');
+
+-- Test concatenation with formatted time
+SELECT concat('The time is ', time_format(TIME'14:30:45', 'hh:mm a'));
+
+-- Test single format showing both 24-hour and 12-hour in one output
+SELECT time_format(TIME'14:30:45', 'HH:mm:ss (hh:mm:ss a)');
+SELECT time_format(TIME'09:15:30', 'HH:mm (h:mm a)');
+SELECT time_format(TIME'23:45:00', '''24hr:'' HH:mm ''12hr:'' hh:mm a');
+SELECT time_format(TIME'00:30:00', 'HH:mm:ss = hh:mm:ss a');
+SELECT time_format(TIME'14:30:45', 'HH:mm:ss ''(24h)'' / hh:mm:ss a ''(12h)''');
+
+-- Test multiple formats in single query
+SELECT time_format(TIME'14:30:45', 'HH:mm:ss'), time_format(TIME'14:30:45', 'hh:mm:ss a');
+SELECT time_format(TIME'09:15:30', 'HH:mm'), time_format(TIME'09:15:30', 'h:mm a');
+SELECT
+  time_format(TIME'14:30:45.123456', 'HH:mm:ss') as format_24hr,
+  time_format(TIME'14:30:45.123456', 'hh:mm:ss a') as format_12hr,
+  time_format(TIME'14:30:45.123456', 'HH:mm:ss.SSSSSS') as format_with_micros;
+
+-- Test special characters and patterns
+SELECT time_format(TIME'14:30:45', 'HH:mm:ss ''UTC''');
+SELECT time_format(TIME'14:30:45', '[HH:mm:ss]');
+SELECT time_format(TIME'14:30:45', 'HH|mm|ss');
+SELECT time_format(TIME'14:30:45', 'HH-mm-ss');
+
+-- Test common mistake: MM (month) vs mm (minute)
+-- MM is for month, mm is for minute - TIME has no date so MM returns epoch month (01)
+SELECT time_format(TIME'14:30:45', 'HH:MM:ss');
+
+-- Test with millisecond precision edge cases
+SELECT time_format(TIME'14:30:45.000', 'HH:mm:ss.SSS');
+SELECT time_format(TIME'14:30:45.999', 'HH:mm:ss.SSS');
+SELECT time_format(TIME'14:30:45.001', 'HH:mm:ss.SSS');
+
+-- Test with microsecond precision edge cases
+SELECT time_format(TIME'14:30:45.000000', 'HH:mm:ss.SSSSSS');
+SELECT time_format(TIME'14:30:45.999999', 'HH:mm:ss.SSSSSS');
+SELECT time_format(TIME'14:30:45.000001', 'HH:mm:ss.SSSSSS');
+
+-- Test CAST behavior with formatted output
+SELECT cast(time_format(TIME'14:30:45', 'HH:mm:ss') as string);

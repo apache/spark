@@ -12830,6 +12830,78 @@ def time_diff(unit: "ColumnOrName", start: "ColumnOrName", end: "ColumnOrName") 
 
 
 @_try_remote_functions
+def time_format(time: "ColumnOrName", format: str) -> Column:
+    """
+    Converts a time to a value of string in the format specified by the time
+    format given by the second argument.
+
+    A pattern could be for instance `HH:mm:ss` and could return a string like '14:30:45'.
+    Time-related pattern letters of `datetime pattern`_ can be used.
+
+    .. versionadded:: 4.2.0
+
+    Parameters
+    ----------
+    time : :class:`~pyspark.sql.Column` or column name
+        input column of TIME values to format.
+    format: literal string
+        format to use to represent time values.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        string value representing formatted time.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.to_time`
+    :meth:`pyspark.sql.functions.try_to_time`
+    :meth:`pyspark.sql.functions.date_format`
+
+    Examples
+    --------
+    Example 1: Basic 24-hour format
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.sql("SELECT TIME'14:30:45' as time_col")
+    >>> df.select("*", sf.time_format('time_col', 'HH:mm:ss')).show()
+    +--------+-------------------------------+
+    |time_col|time_format(time_col, HH:mm:ss)|
+    +--------+-------------------------------+
+    |14:30:45|                       14:30:45|
+    +--------+-------------------------------+
+    <BLANKLINE>
+
+    Example 2: 12-hour format with AM/PM
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.sql("SELECT TIME'14:30:45' as time_col")
+    >>> df.select("*", sf.time_format('time_col', 'hh:mm:ss a')).show()
+    +--------+---------------------------------+
+    |time_col|time_format(time_col, hh:mm:ss a)|
+    +--------+---------------------------------+
+    |14:30:45|                      02:30:45 PM|
+    +--------+---------------------------------+
+    <BLANKLINE>
+
+    Example 3: With microseconds
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.sql("SELECT TIME'14:30:45.123456' as time_col")
+    >>> df.select("*", sf.time_format('time_col', 'HH:mm:ss.SSSSSS')).show()
+    +---------------+--------------------------------------+
+    |       time_col|time_format(time_col, HH:mm:ss.SSSSSS)|
+    +---------------+--------------------------------------+
+    |14:30:45.123456|                       14:30:45.123456|
+    +---------------+--------------------------------------+
+    <BLANKLINE>
+    """
+    from pyspark.sql.classic.column import _to_java_column
+
+    return _invoke_function("time_format", _to_java_column(time), _enum_to_value(format))
+
+
+@_try_remote_functions
 def time_trunc(unit: "ColumnOrName", time: "ColumnOrName") -> Column:
     """
     Returns `time` truncated to the `unit`.
