@@ -56,7 +56,8 @@ jobs:
   build:
     name: "Build modules: ${{ matrix.modules }} ${{ matrix.comment }}"
     runs-on: ${{ inputs.os }}
-    timeout-minutes: 150
+    # TODO(SPARK-54466): https://github.com/actions/runner-images/issues/13341
+    # timeout-minutes: 150
     strategy:
       fail-fast: false
       matrix:
@@ -143,6 +144,8 @@ jobs:
           git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
       # Cache local repositories. Note that GitHub Actions cache has a 10G limit.
       - name: Cache SBT and Maven
+        # TODO(SPARK-54466): https://github.com/actions/runner-images/issues/13341
+        if: ${{ runner.os != 'macOS' }}
         uses: actions/cache@v4
         with:
           path: |
@@ -153,6 +156,8 @@ jobs:
           restore-keys: |
             build-
       - name: Cache Maven local repository
+        # TODO(SPARK-54466): https://github.com/actions/runner-images/issues/13341
+        if: ${{ runner.os != 'macOS' }}
         uses: actions/cache@v4
         with:
           path: ~/.m2/repository
