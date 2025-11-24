@@ -475,7 +475,7 @@ private[spark] object Config extends Logging {
         "fails with 'connection refused' error. " +
         "The executor kubernetes service provides access to the executor's block manager, so " +
         "BLOCK_MANAGER_PORT has to be given a value greater than zero.")
-      .version("4.1.0")
+      .version("4.2.0")
       .booleanConf
       .createWithDefault(false)
 
