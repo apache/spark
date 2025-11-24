@@ -148,7 +148,7 @@ private[spark] class BasicExecutorFeatureStep(
       hostname = hostname.toLowerCase(Locale.ROOT)
     }
 
-    val executorMemoryRequestQuantity = new Quantity(s"${execResources.totalMemMiBRequest}Mi")
+    val executorMemoryRequestQuantity = new Quantity(s"${execResources.totalMemMiB}Mi")
     val executorMemoryLimitQuantity = execResources.totalMemMiBLimit.map { mem =>
       new Quantity(s"${mem}Mi")
     }.getOrElse(executorMemoryRequestQuantity)
