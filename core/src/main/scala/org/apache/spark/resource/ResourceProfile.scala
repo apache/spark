@@ -573,8 +573,8 @@ object ResourceProfile extends Logging {
     } else {
       val burstyControlFactor = conf.get(EXECUTOR_BURSTY_MEMORY_OVERHEAD_FACTOR)
       val newMemoryOverheadMiB = (memoryOverheadMiB - math.min(
-        (executorMemoryMiB + memoryOverheadMiB) * (burstyControlFactor - 1.0), memoryOverheadMiB))
-        .toLong
+          ((executorMemoryMiB + memoryOverheadMiB) * (burstyControlFactor - 1.0)).toLong,
+        memoryOverheadMiB))
       val totalMemMiBLimit = executorMemoryMiB + memoryOverheadMiB + memoryOffHeapMiB +
         pysparkMemToUseMiB
       val totalMemMiBRequest = executorMemoryMiB + newMemoryOverheadMiB + memoryOffHeapMiB +
