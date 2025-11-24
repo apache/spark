@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.plans.physical.BroadcastMode
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types.LongType
 import org.apache.spark.unsafe.Platform
+import org.apache.spark.unsafe.array.LongArray
 import org.apache.spark.unsafe.map.BytesToBytesMap
 import org.apache.spark.unsafe.memory.MemoryBlock
 import org.apache.spark.util.{KnownSizeEstimation, Utils}
@@ -551,7 +552,7 @@ private[execution] final class LongToUnsafeRowMap(
   //
   // Sparse mode: [key1] [offset1 | size1] [key2] [offset | size2] ...
   // Dense mode: [offset1 | size1] [offset2 | size2]
-  private var array: UnsafeLongArray = null
+  private var array: LongArray = null
   private var mask: Int = 0
 
   // The page to store all bytes of UnsafeRow and the pointer to next rows.
@@ -589,9 +590,10 @@ private[execution] final class LongToUnsafeRowMap(
       require(capacity < 512000000, "Cannot broadcast 512 million or more rows")
       var n = 1
       while (n < capacity) n *= 2
-      array = new UnsafeLongArray(n * 2)
+      array = allocateArray(n * 2)
+      array.zeroOut()
       mask = n * 2 - 2
-      page = allocatePage(1 << 20)// 1M bytes
+      page = allocatePage(1 << 20) // 1M bytes
       cursor = page.getBaseOffset
     }
   }
@@ -608,7 +610,7 @@ private[execution] final class LongToUnsafeRowMap(
   /**
    * Returns total memory consumption.
    */
-  def getTotalMemoryConsumption: Long = array.length * 8L + page.size()
+  def getTotalMemoryConsumption: Long = array.size() * 8L + page.size()
 
   /**
    * Returns the first slot of array that store the keys (sparse mode).
@@ -646,16 +648,16 @@ private[execution] final class LongToUnsafeRowMap(
   def getValue(key: Long, resultRow: UnsafeRow): UnsafeRow = {
     if (isDense) {
       if (key >= minKey && key <= maxKey) {
-        val value = array((key - minKey).toInt)
+        val value = array.get((key - minKey).toInt)
         if (value > 0) {
           return getRow(value, resultRow)
         }
       }
     } else {
       var pos = firstSlot(key)
-      while (array(pos + 1) != 0) {
-        if (array(pos) == key) {
-          return getRow(array(pos + 1), resultRow)
+      while (array.get(pos + 1) != 0) {
+        if (array.get(pos) == key) {
+          return getRow(array.get(pos + 1), resultRow)
         }
         pos = nextSlot(pos)
       }
@@ -686,16 +688,16 @@ private[execution] final class LongToUnsafeRowMap(
   def get(key: Long, resultRow: UnsafeRow): Iterator[UnsafeRow] = {
     if (isDense) {
       if (key >= minKey && key <= maxKey) {
-        val value = array((key - minKey).toInt)
+        val value = array.get((key - minKey).toInt)
         if (value > 0) {
           return valueIter(value, resultRow)
         }
       }
     } else {
       var pos = firstSlot(key)
-      while (array(pos + 1) != 0) {
-        if (array(pos) == key) {
-          return valueIter(array(pos + 1), resultRow)
+      while (array.get(pos + 1) != 0) {
+        if (array.get(pos) == key) {
+          return valueIter(array.get(pos + 1), resultRow)
         }
         pos = nextSlot(pos)
       }
@@ -720,8 +722,8 @@ private[execution] final class LongToUnsafeRowMap(
 
       override def hasNext: Boolean = {
         // go to the next key if the current key slot is empty
-        while (pos + step < array.length) {
-          if (array(pos + step) > 0) {
+        while (pos + step < array.size()) {
+          if (array.get(pos + step) > 0) {
             return true
           }
           pos += step + 1
@@ -734,7 +736,7 @@ private[execution] final class LongToUnsafeRowMap(
           throw QueryExecutionErrors.endOfIteratorError()
         } else {
           // the key is retrieved based on the map mode
-          val ret = if (isDense) minKey + pos else array(pos)
+          val ret = if (isDense) minKey + pos else array.get(pos)
           // advance the cursor to the next index
           pos += step + 1
           row.setLong(0, ret)
@@ -754,7 +756,7 @@ private[execution] final class LongToUnsafeRowMap(
     }
 
     val pos = findKeyPosition(key)
-    if (ignoresDuplicatedKey && array(pos + 1) != 0) {
+    if (ignoresDuplicatedKey && array.get(pos + 1) != 0) {
       return
     }
 
@@ -780,8 +782,8 @@ private[execution] final class LongToUnsafeRowMap(
 
   private def findKeyPosition(key: Long): Int = {
     var pos = firstSlot(key)
-    assert(numKeys < array.length / 2)
-    while (array(pos) != key && array(pos + 1) != 0) {
+    assert(numKeys < array.size() / 2)
+    while (array.get(pos) != key && array.get(pos + 1) != 0) {
       pos = nextSlot(pos)
     }
     pos
@@ -791,17 +793,17 @@ private[execution] final class LongToUnsafeRowMap(
    * Update the address in array for given key.
    */
   private def updateIndex(key: Long, pos: Int, address: Long): Unit = {
-    if (array(pos + 1) == 0) {
+    if (array.get(pos + 1) == 0) {
       // this is the first value for this key, put the address in array.
-      array(pos) = key
-      array(pos + 1) = address
+      array.set(pos, key)
+      array.set(pos + 1, address)
       numKeys += 1
-      if (numKeys * 4 > array.length) {
+      if (numKeys * 4 > array.size()) {
         // reach half of the capacity
-        if (array.length < (1 << 30)) {
+        if (array.size() < (1 << 30)) {
           // Cannot allocate an array with 2G elements
           growArray()
-        } else if (numKeys > array.length / 2 * 0.75) {
+        } else if (numKeys > array.size() / 2 * 0.75) {
           // The fill ratio should be less than 0.75
           throw QueryExecutionErrors.cannotBuildHashedRelationWithUniqueKeysExceededError()
         }
@@ -809,8 +811,8 @@ private[execution] final class LongToUnsafeRowMap(
     } else {
       // there are some values for this key, put the address in the front of them.
       val pointer = toOffset(address) + toSize(address)
-      Platform.putLong(page.getBaseObject, page.getBaseOffset + pointer, array(pos + 1))
-      array(pos + 1) = address
+      Platform.putLong(page.getBaseObject, page.getBaseOffset + pointer, array.get(pos + 1))
+      array.set(pos + 1, address)
     }
   }
 
@@ -834,19 +836,20 @@ private[execution] final class LongToUnsafeRowMap(
 
   private def growArray(): Unit = {
     var old_array = array
-    val n = array.length
+    val n = Math.toIntExact(array.size())
     numKeys = 0
-    array = new UnsafeLongArray(n * 2)
+    array = allocateArray(n * 2)
+    array.zeroOut()
     mask = n * 2 - 2
     var i = 0
-    while (i < old_array.length) {
-      if (old_array(i + 1) > 0) {
-        val key = old_array(i)
-        updateIndex(key, findKeyPosition(key), old_array(i + 1))
+    while (i < old_array.size()) {
+      if (old_array.get(i + 1) > 0) {
+        val key = old_array.get(i)
+        updateIndex(key, findKeyPosition(key), old_array.get(i + 1))
       }
       i += 2
     }
-    old_array.free()
+    freeArray(old_array)
     old_array = null  // release the reference to old array
   }
 
@@ -857,17 +860,18 @@ private[execution] final class LongToUnsafeRowMap(
     val range = maxKey - minKey
     // Convert to dense mode if it does not require more memory or could fit within L1 cache
     // SPARK-16740: Make sure range doesn't overflow if minKey has a large negative value
-    if (range >= 0 && (range < array.length || range < 1024)) {
-      val denseArray = new UnsafeLongArray((range + 1).toInt)
+    if (range >= 0 && (range < array.size() || range < 1024)) {
+      val denseArray = allocateArray((range + 1).toInt)
+      denseArray.zeroOut()
       var i = 0
-      while (i < array.length) {
-        if (array(i + 1) > 0) {
-          val idx = (array(i) - minKey).toInt
-          denseArray(idx) = array(i + 1)
+      while (i < array.size()) {
+        if (array.get(i + 1) > 0) {
+          val idx = (array.get(i) - minKey).toInt
+          denseArray.set(idx, array.get(i + 1))
         }
         i += 2
       }
-      array.free()
+      freeArray(array)
       array = denseArray
       isDense = true
     }
@@ -882,7 +886,7 @@ private[execution] final class LongToUnsafeRowMap(
       page = null
     }
     if (array != null) {
-      array.free()
+      freeArray(array)
       array = null
     }
   }
@@ -913,9 +917,9 @@ private[execution] final class LongToUnsafeRowMap(
     writeLong(numKeys)
     writeLong(numValues)
 
-    writeLong(array.length)
-    writeBytes(writeBuffer,
-      array.memoryBlock.getBaseObject, array.memoryBlock.getBaseOffset, array.length)
+    writeLong(array.size())
+    writeBytes(writeBuffer, array.memoryBlock.getBaseObject, array.memoryBlock.getBaseOffset,
+      Math.toIntExact(array.size()))
     val used = ((cursor - page.getBaseOffset) / 8).toInt
     writeLong(used)
     writeBytes(writeBuffer, page.getBaseObject, page.getBaseOffset, used)
@@ -957,8 +961,8 @@ private[execution] final class LongToUnsafeRowMap(
 
     val length = readLong().toInt
     mask = length - 2
-    array.free()
-    array = new UnsafeLongArray(length)
+    freeArray(array)
+    array = allocateArray(length)
     readData(readBuffer, array.memoryBlock.getBaseObject, array.memoryBlock.getBaseOffset, length)
     val pageLength = readLong().toInt
     freePage(page)
@@ -975,32 +979,11 @@ private[execution] final class LongToUnsafeRowMap(
   override def read(kryo: Kryo, in: Input): Unit = {
     read(() => in.readBoolean(), () => in.readLong(), in.readBytes)
   }
-
-  private class UnsafeLongArray(val length: Int) {
-    val memoryBlock: MemoryBlock = allocatePage(length * 8)
-
-    for (i <- 0 until length) {
-      update(i, 0)
-    }
-
-    def apply(index: Int): Long = {
-      Platform.getLong(memoryBlock.getBaseObject, memoryBlock.getBaseOffset + index * 8)
-    }
-
-    def update(index: Int, value: Long): Unit = {
-      Platform.putLong(memoryBlock.getBaseObject, memoryBlock.getBaseOffset + index * 8, value)
-    }
-
-    def free(): Unit = {
-      freePage(memoryBlock)
-    }
-  }
 }
 
 class LongHashedRelation(
     private var nFields: Int,
     private var map: LongToUnsafeRowMap) extends HashedRelation with Externalizable {
-
   private var resultRow: UnsafeRow = new UnsafeRow(nFields)
 
   // Needed for serialization (it is public to make Java serialization work)
