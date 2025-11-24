@@ -1200,6 +1200,88 @@ class ArrowStreamAggArrowUDFSerializer(ArrowStreamArrowUDFSerializer):
         return "ArrowStreamAggArrowUDFSerializer"
 
 
+# Serializer for SQL_GROUPED_AGG_PANDAS_UDF and SQL_WINDOW_AGG_PANDAS_UDF
+class ArrowStreamAggPandasUDFSerializer(ArrowStreamPandasUDFSerializer):
+    def __init__(
+        self,
+        timezone,
+        safecheck,
+        assign_cols_by_name,
+        int_to_decimal_coercion_enabled,
+    ):
+        super().__init__(
+            timezone=timezone,
+            safecheck=safecheck,
+            assign_cols_by_name=False,
+            df_for_struct=False,
+            struct_in_pandas="dict",
+            ndarray_as_list=False,
+            arrow_cast=True,
+            input_types=None,
+            int_to_decimal_coercion_enabled=int_to_decimal_coercion_enabled,
+        )
+        self._timezone = timezone
+        self._safecheck = safecheck
+        self._assign_cols_by_name = assign_cols_by_name
+
+    def load_stream(self, stream):
+        """
+        Merge all batches into a single RecordBatch and convert to pandas Series list.
+        """
+        import pyarrow as pa
+
+        dataframes_in_group = None
+
+        while dataframes_in_group is None or dataframes_in_group > 0:
+            dataframes_in_group = read_int(stream)
+
+            if dataframes_in_group == 1:
+                batches = ArrowStreamSerializer.load_stream(self, stream)
+                if hasattr(pa, "concat_batches"):
+                    merged_batch = pa.concat_batches(batches)
+                else:
+                    # pyarrow.concat_batches not supported in old versions
+                    merged_batch = pa.RecordBatch.from_struct_array(
+                        pa.concat_arrays([b.to_struct_array() for b in batches])
+                    )
+                # Convert merged batch to pandas Series list
+                series = [
+                    self.arrow_to_pandas(c, i)
+                    for i, c in enumerate(pa.Table.from_batches([merged_batch]).itercolumns())
+                ]
+                yield series
+
+            elif dataframes_in_group != 0:
+                raise PySparkValueError(
+                    errorClass="INVALID_NUMBER_OF_DATAFRAMES_IN_GROUP",
+                    messageParameters={"dataframes_in_group": str(dataframes_in_group)},
+                )
+
+    def dump_stream(self, iterator, stream):
+        import pyarrow as pa
+        import pandas as pd
+
+        # Flatten iterator of (generator, arrow_type) into (df, arrow_type) for parent class
+        def flatten_iterator():
+            for (
+                batches_gen,
+                arrow_type,
+            ) in iterator:  # tuple constructed in wrap_grouped_*_pandas_udf
+                # batches_gen yields df for single UDF or [(df1, type1), (df2, type2), ...] for multiple UDFs
+                for item in batches_gen:
+                    if isinstance(item, list) and len(item) > 0 and isinstance(item[0], tuple):
+                        # Multiple UDFs: item is [(df1, type1), (df2, type2), ...]
+                        yield item
+                    else:
+                        # Single UDF: item is df, wrap with arrow_type
+                        yield (item, arrow_type)
+
+        super(ArrowStreamAggPandasUDFSerializer, self).dump_stream(flatten_iterator(), stream)
+
+    def __repr__(self):
+        return "ArrowStreamAggPandasUDFSerializer"
+
+
 class GroupPandasUDFSerializer(ArrowStreamPandasUDFSerializer):
     def __init__(
         self,

@@ -55,6 +55,7 @@ from pyspark.sql.pandas.serializers import (
     ArrowStreamPandasUDFSerializer,
     ArrowStreamPandasUDTFSerializer,
     GroupPandasUDFSerializer,
+    ArrowStreamAggPandasUDFSerializer,
     GroupArrowUDFSerializer,
     CogroupArrowUDFSerializer,
     CogroupPandasUDFSerializer,
@@ -2734,10 +2735,18 @@ def read_udfs(pickleSer, infile, eval_type):
         ):
             ser = ArrowStreamAggArrowUDFSerializer(timezone, True, _assign_cols_by_name, True)
         elif eval_type in (
-            PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
-            PythonEvalType.SQL_GROUPED_MAP_PANDAS_ITER_UDF,
             PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF,
             PythonEvalType.SQL_WINDOW_AGG_PANDAS_UDF,
+        ):
+            ser = ArrowStreamAggPandasUDFSerializer(
+                timezone=timezone,
+                safecheck=safecheck,
+                assign_cols_by_name=_assign_cols_by_name,
+                int_to_decimal_coercion_enabled=int_to_decimal_coercion_enabled,
+            )
+        elif eval_type in (
+            PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
+            PythonEvalType.SQL_GROUPED_MAP_PANDAS_ITER_UDF,
         ):
             ser = GroupPandasUDFSerializer(
                 timezone=timezone,
@@ -3022,37 +3031,6 @@ def read_udfs(pickleSer, infile, eval_type):
         PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF,
         PythonEvalType.SQL_WINDOW_AGG_PANDAS_UDF,
     ):
-        import pandas as pd
-
-        def merge_batches_to_series_list(a):
-            """Merge iterator of batches into a single Series list."""
-            if isinstance(a, (list, tuple)):
-                return a
-            # If not list/tuple, assume it's an iterator of batches and merge them incrementally
-            series_list = None
-            for batch in a:
-                if series_list is None:
-                    series_list = list(batch)
-                else:
-                    series_list = [
-                        pd.concat([series_list[i], s], ignore_index=True)
-                        for i, s in enumerate(batch)
-                    ]
-            return series_list if series_list is not None else []
-
-        def combine_multiple_udf_results(results):
-            """Combine multiple UDF results into a single (generator, arrow_type) tuple."""
-            if len(results) == 1:
-                return results[0]
-
-            gens, types = zip(*results)
-
-            def combined_gen():
-                for combined_dfs in zip(*gens):
-                    yield [(df, arrow_type) for df, arrow_type in zip(combined_dfs, types)]
-
-            return (combined_gen(), types[0])
-
         udfs = [
             read_single_udf(
                 pickleSer, infile, eval_type, runner_conf, udf_index=i, profiler=profiler
@@ -3061,9 +3039,17 @@ def read_udfs(pickleSer, infile, eval_type):
         ]
 
         def mapper(a):
-            series_list = merge_batches_to_series_list(a)
-            results = [f(*[series_list[o] for o in arg_offsets]) for arg_offsets, f in udfs]
-            return combine_multiple_udf_results(results)
+            # ArrowStreamAggPandasUDFSerializer.load_stream already returns merged Series list
+            results = [f(*[a[o] for o in arg_offsets]) for arg_offsets, f in udfs]
+            # Results are (generator, arrow_type) tuples
+            if len(results) == 1:
+                return results[0]
+            # Multiple UDFs: combine generators
+            gens, types = zip(*results)
+            def combined_gen():
+                for combined_dfs in zip(*gens):
+                    yield [(df, arrow_type) for df, arrow_type in zip(combined_dfs, types)]
+            return (combined_gen(), types[0])
 
     elif eval_type == PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_UDF:
         # We assume there is only one UDF here because grouped map doesn't
