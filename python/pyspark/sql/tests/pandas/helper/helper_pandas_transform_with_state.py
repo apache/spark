@@ -262,6 +262,13 @@ class LargeValueStatefulProcessorFactory(StatefulProcessorFactory):
     def row(self):
         return RowLargeValueStatefulProcessor()
 
+class RunningCountStatefulProcessorFactory(StatefulProcessorFactory):
+    def pandas(self):
+        return RunningCountStatefulProcessor(use_pandas=True)
+
+    def row(self):
+        return RunningCountStatefulProcessor(use_pandas=False)
+
 
 # StatefulProcessor implementations
 
@@ -2131,3 +2138,26 @@ class RowLargeValueStatefulProcessor(StatefulProcessor):
 
     def close(self) -> None:
         pass
+
+
+# Simple processor to keep running count of rows with the same value of key column.
+class RunningCountStatefulProcessor(StatefulProcessor):
+    state_schema = StructType([StructField("value", IntegerType(), True)])
+
+    def __init__(self, use_pandas=True):
+        self.use_pandas = use_pandas
+
+    def init(self, handle) -> None:
+        self.handle = handle
+        self.count = handle.getValueState("count", self.state_schema)
+
+    def handleInputRows(self, key, rows, timerValues) -> Iterator[pd.DataFrame]:
+        count = self.count.get()[0] if self.count.exists() else 0
+        if self.use_pandas:
+            count += sum(1 for row_df in rows for row in row_df.iterrows())
+            self.count.update((count,))
+            yield pd.DataFrame({"key": [key[0]], "count": [count]})
+        else:
+            count += sum(1 for row in rows)
+            self.count.update((count,))
+            yield Row(key=key[0], count=count)
