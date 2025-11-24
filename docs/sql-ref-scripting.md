@@ -32,6 +32,10 @@ This is followed by the compound statement body, which consists of:
 - The [EXECUTE IMMEDIATE](sql-ref-syntax-aux-exec-imm.html) statement.
 - Nested compound statements, which provide nested scopes for variables, conditions, and condition handlers.
 
+## Enablement
+
+To enable SQL Scripting, set the `spark.sql.scripting.enabled` flag to `true`.
+
 ## Passing data between the invoker and the compound statement
 
 There are two ways to pass data to and from a SQL script:
