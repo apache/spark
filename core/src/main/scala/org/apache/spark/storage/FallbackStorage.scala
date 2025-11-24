@@ -19,8 +19,10 @@ package org.apache.spark.storage
 
 import java.io.DataInputStream
 import java.nio.ByteBuffer
+import java.util.concurrent.{ConcurrentHashMap, ConcurrentMap}
 
-import scala.concurrent.Future
+import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.duration.Duration
 import scala.reflect.ClassTag
 
 import org.apache.hadoop.conf.Configuration
@@ -30,23 +32,26 @@ import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys._
-import org.apache.spark.internal.config.{STORAGE_DECOMMISSION_FALLBACK_STORAGE_CLEANUP, STORAGE_DECOMMISSION_FALLBACK_STORAGE_PATH}
+import org.apache.spark.internal.config.{STORAGE_DECOMMISSION_FALLBACK_STORAGE_CLEANUP, STORAGE_DECOMMISSION_FALLBACK_STORAGE_PATH, STORAGE_DECOMMISSION_FALLBACK_STORAGE_PROACTIVE_ENABLED, STORAGE_DECOMMISSION_FALLBACK_STORAGE_PROACTIVE_RELIABLE}
 import org.apache.spark.network.buffer.{ManagedBuffer, NioManagedBuffer}
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.rpc.{RpcAddress, RpcEndpointRef, RpcTimeout}
 import org.apache.spark.shuffle.{IndexShuffleBlockResolver, ShuffleBlockInfo}
 import org.apache.spark.shuffle.IndexShuffleBlockResolver.NOOP_REDUCE_ID
 import org.apache.spark.storage.BlockManagerMessages.RemoveShuffle
-import org.apache.spark.util.Utils
+import org.apache.spark.storage.FallbackStorage.asyncCopyExecutionContext
+import org.apache.spark.util.{ThreadUtils, Utils}
 
 /**
  * A fallback storage used by storage decommissioners.
  */
-private[storage] class FallbackStorage(conf: SparkConf) extends Logging {
+private[storage] class FallbackStorage(
+    conf: SparkConf,
+    asyncCopies: ConcurrentMap[ShuffleBlockInfo, Future[Unit]]) extends Logging {
   require(conf.contains("spark.app.id"))
-  require(conf.get(STORAGE_DECOMMISSION_FALLBACK_STORAGE_PATH).isDefined)
+  require(FallbackStorage.isConfigured(conf))
 
-  private val fallbackPath = new Path(conf.get(STORAGE_DECOMMISSION_FALLBACK_STORAGE_PATH).get)
+  private val fallbackPath = FallbackStorage.getPath(conf)
   private val hadoopConf = SparkHadoopUtil.get.newConfiguration(conf)
   private val fallbackFileSystem = FileSystem.get(fallbackPath.toUri, hadoopConf)
   private val appId = conf.getAppId
@@ -54,35 +59,53 @@ private[storage] class FallbackStorage(conf: SparkConf) extends Logging {
   // Visible for testing
   def copy(
       shuffleBlockInfo: ShuffleBlockInfo,
-      bm: BlockManager): Unit = {
+      bm: BlockManager,
+      isAsyncCopy: Boolean = false,
+      reportBlockStatus: Boolean = true): Unit = {
     val shuffleId = shuffleBlockInfo.shuffleId
     val mapId = shuffleBlockInfo.mapId
 
+    // wait for the ongoing async copy to finish
+    if (!isAsyncCopy) {
+      Option(asyncCopies.get(shuffleBlockInfo)).foreach { asyncCopy =>
+        logInfo("Waiting for the ongoing async copy to finish: " +
+          log"${MDC(SHUFFLE_BLOCK_INFO, shuffleBlockInfo)}")
+        ThreadUtils.awaitResult(asyncCopy, Duration.Inf)
+      }
+    }
+
+    // only copy the files if they don't yet exist on the fallback fs
+    // they might have been pro-actively copied
     bm.migratableResolver match {
       case r: IndexShuffleBlockResolver =>
         val indexFile = r.getIndexFile(shuffleId, mapId)
-
-        if (indexFile.exists()) {
-          val hash = JavaUtils.nonNegativeHash(indexFile.getName)
-          fallbackFileSystem.copyFromLocalFile(
-            new Path(Utils.resolveURI(indexFile.getAbsolutePath)),
-            new Path(fallbackPath, s"$appId/$shuffleId/$hash/${indexFile.getName}"))
+        val fallbackIndexFilePath = getFallbackFilePath(shuffleId, indexFile.getName)
+        val fallbackIndexFileExists = fallbackFileSystem.exists(fallbackIndexFilePath)
+        if (fallbackIndexFileExists || indexFile.exists()) {
+          if (!fallbackIndexFileExists) {
+            fallbackFileSystem.copyFromLocalFile(
+              new Path(Utils.resolveURI(indexFile.getAbsolutePath)),
+              fallbackIndexFilePath)
+          }
 
           val dataFile = r.getDataFile(shuffleId, mapId)
-          if (dataFile.exists()) {
-            val hash = JavaUtils.nonNegativeHash(dataFile.getName)
+          val fallbackDataFilePath = getFallbackFilePath(shuffleId, dataFile.getName)
+          val fallbackDataFileExist = fallbackFileSystem.exists(fallbackDataFilePath)
+          if (!fallbackDataFileExist && dataFile.exists()) {
             fallbackFileSystem.copyFromLocalFile(
               new Path(Utils.resolveURI(dataFile.getAbsolutePath)),
-              new Path(fallbackPath, s"$appId/$shuffleId/$hash/${dataFile.getName}"))
+              fallbackDataFilePath)
           }
 
           // Report block statuses
-          val reduceId = NOOP_REDUCE_ID
-          val indexBlockId = ShuffleIndexBlockId(shuffleId, mapId, reduceId)
-          FallbackStorage.reportBlockStatus(bm, indexBlockId, indexFile.length)
-          if (dataFile.exists) {
-            val dataBlockId = ShuffleDataBlockId(shuffleId, mapId, reduceId)
-            FallbackStorage.reportBlockStatus(bm, dataBlockId, dataFile.length)
+          if (reportBlockStatus) {
+            val reduceId = NOOP_REDUCE_ID
+            val indexBlockId = ShuffleIndexBlockId(shuffleId, mapId, reduceId)
+            FallbackStorage.reportBlockStatus(bm, indexBlockId, indexFile.length)
+            if (fallbackDataFileExist || dataFile.exists) {
+              val dataBlockId = ShuffleDataBlockId(shuffleId, mapId, reduceId)
+              FallbackStorage.reportBlockStatus(bm, dataBlockId, dataFile.length)
+            }
           }
         }
       case r =>
@@ -90,9 +113,24 @@ private[storage] class FallbackStorage(conf: SparkConf) extends Logging {
     }
   }
 
+  def copyAsync(
+      shuffleBlockInfo: ShuffleBlockInfo,
+      bm: BlockManager): Unit = {
+    asyncCopies.computeIfAbsent(shuffleBlockInfo, _ => Future {
+        logInfo(log"Starting copying shuffle block ${MDC(SHUFFLE_BLOCK_INFO, shuffleBlockInfo)}")
+        copy(shuffleBlockInfo, bm, isAsyncCopy = true, reportBlockStatus = false)
+        logInfo(log"Finished copying shuffle block ${MDC(SHUFFLE_BLOCK_INFO, shuffleBlockInfo)}")
+      }(asyncCopyExecutionContext)
+    ).andThen {
+      case _ => asyncCopies.remove(shuffleBlockInfo)
+    }(asyncCopyExecutionContext)
+  }
+
+  def getFallbackFilePath(shuffleId: Int, filename: String): Path =
+    FallbackStorage.getFallbackFilePath(fallbackPath, appId, shuffleId, filename)
+
   def exists(shuffleId: Int, filename: String): Boolean = {
-    val hash = JavaUtils.nonNegativeHash(filename)
-    fallbackFileSystem.exists(new Path(fallbackPath, s"$appId/$shuffleId/$hash/$filename"))
+    fallbackFileSystem.exists(getFallbackFilePath(shuffleId, filename))
   }
 }
 
@@ -117,10 +155,31 @@ private[storage] class FallbackStorageRpcEndpointRef(conf: SparkConf, hadoopConf
 private[spark] object FallbackStorage extends Logging {
   /** We use one block manager id as a place holder. */
   val FALLBACK_BLOCK_MANAGER_ID: BlockManagerId = BlockManagerId("fallback", "remote", 7337)
+  /** Holds a future for each async copy in progress. Removed by the future on completion. */
+  val FALLBACK_ASYNC_COPIES: ConcurrentMap[ShuffleBlockInfo, Future[Unit]] =
+    new ConcurrentHashMap[ShuffleBlockInfo, Future[Unit]]()
+
+  def isConfigured(conf: SparkConf): Boolean =
+    conf.get(STORAGE_DECOMMISSION_FALLBACK_STORAGE_PATH).isDefined
+
+  def isProactive(conf: SparkConf): Boolean = {
+    isConfigured(conf) &&
+      conf.get(STORAGE_DECOMMISSION_FALLBACK_STORAGE_PROACTIVE_ENABLED)
+  }
+
+  def isReliable(conf: SparkConf): Boolean =
+    isConfigured(conf) &&
+      conf.get(STORAGE_DECOMMISSION_FALLBACK_STORAGE_PROACTIVE_RELIABLE)
+
+  def getPath(conf: SparkConf): Path =
+    new Path(conf.get(STORAGE_DECOMMISSION_FALLBACK_STORAGE_PATH).get)
+
+  private val asyncCopyExecutionContext = ExecutionContext.fromExecutorService(
+    ThreadUtils.newDaemonCachedThreadPool("fallback-storage-async-copy", 16))
 
   def getFallbackStorage(conf: SparkConf): Option[FallbackStorage] = {
-    if (conf.get(STORAGE_DECOMMISSION_FALLBACK_STORAGE_PATH).isDefined) {
-      Some(new FallbackStorage(conf))
+    if (isConfigured(conf)) {
+      Some(new FallbackStorage(conf, FALLBACK_ASYNC_COPIES))
     } else {
       None
     }
@@ -131,7 +190,7 @@ private[spark] object FallbackStorage extends Logging {
       master: BlockManagerMaster,
       conf: SparkConf,
       hadoopConf: Configuration): Unit = {
-    if (conf.get(STORAGE_DECOMMISSION_FALLBACK_STORAGE_PATH).isDefined) {
+    if (isConfigured(conf)) {
       master.registerBlockManager(
         FALLBACK_BLOCK_MANAGER_ID, Array.empty[String], 0, 0,
         new FallbackStorageRpcEndpointRef(conf, hadoopConf))
@@ -140,11 +199,11 @@ private[spark] object FallbackStorage extends Logging {
 
   /** Clean up the generated fallback location for this app (and shuffle id if given). */
   def cleanUp(conf: SparkConf, hadoopConf: Configuration, shuffleId: Option[Int] = None): Unit = {
-    if (conf.get(STORAGE_DECOMMISSION_FALLBACK_STORAGE_PATH).isDefined &&
+    if (isConfigured(conf) &&
         conf.get(STORAGE_DECOMMISSION_FALLBACK_STORAGE_CLEANUP) &&
         conf.contains("spark.app.id")) {
       val fallbackPath = shuffleId.foldLeft(
-        new Path(conf.get(STORAGE_DECOMMISSION_FALLBACK_STORAGE_PATH).get, conf.getAppId)
+        new Path(FallbackStorage.getPath(conf), conf.getAppId)
       ) { case (path, shuffleId) => new Path(path, shuffleId.toString) }
       val fallbackUri = fallbackPath.toUri
       val fallbackFileSystem = FileSystem.get(fallbackUri, hadoopConf)
@@ -167,12 +226,25 @@ private[spark] object FallbackStorage extends Logging {
       FALLBACK_BLOCK_MANAGER_ID, blockId, StorageLevel.DISK_ONLY, memSize = 0, dataLength)
   }
 
-  /**
-   * Read a ManagedBuffer.
-   */
-  def read(conf: SparkConf, blockId: BlockId): ManagedBuffer = {
-    logInfo(log"Read ${MDC(BLOCK_ID, blockId)}")
-    val fallbackPath = new Path(conf.get(STORAGE_DECOMMISSION_FALLBACK_STORAGE_PATH).get)
+  private def getFallbackFilePath(
+      fallbackPath: Path,
+      appId: String,
+      shuffleId: Int,
+      filename: String): Path = {
+    val hash = JavaUtils.nonNegativeHash(filename)
+    new Path(fallbackPath, s"$appId/$shuffleId/$hash/$filename")
+  }
+
+  def exists(conf: SparkConf, blockId: BlockId): Boolean = {
+    if (!isConfigured(conf)) {
+      return false
+    }
+    val (fallbackFileSystem, indexFile, dataFile, _, _) = getShuffleFiles(conf, blockId)
+    fallbackFileSystem.exists(indexFile) && fallbackFileSystem.exists(dataFile)
+  }
+
+  def getShuffleFiles(conf: SparkConf, blockId: BlockId): (FileSystem, Path, Path, Long, Long) = {
+    val fallbackPath = FallbackStorage.getPath(conf)
     val hadoopConf = SparkHadoopUtil.get.newConfiguration(conf)
     val fallbackFileSystem = FileSystem.get(fallbackPath.toUri, hadoopConf)
     val appId = conf.getAppId
@@ -187,20 +259,27 @@ private[spark] object FallbackStorage extends Logging {
           s"unexpected shuffle block id format: $blockId", category = "STORAGE")
     }
 
-    val name = ShuffleIndexBlockId(shuffleId, mapId, NOOP_REDUCE_ID).name
-    val hash = JavaUtils.nonNegativeHash(name)
-    val indexFile = new Path(fallbackPath, s"$appId/$shuffleId/$hash/$name")
+    val indexName = ShuffleIndexBlockId(shuffleId, mapId, NOOP_REDUCE_ID).name
+    val indexFile = getFallbackFilePath(fallbackPath, appId, shuffleId, indexName)
+    val dataName = ShuffleDataBlockId(shuffleId, mapId, NOOP_REDUCE_ID).name
+    val dataFile = getFallbackFilePath(fallbackPath, appId, shuffleId, dataName)
     val start = startReduceId * 8L
     val end = endReduceId * 8L
+    (fallbackFileSystem, indexFile, dataFile, start, end)
+  }
+
+  /**
+   * Read a ManagedBuffer.
+   */
+  def read(conf: SparkConf, blockId: BlockId): ManagedBuffer = {
+    logInfo(log"Read ${MDC(BLOCK_ID, blockId)}")
+    val (fallbackFileSystem, indexFile, dataFile, start, end) = getShuffleFiles(conf, blockId)
     Utils.tryWithResource(fallbackFileSystem.open(indexFile)) { inputStream =>
       Utils.tryWithResource(new DataInputStream(inputStream)) { index =>
         index.skip(start)
         val offset = index.readLong()
         index.skip(end - (start + 8L))
         val nextOffset = index.readLong()
-        val name = ShuffleDataBlockId(shuffleId, mapId, NOOP_REDUCE_ID).name
-        val hash = JavaUtils.nonNegativeHash(name)
-        val dataFile = new Path(fallbackPath, s"$appId/$shuffleId/$hash/$name")
         val size = nextOffset - offset
         logDebug(s"To byte array $size")
         val array = new Array[Byte](size.toInt)

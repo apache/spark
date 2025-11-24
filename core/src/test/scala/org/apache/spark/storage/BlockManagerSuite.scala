@@ -62,6 +62,7 @@ import org.apache.spark.scheduler.{LiveListenerBus, MapStatus, MergeStatus, Spar
 import org.apache.spark.scheduler.cluster.{CoarseGrainedClusterMessages, CoarseGrainedSchedulerBackend}
 import org.apache.spark.security.{CryptoStreamUtils, EncryptionFunSuite}
 import org.apache.spark.serializer.{DeserializationStream, JavaSerializer, KryoDeserializationStream, KryoSerializer, KryoSerializerInstance, SerializerInstance, SerializerManager}
+import org.apache.spark.shuffle.IndexShuffleBlockResolver.NOOP_REDUCE_ID
 import org.apache.spark.shuffle.{MigratableResolver, ShuffleBlockInfo, ShuffleBlockResolver, ShuffleManager}
 import org.apache.spark.shuffle.sort.SortShuffleManager
 import org.apache.spark.storage.BlockManagerMessages._
@@ -2248,6 +2249,29 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
     decomManager.refreshMigratableShuffleBlocks()
 
     assert(sortedBlocks.sameElements(decomManager.shufflesToMigrate.asScala.map(_._1)))
+  }
+
+  test("recover proactive replicated shuffle blocks") {
+    val store = makeBlockManager(1000, "executor")
+
+    val env = mock(classOf[SparkEnv])
+    when(env.conf).thenReturn(conf)
+    when(env.blockManager).thenReturn(store)
+    SparkEnv.set(env)
+
+    val message = "message"
+    val ser = serializer.newInstance().serialize(message).array()
+    val blockId = ShuffleIndexBlockId(1, 1L, NOOP_REDUCE_ID)
+    val streamCallbackWithId =
+      store.putBlockDataAsStream(blockId, StorageLevel.DISK_ONLY, ClassTag(message.getClass))
+    streamCallbackWithId.onData("0", ByteBuffer.wrap(ser))
+    streamCallbackWithId.onComplete("0")
+    store.reportBlockStatus(blockId, BlockStatus(StorageLevel.DISK_ONLY, 0L, 1000L))
+
+    // Checking whether master knows about the block
+    assert(master.getLocations(blockId) === Seq("master was not told about a1"))
+    master.removeExecutor("executor")
+    assert(master.getLocations(blockId) === Seq("master was not told about a1"))
   }
 
   test("SPARK-34193: Potential race condition during decommissioning with TorrentBroadcast") {
