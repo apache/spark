@@ -448,7 +448,7 @@ package object config {
   private[spark] val EXECUTOR_BURSTY_MEMORY_OVERHEAD_ENABLED =
     ConfigBuilder("spark.executor.memoryOverheadBursty.enabled")
       .doc("Whether to enable memory overhead bursty")
-      .version("3.2.0")
+      .version("4.2.0")
       .booleanConf
       .createWithDefault(false)
 
@@ -457,7 +457,7 @@ package object config {
       .doc("the bursty control factor controlling the size of memory overhead space shared with" +
         s" other processes, newMemoryOverhead=oldMemoryOverhead-MIN((onheap + memoryoverhead) *" +
         s" (this value - 1), oldMemoryOverhead)")
-      .version("3.2.0")
+      .version("4.2.0")
       .doubleConf
       .checkValue((v: Double) => v >= 1.0,
         "the value of bursty control factor has to be no less than 1")
@@ -465,10 +465,11 @@ package object config {
 
   private[spark] val EXECUTOR_BURSTY_MEMORY_OVERHEAD = ConfigBuilder(
     "spark.executor.burstyMemoryOverhead")
-    .doc(s"The adjusted amount of non-heap memory to be allocated per executor" +
+    .doc(s"The adjusted amount of memoryOverhead to be allocated per executor" +
       s" (the adjustment happens if ${EXECUTOR_BURSTY_MEMORY_OVERHEAD_ENABLED.key} is enabled," +
-      " in MiB unless otherwise specified.")
-    .version("2.3.0")
+      " in MiB unless otherwise specified. This parameter is here only for UI demonstration," +
+      " there is not effect when user sets it directly")
+    .version("4.2.0")
     .bytesConf(ByteUnit.MiB)
     .createOptional
 

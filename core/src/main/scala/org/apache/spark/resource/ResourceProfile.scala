@@ -595,17 +595,11 @@ object ResourceProfile extends Logging {
       val sparkContext = sparkContextOption.get
       val klass = classOf[ApplicationEnvironmentInfoWrapper]
       val currentAppEnvironment = sparkContext._statusStore.store.read(klass, klass.getName()).info
-      logInfo(s"currentAppEnvironment spark properties count:" +
-        s" ${currentAppEnvironment.sparkProperties.size}")
       val newAppEnvironment = ApplicationEnvironmentInfo.create(currentAppEnvironment,
         newSparkProperties = Map(EXECUTOR_BURSTY_MEMORY_OVERHEAD.key ->
           newMemoryOverheadMiB.toString))
-      logInfo(s"newAppEnvironment spark properties count:" +
-        s" ${newAppEnvironment.sparkProperties.size}")
       sparkContext._statusStore.store.write(new ApplicationEnvironmentInfoWrapper(
         newAppEnvironment))
-      // we have to post full information here, but need ensure that the downstream pipeline can
-      // consume duplicate entries properly
       this.synchronized {
         if (!loggedBurstyMemoryOverhead) {
           SparkContext.getActive.get.eventLogger.foreach { logger =>
@@ -619,11 +613,9 @@ object ResourceProfile extends Logging {
                 "Classpath Entries" -> newAppEnvironment.classpathEntries)
             ))
             loggedBurstyMemoryOverhead = true
-            logInfo("make a event log for bursty memory overhead")
           }
         }
       }
-      logInfo(s"posted memoryoverhead update event")
     }
   }
 
