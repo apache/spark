@@ -31,6 +31,9 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Python.PYSPARK_EXECUTOR_MEMORY
+import org.apache.spark.scheduler.SparkListenerEnvironmentUpdate
+import org.apache.spark.status.ApplicationEnvironmentInfoWrapper
+import org.apache.spark.status.api.v1.ApplicationEnvironmentInfo
 import org.apache.spark.util.Utils
 
 /**
@@ -48,7 +51,7 @@ import org.apache.spark.util.Utils
 @Evolving
 @Since("3.1.0")
 class ResourceProfile(
-    val executorResources: Map[String, ExecutorResourceRequest],
+    var executorResources: Map[String, ExecutorResourceRequest],
     val taskResources: Map[String, TaskResourceRequest]) extends Serializable with Logging {
 
   validate()
@@ -485,6 +488,7 @@ object ResourceProfile extends Logging {
       pysparkMemoryMiB: Long,
       memoryOverheadMiB: Long,
       totalMemMiB: Long,
+      totalMemMiBLimit: Option[Long],
       customResources: Map[String, ExecutorResourceRequest])
 
   private[spark] case class DefaultProfileExecutorResources(
@@ -559,12 +563,71 @@ object ResourceProfile extends Logging {
     } else {
       0L
     }
-    val totalMemMiB =
-      (executorMemoryMiB + memoryOverheadMiB + memoryOffHeapMiB + pysparkMemToUseMiB)
-    ExecutorResourcesOrDefaults(cores, executorMemoryMiB, memoryOffHeapMiB,
-      pysparkMemToUseMiB, memoryOverheadMiB, totalMemMiB, finalCustomResources)
+
+    if (!conf.get(EXECUTOR_BURSTY_MEMORY_OVERHEAD_ENABLED)) {
+      val totalMemMiB =
+        (executorMemoryMiB + memoryOverheadMiB + memoryOffHeapMiB + pysparkMemToUseMiB)
+      ExecutorResourcesOrDefaults(cores, executorMemoryMiB, memoryOffHeapMiB,
+        pysparkMemToUseMiB, memoryOverheadMiB, totalMemMiB, totalMemMiBLimit = None,
+        finalCustomResources)
+    } else {
+      val burstyControlFactor = conf.get(EXECUTOR_BURSTY_MEMORY_OVERHEAD_FACTOR)
+      val newMemoryOverheadMiB = (memoryOverheadMiB - math.min(
+        (executorMemoryMiB + memoryOverheadMiB) * (burstyControlFactor - 1.0), memoryOverheadMiB))
+        .toLong
+      val totalMemMiBLimit = executorMemoryMiB + memoryOverheadMiB + memoryOffHeapMiB +
+        pysparkMemToUseMiB
+      val totalMemMiBRequest = executorMemoryMiB + newMemoryOverheadMiB + memoryOffHeapMiB +
+        pysparkMemToUseMiB
+      logInfo(s"reduce memoryoverhead request from $memoryOverheadMiB MB to" +
+        s" $newMemoryOverheadMiB MB")
+      updateEventLogAndUI(newMemoryOverheadMiB, conf)
+      ExecutorResourcesOrDefaults(cores, executorMemoryMiB, memoryOffHeapMiB,
+        pysparkMemToUseMiB, newMemoryOverheadMiB, totalMemMiBRequest,
+        totalMemMiBLimit = Some(totalMemMiBLimit), finalCustomResources)
+    }
+  }
+
+  private def updateEventLogAndUI(newMemoryOverheadMiB: Long, conf: SparkConf): Unit = {
+    conf.set(EXECUTOR_BURSTY_MEMORY_OVERHEAD, newMemoryOverheadMiB)
+    val sparkContextOption = SparkContext.getActive
+    if (sparkContextOption.isDefined) {
+      val sparkContext = sparkContextOption.get
+      val klass = classOf[ApplicationEnvironmentInfoWrapper]
+      val currentAppEnvironment = sparkContext._statusStore.store.read(klass, klass.getName()).info
+      logInfo(s"currentAppEnvironment spark properties count:" +
+        s" ${currentAppEnvironment.sparkProperties.size}")
+      val newAppEnvironment = ApplicationEnvironmentInfo.create(currentAppEnvironment,
+        newSparkProperties = Map(EXECUTOR_BURSTY_MEMORY_OVERHEAD.key ->
+          newMemoryOverheadMiB.toString))
+      logInfo(s"newAppEnvironment spark properties count:" +
+        s" ${newAppEnvironment.sparkProperties.size}")
+      sparkContext._statusStore.store.write(new ApplicationEnvironmentInfoWrapper(
+        newAppEnvironment))
+      // we have to post full information here, but need ensure that the downstream pipeline can
+      // consume duplicate entries properly
+      this.synchronized {
+        if (!loggedBurstyMemoryOverhead) {
+          SparkContext.getActive.get.eventLogger.foreach { logger =>
+            logger.onEnvironmentUpdate(SparkListenerEnvironmentUpdate(
+              Map("Spark Properties" -> newAppEnvironment.sparkProperties,
+                "JVM Information" -> Seq(("Java Version", newAppEnvironment.runtime.javaVersion),
+                  ("Java Home", newAppEnvironment.runtime.javaHome),
+                  ("Scala Version", newAppEnvironment.runtime.scalaVersion)),
+                "Hadoop Properties" -> newAppEnvironment.hadoopProperties,
+                "System Properties" -> newAppEnvironment.systemProperties,
+                "Classpath Entries" -> newAppEnvironment.classpathEntries)
+            ))
+            loggedBurstyMemoryOverhead = true
+            logInfo("make a event log for bursty memory overhead")
+          }
+        }
+      }
+      logInfo(s"posted memoryoverhead update event")
+    }
   }
 
   private[spark] val PYSPARK_MEMORY_LOCAL_PROPERTY = "resource.pyspark.memory"
   private[spark] val EXECUTOR_CORES_LOCAL_PROPERTY = "resource.executor.cores"
+  private var loggedBurstyMemoryOverhead: Boolean = false
 }

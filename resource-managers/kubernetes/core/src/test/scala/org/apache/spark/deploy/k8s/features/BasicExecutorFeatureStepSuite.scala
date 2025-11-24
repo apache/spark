@@ -88,9 +88,10 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
   }
 
   private def newExecutorConf(
-      environment: Map[String, String] = Map.empty): KubernetesExecutorConf = {
+     environment: Map[String, String] = Map.empty,
+     sparkConf: Option[SparkConf] = None): KubernetesExecutorConf = {
     KubernetesTestConf.createExecutorConf(
-      sparkConf = baseConf,
+      sparkConf = sparkConf.getOrElse(baseConf),
       driverPod = Some(DRIVER_POD),
       labels = CUSTOM_EXECUTOR_LABELS,
       environment = environment)
@@ -526,6 +527,105 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
     assert(podConfigured2.pod.getMetadata.getName
       .startsWith("time-is-the-most-valuable-thing-it-s-about-time-"))
 
+  }
+
+  test("when turning on bursty memory overhead, configure request and limit correctly with" +
+    " default memoryOverhead profile") {
+    baseConf.remove(KUBERNETES_EXECUTOR_POD_NAME_PREFIX)
+    baseConf.set("spark.app.name", "xyz.abc _i_am_a_app_name_w/_some_abbrs")
+    val basePod = SparkPod.initialPod()
+    // scalastyle:off
+
+    val smallMemoryOverheadConf = baseConf.clone
+      .set(EXECUTOR_BURSTY_MEMORY_OVERHEAD_ENABLED, true)
+      .set(EXECUTOR_BURSTY_MEMORY_OVERHEAD_FACTOR, 1.2)
+      .set("spark.executor.memory", "64g")
+    initDefaultProfile(smallMemoryOverheadConf)
+    val step = new BasicExecutorFeatureStep(
+      newExecutorConf(sparkConf = Some(smallMemoryOverheadConf)),
+      new SecurityManager(smallMemoryOverheadConf), defaultProfile)
+
+    val podConfigured = step.configurePod(basePod)
+    val resource = podConfigured.container.getResources
+    assert(defaultProfile.executorResources("memory").amount === 64 * 1024)
+    // assert(defaultProfile.executorResources("memoryOverhead").amount === 6.4 * 1024)
+    assert(resource.getLimits.get("memory").getAmount.toLong === math.floor((64 + 6.4) * 1024))
+    assert(resource.getRequests.get("memory").getAmount.toLong === 64 * 1024)
+  }
+
+  test("when turning on bursty memory overhead, configure request and limit correctly with" +
+    " small memoryOverhead profile") {
+    baseConf.remove(KUBERNETES_EXECUTOR_POD_NAME_PREFIX)
+    baseConf.set("spark.app.name", "xyz.abc _i_am_a_app_name_w/_some_abbrs")
+    val basePod = SparkPod.initialPod()
+    // scalastyle:off
+
+    val smallMemoryOverheadConf = baseConf.clone
+      .set(EXECUTOR_BURSTY_MEMORY_OVERHEAD_ENABLED, true)
+      .set(EXECUTOR_BURSTY_MEMORY_OVERHEAD_FACTOR, 1.2)
+      .set("spark.executor.memory", "64g")
+      .set("spark.executor.memoryOverhead", "10g")
+    initDefaultProfile(smallMemoryOverheadConf)
+    val step = new BasicExecutorFeatureStep(
+      newExecutorConf(sparkConf = Some(smallMemoryOverheadConf)),
+      new SecurityManager(smallMemoryOverheadConf), defaultProfile)
+
+    val podConfigured = step.configurePod(basePod)
+    val resource = podConfigured.container.getResources
+    assert(defaultProfile.executorResources("memory").amount === 64 * 1024)
+    assert(defaultProfile.executorResources("memoryOverhead").amount === 10240)
+    assert(resource.getLimits.get("memory").getAmount.toLong === 74 * 1024)
+    assert(resource.getRequests.get("memory").getAmount.toLong === 64 * 1024)
+  }
+
+  test("when turning on bursty memory overhead, configure request and limit correctly with" +
+    " big memoryOverhead profile") {
+    baseConf.remove(KUBERNETES_EXECUTOR_POD_NAME_PREFIX)
+    baseConf.set("spark.app.name", "xyz.abc _i_am_a_app_name_w/_some_abbrs")
+    val basePod = SparkPod.initialPod()
+    // scalastyle:off
+
+    val bigMemoryOverheadConf = baseConf.clone
+      .set(EXECUTOR_BURSTY_MEMORY_OVERHEAD_ENABLED, true)
+      .set(EXECUTOR_BURSTY_MEMORY_OVERHEAD_FACTOR, 1.2)
+      .set("spark.executor.memory", "64g")
+      .set("spark.executor.memoryOverhead", "20g")
+    initDefaultProfile(bigMemoryOverheadConf)
+    val step = new BasicExecutorFeatureStep(
+      newExecutorConf(sparkConf = Some(bigMemoryOverheadConf)),
+      new SecurityManager(bigMemoryOverheadConf), defaultProfile)
+
+    val podConfigured = step.configurePod(basePod)
+    val resource = podConfigured.container.getResources
+    assert(defaultProfile.executorResources("memory").amount === 64 * 1024)
+    assert(defaultProfile.executorResources("memoryOverhead").amount === 20480)
+    assert(resource.getLimits.get("memory").getAmount.toLong === 84 * 1024)
+    assert(resource.getRequests.get("memory").getAmount.toLong === math.floor((64 + 3.2) * 1024))
+  }
+
+  test("when turning on bursty memory overhead, configure request and limit correctly with" +
+    " big memoryOverhead profile and non-default factor") {
+    baseConf.remove(KUBERNETES_EXECUTOR_POD_NAME_PREFIX)
+    baseConf.set("spark.app.name", "xyz.abc _i_am_a_app_name_w/_some_abbrs")
+    val basePod = SparkPod.initialPod()
+    // scalastyle:off
+
+    val bigMemoryOverheadConf = baseConf.clone
+      .set(EXECUTOR_BURSTY_MEMORY_OVERHEAD_ENABLED, true)
+      .set(EXECUTOR_BURSTY_MEMORY_OVERHEAD_FACTOR, 1.1)
+      .set("spark.executor.memory", "64g")
+      .set("spark.executor.memoryOverhead", "20g")
+    initDefaultProfile(bigMemoryOverheadConf)
+    val step = new BasicExecutorFeatureStep(
+      newExecutorConf(sparkConf = Some(bigMemoryOverheadConf)),
+      new SecurityManager(bigMemoryOverheadConf), defaultProfile)
+
+    val podConfigured = step.configurePod(basePod)
+    val resource = podConfigured.container.getResources
+    assert(defaultProfile.executorResources("memory").amount === 64 * 1024)
+    assert(defaultProfile.executorResources("memoryOverhead").amount === 20480)
+    assert(resource.getLimits.get("memory").getAmount.toLong === 84 * 1024)
+    assert(resource.getRequests.get("memory").getAmount.toLong === math.floor((64 + 11.6) * 1024))
   }
 
   test("SPARK-36075: Check executor pod respects nodeSelector/executorNodeSelector") {

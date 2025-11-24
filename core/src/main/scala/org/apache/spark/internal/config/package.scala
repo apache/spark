@@ -445,6 +445,33 @@ package object config {
         "Ensure that memory overhead is a double greater than 0")
       .createWithDefault(0.1)
 
+  private[spark] val EXECUTOR_BURSTY_MEMORY_OVERHEAD_ENABLED =
+    ConfigBuilder("spark.executor.memoryOverheadBursty.enabled")
+      .doc("Whether to enable memory overhead bursty")
+      .version("3.2.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  private[spark] val EXECUTOR_BURSTY_MEMORY_OVERHEAD_FACTOR =
+    ConfigBuilder("spark.executor.memoryOverheadBurstyFactor")
+      .doc("the bursty control factor controlling the size of memory overhead space shared with" +
+        s" other processes, newMemoryOverhead=oldMemoryOverhead-MIN((onheap + memoryoverhead) *" +
+        s" (this value - 1), oldMemoryOverhead)")
+      .version("3.2.0")
+      .doubleConf
+      .checkValue((v: Double) => v >= 1.0,
+        "the value of bursty control factor has to be no less than 1")
+      .createWithDefault(1.2)
+
+  private[spark] val EXECUTOR_BURSTY_MEMORY_OVERHEAD = ConfigBuilder(
+    "spark.executor.burstyMemoryOverhead")
+    .doc(s"The adjusted amount of non-heap memory to be allocated per executor" +
+      s" (the adjustment happens if ${EXECUTOR_BURSTY_MEMORY_OVERHEAD_ENABLED.key} is enabled," +
+      " in MiB unless otherwise specified.")
+    .version("2.3.0")
+    .bytesConf(ByteUnit.MiB)
+    .createOptional
+
   private[spark] val CORES_MAX = ConfigBuilder("spark.cores.max")
     .doc("When running on a standalone deploy cluster, " +
       "the maximum amount of CPU cores to request for the application from across " +

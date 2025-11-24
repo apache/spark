@@ -71,6 +71,26 @@ private[spark] class BasicExecutorFeatureStep(
     kubernetesConf.get(MEMORY_OVERHEAD_FACTOR)
   }
 
+  // this is to make resource management easier in K8S by adding memoryOverhead if the user
+  // didn't specify memoryOverhead
+  resourceProfile.executorResources = {
+    if (resourceProfile.executorResources.contains(ResourceProfile.MEMORY)) {
+      if (resourceProfile.executorResources.contains(ResourceProfile.OVERHEAD_MEM)) {
+        resourceProfile.executorResources
+      } else {
+        // fill memory overhead
+        resourceProfile.executorResources ++ Map(ResourceProfile.OVERHEAD_MEM ->
+          new ExecutorResourceRequest(ResourceProfile.OVERHEAD_MEM,
+            math.floor(resourceProfile.executorResources(ResourceProfile.MEMORY).amount *
+              kubernetesConf.get(MEMORY_OVERHEAD_FACTOR)).toLong))
+      }
+    } else {
+      resourceProfile.executorResources ++ Map(ResourceProfile.MEMORY ->
+        new ExecutorResourceRequest(ResourceProfile.MEMORY,
+          kubernetesConf.sparkConf.get(EXECUTOR_MEMORY)))
+    }
+  }
+
   val execResources = ResourceProfile.getResourcesForClusterManager(
     resourceProfile.id,
     resourceProfile.executorResources,
@@ -128,7 +148,10 @@ private[spark] class BasicExecutorFeatureStep(
       hostname = hostname.toLowerCase(Locale.ROOT)
     }
 
-    val executorMemoryQuantity = new Quantity(s"${execResources.totalMemMiB}Mi")
+    val executorMemoryRequestQuantity = new Quantity(s"${execResources.totalMemMiBRequest}Mi")
+    val executorMemoryLimitQuantity = execResources.totalMemMiBLimit.map { mem =>
+      new Quantity(s"${mem}Mi")
+    }.getOrElse(executorMemoryRequestQuantity)
     val executorCpuQuantity = new Quantity(executorCoresRequest)
     val executorResourceQuantities =
       buildExecutorResourcesQuantities(execResources.customResources.values.toSet)
@@ -212,8 +235,8 @@ private[spark] class BasicExecutorFeatureStep(
       .withImage(executorContainerImage)
       .withImagePullPolicy(kubernetesConf.imagePullPolicy)
       .editOrNewResources()
-        .addToRequests("memory", executorMemoryQuantity)
-        .addToLimits("memory", executorMemoryQuantity)
+        .addToRequests("memory", executorMemoryRequestQuantity)
+        .addToLimits("memory", executorMemoryLimitQuantity)
         .addToRequests("cpu", executorCpuQuantity)
         .addToLimits(executorResourceQuantities.asJava)
         .endResources()

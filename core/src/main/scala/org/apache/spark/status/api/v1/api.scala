@@ -501,6 +501,29 @@ class ApplicationEnvironmentInfo private[spark] (
     val classpathEntries: collection.Seq[(String, String)],
     val resourceProfiles: collection.Seq[ResourceProfileInfo])
 
+private[spark] object ApplicationEnvironmentInfo {
+  def create(appEnv: ApplicationEnvironmentInfo,
+             newSparkProperties: Map[String, String] = Map(),
+             newHadoopProperties: Map[String, String] = Map(),
+             newSystemProperties: Map[String, String] = Map(),
+             newClasspathProperties: Map[String, String] = Map(),
+             newResourceProfiles: Seq[ResourceProfileInfo] = Seq()): ApplicationEnvironmentInfo = {
+    if (newResourceProfiles.nonEmpty) {
+      require(!newResourceProfiles.exists(newRP => appEnv.resourceProfiles.map(_.id)
+        .contains(newRP.id)), "duplicate resource profile id in newResourceProfile and existing" +
+        " resource profiles")
+    }
+    new ApplicationEnvironmentInfo(
+      runtime = appEnv.runtime,
+      sparkProperties = (appEnv.sparkProperties.toMap ++ newSparkProperties).toSeq,
+      hadoopProperties = (appEnv.hadoopProperties.toMap ++ newHadoopProperties).toSeq,
+      systemProperties = (appEnv.systemProperties.toMap ++ newSystemProperties).toSeq,
+      classpathEntries = (appEnv.classpathEntries.toMap ++ newClasspathProperties).toSeq,
+      resourceProfiles = appEnv.resourceProfiles ++ newResourceProfiles
+    )
+  }
+}
+
 class RuntimeInfo private[spark](
     val javaVersion: String,
     val javaHome: String,
