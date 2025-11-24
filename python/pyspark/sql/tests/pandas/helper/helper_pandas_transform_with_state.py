@@ -31,6 +31,7 @@ from pyspark.sql.types import (
     LongType,
     BooleanType,
     FloatType,
+    DoubleType,
     ArrayType,
     MapType,
 )
@@ -268,6 +269,16 @@ class RunningCountStatefulProcessorFactory(StatefulProcessorFactory):
 
     def row(self):
         return RunningCountStatefulProcessor(use_pandas=False)
+
+class TopKProcessorFactory(StatefulProcessorFactory):
+    def __init__(self, k: int = 2):
+        self.k = k
+
+    def pandas(self):
+        return TopKProcessor(self.k, use_pandas=True)
+
+    def row(self):
+        return TopKProcessor(self.k, use_pandas=False)
 
 
 # StatefulProcessor implementations
@@ -2161,3 +2172,41 @@ class RunningCountStatefulProcessor(StatefulProcessor):
             count += sum(1 for row in rows)
             self.count.update((count,))
             yield Row(key=key[0], count=count)
+
+
+
+
+# Processor to keep track of K highest scores per each key.
+class TopKProcessor(StatefulProcessor):
+    state_schema = StructType([StructField("score", DoubleType(), True)])
+
+    def __init__(self, k: int, use_pandas: bool=False):
+        self.k = k
+        self.use_pandas = use_pandas
+        assert(not use_pandas) # TODO: add support for Pandas later.
+
+    def init(self, handle: StatefulProcessorHandle) -> None:
+        self.topk = handle.getListState("topK", self.state_schema)
+
+    def handleInputRows(self, key, rows, timerValues) -> Iterator[Row]:
+        # Load existing list into a buffer
+        current = []
+        for score_tuple in self.topK_state.get():
+            current.append(score_tuple[0])
+
+        # Add new values from input rows
+        for row in rows:
+            current.append(row.score)
+
+        # Recompute top-K (sorted in descending order)
+        updated_top_k = sorted(current, reverse=True)[: self.k]
+
+        # Persist back
+        # self.topK_state.clear()
+        if updated_top_k:
+            self.topK_state.put([(score,) for score in updated_top_k])
+
+        # Emit snapshot of top-K for this key
+        for score in updated_top_k:
+            yield Row(key=key, score=score)
+

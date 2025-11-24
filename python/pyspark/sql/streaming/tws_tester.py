@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 
-from typing import Any, List, Optional, Tuple, Union, Dict, TYPE_CHECKING
+from typing import Any, List, Optional, Tuple, Union, Dict, TYPE_CHECKING, Iterator
 from itertools import groupby
 from pyspark.sql.types import Row
 
@@ -34,66 +34,38 @@ from pyspark.sql.types import StructType
 __all__ = ["TwsTester"]
 
 
-class InMemoryValueStateClient:
-    def __init__(self, schema: Union[StructType, str]) -> None:
-        if isinstance(schema, str):
-            self.schema = StructType.fromDDL(schema)
-        else:
-            self.schema = schema
-        self._value: Optional[Tuple] = None
-        self._exists: bool = False
+class InMemoryValueState(ValueState):
+    """In-memory implementation of ValueState for testing."""
+    
+    def __init__(
+        self,
+        handle: InMemoryStatefulProcessorHandle,
+    ) -> None:
+        self.handle = handle
+        self.state = dict()
 
     def exists(self) -> bool:
-        return self._exists
+        return self.handle.grouping_key in self.state
 
     def get(self) -> Optional[Tuple]:
-        return self._value
+        return self.state.get(self.handle.grouping_key, None)
 
-    def update(self, value: Tuple) -> None:
-        self._value = value
-        self._exists = True
+    def update(self, newValue: Tuple) -> None:
+        self.state[self.handle.grouping_key] = newValue
 
     def clear(self) -> None:
-        self._value = None
-        self._exists = False
-
-
-class InMemoryStatefulProcessorApiClient:
-    def __init__(self) -> None:
-        self._current_key: Any = None
-        self._value_states: Dict[Any, Dict[str, InMemoryValueStateClient]] = {}
-        self._state_schemas: Dict[str, Union[StructType, str]] = {}
-
-    def set_implicit_key(self, key: Any) -> None:
-        self._current_key = key
-        if key not in self._value_states:
-            self._value_states[key] = {}
-
-    def get_value_state(
-        self,
-        stateName: str,
-        schema: Union[StructType, str],
-        ttlDurationMs: Optional[int] = None,
-    ) -> None:
-        self._state_schemas[stateName] = schema
-
-    def _get_or_create_value_state_client(
-        self, stateName: str, schema: Union[StructType, str]
-    ) -> InMemoryValueStateClient:
-        if self._current_key not in self._value_states:
-            self._value_states[self._current_key] = {}
-
-        if stateName not in self._value_states[self._current_key]:
-            self._value_states[self._current_key][stateName] = InMemoryValueStateClient(
-                schema
-            )
-
-        return self._value_states[self._current_key][stateName]
+        del self.state[self.handle.grouping_key]
 
 
 class InMemoryStatefulProcessorHandle(StatefulProcessorHandle):
-    def __init__(self, api_client: InMemoryStatefulProcessorApiClient) -> None:
-        self._api_client = api_client
+    """In-memory implementation of StatefulProcessorHandle for testing."""
+    
+    def __init__(self):
+        self.grouping_key = None
+        self.states = dict()
+
+    def setGroupingKey(self, key):
+        self.grouping_key = key
 
     def getValueState(
         self,
@@ -101,42 +73,9 @@ class InMemoryStatefulProcessorHandle(StatefulProcessorHandle):
         schema: Union[StructType, str],
         ttlDurationMs: Optional[int] = None,
     ) -> ValueState:
-        self._api_client.get_value_state(stateName, schema, ttlDurationMs)
-
-        class InMemoryValueState(ValueState):
-            def __init__(
-                self,
-                api_client: InMemoryStatefulProcessorApiClient,
-                name: str,
-                schema: Union[StructType, str],
-            ) -> None:
-                self._api_client = api_client
-                self._name = name
-                self._schema = schema
-
-            def _get_client(self) -> InMemoryValueStateClient:
-                return self._api_client._get_or_create_value_state_client(
-                    self._name, self._schema
-                )
-
-            def exists(self) -> bool:
-                return self._get_client().exists()
-
-            def get(self) -> Optional[Tuple]:
-                return self._get_client().get()
-
-            def update(self, newValue: Tuple) -> None:
-                self._get_client().update(newValue)
-
-            def clear(self) -> None:
-                self._get_client().clear()
-
-        return InMemoryValueState(self._api_client, stateName, schema)
-
-
-def LOG(s):
-    with open("/tmp/log.txt", "a") as f:
-        f.write(s + "\n")
+        if stateName not in self.states:
+            self.states[stateName] = InMemoryValueState(self)
+        return self.states[stateName]
 
 
 class TwsTester:
@@ -148,9 +87,7 @@ class TwsTester:
     ) -> None:
         self.processor = processor
         self.key_column_name = key_column_name
-
-        self.api_client = InMemoryStatefulProcessorApiClient()
-        self.handle = InMemoryStatefulProcessorHandle(self.api_client)
+        self.handle = InMemoryStatefulProcessorHandle()
 
         self.processor.init(self.handle)
 
@@ -165,7 +102,7 @@ class TwsTester:
         for key, group in groupby(
             sorted_input, key=lambda row: row[self.key_column_name]
         ):
-            self.api_client.set_implicit_key(key)
+            self.handle.setGroupingKey(key)
             rows = [item[1] for item in group]
             timer_values = TimerValues(-1, -1)
             result_iter: Iterator[Row] = self.processor.handleInputRows(
@@ -181,7 +118,7 @@ class TwsTester:
         result_dfs = []
         sorted_input = input.sort_values(by=self.key_column_name)
         for key, group_df in sorted_input.groupby(self.key_column_name):
-            self.api_client.set_implicit_key(key)
+            self.handle.setGroupingKey(key)
             timer_values = TimerValues(-1, -1)
             result_iter: Iterator[pd.DataFrame] = self.processor.handleInputRows(
                 (key,), iter([group_df]), timer_values
@@ -194,20 +131,9 @@ class TwsTester:
             return pd.DataFrame()
 
     def setValueState(self, stateName: str, key: Any, value: Tuple) -> None:
-        self.api_client.set_implicit_key(key)
-        if stateName in self.api_client._state_schemas:
-            schema = self.api_client._state_schemas[stateName]
-            client = self.api_client._get_or_create_value_state_client(
-                stateName, schema
-            )
-            client.update(value)
+        """Directly set a value state for a given key."""
+        self.handle.states[stateName].state[key] = value
 
     def peekValueState(self, stateName: str, key: Any) -> Optional[Tuple]:
-        self.api_client.set_implicit_key(key)
-        if stateName in self.api_client._state_schemas:
-            schema = self.api_client._state_schemas[stateName]
-            client = self.api_client._get_or_create_value_state_client(
-                stateName, schema
-            )
-            return client.get()
-        return None
+        """Peek at a value state for a given key."""
+        return self.handle.states[stateName].state.get(key, None)

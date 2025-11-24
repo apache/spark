@@ -41,8 +41,9 @@ from pyspark.testing.sqlutils import (
 )
 
 from pyspark.sql.tests.pandas.helper.helper_pandas_transform_with_state import (
-    StatefulProcessorFactory,
+    TopKProcessorFactory,
     RunningCountStatefulProcessorFactory,
+    StatefulProcessorFactory,
 )
 
 
@@ -59,7 +60,7 @@ class TwsTesterTests(ReusedSQLTestCase):
 
     def test_running_count_processor(self):
         processor = RunningCountStatefulProcessorFactory().row()
-        tester = TwsTester(processor, key_column_name="key")
+        tester = TwsTester(processor)
 
         ans1 = tester.test(
             [
@@ -87,7 +88,7 @@ class TwsTesterTests(ReusedSQLTestCase):
 
     def test_running_count_processor_pandas(self):
         processor = RunningCountStatefulProcessorFactory().pandas()
-        tester = TwsTester(processor, key_column_name="key")
+        tester = TwsTester(processor)
 
         input_df1 = pd.DataFrame(
             {
@@ -106,10 +107,49 @@ class TwsTesterTests(ReusedSQLTestCase):
 
     def test_direct_access_to_value_state(self):
         processor = RunningCountStatefulProcessorFactory().row()
-        tester = TwsTester(processor, key_column_name="key")
+        tester = TwsTester(processor)
         tester.setValueState("count", "foo", (5,))
         tester.test([Row(key="foo", value="q")])
         self.assertEqual(tester.peekValueState("count", "foo"), (6,))
+    """
+    def test_topk_processor(self):
+        processor = TopKProcessorFactory(k=2).row()
+        tester = TwsTester(processor)
+
+        # Feed 1 row with id="0" and temperature=100
+        ans1 = tester.test(
+            [
+                Row(key="key2", score=30.0),
+                Row(key="key2", score=40.0),
+                Row(key="key1", score=2.0),
+                Row(key="key1", score=3.0),
+                Row(key="key2", score=10.0),
+                Row(key="key2", score=20.0),
+                Row(key="key3", score=100.0),
+                Row(key="key1", score=1.0),
+            ]
+        )
+        assert ans1 == [
+            Row(key="key1", score=2.0),
+            Row(key="key1", score=3.0),
+            Row(key="key2", score=30.0),
+            Row(key="key2", score=40.0),
+            Row(key="key3", score=100.0),
+        ]
+
+    def test_topk_processor_pandas(self):
+        pass
+        # processor = ListStateProcessorFactory(k=2).pandas()
+        # tester = TwsTester(processor)
+        # TODO
+
+    def test_direct_access_to_value_state(self):
+        processor = ListStatePorcessorFactory().row()
+        tester = TwsTester(processor)
+        # TODO.
+    """
+
+    # Add test for key column name different than key.
 
 
 def LOG(s):
@@ -121,7 +161,7 @@ def _get_processor(factory: StatefulProcessorFactory, use_pandas: bool = False):
     return factory.pandas() if use_pandas else factory.row()
 
 
-@unittest.skip("a")
+#@unittest.skip("a")
 @unittest.skipIf(
     not have_pandas or not have_pyarrow,
     pandas_requirement_message or pyarrow_requirement_message or "",
