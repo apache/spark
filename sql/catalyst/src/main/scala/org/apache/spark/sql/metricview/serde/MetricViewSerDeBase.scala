@@ -59,9 +59,9 @@ trait YamlMapperProviderBase {
 
     val mapper = new ObjectMapper(yamlFactory)
       // Exclude null values from serialized output
-      .setSerializationInclusion(JsonInclude.Include.NON_NULL)
+      .setDefaultPropertyInclusion(JsonInclude.Include.NON_NULL)
       // Exclude empty collections/strings from serialized output
-      .setSerializationInclusion(JsonInclude.Include.NON_EMPTY)
+      .setDefaultPropertyInclusion(JsonInclude.Include.NON_EMPTY)
 
     mapper.registerModule(DefaultScalaModule)
     mapper

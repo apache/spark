@@ -25,7 +25,7 @@ case class ColumnV01(
 ) extends ColumnBase
 
 object ColumnV01 {
-  def fromCanonical(canonical: Column[_ <: Expression], ordinal: Int): ColumnV01 = {
+  def fromCanonical(canonical: Column[_ <: Expression]): ColumnV01 = {
     val name = canonical.name
     val expr = canonical.expression match {
       case DimensionExpression(exprStr) => exprStr
@@ -50,13 +50,13 @@ object MetricViewV01 {
     val source = canonical.from.toString
     val filter = canonical.where
     // Separate dimensions and measures based on expression type
-    val dimensions = canonical.select.zipWithIndex.collect {
-      case (column, index) if column.expression.isInstanceOf[DimensionExpression] =>
-        ColumnV01.fromCanonical(column, index)
+    val dimensions = canonical.select.collect {
+      case column if column.expression.isInstanceOf[DimensionExpression] =>
+        ColumnV01.fromCanonical(column)
     }
-    val measures = canonical.select.zipWithIndex.collect {
-      case (column, index) if column.expression.isInstanceOf[MeasureExpression] =>
-        ColumnV01.fromCanonical(column, index)
+    val measures = canonical.select.collect {
+      case column if column.expression.isInstanceOf[MeasureExpression] =>
+        ColumnV01.fromCanonical(column)
     }
     MetricViewV01(
       version = canonical.version,

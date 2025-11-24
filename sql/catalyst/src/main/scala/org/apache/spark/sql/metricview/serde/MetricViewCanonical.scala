@@ -122,7 +122,10 @@ object Source {
         Try(CatalystSqlParser.parseQuery(sourceText)) match {
           case Success(_) => SQLSource(sourceText)
           case Failure(queryEx) =>
-            throw queryEx
+            throw MetricViewValidationException(
+              s"Invalid source: $sourceText",
+              Some(queryEx)
+            )
         }
     }
   }
@@ -178,7 +181,7 @@ case class ColumnMetadata(
 // Only parse the "version" field and ignore all others
 @JsonIgnoreProperties(ignoreUnknown = true)
 case class YAMLVersion(version: String) extends Validatable {
-  def validYAMLVersions: Set[String] = Set("0.1")
+  private def validYAMLVersions: Set[String] = Set("0.1")
   def validate(): Try[Unit] = {
     if (!validYAMLVersions.contains(version)) {
       Failure(
