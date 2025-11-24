@@ -2162,8 +2162,6 @@ class Analyzer(
         case f @ UnresolvedFunction(nameParts, _, _, _, _, _, _) =>
           if (functionResolution.lookupBuiltinOrTempFunction(nameParts, Some(f)).isDefined) {
             f
-          } else if (nameParts.length == 1 && nameParts.head.equalsIgnoreCase("measure")) {
-            f
           } else {
             val CatalogAndIdentifier(catalog, ident) =
               relationResolution.expandIdentifier(nameParts)
