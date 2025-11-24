@@ -24,6 +24,7 @@ import os
 from typing import Iterator, List, Tuple, Any
 
 import pandas as pd
+import pandas.testing as pdt
 
 from pyspark import SparkConf
 from pyspark.sql import DataFrame
@@ -45,16 +46,82 @@ from pyspark.sql.tests.pandas.helper.helper_pandas_transform_with_state import (
 )
 
 
+@unittest.skipIf(
+    not have_pandas or not have_pyarrow,
+    pandas_requirement_message or pyarrow_requirement_message or "",
+)
+class TwsTesterTests(ReusedSQLTestCase):
+    def _assertDataFrameEqual(self, df: pd.DataFrame, expected: list[dict[str, Any]]):
+        actual: list[dict[str, Any]] = df.to_dict("records")
+        actual_set = {frozenset(d.items()) for d in actual}
+        expected_set = {frozenset(d.items()) for d in expected}
+        self.assertEqual(actual_set, expected_set)
+
+    def test_running_count_processor(self):
+        processor = RunningCountStatefulProcessorFactory().row()
+        tester = TwsTester(processor, key_column_name="key")
+
+        ans1 = tester.test(
+            [
+                Row(key="key1", value="a"),
+                Row(key="key2", value="b"),
+                Row(key="key1", value="c"),
+                Row(key="key2", value="b"),
+                Row(key="key1", value="c"),
+                Row(key="key1", value="c"),
+                Row(key="key3", value="q"),
+            ]
+        )
+        assert ans1 == [
+            Row(key="key1", count=4),
+            Row(key="key2", count=2),
+            Row(key="key3", count=1),
+        ]
+
+        ans2 = tester.test(
+            [
+                Row(key="key1", value="q"),
+            ]
+        )
+        assert ans2 == [Row(key="key1", count=5)]
+
+    def test_running_count_processor_pandas(self):
+        processor = RunningCountStatefulProcessorFactory().pandas()
+        tester = TwsTester(processor, key_column_name="key")
+
+        input_df1 = pd.DataFrame(
+            {
+                "key": ["key1", "key2", "key1", "key2", "key1", "key1", "key3"],
+                "value": ["a", "b", "c", "b", "c", "c", "q"],
+            }
+        )
+        ans1 = tester.testInPandas(input_df1)
+        expected1 = pd.DataFrame({"key": ["key1", "key2", "key3"], "count": [4, 2, 1]})
+        pdt.assert_frame_equal(ans1, expected1, check_like=True)
+
+        input_df2 = pd.DataFrame({"key": ["key1"], "value": ["q"]})
+        ans2 = tester.testInPandas(input_df2)
+        expected2 = pd.DataFrame({"key": ["key1"], "count": [5]})
+        pdt.assert_frame_equal(ans2, expected2, check_like=True)
+
+    def test_direct_access_to_value_state(self):
+        processor = RunningCountStatefulProcessorFactory().row()
+        tester = TwsTester(processor, key_column_name="key")
+        tester.setValueState("count", "foo", (5,))
+        tester.test([Row(key="foo", value="q")])
+        self.assertEqual(tester.peekValueState("count", "foo"), (6,))
+
 
 def LOG(s):
     with open("/tmp/log.txt", "a") as f:
         f.write(s + "\n")
 
 
-def _get_processor(factory: StatefulProcessorFactory, use_pandas: bool=False):
-    return factory.pandas() if use_pandas else factory.row() 
+def _get_processor(factory: StatefulProcessorFactory, use_pandas: bool = False):
+    return factory.pandas() if use_pandas else factory.row()
 
-# @unittest.skip("a")
+
+@unittest.skip("a")
 @unittest.skipIf(
     not have_pandas or not have_pyarrow,
     pandas_requirement_message or pyarrow_requirement_message or "",
@@ -70,7 +137,6 @@ class TwsTesterFuzzTests(ReusedSQLTestCase):
         )
         return cfg
 
-
     # Helper that runs real streaming query with TWS and compares results with TwsTester output.
     # Supports both row mode (use_pandas=False) and Pandas mode (use_pandas=True).
     # Supports multiple bacthes.
@@ -84,11 +150,14 @@ class TwsTesterFuzzTests(ReusedSQLTestCase):
         use_pandas: bool = False,
     ):
         num_batches = len(batches)
-        key_column: str = input_columns[0]  # Assume first column is key columns for this test.
+        key_column: str = input_columns[
+            0
+        ]  # Assume first column is key columns for this test.
         num_input_columns = len(input_columns)
-        
+
         # Use TwsTester to compute expected results.
         tester = TwsTester(processor, key_column_name=key_column)
+
         def _run_tester(batch: list[tuple]) -> list[Row]:
             if use_pandas:
                 input_to_tester = pd.DataFrame(batch, columns=input_columns)
@@ -100,6 +169,7 @@ class TwsTesterFuzzTests(ReusedSQLTestCase):
                     Row(**dict(zip(input_columns, r))) for r in batch
                 ]
                 return tester.test(input_to_tester)
+
         expected_results: list[list[Row]] = [_run_tester(batch) for batch in batches]
 
         # Create streaming DataFrame, it will read input from files.
@@ -133,16 +203,18 @@ class TwsTesterFuzzTests(ReusedSQLTestCase):
 
         # Start streaming query collecting TWS results.
         actual_results: list[list[Row]] = []
+
         def _collect_results(batch_df: DataFrame, batch_id):
             rows: list[Row] = batch_df.collect()
             actual_results.append(rows)
+
         query: StreamingQuery = (
             tws_df.writeStream.queryName("test_tmp_query")
             .foreachBatch(_collect_results)
             .outputMode("update")
             .start()
         )
-           
+
         # Process each input batch.
         try:
             for batch_id, batch in enumerate(batches):
@@ -181,7 +253,9 @@ class TwsTesterFuzzTests(ReusedSQLTestCase):
 
         for use_pandas in [False, True]:
             LOG(f"**** use_pandas={use_pandas}")
-            processor = _get_processor(RunningCountStatefulProcessorFactory(), use_pandas=use_pandas)
+            processor = _get_processor(
+                RunningCountStatefulProcessorFactory(), use_pandas=use_pandas
+            )
             self._check_tws_tester(
                 processor, batches, input_columns, output_schema, use_pandas=use_pandas
             )
