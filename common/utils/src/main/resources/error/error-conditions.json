@@ -6284,6 +6284,12 @@
     },
     "sqlState" : "42703"
   },
+  "UNRESOLVED_COLUMN_AMONG_FIELD_NAMES" : {
+    "message" : [
+      "Cannot resolve column name \"<colName>\" among (<fieldNames>)."
+    ],
+    "sqlState" : "42703"
+  },
   "UNRESOLVED_FIELD" : {
     "message" : [
       "A field with name <fieldName> cannot be resolved with the struct-type column <columnPath>."
@@ -8148,11 +8154,6 @@
   "_LEGACY_ERROR_TEMP_1199" : {
     "message" : [
       "Invalid bound function '<bound>: there are <argsLen> arguments but <inputTypesLen> parameters returned from 'inputTypes()'."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1201" : {
-    "message" : [
-      "Cannot resolve column name \"<colName>\" among (<fieldNames>)."
     ]
   },
   "_LEGACY_ERROR_TEMP_1205" : {
