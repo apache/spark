@@ -597,7 +597,7 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
     assert(defaultProfile.executorResources("memory").amount === 64 * 1024)
     assert(defaultProfile.executorResources("memoryOverhead").amount === 20480)
     assert(resource.getLimits.get("memory").getAmount.toLong === 84 * 1024)
-    assert(resource.getRequests.get("memory").getAmount.toLong === math.floor((64 + 3.2) * 1024))
+    assert(resource.getRequests.get("memory").getAmount.toLong === math.ceil((64 + 3.2) * 1024))
   }
 
   test("when turning on bursty memory overhead, configure request and limit correctly with" +
@@ -621,7 +621,7 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
     assert(defaultProfile.executorResources("memory").amount === 64 * 1024)
     assert(defaultProfile.executorResources("memoryOverhead").amount === 20480)
     assert(resource.getLimits.get("memory").getAmount.toLong === 84 * 1024)
-    assert(resource.getRequests.get("memory").getAmount.toLong === math.floor((64 + 11.6) * 1024))
+    assert(resource.getRequests.get("memory").getAmount.toLong === math.ceil((64 + 11.6) * 1024))
   }
 
   test("SPARK-36075: Check executor pod respects nodeSelector/executorNodeSelector") {
