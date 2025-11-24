@@ -17,8 +17,6 @@
 
 package org.apache.spark.util
 
-import scala.concurrent.duration._
-
 import org.apache.spark.SparkConf
 import org.apache.spark.internal.config
 import org.apache.spark.internal.config.Network._
