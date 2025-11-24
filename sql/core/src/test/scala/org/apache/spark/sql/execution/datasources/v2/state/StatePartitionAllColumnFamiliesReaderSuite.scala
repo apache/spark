@@ -276,80 +276,80 @@ class StatePartitionAllColumnFamiliesReaderSuite extends StateDataSourceTestBase
 
     testWithChangelogConfig("all-column-families: dropDuplicates validation") {
       withTempDir { tempDir =>
-      runDropDuplicatesQuery(tempDir.getAbsolutePath)
+        runDropDuplicatesQuery(tempDir.getAbsolutePath)
 
-      val keySchema = StructType(Array(
-        StructField("value", IntegerType, nullable = false),
-        StructField("eventTime", org.apache.spark.sql.types.TimestampType)
-      ))
-      val valueSchema = StructType(Array(
-        StructField("__dummy__", NullType, nullable = true)
-      ))
+        val keySchema = StructType(Array(
+          StructField("value", IntegerType, nullable = false),
+          StructField("eventTime", org.apache.spark.sql.types.TimestampType)
+        ))
+        val valueSchema = StructType(Array(
+          StructField("__dummy__", NullType, nullable = true)
+        ))
 
-      val normalData = getNormalReadDf(tempDir.getAbsolutePath).collect()
-      val bytesDf = getBytesReadDf(tempDir.getAbsolutePath).collect()
+        val normalData = getNormalReadDf(tempDir.getAbsolutePath).collect()
+        val bytesDf = getBytesReadDf(tempDir.getAbsolutePath).collect()
 
-      compareNormalAndBytesData(normalData, bytesDf, "default", keySchema, valueSchema)
+        compareNormalAndBytesData(normalData, bytesDf, "default", keySchema, valueSchema)
       }
     }
 
     testWithChangelogConfig("all-column-families: dropDuplicates with column specified") {
       withTempDir { tempDir =>
-      runDropDuplicatesQueryWithColumnSpecified(tempDir.getAbsolutePath)
+        runDropDuplicatesQueryWithColumnSpecified(tempDir.getAbsolutePath)
 
-      val keySchema = StructType(Array(
-        StructField("col1", org.apache.spark.sql.types.StringType, nullable = true)
-      ))
-      val valueSchema = StructType(Array(
-        StructField("__dummy__", NullType, nullable = true)
-      ))
+        val keySchema = StructType(Array(
+          StructField("col1", org.apache.spark.sql.types.StringType, nullable = true)
+        ))
+        val valueSchema = StructType(Array(
+          StructField("__dummy__", NullType, nullable = true)
+        ))
 
-      val normalData = getNormalReadDf(tempDir.getAbsolutePath).collect()
-      val bytesDf = getBytesReadDf(tempDir.getAbsolutePath).collect()
+        val normalData = getNormalReadDf(tempDir.getAbsolutePath).collect()
+        val bytesDf = getBytesReadDf(tempDir.getAbsolutePath).collect()
 
-      compareNormalAndBytesData(normalData, bytesDf, "default", keySchema, valueSchema)
+        compareNormalAndBytesData(normalData, bytesDf, "default", keySchema, valueSchema)
       }
     }
 
     testWithChangelogConfig("all-column-families: dropDuplicatesWithinWatermark") {
       withTempDir { tempDir =>
-      runDropDuplicatesWithinWatermarkQuery(tempDir.getAbsolutePath)
+        runDropDuplicatesWithinWatermarkQuery(tempDir.getAbsolutePath)
 
-      val keySchema = StructType(Array(
-        StructField("_1", org.apache.spark.sql.types.StringType, nullable = true)
-      ))
-      val valueSchema = StructType(Array(
-        StructField("expiresAtMicros", LongType, nullable = false)
-      ))
+        val keySchema = StructType(Array(
+          StructField("_1", org.apache.spark.sql.types.StringType, nullable = true)
+        ))
+        val valueSchema = StructType(Array(
+          StructField("expiresAtMicros", LongType, nullable = false)
+        ))
 
-      val normalData = getNormalReadDf(tempDir.getAbsolutePath).collect()
-      val bytesDf = getBytesReadDf(tempDir.getAbsolutePath).collect()
+        val normalData = getNormalReadDf(tempDir.getAbsolutePath).collect()
+        val bytesDf = getBytesReadDf(tempDir.getAbsolutePath).collect()
 
-      compareNormalAndBytesData(normalData, bytesDf, "default", keySchema, valueSchema)
+        compareNormalAndBytesData(normalData, bytesDf, "default", keySchema, valueSchema)
       }
     }
 
     testWithChangelogConfig("all-column-families: session window aggregation") {
       withTempDir { tempDir =>
-      runSessionWindowAggregationQuery(tempDir.getAbsolutePath)
+        runSessionWindowAggregationQuery(tempDir.getAbsolutePath)
 
-      val keySchema = StructType(Array(
-        StructField("sessionId", org.apache.spark.sql.types.StringType, nullable = false),
-        StructField("sessionStartTime", org.apache.spark.sql.types.TimestampType, nullable = false)
-      ))
-      val valueSchema = StructType(Array(
-        StructField("session_window", org.apache.spark.sql.types.StructType(Array(
-          StructField("start", org.apache.spark.sql.types.TimestampType, nullable = true),
-          StructField("end", org.apache.spark.sql.types.TimestampType, nullable = true)
-        )), nullable = false),
-        StructField("sessionId", org.apache.spark.sql.types.StringType, nullable = false),
-        StructField("count", LongType, nullable = false)
-      ))
+        val keySchema = StructType(Array(
+          StructField("sessionId", org.apache.spark.sql.types.StringType, nullable = false),
+          StructField("sessionStartTime", org.apache.spark.sql.types.TimestampType, nullable = false)
+        ))
+        val valueSchema = StructType(Array(
+          StructField("session_window", org.apache.spark.sql.types.StructType(Array(
+            StructField("start", org.apache.spark.sql.types.TimestampType, nullable = true),
+            StructField("end", org.apache.spark.sql.types.TimestampType, nullable = true)
+          )), nullable = false),
+          StructField("sessionId", org.apache.spark.sql.types.StringType, nullable = false),
+          StructField("count", LongType, nullable = false)
+        ))
 
-      val normalData = getNormalReadDf(tempDir.getAbsolutePath).collect()
-      val bytesDf = getBytesReadDf(tempDir.getAbsolutePath).collect()
+        val normalData = getNormalReadDf(tempDir.getAbsolutePath).collect()
+        val bytesDf = getBytesReadDf(tempDir.getAbsolutePath).collect()
 
-      compareNormalAndBytesData(normalData, bytesDf, "default", keySchema, valueSchema)
+        compareNormalAndBytesData(normalData, bytesDf, "default", keySchema, valueSchema)
       }
     }
 

@@ -5520,7 +5520,7 @@
     },
     "sqlState" : "42616"
   },
-  "STATE_REPARTITION_INVALID_STATE_STORE_CONFIG": {
+  "STATE_REPARTITION_INVALID_STATE_STORE_CONFIG" : {
     "message" : [
       "StateStoreConfig <configName> is invalid:"
     ],
