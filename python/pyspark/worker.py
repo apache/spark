@@ -3046,9 +3046,11 @@ def read_udfs(pickleSer, infile, eval_type):
                 return results[0]
             # Multiple UDFs: combine generators
             gens, types = zip(*results)
+
             def combined_gen():
                 for combined_dfs in zip(*gens):
                     yield [(df, arrow_type) for df, arrow_type in zip(combined_dfs, types)]
+
             return (combined_gen(), types[0])
 
     elif eval_type == PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_UDF:
