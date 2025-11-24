@@ -534,7 +534,6 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
     baseConf.remove(KUBERNETES_EXECUTOR_POD_NAME_PREFIX)
     baseConf.set("spark.app.name", "xyz.abc _i_am_a_app_name_w/_some_abbrs")
     val basePod = SparkPod.initialPod()
-    // scalastyle:off
 
     val smallMemoryOverheadConf = baseConf.clone
       .set(EXECUTOR_BURSTY_MEMORY_OVERHEAD_ENABLED, true)
@@ -558,7 +557,6 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
     baseConf.remove(KUBERNETES_EXECUTOR_POD_NAME_PREFIX)
     baseConf.set("spark.app.name", "xyz.abc _i_am_a_app_name_w/_some_abbrs")
     val basePod = SparkPod.initialPod()
-    // scalastyle:off
 
     val smallMemoryOverheadConf = baseConf.clone
       .set(EXECUTOR_BURSTY_MEMORY_OVERHEAD_ENABLED, true)
@@ -583,7 +581,6 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
     baseConf.remove(KUBERNETES_EXECUTOR_POD_NAME_PREFIX)
     baseConf.set("spark.app.name", "xyz.abc _i_am_a_app_name_w/_some_abbrs")
     val basePod = SparkPod.initialPod()
-    // scalastyle:off
 
     val bigMemoryOverheadConf = baseConf.clone
       .set(EXECUTOR_BURSTY_MEMORY_OVERHEAD_ENABLED, true)
@@ -608,7 +605,6 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
     baseConf.remove(KUBERNETES_EXECUTOR_POD_NAME_PREFIX)
     baseConf.set("spark.app.name", "xyz.abc _i_am_a_app_name_w/_some_abbrs")
     val basePod = SparkPod.initialPod()
-    // scalastyle:off
 
     val bigMemoryOverheadConf = baseConf.clone
       .set(EXECUTOR_BURSTY_MEMORY_OVERHEAD_ENABLED, true)
