@@ -519,6 +519,7 @@ private[spark] object ApplicationEnvironmentInfo {
       hadoopProperties = (appEnv.hadoopProperties.toMap ++ newHadoopProperties).toSeq,
       systemProperties = (appEnv.systemProperties.toMap ++ newSystemProperties).toSeq,
       classpathEntries = (appEnv.classpathEntries.toMap ++ newClasspathProperties).toSeq,
+      metricsProperties = appEnv.metricsProperties,
       resourceProfiles = appEnv.resourceProfiles ++ newResourceProfiles
     )
   }
