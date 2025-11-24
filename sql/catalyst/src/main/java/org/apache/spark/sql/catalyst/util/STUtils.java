@@ -22,8 +22,14 @@ import org.apache.spark.sql.types.GeometryType;
 import org.apache.spark.unsafe.types.GeographyVal;
 import org.apache.spark.unsafe.types.GeometryVal;
 
+import java.nio.ByteBuffer;
+
+import static org.apache.spark.sql.catalyst.util.Geo.*;
+
 // This class defines static methods that used to implement ST expressions using `StaticInvoke`.
 public final class STUtils {
+
+  static WkbReader wkbReader = new WkbReader();
 
   /** Conversion methods from physical values to Geography/Geometry objects. */
 
@@ -56,6 +62,17 @@ public final class STUtils {
     // Geographic SRID is always a valid SRID for geometry, so we don't need to check it.
     // Also, all geographic coordinates are valid for geometry, so no need to check bounds.
     return toPhysVal(Geometry.fromBytes(geographyVal.getBytes()));
+  }
+
+  public static Geometry fromWKB(byte[] wkb, int srid) {
+    return wkbReader.read(wkb, srid);
+  }
+
+  public static GeometryVal physicalValFromWKB(byte[] wkb, int srid) {
+    byte[] bytes = new byte[HEADER_SIZE + wkb.length];
+    ByteBuffer.wrap(bytes).order(DEFAULT_ENDIANNESS).putInt(srid);
+    System.arraycopy(wkb, 0, bytes, WKB_OFFSET, wkb.length);
+    return GeometryVal.fromBytes(bytes);
   }
 
   /** Geospatial type encoder/decoder utilities. */
@@ -148,5 +165,4 @@ public final class STUtils {
   public static int stSrid(GeometryVal geom) {
     return fromPhysVal(geom).srid();
   }
-
 }
