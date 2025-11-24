@@ -24,7 +24,7 @@ import java.util.Arrays;
 
 // This class represents the Geometry data for clients.
 @Unstable
-public final class Geometry implements Serializable {
+public class Geometry implements Serializable {
   // The GEOMETRY type is implemented as WKB bytes + SRID integer stored in class itself.
   protected final byte[] value;
 
