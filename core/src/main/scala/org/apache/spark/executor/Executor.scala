@@ -381,7 +381,28 @@ private[spark] class Executor(
       tr.kill(killMark._1, killMark._2)
       killMarks.remove(taskId)
     }
-    threadPool.execute(tr)
+    try {
+      threadPool.execute(tr)
+    } catch {
+      case t: Throwable =>
+        try {
+          logError(log"Executor launch task ${MDC(TASK_NAME, taskDescription.name)} failed," +
+            log" reason: ${MDC(REASON, t.getMessage)}")
+          context.statusUpdate(
+            taskDescription.taskId,
+            TaskState.FAILED,
+            env.closureSerializer.newInstance().serialize(new ExceptionFailure(t, Seq.empty)))
+        } catch {
+          case oom: OutOfMemoryError =>
+            logError(log"Executor update launching task ${MDC(TASK_NAME, taskDescription.name)} " +
+              log"failed status failed, reason: ${MDC(REASON, oom.getMessage)}")
+            System.exit(SparkExitCode.OOM)
+          case t: Throwable =>
+            logError(log"Executor update launching task ${MDC(TASK_NAME, taskDescription.name)} " +
+              log"failed status failed, reason: ${MDC(REASON, t.getMessage)}")
+            System.exit(-1)
+        }
+    }
     if (decommissioned) {
       log.error(s"Launching a task while in decommissioned state.")
     }

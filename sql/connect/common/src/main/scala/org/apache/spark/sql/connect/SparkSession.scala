@@ -118,39 +118,73 @@ class SparkSession private[sql] (
     newDataset(encoder) { builder =>
       if (data.nonEmpty) {
         val threshold = conf.get(SqlApiConf.LOCAL_RELATION_CACHE_THRESHOLD_KEY).toInt
-        val maxRecordsPerBatch = conf.get(SqlApiConf.LOCAL_RELATION_CHUNK_SIZE_ROWS_KEY).toInt
-        val maxBatchSize = conf.get(SqlApiConf.LOCAL_RELATION_CHUNK_SIZE_BYTES_KEY).toInt
+        val maxChunkSizeRows = conf.get(SqlApiConf.LOCAL_RELATION_CHUNK_SIZE_ROWS_KEY).toInt
+        val maxChunkSizeBytes = conf.get(SqlApiConf.LOCAL_RELATION_CHUNK_SIZE_BYTES_KEY).toInt
+        val maxBatchOfChunksSize =
+          conf.get(SqlApiConf.LOCAL_RELATION_BATCH_OF_CHUNKS_SIZE_BYTES_KEY).toLong
+
         // Serialize with chunking support
         val it = ArrowSerializer.serialize(
           data,
           encoder,
           allocator,
-          maxRecordsPerBatch = maxRecordsPerBatch,
-          maxBatchSize = maxBatchSize,
+          maxRecordsPerBatch = maxChunkSizeRows,
+          maxBatchSize = math.min(maxChunkSizeBytes, maxBatchOfChunksSize),
           timeZoneId = timeZoneId,
           largeVarTypes = largeVarTypes,
-          batchSizeCheckInterval = math.min(1024, maxRecordsPerBatch))
+          batchSizeCheckInterval = math.min(1024, maxChunkSizeRows))
 
-        val chunks =
-          try {
-            it.toArray
-          } finally {
-            it.close()
+        try {
+          val schemaBytes = encoder.schema.json.getBytes
+          // Schema is the first chunk, data chunks follow from the iterator
+          val currentBatch = scala.collection.mutable.ArrayBuffer[Array[Byte]](schemaBytes)
+          var totalChunks = 1
+          var currentBatchSize = schemaBytes.length.toLong
+          var totalSize = currentBatchSize
+
+          // store all hashes of uploaded chunks. The first hash is schema, rest are data hashes
+          val allHashes = scala.collection.mutable.ArrayBuffer[String]()
+          while (it.hasNext) {
+            val chunk = it.next()
+            val chunkSize = chunk.length
+            totalChunks += 1
+            totalSize += chunkSize
+
+            // Check if adding this chunk would exceed batch size
+            if (currentBatchSize + chunkSize > maxBatchOfChunksSize) {
+              // Upload current batch
+              allHashes ++= client.artifactManager.cacheArtifacts(currentBatch.toArray)
+              // Start new batch
+              currentBatch.clear()
+              currentBatchSize = 0
+            }
+
+            currentBatch += chunk
+            currentBatchSize += chunkSize
           }
 
-        // If we got multiple chunks or a single large chunk, use ChunkedCachedLocalRelation
-        val totalSize = chunks.map(_.length).sum
-        if (chunks.length > 1 || totalSize > threshold) {
-          val (dataHashes, schemaHash) = client.cacheLocalRelation(chunks, encoder.schema.json)
-          builder.getChunkedCachedLocalRelationBuilder
-            .setSchemaHash(schemaHash)
-            .addAllDataHashes(dataHashes.asJava)
-        } else {
-          // Small data, use LocalRelation directly
-          val arrowData = ByteString.copyFrom(chunks(0))
-          builder.getLocalRelationBuilder
-            .setSchema(encoder.schema.json)
-            .setData(arrowData)
+          // Decide whether to use LocalRelation or ChunkedCachedLocalRelation
+          if (totalChunks == 2 && totalSize <= threshold) {
+            // Schema + single small data chunk: use LocalRelation with inline data
+            val arrowData = ByteString.copyFrom(currentBatch.last)
+            builder.getLocalRelationBuilder
+              .setSchema(encoder.schema.json)
+              .setData(arrowData)
+          } else {
+            // Multiple data chunks or large data: use ChunkedCachedLocalRelation
+            // Upload remaining batch
+            allHashes ++= client.artifactManager.cacheArtifacts(currentBatch.toArray)
+
+            // First hash is schema, rest are data
+            val schemaHash = allHashes.head
+            val dataHashes = allHashes.tail
+
+            builder.getChunkedCachedLocalRelationBuilder
+              .setSchemaHash(schemaHash)
+              .addAllDataHashes(dataHashes.asJava)
+          }
+        } finally {
+          it.close()
         }
       } else {
         builder.getLocalRelationBuilder

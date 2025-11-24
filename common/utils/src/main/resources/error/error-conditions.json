@@ -1693,6 +1693,12 @@
     ],
     "sqlState" : "42846"
   },
+  "EXPRESSION_TRANSLATION_TO_V2_IS_NOT_SUPPORTED" : {
+    "message" : [
+      "Expression <expr> cannot be translated to v2 expression."
+    ],
+    "sqlState" : "0A000"
+  },
   "EXPRESSION_TYPE_IS_NOT_ORDERABLE" : {
     "message" : [
       "Column expression <expr> cannot be sorted because its type <exprType> is not orderable."
@@ -2058,7 +2064,7 @@
   },
   "IDENTIFIER_TOO_MANY_NAME_PARTS" : {
     "message" : [
-      "<identifier> is not a valid identifier as it has more than 2 name parts."
+      "<identifier> is not a valid identifier as it has more than <limit> name parts."
     ],
     "sqlState" : "42601"
   },
@@ -2121,6 +2127,15 @@
       "View <datasetIdentifier> is a batch view and must be referenced using SparkSession#read. This check can be disabled by setting Spark conf pipelines.incompatibleViewCheck.enabled = false."
     ],
     "sqlState" : "42000"
+  },
+  "INCOMPATIBLE_COLUMN_CHANGES_AFTER_VIEW_WITH_PLAN_CREATION" : {
+    "message" : [
+      "View <viewName> plan references table <tableName> whose <colType> columns changed since the view plan was initially captured.",
+      "Column changes:",
+      "<errors>",
+      "This indicates the table has evolved and the view based on the plan must be recreated."
+    ],
+    "sqlState" : "51024"
   },
   "INCOMPATIBLE_COLUMN_TYPE" : {
     "message" : [
@@ -2203,6 +2218,31 @@
       "View <datasetIdentifier> is a streaming view and must be referenced using SparkSession#readStream. This check can be disabled by setting Spark conf pipelines.incompatibleViewCheck.enabled = false."
     ],
     "sqlState" : "42000"
+  },
+  "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS" : {
+    "message" : [
+      "Detected incompatible changes to table <tableName> after DataFrame/Dataset has been resolved and analyzed, meaning the underlying plan is out of sync. Please, re-create DataFrame/Dataset before attempting to execute the query again."
+    ],
+    "subClass" : {
+      "COLUMNS_MISMATCH" : {
+        "message" : [
+          "Data columns have changed:",
+          "<errors>"
+        ]
+      },
+      "METADATA_COLUMNS_MISMATCH" : {
+        "message" : [
+          "Metadata columns have changed:",
+          "<errors>"
+        ]
+      },
+      "TABLE_ID_MISMATCH" : {
+        "message" : [
+          "Table ID has changed from <capturedTableId> to <currentTableId>."
+        ]
+      }
+    },
+    "sqlState" : "51024"
   },
   "INCOMPATIBLE_VIEW_SCHEMA_CHANGE" : {
     "message" : [
@@ -4384,6 +4424,59 @@
     },
     "sqlState" : "XX000"
   },
+  "MISSING_CATALOG_ABILITY" : {
+    "message" : [
+      "Catalog <plugin> does not support"
+    ],
+    "subClass" : {
+      "CREATE_FUNCTION" : {
+        "message" : [
+          "CREATE FUNCTION."
+        ]
+      },
+      "DROP_FUNCTION" : {
+        "message" : [
+          "DROP FUNCTION."
+        ]
+      },
+      "FUNCTIONS" : {
+        "message" : [
+          "functions."
+        ]
+      },
+      "NAMESPACES" : {
+        "message" : [
+          "namespaces."
+        ]
+      },
+      "PROCEDURES" : {
+        "message" : [
+          "procedures."
+        ]
+      },
+      "REFRESH_FUNCTION" : {
+        "message" : [
+          "REFRESH FUNCTION."
+        ]
+      },
+      "TABLES" : {
+        "message" : [
+          "tables."
+        ]
+      },
+      "TABLE_VALUED_FUNCTIONS" : {
+        "message" : [
+          "table-valued functions."
+        ]
+      },
+      "VIEWS" : {
+        "message" : [
+          "views."
+        ]
+      }
+    },
+    "sqlState" : "0A000"
+  },
   "MISSING_DATABASE_FOR_V1_SESSION_CATALOG" : {
     "message" : [
       "Database name is not specified in the v1 session catalog. Please ensure to provide a valid database name when interacting with the v1 catalog."
@@ -4943,6 +5036,12 @@
     ],
     "sqlState" : "42000"
   },
+  "PIPELINE_STORAGE_ROOT_INVALID" : {
+    "message" : [
+      "Pipeline storage root must be an absolute path with a URI scheme (e.g., file://, s3a://, hdfs://). Got: `<storage_root>`."
+    ],
+    "sqlState" : "42K03"
+  },
   "PIPE_OPERATOR_AGGREGATE_EXPRESSION_CONTAINS_NO_AGGREGATE_FUNCTION" : {
     "message" : [
       "Non-grouping expression <expr> is provided as an argument to the |> AGGREGATE pipe operator but does not contain any aggregate function; please update it to include an aggregate function and then retry the query again."
@@ -5154,7 +5253,7 @@
   "RUN_EMPTY_PIPELINE" : {
     "message" : [
       "Pipelines are expected to have at least one non-temporary dataset defined (tables, persisted views) but no non-temporary datasets were found in your pipeline.",
-      "Please verify that you have included the expected source files, and that your source code includes table definitions (e.g., CREATE MATERIALIZED VIEW in SQL code, @sdp.table in python code)."
+      "Please verify that you have included the expected source files, and that your source code includes table definitions (e.g., CREATE MATERIALIZED VIEW in SQL code, @dp.table in python code)."
     ],
     "sqlState" : "42617"
   },
@@ -5328,6 +5427,85 @@
       "Unknown time mode <timeMode>. Accepted timeMode modes are 'none', 'processingTime', 'eventTime'"
     ],
     "sqlState" : "42802"
+  },
+  "STATE_REPARTITION_INVALID_CHECKPOINT" : {
+    "message" : [
+      "The provided checkpoint location '<checkpointLocation>' is in an invalid state."
+    ],
+    "subClass" : {
+      "LAST_BATCH_ABANDONED_REPARTITION" : {
+        "message" : [
+          "The last batch ID <lastBatchId> is a repartition batch with <lastBatchShufflePartitions> shuffle partitions and didn't finish successfully.",
+          "You're now requesting to repartition to <numPartitions> shuffle partitions.",
+          "Please retry with the same number of shuffle partitions as the previous attempt.",
+          "Once that completes successfully, you can repartition to another number of shuffle partitions."
+        ]
+      },
+      "LAST_BATCH_FAILED" : {
+        "message" : [
+          "The last batch ID <lastBatchId> didn't finish successfully. Please make sure the streaming query finishes successfully, before repartitioning.",
+          "If using ProcessingTime trigger, you can use AvailableNow trigger instead, which will make sure the query terminates successfully by itself.",
+          "If you want to skip this check, set enforceExactlyOnceSink parameter in repartition to false.",
+          "But this can cause duplicate output records from the failed batch when using exactly-once sinks."
+        ]
+      },
+      "MISSING_OFFSET_SEQ_METADATA" : {
+        "message" : [
+          "The OffsetSeq (v<version>) metadata is missing for batch ID <batchId>. Please make sure the checkpoint is from a supported Spark version (Spark 4.0+)."
+        ]
+      },
+      "NO_BATCH_FOUND" : {
+        "message" : [
+          "No microbatch has been recorded in the checkpoint location. Make sure the streaming query has successfully completed at least one microbatch before repartitioning."
+        ]
+      },
+      "NO_COMMITTED_BATCH" : {
+        "message" : [
+          "There is no committed microbatch. Make sure the streaming query has successfully completed at least one microbatch before repartitioning."
+        ]
+      },
+      "OFFSET_SEQ_NOT_FOUND" : {
+        "message" : [
+          "Offset sequence entry for batch ID <batchId> not found. You might have set a very low value for",
+          "'spark.sql.streaming.minBatchesToRetain' config during the streaming query execution or you deleted files in the checkpoint location."
+        ]
+      },
+      "SHUFFLE_PARTITIONS_ALREADY_MATCH" : {
+        "message" : [
+          "The number of shuffle partitions in the last committed batch (id=<batchId>) is the same as the requested <numPartitions> partitions.",
+          "Hence, already has the requested number of partitions, so no-op."
+        ]
+      },
+      "UNSUPPORTED_OFFSET_SEQ_VERSION" : {
+        "message" : [
+          "Unsupported offset sequence version <version>. Please make sure the checkpoint is from a supported Spark version (Spark 4.0+)."
+        ]
+      }
+    },
+    "sqlState" : "55019"
+  },
+  "STATE_REPARTITION_INVALID_PARAMETER" : {
+    "message" : [
+      "The repartition parameter <parameter> is invalid:"
+    ],
+    "subClass" : {
+      "IS_EMPTY" : {
+        "message" : [
+          "cannot be empty."
+        ]
+      },
+      "IS_NOT_GREATER_THAN_ZERO" : {
+        "message" : [
+          "must be greater than zero."
+        ]
+      },
+      "IS_NULL" : {
+        "message" : [
+          "cannot be null."
+        ]
+      }
+    },
+    "sqlState" : "42616"
   },
   "STATE_STORE_CANNOT_CREATE_COLUMN_FAMILY_WITH_RESERVED_CHARS" : {
     "message" : [
@@ -5718,6 +5896,15 @@
     },
     "sqlState" : "0A000"
   },
+  "STREAMING_STATEFUL_OPERATOR_MISSING_STATE_DIRECTORY" : {
+    "message" : [
+      "Cannot restart streaming query with stateful operators because the state directory is empty or missing.",
+      "Stateful operators in current batch: [<OpsInCurBatchSeq>].",
+      "This typically occurs when state files have been deleted or the streaming query was previously run without stateful operators but restarted with stateful operators.",
+      "Please remove the stateful operators, use a new checkpoint location, or restore the missing state files."
+    ],
+    "sqlState" : "42K03"
+  },
   "STREAMING_STATEFUL_OPERATOR_NOT_MATCH_IN_STATE_METADATA" : {
     "message" : [
       "Streaming stateful operator name does not match with the operator in state metadata. This likely to happen when user adds/removes/changes stateful operator of existing streaming query.",
@@ -5832,7 +6019,7 @@
   "TEMP_TABLE_OR_VIEW_ALREADY_EXISTS" : {
     "message" : [
       "Cannot create the temporary view <relationName> because it already exists.",
-      "Choose a different name, drop or replace the existing view,  or add the IF NOT EXISTS clause to tolerate pre-existing views."
+      "Choose a different name, drop or replace the existing view."
     ],
     "sqlState" : "42P07"
   },
@@ -6467,6 +6654,11 @@
           "Drop the namespace <namespace>."
         ]
       },
+      "GEOSPATIAL_DISABLED" : {
+        "message" : [
+          "Geospatial feature is disabled."
+        ]
+      },
       "HIVE_TABLE_TYPE" : {
         "message" : [
           "The <tableName> is hive <tableType>."
@@ -6859,6 +7051,12 @@
   "UNSUPPORTED_PARTITION_TRANSFORM" : {
     "message" : [
       "Unsupported partition transform: <transform>. The supported transforms are `identity`, `bucket`, and `clusterBy`. Ensure your transform expression uses one of these."
+    ],
+    "sqlState" : "0A000"
+  },
+  "UNSUPPORTED_PIPELINE_SPARK_SQL_COMMAND" : {
+    "message" : [
+      "'<command>' is not supported in spark.sql(\"...\") API in Spark Declarative Pipeline."
     ],
     "sqlState" : "0A000"
   },
@@ -7882,11 +8080,6 @@
       "Cannot use \"INTERVAL\" type in the table schema."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1184" : {
-    "message" : [
-      "Catalog <plugin> does not support <ability>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1186" : {
     "message" : [
       "Multi-part identifier cannot be empty."
@@ -8585,11 +8778,6 @@
   "_LEGACY_ERROR_TEMP_2095" : {
     "message" : [
       "Failed to merge incompatible schemas <left> and <right>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2096" : {
-    "message" : [
-      "<ddl> is not supported temporarily."
     ]
   },
   "_LEGACY_ERROR_TEMP_2097" : {

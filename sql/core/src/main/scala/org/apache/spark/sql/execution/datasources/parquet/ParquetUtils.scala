@@ -523,6 +523,10 @@ object ParquetUtils extends Logging {
       SQLConf.LEGACY_PARQUET_NANOS_AS_LONG.key,
       sqlConf.legacyParquetNanosAsLong.toString)
 
+    conf.set(
+      SQLConf.PARQUET_ANNOTATE_VARIANT_LOGICAL_TYPE.key,
+      sqlConf.parquetAnnotateVariantLogicalType.toString)
+
     // Sets compression scheme
     conf.set(ParquetOutputFormat.COMPRESSION, parquetOptions.compressionCodecClassName)
 

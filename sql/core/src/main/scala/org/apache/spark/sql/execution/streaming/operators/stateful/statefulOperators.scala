@@ -1317,8 +1317,8 @@ abstract class BaseStreamingDeduplicateExec
       val result = baseIterator.filter { r =>
         val row = r.asInstanceOf[UnsafeRow]
         val key = getKey(row)
-        val value = store.get(key)
-        if (value == null) {
+        val keyExists = store.keyExists(key)
+        if (!keyExists) {
           putDupInfoIntoState(store, row, key, reusedDupInfoRow)
           numUpdatedStateRows += 1
           numOutputRows += 1

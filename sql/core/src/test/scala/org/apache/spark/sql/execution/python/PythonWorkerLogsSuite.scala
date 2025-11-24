@@ -19,7 +19,9 @@ package org.apache.spark.sql.execution.python
 
 import java.util.UUID
 
-import org.apache.spark.sql.{QueryTest, Row}
+import org.apache.spark.SparkConf
+import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.storage.{PythonWorkerLogBlockId, PythonWorkerLogBlockIdGenerator, PythonWorkerLogLine}
@@ -27,6 +29,9 @@ import org.apache.spark.util.LogUtils
 
 class PythonWorkerLogsSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
+
+  override def sparkConf: SparkConf =
+    super.sparkConf.set(SQLConf.PYTHON_WORKER_LOGGING_ENABLED.key, "true")
 
   protected override def afterEach(): Unit = {
     try {
@@ -38,8 +43,25 @@ class PythonWorkerLogsSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("fail if logging is not enabled") {
+    withSQLConf(SQLConf.PYTHON_WORKER_LOGGING_ENABLED.key -> "false") {
+      val ex = intercept[AnalysisException] {
+        spark.tvf.python_worker_logs().collect()
+      }
+      checkError(
+        exception = ex,
+        condition = "FEATURE_NOT_ENABLED",
+        parameters = Map(
+          "featureName" -> "Python Worker Logging",
+          "configKey" -> "spark.sql.pyspark.worker.logging.enabled",
+          "configValue" -> "true"
+        )
+      )
+    }
+  }
+
   test("schema") {
-    val schema = spark.table("system.session.python_worker_logs").schema
+    val schema = spark.tvf.python_worker_logs().schema
     assert(schema == StructType.fromDDL(LogUtils.SPARK_LOG_SCHEMA))
   }
 
@@ -57,7 +79,7 @@ class PythonWorkerLogsSuite extends QueryTest with SharedSparkSession {
   test("read logs") {
     prepareLogs(spark.sessionUUID)
 
-    val df = spark.table("system.session.python_worker_logs")
+    val df = spark.tvf.python_worker_logs()
     assert(df.count() == 2)
     checkAnswer(
       df.select($"level", $"msg"),
@@ -67,7 +89,7 @@ class PythonWorkerLogsSuite extends QueryTest with SharedSparkSession {
   test("can't read logs for another session") {
     prepareLogs(UUID.randomUUID.toString)
 
-    val df = spark.table("system.session.python_worker_logs")
+    val df = spark.tvf.python_worker_logs()
     assert(df.count() == 0)
   }
 }

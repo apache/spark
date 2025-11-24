@@ -90,6 +90,12 @@ object Cast extends QueryErrorsBase {
    *   - String <=> Binary
    */
   def canAnsiCast(from: DataType, to: DataType): Boolean = (from, to) match {
+    case (fromType, toType) if !SQLConf.get.geospatialEnabled &&
+        (isGeoSpatialType(fromType) || isGeoSpatialType(toType)) =>
+      throw new org.apache.spark.sql.AnalysisException(
+        errorClass = "UNSUPPORTED_FEATURE.GEOSPATIAL_DISABLED",
+        messageParameters = scala.collection.immutable.Map.empty)
+
     case (fromType, toType) if fromType == toType => true
 
     case (NullType, _) => true
@@ -218,6 +224,12 @@ object Cast extends QueryErrorsBase {
    * Returns true iff we can cast `from` type to `to` type.
    */
   def canCast(from: DataType, to: DataType): Boolean = (from, to) match {
+    case (fromType, toType) if !SQLConf.get.geospatialEnabled &&
+        (isGeoSpatialType(fromType) || isGeoSpatialType(toType)) =>
+      throw new org.apache.spark.sql.AnalysisException(
+        errorClass = "UNSUPPORTED_FEATURE.GEOSPATIAL_DISABLED",
+        messageParameters = scala.collection.immutable.Map.empty)
+
     case (fromType, toType) if fromType == toType => true
 
     case (NullType, _) => true
