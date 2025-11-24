@@ -1210,8 +1210,6 @@ class ArrowStreamAggArrowIterUDFSerializer(ArrowStreamArrowUDFSerializer):
         Yield column iterators instead of concatenating batches.
         Each group yields a structure where indexing by column offset gives an iterator of arrays.
         """
-        import pyarrow as pa
-
         dataframes_in_group = None
 
         while dataframes_in_group is None or dataframes_in_group > 0:
