@@ -166,6 +166,8 @@ assert(df100.collect().length == 100)
 
 ## 2. UDFs with mutable external variables
 
+It is generally considered bad practice for UDFs to depend on mutable external variables, as this introduces implicit dependencies, can lead to non-deterministic behavior, and reduces composability. However, if you do have such a pattern, be aware of the following gotcha:
+
 ```python
 from pyspark.sql.functions import udf
 
