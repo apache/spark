@@ -381,6 +381,7 @@ abstract class ExplodeBase extends UnaryExpression with CollectionGenerator with
             override def iterator: Iterator[InternalRow] = new Iterator[InternalRow] {
               var currentIndex = 0
               val iter = inputArray.iterator()
+              
               override def hasNext: Boolean = iter.hasNext()
 
               override def next(): InternalRow = {
