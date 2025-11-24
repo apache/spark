@@ -379,31 +379,27 @@ abstract class ExplodeBase extends UnaryExpression with CollectionGenerator with
       case (ArrayType(et, _), inputArray: ArrayData) if inputArray != null =>
           new IterableOnce[InternalRow] {
             override def iterator: Iterator[InternalRow] = new Iterator[InternalRow] {
-              val numElements = inputArray.numElements()
-              var currentIndex = -1
-
-              override def hasNext: Boolean = currentIndex + 1 < numElements
+              var currentIndex = 0
+              val iter = inputArray.iterator()
+              override def hasNext: Boolean = iter.hasNext()
 
               override def next(): InternalRow = {
-                currentIndex += 1
-                val element = inputArray.get(currentIndex, et)
-                if (position) InternalRow(currentIndex, element) else InternalRow(element)
+                val element = iter.next().get(et)
+                if (position) InternalRow(currentIndex++, element) else InternalRow(element)
               }
             }
           }
       case (MapType(kt, vt, _), inputMap: MapData) if inputMap != null =>
           new IterableOnce[InternalRow] {
             override def iterator: Iterator[InternalRow] = new Iterator[InternalRow] {
-              val numElements = inputMap.numElements()
-              var currentIndex = -1
+              val currentIndex = 0
+              val iter = inputMap.iterator()
 
-              override def hasNext: Boolean = currentIndex + 1 < numElements
+              override def hasNext: Boolean = iter.hasNext()
 
               override def next(): InternalRow = {
-                currentIndex += 1
-                val k = inputMap.keyArray().get(currentIndex, kt)
-                val v = inputMap.valueArray().get(currentIndex, vt)
-                if (position) InternalRow(currentIndex, k, v) else InternalRow(k, v)
+                val (k, v) = iter.next().get(kt, vt)
+                if (position) InternalRow(currentIndex++, k, v) else InternalRow(k, v)
               }
             }
           }
