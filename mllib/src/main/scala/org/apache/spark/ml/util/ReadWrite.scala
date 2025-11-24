@@ -1152,6 +1152,12 @@ private[spark] object ReadWriteUtils {
       Using.resource(
         new DataOutputStream(new BufferedOutputStream(new FileOutputStream(filePath.toFile)))
       ) { dos =>
+
+      }
+
+      Using.resource(
+        new DataOutputStream(new BufferedOutputStream(new FileOutputStream(filePath.toFile)))
+      ) { dos =>
         dos.writeUTF("ARROW") // format
 
         val schema: StructType = df.schema

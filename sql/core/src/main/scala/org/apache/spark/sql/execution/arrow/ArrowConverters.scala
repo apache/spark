@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.arrow
 
-import java.io.{ByteArrayInputStream, ByteArrayOutputStream, FileInputStream, OutputStream}
+import java.io.{ByteArrayInputStream, ByteArrayOutputStream, FileInputStream, FileOutputStream, OutputStream}
 import java.nio.channels.{Channels, ReadableByteChannel}
 
 import scala.collection.mutable.ArrayBuffer
@@ -28,7 +28,7 @@ import org.apache.arrow.flatbuf.MessageHeader
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector._
 import org.apache.arrow.vector.compression.{CompressionCodec, NoCompressionCodec}
-import org.apache.arrow.vector.ipc.{ArrowStreamReader, ArrowStreamWriter, ReadChannel, WriteChannel}
+import org.apache.arrow.vector.ipc.{ArrowFileWriter, ArrowStreamReader, ArrowStreamWriter, ReadChannel, WriteChannel}
 import org.apache.arrow.vector.ipc.message.{ArrowRecordBatch, IpcOption, MessageSerializer}
 
 import org.apache.spark.SparkException
