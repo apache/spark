@@ -19,7 +19,7 @@ include:
 
 # These allow the documentation to be updated with newer releases
 # of Spark, Scala.
-SPARK_VERSION: 4.1.0-SNAPSHOT
+SPARK_VERSION: 4.1.0
 SPARK_VERSION_SHORT: 4.1.0
 SCALA_BINARY_VERSION: "2.13"
 SCALA_VERSION: "2.13.17"
@@ -39,7 +39,7 @@ DOCSEARCH_SCRIPT: |
       inputSelector: '#docsearch-input',
       enhancedSearchInput: true,
       algoliaOptions: {
-        'facetFilters': ["version:latest"]
+        'facetFilters': ["version:4.1.0"]
       },
       debug: false // Set debug to true if you want to inspect the dropdown
   });
