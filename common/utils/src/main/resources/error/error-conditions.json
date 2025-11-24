@@ -1727,6 +1727,11 @@
           "Alter the table <tableName>."
         ]
       },
+      "CONNECTION" : {
+        "message" : [
+          "Couldn't connect to the database"
+        ]
+      },
       "CREATE_INDEX" : {
         "message" : [
           "Create the index <indexName> in the <tableName> table."
