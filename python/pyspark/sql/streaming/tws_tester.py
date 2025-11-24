@@ -15,7 +15,14 @@
 # limitations under the License.
 #
 
-from typing import Any, List, Optional, Tuple, Union, Dict
+from typing import Any, List, Optional, Tuple, Union, Dict, TYPE_CHECKING
+from itertools import groupby
+from pyspark.sql.types import Row
+     
+
+if TYPE_CHECKING:
+    import pandas as pd
+
 from pyspark.sql.streaming.stateful_processor import StatefulProcessor, StatefulProcessorHandle, TimerValues, ValueState
 from pyspark.sql.types import StructType
 
@@ -107,13 +114,22 @@ class InMemoryStatefulProcessorHandle(StatefulProcessorHandle):
         return InMemoryValueState(self._api_client, stateName, schema)
 
 
+def LOG(s):
+    with open("/tmp/log.txt", "a") as f:
+        f.write(s + "\n")
+
+
+
 class TwsTester:
     def __init__(
         self,
         processor: StatefulProcessor,
-        initialState: Optional[List[Tuple[Any, Any]]] = None
+        initialState: Optional[List[Tuple[Any, Any]]] = None,
+        key_column_name = "key"
     ) -> None:
-        self.processor = processor
+        self.processor = processor 
+        self.key_column_name = key_column_name
+
         self.api_client = InMemoryStatefulProcessorApiClient()
         self.handle = InMemoryStatefulProcessorHandle(self.api_client)
         
@@ -122,32 +138,42 @@ class TwsTester:
         if initialState:
             for key, state in initialState:
                 self.api_client.set_implicit_key(key)
-    
-    def test(self, input: List[Tuple[Any, Any]]) -> List[Any]:
-        from itertools import groupby
-        
-        ans = []
-        
-        sorted_input = sorted(input, key=lambda x: str(x[0]))
-        
-        for key, group in groupby(sorted_input, key=lambda x: x[0]):
-            self.api_client.set_implicit_key(key)
-            
+
+    def test(self, input: list[Row]) -> list[Row]:
+        result: list[Row] = []
+        sorted_input = sorted(input, key=lambda row: row[self.key_column_name])
+        for key, group in groupby(sorted_input, key=lambda row: row[self.key_column_name]):
+            self.api_client.set_implicit_key(key)            
             rows = [item[1] for item in group]
+            timer_values = TimerValues(-1, -1)
+            result_iter = self.processor.handleInputRows((key,), iter(rows), timer_values)
+            for result_df in result_iter:
+                result.append(result_df)        
+        return result
+
+    def testInPandas(self, input: "pd.DataFrame") -> "pd.DataFrame":
+        import pandas as pd
+        
+        result_dfs = []
+        
+        # Sort by key column and group by it
+        sorted_input = input.sort_values(by=self.key_column_name)
+        
+        for key, group_df in sorted_input.groupby(self.key_column_name):
+            self.api_client.set_implicit_key(key)
             
             timer_values = TimerValues(-1, -1)
             
-            result_iter = self.processor.handleInputRows(key, iter(rows), timer_values)
+            result_iter = self.processor.handleInputRows((key,), iter([group_df]), timer_values)
             
-            for result in result_iter:
-                if hasattr(result, 'to_dict'):
-                    result_dict = result.to_dict('records')
-                    for record in result_dict:
-                        ans.append(record)
-                else:
-                    ans.append(result)
+            for result_df in result_iter:
+                result_dfs.append(result_df)
         
-        return ans
+        if result_dfs:
+            return pd.concat(result_dfs, ignore_index=True)
+        else:
+            return pd.DataFrame()
+
     
     def setValueState(self, stateName: str, key: Any, value: Tuple) -> None:
         self.api_client.set_implicit_key(key)
