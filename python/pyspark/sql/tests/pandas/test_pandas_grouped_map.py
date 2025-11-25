@@ -869,7 +869,7 @@ class ApplyInPandasTestsMixin:
 
         def stats(key, pdf):
             if key[0] % 2 == 0:
-                return ApplyInPandasTestsMixin.stats_with_no_column_names(key, pdf)
+                return pd.DataFrame([key + (pdf.v.mean(),)])
             return empty_df
 
         result = (
