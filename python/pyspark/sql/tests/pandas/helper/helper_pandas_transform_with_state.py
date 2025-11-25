@@ -50,6 +50,9 @@ class StatefulProcessorFactory:
     def row(self):
         ...
 
+    def get(self, use_pandas: bool = False):
+        return self.pandas() if use_pandas else self.row()
+
 
 # StatefulProcessor factory implementations
 

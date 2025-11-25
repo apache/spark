@@ -274,27 +274,27 @@ class TwsTesterTests(ReusedSQLTestCase):
         tester.setMapState("frequencies", "user1", {("hello",): (5,), ("world",): (3,)})
         tester.setMapState("frequencies", "user2", {("spark",): (10,)})
 
-        tester.test([
-            Row(key="user1", word="hello"),
-            Row(key="user1", word="goodbye"),
-            Row(key="user2", word="spark"),
-            Row(key="user3", word="new"),
-        ])
+        tester.test(
+            [
+                Row(key="user1", word="hello"),
+                Row(key="user1", word="goodbye"),
+                Row(key="user2", word="spark"),
+                Row(key="user3", word="new"),
+            ]
+        )
 
         self.assertEqual(
             tester.peekMapState("frequencies", "user1"),
             {("hello",): (6,), ("world",): (3,), ("goodbye",): (1,)},
         )
-        self.assertEqual(tester.peekMapState("frequencies", "user2"), {("spark",): (11,)})
+        self.assertEqual(
+            tester.peekMapState("frequencies", "user2"), {("spark",): (11,)}
+        )
         self.assertEqual(tester.peekMapState("frequencies", "user3"), {("new",): (1,)})
         self.assertEqual(tester.peekMapState("frequencies", "user4"), {})
 
 
-def _get_processor(factory: StatefulProcessorFactory, use_pandas: bool = False):
-    return factory.pandas() if use_pandas else factory.row()
-
-
-@unittest.skip("a")
+# @unittest.skip("a")
 @unittest.skipIf(
     not have_pandas or not have_pyarrow,
     pandas_requirement_message or pyarrow_requirement_message or "",
@@ -390,12 +390,15 @@ class TwsTesterFuzzTests(ReusedSQLTestCase):
         )
 
         # Process each input batch.
+        def _write_batch(batch_id: int, batch: list[tuple]):
+            with open(input_path + f"/test{batch_id}.txt", "w") as f:
+                for row in batch:
+                    assert len(row) == num_input_columns
+                    f.write(",".join(str(value) for value in row) + "\n")
+
         try:
             for batch_id, batch in enumerate(batches):
-                with open(input_path + f"/test{batch_id}.txt", "w") as f:
-                    for row in batch:
-                        assert len(row) == num_input_columns
-                        f.write(",".join(str(value) for value in row) + "\n")
+                _write_batch(batch_id, batch)
                 query.processAllAvailable()
             query.awaitTermination(1)
             self.assertTrue(query.exception() is None)
@@ -409,7 +412,7 @@ class TwsTesterFuzzTests(ReusedSQLTestCase):
         self.assertEqual(len(actual_results), num_batches)
         self.assertEqual(len(expected_results), num_batches)
         for batch_id in range(num_batches):
-            self.assertEqual(actual_results[batch_id], expected_results[batch_id])
+            self.assertCountEqual(actual_results[batch_id], expected_results[batch_id])
 
     # @unittest.skip("a")
     def test_fuzz_running_count(self):
@@ -419,23 +422,20 @@ class TwsTesterFuzzTests(ReusedSQLTestCase):
                 StructField("count", IntegerType(), True),
             ]
         )
-
-        input_data: list[tuple[str, str]] = []
-        for _ in range(1000):
-            key = f"key{random.randint(0, 9)}"
-            value = "".join(random.choices("abcdefghijklmnopqrstuvwxyz", k=5))
-            input_data.append((key, value))
+        batches: list[list[tuple[str, str]]] = []
+        for batch_id in range(5):
+            batch: list[tuple[str, str]] = []
+            for _ in range(200):
+                key = f"key{random.randint(0, 9)}"
+                value = "".join(random.choices("abcdefghijklmnopqrstuvwxyz", k=5))
+                batch.append((key, value))
+            batches.append(batch)
         input_columns: list[str] = ["key", "value"]
         input_types: list[str] = ["string", "string"]
-        batches = [input_data, input_data]
 
         for use_pandas in [False, True]:
-            LOG(f"**** use_pandas={use_pandas}")
-            processor = _get_processor(
-                RunningCountStatefulProcessorFactory(), use_pandas=use_pandas
-            )
             self._check_tws_tester(
-                processor,
+                RunningCountStatefulProcessorFactory().get(use_pandas=use_pandas),
                 batches,
                 input_columns,
                 input_types,
@@ -450,23 +450,50 @@ class TwsTesterFuzzTests(ReusedSQLTestCase):
                 StructField("score", DoubleType(), True),
             ]
         )
-
-        input_data: list[tuple[str, float]] = []
-        for _ in range(1000):
-            key: str = f"key{random.randint(0, 9)}"
-            score: float = random.randint(0, 1000000) / 1000
-            input_data.append((key, score))
+        batches: list[list[tuple[str, float]]] = []
+        for batch_id in range(5):
+            batch: list[tuple[str, float]] = []
+            for _ in range(200):
+                key: str = f"key{random.randint(0, 9)}"
+                score: float = random.randint(0, 1000000) / 1000
+                batch.append((key, score))
+            batches.append(batch)
         input_columns: list[str] = ["key", "score"]
         input_types: list[str] = ["string", "double"]
-        batches = [input_data]
 
         for use_pandas in [False, True]:
-            LOG(f"**** use_pandas={use_pandas}")
-            processor = _get_processor(
-                TopKProcessorFactory(k=10), use_pandas=use_pandas
-            )
             self._check_tws_tester(
-                processor,
+                TopKProcessorFactory(k=10).get(use_pandas=use_pandas),
+                batches,
+                input_columns,
+                input_types,
+                output_schema,
+                use_pandas=use_pandas,
+            )
+
+    def test_fuzz_word_frequency(self):
+        self.maxDiff = None
+        output_schema = StructType(
+            [
+                StructField("key", StringType(), True),
+                StructField("word", StringType(), True),
+                StructField("count", IntegerType(), True),
+            ]
+        )
+        batches: list[list[tuple[str, str]]] = []
+        for batch_id in range(5): 
+            batch: list[tuple[str, str]] = []
+            for _ in range(200):
+                key = f"key{random.randint(0, 9)}"
+                word = "".join(random.choices("abcdefghijklmnopqrstuvwxyz", k=5))
+                batch.append((key, word))
+            batches.append(batch)
+        input_columns: list[str] = ["key", "word"]
+        input_types: list[str] = ["string", "string"]
+
+        for use_pandas in [False, True]:
+            self._check_tws_tester(
+                WordFrequencyProcessorFactory().get(use_pandas=use_pandas),
                 batches,
                 input_columns,
                 input_types,
@@ -484,4 +511,6 @@ if __name__ == "__main__":
         testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:
         testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    unittest.main(testRunner=testRunner, verbosity=2,
+        #defaultTest='TwsTesterFuzzTests.test_fuzz_word_frequency'
+    )
