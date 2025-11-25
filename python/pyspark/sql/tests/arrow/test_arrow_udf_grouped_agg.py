@@ -1189,11 +1189,15 @@ class GroupedAggArrowUDFTestsMixin:
             # Verify both groups were processed correctly
             # Group 1: processes 2 batches (all available)
             group1_result = next(row for row in actual if row["id"] == 1)
-            self.assertAlmostEqual(group1_result["mean"], 2.5, places=5, msg="Group 1 should process 2 batches")
+            self.assertAlmostEqual(
+                group1_result["mean"], 2.5, places=5, msg="Group 1 should process 2 batches"
+            )
 
             # Group 2: processes 1 batch (only batch available)
             group2_result = next(row for row in actual if row["id"] == 2)
-            self.assertAlmostEqual(group2_result["mean"], 5.5, places=5, msg="Group 2 should process 1 batch")
+            self.assertAlmostEqual(
+                group2_result["mean"], 5.5, places=5, msg="Group 2 should process 1 batch"
+            )
 
 
 class GroupedAggArrowUDFTests(GroupedAggArrowUDFTestsMixin, ReusedSQLTestCase):

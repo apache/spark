@@ -1211,6 +1211,7 @@ class ArrowStreamAggArrowIterUDFSerializer(ArrowStreamArrowUDFSerializer):
         Each group yields Iterator[List[pa.Array]], allowing UDF to process batches one by one
         without consuming all batches upfront.
         """
+
         def process_group(batches: "Iterator[pa.RecordBatch]"):
             # Convert each Arrow batch to a list of column arrays on-demand, yielding one list per batch
             for batch in batches:

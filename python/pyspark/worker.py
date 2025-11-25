@@ -3312,7 +3312,7 @@ def read_udfs(pickleSer, infile, eval_type):
         arg_offsets, f = read_single_udf(
             pickleSer, infile, eval_type, runner_conf, udf_index=0, profiler=profiler
         )
-        
+
         # Convert to iterator of batches where each batch is represented as:
         # - Single column: Iterator[pa.Array] (each element is pa.Array from a batch)
         # - Multiple columns: Iterator[Tuple[pa.Array, ...]] (each element is tuple of arrays from a batch)
