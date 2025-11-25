@@ -1707,6 +1707,34 @@ class DataSourceV2DataFrameSuite
     }
   }
 
+  test("SPARK-54504: self-subquery refreshes both table references before execution") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, value INT) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 10), (2, 20)")
+
+      // create DataFrame with self-subquery without executing
+      val df = spark.sql(
+        s"""
+           |SELECT t1.id, t1.value, t2.value as other_value
+           |FROM $t t1
+           |JOIN (
+           |  SELECT id, value FROM $t
+           |  WHERE id IN (SELECT id FROM $t WHERE value > 5)
+           |) t2 ON t1.id = t2.id
+           |""".stripMargin)
+
+      // insert more data into base table
+      sql(s"INSERT INTO $t VALUES (3, 30)")
+
+      // all three table references should be refreshed to see new data
+      checkAnswer(df, Seq(
+        Row(1, 10, 10),
+        Row(2, 20, 20),
+        Row(3, 30, 30)))
+    }
+  }
+
   private def pinTable(catalogName: String, ident: Identifier, version: String): Unit = {
     catalog(catalogName) match {
       case inMemory: BasicInMemoryTableCatalog => inMemory.pinTable(ident, version)
