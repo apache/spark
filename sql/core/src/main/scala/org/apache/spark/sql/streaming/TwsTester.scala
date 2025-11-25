@@ -36,8 +36,8 @@ import org.apache.spark.sql.execution.streaming.operators.stateful.transformwith
  *
  * '''Not Supported:'''
  *  - '''Timers''': Only TimeMode.None is supported. If the processor attempts to register or
- *    use timers (as if in TimeMode.EventTime or TimeMode.ProcessingTime), a NullPointerException
- *    will be thrown.
+ *    use timers (as if in TimeMode.EventTime or TimeMode.ProcessingTime), an 
+ *    UnsupportedOperationException or NullPointerException will be thrown.
  *  - '''TTL''': State TTL configurations are ignored. All state persists indefinitely.
  *
  * '''Use Cases:'''
