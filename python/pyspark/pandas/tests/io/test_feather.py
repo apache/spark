@@ -17,6 +17,7 @@
 import unittest
 
 import pandas as pd
+import os
 
 from pyspark import pandas as ps
 from pyspark.testing.pandasutils import PandasOnSparkTestCase, TestUtils
@@ -34,6 +35,9 @@ class FeatherMixin:
     def psdf(self):
         return ps.from_pandas(self.pdf)
 
+    @unittest.skipIf(
+        os.environ.get("SPARK_SKIP_CONNECT_COMPAT_TESTS") == "1", "SPARK-54486: To be reenabled"
+    )
     def test_to_feather(self):
         with self.temp_dir() as dirpath:
             path1 = f"{dirpath}/file1.feather"
