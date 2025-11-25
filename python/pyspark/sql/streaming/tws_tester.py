@@ -379,6 +379,7 @@ class TwsTester:
 
     def setValueState(self, stateName: str, key: Any, value: tuple) -> None:
         """Directly set a value state for a given key."""
+        assert stateName in self.handle.states, f"State {stateName} has not been initialized."
         self.handle.states[stateName].state[key] = value
 
     def peekValueState(self, stateName: str, key: Any) -> Optional[tuple]:
@@ -387,10 +388,12 @@ class TwsTester:
 
         Returns None if the state does not exist for the given key.
         """
+        assert stateName in self.handle.states, f"State {stateName} has not been initialized."
         return self.handle.states[stateName].state.get(key, None)
 
     def setListState(self, stateName: str, key: Any, value: list[tuple]) -> None:
         """Directly set a list state for a given key."""
+        assert stateName in self.handle.states, f"State {stateName} has not been initialized."
         self.handle.states[stateName].state[key] = value
 
     def peekListState(self, stateName: str, key: Any) -> list[tuple]:
@@ -399,10 +402,12 @@ class TwsTester:
 
         Returns an empty list if the state does not exist for the given key.
         """
+        assert stateName in self.handle.states, f"State {stateName} has not been initialized."
         return list(self.handle.states[stateName].state.get(key, []))
 
     def setMapState(self, stateName: str, key: Any, value: dict) -> None:
         """Directly set a map state for a given key."""
+        assert stateName in self.handle.states, f"State {stateName} has not been initialized."
         self.handle.states[stateName].state[key] = dict(value)
 
     def peekMapState(self, stateName: str, key: Any) -> dict:
@@ -411,4 +416,5 @@ class TwsTester:
 
         Returns an empty dict if the state does not exist for the given key.
         """
+        assert stateName in self.handle.states, f"State {stateName} has not been initialized."
         return dict(self.handle.states[stateName].state.get(key, {}))

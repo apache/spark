@@ -520,13 +520,13 @@ class TwsTesterTests(ReusedSQLTestCase):
     def test_set_nonexistent_state(self):
         processor = RunningCountStatefulProcessorFactory().row()
         tester = TwsTester(processor)
-        with self.assertRaises(KeyError):
+        with self.assertRaises(AssertionError):
             tester.setValueState("nonexistent_state", "key1", (5,))
 
     def test_peek_state_before_initialization(self):
         processor = RunningCountStatefulProcessorFactory().row()
         tester = TwsTester(processor)
-        with self.assertRaises(KeyError):
+        with self.assertRaises(AssertionError):
             tester.peekValueState("nonexistent_state", "key1")
 
     def test_clear_nonexistent_list_state(self):
