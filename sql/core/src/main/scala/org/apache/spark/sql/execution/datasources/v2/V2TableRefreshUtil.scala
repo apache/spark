@@ -102,7 +102,7 @@ private[sql] object V2TableRefreshUtil extends SQLConfHelper with Logging {
       versionedOnly: Boolean,
       schemaValidationMode: SchemaValidationMode): LogicalPlan = {
     val currentTables = mutable.HashMap.empty[(TableCatalog, Identifier), Table]
-    plan transform {
+    plan transformWithSubqueries {
       case r @ ExtractV2CatalogAndIdentifier(catalog, ident)
           if (r.isVersioned || !versionedOnly) && r.timeTravelSpec.isEmpty =>
         val currentTable = currentTables.getOrElseUpdate((catalog, ident), {
