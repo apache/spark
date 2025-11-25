@@ -335,7 +335,7 @@ class TwsTester:
         k: str = self.key_column_name
         sorted_input = sorted(
             input,
-            key=lambda row: (row[k] is not None, row[k] or ""),
+            key=lambda row: (row[k] is not None, row[k] if row[k] is not None else ""),
         )
         for key, rows in groupby(
             sorted_input, key=lambda row: row[self.key_column_name]
