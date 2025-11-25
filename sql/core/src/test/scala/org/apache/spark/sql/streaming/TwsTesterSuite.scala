@@ -204,6 +204,15 @@ class TwsTesterSuite extends SparkFunSuite {
     assert(ans == List(("a", 11L), ("c", 1L)))
   }
 
+  test("TwsTester should fail when initialState is passed to processor without initial state support") {
+    val processor = new TopKProcessor(5)
+    val exception = intercept[IllegalArgumentException] {
+      new TwsTester(processor, initialState = List(("a", List(1.0, 2.0))))
+    }
+    assert(exception.getMessage.contains(
+      "Passed initial state, but the stateful processor doesn't support initial state."))
+  }
+
   test("TwsTester should test RunningCountProcessor row-by-row") {
     val tester = new TwsTester(new RunningCountProcessor[String]())
 

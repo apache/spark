@@ -36,7 +36,7 @@ import org.apache.spark.sql.execution.streaming.operators.stateful.transformwith
  *
  * '''Not Supported:'''
  *  - '''Timers''': Only TimeMode.None is supported. If the processor attempts to register or
- *    use timers (as if in TimeMode.EventTime or TimeMode.ProcessingTime), an 
+ *    use timers (as if in TimeMode.EventTime or TimeMode.ProcessingTime), an
  *    UnsupportedOperationException or NullPointerException will be thrown.
  *  - '''TTL''': State TTL configurations are ignored. All state persists indefinitely.
  *
@@ -61,6 +61,10 @@ class TwsTester[K, I, O](
     case p: StatefulProcessorWithInitialState[K @unchecked, I @unchecked, O @unchecked, s] =>
       handleInitialState[s]()
     case _ =>
+      require(
+        initialState.isEmpty,
+        "Passed initial state, but the stateful processor doesn't support initial state."
+      )
   }
 
   private def handleInitialState[S](): Unit = {
@@ -77,7 +81,7 @@ class TwsTester[K, I, O](
    *
    * This corresponds to processing one microbatch. {@code handleInputRows} will be called once for
    * each key that appears in {@code input}.
-   * 
+   *
    * To simulate real-time mode, call this method repeatedly in a loop, passing a list with a single
    * (key, input row) tuple per call.
    *
@@ -89,7 +93,7 @@ class TwsTester[K, I, O](
     for ((key, v) <- input.groupBy(_._1)) {
       ImplicitGroupingKeyTracker.setImplicitKey(key)
       ans = ans ++ processor.handleInputRows(key, v.map(_._2).iterator, null).toList
-    }    
+    }
     ans
   }
 
