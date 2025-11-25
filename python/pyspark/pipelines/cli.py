@@ -228,7 +228,8 @@ def register_definitions(
     - Import Python files matching the glob patterns in the spec.
     - Register SQL files matching the glob patterns in the spec.
     """
-    path = spec_path.parent
+    path = spec_path.parent.resolve()
+
     with change_dir(path):
         with graph_element_registration_context(registry):
             log_with_curr_timestamp(f"Loading definitions. Root directory: '{path}'.")
@@ -260,7 +261,7 @@ def register_definitions(
                         log_with_curr_timestamp(f"Registering SQL file {file}...")
                         with file.open("r") as f:
                             sql = f.read()
-                        file_path_relative_to_spec = file.relative_to(spec_path.parent)
+                        file_path_relative_to_spec = file.relative_to(path)
                         registry.register_sql(sql, file_path_relative_to_spec)
                     else:
                         raise PySparkException(
