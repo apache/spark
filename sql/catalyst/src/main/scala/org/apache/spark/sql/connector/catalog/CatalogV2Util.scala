@@ -587,12 +587,29 @@ private[sql] object CatalogV2Util {
       .asTableCatalog
   }
 
+  def toStructType(cols: Seq[MetadataColumn]): StructType = {
+    StructType(cols.map(toStructField))
+  }
+
+  private def toStructField(col: MetadataColumn): StructField = {
+    val metadata = Option(col.metadataInJSON).map(Metadata.fromJson).getOrElse(Metadata.empty)
+    var f = StructField(col.name, col.dataType, col.isNullable, metadata)
+    if (col.comment != null) {
+      f = f.withComment(col.comment)
+    }
+    f
+  }
+
+  def v2ColumnsToStructType(columns: Array[Column]): StructType = {
+    v2ColumnsToStructType(columns.toImmutableArraySeq)
+  }
+
   /**
    * Converts DS v2 columns to StructType, which encodes column comment and default value to
    * StructField metadata. This is mainly used to define the schema of v2 scan, w.r.t. the columns
    * of the v2 table.
    */
-  def v2ColumnsToStructType(columns: Array[Column]): StructType = {
+  def v2ColumnsToStructType(columns: Seq[Column]): StructType = {
     StructType(columns.map(v2ColumnToStructField))
   }
 
