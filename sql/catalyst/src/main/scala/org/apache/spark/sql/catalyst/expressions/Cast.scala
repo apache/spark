@@ -372,6 +372,19 @@ object Cast extends QueryErrorsBase {
         case _ => false
       }
     }
+    (from, to) match {
+      case (s1: StructType, s2: StructType) =>
+        s1.length == s2.length && s1.fields.zip(s2.fields).forall {
+          case (f1, f2) => canAssignDefaultValue(f1.dataType, f2.dataType)
+        }
+      case (a1: ArrayType, a2: ArrayType) =>
+        canAssignDefaultValue(a1.elementType, a2.elementType)
+      case (m1: MapType, m2: MapType) =>
+        canAssignDefaultValue(m1.keyType, m2.keyType) &&
+          canAssignDefaultValue(m1.valueType, m2.valueType)
+      case (_: VariantType, s: StructType) => isVariantStruct(s)
+      case (k, v) => canUpCast(k, v)
+    }
     // In order to resolve defaults for variants, they need to be in their regular VariantType
     // representation instead of the Struct representation used in shredded reads.
     // Note that currently, only null values are supported for variant projections pushed into the
