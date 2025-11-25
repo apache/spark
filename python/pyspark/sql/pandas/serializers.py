@@ -1341,14 +1341,9 @@ class GroupPandasUDFSerializer(ArrowStreamPandasUDFSerializer):
                 batches_gen,
                 arrow_type,
             ) in iterator:  # tuple constructed in wrap_grouped_*_pandas_udf
-                # yields df for single UDF or [(df1, type1), (df2, type2), ...] for multiple UDFs
+                # yields df for single UDF (grouped map doesn't support multiple UDFs)
                 for item in batches_gen:
-                    if isinstance(item, list) and len(item) > 0 and isinstance(item[0], tuple):
-                        # Multiple UDFs: item is [(df1, type1), (df2, type2), ...]
-                        yield item
-                    else:
-                        # Single UDF: item is df, wrap with arrow_type
-                        yield (item, arrow_type)
+                    yield (item, arrow_type)
 
         super(GroupPandasUDFSerializer, self).dump_stream(flatten_iterator(), stream)
 

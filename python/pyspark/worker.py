@@ -55,7 +55,6 @@ from pyspark.sql.pandas.serializers import (
     ArrowStreamPandasUDFSerializer,
     ArrowStreamPandasUDTFSerializer,
     GroupPandasUDFSerializer,
-    ArrowStreamAggPandasUDFSerializer,
     GroupArrowUDFSerializer,
     CogroupArrowUDFSerializer,
     CogroupPandasUDFSerializer,
@@ -968,8 +967,7 @@ def wrap_grouped_agg_pandas_udf(f, args_offsets, kwargs_offsets, return_type, ru
         import pandas as pd
 
         result = func(*series)
-        # Return generator yielding Series
-        yield pd.Series([result])
+        return pd.Series([result])
 
     return (
         args_kwargs_offsets,
@@ -1053,8 +1051,7 @@ def wrap_unbounded_window_agg_pandas_udf(f, args_offsets, kwargs_offsets, return
         import pandas as pd
 
         result = func(*series)
-        # Return generator yielding Series
-        yield pd.Series([result]).repeat(len(series[0]))
+        return pd.Series([result]).repeat(len(series[0]))
 
     return (
         args_kwargs_offsets,
@@ -1119,8 +1116,7 @@ def wrap_bounded_window_agg_pandas_udf(f, args_offsets, kwargs_offsets, return_t
             #       reasons we don't do it here.
             series_slices = [s.iloc[begin_array[i] : end_array[i]] for s in series]
             result.append(func(*series_slices))
-        # Return generator yielding Series
-        yield pd.Series(result)
+        return pd.Series(result)
 
     return (
         args_offsets[:2] + args_kwargs_offsets,
@@ -2735,24 +2731,13 @@ def read_udfs(pickleSer, infile, eval_type):
         ):
             ser = ArrowStreamAggArrowUDFSerializer(timezone, True, _assign_cols_by_name, True)
         elif eval_type in (
+            PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
+            PythonEvalType.SQL_GROUPED_MAP_PANDAS_ITER_UDF,
             PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF,
             PythonEvalType.SQL_WINDOW_AGG_PANDAS_UDF,
         ):
-            ser = ArrowStreamAggPandasUDFSerializer(
-                timezone=timezone,
-                safecheck=safecheck,
-                assign_cols_by_name=_assign_cols_by_name,
-                int_to_decimal_coercion_enabled=int_to_decimal_coercion_enabled,
-            )
-        elif eval_type in (
-            PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
-            PythonEvalType.SQL_GROUPED_MAP_PANDAS_ITER_UDF,
-        ):
             ser = GroupPandasUDFSerializer(
-                timezone=timezone,
-                safecheck=safecheck,
-                assign_cols_by_name=_assign_cols_by_name,
-                int_to_decimal_coercion_enabled=int_to_decimal_coercion_enabled,
+                timezone, safecheck, _assign_cols_by_name, int_to_decimal_coercion_enabled
             )
         elif eval_type == PythonEvalType.SQL_COGROUPED_MAP_ARROW_UDF:
             ser = CogroupArrowUDFSerializer(_assign_cols_by_name)
@@ -3039,7 +3024,6 @@ def read_udfs(pickleSer, infile, eval_type):
         ]
 
         def mapper(a):
-            # ArrowStreamAggPandasUDFSerializer.load_stream already returns merged Series list
             results = [f(*[a[o] for o in arg_offsets]) for arg_offsets, f in udfs]
             # Results are (generator, arrow_type) tuples
             if len(results) == 1:
