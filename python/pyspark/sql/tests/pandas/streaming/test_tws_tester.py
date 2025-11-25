@@ -31,7 +31,7 @@ from pyspark.sql import DataFrame
 from pyspark.sql.functions import split
 from pyspark.sql.streaming import StatefulProcessor
 from pyspark.sql.streaming.tws_tester import TwsTester
-from pyspark.sql.types import StructType, StructField, StringType, IntegerType, Row
+from pyspark.sql.types import StructType, StructField, StringType, IntegerType, Row, DoubleType
 from pyspark.testing.sqlutils import (
     ReusedSQLTestCase,
     have_pandas,
@@ -194,7 +194,7 @@ def _get_processor(factory: StatefulProcessorFactory, use_pandas: bool = False):
     return factory.pandas() if use_pandas else factory.row()
 
 
-@unittest.skip("a")
+#@unittest.skip("a")
 @unittest.skipIf(
     not have_pandas or not have_pyarrow,
     pandas_requirement_message or pyarrow_requirement_message or "",
@@ -219,14 +219,16 @@ class TwsTesterFuzzTests(ReusedSQLTestCase):
         processor: StatefulProcessor,
         batches: list[list[tuple]],
         input_columns: list[str],
+        input_types: list[str],
         output_schema: StructType,
         use_pandas: bool = False,
     ):
         num_batches = len(batches)
-        key_column: str = input_columns[
-            0
-        ]  # Assume first column is key columns for this test.
+        key_column: str = input_columns[ 0  ]         # Assume first column is key column.
+
         num_input_columns = len(input_columns)
+        assert len(input_types) == num_input_columns
+        
 
         # Use TwsTester to compute expected results.
         tester = TwsTester(processor, key_column_name=key_column)
@@ -251,7 +253,7 @@ class TwsTesterFuzzTests(ReusedSQLTestCase):
         df_split = df.withColumn("split_values", split(df["value"], ","))
         df_final = df_split.select(
             *[
-                df_split.split_values.getItem(i).alias(col_name).cast("string")
+                df_split.split_values.getItem(i).alias(col_name).cast(input_types[i])
                 for i, col_name in enumerate(input_columns)
             ]
         )
@@ -294,7 +296,7 @@ class TwsTesterFuzzTests(ReusedSQLTestCase):
                 with open(input_path + f"/test{batch_id}.txt", "w") as f:
                     for row in batch:
                         assert len(row) == num_input_columns
-                        f.write(",".join(row) + "\n")
+                        f.write(",".join(str(value) for value in row) + "\n")
                 query.processAllAvailable()
             query.awaitTermination(1)
             self.assertTrue(query.exception() is None)
@@ -302,13 +304,16 @@ class TwsTesterFuzzTests(ReusedSQLTestCase):
             query.stop()
 
         # Assert actual results are equal to expected results.
+        LOG(f"actual_results={actual_results}")
+        LOG(f"expected_results={expected_results}")
+        
         self.assertEqual(len(actual_results), num_batches)
         self.assertEqual(len(expected_results), num_batches)
         for batch_id in range(num_batches):
             self.assertEqual(actual_results[batch_id], expected_results[batch_id])
 
-    def test_running_count_fuzz(self):
-        LOG("***** TEST START ******")
+    #@unittest.skip("a")
+    def test_fuzz_running_count(self):
         output_schema = StructType(
             [
                 StructField("key", StringType(), True),
@@ -322,6 +327,7 @@ class TwsTesterFuzzTests(ReusedSQLTestCase):
             value = "".join(random.choices("abcdefghijklmnopqrstuvwxyz", k=5))
             input_data.append((key, value))
         input_columns: list[str] = ["key", "value"]
+        input_types: list[str] = ["string", "string"]
         batches = [input_data, input_data]
 
         for use_pandas in [False, True]:
@@ -330,7 +336,33 @@ class TwsTesterFuzzTests(ReusedSQLTestCase):
                 RunningCountStatefulProcessorFactory(), use_pandas=use_pandas
             )
             self._check_tws_tester(
-                processor, batches, input_columns, output_schema, use_pandas=use_pandas
+                processor, batches, input_columns,input_types, output_schema, use_pandas=use_pandas
+            )
+
+    def test_fuzz_topk(self):
+        output_schema = StructType(
+            [
+                StructField("key", StringType(), True),
+                StructField("score", DoubleType(), True),
+            ]
+        )
+
+        input_data: list[tuple[str, float]] = []
+        for _ in range(1000):
+            key: str = f"key{random.randint(0, 9)}"
+            score: float = random.randint(0, 1000000) / 1000 
+            input_data.append((key, score))
+        input_columns: list[str] = ["key", "score"]
+        input_types: list[str] = ["string", "double"]
+        batches = [input_data]
+
+        for use_pandas in [False, True]:
+            LOG(f"**** use_pandas={use_pandas}")
+            processor = _get_processor(
+                TopKProcessorFactory(k=10), use_pandas=use_pandas
+            )
+            self._check_tws_tester(
+                processor, batches, input_columns, input_types, output_schema, use_pandas=use_pandas
             )
 
 
