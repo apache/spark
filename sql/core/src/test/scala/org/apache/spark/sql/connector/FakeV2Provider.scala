@@ -19,7 +19,7 @@ package org.apache.spark.sql.connector
 
 import java.util
 
-import org.apache.spark.sql.connector.catalog.{Table, TableProvider}
+import org.apache.spark.sql.connector.catalog.{RequiresDataFrameWriterV1SaveAsTableOverwriteWriteOption, Table, TableProvider}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.connector.read.{InputPartition, ScanBuilder}
 import org.apache.spark.sql.types.StructType
@@ -83,3 +83,7 @@ class FakeV2ProviderWithCustomSchema extends FakeV2Provider {
     new FakeTable(schema, partitioning, new CaseInsensitiveStringMap(properties))
   }
 }
+
+class FakeV2ProviderWithV1SaveAsTableOverwriteWriteOption
+    extends FakeV2Provider
+    with RequiresDataFrameWriterV1SaveAsTableOverwriteWriteOption

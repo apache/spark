@@ -484,12 +484,20 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) extends sql.DataFram
           serde = None,
           external = false,
           constraints = Seq.empty)
+        val writeOptions = lookupV2Provider() match {
+          case Some(_: RequiresDataFrameWriterV1SaveAsTableOverwriteWriteOption) =>
+            extraOptions +
+              (RequiresDataFrameWriterV1SaveAsTableOverwriteWriteOption
+                .IS_DATAFRAME_WRITER_V1_SAVE_AS_TABLE_OVERWRITE_OPTION_NAME -> "true")
+          case _ =>
+            extraOptions
+        }
         ReplaceTableAsSelect(
           UnresolvedIdentifier(nameParts),
           partitioningAsV2,
           df.queryExecution.analyzed,
           tableSpec,
-          writeOptions = extraOptions.toMap,
+          writeOptions = writeOptions.toMap,
           orCreate = true) // Create the table if it doesn't exist
 
       case (other, _) =>
