@@ -7341,7 +7341,7 @@
       "DataFrameReader.schema API or creating a table, please do not specify the schema.",
       "Or if you're scanning an existed table, please drop it and re-create it."
     ],
-    "sqlState" : "42KD7"
+    "sqlState" : "42K03"
   },
   "USER_SPECIFIED_AND_INFERRED_SCHEMA_NOT_COMPATIBLE" : {
     "message" : [
