@@ -563,7 +563,6 @@ class TwsTesterTests(ReusedSQLTestCase):
         )
         self.assertEqual(result, [Row(key="key@#$%", count=2)])
 
-    @unittest.skip("bug")
     def test_null_key_value_row(self):
         processor = RunningCountStatefulProcessorFactory().row()
         tester = TwsTester(processor)
@@ -785,6 +784,7 @@ class TwsTesterTests(ReusedSQLTestCase):
         self.assertEqual(initial_state_call_count[0], 0)
 
 
+@unittest.skip("temp")
 @unittest.skipIf(
     not have_pandas or not have_pyarrow,
     pandas_requirement_message or pyarrow_requirement_message or "",

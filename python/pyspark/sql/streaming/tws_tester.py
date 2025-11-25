@@ -306,7 +306,9 @@ class TwsTester:
                 self.handle.setGroupingKey(key)
                 self.processor.handleInitialState(key, row, TimerValues(-1, -1))
         elif initialStatePandas is not None:
-            for key, group_df in initialStatePandas.groupby(self.key_column_name, dropna=False):
+            for key, group_df in initialStatePandas.groupby(
+                self.key_column_name, dropna=False
+            ):
                 self.handle.setGroupingKey(key)
                 for _, row_df in group_df.iterrows():
                     single_row_df = pd.DataFrame([row_df]).reset_index(drop=True)
@@ -330,7 +332,11 @@ class TwsTester:
         objects representing all output rows produced by the processor during this batch.
         """
         result: list[Row] = []
-        sorted_input = sorted(input, key=lambda row: row[self.key_column_name])
+        k: str = self.key_column_name
+        sorted_input = sorted(
+            input,
+            key=lambda row: (row[k] is not None, row[k] or ""),
+        )
         for key, rows in groupby(
             sorted_input, key=lambda row: row[self.key_column_name]
         ):
@@ -351,12 +357,14 @@ class TwsTester:
         passed to ``transformWithStateInPandas`` in a real streaming query.
 
         The input is a :class:`pandas.DataFrame` to process, which will be automatically grouped by
-        the key column specified in the constructor. Returns a :class:`pandas.DataFrame` 
+        the key column specified in the constructor. Returns a :class:`pandas.DataFrame`
         representing all output rows produced by the processor during this batch.
         """
         result_dfs = []
-        sorted_input = input.sort_values(by=self.key_column_name, na_position='first')
-        for key, group_df in sorted_input.groupby(self.key_column_name, dropna=False, sort=False):
+        sorted_input = input.sort_values(by=self.key_column_name, na_position="first")
+        for key, group_df in sorted_input.groupby(
+            self.key_column_name, dropna=False, sort=False
+        ):
             self.handle.setGroupingKey(key)
             timer_values = TimerValues(-1, -1)
             result_iter: Iterator[pd.DataFrame] = self.processor.handleInputRows(
@@ -376,7 +384,7 @@ class TwsTester:
     def peekValueState(self, stateName: str, key: Any) -> Optional[tuple]:
         """
         Peek at a value state for a given key without modifying it.
-        
+
         Returns None if the state does not exist for the given key.
         """
         return self.handle.states[stateName].state.get(key, None)
@@ -388,7 +396,7 @@ class TwsTester:
     def peekListState(self, stateName: str, key: Any) -> list[tuple]:
         """
         Peek at a list state for a given key without modifying it.
-        
+
         Returns an empty list if the state does not exist for the given key.
         """
         return list(self.handle.states[stateName].state.get(key, []))
@@ -400,7 +408,7 @@ class TwsTester:
     def peekMapState(self, stateName: str, key: Any) -> dict:
         """
         Peek at a map state for a given key without modifying it.
-        
+
         Returns an empty dict if the state does not exist for the given key.
         """
         return dict(self.handle.states[stateName].state.get(key, {}))
