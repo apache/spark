@@ -320,25 +320,29 @@ class TwsTesterTests(ReusedSQLTestCase):
                 result += tester.test([row])
             return result
 
-        ans = test_row_by_row_helper([
-            Row(key="key1", value="a"),
-            Row(key="key2", value="b"),
-            Row(key="key1", value="c"),
-            Row(key="key2", value="b"),
-            Row(key="key1", value="c"),
-            Row(key="key1", value="c"),
-            Row(key="key3", value="q"),
-        ])
-        self.assertEqual(ans, [ 
-            Row(key="key1", count=1),
-            Row(key="key2", count=1),
-            Row(key="key1", count=2),
-            Row(key="key2", count=2),
-            Row(key="key1", count=3),
-            Row(key="key1", count=4),
-            Row(key="key3", count=1),
-        ])
-
+        ans = test_row_by_row_helper(
+            [
+                Row(key="key1", value="a"),
+                Row(key="key2", value="b"),
+                Row(key="key1", value="c"),
+                Row(key="key2", value="b"),
+                Row(key="key1", value="c"),
+                Row(key="key1", value="c"),
+                Row(key="key3", value="q"),
+            ]
+        )
+        self.assertEqual(
+            ans,
+            [
+                Row(key="key1", count=1),
+                Row(key="key2", count=1),
+                Row(key="key1", count=2),
+                Row(key="key2", count=2),
+                Row(key="key1", count=3),
+                Row(key="key1", count=4),
+                Row(key="key3", count=1),
+            ],
+        )
 
     # Tests that TwsTester calls handleInitialState.
     def test_initial_state_row(self):
@@ -366,7 +370,7 @@ class TwsTesterTests(ReusedSQLTestCase):
         )
         self.assertEqual(tester.peekValueState("count", "a"), (10,))
         self.assertEqual(tester.peekValueState("count", "b"), (20,))
- 
+
         ans = tester.testInPandas(
             pd.DataFrame({"key": ["a", "c"], "value": ["a", "c"]})
         )
