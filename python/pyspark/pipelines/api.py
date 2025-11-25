@@ -429,7 +429,7 @@ def create_streaming_table(
         property values. These properties will be set on the table.
     :param partition_cols: A list containing the column names of the partition columns.
     :param cluster_by: A list containing the column names of the cluster columns.
-    :param schema Explicit Spark SQL schema to materialize this table with. Supports either a \
+    :param schema: Explicit Spark SQL schema to materialize this table with. Supports either a \
         Pyspark StructType or a SQL DDL string, such as "a INT, b STRING".
     :param format: The format of the table, e.g. "parquet".
     """
