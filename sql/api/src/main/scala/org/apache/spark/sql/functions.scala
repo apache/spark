@@ -6911,6 +6911,55 @@ object functions {
   }
 
   /**
+   * Creates a TIME from the number of seconds since midnight.
+   *
+   * @group datetime_funcs
+   * @since 4.2.0
+   */
+  def time_from_seconds(e: Column): Column = Column.fn("time_from_seconds", e)
+
+  /**
+   * Creates a TIME from the number of milliseconds since midnight.
+   *
+   * @group datetime_funcs
+   * @since 4.2.0
+   */
+  def time_from_millis(e: Column): Column = Column.fn("time_from_millis", e)
+
+  /**
+   * Creates a TIME from the number of microseconds since midnight.
+   *
+   * @group datetime_funcs
+   * @since 4.2.0
+   */
+  def time_from_micros(e: Column): Column = Column.fn("time_from_micros", e)
+
+  /**
+   * Extracts the number of seconds (including fractional seconds) from a TIME value. Returns a
+   * DECIMAL(14,6) to preserve microsecond precision.
+   *
+   * @group datetime_funcs
+   * @since 4.2.0
+   */
+  def time_to_seconds(e: Column): Column = Column.fn("time_to_seconds", e)
+
+  /**
+   * Extracts the number of milliseconds since midnight from a TIME value.
+   *
+   * @group datetime_funcs
+   * @since 4.2.0
+   */
+  def time_to_millis(e: Column): Column = Column.fn("time_to_millis", e)
+
+  /**
+   * Extracts the number of microseconds since midnight from a TIME value.
+   *
+   * @group datetime_funcs
+   * @since 4.2.0
+   */
+  def time_to_micros(e: Column): Column = Column.fn("time_to_micros", e)
+
+  /**
    * Parses the `timestamp` expression with the `format` expression to a timestamp without time
    * zone. Returns null with invalid input.
    *
@@ -9470,6 +9519,24 @@ object functions {
    */
   def st_geomfromwkb(wkb: Column): Column =
     Column.fn("st_geomfromwkb", wkb)
+
+  /**
+   * Returns a new GEOGRAPHY or GEOMETRY value whose SRID is the specified SRID value.
+   *
+   * @group st_funcs
+   * @since 4.1.0
+   */
+  def st_setsrid(geo: Column, srid: Column): Column =
+    Column.fn("st_setsrid", geo, srid)
+
+  /**
+   * Returns a new GEOGRAPHY or GEOMETRY value whose SRID is the specified SRID value.
+   *
+   * @group st_funcs
+   * @since 4.1.0
+   */
+  def st_setsrid(geo: Column, srid: Int): Column =
+    Column.fn("st_setsrid", geo, lit(srid))
 
   /**
    * Returns the SRID of the input GEOGRAPHY or GEOMETRY value.

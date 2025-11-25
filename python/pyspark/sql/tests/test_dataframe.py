@@ -20,6 +20,7 @@ import os
 import pydoc
 import shutil
 import tempfile
+import warnings
 import unittest
 from typing import cast
 import io
@@ -1043,6 +1044,18 @@ class DataFrameTestsMixin:
         # this test should cover for unexpected errors in the API.
         df = self.spark.range(10).localCheckpoint(eager=True, storageLevel=StorageLevel.DISK_ONLY)
         df.collect()
+
+    def test_socket_leak(self):
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always", ResourceWarning)
+            df = self.spark.range(10)
+            df.collect()
+
+            df = self.spark.range(10)
+            for _ in df.toLocalIterator():
+                pass
+
+        self.assertEqual(w, [])
 
     def test_transpose(self):
         df = self.spark.createDataFrame([{"a": "x", "b": "y", "c": "z"}])

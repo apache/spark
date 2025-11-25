@@ -92,6 +92,7 @@ jobs:
           pyspark_pandas_modules=`cd dev && python -c "import sparktestsupport.modules as m; print(','.join(m.name for m in m.all_modules if m.name.startswith('pyspark-pandas')))"`
           pyspark=`./dev/is-changed.py -m $pyspark_modules`
           pandas=`./dev/is-changed.py -m $pyspark_pandas_modules`
+          pyspark_install=`./dev/is-changed.py -m pyspark-install`
           if [[ "${{ github.repository }}" != 'apache/spark' ]]; then
             yarn=`./dev/is-changed.py -m yarn`
             kubernetes=`./dev/is-changed.py -m kubernetes`
@@ -102,6 +103,7 @@ jobs:
             ui=true
             docs=true
           else
+            pyspark_install=false
             pandas=false
             yarn=false
             kubernetes=false
@@ -118,6 +120,7 @@ jobs:
               \"build\": \"$build\",
               \"pyspark\": \"$pyspark\",
               \"pyspark-pandas\": \"$pandas\",
+              \"pyspark-install\": \"$pyspark_install\",
               \"sparkr\": \"$sparkr\",
               \"tpcds-1g\": \"$tpcds\",
               \"docker-integration-tests\": \"$docker\",
@@ -521,6 +524,8 @@ jobs:
           - >-
             pyspark-connect
           - >-
+            pyspark-install
+          - >-
             pyspark-pandas
           - >-
             pyspark-pandas-slow
@@ -537,6 +542,8 @@ jobs:
           - modules: ${{ fromJson(needs.precondition.outputs.required).pyspark != 'true' && 'pyspark-mllib, pyspark-ml, pyspark-ml-connect' }}
           - modules: ${{ fromJson(needs.precondition.outputs.required).pyspark != 'true' && 'pyspark-structured-streaming, pyspark-structured-streaming-connect' }}
           - modules: ${{ fromJson(needs.precondition.outputs.required).pyspark != 'true' && 'pyspark-connect' }}
+          # pyspark-install is very slow so we only run it when it's changed or explicity requested
+          - modules: ${{ fromJson(needs.precondition.outputs.required).pyspark-install != 'true' && 'pyspark-install' }}
           # Always run if pyspark-pandas == 'true', even infra-image is skip (such as non-master job)
           # In practice, the build will run in individual PR, but not against the individual commit
           # in Apache Spark repository.

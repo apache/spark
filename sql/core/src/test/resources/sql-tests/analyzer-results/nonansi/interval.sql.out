@@ -61,15 +61,21 @@ Project [(INTERVAL '2147483647' MONTH / 0.5) AS (INTERVAL '2147483647' MONTH / 0
 -- !query
 select interval 2147483647 day * 2
 -- !query analysis
-java.lang.ArithmeticException
-long overflow
+org.apache.spark.SparkArithmeticException
+{
+  "errorClass" : "INTERVAL_ARITHMETIC_OVERFLOW.WITHOUT_SUGGESTION",
+  "sqlState" : "22015"
+}
 
 
 -- !query
 select interval 2147483647 day / 0.5
 -- !query analysis
-java.lang.ArithmeticException
-long overflow
+org.apache.spark.SparkArithmeticException
+{
+  "errorClass" : "INTERVAL_ARITHMETIC_OVERFLOW.WITHOUT_SUGGESTION",
+  "sqlState" : "22015"
+}
 
 
 -- !query
@@ -3212,3 +3218,13 @@ SELECT width_bucket(INTERVAL '-59' MINUTE, INTERVAL -'1 01' DAY TO HOUR, INTERVA
 -- !query analysis
 Project [width_bucket(INTERVAL '-59' MINUTE, INTERVAL '-1 01' DAY TO HOUR, INTERVAL '1 02:03:04.001' DAY TO SECOND, cast(10 as bigint)) AS width_bucket(INTERVAL '-59' MINUTE, INTERVAL '-1 01' DAY TO HOUR, INTERVAL '1 02:03:04.001' DAY TO SECOND, 10)#xL]
 +- OneRowRelation
+
+
+-- !query
+SELECT interval 106751991 day 4 hour 0 minute 54.776 second
+-- !query analysis
+org.apache.spark.SparkArithmeticException
+{
+  "errorClass" : "INTERVAL_ARITHMETIC_OVERFLOW.WITHOUT_SUGGESTION",
+  "sqlState" : "22015"
+}

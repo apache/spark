@@ -2140,7 +2140,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       errorClass = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMNS_MISMATCH",
       messageParameters = Map(
         "tableName" -> toSQLId(tableName),
-        "errors" -> errors.mkString("\n- ", "\n- ", "")))
+        "errors" -> errors.mkString("- ", "\n- ", "")))
   }
 
   def metadataColumnsChangedAfterAnalysis(
@@ -2150,7 +2150,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       errorClass = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.METADATA_COLUMNS_MISMATCH",
       messageParameters = Map(
         "tableName" -> toSQLId(tableName),
-        "errors" -> errors.mkString("\n- ", "\n- ", "")))
+        "errors" -> errors.mkString("- ", "\n- ", "")))
   }
 
   def numberOfPartitionsNotAllowedWithUnspecifiedDistributionError(): Throwable = {
@@ -4477,7 +4477,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "viewName" -> toSQLId(viewName),
         "tableName" -> toSQLId(tableName),
         "colType" -> "data",
-        "errors" -> errors.mkString("\n- ", "\n- ", "")))
+        "errors" -> errors.mkString("- ", "\n- ", "")))
   }
 
   def metadataColumnsChangedAfterViewWithPlanCreation(
@@ -4490,6 +4490,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "viewName" -> toSQLId(viewName),
         "tableName" -> toSQLId(tableName),
         "colType" -> "metadata",
-        "errors" -> errors.mkString("\n- ", "\n- ", "")))
+        "errors" -> errors.mkString("- ", "\n- ", "")))
   }
 }

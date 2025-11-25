@@ -207,7 +207,7 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
         sql(s"INSERT INTO $t VALUES (1, 'a'), (null, 'b')")
         sql(s"ALTER TABLE $t ADD CONSTRAINT c1 CHECK (id > 0) $characteristic")
         val table = loadTable(nonPartitionCatalog, "ns", "tbl")
-        assert(table.currentVersion() == "2")
+        assert(table.version() == "2")
         assert(table.validatedVersion() == "1")
         val constraint = getCheckConstraint(table)
         assert(constraint.name() == "c1")
@@ -254,7 +254,7 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
       // Add a valid check constraint
       sql(s"ALTER TABLE $t ADD CONSTRAINT valid_positive_num CHECK (s.num >= -1)")
       val table = loadTable(nonPartitionCatalog, "ns", "tbl")
-      assert(table.currentVersion() == "2")
+      assert(table.version() == "2")
       assert(table.validatedVersion() == "1")
       val constraint = getCheckConstraint(table)
       assert(constraint.name() == "valid_positive_num")
@@ -284,7 +284,7 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
       // Add a valid check constraint
       sql(s"ALTER TABLE $t ADD CONSTRAINT valid_map_val CHECK (m['a'] >= -1)")
       val table = loadTable(nonPartitionCatalog, "ns", "tbl")
-      assert(table.currentVersion() == "2")
+      assert(table.version() == "2")
       assert(table.validatedVersion() == "1")
       val constraint = getCheckConstraint(table)
       assert(constraint.name() == "valid_map_val")
@@ -312,7 +312,7 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
       // Add a valid check constraint
       sql(s"ALTER TABLE $t ADD CONSTRAINT valid_array CHECK (a[1] >= -2)")
       val table = loadTable(nonPartitionCatalog, "ns", "tbl")
-      assert(table.currentVersion() == "2")
+      assert(table.version() == "2")
       assert(table.validatedVersion() == "1")
       val constraint = getCheckConstraint(table)
       assert(constraint.name() == "valid_array")

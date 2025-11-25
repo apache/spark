@@ -21,7 +21,6 @@ import java.util.concurrent.ThreadPoolExecutor
 import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.concurrent.{ExecutionContext, Future}
-import scala.util.{Failure, Success}
 import scala.util.control.NonFatal
 
 import org.apache.spark.internal.{Logging, LogKeys}
@@ -53,7 +52,7 @@ trait FlowExecution {
   def identifier: TableIdentifier
 
   /**
-   * Returns a user-visible name for the flow.
+   * Returns the user-visible name of this flow.
    */
   final def displayName: String = identifier.unquotedString
 
@@ -139,10 +138,6 @@ trait FlowExecution {
     _future = try {
       Option(
         executeInternal()
-          .transform {
-            case Success(_) => Success(ExecutionResult.FINISHED)
-            case Failure(e) => Failure(e)
-          }
           .map(_ => ExecutionResult.FINISHED)
           .recover {
             case _: Throwable if stopped.get() =>
@@ -196,7 +191,7 @@ trait StreamingFlowExecution extends FlowExecution with Logging {
   /** Visible for testing */
   def getStreamingQuery: StreamingQuery =
     _streamingQuery.getOrElse(
-      throw new IllegalStateException(s"StreamingPhysicalFlow has not been started")
+      throw new IllegalStateException("StreamingPhysicalFlow has not been started")
     )
 
   /**
@@ -230,14 +225,13 @@ class StreamingTableWrite(
 
   def startStream(): StreamingQuery = {
     val data = graph.reanalyzeFlow(flow).df
-    val dataStreamWriter = data.writeStream
+    val dataStreamWriter = data
+      .writeStream
       .queryName(displayName)
       .option("checkpointLocation", checkpointPath)
       .trigger(trigger)
       .outputMode(OutputMode.Append())
-    if (destination.format.isDefined) {
-      dataStreamWriter.format(destination.format.get)
-    }
+    destination.format.foreach(dataStreamWriter.format)
     dataStreamWriter.toTable(destination.identifier.unquotedString)
   }
 }
@@ -252,28 +246,25 @@ class BatchTableWrite(
     val sqlConf: Map[String, String]
 ) extends FlowExecution {
 
-  override def isStreaming: Boolean = false
+  override final def isStreaming: Boolean = false
   override def getOrigin: QueryOrigin = flow.origin
 
-  def executeInternal(): scala.concurrent.Future[Unit] =
+  def executeInternal(): Future[Unit] = {
     SparkSessionUtils.withSqlConf(spark, sqlConf.toList: _*) {
       updateContext.flowProgressEventLogger.recordRunning(flow = flow)
       val data = graph.reanalyzeFlow(flow).df
       Future {
         val dataFrameWriter = data.write
-        if (destination.format.isDefined) {
-          dataFrameWriter.format(destination.format.get)
-        }
+        destination.format.foreach(dataFrameWriter.format)
 
         // In "append" mode with saveAsTable, partition/cluster columns must be specified in query
         // because the format and options of the existing table is used, and the table could
         // have been created with partition columns.
-        if (destination.clusterCols.isDefined) {
-          val clusterCols = destination.clusterCols.get
+        destination.clusterCols.foreach { clusterCols =>
           dataFrameWriter.clusterBy(clusterCols.head, clusterCols.tail: _*)
         }
-        if (destination.partitionCols.isDefined) {
-          dataFrameWriter.partitionBy(destination.partitionCols.get: _*)
+        destination.partitionCols.foreach { partitionCols =>
+          dataFrameWriter.partitionBy(partitionCols: _*)
         }
 
         dataFrameWriter
@@ -281,6 +272,7 @@ class BatchTableWrite(
           .saveAsTable(destination.identifier.unquotedString)
       }
     }
+  }
 }
 
 /** A `StreamingFlowExecution` that writes a streaming `DataFrame` to a `Sink`. */

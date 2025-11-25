@@ -113,6 +113,7 @@ class UnivocityParser(
     options.locale,
     legacyFormat = FAST_DATE_FORMAT,
     isParsing = true)
+  private lazy val timeFormatter = TimeFormatter(options.timeFormatInRead, isParsing = true)
 
   private val csvFilters = if (SQLConf.get.csvFilterPushDown) {
     new OrderedFilters(filters, requiredSchema)
@@ -260,6 +261,11 @@ class UnivocityParser(
     case _: TimestampNTZType => (d: String) =>
       nullSafeDatum(d, name, nullable, options) { datum =>
         timestampNTZFormatter.parseWithoutTimeZone(datum, false)
+      }
+
+    case _: TimeType => (d: String) =>
+      nullSafeDatum(d, name, nullable, options) { datum =>
+        timeFormatter.parse(datum)
       }
 
     case _: StringType => (d: String) =>

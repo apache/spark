@@ -17,9 +17,12 @@
 
 package org.apache.spark.sql.internal.types;
 
+import org.apache.spark.annotation.Unstable;
+
 /**
  * Class for providing SRS mappings for cartesian spatial reference systems.
  */
+@Unstable
 public class CartesianSpatialReferenceSystemMapper extends SpatialReferenceSystemMapper {
   // Returns the string ID corresponding to the input SRID. If not supported, returns `null`.
   public static String getStringId(int srid) {

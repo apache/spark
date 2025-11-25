@@ -80,7 +80,8 @@ object SimpleAnalyzer extends Analyzer(
       FunctionRegistry.builtin,
       TableFunctionRegistry.builtin) {
       override def createDatabase(dbDefinition: CatalogDatabase, ignoreIfExists: Boolean): Unit = {}
-    })) {
+    }),
+  RelationCache.empty) {
   override def resolver: Resolver = caseSensitiveResolution
 }
 
@@ -285,11 +286,14 @@ object Analyzer {
  * Provides a logical query plan analyzer, which translates [[UnresolvedAttribute]]s and
  * [[UnresolvedRelation]]s into fully typed objects using information in a [[SessionCatalog]].
  */
-class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor[LogicalPlan]
+class Analyzer(
+    override val catalogManager: CatalogManager,
+    private[sql] val sharedRelationCache: RelationCache = RelationCache.empty)
+  extends RuleExecutor[LogicalPlan]
   with CheckAnalysis with AliasHelper with SQLConfHelper with ColumnResolutionHelper {
 
   private val v1SessionCatalog: SessionCatalog = catalogManager.v1SessionCatalog
-  private val relationResolution = new RelationResolution(catalogManager)
+  private val relationResolution = new RelationResolution(catalogManager, sharedRelationCache)
   private val functionResolution = new FunctionResolution(catalogManager, relationResolution)
 
   override protected def validatePlanChanges(
@@ -1203,6 +1207,8 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         val relation = table match {
           case u: UnresolvedRelation if !u.isStreaming =>
             resolveRelation(u).getOrElse(u)
+          case r: V2TableReference =>
+            relationResolution.resolveReference(r)
           case other => other
         }
 
@@ -1709,14 +1715,15 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
                 val resolvedDeleteCondition = deleteCondition.map(
                   resolveExpressionByPlanChildren(_, m))
                 DeleteAction(resolvedDeleteCondition)
-              case UpdateAction(updateCondition, assignments) =>
+              case UpdateAction(updateCondition, assignments, fromStar) =>
                 val resolvedUpdateCondition = updateCondition.map(
                   resolveExpressionByPlanChildren(_, m))
                 UpdateAction(
                   resolvedUpdateCondition,
                   // The update value can access columns from both target and source tables.
                   resolveAssignments(assignments, m, MergeResolvePolicy.BOTH,
-                    throws = throws))
+                    throws = throws),
+                  fromStar)
               case UpdateStarAction(updateCondition) =>
                 // Expand star to top level source columns.  If source has less columns than target,
                 // assignments will be added by ResolveRowLevelCommandAssignments later.
@@ -1738,7 +1745,8 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
                   updateCondition.map(resolveExpressionByPlanChildren(_, m)),
                   // For UPDATE *, the value must be from source table.
                   resolveAssignments(assignments, m, MergeResolvePolicy.SOURCE,
-                    throws = throws))
+                    throws = throws),
+                  fromStar = true)
               case o => o
             }
             val newNotMatchedActions = m.notMatchedActions.map {
@@ -1783,14 +1791,15 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
                 val resolvedDeleteCondition = deleteCondition.map(
                   resolveExpressionByPlanOutput(_, targetTable))
                 DeleteAction(resolvedDeleteCondition)
-              case UpdateAction(updateCondition, assignments) =>
+              case UpdateAction(updateCondition, assignments, fromStar) =>
                 val resolvedUpdateCondition = updateCondition.map(
                   resolveExpressionByPlanOutput(_, targetTable))
                 UpdateAction(
                   resolvedUpdateCondition,
                   // The update value can access columns from the target table only.
                   resolveAssignments(assignments, m, MergeResolvePolicy.TARGET,
-                    throws = throws))
+                    throws = throws),
+                  fromStar)
               case o => o
             }
 

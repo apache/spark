@@ -5253,7 +5253,7 @@
   "RUN_EMPTY_PIPELINE" : {
     "message" : [
       "Pipelines are expected to have at least one non-temporary dataset defined (tables, persisted views) but no non-temporary datasets were found in your pipeline.",
-      "Please verify that you have included the expected source files, and that your source code includes table definitions (e.g., CREATE MATERIALIZED VIEW in SQL code, @sdp.table in python code)."
+      "Please verify that you have included the expected source files, and that your source code includes table definitions (e.g., CREATE MATERIALIZED VIEW in SQL code, @dp.table in python code)."
     ],
     "sqlState" : "42617"
   },
@@ -5427,6 +5427,85 @@
       "Unknown time mode <timeMode>. Accepted timeMode modes are 'none', 'processingTime', 'eventTime'"
     ],
     "sqlState" : "42802"
+  },
+  "STATE_REPARTITION_INVALID_CHECKPOINT" : {
+    "message" : [
+      "The provided checkpoint location '<checkpointLocation>' is in an invalid state."
+    ],
+    "subClass" : {
+      "LAST_BATCH_ABANDONED_REPARTITION" : {
+        "message" : [
+          "The last batch ID <lastBatchId> is a repartition batch with <lastBatchShufflePartitions> shuffle partitions and didn't finish successfully.",
+          "You're now requesting to repartition to <numPartitions> shuffle partitions.",
+          "Please retry with the same number of shuffle partitions as the previous attempt.",
+          "Once that completes successfully, you can repartition to another number of shuffle partitions."
+        ]
+      },
+      "LAST_BATCH_FAILED" : {
+        "message" : [
+          "The last batch ID <lastBatchId> didn't finish successfully. Please make sure the streaming query finishes successfully, before repartitioning.",
+          "If using ProcessingTime trigger, you can use AvailableNow trigger instead, which will make sure the query terminates successfully by itself.",
+          "If you want to skip this check, set enforceExactlyOnceSink parameter in repartition to false.",
+          "But this can cause duplicate output records from the failed batch when using exactly-once sinks."
+        ]
+      },
+      "MISSING_OFFSET_SEQ_METADATA" : {
+        "message" : [
+          "The OffsetSeq (v<version>) metadata is missing for batch ID <batchId>. Please make sure the checkpoint is from a supported Spark version (Spark 4.0+)."
+        ]
+      },
+      "NO_BATCH_FOUND" : {
+        "message" : [
+          "No microbatch has been recorded in the checkpoint location. Make sure the streaming query has successfully completed at least one microbatch before repartitioning."
+        ]
+      },
+      "NO_COMMITTED_BATCH" : {
+        "message" : [
+          "There is no committed microbatch. Make sure the streaming query has successfully completed at least one microbatch before repartitioning."
+        ]
+      },
+      "OFFSET_SEQ_NOT_FOUND" : {
+        "message" : [
+          "Offset sequence entry for batch ID <batchId> not found. You might have set a very low value for",
+          "'spark.sql.streaming.minBatchesToRetain' config during the streaming query execution or you deleted files in the checkpoint location."
+        ]
+      },
+      "SHUFFLE_PARTITIONS_ALREADY_MATCH" : {
+        "message" : [
+          "The number of shuffle partitions in the last committed batch (id=<batchId>) is the same as the requested <numPartitions> partitions.",
+          "Hence, already has the requested number of partitions, so no-op."
+        ]
+      },
+      "UNSUPPORTED_OFFSET_SEQ_VERSION" : {
+        "message" : [
+          "Unsupported offset sequence version <version>. Please make sure the checkpoint is from a supported Spark version (Spark 4.0+)."
+        ]
+      }
+    },
+    "sqlState" : "55019"
+  },
+  "STATE_REPARTITION_INVALID_PARAMETER" : {
+    "message" : [
+      "The repartition parameter <parameter> is invalid:"
+    ],
+    "subClass" : {
+      "IS_EMPTY" : {
+        "message" : [
+          "cannot be empty."
+        ]
+      },
+      "IS_NOT_GREATER_THAN_ZERO" : {
+        "message" : [
+          "must be greater than zero."
+        ]
+      },
+      "IS_NULL" : {
+        "message" : [
+          "cannot be null."
+        ]
+      }
+    },
+    "sqlState" : "42616"
   },
   "STATE_STORE_CANNOT_CREATE_COLUMN_FAMILY_WITH_RESERVED_CHARS" : {
     "message" : [
@@ -5940,7 +6019,7 @@
   "TEMP_TABLE_OR_VIEW_ALREADY_EXISTS" : {
     "message" : [
       "Cannot create the temporary view <relationName> because it already exists.",
-      "Choose a different name, drop or replace the existing view,  or add the IF NOT EXISTS clause to tolerate pre-existing views."
+      "Choose a different name, drop or replace the existing view."
     ],
     "sqlState" : "42P07"
   },
@@ -6573,6 +6652,11 @@
       "DROP_NAMESPACE" : {
         "message" : [
           "Drop the namespace <namespace>."
+        ]
+      },
+      "GEOSPATIAL_DISABLED" : {
+        "message" : [
+          "Geospatial feature is disabled."
         ]
       },
       "HIVE_TABLE_TYPE" : {

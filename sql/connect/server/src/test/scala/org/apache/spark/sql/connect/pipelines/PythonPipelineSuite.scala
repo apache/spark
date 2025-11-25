@@ -26,6 +26,9 @@ import java.util.concurrent.TimeUnit
 import scala.collection.mutable.ArrayBuffer
 import scala.util.Try
 
+import org.scalactic.source.Position
+import org.scalatest.Tag
+
 import org.apache.spark.api.python.PythonUtils
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
@@ -49,7 +52,6 @@ class PythonPipelineSuite
     with EventVerificationTestHelpers {
 
   def buildGraph(pythonText: String): DataflowGraph = {
-    assume(PythonTestDepsChecker.isConnectDepsAvailable)
     val indentedPythonText = pythonText.linesIterator.map("        " + _).mkString("\n")
     // create a unique identifier to allow identifying the session and dataflow graph
     val customSessionIdentifier = UUID.randomUUID().toString
@@ -530,7 +532,6 @@ class PythonPipelineSuite
       "eager analysis or execution will fail")(
     Seq("""spark.sql("SELECT * FROM src")""", """spark.read.table("src").collect()""")) {
     command =>
-      assume(PythonTestDepsChecker.isConnectDepsAvailable)
       val ex = intercept[RuntimeException] {
         buildGraph(s"""
         |@dp.materialized_view
@@ -549,7 +550,6 @@ class PythonPipelineSuite
   }
 
   test("create dataset with the same name will fail") {
-    assume(PythonTestDepsChecker.isConnectDepsAvailable)
     val ex = intercept[AnalysisException] {
       buildGraph(s"""
            |@dp.materialized_view
@@ -623,7 +623,6 @@ class PythonPipelineSuite
   }
 
   test("create datasets with three part names") {
-    assume(PythonTestDepsChecker.isConnectDepsAvailable)
     val graphTry = Try {
       buildGraph(s"""
            |@dp.table(name = "some_catalog.some_schema.mv")
@@ -676,7 +675,6 @@ class PythonPipelineSuite
   }
 
   test("create named flow with multipart name will fail") {
-    assume(PythonTestDepsChecker.isConnectDepsAvailable)
     val ex = intercept[RuntimeException] {
       buildGraph(s"""
            |@dp.table
@@ -825,7 +823,6 @@ class PythonPipelineSuite
   }
 
   test("create pipeline without table will throw RUN_EMPTY_PIPELINE exception") {
-    assume(PythonTestDepsChecker.isConnectDepsAvailable)
     checkError(
       exception = intercept[AnalysisException] {
         buildGraph(s"""
@@ -837,7 +834,6 @@ class PythonPipelineSuite
   }
 
   test("create pipeline with only temp view will throw RUN_EMPTY_PIPELINE exception") {
-    assume(PythonTestDepsChecker.isConnectDepsAvailable)
     checkError(
       exception = intercept[AnalysisException] {
         buildGraph(s"""
@@ -851,7 +847,6 @@ class PythonPipelineSuite
   }
 
   test("create pipeline with only flow will throw RUN_EMPTY_PIPELINE exception") {
-    assume(PythonTestDepsChecker.isConnectDepsAvailable)
     checkError(
       exception = intercept[AnalysisException] {
         buildGraph(s"""
@@ -1048,7 +1043,6 @@ class PythonPipelineSuite
 
   gridTest("Unsupported SQL command outside query function should result in a failure")(
     unsupportedSqlCommandList) { unsupportedSqlCommand =>
-    assume(PythonTestDepsChecker.isConnectDepsAvailable)
     val ex = intercept[RuntimeException] {
       buildGraph(s"""
         |spark.sql("$unsupportedSqlCommand")
@@ -1063,7 +1057,6 @@ class PythonPipelineSuite
 
   gridTest("Unsupported SQL command inside query function should result in a failure")(
     unsupportedSqlCommandList) { unsupportedSqlCommand =>
-    assume(PythonTestDepsChecker.isConnectDepsAvailable)
     val ex = intercept[RuntimeException] {
       buildGraph(s"""
         |@dp.materialized_view()
@@ -1110,5 +1103,14 @@ class PythonPipelineSuite
         |  spark.sql("$supportedSqlCommand")
         |  return spark.range(5)
         |""".stripMargin)
+  }
+
+  override protected def test(testName: String, testTags: Tag*)(testFun: => Any)(implicit
+      pos: Position): Unit = {
+    if (PythonTestDepsChecker.isConnectDepsAvailable) {
+      super.test(testName, testTags: _*)(testFun)
+    } else {
+      super.ignore(testName, testTags: _*)(testFun)
+    }
   }
 }
