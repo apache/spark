@@ -784,7 +784,6 @@ class TwsTesterTests(ReusedSQLTestCase):
         self.assertEqual(initial_state_call_count[0], 0)
 
 
-@unittest.skip("temp")
 @unittest.skipIf(
     not have_pandas or not have_pyarrow,
     pandas_requirement_message or pyarrow_requirement_message or "",
