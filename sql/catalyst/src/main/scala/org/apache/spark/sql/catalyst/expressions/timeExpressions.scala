@@ -752,6 +752,111 @@ case class TimeTrunc(unit: Expression, time: Expression)
   }
 }
 
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = """
+    _FUNC_(bucket_width, time) - Returns the start of the time bucket containing `time`,
+    where buckets are aligned to midnight (00:00:00).
+  """,
+  arguments = """
+    Arguments:
+      * bucket_width - A day-time interval specifying the width of each bucket (e.g., INTERVAL '15' MINUTE).
+      * time - The time value to bucket. Must be of TIME type.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_(INTERVAL '15' MINUTE, TIME'09:37:22');
+       09:30:00
+      > SELECT _FUNC_(INTERVAL '30' MINUTE, TIME'14:47:00');
+       14:30:00
+      > SELECT _FUNC_(INTERVAL '1' HOUR, TIME'16:35:00');
+       16:00:00
+      > SELECT _FUNC_(INTERVAL '2' HOUR, TIME'15:20:00');
+       14:00:00
+  """,
+  note = """
+    Notes:
+      * Buckets are aligned to midnight (00:00:00) and cannot span across midnight.
+      * The bucket width must be a positive day-time interval.
+      * The function returns the start time of the bucket (inclusive lower bound).
+  """,
+  group = "datetime_funcs",
+  since = "4.2.0")
+// scalastyle:on line.size.limit
+case class TimeBucket(
+    bucketWidth: Expression,
+    time: Expression)
+  extends BinaryExpression with ImplicitCastInputTypes {
+
+  override def left: Expression = bucketWidth
+  override def right: Expression = time
+
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(DayTimeIntervalType, AnyTimeType)
+
+  override def dataType: DataType = time.dataType
+
+  override def nullable: Boolean = time.nullable || bucketWidth.nullable
+
+  override def nullIntolerant: Boolean = true
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    super.checkInputDataTypes() match {
+      case TypeCheckSuccess =>
+        if (!bucketWidth.foldable) {
+          DataTypeMismatch(
+            errorSubClass = "NON_FOLDABLE_INPUT",
+            messageParameters = Map(
+              "inputName" -> toSQLId("bucket_width"),
+              "inputType" -> toSQLType(bucketWidth.dataType),
+              "inputExpr" -> toSQLExpr(bucketWidth)
+            )
+          )
+        } else {
+          val widthValue = bucketWidth.eval()
+          if (widthValue != null) {
+            val widthMicros = widthValue.asInstanceOf[Long]
+            if (widthMicros <= 0) {
+              DataTypeMismatch(
+                errorSubClass = "VALUE_OUT_OF_RANGE",
+                messageParameters = Map(
+                  "exprName" -> "bucket_width",
+                  "valueRange" -> s"(0, ${Long.MaxValue}]",
+                  "currentValue" -> toSQLValue(widthMicros, LongType)
+                )
+              )
+            } else {
+              TypeCheckSuccess
+            }
+          } else {
+            TypeCheckSuccess
+          }
+        }
+      case failure => failure
+    }
+  }
+
+  override def nullSafeEval(bucketWidthValue: Any, timeValue: Any): Any = {
+    val bucketMicros = bucketWidthValue.asInstanceOf[Long]
+    val timeNanos = timeValue.asInstanceOf[Long]
+    val bucketNanos = bucketMicros * NANOS_PER_MICROS
+    (timeNanos / bucketNanos) * bucketNanos
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    defineCodeGen(ctx, ev, (bucket, time) => {
+      val scaleFactor = s"${NANOS_PER_MICROS}L"
+      s"($time / ($bucket * $scaleFactor)) * ($bucket * $scaleFactor)"
+    })
+  }
+
+  override def prettyName: String = "time_bucket"
+
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): TimeBucket =
+    copy(bucketWidth = newLeft, time = newRight)
+}
+
 abstract class IntegralToTimeBase
   extends UnaryExpression with ExpectsInputTypes with CodegenFallback {
   protected def upScaleFactor: Long

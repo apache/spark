@@ -3664,6 +3664,13 @@ def time_trunc(unit: "ColumnOrName", time: "ColumnOrName") -> Column:
 time_trunc.__doc__ = pysparkfuncs.time_trunc.__doc__
 
 
+def time_bucket(bucket_width: "ColumnOrName", time: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("time_bucket", bucket_width, time)
+
+
+time_bucket.__doc__ = pysparkfuncs.time_bucket.__doc__
+
+
 def timestamp_millis(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("timestamp_millis", col)
 

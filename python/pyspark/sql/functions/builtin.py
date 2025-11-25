@@ -12921,6 +12921,79 @@ def time_trunc(unit: "ColumnOrName", time: "ColumnOrName") -> Column:
 
 
 @_try_remote_functions
+def time_bucket(bucket_width: "ColumnOrName", time: "ColumnOrName") -> Column:
+    """
+    Returns the start of the time bucket containing the input time value.
+    Buckets are aligned to midnight (00:00:00).
+
+    .. versionadded:: 4.2.0
+
+    Parameters
+    ----------
+    bucket_width : :class:`~pyspark.sql.Column` or column name
+        A day-time interval specifying the width of each bucket.
+        Can be specified as a column expression like ``sf.expr("INTERVAL '15' MINUTE")``.
+    time : :class:`~pyspark.sql.Column` or column name
+        The time value to bucket. Must be of TIME type.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        The start time of the bucket containing the input time.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.time_trunc`
+    :meth:`pyspark.sql.functions.date_trunc`
+
+    Examples
+    --------
+    Example 1: Basic 15-minute bucketing
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([
+    ...     (1, '09:37:22'),
+    ...     (2, '14:47:00'),
+    ...     (3, '10:05:30')
+    ... ], ['id', 't'])
+    >>> df = df.withColumn("t", sf.to_time(df.t))
+    >>> df.select(sf.time_bucket(sf.expr("INTERVAL '15' MINUTE"), df.t).alias("bucket")).show()
+    +--------+
+    |  bucket|
+    +--------+
+    |09:30:00|
+    |14:45:00|
+    |10:00:00|
+    +--------+
+
+    Example 2: Hourly bucketing
+
+    >>> df.select(sf.time_bucket(sf.expr("INTERVAL '1' HOUR"), df.t).alias("bucket")).show()
+    +--------+
+    |  bucket|
+    +--------+
+    |09:00:00|
+    |14:00:00|
+    |10:00:00|
+    +--------+
+
+    Example 3: Aggregation with time buckets
+
+    >>> df.groupBy(
+    ...     sf.time_bucket(sf.expr("INTERVAL '30' MINUTE"), df.t).alias("time_slot")
+    ... ).count().orderBy("time_slot").show()
+    +---------+-----+
+    |time_slot|count|
+    +---------+-----+
+    | 09:30:00|    1|
+    | 10:00:00|    1|
+    | 14:30:00|    1|
+    +---------+-----+
+    """
+    return _invoke_function_over_columns("time_bucket", bucket_width, time)
+
+
+@_try_remote_functions
 def timestamp_millis(col: "ColumnOrName") -> Column:
     """
     Creates timestamp from the number of milliseconds since UTC epoch.

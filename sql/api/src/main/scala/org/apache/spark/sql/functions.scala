@@ -6911,6 +6911,36 @@ object functions {
   }
 
   /**
+   * Returns the start of the time bucket containing the input time value. Buckets are aligned to
+   * midnight (00:00:00).
+   *
+   * @param bucketWidth
+   *   A Column representing a day-time interval (e.g., INTERVAL '15' MINUTE)
+   * @param time
+   *   The time column to bucket
+   *
+   * @group datetime_funcs
+   * @since 4.2.0
+   */
+  def time_bucket(bucketWidth: Column, time: Column): Column =
+    Column.fn("time_bucket", bucketWidth, time)
+
+  /**
+   * Returns the start of the time bucket containing the input time value. Buckets are aligned to
+   * midnight (00:00:00).
+   *
+   * @param bucketWidth
+   *   A string representing a day-time interval (e.g., "15 minutes")
+   * @param time
+   *   The time column to bucket
+   *
+   * @group datetime_funcs
+   * @since 4.2.0
+   */
+  def time_bucket(bucketWidth: String, time: Column): Column =
+    time_bucket(expr(s"INTERVAL '$bucketWidth'"), time)
+
+  /**
    * Creates a TIME from the number of seconds since midnight.
    *
    * @group datetime_funcs

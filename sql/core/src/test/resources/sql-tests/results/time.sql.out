@@ -2761,3 +2761,189 @@ SELECT time_from_micros(time_to_micros(TIME'14:30:00.5'))
 struct<time_from_micros(time_to_micros(TIME '14:30:00.5')):time(6)>
 -- !query output
 14:30:00.5
+
+
+-- !query
+SELECT time_bucket(INTERVAL '15' MINUTE, TIME'09:37:22.123456')
+-- !query schema
+struct<time_bucket(INTERVAL '15' MINUTE, TIME '09:37:22.123456'):time(6)>
+-- !query output
+09:30:00
+
+
+-- !query
+SELECT time_bucket(INTERVAL '30' MINUTE, TIME'14:47:00.987654')
+-- !query schema
+struct<time_bucket(INTERVAL '30' MINUTE, TIME '14:47:00.987654'):time(6)>
+-- !query output
+14:30:00
+
+
+-- !query
+SELECT time_bucket(INTERVAL '1' HOUR, TIME'16:35:00.500000')
+-- !query schema
+struct<time_bucket(INTERVAL '01' HOUR, TIME '16:35:00.5'):time(6)>
+-- !query output
+16:00:00
+
+
+-- !query
+SELECT time_bucket(INTERVAL '2' HOUR, TIME'15:20:00.123000')
+-- !query schema
+struct<time_bucket(INTERVAL '02' HOUR, TIME '15:20:00.123'):time(6)>
+-- !query output
+14:00:00
+
+
+-- !query
+SELECT time_bucket(INTERVAL '90' MINUTE, TIME'10:45:00.456789')
+-- !query schema
+struct<time_bucket(INTERVAL '90' MINUTE, TIME '10:45:00.456789'):time(6)>
+-- !query output
+10:30:00
+
+
+-- !query
+SELECT time_bucket(INTERVAL '1' HOUR, TIME'00:00:00.123456')
+-- !query schema
+struct<time_bucket(INTERVAL '01' HOUR, TIME '00:00:00.123456'):time(6)>
+-- !query output
+00:00:00
+
+
+-- !query
+SELECT time_bucket(INTERVAL '30' MINUTE, TIME'23:59:59.888888')
+-- !query schema
+struct<time_bucket(INTERVAL '30' MINUTE, TIME '23:59:59.888888'):time(6)>
+-- !query output
+23:30:00
+
+
+-- !query
+SELECT time_bucket(INTERVAL '15' MINUTE, TIME'09:30:00.555555')
+-- !query schema
+struct<time_bucket(INTERVAL '15' MINUTE, TIME '09:30:00.555555'):time(6)>
+-- !query output
+09:30:00
+
+
+-- !query
+SELECT time_bucket(INTERVAL '1' SECOND, TIME'00:00:00.000001')
+-- !query schema
+struct<time_bucket(INTERVAL '01' SECOND, TIME '00:00:00.000001'):time(6)>
+-- !query output
+00:00:00
+
+
+-- !query
+SELECT time_bucket(INTERVAL '100' MILLISECOND, TIME'12:34:56.789123')
+-- !query schema
+struct<time_bucket(INTERVAL '00.1' SECOND, TIME '12:34:56.789123'):time(6)>
+-- !query output
+12:34:56.7
+
+
+-- !query
+SELECT time_bucket(INTERVAL '1000' MICROSECOND, TIME'14:30:00.555555')
+-- !query schema
+struct<time_bucket(INTERVAL '00.001' SECOND, TIME '14:30:00.555555'):time(6)>
+-- !query output
+14:30:00.555
+
+
+-- !query
+SELECT time_bucket(INTERVAL '15' MINUTE, NULL)
+-- !query schema
+struct<time_bucket(INTERVAL '15' MINUTE, NULL):time(6)>
+-- !query output
+NULL
+
+
+-- !query
+SELECT time_bucket(NULL, TIME'12:34:56.789012')
+-- !query schema
+struct<time_bucket(NULL, TIME '12:34:56.789012'):time(6)>
+-- !query output
+NULL
+
+
+-- !query
+SELECT time_bucket(NULL, NULL)
+-- !query schema
+struct<time_bucket(NULL, NULL):time(6)>
+-- !query output
+NULL
+
+
+-- !query
+WITH time_bucket_data AS (
+  SELECT * FROM VALUES
+    (1, TIME'09:15:30.123456'),
+    (2, TIME'09:37:45.654321'),
+    (3, TIME'10:05:12.987654'),
+    (4, TIME'14:42:00.111222'),
+    (5, TIME'14:55:30.333444')
+  AS t(id, event_time)
+)
+SELECT time_bucket(INTERVAL '30' MINUTE, event_time) AS time_slot,
+       COUNT(*) AS cnt
+FROM time_bucket_data
+GROUP BY time_slot
+ORDER BY time_slot
+-- !query schema
+struct<time_slot:time(6),cnt:bigint>
+-- !query output
+09:00:00	1
+09:30:00	1
+10:00:00	1
+14:30:00	2
+
+
+-- !query
+SELECT time_bucket(INTERVAL '0' MINUTE, TIME'12:34:56.789123')
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.VALUE_OUT_OF_RANGE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "currentValue" : "0L",
+    "exprName" : "bucket_width",
+    "sqlExpr" : "\"time_bucket(INTERVAL '00' MINUTE, TIME '12:34:56.789123')\"",
+    "valueRange" : "(0, 9223372036854775807]"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 62,
+    "fragment" : "time_bucket(INTERVAL '0' MINUTE, TIME'12:34:56.789123')"
+  } ]
+}
+
+
+-- !query
+SELECT time_bucket(INTERVAL '-15' MINUTE, TIME'12:34:56.456789')
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.VALUE_OUT_OF_RANGE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "currentValue" : "-900000000L",
+    "exprName" : "bucket_width",
+    "sqlExpr" : "\"time_bucket(INTERVAL '-15' MINUTE, TIME '12:34:56.456789')\"",
+    "valueRange" : "(0, 9223372036854775807]"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 64,
+    "fragment" : "time_bucket(INTERVAL '-15' MINUTE, TIME'12:34:56.456789')"
+  } ]
+}
