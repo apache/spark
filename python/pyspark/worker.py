@@ -3313,23 +3313,14 @@ def read_udfs(pickleSer, infile, eval_type):
             pickleSer, infile, eval_type, runner_conf, udf_index=0, profiler=profiler
         )
 
-        # Convert to iterator of batches where each batch is represented as:
-        # - Single column: Iterator[pa.Array] (each element is pa.Array from a batch)
-        # - Multiple columns: Iterator[Tuple[pa.Array, ...]] (each element is tuple of arrays from a batch)
+        # Convert to iterator of batches: Iterator[pa.Array] for single column,
+        # or Iterator[Tuple[pa.Array, ...]] for multiple columns
         def mapper(a):
-            # Create an iterator that yields batches based on arg_offsets
-            # Single column: Iterator[pa.Array] - yields array from each batch
-            # Multiple columns: Iterator[Tuple[pa.Array, ...]] - yields tuple of arrays from each batch
-            def create_batch_iterator():
-                for batch_columns in a:
-                    if len(arg_offsets) == 1:
-                        # Single column: Iterator[pa.Array]
-                        yield batch_columns[arg_offsets[0]]
-                    else:
-                        # Multiple columns: Iterator[Tuple[pa.Array, ...]]
-                        yield tuple(batch_columns[o] for o in arg_offsets)
-
-            return f(create_batch_iterator())
+            if len(arg_offsets) == 1:
+                batch_iter = (batch_columns[arg_offsets[0]] for batch_columns in a)
+            else:
+                batch_iter = (tuple(batch_columns[o] for o in arg_offsets) for batch_columns in a)
+            return f(batch_iter)
 
     else:
         udfs = []
