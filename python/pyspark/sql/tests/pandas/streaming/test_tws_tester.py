@@ -462,9 +462,9 @@ class TwsTesterFuzzTests(ReusedSQLTestCase):
         use_pandas: bool = False,
     ):
         num_batches = len(batches)
-        key_column: str = input_columns[0]  # Assume first column is key column.
+        key_column: str = input_columns[0]  # Assume first column is the key column.
 
-        num_input_columns = len(input_columns)
+        num_input_columns: int = len(input_columns)
         assert len(input_types) == num_input_columns
 
         # Use TwsTester to compute expected results.
