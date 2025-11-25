@@ -403,7 +403,6 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
         }
         s = arrow_column.to_pandas(**pandas_options)
 
-        # TODO(SPARK-43579): cache the converter for reuse
         converter = _create_converter_to_pandas(
             data_type=spark_type or from_arrow_type(arrow_column.type, prefer_timestamp_ntz=True),
             nullable=True,
@@ -442,7 +441,6 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
 
         if arrow_type is not None:
             dt = spark_type or from_arrow_type(arrow_type, prefer_timestamp_ntz=True)
-            # TODO(SPARK-43579): cache the converter for reuse
             conv = _create_converter_from_pandas(
                 dt, timezone=self._timezone, error_on_duplicated_field_names=False
             )
