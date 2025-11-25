@@ -3012,31 +3012,6 @@ def read_udfs(pickleSer, infile, eval_type):
             # Call wrapped function which returns (generator, arrow_type)
             return f(keys, value_series_gen)
 
-    elif eval_type in (
-        PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF,
-        PythonEvalType.SQL_WINDOW_AGG_PANDAS_UDF,
-    ):
-        udfs = [
-            read_single_udf(
-                pickleSer, infile, eval_type, runner_conf, udf_index=i, profiler=profiler
-            )
-            for i in range(num_udfs)
-        ]
-
-        def mapper(a):
-            results = [f(*[a[o] for o in arg_offsets]) for arg_offsets, f in udfs]
-            # Results are (generator, arrow_type) tuples
-            if len(results) == 1:
-                return results[0]
-            # Multiple UDFs: combine generators
-            gens, types = zip(*results)
-
-            def combined_gen():
-                for combined_dfs in zip(*gens):
-                    yield [(df, arrow_type) for df, arrow_type in zip(combined_dfs, types)]
-
-            return (combined_gen(), types[0])
-
     elif eval_type == PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_UDF:
         # We assume there is only one UDF here because grouped map doesn't
         # support combining multiple UDFs.
