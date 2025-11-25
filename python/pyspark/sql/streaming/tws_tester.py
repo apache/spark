@@ -81,12 +81,12 @@ class InMemoryListState(ListState):
     def appendValue(self, newState: Tuple) -> None:
         if not self.exists():
             self.state[self.handle.grouping_key] = []
-        self.state.append(newState)
+        self.state[self.handle.grouping_key].append(newState)
 
     def appendList(self, newState: List[Tuple]) -> None:
         if not self.exists():
             self.state[self.handle.grouping_key] = []
-        self.state.extend(newState)
+        self.state[self.handle.grouping_key].extend(newState)
 
     def clear(self) -> None:
         del self.state[self.handle.grouping_key]

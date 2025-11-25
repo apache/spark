@@ -48,6 +48,7 @@ from pyspark.testing.sqlutils import (
 )
 
 from pyspark.sql.tests.pandas.helper.helper_pandas_transform_with_state import (
+    AllMethodsTestProcessorFactory,
     TopKProcessorFactory,
     RunningCountStatefulProcessorFactory,
     StatefulProcessorFactory,
@@ -376,6 +377,62 @@ class TwsTesterTests(ReusedSQLTestCase):
         )
         expected = pd.DataFrame({"key": ["a", "c"], "count": [11, 1]})
         pdt.assert_frame_equal(ans, expected, check_like=True)
+
+    def test_all_methods_processor(self):
+        """Test that TwsTester exercises all state methods."""
+        processor = AllMethodsTestProcessorFactory().row()
+        tester = TwsTester(processor)
+
+        results = tester.test(
+            [
+                Row(key="k", cmd="value-exists"),      # false
+                Row(key="k", cmd="value-set"),         # set to 42
+                Row(key="k", cmd="value-exists"),      # true
+                Row(key="k", cmd="value-clear"),       # clear
+                Row(key="k", cmd="value-exists"),      # false again
+                Row(key="k", cmd="list-exists"),       # false
+                Row(key="k", cmd="list-append"),       # append a, b
+                Row(key="k", cmd="list-exists"),       # true
+                Row(key="k", cmd="list-append-array"), # append c, d
+                Row(key="k", cmd="list-get"),          # a,b,c,d
+                Row(key="k", cmd="map-exists"),        # false
+                Row(key="k", cmd="map-add"),           # add x=1, y=2, z=3
+                Row(key="k", cmd="map-exists"),        # true
+                Row(key="k", cmd="map-keys"),          # x,y,z
+                Row(key="k", cmd="map-values"),        # 1,2,3
+                Row(key="k", cmd="map-iterator"),      # x=1,y=2,z=3
+                Row(key="k", cmd="map-remove"),        # remove y
+                Row(key="k", cmd="map-keys"),          # x,z
+                Row(key="k", cmd="map-clear"),         # clear map
+                Row(key="k", cmd="map-exists"),        # false
+            ]
+        )
+
+        self.assertEqual(
+            results,
+            [
+                Row(key="k", result="value-exists:False"),
+                Row(key="k", result="value-set:done"),
+                Row(key="k", result="value-exists:True"),
+                Row(key="k", result="value-clear:done"),
+                Row(key="k", result="value-exists:False"),
+                Row(key="k", result="list-exists:False"),
+                Row(key="k", result="list-append:done"),
+                Row(key="k", result="list-exists:True"),
+                Row(key="k", result="list-append-array:done"),
+                Row(key="k", result="list-get:a,b,c,d"),
+                Row(key="k", result="map-exists:False"),
+                Row(key="k", result="map-add:done"),
+                Row(key="k", result="map-exists:True"),
+                Row(key="k", result="map-keys:x,y,z"),
+                Row(key="k", result="map-values:1,2,3"),
+                Row(key="k", result="map-iterator:x=1,y=2,z=3"),
+                Row(key="k", result="map-remove:done"),
+                Row(key="k", result="map-keys:x,z"),
+                Row(key="k", result="map-clear:done"),
+                Row(key="k", result="map-exists:False"),
+            ],
+        )
 
 
 @unittest.skip("a")
