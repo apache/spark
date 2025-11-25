@@ -120,7 +120,6 @@ class TwsTesterTests(ReusedSQLTestCase):
         processor = TopKProcessorFactory(k=2).row()
         tester = TwsTester(processor)
 
-        # Feed 1 row with id="0" and temperature=100
         ans1 = tester.test(
             [
                 Row(key="key2", score=30.0),
@@ -140,18 +139,50 @@ class TwsTesterTests(ReusedSQLTestCase):
             Row(key="key2", score=30.0),
             Row(key="key3", score=100.0),
         ]
-    """
-    def test_topk_processor_pandas(self):
-        pass
-        # processor = ListStateProcessorFactory(k=2).pandas()
-        # tester = TwsTester(processor)
-        # TODO
 
-    def test_direct_access_to_value_state(self):
-        processor = ListStatePorcessorFactory().row()
+        ans2 = tester.test([Row(key="key1", score=10.0)])
+        assert ans2 == [Row(key="key1", score=10.0), Row(key="key1", score=3.0)]
+
+    def test_topk_processor_pandas(self):
+        processor = TopKProcessorFactory(k=2).pandas()
         tester = TwsTester(processor)
-        # TODO.
-    """
+
+        input_df1 = pd.DataFrame(
+            {
+                "key": ["key2", "key2", "key1", "key1", "key2", "key2", "key3", "key1"],
+                "score": [30.0, 40.0, 2.0, 3.0, 10.0, 20.0, 100.0, 1.0],
+            }
+        )
+        ans1 = tester.testInPandas(input_df1)
+        expected1 = pd.DataFrame(
+            {
+                "key": ["key1", "key1", "key2", "key2", "key3"],
+                "score": [3.0, 2.0, 40.0, 30.0, 100.0],
+            }
+        )
+        pdt.assert_frame_equal(ans1, expected1, check_like=True)
+
+        input_df2 = pd.DataFrame({"key": ["key1"], "score": [10.0]})
+        ans2 = tester.testInPandas(input_df2)
+        expected2 = pd.DataFrame({"key": ["key1", "key1"], "score": [10.0, 3.0]})
+        pdt.assert_frame_equal(ans2, expected2, check_like=True)
+ 
+    def test_direct_access_to_list_state(self):
+        processor = TopKProcessorFactory(k=2).row()
+        tester = TwsTester(processor)
+
+        tester.setListState("topK", "a", [(6.0,), (5.0,)])
+        tester.setListState("topK", "b", [(8.0,), (7.0,)])
+        tester.test([
+            Row(key="a", score=10.0),
+            Row(key="b", score=7.5),
+            Row(key="c", score=1.0),
+        ])
+
+        assert(tester.peekListState("topK", "a") == [(10.0,), (6.0,)])
+        assert(tester.peekListState("topK", "b") == [(8.0,), (7.5,)])
+        assert(tester.peekListState("topK", "c") == [(1.0,)])
+        assert(tester.peekListState("topK", "d") == [])
 
     # Add test for key column name different than key.
 

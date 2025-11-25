@@ -176,10 +176,18 @@ class TwsTester:
         else:
             return pd.DataFrame()
 
-    def setValueState(self, stateName: str, key: Any, value: Tuple) -> None:
+    def setValueState(self, stateName: str, key: Any, value: tuple) -> None:
         """Directly set a value state for a given key."""
         self.handle.states[stateName].state[key] = value
 
-    def peekValueState(self, stateName: str, key: Any) -> Optional[Tuple]:
+    def peekValueState(self, stateName: str, key: Any) -> Optional[tuple]:
         """Peek at a value state for a given key."""
         return self.handle.states[stateName].state.get(key, None)
+
+    def setListState(self, stateName: str, key: Any, value: list[tuple]) -> None:
+        """Directly set a list state for a given key."""
+        self.handle.states[stateName].state[key] = value
+
+    def peekListState(self, stateName: str, key: Any) -> list[tuple]:
+        """Peek at a list state for a given key."""
+        return list(self.handle.states[stateName].state.get(key, []))
