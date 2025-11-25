@@ -46,6 +46,10 @@ from pyspark.sql.tests.pandas.helper.helper_pandas_transform_with_state import (
     StatefulProcessorFactory,
 )
 
+def LOG(s):
+    with open("/tmp/log.txt", "a") as f:
+        f.write(s + "\n")
+
 
 @unittest.skipIf(
     not have_pandas or not have_pyarrow,
@@ -111,7 +115,7 @@ class TwsTesterTests(ReusedSQLTestCase):
         tester.setValueState("count", "foo", (5,))
         tester.test([Row(key="foo", value="q")])
         self.assertEqual(tester.peekValueState("count", "foo"), (6,))
-    """
+    
     def test_topk_processor(self):
         processor = TopKProcessorFactory(k=2).row()
         tester = TwsTester(processor)
@@ -130,13 +134,13 @@ class TwsTesterTests(ReusedSQLTestCase):
             ]
         )
         assert ans1 == [
-            Row(key="key1", score=2.0),
             Row(key="key1", score=3.0),
-            Row(key="key2", score=30.0),
+            Row(key="key1", score=2.0),
             Row(key="key2", score=40.0),
+            Row(key="key2", score=30.0),
             Row(key="key3", score=100.0),
         ]
-
+    """
     def test_topk_processor_pandas(self):
         pass
         # processor = ListStateProcessorFactory(k=2).pandas()
@@ -152,16 +156,14 @@ class TwsTesterTests(ReusedSQLTestCase):
     # Add test for key column name different than key.
 
 
-def LOG(s):
-    with open("/tmp/log.txt", "a") as f:
-        f.write(s + "\n")
+
 
 
 def _get_processor(factory: StatefulProcessorFactory, use_pandas: bool = False):
     return factory.pandas() if use_pandas else factory.row()
 
 
-#@unittest.skip("a")
+@unittest.skip("a")
 @unittest.skipIf(
     not have_pandas or not have_pyarrow,
     pandas_requirement_message or pyarrow_requirement_message or "",

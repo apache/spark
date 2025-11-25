@@ -2191,7 +2191,7 @@ class TopKProcessor(StatefulProcessor):
     def handleInputRows(self, key, rows, timerValues) -> Iterator[Row]:
         # Load existing list into a buffer
         current = []
-        for score_tuple in self.topK_state.get():
+        for score_tuple in self.topk.get():
             current.append(score_tuple[0])
 
         # Add new values from input rows
@@ -2204,9 +2204,9 @@ class TopKProcessor(StatefulProcessor):
         # Persist back
         # self.topK_state.clear()
         if updated_top_k:
-            self.topK_state.put([(score,) for score in updated_top_k])
+            self.topk.put([(score,) for score in updated_top_k])
 
         # Emit snapshot of top-K for this key
         for score in updated_top_k:
-            yield Row(key=key, score=score)
+            yield Row(key=key[0], score=score)
 
