@@ -29,6 +29,7 @@ import traceback
 import typing
 import socket
 import warnings
+from contextlib import contextmanager
 from types import TracebackType
 from typing import Any, Callable, IO, Iterator, List, Optional, TextIO, Tuple, Union
 
@@ -691,6 +692,7 @@ def _create_local_socket(sock_info: "JavaArray") -> "io.BufferedRWPair":
     return sockfile
 
 
+@contextmanager
 def _load_from_socket(sock_info: "JavaArray", serializer: "Serializer") -> Iterator[Any]:
     """
     Connect to a local socket described by sock_info and use the given serializer to yield data
@@ -707,9 +709,11 @@ def _load_from_socket(sock_info: "JavaArray", serializer: "Serializer") -> Itera
     result of meth:`Serializer.load_stream`,
     usually a generator that yields deserialized data
     """
-    sockfile = _create_local_socket(sock_info)
-    # The socket will be automatically closed when garbage-collected.
-    return serializer.load_stream(sockfile)
+    try:
+        sockfile = _create_local_socket(sock_info)
+        yield serializer.load_stream(sockfile)
+    finally:
+        sockfile.close()
 
 
 def _local_iterator_from_socket(sock_info: "JavaArray", serializer: "Serializer") -> Iterator[Any]:
