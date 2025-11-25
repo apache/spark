@@ -345,6 +345,9 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
   private def recacheByCondition(
       spark: SparkSession,
       condition: CachedData => Boolean): Unit = {
+    // scalastyle:off
+    println("RECACHE TRIGGERED")
+    // scalastyle:onn
     val needToRecache = cachedData.filter(condition)
     this.synchronized {
       // Remove the cache entry before creating a new ones.
