@@ -3986,6 +3986,19 @@ class DataSourceV2SQLSuiteV1Filter
     }
   }
 
+  test("SPARK-54491: insert into temp view on DSv2 table") {
+    val t = s"testcat.default.t"
+    val v = "v"
+    withTable(t) {
+      withTempView(v) {
+        sql(s"CREATE TABLE $t (id INT) USING foo")
+        spark.table(t).createOrReplaceTempView(v)
+        sql(s"INSERT INTO v VALUES (1)")
+        checkAnswer(sql(s"SELECT * FROM $t"), Seq(Row(1)))
+      }
+    }
+  }
+
   private def testNotSupportedV2Command(
       sqlCommand: String,
       sqlParams: String,
