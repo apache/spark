@@ -203,7 +203,8 @@ class TwsTester:
     def __init__(
         self,
         processor: StatefulProcessor,
-        initialState: Optional[List[Tuple[Any, Any]]] = None,
+        initialStateRow: Optional[list[Row]] = None,
+        initialStatePandas: Optional["pd.DataFrame"] = None,
         key_column_name="key",
     ) -> None:
         self.processor = processor
@@ -212,10 +213,20 @@ class TwsTester:
 
         self.processor.init(self.handle)
 
-        if initialState:
-            for key, state in initialState:
-                self.api_client.set_implicit_key(key)
-                self.processor.handleInitialState(key, state)
+        if initialStateRow is not None:
+            assert initialStatePandas is None, "Cannot specify both Row and Pandas initial states."
+            for row in initialStateRow:
+                key = row[self.key_column_name]
+                self.handle.setGroupingKey(key)
+                self.processor.handleInitialState(key, row, TimerValues(-1, -1))
+        elif initialStatePandas is not None:
+            import pandas as pd
+            
+            for key, group_df in initialStatePandas.groupby(self.key_column_name):
+                self.handle.setGroupingKey(key)
+                for _, row_df in group_df.iterrows():
+                    single_row_df = pd.DataFrame([row_df]).reset_index(drop=True)
+                    self.processor.handleInitialState(key, single_row_df, TimerValues(-1, -1))
 
     def test(self, input: list[Row]) -> list[Row]:
         result: list[Row] = []

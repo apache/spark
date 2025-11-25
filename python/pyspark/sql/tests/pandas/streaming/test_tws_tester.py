@@ -293,8 +293,55 @@ class TwsTesterTests(ReusedSQLTestCase):
         self.assertEqual(tester.peekMapState("frequencies", "user3"), {("new",): (1,)})
         self.assertEqual(tester.peekMapState("frequencies", "user4"), {})
 
+    # Example of how TwsTester can be used to test step function.
+    def test_step_function(self):
+        processor = RunningCountStatefulProcessorFactory().row()
+        tester = TwsTester(processor)
 
-# @unittest.skip("a")
+        # Example of helper function using TwsTester to inspect how processing a single row changes
+        # state.
+        def step_function(key: str, input_row: str, state_in: int) -> int:
+            tester.setValueState("count", key, (state_in,))
+            tester.test([Row(key=key, value=input_row)])
+            return tester.peekValueState("count", key)[0]
+
+        self.assertEqual(step_function("key1", "a", 10), 11)
+
+    # Tests that TwsTester calls handleInitialState.
+    def test_initial_state_row(self):
+        processor = RunningCountStatefulProcessorFactory().row()
+        tester = TwsTester(
+            processor,
+            initialStateRow=[
+                Row(key="a", initial_count=10),
+                Row(key="b", initial_count=20),
+            ],
+        )
+        self.assertEqual(tester.peekValueState("count", "a"), (10,))
+        self.assertEqual(tester.peekValueState("count", "b"), (20,))
+
+        ans = tester.test([Row(key="a", value="a"), Row(key="c", value="c")])
+        self.assertEqual(ans, [Row(key="a", count=11), Row(key="c", count=1)])
+
+    def test_initial_state_pandas(self):
+        processor = RunningCountStatefulProcessorFactory().pandas()
+        tester = TwsTester(
+            processor,
+            initialStatePandas=pd.DataFrame(
+                {"key": ["a", "b"], "initial_count": [10, 20]}
+            ),
+        )
+        self.assertEqual(tester.peekValueState("count", "a"), (10,))
+        self.assertEqual(tester.peekValueState("count", "b"), (20,))
+ 
+        ans = tester.testInPandas(
+            pd.DataFrame({"key": ["a", "c"], "value": ["a", "c"]})
+        )
+        expected = pd.DataFrame({"key": ["a", "c"], "count": [11, 1]})
+        pdt.assert_frame_equal(ans, expected, check_like=True)
+
+
+@unittest.skip("a")
 @unittest.skipIf(
     not have_pandas or not have_pyarrow,
     pandas_requirement_message or pyarrow_requirement_message or "",
@@ -481,7 +528,7 @@ class TwsTesterFuzzTests(ReusedSQLTestCase):
             ]
         )
         batches: list[list[tuple[str, str]]] = []
-        for batch_id in range(5): 
+        for batch_id in range(5):
             batch: list[tuple[str, str]] = []
             for _ in range(200):
                 key = f"key{random.randint(0, 9)}"
@@ -511,6 +558,7 @@ if __name__ == "__main__":
         testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:
         testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2,
-        #defaultTest='TwsTesterFuzzTests.test_fuzz_word_frequency'
+    unittest.main(
+        testRunner=testRunner,
+        verbosity=2,
     )
