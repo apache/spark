@@ -36,6 +36,7 @@ from pyspark.testing import (
     should_test_connect,
 )
 from pyspark import Row, SparkConf
+from pyspark.loose_version import LooseVersion
 from pyspark.util import is_remote_only
 from pyspark.testing.utils import PySparkErrorTestUtils
 from pyspark.testing.sqlutils import (
@@ -197,3 +198,28 @@ class ReusedConnectTestCase(unittest.TestCase, SQLTestUtils, PySparkErrorTestUti
             return QuietTest(self._legacy_sc)
         else:
             return contextlib.nullcontext()
+
+
+def skip_if_server_version_is(
+    cond: typing.Callable[[LooseVersion], bool], reason: typing.Optional[str] = None
+) -> typing.Callable[[...], ...]:
+    def decorator(f: typing.Callable) -> typing.Callable:
+        @functools.wraps(f)
+        def wrapper(self, *args, **kwargs):
+            version = self.spark.version
+            if cond(LooseVersion(version)):
+                raise unittest.SkipTest(
+                    f"Skipping test {f.__name__} because server version is {version}"
+                    + (f" ({reason})" if reason else "")
+                )
+            return f(self, *args, **kwargs)
+
+        return wrapper
+
+    return decorator
+
+
+def skip_if_server_version_is_greater_than_or_equal_to(
+    version: str, reason: typing.Optional[str] = None
+) -> typing.Callable[[...], ...]:
+    return skip_if_server_version_is(lambda v: v >= LooseVersion(version), reason)
