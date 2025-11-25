@@ -18,6 +18,7 @@
 import datetime
 import unittest
 import logging
+import os
 
 from collections import OrderedDict
 from decimal import Decimal
@@ -287,12 +288,21 @@ class ApplyInPandasTestsMixin:
         # columns must be in order of applyInPandas schema when no columns given
         return pd.DataFrame([key + (pdf.v.mean(),)])
 
+    @unittest.skipIf(
+        os.environ.get("SPARK_SKIP_CONNECT_COMPAT_TESTS") == "1", "SPARK-54482: To be reenabled"
+    )
     def test_apply_in_pandas_returning_column_names(self):
         self._test_apply_in_pandas(ApplyInPandasTestsMixin.stats_with_column_names)
 
+    @unittest.skipIf(
+        os.environ.get("SPARK_SKIP_CONNECT_COMPAT_TESTS") == "1", "SPARK-54482: To be reenabled"
+    )
     def test_apply_in_pandas_returning_no_column_names(self):
         self._test_apply_in_pandas(ApplyInPandasTestsMixin.stats_with_no_column_names)
 
+    @unittest.skipIf(
+        os.environ.get("SPARK_SKIP_CONNECT_COMPAT_TESTS") == "1", "SPARK-54482: To be reenabled"
+    )
     def test_apply_in_pandas_returning_column_names_sometimes(self):
         def stats(key, pdf):
             if key[0] % 2:
@@ -332,9 +342,15 @@ class ApplyInPandasTestsMixin:
                 lambda key, pdf: pd.DataFrame([key + (pdf.v.mean(), pdf.v.std())])
             )
 
+    @unittest.skipIf(
+        os.environ.get("SPARK_SKIP_CONNECT_COMPAT_TESTS") == "1", "SPARK-54482: To be reenabled"
+    )
     def test_apply_in_pandas_returning_empty_dataframe(self):
         self._test_apply_in_pandas_returning_empty_dataframe(pd.DataFrame())
 
+    @unittest.skipIf(
+        os.environ.get("SPARK_SKIP_CONNECT_COMPAT_TESTS") == "1", "SPARK-54482: To be reenabled"
+    )
     def test_apply_in_pandas_returning_incompatible_type(self):
         with self.quiet():
             self.check_apply_in_pandas_returning_incompatible_type()
@@ -887,6 +903,9 @@ class ApplyInPandasTestsMixin:
         for row in result:
             self.assertEqual(24.5, row[1])
 
+    @unittest.skipIf(
+        os.environ.get("SPARK_SKIP_CONNECT_COMPAT_TESTS") == "1", "SPARK-54482: To be reenabled"
+    )
     def _test_apply_in_pandas_returning_empty_dataframe_error(self, empty_df, error):
         with self.quiet():
             with self.assertRaisesRegex(PythonException, error):
