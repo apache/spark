@@ -281,6 +281,14 @@ class TopKProcessorFactory(StatefulProcessorFactory):
         return TopKProcessor(self.k, use_pandas=False)
 
 
+class WordFrequencyProcessorFactory(StatefulProcessorFactory):
+    def pandas(self):
+        return PandasWordFrequencyProcessor()
+
+    def row(self):
+        return RowWordFrequencyProcessor()
+
+
 # StatefulProcessor implementations
 
 
@@ -2162,7 +2170,7 @@ class RunningCountStatefulProcessor(StatefulProcessor):
         self.handle = handle
         self.count = handle.getValueState("count", self.state_schema)
 
-    def handleInputRows(self, key, rows, timerValues) -> Iterator[pd.DataFrame]:
+    def handleInputRows(self, key, rows, timerValues) -> Iterator[pd.DataFrame | Row]:
         count = self.count.get()[0] if self.count.exists() else 0
         if self.use_pandas:
             count += sum(1 for row_df in rows for row in row_df.iterrows())
@@ -2185,7 +2193,7 @@ class TopKProcessor(StatefulProcessor):
     def init(self, handle: StatefulProcessorHandle) -> None:
         self.topk = handle.getListState("topK", self.state_schema)
 
-    def handleInputRows(self, key, rows, timerValues) -> Iterator[Row]:
+    def handleInputRows(self, key, rows, timerValues) -> Iterator[pd.DataFrame | Row]:
         scores = [score_tuple[0] for score_tuple in self.topk.get()]
         if self.use_pandas:
             scores.extend([row.score for row_df in rows for _, row in row_df.iterrows()])
@@ -2199,4 +2207,36 @@ class TopKProcessor(StatefulProcessor):
         else:
             for score in top_k_scores:
                 yield Row(key=key[0], score=score)
+
+
+# Processor to keep track of word frequencies per each key.
+class RowWordFrequencyProcessor(StatefulProcessor):    
+    def init(self, handle: StatefulProcessorHandle) -> None:
+        self.freq_state = handle.getMapState("frequencies", "key string", "value long")
+
+    def handleInputRows(self, key, rows, timerValues) -> Iterator[Row]:
+        for row in rows:
+            word = row.word
+            current_count = self.freq_state.getValue((word,))[0] if self.freq_state.containsKey((word,)) else 0
+            updated_count = current_count + 1
+            self.freq_state.updateValue((word,), (updated_count,))
+            yield Row(key=key[0], word=word, count=updated_count)
+
+
+# Processor to keep track of word frequencies per each key.
+class PandasWordFrequencyProcessor(StatefulProcessor):    
+    def init(self, handle: StatefulProcessorHandle) -> None:
+        self.freq_state = handle.getMapState("frequencies", "key string", "value long")
+
+    def handleInputRows(self, key, rows, timerValues) -> Iterator[pd.DataFrame]:
+        results = []
+        for row_df in rows:
+            for _, row in row_df.iterrows():
+                word = row.word
+                current_count = self.freq_state.getValue((word,))[0] if self.freq_state.containsKey((word,)) else 0
+                updated_count = current_count + 1
+                self.freq_state.updateValue((word,), (updated_count,))
+                results.append({"key": key[0], "word": word, "count": updated_count})
+        if results:
+            yield pd.DataFrame(results)
 

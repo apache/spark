@@ -29,6 +29,7 @@ from pyspark.sql.streaming.stateful_processor import (
     TimerValues,
     ValueState,
     ListState,
+    MapState,
 )
 from pyspark.sql.types import StructType
 
@@ -91,6 +92,57 @@ class InMemoryListState(ListState):
         del self.state[self.handle.grouping_key]
 
 
+class InMemoryMapState(MapState):
+    """In-memory implementation of MapState for testing."""
+    
+    def __init__(
+        self,
+        handle: "InMemoryStatefulProcessorHandle",
+    ) -> None:
+        self.handle = handle
+        self.state = dict()  # type: dict[Any, dict[Tuple, Tuple]]
+
+    def exists(self) -> bool:
+        return self.handle.grouping_key in self.state
+
+    def getValue(self, key: Tuple) -> Optional[Tuple]:
+        if not self.exists():
+            return None
+        return self.state[self.handle.grouping_key].get(key, None)
+
+    def containsKey(self, key: Tuple) -> bool:
+        if not self.exists():
+            return False
+        return key in self.state[self.handle.grouping_key]
+
+    def updateValue(self, key: Tuple, value: Tuple) -> None:
+        if not self.exists():
+            self.state[self.handle.grouping_key] = {}
+        self.state[self.handle.grouping_key][key] = value
+
+    def iterator(self) -> Iterator[Tuple[Tuple, Tuple]]:
+        if not self.exists():
+            return iter([])
+        return iter(self.state[self.handle.grouping_key].items())
+
+    def keys(self) -> Iterator[Tuple]:
+        if not self.exists():
+            return iter([])
+        return iter(self.state[self.handle.grouping_key].keys())
+
+    def values(self) -> Iterator[Tuple]:
+        if not self.exists():
+            return iter([])
+        return iter(self.state[self.handle.grouping_key].values())
+
+    def removeKey(self, key: Tuple) -> None:
+        if self.exists() and key in self.state[self.handle.grouping_key]:
+            del self.state[self.handle.grouping_key][key]
+
+    def clear(self) -> None:
+        del self.state[self.handle.grouping_key]
+
+
 class InMemoryStatefulProcessorHandle(StatefulProcessorHandle):
     """In-memory implementation of StatefulProcessorHandle for testing."""
     
@@ -121,6 +173,29 @@ class InMemoryStatefulProcessorHandle(StatefulProcessorHandle):
             self.states[stateName] = InMemoryListState(self)
         return self.states[stateName]
 
+    def getMapState(
+        self,
+        stateName: str,
+        userKeySchema: Union[StructType, str],
+        valueSchema: Union[StructType, str],
+        ttlDurationMs: Optional[int] = None,
+    ) -> MapState:
+        if stateName not in self.states:
+            self.states[stateName] = InMemoryMapState(self)
+        return self.states[stateName]
+
+    def registerTimer(self, expiryTimestampMs: int) -> None:
+        raise NotImplementedError()
+
+    def deleteTimer(self, expiryTimestampMs: int) -> None:
+        raise NotImplementedError()
+
+    def listTimers(self) -> Iterator[int]:
+        raise NotImplementedError()
+
+    def deleteIfExists(self, stateName: str) -> None:
+        del self.states[stateName]
+    
     
 
 
@@ -145,17 +220,13 @@ class TwsTester:
     def test(self, input: list[Row]) -> list[Row]:
         result: list[Row] = []
         sorted_input = sorted(input, key=lambda row: row[self.key_column_name])
-        for key, group in groupby(
-            sorted_input, key=lambda row: row[self.key_column_name]
-        ):
+        for key, rows in groupby(sorted_input, key=lambda row: row[self.key_column_name]):
             self.handle.setGroupingKey(key)
-            rows = group
             timer_values = TimerValues(-1, -1)
             result_iter: Iterator[Row] = self.processor.handleInputRows(
                 (key,), iter(rows), timer_values
             )
-            for result_df in result_iter:
-                result.append(result_df)
+            result += list(result_iter)
         return result
 
     def testInPandas(self, input: "pd.DataFrame") -> "pd.DataFrame":
@@ -191,3 +262,11 @@ class TwsTester:
     def peekListState(self, stateName: str, key: Any) -> list[tuple]:
         """Peek at a list state for a given key."""
         return list(self.handle.states[stateName].state.get(key, []))
+
+    def setMapState(self, stateName: str, key: Any, value: dict) -> None:
+        """Directly set a map state for a given key."""
+        self.handle.states[stateName].state[key] = dict(value)
+
+    def peekMapState(self, stateName: str, key: Any) -> dict:
+        """Peek at a map state for a given key."""
+        return dict(self.handle.states[stateName].state.get(key, {}))
