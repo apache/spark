@@ -1207,53 +1207,30 @@ class ArrowStreamAggArrowIterUDFSerializer(ArrowStreamArrowUDFSerializer):
 
     def load_stream(self, stream):
         """
-        Yield column iterators instead of concatenating batches.
-        Each group yields a structure where indexing by column offset gives an iterator of arrays.
+        Yield an iterator that produces one list of column arrays per batch.
+        Each group yields Iterator[List[pa.Array]], allowing UDF to process batches one by one
+        without consuming all batches upfront.
         """
+        def process_group(batches: "Iterator[pa.RecordBatch]"):
+            # Convert each Arrow batch to a list of column arrays on-demand, yielding one list per batch
+            for batch in batches:
+                # Extract all columns from the batch as a list of arrays
+                column_arrays = [batch.column(col_idx) for col_idx in range(batch.num_columns)]
+                yield column_arrays
+
         dataframes_in_group = None
 
         while dataframes_in_group is None or dataframes_in_group > 0:
             dataframes_in_group = read_int(stream)
 
             if dataframes_in_group == 1:
-                batches_stream = ArrowStreamSerializer.load_stream(self, stream)
-                # Peek at the first batch to get the number of columns
-                batches_iter = iter(batches_stream)
-                try:
-                    first_batch = next(batches_iter)
-                except StopIteration:
-                    # Empty group
-                    yield []
-                    continue
-
-                num_cols = first_batch.num_columns
-
-                # Create a custom class that can be indexed to get column iterators
-                # Uses itertools.tee to create independent iterators for each column
-                class ColumnIterators:
-                    def __init__(self, first_batch, batches_iter, num_cols):
-                        self._first_batch = first_batch
-                        self._batches_iter = batches_iter
-                        self._num_cols = num_cols
-                        self._teed_iters = None
-
-                    def __getitem__(self, col_idx):
-                        import itertools
-
-                        # Lazily create teed iterators when first column is accessed
-                        if self._teed_iters is None:
-                            # Recreate full batch stream including first batch
-                            full_stream = itertools.chain([self._first_batch], self._batches_iter)
-                            # Create independent iterators for each column
-                            self._teed_iters = itertools.tee(full_stream, self._num_cols)
-
-                        # Return a generator that extracts the specified column from each batch
-                        return (batch.column(col_idx) for batch in self._teed_iters[col_idx])
-
-                    def __len__(self):
-                        return self._num_cols
-
-                yield ColumnIterators(first_batch, batches_iter, num_cols)
+                # Lazily read and convert Arrow batches one at a time from the stream
+                # This avoids loading all batches into memory for the group
+                batch_iter = process_group(ArrowStreamSerializer.load_stream(self, stream))
+                yield batch_iter
+                # Make sure the batches are fully iterated before getting the next group
+                for _ in batch_iter:
+                    pass
 
             elif dataframes_in_group != 0:
                 raise PySparkValueError(

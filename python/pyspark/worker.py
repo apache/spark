@@ -993,21 +993,12 @@ def wrap_grouped_agg_arrow_iter_udf(f, args_offsets, kwargs_offsets, return_type
         return_type, prefers_large_types=use_large_var_types(runner_conf)
     )
 
-    def wrapped(*col_iters):
+    def wrapped(batch_iter):
         import pyarrow as pa
 
-        # col_iters are iterators over pa.Array (one iterator per column)
-        # The serializer yields lists of RecordBatch, and the mapper extracts each column
-        # as an iterator over that column's arrays from all batches
-
-        if len(col_iters) == 1:
-            # Single column: Iterator[pa.Array] -> Any
-            result = func(col_iters[0])
-        else:
-            # Multiple columns: Iterator[Tuple[pa.Array, ...]] -> Any
-            # Zip the column iterators together to create tuples
-            result = func(zip(*col_iters))
-
+        # batch_iter is Iterator[pa.Array] for single column or Iterator[Tuple[pa.Array, ...]] for multiple columns
+        # Each element represents one batch (array for single column, tuple of arrays for multiple columns)
+        result = func(batch_iter)
         return pa.array([result])
 
     return (
@@ -3312,6 +3303,33 @@ def read_udfs(pickleSer, infile, eval_type):
             df2_keys = table_from_batches(a[1], parsed_offsets[1][0])
             df2_vals = table_from_batches(a[1], parsed_offsets[1][1])
             return f(df1_keys, df1_vals, df2_keys, df2_vals)
+
+    elif eval_type == PythonEvalType.SQL_GROUPED_AGG_ARROW_ITER_UDF:
+        # We assume there is only one UDF here because grouped agg doesn't
+        # support combining multiple UDFs.
+        assert num_udfs == 1
+
+        arg_offsets, f = read_single_udf(
+            pickleSer, infile, eval_type, runner_conf, udf_index=0, profiler=profiler
+        )
+        
+        # Convert to iterator of batches where each batch is represented as:
+        # - Single column: Iterator[pa.Array] (each element is pa.Array from a batch)
+        # - Multiple columns: Iterator[Tuple[pa.Array, ...]] (each element is tuple of arrays from a batch)
+        def mapper(a):
+            # Create an iterator that yields batches based on arg_offsets
+            # Single column: Iterator[pa.Array] - yields array from each batch
+            # Multiple columns: Iterator[Tuple[pa.Array, ...]] - yields tuple of arrays from each batch
+            def create_batch_iterator():
+                for batch_columns in a:
+                    if len(arg_offsets) == 1:
+                        # Single column: Iterator[pa.Array]
+                        yield batch_columns[arg_offsets[0]]
+                    else:
+                        # Multiple columns: Iterator[Tuple[pa.Array, ...]]
+                        yield tuple(batch_columns[o] for o in arg_offsets)
+
+            return f(create_batch_iterator())
 
     else:
         udfs = []
