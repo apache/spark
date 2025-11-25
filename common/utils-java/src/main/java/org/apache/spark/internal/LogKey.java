@@ -49,4 +49,14 @@ package org.apache.spark.internal;
  */
 public interface LogKey {
   String name();
+
+  /**
+   * This method is added for backward compatibility with libraries compiled against older Spark
+   * versions where LogKey was a Scala trait. Scala traits generate a $init$ method that gets
+   * called during initialization. Since LogKey is now a Java interface, we provide this empty
+   * static method to prevent NoSuchMethodError at runtime.
+   */
+  static void $init$(LogKey logKey) {
+    // Empty method for binary compatibility
+  }
 }
