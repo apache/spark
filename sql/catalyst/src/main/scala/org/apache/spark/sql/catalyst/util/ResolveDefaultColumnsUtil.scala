@@ -588,12 +588,25 @@ object ResolveDefaultColumns extends QueryErrorsBase
     }.toSeq
   }
 
+  // In order to resolve defaults for variants, they need to be in their regular VariantType
+  // representation instead of the Struct representation used in shredded reads.
+  // Note that currently, only null values are supported for variant projections pushed into the
+  // scan.
+  private def variantStructToVariant(dt: StructType): StructType = {
+    def isVariantStruct(s: StructType): Boolean =
+      s.fields.length > 0 && s.fields.forall(_.metadata.contains("__VARIANT_METADATA_KEY"))
+    require(!isVariantStruct(dt), "The top level schema should not be a variant struct.")
+    dt.transformRecursively {
+      case s: StructType if isVariantStruct(s) => VariantType
+    }.asInstanceOf[StructType]
+  }
+
   /**
    * These define existence default values for the struct fields for efficiency purposes.
    * The caller should avoid using such methods in a loop for efficiency.
    */
   def existenceDefaultValues(schema: StructType): Array[Any] =
-    getExistenceDefaultValues(schema)
+    getExistenceDefaultValues(variantStructToVariant(schema))
   def existenceDefaultsBitmask(schema: StructType): Array[Boolean] =
     getExistenceDefaultsBitmask(schema)
   def hasExistenceDefaultValues(schema: StructType): Boolean =
