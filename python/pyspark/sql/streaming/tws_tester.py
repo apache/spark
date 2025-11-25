@@ -87,7 +87,8 @@ class _InMemoryListState(ListState):
         self.state[self.handle.grouping_key].extend(newState)
 
     def clear(self) -> None:
-        del self.state[self.handle.grouping_key]
+        if self.exists():
+            del self.state[self.handle.grouping_key]
 
 
 class _InMemoryMapState(MapState):
@@ -305,7 +306,7 @@ class TwsTester:
                 self.handle.setGroupingKey(key)
                 self.processor.handleInitialState(key, row, TimerValues(-1, -1))
         elif initialStatePandas is not None:
-            for key, group_df in initialStatePandas.groupby(self.key_column_name):
+            for key, group_df in initialStatePandas.groupby(self.key_column_name, dropna=False):
                 self.handle.setGroupingKey(key)
                 for _, row_df in group_df.iterrows():
                     single_row_df = pd.DataFrame([row_df]).reset_index(drop=True)
@@ -354,8 +355,8 @@ class TwsTester:
         representing all output rows produced by the processor during this batch.
         """
         result_dfs = []
-        sorted_input = input.sort_values(by=self.key_column_name)
-        for key, group_df in sorted_input.groupby(self.key_column_name):
+        sorted_input = input.sort_values(by=self.key_column_name, na_position='first')
+        for key, group_df in sorted_input.groupby(self.key_column_name, dropna=False, sort=False):
             self.handle.setGroupingKey(key)
             timer_values = TimerValues(-1, -1)
             result_iter: Iterator[pd.DataFrame] = self.processor.handleInputRows(

@@ -23,6 +23,7 @@ import pandas as pd
 import pandas.testing as pdt
 
 from pyspark import SparkConf
+from pyspark.errors.exceptions.base import PySparkValueError
 from pyspark.sql import DataFrame
 from pyspark.sql.functions import split
 from pyspark.sql.streaming import StatefulProcessor
@@ -429,6 +430,359 @@ class TwsTesterTests(ReusedSQLTestCase):
 
         ans1 = tester.test([Row(id="key1", value="a"), Row(id="key1", value="b")])
         self.assertEqual(ans1, [Row(key="key1", count=2)])
+
+    def test_missing_key_column_in_input_row(self):
+        processor = RunningCountStatefulProcessorFactory().row()
+        tester = TwsTester(processor)
+        with self.assertRaises(PySparkValueError):
+            tester.test([Row(wrong_key="key1", value="a")])
+
+    def test_missing_key_column_in_input_pandas(self):
+        processor = RunningCountStatefulProcessorFactory().pandas()
+        tester = TwsTester(processor)
+        input_df = pd.DataFrame({"wrong_key": ["key1"], "value": ["a"]})
+        with self.assertRaises(KeyError):
+            tester.testInPandas(input_df)
+
+    def test_both_initial_states_specified(self):
+        processor = RunningCountStatefulProcessorFactory().row()
+        with self.assertRaises(AssertionError):
+            TwsTester(
+                processor,
+                initialStateRow=[Row(key="a", initial_count=10)],
+                initialStatePandas=pd.DataFrame({"key": ["a"], "initial_count": [10]}),
+            )
+
+    def test_timer_registration_raises_error(self):
+        processor = RunningCountStatefulProcessorFactory().row()
+        tester = TwsTester(processor)
+        with self.assertRaises(NotImplementedError):
+            tester.handle.registerTimer(12345)
+
+    def test_delete_timer_raises_error(self):
+        processor = RunningCountStatefulProcessorFactory().row()
+        tester = TwsTester(processor)
+        with self.assertRaises(NotImplementedError):
+            tester.handle.deleteTimer(12345)
+
+    def test_list_timers_raises_error(self):
+        processor = RunningCountStatefulProcessorFactory().row()
+        tester = TwsTester(processor)
+        with self.assertRaises(NotImplementedError):
+            list(tester.handle.listTimers())
+
+    def test_empty_input_row(self):
+        processor = RunningCountStatefulProcessorFactory().row()
+        tester = TwsTester(processor)
+        result = tester.test([])
+        self.assertEqual(result, [])
+
+    def test_empty_input_pandas(self):
+        processor = RunningCountStatefulProcessorFactory().pandas()
+        tester = TwsTester(processor)
+        input_df = pd.DataFrame({"key": [], "value": []})
+        result = tester.testInPandas(input_df)
+        self.assertTrue(result.empty)
+
+    def test_empty_initial_state_row(self):
+        processor = RunningCountStatefulProcessorFactory().row()
+        tester = TwsTester(processor, initialStateRow=[])
+        result = tester.test([Row(key="key1", value="a")])
+        self.assertEqual(result, [Row(key="key1", count=1)])
+
+    def test_empty_initial_state_pandas(self):
+        processor = RunningCountStatefulProcessorFactory().pandas()
+        tester = TwsTester(
+            processor, initialStatePandas=pd.DataFrame({"key": [], "initial_count": []})
+        )
+        result = tester.testInPandas(pd.DataFrame({"key": ["key1"], "value": ["a"]}))
+        expected = pd.DataFrame({"key": ["key1"], "count": [1]})
+        pdt.assert_frame_equal(result, expected, check_like=True)
+
+    def test_none_values_in_input(self):
+        processor = RunningCountStatefulProcessorFactory().row()
+        tester = TwsTester(processor)
+        result = tester.test([Row(key="key1", value=None), Row(key="key1", value="a")])
+        self.assertEqual(result, [Row(key="key1", count=2)])
+
+    def test_single_row_input(self):
+        processor = RunningCountStatefulProcessorFactory().row()
+        tester = TwsTester(processor)
+        result = tester.test([Row(key="key1", value="a")])
+        self.assertEqual(result, [Row(key="key1", count=1)])
+
+    def test_peek_nonexistent_state(self):
+        processor = RunningCountStatefulProcessorFactory().row()
+        tester = TwsTester(processor)
+        result = tester.peekValueState("count", "nonexistent_key")
+        self.assertIsNone(result)
+
+    def test_set_nonexistent_state(self):
+        processor = RunningCountStatefulProcessorFactory().row()
+        tester = TwsTester(processor)
+        with self.assertRaises(KeyError):
+            tester.setValueState("nonexistent_state", "key1", (5,))
+
+    def test_peek_state_before_initialization(self):
+        processor = RunningCountStatefulProcessorFactory().row()
+        tester = TwsTester(processor)
+        with self.assertRaises(KeyError):
+            tester.peekValueState("nonexistent_state", "key1")
+
+    def test_clear_nonexistent_list_state(self):
+        processor = TopKProcessorFactory(k=2).row()
+        tester = TwsTester(processor)
+        tester.handle.setGroupingKey("key1")
+        list_state = tester.handle.getListState("topK", "double")
+        list_state.clear()
+
+    def test_delete_if_exists_nonexistent(self):
+        processor = RunningCountStatefulProcessorFactory().row()
+        tester = TwsTester(processor)
+        tester.handle.deleteIfExists("nonexistent_state")
+
+    def test_numeric_key_column(self):
+        processor = RunningCountStatefulProcessorFactory().row()
+        tester = TwsTester(processor, key_column_name="id")
+        result = tester.test(
+            [Row(id=1, value="a"), Row(id=2, value="b"), Row(id=1, value="c")]
+        )
+        self.assertEqual(result, [Row(key=1, count=2), Row(key=2, count=1)])
+
+    def test_tuple_key_column(self):
+        processor = RunningCountStatefulProcessorFactory().row()
+        tester = TwsTester(processor, key_column_name="id")
+        result = tester.test([Row(id=(1, 2), value="a"), Row(id=(1, 2), value="b")])
+        self.assertEqual(result, [Row(key=(1, 2), count=2)])
+
+    def test_special_characters_in_key(self):
+        processor = RunningCountStatefulProcessorFactory().row()
+        tester = TwsTester(processor)
+        result = tester.test(
+            [Row(key="key@#$%", value="a"), Row(key="key@#$%", value="b")]
+        )
+        self.assertEqual(result, [Row(key="key@#$%", count=2)])
+
+    @unittest.skip("bug")
+    def test_null_key_value_row(self):
+        processor = RunningCountStatefulProcessorFactory().row()
+        tester = TwsTester(processor)
+        result = tester.test(
+            [
+                Row(key=None, value="a"),
+                Row(key=None, value="b"),
+                Row(key="a", value="c"),
+            ]
+        )
+        self.assertEqual(result, [Row(key=None, count=2), Row(key="a", count=1)])
+
+    def test_null_key_value_pandas(self):
+        processor = RunningCountStatefulProcessorFactory().pandas()
+        tester = TwsTester(processor)
+        input_df = pd.DataFrame({"key": [None, None, "a"], "value": ["a", "b", "c"]})
+        result = tester.testInPandas(input_df)
+        expected = pd.DataFrame({"key": [None, "a"], "count": [2, 1]})
+        pdt.assert_frame_equal(result, expected, check_like=True)
+
+    def test_multiple_value_states(self):
+        from pyspark.sql.streaming.stateful_processor import (
+            StatefulProcessor,
+            StatefulProcessorHandle,
+        )
+        from typing import Iterator
+
+        class MultiValueStateProcessor(StatefulProcessor):
+            def init(self, handle: StatefulProcessorHandle) -> None:
+                self.handle = handle
+                self.state1 = handle.getValueState("state1", "int")
+                self.state2 = handle.getValueState("state2", "int")
+
+            def handleInputRows(self, key, rows, timerValues) -> Iterator:
+                val1 = self.state1.get() if self.state1.exists() else None
+                count1 = val1[0] if val1 else 0
+                val2 = self.state2.get() if self.state2.exists() else None
+                count2 = val2[0] if val2 else 0
+                for row in rows:
+                    count1 += 1
+                    count2 += 2
+                self.state1.update((count1,))
+                self.state2.update((count2,))
+                yield Row(key=key[0], count1=count1, count2=count2)
+
+        processor = MultiValueStateProcessor()
+        tester = TwsTester(processor)
+        result = tester.test([Row(key="key1", value="a")])
+        self.assertEqual(result, [Row(key="key1", count1=1, count2=2)])
+        self.assertEqual(tester.peekValueState("state1", "key1"), (1,))
+        self.assertEqual(tester.peekValueState("state2", "key1"), (2,))
+
+    def test_multiple_list_states(self):
+        from pyspark.sql.streaming.stateful_processor import (
+            StatefulProcessor,
+            StatefulProcessorHandle,
+        )
+        from typing import Iterator
+
+        class MultiListStateProcessor(StatefulProcessor):
+            def init(self, handle: StatefulProcessorHandle) -> None:
+                self.handle = handle
+                self.list1 = handle.getListState("list1", "string")
+                self.list2 = handle.getListState("list2", "string")
+
+            def handleInputRows(self, key, rows, timerValues) -> Iterator:
+                for row in rows:
+                    self.list1.appendValue((row.value,))
+                    self.list2.appendValue((row.value + "_2",))
+                yield Row(key=key[0], count=1)
+
+        processor = MultiListStateProcessor()
+        tester = TwsTester(processor)
+        tester.test([Row(key="key1", value="a")])
+        self.assertEqual(tester.peekListState("list1", "key1"), [("a",)])
+        self.assertEqual(tester.peekListState("list2", "key1"), [("a_2",)])
+
+    def test_multiple_map_states(self):
+        from pyspark.sql.streaming.stateful_processor import (
+            StatefulProcessor,
+            StatefulProcessorHandle,
+        )
+        from typing import Iterator
+
+        class MultiMapStateProcessor(StatefulProcessor):
+            def init(self, handle: StatefulProcessorHandle) -> None:
+                self.handle = handle
+                self.map1 = handle.getMapState("map1", "string", "int")
+                self.map2 = handle.getMapState("map2", "string", "int")
+
+            def handleInputRows(self, key, rows, timerValues) -> Iterator:
+                for row in rows:
+                    val1 = self.map1.getValue((row.word,))
+                    count1 = val1[0] if val1 is not None else 0
+                    val2 = self.map2.getValue((row.word,))
+                    count2 = val2[0] if val2 is not None else 0
+                    self.map1.updateValue((row.word,), (count1 + 1,))
+                    self.map2.updateValue((row.word,), (count2 + 2,))
+                yield Row(key=key[0], word=row.word)
+
+        processor = MultiMapStateProcessor()
+        tester = TwsTester(processor)
+        tester.test([Row(key="key1", word="hello")])
+        self.assertEqual(tester.peekMapState("map1", "key1"), {("hello",): (1,)})
+        self.assertEqual(tester.peekMapState("map2", "key1"), {("hello",): (2,)})
+
+    def test_mixed_state_types(self):
+        from pyspark.sql.streaming.stateful_processor import (
+            StatefulProcessor,
+            StatefulProcessorHandle,
+        )
+        from typing import Iterator
+
+        class MixedStateProcessor(StatefulProcessor):
+            def init(self, handle: StatefulProcessorHandle) -> None:
+                self.handle = handle
+                self.value_state = handle.getValueState("value", "int")
+                self.list_state = handle.getListState("list", "string")
+                self.map_state = handle.getMapState("map", "string", "int")
+
+            def handleInputRows(self, key, rows, timerValues) -> Iterator:
+                for row in rows:
+                    val = self.value_state.get() if self.value_state.exists() else None
+                    count = val[0] if val else 0
+                    self.value_state.update((count + 1,))
+                    self.list_state.appendValue((row.value,))
+                    self.map_state.updateValue((row.value,), (1,))
+                yield Row(key=key[0], count=1)
+
+        processor = MixedStateProcessor()
+        tester = TwsTester(processor)
+        tester.test([Row(key="key1", value="a")])
+        self.assertEqual(tester.peekValueState("value", "key1"), (1,))
+        self.assertEqual(tester.peekListState("list", "key1"), [("a",)])
+        self.assertEqual(tester.peekMapState("map", "key1"), {("a",): (1,)})
+
+    def test_pandas_with_duplicate_keys(self):
+        processor = RunningCountStatefulProcessorFactory().pandas()
+        tester = TwsTester(processor)
+        input_df = pd.DataFrame(
+            {"key": ["key1", "key1", "key1"], "value": ["a", "b", "c"]}
+        )
+        result = tester.testInPandas(input_df)
+        expected = pd.DataFrame({"key": ["key1"], "count": [3]})
+        pdt.assert_frame_equal(result, expected, check_like=True)
+
+    def test_pandas_dtype_preservation(self):
+        processor = RunningCountStatefulProcessorFactory().pandas()
+        tester = TwsTester(processor)
+        input_df = pd.DataFrame({"key": ["key1"], "value": ["a"]})
+        input_df["key"] = input_df["key"].astype("string")
+        result = tester.testInPandas(input_df)
+        self.assertEqual(result["count"].dtype, "int64")
+
+    def test_processor_init_called_once(self):
+        from pyspark.sql.streaming.stateful_processor import (
+            StatefulProcessor,
+            StatefulProcessorHandle,
+        )
+        from typing import Iterator
+
+        init_call_count = [0]
+
+        class InitCountingProcessor(StatefulProcessor):
+            def init(self, handle: StatefulProcessorHandle) -> None:
+                init_call_count[0] += 1
+                self.handle = handle
+                self.state = handle.getValueState("count", "int")
+
+            def handleInputRows(self, key, rows, timerValues) -> Iterator:
+                val = self.state.get() if self.state.exists() else None
+                count = val[0] if val else 0
+                for row in rows:
+                    count += 1
+                self.state.update((count,))
+                yield Row(key=key[0], count=count)
+
+        processor = InitCountingProcessor()
+        tester = TwsTester(processor)
+        tester.test([Row(key="key1", value="a")])
+        tester.test([Row(key="key1", value="b")])
+        self.assertEqual(init_call_count[0], 1)
+
+    def test_processor_state_persists_across_batches(self):
+        processor = RunningCountStatefulProcessorFactory().row()
+        tester = TwsTester(processor)
+        tester.test([Row(key="key1", value="a")])
+        result = tester.test([Row(key="key1", value="b")])
+        self.assertEqual(result, [Row(key="key1", count=2)])
+
+    def test_handle_initial_state_not_called_without_initial_state(self):
+        from pyspark.sql.streaming.stateful_processor import (
+            StatefulProcessor,
+            StatefulProcessorHandle,
+        )
+        from typing import Iterator
+
+        initial_state_call_count = [0]
+
+        class InitialStateCountingProcessor(StatefulProcessor):
+            def init(self, handle: StatefulProcessorHandle) -> None:
+                self.handle = handle
+                self.state = handle.getValueState("count", "int")
+
+            def handleInitialState(self, key, initialState, timerValues) -> None:
+                initial_state_call_count[0] += 1
+
+            def handleInputRows(self, key, rows, timerValues) -> Iterator:
+                val = self.state.get() if self.state.exists() else None
+                count = val[0] if val else 0
+                for row in rows:
+                    count += 1
+                self.state.update((count,))
+                yield Row(key=key[0], count=count)
+
+        processor = InitialStateCountingProcessor()
+        tester = TwsTester(processor)
+        tester.test([Row(key="key1", value="a")])
+        self.assertEqual(initial_state_call_count[0], 0)
 
 
 @unittest.skipIf(
