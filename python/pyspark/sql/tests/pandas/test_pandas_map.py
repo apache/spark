@@ -273,6 +273,9 @@ class MapInPandasTestsMixin:
         actual = df.repartition(1).mapInPandas(f, "id long, value long").collect()
         self.assertEqual(actual, expected)
 
+    @unittest.skipIf(
+        os.environ.get("SPARK_SKIP_CONNECT_COMPAT_TESTS") == "1", "SPARK-54483: To be reenabled"
+    )
     def test_dataframes_with_incompatible_types(self):
         with self.quiet():
             self.check_dataframes_with_incompatible_types()
