@@ -346,6 +346,9 @@ class MemoryProfiler2TestsMixin:
             )
 
     @unittest.skipIf(
+        os.environ.get("SPARK_SKIP_CONNECT_COMPAT_TESTS") == "1", "SPARK-54494: To be reenabled"
+    )
+    @unittest.skipIf(
         not have_pandas or not have_pyarrow,
         cast(str, pandas_requirement_message or pyarrow_requirement_message),
     )
@@ -378,6 +381,9 @@ class MemoryProfiler2TestsMixin:
                 io.getvalue(), f"Filename.*{os.path.basename(inspect.getfile(_do_computation))}"
             )
 
+    @unittest.skipIf(
+        os.environ.get("SPARK_SKIP_CONNECT_COMPAT_TESTS") == "1", "SPARK-54494: To be reenabled"
+    )
     @unittest.skipIf(
         not have_pandas or not have_pyarrow,
         cast(str, pandas_requirement_message or pyarrow_requirement_message),

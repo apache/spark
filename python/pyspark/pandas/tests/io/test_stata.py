@@ -14,6 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import os
 import unittest
 
 import pandas as pd
@@ -33,6 +34,9 @@ class StataMixin:
     def psdf(self):
         return ps.from_pandas(self.pdf)
 
+    @unittest.skipIf(
+        os.environ.get("SPARK_SKIP_CONNECT_COMPAT_TESTS") == "1", "SPARK-54486: To be reenabled"
+    )
     def test_to_feather(self):
         with self.temp_dir() as dirpath:
             path1 = f"{dirpath}/file1.dta"
