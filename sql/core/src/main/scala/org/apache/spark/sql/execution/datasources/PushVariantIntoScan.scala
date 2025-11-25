@@ -300,8 +300,7 @@ object PushVariantIntoScan extends Rule[LogicalPlan] {
     val schemaAttributes = relation.resolve(hadoopFsRelation.dataSchema,
       hadoopFsRelation.sparkSession.sessionState.analyzer.resolver)
     val defaultValues = ResolveDefaultColumns.existenceDefaultValues(StructType(
-      schemaAttributes.map(a =>
-        StructField(a.name, a.dataType, a.nullable, a.metadata))))
+      schemaAttributes.map(a => StructField(a.name, a.dataType, a.nullable, a.metadata))))
     for ((a, defaultValue) <- schemaAttributes.zip(defaultValues)) {
       variants.addVariantFields(a.exprId, a.dataType, defaultValue, Nil)
     }
