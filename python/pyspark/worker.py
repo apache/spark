@@ -996,8 +996,7 @@ def wrap_grouped_agg_arrow_iter_udf(f, args_offsets, kwargs_offsets, return_type
     def wrapped(batch_iter):
         import pyarrow as pa
 
-        # batch_iter is Iterator[pa.Array] for single column or Iterator[Tuple[pa.Array, ...]] for multiple columns
-        # Each element represents one batch (array for single column, tuple of arrays for multiple columns)
+        # batch_iter: Iterator[pa.Array] (single) or Iterator[Tuple[pa.Array, ...]] (multiple)
         result = func(batch_iter)
         return pa.array([result])
 
