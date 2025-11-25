@@ -2362,13 +2362,32 @@ class PandasWordFrequencyProcessor(StatefulProcessor):
 
 # Test processor that exercises all state methods for coverage testing.
 class AllMethodsTestProcessor(StatefulProcessor):
+    ALL_METHODS: list[str] = [
+        "value-exists",
+        "value-set",
+        "value-clear",
+        "list-exists",
+        "list-append",
+        "list-append-array",
+        "list-get",
+        "map-exists",
+        "map-add",
+        "map-keys",
+        "map-values",
+        "map-iterator",
+        "map-remove",
+        "map-clear",
+    ]
+
     def __init__(self, use_pandas: bool = False):
         self.use_pandas = use_pandas
 
     def init(self, handle: StatefulProcessorHandle) -> None:
-        self.value_state = handle.getValueState("value", "int")
-        self.list_state = handle.getListState("list", "string")
-        self.map_state = handle.getMapState("map", "string", "int")
+        state_schema = StructType([StructField("value", IntegerType(), True)])
+        self.value_state = handle.getValueState("value", state_schema)
+        list_element_schema = StructType([StructField("value", StringType(), True)])
+        self.list_state = handle.getListState("list", list_element_schema)
+        self.map_state = handle.getMapState("map", "key string", "value long")
 
     def handleInputRows(self, key, rows, timerValues) -> Iterator:
         if self.use_pandas:

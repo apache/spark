@@ -15,13 +15,9 @@
 # limitations under the License.
 #
 
-from pyspark.sql.streaming.query import StreamingQuery
 import random
-import unittest
 import tempfile
-import sys
-import os
-from typing import Iterator, List, Tuple, Any
+import unittest
 
 import pandas as pd
 import pandas.testing as pdt
@@ -30,14 +26,22 @@ from pyspark import SparkConf
 from pyspark.sql import DataFrame
 from pyspark.sql.functions import split
 from pyspark.sql.streaming import StatefulProcessor
+from pyspark.sql.streaming.query import StreamingQuery
 from pyspark.sql.streaming.tws_tester import TwsTester
+from pyspark.sql.tests.pandas.helper.helper_pandas_transform_with_state import (
+    AllMethodsTestProcessor,
+    AllMethodsTestProcessorFactory,
+    RunningCountStatefulProcessorFactory,
+    TopKProcessorFactory,
+    WordFrequencyProcessorFactory,
+)
 from pyspark.sql.types import (
-    StructType,
-    StructField,
-    StringType,
+    DoubleType,
     IntegerType,
     Row,
-    DoubleType,
+    StringType,
+    StructField,
+    StructType,
 )
 from pyspark.testing.sqlutils import (
     ReusedSQLTestCase,
@@ -45,14 +49,6 @@ from pyspark.testing.sqlutils import (
     have_pyarrow,
     pandas_requirement_message,
     pyarrow_requirement_message,
-)
-
-from pyspark.sql.tests.pandas.helper.helper_pandas_transform_with_state import (
-    AllMethodsTestProcessorFactory,
-    TopKProcessorFactory,
-    RunningCountStatefulProcessorFactory,
-    StatefulProcessorFactory,
-    WordFrequencyProcessorFactory,
 )
 
 
@@ -385,26 +381,26 @@ class TwsTesterTests(ReusedSQLTestCase):
 
         results = tester.test(
             [
-                Row(key="k", cmd="value-exists"),      # false
-                Row(key="k", cmd="value-set"),         # set to 42
-                Row(key="k", cmd="value-exists"),      # true
-                Row(key="k", cmd="value-clear"),       # clear
-                Row(key="k", cmd="value-exists"),      # false again
-                Row(key="k", cmd="list-exists"),       # false
-                Row(key="k", cmd="list-append"),       # append a, b
-                Row(key="k", cmd="list-exists"),       # true
-                Row(key="k", cmd="list-append-array"), # append c, d
-                Row(key="k", cmd="list-get"),          # a,b,c,d
-                Row(key="k", cmd="map-exists"),        # false
-                Row(key="k", cmd="map-add"),           # add x=1, y=2, z=3
-                Row(key="k", cmd="map-exists"),        # true
-                Row(key="k", cmd="map-keys"),          # x,y,z
-                Row(key="k", cmd="map-values"),        # 1,2,3
-                Row(key="k", cmd="map-iterator"),      # x=1,y=2,z=3
-                Row(key="k", cmd="map-remove"),        # remove y
-                Row(key="k", cmd="map-keys"),          # x,z
-                Row(key="k", cmd="map-clear"),         # clear map
-                Row(key="k", cmd="map-exists"),        # false
+                Row(key="k", cmd="value-exists"),  # false
+                Row(key="k", cmd="value-set"),  # set to 42
+                Row(key="k", cmd="value-exists"),  # true
+                Row(key="k", cmd="value-clear"),  # clear
+                Row(key="k", cmd="value-exists"),  # false again
+                Row(key="k", cmd="list-exists"),  # false
+                Row(key="k", cmd="list-append"),  # append a, b
+                Row(key="k", cmd="list-exists"),  # true
+                Row(key="k", cmd="list-append-array"),  # append c, d
+                Row(key="k", cmd="list-get"),  # a,b,c,d
+                Row(key="k", cmd="map-exists"),  # false
+                Row(key="k", cmd="map-add"),  # add x=1, y=2, z=3
+                Row(key="k", cmd="map-exists"),  # true
+                Row(key="k", cmd="map-keys"),  # x,y,z
+                Row(key="k", cmd="map-values"),  # 1,2,3
+                Row(key="k", cmd="map-iterator"),  # x=1,y=2,z=3
+                Row(key="k", cmd="map-remove"),  # remove y
+                Row(key="k", cmd="map-keys"),  # x,z
+                Row(key="k", cmd="map-clear"),  # clear map
+                Row(key="k", cmd="map-exists"),  # false
             ]
         )
 
@@ -434,6 +430,14 @@ class TwsTesterTests(ReusedSQLTestCase):
             ],
         )
 
+    # This test shows that key column in input data can have arbitrary name.
+    def test_key_column_name(self):
+        processor = RunningCountStatefulProcessorFactory().row()
+        tester = TwsTester(processor, key_column_name="id")
+
+        ans1 = tester.test([Row(id="key1", value="a"), Row(id="key1", value="b")])
+        self.assertEqual(ans1, [Row(key="key1", count=2)])
+
 
 @unittest.skip("a")
 @unittest.skipIf(
@@ -455,6 +459,8 @@ class TwsTesterFuzzTests(ReusedSQLTestCase):
     # Supports both row mode (use_pandas=False) and Pandas mode (use_pandas=True).
     # Supports multiple bacthes.
     # Assumes that the first column is the key column.
+    # Output rows are checked ignoring order.
+    # This test is correct if results do not depend on reordering rows within batch.
     def _check_tws_tester(
         self,
         processor: StatefulProcessor,
@@ -613,7 +619,6 @@ class TwsTesterFuzzTests(ReusedSQLTestCase):
             )
 
     def test_fuzz_word_frequency(self):
-        self.maxDiff = None
         output_schema = StructType(
             [
                 StructField("key", StringType(), True),
@@ -626,7 +631,7 @@ class TwsTesterFuzzTests(ReusedSQLTestCase):
             batch: list[tuple[str, str]] = []
             for _ in range(200):
                 key = f"key{random.randint(0, 9)}"
-                word = "".join(random.choices("abcdefghijklmnopqrstuvwxyz", k=5))
+                word = "".join(random.choices("abcdefghijklmnopqrstuvwxyz", k=1))
                 batch.append((key, word))
             batches.append(batch)
         input_columns: list[str] = ["key", "word"]
@@ -655,4 +660,5 @@ if __name__ == "__main__":
     unittest.main(
         testRunner=testRunner,
         verbosity=2,
+        # defaultTest="TwsTesterFuzzTests.test_fuzz_all_methods"
     )

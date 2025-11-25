@@ -56,7 +56,8 @@ class InMemoryValueState(ValueState):
         self.state[self.handle.grouping_key] = newValue
 
     def clear(self) -> None:
-        del self.state[self.handle.grouping_key]
+        if self.exists():
+            del self.state[self.handle.grouping_key]
 
 
 class InMemoryListState(ListState):
@@ -140,7 +141,8 @@ class InMemoryMapState(MapState):
             del self.state[self.handle.grouping_key][key]
 
     def clear(self) -> None:
-        del self.state[self.handle.grouping_key]
+        if self.exists():
+            del self.state[self.handle.grouping_key]
 
 
 class InMemoryStatefulProcessorHandle(StatefulProcessorHandle):
