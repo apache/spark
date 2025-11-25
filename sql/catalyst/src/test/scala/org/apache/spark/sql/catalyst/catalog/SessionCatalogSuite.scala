@@ -2095,68 +2095,68 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
   }
 
   test("UnresolvedCatalogRelation requires database in identifier") {
-    val catalog = new SessionCatalog(newEmptyCatalog())
-    catalog.createDatabase(newDb("default"), ignoreIfExists = true)
-    val db = "test_db"
-    catalog.createDatabase(newDb(db), ignoreIfExists = true)
+    withEmptyCatalog { catalog =>
+      val db = "test_db"
+      catalog.createDatabase(newDb(db), ignoreIfExists = true)
 
-    // Create a table with database
-    val validTable = CatalogTable(
-      identifier = TableIdentifier("test_table", Some(db)),
-      tableType = CatalogTableType.MANAGED,
-      storage = CatalogStorageFormat.empty,
-      schema = new StructType().add("id", IntegerType)
-    )
-    catalog.createTable(validTable, ignoreIfExists = false)
+      // Create a table with database
+      val validTable = CatalogTable(
+        identifier = TableIdentifier("test_table", Some(db)),
+        tableType = CatalogTableType.MANAGED,
+        storage = CatalogStorageFormat.empty,
+        schema = new StructType().add("id", IntegerType)
+      )
+      catalog.createTable(validTable, ignoreIfExists = false)
 
-    // Try to create UnresolvedCatalogRelation without database - should fail
-    val tableMetaWithoutDb = validTable.copy(
-      identifier = TableIdentifier("test_table", None)
-    )
+      // Try to create UnresolvedCatalogRelation without database - should fail
+      val tableMetaWithoutDb = validTable.copy(
+        identifier = TableIdentifier("test_table", None)
+      )
 
-    val exception = intercept[AssertionError] {
-      UnresolvedCatalogRelation(tableMetaWithoutDb)
+      val exception = intercept[AssertionError] {
+        UnresolvedCatalogRelation(tableMetaWithoutDb)
+      }
+
+      val expectedMessage =
+        "assertion failed: Table identifier `test_table` is missing database name. " +
+        "UnresolvedCatalogRelation requires a fully qualified table identifier with database."
+      assert(exception.getMessage === expectedMessage)
     }
-
-    val expectedMessage =
-      "assertion failed: Table identifier `test_table` is missing database name. " +
-      "UnresolvedCatalogRelation requires a fully qualified table identifier with database."
-    assert(exception.getMessage === expectedMessage)
   }
 
   test("HiveTableRelation requires database in identifier") {
-    val catalog = new SessionCatalog(newEmptyCatalog())
-    catalog.createDatabase(newDb("default"), ignoreIfExists = true)
-    val db = "test_db"
-    catalog.createDatabase(newDb(db), ignoreIfExists = true)
+    withEmptyCatalog { catalog =>
+      val db = "test_db"
+      catalog.createDatabase(newDb(db), ignoreIfExists = true)
 
-    // Create a table with database
-    val validTable = CatalogTable(
-      identifier = TableIdentifier("test_table", Some(db)),
-      tableType = CatalogTableType.MANAGED,
-      storage = CatalogStorageFormat.empty,
-      schema = new StructType()
-        .add("id", IntegerType)
-        .add("name", StringType)
-    )
-
-    // Try to create HiveTableRelation without database - should fail
-    val tableMetaWithoutDb = validTable.copy(
-      identifier = TableIdentifier("test_table", None)
-    )
-
-    val exception = intercept[AssertionError] {
-      HiveTableRelation(
-        tableMetaWithoutDb,
-        Seq(AttributeReference("id", IntegerType)()),
-        Seq.empty
+      // Create a table with database
+      val validTable = CatalogTable(
+        identifier = TableIdentifier("test_table", Some(db)),
+        tableType = CatalogTableType.MANAGED,
+        storage = CatalogStorageFormat.empty,
+        schema = new StructType()
+          .add("id", IntegerType)
+          .add("name", StringType)
       )
-    }
 
-    val expectedMessage =
-      "assertion failed: Table identifier `test_table` is missing database name. " +
-      "HiveTableRelation requires a fully qualified table identifier with database."
-    assert(exception.getMessage === expectedMessage)
+      // Try to create HiveTableRelation without database - should fail
+      val tableMetaWithoutDb = validTable.copy(
+        identifier = TableIdentifier("test_table", None)
+      )
+
+      val exception = intercept[AssertionError] {
+        HiveTableRelation(
+          tableMetaWithoutDb,
+          Seq(AttributeReference("id", IntegerType)()),
+          Seq.empty
+        )
+      }
+
+      val expectedMessage =
+        "assertion failed: Table identifier `test_table` is missing database name. " +
+        "HiveTableRelation requires a fully qualified table identifier with database."
+      assert(exception.getMessage === expectedMessage)
+    }
   }
 
   test("SQLFunction requires either exprText or queryText") {
