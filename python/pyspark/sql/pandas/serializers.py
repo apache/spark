@@ -1278,6 +1278,7 @@ class ArrowStreamAggPandasUDFSerializer(ArrowStreamPandasUDFSerializer):
     def __repr__(self):
         return "ArrowStreamAggPandasUDFSerializer"
 
+
 # Serializer for SQL_GROUPED_MAP_PANDAS_UDF and SQL_GROUPED_MAP_PANDAS_ITER_UDF
 class GroupPandasUDFSerializer(ArrowStreamPandasUDFSerializer):
     def __init__(
