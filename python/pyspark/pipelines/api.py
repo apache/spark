@@ -421,7 +421,7 @@ def create_streaming_table(
     Creates a table that can be targeted by append flows.
 
     Example:
-    create_streaming_table("target")
+        create_streaming_table("target")
 
     :param name: The name of the table.
     :param comment: Description of the table.
