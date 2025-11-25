@@ -307,6 +307,39 @@ class TwsTesterTests(ReusedSQLTestCase):
 
         self.assertEqual(step_function("key1", "a", 10), 11)
 
+    # Example of how TwsTester can be used to simulate real-time mode.
+    def test_row_by_row(self):
+        processor = RunningCountStatefulProcessorFactory().row()
+        tester = TwsTester(processor)
+
+        # Example of helper function to test how TransformWithState processes rows one-by-one,
+        # which can be used to simulate real-time mode.
+        def test_row_by_row_helper(input_rows: list[Row]) -> list[Row]:
+            result: list[Row] = []
+            for row in input_rows:
+                result += tester.test([row])
+            return result
+
+        ans = test_row_by_row_helper([
+            Row(key="key1", value="a"),
+            Row(key="key2", value="b"),
+            Row(key="key1", value="c"),
+            Row(key="key2", value="b"),
+            Row(key="key1", value="c"),
+            Row(key="key1", value="c"),
+            Row(key="key3", value="q"),
+        ])
+        self.assertEqual(ans, [ 
+            Row(key="key1", count=1),
+            Row(key="key2", count=1),
+            Row(key="key1", count=2),
+            Row(key="key2", count=2),
+            Row(key="key1", count=3),
+            Row(key="key1", count=4),
+            Row(key="key3", count=1),
+        ])
+
+
     # Tests that TwsTester calls handleInitialState.
     def test_initial_state_row(self):
         processor = RunningCountStatefulProcessorFactory().row()
