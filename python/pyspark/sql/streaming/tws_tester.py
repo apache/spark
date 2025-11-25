@@ -15,33 +15,30 @@
 # limitations under the License.
 #
 
-from typing import Any, List, Optional, Tuple, Union, Dict, TYPE_CHECKING, Iterator
 from itertools import groupby
-from pyspark.sql.types import Row
+from typing import Any, Iterator, Optional, Union
 
-
-if TYPE_CHECKING:
-    import pandas as pd
+import pandas as pd
 
 from pyspark.sql.streaming.stateful_processor import (
+    ListState,
+    MapState,
     StatefulProcessor,
     StatefulProcessorHandle,
     TimerValues,
     ValueState,
-    ListState,
-    MapState,
 )
-from pyspark.sql.types import StructType
+from pyspark.sql.types import Row, StructType
 
 __all__ = ["TwsTester"]
 
 
-class InMemoryValueState(ValueState):
+class _InMemoryValueState(ValueState):
     """In-memory implementation of ValueState for testing."""
-    
+
     def __init__(
         self,
-        handle: InMemoryStatefulProcessorHandle,
+        handle: _InMemoryStatefulProcessorHandle,
     ) -> None:
         self.handle = handle
         self.state = dict()
@@ -49,10 +46,10 @@ class InMemoryValueState(ValueState):
     def exists(self) -> bool:
         return self.handle.grouping_key in self.state
 
-    def get(self) -> Optional[Tuple]:
+    def get(self) -> Optional[tuple]:
         return self.state.get(self.handle.grouping_key, None)
 
-    def update(self, newValue: Tuple) -> None:
+    def update(self, newValue: tuple) -> None:
         self.state[self.handle.grouping_key] = newValue
 
     def clear(self) -> None:
@@ -60,12 +57,12 @@ class InMemoryValueState(ValueState):
             del self.state[self.handle.grouping_key]
 
 
-class InMemoryListState(ListState):
+class _InMemoryListState(ListState):
     """In-memory implementation of ListState for testing."""
-    
+
     def __init__(
         self,
-        handle: "InMemoryStatefulProcessorHandle",
+        handle: _InMemoryStatefulProcessorHandle,
     ) -> None:
         self.handle = handle
         self.state = dict()  # type: dict[Any, list[tuple]]
@@ -73,18 +70,18 @@ class InMemoryListState(ListState):
     def exists(self) -> bool:
         return self.handle.grouping_key in self.state
 
-    def get(self) -> Iterator[Tuple]:
+    def get(self) -> Iterator[tuple]:
         return iter(self.state.get(self.handle.grouping_key, []))
 
-    def put(self, newState: List[Tuple]) -> None:
+    def put(self, newState: list[tuple]) -> None:
         self.state[self.handle.grouping_key] = newState
 
-    def appendValue(self, newState: Tuple) -> None:
+    def appendValue(self, newState: tuple) -> None:
         if not self.exists():
             self.state[self.handle.grouping_key] = []
         self.state[self.handle.grouping_key].append(newState)
 
-    def appendList(self, newState: List[Tuple]) -> None:
+    def appendList(self, newState: list[tuple]) -> None:
         if not self.exists():
             self.state[self.handle.grouping_key] = []
         self.state[self.handle.grouping_key].extend(newState)
@@ -93,50 +90,50 @@ class InMemoryListState(ListState):
         del self.state[self.handle.grouping_key]
 
 
-class InMemoryMapState(MapState):
+class _InMemoryMapState(MapState):
     """In-memory implementation of MapState for testing."""
-    
+
     def __init__(
         self,
-        handle: "InMemoryStatefulProcessorHandle",
+        handle: _InMemoryStatefulProcessorHandle,
     ) -> None:
         self.handle = handle
-        self.state = dict()  # type: dict[Any, dict[Tuple, Tuple]]
+        self.state = dict()  # type: dict[Any, dict[tuple, tuple]]
 
     def exists(self) -> bool:
         return self.handle.grouping_key in self.state
 
-    def getValue(self, key: Tuple) -> Optional[Tuple]:
+    def getValue(self, key: tuple) -> Optional[tuple]:
         if not self.exists():
             return None
         return self.state[self.handle.grouping_key].get(key, None)
 
-    def containsKey(self, key: Tuple) -> bool:
+    def containsKey(self, key: tuple) -> bool:
         if not self.exists():
             return False
         return key in self.state[self.handle.grouping_key]
 
-    def updateValue(self, key: Tuple, value: Tuple) -> None:
+    def updateValue(self, key: tuple, value: tuple) -> None:
         if not self.exists():
             self.state[self.handle.grouping_key] = {}
         self.state[self.handle.grouping_key][key] = value
 
-    def iterator(self) -> Iterator[Tuple[Tuple, Tuple]]:
+    def iterator(self) -> Iterator[tuple[tuple, tuple]]:
         if not self.exists():
             return iter([])
         return iter(self.state[self.handle.grouping_key].items())
 
-    def keys(self) -> Iterator[Tuple]:
+    def keys(self) -> Iterator[tuple]:
         if not self.exists():
             return iter([])
         return iter(self.state[self.handle.grouping_key].keys())
 
-    def values(self) -> Iterator[Tuple]:
+    def values(self) -> Iterator[tuple]:
         if not self.exists():
             return iter([])
         return iter(self.state[self.handle.grouping_key].values())
 
-    def removeKey(self, key: Tuple) -> None:
+    def removeKey(self, key: tuple) -> None:
         if self.exists() and key in self.state[self.handle.grouping_key]:
             del self.state[self.handle.grouping_key][key]
 
@@ -145,9 +142,9 @@ class InMemoryMapState(MapState):
             del self.state[self.handle.grouping_key]
 
 
-class InMemoryStatefulProcessorHandle(StatefulProcessorHandle):
+class _InMemoryStatefulProcessorHandle(StatefulProcessorHandle):
     """In-memory implementation of StatefulProcessorHandle for testing."""
-    
+
     def __init__(self):
         self.grouping_key = None
         self.states = dict()
@@ -162,7 +159,7 @@ class InMemoryStatefulProcessorHandle(StatefulProcessorHandle):
         ttlDurationMs: Optional[int] = None,
     ) -> ValueState:
         if stateName not in self.states:
-            self.states[stateName] = InMemoryValueState(self)
+            self.states[stateName] = _InMemoryValueState(self)
         return self.states[stateName]
 
     def getListState(
@@ -172,7 +169,7 @@ class InMemoryStatefulProcessorHandle(StatefulProcessorHandle):
         ttlDurationMs: Optional[int] = None,
     ) -> ListState:
         if stateName not in self.states:
-            self.states[stateName] = InMemoryListState(self)
+            self.states[stateName] = _InMemoryListState(self)
         return self.states[stateName]
 
     def getMapState(
@@ -183,7 +180,7 @@ class InMemoryStatefulProcessorHandle(StatefulProcessorHandle):
         ttlDurationMs: Optional[int] = None,
     ) -> MapState:
         if stateName not in self.states:
-            self.states[stateName] = InMemoryMapState(self)
+            self.states[stateName] = _InMemoryMapState(self)
         return self.states[stateName]
 
     def registerTimer(self, expiryTimestampMs: int) -> None:
@@ -197,8 +194,6 @@ class InMemoryStatefulProcessorHandle(StatefulProcessorHandle):
 
     def deleteIfExists(self, stateName: str) -> None:
         del self.states[stateName]
-    
-    
 
 
 class TwsTester:
@@ -206,34 +201,38 @@ class TwsTester:
         self,
         processor: StatefulProcessor,
         initialStateRow: Optional[list[Row]] = None,
-        initialStatePandas: Optional["pd.DataFrame"] = None,
+        initialStatePandas: Optional[pd.DataFrame] = None,
         key_column_name="key",
     ) -> None:
         self.processor = processor
         self.key_column_name = key_column_name
-        self.handle = InMemoryStatefulProcessorHandle()
+        self.handle = _InMemoryStatefulProcessorHandle()
 
         self.processor.init(self.handle)
 
         if initialStateRow is not None:
-            assert initialStatePandas is None, "Cannot specify both Row and Pandas initial states."
+            assert initialStatePandas is None, (
+                "Cannot specify both Row and Pandas initial states."
+            )
             for row in initialStateRow:
                 key = row[self.key_column_name]
                 self.handle.setGroupingKey(key)
                 self.processor.handleInitialState(key, row, TimerValues(-1, -1))
         elif initialStatePandas is not None:
-            import pandas as pd
-            
             for key, group_df in initialStatePandas.groupby(self.key_column_name):
                 self.handle.setGroupingKey(key)
                 for _, row_df in group_df.iterrows():
                     single_row_df = pd.DataFrame([row_df]).reset_index(drop=True)
-                    self.processor.handleInitialState(key, single_row_df, TimerValues(-1, -1))
+                    self.processor.handleInitialState(
+                        key, single_row_df, TimerValues(-1, -1)
+                    )
 
     def test(self, input: list[Row]) -> list[Row]:
         result: list[Row] = []
         sorted_input = sorted(input, key=lambda row: row[self.key_column_name])
-        for key, rows in groupby(sorted_input, key=lambda row: row[self.key_column_name]):
+        for key, rows in groupby(
+            sorted_input, key=lambda row: row[self.key_column_name]
+        ):
             self.handle.setGroupingKey(key)
             timer_values = TimerValues(-1, -1)
             result_iter: Iterator[Row] = self.processor.handleInputRows(
@@ -242,9 +241,7 @@ class TwsTester:
             result += list(result_iter)
         return result
 
-    def testInPandas(self, input: "pd.DataFrame") -> "pd.DataFrame":
-        import pandas as pd
-
+    def testInPandas(self, input: pd.DataFrame) -> pd.DataFrame:
         result_dfs = []
         sorted_input = input.sort_values(by=self.key_column_name)
         for key, group_df in sorted_input.groupby(self.key_column_name):

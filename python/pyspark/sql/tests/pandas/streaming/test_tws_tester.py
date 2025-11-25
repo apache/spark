@@ -29,7 +29,6 @@ from pyspark.sql.streaming import StatefulProcessor
 from pyspark.sql.streaming.query import StreamingQuery
 from pyspark.sql.streaming.tws_tester import TwsTester
 from pyspark.sql.tests.pandas.helper.helper_pandas_transform_with_state import (
-    AllMethodsTestProcessor,
     AllMethodsTestProcessorFactory,
     RunningCountStatefulProcessorFactory,
     TopKProcessorFactory,
@@ -50,11 +49,6 @@ from pyspark.testing.sqlutils import (
     pandas_requirement_message,
     pyarrow_requirement_message,
 )
-
-
-def LOG(s):
-    with open("/tmp/log.txt", "a") as f:
-        f.write(s + "\n")
 
 
 @unittest.skipIf(
@@ -190,8 +184,6 @@ class TwsTesterTests(ReusedSQLTestCase):
         assert tester.peekListState("topK", "b") == [(8.0,), (7.5,)]
         assert tester.peekListState("topK", "c") == [(1.0,)]
         assert tester.peekListState("topK", "d") == []
-
-    # TODO: Add test for key column name different than key.
 
     def test_word_frequency_processor(self):
         processor = WordFrequencyProcessorFactory().row()
@@ -439,7 +431,6 @@ class TwsTesterTests(ReusedSQLTestCase):
         self.assertEqual(ans1, [Row(key="key1", count=2)])
 
 
-@unittest.skip("a")
 @unittest.skipIf(
     not have_pandas or not have_pyarrow,
     pandas_requirement_message or pyarrow_requirement_message or "",
@@ -460,7 +451,7 @@ class TwsTesterFuzzTests(ReusedSQLTestCase):
     # Supports multiple bacthes.
     # Assumes that the first column is the key column.
     # Output rows are checked ignoring order.
-    # This test is correct if results do not depend on reordering rows within batch.
+    # Correct only if results do not depend on reordering rows within batch.
     def _check_tws_tester(
         self,
         processor: StatefulProcessor,
@@ -553,15 +544,11 @@ class TwsTesterFuzzTests(ReusedSQLTestCase):
             query.stop()
 
         # Assert actual results are equal to expected results.
-        LOG(f"actual_results={actual_results}")
-        LOG(f"expected_results={expected_results}")
-
         self.assertEqual(len(actual_results), num_batches)
         self.assertEqual(len(expected_results), num_batches)
         for batch_id in range(num_batches):
             self.assertCountEqual(actual_results[batch_id], expected_results[batch_id])
 
-    # @unittest.skip("a")
     def test_fuzz_running_count(self):
         output_schema = StructType(
             [
@@ -573,8 +560,8 @@ class TwsTesterFuzzTests(ReusedSQLTestCase):
         for batch_id in range(5):
             batch: list[tuple[str, str]] = []
             for _ in range(200):
-                key = f"key{random.randint(0, 9)}"
-                value = "".join(random.choices("abcdefghijklmnopqrstuvwxyz", k=5))
+                key: str = f"key{random.randint(0, 9)}"
+                value: str = "".join(random.choices("abcdefghijklmnopqrstuvwxyz", k=5))
                 batch.append((key, value))
             batches.append(batch)
         input_columns: list[str] = ["key", "value"]
@@ -657,8 +644,4 @@ if __name__ == "__main__":
         testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:
         testRunner = None
-    unittest.main(
-        testRunner=testRunner,
-        verbosity=2,
-        # defaultTest="TwsTesterFuzzTests.test_fuzz_all_methods"
-    )
+    unittest.main(testRunner=testRunner, verbosity=2)
