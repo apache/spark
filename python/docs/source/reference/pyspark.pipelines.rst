@@ -16,28 +16,18 @@
     under the License.
 
 
-=============
-API Reference
-=============
+==================
+PySpark Pipelines
+==================
 
-This page lists an overview of all public PySpark modules, classes, functions and methods.
+.. currentmodule:: pyspark.pipelines
 
-.. note::
-   Spark SQL, Pandas API on Spark, Structured Streaming, and MLlib (DataFrame-based) support
-   Spark Connect.
+.. autosummary::
+    :toctree: api/
 
-.. toctree::
-   :maxdepth: 2
-
-   pyspark.sql/index
-   pyspark.pandas/index
-   pyspark.ss/index
-   pyspark.ml
-   pyspark.streaming
-   pyspark.mllib
-   pyspark
-   pyspark.pipelines
-   pyspark.resource
-   pyspark.errors
-   pyspark.logger
-   pyspark.testing
+    materialized_view
+    table
+    temporary_view
+    create_streaming_table
+    append_flow
+    create_sink
