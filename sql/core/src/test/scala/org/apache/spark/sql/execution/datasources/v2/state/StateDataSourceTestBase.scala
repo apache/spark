@@ -179,7 +179,7 @@ trait StateDataSourceTestBase extends StreamTest with StateStoreMetricsTest {
     )
   }
 
-  private def getDropDuplicatesQuery(inputData: MemoryStream[Int]): Dataset[Long] = {
+  protected def getDropDuplicatesQuery(inputData: MemoryStream[Int]): Dataset[Long] = {
     inputData.toDS()
       .withColumn("eventTime", timestamp_seconds($"value"))
       .withWatermark("eventTime", "10 seconds")
