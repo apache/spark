@@ -16,12 +16,12 @@
 #
 import shutil
 import tempfile
-import typing
 import os
 import functools
 import unittest
 import uuid
 import contextlib
+from typing import Callable, Optional
 
 from pyspark.testing import (
     grpc_requirement_message,
@@ -201,9 +201,9 @@ class ReusedConnectTestCase(unittest.TestCase, SQLTestUtils, PySparkErrorTestUti
 
 
 def skip_if_server_version_is(
-    cond: typing.Callable[[LooseVersion], bool], reason: typing.Optional[str] = None
-) -> typing.Callable[[...], ...]:
-    def decorator(f: typing.Callable) -> typing.Callable:
+    cond: Callable[[LooseVersion], bool], reason: Optional[str] = None
+) -> Callable[[...], ...]:
+    def decorator(f: Callable) -> Callable:
         @functools.wraps(f)
         def wrapper(self, *args, **kwargs):
             version = self.spark.version
@@ -220,6 +220,6 @@ def skip_if_server_version_is(
 
 
 def skip_if_server_version_is_greater_than_or_equal_to(
-    version: str, reason: typing.Optional[str] = None
-) -> typing.Callable[[...], ...]:
+    version: str, reason: Optional[str] = None
+) -> Callable[[...], ...]:
     return skip_if_server_version_is(lambda v: v >= LooseVersion(version), reason)
