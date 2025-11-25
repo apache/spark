@@ -17,7 +17,17 @@
 
 package org.apache.spark.storage
 
+import scala.concurrent.{Future, Promise}
+import scala.reflect.ClassTag
+
+import org.mockito.ArgumentMatchers.any
+import org.mockito.Mockito.when
+import org.scalatestplus.mockito.MockitoSugar._
+
 import org.apache.spark.{SparkConf, SparkFunSuite}
+import org.apache.spark.internal.config.CLEANER_REFERENCE_TRACKING_BLOCKING_TIMEOUT
+import org.apache.spark.rpc.{RpcEndpointRef, RpcTimeoutException}
+import org.apache.spark.storage.BlockManagerMessages.RemoveRdd
 
 class BlockManagerMasterSuite extends SparkFunSuite {
 
@@ -29,5 +39,57 @@ class BlockManagerMasterSuite extends SparkFunSuite {
   test("SPARK-31422: getStorageStatus should not fail after BlockManagerMaster stops") {
     val bmm = new BlockManagerMaster(null, null, new SparkConf, true)
     assert(bmm.getStorageStatus.isEmpty)
+  }
+
+  test("SPARK-54219: wait block removal timeout - success case") {
+    val conf = new SparkConf()
+    conf.set(CLEANER_REFERENCE_TRACKING_BLOCKING_TIMEOUT, 5L)
+
+    val mockDriverEndpoint = mock[RpcEndpointRef]
+    val mockHeartbeatEndpoint = mock[RpcEndpointRef]
+
+    // Create a Future that completes successfully
+    val promise = Promise[Seq[Int]]()
+    val future = promise.future
+
+    // Mock the askSync to return the Future
+    when(
+      mockDriverEndpoint.askSync[Future[Seq[Int]]](any[RemoveRdd])(any[ClassTag[Future[Seq[Int]]]])
+    ).thenReturn(future)
+
+    val bmm = new BlockManagerMaster(mockDriverEndpoint, mockHeartbeatEndpoint, conf, true)
+
+    // Complete the future successfully
+    promise.success(Seq(1, 2, 3))
+
+    // This should not throw an exception
+    bmm.removeRdd(1, blocking = true)
+  }
+
+  test("SPARK-54219: wait block removal timeout - timeout case") {
+    val conf = new SparkConf()
+    // Set a very short timeout (1 second)
+    conf.set(CLEANER_REFERENCE_TRACKING_BLOCKING_TIMEOUT, 1L)
+
+    val mockDriverEndpoint = mock[RpcEndpointRef]
+    val mockHeartbeatEndpoint = mock[RpcEndpointRef]
+
+    // Create a Future that never completes (simulating timeout)
+    val promise = Promise[Seq[Int]]()
+    val future = promise.future
+
+    // Mock the askSync to return the Future
+    when(
+      mockDriverEndpoint.askSync[Future[Seq[Int]]](any[RemoveRdd])(any[ClassTag[Future[Seq[Int]]]])
+    ).thenReturn(future)
+
+    val bmm = new BlockManagerMaster(mockDriverEndpoint, mockHeartbeatEndpoint, conf, true)
+
+    // This should throw RpcTimeoutException
+    val exception = intercept[RpcTimeoutException] {
+      bmm.removeRdd(1, blocking = true)
+    }
+
+    assert(exception.getMessage.contains(CLEANER_REFERENCE_TRACKING_BLOCKING_TIMEOUT.key))
   }
 }
