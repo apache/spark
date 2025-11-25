@@ -734,6 +734,7 @@ private[sql] class RocksDBStateStoreProvider
       readOnly: Boolean,
       existingStore: Option[RocksDBStateStore] = None,
       forceSnapshotOnCommit: Boolean = false): StateStore = {
+    println("loading state store ", version)
     var acquiredStamp: Option[Long] = None
     var storeLoaded = false
     try {

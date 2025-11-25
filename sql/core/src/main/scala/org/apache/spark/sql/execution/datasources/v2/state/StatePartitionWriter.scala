@@ -88,27 +88,27 @@ class StatePartitionAllColumnFamiliesWriter(
   private def writeRaw(rawRecord: Row): Unit = {
     val rowConverter = CatalystTypeConverters.createToCatalystConverter(schema)
     val record = rowConverter(rawRecord).asInstanceOf[InternalRow]
-      // Validate record schema
-      if (record.numFields != 4) {
-        throw new IOException(
-          s"Invalid record schema: expected 4 fields (partition_key, key_bytes, value_bytes, " +
-            s"column_family_name), got ${record.numFields}")
-      }
+    // Validate record schema
+    if (record.numFields != 4) {
+      throw new IOException(
+        s"Invalid record schema: expected 4 fields (partition_key, key_bytes, value_bytes, " +
+          s"column_family_name), got ${record.numFields}")
+    }
 
-      // Extract raw bytes and column family name from the record
-      val keyBytes = record.getBinary(1)
-      val valueBytes = record.getBinary(2)
-      val colFamilyName = record.getString(3)
+    // Extract raw bytes and column family name from the record
+    val keyBytes = record.getBinary(1)
+    val valueBytes = record.getBinary(2)
+    val colFamilyName = record.getString(3)
 
-      // Reconstruct UnsafeRow objects from the raw bytes
-      // The bytes are in UnsafeRow memory format from StatePartitionReaderAllColumnFamilies
-      val keyRow = new UnsafeRow(columnFamilyToKeySchemaLenMap(colFamilyName))
-      keyRow.pointTo(keyBytes, keyBytes.length)
+    // Reconstruct UnsafeRow objects from the raw bytes
+    // The bytes are in UnsafeRow memory format from StatePartitionReaderAllColumnFamilies
+    val keyRow = new UnsafeRow(columnFamilyToKeySchemaLenMap(colFamilyName))
+    keyRow.pointTo(keyBytes, keyBytes.length)
 
-      val valueRow = new UnsafeRow(columnFamilyToValueSchemaLenMap(colFamilyName))
-      valueRow.pointTo(valueBytes, valueBytes.length)
+    val valueRow = new UnsafeRow(columnFamilyToValueSchemaLenMap(colFamilyName))
+    valueRow.pointTo(valueBytes, valueBytes.length)
 
-      // Use StateStore API which handles proper RocksDB encoding (version byte, checksums, etc.)
-      stateStore.put(keyRow, valueRow, colFamilyName)
+    // Use StateStore API which handles proper RocksDB encoding (version byte, checksums, etc.)
+    stateStore.put(keyRow, valueRow, colFamilyName)
   }
 }
