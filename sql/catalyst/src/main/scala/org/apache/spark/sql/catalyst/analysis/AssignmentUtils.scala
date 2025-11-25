@@ -29,7 +29,6 @@ import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns.getDefaultValueExprOrNullLit
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.util.ArrayImplicits._
 
@@ -183,7 +182,7 @@ object AssignmentUtils extends SQLConfHelper with CastSupport {
     } else if (exactAssignments.isEmpty && fieldAssignments.isEmpty) {
       TableOutputResolver.checkNullability(colExpr, col, conf, colPath)
     } else if (exactAssignments.nonEmpty) {
-     if (SQLConf.get.mergeUpdateStructsByField && updateStar) {
+     if (updateStar) {
         val value = exactAssignments.head.value
         col.dataType match {
           case structType: StructType =>

@@ -395,30 +395,30 @@ class PandasConversionMixin:
 
         # Collect list of un-ordered batches where last element is a list of correct order indices
         try:
-            batch_stream = _load_from_socket((port, auth_secret), ArrowCollectSerializer())
-            if split_batches:
-                # When spark.sql.execution.arrow.pyspark.selfDestruct.enabled, ensure
-                # each column in each record batch is contained in its own allocation.
-                # Otherwise, selfDestruct does nothing; it frees each column as its
-                # converted, but each column will actually be a list of slices of record
-                # batches, and so no memory is actually freed until all columns are
-                # converted.
-                import pyarrow as pa
+            with _load_from_socket((port, auth_secret), ArrowCollectSerializer()) as batch_stream:
+                if split_batches:
+                    # When spark.sql.execution.arrow.pyspark.selfDestruct.enabled, ensure
+                    # each column in each record batch is contained in its own allocation.
+                    # Otherwise, selfDestruct does nothing; it frees each column as its
+                    # converted, but each column will actually be a list of slices of record
+                    # batches, and so no memory is actually freed until all columns are
+                    # converted.
+                    import pyarrow as pa
 
-                results = []
-                for batch_or_indices in batch_stream:
-                    if isinstance(batch_or_indices, pa.RecordBatch):
-                        batch_or_indices = pa.RecordBatch.from_arrays(
-                            [
-                                # This call actually reallocates the array
-                                pa.concat_arrays([array])
-                                for array in batch_or_indices
-                            ],
-                            schema=batch_or_indices.schema,
-                        )
-                    results.append(batch_or_indices)
-            else:
-                results = list(batch_stream)
+                    results = []
+                    for batch_or_indices in batch_stream:
+                        if isinstance(batch_or_indices, pa.RecordBatch):
+                            batch_or_indices = pa.RecordBatch.from_arrays(
+                                [
+                                    # This call actually reallocates the array
+                                    pa.concat_arrays([array])
+                                    for array in batch_or_indices
+                                ],
+                                schema=batch_or_indices.schema,
+                            )
+                        results.append(batch_or_indices)
+                else:
+                    results = list(batch_stream)
         finally:
             with unwrap_spark_exception():
                 # Join serving thread and raise any exceptions from collectAsArrowToPython

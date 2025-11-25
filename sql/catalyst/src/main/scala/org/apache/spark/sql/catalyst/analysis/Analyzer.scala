@@ -1207,6 +1207,8 @@ class Analyzer(
         val relation = table match {
           case u: UnresolvedRelation if !u.isStreaming =>
             resolveRelation(u).getOrElse(u)
+          case r: V2TableReference =>
+            relationResolution.resolveReference(r)
           case other => other
         }
 
