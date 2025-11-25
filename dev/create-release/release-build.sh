@@ -498,7 +498,7 @@ EOF
   # Find latest orgapachespark-* repo for this release version
   REPO_ID=$(curl --retry 10 --retry-all-errors -s -u "$ASF_USERNAME:$ASF_PASSWORD" \
     https://repository.apache.org/service/local/staging/profile_repositories | \
-    grep -A 5 "<repositoryId>orgapachespark-" | \
+    grep -A 13 "<repositoryId>orgapachespark-" | \
     awk '/<repositoryId>/ { id = $0 } /<description>/ && $0 ~ /Apache Spark '"$RELEASE_VERSION"'/ { print id }' | \
     grep -oP '(?<=<repositoryId>)orgapachespark-[0-9]+(?=</repositoryId>)' | \
     sort -V | tail -n 1)
@@ -833,13 +833,6 @@ if [[ "$1" == "docs" ]]; then
   fi
   bundle install
   PRODUCTION=1 RELEASE_VERSION="$SPARK_VERSION" bundle exec jekyll build
-
-  # Generate llms.txt for LLM consumption
-  echo "Generating llms.txt..."
-  python "$SELF/generate-llms-txt.py" \
-    --docs-path . \
-    --output _site/llms.txt \
-    --version "$SPARK_VERSION"
 
   cd ..
   cd ..

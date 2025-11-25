@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.util;
 
+import org.apache.spark.SparkIllegalArgumentException;
 import org.apache.spark.unsafe.types.GeographyVal;
 import org.apache.spark.unsafe.types.GeometryVal;
 import org.junit.jupiter.api.Test;
@@ -118,6 +119,51 @@ class STUtilsSuite {
   void testStSridGeometry() {
     GeometryVal geometryVal = GeometryVal.fromBytes(testGeometryBytes);
     assertEquals(testGeometrySrid, STUtils.stSrid(geometryVal));
+  }
+
+  // ST_SetSrid
+  @Test
+  void testStSetSridGeography() {
+    for (int validGeographySrid : new int[]{4326}) {
+      GeographyVal geographyVal = GeographyVal.fromBytes(testGeographyBytes);
+      GeographyVal updatedGeographyVal = STUtils.stSetSrid(geographyVal, validGeographySrid);
+      assertNotNull(updatedGeographyVal);
+      Geography updatedGeography = Geography.fromBytes(updatedGeographyVal.getBytes());
+      assertEquals(validGeographySrid, updatedGeography.srid());
+    }
+  }
+
+  @Test
+  void testStSetSridGeographyInvalidSrid() {
+    for (int invalidGeographySrid : new int[]{-9999, -2, -1, 0, 1, 2, 3857, 9999}) {
+      GeographyVal geographyVal = GeographyVal.fromBytes(testGeographyBytes);
+      SparkIllegalArgumentException exception = assertThrows(SparkIllegalArgumentException.class,
+        () -> STUtils.stSetSrid(geographyVal, invalidGeographySrid));
+      assertEquals("ST_INVALID_SRID_VALUE", exception.getCondition());
+      assertTrue(exception.getMessage().contains("value: " + invalidGeographySrid + "."));
+    }
+  }
+
+  @Test
+  void testStSetSridGeometry() {
+    for (int validGeographySrid : new int[]{0, 3857, 4326}) {
+      GeometryVal geometryVal = GeometryVal.fromBytes(testGeometryBytes);
+      GeometryVal updatedGeometryVal = STUtils.stSetSrid(geometryVal, validGeographySrid);
+      assertNotNull(updatedGeometryVal);
+      Geometry updatedGeometry = Geometry.fromBytes(updatedGeometryVal.getBytes());
+      assertEquals(validGeographySrid, updatedGeometry.srid());
+    }
+  }
+
+  @Test
+  void testStSetSridGeometryInvalidSrid() {
+    for (int invalidGeometrySrid : new int[]{-9999, -2, -1, 1, 2, 9999}) {
+      GeometryVal geometryVal = GeometryVal.fromBytes(testGeometryBytes);
+      SparkIllegalArgumentException exception = assertThrows(SparkIllegalArgumentException.class,
+        () -> STUtils.stSetSrid(geometryVal, invalidGeometrySrid));
+      assertEquals("ST_INVALID_SRID_VALUE", exception.getCondition());
+      assertTrue(exception.getMessage().contains("value: " + invalidGeometrySrid + "."));
+    }
   }
 
 }

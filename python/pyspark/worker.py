@@ -18,6 +18,7 @@
 """
 Worker that receives input from Piped RDD.
 """
+import datetime
 import itertools
 import os
 import sys
@@ -27,7 +28,6 @@ import inspect
 import itertools
 import json
 from typing import Any, Callable, Iterable, Iterator, Optional, Tuple
-import faulthandler
 
 from pyspark.accumulators import (
     SpecialAccumulatorIds,
@@ -72,7 +72,7 @@ from pyspark.sql.pandas.serializers import (
     ArrowStreamUDTFSerializer,
     ArrowStreamArrowUDTFSerializer,
 )
-from pyspark.sql.pandas.types import to_arrow_type
+from pyspark.sql.pandas.types import to_arrow_type, TimestampType
 from pyspark.sql.types import (
     ArrayType,
     BinaryType,
@@ -84,7 +84,12 @@ from pyspark.sql.types import (
     _create_row,
     _parse_datatype_json_string,
 )
-from pyspark.util import fail_on_stopiteration, handle_worker_exception
+from pyspark.util import (
+    fail_on_stopiteration,
+    handle_worker_exception,
+    with_faulthandler,
+    start_faulthandler_periodic_traceback,
+)
 from pyspark import shuffle
 from pyspark.errors import PySparkRuntimeError, PySparkTypeError, PySparkValueError
 from pyspark.worker_util import (
@@ -1158,17 +1163,19 @@ def wrap_kwargs_support(f, args_offsets, kwargs_offsets):
         return f, args_offsets
 
 
-def _supports_profiler(eval_type: int) -> bool:
-    return eval_type not in (
+def _is_iter_based(eval_type: int) -> bool:
+    return eval_type in (
         PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF,
         PythonEvalType.SQL_SCALAR_ARROW_ITER_UDF,
         PythonEvalType.SQL_MAP_PANDAS_ITER_UDF,
         PythonEvalType.SQL_MAP_ARROW_ITER_UDF,
         PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE,
+        PythonEvalType.SQL_GROUPED_MAP_ARROW_ITER_UDF,
+        PythonEvalType.SQL_GROUPED_MAP_PANDAS_ITER_UDF,
     )
 
 
-def wrap_perf_profiler(f, result_id):
+def wrap_perf_profiler(f, eval_type, result_id):
     import cProfile
     import pstats
 
@@ -1178,38 +1185,89 @@ def wrap_perf_profiler(f, result_id):
         SpecialAccumulatorIds.SQL_UDF_PROFIER, None, ProfileResultsParam
     )
 
-    def profiling_func(*args, **kwargs):
-        with cProfile.Profile() as pr:
-            ret = f(*args, **kwargs)
-        st = pstats.Stats(pr)
-        st.stream = None  # make it picklable
-        st.strip_dirs()
+    if _is_iter_based(eval_type):
 
-        accumulator.add({result_id: (st, None)})
+        def profiling_func(*args, **kwargs):
+            iterator = iter(f(*args, **kwargs))
+            pr = cProfile.Profile()
+            while True:
+                try:
+                    with pr:
+                        item = next(iterator)
+                    yield item
+                except StopIteration:
+                    break
 
-        return ret
+            st = pstats.Stats(pr)
+            st.stream = None  # make it picklable
+            st.strip_dirs()
+
+            accumulator.add({result_id: (st, None)})
+
+    else:
+
+        def profiling_func(*args, **kwargs):
+            with cProfile.Profile() as pr:
+                ret = f(*args, **kwargs)
+            st = pstats.Stats(pr)
+            st.stream = None  # make it picklable
+            st.strip_dirs()
+
+            accumulator.add({result_id: (st, None)})
+
+            return ret
 
     return profiling_func
 
 
-def wrap_memory_profiler(f, result_id):
+def wrap_memory_profiler(f, eval_type, result_id):
     from pyspark.sql.profiler import ProfileResultsParam
     from pyspark.profiler import UDFLineProfilerV2
+
+    if not has_memory_profiler:
+        return f
 
     accumulator = _deserialize_accumulator(
         SpecialAccumulatorIds.SQL_UDF_PROFIER, None, ProfileResultsParam
     )
 
-    def profiling_func(*args, **kwargs):
-        profiler = UDFLineProfilerV2()
+    if _is_iter_based(eval_type):
 
-        wrapped = profiler(f)
-        ret = wrapped(*args, **kwargs)
-        codemap_dict = {
-            filename: list(line_iterator) for filename, line_iterator in profiler.code_map.items()
-        }
-        accumulator.add({result_id: (None, codemap_dict)})
-        return ret
+        def profiling_func(*args, **kwargs):
+            profiler = UDFLineProfilerV2()
+            profiler.add_function(f)
+
+            iterator = iter(f(*args, **kwargs))
+
+            while True:
+                try:
+                    with profiler:
+                        item = next(iterator)
+                    yield item
+                except StopIteration:
+                    break
+
+            codemap_dict = {
+                filename: list(line_iterator)
+                for filename, line_iterator in profiler.code_map.items()
+            }
+            accumulator.add({result_id: (None, codemap_dict)})
+
+    else:
+
+        def profiling_func(*args, **kwargs):
+            profiler = UDFLineProfilerV2()
+            profiler.add_function(f)
+
+            with profiler:
+                ret = f(*args, **kwargs)
+
+            codemap_dict = {
+                filename: list(line_iterator)
+                for filename, line_iterator in profiler.code_map.items()
+            }
+            accumulator.add({result_id: (None, codemap_dict)})
+            return ret
 
     return profiling_func
 
@@ -1254,17 +1312,12 @@ def read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index, profil
     if profiler == "perf":
         result_id = read_long(infile)
 
-        if _supports_profiler(eval_type):
-            profiling_func = wrap_perf_profiler(chained_func, result_id)
-        else:
-            profiling_func = chained_func
+        profiling_func = wrap_perf_profiler(chained_func, eval_type, result_id)
 
     elif profiler == "memory":
         result_id = read_long(infile)
-        if _supports_profiler(eval_type) and has_memory_profiler:
-            profiling_func = wrap_memory_profiler(chained_func, result_id)
-        else:
-            profiling_func = chained_func
+
+        profiling_func = wrap_memory_profiler(chained_func, eval_type, result_id)
     else:
         profiling_func = chained_func
 
@@ -3242,22 +3295,18 @@ def read_udfs(pickleSer, infile, eval_type):
     return func, None, ser, ser
 
 
+@with_faulthandler
 def main(infile, outfile):
-    faulthandler_log_path = os.environ.get("PYTHON_FAULTHANDLER_DIR", None)
-    tracebackDumpIntervalSeconds = os.environ.get("PYTHON_TRACEBACK_DUMP_INTERVAL_SECONDS", None)
     try:
-        if faulthandler_log_path:
-            faulthandler_log_path = os.path.join(faulthandler_log_path, str(os.getpid()))
-            faulthandler_log_file = open(faulthandler_log_path, "w")
-            faulthandler.enable(file=faulthandler_log_file)
-
         boot_time = time.time()
         split_index = read_int(infile)
         if split_index == -1:  # for unit tests
             sys.exit(-1)
+        start_faulthandler_periodic_traceback()
 
-        if tracebackDumpIntervalSeconds is not None and int(tracebackDumpIntervalSeconds) > 0:
-            faulthandler.dump_traceback_later(int(tracebackDumpIntervalSeconds), repeat=True)
+        # Use the local timezone to convert the timestamp
+        tz = datetime.datetime.now().astimezone().tzinfo
+        TimestampType.tz_info = tz
 
         check_python_version(infile)
 
@@ -3349,11 +3398,6 @@ def main(infile, outfile):
     except BaseException as e:
         handle_worker_exception(e, outfile)
         sys.exit(-1)
-    finally:
-        if faulthandler_log_path:
-            faulthandler.disable()
-            faulthandler_log_file.close()
-            os.remove(faulthandler_log_path)
     finish_time = time.time()
     report_times(outfile, boot_time, init_time, finish_time)
     write_long(shuffle.MemoryBytesSpilled, outfile)
@@ -3370,9 +3414,6 @@ def main(infile, outfile):
         # write a different value to tell JVM to not reuse this worker
         write_int(SpecialLengths.END_OF_DATA_SECTION, outfile)
         sys.exit(-1)
-
-    # Force to cancel dump_traceback_later
-    faulthandler.cancel_dump_traceback_later()
 
 
 if __name__ == "__main__":

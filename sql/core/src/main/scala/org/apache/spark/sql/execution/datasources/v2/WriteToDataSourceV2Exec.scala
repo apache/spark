@@ -31,12 +31,14 @@ import org.apache.spark.sql.catalyst.util.RowDeltaUtils.{DELETE_OPERATION, INSER
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Column, Identifier, StagedTable, StagingTableCatalog, Table, TableCatalog, TableInfo, TableWritePrivilege}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.connector.metric.CustomMetric
-import org.apache.spark.sql.connector.write.{BatchWrite, DataWriter, DataWriterFactory, DeltaWrite, DeltaWriter, MergeSummaryImpl, PhysicalWriteInfoImpl, Write, WriterCommitMessage, WriteSummary}
+import org.apache.spark.sql.connector.write.{BatchWrite, DataWriter, DataWriterFactory, DeltaWrite, DeltaWriter, MergeSummaryImpl, PhysicalWriteInfoImpl, RowLevelOperationTable, Write, WriterCommitMessage, WriteSummary}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.{SparkPlan, SQLExecution, UnaryExecNode}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
+import org.apache.spark.sql.execution.joins.BaseJoinExec
 import org.apache.spark.sql.execution.metric.{CustomMetrics, SQLMetric, SQLMetrics}
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.util.SchemaValidationMode.PROHIBIT_CHANGES
 import org.apache.spark.util.{LongAccumulator, Utils}
 import org.apache.spark.util.ArrayImplicits._
 
@@ -167,6 +169,15 @@ case class ReplaceTableAsSelectExec(
     // 1. Creating the new table fails,
     // 2. Writing to the new table fails,
     // 3. The table returned by catalog.createTable doesn't support writing.
+    //
+    // RTAS must refresh and pin versions in query to read from original table versions instead of
+    // newly created empty table that is meant to serve as target for append/overwrite
+    val refreshedQuery = V2TableRefreshUtil.refresh(
+      session,
+      query,
+      versionedOnly = true,
+      schemaValidationMode = PROHIBIT_CHANGES)
+    val pinnedQuery = V2TableRefreshUtil.pinVersions(refreshedQuery)
     if (catalog.tableExists(ident)) {
       invalidateCache(catalog, ident)
       catalog.dropTable(ident)
@@ -174,13 +185,13 @@ case class ReplaceTableAsSelectExec(
       throw QueryCompilationErrors.cannotReplaceMissingTableError(ident)
     }
     val tableInfo = new TableInfo.Builder()
-      .withColumns(getV2Columns(query.schema, catalog.useNullableQuerySchema))
+      .withColumns(getV2Columns(pinnedQuery.schema, catalog.useNullableQuerySchema))
       .withPartitions(partitioning.toArray)
       .withProperties(properties.asJava)
       .build()
     val table = Option(catalog.createTable(ident, tableInfo))
       .getOrElse(catalog.loadTable(ident, Set(TableWritePrivilege.INSERT).asJava))
-    writeToTable(catalog, table, writeOptions, ident, query, overwrite = true)
+    writeToTable(catalog, table, writeOptions, ident, pinnedQuery, overwrite = true)
   }
 }
 
@@ -481,7 +492,9 @@ trait V2TableWriteExec extends V2CommandExec with UnaryExecNode with AdaptiveSpa
   private def getWriteSummary(query: SparkPlan): Option[WriteSummary] = {
     collectFirst(query) { case m: MergeRowsExec => m }.map { n =>
       val metrics = n.metrics
+      val numSourceRows = getNumSourceRows(n)
       MergeSummaryImpl(
+        numSourceRows,
         metrics.get("numTargetRowsCopied").map(_.value).getOrElse(-1L),
         metrics.get("numTargetRowsDeleted").map(_.value).getOrElse(-1L),
         metrics.get("numTargetRowsUpdated").map(_.value).getOrElse(-1L),
@@ -492,6 +505,40 @@ trait V2TableWriteExec extends V2CommandExec with UnaryExecNode with AdaptiveSpa
         metrics.get("numTargetRowsNotMatchedBySourceDeleted").map(_.value).getOrElse(-1L)
       )
     }
+  }
+
+  private def getNumSourceRows(mergeRowsExec: MergeRowsExec): Long = {
+    def hasTargetTable(plan: SparkPlan): Boolean = {
+      collectFirst(plan) {
+        case scan @ BatchScanExec(_, _, _, _, _: RowLevelOperationTable, _) => scan
+      }.isDefined
+    }
+
+    def findSourceScan(join: BaseJoinExec): Option[SparkPlan] = {
+      val leftHasTarget = hasTargetTable(join.left)
+      val rightHasTarget = hasTargetTable(join.right)
+
+      val sourceSide = if (leftHasTarget) {
+        Some(join.right)
+      } else if (rightHasTarget) {
+        Some(join.left)
+      } else {
+        None
+      }
+
+      sourceSide.flatMap { side =>
+        collectFirst(side) {
+          case source if source.metrics.contains("numOutputRows") =>
+          source
+        }
+      }
+    }
+
+    (for {
+      join <- collectFirst(mergeRowsExec.child) { case j: BaseJoinExec => j }
+      sourceScan <- findSourceScan(join)
+      metric <- sourceScan.metrics.get("numOutputRows")
+    } yield metric.value).getOrElse(-1L)
   }
 }
 

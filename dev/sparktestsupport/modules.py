@@ -475,7 +475,6 @@ pyspark_core = Module(
         "pyspark.tests.test_conf",
         "pyspark.tests.test_context",
         "pyspark.tests.test_daemon",
-        "pyspark.tests.test_install_spark",
         "pyspark.tests.test_join",
         "pyspark.tests.test_memory_profiler",
         "pyspark.tests.test_profiler",
@@ -771,6 +770,18 @@ pyspark_ml = Module(
     ],
     excluded_python_implementations=[
         "PyPy"  # Skip these tests under PyPy since they require numpy and it isn't available there
+    ],
+)
+
+pyspark_install = Module(
+    name="pyspark-install",
+    dependencies=[core],
+    source_file_regexes=[
+        "python/pyspark/install.py",
+        "python/pyspark/tests/test_install_spark.py",
+    ],
+    python_test_goals=[
+        "pyspark.tests.test_install_spark",
     ],
 )
 
@@ -1114,6 +1125,8 @@ pyspark_connect = Module(
         "pyspark.sql.tests.connect.test_connect_retry",
         "pyspark.sql.tests.connect.test_connect_session",
         "pyspark.sql.tests.connect.test_connect_stat",
+        "pyspark.sql.tests.connect.test_parity_geographytype",
+        "pyspark.sql.tests.connect.test_parity_geometrytype",
         "pyspark.sql.tests.connect.test_parity_datasources",
         "pyspark.sql.tests.connect.test_parity_errors",
         "pyspark.sql.tests.connect.test_parity_catalog",

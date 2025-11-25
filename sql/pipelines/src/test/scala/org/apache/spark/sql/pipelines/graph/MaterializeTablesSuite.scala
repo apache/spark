@@ -20,9 +20,10 @@ package org.apache.spark.sql.pipelines.graph
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.SparkThrowable
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Identifier, TableCatalog}
-import org.apache.spark.sql.connector.expressions.Expressions
+import org.apache.spark.sql.connector.expressions.{ClusterByTransform, Expressions, FieldReference}
 import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.pipelines.graph.DatasetManager.TableMaterializationException
 import org.apache.spark.sql.pipelines.utils.{BaseCoreExecutionTest, TestGraphRegistrationContext}
@@ -884,5 +885,248 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
       ),
       storageRoot = storageRoot
     )
+  }
+
+  test("cluster columns with user schema") {
+    val session = spark
+    import session.implicits._
+
+    materializeGraph(
+      new TestGraphRegistrationContext(spark) {
+        registerTable(
+          "a",
+          query = Option(dfFlowFunc(Seq((1, 1, "x"), (2, 3, "y")).toDF("x1", "x2", "x3"))),
+          specifiedSchema = Option(
+            new StructType()
+              .add("x1", IntegerType)
+              .add("x2", IntegerType)
+              .add("x3", StringType)
+          ),
+          clusterCols = Option(Seq("x1", "x3"))
+        )
+      }.resolveToDataflowGraph(),
+      storageRoot = storageRoot
+    )
+    val catalog = spark.sessionState.catalogManager.currentCatalog.asInstanceOf[TableCatalog]
+    val identifier = Identifier.of(Array(TestGraphRegistrationContext.DEFAULT_DATABASE), "a")
+    val table = catalog.loadTable(identifier)
+    assert(
+      table.columns() sameElements CatalogV2Util.structTypeToV2Columns(
+        new StructType()
+          .add("x1", IntegerType)
+          .add("x2", IntegerType)
+          .add("x3", StringType)
+      )
+    )
+    val expectedClusterTransform = ClusterByTransform(
+      Seq(FieldReference("x1"), FieldReference("x3")).toSeq
+    )
+    assert(table.partitioning().contains(expectedClusterTransform))
+  }
+
+  test("specifying cluster column with existing clustered table") {
+    val session = spark
+    import session.implicits._
+
+    materializeGraph(
+      new TestGraphRegistrationContext(spark) {
+        registerTable(
+          "t10",
+          query = Option(dfFlowFunc(Seq((1, true, "a"), (2, false, "b")).toDF("x", "y", "z"))),
+          clusterCols = Option(Seq("x", "z"))
+        )
+      }.resolveToDataflowGraph(),
+      storageRoot = storageRoot
+    )
+
+    val catalog = spark.sessionState.catalogManager.currentCatalog.asInstanceOf[TableCatalog]
+    val identifier = Identifier.of(Array(TestGraphRegistrationContext.DEFAULT_DATABASE), "t10")
+    val table = catalog.loadTable(identifier)
+    val expectedClusterTransform = ClusterByTransform(
+      Seq(FieldReference("x"), FieldReference("z")).toSeq
+    )
+    assert(table.partitioning().contains(expectedClusterTransform))
+
+    // Specify the same cluster columns - should work
+    materializeGraph(
+      new TestGraphRegistrationContext(spark) {
+        registerFlow(
+          "t10",
+          "t10",
+          query = dfFlowFunc(Seq((3, true, "c"), (4, false, "d")).toDF("x", "y", "z"))
+        )
+        registerTable("t10", clusterCols = Option(Seq("x", "z")))
+      }.resolveToDataflowGraph(),
+      storageRoot = storageRoot
+    )
+
+    val table2 = catalog.loadTable(identifier)
+    assert(table2.partitioning().contains(expectedClusterTransform))
+
+    // Don't specify cluster columns when table already has them - should throw
+    val ex = intercept[TableMaterializationException] {
+      materializeGraph(
+        new TestGraphRegistrationContext(spark) {
+          registerFlow(
+            "t10",
+            "t10",
+            query = dfFlowFunc(Seq((5, true, "e"), (6, false, "f")).toDF("x", "y", "z"))
+          )
+          registerTable("t10")
+        }.resolveToDataflowGraph(),
+        storageRoot = storageRoot
+      )
+    }
+    assert(ex.cause.asInstanceOf[SparkThrowable].getCondition == "CANNOT_UPDATE_PARTITION_COLUMNS")
+  }
+
+  test("specifying cluster column different from existing clustered table") {
+    val session = spark
+    import session.implicits._
+
+    materializeGraph(
+      new TestGraphRegistrationContext(spark) {
+        registerTable(
+          "t11",
+          query = Option(dfFlowFunc(Seq((1, true, "a"), (2, false, "b")).toDF("x", "y", "z"))),
+          clusterCols = Option(Seq("x"))
+        )
+      }.resolveToDataflowGraph(),
+      storageRoot = storageRoot
+    )
+
+    val catalog = spark.sessionState.catalogManager.currentCatalog.asInstanceOf[TableCatalog]
+    val identifier = Identifier.of(Array(TestGraphRegistrationContext.DEFAULT_DATABASE), "t11")
+
+    // Specify different cluster columns - should throw
+    val ex = intercept[TableMaterializationException] {
+      materializeGraph(
+        new TestGraphRegistrationContext(spark) {
+          registerFlow(
+            "t11",
+            "t11",
+            query = dfFlowFunc(Seq((3, true, "c"), (4, false, "d")).toDF("x", "y", "z"))
+          )
+          registerTable("t11", clusterCols = Option(Seq("y")))
+        }.resolveToDataflowGraph(),
+        storageRoot = storageRoot
+      )
+    }
+    assert(ex.cause.asInstanceOf[SparkThrowable].getCondition == "CANNOT_UPDATE_PARTITION_COLUMNS")
+
+    val table = catalog.loadTable(identifier)
+    val expectedClusterTransform = ClusterByTransform(Seq(FieldReference("x")).toSeq)
+    assert(table.partitioning().contains(expectedClusterTransform))
+  }
+
+  test("cluster columns only (no partitioning)") {
+    val session = spark
+    import session.implicits._
+
+    materializeGraph(
+      new TestGraphRegistrationContext(spark) {
+        registerTable(
+          "t12",
+          query = Option(dfFlowFunc(Seq((1, 1, "x"), (2, 3, "y")).toDF("x1", "x2", "x3"))),
+          specifiedSchema = Option(
+            new StructType()
+              .add("x1", IntegerType)
+              .add("x2", IntegerType)
+              .add("x3", StringType)
+          ),
+          clusterCols = Option(Seq("x1", "x3"))
+        )
+      }.resolveToDataflowGraph(),
+      storageRoot = storageRoot
+    )
+    val catalog = spark.sessionState.catalogManager.currentCatalog.asInstanceOf[TableCatalog]
+    val identifier = Identifier.of(Array(TestGraphRegistrationContext.DEFAULT_DATABASE), "t12")
+    val table = catalog.loadTable(identifier)
+    assert(
+      table.columns() sameElements CatalogV2Util.structTypeToV2Columns(
+        new StructType()
+          .add("x1", IntegerType)
+          .add("x2", IntegerType)
+          .add("x3", StringType)
+      )
+    )
+
+    val transforms = table.partitioning()
+    val expectedClusterTransform = ClusterByTransform(
+      Seq(FieldReference("x1"), FieldReference("x3")).toSeq
+    )
+    assert(transforms.contains(expectedClusterTransform))
+  }
+
+  test("materialized view with cluster columns") {
+    val session = spark
+    import session.implicits._
+
+    materializeGraph(
+      new TestGraphRegistrationContext(spark) {
+        registerMaterializedView(
+          "mv1",
+          query = dfFlowFunc(Seq((1, 1, "x"), (2, 3, "y")).toDF("x1", "x2", "x3")),
+          clusterCols = Option(Seq("x1", "x2"))
+        )
+      }.resolveToDataflowGraph(),
+      storageRoot = storageRoot
+    )
+    val catalog = spark.sessionState.catalogManager.currentCatalog.asInstanceOf[TableCatalog]
+    val identifier = Identifier.of(Array(TestGraphRegistrationContext.DEFAULT_DATABASE), "mv1")
+    val table = catalog.loadTable(identifier)
+    assert(
+      table.columns() sameElements CatalogV2Util.structTypeToV2Columns(
+        new StructType()
+          .add("x1", IntegerType)
+          .add("x2", IntegerType)
+          .add("x3", StringType)
+      )
+    )
+    val expectedClusterTransform = ClusterByTransform(
+      Seq(FieldReference("x1"), FieldReference("x2")).toSeq
+    )
+    assert(table.partitioning().contains(expectedClusterTransform))
+  }
+
+  test("partition and cluster columns together should fail") {
+    val session = spark
+    import session.implicits._
+
+    val ex = intercept[TableMaterializationException] {
+      materializeGraph(
+        new TestGraphRegistrationContext(spark) {
+          registerTable(
+            "invalid_table",
+            query = Option(dfFlowFunc(Seq((1, 1, "x"), (2, 3, "y")).toDF("x1", "x2", "x3"))),
+            partitionCols = Option(Seq("x2")),
+            clusterCols = Option(Seq("x1", "x3"))
+          )
+        }.resolveToDataflowGraph(),
+        storageRoot = storageRoot
+      )
+    }
+    assert(ex.cause.isInstanceOf[AnalysisException])
+    val analysisEx = ex.cause.asInstanceOf[AnalysisException]
+    assert(analysisEx.errorClass.get == "SPECIFY_CLUSTER_BY_WITH_PARTITIONED_BY_IS_NOT_ALLOWED")
+  }
+
+  test("cluster column that doesn't exist in table schema should fail") {
+    val session = spark
+    import session.implicits._
+
+    val ex = intercept[TableMaterializationException] {
+      materializeGraph(
+        new TestGraphRegistrationContext(spark) {
+          registerTable(
+            "invalid_cluster_table",
+            query = Option(dfFlowFunc(Seq((1, 1, "x"), (2, 3, "y")).toDF("x1", "x2", "x3"))),
+            clusterCols = Option(Seq("nonexistent_column"))
+          )
+        }.resolveToDataflowGraph(),
+        storageRoot = storageRoot
+      )
+    }
+    assert(ex.cause.isInstanceOf[AnalysisException])
   }
 }

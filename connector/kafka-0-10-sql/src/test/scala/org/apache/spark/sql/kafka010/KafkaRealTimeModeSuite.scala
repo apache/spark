@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.kafka010
 
+import java.util.UUID
+
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.time.SpanSugar._
 
@@ -26,6 +28,7 @@ import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.sources.ContinuousMemorySink
 import org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.kafka010.consumer.KafkaDataConsumer
 import org.apache.spark.sql.streaming.{StreamingQuery, Trigger}
 import org.apache.spark.sql.streaming.OutputMode.Update
 import org.apache.spark.sql.streaming.util.GlobalSingletonManualClock
@@ -39,9 +42,7 @@ class KafkaRealTimeModeSuite
   override protected val defaultTrigger = RealTimeTrigger.apply("3 seconds")
 
   override protected def sparkConf: SparkConf = {
-    // Should turn to use StreamingShuffleManager when it is ready.
     super.sparkConf
-      .set("spark.databricks.streaming.realTimeMode.enabled", "true")
       .set(
         SQLConf.STATE_STORE_PROVIDER_CLASS,
         classOf[RocksDBStateStoreProvider].getName)
@@ -677,5 +678,99 @@ class KafkaRealTimeModeSuite
           )
         }
       )
+  }
+}
+
+class KafkaConsumerPoolRealTimeModeSuite
+  extends KafkaSourceTest
+  with Matchers {
+  override protected val defaultTrigger = RealTimeTrigger.apply("3 seconds")
+
+  override protected def sparkConf: SparkConf = {
+    super.sparkConf
+      .set(
+        SQLConf.STATE_STORE_PROVIDER_CLASS,
+        classOf[RocksDBStateStoreProvider].getName)
+  }
+
+  import testImplicits._
+
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    spark.conf.set(
+      SQLConf.STREAMING_REAL_TIME_MODE_MIN_BATCH_DURATION,
+      defaultTrigger.batchDurationMs
+    )
+  }
+
+  test("SPARK-54200: Kafka consumers in consumer pool should be properly reused") {
+    val topic = newTopic()
+    testUtils.createTopic(topic, partitions = 2)
+
+    testUtils.sendMessages(topic, Array("1", "2"), Some(0))
+    testUtils.sendMessages(topic, Array("3"), Some(1))
+
+    val groupIdPrefix = UUID.randomUUID().toString
+
+    val reader = spark
+      .readStream
+      .format("kafka")
+      .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+      .option("subscribe", topic)
+      .option("startingOffsets", "earliest")
+      .option("groupIdPrefix", groupIdPrefix)
+      .load()
+      .selectExpr("CAST(value AS STRING)")
+      .as[String]
+      .map(_.toInt)
+      .map(_ + 1)
+
+    // At any point of time, Kafka consumer pool should only contain at most 2 active instances.
+    testStream(reader, Update, sink = new ContinuousMemorySink())(
+      StartStream(),
+      CheckAnswerWithTimeout(60000, 2, 3, 4),
+      WaitUntilCurrentBatchProcessed,
+      // After completion of batch 0
+      new ExternalAction() {
+        override def runAction(): Unit = {
+          assertActiveSizeOnConsumerPool(groupIdPrefix, 2)
+
+          testUtils.sendMessages(topic, Array("4", "5"), Some(0))
+          testUtils.sendMessages(topic, Array("6"), Some(1))
+        }
+      },
+      CheckAnswerWithTimeout(5000, 2, 3, 4, 5, 6, 7),
+      WaitUntilCurrentBatchProcessed,
+      // After completion of batch 1
+      new ExternalAction() {
+        override def runAction(): Unit = {
+          assertActiveSizeOnConsumerPool(groupIdPrefix, 2)
+
+          testUtils.sendMessages(topic, Array("7"), Some(1))
+        }
+      },
+      CheckAnswerWithTimeout(5000, 2, 3, 4, 5, 6, 7, 8),
+      WaitUntilCurrentBatchProcessed,
+      // After completion of batch 2
+      new ExternalAction() {
+        override def runAction(): Unit = {
+          assertActiveSizeOnConsumerPool(groupIdPrefix, 2)
+        }
+      },
+      StopStream
+    )
+  }
+
+  /**
+   * NOTE: This method leverages that we run test code, driver and executor in a same process in
+   * a normal unit test setup (say, local[<number, or *>] in spark master). With that setup, we
+   * can access singleton object directly.
+   */
+  private def assertActiveSizeOnConsumerPool(
+      groupIdPrefix: String,
+      maxAllowedActiveSize: Int): Unit = {
+    val activeSize = KafkaDataConsumer.getActiveSizeInConsumerPool(groupIdPrefix)
+    assert(activeSize <= maxAllowedActiveSize, s"Consumer pool size is expected to be less " +
+      s"than $maxAllowedActiveSize, but $activeSize.")
   }
 }

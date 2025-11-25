@@ -16,7 +16,6 @@
 #
 import shutil
 import tempfile
-import typing
 import os
 import functools
 import unittest
@@ -52,6 +51,7 @@ if should_test_connect:
     from pyspark.sql.connect.dataframe import DataFrame
     from pyspark.sql.connect.plan import Read, Range, SQL, LogicalPlan
     from pyspark.sql.connect.session import SparkSession
+    import pyspark.sql.connect.proto as pb2
 
 
 class MockRemoteSession:
@@ -113,6 +113,16 @@ class PlanOnlyTestFixture(unittest.TestCase, PySparkErrorTestUtils):
         def _session_sql(cls, query):
             return cls._df_mock(SQL(query))
 
+        @classmethod
+        def _set_relation_in_plan(self, plan: pb2.Plan, relation: pb2.Relation) -> None:
+            # Skip plan compression in plan-only tests.
+            plan.root.CopyFrom(relation)
+
+        @classmethod
+        def _set_command_in_plan(self, plan: pb2.Plan, command: pb2.Command) -> None:
+            # Skip plan compression in plan-only tests.
+            plan.command.CopyFrom(command)
+
         if have_pandas:
 
             @classmethod
@@ -122,13 +132,14 @@ class PlanOnlyTestFixture(unittest.TestCase, PySparkErrorTestUtils):
         @classmethod
         def setUpClass(cls):
             cls.connect = MockRemoteSession()
-            cls.session = SparkSession.builder.remote().getOrCreate()
             cls.tbl_name = "test_connect_plan_only_table_1"
 
             cls.connect.set_hook("readTable", cls._read_table)
             cls.connect.set_hook("range", cls._session_range)
             cls.connect.set_hook("sql", cls._session_sql)
             cls.connect.set_hook("with_plan", cls._with_plan)
+            cls.connect.set_hook("_set_relation_in_plan", cls._set_relation_in_plan)
+            cls.connect.set_hook("_set_command_in_plan", cls._set_command_in_plan)
 
         @classmethod
         def tearDownClass(cls):

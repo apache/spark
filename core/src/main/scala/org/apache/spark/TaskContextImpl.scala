@@ -146,6 +146,10 @@ private[spark] class TaskContextImpl(
     invokeTaskCompletionListeners(error)
   }
 
+  private[spark] override def getTaskFailure: Option[Throwable] = {
+    failureCauseOpt
+  }
+
   private def invokeTaskCompletionListeners(error: Option[Throwable]): Unit = {
     // It is safe to access the reference to `onCompleteCallbacks` without holding the TaskContext
     // lock. `invokeListeners()` acquires the lock before accessing the contents.

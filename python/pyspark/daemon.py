@@ -24,19 +24,12 @@ import sys
 import traceback
 import time
 import gc
+import faulthandler
 from errno import EINTR, EAGAIN
 from socket import AF_INET, AF_INET6, SOCK_STREAM, SOMAXCONN
 from signal import SIGHUP, SIGTERM, SIGCHLD, SIG_DFL, SIG_IGN, SIGINT
 
 from pyspark.serializers import read_int, write_int, write_with_length, UTF8Deserializer
-
-if len(sys.argv) > 1 and sys.argv[1].startswith("pyspark"):
-    import importlib
-
-    worker_module = importlib.import_module(sys.argv[1])
-    worker_main = worker_module.main
-else:
-    from pyspark.worker import main as worker_main
 
 
 def compute_real_exit_code(exit_code):
@@ -77,6 +70,19 @@ def worker(sock, authenticated):
             return 1
 
     exit_code = 0
+
+    # We don't know what could happen when we import the worker module. We have to
+    # guarantee that no thread is spawned before we fork, so we have to import the
+    # worker module after fork. For example, both pandas and pyarrow starts some
+    # threads when they are imported.
+    if len(sys.argv) > 1 and sys.argv[1].startswith("pyspark"):
+        import importlib
+
+        worker_module = importlib.import_module(sys.argv[1])
+        worker_main = worker_module.main
+    else:
+        from pyspark.worker import main as worker_main
+
     try:
         worker_main(infile, outfile)
     except SystemExit as exc:
@@ -85,7 +91,19 @@ def worker(sock, authenticated):
         try:
             outfile.flush()
         except Exception:
-            pass
+            if os.environ.get("PYTHON_DAEMON_KILL_WORKER_ON_FLUSH_FAILURE", False):
+                faulthandler_log_path = os.environ.get("PYTHON_FAULTHANDLER_DIR", None)
+                if faulthandler_log_path:
+                    faulthandler_log_path = os.path.join(faulthandler_log_path, str(os.getpid()))
+                    with open(faulthandler_log_path, "w") as faulthandler_log_file:
+                        faulthandler.dump_traceback(file=faulthandler_log_file)
+                raise
+            else:
+                print(
+                    "PySpark daemon failed to flush the output to the worker process:\n"
+                    + traceback.format_exc(),
+                    file=sys.stderr,
+                )
     return exit_code
 
 

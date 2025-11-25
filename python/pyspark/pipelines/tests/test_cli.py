@@ -22,6 +22,7 @@ from pathlib import Path
 
 from pyspark.errors import PySparkException
 from pyspark.testing.connectutils import (
+    ReusedConnectTestCase,
     should_test_connect,
     connect_requirement_message,
 )
@@ -45,7 +46,7 @@ if should_test_connect and have_yaml:
     not should_test_connect or not have_yaml,
     connect_requirement_message or yaml_requirement_message,
 )
-class CLIUtilityTests(unittest.TestCase):
+class CLIUtilityTests(ReusedConnectTestCase):
     def test_load_pipeline_spec(self):
         with tempfile.NamedTemporaryFile(mode="w") as tmpfile:
             tmpfile.write(
@@ -190,7 +191,7 @@ class CLIUtilityTests(unittest.TestCase):
 
     def test_find_pipeline_spec_in_current_directory(self):
         with tempfile.TemporaryDirectory() as temp_dir:
-            spec_path = Path(temp_dir) / "pipeline.yaml"
+            spec_path = Path(temp_dir) / "spark-pipeline.yaml"
             with spec_path.open("w") as f:
                 f.write(
                     """
@@ -207,7 +208,7 @@ class CLIUtilityTests(unittest.TestCase):
 
     def test_find_pipeline_spec_in_current_directory_yml(self):
         with tempfile.TemporaryDirectory() as temp_dir:
-            spec_path = Path(temp_dir) / "pipeline.yml"
+            spec_path = Path(temp_dir) / "spark-pipeline.yml"
             with spec_path.open("w") as f:
                 f.write(
                     """
@@ -224,10 +225,10 @@ class CLIUtilityTests(unittest.TestCase):
 
     def test_find_pipeline_spec_in_current_directory_yml_and_yaml(self):
         with tempfile.TemporaryDirectory() as temp_dir:
-            with (Path(temp_dir) / "pipeline.yml").open("w") as f:
+            with (Path(temp_dir) / "spark-pipeline.yml").open("w") as f:
                 f.write("")
 
-            with (Path(temp_dir) / "pipeline.yaml").open("w") as f:
+            with (Path(temp_dir) / "spark-pipeline.yaml").open("w") as f:
                 f.write("")
 
             with self.assertRaises(PySparkException) as context:
@@ -240,7 +241,7 @@ class CLIUtilityTests(unittest.TestCase):
             parent_dir = Path(temp_dir)
             child_dir = Path(temp_dir) / "child"
             child_dir.mkdir()
-            spec_path = parent_dir / "pipeline.yaml"
+            spec_path = parent_dir / "spark-pipeline.yaml"
             with spec_path.open("w") as f:
                 f.write(
                     """
@@ -294,7 +295,9 @@ class CLIUtilityTests(unittest.TestCase):
                 )
 
             registry = LocalGraphElementRegistry()
-            register_definitions(outer_dir / "pipeline.yaml", registry, spec)
+            register_definitions(
+                outer_dir / "spark-pipeline.yaml", registry, spec, self.spark, "test_graph_id"
+            )
             self.assertEqual(len(registry.outputs), 1)
             self.assertEqual(registry.outputs[0].name, "mv1")
 
@@ -315,7 +318,9 @@ class CLIUtilityTests(unittest.TestCase):
 
             registry = LocalGraphElementRegistry()
             with self.assertRaises(RuntimeError) as context:
-                register_definitions(outer_dir / "pipeline.yml", registry, spec)
+                register_definitions(
+                    outer_dir / "spark-pipeline.yml", registry, spec, self.spark, "test_graph_id"
+                )
             self.assertIn("This is a test exception", str(context.exception))
 
     def test_register_definitions_unsupported_file_extension_matches_glob(self):
@@ -334,7 +339,7 @@ class CLIUtilityTests(unittest.TestCase):
 
             registry = LocalGraphElementRegistry()
             with self.assertRaises(PySparkException) as context:
-                register_definitions(outer_dir, registry, spec)
+                register_definitions(outer_dir, registry, spec, self.spark, "test_graph_id")
             self.assertEqual(
                 context.exception.getCondition(), "PIPELINE_UNSUPPORTED_DEFINITIONS_FILE_EXTENSION"
             )
@@ -372,7 +377,7 @@ class CLIUtilityTests(unittest.TestCase):
             registry = LocalGraphElementRegistry()
             with change_dir(inner_dir2):
                 register_definitions(
-                    inner_dir1 / "pipeline.yaml",
+                    inner_dir1 / "spark-pipeline.yaml",
                     registry,
                     PipelineSpec(
                         name="test_pipeline",
@@ -382,12 +387,14 @@ class CLIUtilityTests(unittest.TestCase):
                         configuration={},
                         libraries=[LibrariesGlob(include="defs.py")],
                     ),
+                    self.spark,
+                    "test_graph_id",
                 )
 
     def test_full_refresh_all_conflicts_with_full_refresh(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             # Create a minimal pipeline spec
-            spec_path = Path(temp_dir) / "pipeline.yaml"
+            spec_path = Path(temp_dir) / "spark-pipeline.yaml"
             with spec_path.open("w") as f:
                 f.write('{"name": "test_pipeline"}')
 
@@ -411,7 +418,7 @@ class CLIUtilityTests(unittest.TestCase):
     def test_full_refresh_all_conflicts_with_refresh(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             # Create a minimal pipeline spec
-            spec_path = Path(temp_dir) / "pipeline.yaml"
+            spec_path = Path(temp_dir) / "spark-pipeline.yaml"
             with spec_path.open("w") as f:
                 f.write('{"name": "test_pipeline"}')
 
@@ -436,7 +443,7 @@ class CLIUtilityTests(unittest.TestCase):
     def test_full_refresh_all_conflicts_with_both(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             # Create a minimal pipeline spec
-            spec_path = Path(temp_dir) / "pipeline.yaml"
+            spec_path = Path(temp_dir) / "spark-pipeline.yaml"
             with spec_path.open("w") as f:
                 f.write('{"name": "test_pipeline"}')
 

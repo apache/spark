@@ -213,7 +213,7 @@ class StreamingQueryManager private[sql] (
       sink,
       outputMode,
       df.sparkSession.sessionState.newHadoopConf(),
-      trigger.isInstanceOf[ContinuousTrigger],
+      trigger,
       analyzedPlan,
       catalogAndIdent,
       catalogTable)

@@ -150,20 +150,29 @@ class RocksDB(
       localTempDir: File,
       hadoopConf: Configuration,
       codecName: String,
-      loggingId: String): RocksDBFileManager = {
+      loggingId: String,
+      storeConf: StateStoreConf): RocksDBFileManager = {
     new RocksDBFileManager(
       dfsRootDir,
       localTempDir,
       hadoopConf,
       codecName,
       loggingId = loggingId,
+      storeConf,
       fileChecksumEnabled = conf.fileChecksumEnabled,
       fileChecksumThreadPoolSize = fileChecksumThreadPoolSize
     )
   }
 
-  private[spark] val fileManager = createFileManager(dfsRootDir, createTempDir("fileManager"),
-    hadoopConf, conf.compressionCodec, loggingId = loggingId)
+  private[spark] val fileManager = createFileManager(
+    dfsRootDir,
+    createTempDir("fileManager"),
+    hadoopConf,
+    conf.compressionCodec,
+    loggingId = loggingId,
+    storeConf = conf.stateStoreConf
+  )
+
   private val byteArrayPair = new ByteArrayPair()
   private val commitLatencyMs = new mutable.HashMap[String, Long]()
 
@@ -975,6 +984,26 @@ class RocksDB(
   }
 
   /**
+   * This method should gives a 100% guarantee of a correct result, whether the key exists or
+   * not.
+   *
+   * @param key The key to check
+   * @param cfName The column family name
+   * @return true if the key exists, false otherwise
+   */
+  def keyExists(
+      key: Array[Byte],
+      cfName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Boolean = {
+    updateMemoryUsageIfNeeded()
+    val keyWithPrefix = if (useColumnFamilies) {
+      encodeStateRowWithPrefix(key, cfName)
+    } else {
+      key
+    }
+    db.keyExists(keyWithPrefix)
+  }
+
+  /**
    * Get the values for a given key if present, that were merged (via merge).
    * This returns the values as an iterator of index range, to allow inline access
    * of each value bytes without copying, for better performance.
@@ -1440,12 +1469,16 @@ class RocksDB(
    * - Create a RocksDB checkpoint in a new local dir
    * - Sync the checkpoint dir files to DFS
    */
-  def commit(): (Long, StateStoreCheckpointInfo) = {
+  def commit(forceSnapshot: Boolean = false): (Long, StateStoreCheckpointInfo) = {
     commitLatencyMs.clear()
     updateMemoryUsageIfNeeded()
     val newVersion = loadedVersion + 1
     try {
       logInfo(log"Flushing updates for ${MDC(LogKeys.VERSION_NUM, newVersion)}")
+
+      if (forceSnapshot) {
+        shouldForceSnapshot.set(true)
+      }
 
       var snapshot: Option[RocksDBSnapshot] = None
       if (shouldCreateSnapshot() || shouldForceSnapshot.get()) {

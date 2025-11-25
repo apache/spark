@@ -231,11 +231,6 @@ abstract class PipelineTest
       ignoreFieldCase: Boolean = false
   )
 
-  /** Holds a parsed version along with the original json of a test. */
-  private case class TestSequence(json: Seq[String], rows: Seq[Row]) {
-    require(json.size == rows.size)
-  }
-
   /**
    * Helper method to verify unresolved column error message. We expect three elements to be present
    * in the message: error class, unresolved column name, list of suggested columns.

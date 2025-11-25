@@ -18,6 +18,7 @@
 package org.apache.spark.sql.connector.catalog
 
 import java.util
+import java.util.{Objects, UUID}
 
 import org.apache.spark.sql.connector.catalog.constraints.Constraint
 import org.apache.spark.sql.connector.distributions.{Distribution, Distributions}
@@ -42,7 +43,8 @@ class InMemoryTable(
     numPartitions: Option[Int] = None,
     advisoryPartitionSize: Option[Long] = None,
     isDistributionStrictlyRequired: Boolean = true,
-    override val numRowsPerSplit: Int = Int.MaxValue)
+    override val numRowsPerSplit: Int = Int.MaxValue,
+    override val id: String = UUID.randomUUID().toString)
   extends InMemoryBaseTable(name, columns, partitioning, properties, constraints, distribution,
     ordering, numPartitions, advisoryPartitionSize, isDistributionStrictlyRequired,
     numRowsPerSplit) with SupportsDelete {
@@ -67,7 +69,7 @@ class InMemoryTable(
     import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
     dataMap --= InMemoryTable
       .filtersToKeys(dataMap.keys, partCols.map(_.toSeq.quoted).toImmutableArraySeq, filters)
-    increaseCurrentVersion()
+    increaseVersion()
   }
 
   override def withData(data: Array[BufferedRows]): InMemoryTable = {
@@ -107,7 +109,7 @@ class InMemoryTable(
           row.getInt(0) == InMemoryTable.uncommittableValue()))) {
         throw new IllegalArgumentException(s"Test only mock write failure")
       }
-      increaseCurrentVersion()
+      increaseVersion()
       this
     }
   }
@@ -137,7 +139,8 @@ class InMemoryTable(
       numPartitions,
       advisoryPartitionSize,
       isDistributionStrictlyRequired,
-      numRowsPerSplit)
+      numRowsPerSplit,
+      id)
 
     dataMap.synchronized {
       dataMap.foreach { case (key, splits) =>
@@ -152,12 +155,22 @@ class InMemoryTable(
 
     copiedTable.commits ++= commits.map(_.copy())
 
-    copiedTable.setCurrentVersion(currentVersion())
+    copiedTable.setVersion(version())
     if (validatedVersion() != null) {
       copiedTable.setValidatedVersion(validatedVersion())
     }
 
     copiedTable
+  }
+
+  override def equals(other: Any): Boolean = other match {
+    case that: InMemoryTable =>
+      this.id == that.id && this.version() == that.version()
+    case _ => false
+  }
+
+  override def hashCode(): Int = {
+    Objects.hash(id, version())
   }
 
   class InMemoryWriterBuilderWithOverWrite(override val info: LogicalWriteInfo)

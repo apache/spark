@@ -34,7 +34,7 @@ import org.apache.spark.sql.connector.catalog.{
   TableInfo
 }
 import org.apache.spark.sql.connector.catalog.CatalogV2Util.v2ColumnsToStructType
-import org.apache.spark.sql.connector.expressions.Expressions
+import org.apache.spark.sql.connector.expressions.{ClusterByTransform, Expressions}
 import org.apache.spark.sql.execution.command.CreateViewCommand
 import org.apache.spark.sql.pipelines.graph.QueryOrigin.ExceptionHelpers
 import org.apache.spark.sql.pipelines.util.SchemaInferenceUtils.diffSchemas
@@ -77,7 +77,7 @@ object DatasetManager extends Logging {
       context: PipelineUpdateContext
   ): DataflowGraph = {
     val (_, refreshTableIdentsSet, fullRefreshTableIdentsSet) = {
-      DatasetManager.constructFullRefreshSet(resolvedDataflowGraph.tables, context)
+      constructFullRefreshSet(resolvedDataflowGraph.tables, context)
     }
 
     /** Return all the tables that need to be materialized from the given graph. */
@@ -125,7 +125,6 @@ object DatasetManager extends Logging {
     } catch {
       case e: SparkException if e.getCause != null => throw e.getCause
     }
-
     materializeViews(materializedGraph, context)
     materializedGraph
   }
@@ -144,7 +143,7 @@ object DatasetManager extends Logging {
     var publishedViews: Set[TableIdentifier] = Set.empty
     var failedViews: Set[TableIdentifier] = Set.empty
 
-    // To publish a view, it is required that all the input sources must exists in the metastore.
+    // To publish a view, it is required that all the input sources must exist in the metastore.
     //  Thereby, if a Persisted View target reads another Persisted View source, the source must be
     //  published first.
     //  Here we make sure all the persisted views are published in correct order
@@ -226,8 +225,8 @@ object DatasetManager extends Logging {
     try {
       // Using the catalog and database from the flow ensures that reads within the view are
       // directed to the right catalog/database.
-      catalogManager.setCurrentCatalog(queryContext.currentCatalog.get)
-      queryContext.currentDatabase.foreach { d => catalogManager.setCurrentNamespace(Array(d))}
+      queryContext.currentCatalog.foreach(catalogManager.setCurrentCatalog)
+      queryContext.currentDatabase.map(d => Array(d)).foreach(catalogManager.setCurrentNamespace)
       command.run(spark)
     } finally {
       catalogManager.setCurrentCatalog(currentCatalogName)
@@ -248,8 +247,7 @@ object DatasetManager extends Logging {
       resolvedDataflowGraph: DataflowGraph,
       table: Table,
       isFullRefresh: Boolean,
-      context: PipelineUpdateContext
-  ): Table = {
+      context: PipelineUpdateContext): Table = {
     logInfo(log"Materializing metadata for table ${MDC(LogKeys.TABLE_NAME, table.identifier)}.")
     val catalogManager = context.spark.sessionState.catalogManager
     val catalog = (table.identifier.catalog match {
@@ -266,6 +264,19 @@ object DatasetManager extends Logging {
     )
     val mergedProperties = resolveTableProperties(table, identifier)
     val partitioning = table.partitionCols.toSeq.flatten.map(Expressions.identity)
+    val clustering = table.clusterCols.map(cols =>
+      ClusterByTransform(cols.map(col => Expressions.column(col)))
+    ).toSeq
+
+    // Validate that partition and cluster columns don't coexist
+    if (partitioning.nonEmpty && clustering.nonEmpty) {
+      throw new AnalysisException(
+        errorClass = "SPECIFY_CLUSTER_BY_WITH_PARTITIONED_BY_IS_NOT_ALLOWED",
+        messageParameters = Map.empty
+      )
+    }
+
+    val allTransforms = partitioning ++ clustering
 
     val existingTableOpt = if (catalog.tableExists(identifier)) {
       Some(catalog.loadTable(identifier))
@@ -273,15 +284,15 @@ object DatasetManager extends Logging {
       None
     }
 
-    // Error if partitioning doesn't match
-    if (existingTableOpt.isDefined) {
-      val existingPartitioning = existingTableOpt.get.partitioning().toSeq
-      if (existingPartitioning != partitioning) {
+    // Error if partitioning/clustering doesn't match
+    existingTableOpt.foreach { existingTable =>
+      val existingTransforms = existingTable.partitioning().toSeq
+      if (existingTransforms != allTransforms) {
         throw new AnalysisException(
           errorClass = "CANNOT_UPDATE_PARTITION_COLUMNS",
           messageParameters = Map(
-            "existingPartitionColumns" -> existingPartitioning.mkString(", "),
-            "requestedPartitionColumns" -> partitioning.mkString(", ")
+            "existingPartitionColumns" -> existingTransforms.mkString(", "),
+            "requestedPartitionColumns" -> allTransforms.mkString(", ")
           )
         )
       }
@@ -293,8 +304,8 @@ object DatasetManager extends Logging {
     }
 
     // Alter the table if we need to
-    if (existingTableOpt.isDefined) {
-      val existingSchema = v2ColumnsToStructType(existingTableOpt.get.columns())
+    existingTableOpt.foreach { existingTable =>
+      val existingSchema = v2ColumnsToStructType(existingTable.columns())
 
       val targetSchema = if (table.isStreamingTable && !isFullRefresh) {
         SchemaMergingUtils.mergeSchemas(existingSchema, outputSchema)
@@ -314,7 +325,7 @@ object DatasetManager extends Logging {
         new TableInfo.Builder()
           .withProperties(mergedProperties.asJava)
           .withColumns(CatalogV2Util.structTypeToV2Columns(outputSchema))
-          .withPartitions(partitioning.toArray)
+          .withPartitions(allTransforms.toArray)
           .build()
       )
     }

@@ -35,6 +35,7 @@ from pyspark.sql.connect.types import pyspark_types_to_proto_types
 from pyspark.sql.types import StructType
 from typing import Any, cast
 import pyspark.sql.connect.proto as pb2
+from pyspark.pipelines.add_pipeline_analysis_context import add_pipeline_analysis_context
 
 
 class SparkConnectGraphElementRegistry(GraphElementRegistry):
@@ -43,6 +44,7 @@ class SparkConnectGraphElementRegistry(GraphElementRegistry):
     def __init__(self, spark: SparkSession, dataflow_graph_id: str) -> None:
         # Cast because mypy seems to think `spark`` is a function, not an object. Likely related to
         # SPARK-47544.
+        self._spark = spark
         self._client = cast(Any, spark).client
         self._dataflow_graph_id = dataflow_graph_id
 
@@ -63,6 +65,7 @@ class SparkConnectGraphElementRegistry(GraphElementRegistry):
             table_details = pb2.PipelineCommand.DefineOutput.TableDetails(
                 table_properties=output.table_properties,
                 partition_cols=output.partition_cols,
+                clustering_columns=output.cluster_by,
                 format=output.format,
                 # Even though schema_string is not required, the generated Python code seems to
                 # erroneously think it is required.
@@ -109,8 +112,11 @@ class SparkConnectGraphElementRegistry(GraphElementRegistry):
         self._client.execute_command(command)
 
     def register_flow(self, flow: Flow) -> None:
-        with block_spark_connect_execution_and_analysis():
-            df = flow.func()
+        with add_pipeline_analysis_context(
+            spark=self._spark, dataflow_graph_id=self._dataflow_graph_id, flow_name=flow.name
+        ):
+            with block_spark_connect_execution_and_analysis():
+                df = flow.func()
         relation = cast(ConnectDataFrame, df)._plan.plan(self._client)
 
         relation_flow_details = pb2.PipelineCommand.DefineFlow.WriteRelationFlowDetails(

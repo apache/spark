@@ -3776,8 +3776,44 @@ abstract class JsonSuite
     }
   }
 
+  test("TIME type roundtrip with JSON datasource - representative precisions and custom format") {
+    import java.time.LocalTime
+    withTempDir { dir =>
+      // Test representative precisions: 0, 3, 6
+      Seq(
+        (0, Seq(LocalTime.of(0, 0, 0), LocalTime.of(14, 30, 45), LocalTime.of(23, 59, 59))),
+        (3, Seq(LocalTime.of(14, 30, 45, 123000000), LocalTime.of(23, 59, 59, 999000000))),
+        (6, Seq(LocalTime.of(0, 0, 0), LocalTime.of(14, 30, 45, 123456000),
+          LocalTime.of(23, 59, 59, 999999000)))
+      ).foreach { case (precision, timeData) =>
+        val schema = new StructType().add("time", TimeType(precision))
+        val df = timeData.toDF("time").select($"time".cast(TimeType(precision)))
+        val outputPath = s"${dir.getCanonicalPath}/time_p$precision.json"
+
+        df.write.mode("overwrite").json(outputPath)
+        val readBack = spark.read.schema(schema).json(outputPath)
+
+        assert(readBack.schema === schema, s"Schema mismatch for precision $precision")
+        checkAnswer(readBack, df)
+      }
+
+      // Test custom format with precision 6
+      val schema = new StructType().add("time", TimeType(6))
+      val customTime = Seq(LocalTime.of(14, 30, 45, 123456000)).toDF("time")
+        .select($"time".cast(TimeType(6)))
+      val customPath = s"${dir.getCanonicalPath}/time_custom.json"
+
+      customTime.write.mode("overwrite")
+        .option("timeFormat", "HH-mm-ss.SSSSSS").json(customPath)
+      val readCustom = spark.read.schema(schema)
+        .option("timeFormat", "HH-mm-ss.SSSSSS").json(customPath)
+
+      checkAnswer(readCustom, customTime)
+    }
+  }
+
   test("SPARK-40667: validate JSON Options") {
-    assert(JSONOptions.getAllOptions.size == 30)
+    assert(JSONOptions.getAllOptions.size == 31)
     // Please add validation on any new Json options here
     assert(JSONOptions.isValidOption("samplingRatio"))
     assert(JSONOptions.isValidOption("primitivesAsString"))
@@ -3797,6 +3833,7 @@ abstract class JsonSuite
     assert(JSONOptions.isValidOption("dateFormat"))
     assert(JSONOptions.isValidOption("timestampFormat"))
     assert(JSONOptions.isValidOption("timestampNTZFormat"))
+    assert(JSONOptions.isValidOption("timeFormat"))
     assert(JSONOptions.isValidOption("enableDateTimeParsingFallback"))
     assert(JSONOptions.isValidOption("multiLine"))
     assert(JSONOptions.isValidOption("lineSep"))

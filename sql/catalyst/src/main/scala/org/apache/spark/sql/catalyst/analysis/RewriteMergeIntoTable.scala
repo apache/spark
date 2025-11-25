@@ -334,7 +334,7 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
       // original row ID values must be preserved and passed back to the table to encode updates
       // if there are any assignments to row ID attributes, add extra columns for original values
       val updateAssignments = (matchedActions ++ notMatchedBySourceActions).flatMap {
-        case UpdateAction(_, assignments) => assignments
+        case UpdateAction(_, assignments, _) => assignments
         case _ => Nil
       }
       buildOriginalRowIdValues(rowIdAttrs, updateAssignments)
@@ -434,7 +434,7 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
   // converts a MERGE action into an instruction on top of the joined plan for group-based plans
   private def toInstruction(action: MergeAction, metadataAttrs: Seq[Attribute]): Instruction = {
     action match {
-      case UpdateAction(cond, assignments) =>
+      case UpdateAction(cond, assignments, _) =>
         val rowValues = assignments.map(_.value)
         val metadataValues = nullifyMetadataOnUpdate(metadataAttrs)
         val output = Seq(Literal(WRITE_WITH_METADATA_OPERATION)) ++ rowValues ++ metadataValues
@@ -466,12 +466,12 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
       splitUpdates: Boolean): Instruction = {
 
     action match {
-      case UpdateAction(cond, assignments) if splitUpdates =>
+      case UpdateAction(cond, assignments, _) if splitUpdates =>
         val output = deltaDeleteOutput(rowAttrs, rowIdAttrs, metadataAttrs, originalRowIdValues)
         val otherOutput = deltaReinsertOutput(assignments, metadataAttrs, originalRowIdValues)
         Split(cond.getOrElse(TrueLiteral), output, otherOutput)
 
-      case UpdateAction(cond, assignments) =>
+      case UpdateAction(cond, assignments, _) =>
         val output = deltaUpdateOutput(assignments, metadataAttrs, originalRowIdValues)
         Keep(Update, cond.getOrElse(TrueLiteral), output)
 
@@ -495,7 +495,7 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
     val actions = merge.matchedActions ++ merge.notMatchedActions ++ merge.notMatchedBySourceActions
     actions.foreach {
       case DeleteAction(Some(cond)) => checkMergeIntoCondition("DELETE", cond)
-      case UpdateAction(Some(cond), _) => checkMergeIntoCondition("UPDATE", cond)
+      case UpdateAction(Some(cond), _, _) => checkMergeIntoCondition("UPDATE", cond)
       case InsertAction(Some(cond), _) => checkMergeIntoCondition("INSERT", cond)
       case _ => // OK
     }

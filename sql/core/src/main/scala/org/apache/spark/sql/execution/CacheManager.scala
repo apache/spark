@@ -22,6 +22,8 @@ import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.spark.internal.{Logging, MessageWithContext}
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
+import org.apache.spark.sql.catalyst.analysis.Resolver
+import org.apache.spark.sql.catalyst.analysis.V2TableReference
 import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
 import org.apache.spark.sql.catalyst.expressions.{Attribute, SubqueryExpression}
 import org.apache.spark.sql.catalyst.optimizer.EliminateResolvedHint
@@ -29,12 +31,14 @@ import org.apache.spark.sql.catalyst.plans.logical.{IgnoreCachedData, LogicalPla
 import org.apache.spark.sql.catalyst.trees.TreePattern.PLAN_EXPRESSION
 import org.apache.spark.sql.catalyst.util.sideBySide
 import org.apache.spark.sql.classic.{Dataset, SparkSession}
-import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.IdentifierHelper
+import org.apache.spark.sql.connector.catalog.CatalogPlugin
+import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.{IdentifierHelper, MultipartIdentifierHelper}
+import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
 import org.apache.spark.sql.execution.command.CommandUtils
 import org.apache.spark.sql.execution.datasources.{FileIndex, HadoopFsRelation, LogicalRelation, LogicalRelationWithTable}
-import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, ExtractV2Table, FileTable}
+import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, ExtractV2CatalogAndIdentifier, ExtractV2Table, FileTable, V2TableRefreshUtil}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.storage.StorageLevel.MEMORY_AND_DISK
@@ -238,26 +242,49 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
       name: Seq[String],
       conf: SQLConf,
       includeTimeTravel: Boolean): Boolean = {
-    def isSameName(nameInCache: Seq[String]): Boolean = {
-      nameInCache.length == name.length && nameInCache.zip(name).forall(conf.resolver.tupled)
-    }
+    isMatchedTableOrView(plan, name, conf.resolver, includeTimeTravel)
+  }
+
+  private def isMatchedTableOrView(
+      plan: LogicalPlan,
+      name: Seq[String],
+      resolver: Resolver,
+      includeTimeTravel: Boolean): Boolean = {
 
     EliminateSubqueryAliases(plan) match {
       case LogicalRelationWithTable(_, Some(catalogTable)) =>
-        isSameName(catalogTable.identifier.nameParts)
+        isSameName(name, catalogTable.identifier.nameParts, resolver)
 
       case DataSourceV2Relation(_, _, Some(catalog), Some(v2Ident), _, timeTravelSpec) =>
         val nameInCache = v2Ident.toQualifiedNameParts(catalog)
-        isSameName(nameInCache) && (includeTimeTravel || timeTravelSpec.isEmpty)
+        isSameName(name, nameInCache, resolver) && (includeTimeTravel || timeTravelSpec.isEmpty)
+
+      case r: V2TableReference =>
+        isSameName(name, r.identifier.toQualifiedNameParts(r.catalog), resolver)
 
       case v: View =>
-        isSameName(v.desc.identifier.nameParts)
+        isSameName(name, v.desc.identifier.nameParts, resolver)
 
       case HiveTableRelation(catalogTable, _, _, _, _) =>
-        isSameName(catalogTable.identifier.nameParts)
+        isSameName(name, catalogTable.identifier.nameParts, resolver)
 
       case _ => false
     }
+  }
+
+  private def isSameName(
+      name: Seq[String],
+      catalog: CatalogPlugin,
+      ident: Identifier,
+      resolver: Resolver): Boolean = {
+    isSameName(name, ident.toQualifiedNameParts(catalog), resolver)
+  }
+
+  private def isSameName(
+      name: Seq[String],
+      nameInCache: Seq[String],
+      resolver: Resolver): Boolean = {
+    nameInCache.length == name.length && nameInCache.zip(name).forall(resolver.tupled)
   }
 
   private def uncacheByCondition(
@@ -348,11 +375,12 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
     needToRecache.foreach { cd =>
       cd.cachedRepresentation.cacheBuilder.clearCache()
       val sessionWithConfigsOff = getOrCloneSessionWithConfigsOff(spark)
-      val newCache = sessionWithConfigsOff.withActive {
-        val qe = sessionWithConfigsOff.sessionState.executePlan(cd.plan)
-        InMemoryRelation(cd.cachedRepresentation.cacheBuilder, qe)
+      val (newKey, newCache) = sessionWithConfigsOff.withActive {
+        val refreshedPlan = V2TableRefreshUtil.refresh(sessionWithConfigsOff, cd.plan)
+        val qe = sessionWithConfigsOff.sessionState.executePlan(refreshedPlan)
+        qe.normalized -> InMemoryRelation(cd.cachedRepresentation.cacheBuilder, qe)
       }
-      val recomputedPlan = cd.copy(cachedRepresentation = newCache)
+      val recomputedPlan = cd.copy(plan = newKey, cachedRepresentation = newCache)
       this.synchronized {
         if (lookupCachedDataInternal(recomputedPlan.plan).nonEmpty) {
           logWarning("While recaching, data was already added to cache.")
@@ -361,6 +389,35 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
           CacheManager.logCacheOperation(log"Re-cached Dataframe cache entry:" +
             log"${MDC(DATAFRAME_CACHE_ENTRY, recomputedPlan)}")
         }
+      }
+    }
+  }
+
+  private[sql] def lookupCachedTable(
+      name: Seq[String],
+      resolver: Resolver): Option[LogicalPlan] = {
+    val cachedRelations = findCachedRelations(name, resolver)
+    cachedRelations match {
+      case cachedRelation +: _ =>
+        CacheManager.logCacheOperation(
+          log"Relation cache hit for table ${MDC(TABLE_NAME, name.quoted)}")
+        Some(cachedRelation)
+      case _ =>
+        None
+    }
+  }
+
+  private def findCachedRelations(
+      name: Seq[String],
+      resolver: Resolver): Seq[LogicalPlan] = {
+    cachedData.flatMap { cd =>
+      val plan = EliminateSubqueryAliases(cd.plan)
+      plan match {
+        case r @ ExtractV2CatalogAndIdentifier(catalog, ident)
+            if isSameName(name, catalog, ident, resolver) && r.timeTravelSpec.isEmpty =>
+          Some(r)
+        case _ =>
+          None
       }
     }
   }
