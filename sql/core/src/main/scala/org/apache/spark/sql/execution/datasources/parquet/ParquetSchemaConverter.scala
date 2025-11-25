@@ -309,10 +309,13 @@ class ParquetToSparkSchemaConverter(
             } else {
               TimestampNTZType
             }
-          // SPARK-40819: NANOS are not supported as a Timestamp, convert to LongType without
-          // timezone awareness to address behaviour regression introduced by SPARK-34661
+          // SPARK-40819 & SPARK-44988: NANOS are not supported as a Timestamp, convert to LongType
+          // The nanosAsLong config was originally intended as a migration flag, but since Spark
+          // doesn't have full NANOS support and real-world files exist with TIMESTAMP(NANOS,*)
+          // we always convert to LongType regardless of the config to prevent unreadable files.
+          // This handles both TIMESTAMP(NANOS,true) and TIMESTAMP(NANOS,false)
           case timestamp: TimestampLogicalTypeAnnotation
-            if timestamp.getUnit == TimeUnit.NANOS && nanosAsLong =>
+            if timestamp.getUnit == TimeUnit.NANOS =>
             LongType
           case time: TimeLogicalTypeAnnotation
             if time.getUnit == TimeUnit.MICROS && !time.isAdjustedToUTC =>
