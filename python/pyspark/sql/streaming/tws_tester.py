@@ -193,10 +193,96 @@ class _InMemoryStatefulProcessorHandle(StatefulProcessorHandle):
         raise NotImplementedError()
 
     def deleteIfExists(self, stateName: str) -> None:
-        del self.states[stateName]
+        if stateName in self.states:
+            del self.states[stateName]
 
 
 class TwsTester:
+    """
+    Testing utility for transformWithState stateful processors.
+
+    This class enables unit testing of StatefulProcessor business logic by simulating the
+    behavior of transformWithState and transformWithStateInPandas. It processes input data
+    and returns output data equivalent to what would be produced by the processor in an
+    actual Spark streaming query.
+
+    **Supported:**
+        - Processing input data and producing output via :meth:`test` (Row mode) or
+          :meth:`testInPandas` (Pandas mode).
+        - Initial state setup via constructor parameters ``initialStateRow`` or
+          ``initialStatePandas``.
+        - Direct state manipulation via :meth:`setValueState`, :meth:`setListState`,
+          :meth:`setMapState`.
+        - Direct state inspection via :meth:`peekValueState`, :meth:`peekListState`,
+          :meth:`peekMapState`.
+
+    **Not Supported:**
+        - **Timers**: Only TimeMode.None is supported. If the processor attempts to register or
+          use timers (as if in TimeMode.EventTime or TimeMode.ProcessingTime), a
+          NotImplementedError will be raised.
+        - **TTL**: State TTL configurations are ignored. All state persists indefinitely.
+
+    **Use Cases:**
+        - **Primary**: Unit testing business logic in ``handleInputRows`` implementations.
+        - **Not recommended**: End-to-end testing or performance testing - use actual Spark
+          streaming queries for those scenarios.
+
+    Parameters
+    ----------
+    processor : :class:`StatefulProcessor`
+        The StatefulProcessor to test
+    initialStateRow : list of :class:`Row`, optional
+        Initial state for each key as a list of Rows (for Row mode processors). Cannot be
+        specified together with ``initialStatePandas``.
+    initialStatePandas : :class:`pandas.DataFrame`, optional
+        Initial state for each key as a pandas DataFrame (for Pandas mode processors). Cannot
+        be specified together with ``initialStateRow``.
+    key_column_name : str, optional
+        Name of the column containing the grouping key in input data. Default is "key".
+
+    Examples
+    --------
+    **Example 1: Testing a Row mode processor**
+
+    >>> processor = RunningCountStatefulProcessorFactory().row()
+    >>> tester = TwsTester(processor)
+    >>> result = tester.test([
+    ...     Row(key="key1", value="a"),
+    ...     Row(key="key1", value="b"),
+    ...     Row(key="key2", value="c")
+    ... ])
+    >>> # Result: [Row(key="key1", count=2), Row(key="key2", count=1)]
+
+    **Example 2: Testing a Pandas mode processor**
+
+    >>> processor = RunningCountStatefulProcessorFactory().pandas()
+    >>> tester = TwsTester(processor)
+    >>> input_df = pd.DataFrame({"key": ["key1", "key1", "key2"], "value": ["a", "b", "c"]})
+    >>> result = tester.testInPandas(input_df)
+    >>> # Result: pd.DataFrame({"key": ["key1", "key2"], "count": [2, 1]})
+
+    **Example 3: Testing with initial state**
+
+    >>> processor = RunningCountStatefulProcessorFactory().row()
+    >>> tester = TwsTester(
+    ...     processor,
+    ...     initialStateRow=[Row(key="key1", initial_count=10)]
+    ... )
+    >>> result = tester.test([Row(key="key1", value="a")])
+    >>> # Result: [Row(key="key1", count=11)]
+
+    **Example 4: Direct state manipulation**
+
+    >>> processor = RunningCountStatefulProcessorFactory().row()
+    >>> tester = TwsTester(processor)
+    >>> tester.setValueState("count", "key1", (5,))
+    >>> result = tester.test([Row(key="key1", value="a")])
+    >>> tester.peekValueState("count", "key1")
+    >>> # Returns: (6,)
+
+    .. versionadded:: 4.2.0
+    """
+
     def __init__(
         self,
         processor: StatefulProcessor,
@@ -228,6 +314,20 @@ class TwsTester:
                     )
 
     def test(self, input: list[Row]) -> list[Row]:
+        """
+        Processes input rows through the stateful processor, grouped by key.
+
+        This method is used for testing **Row mode** processors (transformWithState). It
+        corresponds to processing one microbatch. ``handleInputRows`` will be called once for
+        each key that appears in the input.
+
+        To simulate real-time mode, call this method repeatedly in a loop, passing a list with
+        a single Row per call.
+
+        The input is a list of :class:`Row` objects to process, which will be automatically
+        grouped by the key column specified in the constructor. Returns a list of :class:`Row`
+        objects representing all output rows produced by the processor during this batch.
+        """
         result: list[Row] = []
         sorted_input = sorted(input, key=lambda row: row[self.key_column_name])
         for key, rows in groupby(
@@ -242,6 +342,17 @@ class TwsTester:
         return result
 
     def testInPandas(self, input: pd.DataFrame) -> pd.DataFrame:
+        """
+        Processes input data through the stateful processor, grouped by key.
+
+        This method does the same thing as :meth:`test`, but input and output are pandas
+        DataFrames. It is used for testing **Pandas mode** processors - those intended to be
+        passed to ``transformWithStateInPandas`` in a real streaming query.
+
+        The input is a :class:`pandas.DataFrame` to process, which will be automatically grouped by
+        the key column specified in the constructor. Returns a :class:`pandas.DataFrame` 
+        representing all output rows produced by the processor during this batch.
+        """
         result_dfs = []
         sorted_input = input.sort_values(by=self.key_column_name)
         for key, group_df in sorted_input.groupby(self.key_column_name):
@@ -262,7 +373,11 @@ class TwsTester:
         self.handle.states[stateName].state[key] = value
 
     def peekValueState(self, stateName: str, key: Any) -> Optional[tuple]:
-        """Peek at a value state for a given key."""
+        """
+        Peek at a value state for a given key without modifying it.
+        
+        Returns None if the state does not exist for the given key.
+        """
         return self.handle.states[stateName].state.get(key, None)
 
     def setListState(self, stateName: str, key: Any, value: list[tuple]) -> None:
@@ -270,7 +385,11 @@ class TwsTester:
         self.handle.states[stateName].state[key] = value
 
     def peekListState(self, stateName: str, key: Any) -> list[tuple]:
-        """Peek at a list state for a given key."""
+        """
+        Peek at a list state for a given key without modifying it.
+        
+        Returns an empty list if the state does not exist for the given key.
+        """
         return list(self.handle.states[stateName].state.get(key, []))
 
     def setMapState(self, stateName: str, key: Any, value: dict) -> None:
@@ -278,5 +397,9 @@ class TwsTester:
         self.handle.states[stateName].state[key] = dict(value)
 
     def peekMapState(self, stateName: str, key: Any) -> dict:
-        """Peek at a map state for a given key."""
+        """
+        Peek at a map state for a given key without modifying it.
+        
+        Returns an empty dict if the state does not exist for the given key.
+        """
         return dict(self.handle.states[stateName].state.get(key, {}))
