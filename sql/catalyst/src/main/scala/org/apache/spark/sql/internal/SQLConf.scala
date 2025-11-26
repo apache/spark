@@ -7903,8 +7903,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def legacyXMLParserEnabled: Boolean =
     getConf(SQLConf.LEGACY_XML_PARSER_ENABLED)
 
-  def coerceMergeNestedTypes: Boolean =
-    getConf(SQLConf.MERGE_INTO_NESTED_TYPE_COERCION_ENABLED)
+  // Disable until we define the semantics of UPDATE SET * with nested types
+  def coerceMergeNestedTypes: Boolean = false
 
   /** ********************** SQLConf functionality methods ************ */
 
