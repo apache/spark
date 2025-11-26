@@ -1969,6 +1969,11 @@ package object config {
       .booleanConf
       .createWithDefault(false)
 
+  private[spark] val CLEANER_REFERENCE_TRACKING_BLOCKING_TIMEOUT =
+    ConfigBuilder("spark.cleaner.referenceTracking.blocking.timeout")
+      .version("4.2.0")
+      .fallbackConf(Network.NETWORK_TIMEOUT)
+
   private[spark] val EXECUTOR_LOGS_ROLLING_STRATEGY =
     ConfigBuilder("spark.executor.logs.rolling.strategy")
       .version("1.1.0")

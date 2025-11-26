@@ -58,7 +58,9 @@ class ParquetToSparkSchemaConverter(
     caseSensitive: Boolean = SQLConf.CASE_SENSITIVE.defaultValue.get,
     inferTimestampNTZ: Boolean = SQLConf.PARQUET_INFER_TIMESTAMP_NTZ_ENABLED.defaultValue.get,
     nanosAsLong: Boolean = SQLConf.LEGACY_PARQUET_NANOS_AS_LONG.defaultValue.get,
-    useFieldId: Boolean = SQLConf.PARQUET_FIELD_ID_READ_ENABLED.defaultValue.get) {
+    useFieldId: Boolean = SQLConf.PARQUET_FIELD_ID_READ_ENABLED.defaultValue.get,
+    val ignoreVariantAnnotation: Boolean =
+      SQLConf.PARQUET_IGNORE_VARIANT_ANNOTATION.defaultValue.get) {
 
   def this(conf: SQLConf) = this(
     assumeBinaryIsString = conf.isParquetBinaryAsString,
@@ -66,7 +68,8 @@ class ParquetToSparkSchemaConverter(
     caseSensitive = conf.caseSensitiveAnalysis,
     inferTimestampNTZ = conf.parquetInferTimestampNTZEnabled,
     nanosAsLong = conf.legacyParquetNanosAsLong,
-    useFieldId = conf.parquetFieldIdReadEnabled)
+    useFieldId = conf.parquetFieldIdReadEnabled,
+    ignoreVariantAnnotation = conf.parquetIgnoreVariantAnnotation)
 
   def this(conf: Configuration) = this(
     assumeBinaryIsString = conf.get(SQLConf.PARQUET_BINARY_AS_STRING.key).toBoolean,
@@ -75,7 +78,9 @@ class ParquetToSparkSchemaConverter(
     inferTimestampNTZ = conf.get(SQLConf.PARQUET_INFER_TIMESTAMP_NTZ_ENABLED.key).toBoolean,
     nanosAsLong = conf.get(SQLConf.LEGACY_PARQUET_NANOS_AS_LONG.key).toBoolean,
     useFieldId = conf.getBoolean(SQLConf.PARQUET_FIELD_ID_READ_ENABLED.key,
-      SQLConf.PARQUET_FIELD_ID_READ_ENABLED.defaultValue.get))
+      SQLConf.PARQUET_FIELD_ID_READ_ENABLED.defaultValue.get),
+    ignoreVariantAnnotation = conf.getBoolean(SQLConf.PARQUET_IGNORE_VARIANT_ANNOTATION.key,
+      SQLConf.PARQUET_IGNORE_VARIANT_ANNOTATION.defaultValue.get))
 
   /**
    * Converts Parquet [[MessageType]] `parquetSchema` to a Spark SQL [[StructType]].
@@ -202,15 +207,17 @@ class ParquetToSparkSchemaConverter(
       case primitiveColumn: PrimitiveColumnIO => convertPrimitiveField(primitiveColumn, targetType)
       case groupColumn: GroupColumnIO if targetType.contains(VariantType) =>
         if (SQLConf.get.getConf(SQLConf.VARIANT_ALLOW_READING_SHREDDED)) {
-          val col = convertGroupField(groupColumn)
+          // We need the underlying file type regardless of the config.
+          val col = convertGroupField(groupColumn, ignoreVariantAnnotation = true)
           col.copy(sparkType = VariantType, variantFileType = Some(col))
         } else {
           convertVariantField(groupColumn)
         }
       case groupColumn: GroupColumnIO if targetType.exists(VariantMetadata.isVariantStruct) =>
-        val col = convertGroupField(groupColumn)
+        val col = convertGroupField(groupColumn, ignoreVariantAnnotation = true)
         col.copy(sparkType = targetType.get, variantFileType = Some(col))
-      case groupColumn: GroupColumnIO => convertGroupField(groupColumn, targetType)
+      case groupColumn: GroupColumnIO =>
+        convertGroupField(groupColumn, ignoreVariantAnnotation, targetType)
     }
   }
 
@@ -349,6 +356,7 @@ class ParquetToSparkSchemaConverter(
 
   private def convertGroupField(
       groupColumn: GroupColumnIO,
+      ignoreVariantAnnotation: Boolean,
       sparkReadType: Option[DataType] = None): ParquetColumn = {
     val field = groupColumn.getType.asGroupType()
 
@@ -373,9 +381,21 @@ class ParquetToSparkSchemaConverter(
 
     Option(field.getLogicalTypeAnnotation).fold(
       convertInternal(groupColumn, sparkReadType.map(_.asInstanceOf[StructType]))) {
-      // Temporary workaround to read Shredded variant data
-      case v: VariantLogicalTypeAnnotation if v.getSpecVersion == 1 && sparkReadType.isEmpty =>
-        convertInternal(groupColumn, None)
+      case v: VariantLogicalTypeAnnotation if v.getSpecVersion == 1 =>
+        if (ignoreVariantAnnotation) {
+          convertInternal(groupColumn)
+        } else {
+          ParquetSchemaConverter.checkConversionRequirement(
+            sparkReadType.forall(_.isInstanceOf[VariantType]),
+            s"Invalid Spark read type: expected $field to be variant type but found " +
+              s"${if (sparkReadType.isEmpty) { "None" } else {sparkReadType.get.sql} }")
+          if (SQLConf.get.getConf(SQLConf.VARIANT_ALLOW_READING_SHREDDED)) {
+            val col = convertInternal(groupColumn)
+            col.copy(sparkType = VariantType, variantFileType = Some(col))
+          } else {
+            convertVariantField(groupColumn)
+          }
+        }
 
       // A Parquet list is represented as a 3-level structure:
       //

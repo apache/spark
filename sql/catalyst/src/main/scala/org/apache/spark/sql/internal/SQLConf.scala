@@ -1600,6 +1600,15 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val PARQUET_IGNORE_VARIANT_ANNOTATION =
+    buildConf("spark.sql.parquet.ignoreVariantAnnotation")
+      .internal()
+      .doc("When true, ignore the variant logical type annotation and treat the Parquet " +
+        "column in the same way as the underlying struct type")
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val PARQUET_FIELD_ID_READ_ENABLED =
     buildConf("spark.sql.parquet.fieldId.read.enabled")
       .doc("Field ID is a native field of the Parquet schema spec. When enabled, Parquet readers " +
@@ -5592,7 +5601,7 @@ object SQLConf {
         "When false, it only reads unshredded variant.")
       .version("4.0.0")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   val PUSH_VARIANT_INTO_SCAN =
     buildConf("spark.sql.variant.pushVariantIntoScan")
@@ -6686,8 +6695,8 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
-  val MERGE_INTO_SOURCE_NESTED_TYPE_COERCION_ENABLED =
-    buildConf("spark.sql.merge.source.nested.type.coercion.enabled")
+  val MERGE_INTO_NESTED_TYPE_COERCION_ENABLED =
+    buildConf("spark.sql.merge.nested.type.coercion.enabled")
       .internal()
       .doc("If enabled, allow MERGE INTO to coerce source nested types if they have less" +
         "nested fields than the target table's nested types.")
@@ -7811,6 +7820,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def parquetAnnotateVariantLogicalType: Boolean = getConf(PARQUET_ANNOTATE_VARIANT_LOGICAL_TYPE)
 
+  def parquetIgnoreVariantAnnotation: Boolean = getConf(SQLConf.PARQUET_IGNORE_VARIANT_ANNOTATION)
+
   def ignoreMissingParquetFieldId: Boolean = getConf(SQLConf.IGNORE_MISSING_PARQUET_FIELD_ID)
 
   def legacyParquetNanosAsLong: Boolean = getConf(SQLConf.LEGACY_PARQUET_NANOS_AS_LONG)
@@ -7893,7 +7904,7 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
     getConf(SQLConf.LEGACY_XML_PARSER_ENABLED)
 
   def coerceMergeNestedTypes: Boolean =
-    getConf(SQLConf.MERGE_INTO_SOURCE_NESTED_TYPE_COERCION_ENABLED)
+    getConf(SQLConf.MERGE_INTO_NESTED_TYPE_COERCION_ENABLED)
 
   /** ********************** SQLConf functionality methods ************ */
 

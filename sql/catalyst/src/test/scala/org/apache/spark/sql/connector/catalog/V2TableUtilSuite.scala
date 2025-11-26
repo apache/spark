@@ -26,6 +26,7 @@ import org.apache.spark.sql.connector.catalog.TableCapability.BATCH_READ
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.sql.util.SchemaValidationMode.PROHIBIT_CHANGES
 import org.apache.spark.util.ArrayImplicits.SparkArrayOps
 
 class V2TableUtilSuite extends SparkFunSuite {
@@ -65,7 +66,7 @@ class V2TableUtilSuite extends SparkFunSuite {
 
     val errors = validateCapturedColumns(table, originCols)
     assert(errors.size == 1)
-    assert(errors.head == "`id` type has changed from BIGINT to BIGINT NOT NULL")
+    assert(errors.head == "`id` is no longer nullable")
   }
 
   test("validateCapturedColumns - column nullability changed to nullable") {
@@ -79,7 +80,7 @@ class V2TableUtilSuite extends SparkFunSuite {
 
     val errors = validateCapturedColumns(table, originCols)
     assert(errors.size == 1)
-    assert(errors.head == "`id` type has changed from BIGINT NOT NULL to BIGINT")
+    assert(errors.head == "`id` is nullable now")
   }
 
   test("validateCapturedColumns - column removed") {
@@ -187,9 +188,7 @@ class V2TableUtilSuite extends SparkFunSuite {
 
     val errors = V2TableUtil.validateCapturedColumns(table, originCols.toSeq)
     assert(errors.size == 1)
-    assert(errors.head.contains(
-      "`address` type has changed from STRUCT<street: STRING, city: STRING> to " +
-      "STRUCT<street: STRING, city: INT>"))
+    assert(errors.head.contains("`address`.`city` type has changed from STRING to INT"))
   }
 
   test("validateCapturedMetadataColumns - no changes") {
@@ -214,7 +213,7 @@ class V2TableUtilSuite extends SparkFunSuite {
 
     val errors = V2TableUtil.validateCapturedMetadataColumns(table, originMetaCols)
     assert(errors.size == 1)
-    assert(errors.head == "`index` type has changed from INT NOT NULL to STRING NOT NULL")
+    assert(errors.head == "`index` type has changed from INT to STRING")
   }
 
   test("validateCapturedMetadataColumns - nullability changed to nullable") {
@@ -226,7 +225,7 @@ class V2TableUtilSuite extends SparkFunSuite {
 
     val errors = V2TableUtil.validateCapturedMetadataColumns(table, originMetaCols)
     assert(errors.size == 1)
-    assert(errors.head == "`index` type has changed from INT NOT NULL to INT")
+    assert(errors.head == "`index` is nullable now")
   }
 
   test("validateCapturedMetadataColumns - nullability changed to not null") {
@@ -236,7 +235,7 @@ class V2TableUtilSuite extends SparkFunSuite {
 
     val errors = V2TableUtil.validateCapturedMetadataColumns(table, originMetaCols)
     assert(errors.size == 1)
-    assert(errors.head == "`index` type has changed from INT to INT NOT NULL")
+    assert(errors.head == "`index` is no longer nullable")
   }
 
   test("validateCapturedMetadataColumns - column removed") {
@@ -332,9 +331,7 @@ class V2TableUtilSuite extends SparkFunSuite {
 
     val errors = V2TableUtil.validateCapturedMetadataColumns(table, originMetaCols)
     assert(errors.size == 1)
-    assert(errors.head.contains(
-      "`_partition` type has changed from STRUCT<bucket: INT, partition: INT> NOT NULL to " +
-      "STRUCT<bucket: STRING, partition: INT> NOT NULL"))
+    assert(errors.head.contains("`_partition`.`bucket` type has changed from INT to STRING"))
   }
 
   test("validateCapturedMetadataColumns - with DataSourceV2Relation") {
@@ -362,7 +359,10 @@ class V2TableUtilSuite extends SparkFunSuite {
       metaCol("index", IntegerType, nullable = false))
     val currentTable = TestTableWithMetadataSupport("test", dataCols, currentMetaCols)
 
-    val errors = V2TableUtil.validateCapturedMetadataColumns(currentTable, relation)
+    val errors = V2TableUtil.validateCapturedMetadataColumns(
+      currentTable,
+      relation,
+      mode = PROHIBIT_CHANGES)
     assert(errors.size == 1)
     assert(errors.head.contains("`_partition` type has changed"))
   }
@@ -384,8 +384,149 @@ class V2TableUtilSuite extends SparkFunSuite {
 
     val currentTable = TestTable("test", dataCols)
 
-    val errors = V2TableUtil.validateCapturedMetadataColumns(currentTable, relation)
+    val errors = V2TableUtil.validateCapturedMetadataColumns(
+      currentTable,
+      relation,
+      mode = PROHIBIT_CHANGES)
     assert(errors.isEmpty)
+  }
+
+  test("validateCapturedColumns - array element type changed") {
+    val originCols = Array(
+      col("id", LongType, nullable = true),
+      col("data", ArrayType(IntegerType, containsNull = true), nullable = true))
+    val currentCols = Array(
+      col("id", LongType, nullable = true),
+      col("data", ArrayType(LongType, containsNull = true), nullable = true))
+    val table = TestTableWithMetadataSupport("test", currentCols)
+
+    val errors = validateCapturedColumns(table, originCols)
+    assert(errors.size == 1)
+    assert(errors.head == "`data`.`element` type has changed from INT to BIGINT")
+  }
+
+  test("validateCapturedColumns - array containsNull changed to false") {
+    val originCols = Array(
+      col("id", LongType, nullable = true),
+      col("data", ArrayType(IntegerType, containsNull = true), nullable = true))
+    val currentCols = Array(
+      col("id", LongType, nullable = true),
+      col("data", ArrayType(IntegerType, containsNull = false), nullable = true))
+    val table = TestTableWithMetadataSupport("test", currentCols)
+
+    val errors = validateCapturedColumns(table, originCols)
+    assert(errors.size == 1)
+    assert(errors.head == "`data`.`element` is no longer nullable")
+  }
+
+  test("validateCapturedColumns - array containsNull changed to true") {
+    val originCols = Array(
+      col("id", LongType, nullable = true),
+      col("data", ArrayType(IntegerType, containsNull = false), nullable = true))
+    val currentCols = Array(
+      col("id", LongType, nullable = true),
+      col("data", ArrayType(IntegerType, containsNull = true), nullable = true))
+    val table = TestTableWithMetadataSupport("test", currentCols)
+
+    val errors = validateCapturedColumns(table, originCols)
+    assert(errors.size == 1)
+    assert(errors.head == "`data`.`element` is nullable now")
+  }
+
+  test("validateCapturedColumns - map key type changed") {
+    val originCols = Array(
+      col("id", LongType, nullable = true),
+      col("data", MapType(IntegerType, StringType, valueContainsNull = true), nullable = true))
+    val currentCols = Array(
+      col("id", LongType, nullable = true),
+      col("data", MapType(LongType, StringType, valueContainsNull = true), nullable = true))
+    val table = TestTableWithMetadataSupport("test", currentCols)
+
+    val errors = validateCapturedColumns(table, originCols)
+    assert(errors.size == 1)
+    assert(errors.head == "`data`.`key` type has changed from INT to BIGINT")
+  }
+
+  test("validateCapturedColumns - map value type changed") {
+    val originCols = Array(
+      col("id", LongType, nullable = true),
+      col("data", MapType(StringType, IntegerType, valueContainsNull = true), nullable = true))
+    val currentCols = Array(
+      col("id", LongType, nullable = true),
+      col("data", MapType(StringType, LongType, valueContainsNull = true), nullable = true))
+    val table = TestTableWithMetadataSupport("test", currentCols)
+
+    val errors = validateCapturedColumns(table, originCols)
+    assert(errors.size == 1)
+    assert(errors.head == "`data`.`value` type has changed from INT to BIGINT")
+  }
+
+  test("validateCapturedColumns - map valueContainsNull changed to false") {
+    val originCols = Array(
+      col("id", LongType, nullable = true),
+      col("data", MapType(StringType, IntegerType, valueContainsNull = true), nullable = true))
+    val currentCols = Array(
+      col("id", LongType, nullable = true),
+      col("data", MapType(StringType, IntegerType, valueContainsNull = false), nullable = true))
+    val table = TestTableWithMetadataSupport("test", currentCols)
+
+    val errors = validateCapturedColumns(table, originCols)
+    assert(errors.size == 1)
+    assert(errors.head == "`data`.`value` is no longer nullable")
+  }
+
+  test("validateCapturedColumns - map valueContainsNull changed to true") {
+    val originCols = Array(
+      col("id", LongType, nullable = true),
+      col("data", MapType(StringType, IntegerType, valueContainsNull = false), nullable = true))
+    val currentCols = Array(
+      col("id", LongType, nullable = true),
+      col("data", MapType(StringType, IntegerType, valueContainsNull = true), nullable = true))
+    val table = TestTableWithMetadataSupport("test", currentCols)
+
+    val errors = validateCapturedColumns(table, originCols)
+    assert(errors.size == 1)
+    assert(errors.head == "`data`.`value` is nullable now")
+  }
+
+  test("validateCapturedColumns - nested array in struct element type changed") {
+    val originStructType = StructType(Seq(
+      StructField("name", StringType),
+      StructField("scores", ArrayType(IntegerType, containsNull = true))))
+    val originCols = Array(
+      col("id", LongType, nullable = true),
+      col("person", originStructType, nullable = true))
+    val currentStructType = StructType(Seq(
+      StructField("name", StringType),
+      StructField("scores", ArrayType(LongType, containsNull = true))))
+    val currentCols = Array(
+      col("id", LongType, nullable = true),
+      col("person", currentStructType, nullable = true))
+    val table = TestTableWithMetadataSupport("test", currentCols)
+
+    val errors = validateCapturedColumns(table, originCols)
+    assert(errors.size == 1)
+    assert(errors.head == "`person`.`scores`.`element` type has changed from INT to BIGINT")
+  }
+
+  test("validateCapturedColumns - nested map in struct value type changed") {
+    val originStructType = StructType(Seq(
+      StructField("name", StringType),
+      StructField("attrs", MapType(StringType, IntegerType, valueContainsNull = true))))
+    val originCols = Array(
+      col("id", LongType, nullable = true),
+      col("person", originStructType, nullable = true))
+    val currentStructType = StructType(Seq(
+      StructField("name", StringType),
+      StructField("attrs", MapType(StringType, LongType, valueContainsNull = true))))
+    val currentCols = Array(
+      col("id", LongType, nullable = true),
+      col("person", currentStructType, nullable = true))
+    val table = TestTableWithMetadataSupport("test", currentCols)
+
+    val errors = validateCapturedColumns(table, originCols)
+    assert(errors.size == 1)
+    assert(errors.head == "`person`.`attrs`.`value` type has changed from INT to BIGINT")
   }
 
   // simple table without metadata column support

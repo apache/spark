@@ -5253,7 +5253,7 @@
   "RUN_EMPTY_PIPELINE" : {
     "message" : [
       "Pipelines are expected to have at least one non-temporary dataset defined (tables, persisted views) but no non-temporary datasets were found in your pipeline.",
-      "Please verify that you have included the expected source files, and that your source code includes table definitions (e.g., CREATE MATERIALIZED VIEW in SQL code, @sdp.table in python code)."
+      "Please verify that you have included the expected source files, and that your source code includes table definitions (e.g., CREATE MATERIALIZED VIEW in SQL code, @dp.table in python code)."
     ],
     "sqlState" : "42617"
   },
@@ -6019,7 +6019,7 @@
   "TEMP_TABLE_OR_VIEW_ALREADY_EXISTS" : {
     "message" : [
       "Cannot create the temporary view <relationName> because it already exists.",
-      "Choose a different name, drop or replace the existing view,  or add the IF NOT EXISTS clause to tolerate pre-existing views."
+      "Choose a different name, drop or replace the existing view."
     ],
     "sqlState" : "42P07"
   },

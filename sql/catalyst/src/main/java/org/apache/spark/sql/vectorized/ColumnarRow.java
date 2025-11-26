@@ -91,6 +91,8 @@ public final class ColumnarRow extends InternalRow {
           row.update(i, getArray(i).copy());
         } else if (pdt instanceof PhysicalMapType) {
           row.update(i, getMap(i).copy());
+        } else if (pdt instanceof PhysicalVariantType) {
+          row.update(i, getVariant(i));
         } else {
           throw new RuntimeException("Not implemented. " + dt);
         }

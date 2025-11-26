@@ -952,7 +952,7 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
       }
     }
 
-    val timeoutDuration = 1.minute
+    val timeoutDuration = 2.minutes
 
     quietly {
       withSpark(SparkContext.getOrCreate(conf)) { sc =>
@@ -2736,19 +2736,17 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
   }
 
   test("SPARK-54063: forceSnapshot metric populated when shouldForceSnapshotOnCommit is true") {
-    withTempDir { dir =>
-      tryWithProviderResource(newStoreProvider()) { provider =>
-        val store = provider.getStore(0, forceSnapshotOnCommit = true)
-        put(store, "a", 0, 1)
-        store.commit()
-        // Verify that a snapshot file was created for version 1
-        val metricPair = store.metrics.customMetrics.find { case (metric, _) =>
-          metric.name.contains("rocksdbForceSnapshotCount") ||
-          metric.name.contains("forceSnapshotCount")
-        }
-        assert(metricPair.isDefined)
-        assert(metricPair.get._2 == 1L, s"forceSnapshot should be 1 but was ${metricPair.get._2}")
+    tryWithProviderResource(newStoreProvider()) { provider =>
+      val store = provider.getStore(0, forceSnapshotOnCommit = true)
+      put(store, "a", 0, 1)
+      store.commit()
+      // Verify that a snapshot file was created for version 1
+      val metricPair = store.metrics.customMetrics.find { case (metric, _) =>
+        metric.name.contains("rocksdbForceSnapshotCount") ||
+        metric.name.contains("forceSnapshotCount")
       }
+      assert(metricPair.isDefined)
+      assert(metricPair.get._2 == 1L, s"forceSnapshot should be 1 but was ${metricPair.get._2}")
     }
   }
 

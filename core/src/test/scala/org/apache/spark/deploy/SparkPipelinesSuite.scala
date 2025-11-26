@@ -58,7 +58,7 @@ class SparkPipelinesSuite extends SparkSubmitTestUtils with BeforeAndAfterEach {
     val args = Array(
       "run",
       "--spec",
-      "pipeline.yml"
+      "spark-pipeline.yml"
     )
     assert(
       SparkPipelines.constructSparkSubmitArgs(
@@ -71,7 +71,7 @@ class SparkPipelinesSuite extends SparkSubmitTestUtils with BeforeAndAfterEach {
         "abc/python/pyspark/pipelines/cli.py",
         "run",
         "--spec",
-        "pipeline.yml"
+        "spark-pipeline.yml"
       )
     )
   }
@@ -83,7 +83,7 @@ class SparkPipelinesSuite extends SparkSubmitTestUtils with BeforeAndAfterEach {
       "run",
       "--supervise",
       "--spec",
-      "pipeline.yml",
+      "spark-pipeline.yml",
       "--conf",
       "spark.conf2=3"
     )
@@ -101,7 +101,7 @@ class SparkPipelinesSuite extends SparkSubmitTestUtils with BeforeAndAfterEach {
         "abc/python/pyspark/pipelines/cli.py",
         "run",
         "--spec",
-        "pipeline.yml"
+        "spark-pipeline.yml"
       )
     )
   }
