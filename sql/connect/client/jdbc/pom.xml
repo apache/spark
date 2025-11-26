@@ -59,26 +59,68 @@
           <argLine>-ea -Xmx4g -Xss4m -XX:MaxMetaspaceSize=2g -XX:ReservedCodeCacheSize=${CodeCacheSize} ${extraJavaTestArgs} -Darrow.memory.debug.allocator=true</argLine>
         </configuration>
       </plugin>
+      <!-- Shade all Guava / Protobuf / Netty dependencies of this build -->
+      <!-- TODO (SPARK-42449): Ensure shading rules are handled correctly in `native-image.properties` and support GraalVM   -->
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-shade-plugin</artifactId>
         <configuration combine.self = "override">
-          <!-- The global shading rules does satisfy Connect Client modules -->
           <shadedArtifactAttached>false</shadedArtifactAttached>
+          <promoteTransitiveDependencies>false</promoteTransitiveDependencies>
           <artifactSet>
             <includes>
               <include>org.spark-project.spark:unused</include>
             </includes>
           </artifactSet>
+          <relocations>
+            <relocation>
+              <pattern>com.google.common</pattern>
+              <shadedPattern>${spark.shade.packageName}.connect.guava</shadedPattern>
+              <includes>
+                <include>com.google.common.**</include>
+              </includes>
+            </relocation>
+            <relocation>
+              <pattern>io.grpc</pattern>
+              <shadedPattern>${spark.shade.packageName}.io.grpc</shadedPattern>
+              <includes>
+                <include>io.grpc.**</include>
+              </includes>
+            </relocation>
+            <relocation>
+              <pattern>com.google</pattern>
+              <shadedPattern>${spark.shade.packageName}.com.google</shadedPattern>
+              <excludes>
+                <!-- Guava is relocated to ${spark.shade.packageName}.connect.guava -->
+                <exclude>com.google.common.**</exclude>
+              </excludes>
+            </relocation>
+            <relocation>
+              <pattern>io.netty</pattern>
+              <shadedPattern>${spark.shade.packageName}.io.netty</shadedPattern>
+            </relocation>
+            <relocation>
+              <pattern>io.perfmark</pattern>
+              <shadedPattern>${spark.shade.packageName}.io.perfmark</shadedPattern>
+            </relocation>
+            <relocation>
+              <pattern>org.codehaus</pattern>
+              <shadedPattern>${spark.shade.packageName}.org.codehaus</shadedPattern>
+            </relocation>
+            <relocation>
+              <pattern>org.apache.arrow</pattern>
+              <shadedPattern>${spark.shade.packageName}.org.apache.arrow</shadedPattern>
+            </relocation>
+            <relocation>
+              <pattern>android.annotation</pattern>
+              <shadedPattern>${spark.shade.packageName}.android.annotation</shadedPattern>
+            </relocation>
+          </relocations>
+          <!--SPARK-42228: Add `ServicesResourceTransformer` to relocation class names in META-INF/services for grpc-->
+          <transformers>
+            <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>
+          </transformers>
         </configuration>
-        <executions>
-          <execution>
-            <phase>package</phase>
-            <goals>
-              <goal>shade</goal>
-            </goals>
-          </execution>
-        </executions>
       </plugin>
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
