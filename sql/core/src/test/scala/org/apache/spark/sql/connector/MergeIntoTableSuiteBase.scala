@@ -3321,7 +3321,7 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
                 checkAnswer(
                   sql(s"SELECT * FROM $tableNameAsString"),
                   Seq(
-                    Row(1, Row(10, Row(Seq(1, 2), Map("c" -> "d"), false)), "sales"),
+                    Row(1, Row(10, Row(null, Map("c" -> "d"), false)), "sales"),
                     Row(2, Row(20, Row(null, Map("e" -> "f"), true)), "engineering")))
               } else {
                 val exception = intercept[org.apache.spark.sql.AnalysisException] {
@@ -5365,8 +5365,8 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
               checkAnswer(
                 sql(s"SELECT * FROM $tableNameAsString"),
                 Seq(
-                  Row(1, Row(10, Row(20, true)), "sales"),
-                  Row(2, Row(20, Row(30, false)), "engineering")))
+                  Row(1, Row(10, Row(20, null)), "sales"),
+                  Row(2, Row(20, Row(30, null)), "engineering")))
             } else {
               val exception = intercept[Exception] {
                 sql(mergeStmt)
@@ -5960,7 +5960,7 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
                 checkAnswer(
                   sql(s"SELECT * FROM $tableNameAsString"),
                   Seq(
-                    Row(1, Row(10, Row(Seq(1, 2), Map("c" -> "d"), false)), "sales"),
+                    Row(1, Row(10, Row(null, Map("c" -> "d"), false)), "sales"),
                     Row(2, Row(20, Row(null, Map("e" -> "f"), true)), "engineering")))
               } else {
                 val exception = intercept[org.apache.spark.sql.AnalysisException] {
