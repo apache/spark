@@ -202,7 +202,7 @@ class ReusedConnectTestCase(unittest.TestCase, SQLTestUtils, PySparkErrorTestUti
 
 def skip_if_server_version_is(
     cond: Callable[[LooseVersion], bool], reason: Optional[str] = None
-) -> Callable[[...], ...]:
+) -> Callable:
     def decorator(f: Callable) -> Callable:
         @functools.wraps(f)
         def wrapper(self, *args, **kwargs):
@@ -221,5 +221,5 @@ def skip_if_server_version_is(
 
 def skip_if_server_version_is_greater_than_or_equal_to(
     version: str, reason: Optional[str] = None
-) -> Callable[[...], ...]:
+) -> Callable:
     return skip_if_server_version_is(lambda v: v >= LooseVersion(version), reason)
