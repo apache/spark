@@ -17,7 +17,7 @@
 
 package org.apache.spark.ml.util
 
-import org.apache.spark.{SparkException, TaskContext}
+import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{CLASS_NAME, LABEL_COLUMN, NUM_CLASSES}
 import org.apache.spark.ml.PredictorParams
@@ -28,7 +28,6 @@ import org.apache.spark.ml.param.shared.HasWeightCol
 import org.apache.spark.mllib.linalg.{Vector => OldVector, Vectors => OldVectors}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
-import org.apache.spark.sql.execution.arrow.ArrowConverters
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 
@@ -211,53 +210,6 @@ private[spark] object DatasetUtils extends Logging {
   private[ml] def getNumFeatures(dataset: Dataset[_], vectorCol: String): Int = {
     MetadataUtils.getNumFeatures(dataset.schema(vectorCol)).getOrElse {
       dataset.select(columnToVector(dataset, vectorCol)).head().getAs[Vector](0).size
-    }
-  }
-
-  private[ml] def toArrowBatchRDD(
-      dataFrame: DataFrame,
-      timeZoneId: String): RDD[Array[Byte]] = {
-    dataFrame match {
-      case df: org.apache.spark.sql.classic.DataFrame =>
-        val spark = df.sparkSession
-        val schema = df.schema
-        val maxRecordsPerBatch = spark.sessionState.conf.arrowMaxRecordsPerBatch
-        df.queryExecution.executedPlan.execute().mapPartitionsInternal { iter =>
-          val context = TaskContext.get()
-          ArrowConverters.toBatchIterator(
-            iter,
-            schema,
-            maxRecordsPerBatch,
-            timeZoneId,
-            true,
-            false,
-            context)
-        }
-
-      case _ => throw new UnsupportedOperationException("Not implemented")
-    }
-  }
-
-  private[ml] def fromArrowBatchRDD(
-      rdd: RDD[Array[Byte]],
-      schema: StructType,
-      timeZoneId: String,
-      sparkSession: SparkSession): DataFrame = {
-    sparkSession match {
-      case spark: org.apache.spark.sql.classic.SparkSession =>
-        val rowRDD = rdd.mapPartitions { iter =>
-          val context = TaskContext.get()
-          ArrowConverters.fromBatchIterator(
-            iter,
-            schema,
-            timeZoneId,
-            true,
-            false,
-            context)
-        }
-        spark.internalCreateDataFrame(rowRDD.setName("arrow"), schema)
-
-      case _ => throw new UnsupportedOperationException("Not implemented")
     }
   }
 }
