@@ -220,20 +220,7 @@ private[spark] class Executor(
         val state = notification.getValue
         // Cache is always used for isolated sessions.
         assert(!isDefaultState(state.sessionUUID))
-        // Close classloaders to release resources.
-        try {
-          state.replClassLoader match {
-            case urlClassLoader: URLClassLoader =>
-              urlClassLoader.close()
-              logInfo(log"Closed replClassLoader (URLClassLoader) for evicted session " +
-                log"${MDC(SESSION_ID, state.sessionUUID)}")
-            case _ =>
-          }
-        } catch {
-          case NonFatal(e) =>
-            logWarning(log"Failed to close replClassLoader for session " +
-              log"${MDC(SESSION_ID, state.sessionUUID)}", e)
-        }
+        // Close the urlClassLoader to release resources.
         try {
           state.urlClassLoader match {
             case urlClassLoader: URLClassLoader =>
