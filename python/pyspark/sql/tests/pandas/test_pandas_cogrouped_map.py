@@ -18,7 +18,6 @@
 import unittest
 import logging
 from typing import cast
-import os
 
 from pyspark.sql import functions as sf
 from pyspark.sql.functions import pandas_udf, udf
