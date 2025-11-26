@@ -531,7 +531,7 @@ object StructType extends AbstractDataType {
 
   override private[sql] def simpleString: String = "struct"
 
-  private[spark] def fromString(raw: String): StructType = {
+  private[sql] def fromString(raw: String): StructType = {
     Try(DataType.fromJson(raw)).getOrElse(LegacyTypeStringParser.parseString(raw)) match {
       case t: StructType => t
       case _ => throw DataTypeErrors.failedParsingStructTypeError(raw)

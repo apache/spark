@@ -1147,15 +1147,7 @@ private[spark] object ReadWriteUtils {
   def saveDataFrame(path: String, df: DataFrame): Unit = {
     if (localSavingModeState.get()) {
       val filePath = Paths.get(path)
-      val parentPath = filePath.getParent
-      Files.createDirectories(parentPath)
-
-      val schemaPath = new Path(parentPath.toString, "schema").toString
-      Using.resource(
-        new DataOutputStream(new BufferedOutputStream(new FileOutputStream(schemaPath)))
-      ) { dos =>
-        dos.writeUTF(df.schema.json)
-      }
+      Files.createDirectories(filePath.getParent)
 
       df match {
         case d: org.apache.spark.sql.classic.DataFrame =>
@@ -1172,7 +1164,6 @@ private[spark] object ReadWriteUtils {
       spark match {
         case s: org.apache.spark.sql.classic.SparkSession =>
           ArrowFileReadWrite.load(s, path)
-
         case _ => throw new UnsupportedOperationException("Unsupported session type")
       }
     } else {
