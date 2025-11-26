@@ -95,6 +95,18 @@ class ErrorClassesReader:
     def __init__(self) -> None:
         self.error_info_map = ERROR_CLASSES_MAP
 
+    def get_sqlstate(self, errorClass: str) -> str:
+        """
+        Returns the SQL state for the given error class.
+        """
+        error_classes = errorClass.split(".")
+        if len(error_classes) == 1:
+            return self.error_info_map[errorClass].get("sqlState", None)
+        else:
+            return self.error_info_map[error_classes[0]]["sub_class"][error_classes[1]].get(
+                "sqlState", None
+            )
+
     def get_error_message(self, errorClass: str, messageParameters: Dict[str, str]) -> str:
         """
         Returns the completed error message by applying message parameters to the message template.

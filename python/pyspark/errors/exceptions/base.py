@@ -121,7 +121,7 @@ class PySparkException(Exception):
         :meth:`PySparkException.getMessageParameters`
         :meth:`PySparkException.getQueryContext`
         """
-        return None
+        return self._error_reader.get_sqlstate(self._errorClass)
 
     def getMessage(self) -> str:
         """
