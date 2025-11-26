@@ -197,7 +197,6 @@ class VariantSuite extends QueryTest with SharedSparkSession with ExpressionEval
   }
 
   test("round trip tests") {
-    // Since we are writing random bytes, shredding schema inference will fail.
     withSQLConf(SQLConf.VARIANT_INFER_SHREDDING_SCHEMA.key -> "false") {
       val rand = new Random(42)
       val input = Seq.fill(50) {
@@ -389,7 +388,7 @@ class VariantSuite extends QueryTest with SharedSparkSession with ExpressionEval
       Seq(false, true).foreach { vectorizedReader =>
         withSQLConf(
           SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> vectorizedReader.toString,
-          // Invalid variant binary fails during shredding schema inference
+          // Invalid variant binary fails during shredding schema inference.
           SQLConf.VARIANT_INFER_SHREDDING_SCHEMA.key -> "false"
         ) {
           withTempDir { dir =>
