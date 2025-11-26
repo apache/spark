@@ -47,6 +47,7 @@ import org.apache.spark.ml.linalg.{DenseMatrix, DenseVector, Matrix, SparseMatri
 import org.apache.spark.ml.param.{ParamPair, Params}
 import org.apache.spark.ml.tuning.ValidatorParams
 import org.apache.spark.sql.{DataFrame, SparkSession, SQLContext}
+import org.apache.spark.sql.execution.arrow.ArrowFileReadWrite
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.{Utils, VersionUtils}
 
@@ -1147,30 +1148,20 @@ private[spark] object ReadWriteUtils {
   def saveDataFrame(path: String, df: DataFrame): Unit = {
     if (localSavingModeState.get()) {
       val filePath = Paths.get(path)
-      Files.createDirectories(filePath.getParent)
+      val parentPath = filePath.getParent
+      Files.createDirectories(parentPath)
 
+      val schemaPath = new Path(parentPath.toString, "schema").toString
       Using.resource(
-        new DataOutputStream(new BufferedOutputStream(new FileOutputStream(filePath.toFile)))
+        new DataOutputStream(new BufferedOutputStream(new FileOutputStream(schemaPath)))
       ) { dos =>
-
+        dos.writeUTF(df.schema.json)
       }
 
-      Using.resource(
-        new DataOutputStream(new BufferedOutputStream(new FileOutputStream(filePath.toFile)))
-      ) { dos =>
-        dos.writeUTF("ARROW") // format
-
-        val schema: StructType = df.schema
-        dos.writeUTF(schema.json)
-
-        val iter = DatasetUtils.toArrowBatchRDD(df, "UTC").toLocalIterator
-        while (iter.hasNext) {
-          val bytes = iter.next()
-          require(bytes != null)
-          dos.writeInt(bytes.length)
-          dos.write(bytes)
-        }
-        dos.writeInt(-1) // End
+      df match {
+        case d: org.apache.spark.sql.classic.DataFrame =>
+          ArrowFileReadWrite.save(d, path)
+        case _ => throw new UnsupportedOperationException("Unsupported dataframe type")
       }
     } else {
       df.write.parquet(path)
@@ -1179,33 +1170,23 @@ private[spark] object ReadWriteUtils {
 
   def loadDataFrame(path: String, spark: SparkSession): DataFrame = {
     if (localSavingModeState.get()) {
-      val sc = spark match {
-        case s: org.apache.spark.sql.classic.SparkSession => s.sparkContext
+      val filePath = Paths.get(path)
+      val parentPath = filePath.getParent
+      val schemaPath = new Path(parentPath.toString, "schema").toString
+
+      var schemaString: String = null
+      Using.resource(
+        new DataInputStream(new BufferedInputStream(new FileInputStream(schemaPath)))
+      ) { dis =>
+        schemaString = dis.readUTF()
       }
 
-      Using.resource(
-        new DataInputStream(new BufferedInputStream(new FileInputStream(path)))
-      ) { dis =>
-        val format = dis.readUTF()
-        require(format == "ARROW")
+      spark match {
+        case s: org.apache.spark.sql.classic.SparkSession =>
+          val schema = StructType.fromString(schemaString)
+          ArrowFileReadWrite.load(s, path, schema)
 
-        val schema: StructType = StructType.fromString(dis.readUTF())
-
-        val buff = mutable.ListBuffer.empty[Array[Byte]]
-        var nextBytes = dis.readInt()
-        while (nextBytes >= 0) {
-          val bytes = dis.readNBytes(nextBytes)
-          buff.append(bytes)
-          nextBytes = dis.readInt()
-        }
-        require(nextBytes == -1)
-
-        DatasetUtils.fromArrowBatchRDD(
-          sc.parallelize[Array[Byte]](buff.result()),
-          schema,
-          "UTC",
-          spark
-        )
+        case _ => throw new UnsupportedOperationException("Unsupported session type")
       }
     } else {
       spark.read.parquet(path)
