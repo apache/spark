@@ -164,4 +164,236 @@ abstract class MetricViewSuite extends QueryTest with SQLTestUtils {
       )
     }
   }
+
+  test("test ORDER BY and LIMIT clauses") {
+    val metricView = MetricView(
+      "0.1", AssetSource(testTableName), None, testMetricViewColumns)
+    withMetricView(testMetricViewName, metricView) {
+      checkAnswer(
+        sql("SELECT region, measure(count_sum) " +
+          "FROM test_metric_view GROUP BY region ORDER BY 2 DESC"),
+        sql("SELECT region, sum(count) " +
+          "FROM test_table GROUP BY region ORDER BY 2 DESC")
+      )
+      checkAnswer(
+        sql("SELECT product, measure(price_avg) " +
+          "FROM test_metric_view GROUP BY product ORDER BY 2 ASC LIMIT 2"),
+        sql("SELECT product, avg(price) " +
+          "FROM test_table GROUP BY product ORDER BY 2 ASC LIMIT 2")
+      )
+    }
+  }
+
+  test("test complex WHERE conditions with dimensions") {
+    val metricView = MetricView(
+      "0.1", AssetSource(testTableName), None, testMetricViewColumns)
+    withMetricView(testMetricViewName, metricView) {
+      checkAnswer(
+        sql("SELECT region, product, measure(count_sum) " +
+          "FROM test_metric_view WHERE region_upper = 'REGION_1' " +
+          "AND product IN ('product_1', 'product_2') " +
+          "GROUP BY region, product"),
+        sql("SELECT region, product, sum(count) " +
+          "FROM test_table WHERE upper(region) = 'REGION_1' " +
+          "AND product IN ('product_1', 'product_2') " +
+          "GROUP BY region, product")
+      )
+      checkAnswer(
+        sql("SELECT measure(count_sum), measure(price_avg) " +
+          "FROM test_metric_view WHERE region_upper LIKE 'REGION_%' AND product <> 'product_4'"),
+        sql("SELECT sum(count), avg(price) " +
+          "FROM test_table WHERE upper(region) LIKE 'REGION_%' AND product <> 'product_4'")
+      )
+    }
+  }
+
+  test("test metric view with where clause and additional query filters") {
+    val metricView = MetricView(
+      "0.1", AssetSource(testTableName),
+      Some("product IN ('product_1', 'product_2')"), testMetricViewColumns)
+    withMetricView(testMetricViewName, metricView) {
+      checkAnswer(
+        sql("SELECT region, measure(count_sum) " +
+          "FROM test_metric_view WHERE region_upper = 'REGION_1' GROUP BY region"),
+        sql("SELECT region, sum(count) " +
+          "FROM test_table WHERE product IN ('product_1', 'product_2') " +
+          "AND upper(region) = 'REGION_1' GROUP BY region")
+      )
+    }
+  }
+
+  test("test multiple measures with different aggregations") {
+    val columns = Seq(
+      Column("region", DimensionExpression("region"), 0),
+      Column("count_sum", MeasureExpression("sum(count)"), 1),
+      Column("count_avg", MeasureExpression("avg(count)"), 2),
+      Column("count_max", MeasureExpression("max(count)"), 3),
+      Column("count_min", MeasureExpression("min(count)"), 4),
+      Column("price_sum", MeasureExpression("sum(price)"), 5)
+    )
+    val metricView = MetricView("0.1", AssetSource(testTableName), None, columns)
+    withMetricView(testMetricViewName, metricView) {
+      checkAnswer(
+        sql("SELECT measure(count_sum), measure(count_avg), measure(count_max), " +
+          "measure(count_min), measure(price_sum) FROM test_metric_view"),
+        sql("SELECT sum(count), avg(count), max(count), min(count), sum(price) FROM test_table")
+      )
+      checkAnswer(
+        sql("SELECT region, measure(count_sum), measure(count_max), measure(price_sum) " +
+          "FROM test_metric_view GROUP BY region"),
+        sql("SELECT region, sum(count), max(count), sum(price) FROM test_table GROUP BY region")
+      )
+    }
+  }
+
+  test("test dimension expressions with case statements") {
+    val columns = Seq(
+      Column("region", DimensionExpression("region"), 0),
+      Column("region_category", DimensionExpression(
+        "CASE WHEN region = 'region_1' THEN 'Group A' ELSE 'Group B' END"), 1),
+      Column("count_sum", MeasureExpression("sum(count)"), 2)
+    )
+    val metricView = MetricView("0.1", AssetSource(testTableName), None, columns)
+    withMetricView(testMetricViewName, metricView) {
+      checkAnswer(
+        sql("SELECT region_category, measure(count_sum) " +
+          "FROM test_metric_view GROUP BY region_category"),
+        sql("SELECT CASE WHEN region = 'region_1' THEN 'Group A' ELSE 'Group B' END, " +
+          "sum(count) FROM test_table " +
+          "GROUP BY CASE WHEN region = 'region_1' THEN 'Group A' ELSE 'Group B' END")
+      )
+    }
+  }
+
+  test("test measure expressions with arithmetic operations") {
+    val columns = Seq(
+      Column("region", DimensionExpression("region"), 0),
+      Column("total_revenue", MeasureExpression("sum(count * price)"), 1),
+      Column("avg_revenue", MeasureExpression("avg(count * price)"), 2)
+    )
+    val metricView = MetricView("0.1", AssetSource(testTableName), None, columns)
+    withMetricView(testMetricViewName, metricView) {
+      checkAnswer(
+        sql("SELECT measure(total_revenue), measure(avg_revenue) FROM test_metric_view"),
+        sql("SELECT sum(count * price), avg(count * price) FROM test_table")
+      )
+      checkAnswer(
+        sql("SELECT region, measure(total_revenue) " +
+          "FROM test_metric_view GROUP BY region ORDER BY 2 DESC"),
+        sql("SELECT region, sum(count * price) " +
+          "FROM test_table GROUP BY region ORDER BY 2 DESC")
+      )
+    }
+  }
+
+  test("test dimensions with aggregate functions in GROUP BY") {
+    val metricView = MetricView(
+      "0.1", AssetSource(testTableName), None, testMetricViewColumns)
+    withMetricView(testMetricViewName, metricView) {
+      checkAnswer(
+        sql("SELECT region_upper, product, measure(count_sum) " +
+          "FROM test_metric_view GROUP BY region_upper, product ORDER BY region_upper, product"),
+        sql("SELECT upper(region), product, sum(count) " +
+          "FROM test_table GROUP BY upper(region), product ORDER BY upper(region), product")
+      )
+    }
+  }
+
+  test("test WHERE clause with OR conditions") {
+    val metricView = MetricView(
+      "0.1", AssetSource(testTableName), None, testMetricViewColumns)
+    withMetricView(testMetricViewName, metricView) {
+      checkAnswer(
+        sql("SELECT measure(count_sum), measure(price_avg) " +
+          "FROM test_metric_view WHERE region = 'region_1' OR product = 'product_1'"),
+        sql("SELECT sum(count), avg(price) " +
+          "FROM test_table WHERE region = 'region_1' OR product = 'product_1'")
+      )
+    }
+  }
+
+  test("test dimension-only query with multiple dimensions") {
+    val metricView = MetricView(
+      "0.1", AssetSource(testTableName), None, testMetricViewColumns)
+    withMetricView(testMetricViewName, metricView) {
+      checkAnswer(
+        sql("SELECT region_upper, product " +
+          "FROM test_metric_view GROUP BY region_upper, product"),
+        sql("SELECT upper(region), product FROM test_table GROUP BY upper(region), product")
+      )
+    }
+  }
+
+  test("test query with SELECT * should fail") {
+    val metricView = MetricView(
+      "0.1", AssetSource(testTableName), None, testMetricViewColumns)
+    withMetricView(testMetricViewName, metricView) {
+      intercept[Exception] {
+        sql("SELECT * FROM test_metric_view").collect()
+      }
+    }
+  }
+
+  test("test SQLSource with complex query") {
+    val sqlSource = SQLSource(
+      "SELECT region, product, count, price FROM test_table WHERE count > 20")
+    val metricView = MetricView("0.1", sqlSource, None, testMetricViewColumns)
+    withMetricView(testMetricViewName, metricView) {
+      checkAnswer(
+        sql("SELECT measure(count_sum), measure(price_avg) FROM test_metric_view"),
+        sql("SELECT sum(count), avg(price) FROM test_table WHERE count > 20")
+      )
+      checkAnswer(
+        sql("SELECT region, measure(count_sum) FROM test_metric_view GROUP BY region"),
+        sql("SELECT region, sum(count) FROM test_table WHERE count > 20 GROUP BY region")
+      )
+    }
+  }
+
+  test("test measure function without GROUP BY") {
+    val metricView = MetricView(
+      "0.1", AssetSource(testTableName), None, testMetricViewColumns)
+    withMetricView(testMetricViewName, metricView) {
+      checkAnswer(
+        sql("SELECT measure(count_sum) FROM test_metric_view"),
+        sql("SELECT sum(count) FROM test_table")
+      )
+      checkAnswer(
+        sql("SELECT measure(count_sum), measure(price_avg) FROM test_metric_view"),
+        sql("SELECT sum(count), avg(price) FROM test_table")
+      )
+    }
+  }
+
+  test("test combining multiple dimension expressions in WHERE") {
+    val metricView = MetricView(
+      "0.1", AssetSource(testTableName), None, testMetricViewColumns)
+    withMetricView(testMetricViewName, metricView) {
+      checkAnswer(
+        sql("SELECT product, measure(count_sum) " +
+          "FROM test_metric_view WHERE region = 'region_1' AND region_upper = 'REGION_1' " +
+          "GROUP BY product"),
+        sql("SELECT product, sum(count) " +
+          "FROM test_table WHERE region = 'region_1' AND upper(region) = 'REGION_1' " +
+          "GROUP BY product")
+      )
+    }
+  }
+
+  test("test measure with COUNT DISTINCT") {
+    val columns = Seq(
+      Column("region", DimensionExpression("region"), 0),
+      Column("product_count", MeasureExpression("count(distinct product)"), 1),
+      Column("count_sum", MeasureExpression("sum(count)"), 2)
+    )
+    val metricView = MetricView("0.1", AssetSource(testTableName), None, columns)
+    withMetricView(testMetricViewName, metricView) {
+      checkAnswer(
+        sql("SELECT region, measure(product_count), measure(count_sum) " +
+          "FROM test_metric_view GROUP BY region"),
+        sql("SELECT region, count(distinct product), sum(count) " +
+          "FROM test_table GROUP BY region")
+      )
+    }
+  }
 }
