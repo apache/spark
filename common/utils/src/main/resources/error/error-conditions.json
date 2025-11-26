@@ -5493,6 +5493,11 @@
         "message" : [
           "Unsupported offset sequence version <version>. Please make sure the checkpoint is from a supported Spark version (Spark 4.0+)."
         ]
+      },
+      "UNSUPPORTED_PROVIDER" : {
+        "message" : [
+          "<provider> is not supported"
+        ]
       }
     },
     "sqlState" : "55019"
@@ -5519,19 +5524,6 @@
       }
     },
     "sqlState" : "42616"
-  },
-  "STATE_REPARTITION_INVALID_STATE_STORE_CONFIG" : {
-    "message" : [
-      "StateStoreConfig <configName> is invalid:"
-    ],
-    "subClass" : {
-      "UNSUPPORTED_PROVIDER" : {
-        "message" : [
-          "<provider> is not supported"
-        ]
-      }
-    },
-    "sqlState" : "42617"
   },
   "STATE_STORE_CANNOT_CREATE_COLUMN_FAMILY_WITH_RESERVED_CHARS" : {
     "message" : [

@@ -16,6 +16,8 @@
  */
 package org.apache.spark.sql.execution.datasources.v2.state
 
+import scala.collection.mutable
+
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeRow}
@@ -50,16 +52,7 @@ class StatePartitionReaderFactory(
   override def createReader(partition: InputPartition): PartitionReader[InternalRow] = {
     val stateStoreInputPartition = partition.asInstanceOf[StateStoreInputPartition]
     if (stateStoreInputPartition.sourceOptions.internalOnlyReadAllColumnFamilies) {
-      // Disable format validation because the schema returned by
-      // StatePartitionAllColumnFamiliesReader does not contain the corresponding
-      // keySchema or valueSchema.
-      // It's safe to do so we also don't expect the caller of StatePartitionAllColumnFamiliesReader
-      // to extract specific fields out of the returning row.
-      val modifiedStoreConf = storeConf.withExtraOptions(Map(
-        StateStoreConf.FORMAT_VALIDATION_ENABLED_CONFIG -> "false",
-        StateStoreConf.FORMAT_VALIDATION_CHECK_VALUE_CONFIG -> "false"
-      ))
-      new StatePartitionAllColumnFamiliesReader(modifiedStoreConf, hadoopConf,
+      new StatePartitionAllColumnFamiliesReader(storeConf, hadoopConf,
         stateStoreInputPartition, schema, keyStateEncoderSpec)
     } else if (stateStoreInputPartition.sourceOptions.readChangeFeed) {
       new StateStoreChangeDataPartitionReader(storeConf, hadoopConf,
@@ -95,19 +88,34 @@ abstract class StatePartitionReaderBase(
   private val placeholderSchema: StructType =
     StructType(Array(StructField("__dummy__", NullType)))
 
+  private val colFamilyToSchema : mutable.HashMap[String, StateStoreColFamilySchema] = {
+    val stateStoreId = StateStoreId(
+      partition.sourceOptions.stateCheckpointLocation.toString,
+      partition.sourceOptions.operatorId,
+      StateStore.PARTITION_ID_TO_CHECK_SCHEMA,
+      partition.sourceOptions.storeName)
+    val stateStoreProviderId = StateStoreProviderId(stateStoreId, partition.queryId)
+    val manager = new StateSchemaCompatibilityChecker(stateStoreProviderId, hadoopConf.value)
+    val schemaFile = manager.readSchemaFile()
+    val schemaMap = mutable.HashMap[String, StateStoreColFamilySchema]()
+    schemaFile.foreach { schema => schemaMap.put(schema.colFamilyName, schema)}
+    schemaMap
+  }
+
   protected val keySchema = {
     if (SchemaUtil.checkVariableType(stateVariableInfoOpt, StateVariableType.MapState)) {
       SchemaUtil.getCompositeKeySchema(schema, partition.sourceOptions)
     } else if (partition.sourceOptions.internalOnlyReadAllColumnFamilies) {
-      placeholderSchema
+      colFamilyToSchema(StateStore.DEFAULT_COL_FAMILY_NAME).keySchema
     } else {
       SchemaUtil.getSchemaAsDataType(schema, "key").asInstanceOf[StructType]
     }
   }
 
-  protected val valueSchema = if (stateVariableInfoOpt.isDefined ||
-      partition.sourceOptions.internalOnlyReadAllColumnFamilies) {
+  protected val valueSchema = if (stateVariableInfoOpt.isDefined) {
     placeholderSchema
+  } else if (partition.sourceOptions.internalOnlyReadAllColumnFamilies) {
+    colFamilyToSchema(StateStore.DEFAULT_COL_FAMILY_NAME).valueSchema
   } else {
     SchemaUtil.getSchemaAsDataType(
       schema, "value").asInstanceOf[StructType]

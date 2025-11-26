@@ -17,8 +17,7 @@
 
 package org.apache.spark.sql.execution.streaming.state
 
-import org.apache.spark.{SparkIllegalArgumentException, SparkIllegalStateException, SparkUnsupportedOperationException}
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.{SparkIllegalArgumentException, SparkIllegalStateException}
 
 /**
  * Errors thrown by Offline state repartitioning.
@@ -88,9 +87,10 @@ object OfflineStateRepartitionErrors {
   }
 
   def unsupportedStateStoreProviderError(
+      checkpointLocation: String,
       providerClass: String
-    ): StateRepartitionInvalidStateStoreConfigUnsupportedProviderError = {
-    new StateRepartitionInvalidStateStoreConfigUnsupportedProviderError(providerClass)
+    ): StateRepartitionUnsupportedProviderError = {
+    new StateRepartitionUnsupportedProviderError(checkpointLocation, providerClass)
   }
 }
 
@@ -209,16 +209,9 @@ class StateRepartitionUnsupportedOffsetSeqVersionError(
     subClass = "UNSUPPORTED_OFFSET_SEQ_VERSION",
     messageParameters = Map("version" -> version.toString))
 
-abstract class StateRepartitionInvalidStateStoreConfigError(
-    configName: String,
-    subClass: String,
-    messageParameters: Map[String, String] = Map.empty)
-  extends SparkUnsupportedOperationException(
-    errorClass = s"STATE_REPARTITION_INVALID_STATE_STORE_CONFIG.$subClass",
-    messageParameters = Map("configName" -> configName) ++ messageParameters)
-
-class StateRepartitionInvalidStateStoreConfigUnsupportedProviderError(
-    provider: String) extends StateRepartitionInvalidStateStoreConfigError(
-    SQLConf.STATE_STORE_PROVIDER_CLASS.key,
+class StateRepartitionUnsupportedProviderError(
+    checkpointLocation: String,
+    provider: String) extends StateRepartitionInvalidCheckpointError(
+    checkpointLocation,
     subClass = "UNSUPPORTED_PROVIDER",
     messageParameters = Map("provider" -> provider))

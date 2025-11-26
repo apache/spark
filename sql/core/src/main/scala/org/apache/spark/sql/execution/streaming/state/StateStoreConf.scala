@@ -30,18 +30,6 @@ class StateStoreConf(
 
   def this() = this(new SQLConf)
 
-  def withExtraOptions(additionalOptions: Map[String, String]): StateStoreConf = {
-    val reconstructedSqlConf = {
-      // Reconstruct a SQLConf with the all settings preserved because sqlConf is transient
-      val conf = new SQLConf()
-      // Restore all state store related settings
-      sqlConfs.foreach { case (key, value) =>
-        conf.setConfString(key, value)
-      }
-      conf
-    }
-    new StateStoreConf(reconstructedSqlConf, extraOptions ++ additionalOptions)
-  }
   /**
    * Size of MaintenanceThreadPool to perform maintenance tasks for StateStore
    */
@@ -95,10 +83,7 @@ class StateStoreConf(
   val providerClass: String = sqlConf.stateStoreProviderClass
 
   /** Whether validate the underlying format or not. */
-  val formatValidationEnabled: Boolean = extraOptions.get(
-      StateStoreConf.FORMAT_VALIDATION_ENABLED_CONFIG)
-    .map(_ == "true")
-    .getOrElse(sqlConf.stateStoreFormatValidationEnabled)
+  val formatValidationEnabled: Boolean = sqlConf.stateStoreFormatValidationEnabled
 
   /**
    * Whether to validate StateStore commits for ForeachBatch sinks to ensure all partitions
@@ -181,7 +166,6 @@ class StateStoreConf(
 }
 
 object StateStoreConf {
-  val FORMAT_VALIDATION_ENABLED_CONFIG = "formatValidationEnabled"
   val FORMAT_VALIDATION_CHECK_VALUE_CONFIG = "formatValidationCheckValue"
 
   val empty = new StateStoreConf()

@@ -67,11 +67,12 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
     val sourceOptions = StateSourceOptions.modifySourceOptions(hadoopConf,
       StateSourceOptions.apply(session, hadoopConf, properties))
     val stateConf = buildStateStoreConf(sourceOptions.resolvedCpLocation, sourceOptions.batchId)
-    // We only support RocksDB because the repartition work that this reader
+    // We only support RocksDB because the repartition work that this option
     // is built for only supports RocksDB
     if (sourceOptions.internalOnlyReadAllColumnFamilies
       && stateConf.providerClass != classOf[RocksDBStateStoreProvider].getName) {
       throw OfflineStateRepartitionErrors.unsupportedStateStoreProviderError(
+        sourceOptions.resolvedCpLocation,
         stateConf.providerClass)
     }
     val stateStoreReaderInfo: StateStoreReaderInfo = getStoreMetadataAndRunChecks(
