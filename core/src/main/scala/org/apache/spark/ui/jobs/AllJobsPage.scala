@@ -280,6 +280,7 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
     val startDate = appInfo.attempts.head.startTime
     val startTime = startDate.getTime()
     val endTime = appInfo.attempts.head.endTime.getTime()
+    val exitCode = appInfo.attempts.head.exitCode
 
     val activeJobs = new ListBuffer[v1.JobData]()
     val completedJobs = new ListBuffer[v1.JobData]()
@@ -339,6 +340,16 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
                 UIUtils.formatDuration(System.currentTimeMillis() - startTime)
               } else if (endTime > 0) {
                 UIUtils.formatDuration(endTime - startTime)
+              }
+            }
+          </li>
+          <li>
+            <strong>Status:</strong>
+            {
+              exitCode match {
+                case Some(code) if code == 0 => "Success"
+                case Some(code) => s"Failure ($code)"
+                case None => "Running"
               }
             }
           </li>
