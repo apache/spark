@@ -836,31 +836,9 @@ object SparkConnect {
 }
 
 object SparkConnectJdbc {
-  import BuildCommons.protoVersion
   val buildTestDeps = TaskKey[Unit]("buildTestDeps", "Build needed dependencies for test.")
 
   lazy val settings = Seq(
-    // For some reason the resolution from the imported Maven build does not work for some
-    // of these dependendencies that we need to shade later on.
-    libraryDependencies ++= {
-      val guavaVersion =
-        SbtPomKeys.effectivePom.value.getProperties.get(
-          "guava.version").asInstanceOf[String]
-      Seq(
-        "com.google.guava" % "guava" % guavaVersion,
-        "com.google.protobuf" % "protobuf-java" % protoVersion % "protobuf"
-      )
-    },
-    dependencyOverrides ++= {
-      val guavaVersion =
-        SbtPomKeys.effectivePom.value.getProperties.get(
-          "guava.version").asInstanceOf[String]
-      Seq(
-        "com.google.guava" % "guava" % guavaVersion,
-        "com.google.protobuf" % "protobuf-java" % protoVersion
-      )
-    },
-
     buildTestDeps := {
       (LocalProject("assembly") / Compile / Keys.`package`).value
       (LocalProject("catalyst") / Test / Keys.`package`).value
@@ -873,55 +851,7 @@ object SparkConnectJdbc {
 
     testOnly := ((Test / testOnly) dependsOn (buildTestDeps)).evaluated,
 
-    (Test / javaOptions) += "-Darrow.memory.debug.allocator=true",
-
-    (assembly / test) := { },
-
-    (assembly / logLevel) := Level.Info,
-
-    // Exclude `scala-library` from assembly.
-    (assembly / assemblyPackageScala / assembleArtifact) := false,
-
-    // Exclude `pmml-model-*.jar`, `scala-collection-compat_*.jar`, `jspecify-*.jar`,
-    // `error_prone_annotations-*.jar`, `listenablefuture-9999.0-empty-to-avoid-conflict-with-guava.jar`,
-    // `j2objc-annotations-*.jar` and `unused-1.0.0.jar` from assembly.
-    (assembly / assemblyExcludedJars) := {
-      val cp = (assembly / fullClasspath).value
-      cp filter { v =>
-        val name = v.data.getName
-        name.startsWith("pmml-model-") || name.startsWith("scala-collection-compat_") ||
-          name.startsWith("jspecify-") || name.startsWith("error_prone_annotations") ||
-          name.startsWith("listenablefuture") || name.startsWith("j2objc-annotations") ||
-          name == "unused-1.0.0.jar"
-      }
-    },
-    // Only include `spark-connect-client-jdbc-*.jar`
-    // This needs to be consistent with the content of `maven-shade-plugin`.
-    (assembly / assemblyExcludedJars) := {
-      val cp = (assembly / fullClasspath).value
-      val validPrefixes = Set("spark-connect-client-jdbc")
-      cp filterNot { v =>
-        validPrefixes.exists(v.data.getName.startsWith)
-      }
-    },
-
-    (assembly / assemblyShadeRules) := Seq(
-      ShadeRule.rename("io.grpc.**" -> "org.sparkproject.connect.client.io.grpc.@1").inAll,
-      ShadeRule.rename("com.google.**" -> "org.sparkproject.connect.client.com.google.@1").inAll,
-      ShadeRule.rename("io.netty.**" -> "org.sparkproject.connect.client.io.netty.@1").inAll,
-      ShadeRule.rename("io.perfmark.**" -> "org.sparkproject.connect.client.io.perfmark.@1").inAll,
-      ShadeRule.rename("org.codehaus.**" -> "org.sparkproject.connect.client.org.codehaus.@1").inAll,
-      ShadeRule.rename("android.annotation.**" -> "org.sparkproject.connect.client.android.annotation.@1").inAll
-    ),
-
-    (assembly / assemblyMergeStrategy) := {
-      case m if m.toLowerCase(Locale.ROOT).endsWith("manifest.mf") => MergeStrategy.discard
-      case m if m.toLowerCase(Locale.ROOT).matches("meta-inf.*\\.sf$") => MergeStrategy.discard
-      case m if m.toLowerCase(Locale.ROOT).startsWith("meta-inf/services/") => MergeStrategy.filterDistinctLines
-      // Drop all proto files that are not needed as artifacts of the build.
-      case m if m.toLowerCase(Locale.ROOT).endsWith(".proto") => MergeStrategy.discard
-      case _ => MergeStrategy.first
-    }
+    (Test / javaOptions) += "-Darrow.memory.debug.allocator=true"
   )
 }
 
@@ -1667,7 +1597,13 @@ object CopyDependencies {
           if (jar.getName.contains("spark-connect-common")) {
             // Don't copy the spark connect common JAR as it is shaded in the spark connect.
           } else if (jar.getName.contains("connect-client-jdbc")) {
-            // Do not place Spark Connect JDBC driver jar as it is not built-in.
+            val _destDir = new File(dest, "connect-repl")
+            Files.createDirectories(_destDir.toPath)
+            val _destJar = new File(_destDir, jar.getName)
+            if (_destJar.isFile()) {
+              _destJar.delete()
+            }
+            Files.copy(jar.toPath, _destJar.toPath)
           } else if (jar.getName.contains("connect-client-jvm")) {
             // Do not place Spark Connect client jars as it is not built-in.
           } else if (noProvidedSparkJars && jar.getName.contains("spark-avro")) {
@@ -1712,30 +1648,6 @@ object CopyDependencies {
               }
             }
           }.dependsOn(LocalProject("connect-client-jvm") / assembly)
-        } else {
-          Def.task {}
-        }
-      }.value
-
-      // Copy the Spark Connect JDBC driver assembly manually.
-      Def.taskDyn {
-        if (moduleName.value.contains("assembly")) {
-          Def.task {
-            val scalaBinaryVer = SbtPomKeys.effectivePom.value.getProperties.get(
-              "scala.binary.version").asInstanceOf[String]
-            val sparkVer = SbtPomKeys.effectivePom.value.getProperties.get(
-              "spark.version").asInstanceOf[String]
-            val dest = destPath.value
-            val destDir = new File(dest, "connect-repl").toPath
-            Files.createDirectories(destDir)
-
-            val sourceAssemblyJar = Paths.get(
-              BuildCommons.sparkHome.getAbsolutePath, "sql", "connect", "client",
-              "jdbc", "target", s"scala-$scalaBinaryVer", s"spark-connect-client-jdbc-assembly-$sparkVer.jar")
-            val destAssemblyJar = Paths.get(destDir.toString, s"spark-connect-client-jdbc-assembly-$sparkVer.jar")
-            Files.copy(sourceAssemblyJar, destAssemblyJar, StandardCopyOption.REPLACE_EXISTING)
-            ()
-          }.dependsOn(LocalProject("connect-client-jdbc") / assembly)
         } else {
           Def.task {}
         }
