@@ -110,7 +110,7 @@ class PySparkException(Exception):
         """
         Returns an SQLSTATE as a string.
 
-        Errors generated in Python have no SQLSTATE, so it always returns None.
+        If the errorClass has no corresponding SQLSTATE, it returns None.
 
         .. versionadded:: 3.4.0
 
