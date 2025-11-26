@@ -58,7 +58,7 @@ class TableArg(TableValuedFunctionArgument):
         Examples
         --------
         >>> from pyspark.sql.functions import udtf
-        >>> 
+        >>>
         >>> @udtf(returnType="key: int, value: string")
         ... class ProcessUDTF:
         ...     def eval(self, row):
@@ -67,7 +67,7 @@ class TableArg(TableValuedFunctionArgument):
         >>> df = spark.createDataFrame(
         ...     [(1, "a"), (1, "b"), (2, "c"), (2, "d")], ["key", "value"]
         ... )
-        >>> 
+        >>>
         >>> # Partition by a single column
         >>> result = ProcessUDTF(df.asTable().partitionBy("key"))
         >>> result.show()
@@ -79,7 +79,7 @@ class TableArg(TableValuedFunctionArgument):
         |  2|    c|
         |  2|    d|
         +---+-----+
-        >>> 
+        >>>
         >>> # Partition by multiple columns
         >>> df2 = spark.createDataFrame(
         ...     [(1, "x", 10), (1, "x", 20), (2, "y", 30)], ["key", "category", "value"]
@@ -119,7 +119,7 @@ class TableArg(TableValuedFunctionArgument):
         Examples
         --------
         >>> from pyspark.sql.functions import udtf
-        >>> 
+        >>>
         >>> @udtf(returnType="key: int, value: string")
         ... class ProcessUDTF:
         ...     def eval(self, row):
@@ -128,7 +128,7 @@ class TableArg(TableValuedFunctionArgument):
         >>> df = spark.createDataFrame(
         ...     [(1, "b"), (1, "a"), (2, "d"), (2, "c")], ["key", "value"]
         ... )
-        >>> 
+        >>>
         >>> # Order by a single column within partitions
         >>> result = ProcessUDTF(df.asTable().partitionBy("key").orderBy("value"))
         >>> result.show()
@@ -140,7 +140,7 @@ class TableArg(TableValuedFunctionArgument):
         |  2|    c|
         |  2|    d|
         +---+-----+
-        >>> 
+        >>>
         >>> # Order by multiple columns
         >>> df2 = spark.createDataFrame(
         ...     [(1, "a", 2), (1, "a", 1), (1, "b", 3)], ["key", "value", "num"]
@@ -154,7 +154,7 @@ class TableArg(TableValuedFunctionArgument):
         |  1|    a|
         |  1|    b|
         +---+-----+
-        >>> 
+        >>>
         >>> # Order by descending order
         >>> result3 = ProcessUDTF(df.asTable().partitionBy("key").orderBy(df.value.desc()))
         >>> result3.show()
@@ -186,7 +186,7 @@ class TableArg(TableValuedFunctionArgument):
         Examples
         --------
         >>> from pyspark.sql.functions import udtf
-        >>> 
+        >>>
         >>> @udtf(returnType="key: int, value: string")
         ... class ProcessUDTF:
         ...     def eval(self, row):
@@ -195,7 +195,7 @@ class TableArg(TableValuedFunctionArgument):
         >>> df = spark.createDataFrame(
         ...     [(1, "a"), (2, "b"), (3, "c")], ["key", "value"]
         ... )
-        >>> 
+        >>>
         >>> # Process all data in a single partition
         >>> result = ProcessUDTF(df.asTable().withSinglePartition())
         >>> result.show()
@@ -206,7 +206,7 @@ class TableArg(TableValuedFunctionArgument):
         |  2|    b|
         |  3|    c|
         +---+-----+
-        >>> 
+        >>>
         >>> # Use withSinglePartition and orderBy together
         >>> df2 = spark.createDataFrame(
         ...     [(3, "c"), (1, "a"), (2, "b")], ["key", "value"]

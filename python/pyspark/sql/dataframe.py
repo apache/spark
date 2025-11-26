@@ -6697,7 +6697,7 @@ class DataFrame:
         Examples
         --------
         >>> from pyspark.sql.functions import udtf
-        >>> 
+        >>>
         >>> # Create a simple UDTF that processes table data
         >>> @udtf(returnType="id: int, doubled: int")
         ... class DoubleUDTF:
@@ -6706,7 +6706,7 @@ class DataFrame:
         ...
         >>> # Create a DataFrame
         >>> df = spark.createDataFrame([(1,), (2,), (3,)], ["id"])
-        >>> 
+        >>>
         >>> # Use asTable() to pass the DataFrame as a table argument to the UDTF
         >>> result = DoubleUDTF(df.asTable())
         >>> result.show()
@@ -6717,12 +6717,12 @@ class DataFrame:
         |  2|      4|
         |  3|      6|
         +---+-------+
-        >>> 
+        >>>
         >>> # Use partitionBy and orderBy to control data partitioning and ordering
         >>> df2 = spark.createDataFrame(
         ...     [(1, "a"), (1, "b"), (2, "c"), (2, "d")], ["key", "value"]
         ... )
-        >>> 
+        >>>
         >>> @udtf(returnType="key: int, value: string")
         ... class ProcessUDTF:
         ...     def eval(self, row):
@@ -6739,7 +6739,7 @@ class DataFrame:
         |  2|    c|
         |  2|    d|
         +---+-----+
-        >>> 
+        >>>
         >>> # Use withSinglePartition to process all data in a single partition
         >>> result3 = ProcessUDTF(df2.asTable().withSinglePartition().orderBy("value"))
         >>> result3.show()
