@@ -31,12 +31,11 @@ import org.apache.arrow.vector.types.pojo.Schema
 
 import org.apache.spark.TaskContext
 import org.apache.spark.sql.classic.{DataFrame, SparkSession}
-import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.ArrowUtils
 
-private[spark] class SparkArrowFileWriter(
+private[sql] class SparkArrowFileWriter(
   arrowSchema: Schema,
-  out: FileOutputStream,
+  path: String,
   context: TaskContext) extends AutoCloseable {
 
   private val allocator =
@@ -44,9 +43,11 @@ private[spark] class SparkArrowFileWriter(
       s"to${this.getClass.getSimpleName}", 0, Long.MaxValue)
 
   protected val root = VectorSchemaRoot.create(arrowSchema, allocator)
-  protected val fileWriter = new ArrowFileWriter(root, null, Channels.newChannel(out))
   protected val loader = new VectorLoader(root)
   protected val arrowWriter = ArrowWriter.create(root)
+
+  protected val fileWriter =
+    new ArrowFileWriter(root, null, Channels.newChannel(new FileOutputStream(path)))
 
   Option(context).foreach {_.addTaskCompletionListener[Unit] { _ =>
     close()
@@ -70,7 +71,7 @@ private[spark] class SparkArrowFileWriter(
   }
 }
 
-private[spark] class SparkArrowFileReader(
+private[sql] class SparkArrowFileReader(
   path: String,
   context: TaskContext) extends AutoCloseable {
 
@@ -90,6 +91,8 @@ private[spark] class SparkArrowFileReader(
     fileReader.close()
   }
 
+  val schema: Schema = fileReader.getVectorSchemaRoot.getSchema
+
   def read(): Iterator[Array[Byte]] = {
     fileReader.getRecordBlocks.iterator().asScala.map { block =>
       fileReader.loadRecordBatch(block)
@@ -106,17 +109,16 @@ private[spark] class SparkArrowFileReader(
 
 private[spark] object ArrowFileReadWrite {
   def save(df: DataFrame, path: String): Unit = {
-    val spark = df.sparkSession
-    val rdd = df.toArrowBatchRdd(
-      spark.sessionState.conf.arrowMaxRecordsPerBatch,
-      "UTC", true, false)
+    val maxRecordsPerBatch = df.sparkSession.sessionState.conf.arrowMaxRecordsPerBatch
+    val rdd = df.toArrowBatchRdd(maxRecordsPerBatch, "UTC", true, false)
     val arrowSchema = ArrowUtils.toArrowSchema(df.schema, "UTC", true, false)
-    val writer = new SparkArrowFileWriter(arrowSchema, new FileOutputStream(path), null)
+    val writer = new SparkArrowFileWriter(arrowSchema, path, null)
     writer.write(rdd.toLocalIterator)
   }
 
-  def load(spark: SparkSession, path: String, schema: StructType): DataFrame = {
+  def load(spark: SparkSession, path: String): DataFrame = {
     val reader = new SparkArrowFileReader(path, null)
+    val schema = ArrowUtils.fromArrowSchema(reader.schema)
     ArrowConverters.toDataFrame(reader.read(), schema, spark, "UTC", true, false)
   }
 }

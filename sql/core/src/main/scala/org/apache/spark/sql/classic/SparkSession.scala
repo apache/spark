@@ -399,7 +399,7 @@ class SparkSession private(
   /**
    * Creates a `DataFrame` from an `RDD[InternalRow]`.
    */
-  private[spark] def internalCreateDataFrame(
+  private[sql] def internalCreateDataFrame(
       catalystRows: RDD[InternalRow],
       schema: StructType,
       isStreaming: Boolean = false): DataFrame = {

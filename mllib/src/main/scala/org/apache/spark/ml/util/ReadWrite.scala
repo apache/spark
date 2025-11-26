@@ -48,7 +48,6 @@ import org.apache.spark.ml.param.{ParamPair, Params}
 import org.apache.spark.ml.tuning.ValidatorParams
 import org.apache.spark.sql.{DataFrame, SparkSession, SQLContext}
 import org.apache.spark.sql.execution.arrow.ArrowFileReadWrite
-import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.{Utils, VersionUtils}
 
 /**
@@ -1170,21 +1169,9 @@ private[spark] object ReadWriteUtils {
 
   def loadDataFrame(path: String, spark: SparkSession): DataFrame = {
     if (localSavingModeState.get()) {
-      val filePath = Paths.get(path)
-      val parentPath = filePath.getParent
-      val schemaPath = new Path(parentPath.toString, "schema").toString
-
-      var schemaString: String = null
-      Using.resource(
-        new DataInputStream(new BufferedInputStream(new FileInputStream(schemaPath)))
-      ) { dis =>
-        schemaString = dis.readUTF()
-      }
-
       spark match {
         case s: org.apache.spark.sql.classic.SparkSession =>
-          val schema = StructType.fromString(schemaString)
-          ArrowFileReadWrite.load(s, path, schema)
+          ArrowFileReadWrite.load(s, path)
 
         case _ => throw new UnsupportedOperationException("Unsupported session type")
       }

@@ -80,7 +80,7 @@ private[sql] class ArrowBatchStreamWriter(
   }
 }
 
-private[spark] object ArrowConverters extends Logging {
+private[sql] object ArrowConverters extends Logging {
   private[sql] class ArrowBatchIterator(
       rowIter: Iterator[InternalRow],
       schema: StructType,
@@ -231,7 +231,7 @@ private[spark] object ArrowConverters extends Logging {
    * Maps Iterator from InternalRow to serialized ArrowRecordBatches. Limit ArrowRecordBatch size
    * in a batch by setting maxRecordsPerBatch or use 0 to fully consume rowIter.
    */
-  private[spark] def toBatchIterator(
+  private[sql] def toBatchIterator(
       rowIter: Iterator[InternalRow],
       schema: StructType,
       maxRecordsPerBatch: Long,
@@ -484,7 +484,7 @@ private[spark] object ArrowConverters extends Logging {
   /**
    * Maps iterator from serialized ArrowRecordBatches to InternalRows.
    */
-  private[spark] def fromBatchIterator(
+  private[sql] def fromBatchIterator(
       arrowBatchIter: Iterator[Array[Byte]],
       schema: StructType,
       timeZoneId: String,
