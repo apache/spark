@@ -289,37 +289,20 @@ class GroupedApplyInPandasTestsMixin:
         ):
             self._test_apply_in_pandas(lambda key, pdf: key)
 
-    @staticmethod
-    def stats_with_column_names(key, pdf):
-        # order of column can be different to applyInPandas schema when column names are given
-        return pd.DataFrame([(pdf.v.mean(),) + key], columns=["mean", "id"])
-
-    @staticmethod
-    def stats_with_no_column_names(key, pdf):
-        # columns must be in order of applyInPandas schema when no columns given
-        return pd.DataFrame([key + (pdf.v.mean(),)])
-
-    @unittest.skipIf(
-        os.environ.get("SPARK_SKIP_CONNECT_COMPAT_TESTS") == "1", "SPARK-54482: To be reenabled"
-    )
     def test_apply_in_pandas_returning_column_names(self):
-        self._test_apply_in_pandas(GroupedApplyInPandasTestsMixin.stats_with_column_names)
+        self._test_apply_in_pandas(
+            lambda key, pdf: pd.DataFrame([(pdf.v.mean(),) + key], columns=["mean", "id"])
+        )
 
-    @unittest.skipIf(
-        os.environ.get("SPARK_SKIP_CONNECT_COMPAT_TESTS") == "1", "SPARK-54482: To be reenabled"
-    )
     def test_apply_in_pandas_returning_no_column_names(self):
-        self._test_apply_in_pandas(GroupedApplyInPandasTestsMixin.stats_with_no_column_names)
+        self._test_apply_in_pandas(lambda key, pdf: pd.DataFrame([key + (pdf.v.mean(),)]))
 
-    @unittest.skipIf(
-        os.environ.get("SPARK_SKIP_CONNECT_COMPAT_TESTS") == "1", "SPARK-54482: To be reenabled"
-    )
     def test_apply_in_pandas_returning_column_names_sometimes(self):
         def stats(key, pdf):
             if key[0] % 2:
-                return GroupedApplyInPandasTestsMixin.stats_with_column_names(key, pdf)
+                return pd.DataFrame([(pdf.v.mean(),) + key], columns=["mean", "id"])
             else:
-                return GroupedApplyInPandasTestsMixin.stats_with_no_column_names(key, pdf)
+                return pd.DataFrame([key + (pdf.v.mean(),)])
 
         self._test_apply_in_pandas(stats)
 
@@ -862,7 +845,7 @@ class GroupedApplyInPandasTestsMixin:
 
         def stats(key, pdf):
             if key[0] % 2 == 0:
-                return GroupedApplyInPandasTestsMixin.stats_with_no_column_names(key, pdf)
+                return pd.DataFrame([key + (pdf.v.mean(),)])
             return empty_df
 
         result = (
@@ -879,9 +862,6 @@ class GroupedApplyInPandasTestsMixin:
         for row in result:
             self.assertEqual(24.5, row[1])
 
-    @unittest.skipIf(
-        os.environ.get("SPARK_SKIP_CONNECT_COMPAT_TESTS") == "1", "SPARK-54482: To be reenabled"
-    )
     def _test_apply_in_pandas_returning_empty_dataframe_error(self, empty_df, error):
         with self.quiet():
             with self.assertRaisesRegex(PythonException, error):
