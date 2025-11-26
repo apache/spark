@@ -125,6 +125,7 @@ private[spark] class AppStatusListener(
       -1L,
       event.sparkUser,
       false,
+      None,
       sparkVersion)
 
     appInfo = v1.ApplicationInfo(
@@ -199,6 +200,7 @@ private[spark] class AppStatusListener(
       event.time - old.startTime.getTime(),
       old.sparkUser,
       true,
+      event.exitCode,
       old.appSparkVersion)
 
     appInfo = v1.ApplicationInfo(
