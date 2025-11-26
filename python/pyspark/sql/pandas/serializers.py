@@ -1224,7 +1224,11 @@ class ArrowStreamAggPandasUDFSerializer(ArrowStreamPandasUDFSerializer):
                 yield (
                     [
                         self.arrow_to_pandas(c, i)
-                        for i, c in enumerate(pa.Table.from_batches(ArrowStreamSerializer.load_stream(self, stream)).itercolumns())
+                        for i, c in enumerate(
+                            pa.Table.from_batches(
+                                ArrowStreamSerializer.load_stream(self, stream)
+                            ).itercolumns()
+                        )
                     ]
                 )
 
