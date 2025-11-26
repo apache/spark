@@ -534,13 +534,6 @@ public class YarnShuffleService extends AuxiliaryService {
   }
 
   /**
-   * Get the path specific to this auxiliary service to use for recovery.
-   */
-  protected Path getRecoveryPath(String fileName) {
-    return _recoveryPath;
-  }
-
-  /**
    * Figure out the recovery path and handle moving the DB if YARN NM recovery gets enabled
    * and DB exists in the local dir of NM by old version of shuffle service.
    */
