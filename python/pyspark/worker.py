@@ -3165,14 +3165,13 @@ def read_udfs(pickleSer, infile, eval_type):
             )
 
         def mapper(a):
-            batch_iter = iter(a)
             # Need to materialize the first batch to get the keys
-            first_batch = next(batch_iter)
+            first_batch = next(a)
 
             keys = batch_from_offset(first_batch, parsed_offsets[0][0])
             value_batches = (
                 batch_from_offset(b, parsed_offsets[0][1])
-                for b in itertools.chain((first_batch,), batch_iter)
+                for b in itertools.chain((first_batch,), a)
             )
 
             return f(keys, value_batches)
@@ -3260,6 +3259,39 @@ def read_udfs(pickleSer, infile, eval_type):
             df2_keys = table_from_batches(a[1], parsed_offsets[1][0])
             df2_vals = table_from_batches(a[1], parsed_offsets[1][1])
             return f(df1_keys, df1_vals, df2_keys, df2_vals)
+
+    elif eval_type in (
+        PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF,
+        PythonEvalType.SQL_WINDOW_AGG_PANDAS_UDF,
+    ):
+        udfs = []
+        for i in range(num_udfs):
+            udfs.append(
+                read_single_udf(
+                    pickleSer, infile, eval_type, runner_conf, udf_index=i, profiler=profiler
+                )
+            )
+
+        def mapper(a):
+            # `a` is an iterator from load_stream
+            # Convert iterator to list (merge all batches) for aggregation UDFs
+            a = list(a)
+            # Merge all batch lists into a single list
+            if a:
+                # Flatten list of lists into single list
+                merged = []
+                for batch_list in a:
+                    merged.extend(batch_list)
+                a = merged
+            else:
+                a = []
+            result = tuple(f(*[a[o] for o in arg_offsets]) for arg_offsets, f in udfs)
+            # In the special case of a single UDF this will return a single result rather
+            # than a tuple of results; this is the format that the JVM side expects.
+            if len(result) == 1:
+                return result[0]
+            else:
+                return result
 
     else:
         udfs = []
