@@ -19,13 +19,24 @@ import os
 import unittest
 
 from pyspark.tests.test_memory_profiler import MemoryProfiler2TestsMixin, _do_computation
-from pyspark.testing.connectutils import ReusedConnectTestCase
+from pyspark.testing.connectutils import (
+    ReusedConnectTestCase,
+    skip_if_server_version_is_greater_than_or_equal_to,
+)
 
 
 class MemoryProfilerParityTests(MemoryProfiler2TestsMixin, ReusedConnectTestCase):
     def setUp(self) -> None:
         super().setUp()
         self.spark._profiler_collector._value = None
+
+    @skip_if_server_version_is_greater_than_or_equal_to("4.1.0")
+    def test_memory_profiler_pandas_udf_iterator_not_supported(self):
+        super().test_memory_profiler_pandas_udf_iterator_not_supported()
+
+    @skip_if_server_version_is_greater_than_or_equal_to("4.1.0")
+    def test_memory_profiler_map_in_pandas_not_supported(self):
+        super().test_memory_profiler_map_in_pandas_not_supported()
 
 
 class MemoryProfilerWithoutPlanCacheParityTests(MemoryProfilerParityTests):
