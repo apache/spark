@@ -47,7 +47,7 @@ class TableArg(TableValuedFunctionArgument):
 
         Parameters
         ----------
-        *cols : str, :class:`Column`, or list
+        cols : str, :class:`Column`, or list
             Column names or :class:`Column` objects to partition by.
 
         Returns
@@ -106,7 +106,7 @@ class TableArg(TableValuedFunctionArgument):
 
         Parameters
         ----------
-        *cols : str, :class:`Column`, or list
+        cols : str, :class:`Column`, or list
             Column names or :class:`Column` objects to order by. Columns can be
             ordered in ascending or descending order using :meth:`Column.asc` or
             :meth:`Column.desc`.
