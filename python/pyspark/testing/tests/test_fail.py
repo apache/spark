@@ -14,6 +14,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+
+import tempfile
 import unittest
 
 
@@ -25,13 +27,16 @@ class FailTests(unittest.TestCase):
 if __name__ == "__main__":
     from pyspark.testing.tests.test_fail import *  # noqa: F401
 
-    try:
-        import xmlrunner
+    # Do not keep XML report because the test is supposed to fail.
+    # We do not want to confuse XML report consumers.
+    with tempfile.TemporaryDirectory() as tmpdir:
+        try:
+            import xmlrunner
 
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    try:
-        unittest.main(testRunner=testRunner, verbosity=2)
-    except SystemExit as e:
-        assert e.code == 1, f"status code: {e.code}"
+            testRunner = xmlrunner.XMLTestRunner(output=tmpdir, verbosity=2)
+        except ImportError:
+            testRunner = None
+        try:
+            unittest.main(testRunner=testRunner, verbosity=2)
+        except SystemExit as e:
+            assert e.code == 1, f"status code: {e.code}"

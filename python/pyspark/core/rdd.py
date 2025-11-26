@@ -1698,7 +1698,8 @@ class RDD(Generic[T_co]):
         with SCCallSiteSync(self.context):
             assert self.ctx._jvm is not None
             sock_info = self.ctx._jvm.PythonRDD.collectAndServe(self._jrdd.rdd())
-        return list(_load_from_socket(sock_info, self._jrdd_deserializer))
+        with _load_from_socket(sock_info, self._jrdd_deserializer) as stream:
+            return list(stream)
 
     def collectWithJobGroup(
         self: "RDD[T]", groupId: str, description: str, interruptOnCancel: bool = False
@@ -1741,7 +1742,8 @@ class RDD(Generic[T_co]):
             sock_info = self.ctx._jvm.PythonRDD.collectAndServeWithJobGroup(
                 self._jrdd.rdd(), groupId, description, interruptOnCancel
             )
-        return list(_load_from_socket(sock_info, self._jrdd_deserializer))
+        with _load_from_socket(sock_info, self._jrdd_deserializer) as stream:
+            return list(stream)
 
     def reduce(self: "RDD[T]", f: Callable[[T, T], T]) -> T:
         """

@@ -103,6 +103,7 @@ jobs:
             ui=true
             docs=true
           else
+            pyspark_install=false
             pandas=false
             yarn=false
             kubernetes=false

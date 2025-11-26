@@ -34,7 +34,7 @@ PySpark combines Python's learnability and ease of use with the power of Apache 
 to enable processing and analysis of data at any size for everyone familiar with Python.
 
 PySpark supports all of Spark's features such as Spark SQL,
-DataFrames, Structured Streaming, Machine Learning (MLlib) and Spark Core.
+DataFrames, Structured Streaming, Machine Learning (MLlib), Pipelines and Spark Core.
 
 .. list-table::
    :widths: 10 80 10
@@ -150,6 +150,15 @@ learning pipelines.
 
 - `Machine Learning Library (MLlib) Programming Guide <https://spark.apache.org/docs/latest/ml-guide.html>`_
 - :ref:`Machine Learning (MLlib) API Reference</reference/pyspark.ml.rst>`
+
+**Declarative Pipelines**
+
+Spark Declarative Pipelines (SDP) is a declarative framework for building reliable,
+maintainable, and testable data pipelines on Spark. SDP simplifies ETL development by allowing
+you to focus on the transformations you want to apply to your data, rather than the mechanics
+of pipeline execution.
+
+- :ref:`Pipelines API Reference</reference/pyspark.pipelines.rst>`
 
 **Spark Core and RDDs**
 

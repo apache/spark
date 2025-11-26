@@ -6695,8 +6695,8 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
-  val MERGE_INTO_SOURCE_NESTED_TYPE_COERCION_ENABLED =
-    buildConf("spark.sql.merge.source.nested.type.coercion.enabled")
+  val MERGE_INTO_NESTED_TYPE_COERCION_ENABLED =
+    buildConf("spark.sql.merge.nested.type.coercion.enabled")
       .internal()
       .doc("If enabled, allow MERGE INTO to coerce source nested types if they have less" +
         "nested fields than the target table's nested types.")
@@ -7904,7 +7904,7 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
     getConf(SQLConf.LEGACY_XML_PARSER_ENABLED)
 
   def coerceMergeNestedTypes: Boolean =
-    getConf(SQLConf.MERGE_INTO_SOURCE_NESTED_TYPE_COERCION_ENABLED)
+    getConf(SQLConf.MERGE_INTO_NESTED_TYPE_COERCION_ENABLED)
 
   /** ********************** SQLConf functionality methods ************ */
 

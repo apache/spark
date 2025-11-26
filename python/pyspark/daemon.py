@@ -31,14 +31,6 @@ from signal import SIGHUP, SIGTERM, SIGCHLD, SIG_DFL, SIG_IGN, SIGINT
 
 from pyspark.serializers import read_int, write_int, write_with_length, UTF8Deserializer
 
-if len(sys.argv) > 1 and sys.argv[1].startswith("pyspark"):
-    import importlib
-
-    worker_module = importlib.import_module(sys.argv[1])
-    worker_main = worker_module.main
-else:
-    from pyspark.worker import main as worker_main
-
 
 def compute_real_exit_code(exit_code):
     # SystemExit's code can be integer or string, but os._exit only accepts integers
@@ -78,6 +70,19 @@ def worker(sock, authenticated):
             return 1
 
     exit_code = 0
+
+    # We don't know what could happen when we import the worker module. We have to
+    # guarantee that no thread is spawned before we fork, so we have to import the
+    # worker module after fork. For example, both pandas and pyarrow starts some
+    # threads when they are imported.
+    if len(sys.argv) > 1 and sys.argv[1].startswith("pyspark"):
+        import importlib
+
+        worker_module = importlib.import_module(sys.argv[1])
+        worker_main = worker_module.main
+    else:
+        from pyspark.worker import main as worker_main
+
     try:
         worker_main(infile, outfile)
     except SystemExit as exc:

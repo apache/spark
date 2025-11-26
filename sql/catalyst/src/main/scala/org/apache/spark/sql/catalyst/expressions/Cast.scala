@@ -365,37 +365,23 @@ object Cast extends QueryErrorsBase {
    * data source metadata to the `to` type typically in the read schema of a query.
    */
   def canAssignDefaultValue(from: DataType, to: DataType): Boolean = {
-    def isVariantStruct(dt: DataType): Boolean = {
-      dt match {
-        case s: StructType =>
-          s.fields.length > 0 && s.fields.forall(_.metadata.contains("__VARIANT_METADATA_KEY"))
-        case _ => false
-      }
+    def isVariantStruct(st: StructType): Boolean = {
+      st.fields.length > 0 && st.fields.forall(_.metadata.contains("__VARIANT_METADATA_KEY"))
     }
     (from, to) match {
       case (s1: StructType, s2: StructType) =>
         s1.length == s2.length && s1.fields.zip(s2.fields).forall {
-          case (f1, f2) => canAssignDefaultValue(f1.dataType, f2.dataType)
+          case (f1, f2) => resolvableNullability(f1.nullable, f2.nullable) &&
+            canAssignDefaultValue(f1.dataType, f2.dataType)
         }
-      case (a1: ArrayType, a2: ArrayType) =>
-        canAssignDefaultValue(a1.elementType, a2.elementType)
-      case (m1: MapType, m2: MapType) =>
-        canAssignDefaultValue(m1.keyType, m2.keyType) &&
-          canAssignDefaultValue(m1.valueType, m2.valueType)
-      case (_: VariantType, s: StructType) => isVariantStruct(s)
-      case (k, v) => canUpCast(k, v)
-    }
-    // In order to resolve defaults for variants, they need to be in their regular VariantType
-    // representation instead of the Struct representation used in shredded reads.
-    // Note that currently, only null values are supported for variant projections pushed into the
-    // scan.
-    if (canUpCast(from, to)) {
-      true
-    } else {
-      from match {
-        case VariantType if isVariantStruct(to) => true
-        case _ => false
-      }
+      case (ArrayType(fromType, fn), ArrayType(toType, tn)) =>
+        resolvableNullability(fn, tn) && canAssignDefaultValue(fromType, toType)
+      case (MapType(fromKey, fromValue, fn), MapType(toKey, toValue, tn)) =>
+        resolvableNullability(fn, tn) && canAssignDefaultValue(fromKey, toKey) &&
+          canAssignDefaultValue(fromValue, toValue)
+      // A VARIANT field can be read as StructType due to shredding.
+      case (VariantType, s: StructType) => isVariantStruct(s)
+      case _ => canUpCast(from, to)
     }
   }
 
