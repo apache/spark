@@ -196,6 +196,7 @@ private[spark] class SparkUI private (
         lastUpdated = new Date(startTime),
         sparkUser = getSparkUser,
         completed = false,
+        exitCode = None,
         appSparkVersion = appSparkVersion
       ))
     ))
