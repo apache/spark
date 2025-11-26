@@ -71,7 +71,7 @@ private[hive] class SparkSQLDriver(val sparkSession: SparkSession = SparkSQLEnv.
       val conf = sparkSession.sessionState.conf
 
       val shuffleCleanupMode =
-        if (conf.getConf(SQLConf.THRIFT_SHUFFLE_DEPENDENCY_FILE_CLEANUP_ENABLED)) {
+        if (conf.getConf(SQLConf.THRIFTSERVER_SHUFFLE_DEPENDENCY_FILE_CLEANUP_ENABLED)) {
           org.apache.spark.sql.execution.RemoveShuffleFiles
         } else {
           org.apache.spark.sql.execution.DoNotCleanup

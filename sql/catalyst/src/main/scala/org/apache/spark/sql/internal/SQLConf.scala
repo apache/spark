@@ -3822,8 +3822,8 @@ object SQLConf {
       .version("4.1.0")
       .fallbackConf(SHUFFLE_DEPENDENCY_FILE_CLEANUP_ENABLED)
 
-  val THRIFT_SHUFFLE_DEPENDENCY_FILE_CLEANUP_ENABLED =
-    buildConf("spark.sql.thrift.shuffleDependency.fileCleanup.enabled")
+  val THRIFTSERVER_SHUFFLE_DEPENDENCY_FILE_CLEANUP_ENABLED =
+    buildConf("spark.sql.thriftserver.shuffleDependency.fileCleanup.enabled")
       .doc("When enabled, shuffle files will be cleaned up at the end of Thrift server " +
         "SQL executions.")
       .version("4.2.0")
