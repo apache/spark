@@ -129,8 +129,12 @@ private[storage] class FallbackStorage(
   def getFallbackFilePath(shuffleId: Int, filename: String): Path =
     FallbackStorage.getFallbackFilePath(fallbackPath, appId, shuffleId, filename)
 
-  def exists(shuffleId: Int, filename: String): Boolean = {
-    fallbackFileSystem.exists(getFallbackFilePath(shuffleId, filename))
+  private[storage] def exists(shuffleId: Int, mapId: Long): Boolean = {
+    val indexName = ShuffleIndexBlockId(shuffleId, mapId, NOOP_REDUCE_ID).name
+    val indexFile = getFallbackFilePath(shuffleId, indexName)
+    val dataName = ShuffleDataBlockId(shuffleId, mapId, NOOP_REDUCE_ID).name
+    val dataFile = getFallbackFilePath(shuffleId, dataName)
+    fallbackFileSystem.exists(indexFile) && fallbackFileSystem.exists(dataFile)
   }
 }
 
@@ -233,14 +237,6 @@ private[spark] object FallbackStorage extends Logging {
       filename: String): Path = {
     val hash = JavaUtils.nonNegativeHash(filename)
     new Path(fallbackPath, s"$appId/$shuffleId/$hash/$filename")
-  }
-
-  def exists(conf: SparkConf, blockId: BlockId): Boolean = {
-    if (!isConfigured(conf)) {
-      return false
-    }
-    val (fallbackFileSystem, indexFile, dataFile, _, _) = getShuffleFiles(conf, blockId)
-    fallbackFileSystem.exists(indexFile) && fallbackFileSystem.exists(dataFile)
   }
 
   def getShuffleFiles(conf: SparkConf, blockId: BlockId): (FileSystem, Path, Path, Long, Long) = {

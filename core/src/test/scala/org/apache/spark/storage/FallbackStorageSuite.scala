@@ -41,7 +41,6 @@ import org.apache.spark.network.buffer.ManagedBuffer
 import org.apache.spark.scheduler.ExecutorDecommissionInfo
 import org.apache.spark.scheduler.cluster.StandaloneSchedulerBackend
 import org.apache.spark.shuffle.{IndexShuffleBlockResolver, ShuffleBlockInfo}
-import org.apache.spark.shuffle.IndexShuffleBlockResolver.NOOP_REDUCE_ID
 import org.apache.spark.util.Utils.tryWithResource
 
 class FallbackStorageSuite extends SparkFunSuite with LocalSparkContext {
@@ -103,10 +102,10 @@ class FallbackStorageSuite extends SparkFunSuite with LocalSparkContext {
     fallbackStorage.copy(ShuffleBlockInfo(1, 1L), bm)
     fallbackStorage.copy(ShuffleBlockInfo(1, 2L), bm)
 
-    assert(fallbackStorage.exists(1, ShuffleIndexBlockId(1, 1L, NOOP_REDUCE_ID).name))
-    assert(fallbackStorage.exists(1, ShuffleDataBlockId(1, 1L, NOOP_REDUCE_ID).name))
-    assert(fallbackStorage.exists(1, ShuffleIndexBlockId(1, 2L, NOOP_REDUCE_ID).name))
-    assert(fallbackStorage.exists(1, ShuffleDataBlockId(1, 2L, NOOP_REDUCE_ID).name))
+    assert(fallbackStorage.exists(1, 1L))
+    assert(fallbackStorage.exists(1, 1L))
+    assert(fallbackStorage.exists(1, 2L))
+    assert(fallbackStorage.exists(1, 2L))
 
     // The files for shuffle 1 and map 1 are empty intentionally.
     intercept[java.io.EOFException] {
@@ -167,10 +166,10 @@ class FallbackStorageSuite extends SparkFunSuite with LocalSparkContext {
     verify(bmm, never()).updateBlockInfo(mc.any(), mc.any(), mc.any(), mc.any(), mc.any())
 
     // the copied files should exist and be readable
-    assert(fallbackStorage.exists(1, ShuffleIndexBlockId(1, 1L, NOOP_REDUCE_ID).name))
-    assert(fallbackStorage.exists(1, ShuffleDataBlockId(1, 1L, NOOP_REDUCE_ID).name))
-    assert(fallbackStorage.exists(1, ShuffleIndexBlockId(1, 2L, NOOP_REDUCE_ID).name))
-    assert(fallbackStorage.exists(1, ShuffleDataBlockId(1, 2L, NOOP_REDUCE_ID).name))
+    assert(fallbackStorage.exists(1, 1L))
+    assert(fallbackStorage.exists(1, 1L))
+    assert(fallbackStorage.exists(1, 2L))
+    assert(fallbackStorage.exists(1, 2L))
 
     // The files for shuffle 1 and map 1 are empty intentionally.
     intercept[java.io.EOFException] {
@@ -185,10 +184,10 @@ class FallbackStorageSuite extends SparkFunSuite with LocalSparkContext {
     verify(bmm, times(4)).updateBlockInfo(mc.any(), mc.any(), mc.any(), mc.any(), mc.any())
 
     // still the copied files should exist and be readable
-    assert(fallbackStorage.exists(1, ShuffleIndexBlockId(1, 1L, NOOP_REDUCE_ID).name))
-    assert(fallbackStorage.exists(1, ShuffleDataBlockId(1, 1L, NOOP_REDUCE_ID).name))
-    assert(fallbackStorage.exists(1, ShuffleIndexBlockId(1, 2L, NOOP_REDUCE_ID).name))
-    assert(fallbackStorage.exists(1, ShuffleDataBlockId(1, 2L, NOOP_REDUCE_ID).name))
+    assert(fallbackStorage.exists(1, 1L))
+    assert(fallbackStorage.exists(1, 1L))
+    assert(fallbackStorage.exists(1, 2L))
+    assert(fallbackStorage.exists(1, 2L))
 
     // The files for shuffle 1 and map 1 are empty intentionally.
     intercept[java.io.EOFException] {
@@ -251,10 +250,10 @@ class FallbackStorageSuite extends SparkFunSuite with LocalSparkContext {
     verify(bmm, never()).updateBlockInfo(mc.any(), mc.any(), mc.any(), mc.any(), mc.any())
 
     // the copied files should exist and be readable
-    assert(fallbackStorage.exists(1, ShuffleIndexBlockId(1, 1L, NOOP_REDUCE_ID).name))
-    assert(fallbackStorage.exists(1, ShuffleDataBlockId(1, 1L, NOOP_REDUCE_ID).name))
-    assert(fallbackStorage.exists(1, ShuffleIndexBlockId(1, 2L, NOOP_REDUCE_ID).name))
-    assert(fallbackStorage.exists(1, ShuffleDataBlockId(1, 2L, NOOP_REDUCE_ID).name))
+    assert(fallbackStorage.exists(1, 1L))
+    assert(fallbackStorage.exists(1, 1L))
+    assert(fallbackStorage.exists(1, 2L))
+    assert(fallbackStorage.exists(1, 2L))
 
     // The files for shuffle 1 and map 1 are empty intentionally.
     intercept[java.io.EOFException] {
@@ -269,10 +268,10 @@ class FallbackStorageSuite extends SparkFunSuite with LocalSparkContext {
     verify(bmm, times(4)).updateBlockInfo(mc.any(), mc.any(), mc.any(), mc.any(), mc.any())
 
     // still the copied files should exist and be readable
-    assert(fallbackStorage.exists(1, ShuffleIndexBlockId(1, 1L, NOOP_REDUCE_ID).name))
-    assert(fallbackStorage.exists(1, ShuffleDataBlockId(1, 1L, NOOP_REDUCE_ID).name))
-    assert(fallbackStorage.exists(1, ShuffleIndexBlockId(1, 2L, NOOP_REDUCE_ID).name))
-    assert(fallbackStorage.exists(1, ShuffleDataBlockId(1, 2L, NOOP_REDUCE_ID).name))
+    assert(fallbackStorage.exists(1, 1L))
+    assert(fallbackStorage.exists(1, 1L))
+    assert(fallbackStorage.exists(1, 2L))
+    assert(fallbackStorage.exists(1, 2L))
 
     // The files for shuffle 1 and map 1 are empty intentionally.
     intercept[java.io.EOFException] {
@@ -319,8 +318,8 @@ class FallbackStorageSuite extends SparkFunSuite with LocalSparkContext {
 
     fallbackStorage.copy(ShuffleBlockInfo(1, 2L), bm)
 
-    assert(fallbackStorage.exists(1, ShuffleIndexBlockId(1, 2L, NOOP_REDUCE_ID).name))
-    assert(fallbackStorage.exists(1, ShuffleDataBlockId(1, 2L, NOOP_REDUCE_ID).name))
+    assert(fallbackStorage.exists(1, 2L))
+    assert(fallbackStorage.exists(1, 2L))
 
     val readResult = FallbackStorage.read(conf, ShuffleBlockId(1, 2L, 0))
     assert(readResult.nioByteBuffer().array().sameElements(content))
@@ -426,9 +425,7 @@ class FallbackStorageSuite extends SparkFunSuite with LocalSparkContext {
         verify(blockTransferService, never())
           .uploadBlockSync(mc.any(), mc.any(), mc.any(), mc.any(), mc.any(), mc.any(), mc.any())
 
-        Seq("shuffle_1_1_0.index", "shuffle_1_1_0.data").foreach { filename =>
-          assert(fallbackStorage.exists(shuffleId = 1, filename))
-        }
+        assert(fallbackStorage.exists(1, 1L))
       }
     } finally {
       decommissioner.stop()
@@ -487,9 +484,7 @@ class FallbackStorageSuite extends SparkFunSuite with LocalSparkContext {
         verify(blockTransferService, never())
           .uploadBlockSync(mc.any(), mc.any(), mc.any(), mc.any(), mc.any(), mc.any(), mc.any())
 
-        Seq("shuffle_1_1_0.index", "shuffle_1_1_0.data").foreach { filename =>
-          assert(fallbackStorage.exists(shuffleId = 1, filename))
-        }
+        assert(fallbackStorage.exists(1, 1L))
       }
     } finally {
       decommissioner.stop()
@@ -514,11 +509,11 @@ class FallbackStorageSuite extends SparkFunSuite with LocalSparkContext {
       val files = Seq("shuffle_0_0_0.index", "shuffle_0_0_0.data")
       val fallbackStorage = FallbackStorage.getFallbackStorage(sc.getConf).get
       // Uploading is not started yet.
-      files.foreach { file => assert(!fallbackStorage.exists(0, file)) }
+      assert(!fallbackStorage.exists(0, 0))
 
       // Uploading is completed on decommissioned executors
       eventually(timeout(20.seconds), interval(1.seconds)) {
-        files.foreach { file => assert(fallbackStorage.exists(0, file)) }
+        assert(fallbackStorage.exists(0, 0))
       }
 
       // All executors are still alive.
@@ -543,8 +538,10 @@ class FallbackStorageSuite extends SparkFunSuite with LocalSparkContext {
         "shuffle_1_4_0.index", "shuffle_1_4_0.data",
         "shuffle_1_5_0.index", "shuffle_1_5_0.data")
       val fallbackStorage = FallbackStorage.getFallbackStorage(sc.getConf).get
-      shuffle0_files.foreach { file => assert(!fallbackStorage.exists(0, file)) }
-      shuffle1_files.foreach { file => assert(!fallbackStorage.exists(1, file)) }
+      assert(!fallbackStorage.exists(0, 0))
+      assert(!fallbackStorage.exists(0, 1))
+      assert(!fallbackStorage.exists(1, 4))
+      assert(!fallbackStorage.exists(1, 5))
 
       // Decommission all
       val sched = sc.schedulerBackend.asInstanceOf[StandaloneSchedulerBackend]
@@ -553,8 +550,10 @@ class FallbackStorageSuite extends SparkFunSuite with LocalSparkContext {
       }
 
       eventually(timeout(20.seconds), interval(1.seconds)) {
-        shuffle0_files.foreach { file => assert(fallbackStorage.exists(0, file)) }
-        shuffle1_files.foreach { file => assert(fallbackStorage.exists(1, file)) }
+        assert(fallbackStorage.exists(0, 0))
+        assert(fallbackStorage.exists(0, 1))
+        assert(fallbackStorage.exists(1, 4))
+        assert(fallbackStorage.exists(1, 5))
       }
     }
   }
@@ -578,11 +577,8 @@ class FallbackStorageSuite extends SparkFunSuite with LocalSparkContext {
         // Make it sure that fallback storage are ready
         val fallbackStorage = FallbackStorage.getFallbackStorage(sc.getConf).get
         eventually(timeout(20.seconds), interval(1.seconds)) {
-          Seq(
-            "shuffle_0_0_0.index", "shuffle_0_0_0.data",
-            "shuffle_0_1_0.index", "shuffle_0_1_0.data").foreach { file =>
-            assert(fallbackStorage.exists(0, file))
-          }
+          assert(fallbackStorage.exists(0, 0L))
+          assert(fallbackStorage.exists(0, 1L))
         }
 
         // Since the data is safe, force to shrink down to zero executor
