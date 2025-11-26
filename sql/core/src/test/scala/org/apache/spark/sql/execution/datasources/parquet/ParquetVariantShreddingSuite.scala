@@ -48,7 +48,8 @@ class ParquetVariantShreddingSuite extends QueryTest with ParquetTest with Share
 
   test("timestamp physical type") {
     ParquetOutputTimestampType.values.foreach { timestampParquetType =>
-      withSQLConf(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key -> timestampParquetType.toString) {
+      withSQLConf(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key -> timestampParquetType.toString,
+        SQLConf.PARQUET_IGNORE_VARIANT_ANNOTATION.key -> "true") {
         withTempDir { dir =>
           val schema = "t timestamp, st struct<t timestamp>, at array<timestamp>"
           val fullSchema = "v struct<metadata binary, value binary, typed_value struct<" +
@@ -232,7 +233,8 @@ class ParquetVariantShreddingSuite extends QueryTest with ParquetTest with Share
   test("variant logical type annotation - ignore variant annotation") {
     Seq(true, false).foreach { ignoreVariantAnnotation =>
       withSQLConf(SQLConf.PARQUET_ANNOTATE_VARIANT_LOGICAL_TYPE.key -> "true",
-        SQLConf.PARQUET_IGNORE_VARIANT_ANNOTATION.key -> ignoreVariantAnnotation.toString
+        SQLConf.PARQUET_IGNORE_VARIANT_ANNOTATION.key -> ignoreVariantAnnotation.toString,
+        SQLConf.VARIANT_INFER_SHREDDING_SCHEMA.key -> "false"
       ) {
         withTempDir { dir =>
           // write parquet file
@@ -302,7 +304,8 @@ class ParquetVariantShreddingSuite extends QueryTest with ParquetTest with Share
       "c struct<value binary, typed_value decimal(15, 1)>>>"
     withSQLConf(SQLConf.VARIANT_WRITE_SHREDDING_ENABLED.key -> true.toString,
       SQLConf.VARIANT_ALLOW_READING_SHREDDED.key -> true.toString,
-      SQLConf.VARIANT_FORCE_SHREDDING_SCHEMA_FOR_TEST.key -> schema) {
+      SQLConf.VARIANT_FORCE_SHREDDING_SCHEMA_FOR_TEST.key -> schema,
+      SQLConf.PARQUET_IGNORE_VARIANT_ANNOTATION.key -> true.toString) {
       df.write.mode("overwrite").parquet(dir.getAbsolutePath)
 
 
@@ -441,7 +444,8 @@ class ParquetVariantShreddingSuite extends QueryTest with ParquetTest with Share
       "m map<string, struct<metadata binary, value binary>>"
     withSQLConf(SQLConf.VARIANT_WRITE_SHREDDING_ENABLED.key -> true.toString,
       SQLConf.VARIANT_ALLOW_READING_SHREDDED.key -> true.toString,
-      SQLConf.VARIANT_FORCE_SHREDDING_SCHEMA_FOR_TEST.key -> schema) {
+      SQLConf.VARIANT_FORCE_SHREDDING_SCHEMA_FOR_TEST.key -> schema,
+      SQLConf.PARQUET_IGNORE_VARIANT_ANNOTATION.key -> true.toString) {
       df.write.mode("overwrite").parquet(dir.getAbsolutePath)
 
       // Verify that we can read the full variant.
