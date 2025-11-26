@@ -388,7 +388,7 @@ class VariantSuite extends QueryTest with SharedSparkSession with ExpressionEval
       Seq(false, true).foreach { vectorizedReader =>
         withSQLConf(
           SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> vectorizedReader.toString,
-          // Invalid variant binary fails during shredding schema inference
+          // Invalid variant binary fails during shredding schema inference.
           SQLConf.VARIANT_INFER_SHREDDING_SCHEMA.key -> "false"
         ) {
           withTempDir { dir =>
