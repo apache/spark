@@ -916,19 +916,29 @@ case class MergeIntoTable(
       false
     } else {
       val actions = matchedActions ++ notMatchedActions
-      val assignments = actions.collect {
-        case a: UpdateAction => a.assignments
-        case a: InsertAction => a.assignments
-      }.flatten
-      val sourcePaths = DataTypeUtils.extractAllFieldPaths(sourceTable.schema)
-      assignments.forall { assignment =>
-        assignment.resolved ||
-          (assignment.value.resolved && sourcePaths.exists {
-            path => MergeIntoTable.isEqual(assignment, path)
-          })
+      val hasStarActions = actions.exists {
+        case _: UpdateStarAction => true
+        case _: InsertStarAction => true
+        case _ => false
+      }
+      if (hasStarActions) {
+        // need to resolve star actions first
+        false
+      } else {
+        val assignments = actions.collect {
+          case a: UpdateAction => a.assignments
+          case a: InsertAction => a.assignments
+        }.flatten
+        val sourcePaths = DataTypeUtils.extractAllFieldPaths(sourceTable.schema)
+        assignments.forall { assignment =>
+          assignment.resolved ||
+            (assignment.value.resolved && sourcePaths.exists {
+              path => MergeIntoTable.isEqual(assignment, path)
+            })
         }
       }
     }
+  }
 
   private lazy val sourceSchemaForEvolution: StructType =
     MergeIntoTable.sourceSchemaForSchemaEvolution(this)
