@@ -5101,7 +5101,7 @@
   },
   "PYTHON_EXCEPTION" : {
     "message" : [
-      "<msg>\n<traceback>"
+      "<msg>: <traceback>"
     ],
     "sqlState" : "38000"
   },
