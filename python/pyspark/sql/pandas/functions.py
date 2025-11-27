@@ -311,7 +311,7 @@ def arrow_udf(f=None, returnType=None, functionType=None):
         iteratively, which is more memory-efficient than loading all data at once. The returned
         scalar can be a python primitive type, a numpy data type, or a `pyarrow.Scalar` instance.
 
-        .. note:: Only a single UDF is supported per aggregation. 
+        .. note:: Only a single UDF is supported per aggregation.
 
         >>> from typing import Iterator
         >>> @arrow_udf("double")
@@ -340,7 +340,7 @@ def arrow_udf(f=None, returnType=None, functionType=None):
         The function takes an iterator of a tuple of multiple `pyarrow.Array` and returns a
         scalar value. This is useful for grouped aggregations with multiple input columns.
 
-        .. note:: Only a single UDF is supported per aggregation. 
+        .. note:: Only a single UDF is supported per aggregation.
 
         >>> from typing import Iterator, Tuple
         >>> import numpy as np
