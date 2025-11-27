@@ -472,7 +472,7 @@ object SQLConf {
     buildConf("spark.sql.optimizer.avoidDoubleFilterEval")
     .doc("When true avoid pushing expensive (UDF, etc.) filters down if it could result in" +
         "double evaluation. This was the behaviour prior to 3.X.")
-    .version("4.1.0")
+    .version("4.2.0")
     .booleanConf
     .createWithDefault(true)
 
