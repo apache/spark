@@ -25,7 +25,6 @@ import java.io.*;
 import java.nio.channels.FileChannel;
 import java.nio.channels.WritableByteChannel;
 import java.util.Iterator;
-import java.util.concurrent.TimeUnit;
 
 import scala.Option;
 import scala.Product2;

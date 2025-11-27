@@ -556,10 +556,7 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
    * Merges another UnsafeExternalSorters into this one, the other one will be emptied.
    */
   public void merge(UnsafeExternalSorter other) throws IOException {
-    long startNs = System.nanoTime();
     other.spill();
-    taskContext.taskMetrics().incSpillTime(
-        TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startNs));
     totalSpillBytes += other.totalSpillBytes;
     spillWriters.addAll(other.spillWriters);
     // remove them from `spillWriters`, or the files will be deleted in `cleanupResources`.
