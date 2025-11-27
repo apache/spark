@@ -29,8 +29,6 @@ import static org.apache.spark.sql.catalyst.util.Geo.*;
 // This class defines static methods that used to implement ST expressions using `StaticInvoke`.
 public final class STUtils {
 
-  static WkbReader wkbReader = new WkbReader();
-
   /** Conversion methods from physical values to Geography/Geometry objects. */
 
   // Converts a GEOGRAPHY from its physical value to the corresponding `Geography` object
@@ -65,7 +63,7 @@ public final class STUtils {
   }
 
   public static Geometry fromWKB(byte[] wkb, int srid) {
-    return wkbReader.read(wkb, srid);
+    return new WkbReader().read(wkb, srid);
   }
 
   public static GeometryVal physicalValFromWKB(byte[] wkb, int srid) {
