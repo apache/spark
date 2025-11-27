@@ -141,7 +141,7 @@ class KinesisReceiverSuite extends TestSuiteBase with Matchers with BeforeAndAft
     verify(receiverMock, never).setCheckpointer(anyString, meq(checkpointerMock))
   }
 
-  test("SPARK-XXXXX: shutdownRequest should checkpoint") {
+  test("SPARK-45720: shutdownRequest should checkpoint") {
     when(receiverMock.getLatestSeqNumToCheckpoint(shardId)).thenReturn(someSeqNum)
 
     val recordProcessor = new KinesisRecordProcessor(receiverMock, schedulerId)
@@ -154,7 +154,7 @@ class KinesisReceiverSuite extends TestSuiteBase with Matchers with BeforeAndAft
     verify(receiverMock, times(1)).removeCheckpointer(meq(shardId), meq(checkpointerMock))
   }
 
-  test("SPARK-XXXXX: shardEnded should checkpoint") {
+  test("SPARK-45720: shardEnded should checkpoint") {
     when(receiverMock.getLatestSeqNumToCheckpoint(shardId)).thenReturn(someSeqNum)
 
     val recordProcessor = new KinesisRecordProcessor(receiverMock, schedulerId)
@@ -167,7 +167,7 @@ class KinesisReceiverSuite extends TestSuiteBase with Matchers with BeforeAndAft
     verify(receiverMock, times(1)).removeCheckpointer(meq(shardId), meq(checkpointerMock))
   }
 
-  test("SPARK-XXXXX: leaseLost should not checkpoint") {
+  test("SPARK-45720: leaseLost should not checkpoint") {
     when(receiverMock.getLatestSeqNumToCheckpoint(shardId)).thenReturn(someSeqNum)
 
     val recordProcessor = new KinesisRecordProcessor(receiverMock, schedulerId)
