@@ -25,12 +25,13 @@ object MyRule extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan match {
     case project: Project =>
       val newProject = project.copy(
-        projectList = project.projectList :+ AttributeReference("b", ByteType)()
+        projectList = project.projectList :+ UnresolvedAttribute("b")
       )
       newProject.copyTagsFrom(project)
       newProject
   }
 }
+
 
 class ResolveDataFrameColumnSuite extends AnalysisTest {
 
@@ -41,9 +42,17 @@ class ResolveDataFrameColumnSuite extends AnalysisTest {
       AttributeReference("b", ByteType)(),
       AttributeReference("d", DoubleType)())
 
-    val project = Project(Seq(AttributeReference("i", IntegerType)()), table)
-    project.setTagValue(LogicalPlan.PLAN_ID_TAG, 0)
+    val u = UnresolvedAttribute("i")
+    u.setTagValue[Long](LogicalPlan.PLAN_ID_TAG, 0L)
 
+    val project = Project(Seq(u), table)
+    project.setTagValue[Long](LogicalPlan.PLAN_ID_TAG, 0L)
 
+    val rules = Seq(MyRule)
+    val analyzer = new RuleExecutor[LogicalPlan] {
+      override val batches = Seq(Batch("Resolution", FixedPoint(2), rules: _*))
+    }
+
+    val analyzed = analyzer.execute(project)
   }
 }
