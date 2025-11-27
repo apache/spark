@@ -19,7 +19,6 @@
 Worker that receives input from Piped RDD.
 """
 import datetime
-import itertools
 import os
 import sys
 import dataclasses
@@ -54,7 +53,6 @@ from pyspark.sql.functions import SkipRestOfInputTableException
 from pyspark.sql.pandas.serializers import (
     ArrowStreamPandasUDFSerializer,
     ArrowStreamPandasUDTFSerializer,
-    GroupPandasUDFSerializer,
     GroupArrowUDFSerializer,
     CogroupArrowUDFSerializer,
     CogroupPandasUDFSerializer,

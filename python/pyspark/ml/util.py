@@ -50,7 +50,6 @@ if TYPE_CHECKING:
     from py4j.java_gateway import JavaGateway, JavaObject
     from pyspark.ml._typing import PipelineStage
     from pyspark.ml.base import Params
-    from pyspark.ml.wrapper import JavaWrapper
     from pyspark.core.context import SparkContext
     from pyspark.sql import DataFrame
     from pyspark.sql.connect.dataframe import DataFrame as ConnectDataFrame

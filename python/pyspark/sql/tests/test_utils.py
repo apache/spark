@@ -923,7 +923,7 @@ class UtilsTestsMixin:
         assertDataFrameEqual(df1, df2, checkRowOrder=True)
 
     @unittest.skipIf(not have_pandas or not have_pyarrow, "no pandas or pyarrow dependency")
-    def test_assert_equal_exact_pandas_on_spark_df(self):
+    def test_assert_equal_exact_pandas_on_spark_df_no_order(self):
         import pyspark.pandas as ps
 
         df1 = ps.DataFrame(data=[10, 20, 30], columns=["Numbers"])
@@ -1590,7 +1590,7 @@ class UtilsTestsMixin:
             messageParameters={"error_msg": error_msg},
         )
 
-    def test_list_row_unequal_schema(self):
+    def test_list_row_unequal_schema_2(self):
         from pyspark.sql import Row
 
         df1 = self.spark.createDataFrame(

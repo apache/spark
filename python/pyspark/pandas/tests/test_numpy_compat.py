@@ -198,7 +198,6 @@ class NumPyCompatTests(
 
 
 if __name__ == "__main__":
-    import unittest
     from pyspark.pandas.tests.test_numpy_compat import *  # noqa: F401
 
     try:
