@@ -27,7 +27,7 @@ import org.apache.spark.sql.{AnalysisException, DataFrame, Row, SaveMode}
 import org.apache.spark.sql.QueryTest.withQueryExecutionsCaptured
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, CreateTableAsSelect, LogicalPlan, ReplaceTableAsSelect}
-import org.apache.spark.sql.connector.catalog.{Column, ColumnDefaultValue, DefaultValue, Identifier, InMemoryTableCatalog, RequiresDataFrameWriterV1SaveAsTableOverwriteWriteOption, TableInfo}
+import org.apache.spark.sql.connector.catalog.{Column, ColumnDefaultValue, DefaultValue, Identifier, InMemoryTableCatalog, SupportsV1OverwriteWithSaveAsTable, TableInfo}
 import org.apache.spark.sql.connector.catalog.BasicInMemoryTableCatalog
 import org.apache.spark.sql.connector.catalog.TableChange.{AddColumn, UpdateColumnDefaultValue}
 import org.apache.spark.sql.connector.catalog.TableWritePrivilege
@@ -301,8 +301,8 @@ class DataSourceV2DataFrameSuite
       sparkContext.listenerBus.waitUntilEmpty()
       plan match {
         case o: ReplaceTableAsSelect =>
-          assert(o.writeOptions.get(RequiresDataFrameWriterV1SaveAsTableOverwriteWriteOption
-            .IS_DATAFRAME_WRITER_V1_SAVE_AS_TABLE_OVERWRITE_OPTION_NAME).contains("true"))
+          assert(o.writeOptions.get(SupportsV1OverwriteWithSaveAsTable.OPTION_NAME)
+            .contains("true"))
         case other =>
           fail(s"Expected ReplaceTableAsSelect, got ${other.getClass.getName}: $plan")
       }
@@ -330,8 +330,36 @@ class DataSourceV2DataFrameSuite
       sparkContext.listenerBus.waitUntilEmpty()
       plan match {
         case o: ReplaceTableAsSelect =>
-          assert(!o.writeOptions.contains(RequiresDataFrameWriterV1SaveAsTableOverwriteWriteOption
-            .IS_DATAFRAME_WRITER_V1_SAVE_AS_TABLE_OVERWRITE_OPTION_NAME))
+          assert(!o.writeOptions.contains(SupportsV1OverwriteWithSaveAsTable.OPTION_NAME))
+        case other =>
+          fail(s"Expected ReplaceTableAsSelect, got ${other.getClass.getName}: $plan")
+      }
+    } finally {
+      spark.listenerManager.unregister(listener)
+    }
+  }
+
+  test("RTAS does not add V1 option when addV1OverwriteWithSaveAsTableOption returns false") {
+    var plan: LogicalPlan = null
+    val listener = new QueryExecutionListener {
+      override def onSuccess(funcName: String, qe: QueryExecution, durationNs: Long): Unit = {
+        plan = qe.analyzed
+      }
+      override def onFailure(funcName: String, qe: QueryExecution, exception: Exception): Unit = {}
+    }
+    try {
+      spark.listenerManager.register(listener)
+      val t1 = "testcat.ns1.ns2.tbl3"
+      val providerName =
+        classOf[FakeV2ProviderWithV1SaveAsTableOverwriteWriteOptionDisabled].getName
+
+      val df = Seq((1L, "a"), (2L, "b")).toDF("id", "data")
+      df.write.format(providerName).mode("overwrite").saveAsTable(t1)
+
+      sparkContext.listenerBus.waitUntilEmpty()
+      plan match {
+        case o: ReplaceTableAsSelect =>
+          assert(!o.writeOptions.contains(SupportsV1OverwriteWithSaveAsTable.OPTION_NAME))
         case other =>
           fail(s"Expected ReplaceTableAsSelect, got ${other.getClass.getName}: $plan")
       }

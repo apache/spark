@@ -46,18 +46,26 @@ import org.apache.spark.annotation.Evolving;
  * This allows the data source to distinguish between the two APIs and apply appropriate
  * semantics.
  * <p>
- * The option key used is defined by
- * {@link #IS_DATAFRAME_WRITER_V1_SAVE_AS_TABLE_OVERWRITE_OPTION_NAME}
+ * The option key used is defined by {@link #OPTION_NAME}
  * and the value will be "true" when the write originates from DataFrameWriter V1.
  *
  * @since 4.1.0
  */
 @Evolving
-public interface RequiresDataFrameWriterV1SaveAsTableOverwriteWriteOption extends TableProvider {
+public interface SupportsV1OverwriteWithSaveAsTable extends TableProvider {
   /**
    * The name of the internal write option that indicates the command originated from
    * DataFrameWriter V1 saveAsTable API.
    */
-  String IS_DATAFRAME_WRITER_V1_SAVE_AS_TABLE_OVERWRITE_OPTION_NAME =
-    "__is_data_frame_writer_v1_save_as_table_overwrite";
+  String OPTION_NAME = "__v1_save_as_table_overwrite";
+
+  /**
+   * Returns whether to add the V1 overwrite with saveAsTable option to write operations.
+   * Implementations can override this method to control when the option is added.
+   *
+   * @return true if the option should be added (default), false otherwise
+   */
+  default boolean addV1OverwriteWithSaveAsTableOption() {
+    return true;
+  }
 }

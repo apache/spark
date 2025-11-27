@@ -485,10 +485,9 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) extends sql.DataFram
           external = false,
           constraints = Seq.empty)
         val writeOptions = lookupV2Provider() match {
-          case Some(_: RequiresDataFrameWriterV1SaveAsTableOverwriteWriteOption) =>
-            extraOptions +
-              (RequiresDataFrameWriterV1SaveAsTableOverwriteWriteOption
-                .IS_DATAFRAME_WRITER_V1_SAVE_AS_TABLE_OVERWRITE_OPTION_NAME -> "true")
+          case Some(p: SupportsV1OverwriteWithSaveAsTable)
+              if p.addV1OverwriteWithSaveAsTableOption() =>
+            extraOptions + (SupportsV1OverwriteWithSaveAsTable.OPTION_NAME -> "true")
           case _ =>
             extraOptions
         }
