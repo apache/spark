@@ -573,13 +573,9 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
       } else {
         None
       }
-      if (resolved.isEmpty) {
-        // The targe plan node is found, but cannot be resolved
-        // Delay the analysis or failure.
-        (None, true)
-      } else {
-        (resolved.map(r => (r, currentDepth)), true)
-      }
+      // The targe plan node is found, but might fail to resolve.
+      // In this case, return None to delay the analysis or failure.
+      (resolved.map(r => (r, currentDepth)), true)
     } else {
       val children = p match {
         // treat Union node as the leaf node
