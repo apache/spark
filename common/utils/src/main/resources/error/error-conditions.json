@@ -5100,7 +5100,7 @@
     "sqlState" : "38000"
   },
   "PYTHON_EXCEPTION" : {
-    "message": [
+    "message" : [
       "Exception raised from Python worker: <msg>"
     ],
     "sqlState" : "38000"
