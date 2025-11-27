@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.catalyst.util;
 
-import org.apache.spark.SparkIllegalArgumentException;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -54,8 +53,9 @@ public class WkbReaderWriterTest {
 
   /**
    * Test helper to verify WKB round-trip (write and read)
+   * @return the parsed geometry for further assertions
    */
-  private void checkRoundTrip(Geometry geometry, String expectedWkbHexLittle,
+  private Geometry checkRoundTrip(Geometry geometry, String expectedWkbHexLittle,
       String expectedWkbHexBig) {
     // Test with little endian
     WkbWriter writerLittle = new WkbWriter(false);
@@ -81,6 +81,8 @@ public class WkbReaderWriterTest {
         "Geometry type mismatch after parsing little endian");
     Assertions.assertEquals(geometry.getTypeId(), parsedFromBig.getTypeId(),
         "Geometry type mismatch after parsing big endian");
+
+    return parsedFromLittle;
   }
 
   /**
@@ -262,15 +264,13 @@ public class WkbReaderWriterTest {
     Assertions.assertFalse(lineString.isEmpty(), "LineString should not be empty");
     Assertions.assertEquals(3, lineString.getNumPoints(), "Number of points mismatch");
 
-    // Note: Expected WKB values would need to be calculated or taken from test data
-    // For now, we just test the round-trip
-    WkbWriter writer = new WkbWriter();
-    byte[] wkb = writer.write(lineString);
+    // checkstyle.off: LineLength
+    Geometry parsed = checkRoundTrip(lineString,
+        "01020000000300000000000000000000000000000000000000000000000000f03f000000000000f03f00000000000000400000000000000040000000000000000000000000000000",
+        "000000000200000003000000000000000000000000000000003ff00000000000003ff000000000000040000000000000004000000000000000000000000000000000000000000000");
+    // checkstyle.on: LineLength
 
-    WkbReader reader = new WkbReader();
-    Geometry parsed = reader.read(wkb, 0);
-
-    Assertions.assertTrue(parsed instanceof LineString, "Parsed geometry should be LineString");
+    Assertions.assertInstanceOf(LineString.class, parsed, "Parsed geometry should be LineString");
     LineString parsedLS = (LineString) parsed;
     Assertions.assertEquals(3, parsedLS.getNumPoints(), "Number of points should match");
   }
@@ -296,14 +296,13 @@ public class WkbReaderWriterTest {
     Assertions.assertEquals(1, polygon.getRings().size(), "Should have one ring");
     Assertions.assertTrue(ring.isClosed(), "Ring should be closed");
 
-    // Test round-trip
-    WkbWriter writer = new WkbWriter();
-    byte[] wkb = writer.write(polygon);
+    // checkstyle.off: LineLength
+    Geometry parsed = checkRoundTrip(polygon,
+        "010300000001000000050000000000000000000000000000000000000000000000000010400000000000000000000000000000104000000000000010400000000000000000000000000000104000000000000000000000000000000000",
+        "000000000300000001000000050000000000000000000000000000000040100000000000000000000000000000401000000000000040100000000000000000000000000000401000000000000000000000000000000000000000000000");
+    // checkstyle.on: LineLength
 
-    WkbReader reader = new WkbReader();
-    Geometry parsed = reader.read(wkb, 0);
-
-    Assertions.assertTrue(parsed instanceof Polygon, "Parsed geometry should be Polygon");
+    Assertions.assertInstanceOf(Polygon.class, parsed, "Parsed geometry should be Polygon");
     Polygon parsedPoly = (Polygon) parsed;
     Assertions.assertEquals(1, parsedPoly.getRings().size(), "Number of rings should match");
   }
@@ -323,14 +322,13 @@ public class WkbReaderWriterTest {
     Assertions.assertFalse(multiPoint.isEmpty(), "MultiPoint should not be empty");
     Assertions.assertEquals(2, multiPoint.getNumGeometries(), "Number of points mismatch");
 
-    // Test round-trip
-    WkbWriter writer = new WkbWriter();
-    byte[] wkb = writer.write(multiPoint);
+    // checkstyle.off: LineLength
+    Geometry parsed = checkRoundTrip(multiPoint,
+        "0104000000020000000101000000000000000000000000000000000000000101000000000000000000f03f000000000000f03f",
+        "00000000040000000200000000010000000000000000000000000000000000000000013ff00000000000003ff0000000000000");
+    // checkstyle.on: LineLength
 
-    WkbReader reader = new WkbReader();
-    Geometry parsed = reader.read(wkb, 0);
-
-    Assertions.assertTrue(parsed instanceof MultiPoint, "Parsed geometry should be MultiPoint");
+    Assertions.assertInstanceOf(MultiPoint.class, parsed, "Parsed geometry should be MultiPoint");
     MultiPoint parsedMP = (MultiPoint) parsed;
     Assertions.assertEquals(2, parsedMP.getNumGeometries(), "Number of points should match");
   }
@@ -355,15 +353,13 @@ public class WkbReaderWriterTest {
     Assertions.assertFalse(collection.isEmpty(), "GeometryCollection should not be empty");
     Assertions.assertEquals(2, collection.getNumGeometries(), "Number of geometries mismatch");
 
-    // Test round-trip
-    WkbWriter writer = new WkbWriter();
-    byte[] wkb = writer.write(collection);
+    // checkstyle.off: LineLength
+    Geometry parsed = checkRoundTrip(collection,
+        "0107000000020000000101000000000000000000f03f000000000000004001020000000200000000000000000000000000000000000000000000000000f03f000000000000f03f00000000000000000000",
+        "00000000070000000200000000013ff00000000000004000000000000000000000000200000002000000000000000000000000000000003ff00000000000003ff000000000000000000000000000000000");
+    // checkstyle.on: LineLength
 
-    WkbReader reader = new WkbReader();
-    Geometry parsed = reader.read(wkb, 0);
-
-    Assertions.assertTrue(parsed instanceof GeometryCollection,
-        "Parsed geometry should be GeometryCollection");
+    Assertions.assertInstanceOf(GeometryCollection.class, parsed, "Parsed geometry should be GeometryCollection");
     GeometryCollection parsedGC = (GeometryCollection) parsed;
     Assertions.assertEquals(2, parsedGC.getNumGeometries(), "Number of geometries should match");
   }
