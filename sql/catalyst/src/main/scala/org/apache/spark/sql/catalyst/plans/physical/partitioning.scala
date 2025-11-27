@@ -189,7 +189,8 @@ case class OrderedDistribution(ordering: Seq[SortOrder]) extends Distribution {
  * Represents data where tuples are broadcasted to every node. It is quite common that the
  * entire set of tuples is transformed into different data structure.
  */
-case class BroadcastDistribution(mode: BroadcastMode) extends Distribution {
+case class
+BroadcastDistribution(mode: BroadcastMode) extends Distribution {
   override def requiredNumPartitions: Option[Int] = Some(1)
 
   override def createPartitioning(numPartitions: Int): Partitioning = {
@@ -620,6 +621,54 @@ case class BroadcastPartitioning(mode: BroadcastMode) extends Partitioning {
     case _ => false
   }
 }
+
+/**
+ * A partitioning that always satisfies any distribution.
+ * This is useful when you want to ensure that a partitioning will always satisfy a distribution
+ * regardless of the distribution's requirements.
+ */
+case class PassThroughPartitioning(childPartitioning: Partitioning)
+    extends Expression with Partitioning with Unevaluable {
+  /**
+   * Always returns true, satisfying any distribution.
+   */
+  override def satisfies0(required: Distribution): Boolean = childPartitioning.satisfies(required)
+
+  override def createShuffleSpec(distribution: ClusteredDistribution): ShuffleSpec = {
+    childPartitioning.createShuffleSpec(distribution)
+  }
+
+  /** Returns the number of partitions that the data is split across */
+  override val numPartitions: Int = childPartitioning.numPartitions
+
+  // Expression interface implementation
+  override def children: Seq[Expression] = childPartitioning match {
+    case e: Expression => e.children
+    case _ => Nil
+  }
+
+  override def nullable: Boolean = false
+  override def dataType: DataType = IntegerType
+
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[Expression]): PassThroughPartitioning = {
+    childPartitioning match {
+      case e: Expression =>
+        copy(childPartitioning = e.withNewChildren(newChildren).asInstanceOf[Partitioning])
+      case _ =>
+        this
+    }
+  }
+
+  override lazy val canonicalized: Expression = {
+    val canonicalizedChild = childPartitioning match {
+      case e: Expression => e.canonicalized.asInstanceOf[Partitioning]
+      case other => other
+    }
+    copy(childPartitioning = canonicalizedChild)
+  }
+}
+
 
 /**
  * This is used in the scenario where an operator has multiple children (e.g., join) and one or more

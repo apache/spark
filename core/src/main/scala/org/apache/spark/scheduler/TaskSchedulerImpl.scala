@@ -213,6 +213,8 @@ private[spark] class TaskSchedulerImpl(
       schedulingMode match {
         case SchedulingMode.FIFO =>
           new FIFOSchedulableBuilder(rootPool)
+        case SchedulingMode.WEIGHTED_FIFO =>
+          new FIFOSchedulableBuilder(rootPool)
         case SchedulingMode.FAIR =>
           new FairSchedulableBuilder(rootPool, sc)
         case _ =>
