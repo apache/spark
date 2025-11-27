@@ -379,10 +379,7 @@ final class ShuffleExternalSorter extends MemoryConsumer implements ShuffleCheck
         array = allocateArray(used / 8 * 2);
       } catch (TooLargePageException e) {
         // The pointer array is too big to fix in a single page, spill.
-        long startNs = System.nanoTime();
         spill();
-        taskContext.taskMetrics().incSpillTime(
-            TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startNs));
         return;
       } catch (SparkOutOfMemoryError e) {
         // should have trigger spilling
@@ -432,10 +429,7 @@ final class ShuffleExternalSorter extends MemoryConsumer implements ShuffleCheck
       logger.info("Spilling data because number of spilledRecords ({}) crossed the threshold {}",
         MDC.of(LogKeys.NUM_ELEMENTS_SPILL_RECORDS, inMemSorter.numRecords()),
         MDC.of(LogKeys.NUM_ELEMENTS_SPILL_THRESHOLD, numElementsForSpillThreshold));
-      long startNs = System.nanoTime();
       spill();
-      taskContext.taskMetrics().incSpillTime(
-          TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startNs));
     }
 
     // TODO: Ideally we only need to check the spill threshold when new memory needs to be
@@ -447,10 +441,7 @@ final class ShuffleExternalSorter extends MemoryConsumer implements ShuffleCheck
       logger.info("Spilling data because memory usage ({}) crossed the threshold {}",
         MDC.of(LogKeys.SPILL_RECORDS_SIZE, usedMemory),
         MDC.of(LogKeys.SPILL_RECORDS_SIZE_THRESHOLD, sizeInBytesForSpillThreshold));
-      long startNs = System.nanoTime();
       spill();
-      taskContext.taskMetrics().incSpillTime(
-          TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startNs));
     }
 
     growPointerArrayIfNecessary();

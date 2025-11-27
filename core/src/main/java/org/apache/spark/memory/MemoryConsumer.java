@@ -18,8 +18,11 @@
 package org.apache.spark.memory;
 
 import java.io.IOException;
+import java.util.Optional;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 
+import org.apache.spark.TaskContext;
 import org.apache.spark.errors.SparkCoreErrors;
 import org.apache.spark.unsafe.array.LongArray;
 import org.apache.spark.unsafe.memory.MemoryBlock;
@@ -64,7 +67,17 @@ public abstract class MemoryConsumer {
    * Force spill during building.
    */
   public void spill() throws IOException {
-    spill(Long.MAX_VALUE, this);
+    spillWithTiming(Long.MAX_VALUE, this);
+  }
+
+  public long spillWithTiming(long size, MemoryConsumer trigger) throws IOException {
+    long startNs = System.nanoTime();
+    long released = spill(size, trigger);
+    Optional.ofNullable(TaskContext.get()).ifPresent(taskContext ->
+        taskContext.taskMetrics().incSpillTime(
+            TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startNs))
+    );
+    return released;
   }
 
   /**

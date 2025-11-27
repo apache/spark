@@ -275,10 +275,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
   @VisibleForTesting
   void forceSorterToSpill() throws IOException {
     assert (sorter != null);
-    long startNs = System.nanoTime();
     sorter.spill();
-    taskContext.taskMetrics().incSpillTime(
-        TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startNs));
   }
 
   /**

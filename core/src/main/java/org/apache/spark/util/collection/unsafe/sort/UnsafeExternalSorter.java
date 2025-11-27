@@ -24,7 +24,6 @@ import java.io.IOException;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Queue;
-import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -123,10 +122,7 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
       serializerManager, taskContext, recordComparatorSupplier, prefixComparator, initialSize,
         pageSizeBytes, numElementsForSpillThreshold, sizeInBytesForSpillThreshold,
         inMemorySorter, false /* ignored */);
-    long startNs = System.nanoTime();
     sorter.spill(Long.MAX_VALUE, sorter);
-    taskContext.taskMetrics().incSpillTime(
-        TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startNs));
     taskContext.taskMetrics().incMemoryBytesSpilled(existingMemoryConsumption);
     sorter.totalSpillBytes += existingMemoryConsumption;
     // The external sorter will be used to insert records, in-memory sorter is not needed.
@@ -409,10 +405,7 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
         array = allocateArray(used / 8 * 2);
       } catch (TooLargePageException e) {
         // The pointer array is too big to fix in a single page, spill.
-        long startNs = System.nanoTime();
         spill();
-        taskContext.taskMetrics().incSpillTime(
-            TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startNs));
       } catch (SparkOutOfMemoryError e) {
         if (inMemSorter.numRecords() > 0) {
           logger.error("Unable to grow the pointer array");
@@ -499,10 +492,7 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
       logger.info("Spilling data because number of spilledRecords ({}) crossed the threshold {}",
         MDC.of(LogKeys.NUM_ELEMENTS_SPILL_RECORDS, inMemSorter.numRecords()),
         MDC.of(LogKeys.NUM_ELEMENTS_SPILL_THRESHOLD, numElementsForSpillThreshold));
-       long startNs = System.nanoTime();
       spill();
-      taskContext.taskMetrics().incSpillTime(
-          TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startNs));
     }
 
     // TODO: Ideally we only need to check the spill threshold when new memory needs to be
@@ -514,10 +504,7 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
       logger.info("Spilling data because memory usage ({}) crossed the threshold {}",
         MDC.of(LogKeys.SPILL_RECORDS_SIZE, usedMemory),
         MDC.of(LogKeys.SPILL_RECORDS_SIZE_THRESHOLD, sizeInBytesForSpillThreshold));
-      long startNs = System.nanoTime();
       spill();
-      taskContext.taskMetrics().incSpillTime(
-          TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startNs));
     }
 
     final int uaoSize = UnsafeAlignedOffset.getUaoSize();
