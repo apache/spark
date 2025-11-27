@@ -1338,6 +1338,5 @@ private[spark] object TaskSchedulerImpl {
       None
     }
   }
-
-
+  
 }
