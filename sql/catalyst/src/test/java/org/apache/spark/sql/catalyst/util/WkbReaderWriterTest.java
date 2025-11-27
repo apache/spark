@@ -58,14 +58,14 @@ public class WkbReaderWriterTest {
   private Geometry checkRoundTrip(Geometry geometry, String expectedWkbHexLittle,
       String expectedWkbHexBig) {
     // Test with little endian
-    WkbWriter writerLittle = new WkbWriter(false);
+    WkbWriter writerLittle = new WkbWriter();
     byte[] wkbLittle = writerLittle.write(geometry, ByteOrder.LITTLE_ENDIAN);
     String actualHexLittle = bytesToHex(wkbLittle);
 
     Assertions.assertEquals(expectedWkbHexLittle, actualHexLittle, "WKB little endian mismatch");
 
     // Test with big endian
-    WkbWriter writerBig = new WkbWriter(false);
+    WkbWriter writerBig = new WkbWriter();
     byte[] wkbBig = writerBig.write(geometry, ByteOrder.BIG_ENDIAN);
     String actualHexBig = bytesToHex(wkbBig);
 
@@ -374,8 +374,7 @@ public class WkbReaderWriterTest {
 
     Assertions.assertEquals(4326, point.srid(), "SRID mismatch");
 
-    // SRID is not written in standard WKB, only in EWKB
-    WkbWriter writer = new WkbWriter(false);
+    WkbWriter writer = new WkbWriter();
     byte[] wkb = writer.write(point);
 
     // When reading back without SRID info, we need to provide it
@@ -383,26 +382,6 @@ public class WkbReaderWriterTest {
     Geometry parsed = reader.read(wkb, 4326);
 
     Assertions.assertEquals(4326, parsed.srid(), "SRID should be preserved");
-  }
-
-  /**
-   * Test EWKB with SRID
-   */
-  @Test
-  public void testEwkbWithSrid() {
-    double[] coords = {1.0, 2.0};
-    Point point = new Point(coords, 4326);
-
-    // Write EWKB
-    WkbWriter writer = new WkbWriter(true);
-    byte[] ewkb = writer.write(point);
-
-    // Read EWKB
-    WkbReader reader = new WkbReader(true, 1);
-    Geometry parsed = reader.read(ewkb);
-
-    Assertions.assertEquals(4326, parsed.srid(), "SRID should be embedded in EWKB");
-    Assertions.assertTrue(parsed instanceof Point, "Parsed geometry should be Point");
   }
 }
 

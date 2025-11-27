@@ -149,8 +149,8 @@ public class WkbErrorHandlingTest {
 
   @Test
   public void testNullByteArray() {
-    Assertions.assertThrows(NullPointerException.class, () -> Geometry.fromWkb(null),
-        "Should throw NullPointerException for null byte array");
+    Assertions.assertThrows(WkbParseException.class, () -> Geometry.fromWkb(null),
+        "Should throw WKBParseException for null byte array");
   }
 
   @Test
