@@ -310,8 +310,7 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
 
   test("SortAggregate metrics") {
     // Force use SortAggregateExec instead of HashAggregateExec
-    withSQLConf("spark.sql.test.forceApplySortAggregate" -> "true",
-      SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
+    withSQLConf("spark.sql.test.forceApplySortAggregate" -> "true") {
       // Assume the execution plan is
       // -> SortAggregate(nodeId = 0)
       //     -> Sort(nodeId = 1)
