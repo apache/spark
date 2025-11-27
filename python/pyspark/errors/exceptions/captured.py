@@ -236,7 +236,12 @@ def _convert_exception(e: "Py4JJavaError") -> CapturedException:
         return SparkNoSuchElementException(origin=e)
     elif is_instance_of(gw, e, "org.apache.spark.api.python.PythonException"):
         return PythonException(origin=e)
-    return UnknownException(desc=e.toString(), stackTrace=getattr(jvm, "org.apache.spark.util.Utils").exceptionString(e), cause=e.getCause())
+    return UnknownException(
+        desc=e.toString(),
+        stackTrace=getattr(jvm, "org.apache.spark.util.Utils").exceptionString(e),
+        cause=e.getCause(),
+    )
+
 
 def capture_sql_exception(f: Callable[..., Any]) -> Callable[..., Any]:
     def deco(*a: Any, **kw: Any) -> Any:
