@@ -90,6 +90,12 @@ object Cast extends QueryErrorsBase {
    *   - String <=> Binary
    */
   def canAnsiCast(from: DataType, to: DataType): Boolean = (from, to) match {
+    case (fromType, toType) if !SQLConf.get.geospatialEnabled &&
+        (isGeoSpatialType(fromType) || isGeoSpatialType(toType)) =>
+      throw new org.apache.spark.sql.AnalysisException(
+        errorClass = "UNSUPPORTED_FEATURE.GEOSPATIAL_DISABLED",
+        messageParameters = scala.collection.immutable.Map.empty)
+
     case (fromType, toType) if fromType == toType => true
 
     case (NullType, _) => true
@@ -218,6 +224,12 @@ object Cast extends QueryErrorsBase {
    * Returns true iff we can cast `from` type to `to` type.
    */
   def canCast(from: DataType, to: DataType): Boolean = (from, to) match {
+    case (fromType, toType) if !SQLConf.get.geospatialEnabled &&
+        (isGeoSpatialType(fromType) || isGeoSpatialType(toType)) =>
+      throw new org.apache.spark.sql.AnalysisException(
+        errorClass = "UNSUPPORTED_FEATURE.GEOSPATIAL_DISABLED",
+        messageParameters = scala.collection.immutable.Map.empty)
+
     case (fromType, toType) if fromType == toType => true
 
     case (NullType, _) => true
@@ -347,6 +359,31 @@ object Cast extends QueryErrorsBase {
    * up-cast.
    */
   def canUpCast(from: DataType, to: DataType): Boolean = UpCastRule.canUpCast(from, to)
+
+  /**
+   * Returns true iff it is safe to provide a default value of `from` type typically defined in the
+   * data source metadata to the `to` type typically in the read schema of a query.
+   */
+  def canAssignDefaultValue(from: DataType, to: DataType): Boolean = {
+    def isVariantStruct(st: StructType): Boolean = {
+      st.fields.length > 0 && st.fields.forall(_.metadata.contains("__VARIANT_METADATA_KEY"))
+    }
+    (from, to) match {
+      case (s1: StructType, s2: StructType) =>
+        s1.length == s2.length && s1.fields.zip(s2.fields).forall {
+          case (f1, f2) => resolvableNullability(f1.nullable, f2.nullable) &&
+            canAssignDefaultValue(f1.dataType, f2.dataType)
+        }
+      case (ArrayType(fromType, fn), ArrayType(toType, tn)) =>
+        resolvableNullability(fn, tn) && canAssignDefaultValue(fromType, toType)
+      case (MapType(fromKey, fromValue, fn), MapType(toKey, toValue, tn)) =>
+        resolvableNullability(fn, tn) && canAssignDefaultValue(fromKey, toKey) &&
+          canAssignDefaultValue(fromValue, toValue)
+      // A VARIANT field can be read as StructType due to shredding.
+      case (VariantType, s: StructType) => isVariantStruct(s)
+      case _ => canUpCast(from, to)
+    }
+  }
 
   /**
    * Returns true iff we can cast the `from` type to `to` type as per the ANSI SQL.

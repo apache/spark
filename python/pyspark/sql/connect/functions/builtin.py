@@ -3945,6 +3945,48 @@ def make_time(hour: "ColumnOrName", minute: "ColumnOrName", second: "ColumnOrNam
 make_time.__doc__ = pysparkfuncs.make_time.__doc__
 
 
+def time_from_seconds(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("time_from_seconds", col)
+
+
+time_from_seconds.__doc__ = pysparkfuncs.time_from_seconds.__doc__
+
+
+def time_from_millis(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("time_from_millis", col)
+
+
+time_from_millis.__doc__ = pysparkfuncs.time_from_millis.__doc__
+
+
+def time_from_micros(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("time_from_micros", col)
+
+
+time_from_micros.__doc__ = pysparkfuncs.time_from_micros.__doc__
+
+
+def time_to_seconds(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("time_to_seconds", col)
+
+
+time_to_seconds.__doc__ = pysparkfuncs.time_to_seconds.__doc__
+
+
+def time_to_millis(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("time_to_millis", col)
+
+
+time_to_millis.__doc__ = pysparkfuncs.time_to_millis.__doc__
+
+
+def time_to_micros(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("time_to_micros", col)
+
+
+time_to_micros.__doc__ = pysparkfuncs.time_to_micros.__doc__
+
+
 @overload
 def make_timestamp(
     years: "ColumnOrName",
@@ -4967,6 +5009,15 @@ def st_geomfromwkb(wkb: "ColumnOrName") -> Column:
 
 
 st_geomfromwkb.__doc__ = pysparkfuncs.st_geomfromwkb.__doc__
+
+
+def st_setsrid(geo: "ColumnOrName", srid: Union["ColumnOrName", int]) -> Column:
+    srid = _enum_to_value(srid)
+    srid = lit(srid) if isinstance(srid, int) else srid
+    return _invoke_function_over_columns("st_setsrid", geo, srid)
+
+
+st_setsrid.__doc__ = pysparkfuncs.st_setsrid.__doc__
 
 
 def st_srid(geo: "ColumnOrName") -> Column:

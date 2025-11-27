@@ -2030,132 +2030,133 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
 
   test("corrupted view metadata: mismatch between viewQueryColumnNames and schema") {
     withSQLConf("spark.sql.viewSchemaBinding.enabled" -> "true") {
-      val catalog = new SessionCatalog(newBasicCatalog())
-      val db = "test_db"
-      catalog.createDatabase(newDb(db), ignoreIfExists = false)
+      withBasicCatalog { catalog =>
+        val db = "test_db"
+        catalog.createDatabase(newDb(db), ignoreIfExists = false)
 
-      // First create a base table for the view to reference
-      val baseTable = CatalogTable(
-        identifier = TableIdentifier("base_table", Some(db)),
+        // First create a base table for the view to reference
+        val baseTable = CatalogTable(
+          identifier = TableIdentifier("base_table", Some(db)),
+          tableType = CatalogTableType.MANAGED,
+          storage = CatalogStorageFormat.empty,
+          schema = new StructType()
+            .add("id", IntegerType)
+            .add("name", StringType)
+            .add("value", DoubleType)
+        )
+        catalog.createTable(baseTable, ignoreIfExists = false)
+
+        // Create a view with corrupted metadata where viewQueryColumnNames length
+        // doesn't match schema length
+        // We need to set the properties to define viewQueryColumnNames
+        val properties = Map(
+          "view.query.out.numCols" -> "2",
+          "view.query.out.col.0" -> "id",
+          "view.query.out.col.1" -> "name",
+          "view.schema.mode" -> "binding"  // Ensure it's not SchemaEvolution
+        )
+        val corruptedView = CatalogTable(
+          identifier = TableIdentifier("corrupted_view", Some(db)),
+          tableType = CatalogTableType.VIEW,
+          storage = CatalogStorageFormat.empty,
+          schema = new StructType()
+            .add("id", IntegerType)
+            .add("name", StringType)
+            .add("value", DoubleType),
+          viewText = Some("SELECT * FROM test_db.base_table"),
+          provider = Some("spark"),  // Ensure it's not Hive-created
+          properties = properties  // Only 2 query column names but schema has 3 columns
+        )
+
+        catalog.createTable(corruptedView, ignoreIfExists = false)
+
+        // Verify the view was created with corrupted metadata
+        val retrievedView = catalog.getTableMetadata(TableIdentifier("corrupted_view", Some(db)))
+        assert(retrievedView.viewQueryColumnNames.length == 2)
+        assert(retrievedView.schema.length == 3)
+
+        // Attempting to look up the view should throw an assertion error with detailed message
+        val exception = intercept[AssertionError] {
+          catalog.lookupRelation(TableIdentifier("corrupted_view", Some(db)))
+        }
+
+        // The expected message pattern allows for optional catalog prefix
+        val expectedPattern =
+          "assertion failed: Corrupted view metadata detected for view " +
+          "(\\`\\w+\\`\\.)?\\`test_db\\`\\.\\`corrupted_view\\`\\. " +
+          "The number of view query column names 2 " +
+          "does not match the number of columns in the view schema 3\\. " +
+          "View query column names: \\[id, name\\], " +
+          "View schema columns: \\[id, name, value\\]\\. " +
+          "This indicates corrupted view metadata that needs to be repaired\\."
+        assert(exception.getMessage.matches(expectedPattern))
+      }
+    }
+  }
+
+  test("UnresolvedCatalogRelation requires database in identifier") {
+    withEmptyCatalog { catalog =>
+      val db = "test_db"
+      catalog.createDatabase(newDb(db), ignoreIfExists = true)
+
+      // Create a table with database
+      val validTable = CatalogTable(
+        identifier = TableIdentifier("test_table", Some(db)),
+        tableType = CatalogTableType.MANAGED,
+        storage = CatalogStorageFormat.empty,
+        schema = new StructType().add("id", IntegerType)
+      )
+      catalog.createTable(validTable, ignoreIfExists = false)
+
+      // Try to create UnresolvedCatalogRelation without database - should fail
+      val tableMetaWithoutDb = validTable.copy(
+        identifier = TableIdentifier("test_table", None)
+      )
+
+      val exception = intercept[AssertionError] {
+        UnresolvedCatalogRelation(tableMetaWithoutDb)
+      }
+
+      val expectedMessage =
+        "assertion failed: Table identifier `test_table` is missing database name. " +
+        "UnresolvedCatalogRelation requires a fully qualified table identifier with database."
+      assert(exception.getMessage === expectedMessage)
+    }
+  }
+
+  test("HiveTableRelation requires database in identifier") {
+    withEmptyCatalog { catalog =>
+      val db = "test_db"
+      catalog.createDatabase(newDb(db), ignoreIfExists = true)
+
+      // Create a table with database
+      val validTable = CatalogTable(
+        identifier = TableIdentifier("test_table", Some(db)),
         tableType = CatalogTableType.MANAGED,
         storage = CatalogStorageFormat.empty,
         schema = new StructType()
           .add("id", IntegerType)
           .add("name", StringType)
-          .add("value", DoubleType)
-      )
-      catalog.createTable(baseTable, ignoreIfExists = false)
-
-      // Create a view with corrupted metadata where viewQueryColumnNames length
-      // doesn't match schema length
-      // We need to set the properties to define viewQueryColumnNames
-      val properties = Map(
-        "view.query.out.numCols" -> "2",
-        "view.query.out.col.0" -> "id",
-        "view.query.out.col.1" -> "name",
-        "view.schema.mode" -> "binding"  // Ensure it's not SchemaEvolution
-      )
-      val corruptedView = CatalogTable(
-        identifier = TableIdentifier("corrupted_view", Some(db)),
-        tableType = CatalogTableType.VIEW,
-        storage = CatalogStorageFormat.empty,
-        schema = new StructType()
-          .add("id", IntegerType)
-          .add("name", StringType)
-          .add("value", DoubleType),
-        viewText = Some("SELECT * FROM test_db.base_table"),
-        provider = Some("spark"),  // Ensure it's not Hive-created
-        properties = properties  // Only 2 query column names but schema has 3 columns
       )
 
-      catalog.createTable(corruptedView, ignoreIfExists = false)
+      // Try to create HiveTableRelation without database - should fail
+      val tableMetaWithoutDb = validTable.copy(
+        identifier = TableIdentifier("test_table", None)
+      )
 
-      // Verify the view was created with corrupted metadata
-      val retrievedView = catalog.getTableMetadata(TableIdentifier("corrupted_view", Some(db)))
-      assert(retrievedView.viewQueryColumnNames.length == 2)
-      assert(retrievedView.schema.length == 3)
-
-      // Attempting to look up the view should throw an assertion error with detailed message
       val exception = intercept[AssertionError] {
-        catalog.lookupRelation(TableIdentifier("corrupted_view", Some(db)))
+        HiveTableRelation(
+          tableMetaWithoutDb,
+          Seq(AttributeReference("id", IntegerType)()),
+          Seq.empty
+        )
       }
 
-      // The expected message pattern allows for optional catalog prefix
-      val expectedPattern =
-        "assertion failed: Corrupted view metadata detected for view " +
-        "(\\`\\w+\\`\\.)?\\`test_db\\`\\.\\`corrupted_view\\`\\. " +
-        "The number of view query column names 2 " +
-        "does not match the number of columns in the view schema 3\\. " +
-        "View query column names: \\[id, name\\], " +
-        "View schema columns: \\[id, name, value\\]\\. " +
-        "This indicates corrupted view metadata that needs to be repaired\\."
-      assert(exception.getMessage.matches(expectedPattern))
+      val expectedMessage =
+        "assertion failed: Table identifier `test_table` is missing database name. " +
+        "HiveTableRelation requires a fully qualified table identifier with database."
+      assert(exception.getMessage === expectedMessage)
     }
-  }
-
-  test("UnresolvedCatalogRelation requires database in identifier") {
-    val catalog = new SessionCatalog(newEmptyCatalog())
-    catalog.createDatabase(newDb("default"), ignoreIfExists = true)
-    val db = "test_db"
-    catalog.createDatabase(newDb(db), ignoreIfExists = true)
-
-    // Create a table with database
-    val validTable = CatalogTable(
-      identifier = TableIdentifier("test_table", Some(db)),
-      tableType = CatalogTableType.MANAGED,
-      storage = CatalogStorageFormat.empty,
-      schema = new StructType().add("id", IntegerType)
-    )
-    catalog.createTable(validTable, ignoreIfExists = false)
-
-    // Try to create UnresolvedCatalogRelation without database - should fail
-    val tableMetaWithoutDb = validTable.copy(
-      identifier = TableIdentifier("test_table", None)
-    )
-
-    val exception = intercept[AssertionError] {
-      UnresolvedCatalogRelation(tableMetaWithoutDb)
-    }
-
-    val expectedMessage =
-      "assertion failed: Table identifier `test_table` is missing database name. " +
-      "UnresolvedCatalogRelation requires a fully qualified table identifier with database."
-    assert(exception.getMessage === expectedMessage)
-  }
-
-  test("HiveTableRelation requires database in identifier") {
-    val catalog = new SessionCatalog(newEmptyCatalog())
-    catalog.createDatabase(newDb("default"), ignoreIfExists = true)
-    val db = "test_db"
-    catalog.createDatabase(newDb(db), ignoreIfExists = true)
-
-    // Create a table with database
-    val validTable = CatalogTable(
-      identifier = TableIdentifier("test_table", Some(db)),
-      tableType = CatalogTableType.MANAGED,
-      storage = CatalogStorageFormat.empty,
-      schema = new StructType()
-        .add("id", IntegerType)
-        .add("name", StringType)
-    )
-
-    // Try to create HiveTableRelation without database - should fail
-    val tableMetaWithoutDb = validTable.copy(
-      identifier = TableIdentifier("test_table", None)
-    )
-
-    val exception = intercept[AssertionError] {
-      HiveTableRelation(
-        tableMetaWithoutDb,
-        Seq(AttributeReference("id", IntegerType)()),
-        Seq.empty
-      )
-    }
-
-    val expectedMessage =
-      "assertion failed: Table identifier `test_table` is missing database name. " +
-      "HiveTableRelation requires a fully qualified table identifier with database."
-    assert(exception.getMessage === expectedMessage)
   }
 
   test("SQLFunction requires either exprText or queryText") {

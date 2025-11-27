@@ -114,7 +114,7 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest
               "SnapshotLastUploaded.partition_0_default", "rocksdbChangeLogWriterCommitLatencyMs",
               "rocksdbSaveZipFilesLatencyMs", "rocksdbLoadFromSnapshotLatencyMs",
               "rocksdbLoadLatencyMs", "rocksdbReplayChangeLogLatencyMs",
-              "rocksdbNumReplayChangelogFiles"))
+              "rocksdbNumReplayChangelogFiles", "rocksdbForceSnapshotCount"))
             assert(stateOperatorMetrics.customMetrics.get("rocksdbNumSnapshotsAutoRepaired") == 0,
               "Should be 0 since we didn't repair any snapshot")
           }

@@ -3607,6 +3607,94 @@ class XmlSuite
       checkAnswer(df, spark.range(2018, 2025).toDF("value"))
     }
   }
+
+  test("TIME type roundtrip with XML datasource - representative precisions") {
+    import java.time.LocalTime
+
+    def testTimesForPrecision(p: Int): Seq[LocalTime] = {
+      p match {
+        case 0 => Seq(LocalTime.of(0, 0, 0), LocalTime.of(14, 30, 45),
+          LocalTime.of(23, 59, 59))
+        case 3 => Seq(LocalTime.of(0, 0, 0, 0), LocalTime.of(14, 30, 45, 123000000),
+          LocalTime.of(23, 59, 59, 999000000))
+        case 6 => Seq(LocalTime.of(0, 0, 0, 0), LocalTime.of(14, 30, 45, 123456000),
+          LocalTime.of(23, 59, 59, 999999000))
+      }
+    }
+
+    withTempDir { dir =>
+      Seq(0, 3, 6).foreach { precision =>
+        val schema = new StructType().add("time", TimeType(precision))
+        val timeData = testTimesForPrecision(precision)
+        val df = timeData.toDF("time").select($"time".cast(TimeType(precision)))
+
+        val outputPath = s"${dir.getCanonicalPath}/time_p$precision.xml"
+        df.write.mode("overwrite").option("rowTag", "record").xml(outputPath)
+
+        val readBack = spark.read.schema(schema).option("rowTag", "record").xml(outputPath)
+        assert(readBack.schema === schema, s"Schema mismatch for precision $precision")
+        checkAnswer(readBack, df)
+      }
+
+      // Test custom format
+      val customTime = LocalTime.of(14, 30, 45, 123456000)
+      val customSchema = new StructType().add("time", TimeType(6))
+      val customDF = Seq(customTime).toDF("time").select($"time".cast(TimeType(6)))
+      val customPath = s"${dir.getCanonicalPath}/time_custom.xml"
+
+      customDF.write.mode("overwrite")
+        .option("rowTag", "record")
+        .option("timeFormat", "HH-mm-ss.SSSSSS")
+        .xml(customPath)
+
+      val readBackCustom = spark.read
+        .schema(customSchema)
+        .option("rowTag", "record")
+        .option("timeFormat", "HH-mm-ss.SSSSSS")
+        .xml(customPath)
+
+      assert(readBackCustom.schema === customSchema, "Custom format schema mismatch")
+      checkAnswer(readBackCustom, customDF)
+    }
+  }
+
+  test("validate XML Options") {
+    assert(XmlOptions.getAllOptions.size == 32)
+    // Please add validation on any new XML options here
+    assert(XmlOptions.isValidOption("rowTag"))
+    assert(XmlOptions.isValidOption("rootTag"))
+    assert(XmlOptions.isValidOption("declaration"))
+    assert(XmlOptions.isValidOption("arrayElementName"))
+    assert(XmlOptions.isValidOption("excludeAttribute"))
+    assert(XmlOptions.isValidOption("attributePrefix"))
+    assert(XmlOptions.isValidOption("valueTag"))
+    assert(XmlOptions.isValidOption("nullValue"))
+    assert(XmlOptions.isValidOption("ignoreSurroundingSpaces"))
+    assert(XmlOptions.isValidOption("rowValidationXSDPath"))
+    assert(XmlOptions.isValidOption("wildcardColName"))
+    assert(XmlOptions.isValidOption("ignoreNamespace"))
+    assert(XmlOptions.isValidOption("inferSchema"))
+    assert(XmlOptions.isValidOption("preferDate"))
+    assert(XmlOptions.isValidOption("mode"))
+    assert(XmlOptions.isValidOption("locale"))
+    assert(XmlOptions.isValidOption("compression"))
+    assert(XmlOptions.isValidOption("multiLine"))
+    assert(XmlOptions.isValidOption("samplingRatio"))
+    assert(XmlOptions.isValidOption("columnNameOfCorruptRecord"))
+    assert(XmlOptions.isValidOption("dateFormat"))
+    assert(XmlOptions.isValidOption("timestampFormat"))
+    assert(XmlOptions.isValidOption("timestampNTZFormat"))
+    assert(XmlOptions.isValidOption("timeFormat"))
+    assert(XmlOptions.isValidOption("timeZone"))
+    assert(XmlOptions.isValidOption("indent"))
+    assert(XmlOptions.isValidOption("prefersDecimal"))
+    assert(XmlOptions.isValidOption("validateName"))
+    assert(XmlOptions.isValidOption("singleVariantColumn"))
+    assert(XmlOptions.isValidOption("useLegacyXMLParser"))
+    // Alternative options
+    assert(XmlOptions.isValidOption("encoding"))
+    assert(XmlOptions.isValidOption("charset"))
+  }
 }
 
 class XmlSuiteWithLegacyParser extends XmlSuite {

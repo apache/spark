@@ -17,9 +17,13 @@
 
 package org.apache.spark.sql.internal.types;
 
+import org.apache.spark.annotation.Unstable;
+
 /**
  * Abstract class for providing SRS mappings for spatial reference systems.
  */
+
+@Unstable
 public abstract class SpatialReferenceSystemMapper {
   protected static final SpatialReferenceSystemCache srsCache =
       SpatialReferenceSystemCache.getInstance();

@@ -48,7 +48,11 @@ trait AlterTableCommand extends UnaryCommand {
  */
 case class CommentOnTable(table: LogicalPlan, comment: String) extends AlterTableCommand {
   override def changes: Seq[TableChange] = {
-    Seq(TableChange.setProperty(TableCatalog.PROP_COMMENT, comment))
+    if (comment == null) {
+      Seq(TableChange.removeProperty(TableCatalog.PROP_COMMENT))
+    } else {
+      Seq(TableChange.setProperty(TableCatalog.PROP_COMMENT, comment))
+    }
   }
   override protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan =
     copy(table = newChild)

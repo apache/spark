@@ -20,15 +20,16 @@ package org.apache.spark.sql.util
 import java.util.Locale
 
 import scala.collection.immutable.Queue
+import scala.collection.mutable
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, NamedExpression}
-import org.apache.spark.sql.connector.catalog.CatalogV2Util
-import org.apache.spark.sql.connector.catalog.Table
+import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
 import org.apache.spark.sql.connector.expressions.{BucketTransform, FieldReference, NamedTransform, Transform}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.util.SchemaValidationMode.PROHIBIT_CHANGES
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.SparkSchemaUtils
 
@@ -98,11 +99,6 @@ private[spark] object SchemaUtils {
         }
       case _ =>
     }
-  }
-
-  def checkSchemaColumnNameDuplication(table: Table, resolver: Resolver): Unit = {
-    val schema = CatalogV2Util.v2ColumnsToStructType(table.columns)
-    checkSchemaColumnNameDuplication(schema, resolver)
   }
 
   /**
@@ -396,4 +392,141 @@ private[spark] object SchemaUtils {
     case st: StringType => StringHelper.removeCollation(st)
     case _ => dt
   }
+
+  /**
+   * Validates schema compatibility by recursively checking type and nullability changes.
+   *
+   * @param schema the schema to validate against
+   * @param otherSchema the other schema to check for compatibility
+   * @param resolver the resolver that controls whether the validation is case sensitive
+   * @param mode the validation mode that controls what changes are allowed
+   * @return sequence of error messages describing incompatibilities, empty if fully compatible
+   */
+  def validateSchemaCompatibility(
+      schema: StructType,
+      otherSchema: StructType,
+      resolver: Resolver,
+      mode: SchemaValidationMode): Seq[String] = {
+    checkSchemaColumnNameDuplication(schema, resolver)
+    checkSchemaColumnNameDuplication(otherSchema, resolver)
+    val errors = mutable.ArrayBuffer[String]()
+    validateTypeCompatibility(
+      schema,
+      otherSchema,
+      nullable = false,
+      otherNullable = false,
+      colPath = Seq.empty,
+      resolver,
+      mode,
+      errors)
+    errors.toSeq
+  }
+
+  private def validateTypeCompatibility(
+      dataType: DataType,
+      otherDataType: DataType,
+      nullable: Boolean,
+      otherNullable: Boolean,
+      colPath: Seq[String],
+      resolver: Resolver,
+      mode: SchemaValidationMode,
+      errors: mutable.ArrayBuffer[String]): Unit = {
+    if (nullable && !otherNullable) {
+      errors += s"${colPath.fullyQuoted} is no longer nullable"
+    } else if (!nullable && otherNullable) {
+      errors += s"${colPath.fullyQuoted} is nullable now"
+    }
+
+    (dataType, otherDataType) match {
+      case (StructType(fields), StructType(otherFields)) =>
+        val fieldsByName = index(fields, resolver)
+        val otherFieldsByName = index(otherFields, resolver)
+
+        fieldsByName.foreach { case (normalizedName, field) =>
+          otherFieldsByName.get(normalizedName) match {
+            case Some(otherField) =>
+              validateTypeCompatibility(
+                field.dataType,
+                otherField.dataType,
+                field.nullable,
+                otherField.nullable,
+                colPath :+ field.name,
+                resolver,
+                mode,
+                errors)
+            case None =>
+              errors += s"${formatField(colPath, field)} has been removed"
+          }
+        }
+
+        if (mode == PROHIBIT_CHANGES) {
+          otherFieldsByName.foreach { case (normalizedName, otherField) =>
+            if (!fieldsByName.contains(normalizedName)) {
+              errors += s"${formatField(colPath, otherField)} has been added"
+            }
+          }
+        }
+
+      case (ArrayType(elem, containsNull), ArrayType(otherElem, otherContainsNull)) =>
+        validateTypeCompatibility(
+          elem,
+          otherElem,
+          containsNull,
+          otherContainsNull,
+          colPath :+ "element",
+          resolver,
+          mode,
+          errors)
+
+      case (MapType(keyType, valueType, valueContainsNull),
+            MapType(otherKeyType, otherValueType, otherValueContainsNull)) =>
+        validateTypeCompatibility(
+          keyType,
+          otherKeyType,
+          nullable = false,
+          otherNullable = false,
+          colPath :+ "key",
+          resolver,
+          mode,
+          errors)
+        validateTypeCompatibility(
+          valueType,
+          otherValueType,
+          valueContainsNull,
+          otherValueContainsNull,
+          colPath :+ "value",
+          resolver,
+          mode,
+          errors)
+
+      case _ if dataType != otherDataType =>
+        errors += s"${colPath.fullyQuoted} type has changed " +
+          s"from ${dataType.sql} to ${otherDataType.sql}"
+
+      case _ =>
+        // OK
+    }
+  }
+
+  private def formatField(colPath: Seq[String], field: StructField): String = {
+    val nameParts = colPath :+ field.name
+    val name = nameParts.fullyQuoted
+    val dataType = field.dataType.sql
+    if (field.nullable) s"$name $dataType" else s"$name $dataType NOT NULL"
+  }
+
+  private def index(fields: Array[StructField], resolver: Resolver): Map[String, StructField] = {
+    if (isCaseSensitiveAnalysis(resolver)) {
+      fields.map(field => field.name -> field).toMap
+    } else {
+      fields.map(field => field.name.toLowerCase(Locale.ROOT) -> field).toMap
+    }
+  }
+}
+
+private[spark] sealed trait SchemaValidationMode
+
+private[spark] object SchemaValidationMode {
+  case object PROHIBIT_CHANGES extends SchemaValidationMode
+  case object ALLOW_NEW_FIELDS extends SchemaValidationMode
 }

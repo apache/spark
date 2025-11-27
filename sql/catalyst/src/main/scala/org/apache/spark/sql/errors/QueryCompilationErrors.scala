@@ -2140,7 +2140,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       errorClass = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMNS_MISMATCH",
       messageParameters = Map(
         "tableName" -> toSQLId(tableName),
-        "errors" -> errors.mkString("\n- ", "\n- ", "")))
+        "errors" -> errors.mkString("- ", "\n- ", "")))
   }
 
   def metadataColumnsChangedAfterAnalysis(
@@ -2150,7 +2150,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       errorClass = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.METADATA_COLUMNS_MISMATCH",
       messageParameters = Map(
         "tableName" -> toSQLId(tableName),
-        "errors" -> errors.mkString("\n- ", "\n- ", "")))
+        "errors" -> errors.mkString("- ", "\n- ", "")))
   }
 
   def numberOfPartitionsNotAllowedWithUnspecifiedDistributionError(): Throwable = {
@@ -4465,5 +4465,31 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "configValue" -> "true"
       )
     )
+  }
+
+  def columnsChangedAfterViewWithPlanCreation(
+      viewName: Seq[String],
+      tableName: Seq[String],
+      errors: Seq[String]): Throwable = {
+    new AnalysisException(
+      errorClass = "INCOMPATIBLE_COLUMN_CHANGES_AFTER_VIEW_WITH_PLAN_CREATION",
+      messageParameters = Map(
+        "viewName" -> toSQLId(viewName),
+        "tableName" -> toSQLId(tableName),
+        "colType" -> "data",
+        "errors" -> errors.mkString("- ", "\n- ", "")))
+  }
+
+  def metadataColumnsChangedAfterViewWithPlanCreation(
+      viewName: Seq[String],
+      tableName: Seq[String],
+      errors: Seq[String]): Throwable = {
+    new AnalysisException(
+      errorClass = "INCOMPATIBLE_COLUMN_CHANGES_AFTER_VIEW_WITH_PLAN_CREATION",
+      messageParameters = Map(
+        "viewName" -> toSQLId(viewName),
+        "tableName" -> toSQLId(tableName),
+        "colType" -> "metadata",
+        "errors" -> errors.mkString("- ", "\n- ", "")))
   }
 }

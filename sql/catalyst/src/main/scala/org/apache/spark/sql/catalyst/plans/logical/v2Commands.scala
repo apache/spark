@@ -40,7 +40,6 @@ import org.apache.spark.sql.connector.write.RowLevelOperation.Command.{DELETE, M
 import org.apache.spark.sql.errors.DataTypeErrors.toSQLType
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, ExtractV2Table}
-import org.apache.spark.sql.execution.datasources.v2.V2TableRefreshUtil
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{ArrayType, AtomicType, BooleanType, DataType, IntegerType, MapType, MetadataBuilder, StringType, StructField, StructType}
 import org.apache.spark.util.ArrayImplicits._
@@ -546,7 +545,6 @@ case class CreateTableAsSelect(
  * The base command representation for a statement that can be part of a Declarative Pipeline to
  * define a pipeline dataset (MV or ST).
  */
-
 trait CreatePipelineDataset extends Command {
   // The name of the dataset.
   val name: LogicalPlan
@@ -567,7 +565,8 @@ trait CreatePipelineDataset extends Command {
 /**
  * An extension of the base command representation that represents a CTAS style CREATE statement.
  */
-trait CreatePipelineDatasetAsSelect extends BinaryCommand
+trait CreatePipelineDatasetAsSelect
+  extends BinaryCommand
   with CreatePipelineDataset
   with CTEInChildren {
 
@@ -689,12 +688,7 @@ case class ReplaceTableAsSelect(
   extends V2CreateTableAsSelectPlan {
 
   override def markAsAnalyzed(ac: AnalysisContext): LogicalPlan = {
-    // RTAS may drop and recreate table before query execution, breaking self-references
-    // refresh and pin versions here to read from original table versions instead of
-    // newly created empty table that is meant to serve as target for append/overwrite
-    val refreshedQuery = V2TableRefreshUtil.refreshVersions(query)
-    val pinnedQuery = V2TableRefreshUtil.pinVersions(refreshedQuery)
-    copy(query = pinnedQuery, isAnalyzed = true)
+    copy(isAnalyzed = true)
   }
 
   override def withPartitioning(rewritten: Seq[Transform]): V2CreateTablePlan = {
@@ -873,7 +867,7 @@ case class MergeIntoTable(
   lazy val aligned: Boolean = {
     val actions = matchedActions ++ notMatchedActions ++ notMatchedBySourceActions
     actions.forall {
-      case UpdateAction(_, assignments) =>
+      case UpdateAction(_, assignments, _) =>
         AssignmentUtils.aligned(targetTable.output, assignments)
       case _: DeleteAction =>
         true
@@ -922,22 +916,29 @@ case class MergeIntoTable(
       false
     } else {
       val actions = matchedActions ++ notMatchedActions
-      val assignments = actions.collect {
-        case a: UpdateAction => a.assignments
-        case a: InsertAction => a.assignments
-      }.flatten
-
-      val sourcePaths = MergeIntoTable.extractAllFieldPaths(sourceTable.schema)
-      // Only allow unresolved assignment keys to be candidates for schema evolution
-      // if they are directly assigned from source fields, ie UPDATE SET new = source.new
-      assignments.forall { assignment =>
-        assignment.resolved ||
-          (assignment.value.resolved && sourcePaths.exists {
-            path => MergeIntoTable.isEqual(assignment, path)
-          })
+      val hasStarActions = actions.exists {
+        case _: UpdateStarAction => true
+        case _: InsertStarAction => true
+        case _ => false
+      }
+      if (hasStarActions) {
+        // need to resolve star actions first
+        false
+      } else {
+        val assignments = actions.collect {
+          case a: UpdateAction => a.assignments
+          case a: InsertAction => a.assignments
+        }.flatten
+        val sourcePaths = DataTypeUtils.extractAllFieldPaths(sourceTable.schema)
+        assignments.forall { assignment =>
+          assignment.resolved ||
+            (assignment.value.resolved && sourcePaths.exists {
+              path => MergeIntoTable.isEqual(assignment, path)
+            })
         }
       }
     }
+  }
 
   private lazy val sourceSchemaForEvolution: StructType =
     MergeIntoTable.sourceSchemaForSchemaEvolution(this)
@@ -1083,19 +1084,6 @@ object MergeIntoTable {
     filterSchema(merge.sourceTable.schema, Seq.empty)
   }
 
-  private def extractAllFieldPaths(schema: StructType, basePath: Seq[String] = Seq.empty):
-  Seq[Seq[String]] = {
-    schema.flatMap { field =>
-      val fieldPath = basePath :+ field.name
-      field.dataType match {
-        case struct: StructType =>
-          fieldPath +: extractAllFieldPaths(struct, fieldPath)
-        case _ =>
-          Seq(fieldPath)
-      }
-    }
-  }
-
   // Helper method to extract field path from an Expression.
   private def extractFieldPath(expr: Expression, allowUnresolved: Boolean): Seq[String] = {
     expr match {
@@ -1142,7 +1130,8 @@ case class DeleteAction(condition: Option[Expression]) extends MergeAction {
 
 case class UpdateAction(
     condition: Option[Expression],
-    assignments: Seq[Assignment]) extends MergeAction {
+    assignments: Seq[Assignment],
+    fromStar: Boolean = false) extends MergeAction {
   override def children: Seq[Expression] = condition.toSeq ++ assignments
 
   override protected def withNewChildrenInternal(
@@ -2003,7 +1992,7 @@ case class Call(
  * representation of the matching SQL syntax and cannot be executed. Instead, it is interpreted by
  * the pipelines submodule during a pipeline execution
  *
- * @param name  the name of this flow
+ * @param name the name of this flow
  * @param flowOperation the logical plan of the actual transformation this flow should execute
  * @param comment an optional comment describing this flow
  */

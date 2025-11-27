@@ -41,6 +41,9 @@ class VariantInferShreddingSuite extends QueryTest with SharedSparkSession with 
     super.sparkConf.set(SQLConf.PUSH_VARIANT_INTO_SCAN.key, "true")
       .set(SQLConf.VARIANT_WRITE_SHREDDING_ENABLED.key, "true")
       .set(SQLConf.VARIANT_INFER_SHREDDING_SCHEMA.key, "true")
+      // We cannot check the physical shredding schemas if the variant logical type annotation is
+      // used
+      .set(SQLConf.PARQUET_ANNOTATE_VARIANT_LOGICAL_TYPE.key, "false")
   }
 
   private def withTempTable(tableNames: String*)(f: => Unit): Unit = {

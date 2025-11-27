@@ -358,6 +358,15 @@ package object config {
       .intConf
       .createWithDefault(60)
 
+  private[spark] val EXECUTOR_ISOLATED_SESSION_CACHE_SIZE =
+    ConfigBuilder("spark.executor.isolatedSessionCache.size")
+      .doc("Maximum number of isolated sessions to cache in the executor. Each cached session " +
+        "maintains its own classloader for artifact isolation.")
+      .version("4.1.0")
+      .intConf
+      .checkValue(_ > 0, "The cache size must be positive.")
+      .createWithDefault(100)
+
   private[spark] val EXECUTOR_PROCESS_TREE_METRICS_ENABLED =
     ConfigBuilder("spark.executor.processTreeMetrics.enabled")
       .doc("Whether to collect process tree metrics (from the /proc filesystem) when collecting " +
@@ -1968,6 +1977,11 @@ package object config {
       .version("1.4.0")
       .booleanConf
       .createWithDefault(false)
+
+  private[spark] val CLEANER_REFERENCE_TRACKING_BLOCKING_TIMEOUT =
+    ConfigBuilder("spark.cleaner.referenceTracking.blocking.timeout")
+      .version("4.2.0")
+      .fallbackConf(Network.NETWORK_TIMEOUT)
 
   private[spark] val EXECUTOR_LOGS_ROLLING_STRATEGY =
     ConfigBuilder("spark.executor.logs.rolling.strategy")

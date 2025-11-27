@@ -26,7 +26,7 @@ import org.apache.spark.sql.execution.columnar.compression.ColumnBuilderHelper
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.vectorized.ColumnarArray
-import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.unsafe.types.{UTF8String, VariantVal}
 import org.apache.spark.util.ArrayImplicits._
 
 class ColumnVectorSuite extends SparkFunSuite with SQLHelper {
@@ -163,6 +163,43 @@ class ColumnVectorSuite extends SparkFunSuite with SQLHelper {
     (0 until 10).foreach { i =>
       assert(array.get(i, TimestampNTZType) === i)
       assert(arrayCopy.get(i, TimestampNTZType) === i)
+    }
+  }
+
+  testVectors("variant", 3, new StructType().add("v", VariantType)) { structVector =>
+    val variantCol = structVector.getChild(0)
+    val valueChild = variantCol.getChild(0)
+    val metadataChild = variantCol.getChild(1)
+
+    variantCol.putNotNull(0)
+    valueChild.appendByteArray(Array[Byte](1, 2, 3), 0, 3)
+    metadataChild.appendByteArray(Array[Byte](10, 11), 0, 2)
+
+    variantCol.putNotNull(1)
+    valueChild.appendByteArray(Array[Byte](4, 5), 0, 2)
+    metadataChild.appendByteArray(Array[Byte](12, 13, 14), 0, 3)
+
+    variantCol.putNull(2)
+    valueChild.appendNull()
+    metadataChild.appendNull()
+
+    (0 until 3).foreach { i =>
+      val row = structVector.getStruct(i)
+      val rowCopy = row.copy()
+
+      if (i < 2) {
+        assert(!row.isNullAt(0))
+        assert(!rowCopy.isNullAt(0))
+
+        val originalVariant = row.get(0, VariantType).asInstanceOf[VariantVal]
+        val copiedVariant = rowCopy.get(0, VariantType).asInstanceOf[VariantVal]
+
+        assert(java.util.Arrays.equals(originalVariant.getValue, copiedVariant.getValue))
+        assert(java.util.Arrays.equals(originalVariant.getMetadata, copiedVariant.getMetadata))
+      } else {
+        assert(row.isNullAt(0))
+        assert(rowCopy.isNullAt(0))
+      }
     }
   }
 

@@ -60,7 +60,7 @@ class InitCLITests(ReusedConnectTestCase):
                 self.assertTrue((Path.cwd() / "pipeline-storage").exists())
 
                 registry = LocalGraphElementRegistry()
-                register_definitions(spec_path, registry, spec)
+                register_definitions(spec_path, registry, spec, self.spark, "test_graph_id")
                 self.assertEqual(len(registry.outputs), 1)
                 self.assertEqual(registry.outputs[0].name, "example_python_materialized_view")
                 self.assertEqual(len(registry.flows), 1)
@@ -71,6 +71,21 @@ class InitCLITests(ReusedConnectTestCase):
                     registry.sql_files[0].file_path,
                     Path("transformations") / "example_sql_materialized_view.sql",
                 )
+
+    def test_init_existing_directory(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            project_name = "test_project"
+            with change_dir(Path(temp_dir)):
+                init(project_name)
+
+                with self.assertRaises(FileExistsError) as context:
+                    init(project_name)
+
+                expected_message = (
+                    f"Directory '{project_name}' already exists. "
+                    "Please choose a different name or remove the existing directory."
+                )
+                self.assertEqual(str(context.exception), expected_message)
 
 
 if __name__ == "__main__":

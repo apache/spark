@@ -191,6 +191,12 @@ private[sql] class AvroSerializer(
           s"SQL type ${TimestampNTZType.sql} cannot be converted to Avro logical type $other")
       }
 
+      case (_: TimeType, LONG) => avroType.getLogicalType match {
+        case _: LogicalTypes.TimeMicros => (getter, ordinal) => getter.getLong(ordinal)
+        case other => throw new IncompatibleSchemaException(errorPrefix +
+          s"SQL type ${TimeType().sql} cannot be converted to Avro logical type $other")
+      }
+
       case (ArrayType(et, containsNull), ARRAY) =>
         val elementConverter = newConverter(
           et, resolveNullableType(avroType.getElementType, containsNull),
