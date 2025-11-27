@@ -140,7 +140,9 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
           }
           matched(ordinal)
 
-        case u @ UnresolvedAttribute(nameParts) =>
+        case u @ UnresolvedAttribute(nameParts)
+          if u.getTagValue(LogicalPlan.PLAN_ID_TAG).isEmpty =>
+          // UnresolvedAttribute with PLAN_ID_TAG should be resolved in resolveDataFrameColumn
           val result = withPosition(u) {
             resolveColumnByName(nameParts)
               .orElse(LiteralFunctionResolution.resolve(nameParts))
@@ -572,10 +574,12 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
         None
       }
       if (resolved.isEmpty) {
-        // The targe plan node is found, but the column cannot be resolved.
-        throw QueryCompilationErrors.cannotResolveDataFrameColumn(u)
+        // The targe plan node is found, but cannot be resolved
+        // Delay the analysis or failure.
+        (None, true)
+      } else {
+        (resolved.map(r => (r, currentDepth)), true)
       }
-      (resolved.map(r => (r, currentDepth)), true)
     } else {
       val children = p match {
         // treat Union node as the leaf node
