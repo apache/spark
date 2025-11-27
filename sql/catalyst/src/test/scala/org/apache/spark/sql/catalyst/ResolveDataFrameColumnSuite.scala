@@ -23,12 +23,14 @@ import org.apache.spark.sql.types._
 
 object MyRule extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan match {
-    case project: Project =>
+    case project: Project if project.getTagValue(LogicalPlan.PLAN_ID_TAG).nonEmpty =>
       val newProject = project.copy(
         projectList = project.projectList :+ UnresolvedAttribute("b")
       )
       newProject.copyTagsFrom(project)
       newProject
+
+    case _ => plan
   }
 }
 
@@ -36,23 +38,34 @@ object MyRule extends Rule[LogicalPlan] {
 class ResolveDataFrameColumnSuite extends AnalysisTest {
 
   // Test Resolve DataFrame Column with a rule adding new attribute
-  test("Resolve Post Attached Column") {
+  // 'Project ['b]
+  // +- 'Project ['i]  (plan id = 0)
+  //    +- LocalRelation <empty>, [i#0, b#1, d#2]
+  //
+  // MyRule should append column b in 'Project ['i]
+  test("Resolve missing column") {
     val table = LocalRelation(
       AttributeReference("i", IntegerType)(),
       AttributeReference("b", ByteType)(),
       AttributeReference("d", DoubleType)())
 
-    val u = UnresolvedAttribute("i")
-    u.setTagValue[Long](LogicalPlan.PLAN_ID_TAG, 0L)
+    val u1 = UnresolvedAttribute("i")
+    u1.setTagValue[Long](LogicalPlan.PLAN_ID_TAG, 0L)
 
-    val project = Project(Seq(u), table)
-    project.setTagValue[Long](LogicalPlan.PLAN_ID_TAG, 0L)
+    val project1 = Project(Seq(u1), table)
+    project1.setTagValue[Long](LogicalPlan.PLAN_ID_TAG, 0L)
+
+    val u2 = UnresolvedAttribute("b")
+    u2.setTagValue[Long](LogicalPlan.PLAN_ID_TAG, 0L)
+
+    val project2 = Project(Seq(u2), project1)
 
     val rules = Seq(MyRule)
     val analyzer = new RuleExecutor[LogicalPlan] {
       override val batches = Seq(Batch("Resolution", FixedPoint(2), rules: _*))
     }
 
-    val analyzed = analyzer.execute(project)
+    val analyzed = analyzer.execute(project2)
+    assert(analyzed.resolved, s"\n$analyzed")
   }
 }
