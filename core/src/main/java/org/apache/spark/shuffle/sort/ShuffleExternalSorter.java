@@ -21,7 +21,6 @@ import javax.annotation.Nullable;
 import java.io.File;
 import java.io.IOException;
 import java.util.LinkedList;
-import java.util.concurrent.TimeUnit;
 import java.util.zip.Checksum;
 
 import scala.Tuple2;
