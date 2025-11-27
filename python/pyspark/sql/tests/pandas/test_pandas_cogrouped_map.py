@@ -240,9 +240,6 @@ class CogroupedApplyInPandasTestsMixin:
 
         self._test_merge_empty(fn=merge_pandas)
 
-    @unittest.skipIf(
-        os.environ.get("SPARK_SKIP_CONNECT_COMPAT_TESTS") == "1", "SPARK-54481: To be reenabled"
-    )
     def test_apply_in_pandas_returning_incompatible_type(self):
         with self.quiet():
             self.check_apply_in_pandas_returning_incompatible_type()
