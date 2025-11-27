@@ -326,23 +326,29 @@ class SparkConnectDatabaseMetaData(conn: SparkConnectConnection) extends Databas
       case Some(schemaPattern) => $"TABLE_SCHEM".like(schemaPattern)
     }
 
+    val emptyDf = conn.spark.emptyDataFrame
+      .withColumn("TABLE_SCHEM", lit(""))
+      .withColumn("TABLE_CATALOG", lit(""))
+
     def internalGetSchemas(
         catalogOpt: Option[String],
         schemaFilterExpr: Column): connect.DataFrame = {
       val catalog = catalogOpt.getOrElse(conn.getCatalog)
-      // Spark SQL supports LIKE clause in SHOW SCHEMAS command, but we can't use that
-      // because the LIKE pattern does not follow SQL standard.
-      conn.spark.sql(s"SHOW SCHEMAS IN ${quoteIdentifier(catalog)}")
-        .select($"namespace".as("TABLE_SCHEM"))
-        .filter(schemaFilterExpr)
-        .withColumn("TABLE_CATALOG", lit(catalog))
+      try {
+        // Spark SQL supports LIKE clause in SHOW SCHEMAS command, but we can't use that
+        // because the LIKE pattern does not follow SQL standard.
+        conn.spark.sql(s"SHOW SCHEMAS IN ${quoteIdentifier(catalog)}")
+          .select($"namespace".as("TABLE_SCHEM"))
+          .filter(schemaFilterExpr)
+          .withColumn("TABLE_CATALOG", lit(catalog))
+      } catch {
+        case st: SparkThrowable if st.getCondition == "MISSING_CATALOG_ABILITY.NAMESPACES" =>
+          emptyDf
+      }
     }
 
     if (catalog == null) {
       // search in all catalogs
-      val emptyDf = conn.spark.emptyDataFrame
-        .withColumn("TABLE_SCHEM", lit(""))
-        .withColumn("TABLE_CATALOG", lit(""))
       conn.spark.catalog.listCatalogs().collect().map(_.name).map { c =>
         internalGetSchemas(Some(c), schemaFilterExpr)
       }.fold(emptyDf) { (l, r) => l.unionAll(r) }
