@@ -150,6 +150,51 @@ private[spark] object ThreadUtils {
     threadPool
   }
 
+  @volatile private var fileRenamePool: ThreadPoolExecutor = _
+  private val fileRenamePoolLock = new Object()
+  @volatile private var fileRenamePoolShutdownHookRef: Option[AnyRef] = None
+
+  /**
+   * Global, reusable thread pool for multi-threaded file rename/copy operations.
+   * The pool is created on first use with the given numThreads and then reused.
+   */
+  def getOrCreateFileRenameThreadPool(numThreads: Int): ThreadPoolExecutor = {
+    // (Re)create the pool if it does not exist or was previously shut down/terminated.
+    if (fileRenamePool == null || fileRenamePool.isShutdown || fileRenamePool.isTerminated) {
+      fileRenamePoolLock.synchronized {
+        if (fileRenamePool == null || fileRenamePool.isShutdown || fileRenamePool.isTerminated) {
+          fileRenamePool = newDaemonCachedThreadPool("file-rename", numThreads)
+          // Ensure the pool is shutdown at JVM exit in case SparkEnv.stop isn't reached
+          if (fileRenamePoolShutdownHookRef.isEmpty) {
+            fileRenamePoolShutdownHookRef = Some(
+              ShutdownHookManager.addShutdownHook(
+                ShutdownHookManager.DEFAULT_SHUTDOWN_PRIORITY) { () =>
+                shutdownFileRenamePool()
+              }
+            )
+          }
+        }
+      }
+    } else if (numThreads > fileRenamePool.getCorePoolSize) {
+      // Grow the pool if a higher parallelism is requested; allow idle threads to time out.
+      fileRenamePool.setCorePoolSize(numThreads)
+      fileRenamePool.setMaximumPoolSize(numThreads)
+    }
+    fileRenamePool
+  }
+
+  private[spark] def shutdownFileRenamePool(): Unit = {
+    fileRenamePoolLock.synchronized {
+      if (fileRenamePool != null) {
+        fileRenamePool.shutdown()
+        fileRenamePool = null
+        // Remove shutdown hook if any
+        fileRenamePoolShutdownHookRef.foreach(ShutdownHookManager.removeShutdownHook)
+        fileRenamePoolShutdownHookRef = None
+      }
+    }
+  }
+
   /**
    * Wrapper over newFixedThreadPool. Thread names are formatted as prefix-ID, where ID is a
    * unique, sequentially assigned integer.

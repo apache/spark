@@ -4189,6 +4189,12 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val SQL_FILES_RENAME_NUM_THREADS = buildConf("spark.sql.files.rename.numThreads")
+    .doc("Number of threads used for concurrent file rename operations during SQL writes;" +
+      "falls back to spark.files.rename.numThreads.")
+    .version("4.0.0")
+    .fallbackConf(FILES_RENAME_NUM_THREADS)
+
   val CONCAT_BINARY_AS_STRING = buildConf("spark.sql.function.concatBinaryAsString")
     .doc("When this option is set to false and all inputs are binary, `functions.concat` returns " +
       "an output as binary. Otherwise, it returns as a string.")
@@ -7105,6 +7111,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def allowNonEmptyLocationInCTAS: Boolean =
     getConf(SQLConf.ALLOW_NON_EMPTY_LOCATION_IN_CTAS)
+
+  def filesRenameNumThreads: Int =
+    getConf(SQL_FILES_RENAME_NUM_THREADS)
 
   def starSchemaDetection: Boolean = getConf(STARSCHEMA_DETECTION)
 

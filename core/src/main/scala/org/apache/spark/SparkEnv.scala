@@ -48,6 +48,7 @@ import org.apache.spark.shuffle.ShuffleManager
 import org.apache.spark.storage._
 import org.apache.spark.util.{RpcUtils, Utils}
 import org.apache.spark.util.ArrayImplicits._
+import org.apache.spark.util.ThreadUtils._
 
 /**
  * :: DeveloperApi ::
@@ -119,6 +120,7 @@ class SparkEnv (
       blockManager.master.stop()
       metricsSystem.stop()
       outputCommitCoordinator.stop()
+      shutdownFileRenamePool()
       rpcEnv.shutdown()
       rpcEnv.awaitTermination()
 

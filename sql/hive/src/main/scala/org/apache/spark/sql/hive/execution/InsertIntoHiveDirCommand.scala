@@ -128,24 +128,20 @@ case class InsertIntoHiveDirCommand(
       val dfs = tmpPath.getFileSystem(hadoopConf)
       val tmpFiles = dfs.listStatus(tmpPath)
 
-      val numThreads = sparkSession.sparkContext.conf.get(FILES_RENAME_NUM_THREADS)
-      val pool = ThreadUtils.newDaemonFixedThreadPool(numThreads, "hive-dir-rename")
-      try {
-        val renameTasks = tmpFiles.map { tmpFile =>
-          pool.submit(new Callable[Unit] {
-            override def call(): Unit = {
-              if (isLocal) {
-                dfs.copyToLocalFile(tmpFile.getPath, writeToPath)
-              } else {
-                dfs.rename(tmpFile.getPath, writeToPath)
-              }
+      val numThreads = conf.filesRenameNumThreads
+      val pool = ThreadUtils.getOrCreateFileRenameThreadPool(numThreads)
+      val renameTasks = tmpFiles.map { tmpFile =>
+        pool.submit(new Callable[Unit] {
+          override def call(): Unit = {
+            if (isLocal) {
+              dfs.copyToLocalFile(tmpFile.getPath, writeToPath)
+            } else {
+              dfs.rename(tmpFile.getPath, writeToPath)
             }
-          })
-        }
-        renameTasks.foreach(_.get())
-      } finally {
-        pool.shutdown()
+          }
+        })
       }
+      renameTasks.foreach(_.get())
     } catch {
       case e: Throwable =>
         throw new SparkException(

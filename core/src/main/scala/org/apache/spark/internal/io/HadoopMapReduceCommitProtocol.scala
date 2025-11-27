@@ -20,17 +20,14 @@ package org.apache.spark.internal.io
 import java.io.IOException
 import java.util.{Date, UUID}
 import java.util.concurrent.{Callable, ExecutionException}
-
 import scala.collection.mutable
 import scala.util.Try
-
 import org.apache.hadoop.conf.Configurable
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapreduce._
 import org.apache.hadoop.mapreduce.lib.output.FileOutputCommitter
 import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
-
-import org.apache.spark.SparkContext
+import org.apache.spark.{SparkContext, SparkEnv}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config._
@@ -202,11 +199,8 @@ class HadoopMapReduceCommitProtocol(
       logDebug(s"Create absolute parent directories: $absParentPaths")
       absParentPaths.foreach(fs.mkdirs)
 
-      val numThreads = SparkContext.getActive match {
-        case Some(sc) => sc.conf.get(FILES_RENAME_NUM_THREADS)
-        case None => FILES_RENAME_NUM_THREADS.defaultValue.get
-      }
-      val pool = HadoopMapReduceCommitProtocol.getOrCreateFileRenamePool(numThreads)
+      val numThreads = SparkEnv.get.conf.get(FILES_RENAME_NUM_THREADS)
+      val pool = ThreadUtils.getOrCreateFileRenameThreadPool(numThreads)
       val renameTasks = filesToMove.map { case (src, dst) =>
         pool.submit(new Callable[Unit] {
           override def call(): Unit = {
@@ -335,22 +329,5 @@ class HadoopMapReduceCommitProtocol(
         logWarning(log"Exception while aborting " +
           log"${MDC(TASK_ATTEMPT_ID, taskContext.getTaskAttemptID)}", e)
     }
-  }
-}
-
-private[spark] object HadoopMapReduceCommitProtocol {
-  @volatile private var fileRenamePool: java.util.concurrent.ThreadPoolExecutor = _
-  private val poolLock = new Object()
-
-  def getOrCreateFileRenamePool(numThreads: Int): java.util.concurrent.ThreadPoolExecutor = {
-    if (fileRenamePool == null) {
-      poolLock.synchronized {
-        if (fileRenamePool == null) {
-          // Use cached pool with an upper bound; idle threads time out
-          fileRenamePool = ThreadUtils.newDaemonCachedThreadPool("file-rename", numThreads)
-        }
-      }
-    }
-    fileRenamePool
   }
 }
