@@ -326,7 +326,7 @@ class SparkConnectDatabaseMetaData(conn: SparkConnectConnection) extends Databas
       case Some(schemaPattern) => $"TABLE_SCHEM".like(schemaPattern)
     }
 
-    val emptyDf = conn.spark.emptyDataFrame
+    lazy val emptyDf = conn.spark.emptyDataFrame
       .withColumn("TABLE_SCHEM", lit(""))
       .withColumn("TABLE_CATALOG", lit(""))
 
@@ -408,7 +408,7 @@ class SparkConnectDatabaseMetaData(conn: SparkConnectConnection) extends Databas
       $"TABLE_NAME".like(tableNamePattern)
     }
 
-    val emptyDf = conn.spark.emptyDataFrame
+    lazy val emptyDf = conn.spark.emptyDataFrame
       .withColumn("TABLE_CAT", lit(""))
       .withColumn("TABLE_SCHEM", lit(""))
       .withColumn("TABLE_NAME", lit(""))
@@ -496,7 +496,7 @@ class SparkConnectDatabaseMetaData(conn: SparkConnectConnection) extends Databas
       $"COLUMN_NAME".like(columnNamePattern)
     }
 
-    val emptyDf = conn.spark.emptyDataFrame
+    lazy val emptyDf = conn.spark.emptyDataFrame
       .withColumn("TABLE_CAT", lit(""))
       .withColumn("TABLE_SCHEM", lit(""))
       .withColumn("TABLE_NAME", lit(""))
