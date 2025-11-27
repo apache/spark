@@ -258,6 +258,7 @@ class MapInPandasTestsMixin:
             ):
                 # sometimes we see ValueErrors
                 with self.subTest(convert="string to double"):
+
                     def func(iterator):
                         for pdf in iterator:
                             yield pdf.assign(id="test_string")
@@ -281,6 +282,7 @@ class MapInPandasTestsMixin:
                         )
 
                 with self.subTest(convert="float to int precision loss"):
+
                     def func(iterator):
                         for pdf in iterator:
                             yield pdf.assign(id=pdf["id"] + 0.1)
