@@ -335,6 +335,10 @@ class PythonException(CapturedException, BasePythonException):
     """
     Exceptions thrown from Python workers.
     """
+    def __str__(self) -> str:
+        messageParameters = self.getMessageParameters()
+
+        return f"{messageParameters.get('msg')}\n{messageParameters.get('traceback')}"
 
 
 class ArithmeticException(CapturedException, BaseArithmeticException):

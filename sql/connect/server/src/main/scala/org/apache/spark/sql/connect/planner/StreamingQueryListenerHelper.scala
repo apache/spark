@@ -91,12 +91,12 @@ class PythonStreamingQueryListener(listener: SimplePythonFunction, sessionHolder
             log"Streaming query listener function ${MDC(FUNCTION_NAME, functionName)} " +
               log"completed (ret: 0)")
         case SpecialLengths.PYTHON_EXCEPTION_THROWN =>
-          val msg = PythonWorkerUtils.readUTF(dataIn)
-          val errorMsg = s"Found error inside Streaming query listener Python " +
-            s"process for function $functionName: $msg"
+          val traceback = PythonWorkerUtils.readUTF(dataIn)
+          val msg = s"Found error inside Streaming query listener Python " +
+            s"process for function $functionName:"
           throw new PythonException(
             errorClass = "PYTHON_EXCEPTION",
-            messageParameters = Map("msg" -> errorMsg))
+            messageParameters = Map("msg" -> msg, "traceback" -> traceback))
         case otherValue =>
           throw new IllegalStateException(
             s"Unexpected return value $otherValue from the " +

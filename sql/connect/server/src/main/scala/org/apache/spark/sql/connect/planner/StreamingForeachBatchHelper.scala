@@ -176,13 +176,13 @@ object StreamingForeachBatchHelper extends Logging {
                 log"Python foreach batch for dfId ${MDC(DATAFRAME_ID, args.dfId)} " +
                 log"completed (ret: 0)")
           case SpecialLengths.PYTHON_EXCEPTION_THROWN =>
-            val msg = PythonWorkerUtils.readUTF(dataIn)
-            val errorMsg =
+            val traceback = PythonWorkerUtils.readUTF(dataIn)
+            val msg =
               s"[session: ${sessionHolder.sessionId}] [userId: ${sessionHolder.userId}] " +
-                s"Found error inside foreachBatch Python process: $msg"
+                s"Found error inside foreachBatch Python process:"
             throw new PythonException(
               errorClass = "PYTHON_EXCEPTION",
-              messageParameters = Map("msg" -> errorMsg))
+              messageParameters = Map("msg" -> msg, "traceback" -> traceback))
           case otherValue =>
             throw new IllegalStateException(
               s"[session: ${sessionHolder.sessionId}] [userId: ${sessionHolder.userId}] " +

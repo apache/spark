@@ -635,10 +635,11 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
 
     protected def handlePythonException(): PythonException = {
       // Signals that an exception has been thrown in python
-      val msg = PythonWorkerUtils.readUTF(stream)
+      val traceback = PythonWorkerUtils.readUTF(stream)
+      val msg = s"Python worker failed with the following error:"
       new PythonException(
         errorClass = "PYTHON_EXCEPTION",
-        messageParameters = Map("msg" -> msg),
+        messageParameters = Map("msg" -> msg, "traceback" -> traceback),
         cause = writer.exception.orNull)
     }
 

@@ -5101,7 +5101,7 @@
   },
   "PYTHON_EXCEPTION" : {
     "message" : [
-      "Exception raised from Python worker: <msg>"
+      "<msg>\n<traceback>"
     ],
     "sqlState" : "38000"
   },
