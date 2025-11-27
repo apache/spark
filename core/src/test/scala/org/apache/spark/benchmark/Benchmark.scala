@@ -25,7 +25,6 @@ import scala.concurrent.duration._
 import scala.util.Try
 
 import org.apache.commons.io.output.TeeOutputStream
-import org.apache.commons.lang3.SystemUtils
 
 import org.apache.spark.util.Utils
 
@@ -94,9 +93,11 @@ private[spark] class Benchmark(
   /**
    * Runs the benchmark and outputs the results to stdout. This should be copied and added as
    * a comment with the benchmark. Although the results vary from machine to machine, it should
-   * provide some baseline.
+   * provide some baseline. If `relativeTime` is set to `true`, the `Relative` column will be
+   * the relative time of each case relative to the first case (less is better). Otherwise, it
+   * will be the relative execution speed of each case relative to the first case (more is better).
    */
-  def run(): Unit = {
+  def run(relativeTime: Boolean = false): Unit = {
     require(benchmarks.nonEmpty)
     // scalastyle:off
     println("Running benchmark: " + name)
@@ -112,10 +113,12 @@ private[spark] class Benchmark(
     out.println(Benchmark.getJVMOSInfo())
     out.println(Benchmark.getProcessorName())
     val nameLen = Math.max(40, Math.max(name.length, benchmarks.map(_.name.length).max))
+    val relativeHeader = if (relativeTime) "Relative time" else "Relative"
     out.printf(s"%-${nameLen}s %14s %14s %11s %12s %13s %10s\n",
-      name + ":", "Best Time(ms)", "Avg Time(ms)", "Stdev(ms)", "Rate(M/s)", "Per Row(ns)", "Relative")
+      name + ":", "Best Time(ms)", "Avg Time(ms)", "Stdev(ms)", "Rate(M/s)", "Per Row(ns)", relativeHeader)
     out.println("-" * (nameLen + 80))
     results.zip(benchmarks).foreach { case (result, benchmark) =>
+      val relative = if (relativeTime) result.bestMs / firstBest else firstBest / result.bestMs
       out.printf(s"%-${nameLen}s %14s %14s %11s %12s %13s %10s\n",
         benchmark.name,
         "%5.0f" format result.bestMs,
@@ -123,7 +126,7 @@ private[spark] class Benchmark(
         "%5.0f" format result.stdevMs,
         "%10.1f" format result.bestRate,
         "%6.1f" format (1000 / result.bestRate),
-        "%3.1fX" format (firstBest / result.bestMs))
+        "%3.1fX" format relative)
     }
     out.println()
     // scalastyle:on
@@ -207,10 +210,10 @@ private[spark] object Benchmark {
    * This should return something like "Intel(R) Core(TM) i7-4870HQ CPU @ 2.50GHz"
    */
   def getProcessorName(): String = {
-    val cpu = if (SystemUtils.IS_OS_MAC_OSX) {
+    val cpu = if (Utils.isMac) {
       Utils.executeAndGetOutput(Seq("/usr/sbin/sysctl", "-n", "machdep.cpu.brand_string"))
         .stripLineEnd
-    } else if (SystemUtils.IS_OS_LINUX) {
+    } else if (Utils.isLinux) {
       Try {
         val grepPath = Utils.executeAndGetOutput(Seq("which", "grep")).stripLineEnd
         Utils.executeAndGetOutput(Seq(grepPath, "-m", "1", "model name", "/proc/cpuinfo"))
@@ -230,8 +233,6 @@ private[spark] object Benchmark {
   def getJVMOSInfo(): String = {
     val vmName = System.getProperty("java.vm.name")
     val runtimeVersion = System.getProperty("java.runtime.version")
-    val osName = System.getProperty("os.name")
-    val osVersion = System.getProperty("os.version")
-    s"${vmName} ${runtimeVersion} on ${osName} ${osVersion}"
+    s"${vmName} ${runtimeVersion} on ${Utils.osName} ${Utils.osVersion}"
   }
 }

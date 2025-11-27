@@ -21,7 +21,7 @@ set -ex
 if [[ $# -gt 1 ]]; then
   echo "Illegal number of parameters."
   echo "Usage: ./dev/protobuf-breaking-changes-check.sh [branch]"
-  echo "the default branch is 'master', available options are 'master', 'branch-3.4', etc"
+  echo "the default branch is 'master'"
   exit -1
 fi
 
@@ -33,9 +33,9 @@ if [[ $# -eq 1 ]]; then
   BRANCH=$1
 fi
 
-pushd connector/connect/common/src/main &&
+pushd sql/connect/common/src/main &&
 echo "Start protobuf breaking changes checking against $BRANCH" &&
-buf breaking --against "https://github.com/apache/spark.git#branch=$BRANCH,subdir=connector/connect/common/src/main" &&
+buf breaking --against "https://github.com/apache/spark.git#branch=$BRANCH,subdir=sql/connect/common/src/main" &&
 echo "Finsh protobuf breaking changes checking: SUCCESS"
 
 if [[ $? -ne -0 ]]; then

@@ -29,6 +29,7 @@ import org.apache.spark.util.Utils
  */
 class DescribeTableSuite extends command.DescribeTableSuiteBase
   with CommandSuiteBase {
+  import testImplicits._
 
   test("Describing a partition is not supported") {
     withNamespaceAndTable("ns", "table") { tbl =>
@@ -46,7 +47,7 @@ class DescribeTableSuite extends command.DescribeTableSuiteBase
       sql(s"CREATE TABLE $tbl (s struct<id:INT, a:BIGINT>, data string) " +
         s"$defaultUsing PARTITIONED BY (s.id, s.a)")
       val descriptionDf = sql(s"DESCRIBE TABLE $tbl")
-      QueryTest.checkAnswer(
+      checkAnswer(
         descriptionDf.filter("col_name != 'Created Time'"),
         Seq(
           Row("data", "string", null),
@@ -70,7 +71,7 @@ class DescribeTableSuite extends command.DescribeTableSuiteBase
         ("col_name", StringType),
         ("data_type", StringType),
         ("comment", StringType)))
-      QueryTest.checkAnswer(
+      checkAnswer(
         descriptionDf,
         Seq(
           Row("id", "bigint", null),
@@ -106,7 +107,7 @@ class DescribeTableSuite extends command.DescribeTableSuiteBase
         exception = intercept[AnalysisException] {
           sql(query).collect()
         },
-        errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+        condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
         sqlState = "42703",
         parameters = Map(
           "objectName" -> "`key1`",
@@ -137,7 +138,7 @@ class DescribeTableSuite extends command.DescribeTableSuiteBase
           exception = intercept[AnalysisException] {
             sql(query).collect()
           },
-          errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+          condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
           sqlState = "42703",
           parameters = Map(
             "objectName" -> "`KEY`",
@@ -162,7 +163,7 @@ class DescribeTableSuite extends command.DescribeTableSuiteBase
       assert(descriptionDf.schema.map(field => (field.name, field.dataType)) === Seq(
         ("info_name", StringType),
         ("info_value", StringType)))
-      QueryTest.checkAnswer(
+      checkAnswer(
         descriptionDf,
         Seq(
           Row("col_name", "key"),
@@ -189,7 +190,7 @@ class DescribeTableSuite extends command.DescribeTableSuiteBase
       assert(descriptionDf.schema.map(field => (field.name, field.dataType)) === Seq(
         ("info_name", StringType),
         ("info_value", StringType)))
-      QueryTest.checkAnswer(
+      checkAnswer(
         descriptionDf,
         Seq(
           Row("col_name", "key"),
@@ -211,6 +212,71 @@ class DescribeTableSuite extends command.DescribeTableSuiteBase
       val stats = descriptionDf.filter("col_name == 'Statistics'").head()
         .getAs[String]("data_type")
       assert("""\d+\s+bytes,\s+4\s+rows""".r.matches(stats))
+    }
+  }
+
+  test("desc table constraints") {
+    withNamespaceAndTable("ns", "pk_table", nonPartitionCatalog) { tbl =>
+      withTable("fk_table") {
+        sql(
+          s"""
+             |CREATE TABLE fk_table (id INT PRIMARY KEY) USING parquet
+        """.stripMargin)
+        sql(
+          s"""
+             |CREATE TABLE $tbl (
+             |  id INT,
+             |  a INT,
+             |  b STRING,
+             |  c STRING,
+             |  PRIMARY KEY (id),
+             |  CONSTRAINT fk_a FOREIGN KEY (a) REFERENCES fk_table(id) RELY,
+             |  CONSTRAINT uk_b UNIQUE (b),
+             |  CONSTRAINT uk_a_c UNIQUE (a, c),
+             |  CONSTRAINT c1 CHECK (c IS NOT NULL),
+             |  CONSTRAINT c2 CHECK (id > 0)
+             |)
+             |$defaultUsing
+        """.stripMargin)
+
+        // Skipped showing NORELY since it is the default value.
+        var expectedConstraintsDdl = Array(
+          "# Constraints,,",
+          "pk_table_pk,PRIMARY KEY (id) NOT ENFORCED,",
+          "fk_a,FOREIGN KEY (a) REFERENCES fk_table (id) NOT ENFORCED RELY,",
+          "uk_b,UNIQUE (b) NOT ENFORCED,",
+          "uk_a_c,UNIQUE (a, c) NOT ENFORCED,",
+          "c1,CHECK (c IS NOT NULL) ENFORCED,",
+          "c2,CHECK (id > 0) ENFORCED,"
+        )
+        var descDdL = sql(s"DESCRIBE EXTENDED $tbl").collect().map(_.mkString(","))
+          .dropWhile(_ != "# Constraints,,")
+        assert(descDdL === expectedConstraintsDdl)
+
+        // Show non-default value for RELY.
+        sql(s"ALTER TABLE $tbl ADD CONSTRAINT c3 CHECK (b IS NOT NULL) RELY")
+        descDdL = sql(s"DESCRIBE EXTENDED $tbl").collect().map(_.mkString(","))
+          .dropWhile(_ != "# Constraints,,")
+        expectedConstraintsDdl = expectedConstraintsDdl ++
+          Array("c3,CHECK (b IS NOT NULL) ENFORCED RELY,")
+        assert(descDdL === expectedConstraintsDdl)
+
+        sql(s"ALTER TABLE $tbl DROP CONSTRAINT c1")
+        descDdL = sql(s"DESCRIBE EXTENDED $tbl").collect().map(_.mkString(","))
+          .dropWhile(_ != "# Constraints,,")
+        assert(descDdL === expectedConstraintsDdl
+          .filter(_ != "c1,CHECK (c IS NOT NULL) ENFORCED,"))
+      }
+    }
+  }
+
+  test("describe table with column having only current default value") {
+    withNamespaceAndTable("ns", "tbl") { tbl =>
+      sql(s"CREATE TABLE $tbl (key int DEFAULT 13579) $defaultUsing " +
+        "TBLPROPERTIES ('dropExistsDefault'=true)")
+      checkAnswer(
+        sql(s"DESCRIBE TABLE EXTENDED $tbl").where($"comment" === "13579"),
+        Seq(Row("key", "int", "13579")))
     }
   }
 }

@@ -19,8 +19,6 @@ package test.org.apache.spark.sql;
 
 import java.util.*;
 
-import com.google.common.collect.Maps;
-
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
@@ -85,11 +83,11 @@ public class JavaColumnExpressionSuite {
     Dataset<Row> df = spark.createDataFrame(rows, schema);
     AnalysisException e = Assertions.assertThrows(AnalysisException.class,
       () -> df.filter(df.col("a").isInCollection(Arrays.asList(new Column("b")))));
-    Assertions.assertTrue(e.getErrorClass().equals("DATATYPE_MISMATCH.DATA_DIFF_TYPES"));
+    Assertions.assertTrue(e.getCondition().equals("DATATYPE_MISMATCH.DATA_DIFF_TYPES"));
     Map<String, String> messageParameters = new HashMap<>();
     messageParameters.put("functionName", "`in`");
     messageParameters.put("dataType", "[\"INT\", \"ARRAY<INT>\"]");
     messageParameters.put("sqlExpr", "\"(a IN (b))\"");
-    Assertions.assertTrue(Maps.difference(e.getMessageParameters(), messageParameters).areEqual());
+    Assertions.assertTrue(e.getMessageParameters().equals(messageParameters));
   }
 }

@@ -19,9 +19,10 @@ package org.apache.spark.sql.streaming
 
 import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.sql.Encoders
-import org.apache.spark.sql.execution.streaming.MemoryStream
-import org.apache.spark.sql.execution.streaming.state.{AlsoTestWithChangelogCheckpointingEnabled, RocksDBStateStoreProvider}
+import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
+import org.apache.spark.sql.execution.streaming.state.{AlsoTestWithEncodingTypes, AlsoTestWithRocksDBFeatures, EnableStateStoreRowChecksum, RocksDBStateStoreProvider}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.tags.SlowSQLTest
 
 case class InputMapRow(key: String, action: String, value: (String, String))
 
@@ -33,14 +34,14 @@ class TestMapStateProcessor
   override def init(
       outputMode: OutputMode,
       timeMode: TimeMode): Unit = {
-    _mapState = getHandle.getMapState("sessionState", Encoders.STRING, Encoders.STRING)
+    _mapState = getHandle.getMapState("sessionState", Encoders.STRING, Encoders.STRING,
+      TTLConfig.NONE)
   }
 
   override def handleInputRows(
       key: String,
       inputRows: Iterator[InputMapRow],
-      timerValues: TimerValues,
-      expiredTimerInfo: ExpiredTimerInfo): Iterator[(String, String, String)] = {
+      timerValues: TimerValues): Iterator[(String, String, String)] = {
 
     var output = List[(String, String, String)]()
 
@@ -74,16 +75,75 @@ class TestMapStateProcessor
     }
     output.iterator
   }
+}
 
-  override def close(): Unit = {}
+// Case classes for schema evolution testing
+case class SimpleMapValue(count: Int)
+case class EvolvedMapValue(count: Int, lastUpdated: Option[Long])
+
+// Initial processor with simple schema
+class InitialMapStateProcessor extends StatefulProcessor[String, String, (String, String, Int)] {
+  @transient protected var mapState: MapState[String, SimpleMapValue] = _
+
+  override def init(outputMode: OutputMode, timeMode: TimeMode): Unit = {
+    mapState = getHandle.getMapState[String, SimpleMapValue](
+      "mapState",
+      Encoders.STRING,
+      Encoders.product[SimpleMapValue],
+      TTLConfig.NONE
+    )
+  }
+
+  override def handleInputRows(
+      key: String,
+      rows: Iterator[String],
+      timerValues: TimerValues): Iterator[(String, String, Int)] = {
+
+    rows.map { value =>
+      val current = mapState.getValue(value)
+      val newCount = if (current == null) 1 else current.count + 1
+      mapState.updateValue(value, SimpleMapValue(newCount))
+      (key, value, newCount)
+    }
+  }
+}
+
+// Evolved processor with additional timestamp field
+class EvolvedMapStateProcessor extends StatefulProcessor[String, String, (String, String, Int)] {
+  @transient protected var mapState: MapState[String, EvolvedMapValue] = _
+
+  override def init(outputMode: OutputMode, timeMode: TimeMode): Unit = {
+    mapState = getHandle.getMapState[String, EvolvedMapValue](
+      "mapState",
+      Encoders.STRING,
+      Encoders.product[EvolvedMapValue],
+      TTLConfig.NONE
+    )
+  }
+
+  override def handleInputRows(
+      key: String,
+      rows: Iterator[String],
+      timerValues: TimerValues): Iterator[(String, String, Int)] = {
+
+    rows.map { value =>
+      val current = mapState.getValue(value)
+      val newCount = if (current == null) 1 else current.count + 1
+      mapState.updateValue(value, EvolvedMapValue(newCount, Some(System.currentTimeMillis())))
+      (key, value, newCount)
+    }
+  }
 }
 
 /**
  * Class that adds integration tests for MapState types used in arbitrary stateful
  * operators such as transformWithState.
  */
+@SlowSQLTest
 class TransformWithMapStateSuite extends StreamTest
-  with AlsoTestWithChangelogCheckpointingEnabled {
+  with AlsoTestWithEncodingTypes
+  with AlsoTestWithRocksDBFeatures
+  with StateStoreMetricsTest {
   import testImplicits._
 
   private def testMapStateWithNullUserKey(inputMapRow: InputMapRow): Unit = {
@@ -103,7 +163,7 @@ class TransformWithMapStateSuite extends StreamTest
         ExpectFailure[SparkIllegalArgumentException] { e => {
           checkError(
             exception = e.asInstanceOf[SparkIllegalArgumentException],
-            errorClass = "ILLEGAL_STATE_STORE_VALUE.NULL_VALUE",
+            condition = "ILLEGAL_STATE_STORE_VALUE.NULL_VALUE",
             sqlState = Some("42601"),
             parameters = Map("stateName" -> "sessionState")
           )
@@ -125,7 +185,8 @@ class TransformWithMapStateSuite extends StreamTest
 
       testStream(result, OutputMode.Update())(
         AddData(inputData, InputMapRow("k1", "getValue", ("v1", ""))),
-        CheckAnswer(("k1", "v1", null))
+        CheckAnswer(("k1", "v1", null)),
+        assertNumStateRows(total = 0, updated = 0)
       )
     }
   }
@@ -152,7 +213,7 @@ class TransformWithMapStateSuite extends StreamTest
         ExpectFailure[SparkIllegalArgumentException] { e => {
           checkError(
             exception = e.asInstanceOf[SparkIllegalArgumentException],
-            errorClass = "ILLEGAL_STATE_STORE_VALUE.NULL_VALUE",
+            condition = "ILLEGAL_STATE_STORE_VALUE.NULL_VALUE",
             sqlState = Some("42601"),
             parameters = Map("stateName" -> "sessionState"))
         }}
@@ -175,6 +236,7 @@ class TransformWithMapStateSuite extends StreamTest
         AddData(inputData, InputMapRow("k1", "exists", ("", ""))),
         AddData(inputData, InputMapRow("k2", "exists", ("", ""))),
         CheckNewAnswer(("k1", "exists", "true"), ("k2", "exists", "false")),
+        assertNumStateRows(total = 1, updated = 1),
 
         // Test get and put with composite key
         AddData(inputData, InputMapRow("k1", "updateValue", ("v2", "5"))),
@@ -186,32 +248,46 @@ class TransformWithMapStateSuite extends StreamTest
         // Different grouping key, same user key
         AddData(inputData, InputMapRow("k1", "getValue", ("v2", ""))),
         CheckNewAnswer(("k1", "v2", "5")),
+        assertNumStateRows(total = 4, updated = 4), // new state store row for each (k, v) pair
+
         // Same grouping key, same user key, update value should reflect
         AddData(inputData, InputMapRow("k2", "getValue", ("v2", ""))),
         CheckNewAnswer(("k2", "v2", "12")),
+        assertNumStateRows(total = 4, updated = 0),
 
         // Test get full map for a given grouping key - prefixScan
         AddData(inputData, InputMapRow("k2", "iterator", ("", ""))),
         CheckNewAnswer(("k2", "v2", "12"), ("k2", "v4", "1")),
+        assertNumStateRows(total = 4, updated = 0),
 
         AddData(inputData, InputMapRow("k2", "keys", ("", ""))),
         CheckNewAnswer(("k2", "v2", ""), ("k2", "v4", "")),
+        assertNumStateRows(total = 4, updated = 0),
 
         AddData(inputData, InputMapRow("k2", "values", ("", ""))),
         CheckNewAnswer(("k2", "", "12"), ("k2", "", "1")),
+        assertNumStateRows(total = 4, updated = 0),
 
         // Test remove functionalities
         AddData(inputData, InputMapRow("k1", "removeKey", ("v2", ""))),
         AddData(inputData, InputMapRow("k1", "containsKey", ("v2", ""))),
         CheckNewAnswer(("k1", "v2", "false")),
+        assertNumStateRows(total = 3, updated = 0), // remove does not count as update
 
         AddData(inputData, InputMapRow("k2", "clear", ("", ""))),
         AddData(inputData, InputMapRow("k2", "iterator", ("", ""))),
         CheckNewAnswer(),
+        assertNumStateRows(total = 1, updated = 0),
+
         AddData(inputData, InputMapRow("k2", "exists", ("", ""))),
+        AddData(inputData, InputMapRow("k1", "clear", ("", ""))),
+        AddData(inputData, InputMapRow("k3", "updateValue", ("v7", "11"))),
         CheckNewAnswer(("k2", "exists", "false")),
+        assertNumStateRows(total = 1, updated = 1),
         Execute { q =>
           assert(q.lastProgress.stateOperators(0).customMetrics.get("numMapStateVars") > 0)
+          assert(q.lastProgress.stateOperators(0).numRowsUpdated === 1)
+          assert(q.lastProgress.stateOperators(0).numRowsRemoved === 1)
         }
       )
     }
@@ -230,4 +306,57 @@ class TransformWithMapStateSuite extends StreamTest
     val df = result.toDF()
     checkAnswer(df, Seq(("k1", "v1", "10")).toDF())
   }
+
+  testWithEncoding("avro")("MapState schema evolution - add field") {
+    withSQLConf(
+      SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[RocksDBStateStoreProvider].getName) {
+      withTempDir { dir =>
+        val inputData = MemoryStream[String]
+
+        // First run with initial schema
+        val result1 = inputData.toDS()
+          .groupByKey(x => x)
+          .transformWithState(new InitialMapStateProcessor(),
+            TimeMode.None(),
+            OutputMode.Update())
+
+        testStream(result1, OutputMode.Update())(
+          StartStream(checkpointLocation = dir.getCanonicalPath),
+          AddData(inputData, "a", "b"),
+          CheckNewAnswer(("a", "a", 1), ("b", "b", 1)),
+          assertNumStateRows(total = 2, updated = 2),
+          AddData(inputData, "a"),
+          CheckNewAnswer(("a", "a", 2)),
+          assertNumStateRows(total = 2, updated = 1),
+          StopStream
+        )
+
+        // Second run with evolved schema
+        val result2 = inputData.toDS()
+          .groupByKey(x => x)
+          .transformWithState(new EvolvedMapStateProcessor(),
+            TimeMode.None(),
+            OutputMode.Update())
+
+        testStream(result2, OutputMode.Update())(
+          StartStream(checkpointLocation = dir.getCanonicalPath),
+          AddData(inputData, "c"),
+          CheckNewAnswer(("c", "c", 1)),
+          assertNumStateRows(total = 3, updated = 1),
+          // Verify we can still read old state format
+          AddData(inputData, "a"),
+          CheckNewAnswer(("a", "a", 3)), // Count should continue from previous state
+          assertNumStateRows(total = 3, updated = 1),
+          StopStream
+        )
+      }
+    }
+  }
 }
+
+/**
+ * Test suite that runs all TransformWithMapStateSuite tests with row checksum enabled.
+ */
+@SlowSQLTest
+class TransformWithMapStateSuiteWithRowChecksum
+  extends TransformWithMapStateSuite with EnableStateStoreRowChecksum

@@ -18,7 +18,7 @@ CreateViewCommand `tab1`, SELECT * FROM VALUES
     (2, 3),
     (null, null),
     (null, null)
-    AS tab1(k, v), false, false, LocalTempView, true
+    AS tab1(k, v), false, false, LocalTempView, UNSUPPORTED, true
    +- Project [k#x, v#x]
       +- SubqueryAlias tab1
          +- LocalRelation [k#x, v#x]
@@ -41,7 +41,7 @@ CreateViewCommand `tab2`, SELECT * FROM VALUES
     (3, 4),
     (null, null),
     (null, null)
-    AS tab2(k, v), false, false, LocalTempView, true
+    AS tab2(k, v), false, false, LocalTempView, UNSUPPORTED, true
    +- Project [k#x, v#x]
       +- SubqueryAlias tab2
          +- LocalRelation [k#x, v#x]
@@ -593,7 +593,7 @@ SetCommand (spark.sql.legacy.setopsPrecedence.enabled,Some(false))
 -- !query
 CREATE OR REPLACE TEMPORARY VIEW tab3 AS VALUES (decimal(1)), (decimal(2)) tbl3(v)
 -- !query analysis
-CreateViewCommand `tab3`, VALUES (decimal(1)), (decimal(2)) tbl3(v), false, true, LocalTempView, true
+CreateViewCommand `tab3`, VALUES (decimal(1)), (decimal(2)) tbl3(v), false, true, LocalTempView, UNSUPPORTED, true
    +- SubqueryAlias tbl3
       +- LocalRelation [v#x]
 

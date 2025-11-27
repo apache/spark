@@ -17,7 +17,7 @@
 package org.apache.spark.streaming.kinesis
 
 import java.net.URI
-import java.util.UUID
+import java.util.{HashSet, List => JList, UUID}
 import java.util.concurrent.ConcurrentHashMap
 
 import scala.collection.mutable
@@ -33,8 +33,9 @@ import software.amazon.kinesis.coordinator.Scheduler
 import software.amazon.kinesis.metrics.{MetricsConfig, MetricsLevel}
 import software.amazon.kinesis.processor.{RecordProcessorCheckpointer, ShardRecordProcessor, ShardRecordProcessorFactory}
 import software.amazon.kinesis.retrieval.KinesisClientRecord
+import software.amazon.kinesis.retrieval.polling.PollingConfig
 
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.WORKER_URL
 import org.apache.spark.storage.{StorageLevel, StreamBlockId}
 import org.apache.spark.streaming.Duration
@@ -185,7 +186,7 @@ private[kinesis] class KinesisReceiver[T](
       dynamoClient, cloudWatchClient, schedulerId, recordProcessorFactory)
     val metricsConfig = new MetricsConfig(cloudWatchClient, checkpointAppName)
       .metricsLevel(metricsLevel)
-      .metricsEnabledDimensions(metricsEnabledDimensions.asJava)
+      .metricsEnabledDimensions(new HashSet(metricsEnabledDimensions.asJava))
 
     val initialPositionInStreamExtended = initialPosition match {
       case ts: AtTimestamp =>
@@ -193,6 +194,10 @@ private[kinesis] class KinesisReceiver[T](
       case _ =>
         InitialPositionInStreamExtended.newInitialPosition(initialPosition.getPosition)
     }
+
+    val pollingConfig = new PollingConfig(streamName, kinesisClient)
+    // To maintain the same behavior as SDK v1, set the interval to 1000.
+    pollingConfig.idleTimeBetweenReadsInMillis(1000)
 
     scheduler = new Scheduler(
       configsBuilder.checkpointConfig(),
@@ -202,6 +207,7 @@ private[kinesis] class KinesisReceiver[T](
       metricsConfig,
       configsBuilder.processorConfig(),
       configsBuilder.retrievalConfig()
+        .retrievalSpecificConfig(pollingConfig)
         .initialPositionInStreamExtended(initialPositionInStreamExtended)
     )
 
@@ -249,8 +255,7 @@ private[kinesis] class KinesisReceiver[T](
   }
 
   /** Add records of the given shard to the current block being generated */
-  private[kinesis] def addRecords(shardId: String, records: java.util.List[KinesisClientRecord]):
-  Unit = {
+  private[kinesis] def addRecords(shardId: String, records: JList[KinesisClientRecord]): Unit = {
     if (records.size > 0) {
       val dataIterator = records.iterator().asScala.map(messageHandler)
       val metadata = SequenceNumberRange(streamName, shardId,

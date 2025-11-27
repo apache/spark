@@ -45,6 +45,9 @@ private[spark] object SparkExitCode {
       OutOfMemoryError. */
   val OOM = 52
 
+  /** Exit due to ClassNotFoundException or NoClassDefFoundError. */
+  val CLASS_NOT_FOUND = 101
+
   /** Exit because the driver is running over the given threshold. */
   val DRIVER_TIMEOUT = 124
 

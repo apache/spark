@@ -29,7 +29,6 @@ import java.util.Map;
 import java.util.concurrent.TimeoutException;
 
 import com.google.common.collect.ImmutableMap;
-import com.google.common.collect.Sets;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.stubbing.Answer;
@@ -288,7 +287,7 @@ public class RetryingBlockTransferorSuite {
     verify(listener, timeout(5000)).onBlockTransferSuccess("b0", block0);
     verify(listener).getTransferType();
     verifyNoMoreInteractions(listener);
-    assert(_retryingBlockTransferor.getRetryCount() == 0);
+    assertEquals(0, _retryingBlockTransferor.getRetryCount());
   }
 
   @Test
@@ -310,7 +309,7 @@ public class RetryingBlockTransferorSuite {
     verify(listener, timeout(5000)).onBlockTransferFailure("b0", saslTimeoutException);
     verify(listener, times(3)).getTransferType();
     verifyNoMoreInteractions(listener);
-    assert(_retryingBlockTransferor.getRetryCount() == MAX_RETRIES);
+    assertEquals(MAX_RETRIES, _retryingBlockTransferor.getRetryCount());
   }
 
   @Test
@@ -339,7 +338,7 @@ public class RetryingBlockTransferorSuite {
     // This should be equal to 1 because after the SASL exception is retried,
     // retryCount should be set back to 0. Then after that b1 encounters an
     // exception that is retried.
-    assert(_retryingBlockTransferor.getRetryCount() == 1);
+    assertEquals(1, _retryingBlockTransferor.getRetryCount());
   }
 
   @Test
@@ -353,22 +352,22 @@ public class RetryingBlockTransferorSuite {
             new TimeoutException());
     IOException ioException = new IOException();
     List<? extends Map<String, Object>> interactions = Arrays.asList(
-            ImmutableMap.of("b0", saslExceptionInitial),
-            ImmutableMap.of("b0", ioException),
-            ImmutableMap.of("b0", saslExceptionInitial),
-            ImmutableMap.of("b0", ioException),
-            ImmutableMap.of("b0", saslExceptionFinal),
+            Map.of("b0", saslExceptionInitial),
+            Map.of("b0", ioException),
+            Map.of("b0", saslExceptionInitial),
+            Map.of("b0", ioException),
+            Map.of("b0", saslExceptionFinal),
             // will not get invoked because the connection fails
-            ImmutableMap.of("b0", ioException),
+            Map.of("b0", ioException),
             // will not get invoked
-            ImmutableMap.of("b0", block0)
+            Map.of("b0", block0)
     );
     configMap.put("spark.shuffle.sasl.enableRetries", "true");
     performInteractions(interactions, listener);
     verify(listener, timeout(5000)).onBlockTransferFailure("b0", saslExceptionFinal);
     verify(listener, atLeastOnce()).getTransferType();
     verifyNoMoreInteractions(listener);
-    assert(_retryingBlockTransferor.getRetryCount() == MAX_RETRIES);
+    assertEquals(MAX_RETRIES, _retryingBlockTransferor.getRetryCount());
   }
 
   @Test
@@ -425,7 +424,7 @@ public class RetryingBlockTransferorSuite {
     Stubber stub = null;
 
     // Contains all blockIds that are referenced across all interactions.
-    LinkedHashSet<String> blockIds = Sets.newLinkedHashSet();
+    LinkedHashSet<String> blockIds = new LinkedHashSet<>();
 
     for (Map<String, Object> interaction : interactions) {
       blockIds.addAll(interaction.keySet());

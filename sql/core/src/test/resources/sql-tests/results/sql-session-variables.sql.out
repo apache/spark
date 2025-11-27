@@ -168,7 +168,7 @@ struct<>
 
 
 -- !query
-DECLARE VARIABLE var1 INT
+DECLARE VAR var1 INT
 -- !query schema
 struct<>
 -- !query output
@@ -184,7 +184,7 @@ NULL
 
 
 -- !query
-DROP TEMPORARY VARIABLE var1
+DROP TEMPORARY VAR var1
 -- !query schema
 struct<>
 -- !query output
@@ -1367,6 +1367,188 @@ DROP TEMPORARY VARIABLE var3
 struct<>
 -- !query output
 
+
+
+-- !query
+SET VARIABLE title = 'DECLARE VARIABLE - multiple variables declared at once'
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DECLARE VARIABLE var1, var2, var3 INT
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DECLARE VARIABLE var4, var5, var6 INT DEFAULT CAST(RAND(0) * 10 AS INT)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DECLARE VARIABLE var7, var8, var9 DEFAULT 5
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT var4 = var5, var4 = var6, var5 = var6
+-- !query schema
+struct<(variablereference(system.session.var4=7) = variablereference(system.session.var5=7)):boolean,(variablereference(system.session.var4=7) = variablereference(system.session.var6=7)):boolean,(variablereference(system.session.var5=7) = variablereference(system.session.var6=7)):boolean>
+-- !query output
+true	true	true
+
+
+-- !query
+DECLARE OR REPLACE VARIABLE var1, var2, var3 DOUBLE
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DECLARE OR REPLACE VARIABLE var4, var5, var6 DOUBLE DEFAULT RAND(0)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DECLARE OR REPLACE VARIABLE var7, var8, var9 DEFAULT 1.5
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT var4 = var5, var4 = var6, var5 = var6
+-- !query schema
+struct<(variablereference(system.session.var4=0.7604953758285915D) = variablereference(system.session.var5=0.7604953758285915D)):boolean,(variablereference(system.session.var4=0.7604953758285915D) = variablereference(system.session.var6=0.7604953758285915D)):boolean,(variablereference(system.session.var5=0.7604953758285915D) = variablereference(system.session.var6=0.7604953758285915D)):boolean>
+-- !query output
+true	true	true
+
+
+-- !query
+DROP TEMPORARY VARIABLE var1
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP TEMPORARY VARIABLE var2
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP TEMPORARY VARIABLE var3
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP TEMPORARY VARIABLE var4
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP TEMPORARY VARIABLE var5
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP TEMPORARY VARIABLE var6
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP TEMPORARY VARIABLE var7
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP TEMPORARY VARIABLE var8
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP TEMPORARY VARIABLE var9
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SET VARIABLE title = 'DECLARE VARIABLE - duplicate names'
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DECLARE VARIABLE var1, var2, vAr1 INT
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "DUPLICATE_VARIABLE_NAME_INSIDE_DECLARE",
+  "sqlState" : "42734",
+  "messageParameters" : {
+    "variableName" : "`system`.`session`.`var1`"
+  }
+}
+
+
+-- !query
+DECLARE OR REPLACE VARIABLE var1, var2, vAr1 INT
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "DUPLICATE_VARIABLE_NAME_INSIDE_DECLARE",
+  "sqlState" : "42734",
+  "messageParameters" : {
+    "variableName" : "`system`.`session`.`var1`"
+  }
+}
 
 
 -- !query

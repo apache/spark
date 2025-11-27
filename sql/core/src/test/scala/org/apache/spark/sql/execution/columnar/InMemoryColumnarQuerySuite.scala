@@ -22,10 +22,11 @@ import java.sql.{Date, Timestamp}
 import java.util.concurrent.atomic.AtomicInteger
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{DataFrame, QueryTest, Row}
+import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, AttributeSet, In}
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
+import org.apache.spark.sql.classic.DataFrame
 import org.apache.spark.sql.columnar.CachedBatch
 import org.apache.spark.sql.execution.{FilterExec, InputAdapter, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
@@ -150,7 +151,7 @@ class InMemoryColumnarQuerySuite extends QueryTest
       spark.catalog.cacheTable("sizeTst")
       assert(
         spark.table("sizeTst").queryExecution.analyzed.stats.sizeInBytes >
-          spark.conf.get(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD))
+          sqlConf.getConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD))
     }
   }
 
@@ -568,9 +569,10 @@ class InMemoryColumnarQuerySuite extends QueryTest
   }
 
   test("SPARK-39104: InMemoryRelation#isCachedColumnBuffersLoaded should be thread-safe") {
-    val plan = spark.range(1).queryExecution.executedPlan
+    val qe = spark.range(1).queryExecution
+    val plan = qe.executedPlan
     val serializer = new TestCachedBatchSerializer(true, 1)
-    val cachedRDDBuilder = CachedRDDBuilder(serializer, MEMORY_ONLY, plan, None)
+    val cachedRDDBuilder = CachedRDDBuilder(serializer, MEMORY_ONLY, plan, None, qe.logical)
 
     @volatile var isCachedColumnBuffersLoaded = false
     @volatile var stopped = false

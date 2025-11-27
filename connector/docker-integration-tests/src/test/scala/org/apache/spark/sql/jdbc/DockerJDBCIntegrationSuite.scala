@@ -37,7 +37,6 @@ import org.scalatest.concurrent.{Eventually, PatienceConfiguration}
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.internal.LogKeys.{CLASS_NAME, CONTAINER, STATUS}
-import org.apache.spark.internal.MDC
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.util.{DockerUtils, Utils}
@@ -115,7 +114,7 @@ abstract class DockerJDBCIntegrationSuite
   protected val startContainerTimeout: Long =
     timeStringAsSeconds(sys.props.getOrElse("spark.test.docker.startContainerTimeout", "5min"))
   protected val connectionTimeout: PatienceConfiguration.Timeout = {
-    val timeoutStr = sys.props.getOrElse("spark.test.docker.connectionTimeout", "5min")
+    val timeoutStr = sys.props.getOrElse("spark.test.docker.connectionTimeout", "10min")
     timeout(timeStringAsSeconds(timeoutStr).seconds)
   }
 

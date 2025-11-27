@@ -96,7 +96,7 @@ logging into the data sources.
             </code></li>
       </ol>
     </td>
-    <td>read/write</td>
+    <td>read</td>
   </tr>
   <tr>
     <td><code>prepareQuery</code></td>
@@ -229,9 +229,9 @@ logging into the data sources.
     <td><code>truncate</code></td>
     <td><code>false</code></td>
     <td>
-      This is a JDBC writer related option. When <code>SaveMode.Overwrite</code> is enabled, this option causes Spark to truncate an existing table instead of dropping and recreating it. This can be more efficient, and prevents the table metadata (e.g., indices) from being removed. However, it will not work in some cases, such as when the new data has a different schema. In case of failures, users should turn off <code>truncate</code> option to use <code>DROP TABLE</code> again. Also, due to the different behavior of <code>TRUNCATE TABLE</code> among DBMS, it's not always safe to use this. MySQLDialect, DB2Dialect, MsSqlServerDialect, DerbyDialect, and OracleDialect supports this while PostgresDialect and default JDBCDirect doesn't. For unknown and unsupported JDBCDirect, the user option <code>truncate</code> is ignored.
+      This is a JDBC writer related option. When <code>SaveMode.Overwrite</code> is enabled, this option causes Spark to truncate an existing table instead of dropping and recreating it. This can be more efficient, and prevents the table metadata (e.g., indices) from being removed. However, it will not work in some cases, such as when the new data has a different schema. In case of failures, users should turn off <code>truncate</code> option to use <code>DROP TABLE</code> again. Also, due to the different behavior of <code>TRUNCATE TABLE</code> among DBMSes, it's not always safe to use this. MySQLDialect, DB2Dialect, MsSqlServerDialect, DerbyDialect, and OracleDialect supports this while PostgresDialect and default JDBCDialect doesn't. For unknown and unsupported JDBCDialect, the user option <code>truncate</code> is ignored.
+    </td>
     <td>write</td>
-   </td>
   </tr>
 
   <tr>
@@ -371,6 +371,14 @@ logging into the data sources.
       When the option is set to <code>true</code>, TIMESTAMP WITHOUT TIME ZONE type is inferred as Spark's TimestampNTZ type.
       Otherwise, it is interpreted as Spark's Timestamp type(equivalent to TIMESTAMP WITH LOCAL TIME ZONE).
       This setting specifically affects only the inference of TIMESTAMP WITHOUT TIME ZONE data type. Both TIMESTAMP WITH LOCAL TIME ZONE and TIMESTAMP WITH TIME ZONE data types are consistently interpreted as Spark's Timestamp type regardless of this setting.
+    </td>
+    <td>read</td>
+  </tr>
+  <tr>
+    <td><code>hint</code></td>
+    <td>(none)</td>
+    <td>
+      This option is used to specify the hint for reading. The supported hint format is a variant of C-style comments: it needs to start with `/*+ ` and end with ` */`. Currently, this option is only supported in MySQLDialect, OracleDialect and DatabricksDialect.
     </td>
     <td>read</td>
   </tr>
@@ -1074,8 +1082,8 @@ the [PostgreSQL JDBC Driver](https://mvnrepository.com/artifact/org.postgresql/p
     </tr>
     <tr>
       <td>TimestampType</td>
-      <td>timestamp</td>
-      <td></td>
+      <td>timestamp with time zone</td>
+      <td>Before Spark 4.0, it was mapped as timestamp. Please refer to the migration guide for more information</td>
     </tr>
     <tr>
       <td>TimestampNTZType</td>
@@ -1725,6 +1733,475 @@ the mssql-jdbc as the activated JDBC Driver.
 </table>
 
 The Spark Catalyst data types below are not supported with suitable SQL Server types.
+
+- DayTimeIntervalType
+- YearMonthIntervalType
+- CalendarIntervalType
+- ArrayType
+- MapType
+- StructType
+- UserDefinedType
+- NullType
+- ObjectType
+- VariantType
+
+### Mapping Spark SQL Data Types from DB2
+
+The below table describes the data type conversions from DB2 data types to Spark SQL Data Types,
+when reading data from a DB2 table using the built-in jdbc data source with the [IBM Data Server Driver For JDBC and SQLJ](https://mvnrepository.com/artifact/com.ibm.db2/jcc)
+as the activated JDBC Driver.
+
+
+<table>
+  <thead>
+    <tr>
+      <th><b>DB2 Data Type</b></th>
+      <th><b>Spark SQL Data Type</b></th>
+      <th><b>Remarks</b></th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>BOOLEAN</td>
+      <td>BinaryType</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>SMALLINT</td>
+      <td>ShortType</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>INTEGER</td>
+      <td>IntegerType</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>BIGINT</td>
+      <td>LongType</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>REAL</td>
+      <td>FloatType</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>DOUBLE, FLOAT</td>
+      <td>DoubleType</td>
+      <td>FLOAT is double precision floating-point in db2</td>
+    </tr>
+    <tr>
+      <td>DECIMAL, NUMERIC, DECFLOAT</td>
+      <td>DecimalType</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>DATE</td>
+      <td>DateType</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>TIMESTAMP, TIMESTAMP WITHOUT TIME ZONE</td>
+      <td>TimestampType</td>
+      <td>(Default)preferTimestampNTZ=false or spark.sql.timestampType=TIMESTAMP_LTZ</td>
+    </tr>
+    <tr>
+      <td>TIMESTAMP, TIMESTAMP WITHOUT TIME ZONE</td>
+      <td>TimestampNTZType</td>
+      <td>preferTimestampNTZ=true or spark.sql.timestampType=TIMESTAMP_NTZ</td>
+    </tr>
+    <tr>
+      <td>TIMESTAMP WITH TIME ZONE</td>
+      <td>TimestampType</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>TIME</td>
+      <td>TimestampType</td>
+      <td>(Default)preferTimestampNTZ=false or spark.sql.timestampType=TIMESTAMP_LTZ</td>
+    </tr>
+    <tr>
+      <td>TIME</td>
+      <td>TimestampNTZType</td>
+      <td>preferTimestampNTZ=true or spark.sql.timestampType=TIMESTAMP_NTZ</td>
+    </tr>
+    <tr>
+      <td>CHAR(n)</td>
+      <td>CharType(n)</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>VARCHAR(n)</td>
+      <td>VarcharType(n)</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>CHAR(n) FOR BIT DATA</td>
+      <td>BinaryType</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>VARCHAR(n) FOR BIT DATA</td>
+      <td>BinaryType</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>BINARY(n)</td>
+      <td>BinaryType</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>VARBINARY(n)</td>
+      <td>BinaryType</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>CLOB(n)</td>
+      <td>StringType</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>DBCLOB(n)</td>
+      <td>StringType</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>BLOB(n)</td>
+      <td>BinaryType</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>GRAPHIC(n)</td>
+      <td>StringType</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>VARGRAPHIC(n)</td>
+      <td>StringType</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>XML</td>
+      <td>StringType</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>ROWID</td>
+      <td>StringType</td>
+      <td></td>
+    </tr>
+  </tbody>
+</table>
+
+### Mapping Spark SQL Data Types to DB2
+
+The below table describes the data type conversions from Spark SQL Data Types to DB2 data types,
+when creating, altering, or writing data to a DB2 table using the built-in jdbc data source with
+the [IBM Data Server Driver For JDBC and SQLJ](https://mvnrepository.com/artifact/com.ibm.db2/jcc) as the activated JDBC Driver.
+
+<table>
+  <thead>
+    <tr>
+      <th><b>Spark SQL Data Type</b></th>
+      <th><b>DB2 Data Type</b></th>
+      <th><b>Remarks</b></th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>BooleanType</td>
+      <td>BOOLEAN</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>ByteType</td>
+      <td>SMALLINT</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>ShortType</td>
+      <td>SMALLINT</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>IntegerType</td>
+      <td>INTEGER</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>LongType</td>
+      <td>BIGINT</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>FloatType</td>
+      <td>REAL</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>DoubleType</td>
+      <td>DOUBLE PRECISION</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>DecimalType(p, s)</td>
+      <td>DECIMAL(p,s)</td>
+      <td>The maximum value for 'p' is 31 in DB2, while it is 38 in Spark. It might fail when storing DecimalType(p>=32, s) to DB2</td>
+    </tr>
+    <tr>
+      <td>DateType</td>
+      <td>DATE</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>TimestampType</td>
+      <td>TIMESTAMP</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>TimestampNTZType</td>
+      <td>TIMESTAMP</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>StringType</td>
+      <td>CLOB</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>BinaryType</td>
+      <td>BLOB</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>CharType(n)</td>
+      <td>CHAR(n)</td>
+      <td>The maximum value for 'n' is 255 in DB2, while it is unlimited in Spark.</td>
+    </tr>
+    <tr>
+      <td>VarcharType(n)</td>
+      <td>VARCHAR(n)</td>
+      <td>The maximum value for 'n' is 255 in DB2, while it is unlimited in Spark.</td>
+    </tr>
+  </tbody>
+</table>
+
+The Spark Catalyst data types below are not supported with suitable DB2 types.
+
+- DayTimeIntervalType
+- YearMonthIntervalType
+- CalendarIntervalType
+- ArrayType
+- MapType
+- StructType
+- UserDefinedType
+- NullType
+- ObjectType
+- VariantType
+
+### Mapping Spark SQL Data Types from Teradata
+
+The below table describes the data type conversions from Teradata data types to Spark SQL Data Types,
+when reading data from a Teradata table using the built-in jdbc data source with the [Teradata JDBC Driver](https://mvnrepository.com/artifact/com.teradata.jdbc/terajdbc)
+as the activated JDBC Driver.
+
+<table>
+  <thead>
+    <tr>
+      <th><b>Teradata Data Type</b></th>
+      <th><b>Spark SQL Data Type</b></th>
+      <th><b>Remarks</b></th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>BYTEINT</td>
+      <td>ByteType</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>SMALLINT</td>
+      <td>ShortType</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>INTEGER, INT</td>
+      <td>IntegerType</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>BIGINT</td>
+      <td>LongType</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>REAL, DOUBLE PRECISION, FLOAT</td>
+      <td>DoubleType</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>DECIMAL, NUMERIC, NUMBER</td>
+      <td>DecimalType</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>DATE</td>
+      <td>DateType</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>TIMESTAMP, TIMESTAMP WITH TIME ZONE</td>
+      <td>TimestampType</td>
+      <td>(Default)preferTimestampNTZ=false or spark.sql.timestampType=TIMESTAMP_LTZ</td>
+    </tr>
+    <tr>
+      <td>TIMESTAMP, TIMESTAMP WITH TIME ZONE</td>
+      <td>TimestampNTZType</td>
+      <td>preferTimestampNTZ=true or spark.sql.timestampType=TIMESTAMP_NTZ</td>
+    </tr>
+    <tr>
+      <td>TIME, TIME WITH TIME ZONE</td>
+      <td>TimestampType</td>
+      <td>(Default)preferTimestampNTZ=false or spark.sql.timestampType=TIMESTAMP_LTZ</td>
+    </tr>
+    <tr>
+      <td>TIME, TIME WITH TIME ZONE</td>
+      <td>TimestampNTZType</td>
+      <td>preferTimestampNTZ=true or spark.sql.timestampType=TIMESTAMP_NTZ</td>
+    </tr>
+    <tr>
+      <td>CHARACTER(n), CHAR(n), GRAPHIC(n)</td>
+      <td>CharType(n)</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>VARCHAR(n), VARGRAPHIC(n)</td>
+      <td>VarcharType(n)</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>BYTE(n), VARBYTE(n)</td>
+      <td>BinaryType</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>CLOB</td>
+      <td>StringType</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>BLOB</td>
+      <td>BinaryType</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>INTERVAL Data Types</td>
+      <td>-</td>
+      <td>The INTERVAL data types are unknown yet</td>
+    </tr>
+    <tr>
+      <td>Period Data Types, ARRAY, UDT</td>
+      <td>-</td>
+      <td>Not Supported</td>
+    </tr>
+  </tbody>
+</table>
+
+### Mapping Spark SQL Data Types to Teradata
+
+The below table describes the data type conversions from Spark SQL Data Types to Teradata data types,
+when creating, altering, or writing data to a Teradata table using the built-in jdbc data source with
+the [Teradata JDBC Driver](https://mvnrepository.com/artifact/com.teradata.jdbc/terajdbc) as the activated JDBC Driver.
+
+<table>
+  <thead>
+    <tr>
+      <th><b>Spark SQL Data Type</b></th>
+      <th><b>Teradata Data Type</b></th>
+      <th><b>Remarks</b></th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>BooleanType</td>
+      <td>CHAR(1)</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>ByteType</td>
+      <td>BYTEINT</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>ShortType</td>
+      <td>SMALLINT</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>IntegerType</td>
+      <td>INTEGER</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>LongType</td>
+      <td>BIGINT</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>FloatType</td>
+      <td>REAL</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>DoubleType</td>
+      <td>DOUBLE PRECISION</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>DecimalType(p, s)</td>
+      <td>DECIMAL(p,s)</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>DateType</td>
+      <td>DATE</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>TimestampType</td>
+      <td>TIMESTAMP</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>TimestampNTZType</td>
+      <td>TIMESTAMP</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>StringType</td>
+      <td>VARCHAR(255)</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>BinaryType</td>
+      <td>BLOB</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>CharType(n)</td>
+      <td>CHAR(n)</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>VarcharType(n)</td>
+      <td>VARCHAR(n)</td>
+      <td></td>
+    </tr>
+  </tbody>
+</table>
+
+The Spark Catalyst data types below are not supported with suitable Teradata types.
 
 - DayTimeIntervalType
 - YearMonthIntervalType

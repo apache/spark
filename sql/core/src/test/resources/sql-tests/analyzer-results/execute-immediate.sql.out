@@ -18,7 +18,7 @@ CreateViewCommand `tbl_view`, SELECT * FROM VALUES
   (50, 'name5', named_struct('f1', 5, 's2', named_struct('f2', 505, 'f3', 'e'))),
   (60, 'name6', named_struct('f1', 6, 's2', named_struct('f2', 606, 'f3', 'f'))),
   (70, 'name7', named_struct('f1', 7, 's2', named_struct('f2', 707, 'f3', 'g')))
-AS tbl_view(id, name, data), false, false, LocalTempView, true
+AS tbl_view(id, name, data), false, false, LocalTempView, UNSUPPORTED, true
    +- Project [id#x, name#x, data#x]
       +- SubqueryAlias tbl_view
          +- LocalRelation [id#x, name#x, data#x]
@@ -48,20 +48,22 @@ SetVariable [variablereference(system.session.sql_string=CAST(NULL AS STRING))]
 -- !query
 EXECUTE IMMEDIATE 'SET spark.sql.ansi.enabled=true'
 -- !query analysis
-SetCommand (spark.sql.ansi.enabled,Some(true))
+CommandResult [key#x, value#x], Execute SetCommand, [[spark.sql.ansi.enabled,true]]
+   +- SetCommand (spark.sql.ansi.enabled,Some(true))
 
 
 -- !query
 EXECUTE IMMEDIATE 'CREATE TEMPORARY VIEW IDENTIFIER(:tblName) AS SELECT id, name FROM tbl_view' USING 'tbl_view_tmp' as tblName
 -- !query analysis
-CreateViewCommand `tbl_view_tmp`, SELECT id, name FROM tbl_view, false, false, LocalTempView, true
-   +- Project [id#x, name#x]
-      +- SubqueryAlias tbl_view
-         +- View (`tbl_view`, [id#x, name#x, data#x])
-            +- Project [cast(id#x as int) AS id#x, cast(name#x as string) AS name#x, cast(data#x as struct<f1:int,s2:struct<f2:int,f3:string>>) AS data#x]
-               +- Project [id#x, name#x, data#x]
-                  +- SubqueryAlias tbl_view
-                     +- LocalRelation [id#x, name#x, data#x]
+CommandResult Execute CreateViewCommand
+   +- CreateViewCommand `tbl_view_tmp`, SELECT id, name FROM tbl_view, false, false, LocalTempView, UNSUPPORTED, true
+         +- Project [id#x, name#x]
+            +- SubqueryAlias tbl_view
+               +- View (`tbl_view`, [id#x, name#x, data#x])
+                  +- Project [cast(id#x as int) AS id#x, cast(name#x as string) AS name#x, cast(data#x as struct<f1:int,s2:struct<f2:int,f3:string>>) AS data#x]
+                     +- Project [id#x, name#x, data#x]
+                        +- SubqueryAlias tbl_view
+                           +- LocalRelation [id#x, name#x, data#x]
 
 
 -- !query
@@ -83,7 +85,8 @@ Project [id#x, name#x]
 -- !query
 EXECUTE IMMEDIATE 'REFRESH TABLE IDENTIFIER(:tblName)' USING 'x' as tblName
 -- !query analysis
-RefreshTableCommand `spark_catalog`.`default`.`x`
+CommandResult Execute RefreshTableCommand
+   +- RefreshTableCommand `spark_catalog`.`default`.`x`
 
 
 -- !query
@@ -152,7 +155,7 @@ Project [id#x, name#x, data#x]
 EXECUTE IMMEDIATE sql_string USING a, 'name2'
 -- !query analysis
 Project [id#x, name#x, data#x]
-+- Filter ((name#x = variablereference(system.session.a='name1')) OR (name#x = name2))
++- Filter ((name#x = name1) OR (name#x = name2))
    +- SubqueryAlias tbl_view
       +- View (`tbl_view`, [id#x, name#x, data#x])
          +- Project [cast(id#x as int) AS id#x, cast(name#x as string) AS name#x, cast(data#x as struct<f1:int,s2:struct<f2:int,f3:string>>) AS data#x]
@@ -178,7 +181,7 @@ Project [id#x, name#x, data#x]
 EXECUTE IMMEDIATE 'SELECT * from tbl_view where name = ? or name = ?' USING a, 'name2'
 -- !query analysis
 Project [id#x, name#x, data#x]
-+- Filter ((name#x = variablereference(system.session.a='name1')) OR (name#x = name2))
++- Filter ((name#x = name1) OR (name#x = name2))
    +- SubqueryAlias tbl_view
       +- View (`tbl_view`, [id#x, name#x, data#x])
          +- Project [cast(id#x as int) AS id#x, cast(name#x as string) AS name#x, cast(data#x as struct<f1:int,s2:struct<f2:int,f3:string>>) AS data#x]
@@ -191,7 +194,7 @@ Project [id#x, name#x, data#x]
 EXECUTE IMMEDIATE 'SELECT * from tbl_view where name = ? or name = ?' USING (a, 'name2')
 -- !query analysis
 Project [id#x, name#x, data#x]
-+- Filter ((name#x = variablereference(system.session.a='name1')) OR (name#x = name2))
++- Filter ((name#x = name1) OR (name#x = name2))
    +- SubqueryAlias tbl_view
       +- View (`tbl_view`, [id#x, name#x, data#x])
          +- Project [cast(id#x as int) AS id#x, cast(name#x as string) AS name#x, cast(data#x as struct<f1:int,s2:struct<f2:int,f3:string>>) AS data#x]
@@ -203,9 +206,10 @@ Project [id#x, name#x, data#x]
 -- !query
 EXECUTE IMMEDIATE 'INSERT INTO x VALUES(?)' USING 1
 -- !query analysis
-InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/x, false, CSV, [path=file:[not included in comparison]/{warehouse_dir}/x], Append, `spark_catalog`.`default`.`x`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/x), [id]
-+- Project [cast(col1#x as int) AS id#x]
-   +- LocalRelation [col1#x]
+CommandResult Execute InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/x, false, CSV, [path=file:[not included in comparison]/{warehouse_dir}/x], Append, `spark_catalog`.`default`.`x`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/x), [id]
+   +- InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/x, false, CSV, [path=file:[not included in comparison]/{warehouse_dir}/x], Append, `spark_catalog`.`default`.`x`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/x), [id]
+      +- Project [col1#x AS id#x]
+         +- LocalRelation [col1#x]
 
 
 -- !query
@@ -256,7 +260,7 @@ Project [id#x, name#x, data#x]
 EXECUTE IMMEDIATE sql_string USING b as second, 'name7' as first
 -- !query analysis
 Project [id#x, name#x, data#x]
-+- Filter ((name#x = name7) OR (id#x = variablereference(system.session.b=40)))
++- Filter ((name#x = name7) OR (id#x = 40))
    +- SubqueryAlias tbl_view
       +- View (`tbl_view`, [id#x, name#x, data#x])
          +- Project [cast(id#x as int) AS id#x, cast(name#x as string) AS name#x, cast(data#x as struct<f1:int,s2:struct<f2:int,f3:string>>) AS data#x]
@@ -282,7 +286,7 @@ Project [id#x, name#x, data#x]
 EXECUTE IMMEDIATE 'SELECT * from tbl_view where name = :first or id = :second' USING 'name7' as first, b as second
 -- !query analysis
 Project [id#x, name#x, data#x]
-+- Filter ((name#x = name7) OR (id#x = variablereference(system.session.b=40)))
++- Filter ((name#x = name7) OR (id#x = 40))
    +- SubqueryAlias tbl_view
       +- View (`tbl_view`, [id#x, name#x, data#x])
          +- Project [cast(id#x as int) AS id#x, cast(name#x as string) AS name#x, cast(data#x as struct<f1:int,s2:struct<f2:int,f3:string>>) AS data#x]
@@ -307,9 +311,10 @@ Project [id#x, name#x, data#x, name7 AS p#x]
 -- !query
 EXECUTE IMMEDIATE 'SET VAR sql_string = ?' USING 'SELECT id from tbl_view where name = :first'
 -- !query analysis
-SetVariable [variablereference(system.session.sql_string='SELECT * from tbl_view where name = :first or id = :second')]
-+- Project [SELECT id from tbl_view where name = :first AS sql_string#x]
-   +- OneRowRelation
+CommandResult SetVariable [variablereference(system.session.sql_string='SELECT * from tbl_view where name = :first or id = :second')]
+   +- SetVariable [variablereference(system.session.sql_string='SELECT * from tbl_view where name = :first or id = :second')]
+      +- Project [SELECT id from tbl_view where name = :first AS sql_string#x]
+         +- OneRowRelation
 
 
 -- !query
@@ -356,7 +361,7 @@ SetVariable [variablereference(system.session.res_id=70)]
 +- GlobalLimit 2
    +- LocalLimit 2
       +- Project [id#x]
-         +- Filter (name#x = variablereference(system.session.a='name1'))
+         +- Filter (name#x = name1)
             +- SubqueryAlias tbl_view
                +- View (`tbl_view`, [id#x, name#x, data#x])
                   +- Project [cast(id#x as int) AS id#x, cast(name#x as string) AS name#x, cast(data#x as struct<f1:int,s2:struct<f2:int,f3:string>>) AS data#x]
@@ -422,7 +427,7 @@ Project [variablereference(system.session.b=10) AS b#x, variablereference(system
 EXECUTE IMMEDIATE 'SELECT * FROM tbl_view where id = ? AND name = ?' USING b as first, a
 -- !query analysis
 Project [id#x, name#x, data#x]
-+- Filter ((id#x = variablereference(system.session.b=10)) AND (name#x = variablereference(system.session.a='name1')))
++- Filter ((id#x = 10) AND (name#x = name1))
    +- SubqueryAlias tbl_view
       +- View (`tbl_view`, [id#x, name#x, data#x])
          +- Project [cast(id#x as int) AS id#x, cast(name#x as string) AS name#x, cast(data#x as struct<f1:int,s2:struct<f2:int,f3:string>>) AS data#x]
@@ -500,15 +505,34 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
-EXECUTE IMMEDIATE 'SELECT * FROM tbl_view WHERE ? = id' USING id
+DECLARE OR REPLACE testvarA INT
+-- !query analysis
+CreateVariable defaultvalueexpression(null, null), true
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.testvarA
+
+
+-- !query
+EXECUTE IMMEDIATE 'SET VAR testVarA = 1' INTO testVarA
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNRESOLVED_VARIABLE",
-  "sqlState" : "42883",
+  "errorClass" : "INVALID_STATEMENT_FOR_EXECUTE_INTO",
+  "sqlState" : "07501",
   "messageParameters" : {
-    "searchPath" : "`system`.`session`",
-    "variableName" : "`id`"
+    "sqlString" : "SET VAR TESTVARA = 1"
+  }
+}
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT * FROM tbl_view WHERE ? = id' USING id
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`id`"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -521,12 +545,25 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
-EXECUTE IMMEDIATE 'SELECT * FROM tbl_view where ? = id and :first = name' USING 1, 'name2' as first
+EXECUTE IMMEDIATE 'SELECT * FROM tbl_view where ? = id and :first = name' USING 1 as x, 'name2' as first
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INVALID_QUERY_MIXED_QUERY_PARAMETERS",
   "sqlState" : "42613"
+}
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT * FROM tbl_view where :x = id and :first = name' USING 1, 'name2' as first
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "ALL_PARAMETERS_MUST_BE_NAMED",
+  "sqlState" : "07001",
+  "messageParameters" : {
+    "exprs" : "\"1\""
+  }
 }
 
 
@@ -555,11 +592,11 @@ org.apache.spark.sql.catalyst.parser.ParseException
     "hint" : ""
   },
   "queryContext" : [ {
-    "objectType" : "",
+    "objectType" : "EXECUTE IMMEDIATE",
     "objectName" : "",
     "startIndex" : 1,
-    "stopIndex" : 28,
-    "fragment" : "EXECUTE IMMEDIATE 'SELCT Fa'"
+    "stopIndex" : 8,
+    "fragment" : "SELCT Fa"
   } ]
 }
 
@@ -576,11 +613,11 @@ org.apache.spark.sql.catalyst.parser.ParseException
     "hint" : ""
   },
   "queryContext" : [ {
-    "objectType" : "",
+    "objectType" : "EXECUTE IMMEDIATE",
     "objectName" : "",
     "startIndex" : 1,
-    "stopIndex" : 40,
-    "fragment" : "EXECUTE IMMEDIATE 'SELCT Fa' INTO res_id"
+    "stopIndex" : 8,
+    "fragment" : "SELCT Fa"
   } ]
 }
 
@@ -590,10 +627,10 @@ EXECUTE IMMEDIATE b
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_VARIABLE_TYPE_FOR_QUERY_EXECUTE_IMMEDIATE",
+  "errorClass" : "INVALID_EXPR_TYPE_FOR_QUERY_EXECUTE_IMMEDIATE",
   "sqlState" : "42K09",
   "messageParameters" : {
-    "varType" : "\"INT\""
+    "exprType" : "\"INT\""
   }
 }
 
@@ -617,21 +654,14 @@ SetVariable [variablereference(system.session.a='name1')]
 -- !query
 EXECUTE IMMEDIATE 'SELECT * from tbl_view where name = :first' USING CONCAT(a , "me1") as first
 -- !query analysis
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "UNSUPPORTED_EXPR_FOR_PARAMETER",
-  "sqlState" : "42K0E",
-  "messageParameters" : {
-    "invalidExprSql" : "\"CONCAT(a, me1)\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 70,
-    "stopIndex" : 86,
-    "fragment" : "CONCAT(a , \"me1\")"
-  } ]
-}
+Project [id#x, name#x, data#x]
++- Filter (name#x = name1)
+   +- SubqueryAlias tbl_view
+      +- View (`tbl_view`, [id#x, name#x, data#x])
+         +- Project [cast(id#x as int) AS id#x, cast(name#x as string) AS name#x, cast(data#x as struct<f1:int,s2:struct<f2:int,f3:string>>) AS data#x]
+            +- Project [id#x, name#x, data#x]
+               +- SubqueryAlias tbl_view
+                  +- LocalRelation [id#x, name#x, data#x]
 
 
 -- !query
@@ -760,7 +790,7 @@ CreateVariable defaultvalueexpression(10, 10), false
 EXECUTE IMMEDIATE 'SELECT id FROM tbl_view WHERE id = :p' USING p
 -- !query analysis
 Project [id#x]
-+- Filter (id#x = variablereference(system.session.p=10))
++- Filter (id#x = 10)
    +- SubqueryAlias tbl_view
       +- View (`tbl_view`, [id#x, name#x, data#x])
          +- Project [cast(id#x as int) AS id#x, cast(name#x as string) AS name#x, cast(data#x as struct<f1:int,s2:struct<f2:int,f3:string>>) AS data#x]
@@ -796,16 +826,16 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
-EXECUTE IMMEDIATE 'EXECUTE IMMEDIATE \'SELECT id FROM tbl_view WHERE id = ? USING 10\''
+EXECUTE IMMEDIATE 'EXECUTE IMMEDIATE \'SELECT id FROM tbl_view WHERE id = ?\' USING 10'
 -- !query analysis
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "NESTED_EXECUTE_IMMEDIATE",
-  "sqlState" : "07501",
-  "messageParameters" : {
-    "sqlString" : "EXECUTE IMMEDIATE 'SELECT ID FROM TBL_VIEW WHERE ID = ? USING 10'"
-  }
-}
+Project [id#x]
++- Filter (id#x = 10)
+   +- SubqueryAlias tbl_view
+      +- View (`tbl_view`, [id#x, name#x, data#x])
+         +- Project [cast(id#x as int) AS id#x, cast(name#x as string) AS name#x, cast(data#x as struct<f1:int,s2:struct<f2:int,f3:string>>) AS data#x]
+            +- Project [id#x, name#x, data#x]
+               +- SubqueryAlias tbl_view
+                  +- LocalRelation [id#x, name#x, data#x]
 
 
 -- !query
@@ -831,7 +861,406 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
+SET VAR sql_string = 5
+-- !query analysis
+SetVariable [variablereference(system.session.sql_string=CAST(NULL AS STRING))]
++- Project [cast(sql_string#x as string) AS sql_string#x]
+   +- Project [5 AS sql_string#x]
+      +- OneRowRelation
+
+
+-- !query
+EXECUTE IMMEDIATE sql_string
+-- !query analysis
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'5'",
+    "hint" : ""
+  },
+  "queryContext" : [ {
+    "objectType" : "EXECUTE IMMEDIATE",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 1,
+    "fragment" : "5"
+  } ]
+}
+
+
+-- !query
+SET VAR sql_string = 'hello'
+-- !query analysis
+SetVariable [variablereference(system.session.sql_string='5')]
++- Project [hello AS sql_string#x]
+   +- OneRowRelation
+
+
+-- !query
+EXECUTE IMMEDIATE length(sql_string)
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_EXPR_TYPE_FOR_QUERY_EXECUTE_IMMEDIATE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "exprType" : "\"INT\""
+  }
+}
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT 42 where ? = :first' USING 1, 2 as first
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_QUERY_MIXED_QUERY_PARAMETERS",
+  "sqlState" : "42613"
+}
+
+
+-- !query
+DECLARE int_var INT
+-- !query analysis
+CreateVariable defaultvalueexpression(null, null), false
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.int_var
+
+
+-- !query
+SET VAR int_var = 42
+-- !query analysis
+SetVariable [variablereference(system.session.int_var=CAST(NULL AS INT))]
++- Project [42 AS int_var#x]
+   +- OneRowRelation
+
+
+-- !query
+EXECUTE IMMEDIATE int_var
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_EXPR_TYPE_FOR_QUERY_EXECUTE_IMMEDIATE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "exprType" : "\"INT\""
+  }
+}
+
+
+-- !query
+DECLARE null_var STRING
+-- !query analysis
+CreateVariable defaultvalueexpression(null, null), false
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.null_var
+
+
+-- !query
+SET VAR null_var = null
+-- !query analysis
+SetVariable [variablereference(system.session.null_var=CAST(NULL AS STRING))]
++- Project [cast(null_var#x as string) AS null_var#x]
+   +- Project [null AS null_var#x]
+      +- OneRowRelation
+
+
+-- !query
+EXECUTE IMMEDIATE null_var
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "NULL_QUERY_STRING_EXECUTE_IMMEDIATE",
+  "sqlState" : "22004",
+  "messageParameters" : {
+    "varName" : "`null_var`"
+  }
+}
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT ?' USING (SELECT 1)
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNSUPPORTED_EXPR_FOR_PARAMETER",
+  "sqlState" : "42K0E",
+  "messageParameters" : {
+    "invalidExprSql" : "\"scalarsubquery()\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 36,
+    "stopIndex" : 45,
+    "fragment" : "(SELECT 1)"
+  } ]
+}
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT :first' USING 2, 3
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "ALL_PARAMETERS_MUST_BE_NAMED",
+  "sqlState" : "07001",
+  "messageParameters" : {
+    "exprs" : "\"2\", \"3\""
+  }
+}
+
+
+-- !query
+EXECUTE IMMEDIATE (SELECT c FROM (VALUES(1)) AS T(c))
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_EXPR_TYPE_FOR_QUERY_EXECUTE_IMMEDIATE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "exprType" : "\"INT\""
+  }
+}
+
+
+-- !query
 DROP TABLE x
 -- !query analysis
 DropTable false, false
 +- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.x
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT typeof(:p) as type, :p as val' USING 5 AS p
+-- !query analysis
+Project [typeof(5) AS type#x, 5 AS val#x]
++- OneRowRelation
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT typeof(:p) as type, :p as val' USING 5L AS p
+-- !query analysis
+Project [typeof(5) AS type#x, 5 AS val#xL]
++- OneRowRelation
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT typeof(:p) as type, :p as val' USING 5S AS p
+-- !query analysis
+Project [typeof(5) AS type#x, 5 AS val#x]
++- OneRowRelation
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT typeof(:p) as type, :p as val' USING 5Y AS p
+-- !query analysis
+Project [typeof(5) AS type#x, 5 AS val#x]
++- OneRowRelation
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT typeof(:p) as type, :p as val' USING 3.14F AS p
+-- !query analysis
+Project [typeof(cast(3.14 as float)) AS type#x, cast(3.14 as float) AS val#x]
++- OneRowRelation
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT typeof(:p) as type, :p as val' USING 3.14159D AS p
+-- !query analysis
+Project [typeof(3.14159) AS type#x, 3.14159 AS val#x]
++- OneRowRelation
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT typeof(:p) as type, :p as val' USING 123.45BD AS p
+-- !query analysis
+Project [typeof(123.45) AS type#x, 123.45 AS val#x]
++- OneRowRelation
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT typeof(:p) as type, :p as val' USING true AS p
+-- !query analysis
+Project [typeof(true) AS type#x, true AS val#x]
++- OneRowRelation
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT typeof(:p) as type, :p as val' USING false AS p
+-- !query analysis
+Project [typeof(false) AS type#x, false AS val#x]
++- OneRowRelation
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT typeof(:p) as type, :p as val' USING 'hello world' AS p
+-- !query analysis
+Project [typeof(hello world) AS type#x, hello world AS val#x]
++- OneRowRelation
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT typeof(:p) as type, :p as val' USING 'it''s a test' AS p
+-- !query analysis
+Project [typeof(it's a test) AS type#x, it's a test AS val#x]
++- OneRowRelation
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT typeof(:p) as type, :p as val' USING DATE '2023-12-25' AS p
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT typeof(:p) as type, :p as val' USING TIMESTAMP '2023-12-25 10:30:45' AS p
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT typeof(:p) as type, :p as val' USING TIMESTAMP_NTZ '2023-12-25 10:30:45' AS p
+-- !query analysis
+Project [typeof(2023-12-25 10:30:45) AS type#x, 2023-12-25 10:30:45 AS val#x]
++- OneRowRelation
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT typeof(:p) as type, :p as val' USING CAST(NULL AS INT) AS p
+-- !query analysis
+Project [typeof(cast(null as int)) AS type#x, cast(null as int) AS val#x]
++- OneRowRelation
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT typeof(:p) as type, :p as val' USING CAST(NULL AS STRING) AS p
+-- !query analysis
+Project [typeof(cast(null as string)) AS type#x, cast(null as string) AS val#x]
++- OneRowRelation
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT typeof(:p) as type, hex(:p) as val' USING X'010203FF' AS p
+-- !query analysis
+Project [typeof(0x010203FF) AS type#x, hex(0x010203FF) AS val#x]
++- OneRowRelation
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT typeof(:p) as type, :p as val' USING INTERVAL '3' DAY AS p
+-- !query analysis
+Project [typeof(INTERVAL '3' DAY) AS type#x, INTERVAL '3' DAY AS val#x]
++- OneRowRelation
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT typeof(:p) as type, :p as val' USING INTERVAL '2' YEAR AS p
+-- !query analysis
+Project [typeof(INTERVAL '2' YEAR) AS type#x, INTERVAL '2' YEAR AS val#x]
++- OneRowRelation
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT typeof(:p) as type, :p as val' USING INTERVAL '1-2' YEAR TO MONTH AS p
+-- !query analysis
+Project [typeof(INTERVAL '1-2' YEAR TO MONTH) AS type#x, INTERVAL '1-2' YEAR TO MONTH AS val#x]
++- OneRowRelation
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT typeof(:p) as type, :p as val' USING INTERVAL '3 4:5:6' DAY TO SECOND AS p
+-- !query analysis
+Project [typeof(INTERVAL '3 04:05:06' DAY TO SECOND) AS type#x, INTERVAL '3 04:05:06' DAY TO SECOND AS val#x]
++- OneRowRelation
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT typeof(:p) as type, :p as val' USING 999.999BD AS p
+-- !query analysis
+Project [typeof(999.999) AS type#x, 999.999 AS val#x]
++- OneRowRelation
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT typeof(:p1) as type1, :p1 as val1, typeof(:p2) as type2, :p2 as val2' 
+  USING 42 as p1, 'test string' as p2
+-- !query analysis
+Project [typeof(42) AS type1#x, 42 AS val1#x, typeof(test string) AS type2#x, test string AS val2#x]
++- OneRowRelation
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT typeof(:p) as type, :p as val' USING ARRAY(1, 2, 3) AS p
+-- !query analysis
+Project [typeof(array(1, 2, 3)) AS type#x, array(1, 2, 3) AS val#x]
++- OneRowRelation
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT typeof(:p) as type, :p as val' USING ARRAY('a', 'b', 'c') AS p
+-- !query analysis
+Project [typeof(array(a, b, c)) AS type#x, array(a, b, c) AS val#x]
++- OneRowRelation
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT typeof(:p) as type, :p as val' USING ARRAY(ARRAY(1, 2), ARRAY(3, 4)) AS p
+-- !query analysis
+Project [typeof(array(array(1, 2), array(3, 4))) AS type#x, array(array(1, 2), array(3, 4)) AS val#x]
++- OneRowRelation
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT typeof(:p) as type, :p as val' USING MAP('key1', 'value1', 'key2', 'value2') AS p
+-- !query analysis
+Project [typeof(map(key1, value1, key2, value2)) AS type#x, map(key1, value1, key2, value2) AS val#x]
++- OneRowRelation
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT typeof(:p) as type, :p as val' USING MAP(1, 'one', 2, 'two') AS p
+-- !query analysis
+Project [typeof(map(1, one, 2, two)) AS type#x, map(1, one, 2, two) AS val#x]
++- OneRowRelation
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT :param'
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNBOUND_SQL_PARAMETER",
+  "sqlState" : "42P02",
+  "messageParameters" : {
+    "name" : "param"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 13,
+    "fragment" : ":param"
+  } ]
+}
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT ?'
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNBOUND_SQL_PARAMETER",
+  "sqlState" : "42P02",
+  "messageParameters" : {
+    "name" : "_7"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 8,
+    "fragment" : "?"
+  } ]
+}

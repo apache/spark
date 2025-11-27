@@ -494,7 +494,7 @@ class ScalaReflectionSuite extends SparkFunSuite {
       exception = intercept[SparkUnsupportedOperationException] {
         schemaFor[TraitProductWithoutCompanion]
       },
-      errorClass = "_LEGACY_ERROR_TEMP_2144",
+      condition = "_LEGACY_ERROR_TEMP_2144",
       parameters = Map("tpe" -> "org.apache.spark.sql.catalyst.TraitProductWithoutCompanion"))
   }
 
@@ -503,7 +503,7 @@ class ScalaReflectionSuite extends SparkFunSuite {
       exception = intercept[SparkUnsupportedOperationException] {
         schemaFor[TraitProductWithNoConstructorCompanion]
       },
-      errorClass = "_LEGACY_ERROR_TEMP_2144",
+      condition = "_LEGACY_ERROR_TEMP_2144",
       parameters = Map("tpe" ->
         "org.apache.spark.sql.catalyst.TraitProductWithNoConstructorCompanion"))
   }

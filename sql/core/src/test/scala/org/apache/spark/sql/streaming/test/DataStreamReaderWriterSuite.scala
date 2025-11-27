@@ -30,7 +30,12 @@ import org.mockito.Mockito._
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql._
-import org.apache.spark.sql.execution.streaming._
+import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
+import org.apache.spark.sql.classic.ClassicConversions.castToImpl
+import org.apache.spark.sql.classic.Dataset.ofRows
+import org.apache.spark.sql.execution.datasources.DataSourceUtils
+import org.apache.spark.sql.execution.streaming.{Offset, Sink, Source}
+import org.apache.spark.sql.execution.streaming.runtime._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.{StreamSinkProvider, StreamSourceProvider}
 import org.apache.spark.sql.streaming.{OutputMode, StreamingQuery, StreamingQueryException, StreamTest}
@@ -47,6 +52,7 @@ object LastOptions {
   var sinkParameters: Map[String, String] = null
   var schema: Option[StructType] = null
   var partitionColumns: Seq[String] = Nil
+  var clusteringColumns: Seq[String] = Nil
 
   def clear(): Unit = {
     parameters = null
@@ -89,8 +95,8 @@ class DefaultSource extends StreamSourceProvider with StreamSinkProvider {
 
       override def getOffset: Option[Offset] = Some(new LongOffset(0))
 
-      override def getBatch(start: Option[Offset], end: Offset): DataFrame = {
-        spark.internalCreateDataFrame(spark.sparkContext.emptyRDD, schema, isStreaming = true)
+      override def getBatch(start: Option[Offset], end: Offset): classic.DataFrame = {
+        ofRows(spark.sparkSession, LocalRelation(schema).copy(isStreaming = true))
       }
 
       override def stop(): Unit = {}
@@ -104,6 +110,8 @@ class DefaultSource extends StreamSourceProvider with StreamSinkProvider {
       outputMode: OutputMode): Sink = {
     LastOptions.sinkParameters = parameters
     LastOptions.partitionColumns = partitionColumns
+    LastOptions.clusteringColumns = parameters.get(DataSourceUtils.CLUSTERING_COLUMNS_KEY)
+      .map(DataSourceUtils.decodePartitioningColumns).getOrElse(Nil)
     LastOptions.mockStreamSinkProvider.createSink(spark, parameters, partitionColumns, outputMode)
     (_: Long, _: DataFrame) => {}
   }
@@ -129,7 +137,7 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
           .write
           .save()
       },
-      errorClass = "CALL_ON_STREAMING_DATASET_UNSUPPORTED",
+      condition = "CALL_ON_STREAMING_DATASET_UNSUPPORTED",
       parameters = Map("methodName" -> "`write`"))
   }
 
@@ -253,6 +261,56 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
         .format("org.apache.spark.sql.streaming.test")
         .option("checkpointLocation", newMetadataDir)
         .partitionBy("b")
+        .start()
+        .stop()
+    }
+  }
+
+  test("clustering") {
+    val df = spark.readStream
+      .format("org.apache.spark.sql.streaming.test")
+      .load()
+
+    df.writeStream
+      .format("org.apache.spark.sql.streaming.test")
+      .option("checkpointLocation", newMetadataDir)
+      .start()
+      .stop()
+    assert(LastOptions.partitionColumns == Nil)
+
+    df.writeStream
+      .format("org.apache.spark.sql.streaming.test")
+      .option("checkpointLocation", newMetadataDir)
+      .clusterBy("a")
+      .start()
+      .stop()
+    assert(LastOptions.clusteringColumns == Seq("a"))
+
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+      df.writeStream
+        .format("org.apache.spark.sql.streaming.test")
+        .option("checkpointLocation", newMetadataDir)
+        .clusterBy("A")
+        .start()
+        .stop()
+      assert(LastOptions.clusteringColumns == Seq("a"))
+    }
+
+    intercept[AnalysisException] {
+      df.writeStream
+        .format("org.apache.spark.sql.streaming.test")
+        .option("checkpointLocation", newMetadataDir)
+        .clusterBy("b")
+        .start()
+        .stop()
+    }
+
+    intercept[AnalysisException] {
+      df.writeStream
+        .format("org.apache.spark.sql.streaming.test")
+        .option("checkpointLocation", newMetadataDir)
+        .clusterBy("a")
+        .partitionBy("a")
         .start()
         .stop()
     }
@@ -425,8 +483,6 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
       meq(Map.empty))
   }
 
-  private def newTextInput = Utils.createTempDir(namePrefix = "text").getCanonicalPath
-
   test("check foreach() catches null writers") {
     val df = spark.readStream
       .format("org.apache.spark.sql.streaming.test")
@@ -470,7 +526,7 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
   }
 
   private def testMemorySinkCheckpointRecovery(chkLoc: String, provideInWriter: Boolean): Unit = {
-    val ms = new MemoryStream[Int](0, sqlContext)
+    val ms = new MemoryStream[Int](0, spark)
     val df = ms.toDF().toDF("a")
     val tableName = "test"
     def startQuery: StreamingQuery = {
@@ -512,7 +568,7 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
   test("MemorySink can recover from a checkpoint in Complete Mode") {
     val checkpointLoc = newMetadataDir
     val checkpointDir = new File(checkpointLoc, "offsets")
-    checkpointDir.mkdirs()
+    Utils.createDirectory(checkpointDir)
     assert(checkpointDir.exists())
     testMemorySinkCheckpointRecovery(checkpointLoc, provideInWriter = true)
   }
@@ -520,7 +576,7 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
   test("SPARK-18927: MemorySink can recover from a checkpoint provided in conf in Complete Mode") {
     val checkpointLoc = newMetadataDir
     val checkpointDir = new File(checkpointLoc, "offsets")
-    checkpointDir.mkdirs()
+    Utils.createDirectory(checkpointDir)
     assert(checkpointDir.exists())
     withSQLConf(SQLConf.CHECKPOINT_LOCATION.key -> checkpointLoc) {
       testMemorySinkCheckpointRecovery(checkpointLoc, provideInWriter = false)
@@ -529,11 +585,11 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
 
   test("append mode memory sink's do not support checkpoint recovery") {
     import testImplicits._
-    val ms = new MemoryStream[Int](0, sqlContext)
+    val ms = new MemoryStream[Int](0, spark)
     val df = ms.toDF().toDF("a")
     val checkpointLoc = newMetadataDir
     val checkpointDir = new File(checkpointLoc, "offsets")
-    checkpointDir.mkdirs()
+    Utils.createDirectory(checkpointDir)
     assert(checkpointDir.exists())
 
     val e = intercept[AnalysisException] {

@@ -35,23 +35,61 @@ import java.util.Map;
  */
 @Evolving
 public interface SparkThrowable {
-  // Succinct, human-readable, unique, and consistent representation of the error category
-  // If null, error class is not set
-  String getErrorClass();
+  /**
+   * Succinct, human-readable, unique, and consistent representation of the error condition.
+   * If null, error condition is not set.
+   */
+  String getCondition();
+
+  /**
+   * Succinct, human-readable, unique, and consistent representation of the error category.
+   * If null, error class is not set.
+   * @deprecated Use {@link #getCondition()} instead.
+   */
+  @Deprecated
+  default String getErrorClass() { return getCondition(); }
 
   // Portable error identifier across SQL engines
   // If null, error class or SQLSTATE is not set
   default String getSqlState() {
-    return SparkThrowableHelper.getSqlState(this.getErrorClass());
+    return SparkThrowableHelper.getSqlState(this.getCondition());
   }
 
   // True if this error is an internal error.
   default boolean isInternalError() {
-    return SparkThrowableHelper.isInternalError(this.getErrorClass());
+    return SparkThrowableHelper.isInternalError(this.getCondition());
+  }
+
+  // If null, the error message is not for a breaking change
+  default BreakingChangeInfo getBreakingChangeInfo() {
+    return SparkThrowableHelper.getBreakingChangeInfo(
+        this.getCondition()).getOrElse(() -> null);
   }
 
   default Map<String, String> getMessageParameters() {
     return new HashMap<>();
+  }
+
+  /**
+   * Returns the default message template for this error.
+   *
+   * The template is a machine-readable string with placeholders
+   * to be filled by {@code getMessageParameters()}.
+   *
+   * This is the default template known to Spark, but clients are
+   * free to generate their own messages (e.g., translations,
+   * alternate formats) using the provided error metadata.
+   *
+   * @return the default message template for this error, or null if unavailable
+   */
+  default String getDefaultMessageTemplate() {
+    try {
+      String cond = this.getCondition();
+      if (cond == null) return null;
+      return SparkThrowableHelper.getMessageTemplate(cond);
+    } catch (Throwable t) {
+      return null; // Unknown error condition
+    }
   }
 
   default QueryContext[] getQueryContext() { return new QueryContext[0]; }

@@ -23,6 +23,7 @@ from typing import Dict, List, IO, Tuple
 
 from pyspark.accumulators import _accumulatorRegistry
 from pyspark.errors import PySparkRuntimeError, PySparkValueError
+from pyspark.logger.worker_io import capture_outputs, context_provider as default_context_provider
 from pyspark.serializers import (
     read_bool,
     read_int,
@@ -33,7 +34,12 @@ from pyspark.serializers import (
 from pyspark.sql.functions import OrderingColumn, PartitioningColumn, SelectedColumn
 from pyspark.sql.types import _parse_datatype_json_string, StructType
 from pyspark.sql.udtf import AnalyzeArgument, AnalyzeResult
-from pyspark.util import handle_worker_exception, local_connect_and_auth
+from pyspark.util import (
+    handle_worker_exception,
+    local_connect_and_auth,
+    with_faulthandler,
+    start_faulthandler_periodic_traceback,
+)
 from pyspark.worker_util import (
     check_python_version,
     read_command,
@@ -98,6 +104,7 @@ def read_arguments(infile: IO) -> Tuple[List[AnalyzeArgument], Dict[str, Analyze
     return args, kwargs
 
 
+@with_faulthandler
 def main(infile: IO, outfile: IO) -> None:
     """
     Runs the Python UDTF's `analyze` static method.
@@ -108,6 +115,8 @@ def main(infile: IO, outfile: IO) -> None:
     """
     try:
         check_python_version(infile)
+
+        start_faulthandler_periodic_traceback()
 
         memory_limit_mb = int(os.environ.get("PYSPARK_PLANNER_MEMORY_MB", "-1"))
         setup_memory_limits(memory_limit_mb)
@@ -143,8 +152,15 @@ def main(infile: IO, outfile: IO) -> None:
                 )
             )
 
-        # Invoke the UDTF's 'analyze' method.
-        result = handler.analyze(*args, **kwargs)  # type: ignore[attr-defined]
+        # The default context provider can't detect the class name from static methods.
+        def context_provider() -> dict[str, str]:
+            context = default_context_provider()
+            context["class_name"] = handler.__name__
+            return context
+
+        with capture_outputs(context_provider):
+            # Invoke the UDTF's 'analyze' method.
+            result = handler.analyze(*args, **kwargs)  # type: ignore[attr-defined]
 
         # Check invariants about the 'analyze' method after running it.
         if not isinstance(result, AnalyzeResult):
@@ -261,9 +277,11 @@ def main(infile: IO, outfile: IO) -> None:
 
 if __name__ == "__main__":
     # Read information about how to connect back to the JVM from the environment.
-    java_port = int(os.environ["PYTHON_WORKER_FACTORY_PORT"])
-    auth_secret = os.environ["PYTHON_WORKER_FACTORY_SECRET"]
-    (sock_file, _) = local_connect_and_auth(java_port, auth_secret)
+    conn_info = os.environ.get(
+        "PYTHON_WORKER_FACTORY_SOCK_PATH", int(os.environ.get("PYTHON_WORKER_FACTORY_PORT", -1))
+    )
+    auth_secret = os.environ.get("PYTHON_WORKER_FACTORY_SECRET")
+    (sock_file, _) = local_connect_and_auth(conn_info, auth_secret)
     # TODO: Remove the following two lines and use `Process.pid()` when we drop JDK 8.
     write_int(os.getpid(), sock_file)
     sock_file.flush()

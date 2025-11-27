@@ -25,8 +25,6 @@ import java.nio.file.{Files, Paths}
 import scala.collection.mutable.ArrayBuffer
 import scala.io.{Codec, Source}
 
-import com.google.common.io.ByteStreams
-import org.apache.commons.io.FileUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, FSDataInputStream, Path}
 import org.scalatest.BeforeAndAfterEach
@@ -73,7 +71,7 @@ trait TestPrematureExit {
 
     @volatile var exitedCleanly = false
     val original = mainObject.exitFn
-    mainObject.exitFn = (_) => exitedCleanly = true
+    mainObject.exitFn = (_, _) => exitedCleanly = true
     try {
       @volatile var exception: Exception = null
       val thread = new Thread {
@@ -111,7 +109,7 @@ class SparkSubmitSuite
   with TestPrematureExit {
 
   private val emptyIvySettings = File.createTempFile("ivy", ".xml")
-  FileUtils.write(emptyIvySettings, "<ivysettings />", StandardCharsets.UTF_8)
+  Files.writeString(emptyIvySettings.toPath, "<ivysettings />")
 
   private val submit = new SparkSubmit()
 
@@ -506,6 +504,8 @@ class SparkSubmitSuite
 
   test("SPARK-47495: Not to add primary resource to jars again" +
     " in k8s client mode & driver runs inside a POD") {
+    val testJar = "src/test/resources/TestUDTF.jar"
+    assume(new File(testJar).exists)
     val clArgs = Seq(
       "--deploy-mode", "client",
       "--proxy-user", "test.user",
@@ -514,7 +514,7 @@ class SparkSubmitSuite
       "--class", "org.SomeClass",
       "--driver-memory", "1g",
       "--conf", "spark.kubernetes.submitInDriver=true",
-      "--jars", "src/test/resources/TestUDTF.jar",
+      "--jars", testJar,
       "/home/jarToIgnore.jar",
       "arg1")
     val appArgs = new SparkSubmitArguments(clArgs)
@@ -524,6 +524,8 @@ class SparkSubmitSuite
   }
 
   test("SPARK-33782: handles k8s files download to current directory") {
+    val testJar = "src/test/resources/TestUDTF.jar"
+    assume(new File(testJar).exists)
     val clArgs = Seq(
       "--deploy-mode", "client",
       "--proxy-user", "test.user",
@@ -537,7 +539,7 @@ class SparkSubmitSuite
       "--files", "src/test/resources/test_metrics_config.properties",
       "--py-files", "src/test/resources/test_metrics_system.properties",
       "--archives", "src/test/resources/log4j2.properties",
-      "--jars", "src/test/resources/TestUDTF.jar",
+      "--jars", testJar,
       "/home/thejar.jar",
       "arg1")
     val appArgs = new SparkSubmitArguments(clArgs)
@@ -561,6 +563,8 @@ class SparkSubmitSuite
   test("SPARK-47475: Avoid jars download if scheme matches " +
     "spark.kubernetes.jars.avoidDownloadSchemes " +
     "in k8s client mode & driver runs inside a POD") {
+    val testJar = "src/test/resources/TestUDTF.jar"
+    assume(new File(testJar).exists)
     val hadoopConf = new Configuration()
     updateConfWithFakeS3Fs(hadoopConf)
     withTempDir { tmpDir =>
@@ -579,7 +583,7 @@ class SparkSubmitSuite
         "--files", "src/test/resources/test_metrics_config.properties",
         "--py-files", "src/test/resources/test_metrics_system.properties",
         "--archives", "src/test/resources/log4j2.properties",
-        "--jars", s"src/test/resources/TestUDTF.jar,$remoteJarFile",
+        "--jars", s"$testJar,$remoteJarFile",
         "/home/jarToIgnore.jar",
         "arg1")
       val appArgs = new SparkSubmitArguments(clArgs)
@@ -898,7 +902,7 @@ class SparkSubmitSuite
     // compile a small jar containing a class that will be called from R code.
     withTempDir { tempDir =>
       val srcDir = new File(tempDir, "sparkrtest")
-      srcDir.mkdirs()
+      Utils.createDirectory(srcDir)
       val excSource = new JavaSourceFromString(new File(srcDir, "DummyClass").toURI.getPath,
         """package sparkrtest;
         |
@@ -1107,9 +1111,46 @@ class SparkSubmitSuite
         "--master", "local",
         unusedJar.toString)
       val appArgs = new SparkSubmitArguments(args, env = Map("SPARK_CONF_DIR" -> path))
-      assert(appArgs.propertiesFile != null)
-      assert(appArgs.propertiesFile.startsWith(path))
       appArgs.executorMemory should be ("3g")
+    }
+  }
+
+  test("SPARK-48392: load spark-defaults.conf when --load-spark-defaults is set") {
+    forConfDir(Map("spark.executor.memory" -> "3g", "spark.driver.memory" -> "3g")) { path =>
+      withPropertyFile("spark-conf.properties",
+          Map("spark.executor.cores" -> "16", "spark.driver.memory" -> "4g")) { propsFile =>
+        val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
+        val args = Seq(
+          "--class", SimpleApplicationTest.getClass.getName.stripSuffix("$"),
+          "--name", "testApp",
+          "--master", "local",
+          "--properties-file", propsFile,
+          "--load-spark-defaults",
+          unusedJar.toString)
+        val appArgs = new SparkSubmitArguments(args, env = Map("SPARK_CONF_DIR" -> path))
+        appArgs.executorCores should be("16")
+        appArgs.executorMemory should be("3g")
+        appArgs.driverMemory should be("4g")
+      }
+    }
+  }
+
+  test("SPARK-48392: should skip spark-defaults.conf when --load-spark-defaults is not set") {
+    forConfDir(Map("spark.executor.memory" -> "3g", "spark.driver.memory" -> "3g")) { path =>
+      withPropertyFile("spark-conf.properties",
+        Map("spark.executor.cores" -> "16", "spark.driver.memory" -> "4g")) { propsFile =>
+        val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
+        val args = Seq(
+          "--class", SimpleApplicationTest.getClass.getName.stripSuffix("$"),
+          "--name", "testApp",
+          "--master", "local",
+          "--properties-file", propsFile,
+          unusedJar.toString)
+        val appArgs = new SparkSubmitArguments(args, env = Map("SPARK_CONF_DIR" -> path))
+        appArgs.executorCores should be("16")
+        appArgs.driverMemory should be("4g")
+        appArgs.executorMemory should be(null)
+      }
     }
   }
 
@@ -1146,14 +1187,14 @@ class SparkSubmitSuite
 
             val appArgs = new SparkSubmitArguments(args)
             val (_, _, conf, _) = submit.prepareSubmitEnvironment(appArgs)
-            conf.get("spark.yarn.dist.jars").split(",").toSet should be
-            (Set(jar1.toURI.toString, jar2.toURI.toString))
-            conf.get("spark.yarn.dist.files").split(",").toSet should be
-            (Set(file1.toURI.toString, file2.toURI.toString))
-            conf.get("spark.yarn.dist.pyFiles").split(",").toSet should be
-            (Set(pyFile1.getAbsolutePath, pyFile2.getAbsolutePath))
-            conf.get("spark.yarn.dist.archives").split(",").toSet should be
-            (Set(archive1.toURI.toString, archive2.toURI.toString))
+            conf.get("spark.yarn.dist.jars").split(",").toSet should be(
+              Set(jar1.toURI.toString, jar2.toURI.toString))
+            conf.get("spark.yarn.dist.files").split(",").toSet should be(
+              Set(file1.toURI.toString, file2.toURI.toString))
+            conf.get("spark.yarn.dist.pyFiles").split(",").toSet should be(
+              Set(pyFile1.toURI.toString, pyFile2.toURI.toString))
+            conf.get("spark.yarn.dist.archives").split(",").toSet should be(
+              Set(archive1.toURI.toString, archive2.toURI.toString))
           }
         }
       }
@@ -1250,8 +1291,8 @@ class SparkSubmitSuite
 
     // The path and filename are preserved.
     assert(outputUri.getPath.endsWith(new Path(sourceUri).getName))
-    assert(FileUtils.readFileToString(new File(outputUri.getPath), StandardCharsets.UTF_8) ===
-      FileUtils.readFileToString(new File(sourceUri.getPath), StandardCharsets.UTF_8))
+    assert(Files.readString(new File(outputUri.getPath).toPath) ===
+      Files.readString(new File(sourceUri.getPath).toPath))
   }
 
   private def deleteTempOutputFile(outputPath: String): Unit = {
@@ -1293,7 +1334,7 @@ class SparkSubmitSuite
     val jarFile = File.createTempFile("test", ".jar")
     jarFile.deleteOnExit()
     val content = "hello, world"
-    FileUtils.write(jarFile, content, StandardCharsets.UTF_8)
+    Files.writeString(jarFile.toPath, content)
     val hadoopConf = new Configuration()
     val tmpDir = Files.createTempDirectory("tmp").toFile
     updateConfWithFakeS3Fs(hadoopConf)
@@ -1308,7 +1349,7 @@ class SparkSubmitSuite
     val jarFile = File.createTempFile("test", ".jar")
     jarFile.deleteOnExit()
     val content = "hello, world"
-    FileUtils.write(jarFile, content, StandardCharsets.UTF_8)
+    Files.writeString(jarFile.toPath, content)
     val hadoopConf = new Configuration()
     val tmpDir = Files.createTempDirectory("tmp").toFile
     updateConfWithFakeS3Fs(hadoopConf)
@@ -1552,6 +1593,44 @@ class SparkSubmitSuite
       runSparkSubmit(argsSuccess, expectFailure = false))
   }
 
+  test("spark.submit.callSystemExitOnMainExit returns non-zero exit code on unclean main exit") {
+    val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
+    val args = Seq(
+      "--class", MainThrowsUncaughtExceptionSparkApplicationTest.getClass.getName.stripSuffix("$"),
+      "--name", "testApp",
+      "--conf", s"${SUBMIT_CALL_SYSTEM_EXIT_ON_MAIN_EXIT.key}=true",
+      unusedJar.toString
+    )
+    assertResult(1)(runSparkSubmit(args, expectFailure = true))
+  }
+
+  test("spark.submit.callSystemExitOnMainExit calls system exit on clean main exit") {
+    val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
+    val args = Seq(
+      "--class", NonDaemonThreadSparkApplicationTest.getClass.getName.stripSuffix("$"),
+      "--name", "testApp",
+      "--conf", s"${SUBMIT_CALL_SYSTEM_EXIT_ON_MAIN_EXIT.key}=true",
+      unusedJar.toString
+    )
+    // With SUBMIT_CALL_SYSTEM_EXIT_ON_MAIN_EXIT set to false, the non-daemon thread will
+    // prevent the JVM from beginning shutdown and the following call will fail with a
+    // timeout:
+    assertResult(0)(runSparkSubmit(args))
+  }
+
+  test("spark.submit.callSystemExitOnMainExit with main that explicitly calls System.exit") {
+    val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
+    val args = Seq(
+      "--class",
+      MainExplicitlyCallsSystemExit3SparkApplicationTest.getClass.getName.stripSuffix("$"),
+      "--name", "testApp",
+      "--conf", s"${SUBMIT_CALL_SYSTEM_EXIT_ON_MAIN_EXIT.key}=true",
+      unusedJar.toString
+    )
+    // This main class explicitly exits with System.exit(3), hence this expected exit code:
+    assertResult(3)(runSparkSubmit(args, expectFailure = true))
+  }
+
   private def testRemoteResources(
       enableHttpFs: Boolean,
       forceDownloadSchemes: Seq[String] = Nil): Unit = {
@@ -1620,6 +1699,22 @@ class SparkSubmitSuite
       for ((key, value) <- defaults) writer.write(s"$key $value\n")
       writer.close()
       f(tmpDir.getAbsolutePath)
+    }
+  }
+
+  private def withPropertyFile(fileName: String, conf: Map[String, String])(f: String => Unit) = {
+    withTempDir { tmpDir =>
+      val props = new java.util.Properties()
+      val propsFile = File.createTempFile(fileName, "", tmpDir)
+      val propsOutputStream = new FileOutputStream(propsFile)
+      try {
+        conf.foreach { case (k, v) => props.put(k, v) }
+        props.store(propsOutputStream, "")
+      } finally {
+        propsOutputStream.close()
+      }
+
+      f(propsFile.getPath)
     }
   }
 
@@ -1694,40 +1789,31 @@ class SparkSubmitSuite
     val infixDelimFromFile = s"${delimKey}infixDelimFromFile" -> s"${CR}blah${LF}"
     val nonDelimSpaceFromFile = s"${delimKey}nonDelimSpaceFromFile" -> " blah\f"
 
-    val testProps = Seq(leadingDelimKeyFromFile, trailingDelimKeyFromFile, infixDelimFromFile,
+    val testProps = Map(leadingDelimKeyFromFile, trailingDelimKeyFromFile, infixDelimFromFile,
       nonDelimSpaceFromFile)
 
-    val props = new java.util.Properties()
-    val propsFile = File.createTempFile("test-spark-conf", ".properties",
-      Utils.createTempDir())
-    val propsOutputStream = new FileOutputStream(propsFile)
-    try {
-      testProps.foreach { case (k, v) => props.put(k, v) }
-      props.store(propsOutputStream, "test whitespace")
-    } finally {
-      propsOutputStream.close()
+    withPropertyFile("test-spark-conf.properties", testProps) { propsFile =>
+      val clArgs = Seq(
+        "--class", "org.SomeClass",
+        "--conf", s"${lineFeedFromCommandLine._1}=${lineFeedFromCommandLine._2}",
+        "--conf", "spark.master=yarn",
+        "--properties-file", propsFile,
+        "thejar.jar")
+
+      val appArgs = new SparkSubmitArguments(clArgs)
+      val (_, _, conf, _) = submit.prepareSubmitEnvironment(appArgs)
+
+      Seq(
+        lineFeedFromCommandLine,
+        leadingDelimKeyFromFile,
+        trailingDelimKeyFromFile,
+        infixDelimFromFile
+      ).foreach { case (k, v) =>
+        conf.get(k) should be (v)
+      }
+
+      conf.get(nonDelimSpaceFromFile._1) should be ("blah")
     }
-
-    val clArgs = Seq(
-      "--class", "org.SomeClass",
-      "--conf", s"${lineFeedFromCommandLine._1}=${lineFeedFromCommandLine._2}",
-      "--conf", "spark.master=yarn",
-      "--properties-file", propsFile.getPath,
-      "thejar.jar")
-
-    val appArgs = new SparkSubmitArguments(clArgs)
-    val (_, _, conf, _) = submit.prepareSubmitEnvironment(appArgs)
-
-    Seq(
-      lineFeedFromCommandLine,
-      leadingDelimKeyFromFile,
-      trailingDelimKeyFromFile,
-      infixDelimFromFile
-    ).foreach { case (k, v) =>
-      conf.get(k) should be (v)
-    }
-
-    conf.get(nonDelimSpaceFromFile._1) should be ("blah")
   }
 
   test("get a Spark configuration from arguments") {
@@ -1757,6 +1843,23 @@ class SparkSubmitSuite
     val appArgs = new SparkSubmitArguments(clArgs)
     val (_, classpath, _, _) = submit.prepareSubmitEnvironment(appArgs)
     assert(classpath.contains("."))
+  }
+
+  // Requires Python dependencies for Spark Connect. Should be enabled by default.
+  ignore("Spark Connect application submission (Python)") {
+    val pyFile = File.createTempFile("remote_test", ".py")
+    pyFile.deleteOnExit()
+    val content =
+      "from pyspark.sql import SparkSession;" +
+        "spark = SparkSession.builder.getOrCreate();" +
+        "assert 'connect' in str(type(spark));" +
+        "assert spark.range(1).first()[0] == 0"
+    Files.writeString(pyFile.toPath, content)
+    val args = Seq(
+      "--name", "testPyApp",
+      "--remote", "local",
+      pyFile.getAbsolutePath)
+    runSparkSubmit(args)
   }
 }
 
@@ -1811,11 +1914,38 @@ object SimpleApplicationTest {
   }
 }
 
+object MainThrowsUncaughtExceptionSparkApplicationTest {
+  def main(args: Array[String]): Unit = {
+    throw new Exception("User exception")
+  }
+}
+
+object NonDaemonThreadSparkApplicationTest {
+  def main(args: Array[String]): Unit = {
+    val nonDaemonThread: Thread = new Thread {
+      override def run(): Unit = {
+        while (true) {
+          Thread.sleep(1000)
+        }
+      }
+    }
+    nonDaemonThread.setDaemon(false)
+    nonDaemonThread.setName("Non-Daemon-Thread")
+    nonDaemonThread.start()
+    // Fall off the end of the main method.
+  }
+}
+
+object MainExplicitlyCallsSystemExit3SparkApplicationTest {
+  def main(args: Array[String]): Unit = {
+    System.exit(3)
+  }
+}
+
 object UserClasspathFirstTest {
   def main(args: Array[String]): Unit = {
     val ccl = Thread.currentThread().getContextClassLoader()
-    val resource = ccl.getResourceAsStream("test.resource")
-    val bytes = ByteStreams.toByteArray(resource)
+    val bytes = ccl.getResourceAsStream("test.resource").readAllBytes()
     val contents = new String(bytes, 0, bytes.length, StandardCharsets.UTF_8)
     if (contents != "USER") {
       throw new SparkException("Should have read user resource, but instead read: " + contents)

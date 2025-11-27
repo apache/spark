@@ -30,7 +30,7 @@ import scala.util.{DynamicVariable, Failure, Success, Try}
 import scala.util.control.NonFatal
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkContext}
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config.EXECUTOR_ID
 import org.apache.spark.internal.config.Network._

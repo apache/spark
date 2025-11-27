@@ -17,9 +17,8 @@
 package org.apache.spark.deploy.k8s.features
 
 import java.io.File
-import java.nio.charset.StandardCharsets
+import java.nio.file.Files
 
-import com.google.common.io.Files
 import io.fabric8.kubernetes.api.model.{ConfigMapBuilder, ContainerBuilder, HasMetadata, PodBuilder}
 
 import org.apache.spark.deploy.SparkHadoopUtil
@@ -81,7 +80,7 @@ private[spark] class PodTemplateConfigMapStep(conf: KubernetesConf)
       val hadoopConf = SparkHadoopUtil.get.newConfiguration(conf.sparkConf)
       val uri = downloadFile(podTemplateFile, Utils.createTempDir(), conf.sparkConf, hadoopConf)
       val file = new java.net.URI(uri).getPath
-      val podTemplateString = Files.toString(new File(file), StandardCharsets.UTF_8)
+      val podTemplateString = Files.readString(new File(file).toPath)
       Seq(new ConfigMapBuilder()
           .withNewMetadata()
             .withName(configmapName)

@@ -16,6 +16,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+if [[ $DEBUG_MODE = 1 ]]; then
+  # Fail fast and print out commands it runs.
+  set -o pipefail
+  set -e
+  set -x
+fi
 
 DRY_RUN=${DRY_RUN:-0}
 GPG="gpg --no-tty --batch"
@@ -100,6 +106,9 @@ function get_release_info {
   fi
 
   NEXT_VERSION="$VERSION"
+  if [ -n "$RELEASE_VERSION" ]; then
+    SPARK_RELEASE_VERSION="$RELEASE_VERSION"
+  fi
   RELEASE_VERSION="${VERSION/-SNAPSHOT/}"
   SHORT_VERSION=$(echo "$VERSION" | cut -d . -f 1-2)
   local REV=$(echo "$RELEASE_VERSION" | cut -d . -f 3)
@@ -128,17 +137,33 @@ function get_release_info {
     RC_COUNT=1
   fi
 
+  if [ "$GIT_BRANCH" = "master" ]; then
+    RELEASE_VERSION="$RELEASE_VERSION-preview1"
+    if [ -n "$SPARK_RELEASE_VERSION" ]; then
+      # If we are building it from master branch, respect the RELEASE_VERSION
+      # set before. This is usually a preview release.
+      RELEASE_VERSION="$SPARK_RELEASE_VERSION"
+    fi
+  fi
   export NEXT_VERSION
   export RELEASE_VERSION=$(read_config "Release" "$RELEASE_VERSION")
 
   RC_COUNT=$(read_config "RC #" "$RC_COUNT")
+  if [ -n "$SPARK_RC_COUNT" ]; then
+    RC_COUNT=$SPARK_RC_COUNT
+  fi
+  export SPARK_RC_COUNT=$RC_COUNT
 
   # Check if the RC already exists, and if re-creating the RC, skip tag creation.
   RELEASE_TAG="v${RELEASE_VERSION}-rc${RC_COUNT}"
-  SKIP_TAG=0
-  if check_for_tag "$RELEASE_TAG"; then
-    read -p "$RELEASE_TAG already exists. Continue anyway [y/n]? " ANSWER
-    if [ "$ANSWER" != "y" ]; then
+  SKIP_TAG="${SKIP_TAG:-0}"
+  if check_for_tag "$RELEASE_TAG" && [[ $SKIP_TAG = 0 ]]; then
+    if [ -z "$ANSWER" ]; then
+      read -p "$RELEASE_TAG already exists. Continue anyway [y/n]? " userinput
+      if [ "$userinput" != "y" ]; then
+        error "Exiting."
+      fi
+    elif [ "$ANSWER" != "y" ]; then
       error "Exiting."
     fi
     SKIP_TAG=1
@@ -150,7 +175,7 @@ function get_release_info {
   GIT_REF="$RELEASE_TAG"
   if is_dry_run; then
     echo "This is a dry run. Please confirm the ref that will be built for testing."
-    if [[ $SKIP_TAG = 0 ]]; then
+    if [[ $SKIP_TAG = 1 ]]; then
       GIT_REF="$GIT_BRANCH"
     fi
     GIT_REF=$(read_config "Ref" "$GIT_REF")
@@ -186,10 +211,13 @@ E-MAIL:     $GIT_EMAIL
 ================
 EOF
 
-  read -p "Is this info correct [y/n]? " ANSWER
-  if [ "$ANSWER" != "y" ]; then
-    echo "Exiting."
-    exit 1
+  if [ -z "$ANSWER" ]; then
+    read -p "Is this info correct [y/n]? " userinput
+    if [ "$userinput" != "y" ]; then
+      error "Exiting."
+    fi
+  elif [ "$ANSWER" != "y" ]; then
+    error "Exiting."
   fi
 
   if ! is_dry_run; then

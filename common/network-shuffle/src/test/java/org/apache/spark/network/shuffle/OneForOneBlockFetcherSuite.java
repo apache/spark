@@ -23,7 +23,6 @@ import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import com.google.common.collect.Maps;
 import io.netty.buffer.Unpooled;
 import org.junit.jupiter.api.Test;
 
@@ -57,7 +56,7 @@ public class OneForOneBlockFetcherSuite {
 
   @Test
   public void testFetchOne() {
-    LinkedHashMap<String, ManagedBuffer> blocks = Maps.newLinkedHashMap();
+    LinkedHashMap<String, ManagedBuffer> blocks = new LinkedHashMap<>();
     blocks.put("shuffle_0_0_0", new NioManagedBuffer(ByteBuffer.wrap(new byte[0])));
     String[] blockIds = blocks.keySet().toArray(new String[blocks.size()]);
 
@@ -72,7 +71,7 @@ public class OneForOneBlockFetcherSuite {
 
   @Test
   public void testUseOldProtocol() {
-    LinkedHashMap<String, ManagedBuffer> blocks = Maps.newLinkedHashMap();
+    LinkedHashMap<String, ManagedBuffer> blocks = new LinkedHashMap<>();
     blocks.put("shuffle_0_0_0", new NioManagedBuffer(ByteBuffer.wrap(new byte[0])));
     String[] blockIds = blocks.keySet().toArray(new String[blocks.size()]);
 
@@ -91,7 +90,7 @@ public class OneForOneBlockFetcherSuite {
 
   @Test
   public void testFetchThreeShuffleBlocks() {
-    LinkedHashMap<String, ManagedBuffer> blocks = Maps.newLinkedHashMap();
+    LinkedHashMap<String, ManagedBuffer> blocks = new LinkedHashMap<>();
     blocks.put("shuffle_0_0_0", new NioManagedBuffer(ByteBuffer.wrap(new byte[12])));
     blocks.put("shuffle_0_0_1", new NioManagedBuffer(ByteBuffer.wrap(new byte[23])));
     blocks.put("shuffle_0_0_2", new NettyManagedBuffer(Unpooled.wrappedBuffer(new byte[23])));
@@ -112,7 +111,7 @@ public class OneForOneBlockFetcherSuite {
 
   @Test
   public void testBatchFetchThreeShuffleBlocks() {
-    LinkedHashMap<String, ManagedBuffer> blocks = Maps.newLinkedHashMap();
+    LinkedHashMap<String, ManagedBuffer> blocks = new LinkedHashMap<>();
     blocks.put("shuffle_0_0_0_3", new NioManagedBuffer(ByteBuffer.wrap(new byte[58])));
     String[] blockIds = blocks.keySet().toArray(new String[blocks.size()]);
 
@@ -129,7 +128,7 @@ public class OneForOneBlockFetcherSuite {
 
   @Test
   public void testFetchThree() {
-    LinkedHashMap<String, ManagedBuffer> blocks = Maps.newLinkedHashMap();
+    LinkedHashMap<String, ManagedBuffer> blocks = new LinkedHashMap<>();
     blocks.put("b0", new NioManagedBuffer(ByteBuffer.wrap(new byte[12])));
     blocks.put("b1", new NioManagedBuffer(ByteBuffer.wrap(new byte[23])));
     blocks.put("b2", new NettyManagedBuffer(Unpooled.wrappedBuffer(new byte[23])));
@@ -148,7 +147,7 @@ public class OneForOneBlockFetcherSuite {
 
   @Test
   public void testFailure() {
-    LinkedHashMap<String, ManagedBuffer> blocks = Maps.newLinkedHashMap();
+    LinkedHashMap<String, ManagedBuffer> blocks = new LinkedHashMap<>();
     blocks.put("b0", new NioManagedBuffer(ByteBuffer.wrap(new byte[12])));
     blocks.put("b1", null);
     blocks.put("b2", null);
@@ -168,7 +167,7 @@ public class OneForOneBlockFetcherSuite {
 
   @Test
   public void testFailureAndSuccess() {
-    LinkedHashMap<String, ManagedBuffer> blocks = Maps.newLinkedHashMap();
+    LinkedHashMap<String, ManagedBuffer> blocks = new LinkedHashMap<>();
     blocks.put("b0", new NioManagedBuffer(ByteBuffer.wrap(new byte[12])));
     blocks.put("b1", null);
     blocks.put("b2", new NioManagedBuffer(ByteBuffer.wrap(new byte[21])));
@@ -190,14 +189,14 @@ public class OneForOneBlockFetcherSuite {
   @Test
   public void testEmptyBlockFetch() {
     IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
-      () -> fetchBlocks(Maps.newLinkedHashMap(), new String[] {},
+      () -> fetchBlocks(new LinkedHashMap<>(), new String[] {},
         new OpenBlocks("app-id", "exec-id", new String[] {}), conf));
     assertEquals("Zero-sized blockIds array", e.getMessage());
   }
 
   @Test
   public void testFetchShuffleBlocksOrder() {
-    LinkedHashMap<String, ManagedBuffer> blocks = Maps.newLinkedHashMap();
+    LinkedHashMap<String, ManagedBuffer> blocks = new LinkedHashMap<>();
     blocks.put("shuffle_0_0_0", new NioManagedBuffer(ByteBuffer.wrap(new byte[1])));
     blocks.put("shuffle_0_2_1", new NioManagedBuffer(ByteBuffer.wrap(new byte[2])));
     blocks.put("shuffle_0_10_2", new NettyManagedBuffer(Unpooled.wrappedBuffer(new byte[3])));
@@ -217,7 +216,7 @@ public class OneForOneBlockFetcherSuite {
 
   @Test
   public void testBatchFetchShuffleBlocksOrder() {
-    LinkedHashMap<String, ManagedBuffer> blocks = Maps.newLinkedHashMap();
+    LinkedHashMap<String, ManagedBuffer> blocks = new LinkedHashMap<>();
     blocks.put("shuffle_0_0_1_2", new NioManagedBuffer(ByteBuffer.wrap(new byte[1])));
     blocks.put("shuffle_0_2_2_3", new NioManagedBuffer(ByteBuffer.wrap(new byte[2])));
     blocks.put("shuffle_0_10_3_4", new NettyManagedBuffer(Unpooled.wrappedBuffer(new byte[3])));
@@ -237,7 +236,7 @@ public class OneForOneBlockFetcherSuite {
 
   @Test
   public void testShuffleBlockChunksFetch() {
-    LinkedHashMap<String, ManagedBuffer> blocks = Maps.newLinkedHashMap();
+    LinkedHashMap<String, ManagedBuffer> blocks = new LinkedHashMap<>();
     blocks.put("shuffleChunk_0_0_0_0", new NioManagedBuffer(ByteBuffer.wrap(new byte[12])));
     blocks.put("shuffleChunk_0_0_0_1", new NioManagedBuffer(ByteBuffer.wrap(new byte[23])));
     blocks.put("shuffleChunk_0_0_0_2",
@@ -255,7 +254,7 @@ public class OneForOneBlockFetcherSuite {
 
   @Test
   public void testShuffleBlockChunkFetchFailure() {
-    LinkedHashMap<String, ManagedBuffer> blocks = Maps.newLinkedHashMap();
+    LinkedHashMap<String, ManagedBuffer> blocks = new LinkedHashMap<>();
     blocks.put("shuffleChunk_0_0_0_0", new NioManagedBuffer(ByteBuffer.wrap(new byte[12])));
     blocks.put("shuffleChunk_0_0_0_1", null);
     blocks.put("shuffleChunk_0_0_0_2",

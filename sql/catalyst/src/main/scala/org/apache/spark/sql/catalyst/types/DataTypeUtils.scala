@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy
 import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy.{ANSI, STRICT}
-import org.apache.spark.sql.types.{ArrayType, AtomicType, DataType, Decimal, DecimalType, MapType, NullType, StringType, StructField, StructType, UserDefinedType}
+import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.DecimalType.{forType, fromDecimal}
 
 object DataTypeUtils {
@@ -248,6 +248,39 @@ object DataTypeUtils {
     case v: Int => fromDecimal(Decimal(BigDecimal(v)))
     case v: Long => fromDecimal(Decimal(BigDecimal(v)))
     case _ => forType(literal.dataType)
+  }
+
+  /**
+   * Extracts all struct field paths from a nested StructType.
+   */
+  def extractAllFieldPaths(schema: StructType, basePath: Seq[String] = Seq.empty):
+  Seq[Seq[String]] = {
+    schema.flatMap { field =>
+      val fieldPath = basePath :+ field.name
+      field.dataType match {
+        case struct: StructType =>
+          fieldPath +: extractAllFieldPaths(struct, fieldPath)
+        case _ =>
+          Seq(fieldPath)
+      }
+    }
+  }
+
+  /**
+   * Extracts only leaf-level field paths from a nested StructType.
+   * Unlike extractAllFieldPaths, this method does not include intermediate struct paths.
+   */
+  def extractLeafFieldPaths(schema: StructType, basePath: Seq[String] = Seq.empty):
+  Seq[Seq[String]] = {
+    schema.flatMap { field =>
+      val fieldPath = basePath :+ field.name
+      field.dataType match {
+        case struct: StructType =>
+          extractLeafFieldPaths(struct, fieldPath)
+        case _ =>
+          Seq(fieldPath)
+      }
+    }
   }
 }
 

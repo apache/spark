@@ -17,14 +17,13 @@
 package org.apache.spark.deploy.k8s.features
 
 import java.io.File
-import java.nio.charset.StandardCharsets.UTF_8
+import java.nio.file.Files
 import java.security.PrivilegedExceptionAction
+import java.util.Base64
 
 import scala.jdk.CollectionConverters._
 
-import com.google.common.io.Files
 import io.fabric8.kubernetes.api.model.{ConfigMap, Secret}
-import org.apache.commons.codec.binary.Base64
 import org.apache.hadoop.io.Text
 import org.apache.hadoop.security.UserGroupInformation
 
@@ -55,7 +54,7 @@ class KerberosConfDriverFeatureStepSuite extends SparkFunSuite {
 
   test("create krb5.conf config map if local config provided") {
     val krbConf = File.createTempFile("krb5", ".conf", tmpDir)
-    Files.write("some data", krbConf, UTF_8)
+    Files.writeString(krbConf.toPath, "some data")
 
     val sparkConf = new SparkConf(false)
       .set(KUBERNETES_KERBEROS_KRB5_FILE, krbConf.getAbsolutePath())
@@ -70,7 +69,7 @@ class KerberosConfDriverFeatureStepSuite extends SparkFunSuite {
 
   test("create keytab secret if client keytab file used") {
     val keytab = File.createTempFile("keytab", ".bin", tmpDir)
-    Files.write("some data", keytab, UTF_8)
+    Files.writeString(keytab.toPath, "some data")
 
     val sparkConf = new SparkConf(false)
       .set(KEYTAB, keytab.getAbsolutePath())
@@ -127,7 +126,8 @@ class KerberosConfDriverFeatureStepSuite extends SparkFunSuite {
         val step = createStep(new SparkConf(false))
 
         val dtSecret = filter[Secret](step.getAdditionalKubernetesResources()).head
-        assert(dtSecret.getData().get(KERBEROS_SECRET_KEY) === Base64.encodeBase64String(tokens))
+        assert(dtSecret.getData().get(KERBEROS_SECRET_KEY) ===
+          Base64.getEncoder().encodeToString(tokens))
 
         checkPodForTokens(step.configurePod(SparkPod.initialPod()),
           dtSecret.getMetadata().getName())

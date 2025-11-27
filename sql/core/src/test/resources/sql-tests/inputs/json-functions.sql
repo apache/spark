@@ -109,3 +109,45 @@ select json_object_keys('[1, 2, 3]');
 
 -- Clean up
 DROP VIEW IF EXISTS jsonTable;
+
+-- TIME type tests
+-- from_json with TIME type
+select from_json('{"time": "14:30:45"}', 'time TIME(0)');
+select from_json('{"time": "14:30:45.123"}', 'time TIME(3)');
+select from_json('{"time": "14:30:45.123456"}', 'time TIME(6)');
+select from_json('{"time": "14-30-45.123456"}', 'time TIME(6)', map('timeFormat', 'HH-mm-ss.SSSSSS'));
+select from_json('{"t1": "09:00:00", "t2": "17:30:00"}', 't1 TIME, t2 TIME');
+select from_json('{"time": "25:00:00"}', 'time TIME');
+select from_json('{"time": "invalid"}', 'time TIME');
+select from_json('{"time": null}', 'time TIME');
+
+-- to_json with TIME type
+select to_json(named_struct('time', TIME'14:30:45'));
+select to_json(named_struct('time', TIME'14:30:45.123456'));
+select to_json(named_struct('time', TIME'14:30:45.123456'), map('timeFormat', 'HH-mm-ss.SSSSSS'));
+select to_json(array(TIME'09:00:00', TIME'17:45:30'));
+
+-- TIME type roundtrip tests
+select from_json(to_json(named_struct('time', TIME'14:30:45')), 'time TIME(0)');
+select from_json(to_json(named_struct('time', TIME'14:30:45.1')), 'time TIME(1)');
+select from_json(to_json(named_struct('time', TIME'14:30:45.12')), 'time TIME(2)');
+select from_json(to_json(named_struct('time', TIME'14:30:45.123')), 'time TIME(3)');
+select from_json(to_json(named_struct('time', TIME'14:30:45.1234')), 'time TIME(4)');
+select from_json(to_json(named_struct('time', TIME'14:30:45.12345')), 'time TIME(5)');
+select from_json(to_json(named_struct('time', TIME'14:30:45.123456')), 'time TIME(6)');
+select from_json(to_json(named_struct('time', TIME'00:00:00')), 'time TIME(0)');
+select from_json(to_json(named_struct('time', TIME'23:59:59.999999')), 'time TIME(6)');
+select to_json(from_json('{"time":"14:30:45"}', 'time TIME(0)'));
+select to_json(from_json('{"time":"14:30:45.1"}', 'time TIME(1)'));
+select to_json(from_json('{"time":"14:30:45.12"}', 'time TIME(2)'));
+select to_json(from_json('{"time":"14:30:45.123"}', 'time TIME(3)'));
+select to_json(from_json('{"time":"14:30:45.1234"}', 'time TIME(4)'));
+select to_json(from_json('{"time":"14:30:45.12345"}', 'time TIME(5)'));
+select to_json(from_json('{"time":"14:30:45.123456"}', 'time TIME(6)'));
+select to_json(from_json('{"time":"00:00:00"}', 'time TIME(0)'));
+select to_json(from_json('{"time":"23:59:59.999999"}', 'time TIME(6)'));
+
+-- TIME type schema inference and other tests
+select schema_of_json('{"time": "14:30:45"}');
+select schema_of_json('{"time": "14:30:45.123456"}');
+select from_json('{"time": "14:30:45"}', 'time TIME') LIMIT 1;

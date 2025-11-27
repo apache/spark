@@ -36,7 +36,7 @@ fi
 declare -r noshare_opts="-Dsbt.global.base=project/.sbtboot -Dsbt.boot.directory=project/.boot -Dsbt.ivy.home=project/.ivy"
 declare -r sbt_opts_file=".sbtopts"
 declare -r etc_sbt_opts_file="/etc/sbt/sbtopts"
-declare -r default_sbt_opts="-Xss64m"
+declare -r default_sbt_opts="-Xss64m -XX:+IgnoreUnrecognizedVMOptions -XX:+UnlockDiagnosticVMOptions -XX:GCLockerRetryAllocationCount=100 --enable-native-access=ALL-UNNAMED"
 
 usage() {
  cat <<EOM

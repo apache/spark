@@ -20,6 +20,7 @@ package org.apache.spark.ml.feature
 import java.util.Locale
 
 import org.apache.spark.annotation.Since
+import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.ml.Transformer
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared.{HasInputCol, HasInputCols, HasOutputCol, HasOutputCols}
@@ -121,21 +122,6 @@ class StopWordsRemover @Since("1.5.0") (@Since("1.5.0") override val uid: String
   @Since("2.4.0")
   def getLocale: String = $(locale)
 
-  /**
-   * Returns system default locale, or `Locale.US` if the default locale is not in available locales
-   * in JVM.
-   */
-  private val getDefaultOrUS: Locale = {
-    if (Locale.getAvailableLocales.contains(Locale.getDefault)) {
-      Locale.getDefault
-    } else {
-      logWarning(s"Default locale set was [${Locale.getDefault.toString}]; however, it was " +
-        "not found in available locales in JVM, falling back to en_US locale. Set param `locale` " +
-        "in order to respect another locale.")
-      Locale.US
-    }
-  }
-
   /** Returns the input and output column names corresponding in pair. */
   private[feature] def getInOutCols(): (Array[String], Array[String]) = {
     if (isSet(inputCol)) {
@@ -146,7 +132,7 @@ class StopWordsRemover @Since("1.5.0") (@Since("1.5.0") override val uid: String
   }
 
   setDefault(stopWords -> StopWordsRemover.loadDefaultStopWords("english"),
-    caseSensitive -> false, locale -> getDefaultOrUS.toString)
+    caseSensitive -> false, locale -> StopWordsRemover.getDefaultOrUS.toString)
 
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
@@ -192,13 +178,16 @@ class StopWordsRemover @Since("1.5.0") (@Since("1.5.0") override val uid: String
     }
 
     val (inputColNames, outputColNames) = getInOutCols()
+
     val newCols = inputColNames.zip(outputColNames).map { case (inputColName, outputColName) =>
        require(!schema.fieldNames.contains(outputColName),
         s"Output Column $outputColName already exists.")
-      val inputType = schema(inputColName).dataType
+      val inputType = SchemaUtils.getSchemaFieldType(schema, inputColName)
       require(DataTypeUtils.sameType(inputType, ArrayType(StringType)), "Input type must be " +
         s"${ArrayType(StringType).catalogString} but got ${inputType.catalogString}.")
-      StructField(outputColName, inputType, schema(inputColName).nullable)
+      StructField(
+        outputColName, inputType, SchemaUtils.getSchemaField(schema, inputColName).nullable
+      )
     }
     StructType(schema.fields ++ newCols)
   }
@@ -214,7 +203,7 @@ class StopWordsRemover @Since("1.5.0") (@Since("1.5.0") override val uid: String
 }
 
 @Since("1.6.0")
-object StopWordsRemover extends DefaultParamsReadable[StopWordsRemover] {
+object StopWordsRemover extends DefaultParamsReadable[StopWordsRemover] with Logging {
 
   private[feature]
   val supportedLanguages = Set("danish", "dutch", "english", "finnish", "french", "german",
@@ -236,5 +225,16 @@ object StopWordsRemover extends DefaultParamsReadable[StopWordsRemover] {
       s"$language is not in the supported language list: ${supportedLanguages.mkString(", ")}.")
     val is = getClass.getResourceAsStream(s"/org/apache/spark/ml/feature/stopwords/$language.txt")
     scala.io.Source.fromInputStream(is)(scala.io.Codec.UTF8).getLines().toArray
+  }
+
+  private[spark] def getDefaultOrUS: Locale = {
+    if (Locale.getAvailableLocales.contains(Locale.getDefault)) {
+      Locale.getDefault
+    } else {
+      logWarning(log"Default locale set was [${MDC(LogKeys.LOCALE, Locale.getDefault)}]; " +
+        log"however, it was not found in available locales in JVM, falling back to en_US locale. " +
+        log"Set param `locale` in order to respect another locale.")
+      Locale.US
+    }
   }
 }

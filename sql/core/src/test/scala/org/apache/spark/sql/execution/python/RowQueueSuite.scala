@@ -68,7 +68,7 @@ class RowQueueSuite extends SparkFunSuite with EncryptionFunSuite {
   encryptionTest("disk queue") { conf =>
     val serManager = createSerializerManager(conf)
     val dir = Utils.createTempDir().getCanonicalFile
-    dir.mkdirs()
+    Utils.createDirectory(dir)
     val queue = DiskRowQueue(new File(dir, "buffer"), 1, serManager)
     val row = new UnsafeRow(1)
     row.pointTo(new Array[Byte](16), 16)
@@ -111,7 +111,7 @@ class RowQueueSuite extends SparkFunSuite with EncryptionFunSuite {
       var i = 0
       while (i < n) {
         row.setLong(0, i)
-        assert(queue.add(row), "fail to add")
+        queue.add(row)
         i += 1
       }
       assert(queue.numQueues() > 1, "should have more than one queue")
@@ -128,7 +128,7 @@ class RowQueueSuite extends SparkFunSuite with EncryptionFunSuite {
       i = 0
       while (i < n) {
         row.setLong(0, i)
-        assert(queue.add(row), "fail to add")
+        queue.add(row)
         i += 1
       }
       assert(queue.numQueues() > 1, "should have more than one queue")

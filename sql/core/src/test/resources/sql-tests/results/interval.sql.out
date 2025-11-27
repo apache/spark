@@ -75,8 +75,11 @@ select interval 2147483647 day * 2
 -- !query schema
 struct<>
 -- !query output
-java.lang.ArithmeticException
-long overflow
+org.apache.spark.SparkArithmeticException
+{
+  "errorClass" : "INTERVAL_ARITHMETIC_OVERFLOW.WITHOUT_SUGGESTION",
+  "sqlState" : "22015"
+}
 
 
 -- !query
@@ -84,8 +87,11 @@ select interval 2147483647 day / 0.5
 -- !query schema
 struct<>
 -- !query output
-java.lang.ArithmeticException
-long overflow
+org.apache.spark.SparkArithmeticException
+{
+  "errorClass" : "INTERVAL_ARITHMETIC_OVERFLOW.WITHOUT_SUGGESTION",
+  "sqlState" : "22015"
+}
 
 
 -- !query
@@ -123,33 +129,101 @@ struct<(INTERVAL '2' YEAR / 2):interval year to month>
 -- !query
 select interval 2 second * 'a'
 -- !query schema
-struct<(INTERVAL '02' SECOND * a):interval day to second>
+struct<>
 -- !query output
-NULL
+org.apache.spark.SparkNumberFormatException
+{
+  "errorClass" : "CAST_INVALID_INPUT",
+  "sqlState" : "22018",
+  "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
+    "expression" : "'a'",
+    "sourceType" : "\"STRING\"",
+    "targetType" : "\"DOUBLE\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 30,
+    "fragment" : "interval 2 second * 'a'"
+  } ]
+}
 
 
 -- !query
 select interval 2 second / 'a'
 -- !query schema
-struct<(INTERVAL '02' SECOND / a):interval day to second>
+struct<>
 -- !query output
-NULL
+org.apache.spark.SparkNumberFormatException
+{
+  "errorClass" : "CAST_INVALID_INPUT",
+  "sqlState" : "22018",
+  "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
+    "expression" : "'a'",
+    "sourceType" : "\"STRING\"",
+    "targetType" : "\"DOUBLE\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 30,
+    "fragment" : "interval 2 second / 'a'"
+  } ]
+}
 
 
 -- !query
 select interval 2 year * 'a'
 -- !query schema
-struct<(INTERVAL '2' YEAR * a):interval year to month>
+struct<>
 -- !query output
-NULL
+org.apache.spark.SparkNumberFormatException
+{
+  "errorClass" : "CAST_INVALID_INPUT",
+  "sqlState" : "22018",
+  "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
+    "expression" : "'a'",
+    "sourceType" : "\"STRING\"",
+    "targetType" : "\"DOUBLE\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 28,
+    "fragment" : "interval 2 year * 'a'"
+  } ]
+}
 
 
 -- !query
 select interval 2 year / 'a'
 -- !query schema
-struct<(INTERVAL '2' YEAR / a):interval year to month>
+struct<>
 -- !query output
-NULL
+org.apache.spark.SparkNumberFormatException
+{
+  "errorClass" : "CAST_INVALID_INPUT",
+  "sqlState" : "22018",
+  "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
+    "expression" : "'a'",
+    "sourceType" : "\"STRING\"",
+    "targetType" : "\"DOUBLE\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 28,
+    "fragment" : "interval 2 year / 'a'"
+  } ]
+}
 
 
 -- !query
@@ -171,17 +245,51 @@ struct<(INTERVAL '2' YEAR * 2):interval year to month>
 -- !query
 select 'a' * interval 2 second
 -- !query schema
-struct<(INTERVAL '02' SECOND * a):interval day to second>
+struct<>
 -- !query output
-NULL
+org.apache.spark.SparkNumberFormatException
+{
+  "errorClass" : "CAST_INVALID_INPUT",
+  "sqlState" : "22018",
+  "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
+    "expression" : "'a'",
+    "sourceType" : "\"STRING\"",
+    "targetType" : "\"DOUBLE\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 30,
+    "fragment" : "'a' * interval 2 second"
+  } ]
+}
 
 
 -- !query
 select 'a' * interval 2 year
 -- !query schema
-struct<(INTERVAL '2' YEAR * a):interval year to month>
+struct<>
 -- !query output
-NULL
+org.apache.spark.SparkNumberFormatException
+{
+  "errorClass" : "CAST_INVALID_INPUT",
+  "sqlState" : "22018",
+  "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
+    "expression" : "'a'",
+    "sourceType" : "\"STRING\"",
+    "targetType" : "\"DOUBLE\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 28,
+    "fragment" : "'a' * interval 2 year"
+  } ]
+}
 
 
 -- !query
@@ -773,9 +881,26 @@ struct<make_interval(1, 2, 3, 4, 0, 0, 123456789012.123456):interval>
 -- !query
 select make_interval(0, 0, 0, 0, 0, 0, 1234567890123456789)
 -- !query schema
-struct<make_interval(0, 0, 0, 0, 0, 0, 1234567890123456789):interval>
+struct<>
 -- !query output
-NULL
+org.apache.spark.SparkArithmeticException
+{
+  "errorClass" : "NUMERIC_VALUE_OUT_OF_RANGE.WITH_SUGGESTION",
+  "sqlState" : "22003",
+  "messageParameters" : {
+    "config" : "\"spark.sql.ansi.enabled\"",
+    "precision" : "18",
+    "scale" : "6",
+    "value" : "1234567890123456789"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 59,
+    "fragment" : "make_interval(0, 0, 0, 0, 0, 0, 1234567890123456789)"
+  } ]
+}
 
 
 -- !query
@@ -823,8 +948,18 @@ select make_dt_interval(2147483647)
 -- !query schema
 struct<>
 -- !query output
-java.lang.ArithmeticException
-long overflow
+org.apache.spark.SparkArithmeticException
+{
+  "errorClass" : "INTERVAL_ARITHMETIC_OVERFLOW.WITHOUT_SUGGESTION",
+  "sqlState" : "22015",
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 35,
+    "fragment" : "make_dt_interval(2147483647)"
+  } ]
+}
 
 
 -- !query
@@ -864,8 +999,18 @@ select make_ym_interval(178956970, 8)
 -- !query schema
 struct<>
 -- !query output
-java.lang.ArithmeticException
-integer overflow
+org.apache.spark.SparkArithmeticException
+{
+  "errorClass" : "INTERVAL_ARITHMETIC_OVERFLOW.WITHOUT_SUGGESTION",
+  "sqlState" : "22015",
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 37,
+    "fragment" : "make_ym_interval(178956970, 8)"
+  } ]
+}
 
 
 -- !query
@@ -881,8 +1026,18 @@ select make_ym_interval(-178956970, -9)
 -- !query schema
 struct<>
 -- !query output
-java.lang.ArithmeticException
-integer overflow
+org.apache.spark.SparkArithmeticException
+{
+  "errorClass" : "INTERVAL_ARITHMETIC_OVERFLOW.WITHOUT_SUGGESTION",
+  "sqlState" : "22015",
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 39,
+    "fragment" : "make_ym_interval(-178956970, -9)"
+  } ]
+}
 
 
 -- !query
@@ -1142,9 +1297,13 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0063",
+  "errorClass" : "INVALID_INTERVAL_FORMAT.UNMATCHED_FORMAT_STRING_WITH_NOTICE",
+  "sqlState" : "22006",
   "messageParameters" : {
-    "msg" : "Interval string does not match day-time format of `[+|-]d h`, `INTERVAL [+|-]'[+|-]d h' DAY TO HOUR` when cast to interval day to hour: 20 15:40:32.99899999, set spark.sql.legacy.fromDayTimeString.enabled to true to restore the behavior before Spark 3.0."
+    "input" : "20 15:40:32.99899999",
+    "intervalStr" : "day-time",
+    "supportedFormat" : "`[+|-]d h`, `INTERVAL [+|-]'[+|-]d h' DAY TO HOUR`",
+    "typeName" : "interval day to hour"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1163,9 +1322,13 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0063",
+  "errorClass" : "INVALID_INTERVAL_FORMAT.UNMATCHED_FORMAT_STRING_WITH_NOTICE",
+  "sqlState" : "22006",
   "messageParameters" : {
-    "msg" : "Interval string does not match day-time format of `[+|-]d h:m`, `INTERVAL [+|-]'[+|-]d h:m' DAY TO MINUTE` when cast to interval day to minute: 20 15:40:32.99899999, set spark.sql.legacy.fromDayTimeString.enabled to true to restore the behavior before Spark 3.0."
+    "input" : "20 15:40:32.99899999",
+    "intervalStr" : "day-time",
+    "supportedFormat" : "`[+|-]d h:m`, `INTERVAL [+|-]'[+|-]d h:m' DAY TO MINUTE`",
+    "typeName" : "interval day to minute"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1184,9 +1347,13 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0063",
+  "errorClass" : "INVALID_INTERVAL_FORMAT.UNMATCHED_FORMAT_STRING_WITH_NOTICE",
+  "sqlState" : "22006",
   "messageParameters" : {
-    "msg" : "Interval string does not match day-time format of `[+|-]h:m`, `INTERVAL [+|-]'[+|-]h:m' HOUR TO MINUTE` when cast to interval hour to minute: 15:40:32.99899999, set spark.sql.legacy.fromDayTimeString.enabled to true to restore the behavior before Spark 3.0."
+    "input" : "15:40:32.99899999",
+    "intervalStr" : "day-time",
+    "supportedFormat" : "`[+|-]h:m`, `INTERVAL [+|-]'[+|-]h:m' HOUR TO MINUTE`",
+    "typeName" : "interval hour to minute"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1205,9 +1372,13 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0063",
+  "errorClass" : "INVALID_INTERVAL_FORMAT.UNMATCHED_FORMAT_STRING_WITH_NOTICE",
+  "sqlState" : "22006",
   "messageParameters" : {
-    "msg" : "Interval string does not match day-time format of `[+|-]h:m:s.n`, `INTERVAL [+|-]'[+|-]h:m:s.n' HOUR TO SECOND` when cast to interval hour to second: 15:40.99899999, set spark.sql.legacy.fromDayTimeString.enabled to true to restore the behavior before Spark 3.0."
+    "input" : "15:40.99899999",
+    "intervalStr" : "day-time",
+    "supportedFormat" : "`[+|-]h:m:s.n`, `INTERVAL [+|-]'[+|-]h:m:s.n' HOUR TO SECOND`",
+    "typeName" : "interval hour to second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1226,9 +1397,13 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0063",
+  "errorClass" : "INVALID_INTERVAL_FORMAT.UNMATCHED_FORMAT_STRING_WITH_NOTICE",
+  "sqlState" : "22006",
   "messageParameters" : {
-    "msg" : "Interval string does not match day-time format of `[+|-]h:m:s.n`, `INTERVAL [+|-]'[+|-]h:m:s.n' HOUR TO SECOND` when cast to interval hour to second: 15:40, set spark.sql.legacy.fromDayTimeString.enabled to true to restore the behavior before Spark 3.0."
+    "input" : "15:40",
+    "intervalStr" : "day-time",
+    "supportedFormat" : "`[+|-]h:m:s.n`, `INTERVAL [+|-]'[+|-]h:m:s.n' HOUR TO SECOND`",
+    "typeName" : "interval hour to second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1247,9 +1422,13 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0063",
+  "errorClass" : "INVALID_INTERVAL_FORMAT.UNMATCHED_FORMAT_STRING_WITH_NOTICE",
+  "sqlState" : "22006",
   "messageParameters" : {
-    "msg" : "Interval string does not match day-time format of `[+|-]m:s.n`, `INTERVAL [+|-]'[+|-]m:s.n' MINUTE TO SECOND` when cast to interval minute to second: 20 40:32.99899999, set spark.sql.legacy.fromDayTimeString.enabled to true to restore the behavior before Spark 3.0."
+    "input" : "20 40:32.99899999",
+    "intervalStr" : "day-time",
+    "supportedFormat" : "`[+|-]m:s.n`, `INTERVAL [+|-]'[+|-]m:s.n' MINUTE TO SECOND`",
+    "typeName" : "interval minute to second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1398,9 +1577,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0028",
+  "errorClass" : "INVALID_INTERVAL_FORMAT.UNSUPPORTED_FROM_TO_EXPRESSION",
+  "sqlState" : "22006",
   "messageParameters" : {
     "from" : "year",
+    "input" : "1",
     "to" : "second"
   },
   "queryContext" : [ {
@@ -1678,9 +1859,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0063",
+  "errorClass" : "INVALID_INTERVAL_FORMAT.INTERVAL_PARSING",
+  "sqlState" : "22006",
   "messageParameters" : {
-    "msg" : "Error parsing interval year-month string: integer overflow"
+    "input" : "178956970-8",
+    "interval" : "year-month"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1819,17 +2002,51 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 select '4 11:11' - interval '4 22:12' day to minute
 -- !query schema
-struct<4 11:11 - INTERVAL '4 22:12' DAY TO MINUTE:string>
+struct<>
 -- !query output
-NULL
+org.apache.spark.SparkDateTimeException
+{
+  "errorClass" : "CAST_INVALID_INPUT",
+  "sqlState" : "22018",
+  "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
+    "expression" : "'4 11:11'",
+    "sourceType" : "\"STRING\"",
+    "targetType" : "\"TIMESTAMP\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 51,
+    "fragment" : "'4 11:11' - interval '4 22:12' day to minute"
+  } ]
+}
 
 
 -- !query
 select '4 12:12:12' + interval '4 22:12' day to minute
 -- !query schema
-struct<4 12:12:12 + INTERVAL '4 22:12' DAY TO MINUTE:string>
+struct<>
 -- !query output
-NULL
+org.apache.spark.SparkDateTimeException
+{
+  "errorClass" : "CAST_INVALID_INPUT",
+  "sqlState" : "22018",
+  "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
+    "expression" : "'4 12:12:12'",
+    "sourceType" : "\"STRING\"",
+    "targetType" : "\"TIMESTAMP\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 54,
+    "fragment" : "'4 12:12:12' + interval '4 22:12' day to minute"
+  } ]
+}
 
 
 -- !query
@@ -1891,17 +2108,51 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 select str - interval '4 22:12' day to minute from interval_view
 -- !query schema
-struct<str - INTERVAL '4 22:12' DAY TO MINUTE:string>
+struct<>
 -- !query output
-NULL
+org.apache.spark.SparkDateTimeException
+{
+  "errorClass" : "CAST_INVALID_INPUT",
+  "sqlState" : "22018",
+  "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
+    "expression" : "'1'",
+    "sourceType" : "\"STRING\"",
+    "targetType" : "\"TIMESTAMP\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 45,
+    "fragment" : "str - interval '4 22:12' day to minute"
+  } ]
+}
 
 
 -- !query
 select str + interval '4 22:12' day to minute from interval_view
 -- !query schema
-struct<str + INTERVAL '4 22:12' DAY TO MINUTE:string>
+struct<>
 -- !query output
-NULL
+org.apache.spark.SparkDateTimeException
+{
+  "errorClass" : "CAST_INVALID_INPUT",
+  "sqlState" : "22018",
+  "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
+    "expression" : "'1'",
+    "sourceType" : "\"STRING\"",
+    "targetType" : "\"TIMESTAMP\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 45,
+    "fragment" : "str + interval '4 22:12' day to minute"
+  } ]
+}
 
 
 -- !query
@@ -2161,9 +2412,13 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0063",
+  "errorClass" : "INVALID_INTERVAL_FORMAT.UNMATCHED_FORMAT_STRING",
+  "sqlState" : "22006",
   "messageParameters" : {
-    "msg" : "Interval string does not match year-month format of `[+|-]y-m`, `INTERVAL [+|-]'[+|-]y-m' YEAR TO MONTH` when cast to interval year to month: -\t2-2\t"
+    "input" : "-\t2-2\t",
+    "intervalStr" : "year-month",
+    "supportedFormat" : "`[+|-]y-m`, `INTERVAL [+|-]'[+|-]y-m' YEAR TO MONTH`",
+    "typeName" : "interval year to month"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2190,9 +2445,13 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0063",
+  "errorClass" : "INVALID_INTERVAL_FORMAT.UNMATCHED_FORMAT_STRING_WITH_NOTICE",
+  "sqlState" : "22006",
   "messageParameters" : {
-    "msg" : "Interval string does not match day-time format of `[+|-]d h:m:s.n`, `INTERVAL [+|-]'[+|-]d h:m:s.n' DAY TO SECOND` when cast to interval day to second: \n-\t10\t 12:34:46.789\t, set spark.sql.legacy.fromDayTimeString.enabled to true to restore the behavior before Spark 3.0."
+    "input" : "\n-\t10\t 12:34:46.789\t",
+    "intervalStr" : "day-time",
+    "supportedFormat" : "`[+|-]d h:m:s.n`, `INTERVAL [+|-]'[+|-]d h:m:s.n' DAY TO SECOND`",
+    "typeName" : "interval day to second"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2280,12 +2539,8 @@ struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
 {
-  "errorClass" : "INTERVAL_ARITHMETIC_OVERFLOW",
-  "sqlState" : "22015",
-  "messageParameters" : {
-    "alternative" : "",
-    "message" : "integer overflow"
-  }
+  "errorClass" : "INTERVAL_ARITHMETIC_OVERFLOW.WITHOUT_SUGGESTION",
+  "sqlState" : "22015"
 }
 
 
@@ -2296,11 +2551,10 @@ struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
 {
-  "errorClass" : "INTERVAL_ARITHMETIC_OVERFLOW",
+  "errorClass" : "INTERVAL_ARITHMETIC_OVERFLOW.WITH_SUGGESTION",
   "sqlState" : "22015",
   "messageParameters" : {
-    "alternative" : " Use 'try_subtract' to tolerate overflow and return NULL instead.",
-    "message" : "integer overflow"
+    "functionName" : "`try_subtract`"
   }
 }
 
@@ -2312,11 +2566,10 @@ struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
 {
-  "errorClass" : "INTERVAL_ARITHMETIC_OVERFLOW",
+  "errorClass" : "INTERVAL_ARITHMETIC_OVERFLOW.WITH_SUGGESTION",
   "sqlState" : "22015",
   "messageParameters" : {
-    "alternative" : " Use 'try_add' to tolerate overflow and return NULL instead.",
-    "message" : "integer overflow"
+    "functionName" : "`try_add`"
   }
 }
 
@@ -2625,11 +2878,10 @@ struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
 {
-  "errorClass" : "INTERVAL_ARITHMETIC_OVERFLOW",
+  "errorClass" : "INTERVAL_ARITHMETIC_OVERFLOW.WITH_SUGGESTION",
   "sqlState" : "22015",
   "messageParameters" : {
-    "alternative" : " Use 'try_divide' to tolerate overflow and return NULL instead.",
-    "message" : "Interval value overflows after being divided by -1"
+    "functionName" : "`try_divide`"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2648,11 +2900,10 @@ struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
 {
-  "errorClass" : "INTERVAL_ARITHMETIC_OVERFLOW",
+  "errorClass" : "INTERVAL_ARITHMETIC_OVERFLOW.WITH_SUGGESTION",
   "sqlState" : "22015",
   "messageParameters" : {
-    "alternative" : " Use 'try_divide' to tolerate overflow and return NULL instead.",
-    "message" : "Interval value overflows after being divided by -1"
+    "functionName" : "`try_divide`"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2679,7 +2930,7 @@ SELECT (INTERVAL '-178956970-8' YEAR TO MONTH) / -1.0D
 struct<>
 -- !query output
 java.lang.ArithmeticException
-not in range
+rounded value is out of range for input 2.147483648E9 and rounding mode HALF_UP
 
 
 -- !query
@@ -2705,11 +2956,10 @@ struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
 {
-  "errorClass" : "INTERVAL_ARITHMETIC_OVERFLOW",
+  "errorClass" : "INTERVAL_ARITHMETIC_OVERFLOW.WITH_SUGGESTION",
   "sqlState" : "22015",
   "messageParameters" : {
-    "alternative" : " Use 'try_divide' to tolerate overflow and return NULL instead.",
-    "message" : "Interval value overflows after being divided by -1"
+    "functionName" : "`try_divide`"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2728,11 +2978,10 @@ struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
 {
-  "errorClass" : "INTERVAL_ARITHMETIC_OVERFLOW",
+  "errorClass" : "INTERVAL_ARITHMETIC_OVERFLOW.WITH_SUGGESTION",
   "sqlState" : "22015",
   "messageParameters" : {
-    "alternative" : " Use 'try_divide' to tolerate overflow and return NULL instead.",
-    "message" : "Interval value overflows after being divided by -1"
+    "functionName" : "`try_divide`"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2759,7 +3008,7 @@ SELECT (INTERVAL '-106751991 04:00:54.775808' DAY TO SECOND) / -1.0D
 struct<>
 -- !query output
 java.lang.ArithmeticException
-not in range
+rounded value is out of range for input 9.223372036854776E18 and rounding mode HALF_UP
 
 
 -- !query
@@ -3654,3 +3903,15 @@ SELECT width_bucket(INTERVAL '-59' MINUTE, INTERVAL -'1 01' DAY TO HOUR, INTERVA
 struct<width_bucket(INTERVAL '-59' MINUTE, INTERVAL '-1 01' DAY TO HOUR, INTERVAL '1 02:03:04.001' DAY TO SECOND, 10):bigint>
 -- !query output
 5
+
+
+-- !query
+SELECT interval 106751991 day 4 hour 0 minute 54.776 second
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkArithmeticException
+{
+  "errorClass" : "INTERVAL_ARITHMETIC_OVERFLOW.WITHOUT_SUGGESTION",
+  "sqlState" : "22015"
+}

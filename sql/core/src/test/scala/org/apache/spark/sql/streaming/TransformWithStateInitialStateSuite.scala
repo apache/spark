@@ -17,21 +17,39 @@
 
 package org.apache.spark.sql.streaming
 
-import org.apache.spark.SparkUnsupportedOperationException
-import org.apache.spark.sql.{Dataset, Encoders, KeyValueGroupedDataset}
-import org.apache.spark.sql.execution.streaming.MemoryStream
-import org.apache.spark.sql.execution.streaming.state.{AlsoTestWithChangelogCheckpointingEnabled, RocksDBStateStoreProvider}
-import org.apache.spark.sql.functions.timestamp_seconds
+import org.apache.spark.sql.{DataFrame, Dataset, Encoders, KeyValueGroupedDataset}
+import org.apache.spark.sql.execution.datasources.v2.state.StateSourceOptions
+import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
+import org.apache.spark.sql.execution.streaming.state.{AlsoTestWithEncodingTypes, AlsoTestWithRocksDBFeatures, EnableStateStoreRowChecksum, RocksDBStateStoreProvider}
+import org.apache.spark.sql.functions.{col, timestamp_seconds}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.util.StreamManualClock
+import org.apache.spark.tags.SlowSQLTest
 
 case class InitInputRow(key: String, action: String, value: Double)
 case class InputRowForInitialState(
     key: String, value: Double, entries: List[Double], mapping: Map[Double, Int])
 
+case class UnionInitialStateRow(
+    groupingKey: String,
+    value: Option[Long],
+    listValue: Option[Long],
+    userMapKey: Option[String],
+    userMapValue: Option[Long]
+)
+
+case class UnionUnflattenInitialStateRow(
+    groupingKey: String,
+    value: Option[Long],
+    listValue: Option[Seq[Long]],
+    mapValue: Option[Map[String, Long]]
+)
+
 abstract class StatefulProcessorWithInitialStateTestClass[V]
     extends StatefulProcessorWithInitialState[
         String, InitInputRow, (String, String, Double), V] {
+  import implicits._
+
   @transient var _valState: ValueState[Double] = _
   @transient var _listState: ListState[Double] = _
   @transient var _mapState: MapState[Double, Int] = _
@@ -39,21 +57,19 @@ abstract class StatefulProcessorWithInitialStateTestClass[V]
   override def init(
       outputMode: OutputMode,
       timeMode: TimeMode): Unit = {
-    _valState = getHandle.getValueState[Double]("testValueInit", Encoders.scalaDouble)
-    _listState = getHandle.getListState[Double]("testListInit", Encoders.scalaDouble)
-    _mapState = getHandle.getMapState[Double, Int](
-      "testMapInit", Encoders.scalaDouble, Encoders.scalaInt)
+    _valState = getHandle.getValueState[Double]("testValueInit", TTLConfig.NONE)
+    _listState = getHandle.getListState[Double]("testListInit", TTLConfig.NONE)
+    _mapState = getHandle.getMapState[Double, Int]("testMapInit", TTLConfig.NONE)
   }
 
   override def handleInputRows(
       key: String,
       inputRows: Iterator[InitInputRow],
-      timerValues: TimerValues,
-      expiredTimerInfo: ExpiredTimerInfo): Iterator[(String, String, Double)] = {
+      timerValues: TimerValues): Iterator[(String, String, Double)] = {
     var output = List[(String, String, Double)]()
     for (row <- inputRows) {
       if (row.action == "getOption") {
-        output = (key, row.action, _valState.getOption().getOrElse(-1.0)) :: output
+        output = (key, row.action, Option(_valState.get()).getOrElse(-1.0)) :: output
       } else if (row.action == "update") {
         _valState.update(row.value)
       } else if (row.action == "remove") {
@@ -84,6 +100,86 @@ abstract class StatefulProcessorWithInitialStateTestClass[V]
   }
 }
 
+/**
+ * Class that updates all state variables with input rows. Act as a counter -
+ * keep the count in value state; keep all the occurrences in list state; and
+ * keep a map of key -> occurrence count in the map state.
+ */
+abstract class InitialStateWithStateDataSourceBase[V]
+  extends StatefulProcessorWithInitialState[
+    String, String, (String, String), V] {
+  @transient var _valState: ValueState[Long] = _
+  @transient var _listState: ListState[Long] = _
+  @transient var _mapState: MapState[String, Long] = _
+
+  override def init(
+      outputMode: OutputMode,
+      timeMode: TimeMode): Unit = {
+    _valState = getHandle.getValueState[Long]("testVal", Encoders.scalaLong, TTLConfig.NONE)
+    _listState = getHandle.getListState[Long]("testList", Encoders.scalaLong, TTLConfig.NONE)
+    _mapState = getHandle.getMapState[String, Long](
+      "testMap", Encoders.STRING, Encoders.scalaLong, TTLConfig.NONE)
+  }
+
+  override def handleInputRows(
+      key: String,
+      inputRows: Iterator[String],
+      timerValues: TimerValues): Iterator[(String, String)] = {
+    val curCountValue = if (_valState.exists()) {
+      _valState.get()
+    } else {
+      0L
+    }
+    var cnt = curCountValue
+    inputRows.foreach { row =>
+      cnt += 1
+      _listState.appendValue(cnt)
+      val mapCurVal = if (_mapState.containsKey(row)) {
+        _mapState.getValue(row)
+      } else {
+        0
+      }
+      _mapState.updateValue(row, mapCurVal + 1L)
+    }
+    _valState.update(cnt)
+    Iterator.single((key, cnt.toString))
+  }
+
+  override def close(): Unit = super.close()
+}
+
+class InitialStatefulProcessorWithStateDataSource
+  extends InitialStateWithStateDataSourceBase[UnionInitialStateRow] {
+  override def handleInitialState(
+      key: String, initialState: UnionInitialStateRow, timerValues: TimerValues): Unit = {
+    if (initialState.value.isDefined) {
+      _valState.update(initialState.value.get)
+    } else if (initialState.listValue.isDefined) {
+      _listState.appendValue(initialState.listValue.get)
+    } else if (initialState.userMapKey.isDefined) {
+      _mapState.updateValue(
+        initialState.userMapKey.get, initialState.userMapValue.get)
+    }
+  }
+}
+
+class InitialStatefulProcessorWithUnflattenStateDataSource
+  extends InitialStateWithStateDataSourceBase[UnionUnflattenInitialStateRow] {
+  override def handleInitialState(
+      key: String, initialState: UnionUnflattenInitialStateRow, timerValues: TimerValues): Unit = {
+    if (initialState.value.isDefined) {
+      _valState.update(initialState.value.get)
+    } else if (initialState.listValue.isDefined) {
+      _listState.appendList(
+        initialState.listValue.get.toArray)
+    } else if (initialState.mapValue.isDefined) {
+      initialState.mapValue.get.keys.foreach { key =>
+        _mapState.updateValue(key, initialState.mapValue.get.get(key).get)
+      }
+    }
+  }
+}
+
 class AccumulateStatefulProcessorWithInitState
     extends StatefulProcessorWithInitialStateTestClass[(String, Double)] {
   override def handleInitialState(
@@ -96,15 +192,14 @@ class AccumulateStatefulProcessorWithInitState
   override def handleInputRows(
       key: String,
       inputRows: Iterator[InitInputRow],
-      timerValues: TimerValues,
-      expiredTimerInfo: ExpiredTimerInfo): Iterator[(String, String, Double)] = {
+      timerValues: TimerValues): Iterator[(String, String, Double)] = {
     var output = List[(String, String, Double)]()
     for (row <- inputRows) {
       if (row.action == "getOption") {
-        output = (key, row.action, _valState.getOption().getOrElse(0.0)) :: output
+        output = (key, row.action, Option(_valState.get()).getOrElse(0.0)) :: output
       } else if (row.action == "add") {
         // Update state variable as accumulative sum
-        val accumulateSum = _valState.getOption().getOrElse(0.0) + row.value
+        val accumulateSum = Option(_valState.get()).getOrElse(0.0) + row.value
         _valState.update(accumulateSum)
       } else if (row.action == "remove") {
         _valState.clear()
@@ -140,13 +235,6 @@ class StatefulProcessorWithInitialStateProcTimerClass
   @transient private var _timerState: ValueState[Long] = _
   @transient protected var _countState: ValueState[Long] = _
 
-  private def handleProcessingTimeBasedTimers(
-      key: String,
-      expiryTimestampMs: Long): Iterator[(String, String)] = {
-    _timerState.clear()
-    Iterator((key, "-1"))
-  }
-
   private def processUnexpiredRows(
       key: String,
       currCount: Long,
@@ -171,8 +259,10 @@ class StatefulProcessorWithInitialStateProcTimerClass
   override def init(
       outputMode: OutputMode,
       timeMode: TimeMode) : Unit = {
-    _countState = getHandle.getValueState[Long]("countState", Encoders.scalaLong)
-    _timerState = getHandle.getValueState[Long]("timerState", Encoders.scalaLong)
+    _countState = getHandle.getValueState[Long]("countState", Encoders.scalaLong,
+      TTLConfig.NONE)
+    _timerState = getHandle.getValueState[Long]("timerState", Encoders.scalaLong,
+      TTLConfig.NONE)
   }
 
   override def handleInitialState(
@@ -187,16 +277,19 @@ class StatefulProcessorWithInitialStateProcTimerClass
   override def handleInputRows(
       key: String,
       inputRows: Iterator[String],
+      timerValues: TimerValues): Iterator[(String, String)] = {
+    val currCount = Option(_countState.get()).getOrElse(0L)
+    val count = currCount + inputRows.size
+    processUnexpiredRows(key, currCount, count, timerValues)
+    Iterator((key, count.toString))
+  }
+
+  override def handleExpiredTimer(
+      key: String,
       timerValues: TimerValues,
       expiredTimerInfo: ExpiredTimerInfo): Iterator[(String, String)] = {
-    if (expiredTimerInfo.isValid()) {
-      handleProcessingTimeBasedTimers(key, expiredTimerInfo.getExpiryTimeInMs())
-    } else {
-      val currCount = _countState.getOption().getOrElse(0L)
-      val count = currCount + inputRows.size
-      processUnexpiredRows(key, currCount, count, timerValues)
-      Iterator((key, count.toString))
-    }
+    _timerState.clear()
+    Iterator((key, "-1"))
   }
 }
 
@@ -215,8 +308,9 @@ class StatefulProcessorWithInitialStateEventTimerClass
       outputMode: OutputMode,
       timeMode: TimeMode): Unit = {
     _maxEventTimeState = getHandle.getValueState[Long]("maxEventTimeState",
-      Encoders.scalaLong)
-    _timerState = getHandle.getValueState[Long]("timerState", Encoders.scalaLong)
+      Encoders.scalaLong, TTLConfig.NONE)
+    _timerState = getHandle.getValueState[Long]("timerState", Encoders.scalaLong,
+      TTLConfig.NONE)
   }
 
   private def processUnexpiredRows(maxEventTimeSec: Long): Unit = {
@@ -224,7 +318,7 @@ class StatefulProcessorWithInitialStateEventTimerClass
     val timeoutTimestampMs = (maxEventTimeSec + timeoutDelaySec) * 1000
     _maxEventTimeState.update(maxEventTimeSec)
 
-    val registeredTimerMs: Long = _timerState.getOption().getOrElse(0L)
+    val registeredTimerMs: Long = Option(_timerState.get()).getOrElse(0L)
     if (registeredTimerMs < timeoutTimestampMs) {
       getHandle.deleteTimer(registeredTimerMs)
       getHandle.registerTimer(timeoutTimestampMs)
@@ -239,25 +333,27 @@ class StatefulProcessorWithInitialStateEventTimerClass
     // keep a _maxEventTimeState to track the max eventTime seen so far
     // register a timer if bigger eventTime is seen
     val maxEventTimeSec = math.max(initialState._2,
-      _maxEventTimeState.getOption().getOrElse(0L))
+      Option(_maxEventTimeState.get()).getOrElse(0L))
     processUnexpiredRows(maxEventTimeSec)
   }
 
   override def handleInputRows(
       key: String,
       inputRows: Iterator[(String, Long)],
+      timerValues: TimerValues): Iterator[(String, Int)] = {
+    val valuesSeq = inputRows.toSeq
+    val maxEventTimeSec = math.max(valuesSeq.map(_._2).max,
+      Option(_maxEventTimeState.get()).getOrElse(0L))
+    processUnexpiredRows(maxEventTimeSec)
+    Iterator((key, maxEventTimeSec.toInt))
+  }
+
+  override def handleExpiredTimer(
+      key: String,
       timerValues: TimerValues,
       expiredTimerInfo: ExpiredTimerInfo): Iterator[(String, Int)] = {
-    if (expiredTimerInfo.isValid()) {
-      _maxEventTimeState.clear()
-      Iterator((key, -1))
-    } else {
-      val valuesSeq = inputRows.toSeq
-      val maxEventTimeSec = math.max(valuesSeq.map(_._2).max,
-        _maxEventTimeState.getOption().getOrElse(0L))
-      processUnexpiredRows(maxEventTimeSec)
-      Iterator((key, maxEventTimeSec.toInt))
-    }
+    _maxEventTimeState.clear()
+    Iterator((key, -1))
   }
 }
 
@@ -265,8 +361,9 @@ class StatefulProcessorWithInitialStateEventTimerClass
  * Class that adds tests for transformWithState stateful
  * streaming operator with user-defined initial state
  */
+@SlowSQLTest
 class TransformWithStateInitialStateSuite extends StateStoreMetricsTest
-  with AlsoTestWithChangelogCheckpointingEnabled {
+  with AlsoTestWithEncodingTypes with AlsoTestWithRocksDBFeatures {
 
   import testImplicits._
 
@@ -282,6 +379,8 @@ class TransformWithStateInitialStateSuite extends StateStoreMetricsTest
     withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
       classOf[RocksDBStateStoreProvider].getName) {
 
+      val clock = new StreamManualClock
+
       val inputData = MemoryStream[InitInputRow]
       val kvDataSet = inputData.toDS()
         .groupByKey(x => x.key)
@@ -293,67 +392,94 @@ class TransformWithStateInitialStateSuite extends StateStoreMetricsTest
         TimeMode.None(), OutputMode.Append(), initStateDf)
 
       testStream(query, OutputMode.Update())(
+        StartStream(Trigger.ProcessingTime("1 second"), triggerClock = clock),
         // non-exist key test
         AddData(inputData, InitInputRow("k1", "update", 37.0)),
         AddData(inputData, InitInputRow("k2", "update", 40.0)),
         AddData(inputData, InitInputRow("non-exist", "getOption", -1.0)),
+        AdvanceManualClock(1 * 1000),
         CheckNewAnswer(("non-exist", "getOption", -1.0)),
+        Execute { q =>
+          assert(q.lastProgress
+            .stateOperators(0).customMetrics.get("initialStateProcessingTimeMs") > 0)
+        },
         AddData(inputData, InitInputRow("k1", "appendList", 37.0)),
         AddData(inputData, InitInputRow("k2", "appendList", 40.0)),
         AddData(inputData, InitInputRow("non-exist", "getList", -1.0)),
+        AdvanceManualClock(1 * 1000),
         CheckNewAnswer(),
 
         AddData(inputData, InitInputRow("k1", "incCount", 37.0)),
         AddData(inputData, InitInputRow("k2", "incCount", 40.0)),
         AddData(inputData, InitInputRow("non-exist", "getCount", -1.0)),
+        AdvanceManualClock(1 * 1000),
         CheckNewAnswer(("non-exist", "getCount", 0.0)),
+
         AddData(inputData, InitInputRow("k2", "incCount", 40.0)),
         AddData(inputData, InitInputRow("k2", "getCount", 40.0)),
+        AdvanceManualClock(1 * 1000),
         CheckNewAnswer(("k2", "getCount", 2.0)),
 
         // test every row in initial State is processed
         AddData(inputData, InitInputRow("init_1", "getOption", -1.0)),
+        AdvanceManualClock(1 * 1000),
         CheckNewAnswer(("init_1", "getOption", 40.0)),
+
         AddData(inputData, InitInputRow("init_2", "getOption", -1.0)),
+        AdvanceManualClock(1 * 1000),
         CheckNewAnswer(("init_2", "getOption", 100.0)),
 
         AddData(inputData, InitInputRow("init_1", "getList", -1.0)),
+        AdvanceManualClock(1 * 1000),
         CheckNewAnswer(("init_1", "getList", 40.0)),
+
         AddData(inputData, InitInputRow("init_2", "getList", -1.0)),
+        AdvanceManualClock(1 * 1000),
         CheckNewAnswer(("init_2", "getList", 100.0)),
 
         AddData(inputData, InitInputRow("init_1", "getCount", 40.0)),
+        AdvanceManualClock(1 * 1000),
         CheckNewAnswer(("init_1", "getCount", 1.0)),
+
         AddData(inputData, InitInputRow("init_2", "getCount", 100.0)),
+        AdvanceManualClock(1 * 1000),
         CheckNewAnswer(("init_2", "getCount", 1.0)),
 
         // Update row with key in initial row will work
         AddData(inputData, InitInputRow("init_1", "update", 50.0)),
         AddData(inputData, InitInputRow("init_1", "getOption", -1.0)),
+        AdvanceManualClock(1 * 1000),
         CheckNewAnswer(("init_1", "getOption", 50.0)),
+
         AddData(inputData, InitInputRow("init_1", "remove", -1.0)),
         AddData(inputData, InitInputRow("init_1", "getOption", -1.0)),
+        AdvanceManualClock(1 * 1000),
         CheckNewAnswer(("init_1", "getOption", -1.0)),
 
         AddData(inputData, InitInputRow("init_1", "appendList", 50.0)),
         AddData(inputData, InitInputRow("init_1", "getList", -1.0)),
+        AdvanceManualClock(1 * 1000),
         CheckNewAnswer(("init_1", "getList", 50.0), ("init_1", "getList", 40.0)),
 
         AddData(inputData, InitInputRow("init_1", "incCount", 40.0)),
         AddData(inputData, InitInputRow("init_1", "getCount", 40.0)),
+        AdvanceManualClock(1 * 1000),
         CheckNewAnswer(("init_1", "getCount", 2.0)),
 
         // test remove
         AddData(inputData, InitInputRow("k1", "remove", -1.0)),
         AddData(inputData, InitInputRow("k1", "getOption", -1.0)),
+        AdvanceManualClock(1 * 1000),
         CheckNewAnswer(("k1", "getOption", -1.0)),
 
         AddData(inputData, InitInputRow("init_1", "clearCount", -1.0)),
         AddData(inputData, InitInputRow("init_1", "getCount", -1.0)),
+        AdvanceManualClock(1 * 1000),
         CheckNewAnswer(("init_1", "getCount", 0.0)),
 
         AddData(inputData, InitInputRow("init_1", "clearList", -1.0)),
         AddData(inputData, InitInputRow("init_1", "getList", -1.0)),
+        AdvanceManualClock(1 * 1000),
         CheckNewAnswer()
       )
     }
@@ -396,37 +522,6 @@ class TransformWithStateInitialStateSuite extends StateStoreMetricsTest
     checkAnswer(df, Seq(("k1", "getOption", 37.0)).toDF())
   }
 
-  test("transformWithStateWithInitialState - " +
-    "cannot re-initialize state during initial state handling") {
-    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
-      classOf[RocksDBStateStoreProvider].getName) {
-      val initDf = Seq(("init_1", 40.0), ("init_2", 100.0), ("init_1", 50.0)).toDS()
-        .groupByKey(x => x._1).mapValues(x => x)
-      val inputData = MemoryStream[InitInputRow]
-      val query = inputData.toDS()
-        .groupByKey(x => x.key)
-        .transformWithState(new AccumulateStatefulProcessorWithInitState(),
-          TimeMode.None(),
-          OutputMode.Append(),
-          initDf)
-
-      testStream(query, OutputMode.Update())(
-        AddData(inputData, InitInputRow("k1", "add", 50.0)),
-        Execute { q =>
-          val e = intercept[Exception] {
-            q.processAllAvailable()
-          }
-          checkError(
-            exception = e.getCause.asInstanceOf[SparkUnsupportedOperationException],
-            errorClass = "STATEFUL_PROCESSOR_CANNOT_REINITIALIZE_STATE_ON_KEY",
-            sqlState = Some("42802"),
-            parameters = Map("groupingKey" -> "init_1")
-          )
-        }
-      )
-    }
-  }
-
   test("transformWithStateWithInitialState - streaming with processing time timer, " +
     "can emit expired initial state rows when grouping key is not received for new input rows") {
     withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
@@ -448,6 +543,10 @@ class TransformWithStateInitialStateSuite extends StateStoreMetricsTest
         AdvanceManualClock(1 * 1000),
         // registered timer for "a" and "b" is 6000, first batch is processed at ts = 1000
         CheckNewAnswer(("c", "1")),
+        Execute { q =>
+          assert(q.lastProgress
+            .stateOperators(0).customMetrics.get("initialStateProcessingTimeMs") > 0)
+        },
 
         AddData(inputData, "c"),
         AdvanceManualClock(6 * 1000), // ts = 7000, "a" expires
@@ -501,4 +600,173 @@ class TransformWithStateInitialStateSuite extends StateStoreMetricsTest
       )
     }
   }
+
+  Seq(true, false).foreach { flattenOption =>
+    Seq(("5", "2"), ("5", "8"), ("5", "5")).foreach { partitions =>
+      test("state data source reader dataframe as initial state " +
+        s"(flatten option=$flattenOption, shuffle partition for 1st stream=${partitions._1}, " +
+        s"shuffle partition for 1st stream=${partitions._2})") {
+        withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+          classOf[RocksDBStateStoreProvider].getName) {
+          withTempPaths(2) { checkpointDirs =>
+            SQLConf.get.setConfString(SQLConf.SHUFFLE_PARTITIONS.key, partitions._1)
+            val inputData = MemoryStream[String]
+            val result = inputData.toDS()
+              .groupByKey(x => x)
+              .transformWithState(new InitialStatefulProcessorWithStateDataSource(),
+                TimeMode.None(),
+                OutputMode.Update())
+
+            testStream(result, OutputMode.Update())(
+              StartStream(checkpointLocation = checkpointDirs(0).getCanonicalPath),
+              AddData(inputData, "a", "b"),
+              CheckNewAnswer(("a", "1"), ("b", "1")),
+              AddData(inputData, "a", "b", "a"),
+              CheckNewAnswer(("a", "3"), ("b", "2"))
+            )
+
+            // We are trying to mimic a use case where users load all state data rows
+            // from a previous tws query as initial state and start a new tws query.
+            // In this use case, users will need to create a single dataframe with
+            // all the state rows from different state variables with different schema.
+            // We can only read from one state variable from one state data source reader
+            // query, and they are of different schema. We will get one dataframe from each
+            // state variable, and we union them together into a single dataframe.
+            val valueDf = spark.read
+              .format("statestore")
+              .option(StateSourceOptions.PATH, checkpointDirs(0).getAbsolutePath)
+              .option(StateSourceOptions.STATE_VAR_NAME, "testVal")
+              .load()
+              .drop("partition_id")
+
+            val listDf = spark.read
+              .format("statestore")
+              .option(StateSourceOptions.PATH, checkpointDirs(0).getAbsolutePath)
+              .option(StateSourceOptions.STATE_VAR_NAME, "testList")
+              .option(StateSourceOptions.FLATTEN_COLLECTION_TYPES, flattenOption)
+              .load()
+              .drop("partition_id")
+
+            val mapDf = spark.read
+              .format("statestore")
+              .option(StateSourceOptions.PATH, checkpointDirs(0).getAbsolutePath)
+              .option(StateSourceOptions.STATE_VAR_NAME, "testMap")
+              .option(StateSourceOptions.FLATTEN_COLLECTION_TYPES, flattenOption)
+              .load()
+              .drop("partition_id")
+
+            // create a df where each row contains all value, list, map state rows
+            // fill the missing column with null.
+            SQLConf.get.setConfString(SQLConf.SHUFFLE_PARTITIONS.key, partitions._2)
+            val inputData2 = MemoryStream[String]
+            val query = startQueryWithDataSourceDataframeAsInitState(
+              flattenOption, valueDf, listDf, mapDf, inputData2)
+
+            testStream(query, OutputMode.Update())(
+              StartStream(checkpointLocation = checkpointDirs(1).getCanonicalPath),
+              // check initial state is updated for state vars
+              AddData(inputData2, "c"),
+              CheckNewAnswer(("c", "1")),
+              Execute { _ =>
+                val valueDf2 = spark.read
+                  .format("statestore")
+                  .option(StateSourceOptions.PATH, checkpointDirs(1).getAbsolutePath)
+                  .option(StateSourceOptions.STATE_VAR_NAME, "testVal")
+                  .option(StateSourceOptions.FLATTEN_COLLECTION_TYPES, flattenOption)
+                  .load()
+                  .drop("partition_id")
+                  .filter(col("key.value") =!= "c")
+
+                val listDf2 = spark.read
+                  .format("statestore")
+                  .option(StateSourceOptions.PATH, checkpointDirs(1).getAbsolutePath)
+                  .option(StateSourceOptions.STATE_VAR_NAME, "testList")
+                  .option(StateSourceOptions.FLATTEN_COLLECTION_TYPES, flattenOption)
+                  .load()
+                  .drop("partition_id")
+                  .filter(col("key.value") =!= "c")
+
+                val mapDf2 = spark.read
+                  .format("statestore")
+                  .option(StateSourceOptions.PATH, checkpointDirs(1).getAbsolutePath)
+                  .option(StateSourceOptions.STATE_VAR_NAME, "testMap")
+                  .option(StateSourceOptions.FLATTEN_COLLECTION_TYPES, flattenOption)
+                  .load()
+                  .drop("partition_id")
+                  .filter(col("key.value") =!= "c")
+
+                checkAnswer(valueDf, valueDf2)
+                checkAnswer(listDf, listDf2)
+                checkAnswer(mapDf, mapDf2)
+              }
+            )
+          }
+        }
+      }
+    }
+  }
+
+  private def startQueryWithDataSourceDataframeAsInitState(
+      flattenOption: Boolean,
+      valDf: DataFrame,
+      listDf: DataFrame,
+      mapDf: DataFrame,
+      inputData: MemoryStream[String]): DataFrame = {
+    if (flattenOption) {
+      // when we read the state rows with flattened option set to true, values of a composite
+      // state variable will be flattened into multiple rows where each row is a
+      // key -> single value pair
+      val valueDf = valDf.selectExpr("key.value AS groupingKey", "value.value AS value")
+      val flattenListDf = listDf
+        .selectExpr("key.value AS groupingKey", "list_element.value AS listValue")
+      val flattenMapDf = mapDf
+        .selectExpr(
+          "key.value AS groupingKey",
+          "user_map_key.value AS userMapKey",
+          "user_map_value.value AS userMapValue")
+      val df_joined =
+        valueDf.unionByName(flattenListDf, true)
+          .unionByName(flattenMapDf, true)
+      val kvDataSet = inputData.toDS().groupByKey(x => x)
+      val initDf = df_joined.as[UnionInitialStateRow].groupByKey(x => x.groupingKey)
+      (kvDataSet.transformWithState(
+        new InitialStatefulProcessorWithStateDataSource(),
+        TimeMode.None(), OutputMode.Append(), initDf).toDF())
+    } else {
+      // when we read the state rows with flattened option set to false, values of a composite
+      // state variable will be composed into a single row of list/map type
+      val valueDf = valDf.selectExpr("key.value AS groupingKey", "value.value AS value")
+      val unflattenListDf = listDf
+        .selectExpr("key.value AS groupingKey",
+          "list_value.value as listValue")
+      val unflattenMapDf = mapDf
+        .selectExpr(
+          "key.value AS groupingKey",
+          "map_from_entries(transform(map_entries(map_value), x -> " +
+            "struct(x.key.value, x.value.value))) as mapValue")
+      val df_joined =
+        valueDf.unionByName(unflattenListDf, true)
+          .unionByName(unflattenMapDf, true)
+      val kvDataSet = inputData.toDS().groupByKey(x => x)
+      val initDf = df_joined.as[UnionUnflattenInitialStateRow].groupByKey(x => x.groupingKey)
+      kvDataSet.transformWithState(
+        new InitialStatefulProcessorWithUnflattenStateDataSource(),
+        TimeMode.None(), OutputMode.Append(), initDf).toDF()
+    }
+  }
 }
+
+class TransformWithStateInitialStateSuiteCheckpointV2
+  extends TransformWithStateInitialStateSuite {
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    spark.conf.set(SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION, 2)
+  }
+}
+
+/**
+ * Test suite that runs all TransformWithStateInitialStateSuite tests with row checksum enabled.
+ */
+@SlowSQLTest
+class TransformWithStateInitialStateSuiteWithRowChecksum
+  extends TransformWithStateInitialStateSuite with EnableStateStoreRowChecksum

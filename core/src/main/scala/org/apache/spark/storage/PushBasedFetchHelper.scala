@@ -28,7 +28,7 @@ import org.roaringbitmap.RoaringBitmap
 
 import org.apache.spark.MapOutputTracker
 import org.apache.spark.MapOutputTracker.SHUFFLE_PUSH_MAP_ID
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.network.shuffle.{BlockStoreClient, MergedBlockMeta, MergedBlocksMetaListener}
 import org.apache.spark.shuffle.ShuffleReadMetricsReporter
@@ -342,7 +342,8 @@ private class PushBasedFetchHelper(
             // Fallback for all the pending fetch requests
             val pendingShuffleChunks = iterator.removePendingChunks(shuffleChunkId, address)
             pendingShuffleChunks.foreach { pendingBlockId =>
-              logInfo(s"Falling back immediately for shuffle chunk $pendingBlockId")
+              logInfo(
+                log"Falling back immediately for shuffle chunk ${MDC(BLOCK_ID, pendingBlockId)}")
               shuffleMetrics.incMergedFetchFallbackCount(1)
               val bitmapOfPendingChunk: RoaringBitmap = chunksMetaMap.remove(pendingBlockId).get
               chunkBitmap.or(bitmapOfPendingChunk)

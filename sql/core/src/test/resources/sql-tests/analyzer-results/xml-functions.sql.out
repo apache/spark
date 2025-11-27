@@ -9,7 +9,7 @@ Project [to_xml((indent,), named_struct(a, 1, b, 2), Some(America/Los_Angeles)) 
 -- !query
 select to_xml(named_struct('time', to_timestamp('2015-08-26', 'yyyy-MM-dd')), map('timestampFormat', 'dd/MM/yyyy', 'indent', ''))
 -- !query analysis
-Project [to_xml((timestampFormat,dd/MM/yyyy), (indent,), named_struct(time, to_timestamp(2015-08-26, Some(yyyy-MM-dd), TimestampType, Some(America/Los_Angeles), false)), Some(America/Los_Angeles)) AS to_xml(named_struct(time, to_timestamp(2015-08-26, yyyy-MM-dd)))#x]
+Project [to_xml((timestampFormat,dd/MM/yyyy), (indent,), named_struct(time, to_timestamp(2015-08-26, Some(yyyy-MM-dd), TimestampType, Some(America/Los_Angeles), true)), Some(America/Los_Angeles)) AS to_xml(named_struct(time, to_timestamp(2015-08-26, yyyy-MM-dd)))#x]
 +- OneRowRelation
 
 
@@ -357,9 +357,33 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 
 
 -- !query
+select schema_of_xml(42)
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"42\"",
+    "inputType" : "\"INT\"",
+    "paramIndex" : "first",
+    "requiredType" : "\"STRING\"",
+    "sqlExpr" : "\"schema_of_xml(42)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 24,
+    "fragment" : "schema_of_xml(42)"
+  } ]
+}
+
+
+-- !query
 CREATE TEMPORARY VIEW xmlTable(xmlField, a) AS SELECT * FROM VALUES ('<p><a>1</a><b>"2"</b></p>', 'a')
 -- !query analysis
-CreateViewCommand `xmlTable`, [(xmlField,None), (a,None)], SELECT * FROM VALUES ('<p><a>1</a><b>"2"</b></p>', 'a'), false, false, LocalTempView, true
+CreateViewCommand `xmlTable`, [(xmlField,None), (a,None)], SELECT * FROM VALUES ('<p><a>1</a><b>"2"</b></p>', 'a'), false, false, LocalTempView, UNSUPPORTED, true
    +- Project [col1#x, col2#x]
       +- LocalRelation [col1#x, col2#x]
 
@@ -391,3 +415,173 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 DROP VIEW IF EXISTS xmlTable
 -- !query analysis
 DropTempViewCommand xmlTable
+
+
+-- !query
+select from_xml('<record><time>14:30:45</time></record>', 'time TIME(0)', map('rowTag', 'record'))
+-- !query analysis
+Project [from_xml(StructField(time,TimeType(0),true), (rowTag,record), <record><time>14:30:45</time></record>, Some(America/Los_Angeles)) AS from_xml(<record><time>14:30:45</time></record>)#x]
++- OneRowRelation
+
+
+-- !query
+select from_xml('<record><time>14:30:45.123</time></record>', 'time TIME(3)', map('rowTag', 'record'))
+-- !query analysis
+Project [from_xml(StructField(time,TimeType(3),true), (rowTag,record), <record><time>14:30:45.123</time></record>, Some(America/Los_Angeles)) AS from_xml(<record><time>14:30:45.123</time></record>)#x]
++- OneRowRelation
+
+
+-- !query
+select from_xml('<record><time>14:30:45.123456</time></record>', 'time TIME(6)', map('rowTag', 'record'))
+-- !query analysis
+Project [from_xml(StructField(time,TimeType(6),true), (rowTag,record), <record><time>14:30:45.123456</time></record>, Some(America/Los_Angeles)) AS from_xml(<record><time>14:30:45.123456</time></record>)#x]
++- OneRowRelation
+
+
+-- !query
+select from_xml('<record><time>14-30-45.123456</time></record>', 'time TIME(6)', map('rowTag', 'record', 'timeFormat', 'HH-mm-ss.SSSSSS'))
+-- !query analysis
+Project [from_xml(StructField(time,TimeType(6),true), (rowTag,record), (timeFormat,HH-mm-ss.SSSSSS), <record><time>14-30-45.123456</time></record>, Some(America/Los_Angeles)) AS from_xml(<record><time>14-30-45.123456</time></record>)#x]
++- OneRowRelation
+
+
+-- !query
+select from_xml('<record><t1>09:00:00</t1><t2>17:30:00</t2></record>', 't1 TIME, t2 TIME', map('rowTag', 'record'))
+-- !query analysis
+Project [from_xml(StructField(t1,TimeType(6),true), StructField(t2,TimeType(6),true), (rowTag,record), <record><t1>09:00:00</t1><t2>17:30:00</t2></record>, Some(America/Los_Angeles)) AS from_xml(<record><t1>09:00:00</t1><t2>17:30:00</t2></record>)#x]
++- OneRowRelation
+
+
+-- !query
+select from_xml('<record><time>25:00:00</time></record>', 'time TIME', map('rowTag', 'record'))
+-- !query analysis
+Project [from_xml(StructField(time,TimeType(6),true), (rowTag,record), <record><time>25:00:00</time></record>, Some(America/Los_Angeles)) AS from_xml(<record><time>25:00:00</time></record>)#x]
++- OneRowRelation
+
+
+-- !query
+select from_xml('<record><time>invalid</time></record>', 'time TIME', map('rowTag', 'record'))
+-- !query analysis
+Project [from_xml(StructField(time,TimeType(6),true), (rowTag,record), <record><time>invalid</time></record>, Some(America/Los_Angeles)) AS from_xml(<record><time>invalid</time></record>)#x]
++- OneRowRelation
+
+
+-- !query
+select from_xml('<record></record>', 'time TIME', map('rowTag', 'record'))
+-- !query analysis
+Project [from_xml(StructField(time,TimeType(6),true), (rowTag,record), <record></record>, Some(America/Los_Angeles)) AS from_xml(<record></record>)#x]
++- OneRowRelation
+
+
+-- !query
+select to_xml(named_struct('time', TIME'14:30:45'), map('rowTag', 'record', 'indent', ''))
+-- !query analysis
+Project [to_xml((rowTag,record), (indent,), named_struct(time, 14:30:45), Some(America/Los_Angeles)) AS to_xml(named_struct(time, TIME '14:30:45'))#x]
++- OneRowRelation
+
+
+-- !query
+select to_xml(named_struct('time', TIME'14:30:45.123456'), map('rowTag', 'record', 'indent', ''))
+-- !query analysis
+Project [to_xml((rowTag,record), (indent,), named_struct(time, 14:30:45.123456), Some(America/Los_Angeles)) AS to_xml(named_struct(time, TIME '14:30:45.123456'))#x]
++- OneRowRelation
+
+
+-- !query
+select to_xml(named_struct('time', TIME'14:30:45.123456'), map('rowTag', 'record', 'timeFormat', 'HH-mm-ss.SSSSSS', 'indent', ''))
+-- !query analysis
+Project [to_xml((rowTag,record), (timeFormat,HH-mm-ss.SSSSSS), (indent,), named_struct(time, 14:30:45.123456), Some(America/Los_Angeles)) AS to_xml(named_struct(time, TIME '14:30:45.123456'))#x]
++- OneRowRelation
+
+
+-- !query
+select from_xml(to_xml(named_struct('time', TIME'14:30:45'), map('rowTag', 'record')), 'time TIME(0)', map('rowTag', 'record'))
+-- !query analysis
+Project [from_xml(StructField(time,TimeType(0),true), (rowTag,record), to_xml((rowTag,record), named_struct(time, 14:30:45), Some(America/Los_Angeles)), Some(America/Los_Angeles)) AS from_xml(to_xml(named_struct(time, TIME '14:30:45')))#x]
++- OneRowRelation
+
+
+-- !query
+select from_xml(to_xml(named_struct('time', TIME'14:30:45.1'), map('rowTag', 'record')), 'time TIME(1)', map('rowTag', 'record'))
+-- !query analysis
+Project [from_xml(StructField(time,TimeType(1),true), (rowTag,record), to_xml((rowTag,record), named_struct(time, 14:30:45.1), Some(America/Los_Angeles)), Some(America/Los_Angeles)) AS from_xml(to_xml(named_struct(time, TIME '14:30:45.1')))#x]
++- OneRowRelation
+
+
+-- !query
+select from_xml(to_xml(named_struct('time', TIME'14:30:45.12'), map('rowTag', 'record')), 'time TIME(2)', map('rowTag', 'record'))
+-- !query analysis
+Project [from_xml(StructField(time,TimeType(2),true), (rowTag,record), to_xml((rowTag,record), named_struct(time, 14:30:45.12), Some(America/Los_Angeles)), Some(America/Los_Angeles)) AS from_xml(to_xml(named_struct(time, TIME '14:30:45.12')))#x]
++- OneRowRelation
+
+
+-- !query
+select from_xml(to_xml(named_struct('time', TIME'14:30:45.123'), map('rowTag', 'record')), 'time TIME(3)', map('rowTag', 'record'))
+-- !query analysis
+Project [from_xml(StructField(time,TimeType(3),true), (rowTag,record), to_xml((rowTag,record), named_struct(time, 14:30:45.123), Some(America/Los_Angeles)), Some(America/Los_Angeles)) AS from_xml(to_xml(named_struct(time, TIME '14:30:45.123')))#x]
++- OneRowRelation
+
+
+-- !query
+select from_xml(to_xml(named_struct('time', TIME'14:30:45.1234'), map('rowTag', 'record')), 'time TIME(4)', map('rowTag', 'record'))
+-- !query analysis
+Project [from_xml(StructField(time,TimeType(4),true), (rowTag,record), to_xml((rowTag,record), named_struct(time, 14:30:45.1234), Some(America/Los_Angeles)), Some(America/Los_Angeles)) AS from_xml(to_xml(named_struct(time, TIME '14:30:45.1234')))#x]
++- OneRowRelation
+
+
+-- !query
+select from_xml(to_xml(named_struct('time', TIME'14:30:45.12345'), map('rowTag', 'record')), 'time TIME(5)', map('rowTag', 'record'))
+-- !query analysis
+Project [from_xml(StructField(time,TimeType(5),true), (rowTag,record), to_xml((rowTag,record), named_struct(time, 14:30:45.12345), Some(America/Los_Angeles)), Some(America/Los_Angeles)) AS from_xml(to_xml(named_struct(time, TIME '14:30:45.12345')))#x]
++- OneRowRelation
+
+
+-- !query
+select from_xml(to_xml(named_struct('time', TIME'14:30:45.123456'), map('rowTag', 'record')), 'time TIME(6)', map('rowTag', 'record'))
+-- !query analysis
+Project [from_xml(StructField(time,TimeType(6),true), (rowTag,record), to_xml((rowTag,record), named_struct(time, 14:30:45.123456), Some(America/Los_Angeles)), Some(America/Los_Angeles)) AS from_xml(to_xml(named_struct(time, TIME '14:30:45.123456')))#x]
++- OneRowRelation
+
+
+-- !query
+select to_xml(from_xml('<record><time>14:30:45</time></record>', 'time TIME(0)', map('rowTag', 'record')), map('rowTag', 'record', 'indent', ''))
+-- !query analysis
+Project [to_xml((rowTag,record), (indent,), from_xml(StructField(time,TimeType(0),true), (rowTag,record), <record><time>14:30:45</time></record>, Some(America/Los_Angeles)), Some(America/Los_Angeles)) AS to_xml(from_xml(<record><time>14:30:45</time></record>))#x]
++- OneRowRelation
+
+
+-- !query
+select to_xml(from_xml('<record><time>14:30:45.123</time></record>', 'time TIME(3)', map('rowTag', 'record')), map('rowTag', 'record', 'indent', ''))
+-- !query analysis
+Project [to_xml((rowTag,record), (indent,), from_xml(StructField(time,TimeType(3),true), (rowTag,record), <record><time>14:30:45.123</time></record>, Some(America/Los_Angeles)), Some(America/Los_Angeles)) AS to_xml(from_xml(<record><time>14:30:45.123</time></record>))#x]
++- OneRowRelation
+
+
+-- !query
+select to_xml(from_xml('<record><time>14:30:45.123456</time></record>', 'time TIME(6)', map('rowTag', 'record')), map('rowTag', 'record', 'indent', ''))
+-- !query analysis
+Project [to_xml((rowTag,record), (indent,), from_xml(StructField(time,TimeType(6),true), (rowTag,record), <record><time>14:30:45.123456</time></record>, Some(America/Los_Angeles)), Some(America/Los_Angeles)) AS to_xml(from_xml(<record><time>14:30:45.123456</time></record>))#x]
++- OneRowRelation
+
+
+-- !query
+select schema_of_xml('<record><time>14:30:45</time></record>', map('rowTag', 'record'))
+-- !query analysis
+Project [schema_of_xml(<record><time>14:30:45</time></record>, (rowTag,record)) AS schema_of_xml(<record><time>14:30:45</time></record>)#x]
++- OneRowRelation
+
+
+-- !query
+select schema_of_xml('<record><time>14:30:45.123456</time></record>', map('rowTag', 'record'))
+-- !query analysis
+Project [schema_of_xml(<record><time>14:30:45.123456</time></record>, (rowTag,record)) AS schema_of_xml(<record><time>14:30:45.123456</time></record>)#x]
++- OneRowRelation
+
+
+-- !query
+select from_xml('<record><time>14:30:45</time></record>', 'time TIME', map('rowTag', 'record')) LIMIT 1
+-- !query analysis
+GlobalLimit 1
++- LocalLimit 1
+   +- Project [from_xml(StructField(time,TimeType(6),true), (rowTag,record), <record><time>14:30:45</time></record>, Some(America/Los_Angeles)) AS from_xml(<record><time>14:30:45</time></record>)#x]
+      +- OneRowRelation

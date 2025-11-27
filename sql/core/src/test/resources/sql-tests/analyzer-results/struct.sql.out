@@ -10,7 +10,7 @@ CreateViewCommand `tbl_x`, VALUES
   (1, NAMED_STRUCT('C', 'gamma', 'D', 'delta')),
   (2, NAMED_STRUCT('C', 'epsilon', 'D', 'eta')),
   (3, NAMED_STRUCT('C', 'theta', 'D', 'iota'))
-  AS T(ID, ST), false, false, LocalTempView, true
+  AS T(ID, ST), false, false, LocalTempView, UNSUPPORTED, true
    +- SubqueryAlias T
       +- LocalRelation [ID#x, ST#x]
 
@@ -93,3 +93,46 @@ Project [ID#x, struct(STC, ST#x.C, STD, ST#x.D).STD AS struct(ST.C AS STC, ST.D 
       +- Project [cast(ID#x as int) AS ID#x, cast(ST#x as struct<C:string,D:string>) AS ST#x]
          +- SubqueryAlias T
             +- LocalRelation [ID#x, ST#x]
+
+
+-- !query
+SELECT STRUCT(1 AS a) AS b, b AS c
+-- !query analysis
+Project [b#x, b#x AS c#x]
++- Project [struct(a, 1) AS b#x]
+   +- OneRowRelation
+
+
+-- !query
+SELECT STRUCT(col1 AS a) AS b, b AS c FROM VALUES(1)
+-- !query analysis
+Project [b#x, b#x AS c#x]
++- Project [col1#x, struct(a, col1#x) AS b#x]
+   +- LocalRelation [col1#x]
+
+
+-- !query
+SELECT STRUCT(1 AS a) AS b, b AS c GROUP BY b
+-- !query analysis
+Project [b#x, b#x AS c#x]
++- Project [struct(1)#x, struct(1)#x AS b#x]
+   +- Aggregate [struct(a, 1)], [struct(a, 1) AS struct(1)#x]
+      +- OneRowRelation
+
+
+-- !query
+SELECT STRUCT(col1 AS a) AS b, b AS c FROM VALUES(1) GROUP BY b
+-- !query analysis
+Project [b#x, b#x AS c#x]
++- Project [struct(col1)#x, struct(col1)#x AS b#x]
+   +- Aggregate [struct(a, col1#x)], [struct(a, col1#x) AS struct(col1)#x]
+      +- LocalRelation [col1#x]
+
+
+-- !query
+SELECT MAX(STRUCT(1 AS a)), 2 AS b, b AS c GROUP BY b
+-- !query analysis
+Project [max(struct(1))#x AS max(struct(1 AS a))#x, b#x, b#x AS c#x]
++- Project [max(struct(1))#x, 2#x, 2#x AS b#x]
+   +- Aggregate [2], [max(struct(a, 1)) AS max(struct(1))#x, 2 AS 2#x]
+      +- OneRowRelation

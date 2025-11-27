@@ -176,7 +176,7 @@ def as_spark_type(
             return None
         return types.ArrayType(element_type)
     # BinaryType
-    elif tpe in (bytes, np.character, np.bytes_, np.string_):
+    elif tpe in (bytes, np.character, np.bytes_):
         return types.BinaryType()
     # BooleanType
     elif tpe in (bool, np.bool_, "bool", "?"):
@@ -190,7 +190,7 @@ def as_spark_type(
     elif tpe in (decimal.Decimal,):
         # TODO: considering the precision & scale for decimal type.
         return types.DecimalType(38, 18)
-    elif tpe in (float, np.float_, np.float64, "float", "float64", "double"):
+    elif tpe in (float, np.double, np.float64, "float", "float64", "double"):
         return types.DoubleType()
     elif tpe in (np.float32, "float32", "f"):
         return types.FloatType()
@@ -201,7 +201,7 @@ def as_spark_type(
     elif tpe in (np.int16, "int16", "short"):
         return types.ShortType()
     # StringType
-    elif tpe in (str, np.unicode_, "str", "U"):
+    elif tpe in (str, np.str_, "str", "U"):
         return types.StringType()
     # TimestampType or TimestampNTZType if timezone is not specified.
     elif tpe in (datetime.datetime, np.datetime64, "datetime64[ns]", "M", pd.Timestamp):
@@ -296,7 +296,15 @@ def spark_type_to_pandas_dtype(
     elif isinstance(spark_type, (types.TimestampType, types.TimestampNTZType)):
         return np.dtype("datetime64[ns]")
     else:
-        return np.dtype(to_arrow_type(spark_type).to_pandas_dtype())
+        from pyspark.pandas.utils import default_session
+
+        prefers_large_var_types = (
+            default_session()
+            .conf.get("spark.sql.execution.arrow.useLargeVarTypes", "false")
+            .lower()
+            == "true"
+        )
+        return np.dtype(to_arrow_type(spark_type, prefers_large_var_types).to_pandas_dtype())
 
 
 def pandas_on_spark_type(tpe: Union[str, type, Dtype]) -> Tuple[Dtype, types.DataType]:
@@ -354,8 +362,9 @@ def infer_pd_series_spark_type(
     if dtype == np.dtype("object"):
         if len(pser) == 0 or pser.isnull().all():
             return types.NullType()
-        elif hasattr(pser.iloc[0], "__UDT__"):
-            return pser.iloc[0].__UDT__
+        notnull = pser[pser.notnull()]
+        if hasattr(notnull.iloc[0], "__UDT__"):
+            return notnull.iloc[0].__UDT__
         else:
             return from_arrow_type(pa.Array.from_pandas(pser).type, prefer_timestamp_ntz)
     elif isinstance(dtype, CategoricalDtype):

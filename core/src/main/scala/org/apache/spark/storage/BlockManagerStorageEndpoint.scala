@@ -20,7 +20,7 @@ package org.apache.spark.storage
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutorService, Future}
 
 import org.apache.spark.{MapOutputTracker, SparkEnv}
-import org.apache.spark.internal.{Logging, MDC, MessageWithContext}
+import org.apache.spark.internal.{Logging, MessageWithContext}
 import org.apache.spark.internal.LogKeys.{BLOCK_ID, BROADCAST_ID, RDD_ID, SHUFFLE_ID}
 import org.apache.spark.rpc.{IsolatedThreadSafeRpcEndpoint, RpcCallContext, RpcEnv}
 import org.apache.spark.storage.BlockManagerMessages._
@@ -60,7 +60,13 @@ class BlockManagerStorageEndpoint(
         if (mapOutputTracker != null) {
           mapOutputTracker.unregisterShuffle(shuffleId)
         }
-        SparkEnv.get.shuffleManager.unregisterShuffle(shuffleId)
+        val shuffleManager = SparkEnv.get.shuffleManager
+        if (shuffleManager != null) {
+          shuffleManager.unregisterShuffle(shuffleId)
+        } else {
+          logDebug(log"Ignore remove shuffle ${MDC(SHUFFLE_ID, shuffleId)}")
+          true
+        }
       }
 
     case DecommissionBlockManager =>

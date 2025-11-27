@@ -23,7 +23,7 @@ CreateDataSourceTableCommand `spark_catalog`.`default`.`TEXT_TBL`, false
 INSERT INTO TEXT_TBL VALUES ('doh!')
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/text_tbl, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/text_tbl], Append, `spark_catalog`.`default`.`text_tbl`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/text_tbl), [f1]
-+- Project [cast(col1#x as string) AS f1#x]
++- Project [col1#x AS f1#x]
    +- LocalRelation [col1#x]
 
 
@@ -31,7 +31,7 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 INSERT INTO TEXT_TBL VALUES ('hi de ho neighbor')
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/text_tbl, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/text_tbl], Append, `spark_catalog`.`default`.`text_tbl`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/text_tbl), [f1]
-+- Project [cast(col1#x as string) AS f1#x]
++- Project [col1#x AS f1#x]
    +- LocalRelation [col1#x]
 
 

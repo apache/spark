@@ -20,7 +20,12 @@ from typing import Any, Dict, Optional, TYPE_CHECKING
 
 from pyspark import keyword_only, since
 from pyspark.sql import DataFrame
-from pyspark.ml.util import JavaMLWritable, JavaMLReadable
+from pyspark.ml.util import (
+    JavaMLWritable,
+    JavaMLReadable,
+    try_remote_attribute_relation,
+    invoke_helper_relation,
+)
 from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaParams
 from pyspark.ml.param.shared import HasPredictionCol, Param, TypeConverters, Params
 
@@ -126,6 +131,7 @@ class FPGrowthModel(JavaModel, _FPGrowthParams, JavaMLWritable, JavaMLReadable["
 
     @property
     @since("2.2.0")
+    @try_remote_attribute_relation
     def freqItemsets(self) -> DataFrame:
         """
         DataFrame with two columns:
@@ -136,6 +142,7 @@ class FPGrowthModel(JavaModel, _FPGrowthParams, JavaMLWritable, JavaMLReadable["
 
     @property
     @since("2.2.0")
+    @try_remote_attribute_relation
     def associationRules(self) -> DataFrame:
         """
         DataFrame with four columns:
@@ -213,7 +220,6 @@ class FPGrowth(
     |      [q]|   2|
     +---------+----+
     only showing top 5 rows
-    ...
     >>> fpm.associationRules.sort("antecedent", "consequent").show(5)
     +----------+----------+----------+----+------------------+
     |antecedent|consequent|confidence|lift|           support|
@@ -225,7 +231,6 @@ class FPGrowth(
     |       [q]|       [t]|       1.0| 2.0|0.3333333333333333|
     +----------+----------+----------+----+------------------+
     only showing top 5 rows
-    ...
     >>> new_data = spark.createDataFrame([(["t", "s"], )], ["items"])
     >>> sorted(fpm.transform(new_data).first().newPrediction)
     ['x', 'y', 'z']
@@ -506,9 +511,21 @@ class PrefixSpan(JavaParams):
             - `sequence: ArrayType(ArrayType(T))` (T is the item type)
             - `freq: Long`
         """
+        from pyspark.sql.utils import is_remote
+
+        assert self._java_obj is not None
+
+        if is_remote():
+            return invoke_helper_relation(
+                "prefixSpanFindFrequentSequentialPatterns",
+                dataset,
+                self.getMinSupport(),
+                self.getMaxPatternLength(),
+                self.getMaxLocalProjDBSize(),
+                self.getSequenceCol(),
+            )
 
         self._transfer_params_to_java()
-        assert self._java_obj is not None
         jdf = self._java_obj.findFrequentSequentialPatterns(dataset._jdf)
         return DataFrame(jdf, dataset.sparkSession)
 

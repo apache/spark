@@ -63,7 +63,10 @@ case class CountMinSketchAgg(
   // Mark as lazy so that they are not evaluated during tree transformation.
   private lazy val eps: Double = epsExpression.eval().asInstanceOf[Double]
   private lazy val confidence: Double = confidenceExpression.eval().asInstanceOf[Double]
-  private lazy val seed: Int = seedExpression.eval().asInstanceOf[Int]
+  private lazy val seed: Int = seedExpression.eval() match {
+    case i: Int => i
+    case l: Long => l.toInt
+  }
 
   override def checkInputDataTypes(): TypeCheckResult = {
     val defaultCheck = super.checkInputDataTypes()
@@ -168,7 +171,8 @@ case class CountMinSketchAgg(
     copy(inputAggBufferOffset = newInputAggBufferOffset)
 
   override def inputTypes: Seq[AbstractDataType] = {
-    Seq(TypeCollection(IntegralType, StringType, BinaryType), DoubleType, DoubleType, IntegerType)
+    Seq(TypeCollection(IntegralType, StringType, BinaryType), DoubleType, DoubleType,
+      TypeCollection(IntegerType, LongType))
   }
 
   override def nullable: Boolean = false

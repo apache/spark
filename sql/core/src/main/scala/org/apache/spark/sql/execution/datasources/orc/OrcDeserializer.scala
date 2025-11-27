@@ -20,11 +20,11 @@ package org.apache.spark.sql.execution.datasources.orc
 import org.apache.hadoop.io._
 import org.apache.orc.mapred.{OrcList, OrcMap, OrcStruct, OrcTimestamp}
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{SpecificInternalRow, UnsafeArrayData}
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
-import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -126,8 +126,8 @@ class OrcDeserializer(
       case IntegerType | _: YearMonthIntervalType => (ordinal, value) =>
         updater.setInt(ordinal, value.asInstanceOf[IntWritable].get)
 
-      case LongType | _: DayTimeIntervalType | _: TimestampNTZType => (ordinal, value) =>
-        updater.setLong(ordinal, value.asInstanceOf[LongWritable].get)
+      case LongType | _: DayTimeIntervalType | _: TimestampNTZType | _: TimeType =>
+        (ordinal, value) => updater.setLong(ordinal, value.asInstanceOf[LongWritable].get)
 
       case FloatType => (ordinal, value) =>
         updater.setFloat(ordinal, value.asInstanceOf[FloatWritable].get)
@@ -238,8 +238,7 @@ class OrcDeserializer(
 
       case udt: UserDefinedType[_] => newWriter(udt.sqlType, updater)
 
-      case _ =>
-        throw QueryExecutionErrors.dataTypeUnsupportedYetError(dataType)
+      case _ => throw SparkException.internalError(s"Unsupported data type $dataType.")
     }
 
   private def createArrayData(elementType: DataType, length: Int): ArrayData = elementType match {

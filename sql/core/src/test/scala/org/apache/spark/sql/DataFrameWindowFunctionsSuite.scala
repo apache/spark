@@ -387,7 +387,7 @@ class DataFrameWindowFunctionsSuite extends QueryTest
       df.select($"key", count("invalid").over()))
     checkError(
       exception = e,
-      errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+      condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
       parameters = Map(
         "objectName" -> "`invalid`",
         "proposal" -> "`value`, `key`"),
@@ -869,7 +869,7 @@ class DataFrameWindowFunctionsSuite extends QueryTest
           lag($"value", 3, null, true).over(window),
           lag(concat($"value", $"key"), 1, null, true).over(window)).orderBy($"order").collect()
       },
-      errorClass = "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
+      condition = "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
       parameters = Map(
         "sqlExpr" -> "\"lag(value, nonfoldableliteral(), NULL)\"",
         "inputName" -> "`offset`",
@@ -1616,6 +1616,23 @@ class DataFrameWindowFunctionsSuite extends QueryTest
           Row(2, "Mark", 2, 2020, 2, 0.5),
           Row(6, "Amy", 3, 2021, 2, 0.3333333333333333)
         ))
+      }
+    }
+  }
+
+  test("SPARK-49386: Window spill with more than the inMemoryThreshold and spillSizeThreshold") {
+    val df = Seq((1, "1"), (2, "2"), (1, "3"), (2, "4")).toDF("key", "value")
+    val window = Window.partitionBy($"key").orderBy($"value")
+
+    withSQLConf(SQLConf.WINDOW_EXEC_BUFFER_IN_MEMORY_THRESHOLD.key -> "1",
+      SQLConf.WINDOW_EXEC_BUFFER_SPILL_THRESHOLD.key -> Int.MaxValue.toString) {
+      assertNotSpilled(sparkContext, "select") {
+        df.select($"key", sum("value").over(window)).collect()
+      }
+      withSQLConf(SQLConf.WINDOW_EXEC_BUFFER_SIZE_SPILL_THRESHOLD.key -> "1") {
+        assertSpilled(sparkContext, "select") {
+          df.select($"key", sum("value").over(window)).collect()
+        }
       }
     }
   }

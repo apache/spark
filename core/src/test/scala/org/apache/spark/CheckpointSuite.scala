@@ -21,7 +21,6 @@ import java.io.File
 
 import scala.reflect.ClassTag
 
-import com.google.common.io.ByteStreams
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.internal.config.CACHE_CHECKPOINT_PREFERRED_LOCS_EXPIRE_TIME
@@ -612,7 +611,7 @@ class CheckpointStorageSuite extends SparkFunSuite with LocalSparkContext {
       val compressedInputStream = CompressionCodec.createCodec(conf)
         .compressedInputStream(fs.open(checkpointFile))
       try {
-        ByteStreams.toByteArray(compressedInputStream)
+        compressedInputStream.readAllBytes()
       } finally {
         compressedInputStream.close()
       }
@@ -667,6 +666,22 @@ class CheckpointStorageSuite extends SparkFunSuite with LocalSparkContext {
       assert(rdd.collect().toSeq === (1 to 200))
       // Verify that RDD is checkpointed
       assert(rdd.firstParent.isInstanceOf[ReliableCheckpointRDD[_]])
+    }
+  }
+
+  test("SPARK-48268: checkpoint directory via configuration") {
+    withTempDir { checkpointDir =>
+      val conf = new SparkConf()
+        .set("spark.checkpoint.dir", checkpointDir.toString)
+        .set(UI_ENABLED.key, "false")
+      sc = new SparkContext("local", "test", conf)
+      val parCollection = sc.makeRDD(1 to 4)
+      val flatMappedRDD = parCollection.flatMap(x => 1 to x)
+      flatMappedRDD.checkpoint()
+      assert(flatMappedRDD.dependencies.head.rdd === parCollection)
+      val result = flatMappedRDD.collect()
+      assert(flatMappedRDD.dependencies.head.rdd != parCollection)
+      assert(flatMappedRDD.collect() === result)
     }
   }
 }

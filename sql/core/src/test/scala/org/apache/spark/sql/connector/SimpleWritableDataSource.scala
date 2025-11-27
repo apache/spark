@@ -107,7 +107,7 @@ class SimpleWritableDataSource extends TestingV2Source {
       try {
         for (file <- fs.listStatus(jobPath).map(_.getPath)) {
           val dest = new Path(finalPath, file.getName)
-          if(!fs.rename(file, dest)) {
+          if (!fs.rename(file, dest)) {
             throw new IOException(s"failed to rename($file, $dest)")
           }
         }

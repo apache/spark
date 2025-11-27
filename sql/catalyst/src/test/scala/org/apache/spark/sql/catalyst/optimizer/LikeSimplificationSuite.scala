@@ -165,6 +165,54 @@ class LikeSimplificationSuite extends PlanTest {
     comparePlans(optimized5, correctAnswer5)
   }
 
+  test("SPARK-52817: Spark SQL LIKE expressions show poor performance when using multiple '%'") {
+    val originalQuery1 =
+      testRelation
+        .where($"a" like "abc%%")
+    val optimized1 = Optimize.execute(originalQuery1.analyze)
+    val correctAnswer1 = testRelation
+      .where(StartsWith($"a", "abc"))
+      .analyze
+    comparePlans(optimized1, correctAnswer1)
+
+    val originalQuery2 =
+      testRelation
+        .where($"a" like "%%xyz")
+    val optimized2 = Optimize.execute(originalQuery2.analyze)
+    val correctAnswer2 = testRelation
+      .where(EndsWith($"a", "xyz"))
+      .analyze
+    comparePlans(optimized2, correctAnswer2)
+
+    val originalQuery3 =
+      testRelation
+        .where($"a" like "abc%%def")
+    val optimized3 = Optimize.execute(originalQuery3.analyze)
+    val correctAnswer3 = testRelation
+      .where(
+        (Length($"a") >= 6 && (StartsWith($"a", "abc") && EndsWith($"a", "def"))))
+      .analyze
+    comparePlans(optimized3, correctAnswer3)
+
+    val originalQuery4 =
+      testRelation
+        .where(($"a" like "%%mn%%"))
+    val optimized4 = Optimize.execute(originalQuery4.analyze)
+    val correctAnswer4 = testRelation
+      .where(Contains($"a", "mn"))
+      .analyze
+    comparePlans(optimized4, correctAnswer4)
+
+    val originalQuery5 =
+      testRelation
+        .where(($"a" like "%%%mn%%%"))
+    val optimized5 = Optimize.execute(originalQuery5.analyze)
+    val correctAnswer5 = testRelation
+      .where(Contains($"a", "mn"))
+      .analyze
+    comparePlans(optimized5, correctAnswer5)
+  }
+
   test("simplify LikeAll") {
     val originalQuery =
       testRelation

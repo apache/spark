@@ -853,6 +853,50 @@ Join condition: None
 
 -- !query
 EXPLAIN FORMATTED
+  WITH RECURSIVE r(level) AS (
+    VALUES 0
+    UNION ALL
+    SELECT level + 1 FROM r WHERE level < 9
+  )
+SELECT * FROM r
+-- !query schema
+struct<plan:string>
+-- !query output
+== Physical Plan ==
+* Project (6)
++- UnionLoop (1)
+      :- LocalRelation (2)
+      +- Project (5)
+         +- Filter (4)
+            +- UnionLoopRef (3)
+
+
+(1) UnionLoop
+Loop id: xxxx
+Output [1]: [col1#x]
+Limit: None
+
+(2) LocalRelation
+Arguments: [col1#x]
+
+(3) UnionLoopRef
+Loop id: xxxx
+Output [1]: [col1#x]
+Accumulated: false
+
+(4) Filter
+Arguments: (isnotnull(col1#x) AND (col1#x < 9))
+
+(5) Project
+Arguments: [(col1#x + 1) AS (level + 1)#x]
+
+(6) Project [codegen id : 1]
+Output [1]: [col1#x AS level#x]
+Input [1]: [col1#x]
+
+
+-- !query
+EXPLAIN FORMATTED
   CREATE VIEW explain_view AS
     SELECT key, val FROM explain_temp1
 -- !query schema
@@ -870,7 +914,7 @@ Execute CreateViewCommand (1)
 Output: []
 
 (2) CreateViewCommand
-Arguments: `spark_catalog`.`default`.`explain_view`, SELECT key, val FROM explain_temp1, false, false, PersistedView, true
+Arguments: `spark_catalog`.`default`.`explain_view`, SELECT key, val FROM explain_temp1, false, false, PersistedView, COMPENSATION, true
 
 (3) LogicalRelation
 Arguments: parquet, [key#x, val#x], `spark_catalog`.`default`.`explain_temp1`, false
@@ -1031,15 +1075,16 @@ EXPLAIN EXTENDED INSERT INTO TABLE explain_temp5 SELECT * FROM explain_temp4
 struct<plan:string>
 -- !query output
 == Parsed Logical Plan ==
-'InsertIntoStatement 'UnresolvedRelation [explain_temp5], [], false, false, false, false
+'InsertIntoStatement 'UnresolvedRelation [explain_temp5], [__required_write_privileges__=INSERT], false, false, false, false
 +- 'Project [*]
    +- 'UnresolvedRelation [explain_temp4], [], false
 
 == Analyzed Logical Plan ==
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/explain_temp5, false, [val#x], Parquet, [path=file:[not included in comparison]/{warehouse_dir}/explain_temp5], Append, `spark_catalog`.`default`.`explain_temp5`, org.apache.spark.sql.execution.datasources.CatalogFileIndex(file:[not included in comparison]/{warehouse_dir}/explain_temp5), [key, val]
-+- Project [key#x, val#x]
-   +- SubqueryAlias spark_catalog.default.explain_temp4
-      +- Relation spark_catalog.default.explain_temp4[key#x,val#x] parquet
++- Project [key#x AS key#x, val#x AS val#x]
+   +- Project [key#x, val#x]
+      +- SubqueryAlias spark_catalog.default.explain_temp4
+         +- Relation spark_catalog.default.explain_temp4[key#x,val#x] parquet
 
 == Optimized Logical Plan ==
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/explain_temp5, false, [val#x], Parquet, [path=file:[not included in comparison]/{warehouse_dir}/explain_temp5], Append, `spark_catalog`.`default`.`explain_temp5`, org.apache.spark.sql.execution.datasources.CatalogFileIndex(file:[not included in comparison]/{warehouse_dir}/explain_temp5), [key, val]

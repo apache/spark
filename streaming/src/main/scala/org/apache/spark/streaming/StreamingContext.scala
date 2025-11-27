@@ -36,17 +36,16 @@ import org.apache.spark._
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.input.FixedLengthBinaryInputFormat
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.rdd.{RDD, RDDOperationScope}
 import org.apache.spark.scheduler.LiveListenerBus
 import org.apache.spark.serializer.SerializationDebugger
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.streaming.StreamingConf.STOP_GRACEFULLY_ON_SHUTDOWN
+import org.apache.spark.streaming.StreamingConf.{STOP_GRACEFULLY_ON_SHUTDOWN, STREAMING_EXTRA_LISTENERS}
 import org.apache.spark.streaming.StreamingContextState._
 import org.apache.spark.streaming.dstream._
 import org.apache.spark.streaming.receiver.Receiver
-import org.apache.spark.streaming.scheduler.
-    {ExecutorAllocationManager, JobScheduler, StreamingListener, StreamingListenerStreamingStarted}
+import org.apache.spark.streaming.scheduler.{ExecutorAllocationManager, JobScheduler, StreamingListener, StreamingListenerStreamingStarted}
 import org.apache.spark.streaming.ui.{StreamingJobProgressListener, StreamingTab}
 import org.apache.spark.util.{CallSite, ShutdownHookManager, ThreadUtils, Utils}
 
@@ -584,7 +583,7 @@ class StreamingContext private[streaming] (
             validate()
 
             registerProgressListener()
-
+            registerExtraStreamingListener()
             // Start the streaming scheduler in a new thread, so that thread local properties
             // like call sites and job groups can be reset without affecting those of the
             // current thread.
@@ -622,6 +621,27 @@ class StreamingContext private[streaming] (
     }
   }
 
+  /**
+   * Registers streaming listeners specified in spark.streaming.extraListeners.
+   */
+  private def registerExtraStreamingListener(): Unit = {
+    try {
+      conf.get(STREAMING_EXTRA_LISTENERS).foreach { classNames =>
+        val listeners = Utils.loadExtensions(classOf[StreamingListener], classNames, conf)
+        listeners.foreach { listener =>
+          addStreamingListener(listener)
+          logInfo(s"Registered streaming listener ${listener.getClass().getName()}")
+        }
+      }
+    } catch {
+      case e: Exception =>
+        try {
+          stop()
+        } finally {
+          throw new SparkException(s"Exception when registering StreamingListener", e)
+        }
+    }
+  }
 
   /**
    * Wait for the execution to stop. Any exceptions that occurs during the execution
@@ -725,7 +745,8 @@ class StreamingContext private[streaming] (
 
   private def stopOnShutdown(): Unit = {
     val stopGracefully = conf.get(STOP_GRACEFULLY_ON_SHUTDOWN)
-    logInfo(s"Invoking stop(stopGracefully=$stopGracefully) from shutdown hook")
+    logInfo(log"Invoking stop(stopGracefully=" +
+      log"${MDC(LogKeys.VALUE, stopGracefully)}) from shutdown hook")
     // Do not stop SparkContext, let its own shutdown hook stop it
     stop(stopSparkContext = false, stopGracefully = stopGracefully)
   }

@@ -21,19 +21,23 @@ import java.math.BigInteger
 import java.sql.{Date, Timestamp}
 import java.util.Arrays
 
+import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
+import scala.reflect.{classTag, ClassTag}
 import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.spark.{SPARK_DOC_ROOT, SparkArithmeticException, SparkRuntimeException, SparkUnsupportedOperationException}
 import org.apache.spark.sql.{Encoder, Encoders, Row}
-import org.apache.spark.sql.catalyst.{FooClassWithEnum, FooEnum, OptionalData, PrimitiveData, ScroogeLikeExample}
+import org.apache.spark.sql.catalyst.{FooClassWithEnum, FooEnum, OptionalData, PrimitiveData, ScalaReflection, ScroogeLikeExample}
 import org.apache.spark.sql.catalyst.analysis.AnalysisTest
 import org.apache.spark.sql.catalyst.dsl.plans._
+import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{BinaryEncoder, EncoderField, IterableEncoder, MapEncoder, OptionEncoder, PrimitiveIntEncoder, ProductEncoder, TimestampEncoder, TransformingEncoder}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, NaNvl}
 import org.apache.spark.sql.catalyst.plans.CodegenInterpretedPlanTest
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.ArrayData
+import org.apache.spark.sql.catalyst.util.SparkDateTimeUtils.{instantToMicros, microsToInstant}
 import org.apache.spark.sql.errors.QueryErrorsBase
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -138,6 +142,38 @@ case class SeqNestedGeneric[T](list: Seq[T])
 case class OptionNestedGeneric[T](list: Option[T])
 case class MapNestedGenericKey[T](list: Map[T, Int])
 case class MapNestedGenericValue[T](list: Map[Int, T])
+
+// ADT encoding for TransformingEncoder test
+trait Base {
+  def name: String
+}
+
+case class A(name: String, number: Int) extends Base
+
+case class B(name: String, text: String) extends Base
+
+case class Struct(typ: String, name: String, number: Option[Int] = None,
+  text: Option[String] = None)
+// end ADT encoding
+
+case class V[A](v: A)
+
+class Wrapper[T](val value: T) {
+  override def hashCode(): Int = value.hashCode()
+  override def equals(obj: Any): Boolean = obj match {
+    case other: Wrapper[T @unchecked] => value == other.value
+    case _ => false
+  }
+}
+
+class WrapperCodec[T] extends Codec[Wrapper[T], T] {
+  override def encode(in: Wrapper[T]): T = in.value
+  override def decode(out: T): Wrapper[T] = new Wrapper(out)
+}
+
+class WrapperCodecProvider[T] extends (() => Codec[Wrapper[T], T]) {
+  override def apply(): Codec[Wrapper[T], T] = new WrapperCodec[T]
+}
 
 class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTest
   with QueryErrorsBase {
@@ -319,29 +355,29 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
   encodeDecodeTest(
     1 -> 10L,
     "tuple with 2 flat encoders")(
-    ExpressionEncoder.tuple(ExpressionEncoder[Int](), ExpressionEncoder[Long]()))
+    encoderFor(Encoders.tuple(Encoders.scalaInt, Encoders.scalaLong)))
 
   encodeDecodeTest(
     (PrimitiveData(1, 1, 1, 1, 1, 1, true), (3, 30L)),
     "tuple with 2 product encoders")(
-    ExpressionEncoder.tuple(ExpressionEncoder[PrimitiveData](), ExpressionEncoder[(Int, Long)]()))
+    encoderFor(Encoders.tuple(Encoders.product[PrimitiveData], Encoders.product[(Int, Long)])))
 
   encodeDecodeTest(
     (PrimitiveData(1, 1, 1, 1, 1, 1, true), 3),
     "tuple with flat encoder and product encoder")(
-    ExpressionEncoder.tuple(ExpressionEncoder[PrimitiveData](), ExpressionEncoder[Int]()))
+    encoderFor(Encoders.tuple(Encoders.product[PrimitiveData], Encoders.scalaInt)))
 
   encodeDecodeTest(
     (3, PrimitiveData(1, 1, 1, 1, 1, 1, true)),
     "tuple with product encoder and flat encoder")(
-    ExpressionEncoder.tuple(ExpressionEncoder[Int](), ExpressionEncoder[PrimitiveData]()))
+    encoderFor(Encoders.tuple(Encoders.scalaInt, Encoders.product[PrimitiveData])))
 
   encodeDecodeTest(
     (1, (10, 100L)),
     "nested tuple encoder") {
-    val intEnc = ExpressionEncoder[Int]()
-    val longEnc = ExpressionEncoder[Long]()
-    ExpressionEncoder.tuple(intEnc, ExpressionEncoder.tuple(intEnc, longEnc))
+    val intEnc = Encoders.scalaInt
+    val longEnc = Encoders.scalaLong
+    encoderFor(Encoders.tuple(intEnc, Encoders.tuple(intEnc, longEnc)))
   }
 
   // test for value classes
@@ -426,6 +462,10 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
 
   encodeDecodeTest(Array(Set(1, 2), Set(2, 3)), "array of sets")
 
+  encodeDecodeTest(Array(mutable.Set(1, 2)), "SPARK-51070: array of mutable set")
+  encodeDecodeTest(Seq(mutable.Set(1, 2)), "SPARK-51070: seq of mutable set")
+  encodeDecodeTest(Map(0 -> mutable.Set(1, 2)), "SPARK-51070: map of mutable set")
+
   productTest(("UDT", new ExamplePoint(0.1, 0.2)))
 
   test("AnyVal class with Any fields") {
@@ -433,7 +473,7 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
       implicitly[ExpressionEncoder[Foo]])
     checkError(
       exception = exception,
-      errorClass = "ENCODER_NOT_FOUND",
+      condition = "ENCODER_NOT_FOUND",
       parameters = Map(
         "typeName" -> "Any",
         "docroot" -> SPARK_DOC_ROOT)
@@ -466,9 +506,8 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
 
     // test for tupled encoders
     {
-      val schema = ExpressionEncoder.tuple(
-        ExpressionEncoder[Int](),
-        ExpressionEncoder[(String, Int)]()).schema
+      val encoder = encoderFor(Encoders.tuple(Encoders.scalaInt, Encoders.product[(String, Int)]))
+      val schema = encoder.schema
       assert(schema(0).nullable === false)
       assert(schema(1).nullable)
       assert(schema(1).dataType.asInstanceOf[StructType](0).nullable)
@@ -494,7 +533,7 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
     assert(e.getCause.isInstanceOf[SparkRuntimeException])
     checkError(
       exception = e.getCause.asInstanceOf[SparkRuntimeException],
-      errorClass = "NULL_MAP_KEY",
+      condition = "NULL_MAP_KEY",
       parameters = Map.empty
     )
   }
@@ -505,19 +544,30 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
     assert(e.getCause.isInstanceOf[SparkRuntimeException])
     checkError(
       exception = e.getCause.asInstanceOf[SparkRuntimeException],
-      errorClass = "NULL_MAP_KEY",
+      condition = "NULL_MAP_KEY",
       parameters = Map.empty
     )
   }
 
   test("throw exception for tuples with more than 22 elements") {
-    val encoders = (0 to 22).map(_ => Encoders.scalaInt.asInstanceOf[ExpressionEncoder[_]])
+    val encoders = (0 to 22).map(_ => Encoders.scalaInt)
 
     checkError(
       exception = intercept[SparkUnsupportedOperationException] {
-        ExpressionEncoder.tuple(encoders)
+        Encoders.tupleEncoder(encoders: _*)
       },
-      errorClass = "_LEGACY_ERROR_TEMP_2150",
+      condition = "TUPLE_SIZE_EXCEEDS_LIMIT",
+      parameters = Map.empty)
+  }
+
+  test("throw exception for empty tuple") {
+    val encoders = Seq.empty[Encoder[Int]]
+
+    checkError(
+      exception = intercept[SparkUnsupportedOperationException] {
+        Encoders.tupleEncoder(encoders: _*)
+      },
+      condition = "TUPLE_IS_EMPTY",
       parameters = Map.empty)
   }
 
@@ -529,11 +579,11 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
     val encoder = ExpressionEncoder(schema, lenient = true)
     val unexpectedSerializer = NaNvl(encoder.objSerializer, encoder.objSerializer)
     val exception = intercept[org.apache.spark.SparkRuntimeException] {
-      new ExpressionEncoder[Row](unexpectedSerializer, encoder.objDeserializer, encoder.clsTag)
+      new ExpressionEncoder[Row](encoder.encoder, unexpectedSerializer, encoder.objDeserializer)
     }
     checkError(
       exception = exception,
-      errorClass = "UNEXPECTED_SERIALIZER_FOR_CLASS",
+      condition = "UNEXPECTED_SERIALIZER_FOR_CLASS",
       parameters = Map(
         "className" -> Utils.getSimpleName(encoder.clsTag.runtimeClass),
         "expr" -> toSQLExpr(unexpectedSerializer))
@@ -550,52 +600,281 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
   encodeDecodeTest(FooClassWithEnum(1, FooEnum.E1), "case class with Int and scala Enum")
   encodeDecodeTest(FooEnum.E1, "scala Enum")
 
+
+  // TransformingEncoder tests ----------------------------------------------------------
+
+  private def testTransformingEncoder(
+      name: String,
+      provider: () => Codec[Any, Array[Byte]]): Unit = test(name) {
+    val encoder = ExpressionEncoder(TransformingEncoder(
+      classTag[(Long, Long)],
+      BinaryEncoder,
+      provider,
+      nullable = true))
+      .resolveAndBind()
+    assert(encoder.schema == new StructType().add("value", BinaryType))
+    val toRow = encoder.createSerializer()
+    val fromRow = encoder.createDeserializer()
+    assert(fromRow(toRow((11, 14))) == (11, 14))
+  }
+
+  testTransformingEncoder("transforming java serialization encoder", JavaSerializationCodec)
+  testTransformingEncoder("transforming kryo encoder", KryoSerializationCodec)
+
+  test("transforming encoders ADT - Frameless Injections use case") {
+    val provider = () => new Codec[Base, Struct]{
+      override def encode(in: Base): Struct = in match {
+        case A(name, number) => Struct("A", name, number = Some(number))
+        case B(name, text) => Struct("B", name, text = Some(text))
+      }
+
+      override def decode(out: Struct): Base = out match {
+        case Struct("A", name, Some(number), None) => A(name, number)
+        case Struct("B", name, None, Some(text)) => B(name, text)
+        case _ => throw new Exception(f"Invalid Base structure {s}")
+      }
+    }
+    val encoder = ExpressionEncoder(TransformingEncoder(
+      classTag[Base],
+      ScalaReflection.encoderFor[Struct],
+      provider))
+      .resolveAndBind()
+
+    val toRow = encoder.createSerializer()
+    val fromRow = encoder.createDeserializer()
+
+    assert(fromRow(toRow(A("anA", 1))) == A("anA", 1))
+    assert(fromRow(toRow(B("aB", "text"))) == B("aB", "text"))
+  }
+
+  test("transforming row encoder") {
+    val schema = new StructType().add("a", LongType).add("b", StringType)
+    val encoder = ExpressionEncoder(TransformingEncoder(
+      classTag[Wrapper[Row]],
+      RowEncoder.encoderFor(schema),
+      new WrapperCodecProvider[Row]))
+      .resolveAndBind()
+    val toRow = encoder.createSerializer()
+    val fromRow = encoder.createDeserializer()
+    assert(fromRow(toRow(new Wrapper(Row(9L, "x")))) == new Wrapper(Row(9L, "x")))
+  }
+
+  test("SPARK-52614: transforming encoder row encoder in product encoder") {
+    val schema = new StructType().add("a", LongType).add("b", StringType)
+    val wrapperEncoder = TransformingEncoder(
+      classTag[Wrapper[Row]],
+      RowEncoder.encoderFor(schema),
+      new WrapperCodecProvider[Row])
+    val encoder = ExpressionEncoder(ProductEncoder(
+      classTag[V[Wrapper[Row]]],
+      Seq(EncoderField("v", wrapperEncoder, nullable = false, Metadata.empty)),
+      None))
+      .resolveAndBind()
+    val toRow = encoder.createSerializer()
+    val fromRow = encoder.createDeserializer()
+    assert(fromRow(toRow(V(new Wrapper(Row(9L, "x"))))) == V(new Wrapper(Row(9L, "x"))))
+  }
+
+  // below tests are related to SPARK-49960 and TransformingEncoder usage
+  test("""Encoder with OptionEncoder of transformation""".stripMargin) {
+    type T = Option[V[V[Int]]]
+    val data: Seq[T] = Seq(None, Some(V(V(1))))
+
+    /* attempt to behave as if value class semantics except the last product,
+      using a final transforming instead of a product serializes */
+    val enc =
+      OptionEncoder(
+        transforming(
+          V_OF_INT,
+          true
+        )
+      )
+
+    testDataTransformingEnc(enc, data)
+  }
+
+  def testDataTransformingEnc[T](enc: AgnosticEncoder[T], data: Seq[T]): Unit = {
+    val encoder = ExpressionEncoder[T](enc).resolveAndBind()
+    val toRow = encoder.createSerializer()
+    val fromRow = encoder.createDeserializer()
+    data.foreach{ row =>
+      assert(fromRow(toRow(data.head)) === data.head)
+    }
+  }
+
+  def provider[A]: () => Codec[V[A], A] = () =>
+    new Codec[V[A], A]{
+      override def encode(in: V[A]): A = in.v
+      override def decode(out: A): V[A] = if (out == null) null else V(out)
+    }
+
+  def transforming[A](underlying: AgnosticEncoder[A],
+                      useUnderyling: Boolean = false): TransformingEncoder[V[A], A] =
+    TransformingEncoder[V[A], A](
+      implicitly[ClassTag[V[A]]],
+      underlying,
+      provider,
+      if (useUnderyling) {
+        underlying.nullable
+      } else {
+        false
+      }
+    )
+
+  val V_INT = StructType(Seq(StructField("v", IntegerType, nullable = true)))
+
+  // product encoder for a non-nullable V
+  val V_OF_INT =
+    ProductEncoder(
+      classTag[V[Int]],
+      Seq(EncoderField("v", PrimitiveIntEncoder, nullable = false, Metadata.empty)),
+      None
+    )
+
+  test("""Encoder derivation with nested TransformingEncoder of OptionEncoder""".stripMargin) {
+    type T = V[V[Option[V[Int]]]]
+    val data: Seq[T] = Seq(V(V(None)), V(V(Some(V(1)))))
+
+    /* attempt to behave as if value class semantics except the last product,
+      using a final transforming instead of a product serializes */
+    val enc =
+      transforming(
+        transforming(
+          OptionEncoder(
+            V_OF_INT
+          )
+        )
+      )
+
+    testDataTransformingEnc(enc, data)
+  }
+
+  test("""Encoder derivation with TransformingEncoder of OptionEncoder""".stripMargin) {
+    type T = V[Option[V[Int]]]
+    val data: Seq[T] = Seq(V(None), V(Some(V(1))))
+
+    /* attempt to behave as if value class semantics except the last product,
+      using a final transforming instead of a product serializes */
+    val enc =
+      transforming(
+        OptionEncoder(
+          V_OF_INT
+        )
+      )
+
+    testDataTransformingEnc(enc, data)
+  }
+
+  test("SPARK-52601 TransformingEncoder from primitive to timestamp") {
+    val enc: AgnosticEncoder[Long] =
+      TransformingEncoder[Long, java.sql.Timestamp](
+        classTag,
+        TimestampEncoder(true),
+        () =>
+          new Codec[Long, java.sql.Timestamp] with Serializable {
+            override def encode(in: Long): Timestamp = Timestamp.from(microsToInstant(in))
+            override def decode(out: Timestamp): Long = instantToMicros(out.toInstant)
+        }
+    )
+    val data: Seq[Long] = Seq(0L, 1L, 2L)
+
+    assert(enc.dataType === TimestampType)
+
+    testDataTransformingEnc(enc, data)
+  }
+
+  val longEncForTimestamp: AgnosticEncoder[V[Long]] =
+    TransformingEncoder[V[Long], java.sql.Timestamp](
+      classTag,
+      TimestampEncoder(true),
+      () =>
+        new Codec[V[Long], java.sql.Timestamp] with Serializable {
+          override def encode(in: V[Long]): Timestamp = Timestamp.from(microsToInstant(in.v))
+
+          override def decode(out: Timestamp): V[Long] = V[Long](instantToMicros(out.toInstant))
+        }
+    )
+
+  test("""TransformingEncoder as Iterable""".stripMargin) {
+    type T = Seq[V[Long]]
+    val data: Seq[T] = Seq(Seq(V(0)), Seq(V(1), V(2)))
+
+    /* requires validateAndSerializeElement to test for TransformingEncoder */
+    val enc: AgnosticEncoder[T] =
+      IterableEncoder[Seq[V[Long]], V[Long]](
+        implicitly[ClassTag[Seq[V[Long]]]],
+        longEncForTimestamp,
+        containsNull = false,
+        lenientSerialization = false)
+
+    assert(enc.dataType === new ArrayType(TimestampType, false))
+
+    testDataTransformingEnc(enc, data)
+  }
+
+  test("""TransformingEncoder as Map Key/Value""".stripMargin) {
+    type T = Map[V[Long], V[Long]]
+    val data: Seq[T] = Seq(Map(V(0L) -> V(0L)), Map(V(1L) -> V(1L)), Map(V(2L) -> V(2L)))
+
+    /* requires validateAndSerializeElement to test for TransformingEncoder */
+    val enc: AgnosticEncoder[T] =
+      MapEncoder[T, V[Long], V[Long]](
+        implicitly[ClassTag[T]],
+        longEncForTimestamp,
+        longEncForTimestamp,
+        valueContainsNull = false)
+
+    assert(enc.dataType === new MapType(TimestampType, TimestampType, false))
+
+    testDataTransformingEnc(enc, data)
+  }
   // Scala / Java big decimals ----------------------------------------------------------
 
-  encodeDecodeTest(BigDecimal(("9" * 20) + "." + "9" * 18),
+  encodeDecodeTest(BigDecimal("9".repeat(20) + "." + "9".repeat(18)),
     "scala decimal within precision/scale limit")
-  encodeDecodeTest(new java.math.BigDecimal(("9" * 20) + "." + "9" * 18),
+  encodeDecodeTest(new java.math.BigDecimal("9".repeat(20) + "." + "9".repeat(18)),
     "java decimal within precision/scale limit")
 
-  encodeDecodeTest(-BigDecimal(("9" * 20) + "." + "9" * 18),
+  encodeDecodeTest(-BigDecimal("9".repeat(20) + "." + "9".repeat(18)),
     "negative scala decimal within precision/scale limit")
-  encodeDecodeTest(new java.math.BigDecimal(("9" * 20) + "." + "9" * 18).negate,
+  encodeDecodeTest(new java.math.BigDecimal("9".repeat(20) + "." + "9".repeat(18)).negate,
     "negative java decimal within precision/scale limit")
 
-  testOverflowingBigNumeric(BigDecimal("1" * 21), "scala big decimal")
-  testOverflowingBigNumeric(new java.math.BigDecimal("1" * 21), "java big decimal")
+  testOverflowingBigNumeric(BigDecimal("1".repeat(21)), "scala big decimal")
+  testOverflowingBigNumeric(new java.math.BigDecimal("1".repeat(21)), "java big decimal")
 
-  testOverflowingBigNumeric(-BigDecimal("1" * 21), "negative scala big decimal")
-  testOverflowingBigNumeric(new java.math.BigDecimal("1" * 21).negate, "negative java big decimal")
+  testOverflowingBigNumeric(-BigDecimal("1".repeat(21)), "negative scala big decimal")
+  testOverflowingBigNumeric(new java.math.BigDecimal("1".repeat(21)).negate,
+    "negative java big decimal")
 
-  testOverflowingBigNumeric(BigDecimal(("1" * 21) + ".123"),
+  testOverflowingBigNumeric(BigDecimal("1".repeat(21) + ".123"),
     "scala big decimal with fractional part")
-  testOverflowingBigNumeric(new java.math.BigDecimal(("1" * 21) + ".123"),
+  testOverflowingBigNumeric(new java.math.BigDecimal("1".repeat(21) + ".123"),
     "java big decimal with fractional part")
 
-  testOverflowingBigNumeric(BigDecimal(("1" * 21)  + "." + "9999" * 100),
+  testOverflowingBigNumeric(BigDecimal("1".repeat(21)  + "." + "9999".repeat(100)),
     "scala big decimal with long fractional part")
-  testOverflowingBigNumeric(new java.math.BigDecimal(("1" * 21)  + "." + "9999" * 100),
+  testOverflowingBigNumeric(new java.math.BigDecimal("1".repeat(21)  + "." + "9999".repeat(100)),
     "java big decimal with long fractional part")
 
   // Scala / Java big integers ----------------------------------------------------------
 
-  encodeDecodeTest(BigInt("9" * 38), "scala big integer within precision limit")
-  encodeDecodeTest(new BigInteger("9" * 38), "java big integer within precision limit")
+  encodeDecodeTest(BigInt("9".repeat(38)), "scala big integer within precision limit")
+  encodeDecodeTest(new BigInteger("9".repeat(38)), "java big integer within precision limit")
 
-  encodeDecodeTest(-BigInt("9" * 38),
+  encodeDecodeTest(-BigInt("9".repeat(38)),
     "negative scala big integer within precision limit")
-  encodeDecodeTest(new BigInteger("9" * 38).negate(),
+  encodeDecodeTest(new BigInteger("9".repeat(38)).negate(),
     "negative java big integer within precision limit")
 
-  testOverflowingBigNumeric(BigInt("1" * 39), "scala big int")
-  testOverflowingBigNumeric(new BigInteger("1" * 39), "java big integer")
+  testOverflowingBigNumeric(BigInt("1".repeat(39)), "scala big int")
+  testOverflowingBigNumeric(new BigInteger("1".repeat(39)), "java big integer")
 
-  testOverflowingBigNumeric(-BigInt("1" * 39), "negative scala big int")
-  testOverflowingBigNumeric(new BigInteger("1" * 39).negate, "negative java big integer")
+  testOverflowingBigNumeric(-BigInt("1".repeat(39)), "negative scala big int")
+  testOverflowingBigNumeric(new BigInteger("1".repeat(39)).negate, "negative java big integer")
 
-  testOverflowingBigNumeric(BigInt("9" * 100), "scala very large big int")
-  testOverflowingBigNumeric(new BigInteger("9" * 100), "java very big int")
+  testOverflowingBigNumeric(BigInt("9".repeat(100)), "scala very large big int")
+  testOverflowingBigNumeric(new BigInteger("9".repeat(100)), "java very big int")
 
   private def testOverflowingBigNumeric[T: TypeTag](bigNumeric: T, testName: String): Unit = {
     Seq(true, false).foreach { ansiEnabled =>

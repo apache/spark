@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.command
 
 import org.apache.spark.SparkThrowable
-import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, GlobalTempView, LocalTempView, UnresolvedAttribute, UnresolvedFunctionName, UnresolvedIdentifier}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, GlobalTempView, LocalTempView, SchemaCompensation, UnresolvedAttribute, UnresolvedFunctionName, UnresolvedIdentifier}
 import org.apache.spark.sql.catalyst.catalog.{ArchiveResource, FileResource, FunctionResource, JarResource}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans
@@ -60,7 +60,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     val v2 = "INSERT OVERWRITE DIRECTORY USING parquet SELECT 1 as a"
     checkError(
       exception = parseException(v2),
-      errorClass = "_LEGACY_ERROR_TEMP_0049",
+      condition = "_LEGACY_ERROR_TEMP_0049",
       parameters = Map.empty,
       context = ExpectedContext(
         fragment = "INSERT OVERWRITE DIRECTORY USING parquet",
@@ -95,36 +95,12 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
         | OPTIONS ('path' '/tmp/file', a 1, b 0.1, c TRUE)""".stripMargin
     checkError(
       exception = parseException(v4),
-      errorClass = "_LEGACY_ERROR_TEMP_0049",
+      condition = "_LEGACY_ERROR_TEMP_0049",
       parameters = Map.empty,
       context = ExpectedContext(
         fragment = fragment4,
         start = 0,
         stop = 98))
-  }
-
-  test("alter table - property values must be set") {
-    val sql = "ALTER TABLE my_tab SET TBLPROPERTIES('key_without_value', 'key_with_value'='x')"
-    checkError(
-      exception = parseException(sql),
-      errorClass = "_LEGACY_ERROR_TEMP_0035",
-      parameters = Map("message" -> "Values must be specified for key(s): [key_without_value]"),
-      context = ExpectedContext(
-        fragment = sql,
-        start = 0,
-        stop = 78))
-  }
-
-  test("alter table unset properties - property values must NOT be set") {
-    val sql = "ALTER TABLE my_tab UNSET TBLPROPERTIES('key_without_value', 'key_with_value'='x')"
-    checkError(
-      exception = parseException(sql),
-      errorClass = "_LEGACY_ERROR_TEMP_0035",
-      parameters = Map("message" -> "Values should not be specified for key(s): [key_with_value]"),
-      context = ExpectedContext(
-        fragment = sql,
-        start = 0,
-        stop = 80))
   }
 
   test("alter table: exchange partition (not supported)") {
@@ -133,7 +109,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
         |(dt='2008-08-08', country='us') WITH TABLE table_name_2""".stripMargin
     checkError(
       exception = parseException(sql),
-      errorClass = "INVALID_STATEMENT_OR_CLAUSE",
+      condition = "INVALID_STATEMENT_OR_CLAUSE",
       parameters = Map("operation" -> "ALTER TABLE EXCHANGE PARTITION"),
       context = ExpectedContext(
         fragment = sql,
@@ -145,7 +121,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     val sql = "ALTER TABLE table_name ARCHIVE PARTITION (dt='2008-08-08', country='us')"
     checkError(
       exception = parseException(sql),
-      errorClass = "INVALID_STATEMENT_OR_CLAUSE",
+      condition = "INVALID_STATEMENT_OR_CLAUSE",
       parameters = Map("operation" -> "ALTER TABLE ARCHIVE PARTITION"),
       context = ExpectedContext(
         fragment = sql,
@@ -157,7 +133,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     val sql = "ALTER TABLE table_name UNARCHIVE PARTITION (dt='2008-08-08', country='us')"
     checkError(
       exception = parseException(sql),
-      errorClass = "INVALID_STATEMENT_OR_CLAUSE",
+      condition = "INVALID_STATEMENT_OR_CLAUSE",
       parameters = Map("operation" -> "ALTER TABLE UNARCHIVE PARTITION"),
       context = ExpectedContext(
         fragment = sql,
@@ -169,7 +145,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     val sql1 = "ALTER TABLE table_name SET FILEFORMAT INPUTFORMAT 'test' OUTPUTFORMAT 'test'"
     checkError(
       exception = parseException(sql1),
-      errorClass = "INVALID_STATEMENT_OR_CLAUSE",
+      condition = "INVALID_STATEMENT_OR_CLAUSE",
       parameters = Map("operation" -> "ALTER TABLE SET FILEFORMAT"),
       context = ExpectedContext(
         fragment = sql1,
@@ -180,7 +156,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
       "SET FILEFORMAT PARQUET"
     checkError(
       exception = parseException(sql2),
-      errorClass = "INVALID_STATEMENT_OR_CLAUSE",
+      condition = "INVALID_STATEMENT_OR_CLAUSE",
       parameters = Map("operation" -> "ALTER TABLE SET FILEFORMAT"),
       context = ExpectedContext(
         fragment = sql2,
@@ -192,7 +168,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     val sql1 = "ALTER TABLE table_name TOUCH"
     checkError(
       exception = parseException(sql1),
-      errorClass = "INVALID_STATEMENT_OR_CLAUSE",
+      condition = "INVALID_STATEMENT_OR_CLAUSE",
       parameters = Map("operation" -> "ALTER TABLE TOUCH"),
       context = ExpectedContext(
         fragment = sql1,
@@ -202,7 +178,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     val sql2 = "ALTER TABLE table_name TOUCH PARTITION (dt='2008-08-08', country='us')"
     checkError(
       exception = parseException(sql2),
-      errorClass = "INVALID_STATEMENT_OR_CLAUSE",
+      condition = "INVALID_STATEMENT_OR_CLAUSE",
       parameters = Map("operation" -> "ALTER TABLE TOUCH"),
       context = ExpectedContext(
         fragment = sql2,
@@ -214,7 +190,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     val sql1 = "ALTER TABLE table_name COMPACT 'compaction_type'"
     checkError(
       exception = parseException(sql1),
-      errorClass = "INVALID_STATEMENT_OR_CLAUSE",
+      condition = "INVALID_STATEMENT_OR_CLAUSE",
       parameters = Map("operation" -> "ALTER TABLE COMPACT"),
       context = ExpectedContext(
         fragment = sql1,
@@ -226,7 +202,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
         |COMPACT 'MAJOR'""".stripMargin
     checkError(
       exception = parseException(sql2),
-      errorClass = "INVALID_STATEMENT_OR_CLAUSE",
+      condition = "INVALID_STATEMENT_OR_CLAUSE",
       parameters = Map("operation" -> "ALTER TABLE COMPACT"),
       context = ExpectedContext(
         fragment = sql2,
@@ -238,7 +214,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     val sql1 = "ALTER TABLE table_name CONCATENATE"
     checkError(
       exception = parseException(sql1),
-      errorClass = "INVALID_STATEMENT_OR_CLAUSE",
+      condition = "INVALID_STATEMENT_OR_CLAUSE",
       parameters = Map("operation" -> "ALTER TABLE CONCATENATE"),
       context = ExpectedContext(
         fragment = sql1,
@@ -248,7 +224,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     val sql2 = "ALTER TABLE table_name PARTITION (dt='2008-08-08', country='us') CONCATENATE"
     checkError(
       exception = parseException(sql2),
-      errorClass = "INVALID_STATEMENT_OR_CLAUSE",
+      condition = "INVALID_STATEMENT_OR_CLAUSE",
       parameters = Map("operation" -> "ALTER TABLE CONCATENATE"),
       context = ExpectedContext(
         fragment = sql2,
@@ -260,7 +236,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     val sql1 = "ALTER TABLE table_name CLUSTERED BY (col_name) SORTED BY (col2_name) INTO 3 BUCKETS"
     checkError(
       exception = parseException(sql1),
-      errorClass = "INVALID_STATEMENT_OR_CLAUSE",
+      condition = "INVALID_STATEMENT_OR_CLAUSE",
       parameters = Map("operation" -> "ALTER TABLE CLUSTERED BY"),
       context = ExpectedContext(
         fragment = sql1,
@@ -270,7 +246,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     val sql2 = "ALTER TABLE table_name CLUSTERED BY (col_name) INTO 3 BUCKETS"
     checkError(
       exception = parseException(sql2),
-      errorClass = "INVALID_STATEMENT_OR_CLAUSE",
+      condition = "INVALID_STATEMENT_OR_CLAUSE",
       parameters = Map("operation" -> "ALTER TABLE CLUSTERED BY"),
       context = ExpectedContext(
         fragment = sql2,
@@ -280,7 +256,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     val sql3 = "ALTER TABLE table_name NOT CLUSTERED"
     checkError(
       exception = parseException(sql3),
-      errorClass = "INVALID_STATEMENT_OR_CLAUSE",
+      condition = "INVALID_STATEMENT_OR_CLAUSE",
       parameters = Map("operation" -> "ALTER TABLE NOT CLUSTERED"),
       context = ExpectedContext(
         fragment = sql3,
@@ -290,7 +266,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     val sql4 = "ALTER TABLE table_name NOT SORTED"
     checkError(
       exception = parseException(sql4),
-      errorClass = "INVALID_STATEMENT_OR_CLAUSE",
+      condition = "INVALID_STATEMENT_OR_CLAUSE",
       parameters = Map("operation" -> "ALTER TABLE NOT SORTED"),
       context = ExpectedContext(
         fragment = sql4,
@@ -302,7 +278,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     val sql1 = "ALTER TABLE table_name NOT SKEWED"
     checkError(
       exception = parseException(sql1),
-      errorClass = "INVALID_STATEMENT_OR_CLAUSE",
+      condition = "INVALID_STATEMENT_OR_CLAUSE",
       parameters = Map("operation" -> "ALTER TABLE NOT SKEWED"),
       context = ExpectedContext(
         fragment = sql1,
@@ -312,7 +288,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     val sql2 = "ALTER TABLE table_name NOT STORED AS DIRECTORIES"
     checkError(
       exception = parseException(sql2),
-      errorClass = "INVALID_STATEMENT_OR_CLAUSE",
+      condition = "INVALID_STATEMENT_OR_CLAUSE",
       parameters = Map("operation" -> "ALTER TABLE NOT STORED AS DIRECTORIES"),
       context = ExpectedContext(
         fragment = sql2,
@@ -322,7 +298,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     val sql3 = "ALTER TABLE table_name SET SKEWED LOCATION (col_name1=\"location1\""
     checkError(
       exception = parseException(sql3),
-      errorClass = "INVALID_STATEMENT_OR_CLAUSE",
+      condition = "INVALID_STATEMENT_OR_CLAUSE",
       parameters = Map("operation" -> "ALTER TABLE SET SKEWED LOCATION"),
       context = ExpectedContext(
         fragment = sql3,
@@ -332,7 +308,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     val sql4 = "ALTER TABLE table_name SKEWED BY (key) ON (1,5,6) STORED AS DIRECTORIES"
     checkError(
       exception = parseException(sql4),
-      errorClass = "INVALID_STATEMENT_OR_CLAUSE",
+      condition = "INVALID_STATEMENT_OR_CLAUSE",
       parameters = Map("operation" -> "ALTER TABLE SKEWED BY"),
       context = ExpectedContext(
         fragment = sql4,
@@ -346,7 +322,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
         |COMMENT 'test_comment', new_col2 LONG COMMENT 'test_comment2') RESTRICT""".stripMargin
     checkError(
       exception = parseException(sql),
-      errorClass = "INVALID_STATEMENT_OR_CLAUSE",
+      condition = "INVALID_STATEMENT_OR_CLAUSE",
       parameters = Map("operation" -> "ALTER TABLE REPLACE COLUMNS"),
       context = ExpectedContext(
         fragment = sql,
@@ -371,7 +347,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
 
     checkError(
       exception = parseException(sql1),
-      errorClass = "_LEGACY_ERROR_TEMP_0035",
+      condition = "_LEGACY_ERROR_TEMP_0035",
       parameters = Map(
         "message" -> "CREATE TEMPORARY TABLE ... AS ..., use CREATE TEMPORARY VIEW instead"),
       context = ExpectedContext(
@@ -385,7 +361,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
         |AS SELECT key, value FROM src ORDER BY key, value""".stripMargin
     checkError(
       exception = parseException(sql2),
-      errorClass = "_LEGACY_ERROR_TEMP_0035",
+      condition = "_LEGACY_ERROR_TEMP_0035",
       parameters = Map(
         "message" -> "Schema may not be specified in a Create Table As Select (CTAS) statement"),
       context = ExpectedContext(
@@ -399,7 +375,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
         |AS SELECT key, value FROM src ORDER BY key, value""".stripMargin
     checkError(
       exception = parseException(sql3),
-      errorClass = "INVALID_STATEMENT_OR_CLAUSE",
+      condition = "INVALID_STATEMENT_OR_CLAUSE",
       parameters = Map("operation" -> "CREATE TABLE ... SKEWED BY"),
       context = ExpectedContext(
         fragment = sql3,
@@ -412,7 +388,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
         |FROM testData""".stripMargin
     checkError(
       exception = parseException(sql4),
-      errorClass = "_LEGACY_ERROR_TEMP_0048",
+      condition = "_LEGACY_ERROR_TEMP_0048",
       parameters = Map.empty,
       context = ExpectedContext(
         fragment = sql4,
@@ -422,13 +398,13 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
 
   test("Invalid interval term should throw AnalysisException") {
     val sql1 = "select interval '42-32' year to month"
-    val value1 = "Error parsing interval year-month string: " +
-      "requirement failed: month 32 outside range [0, 11]"
     val fragment1 = "'42-32' year to month"
     checkError(
       exception = parseException(sql1),
-      errorClass = "_LEGACY_ERROR_TEMP_0063",
-      parameters = Map("msg" -> value1),
+      condition = "INVALID_INTERVAL_FORMAT.INTERVAL_PARSING",
+      parameters = Map(
+        "input" -> "42-32",
+        "interval" -> "year-month"),
       context = ExpectedContext(
         fragment = fragment1,
         start = 16,
@@ -438,7 +414,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     val fragment2 = "'5 49:12:15' day to second"
     checkError(
       exception = parseException(sql2),
-      errorClass = "_LEGACY_ERROR_TEMP_0063",
+      condition = "_LEGACY_ERROR_TEMP_0063",
       parameters = Map("msg" -> "requirement failed: hour 49 outside range [0, 23]"),
       context = ExpectedContext(
         fragment = fragment2,
@@ -449,7 +425,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     val fragment3 = "'23:61:15' hour to second"
     checkError(
       exception = parseException(sql3),
-      errorClass = "_LEGACY_ERROR_TEMP_0063",
+      condition = "_LEGACY_ERROR_TEMP_0063",
       parameters = Map("msg" -> "requirement failed: minute 61 outside range [0, 59]"),
       context = ExpectedContext(
         fragment = fragment3,
@@ -518,11 +494,13 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
       UnresolvedIdentifier(Seq("view1")),
       Seq.empty[(String, Option[String])],
       None,
+      None,
       Map.empty[String, String],
       Some("SELECT * FROM tab1"),
       parser.parsePlan("SELECT * FROM tab1"),
       false,
-      false)
+      false,
+      SchemaCompensation)
     comparePlans(parsed1, expected1)
 
     val v2 = "CREATE TEMPORARY VIEW a AS SELECT * FROM tab1"
@@ -531,6 +509,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     val expected2 = CreateViewCommand(
       Seq("a").asTableIdentifier,
       Seq.empty[(String, Option[String])],
+      None,
       None,
       Map.empty[String, String],
       Some("SELECT * FROM tab1"),
@@ -543,7 +522,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     val v3 = "CREATE TEMPORARY VIEW a.b AS SELECT 1"
     checkError(
       exception = parseException(v3),
-      errorClass = "TEMP_VIEW_NAME_TOO_MANY_NAME_PARTS",
+      condition = "TEMP_VIEW_NAME_TOO_MANY_NAME_PARTS",
       parameters = Map("actualName" -> "`a`.`b`"),
       context = ExpectedContext(
         fragment = v3,
@@ -558,6 +537,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
         |(col1, col3 COMMENT 'hello')
         |TBLPROPERTIES('prop1Key'="prop1Val")
         |COMMENT 'BLABLA'
+        |DEFAULT COLLATION uNiCodE
         |AS SELECT * FROM tab1
       """.stripMargin
     val parsed1 = parser.parsePlan(v1)
@@ -565,11 +545,13 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
       UnresolvedIdentifier(Seq("view1")),
       Seq("col1" -> None, "col3" -> Some("hello")),
       Some("BLABLA"),
+      Some("UNICODE"),
       Map("prop1Key" -> "prop1Val"),
       Some("SELECT * FROM tab1"),
       parser.parsePlan("SELECT * FROM tab1"),
       false,
-      true)
+      true,
+      SchemaCompensation)
     comparePlans(parsed1, expected1)
 
     val v2 =
@@ -577,6 +559,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
         |CREATE OR REPLACE GLOBAL TEMPORARY VIEW a
         |(col1, col3 COMMENT 'hello')
         |COMMENT 'BLABLA'
+        |DEFAULT COLLATION uNiCoDe
         |AS SELECT * FROM tab1
           """.stripMargin
     val parsed2 = parser.parsePlan(v2)
@@ -584,6 +567,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
       Seq("a").asTableIdentifier,
       Seq("col1" -> None, "col3" -> Some("hello")),
       Some("BLABLA"),
+      Some("UNICODE"),
       Map(),
       Some("SELECT * FROM tab1"),
       parser.parsePlan("SELECT * FROM tab1"),
@@ -597,7 +581,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     val v1 = "CREATE VIEW view1 partitioned on (ds, hr) as select * from srcpart"
     checkError(
       exception = parseException(v1),
-      errorClass = "INVALID_STATEMENT_OR_CLAUSE",
+      condition = "INVALID_STATEMENT_OR_CLAUSE",
       parameters = Map("operation" -> "CREATE VIEW ... PARTITIONED ON"),
       context = ExpectedContext(
         fragment = v1,
@@ -617,7 +601,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     val sql1 = createViewStatement("COMMENT 'BLABLA'")
     checkError(
       exception = parseException(sql1),
-      errorClass = "DUPLICATE_CLAUSES",
+      condition = "DUPLICATE_CLAUSES",
       parameters = Map("clauseName" -> "COMMENT"),
       context = ExpectedContext(
         fragment = sql1,
@@ -627,7 +611,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     val sql2 = createViewStatement("TBLPROPERTIES('prop1Key'=\"prop1Val\")")
     checkError(
       exception = parseException(sql2),
-      errorClass = "DUPLICATE_CLAUSES",
+      condition = "DUPLICATE_CLAUSES",
       parameters = Map("clauseName" -> "TBLPROPERTIES"),
       context = ExpectedContext(
         fragment = sql2,
@@ -673,7 +657,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     val sql = "CREATE FUNCTION a as 'fun' USING OTHER 'o'"
     checkError(
       exception = parseException(sql),
-      errorClass = "_LEGACY_ERROR_TEMP_0035",
+      condition = "_LEGACY_ERROR_TEMP_0035",
       parameters = Map("message" -> "CREATE FUNCTION with resource type 'other'"),
       context = ExpectedContext(
         fragment = sql,
@@ -705,8 +689,8 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     val sql1 = "DROP TEMPORARY FUNCTION a.b"
     checkError(
       exception = parseException(sql1),
-      errorClass = "INVALID_SQL_SYNTAX.MULTI_PART_NAME",
-      parameters = Map("statement" -> "DROP TEMPORARY FUNCTION", "funcName" -> "`a`.`b`"),
+      condition = "INVALID_SQL_SYNTAX.MULTI_PART_NAME",
+      parameters = Map("statement" -> "DROP TEMPORARY FUNCTION", "name" -> "`a`.`b`"),
       context = ExpectedContext(
         fragment = sql1,
         start = 0,
@@ -715,8 +699,8 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     val sql2 = "DROP TEMPORARY FUNCTION IF EXISTS a.b"
     checkError(
       exception = parseException(sql2),
-      errorClass = "INVALID_SQL_SYNTAX.MULTI_PART_NAME",
-      parameters = Map("statement" -> "DROP TEMPORARY FUNCTION", "funcName" -> "`a`.`b`"),
+      condition = "INVALID_SQL_SYNTAX.MULTI_PART_NAME",
+      parameters = Map("statement" -> "DROP TEMPORARY FUNCTION", "name" -> "`a`.`b`"),
       context = ExpectedContext(
         fragment = sql2,
         start = 0,
@@ -731,7 +715,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
         |AS SELECT * FROM tab1""".stripMargin
     checkError(
       exception = parseException(sql),
-      errorClass = "_LEGACY_ERROR_TEMP_0035",
+      condition = "_LEGACY_ERROR_TEMP_0035",
       parameters = Map("message" -> "TBLPROPERTIES can't coexist with CREATE TEMPORARY VIEW"),
       context = ExpectedContext(
         fragment = sql,

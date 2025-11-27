@@ -42,10 +42,11 @@ import org.apache.thrift.server.ServerContext;
 import org.apache.thrift.server.TServerEventHandler;
 import org.apache.thrift.transport.TTransport;
 
-import org.apache.spark.internal.Logger;
-import org.apache.spark.internal.LoggerFactory;
+import org.apache.spark.internal.SparkLogger;
+import org.apache.spark.internal.SparkLoggerFactory;
 import org.apache.spark.internal.LogKeys;
 import org.apache.spark.internal.MDC;
+import org.apache.spark.util.Utils;
 
 /**
  * ThriftCLIService.
@@ -53,7 +54,7 @@ import org.apache.spark.internal.MDC;
  */
 public abstract class ThriftCLIService extends AbstractService implements TCLIService.Iface, Runnable {
 
-  public static final Logger LOG = LoggerFactory.getLogger(ThriftCLIService.class);
+  public static final SparkLogger LOG = SparkLoggerFactory.getLogger(ThriftCLIService.class);
 
   protected CLIService cliService;
   private static final TStatus OK_STATUS = new TStatus(TStatusCode.SUCCESS_STATUS);
@@ -250,7 +251,7 @@ public abstract class ThriftCLIService extends AbstractService implements TCLISe
   @Override
   public TOpenSessionResp OpenSession(TOpenSessionReq req) throws TException {
     LOG.info("Client protocol version: {}",
-      MDC.of(LogKeys.PROTOCOL_VERSION$.MODULE$, req.getClient_protocol()));
+      MDC.of(LogKeys.PROTOCOL_VERSION, req.getClient_protocol()));
     TOpenSessionResp resp = new TOpenSessionResp();
     try {
       SessionHandle sessionHandle = getSessionHandle(req, resp);
@@ -286,7 +287,7 @@ public abstract class ThriftCLIService extends AbstractService implements TCLISe
         sb.append(e.getKey()).append(" = ").append(e.getValue());
       }
       if (sb != null) {
-        LOG.info("{}", MDC.of(LogKeys.SET_CLIENT_INFO_REQUEST$.MODULE$, sb));
+        LOG.info("{}", MDC.of(LogKeys.SET_CLIENT_INFO_REQUEST, sb));
       }
     }
     return new TSetClientInfoResp(OK_STATUS);
@@ -593,8 +594,7 @@ public abstract class ThriftCLIService extends AbstractService implements TCLISe
       if (opException != null) {
         resp.setSqlState(opException.getSQLState());
         resp.setErrorCode(opException.getErrorCode());
-        resp.setErrorMessage(org.apache.hadoop.util.StringUtils
-            .stringifyException(opException));
+        resp.setErrorMessage(Utils.stringifyException(opException));
       }
       resp.setStatus(OK_STATUS);
     } catch (Exception e) {

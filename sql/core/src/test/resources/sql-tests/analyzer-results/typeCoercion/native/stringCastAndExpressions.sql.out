@@ -2,7 +2,7 @@
 -- !query
 CREATE TEMPORARY VIEW t AS SELECT 'aa' as a
 -- !query analysis
-CreateViewCommand `t`, SELECT 'aa' as a, false, false, LocalTempView, true
+CreateViewCommand `t`, SELECT 'aa' as a, false, false, LocalTempView, UNSUPPORTED, true
    +- Project [aa AS a#x]
       +- OneRowRelation
 
@@ -197,7 +197,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 select to_timestamp(a) from t
 -- !query analysis
-Project [to_timestamp(a#x, None, TimestampType, Some(America/Los_Angeles), false) AS to_timestamp(a)#x]
+Project [to_timestamp(a#x, None, TimestampType, Some(America/Los_Angeles), true) AS to_timestamp(a)#x]
 +- SubqueryAlias t
    +- View (`t`, [a#x])
       +- Project [cast(a#x as string) AS a#x]
@@ -208,7 +208,7 @@ Project [to_timestamp(a#x, None, TimestampType, Some(America/Los_Angeles), false
 -- !query
 select to_timestamp('2018-01-01', a) from t
 -- !query analysis
-Project [to_timestamp(2018-01-01, Some(a#x), TimestampType, Some(America/Los_Angeles), false) AS to_timestamp(2018-01-01, a)#x]
+Project [to_timestamp(2018-01-01, Some(a#x), TimestampType, Some(America/Los_Angeles), true) AS to_timestamp(2018-01-01, a)#x]
 +- SubqueryAlias t
    +- View (`t`, [a#x])
       +- Project [cast(a#x as string) AS a#x]
@@ -219,7 +219,7 @@ Project [to_timestamp(2018-01-01, Some(a#x), TimestampType, Some(America/Los_Ang
 -- !query
 select to_unix_timestamp(a) from t
 -- !query analysis
-Project [to_unix_timestamp(a#x, yyyy-MM-dd HH:mm:ss, Some(America/Los_Angeles), false) AS to_unix_timestamp(a, yyyy-MM-dd HH:mm:ss)#xL]
+Project [to_unix_timestamp(a#x, yyyy-MM-dd HH:mm:ss, Some(America/Los_Angeles), true) AS to_unix_timestamp(a, yyyy-MM-dd HH:mm:ss)#xL]
 +- SubqueryAlias t
    +- View (`t`, [a#x])
       +- Project [cast(a#x as string) AS a#x]
@@ -230,7 +230,7 @@ Project [to_unix_timestamp(a#x, yyyy-MM-dd HH:mm:ss, Some(America/Los_Angeles), 
 -- !query
 select to_unix_timestamp('2018-01-01', a) from t
 -- !query analysis
-Project [to_unix_timestamp(2018-01-01, a#x, Some(America/Los_Angeles), false) AS to_unix_timestamp(2018-01-01, a)#xL]
+Project [to_unix_timestamp(2018-01-01, a#x, Some(America/Los_Angeles), true) AS to_unix_timestamp(2018-01-01, a)#xL]
 +- SubqueryAlias t
    +- View (`t`, [a#x])
       +- Project [cast(a#x as string) AS a#x]
@@ -241,7 +241,7 @@ Project [to_unix_timestamp(2018-01-01, a#x, Some(America/Los_Angeles), false) AS
 -- !query
 select unix_timestamp(a) from t
 -- !query analysis
-Project [unix_timestamp(a#x, yyyy-MM-dd HH:mm:ss, Some(America/Los_Angeles), false) AS unix_timestamp(a, yyyy-MM-dd HH:mm:ss)#xL]
+Project [unix_timestamp(a#x, yyyy-MM-dd HH:mm:ss, Some(America/Los_Angeles), true) AS unix_timestamp(a, yyyy-MM-dd HH:mm:ss)#xL]
 +- SubqueryAlias t
    +- View (`t`, [a#x])
       +- Project [cast(a#x as string) AS a#x]
@@ -252,7 +252,7 @@ Project [unix_timestamp(a#x, yyyy-MM-dd HH:mm:ss, Some(America/Los_Angeles), fal
 -- !query
 select unix_timestamp('2018-01-01', a) from t
 -- !query analysis
-Project [unix_timestamp(2018-01-01, a#x, Some(America/Los_Angeles), false) AS unix_timestamp(2018-01-01, a)#xL]
+Project [unix_timestamp(2018-01-01, a#x, Some(America/Los_Angeles), true) AS unix_timestamp(2018-01-01, a)#xL]
 +- SubqueryAlias t
    +- View (`t`, [a#x])
       +- Project [cast(a#x as string) AS a#x]
@@ -285,7 +285,7 @@ Project [from_unixtime(cast(2018-01-01 as bigint), a#x, Some(America/Los_Angeles
 -- !query
 select next_day(a, 'MO') from t
 -- !query analysis
-Project [next_day(cast(a#x as date), MO, false) AS next_day(a, MO)#x]
+Project [next_day(cast(a#x as date), MO, true) AS next_day(a, MO)#x]
 +- SubqueryAlias t
    +- View (`t`, [a#x])
       +- Project [cast(a#x as string) AS a#x]
@@ -296,7 +296,7 @@ Project [next_day(cast(a#x as date), MO, false) AS next_day(a, MO)#x]
 -- !query
 select next_day('2018-01-01', a) from t
 -- !query analysis
-Project [next_day(cast(2018-01-01 as date), a#x, false) AS next_day(2018-01-01, a)#x]
+Project [next_day(cast(2018-01-01 as date), a#x, true) AS next_day(2018-01-01, a)#x]
 +- SubqueryAlias t
    +- View (`t`, [a#x])
       +- Project [cast(a#x as string) AS a#x]
@@ -370,7 +370,7 @@ Project [c0#x]
 -- !query
 select from_json(a, 'a INT') from t
 -- !query analysis
-Project [from_json(StructField(a,IntegerType,true), a#x, Some(America/Los_Angeles)) AS from_json(a)#x]
+Project [from_json(StructField(a,IntegerType,true), a#x, Some(America/Los_Angeles), false) AS from_json(a)#x]
 +- SubqueryAlias t
    +- View (`t`, [a#x])
       +- Project [cast(a#x as string) AS a#x]

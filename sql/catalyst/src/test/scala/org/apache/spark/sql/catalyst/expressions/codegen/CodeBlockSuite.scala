@@ -121,7 +121,7 @@ class CodeBlockSuite extends SparkFunSuite {
       exception = intercept[SparkException] {
         code"$obj"
       },
-      errorClass = "INTERNAL_ERROR",
+      condition = "INTERNAL_ERROR",
       parameters = Map("message" -> s"Can not interpolate ${obj.getClass.getName} into code block.")
     )
   }

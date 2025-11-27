@@ -1,0 +1,2 @@
+Project [forall(e#0, lambdafunction((lambda x_1#0 > 10), lambda x_1#0, false)) AS forall(e, lambdafunction((namedlambdavariable() > 10), namedlambdavariable()))#0]
++- LocalRelation <empty>, [id#0L, a#0, b#0, d#0, e#0, f#0, g#0]

@@ -131,8 +131,10 @@ class FeatureHasher(@Since("2.3.0") override val uid: String) extends Transforme
     val n = $(numFeatures)
     val localInputCols = $(inputCols)
 
-    var catCols = dataset.schema(localInputCols.toSet)
-      .filterNot(_.dataType.isInstanceOf[NumericType]).map(_.name).toArray
+    var catCols = localInputCols.map {
+      localInputCol => SchemaUtils.getSchemaField(dataset.schema, localInputCol)
+    }.filterNot(_.dataType.isInstanceOf[NumericType]).map(_.name)
+
     if (isSet(categoricalCols)) {
       // categoricalCols may contain columns not set in inputCols
       catCols = (catCols ++ $(categoricalCols).intersect(localInputCols)).distinct
@@ -204,10 +206,9 @@ class FeatureHasher(@Since("2.3.0") override val uid: String) extends Transforme
         log.warn(s"categoricalCols ${set.mkString("[", ",", "]")} do not exist in inputCols")
       }
     }
-    val fields = schema(localInputCols)
-    fields.foreach { fieldSchema =>
-      val dataType = fieldSchema.dataType
-      val fieldName = fieldSchema.name
+    for (fieldName <- localInputCols) {
+      val field = SchemaUtils.getSchemaField(schema, fieldName)
+      val dataType = field.dataType
       require(dataType.isInstanceOf[NumericType] ||
         dataType.isInstanceOf[StringType] ||
         dataType.isInstanceOf[BooleanType],
@@ -215,6 +216,7 @@ class FeatureHasher(@Since("2.3.0") override val uid: String) extends Transforme
           s"${BooleanType.catalogString} or ${StringType.catalogString}. " +
           s"Column $fieldName was ${dataType.catalogString}")
     }
+
     val attrGroup = new AttributeGroup($(outputCol), $(numFeatures))
     SchemaUtils.appendColumn(schema, attrGroup.toStructField())
   }

@@ -1,0 +1,2 @@
+Project [aggregate(e#0, 0, lambdafunction((lambda x_1#0 + lambda y_2#0), lambda x_1#0, lambda y_2#0, false), lambdafunction((lambda x_3#0 + 2), lambda x_3#0, false)) AS aggregate(e, 0, lambdafunction((namedlambdavariable() + namedlambdavariable()), namedlambdavariable(), namedlambdavariable()), lambdafunction((namedlambdavariable() + 2), namedlambdavariable()))#0]
++- LocalRelation <empty>, [id#0L, a#0, b#0, d#0, e#0, f#0, g#0]

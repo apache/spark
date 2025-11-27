@@ -17,7 +17,7 @@
 package org.apache.spark.deploy.k8s.integrationtest
 
 import java.io.File
-import java.net.{URI, URL}
+import java.net.URI
 import java.nio.file.Files
 
 import scala.jdk.CollectionConverters._
@@ -38,7 +38,7 @@ import org.apache.spark.deploy.k8s.integrationtest.DepsTestsSuite.{DEPS_TIMEOUT,
 import org.apache.spark.deploy.k8s.integrationtest.KubernetesSuite._
 import org.apache.spark.deploy.k8s.integrationtest.Utils.getExamplesJarName
 import org.apache.spark.deploy.k8s.integrationtest.backend.minikube.Minikube
-import org.apache.spark.internal.{LogKeys, MDC}
+import org.apache.spark.internal.{LogKeys}
 import org.apache.spark.internal.config.{ARCHIVES, PYSPARK_DRIVER_PYTHON, PYSPARK_PYTHON}
 
 private[spark] trait DepsTestsSuite { k8sSuite: KubernetesSuite =>
@@ -135,7 +135,7 @@ private[spark] trait DepsTestsSuite { k8sSuite: KubernetesSuite =>
       .kubernetesClient
       .services()
       .inNamespace(kubernetesTestComponents.namespace)
-      .create(minioService))
+      .resource(minioService).create())
 
     // try until the stateful set of a previous test is deleted
     Eventually.eventually(TIMEOUT, INTERVAL) (kubernetesTestComponents
@@ -143,7 +143,7 @@ private[spark] trait DepsTestsSuite { k8sSuite: KubernetesSuite =>
       .apps()
       .statefulSets()
       .inNamespace(kubernetesTestComponents.namespace)
-      .create(minioStatefulSet))
+      .resource(minioStatefulSet).create())
   }
 
   private def deleteMinioStorage(): Unit = {
@@ -371,7 +371,7 @@ private[spark] trait DepsTestsSuite { k8sSuite: KubernetesSuite =>
   }
 
   private def getServiceHostAndPort(minioUrlStr : String) : (String, Int) = {
-    val minioUrl = new URL(minioUrlStr)
+    val minioUrl = new URI(minioUrlStr).toURL
     (minioUrl.getHost, minioUrl.getPort)
   }
 

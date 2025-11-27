@@ -29,7 +29,9 @@ import org.apache.spark.sql.connector.read.streaming.{ContinuousPartitionReaderF
 import org.apache.spark.sql.connector.write.{LogicalWriteInfo, PhysicalWriteInfo, Write, WriteBuilder, WriterCommitMessage}
 import org.apache.spark.sql.connector.write.streaming.{StreamingDataWriterFactory, StreamingWrite}
 import org.apache.spark.sql.execution.datasources.DataSource
-import org.apache.spark.sql.execution.streaming.{ContinuousTrigger, RateStreamOffset, Sink, StreamingQueryWrapper}
+import org.apache.spark.sql.execution.streaming.ContinuousTrigger
+import org.apache.spark.sql.execution.streaming.Sink
+import org.apache.spark.sql.execution.streaming.runtime.{RateStreamOffset, StreamingQueryWrapper}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.connector.SimpleTableProvider
 import org.apache.spark.sql.sources.{DataSourceRegister, StreamSinkProvider}
@@ -324,7 +326,7 @@ class StreamingDataSourceV2Suite extends StreamTest {
       readFormat: String,
       writeFormat: String,
       trigger: Trigger,
-      errorClass: String,
+      condition: String,
       parameters: Map[String, String]) = {
     val query = spark.readStream
       .format(readFormat)
@@ -339,7 +341,7 @@ class StreamingDataSourceV2Suite extends StreamTest {
       assert(query.exception.get.cause != null)
       checkErrorMatchPVals(
         exception = query.exception.get.cause.asInstanceOf[SparkUnsupportedOperationException],
-        errorClass = errorClass,
+        condition = condition,
         parameters = parameters
       )
     }
@@ -352,7 +354,7 @@ class StreamingDataSourceV2Suite extends StreamTest {
       Trigger.AvailableNow()) { v2Query =>
       val sink = v2Query.asInstanceOf[StreamingQueryWrapper].streamingQuery.sink
       assert(sink.isInstanceOf[Table])
-      assert(sink.schema() == StructType(Nil))
+      assert(sink.columns.isEmpty)
     }
   }
 
@@ -436,7 +438,7 @@ class StreamingDataSourceV2Suite extends StreamTest {
             exception = intercept[SparkUnsupportedOperationException] {
               testCase(read, write, trigger)
             },
-            errorClass = "_LEGACY_ERROR_TEMP_2049",
+            condition = "_LEGACY_ERROR_TEMP_2049",
             parameters = Map(
               "className" -> "fake-read-neither-mode",
               "operator" -> "reading"
@@ -449,7 +451,7 @@ class StreamingDataSourceV2Suite extends StreamTest {
             exception = intercept[SparkUnsupportedOperationException] {
               testCase(read, write, trigger)
             },
-            errorClass = "_LEGACY_ERROR_TEMP_2049",
+            condition = "_LEGACY_ERROR_TEMP_2049",
             parameters = Map(
               "className" -> "fake-write-neither-mode",
               "operator" -> "writing"
@@ -466,7 +468,7 @@ class StreamingDataSourceV2Suite extends StreamTest {
               exception = intercept[SparkUnsupportedOperationException] {
                 testCase(read, write, trigger)
               },
-              errorClass = "_LEGACY_ERROR_TEMP_2253",
+              condition = "_LEGACY_ERROR_TEMP_2253",
               parameters = Map("sourceName" -> "fake-read-microbatch-only")
             )
           }
@@ -478,7 +480,7 @@ class StreamingDataSourceV2Suite extends StreamTest {
           } else {
             // Invalid - trigger is microbatch but reader is not
             testPostCreationNegativeCase(read, write, trigger,
-              errorClass = "_LEGACY_ERROR_TEMP_2209",
+              condition = "_LEGACY_ERROR_TEMP_2209",
               parameters = Map(
                 "srcName" -> read,
                 "disabledSources" -> "",

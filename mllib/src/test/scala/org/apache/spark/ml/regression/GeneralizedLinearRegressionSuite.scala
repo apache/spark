@@ -1722,6 +1722,37 @@ class GeneralizedLinearRegressionSuite extends MLTest with DefaultReadWriteTest 
     val model = trainer.fit(Seq(Instance(1.0, 1.0, Vectors.dense(1.0, 7.0))).toDF())
     ser.serialize[GeneralizedLinearRegressionModel](model)
   }
+
+  test("model size estimation: generalized linear regression") {
+    for ((link, df) <- Seq(
+      ("identity", datasetGaussianIdentity),
+      ("log", datasetGaussianLog),
+      ("inverse", datasetGaussianInverse))) {
+      for (fitIntercept <- Seq(false, true)) {
+        val glr = new GeneralizedLinearRegression()
+          .setFamily("gaussian")
+          .setLink(link)
+          .setFitIntercept(fitIntercept)
+          .setLinkPredictionCol("linkPrediction")
+          .setTol(1e-3)
+        val size1 = glr.estimateModelSize(df)
+
+        val model = glr.fit(df)
+        val size2 = model.estimatedSize
+
+        // the model is dense, the estimation should be relatively accurate
+        //        (link, fitIntercept, size1, size2)
+        //        (identity,false,4972,4972)
+        //        (identity,true,4972,4972)
+        //        (log,false,4972,4972)
+        //        (log,true,4972,4972)
+        //        (inverse,false,4972,4972)
+        //        (inverse,true,4972,4972)
+        val rel = (size1 - size2).toDouble / size2
+        assert(math.abs(rel) < 0.05, (link, fitIntercept, size1, size2))
+      }
+    }
+  }
 }
 
 object GeneralizedLinearRegressionSuite {

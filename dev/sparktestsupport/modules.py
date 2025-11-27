@@ -113,9 +113,20 @@ tags = Module(
     ],
 )
 
+utils_java = Module(
+    name="utils-java",
+    dependencies=[tags],
+    source_file_regexes=[
+        "common/utils-java/",
+    ],
+    sbt_test_goals=[
+        "common-utils-java/test",
+    ],
+)
+
 utils = Module(
     name="utils",
-    dependencies=[tags],
+    dependencies=[tags, utils_java],
     source_file_regexes=[
         "common/utils/",
     ],
@@ -137,7 +148,7 @@ kvstore = Module(
 
 network_common = Module(
     name="network-common",
-    dependencies=[tags, utils],
+    dependencies=[tags, utils_java],
     source_file_regexes=[
         "common/network-common/",
     ],
@@ -309,6 +320,15 @@ sql_kafka = Module(
     ],
 )
 
+profiler = Module(
+    name="profiler",
+    dependencies=[],
+    build_profile_flags=["-Pjvm-profiler"],
+    source_file_regexes=[
+        "connector/profiler",
+    ],
+)
+
 protobuf = Module(
     name="protobuf",
     dependencies=[sql],
@@ -317,19 +337,6 @@ protobuf = Module(
     ],
     sbt_test_goals=[
         "protobuf/test",
-    ],
-)
-
-connect = Module(
-    name="connect",
-    dependencies=[hive, avro, protobuf],
-    source_file_regexes=[
-        "connector/connect",
-    ],
-    build_profile_flags=["-Pconnect"],
-    sbt_test_goals=[
-        "connect/test",
-        "connect-client-jvm/test",
     ],
 )
 
@@ -412,6 +419,27 @@ mllib = Module(
     ],
 )
 
+pipelines = Module(
+    name="pipelines",
+    dependencies=[],
+    source_file_regexes=["sql/pipelines"],
+    sbt_test_goals=[
+        "pipelines/test",
+    ],
+)
+
+connect = Module(
+    name="connect",
+    dependencies=[hive, avro, protobuf, mllib],
+    source_file_regexes=[
+        "sql/connect",
+    ],
+    sbt_test_goals=[
+        "connect/test",
+        "connect-client-jvm/test",
+        "connect-client-jdbc/test",
+    ],
+)
 
 examples = Module(
     name="examples",
@@ -427,7 +455,7 @@ examples = Module(
 pyspark_core = Module(
     name="pyspark-core",
     dependencies=[core],
-    source_file_regexes=["python/(?!pyspark/(ml|mllib|sql|streaming))"],
+    source_file_regexes=["python/(?!pyspark/(ml|mllib|sql|streaming|pandas|resource|testing))"],
     python_test_goals=[
         # doctests
         "pyspark.conf",
@@ -447,7 +475,6 @@ pyspark_core = Module(
         "pyspark.tests.test_conf",
         "pyspark.tests.test_context",
         "pyspark.tests.test_daemon",
-        "pyspark.tests.test_install_spark",
         "pyspark.tests.test_join",
         "pyspark.tests.test_memory_profiler",
         "pyspark.tests.test_profiler",
@@ -478,20 +505,19 @@ pyspark_sql = Module(
         "pyspark.sql.catalog",
         "pyspark.sql.classic.column",
         "pyspark.sql.classic.dataframe",
+        "pyspark.sql.classic.window",
         "pyspark.sql.datasource",
         "pyspark.sql.group",
         "pyspark.sql.functions.builtin",
         "pyspark.sql.functions.partitioning",
+        "pyspark.sql.merge",
         "pyspark.sql.readwriter",
-        "pyspark.sql.streaming.query",
-        "pyspark.sql.streaming.readwriter",
-        "pyspark.sql.streaming.listener",
         "pyspark.sql.udf",
         "pyspark.sql.udtf",
-        "pyspark.sql.window",
         "pyspark.sql.avro.functions",
         "pyspark.sql.protobuf.functions",
         "pyspark.sql.pandas.conversion",
+        "pyspark.sql.pandas.functions",
         "pyspark.sql.pandas.map_ops",
         "pyspark.sql.pandas.group_ops",
         "pyspark.sql.pandas.types",
@@ -499,11 +525,9 @@ pyspark_sql = Module(
         "pyspark.sql.pandas.typehints",
         "pyspark.sql.pandas.utils",
         "pyspark.sql.observation",
+        "pyspark.sql.tvf",
         # unittests
-        "pyspark.sql.tests.test_arrow",
-        "pyspark.sql.tests.test_arrow_cogrouped_map",
-        "pyspark.sql.tests.test_arrow_grouped_map",
-        "pyspark.sql.tests.test_arrow_python_udf",
+        "pyspark.sql.tests.test_artifact",
         "pyspark.sql.tests.test_catalog",
         "pyspark.sql.tests.test_column",
         "pyspark.sql.tests.test_conf",
@@ -511,6 +535,7 @@ pyspark_sql = Module(
         "pyspark.sql.tests.test_dataframe",
         "pyspark.sql.tests.test_collection",
         "pyspark.sql.tests.test_creation",
+        "pyspark.sql.tests.test_conversion",
         "pyspark.sql.tests.test_listener",
         "pyspark.sql.tests.test_observation",
         "pyspark.sql.tests.test_repartition",
@@ -519,34 +544,51 @@ pyspark_sql = Module(
         "pyspark.sql.tests.test_errors",
         "pyspark.sql.tests.test_functions",
         "pyspark.sql.tests.test_group",
+        "pyspark.sql.tests.test_sql",
+        "pyspark.sql.tests.test_job_cancellation",
+        "pyspark.sql.tests.arrow.test_arrow",
+        "pyspark.sql.tests.arrow.test_arrow_map",
+        "pyspark.sql.tests.arrow.test_arrow_cogrouped_map",
+        "pyspark.sql.tests.arrow.test_arrow_grouped_map",
+        "pyspark.sql.tests.arrow.test_arrow_python_udf",
+        "pyspark.sql.tests.arrow.test_arrow_udf",
+        "pyspark.sql.tests.arrow.test_arrow_udf_grouped_agg",
+        "pyspark.sql.tests.arrow.test_arrow_udf_scalar",
+        "pyspark.sql.tests.arrow.test_arrow_udf_window",
+        "pyspark.sql.tests.arrow.test_arrow_udf_typehints",
+        "pyspark.sql.tests.arrow.test_arrow_udtf",
         "pyspark.sql.tests.pandas.test_pandas_cogrouped_map",
         "pyspark.sql.tests.pandas.test_pandas_grouped_map",
-        "pyspark.sql.tests.pandas.test_pandas_grouped_map_with_state",
         "pyspark.sql.tests.pandas.test_pandas_map",
-        "pyspark.sql.tests.test_arrow_map",
         "pyspark.sql.tests.pandas.test_pandas_udf",
         "pyspark.sql.tests.pandas.test_pandas_udf_grouped_agg",
         "pyspark.sql.tests.pandas.test_pandas_udf_scalar",
         "pyspark.sql.tests.pandas.test_pandas_udf_typehints",
         "pyspark.sql.tests.pandas.test_pandas_udf_typehints_with_future_annotations",
         "pyspark.sql.tests.pandas.test_pandas_udf_window",
+        "pyspark.sql.tests.pandas.test_pandas_sqlmetrics",
         "pyspark.sql.tests.pandas.test_converter",
-        "pyspark.sql.tests.test_pandas_sqlmetrics",
         "pyspark.sql.tests.test_python_datasource",
-        "pyspark.sql.tests.test_python_streaming_datasource",
         "pyspark.sql.tests.test_readwriter",
         "pyspark.sql.tests.test_serde",
         "pyspark.sql.tests.test_session",
-        "pyspark.sql.tests.streaming.test_streaming",
-        "pyspark.sql.tests.streaming.test_streaming_foreach",
-        "pyspark.sql.tests.streaming.test_streaming_foreach_batch",
-        "pyspark.sql.tests.streaming.test_streaming_listener",
+        "pyspark.sql.tests.test_subquery",
         "pyspark.sql.tests.test_types",
+        "pyspark.sql.tests.test_geographytype",
+        "pyspark.sql.tests.test_geometrytype",
         "pyspark.sql.tests.test_udf",
+        "pyspark.sql.tests.test_udf_combinations",
         "pyspark.sql.tests.test_udf_profiler",
+        "pyspark.sql.tests.test_unified_udf",
         "pyspark.sql.tests.test_udtf",
+        "pyspark.sql.tests.test_tvf",
         "pyspark.sql.tests.test_utils",
         "pyspark.sql.tests.test_resources",
+        "pyspark.sql.tests.plot.test_frame_plot",
+        "pyspark.sql.tests.plot.test_frame_plot_plotly",
+        "pyspark.sql.tests.test_connect_compatibility",
+        "pyspark.sql.tests.udf_type_tests.test_udf_input_types",
+        "pyspark.sql.tests.udf_type_tests.test_udf_return_types",
     ],
 )
 
@@ -558,6 +600,14 @@ pyspark_testing = Module(
         # doctests
         "pyspark.testing.utils",
         "pyspark.testing.pandasutils",
+        # unittests
+        "pyspark.testing.tests.test_fail",
+        "pyspark.testing.tests.test_fail_in_set_up_class",
+        "pyspark.testing.tests.test_no_tests",
+        "pyspark.testing.tests.test_pass_all",
+        "pyspark.testing.tests.test_skip_all",
+        "pyspark.testing.tests.test_skip_class",
+        "pyspark.testing.tests.test_skip_set_up_class",
     ],
 )
 
@@ -590,6 +640,40 @@ pyspark_streaming = Module(
     ],
 )
 
+
+pyspark_structured_streaming = Module(
+    name="pyspark-structured-streaming",
+    dependencies=[pyspark_core, pyspark_streaming, pyspark_sql],
+    source_file_regexes=[
+        "python/pyspark/sql/streaming",
+        "python/pyspark/sql/pandas",
+        "python/pyspark/sql/worker",
+    ],
+    python_test_goals=[
+        # doctests
+        "pyspark.sql.streaming.query",
+        "pyspark.sql.streaming.readwriter",
+        "pyspark.sql.streaming.listener",
+        # unittests
+        "pyspark.sql.tests.test_python_streaming_datasource",
+        "pyspark.sql.tests.streaming.test_streaming",
+        "pyspark.sql.tests.streaming.test_streaming_foreach",
+        "pyspark.sql.tests.streaming.test_streaming_foreach_batch",
+        "pyspark.sql.tests.streaming.test_streaming_listener",
+        "pyspark.sql.tests.pandas.test_pandas_grouped_map_with_state",
+        "pyspark.sql.tests.pandas.streaming.test_pandas_transform_with_state",
+        "pyspark.sql.tests.pandas.streaming.test_pandas_transform_with_state_checkpoint_v2",
+        "pyspark.sql.tests.pandas.streaming.test_pandas_transform_with_state_state_variable",
+        "pyspark.sql.tests.pandas.streaming.test_pandas_transform_with_state_state_variable_checkpoint_v2",  # noqa: E501
+        "pyspark.sql.tests.pandas.streaming.test_transform_with_state",
+        "pyspark.sql.tests.pandas.streaming.test_transform_with_state_checkpoint_v2",
+        "pyspark.sql.tests.pandas.streaming.test_transform_with_state_state_variable",
+        "pyspark.sql.tests.pandas.streaming.test_transform_with_state_state_variable_checkpoint_v2",
+    ],
+    excluded_python_implementations=[
+        "PyPy"  # Skip these tests under PyPy since they require numpy and it isn't available there
+    ],
+)
 
 pyspark_mllib = Module(
     name="pyspark-mllib",
@@ -646,6 +730,7 @@ pyspark_ml = Module(
         # unittests
         "pyspark.ml.tests.test_algorithms",
         "pyspark.ml.tests.test_als",
+        "pyspark.ml.tests.test_fpm",
         "pyspark.ml.tests.test_base",
         "pyspark.ml.tests.test_evaluation",
         "pyspark.ml.tests.test_feature",
@@ -656,6 +741,8 @@ pyspark_ml = Module(
         "pyspark.ml.tests.test_param",
         "pyspark.ml.tests.test_persistence",
         "pyspark.ml.tests.test_pipeline",
+        "pyspark.ml.tests.test_tuning",
+        "pyspark.ml.tests.test_ovr",
         "pyspark.ml.tests.test_stat",
         "pyspark.ml.tests.test_training_summary",
         "pyspark.ml.tests.tuning.test_tuning",
@@ -677,9 +764,24 @@ pyspark_ml = Module(
         "pyspark.ml.tests.connect.test_legacy_mode_classification",
         "pyspark.ml.tests.connect.test_legacy_mode_pipeline",
         "pyspark.ml.tests.connect.test_legacy_mode_tuning",
+        "pyspark.ml.tests.test_classification",
+        "pyspark.ml.tests.test_regression",
+        "pyspark.ml.tests.test_clustering",
     ],
     excluded_python_implementations=[
         "PyPy"  # Skip these tests under PyPy since they require numpy and it isn't available there
+    ],
+)
+
+pyspark_install = Module(
+    name="pyspark-install",
+    dependencies=[core],
+    source_file_regexes=[
+        "python/pyspark/install.py",
+        "python/pyspark/tests/test_install_spark.py",
+    ],
+    python_test_goals=[
+        "pyspark.tests.test_install_spark",
     ],
 )
 
@@ -789,6 +891,21 @@ pyspark_pandas = Module(
         "pyspark.pandas.tests.frame.test_time_series",
         "pyspark.pandas.tests.frame.test_truncate",
         "pyspark.pandas.tests.series.test_interpolate",
+        "pyspark.pandas.tests.series.test_datetime",
+        "pyspark.pandas.tests.series.test_string_ops_adv",
+        "pyspark.pandas.tests.series.test_string_ops_basic",
+        "pyspark.pandas.tests.series.test_all_any",
+        "pyspark.pandas.tests.series.test_arg_ops",
+        "pyspark.pandas.tests.series.test_as_of",
+        "pyspark.pandas.tests.series.test_as_type",
+        "pyspark.pandas.tests.series.test_compute",
+        "pyspark.pandas.tests.series.test_conversion",
+        "pyspark.pandas.tests.series.test_cumulative",
+        "pyspark.pandas.tests.series.test_index",
+        "pyspark.pandas.tests.series.test_missing_data",
+        "pyspark.pandas.tests.series.test_series",
+        "pyspark.pandas.tests.series.test_sort",
+        "pyspark.pandas.tests.series.test_stat",
         "pyspark.pandas.tests.resample.test_on",
         "pyspark.pandas.tests.resample.test_error",
         "pyspark.pandas.tests.resample.test_frame",
@@ -817,21 +934,6 @@ pyspark_pandas = Module(
         "pyspark.pandas.tests.window.test_groupby_rolling",
         "pyspark.pandas.tests.window.test_groupby_rolling_adv",
         "pyspark.pandas.tests.window.test_groupby_rolling_count",
-        "pyspark.pandas.tests.series.test_datetime",
-        "pyspark.pandas.tests.series.test_string_ops_adv",
-        "pyspark.pandas.tests.series.test_string_ops_basic",
-        "pyspark.pandas.tests.series.test_all_any",
-        "pyspark.pandas.tests.series.test_arg_ops",
-        "pyspark.pandas.tests.series.test_as_of",
-        "pyspark.pandas.tests.series.test_as_type",
-        "pyspark.pandas.tests.series.test_compute",
-        "pyspark.pandas.tests.series.test_conversion",
-        "pyspark.pandas.tests.series.test_cumulative",
-        "pyspark.pandas.tests.series.test_index",
-        "pyspark.pandas.tests.series.test_missing_data",
-        "pyspark.pandas.tests.series.test_series",
-        "pyspark.pandas.tests.series.test_sort",
-        "pyspark.pandas.tests.series.test_stat",
         "pyspark.pandas.tests.io.test_io",
         "pyspark.pandas.tests.io.test_csv",
         "pyspark.pandas.tests.io.test_feather",
@@ -997,6 +1099,7 @@ pyspark_connect = Module(
         "pyspark.sql.connect.session",
         "pyspark.sql.connect.window",
         "pyspark.sql.connect.column",
+        "pyspark.sql.connect.merge",
         "pyspark.sql.connect.readwriter",
         "pyspark.sql.connect.dataframe",
         "pyspark.sql.connect.functions.builtin",
@@ -1006,19 +1109,24 @@ pyspark_connect = Module(
         "pyspark.sql.connect.protobuf.functions",
         "pyspark.sql.connect.streaming.readwriter",
         "pyspark.sql.connect.streaming.query",
+        "pyspark.sql.connect.tvf",
         # sql unittests
         "pyspark.sql.tests.connect.test_connect_plan",
         "pyspark.sql.tests.connect.test_connect_basic",
+        "pyspark.sql.tests.connect.test_connect_dataframe_property",
+        "pyspark.sql.tests.connect.test_connect_channel",
+        "pyspark.sql.tests.connect.test_connect_clone_session",
         "pyspark.sql.tests.connect.test_connect_error",
         "pyspark.sql.tests.connect.test_connect_function",
         "pyspark.sql.tests.connect.test_connect_collection",
         "pyspark.sql.tests.connect.test_connect_column",
         "pyspark.sql.tests.connect.test_connect_creation",
         "pyspark.sql.tests.connect.test_connect_readwriter",
+        "pyspark.sql.tests.connect.test_connect_retry",
         "pyspark.sql.tests.connect.test_connect_session",
         "pyspark.sql.tests.connect.test_connect_stat",
-        "pyspark.sql.tests.connect.test_parity_arrow",
-        "pyspark.sql.tests.connect.test_parity_arrow_python_udf",
+        "pyspark.sql.tests.connect.test_parity_geographytype",
+        "pyspark.sql.tests.connect.test_parity_geometrytype",
         "pyspark.sql.tests.connect.test_parity_datasources",
         "pyspark.sql.tests.connect.test_parity_errors",
         "pyspark.sql.tests.connect.test_parity_catalog",
@@ -1026,45 +1134,81 @@ pyspark_connect = Module(
         "pyspark.sql.tests.connect.test_parity_serde",
         "pyspark.sql.tests.connect.test_parity_functions",
         "pyspark.sql.tests.connect.test_parity_group",
+        "pyspark.sql.tests.connect.test_parity_sql",
+        "pyspark.sql.tests.connect.test_parity_job_cancellation",
         "pyspark.sql.tests.connect.test_parity_dataframe",
         "pyspark.sql.tests.connect.test_parity_collection",
         "pyspark.sql.tests.connect.test_parity_creation",
         "pyspark.sql.tests.connect.test_parity_observation",
         "pyspark.sql.tests.connect.test_parity_repartition",
         "pyspark.sql.tests.connect.test_parity_stat",
+        "pyspark.sql.tests.connect.test_parity_subquery",
         "pyspark.sql.tests.connect.test_parity_types",
         "pyspark.sql.tests.connect.test_parity_column",
         "pyspark.sql.tests.connect.test_parity_readwriter",
         "pyspark.sql.tests.connect.test_parity_udf",
+        "pyspark.sql.tests.connect.test_parity_udf_combinations",
         "pyspark.sql.tests.connect.test_parity_udf_profiler",
+        "pyspark.sql.tests.connect.test_parity_unified_udf",
         "pyspark.sql.tests.connect.test_parity_memory_profiler",
         "pyspark.sql.tests.connect.test_parity_udtf",
-        "pyspark.sql.tests.connect.test_parity_pandas_udf",
-        "pyspark.sql.tests.connect.test_parity_pandas_map",
-        "pyspark.sql.tests.connect.test_parity_arrow_map",
-        "pyspark.sql.tests.connect.test_parity_pandas_grouped_map",
-        "pyspark.sql.tests.connect.test_parity_pandas_cogrouped_map",
-        "pyspark.sql.tests.connect.test_parity_arrow_grouped_map",
-        "pyspark.sql.tests.connect.test_parity_arrow_cogrouped_map",
+        "pyspark.sql.tests.connect.test_parity_tvf",
         "pyspark.sql.tests.connect.test_parity_python_datasource",
+        "pyspark.sql.tests.connect.test_parity_frame_plot",
+        "pyspark.sql.tests.connect.test_parity_frame_plot_plotly",
         "pyspark.sql.tests.connect.test_utils",
         "pyspark.sql.tests.connect.client.test_artifact",
+        "pyspark.sql.tests.connect.client.test_artifact_localcluster",
         "pyspark.sql.tests.connect.client.test_client",
         "pyspark.sql.tests.connect.client.test_reattach",
-        "pyspark.sql.tests.connect.streaming.test_parity_streaming",
-        "pyspark.sql.tests.connect.streaming.test_parity_listener",
-        "pyspark.sql.tests.connect.streaming.test_parity_foreach",
-        "pyspark.sql.tests.connect.streaming.test_parity_foreach_batch",
-        "pyspark.sql.tests.connect.test_parity_pandas_grouped_map_with_state",
-        "pyspark.sql.tests.connect.test_parity_pandas_udf_scalar",
-        "pyspark.sql.tests.connect.test_parity_pandas_udf_grouped_agg",
-        "pyspark.sql.tests.connect.test_parity_pandas_udf_window",
         "pyspark.sql.tests.connect.test_resources",
         "pyspark.sql.tests.connect.shell.test_progress",
+        "pyspark.sql.tests.connect.test_df_debug",
+        "pyspark.sql.tests.connect.arrow.test_parity_arrow",
+        "pyspark.sql.tests.connect.arrow.test_parity_arrow_map",
+        "pyspark.sql.tests.connect.arrow.test_parity_arrow_grouped_map",
+        "pyspark.sql.tests.connect.arrow.test_parity_arrow_cogrouped_map",
+        "pyspark.sql.tests.connect.arrow.test_parity_arrow_python_udf",
+        "pyspark.sql.tests.connect.arrow.test_parity_arrow_udf",
+        "pyspark.sql.tests.connect.arrow.test_parity_arrow_udf_scalar",
+        "pyspark.sql.tests.connect.arrow.test_parity_arrow_udf_grouped_agg",
+        "pyspark.sql.tests.connect.arrow.test_parity_arrow_udf_window",
+        "pyspark.sql.tests.connect.arrow.test_parity_arrow_udtf",
+        "pyspark.sql.tests.connect.pandas.test_parity_pandas_map",
+        "pyspark.sql.tests.connect.pandas.test_parity_pandas_grouped_map",
+        "pyspark.sql.tests.connect.pandas.test_parity_pandas_cogrouped_map",
+        "pyspark.sql.tests.connect.pandas.test_parity_pandas_udf",
+        "pyspark.sql.tests.connect.pandas.test_parity_pandas_udf_scalar",
+        "pyspark.sql.tests.connect.pandas.test_parity_pandas_udf_grouped_agg",
+        "pyspark.sql.tests.connect.pandas.test_parity_pandas_udf_window",
     ],
     excluded_python_implementations=[
         "PyPy"  # Skip these tests under PyPy since they require numpy, pandas, and pyarrow and
         # they aren't available there
+    ],
+)
+
+pyspark_structured_streaming_connect = Module(
+    name="pyspark-structured-streaming-connect",
+    dependencies=[pyspark_connect, pyspark_structured_streaming],
+    source_file_regexes=[
+        "python/pyspark/sql/connect",
+    ],
+    python_test_goals=[
+        # unittests
+        "pyspark.sql.tests.connect.test_parity_python_streaming_datasource",
+        "pyspark.sql.tests.connect.streaming.test_parity_streaming",
+        "pyspark.sql.tests.connect.streaming.test_parity_listener",
+        "pyspark.sql.tests.connect.streaming.test_parity_foreach",
+        "pyspark.sql.tests.connect.streaming.test_parity_foreach_batch",
+        "pyspark.sql.tests.connect.pandas.streaming.test_parity_pandas_grouped_map_with_state",
+        "pyspark.sql.tests.connect.pandas.streaming.test_parity_pandas_transform_with_state",
+        "pyspark.sql.tests.connect.pandas.streaming.test_parity_pandas_transform_with_state_state_variable",  # noqa: E501
+        "pyspark.sql.tests.connect.pandas.streaming.test_parity_transform_with_state",
+        "pyspark.sql.tests.connect.pandas.streaming.test_parity_transform_with_state_state_variable",  # noqa: E501
+    ],
+    excluded_python_implementations=[
+        "PyPy"  # Skip these tests under PyPy since they require numpy and it isn't available there
     ],
 )
 
@@ -1076,7 +1220,10 @@ pyspark_ml_connect = Module(
         "python/pyspark/ml/connect",
     ],
     python_test_goals=[
+        # ml doctests
+        "pyspark.ml.connect.functions",
         # ml unittests
+        "pyspark.ml.tests.connect.test_connect_cache",
         "pyspark.ml.tests.connect.test_connect_function",
         "pyspark.ml.tests.connect.test_parity_torch_distributor",
         "pyspark.ml.tests.connect.test_parity_torch_data_loader",
@@ -1086,6 +1233,18 @@ pyspark_ml_connect = Module(
         "pyspark.ml.tests.connect.test_connect_classification",
         "pyspark.ml.tests.connect.test_connect_pipeline",
         "pyspark.ml.tests.connect.test_connect_tuning",
+        "pyspark.ml.tests.connect.test_parity_als",
+        "pyspark.ml.tests.connect.test_parity_fpm",
+        "pyspark.ml.tests.connect.test_parity_classification",
+        "pyspark.ml.tests.connect.test_parity_regression",
+        "pyspark.ml.tests.connect.test_parity_clustering",
+        "pyspark.ml.tests.connect.test_parity_evaluation",
+        "pyspark.ml.tests.connect.test_parity_feature",
+        "pyspark.ml.tests.connect.test_parity_functions",
+        "pyspark.ml.tests.connect.test_parity_pipeline",
+        "pyspark.ml.tests.connect.test_parity_tuning",
+        "pyspark.ml.tests.connect.test_parity_ovr",
+        "pyspark.ml.tests.connect.test_parity_stat",
     ],
     excluded_python_implementations=[
         "PyPy"  # Skip these tests under PyPy since they require numpy, pandas, and pyarrow and
@@ -1094,13 +1253,15 @@ pyspark_ml_connect = Module(
 )
 
 
-pyspark_pandas_connect_part0 = Module(
-    name="pyspark-pandas-connect-part0",
+pyspark_pandas_connect = Module(
+    name="pyspark-pandas-connect",
     dependencies=[pyspark_connect, pyspark_pandas, pyspark_pandas_slow],
     source_file_regexes=[
         "python/pyspark/pandas",
     ],
     python_test_goals=[
+        # unittests dedicated for Spark Connect
+        "pyspark.pandas.tests.connect.test_connect_plotting",
         # pandas-on-Spark unittests
         "pyspark.pandas.tests.connect.test_parity_categorical",
         "pyspark.pandas.tests.connect.test_parity_config",
@@ -1117,6 +1278,25 @@ pyspark_pandas_connect_part0 = Module(
         "pyspark.pandas.tests.connect.test_parity_sql",
         "pyspark.pandas.tests.connect.test_parity_typedef",
         "pyspark.pandas.tests.connect.test_parity_utils",
+        "pyspark.pandas.tests.connect.computation.test_parity_any_all",
+        "pyspark.pandas.tests.connect.computation.test_parity_apply_func",
+        "pyspark.pandas.tests.connect.computation.test_parity_binary_ops",
+        "pyspark.pandas.tests.connect.computation.test_parity_combine",
+        "pyspark.pandas.tests.connect.computation.test_parity_compute",
+        "pyspark.pandas.tests.connect.computation.test_parity_cov",
+        "pyspark.pandas.tests.connect.computation.test_parity_corr",
+        "pyspark.pandas.tests.connect.computation.test_parity_corrwith",
+        "pyspark.pandas.tests.connect.computation.test_parity_cumulative",
+        "pyspark.pandas.tests.connect.computation.test_parity_describe",
+        "pyspark.pandas.tests.connect.computation.test_parity_eval",
+        "pyspark.pandas.tests.connect.computation.test_parity_melt",
+        "pyspark.pandas.tests.connect.computation.test_parity_missing_data",
+        "pyspark.pandas.tests.connect.computation.test_parity_pivot",
+        "pyspark.pandas.tests.connect.computation.test_parity_pivot_table",
+        "pyspark.pandas.tests.connect.computation.test_parity_pivot_table_adv",
+        "pyspark.pandas.tests.connect.computation.test_parity_pivot_table_multi_idx",
+        "pyspark.pandas.tests.connect.computation.test_parity_pivot_table_multi_idx_adv",
+        "pyspark.pandas.tests.connect.computation.test_parity_stats",
         "pyspark.pandas.tests.connect.data_type_ops.test_parity_as_type",
         "pyspark.pandas.tests.connect.data_type_ops.test_parity_base",
         "pyspark.pandas.tests.connect.data_type_ops.test_parity_binary_ops",
@@ -1131,12 +1311,98 @@ pyspark_pandas_connect_part0 = Module(
         "pyspark.pandas.tests.connect.data_type_ops.test_parity_string_ops",
         "pyspark.pandas.tests.connect.data_type_ops.test_parity_udt_ops",
         "pyspark.pandas.tests.connect.data_type_ops.test_parity_timedelta_ops",
+        "pyspark.pandas.tests.connect.data_type_ops.test_parity_num_arithmetic",
+        "pyspark.pandas.tests.connect.data_type_ops.test_parity_num_mod",
+        "pyspark.pandas.tests.connect.data_type_ops.test_parity_num_mul_div",
+        "pyspark.pandas.tests.connect.data_type_ops.test_parity_num_pow",
         "pyspark.pandas.tests.connect.plot.test_parity_frame_plot",
         "pyspark.pandas.tests.connect.plot.test_parity_frame_plot_matplotlib",
         "pyspark.pandas.tests.connect.plot.test_parity_frame_plot_plotly",
         "pyspark.pandas.tests.connect.plot.test_parity_series_plot",
         "pyspark.pandas.tests.connect.plot.test_parity_series_plot_matplotlib",
         "pyspark.pandas.tests.connect.plot.test_parity_series_plot_plotly",
+        "pyspark.pandas.tests.connect.frame.test_parity_attrs",
+        "pyspark.pandas.tests.connect.frame.test_parity_axis",
+        "pyspark.pandas.tests.connect.frame.test_parity_constructor",
+        "pyspark.pandas.tests.connect.frame.test_parity_conversion",
+        "pyspark.pandas.tests.connect.frame.test_parity_reindexing",
+        "pyspark.pandas.tests.connect.frame.test_parity_reshaping",
+        "pyspark.pandas.tests.connect.frame.test_parity_spark",
+        "pyspark.pandas.tests.connect.frame.test_parity_take",
+        "pyspark.pandas.tests.connect.frame.test_parity_take_adv",
+        "pyspark.pandas.tests.connect.frame.test_parity_time_series",
+        "pyspark.pandas.tests.connect.frame.test_parity_truncate",
+        "pyspark.pandas.tests.connect.frame.test_parity_interpolate",
+        "pyspark.pandas.tests.connect.frame.test_parity_interpolate_error",
+        "pyspark.pandas.tests.connect.series.test_parity_datetime",
+        "pyspark.pandas.tests.connect.series.test_parity_string_ops_adv",
+        "pyspark.pandas.tests.connect.series.test_parity_string_ops_basic",
+        "pyspark.pandas.tests.connect.series.test_parity_all_any",
+        "pyspark.pandas.tests.connect.series.test_parity_arg_ops",
+        "pyspark.pandas.tests.connect.series.test_parity_as_of",
+        "pyspark.pandas.tests.connect.series.test_parity_as_type",
+        "pyspark.pandas.tests.connect.series.test_parity_compute",
+        "pyspark.pandas.tests.connect.series.test_parity_conversion",
+        "pyspark.pandas.tests.connect.series.test_parity_cumulative",
+        "pyspark.pandas.tests.connect.series.test_parity_index",
+        "pyspark.pandas.tests.connect.series.test_parity_missing_data",
+        "pyspark.pandas.tests.connect.series.test_parity_series",
+        "pyspark.pandas.tests.connect.series.test_parity_sort",
+        "pyspark.pandas.tests.connect.series.test_parity_stat",
+        "pyspark.pandas.tests.connect.series.test_parity_interpolate",
+        "pyspark.pandas.tests.connect.resample.test_parity_frame",
+        "pyspark.pandas.tests.connect.resample.test_parity_series",
+        "pyspark.pandas.tests.connect.resample.test_parity_error",
+        "pyspark.pandas.tests.connect.resample.test_parity_missing",
+        "pyspark.pandas.tests.connect.resample.test_parity_on",
+        "pyspark.pandas.tests.connect.resample.test_parity_timezone",
+        "pyspark.pandas.tests.connect.reshape.test_parity_get_dummies",
+        "pyspark.pandas.tests.connect.reshape.test_parity_get_dummies_kwargs",
+        "pyspark.pandas.tests.connect.reshape.test_parity_get_dummies_multiindex",
+        "pyspark.pandas.tests.connect.reshape.test_parity_get_dummies_object",
+        "pyspark.pandas.tests.connect.reshape.test_parity_get_dummies_prefix",
+        "pyspark.pandas.tests.connect.reshape.test_parity_merge_asof",
+        "pyspark.pandas.tests.connect.window.test_parity_ewm_error",
+        "pyspark.pandas.tests.connect.window.test_parity_ewm_mean",
+        "pyspark.pandas.tests.connect.window.test_parity_groupby_ewm_mean",
+        "pyspark.pandas.tests.connect.window.test_parity_missing",
+        "pyspark.pandas.tests.connect.window.test_parity_rolling",
+        "pyspark.pandas.tests.connect.window.test_parity_rolling_adv",
+        "pyspark.pandas.tests.connect.window.test_parity_rolling_count",
+        "pyspark.pandas.tests.connect.window.test_parity_rolling_error",
+        "pyspark.pandas.tests.connect.window.test_parity_groupby_rolling",
+        "pyspark.pandas.tests.connect.window.test_parity_groupby_rolling_adv",
+        "pyspark.pandas.tests.connect.window.test_parity_groupby_rolling_count",
+        "pyspark.pandas.tests.connect.window.test_parity_expanding",
+        "pyspark.pandas.tests.connect.window.test_parity_expanding_adv",
+        "pyspark.pandas.tests.connect.window.test_parity_expanding_error",
+        "pyspark.pandas.tests.connect.window.test_parity_groupby_expanding",
+        "pyspark.pandas.tests.connect.window.test_parity_groupby_expanding_adv",
+        "pyspark.pandas.tests.connect.io.test_parity_io",
+        "pyspark.pandas.tests.connect.io.test_parity_csv",
+        "pyspark.pandas.tests.connect.io.test_parity_feather",
+        "pyspark.pandas.tests.connect.io.test_parity_stata",
+        "pyspark.pandas.tests.connect.io.test_parity_dataframe_conversion",
+        "pyspark.pandas.tests.connect.io.test_parity_dataframe_spark_io",
+        "pyspark.pandas.tests.connect.io.test_parity_series_conversion",
+        # fallback
+        "pyspark.pandas.tests.connect.frame.test_parity_asfreq",
+        "pyspark.pandas.tests.connect.frame.test_parity_asof",
+    ],
+    excluded_python_implementations=[
+        "PyPy"  # Skip these tests under PyPy since they require numpy, pandas, and pyarrow and
+        # they aren't available there
+    ],
+)
+
+pyspark_pandas_slow_connect = Module(
+    name="pyspark-pandas-slow-connect",
+    dependencies=[pyspark_connect, pyspark_pandas, pyspark_pandas_slow],
+    source_file_regexes=[
+        "python/pyspark/pandas",
+    ],
+    python_test_goals=[
+        # pandas-on-Spark unittests
         "pyspark.pandas.tests.connect.indexes.test_parity_default",
         "pyspark.pandas.tests.connect.indexes.test_parity_category",
         "pyspark.pandas.tests.connect.indexes.test_parity_timedelta",
@@ -1170,44 +1436,24 @@ pyspark_pandas_connect_part0 = Module(
         "pyspark.pandas.tests.connect.indexes.test_parity_reindex",
         "pyspark.pandas.tests.connect.indexes.test_parity_rename",
         "pyspark.pandas.tests.connect.indexes.test_parity_reset_index",
-        "pyspark.pandas.tests.connect.computation.test_parity_any_all",
-        "pyspark.pandas.tests.connect.computation.test_parity_apply_func",
-        "pyspark.pandas.tests.connect.computation.test_parity_binary_ops",
-        "pyspark.pandas.tests.connect.computation.test_parity_combine",
-        "pyspark.pandas.tests.connect.computation.test_parity_compute",
-        "pyspark.pandas.tests.connect.computation.test_parity_cov",
-        "pyspark.pandas.tests.connect.computation.test_parity_corr",
-        "pyspark.pandas.tests.connect.computation.test_parity_corrwith",
-        "pyspark.pandas.tests.connect.computation.test_parity_cumulative",
-        "pyspark.pandas.tests.connect.computation.test_parity_describe",
-        "pyspark.pandas.tests.connect.computation.test_parity_eval",
-        "pyspark.pandas.tests.connect.computation.test_parity_melt",
-    ],
-    excluded_python_implementations=[
-        "PyPy"  # Skip these tests under PyPy since they require numpy, pandas, and pyarrow and
-        # they aren't available there
-    ],
-)
-
-pyspark_pandas_connect_part1 = Module(
-    name="pyspark-pandas-connect-part1",
-    dependencies=[pyspark_connect, pyspark_pandas, pyspark_pandas_slow],
-    source_file_regexes=[
-        "python/pyspark/pandas",
-    ],
-    python_test_goals=[
-        # pandas-on-Spark unittests
-        "pyspark.pandas.tests.connect.frame.test_parity_attrs",
-        "pyspark.pandas.tests.connect.frame.test_parity_axis",
-        "pyspark.pandas.tests.connect.frame.test_parity_constructor",
-        "pyspark.pandas.tests.connect.frame.test_parity_conversion",
-        "pyspark.pandas.tests.connect.frame.test_parity_reindexing",
-        "pyspark.pandas.tests.connect.frame.test_parity_reshaping",
-        "pyspark.pandas.tests.connect.frame.test_parity_spark",
-        "pyspark.pandas.tests.connect.frame.test_parity_take",
-        "pyspark.pandas.tests.connect.frame.test_parity_take_adv",
-        "pyspark.pandas.tests.connect.frame.test_parity_time_series",
-        "pyspark.pandas.tests.connect.frame.test_parity_truncate",
+        "pyspark.pandas.tests.connect.indexes.test_parity_datetime",
+        "pyspark.pandas.tests.connect.indexes.test_parity_datetime_at",
+        "pyspark.pandas.tests.connect.indexes.test_parity_datetime_between",
+        "pyspark.pandas.tests.connect.indexes.test_parity_append",
+        "pyspark.pandas.tests.connect.indexes.test_parity_intersection",
+        "pyspark.pandas.tests.connect.indexes.test_parity_monotonic",
+        "pyspark.pandas.tests.connect.indexes.test_parity_union",
+        "pyspark.pandas.tests.connect.indexes.test_parity_datetime_ceil",
+        "pyspark.pandas.tests.connect.indexes.test_parity_datetime_floor",
+        "pyspark.pandas.tests.connect.indexes.test_parity_datetime_iso",
+        "pyspark.pandas.tests.connect.indexes.test_parity_datetime_map",
+        "pyspark.pandas.tests.connect.indexes.test_parity_datetime_property",
+        "pyspark.pandas.tests.connect.indexes.test_parity_datetime_round",
+        "pyspark.pandas.tests.connect.groupby.test_parity_stat",
+        "pyspark.pandas.tests.connect.groupby.test_parity_stat_adv",
+        "pyspark.pandas.tests.connect.groupby.test_parity_stat_ddof",
+        "pyspark.pandas.tests.connect.groupby.test_parity_stat_func",
+        "pyspark.pandas.tests.connect.groupby.test_parity_stat_prod",
         "pyspark.pandas.tests.connect.groupby.test_parity_aggregate",
         "pyspark.pandas.tests.connect.groupby.test_parity_apply_func",
         "pyspark.pandas.tests.connect.groupby.test_parity_corr",
@@ -1221,82 +1467,17 @@ pyspark_pandas_connect_part1 = Module(
         "pyspark.pandas.tests.connect.groupby.test_parity_split_apply_skew",
         "pyspark.pandas.tests.connect.groupby.test_parity_split_apply_std",
         "pyspark.pandas.tests.connect.groupby.test_parity_split_apply_var",
-        "pyspark.pandas.tests.connect.series.test_parity_datetime",
-        "pyspark.pandas.tests.connect.series.test_parity_string_ops_adv",
-        "pyspark.pandas.tests.connect.series.test_parity_string_ops_basic",
-        "pyspark.pandas.tests.connect.series.test_parity_all_any",
-        "pyspark.pandas.tests.connect.series.test_parity_arg_ops",
-        "pyspark.pandas.tests.connect.series.test_parity_as_of",
-        "pyspark.pandas.tests.connect.series.test_parity_as_type",
-        "pyspark.pandas.tests.connect.series.test_parity_compute",
-        "pyspark.pandas.tests.connect.series.test_parity_conversion",
-        "pyspark.pandas.tests.connect.series.test_parity_cumulative",
-        "pyspark.pandas.tests.connect.series.test_parity_index",
-        "pyspark.pandas.tests.connect.series.test_parity_missing_data",
-        "pyspark.pandas.tests.connect.series.test_parity_series",
-        "pyspark.pandas.tests.connect.series.test_parity_sort",
-        "pyspark.pandas.tests.connect.series.test_parity_stat",
-        "pyspark.pandas.tests.connect.series.test_parity_interpolate",
-        "pyspark.pandas.tests.connect.data_type_ops.test_parity_num_arithmetic",
-        "pyspark.pandas.tests.connect.data_type_ops.test_parity_num_mod",
-        "pyspark.pandas.tests.connect.data_type_ops.test_parity_num_mul_div",
-        "pyspark.pandas.tests.connect.data_type_ops.test_parity_num_pow",
-        "pyspark.pandas.tests.connect.reshape.test_parity_get_dummies",
-        "pyspark.pandas.tests.connect.reshape.test_parity_get_dummies_kwargs",
-        "pyspark.pandas.tests.connect.reshape.test_parity_get_dummies_multiindex",
-        "pyspark.pandas.tests.connect.reshape.test_parity_get_dummies_object",
-        "pyspark.pandas.tests.connect.reshape.test_parity_get_dummies_prefix",
-        "pyspark.pandas.tests.connect.reshape.test_parity_merge_asof",
-        # fallback
-        "pyspark.pandas.tests.connect.frame.test_parity_asfreq",
-        "pyspark.pandas.tests.connect.frame.test_parity_asof",
-    ],
-    excluded_python_implementations=[
-        "PyPy"  # Skip these tests under PyPy since they require numpy, pandas, and pyarrow and
-        # they aren't available there
-    ],
-)
-
-
-pyspark_pandas_connect_part2 = Module(
-    name="pyspark-pandas-connect-part2",
-    dependencies=[pyspark_connect, pyspark_pandas, pyspark_pandas_slow],
-    source_file_regexes=[
-        "python/pyspark/pandas",
-    ],
-    python_test_goals=[
-        # pandas-on-Spark unittests
-        "pyspark.pandas.tests.connect.computation.test_parity_pivot",
-        "pyspark.pandas.tests.connect.computation.test_parity_pivot_table",
-        "pyspark.pandas.tests.connect.computation.test_parity_pivot_table_adv",
-        "pyspark.pandas.tests.connect.computation.test_parity_pivot_table_multi_idx",
-        "pyspark.pandas.tests.connect.computation.test_parity_pivot_table_multi_idx_adv",
-        "pyspark.pandas.tests.connect.computation.test_parity_stats",
-        "pyspark.pandas.tests.connect.computation.test_parity_missing_data",
-        "pyspark.pandas.tests.connect.frame.test_parity_interpolate",
-        "pyspark.pandas.tests.connect.frame.test_parity_interpolate_error",
-        "pyspark.pandas.tests.connect.resample.test_parity_frame",
-        "pyspark.pandas.tests.connect.resample.test_parity_series",
-        "pyspark.pandas.tests.connect.resample.test_parity_error",
-        "pyspark.pandas.tests.connect.resample.test_parity_missing",
-        "pyspark.pandas.tests.connect.resample.test_parity_on",
-        "pyspark.pandas.tests.connect.resample.test_parity_timezone",
-        "pyspark.pandas.tests.connect.window.test_parity_ewm_error",
-        "pyspark.pandas.tests.connect.window.test_parity_ewm_mean",
-        "pyspark.pandas.tests.connect.window.test_parity_groupby_ewm_mean",
-        "pyspark.pandas.tests.connect.window.test_parity_missing",
-        "pyspark.pandas.tests.connect.window.test_parity_rolling",
-        "pyspark.pandas.tests.connect.window.test_parity_rolling_adv",
-        "pyspark.pandas.tests.connect.window.test_parity_rolling_count",
-        "pyspark.pandas.tests.connect.window.test_parity_rolling_error",
-        "pyspark.pandas.tests.connect.window.test_parity_groupby_rolling",
-        "pyspark.pandas.tests.connect.window.test_parity_groupby_rolling_adv",
-        "pyspark.pandas.tests.connect.window.test_parity_groupby_rolling_count",
-        "pyspark.pandas.tests.connect.window.test_parity_expanding",
-        "pyspark.pandas.tests.connect.window.test_parity_expanding_adv",
-        "pyspark.pandas.tests.connect.window.test_parity_expanding_error",
-        "pyspark.pandas.tests.connect.window.test_parity_groupby_expanding",
-        "pyspark.pandas.tests.connect.window.test_parity_groupby_expanding_adv",
+        "pyspark.pandas.tests.connect.groupby.test_parity_index",
+        "pyspark.pandas.tests.connect.groupby.test_parity_describe",
+        "pyspark.pandas.tests.connect.groupby.test_parity_head_tail",
+        "pyspark.pandas.tests.connect.groupby.test_parity_groupby",
+        "pyspark.pandas.tests.connect.groupby.test_parity_grouping",
+        "pyspark.pandas.tests.connect.groupby.test_parity_missing",
+        "pyspark.pandas.tests.connect.groupby.test_parity_nlargest_nsmallest",
+        "pyspark.pandas.tests.connect.groupby.test_parity_raises",
+        "pyspark.pandas.tests.connect.groupby.test_parity_rank",
+        "pyspark.pandas.tests.connect.groupby.test_parity_size",
+        "pyspark.pandas.tests.connect.groupby.test_parity_value_counts",
         "pyspark.pandas.tests.connect.diff_frames_ops.test_parity_groupby_rolling",
         "pyspark.pandas.tests.connect.diff_frames_ops.test_parity_groupby_rolling_adv",
         "pyspark.pandas.tests.connect.diff_frames_ops.test_parity_groupby_rolling_count",
@@ -1311,58 +1492,6 @@ pyspark_pandas_connect_part2 = Module(
         "pyspark.pandas.tests.connect.diff_frames_ops.test_parity_series",
         "pyspark.pandas.tests.connect.diff_frames_ops.test_parity_setitem_frame",
         "pyspark.pandas.tests.connect.diff_frames_ops.test_parity_setitem_series",
-        "pyspark.pandas.tests.connect.groupby.test_parity_index",
-        "pyspark.pandas.tests.connect.groupby.test_parity_describe",
-        "pyspark.pandas.tests.connect.groupby.test_parity_head_tail",
-        "pyspark.pandas.tests.connect.groupby.test_parity_groupby",
-        "pyspark.pandas.tests.connect.groupby.test_parity_grouping",
-        "pyspark.pandas.tests.connect.groupby.test_parity_missing",
-        "pyspark.pandas.tests.connect.groupby.test_parity_nlargest_nsmallest",
-        "pyspark.pandas.tests.connect.groupby.test_parity_raises",
-        "pyspark.pandas.tests.connect.groupby.test_parity_rank",
-        "pyspark.pandas.tests.connect.groupby.test_parity_size",
-        "pyspark.pandas.tests.connect.groupby.test_parity_value_counts",
-    ],
-    excluded_python_implementations=[
-        "PyPy"  # Skip these tests under PyPy since they require numpy, pandas, and pyarrow and
-        # they aren't available there
-    ],
-)
-
-
-pyspark_pandas_connect_part3 = Module(
-    name="pyspark-pandas-connect-part3",
-    dependencies=[pyspark_connect, pyspark_pandas, pyspark_pandas_slow],
-    source_file_regexes=[
-        "python/pyspark/pandas",
-    ],
-    python_test_goals=[
-        # pandas-on-Spark unittests
-        "pyspark.pandas.tests.connect.io.test_parity_io",
-        "pyspark.pandas.tests.connect.io.test_parity_csv",
-        "pyspark.pandas.tests.connect.io.test_parity_feather",
-        "pyspark.pandas.tests.connect.io.test_parity_stata",
-        "pyspark.pandas.tests.connect.io.test_parity_dataframe_conversion",
-        "pyspark.pandas.tests.connect.io.test_parity_dataframe_spark_io",
-        "pyspark.pandas.tests.connect.io.test_parity_series_conversion",
-        "pyspark.pandas.tests.connect.groupby.test_parity_stat",
-        "pyspark.pandas.tests.connect.groupby.test_parity_stat_adv",
-        "pyspark.pandas.tests.connect.groupby.test_parity_stat_ddof",
-        "pyspark.pandas.tests.connect.groupby.test_parity_stat_func",
-        "pyspark.pandas.tests.connect.groupby.test_parity_stat_prod",
-        "pyspark.pandas.tests.connect.indexes.test_parity_append",
-        "pyspark.pandas.tests.connect.indexes.test_parity_intersection",
-        "pyspark.pandas.tests.connect.indexes.test_parity_monotonic",
-        "pyspark.pandas.tests.connect.indexes.test_parity_union",
-        "pyspark.pandas.tests.connect.indexes.test_parity_datetime",
-        "pyspark.pandas.tests.connect.indexes.test_parity_datetime_at",
-        "pyspark.pandas.tests.connect.indexes.test_parity_datetime_between",
-        "pyspark.pandas.tests.connect.indexes.test_parity_datetime_ceil",
-        "pyspark.pandas.tests.connect.indexes.test_parity_datetime_floor",
-        "pyspark.pandas.tests.connect.indexes.test_parity_datetime_iso",
-        "pyspark.pandas.tests.connect.indexes.test_parity_datetime_map",
-        "pyspark.pandas.tests.connect.indexes.test_parity_datetime_property",
-        "pyspark.pandas.tests.connect.indexes.test_parity_datetime_round",
         "pyspark.pandas.tests.connect.diff_frames_ops.test_parity_arithmetic",
         "pyspark.pandas.tests.connect.diff_frames_ops.test_parity_arithmetic_ext",
         "pyspark.pandas.tests.connect.diff_frames_ops.test_parity_arithmetic_ext_float",
@@ -1385,12 +1514,12 @@ pyspark_pandas_connect_part3 = Module(
         "pyspark.pandas.tests.connect.diff_frames_ops.test_parity_groupby_diff_len",
         "pyspark.pandas.tests.connect.diff_frames_ops.test_parity_groupby_fillna",
         "pyspark.pandas.tests.connect.diff_frames_ops.test_parity_groupby_filter",
-        "pyspark.pandas.tests.connect.diff_frames_ops.test_parity_groupby_shift",
         "pyspark.pandas.tests.connect.diff_frames_ops.test_parity_groupby_split_apply_combine",
-        "pyspark.pandas.tests.connect.diff_frames_ops.test_parity_groupby_transform",
         "pyspark.pandas.tests.connect.diff_frames_ops.test_parity_groupby_expanding",
         "pyspark.pandas.tests.connect.diff_frames_ops.test_parity_groupby_expanding_adv",
         "pyspark.pandas.tests.connect.diff_frames_ops.test_parity_groupby_expanding_count",
+        "pyspark.pandas.tests.connect.diff_frames_ops.test_parity_groupby_shift",
+        "pyspark.pandas.tests.connect.diff_frames_ops.test_parity_groupby_transform",
     ],
     excluded_python_implementations=[
         "PyPy"  # Skip these tests under PyPy since they require numpy, pandas, and pyarrow and
@@ -1412,7 +1541,37 @@ pyspark_errors = Module(
     ],
     python_test_goals=[
         # unittests
+        "pyspark.errors.tests.test_connect_errors_conversion",
         "pyspark.errors.tests.test_errors",
+        "pyspark.errors.tests.test_traceback",
+        "pyspark.errors.tests.connect.test_parity_traceback",
+    ],
+)
+
+pyspark_logger = Module(
+    name="pyspark-logger",
+    dependencies=[],
+    source_file_regexes=["python/pyspark/logger"],
+    python_test_goals=[
+        # doctests
+        "pyspark.logger.logger",
+        # unittests
+        "pyspark.logger.tests.test_logger",
+        "pyspark.logger.tests.connect.test_parity_logger",
+    ],
+)
+
+pyspark_pipelines = Module(
+    name="pyspark-pipelines",
+    dependencies=[pyspark_core, pyspark_sql, pyspark_connect],
+    source_file_regexes=["python/pyspark/pipelines"],
+    python_test_goals=[
+        "pyspark.pipelines.tests.test_block_connect_access",
+        "pyspark.pipelines.tests.test_block_session_mutations",
+        "pyspark.pipelines.tests.test_cli",
+        "pyspark.pipelines.tests.test_decorators",
+        "pyspark.pipelines.tests.test_graph_element_registry",
+        "pyspark.pipelines.tests.test_init_cli",
     ],
 )
 

@@ -22,8 +22,8 @@ import org.apache.spark.sql.errors.DataTypeErrors
 import org.apache.spark.sql.types.DayTimeIntervalType.fieldToString
 
 /**
- * The type represents day-time intervals of the SQL standard. A day-time interval is made up
- * of a contiguous subset of the following fields:
+ * The type represents day-time intervals of the SQL standard. A day-time interval is made up of a
+ * contiguous subset of the following fields:
  *   - SECOND, seconds within minutes and possibly fractions of a second [0..59.999999],
  *   - MINUTE, minutes within hours [0..59],
  *   - HOUR, hours within days [0..23],
@@ -31,18 +31,21 @@ import org.apache.spark.sql.types.DayTimeIntervalType.fieldToString
  *
  * `DayTimeIntervalType` represents positive as well as negative day-time intervals.
  *
- * @param startField The leftmost field which the type comprises of. Valid values:
- *                   0 (DAY), 1 (HOUR), 2 (MINUTE), 3 (SECOND).
- * @param endField The rightmost field which the type comprises of. Valid values:
- *                 0 (DAY), 1 (HOUR), 2 (MINUTE), 3 (SECOND).
+ * @param startField
+ *   The leftmost field which the type comprises of. Valid values: 0 (DAY), 1 (HOUR), 2 (MINUTE),
+ *   3 (SECOND).
+ * @param endField
+ *   The rightmost field which the type comprises of. Valid values: 0 (DAY), 1 (HOUR), 2 (MINUTE),
+ *   3 (SECOND).
  *
  * @since 3.2.0
  */
 @Unstable
 case class DayTimeIntervalType(startField: Byte, endField: Byte) extends AnsiIntervalType {
+
   /**
-   * The day-time interval type has constant precision. A value of the type always occupies 8 bytes.
-   * The DAY field is constrained by the upper bound 106751991 to fit to `Long`.
+   * The day-time interval type has constant precision. A value of the type always occupies 8
+   * bytes. The DAY field is constrained by the upper bound 106751991 to fit to `Long`.
    */
   override def defaultSize: Int = 8
 

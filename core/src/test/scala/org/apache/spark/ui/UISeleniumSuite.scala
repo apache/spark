@@ -17,7 +17,7 @@
 
 package org.apache.spark.ui
 
-import java.net.URL
+import java.net.{URI, URL}
 import java.util.Locale
 
 import scala.io.Source
@@ -417,7 +417,7 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers {
         // Instead, it's safer to check that each row contains a link to a stage details page.
         findAll(cssSelector("tbody tr")).foreach { row =>
           val link = row.underlying.findElement(By.xpath("./td/div/a"))
-          link.getAttribute("href") should include ("stage")
+          link.getDomProperty("href") should include ("stage")
         }
       }
     }
@@ -473,7 +473,7 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers {
         // Instead, it's safer to check that each row contains a link to a stage details page.
         findAll(cssSelector("tbody tr")).foreach { row =>
           val link = row.underlying.findElement(By.xpath(".//a"))
-          link.getAttribute("href") should include ("stage")
+          link.getDomProperty("href") should include ("stage")
         }
       }
     }
@@ -544,8 +544,8 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers {
     withSpark(newSparkContext(killEnabled = true)) { sc =>
       sc.parallelize(1 to 10).map{x => Thread.sleep(10000); x}.countAsync()
       eventually(timeout(5.seconds), interval(50.milliseconds)) {
-        val url = new URL(
-          sc.ui.get.webUrl.stripSuffix("/") + "/stages/stage/kill/?id=0")
+        val url = new URI(
+          sc.ui.get.webUrl.stripSuffix("/") + "/stages/stage/kill/?id=0").toURL
         // SPARK-6846: should be POST only but YARN AM doesn't proxy POST
         TestUtils.httpResponseCode(url, "GET") should be (200)
         TestUtils.httpResponseCode(url, "POST") should be (200)
@@ -557,8 +557,8 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers {
     withSpark(newSparkContext(killEnabled = true)) { sc =>
       sc.parallelize(1 to 10).map{x => Thread.sleep(10000); x}.countAsync()
       eventually(timeout(5.seconds), interval(50.milliseconds)) {
-        val url = new URL(
-          sc.ui.get.webUrl.stripSuffix("/") + "/jobs/job/kill/?id=0")
+        val url = new URI(
+          sc.ui.get.webUrl.stripSuffix("/") + "/jobs/job/kill/?id=0").toURL
         // SPARK-6846: should be POST only but YARN AM doesn't proxy POST
         TestUtils.httpResponseCode(url, "GET") should be (200)
         TestUtils.httpResponseCode(url, "POST") should be (200)
@@ -692,8 +692,8 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers {
 
   test("live UI json application list") {
     withSpark(newSparkContext()) { sc =>
-      val appListRawJson = HistoryServerSuite.getUrl(new URL(
-        sc.ui.get.webUrl + "/api/v1/applications"))
+      val appListRawJson = HistoryServerSuite.getUrl(new URI(
+        sc.ui.get.webUrl + "/api/v1/applications").toURL)
       val appListJsonAst = JsonMethods.parse(appListRawJson)
       appListJsonAst.children.length should be (1)
       val attempts = (appListJsonAst.children.head \ "attempts").children
@@ -918,6 +918,6 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers {
   }
 
   def apiUrl(ui: SparkUI, path: String): URL = {
-    new URL(ui.webUrl + "/api/v1/applications/" + ui.sc.get.applicationId + "/" + path)
+    new URI(ui.webUrl + "/api/v1/applications/" + ui.sc.get.applicationId + "/" + path).toURL
   }
 }

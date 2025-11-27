@@ -29,12 +29,13 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FsUrlStreamHandlerFactory, Path}
 
 import org.apache.spark.{SparkConf, SparkContext}
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{CONFIG, CONFIG2, PATH, VALUE}
+import org.apache.spark.sql.catalyst.analysis.RelationCache
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.CacheManager
-import org.apache.spark.sql.execution.streaming.StreamExecution
+import org.apache.spark.sql.execution.streaming.runtime.StreamExecution
 import org.apache.spark.sql.execution.ui.{SQLAppStatusListener, SQLAppStatusStore, SQLTab, StreamingQueryStatusStore}
 import org.apache.spark.sql.internal.StaticSQLConf._
 import org.apache.spark.sql.streaming.ui.{StreamingQueryStatusListener, StreamingQueryTab}
@@ -95,6 +96,13 @@ private[sql] class SharedState(
    * Class for caching query results reused in future executions.
    */
   val cacheManager: CacheManager = new CacheManager
+
+  /**
+   * A relation cache backed by the cache manager.
+   */
+  private[sql] val relationCache: RelationCache = {
+    (nameParts, resolver) => cacheManager.lookupCachedTable(nameParts, resolver)
+  }
 
   /** A global lock for all streaming query lifecycle tracking and management. */
   private[sql] val activeQueriesLock = new Object
@@ -169,11 +177,12 @@ private[sql] class SharedState(
     wrapped
   }
 
+  val globalTempDB = conf.get(GLOBAL_TEMP_DATABASE)
+
   /**
    * A manager for global temporary views.
    */
   lazy val globalTempViewManager: GlobalTempViewManager = {
-    val globalTempDB = conf.get(GLOBAL_TEMP_DATABASE)
     if (externalCatalog.databaseExists(globalTempDB)) {
       throw QueryExecutionErrors.databaseNameConflictWithSystemPreservedDatabaseError(globalTempDB)
     }

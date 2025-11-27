@@ -30,7 +30,8 @@ class ArrowUtilsSuite extends SparkFunSuite {
   def roundtrip(dt: DataType): Unit = {
     dt match {
       case schema: StructType =>
-        assert(ArrowUtils.fromArrowSchema(ArrowUtils.toArrowSchema(schema, null, true)) === schema)
+        assert(ArrowUtils.fromArrowSchema(
+          ArrowUtils.toArrowSchema(schema, null, true, false)) === schema)
       case _ =>
         roundtrip(new StructType().add("value", dt))
     }
@@ -48,19 +49,23 @@ class ArrowUtilsSuite extends SparkFunSuite {
     roundtrip(BinaryType)
     roundtrip(DecimalType.SYSTEM_DEFAULT)
     roundtrip(DateType)
+    roundtrip(GeometryType("ANY"))
+    roundtrip(GeometryType(4326))
+    roundtrip(GeographyType("ANY"))
+    roundtrip(GeographyType(4326))
     roundtrip(YearMonthIntervalType())
     roundtrip(DayTimeIntervalType())
     checkError(
       exception = intercept[SparkException] {
         roundtrip(TimestampType)
       },
-      errorClass = "INTERNAL_ERROR",
+      condition = "INTERNAL_ERROR",
       parameters = Map("message" -> "Missing timezoneId where it is mandatory."))
     checkError(
       exception = intercept[SparkUnsupportedOperationException] {
         ArrowUtils.fromArrowType(new ArrowType.Int(8, false))
       },
-      errorClass = "UNSUPPORTED_ARROWTYPE",
+      condition = "UNSUPPORTED_ARROWTYPE",
       parameters = Map("typeName" -> "Int(8, false)")
     )
   }
@@ -69,7 +74,7 @@ class ArrowUtilsSuite extends SparkFunSuite {
 
     def roundtripWithTz(timeZoneId: String): Unit = {
       val schema = new StructType().add("value", TimestampType)
-      val arrowSchema = ArrowUtils.toArrowSchema(schema, timeZoneId, true)
+      val arrowSchema = ArrowUtils.toArrowSchema(schema, timeZoneId, true, false)
       val fieldType = arrowSchema.findField("value").getType.asInstanceOf[ArrowType.Timestamp]
       assert(fieldType.getTimezone() === timeZoneId)
       assert(ArrowUtils.fromArrowSchema(arrowSchema) === schema)
@@ -105,9 +110,9 @@ class ArrowUtilsSuite extends SparkFunSuite {
     def check(dt: DataType, expected: DataType): Unit = {
       val schema = new StructType().add("value", dt)
       intercept[SparkUnsupportedOperationException] {
-        ArrowUtils.toArrowSchema(schema, null, true)
+        ArrowUtils.toArrowSchema(schema, null, true, false)
       }
-      assert(ArrowUtils.fromArrowSchema(ArrowUtils.toArrowSchema(schema, null, false))
+      assert(ArrowUtils.fromArrowSchema(ArrowUtils.toArrowSchema(schema, null, false, false))
         === new StructType().add("value", expected))
     }
 

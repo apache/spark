@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.connector.catalog.Table
 import org.apache.spark.sql.connector.write.RowLevelOperation.Command.UPDATE
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, DataSourceV2ScanRelation}
+import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, DataSourceV2ScanRelation, ExtractV2Table}
 import org.apache.spark.sql.internal.SQLConf
 
 trait OperationHelper extends AliasHelper with PredicateHelper {
@@ -291,7 +291,7 @@ object PhysicalAggregation {
     (Seq[NamedExpression], Seq[AggregateExpression], Seq[NamedExpression], LogicalPlan)
 
   def unapply(a: Any): Option[ReturnType] = a match {
-    case logical.Aggregate(groupingExpressions, resultExpressions, child) =>
+    case logical.Aggregate(groupingExpressions, resultExpressions, child, _) =>
       // A single aggregate expression might appear multiple times in resultExpressions.
       // In order to avoid evaluating an individual aggregate function multiple times, we'll
       // build a set of semantically distinct aggregate expressions and re-write expressions so
@@ -364,7 +364,7 @@ object PhysicalWindow {
     (WindowFunctionType, Seq[NamedExpression], Seq[Expression], Seq[SortOrder], LogicalPlan)
 
   def unapply(a: Any): Option[ReturnType] = a match {
-    case expr @ logical.Window(windowExpressions, partitionSpec, orderSpec, child) =>
+    case expr @ logical.Window(windowExpressions, partitionSpec, orderSpec, child, _) =>
 
       // The window expression should not be empty here, otherwise it's a bug.
       if (windowExpressions.isEmpty) {
@@ -436,8 +436,7 @@ object GroupBasedRowLevelOperation {
   type ReturnType = (ReplaceData, Expression, Option[Expression], LogicalPlan)
 
   def unapply(plan: LogicalPlan): Option[ReturnType] = plan match {
-    case rd @ ReplaceData(DataSourceV2Relation(table, _, _, _, _),
-        cond, query, _, groupFilterCond, _) =>
+    case rd @ ReplaceData(ExtractV2Table(table), cond, query, _, _, groupFilterCond, _) =>
       // group-based UPDATEs that are rewritten as UNION read the table twice
       val allowMultipleReads = rd.operation.command == UPDATE
       val readRelation = findReadRelation(table, query, allowMultipleReads)

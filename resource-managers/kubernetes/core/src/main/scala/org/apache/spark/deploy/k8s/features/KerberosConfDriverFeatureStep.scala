@@ -17,13 +17,13 @@
 package org.apache.spark.deploy.k8s.features
 
 import java.io.File
-import java.nio.charset.StandardCharsets
+import java.nio.file.Files
+import java.util.Base64
 
 import scala.jdk.CollectionConverters._
+import scala.util.control.NonFatal
 
-import com.google.common.io.Files
 import io.fabric8.kubernetes.api.model._
-import org.apache.commons.codec.binary.Base64
 import org.apache.hadoop.security.UserGroupInformation
 
 import org.apache.spark.deploy.SparkHadoopUtil
@@ -91,14 +91,20 @@ private[spark] class KerberosConfDriverFeatureStep(kubernetesConf: KubernetesDri
     if (keytab.isEmpty && existingSecretName.isEmpty) {
       val tokenManager = new HadoopDelegationTokenManager(kubernetesConf.sparkConf,
         SparkHadoopUtil.get.newConfiguration(kubernetesConf.sparkConf), null)
-      val creds = UserGroupInformation.getCurrentUser().getCredentials()
-      tokenManager.obtainDelegationTokens(creds)
-      // If no tokens and no secrets are stored in the credentials, make sure nothing is returned,
-      // to avoid creating an unnecessary secret.
-      if (creds.numberOfTokens() > 0 || creds.numberOfSecretKeys() > 0) {
-        SparkHadoopUtil.get.serialize(creds)
-      } else {
-        null
+      try {
+        val creds = UserGroupInformation.getCurrentUser().getCredentials()
+        tokenManager.obtainDelegationTokens(creds)
+        // If no tokens and no secrets are stored in the credentials, make sure nothing is returned,
+        // to avoid creating an unnecessary secret.
+        if (creds.numberOfTokens() > 0 || creds.numberOfSecretKeys() > 0) {
+          SparkHadoopUtil.get.serialize(creds)
+        } else {
+          null
+        }
+      } catch {
+        case NonFatal(e) =>
+          logWarning("Fail to get credentials", e)
+          null
       }
     } else {
       null
@@ -220,6 +226,7 @@ private[spark] class KerberosConfDriverFeatureStep(kubernetesConf: KubernetesDri
   }
 
   override def getAdditionalKubernetesResources(): Seq[HasMetadata] = {
+    val encodeToString = Base64.getEncoder().encodeToString(_)
     Seq[HasMetadata]() ++ {
       krb5File.map { path =>
         val file = new File(path)
@@ -229,7 +236,7 @@ private[spark] class KerberosConfDriverFeatureStep(kubernetesConf: KubernetesDri
             .endMetadata()
           .withImmutable(true)
           .addToData(
-            Map(file.getName() -> Files.toString(file, StandardCharsets.UTF_8)).asJava)
+            Map(file.getName() -> Files.readString(file.toPath)).asJava)
           .build()
       }
     } ++ {
@@ -241,7 +248,7 @@ private[spark] class KerberosConfDriverFeatureStep(kubernetesConf: KubernetesDri
             .withName(ktSecretName)
             .endMetadata()
           .withImmutable(true)
-          .addToData(kt.getName(), Base64.encodeBase64String(Files.toByteArray(kt)))
+          .addToData(kt.getName(), encodeToString(Files.readAllBytes(kt.toPath)))
           .build())
       } else {
         Nil
@@ -253,7 +260,7 @@ private[spark] class KerberosConfDriverFeatureStep(kubernetesConf: KubernetesDri
             .withName(dtSecretName)
             .endMetadata()
           .withImmutable(true)
-          .addToData(KERBEROS_SECRET_KEY, Base64.encodeBase64String(delegationTokens))
+          .addToData(KERBEROS_SECRET_KEY, encodeToString(delegationTokens))
           .build())
       } else {
         Nil

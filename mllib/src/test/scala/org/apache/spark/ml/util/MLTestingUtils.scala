@@ -220,7 +220,7 @@ object MLTestingUtils extends SparkFunSuite {
       numClasses: Int,
       modelEquals: (M, M) => Unit,
       outlierRatio: Int): Unit = {
-    import data.sqlContext.implicits._
+    import data.sparkSession.implicits._
     val outlierDS = data.withColumn("weight", lit(1.0)).as[Instance].flatMap {
       case Instance(l, w, f) =>
         val outlierLabel = if (numClasses == 0) -l else numClasses - l - 1

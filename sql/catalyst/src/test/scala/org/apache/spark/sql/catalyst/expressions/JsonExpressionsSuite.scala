@@ -28,13 +28,12 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
-import org.apache.spark.sql.catalyst.plans.PlanTestBase
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{PST, UTC, UTC_OPT}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
-class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with PlanTestBase {
+class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   val json =
     """
       |{"store":{"fruit":[{"weight":8,"type":"apple"},{"weight":9,"type":"pear"}],
@@ -255,7 +254,7 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with 
   }
 
   test("some big value") {
-    val value = "x" * 3000
+    val value = "x".repeat(3000)
     checkEvaluation(
       GetJsonObject(NonFoldableLiteral((s"""{"big": "$value"}""")),
       NonFoldableLiteral("$.big")), value)
@@ -273,8 +272,9 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with 
   }
 
   test("json_tuple escaping") {
-    GenerateUnsafeProjection.generate(
-      JsonTuple(Literal("\"quote") ::  Literal("\"quote") :: Nil) :: Nil)
+    checkJsonTuple(
+      JsonTuple(Literal("\"quote") ::  Literal("\"quote") :: Nil),
+      InternalRow.fromSeq(Seq(null).map(UTF8String.fromString)))
   }
 
   test("json_tuple - hive key 1") {
@@ -448,7 +448,7 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with 
     }.getCause
     checkError(
       exception = exception.asInstanceOf[SparkException],
-      errorClass = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
+      condition = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
       parameters = Map("badRecord" -> "[null]", "failFastMode" -> "FAILFAST")
     )
   }
@@ -582,7 +582,7 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with 
     val schema = StructType(StructField("\"quote", IntegerType) :: Nil)
     val struct = Literal.create(create_row(1), schema)
     GenerateUnsafeProjection.generate(
-      StructsToJson(Map.empty, struct, UTC_OPT) :: Nil)
+      StructsToJson(Map.empty, struct, UTC_OPT).replacement :: Nil)
   }
 
   test("to_json - struct") {
@@ -791,13 +791,13 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with 
   }
 
   test("verify corrupt column") {
-    checkExceptionInExpression[AnalysisException](
+    checkErrorInExpression[AnalysisException](
       JsonToStructs(
         schema = StructType.fromDDL("i int, _unparsed boolean"),
         options = Map("columnNameOfCorruptRecord" -> "_unparsed"),
         child = Literal.create("""{"i":"a"}"""),
-        timeZoneId = UTC_OPT),
-      expectedErrMsg = "The field for corrupt records must be string type and nullable")
+        timeZoneId = UTC_OPT), null, "INVALID_CORRUPT_RECORD_TYPE",
+      Map("columnName" -> "`_unparsed`", "actualType" -> "\"BOOLEAN\""))
   }
 
   def decimalInput(langTag: String): (Decimal, String) = {
@@ -906,4 +906,71 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with 
       "QUESTION"
     )
   }
+
+  test("from_json/to_json with TIME type - all precisions") {
+    // Test data: (timeString, precision) - covers all precisions and edge cases
+    val testCases = Seq(
+      ("00:00:00", 0),
+      ("14:30:45.1", 1),
+      ("14:30:45.12", 2),
+      ("14:30:45.123", 3),
+      ("14:30:45.1234", 4),
+      ("14:30:45.12345", 5),
+      ("23:59:59.999999", 6)
+    )
+
+    testCases.foreach { case (timeStr, precision) =>
+      val schema = StructType(StructField("t", TimeType(precision)) :: Nil)
+      val timeValue = SparkDateTimeUtils.stringToTimeAnsi(UTF8String.fromString(timeStr))
+      val jsonInput = s"""{"t": "$timeStr"}"""
+      val jsonOutput = s"""{"t":"$timeStr"}"""
+
+      // Test from_json
+      checkEvaluation(
+        JsonToStructs(schema, Map.empty, Literal(jsonInput), UTC_OPT),
+        InternalRow(timeValue))
+
+      // Test to_json
+      val struct = Literal.create(create_row(timeValue), schema)
+      checkEvaluation(
+        StructsToJson(Map.empty, struct, UTC_OPT),
+        jsonOutput)
+
+      // Test roundtrip
+      val jsonResult = StructsToJson(Map.empty, struct, UTC_OPT)
+      checkEvaluation(
+        JsonToStructs(schema, Map.empty, jsonResult, UTC_OPT),
+        InternalRow(timeValue))
+    }
+
+    // Test custom format with microsecond precision
+    val schema = StructType(StructField("t", TimeType(6)) :: Nil)
+    val time = SparkDateTimeUtils.stringToTimeAnsi(UTF8String.fromString("14:30:45.123456"))
+    val customFormat = Map("timeFormat" -> "HH-mm-ss.SSSSSS")
+
+    checkEvaluation(
+      JsonToStructs(schema, customFormat, Literal("""{"t": "14-30-45.123456"}"""), UTC_OPT),
+      InternalRow(time))
+
+    checkEvaluation(
+      StructsToJson(customFormat, Literal.create(create_row(time), schema), UTC_OPT),
+      """{"t":"14-30-45.123456"}""")
+  }
+
+  test("TIME type with arrays") {
+    val inputSchema = ArrayType(StructType(StructField("t", TimeType(3)) :: Nil))
+    val time1 = SparkDateTimeUtils.stringToTimeAnsi(UTF8String.fromString("09:00:00.123"))
+    val time2 = SparkDateTimeUtils.stringToTimeAnsi(UTF8String.fromString("17:30:00.456"))
+    val input = new GenericArrayData(InternalRow(time1) :: InternalRow(time2) :: Nil)
+    val expectedJson = """[{"t":"09:00:00.123"},{"t":"17:30:00.456"}]"""
+
+    checkEvaluation(
+      StructsToJson(Map.empty, Literal.create(input, inputSchema), UTC_OPT),
+      expectedJson)
+
+    checkEvaluation(
+      JsonToStructs(inputSchema, Map.empty, Literal(expectedJson), UTC_OPT),
+      input)
+  }
+
 }

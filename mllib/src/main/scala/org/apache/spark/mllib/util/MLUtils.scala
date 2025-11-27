@@ -22,7 +22,7 @@ import scala.reflect.ClassTag
 
 import org.apache.spark.{SparkContext, SparkException}
 import org.apache.spark.annotation.Since
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.OPTIMIZER_CLASS_NAME
 import org.apache.spark.ml.linalg.{MatrixUDT => MLMatrixUDT, VectorUDT => MLVectorUDT}
 import org.apache.spark.ml.util.Instrumentation
@@ -119,7 +119,7 @@ object MLUtils extends Logging {
       ).resolveRelation(checkFilesExist = false))
       .select("value")
 
-    import lines.sqlContext.implicits._
+    import lines.sparkSession.implicits._
 
     lines.select(trim($"value").as("line"))
       .filter(not((length($"line") === 0).or($"line".startsWith("#"))))
@@ -258,20 +258,23 @@ object MLUtils extends Logging {
    */
   @Since("3.1.0")
   def kFold(df: DataFrame, numFolds: Int, foldColName: String): Array[(RDD[Row], RDD[Row])] = {
-    val foldCol = df.col(foldColName)
-    val checker = udf { foldNum: Int =>
-      // Valid fold number is in range [0, numFolds).
-      if (foldNum < 0 || foldNum >= numFolds) {
-        throw new SparkException(s"Fold number must be in range [0, $numFolds), but got $foldNum.")
-      }
-      true
-    }
+    val checked = df.withColumn(
+      foldColName,
+      when((lit(0) <= col(foldColName)) && (col(foldColName) < lit(numFolds)), col(foldColName))
+        .otherwise(
+          raise_error(
+            printf(
+              lit(s"Fold number must be in range [0, $numFolds), but got %s."), col(foldColName))
+          )
+        )
+    )
+
     (0 until numFolds).map { fold =>
-      val training = df
-        .filter(checker(foldCol) && foldCol =!= fold)
+      val training = checked
+        .filter(col(foldColName) =!= fold)
         .drop(foldColName).rdd
-      val validation = df
-        .filter(checker(foldCol) && foldCol === fold)
+      val validation = checked
+        .filter(col(foldColName) === fold)
         .drop(foldColName).rdd
       if (training.isEmpty()) {
         throw new SparkException(s"The training data at fold $fold is empty.")

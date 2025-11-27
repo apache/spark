@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.trees.TreePatternBits
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{convertSpecialDate, convertSpecialTimestamp, convertSpecialTimestampNTZ, instantToMicros, localDateTimeToMicros}
+import org.apache.spark.sql.catalyst.util.SparkDateTimeUtils.{instantToNanosOfDay, truncateTimeToPrecision}
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLExpr
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.types._
@@ -83,23 +84,26 @@ object RewriteNonCorrelatedExists extends Rule[LogicalPlan] {
 object EvalInlineTables extends Rule[LogicalPlan] with CastSupport {
   override def apply(plan: LogicalPlan): LogicalPlan = {
     plan.transformDownWithSubqueriesAndPruning(_.containsPattern(INLINE_TABLE_EVAL)) {
-      case table: ResolvedInlineTable =>
-        val newRows: Seq[InternalRow] =
-          table.rows.map { row => InternalRow.fromSeq(row.map { e =>
-              try {
-                prepareForEval(e).eval()
-              } catch {
-                case NonFatal(ex) =>
-                  table.failAnalysis(
-                    errorClass = "INVALID_INLINE_TABLE.FAILED_SQL_EXPRESSION_EVALUATION",
-                    messageParameters = Map("sqlExpr" -> toSQLExpr(e)),
-                    cause = ex)
-              }})
-          }
-
-        LocalRelation(table.output, newRows)
+      case table: ResolvedInlineTable => eval(table)
     }
   }
+
+    def eval(table: ResolvedInlineTable): LocalRelation = {
+      val newRows: Seq[InternalRow] =
+        table.rows.map { row => InternalRow.fromSeq(row.map { e =>
+          try {
+            prepareForEval(e).eval()
+          } catch {
+            case NonFatal(ex) =>
+              table.failAnalysis(
+                errorClass = "INVALID_INLINE_TABLE.FAILED_SQL_EXPRESSION_EVALUATION",
+                messageParameters = Map("sqlExpr" -> toSQLExpr(e)),
+                cause = ex)
+          }})
+        }
+
+      LocalRelation(table.output, newRows)
+    }
 }
 
 /**
@@ -110,6 +114,7 @@ object ComputeCurrentTime extends Rule[LogicalPlan] {
     val instant = Instant.now()
     val currentTimestampMicros = instantToMicros(instant)
     val currentTime = Literal.create(currentTimestampMicros, TimestampType)
+    val currentTimeOfDayNanos = instantToNanosOfDay(instant, conf.sessionLocalTimeZone)
     val timezone = Literal.create(conf.sessionLocalTimeZone, StringType)
     val currentDates = collection.mutable.HashMap.empty[ZoneId, Literal]
     val localTimestamps = collection.mutable.HashMap.empty[ZoneId, Literal]
@@ -126,6 +131,10 @@ object ComputeCurrentTime extends Rule[LogicalPlan] {
               Literal.create(
                 DateTimeUtils.microsToDays(currentTimestampMicros, cd.zoneId), DateType)
             })
+          case currentTimeType : CurrentTime =>
+            val truncatedTime = truncateTimeToPrecision(currentTimeOfDayNanos,
+              currentTimeType.precision)
+            Literal.create(truncatedTime, TimeType(currentTimeType.precision))
           case CurrentTimestamp() | Now() => currentTime
           case CurrentTimeZone() => timezone
           case localTimestamp: LocalTimestamp =>
@@ -139,15 +148,15 @@ object ComputeCurrentTime extends Rule[LogicalPlan] {
 }
 
 /**
- * Replaces the expression of CurrentDatabase with the current database name.
- * Replaces the expression of CurrentCatalog with the current catalog name.
+ * Replaces the expression of CurrentDatabase, CurrentCatalog, and CurrentUser
+ * with the current values.
  */
 case class ReplaceCurrentLike(catalogManager: CatalogManager) extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = {
     import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
-    val currentNamespace = catalogManager.currentNamespace.quoted
-    val currentCatalog = catalogManager.currentCatalog.name()
-    val currentUser = CurrentUserContext.getCurrentUser
+    lazy val currentNamespace = catalogManager.currentNamespace.quoted
+    lazy val currentCatalog = catalogManager.currentCatalog.name()
+    lazy val currentUser = CurrentUserContext.getCurrentUser
 
     plan.transformAllExpressionsWithPruning(_.containsPattern(CURRENT_LIKE)) {
       case CurrentDatabase() =>
@@ -178,5 +187,12 @@ object SpecialDatetimeValues extends Rule[LogicalPlan] {
           .map(Literal(_, dt))
           .getOrElse(cast)
     }
+  }
+}
+
+object ReplaceTranspose extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan.transform {
+    case t @ Transpose(output, data) =>
+      LocalRelation(output, data)
   }
 }

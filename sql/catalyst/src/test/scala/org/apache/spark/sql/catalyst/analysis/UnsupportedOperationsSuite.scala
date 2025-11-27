@@ -115,11 +115,11 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
     Aggregate(Seq(attributeWithWatermark), aggExprs("d"), streamRelation),
     outputMode = Append)
 
-  assertNotSupportedInStreamingPlan(
+  assertOutputModeNotSupportedInStreamingPlan(
     "aggregate - streaming aggregations without watermark in append mode",
     Aggregate(Nil, aggExprs("d"), streamRelation),
-    outputMode = Append,
-    expectedMsgs = Seq("streaming aggregations", "without watermark"))
+    Append,
+    "streaming aggregations without watermark")
 
   // Aggregation: Distinct aggregates not supported on streaming relation
   val distinctAggExprs = Seq(Count("*").toAggregateExpression(isDistinct = true).as("c"))
@@ -740,7 +740,7 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
   testUnaryOperatorInStreamingPlan(
     "window",
     Window(Nil, Nil, Nil, _),
-    errorClass = "NON_TIME_WINDOW_NOT_SUPPORTED_IN_STREAMING")
+    condition = "NON_TIME_WINDOW_NOT_SUPPORTED_IN_STREAMING")
 
   // Output modes with aggregation and non-aggregation plans
   testOutputMode(Append, shouldSupportAggregation = false, shouldSupportNonAggregation = true)
@@ -855,6 +855,27 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
 
   /*
     =======================================================================================
+                                 REAL-TIME STREAMING
+    =======================================================================================
+  */
+
+  {
+    assertNotSupportedForRealTime(
+      "real-time without operators - append mode",
+      streamRelation,
+      Append,
+      "STREAMING_REAL_TIME_MODE.OUTPUT_MODE_NOT_SUPPORTED"
+    )
+
+    assertSupportedForRealTime(
+      "real-time with stream-batch join - update mode",
+      streamRelation.join(batchRelation, joinType = Inner),
+      Update
+    )
+  }
+
+  /*
+    =======================================================================================
                                      TESTING FUNCTIONS
     =======================================================================================
    */
@@ -869,11 +890,11 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
    * supports having a batch child plan, forming a batch subplan inside a streaming plan.
    */
   def testUnaryOperatorInStreamingPlan(
-    operationName: String,
-    logicalPlanGenerator: LogicalPlan => LogicalPlan,
-    outputMode: OutputMode = Append,
-    expectedMsg: String = "",
-    errorClass: String = ""): Unit = {
+      operationName: String,
+      logicalPlanGenerator: LogicalPlan => LogicalPlan,
+      outputMode: OutputMode = Append,
+      expectedMsg: String = "",
+      condition: String = ""): Unit = {
 
     val expectedMsgs = if (expectedMsg.isEmpty) Seq(operationName) else Seq(expectedMsg)
 
@@ -882,7 +903,7 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
       wrapInStreaming(logicalPlanGenerator(streamRelation)),
       outputMode,
       expectedMsgs,
-      errorClass)
+      condition)
 
     assertSupportedInStreamingPlan(
       s"$operationName with batch relation",
@@ -965,11 +986,11 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
         streamRelation.groupBy("a")("count(*)"),
         outputMode = outputMode)
     } else {
-      assertNotSupportedInStreamingPlan(
-        s"$outputMode output mode - aggregation",
+      assertOutputModeNotSupportedInStreamingPlan(
+        s"$outputMode output mode - aggregation without watermark",
         streamRelation.groupBy("a")("count(*)"),
-        outputMode = outputMode,
-        Seq("aggregation", s"$outputMode output mode"))
+        outputMode,
+        "streaming aggregations without watermark")
     }
 
     // non aggregation
@@ -979,11 +1000,11 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
         streamRelation.where($"a" > 1),
         outputMode = outputMode)
     } else {
-      assertNotSupportedInStreamingPlan(
+      assertOutputModeNotSupportedInStreamingPlan(
         s"$outputMode output mode - no aggregation",
         streamRelation.where($"a" > 1),
-        outputMode = outputMode,
-        Seq("aggregation", s"$outputMode output mode"))
+        outputMode,
+        "no streaming aggregations")
     }
   }
 
@@ -1017,6 +1038,31 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
     }
   }
 
+  /** Assert that the logical plan is supported for real-time mode */
+  def assertSupportedForRealTime(name: String, plan: LogicalPlan, outputMode: OutputMode): Unit = {
+    test(s"real-time trigger - $name: supported") {
+      UnsupportedOperationChecker.checkAdditionalRealTimeModeConstraints(plan, outputMode)
+    }
+  }
+
+  /**
+   * Assert that the logical plan is not supported inside a streaming plan with the
+   * real-time trigger.
+   */
+  def assertNotSupportedForRealTime(
+      name: String,
+      plan: LogicalPlan,
+      outputMode: OutputMode,
+      condition: String): Unit = {
+    testError(
+      s"real-time trigger - $name: not supported",
+      Seq("Streaming real-time mode"),
+      condition
+    ) {
+      UnsupportedOperationChecker.checkAdditionalRealTimeModeConstraints(plan, outputMode)
+    }
+  }
+
   /**
    * Assert that the logical plan is not supported inside a streaming plan.
    *
@@ -1030,12 +1076,33 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
       plan: LogicalPlan,
       outputMode: OutputMode,
       expectedMsgs: Seq[String],
-      errorClass: String = ""): Unit = {
+      condition: String = ""): Unit = {
     testError(
       s"streaming plan - $name: not supported",
       expectedMsgs :+ "streaming" :+ "DataFrame" :+ "Dataset" :+ "not supported",
-      errorClass) {
+      condition) {
       UnsupportedOperationChecker.checkForStreaming(wrapInStreaming(plan), outputMode)
+    }
+  }
+
+  /**
+   * Assert that output model is not supported in streaming plan.
+   */
+  def assertOutputModeNotSupportedInStreamingPlan(
+      name: String,
+      plan: LogicalPlan,
+      outputMode: OutputMode,
+      operation: String): Unit = {
+    test(s"streaming plan - $name: not supported") {
+      checkError(
+        exception = intercept[AnalysisException] {
+          UnsupportedOperationChecker.checkForStreaming(wrapInStreaming(plan), outputMode)
+        },
+        condition = "STREAMING_OUTPUT_MODE.UNSUPPORTED_OPERATION",
+        sqlState = "42KDE",
+        parameters = Map(
+          "outputMode" -> outputMode.toString.toLowerCase(Locale.ROOT),
+          "operation" -> operation))
     }
   }
 
@@ -1099,7 +1166,7 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
   def testError(
       testName: String,
       expectedMsgs: Seq[String],
-      errorClass: String = "")(testBody: => Unit): Unit = {
+      condition: String = "")(testBody: => Unit): Unit = {
 
     test(testName) {
       val e = intercept[AnalysisException] {
@@ -1111,8 +1178,8 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
             s"actual exception message:\n\t'${e.getMessage}'")
         }
       }
-      if (!errorClass.isEmpty) {
-        assert(e.getErrorClass == errorClass)
+      if (!condition.isEmpty) {
+        assert(e.getCondition == condition)
       }
     }
   }

@@ -20,7 +20,6 @@ package org.apache.spark.shuffle
 import java.util.{Map => JMap}
 import java.util.concurrent.atomic.AtomicBoolean
 
-import com.google.common.collect.ImmutableMap
 import org.scalatest.Assertions._
 
 import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext, SparkFunSuite}
@@ -61,7 +60,7 @@ class TestShuffleDataIO(sparkConf: SparkConf) extends ShuffleDataIO {
 
 class TestShuffleDriverComponents extends ShuffleDriverComponents {
   override def initializeApplication(): JMap[String, String] = {
-    ImmutableMap.of("test-plugin-key", "plugin-set-value")
+    JMap.of("test-plugin-key", "plugin-set-value")
   }
 
   override def cleanupApplication(): Unit = {}

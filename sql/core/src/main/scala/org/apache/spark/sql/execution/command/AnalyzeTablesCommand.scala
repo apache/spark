@@ -20,9 +20,8 @@ package org.apache.spark.sql.execution.command
 import scala.util.control.NonFatal
 
 import org.apache.spark.internal.LogKeys.{DATABASE_NAME, ERROR, TABLE_NAME}
-import org.apache.spark.internal.MDC
 import org.apache.spark.sql.{Row, SparkSession}
-
+import org.apache.spark.sql.classic.ClassicConversions.castToImpl
 
 /**
  * Analyzes all tables in the given database to generate statistics.
@@ -40,7 +39,7 @@ case class AnalyzeTablesCommand(
       } catch {
         case NonFatal(e) =>
           logWarning(log"Failed to analyze table ${MDC(TABLE_NAME, tbl.table)} in the " +
-            log"database ${MDC(DATABASE_NAME, db)} because of ${MDC(ERROR, e.toString)}}", e)
+            log"database ${MDC(DATABASE_NAME, db)} because of ${MDC(ERROR, e.toString)}", e)
       }
     }
     Seq.empty[Row]

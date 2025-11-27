@@ -17,16 +17,18 @@
 
 package org.apache.spark.sql.execution.datasources.text
 
-import java.io.File
+import java.io.{File, FileOutputStream}
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 
 import org.apache.hadoop.io.SequenceFile.CompressionType
-import org.apache.hadoop.io.compress.GzipCodec
+import org.apache.hadoop.io.compress.{CompressionCodecFactory, GzipCodec}
 
 import org.apache.spark.{SparkConf, SparkIllegalArgumentException, TestUtils}
+import org.apache.spark.io.ZStdCompressionCodec
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row, SaveMode}
-import org.apache.spark.sql.catalyst.util.HadoopCompressionCodec.{BZIP2, DEFLATE, GZIP, NONE}
+import org.apache.spark.sql.catalyst.util.HadoopCompressionCodec
+import org.apache.spark.sql.catalyst.util.HadoopCompressionCodec.{BZIP2, DEFLATE, GZIP, LZ4, NONE, SNAPPY}
 import org.apache.spark.sql.execution.datasources.CommonFileDataSourceSuite
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -93,7 +95,7 @@ abstract class TextSuite extends QueryTest with SharedSparkSession with CommonFi
 
   test("SPARK-13503 Support to specify the option for compression codec for TEXT") {
     val testDf = spark.read.text(testFile)
-    val extensionNameMap = Seq(BZIP2, DEFLATE, GZIP)
+    val extensionNameMap = Seq(BZIP2, DEFLATE, GZIP, LZ4, SNAPPY)
       .map(codec => codec.lowerCaseName() -> codec.getCompressionCodec.getDefaultExtension)
     extensionNameMap.foreach {
       case (codecName, extension) =>
@@ -111,7 +113,7 @@ abstract class TextSuite extends QueryTest with SharedSparkSession with CommonFi
           testDf.write.option("compression", "illegal").mode(
             SaveMode.Overwrite).text(dir.getAbsolutePath)
         },
-        errorClass = "CODEC_NOT_AVAILABLE.WITH_AVAILABLE_CODECS_SUGGESTION",
+        condition = "CODEC_NOT_AVAILABLE.WITH_AVAILABLE_CODECS_SUGGESTION",
         parameters = Map(
           "codecName" -> "illegal",
           "availableCodecs" -> "bzip2, deflate, uncompressed, snappy, none, lz4, gzip")
@@ -252,6 +254,91 @@ abstract class TextSuite extends QueryTest with SharedSparkSession with CommonFi
     assert(TextOptions.isValidOption("wholetext"))
     assert(TextOptions.isValidOption("encoding"))
     assert(TextOptions.isValidOption("lineSep"))
+  }
+
+  private def createTestFiles(dir: File, fileFormatWriter: Boolean,
+    wholeText: Boolean): Seq[Row] = {
+    val numRecord = 100
+    val codecExtensionMap = HadoopCompressionCodec.values()
+      .map(c => (c.lowerCaseName(),
+        Option(c.getCompressionCodec).map(_.getDefaultExtension).getOrElse(""))) ++
+      Seq(("zstd", ".zst"), ("zstd", ".zstd"), ("gzip", ".gzip"))
+
+    val codecFactory = new CompressionCodecFactory(spark.sessionState.newHadoopConf())
+    codecExtensionMap.foreach { case (codec, ext) =>
+
+      val data = (1 to numRecord).map(i => s"$i, value_${codec}$ext").mkString("\n")
+      val file = new File(dir, s"test_$codec.txt$ext")
+
+      // file data source writers do not support zstd codec yet.
+      if (fileFormatWriter && !codec.equals("zstd")) {
+        val df = Seq(data).toDF("value")
+        df.coalesce(1).write
+          .format("text")
+          .option("compression", codec)
+          .save(file.getCanonicalPath)
+
+        val compressedFiles = new File(file.getCanonicalPath).listFiles()
+
+        compressedFiles.foreach { file =>
+          if (file.isFile && file.getName.startsWith("part")) {
+            val newName = file.getName.split("\\.").init.mkString(".") + ext
+            val status = file.renameTo(new File(dir, newName))
+            assert(status)
+          }
+        }
+      } else {
+        val os = new FileOutputStream(file)
+
+        val outputStream = codec match {
+          case "zstd" =>
+            new ZStdCompressionCodec(sparkConf).compressedOutputStream(os)
+          case codec if ext.nonEmpty =>
+            val compressionCodec = codecFactory.getCodecByName(codec)
+            compressionCodec.createOutputStream(os)
+          case _ => os
+        }
+        outputStream.write(data.getBytes(StandardCharsets.UTF_8))
+        outputStream.close()
+      }
+    }
+
+    val expectedOutput = codecExtensionMap.flatMap {
+      case (codec, ext) =>
+        val data = (1 to numRecord).map(i => s"$i, value_${codec}$ext")
+        if (wholeText) {
+          if (fileFormatWriter && !codec.equals("zstd")) {
+            Seq(Row(data.mkString("", "\n", "\n")))
+          } else {
+            Seq(Row(data.mkString("\n")))
+          }
+        } else {
+          data.map(Row(_))
+        }
+    }.toSeq
+    val numRows = if (wholeText) 1 else numRecord
+    assert(expectedOutput.length == codecExtensionMap.length * numRows)
+    expectedOutput
+  }
+
+  test("Test all supported codec and extension including zst, zstd and gzip") {
+    for (
+      wholeText <- Seq(true, false);
+      fileFormatWriter <- Seq(true, false)
+    ) {
+      logInfo(s"Testing with wholeText=$wholeText, fileFormatWriter=$fileFormatWriter")
+
+      withTempDir { dir =>
+        val options = Map(
+          "wholeText" -> wholeText.toString,
+          "recursiveFileLookup" -> "true"
+        )
+
+        val expectedOutput = createTestFiles(dir, fileFormatWriter, wholeText)
+        val df = spark.read.options(options).text(dir.getCanonicalPath)
+        checkAnswer(df, expectedOutput)
+      }
+    }
   }
 }
 

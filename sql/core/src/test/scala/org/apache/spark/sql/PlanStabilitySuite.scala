@@ -19,10 +19,9 @@ package org.apache.spark.sql
 
 import java.io.File
 import java.nio.charset.StandardCharsets
+import java.nio.file.Files
 
 import scala.collection.mutable
-
-import org.apache.commons.io.FileUtils
 
 import org.apache.spark.sql.catalyst.expressions.AttributeSet
 import org.apache.spark.sql.catalyst.util._
@@ -31,6 +30,7 @@ import org.apache.spark.sql.execution.adaptive.DisableAdaptiveExecutionSuite
 import org.apache.spark.sql.execution.exchange.{Exchange, ReusedExchangeExec, ValidateRequirements}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.tags.ExtendedSQLTest
+import org.apache.spark.util.Utils
 
 // scalastyle:off line.size.limit
 /**
@@ -77,8 +77,9 @@ trait PlanStabilitySuite extends DisableAdaptiveExecutionSuite {
   }
 
   private val referenceRegex = "#\\d+".r
-  private val normalizeRegex = "#\\d+L?".r
-  private val planIdRegex = "plan_id=\\d+".r
+  // Do not match `id=#123` like ids as those are actually plan ids in `SubqueryExec` nodes.
+  private val exprIdRegexp = "(?<prefix>(?<!id=)#)\\d+L?".r
+  private val planIdRegex = "(?<prefix>(plan_id=|id=#))\\d+".r
 
   private val clsName = this.getClass.getCanonicalName
 
@@ -101,9 +102,9 @@ trait PlanStabilitySuite extends DisableAdaptiveExecutionSuite {
   private def isApproved(
       dir: File, actualSimplifiedPlan: String, actualExplain: String): Boolean = {
     val simplifiedFile = new File(dir, "simplified.txt")
-    val expectedSimplified = FileUtils.readFileToString(simplifiedFile, StandardCharsets.UTF_8)
+    val expectedSimplified = Files.readString(simplifiedFile.toPath)
     lazy val explainFile = new File(dir, "explain.txt")
-    lazy val expectedExplain = FileUtils.readFileToString(explainFile, StandardCharsets.UTF_8)
+    lazy val expectedExplain = Files.readString(explainFile.toPath)
     expectedSimplified == actualSimplifiedPlan && expectedExplain == actualExplain
   }
 
@@ -122,20 +123,20 @@ trait PlanStabilitySuite extends DisableAdaptiveExecutionSuite {
     val foundMatch = dir.exists() && isApproved(dir, simplified, explain)
 
     if (!foundMatch) {
-      FileUtils.deleteDirectory(dir)
-      assert(dir.mkdirs())
+      Utils.deleteRecursively(dir)
+      assert(Utils.createDirectory(dir))
 
       val file = new File(dir, "simplified.txt")
-      FileUtils.writeStringToFile(file, simplified, StandardCharsets.UTF_8)
+      Files.writeString(file.toPath(), simplified, StandardCharsets.UTF_8)
       val fileOriginalPlan = new File(dir, "explain.txt")
-      FileUtils.writeStringToFile(fileOriginalPlan, explain, StandardCharsets.UTF_8)
+      Files.writeString(fileOriginalPlan.toPath(), explain, StandardCharsets.UTF_8)
       logDebug(s"APPROVED: $file $fileOriginalPlan")
     }
   }
 
   private def checkWithApproved(plan: SparkPlan, name: String, explain: String): Unit = {
     val dir = getDirForTest(name)
-    val tempDir = FileUtils.getTempDirectory
+    val tempDir = System.getProperty("java.io.tmpdir")
     val actualSimplified = getSimplifiedPlan(plan)
     val foundMatch = isApproved(dir, actualSimplified, explain)
 
@@ -147,11 +148,10 @@ trait PlanStabilitySuite extends DisableAdaptiveExecutionSuite {
       val actualSimplifiedFile = new File(tempDir, s"$name.actual.simplified.txt")
       val actualExplainFile = new File(tempDir, s"$name.actual.explain.txt")
 
-      val approvedSimplified = FileUtils.readFileToString(
-        approvedSimplifiedFile, StandardCharsets.UTF_8)
+      val approvedSimplified = Files.readString(approvedSimplifiedFile.toPath)
       // write out for debugging
-      FileUtils.writeStringToFile(actualSimplifiedFile, actualSimplified, StandardCharsets.UTF_8)
-      FileUtils.writeStringToFile(actualExplainFile, explain, StandardCharsets.UTF_8)
+      Files.writeString(actualSimplifiedFile.toPath(), actualSimplified, StandardCharsets.UTF_8)
+      Files.writeString(actualExplainFile.toPath(), explain, StandardCharsets.UTF_8)
 
       fail(
         s"""
@@ -209,7 +209,7 @@ trait PlanStabilitySuite extends DisableAdaptiveExecutionSuite {
      *     Project [c_customer_id]
      */
     def simplifyNode(node: SparkPlan, depth: Int): String = {
-      val padding = "  " * depth
+      val padding = "  ".repeat(depth)
       var thisNode = node.nodeName
       if (node.references.nonEmpty) {
         thisNode += s" [${cleanUpReferences(node.references)}]"
@@ -230,18 +230,15 @@ trait PlanStabilitySuite extends DisableAdaptiveExecutionSuite {
   }
 
   private def normalizeIds(plan: String): String = {
-    val map = new mutable.HashMap[String, String]()
-    normalizeRegex.findAllMatchIn(plan).map(_.toString)
-      .foreach(map.getOrElseUpdate(_, (map.size + 1).toString))
-    val exprIdNormalized = normalizeRegex.replaceAllIn(
-      plan, regexMatch => s"#${map(regexMatch.toString)}")
+    val exprIdMap = new mutable.HashMap[String, String]()
+    val exprIdNormalized = exprIdRegexp.replaceAllIn(plan,
+      m => exprIdMap.getOrElseUpdate(m.toString(), s"${m.group("prefix")}${exprIdMap.size + 1}"))
 
-    // Normalize the plan id in Exchange nodes. See `Exchange.stringArgs`.
+    // Normalize the plan ids in Exchange and Subquery nodes.
+    // See `Exchange.stringArgs` and `SubqueryExec.stringArgs`
     val planIdMap = new mutable.HashMap[String, String]()
-    planIdRegex.findAllMatchIn(exprIdNormalized).map(_.toString)
-      .foreach(planIdMap.getOrElseUpdate(_, (planIdMap.size + 1).toString))
-    planIdRegex.replaceAllIn(
-      exprIdNormalized, regexMatch => s"plan_id=${planIdMap(regexMatch.toString)}")
+    planIdRegex.replaceAllIn(exprIdNormalized,
+      m => planIdMap.getOrElseUpdate(s"$m", s"${m.group("prefix")}${planIdMap.size + 1}"))
   }
 
   private def normalizeLocation(plan: String): String = {
@@ -256,9 +253,11 @@ trait PlanStabilitySuite extends DisableAdaptiveExecutionSuite {
   protected def testQuery(tpcdsGroup: String, query: String, suffix: String = ""): Unit = {
     val queryString = resourceToString(s"$tpcdsGroup/$query.sql",
       classLoader = Thread.currentThread().getContextClassLoader)
-    // Disable char/varchar read-side handling for better performance.
-    withSQLConf(SQLConf.READ_SIDE_CHAR_PADDING.key -> "false",
-        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "10MB") {
+    withSQLConf(
+      // Disable char/varchar read-side handling for better performance.
+      SQLConf.READ_SIDE_CHAR_PADDING.key -> "false",
+      SQLConf.LEGACY_NO_CHAR_PADDING_IN_PREDICATE.key -> "true",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "10MB") {
       val qe = sql(queryString).queryExecution
       val plan = qe.executedPlan
       val explain = normalizeLocation(normalizeIds(qe.explainString(FormattedMode)))

@@ -40,7 +40,7 @@ class AlignMergeAssignmentsSuite extends AlignAssignmentsSuiteBase {
           | UPDATE SET t.txt = "error", t.i = CAST(null AS INT)""".stripMargin)
 
     matchedActions match {
-      case Seq(UpdateAction(None, assignments)) =>
+      case Seq(UpdateAction(None, assignments, _)) =>
         assignments match {
           case Seq(
               Assignment(i: AttributeReference, AssertNotNull(iValue: AttributeReference, _)),
@@ -80,7 +80,7 @@ class AlignMergeAssignmentsSuite extends AlignAssignmentsSuiteBase {
     }
 
     notMatchedBySourceActions match {
-      case Seq(UpdateAction(None, assignments)) =>
+      case Seq(UpdateAction(None, assignments, _)) =>
         assignments match {
           case Seq(
               Assignment(i: AttributeReference, AssertNotNull(_: Cast, _)),
@@ -138,7 +138,7 @@ class AlignMergeAssignmentsSuite extends AlignAssignmentsSuiteBase {
     }
 
     matchedActions match {
-      case Seq(UpdateAction(None, assignments)) =>
+      case Seq(UpdateAction(None, assignments, _)) =>
         assignments match {
           case Seq(
               Assignment(i: AttributeReference, iValue: AttributeReference),
@@ -184,7 +184,7 @@ class AlignMergeAssignmentsSuite extends AlignAssignmentsSuiteBase {
     }
 
     notMatchedBySourceActions match {
-      case Seq(UpdateAction(None, assignments)) =>
+      case Seq(UpdateAction(None, assignments, _)) =>
         assignments match {
           case Seq(
               Assignment(i: AttributeReference, iValue: AttributeReference),
@@ -217,7 +217,7 @@ class AlignMergeAssignmentsSuite extends AlignAssignmentsSuiteBase {
           |""".stripMargin)
 
     matchedActions match {
-      case Seq(UpdateAction(None, assignments)) =>
+      case Seq(UpdateAction(None, assignments, _)) =>
         assignments match {
           case Seq(
               Assignment(i: AttributeReference, iValue: AttributeReference),
@@ -280,7 +280,7 @@ class AlignMergeAssignmentsSuite extends AlignAssignmentsSuiteBase {
     }
 
     matchedActions match {
-      case Seq(UpdateAction(None, assignments)) =>
+      case Seq(UpdateAction(None, assignments, _)) =>
         assignments match {
           case Seq(
               Assignment(i: AttributeReference, iValue: AttributeReference),
@@ -342,7 +342,7 @@ class AlignMergeAssignmentsSuite extends AlignAssignmentsSuiteBase {
     }
 
     notMatchedBySourceActions match {
-      case Seq(UpdateAction(None, assignments)) =>
+      case Seq(UpdateAction(None, assignments, _)) =>
         assignments match {
           case Seq(
               Assignment(i: AttributeReference, iValue: AttributeReference),
@@ -463,7 +463,7 @@ class AlignMergeAssignmentsSuite extends AlignAssignmentsSuiteBase {
     }
 
     matchedActions match {
-      case Seq(UpdateAction(None, assignments)) =>
+      case Seq(UpdateAction(None, assignments, _)) =>
         assignments match {
           case Seq(
               Assignment(c: AttributeReference, cValue: StaticInvoke),
@@ -531,7 +531,7 @@ class AlignMergeAssignmentsSuite extends AlignAssignmentsSuiteBase {
     }
 
     notMatchedBySourceActions match {
-      case Seq(UpdateAction(None, assignments)) =>
+      case Seq(UpdateAction(None, assignments, _)) =>
         assignments match {
           case Seq(
               Assignment(c: AttributeReference, cValue: StaticInvoke),
@@ -591,7 +591,7 @@ class AlignMergeAssignmentsSuite extends AlignAssignmentsSuiteBase {
           if (policy == StoreAssignmentPolicy.ANSI) {
             checkError(
               exception = e,
-              errorClass = "DATATYPE_MISMATCH.INVALID_ROW_LEVEL_OPERATION_ASSIGNMENTS",
+              condition = "DATATYPE_MISMATCH.INVALID_ROW_LEVEL_OPERATION_ASSIGNMENTS",
               parameters = Map(
                 "sqlExpr" -> "\"s.n_i = 1\", \"s.n_s = NULL\", \"s.n_i = -1\"",
                 "errors" -> "\n- Multiple assignments for 's.n_i': 1, -1")
@@ -599,7 +599,7 @@ class AlignMergeAssignmentsSuite extends AlignAssignmentsSuiteBase {
           } else {
             checkError(
               exception = e,
-              errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
+              condition = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
               parameters = Map(
                 "tableName" -> "``",
                 "colName" -> "`s`.`n_s`",
@@ -690,20 +690,41 @@ class AlignMergeAssignmentsSuite extends AlignAssignmentsSuiteBase {
              |""".stripMargin)
         assertNullCheckExists(plan4, Seq("s", "n_s", "dn_i"))
 
-        val e = intercept[AnalysisException] {
-          parseAndResolve(
-            s"""MERGE INTO nested_struct_table t USING nested_struct_table src
-               |ON t.i = src.i
-               |$clause THEN
-               | UPDATE SET s.n_s = named_struct('dn_i', 1)
-               |""".stripMargin
-          )
+        Seq(true, false).foreach { coerceNestedTypes =>
+          withSQLConf(SQLConf.MERGE_INTO_NESTED_TYPE_COERCION_ENABLED.key ->
+            coerceNestedTypes.toString) {
+            val mergeStmt =
+              s"""MERGE INTO nested_struct_table t USING nested_struct_table src
+                 |ON t.i = src.i
+                 |$clause THEN
+                 | UPDATE SET s.n_s = named_struct('dn_i', 2L)
+                 |""".stripMargin
+            if (coerceNestedTypes) {
+              val plan5 = parseAndResolve(mergeStmt)
+              // No null check for dn_i as it is explicitly set
+              assertNoNullCheckExists(plan5)
+            } else {
+              val e = intercept[AnalysisException] {
+                parseAndResolve(mergeStmt)
+              }
+              checkError(
+                exception = e,
+                condition = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA",
+                parameters = Map("tableName" -> "``", "colName" -> "`s`.`n_s`.`dn_l`")
+              )
+            }
+          }
         }
-        checkError(
-          exception = e,
-          errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA",
-          parameters = Map("tableName" -> "``", "colName" -> "`s`.`n_s`.`dn_l`")
-        )
+
+        // dn_i is a required field but not provided
+        assertAnalysisException(
+          s"""MERGE INTO nested_struct_table t USING nested_struct_table src
+             |ON t.i = src.i
+             |$clause THEN
+             | UPDATE SET s.n_s = named_struct('dn_l', 2L)
+             |""".stripMargin,
+          "Cannot write incompatible data for the table ``: " +
+            "Cannot find data for the output column `s`.`n_s`.`dn_i`")
 
         // ANSI mode does NOT allow string to int casts
         assertAnalysisException(
@@ -724,7 +745,7 @@ class AlignMergeAssignmentsSuite extends AlignAssignmentsSuiteBase {
 
         val actions = if (matchedActions.nonEmpty) matchedActions else notMatchedBySourceActions
         actions match {
-          case Seq(UpdateAction(_, assignments)) =>
+          case Seq(UpdateAction(_, assignments, _)) =>
             assignments match {
               case Seq(
                   Assignment(
@@ -836,19 +857,46 @@ class AlignMergeAssignmentsSuite extends AlignAssignmentsSuiteBase {
              |""".stripMargin)
         assertNullCheckExists(plan4, Seq("s", "n_s", "dn_i"))
 
+        Seq(true, false).foreach { coerceNestedTypes =>
+          withSQLConf(SQLConf.MERGE_INTO_NESTED_TYPE_COERCION_ENABLED.key ->
+            coerceNestedTypes.toString) {
+            val mergeStmt =
+              s"""MERGE INTO nested_struct_table t USING nested_struct_table src
+                 |ON t.i = src.i
+                 |$clause THEN
+                 | UPDATE SET s.n_s = named_struct('dn_i', 1)
+                 |""".stripMargin
+            if (coerceNestedTypes) {
+              val plan5 = parseAndResolve(mergeStmt)
+              // No null check for dn_i as it is explicitly set
+              assertNoNullCheckExists(plan5)
+            } else {
+              val e = intercept[AnalysisException] {
+                parseAndResolve(mergeStmt)
+              }
+              checkError(
+                exception = e,
+                condition = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA",
+                parameters = Map("tableName" -> "``", "colName" -> "`s`.`n_s`.`dn_l`"))
+            }
+          }
+        }
+
+        // dn_i is a required field but not provided
         val e = intercept[AnalysisException] {
           parseAndResolve(
             s"""MERGE INTO nested_struct_table t USING nested_struct_table src
                |ON t.i = src.i
                |$clause THEN
-               | UPDATE SET s.n_s = named_struct('dn_i', 1)
-               |""".stripMargin
-          )
+               | UPDATE SET s.n_s = named_struct('dn_l', 2L)
+               |""".stripMargin)
         }
         checkError(
           exception = e,
-          errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA",
-          parameters = Map("tableName" -> "``", "colName" -> "`s`.`n_s`.`dn_l`")
+          condition = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA",
+          parameters = Map(
+            "tableName" -> "``",
+            "colName" -> "`s`.`n_s`.`dn_i`")
         )
 
         // strict mode does NOT allow string to int casts
@@ -899,7 +947,7 @@ class AlignMergeAssignmentsSuite extends AlignAssignmentsSuiteBase {
           | UPDATE SET t.i = DEFAULT""".stripMargin)
 
     matchedActions match {
-      case Seq(UpdateAction(None, assignments)) =>
+      case Seq(UpdateAction(None, assignments, _)) =>
         assignments match {
           case Seq(
               Assignment(b: AttributeReference, bValue: AttributeReference),
@@ -953,7 +1001,7 @@ class AlignMergeAssignmentsSuite extends AlignAssignmentsSuiteBase {
     }
 
     notMatchedBySourceActions match {
-      case Seq(UpdateAction(None, assignments)) =>
+      case Seq(UpdateAction(None, assignments, _)) =>
         assignments match {
           case Seq(
               Assignment(b: AttributeReference, bValue: AttributeReference),

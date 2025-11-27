@@ -129,8 +129,8 @@ If you are using Conda, the development environment can be set as follows.
 
 .. code-block:: bash
 
-    # Python 3.9+ is required
-    conda create --name pyspark-dev-env python=3.9
+    # Python 3.10+ is required
+    conda create --name pyspark-dev-env python=3.10
     conda activate pyspark-dev-env
     pip install --upgrade -r dev/requirements.txt
 
@@ -145,7 +145,7 @@ Now, you can start developing and `running the tests <testing.rst>`_.
 pip
 ~~~
 
-With Python 3.9+, pip can be used as below to install and set up the development environment.
+With Python 3.10+, pip can be used as below to install and set up the development environment.
 
 .. code-block:: bash
 
@@ -279,8 +279,8 @@ Throw with arbitrary error message:
 .. code-block:: python
 
   class PySparkTestError(PySparkException):
-      def __init__(self, error_class: str, message_parameters: Dict[str, str]):
-          super().__init__(error_class=error_class, message_parameters=message_parameters)
+      def __init__(self, errorClass: str, messageParameters: Dict[str, str]):
+          super().__init__(errorClass=errorClass, messageParameters=messageParameters)
   
       def getMessageParameters(self) -> Optional[Dict[str, str]]:
           return super().getMessageParameters()
@@ -295,14 +295,14 @@ Throw with error class and message parameters:
 Access fields
 ~~~~~~~~~~~~~
 
-To access error fields, catch exceptions that extend :class:`PySparkException`  and access to error class with :func:`PySparkException.getErrorClass`.
+To access error fields, catch exceptions that extend :class:`PySparkException` and access to error class with :func:`PySparkException.getCondition`.
 
 .. code-block:: python
 
   try:
       ...
   except PySparkException as pe:
-      if pe.getErrorClass() == "PROBLEM_BECAUSE":
+      if pe.getCondition() == "PROBLEM_BECAUSE":
           ...
 
 

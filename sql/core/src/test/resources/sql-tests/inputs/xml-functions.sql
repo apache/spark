@@ -53,8 +53,50 @@ select from_xml(
 
 -- infer schema of xml literal with options
 select schema_of_xml(null);
+select schema_of_xml(42);
 CREATE TEMPORARY VIEW xmlTable(xmlField, a) AS SELECT * FROM VALUES ('<p><a>1</a><b>"2"</b></p>', 'a');
 SELECT schema_of_xml(xmlField) FROM xmlTable;
 
 -- Clean up
 DROP VIEW IF EXISTS xmlTable;
+
+-- TIME type tests
+-- from_xml with TIME type
+select from_xml('<record><time>14:30:45</time></record>', 'time TIME(0)', map('rowTag', 'record'));
+select from_xml('<record><time>14:30:45.123</time></record>', 'time TIME(3)', map('rowTag', 'record'));
+select from_xml('<record><time>14:30:45.123456</time></record>', 'time TIME(6)', map('rowTag', 'record'));
+select from_xml('<record><time>14-30-45.123456</time></record>', 'time TIME(6)', map('rowTag', 'record', 'timeFormat', 'HH-mm-ss.SSSSSS'));
+select from_xml('<record><t1>09:00:00</t1><t2>17:30:00</t2></record>', 't1 TIME, t2 TIME', map('rowTag', 'record'));
+
+-- Invalid input
+select from_xml('<record><time>25:00:00</time></record>', 'time TIME', map('rowTag', 'record'));
+select from_xml('<record><time>invalid</time></record>', 'time TIME', map('rowTag', 'record'));
+select from_xml('<record></record>', 'time TIME', map('rowTag', 'record'));
+
+-- to_xml with TIME type
+select to_xml(named_struct('time', TIME'14:30:45'), map('rowTag', 'record', 'indent', ''));
+select to_xml(named_struct('time', TIME'14:30:45.123456'), map('rowTag', 'record', 'indent', ''));
+select to_xml(named_struct('time', TIME'14:30:45.123456'), map('rowTag', 'record', 'timeFormat', 'HH-mm-ss.SSSSSS', 'indent', ''));
+
+-- TIME type roundtrip tests
+select from_xml(to_xml(named_struct('time', TIME'14:30:45'), map('rowTag', 'record')), 'time TIME(0)', map('rowTag', 'record'));
+select from_xml(to_xml(named_struct('time', TIME'14:30:45.1'), map('rowTag', 'record')), 'time TIME(1)', map('rowTag', 'record'));
+select from_xml(to_xml(named_struct('time', TIME'14:30:45.12'), map('rowTag', 'record')), 'time TIME(2)', map('rowTag', 'record'));
+select from_xml(to_xml(named_struct('time', TIME'14:30:45.123'), map('rowTag', 'record')), 'time TIME(3)', map('rowTag', 'record'));
+select from_xml(to_xml(named_struct('time', TIME'14:30:45.1234'), map('rowTag', 'record')), 'time TIME(4)', map('rowTag', 'record'));
+select from_xml(to_xml(named_struct('time', TIME'14:30:45.12345'), map('rowTag', 'record')), 'time TIME(5)', map('rowTag', 'record'));
+select from_xml(to_xml(named_struct('time', TIME'14:30:45.123456'), map('rowTag', 'record')), 'time TIME(6)', map('rowTag', 'record'));
+
+-- Reverse roundtrip
+select to_xml(from_xml('<record><time>14:30:45</time></record>', 'time TIME(0)', map('rowTag', 'record')), map('rowTag', 'record', 'indent', ''));
+select to_xml(from_xml('<record><time>14:30:45.123</time></record>', 'time TIME(3)', map('rowTag', 'record')), map('rowTag', 'record', 'indent', ''));
+select to_xml(from_xml('<record><time>14:30:45.123456</time></record>', 'time TIME(6)', map('rowTag', 'record')), map('rowTag', 'record', 'indent', ''));
+
+-- TIME type schema inference
+-- Schema inference: TIME type is never auto-inferred (requires explicit schema).
+-- Time-like strings are inferred as TIMESTAMP by XML's existing inference logic.
+select schema_of_xml('<record><time>14:30:45</time></record>', map('rowTag', 'record'));
+select schema_of_xml('<record><time>14:30:45.123456</time></record>', map('rowTag', 'record'));
+
+-- LIMIT test
+select from_xml('<record><time>14:30:45</time></record>', 'time TIME', map('rowTag', 'record')) LIMIT 1;

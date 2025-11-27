@@ -20,7 +20,6 @@ package org.apache.spark.sql.execution.datasources.parquet;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 
-import org.apache.parquet.Preconditions;
 import org.apache.parquet.bytes.ByteBufferInputStream;
 import org.apache.parquet.bytes.BytesUtils;
 import org.apache.parquet.column.values.ValuesReader;
@@ -30,6 +29,7 @@ import org.apache.parquet.io.ParquetDecodingException;
 import org.apache.parquet.io.api.Binary;
 
 import org.apache.spark.SparkUnsupportedOperationException;
+import org.apache.spark.network.util.JavaUtils;
 import org.apache.spark.sql.execution.vectorized.WritableColumnVector;
 
 /**
@@ -122,7 +122,7 @@ public final class VectorizedRleValuesReader extends ValuesReader
    * Initializes the internal state for decoding ints of `bitWidth`.
    */
   private void init(int bitWidth) {
-    Preconditions.checkArgument(bitWidth >= 0 && bitWidth <= 32, "bitWidth must be >= 0 and <= 32");
+    JavaUtils.checkArgument(bitWidth >= 0 && bitWidth <= 32, "bitWidth must be >= 0 and <= 32");
     this.bitWidth = bitWidth;
     this.bytesWidth = BytesUtils.paddedByteCountFromBits(bitWidth);
     this.packer = Packer.LITTLE_ENDIAN.newBytePacker(bitWidth);

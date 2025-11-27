@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.util
 
-import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisErrorAt, TypeCheckResult, TypeCoercion}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.{Expression, RowOrdering}
 import org.apache.spark.sql.catalyst.types.{PhysicalDataType, PhysicalNumericType}
@@ -39,6 +39,16 @@ object TypeUtils extends QueryErrorsBase {
           "functionName" -> toSQLId(caller),
           "dataType" -> toSQLType(dt)
         )
+      )
+    }
+  }
+
+  def tryThrowNotOrderableExpression(expression: Expression): Unit = {
+    if (!RowOrdering.isOrderable(expression.dataType)) {
+      expression.failAnalysis(
+        errorClass = "EXPRESSION_TYPE_IS_NOT_ORDERABLE",
+        messageParameters =
+          Map("expr" -> toSQLExpr(expression), "exprType" -> toSQLType(expression.dataType))
       )
     }
   }

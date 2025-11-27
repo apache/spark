@@ -18,7 +18,8 @@
 package org.apache.spark.sql.jdbc
 
 class DB2DatabaseOnDocker extends DatabaseOnDocker {
-  override val imageName = sys.env.getOrElse("DB2_DOCKER_IMAGE_NAME", "ibmcom/db2:11.5.8.0")
+  override val imageName = sys.env.getOrElse("DB2_DOCKER_IMAGE_NAME",
+    "icr.io/db2_community/db2:11.5.9.0")
   override val env = Map(
     "DB2INST1_PASSWORD" -> "rootpass",
     "LICENSE" -> "accept",

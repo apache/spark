@@ -19,9 +19,16 @@ package org.apache.spark.sql.jdbc.v2
 
 import java.sql.Connection
 
+import org.apache.spark.SparkConf
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.jdbc.DockerJDBCIntegrationSuite
 
 abstract class DockerJDBCIntegrationV2Suite extends DockerJDBCIntegrationSuite {
+
+  override def sparkConf: SparkConf = super.sparkConf
+    // DS V2 relies on ANSI mode to translate expressions, we should always
+    // run JDBC v2 tests with ANSI on.
+    .set(SQLConf.ANSI_ENABLED, true)
 
   /**
    * Prepare databases and tables for testing.
@@ -37,6 +44,25 @@ abstract class DockerJDBCIntegrationV2Suite extends DockerJDBCIntegrationSuite {
     connection.prepareStatement("INSERT INTO employee VALUES (2, 'david', 10000, 1300)")
       .executeUpdate()
     connection.prepareStatement("INSERT INTO employee VALUES (6, 'jen', 12000, 1200)")
+      .executeUpdate()
+
+    connection.prepareStatement("INSERT INTO pattern_testing_table "
+        + "VALUES ('special_character_quote''_present')")
+      .executeUpdate()
+    connection.prepareStatement("INSERT INTO pattern_testing_table "
+        + "VALUES ('special_character_quote_not_present')")
+      .executeUpdate()
+    connection.prepareStatement("INSERT INTO pattern_testing_table "
+        + "VALUES ('special_character_percent%_present')")
+      .executeUpdate()
+    connection.prepareStatement("INSERT INTO pattern_testing_table "
+        + "VALUES ('special_character_percent_not_present')")
+      .executeUpdate()
+    connection.prepareStatement("INSERT INTO pattern_testing_table "
+        + "VALUES ('special_character_underscore_present')")
+      .executeUpdate()
+    connection.prepareStatement("INSERT INTO pattern_testing_table "
+        + "VALUES ('special_character_underscorenot_present')")
       .executeUpdate()
   }
 

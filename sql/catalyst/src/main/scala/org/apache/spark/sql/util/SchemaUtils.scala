@@ -19,12 +19,17 @@ package org.apache.spark.sql.util
 
 import java.util.Locale
 
+import scala.collection.immutable.Queue
+import scala.collection.mutable
+
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, NamedExpression}
+import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
 import org.apache.spark.sql.connector.expressions.{BucketTransform, FieldReference, NamedTransform, Transform}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
-import org.apache.spark.sql.types.{ArrayType, DataType, MapType, StringType, StructField, StructType}
+import org.apache.spark.sql.types._
+import org.apache.spark.sql.util.SchemaValidationMode.PROHIBIT_CHANGES
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.SparkSchemaUtils
 
@@ -35,6 +40,40 @@ import org.apache.spark.util.SparkSchemaUtils
  * TODO: Merge this file with [[org.apache.spark.ml.util.SchemaUtils]].
  */
 private[spark] object SchemaUtils {
+
+  /**
+   * Class to represent a nested column path.
+   */
+  private[spark] case class ColumnPath(parts: Queue[String] = Queue.empty) {
+    override def toString: String = parts.mkString(".")
+
+    def prepended(part: String): ColumnPath = ColumnPath(parts.prepended(part))
+  }
+
+  /**
+   * For the given dataType `dt` find all column paths that satisfy the given predicate `f`.
+   */
+  def findColumnPaths(dt: DataType)(f: DataType => Boolean): Seq[ColumnPath] = {
+    dt match {
+      case _ if f(dt) =>
+        Seq(ColumnPath())
+
+      case ArrayType(elementType, _) =>
+        findColumnPaths(elementType)(f).map(p => p.prepended("element"))
+
+      case MapType(keyType, valueType, _) =>
+        findColumnPaths(keyType)(f).map(p => p.prepended("key")) ++
+          findColumnPaths(valueType)(f).map(p => p.prepended("value"))
+
+      case StructType(fields) =>
+        fields.flatMap { case StructField(name, dataType, _, _) =>
+          findColumnPaths(dataType)(f).map(p => p.prepended(name))
+        }.toSeq
+
+      case _ =>
+        Nil
+    }
+  }
 
   /**
    * Checks if an input schema has duplicate column names. This throws an exception if the
@@ -304,6 +343,39 @@ private[spark] object SchemaUtils {
     }
   }
 
+  /** Checks if a given data type has indeterminate collation. */
+  def hasIndeterminateCollation(dt: DataType): Boolean = {
+    dt.existsRecursively {
+      case IndeterminateStringType => true
+      case _ => false
+    }
+  }
+
+  /**
+   * Throws an error if the given schema has indeterminate collation.
+   */
+  def checkIndeterminateCollationInSchema(schema: StructType): Unit = {
+    val indeterminatePaths = findColumnPaths(schema) {
+      case IndeterminateStringType => true
+      case _ => false
+    }
+
+    if (indeterminatePaths.nonEmpty) {
+      throw QueryCompilationErrors.indeterminateCollationInSchemaError(indeterminatePaths)
+    }
+  }
+
+  def checkNoCollationsInMapKeys(schema: DataType): Unit = schema match {
+    case m: MapType =>
+      if (hasNonUTF8BinaryCollation(m.keyType)) {
+        throw QueryCompilationErrors.collatedStringsInMapKeysNotSupportedError()
+      }
+      checkNoCollationsInMapKeys(m.valueType)
+    case s: StructType => s.fields.foreach(field => checkNoCollationsInMapKeys(field.dataType))
+    case a: ArrayType => checkNoCollationsInMapKeys(a.elementType)
+    case _ =>
+  }
+
   /**
    * Replaces any collated string type with non collated StringType
    * recursively in the given data type.
@@ -317,7 +389,144 @@ private[spark] object SchemaUtils {
       StructType(fields.map { field =>
         field.copy(dataType = replaceCollatedStringWithString(field.dataType))
       })
-    case _: StringType => StringType
+    case st: StringType => StringHelper.removeCollation(st)
     case _ => dt
   }
+
+  /**
+   * Validates schema compatibility by recursively checking type and nullability changes.
+   *
+   * @param schema the schema to validate against
+   * @param otherSchema the other schema to check for compatibility
+   * @param resolver the resolver that controls whether the validation is case sensitive
+   * @param mode the validation mode that controls what changes are allowed
+   * @return sequence of error messages describing incompatibilities, empty if fully compatible
+   */
+  def validateSchemaCompatibility(
+      schema: StructType,
+      otherSchema: StructType,
+      resolver: Resolver,
+      mode: SchemaValidationMode): Seq[String] = {
+    checkSchemaColumnNameDuplication(schema, resolver)
+    checkSchemaColumnNameDuplication(otherSchema, resolver)
+    val errors = mutable.ArrayBuffer[String]()
+    validateTypeCompatibility(
+      schema,
+      otherSchema,
+      nullable = false,
+      otherNullable = false,
+      colPath = Seq.empty,
+      resolver,
+      mode,
+      errors)
+    errors.toSeq
+  }
+
+  private def validateTypeCompatibility(
+      dataType: DataType,
+      otherDataType: DataType,
+      nullable: Boolean,
+      otherNullable: Boolean,
+      colPath: Seq[String],
+      resolver: Resolver,
+      mode: SchemaValidationMode,
+      errors: mutable.ArrayBuffer[String]): Unit = {
+    if (nullable && !otherNullable) {
+      errors += s"${colPath.fullyQuoted} is no longer nullable"
+    } else if (!nullable && otherNullable) {
+      errors += s"${colPath.fullyQuoted} is nullable now"
+    }
+
+    (dataType, otherDataType) match {
+      case (StructType(fields), StructType(otherFields)) =>
+        val fieldsByName = index(fields, resolver)
+        val otherFieldsByName = index(otherFields, resolver)
+
+        fieldsByName.foreach { case (normalizedName, field) =>
+          otherFieldsByName.get(normalizedName) match {
+            case Some(otherField) =>
+              validateTypeCompatibility(
+                field.dataType,
+                otherField.dataType,
+                field.nullable,
+                otherField.nullable,
+                colPath :+ field.name,
+                resolver,
+                mode,
+                errors)
+            case None =>
+              errors += s"${formatField(colPath, field)} has been removed"
+          }
+        }
+
+        if (mode == PROHIBIT_CHANGES) {
+          otherFieldsByName.foreach { case (normalizedName, otherField) =>
+            if (!fieldsByName.contains(normalizedName)) {
+              errors += s"${formatField(colPath, otherField)} has been added"
+            }
+          }
+        }
+
+      case (ArrayType(elem, containsNull), ArrayType(otherElem, otherContainsNull)) =>
+        validateTypeCompatibility(
+          elem,
+          otherElem,
+          containsNull,
+          otherContainsNull,
+          colPath :+ "element",
+          resolver,
+          mode,
+          errors)
+
+      case (MapType(keyType, valueType, valueContainsNull),
+            MapType(otherKeyType, otherValueType, otherValueContainsNull)) =>
+        validateTypeCompatibility(
+          keyType,
+          otherKeyType,
+          nullable = false,
+          otherNullable = false,
+          colPath :+ "key",
+          resolver,
+          mode,
+          errors)
+        validateTypeCompatibility(
+          valueType,
+          otherValueType,
+          valueContainsNull,
+          otherValueContainsNull,
+          colPath :+ "value",
+          resolver,
+          mode,
+          errors)
+
+      case _ if dataType != otherDataType =>
+        errors += s"${colPath.fullyQuoted} type has changed " +
+          s"from ${dataType.sql} to ${otherDataType.sql}"
+
+      case _ =>
+        // OK
+    }
+  }
+
+  private def formatField(colPath: Seq[String], field: StructField): String = {
+    val nameParts = colPath :+ field.name
+    val name = nameParts.fullyQuoted
+    val dataType = field.dataType.sql
+    if (field.nullable) s"$name $dataType" else s"$name $dataType NOT NULL"
+  }
+
+  private def index(fields: Array[StructField], resolver: Resolver): Map[String, StructField] = {
+    if (isCaseSensitiveAnalysis(resolver)) {
+      fields.map(field => field.name -> field).toMap
+    } else {
+      fields.map(field => field.name.toLowerCase(Locale.ROOT) -> field).toMap
+    }
+  }
+}
+
+private[spark] sealed trait SchemaValidationMode
+
+private[spark] object SchemaValidationMode {
+  case object PROHIBIT_CHANGES extends SchemaValidationMode
+  case object ALLOW_NEW_FIELDS extends SchemaValidationMode
 }

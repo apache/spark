@@ -21,11 +21,15 @@ import java.io.File
 import java.util
 import java.util.OptionalLong
 
+import scala.jdk.CollectionConverters._
+
 import test.org.apache.spark.sql.connector._
 
 import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row}
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.ScalarSubquery
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Project}
 import org.apache.spark.sql.connector.catalog.{PartitionInternalRow, SupportsRead, Table, TableCapability, TableProvider}
 import org.apache.spark.sql.connector.catalog.TableCapability._
 import org.apache.spark.sql.connector.expressions.{Expression, FieldReference, Literal, NamedReference, NullOrdering, SortDirection, SortOrder, Transform}
@@ -35,7 +39,8 @@ import org.apache.spark.sql.connector.read.Scan.ColumnarSupportMode
 import org.apache.spark.sql.connector.read.partitioning.{KeyGroupedPartitioning, Partitioning, UnknownPartitioning}
 import org.apache.spark.sql.execution.SortExec
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
-import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2Relation, DataSourceV2ScanRelation}
+import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2Relation, DataSourceV2ScanRelation, V2ScanPartitioningAndOrdering}
+import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
 import org.apache.spark.sql.execution.exchange.{Exchange, ShuffleExchangeExec}
 import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector
 import org.apache.spark.sql.expressions.Window
@@ -454,7 +459,7 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
               .write.format(cls.getName)
               .option("path", path).mode("ignore").save()
           },
-          errorClass = "UNSUPPORTED_DATA_SOURCE_SAVE_MODE",
+          condition = "UNSUPPORTED_DATA_SOURCE_SAVE_MODE",
           parameters = Map(
             "source" -> cls.getName,
             "createMode" -> "\"Ignore\""
@@ -467,7 +472,7 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
               .write.format(cls.getName)
               .option("path", path).mode("error").save()
           },
-          errorClass = "UNSUPPORTED_DATA_SOURCE_SAVE_MODE",
+          condition = "UNSUPPORTED_DATA_SOURCE_SAVE_MODE",
           parameters = Map(
             "source" -> cls.getName,
             "createMode" -> "\"ErrorIfExists\""
@@ -534,7 +539,7 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
   test("SPARK-23315: get output from canonicalized data source v2 related plans") {
     def checkCanonicalizedOutput(
         df: DataFrame, logicalNumOutput: Int, physicalNumOutput: Int): Unit = {
-      val logical = df.queryExecution.logical.collect {
+      val logical = df.queryExecution.analyzed.collect {
         case d: DataSourceV2Relation => d
       }.head
       assert(logical.canonicalized.output.length == logicalNumOutput)
@@ -558,7 +563,7 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
         .read
         .option(optionName, false)
         .format(classOf[DataSourceV2WithSessionConfig].getName).load()
-      val options = df.queryExecution.logical.collectFirst {
+      val options = df.queryExecution.analyzed.collectFirst {
         case d: DataSourceV2Relation => d.options
       }.get
       assert(options.get(optionName) === "false")
@@ -651,7 +656,7 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
           exception = intercept[SparkUnsupportedOperationException] {
             sql(s"CREATE TABLE test(a INT, b INT) USING ${cls.getName}")
           },
-          errorClass = "CANNOT_CREATE_DATA_SOURCE_TABLE.EXTERNAL_METADATA_UNSUPPORTED",
+          condition = "CANNOT_CREATE_DATA_SOURCE_TABLE.EXTERNAL_METADATA_UNSUPPORTED",
           parameters = Map("tableName" -> "`default`.`test`", "provider" -> cls.getName)
         )
       }
@@ -732,7 +737,7 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
         exception = intercept[AnalysisException] {
           sql(s"CREATE TABLE test (x INT, y INT) USING ${cls.getName}")
         },
-        errorClass = "DATA_SOURCE_TABLE_SCHEMA_MISMATCH",
+        condition = "DATA_SOURCE_TABLE_SCHEMA_MISMATCH",
         parameters = Map(
           "dsSchema" -> "\"STRUCT<i: INT, j: INT>\"",
           "expectedSchema" -> "\"STRUCT<x: INT, y: INT>\""))
@@ -770,7 +775,7 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
         exception = intercept[AnalysisException] {
           sql(s"CREATE TABLE test USING ${cls.getName} AS VALUES (0, 1), (1, 2)")
         },
-        errorClass = "DATA_SOURCE_TABLE_SCHEMA_MISMATCH",
+        condition = "DATA_SOURCE_TABLE_SCHEMA_MISMATCH",
         parameters = Map(
           "dsSchema" -> "\"STRUCT<i: INT, j: INT>\"",
           "expectedSchema" -> "\"STRUCT<col1: INT, col2: INT>\""))
@@ -788,7 +793,7 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
                |AS VALUES ('a', 'b'), ('c', 'd') t(i, j)
                |""".stripMargin)
         },
-        errorClass = "DATA_SOURCE_TABLE_SCHEMA_MISMATCH",
+        condition = "DATA_SOURCE_TABLE_SCHEMA_MISMATCH",
         parameters = Map(
           "dsSchema" -> "\"STRUCT<i: INT, j: INT>\"",
           "expectedSchema" -> "\"STRUCT<i: STRING, j: STRING>\""))
@@ -819,7 +824,7 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
              |OPTIONS (PATH '$path')
              |AS VALUES (2, 3)
              |""".stripMargin)
-        checkAnswer(sql("SELECT * FROM test"), Seq(Row(0, 1), Row(0, 1), Row(1, 2), Row(2, 3)))
+        checkAnswer(sql("SELECT * FROM test"), Seq(Row(2, 3)))
         // Replace the table without the path options.
         sql(
           s"""
@@ -839,7 +844,7 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
         exception = intercept[SparkUnsupportedOperationException] {
           sql(s"CREATE TABLE test USING ${cls.getName} AS VALUES (0, 1)")
         },
-        errorClass = "CANNOT_CREATE_DATA_SOURCE_TABLE.EXTERNAL_METADATA_UNSUPPORTED",
+        condition = "CANNOT_CREATE_DATA_SOURCE_TABLE.EXTERNAL_METADATA_UNSUPPORTED",
         parameters = Map(
           "tableName" -> "`default`.`test`",
           "provider" -> "org.apache.spark.sql.connector.SimpleDataSourceV2"))
@@ -851,7 +856,7 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
         exception = intercept[AnalysisException] {
           sql(s"CREATE TABLE test USING ${cls.getName} AS SELECT * FROM VALUES (0, 1)")
         },
-        errorClass = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
+        condition = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
         parameters = Map(
           "tableName" -> "`spark_catalog`.`default`.`test`",
           "operation" -> "append in batch mode"))
@@ -881,7 +886,7 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
         exception = intercept[AnalysisException] {
           sql(s"INSERT INTO test VALUES (4)")
         },
-        errorClass = "INSERT_COLUMN_ARITY_MISMATCH.NOT_ENOUGH_DATA_COLUMNS",
+        condition = "INSERT_COLUMN_ARITY_MISMATCH.NOT_ENOUGH_DATA_COLUMNS",
         parameters = Map(
           "tableName" -> "`spark_catalog`.`default`.`test`",
           "tableColumns" -> "`x`, `y`",
@@ -893,7 +898,7 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
         exception = intercept[AnalysisException] {
           sql(s"INSERT INTO test(x, x) VALUES (4, 5)")
         },
-        errorClass = "COLUMN_ALREADY_EXISTS",
+        condition = "COLUMN_ALREADY_EXISTS",
         parameters = Map("columnName" -> "`x`"))
     }
   }
@@ -935,13 +940,13 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
         exception = intercept[AnalysisException] {
           sql("INSERT INTO test PARTITION(z = 1) VALUES (2)")
         },
-        errorClass = "NON_PARTITION_COLUMN",
+        condition = "NON_PARTITION_COLUMN",
         parameters = Map("columnName" -> "`z`"))
       checkError(
         exception = intercept[AnalysisException] {
           sql("INSERT INTO test PARTITION(x, y = 1) VALUES (2, 3)")
         },
-        errorClass = "INSERT_COLUMN_ARITY_MISMATCH.TOO_MANY_DATA_COLUMNS",
+        condition = "INSERT_COLUMN_ARITY_MISMATCH.TOO_MANY_DATA_COLUMNS",
         parameters = Map(
           "tableName" -> "`spark_catalog`.`default`.`test`",
           "tableColumns" -> "`x`, `y`",
@@ -959,7 +964,7 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
         exception = intercept[AnalysisException] {
           sql("INSERT OVERWRITE test PARTITION(x = 1) VALUES (5)")
         },
-        errorClass = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
+        condition = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
         parameters = Map(
           "tableName" -> "`spark_catalog`.`default`.`test`",
           "operation" -> "overwrite by filter in batch mode")
@@ -974,6 +979,183 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
       val df = sql("SELECT * FROM  t1 WHERE if(i = 1, i, 0) > 0")
       val result = df.collect()
       assert(result.length == 1)
+    }
+  }
+
+  test("SPARK-53809: scan canonicalization") {
+    val table = new SimpleDataSourceV2().getTable(CaseInsensitiveStringMap.empty())
+
+    def createDsv2ScanRelation(): DataSourceV2ScanRelation = {
+      val relation = DataSourceV2Relation.create(
+        table, None, None, CaseInsensitiveStringMap.empty())
+      val scan = relation.table.asReadable.newScanBuilder(relation.options).build()
+      DataSourceV2ScanRelation(relation, scan, relation.output)
+    }
+
+    // Create two DataSourceV2ScanRelation instances, representing the scan of the same table
+    val scanRelation1 = createDsv2ScanRelation()
+    val scanRelation2 = createDsv2ScanRelation()
+
+    // the two instances should not be the same, as they should have different attribute IDs
+    assert(scanRelation1 != scanRelation2,
+      "Two created DataSourceV2ScanRelation instances should not be the same")
+    assert(scanRelation1.output.map(_.exprId).toSet != scanRelation2.output.map(_.exprId).toSet,
+      "Output attributes should have different expression IDs before canonicalization")
+    assert(scanRelation1.relation.output.map(_.exprId).toSet !=
+      scanRelation2.relation.output.map(_.exprId).toSet,
+      "Relation output attributes should have different expression IDs before canonicalization")
+
+    // After canonicalization, the two instances should be equal
+    assert(scanRelation1.canonicalized == scanRelation2.canonicalized,
+      "Canonicalized DataSourceV2ScanRelation instances should be equal")
+  }
+
+  test("SPARK-54163: scan canonicalization for partitioning and ordering aware data source") {
+    val options = new CaseInsensitiveStringMap(Map(
+      "partitionKeys" -> "i",
+      "orderKeys" -> "i,j"
+    ).asJava)
+    val table = new OrderAndPartitionAwareDataSource().getTable(options)
+
+    def createDsv2ScanRelation(): DataSourceV2ScanRelation = {
+      val relation = DataSourceV2Relation.create(table, None, None, options)
+      val scan = relation.table.asReadable.newScanBuilder(relation.options).build()
+      val scanRelation = DataSourceV2ScanRelation(relation, scan, relation.output)
+      // Attach partitioning and ordering information to DataSourceV2ScanRelation
+      V2ScanPartitioningAndOrdering.apply(scanRelation).asInstanceOf[DataSourceV2ScanRelation]
+    }
+
+    // Create two DataSourceV2ScanRelation instances, representing the scan of the same table
+    val scanRelation1 = createDsv2ScanRelation()
+    val scanRelation2 = createDsv2ScanRelation()
+
+    // assert scanRelations have partitioning and ordering
+    assert(scanRelation1.keyGroupedPartitioning.isDefined &&
+      scanRelation1.keyGroupedPartitioning.get.nonEmpty,
+      "DataSourceV2ScanRelation should have key grouped partitioning")
+    assert(scanRelation1.ordering.isDefined && scanRelation1.ordering.get.nonEmpty,
+      "DataSourceV2ScanRelation should have ordering")
+
+    // the two instances should not be the same, as they should have different attribute IDs
+    assert(scanRelation1 != scanRelation2,
+      "Two created DataSourceV2ScanRelation instances should not be the same")
+    assert(scanRelation1.output.map(_.exprId).toSet != scanRelation2.output.map(_.exprId).toSet,
+      "Output attributes should have different expression IDs before canonicalization")
+    assert(scanRelation1.relation.output.map(_.exprId).toSet !=
+      scanRelation2.relation.output.map(_.exprId).toSet,
+      "Relation output attributes should have different expression IDs before canonicalization")
+    assert(scanRelation1.keyGroupedPartitioning.get.flatMap(_.references.map(_.exprId)).toSet !=
+      scanRelation2.keyGroupedPartitioning.get.flatMap(_.references.map(_.exprId)).toSet,
+      "Partitioning columns should have different expression IDs before canonicalization")
+    assert(scanRelation1.ordering.get.flatMap(_.references.map(_.exprId)).toSet !=
+      scanRelation2.ordering.get.flatMap(_.references.map(_.exprId)).toSet,
+      "Ordering columns should have different expression IDs before canonicalization")
+
+    // After canonicalization, the two instances should be equal
+    assert(scanRelation1.canonicalized == scanRelation2.canonicalized,
+      "Canonicalized DataSourceV2ScanRelation instances should be equal")
+  }
+
+  test("SPARK-53809: check mergeScalarSubqueries is effective for DataSourceV2ScanRelation") {
+    val df = spark.read.format(classOf[SimpleDataSourceV2].getName).load()
+    df.createOrReplaceTempView("df")
+
+    val query = sql("select (select max(i) from df) as max_i, (select min(i) from df) as min_i")
+    val optimizedPlan = query.queryExecution.optimizedPlan
+
+    // check optimizedPlan merged scalar subqueries `select max(i), min(i) from df`
+    val sub1 = optimizedPlan.asInstanceOf[Project].projectList.head.collect {
+      case s: ScalarSubquery => s
+    }
+    val sub2 = optimizedPlan.asInstanceOf[Project].projectList(1).collect {
+      case s: ScalarSubquery => s
+    }
+
+    // Both subqueries should reference the same merged plan `select max(i), min(i) from df`
+    assert(sub1.nonEmpty && sub2.nonEmpty, "Both scalar subqueries should exist")
+    assert(sub1.head.plan == sub2.head.plan,
+      "Both subqueries should reference the same merged plan")
+
+    // Extract the aggregate from the merged plan sub1
+    val agg = sub1.head.plan.collect {
+      case a: Aggregate => a
+    }.head
+
+    // Check that the aggregate contains both max(i) and min(i)
+    val aggFunctionSet = agg.aggregateExpressions.flatMap { expr =>
+      expr.collect {
+        case ae: org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression =>
+          ae.aggregateFunction
+      }
+    }.toSet
+
+    assert(aggFunctionSet.size == 2, "Aggregate should contain exactly two aggregate functions")
+    assert(aggFunctionSet
+      .exists(_.isInstanceOf[org.apache.spark.sql.catalyst.expressions.aggregate.Max]),
+      "Aggregate should contain max(i)")
+    assert(aggFunctionSet
+      .exists(_.isInstanceOf[org.apache.spark.sql.catalyst.expressions.aggregate.Min]),
+      "Aggregate should contain min(i)")
+
+    // Verify the query produces correct results
+    checkAnswer(query, Row(9, 0))
+  }
+
+  test(
+    "SPARK-54163: check mergeScalarSubqueries is effective for OrderAndPartitionAwareDataSource"
+  ) {
+    withSQLConf(SQLConf.V2_BUCKETING_ENABLED.key -> "true") {
+      val options = Map(
+        "partitionKeys" -> "i",
+        "orderKeys" -> "i,j"
+      )
+
+      // Create the OrderAndPartitionAwareDataSource DataFrame
+      val df = spark.read
+        .format(classOf[OrderAndPartitionAwareDataSource].getName)
+        .options(options)
+        .load()
+      df.createOrReplaceTempView("df")
+
+      val query = sql("select (select max(i) from df) as max_i, (select min(i) from df) as min_i")
+      val optimizedPlan = query.queryExecution.optimizedPlan
+
+      // check optimizedPlan merged scalar subqueries `select max(i), min(i) from df`
+      val sub1 = optimizedPlan.asInstanceOf[Project].projectList.head.collect {
+        case s: ScalarSubquery => s
+      }
+      val sub2 = optimizedPlan.asInstanceOf[Project].projectList(1).collect {
+        case s: ScalarSubquery => s
+      }
+
+      // Both subqueries should reference the same merged plan `select max(i), min(i) from df`
+      assert(sub1.nonEmpty && sub2.nonEmpty, "Both scalar subqueries should exist")
+      assert(sub1.head.plan == sub2.head.plan,
+        "Both subqueries should reference the same merged plan")
+
+      // Extract the aggregate from the merged plan sub1
+      val agg = sub1.head.plan.collect {
+        case a: Aggregate => a
+      }.head
+
+      // Check that the aggregate contains both max(i) and min(i)
+      val aggFunctionSet = agg.aggregateExpressions.flatMap { expr =>
+        expr.collect {
+          case ae: org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression =>
+            ae.aggregateFunction
+        }
+      }.toSet
+
+      assert(aggFunctionSet.size == 2, "Aggregate should contain exactly two aggregate functions")
+      assert(aggFunctionSet
+        .exists(_.isInstanceOf[org.apache.spark.sql.catalyst.expressions.aggregate.Max]),
+        "Aggregate should contain max(i)")
+      assert(aggFunctionSet
+        .exists(_.isInstanceOf[org.apache.spark.sql.catalyst.expressions.aggregate.Min]),
+        "Aggregate should contain min(i)")
+
+      // Verify the query produces correct results
+      checkAnswer(query, Row(4, 1))
     }
   }
 }
@@ -1017,6 +1199,18 @@ abstract class SimpleScanBuilder extends ScanBuilder
   override def readSchema(): StructType = TestingV2Source.schema
 
   override def createReaderFactory(): PartitionReaderFactory = SimpleReaderFactory
+
+  override def equals(obj: Any): Boolean = {
+    obj match {
+      case s: Scan =>
+        this.readSchema() == s.readSchema()
+      case _ => false
+    }
+  }
+
+  override def hashCode(): Int = {
+    this.readSchema().hashCode()
+  }
 }
 
 trait TestingV2Source extends TableProvider {
@@ -1380,7 +1574,7 @@ class PartitionAwareDataSource extends TestingV2Source {
 
 class OrderAndPartitionAwareDataSource extends PartitionAwareDataSource {
 
-  class MyScanBuilder(
+  class OrderAwareScanBuilder(
       val partitionKeys: Option[Seq[String]],
       val orderKeys: Seq[String])
     extends SimpleScanBuilder
@@ -1414,7 +1608,7 @@ class OrderAndPartitionAwareDataSource extends PartitionAwareDataSource {
 
   override def getTable(options: CaseInsensitiveStringMap): Table = new SimpleBatchTable {
     override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
-      new MyScanBuilder(
+      new OrderAwareScanBuilder(
         Option(options.get("partitionKeys")).map(_.split(",").toImmutableArraySeq),
         Option(options.get("orderKeys")).map(_.split(",").toSeq).getOrElse(Seq.empty)
       )
@@ -1518,7 +1712,7 @@ class SupportsExternalMetadataWritableDataSource extends SimpleWritableDataSourc
 
 class ReportStatisticsDataSource extends SimpleWritableDataSource {
 
-  class MyScanBuilder extends SimpleScanBuilder
+  class ReportStatisticsScanBuilder extends SimpleScanBuilder
     with SupportsReportStatistics {
     override def estimateStatistics(): Statistics = {
       new Statistics {
@@ -1536,7 +1730,7 @@ class ReportStatisticsDataSource extends SimpleWritableDataSource {
   override def getTable(options: CaseInsensitiveStringMap): Table = {
     new SimpleBatchTable {
       override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
-        new MyScanBuilder
+        new ReportStatisticsScanBuilder
       }
     }
   }

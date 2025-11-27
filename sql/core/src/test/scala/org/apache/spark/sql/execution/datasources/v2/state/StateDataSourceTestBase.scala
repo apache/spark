@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.datasources.v2.state
 import java.sql.Timestamp
 
 import org.apache.spark.sql.{DataFrame, Dataset}
-import org.apache.spark.sql.execution.streaming.MemoryStream
+import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.execution.streaming.state.StateStore
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -383,7 +383,7 @@ trait StateDataSourceTestBase extends StreamTest with StateStoreMetricsTest {
     }
   }
 
-  private def getStreamStreamJoinQuery(inputStream: MemoryStream[(Int, Long)]): DataFrame = {
+  protected def getStreamStreamJoinQuery(inputStream: MemoryStream[(Int, Long)]): DataFrame = {
     val df = inputStream.toDS()
       .select(col("_1").as("value"), timestamp_seconds($"_2").as("timestamp"))
 

@@ -49,11 +49,12 @@ class FrameBinaryOpsMixin:
         self.assert_eq(psdf + psdf.loc[:, ["A", "B"]], pdf + pdf.loc[:, ["A", "B"]])
         self.assert_eq(psdf.loc[:, ["A", "B"]] + psdf, pdf.loc[:, ["A", "B"]] + pdf)
 
-        self.assertRaisesRegex(
-            ValueError,
-            "it comes from a different dataframe",
-            lambda: ps.range(10).add(ps.range(10)),
-        )
+        with ps.option_context("compute.ops_on_diff_frames", False):
+            self.assertRaisesRegex(
+                ValueError,
+                "it comes from a different dataframe",
+                lambda: ps.range(10).add(ps.range(10)),
+            )
 
         self.assertRaisesRegex(
             TypeError,
@@ -109,12 +110,93 @@ class FrameBinaryOpsMixin:
         psdf = ps.DataFrame({"a": ["x"], "b": ["y"]})
         self.assertRaisesRegex(TypeError, ks_err_msg, lambda: psdf["a"] - psdf["b"])
 
+    def test_divide_by_zero_behavior(self):
+        # float / float
+        # np.float32
+        pdf = pd.DataFrame(
+            {
+                "a": [1.0, -1.0, 0.0, np.nan],
+                "b": [0.0, 0.0, 0.0, 0.0],
+            },
+            dtype=np.float32,
+        )
+        psdf = ps.from_pandas(pdf)
+        self.assert_eq(psdf["a"] / psdf["b"], pdf["a"] / pdf["b"])
+
+        # np.float64
+        pdf = pd.DataFrame(
+            {
+                "a": [1.0, -1.0, 0.0, np.nan],
+                "b": [0.0, 0.0, 0.0, 0.0],
+            },
+            dtype=np.float64,
+        )
+        psdf = ps.from_pandas(pdf)
+
+        self.assert_eq(psdf["a"] / psdf["b"], pdf["a"] / pdf["b"])
+
+        # int / int
+        for dtype in [np.int32, np.int64]:
+            pdf = pd.DataFrame(
+                {
+                    "a": [1, -1, 0],
+                    "b": [0, 0, 0],
+                },
+                dtype=dtype,
+            )
+            psdf = ps.from_pandas(pdf)
+            self.assert_eq(psdf["a"] / psdf["b"], pdf["a"] / pdf["b"])
+
+        # float / int
+        pdf = pd.DataFrame(
+            {
+                "a": pd.Series([1.0, -1.0, 0.0, np.nan]),
+                "b": pd.Series([0, 0, 0, 0]),
+            }
+        )
+        psdf = ps.from_pandas(pdf)
+        self.assert_eq(psdf["a"] / psdf["b"], pdf["a"] / pdf["b"])
+
+        # int / float
+        pdf = pd.DataFrame(
+            {
+                "a": pd.Series([1, -1, 0]),
+                "b": pd.Series([0.0, 0.0, 0.0]),
+            }
+        )
+        psdf = ps.from_pandas(pdf)
+        self.assert_eq(psdf["a"] / psdf["b"], pdf["a"] / pdf["b"])
+
+        # bool
+        pdf = pd.DataFrame(
+            {
+                "a": pd.Series([True, False]),
+                "b": pd.Series([0, 0]),
+            }
+        )
+        psdf = ps.from_pandas(pdf)
+        self.assert_eq(psdf["a"] / psdf["b"], pdf["a"] / pdf["b"])
+
+        pdf = pd.DataFrame(
+            {
+                "a": pd.Series([True, False]),
+                "b": pd.Series([0.0, 0.0]),
+            }
+        )
+        psdf = ps.from_pandas(pdf)
+        self.assert_eq(psdf["a"] / psdf["b"], pdf["a"] / pdf["b"])
+
     def test_binary_operator_truediv(self):
         # Positive
         pdf = pd.DataFrame({"a": [3], "b": [2]})
         psdf = ps.from_pandas(pdf)
 
         self.assert_eq(psdf["a"] / psdf["b"], pdf["a"] / pdf["b"])
+
+        pser = pd.Series([1.1, 2.2, 3.3], dtype=np.float32)
+        psser = ps.from_pandas(pser)
+        self.assert_eq(psser / 1, pser / 1)
+        self.assert_eq(psser / 0, pser / 0)
 
         # Negative
         psdf = ps.DataFrame({"a": ["x"], "b": [1]})
@@ -129,7 +211,15 @@ class FrameBinaryOpsMixin:
         self.assertRaisesRegex(TypeError, ks_err_msg, lambda: 1 / psdf["a"])
 
     def test_binary_operator_floordiv(self):
-        psdf = ps.DataFrame({"a": ["x"], "b": [1]})
+        pdf = pd.DataFrame({"a": ["x"], "b": [1], "c": [1.0], "d": [0]})
+        psdf = ps.from_pandas(pdf)
+        self.assert_eq(pdf["b"] // 0, psdf["b"] // 0)
+        self.assert_eq(pdf["c"] // 0, psdf["c"] // 0)
+        self.assert_eq(pdf["d"] // 0, psdf["d"] // 0)
+
+        pser = pd.Series([1.1, 2.2, 3.3], dtype=np.float32)
+        psser = ps.from_pandas(pser)
+        self.assert_eq(psser // 1, pser // 1)
 
         ks_err_msg = "Floor division can not be applied to strings"
         self.assertRaisesRegex(TypeError, ks_err_msg, lambda: psdf["a"] // psdf["b"])
@@ -142,10 +232,12 @@ class FrameBinaryOpsMixin:
 
     def test_binary_operator_mod(self):
         # Positive
-        pdf = pd.DataFrame({"a": [3], "b": [2]})
+        pdf = pd.DataFrame({"a": [3], "b": [2], "c": [0]})
         psdf = ps.from_pandas(pdf)
 
         self.assert_eq(psdf["a"] % psdf["b"], pdf["a"] % pdf["b"])
+        self.assert_eq(psdf["a"] % 0, pdf["a"] % 0)
+        self.assert_eq(1 % psdf["c"], 1 % pdf["c"])
 
         # Negative
         psdf = ps.DataFrame({"a": ["x"], "b": [1]})

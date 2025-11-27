@@ -23,13 +23,13 @@ import org.apache.hadoop.io.compress.{CompressionCodecFactory, SplittableCompres
 import org.apache.hadoop.mapreduce.Job
 
 import org.apache.spark.paths.SparkPath
-import org.apache.spark.sql._
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.{SessionStateHelper, SQLConf}
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types._
 
@@ -183,10 +183,22 @@ trait FileFormat {
   def supportDataType(dataType: DataType): Boolean = true
 
   /**
+   * Returns whether this format supports the given [[DataType]] in the read-only path.
+   * By default, it is the same as `supportDataType`. In certain file formats, it can allow more
+   * data types than `supportDataType`. At this point, only `CSVFileFormat` overrides it.
+   */
+  def supportReadDataType(dataType: DataType): Boolean = supportDataType(dataType)
+
+  /**
    * Returns whether this format supports the given filed name in read/write path.
    * By default all field name is supported.
    */
   def supportFieldName(name: String): Boolean = true
+
+  /**
+   * Returns whether this format allows duplicated column names in the input query during writing.
+   */
+  def allowDuplicatedColumnNames: Boolean = false
 
   /**
    * All fields the file format's _metadata struct defines.
@@ -223,12 +235,6 @@ trait FileFormat {
    */
   def fileConstantMetadataExtractors: Map[String, PartitionedFile => Any] =
     FileFormat.BASE_METADATA_EXTRACTORS
-
-  /**
-   * Returns whether the file format supports filter push down
-   * for non utf8 binary collated columns.
-   */
-  def supportsCollationPushDown: Boolean = false
 }
 
 object FileFormat {
@@ -350,7 +356,7 @@ object FileFormat {
 /**
  * The base class file format that is based on text file.
  */
-abstract class TextBasedFileFormat extends FileFormat {
+abstract class TextBasedFileFormat extends FileFormat with SessionStateHelper {
   private var codecFactory: CompressionCodecFactory = _
 
   override def isSplitable(
@@ -358,8 +364,7 @@ abstract class TextBasedFileFormat extends FileFormat {
       options: Map[String, String],
       path: Path): Boolean = {
     if (codecFactory == null) {
-      codecFactory = new CompressionCodecFactory(
-        sparkSession.sessionState.newHadoopConfWithOptions(options))
+      codecFactory = new CompressionCodecFactory(getHadoopConf(sparkSession, options))
     }
     val codec = codecFactory.getCodec(path)
     codec == null || codec.isInstanceOf[SplittableCompressionCodec]

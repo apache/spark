@@ -6,7 +6,7 @@ AS testData(a, b)
 -- !query analysis
 CreateViewCommand `testData`, SELECT * FROM VALUES
 (1, 1), (1, 2), (2, 1), (2, 2), (3, 1), (3, 2), (null, 1), (3, null), (null, null)
-AS testData(a, b), false, true, LocalTempView, true
+AS testData(a, b), false, true, LocalTempView, UNSUPPORTED, true
    +- Project [a#x, b#x]
       +- SubqueryAlias testData
          +- LocalRelation [a#x, b#x]
@@ -35,7 +35,7 @@ CreateViewCommand `EMP`, SELECT * FROM VALUES
   (600, "emp 6 - no dept", date "2001-01-01", 400.00D, 100),
   (700, "emp 7", date "2010-01-01", 400.00D, 100),
   (800, "emp 8", date "2016-01-01", 150.00D, 70)
-AS EMP(id, emp_name, hiredate, salary, dept_id), false, true, LocalTempView, true
+AS EMP(id, emp_name, hiredate, salary, dept_id), false, true, LocalTempView, UNSUPPORTED, true
    +- Project [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
       +- SubqueryAlias EMP
          +- LocalRelation [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
@@ -58,7 +58,7 @@ CreateViewCommand `DEPT`, SELECT * FROM VALUES
   (40, "dept 4 - unassigned", "OR"),
   (50, "dept 5 - unassigned", "NJ"),
   (70, "dept 7", "FL")
-AS DEPT(dept_id, dept_name, state), false, true, LocalTempView, true
+AS DEPT(dept_id, dept_name, state), false, true, LocalTempView, UNSUPPORTED, true
    +- Project [dept_id#x, dept_name#x, state#x]
       +- SubqueryAlias DEPT
          +- LocalRelation [dept_id#x, dept_name#x, state#x]
@@ -75,7 +75,7 @@ CreateViewCommand `FilterExpressionTestData`, SELECT * FROM VALUES
   (1, 2, "asd"),
   (3, 4, "fgh"),
   (5, 6, "jkl")
-AS FilterExpressionTestData(num1, num2, str), false, true, LocalTempView, true
+AS FilterExpressionTestData(num1, num2, str), false, true, LocalTempView, UNSUPPORTED, true
    +- Project [num1#x, num2#x, str#x]
       +- SubqueryAlias FilterExpressionTestData
          +- LocalRelation [num1#x, num2#x, str#x]
@@ -119,7 +119,7 @@ SELECT COUNT(id) FILTER (WHERE hiredate = date "2001-01-01") FROM emp
 -- !query
 SELECT COUNT(id) FILTER (WHERE hiredate = to_date('2001-01-01 00:00:00')) FROM emp
 -- !query analysis
-Aggregate [count(id#x) FILTER (WHERE (hiredate#x = to_date(2001-01-01 00:00:00, None, Some(America/Los_Angeles), false))) AS count(id) FILTER (WHERE (hiredate = to_date(2001-01-01 00:00:00)))#xL]
+Aggregate [count(id#x) FILTER (WHERE (hiredate#x = to_date(2001-01-01 00:00:00, None, Some(America/Los_Angeles), true))) AS count(id) FILTER (WHERE (hiredate = to_date(2001-01-01 00:00:00)))#xL]
 +- SubqueryAlias emp
    +- View (`EMP`, [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x])
       +- Project [cast(id#x as int) AS id#x, cast(emp_name#x as string) AS emp_name#x, cast(hiredate#x as date) AS hiredate#x, cast(salary#x as double) AS salary#x, cast(dept_id#x as int) AS dept_id#x]
@@ -131,7 +131,7 @@ Aggregate [count(id#x) FILTER (WHERE (hiredate#x = to_date(2001-01-01 00:00:00, 
 -- !query
 SELECT COUNT(id) FILTER (WHERE hiredate = to_timestamp("2001-01-01 00:00:00")) FROM emp
 -- !query analysis
-Aggregate [count(id#x) FILTER (WHERE (cast(hiredate#x as timestamp) = to_timestamp(2001-01-01 00:00:00, None, TimestampType, Some(America/Los_Angeles), false))) AS count(id) FILTER (WHERE (hiredate = to_timestamp(2001-01-01 00:00:00)))#xL]
+Aggregate [count(id#x) FILTER (WHERE (cast(hiredate#x as timestamp) = to_timestamp(2001-01-01 00:00:00, None, TimestampType, Some(America/Los_Angeles), true))) AS count(id) FILTER (WHERE (hiredate = to_timestamp(2001-01-01 00:00:00)))#xL]
 +- SubqueryAlias emp
    +- View (`EMP`, [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x])
       +- Project [cast(id#x as int) AS id#x, cast(emp_name#x as string) AS emp_name#x, cast(hiredate#x as date) AS hiredate#x, cast(salary#x as double) AS salary#x, cast(dept_id#x as int) AS dept_id#x]
@@ -179,7 +179,7 @@ Aggregate [count(distinct id#x) AS count(DISTINCT id)#xL, count(distinct id#x) F
 -- !query
 SELECT COUNT(DISTINCT id) FILTER (WHERE hiredate = to_timestamp("2001-01-01 00:00:00")), COUNT(DISTINCT id) FILTER (WHERE hiredate = to_date('2001-01-01 00:00:00')) FROM emp
 -- !query analysis
-Aggregate [count(distinct id#x) FILTER (WHERE (cast(hiredate#x as timestamp) = to_timestamp(2001-01-01 00:00:00, None, TimestampType, Some(America/Los_Angeles), false))) AS count(DISTINCT id) FILTER (WHERE (hiredate = to_timestamp(2001-01-01 00:00:00)))#xL, count(distinct id#x) FILTER (WHERE (hiredate#x = to_date(2001-01-01 00:00:00, None, Some(America/Los_Angeles), false))) AS count(DISTINCT id) FILTER (WHERE (hiredate = to_date(2001-01-01 00:00:00)))#xL]
+Aggregate [count(distinct id#x) FILTER (WHERE (cast(hiredate#x as timestamp) = to_timestamp(2001-01-01 00:00:00, None, TimestampType, Some(America/Los_Angeles), true))) AS count(DISTINCT id) FILTER (WHERE (hiredate = to_timestamp(2001-01-01 00:00:00)))#xL, count(distinct id#x) FILTER (WHERE (hiredate#x = to_date(2001-01-01 00:00:00, None, Some(America/Los_Angeles), true))) AS count(DISTINCT id) FILTER (WHERE (hiredate = to_date(2001-01-01 00:00:00)))#xL]
 +- SubqueryAlias emp
    +- View (`EMP`, [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x])
       +- Project [cast(id#x as int) AS id#x, cast(emp_name#x as string) AS emp_name#x, cast(hiredate#x as date) AS hiredate#x, cast(salary#x as double) AS salary#x, cast(dept_id#x as int) AS dept_id#x]
@@ -373,7 +373,7 @@ SELECT dept_id, SUM(salary) FILTER (WHERE hiredate > date "2003-01-01") FROM emp
 -- !query
 SELECT dept_id, SUM(salary) FILTER (WHERE hiredate > to_date("2003-01-01")) FROM emp GROUP BY dept_id
 -- !query analysis
-Aggregate [dept_id#x], [dept_id#x, sum(salary#x) FILTER (WHERE (hiredate#x > to_date(2003-01-01, None, Some(America/Los_Angeles), false))) AS sum(salary) FILTER (WHERE (hiredate > to_date(2003-01-01)))#x]
+Aggregate [dept_id#x], [dept_id#x, sum(salary#x) FILTER (WHERE (hiredate#x > to_date(2003-01-01, None, Some(America/Los_Angeles), true))) AS sum(salary) FILTER (WHERE (hiredate > to_date(2003-01-01)))#x]
 +- SubqueryAlias emp
    +- View (`EMP`, [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x])
       +- Project [cast(id#x as int) AS id#x, cast(emp_name#x as string) AS emp_name#x, cast(hiredate#x as date) AS hiredate#x, cast(salary#x as double) AS salary#x, cast(dept_id#x as int) AS dept_id#x]
@@ -385,7 +385,7 @@ Aggregate [dept_id#x], [dept_id#x, sum(salary#x) FILTER (WHERE (hiredate#x > to_
 -- !query
 SELECT dept_id, SUM(salary) FILTER (WHERE hiredate > to_timestamp("2003-01-01 00:00:00")) FROM emp GROUP BY dept_id
 -- !query analysis
-Aggregate [dept_id#x], [dept_id#x, sum(salary#x) FILTER (WHERE (cast(hiredate#x as timestamp) > to_timestamp(2003-01-01 00:00:00, None, TimestampType, Some(America/Los_Angeles), false))) AS sum(salary) FILTER (WHERE (hiredate > to_timestamp(2003-01-01 00:00:00)))#x]
+Aggregate [dept_id#x], [dept_id#x, sum(salary#x) FILTER (WHERE (cast(hiredate#x as timestamp) > to_timestamp(2003-01-01 00:00:00, None, TimestampType, Some(America/Los_Angeles), true))) AS sum(salary) FILTER (WHERE (hiredate > to_timestamp(2003-01-01 00:00:00)))#x]
 +- SubqueryAlias emp
    +- View (`EMP`, [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x])
       +- Project [cast(id#x as int) AS id#x, cast(emp_name#x as string) AS emp_name#x, cast(hiredate#x as date) AS hiredate#x, cast(salary#x as double) AS salary#x, cast(dept_id#x as int) AS dept_id#x]
@@ -481,7 +481,7 @@ SELECT 'foo', SUM(salary) FILTER (WHERE hiredate >= date "2003-01-01") FROM emp 
 -- !query
 SELECT 'foo', SUM(salary) FILTER (WHERE hiredate >= to_date("2003-01-01")) FROM emp GROUP BY 1
 -- !query analysis
-Aggregate [foo], [foo AS foo#x, sum(salary#x) FILTER (WHERE (hiredate#x >= to_date(2003-01-01, None, Some(America/Los_Angeles), false))) AS sum(salary) FILTER (WHERE (hiredate >= to_date(2003-01-01)))#x]
+Aggregate [foo], [foo AS foo#x, sum(salary#x) FILTER (WHERE (hiredate#x >= to_date(2003-01-01, None, Some(America/Los_Angeles), true))) AS sum(salary) FILTER (WHERE (hiredate >= to_date(2003-01-01)))#x]
 +- SubqueryAlias emp
    +- View (`EMP`, [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x])
       +- Project [cast(id#x as int) AS id#x, cast(emp_name#x as string) AS emp_name#x, cast(hiredate#x as date) AS hiredate#x, cast(salary#x as double) AS salary#x, cast(dept_id#x as int) AS dept_id#x]
@@ -493,7 +493,7 @@ Aggregate [foo], [foo AS foo#x, sum(salary#x) FILTER (WHERE (hiredate#x >= to_da
 -- !query
 SELECT 'foo', SUM(salary) FILTER (WHERE hiredate >= to_timestamp("2003-01-01")) FROM emp GROUP BY 1
 -- !query analysis
-Aggregate [foo], [foo AS foo#x, sum(salary#x) FILTER (WHERE (cast(hiredate#x as timestamp) >= to_timestamp(2003-01-01, None, TimestampType, Some(America/Los_Angeles), false))) AS sum(salary) FILTER (WHERE (hiredate >= to_timestamp(2003-01-01)))#x]
+Aggregate [foo], [foo AS foo#x, sum(salary#x) FILTER (WHERE (cast(hiredate#x as timestamp) >= to_timestamp(2003-01-01, None, TimestampType, Some(America/Los_Angeles), true))) AS sum(salary) FILTER (WHERE (hiredate >= to_timestamp(2003-01-01)))#x]
 +- SubqueryAlias emp
    +- View (`EMP`, [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x])
       +- Project [cast(id#x as int) AS id#x, cast(emp_name#x as string) AS emp_name#x, cast(hiredate#x as date) AS hiredate#x, cast(salary#x as double) AS salary#x, cast(dept_id#x as int) AS dept_id#x]

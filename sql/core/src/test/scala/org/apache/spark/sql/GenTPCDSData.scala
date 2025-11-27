@@ -225,7 +225,7 @@ class TPCDSTables(spark: SparkSession, dsdgenDir: String, scaleFactor: Int)
           // datagen speed files will be truncated to maxRecordsPerFile value, so the final
           // result will be the same.
           val numRows = data.count()
-          val maxRecordPerFile = spark.conf.get(SQLConf.MAX_RECORDS_PER_FILE)
+          val maxRecordPerFile = spark.sessionState.conf.getConf(SQLConf.MAX_RECORDS_PER_FILE)
 
           if (maxRecordPerFile > 0 && numRows > maxRecordPerFile) {
             val numFiles = (numRows.toDouble/maxRecordPerFile).ceil.toInt
@@ -359,7 +359,7 @@ class GenTPCDSDataConfig(args: Array[String]) {
   private def printUsageAndExit(exitCode: Int): Unit = {
     // scalastyle:off
     System.err.println("""
-      |build/sbt "test:runMain <this class> [Options]"
+      |build/sbt "Test/runMain <this class> [Options]"
       |Options:
       |  --master                        the Spark master to use, default to local[*]
       |  --dsdgenDir                     location of dsdgen

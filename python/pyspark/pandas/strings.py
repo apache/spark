@@ -18,12 +18,14 @@
 """
 String functions on pandas-on-Spark Series
 """
+from functools import wraps
 from typing import (
     Any,
     Callable,
     Dict,
     List,
     Optional,
+    TypeVar,
     Union,
     cast,
     no_type_check,
@@ -32,10 +34,23 @@ from typing import (
 import numpy as np
 import pandas as pd
 
+from pyspark.pandas.utils import ansi_mode_context, is_ansi_mode_enabled
 from pyspark.sql.types import StringType, BinaryType, ArrayType, LongType, MapType
 from pyspark.sql import functions as F
 from pyspark.sql.functions import pandas_udf
 import pyspark.pandas as ps
+
+
+FuncT = TypeVar("FuncT", bound=Callable[..., Any])
+
+
+def with_ansi_mode_context(f: FuncT) -> FuncT:
+    @wraps(f)
+    def _with_ansi_mode_context(self: "StringMethods", *args: Any, **kwargs: Any) -> Any:
+        with ansi_mode_context(self._data._internal.spark_frame.sparkSession):
+            return f(self, *args, **kwargs)
+
+    return cast(FuncT, _with_ansi_mode_context)
 
 
 class StringMethods:
@@ -862,7 +877,7 @@ class StringMethods:
         --------
         Returning a Series of booleans using only a literal pattern.
 
-        >>> s1 = ps.Series(['Mouse', 'dog', 'house and parrot', '23', np.NaN])
+        >>> s1 = ps.Series(['Mouse', 'dog', 'house and parrot', '23', np.nan])
         >>> s1.str.contains('og', regex=False)
         0    False
         1     True
@@ -965,7 +980,7 @@ class StringMethods:
 
         Examples
         --------
-        >>> s = ps.Series(['A', 'B', 'Aaba', 'Baca', np.NaN, 'CABA', 'cat'])
+        >>> s = ps.Series(['A', 'B', 'Aaba', 'Baca', np.nan, 'CABA', 'cat'])
         >>> s.str.count('a')
         0    0.0
         1    0.0
@@ -1327,7 +1342,7 @@ class StringMethods:
 
         return self._data.pandas_on_spark.transform_batch(pandas_ljust)
 
-    def match(self, pat: str, case: bool = True, flags: int = 0, na: Any = np.NaN) -> "ps.Series":
+    def match(self, pat: str, case: bool = True, flags: int = 0, na: Any = np.nan) -> "ps.Series":
         """
         Determine if each string matches a regular expression.
 
@@ -1353,7 +1368,7 @@ class StringMethods:
 
         Examples
         --------
-        >>> s = ps.Series(['Mouse', 'dog', 'house and parrot', '23', np.NaN])
+        >>> s = ps.Series(['Mouse', 'dog', 'house and parrot', '23', np.nan])
         >>> s.str.match('dog')
         0    False
         1     True
@@ -1889,6 +1904,7 @@ class StringMethods:
 
         return self._data.pandas_on_spark.transform_batch(pandas_slice_replace)
 
+    @with_ansi_mode_context
     def split(
         self, pat: Optional[str] = None, n: int = -1, expand: bool = False
     ) -> Union["ps.Series", "ps.DataFrame"]:
@@ -2031,7 +2047,13 @@ class StringMethods:
         if expand:
             psdf = psser.to_frame()
             scol = psdf._internal.data_spark_columns[0]
-            spark_columns = [scol[i].alias(str(i)) for i in range(n + 1)]
+            spark_session = self._data._internal.spark_frame.sparkSession
+            if is_ansi_mode_enabled(spark_session):
+                spark_columns = [
+                    F.try_element_at(scol, F.lit(i + 1)).alias(str(i)) for i in range(n + 1)
+                ]
+            else:
+                spark_columns = [scol[i].alias(str(i)) for i in range(n + 1)]
             column_labels = [(i,) for i in range(n + 1)]
             internal = psdf._internal.with_new_columns(
                 spark_columns,
@@ -2045,6 +2067,7 @@ class StringMethods:
         else:
             return psser
 
+    @with_ansi_mode_context
     def rsplit(
         self, pat: Optional[str] = None, n: int = -1, expand: bool = False
     ) -> Union["ps.Series", "ps.DataFrame"]:
@@ -2178,7 +2201,13 @@ class StringMethods:
         if expand:
             psdf = psser.to_frame()
             scol = psdf._internal.data_spark_columns[0]
-            spark_columns = [scol[i].alias(str(i)) for i in range(n + 1)]
+            spark_session = self._data._internal.spark_frame.sparkSession
+            if is_ansi_mode_enabled(spark_session):
+                spark_columns = [
+                    F.try_element_at(scol, F.lit(i + 1)).alias(str(i)) for i in range(n + 1)
+                ]
+            else:
+                spark_columns = [scol[i].alias(str(i)) for i in range(n + 1)]
             column_labels = [(i,) for i in range(n + 1)]
             internal = psdf._internal.with_new_columns(
                 spark_columns,

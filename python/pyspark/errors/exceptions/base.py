@@ -14,15 +14,21 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import warnings
 from abc import ABC, abstractmethod
 from enum import Enum
-from typing import Dict, Optional, cast, Iterable, TYPE_CHECKING, List
+from typing import Any, Dict, Optional, TypeVar, cast, Iterable, TYPE_CHECKING, List
 
+from pyspark.errors.exceptions.tblib import Traceback
 from pyspark.errors.utils import ErrorClassesReader
+from pyspark.logger import PySparkLogger
 from pickle import PicklingError
 
 if TYPE_CHECKING:
     from pyspark.sql.types import Row
+
+
+T = TypeVar("T", bound="PySparkException")
 
 
 class PySparkException(Exception):
@@ -33,30 +39,30 @@ class PySparkException(Exception):
     def __init__(
         self,
         message: Optional[str] = None,
-        error_class: Optional[str] = None,
-        message_parameters: Optional[Dict[str, str]] = None,
-        query_contexts: Optional[List["QueryContext"]] = None,
+        errorClass: Optional[str] = None,
+        messageParameters: Optional[Dict[str, str]] = None,
+        contexts: Optional[List["QueryContext"]] = None,
     ):
-        if query_contexts is None:
-            query_contexts = []
+        if contexts is None:
+            contexts = []
         self._error_reader = ErrorClassesReader()
 
         if message is None:
             self._message = self._error_reader.get_error_message(
-                cast(str, error_class), cast(Dict[str, str], message_parameters)
+                cast(str, errorClass), cast(Dict[str, str], messageParameters)
             )
         else:
             self._message = message
 
-        self._error_class = error_class
-        self._message_parameters = message_parameters
-        self._query_contexts = query_contexts
+        self._errorClass = errorClass
+        self._messageParameters = messageParameters
+        self._contexts = contexts
 
-    def getErrorClass(self) -> Optional[str]:
+    def getCondition(self) -> Optional[str]:
         """
-        Returns an error class as a string.
+        Returns an error condition.
 
-        .. versionadded:: 3.4.0
+        .. versionadded:: 4.0.0
 
         See Also
         --------
@@ -65,7 +71,25 @@ class PySparkException(Exception):
         :meth:`PySparkException.getQueryContext`
         :meth:`PySparkException.getSqlState`
         """
-        return self._error_class
+        return self._errorClass
+
+    def getErrorClass(self) -> Optional[str]:
+        """
+        Returns an error class as a string.
+
+        .. versionadded:: 3.4.0
+
+        .. deprecated:: 4.0.0
+
+        See Also
+        --------
+        :meth:`PySparkException.getMessage`
+        :meth:`PySparkException.getMessageParameters`
+        :meth:`PySparkException.getQueryContext`
+        :meth:`PySparkException.getSqlState`
+        """
+        warnings.warn("Deprecated in 4.0.0, use getCondition instead.", FutureWarning)
+        return self.getCondition()
 
     def getMessageParameters(self) -> Optional[Dict[str, str]]:
         """
@@ -75,29 +99,29 @@ class PySparkException(Exception):
 
         See Also
         --------
-        :meth:`PySparkException.getErrorClass`
+        :meth:`PySparkException.getCondition`
         :meth:`PySparkException.getMessage`
         :meth:`PySparkException.getQueryContext`
         :meth:`PySparkException.getSqlState`
         """
-        return self._message_parameters
+        return self._messageParameters
 
     def getSqlState(self) -> Optional[str]:
         """
         Returns an SQLSTATE as a string.
 
-        Errors generated in Python have no SQLSTATE, so it always returns None.
+        If the errorClass has no corresponding SQLSTATE, it returns None.
 
         .. versionadded:: 3.4.0
 
         See Also
         --------
-        :meth:`PySparkException.getErrorClass`
+        :meth:`PySparkException.getCondition`
         :meth:`PySparkException.getMessage`
         :meth:`PySparkException.getMessageParameters`
         :meth:`PySparkException.getQueryContext`
         """
-        return None
+        return self._error_reader.get_sqlstate(self._errorClass)
 
     def getMessage(self) -> str:
         """
@@ -107,12 +131,29 @@ class PySparkException(Exception):
 
         See Also
         --------
-        :meth:`PySparkException.getErrorClass`
+        :meth:`PySparkException.getCondition`
         :meth:`PySparkException.getMessageParameters`
         :meth:`PySparkException.getQueryContext`
         :meth:`PySparkException.getSqlState`
         """
-        return f"[{self.getErrorClass()}] {self._message}"
+        return f"[{self.getCondition()}] {self._message}"
+
+    def getBreakingChangeInfo(self) -> Optional[Dict[str, Any]]:
+        """
+        Returns the breaking change info for an error, or None.
+
+        Breaking change info is a dict with two fields:
+
+        migration_message: list of str
+            A message explaining how the user can migrate their job to work
+                with the breaking change.
+
+        mitigation_config:
+            A dict with key: str and value: str fields.
+            A spark config flag that can be used to mitigate the
+                breaking change.
+        """
+        return self._error_reader.get_breaking_change_info(self._errorClass)
 
     def getQueryContext(self) -> List["QueryContext"]:
         """
@@ -122,15 +163,39 @@ class PySparkException(Exception):
 
         See Also
         --------
-        :meth:`PySparkException.getErrorClass`
+        :meth:`PySparkException.getCondition`
         :meth:`PySparkException.getMessageParameters`
         :meth:`PySparkException.getMessage`
         :meth:`PySparkException.getSqlState`
         """
-        return self._query_contexts
+        return self._contexts
+
+    def _log_exception(self) -> None:
+        contexts = self.getQueryContext()
+        context = contexts[0] if len(contexts) != 0 else None
+        if context:
+            if context.contextType().name == "DataFrame":
+                logger = PySparkLogger.getLogger("DataFrameQueryContextLogger")
+                logger.propagate = False
+                call_site = context.callSite().split(":")
+                line = call_site[1] if len(call_site) == 2 else ""
+                logger.exception(
+                    self.getMessage(),
+                    file=call_site[0],
+                    line=line,
+                    fragment=context.fragment(),
+                    errorClass=self.getCondition(),
+                )
+            else:
+                logger = PySparkLogger.getLogger("SQLQueryContextLogger")
+                logger.propagate = False
+                logger.exception(
+                    self.getMessage(),
+                    errorClass=self.getCondition(),
+                )
 
     def __str__(self) -> str:
-        if self.getErrorClass() is not None:
+        if self.getCondition() is not None:
             return self.getMessage()
         else:
             return self._message
@@ -199,6 +264,12 @@ class NumberFormatException(IllegalArgumentException):
 class StreamingQueryException(PySparkException):
     """
     Exception that stopped a :class:`StreamingQuery`.
+    """
+
+
+class StreamingPythonRunnerInitializationException(PySparkException):
+    """
+    Failed to initialize a streaming Python runner.
     """
 
 
@@ -276,11 +347,11 @@ class PySparkAssertionError(PySparkException, AssertionError):
     def __init__(
         self,
         message: Optional[str] = None,
-        error_class: Optional[str] = None,
-        message_parameters: Optional[Dict[str, str]] = None,
+        errorClass: Optional[str] = None,
+        messageParameters: Optional[Dict[str, str]] = None,
         data: Optional[Iterable["Row"]] = None,
     ):
-        super().__init__(message, error_class, message_parameters)
+        super().__init__(message, errorClass, messageParameters)
         self.data = data
 
 
@@ -296,13 +367,6 @@ class PySparkPicklingError(PySparkException, PicklingError):
     """
 
 
-class RetriesExceeded(PySparkException):
-    """
-    Represents an exception which is considered retriable, but retry limits
-    were exceeded
-    """
-
-
 class PySparkKeyError(PySparkException, KeyError):
     """
     Wrapper class for KeyError to support error classes.
@@ -312,6 +376,14 @@ class PySparkKeyError(PySparkException, KeyError):
 class PySparkImportError(PySparkException, ImportError):
     """
     Wrapper class for ImportError to support error classes.
+    """
+
+
+class PickleException(PySparkException):
+    """
+    Represents an exception which is failed while pickling from server side
+    such as `net.razorvine.pickle.PickleException`. This is different from `PySparkPicklingError`
+    which represents an exception failed from Python built-in `pickle.PicklingError`.
     """
 
 
@@ -393,3 +465,30 @@ class QueryContext(ABC):
         Summary of the exception cause.
         """
         ...
+
+
+def recover_python_exception(e: T) -> T:
+    """
+    Recover Python exception stack trace.
+
+    Many JVM exceptions types may wrap Python exceptions. For example:
+    - UDFs can cause PythonException
+    - UDTFs and Data Sources can cause AnalysisException
+    """
+    python_exception_header = "Traceback (most recent call last):"
+    try:
+        message = str(e)
+        start = message.find(python_exception_header)
+        if start == -1:
+            # No Python exception found
+            return e
+
+        # The message contains a Python exception. Parse it to use it as the exception's traceback.
+        # This allows richer error messages, for example showing line content in Python UDF.
+        python_exception_string = message[start:]
+        tb = Traceback.from_string(python_exception_string)
+        tb.populate_linecache()
+        return e.with_traceback(tb.as_traceback())
+    except BaseException:
+        # Parsing the stacktrace is best effort.
+        return e

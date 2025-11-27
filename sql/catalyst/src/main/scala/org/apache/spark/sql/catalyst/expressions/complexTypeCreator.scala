@@ -33,7 +33,7 @@ import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.types.StringTypeAnyCollation
+import org.apache.spark.sql.internal.types.StringTypeNonCSAICollation
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.ArrayImplicits._
@@ -71,6 +71,8 @@ case class CreateArray(children: Seq[Expression], useStringTypeWhenEmpty: Boolea
 
   override def foldable: Boolean = children.forall(_.foldable)
 
+  override def contextIndependentFoldable: Boolean = children.forall(_.contextIndependentFoldable)
+
   override def stringArgs: Iterator[Any] = super.stringArgs.take(1)
 
   override def checkInputDataTypes(): TypeCheckResult = {
@@ -79,7 +81,7 @@ case class CreateArray(children: Seq[Expression], useStringTypeWhenEmpty: Boolea
 
   private val defaultElementType: DataType = {
     if (useStringTypeWhenEmpty) {
-      SQLConf.get.defaultStringType
+      StringType
     } else {
       NullType
     }
@@ -204,6 +206,8 @@ case class CreateMap(children: Seq[Expression], useStringTypeWhenEmpty: Boolean)
 
   override def foldable: Boolean = children.forall(_.foldable)
 
+  override def contextIndependentFoldable: Boolean = children.forall(_.contextIndependentFoldable)
+
   override def stringArgs: Iterator[Any] = super.stringArgs.take(1)
 
   override def checkInputDataTypes(): TypeCheckResult = {
@@ -245,6 +249,8 @@ case class CreateMap(children: Seq[Expression], useStringTypeWhenEmpty: Boolean)
 
   private lazy val mapBuilder = new ArrayBasedMapBuilder(dataType.keyType, dataType.valueType)
 
+  override def stateful: Boolean = true
+
   override def eval(input: InternalRow): Any = {
     var i = 0
     while (i < keys.length) {
@@ -276,6 +282,8 @@ case class CreateMap(children: Seq[Expression], useStringTypeWhenEmpty: Boolean)
 
   override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): CreateMap =
     copy(children = newChildren)
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(CREATE_MAP)
 }
 
 object CreateMap {
@@ -299,8 +307,8 @@ object CreateMap {
   since = "2.4.0",
   group = "map_funcs")
 case class MapFromArrays(left: Expression, right: Expression)
-  extends BinaryExpression with ExpectsInputTypes with NullIntolerant {
-
+  extends BinaryExpression with ExpectsInputTypes {
+  override def nullIntolerant: Boolean = true
   override def inputTypes: Seq[AbstractDataType] = Seq(ArrayType, ArrayType)
 
   override def checkInputDataTypes(): TypeCheckResult = {
@@ -319,6 +327,8 @@ case class MapFromArrays(left: Expression, right: Expression)
       valueType = right.dataType.asInstanceOf[ArrayType].elementType,
       valueContainsNull = right.dataType.asInstanceOf[ArrayType].containsNull)
   }
+
+  override def stateful: Boolean = true
 
   private lazy val mapBuilder = new ArrayBasedMapBuilder(dataType.keyType, dataType.valueType)
 
@@ -340,6 +350,8 @@ case class MapFromArrays(left: Expression, right: Expression)
   override protected def withNewChildrenInternal(
       newLeft: Expression, newRight: Expression): MapFromArrays =
     copy(left = newLeft, right = newRight)
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(MAP_FROM_ARRAYS)
 }
 
 /**
@@ -446,6 +458,8 @@ case class CreateNamedStruct(children: Seq[Expression]) extends Expression with 
 
   override def foldable: Boolean = valExprs.forall(_.foldable)
 
+  override def contextIndependentFoldable: Boolean = children.forall(_.contextIndependentFoldable)
+
   final override val nodePatterns: Seq[TreePattern] = Seq(CREATE_NAMED_STRUCT)
 
   override lazy val dataType: StructType = {
@@ -453,6 +467,7 @@ case class CreateNamedStruct(children: Seq[Expression]) extends Expression with 
       case (name, expr) =>
         val metadata = expr match {
           case ne: NamedExpression => ne.metadata
+          case gsf: GetStructField => gsf.metadata
           case _ => Metadata.empty
         }
         StructField(name.toString, expr.dataType, expr.nullable, metadata)
@@ -558,38 +573,49 @@ case class CreateNamedStruct(children: Seq[Expression]) extends Expression with 
   group = "map_funcs")
 // scalastyle:on line.size.limit
 case class StringToMap(text: Expression, pairDelim: Expression, keyValueDelim: Expression)
-  extends TernaryExpression with ExpectsInputTypes with NullIntolerant {
-
+  extends TernaryExpression with ExpectsInputTypes {
+  override def nullIntolerant: Boolean = true
   def this(child: Expression, pairDelim: Expression) = {
-    this(child, pairDelim, Literal(":"))
+    this(child, pairDelim, Literal.create(":", StringType))
   }
 
   def this(child: Expression) = {
-    this(child, Literal(","), Literal(":"))
+    this(
+      child,
+      Literal.create(",", StringType),
+      Literal.create(":", StringType))
   }
+
+  override def stateful: Boolean = true
 
   override def first: Expression = text
   override def second: Expression = pairDelim
   override def third: Expression = keyValueDelim
 
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(StringTypeAnyCollation, StringTypeAnyCollation, StringTypeAnyCollation)
+    Seq(StringTypeNonCSAICollation, StringTypeNonCSAICollation, StringTypeNonCSAICollation)
 
   override def dataType: DataType = MapType(first.dataType, first.dataType)
 
   private lazy val mapBuilder = new ArrayBasedMapBuilder(first.dataType, first.dataType)
 
+  private final lazy val collationId: Int = text.dataType.asInstanceOf[StringType].collationId
+
+  private lazy val legacySplitTruncate =
+    SQLConf.get.getConf(SQLConf.LEGACY_TRUNCATE_FOR_EMPTY_REGEX_SPLIT)
+
   override def nullSafeEval(
       inputString: Any,
       stringDelimiter: Any,
       keyValueDelimiter: Any): Any = {
-    val keyValues =
-      inputString.asInstanceOf[UTF8String].split(stringDelimiter.asInstanceOf[UTF8String], -1)
+    val keyValues = CollationAwareUTF8String.splitSQL(inputString.asInstanceOf[UTF8String],
+      stringDelimiter.asInstanceOf[UTF8String], -1, collationId, legacySplitTruncate)
     val keyValueDelimiterUTF8String = keyValueDelimiter.asInstanceOf[UTF8String]
 
     var i = 0
     while (i < keyValues.length) {
-      val keyValueArray = keyValues(i).split(keyValueDelimiterUTF8String, 2)
+      val keyValueArray = CollationAwareUTF8String.splitSQL(
+        keyValues(i), keyValueDelimiterUTF8String, 2, collationId, legacySplitTruncate)
       val key = keyValueArray(0)
       val value = if (keyValueArray.length < 2) null else keyValueArray(1)
       mapBuilder.put(key, value)
@@ -604,9 +630,11 @@ case class StringToMap(text: Expression, pairDelim: Expression, keyValueDelim: E
 
     nullSafeCodeGen(ctx, ev, (text, pd, kvd) =>
       s"""
-         |UTF8String[] $keyValues = $text.split($pd, -1);
+         |UTF8String[] $keyValues =
+         |  CollationAwareUTF8String.splitSQL($text, $pd, -1, $collationId, $legacySplitTruncate);
          |for(UTF8String kvEntry: $keyValues) {
-         |  UTF8String[] kv = kvEntry.split($kvd, 2);
+         |  UTF8String[] kv = CollationAwareUTF8String.splitSQL(
+         |    kvEntry, $kvd, 2, $collationId, $legacySplitTruncate);
          |  $builderTerm.put(kv[0], kv.length == 2 ? kv[1] : null);
          |}
          |${ev.value} = $builderTerm.build();

@@ -19,16 +19,16 @@ package org.apache.spark.deploy.history
 
 import java.io._
 import java.nio.charset.StandardCharsets
+import java.nio.file.Files
 import java.util.{Date, Locale}
 import java.util.concurrent.TimeUnit
 import java.util.zip.{ZipInputStream, ZipOutputStream}
 
 import scala.concurrent.duration._
 
-import com.google.common.io.{ByteStreams, Files}
-import org.apache.commons.io.FileUtils
 import org.apache.hadoop.fs.{FileStatus, FileSystem, FSDataInputStream, Path}
 import org.apache.hadoop.hdfs.{DFSInputStream, DistributedFileSystem}
+import org.apache.hadoop.ipc.{CallerContext => HadoopCallerContext}
 import org.apache.hadoop.security.AccessControlException
 import org.mockito.ArgumentMatchers.{any, argThat}
 import org.mockito.Mockito.{doThrow, mock, spy, verify, when}
@@ -706,10 +706,8 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with P
       var entry = inputStream.getNextEntry
       entry should not be null
       while (entry != null) {
-        val actual = new String(ByteStreams.toByteArray(inputStream), StandardCharsets.UTF_8)
-        val expected =
-          Files.toString(logs.find(_.getName == entry.getName).get, StandardCharsets.UTF_8)
-        actual should be (expected)
+        val expected = Files.readString(logs.find(_.getName == entry.getName).get.toPath)
+        Utils.toString(inputStream) should be (expected)
         totalEntries += 1
         entry = inputStream.getNextEntry
       }
@@ -731,15 +729,15 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with P
     testConf.set(MAX_DRIVER_LOG_AGE_S, maxAge)
     val provider = new FsHistoryProvider(testConf, clock)
 
-    val log1 = FileUtils.getFile(testDir, "1" + DriverLogger.DRIVER_LOG_FILE_SUFFIX)
+    val log1 = Utils.getFile(testDir, "1" + DriverLogger.DRIVER_LOG_FILE_SUFFIX)
     createEmptyFile(log1)
     clock.setTime(firstFileModifiedTime)
     log1.setLastModified(clock.getTimeMillis())
     provider.cleanDriverLogs()
 
-    val log2 = FileUtils.getFile(testDir, "2" + DriverLogger.DRIVER_LOG_FILE_SUFFIX)
+    val log2 = Utils.getFile(testDir, "2" + DriverLogger.DRIVER_LOG_FILE_SUFFIX)
     createEmptyFile(log2)
-    val log3 = FileUtils.getFile(testDir, "3" + DriverLogger.DRIVER_LOG_FILE_SUFFIX)
+    val log3 = Utils.getFile(testDir, "3" + DriverLogger.DRIVER_LOG_FILE_SUFFIX)
     createEmptyFile(log3)
     clock.setTime(secondFileModifiedTime)
     log2.setLastModified(clock.getTimeMillis())
@@ -757,7 +755,7 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with P
     assert(log3.exists())
 
     // Update the third file length while keeping the original modified time
-    Files.write("Add logs to file".getBytes(), log3)
+    Files.writeString(log3.toPath, "Add logs to file")
     log3.setLastModified(secondFileModifiedTime)
     // Should cleanup the second file but not the third file, as filelength changed.
     clock.setTime(secondFileModifiedTime + TimeUnit.SECONDS.toMillis(maxAge) + 1)
@@ -1638,6 +1636,40 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with P
     }
   }
 
+  test("SPARK-52914: Support spark.history.fs.eventLog.rolling.onDemandLoadEnabled") {
+    Seq(true, false).foreach { onDemandEnabled =>
+      withTempDir { dir =>
+        val conf = createTestConf(true)
+        conf.set(HISTORY_LOG_DIR, dir.getAbsolutePath)
+        conf.set(EVENT_LOG_ROLLING_ON_DEMAND_LOAD_ENABLED, onDemandEnabled)
+        val hadoopConf = SparkHadoopUtil.newConfiguration(conf)
+        val provider = new FsHistoryProvider(conf)
+
+        val writer1 = new RollingEventLogFilesWriter("app1", None, dir.toURI, conf, hadoopConf)
+        writer1.start()
+        writeEventsToRollingWriter(writer1, Seq(
+          SparkListenerApplicationStart("app1", Some("app1"), 0, "user", None),
+          SparkListenerJobStart(1, 0, Seq.empty)), rollFile = false)
+        writer1.stop()
+
+        assert(dir.listFiles().length === 1)
+        assert(provider.getListing().length === 0)
+        assert(provider.getAppUI("app1", None).isDefined == onDemandEnabled)
+        assert(provider.getListing().length === (if (onDemandEnabled) 1 else 0))
+
+        // The dummy entry should be protected from cleanLogs()
+        provider.cleanLogs()
+        assert(dir.listFiles().length === 1)
+
+        assert(dir.listFiles().length === 1)
+        assert(provider.getAppUI("nonexist", None).isEmpty)
+        assert(provider.getListing().length === (if (onDemandEnabled) 1 else 0))
+
+        provider.stop()
+      }
+    }
+  }
+
   test("SPARK-36354: EventLogFileReader should skip rolling event log directories with no logs") {
     withTempDir { dir =>
       val conf = createTestConf(true)
@@ -1773,6 +1805,18 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with P
     assert(!log1.exists())
     assert(!log3.exists())
     assert(log2.exists())
+  }
+
+  test("SPARK-51136: FsHistoryProvider start should set Hadoop CallerContext") {
+    val provider = new FsHistoryProvider(createTestConf())
+    provider.start()
+
+    try {
+      val hadoopCallerContext = HadoopCallerContext.getCurrent()
+      assert(hadoopCallerContext.getContext() === "SPARK_HISTORY")
+    } finally {
+      provider.stop()
+    }
   }
 
   /**

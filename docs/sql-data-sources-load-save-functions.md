@@ -109,7 +109,7 @@ For example, you can control bloom filters and dictionary encodings for ORC data
 The following ORC example will create bloom filter and use dictionary encoding only for `favorite_color`.
 For Parquet, there exists `parquet.bloom.filter.enabled` and `parquet.enable.dictionary`, too.
 To find more detailed information about the extra ORC/Parquet options,
-visit the official Apache [ORC](https://orc.apache.org/docs/spark-config.html) / [Parquet](https://github.com/apache/parquet-mr/tree/master/parquet-hadoop) websites.
+visit the official Apache [ORC](https://orc.apache.org/docs/spark-config.html) / [Parquet](https://github.com/apache/parquet-java/tree/master/parquet-hadoop) websites.
 
 ORC data source:
 

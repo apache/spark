@@ -23,9 +23,10 @@ import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader, PartitionReaderFactory}
 import org.apache.spark.sql.execution.datasources.v2.state.StateSourceOptions.JoinSideValues
 import org.apache.spark.sql.execution.datasources.v2.state.utils.SchemaUtil
-import org.apache.spark.sql.execution.streaming.StatefulOperatorStateInfo
-import org.apache.spark.sql.execution.streaming.StreamingSymmetricHashJoinHelper.{JoinSide, LeftSide, RightSide}
-import org.apache.spark.sql.execution.streaming.state.{StateStoreConf, SymmetricHashJoinStateManager}
+import org.apache.spark.sql.execution.streaming.operators.stateful.StatefulOperatorStateInfo
+import org.apache.spark.sql.execution.streaming.operators.stateful.join.{JoinStateManagerStoreGenerator, SnapshotOptions, SymmetricHashJoinStateManager}
+import org.apache.spark.sql.execution.streaming.operators.stateful.join.StreamingSymmetricHashJoinHelper.{JoinSide, LeftSide, RightSide}
+import org.apache.spark.sql.execution.streaming.state.StateStoreConf
 import org.apache.spark.sql.types.{BooleanType, StructType}
 import org.apache.spark.util.SerializableConfiguration
 
@@ -70,6 +71,47 @@ class StreamStreamJoinStatePartitionReader(
       throw StateDataSourceErrors.internalError("Unexpected join side for stream-stream read!")
   }
 
+  private val usesVirtualColumnFamilies = StreamStreamJoinStateHelper.usesVirtualColumnFamilies(
+    hadoopConf.value,
+    partition.sourceOptions.stateCheckpointLocation.toString,
+    partition.sourceOptions.operatorId)
+
+  private val startStateStoreCheckpointIds =
+    SymmetricHashJoinStateManager.getStateStoreCheckpointIds(
+      partition.partition,
+      partition.sourceOptions.startOperatorStateUniqueIds,
+      usesVirtualColumnFamilies)
+
+  private val endStateStoreCheckpointIds =
+    SymmetricHashJoinStateManager.getStateStoreCheckpointIds(
+      partition.partition,
+      partition.sourceOptions.endOperatorStateUniqueIds,
+      usesVirtualColumnFamilies)
+
+  private val startKeyToNumValuesStateStoreCkptId = if (joinSide == LeftSide) {
+    startStateStoreCheckpointIds.left.keyToNumValues
+  } else {
+    startStateStoreCheckpointIds.right.keyToNumValues
+  }
+
+  private val startKeyWithIndexToValueStateStoreCkptId = if (joinSide == LeftSide) {
+    startStateStoreCheckpointIds.left.keyWithIndexToValue
+  } else {
+    startStateStoreCheckpointIds.right.keyWithIndexToValue
+  }
+
+  private val endKeyToNumValuesStateStoreCkptId = if (joinSide == LeftSide) {
+    endStateStoreCheckpointIds.left.keyToNumValues
+  } else {
+    endStateStoreCheckpointIds.right.keyToNumValues
+  }
+
+  private val endKeyWithIndexToValueStateStoreCkptId = if (joinSide == LeftSide) {
+    endStateStoreCheckpointIds.left.keyWithIndexToValue
+  } else {
+    endStateStoreCheckpointIds.right.keyWithIndexToValue
+  }
+
   /*
    * This is to handle the difference of schema across state format versions. The major difference
    * is whether we have added new field(s) in addition to the fields from input schema.
@@ -80,8 +122,15 @@ class StreamStreamJoinStatePartitionReader(
   private val (inputAttributes, formatVersion) = {
     val maybeMatchedColumn = valueSchema.last
     val (fields, version) = {
+      // If there is a matched column, version is either 2 or 3. We need to drop the matched
+      // column from the value schema to get the actual fields.
       if (maybeMatchedColumn.name == "matched" && maybeMatchedColumn.dataType == BooleanType) {
-        (valueSchema.dropRight(1), 2)
+        // If checkpoint is using one store and virtual column families, version is 3
+        if (usesVirtualColumnFamilies) {
+          (valueSchema.dropRight(1), 3)
+        } else {
+          (valueSchema.dropRight(1), 2)
+        }
       } else {
         (valueSchema, 1)
       }
@@ -102,11 +151,16 @@ class StreamStreamJoinStatePartitionReader(
 
   private lazy val iter = {
     if (joinStateManager == null) {
+      // Here we don't know the StateStoreCheckpointID, so we set it to None in both stateInfo
+      // and `keyToNumValuesStateStoreCkptId` and `keyWithIndexToValueStateStoreCkptId` passed
+      // into SymmetricHashJoinStateManager.
+      // TODO after we persistent the StateStoreCheckpointID to the commit log, we can get it from
+      // there and pass it in.
       val stateInfo = StatefulOperatorStateInfo(
         partition.sourceOptions.stateCheckpointLocation.toString,
         partition.queryId, partition.sourceOptions.operatorId,
-        partition.sourceOptions.batchId + 1, -1)
-      joinStateManager = new SymmetricHashJoinStateManager(
+        partition.sourceOptions.batchId + 1, -1, None)
+      joinStateManager = SymmetricHashJoinStateManager(
         joinSide,
         inputAttributes,
         joinKeys = DataTypeUtils.toAttributes(keySchema),
@@ -114,9 +168,20 @@ class StreamStreamJoinStatePartitionReader(
         storeConf = storeConf,
         hadoopConf = hadoopConf.value,
         partitionId = partition.partition,
+        keyToNumValuesStateStoreCkptId = startKeyToNumValuesStateStoreCkptId,
+        keyWithIndexToValueStateStoreCkptId = startKeyWithIndexToValueStateStoreCkptId,
         formatVersion,
         skippedNullValueCount = None,
-        useStateStoreCoordinator = false
+        useStateStoreCoordinator = false,
+        snapshotOptions =
+          partition.sourceOptions.fromSnapshotOptions.map(opts => SnapshotOptions(
+            snapshotVersion = opts.snapshotStartBatchId + 1,
+            endVersion = partition.sourceOptions.batchId + 1,
+            startKeyToNumValuesStateStoreCkptId = startKeyToNumValuesStateStoreCkptId,
+            startKeyWithIndexToValueStateStoreCkptId = startKeyWithIndexToValueStateStoreCkptId,
+            endKeyToNumValuesStateStoreCkptId = endKeyToNumValuesStateStoreCkptId,
+            endKeyWithIndexToValueStateStoreCkptId = endKeyWithIndexToValueStateStoreCkptId)),
+        joinStoreGenerator = new JoinStateManagerStoreGenerator()
       )
     }
 
@@ -127,7 +192,7 @@ class StreamStreamJoinStatePartitionReader(
       inputAttributes)
 
     joinStateManager.iterator.map { pair =>
-      if (formatVersion == 2) {
+      if (formatVersion >= 2) {
         val row = valueWithMatchedRowGenerator(pair.value)
         row.setBoolean(indexOrdinalInValueWithMatchedRow, pair.matched)
         unifyStateRowPair(pair.key, row)

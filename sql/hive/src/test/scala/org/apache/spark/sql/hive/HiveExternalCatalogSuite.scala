@@ -18,6 +18,7 @@
 package org.apache.spark.sql.hive
 
 import org.apache.hadoop.conf.Configuration
+import org.apache.logging.log4j.Level
 
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.catalyst.TableIdentifier
@@ -102,7 +103,7 @@ class HiveExternalCatalogSuite extends ExternalCatalogSuite {
       """.stripMargin)
 
     val newSchema = new StructType().add("a", "string").add("b", "string").add("c", "string")
-    catalog.alterTableDataSchema("db1", "t", newSchema)
+    catalog.alterTableSchema("db1", "t", newSchema)
 
     assert(catalog.getTable("db1", "t").schema == newSchema)
     val bucketString = externalCatalog.client.runSqlHive("DESC FORMATTED db1.t")
@@ -231,14 +232,43 @@ class HiveExternalCatalogSuite extends ExternalCatalogSuite {
 
     // perform alter table
     val newSchema = StructType(Seq(
-      StructField("col1", StringType("UTF8_BINARY_LCASE"))
+      StructField("col1", StringType("UTF8_LCASE"))
     ))
-    catalog.alterTableDataSchema("db1", tableName, newSchema)
+    catalog.alterTableSchema("db1", tableName, newSchema)
 
     val alteredRawTable = externalCatalog.getRawTable("db1", tableName)
     assert(DataTypeUtils.sameType(alteredRawTable.schema, noCollationsSchema))
 
     val alteredTable = externalCatalog.getTable("db1", tableName)
     assert(DataTypeUtils.sameType(alteredTable.schema, newSchema))
+  }
+
+  test("SPARK-50137: Avoid fallback to Hive-incompatible ways on thrift exception") {
+    val hadoopConf = new Configuration()
+    // Use an unavailable uri to mock client connection timeout.
+    hadoopConf.set("hive.metastore.uris", "thrift://192.0.2.1:9083")
+    hadoopConf.set("hive.metastore.client.connection.timeout", "1s")
+    // Dummy HiveExternalCatalog to mock that the hive client is still available
+    // when checking database and table.
+    val catalog = new HiveExternalCatalog(new SparkConf, hadoopConf) {
+      override def requireDbExists(db: String): Unit = {}
+      override def tableExists(db: String, table: String): Boolean = false
+    }
+    val logAppender = new LogAppender()
+    withLogAppender(logAppender, level = Some(Level.WARN)) {
+      val table = CatalogTable(
+        identifier = TableIdentifier("tbl", Some("default")),
+        tableType = CatalogTableType.EXTERNAL,
+        storage = storageFormat.copy(locationUri = Some(newUriForDatabase())),
+        schema = new StructType()
+            .add("col1", "string"),
+        provider = Some("parquet"))
+      intercept[Throwable] {
+        catalog.createTable(table, ignoreIfExists = false)
+      }
+    }
+    assert(!logAppender.loggingEvents.map(_.getMessage.getFormattedMessage).contains(
+      "Could not persist `default`.`tbl` in a Hive compatible way. " +
+      "Persisting it into Hive metastore in Spark SQL specific format."))
   }
 }

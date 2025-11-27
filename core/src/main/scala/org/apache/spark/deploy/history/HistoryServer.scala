@@ -29,7 +29,7 @@ import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.Utils.addRenderLogHandler
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config._
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config.History
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.status.api.v1.{ApiRootResource, ApplicationInfo, UIRoot}
@@ -60,11 +60,13 @@ class HistoryServer(
     poolSize = 1000)
   with Logging with UIRoot with ApplicationCacheOperations {
 
+  val title = conf.get(History.HISTORY_SERVER_UI_TITLE)
+
   // How many applications to retain
   private val retainedApplications = conf.get(History.RETAINED_APPLICATIONS)
 
   // How many applications the summary ui displays
-  private[history] val maxApplications = conf.get(HISTORY_UI_MAX_APPS);
+  private[history] val maxApplications = conf.get(History.HISTORY_UI_MAX_APPS);
 
   // application
   private val appCache = new ApplicationCache(this, retainedApplications, new SystemClock())
@@ -222,6 +224,11 @@ class HistoryServer(
     getApplicationList()
   }
 
+  override def getApplicationInfoList(max: Int)(
+      filter: ApplicationInfo => Boolean): Iterator[ApplicationInfo] = {
+    provider.getListing(max)(filter)
+  }
+
   def getApplicationInfo(appId: String): Option[ApplicationInfo] = {
     provider.getApplicationInfo(appId)
   }
@@ -290,18 +297,18 @@ class HistoryServer(
  * This launches the HistoryServer as a Spark daemon.
  */
 object HistoryServer extends Logging {
-  private val conf = new SparkConf
+  private lazy val conf = new SparkConf
 
   val UI_PATH_PREFIX = "/history"
 
   def main(argStrings: Array[String]): Unit = {
+    Utils.resetStructuredLogging()
     Utils.initDaemon(log)
     new HistoryServerArguments(conf, argStrings)
     initSecurity()
     val securityManager = createSecurityManager(conf)
 
     val providerName = conf.get(History.PROVIDER)
-      .getOrElse(classOf[FsHistoryProvider].getName())
     val provider = Utils.classForName[ApplicationHistoryProvider](providerName)
       .getConstructor(classOf[SparkConf])
       .newInstance(conf)
@@ -315,7 +322,7 @@ object HistoryServer extends Logging {
     ShutdownHookManager.addShutdownHook { () => server.stop() }
 
     // Wait until the end of the world... or if the HistoryServer process is manually stopped
-    while(true) { Thread.sleep(Int.MaxValue) }
+    while (true) { Thread.sleep(Int.MaxValue) }
   }
 
   /**
@@ -332,8 +339,8 @@ object HistoryServer extends Logging {
     }
 
     if (config.get(ACLS_ENABLE)) {
-      logInfo(s"${ACLS_ENABLE.key} is configured, " +
-        s"clearing it and only using ${History.HISTORY_SERVER_UI_ACLS_ENABLE.key}")
+      logInfo(log"${MDC(KEY, ACLS_ENABLE.key)} is configured, " +
+        log"clearing it and only using ${MDC(KEY2, History.HISTORY_SERVER_UI_ACLS_ENABLE.key)}")
       config.set(ACLS_ENABLE, false)
     }
 

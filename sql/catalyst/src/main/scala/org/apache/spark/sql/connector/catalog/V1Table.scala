@@ -22,7 +22,7 @@ import java.util
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 
-import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogTableType}
+import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogTableType, CatalogUtils}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.TableIdentifierHelper
 import org.apache.spark.sql.connector.catalog.V1Table.addV2TableProperties
 import org.apache.spark.sql.connector.expressions.{LogicalExpressions, Transform}
@@ -38,7 +38,7 @@ private[sql] case class V1Table(v1Table: CatalogTable) extends Table {
   lazy val options: Map[String, String] = {
     v1Table.storage.locationUri match {
       case Some(uri) =>
-        v1Table.storage.properties + ("path" -> uri.toString)
+        v1Table.storage.properties + ("path" -> CatalogUtils.URIToString(uri))
       case _ =>
         v1Table.storage.properties
     }
@@ -60,6 +60,10 @@ private[sql] case class V1Table(v1Table: CatalogTable) extends Table {
       partitions += spec.asTransform
     }
 
+    v1Table.clusterBySpec.foreach { spec =>
+      partitions += spec.asTransform
+    }
+
     partitions.toArray
   }
 
@@ -75,16 +79,35 @@ private[sql] object V1Table {
   def addV2TableProperties(v1Table: CatalogTable): Map[String, String] = {
     val external = v1Table.tableType == CatalogTableType.EXTERNAL
     val managed = v1Table.tableType == CatalogTableType.MANAGED
+    val tableTypeProperties: Option[(String, String)] = getV2TableType(v1Table)
+        .map(tableType => TableCatalog.PROP_TABLE_TYPE -> tableType)
 
     v1Table.properties ++
       v1Table.storage.properties.map { case (key, value) =>
         TableCatalog.OPTION_PREFIX + key -> value } ++
       v1Table.provider.map(TableCatalog.PROP_PROVIDER -> _) ++
       v1Table.comment.map(TableCatalog.PROP_COMMENT -> _) ++
-      v1Table.storage.locationUri.map(TableCatalog.PROP_LOCATION -> _.toString) ++
+      v1Table.collation.map(TableCatalog.PROP_COLLATION -> _) ++
+      v1Table.storage.locationUri.map { loc =>
+        TableCatalog.PROP_LOCATION -> CatalogUtils.URIToString(loc)
+      } ++
       (if (managed) Some(TableCatalog.PROP_IS_MANAGED_LOCATION -> "true") else None) ++
       (if (external) Some(TableCatalog.PROP_EXTERNAL -> "true") else None) ++
+      tableTypeProperties ++
       Some(TableCatalog.PROP_OWNER -> v1Table.owner)
+  }
+
+  /**
+   * Returns v2 table type that should be part of v2 table properties.
+   * If there is no mapping between v1 table type and v2 table type, then None is returned.
+   */
+  private def getV2TableType(v1Table: CatalogTable): Option[String] = {
+    v1Table.tableType match {
+      case CatalogTableType.EXTERNAL => Some(TableSummary.EXTERNAL_TABLE_TYPE)
+      case CatalogTableType.MANAGED => Some(TableSummary.MANAGED_TABLE_TYPE)
+      case CatalogTableType.VIEW => Some(TableSummary.VIEW_TABLE_TYPE)
+      case _ => None
+    }
   }
 }
 

@@ -27,7 +27,7 @@ import scala.reflect.ClassTag
 import org.apache.commons.lang3.reflect.{TypeUtils => JavaTypeUtils}
 
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
-import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{ArrayEncoder, BinaryEncoder, BoxedBooleanEncoder, BoxedByteEncoder, BoxedDoubleEncoder, BoxedFloatEncoder, BoxedIntEncoder, BoxedLongEncoder, BoxedShortEncoder, DayTimeIntervalEncoder, DEFAULT_JAVA_DECIMAL_ENCODER, EncoderField, IterableEncoder, JavaBeanEncoder, JavaBigIntEncoder, JavaEnumEncoder, LocalDateTimeEncoder, MapEncoder, PrimitiveBooleanEncoder, PrimitiveByteEncoder, PrimitiveDoubleEncoder, PrimitiveFloatEncoder, PrimitiveIntEncoder, PrimitiveLongEncoder, PrimitiveShortEncoder, STRICT_DATE_ENCODER, STRICT_INSTANT_ENCODER, STRICT_LOCAL_DATE_ENCODER, STRICT_TIMESTAMP_ENCODER, StringEncoder, UDTEncoder, YearMonthIntervalEncoder}
+import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{ArrayEncoder, BinaryEncoder, BoxedBooleanEncoder, BoxedByteEncoder, BoxedDoubleEncoder, BoxedFloatEncoder, BoxedIntEncoder, BoxedLongEncoder, BoxedShortEncoder, DayTimeIntervalEncoder, DEFAULT_GEOGRAPHY_ENCODER, DEFAULT_GEOMETRY_ENCODER, DEFAULT_JAVA_DECIMAL_ENCODER, EncoderField, IterableEncoder, JavaBeanEncoder, JavaBigIntEncoder, JavaEnumEncoder, LocalDateTimeEncoder, LocalTimeEncoder, MapEncoder, PrimitiveBooleanEncoder, PrimitiveByteEncoder, PrimitiveDoubleEncoder, PrimitiveFloatEncoder, PrimitiveIntEncoder, PrimitiveLongEncoder, PrimitiveShortEncoder, STRICT_DATE_ENCODER, STRICT_INSTANT_ENCODER, STRICT_LOCAL_DATE_ENCODER, STRICT_TIMESTAMP_ENCODER, StringEncoder, UDTEncoder, YearMonthIntervalEncoder}
 import org.apache.spark.sql.errors.ExecutionErrors
 import org.apache.spark.sql.types._
 import org.apache.spark.util.ArrayImplicits._
@@ -36,10 +36,13 @@ import org.apache.spark.util.ArrayImplicits._
  * Type-inference utilities for POJOs and Java collections.
  */
 object JavaTypeInference {
+
   /**
    * Infers the corresponding SQL data type of a Java type.
-   * @param beanType Java type
-   * @return (SQL data type, nullable)
+   * @param beanType
+   *   Java type
+   * @return
+   *   (SQL data type, nullable)
    */
   def inferDataType(beanType: Type): (DataType, Boolean) = {
     val encoder = encoderFor(beanType)
@@ -60,8 +63,10 @@ object JavaTypeInference {
     encoderFor(beanType, Set.empty).asInstanceOf[AgnosticEncoder[T]]
   }
 
-  private def encoderFor(t: Type, seenTypeSet: Set[Class[_]],
-    typeVariables: Map[TypeVariable[_], Type] = Map.empty): AgnosticEncoder[_] = t match {
+  private def encoderFor(
+      t: Type,
+      seenTypeSet: Set[Class[_]],
+      typeVariables: Map[TypeVariable[_], Type] = Map.empty): AgnosticEncoder[_] = t match {
 
     case c: Class[_] if c == java.lang.Boolean.TYPE => PrimitiveBooleanEncoder
     case c: Class[_] if c == java.lang.Byte.TYPE => PrimitiveByteEncoder
@@ -81,9 +86,14 @@ object JavaTypeInference {
 
     case c: Class[_] if c == classOf[java.lang.String] => StringEncoder
     case c: Class[_] if c == classOf[Array[Byte]] => BinaryEncoder
+    case c: Class[_] if c == classOf[org.apache.spark.sql.types.Geometry] =>
+      DEFAULT_GEOMETRY_ENCODER
+    case c: Class[_] if c == classOf[org.apache.spark.sql.types.Geography] =>
+      DEFAULT_GEOGRAPHY_ENCODER
     case c: Class[_] if c == classOf[java.math.BigDecimal] => DEFAULT_JAVA_DECIMAL_ENCODER
     case c: Class[_] if c == classOf[java.math.BigInteger] => JavaBigIntEncoder
     case c: Class[_] if c == classOf[java.time.LocalDate] => STRICT_LOCAL_DATE_ENCODER
+    case c: Class[_] if c == classOf[java.time.LocalTime] => LocalTimeEncoder
     case c: Class[_] if c == classOf[java.sql.Date] => STRICT_DATE_ENCODER
     case c: Class[_] if c == classOf[java.time.Instant] => STRICT_INSTANT_ENCODER
     case c: Class[_] if c == classOf[java.sql.Timestamp] => STRICT_TIMESTAMP_ENCODER
@@ -94,14 +104,22 @@ object JavaTypeInference {
     case c: Class[_] if c.isEnum => JavaEnumEncoder(ClassTag(c))
 
     case c: Class[_] if c.isAnnotationPresent(classOf[SQLUserDefinedType]) =>
-      val udt = c.getAnnotation(classOf[SQLUserDefinedType]).udt()
-        .getConstructor().newInstance().asInstanceOf[UserDefinedType[Any]]
+      val udt = c
+        .getAnnotation(classOf[SQLUserDefinedType])
+        .udt()
+        .getConstructor()
+        .newInstance()
+        .asInstanceOf[UserDefinedType[Any]]
       val udtClass = udt.userClass.getAnnotation(classOf[SQLUserDefinedType]).udt()
       UDTEncoder(udt, udtClass)
 
     case c: Class[_] if UDTRegistration.exists(c.getName) =>
-      val udt = UDTRegistration.getUDTFor(c.getName).get.getConstructor().
-        newInstance().asInstanceOf[UserDefinedType[Any]]
+      val udt = UDTRegistration
+        .getUDTFor(c.getName)
+        .get
+        .getConstructor()
+        .newInstance()
+        .asInstanceOf[UserDefinedType[Any]]
       UDTEncoder(udt, udt.getClass)
 
     case c: Class[_] if c.isArray =>
@@ -125,7 +143,9 @@ object JavaTypeInference {
       encoderFor(typeVariables(tv), seenTypeSet, typeVariables)
 
     case pt: ParameterizedType =>
-      encoderFor(pt.getRawType, seenTypeSet, JavaTypeUtils.getTypeArguments(pt).asScala.toMap)
+      val newTvs = JavaTypeUtils.getTypeArguments(pt).asScala.toMap
+      val allTvs = typeVariables ++ newTvs
+      encoderFor(pt.getRawType, seenTypeSet, allTvs)
 
     case c: Class[_] =>
       if (seenTypeSet.contains(c)) {
@@ -160,7 +180,8 @@ object JavaTypeInference {
 
   def getJavaBeanReadableProperties(beanClass: Class[_]): Array[PropertyDescriptor] = {
     val beanInfo = Introspector.getBeanInfo(beanClass)
-    beanInfo.getPropertyDescriptors.filterNot(_.getName == "class")
+    beanInfo.getPropertyDescriptors
+      .filterNot(_.getName == "class")
       .filterNot(_.getName == "declaringClass")
       .filter(_.getReadMethod != null)
   }

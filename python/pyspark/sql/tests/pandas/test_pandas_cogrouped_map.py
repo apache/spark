@@ -16,9 +16,12 @@
 #
 
 import unittest
+import logging
 from typing import cast
+import os
 
-from pyspark.sql.functions import array, explode, col, lit, udf, pandas_udf, sum
+from pyspark.sql import functions as sf
+from pyspark.sql.functions import pandas_udf, udf
 from pyspark.sql.types import (
     ArrayType,
     DoubleType,
@@ -37,6 +40,8 @@ from pyspark.testing.sqlutils import (
     pandas_requirement_message,
     pyarrow_requirement_message,
 )
+from pyspark.testing.utils import assertDataFrameEqual
+from pyspark.util import is_remote_only
 
 if have_pandas:
     import pandas as pd
@@ -55,9 +60,9 @@ class CogroupedApplyInPandasTestsMixin:
     def data1(self):
         return (
             self.spark.range(10)
-            .withColumn("ks", array([lit(i) for i in range(20, 30)]))
-            .withColumn("k", explode(col("ks")))
-            .withColumn("v", col("k") * 10)
+            .withColumn("ks", sf.array([sf.lit(i) for i in range(20, 30)]))
+            .withColumn("k", sf.explode(sf.col("ks")))
+            .withColumn("v", sf.col("k") * 10)
             .drop("ks")
         )
 
@@ -65,9 +70,9 @@ class CogroupedApplyInPandasTestsMixin:
     def data2(self):
         return (
             self.spark.range(10)
-            .withColumn("ks", array([lit(i) for i in range(20, 30)]))
-            .withColumn("k", explode(col("ks")))
-            .withColumn("v2", col("k") * 100)
+            .withColumn("ks", sf.array([sf.lit(i) for i in range(20, 30)]))
+            .withColumn("k", sf.explode(sf.col("ks")))
+            .withColumn("v2", sf.col("k") * 100)
             .drop("ks")
         )
 
@@ -75,15 +80,15 @@ class CogroupedApplyInPandasTestsMixin:
         self._test_merge(self.data1, self.data2)
 
     def test_left_group_empty(self):
-        left = self.data1.where(col("id") % 2 == 0)
+        left = self.data1.where(sf.col("id") % 2 == 0)
         self._test_merge(left, self.data2)
 
     def test_right_group_empty(self):
-        right = self.data2.where(col("id") % 2 == 0)
+        right = self.data2.where(sf.col("id") % 2 == 0)
         self._test_merge(self.data1, right)
 
     def test_different_schemas(self):
-        right = self.data2.withColumn("v3", lit("a"))
+        right = self.data2.withColumn("v3", sf.lit("a"))
         self._test_merge(
             self.data1, right, output_schema="id long, k int, v int, v2 int, v3 string"
         )
@@ -116,9 +121,9 @@ class CogroupedApplyInPandasTestsMixin:
 
         right = pd.DataFrame.from_dict({"id": [11, 12, 13], "k": [5, 6, 7], "v2": [90, 100, 110]})
 
-        left_gdf = self.spark.createDataFrame(left).groupby(col("id") % 2 == 0)
+        left_gdf = self.spark.createDataFrame(left).groupby(sf.col("id") % 2 == 0)
 
-        right_gdf = self.spark.createDataFrame(right).groupby(col("id") % 2 == 0)
+        right_gdf = self.spark.createDataFrame(right).groupby(sf.col("id") % 2 == 0)
 
         def merge_pandas(lft, rgt):
             return pd.merge(lft[["k", "v"]], rgt[["k", "v2"]], on=["k"])
@@ -154,7 +159,7 @@ class CogroupedApplyInPandasTestsMixin:
         ):
             (left.groupby("id", "k").cogroup(right.groupby("id"))).applyInPandas(
                 merge_pandas, "id long, k int, v int"
-            ).schema
+            ).count()
 
     def test_apply_in_pandas_not_returning_pandas_dataframe(self):
         with self.quiet():
@@ -163,7 +168,7 @@ class CogroupedApplyInPandasTestsMixin:
     def check_apply_in_pandas_not_returning_pandas_dataframe(self):
         self._test_merge_error(
             fn=lambda lft, rgt: lft.size + rgt.size,
-            error_class=PythonException,
+            errorClass=PythonException,
             error_message_regex="Return type of the user-defined function "
             "should be pandas.DataFrame, but is int",
         )
@@ -203,7 +208,7 @@ class CogroupedApplyInPandasTestsMixin:
 
         self._test_merge_error(
             fn=merge_pandas,
-            error_class=PythonException,
+            errorClass=PythonException,
             error_message_regex="Column names of the returned pandas.DataFrame "
             "do not match specified schema. Unexpected: add, more.\n",
         )
@@ -224,7 +229,7 @@ class CogroupedApplyInPandasTestsMixin:
 
         self._test_merge_error(
             fn=merge_pandas,
-            error_class=PythonException,
+            errorClass=PythonException,
             error_message_regex="Number of columns of the returned pandas.DataFrame "
             "doesn't match specified schema. Expected: 4 Actual: 6\n",
         )
@@ -239,6 +244,9 @@ class CogroupedApplyInPandasTestsMixin:
 
         self._test_merge_empty(fn=merge_pandas)
 
+    @unittest.skipIf(
+        os.environ.get("SPARK_SKIP_CONNECT_COMPAT_TESTS") == "1", "SPARK-54481: To be reenabled"
+    )
     def test_apply_in_pandas_returning_incompatible_type(self):
         with self.quiet():
             self.check_apply_in_pandas_returning_incompatible_type()
@@ -262,9 +270,9 @@ class CogroupedApplyInPandasTestsMixin:
                             "`spark.sql.execution.pandas.convertToArrowArraySafely`."
                         )
                     self._test_merge_error(
-                        fn=lambda lft, rgt: pd.DataFrame({"id": [1], "k": ["2.0"]}),
+                        fn=lambda lft, rgt: pd.DataFrame({"id": [1], "k": ["test_string"]}),
                         output_schema="id long, k double",
-                        error_class=PythonException,
+                        errorClass=PythonException,
                         error_message_regex=expected,
                     )
 
@@ -277,9 +285,57 @@ class CogroupedApplyInPandasTestsMixin:
                     self._test_merge_error(
                         fn=lambda lft, rgt: pd.DataFrame({"id": [1], "k": [2.0]}),
                         output_schema="id long, k string",
-                        error_class=PythonException,
+                        errorClass=PythonException,
                         error_message_regex=expected,
                     )
+
+    def test_cogroup_apply_int_to_decimal_coercion(self):
+        left = self.data1.limit(3)
+        right = self.data2.limit(3)
+
+        def int_to_decimal_merge(lft, rgt):
+            return pd.DataFrame(
+                [
+                    {
+                        "id": 1,
+                        "decimal_result": 98765,
+                        "left_count": len(lft),
+                        "right_count": len(rgt),
+                    }
+                ]
+            )
+
+        with self.sql_conf(
+            {"spark.sql.execution.pythonUDF.pandas.intToDecimalCoercionEnabled": True}
+        ):
+            result = (
+                left.groupby("id")
+                .cogroup(right.groupby("id"))
+                .applyInPandas(
+                    int_to_decimal_merge,
+                    "id long, decimal_result decimal(10,2), left_count long, right_count long",
+                )
+                .collect()
+            )
+            self.assertTrue(len(result) > 0)
+            for row in result:
+                self.assertEqual(row.decimal_result, 98765.00)
+
+        with self.sql_conf(
+            {"spark.sql.execution.pythonUDF.pandas.intToDecimalCoercionEnabled": False}
+        ):
+            with self.assertRaisesRegex(
+                PythonException, "Exception thrown when converting pandas.Series"
+            ):
+                (
+                    left.groupby("id")
+                    .cogroup(right.groupby("id"))
+                    .applyInPandas(
+                        int_to_decimal_merge,
+                        "id long, decimal_result decimal(10,2), left_count long, right_count long",
+                    )
+                    .collect()
+                )
 
     def test_mixed_scalar_udfs_followed_by_cogrouby_apply(self):
         df = self.spark.range(0, 10).toDF("v1")
@@ -306,11 +362,11 @@ class CogroupedApplyInPandasTestsMixin:
         self._test_with_key(self.data1, self.data1, isLeft=False)
 
     def test_with_key_left_group_empty(self):
-        left = self.data1.where(col("id") % 2 == 0)
+        left = self.data1.where(sf.col("id") % 2 == 0)
         self._test_with_key(left, self.data1, isLeft=True)
 
     def test_with_key_right_group_empty(self):
-        right = self.data1.where(col("id") % 2 == 0)
+        right = self.data1.where(sf.col("id") % 2 == 0)
         self._test_with_key(self.data1, right, isLeft=False)
 
     def test_with_key_complex(self):
@@ -318,8 +374,8 @@ class CogroupedApplyInPandasTestsMixin:
             return lft.assign(key=key[0])
 
         result = (
-            self.data1.groupby(col("id") % 2 == 0)
-            .cogroup(self.data2.groupby(col("id") % 2 == 0))
+            self.data1.groupby(sf.col("id") % 2 == 0)
+            .cogroup(self.data2.groupby(sf.col("id") % 2 == 0))
             .applyInPandas(left_assign_key, "id long, k int, v int, key boolean")
             .sort(["id", "k"])
             .toPandas()
@@ -341,7 +397,7 @@ class CogroupedApplyInPandasTestsMixin:
             output_schema=(
                 StructType().add("id", LongType()).add("v", ArrayType(YearMonthIntervalType()))
             ),
-            error_class=NotImplementedError,
+            errorClass=NotImplementedError,
             error_message_regex="Invalid return type.*ArrayType.*YearMonthIntervalType",
         )
 
@@ -353,7 +409,7 @@ class CogroupedApplyInPandasTestsMixin:
         self.__test_merge_error(
             fn=lambda: 1,
             output_schema=StructType([StructField("d", DoubleType())]),
-            error_class=ValueError,
+            errorClass=ValueError,
             error_message_regex="Invalid function",
         )
 
@@ -408,7 +464,9 @@ class CogroupedApplyInPandasTestsMixin:
         left_df = df.withColumnRenamed("value", "left").repartition(parts).cache()
         # SPARK-42132: this bug requires us to alias all columns from df here
         right_df = (
-            df.select(col("id").alias("id"), col("day").alias("day"), col("value").alias("right"))
+            df.select(
+                sf.col("id").alias("id"), sf.col("day").alias("day"), sf.col("value").alias("right")
+            )
             .repartition(parts)
             .cache()
         )
@@ -417,9 +475,9 @@ class CogroupedApplyInPandasTestsMixin:
         window = Window.partitionBy("day", "id")
 
         left_grouped_df = left_df.groupBy("id", "day")
-        right_grouped_df = right_df.withColumn("day_sum", sum(col("day")).over(window)).groupBy(
-            "id", "day"
-        )
+        right_grouped_df = right_df.withColumn(
+            "day_sum", sf.sum(sf.col("day")).over(window)
+        ).groupBy("id", "day")
 
         def cogroup(left: pd.DataFrame, right: pd.DataFrame) -> pd.DataFrame:
             return pd.DataFrame(
@@ -558,7 +616,7 @@ class CogroupedApplyInPandasTestsMixin:
 
     def _test_merge_error(
         self,
-        error_class,
+        errorClass,
         error_message_regex,
         left=None,
         right=None,
@@ -577,7 +635,7 @@ class CogroupedApplyInPandasTestsMixin:
                 by=by,
                 fn=fn,
                 output_schema=output_schema,
-                error_class=error_class,
+                errorClass=errorClass,
                 error_message_regex=error_message_regex,
             )
         with self.subTest("with key"):
@@ -587,13 +645,13 @@ class CogroupedApplyInPandasTestsMixin:
                 by=by,
                 fn=fn_with_key,
                 output_schema=output_schema,
-                error_class=error_class,
+                errorClass=errorClass,
                 error_message_regex=error_message_regex,
             )
 
     def __test_merge_error(
         self,
-        error_class,
+        errorClass,
         error_message_regex,
         left=None,
         right=None,
@@ -602,8 +660,106 @@ class CogroupedApplyInPandasTestsMixin:
         output_schema="id long, k int, v int, v2 int",
     ):
         # Test fn as is, cf. _test_merge_error
-        with self.assertRaisesRegex(error_class, error_message_regex):
+        with self.assertRaisesRegex(errorClass, error_message_regex):
             self.__test_merge(left, right, by, fn, output_schema)
+
+    def test_arrow_batch_slicing(self):
+        m, n = 100000, 10000
+
+        df1 = self.spark.range(m).select((sf.col("id") % 2).alias("key"), sf.col("id").alias("v"))
+        cols = {f"col_{i}": sf.col("v") + i for i in range(10)}
+        df1 = df1.withColumns(cols)
+
+        df2 = self.spark.range(n).select((sf.col("id") % 4).alias("key"), sf.col("id").alias("v"))
+        cols = {f"col_{i}": sf.col("v") + i for i in range(20)}
+        df2 = df2.withColumns(cols)
+
+        def summarize(key, left, right):
+            assert len(left) == m / 2 or len(left) == 0, len(left)
+            assert len(right) == n / 4, len(right)
+            return pd.DataFrame(
+                {
+                    "key": [key[0]],
+                    "left_rows": [len(left)],
+                    "left_columns": [len(left.columns)],
+                    "right_rows": [len(right)],
+                    "right_columns": [len(right.columns)],
+                }
+            )
+
+        schema = "key long, left_rows long, left_columns long, right_rows long, right_columns long"
+
+        expected = [
+            Row(key=0, left_rows=m / 2, left_columns=12, right_rows=n / 4, right_columns=22),
+            Row(key=1, left_rows=m / 2, left_columns=12, right_rows=n / 4, right_columns=22),
+            Row(key=2, left_rows=0, left_columns=12, right_rows=n / 4, right_columns=22),
+            Row(key=3, left_rows=0, left_columns=12, right_rows=n / 4, right_columns=22),
+        ]
+
+        for maxRecords, maxBytes in [(1000, 2**31 - 1), (0, 4096), (1000, 4096)]:
+            with self.subTest(maxRecords=maxRecords, maxBytes=maxBytes):
+                with self.sql_conf(
+                    {
+                        "spark.sql.execution.arrow.maxRecordsPerBatch": maxRecords,
+                        "spark.sql.execution.arrow.maxBytesPerBatch": maxBytes,
+                    }
+                ):
+                    result = (
+                        df1.groupby("key")
+                        .cogroup(df2.groupby("key"))
+                        .applyInPandas(summarize, schema=schema)
+                        .sort("key")
+                        .collect()
+                    )
+
+                    self.assertEqual(expected, result)
+
+    def test_negative_and_zero_batch_size(self):
+        for batch_size in [0, -1]:
+            with self.sql_conf({"spark.sql.execution.arrow.maxRecordsPerBatch": batch_size}):
+                CogroupedApplyInPandasTestsMixin.test_with_key_right(self)
+
+    @unittest.skipIf(is_remote_only(), "Requires JVM access")
+    def test_cogroup_apply_in_pandas_with_logging(self):
+        import pandas as pd
+
+        def func_with_logging(left_pdf, right_pdf):
+            assert isinstance(left_pdf, pd.DataFrame)
+            assert isinstance(right_pdf, pd.DataFrame)
+            logger = logging.getLogger("test_pandas_cogrouped_map")
+            logger.warning(
+                f"pandas cogrouped map: {dict(v1=list(left_pdf['v1']), v2=list(right_pdf['v2']))}"
+            )
+            return pd.merge(left_pdf, right_pdf, on=["id"])
+
+        left_df = self.spark.createDataFrame([(1, 10), (2, 20), (1, 30)], ["id", "v1"])
+        right_df = self.spark.createDataFrame([(1, 100), (2, 200), (1, 300)], ["id", "v2"])
+
+        grouped_left = left_df.groupBy("id")
+        grouped_right = right_df.groupBy("id")
+        cogrouped_df = grouped_left.cogroup(grouped_right)
+
+        with self.sql_conf({"spark.sql.pyspark.worker.logging.enabled": "true"}):
+            assertDataFrameEqual(
+                cogrouped_df.applyInPandas(func_with_logging, "id long, v1 long, v2 long"),
+                [Row(id=1, v1=v1, v2=v2) for v1 in [10, 30] for v2 in [100, 300]]
+                + [Row(id=2, v1=20, v2=200)],
+            )
+
+            logs = self.spark.tvf.python_worker_logs()
+
+            assertDataFrameEqual(
+                logs.select("level", "msg", "context", "logger"),
+                [
+                    Row(
+                        level="WARNING",
+                        msg=f"pandas cogrouped map: {dict(v1=v1, v2=v2)}",
+                        context={"func_name": func_with_logging.__name__},
+                        logger="test_pandas_cogrouped_map",
+                    )
+                    for v1, v2 in [([10, 30], [100, 300]), ([20], [200])]
+                ],
+            )
 
 
 class CogroupedApplyInPandasTests(CogroupedApplyInPandasTestsMixin, ReusedSQLTestCase):

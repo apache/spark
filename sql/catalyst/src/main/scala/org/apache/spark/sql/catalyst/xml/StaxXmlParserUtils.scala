@@ -18,11 +18,20 @@ package org.apache.spark.sql.catalyst.xml
 
 import java.io.StringReader
 import javax.xml.namespace.QName
-import javax.xml.stream.{EventFilter, XMLEventReader, XMLInputFactory, XMLStreamConstants}
+import javax.xml.stream.{
+  EventFilter,
+  StreamFilter,
+  XMLEventReader,
+  XMLInputFactory,
+  XMLStreamConstants,
+  XMLStreamReader
+}
 import javax.xml.stream.events._
 
 import scala.annotation.tailrec
 import scala.jdk.CollectionConverters._
+
+import org.apache.commons.io.input.BOMInputStream
 
 object StaxXmlParserUtils {
 
@@ -35,19 +44,21 @@ object StaxXmlParserUtils {
     factory
   }
 
+  private[sql] val eventTypeFilter: Int => Boolean = {
+    // Ignore comments and processing instructions
+    case XMLStreamConstants.COMMENT |
+         XMLStreamConstants.PROCESSING_INSTRUCTION => false
+    // unsupported events
+    case XMLStreamConstants.DTD |
+         XMLStreamConstants.ENTITY_DECLARATION |
+         XMLStreamConstants.ENTITY_REFERENCE |
+         XMLStreamConstants.NOTATION_DECLARATION => false
+    case _ => true
+  }
+
   def filteredReader(xml: String): XMLEventReader = {
     val filter = new EventFilter {
-      override def accept(event: XMLEvent): Boolean =
-        event.getEventType match {
-          // Ignore comments and processing instructions
-          case XMLStreamConstants.COMMENT | XMLStreamConstants.PROCESSING_INSTRUCTION => false
-          // unsupported events
-          case XMLStreamConstants.DTD |
-               XMLStreamConstants.ENTITY_DECLARATION |
-               XMLStreamConstants.ENTITY_REFERENCE |
-               XMLStreamConstants.NOTATION_DECLARATION => false
-          case _ => true
-        }
+      override def accept(event: XMLEvent): Boolean = eventTypeFilter(event.getEventType)
     }
     // It does not have to skip for white space, since `XmlInputFormat`
     // always finds the root tag without a heading space.
@@ -55,9 +66,39 @@ object StaxXmlParserUtils {
     factory.createFilteredReader(eventReader, filter)
   }
 
+  def filteredReader(inputStream: java.io.InputStream, options: XmlOptions): XMLEventReader = {
+    val filter = new EventFilter {
+      override def accept(event: XMLEvent): Boolean = eventTypeFilter(event.getEventType)
+    }
+    val bomInputStreamBuilder = new BOMInputStream.Builder
+    bomInputStreamBuilder.setInputStream(inputStream)
+    bomInputStreamBuilder.setCharset(options.charset)
+    val eventReader = factory.createXMLEventReader(bomInputStreamBuilder.get())
+    factory.createFilteredReader(eventReader, filter)
+  }
+
+  def filteredReader(
+      inputStream: () => java.io.InputStream,
+      options: XmlOptions): StaxXMLRecordReader = {
+    StaxXMLRecordReader(inputStream, options)
+  }
+
+  def filteredStreamReader(
+      inputStream: java.io.InputStream,
+      options: XmlOptions): XMLStreamReader = {
+    val filter = new StreamFilter {
+      override def accept(event: XMLStreamReader): Boolean =
+        StaxXmlParserUtils.eventTypeFilter(event.getEventType)
+    }
+    val bomInputStreamBuilder = new BOMInputStream.Builder
+    bomInputStreamBuilder.setInputStream(inputStream)
+    val streamReader =
+      StaxXmlParserUtils.factory.createXMLStreamReader(bomInputStreamBuilder.get(), options.charset)
+    StaxXmlParserUtils.factory.createFilteredReader(streamReader, filter)
+  }
+
   def gatherRootAttributes(parser: XMLEventReader): Array[Attribute] = {
-    val rootEvent =
-      StaxXmlParserUtils.skipUntil(parser, XMLStreamConstants.START_ELEMENT)
+    val rootEvent = StaxXmlParserUtils.skipUntil(parser, XMLStreamConstants.START_ELEMENT)
     rootEvent.asStartElement.getAttributes.asScala.toArray
   }
 
@@ -124,7 +165,9 @@ object StaxXmlParserUtils {
   }
 
   /**
-   * Convert the current structure of XML document to a XML string.
+   * Convert the structure inside the target element to an XML string, **EXCLUDING** the target
+   * element layer itself. The parser is expected to be positioned **AT** the start tag of the
+   * target element.
    */
   def currentStructureAsString(
       parser: XMLEventReader,
@@ -133,26 +176,9 @@ object StaxXmlParserUtils {
     val xmlString = new StringBuilder()
     var indent = 0
     do {
-      parser.nextEvent match {
-        case e: StartElement =>
-          xmlString.append('<').append(e.getName)
-          e.getAttributes.asScala.foreach { att =>
-            xmlString
-              .append(' ')
-              .append(att.getName)
-              .append("=\"")
-              .append(att.getValue)
-              .append('"')
-          }
-          xmlString.append('>')
-          indent += 1
-        case e: EndElement =>
-          xmlString.append("</").append(e.getName).append('>')
-          indent -= 1
-        case c: Characters =>
-          xmlString.append(c.getData)
-        case _: XMLEvent => // do nothing
-      }
+      val (str, ind) = nextEventToString(parser, indent)
+      indent = ind
+      xmlString.append(str)
     } while (parser.peek() match {
       case _: EndElement =>
         // until the unclosed end element for the whole parent is found
@@ -164,25 +190,74 @@ object StaxXmlParserUtils {
   }
 
   /**
-   * Skip the children of the current XML element.
+   * Convert the element with the target element name to an XML string. The next event of the parser
+   * is expected to be the start tag of the target element.
    */
-  def skipChildren(parser: XMLEventReader): Unit = {
-    var shouldStop = checkEndElement(parser)
+  def currentElementAsString(
+      parser: XMLEventReader,
+      startElementName: String,
+      options: XmlOptions): String = {
+    assert(
+      getName(parser.peek().asStartElement().getName, options) == startElementName,
+      s"Expected StartElement <$startElementName>, but found ${parser.peek()}"
+    )
+    val xmlString = new StringBuilder()
+    var indent = 0
+    do {
+      val (str, ind) = nextEventToString(parser, indent)
+      indent = ind
+      xmlString.append(str)
+    } while (indent > 0)
+    xmlString.toString()
+  }
+
+  private def nextEventToString(parser: XMLEventReader, currentIdent: Int): (String, Int) = {
+    parser.nextEvent match {
+      case e: StartElement =>
+        val sb = new StringBuilder()
+        sb.append('<').append(e.getName)
+        e.getAttributes.asScala.foreach { att =>
+          sb
+            .append(' ')
+            .append(att.getName)
+            .append("=\"")
+            .append(att.getValue)
+            .append('"')
+        }
+        sb.append('>')
+        (sb.toString(), currentIdent + 1)
+      case e: EndElement =>
+        (s"</${e.getName}>", currentIdent - 1)
+      case c: Characters =>
+        (c.getData, currentIdent)
+      case _: XMLEvent => // do nothing
+        ("", currentIdent)
+    }
+  }
+
+  /**
+   * Skip the children of the current XML element.
+   * Before this function is called, the 'startElement' of the object has already been consumed.
+   * Upon completion, this function consumes the 'endElement' of the object,
+   * which effectively skipping the entire object enclosed within these elements.
+   */
+  def skipChildren(
+      parser: XMLEventReader,
+      expectedNextEndElementName: String,
+      options: XmlOptions): Unit = {
+    var shouldStop = false
     while (!shouldStop) {
       parser.nextEvent match {
-        case _: StartElement =>
-          val e = parser.peek
-          if (e.isCharacters && e.asCharacters.isWhiteSpace) {
-            // There can be a `Characters` event between `StartElement`s.
-            // So, we need to check further to decide if this is a data or just
-            // a whitespace between them.
-            parser.next
-          }
-          if (parser.peek.isStartElement) {
-            skipChildren(parser)
-          }
-        case _: EndElement =>
-          shouldStop = checkEndElement(parser)
+        case startElement: StartElement =>
+          val childField = StaxXmlParserUtils.getName(startElement.asStartElement.getName, options)
+          skipChildren(parser, childField, options)
+        case endElement: EndElement =>
+          val endElementName = getName(endElement.getName, options)
+          assert(
+            endElementName == expectedNextEndElementName,
+            s"Expected EndElement </$expectedNextEndElementName>, but found </$endElementName>"
+          )
+          shouldStop = true
         case _: XMLEvent => // do nothing
       }
     }
@@ -197,9 +272,10 @@ object StaxXmlParserUtils {
       case c: Characters if c.isWhiteSpace =>
         skipNextEndElement(parser, expectedNextEndElementName, options)
       case endElement: EndElement =>
+        val endElementName = getName(endElement.getName, options)
         assert(
-          getName(endElement.getName, options) == expectedNextEndElementName,
-          s"Expected EndElement </$expectedNextEndElementName>")
+          endElementName == expectedNextEndElementName,
+          s"Expected EndElement </$expectedNextEndElementName>, but found </$endElementName>")
       case _ => throw new IllegalStateException(
         s"Expected EndElement </$expectedNextEndElementName>")
     }

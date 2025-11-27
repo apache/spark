@@ -17,6 +17,18 @@ SELECT (
   SELECT * FROM t
 );
 
+-- un-referenced CTE in subquery expression: outer reference in CTE relation
+SELECT (
+  WITH unreferenced AS (SELECT id)
+  SELECT 1
+) FROM range(1);
+
+-- un-referenced CTE in subquery expression: outer reference in CTE main query
+SELECT (
+  WITH unreferenced AS (SELECT 1)
+  SELECT id
+) FROM range(1);
+
 -- Make sure CTE in subquery is scoped to that subquery rather than global
 -- the 2nd half of the union should fail because the cte is scoped to the first half
 SELECT * FROM

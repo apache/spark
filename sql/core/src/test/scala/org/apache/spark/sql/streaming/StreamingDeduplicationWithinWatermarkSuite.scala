@@ -19,7 +19,7 @@ package org.apache.spark.sql.streaming
 
 import org.apache.spark.sql.{AnalysisException, Dataset, SaveMode}
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes.Append
-import org.apache.spark.sql.execution.streaming.MemoryStream
+import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.functions.timestamp_seconds
 import org.apache.spark.tags.SlowSQLTest
 
@@ -219,5 +219,19 @@ class StreamingDeduplicationWithinWatermarkSuite extends StateStoreMetricsTest {
         }
       )
     }
+  }
+
+  test("SPARK-50492: drop event time column after dropDuplicatesWithinWatermark") {
+    val inputData = MemoryStream[(Int, Int)]
+    val result = inputData.toDS()
+      .withColumn("first", timestamp_seconds($"_1"))
+      .withWatermark("first", "10 seconds")
+      .dropDuplicatesWithinWatermark("_2")
+      .select("_2")
+
+    testStream(result, Append)(
+      AddData(inputData, (1, 2)),
+      CheckAnswer(2)
+    )
   }
 }

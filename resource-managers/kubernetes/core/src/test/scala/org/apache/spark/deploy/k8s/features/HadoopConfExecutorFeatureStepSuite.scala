@@ -18,9 +18,7 @@
 package org.apache.spark.deploy.k8s.features
 
 import java.io.File
-import java.nio.charset.StandardCharsets.UTF_8
-
-import com.google.common.io.Files
+import java.nio.file.Files
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.k8s.{Constants, KubernetesTestConf, SecretVolumeUtils, SparkPod}
@@ -36,7 +34,7 @@ class HadoopConfExecutorFeatureStepSuite extends SparkFunSuite  {
     val confFiles = Set("core-site.xml", "hdfs-site.xml")
 
     confFiles.foreach { f =>
-      Files.write("some data", new File(confDir, f), UTF_8)
+      Files.writeString(new File(confDir, f).toPath, "some data")
     }
 
     Seq(

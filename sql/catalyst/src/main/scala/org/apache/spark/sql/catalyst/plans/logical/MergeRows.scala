@@ -49,6 +49,12 @@ case class MergeRows(
     AttributeSet.fromAttributeSets(usedExprs.map(_.references)) -- producedAttributes
   }
 
+  def instructions: Seq[Instruction] = {
+    matchedInstructions ++ notMatchedInstructions ++ notMatchedBySourceInstructions
+  }
+
+  def outputs: Seq[Seq[Expression]] = instructions.flatMap(_.outputs)
+
   override def simpleString(maxFields: Int): String = {
     s"MergeRows${truncatedString(output, "[", ", ", "]", maxFields)}"
   }
@@ -81,7 +87,17 @@ object MergeRows {
     override def dataType: DataType = NullType
   }
 
-  case class Keep(condition: Expression, output: Seq[Expression]) extends Instruction {
+  sealed trait Context
+  case object Copy extends Context
+  case object Delete extends Context
+  case object Insert extends Context
+  case object Update extends Context
+
+  case class Keep(
+      context: Context,
+      condition: Expression,
+      output: Seq[Expression])
+    extends Instruction {
     def children: Seq[Expression] = condition +: output
     override def outputs: Seq[Seq[Expression]] = Seq(output)
 

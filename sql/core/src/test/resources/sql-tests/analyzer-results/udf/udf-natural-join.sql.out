@@ -10,7 +10,7 @@ CreateViewCommand `nt1`, select * from values
   ("one", 1),
   ("two", 2),
   ("three", 3)
-  as nt1(k, v1), false, false, LocalTempView, true
+  as nt1(k, v1), false, false, LocalTempView, UNSUPPORTED, true
    +- Project [k#x, v1#x]
       +- SubqueryAlias nt1
          +- LocalRelation [k#x, v1#x]
@@ -27,7 +27,7 @@ CreateViewCommand `nt2`, select * from values
   ("one", 1),
   ("two", 22),
   ("one", 5)
-  as nt2(k, v2), false, false, LocalTempView, true
+  as nt2(k, v2), false, false, LocalTempView, UNSUPPORTED, true
    +- Project [k#x, v2#x]
       +- SubqueryAlias nt2
          +- LocalRelation [k#x, v2#x]

@@ -22,11 +22,13 @@ import org.apache.spark.sql.catalyst.analysis.{EmptyFunctionRegistry, FakeV2Sess
 import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{Alias, Literal, NamedExpression}
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.PlanTest
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LocalRelation, LogicalPlan, OneRowRelation, Project}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, LocalRelation, LogicalPlan, OneRowRelation, Project}
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.connector.catalog.CatalogManager
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.{BooleanType, StringType, StructType}
 
 
 class OptimizerStructuralIntegrityCheckerSuite extends PlanTest {
@@ -36,9 +38,21 @@ class OptimizerStructuralIntegrityCheckerSuite extends PlanTest {
       case Project(projectList, child) =>
         val newAttr = UnresolvedAttribute("unresolvedAttr")
         Project(projectList ++ Seq(newAttr), child)
-      case agg @ Aggregate(Nil, aggregateExpressions, child) =>
+      case agg @ Aggregate(Nil, aggregateExpressions, child, _) =>
         // Project cannot host AggregateExpression
         Project(aggregateExpressions, child)
+      case Filter(cond, child) =>
+        val newCond = cond.transform {
+          case g @ GetStructField(a: AttributeReference, _, _) =>
+            g.copy(child = a.withDataType(StringType))
+          case g @ GetArrayStructFields(a: AttributeReference, _, _, _, _) =>
+            g.copy(child = a.withDataType(StringType))
+          case g @ GetArrayItem(a: AttributeReference, _, _) =>
+            g.copy(child = a.withDataType(StringType))
+          case g @ GetMapValue(a: AttributeReference, _) =>
+            g.copy(child = a.withDataType(StringType))
+        }
+        Filter(newCond, child)
     }
   }
 
@@ -77,6 +91,38 @@ class OptimizerStructuralIntegrityCheckerSuite extends PlanTest {
 
     // Should not fail verification with the regular optimizer
     SimpleTestOptimizer.execute(analyzed)
+  }
+
+  test("check for invalid plan after execution of rule - bad ExtractValue") {
+    val input = LocalRelation(
+      $"c1".struct(new StructType().add("f1", "boolean")),
+      $"c2".array(new StructType().add("f1", "boolean")),
+      $"c3".array(BooleanType),
+      new DslAttr($"c4").map(StringType, BooleanType)
+    )
+
+    def assertCheckFailed(expr: Expression): Unit = {
+      val analyzed = Filter(expr, input).analyze
+      assert(analyzed.resolved)
+      // Should fail verification with the OptimizeRuleBreakSI rule
+      val message = intercept[SparkException] {
+        Optimize.execute(analyzed)
+      }.getMessage
+      val ruleName = OptimizeRuleBreakSI.ruleName
+      assert(message.contains(s"Rule $ruleName in batch OptimizeRuleBreakSI"))
+      assert(message.contains("generated an invalid plan"))
+    }
+
+    // This resolution validation should be included in the lightweight
+    // validator so that it's validated in production.
+    withSQLConf(
+      SQLConf.PLAN_CHANGE_VALIDATION.key -> "false",
+      SQLConf.LIGHTWEIGHT_PLAN_CHANGE_VALIDATION.key -> "true") {
+      assertCheckFailed($"c1.f1")
+      assertCheckFailed($"c2.f1".getItem(0))
+      assertCheckFailed($"c3".getItem(0))
+      assertCheckFailed($"c4".getItem("key"))
+    }
   }
 
   test("check for invalid plan before execution of any rule") {

@@ -22,7 +22,7 @@ import scala.util.control.NonFatal
 
 import software.amazon.kinesis.processor.RecordProcessorCheckpointer
 
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{SHARD_ID, WORKER_URL}
 import org.apache.spark.streaming.Duration
 import org.apache.spark.streaming.util.RecurringTimer
@@ -102,7 +102,7 @@ private[kinesis] class KinesisCheckpointer(
       }
     } catch {
       case NonFatal(e) =>
-        logWarning(s"Failed to checkpoint shardId $shardId to DynamoDB.", e)
+        logWarning(log"Failed to checkpoint shardId ${MDC(SHARD_ID, shardId)} to DynamoDB.", e)
     }
   }
 

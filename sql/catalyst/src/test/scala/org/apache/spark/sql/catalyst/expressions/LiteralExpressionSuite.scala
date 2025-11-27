@@ -18,20 +18,20 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.nio.charset.StandardCharsets
-import java.time.{Duration, Instant, LocalDate, LocalDateTime, Period, ZoneOffset}
+import java.time.{Duration, Instant, LocalDate, LocalDateTime, LocalTime, Period, ZoneOffset}
 import java.time.temporal.ChronoUnit
 import java.util.TimeZone
 
 import scala.collection.mutable
 import scala.reflect.runtime.universe.TypeTag
 
-import org.apache.spark.{SparkException, SparkFunSuite}
+import org.apache.spark.{SparkFunSuite, SparkRuntimeException}
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, ScalaReflection}
 import org.apache.spark.sql.catalyst.encoders.ExamplePointUDT
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
+import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.localTime
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
-import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLType
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.DayTimeIntervalType._
@@ -52,6 +52,7 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Literal.create(null, BinaryType), null)
     checkEvaluation(Literal.create(null, DecimalType.USER_DEFAULT), null)
     checkEvaluation(Literal.create(null, DateType), null)
+    checkEvaluation(Literal.create(null, TimeType()), null)
     checkEvaluation(Literal.create(null, TimestampType), null)
     checkEvaluation(Literal.create(null, CalendarIntervalType), null)
     checkEvaluation(Literal.create(null, YearMonthIntervalType()), null)
@@ -82,6 +83,7 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       checkEvaluation(Literal.default(DateType), LocalDate.ofEpochDay(0))
       checkEvaluation(Literal.default(TimestampType), Instant.ofEpochSecond(0))
     }
+    checkEvaluation(Literal.default(TimeType()), LocalTime.MIDNIGHT)
     checkEvaluation(Literal.default(CalendarIntervalType), new CalendarInterval(0, 0, 0L))
     checkEvaluation(Literal.default(YearMonthIntervalType()), 0)
     checkEvaluation(Literal.default(DayTimeIntervalType()), 0L)
@@ -91,16 +93,8 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     // ExamplePointUDT.sqlType is ArrayType(DoubleType, false).
     checkEvaluation(Literal.default(new ExamplePointUDT), Array())
 
-    // DateType without default value`
-    List(CharType(1), VarcharType(1)).foreach(errType => {
-      checkError(
-        exception = intercept[SparkException] {
-          Literal.default(errType)
-        },
-        errorClass = "INTERNAL_ERROR",
-        parameters = Map("message" -> s"No default value for type: ${toSQLType(errType)}.")
-      )
-    })
+    checkEvaluation(Literal.default(CharType(5)), "     ")
+    checkEvaluation(Literal.default(VarcharType(5)), "")
   }
 
   test("boolean literals") {
@@ -158,6 +152,42 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Literal.create(""), "")
     checkEvaluation(Literal.create("test"), "test")
     checkEvaluation(Literal.create("\u0000"), "\u0000")
+  }
+
+  test("char literals") {
+    withSQLConf(SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true") {
+      val typ = CharType(5)
+      checkEvaluation(Literal.create("", typ), "     ")
+      checkEvaluation(Literal.create("test", typ), "test ")
+      checkEvaluation(Literal.create("test      ", typ), "test ")
+      checkEvaluation(Literal.create("\u0000", typ), "\u0000    ")
+
+      checkError(
+        exception = intercept[SparkRuntimeException]({
+          Literal.create("123456", typ)
+        }),
+        condition = "EXCEED_LIMIT_LENGTH",
+        parameters = Map("limit" -> "5")
+      )
+    }
+  }
+
+  test("varchar literals") {
+    withSQLConf(SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true") {
+      val typ = VarcharType(5)
+      checkEvaluation(Literal.create("", typ), "")
+      checkEvaluation(Literal.create("test", typ), "test")
+      checkEvaluation(Literal.create("test     ", typ), "test ")
+      checkEvaluation(Literal.create("\u0000", typ), "\u0000")
+
+      checkError(
+        exception = intercept[SparkRuntimeException]({
+          Literal.create("123456", typ)
+        }),
+        condition = "EXCEED_LIMIT_LENGTH",
+        parameters = Map("limit" -> "5")
+      )
+    }
   }
 
   test("sum two literals") {
@@ -284,6 +314,13 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       val localDate1 = LocalDate.of(2100, 4, 22)
       checkEvaluation(Literal(Array(localDate0, localDate1)), Array(localDate0, localDate1))
     }
+  }
+
+  test("construct literals from arrays of java.time.LocalTime") {
+    val localTime0 = LocalTime.of(1, 2, 3)
+    checkEvaluation(Literal(Array(localTime0)), Array(localTime0))
+    val localTime1 = LocalTime.of(23, 59, 59, 999999000)
+    checkEvaluation(Literal(Array(localTime0, localTime1)), Array(localTime0, localTime1))
   }
 
   test("construct literals from java.time.Instant") {
@@ -470,6 +507,11 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       }
       checkEvaluation(Literal.create(duration, dt), result)
     }
+
+    val time = LocalTime.of(12, 13, 14)
+    DataTypeTestUtils.timeTypes.foreach { tt =>
+      checkEvaluation(Literal.create(time, tt), localTime(12, 13, 14))
+    }
   }
 
   test("SPARK-37967: Literal.create support ObjectType") {
@@ -503,5 +545,114 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Literal(immArraySeq), expected)
     checkEvaluation(Literal.create(immArraySeq), expected)
     checkEvaluation(Literal.create(immArraySeq, ArrayType(DoubleType)), expected)
+  }
+
+  test("TimeType toString and sql") {
+    Seq(
+      Literal.default(TimeType()) -> "00:00:00",
+      Literal(LocalTime.NOON) -> "12:00:00",
+      Literal(LocalTime.of(23, 59, 59, 100 * 1000 * 1000)) -> "23:59:59.1",
+      Literal(LocalTime.of(23, 59, 59, 10000)) -> "23:59:59.00001",
+      Literal(LocalTime.of(23, 59, 59, 999999000)) -> "23:59:59.999999"
+    ).foreach { case (lit, str) =>
+      assert(lit.toString === str)
+      assert(lit.sql === s"TIME '$str'")
+    }
+  }
+
+  test("context independent foldable literals") {
+    val array = Literal.create(Seq(1, 2, 3), ArrayType(IntegerType))
+    val map = Literal.create(
+      Map("a" -> "123", "b" -> "true", "c" -> "f"),
+      MapType(StringType, StringType, valueContainsNull = true))
+    val struct = Literal.create(
+      Row(1, "2", true, null),
+      StructType(Seq(
+        StructField("a", IntegerType),
+        StructField("b", StringType),
+        StructField("c", BooleanType),
+        StructField("d", NullType))))
+    // Create an array containing timestamps
+    val array2 = Literal.create(
+      Seq(java.sql.Timestamp.valueOf("2021-01-01 12:00:00")),
+      ArrayType(TimestampType))
+
+    // Create a map with timestamp values
+    val map2 = Literal.create(
+      Map("a" -> java.sql.Timestamp.valueOf("2021-01-01 12:00:00")),
+      MapType(StringType, TimestampType, valueContainsNull = true))
+
+    // Create a struct with a timestamp field
+    val struct2 = Literal.create(
+      Row(1, java.sql.Timestamp.valueOf("2021-01-01 12:00:00")),
+      StructType(Seq(
+        StructField("a", IntegerType),
+        StructField("b", TimestampType))))
+    Seq(
+      Literal(1),
+      Literal(1L),
+      Literal(1.0),
+      Literal(1.0f),
+      Literal("string"),
+      Literal(true),
+      Literal(false),
+      Literal(null, NullType),
+      Literal(Decimal(10.5)),
+      Literal(LocalDate.now()),
+      Literal(LocalTime.of(12, 30, 0)),
+      Literal(Period.ofMonths(1)),
+      Literal(Duration.ofDays(1)),
+      Literal.create(java.sql.Timestamp.valueOf("2021-01-01 12:00:00"), TimestampType),
+      Literal.create(1L, TimestampType),
+      array,
+      array2,
+      map,
+      map2,
+      struct,
+      struct2
+    ).foreach { expr =>
+      assert(expr.foldable, s"Expression $expr should be foldable")
+      assert(expr.contextIndependentFoldable,
+        s"Expression $expr should be context independent foldable")
+    }
+  }
+
+  test("context independent foldable literals with UDT") {
+    // Create point instances with ExamplePointUDT
+    val point1 = Array(1.0, 2.0)
+    val point2 = Array(3.0, 4.0)
+
+    Seq(
+      // Basic UDT example
+      Literal.create(point1, new ExamplePointUDT),
+
+      // Array containing UDT elements
+      Literal.create(
+        Array(point1, point2),
+        ArrayType(new ExamplePointUDT)),
+
+      // Map with UDT values
+      Literal.create(
+        Map("p1" -> point1, "p2" -> point2),
+        MapType(StringType, new ExamplePointUDT, valueContainsNull = false)),
+
+      // Struct containing UDT fields
+      Literal.create(
+        Row("point", point1, 42),
+        StructType(Seq(
+          StructField("name", StringType),
+          StructField("coordinates", new ExamplePointUDT),
+          StructField("id", IntegerType)
+        ))),
+
+      // Nested structure with UDT
+      Literal.create(
+        Map("points" -> Array(point1, point2)),
+        MapType(StringType, ArrayType(new ExamplePointUDT), valueContainsNull = false))
+    ).foreach { expr =>
+      assert(expr.foldable, s"Expression $expr should be foldable")
+      assert(expr.contextIndependentFoldable,
+        s"Expression $expr should not be context independent foldable")
+    }
   }
 }

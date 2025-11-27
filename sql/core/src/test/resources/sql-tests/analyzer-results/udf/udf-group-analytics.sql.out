@@ -6,7 +6,7 @@ AS testData(a, b)
 -- !query analysis
 CreateViewCommand `testData`, SELECT * FROM VALUES
 (1, 1), (1, 2), (2, 1), (2, 2), (3, 1), (3, 2)
-AS testData(a, b), false, true, LocalTempView, true
+AS testData(a, b), false, true, LocalTempView, UNSUPPORTED, true
    +- Project [a#x, b#x]
       +- SubqueryAlias testData
          +- LocalRelation [a#x, b#x]
@@ -15,9 +15,9 @@ AS testData(a, b), false, true, LocalTempView, true
 -- !query
 SELECT udf(a + b), b, udf(SUM(a - b)) FROM testData GROUP BY udf(a + b), b WITH CUBE
 -- !query analysis
-Aggregate [cast(udf(cast((a#x + b#x) as string)) as int)#x, b#x, spark_grouping_id#xL], [cast(udf(cast((a#x + b#x) as string)) as int)#x AS udf((a + b))#x, b#x, cast(udf(cast(sum((a#x - b#x)) as string)) as bigint) AS udf(sum((a - b)))#xL]
-+- Expand [[a#x, b#x, cast(udf(cast((a#x + b#x) as string)) as int)#x, b#x, 0], [a#x, b#x, cast(udf(cast((a#x + b#x) as string)) as int)#x, null, 1], [a#x, b#x, null, b#x, 2], [a#x, b#x, null, null, 3]], [a#x, b#x, cast(udf(cast((a#x + b#x) as string)) as int)#x, b#x, spark_grouping_id#xL]
-   +- Project [a#x, b#x, cast(udf(cast((a#x + b#x) as string)) as int) AS cast(udf(cast((a#x + b#x) as string)) as int)#x, b#x AS b#x]
+Aggregate [udf((a + b))#x, b#x, spark_grouping_id#xL], [udf((a + b))#x AS udf((a + b))#x, b#x, cast(udf(cast(sum((a#x - b#x)) as string)) as bigint) AS udf(sum((a - b)))#xL]
++- Expand [[a#x, b#x, udf((a + b))#x, b#x, 0], [a#x, b#x, udf((a + b))#x, null, 1], [a#x, b#x, null, b#x, 2], [a#x, b#x, null, null, 3]], [a#x, b#x, udf((a + b))#x, b#x, spark_grouping_id#xL]
+   +- Project [a#x, b#x, cast(udf(cast((a#x + b#x) as string)) as int) AS udf((a + b))#x, b#x AS b#x]
       +- SubqueryAlias testdata
          +- View (`testData`, [a#x, b#x])
             +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
@@ -29,9 +29,9 @@ Aggregate [cast(udf(cast((a#x + b#x) as string)) as int)#x, b#x, spark_grouping_
 -- !query
 SELECT udf(a), udf(b), SUM(b) FROM testData GROUP BY udf(a), b WITH CUBE
 -- !query analysis
-Aggregate [cast(udf(cast(a#x as string)) as int)#x, b#x, spark_grouping_id#xL], [cast(udf(cast(a#x as string)) as int)#x AS udf(a)#x, cast(udf(cast(b#x as string)) as int) AS udf(b)#x, sum(b#x) AS sum(b)#xL]
-+- Expand [[a#x, b#x, cast(udf(cast(a#x as string)) as int)#x, b#x, 0], [a#x, b#x, cast(udf(cast(a#x as string)) as int)#x, null, 1], [a#x, b#x, null, b#x, 2], [a#x, b#x, null, null, 3]], [a#x, b#x, cast(udf(cast(a#x as string)) as int)#x, b#x, spark_grouping_id#xL]
-   +- Project [a#x, b#x, cast(udf(cast(a#x as string)) as int) AS cast(udf(cast(a#x as string)) as int)#x, b#x AS b#x]
+Aggregate [udf(a)#x, b#x, spark_grouping_id#xL], [udf(a)#x AS udf(a)#x, cast(udf(cast(b#x as string)) as int) AS udf(b)#x, sum(b#x) AS sum(b)#xL]
++- Expand [[a#x, b#x, udf(a)#x, b#x, 0], [a#x, b#x, udf(a)#x, null, 1], [a#x, b#x, null, b#x, 2], [a#x, b#x, null, null, 3]], [a#x, b#x, udf(a)#x, b#x, spark_grouping_id#xL]
+   +- Project [a#x, b#x, cast(udf(cast(a#x as string)) as int) AS udf(a)#x, b#x AS b#x]
       +- SubqueryAlias testdata
          +- View (`testData`, [a#x, b#x])
             +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
@@ -43,9 +43,9 @@ Aggregate [cast(udf(cast(a#x as string)) as int)#x, b#x, spark_grouping_id#xL], 
 -- !query
 SELECT udf(a + b), b, SUM(a - b) FROM testData GROUP BY a + b, b WITH ROLLUP
 -- !query analysis
-Aggregate [(a#x + b#x)#x, b#x, spark_grouping_id#xL], [cast(udf(cast((a#x + b#x)#x as string)) as int) AS udf((a + b))#x, b#x, sum((a#x - b#x)) AS sum((a - b))#xL]
-+- Expand [[a#x, b#x, (a#x + b#x)#x, b#x, 0], [a#x, b#x, (a#x + b#x)#x, null, 1], [a#x, b#x, null, null, 3]], [a#x, b#x, (a#x + b#x)#x, b#x, spark_grouping_id#xL]
-   +- Project [a#x, b#x, (a#x + b#x) AS (a#x + b#x)#x, b#x AS b#x]
+Aggregate [(a + b)#x, b#x, spark_grouping_id#xL], [cast(udf(cast((a + b)#x as string)) as int) AS udf((a + b))#x, b#x, sum((a#x - b#x)) AS sum((a - b))#xL]
++- Expand [[a#x, b#x, (a + b)#x, b#x, 0], [a#x, b#x, (a + b)#x, null, 1], [a#x, b#x, null, null, 3]], [a#x, b#x, (a + b)#x, b#x, spark_grouping_id#xL]
+   +- Project [a#x, b#x, (a#x + b#x) AS (a + b)#x, b#x AS b#x]
       +- SubqueryAlias testdata
          +- View (`testData`, [a#x, b#x])
             +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
@@ -57,9 +57,9 @@ Aggregate [(a#x + b#x)#x, b#x, spark_grouping_id#xL], [cast(udf(cast((a#x + b#x)
 -- !query
 SELECT udf(a), b, udf(SUM(b)) FROM testData GROUP BY udf(a), b WITH ROLLUP
 -- !query analysis
-Aggregate [cast(udf(cast(a#x as string)) as int)#x, b#x, spark_grouping_id#xL], [cast(udf(cast(a#x as string)) as int)#x AS udf(a)#x, b#x, cast(udf(cast(sum(b#x) as string)) as bigint) AS udf(sum(b))#xL]
-+- Expand [[a#x, b#x, cast(udf(cast(a#x as string)) as int)#x, b#x, 0], [a#x, b#x, cast(udf(cast(a#x as string)) as int)#x, null, 1], [a#x, b#x, null, null, 3]], [a#x, b#x, cast(udf(cast(a#x as string)) as int)#x, b#x, spark_grouping_id#xL]
-   +- Project [a#x, b#x, cast(udf(cast(a#x as string)) as int) AS cast(udf(cast(a#x as string)) as int)#x, b#x AS b#x]
+Aggregate [udf(a)#x, b#x, spark_grouping_id#xL], [udf(a)#x AS udf(a)#x, b#x, cast(udf(cast(sum(b#x) as string)) as bigint) AS udf(sum(b))#xL]
++- Expand [[a#x, b#x, udf(a)#x, b#x, 0], [a#x, b#x, udf(a)#x, null, 1], [a#x, b#x, null, null, 3]], [a#x, b#x, udf(a)#x, b#x, spark_grouping_id#xL]
+   +- Project [a#x, b#x, cast(udf(cast(a#x as string)) as int) AS udf(a)#x, b#x AS b#x]
       +- SubqueryAlias testdata
          +- View (`testData`, [a#x, b#x])
             +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
@@ -75,7 +75,7 @@ AS courseSales(course, year, earnings)
 -- !query analysis
 CreateViewCommand `courseSales`, SELECT * FROM VALUES
 ("dotNET", 2012, 10000), ("Java", 2012, 20000), ("dotNET", 2012, 5000), ("dotNET", 2013, 48000), ("Java", 2013, 30000)
-AS courseSales(course, year, earnings), false, true, LocalTempView, true
+AS courseSales(course, year, earnings), false, true, LocalTempView, UNSUPPORTED, true
    +- Project [course#x, year#x, earnings#x]
       +- SubqueryAlias courseSales
          +- LocalRelation [course#x, year#x, earnings#x]
@@ -256,7 +256,7 @@ HAVING GROUPING(year) = 1 AND GROUPING_ID(course, year) > 0 ORDER BY course, udf
 Sort [course#x ASC NULLS FIRST, cast(udf(cast(year#x as string)) as int) ASC NULLS FIRST], true
 +- Project [course#x, year#x]
    +- Filter ((cast(cast((shiftright(spark_grouping_id#xL, 0) & 1) as tinyint) as int) = 1) AND (spark_grouping_id#xL > cast(0 as bigint)))
-      +- Aggregate [course#x, year#x, spark_grouping_id#xL], [course#x, year#x, spark_grouping_id#xL, spark_grouping_id#xL]
+      +- Aggregate [course#x, year#x, spark_grouping_id#xL], [course#x, year#x, spark_grouping_id#xL]
          +- Expand [[course#x, year#x, earnings#x, course#x, year#x, 0], [course#x, year#x, earnings#x, course#x, null, 1], [course#x, year#x, earnings#x, null, year#x, 2], [course#x, year#x, earnings#x, null, null, 3]], [course#x, year#x, earnings#x, course#x, year#x, spark_grouping_id#xL]
             +- Project [course#x, year#x, earnings#x, course#x AS course#x, year#x AS year#x]
                +- SubqueryAlias coursesales
@@ -307,34 +307,32 @@ Project [udf(course)#x, year#x]
 SELECT course, year, GROUPING(course), GROUPING(year) FROM courseSales GROUP BY CUBE(course, year)
 ORDER BY GROUPING(course), GROUPING(year), course, udf(year)
 -- !query analysis
-Project [course#x, year#x, grouping(course)#x, grouping(year)#x]
-+- Sort [cast((shiftright(spark_grouping_id#xL, 1) & 1) as tinyint) ASC NULLS FIRST, cast((shiftright(spark_grouping_id#xL, 0) & 1) as tinyint) ASC NULLS FIRST, course#x ASC NULLS FIRST, cast(udf(cast(year#x as string)) as int) ASC NULLS FIRST], true
-   +- Aggregate [course#x, year#x, spark_grouping_id#xL], [course#x, year#x, cast((shiftright(spark_grouping_id#xL, 1) & 1) as tinyint) AS grouping(course)#x, cast((shiftright(spark_grouping_id#xL, 0) & 1) as tinyint) AS grouping(year)#x, spark_grouping_id#xL, spark_grouping_id#xL]
-      +- Expand [[course#x, year#x, earnings#x, course#x, year#x, 0], [course#x, year#x, earnings#x, course#x, null, 1], [course#x, year#x, earnings#x, null, year#x, 2], [course#x, year#x, earnings#x, null, null, 3]], [course#x, year#x, earnings#x, course#x, year#x, spark_grouping_id#xL]
-         +- Project [course#x, year#x, earnings#x, course#x AS course#x, year#x AS year#x]
-            +- SubqueryAlias coursesales
-               +- View (`courseSales`, [course#x, year#x, earnings#x])
-                  +- Project [cast(course#x as string) AS course#x, cast(year#x as int) AS year#x, cast(earnings#x as int) AS earnings#x]
-                     +- Project [course#x, year#x, earnings#x]
-                        +- SubqueryAlias courseSales
-                           +- LocalRelation [course#x, year#x, earnings#x]
+Sort [grouping(course)#x ASC NULLS FIRST, grouping(year)#x ASC NULLS FIRST, course#x ASC NULLS FIRST, cast(udf(cast(year#x as string)) as int) ASC NULLS FIRST], true
++- Aggregate [course#x, year#x, spark_grouping_id#xL], [course#x, year#x, cast((shiftright(spark_grouping_id#xL, 1) & 1) as tinyint) AS grouping(course)#x, cast((shiftright(spark_grouping_id#xL, 0) & 1) as tinyint) AS grouping(year)#x]
+   +- Expand [[course#x, year#x, earnings#x, course#x, year#x, 0], [course#x, year#x, earnings#x, course#x, null, 1], [course#x, year#x, earnings#x, null, year#x, 2], [course#x, year#x, earnings#x, null, null, 3]], [course#x, year#x, earnings#x, course#x, year#x, spark_grouping_id#xL]
+      +- Project [course#x, year#x, earnings#x, course#x AS course#x, year#x AS year#x]
+         +- SubqueryAlias coursesales
+            +- View (`courseSales`, [course#x, year#x, earnings#x])
+               +- Project [cast(course#x as string) AS course#x, cast(year#x as int) AS year#x, cast(earnings#x as int) AS earnings#x]
+                  +- Project [course#x, year#x, earnings#x]
+                     +- SubqueryAlias courseSales
+                        +- LocalRelation [course#x, year#x, earnings#x]
 
 
 -- !query
 SELECT course, year, GROUPING_ID(course, year) FROM courseSales GROUP BY CUBE(course, year)
 ORDER BY GROUPING(course), GROUPING(year), course, udf(year)
 -- !query analysis
-Project [course#x, year#x, grouping_id(course, year)#xL]
-+- Sort [cast((shiftright(spark_grouping_id#xL, 1) & 1) as tinyint) ASC NULLS FIRST, cast((shiftright(spark_grouping_id#xL, 0) & 1) as tinyint) ASC NULLS FIRST, course#x ASC NULLS FIRST, cast(udf(cast(year#x as string)) as int) ASC NULLS FIRST], true
-   +- Aggregate [course#x, year#x, spark_grouping_id#xL], [course#x, year#x, spark_grouping_id#xL AS grouping_id(course, year)#xL, spark_grouping_id#xL, spark_grouping_id#xL]
-      +- Expand [[course#x, year#x, earnings#x, course#x, year#x, 0], [course#x, year#x, earnings#x, course#x, null, 1], [course#x, year#x, earnings#x, null, year#x, 2], [course#x, year#x, earnings#x, null, null, 3]], [course#x, year#x, earnings#x, course#x, year#x, spark_grouping_id#xL]
-         +- Project [course#x, year#x, earnings#x, course#x AS course#x, year#x AS year#x]
-            +- SubqueryAlias coursesales
-               +- View (`courseSales`, [course#x, year#x, earnings#x])
-                  +- Project [cast(course#x as string) AS course#x, cast(year#x as int) AS year#x, cast(earnings#x as int) AS earnings#x]
-                     +- Project [course#x, year#x, earnings#x]
-                        +- SubqueryAlias courseSales
-                           +- LocalRelation [course#x, year#x, earnings#x]
+Sort [cast((shiftright(grouping_id(course, year)#xL, 1) & 1) as tinyint) ASC NULLS FIRST, cast((shiftright(grouping_id(course, year)#xL, 0) & 1) as tinyint) ASC NULLS FIRST, course#x ASC NULLS FIRST, cast(udf(cast(year#x as string)) as int) ASC NULLS FIRST], true
++- Aggregate [course#x, year#x, spark_grouping_id#xL], [course#x, year#x, spark_grouping_id#xL AS grouping_id(course, year)#xL]
+   +- Expand [[course#x, year#x, earnings#x, course#x, year#x, 0], [course#x, year#x, earnings#x, course#x, null, 1], [course#x, year#x, earnings#x, null, year#x, 2], [course#x, year#x, earnings#x, null, null, 3]], [course#x, year#x, earnings#x, course#x, year#x, spark_grouping_id#xL]
+      +- Project [course#x, year#x, earnings#x, course#x AS course#x, year#x AS year#x]
+         +- SubqueryAlias coursesales
+            +- View (`courseSales`, [course#x, year#x, earnings#x])
+               +- Project [cast(course#x as string) AS course#x, cast(year#x as int) AS year#x, cast(earnings#x as int) AS earnings#x]
+                  +- Project [course#x, year#x, earnings#x]
+                     +- SubqueryAlias courseSales
+                        +- LocalRelation [course#x, year#x, earnings#x]
 
 
 -- !query
@@ -404,9 +402,9 @@ Aggregate [k#x, b#x, spark_grouping_id#xL], [k#x, b#x, sum((a#x - b#x)) AS sum((
 -- !query
 SELECT udf(a + b), udf(udf(b)) AS k, SUM(a - b) FROM testData GROUP BY a + b, k GROUPING SETS(k)
 -- !query analysis
-Aggregate [(a#x + b#x)#x, k#x, spark_grouping_id#xL], [cast(udf(cast((a#x + b#x)#x as string)) as int) AS udf((a + b))#x, k#x, sum((a#x - b#x)) AS sum((a - b))#xL]
-+- Expand [[a#x, b#x, null, k#x, 2]], [a#x, b#x, (a#x + b#x)#x, k#x, spark_grouping_id#xL]
-   +- Project [a#x, b#x, (a#x + b#x) AS (a#x + b#x)#x, cast(udf(cast(cast(udf(cast(b#x as string)) as int) as string)) as int) AS k#x]
+Aggregate [(a + b)#x, k#x, spark_grouping_id#xL], [cast(udf(cast((a + b)#x as string)) as int) AS udf((a + b))#x, k#x, sum((a#x - b#x)) AS sum((a - b))#xL]
++- Expand [[a#x, b#x, null, k#x, 2]], [a#x, b#x, (a + b)#x, k#x, spark_grouping_id#xL]
+   +- Project [a#x, b#x, (a#x + b#x) AS (a + b)#x, cast(udf(cast(cast(udf(cast(b#x as string)) as int) as string)) as int) AS k#x]
       +- SubqueryAlias testdata
          +- View (`testData`, [a#x, b#x])
             +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]

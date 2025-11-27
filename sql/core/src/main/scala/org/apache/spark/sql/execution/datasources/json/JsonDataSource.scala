@@ -20,7 +20,6 @@ package org.apache.spark.sql.execution.datasources.json
 import java.io.InputStream
 
 import com.fasterxml.jackson.core.{JsonFactory, JsonParser}
-import com.google.common.io.ByteStreams
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.io.Text
@@ -34,10 +33,11 @@ import org.apache.spark.sql.{Dataset, Encoders, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.json.{CreateJacksonParser, JacksonParser, JsonInferSchema, JSONOptions}
 import org.apache.spark.sql.catalyst.util.FailureSafeParser
+import org.apache.spark.sql.classic.ClassicConversions.castToImpl
 import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.text.TextFileFormat
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
 
@@ -60,10 +60,14 @@ abstract class JsonDataSource extends Serializable {
       sparkSession: SparkSession,
       inputPaths: Seq[FileStatus],
       parsedOptions: JSONOptions): Option[StructType] = {
-    if (inputPaths.nonEmpty) {
-      Some(infer(sparkSession, inputPaths, parsedOptions))
-    } else {
-      None
+    parsedOptions.singleVariantColumn match {
+      case Some(columnName) => Some(StructType(Array(StructField(columnName, VariantType))))
+      case None =>
+        if (inputPaths.nonEmpty) {
+          Some(infer(sparkSession, inputPaths, parsedOptions))
+        } else {
+          None
+        }
     }
   }
 
@@ -129,7 +133,9 @@ object TextInputJsonDataSource extends JsonDataSource {
       file: PartitionedFile,
       parser: JacksonParser,
       schema: StructType): Iterator[InternalRow] = {
-    val linesReader = new HadoopFileLinesReader(file, parser.options.lineSeparatorInRead, conf)
+    val linesReader = Utils.createResourceUninterruptiblyIfInTaskThread(
+      new HadoopFileLinesReader(file, parser.options.lineSeparatorInRead, conf)
+    )
     Option(TaskContext.get()).foreach(_.addTaskCompletionListener[Unit](_ => linesReader.close()))
     val textParser = parser.options.encoding
       .map(enc => CreateJacksonParser.text(enc, _: JsonFactory, _: Text))
@@ -164,7 +170,8 @@ object MultiLineJsonDataSource extends JsonDataSource {
       .getOrElse(createParser(_: JsonFactory, _: PortableDataStream))
 
     SQLExecution.withSQLConfPropagated(sparkSession) {
-      new JsonInferSchema(parsedOptions).infer[PortableDataStream](sampled, parser)
+      new JsonInferSchema(parsedOptions)
+        .infer[PortableDataStream](sampled, parser, isReadFile = true)
     }
   }
 
@@ -210,9 +217,11 @@ object MultiLineJsonDataSource extends JsonDataSource {
       schema: StructType): Iterator[InternalRow] = {
     def partitionedFileString(ignored: Any): UTF8String = {
       Utils.tryWithResource {
-        CodecStreams.createInputStreamWithCloseResource(conf, file.toPath)
+        Utils.createResourceUninterruptiblyIfInTaskThread {
+          CodecStreams.createInputStreamWithCloseResource(conf, file.toPath)
+        }
       } { inputStream =>
-        UTF8String.fromBytes(ByteStreams.toByteArray(inputStream))
+        UTF8String.fromBytes(inputStream.readAllBytes())
       }
     }
     val streamParser = parser.options.encoding

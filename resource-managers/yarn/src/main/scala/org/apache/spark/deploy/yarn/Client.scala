@@ -17,20 +17,20 @@
 
 package org.apache.spark.deploy.yarn
 
-import java.io.{File, FileFilter, FileNotFoundException, FileOutputStream, InterruptedIOException, IOException, OutputStreamWriter}
+import java.io.{BufferedInputStream, BufferedOutputStream, File, FileFilter, FileInputStream, FileNotFoundException, FileOutputStream, InterruptedIOException, IOException, OutputStreamWriter}
 import java.net.{InetAddress, UnknownHostException, URI, URL}
 import java.nio.ByteBuffer
 import java.nio.charset.StandardCharsets
 import java.nio.file.{Files, Paths}
-import java.util.{Collections, Locale, Properties, UUID}
+import java.util.{Collections, Locale, Objects, Properties, UUID}
 import java.util.zip.{ZipEntry, ZipOutputStream}
 
 import scala.collection.immutable.{Map => IMap}
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, ListBuffer, Map}
 import scala.jdk.CollectionConverters._
+import scala.util.Using
 import scala.util.control.NonFatal
 
-import com.google.common.base.Objects
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
 import org.apache.hadoop.fs.permission.FsPermission
@@ -55,7 +55,7 @@ import org.apache.spark.deploy.security.HadoopDelegationTokenManager
 import org.apache.spark.deploy.yarn.ResourceRequestHelper._
 import org.apache.spark.deploy.yarn.YarnSparkHadoopUtil._
 import org.apache.spark.deploy.yarn.config._
-import org.apache.spark.internal.{Logging, LogKeys, MDC}
+import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Python._
 import org.apache.spark.launcher.{JavaModuleOptions, LauncherBackend, SparkAppHandle, YarnCommandBuilderUtils}
@@ -332,7 +332,7 @@ private[spark] class Client(
         appContext.setLogAggregationContext(logAggregationContext)
       } catch {
         case NonFatal(e) =>
-          logWarning(log"Ignoring ${MDC(LogKeys.CONFIG, ROLLED_LOG_INCLUDE_PATTERN.key)}} " +
+          logWarning(log"Ignoring ${MDC(LogKeys.CONFIG, ROLLED_LOG_INCLUDE_PATTERN.key)} " +
             log"because the version of YARN does not support it", e)
       }
     }
@@ -705,27 +705,27 @@ private[spark] class Client(
           // No configuration, so fall back to uploading local jar files.
           logWarning(
             log"Neither ${MDC(LogKeys.CONFIG, SPARK_JARS.key)} nor " +
-              log"${MDC(LogKeys.CONFIG2, SPARK_ARCHIVE.key)}} is set, falling back to uploading " +
+              log"${MDC(LogKeys.CONFIG2, SPARK_ARCHIVE.key)} is set, falling back to uploading " +
               log"libraries under SPARK_HOME.")
           val jarsDir = new File(YarnCommandBuilderUtils.findJarsDir(
             sparkConf.getenv("SPARK_HOME")))
           val jarsArchive = File.createTempFile(LOCALIZED_LIB_DIR, ".zip",
             new File(Utils.getLocalDir(sparkConf)))
-          val jarsStream = new ZipOutputStream(new FileOutputStream(jarsArchive))
-
-          try {
-            jarsStream.setLevel(0)
-            jarsDir.listFiles().foreach { f =>
-              if (f.isFile && f.getName.toLowerCase(Locale.ROOT).endsWith(".jar") && f.canRead) {
-                jarsStream.putNextEntry(new ZipEntry(f.getName))
-                Files.copy(f.toPath, jarsStream)
+          val bufferSize = sparkConf.get(BUFFER_SIZE)
+          Using.resource(new ZipOutputStream(
+            new BufferedOutputStream(new FileOutputStream(jarsArchive), bufferSize))) {
+            jarsStream =>
+              jarsStream.setLevel(0)
+              jarsDir.listFiles().foreach { f =>
+                if (f.isFile && f.getName.toLowerCase(Locale.ROOT).endsWith(".jar") && f.canRead) {
+                  jarsStream.putNextEntry(new ZipEntry(f.getName))
+                  Using.resource(new BufferedInputStream(new FileInputStream(f), bufferSize)) {
+                    _.transferTo(jarsStream)
+                  }
+                }
                 jarsStream.closeEntry()
               }
-            }
-          } finally {
-            jarsStream.close()
           }
-
           distribute(jarsArchive.toURI.getPath,
             resType = LocalResourceType.ARCHIVE,
             destName = Some(LOCALIZED_LIB_DIR))
@@ -960,14 +960,13 @@ private[spark] class Client(
   /**
    * Set up the environment for launching our ApplicationMaster container.
    */
-  private def setupLaunchEnv(
+  private[yarn] def setupLaunchEnv(
       stagingDirPath: Path,
       pySparkArchives: Seq[String]): HashMap[String, String] = {
     logInfo("Setting up the launch environment for our AM container")
     val env = new HashMap[String, String]()
     populateClasspath(args, hadoopConf, sparkConf, env, sparkConf.get(DRIVER_CLASS_PATH))
     env("SPARK_YARN_STAGING_DIR") = stagingDirPath.toString
-    env("SPARK_USER") = UserGroupInformation.getCurrentUser().getShortUserName()
     env("SPARK_PREFER_IPV6") = Utils.preferIPv6.toString
 
     // Pick up any environment variables for the AM provided through spark.yarn.appMasterEnv.*
@@ -976,6 +975,10 @@ private[spark] class Client(
       .filter { case (k, v) => k.startsWith(amEnvPrefix) }
       .map { case (k, v) => (k.substring(amEnvPrefix.length), v) }
       .foreach { case (k, v) => YarnSparkHadoopUtil.addPathToEnvironment(env, k, v) }
+
+    if (!env.contains("SPARK_USER")) {
+      env("SPARK_USER") = UserGroupInformation.getCurrentUser().getShortUserName()
+    }
 
     // If pyFiles contains any .py files, we need to add LOCALIZED_PYTHON_DIR to the PYTHONPATH
     // of the container processes too. Add all non-.py files directly to PYTHONPATH.
@@ -1211,11 +1214,11 @@ private[spark] class Client(
             cleanupStagingDir()
             return YarnAppReport(YarnApplicationState.KILLED, FinalApplicationStatus.KILLED, None)
           case NonFatal(e) if !e.isInstanceOf[InterruptedIOException] =>
-            val msg = s"Failed to contact YARN for application $appId."
+            val msg = log"Failed to contact YARN for application ${MDC(LogKeys.APP_ID, appId)}."
             logError(msg, e)
             // Don't necessarily clean up staging dir because status is unknown
             return YarnAppReport(YarnApplicationState.FAILED, FinalApplicationStatus.FAILED,
-              Some(msg))
+              Some(msg.message))
         }
       val state = report.getYarnApplicationState
       reportsSinceLastLog += 1
@@ -1385,7 +1388,7 @@ private[spark] class Client(
       val YarnAppReport(appState, finalState, diags) = monitorApplication()
       if (appState == YarnApplicationState.FAILED || finalState == FinalApplicationStatus.FAILED) {
         diags.foreach { err =>
-          logError(s"Application diagnostics message: $err")
+          logError(log"Application diagnostics message: ${MDC(LogKeys.ERROR, err)}")
         }
         throw new SparkException(s"Application $appId finished with failed status")
       }
@@ -1722,7 +1725,7 @@ private[spark] object Client extends Logging {
       }
     }
 
-    Objects.equal(srcHost, dstHost) && srcUri.getPort() == dstUri.getPort()
+    Objects.equals(srcHost, dstHost) && srcUri.getPort() == dstUri.getPort()
 
   }
 

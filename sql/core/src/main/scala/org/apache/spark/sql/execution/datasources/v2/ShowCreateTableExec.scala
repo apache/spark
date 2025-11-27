@@ -57,6 +57,7 @@ case class ShowCreateTableExec(
     showTableOptions(builder, tableOptions)
     showTablePartitioning(table, builder)
     showTableComment(table, builder)
+    showTableCollation(table, builder)
     showTableLocation(table, builder)
     showTableProperties(table, builder, tableOptions)
   }
@@ -64,7 +65,8 @@ case class ShowCreateTableExec(
   private def showTableDataColumns(table: Table, builder: StringBuilder): Unit = {
     import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
     val columns = CharVarcharUtils.getRawSchema(table.columns.asSchema, conf).fields.map(_.toDDL)
-    builder ++= concatByMultiLines(columns)
+    val constraints = table.constraints().map(_.toDDL)
+    builder ++= concatByMultiLines(columns ++ constraints)
   }
 
   private def showTableUsing(table: Table, builder: StringBuilder): Unit = {
@@ -120,7 +122,7 @@ case class ShowCreateTableExec(
   private def showTableLocation(table: Table, builder: StringBuilder): Unit = {
     val isManagedOption = Option(table.properties.get(TableCatalog.PROP_IS_MANAGED_LOCATION))
     // Only generate LOCATION clause if it's not managed.
-    if (isManagedOption.forall(_.equalsIgnoreCase("false"))) {
+    if (isManagedOption.isEmpty || !isManagedOption.get.equalsIgnoreCase("true")) {
       Option(table.properties.get(TableCatalog.PROP_LOCATION))
         .map("LOCATION '" + escapeSingleQuotedString(_) + "'\n")
         .foreach(builder.append)
@@ -152,6 +154,12 @@ case class ShowCreateTableExec(
   private def showTableComment(table: Table, builder: StringBuilder): Unit = {
     Option(table.properties.get(TableCatalog.PROP_COMMENT))
       .map("COMMENT '" + escapeSingleQuotedString(_) + "'\n")
+      .foreach(builder.append)
+  }
+
+  private def showTableCollation(table: Table, builder: StringBuilder): Unit = {
+    Option(table.properties.get(TableCatalog.PROP_COLLATION))
+      .map("COLLATION '" + escapeSingleQuotedString(_) + "'\n")
       .foreach(builder.append)
   }
 

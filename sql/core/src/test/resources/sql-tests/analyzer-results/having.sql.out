@@ -12,7 +12,7 @@ CreateViewCommand `hav`, select * from values
   ("two", 2),
   ("three", 3),
   ("one", 5)
-  as hav(k, v), false, false, LocalTempView, true
+  as hav(k, v), false, false, LocalTempView, UNSUPPORTED, true
    +- Project [k#x, v#x]
       +- SubqueryAlias hav
          +- LocalRelation [k#x, v#x]
@@ -35,8 +35,8 @@ Filter (sum(v)#xL > cast(2 as bigint))
 SELECT count(k) FROM hav GROUP BY v + 1 HAVING v + 1 = 2
 -- !query analysis
 Project [count(k)#xL]
-+- Filter ((v#x + 1)#x = 2)
-   +- Aggregate [(v#x + 1)], [count(k#x) AS count(k)#xL, (v#x + 1) AS (v#x + 1)#x]
++- Filter ((v + 1)#x = 2)
+   +- Aggregate [(v#x + 1)], [count(k#x) AS count(k)#xL, (v#x + 1) AS (v + 1)#x]
       +- SubqueryAlias hav
          +- View (`hav`, [k#x, v#x])
             +- Project [cast(k#x as string) AS k#x, cast(v#x as int) AS v#x]
@@ -199,12 +199,434 @@ Sort [sum(v)#xL ASC NULLS FIRST], true
 SELECT k, sum(v) FROM hav GROUP BY k HAVING sum(v) > 2 ORDER BY avg(v)
 -- !query analysis
 Project [k#x, sum(v)#xL]
-+- Sort [avg(v#x)#x ASC NULLS FIRST], true
++- Sort [avg(v)#x ASC NULLS FIRST], true
    +- Filter (sum(v)#xL > cast(2 as bigint))
-      +- Aggregate [k#x], [k#x, sum(v#x) AS sum(v)#xL, avg(v#x) AS avg(v#x)#x]
+      +- Aggregate [k#x], [k#x, sum(v#x) AS sum(v)#xL, avg(v#x) AS avg(v)#x]
          +- SubqueryAlias hav
             +- View (`hav`, [k#x, v#x])
                +- Project [cast(k#x as string) AS k#x, cast(v#x as int) AS v#x]
                   +- Project [k#x, v#x]
                      +- SubqueryAlias hav
                         +- LocalRelation [k#x, v#x]
+
+
+-- !query
+SELECT sum(v) FROM hav HAVING avg(try_add(v, 1)) = 1
+-- !query analysis
+Project [sum(v)#xL]
++- Filter (avg(try_add(v, 1))#x = cast(1 as double))
+   +- Aggregate [sum(v#x) AS sum(v)#xL, avg(try_add(tempresolvedcolumn(v#x, v, false), 1)) AS avg(try_add(v, 1))#x]
+      +- SubqueryAlias hav
+         +- View (`hav`, [k#x, v#x])
+            +- Project [cast(k#x as string) AS k#x, cast(v#x as int) AS v#x]
+               +- Project [k#x, v#x]
+                  +- SubqueryAlias hav
+                     +- LocalRelation [k#x, v#x]
+
+
+-- !query
+SELECT sum(v) FROM hav HAVING sum(try_add(v, 1)) = 1
+-- !query analysis
+Project [sum(v)#xL]
++- Filter (sum(try_add(v, 1))#xL = cast(1 as bigint))
+   +- Aggregate [sum(v#x) AS sum(v)#xL, sum(try_add(tempresolvedcolumn(v#x, v, false), 1)) AS sum(try_add(v, 1))#xL]
+      +- SubqueryAlias hav
+         +- View (`hav`, [k#x, v#x])
+            +- Project [cast(k#x as string) AS k#x, cast(v#x as int) AS v#x]
+               +- Project [k#x, v#x]
+                  +- SubqueryAlias hav
+                     +- LocalRelation [k#x, v#x]
+
+
+-- !query
+SELECT sum(v) FROM hav HAVING sum(ifnull(v, 1)) = 1
+-- !query analysis
+Project [sum(v)#xL]
++- Filter (sum(ifnull(v, 1))#xL = cast(1 as bigint))
+   +- Aggregate [sum(v#x) AS sum(v)#xL, sum(ifnull(tempresolvedcolumn(v#x, v, false), 1)) AS sum(ifnull(v, 1))#xL]
+      +- SubqueryAlias hav
+         +- View (`hav`, [k#x, v#x])
+            +- Project [cast(k#x as string) AS k#x, cast(v#x as int) AS v#x]
+               +- Project [k#x, v#x]
+                  +- SubqueryAlias hav
+                     +- LocalRelation [k#x, v#x]
+
+
+-- !query
+SELECT sum(v) FROM hav GROUP BY ALL HAVING sum(ifnull(v, 1)) = 1
+-- !query analysis
+Project [sum(v)#xL]
++- Filter (sum(ifnull(v, 1))#xL = cast(1 as bigint))
+   +- Aggregate [sum(v#x) AS sum(v)#xL, sum(ifnull(tempresolvedcolumn(v#x, v, false), 1)) AS sum(ifnull(v, 1))#xL]
+      +- SubqueryAlias hav
+         +- View (`hav`, [k#x, v#x])
+            +- Project [cast(k#x as string) AS k#x, cast(v#x as int) AS v#x]
+               +- Project [k#x, v#x]
+                  +- SubqueryAlias hav
+                     +- LocalRelation [k#x, v#x]
+
+
+-- !query
+SELECT sum(v) FROM hav GROUP BY v HAVING sum(ifnull(v, 1)) = 1
+-- !query analysis
+Project [sum(v)#xL]
++- Filter (sum(ifnull(v, 1))#xL = cast(1 as bigint))
+   +- Aggregate [v#x], [sum(v#x) AS sum(v)#xL, sum(ifnull(tempresolvedcolumn(v#x, v, false), 1)) AS sum(ifnull(v, 1))#xL]
+      +- SubqueryAlias hav
+         +- View (`hav`, [k#x, v#x])
+            +- Project [cast(k#x as string) AS k#x, cast(v#x as int) AS v#x]
+               +- Project [k#x, v#x]
+                  +- SubqueryAlias hav
+                     +- LocalRelation [k#x, v#x]
+
+
+-- !query
+SELECT v + 1 FROM hav GROUP BY ALL HAVING avg(try_add(v, 1)) = 1
+-- !query analysis
+Project [(v + 1)#x]
++- Filter (avg(try_add(v, 1))#x = cast(1 as double))
+   +- Aggregate [(v#x + 1)], [(v#x + 1) AS (v + 1)#x, avg(try_add(tempresolvedcolumn(v#x, v, false), 1)) AS avg(try_add(v, 1))#x]
+      +- SubqueryAlias hav
+         +- View (`hav`, [k#x, v#x])
+            +- Project [cast(k#x as string) AS k#x, cast(v#x as int) AS v#x]
+               +- Project [k#x, v#x]
+                  +- SubqueryAlias hav
+                     +- LocalRelation [k#x, v#x]
+
+
+-- !query
+SELECT v + 1 FROM hav GROUP BY ALL HAVING avg(try_add(v, 1) + 1) = 1
+-- !query analysis
+Project [(v + 1)#x]
++- Filter (avg((try_add(v, 1) + 1))#x = cast(1 as double))
+   +- Aggregate [(v#x + 1)], [(v#x + 1) AS (v + 1)#x, avg((try_add(tempresolvedcolumn(v#x, v, false), 1) + 1)) AS avg((try_add(v, 1) + 1))#x]
+      +- SubqueryAlias hav
+         +- View (`hav`, [k#x, v#x])
+            +- Project [cast(k#x as string) AS k#x, cast(v#x as int) AS v#x]
+               +- Project [k#x, v#x]
+                  +- SubqueryAlias hav
+                     +- LocalRelation [k#x, v#x]
+
+
+-- !query
+SELECT sum(v) FROM hav GROUP BY ifnull(v, 1) + 1 order by ifnull(v, 1) + 1
+-- !query analysis
+Project [sum(v)#xL]
++- Sort [(ifnull(v, 1) + 1)#x ASC NULLS FIRST], true
+   +- Aggregate [(ifnull(v#x, 1) + 1)], [sum(v#x) AS sum(v)#xL, (ifnull(tempresolvedcolumn(v#x, v, false), 1) + 1) AS (ifnull(v, 1) + 1)#x]
+      +- SubqueryAlias hav
+         +- View (`hav`, [k#x, v#x])
+            +- Project [cast(k#x as string) AS k#x, cast(v#x as int) AS v#x]
+               +- Project [k#x, v#x]
+                  +- SubqueryAlias hav
+                     +- LocalRelation [k#x, v#x]
+
+
+-- !query
+SELECT 1 AS `2`, 2 FROM VALUES (2) t (`2`) GROUP BY `2` HAVING `2` > 2
+-- !query analysis
+Project [2#x, 2#x]
++- Filter (2#x > 2#x)
+   +- Aggregate [2#x], [1 AS 2#x, 2 AS 2#x, 2#x]
+      +- SubqueryAlias t
+         +- LocalRelation [2#x]
+
+
+-- !query
+SELECT 2, 1 AS `2` FROM VALUES (2) t (`2`) GROUP BY `2` HAVING `2` > 2
+-- !query analysis
+Project [2#x, 2#x]
++- Filter (2#x > 2#x)
+   +- Aggregate [2#x], [2 AS 2#x, 1 AS 2#x, 2#x]
+      +- SubqueryAlias t
+         +- LocalRelation [2#x]
+
+
+-- !query
+SELECT 1 AS `2` FROM VALUES (2) t (`2`) GROUP BY `2` HAVING `2` > 2
+-- !query analysis
+Project [2#x]
++- Filter (2#x > 2)
+   +- Aggregate [2#x], [1 AS 2#x, 2#x]
+      +- SubqueryAlias t
+         +- LocalRelation [2#x]
+
+
+-- !query
+SELECT 2 FROM VALUES (2) t (`2`) GROUP BY `2` HAVING `2` > 2
+-- !query analysis
+Project [2#x]
++- Filter (2#x > 2#x)
+   +- Aggregate [2#x], [2 AS 2#x, 2#x]
+      +- SubqueryAlias t
+         +- LocalRelation [2#x]
+
+
+-- !query
+SELECT SUM(v) + 1 FROM hav HAVING SUM(v) + 1
+-- !query analysis
+Filter cast((sum(v) + 1)#xL as boolean)
++- Aggregate [(sum(v#x) + cast(1 as bigint)) AS (sum(v) + 1)#xL]
+   +- SubqueryAlias hav
+      +- View (`hav`, [k#x, v#x])
+         +- Project [cast(k#x as string) AS k#x, cast(v#x as int) AS v#x]
+            +- Project [k#x, v#x]
+               +- SubqueryAlias hav
+                  +- LocalRelation [k#x, v#x]
+
+
+-- !query
+SELECT 1 + SUM(v) FROM hav HAVING SUM(v) + 1
+-- !query analysis
+Filter cast((1 + sum(v))#xL as boolean)
++- Aggregate [(cast(1 as bigint) + sum(v#x)) AS (1 + sum(v))#xL]
+   +- SubqueryAlias hav
+      +- View (`hav`, [k#x, v#x])
+         +- Project [cast(k#x as string) AS k#x, cast(v#x as int) AS v#x]
+            +- Project [k#x, v#x]
+               +- SubqueryAlias hav
+                  +- LocalRelation [k#x, v#x]
+
+
+-- !query
+SELECT SUM(v) + 1 FROM hav HAVING 1 + SUM(v)
+-- !query analysis
+Filter cast((sum(v) + 1)#xL as boolean)
++- Aggregate [(sum(v#x) + cast(1 as bigint)) AS (sum(v) + 1)#xL]
+   +- SubqueryAlias hav
+      +- View (`hav`, [k#x, v#x])
+         +- Project [cast(k#x as string) AS k#x, cast(v#x as int) AS v#x]
+            +- Project [k#x, v#x]
+               +- SubqueryAlias hav
+                  +- LocalRelation [k#x, v#x]
+
+
+-- !query
+SELECT MAX(v) + SUM(v) FROM hav HAVING SUM(v) + MAX(v)
+-- !query analysis
+Filter cast((max(v) + sum(v))#xL as boolean)
++- Aggregate [(cast(max(v#x) as bigint) + sum(v#x)) AS (max(v) + sum(v))#xL]
+   +- SubqueryAlias hav
+      +- View (`hav`, [k#x, v#x])
+         +- Project [cast(k#x as string) AS k#x, cast(v#x as int) AS v#x]
+            +- Project [k#x, v#x]
+               +- SubqueryAlias hav
+                  +- LocalRelation [k#x, v#x]
+
+
+-- !query
+SELECT SUM(v) + 1 + MIN(v) FROM hav HAVING 1 + 1 + 1 + MIN(v) + 1 + SUM(v)
+-- !query analysis
+Project [((sum(v) + 1) + min(v))#xL]
++- Filter cast((cast(((((1 + 1) + 1) + min(v)#x) + 1) as bigint) + sum(v)#xL) as boolean)
+   +- Aggregate [((sum(v#x) + cast(1 as bigint)) + cast(min(v#x) as bigint)) AS ((sum(v) + 1) + min(v))#xL, min(v#x) AS min(v)#x, sum(v#x) AS sum(v)#xL]
+      +- SubqueryAlias hav
+         +- View (`hav`, [k#x, v#x])
+            +- Project [cast(k#x as string) AS k#x, cast(v#x as int) AS v#x]
+               +- Project [k#x, v#x]
+                  +- SubqueryAlias hav
+                     +- LocalRelation [k#x, v#x]
+
+
+-- !query
+SELECT col1 AS alias
+FROM values(1)
+GROUP BY col1
+HAVING (
+    SELECT col1 = 1
+)
+-- !query analysis
+Filter cast(scalar-subquery#x [alias#x] as boolean)
+:  +- Project [(outer(alias#x) = 1) AS (outer(col1) = 1)#x]
+:     +- OneRowRelation
++- Aggregate [col1#x], [col1#x AS alias#x]
+   +- LocalRelation [col1#x]
+
+
+-- !query
+SELECT col1 AS alias
+FROM values(named_struct('a', 1))
+GROUP BY col1
+HAVING (
+    SELECT col1.a = 1
+)
+-- !query analysis
+Filter cast(scalar-subquery#x [alias#x] as boolean)
+:  +- Project [(outer(alias#x).a = 1) AS (outer(col1).a = 1)#x]
+:     +- OneRowRelation
++- Aggregate [col1#x], [col1#x AS alias#x]
+   +- LocalRelation [col1#x]
+
+
+-- !query
+SELECT col1 AS alias
+FROM values(array(1))
+GROUP BY col1
+HAVING (
+    SELECT col1[0] = 1
+)
+-- !query analysis
+Filter cast(scalar-subquery#x [alias#x] as boolean)
+:  +- Project [(outer(alias#x)[0] = 1) AS (outer(col1)[0] = 1)#x]
+:     +- OneRowRelation
++- Aggregate [col1#x], [col1#x AS alias#x]
+   +- LocalRelation [col1#x]
+
+
+-- !query
+SELECT col1 AS alias
+FROM values(map('a', 1))
+GROUP BY col1
+HAVING (
+    SELECT col1[0] = 1
+)
+-- !query analysis
+Filter cast(scalar-subquery#x [alias#x] as boolean)
+:  +- Project [(outer(alias#x)[cast(0 as string)] = 1) AS (outer(col1)[0] = 1)#x]
+:     +- OneRowRelation
++- Aggregate [col1#x], [col1#x AS alias#x]
+   +- LocalRelation [col1#x]
+
+
+-- !query
+SELECT col1 FROM VALUES(1,2) GROUP BY col1, col2 HAVING col2 = col2
+-- !query analysis
+Project [col1#x]
++- Filter (col2#x = col2#x)
+   +- Aggregate [col1#x, col2#x], [col1#x, col2#x]
+      +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+SELECT col1 AS a, a AS b FROM VALUES(1,2) GROUP BY col1, col2 HAVING col2 = col2
+-- !query analysis
+Project [a#x, b#x]
++- Filter (col2#x = col2#x)
+   +- Project [a#x, a#x AS b#x, col2#x]
+      +- Project [col1#x, col2#x, col1#x AS a#x]
+         +- Aggregate [col1#x, col2#x], [col1#x, col2#x]
+            +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+SELECT col1, col1 AS a FROM VALUES(1) GROUP BY col1 HAVING col1 > 0
+-- !query analysis
+Filter (col1#x > 0)
++- Aggregate [col1#x], [col1#x, col1#x AS a#x]
+   +- LocalRelation [col1#x]
+
+
+-- !query
+SELECT col1 AS a, col1 FROM VALUES(1) GROUP BY col1 HAVING col1 > 0
+-- !query analysis
+Filter (col1#x > 0)
++- Aggregate [col1#x], [col1#x AS a#x, col1#x]
+   +- LocalRelation [col1#x]
+
+
+-- !query
+SELECT make_date(col1, col2, col3) AS a, a AS b FROM VALUES(1,2,3) GROUP BY make_date(col1, col2, col3) HAVING make_date(col1, col2, col3) > '2025-01-01'
+-- !query analysis
+Filter (a#x > cast(2025-01-01 as date))
++- Project [a#x, a#x AS b#x]
+   +- Project [make_date(col1, col2, col3)#x, make_date(col1, col2, col3)#x AS a#x]
+      +- Aggregate [make_date(col1#x, col2#x, col3#x, true)], [make_date(col1#x, col2#x, col3#x, true) AS make_date(col1, col2, col3)#x]
+         +- LocalRelation [col1#x, col2#x, col3#x]
+
+
+-- !query
+SELECT 1 AS a, 1 / a AS b, ZEROIFNULL(SUM(col1)) FROM VALUES(1) GROUP BY 1 HAVING ZEROIFNULL(SUM(col1)) > 0
+-- !query analysis
+Filter (zeroifnull(sum(col1))#xL > cast(0 as bigint))
++- Project [a#x, (cast(1#x as double) / cast(a#x as double)) AS b#x, zeroifnull(sum(col1#x)) AS zeroifnull(sum(col1))#xL]
+   +- Project [1#x, sum(col1)#xL, 1#x AS a#x]
+      +- Aggregate [1], [1 AS 1#x, sum(col1#x) AS sum(col1)#xL]
+         +- LocalRelation [col1#x]
+
+
+-- !query
+SELECT col1 AS a, SUM(col2) AS b, CASE WHEN col1 = 1 THEN 1 END AS c FROM VALUES(1,2) GROUP BY col1 HAVING CASE WHEN col1 = 1 THEN 1 END = 1
+-- !query analysis
+Filter (c#x = 1)
++- Aggregate [col1#x], [col1#x AS a#x, sum(col2#x) AS b#xL, CASE WHEN (col1#x = 1) THEN 1 END AS c#x]
+   +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+SELECT col1 FROM VALUES(1,2) GROUP BY col1 HAVING MAX(col2) == (SELECT 1 WHERE MAX(col2) = 1)
+-- !query analysis
+Project [col1#x]
++- Filter (max(col2)#x = scalar-subquery#x [max(col2)#x])
+   :  +- Project [1 AS 1#x]
+   :     +- Filter (outer(max(col2)#x) = 1)
+   :        +- OneRowRelation
+   +- Aggregate [col1#x], [col1#x, max(col2#x) AS max(col2)#x]
+      +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+SELECT col1 FROM VALUES(1,2) GROUP BY col1 HAVING (SELECT 1 WHERE MAX(col2) = 1) == MAX(col2)
+-- !query analysis
+Project [col1#x]
++- Filter (scalar-subquery#x [max(col2)#x] = max(col2)#x)
+   :  +- Project [1 AS 1#x]
+   :     +- Filter (outer(max(col2)#x) = 1)
+   :        +- OneRowRelation
+   +- Aggregate [col1#x], [col1#x, max(col2#x) AS max(col2)#x]
+      +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+SELECT col1 FROM VALUES(1,2) GROUP BY col1 HAVING (SELECT 1 WHERE MAX(col2) = 1) == (SELECT 1 WHERE MAX(col2) = 1)
+-- !query analysis
+Project [col1#x]
++- Filter (scalar-subquery#x [max(col2)#x] = scalar-subquery#x [max(col2)#x])
+   :  :- Project [1 AS 1#x]
+   :  :  +- Filter (outer(max(col2)#x) = 1)
+   :  :     +- OneRowRelation
+   :  +- Project [1 AS 1#x]
+   :     +- Filter (outer(max(col2)#x) = 1)
+   :        +- OneRowRelation
+   +- Aggregate [col1#x], [col1#x, max(col2#x) AS max(col2)#x]
+      +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+SELECT col1 FROM VALUES(1,2) GROUP BY col1 HAVING bool_or(col2 = 1) AND bool_or(col2 = 1)
+-- !query analysis
+Project [col1#x]
++- Filter (bool_or((col2 = 1))#x AND bool_or((col2 = 1))#x)
+   +- Aggregate [col1#x], [col1#x, bool_or((col2#x = 1)) AS bool_or((col2 = 1))#x]
+      +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+SELECT 1 GROUP BY COALESCE(1, 1) HAVING COALESCE(1, 1) = 1  OR COALESCE(1, 1) IS NOT NULL
+-- !query analysis
+Project [1#x]
++- Filter ((coalesce(1, 1)#x = 1#x) OR isnotnull(coalesce(1, 1)#x))
+   +- Aggregate [coalesce(1, 1)], [1 AS 1#x, coalesce(1, 1) AS coalesce(1, 1)#x]
+      +- OneRowRelation
+
+
+-- !query
+SELECT col1 FROM VALUES (1) t1 GROUP BY col1 HAVING (
+    SELECT MAX(t2.col1) FROM VALUES (1) t2 WHERE t2.col1 == MAX(t1.col1) GROUP BY t2.col1 HAVING (
+        SELECT t3.col1 FROM VALUES (1) t3 WHERE t3.col1 == MAX(t2.col1)
+    )
+)
+-- !query analysis
+Project [col1#x]
++- Filter cast(scalar-subquery#x [max(col1)#x] as boolean)
+   :  +- Filter cast(scalar-subquery#x [max(col1)#x] as boolean)
+   :     :  +- Project [col1#x]
+   :     :     +- Filter (col1#x = outer(max(col1)#x))
+   :     :        +- SubqueryAlias t3
+   :     :           +- LocalRelation [col1#x]
+   :     +- Aggregate [col1#x], [max(col1#x) AS max(col1)#x]
+   :        +- Filter (col1#x = outer(max(col1)#x))
+   :           +- SubqueryAlias t2
+   :              +- LocalRelation [col1#x]
+   +- Aggregate [col1#x], [col1#x, max(col1#x) AS max(col1)#x]
+      +- SubqueryAlias t1
+         +- LocalRelation [col1#x]

@@ -20,7 +20,6 @@ package org.apache.spark.sql.catalyst.rules
 import org.apache.spark.SparkException
 import org.apache.spark.internal.{Logging, MessageWithContext}
 import org.apache.spark.internal.LogKeys._
-import org.apache.spark.internal.MDC
 import org.apache.spark.sql.catalyst.QueryPlanningTracker
 import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.NANOS_PER_MILLIS
@@ -30,7 +29,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.Utils
 
 object RuleExecutor {
-  protected val queryExecutionMeter = QueryExecutionMetering()
+  protected val queryExecutionMeter = QueryExecutionMetering.INSTANCE
 
   /** Dump statistics about time spent running specific rules. */
   def dumpTimeSpent(): String = {
@@ -59,13 +58,22 @@ class PlanChangeLogger[TreeType <: TreeNode[_]] extends Logging {
     if (!newPlan.fastEquals(oldPlan)) {
       if (logRules.isEmpty || logRules.get.contains(ruleName)) {
         def message(): MessageWithContext = {
+          val oldPlanStringWithOutput = oldPlan.treeString(verbose = false,
+            printOutputColumns = true)
+          val newPlanStringWithOutput = newPlan.treeString(verbose = false,
+            printOutputColumns = true)
+          // scalastyle:off line.size.limit
           log"""
              |=== Applying Rule ${MDC(RULE_NAME, ruleName)} ===
              |${MDC(QUERY_PLAN, sideBySide(oldPlan.treeString, newPlan.treeString).mkString("\n"))}
+             |
+             |Output Information:
+             |${MDC(QUERY_PLAN, sideBySide(oldPlanStringWithOutput, newPlanStringWithOutput).mkString("\n"))}
            """.stripMargin
+           // scalastyle:on line.size.limit
         }
 
-        logBasedOnLevel(message())
+        logBasedOnLevel(logLevel)(message())
       }
     }
   }
@@ -74,47 +82,53 @@ class PlanChangeLogger[TreeType <: TreeNode[_]] extends Logging {
     if (logBatches.isEmpty || logBatches.get.contains(batchName)) {
       def message(): MessageWithContext = {
         if (!oldPlan.fastEquals(newPlan)) {
+          val oldPlanStringWithOutput = oldPlan.treeString(verbose = false,
+            printOutputColumns = true)
+          val newPlanStringWithOutput = newPlan.treeString(verbose = false,
+            printOutputColumns = true)
+          // scalastyle:off line.size.limit
           log"""
              |=== Result of Batch ${MDC(BATCH_NAME, batchName)} ===
              |${MDC(QUERY_PLAN, sideBySide(oldPlan.treeString, newPlan.treeString).mkString("\n"))}
+             |
+             |Output Information:
+             |${MDC(QUERY_PLAN, sideBySide(oldPlanStringWithOutput, newPlanStringWithOutput).mkString("\n"))}
           """.stripMargin
+          // scalastyle:on line.size.limit
         } else {
           log"Batch ${MDC(BATCH_NAME, batchName)} has no effect."
         }
       }
 
-      logBasedOnLevel(message())
+      logBasedOnLevel(logLevel)(message())
     }
   }
 
-  def logMetrics(metrics: QueryExecutionMetrics): Unit = {
+  def logMetrics(name: String, metrics: QueryExecutionMetrics): Unit = {
     val totalTime = metrics.time / NANOS_PER_MILLIS.toDouble
     val totalTimeEffective = metrics.timeEffective / NANOS_PER_MILLIS.toDouble
+    // scalastyle:off line.size.limit
     val message: MessageWithContext =
       log"""
-         |=== Metrics of Executed Rules ===
-         |Total number of runs: ${MDC(RULE_NUMBER_OF_RUNS, metrics.numRuns)}
+         |=== Metrics of Executed Rules ${MDC(RULE_EXECUTOR_NAME, name)} ===
+         |Total number of runs: ${MDC(NUM_RULE_OF_RUNS, metrics.numRuns)}
          |Total time: ${MDC(TOTAL_TIME, totalTime)} ms
-         |Total number of effective runs: ${MDC(RULE_NUMBER_OF_RUNS, metrics.numEffectiveRuns)}
+         |Total number of effective runs: ${MDC(NUM_EFFECTIVE_RULE_OF_RUNS, metrics.numEffectiveRuns)}
          |Total time of effective runs: ${MDC(TOTAL_EFFECTIVE_TIME, totalTimeEffective)} ms
       """.stripMargin
+    // scalastyle:on line.size.limit
 
-    logBasedOnLevel(message)
-  }
-
-  private def logBasedOnLevel(f: => MessageWithContext): Unit = {
-    logLevel match {
-      case "TRACE" => logTrace(f.message)
-      case "DEBUG" => logDebug(f.message)
-      case "INFO" => logInfo(f)
-      case "WARN" => logWarning(f)
-      case "ERROR" => logError(f)
-      case _ => logTrace(f.message)
-    }
+    logBasedOnLevel(logLevel)(message)
   }
 }
 
 abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
+
+  /** Name for this rule executor, automatically inferred based on class name. */
+  protected def name: String = {
+    val className = getClass.getName
+    if (className endsWith "$") className.dropRight(1) else className
+  }
 
   /**
    * An execution strategy for rules that indicates the maximum number of executions. If the
@@ -145,7 +159,7 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
     override val maxIterationsSetting: String = null) extends Strategy
 
   /** A batch of rules. */
-  protected case class Batch(name: String, strategy: Strategy, rules: Rule[TreeType]*)
+  protected[catalyst] case class Batch(name: String, strategy: Strategy, rules: Rule[TreeType]*)
 
   /** Defines a sequence of rule batches, to be overridden by the implementation. */
   protected def batches: Seq[Batch]
@@ -160,6 +174,15 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
    * turn the plan into unresolved.
    */
   protected def validatePlanChanges(
+      previousPlan: TreeType,
+      currentPlan: TreeType): Option[String] = None
+
+  /**
+   * Defines a validate function that validates the plan changes after the execution of each rule,
+   * to make sure these rules make valid changes to the plan. Since this is enabled by default,
+   * this should only consist of very lightweight checks.
+   */
+  protected def validatePlanChangesLightweight(
       previousPlan: TreeType,
       currentPlan: TreeType): Option[String] = None
 
@@ -196,9 +219,10 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
     val tracker: Option[QueryPlanningTracker] = QueryPlanningTracker.get
     val beforeMetrics = RuleExecutor.getCurrentMetrics()
 
-    val enableValidation = SQLConf.get.getConf(SQLConf.PLAN_CHANGE_VALIDATION)
+    val fullValidation = SQLConf.get.getConf(SQLConf.PLAN_CHANGE_VALIDATION)
+    lazy val lightweightValidation = SQLConf.get.getConf(SQLConf.LIGHTWEIGHT_PLAN_CHANGE_VALIDATION)
     // Validate the initial input.
-    if (Utils.isTesting || enableValidation) {
+    if (fullValidation) {
       validatePlanChanges(plan, plan) match {
         case Some(msg) =>
           val ruleExecutorName = this.getClass.getName.stripSuffix("$")
@@ -216,7 +240,7 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
       var lastPlan = curPlan
       var continue = true
 
-      // Run until fix point (or the max number of iterations as specified in the strategy.
+      // Run until fix point or the max number of iterations as specified in the strategy.
       while (continue) {
         curPlan = batch.rules.foldLeft(curPlan) {
           case (plan, rule) =>
@@ -230,8 +254,14 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
               queryExecutionMetrics.incTimeEffectiveExecutionBy(rule.ruleName, runTime)
               planChangeLogger.logRule(rule.ruleName, plan, result)
               // Run the plan changes validation after each rule.
-              if (Utils.isTesting || enableValidation) {
-                validatePlanChanges(plan, result) match {
+              if (fullValidation || lightweightValidation) {
+                // Only run the lightweight version of validation if full validation is disabled.
+                val validationResult = if (fullValidation) {
+                  validatePlanChanges(plan, result)
+                } else {
+                  validatePlanChangesLightweight(plan, result)
+                }
+                validationResult match {
                   case Some(msg) =>
                     throw new SparkException(
                       errorClass = "PLAN_VALIDATION_FAILED_RULE_IN_BATCH",
@@ -289,7 +319,7 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
 
       planChangeLogger.logBatch(batch.name, batchStartPlan, curPlan)
     }
-    planChangeLogger.logMetrics(RuleExecutor.getCurrentMetrics() - beforeMetrics)
+    planChangeLogger.logMetrics(name, RuleExecutor.getCurrentMetrics() - beforeMetrics)
 
     curPlan
   }

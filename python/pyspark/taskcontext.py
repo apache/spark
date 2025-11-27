@@ -262,8 +262,8 @@ ALL_GATHER_FUNCTION = 2
 
 
 def _load_from_socket(
-    port: Optional[Union[str, int]],
-    auth_secret: str,
+    conn_info: Optional[Union[str, int]],
+    auth_secret: Optional[str],
     function: int,
     all_gather_message: Optional[str] = None,
 ) -> List[str]:
@@ -271,7 +271,7 @@ def _load_from_socket(
     Load data from a given socket, this is a blocking method thus only return when the socket
     connection has been closed.
     """
-    (sockfile, sock) = local_connect_and_auth(port, auth_secret)
+    (sockfile, sock) = local_connect_and_auth(conn_info, auth_secret)
 
     # The call may block forever, so no timeout
     sock.settimeout(None)
@@ -331,7 +331,7 @@ class BarrierTaskContext(TaskContext):
     [1]
     """
 
-    _port: ClassVar[Optional[Union[str, int]]] = None
+    _conn_info: ClassVar[Optional[Union[str, int]]] = None
     _secret: ClassVar[Optional[str]] = None
 
     @classmethod
@@ -361,20 +361,20 @@ class BarrierTaskContext(TaskContext):
         """
         if not isinstance(cls._taskContext, BarrierTaskContext):
             raise PySparkRuntimeError(
-                error_class="NOT_IN_BARRIER_STAGE",
-                message_parameters={},
+                errorClass="NOT_IN_BARRIER_STAGE",
+                messageParameters={},
             )
         return cls._taskContext
 
     @classmethod
     def _initialize(
-        cls: Type["BarrierTaskContext"], port: Optional[Union[str, int]], secret: str
+        cls: Type["BarrierTaskContext"], conn_info: Optional[Union[str, int]], secret: Optional[str]
     ) -> None:
         """
         Initialize :class:`BarrierTaskContext`, other methods within :class:`BarrierTaskContext`
         can only be called after BarrierTaskContext is initialized.
         """
-        cls._port = port
+        cls._conn_info = conn_info
         cls._secret = secret
 
     def barrier(self) -> None:
@@ -393,16 +393,16 @@ class BarrierTaskContext(TaskContext):
         calls, in all possible code branches. Otherwise, you may get the job hanging
         or a `SparkException` after timeout.
         """
-        if self._port is None or self._secret is None:
+        if self._conn_info is None:
             raise PySparkRuntimeError(
-                error_class="CALL_BEFORE_INITIALIZE",
-                message_parameters={
+                errorClass="CALL_BEFORE_INITIALIZE",
+                messageParameters={
                     "func_name": "barrier",
                     "object": "BarrierTaskContext",
                 },
             )
         else:
-            _load_from_socket(self._port, self._secret, BARRIER_FUNCTION)
+            _load_from_socket(self._conn_info, self._secret, BARRIER_FUNCTION)
 
     def allGather(self, message: str = "") -> List[str]:
         """
@@ -422,16 +422,16 @@ class BarrierTaskContext(TaskContext):
         """
         if not isinstance(message, str):
             raise TypeError("Argument `message` must be of type `str`")
-        elif self._port is None or self._secret is None:
+        elif self._conn_info is None:
             raise PySparkRuntimeError(
-                error_class="CALL_BEFORE_INITIALIZE",
-                message_parameters={
+                errorClass="CALL_BEFORE_INITIALIZE",
+                messageParameters={
                     "func_name": "allGather",
                     "object": "BarrierTaskContext",
                 },
             )
         else:
-            return _load_from_socket(self._port, self._secret, ALL_GATHER_FUNCTION, message)
+            return _load_from_socket(self._conn_info, self._secret, ALL_GATHER_FUNCTION, message)
 
     def getTaskInfos(self) -> List["BarrierTaskInfo"]:
         """
@@ -453,10 +453,10 @@ class BarrierTaskContext(TaskContext):
         >>> barrier_info.address
         '...:...'
         """
-        if self._port is None or self._secret is None:
+        if self._conn_info is None:
             raise PySparkRuntimeError(
-                error_class="CALL_BEFORE_INITIALIZE",
-                message_parameters={
+                errorClass="CALL_BEFORE_INITIALIZE",
+                messageParameters={
                     "func_name": "getTaskInfos",
                     "object": "BarrierTaskContext",
                 },

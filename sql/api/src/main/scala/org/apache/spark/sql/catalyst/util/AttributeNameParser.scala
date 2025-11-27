@@ -19,11 +19,11 @@ package org.apache.spark.sql.catalyst.util
 import org.apache.spark.sql.errors.DataTypeErrors
 
 trait AttributeNameParser {
+
   /**
-   * Used to split attribute name by dot with backticks rule.
-   * Backticks must appear in pairs, and the quoted string must be a complete name part,
-   * which means `ab..c`e.f is not allowed.
-   * We can use backtick only inside quoted name parts.
+   * Used to split attribute name by dot with backticks rule. Backticks must appear in pairs, and
+   * the quoted string must be a complete name part, which means `ab..c`e.f is not allowed. We can
+   * use backtick only inside quoted name parts.
    */
   def parseAttributeName(name: String): Seq[String] = {
     def e = DataTypeErrors.attributeNameSyntaxError(name)
@@ -50,7 +50,7 @@ trait AttributeNameParser {
           if (tmp.nonEmpty) throw e
           inBacktick = true
         } else if (char == '.') {
-          if (name(i - 1) == '.' || i == name.length - 1) throw e
+          if (i == 0 || name(i - 1) == '.' || i == name.length - 1) throw e
           nameParts += tmp.mkString
           tmp.clear()
         } else {

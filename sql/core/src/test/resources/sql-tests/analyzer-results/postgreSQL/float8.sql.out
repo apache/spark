@@ -9,7 +9,7 @@ CreateDataSourceTableCommand `spark_catalog`.`default`.`FLOAT8_TBL`, false
 INSERT INTO FLOAT8_TBL VALUES (double('    0.0   '))
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/float8_tbl, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/float8_tbl], Append, `spark_catalog`.`default`.`float8_tbl`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/float8_tbl), [f1]
-+- Project [cast(col1#x as double) AS f1#x]
++- Project [col1#x AS f1#x]
    +- LocalRelation [col1#x]
 
 
@@ -17,7 +17,7 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 INSERT INTO FLOAT8_TBL VALUES (double('1004.30  '))
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/float8_tbl, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/float8_tbl], Append, `spark_catalog`.`default`.`float8_tbl`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/float8_tbl), [f1]
-+- Project [cast(col1#x as double) AS f1#x]
++- Project [col1#x AS f1#x]
    +- LocalRelation [col1#x]
 
 
@@ -25,7 +25,7 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 INSERT INTO FLOAT8_TBL VALUES (double('   -34.84'))
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/float8_tbl, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/float8_tbl], Append, `spark_catalog`.`default`.`float8_tbl`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/float8_tbl), [f1]
-+- Project [cast(col1#x as double) AS f1#x]
++- Project [col1#x AS f1#x]
    +- LocalRelation [col1#x]
 
 
@@ -33,7 +33,7 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 INSERT INTO FLOAT8_TBL VALUES (double('1.2345678901234e+200'))
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/float8_tbl, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/float8_tbl], Append, `spark_catalog`.`default`.`float8_tbl`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/float8_tbl), [f1]
-+- Project [cast(col1#x as double) AS f1#x]
++- Project [col1#x AS f1#x]
    +- LocalRelation [col1#x]
 
 
@@ -41,7 +41,7 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 INSERT INTO FLOAT8_TBL VALUES (double('1.2345678901234e-200'))
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/float8_tbl, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/float8_tbl], Append, `spark_catalog`.`default`.`float8_tbl`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/float8_tbl), [f1]
-+- Project [cast(col1#x as double) AS f1#x]
++- Project [col1#x AS f1#x]
    +- LocalRelation [col1#x]
 
 
@@ -403,7 +403,7 @@ FROM FLOAT8_TBL
 -- !query analysis
 CreateViewCommand `UPDATED_FLOAT8_TBL`, SELECT
   CASE WHEN FLOAT8_TBL.f1 > '0.0' THEN FLOAT8_TBL.f1 * '-1' ELSE FLOAT8_TBL.f1 END AS f1
-FROM FLOAT8_TBL, false, false, LocalTempView, true
+FROM FLOAT8_TBL, false, false, LocalTempView, UNSUPPORTED, true
    +- Project [CASE WHEN (f1#x > cast(0.0 as double)) THEN (f1#x * cast(-1 as double)) ELSE f1#x END AS f1#x]
       +- SubqueryAlias spark_catalog.default.float8_tbl
          +- Relation spark_catalog.default.float8_tbl[f1#x] parquet
@@ -612,7 +612,7 @@ TruncateTableCommand `spark_catalog`.`default`.`float8_tbl`
 INSERT INTO FLOAT8_TBL VALUES (double('0.0'))
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/float8_tbl, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/float8_tbl], Append, `spark_catalog`.`default`.`float8_tbl`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/float8_tbl), [f1]
-+- Project [cast(col1#x as double) AS f1#x]
++- Project [col1#x AS f1#x]
    +- LocalRelation [col1#x]
 
 
@@ -620,7 +620,7 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 INSERT INTO FLOAT8_TBL VALUES (double('-34.84'))
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/float8_tbl, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/float8_tbl], Append, `spark_catalog`.`default`.`float8_tbl`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/float8_tbl), [f1]
-+- Project [cast(col1#x as double) AS f1#x]
++- Project [col1#x AS f1#x]
    +- LocalRelation [col1#x]
 
 
@@ -628,7 +628,7 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 INSERT INTO FLOAT8_TBL VALUES (double('-1004.30'))
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/float8_tbl, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/float8_tbl], Append, `spark_catalog`.`default`.`float8_tbl`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/float8_tbl), [f1]
-+- Project [cast(col1#x as double) AS f1#x]
++- Project [col1#x AS f1#x]
    +- LocalRelation [col1#x]
 
 
@@ -636,7 +636,7 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 INSERT INTO FLOAT8_TBL VALUES (double('-1.2345678901234e+200'))
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/float8_tbl, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/float8_tbl], Append, `spark_catalog`.`default`.`float8_tbl`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/float8_tbl), [f1]
-+- Project [cast(col1#x as double) AS f1#x]
++- Project [col1#x AS f1#x]
    +- LocalRelation [col1#x]
 
 
@@ -644,7 +644,7 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 INSERT INTO FLOAT8_TBL VALUES (double('-1.2345678901234e-200'))
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/float8_tbl, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/float8_tbl], Append, `spark_catalog`.`default`.`float8_tbl`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/float8_tbl), [f1]
-+- Project [cast(col1#x as double) AS f1#x]
++- Project [col1#x AS f1#x]
    +- LocalRelation [col1#x]
 
 

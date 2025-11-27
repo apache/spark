@@ -31,7 +31,7 @@ import org.apache.spark._
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.worker.WorkerWatcher
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys
 import org.apache.spark.internal.config._
 import org.apache.spark.network.netty.SparkTransportConf
@@ -74,13 +74,14 @@ private[spark] class CoarseGrainedExecutorBackend(
   override def onStart(): Unit = {
     if (env.conf.get(DECOMMISSION_ENABLED)) {
       val signal = env.conf.get(EXECUTOR_DECOMMISSION_SIGNAL)
-      logInfo(s"Registering SIG$signal handler to trigger decommissioning.")
+      logInfo(log"Registering SIG${MDC(LogKeys.SIGNAL, signal)}" +
+        log" handler to trigger decommissioning.")
       SignalUtils.register(signal, log"Failed to register SIG${MDC(LogKeys.SIGNAL, signal)} " +
         log"handler - disabling executor decommission feature.")(
         self.askSync[Boolean](ExecutorDecommissionSigReceived))
     }
 
-    logInfo("Connecting to driver: " + driverUrl)
+    logInfo(log"Connecting to driver: ${MDC(LogKeys.URL, driverUrl)}" )
     try {
       val securityManager = new SecurityManager(env.conf)
       val shuffleClientTransportConf = SparkTransportConf.fromSparkConf(
@@ -182,7 +183,7 @@ private[spark] class CoarseGrainedExecutorBackend(
         exitExecutor(1, "Received LaunchTask command but executor was null")
       } else {
         val taskDesc = TaskDescription.decode(data.value)
-        logInfo("Got assigned task " + taskDesc.taskId)
+        logInfo(log"Got assigned task ${MDC(LogKeys.TASK_ID, taskDesc.taskId)}")
         executor.launchTask(this, taskDesc)
       }
 
@@ -219,7 +220,7 @@ private[spark] class CoarseGrainedExecutorBackend(
       }.start()
 
     case UpdateDelegationTokens(tokenBytes) =>
-      logInfo(s"Received tokens of ${tokenBytes.length} bytes")
+      logInfo(log"Received tokens of ${MDC(LogKeys.NUM_BYTES, tokenBytes.length)} bytes")
       SparkHadoopUtil.get.addDelegationTokens(tokenBytes, env.conf)
 
     case DecommissionExecutor =>
@@ -252,7 +253,8 @@ private[spark] class CoarseGrainedExecutorBackend(
 
   override def onDisconnected(remoteAddress: RpcAddress): Unit = {
     if (stopping.get()) {
-      logInfo(s"Driver from $remoteAddress disconnected during shutdown")
+      logInfo(log"Driver from ${MDC(LogKeys.RPC_ADDRESS, remoteAddress)}" +
+        log" disconnected during shutdown")
     } else if (driver.exists(_.address == remoteAddress)) {
       exitExecutor(1, s"Driver $remoteAddress disassociated! Shutting down.", null,
         notifyDriver = false)
@@ -263,8 +265,9 @@ private[spark] class CoarseGrainedExecutorBackend(
   }
 
   override def statusUpdate(taskId: Long, state: TaskState, data: ByteBuffer): Unit = {
-    val resources = executor.runningTasks.get(taskId).taskDescription.resources
-    val cpus = executor.runningTasks.get(taskId).taskDescription.cpus
+    val taskDescription = executor.runningTasks.get(taskId).taskDescription
+    val resources = taskDescription.resources
+    val cpus = taskDescription.cpus
     val msg = StatusUpdate(executorId, taskId, state, data, cpus, resources)
     if (TaskState.isFinished(state)) {
       lastTaskFinishTime.set(System.nanoTime())
@@ -315,8 +318,7 @@ private[spark] class CoarseGrainedExecutorBackend(
         log"already started decommissioning.")
       return
     }
-    val msg = s"Decommission executor $executorId."
-    logInfo(msg)
+    logInfo(log"Decommission executor ${MDC(LogKeys.EXECUTOR_ID, executorId)}.")
     try {
       decommissioned = true
       val migrationEnabled = env.conf.get(STORAGE_DECOMMISSION_ENABLED) &&
@@ -369,7 +371,8 @@ private[spark] class CoarseGrainedExecutorBackend(
                 exitExecutor(0, ExecutorLossMessage.decommissionFinished, notifyDriver = true)
               }
             } else {
-              logInfo(s"Blocked from shutdown by ${executor.numRunningTasks} running tasks")
+              logInfo(log"Blocked from shutdown by" +
+                log" ${MDC(LogKeys.NUM_TASKS, executor.numRunningTasks)} running tasks")
             }
             Thread.sleep(sleep_time)
           }
@@ -420,6 +423,7 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
       backendCreateFn: (RpcEnv, Arguments, SparkEnv, ResourceProfile) =>
         CoarseGrainedExecutorBackend): Unit = {
 
+    Utils.resetStructuredLogging()
     Utils.initDaemon(log)
 
     SparkHadoopUtil.get.runAsSparkUser { () =>
@@ -465,6 +469,10 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
         }
       }
 
+      // Initialize logging system again after `spark.log.structuredLogging.enabled` takes effect
+      Utils.resetStructuredLogging(driverConf)
+      Logging.uninitialize()
+
       cfg.hadoopDelegationCreds.foreach { tokens =>
         SparkHadoopUtil.get.addDelegationTokens(tokens, driverConf)
       }
@@ -472,6 +480,29 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
       driverConf.set(EXECUTOR_ID, arguments.executorId)
       cfg.logLevel.foreach(logLevel => Utils.setLogLevelIfNeeded(logLevel))
 
+      // Set executor memory related config here according to resource profile
+      if (cfg.resourceProfile.id != ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID) {
+        cfg.resourceProfile
+          .executorResources
+          .foreach {
+            case (ResourceProfile.OFFHEAP_MEM, request) =>
+              driverConf.set(MEMORY_OFFHEAP_SIZE.key, request.amount.toString + "m")
+              logInfo(log"Set executor off-heap memory to " +
+                log"${MDC(LogKeys.EXECUTOR_MEMORY_OFFHEAP, request)}")
+            case (ResourceProfile.MEMORY, request) =>
+              driverConf.set(EXECUTOR_MEMORY.key, request.amount.toString + "m")
+              logInfo(log"Set executor memory to ${MDC(LogKeys.EXECUTOR_MEMORY_SIZE, request)}")
+            case (ResourceProfile.OVERHEAD_MEM, request) =>
+              // Maybe don't need to set this since it's nearly used by tasks.
+              driverConf.set(EXECUTOR_MEMORY_OVERHEAD.key, request.amount.toString + "m")
+              logInfo(log"Set executor memory_overhead to " +
+                log"${MDC(LogKeys.EXECUTOR_MEMORY_OVERHEAD_SIZE, request)}")
+            case (ResourceProfile.CORES, request) =>
+              driverConf.set(EXECUTOR_CORES.key, request.amount.toString)
+              logInfo(log"Set executor cores to ${MDC(LogKeys.NUM_EXECUTOR_CORES, request)}")
+            case _ =>
+          }
+      }
       val env = SparkEnv.createExecutorEnv(driverConf, arguments.executorId, arguments.bindAddress,
         arguments.hostname, arguments.cores, cfg.ioEncryptionKey, isLocal = false)
       // Set the application attemptId in the BlockStoreClient if available.

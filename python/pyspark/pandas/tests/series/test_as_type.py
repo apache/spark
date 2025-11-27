@@ -22,6 +22,7 @@ import pandas as pd
 from pyspark import pandas as ps
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.sqlutils import SQLTestUtils
+from pyspark.testing.utils import is_ansi_mode_test
 from pyspark.pandas.typedef.typehints import (
     extension_dtypes_available,
     extension_float_dtypes_available,
@@ -31,6 +32,7 @@ from pyspark.pandas.typedef.typehints import (
 
 class SeriesAsTypeMixin:
     def test_astype(self):
+        # numeric
         psers = [pd.Series([10, 20, 15, 30, 45], name="x")]
 
         if extension_dtypes_available:
@@ -41,12 +43,14 @@ class SeriesAsTypeMixin:
         for pser in psers:
             self._test_numeric_astype(pser)
 
+        # numeric with nulls
         pser = pd.Series([10, 20, 15, 30, 45, None, np.nan], name="x")
         psser = ps.Series(pser)
 
         self.assert_eq(psser.astype(bool), pser.astype(bool))
         self.assert_eq(psser.astype(str), pser.astype(str))
 
+        # strings
         pser = pd.Series(["hi", "hi ", " ", " \t", "", None], name="x")
         psser = ps.Series(pser)
 
@@ -60,11 +64,15 @@ class SeriesAsTypeMixin:
             self._check_extension(psser.astype("string"), pser.astype("string"))
             self._check_extension(psser.astype(StringDtype()), pser.astype(StringDtype()))
 
+        # bools
         pser = pd.Series([True, False, None], name="x")
         psser = ps.Series(pser)
-
         self.assert_eq(psser.astype(bool), pser.astype(bool))
         self.assert_eq(psser.astype(str), pser.astype(str))
+
+        if is_ansi_mode_test:
+            with self.assertRaisesRegex(ValueError, "with missing values to integer"):
+                self.assert_eq(psser.astype(int))
 
         if extension_object_dtypes_available:
             from pandas import BooleanDtype, StringDtype
@@ -74,6 +82,7 @@ class SeriesAsTypeMixin:
             self._check_extension(psser.astype("string"), pser.astype("string"))
             self._check_extension(psser.astype(StringDtype()), pser.astype(StringDtype()))
 
+        # datetimes
         pser = pd.Series(["2020-10-27 00:00:01", None], name="x")
         psser = ps.Series(pser)
 
@@ -126,7 +135,7 @@ class SeriesAsTypeMixin:
         self.assert_eq(psser.astype(bool), pser.astype(bool))
         self.assert_eq(psser.astype("bool"), pser.astype("bool"))
         self.assert_eq(psser.astype("?"), pser.astype("?"))
-        self.assert_eq(psser.astype(np.unicode_), pser.astype(np.unicode_))
+        self.assert_eq(psser.astype(np.str_), pser.astype(np.str_))
         self.assert_eq(psser.astype("str"), pser.astype("str"))
         self.assert_eq(psser.astype("U"), pser.astype("U"))
 

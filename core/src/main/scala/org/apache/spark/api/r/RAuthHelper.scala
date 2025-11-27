@@ -24,6 +24,7 @@ import org.apache.spark.SparkConf
 import org.apache.spark.security.SocketAuthHelper
 
 private[spark] class RAuthHelper(conf: SparkConf) extends SocketAuthHelper(conf) {
+  override val isUnixDomainSock = false
 
   override protected def readUtf8(s: Socket): String = {
     SerDe.readString(new DataInputStream(s.getInputStream()))

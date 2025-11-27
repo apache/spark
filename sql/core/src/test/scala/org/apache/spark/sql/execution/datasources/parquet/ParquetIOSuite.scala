@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.parquet
 
-import java.time.LocalDateTime
+import java.time.{LocalDateTime, LocalTime}
 import java.util.Locale
 
 import scala.collection.mutable
@@ -38,10 +38,13 @@ import org.apache.parquet.io.api.Binary
 import org.apache.parquet.schema.{MessageType, MessageTypeParser}
 
 import org.apache.spark.{SPARK_VERSION_SHORT, SparkException, TestUtils}
+import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeRow}
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.catalyst.expressions.{Attribute, GenericInternalRow, UnsafeRow}
+import org.apache.spark.sql.catalyst.util.{DateTimeConstants, DateTimeUtils}
+import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.localTime
+import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.execution.datasources.SQLHadoopMapReduceCommitProtocol
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -92,12 +95,13 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
         |  required fixed_len_byte_array(32) i(DECIMAL(32,0));
         |  required int64 j(TIMESTAMP_MILLIS);
         |  required int64 k(TIMESTAMP_MICROS);
+        |  required int64 l(TIME(MICROS, false));
         |}
       """.stripMargin)
 
     val expectedSparkTypes = Seq(ByteType, ShortType, DateType, DecimalType(1, 0),
       DecimalType(10, 0), StringType, StringType, DecimalType(32, 0), DecimalType(32, 0),
-      TimestampType, TimestampType)
+      TimestampType, TimestampType, TimeType(TimeType.MICROS_PRECISION))
 
     withTempPath { location =>
       val path = new Path(location.getCanonicalPath)
@@ -288,6 +292,31 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
       data.write.parquet(dir.getCanonicalPath)
       readParquetFile(dir.getCanonicalPath) { df =>
         checkAnswer(df, data.collect().toSeq)
+      }
+    }
+  }
+
+  test("SPARK-54220: NullType") {
+    val data = (1 to 5)
+      .map(_ => Row(null, Row(null, null), Seq(null, null), Map(Row(null) -> null))).asJava
+    val dataSchema = new StructType()
+      .add("_1", NullType)
+      .add("_2", new StructType()
+        .add("_1", NullType)
+        .add("_2", NullType))
+      .add("_3", ArrayType(NullType, containsNull = true))
+      .add("_4", MapType(new StructType().add("_1", NullType), NullType, valueContainsNull = true))
+    val expected = data.asScala.toArray
+
+    withAllParquetWriters {
+      withTempPath { path =>
+        val file = path.getCanonicalPath
+        spark.createDataFrame(data, dataSchema).write.parquet(file)
+
+        withAllParquetReaders {
+          val df = spark.read.parquet(file)
+          checkAnswer(df, expected)
+        }
       }
     }
   }
@@ -737,9 +766,14 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
   }
 
   test("vectorized reader: missing all struct fields") {
-    Seq(true, false).foreach { offheapEnabled =>
+    for {
+      offheapEnabled <- Seq(true, false)
+      returnNullStructIfAllFieldsMissing <- Seq(true, false)
+    } {
       withSQLConf(
           SQLConf.PARQUET_VECTORIZED_READER_NESTED_COLUMN_ENABLED.key -> "true",
+          SQLConf.LEGACY_PARQUET_RETURN_NULL_STRUCT_IF_ALL_FIELDS_MISSING.key ->
+              returnNullStructIfAllFieldsMissing.toString,
           SQLConf.COLUMN_VECTOR_OFFHEAP_ENABLED.key -> offheapEnabled.toString) {
         val data = Seq(
           Tuple1((1, "a")),
@@ -753,10 +787,199 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
               .add("_4", LongType, nullable = true),
           nullable = true)
 
+        val expectedAnswer = if (!returnNullStructIfAllFieldsMissing) {
+          Row(Row(null, null)) :: Row(Row(null, null)) :: Row(null) :: Nil
+        } else {
+          Row(null) :: Row(null) :: Row(null) :: Nil
+        }
+
         withParquetFile(data) { file =>
-          checkAnswer(spark.read.schema(readSchema).parquet(file),
-            Row(null) :: Row(null) :: Row(null) :: Nil
-          )
+          val df = spark.read.schema(readSchema).parquet(file)
+          val scanNode = df.queryExecution.executedPlan.collectLeaves().head
+          VerifyNoAdditionalScanOutputExec(scanNode).execute().collect()
+          checkAnswer(df, expectedAnswer)
+        }
+      }
+    }
+  }
+
+  test("SPARK-53535: vectorized reader: missing all struct fields, struct with complex fields") {
+    val data = Seq(
+      Row(Row(Seq(11, 12, null, 14), Row("21", 22), Row(true)), 100),
+      Row(Row(Seq(11, 12, null, 14), Row("21", 22), Row(false)), 100),
+      Row(null, 100)
+    )
+
+    val tableSchema = new StructType()
+      .add("_1", new StructType()
+        .add("_1", ArrayType(IntegerType, containsNull = true))
+        .add("_2", new StructType()
+          .add("_1", StringType)
+          .add("_2", IntegerType))
+        .add("_3", new StructType()
+          .add("_1", BooleanType)))
+      .add("_2", IntegerType)
+
+    val readSchema = new StructType()
+      .add("_1", new StructType()
+        .add("_101", IntegerType)
+        .add("_102", LongType))
+
+    withTempPath { path =>
+      val file = path.getCanonicalPath
+      spark.createDataFrame(data.asJava, tableSchema).write.partitionBy("_2").parquet(file)
+
+      for {
+        offheapEnabled <- Seq(true, false)
+        returnNullStructIfAllFieldsMissing <- Seq(true, false)
+      } {
+        withSQLConf(
+          SQLConf.LEGACY_PARQUET_RETURN_NULL_STRUCT_IF_ALL_FIELDS_MISSING.key ->
+            returnNullStructIfAllFieldsMissing.toString,
+          SQLConf.PARQUET_VECTORIZED_READER_NESTED_COLUMN_ENABLED.key -> "true",
+          SQLConf.COLUMN_VECTOR_OFFHEAP_ENABLED.key -> offheapEnabled.toString
+        ) {
+          val expectedAnswer = if (!returnNullStructIfAllFieldsMissing) {
+            Row(Row(null, null), 100) :: Row(Row(null, null), 100) :: Row(null, 100) :: Nil
+          } else {
+            Row(null, 100) :: Row(null, 100) :: Row(null, 100) :: Nil
+          }
+
+          withAllParquetReaders {
+            val df = spark.read.schema(readSchema).parquet(file)
+            val scanNode = df.queryExecution.executedPlan.collectLeaves().head
+            if (scanNode.supportsColumnar) {
+              VerifyNoAdditionalScanOutputExec(scanNode).execute().collect()
+            }
+            checkAnswer(df, expectedAnswer)
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-53535: vectorized reader: missing all struct fields, struct with map field only") {
+    val data = Seq(
+      Row(Row(Map("key1" -> 1)), 100),
+      Row(Row(Map("key2" -> 2)), 100),
+      Row(null, 100)
+    )
+
+    val tableSchema = new StructType()
+      .add("_1", new StructType()
+        .add("_1", MapType(StringType, IntegerType, valueContainsNull = true)))
+      .add("_2", IntegerType)
+
+    val readSchema = new StructType()
+      .add("_1", new StructType()
+        .add("_101", IntegerType))
+
+    withTempPath { path =>
+      val file = path.getCanonicalPath
+      spark.createDataFrame(data.asJava, tableSchema).write.partitionBy("_2").parquet(file)
+
+      for {
+        offheapEnabled <- Seq(true, false)
+        returnNullStructIfAllFieldsMissing <- Seq(true, false)
+      } {
+        withSQLConf(
+            SQLConf.LEGACY_PARQUET_RETURN_NULL_STRUCT_IF_ALL_FIELDS_MISSING.key ->
+              returnNullStructIfAllFieldsMissing.toString,
+            SQLConf.PARQUET_VECTORIZED_READER_NESTED_COLUMN_ENABLED.key -> "true",
+            SQLConf.COLUMN_VECTOR_OFFHEAP_ENABLED.key -> offheapEnabled.toString
+        ) {
+          val expectedAnswer = if (!returnNullStructIfAllFieldsMissing) {
+            Row(Row(null), 100) :: Row(Row(null), 100) :: Row(null, 100) :: Nil
+          } else {
+            Row(null, 100) :: Row(null, 100) :: Row(null, 100) :: Nil
+          }
+
+          withAllParquetReaders {
+            checkAnswer(spark.read.schema(readSchema).parquet(file), expectedAnswer)
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-53535: vectorized reader: missing all struct fields, " +
+      "struct with cheap map and more expensive array field") {
+    val data = Seq(
+      Row(Row(Map(false -> Row("expensive", 1)), Seq("test1")), 100),
+      Row(Row(Map(true -> Row("expensive", 2)), Seq("test2")), 100),
+      Row(null, 100)
+    )
+
+    val tableSchema = new StructType()
+      .add("_1", new StructType()
+        .add("_1", MapType(
+          BooleanType,
+          new StructType()
+            .add("_1", StringType)
+            .add("_2", IntegerType),
+          valueContainsNull = true))
+        .add("_2", ArrayType(StringType, containsNull = true)))
+      .add("_2", IntegerType)
+
+    val readSchema = new StructType()
+      .add("_1", new StructType()
+        .add("_101", IntegerType))
+
+    withTempPath { path =>
+      val file = path.getCanonicalPath
+      spark.createDataFrame(data.asJava, tableSchema).write.partitionBy("_2").parquet(file)
+
+      for {
+        offheapEnabled <- Seq(true, false)
+        returnNullStructIfAllFieldsMissing <- Seq(true, false)
+      } {
+        withSQLConf(
+            SQLConf.LEGACY_PARQUET_RETURN_NULL_STRUCT_IF_ALL_FIELDS_MISSING.key ->
+              returnNullStructIfAllFieldsMissing.toString,
+            SQLConf.PARQUET_VECTORIZED_READER_NESTED_COLUMN_ENABLED.key -> "true",
+            SQLConf.COLUMN_VECTOR_OFFHEAP_ENABLED.key -> offheapEnabled.toString
+        ) {
+          val expectedAnswer = if (!returnNullStructIfAllFieldsMissing) {
+            Row(Row(null), 100) :: Row(Row(null), 100) :: Row(null, 100) :: Nil
+          } else {
+            Row(null, 100) :: Row(null, 100) :: Row(null, 100) :: Nil
+          }
+
+          withAllParquetReaders {
+            checkAnswer(spark.read.schema(readSchema).parquet(file), expectedAnswer)
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-54220: vectorized reader: missing all struct fields, struct with NullType only") {
+    val data = Seq(
+      Tuple1((null, null)),
+      Tuple1((null, null)),
+      Tuple1(null)
+    )
+    val readSchema = new StructType().add("_1",
+      new StructType()
+          .add("_3", IntegerType, nullable = true)
+          .add("_4", StringType, nullable = true),
+      nullable = true)
+    val expectedAnswer = Row(Row(null, null)) :: Row(Row(null, null)) :: Row(null) :: Nil
+
+    withParquetFile(data) { file =>
+      for (offheapEnabled <- Seq(true, false)) {
+        withSQLConf(
+            SQLConf.PARQUET_VECTORIZED_READER_NESTED_COLUMN_ENABLED.key -> "true",
+            SQLConf.LEGACY_PARQUET_RETURN_NULL_STRUCT_IF_ALL_FIELDS_MISSING.key -> "false",
+            SQLConf.COLUMN_VECTOR_OFFHEAP_ENABLED.key -> offheapEnabled.toString) {
+          withAllParquetReaders {
+            val df = spark.read.schema(readSchema).parquet(file)
+            val scanNode = df.queryExecution.executedPlan.collectLeaves().head
+            if (scanNode.supportsColumnar) {
+              VerifyNoAdditionalScanOutputExec(scanNode).execute().collect()
+            }
+            checkAnswer(df, expectedAnswer)
+          }
         }
       }
     }
@@ -846,7 +1069,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
     def checkCompressionCodec(codec: ParquetCompressionCodec): Unit = {
       withSQLConf(SQLConf.PARQUET_COMPRESSION.key -> codec.name()) {
         withParquetFile(data) { path =>
-          assertResult(spark.conf.get(SQLConf.PARQUET_COMPRESSION).toUpperCase(Locale.ROOT)) {
+          assertResult(spark.conf.get(SQLConf.PARQUET_COMPRESSION.key).toUpperCase(Locale.ROOT)) {
             compressionCodecFor(path, codec.name())
           }
         }
@@ -855,7 +1078,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
 
     // Checks default compression codec
     checkCompressionCodec(
-      ParquetCompressionCodec.fromString(spark.conf.get(SQLConf.PARQUET_COMPRESSION)))
+      ParquetCompressionCodec.fromString(spark.conf.get(SQLConf.PARQUET_COMPRESSION.key)))
 
     ParquetCompressionCodec.availableCodecs.asScala.foreach(checkCompressionCodec(_))
   }
@@ -1068,7 +1291,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
         exception = intercept[SparkException] {
           spark.read.schema(readSchema).parquet(path).collect()
         },
-        errorClass = "FAILED_READ_FILE.PARQUET_COLUMN_DATA_TYPE_MISMATCH",
+        condition = "FAILED_READ_FILE.PARQUET_COLUMN_DATA_TYPE_MISMATCH",
         parameters = Map(
           "path" -> ".*",
           "column" -> "\\[_1\\]",
@@ -1208,7 +1431,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
 
   test("SPARK-7837 Do not close output writer twice when commitTask() fails") {
     withSQLConf(SQLConf.FILE_COMMIT_PROTOCOL_CLASS.key ->
-        classOf[SQLHadoopMapReduceCommitProtocol].getCanonicalName) {
+      classOf[SQLHadoopMapReduceCommitProtocol].getCanonicalName) {
       // Using a output committer that always fail when committing a task, so that both
       // `commitTask()` and `abortTask()` are invoked.
       val extraOptions = Map[String, String](
@@ -1223,7 +1446,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
         val m1 = intercept[SparkException] {
           spark.range(1).coalesce(1).write.options(extraOptions).parquet(dir.getCanonicalPath)
         }
-        assert(m1.getErrorClass == "TASK_WRITE_FAILED")
+        assert(m1.getCondition == "TASK_WRITE_FAILED")
         assert(m1.getCause.getMessage.contains("Intentional exception for testing purposes"))
       }
 
@@ -1233,8 +1456,8 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
             .coalesce(1)
           df.write.partitionBy("a").options(extraOptions).parquet(dir.getCanonicalPath)
         }
-        if (m2.getErrorClass != null) {
-          assert(m2.getErrorClass == "TASK_WRITE_FAILED")
+        if (m2.getCondition != null) {
+          assert(m2.getCondition == "TASK_WRITE_FAILED")
           assert(m2.getCause.getMessage.contains("Intentional exception for testing purposes"))
         } else {
           assert(m2.getMessage.contains("TASK_WRITE_FAILED"))
@@ -1302,6 +1525,16 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
         // Decimal column in this file is encoded using plain dictionary
         readResourceParquetFile("test-data/dec-in-i32.parquet"),
         spark.range(1 << 4).select($"id" % 10 cast DecimalType(5, 2) as Symbol("i32_dec")))
+    }
+  }
+
+  test("explode nested lists crossing a rowgroup boundary") {
+    withAllParquetReaders {
+      checkAnswer(
+        readResourceParquetFile("test-data/packed-list-vectorized.parquet")
+          .selectExpr("explode(DIStatus.command_status.actions_status)")
+          .selectExpr("col.result"),
+        List.fill(4992)(Row("SUCCESS")))
     }
   }
 
@@ -1585,6 +1818,47 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
       }
     }
   }
+
+  test("SPARK-49991: Respect 'mapreduce.output.basename' to generate file names") {
+    withTempPath { dir =>
+      withSQLConf("mapreduce.output.basename" -> "apachespark") {
+        spark.range(1).coalesce(1).write.parquet(dir.getCanonicalPath)
+        val df = spark.read.parquet(dir.getCanonicalPath)
+        assert(df.inputFiles.head.contains("apachespark"))
+        checkAnswer(spark.read.parquet(dir.getCanonicalPath), Row(0))
+      }
+    }
+  }
+
+  test("Read TimeType for the logical TIME type") {
+    val schema = MessageTypeParser.parseMessageType(
+      """message root {
+        |  required int64 time_micros(TIME(MICROS,false));
+        |}""".stripMargin)
+
+    for (dictEnabled <- Seq(true, false)) {
+      withTempDir { dir =>
+        val tablePath = new Path(s"${dir.getCanonicalPath}/times.parquet")
+        val numRecords = 100
+
+        val writer = createParquetWriter(schema, tablePath, dictionaryEnabled = dictEnabled)
+        (0 until numRecords).foreach { i =>
+          val record = new SimpleGroup(schema)
+          record.add(0, localTime(23, 59, 59, 123456) / DateTimeConstants.NANOS_PER_MICROS)
+          writer.write(record)
+        }
+        writer.close
+
+        withAllParquetReaders {
+          val df = spark.read.parquet(tablePath.toString)
+          assertResult(df.schema) { new StructType().add("time_micros", TimeType()) }
+          val lt = LocalTime.of(23, 59, 59, 123456000)
+          val expected = (0 until numRecords).map { _ => lt }.toDF()
+          checkAnswer(df, expected)
+        }
+      }
+    }
+  }
 }
 
 class JobCommitFailureParquetOutputCommitter(outputPath: Path, context: TaskAttemptContext)
@@ -1601,4 +1875,22 @@ class TaskCommitFailureParquetOutputCommitter(outputPath: Path, context: TaskAtt
   override def commitTask(context: TaskAttemptContext): Unit = {
     sys.error("Intentional exception for testing purposes")
   }
+}
+
+case class VerifyNoAdditionalScanOutputExec(override val child: SparkPlan) extends UnaryExecNode {
+  override def doExecute(): RDD[InternalRow] = {
+    val childOutputTypes = child.output.map(_.dataType)
+    child.executeColumnar().foreachPartition { batches =>
+      batches.foreach { input =>
+        0.until(input.numCols).foreach { index =>
+          assert(childOutputTypes(index) == input.column(index).dataType,
+            "Found additional columns in the ColumnarBatch that are not present in output schema")
+        }
+      }
+    }
+    sparkContext.emptyRDD[InternalRow]
+  }
+  override def output: Seq[Attribute] = Nil
+  override def withNewChildInternal(newChild: SparkPlan): VerifyNoAdditionalScanOutputExec =
+    copy(child = newChild)
 }

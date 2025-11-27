@@ -1,2 +1,0 @@
-SubqueryAlias primary.tempdb.myTable
-+- RelationV2[id#0L] primary.tempdb.myTable primary.tempdb.myTable

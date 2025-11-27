@@ -18,11 +18,10 @@
 package org.apache.spark.sql.hive.thriftserver
 
 import java.io.File
-import java.nio.charset.StandardCharsets
+import java.nio.file.Files
 
 import scala.util.Random
 
-import com.google.common.io.Files
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.openqa.selenium.WebDriver
 import org.openqa.selenium.htmlunit.HtmlUnitDriver
@@ -75,7 +74,7 @@ class UISeleniumSuite
       // overrides all other potential log4j configurations contained in other dependency jar files.
       val tempLog4jConf = org.apache.spark.util.Utils.createTempDir().getCanonicalPath
 
-      Files.write(
+      Files.writeString(new File(s"$tempLog4jConf/log4j2.properties").toPath,
         """rootLogger.level = info
           |rootLogger.appenderRef.file.ref = console
           |appender.console.type = Console
@@ -83,9 +82,7 @@ class UISeleniumSuite
           |appender.console.target = SYSTEM_ERR
           |appender.console.layout.type = PatternLayout
           |appender.console.layout.pattern = %d{HH:mm:ss.SSS} %p %c: %maxLen{%m}{512}%n%ex{8}%n
-        """.stripMargin,
-        new File(s"$tempLog4jConf/log4j2.properties"),
-        StandardCharsets.UTF_8)
+        """.stripMargin)
 
       tempLog4jConf
     }
@@ -159,7 +156,7 @@ class UISeleniumSuite
       }
 
       val sessionLink =
-        find(cssSelector("table#sessionstat td a")).head.underlying.getAttribute("href")
+        find(cssSelector("table#sessionstat td a")).head.underlying.getDomProperty("href")
       eventually(timeout(10.seconds), interval(50.milliseconds)) {
         go to sessionLink
         val statements = findAll(

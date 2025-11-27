@@ -29,14 +29,21 @@ import org.apache.spark.api.python.SerDeUtil
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, GenericArrayData, MapData}
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, GenericArrayData, MapData, STUtils}
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.unsafe.types.{GeographyVal, GeometryVal, UTF8String, VariantVal}
 
 object EvaluatePython {
 
+  /**
+   * Wrapper class for byte arrays that should be pickled as Python bytes instead of bytearray.
+   * This is a marker class that tells the pickler to use bytes() constructor.
+   */
+  private[python] class BytesWrapper(val data: Array[Byte])
+
   def needConversionInPython(dt: DataType): Boolean = dt match {
-    case DateType | TimestampType | TimestampNTZType | _: DayTimeIntervalType => true
+    case DateType | TimestampType | TimestampNTZType | VariantType | _: DayTimeIntervalType
+         | _: TimeType | _: GeometryType | _: GeographyType => true
     case _: StructType => true
     case _: UserDefinedType[_] => true
     case ArrayType(elementType, _) => needConversionInPython(elementType)
@@ -48,39 +55,56 @@ object EvaluatePython {
   /**
    * Helper for converting from Catalyst type to java type suitable for Pickle.
    */
-  def toJava(obj: Any, dataType: DataType): Any = (obj, dataType) match {
-    case (null, _) => null
+  def toJava(
+      obj: Any,
+      dataType: DataType,
+      binaryAsBytes: Boolean): Any = {
+    (obj, dataType) match {
+      case (null, _) => null
 
-    case (row: InternalRow, struct: StructType) =>
-      val values = new Array[Any](row.numFields)
-      var i = 0
-      while (i < row.numFields) {
-        values(i) = toJava(row.get(i, struct.fields(i).dataType), struct.fields(i).dataType)
-        i += 1
-      }
-      new GenericRowWithSchema(values, struct)
+      case (row: InternalRow, struct: StructType) =>
+        val values = new Array[Any](row.numFields)
+        var i = 0
+        while (i < row.numFields) {
+          val field = struct.fields(i)
+          values(i) = toJava(row.get(i, field.dataType), field.dataType, binaryAsBytes)
+          i += 1
+        }
+        new GenericRowWithSchema(values, struct)
 
-    case (a: ArrayData, array: ArrayType) =>
-      val values = new java.util.ArrayList[Any](a.numElements())
-      a.foreach(array.elementType, (_, e) => {
-        values.add(toJava(e, array.elementType))
-      })
-      values
+      case (a: ArrayData, array: ArrayType) =>
+        val values = new java.util.ArrayList[Any](a.numElements())
+        a.foreach(array.elementType, (_, e) => {
+          values.add(toJava(e, array.elementType, binaryAsBytes))
+        })
+        values
 
-    case (map: MapData, mt: MapType) =>
-      val jmap = new java.util.HashMap[Any, Any](map.numElements())
-      map.foreach(mt.keyType, mt.valueType, (k, v) => {
-        jmap.put(toJava(k, mt.keyType), toJava(v, mt.valueType))
-      })
-      jmap
+      case (map: MapData, mt: MapType) =>
+        val jmap = new java.util.HashMap[Any, Any](map.numElements())
+        map.foreach(mt.keyType, mt.valueType, (k, v) => {
+          jmap.put(toJava(k, mt.keyType, binaryAsBytes), toJava(v, mt.valueType, binaryAsBytes))
+        })
+        jmap
 
-    case (ud, udt: UserDefinedType[_]) => toJava(ud, udt.sqlType)
+      case (ud, udt: UserDefinedType[_]) => toJava(ud, udt.sqlType, binaryAsBytes)
 
-    case (d: Decimal, _) => d.toJavaBigDecimal
+      case (d: Decimal, _) => d.toJavaBigDecimal
 
-    case (s: UTF8String, StringType) => s.toString
+      case (s: UTF8String, _: StringType) => s.toString
 
-    case (other, _) => other
+      case (g: GeometryVal, gt: GeometryType) => STUtils.deserializeGeom(g, gt)
+
+      case (g: GeographyVal, gt: GeographyType) => STUtils.deserializeGeog(g, gt)
+
+      case (bytes: Array[Byte], BinaryType) =>
+        if (binaryAsBytes) {
+          new BytesWrapper(bytes)
+        } else {
+          bytes
+        }
+
+      case (other, _) => other
+    }
   }
 
   /**
@@ -138,7 +162,7 @@ object EvaluatePython {
       case c: Int => c
     }
 
-    case TimestampType | TimestampNTZType | _: DayTimeIntervalType => (obj: Any) =>
+    case TimestampType | TimestampNTZType | _: DayTimeIntervalType | _: TimeType => (obj: Any) =>
       nullSafeConvert(obj) {
         case c: Long => c
         // Py4J serializes values between MIN_INT and MAX_INT as Ints, not Longs
@@ -201,6 +225,30 @@ object EvaluatePython {
 
     case udt: UserDefinedType[_] => makeFromJava(udt.sqlType)
 
+    case VariantType => (obj: Any) => nullSafeConvert(obj) {
+      case s: java.util.HashMap[_, _] =>
+        new VariantVal(
+          s.get("value").asInstanceOf[Array[Byte]], s.get("metadata").asInstanceOf[Array[Byte]]
+        )
+    }
+
+    case g: GeographyType => (obj: Any) => nullSafeConvert(obj) {
+      case s: java.util.HashMap[_, _] =>
+        val geographySrid = s.get("srid").asInstanceOf[Int]
+        g.assertSridAllowedForType(geographySrid)
+        STUtils.stGeogFromWKB(
+          s.get("wkb").asInstanceOf[Array[Byte]])
+    }
+
+    case g: GeometryType => (obj: Any) => nullSafeConvert(obj) {
+      case s: java.util.HashMap[_, _] =>
+        val geometrySrid = s.get("srid").asInstanceOf[Int]
+        g.assertSridAllowedForType(geometrySrid)
+        STUtils.stGeomFromWKB(
+          s.get("wkb").asInstanceOf[Array[Byte]],
+          geometrySrid)
+    }
+
     case other => (obj: Any) => nullSafeConvert(obj)(PartialFunction.empty)
   }
 
@@ -236,6 +284,37 @@ object EvaluatePython {
       val schema = obj.asInstanceOf[StructType]
       pickler.save(schema.json)
       out.write(Opcodes.TUPLE1)
+      out.write(Opcodes.REDUCE)
+    }
+  }
+
+  /**
+   * Pickler for BytesWrapper that pickles byte arrays as Python bytes using bytes() builtin.
+   * Structure: bytes(bytearray_data) where bytearray_data is pickled by razorvine's
+   * default pickler.
+   */
+  private class BytesWrapperPickler extends IObjectPickler {
+
+    private val cls = classOf[BytesWrapper]
+
+    def register(): Unit = {
+      Pickler.registerCustomPickler(cls, this)
+    }
+
+    def pickle(obj: Object, out: OutputStream, pickler: Pickler): Unit = {
+      // Pickle structure: bytes(bytearray_value)
+      // GLOBAL 'builtins' 'bytes'
+      out.write(Opcodes.GLOBAL)
+      out.write("builtins\nbytes\n".getBytes(StandardCharsets.UTF_8))
+
+      // Pickle the wrapped byte array data using razorvine's built-in pickler
+      val wrapper = obj.asInstanceOf[BytesWrapper]
+      pickler.save(wrapper.data)
+
+      // TUPLE1 creates a 1-tuple: (bytearray_value,)
+      out.write(Opcodes.TUPLE1)
+
+      // REDUCE calls bytes(bytearray_value)
       out.write(Opcodes.REDUCE)
     }
   }
@@ -291,6 +370,7 @@ object EvaluatePython {
         SerDeUtil.initialize()
         new StructTypePickler().register()
         new RowPickler().register()
+        new BytesWrapperPickler().register()
         registered = true
       }
     }

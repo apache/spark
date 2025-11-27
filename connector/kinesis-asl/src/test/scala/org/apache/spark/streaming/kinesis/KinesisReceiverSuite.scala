@@ -20,7 +20,7 @@ import java.nio.ByteBuffer
 import java.nio.charset.StandardCharsets
 import java.util.Arrays
 
-import org.mockito.ArgumentMatchers.{any, anyList, anyString, eq => meq}
+import org.mockito.ArgumentMatchers.{anyList, anyString, eq => meq}
 import org.mockito.Mockito.{never, times, verify, when}
 import org.scalatest.BeforeAndAfter
 import org.scalatest.matchers.must.Matchers
@@ -141,63 +141,42 @@ class KinesisReceiverSuite extends TestSuiteBase with Matchers with BeforeAndAft
     verify(receiverMock, never).setCheckpointer(anyString, meq(checkpointerMock))
   }
 
-  test("should not checkpoint when the method leaseLost is called") {
+  test("SPARK-XXXXX: shutdownRequest should checkpoint") {
+    when(receiverMock.getLatestSeqNumToCheckpoint(shardId)).thenReturn(someSeqNum)
+
+    val recordProcessor = new KinesisRecordProcessor(receiverMock, schedulerId)
+    val shutdownRequestedInput = ShutdownRequestedInput.builder()
+      .checkpointer(checkpointerMock)
+      .build()
+    recordProcessor.initialize(dummyInitializationInput)
+    recordProcessor.shutdownRequested(shutdownRequestedInput)
+
+    verify(receiverMock, times(1)).removeCheckpointer(meq(shardId), meq(checkpointerMock))
+  }
+
+  test("SPARK-XXXXX: shardEnded should checkpoint") {
+    when(receiverMock.getLatestSeqNumToCheckpoint(shardId)).thenReturn(someSeqNum)
+
+    val recordProcessor = new KinesisRecordProcessor(receiverMock, schedulerId)
+    val shardEndedInput = ShardEndedInput.builder()
+      .checkpointer(checkpointerMock)
+      .build()
+    recordProcessor.initialize(dummyInitializationInput)
+    recordProcessor.shardEnded(shardEndedInput)
+
+    verify(receiverMock, times(1)).removeCheckpointer(meq(shardId), meq(checkpointerMock))
+  }
+
+  test("SPARK-XXXXX: leaseLost should not checkpoint") {
+    when(receiverMock.getLatestSeqNumToCheckpoint(shardId)).thenReturn(someSeqNum)
+
     val recordProcessor = new KinesisRecordProcessor(receiverMock, schedulerId)
     val leaseLostInput = LeaseLostInput.builder().build()
+    recordProcessor.initialize(dummyInitializationInput)
     recordProcessor.leaseLost(leaseLostInput)
-    verify(checkpointerMock, times(0)).checkpoint()
-  }
 
-  test("should checkpoint when the method shardEnded is called") {
-    val recordProcessor = new KinesisRecordProcessor(receiverMock, schedulerId)
-    val shardEndedInput = ShardEndedInput.builder()
-      .checkpointer(checkpointerMock)
-      .build()
-    recordProcessor.initialize(dummyInitializationInput)
-    recordProcessor.shardEnded(shardEndedInput)
-
-    verify(receiverMock, times(1)).removeCheckpointer(shardId, checkpointerMock)
-  }
-
-  test("should not checkpoint when the method shardEnded is called, but shardId is null") {
-    val recordProcessor = new KinesisRecordProcessor(receiverMock, schedulerId)
-    val initializationInput = InitializationInput.builder()
-      .shardId(null)
-      .build()
-    recordProcessor.initialize(initializationInput)
-
-    val shardEndedInput = ShardEndedInput.builder()
-      .checkpointer(checkpointerMock)
-      .build()
-    recordProcessor.shardEnded(shardEndedInput)
-
-    verify(receiverMock, times(0)).removeCheckpointer(any(), meq(checkpointerMock))
-  }
-
-  test("should checkpoint when the method shutdownRequested is called") {
-    val recordProcessor = new KinesisRecordProcessor(receiverMock, schedulerId)
-    val shutdownRequestedInput = ShutdownRequestedInput.builder()
-      .checkpointer(checkpointerMock)
-      .build()
-    recordProcessor.initialize(dummyInitializationInput)
-    recordProcessor.shutdownRequested(shutdownRequestedInput)
-
-    verify(receiverMock, times(1)).removeCheckpointer(shardId, checkpointerMock)
-  }
-
-  test("should not checkpoint when the method shutdownRequested is called, but shardId is null") {
-    val recordProcessor = new KinesisRecordProcessor(receiverMock, schedulerId)
-    val initializationInput = InitializationInput.builder()
-      .shardId(null)
-      .build()
-    recordProcessor.initialize(initializationInput)
-
-    val shutdownRequestedInput = ShutdownRequestedInput.builder()
-      .checkpointer(checkpointerMock)
-      .build()
-    recordProcessor.shutdownRequested(shutdownRequestedInput)
-
-    verify(receiverMock, times(0)).removeCheckpointer(any(), meq(checkpointerMock))
+    verify(receiverMock, times(1)).removeCheckpointer(meq(shardId),
+      meq[RecordProcessorCheckpointer](null))
   }
 
   test("retry success on first attempt") {

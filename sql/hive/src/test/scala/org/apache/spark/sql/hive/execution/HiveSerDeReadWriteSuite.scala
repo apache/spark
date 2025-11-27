@@ -44,7 +44,7 @@ class HiveSerDeReadWriteSuite extends QueryTest with SQLTestUtils with TestHiveS
     super.beforeAll()
     originalConvertMetastoreParquet = spark.conf.get(CONVERT_METASTORE_PARQUET.key)
     originalConvertMetastoreORC = spark.conf.get(CONVERT_METASTORE_ORC.key)
-    originalORCImplementation = spark.conf.get(ORC_IMPLEMENTATION)
+    originalORCImplementation = spark.conf.get(ORC_IMPLEMENTATION.key)
 
     spark.conf.set(CONVERT_METASTORE_PARQUET.key, "false")
     spark.conf.set(CONVERT_METASTORE_ORC.key, "false")
@@ -107,9 +107,10 @@ class HiveSerDeReadWriteSuite extends QueryTest with SQLTestUtils with TestHiveS
     withTable("hive_serde") {
       hiveClient.runSqlHive(s"CREATE TABLE hive_serde (c1 CHAR(10)) STORED AS $fileFormat")
       hiveClient.runSqlHive("INSERT INTO TABLE hive_serde values('s')")
-      checkAnswer(spark.table("hive_serde"), Row("s" + " " * 9))
+      checkAnswer(spark.table("hive_serde"), Row("s" + " ".repeat(9)))
       spark.sql(s"INSERT INTO TABLE hive_serde values('s3')")
-      checkAnswer(spark.table("hive_serde"), Seq(Row("s" + " " * 9), Row("s3" + " " * 8)))
+      checkAnswer(spark.table("hive_serde"),
+        Seq(Row("s" + " ".repeat(9)), Row("s3" + " ".repeat(8))))
     }
   }
 

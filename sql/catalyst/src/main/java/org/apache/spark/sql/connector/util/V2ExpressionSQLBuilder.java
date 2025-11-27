@@ -29,6 +29,7 @@ import org.apache.spark.sql.connector.expressions.Expression;
 import org.apache.spark.sql.connector.expressions.Extract;
 import org.apache.spark.sql.connector.expressions.NamedReference;
 import org.apache.spark.sql.connector.expressions.GeneralScalarExpression;
+import org.apache.spark.sql.connector.expressions.GetArrayItem;
 import org.apache.spark.sql.connector.expressions.Literal;
 import org.apache.spark.sql.connector.expressions.NullOrdering;
 import org.apache.spark.sql.connector.expressions.SortDirection;
@@ -65,7 +66,6 @@ public class V2ExpressionSQLBuilder {
       switch (c) {
         case '_' -> builder.append("\\_");
         case '%' -> builder.append("\\%");
-        case '\'' -> builder.append("\\\'");
         default -> builder.append(c);
       }
     }
@@ -79,12 +79,14 @@ public class V2ExpressionSQLBuilder {
     } else if (expr instanceof NamedReference namedReference) {
       return visitNamedReference(namedReference);
     } else if (expr instanceof Cast cast) {
-      return visitCast(build(cast.expression()), cast.dataType());
+      return visitCast(build(cast.expression()), cast.expressionDataType(), cast.dataType());
     } else if (expr instanceof Extract extract) {
-      return visitExtract(extract.field(), build(extract.source()));
+      return visitExtract(extract);
     } else if (expr instanceof SortOrder sortOrder) {
       return visitSortOrder(
         build(sortOrder.expression()), sortOrder.direction(), sortOrder.nullOrdering());
+    } else if (expr instanceof GetArrayItem getArrayItem) {
+      return visitGetArrayItem(getArrayItem);
     } else if (expr instanceof GeneralScalarExpression e) {
       String name = e.name();
       return switch (name) {
@@ -99,7 +101,9 @@ public class V2ExpressionSQLBuilder {
         case "ENDS_WITH" -> visitEndsWith(build(e.children()[0]), build(e.children()[1]));
         case "CONTAINS" -> visitContains(build(e.children()[0]), build(e.children()[1]));
         case "=", "<>", "<=>", "<", "<=", ">", ">=" ->
-          visitBinaryComparison(name, inputToSQL(e.children()[0]), inputToSQL(e.children()[1]));
+          visitBinaryComparison(name, e.children()[0], e.children()[1]);
+        case "BOOLEAN_EXPRESSION" ->
+          build(expr.children()[0]);
         case "+", "*", "/", "%", "&", "|", "^" ->
           visitBinaryArithmetic(name, inputToSQL(e.children()[0]), inputToSQL(e.children()[1]));
         case "-" -> {
@@ -119,8 +123,8 @@ public class V2ExpressionSQLBuilder {
           "COT", "ASIN", "ASINH", "ACOS", "ACOSH", "ATAN", "ATANH", "ATAN2", "CBRT", "DEGREES",
           "RADIANS", "SIGN", "WIDTH_BUCKET", "SUBSTRING", "UPPER", "LOWER", "TRANSLATE",
           "DATE_ADD", "DATE_DIFF", "TRUNC", "AES_ENCRYPT", "AES_DECRYPT", "SHA1", "SHA2", "MD5",
-          "CRC32", "BIT_LENGTH", "CHAR_LENGTH", "CONCAT" ->
-          visitSQLFunction(name, expressionsToStringArray(e.children()));
+          "CRC32", "BIT_LENGTH", "CHAR_LENGTH", "CONCAT", "RPAD", "LPAD" ->
+          visitSQLFunction(name, e.children());
         case "CASE_WHEN" -> visitCaseWhen(expressionsToStringArray(e.children()));
         case "TRIM" -> visitTrim("BOTH", expressionsToStringArray(e.children()));
         case "LTRIM" -> visitTrim("LEADING", expressionsToStringArray(e.children()));
@@ -130,26 +134,20 @@ public class V2ExpressionSQLBuilder {
         default -> visitUnexpectedExpr(expr);
       };
     } else if (expr instanceof Min min) {
-      return visitAggregateFunction("MIN", false,
-        expressionsToStringArray(min.children()));
+      return visitAggregateFunction("MIN", false, min.children());
     } else if (expr instanceof Max max) {
-      return visitAggregateFunction("MAX", false,
-        expressionsToStringArray(max.children()));
+      return visitAggregateFunction("MAX", false, max.children());
     } else if (expr instanceof Count count) {
-      return visitAggregateFunction("COUNT", count.isDistinct(),
-        expressionsToStringArray(count.children()));
+      return visitAggregateFunction("COUNT", count.isDistinct(), count.children());
     } else if (expr instanceof Sum sum) {
-      return visitAggregateFunction("SUM", sum.isDistinct(),
-        expressionsToStringArray(sum.children()));
-    } else if (expr instanceof CountStar) {
-      return visitAggregateFunction("COUNT", false, new String[]{"*"});
+      return visitAggregateFunction("SUM", sum.isDistinct(), sum.children());
+    } else if (expr instanceof CountStar countStar) {
+      return visitAggregateFunction("COUNT", false, countStar.children());
     } else if (expr instanceof Avg avg) {
-      return visitAggregateFunction("AVG", avg.isDistinct(),
-        expressionsToStringArray(avg.children()));
+      return visitAggregateFunction("AVG", avg.isDistinct(), avg.children());
     } else if (expr instanceof GeneralAggregateFunc f) {
       if (f.orderingWithinGroups().length == 0) {
-        return visitAggregateFunction(f.name(), f.isDistinct(),
-          expressionsToStringArray(f.children()));
+        return visitAggregateFunction(f.name(), f.isDistinct(), f.children());
       } else {
         return visitInverseDistributionFunction(
           f.name(),
@@ -220,9 +218,14 @@ public class V2ExpressionSQLBuilder {
     }
   }
 
+  protected String visitBinaryComparison(String name, Expression le, Expression re) {
+    return visitBinaryComparison(name, inputToSQL(le), inputToSQL(re));
+  }
+
   protected String visitBinaryComparison(String name, String l, String r) {
     if (name.equals("<=>")) {
-      return "(" + l + " = " + r + ") OR (" + l + " IS NULL AND " + r + " IS NULL)";
+      return "((" + l + " IS NOT NULL AND " + r + " IS NOT NULL AND " + l + " = " + r + ") " +
+              "OR (" + l + " IS NULL AND " + r + " IS NULL))";
     }
     return l + " " + name + " " + r;
   }
@@ -231,8 +234,8 @@ public class V2ExpressionSQLBuilder {
     return l + " " + name + " " + r;
   }
 
-  protected String visitCast(String l, DataType dataType) {
-    return "CAST(" + l + " AS " + dataType.typeName() + ")";
+  protected String visitCast(String expr, DataType exprDataType, DataType targetDataType) {
+    return "CAST(" + expr + " AS " + targetDataType.typeName() + ")";
   }
 
   protected String visitAnd(String name, String l, String r) {
@@ -269,12 +272,31 @@ public class V2ExpressionSQLBuilder {
     return sb.toString();
   }
 
+  protected String visitSQLFunction(String funcName, Expression[] inputs) {
+    return visitSQLFunction(funcName, expressionsToStringArray(inputs));
+  }
+
   protected String visitSQLFunction(String funcName, String[] inputs) {
     return joinArrayToString(inputs, ", ", funcName + "(", ")");
   }
 
+  /**
+   * Builds SQL for an aggregate function.
+   *
+   * In V2ExpressionSQLBuilder, always use this override (with Expression[])
+   * instead of the String[] version, as the String[] version does not validate
+   * whether the function is supported in JDBC dialects.
+   */
   protected String visitAggregateFunction(
-      String funcName, boolean isDistinct, String[] inputs) {
+      String funcName, boolean isDistinct, Expression[] inputs) {
+    // CountStar has no children but should return with a star
+    if (funcName.equals("COUNT") && inputs.length == 0) {
+      return visitAggregateFunction(funcName, isDistinct, new String[]{"*"});
+    }
+    return visitAggregateFunction(funcName, isDistinct, expressionsToStringArray(inputs));
+  }
+
+  protected String visitAggregateFunction(String funcName, boolean isDistinct, String[] inputs) {
     if (isDistinct) {
       return joinArrayToString(inputs, ", ", funcName + "(DISTINCT ", ")");
     } else {
@@ -327,6 +349,17 @@ public class V2ExpressionSQLBuilder {
     } else {
       return "TRIM(" + direction + " " + inputs[1] + " FROM " + inputs[0] + ")";
     }
+  }
+
+  protected String visitGetArrayItem(GetArrayItem getArrayItem) {
+    throw new SparkUnsupportedOperationException(
+      "EXPRESSION_TRANSLATION_TO_V2_IS_NOT_SUPPORTED",
+      Map.of("expr", getArrayItem.toString())
+    );
+  }
+
+  protected String visitExtract(Extract extract) {
+    return visitExtract(extract.field(), build(extract.source()));
   }
 
   protected String visitExtract(String field, String source) {

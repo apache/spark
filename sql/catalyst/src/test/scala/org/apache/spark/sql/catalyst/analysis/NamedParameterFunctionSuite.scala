@@ -20,10 +20,11 @@ import org.apache.spark.SparkThrowable
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Expression, Literal, NamedArgumentExpression}
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
-import org.apache.spark.sql.catalyst.plans.logical.{FunctionBuilderBase, FunctionSignature, InputParameter, NamedParametersSupport}
+import org.apache.spark.sql.catalyst.plans.logical.{FunctionSignature, InputParameter, NamedParametersSupport}
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.SQLConf._
 import org.apache.spark.sql.types.DataType
-
 
 case class DummyExpression(
     k1: Expression,
@@ -62,6 +63,8 @@ class NamedParameterFunctionSuite extends AnalysisTest {
   final val k3Arg = NamedArgumentExpression("k3", Literal("v3"))
   final val k4Arg = NamedArgumentExpression("k4", Literal("v4"))
   final val namedK1Arg = NamedArgumentExpression("k1", Literal("v1-2"))
+  final val upperCaseNamedK1Arg = NamedArgumentExpression("K1", Literal("v1"))
+  final val upperCaseNamedK4Arg = NamedArgumentExpression("K4", Literal("v4"))
   final val args = Seq(k1Arg, k4Arg, k2Arg, k3Arg)
 
   final val expectedSeq = Seq(Literal("v1"), Literal("v2"), Literal("v3"), Literal("v4"))
@@ -70,85 +73,203 @@ class NamedParameterFunctionSuite extends AnalysisTest {
     InputParameter("k1"), InputParameter("k2", Option(Literal("v2"))), InputParameter("k3")))
 
   test("Check rearrangement of expressions") {
-    val rearrangedArgs = NamedParametersSupport.defaultRearrange(
-      signature, args, "function")
-    for ((returnedArg, expectedArg) <- rearrangedArgs.zip(expectedSeq)) {
-      assert(returnedArg == expectedArg)
-    }
-    val rearrangedArgsWithBuilder =
-      FunctionRegistry.rearrangeExpressions("function", DummyExpressionBuilder, args)
-    for ((returnedArg, expectedArg) <- rearrangedArgsWithBuilder.zip(expectedSeq)) {
-      assert(returnedArg == expectedArg)
+    Seq("true", "false").foreach { cs =>
+      withSQLConf(CASE_SENSITIVE.key -> cs) {
+        val rearrangedArgs = NamedParametersSupport.defaultRearrange(
+          signature, args, "function", SQLConf.get.resolver)
+        for ((returnedArg, expectedArg) <- rearrangedArgs.zip(expectedSeq)) {
+          assert(returnedArg == expectedArg)
+        }
+        val rearrangedArgsWithBuilder =
+          FunctionRegistry.rearrangeExpressions("function", DummyExpressionBuilder, args)
+        for ((returnedArg, expectedArg) <- rearrangedArgsWithBuilder.zip(expectedSeq)) {
+          assert(returnedArg == expectedArg)
+        }
+      }
     }
   }
 
-  private def parseRearrangeException(functionSignature: FunctionSignature,
-                                      expressions: Seq[Expression],
-                                      functionName: String = "function"): SparkThrowable = {
+  private def parseRearrangeException(
+      functionSignature: FunctionSignature,
+      expressions: Seq[Expression],
+      functionName: String = "function"): SparkThrowable = {
     intercept[SparkThrowable](
-      NamedParametersSupport.defaultRearrange(functionSignature, expressions, functionName))
-  }
-
-  private def parseExternalException[T <: FunctionBuilderBase[_]](
-      functionName: String,
-      builder: T,
-      expressions: Seq[Expression]) : SparkThrowable = {
-    intercept[SparkThrowable](
-      FunctionRegistry.rearrangeExpressions[T](functionName, builder, expressions))
+      NamedParametersSupport.defaultRearrange(
+        functionSignature, expressions, functionName, SQLConf.get.resolver))
   }
 
   test("DUPLICATE_ROUTINE_PARAMETER_ASSIGNMENT") {
-    val errorClass =
-      "DUPLICATE_ROUTINE_PARAMETER_ASSIGNMENT.BOTH_POSITIONAL_AND_NAMED"
-    checkError(
-      exception = parseRearrangeException(
-        signature, Seq(k1Arg, k2Arg, k3Arg, k4Arg, namedK1Arg), "foo"),
-      errorClass = errorClass,
-      parameters = Map("functionName" -> toSQLId("foo"), "parameterName" -> toSQLId("k1"))
-    )
-    checkError(
-      exception = parseRearrangeException(
-        signature, Seq(k1Arg, k2Arg, k3Arg, k4Arg, k4Arg), "foo"),
-      errorClass = "DUPLICATE_ROUTINE_PARAMETER_ASSIGNMENT.DOUBLE_NAMED_ARGUMENT_REFERENCE",
-      parameters = Map("functionName" -> toSQLId("foo"), "parameterName" -> toSQLId("k4"))
-    )
+    Seq("true", "false").foreach { cs =>
+      withSQLConf(CASE_SENSITIVE.key -> cs) {
+        checkError(
+          exception = parseRearrangeException(
+            signature, Seq(k1Arg, k2Arg, k3Arg, k4Arg, namedK1Arg), "foo"),
+          condition = "DUPLICATE_ROUTINE_PARAMETER_ASSIGNMENT.BOTH_POSITIONAL_AND_NAMED",
+          parameters = Map(
+            "routineName" -> toSQLId("foo"),
+            "parameterName" -> toSQLId("k1"))
+        )
+        checkError(
+          exception = parseRearrangeException(
+            signature, Seq(k1Arg, k2Arg, k3Arg, k4Arg, k4Arg), "foo"),
+          condition = "DUPLICATE_ROUTINE_PARAMETER_ASSIGNMENT.DOUBLE_NAMED_ARGUMENT_REFERENCE",
+          parameters = Map(
+            "routineName" -> toSQLId("foo"),
+            "parameterName" -> toSQLId("k4"))
+        )
+      }
+    }
+
+    withSQLConf(CASE_SENSITIVE.key -> "true") {
+      checkError(
+        exception = parseRearrangeException(
+          signature, Seq(k1Arg, k2Arg, k3Arg, k4Arg, upperCaseNamedK1Arg), "foo"),
+        condition = "UNRECOGNIZED_PARAMETER_NAME",
+        parameters = Map(
+          "routineName" -> toSQLId("foo"),
+          "argumentName" -> toSQLId("K1"),
+          "proposal" -> (toSQLId("k1") + " " + toSQLId("k2") + " " + toSQLId("k3")))
+      )
+      checkError(
+        exception = parseRearrangeException(
+          signature, Seq(k1Arg, k2Arg, k3Arg, k4Arg, upperCaseNamedK4Arg), "foo"),
+        condition = "UNRECOGNIZED_PARAMETER_NAME",
+        parameters = Map(
+          "routineName" -> toSQLId("foo"),
+          "argumentName" -> toSQLId("K4"),
+          "proposal" -> (toSQLId("k4") + " " + toSQLId("k1") + " " + toSQLId("k2")))
+      )
+    }
+
+    withSQLConf(CASE_SENSITIVE.key -> "false") {
+      checkError(
+        exception = parseRearrangeException(
+          signature, Seq(k1Arg, k2Arg, k3Arg, k4Arg, upperCaseNamedK1Arg), "foo"),
+        condition = "DUPLICATE_ROUTINE_PARAMETER_ASSIGNMENT.BOTH_POSITIONAL_AND_NAMED",
+        parameters = Map("routineName" -> toSQLId("foo"), "parameterName" -> toSQLId("K1"))
+      )
+      checkError(
+        exception = parseRearrangeException(
+          signature, Seq(k1Arg, k2Arg, k3Arg, k4Arg, upperCaseNamedK4Arg), "foo"),
+        condition = "DUPLICATE_ROUTINE_PARAMETER_ASSIGNMENT.DOUBLE_NAMED_ARGUMENT_REFERENCE",
+        parameters = Map(
+          "routineName" -> toSQLId("foo"),
+          "parameterName" -> toSQLId("K4"))
+      )
+    }
   }
 
   test("REQUIRED_PARAMETER_NOT_FOUND") {
-    checkError(
-      exception = parseRearrangeException(signature, Seq(k1Arg, k2Arg, k3Arg), "foo"),
-      errorClass = "REQUIRED_PARAMETER_NOT_FOUND",
-      parameters = Map(
-        "functionName" -> toSQLId("foo"), "parameterName" -> toSQLId("k4"), "index" -> "2"))
+    Seq("true", "false").foreach { cs =>
+      withSQLConf(CASE_SENSITIVE.key -> cs) {
+        checkError(
+          exception = parseRearrangeException(signature, Seq(k1Arg, k2Arg, k3Arg), "foo"),
+          condition = "REQUIRED_PARAMETER_NOT_FOUND",
+          parameters = Map(
+            "routineName" -> toSQLId("foo"),
+            "parameterName" -> toSQLId("k4"),
+            "index" -> "2"))
+      }
+    }
+
+    withSQLConf(CASE_SENSITIVE.key -> "true") {
+      checkError(
+        exception = parseRearrangeException(
+          signature, Seq(upperCaseNamedK1Arg, k2Arg, k3Arg), "foo"),
+        condition = "UNRECOGNIZED_PARAMETER_NAME",
+        parameters = Map(
+          "routineName" -> toSQLId("foo"),
+          "argumentName" -> toSQLId("K1"),
+          "proposal" -> (toSQLId("k1") + " " + toSQLId("k2") + " " + toSQLId("k3"))))
+    }
+
+    withSQLConf(CASE_SENSITIVE.key -> "false") {
+      checkError(
+        exception = parseRearrangeException(
+          signature, Seq(upperCaseNamedK1Arg, k2Arg, k3Arg), "foo"),
+        condition = "REQUIRED_PARAMETER_NOT_FOUND",
+        parameters = Map(
+          "routineName" -> toSQLId("foo"),
+          "parameterName" -> toSQLId("k4"),
+          "index" -> "3"))
+    }
   }
 
   test("UNRECOGNIZED_PARAMETER_NAME") {
-    checkError(
-      exception = parseRearrangeException(signature,
-        Seq(k1Arg, k2Arg, k3Arg, k4Arg, NamedArgumentExpression("k5", Literal("k5"))), "foo"),
-      errorClass = "UNRECOGNIZED_PARAMETER_NAME",
-      parameters = Map("functionName" -> toSQLId("foo"), "argumentName" -> toSQLId("k5"),
-        "proposal" -> (toSQLId("k1") + " " + toSQLId("k2") + " " + toSQLId("k3")))
-    )
+    Seq("true", "false").foreach { cs =>
+      withSQLConf(CASE_SENSITIVE.key -> cs) {
+        checkError(
+          exception = parseRearrangeException(signature,
+            Seq(k1Arg, k2Arg, k3Arg, k4Arg, NamedArgumentExpression("k5", Literal("k5"))), "foo"),
+          condition = "UNRECOGNIZED_PARAMETER_NAME",
+          parameters = Map(
+            "routineName" -> toSQLId("foo"),
+            "argumentName" -> toSQLId("k5"),
+            "proposal" -> (toSQLId("k1") + " " + toSQLId("k2") + " " + toSQLId("k3")))
+        )
+      }
+    }
+
+    withSQLConf(CASE_SENSITIVE.key -> "true") {
+      checkError(
+        exception = parseRearrangeException(
+          signature, Seq(upperCaseNamedK1Arg, k2Arg, k3Arg, k4Arg), "foo"),
+        condition = "UNRECOGNIZED_PARAMETER_NAME",
+        parameters = Map(
+          "routineName" -> toSQLId("foo"),
+          "argumentName" -> toSQLId("K1"),
+          "proposal" -> (toSQLId("k1") + " " + toSQLId("k2") + " " + toSQLId("k3"))))
+    }
+
+    withSQLConf(CASE_SENSITIVE.key -> "false") {
+      val rearrangedArgs = NamedParametersSupport.defaultRearrange(
+        signature, Seq(upperCaseNamedK1Arg, k2Arg, k3Arg, k4Arg), "foo", SQLConf.get.resolver)
+      for ((returnedArg, expectedArg) <- rearrangedArgs.zip(expectedSeq)) {
+        assert(returnedArg == expectedArg)
+      }
+    }
   }
 
   test("UNEXPECTED_POSITIONAL_ARGUMENT") {
-    checkError(
-      exception = parseRearrangeException(signature,
-        Seq(k2Arg, k3Arg, k1Arg, k4Arg), "foo"),
-      errorClass = "UNEXPECTED_POSITIONAL_ARGUMENT",
-      parameters = Map("functionName" -> toSQLId("foo"), "parameterName" -> toSQLId("k3"))
-    )
+    Seq("true", "false").foreach { cs =>
+      withSQLConf(CASE_SENSITIVE.key -> cs) {
+        checkError(
+          exception = parseRearrangeException(signature,
+            Seq(k4Arg, k3Arg, k1Arg, k2Arg), "foo"),
+          condition = "UNEXPECTED_POSITIONAL_ARGUMENT",
+          parameters = Map(
+            "routineName" -> toSQLId("foo"),
+            "parameterName" -> toSQLId("k3"))
+        )
+      }
+    }
+
+    Seq("true", "false").foreach { cs =>
+      withSQLConf(CASE_SENSITIVE.key -> cs) {
+        checkError(
+          exception = parseRearrangeException(signature,
+            Seq(upperCaseNamedK4Arg, k3Arg, k1Arg, k2Arg), "foo"),
+          condition = "UNEXPECTED_POSITIONAL_ARGUMENT",
+          parameters = Map(
+            "routineName" -> toSQLId("foo"),
+            "parameterName" -> toSQLId("k3"))
+        )
+      }
+    }
   }
 
   test("INTERNAL_ERROR: Enforce optional arguments after required arguments") {
-    val errorMessage = s"Function foo has an unexpected required argument for the provided" +
-      s" function signature ${illegalSignature}. All required arguments should come before" +
-      s" optional arguments."
-    checkError(
-      exception = parseRearrangeException(illegalSignature, args, "foo"),
-      errorClass = "INTERNAL_ERROR",
-      parameters = Map("message" -> errorMessage)
-    )
+    val errorMessage = s"Routine ${toSQLId("foo")} has an unexpected required argument for" +
+      s" the provided routine signature ${illegalSignature.parameters.mkString("[", ", ", "]")}." +
+      s" All required arguments should come before optional arguments."
+    Seq("true", "false").foreach { cs =>
+      withSQLConf(CASE_SENSITIVE.key -> cs) {
+        checkError(
+          exception = parseRearrangeException(illegalSignature, args, "foo"),
+          condition = "INTERNAL_ERROR",
+          parameters = Map("message" -> errorMessage)
+        )
+      }
+    }
   }
 }

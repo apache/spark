@@ -20,7 +20,6 @@ package org.apache.spark.sql.catalyst.expressions
 import java.text.{DecimalFormat, DecimalFormatSymbols, ParsePosition}
 import java.util.Locale
 
-import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
@@ -28,17 +27,20 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.logical.Aggregate
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, CharVarcharUtils}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase, QueryExecutionErrors}
-import org.apache.spark.sql.internal.types.{AbstractMapType, StringTypeAnyCollation}
+import org.apache.spark.sql.internal.types.{AbstractMapType, StringTypeWithCollation}
 import org.apache.spark.sql.types.{DataType, MapType, StringType, StructType, VariantType}
 import org.apache.spark.unsafe.types.UTF8String
 
-object ExprUtils extends QueryErrorsBase {
+object ExprUtils extends EvalHelper with QueryErrorsBase {
 
   def evalTypeExpr(exp: Expression): DataType = {
     if (exp.foldable) {
-      exp.eval() match {
+      prepareForEval(exp).eval() match {
         case s: UTF8String if s != null =>
-          val dataType = DataType.fromDDL(s.toString)
+          val dataType = DataType.parseTypeWithFallback(
+            s.toString,
+            DataType.fromDDL,
+            DataType.fromJson)
           CharVarcharUtils.failIfHasCharVarchar(dataType)
         case _ => throw QueryCompilationErrors.unexpectedSchemaTypeError(exp)
 
@@ -58,7 +60,10 @@ object ExprUtils extends QueryErrorsBase {
 
   def convertToMapData(exp: Expression): Map[String, String] = exp match {
     case m: CreateMap
-      if AbstractMapType(StringTypeAnyCollation, StringTypeAnyCollation).acceptsType(m.dataType) =>
+      if AbstractMapType(
+        StringTypeWithCollation(supportsTrimCollation = true),
+        StringTypeWithCollation(supportsTrimCollation = true))
+        .acceptsType(m.dataType) =>
       val arrayMap = m.eval().asInstanceOf[ArrayBasedMapData]
       ArrayBasedMapData.toScalaMap(arrayMap).map { case (key, value) =>
         key.toString -> value.toString
@@ -79,7 +84,8 @@ object ExprUtils extends QueryErrorsBase {
     schema.getFieldIndex(columnNameOfCorruptRecord).foreach { corruptFieldIndex =>
       val f = schema(corruptFieldIndex)
       if (!f.dataType.isInstanceOf[StringType] || !f.nullable) {
-        throw QueryCompilationErrors.invalidFieldTypeForCorruptRecordError()
+        throw QueryCompilationErrors.invalidFieldTypeForCorruptRecordError(
+          columnNameOfCorruptRecord, f.dataType)
       }
     }
   }
@@ -201,17 +207,6 @@ object ExprUtils extends QueryErrorsBase {
           messageParameters = Map(
             "sqlExpr" -> toSQLExpr(expr),
             "dataType" -> toSQLType(expr.dataType)))
-      }
-
-      if (!expr.deterministic) {
-        // This is just a sanity check, our analysis rule PullOutNondeterministic should
-        // already pull out those nondeterministic expressions and evaluate them in
-        // a Project node.
-        throw SparkException.internalError(
-          msg = s"Non-deterministic expression '${toSQLExpr(expr)}' should not appear in " +
-            "grouping expression.",
-          context = expr.origin.getQueryContext,
-          summary = expr.origin.context.summary)
       }
     }
 

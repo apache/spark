@@ -125,6 +125,12 @@ class ExternalCatalogWithListener(delegate: ExternalCatalog)
     postToAll(AlterTableEvent(db, table, AlterTableKind.DATASCHEMA))
   }
 
+  override def alterTableSchema(db: String, table: String, newSchema: StructType): Unit = {
+    postToAll(AlterTablePreEvent(db, table, AlterTableKind.SCHEMA))
+    delegate.alterTableSchema(db, table, newSchema)
+    postToAll(AlterTableEvent(db, table, AlterTableKind.SCHEMA))
+  }
+
   override def alterTableStats(
       db: String,
       table: String,

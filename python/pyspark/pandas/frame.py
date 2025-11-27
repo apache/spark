@@ -25,7 +25,7 @@ import warnings
 import inspect
 import json
 import types
-from functools import partial, reduce
+from functools import partial, reduce, wraps
 import sys
 from itertools import zip_longest, chain
 from types import TracebackType
@@ -42,6 +42,7 @@ from typing import (
     Sequence,
     Tuple,
     Type,
+    TypeVar,
     Union,
     cast,
     no_type_check,
@@ -70,6 +71,7 @@ from pyspark.errors import PySparkValueError
 from pyspark import StorageLevel
 from pyspark.sql import Column as PySparkColumn, DataFrame as PySparkDataFrame, functions as F
 from pyspark.sql.functions import pandas_udf
+from pyspark.sql.internal import InternalFunction as SF
 from pyspark.sql.types import (
     ArrayType,
     BooleanType,
@@ -105,13 +107,14 @@ from pyspark.pandas.correlation import (
     CORRELATION_CORR_OUTPUT_COLUMN,
     CORRELATION_COUNT_OUTPUT_COLUMN,
 )
-from pyspark.pandas.spark import functions as SF
 from pyspark.pandas.spark.accessors import SparkFrameMethods, CachedSparkFrameMethods
 from pyspark.pandas.utils import (
     align_diff_frames,
+    ansi_mode_context,
     column_labels_level,
     combine_frames,
     default_session,
+    is_ansi_mode_enabled,
     is_name_like_tuple,
     is_name_like_value,
     is_testing,
@@ -149,7 +152,6 @@ from pyspark.pandas.typedef.typehints import (
     create_tuple_for_frame_type,
 )
 from pyspark.pandas.plot import PandasOnSparkPlotAccessor
-from pyspark.sql.utils import get_column_class, get_dataframe_class
 
 if TYPE_CHECKING:
     from pyspark.sql._typing import OptionalPrimitiveType
@@ -167,6 +169,18 @@ REPR_PATTERN = re.compile(r"\n\n\[(?P<rows>[0-9]+) rows x (?P<columns>[0-9]+) co
 REPR_HTML_PATTERN = re.compile(
     r"\n\<p\>(?P<rows>[0-9]+) rows × (?P<columns>[0-9]+) columns\<\/p\>\n\<\/div\>$"
 )
+
+
+FuncT = TypeVar("FuncT", bound=Callable[..., Any])
+
+
+def with_ansi_mode_context(f: FuncT) -> FuncT:
+    @wraps(f)
+    def _with_ansi_mode_context(self: "DataFrame", *args: Any, **kwargs: Any) -> Any:
+        with ansi_mode_context(self._internal.spark_frame.sparkSession):
+            return f(self, *args, **kwargs)
+
+    return cast(FuncT, _with_ansi_mode_context)
 
 
 _flex_doc_FRAME = """
@@ -491,7 +505,8 @@ class DataFrame(Frame, Generic[T]):
 
     >>> import pandas as pd
     >>> sdf = spark.createDataFrame([("Data", 1), ("Bricks", 2)], ["x", "y"])
-    >>> ps.DataFrame(data=sdf, index=pd.Index([0, 1, 2]))
+    >>> with ps.option_context("compute.ops_on_diff_frames", False):
+    ...     ps.DataFrame(data=sdf, index=pd.Index([0, 1, 2]))
     Traceback (most recent call last):
       ...
     ValueError: Cannot combine the series or dataframe...'compute.ops_on_diff_frames' option.
@@ -509,7 +524,8 @@ class DataFrame(Frame, Generic[T]):
 
     >>> import pandas as pd
     >>> sdf = spark.createDataFrame([("Data", 1), ("Bricks", 2)], ["x", "y"])
-    >>> ps.DataFrame(data=sdf, index=ps.Index([0, 1, 2]))
+    >>> with ps.option_context("compute.ops_on_diff_frames", False):
+    ...     ps.DataFrame(data=sdf, index=ps.Index([0, 1, 2]))
     Traceback (most recent call last):
       ...
     ValueError: Cannot combine the series or dataframe...'compute.ops_on_diff_frames' option.
@@ -527,7 +543,6 @@ class DataFrame(Frame, Generic[T]):
     def __init__(  # type: ignore[no-untyped-def]
         self, data=None, index=None, columns=None, dtype=None, copy=False
     ):
-        SparkDataFrame = get_dataframe_class()
         index_assigned = False
         if isinstance(data, InternalFrame):
             assert columns is None
@@ -535,7 +550,7 @@ class DataFrame(Frame, Generic[T]):
             assert not copy
             if index is None:
                 internal = data
-        elif isinstance(data, SparkDataFrame):
+        elif isinstance(data, PySparkDataFrame):
             assert columns is None
             assert dtype is None
             assert not copy
@@ -739,6 +754,7 @@ class DataFrame(Frame, Generic[T]):
         """
         return [self.index, self.columns]
 
+    @with_ansi_mode_context
     def _reduce_for_stat_function(
         self,
         sfun: Callable[["Series"], PySparkColumn],
@@ -869,6 +885,7 @@ class DataFrame(Frame, Generic[T]):
         """
         return self._pssers[label]
 
+    @with_ansi_mode_context
     def _apply_series_op(
         self,
         op: Callable[["Series"], Union["Series", PySparkColumn]],
@@ -883,6 +900,7 @@ class DataFrame(Frame, Generic[T]):
         return DataFrame(internal)
 
     # Arithmetic Operators
+    @with_ansi_mode_context
     def _map_series_op(self, op: str, other: Any) -> "DataFrame":
         from pyspark.pandas.base import IndexOpsMixin
 
@@ -1506,6 +1524,7 @@ class DataFrame(Frame, Generic[T]):
 
     agg = aggregate
 
+    @with_ansi_mode_context
     def corr(self, method: str = "pearson", min_periods: Optional[int] = None) -> "DataFrame":
         """
         Compute pairwise correlation of columns, excluding NA/null values.
@@ -1725,6 +1744,7 @@ class DataFrame(Frame, Generic[T]):
             )
         )
 
+    @with_ansi_mode_context
     def corrwith(
         self, other: DataFrameOrSeries, axis: Axis = 0, drop: bool = False, method: str = "pearson"
     ) -> "Series":
@@ -2632,7 +2652,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         ...                    'mask': ['red', 'purple'],
         ...                    'weapon': ['sai', 'bo staff']},
         ...                   columns=['name', 'mask', 'weapon'])
-        >>> print(df.to_latex(index=False)) # doctest: +NORMALIZE_WHITESPACE
+        >>> print(df.to_latex(index=False))  # doctest: +SKIP
         \begin{tabular}{lll}
         \toprule
               name &    mask &    weapon \\
@@ -2976,7 +2996,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         (``axis=1``).
 
         See also `Transform and apply a function
-        <https://spark.apache.org/docs/latest/api/python/user_guide/pandas_on_spark/transform_apply.html>`_.
+        <https://spark.apache.org/docs/latest/api/python/tutorial/pandas_on_spark/transform_apply.html>`_.
 
         .. note:: when `axis` is 0 or 'index', the `func` is unable to access
             to the whole input series. pandas-on-Spark internally splits the input series into
@@ -3302,7 +3322,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         and that has the same length as its input.
 
         See also `Transform and apply a function
-        <https://spark.apache.org/docs/latest/api/python/user_guide/pandas_on_spark/transform_apply.html>`_.
+        <https://spark.apache.org/docs/latest/api/python/tutorial/pandas_on_spark/transform_apply.html>`_.
 
         .. note:: this API executes the function once to infer the type which is
              potentially expensive, for instance, when the dataset is created after
@@ -3746,8 +3766,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         allowed_inclusive_values = ["left", "right", "both", "neither"]
         if inclusive not in allowed_inclusive_values:
             raise PySparkValueError(
-                error_class="VALUE_NOT_ALLOWED",
-                message_parameters={
+                errorClass="VALUE_NOT_ALLOWED",
+                messageParameters={
                     "arg_name": "inclusive",
                     "allowed_values": str(allowed_inclusive_values),
                 },
@@ -5304,7 +5324,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         --------
 
         >>> df = ps.DataFrame(dict(
-        ...    date=list(pd.date_range('2012-1-1 12:00:00', periods=3, freq='M')),
+        ...    date=list(pd.date_range('2012-1-1 12:00:00', periods=3, freq='ME')),
         ...    country=['KR', 'US', 'JP'],
         ...    code=[1, 2 ,3]), columns=['date', 'country', 'code'])
         >>> df
@@ -5392,7 +5412,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         Examples
         --------
         >>> df = ps.DataFrame(dict(
-        ...    date=list(pd.date_range('2012-1-1 12:00:00', periods=3, freq='M')),
+        ...    date=list(pd.date_range('2012-1-1 12:00:00', periods=3, freq='ME')),
         ...    country=['KR', 'US', 'JP'],
         ...    code=[1, 2 ,3]), columns=['date', 'country', 'code'])
         >>> df
@@ -5474,7 +5494,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         Examples
         --------
         >>> df = ps.DataFrame(dict(
-        ...    date=list(pd.date_range('2012-1-1 12:00:00', periods=3, freq='M')),
+        ...    date=list(pd.date_range('2012-1-1 12:00:00', periods=3, freq='ME')),
         ...    country=['KR', 'US', 'JP'],
         ...    code=[1, 2 ,3]), columns=['date', 'country', 'code'])
         >>> df
@@ -5627,10 +5647,9 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         from pyspark.pandas.indexes import MultiIndex
         from pyspark.pandas.series import IndexOpsMixin
 
-        Column = get_column_class()
         for k, v in kwargs.items():
             is_invalid_assignee = (
-                not (isinstance(v, (IndexOpsMixin, Column)) or callable(v) or is_scalar(v))
+                not (isinstance(v, (IndexOpsMixin, PySparkColumn)) or callable(v) or is_scalar(v))
             ) or isinstance(v, MultiIndex)
             if is_invalid_assignee:
                 raise TypeError(
@@ -5644,7 +5663,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 (v.spark.column, v._internal.data_fields[0])
                 if isinstance(v, IndexOpsMixin) and not isinstance(v, MultiIndex)
                 else (v, None)
-                if isinstance(v, Column)
+                if isinstance(v, PySparkColumn)
                 else (F.lit(v), None)
             )
             for k, v in kwargs.items()
@@ -7293,8 +7312,6 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         4  1   True  1.0
         5  2  False  2.0
         """
-        from pyspark.sql.types import _parse_datatype_string
-
         include_list: List[str]
         if not is_list_like(include):
             include_list = [cast(str, include)] if include is not None else []
@@ -7321,14 +7338,14 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         include_spark_type = []
         for inc in include_list:
             try:
-                include_spark_type.append(_parse_datatype_string(inc))
+                include_spark_type.append(self._internal.spark_frame._session._parse_ddl(inc))
             except BaseException:
                 pass
 
         exclude_spark_type = []
         for exc in exclude_list:
             try:
-                exclude_spark_type.append(_parse_datatype_string(exc))
+                exclude_spark_type.append(self._internal.spark_frame._session._parse_ddl(exc))
             except BaseException:
                 pass
 
@@ -7687,21 +7704,20 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         if na_position not in ("first", "last"):
             raise ValueError("invalid na_position: '{}'".format(na_position))
 
-        Column = get_column_class()
-        # Mapper: Get a spark colum
+        # Mapper: Get a spark column
         # n function for (ascending, na_position) combination
         mapper = {
-            (True, "first"): Column.asc_nulls_first,
-            (True, "last"): Column.asc_nulls_last,
-            (False, "first"): Column.desc_nulls_first,
-            (False, "last"): Column.desc_nulls_last,
+            (True, "first"): PySparkColumn.asc_nulls_first,
+            (True, "last"): PySparkColumn.asc_nulls_last,
+            (False, "first"): PySparkColumn.desc_nulls_first,
+            (False, "last"): PySparkColumn.desc_nulls_last,
         }
         by = [mapper[(asc, na_position)](scol) for scol, asc in zip(by, ascending)]
 
         natural_order_scol = F.col(NATURAL_ORDER_COLUMN_NAME)
 
         if keep == "last":
-            natural_order_scol = Column.desc(natural_order_scol)
+            natural_order_scol = PySparkColumn.desc(natural_order_scol)
         elif keep == "all":
             raise NotImplementedError("`keep`=all is not implemented yet.")
         elif keep != "first":
@@ -8387,6 +8403,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         by_scols = self._prepare_sort_by_scols(columns)
         return self._sort(by=by_scols, ascending=True, na_position="last", keep=keep).head(n=n)
 
+    @with_ansi_mode_context
     def isin(self, values: Union[List, Dict]) -> "DataFrame":
         """
         Whether each element in the DataFrame is contained in values.
@@ -8460,7 +8477,13 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             )
 
             for label in self._internal.column_labels:
-                scol = self._internal.spark_column_for(label).isin([F.lit(v) for v in values])
+                if is_ansi_mode_enabled(self._internal.spark_frame.sparkSession):
+                    col_type = self._internal.spark_type_for(label)
+                    scol = self._internal.spark_column_for(label).isin(
+                        [F.lit(v).try_cast(col_type) for v in values]
+                    )
+                else:
+                    scol = self._internal.spark_column_for(label).isin([F.lit(v) for v in values])
                 scol = F.coalesce(scol, F.lit(False))
                 data_spark_columns.append(scol.alias(self._internal.spark_column_name_for(label)))
         else:
@@ -9810,7 +9833,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         if is_all_string_type:
             # Handling string type columns
-            # We will retrive the `count`, `unique`, `top` and `freq`.
+            # We will retrieve the `count`, `unique`, `top` and `freq`.
             internal = self._internal.resolved_copy
             exprs_string = [
                 internal.spark_column_for(psser._column_label) for psser in psser_string
@@ -10066,7 +10089,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             number (0, 1).
         copy : bool, default True
             Return a new object, even if the passed indexes are the same.
-        fill_value : scalar, default np.NaN
+        fill_value : scalar, default np.nan
             Value to use for missing values. Defaults to NaN, but can be any
             "compatible" value.
 
@@ -10429,6 +10452,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         else:
             raise TypeError("other must be a pandas-on-Spark DataFrame")
 
+    @with_ansi_mode_context
     def melt(
         self,
         id_vars: Optional[Union[Name, List[Name]]] = None,
@@ -10614,12 +10638,35 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         else:
             var_name = [var_name]  # type: ignore[list-item]
 
+        use_cast = is_ansi_mode_enabled(self._internal.spark_frame.sparkSession)
+        string_cast_required_type = None
+        if use_cast:
+            field_by_label = {
+                label: field
+                for label, field in zip(self._internal.column_labels, self._internal.data_fields)
+            }
+
+            value_col_types = [field_by_label[label].spark_type for label in value_vars]
+            # If any value column is of StringType, cast all value columns to StringType to avoid
+            # ANSI mode errors during explode - mixing strings and integers.
+            string_cast_required_type = (
+                StringType() if any(isinstance(t, StringType) for t in value_col_types) else None
+            )
+
         pairs = F.explode(
             F.array(
                 *[
                     F.struct(
                         *[F.lit(c).alias(name) for c, name in zip(label, var_name)],
-                        *[self._internal.spark_column_for(label).alias(value_name)],
+                        *[
+                            (
+                                self._internal.spark_column_for(label).cast(
+                                    string_cast_required_type
+                                )
+                                if use_cast and string_cast_required_type is not None
+                                else self._internal.spark_column_for(label)
+                            ).alias(value_name)
+                        ],
                     )
                     for label in column_labels
                     if label in value_vars
@@ -11082,8 +11129,10 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         return self._result_aggregated(column_labels, applied)
 
-    # TODO(SPARK-46166): axis, skipna and **kwargs should be implemented.
-    def any(self, axis: Axis = 0, bool_only: Optional[bool] = None) -> "Series":
+    # TODO(SPARK-46166): axis and **kwargs should be implemented.
+    def any(
+        self, axis: Axis = 0, bool_only: Optional[bool] = None, skipna: bool = True
+    ) -> "Series":
         """
         Return whether any element is True.
 
@@ -11101,6 +11150,11 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         bool_only : bool, default None
             Include only boolean columns. If None, will attempt to use everything,
             then use only boolean data.
+
+        skipna : bool, default True
+            Exclude NA/null values. If the entire row/column is NA and skipna is True,
+            then the result will be False, as for an empty row/column. If skipna is False,
+            then NA are treated as True, because these are not equal to zero.
 
         Returns
         -------
@@ -11142,22 +11196,55 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         Series([], dtype: bool)
         """
         axis = validate_axis(axis)
-        if axis != 0:
-            raise NotImplementedError('axis should be either 0 or "index" currently.')
-
         column_labels = self._internal.column_labels
         if bool_only:
             column_labels = self._bool_column_labels(column_labels)
         if len(column_labels) == 0:
             return ps.Series([], dtype=bool)
+        if axis == 0:
+            applied: List[PySparkColumn] = []
+            for label in column_labels:
+                scol = self._internal.spark_column_for(label)
+                if skipna:
+                    # When skipna=True, nulls count as False
+                    any_col = F.max(scol.cast("boolean"))
+                    applied.append(F.when(any_col.isNull(), False).otherwise(any_col))
+                else:
+                    # When skipna=False, nulls count as True
+                    any_col = F.max(scol.cast("boolean"))
+                    applied.append(F.when(any_col.isNull(), True).otherwise(any_col))
+            return self._result_aggregated(column_labels, applied)
+        elif axis == 1:
+            from pyspark.pandas.series import first_series
 
-        applied: List[PySparkColumn] = []
-        for label in column_labels:
-            scol = self._internal.spark_column_for(label)
-            any_col = F.max(F.coalesce(scol.cast("boolean"), F.lit(False)))
-            applied.append(F.when(any_col.isNull(), False).otherwise(any_col))
-
-        return self._result_aggregated(column_labels, applied)
+            sdf = self._internal.spark_frame.select(
+                *self._internal_frame.index_spark_columns,
+                F.greatest(
+                    *[
+                        F.coalesce(
+                            self._internal.spark_column_for(label).cast("boolean"),
+                            # When skipna=True, nulls count as False and vice versa
+                            F.lit(not skipna),
+                        )
+                        for label in column_labels
+                    ],
+                    F.lit(False),  # Handle one-column DataFrame case
+                ).alias(SPARK_DEFAULT_SERIES_NAME),
+            )
+            return first_series(
+                DataFrame(
+                    InternalFrame(
+                        spark_frame=sdf,
+                        index_spark_columns=self._internal.index_spark_columns,
+                        index_names=self._internal.index_names,
+                        index_fields=self._internal.index_fields,
+                        column_labels=[None],
+                    )
+                )
+            )
+        else:
+            # axis=None case - return single boolean value
+            raise NotImplementedError('axis should be 0, 1, "index", or "columns" currently.')
 
     def _bool_column_labels(self, column_labels: List[Label]) -> List[Label]:
         """
@@ -13626,14 +13713,6 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         _f = self._build_fallback_method("set_axis")
         return _f(*args, **kwargs)
 
-    def _to_feather_fallback(self, *args: Any, **kwargs: Any) -> None:
-        _f = self._build_fallback_driver_method("to_feather")
-        return _f(*args, **kwargs)
-
-    def _to_stata_fallback(self, *args: Any, **kwargs: Any) -> None:
-        _f = self._build_fallback_driver_method("to_stata")
-        return _f(*args, **kwargs)
-
     def __getattr__(self, key: str) -> Any:
         if key.startswith("__"):
             raise AttributeError(key)
@@ -13738,8 +13817,7 @@ def _reduce_spark_multi(sdf: PySparkDataFrame, aggs: List[PySparkColumn]) -> Any
     """
     Performs a reduction on a spark DataFrame, the functions being known SQL aggregate functions.
     """
-    SparkDataFrame = get_dataframe_class()
-    assert isinstance(sdf, SparkDataFrame)
+    assert isinstance(sdf, PySparkDataFrame)
     sdf0 = sdf.agg(*aggs)
     lst = sdf0.limit(2).toPandas()
     assert len(lst) == 1, (sdf, lst)
@@ -13796,6 +13874,7 @@ def _test() -> None:
 
     globs = pyspark.pandas.frame.__dict__.copy()
     globs["ps"] = pyspark.pandas
+
     spark = (
         SparkSession.builder.master("local[4]").appName("pyspark.pandas.frame tests").getOrCreate()
     )

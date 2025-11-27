@@ -21,12 +21,14 @@ import java.util.Comparator
 import java.util.concurrent.atomic.{AtomicInteger, AtomicReference}
 
 import scala.collection.mutable
+import scala.jdk.CollectionConverters.MapHasAsScala
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion, UnresolvedException}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.codegen._
+import org.apache.spark.sql.catalyst.optimizer.NormalizeFloatingNumbers
 import org.apache.spark.sql.catalyst.trees.{BinaryLike, CurrentOrigin, QuaternaryLike, TernaryLike}
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
@@ -920,6 +922,8 @@ case class TransformKeys(
 
   override def dataType: MapType = MapType(function.dataType, valueType, valueContainsNull)
 
+  override def stateful: Boolean = true
+
   override def checkInputDataTypes(): TypeCheckResult = {
     TypeUtils.checkForMapKeyType(function.dataType)
   }
@@ -1107,8 +1111,10 @@ case class MapZipWith(left: Expression, right: Expression, function: Expression)
    */
   @transient private lazy val getKeysWithValueIndexes:
       (ArrayData, ArrayData) => mutable.Iterable[(Any, Array[Option[Int]])] = {
-    if (TypeUtils.typeWithProperEquals(keyType)) {
-      getKeysWithIndexesFast
+    if (TypeUtils.typeWithProperEquals(keyType) && SQLConf.get.mapZipWithUsesJavaCollections) {
+      getKeysWithIndexesFastAsJava
+    } else if (TypeUtils.typeWithProperEquals(keyType)) {
+      getKeysWithIndexesFastUsingScala
     } else {
       getKeysWithIndexesBruteForce
     }
@@ -1120,9 +1126,9 @@ case class MapZipWith(left: Expression, right: Expression, function: Expression)
     }
   }
 
-  private def getKeysWithIndexesFast(keys1: ArrayData, keys2: ArrayData) = {
+  private def getKeysWithIndexesFastUsingScala(keys1: ArrayData, keys2: ArrayData) = {
     val hashMap = new mutable.LinkedHashMap[Any, Array[Option[Int]]]
-    for((z, array) <- Array((0, keys1), (1, keys2))) {
+    for ((z, array) <- Array((0, keys1), (1, keys2))) {
       var i = 0
       while (i < array.numElements()) {
         val key = array.get(i, keyType)
@@ -1142,9 +1148,40 @@ case class MapZipWith(left: Expression, right: Expression, function: Expression)
     hashMap
   }
 
+  private lazy val normalizer: Any => Any = keyType match {
+    case FloatType => NormalizeFloatingNumbers.FLOAT_NORMALIZER
+    case DoubleType => NormalizeFloatingNumbers.DOUBLE_NORMALIZER
+    case _ => identity
+  }
+
+  private def getKeysWithIndexesFastAsJava(
+      keys1: ArrayData,
+      keys2: ArrayData
+  ): scala.collection.mutable.LinkedHashMap[Any, Array[Option[Int]]] = {
+    val hashMap = new java.util.LinkedHashMap[Any, Array[Option[Int]]]
+    for ((z, array) <- Array((0, keys1), (1, keys2))) {
+      var i = 0
+      while (i < array.numElements()) {
+        val key = normalizer(array.get(i, keyType))
+        Option(hashMap.get(key)) match {
+          case Some(indexes) =>
+            if (indexes(z).isEmpty) {
+              indexes(z) = Some(i)
+            }
+          case None =>
+            val indexes = Array[Option[Int]](None, None)
+            indexes(z) = Some(i)
+            hashMap.put(key, indexes)
+        }
+        i += 1
+      }
+    }
+    scala.collection.mutable.LinkedHashMap(hashMap.asScala.toSeq: _*)
+  }
+
   private def getKeysWithIndexesBruteForce(keys1: ArrayData, keys2: ArrayData) = {
     val arrayBuffer = new mutable.ArrayBuffer[(Any, Array[Option[Int]])]
-    for((z, array) <- Array((0, keys1), (1, keys2))) {
+    for ((z, array) <- Array((0, keys1), (1, keys2))) {
       var i = 0
       while (i < array.numElements()) {
         val key = array.get(i, keyType)
@@ -1154,7 +1191,7 @@ case class MapZipWith(left: Expression, right: Expression, function: Expression)
           val (bufferKey, indexes) = arrayBuffer(j)
           if (ordering.equiv(bufferKey, key)) {
             found = true
-            if(indexes(z).isEmpty) {
+            if (indexes(z).isEmpty) {
               indexes(z) = Some(i)
             }
           }

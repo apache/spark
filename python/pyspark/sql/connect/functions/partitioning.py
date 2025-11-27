@@ -38,8 +38,8 @@ def bucket(numBuckets: Union[Column, int], col: "ColumnOrName") -> Column:
         _numBuckets = numBuckets
     else:
         raise PySparkTypeError(
-            error_class="NOT_COLUMN_OR_INT",
-            message_parameters={
+            errorClass="NOT_COLUMN_OR_INT",
+            messageParameters={
                 "arg_name": "numBuckets",
                 "arg_type": type(numBuckets).__name__,
             },

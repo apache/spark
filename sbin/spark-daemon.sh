@@ -30,7 +30,7 @@
 #   SPARK_NICENESS The scheduling priority for daemons. Defaults to 0.
 #   SPARK_NO_DAEMONIZE   If set, will run the proposed command in the foreground. It will not output a PID file.
 ##
-
+export SPARK_CONNECT_MODE=0
 usage="Usage: spark-daemon.sh [--config <conf-dir>] (start|stop|submit|decommission|status) <spark-command> <spark-instance-number> <args...>"
 
 # if no args specified, show usage
@@ -98,6 +98,10 @@ spark_rotate_log ()
 . "${SPARK_HOME}/bin/load-spark-env.sh"
 
 if [ "$SPARK_IDENT_STRING" = "" ]; then
+  # if for some reason the shell doesn't have $USER defined
+  # (e.g., ssh'd in to execute a command)
+  # let's get the effective username and use that
+  USER=${USER:-$(id -nu)}
   export SPARK_IDENT_STRING="$USER"
 fi
 

@@ -6,7 +6,7 @@ AS testData(a, b)
 -- !query analysis
 CreateViewCommand `testData`, SELECT * FROM VALUES
 (1, 1), (1, 2), (2, 1), (2, 2), (3, 1), (3, 2), (null, 1), (3, null), (null, null)
-AS testData(a, b), false, true, LocalTempView, true
+AS testData(a, b), false, true, LocalTempView, UNSUPPORTED, true
    +- Project [a#x, b#x]
       +- SubqueryAlias testData
          +- LocalRelation [a#x, b#x]
@@ -240,7 +240,7 @@ CREATE OR REPLACE TEMPORARY VIEW testDataHasSameNameWithAlias AS SELECT * FROM V
 (1, 1, 3), (1, 2, 1) AS testDataHasSameNameWithAlias(k, a, v)
 -- !query analysis
 CreateViewCommand `testDataHasSameNameWithAlias`, SELECT * FROM VALUES
-(1, 1, 3), (1, 2, 1) AS testDataHasSameNameWithAlias(k, a, v), false, true, LocalTempView, true
+(1, 1, 3), (1, 2, 1) AS testDataHasSameNameWithAlias(k, a, v), false, true, LocalTempView, UNSUPPORTED, true
    +- Project [k#x, a#x, v#x]
       +- SubqueryAlias testDataHasSameNameWithAlias
          +- LocalRelation [k#x, a#x, v#x]
@@ -369,8 +369,8 @@ Filter cast(true as boolean)
 SELECT udf(udf(1)) FROM range(10) HAVING MAX(id) > 0
 -- !query analysis
 Project [udf(udf(1))#x]
-+- Filter (max(id#xL)#xL > cast(0 as bigint))
-   +- Aggregate [cast(udf(cast(cast(udf(cast(1 as string)) as int) as string)) as int) AS udf(udf(1))#x, max(id#xL) AS max(id#xL)#xL]
++- Filter (max(id)#xL > cast(0 as bigint))
+   +- Aggregate [cast(udf(cast(cast(udf(cast(1 as string)) as int) as string)) as int) AS udf(udf(1))#x, max(id#xL) AS max(id)#xL]
       +- Range (0, 10, step=1)
 
 
@@ -404,7 +404,7 @@ CreateViewCommand `test_agg`, SELECT * FROM VALUES
   (2, true),
   (3, false), (3, null),
   (4, null), (4, null),
-  (5, null), (5, true), (5, false) AS test_agg(k, v), false, true, LocalTempView, true
+  (5, null), (5, true), (5, false) AS test_agg(k, v), false, true, LocalTempView, UNSUPPORTED, true
    +- Project [k#x, v#x]
       +- SubqueryAlias test_agg
          +- LocalRelation [k#x, v#x]
@@ -478,8 +478,8 @@ Filter (every(v)#x = false)
 SELECT udf(k), udf(every(v)) FROM test_agg GROUP BY udf(k) HAVING every(v) IS NULL
 -- !query analysis
 Project [udf(k)#x, udf(every(v))#x]
-+- Filter isnull(every(v#x)#x)
-   +- Aggregate [cast(udf(cast(k#x as string)) as int)], [cast(udf(cast(k#x as string)) as int) AS udf(k)#x, cast(udf(cast(every(v#x) as string)) as boolean) AS udf(every(v))#x, every(v#x) AS every(v#x)#x]
++- Filter isnull(every(v)#x)
+   +- Aggregate [cast(udf(cast(k#x as string)) as int)], [cast(udf(cast(k#x as string)) as int) AS udf(k)#x, cast(udf(cast(every(v#x) as string)) as boolean) AS udf(every(v))#x, every(v#x) AS every(v)#x]
       +- SubqueryAlias test_agg
          +- View (`test_agg`, [k#x, v#x])
             +- Project [cast(k#x as int) AS k#x, cast(v#x as boolean) AS v#x]
@@ -619,25 +619,8 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 SELECT udf(every("true"))
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
-  "sqlState" : "42K09",
-  "messageParameters" : {
-    "inputSql" : "\"true\"",
-    "inputType" : "\"STRING\"",
-    "paramIndex" : "first",
-    "requiredType" : "\"BOOLEAN\"",
-    "sqlExpr" : "\"every(true)\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 12,
-    "stopIndex" : 24,
-    "fragment" : "every(\"true\")"
-  } ]
-}
+Aggregate [cast(udf(cast(every(cast(true as boolean)) as string)) as boolean) AS udf(every(true))#x]
++- OneRowRelation
 
 
 -- !query
@@ -703,8 +686,8 @@ Project [udf(count(1))#xL]
 SELECT k, udf(max(v)) FROM test_agg GROUP BY k HAVING max(v) = true
 -- !query analysis
 Project [k#x, udf(max(v))#x]
-+- Filter (max(v#x)#x = true)
-   +- Aggregate [k#x], [k#x, cast(udf(cast(max(v#x) as string)) as boolean) AS udf(max(v))#x, max(v#x) AS max(v#x)#x]
++- Filter (max(v)#x = true)
+   +- Aggregate [k#x], [k#x, cast(udf(cast(max(v#x) as string)) as boolean) AS udf(max(v))#x, max(v#x) AS max(v)#x]
       +- SubqueryAlias test_agg
          +- View (`test_agg`, [k#x, v#x])
             +- Project [cast(k#x as int) AS k#x, cast(v#x as boolean) AS v#x]

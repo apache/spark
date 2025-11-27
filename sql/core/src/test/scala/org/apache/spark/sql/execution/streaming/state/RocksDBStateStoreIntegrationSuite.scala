@@ -21,17 +21,18 @@ import java.io.File
 
 import scala.jdk.CollectionConverters.SetHasAsScala
 
-import org.scalatest.time.{Minute, Span}
+import org.scalatest.time.{Millis, Minute, Seconds, Span}
 
-import org.apache.spark.sql.execution.streaming.{MemoryStream, StreamingQueryWrapper}
-import org.apache.spark.sql.functions.count
+import org.apache.spark.memory.UnifiedMemoryManager
+import org.apache.spark.sql.execution.streaming.runtime.{MemoryStream, StreamingQueryWrapper}
+import org.apache.spark.sql.functions.{count, max}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming._
 import org.apache.spark.sql.streaming.OutputMode.Update
 import org.apache.spark.util.Utils
 
 class RocksDBStateStoreIntegrationSuite extends StreamTest
-  with AlsoTestWithChangelogCheckpointingEnabled {
+  with AlsoTestWithRocksDBFeatures {
   import testImplicits._
 
   testWithColumnFamilies("RocksDBStateStore",
@@ -107,8 +108,15 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest
               "rocksdbTotalBytesReadByCompaction", "rocksdbTotalBytesWrittenByCompaction",
               "rocksdbTotalCompactionLatencyMs", "rocksdbWriterStallLatencyMs",
               "rocksdbTotalBytesReadThroughIterator", "rocksdbTotalBytesWrittenByFlush",
-              "rocksdbPinnedBlocksMemoryUsage", "rocksdbNumExternalColumnFamilies",
-              "rocksdbNumInternalColumnFamilies"))
+              "rocksdbPinnedBlocksMemoryUsage", "rocksdbNumInternalColFamiliesKeys",
+              "rocksdbNumExternalColumnFamilies", "rocksdbNumInternalColumnFamilies",
+              "rocksdbNumSnapshotsAutoRepaired",
+              "SnapshotLastUploaded.partition_0_default", "rocksdbChangeLogWriterCommitLatencyMs",
+              "rocksdbSaveZipFilesLatencyMs", "rocksdbLoadFromSnapshotLatencyMs",
+              "rocksdbLoadLatencyMs", "rocksdbReplayChangeLogLatencyMs",
+              "rocksdbNumReplayChangelogFiles", "rocksdbForceSnapshotCount"))
+            assert(stateOperatorMetrics.customMetrics.get("rocksdbNumSnapshotsAutoRepaired") == 0,
+              "Should be 0 since we didn't repair any snapshot")
           }
         } finally {
           query.stop()
@@ -119,7 +127,7 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest
 
   private def getFormatVersion(query: StreamingQuery): Int = {
     query.asInstanceOf[StreamingQueryWrapper].streamingQuery.lastExecution.sparkSession
-      .conf.get(SQLConf.STATE_STORE_ROCKSDB_FORMAT_VERSION)
+      .sessionState.conf.getConf(SQLConf.STATE_STORE_ROCKSDB_FORMAT_VERSION)
   }
 
   testWithColumnFamilies("SPARK-36519: store RocksDB format version in the checkpoint",
@@ -164,6 +172,8 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest
     TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
     withSQLConf(
       SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[RocksDBStateStoreProvider].getName,
+      // Set an unsupported RocksDB format version and the query should fail if it's passed down
+      // into RocksDB
       SQLConf.STATE_STORE_ROCKSDB_FORMAT_VERSION.key -> "100") {
       val inputData = MemoryStream[Int]
       val query = inputData.toDS().toDF("value")
@@ -175,9 +185,8 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest
         .outputMode("complete")
         .start()
       inputData.addData(1, 2)
-      query.processAllAvailable()
-      assert(getFormatVersion(query) == 100)
-      query.stop()
+      val e = intercept[StreamingQueryException](query.processAllAvailable())
+      assert(e.getCause.getCause.getMessage.contains("Unsupported BlockBasedTable format_version"))
     }
   }
 
@@ -214,6 +223,49 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest
             val stateOperatorMetrics = nextProgress.stateOperators(0)
             assert(stateOperatorMetrics.numRowsTotal === 0)
           }
+        } finally {
+          query.stop()
+        }
+      }
+    }
+  }
+
+  testWithColumnFamilies("SPARK-51823: unload state stores on commit",
+    TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
+    withTempDir { dir =>
+      withSQLConf(
+        (SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[RocksDBStateStoreProvider].getName),
+        (SQLConf.CHECKPOINT_LOCATION.key -> dir.getCanonicalPath),
+        (SQLConf.SHUFFLE_PARTITIONS.key -> "1"),
+        (SQLConf.STATE_STORE_UNLOAD_ON_COMMIT.key -> "true")) {
+        // Make sure we start with a fresh without any stale state store entries
+        Utils.clearLocalRootDirs()
+
+        val inputData = MemoryStream[Int]
+
+        val query = inputData.toDS().toDF("value")
+          .select($"value")
+          .groupBy($"value")
+          .agg(count("*"))
+          .writeStream
+          .format("console")
+          .outputMode("complete")
+          .start()
+        try {
+          inputData.addData(1, 2)
+          inputData.addData(2, 3)
+          query.processAllAvailable()
+
+          // StateStore should be unloaded, so its tmp dir shouldn't exist
+          var tmpFiles = new File(Utils.getLocalDir(sparkConf)).listFiles()
+          assert(tmpFiles.filter(_.getName().startsWith("StateStore")).isEmpty)
+
+          inputData.addData(3, 4)
+          inputData.addData(4, 5)
+          query.processAllAvailable()
+
+          tmpFiles = new File(Utils.getLocalDir(sparkConf)).listFiles()
+          assert(tmpFiles.filter(_.getName().startsWith("StateStore")).isEmpty)
         } finally {
           query.stop()
         }
@@ -269,4 +321,137 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest
     assert(changelogVersionsPresent(dirForPartition0) == List(3L, 4L))
     assert(snapshotVersionsPresent(dirForPartition0).contains(5L))
   }
+
+  // Test with both bounded memory enabled and disabled
+  Seq(true, false).foreach { boundedMemoryEnabled =>
+    test(s"RocksDB memory tracking integration with UnifiedMemoryManager" +
+      s" with boundedMemory=$boundedMemoryEnabled") {
+      withTempDir { dir =>
+        withSQLConf(
+          (SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[RocksDBStateStoreProvider].getName),
+          (SQLConf.CHECKPOINT_LOCATION.key -> dir.getCanonicalPath),
+          (SQLConf.SHUFFLE_PARTITIONS.key -> "5"),
+          (SQLConf.STREAMING_MAINTENANCE_INTERVAL.key -> (5 * 60 * 1000).toString),
+          ("spark.memory.unmanagedMemoryPollingInterval" -> "100ms"),
+          ("spark.sql.streaming.stateStore.rocksdb.boundedMemoryUsage" ->
+            boundedMemoryEnabled.toString)) {
+
+          // Use rate stream to ensure continuous state operations that trigger memory updates
+          val query = spark.readStream
+            .format("rate")
+            .option("rowsPerSecond", "10") // Continuous but not overwhelming
+            .load()
+            .selectExpr("value % 100 as key", "value")
+            .groupBy("key")
+            .agg(count("*").as("count"), max("value").as("max_value"))
+            .writeStream
+            .format("console")
+            .outputMode("update")
+            .trigger(Trigger.ProcessingTime(200)) // Regular triggers to ensure state operations
+            .start()
+
+          try {
+            // Check for memory tracking - the continuous stream should trigger memory updates
+            var initialRocksDBMemory = 0L
+            eventually(timeout(Span(20, Seconds)), interval(Span(500, Millis))) {
+              initialRocksDBMemory = UnifiedMemoryManager.getMemoryByComponentType("RocksDB")
+              assert(initialRocksDBMemory > 0L,
+                s"RocksDB memory should be tracked with boundedMemory=$boundedMemoryEnabled")
+            }
+
+            logInfo(s"RocksDB memory detected: $initialRocksDBMemory bytes " +
+              s"with boundedMemory=$boundedMemoryEnabled")
+
+            // Verify memory tracking remains stable during continued operation
+            eventually(timeout(Span(5, Seconds)), interval(Span(500, Millis))) {
+              val currentMemory = UnifiedMemoryManager.getMemoryByComponentType("RocksDB")
+              assert(currentMemory > 0L,
+                s"RocksDB memory tracking should remain active during stream processing: " +
+                  s"got $currentMemory bytes (initial: $initialRocksDBMemory) " +
+                  s"with boundedMemory=$boundedMemoryEnabled")
+            }
+
+            val finalMemory = UnifiedMemoryManager.getMemoryByComponentType("RocksDB")
+            logInfo(s"RocksDB memory tracking test completed successfully: " +
+              s"initial=$initialRocksDBMemory bytes, final=$finalMemory bytes " +
+              s"with boundedMemory=$boundedMemoryEnabled")
+
+          } finally {
+            query.stop()
+            // Clean up unmanaged memory users
+            UnifiedMemoryManager.clearUnmanagedMemoryUsers()
+          }
+        }
+      }
+    }
+  }
+
+  testWithColumnFamilies("bounded memory usage calculation",
+    TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
+    withTempDir { dir =>
+      withSQLConf(
+        (SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[RocksDBStateStoreProvider].getName),
+        (SQLConf.CHECKPOINT_LOCATION.key -> dir.getCanonicalPath),
+        (SQLConf.SHUFFLE_PARTITIONS.key -> "2"), // Use 2 partitions to test multiple providers
+        (s"${RocksDBConf.ROCKSDB_SQL_CONF_NAME_PREFIX}.boundedMemoryUsage" -> "true")) {
+
+        // Clear any existing providers from previous tests
+        RocksDBMemoryManager.resetWriteBufferManagerAndCache
+
+        val inputData = MemoryStream[Int]
+
+        val query = inputData.toDS().toDF("value")
+          .select($"value")
+          .groupBy($"value")
+          .agg(count("*"))
+          .writeStream
+          .format("console")
+          .outputMode("complete")
+          .start()
+
+        try {
+          // Initially no providers should be registered
+          assert(RocksDBMemoryManager.getNumRocksDBInstances(true) == 0)
+
+          // Add data to trigger state store creation
+          inputData.addData(1, 2, 3, 4)
+          query.processAllAvailable()
+
+          // With 2 partitions, we should have 2 bounded memory providers registered
+          assert(RocksDBMemoryManager.getNumRocksDBInstances(true) == 2)
+
+          assert(RocksDBMemoryManager.getNumRocksDBInstances(false) == 0)
+
+          // Add more data and check providers remain registered
+          inputData.addData(5, 6, 7, 8)
+          query.processAllAvailable()
+
+          // Should still have 2 instances
+          assert(RocksDBMemoryManager.getNumRocksDBInstances(true) == 2)
+
+          // Verify that the progress contains reasonable memory usage values
+          // With bounded memory, each provider should report its share of total memory
+          // (not 0L as in the old implementation)
+          val progress = query.lastProgress
+          val stateOperators = progress.stateOperators
+          assert(stateOperators.nonEmpty)
+
+          // Check that memory usage is reported at the operator level
+          stateOperators.foreach { op =>
+            // Memory usage is reported in memoryUsedBytes, not in customMetrics
+            val memUsage = op.memoryUsedBytes
+            assert(memUsage > 0L, s"Memory usage should be greater than 0, but was $memUsage")
+          }
+        } finally {
+          query.stop()
+        }
+      }
+    }
+  }
 }
+
+/**
+ * Test suite that runs all RocksDBStateStoreIntegrationSuite tests with row checksum enabled.
+ */
+class RocksDBStateStoreIntegrationSuiteWithRowChecksum
+  extends RocksDBStateStoreIntegrationSuite with EnableStateStoreRowChecksum

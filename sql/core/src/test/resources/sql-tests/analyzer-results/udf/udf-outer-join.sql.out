@@ -6,7 +6,7 @@ as t1(int_col1)
 -- !query analysis
 CreateViewCommand `t1`, SELECT * FROM VALUES
 (-234), (145), (367), (975), (298)
-as t1(int_col1), false, true, LocalTempView, true
+as t1(int_col1), false, true, LocalTempView, UNSUPPORTED, true
    +- Project [int_col1#x]
       +- SubqueryAlias t1
          +- LocalRelation [int_col1#x]
@@ -19,7 +19,7 @@ as t2(int_col0, int_col1)
 -- !query analysis
 CreateViewCommand `t2`, SELECT * FROM VALUES
 (-769, -244), (-800, -409), (940, 86), (-507, 304), (-367, 158)
-as t2(int_col0, int_col1), false, true, LocalTempView, true
+as t2(int_col0, int_col1), false, true, LocalTempView, UNSUPPORTED, true
    +- Project [int_col0#x, int_col1#x]
       +- SubqueryAlias t2
          +- LocalRelation [int_col0#x, int_col1#x]
@@ -38,8 +38,8 @@ HAVING (udf(SUM(COALESCE(udf(t1.int_col1), udf(t2.int_col0)))))
             > (udf(COALESCE(t1.int_col1, t2.int_col0)) * 2)
 -- !query analysis
 Project [udf(sum(udf(coalesce(int_col1, int_col0))))#xL, (udf(coalesce(int_col1, int_col0)) * 2)#x]
-+- Filter (cast(udf(cast(sum(coalesce(cast(udf(cast(int_col1#x as string)) as int), cast(udf(cast(int_col0#x as string)) as int)))#xL as string)) as bigint) > cast((udf(coalesce(int_col1, int_col0)) * 2)#x as bigint))
-   +- Aggregate [cast(udf(cast(greatest(coalesce(cast(udf(cast(int_col1#x as string)) as int), 109), coalesce(int_col1#x, cast(udf(cast(-449 as string)) as int))) as string)) as int), coalesce(int_col1#x, int_col0#x)], [cast(udf(cast(sum(cast(udf(cast(coalesce(int_col1#x, int_col0#x) as string)) as int)) as string)) as bigint) AS udf(sum(udf(coalesce(int_col1, int_col0))))#xL, (cast(udf(cast(coalesce(int_col1#x, int_col0#x) as string)) as int) * 2) AS (udf(coalesce(int_col1, int_col0)) * 2)#x, sum(coalesce(cast(udf(cast(int_col1#x as string)) as int), cast(udf(cast(int_col0#x as string)) as int))) AS sum(coalesce(cast(udf(cast(int_col1#x as string)) as int), cast(udf(cast(int_col0#x as string)) as int)))#xL]
++- Filter (cast(udf(cast(sum(coalesce(udf(int_col1), udf(int_col0)))#xL as string)) as bigint) > cast((udf(coalesce(int_col1, int_col0)) * 2)#x as bigint))
+   +- Aggregate [cast(udf(cast(greatest(coalesce(cast(udf(cast(int_col1#x as string)) as int), 109), coalesce(int_col1#x, cast(udf(cast(-449 as string)) as int))) as string)) as int), coalesce(int_col1#x, int_col0#x)], [cast(udf(cast(sum(cast(udf(cast(coalesce(int_col1#x, int_col0#x) as string)) as int)) as string)) as bigint) AS udf(sum(udf(coalesce(int_col1, int_col0))))#xL, (cast(udf(cast(coalesce(int_col1#x, int_col0#x) as string)) as int) * 2) AS (udf(coalesce(int_col1, int_col0)) * 2)#x, sum(coalesce(cast(udf(cast(int_col1#x as string)) as int), cast(udf(cast(int_col0#x as string)) as int))) AS sum(coalesce(udf(int_col1), udf(int_col0)))#xL]
       +- Join RightOuter, (cast(udf(cast(int_col0#x as string)) as int) = cast(udf(cast(int_col1#x as string)) as int))
          :- SubqueryAlias t1
          :  +- View (`t1`, [int_col1#x])
@@ -58,7 +58,7 @@ Project [udf(sum(udf(coalesce(int_col1, int_col0))))#xL, (udf(coalesce(int_col1,
 -- !query
 CREATE OR REPLACE TEMPORARY VIEW t1 AS SELECT * FROM VALUES (97) as t1(int_col1)
 -- !query analysis
-CreateViewCommand `t1`, SELECT * FROM VALUES (97) as t1(int_col1), false, true, LocalTempView, true
+CreateViewCommand `t1`, SELECT * FROM VALUES (97) as t1(int_col1), false, true, LocalTempView, UNSUPPORTED, true
    +- Project [int_col1#x]
       +- SubqueryAlias t1
          +- LocalRelation [int_col1#x]
@@ -67,7 +67,7 @@ CreateViewCommand `t1`, SELECT * FROM VALUES (97) as t1(int_col1), false, true, 
 -- !query
 CREATE OR REPLACE TEMPORARY VIEW t2 AS SELECT * FROM VALUES (0) as t2(int_col1)
 -- !query analysis
-CreateViewCommand `t2`, SELECT * FROM VALUES (0) as t2(int_col1), false, true, LocalTempView, true
+CreateViewCommand `t2`, SELECT * FROM VALUES (0) as t2(int_col1), false, true, LocalTempView, UNSUPPORTED, true
    +- Project [int_col1#x]
       +- SubqueryAlias t2
          +- LocalRelation [int_col1#x]

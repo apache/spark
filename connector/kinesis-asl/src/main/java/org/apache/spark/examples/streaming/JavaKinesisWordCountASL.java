@@ -110,15 +110,16 @@ public final class JavaKinesisWordCountASL { // needs to be public for access fr
 
     // Create a Kinesis client in order to determine the number of shards for the given stream
     KinesisClient kinesisClient =
-         KinesisClient.builder()
-                 .credentialsProvider(DefaultCredentialsProvider.create())
-                 .endpointOverride(URI.create(endpointUrl))
-                 .httpClientBuilder(ApacheHttpClient.builder())
-                 .build();
+      KinesisClient.builder()
+        .credentialsProvider(DefaultCredentialsProvider.create())
+        .endpointOverride(URI.create(endpointUrl))
+        .httpClientBuilder(ApacheHttpClient.builder())
+        .build();
 
-    DescribeStreamRequest describeStreamRequest = DescribeStreamRequest.builder()
-            .streamName(streamName)
-            .build();
+    DescribeStreamRequest describeStreamRequest =
+      DescribeStreamRequest.builder()
+        .streamName(streamName)
+        .build();
     int numShards =
         kinesisClient.describeStream(describeStreamRequest).streamDescription().shards().size();
 

@@ -1,0 +1,2 @@
+Project [from_avro(bytes#0, {"type": "int", "name": "id"}, (mode,FAILFAST), (compression,zstandard)) AS from_avro(bytes, {"type": "int", "name": "id"}, map(mode, FAILFAST, compression, zstandard))#0]
++- LocalRelation <empty>, [id#0L, bytes#0]

@@ -20,33 +20,33 @@ package org.apache.spark.sql.streaming
 import java.time.Duration
 
 import org.apache.spark.sql.Encoders
-import org.apache.spark.sql.execution.streaming.{MapStateImplWithTTL, MemoryStream}
+import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.ttl.MapStateImplWithTTL
+import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.util.StreamManualClock
+import org.apache.spark.tags.SlowSQLTest
 
 class MapStateSingleKeyTTLProcessor(ttlConfig: TTLConfig)
   extends StatefulProcessor[String, InputEvent, OutputEvent] {
 
-  @transient private var _mapState: MapStateImplWithTTL[String, Int] = _
+  @transient private var _mapState: MapState[String, Int] = _
 
   override def init(
       outputMode: OutputMode,
       timeMode: TimeMode): Unit = {
     _mapState = getHandle
       .getMapState("mapState", Encoders.STRING, Encoders.scalaInt, ttlConfig)
-      .asInstanceOf[MapStateImplWithTTL[String, Int]]
   }
 
   override def handleInputRows(
       key: String,
       inputRows: Iterator[InputEvent],
-      timerValues: TimerValues,
-      expiredTimerInfo: ExpiredTimerInfo): Iterator[OutputEvent] = {
+      timerValues: TimerValues): Iterator[OutputEvent] = {
     var results = List[OutputEvent]()
 
     for (row <- inputRows) {
-      val resultIter = processRow(row, _mapState)
+      val resultIter = processRow(row, _mapState.asInstanceOf[MapStateImplWithTTL[String, Int]])
       resultIter.foreach { r =>
         results = r :: results
       }
@@ -55,7 +55,7 @@ class MapStateSingleKeyTTLProcessor(ttlConfig: TTLConfig)
     results.iterator
   }
 
-  def processRow(
+  private def processRow(
       row: InputEvent,
       mapState: MapStateImplWithTTL[String, Int]): Iterator[OutputEvent] = {
     var results = List[OutputEvent]()
@@ -84,6 +84,8 @@ class MapStateSingleKeyTTLProcessor(ttlConfig: TTLConfig)
       ttlValues.foreach { v =>
         results = OutputEvent(key, -1, isTTLValue = true, ttlValue = v._2) :: results
       }
+    } else if (row.action == "clear") {
+      mapState.clear()
     }
 
     results.iterator
@@ -106,25 +108,24 @@ case class MapOutputEvent(
 class MapStateTTLProcessor(ttlConfig: TTLConfig)
   extends StatefulProcessor[String, MapInputEvent, MapOutputEvent] {
 
-  @transient private var _mapState: MapStateImplWithTTL[String, Int] = _
+  @transient private var _mapState: MapState[String, Int] = _
 
   override def init(
       outputMode: OutputMode,
       timeMode: TimeMode): Unit = {
     _mapState = getHandle
       .getMapState("mapState", Encoders.STRING, Encoders.scalaInt, ttlConfig)
-      .asInstanceOf[MapStateImplWithTTL[String, Int]]
+
   }
 
   override def handleInputRows(
       key: String,
       inputRows: Iterator[MapInputEvent],
-      timerValues: TimerValues,
-      expiredTimerInfo: ExpiredTimerInfo): Iterator[MapOutputEvent] = {
+      timerValues: TimerValues): Iterator[MapOutputEvent] = {
     var results = List[MapOutputEvent]()
 
     for (row <- inputRows) {
-      val resultIter = processRow(row, _mapState)
+      val resultIter = processRow(row, _mapState.asInstanceOf[MapStateImplWithTTL[String, Int]])
       resultIter.foreach { r =>
         results = r :: results
       }
@@ -133,7 +134,7 @@ class MapStateTTLProcessor(ttlConfig: TTLConfig)
     results.iterator
   }
 
-  def processRow(
+  private def processRow(
       row: MapInputEvent,
       mapState: MapStateImplWithTTL[String, Int]): Iterator[MapOutputEvent] = {
     var results = List[MapOutputEvent]()
@@ -174,6 +175,7 @@ class MapStateTTLProcessor(ttlConfig: TTLConfig)
   }
 }
 
+@SlowSQLTest
 class TransformWithMapStateTTLSuite extends TransformWithStateTTLTest {
 
   import testImplicits._
@@ -204,18 +206,30 @@ class TransformWithMapStateTTLSuite extends TransformWithStateTTLTest {
         AddData(inputStream, MapInputEvent("k1", "key1", "put", 1)),
         AdvanceManualClock(1 * 1000),
         CheckNewAnswer(),
+        assertNumStateRows(total = 1, updated = 1),
+
         AddData(inputStream, MapInputEvent("k1", "key1", "get", -1)),
         AdvanceManualClock(30 * 1000),
         CheckNewAnswer(MapOutputEvent("k1", "key1", 1, isTTLValue = false, -1)),
+        assertNumStateRows(total = 1, updated = 0),
+
         AddData(inputStream, MapInputEvent("k1", "key2", "put", 2)),
         AdvanceManualClock(1 * 1000),
         CheckNewAnswer(),
-        // advance clock to expire first key
-        AdvanceManualClock(30 * 1000),
+        assertNumStateRows(total = 2, updated = 1),
+
+        Execute { q =>
+          assert(q.lastProgress.stateOperators(0).numRowsUpdated === 1)
+        },
         AddData(inputStream, MapInputEvent("k1", "key1", "get", -1),
           MapInputEvent("k1", "key2", "get", -1)),
-        AdvanceManualClock(1 * 1000),
+        // advance clock to expire first key
+        AdvanceManualClock(30 * 1000),
         CheckNewAnswer(MapOutputEvent("k1", "key2", 2, isTTLValue = false, -1)),
+        assertNumStateRows(total = 1, updated = 0),
+        Execute { q =>
+          assert(q.lastProgress.stateOperators(0).numRowsRemoved === 1)
+        },
         StopStream
       )
     }
@@ -244,6 +258,8 @@ class TransformWithMapStateTTLSuite extends TransformWithStateTTLTest {
         ),
         AdvanceManualClock(1 * 1000), // batch timestamp: 1000
         CheckNewAnswer(),
+        assertNumStateRows(total = 2, updated = 2),
+
         AddData(inputStream,
           MapInputEvent("k1", "key1", "get", -1),
           MapInputEvent("k1", "key2", "get", -1)
@@ -253,6 +269,8 @@ class TransformWithMapStateTTLSuite extends TransformWithStateTTLTest {
           MapOutputEvent("k1", "key1", 1, isTTLValue = false, -1),
           MapOutputEvent("k1", "key2", 2, isTTLValue = false, -1)
         ),
+        assertNumStateRows(total = 2, updated = 0),
+
         // get values from ttl state
         AddData(inputStream,
           MapInputEvent("k1", "", "get_values_in_ttl_state", -1)
@@ -262,6 +280,8 @@ class TransformWithMapStateTTLSuite extends TransformWithStateTTLTest {
           MapOutputEvent("k1", "key1", -1, isTTLValue = true, 61000),
           MapOutputEvent("k1", "key2", -1, isTTLValue = true, 61000)
         ),
+        assertNumStateRows(total = 2, updated = 0),
+
         // advance clock to expire first two values
         AdvanceManualClock(30 * 1000), // batch timestamp: 62000
         AddData(inputStream,
@@ -276,6 +296,8 @@ class TransformWithMapStateTTLSuite extends TransformWithStateTTLTest {
           MapOutputEvent("k1", "key4", 4, isTTLValue = false, -1),
           MapOutputEvent("k1", "key5", 5, isTTLValue = false, -1)
         ),
+        assertNumStateRows(total = 3, updated = 3),
+
         AddData(inputStream,
           MapInputEvent("k1", "", "get_values_in_ttl_state", -1)
         ),
@@ -285,6 +307,8 @@ class TransformWithMapStateTTLSuite extends TransformWithStateTTLTest {
           MapOutputEvent("k1", "key4", -1, isTTLValue = true, 123000),
           MapOutputEvent("k1", "key5", -1, isTTLValue = true, 123000)
         ),
+        assertNumStateRows(total = 3, updated = 0),
+
         // get all values without enforcing ttl
         AddData(inputStream,
           MapInputEvent("k1", "key1", "get_without_enforcing_ttl", -1),
@@ -299,22 +323,27 @@ class TransformWithMapStateTTLSuite extends TransformWithStateTTLTest {
           MapOutputEvent("k1", "key4", 4, isTTLValue = false, -1),
           MapOutputEvent("k1", "key5", 5, isTTLValue = false, -1)
         ),
+        assertNumStateRows(total = 3, updated = 0),
+
         // check that updating a key updates its TTL
         AddData(inputStream, MapInputEvent("k1", "key3", "put", 3)),
         AdvanceManualClock(1 * 1000),
         AddData(inputStream, MapInputEvent("k1", "", "get_values_in_ttl_state", -1)),
         AdvanceManualClock(1 * 1000),
         CheckNewAnswer(
-          MapOutputEvent("k1", "key3", -1, isTTLValue = true, 123000),
           MapOutputEvent("k1", "key3", -1, isTTLValue = true, 126000),
           MapOutputEvent("k1", "key4", -1, isTTLValue = true, 123000),
           MapOutputEvent("k1", "key5", -1, isTTLValue = true, 123000)
         ),
+        assertNumStateRows(total = 3, updated = 1),
+
         AddData(inputStream, MapInputEvent("k1", "key3", "get_ttl_value_from_state", -1)),
         AdvanceManualClock(1 * 1000),
         CheckNewAnswer(
           MapOutputEvent("k1", "key3", 3, isTTLValue = true, 126000)
         ),
+        assertNumStateRows(total = 3, updated = 0),
+
         StopStream
       )
     }

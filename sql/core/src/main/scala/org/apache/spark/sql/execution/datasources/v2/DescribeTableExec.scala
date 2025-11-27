@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.util.{quoteIfNeeded, ResolveDefaultColumns}
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, SupportsMetadataColumns, SupportsRead, Table, TableCatalog}
 import org.apache.spark.sql.connector.expressions.{ClusterByTransform, IdentityTransform}
 import org.apache.spark.sql.connector.read.SupportsReportStatistics
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.ArrayImplicits._
 
@@ -44,6 +45,7 @@ case class DescribeTableExec(
       addMetadataColumns(rows)
       addTableDetails(rows)
       addTableStats(rows)
+      addTableConstraints(rows)
     }
     rows.toSeq
   }
@@ -75,15 +77,25 @@ case class DescribeTableExec(
     rows += toCatalystRow("Table Properties", properties, "")
 
     // If any columns have default values, append them to the result.
-    ResolveDefaultColumns.getDescribeMetadata(table.schema).foreach { row =>
+    ResolveDefaultColumns.getDescribeMetadata(table.columns()).foreach { row =>
       rows += toCatalystRow(row._1, row._2, row._3)
     }
   }
 
   private def addSchema(rows: ArrayBuffer[InternalRow]): Unit = {
-    rows ++= table.schema.map{ column =>
+    rows ++= table.columns().map{ column =>
       toCatalystRow(
-        column.name, column.dataType.simpleString, column.getComment().orNull)
+        column.name, column.dataType.simpleString, column.comment)
+    }
+  }
+
+  private def addTableConstraints(rows: ArrayBuffer[InternalRow]): Unit = {
+    if (table.constraints.nonEmpty) {
+      rows += emptyRow()
+      rows += toCatalystRow("# Constraints", "", "")
+      rows ++= table.constraints().map{ constraint =>
+        toCatalystRow(constraint.name(), constraint.toDescription, "")
+      }
     }
   }
 
@@ -106,11 +118,12 @@ case class DescribeTableExec(
     rows += toCatalystRow("# Clustering Information", "", "")
     rows += toCatalystRow(s"# ${output.head.name}", output(1).name, output(2).name)
     rows ++= clusterBySpec.columnNames.map { fieldNames =>
-      val nestedField = table.schema.findNestedField(fieldNames.fieldNames.toIndexedSeq)
+      val schema = CatalogV2Util.v2ColumnsToStructType(table.columns())
+      val nestedField = schema.findNestedField(fieldNames.fieldNames.toIndexedSeq)
       assert(nestedField.isDefined,
         "The clustering column " +
           s"${fieldNames.fieldNames.map(quoteIfNeeded).mkString(".")} " +
-          s"was not found in the table schema ${table.schema.catalogString}.")
+          s"was not found in the table schema ${schema.catalogString}.")
       nestedField.get
     }.map { case (path, field) =>
       toCatalystRow(
@@ -152,13 +165,16 @@ case class DescribeTableExec(
       if (partitionColumnsOnly) {
         rows += toCatalystRow("# Partition Information", "", "")
         rows += toCatalystRow(s"# ${output(0).name}", output(1).name, output(2).name)
+        val schema = CatalogV2Util.v2ColumnsToStructType(table.columns())
         rows ++= table.partitioning
           .map(_.asInstanceOf[IdentityTransform].ref.fieldNames())
           .map { fieldNames =>
-            val nestedField = table.schema.findNestedField(fieldNames.toImmutableArraySeq)
-            assert(nestedField.isDefined,
-              s"Not found the partition column ${fieldNames.map(quoteIfNeeded).mkString(".")} " +
-              s"in the table schema ${table.schema().catalogString}.")
+            val nestedField = schema.findNestedField(fieldNames.toImmutableArraySeq)
+            if (nestedField.isEmpty) {
+              throw QueryExecutionErrors.partitionColumnNotFoundInTheTableSchemaError(
+                fieldNames.toSeq,
+                schema)
+            }
             nestedField.get
           }.map { case (path, field) =>
             toCatalystRow(

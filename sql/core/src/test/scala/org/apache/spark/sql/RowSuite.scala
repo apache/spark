@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.{SparkFunSuite, SparkUnsupportedOperationException}
+import org.apache.spark.{SparkFunSuite, SparkRuntimeException, SparkUnsupportedOperationException}
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, SpecificInternalRow}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
@@ -119,8 +119,32 @@ class RowSuite extends SparkFunSuite with SharedSparkSession {
       exception = intercept[SparkUnsupportedOperationException] {
         rowWithoutSchema.fieldIndex("foo")
       },
-      errorClass = "UNSUPPORTED_CALL.FIELD_INDEX",
+      condition = "UNSUPPORTED_CALL.FIELD_INDEX",
       parameters = Map("methodName" -> "fieldIndex", "className" -> "Row", "fieldName" -> "`foo`")
     )
+  }
+
+  test("SPARK-42307: get a value from a null column should result in error") {
+    val position = 0
+    val rowWithNullValue = Row.fromSeq(Seq(null))
+
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        rowWithNullValue.getLong(position)
+      },
+      condition = "ROW_VALUE_IS_NULL",
+      parameters = Map("index" -> position.toString)
+    )
+  }
+
+  test("Geospatial row API - Geography and Geometry") {
+    // A test WKB value corresponding to: POINT (17 7).
+    val point = "010100000000000000000031400000000000001C40"
+      .grouped(2).map(Integer.parseInt(_, 16).toByte).toArray
+
+    val row = Row(Geometry.fromWKB(point), Geography.fromWKB(point))
+
+    assert(row.getGeometry(0).getBytes() == point)
+    assert(row.getGeography(1).getBytes() == point)
   }
 }

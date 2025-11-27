@@ -135,6 +135,29 @@ class FrameAnyAllMixin:
         self.assert_eq(psdf.any(bool_only=True), pdf.any(bool_only=True))
         self.assert_eq(psdf.any(bool_only=False), pdf.any(bool_only=False))
 
+        # Test axis=1
+        self.assert_eq(psdf.any(axis=1), pdf.any(axis=1))
+        self.assert_eq(psdf.any(axis=1, bool_only=True), pdf.any(axis=1, bool_only=True))
+        self.assert_eq(psdf.any(axis=1, bool_only=False), pdf.any(axis=1, bool_only=False))
+
+        # Test axis='index'
+        self.assert_eq(psdf.any(axis="index"), pdf.any(axis="index"))
+        self.assert_eq(
+            psdf.any(axis="index", bool_only=True), pdf.any(axis="index", bool_only=True)
+        )
+        self.assert_eq(
+            psdf.any(axis="index", bool_only=False), pdf.any(axis="index", bool_only=False)
+        )
+
+        # Test axis='columns'
+        self.assert_eq(psdf.any(axis="columns"), pdf.any(axis="columns"))
+        self.assert_eq(
+            psdf.any(axis="columns", bool_only=True), pdf.any(axis="columns", bool_only=True)
+        )
+        self.assert_eq(
+            psdf.any(axis="columns", bool_only=False), pdf.any(axis="columns", bool_only=False)
+        )
+
         columns.names = ["X", "Y"]
         pdf.columns = columns
         psdf.columns = columns
@@ -143,10 +166,53 @@ class FrameAnyAllMixin:
         self.assert_eq(psdf.any(bool_only=True), pdf.any(bool_only=True))
         self.assert_eq(psdf.any(bool_only=False), pdf.any(bool_only=False))
 
-        with self.assertRaisesRegex(
-            NotImplementedError, 'axis should be either 0 or "index" currently.'
-        ):
-            psdf.any(axis=1)
+        # Test axis=1
+        self.assert_eq(psdf.any(axis=1), pdf.any(axis=1))
+        self.assert_eq(psdf.any(axis=1, bool_only=True), pdf.any(axis=1, bool_only=True))
+        self.assert_eq(psdf.any(axis=1, bool_only=False), pdf.any(axis=1, bool_only=False))
+
+        # Test skipna parameter
+        pdf = pd.DataFrame(
+            {"A": [True, False], "B": [1, np.nan], "C": [True, None], "D": [None, np.nan]}
+        )
+        psdf = ps.from_pandas(pdf)
+
+        # bools and np.nan
+        self.assert_eq(psdf[["A", "B"]].any(skipna=False), pdf[["A", "B"]].any(skipna=False))
+        self.assert_eq(
+            psdf[["A", "B"]].any(axis=1, skipna=False), pdf[["A", "B"]].any(axis=1, skipna=False)
+        )
+        # bools and None
+        self.assert_eq(psdf[["A", "C"]].any(skipna=False), pdf[["A", "C"]].any(skipna=False))
+        # bools, np.nan, and None
+        self.assert_eq(psdf[["B", "C"]].any(skipna=False), pdf[["B", "C"]].any(skipna=False))
+        # np.nan, and None
+        self.assert_eq(psdf[["D"]].any(skipna=False), pdf[["D"]].any(skipna=False))
+        self.assert_eq(psdf[["D"]].any(axis=1, skipna=False), pdf[["D"]].any(axis=1, skipna=False))
+
+        # np.nan only
+        self.assert_eq(
+            ps.DataFrame([np.nan]).any(skipna=False),
+            pd.DataFrame([np.nan]).any(skipna=False),
+            almost=True,
+        )
+        self.assert_eq(
+            ps.DataFrame([np.nan]).any(axis=1, skipna=False),
+            pd.DataFrame([np.nan]).any(axis=1, skipna=False),
+            almost=True,
+        )
+
+        # None only
+        self.assert_eq(
+            ps.DataFrame([None]).any(skipna=True),
+            pd.DataFrame([None]).any(skipna=True),
+            almost=True,
+        )
+        self.assert_eq(
+            ps.DataFrame([None]).any(axis=1, skipna=True),
+            pd.DataFrame([None]).any(axis=1, skipna=True),
+            almost=True,
+        )
 
 
 class FrameAnyAllTests(

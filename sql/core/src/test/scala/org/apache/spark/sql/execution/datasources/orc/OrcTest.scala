@@ -22,18 +22,19 @@ import java.io.File
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
 
-import org.apache.commons.io.FileUtils
 import org.scalatest.BeforeAndAfterAll
 
-import org.apache.spark.sql._
+import org.apache.spark.sql.{Column, DataFrame, QueryTest}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Predicate}
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
+import org.apache.spark.sql.classic.ClassicConversions._
 import org.apache.spark.sql.execution.datasources.FileBasedDataSourceTest
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
 import org.apache.spark.sql.execution.datasources.v2.orc.OrcScan
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.ORC_IMPLEMENTATION
 import org.apache.spark.util.ArrayImplicits._
+import org.apache.spark.util.Utils
 
 /**
  * OrcTest
@@ -62,7 +63,7 @@ trait OrcTest extends QueryTest with FileBasedDataSourceTest with BeforeAndAfter
 
   protected override def beforeAll(): Unit = {
     super.beforeAll()
-    originalConfORCImplementation = spark.conf.get(ORC_IMPLEMENTATION)
+    originalConfORCImplementation = spark.sessionState.conf.getConf(ORC_IMPLEMENTATION)
     spark.conf.set(ORC_IMPLEMENTATION.key, orcImp)
   }
 
@@ -142,7 +143,7 @@ trait OrcTest extends QueryTest with FileBasedDataSourceTest with BeforeAndAfter
     // Copy to avoid URISyntaxException when `sql/hive` accesses the resources in `sql/core`
     val file = File.createTempFile("orc-test", ".orc")
     file.deleteOnExit();
-    FileUtils.copyURLToFile(url, file)
+    Utils.copyURLToFile(url, file)
     spark.read.orc(file.getAbsolutePath)
   }
 

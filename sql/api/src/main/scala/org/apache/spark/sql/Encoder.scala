@@ -25,7 +25,7 @@ import org.apache.spark.sql.types._
 /**
  * Used to convert a JVM object of type `T` to and from the internal Spark SQL representation.
  *
- * == Scala ==
+ * ==Scala==
  * Encoders are generally created automatically through implicits from a `SparkSession`, or can be
  * explicitly created by calling static methods on [[Encoders]].
  *
@@ -35,7 +35,7 @@ import org.apache.spark.sql.types._
  *   val ds = Seq(1, 2, 3).toDS() // implicitly provided (spark.implicits.newIntEncoder)
  * }}}
  *
- * == Java ==
+ * ==Java==
  * Encoders are specified by calling static methods on [[Encoders]].
  *
  * {{{
@@ -57,8 +57,8 @@ import org.apache.spark.sql.types._
  *   Encoders.bean(MyClass.class);
  * }}}
  *
- * == Implementation ==
- *  - Encoders should be thread-safe.
+ * ==Implementation==
+ *   - Encoders should be thread-safe.
  *
  * @since 1.6.0
  */

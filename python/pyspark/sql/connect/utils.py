@@ -22,7 +22,7 @@ from pyspark.errors import PySparkImportError
 
 
 def check_dependencies(mod_name: str) -> None:
-    if mod_name == "__main__":
+    if mod_name == "__main__" or mod_name == "pyspark.sql.connect.utils":
         from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
 
         if not should_test_connect:
@@ -37,6 +37,7 @@ def check_dependencies(mod_name: str) -> None:
         require_minimum_grpc_version()
         require_minimum_grpcio_status_version()
         require_minimum_googleapis_common_protos_version()
+        require_minimum_zstandard_version()
 
 
 def require_minimum_grpc_version() -> None:
@@ -47,16 +48,16 @@ def require_minimum_grpc_version() -> None:
         import grpc
     except ImportError as error:
         raise PySparkImportError(
-            error_class="PACKAGE_NOT_INSTALLED",
-            message_parameters={
+            errorClass="PACKAGE_NOT_INSTALLED",
+            messageParameters={
                 "package_name": "grpcio",
                 "minimum_version": str(minimum_grpc_version),
             },
         ) from error
     if LooseVersion(grpc.__version__) < LooseVersion(minimum_grpc_version):
         raise PySparkImportError(
-            error_class="UNSUPPORTED_PACKAGE_VERSION",
-            message_parameters={
+            errorClass="UNSUPPORTED_PACKAGE_VERSION",
+            messageParameters={
                 "package_name": "grpcio",
                 "minimum_version": str(minimum_grpc_version),
                 "current_version": str(grpc.__version__),
@@ -72,8 +73,8 @@ def require_minimum_grpcio_status_version() -> None:
         import grpc_status  # noqa
     except ImportError as error:
         raise PySparkImportError(
-            error_class="PACKAGE_NOT_INSTALLED",
-            message_parameters={
+            errorClass="PACKAGE_NOT_INSTALLED",
+            messageParameters={
                 "package_name": "grpcio-status",
                 "minimum_version": str(minimum_grpc_version),
             },
@@ -88,10 +89,26 @@ def require_minimum_googleapis_common_protos_version() -> None:
         import google.rpc  # noqa
     except ImportError as error:
         raise PySparkImportError(
-            error_class="PACKAGE_NOT_INSTALLED",
-            message_parameters={
+            errorClass="PACKAGE_NOT_INSTALLED",
+            messageParameters={
                 "package_name": "googleapis-common-protos",
                 "minimum_version": str(minimum_common_protos_version),
+            },
+        ) from error
+
+
+def require_minimum_zstandard_version() -> None:
+    """Raise ImportError if zstandard is not installed"""
+    minimum_zstandard_version = "0.25.0"
+
+    try:
+        import zstandard  # noqa
+    except ImportError as error:
+        raise PySparkImportError(
+            errorClass="PACKAGE_NOT_INSTALLED",
+            messageParameters={
+                "package_name": "zstandard",
+                "minimum_version": str(minimum_zstandard_version),
             },
         ) from error
 

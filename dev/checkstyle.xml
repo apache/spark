@@ -71,6 +71,12 @@
 
     <module name="NewlineAtEndOfFile"/>
 
+    <module name="Header">
+        <property name="charset" value="UTF-8" />
+        <property name="headerFile" value="dev/java-file-header" />
+        <property name="fileExtensions" value="java" />
+    </module>
+
     <module name="TreeWalker">
         <!--
         If you wish to turn off checking for a section of code, you can put a comment in the source
@@ -167,30 +173,8 @@
             <property name="message" value="Avoid throwing error in application code."/>
         </module>
         <module name="RegexpSinglelineJava">
-            <property name="format" value="Objects\.toStringHelper"/>
-            <property name="message" value="Avoid using Object.toStringHelper. Use ToStringBuilder instead." />
-        </module>
-        <module name="RegexpSinglelineJava">
             <property name="format" value="new (java\.lang\.)?(Byte|Integer|Long|Short)\("/>
             <property name="message" value="Use static factory 'valueOf' or 'parseXXX' instead of the deprecated constructors." />
-        </module>
-        <module name="RegexpSinglelineJava">
-            <property name="format" value="Files\.createTempDir\("/>
-            <property name="message"
-              value="Avoid using com.google.common.io.Files.createTempDir() due to CVE-2020-8908.
-                Use org.apache.spark.network.util.JavaUtils.createTempDir() instead." />
-        </module>
-        <module name="RegexpSinglelineJava">
-            <property name="format" value="FileBackedOutputStream"/>
-            <property name="message" value="Avoid using FileBackedOutputStream due to CVE-2023-2976." />
-        </module>
-        <module name="RegexpSinglelineJava">
-            <property name="format" value="AtomicDoubleArray"/>
-            <property name="message" value="Avoid using AtomicDoubleArray due to CVE-2018-10237." />
-        </module>
-        <module name="RegexpSinglelineJava">
-            <property name="format" value="CompoundOrdering"/>
-            <property name="message" value="Avoid using CompoundOrdering due to CVE-2018-10237." />
         </module>
         <module name="RegexpSinglelineJava">
             <property name="format" value="@Test\(expected"/>
@@ -199,6 +183,117 @@
         <module name="IllegalImport">
             <property name="illegalPkgs" value="org.apache.log4j" />
             <property name="illegalPkgs" value="org.apache.commons.lang" />
+            <property name="illegalPkgs" value="org.apache.commons.lang3.tuple" />
+            <property name="illegalClasses" value="org.apache.commons.codec.binary.Base64" />
+            <property name="illegalClasses" value="org.apache.commons.io.FileUtils" />
+            <property name="illegalClasses" value="org.apache.commons.lang3.JavaVersion" />
+            <property name="illegalClasses" value="org.apache.commons.lang3.Strings" />
+            <property name="illegalClasses" value="org.apache.commons.lang3.StringUtils" />
+            <property name="illegalClasses" value="org.apache.commons.lang3.SystemUtils" />
+            <property name="illegalClasses" value="org.apache.hadoop.io.IOUtils" />
+            <property name="illegalClasses" value="org.apache.parquet.Preconditions" />
+            <property name="illegalClasses" value="com.google.common.base.Joiner" />
+            <property name="illegalClasses" value="com.google.common.base.Objects" />
+            <property name="illegalClasses" value="com.google.common.base.Preconditions" />
+            <property name="illegalClasses" value="com.google.common.base.Strings" />
+            <property name="illegalClasses" value="com.google.common.collect.ArrayListMultimap" />
+            <property name="illegalClasses" value="com.google.common.collect.Multimap" />
+            <property name="illegalClasses" value="com.google.common.collect.Sets" />
+            <property name="illegalClasses" value="com.google.common.io.BaseEncoding" />
+            <property name="illegalClasses" value="com.google.common.io.Files" />
+        </module>
+        <module name="RegexpSinglelineJava">
+            <property name="format" value="Ints\.checkedCast"/>
+            <property name="message" value="Use JavaUtils.checkedCast instead." />
+        </module>
+        <module name="RegexpSinglelineJava">
+            <property name="format" value="Charset\.defaultCharset"/>
+            <property name="message" value="Use StandardCharsets.UTF_8 instead." />
+        </module>
+        <module name="RegexpSinglelineJava">
+            <property name="format" value="new URL\("/>
+            <property name="message" value="Use URI.toURL or URL.of instead of URL constructors." />
+        </module>
+        <module name="RegexpSinglelineJava">
+            <property name="format" value="new ToStringBuilder\("/>
+            <property name="message" value="Use String concatenation instead." />
+        </module>
+        <module name="RegexpSinglelineJava">
+            <property name="format" value="Files\.equal\("/>
+            <property name="message" value="Use contentEquals of SparkFileUtils or Utils instead." />
+        </module>
+        <module name="RegexpSinglelineJava">
+            <property name="format" value="Files\.asCharSink"/>
+            <property name="message" value="Use java.nio.file.Files.writeString instead." />
+        </module>
+        <module name="RegexpSinglelineJava">
+            <property name="format" value="ByteStreams\.copy"/>
+            <property name="message" value="Use Java transferTo instead." />
+        </module>
+        <module name="RegexpSinglelineJava">
+            <property name="format" value="ByteStreams\.skipFully"/>
+            <property name="message" value="Use Java skipNBytes instead." />
+        </module>
+        <module name="RegexpSinglelineJava">
+            <property name="format" value="Files\.asByteSource"/>
+            <property name="message" value="Use Java Files.newInputStream instead." />
+        </module>
+        <module name="RegexpSinglelineJava">
+            <property name="format" value="ByteStreams\.readFully"/>
+            <property name="message" value="Use readFully of JavaUtils/SparkStreamUtils/Utils instead." />
+        </module>
+        <module name="RegexpSinglelineJava">
+            <property name="format" value="FileUtils.writeStringToFile"/>
+            <property name="message" value="Use java.nio.file.Files.writeString instead." />
+        </module>
+        <module name="RegexpSinglelineJava">
+            <property name="format" value="FileUtils\.deleteDirectory"/>
+            <property name="message" value="Use deleteRecursively of JavaUtils/SparkFileUtils/Utils instead." />
+        </module>
+        <module name="RegexpSinglelineJava">
+            <property name="format" value="FileUtils\.forceDelete\("/>
+            <property name="message" value="Use deleteRecursively of JavaUtils/SparkFileUtils/Utils instead." />
+        </module>
+        <module name="RegexpSinglelineJava">
+            <property name="format" value="FileUtils\.forceDeleteOnExit\("/>
+            <property name="message" value="Use forceDeleteOnExit of JavaUtils/SparkFileUtils/Utils instead." />
+        </module>
+        <module name="RegexpSinglelineJava">
+            <property name="format" value="FileUtils\.deleteQuietly"/>
+            <property name="message" value="Use deleteQuietly of JavaUtils/SparkFileUtils/Utils instead." />
+        </module>
+        <module name="RegexpSinglelineJava">
+            <property name="format" value="CharStreams\.toString"/>
+            <property name="message" value="Use toString of SparkStreamUtils or Utils instead." />
+        </module>
+        <module name="RegexpSinglelineJava">
+            <property name="format" value="Preconditions\.checkNotNull"/>
+            <property name="message" value="Use requireNonNull of java.util.Objects instead." />
+        </module>
+        <module name="RegexpSinglelineJava">
+            <property name="format" value="Lists\.newArrayList"/>
+            <property name="message" value="Use ArrayList constructor instead." />
+        </module>
+        <module name="RegexpSinglelineJava">
+            <property name="format" value="ImmutableMap\.of"/>
+            <property name="message" value="Use Map.of instead." />
+        </module>
+        <module name="RegexpSinglelineJava">
+            <property name="format" value="ImmutableSet\.of"/>
+            <property name="message" value="Use Set.of instead." />
+        </module>
+        <module name="RegexpSinglelineJava">
+            <property name="format" value="Collections\.emptySet"/>
+            <property name="message" value="Use Set.of() instead." />
+        </module>
+        <module name="RegexpSinglelineJava">
+            <property name="format" value="Throwables\.getStackTraceAsString"/>
+            <property name="message" value="Use stackTraceToString of JavaUtils/SparkFileUtils/Utils instead." />
+        </module>
+        <!-- support structured logging -->
+        <module name="RegexpSinglelineJava">
+            <property name="format" value="org\.slf4j\.(Logger|LoggerFactory)" />
+            <property name="message" value="Please use org.apache.spark.internal.(SparkLogger|SparkLoggerFactory) instead." />
         </module>
     </module>
 </module>

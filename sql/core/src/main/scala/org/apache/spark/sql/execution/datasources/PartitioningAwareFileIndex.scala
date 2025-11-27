@@ -24,7 +24,7 @@ import scala.collection.mutable
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
 
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{COUNT, PERCENT, TOTAL}
 import org.apache.spark.paths.SparkPath
 import org.apache.spark.sql.SparkSession
@@ -68,6 +68,13 @@ abstract class PartitioningAwareFileIndex(
 
   protected lazy val recursiveFileLookup: Boolean = {
     caseInsensitiveMap.getOrElse(FileIndexOptions.RECURSIVE_FILE_LOOKUP, "false").toBoolean
+  }
+
+  protected lazy val ignoreInvalidPartitionPaths: Boolean = {
+    caseInsensitiveMap
+      .get(FileIndexOptions.IGNORE_INVALID_PARTITION_PATHS)
+      .map(_.toBoolean)
+      .getOrElse(sparkSession.sessionState.conf.ignoreInvalidPartitionPaths)
   }
 
   override def listFiles(
@@ -162,7 +169,8 @@ abstract class PartitioningAwareFileIndex(
         userSpecifiedSchema = userSpecifiedSchema,
         caseSensitive = sparkSession.sessionState.conf.caseSensitiveAnalysis,
         validatePartitionColumns = sparkSession.sessionState.conf.validatePartitionColumns,
-        timeZoneId = timeZoneId)
+        timeZoneId = timeZoneId,
+        ignoreInvalidPartitionPaths = ignoreInvalidPartitionPaths)
     }
   }
 

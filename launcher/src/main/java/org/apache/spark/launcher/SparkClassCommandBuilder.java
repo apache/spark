@@ -38,6 +38,9 @@ class SparkClassCommandBuilder extends AbstractCommandBuilder {
   SparkClassCommandBuilder(String className, List<String> classArgs) {
     this.className = className;
     this.classArgs = classArgs;
+    if ("org.apache.hive.beeline.BeeLine".equals(className)) {
+      this.isBeeLine = true;
+    }
   }
 
   @Override
@@ -99,6 +102,7 @@ class SparkClassCommandBuilder extends AbstractCommandBuilder {
 
     String mem = firstNonEmpty(memKey != null ? System.getenv(memKey) : null, DEFAULT_MEM);
     cmd.add("-Xmx" + mem);
+    addOptionString(cmd, JavaModuleOptions.defaultModuleOptions());
     cmd.add(className);
     cmd.addAll(classArgs);
     return cmd;

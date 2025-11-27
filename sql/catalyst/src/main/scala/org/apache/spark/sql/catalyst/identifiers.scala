@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst
 
+import org.apache.spark.sql.connector.catalog.CatalogManager
+
 /**
  * An identifier that optionally specifies a database.
  *
@@ -107,8 +109,23 @@ case class TableIdentifier(table: String, database: Option[String], catalog: Opt
 }
 
 /** A fully qualified identifier for a table (i.e., database.tableName) */
-case class QualifiedTableName(database: String, name: String) {
-  override def toString: String = s"$database.$name"
+case class QualifiedTableName(catalog: String, database: String, name: String) {
+  /** Two argument ctor for backward compatibility. */
+  def this(database: String, name: String) = this(
+    catalog = CatalogManager.SESSION_CATALOG_NAME,
+    database = database,
+    name = name)
+
+  override def toString: String = s"$catalog.$database.$name"
+}
+
+object QualifiedTableName {
+  def apply(catalog: String, database: String, name: String): QualifiedTableName = {
+    new QualifiedTableName(catalog, database, name)
+  }
+
+  def apply(database: String, name: String): QualifiedTableName =
+    new QualifiedTableName(database = database, name = name)
 }
 
 object TableIdentifier {

@@ -20,7 +20,7 @@ package org.apache.spark.sql.hive
 import org.apache.spark.SparkContext
 import org.apache.spark.api.java.JavaSparkContext
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{SparkSession, SQLContext}
+import org.apache.spark.sql.classic.{SparkSession, SQLContext}
 
 
 /**

@@ -27,13 +27,16 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.SparkException
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{CLASS_NAME, DATA_SOURCE, DATA_SOURCES, PATHS}
-import org.apache.spark.sql._
+import org.apache.spark.sql.{AnalysisException, SaveMode, SparkSession}
+import org.apache.spark.sql.catalyst.DataSourceOptions
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogUtils}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, TypeUtils}
+import org.apache.spark.sql.classic.ClassicConversions.castToImpl
+import org.apache.spark.sql.classic.Dataset
 import org.apache.spark.sql.connector.catalog.TableProvider
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.command.DataWritingCommand
@@ -46,9 +49,11 @@ import org.apache.spark.sql.execution.datasources.v2.FileDataSourceV2
 import org.apache.spark.sql.execution.datasources.v2.orc.OrcDataSourceV2
 import org.apache.spark.sql.execution.datasources.v2.python.PythonDataSourceV2
 import org.apache.spark.sql.execution.datasources.xml.XmlFileFormat
-import org.apache.spark.sql.execution.streaming._
+import org.apache.spark.sql.execution.streaming.{Sink, Source}
+import org.apache.spark.sql.execution.streaming.runtime._
+import org.apache.spark.sql.execution.streaming.sinks.FileStreamSink
 import org.apache.spark.sql.execution.streaming.sources.{RateStreamProvider, TextSocketSourceProvider}
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.{SessionStateHelper, SQLConf}
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.{DataType, StructField, StructType}
@@ -95,12 +100,14 @@ case class DataSource(
     partitionColumns: Seq[String] = Seq.empty,
     bucketSpec: Option[BucketSpec] = None,
     options: Map[String, String] = Map.empty,
-    catalogTable: Option[CatalogTable] = None) extends Logging {
+    catalogTable: Option[CatalogTable] = None) extends SessionStateHelper with Logging {
 
   case class SourceInfo(name: String, schema: StructType, partitionColumns: Seq[String])
 
+  private val conf: SQLConf = getSqlConf(sparkSession)
+
   lazy val providingClass: Class[_] = {
-    val cls = DataSource.lookupDataSource(className, sparkSession.sessionState.conf)
+    val cls = DataSource.lookupDataSource(className, conf)
     // `providingClass` is used for resolving data source relation for catalog tables.
     // As now catalog for data source V2 is under development, here we fall back all the
     // [[FileDataSourceV2]] to [[FileFormat]] to guarantee the current catalog works.
@@ -115,12 +122,16 @@ case class DataSource(
 
   private[sql] def providingInstance(): Any = providingClass.getConstructor().newInstance()
 
-  private def newHadoopConfiguration(): Configuration =
-    sparkSession.sessionState.newHadoopConfWithOptions(options)
+  private def newHadoopConfiguration(): Configuration = getHadoopConf(sparkSession, options)
+
+  private def makeQualified(path: Path): Path = {
+    val fs = path.getFileSystem(newHadoopConfiguration())
+    path.makeQualified(fs.getUri, fs.getWorkingDirectory)
+  }
 
   lazy val sourceInfo: SourceInfo = sourceSchema()
   private val caseInsensitiveOptions = CaseInsensitiveMap(options)
-  private val equality = sparkSession.sessionState.conf.resolver
+  private val equality = conf.resolver
 
   /**
    * Whether or not paths should be globbed before being used to access files.
@@ -252,10 +263,14 @@ case class DataSource(
           }
         }
 
-        val isSchemaInferenceEnabled = sparkSession.sessionState.conf.streamingSchemaInference
+        val isSchemaInferenceEnabled = conf.streamingSchemaInference
         val isTextSource = providingClass == classOf[text.TextFileFormat]
+        val isSingleVariantColumn = (providingClass == classOf[json.JsonFileFormat] ||
+          providingClass == classOf[csv.CSVFileFormat]) &&
+          caseInsensitiveOptions.contains(DataSourceOptions.SINGLE_VARIANT_COLUMN)
         // If the schema inference is disabled, only text sources require schema to be specified
-        if (!isSchemaInferenceEnabled && !isTextSource && userSpecifiedSchema.isEmpty) {
+        if (!isSchemaInferenceEnabled && !isTextSource && !isSingleVariantColumn &&
+            userSpecifiedSchema.isEmpty) {
           throw QueryExecutionErrors.createStreamingSourceNotSpecifySchemaError()
         }
 
@@ -267,7 +282,7 @@ case class DataSource(
             checkAndGlobPathIfNecessary(checkEmptyGlobPath = false, checkFilesExist = false)
           createInMemoryFileIndex(globbedPaths)
         })
-        val forceNullable = sparkSession.conf.get(SQLConf.FILE_SOURCE_SCHEMA_FORCE_NULLABLE)
+        val forceNullable = conf.getConf(SQLConf.FILE_SOURCE_SCHEMA_FORCE_NULLABLE)
         val sourceDataSchema = if (forceNullable) dataSchema.asNullable else dataSchema
         SourceInfo(
           s"FileSource[$path]",
@@ -316,9 +331,9 @@ case class DataSource(
         s.createSink(sparkSession.sqlContext, caseInsensitiveOptions, partitionColumns, outputMode)
 
       case fileFormat: FileFormat =>
-        val path = caseInsensitiveOptions.getOrElse("path", {
+        val path = makeQualified(new Path(caseInsensitiveOptions.getOrElse("path", {
           throw QueryExecutionErrors.dataPathNotSpecifiedError()
-        })
+        }))).toString
         if (outputMode != OutputMode.Append) {
           throw QueryCompilationErrors.dataSourceOutputModeUnsupportedError(className, outputMode)
         }
@@ -340,7 +355,7 @@ case class DataSource(
    *                        is considered as a non-streaming file based data source. Since we know
    *                        that files already exist, we don't need to check them again.
    */
-  def resolveRelation(checkFilesExist: Boolean = true): BaseRelation = {
+  def resolveRelation(checkFilesExist: Boolean = true, readOnly: Boolean = false): BaseRelation = {
     val relation = (providingInstance(), userSpecifiedSchema) match {
       // TODO: Throw when too much is given.
       case (dataSource: SchemaRelationProvider, Some(schema)) =>
@@ -366,7 +381,7 @@ case class DataSource(
           if FileStreamSink.hasMetadata(
             caseInsensitiveOptions.get("path").toSeq ++ paths,
             newHadoopConfiguration(),
-            sparkSession.sessionState.conf) =>
+            conf) =>
         val basePath = new Path((caseInsensitiveOptions.get("path").toSeq ++ paths).head)
         val fileCatalog = new MetadataLogFileIndex(sparkSession, basePath,
           caseInsensitiveOptions, userSpecifiedSchema)
@@ -392,11 +407,11 @@ case class DataSource(
 
       // This is a non-streaming file based datasource.
       case (format: FileFormat, _) =>
-        val useCatalogFileIndex = sparkSession.sessionState.conf.manageFilesourcePartitions &&
+        val useCatalogFileIndex = conf.manageFilesourcePartitions &&
           catalogTable.isDefined && catalogTable.get.tracksPartitionsInCatalog &&
           catalogTable.get.partitionColumnNames.nonEmpty
         val (fileCatalog, dataSchema, partitionSchema) = if (useCatalogFileIndex) {
-          val defaultTableSize = sparkSession.sessionState.conf.defaultSizeInBytes
+          val defaultTableSize = conf.defaultSizeInBytes
           val index = new CatalogFileIndex(
             sparkSession,
             catalogTable.get,
@@ -431,7 +446,7 @@ case class DataSource(
         SchemaUtils.checkSchemaColumnNameDuplication(
           hs.partitionSchema,
           equality)
-        DataSourceUtils.verifySchema(hs.fileFormat, hs.dataSchema)
+        DataSourceUtils.verifySchema(hs.fileFormat, hs.dataSchema, readOnly)
       case _ =>
         SchemaUtils.checkSchemaColumnNameDuplication(
           relation.schema,
@@ -453,19 +468,19 @@ case class DataSource(
     //  3. It's OK that the output path doesn't exist yet;
     val allPaths = paths ++ caseInsensitiveOptions.get("path")
     val outputPath = if (allPaths.length == 1) {
-      val path = new Path(allPaths.head)
-      val fs = path.getFileSystem(newHadoopConfiguration())
-      path.makeQualified(fs.getUri, fs.getWorkingDirectory)
-    } else {
+      makeQualified(new Path(allPaths.head))
+    } else if (allPaths.length > 1) {
       throw QueryExecutionErrors.multiplePathsSpecifiedError(allPaths)
+    } else {
+      throw QueryExecutionErrors.dataPathNotSpecifiedError()
     }
 
-    val caseSensitive = sparkSession.sessionState.conf.caseSensitiveAnalysis
+    val caseSensitive = conf.caseSensitiveAnalysis
     PartitioningUtils.validatePartitionColumn(data.schema, partitionColumns, caseSensitive)
 
     val fileIndex = catalogTable.map(_.identifier).map { tableIdent =>
       sparkSession.table(tableIdent).queryExecution.analyzed.collect {
-        case LogicalRelation(t: HadoopFsRelation, _, _, _) => t.location
+        case LogicalRelationWithTable(t: HadoopFsRelation, _) => t.location
       }.head
     }
     // For partitioned relation r, r.schema's column ordering can be different from the column
@@ -513,9 +528,10 @@ case class DataSource(
         dataSource.createRelation(
           sparkSession.sqlContext, mode, caseInsensitiveOptions, Dataset.ofRows(sparkSession, data))
       case format: FileFormat =>
-        disallowWritingIntervals(outputColumns.map(_.dataType), forbidAnsiIntervals = false)
+        disallowWritingIntervals(
+          outputColumns.toStructType.asNullable, format.toString, forbidAnsiIntervals = false)
         val cmd = planForWritingFileFormat(format, mode, data)
-        val qe = sparkSession.sessionState.executePlan(cmd)
+        val qe = sessionState(sparkSession).executePlan(cmd)
         qe.assertCommandExecuted()
         // Replace the schema with that of the DataFrame we just wrote out to avoid re-inferring
         copy(userSpecifiedSchema = Some(outputColumns.toStructType.asNullable)).resolveRelation()
@@ -538,8 +554,8 @@ case class DataSource(
         }
         SaveIntoDataSourceCommand(data, dataSource, caseInsensitiveOptions, mode)
       case format: FileFormat =>
-        disallowWritingIntervals(data.schema.map(_.dataType), forbidAnsiIntervals = false)
-        DataSource.validateSchema(data.schema, sparkSession.sessionState.conf)
+        disallowWritingIntervals(data.schema, format.toString, forbidAnsiIntervals = false)
+        DataSource.validateSchema(format.toString, data.schema, conf)
         planForWritingFileFormat(format, mode, data)
       case _ => throw SparkException.internalError(
         s"${providingClass.getCanonicalName} does not allow create table as select.")
@@ -565,12 +581,15 @@ case class DataSource(
   }
 
   private def disallowWritingIntervals(
-      dataTypes: Seq[DataType],
+      outputColumns: Seq[StructField],
+      format: String,
       forbidAnsiIntervals: Boolean): Unit = {
-    dataTypes.foreach(
-      TypeUtils.invokeOnceForInterval(_, forbidAnsiIntervals) {
-      throw QueryCompilationErrors.cannotSaveIntervalIntoExternalStorageError()
-    })
+    outputColumns.foreach { field =>
+      TypeUtils.invokeOnceForInterval(field.dataType, forbidAnsiIntervals) {
+      throw QueryCompilationErrors.dataTypeUnsupportedByDataSourceError(
+        format, field
+      )}
+    }
   }
 }
 
@@ -677,11 +696,10 @@ object DataSource extends Logging {
                 throw e
               }
           }
-        case _ :: Nil if isUserDefinedDataSource =>
-          // There was DSv1 or DSv2 loaded, but the same name source was found
-          // in user defined data source.
-          throw QueryCompilationErrors.foundMultipleDataSources(provider)
         case head :: Nil =>
+          // We do not check whether the provider is a Python data source
+          // (isUserDefinedDataSource) to avoid the lookup cost. Java data sources
+          // always take precedence over Python user-defined data sources.
           head.getClass
         case sources =>
           // There are multiple registered aliases for the input. If there is single datasource
@@ -837,7 +855,7 @@ object DataSource extends Logging {
    * @param schema
    * @param conf
    */
-  def validateSchema(schema: StructType, conf: SQLConf): Unit = {
+  def validateSchema(formatName: String, schema: StructType, conf: SQLConf): Unit = {
     val shouldAllowEmptySchema = conf.getConf(SQLConf.ALLOW_EMPTY_SCHEMAS_FOR_WRITES)
     def hasEmptySchema(schema: StructType): Boolean = {
       schema.size == 0 || schema.exists {
@@ -848,7 +866,7 @@ object DataSource extends Logging {
 
 
     if (!shouldAllowEmptySchema && hasEmptySchema(schema)) {
-      throw QueryCompilationErrors.writeEmptySchemasUnsupportedByDataSourceError()
+      throw QueryCompilationErrors.writeEmptySchemasUnsupportedByDataSourceError(formatName)
     }
   }
 }

@@ -54,7 +54,7 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
   test("serialized task larger than max RPC message size") {
     val conf = new SparkConf
     conf.set(RPC_MESSAGE_MAX_SIZE, 1)
-    conf.set("spark.default.parallelism", "1")
+    conf.set(DEFAULT_PARALLELISM.key, "1")
     sc = new SparkContext("local-cluster[2, 1, 1024]", "test", conf)
     val frameSize = RpcUtils.maxMessageSizeBytes(sc.conf)
     val buffer = new SerializableBuffer(java.nio.ByteBuffer.allocate(2 * frameSize))

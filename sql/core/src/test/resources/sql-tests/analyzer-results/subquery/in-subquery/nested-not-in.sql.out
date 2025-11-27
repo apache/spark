@@ -18,7 +18,7 @@ CreateViewCommand `EMP`, SELECT * FROM VALUES
   (500, "emp 5", NULL),
   (600, "emp 6", 100),
   (800, "emp 8", 70)
-AS EMP(id, emp_name, dept_id), false, false, LocalTempView, true
+AS EMP(id, emp_name, dept_id), false, false, LocalTempView, UNSUPPORTED, true
    +- Project [id#x, emp_name#x, dept_id#x]
       +- SubqueryAlias EMP
          +- LocalRelation [id#x, emp_name#x, dept_id#x]
@@ -41,7 +41,7 @@ CreateViewCommand `DEPT`, SELECT * FROM VALUES
   (40, "dept 4 - unassigned", "OR"),
   (50, "dept 5 - unassigned", "NJ"),
   (70, "dept 7", "FL")
-AS DEPT(dept_id, dept_name, state), false, false, LocalTempView, true
+AS DEPT(dept_id, dept_name, state), false, false, LocalTempView, UNSUPPORTED, true
    +- Project [dept_id#x, dept_name#x, state#x]
       +- SubqueryAlias DEPT
          +- LocalRelation [dept_id#x, dept_name#x, state#x]
@@ -68,7 +68,7 @@ CreateViewCommand `BONUS`, SELECT * FROM VALUES
   ("emp 4", 100.00D),
   ("emp 5", 1000.00D),
   ("emp 6 - no dept", 500.00D)
-AS BONUS(emp_name, bonus_amt), false, false, LocalTempView, true
+AS BONUS(emp_name, bonus_amt), false, false, LocalTempView, UNSUPPORTED, true
    +- Project [emp_name#x, bonus_amt#x]
       +- SubqueryAlias BONUS
          +- LocalRelation [emp_name#x, bonus_amt#x]
@@ -91,7 +91,7 @@ CreateViewCommand `ADDRESS`, SELECT * FROM VALUES
   (null, null, "addr4"),
   (600, "emp 6", "addr6"),
   (800, "emp 8", "addr8")
-AS ADDRESS(id, emp_name, address), false, false, LocalTempView, true
+AS ADDRESS(id, emp_name, address), false, false, LocalTempView, UNSUPPORTED, true
    +- Project [id#x, emp_name#x, address#x]
       +- SubqueryAlias ADDRESS
          +- LocalRelation [id#x, emp_name#x, address#x]
@@ -102,7 +102,7 @@ CREATE TEMPORARY VIEW S1 AS SELECT * FROM VALUES
   (null, null), (5, 5), (8, 8), (11, 11) AS s1(a, b)
 -- !query analysis
 CreateViewCommand `S1`, SELECT * FROM VALUES
-  (null, null), (5, 5), (8, 8), (11, 11) AS s1(a, b), false, false, LocalTempView, true
+  (null, null), (5, 5), (8, 8), (11, 11) AS s1(a, b), false, false, LocalTempView, UNSUPPORTED, true
    +- Project [a#x, b#x]
       +- SubqueryAlias s1
          +- LocalRelation [a#x, b#x]
@@ -113,7 +113,7 @@ CREATE TEMPORARY VIEW S2 AS SELECT * FROM VALUES
   (7, 7), (8, 8), (11, 11), (null, null) AS s2(c, d)
 -- !query analysis
 CreateViewCommand `S2`, SELECT * FROM VALUES
-  (7, 7), (8, 8), (11, 11), (null, null) AS s2(c, d), false, false, LocalTempView, true
+  (7, 7), (8, 8), (11, 11), (null, null) AS s2(c, d), false, false, LocalTempView, UNSUPPORTED, true
    +- Project [c#x, d#x]
       +- SubqueryAlias s2
          +- LocalRelation [c#x, d#x]

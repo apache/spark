@@ -4000,7 +4000,7 @@ test_that("Call DataFrameWriter.save() API in Java without path and check argume
   # DataFrameWriter.save() without path.
   expect_error(write.df(df, source = "csv"),
                paste("Error in save : org.apache.spark.SparkIllegalArgumentException:",
-                     "Expected exactly one path to be specified"))
+                     "'path' is not specified."))
   expect_error(write.json(df, jsonPath),
               "Error in json : analysis error - \\[PATH_ALREADY_EXISTS\\].*")
   expect_error(write.text(df, jsonPath),
@@ -4152,7 +4152,8 @@ test_that("catalog APIs, listTables, getTable, listColumns, listFunctions, funct
   c <- listColumns("cars")
   expect_equal(nrow(c), 2)
   expect_equal(colnames(c),
-               c("name", "description", "dataType", "nullable", "isPartition", "isBucket"))
+               c("name", "description", "dataType", "nullable", "isPartition", "isBucket",
+                 "isCluster"))
   expect_equal(collect(c)[[1]][[1]], "speed")
   expect_error(listColumns("zxwtyswklpf", "default"),
                "[TABLE_OR_VIEW_NOT_FOUND]*`spark_catalog`.`default`.`zxwtyswklpf`*")

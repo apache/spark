@@ -82,7 +82,7 @@ class GeneratorExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       exception = intercept[AnalysisException] {
         Stack(Seq(Literal(1))).checkInputDataTypes()
       },
-      errorClass = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+      condition = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
       parameters = Map(
         "functionName" -> "`stack`",
         "expectedNum" -> "> 1",
@@ -93,7 +93,7 @@ class GeneratorExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       exception = intercept[AnalysisException] {
         Stack(Seq(Literal(1.0))).checkInputDataTypes()
       },
-      errorClass = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+      condition = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
       parameters = Map(
         "functionName" -> "`stack`",
         "expectedNum" -> "> 1",

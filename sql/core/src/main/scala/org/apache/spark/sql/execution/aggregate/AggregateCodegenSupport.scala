@@ -19,7 +19,6 @@ package org.apache.spark.sql.execution.aggregate
 
 import org.apache.spark.SparkException
 import org.apache.spark.internal.LogKeys.MAX_JVM_METHOD_PARAMS_LENGTH
-import org.apache.spark.internal.MDC
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet, Expression, ExpressionEquals, UnsafeRow}
@@ -272,13 +271,13 @@ trait AggregateCodegenSupport
 
     aggCodes.zip(aggregateExpressions.map(ae => (ae.mode, ae.filter))).map {
       case (aggCode, (Partial | Complete, Some(condition))) =>
-        // Note: wrap in "do { } while(false);", so the generated checks can jump out
+        // Note: wrap in "do { } while (false);", so the generated checks can jump out
         // with "continue;"
         s"""
            |do {
            |  ${generatePredicateCode(ctx, condition, inputAttrs, input)}
            |  $aggCode
-           |} while(false);
+           |} while (false);
          """.stripMargin
       case (aggCode, _) =>
         aggCode

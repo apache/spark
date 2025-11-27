@@ -24,11 +24,11 @@ import scala.jdk.CollectionConverters._
 import com.codahale.metrics.{Counter, MetricRegistry, Timer}
 import com.google.common.cache.{CacheBuilder, CacheLoader, LoadingCache, RemovalListener, RemovalNotification}
 import com.google.common.util.concurrent.UncheckedExecutionException
-import jakarta.servlet.{DispatcherType, Filter, FilterChain, FilterConfig, ServletException, ServletRequest, ServletResponse}
+import jakarta.servlet.{DispatcherType, Filter, FilterChain, ServletException, ServletRequest, ServletResponse}
 import jakarta.servlet.http.{HttpServletRequest, HttpServletResponse}
 import org.eclipse.jetty.servlet.FilterHolder
 
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.metrics.source.Source
 import org.apache.spark.ui.SparkUI
@@ -171,19 +171,19 @@ private[history] class ApplicationCache(
    */
   @throws[NoSuchElementException]
   private def loadApplicationEntry(appId: String, attemptId: Option[String]): CacheEntry = {
-    lazy val application = s"$appId/${attemptId.mkString}"
-    logDebug(s"Loading application Entry $application")
+    lazy val application = log"${MDC(APP_ID, appId)}/${MDC(APP_ATTEMPT_ID, attemptId.mkString)}"
+    logDebug(log"Loading application Entry " + application)
     metrics.loadCount.inc()
     val loadedUI = time(metrics.loadTimer) {
       metrics.lookupCount.inc()
       operations.getAppUI(appId, attemptId) match {
         case Some(loadedUI) =>
-          logDebug(s"Loaded application $application")
+          logDebug(log"Loaded application " + application)
           loadedUI
         case None =>
           metrics.lookupFailureCount.inc()
           // guava's cache logs via java.util log, so is of limited use. Hence: our own message
-          logInfo(s"Failed to load application attempt $application")
+          logInfo(log"Failed to load application attempt " + application)
           throw new NoSuchElementException(s"no application with application Id '$appId'" +
               attemptId.map { id => s" attemptId '$id'" }.getOrElse(" and no attempt Id"))
       }
@@ -428,9 +428,4 @@ private[history] class ApplicationCacheCheckFilter(
       httpResponse.sendRedirect(redirectUrl)
     }
   }
-
-  override def init(config: FilterConfig): Unit = { }
-
-  override def destroy(): Unit = { }
-
 }

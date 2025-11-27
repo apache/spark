@@ -19,12 +19,11 @@ package org.apache.spark.sql.streaming
 
 import java.io.File
 
-import org.apache.commons.io.FileUtils
-
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.plans.physical.UnspecifiedDistribution
 import org.apache.spark.sql.execution.aggregate.BaseAggregateExec
-import org.apache.spark.sql.execution.streaming.{MemoryStream, SessionWindowStateStoreRestoreExec, SessionWindowStateStoreSaveExec}
+import org.apache.spark.sql.execution.streaming.operators.stateful.{SessionWindowStateStoreRestoreExec, SessionWindowStateStoreSaveExec}
+import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.functions.{count, session_window}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.util.StatefulOpClusteredDistributionTestHelper
@@ -144,7 +143,7 @@ class StreamingSessionWindowDistributionSuite extends StreamTest
       val checkpointDir = Utils.createTempDir().getCanonicalFile
       // Copy the checkpoint to a temp dir to prevent changes to the original.
       // Not doing this will lead to the test passing on the first run, but fail subsequent runs.
-      FileUtils.copyDirectory(new File(resourceUri), checkpointDir)
+      Utils.copyDirectory(new File(resourceUri), checkpointDir)
 
       inputData.addData(
         ("hello world spark streaming", "key1", 40L),

@@ -34,14 +34,15 @@ from typing import (
 from pyspark.util import PythonEvalType
 from pyspark.sql.group import GroupedData as PySparkGroupedData
 from pyspark.sql.pandas.group_ops import PandasCogroupedOps as PySparkPandasCogroupedOps
-from pyspark.sql.pandas.functions import _validate_pandas_udf  # type: ignore[attr-defined]
-from pyspark.sql.types import NumericType
-from pyspark.sql.types import StructType
+from pyspark.sql.pandas.functions import _validate_vectorized_udf  # type: ignore[attr-defined]
+from pyspark.sql.pandas.typehints import infer_group_arrow_eval_type_from_func
+from pyspark.sql.types import NumericType, StructType
 
 import pyspark.sql.connect.plan as plan
 from pyspark.sql.column import Column
 from pyspark.sql.connect.functions import builtin as F
 from pyspark.errors import PySparkNotImplementedError, PySparkTypeError
+from pyspark.sql.streaming.stateful_processor import StatefulProcessor
 
 if TYPE_CHECKING:
     from pyspark.sql.connect._typing import (
@@ -101,7 +102,7 @@ class GroupedData:
 
     def __repr__(self) -> str:
         # the expressions are not resolved here,
-        # so the string representation can be different from vanilla PySpark.
+        # so the string representation can be different from classic PySpark.
         grouping_str = ", ".join(str(e._expr) for e in self._grouping_cols)
         grouping_str = f"grouping expressions: [{grouping_str}]"
 
@@ -157,6 +158,7 @@ class GroupedData:
 
     def _numeric_agg(self, function: str, cols: Sequence[str]) -> "DataFrame":
         from pyspark.sql.connect.dataframe import DataFrame
+        from pyspark.sql.connect.types import verify_numeric_col_name
 
         assert isinstance(function, str) and function in ["min", "max", "avg", "sum"]
 
@@ -164,21 +166,19 @@ class GroupedData:
 
         schema = self._df.schema
 
-        numerical_cols: List[str] = [
-            field.name for field in schema.fields if isinstance(field.dataType, NumericType)
-        ]
-
         if len(cols) > 0:
-            invalid_cols = [c for c in cols if c not in numerical_cols]
+            invalid_cols = [c for c in cols if not verify_numeric_col_name(c, schema)]
             if len(invalid_cols) > 0:
                 raise PySparkTypeError(
-                    error_class="NOT_NUMERIC_COLUMNS",
-                    message_parameters={"invalid_columns": str(invalid_cols)},
+                    errorClass="NOT_NUMERIC_COLUMNS",
+                    messageParameters={"invalid_columns": str(invalid_cols)},
                 )
             agg_cols = cols
         else:
             # if no column is provided, then all numerical columns are selected
-            agg_cols = numerical_cols
+            agg_cols = [
+                field.name for field in schema.fields if isinstance(field.dataType, NumericType)
+            ]
 
         return DataFrame(
             plan.Aggregate(
@@ -193,29 +193,29 @@ class GroupedData:
             session=self._df._session,
         )
 
-    def min(self, *cols: str) -> "DataFrame":
+    def min(self: "GroupedData", *cols: str) -> "DataFrame":
         return self._numeric_agg("min", list(cols))
 
     min.__doc__ = PySparkGroupedData.min.__doc__
 
-    def max(self, *cols: str) -> "DataFrame":
+    def max(self: "GroupedData", *cols: str) -> "DataFrame":
         return self._numeric_agg("max", list(cols))
 
     max.__doc__ = PySparkGroupedData.max.__doc__
 
-    def sum(self, *cols: str) -> "DataFrame":
+    def sum(self: "GroupedData", *cols: str) -> "DataFrame":
         return self._numeric_agg("sum", list(cols))
 
     sum.__doc__ = PySparkGroupedData.sum.__doc__
 
-    def avg(self, *cols: str) -> "DataFrame":
+    def avg(self: "GroupedData", *cols: str) -> "DataFrame":
         return self._numeric_agg("avg", list(cols))
 
     avg.__doc__ = PySparkGroupedData.avg.__doc__
 
     mean = avg
 
-    def count(self) -> "DataFrame":
+    def count(self: "GroupedData") -> "DataFrame":
         return self.agg(F._invoke_function("count", F.lit(1)).alias("count"))
 
     count.__doc__ = PySparkGroupedData.count.__doc__
@@ -224,32 +224,32 @@ class GroupedData:
         if self._group_type != "groupby":
             if self._group_type == "pivot":
                 raise PySparkNotImplementedError(
-                    error_class="UNSUPPORTED_OPERATION",
-                    message_parameters={"operation": "Repeated PIVOT operation"},
+                    errorClass="UNSUPPORTED_OPERATION",
+                    messageParameters={"operation": "Repeated PIVOT operation"},
                 )
             else:
                 raise PySparkNotImplementedError(
-                    error_class="UNSUPPORTED_OPERATION",
-                    message_parameters={"operation": f"PIVOT after {self._group_type.upper()}"},
+                    errorClass="UNSUPPORTED_OPERATION",
+                    messageParameters={"operation": f"PIVOT after {self._group_type.upper()}"},
                 )
 
         if not isinstance(pivot_col, str):
             raise PySparkTypeError(
-                error_class="NOT_STR",
-                message_parameters={"arg_name": "pivot_col", "arg_type": type(pivot_col).__name__},
+                errorClass="NOT_STR",
+                messageParameters={"arg_name": "pivot_col", "arg_type": type(pivot_col).__name__},
             )
 
         if values is not None:
             if not isinstance(values, list):
                 raise PySparkTypeError(
-                    error_class="NOT_LIST",
-                    message_parameters={"arg_name": "values", "arg_type": type(values).__name__},
+                    errorClass="NOT_LIST",
+                    messageParameters={"arg_name": "values", "arg_type": type(values).__name__},
                 )
             for v in values:
                 if not isinstance(v, (bool, float, int, str)):
                     raise PySparkTypeError(
-                        error_class="NOT_BOOL_OR_FLOAT_OR_INT_OR_STR",
-                        message_parameters={"arg_name": "value", "arg_type": type(v).__name__},
+                        errorClass="NOT_BOOL_OR_FLOAT_OR_INT_OR_STR",
+                        messageParameters={"arg_name": "value", "arg_type": type(v).__name__},
                     )
 
         return GroupedData(
@@ -273,8 +273,8 @@ class GroupedData:
             )
         ):
             raise PySparkTypeError(
-                error_class="INVALID_UDF_EVAL_TYPE",
-                message_parameters={"eval_type": "SQL_GROUPED_MAP_PANDAS_UDF"},
+                errorClass="INVALID_UDF_EVAL_TYPE",
+                messageParameters={"eval_type": "SQL_GROUPED_MAP_PANDAS_UDF"},
             )
 
         warnings.warn(
@@ -293,15 +293,28 @@ class GroupedData:
     ) -> "DataFrame":
         from pyspark.sql.connect.udf import UserDefinedFunction
         from pyspark.sql.connect.dataframe import DataFrame
+        from pyspark.sql.pandas.typehints import infer_group_pandas_eval_type_from_func
 
-        _validate_pandas_udf(func, PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF)
+        # Try to infer the eval type from type hints
+        eval_type = None
+        try:
+            eval_type = infer_group_pandas_eval_type_from_func(func)
+        except Exception:
+            warnings.warn("Cannot infer the eval type from type hints.", UserWarning)
+
+        if eval_type is None:
+            eval_type = PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF
+
+        _validate_vectorized_udf(func, eval_type)
+        if isinstance(schema, str):
+            schema = cast(StructType, self._df._session._parse_ddl(schema))
         udf_obj = UserDefinedFunction(
             func,
             returnType=schema,
-            evalType=PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
+            evalType=eval_type,
         )
 
-        return DataFrame(
+        res = DataFrame(
             plan.GroupMap(
                 child=self._df._plan,
                 grouping_cols=self._grouping_cols,
@@ -310,6 +323,9 @@ class GroupedData:
             ),
             session=self._df._session,
         )
+        if isinstance(schema, StructType):
+            res._cached_schema = schema
+        return res
 
     applyInPandas.__doc__ = PySparkGroupedData.applyInPandas.__doc__
 
@@ -324,7 +340,7 @@ class GroupedData:
         from pyspark.sql.connect.udf import UserDefinedFunction
         from pyspark.sql.connect.dataframe import DataFrame
 
-        _validate_pandas_udf(func, PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE)
+        _validate_vectorized_udf(func, PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE)
         udf_obj = UserDefinedFunction(
             func,
             returnType=outputStructType,
@@ -357,20 +373,135 @@ class GroupedData:
 
     applyInPandasWithState.__doc__ = PySparkGroupedData.applyInPandasWithState.__doc__
 
+    def transformWithStateInPandas(
+        self,
+        statefulProcessor: StatefulProcessor,
+        outputStructType: Union[StructType, str],
+        outputMode: str,
+        timeMode: str,
+        initialState: Optional["GroupedData"] = None,
+        eventTimeColumnName: str = "",
+    ) -> "DataFrame":
+        from pyspark.sql.connect.udf import UserDefinedFunction
+        from pyspark.sql.connect.dataframe import DataFrame
+        from pyspark.sql.streaming.stateful_processor_util import (
+            TransformWithStateInPandasUdfUtils,
+        )
+
+        udf_util = TransformWithStateInPandasUdfUtils(statefulProcessor, timeMode)
+        if initialState is None:
+            udf_obj = UserDefinedFunction(
+                udf_util.transformWithStateUDF,
+                returnType=outputStructType,
+                evalType=PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_UDF,
+            )
+            initial_state_plan = None
+            initial_state_grouping_cols = None
+        else:
+            self._df._check_same_session(initialState._df)
+            udf_obj = UserDefinedFunction(
+                udf_util.transformWithStateWithInitStateUDF,
+                returnType=outputStructType,
+                evalType=PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_INIT_STATE_UDF,
+            )
+            initial_state_plan = initialState._df._plan
+            initial_state_grouping_cols = initialState._grouping_cols
+
+        return DataFrame(
+            plan.TransformWithStateInPandas(
+                child=self._df._plan,
+                grouping_cols=self._grouping_cols,
+                function=udf_obj,
+                output_schema=outputStructType,
+                output_mode=outputMode,
+                time_mode=timeMode,
+                event_time_col_name=eventTimeColumnName,
+                cols=self._df.columns,
+                initial_state_plan=initial_state_plan,
+                initial_state_grouping_cols=initial_state_grouping_cols,
+            ),
+            session=self._df._session,
+        )
+
+    transformWithStateInPandas.__doc__ = PySparkGroupedData.transformWithStateInPandas.__doc__
+
+    def transformWithState(
+        self,
+        statefulProcessor: StatefulProcessor,
+        outputStructType: Union[StructType, str],
+        outputMode: str,
+        timeMode: str,
+        initialState: Optional["GroupedData"] = None,
+        eventTimeColumnName: str = "",
+    ) -> "DataFrame":
+        from pyspark.sql.connect.udf import UserDefinedFunction
+        from pyspark.sql.connect.dataframe import DataFrame
+        from pyspark.sql.streaming.stateful_processor_util import (
+            TransformWithStateInPandasUdfUtils,
+        )
+
+        udf_util = TransformWithStateInPandasUdfUtils(statefulProcessor, timeMode)
+        if initialState is None:
+            udf_obj = UserDefinedFunction(
+                udf_util.transformWithStateUDF,
+                returnType=outputStructType,
+                evalType=PythonEvalType.SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_UDF,
+            )
+            initial_state_plan = None
+            initial_state_grouping_cols = None
+        else:
+            self._df._check_same_session(initialState._df)
+            udf_obj = UserDefinedFunction(
+                udf_util.transformWithStateWithInitStateUDF,
+                returnType=outputStructType,
+                evalType=PythonEvalType.SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_INIT_STATE_UDF,
+            )
+            initial_state_plan = initialState._df._plan
+            initial_state_grouping_cols = initialState._grouping_cols
+
+        return DataFrame(
+            plan.TransformWithStateInPySpark(
+                child=self._df._plan,
+                grouping_cols=self._grouping_cols,
+                function=udf_obj,
+                output_schema=outputStructType,
+                output_mode=outputMode,
+                time_mode=timeMode,
+                event_time_col_name=eventTimeColumnName,
+                cols=self._df.columns,
+                initial_state_plan=initial_state_plan,
+                initial_state_grouping_cols=initial_state_grouping_cols,
+            ),
+            session=self._df._session,
+        )
+
+    transformWithState.__doc__ = PySparkGroupedData.transformWithState.__doc__
+
     def applyInArrow(
         self, func: "ArrowGroupedMapFunction", schema: Union[StructType, str]
     ) -> "DataFrame":
         from pyspark.sql.connect.udf import UserDefinedFunction
         from pyspark.sql.connect.dataframe import DataFrame
 
-        _validate_pandas_udf(func, PythonEvalType.SQL_GROUPED_MAP_ARROW_UDF)
+        try:
+            # Try to infer the eval type from type hints
+            eval_type = infer_group_arrow_eval_type_from_func(func)
+        except Exception:
+            warnings.warn("Cannot infer the eval type from type hints. ", UserWarning)
+
+        if eval_type is None:
+            eval_type = PythonEvalType.SQL_GROUPED_MAP_ARROW_UDF
+
+        _validate_vectorized_udf(func, eval_type)
+        if isinstance(schema, str):
+            schema = cast(StructType, self._df._session._parse_ddl(schema))
         udf_obj = UserDefinedFunction(
             func,
             returnType=schema,
-            evalType=PythonEvalType.SQL_GROUPED_MAP_ARROW_UDF,
+            evalType=eval_type,
         )
 
-        return DataFrame(
+        res = DataFrame(
             plan.GroupMap(
                 child=self._df._plan,
                 grouping_cols=self._grouping_cols,
@@ -379,6 +510,9 @@ class GroupedData:
             ),
             session=self._df._session,
         )
+        if isinstance(schema, StructType):
+            res._cached_schema = schema
+        return res
 
     applyInArrow.__doc__ = PySparkGroupedData.applyInArrow.__doc__
 
@@ -403,14 +537,16 @@ class PandasCogroupedOps:
         from pyspark.sql.connect.udf import UserDefinedFunction
         from pyspark.sql.connect.dataframe import DataFrame
 
-        _validate_pandas_udf(func, PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF)
+        _validate_vectorized_udf(func, PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF)
+        if isinstance(schema, str):
+            schema = cast(StructType, self._gd1._df._session._parse_ddl(schema))
         udf_obj = UserDefinedFunction(
             func,
             returnType=schema,
             evalType=PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF,
         )
 
-        return DataFrame(
+        res = DataFrame(
             plan.CoGroupMap(
                 input=self._gd1._df._plan,
                 input_grouping_cols=self._gd1._grouping_cols,
@@ -420,6 +556,9 @@ class PandasCogroupedOps:
             ),
             session=self._gd1._df._session,
         )
+        if isinstance(schema, StructType):
+            res._cached_schema = schema
+        return res
 
     applyInPandas.__doc__ = PySparkPandasCogroupedOps.applyInPandas.__doc__
 
@@ -429,14 +568,16 @@ class PandasCogroupedOps:
         from pyspark.sql.connect.udf import UserDefinedFunction
         from pyspark.sql.connect.dataframe import DataFrame
 
-        _validate_pandas_udf(func, PythonEvalType.SQL_COGROUPED_MAP_ARROW_UDF)
+        _validate_vectorized_udf(func, PythonEvalType.SQL_COGROUPED_MAP_ARROW_UDF)
+        if isinstance(schema, str):
+            schema = cast(StructType, self._gd1._df._session._parse_ddl(schema))
         udf_obj = UserDefinedFunction(
             func,
             returnType=schema,
             evalType=PythonEvalType.SQL_COGROUPED_MAP_ARROW_UDF,
         )
 
-        return DataFrame(
+        res = DataFrame(
             plan.CoGroupMap(
                 input=self._gd1._df._plan,
                 input_grouping_cols=self._gd1._grouping_cols,
@@ -446,6 +587,9 @@ class PandasCogroupedOps:
             ),
             session=self._gd1._df._session,
         )
+        if isinstance(schema, StructType):
+            res._cached_schema = schema
+        return res
 
     applyInArrow.__doc__ = PySparkPandasCogroupedOps.applyInArrow.__doc__
 
@@ -459,8 +603,12 @@ def _test() -> None:
     import doctest
     from pyspark.sql import SparkSession as PySparkSession
     import pyspark.sql.connect.group
+    from pyspark.testing.utils import have_pandas, have_pyarrow
 
     globs = pyspark.sql.connect.group.__dict__.copy()
+
+    if not have_pandas or not have_pyarrow:
+        del pyspark.sql.connect.group.GroupedData.agg.__doc__
 
     globs["spark"] = (
         PySparkSession.builder.appName("sql.connect.group tests")

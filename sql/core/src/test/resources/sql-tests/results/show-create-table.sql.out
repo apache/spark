@@ -78,7 +78,7 @@ CREATE TABLE spark_catalog.default.tbl (
   b STRING,
   c INT)
 USING parquet
-LOCATION 'file:///path/to/table'
+LOCATION 'file:/path/to/table'
 
 
 -- !query
@@ -108,7 +108,7 @@ CREATE TABLE spark_catalog.default.tbl (
   b STRING,
   c INT)
 USING parquet
-LOCATION 'file:///path/to/table'
+LOCATION 'file:/path/to/table'
 
 
 -- !query
@@ -327,6 +327,7 @@ struct<createtab_stmt:string>
 CREATE VIEW default.view_spark_30302 (
   aaa,
   bbb)
+WITH SCHEMA COMPENSATION
 AS SELECT a, b FROM tbl
 
 
@@ -338,6 +339,7 @@ struct<createtab_stmt:string>
 CREATE VIEW default.view_spark_30302 (
   aaa,
   bbb)
+WITH SCHEMA COMPENSATION
 AS SELECT a, b FROM tbl
 
 
@@ -368,6 +370,7 @@ CREATE VIEW default.view_spark_30302 (
   aaa COMMENT 'comment with \'quoted text\' for aaa',
   bbb)
 COMMENT 'This is a comment with \'quoted text\' for view'
+WITH SCHEMA COMPENSATION
 AS SELECT a, b FROM tbl
 
 
@@ -380,6 +383,7 @@ CREATE VIEW default.view_spark_30302 (
   aaa COMMENT 'comment with \'quoted text\' for aaa',
   bbb)
 COMMENT 'This is a comment with \'quoted text\' for view'
+WITH SCHEMA COMPENSATION
 AS SELECT a, b FROM tbl
 
 
@@ -412,6 +416,7 @@ CREATE VIEW default.view_spark_30302 (
 TBLPROPERTIES (
   'a' = '1',
   'b' = '2')
+WITH SCHEMA COMPENSATION
 AS SELECT a, b FROM tbl
 
 
@@ -426,6 +431,7 @@ CREATE VIEW default.view_spark_30302 (
 TBLPROPERTIES (
   'a' = '1',
   'b' = '2')
+WITH SCHEMA COMPENSATION
 AS SELECT a, b FROM tbl
 
 

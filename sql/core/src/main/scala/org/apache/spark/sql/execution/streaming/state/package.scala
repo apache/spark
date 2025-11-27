@@ -22,6 +22,8 @@ import scala.reflect.ClassTag
 import org.apache.spark.TaskContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.classic.ClassicConversions.castToImpl
+import org.apache.spark.sql.execution.streaming.operators.stateful.StatefulOperatorStateInfo
 import org.apache.spark.sql.internal.SessionState
 import org.apache.spark.sql.types.StructType
 
@@ -43,8 +45,8 @@ package object state {
         keySchema,
         valueSchema,
         keyStateEncoderSpec,
-        sqlContext.sessionState,
-        Some(sqlContext.streams.stateStoreCoordinator))(
+        sqlContext.sparkSession.sessionState,
+        Some(castToImpl(sqlContext.sparkSession).streams.stateStoreCoordinator))(
         storeUpdateFunction)
     }
 
@@ -79,6 +81,8 @@ package object state {
         stateInfo.queryRunId,
         stateInfo.operatorId,
         stateInfo.storeVersion,
+        stateInfo.stateStoreCkptIds,
+        stateInfo.stateSchemaMetadata,
         keySchema,
         valueSchema,
         keyStateEncoderSpec,
@@ -106,8 +110,9 @@ package object state {
       val cleanedF = dataRDD.sparkContext.clean(storeReadFn)
       val wrappedF = (store: ReadStateStore, iter: Iterator[T]) => {
         // Clean up the state store.
-        TaskContext.get().addTaskCompletionListener[Unit](_ => {
-          store.abort()
+        val ctxt = TaskContext.get()
+        ctxt.addTaskCompletionListener[Unit](_ => {
+          StateStoreThreadLocalTracker.clearStore()
         })
         cleanedF(store, iter)
       }
@@ -118,6 +123,8 @@ package object state {
         stateInfo.queryRunId,
         stateInfo.operatorId,
         stateInfo.storeVersion,
+        stateInfo.stateStoreCkptIds,
+        stateInfo.stateSchemaMetadata,
         keySchema,
         valueSchema,
         keyStateEncoderSpec,

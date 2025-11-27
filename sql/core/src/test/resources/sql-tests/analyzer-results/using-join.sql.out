@@ -10,7 +10,7 @@ CreateViewCommand `nt1`, select * from values
   ("one", 1),
   ("two", 2),
   ("three", 3)
-  as nt1(k, v1), false, false, LocalTempView, true
+  as nt1(k, v1), false, false, LocalTempView, UNSUPPORTED, true
    +- Project [k#x, v1#x]
       +- SubqueryAlias nt1
          +- LocalRelation [k#x, v1#x]
@@ -29,7 +29,7 @@ CreateViewCommand `nt2`, select * from values
   ("two", 22),
   ("one", 5),
   ("four", 4)
-  as nt2(k, v2), false, false, LocalTempView, true
+  as nt2(k, v2), false, false, LocalTempView, UNSUPPORTED, true
    +- Project [k#x, v2#x]
       +- SubqueryAlias nt2
          +- LocalRelation [k#x, v2#x]
@@ -568,7 +568,7 @@ SELECT k FROM (SELECT nt2.k FROM nt1 full outer join nt2 using (k))
 Project [k#x]
 +- SubqueryAlias __auto_generated_subquery_name
    +- Project [k#x]
-      +- Project [coalesce(k#x, k#x) AS k#x, v1#x, v2#x, k#x, k#x]
+      +- Project [coalesce(k#x, k#x) AS k#x, v1#x, v2#x, k#x]
          +- Join FullOuter, (k#x = k#x)
             :- SubqueryAlias nt1
             :  +- View (`nt1`, [k#x, v1#x])
@@ -589,7 +589,7 @@ SELECT nt2.k AS key FROM nt1 full outer join nt2 using (k) ORDER BY key
 -- !query analysis
 Sort [key#x ASC NULLS FIRST], true
 +- Project [k#x AS key#x]
-   +- Project [coalesce(k#x, k#x) AS k#x, v1#x, v2#x, k#x, k#x]
+   +- Project [coalesce(k#x, k#x) AS k#x, v1#x, v2#x, k#x]
       +- Join FullOuter, (k#x = k#x)
          :- SubqueryAlias nt1
          :  +- View (`nt1`, [k#x, v1#x])
@@ -609,7 +609,7 @@ Sort [key#x ASC NULLS FIRST], true
 SELECT k, nt1.k FROM nt1 full outer join nt2 using (k)
 -- !query analysis
 Project [k#x, k#x]
-+- Project [coalesce(k#x, k#x) AS k#x, v1#x, v2#x, k#x, k#x]
++- Project [coalesce(k#x, k#x) AS k#x, v1#x, v2#x, k#x]
    +- Join FullOuter, (k#x = k#x)
       :- SubqueryAlias nt1
       :  +- View (`nt1`, [k#x, v1#x])
@@ -629,7 +629,7 @@ Project [k#x, k#x]
 SELECT k, nt2.k FROM nt1 full outer join nt2 using (k)
 -- !query analysis
 Project [k#x, k#x]
-+- Project [coalesce(k#x, k#x) AS k#x, v1#x, v2#x, k#x, k#x]
++- Project [coalesce(k#x, k#x) AS k#x, v1#x, v2#x, k#x]
    +- Join FullOuter, (k#x = k#x)
       :- SubqueryAlias nt1
       :  +- View (`nt1`, [k#x, v1#x])
@@ -828,11 +828,30 @@ WithCTE
 :        +- SubqueryAlias t
 :           +- LocalRelation [key#x]
 +- Project [key#x]
-   +- Project [key#x, key#x, key#x]
+   +- Project [key#x, key#x]
       +- Filter NOT key#x LIKE bb.%
-         +- Project [coalesce(key#x, key#x) AS key#x, key#x, key#x, key#x]
+         +- Project [coalesce(key#x, key#x) AS key#x, key#x]
             +- Join FullOuter, (key#x = key#x)
                :- SubqueryAlias t1
-               :  +- CTERelationRef xxxx, true, [key#x], false
+               :  +- CTERelationRef xxxx, true, [key#x], false, false, 1
                +- SubqueryAlias t2
-                  +- CTERelationRef xxxx, true, [key#x], false
+                  +- CTERelationRef xxxx, true, [key#x], false, false, 1
+
+
+-- !query
+SELECT *
+FROM
+    ( SELECT col1 FROM VALUES(false) ) LEFT JOIN ( SELECT col1 FROM VALUES(false) ) b USING(col1)
+WHERE b.col1
+-- !query analysis
+Project [col1#x]
++- Project [col1#x]
+   +- Filter col1#x: boolean
+      +- Project [col1#x, col1#x]
+         +- Join LeftOuter, (col1#x = col1#x)
+            :- SubqueryAlias __auto_generated_subquery_name
+            :  +- Project [col1#x]
+            :     +- LocalRelation [col1#x]
+            +- SubqueryAlias b
+               +- Project [col1#x]
+                  +- LocalRelation [col1#x]

@@ -29,7 +29,7 @@ import org.apache.hadoop.mapreduce._
 import org.apache.hadoop.mapreduce.lib.output.FileOutputCommitter
 import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
 
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.mapred.SparkHadoopMapRedUtil
 
@@ -118,11 +118,6 @@ class HadoopMapReduceCommitProtocol(
   }
 
   override def newTaskTempFile(
-      taskContext: TaskAttemptContext, dir: Option[String], ext: String): String = {
-    newTaskTempFile(taskContext, dir, FileNameSpec("", ext))
-  }
-
-  override def newTaskTempFile(
       taskContext: TaskAttemptContext, dir: Option[String], spec: FileNameSpec): String = {
     val filename = getFilename(taskContext, spec)
 
@@ -146,11 +141,6 @@ class HadoopMapReduceCommitProtocol(
   }
 
   override def newTaskTempFileAbsPath(
-      taskContext: TaskAttemptContext, absoluteDir: String, ext: String): String = {
-    newTaskTempFileAbsPath(taskContext, absoluteDir, FileNameSpec("", ext))
-  }
-
-  override def newTaskTempFileAbsPath(
       taskContext: TaskAttemptContext, absoluteDir: String, spec: FileNameSpec): String = {
     val filename = getFilename(taskContext, spec)
     val absOutputPath = new Path(absoluteDir, filename).toString
@@ -168,7 +158,8 @@ class HadoopMapReduceCommitProtocol(
     // Note that %05d does not truncate the split number, so if we have more than 100000 tasks,
     // the file name is fine and won't overflow.
     val split = taskContext.getTaskAttemptID.getTaskID.getId
-    f"${spec.prefix}part-$split%05d-$jobId${spec.suffix}"
+    val basename = taskContext.getConfiguration.get("mapreduce.output.basename", "part")
+    f"${spec.prefix}$basename-$split%05d-$jobId${spec.suffix}"
   }
 
   override def setupJob(jobContext: JobContext): Unit = {

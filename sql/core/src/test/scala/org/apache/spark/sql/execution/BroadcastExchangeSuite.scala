@@ -22,7 +22,7 @@ import java.util.concurrent.{CountDownLatch, TimeUnit}
 import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext, SparkException, SparkFunSuite}
 import org.apache.spark.broadcast.TorrentBroadcast
 import org.apache.spark.scheduler._
-import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.exchange.BroadcastExchangeExec
 import org.apache.spark.sql.execution.joins.HashedRelation
@@ -82,7 +82,8 @@ class BroadcastExchangeSuite extends SparkPlanTest
       val events = jobEvents.toArray
       val hasStart = events(0).isInstanceOf[SparkListenerJobStart]
       val hasCancelled = events(1).asInstanceOf[SparkListenerJobEnd].jobResult
-        .asInstanceOf[JobFailed].exception.getMessage.contains("cancelled job tag")
+        .asInstanceOf[JobFailed]
+        .exception.getMessage.contains("The corresponding broadcast query has failed.")
       events.length == 2 && hasStart && hasCancelled
     }
   }
@@ -96,6 +97,21 @@ class BroadcastExchangeSuite extends SparkPlanTest
       assert(broadcastExchangeExec.size == 1, "one and only BroadcastExchangeExec")
       assert(joinDF.collect().length == 1)
     }
+  }
+
+  test("SPARK-52962: broadcast exchange should not reset metrics") {
+    val df = spark.range(1).toDF()
+    val joinDF = df.join(broadcast(df), "id")
+    joinDF.collect()
+    val broadcastExchangeExec = collect(
+      joinDF.queryExecution.executedPlan) { case p: BroadcastExchangeExec => p }
+    assert(broadcastExchangeExec.size == 1, "one and only BroadcastExchangeExec")
+
+    val broadcastExchangeNode = broadcastExchangeExec.head
+    val metrics = broadcastExchangeNode.metrics
+    assert(metrics("numOutputRows").value == 1)
+    broadcastExchangeNode.resetMetrics()
+    assert(metrics("numOutputRows").value == 1)
   }
 }
 

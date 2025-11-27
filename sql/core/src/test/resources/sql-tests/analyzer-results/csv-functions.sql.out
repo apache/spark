@@ -171,9 +171,33 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 
 
 -- !query
+select schema_of_csv(42)
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"42\"",
+    "inputType" : "\"INT\"",
+    "paramIndex" : "first",
+    "requiredType" : "\"STRING\"",
+    "sqlExpr" : "\"schema_of_csv(42)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 24,
+    "fragment" : "schema_of_csv(42)"
+  } ]
+}
+
+
+-- !query
 CREATE TEMPORARY VIEW csvTable(csvField, a) AS SELECT * FROM VALUES ('1,abc', 'a')
 -- !query analysis
-CreateViewCommand `csvTable`, [(csvField,None), (a,None)], SELECT * FROM VALUES ('1,abc', 'a'), false, false, LocalTempView, true
+CreateViewCommand `csvTable`, [(csvField,None), (a,None)], SELECT * FROM VALUES ('1,abc', 'a'), false, false, LocalTempView, UNSUPPORTED, true
    +- Project [col1#x, col2#x]
       +- LocalRelation [col1#x, col2#x]
 
@@ -217,7 +241,7 @@ Project [to_csv(named_struct(a, 1, b, 2), Some(America/Los_Angeles)) AS to_csv(n
 -- !query
 select to_csv(named_struct('time', to_timestamp('2015-08-26', 'yyyy-MM-dd')), map('timestampFormat', 'dd/MM/yyyy'))
 -- !query analysis
-Project [to_csv((timestampFormat,dd/MM/yyyy), named_struct(time, to_timestamp(2015-08-26, Some(yyyy-MM-dd), TimestampType, Some(America/Los_Angeles), false)), Some(America/Los_Angeles)) AS to_csv(named_struct(time, to_timestamp(2015-08-26, yyyy-MM-dd)))#x]
+Project [to_csv((timestampFormat,dd/MM/yyyy), named_struct(time, to_timestamp(2015-08-26, Some(yyyy-MM-dd), TimestampType, Some(America/Los_Angeles), true)), Some(America/Los_Angeles)) AS to_csv(named_struct(time, to_timestamp(2015-08-26, yyyy-MM-dd)))#x]
 +- OneRowRelation
 
 
@@ -256,3 +280,143 @@ org.apache.spark.sql.AnalysisException
     "fragment" : "to_csv(named_struct('a', 1, 'b', 2), map('mode', 1))"
   } ]
 }
+
+
+-- !query
+select from_csv('14:30:45', 'time TIME(0)')
+-- !query analysis
+Project [from_csv(StructField(time,TimeType(0),true), 14:30:45, Some(America/Los_Angeles), None) AS from_csv(14:30:45)#x]
++- OneRowRelation
+
+
+-- !query
+select from_csv('14:30:45.123', 'time TIME(3)')
+-- !query analysis
+Project [from_csv(StructField(time,TimeType(3),true), 14:30:45.123, Some(America/Los_Angeles), None) AS from_csv(14:30:45.123)#x]
++- OneRowRelation
+
+
+-- !query
+select from_csv('14:30:45.123456', 'time TIME(6)')
+-- !query analysis
+Project [from_csv(StructField(time,TimeType(6),true), 14:30:45.123456, Some(America/Los_Angeles), None) AS from_csv(14:30:45.123456)#x]
++- OneRowRelation
+
+
+-- !query
+select from_csv('14-30-45.123456', 'time TIME(6)', map('timeFormat', 'HH-mm-ss.SSSSSS'))
+-- !query analysis
+Project [from_csv(StructField(time,TimeType(6),true), (timeFormat,HH-mm-ss.SSSSSS), 14-30-45.123456, Some(America/Los_Angeles), None) AS from_csv(14-30-45.123456)#x]
++- OneRowRelation
+
+
+-- !query
+select to_csv(named_struct('time', TIME'14:30:45'))
+-- !query analysis
+Project [to_csv(named_struct(time, 14:30:45), Some(America/Los_Angeles)) AS to_csv(named_struct(time, TIME '14:30:45'))#x]
++- OneRowRelation
+
+
+-- !query
+select to_csv(named_struct('time', TIME'14:30:45.123456'))
+-- !query analysis
+Project [to_csv(named_struct(time, 14:30:45.123456), Some(America/Los_Angeles)) AS to_csv(named_struct(time, TIME '14:30:45.123456'))#x]
++- OneRowRelation
+
+
+-- !query
+select to_csv(named_struct('time', TIME'14:30:45.123456'), map('timeFormat', 'HH-mm-ss.SSSSSS'))
+-- !query analysis
+Project [to_csv((timeFormat,HH-mm-ss.SSSSSS), named_struct(time, 14:30:45.123456), Some(America/Los_Angeles)) AS to_csv(named_struct(time, TIME '14:30:45.123456'))#x]
++- OneRowRelation
+
+
+-- !query
+select from_csv(to_csv(named_struct('time', TIME'14:30:45')), 'time TIME(0)')
+-- !query analysis
+Project [from_csv(StructField(time,TimeType(0),true), to_csv(named_struct(time, 14:30:45), Some(America/Los_Angeles)), Some(America/Los_Angeles), None) AS from_csv(to_csv(named_struct(time, TIME '14:30:45')))#x]
++- OneRowRelation
+
+
+-- !query
+select from_csv(to_csv(named_struct('time', TIME'14:30:45.1')), 'time TIME(1)')
+-- !query analysis
+Project [from_csv(StructField(time,TimeType(1),true), to_csv(named_struct(time, 14:30:45.1), Some(America/Los_Angeles)), Some(America/Los_Angeles), None) AS from_csv(to_csv(named_struct(time, TIME '14:30:45.1')))#x]
++- OneRowRelation
+
+
+-- !query
+select from_csv(to_csv(named_struct('time', TIME'14:30:45.12')), 'time TIME(2)')
+-- !query analysis
+Project [from_csv(StructField(time,TimeType(2),true), to_csv(named_struct(time, 14:30:45.12), Some(America/Los_Angeles)), Some(America/Los_Angeles), None) AS from_csv(to_csv(named_struct(time, TIME '14:30:45.12')))#x]
++- OneRowRelation
+
+
+-- !query
+select from_csv(to_csv(named_struct('time', TIME'14:30:45.123')), 'time TIME(3)')
+-- !query analysis
+Project [from_csv(StructField(time,TimeType(3),true), to_csv(named_struct(time, 14:30:45.123), Some(America/Los_Angeles)), Some(America/Los_Angeles), None) AS from_csv(to_csv(named_struct(time, TIME '14:30:45.123')))#x]
++- OneRowRelation
+
+
+-- !query
+select from_csv(to_csv(named_struct('time', TIME'14:30:45.1234')), 'time TIME(4)')
+-- !query analysis
+Project [from_csv(StructField(time,TimeType(4),true), to_csv(named_struct(time, 14:30:45.1234), Some(America/Los_Angeles)), Some(America/Los_Angeles), None) AS from_csv(to_csv(named_struct(time, TIME '14:30:45.1234')))#x]
++- OneRowRelation
+
+
+-- !query
+select from_csv(to_csv(named_struct('time', TIME'14:30:45.12345')), 'time TIME(5)')
+-- !query analysis
+Project [from_csv(StructField(time,TimeType(5),true), to_csv(named_struct(time, 14:30:45.12345), Some(America/Los_Angeles)), Some(America/Los_Angeles), None) AS from_csv(to_csv(named_struct(time, TIME '14:30:45.12345')))#x]
++- OneRowRelation
+
+
+-- !query
+select from_csv(to_csv(named_struct('time', TIME'14:30:45.123456')), 'time TIME(6)')
+-- !query analysis
+Project [from_csv(StructField(time,TimeType(6),true), to_csv(named_struct(time, 14:30:45.123456), Some(America/Los_Angeles)), Some(America/Los_Angeles), None) AS from_csv(to_csv(named_struct(time, TIME '14:30:45.123456')))#x]
++- OneRowRelation
+
+
+-- !query
+select from_csv('25:00:00', 'time TIME')
+-- !query analysis
+Project [from_csv(StructField(time,TimeType(6),true), 25:00:00, Some(America/Los_Angeles), None) AS from_csv(25:00:00)#x]
++- OneRowRelation
+
+
+-- !query
+select from_csv('invalid', 'time TIME')
+-- !query analysis
+Project [from_csv(StructField(time,TimeType(6),true), invalid, Some(America/Los_Angeles), None) AS from_csv(invalid)#x]
++- OneRowRelation
+
+
+-- !query
+select from_csv('', 'time TIME')
+-- !query analysis
+Project [from_csv(StructField(time,TimeType(6),true), , Some(America/Los_Angeles), None) AS from_csv()#x]
++- OneRowRelation
+
+
+-- !query
+select from_csv(null, 'time TIME')
+-- !query analysis
+Project [from_csv(StructField(time,TimeType(6),true), null, Some(America/Los_Angeles), None) AS from_csv(NULL)#x]
++- OneRowRelation
+
+
+-- !query
+select schema_of_csv('14:30:45')
+-- !query analysis
+Project [schema_of_csv(14:30:45) AS schema_of_csv(14:30:45)#x]
++- OneRowRelation
+
+
+-- !query
+select schema_of_csv('14:30:45.123456')
+-- !query analysis
+Project [schema_of_csv(14:30:45.123456) AS schema_of_csv(14:30:45.123456)#x]
++- OneRowRelation

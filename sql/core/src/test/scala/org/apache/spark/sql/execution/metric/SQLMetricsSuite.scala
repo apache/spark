@@ -107,6 +107,27 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
     }
   }
 
+  test("Recursive CTEs metrics") {
+    withSQLConf(SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> "") {
+      val df = sql(
+        """WITH RECURSIVE t(n) AS(
+          | VALUES 1, 2
+          | UNION ALL
+          | SELECT n+1 FROM t WHERE n < 20
+          | )
+          | SELECT * FROM t""".stripMargin)
+      val unionLoopExec = df.queryExecution.executedPlan.collect {
+        case ule: UnionLoopExec => ule
+      }
+      sparkContext.listenerBus.waitUntilEmpty()
+      assert(unionLoopExec.size == 1)
+      val expected = Map("number of output rows" -> 39L, "number of recursive iterations" -> 20L,
+        "number of anchor output rows" -> 2L)
+      testSparkPlanMetrics(df, 22, Map(
+        2L -> (("UnionLoop", expected))))
+    }
+  }
+
   test("Filter metrics") {
     // Assume the execution plan is
     // PhysicalRDD(nodeId = 1) -> Filter(nodeId = 0)
@@ -282,6 +303,26 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
         0L -> (("ObjectHashAggregate", Map(
           "spill size" -> {
             _.toString.matches(sizeMetricPattern)
+          }))))
+      )
+    }
+  }
+
+  test("SortAggregate metrics") {
+    // Force use SortAggregateExec instead of HashAggregateExec
+    withSQLConf("spark.sql.test.forceApplySortAggregate" -> "true") {
+      // Assume the execution plan is
+      // -> SortAggregate(nodeId = 0)
+      //     -> Sort(nodeId = 1)
+      //       -> Exchange(nodeId = 2)
+      //          -> SortAggregate(...)
+      val df = testData2.groupBy($"a").count()
+
+      // Test aggTime metric for grouped aggregate
+      testSparkPlanMetricsWithPredicates(df, 1, Map(
+        0L -> (("SortAggregate", Map(
+          "time in aggregation build" -> {
+            _.toString.matches(timingMetricPattern)
           }))))
       )
     }
@@ -894,16 +935,27 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
           withTable("t1", "t2") {
             spark.range(4).write.saveAsTable("t1")
             spark.range(2).write.saveAsTable("t2")
-            val df = sql("SELECT * FROM t1 WHERE id NOT IN (SELECT id FROM t2)")
-            df.collect()
-            val plan = df.queryExecution.executedPlan
+            val df1 = sql("SELECT * FROM t1 WHERE id NOT IN (SELECT id FROM t2)")
+            df1.collect()
+            val plan1 = df1.queryExecution.executedPlan
 
-            val joins = plan.collect {
+            val joins1 = plan1.collect {
               case s: BroadcastHashJoinExec => s
             }
 
-            assert(joins.size === 1)
-            testMetricsInSparkPlanOperator(joins.head, Map("numOutputRows" -> 2))
+            assert(joins1.size === 1)
+            testMetricsInSparkPlanOperator(joins1.head, Map("numOutputRows" -> 2))
+
+            val df2 = sql("SELECT * FROM t1 WHERE id NOT IN (SELECT id FROM t2 WHERE 1 = 2)")
+            df2.collect()
+            val plan2 = df2.queryExecution.executedPlan
+
+            val joins2 = plan2.collect {
+              case s: BroadcastHashJoinExec => s
+            }
+
+            assert(joins2.size === 1)
+            testMetricsInSparkPlanOperator(joins2.head, Map("numOutputRows" -> 4))
           }
         }
       }
@@ -958,6 +1010,23 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
     intercept[AssertionError] {
       SQLMetrics.createNanoTimingMetric(sparkContext, name = "m", initValue = 5)
     }
+  }
+
+  test("SQLMetric#toInfoUpdate") {
+    assert(SQLMetrics.createSizeMetric(sparkContext, name = "m").toInfoUpdate.update === Some(-1))
+    assert(SQLMetrics.createMetric(sparkContext, name = "m").toInfoUpdate.update === Some(0))
+  }
+
+  test("withTimingNs should time and return same result") {
+    val metric = SQLMetrics.createTimingMetric(sparkContext, name = "m")
+
+    // Use a simple block that returns a value
+    val result = SQLMetrics.withTimingNs(metric) {
+      42
+    }
+
+    assert(result === 42)
+    assert(!metric.isZero, "Metric was not increased")
   }
 }
 

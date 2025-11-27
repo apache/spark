@@ -23,7 +23,7 @@ import software.amazon.kinesis.exceptions.{InvalidStateException, KinesisClientL
 import software.amazon.kinesis.lifecycle.events.{InitializationInput, LeaseLostInput, ProcessRecordsInput, ShardEndedInput, ShutdownRequestedInput}
 import software.amazon.kinesis.processor.ShardRecordProcessor
 
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{RETRY_INTERVAL, SHARD_ID, WORKER_URL}
 
 /**
@@ -46,8 +46,8 @@ private[kinesis] class KinesisRecordProcessor[T](receiver: KinesisReceiver[T], s
 
   /**
    * The Kinesis Client Library calls this method during ShardRecordProcessor initialization.
-   * @param initializationInput contains parameters to the ShardRecordProcessor
-   * initialize method
+   *
+   * @param initializationInput contains parameters to the ShardRecordProcessor initialize method
    */
   override def initialize(initializationInput: InitializationInput): Unit = {
     this.shardId = initializationInput.shardId
@@ -61,7 +61,7 @@ private[kinesis] class KinesisRecordProcessor[T](receiver: KinesisReceiver[T], s
    * and Spark Streaming's Receiver
    *
    * @param processRecordsInput Provides the records to be processed as well as information and
-   * capabilities related to them (eg checkpointing).
+   *   capabilities related to them (eg checkpointing).
    */
   override def processRecords(processRecordsInput: ProcessRecordsInput): Unit = {
     val batch = processRecordsInput.records
@@ -109,10 +109,11 @@ private[kinesis] class KinesisRecordProcessor[T](receiver: KinesisReceiver[T], s
    * Once the lease has been lost the record processor can no longer checkpoint.
    *
    * @param leaseLostInput gives access to information related to the loss of the lease.
-   * Currently this has no functionality.
+   *   Currently this has no functionality.
    */
   override def leaseLost(leaseLostInput: LeaseLostInput): Unit = {
     logInfo(log"The lease for shardId: ${MDC(SHARD_ID, shardId)} is lost.")
+    receiver.removeCheckpointer(shardId, null)
   }
 
   /**
@@ -122,8 +123,8 @@ private[kinesis] class KinesisRecordProcessor[T](receiver: KinesisReceiver[T], s
    * When this is called the record processor <b>must</b> checkpoint. Otherwise an exception
    * will be thrown and the all child shards of this shard will not make progress.
    *
-   * @param shardEndedInput provides access to a checkpointer method for completing
-   * processing of the shard.
+   * @param shardEndedInput provides access to a checkpointer method for completing processing of
+   *   the shard.
    */
   override def shardEnded(shardEndedInput: ShardEndedInput): Unit = {
     logInfo(log"Reached shard end. Checkpointing for shardId: ${MDC(SHARD_ID, shardId)}")
@@ -140,8 +141,8 @@ private[kinesis] class KinesisRecordProcessor[T](receiver: KinesisReceiver[T], s
    * has completed the lease for the record processor is released, and
    * {@link # leaseLost ( LeaseLostInput )} will be called at a later time.
    *
-   * @param shutdownRequestedInput provides access to a checkpointer allowing a record
-   * processor to checkpoint before the shutdown is completed.
+   * @param shutdownRequestedInput provides access to a checkpointer allowing a record processor to
+   *   checkpoint before the shutdown is completed.
    */
   override def shutdownRequested(shutdownRequestedInput: ShutdownRequestedInput): Unit = {
     logInfo(log"Shutdown: Shutting down schedulerId: ${MDC(WORKER_URL, schedulerId)} ")

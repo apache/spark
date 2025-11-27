@@ -21,6 +21,7 @@ import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.analysis.NoSuchPartitionsException
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.util.quoteIdentifier
+import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -103,10 +104,20 @@ trait AlterTableDropPartitionSuiteBase extends QueryTest with DDLCommandTestUtil
     withNamespaceAndTable("ns", "tbl") { t =>
       sql(s"CREATE TABLE $t (id bigint, data string) $defaultUsing PARTITIONED BY (id)")
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
-        val errMsg = intercept[AnalysisException] {
-          sql(s"ALTER TABLE $t DROP PARTITION (ID=1)")
-        }.getMessage
-        assert(errMsg.contains("ID is not a valid partition column"))
+        val expectedTableName = if (commandVersion == DDLCommandTestUtils.V1_COMMAND_VERSION) {
+          s"`$SESSION_CATALOG_NAME`.`ns`.`tbl`"
+        } else {
+          "`test_catalog`.`ns`.`tbl`"
+        }
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql(s"ALTER TABLE $t DROP PARTITION (ID=1)")
+          },
+          condition = "PARTITIONS_NOT_FOUND",
+          parameters = Map(
+            "partitionList" -> "`ID`",
+            "tableName" -> expectedTableName)
+        )
       }
 
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
@@ -146,7 +157,7 @@ trait AlterTableDropPartitionSuiteBase extends QueryTest with DDLCommandTestUtil
         "`test_catalog`.`ns`.`tbl`"
       }
       checkError(e,
-        errorClass = "PARTITIONS_NOT_FOUND",
+        condition = "PARTITIONS_NOT_FOUND",
         parameters = Map("partitionList" -> "PARTITION (`id` = 2)",
         "tableName" -> expectedTableName))
 
@@ -223,25 +234,26 @@ trait AlterTableDropPartitionSuiteBase extends QueryTest with DDLCommandTestUtil
       checkCachedRelation(t, Seq(Row(0, 0), Row(1, 1), Row(2, 2), Row(3, 3)))
 
       withView("v0") {
-        sql(s"CREATE VIEW v0 AS SELECT * FROM $t")
+        // Add a dummy column so that this view is semantically different from raw table scan.
+        sql(s"CREATE VIEW v0 AS SELECT *, 'a' FROM $t")
         cacheRelation("v0")
         sql(s"ALTER TABLE $t DROP PARTITION (part=1)")
-        checkCachedRelation("v0", Seq(Row(0, 0), Row(2, 2), Row(3, 3)))
+        checkCachedRelation("v0", Seq(Row(0, 0, "a"), Row(2, 2, "a"), Row(3, 3, "a")))
       }
 
       withTempView("v1") {
-        sql(s"CREATE TEMP VIEW v1 AS SELECT * FROM $t")
+        sql(s"CREATE TEMP VIEW v1 AS SELECT *, 'a' FROM $t")
         cacheRelation("v1")
         sql(s"ALTER TABLE $t DROP PARTITION (part=2)")
-        checkCachedRelation("v1", Seq(Row(0, 0), Row(3, 3)))
+        checkCachedRelation("v1", Seq(Row(0, 0, "a"), Row(3, 3, "a")))
       }
 
-      val v2 = s"${spark.sharedState.globalTempViewManager.database}.v2"
+      val v2 = s"${spark.sharedState.globalTempDB}.v2"
       withGlobalTempView("v2") {
-        sql(s"CREATE GLOBAL TEMP VIEW v2 AS SELECT * FROM $t")
+        sql(s"CREATE GLOBAL TEMP VIEW v2 AS SELECT *, 'a' FROM $t")
         cacheRelation(v2)
         sql(s"ALTER TABLE $t DROP PARTITION (part=3)")
-        checkCachedRelation(v2, Seq(Row(0, 0)))
+        checkCachedRelation(v2, Seq(Row(0, 0, "a")))
       }
     }
   }

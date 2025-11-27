@@ -67,9 +67,13 @@ package object analysis {
     }
 
     def dataTypeMismatch(expr: Expression, mismatch: DataTypeMismatch): Nothing = {
+      dataTypeMismatch(toSQLExpr(expr), mismatch)
+    }
+
+    def dataTypeMismatch(sqlExpr: String, mismatch: DataTypeMismatch): Nothing = {
       throw new AnalysisException(
         errorClass = s"DATATYPE_MISMATCH.${mismatch.errorSubClass}",
-        messageParameters = mismatch.messageParameters + ("sqlExpr" -> toSQLExpr(expr)),
+        messageParameters = mismatch.messageParameters + ("sqlExpr" -> sqlExpr),
         origin = t.origin)
     }
 

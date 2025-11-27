@@ -2,7 +2,7 @@
 -- !query
 create temporary view t as select * from values 0, 1, 2 as t(id)
 -- !query analysis
-CreateViewCommand `t`, select * from values 0, 1, 2 as t(id), false, false, LocalTempView, true
+CreateViewCommand `t`, select * from values 0, 1, 2 as t(id), false, false, LocalTempView, UNSUPPORTED, true
    +- Project [id#x]
       +- SubqueryAlias t
          +- LocalRelation [id#x]
@@ -11,10 +11,29 @@ CreateViewCommand `t`, select * from values 0, 1, 2 as t(id), false, false, Loca
 -- !query
 create temporary view t2 as select * from values 0, 1 as t(id)
 -- !query analysis
-CreateViewCommand `t2`, select * from values 0, 1 as t(id), false, false, LocalTempView, true
+CreateViewCommand `t2`, select * from values 0, 1 as t(id), false, false, LocalTempView, UNSUPPORTED, true
    +- Project [id#x]
       +- SubqueryAlias t
          +- LocalRelation [id#x]
+
+
+-- !query
+create temporary view t3 as select * from t
+-- !query analysis
+CreateViewCommand `t3`, select * from t, false, false, LocalTempView, UNSUPPORTED, true
+   +- Project [id#x]
+      +- SubqueryAlias t
+         +- View (`t`, [id#x])
+            +- Project [cast(id#x as int) AS id#x]
+               +- Project [id#x]
+                  +- SubqueryAlias t
+                     +- LocalRelation [id#x]
+
+
+-- !query
+create table t4(col1 TIMESTAMP)
+-- !query analysis
+CreateDataSourceTableCommand `spark_catalog`.`default`.`t4`, false
 
 
 -- !query
@@ -73,7 +92,28 @@ WithCTE
 :                       +- LocalRelation [id#x]
 +- Project [1#x]
    +- SubqueryAlias t
-      +- CTERelationRef xxxx, true, [1#x], false
+      +- CTERelationRef xxxx, true, [1#x], false, false
+
+
+-- !query
+WITH t AS (SELECT 1) SELECT * FROM t3
+-- !query analysis
+WithCTE
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias t
+:     +- Project [1 AS 1#x]
+:        +- OneRowRelation
++- Project [id#x]
+   +- SubqueryAlias t3
+      +- View (`t3`, [id#x])
+         +- Project [cast(id#x as int) AS id#x]
+            +- Project [id#x]
+               +- SubqueryAlias t
+                  +- View (`t`, [id#x])
+                     +- Project [cast(id#x as int) AS id#x]
+                        +- Project [id#x]
+                           +- SubqueryAlias t
+                              +- LocalRelation [id#x]
 
 
 -- !query
@@ -113,13 +153,13 @@ WithCTE
 :  +- SubqueryAlias t2
 :     +- Project [2 AS 2#x]
 :        +- SubqueryAlias t1
-:           +- CTERelationRef xxxx, true, [id#x], false
+:           +- CTERelationRef xxxx, true, [id#x], false, false
 +- Project [id#x, 2#x]
    +- Join Cross
       :- SubqueryAlias t1
-      :  +- CTERelationRef xxxx, true, [id#x], false
+      :  +- CTERelationRef xxxx, true, [id#x], false, false
       +- SubqueryAlias t2
-         +- CTERelationRef xxxx, true, [2#x], false
+         +- CTERelationRef xxxx, true, [2#x], false, false
 
 
 -- !query
@@ -157,10 +197,10 @@ WithCTE
    +- Join Cross
       :- SubqueryAlias t1
       :  +- SubqueryAlias CTE1
-      :     +- CTERelationRef xxxx, true, [id#x], false
+      :     +- CTERelationRef xxxx, true, [id#x], false, false
       +- SubqueryAlias t2
          +- SubqueryAlias CTE1
-            +- CTERelationRef xxxx, true, [id#x], false
+            +- CTERelationRef xxxx, true, [id#x], false, false
 
 
 -- !query
@@ -176,7 +216,7 @@ WithCTE
 +- Project [x#x]
    +- Filter (x#x = 1)
       +- SubqueryAlias t
-         +- CTERelationRef xxxx, true, [x#x], false
+         +- CTERelationRef xxxx, true, [x#x], false, false, 1
 
 
 -- !query
@@ -192,7 +232,7 @@ WithCTE
 +- Project [x#x, y#x]
    +- Filter ((x#x = 1) AND (y#x = 2))
       +- SubqueryAlias t
-         +- CTERelationRef xxxx, true, [x#x, y#x], false
+         +- CTERelationRef xxxx, true, [x#x, y#x], false, false, 1
 
 
 -- !query
@@ -207,7 +247,7 @@ WithCTE
 :           +- OneRowRelation
 +- Project [x#x, x#x]
    +- SubqueryAlias t
-      +- CTERelationRef xxxx, true, [x#x, x#x], false
+      +- CTERelationRef xxxx, true, [x#x, x#x], false, false, 1
 
 
 -- !query
@@ -233,9 +273,10 @@ SELECT * FROM t
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0038",
+  "errorClass" : "DUPLICATED_CTE_NAMES",
+  "sqlState" : "42602",
   "messageParameters" : {
-    "duplicateNames" : "'t'"
+    "duplicateNames" : "`t`"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -309,46 +350,46 @@ WithCTE
 :     +- Project [c8#x AS c7#x]
 :        +- Project [c8#x]
 :           +- SubqueryAlias w8
-:              +- CTERelationRef xxxx, true, [c8#x], false
+:              +- CTERelationRef xxxx, true, [c8#x], false, false, 1
 :- CTERelationDef xxxx, false
 :  +- SubqueryAlias w6
 :     +- Project [c7#x AS c6#x]
 :        +- Project [c7#x]
 :           +- SubqueryAlias w7
-:              +- CTERelationRef xxxx, true, [c7#x], false
+:              +- CTERelationRef xxxx, true, [c7#x], false, false, 1
 :- CTERelationDef xxxx, false
 :  +- SubqueryAlias w5
 :     +- Project [c6#x AS c5#x]
 :        +- Project [c6#x]
 :           +- SubqueryAlias w6
-:              +- CTERelationRef xxxx, true, [c6#x], false
+:              +- CTERelationRef xxxx, true, [c6#x], false, false, 1
 :- CTERelationDef xxxx, false
 :  +- SubqueryAlias w4
 :     +- Project [c5#x AS c4#x]
 :        +- Project [c5#x]
 :           +- SubqueryAlias w5
-:              +- CTERelationRef xxxx, true, [c5#x], false
+:              +- CTERelationRef xxxx, true, [c5#x], false, false, 1
 :- CTERelationDef xxxx, false
 :  +- SubqueryAlias w3
 :     +- Project [c4#x AS c3#x]
 :        +- Project [c4#x]
 :           +- SubqueryAlias w4
-:              +- CTERelationRef xxxx, true, [c4#x], false
+:              +- CTERelationRef xxxx, true, [c4#x], false, false, 1
 :- CTERelationDef xxxx, false
 :  +- SubqueryAlias w2
 :     +- Project [c3#x AS c2#x]
 :        +- Project [c3#x]
 :           +- SubqueryAlias w3
-:              +- CTERelationRef xxxx, true, [c3#x], false
+:              +- CTERelationRef xxxx, true, [c3#x], false, false, 1
 :- CTERelationDef xxxx, false
 :  +- SubqueryAlias w1
 :     +- Project [c2#x AS c1#x]
 :        +- Project [c2#x]
 :           +- SubqueryAlias w2
-:              +- CTERelationRef xxxx, true, [c2#x], false
+:              +- CTERelationRef xxxx, true, [c2#x], false, false, 1
 +- Project [c1#x]
    +- SubqueryAlias w1
-      +- CTERelationRef xxxx, true, [c1#x], false
+      +- CTERelationRef xxxx, true, [c1#x], false, false, 1
 
 
 -- !query
@@ -385,7 +426,7 @@ WithCTE
 +- Project [42#x, 10#x]
    +- Join Inner
       :- SubqueryAlias same_name
-      :  +- CTERelationRef xxxx, true, [42#x], false
+      :  +- CTERelationRef xxxx, true, [42#x], false, false, 1
       +- SubqueryAlias same_name
          +- Project [10 AS 10#x]
             +- OneRowRelation
@@ -424,7 +465,7 @@ WithCTE
 :        +- OneRowRelation
 +- Project [x#x, typeof(x#x) AS typeof(x)#x]
    +- SubqueryAlias q
-      +- CTERelationRef xxxx, true, [x#x], false
+      +- CTERelationRef xxxx, true, [x#x], false, false, 1
 
 
 -- !query
@@ -484,7 +525,7 @@ Project [y#x]
       :        +- OneRowRelation
       +- Project [(x#x + 1) AS y#x]
          +- SubqueryAlias q
-            +- CTERelationRef xxxx, true, [x#x], false
+            +- CTERelationRef xxxx, true, [x#x], false, false, 1
 
 
 -- !query
@@ -498,7 +539,7 @@ Project [scalar-subquery#x [] AS scalarsubquery()#x]
 :     :        +- OneRowRelation
 :     +- Project [x#x]
 :        +- SubqueryAlias q
-:           +- CTERelationRef xxxx, true, [x#x], false
+:           +- CTERelationRef xxxx, true, [x#x], false, false, 1
 +- OneRowRelation
 
 
@@ -513,7 +554,7 @@ Project [1 IN (list#x []) AS (1 IN (listquery()))#x]
 :     :        +- OneRowRelation
 :     +- Project [1#x]
 :        +- SubqueryAlias q
-:           +- CTERelationRef xxxx, true, [1#x], false
+:           +- CTERelationRef xxxx, true, [1#x], false, false, 1
 +- OneRowRelation
 
 
@@ -561,14 +602,14 @@ WithCTE
       :- Join Inner
       :  :- SubqueryAlias x
       :  :  +- SubqueryAlias T1
-      :  :     +- CTERelationRef xxxx, true, [a#x], false
+      :  :     +- CTERelationRef xxxx, true, [a#x], false, false, 1
       :  +- SubqueryAlias y
       :     +- Project [b#x]
       :        +- SubqueryAlias T1
-      :           +- CTERelationRef xxxx, true, [b#x], false
+      :           +- CTERelationRef xxxx, true, [b#x], false, false, 1
       +- SubqueryAlias z
          +- SubqueryAlias T1
-            +- CTERelationRef xxxx, true, [a#x], false
+            +- CTERelationRef xxxx, true, [a#x], false, false, 1
 
 
 -- !query
@@ -596,9 +637,9 @@ WithCTE
       +- Project [c#x, a#x]
          +- Join Inner
             :- SubqueryAlias ttTT
-            :  +- CTERelationRef xxxx, true, [c#x], false
+            :  +- CTERelationRef xxxx, true, [c#x], false, false, 1
             +- SubqueryAlias tttT_2
-               +- CTERelationRef xxxx, true, [a#x], false
+               +- CTERelationRef xxxx, true, [a#x], false, false, 1
 
 
 -- !query
@@ -614,7 +655,7 @@ Project [scalar-subquery#x [x#x] AS scalarsubquery(x)#x]
 :     :        +- OneRowRelation
 :     +- Project [x#x]
 :        +- SubqueryAlias q
-:           +- CTERelationRef xxxx, true, [x#x], false
+:           +- CTERelationRef xxxx, true, [x#x], false, false, 1
 +- SubqueryAlias T
    +- Project [1 AS x#x, 2 AS y#x]
       +- OneRowRelation
@@ -633,7 +674,7 @@ Project [scalar-subquery#x [x#x && y#x] AS scalarsubquery(x, y)#x]
 :     :        +- OneRowRelation
 :     +- Project [((outer(x#x) + outer(y#x)) + z#x) AS ((outer(T.x) + outer(T.y)) + z)#x]
 :        +- SubqueryAlias q
-:           +- CTERelationRef xxxx, true, [z#x], false
+:           +- CTERelationRef xxxx, true, [z#x], false, false, 1
 +- SubqueryAlias T
    +- Project [1 AS x#x, 2 AS y#x]
       +- OneRowRelation
@@ -653,12 +694,12 @@ WithCTE
 :  +- SubqueryAlias q2
 :     +- Project [x#x]
 :        +- SubqueryAlias q1
-:           +- CTERelationRef xxxx, true, [x#x], false
+:           +- CTERelationRef xxxx, true, [x#x], false, false, 1
 +- Project [x#x]
    +- SubqueryAlias __auto_generated_subquery_name
       +- Project [x#x]
          +- SubqueryAlias q2
-            +- CTERelationRef xxxx, true, [x#x], false
+            +- CTERelationRef xxxx, true, [x#x], false, false, 1
 
 
 -- !query
@@ -675,12 +716,12 @@ WithCTE
 :  +- SubqueryAlias q1
 :     +- Project [(x#x + 1) AS (x + 1)#x]
 :        +- SubqueryAlias q1
-:           +- CTERelationRef xxxx, true, [x#x], false
+:           +- CTERelationRef xxxx, true, [x#x], false, false, 1
 +- Project [(x + 1)#x]
    +- SubqueryAlias __auto_generated_subquery_name
       +- Project [(x + 1)#x]
          +- SubqueryAlias q1
-            +- CTERelationRef xxxx, true, [(x + 1)#x], false
+            +- CTERelationRef xxxx, true, [(x + 1)#x], false, false, 1
 
 
 -- !query
@@ -688,9 +729,10 @@ with cte1 as (select 42), cte1 as (select 42) select * FROM cte1
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0038",
+  "errorClass" : "DUPLICATED_CTE_NAMES",
+  "sqlState" : "42602",
   "messageParameters" : {
-    "duplicateNames" : "'cte1'"
+    "duplicateNames" : "`cte1`"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -721,9 +763,9 @@ WithCTE
       :  +- Aggregate [max(j#x) AS max(j)#x]
       :     +- SubqueryAlias cte2
       :        +- SubqueryAlias cte1
-      :           +- CTERelationRef xxxx, true, [j#x], false
+      :           +- CTERelationRef xxxx, true, [j#x], false, false
       +- SubqueryAlias cte1
-         +- CTERelationRef xxxx, true, [j#x], false
+         +- CTERelationRef xxxx, true, [j#x], false, false
 
 
 -- !query
@@ -767,6 +809,323 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 
 
 -- !query
+SELECT * FROM (
+  (
+    WITH cte AS (SELECT 1)
+    SELECT * FROM cte
+  ) UNION ALL (
+    WITH cte AS (SELECT 2)
+    SELECT * FROM cte
+  )
+)
+-- !query analysis
+Project [1#x]
++- SubqueryAlias __auto_generated_subquery_name
+   +- WithCTE
+      :- CTERelationDef xxxx, false
+      :  +- SubqueryAlias cte
+      :     +- Project [1 AS 1#x]
+      :        +- OneRowRelation
+      :- CTERelationDef xxxx, false
+      :  +- SubqueryAlias cte
+      :     +- Project [2 AS 2#x]
+      :        +- OneRowRelation
+      +- Union false, false
+         :- Project [1#x]
+         :  +- SubqueryAlias cte
+         :     +- CTERelationRef xxxx, true, [1#x], false, false, 1
+         +- Project [2#x]
+            +- SubqueryAlias cte
+               +- CTERelationRef xxxx, true, [2#x], false, false, 1
+
+
+-- !query
+SELECT * FROM (
+  (
+    WITH cte AS (SELECT 2)
+    SELECT * FROM cte
+  ) UNION ALL (
+    SELECT 1 WHERE EXISTS (
+      SELECT * FROM cte
+    )
+  )
+)
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`cte`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 134,
+    "stopIndex" : 136,
+    "fragment" : "cte"
+  } ]
+}
+
+
+-- !query
+SELECT
+  *
+FROM
+  VALUES (1)
+WHERE EXISTS (
+  WITH cte AS (SELECT 1)
+  SELECT * FROM cte
+)
+UNION ALL (
+  SELECT
+    *
+  FROM
+    VALUES (1)
+  WHERE EXISTS (
+    WITH cte AS (SELECT 1)
+    SELECT * FROM cte
+  )
+)
+-- !query analysis
+Union false, false
+:- Project [col1#x]
+:  +- Filter exists#x []
+:     :  +- WithCTE
+:     :     :- CTERelationDef xxxx, false
+:     :     :  +- SubqueryAlias cte
+:     :     :     +- Project [1 AS 1#x]
+:     :     :        +- OneRowRelation
+:     :     +- Project [1#x]
+:     :        +- SubqueryAlias cte
+:     :           +- CTERelationRef xxxx, true, [1#x], false, false, 1
+:     +- LocalRelation [col1#x]
++- Project [col1#x]
+   +- Filter exists#x []
+      :  +- WithCTE
+      :     :- CTERelationDef xxxx, false
+      :     :  +- SubqueryAlias cte
+      :     :     +- Project [1 AS 1#x]
+      :     :        +- OneRowRelation
+      :     +- Project [1#x]
+      :        +- SubqueryAlias cte
+      :           +- CTERelationRef xxxx, true, [1#x], false, false, 1
+      +- LocalRelation [col1#x]
+
+
+-- !query
+WITH cte AS (
+  SELECT
+    *
+  FROM
+    VALUES (1)
+  WHERE EXISTS (
+    WITH cte AS (SELECT 1)
+    SELECT * FROM cte
+  )
+  UNION ALL (
+    SELECT
+      *
+    FROM
+      VALUES (1)
+    WHERE EXISTS (
+      WITH cte AS (SELECT 1)
+      SELECT * FROM cte
+    )
+  )
+)
+SELECT * FROM cte
+-- !query analysis
+WithCTE
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias cte
+:     +- Union false, false
+:        :- Project [col1#x]
+:        :  +- Filter exists#x []
+:        :     :  +- WithCTE
+:        :     :     :- CTERelationDef xxxx, false
+:        :     :     :  +- SubqueryAlias cte
+:        :     :     :     +- Project [1 AS 1#x]
+:        :     :     :        +- OneRowRelation
+:        :     :     +- Project [1#x]
+:        :     :        +- SubqueryAlias cte
+:        :     :           +- CTERelationRef xxxx, true, [1#x], false, false, 1
+:        :     +- LocalRelation [col1#x]
+:        +- Project [col1#x]
+:           +- Filter exists#x []
+:              :  +- WithCTE
+:              :     :- CTERelationDef xxxx, false
+:              :     :  +- SubqueryAlias cte
+:              :     :     +- Project [1 AS 1#x]
+:              :     :        +- OneRowRelation
+:              :     +- Project [1#x]
+:              :        +- SubqueryAlias cte
+:              :           +- CTERelationRef xxxx, true, [1#x], false, false, 1
+:              +- LocalRelation [col1#x]
++- Project [col1#x]
+   +- SubqueryAlias cte
+      +- CTERelationRef xxxx, true, [col1#x], false, false, 2
+
+
+-- !query
+SELECT * FROM (
+  WITH cte AS (SELECT 1)
+  SELECT
+    *
+  FROM VALUES (1)
+  WHERE EXISTS (
+    WITH cte AS (SELECT 1)
+    SELECT * FROM cte
+  )
+  UNION ALL (
+    SELECT
+      *
+    FROM
+      VALUES (1)
+    WHERE EXISTS (
+      WITH cte AS (SELECT 1)
+      SELECT * FROM cte
+    )
+  )
+)
+-- !query analysis
+Project [col1#x]
++- SubqueryAlias __auto_generated_subquery_name
+   +- WithCTE
+      :- CTERelationDef xxxx, false
+      :  +- SubqueryAlias cte
+      :     +- Project [1 AS 1#x]
+      :        +- OneRowRelation
+      +- Union false, false
+         :- Project [col1#x]
+         :  +- Filter exists#x []
+         :     :  +- WithCTE
+         :     :     :- CTERelationDef xxxx, false
+         :     :     :  +- SubqueryAlias cte
+         :     :     :     +- Project [1 AS 1#x]
+         :     :     :        +- OneRowRelation
+         :     :     +- Project [1#x]
+         :     :        +- SubqueryAlias cte
+         :     :           +- CTERelationRef xxxx, true, [1#x], false, false, 1
+         :     +- LocalRelation [col1#x]
+         +- Project [col1#x]
+            +- Filter exists#x []
+               :  +- WithCTE
+               :     :- CTERelationDef xxxx, false
+               :     :  +- SubqueryAlias cte
+               :     :     +- Project [1 AS 1#x]
+               :     :        +- OneRowRelation
+               :     +- Project [1#x]
+               :        +- SubqueryAlias cte
+               :           +- CTERelationRef xxxx, true, [1#x], false, false, 1
+               +- LocalRelation [col1#x]
+
+
+-- !query
+WITH `a.b.c` AS (
+  SELECT 1
+)
+SELECT * FROM `a.b.c`
+-- !query analysis
+WithCTE
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias `a.b.c`
+:     +- Project [1 AS 1#x]
+:        +- OneRowRelation
++- Project [1#x]
+   +- SubqueryAlias `a.b.c`
+      +- CTERelationRef xxxx, true, [1#x], false, false, 1
+
+
+-- !query
+SELECT * FROM (
+  WITH cte1 AS (SELECT * FROM t4) SELECT t4.col1 FROM t4 JOIN cte1 USING (col1)
+)
+-- !query analysis
+Project [col1#x]
++- SubqueryAlias __auto_generated_subquery_name
+   +- WithCTE
+      :- CTERelationDef xxxx, false
+      :  +- SubqueryAlias cte1
+      :     +- Project [col1#x]
+      :        +- SubqueryAlias spark_catalog.default.t4
+      :           +- Relation spark_catalog.default.t4[col1#x] parquet
+      +- Project [col1#x]
+         +- Project [col1#x]
+            +- Join Inner, (col1#x = col1#x)
+               :- SubqueryAlias spark_catalog.default.t4
+               :  +- Relation spark_catalog.default.t4[col1#x] parquet
+               +- SubqueryAlias cte1
+                  +- CTERelationRef xxxx, true, [col1#x], false, false
+
+
+-- !query
+SELECT * FROM (
+  WITH cte1 AS (SELECT * FROM t4) SELECT cte1.col1 FROM t4 JOIN cte1 USING (col1)
+)
+-- !query analysis
+Project [col1#x]
++- SubqueryAlias __auto_generated_subquery_name
+   +- WithCTE
+      :- CTERelationDef xxxx, false
+      :  +- SubqueryAlias cte1
+      :     +- Project [col1#x]
+      :        +- SubqueryAlias spark_catalog.default.t4
+      :           +- Relation spark_catalog.default.t4[col1#x] parquet
+      +- Project [col1#x]
+         +- Project [col1#x, col1#x]
+            +- Join Inner, (col1#x = col1#x)
+               :- SubqueryAlias spark_catalog.default.t4
+               :  +- Relation spark_catalog.default.t4[col1#x] parquet
+               +- SubqueryAlias cte1
+                  +- CTERelationRef xxxx, true, [col1#x], false, false
+
+
+-- !query
+SELECT * FROM (
+  WITH cte1 AS (SELECT * FROM t4) SELECT t4.col1 FROM cte1 JOIN t4 USING (col1)
+)
+-- !query analysis
+Project [col1#x]
++- SubqueryAlias __auto_generated_subquery_name
+   +- WithCTE
+      :- CTERelationDef xxxx, false
+      :  +- SubqueryAlias cte1
+      :     +- Project [col1#x]
+      :        +- SubqueryAlias spark_catalog.default.t4
+      :           +- Relation spark_catalog.default.t4[col1#x] parquet
+      +- Project [col1#x]
+         +- Project [col1#x, col1#x]
+            +- Join Inner, (col1#x = col1#x)
+               :- SubqueryAlias cte1
+               :  +- CTERelationRef xxxx, true, [col1#x], false, false
+               +- SubqueryAlias spark_catalog.default.t4
+                  +- Relation spark_catalog.default.t4[col1#x] parquet
+
+
+-- !query
+SELECT * FROM (
+  WITH cte1 AS (SELECT * FROM t4) SELECT cte1.col1 FROM cte1 JOIN t4 USING (col1)
+)
+-- !query analysis
+Project [col1#x]
++- SubqueryAlias __auto_generated_subquery_name
+   +- WithCTE
+      :- CTERelationDef xxxx, false
+      :  +- SubqueryAlias cte1
+      :     +- Project [col1#x]
+      :        +- SubqueryAlias spark_catalog.default.t4
+      :           +- Relation spark_catalog.default.t4[col1#x] parquet
+      +- Project [col1#x]
+         +- Project [col1#x]
+            +- Join Inner, (col1#x = col1#x)
+               :- SubqueryAlias cte1
+               :  +- CTERelationRef xxxx, true, [col1#x], false, false
+               +- SubqueryAlias spark_catalog.default.t4
+                  +- Relation spark_catalog.default.t4[col1#x] parquet
+
+
+-- !query
 DROP VIEW IF EXISTS t
 -- !query analysis
 DropTempViewCommand t
@@ -776,3 +1135,16 @@ DropTempViewCommand t
 DROP VIEW IF EXISTS t2
 -- !query analysis
 DropTempViewCommand t2
+
+
+-- !query
+DROP VIEW IF EXISTS t3
+-- !query analysis
+DropTempViewCommand t3
+
+
+-- !query
+DROP TABLE IF EXISTS t4
+-- !query analysis
+DropTable true, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.t4

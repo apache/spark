@@ -23,8 +23,9 @@ from itertools import chain
 import numpy as np
 import pandas as pd
 from pandas.api.types import CategoricalDtype
+from pandas.core.dtypes.common import is_numeric_dtype
 
-from pyspark.sql import functions as F
+from pyspark.sql import functions as F, Column as PySparkColumn
 from pyspark.sql.types import (
     ArrayType,
     BinaryType,
@@ -52,9 +53,7 @@ from pyspark.pandas.typedef.typehints import (
     extension_object_dtypes_available,
     spark_type_to_pandas_dtype,
 )
-
-# For supporting Spark Connect
-from pyspark.sql.utils import get_column_class
+from pyspark.pandas.utils import is_ansi_mode_enabled
 
 if extension_dtypes_available:
     from pandas import Int8Dtype, Int16Dtype, Int32Dtype, Int64Dtype
@@ -109,6 +108,33 @@ def transform_boolean_operand_to_numeric(
         return int(operand)
     else:
         return operand
+
+
+def _should_return_all_false(left: IndexOpsLike, right: Any) -> bool:
+    """
+    Determine if binary comparison should short-circuit to all False,
+    based on incompatible dtypes: non-numeric vs. numeric (including bools).
+    """
+    from pyspark.pandas.base import IndexOpsMixin
+    from pandas.api.types import is_list_like  # type: ignore[attr-defined]
+
+    def are_both_numeric(left_dtype: Dtype, right_dtype: Dtype) -> bool:
+        return is_numeric_dtype(left_dtype) and is_numeric_dtype(right_dtype)
+
+    left_dtype = left.dtype
+
+    if isinstance(right, IndexOpsMixin):
+        right_dtype = right.dtype
+    elif isinstance(right, (list, tuple)):
+        right_dtype = pd.Series(right).dtype
+    else:
+        assert not is_list_like(right), (
+            "Only ps.Series, ps.Index, list, tuple, or scalar is supported as the "
+            "right-hand operand."
+        )
+        right_dtype = pd.Series([right]).dtype
+
+    return left_dtype != right_dtype and not are_both_numeric(left_dtype, right_dtype)
 
 
 def _as_categorical_type(
@@ -395,6 +421,10 @@ class DataTypeOps(object, metaclass=ABCMeta):
         raise TypeError(">= can not be applied to %s." % self.pretty_name)
 
     def eq(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        if is_ansi_mode_enabled(left._internal.spark_frame.sparkSession):
+            if _should_return_all_false(left, right):
+                return left._with_new_scol(F.lit(False)).rename(None)  # type: ignore[attr-defined]
+
         if isinstance(right, (list, tuple)):
             from pyspark.pandas.series import first_series, scol_for
             from pyspark.pandas.frame import DataFrame
@@ -485,16 +515,14 @@ class DataTypeOps(object, metaclass=ABCMeta):
         else:
             from pyspark.pandas.base import column_op
 
-            Column = get_column_class()
-            return column_op(Column.__eq__)(left, right)
+            return column_op(PySparkColumn.__eq__)(left, right)
 
     def ne(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         from pyspark.pandas.base import column_op
 
         _sanitize_list_like(right)
 
-        Column = get_column_class()
-        return column_op(Column.__ne__)(left, right)
+        return column_op(PySparkColumn.__ne__)(left, right)
 
     def invert(self, operand: IndexOpsLike) -> IndexOpsLike:
         raise TypeError("Unary ~ can not be applied to %s." % self.pretty_name)

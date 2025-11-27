@@ -82,31 +82,26 @@ function onMouseOverAndOut(threadId) {
 }
 
 function onSearchStringChange() {
-  var searchString = $('#search').val().toLowerCase();
+  const searchString = $('#search').val().toLowerCase();
   //remove the stacktrace
   collapseAllThreadStackTrace(false);
-  if (searchString.length == 0) {
-    $('tr').each(function() {
+  $('tr[id^="thread_"]').each(function() {
+    if (searchString.length === 0) {
       $(this).removeClass('d-none')
-    })
-  } else {
-    $('tr').each(function(){
-      if($(this).attr('id') && $(this).attr('id').match(/thread_[0-9]+_tr/) ) {
-        var children = $(this).children();
-        var found = false;
-        for (var i = 0; i < children.length; i++) {
-          if (children.eq(i).text().toLowerCase().indexOf(searchString) >= 0) {
-            found = true;
-          }
-        }
-        if (found) {
-          $(this).removeClass('d-none')
+    } else {
+      let found = false;
+      const children = $(this).children();
+      let i = 0;
+      while(!found && i < children.length) {
+        if (children.eq(i).text().toLowerCase().indexOf(searchString) >= 0) {
+          found = true;
         } else {
-          $(this).addClass('d-none')
+          i++;
         }
       }
-    });
-  }
+      $(this).toggleClass('d-none', !found);
+    }
+  });
 }
 /* eslint-enable no-unused-vars */
 

@@ -18,7 +18,6 @@
 package org.apache.spark.streaming.kinesis
 
 import java.net.URI
-import java.nio.ByteBuffer
 import java.nio.charset.StandardCharsets
 import java.util.concurrent.TimeUnit
 
@@ -37,7 +36,7 @@ import software.amazon.awssdk.services.dynamodb.model.DeleteTableRequest
 import software.amazon.awssdk.services.kinesis.KinesisClient
 import software.amazon.awssdk.services.kinesis.model.{CreateStreamRequest, DeleteStreamRequest, DescribeStreamRequest, MergeShardsRequest, PutRecordRequest, ResourceNotFoundException, Shard, SplitShardRequest, StreamDescription}
 
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{STREAM_NAME, TABLE_NAME}
 
 /**
@@ -50,7 +49,6 @@ private[kinesis] class KinesisTestUtils(streamShardCount: Int = 2) extends Loggi
   val endpointUrl = KinesisTestUtils.endpointUrl
   val regionName = KinesisTestUtils.getRegionNameByEndpoint(endpointUrl)
 
-  private val createStreamTimeoutSeconds = 300
   private val describeStreamPollTimeSeconds = 1
 
   @volatile
@@ -67,6 +65,8 @@ private[kinesis] class KinesisTestUtils(streamShardCount: Int = 2) extends Loggi
       .endpointOverride(URI.create(endpointUrl))
       .build()
   }
+
+  private lazy val streamExistsWaiter = kinesisClient.waiter()
 
   private lazy val dynamoDB = {
     DynamoDbClient.builder()
@@ -107,7 +107,7 @@ private[kinesis] class KinesisTestUtils(streamShardCount: Int = 2) extends Loggi
     logInfo(s"Created stream ${_streamName}")
   }
 
-  def getShards: Seq[Shard] = {
+  def getShards(): Seq[Shard] = {
     val describeStreamRequest = DescribeStreamRequest.builder()
       .streamName(_streamName)
       .build()
@@ -206,18 +206,10 @@ private[kinesis] class KinesisTestUtils(streamShardCount: Int = 2) extends Loggi
   }
 
   private def waitForStreamToBeActive(streamNameToWaitFor: String): Unit = {
-    val startTimeNs = System.nanoTime()
-    while (System.nanoTime() - startTimeNs < TimeUnit.SECONDS.toNanos(createStreamTimeoutSeconds)) {
-      Thread.sleep(TimeUnit.SECONDS.toMillis(describeStreamPollTimeSeconds))
-      describeStream(streamNameToWaitFor).foreach { description =>
-        val streamStatus = description.streamStatus
-        logDebug(s"\t- current state: $streamStatus\n")
-        if ("ACTIVE".equals(streamStatus.toString)) {
-          return
-        }
-      }
-    }
-    require(false, s"Stream $streamName never became active")
+    val describeStreamRequest = DescribeStreamRequest.builder()
+      .streamName(streamNameToWaitFor)
+      .build()
+    streamExistsWaiter.waitUntilStreamExists(describeStreamRequest)
   }
 }
 
@@ -286,13 +278,6 @@ private[kinesis] object KinesisTestUtils {
            """.stripMargin)
     }
   }
-
-  def main(args: Array[String]): Unit = {
-    // scalastyle:off println
-    val endpointUrl = "https://kinesis.us-west-2.amazonaws.com"
-    println(s"Result: ${getRegionNameByEndpoint(endpointUrl)}")
-    // scalastyle:on println
-  }
 }
 
 /** A wrapper interface that will allow us to consolidate the code for synthetic data generation. */
@@ -307,10 +292,10 @@ private[kinesis] class SimpleDataGenerator(
     val shardIdToSeqNumbers = new mutable.HashMap[String, ArrayBuffer[(Int, String)]]()
     data.foreach { num =>
       val str = num.toString
-      val data = ByteBuffer.wrap(str.getBytes(StandardCharsets.UTF_8))
+      val data = SdkBytes.fromByteArray(str.getBytes(StandardCharsets.UTF_8))
       val putRecordRequest = PutRecordRequest.builder()
         .streamName(streamName)
-        .data(SdkBytes.fromByteBuffer(data))
+        .data(data)
         .partitionKey(str)
         .build()
 

@@ -71,6 +71,47 @@ WHERE  t1a IN (SELECT t2a
                LIMIT 10)
 LIMIT  2;
 
+-- correlated IN subquery
+-- LIMIT with OFFSET in parent side
+SELECT *
+FROM   t1
+WHERE  t1a IN (SELECT t2a
+               FROM   t2
+               WHERE  t1d = t2d)
+LIMIT  2
+OFFSET 1;
+
+-- correlated IN subquery
+-- LIMIT with OFFSET on both parent and subquery sides
+SELECT *
+FROM   t1
+WHERE  t1a IN (SELECT t2a
+               FROM   t2
+               WHERE  t1d = t2d
+               LIMIT 10
+               OFFSET 2)
+LIMIT  2
+OFFSET 1;
+
+-- correlated IN subquery
+-- OFFSET in parent side
+SELECT *
+FROM   t1
+WHERE  t1a IN (SELECT t2a
+               FROM   t2
+               WHERE  t1d = t2d)
+OFFSET 1;
+
+-- correlated IN subquery
+-- OFFSET on both parent and subquery sides
+SELECT *
+FROM   t1
+WHERE  t1a IN (SELECT t2a
+               FROM   t2
+               WHERE  t1d = t2d
+               OFFSET 2)
+OFFSET 1;
+
 -- TC 01.02
 SELECT *
 FROM   t1

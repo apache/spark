@@ -2,7 +2,7 @@
 -- !query
 CREATE OR REPLACE TEMPORARY VIEW t1 AS VALUES (1, 'a'), (2, 'b') tbl(c1, c2)
 -- !query analysis
-CreateViewCommand `t1`, VALUES (1, 'a'), (2, 'b') tbl(c1, c2), false, true, LocalTempView, true
+CreateViewCommand `t1`, VALUES (1, 'a'), (2, 'b') tbl(c1, c2), false, true, LocalTempView, UNSUPPORTED, true
    +- SubqueryAlias tbl
       +- LocalRelation [c1#x, c2#x]
 
@@ -10,9 +10,15 @@ CreateViewCommand `t1`, VALUES (1, 'a'), (2, 'b') tbl(c1, c2), false, true, Loca
 -- !query
 CREATE OR REPLACE TEMPORARY VIEW t2 AS VALUES (1.0, 1), (2.0, 4) tbl(c1, c2)
 -- !query analysis
-CreateViewCommand `t2`, VALUES (1.0, 1), (2.0, 4) tbl(c1, c2), false, true, LocalTempView, true
+CreateViewCommand `t2`, VALUES (1.0, 1), (2.0, 4) tbl(c1, c2), false, true, LocalTempView, UNSUPPORTED, true
    +- SubqueryAlias tbl
       +- LocalRelation [c1#x, c2#x]
+
+
+-- !query
+CREATE TABLE jsonTable (col1 INT, col2 INT, col3 INT, col4 INT) USING json
+-- !query analysis
+CreateDataSourceTableCommand `spark_catalog`.`default`.`jsonTable`, false
 
 
 -- !query
@@ -40,31 +46,32 @@ Project [c1#x, c2#x]
 
 -- !query
 SELECT *
-FROM   (SELECT * FROM t1
+FROM   (SELECT * FROM t1 where c1 = 1
         UNION ALL
         SELECT * FROM t2
         UNION ALL
         SELECT * FROM t2)
 -- !query analysis
-Project [c1#x, c2#x]
+Project [c1#x, c2#xL]
 +- SubqueryAlias __auto_generated_subquery_name
    +- Union false, false
       :- Union false, false
-      :  :- Project [cast(c1#x as decimal(11,1)) AS c1#x, c2#x]
+      :  :- Project [cast(c1#x as decimal(11,1)) AS c1#x, cast(c2#x as bigint) AS c2#xL]
       :  :  +- Project [c1#x, c2#x]
-      :  :     +- SubqueryAlias t1
-      :  :        +- View (`t1`, [c1#x, c2#x])
-      :  :           +- Project [cast(c1#x as int) AS c1#x, cast(c2#x as string) AS c2#x]
-      :  :              +- SubqueryAlias tbl
-      :  :                 +- LocalRelation [c1#x, c2#x]
-      :  +- Project [cast(c1#x as decimal(11,1)) AS c1#x, cast(c2#x as string) AS c2#x]
+      :  :     +- Filter (c1#x = 1)
+      :  :        +- SubqueryAlias t1
+      :  :           +- View (`t1`, [c1#x, c2#x])
+      :  :              +- Project [cast(c1#x as int) AS c1#x, cast(c2#x as string) AS c2#x]
+      :  :                 +- SubqueryAlias tbl
+      :  :                    +- LocalRelation [c1#x, c2#x]
+      :  +- Project [cast(c1#x as decimal(11,1)) AS c1#x, cast(c2#x as bigint) AS c2#xL]
       :     +- Project [c1#x, c2#x]
       :        +- SubqueryAlias t2
       :           +- View (`t2`, [c1#x, c2#x])
       :              +- Project [cast(c1#x as decimal(2,1)) AS c1#x, cast(c2#x as int) AS c2#x]
       :                 +- SubqueryAlias tbl
       :                    +- LocalRelation [c1#x, c2#x]
-      +- Project [cast(c1#x as decimal(11,1)) AS c1#x, cast(c2#x as string) AS c2#x]
+      +- Project [cast(c1#x as decimal(11,1)) AS c1#x, cast(c2#x as bigint) AS c2#xL]
          +- Project [c1#x, c2#x]
             +- SubqueryAlias t2
                +- View (`t2`, [c1#x, c2#x])
@@ -97,7 +104,7 @@ Project [a#xL]
 -- !query
 CREATE OR REPLACE TEMPORARY VIEW p1 AS VALUES 1 T(col)
 -- !query analysis
-CreateViewCommand `p1`, VALUES 1 T(col), false, true, LocalTempView, true
+CreateViewCommand `p1`, VALUES 1 T(col), false, true, LocalTempView, UNSUPPORTED, true
    +- SubqueryAlias T
       +- LocalRelation [col#x]
 
@@ -105,7 +112,7 @@ CreateViewCommand `p1`, VALUES 1 T(col), false, true, LocalTempView, true
 -- !query
 CREATE OR REPLACE TEMPORARY VIEW p2 AS VALUES 1 T(col)
 -- !query analysis
-CreateViewCommand `p2`, VALUES 1 T(col), false, true, LocalTempView, true
+CreateViewCommand `p2`, VALUES 1 T(col), false, true, LocalTempView, UNSUPPORTED, true
    +- SubqueryAlias T
       +- LocalRelation [col#x]
 
@@ -113,7 +120,7 @@ CreateViewCommand `p2`, VALUES 1 T(col), false, true, LocalTempView, true
 -- !query
 CREATE OR REPLACE TEMPORARY VIEW p3 AS VALUES 1 T(col)
 -- !query analysis
-CreateViewCommand `p3`, VALUES 1 T(col), false, true, LocalTempView, true
+CreateViewCommand `p3`, VALUES 1 T(col), false, true, LocalTempView, UNSUPPORTED, true
    +- SubqueryAlias T
       +- LocalRelation [col#x]
 
@@ -159,10 +166,10 @@ UNION ALL
 SELECT map(1, 2, 3, NULL), 1
 -- !query analysis
 Union false, false
-:- Project [cast(map(1, 2)#x as map<int,int>) AS map(1, 2)#x, str#x]
+:- Project [cast(map(1, 2)#x as map<int,int>) AS map(1, 2)#x, cast(str#x as bigint) AS str#xL]
 :  +- Project [map(1, 2) AS map(1, 2)#x, str AS str#x]
 :     +- OneRowRelation
-+- Project [map(1, 2, 3, NULL)#x, cast(1#x as string) AS 1#x]
++- Project [map(1, 2, 3, NULL)#x, cast(1#x as bigint) AS 1#xL]
    +- Project [map(1, 2, 3, cast(null as int)) AS map(1, 2, 3, NULL)#x, 1 AS 1#x]
       +- OneRowRelation
 
@@ -173,10 +180,10 @@ UNION ALL
 SELECT array(1, 2, 3, NULL), 1
 -- !query analysis
 Union false, false
-:- Project [cast(array(1, 2)#x as array<int>) AS array(1, 2)#x, str#x]
+:- Project [cast(array(1, 2)#x as array<int>) AS array(1, 2)#x, cast(str#x as bigint) AS str#xL]
 :  +- Project [array(1, 2) AS array(1, 2)#x, str AS str#x]
 :     +- OneRowRelation
-+- Project [array(1, 2, 3, NULL)#x, cast(1#x as string) AS 1#x]
++- Project [array(1, 2, 3, NULL)#x, cast(1#x as bigint) AS 1#xL]
    +- Project [array(1, 2, 3, cast(null as int)) AS array(1, 2, 3, NULL)#x, 1 AS 1#x]
       +- OneRowRelation
 
@@ -184,7 +191,7 @@ Union false, false
 -- !query
 CREATE OR REPLACE TEMPORARY VIEW t3 AS VALUES (decimal(1)) tbl(v)
 -- !query analysis
-CreateViewCommand `t3`, VALUES (decimal(1)) tbl(v), false, true, LocalTempView, true
+CreateViewCommand `t3`, VALUES (decimal(1)) tbl(v), false, true, LocalTempView, UNSUPPORTED, true
    +- SubqueryAlias tbl
       +- LocalRelation [v#x]
 
@@ -241,6 +248,25 @@ Aggregate [sum(v#x) AS sum(v)#x]
 
 
 -- !query
+SELECT col1, col2, col3, NULLIF('','') AS col4
+FROM jsonTable
+UNION ALL
+SELECT col2, col2, null AS col3, col4
+FROM jsonTable
+-- !query analysis
+Union false, false
+:- Project [col1#x, col2#x, col3#x, cast(col4#x as bigint) AS col4#xL]
+:  +- Project [col1#x, col2#x, col3#x, nullif(, ) AS col4#x]
+:     +- SubqueryAlias spark_catalog.default.jsontable
+:        +- Relation spark_catalog.default.jsontable[col1#x,col2#x,col3#x,col4#x] json
++- Project [col2#x, col2#x AS col2#x, col3#x, col4#xL]
+   +- Project [col2#x, col2#x, cast(col3#x as int) AS col3#x, cast(col4#x as bigint) AS col4#xL]
+      +- Project [col2#x, col2#x, null AS col3#x, col4#x]
+         +- SubqueryAlias spark_catalog.default.jsontable
+            +- Relation spark_catalog.default.jsontable[col1#x,col2#x,col3#x,col4#x] json
+
+
+-- !query
 DROP VIEW IF EXISTS t1
 -- !query analysis
 DropTempViewCommand t1
@@ -274,3 +300,10 @@ DropTempViewCommand p2
 DROP VIEW IF EXISTS p3
 -- !query analysis
 DropTempViewCommand p3
+
+
+-- !query
+DROP TABLE IF EXISTS jsonTable
+-- !query analysis
+DropTable true, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.jsonTable

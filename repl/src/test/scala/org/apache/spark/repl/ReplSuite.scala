@@ -25,7 +25,7 @@ import org.apache.logging.log4j.core.{Logger, LoggerContext}
 
 import org.apache.spark.{SparkContext, SparkFunSuite}
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
 
 class ReplSuite extends SparkFunSuite {
@@ -395,5 +395,94 @@ class ReplSuite extends SparkFunSuite {
 
     Main.sparkContext.stop()
     System.clearProperty("spark.driver.port")
+  }
+
+  test("register UDF via SparkSession.addArtifact") {
+    withTempDir { tempDir =>
+      val clsName = "org.apache.spark.repl.IntSumUdf"
+      val intSumUdfStream = classOf[IntSumUdf]
+        .getResourceAsStream("/" + clsName.replace(".", "/") + ".class")
+      val intSumUdfPath = new File(tempDir, "IntSumUdf.class")
+      Files.copy(intSumUdfStream, intSumUdfPath.toPath)
+      val output = runInterpreterInPasteMode("local",
+        s"""
+           |import org.apache.spark.sql.api.java.UDF2
+           |import org.apache.spark.sql.types.DataTypes
+           |
+           |spark.addArtifact("${intSumUdfPath.toString}")
+           |
+           |spark.udf.registerJava("intSum", "$clsName", DataTypes.LongType)
+           |
+           |val r = spark.range(5)
+           |  .withColumn("id2", col("id") + 1)
+           |  .selectExpr("intSum(id, id2)")
+           |  .collect()
+           |assert(r.map(_.getLong(0)).toSeq == Seq(1, 3, 5, 7, 9))
+           |
+        """.stripMargin)
+      assertContains("Array([1], [3], [5], [7], [9])", output)
+      assertDoesNotContain("error:", output)
+      assertDoesNotContain("Exception", output)
+      assertDoesNotContain("assertion failed", output)
+
+      // The UDF should not work in a new REPL session.
+      val anotherOutput = runInterpreterInPasteMode("local",
+        s"""
+           |val r = spark.range(5)
+           |  .withColumn("id2", col("id") + 1)
+           |  .selectExpr("intSum(id, id2)")
+           |  .collect()
+           |
+        """.stripMargin)
+      assertContains(
+        "[UNRESOLVED_ROUTINE] Cannot resolve routine `intSum` on search path",
+        anotherOutput)
+    }
+  }
+
+  test("register a class via SparkSession.addArtifact") {
+    withTempDir { tempDir =>
+      val clsName = "org.apache.spark.repl.IntSumUdf"
+      val intSumUdfStream = classOf[IntSumUdf]
+        .getResourceAsStream("/" + clsName.replace(".", "/") + ".class")
+      val intSumUdfPath = new File(tempDir, "IntSumUdf.class")
+      Files.copy(intSumUdfStream, intSumUdfPath.toPath)
+      val output = runInterpreterInPasteMode("local",
+        s"""
+           |import org.apache.spark.sql.functions.udf
+           |
+           |spark.addArtifact("${intSumUdfPath.toString}")
+           |
+           |val intSumUdf = udf((x: Long, y: Long) => new $clsName().call(x, y))
+           |spark.udf.register("intSum", intSumUdf)
+           |
+           |val r = spark.range(5)
+           |  .withColumn("id2", col("id") + 1)
+           |  .selectExpr("intSum(id, id2)")
+           |  .collect()
+           |assert(r.map(_.getLong(0)).toSeq == Seq(1, 3, 5, 7, 9))
+           |
+        """.stripMargin)
+      assertContains("Array([1], [3], [5], [7], [9])", output)
+      assertDoesNotContain("error:", output)
+      assertDoesNotContain("Exception", output)
+      assertDoesNotContain("assertion failed", output)
+    }
+  }
+
+  test("SPARK-53129: spark-shell imports java.net._ by default") {
+    val output = runInterpreter("local",
+      """
+        |new URI("https://spark.apache.org")
+      """.stripMargin)
+    assertDoesNotContain("error: not found: type URI", output)
+  }
+
+  test("SPARK-53131: spark-shell imports java.nio.file._ by default") {
+    val output = runInterpreter("local",
+      """
+        |Path.of("/tmp")
+      """.stripMargin)
+    assertDoesNotContain("error: not found: type URI", output)
   }
 }

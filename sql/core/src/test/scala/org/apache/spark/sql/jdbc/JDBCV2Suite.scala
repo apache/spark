@@ -18,13 +18,13 @@
 package org.apache.spark.sql.jdbc
 
 import java.sql.{Connection, DriverManager}
-import java.util.Properties
+import java.util.{HexFormat, Properties}
 
 import scala.util.control.NonFatal
 
 import test.org.apache.spark.sql.connector.catalog.functions.JavaStrLen.JavaStrLenStaticMagic
 
-import org.apache.spark.{SparkConf, SparkException}
+import org.apache.spark.{SparkConf, SparkException, SparkIllegalArgumentException}
 import org.apache.spark.sql.{AnalysisException, DataFrame, ExplainSuiteHelper, QueryTest, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, IndexAlreadyExistsException, NoSuchIndexException}
@@ -34,7 +34,8 @@ import org.apache.spark.sql.connector.catalog.{Catalogs, Identifier, TableCatalo
 import org.apache.spark.sql.connector.catalog.functions.{ScalarFunction, UnboundFunction}
 import org.apache.spark.sql.connector.catalog.index.SupportsIndex
 import org.apache.spark.sql.connector.expressions.Expression
-import org.apache.spark.sql.execution.FormattedMode
+import org.apache.spark.sql.execution.{FormattedMode, RowDataSourceScanExec}
+import org.apache.spark.sql.execution.datasources.jdbc.{JDBCDatabaseMetadata, JDBCRDD}
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2ScanRelation, V1ScanWrapper}
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
 import org.apache.spark.sql.functions.{abs, acos, asin, atan, atan2, avg, ceil, coalesce, cos, cosh, cot, count, count_distinct, degrees, exp, floor, lit, log => logarithm, log10, not, pow, radians, round, signum, sin, sinh, sqrt, sum, tan, tanh, udf, when}
@@ -140,6 +141,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     .set("spark.sql.catalog.h2.pushDownAggregate", "true")
     .set("spark.sql.catalog.h2.pushDownLimit", "true")
     .set("spark.sql.catalog.h2.pushDownOffset", "true")
+    .set("spark.sql.catalog.h2.pushDownJoin", "true")
 
   private def withConnection[T](f: Connection => T): T = {
     val conn = DriverManager.getConnection(url, new Properties())
@@ -154,77 +156,90 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     super.beforeAll()
     Utils.classForName("org.h2.Driver")
     withConnection { conn =>
-      conn.prepareStatement("CREATE SCHEMA \"test\"").executeUpdate()
-      conn.prepareStatement(
+
+      val batchStmt = conn.createStatement()
+      batchStmt.addBatch("CREATE SCHEMA \"test\"")
+
+      batchStmt.addBatch(
         "CREATE TABLE \"test\".\"empty_table\" (name TEXT(32) NOT NULL, id INTEGER NOT NULL)")
-        .executeUpdate()
-      conn.prepareStatement(
+
+      batchStmt.addBatch(
         "CREATE TABLE \"test\".\"people\" (name TEXT(32) NOT NULL, id INTEGER NOT NULL)")
-        .executeUpdate()
-      conn.prepareStatement("INSERT INTO \"test\".\"people\" VALUES ('fred', 1)").executeUpdate()
-      conn.prepareStatement("INSERT INTO \"test\".\"people\" VALUES ('mary', 2)").executeUpdate()
-      conn.prepareStatement(
+      batchStmt.addBatch("INSERT INTO \"test\".\"people\" VALUES ('fred', 1)")
+      batchStmt.addBatch("INSERT INTO \"test\".\"people\" VALUES ('mary', 2)")
+
+      batchStmt.addBatch(
         "CREATE TABLE \"test\".\"employee\" (dept INTEGER, name TEXT(32), salary NUMERIC(20, 2)," +
-          " bonus DOUBLE, is_manager BOOLEAN)").executeUpdate()
-      conn.prepareStatement(
-        "INSERT INTO \"test\".\"employee\" VALUES (1, 'amy', 10000, 1000, true)").executeUpdate()
-      conn.prepareStatement(
-        "INSERT INTO \"test\".\"employee\" VALUES (2, 'alex', 12000, 1200, false)").executeUpdate()
-      conn.prepareStatement(
-        "INSERT INTO \"test\".\"employee\" VALUES (1, 'cathy', 9000, 1200, false)").executeUpdate()
-      conn.prepareStatement(
-        "INSERT INTO \"test\".\"employee\" VALUES (2, 'david', 10000, 1300, true)").executeUpdate()
-      conn.prepareStatement(
-        "INSERT INTO \"test\".\"employee\" VALUES (6, 'jen', 12000, 1200, true)").executeUpdate()
-      conn.prepareStatement(
+          " bonus DOUBLE, is_manager BOOLEAN)")
+      batchStmt.addBatch("INSERT INTO \"test\".\"employee\" VALUES (1, 'amy', 10000, 1000, true)")
+      batchStmt.addBatch("INSERT INTO \"test\".\"employee\" VALUES (2, 'alex', 12000, 1200, false)")
+      batchStmt.addBatch("INSERT INTO \"test\".\"employee\" VALUES (1, 'cathy', 9000, 1200, false)")
+      batchStmt.addBatch("INSERT INTO \"test\".\"employee\" VALUES (2, 'david', 10000, 1300, true)")
+      batchStmt.addBatch("INSERT INTO \"test\".\"employee\" VALUES (6, 'jen', 12000, 1200, true)")
+
+      batchStmt.addBatch(
         "CREATE TABLE \"test\".\"dept\" (\"dept id\" INTEGER NOT NULL, \"dept.id\" INTEGER)")
-        .executeUpdate()
-      conn.prepareStatement("INSERT INTO \"test\".\"dept\" VALUES (1, 1)").executeUpdate()
-      conn.prepareStatement("INSERT INTO \"test\".\"dept\" VALUES (2, 1)").executeUpdate()
+      batchStmt.addBatch("INSERT INTO \"test\".\"dept\" VALUES (1, 1)")
+      batchStmt.addBatch("INSERT INTO \"test\".\"dept\" VALUES (2, 1)")
 
       // scalastyle:off
-      conn.prepareStatement(
-        "CREATE TABLE \"test\".\"person\" (\"名\" INTEGER NOT NULL)").executeUpdate()
+      batchStmt.addBatch("CREATE TABLE \"test\".\"person\" (\"名\" INTEGER NOT NULL)")
       // scalastyle:on
-      conn.prepareStatement("INSERT INTO \"test\".\"person\" VALUES (1)").executeUpdate()
-      conn.prepareStatement("INSERT INTO \"test\".\"person\" VALUES (2)").executeUpdate()
-      conn.prepareStatement(
-        """CREATE TABLE "test"."view1" ("|col1" INTEGER, "|col2" INTEGER)""").executeUpdate()
-      conn.prepareStatement(
-        """CREATE TABLE "test"."view2" ("|col1" INTEGER, "|col3" INTEGER)""").executeUpdate()
+      batchStmt.addBatch("INSERT INTO \"test\".\"person\" VALUES (1)")
+      batchStmt.addBatch("INSERT INTO \"test\".\"person\" VALUES (2)")
 
-      conn.prepareStatement(
+      batchStmt.addBatch(
+        """CREATE TABLE "test"."view1" ("|col1" INTEGER, "|col2" INTEGER)""")
+      batchStmt.addBatch(
+        """CREATE TABLE "test"."view2" ("|col1" INTEGER, "|col3" INTEGER)""")
+
+      batchStmt.addBatch(
         "CREATE TABLE \"test\".\"item\" (id INTEGER, name TEXT(32), price NUMERIC(23, 3))")
-        .executeUpdate()
-      conn.prepareStatement("INSERT INTO \"test\".\"item\" VALUES " +
-        "(1, 'bottle', 11111111111111111111.123)").executeUpdate()
-      conn.prepareStatement("INSERT INTO \"test\".\"item\" VALUES " +
-        "(1, 'bottle', 99999999999999999999.123)").executeUpdate()
+      batchStmt.addBatch("INSERT INTO \"test\".\"item\"" +
+        "VALUES (1, 'bottle', 11111111111111111111.123)")
+      batchStmt.addBatch("INSERT INTO \"test\".\"item\"" +
+        "VALUES (1, 'bottle', 99999999999999999999.123)")
 
-      conn.prepareStatement(
+      batchStmt.addBatch(
         "CREATE TABLE \"test\".\"datetime\" (name TEXT(32), date1 DATE, time1 TIMESTAMP)")
-        .executeUpdate()
-      conn.prepareStatement("INSERT INTO \"test\".\"datetime\" VALUES " +
-        "('amy', '2022-05-19', '2022-05-19 00:00:00')").executeUpdate()
-      conn.prepareStatement("INSERT INTO \"test\".\"datetime\" VALUES " +
-        "('alex', '2022-05-18', '2022-05-18 00:00:00')").executeUpdate()
+      batchStmt.addBatch("INSERT INTO \"test\".\"datetime\"" +
+        "VALUES ('amy', '2022-05-19', '2022-05-19 00:00:00')")
+      batchStmt.addBatch("INSERT INTO \"test\".\"datetime\"" +
+        "VALUES ('alex', '2022-05-18', '2022-05-18 00:00:00')")
 
-      conn.prepareStatement(
-        "CREATE TABLE \"test\".\"address\" (email TEXT(32) NOT NULL)").executeUpdate()
-      conn.prepareStatement("INSERT INTO \"test\".\"address\" VALUES " +
-        "('abc_def@gmail.com')").executeUpdate()
-      conn.prepareStatement("INSERT INTO \"test\".\"address\" VALUES " +
-        "('abc%def@gmail.com')").executeUpdate()
-      conn.prepareStatement("INSERT INTO \"test\".\"address\" VALUES " +
-        "('abc%_def@gmail.com')").executeUpdate()
-      conn.prepareStatement("INSERT INTO \"test\".\"address\" VALUES " +
-        "('abc_%def@gmail.com')").executeUpdate()
-      conn.prepareStatement("INSERT INTO \"test\".\"address\" VALUES " +
-        "('abc_''%def@gmail.com')").executeUpdate()
+      batchStmt.addBatch(
+        "CREATE TABLE \"test\".\"address\" (email TEXT(32) NOT NULL)")
+      batchStmt.addBatch("INSERT INTO \"test\".\"address\" VALUES ('abc_def@gmail.com')")
+      batchStmt.addBatch("INSERT INTO \"test\".\"address\" VALUES ('abc%def@gmail.com')")
+      batchStmt.addBatch("INSERT INTO \"test\".\"address\" VALUES ('abc%_def@gmail.com')")
+      batchStmt.addBatch("INSERT INTO \"test\".\"address\" VALUES ('abc_%def@gmail.com')")
+      batchStmt.addBatch("INSERT INTO \"test\".\"address\" VALUES ('abc_''%def@gmail.com')")
 
-      conn.prepareStatement("CREATE TABLE \"test\".\"binary1\" (name TEXT(32),b BINARY(20))")
+      batchStmt.addBatch("CREATE TABLE \"test\".\"employee_bonus\" " +
+        "(name TEXT(32), salary NUMERIC(20, 2), bonus DOUBLE, factor DOUBLE)")
+      batchStmt.addBatch("INSERT INTO \"test\".\"employee_bonus\"" +
+        "VALUES ('amy', 10000, 1000, 0.1)")
+      batchStmt.addBatch("INSERT INTO \"test\".\"employee_bonus\"" +
+        "VALUES ('alex', 12000, 1200, 0.1)")
+      batchStmt.addBatch("INSERT INTO \"test\".\"employee_bonus\"" +
+        "VALUES ('cathy', 8000, 1200, 0.15)")
+      batchStmt.addBatch("INSERT INTO \"test\".\"employee_bonus\"" +
+        "VALUES ('david', 10000, 1300, 0.13)")
+      batchStmt.addBatch("INSERT INTO \"test\".\"employee_bonus\"" +
+        "VALUES ('jen', 12000, 2400, 0.2)")
+
+      batchStmt.addBatch(
+        "CREATE TABLE \"test\".\"strings_with_nulls\" (str TEXT(32))")
+      batchStmt.addBatch("INSERT INTO \"test\".\"strings_with_nulls\" VALUES ('abc')")
+      batchStmt.addBatch("INSERT INTO \"test\".\"strings_with_nulls\" VALUES ('a a a')")
+      batchStmt.addBatch("INSERT INTO \"test\".\"strings_with_nulls\" VALUES (null)")
+
+      batchStmt.executeBatch()
+
+      conn
+        .prepareStatement("CREATE TABLE \"test\".\"binary_tab\" (name TEXT(32),b BINARY(20))")
         .executeUpdate()
-      val stmt = conn.prepareStatement("INSERT INTO \"test\".\"binary1\" VALUES (?, ?)")
+      val stmt = conn.prepareStatement("INSERT INTO \"test\".\"binary_tab\" VALUES (?, ?)")
       stmt.setString(1, "jen")
       stmt.setBytes(2, testBytes)
       stmt.executeUpdate()
@@ -277,7 +292,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
   }
 
   private def checkLimitRemoved(df: DataFrame, removed: Boolean = true): Unit = {
-    val limits = df.queryExecution.optimizedPlan.collect {
+    val limits = df.queryExecution.optimizedPlan.collectFirst {
       case g: GlobalLimit => g
       case limit: LocalLimit => limit
     }
@@ -359,7 +374,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
   }
 
   private def checkOffsetRemoved(df: DataFrame, removed: Boolean = true): Unit = {
-    val offsets = df.queryExecution.optimizedPlan.collect {
+    val offsets = df.queryExecution.optimizedPlan.collectFirst {
       case offset: Offset => offset
     }
     if (removed) {
@@ -367,6 +382,20 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     } else {
       assert(offsets.nonEmpty)
     }
+  }
+
+  test("null value for option exception") {
+    val df = spark.read
+      .option("pushDownOffset", null)
+      .table("h2.test.employee")
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        df.collect()
+      },
+      condition = "NULL_DATA_SOURCE_OPTION",
+      parameters = Map(
+        "option" -> "pushDownOffset")
+    )
   }
 
   test("simple scan with OFFSET") {
@@ -777,7 +806,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
   }
 
   private def checkSortRemoved(df: DataFrame, removed: Boolean = true): Unit = {
-    val sorts = df.queryExecution.optimizedPlan.collect {
+    val sorts = df.queryExecution.optimizedPlan.collectFirst {
       case s: Sort => s
     }
     if (removed) {
@@ -1244,7 +1273,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     checkAnswer(df15, Seq(Row(1, "cathy", 9000, 1200, false),
       Row(2, "alex", 12000, 1200, false), Row(6, "jen", 12000, 1200, true)))
 
-    val df16 = spark.table("h2.test.employee")
+    val df16 = spark.table("h2.test.employee_bonus")
       .filter(sin($"bonus") < -0.08)
       .filter(sinh($"bonus") > 200)
       .filter(cos($"bonus") > 0.9)
@@ -1252,17 +1281,17 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       .filter(tan($"bonus") < -0.08)
       .filter(tanh($"bonus") === 1)
       .filter(cot($"bonus") < -11)
-      .filter(asin($"bonus") > 0.1)
-      .filter(acos($"bonus") > 1.4)
+      .filter(asin($"factor") > 0.13)
+      .filter(acos($"factor") < 1.47)
       .filter(atan($"bonus") > 1.4)
       .filter(atan2($"bonus", $"bonus") > 0.7)
     checkFiltersRemoved(df16)
     checkPushedInfo(df16, "PushedFilters: [" +
-      "BONUS IS NOT NULL, SIN(BONUS) < -0.08, SINH(BONUS) > 200.0, COS(BONUS) > 0.9, " +
-      "COSH(BONUS) > 200.0, TAN(BONUS) < -0.08, TANH(BONUS) = 1.0, COT(BONUS) < -11.0, " +
-      "ASIN(BONUS) > 0.1, ACOS(BONUS) > 1.4, ATAN(BONUS) > 1.4, (ATAN2(BONUS, BONUS)) > 0.7],")
-    checkAnswer(df16, Seq(Row(1, "cathy", 9000, 1200, false),
-      Row(2, "alex", 12000, 1200, false), Row(6, "jen", 12000, 1200, true)))
+      "BONUS IS NOT NULL, FACTOR IS NOT NULL, SIN(BONUS) < -0.08, SINH(BONUS) > 200.0, " +
+      "COS(BONUS) > 0.9, COSH(BONUS) > 200.0, TAN(BONUS) < -0.08, TANH(BONUS) = 1.0, " +
+      "COT(BONUS) < -11.0, ASIN(FACTOR) > 0.13, ACOS(FACTOR) < 1.47, ATAN(BONUS) > 1.4, " +
+      "(ATAN2(BONUS, BONUS)) > 0.7],")
+    checkAnswer(df16, Seq(Row("cathy", 8000, 1200, 0.15)))
 
     // H2 does not support log2, asinh, acosh, atanh, cbrt
     val df17 = sql(
@@ -1278,6 +1307,24 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     checkPushedInfo(df17,
       "PushedFilters: [DEPT IS NOT NULL, BONUS IS NOT NULL, SALARY IS NOT NULL]")
     checkAnswer(df17, Seq(Row(6, "jen", 12000, 1200, true)))
+  }
+
+  test("SPARK-48943: arguments for asin and acos are invalid (< -1 || > 1) in H2") {
+    val df1 = spark.table("h2.test.employee").filter(acos($"bonus") > 1.4)
+    val e1 = intercept[SparkException] {
+      checkAnswer(df1, Seq(Row(1, "cathy", 9000, 1200, false)))
+    }
+    assert(e1.getCause.getClass === classOf[org.h2.jdbc.JdbcSQLDataException])
+    assert(e1.getCause.getMessage.contains("Invalid value")
+      && e1.getCause.getMessage.contains("ACOS"))
+
+    val df2 = spark.table("h2.test.employee").filter(asin($"bonus") > 0.1)
+    val e2 = intercept[SparkException] {
+      checkAnswer(df2, Seq(Row(1, "cathy", 9000, 1200, false)))
+    }
+    assert(e2.getCause.getClass === classOf[org.h2.jdbc.JdbcSQLDataException])
+    assert(e2.getCause.getMessage.contains("Invalid value")
+      && e2.getCause.getMessage.contains("ASIN"))
   }
 
   test("SPARK-38432: escape the single quote, _ and % for DS V2 pushdown") {
@@ -1305,7 +1352,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     val df5 = spark.table("h2.test.address").filter($"email".startsWith("abc_'%"))
     checkFiltersRemoved(df5)
     checkPushedInfo(df5,
-      raw"PushedFilters: [EMAIL IS NOT NULL, EMAIL LIKE 'abc\_\'\%%' ESCAPE '\']")
+      raw"PushedFilters: [EMAIL IS NOT NULL, EMAIL LIKE 'abc\_''\%%' ESCAPE '\']")
     checkAnswer(df5, Seq(Row("abc_'%def@gmail.com")))
 
     val df6 = spark.table("h2.test.address").filter($"email".endsWith("_def@gmail.com"))
@@ -1336,7 +1383,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     val df10 = spark.table("h2.test.address").filter($"email".endsWith("_'%def@gmail.com"))
     checkFiltersRemoved(df10)
     checkPushedInfo(df10,
-      raw"PushedFilters: [EMAIL IS NOT NULL, EMAIL LIKE '%\_\'\%def@gmail.com' ESCAPE '\']")
+      raw"PushedFilters: [EMAIL IS NOT NULL, EMAIL LIKE '%\_''\%def@gmail.com' ESCAPE '\']")
     checkAnswer(df10, Seq(Row("abc_'%def@gmail.com")))
 
     val df11 = spark.table("h2.test.address").filter($"email".contains("c_d"))
@@ -1364,7 +1411,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     val df15 = spark.table("h2.test.address").filter($"email".contains("c_'%d"))
     checkFiltersRemoved(df15)
     checkPushedInfo(df15,
-      raw"PushedFilters: [EMAIL IS NOT NULL, EMAIL LIKE '%c\_\'\%d%' ESCAPE '\']")
+      raw"PushedFilters: [EMAIL IS NOT NULL, EMAIL LIKE '%c\_''\%d%' ESCAPE '\']")
     checkAnswer(df15, Seq(Row("abc_'%def@gmail.com")))
   }
 
@@ -1548,7 +1595,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
   }
 
   test("scan with filter push-down with misc functions") {
-    val df1 = sql("SELECT name FROM h2.test.binary1 WHERE " +
+    val df1 = sql("SELECT name FROM h2.test.binary_tab WHERE " +
       "md5(b) = '4371fe0aa613bcb081543a37d241adcb'")
     checkFiltersRemoved(df1)
     val expectedPlanFragment1 = "PushedFilters: [B IS NOT NULL, " +
@@ -1556,7 +1603,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     checkPushedInfo(df1, expectedPlanFragment1)
     checkAnswer(df1, Seq(Row("jen")))
 
-    val df2 = sql("SELECT name FROM h2.test.binary1 WHERE " +
+    val df2 = sql("SELECT name FROM h2.test.binary_tab WHERE " +
       "sha1(b) = 'cf355e86e8666f9300ef12e996acd5c629e0b0a1'")
     checkFiltersRemoved(df2)
     val expectedPlanFragment2 = "PushedFilters: [B IS NOT NULL, " +
@@ -1564,7 +1611,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     checkPushedInfo(df2, expectedPlanFragment2)
     checkAnswer(df2, Seq(Row("jen")))
 
-    val df3 = sql("SELECT name FROM h2.test.binary1 WHERE " +
+    val df3 = sql("SELECT name FROM h2.test.binary_tab WHERE " +
       "sha2(b, 256) = '911732d10153f859dec04627df38b19290ec707ff9f83910d061421fdc476109'")
     checkFiltersRemoved(df3)
     val expectedPlanFragment3 = "PushedFilters: [B IS NOT NULL, (SHA2(B, 256)) = " +
@@ -1579,15 +1626,15 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     checkAnswer(df4, Seq(Row(6, "jen", 12000, 1200, true)))
 
     val df5 = sql("SELECT name FROM h2.test.employee WHERE " +
-      "aes_encrypt(cast(null as string), name) is null")
+      "aes_encrypt(name, '1234567812345678') != 'spark'")
     checkFiltersRemoved(df5, false)
-    val expectedPlanFragment5 = "PushedFilters: [], "
+    val expectedPlanFragment5 = "PushedFilters: [NAME IS NOT NULL], "
     checkPushedInfo(df5, expectedPlanFragment5)
     checkAnswer(df5, Seq(Row("amy"), Row("cathy"), Row("alex"), Row("david"), Row("jen")))
 
     val df6 = sql("SELECT name FROM h2.test.employee WHERE " +
       "aes_decrypt(cast(null as binary), name) is null")
-    checkFiltersRemoved(df6, false)
+    checkFiltersRemoved(df6) // removed by null intolerant opt
     val expectedPlanFragment6 = "PushedFilters: [], "
     checkPushedInfo(df6, expectedPlanFragment6)
     checkAnswer(df6, Seq(Row("amy"), Row("cathy"), Row("alex"), Row("david"), Row("jen")))
@@ -1723,7 +1770,9 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
         Row("test", "empty_table", false), Row("test", "employee", false),
         Row("test", "item", false), Row("test", "dept", false),
         Row("test", "person", false), Row("test", "view1", false), Row("test", "view2", false),
-        Row("test", "datetime", false), Row("test", "binary1", false)))
+        Row("test", "datetime", false), Row("test", "binary_tab", false),
+        Row("test", "employee_bonus", false),
+        Row("test", "strings_with_nulls", false)))
   }
 
   test("SQL API: create table as select") {
@@ -1794,7 +1843,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
   }
 
   private def checkAggregateRemoved(df: DataFrame, removed: Boolean = true): Unit = {
-    val aggregates = df.queryExecution.optimizedPlan.collect {
+    val aggregates = df.queryExecution.optimizedPlan.collectFirst {
       case agg: Aggregate => agg
     }
     if (removed) {
@@ -1866,6 +1915,16 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     checkFiltersRemoved(df8)
     checkPushedInfo(df8, "[(CONCAT(NAME, ',', CAST(SALARY AS string))) = 'cathy,9000.00']")
     checkAnswer(df8, Seq(Row(1, "cathy", 9000, 1200, false)))
+
+    val df9 = sql("SELECT * FROM h2.test.employee WHERE " +
+      "lpad(name, 5, '*') = '**amy'")
+    checkPushedInfo(df9, "[NAME IS NOT NULL, (LPAD(NAME, 5, '*')) = '**amy']")
+    checkAnswer(df9, Seq(Row(1, "amy", 10000, 1000, true)))
+
+    val df10 = sql("SELECT * FROM h2.test.employee WHERE " +
+      "rpad(name, 5, '*') = 'jen**'")
+    checkPushedInfo(df10, "[NAME IS NOT NULL, (RPAD(NAME, 5, '*')) = 'jen**']")
+    checkAnswer(df10, Seq(Row(6, "jen", 12000, 1200, true)))
   }
 
   test("scan with aggregate push-down: MAX AVG with filter and group by") {
@@ -1881,7 +1940,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
   }
 
   private def checkFiltersRemoved(df: DataFrame, removed: Boolean = true): Unit = {
-    val filters = df.queryExecution.optimizedPlan.collect {
+    val filters = df.queryExecution.optimizedPlan.collectFirst {
       case f: Filter => f
     }
     if (removed) {
@@ -2178,7 +2237,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
   test("scan with aggregate push-down: with concat multiple group key in project") {
     val df1 = sql("SELECT concat_ws('#', DEPT, NAME), MAX(SALARY) FROM h2.test.employee" +
       " WHERE dept > 0 GROUP BY DEPT, NAME")
-    val filters1 = df1.queryExecution.optimizedPlan.collect {
+    val filters1 = df1.queryExecution.optimizedPlan.collectFirst {
       case f: Filter => f
     }
     assert(filters1.isEmpty)
@@ -2192,7 +2251,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
 
     val df2 = sql("SELECT concat_ws('#', DEPT, NAME), MAX(SALARY) + MIN(BONUS)" +
       " FROM h2.test.employee WHERE dept > 0 GROUP BY DEPT, NAME")
-    val filters2 = df2.queryExecution.optimizedPlan.collect {
+    val filters2 = df2.queryExecution.optimizedPlan.collectFirst {
       case f: Filter => f
     }
     assert(filters2.isEmpty)
@@ -2632,7 +2691,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
         val df = sql("SELECT SUM(2147483647 + DEPT) FROM h2.test.employee")
         checkAggregateRemoved(df, ansiMode)
         val expectedPlanFragment = if (ansiMode) {
-          "PushedAggregates: [SUM(2147483647 + DEPT)], " +
+          "PushedAggregates: [SUM(DEPT + 2147483647)], " +
             "PushedFilters: [], " +
             "PushedGroupByExpressions: []"
         } else {
@@ -2887,7 +2946,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
         exception = intercept[AnalysisException] {
           checkAnswer(sql("SELECT h2.test.my_avg2(id) FROM h2.test.people"), Seq.empty)
         },
-        errorClass = "UNRESOLVED_ROUTINE",
+        condition = "UNRESOLVED_ROUTINE",
         parameters = Map(
           "routineName" -> "`h2`.`test`.`my_avg2`",
           "searchPath" -> "[`system`.`builtin`, `system`.`session`, `h2`.`default`]"),
@@ -2899,7 +2958,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
         exception = intercept[AnalysisException] {
           checkAnswer(sql("SELECT h2.my_avg2(id) FROM h2.test.people"), Seq.empty)
         },
-        errorClass = "UNRESOLVED_ROUTINE",
+        condition = "UNRESOLVED_ROUTINE",
         parameters = Map(
           "routineName" -> "`h2`.`my_avg2`",
           "searchPath" -> "[`system`.`builtin`, `system`.`session`, `h2`.`default`]"),
@@ -2982,7 +3041,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       exception = intercept[IndexAlreadyExistsException] {
         sql(s"CREATE INDEX people_index ON TABLE h2.test.people (id)")
       },
-      errorClass = "INDEX_ALREADY_EXISTS",
+      condition = "INDEX_ALREADY_EXISTS",
       parameters = Map(
         "indexName" -> "`people_index`",
         "tableName" -> "`test`.`people`"
@@ -3000,7 +3059,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       exception = intercept[NoSuchIndexException] {
         sql(s"DROP INDEX people_index ON TABLE h2.test.people")
       },
-      errorClass = "INDEX_NOT_FOUND",
+      condition = "INDEX_NOT_FOUND",
       parameters = Map("indexName" -> "`people_index`", "tableName" -> "`test`.`people`")
     )
     assert(jdbcTable.indexExists("people_index") == false)
@@ -3017,9 +3076,9 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
         exception = intercept[AnalysisException] {
           sql("SELECT * FROM h2.test.people where h2.db_name.schema_name.function_name()")
         },
-        errorClass = "IDENTIFIER_TOO_MANY_NAME_PARTS",
+        condition = "IDENTIFIER_TOO_MANY_NAME_PARTS",
         sqlState = "42601",
-        parameters = Map("identifier" -> "`db_name`.`schema_name`.`function_name`")
+        parameters = Map("identifier" -> "`db_name`.`schema_name`.`function_name`", "limit" -> "2")
       )
     } finally {
       JdbcDialects.unregisterDialect(testH2Dialect)
@@ -3031,5 +3090,44 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     val df = sql("SELECT max(id) FROM h2.test.people WHERE id > 1")
     val explained = getNormalizedExplain(df, FormattedMode)
     assert(explained.contains("External engine query:"))
+  }
+
+  test("Test not nullSafeEqual") {
+    val df = sql("SELECT str FROM h2.test.strings_with_nulls WHERE NOT str <=> 'abc'")
+    val rows = df.collect()
+
+    assert(rows.length == 2)
+    assert(rows.contains(Row(null)))
+    assert(rows.contains(Row("a a a")))
+  }
+
+  test("SPARK-50792: Format binary data as a binary literal in JDBC.") {
+    val hexBinary = HexFormat.of().withUpperCase().formatHex(testBytes)
+    val binary = "X'" + hexBinary + "'"
+    val df = sql(s"SELECT * FROM h2.test.binary_tab WHERE b = $binary")
+    checkFiltersRemoved(df)
+    checkPushedInfo(df, s"PushedFilters: [B IS NOT NULL, B = 0x$hexBinary]")
+    checkAnswer(df,
+      Row("jen", Array(99, -122, -121, -56, -51, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)))
+  }
+
+  test("SPARK-52730: Database metadata is available in JDBCRDD") {
+    val df = sql("SELECT * FROM h2.test.people")
+    // Force query execution as metadata is stored during execution
+    df.collect()
+
+    val jdbcRdd = df.queryExecution.executedPlan
+      .collect { case r: RowDataSourceScanExec => r }
+      .head.rdd.asInstanceOf[JDBCRDD]
+
+    // This is the Metadata for the testing H2 database
+    val expectedMetadata = JDBCDatabaseMetadata(
+      databaseMajorVersion = Some(2),
+      databaseMinorVersion = Some(3),
+      databaseDriverMajorVersion = Some(2),
+      databaseDriverMinorVersion = Some(3)
+    )
+
+    assertResult(expectedMetadata) { jdbcRdd.getDatabaseMetadata }
   }
 }

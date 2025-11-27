@@ -19,7 +19,7 @@ package org.apache.spark.deploy.worker
 
 import java.util.concurrent.atomic.AtomicBoolean
 
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.internal.LogKeys.WORKER_URL
 import org.apache.spark.rpc._
 
@@ -35,7 +35,7 @@ private[spark] class WorkerWatcher(
     isChildProcessStopping: AtomicBoolean = new AtomicBoolean(false))
   extends RpcEndpoint with Logging {
 
-  logInfo(s"Connecting to worker $workerUrl")
+  logInfo(log"Connecting to worker ${MDC(WORKER_URL, workerUrl)}")
   if (!isTesting) {
     rpcEnv.asyncSetupEndpointRefByURI(workerUrl)
   }
@@ -64,12 +64,12 @@ private[spark] class WorkerWatcher(
     }
 
   override def receive: PartialFunction[Any, Unit] = {
-    case e => logWarning(s"Received unexpected message: $e")
+    case e => logWarning(log"Received unexpected message: ${MDC(LogKeys.ERROR, e)}")
   }
 
   override def onConnected(remoteAddress: RpcAddress): Unit = {
     if (isWorker(remoteAddress)) {
-      logInfo(s"Successfully connected to $workerUrl")
+      logInfo(log"Successfully connected to ${MDC(WORKER_URL, workerUrl)}")
     }
   }
 

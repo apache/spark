@@ -17,10 +17,10 @@
 
 package org.apache.spark.sql.execution.datasources
 
-import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Alias, Ascending, Attribute, AttributeMap, AttributeSet, BitwiseAnd, Empty2Null, Expression, HiveHash, Literal, NamedExpression, Pmod, SortOrder}
+import org.apache.spark.sql.catalyst.optimizer.{EliminateSorts, FoldablePropagation}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, Sort}
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -65,7 +65,7 @@ trait V1WriteCommand extends DataWritingCommand {
 /**
  * A rule that plans v1 write for [[V1WriteCommand]].
  */
-object V1Writes extends Rule[LogicalPlan] with SQLConfHelper {
+object V1Writes extends Rule[LogicalPlan] {
 
   import V1WritesUtils._
 
@@ -98,13 +98,15 @@ object V1Writes extends Rule[LogicalPlan] with SQLConfHelper {
     assert(empty2NullPlan.output.length == query.output.length)
     val attrMap = AttributeMap(query.output.zip(empty2NullPlan.output))
 
-    // Rewrite the attribute references in the required ordering to use the new output.
-    val requiredOrdering = write.requiredOrdering.map(_.transform {
-      case a: Attribute => attrMap.getOrElse(a, a)
-    }.asInstanceOf[SortOrder])
-    val outputOrdering = empty2NullPlan.outputOrdering
-    val orderingMatched = isOrderingMatched(requiredOrdering.map(_.child), outputOrdering)
-    if (orderingMatched) {
+    // Rewrite the attribute references in the required ordering to use the new output,
+    // then eliminate foldable ordering.
+    val requiredOrdering = {
+      val ordering = write.requiredOrdering.map(_.transform {
+        case a: Attribute => attrMap.getOrElse(a, a)
+      }.asInstanceOf[SortOrder])
+      eliminateFoldableOrdering(ordering, empty2NullPlan).outputOrdering
+    }
+    if (isOrderingMatched(requiredOrdering.map(_.child), empty2NullPlan.outputOrdering)) {
       empty2NullPlan
     } else {
       Sort(requiredOrdering, global = false, empty2NullPlan)
@@ -200,6 +202,15 @@ object V1WritesUtils {
     expressions.exists(_.exists(_.isInstanceOf[Empty2Null]))
   }
 
+  // SPARK-53738: the required ordering inferred from table spec (partition, bucketing, etc.)
+  // may contain foldable sort ordering expressions, which causes the optimized query's output
+  // ordering mismatch, here we calculate the required ordering more accurately, by creating a
+  // fake Sort node with the input query, then remove the foldable sort ordering expressions.
+  def eliminateFoldableOrdering(ordering: Seq[SortOrder], query: LogicalPlan): LogicalPlan =
+    EliminateSorts(FoldablePropagation(Sort(ordering, global = false, query)))
+
+  // The comparison ignores SortDirection and NullOrdering since it doesn't matter
+  // for writing cases.
   def isOrderingMatched(
       requiredOrdering: Seq[Expression],
       outputOrdering: Seq[SortOrder]): Boolean = {

@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.json
 import java.io.{ByteArrayOutputStream, CharConversionException}
 import java.nio.charset.MalformedInputException
 
+import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.util.control.NonFatal
 
@@ -79,6 +80,7 @@ class JacksonParser(
     options.locale,
     legacyFormat = FAST_DATE_FORMAT,
     isParsing = true)
+  private lazy val timeFormatter = TimeFormatter(options.timeFormatInRead, isParsing = true)
 
   // Flags to signal if we need to fall back to the backward compatible behavior of parsing
   // dates and timestamps.
@@ -107,6 +109,9 @@ class JacksonParser(
    */
   private def makeRootConverter(dt: DataType): JsonParser => Iterable[InternalRow] = {
     dt match {
+      case _: VariantType => (parser: JsonParser) => {
+        Some(InternalRow(parseVariant(parser)))
+      }
       case _: StructType if options.singleVariantColumn.isDefined => (parser: JsonParser) => {
         Some(InternalRow(parseVariant(parser)))
       }
@@ -116,6 +121,8 @@ class JacksonParser(
     }
   }
 
+  private val variantAllowDuplicateKeys = SQLConf.get.getConf(SQLConf.VARIANT_ALLOW_DUPLICATE_KEYS)
+
   protected final def parseVariant(parser: JsonParser): VariantVal = {
     // Skips `FIELD_NAME` at the beginning. This check is adapted from `parseJsonToken`, but we
     // cannot directly use the function here because it also handles the `VALUE_NULL` token and
@@ -124,7 +131,7 @@ class JacksonParser(
       parser.nextToken()
     }
     try {
-      val v = VariantBuilder.parseJson(parser)
+      val v = VariantBuilder.parseJson(parser, variantAllowDuplicateKeys)
       new VariantVal(v.getValue, v.getMetadata)
     } catch {
       case _: VariantSizeLimitException =>
@@ -201,7 +208,18 @@ class JacksonParser(
         //
         val st = at.elementType.asInstanceOf[StructType]
         val fieldConverters = st.map(_.dataType).map(makeConverter).toArray
-        Some(InternalRow(new GenericArrayData(convertObject(parser, st, fieldConverters).toArray)))
+
+        val res = try {
+          convertObject(parser, st, fieldConverters)
+        } catch {
+          case err: PartialResultException =>
+            throw PartialArrayDataResultException(
+              new GenericArrayData(Seq(err.partialResult)),
+              err.cause
+            )
+        }
+
+        Some(InternalRow(new GenericArrayData(res.toArray[Any])))
     }
   }
 
@@ -278,13 +296,9 @@ class JacksonParser(
 
     case _: StringType => (parser: JsonParser) => {
       // This must be enabled if we will retrieve the bytes directly from the raw content:
-      val includeSourceInLocation = JsonParser.Feature.INCLUDE_SOURCE_IN_LOCATION
-      val originalMask = if (includeSourceInLocation.enabledIn(parser.getFeatureMask)) {
-        1
-      } else {
-        0
-      }
-      parser.overrideStdFeatures(includeSourceInLocation.getMask, includeSourceInLocation.getMask)
+      val oldFeature = parser.getFeatureMask
+      val featureToAdd = JsonParser.Feature.INCLUDE_SOURCE_IN_LOCATION.getMask
+      parser.overrideStdFeatures(oldFeature | featureToAdd, featureToAdd)
       val result = parseJsonToken[UTF8String](parser, dataType) {
         case VALUE_STRING =>
           UTF8String.fromString(parser.getText)
@@ -329,8 +343,11 @@ class JacksonParser(
               UTF8String.fromBytes(writer.toByteArray)
           }
         }
-      // Reset back to the original configuration:
-      parser.overrideStdFeatures(includeSourceInLocation.getMask, originalMask)
+      // Reset back to the original configuration using `~0` as the mask,
+      // which is a bitmask with all bits set, effectively allowing all features
+      // to be reset. This ensures that every feature is restored to its previous
+      // state as defined by `oldFeature`.
+      parser.overrideStdFeatures(oldFeature, ~0)
       result
     }
 
@@ -419,6 +436,12 @@ class JacksonParser(
           java.lang.Long.valueOf(expr.eval(EmptyRow).asInstanceOf[Long])
       }
 
+    case _: TimeType => (parser: JsonParser) =>
+      parseJsonToken[java.lang.Long](parser, dataType) {
+        case VALUE_STRING if parser.getTextLength >= 1 =>
+          timeFormatter.parse(parser.getText)
+      }
+
     case st: StructType =>
       val fieldConverters = st.map(_.dataType).map(makeConverter).toArray
       (parser: JsonParser) => parseJsonToken[InternalRow](parser, dataType) {
@@ -502,6 +525,21 @@ class JacksonParser(
       throw CannotParseJSONFieldException(parser.currentName, parser.getText, token, dataType)
   }
 
+  private val useUnsafeRow = options.useUnsafeRow
+  private val cachedUnsafeProjection = mutable.HashMap.empty[StructType, UnsafeProjection]
+
+  protected final def convertRow(row: InternalRow, schema: StructType): InternalRow = {
+    if (useUnsafeRow) {
+      val p = cachedUnsafeProjection.getOrElseUpdate(schema, UnsafeProjection.create(schema))
+      // The copy is necessary: each time `UnsafeProjection` produces a row, it updates an
+      // internal `UnsafeRow` object and returns the reference. We need to avoid overwriting
+      // previously returned results.
+      p(row).copy()
+    } else {
+      row
+    }
+  }
+
   /**
    * Parse an object from the token stream into a new Row representing the schema.
    * Fields in the json that are not defined in the requested schema will be dropped.
@@ -545,7 +583,7 @@ class JacksonParser(
       None
     } else if (badRecordException.isEmpty) {
       applyExistenceDefaultValuesToRow(schema, row, bitmask)
-      Some(row)
+      Some(convertRow(row, schema))
     } else {
       throw PartialResultException(row, badRecordException.get)
     }

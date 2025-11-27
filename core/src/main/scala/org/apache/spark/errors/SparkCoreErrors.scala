@@ -267,19 +267,6 @@ private[spark] object SparkCoreErrors {
     new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3026")
   }
 
-  def unrecognizedSchedulerModePropertyError(
-      schedulerModeProperty: String,
-      schedulingModeConf: String): Throwable = {
-    new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_3027",
-      messageParameters = Map(
-        "schedulerModeProperty" -> schedulerModeProperty,
-        "schedulingModeConf" -> schedulingModeConf
-      ),
-      cause = null
-    )
-  }
-
   def sparkError(errorMsg: String): Throwable = {
     new SparkException(
       errorClass = "_LEGACY_ERROR_TEMP_3028",
@@ -499,6 +486,15 @@ private[spark] object SparkCoreErrors {
         "codecName" -> codecName,
         "configKey" -> toConf(IO_COMPRESSION_CODEC.key),
         "configVal" -> toConfVal(FALLBACK_COMPRESSION_CODEC)))
+  }
+
+  def tooManyArrayElementsError(numElements: Long, maxRoundedArrayLength: Int): Throwable = {
+    new SparkIllegalArgumentException(
+      errorClass = "COLLECTION_SIZE_LIMIT_EXCEEDED.INITIALIZE",
+      messageParameters = Map(
+        "numberOfElements" -> numElements.toString,
+        "maxRoundedArrayLength" -> maxRoundedArrayLength.toString)
+    )
   }
 
   private def quoteByDefault(elem: String): String = {

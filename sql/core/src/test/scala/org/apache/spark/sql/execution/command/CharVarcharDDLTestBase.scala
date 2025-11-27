@@ -53,7 +53,7 @@ trait CharVarcharDDLTestBase extends QueryTest with SQLTestUtils {
           exception = intercept[AnalysisException] {
             sql(alterSQL)
           },
-          errorClass = "NOT_SUPPORTED_CHANGE_COLUMN",
+          condition = "NOT_SUPPORTED_CHANGE_COLUMN",
           parameters = Map(
             "originType" -> "\"CHAR(4)\"",
             "newType" -> "\"CHAR(5)\"",
@@ -74,7 +74,7 @@ trait CharVarcharDDLTestBase extends QueryTest with SQLTestUtils {
           exception = intercept[AnalysisException] {
             sql(sql1)
           },
-          errorClass = "NOT_SUPPORTED_CHANGE_COLUMN",
+          condition = "NOT_SUPPORTED_CHANGE_COLUMN",
           parameters = Map(
             "originType" -> "\"STRING\"",
             "newType" -> "\"CHAR(5)\"",
@@ -95,7 +95,7 @@ trait CharVarcharDDLTestBase extends QueryTest with SQLTestUtils {
           exception = intercept[AnalysisException] {
             sql(sql1)
           },
-          errorClass = "NOT_SUPPORTED_CHANGE_COLUMN",
+          condition = "NOT_SUPPORTED_CHANGE_COLUMN",
           parameters = Map(
             "originType" -> "\"INT\"",
             "newType" -> "\"CHAR(5)\"",
@@ -124,7 +124,7 @@ trait CharVarcharDDLTestBase extends QueryTest with SQLTestUtils {
           exception = intercept[AnalysisException] {
             sql(sql1)
           },
-          errorClass = "NOT_SUPPORTED_CHANGE_COLUMN",
+          condition = "NOT_SUPPORTED_CHANGE_COLUMN",
           parameters = Map(
             "originType" -> "\"VARCHAR(4)\"",
             "newType" -> "\"VARCHAR(3)\"",
@@ -301,7 +301,7 @@ class DSV2CharVarcharDDLTestSuite extends CharVarcharDDLTestBase
         exception = intercept[AnalysisException] {
           sql(sql1)
         },
-        errorClass = "NOT_SUPPORTED_CHANGE_COLUMN",
+        condition = "NOT_SUPPORTED_CHANGE_COLUMN",
         parameters = Map(
           "originType" -> "\"CHAR(4)\"",
           "newType" -> "\"VARCHAR(3)\"",

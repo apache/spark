@@ -34,51 +34,67 @@ class SparkConnectServiceStub(object):
             "/spark.connect.SparkConnectService/ExecutePlan",
             request_serializer=spark_dot_connect_dot_base__pb2.ExecutePlanRequest.SerializeToString,
             response_deserializer=spark_dot_connect_dot_base__pb2.ExecutePlanResponse.FromString,
+            _registered_method=True,
         )
         self.AnalyzePlan = channel.unary_unary(
             "/spark.connect.SparkConnectService/AnalyzePlan",
             request_serializer=spark_dot_connect_dot_base__pb2.AnalyzePlanRequest.SerializeToString,
             response_deserializer=spark_dot_connect_dot_base__pb2.AnalyzePlanResponse.FromString,
+            _registered_method=True,
         )
         self.Config = channel.unary_unary(
             "/spark.connect.SparkConnectService/Config",
             request_serializer=spark_dot_connect_dot_base__pb2.ConfigRequest.SerializeToString,
             response_deserializer=spark_dot_connect_dot_base__pb2.ConfigResponse.FromString,
+            _registered_method=True,
         )
         self.AddArtifacts = channel.stream_unary(
             "/spark.connect.SparkConnectService/AddArtifacts",
             request_serializer=spark_dot_connect_dot_base__pb2.AddArtifactsRequest.SerializeToString,
             response_deserializer=spark_dot_connect_dot_base__pb2.AddArtifactsResponse.FromString,
+            _registered_method=True,
         )
         self.ArtifactStatus = channel.unary_unary(
             "/spark.connect.SparkConnectService/ArtifactStatus",
             request_serializer=spark_dot_connect_dot_base__pb2.ArtifactStatusesRequest.SerializeToString,
             response_deserializer=spark_dot_connect_dot_base__pb2.ArtifactStatusesResponse.FromString,
+            _registered_method=True,
         )
         self.Interrupt = channel.unary_unary(
             "/spark.connect.SparkConnectService/Interrupt",
             request_serializer=spark_dot_connect_dot_base__pb2.InterruptRequest.SerializeToString,
             response_deserializer=spark_dot_connect_dot_base__pb2.InterruptResponse.FromString,
+            _registered_method=True,
         )
         self.ReattachExecute = channel.unary_stream(
             "/spark.connect.SparkConnectService/ReattachExecute",
             request_serializer=spark_dot_connect_dot_base__pb2.ReattachExecuteRequest.SerializeToString,
             response_deserializer=spark_dot_connect_dot_base__pb2.ExecutePlanResponse.FromString,
+            _registered_method=True,
         )
         self.ReleaseExecute = channel.unary_unary(
             "/spark.connect.SparkConnectService/ReleaseExecute",
             request_serializer=spark_dot_connect_dot_base__pb2.ReleaseExecuteRequest.SerializeToString,
             response_deserializer=spark_dot_connect_dot_base__pb2.ReleaseExecuteResponse.FromString,
+            _registered_method=True,
         )
         self.ReleaseSession = channel.unary_unary(
             "/spark.connect.SparkConnectService/ReleaseSession",
             request_serializer=spark_dot_connect_dot_base__pb2.ReleaseSessionRequest.SerializeToString,
             response_deserializer=spark_dot_connect_dot_base__pb2.ReleaseSessionResponse.FromString,
+            _registered_method=True,
         )
         self.FetchErrorDetails = channel.unary_unary(
             "/spark.connect.SparkConnectService/FetchErrorDetails",
             request_serializer=spark_dot_connect_dot_base__pb2.FetchErrorDetailsRequest.SerializeToString,
             response_deserializer=spark_dot_connect_dot_base__pb2.FetchErrorDetailsResponse.FromString,
+            _registered_method=True,
+        )
+        self.CloneSession = channel.unary_unary(
+            "/spark.connect.SparkConnectService/CloneSession",
+            request_serializer=spark_dot_connect_dot_base__pb2.CloneSessionRequest.SerializeToString,
+            response_deserializer=spark_dot_connect_dot_base__pb2.CloneSessionResponse.FromString,
+            _registered_method=True,
         )
 
 
@@ -162,6 +178,20 @@ class SparkConnectServiceServicer(object):
         context.set_details("Method not implemented!")
         raise NotImplementedError("Method not implemented!")
 
+    def CloneSession(self, request, context):
+        """Create a clone of a Spark Connect session on the server side. The server-side session
+        is cloned with all its current state (SQL configurations, temporary views, registered
+        functions, catalog state) copied over to a new independent session. The cloned session
+        is isolated from the source session - any subsequent changes to either session's
+        server-side state will not be reflected in the other.
+
+        The request can optionally specify a custom session ID for the cloned session (must be
+        a valid UUID). If not provided, a new UUID will be generated automatically.
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details("Method not implemented!")
+        raise NotImplementedError("Method not implemented!")
+
 
 def add_SparkConnectServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -215,11 +245,17 @@ def add_SparkConnectServiceServicer_to_server(servicer, server):
             request_deserializer=spark_dot_connect_dot_base__pb2.FetchErrorDetailsRequest.FromString,
             response_serializer=spark_dot_connect_dot_base__pb2.FetchErrorDetailsResponse.SerializeToString,
         ),
+        "CloneSession": grpc.unary_unary_rpc_method_handler(
+            servicer.CloneSession,
+            request_deserializer=spark_dot_connect_dot_base__pb2.CloneSessionRequest.FromString,
+            response_serializer=spark_dot_connect_dot_base__pb2.CloneSessionResponse.SerializeToString,
+        ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
         "spark.connect.SparkConnectService", rpc_method_handlers
     )
     server.add_generic_rpc_handlers((generic_handler,))
+    server.add_registered_method_handlers("spark.connect.SparkConnectService", rpc_method_handlers)
 
 
 # This class is part of an EXPERIMENTAL API.
@@ -253,6 +289,7 @@ class SparkConnectService(object):
             wait_for_ready,
             timeout,
             metadata,
+            _registered_method=True,
         )
 
     @staticmethod
@@ -282,6 +319,7 @@ class SparkConnectService(object):
             wait_for_ready,
             timeout,
             metadata,
+            _registered_method=True,
         )
 
     @staticmethod
@@ -311,6 +349,7 @@ class SparkConnectService(object):
             wait_for_ready,
             timeout,
             metadata,
+            _registered_method=True,
         )
 
     @staticmethod
@@ -340,6 +379,7 @@ class SparkConnectService(object):
             wait_for_ready,
             timeout,
             metadata,
+            _registered_method=True,
         )
 
     @staticmethod
@@ -369,6 +409,7 @@ class SparkConnectService(object):
             wait_for_ready,
             timeout,
             metadata,
+            _registered_method=True,
         )
 
     @staticmethod
@@ -398,6 +439,7 @@ class SparkConnectService(object):
             wait_for_ready,
             timeout,
             metadata,
+            _registered_method=True,
         )
 
     @staticmethod
@@ -427,6 +469,7 @@ class SparkConnectService(object):
             wait_for_ready,
             timeout,
             metadata,
+            _registered_method=True,
         )
 
     @staticmethod
@@ -456,6 +499,7 @@ class SparkConnectService(object):
             wait_for_ready,
             timeout,
             metadata,
+            _registered_method=True,
         )
 
     @staticmethod
@@ -485,6 +529,7 @@ class SparkConnectService(object):
             wait_for_ready,
             timeout,
             metadata,
+            _registered_method=True,
         )
 
     @staticmethod
@@ -514,4 +559,35 @@ class SparkConnectService(object):
             wait_for_ready,
             timeout,
             metadata,
+            _registered_method=True,
+        )
+
+    @staticmethod
+    def CloneSession(
+        request,
+        target,
+        options=(),
+        channel_credentials=None,
+        call_credentials=None,
+        insecure=False,
+        compression=None,
+        wait_for_ready=None,
+        timeout=None,
+        metadata=None,
+    ):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            "/spark.connect.SparkConnectService/CloneSession",
+            spark_dot_connect_dot_base__pb2.CloneSessionRequest.SerializeToString,
+            spark_dot_connect_dot_base__pb2.CloneSessionResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True,
         )

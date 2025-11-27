@@ -39,8 +39,8 @@ class ShowTablesSuite extends v1.ShowTablesSuiteBase with CommandSuiteBase {
       catalog: String,
       namespace: String,
       table: String): (String, Map[String, String]) = {
-    ("_LEGACY_ERROR_TEMP_1231",
-      Map("key" -> "id", "tblName" -> s"`$catalog`.`$namespace`.`$table`"))
+    ("PARTITIONS_NOT_FOUND",
+      Map("partitionList" -> "`id`", "tableName" -> s"`$catalog`.`$namespace`.`$table`"))
   }
 
   protected override def extendedPartExpectedResult: String =
@@ -97,8 +97,9 @@ class ShowTablesSuite extends v1.ShowTablesSuiteBase with CommandSuiteBase {
              |Type: VIEW
              |View Text: SELECT id FROM $catalog.$namespace.$table
              |View Original Text: SELECT id FROM $catalog.$namespace.$table
+             |View Schema Mode: COMPENSATION
              |View Catalog and Namespace: $catalog.$namespace
-             |View Query Output Columns: [id]
+             |View Query Output Columns: [`id`]
              |Table Properties: <table properties>
              |Serde Library: org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
              |InputFormat: org.apache.hadoop.mapred.SequenceFileInputFormat

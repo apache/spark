@@ -18,7 +18,7 @@
 package org.apache.spark.sql.avro
 
 import java.util
-import java.util.Collections
+import java.util.Set
 
 import org.apache.avro.Schema
 import org.apache.avro.generic.{GenericData, GenericRecordBuilder}
@@ -291,7 +291,8 @@ class AvroCatalystDataConversionSuite extends SparkFunSuite
       RebaseSpec(LegacyBehaviorPolicy.CORRECTED),
       filters,
       false,
-      "")
+      "",
+      -1)
     val deserialized = deserializer.deserialize(data)
     expected match {
       case None => assert(deserialized == None)
@@ -328,7 +329,7 @@ class AvroCatalystDataConversionSuite extends SparkFunSuite
       checkDeserialization(avroSchema, reEncoded, Some(expected))
     }
 
-    validateDeserialization(Collections.emptySet())
+    validateDeserialization(Set.of())
     validateDeserialization(util.Arrays.asList(1, null, 3))
   }
 

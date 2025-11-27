@@ -173,9 +173,9 @@ class ExecutorResourceRequests:
             jvm = _jvm or SparkContext._jvm
 
         if jvm is not None:
-            self._java_executor_resource_requests = (
-                jvm.org.apache.spark.resource.ExecutorResourceRequests()
-            )
+            self._java_executor_resource_requests = getattr(
+                jvm, "org.apache.spark.resource.ExecutorResourceRequests"
+            )()
             if _requests is not None:
                 for k, v in _requests.items():
                     if k == self._MEMORY:
@@ -474,9 +474,9 @@ class TaskResourceRequests:
             jvm = _jvm or SparkContext._jvm
 
         if jvm is not None:
-            self._java_task_resource_requests: Optional[
-                "JavaObject"
-            ] = jvm.org.apache.spark.resource.TaskResourceRequests()
+            self._java_task_resource_requests: Optional["JavaObject"] = getattr(
+                jvm, "org.apache.spark.resource.TaskResourceRequests"
+            )()
             if _requests is not None:
                 for k, v in _requests.items():
                     if k == self._CPUS:

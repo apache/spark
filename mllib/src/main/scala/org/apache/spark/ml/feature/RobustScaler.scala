@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml.feature
 
+import java.io.{DataInputStream, DataOutputStream}
+
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.annotation.Since
@@ -25,7 +27,6 @@ import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol, HasRelativeError}
 import org.apache.spark.ml.util._
-import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.util.QuantileSummaries
@@ -230,6 +231,9 @@ class RobustScalerModel private[ml] (
 
   import RobustScalerModel._
 
+  // For ml connect only
+  private[ml] def this() = this("", Vectors.empty, Vectors.empty)
+
   /** @group setParam */
   def setInputCol(value: String): this.type = set(inputCol, value)
 
@@ -277,17 +281,29 @@ class RobustScalerModel private[ml] (
 
 @Since("3.0.0")
 object RobustScalerModel extends MLReadable[RobustScalerModel] {
+  private[ml] case class Data(range: Vector, median: Vector)
+
+  private[ml] def serializeData(data: Data, dos: DataOutputStream): Unit = {
+    import ReadWriteUtils._
+    serializeVector(data.range, dos)
+    serializeVector(data.median, dos)
+  }
+
+  private[ml] def deserializeData(dis: DataInputStream): Data = {
+    import ReadWriteUtils._
+    val range = deserializeVector(dis)
+    val median = deserializeVector(dis)
+    Data(range, median)
+  }
 
   private[RobustScalerModel]
   class RobustScalerModelWriter(instance: RobustScalerModel) extends MLWriter {
 
-    private case class Data(range: Vector, median: Vector)
-
     override protected def saveImpl(path: String): Unit = {
-      DefaultParamsWriter.saveMetadata(instance, path, sc)
+      DefaultParamsWriter.saveMetadata(instance, path, sparkSession)
       val data = Data(instance.range, instance.median)
       val dataPath = new Path(path, "data").toString
-      sparkSession.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
+      ReadWriteUtils.saveObject[Data](dataPath, data, sparkSession, serializeData)
     }
   }
 
@@ -296,14 +312,10 @@ object RobustScalerModel extends MLReadable[RobustScalerModel] {
     private val className = classOf[RobustScalerModel].getName
 
     override def load(path: String): RobustScalerModel = {
-      val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
+      val metadata = DefaultParamsReader.loadMetadata(path, sparkSession, className)
       val dataPath = new Path(path, "data").toString
-      val data = sparkSession.read.parquet(dataPath)
-      val Row(range: Vector, median: Vector) = MLUtils
-        .convertVectorColumnsToML(data, "range", "median")
-        .select("range", "median")
-        .head()
-      val model = new RobustScalerModel(metadata.uid, range, median)
+      val data = ReadWriteUtils.loadObject[Data](dataPath, sparkSession, deserializeData)
+      val model = new RobustScalerModel(metadata.uid, data.range, data.median)
       metadata.getAndSetParams(model)
       model
     }

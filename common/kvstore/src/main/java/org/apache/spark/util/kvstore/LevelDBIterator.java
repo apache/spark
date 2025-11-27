@@ -26,11 +26,11 @@ import java.util.NoSuchElementException;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.Preconditions;
-import com.google.common.base.Throwables;
 import org.iq80.leveldb.DBIterator;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+
+import org.apache.spark.internal.SparkLogger;
+import org.apache.spark.internal.SparkLoggerFactory;
+import org.apache.spark.network.util.JavaUtils;
 
 class LevelDBIterator<T> implements KVStoreIterator<T> {
 
@@ -65,7 +65,7 @@ class LevelDBIterator<T> implements KVStoreIterator<T> {
     this.resourceCleaner = new ResourceCleaner(it, db);
     this.cleanable = CLEANER.register(this, this.resourceCleaner);
 
-    Preconditions.checkArgument(!index.isChild() || params.parent != null,
+    JavaUtils.checkArgument(!index.isChild() || params.parent != null,
       "Cannot iterate over child index %s without parent value.", params.index);
     byte[] parent = index.isChild() ? index.parent().childPrefix(params.parent) : null;
 
@@ -126,7 +126,7 @@ class LevelDBIterator<T> implements KVStoreIterator<T> {
       try {
         close();
       } catch (IOException ioe) {
-        throw Throwables.propagate(ioe);
+        throw new RuntimeException(ioe);
       }
     }
     return next != null;
@@ -150,7 +150,8 @@ class LevelDBIterator<T> implements KVStoreIterator<T> {
       next = null;
       return ret;
     } catch (Exception e) {
-      throw Throwables.propagate(e);
+      if (e instanceof RuntimeException re) throw re;
+      throw new RuntimeException(e);
     }
   }
 
@@ -302,7 +303,7 @@ class LevelDBIterator<T> implements KVStoreIterator<T> {
   }
 
   static class ResourceCleaner implements Runnable {
-    private static final Logger LOG = LoggerFactory.getLogger(ResourceCleaner.class);
+    private static final SparkLogger LOG = SparkLoggerFactory.getLogger(ResourceCleaner.class);
 
     private final DBIterator dbIterator;
 

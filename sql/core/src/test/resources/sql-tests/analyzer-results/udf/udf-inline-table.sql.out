@@ -101,7 +101,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 select udf(a), udf(b) from values ("one", 2.0), ("two") as data(a, b)
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.parser.ParseException
 {
   "errorClass" : "INVALID_INLINE_TABLE.NUM_COLUMNS_MISMATCH",
   "sqlState" : "42000",
@@ -143,7 +143,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 select udf(a), udf(b) from values ("one"), ("two") as data(a, b)
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.parser.ParseException
 {
   "errorClass" : "INVALID_INLINE_TABLE.NUM_COLUMNS_MISMATCH",
   "sqlState" : "42000",

@@ -17,9 +17,10 @@
 
 package org.apache.spark.ml.recommendation
 
+import org.apache.spark.ml.recommendation.ALSModel.collect_top_k
 import org.apache.spark.ml.util.MLTest
 import org.apache.spark.sql.DataFrame
-import org.apache.spark.sql.functions.{col, collect_top_k, struct}
+import org.apache.spark.sql.functions.{col, struct}
 
 class CollectTopKSuite extends MLTest {
 
@@ -29,8 +30,8 @@ class CollectTopKSuite extends MLTest {
 
   override def beforeAll(): Unit = {
     super.beforeAll()
-    val sqlContext = spark.sqlContext
-    import sqlContext.implicits._
+    val session = spark
+    import session.implicits._
     dataFrame = Seq(
       (0, 3, 54f),
       (0, 4, 44f),

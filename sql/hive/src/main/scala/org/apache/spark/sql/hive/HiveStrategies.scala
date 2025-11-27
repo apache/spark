@@ -23,19 +23,21 @@ import java.util.Locale
 import org.apache.hadoop.fs.{FileSystem, Path}
 
 import org.apache.spark.sql._
+import org.apache.spark.sql.catalyst.analysis.AnalysisContext
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning._
 import org.apache.spark.sql.catalyst.plans.logical.{DeleteFromTable, InsertIntoDir, InsertIntoStatement, LogicalPlan, ScriptTransformation, Statistics, SubqueryAlias}
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.classic.Strategy
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.command.{CreateTableCommand, DDLUtils, InsertIntoDataSourceDirCommand}
-import org.apache.spark.sql.execution.datasources.{CreateTable, DataSourceStrategy, HadoopFsRelation, InsertIntoHadoopFsRelationCommand, LogicalRelation}
+import org.apache.spark.sql.execution.datasources.{CreateTable, DataSourceStrategy, HadoopFsRelation, InsertIntoHadoopFsRelationCommand, LogicalRelation, LogicalRelationWithTable}
 import org.apache.spark.sql.hive.execution._
 import org.apache.spark.sql.hive.execution.HiveScriptTransformationExec
 import org.apache.spark.sql.hive.execution.InsertIntoHiveTable.BY_CTAS
-import org.apache.spark.sql.internal.HiveSerDe
+import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
 
 
 /**
@@ -117,6 +119,9 @@ class ResolveHiveSerdeTable(session: SparkSession) extends Rule[LogicalPlan] {
 }
 
 class DetermineTableStats(session: SparkSession) extends Rule[LogicalPlan] {
+
+  override def conf: SQLConf = session.sessionState.conf
+
   private def hiveTableWithStats(relation: HiveTableRelation): HiveTableRelation = {
     val table = relation.tableMeta
     val partitionCols = relation.partitionCols
@@ -240,9 +245,15 @@ case class RelationConversions(
           query, overwrite, ifPartitionNotExists, byName)
 
       // Read path
-      case relation: HiveTableRelation
-          if DDLUtils.isHiveTable(relation.tableMeta) && isConvertible(relation) =>
-        metastoreCatalog.convert(relation, isWrite = false)
+      case relation: HiveTableRelation if doConvertHiveTableRelationForRead(relation) =>
+        val logicalRelation = convertHiveTableRelationForRead(relation)
+        // We put the resolved relation into the [[AnalyzerBridgeState]] for
+        // it to be later reused by the single-pass [[Resolver]] to avoid resolving the
+        // relation metadata twice.
+        AnalysisContext.get.getSinglePassResolverBridgeState.foreach { bridgeState =>
+          bridgeState.addLogicalRelationForHiveRelation(relation, logicalRelation)
+        }
+        logicalRelation
 
       // CTAS path
       // This `InsertIntoHiveTable` is derived from `CreateHiveTableAsSelectCommand`,
@@ -258,7 +269,7 @@ case class RelationConversions(
         DDLUtils.checkTableColumns(tableDesc.copy(schema = query.schema))
         val hiveTable = DDLUtils.readHiveTable(tableDesc)
         val hadoopRelation = metastoreCatalog.convert(hiveTable, isWrite = true) match {
-          case LogicalRelation(t: HadoopFsRelation, _, _, _) => t
+          case LogicalRelationWithTable(t: HadoopFsRelation, _) => t
           case _ => throw QueryCompilationErrors.tableIdentifierNotConvertedToHadoopFsRelationError(
             tableDesc.identifier)
         }
@@ -286,6 +297,15 @@ case class RelationConversions(
         InsertIntoDataSourceDirCommand(metastoreCatalog.convertStorageFormat(storage),
           convertProvider(storage), query, overwrite)
     }
+  }
+
+  private[hive] def doConvertHiveTableRelationForRead(relation: HiveTableRelation): Boolean = {
+    DDLUtils.isHiveTable(relation.tableMeta) && isConvertible(relation)
+  }
+
+  private[hive] def convertHiveTableRelationForRead(
+      relation: HiveTableRelation): LogicalRelation = {
+    metastoreCatalog.convert(relation, isWrite = false)
   }
 }
 

@@ -51,7 +51,7 @@ org.apache.spark.sql.AnalysisException
   "messageParameters" : {
     "actualNum" : "7",
     "docroot" : "https://spark.apache.org/docs/latest",
-    "expectedNum" : "6",
+    "expectedNum" : "[2, 6]",
     "functionName" : "`make_timestamp_ntz`"
   },
   "queryContext" : [ {
@@ -67,9 +67,168 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT make_timestamp_ntz(2021, 07, 11, 6, 30, 60.007)
 -- !query schema
-struct<make_timestamp_ntz(2021, 7, 11, 6, 30, 60.007):timestamp_ntz>
+struct<>
+-- !query output
+org.apache.spark.SparkDateTimeException
+{
+  "errorClass" : "INVALID_FRACTION_OF_SECOND",
+  "sqlState" : "22023",
+  "messageParameters" : {
+    "secAndMicros" : "60.007"
+  }
+}
+
+
+-- !query
+SELECT make_timestamp_ntz(make_date(2021, 07, 11), make_time(6, 30, 45.678))
+-- !query schema
+struct<make_timestamp_ntz(make_date(2021, 7, 11), make_time(6, 30, 45.678)):timestamp_ntz>
+-- !query output
+2021-07-11 06:30:45.678
+
+
+-- !query
+SELECT make_timestamp_ntz(NULL, TIME'00:00:00')
+-- !query schema
+struct<make_timestamp_ntz(NULL, TIME '00:00:00'):timestamp_ntz>
 -- !query output
 NULL
+
+
+-- !query
+SELECT make_timestamp_ntz(DATE'1970-01-01', NULL)
+-- !query schema
+struct<make_timestamp_ntz(DATE '1970-01-01', NULL):timestamp_ntz>
+-- !query output
+NULL
+
+
+-- !query
+SELECT make_timestamp_ntz(timestamp_ntz'2018-11-17 13:33:33', TIME'0:0:0')
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"TIMESTAMP_NTZ '2018-11-17 13:33:33'\"",
+    "inputType" : "\"TIMESTAMP_NTZ\"",
+    "paramIndex" : "first",
+    "requiredType" : "\"DATE\"",
+    "sqlExpr" : "\"make_timestamp_ntz(TIMESTAMP_NTZ '2018-11-17 13:33:33', TIME '00:00:00')\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 74,
+    "fragment" : "make_timestamp_ntz(timestamp_ntz'2018-11-17 13:33:33', TIME'0:0:0')"
+  } ]
+}
+
+
+-- !query
+SELECT make_timestamp_ntz(DATE'2025-06-20', '0:0:0')
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"0:0:0\"",
+    "inputType" : "\"STRING\"",
+    "paramIndex" : "second",
+    "requiredType" : "\"TIME\"",
+    "sqlExpr" : "\"make_timestamp_ntz(DATE '2025-06-20', 0:0:0)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 52,
+    "fragment" : "make_timestamp_ntz(DATE'2025-06-20', '0:0:0')"
+  } ]
+}
+
+
+-- !query
+SELECT try_make_timestamp_ntz(make_date(2025, 6, 27), make_time(16, 08, 45.123456))
+-- !query schema
+struct<try_make_timestamp_ntz(make_timestamp_ntz(make_date(2025, 6, 27), make_time(16, 8, 45.123456))):timestamp_ntz>
+-- !query output
+2025-06-27 16:08:45.123456
+
+
+-- !query
+SELECT try_make_timestamp_ntz(NULL, TIME'23:59:59.00001')
+-- !query schema
+struct<try_make_timestamp_ntz(make_timestamp_ntz(NULL, TIME '23:59:59.00001')):timestamp_ntz>
+-- !query output
+NULL
+
+
+-- !query
+SELECT try_make_timestamp_ntz(DATE'0001-01-01', NULL)
+-- !query schema
+struct<try_make_timestamp_ntz(make_timestamp_ntz(DATE '0001-01-01', NULL)):timestamp_ntz>
+-- !query output
+NULL
+
+
+-- !query
+SELECT try_make_timestamp_ntz('2018-11-17 13:33:33', TIME'0:0:0')
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"2018-11-17 13:33:33\"",
+    "inputType" : "\"STRING\"",
+    "paramIndex" : "first",
+    "requiredType" : "\"DATE\"",
+    "sqlExpr" : "\"make_timestamp_ntz(2018-11-17 13:33:33, TIME '00:00:00')\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 65,
+    "fragment" : "try_make_timestamp_ntz('2018-11-17 13:33:33', TIME'0:0:0')"
+  } ]
+}
+
+
+-- !query
+SELECT try_make_timestamp_ntz(DATE'2025-06-20', 10D)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"10.0\"",
+    "inputType" : "\"DOUBLE\"",
+    "paramIndex" : "second",
+    "requiredType" : "\"TIME\"",
+    "sqlExpr" : "\"make_timestamp_ntz(DATE '2025-06-20', 10.0)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 52,
+    "fragment" : "try_make_timestamp_ntz(DATE'2025-06-20', 10D)"
+  } ]
+}
 
 
 -- !query
@@ -166,3 +325,59 @@ select timestamp_ntz'2022-01-01 00:00:00' < timestamp_ltz'2022-01-01 00:00:00'
 struct<(TIMESTAMP_NTZ '2022-01-01 00:00:00' < TIMESTAMP '2022-01-01 00:00:00'):boolean>
 -- !query output
 false
+
+
+-- !query
+CREATE TABLE a (a timestamp_ntz, b int) using parquet PARTITIONED BY(a)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+INSERT INTO a PARTITION(a=timestamp_ntz'2018-11-17 13:33:33') VALUES (1)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DESC FORMATTED a
+-- !query schema
+struct<col_name:string,data_type:string,comment:string>
+-- !query output
+b                   	int                 	                    
+a                   	timestamp_ntz       	                    
+# Partition Information	                    	                    
+# col_name          	data_type           	comment             
+a                   	timestamp_ntz       	                    
+                    	                    	                    
+# Detailed Table Information	                    	                    
+Catalog             	spark_catalog       	                    
+Database            	default             	                    
+Table               	a                   	                    
+Created Time [not included in comparison]
+Last Access [not included in comparison]
+Created By [not included in comparison]
+Type                	MANAGED             	                    
+Provider            	parquet             	                    
+Location [not included in comparison]/{warehouse_dir}/a	                    
+Partition Provider  	Catalog
+
+
+-- !query
+SELECT * FROM a
+-- !query schema
+struct<b:int,a:timestamp_ntz>
+-- !query output
+1	2018-11-17 13:33:33
+
+
+-- !query
+DROP TABLE a
+-- !query schema
+struct<>
+-- !query output
+

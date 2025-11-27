@@ -16,13 +16,19 @@
 #
 
 import unittest
+import os
 
 from pyspark.sql.tests.streaming.test_streaming_foreach_batch import StreamingTestsForeachBatchMixin
-from pyspark.testing.connectutils import ReusedConnectTestCase
+from pyspark.testing.connectutils import ReusedConnectTestCase, should_test_connect
 from pyspark.errors import PySparkPicklingError
-from pyspark.errors.exceptions.connect import SparkConnectGrpcException
+
+if should_test_connect:
+    from pyspark.errors.exceptions.connect import StreamingPythonRunnerInitializationException
 
 
+@unittest.skipIf(
+    os.environ.get("SPARK_SKIP_CONNECT_COMPAT_TESTS") == "1", "SPARK-54480: To be reenabled"
+)
 class StreamingForeachBatchParityTests(StreamingTestsForeachBatchMixin, ReusedConnectTestCase):
     def test_streaming_foreach_batch_propagates_python_errors(self):
         super().test_streaming_foreach_batch_propagates_python_errors()
@@ -93,7 +99,7 @@ class StreamingForeachBatchParityTests(StreamingTestsForeachBatchMixin, ReusedCo
             print(obj)
 
         # Assert that an exception occurs during the initialization
-        with self.assertRaises(SparkConnectGrpcException) as error:
+        with self.assertRaises(StreamingPythonRunnerInitializationException) as error:
             df.select("value").writeStream.foreachBatch(fcn).start()
 
         # Assert that the error message contains the expected string

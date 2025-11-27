@@ -22,7 +22,6 @@ import java.util
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.internal.LogKeys.{INDEX_NAME, TABLE_NAME}
-import org.apache.spark.internal.MDC
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.IndexAlreadyExistsException
 import org.apache.spark.sql.catalyst.expressions.Attribute

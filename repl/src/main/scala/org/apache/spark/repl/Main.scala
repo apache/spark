@@ -25,6 +25,8 @@ import scala.tools.nsc.GenericRunnerSettings
 import org.apache.spark._
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.classic.SparkSession.hiveClassesArePresent
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
 import org.apache.spark.util.Utils
 
@@ -55,7 +57,9 @@ object Main extends Logging {
 
   def main(args: Array[String]): Unit = {
     isShellSession = true
-    doMain(args, new SparkILoop)
+    val settings = new GenericRunnerSettings(scalaOptionError)
+    settings.processArguments(args.toList, true)
+    doMain(args, new SparkILoop(settings))
   }
 
   // Visible for testing
@@ -95,6 +99,9 @@ object Main extends Logging {
       // initialization in certain cases, there's an initialization order issue that prevents
       // this from being set after SparkContext is instantiated.
       conf.set("spark.repl.class.outputDir", outputDir.getAbsolutePath())
+      // Disable isolation for REPL, to avoid having in-line classes stored in a isolated directory,
+      // prevent the REPL classloader from finding it.
+      conf.set(SQLConf.ARTIFACTS_SESSION_ISOLATION_ENABLED, false)
       if (execUri != null) {
         conf.set("spark.executor.uri", execUri)
       }
@@ -104,7 +111,7 @@ object Main extends Logging {
 
       val builder = SparkSession.builder().config(conf)
       if (conf.get(CATALOG_IMPLEMENTATION.key, "hive") == "hive") {
-        if (SparkSession.hiveClassesArePresent) {
+        if (hiveClassesArePresent) {
           // In the case that the property is not set at all, builder's config
           // does not have this value set to 'hive' yet. The original default
           // behavior is that when there are hive classes, we use hive catalog.
@@ -126,11 +133,6 @@ object Main extends Logging {
       sparkContext = sparkSession.sparkContext
       sparkSession
     } catch {
-      case e: ClassNotFoundException if isShellSession && e.getMessage.contains(
-        "org.apache.spark.sql.connect.SparkConnectPlugin") =>
-        logError("Failed to load spark connect plugin.")
-        logError("You need to build Spark with -Pconnect.")
-        sys.exit(1)
       case e: Exception if isShellSession =>
         logError("Failed to initialize Spark session.", e)
         sys.exit(1)

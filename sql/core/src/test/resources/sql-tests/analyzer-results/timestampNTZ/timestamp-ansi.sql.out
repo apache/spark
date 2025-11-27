@@ -159,6 +159,322 @@ Project [make_timestamp(1, 1, 1, 1, 1, cast(999.999999 as decimal(16,6)), None, 
 
 
 -- !query
+SELECT make_timestamp(make_date(2021, 07, 11))
+-- !query analysis
+Project [make_timestamp(make_date(2021, 7, 11, true), None, None, Some(America/Los_Angeles)) AS make_timestamp(make_date(2021, 7, 11))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT make_timestamp(DATE'1970-01-01')
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT make_timestamp(NULL)
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT make_timestamp(make_date(2021, 07, 11), make_time(6, 30, 45.678))
+-- !query analysis
+Project [make_timestamp(make_date(2021, 7, 11, true), Some(make_time(6, 30, cast(45.678 as decimal(16,6)))), None, Some(America/Los_Angeles)) AS make_timestamp(make_date(2021, 7, 11), make_time(6, 30, 45.678))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT make_timestamp(DATE'1970-01-01', TIME'00:00:00')
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT make_timestamp(NULL, TIME'00:00:00')
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT make_timestamp(DATE'1970-01-01', NULL)
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT make_timestamp(NULL, NULL)
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT make_timestamp(make_date(2021, 07, 11), make_time(6, 30, 45.678), 'MIT')
+-- !query analysis
+Project [make_timestamp(make_date(2021, 7, 11, true), Some(make_time(6, 30, cast(45.678 as decimal(16,6)))), Some(MIT), Some(America/Los_Angeles)) AS make_timestamp(make_date(2021, 7, 11), make_time(6, 30, 45.678), MIT)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT make_timestamp(make_date(2021, 07, 11), make_time(6, 30, 45.678), 'PST')
+-- !query analysis
+Project [make_timestamp(make_date(2021, 7, 11, true), Some(make_time(6, 30, cast(45.678 as decimal(16,6)))), Some(PST), Some(America/Los_Angeles)) AS make_timestamp(make_date(2021, 7, 11), make_time(6, 30, 45.678), PST)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT make_timestamp(make_date(2021, 07, 11), make_time(6, 30, 45.678), 'UTC')
+-- !query analysis
+Project [make_timestamp(make_date(2021, 7, 11, true), Some(make_time(6, 30, cast(45.678 as decimal(16,6)))), Some(UTC), Some(America/Los_Angeles)) AS make_timestamp(make_date(2021, 7, 11), make_time(6, 30, 45.678), UTC)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT make_timestamp(make_date(2021, 07, 11), make_time(6, 30, 45.678), 'CET')
+-- !query analysis
+Project [make_timestamp(make_date(2021, 7, 11, true), Some(make_time(6, 30, cast(45.678 as decimal(16,6)))), Some(CET), Some(America/Los_Angeles)) AS make_timestamp(make_date(2021, 7, 11), make_time(6, 30, 45.678), CET)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT make_timestamp(make_date(2021, 07, 11), make_time(6, 30, 45.678), 'JST')
+-- !query analysis
+Project [make_timestamp(make_date(2021, 7, 11, true), Some(make_time(6, 30, cast(45.678 as decimal(16,6)))), Some(JST), Some(America/Los_Angeles)) AS make_timestamp(make_date(2021, 7, 11), make_time(6, 30, 45.678), JST)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT make_timestamp(DATE'1970-01-01', TIME'00:00:00', 'UTC')
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT make_timestamp(NULL, TIME'00:00:00', 'UTC')
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT make_timestamp(DATE'1970-01-01', NULL, 'UTC')
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT make_timestamp(DATE'1970-01-01', TIME'00:00:00', NULL)
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT make_timestamp(NULL, NULL, 'UTC')
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT make_timestamp(NULL, TIME'00:00:00', NULL)
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT make_timestamp(DATE'1970-01-01', NULL, NULL)
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT make_timestamp(NULL, NULL, NULL)
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT make_timestamp(timestamp '2018-11-17 13:33:33', TIME'0:0:0', 'CET')
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"TIMESTAMP_NTZ '2018-11-17 13:33:33'\"",
+    "inputType" : "\"TIMESTAMP_NTZ\"",
+    "paramIndex" : "first",
+    "requiredType" : "\"DATE\"",
+    "sqlExpr" : "\"make_timestamp(TIMESTAMP_NTZ '2018-11-17 13:33:33', TIME '00:00:00', CET)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 74,
+    "fragment" : "make_timestamp(timestamp '2018-11-17 13:33:33', TIME'0:0:0', 'CET')"
+  } ]
+}
+
+
+-- !query
+SELECT make_timestamp(timestamp_ntz '2018-11-17 13:33:33', TIME'0:0:0', 'CET')
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"TIMESTAMP_NTZ '2018-11-17 13:33:33'\"",
+    "inputType" : "\"TIMESTAMP_NTZ\"",
+    "paramIndex" : "first",
+    "requiredType" : "\"DATE\"",
+    "sqlExpr" : "\"make_timestamp(TIMESTAMP_NTZ '2018-11-17 13:33:33', TIME '00:00:00', CET)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 78,
+    "fragment" : "make_timestamp(timestamp_ntz '2018-11-17 13:33:33', TIME'0:0:0', 'CET')"
+  } ]
+}
+
+
+-- !query
+SELECT make_timestamp(DATE'1970-01-01', timestamp '2018-11-17 13:33:33', 'CET')
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"TIMESTAMP_NTZ '2018-11-17 13:33:33'\"",
+    "inputType" : "\"TIMESTAMP_NTZ\"",
+    "paramIndex" : "second",
+    "requiredType" : "\"TIME\"",
+    "sqlExpr" : "\"make_timestamp(DATE '1970-01-01', TIMESTAMP_NTZ '2018-11-17 13:33:33', CET)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 79,
+    "fragment" : "make_timestamp(DATE'1970-01-01', timestamp '2018-11-17 13:33:33', 'CET')"
+  } ]
+}
+
+
+-- !query
+SELECT make_timestamp(DATE'1970-01-01', timestamp_ntz '2018-11-17 13:33:33', 'CET')
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"TIMESTAMP_NTZ '2018-11-17 13:33:33'\"",
+    "inputType" : "\"TIMESTAMP_NTZ\"",
+    "paramIndex" : "second",
+    "requiredType" : "\"TIME\"",
+    "sqlExpr" : "\"make_timestamp(DATE '1970-01-01', TIMESTAMP_NTZ '2018-11-17 13:33:33', CET)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 83,
+    "fragment" : "make_timestamp(DATE'1970-01-01', timestamp_ntz '2018-11-17 13:33:33', 'CET')"
+  } ]
+}
+
+
+-- !query
+SELECT try_make_timestamp(make_date(2021, 07, 11))
+-- !query analysis
+Project [try_make_timestamp(make_date(2021, 7, 11, true)) AS try_make_timestamp(make_date(2021, 7, 11))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT try_make_timestamp(make_date(2021, 07, 11), make_time(6, 30, 45.678))
+-- !query analysis
+Project [try_make_timestamp(make_date(2021, 7, 11, true), make_time(6, 30, cast(45.678 as decimal(16,6)))) AS try_make_timestamp(make_date(2021, 7, 11), make_time(6, 30, 45.678))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT try_make_timestamp(make_date(2021, 07, 11), make_time(6, 30, 45.678), 'CET')
+-- !query analysis
+Project [try_make_timestamp(make_date(2021, 7, 11, true), make_time(6, 30, cast(45.678 as decimal(16,6))), CET) AS try_make_timestamp(make_date(2021, 7, 11), make_time(6, 30, 45.678), CET)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT try_make_timestamp(NULL)
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT try_make_timestamp(NULL, NULL)
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT try_make_timestamp(NULL, NULL, NULL)
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT try_make_timestamp(timestamp '2018-11-17 13:33:33', TIME'0:0:0', 'CET')
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"TIMESTAMP_NTZ '2018-11-17 13:33:33'\"",
+    "inputType" : "\"TIMESTAMP_NTZ\"",
+    "paramIndex" : "first",
+    "requiredType" : "\"DATE\"",
+    "sqlExpr" : "\"make_timestamp(TIMESTAMP_NTZ '2018-11-17 13:33:33', TIME '00:00:00', CET)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 78,
+    "fragment" : "try_make_timestamp(timestamp '2018-11-17 13:33:33', TIME'0:0:0', 'CET')"
+  } ]
+}
+
+
+-- !query
+SELECT try_make_timestamp(DATE'1970-01-01', timestamp_ntz '2018-11-17 13:33:33', 'CET')
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"TIMESTAMP_NTZ '2018-11-17 13:33:33'\"",
+    "inputType" : "\"TIMESTAMP_NTZ\"",
+    "paramIndex" : "second",
+    "requiredType" : "\"TIME\"",
+    "sqlExpr" : "\"make_timestamp(DATE '1970-01-01', TIMESTAMP_NTZ '2018-11-17 13:33:33', CET)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 87,
+    "fragment" : "try_make_timestamp(DATE'1970-01-01', timestamp_ntz '2018-11-17 13:33:33', 'CET')"
+  } ]
+}
+
+
+-- !query
 select TIMESTAMP_SECONDS(1230219000),TIMESTAMP_SECONDS(-1230219000),TIMESTAMP_SECONDS(null)
 -- !query analysis
 Project [timestamp_seconds(1230219000) AS timestamp_seconds(1230219000)#x, timestamp_seconds(-1230219000) AS timestamp_seconds(-1230219000)#x, timestamp_seconds(null) AS timestamp_seconds(NULL)#x]
@@ -237,7 +553,7 @@ create temporary view ttf1 as select * from values
 CreateViewCommand `ttf1`, select * from values
   (1, 2),
   (2, 3)
-  as ttf1(`current_date`, `current_timestamp`), false, false, LocalTempView, true
+  as ttf1(`current_date`, `current_timestamp`), false, false, LocalTempView, UNSUPPORTED, true
    +- Project [current_date#x, current_timestamp#x]
       +- SubqueryAlias ttf1
          +- LocalRelation [current_date#x, current_timestamp#x]
@@ -264,7 +580,7 @@ create temporary view ttf2 as select * from values
 CreateViewCommand `ttf2`, select * from values
   (1, 2),
   (2, 3)
-  as ttf2(a, b), false, false, LocalTempView, true
+  as ttf2(a, b), false, false, LocalTempView, UNSUPPORTED, true
    +- Project [a#x, b#x]
       +- SubqueryAlias ttf2
          +- LocalRelation [a#x, b#x]
@@ -567,19 +883,21 @@ Project [(cast(2011-11-11 11:11:11 as timestamp_ntz) - 2011-11-11 11:11:10) AS (
 -- !query
 select timestamp'2011-11-11 11:11:11' - null
 -- !query analysis
-[Analyzer test output redacted due to nondeterminism]
+Project [(2011-11-11 11:11:11 - cast(null as timestamp_ntz)) AS (TIMESTAMP_NTZ '2011-11-11 11:11:11' - NULL)#x]
++- OneRowRelation
 
 
 -- !query
 select null - timestamp'2011-11-11 11:11:11'
 -- !query analysis
-[Analyzer test output redacted due to nondeterminism]
+Project [(cast(null as timestamp_ntz) - 2011-11-11 11:11:11) AS (NULL - TIMESTAMP_NTZ '2011-11-11 11:11:11')#x]
++- OneRowRelation
 
 
 -- !query
 create temporary view ts_view as select '2011-11-11 11:11:11' str
 -- !query analysis
-CreateViewCommand `ts_view`, select '2011-11-11 11:11:11' str, false, false, LocalTempView, true
+CreateViewCommand `ts_view`, select '2011-11-11 11:11:11' str, false, false, LocalTempView, UNSUPPORTED, true
    +- Project [2011-11-11 11:11:11 AS str#x]
       +- OneRowRelation
 
@@ -653,45 +971,15 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 select timestamp'2011-11-11 11:11:11' + null
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
-  "sqlState" : "42K09",
-  "messageParameters" : {
-    "left" : "\"TIMESTAMP_NTZ\"",
-    "right" : "\"VOID\"",
-    "sqlExpr" : "\"(TIMESTAMP_NTZ '2011-11-11 11:11:11' + NULL)\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 44,
-    "fragment" : "timestamp'2011-11-11 11:11:11' + null"
-  } ]
-}
+Project [cast(2011-11-11 11:11:11 + cast(null as interval day to second) as timestamp_ntz) AS TIMESTAMP_NTZ '2011-11-11 11:11:11' + NULL#x]
++- OneRowRelation
 
 
 -- !query
 select null + timestamp'2011-11-11 11:11:11'
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
-  "sqlState" : "42K09",
-  "messageParameters" : {
-    "left" : "\"VOID\"",
-    "right" : "\"TIMESTAMP_NTZ\"",
-    "sqlExpr" : "\"(NULL + TIMESTAMP_NTZ '2011-11-11 11:11:11')\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 44,
-    "fragment" : "null + timestamp'2011-11-11 11:11:11'"
-  } ]
-}
+Project [cast(2011-11-11 11:11:11 + cast(null as interval day to second) as timestamp_ntz) AS TIMESTAMP_NTZ '2011-11-11 11:11:11' + NULL#x]
++- OneRowRelation
 
 
 -- !query
@@ -745,7 +1033,7 @@ Project [unix_timestamp(22 05 2020 Friday, dd MM yyyy EEEEE, Some(America/Los_An
 -- !query
 select from_json('{"t":"26/October/2015"}', 't Timestamp', map('timestampFormat', 'dd/MMMMM/yyyy'))
 -- !query analysis
-Project [from_json(StructField(t,TimestampNTZType,true), (timestampFormat,dd/MMMMM/yyyy), {"t":"26/October/2015"}, Some(America/Los_Angeles)) AS from_json({"t":"26/October/2015"})#x]
+Project [from_json(StructField(t,TimestampNTZType,true), (timestampFormat,dd/MMMMM/yyyy), {"t":"26/October/2015"}, Some(America/Los_Angeles), false) AS from_json({"t":"26/October/2015"})#x]
 +- OneRowRelation
 
 
@@ -759,14 +1047,14 @@ Project [from_csv(StructField(t,TimestampNTZType,true), (timestampFormat,dd/MMMM
 -- !query
 select timestampadd(MONTH, -1, timestamp'2022-02-14 01:02:03')
 -- !query analysis
-Project [timestampadd(MONTH, -1, 2022-02-14 01:02:03, Some(America/Los_Angeles)) AS timestampadd(MONTH, -1, TIMESTAMP_NTZ '2022-02-14 01:02:03')#x]
+Project [timestampadd(MONTH, cast(-1 as bigint), 2022-02-14 01:02:03, Some(America/Los_Angeles)) AS timestampadd(MONTH, -1, TIMESTAMP_NTZ '2022-02-14 01:02:03')#x]
 +- OneRowRelation
 
 
 -- !query
 select timestampadd(MINUTE, 58, timestamp'2022-02-14 01:02:03')
 -- !query analysis
-Project [timestampadd(MINUTE, 58, 2022-02-14 01:02:03, Some(America/Los_Angeles)) AS timestampadd(MINUTE, 58, TIMESTAMP_NTZ '2022-02-14 01:02:03')#x]
+Project [timestampadd(MINUTE, cast(58 as bigint), 2022-02-14 01:02:03, Some(America/Los_Angeles)) AS timestampadd(MINUTE, 58, TIMESTAMP_NTZ '2022-02-14 01:02:03')#x]
 +- OneRowRelation
 
 

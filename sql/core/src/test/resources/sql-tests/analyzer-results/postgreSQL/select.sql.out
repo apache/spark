@@ -2,7 +2,7 @@
 -- !query
 create or replace temporary view onek2 as select * from onek
 -- !query analysis
-CreateViewCommand `onek2`, select * from onek, false, true, LocalTempView, true
+CreateViewCommand `onek2`, select * from onek, false, true, LocalTempView, UNSUPPORTED, true
    +- Project [unique1#x, unique2#x, two#x, four#x, ten#x, twenty#x, hundred#x, thousand#x, twothousand#x, fivethous#x, tenthous#x, odd#x, even#x, stringu1#x, stringu2#x, string4#x]
       +- SubqueryAlias spark_catalog.default.onek
          +- Relation spark_catalog.default.onek[unique1#x,unique2#x,two#x,four#x,ten#x,twenty#x,hundred#x,thousand#x,twothousand#x,fivethous#x,tenthous#x,odd#x,even#x,stringu1#x,stringu2#x,string4#x] parquet
@@ -23,7 +23,7 @@ CreateViewCommand `INT8_TBL`, select * from values
   (cast('4567890123456789' as bigint),cast('123' as bigint)),
   (cast(+4567890123456789 as bigint),cast('4567890123456789' as bigint)),
   (cast('+4567890123456789' as bigint),cast('-4567890123456789' as bigint))
-  as INT8_TBL(q1, q2), false, true, LocalTempView, true
+  as INT8_TBL(q1, q2), false, true, LocalTempView, UNSUPPORTED, true
    +- Project [q1#xL, q2#xL]
       +- SubqueryAlias INT8_TBL
          +- LocalRelation [q1#xL, q2#xL]
@@ -240,7 +240,7 @@ Union false, false
 CREATE OR REPLACE TEMPORARY VIEW foo AS
 SELECT * FROM (values(42),(3),(10),(7),(null),(null),(1)) as foo (f1)
 -- !query analysis
-CreateViewCommand `foo`, SELECT * FROM (values(42),(3),(10),(7),(null),(null),(1)) as foo (f1), false, true, LocalTempView, true
+CreateViewCommand `foo`, SELECT * FROM (values(42),(3),(10),(7),(null),(null),(1)) as foo (f1), false, true, LocalTempView, UNSUPPORTED, true
    +- Project [f1#x]
       +- SubqueryAlias foo
          +- Project [col1#x AS f1#x]

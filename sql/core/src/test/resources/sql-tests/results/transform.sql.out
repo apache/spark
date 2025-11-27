@@ -611,11 +611,11 @@ FROM(
 SELECT (b + 1) AS result
 ORDER BY result
 -- !query schema
-struct<result:double>
+struct<result:bigint>
 -- !query output
-3.0
-6.0
-9.0
+3
+6
+9
 
 
 -- !query
@@ -837,3 +837,13 @@ struct<a:string,b:string>
 3	3
 3	3
 3	3
+
+
+-- !query
+SELECT TRANSFORM (a, b)
+  USING 'cat' AS (a CHAR(10), b VARCHAR(10))
+FROM VALUES('apache', 'spark') t(a, b)
+-- !query schema
+struct<a:string,b:string>
+-- !query output
+apache	spark

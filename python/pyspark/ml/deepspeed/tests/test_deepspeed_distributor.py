@@ -30,12 +30,7 @@ from pyspark.ml.torch.tests.test_distributor import (
     set_up_test_dirs,
     get_distributed_mode_conf,
 )
-
-have_deepspeed = True
-try:
-    import deepspeed  # noqa: F401
-except ImportError:
-    have_deepspeed = False
+from pyspark.testing.utils import have_deepspeed, deepspeed_requirement_message
 
 
 class DeepspeedTorchDistributorUnitTests(unittest.TestCase):
@@ -219,7 +214,7 @@ def _create_pytorch_training_test_file():
 # and inference, the hope is to switch out the training
 # and file for the tests with more realistic testing
 # that use Deepspeed constructs.
-@unittest.skipIf(not have_deepspeed, "deepspeed is required for these tests")
+@unittest.skipIf(not have_deepspeed, deepspeed_requirement_message)
 class DeepspeedTorchDistributorDistributedEndToEnd(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
@@ -232,7 +227,7 @@ class DeepspeedTorchDistributorDistributedEndToEnd(unittest.TestCase):
             conf = conf.set(k, v)
         conf = conf.set(
             "spark.worker.resource.gpu.discoveryScript", cls.gpu_discovery_script_file_name
-        )
+        ).set("spark.python.unix.domain.socket.enabled", "false")
         sc = SparkContext("local-cluster[2,2,512]", cls.__name__, conf=conf)
         cls.spark = SparkSession(sc)
 
@@ -259,7 +254,7 @@ class DeepspeedTorchDistributorDistributedEndToEnd(unittest.TestCase):
             dist.run(cp_path, 2, 5)
 
 
-@unittest.skipIf(not have_deepspeed, "deepspeed is required for these tests")
+@unittest.skipIf(not have_deepspeed, deepspeed_requirement_message)
 class DeepspeedDistributorLocalEndToEndTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
@@ -269,7 +264,7 @@ class DeepspeedDistributorLocalEndToEndTests(unittest.TestCase):
             conf = conf.set(k, v)
         conf = conf.set(
             "spark.driver.resource.gpu.discoveryScript", cls.gpu_discovery_script_file_name
-        )
+        ).set("spark.python.unix.domain.socket.enabled", "false")
         sc = SparkContext("local-cluster[2,2,512]", cls.__name__, conf=conf)
         cls.spark = SparkSession(sc)
 

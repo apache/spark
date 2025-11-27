@@ -246,7 +246,8 @@ class MathFunctionsSuite extends QueryTest with SharedSparkSession {
 
   test("SPARK-36229 inconsistently behaviour where returned value is above the 64 char threshold") {
     withSQLConf(SQLConf.ANSI_ENABLED.key -> false.toString) {
-      val df = Seq(("?" * 64), ("?" * 65), ("a" * 4 + "?" * 60), ("a" * 4 + "?" * 61)).toDF("num")
+      val df = Seq(("?".repeat(64)), ("?".repeat(65)), ("a".repeat(4) + "?".repeat(60)),
+          ("a".repeat(4) + "?".repeat(61))).toDF("num")
       val expectedResult = Seq(Row("0"), Row("0"), Row("43690"), Row("43690"))
       checkAnswer(df.select(conv($"num", 16, 10)), expectedResult)
       checkAnswer(df.select(conv($"num", 16, -10)), expectedResult)
@@ -705,6 +706,17 @@ class MathFunctionsSuite extends QueryTest with SharedSparkSession {
       df1.select(try_divide(make_interval(col("year"), col("month")), lit(2))))
     checkAnswer(df1.selectExpr(s"try_divide(make_interval(year, month), 0)"),
       df1.select(try_divide(make_interval(col("year"), col("month")), lit(0))))
+  }
+
+  test("try_mod") {
+    val df = Seq((10, 3), (5, 5), (5, 0)).toDF("birth", "age")
+    checkAnswer(df.selectExpr("try_mod(birth, age)"), Seq(Row(1), Row(0), Row(null)))
+
+    val dfDecimal = Seq(
+      (BigDecimal(10), BigDecimal(3)),
+      (BigDecimal(5), BigDecimal(5)),
+      (BigDecimal(5), BigDecimal(0))).toDF("birth", "age")
+    checkAnswer(dfDecimal.selectExpr("try_mod(birth, age)"), Seq(Row(1), Row(0), Row(null)))
   }
 
   test("try_element_at") {

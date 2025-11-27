@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.catalyst.csv
 
-import org.apache.commons.lang3.StringUtils
-
 import org.apache.spark.SparkIllegalArgumentException
 
 object CSVExprUtils {
@@ -120,6 +118,11 @@ object CSVExprUtils {
    * @throws SparkIllegalArgumentException if any of the individual input chunks are illegal
    */
   def toDelimiterStr(str: String): String = {
+    if (str == null) {
+      throw new SparkIllegalArgumentException(
+        errorClass = "INVALID_DELIMITER_VALUE.NULL_VALUE")
+    }
+
     var idx = 0
 
     var delimiter = ""
@@ -129,7 +132,7 @@ object CSVExprUtils {
       // in order to use existing escape logic
       val readAhead = if (str(idx) == '\\') 2 else 1
       // get the chunk of 1 or 2 input characters to convert to a single delimiter char
-      val chunk = StringUtils.substring(str, idx, idx + readAhead)
+      val chunk = str.substring(idx, idx + readAhead)
       delimiter += toChar(chunk)
       // advance the counter by the length of input chunk processed
       idx += chunk.length()

@@ -20,7 +20,7 @@ package org.apache.spark.sql.streaming
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Literal}
 import org.apache.spark.sql.execution.LocalTableScanExec
-import org.apache.spark.sql.execution.streaming.StreamingSymmetricHashJoinHelper.JoinConditionSplitPredicates
+import org.apache.spark.sql.execution.streaming.operators.stateful.join.StreamingSymmetricHashJoinHelper.JoinConditionSplitPredicates
 import org.apache.spark.sql.types._
 
 class StreamingSymmetricHashJoinHelperSuite extends StreamTest {
@@ -29,8 +29,8 @@ class StreamingSymmetricHashJoinHelperSuite extends StreamTest {
   val rightAttributeC = AttributeReference("c", IntegerType)()
   val rightAttributeD = AttributeReference("d", IntegerType)()
 
-  val left = new LocalTableScanExec(Seq(leftAttributeA, leftAttributeB), Seq())
-  val right = new LocalTableScanExec(Seq(rightAttributeC, rightAttributeD), Seq())
+  val left = new LocalTableScanExec(Seq(leftAttributeA, leftAttributeB), Seq(), None)
+  val right = new LocalTableScanExec(Seq(rightAttributeC, rightAttributeD), Seq(), None)
 
   test("empty") {
     val split = JoinConditionSplitPredicates(None, left, right)

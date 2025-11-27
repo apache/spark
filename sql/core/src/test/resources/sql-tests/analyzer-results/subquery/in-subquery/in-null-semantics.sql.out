@@ -2,14 +2,14 @@
 -- !query
 create temp view v (c) as values (1), (null)
 -- !query analysis
-CreateViewCommand `v`, [(c,None)], values (1), (null), false, false, LocalTempView, true
+CreateViewCommand `v`, [(c,None)], values (1), (null), false, false, LocalTempView, UNSUPPORTED, true
    +- LocalRelation [col1#x]
 
 
 -- !query
 create temp view v_empty (e) as select 1 where false
 -- !query analysis
-CreateViewCommand `v_empty`, [(e,None)], select 1 where false, false, false, LocalTempView, true
+CreateViewCommand `v_empty`, [(e,None)], select 1 where false, false, false, LocalTempView, UNSUPPORTED, true
    +- Project [1 AS 1#x]
       +- Filter false
          +- OneRowRelation
@@ -25,7 +25,7 @@ CreateDataSourceTableCommand `spark_catalog`.`default`.`t`, false
 insert into t values (1), (null)
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/t, false, JSON, [path=file:[not included in comparison]/{warehouse_dir}/t], Append, `spark_catalog`.`default`.`t`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/t), [c]
-+- Project [cast(col1#x as int) AS c#x]
++- Project [col1#x AS c#x]
    +- LocalRelation [col1#x]
 
 
@@ -39,7 +39,7 @@ CreateDataSourceTableCommand `spark_catalog`.`default`.`t2`, false
 insert into t2 values (2)
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/t2, false, JSON, [path=file:[not included in comparison]/{warehouse_dir}/t2], Append, `spark_catalog`.`default`.`t2`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/t2), [d]
-+- Project [cast(col1#x as int) AS d#x]
++- Project [col1#x AS d#x]
    +- LocalRelation [col1#x]
 
 

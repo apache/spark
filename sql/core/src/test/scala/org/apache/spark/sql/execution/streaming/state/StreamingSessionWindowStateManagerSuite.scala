@@ -25,7 +25,7 @@ import org.scalatest.BeforeAndAfter
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
-import org.apache.spark.sql.execution.streaming.StatefulOperatorStateInfo
+import org.apache.spark.sql.execution.streaming.operators.stateful.{StatefulOperatorStateInfo, StreamingSessionWindowStateManager}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.StreamTest
 import org.apache.spark.sql.types.{IntegerType, LongType, StringType, StructType}
@@ -173,7 +173,8 @@ class StreamingSessionWindowStateManagerSuite extends StreamTest with BeforeAndA
       f: (StreamingSessionWindowStateManager, StateStore) => Unit): Unit = {
     withTempDir { file =>
       val storeConf = new StateStoreConf()
-      val stateInfo = StatefulOperatorStateInfo(file.getAbsolutePath, UUID.randomUUID, 0, 0, 5)
+      val stateInfo = StatefulOperatorStateInfo(
+        file.getAbsolutePath, UUID.randomUUID, 0, 0, 5, None)
 
       val manager = StreamingSessionWindowStateManager.createStateManager(
         keysWithoutSessionAttributes,
@@ -185,7 +186,7 @@ class StreamingSessionWindowStateManagerSuite extends StreamTest with BeforeAndA
       val store = StateStore.get(
         storeProviderId, manager.getStateKeySchema, manager.getStateValueSchema,
         PrefixKeyScanStateEncoderSpec(manager.getStateKeySchema, manager.getNumColsForPrefixKey),
-        stateInfo.storeVersion, useColumnFamilies = false, storeConf, new Configuration)
+        stateInfo.storeVersion, None, None, useColumnFamilies = false, storeConf, new Configuration)
 
       try {
         f(manager, store)

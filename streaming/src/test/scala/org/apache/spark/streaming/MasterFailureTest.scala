@@ -18,7 +18,7 @@
 package org.apache.spark.streaming
 
 import java.io.{File, IOException}
-import java.nio.charset.StandardCharsets
+import java.nio.file.Files
 import java.util.UUID
 import java.util.concurrent.TimeUnit
 
@@ -27,12 +27,11 @@ import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 import scala.util.Random
 
-import com.google.common.io.Files
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.scalatest.Assertions._
 
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.PATH
 import org.apache.spark.streaming.dstream.DStream
 import org.apache.spark.util.Utils
@@ -218,7 +217,7 @@ object MasterFailureTest extends Logging {
     val checkpointDir = ssc.checkpointDir
     val batchDuration = ssc.graph.batchDuration
 
-    while(!isLastOutputGenerated && !isTimedOut) {
+    while (!isLastOutputGenerated && !isTimedOut) {
       // Get the output buffer
       val outputQueue = ssc.graph.getOutputStreams().head.asInstanceOf[TestOutputStream[T]].output
       def output = outputQueue.asScala.flatten
@@ -375,7 +374,7 @@ class FileGeneratingThread(input: Seq[String], testDir: Path, interval: Long)
         val localFile = new File(localTestDir, (i + 1).toString)
         val hadoopFile = new Path(testDir, (i + 1).toString)
         val tempHadoopFile = new Path(testDir, ".tmp_" + (i + 1).toString)
-        Files.write(input(i) + "\n", localFile, StandardCharsets.UTF_8)
+        Files.writeString(localFile.toPath, input(i) + "\n")
         var tries = 0
         var done = false
             while (!done && tries < maxTries) {

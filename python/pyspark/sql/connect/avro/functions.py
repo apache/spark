@@ -39,21 +39,21 @@ def from_avro(
 ) -> Column:
     if not isinstance(data, (Column, str)):
         raise PySparkTypeError(
-            error_class="INVALID_TYPE",
-            message_parameters={
+            errorClass="INVALID_TYPE",
+            messageParameters={
                 "arg_name": "data",
                 "arg_type": "pyspark.sql.Column or str",
             },
         )
     if not isinstance(jsonFormatSchema, str):
         raise PySparkTypeError(
-            error_class="INVALID_TYPE",
-            message_parameters={"arg_name": "jsonFormatSchema", "arg_type": "str"},
+            errorClass="INVALID_TYPE",
+            messageParameters={"arg_name": "jsonFormatSchema", "arg_type": "str"},
         )
     if options is not None and not isinstance(options, dict):
         raise PySparkTypeError(
-            error_class="INVALID_TYPE",
-            message_parameters={"arg_name": "options", "arg_type": "dict, optional"},
+            errorClass="INVALID_TYPE",
+            messageParameters={"arg_name": "options", "arg_type": "dict, optional"},
         )
 
     if options is None:
@@ -70,16 +70,16 @@ from_avro.__doc__ = PyAvroFunctions.from_avro.__doc__
 def to_avro(data: "ColumnOrName", jsonFormatSchema: str = "") -> Column:
     if not isinstance(data, (Column, str)):
         raise PySparkTypeError(
-            error_class="INVALID_TYPE",
-            message_parameters={
+            errorClass="INVALID_TYPE",
+            messageParameters={
                 "arg_name": "data",
                 "arg_type": "pyspark.sql.Column or str",
             },
         )
     if not isinstance(jsonFormatSchema, str):
         raise PySparkTypeError(
-            error_class="INVALID_TYPE",
-            message_parameters={"arg_name": "jsonFormatSchema", "arg_type": "str"},
+            errorClass="INVALID_TYPE",
+            messageParameters={"arg_name": "jsonFormatSchema", "arg_type": "str"},
         )
 
     if jsonFormatSchema == "":
@@ -94,7 +94,7 @@ to_avro.__doc__ = PyAvroFunctions.to_avro.__doc__
 def _test() -> None:
     import os
     import sys
-    from pyspark.testing.utils import search_jar
+    from pyspark.testing.sqlutils import search_jar
 
     avro_jar = search_jar("connector/avro", "spark-avro", "spark-avro")
     if avro_jar is None:

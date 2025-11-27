@@ -72,6 +72,41 @@ d                   	string
 
 
 -- !query
+DESCRIBE EXTENDED t AS JSON
+-- !query schema
+struct<json_metadata:string>
+-- !query output
+{"table_name":"t","catalog_name":"spark_catalog","namespace":["default"],"schema_name":"default","columns":[{"name":"a","type":{"name":"string","collation":"UTF8_BINARY"},"nullable":true},{"name":"b","type":{"name":"int"},"nullable":true},{"name":"c","type":{"name":"string","collation":"UTF8_BINARY"},"nullable":true},{"name":"d","type":{"name":"string","collation":"UTF8_BINARY"},"nullable":true}],"num_buckets":2,"bucket_columns":["a"],"sort_columns":["b"],"location":"file:[not included in comparison]/{warehouse_dir}/t","storage_properties":{"a":"1","b":"2","password":"*********(redacted)"},"created_time [not included in comparison]":"None","last_access [not included in comparison]":"None","created_by [not included in comparison]":"None","type":"MANAGED","provider":"parquet","comment":"table_comment","table_properties":{"e":"3","password":"*********(redacted)","t":"test"},"partition_provider":"Catalog","partition_columns":["c","d"],"collation":"UTF8_BINARY"}
+
+
+-- !query
+DESCRIBE t AS JSON
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "DESCRIBE_JSON_NOT_EXTENDED",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "tableName" : "t"
+  }
+}
+
+
+-- !query
+DESC FORMATTED t a AS JSON
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "UNSUPPORTED_FEATURE.DESC_TABLE_COLUMN_JSON",
+  "sqlState" : "0A000"
+}
+
+
+-- !query
 DESC default.t
 -- !query schema
 struct<col_name:string,data_type:string,comment:string>
@@ -264,6 +299,14 @@ d                   	string
 
 
 -- !query
+DESC EXTENDED t PARTITION (c='Us', d=1) AS JSON
+-- !query schema
+struct<json_metadata:string>
+-- !query output
+{"table_name":"t","catalog_name":"spark_catalog","namespace":["default"],"schema_name":"default","columns":[{"name":"a","type":{"name":"string","collation":"UTF8_BINARY"},"nullable":true},{"name":"b","type":{"name":"int"},"nullable":true},{"name":"c","type":{"name":"string","collation":"UTF8_BINARY"},"nullable":true},{"name":"d","type":{"name":"string","collation":"UTF8_BINARY"},"nullable":true}],"partition_values":{"c":"Us","d":"1"},"location":"file:[not included in comparison]/{warehouse_dir}/t/c=Us/d=1","storage_properties":{"a":"1","b":"2","password":"*********(redacted)"},"created_time [not included in comparison]":"None","last_access [not included in comparison]":"None","created_by [not included in comparison]":"None","type":"MANAGED","provider":"parquet","num_buckets":2,"bucket_columns":["a"],"sort_columns":["b"],"table_properties":{"password":"*********(redacted)","t":"test"},"partition_provider":"Catalog","partition_columns":["c","d"],"collation":"UTF8_BINARY"}
+
+
+-- !query
 DESC EXTENDED t PARTITION (c='Us', d=1)
 -- !query schema
 struct<col_name:string,data_type:string,comment:string>
@@ -411,6 +454,58 @@ org.apache.spark.sql.catalyst.parser.ParseException
 
 
 -- !query
+DROP SCHEMA IF EXISTS test_schema
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE SCHEMA test_schema DEFAULT COLLATION UNICODE
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DESCRIBE SCHEMA EXTENDED test_schema
+-- !query schema
+struct<info_name:string,info_value:string>
+-- !query output
+Catalog Name	spark_catalog
+Collation	UNICODE
+Comment	
+Location [not included in comparison]/{warehouse_dir}/test_schema.db
+Namespace Name	test_schema
+Owner	[not included in comparison]
+Properties
+
+
+-- !query
+ALTER SCHEMA test_schema DEFAULT COLLATION UTF8_LCASE
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DESCRIBE SCHEMA EXTENDED test_schema
+-- !query schema
+struct<info_name:string,info_value:string>
+-- !query output
+Catalog Name	spark_catalog
+Collation	UTF8_LCASE
+Comment	
+Location [not included in comparison]/{warehouse_dir}/test_schema.db
+Namespace Name	test_schema
+Owner	[not included in comparison]
+Properties
+
+
+-- !query
 DESC temp_v
 -- !query schema
 struct<col_name:string,data_type:string,comment:string>
@@ -536,8 +631,9 @@ Created By [not included in comparison]
 Type                	VIEW                	                    
 View Text           	SELECT * FROM t     	                    
 View Original Text  	SELECT * FROM t     	                    
+View Schema Mode    	COMPENSATION        	                    
 View Catalog and Namespace	spark_catalog.default	                    
-View Query Output Columns	[a, b, c, d]
+View Query Output Columns	[`a`, `b`, `c`, `d`]
 
 
 -- !query
@@ -560,8 +656,9 @@ Created By [not included in comparison]
 Type                	VIEW                	                    
 View Text           	SELECT * FROM t     	                    
 View Original Text  	SELECT * FROM t     	                    
+View Schema Mode    	COMPENSATION        	                    
 View Catalog and Namespace	spark_catalog.default	                    
-View Query Output Columns	[a, b, c, d]
+View Query Output Columns	[`a`, `b`, `c`, `d`]
 
 
 -- !query
@@ -643,35 +740,14 @@ Execute DescribeTableCommand
 
 
 -- !query
-DROP TABLE t
+EXPLAIN DESCRIBE EXTENDED t PARTITION (c='Us', d=2) AS JSON
 -- !query schema
-struct<>
+struct<plan:string>
 -- !query output
-
-
-
--- !query
-DROP VIEW temp_v
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-DROP VIEW temp_Data_Source_View
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-DROP VIEW v
--- !query schema
-struct<>
--- !query output
-
+== Physical Plan ==
+Execute DescribeRelationJsonCommand
+   +- DescribeRelationJsonCommand [c=Us, d=2], true, [json_metadata#x]
+      +- ResolvedTable V2SessionCatalog(spark_catalog), default.t, V1Table(default.t), [a#x, b#x, c#x, d#x]
 
 
 -- !query
@@ -864,3 +940,101 @@ Location [not included in comparison]/{warehouse_dir}/e
 # Column Default Values	                    	                    
 a                   	string              	CONCAT('a\n b\n ', 'c\n d')
 b                   	int                 	42
+
+
+-- !query
+CREATE TABLE f USING json PARTITIONED BY (B, C) AS SELECT 'APACHE' A, CAST('SPARK' AS BINARY) B, TIMESTAMP'2018-11-17 13:33:33' C
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DESC FORMATTED f PARTITION (B='SPARK', C=TIMESTAMP'2018-11-17 13:33:33')
+-- !query schema
+struct<col_name:string,data_type:string,comment:string>
+-- !query output
+A                   	string              	                    
+B                   	binary              	                    
+C                   	timestamp           	                    
+# Partition Information	                    	                    
+# col_name          	data_type           	comment             
+B                   	binary              	                    
+C                   	timestamp           	                    
+                    	                    	                    
+# Detailed Partition Information	                    	                    
+Database            	default             	                    
+Table               	f                   	                    
+Partition Values    	[B=SPARK, C=2018-11-17 13:33:33]	                    
+Location [not included in comparison]/{warehouse_dir}/f/B=SPARK/C=2018-11-17 13%3A33%3A33	                    
+Partition Parameters	[numFiles=1, totalSize=15, transient_lastDdlTime=[not included in comparison]]	                    
+Created Time [not included in comparison]
+Last Access [not included in comparison]
+                    	                    	                    
+# Storage Information	                    	                    
+Location [not included in comparison]/{warehouse_dir}/f
+
+
+-- !query
+DESC TABLE EXTENDED f PARTITION (B='SPARK', C=TIMESTAMP'2018-11-17 13:33:33') AS JSON
+-- !query schema
+struct<json_metadata:string>
+-- !query output
+{"table_name":"f","catalog_name":"spark_catalog","namespace":["default"],"schema_name":"default","columns":[{"name":"A","type":{"name":"string","collation":"UTF8_BINARY"},"nullable":true},{"name":"B","type":{"name":"binary"},"nullable":true},{"name":"C","type":{"name":"timestamp_ltz"},"nullable":true}],"partition_values":{"B":"SPARK","C":"2018-11-17 13:33:33"},"location":"file:[not included in comparison]/{warehouse_dir}/f/B=SPARK/C=2018-11-17 13%3A33%3A33","partition_parameters":{"numFiles":"1","totalSize":"15","transient_lastDdlTime [not included in comparison]":"None"},"created_time [not included in comparison]":"None","last_access [not included in comparison]":"None","created_by [not included in comparison]":"None","type":"MANAGED","provider":"json","partition_provider":"Catalog","partition_columns":["B","C"],"collation":"UTF8_BINARY"}
+
+
+-- !query
+DROP VIEW temp_v
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP VIEW temp_Data_Source_View
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP VIEW v
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP TABLE t
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP TABLE d
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP TABLE e
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP TABLE f
+-- !query schema
+struct<>
+-- !query output
+

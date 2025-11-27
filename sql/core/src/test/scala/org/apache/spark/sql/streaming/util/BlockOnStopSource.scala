@@ -22,12 +22,15 @@ import java.util.concurrent.CountDownLatch
 
 import org.apache.zookeeper.KeeperException.UnimplementedException
 
-import org.apache.spark.sql.{DataFrame, Row, SparkSession, SQLContext}
-import org.apache.spark.sql.connector.catalog.{SupportsRead, Table, TableCapability}
+import org.apache.spark.sql.{Row, SparkSession, SQLContext}
+import org.apache.spark.sql.classic.ClassicConversions.castToImpl
+import org.apache.spark.sql.classic.DataFrame
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Column, SupportsRead, Table, TableCapability}
 import org.apache.spark.sql.connector.catalog.TableCapability.CONTINUOUS_READ
 import org.apache.spark.sql.connector.read.{streaming, InputPartition, Scan, ScanBuilder}
 import org.apache.spark.sql.connector.read.streaming.{ContinuousPartitionReaderFactory, ContinuousStream, PartitionOffset}
-import org.apache.spark.sql.execution.streaming.{LongOffset, Offset, Source}
+import org.apache.spark.sql.execution.streaming.{Offset, Source}
+import org.apache.spark.sql.execution.streaming.runtime.LongOffset
 import org.apache.spark.sql.internal.connector.SimpleTableProvider
 import org.apache.spark.sql.sources.StreamSourceProvider
 import org.apache.spark.sql.types.{LongType, StructType}
@@ -85,14 +88,15 @@ class BlockOnStopSource(spark: SparkSession, latch: CountDownLatch) extends Sour
   override val schema: StructType = BlockOnStopSourceProvider.schema
   override def getOffset: Option[Offset] = Some(LongOffset(0))
   override def getBatch(start: Option[Offset], end: Offset): DataFrame = {
-    spark.createDataFrame(spark.sparkContext.emptyRDD[Row], schema)
+    spark.createDataFrame(util.Collections.emptyList[Row](), schema)
   }
 }
 
 /** A V2 Table, which can create a blocking streaming source for ContinuousExecution. */
 class BlockOnStopSourceTable(latch: CountDownLatch) extends Table with SupportsRead {
-  override def schema(): StructType = BlockOnStopSourceProvider.schema
-
+  override def columns(): Array[Column] = {
+    CatalogV2Util.structTypeToV2Columns(BlockOnStopSourceProvider.schema)
+  }
   override def name(): String = "blockingSource"
 
   override def capabilities(): util.Set[TableCapability] = util.EnumSet.of(CONTINUOUS_READ)
@@ -100,7 +104,7 @@ class BlockOnStopSourceTable(latch: CountDownLatch) extends Table with SupportsR
   override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
     new ScanBuilder {
       override def build(): Scan = new Scan {
-        override def readSchema(): StructType = schema()
+        override def readSchema(): StructType = CatalogV2Util.v2ColumnsToStructType(columns())
 
         override def toContinuousStream(checkpointLocation: String): ContinuousStream = {
           new BlockOnStopContinuousStream(latch)

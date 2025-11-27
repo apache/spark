@@ -1,2 +1,0 @@
-Project [staticinvoke(class org.apache.spark.sql.catalyst.expressions.BitmapExpressionUtils, LongType, bitmapCount, bytes#0, BinaryType, true, false, true) AS bitmap_count(bytes)#0L]
-+- LocalRelation <empty>, [id#0L, bytes#0]

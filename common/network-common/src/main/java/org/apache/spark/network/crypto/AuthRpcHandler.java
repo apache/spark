@@ -20,20 +20,21 @@ package org.apache.spark.network.crypto;
 import java.nio.ByteBuffer;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.Preconditions;
-import com.google.common.base.Throwables;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.Channel;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
+import org.apache.spark.internal.SparkLogger;
+import org.apache.spark.internal.SparkLoggerFactory;
+import org.apache.spark.internal.LogKeys;
+import org.apache.spark.internal.MDC;
 import org.apache.spark.network.client.RpcResponseCallback;
 import org.apache.spark.network.client.TransportClient;
 import org.apache.spark.network.sasl.SecretKeyHolder;
 import org.apache.spark.network.sasl.SaslRpcHandler;
 import org.apache.spark.network.server.AbstractAuthRpcHandler;
 import org.apache.spark.network.server.RpcHandler;
+import org.apache.spark.network.util.JavaUtils;
 import org.apache.spark.network.util.TransportConf;
 
 /**
@@ -46,7 +47,7 @@ import org.apache.spark.network.util.TransportConf;
  * authenticated. A connection may be authenticated at most once.
  */
 class AuthRpcHandler extends AbstractAuthRpcHandler {
-  private static final Logger LOG = LoggerFactory.getLogger(AuthRpcHandler.class);
+  private static final SparkLogger LOG = SparkLoggerFactory.getLogger(AuthRpcHandler.class);
 
   /** Transport configuration. */
   private final TransportConf conf;
@@ -91,7 +92,7 @@ class AuthRpcHandler extends AbstractAuthRpcHandler {
     } catch (RuntimeException e) {
       if (conf.saslFallback()) {
         LOG.warn("Failed to parse new auth challenge, reverting to SASL for client {}.",
-          channel.remoteAddress());
+          MDC.of(LogKeys.HOST_PORT, channel.remoteAddress()));
         saslHandler = new SaslRpcHandler(conf, channel, null, secretKeyHolder);
         message.position(position);
         message.limit(limit);
@@ -109,7 +110,7 @@ class AuthRpcHandler extends AbstractAuthRpcHandler {
     AuthEngine engine = null;
     try {
       String secret = secretKeyHolder.getSecretKey(challenge.appId());
-      Preconditions.checkState(secret != null,
+      JavaUtils.checkState(secret != null,
         "Trying to authenticate non-registered app %s.", challenge.appId());
       LOG.debug("Authenticating challenge for app {}.", challenge.appId());
       engine = new AuthEngine(challenge.appId(), secret, conf);
@@ -130,7 +131,8 @@ class AuthRpcHandler extends AbstractAuthRpcHandler {
         try {
           engine.close();
         } catch (Exception e) {
-          throw Throwables.propagate(e);
+          if (e instanceof RuntimeException re) throw re;
+          throw new RuntimeException(e);
         }
       }
     }

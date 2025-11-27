@@ -34,9 +34,9 @@ import io.netty.handler.ssl.SslHandler;
 import io.netty.handler.stream.ChunkedWriteHandler;
 import io.netty.handler.timeout.IdleStateHandler;
 import io.netty.handler.codec.MessageToMessageEncoder;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
+import org.apache.spark.internal.SparkLogger;
+import org.apache.spark.internal.SparkLoggerFactory;
 import org.apache.spark.network.client.TransportClient;
 import org.apache.spark.network.client.TransportClientBootstrap;
 import org.apache.spark.network.client.TransportClientFactory;
@@ -73,7 +73,7 @@ import org.apache.spark.network.util.TransportFrameDecoder;
  * processes to send messages back to the client on an existing channel.
  */
 public class TransportContext implements Closeable {
-  private static final Logger logger = LoggerFactory.getLogger(TransportContext.class);
+  private static final SparkLogger logger = SparkLoggerFactory.getLogger(TransportContext.class);
 
   private static final NettyLogger nettyLogger = new NettyLogger();
   private final TransportConf conf;

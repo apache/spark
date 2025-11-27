@@ -27,14 +27,14 @@ import scala.collection.mutable.ListBuffer
 
 import com.google.common.io.Closeables
 import io.netty.channel.DefaultFileRegion
-import org.apache.commons.io.FileUtils
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkException}
-import org.apache.spark.internal.{config, Logging, MDC}
+import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.network.buffer.ManagedBuffer
 import org.apache.spark.network.util.{AbstractFileRegion, JavaUtils}
 import org.apache.spark.security.CryptoStreamUtils
+import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.util.Utils
 import org.apache.spark.util.io.ChunkedByteBuffer
@@ -150,7 +150,7 @@ private[spark] class DiskStore(
     blockSizes.put(targetBlockId, blockSize)
     val targetFile = diskManager.getFile(targetBlockId.name)
     logDebug(s"${sourceFile.getPath()} -> ${targetFile.getPath()}")
-    FileUtils.moveFile(sourceFile, targetFile)
+    Utils.moveFile(sourceFile, targetFile)
   }
 
   def contains(blockId: BlockId): Boolean = diskManager.containsBlock(blockId)
@@ -324,7 +324,7 @@ private class ReadableChannelFileRegion(source: ReadableByteChannel, blockSize: 
 
   private var _transferred = 0L
 
-  private val buffer = ByteBuffer.allocateDirect(64 * 1024)
+  private val buffer = Platform.allocateDirectBuffer(64 * 1024)
   buffer.flip()
 
   override def count(): Long = blockSize

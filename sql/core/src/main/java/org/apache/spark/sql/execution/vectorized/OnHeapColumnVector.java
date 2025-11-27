@@ -108,12 +108,14 @@ public final class OnHeapColumnVector extends WritableColumnVector {
 
   @Override
   public void putNull(int rowId) {
+    if (isAllNull()) return; // Skip writing nulls to all-null vector.
     nulls[rowId] = (byte)1;
     ++numNulls;
   }
 
   @Override
   public void putNulls(int rowId, int count) {
+    if (isAllNull()) return; // Skip writing nulls to all-null vector.
     for (int i = 0; i < count; ++i) {
       nulls[rowId + i] = (byte)1;
     }
@@ -130,7 +132,7 @@ public final class OnHeapColumnVector extends WritableColumnVector {
 
   @Override
   public boolean isNullAt(int rowId) {
-    return isAllNull || nulls[rowId] == 1;
+    return isAllNull() || nulls[rowId] == 1;
   }
 
   //
@@ -577,6 +579,8 @@ public final class OnHeapColumnVector extends WritableColumnVector {
   // Spilt this function out since it is the slow path.
   @Override
   protected void reserveInternal(int newCapacity) {
+    if (isAllNull()) return; // Skip allocation for all-null vector.
+
     if (isArray() || type instanceof MapType) {
       int[] newLengths = new int[newCapacity];
       int[] newOffsets = new int[newCapacity];
@@ -613,7 +617,8 @@ public final class OnHeapColumnVector extends WritableColumnVector {
       }
     } else if (type instanceof LongType ||
         type instanceof TimestampType ||type instanceof TimestampNTZType ||
-        DecimalType.is64BitDecimalType(type) || type instanceof DayTimeIntervalType) {
+        DecimalType.is64BitDecimalType(type) || type instanceof DayTimeIntervalType ||
+        type instanceof TimeType) {
       if (longData == null || longData.length < newCapacity) {
         long[] newData = new long[newCapacity];
         if (longData != null) System.arraycopy(longData, 0, newData, 0, capacity);
@@ -645,7 +650,7 @@ public final class OnHeapColumnVector extends WritableColumnVector {
   }
 
   @Override
-  protected OnHeapColumnVector reserveNewColumn(int capacity, DataType type) {
+  public OnHeapColumnVector reserveNewColumn(int capacity, DataType type) {
     return new OnHeapColumnVector(capacity, type);
   }
 }

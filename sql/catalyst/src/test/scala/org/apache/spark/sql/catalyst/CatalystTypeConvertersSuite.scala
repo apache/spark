@@ -17,7 +17,8 @@
 
 package org.apache.spark.sql.catalyst
 
-import java.time.{Duration, Instant, LocalDate, LocalDateTime, Period}
+import java.math.{BigDecimal => JavaBigDecimal}
+import java.time.{Duration, Instant, LocalDate, LocalDateTime, LocalTime, Period}
 
 import org.apache.spark.{SparkFunSuite, SparkIllegalArgumentException}
 import org.apache.spark.sql.Row
@@ -108,7 +109,7 @@ class CatalystTypeConvertersSuite extends SparkFunSuite with SQLHelper {
       exception = intercept[SparkIllegalArgumentException] {
         CatalystTypeConverters.createToCatalystConverter(structType)("test")
       },
-      errorClass = "_LEGACY_ERROR_TEMP_3219",
+      condition = "_LEGACY_ERROR_TEMP_3219",
       parameters = Map(
         "other" -> "test",
         "otherClass" -> "java.lang.String",
@@ -121,7 +122,7 @@ class CatalystTypeConvertersSuite extends SparkFunSuite with SQLHelper {
       exception = intercept[SparkIllegalArgumentException] {
         CatalystTypeConverters.createToCatalystConverter(mapType)("test")
       },
-      errorClass = "_LEGACY_ERROR_TEMP_3221",
+      condition = "_LEGACY_ERROR_TEMP_3221",
       parameters = Map(
         "other" -> "test",
         "otherClass" -> "java.lang.String",
@@ -135,7 +136,7 @@ class CatalystTypeConvertersSuite extends SparkFunSuite with SQLHelper {
       exception = intercept[SparkIllegalArgumentException] {
         CatalystTypeConverters.createToCatalystConverter(arrayType)("test")
       },
-      errorClass = "_LEGACY_ERROR_TEMP_3220",
+      condition = "_LEGACY_ERROR_TEMP_3220",
       parameters = Map(
         "other" -> "test",
         "otherClass" -> "java.lang.String",
@@ -148,11 +149,19 @@ class CatalystTypeConvertersSuite extends SparkFunSuite with SQLHelper {
       exception = intercept[SparkIllegalArgumentException] {
         CatalystTypeConverters.createToCatalystConverter(decimalType)("test")
       },
-      errorClass = "_LEGACY_ERROR_TEMP_3219",
+      condition = "_LEGACY_ERROR_TEMP_3219",
       parameters = Map(
         "other" -> "test",
         "otherClass" -> "java.lang.String",
         "dataType" -> "decimal(10,0)"))
+  }
+
+  test("SPARK-51941: convert BigDecimal to Decimal") {
+    val expected = Decimal("0.01")
+    val bigDecimal = BigDecimal("0.01")
+    assert(CatalystTypeConverters.convertToCatalyst(bigDecimal) === expected)
+    val javaBigDecimal = new JavaBigDecimal("0.01")
+    assert(CatalystTypeConverters.convertToCatalyst(javaBigDecimal) === expected)
   }
 
   test("converting a wrong value to the string type") {
@@ -160,7 +169,7 @@ class CatalystTypeConvertersSuite extends SparkFunSuite with SQLHelper {
       exception = intercept[SparkIllegalArgumentException] {
         CatalystTypeConverters.createToCatalystConverter(StringType)(0.1)
       },
-      errorClass = "_LEGACY_ERROR_TEMP_3219",
+      condition = "_LEGACY_ERROR_TEMP_3219",
       parameters = Map(
         "other" -> "0.1",
         "otherClass" -> "java.lang.Double",
@@ -413,6 +422,36 @@ class CatalystTypeConvertersSuite extends SparkFunSuite with SQLHelper {
           assert(result2 === expected)
         }
       }
+    }
+  }
+
+  test("converting java.time.LocalTime to TimeType") {
+    Seq(
+      "00:00:00",
+      "01:02:03.999",
+      "02:59:01",
+      "12:30:02.0",
+      "22:00:00.000001",
+      "23:59:59.999999").foreach { time =>
+      val input = LocalTime.parse(time)
+      val result = CatalystTypeConverters.convertToCatalyst(input)
+      val expected = DateTimeUtils.localTimeToNanos(input)
+      assert(result === expected)
+    }
+  }
+
+  test("converting TimeType to java.time.LocalTime") {
+    Seq(
+      0,
+      1,
+      59000000,
+      3600000001L,
+      43200999999L,
+      86399000000L,
+      86399999999L).foreach { us =>
+      val nanos = us * 1000L
+      val localTime = DateTimeUtils.nanosToLocalTime(nanos)
+      assert(CatalystTypeConverters.createToScalaConverter(TimeType())(nanos) === localTime)
     }
   }
 }

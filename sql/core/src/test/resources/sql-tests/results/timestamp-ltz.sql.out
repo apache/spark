@@ -50,9 +50,108 @@ struct<make_timestamp_ltz(2021, 7, 11, 6, 30, 45.678, CET):timestamp>
 -- !query
 SELECT make_timestamp_ltz(2021, 07, 11, 6, 30, 60.007)
 -- !query schema
-struct<make_timestamp_ltz(2021, 7, 11, 6, 30, 60.007):timestamp>
+struct<>
+-- !query output
+org.apache.spark.SparkDateTimeException
+{
+  "errorClass" : "INVALID_FRACTION_OF_SECOND",
+  "sqlState" : "22023",
+  "messageParameters" : {
+    "secAndMicros" : "60.007"
+  }
+}
+
+
+-- !query
+SELECT make_timestamp_ltz(make_date(2021, 07, 11), make_time(6, 30, 45.678))
+-- !query schema
+struct<make_timestamp(make_date(2021, 7, 11), make_time(6, 30, 45.678)):timestamp>
+-- !query output
+2021-07-11 06:30:45.678
+
+
+-- !query
+SELECT make_timestamp_ltz(NULL, TIME'00:00:00')
+-- !query schema
+struct<make_timestamp(NULL, TIME '00:00:00'):timestamp>
 -- !query output
 NULL
+
+
+-- !query
+SELECT make_timestamp_ltz(DATE'1970-01-01', NULL)
+-- !query schema
+struct<make_timestamp(DATE '1970-01-01', NULL):timestamp>
+-- !query output
+NULL
+
+
+-- !query
+SELECT make_timestamp_ltz(timestamp_ntz'2018-11-17 13:33:33', TIME'0:0:0')
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"TIMESTAMP_NTZ '2018-11-17 13:33:33'\"",
+    "inputType" : "\"TIMESTAMP_NTZ\"",
+    "paramIndex" : "first",
+    "requiredType" : "\"DATE\"",
+    "sqlExpr" : "\"make_timestamp(TIMESTAMP_NTZ '2018-11-17 13:33:33', TIME '00:00:00')\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 74,
+    "fragment" : "make_timestamp_ltz(timestamp_ntz'2018-11-17 13:33:33', TIME'0:0:0')"
+  } ]
+}
+
+
+-- !query
+SELECT make_timestamp_ltz(DATE'2025-06-20', timestamp_ntz'2018-11-17 13:33:33')
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"TIMESTAMP_NTZ '2018-11-17 13:33:33'\"",
+    "inputType" : "\"TIMESTAMP_NTZ\"",
+    "paramIndex" : "second",
+    "requiredType" : "\"TIME\"",
+    "sqlExpr" : "\"make_timestamp(DATE '2025-06-20', TIMESTAMP_NTZ '2018-11-17 13:33:33')\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 79,
+    "fragment" : "make_timestamp_ltz(DATE'2025-06-20', timestamp_ntz'2018-11-17 13:33:33')"
+  } ]
+}
+
+
+-- !query
+SELECT make_timestamp_ltz(make_date(2021, 07, 11), make_time(6, 30, 45.678), 'PST')
+-- !query schema
+struct<make_timestamp(make_date(2021, 7, 11), make_time(6, 30, 45.678), PST):timestamp>
+-- !query output
+2021-07-11 06:30:45.678
+
+
+-- !query
+SELECT make_timestamp_ltz(make_date(2021, 07, 11), make_time(6, 30, 45.678), 'CET')
+-- !query schema
+struct<make_timestamp(make_date(2021, 7, 11), make_time(6, 30, 45.678), CET):timestamp>
+-- !query output
+2021-07-10 21:30:45.678
 
 
 -- !query
@@ -61,3 +160,95 @@ SELECT convert_timezone('Europe/Brussels', timestamp_ltz'2022-03-23 00:00:00 Ame
 struct<convert_timezone(current_timezone(), Europe/Brussels, TIMESTAMP '2022-03-23 00:00:00'):timestamp_ntz>
 -- !query output
 2022-03-23 08:00:00
+
+
+-- !query
+SELECT try_make_timestamp_ltz(make_date(2021, 07, 11), make_time(6, 30, 45.678))
+-- !query schema
+struct<make_timestamp(make_date(2021, 7, 11), make_time(6, 30, 45.678)):timestamp>
+-- !query output
+2021-07-11 06:30:45.678
+
+
+-- !query
+SELECT try_make_timestamp_ltz(NULL, TIME'00:00:00')
+-- !query schema
+struct<make_timestamp(NULL, TIME '00:00:00'):timestamp>
+-- !query output
+NULL
+
+
+-- !query
+SELECT try_make_timestamp_ltz(DATE'1970-01-01', NULL)
+-- !query schema
+struct<make_timestamp(DATE '1970-01-01', NULL):timestamp>
+-- !query output
+NULL
+
+
+-- !query
+SELECT try_make_timestamp_ltz(timestamp_ntz'2018-11-17 13:33:33', TIME'0:0:0')
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"TIMESTAMP_NTZ '2018-11-17 13:33:33'\"",
+    "inputType" : "\"TIMESTAMP_NTZ\"",
+    "paramIndex" : "first",
+    "requiredType" : "\"DATE\"",
+    "sqlExpr" : "\"make_timestamp(TIMESTAMP_NTZ '2018-11-17 13:33:33', TIME '00:00:00')\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 78,
+    "fragment" : "try_make_timestamp_ltz(timestamp_ntz'2018-11-17 13:33:33', TIME'0:0:0')"
+  } ]
+}
+
+
+-- !query
+SELECT try_make_timestamp_ltz(DATE'2025-06-20', timestamp_ntz'2018-11-17 13:33:33')
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"TIMESTAMP_NTZ '2018-11-17 13:33:33'\"",
+    "inputType" : "\"TIMESTAMP_NTZ\"",
+    "paramIndex" : "second",
+    "requiredType" : "\"TIME\"",
+    "sqlExpr" : "\"make_timestamp(DATE '2025-06-20', TIMESTAMP_NTZ '2018-11-17 13:33:33')\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 83,
+    "fragment" : "try_make_timestamp_ltz(DATE'2025-06-20', timestamp_ntz'2018-11-17 13:33:33')"
+  } ]
+}
+
+
+-- !query
+SELECT try_make_timestamp_ltz(make_date(2021, 07, 11), make_time(6, 30, 45.678), 'PST')
+-- !query schema
+struct<make_timestamp(make_date(2021, 7, 11), make_time(6, 30, 45.678), PST):timestamp>
+-- !query output
+2021-07-11 06:30:45.678
+
+
+-- !query
+SELECT try_make_timestamp_ltz(make_date(2021, 07, 11), make_time(6, 30, 45.678), 'CET')
+-- !query schema
+struct<make_timestamp(make_date(2021, 7, 11), make_time(6, 30, 45.678), CET):timestamp>
+-- !query output
+2021-07-10 21:30:45.678

@@ -51,7 +51,7 @@ class JdbcUtilsSuite extends SparkFunSuite {
     }
     checkError(
       exception = duplicate,
-      errorClass = "COLUMN_ALREADY_EXISTS",
+      condition = "COLUMN_ALREADY_EXISTS",
       parameters = Map("columnName" -> "`c1`"))
 
     // Throw ParseException
@@ -59,14 +59,14 @@ class JdbcUtilsSuite extends SparkFunSuite {
       exception = intercept[ParseException]{
         JdbcUtils.getCustomSchema(tableSchema, "c3 DATEE, C2 STRING", caseInsensitive)
       },
-      errorClass = "UNSUPPORTED_DATATYPE",
+      condition = "UNSUPPORTED_DATATYPE",
       parameters = Map("typeName" -> "\"DATEE\""))
 
     checkError(
       exception = intercept[ParseException]{
         JdbcUtils.getCustomSchema(tableSchema, "c3 DATE. C2 STRING", caseInsensitive)
       },
-      errorClass = "PARSE_SYNTAX_ERROR",
+      condition = "PARSE_SYNTAX_ERROR",
       parameters = Map("error" -> "'.'", "hint" -> ""))
   }
 }

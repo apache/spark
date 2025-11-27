@@ -17,11 +17,13 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import java.lang.{StringBuilder => JStringBuilder}
 import java.util.Locale
 import java.util.regex.{Matcher, MatchResult, Pattern, PatternSyntaxException}
 
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
+import scala.util.control.NonFatal
 
 import org.apache.commons.text.StringEscapeUtils
 
@@ -34,19 +36,20 @@ import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.trees.BinaryLike
 import org.apache.spark.sql.catalyst.trees.TreePattern.{LIKE_FAMLIY, REGEXP_EXTRACT_FAMILY, REGEXP_REPLACE, TreePattern}
 import org.apache.spark.sql.catalyst.util.{CollationSupport, GenericArrayData, StringUtils}
-import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.internal.types.{StringTypeAnyCollation, StringTypeBinaryLcase}
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.types.{StringTypeBinaryLcase, StringTypeWithCollation}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
 abstract class StringRegexExpression extends BinaryExpression
-  with ImplicitCastInputTypes with NullIntolerant with Predicate {
-
+  with ImplicitCastInputTypes with Predicate {
+  override def nullIntolerant: Boolean = true
   def escape(v: String): String
   def matches(regex: Pattern, str: String): Boolean
 
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(StringTypeBinaryLcase, StringTypeAnyCollation)
+    Seq(StringTypeBinaryLcase, StringTypeWithCollation)
 
   final lazy val collationId: Int = left.dataType.asInstanceOf[StringType].collationId
   final lazy val collationRegexFlags: Int = CollationSupport.collationAwareRegexFlags(collationId)
@@ -74,11 +77,18 @@ abstract class StringRegexExpression extends BinaryExpression
 
   protected override def nullSafeEval(input1: Any, input2: Any): Any = {
     val regex = pattern(input2.asInstanceOf[UTF8String].toString)
-    if(regex == null) {
+    if (regex == null) {
       null
     } else {
       matches(regex, input1.asInstanceOf[UTF8String].toString)
     }
+  }
+}
+
+private[catalyst] object StringRegexExpression {
+  def expressionToEscapeChar(e: Expression): Char = e match {
+    case StringLiteral(v) if v.length == 1 => v.charAt(0)
+    case _ => throw QueryCompilationErrors.invalidEscapeChar(e)
   }
 }
 
@@ -136,6 +146,9 @@ case class Like(left: Expression, right: Expression, escapeChar: Char)
   extends StringRegexExpression {
 
   def this(left: Expression, right: Expression) = this(left, right, '\\')
+
+  def this(left: Expression, right: Expression, escapeChar: Expression) =
+    this(left, right, StringRegexExpression.expressionToEscapeChar(escapeChar))
 
   override def escape(v: String): String = StringUtils.escapeLikeRegex(v, escapeChar)
 
@@ -259,13 +272,16 @@ case class ILike(
     escapeChar: Char) extends RuntimeReplaceable
   with ImplicitCastInputTypes with BinaryLike[Expression] {
 
+  def this(left: Expression, right: Expression, escapeChar: Expression) =
+    this(left, right, StringRegexExpression.expressionToEscapeChar(escapeChar))
+
   override lazy val replacement: Expression = Like(Lower(left), Lower(right), escapeChar)
 
   def this(left: Expression, right: Expression) =
     this(left, right, '\\')
 
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(StringTypeBinaryLcase, StringTypeAnyCollation)
+    Seq(StringTypeBinaryLcase, StringTypeWithCollation)
 
   override protected def withNewChildrenInternal(
       newLeft: Expression, newRight: Expression): Expression = {
@@ -274,7 +290,10 @@ case class ILike(
 }
 
 sealed abstract class MultiLikeBase
-  extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant with Predicate {
+  extends UnaryExpression with ImplicitCastInputTypes with Predicate {
+  override def nullIntolerant: Boolean = true
+
+  override def contextIndependentFoldable: Boolean = child.contextIndependentFoldable
 
   protected def patterns: Seq[UTF8String]
 
@@ -550,31 +569,44 @@ case class RLike(left: Expression, right: Expression) extends StringRegexExpress
   since = "1.5.0",
   group = "string_funcs")
 case class StringSplit(str: Expression, regex: Expression, limit: Expression)
-  extends TernaryExpression with ImplicitCastInputTypes with NullIntolerant {
-
+  extends TernaryExpression with ImplicitCastInputTypes {
+  override def nullIntolerant: Boolean = true
   override def dataType: DataType = ArrayType(str.dataType, containsNull = false)
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(StringTypeBinaryLcase, StringTypeAnyCollation, IntegerType)
+    Seq(StringTypeBinaryLcase, StringTypeWithCollation, IntegerType)
   override def first: Expression = str
   override def second: Expression = regex
   override def third: Expression = limit
 
   final lazy val collationId: Int = str.dataType.asInstanceOf[StringType].collationId
 
+  private lazy val legacySplitTruncate =
+    SQLConf.get.getConf(SQLConf.LEGACY_TRUNCATE_FOR_EMPTY_REGEX_SPLIT)
+
   def this(exp: Expression, regex: Expression) = this(exp, regex, Literal(-1))
 
   override def nullSafeEval(string: Any, regex: Any, limit: Any): Any = {
-    val pattern = CollationSupport.collationAwareRegex(regex.asInstanceOf[UTF8String], collationId)
-    val strings = string.asInstanceOf[UTF8String].split(pattern, limit.asInstanceOf[Int])
+    val pattern = CollationSupport.collationAwareRegex(
+      regex.asInstanceOf[UTF8String], collationId, legacySplitTruncate)
+    val strings = if (legacySplitTruncate) {
+      string.asInstanceOf[UTF8String].splitLegacyTruncate(pattern, limit.asInstanceOf[Int])
+    } else {
+      string.asInstanceOf[UTF8String].split(pattern, limit.asInstanceOf[Int])
+    }
     new GenericArrayData(strings.asInstanceOf[Array[Any]])
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val arrayClass = classOf[GenericArrayData].getName
+    val pattern = ctx.freshName("pattern")
     nullSafeCodeGen(ctx, ev, (str, regex, limit) => {
       // Array in java is covariant, so we don't need to cast UTF8String[] to Object[].
-      s"""${ev.value} = new $arrayClass($str.split(
-         |CollationSupport.collationAwareRegex($regex, $collationId),$limit));""".stripMargin
+      s"""
+         |UTF8String $pattern =
+         |  CollationSupport.collationAwareRegex($regex, $collationId, $legacySplitTruncate);
+         |${ev.value} = new $arrayClass($legacySplitTruncate ?
+         |  $str.splitLegacyTruncate($pattern, $limit) : $str.split($pattern, $limit));
+         |""".stripMargin
     })
   }
 
@@ -622,7 +654,8 @@ case class StringSplit(str: Expression, regex: Expression, limit: Expression)
   group = "string_funcs")
 // scalastyle:on line.size.limit
 case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expression, pos: Expression)
-  extends QuaternaryExpression with ImplicitCastInputTypes with NullIntolerant {
+  extends QuaternaryExpression with ImplicitCastInputTypes {
+  override def nullIntolerant: Boolean = true
 
   def this(subject: Expression, regexp: Expression, rep: Expression) =
     this(subject, regexp, rep, Literal(1))
@@ -666,7 +699,7 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
   @transient private var lastReplacement: String = _
   @transient private var lastReplacementInUTF8: UTF8String = _
   // result buffer write by Matcher
-  @transient private lazy val result: StringBuffer = new StringBuffer
+  @transient private lazy val result: JStringBuilder = new JStringBuilder
   final override val nodePatterns: Seq[TreePattern] = Seq(REGEXP_REPLACE)
 
   override def nullSafeEval(s: Any, p: Any, r: Any, i: Any): Any = {
@@ -687,7 +720,13 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
       m.region(position, source.length)
       result.delete(0, result.length())
       while (m.find) {
-        m.appendReplacement(result, lastReplacement)
+        try {
+          m.appendReplacement(result, lastReplacement)
+        } catch {
+          case NonFatal(e) =>
+            throw QueryExecutionErrors.invalidRegexpReplaceError(s.toString,
+              p.toString, r.toString, i.asInstanceOf[Int], e)
+        }
       }
       m.appendTail(result)
       UTF8String.fromString(result.toString)
@@ -698,14 +737,15 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
 
   override def dataType: DataType = subject.dataType
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(StringTypeBinaryLcase, StringTypeAnyCollation, StringTypeBinaryLcase, IntegerType)
+    Seq(StringTypeBinaryLcase,
+      StringTypeWithCollation, StringTypeBinaryLcase, IntegerType)
   final lazy val collationId: Int = subject.dataType.asInstanceOf[StringType].collationId
   override def prettyName: String = "regexp_replace"
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val termResult = ctx.freshName("termResult")
 
-    val classNameStringBuffer = classOf[java.lang.StringBuffer].getCanonicalName
+    val classNameStringBuilder = classOf[JStringBuilder].getCanonicalName
 
     val matcher = ctx.freshName("matcher")
     val source = ctx.freshName("source")
@@ -731,11 +771,20 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
       String $source = $subject.toString();
       int $position = $pos - 1;
       if ($position == 0 || $position < $source.length()) {
-        $classNameStringBuffer $termResult = new $classNameStringBuffer();
+        $classNameStringBuilder $termResult = new $classNameStringBuilder();
         $matcher.region($position, $source.length());
 
         while ($matcher.find()) {
-          $matcher.appendReplacement($termResult, $termLastReplacement);
+          try {
+            $matcher.appendReplacement($termResult, $termLastReplacement);
+          } catch (Throwable e) {
+            if (scala.util.control.NonFatal.apply(e)) {
+              throw QueryExecutionErrors.invalidRegexpReplaceError($source, $regexp.toString(),
+                $rep.toString(), $pos, e);
+            } else {
+              throw e;
+            }
+          }
         }
         $matcher.appendTail($termResult);
         ${ev.value} = UTF8String.fromString($termResult.toString());
@@ -773,7 +822,8 @@ object RegExpExtractBase {
 }
 
 abstract class RegExpExtractBase
-  extends TernaryExpression with ImplicitCastInputTypes with NullIntolerant {
+  extends TernaryExpression with ImplicitCastInputTypes {
+  override def nullIntolerant: Boolean = true
   def subject: Expression
   def regexp: Expression
   def idx: Expression
@@ -786,7 +836,7 @@ abstract class RegExpExtractBase
   final override val nodePatterns: Seq[TreePattern] = Seq(REGEXP_EXTRACT_FAMILY)
 
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(StringTypeBinaryLcase, StringTypeAnyCollation, IntegerType)
+    Seq(StringTypeBinaryLcase, StringTypeWithCollation, IntegerType)
   override def first: Expression = subject
   override def second: Expression = regexp
   override def third: Expression = idx
@@ -949,7 +999,7 @@ case class RegExpExtractAll(subject: Expression, regexp: Expression, idx: Expres
   override def nullSafeEval(s: Any, p: Any, r: Any): Any = {
     val m = getLastMatcher(s, p)
     val matchResults = new ArrayBuffer[UTF8String]()
-    while(m.find) {
+    while (m.find) {
       val mr: MatchResult = m.toMatchResult
       val index = r.asInstanceOf[Int]
       RegExpExtractBase.checkGroupIndex(prettyName, mr.groupCount, index)
@@ -1039,7 +1089,7 @@ case class RegExpCount(left: Expression, right: Expression)
   override def children: Seq[Expression] = Seq(left, right)
 
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(StringTypeBinaryLcase, StringTypeAnyCollation)
+    Seq(StringTypeBinaryLcase, StringTypeWithCollation)
 
   override protected def withNewChildrenInternal(
       newChildren: IndexedSeq[Expression]): RegExpCount =
@@ -1079,7 +1129,7 @@ case class RegExpSubStr(left: Expression, right: Expression)
   override def children: Seq[Expression] = Seq(left, right)
 
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(StringTypeBinaryLcase, StringTypeAnyCollation)
+    Seq(StringTypeBinaryLcase, StringTypeWithCollation)
 
   override protected def withNewChildrenInternal(
       newChildren: IndexedSeq[Expression]): RegExpSubStr =

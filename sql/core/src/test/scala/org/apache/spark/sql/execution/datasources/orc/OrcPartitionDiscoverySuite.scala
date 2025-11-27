@@ -25,6 +25,7 @@ import org.apache.spark.SparkConf
 import org.apache.spark.sql._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.util.Utils
 
 // The data where the partitioning key exists only in the directory structure.
 case class OrcParData(intField: Int, stringField: String)
@@ -56,7 +57,7 @@ abstract class OrcPartitionDiscoveryTest extends OrcTest {
       new File(parent, child)
     }
 
-    assert(partDir.mkdirs(), s"Couldn't create directory $partDir")
+    assert(Utils.createDirectory(partDir), s"Couldn't create directory $partDir")
     partDir
   }
 

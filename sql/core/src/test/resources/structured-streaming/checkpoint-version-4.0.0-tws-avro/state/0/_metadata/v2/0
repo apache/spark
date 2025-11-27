@@ -1,0 +1,2 @@
+v2
+{"operatorInfo":{"operatorId":0,"operatorName":"transformWithStateExec"},"stateStoreInfo":[{"storeName":"default","numColsPrefixKey":0,"numPartitions":5,"stateSchemaFilePath":"file:/Users/anish.shrigondekar/spark/spark/target/tmp/spark-dcaeba6f-ff09-4f91-ba1b-4d14fe53cc9f/state/0/_stateSchema/default/0_6b12d3c5-57e6-4001-8321-3ae63d6be7a0"}],"operatorPropertiesJson":"{\"timeMode\":\"NoTime\",\"outputMode\":\"Update\",\"stateVariables\":[{\"stateName\":\"countState\",\"stateVariableType\":\"ValueState\",\"ttlEnabled\":false}]}"}

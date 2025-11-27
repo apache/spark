@@ -34,17 +34,17 @@ Please see [Spark Security](security.html) and the specific security sections in
 
 Images built from the project provided Dockerfiles contain a default [`USER`](https://docs.docker.com/engine/reference/builder/#user) directive with a default UID of `185`.  This means that the resulting images will be running the Spark processes as this UID inside the container. Security conscious deployments should consider providing custom images with `USER` directives specifying their desired unprivileged UID and GID.  The resulting UID should include the root group in its supplementary groups in order to be able to run the Spark executables.  Users building their own images with the provided `docker-image-tool.sh` script can use the `-u <uid>` option to specify the desired UID.
 
-Alternatively the [Pod Template](#pod-template) feature can be used to add a [Security Context](https://kubernetes.io/docs/tasks/configure-pod-container/security-context/#volumes-and-file-systems) with a `runAsUser` to the pods that Spark submits.  This can be used to override the `USER` directives in the images themselves.  Please bear in mind that this requires cooperation from your users and as such may not be a suitable solution for shared environments.  Cluster administrators should use [Pod Security Policies](https://kubernetes.io/docs/concepts/policy/pod-security-policy/#users-and-groups) if they wish to limit the users that pods may run as.
+Alternatively the [Pod Template](#pod-template) feature can be used to add a [Security Context](https://kubernetes.io/docs/tasks/configure-pod-container/security-context/#volumes-and-file-systems) with a `runAsUser` to the pods that Spark submits.  This can be used to override the `USER` directives in the images themselves.  Please bear in mind that this requires cooperation from your users and as such may not be a suitable solution for shared environments.  Cluster administrators should use the [Pod Security Admission Controller](https://kubernetes.io/docs/concepts/security/pod-security-admission/) if they wish to limit the users that pods may run as.
 
 ## Volume Mounts
 
 As described later in this document under [Using Kubernetes Volumes](#using-kubernetes-volumes) Spark on K8S provides configuration options that allow for mounting certain volume types into the driver and executor pods.  In particular it allows for [`hostPath`](https://kubernetes.io/docs/concepts/storage/volumes/#hostpath) volumes which as described in the Kubernetes documentation have known security vulnerabilities.
 
-Cluster administrators should use [Pod Security Policies](https://kubernetes.io/docs/concepts/policy/pod-security-policy/) to limit the ability to mount `hostPath` volumes appropriately for their environments.
+Cluster administrators should use the [Pod Security Admission Controller](https://kubernetes.io/docs/concepts/security/pod-security-admission/) to limit the ability to mount `hostPath` volumes appropriately for their environments.
 
 # Prerequisites
 
-* A running Kubernetes cluster at version >= 1.27 with access configured to it using
+* A running Kubernetes cluster at version >= 1.32 with access configured to it using
 [kubectl](https://kubernetes.io/docs/reference/kubectl/).  If you do not already have a working Kubernetes cluster,
 you may set up a test cluster on your local machine using
 [minikube](https://kubernetes.io/docs/getting-started-guides/minikube/).
@@ -236,7 +236,7 @@ A typical example of this using S3 is via passing the following options:
 
 ```
 ...
---packages org.apache.hadoop:hadoop-aws:3.4.0
+--packages org.apache.hadoop:hadoop-aws:3.4.1
 --conf spark.kubernetes.file.upload.path=s3a://<s3-bucket>/path
 --conf spark.hadoop.fs.s3a.access.key=...
 --conf spark.hadoop.fs.s3a.impl=org.apache.hadoop.fs.s3a.S3AFileSystem
@@ -394,7 +394,7 @@ spark.kubernetes.executor.volumes.persistentVolumeClaim.spark-local-dir-1.mount.
 spark.kubernetes.executor.volumes.persistentVolumeClaim.spark-local-dir-1.mount.readOnly=false
 ```
 
-To enable shuffle data recovery feature via the built-in `KubernetesLocalDiskShuffleDataIO` plugin, we need to have the followings. You may want to enable `spark.kubernetes.driver.waitToReusePersistentVolumeClaim` additionally.
+To enable shuffle data recovery feature via the built-in `KubernetesLocalDiskShuffleDataIO` plugin, we need to have the following. You may want to enable `spark.kubernetes.driver.waitToReusePersistentVolumeClaim` additionally.
 
 ```
 spark.kubernetes.executor.volumes.persistentVolumeClaim.spark-local-dir-1.mount.path=/data/spark-x/executor-x
@@ -429,6 +429,19 @@ $ kubectl -n=<namespace> logs -f <driver-pod-name>
 The same logs can also be accessed through the
 [Kubernetes dashboard](https://kubernetes.io/docs/tasks/access-application-cluster/web-ui-dashboard/) if installed on
 the cluster.
+
+When there exists a log collection system, you can expose it at Spark Driver `Executors` tab UI. For example,
+
+```
+spark.ui.custom.executor.log.url='https://log-server/log?appId={{APP_ID}}&execId={{EXECUTOR_ID}}'
+```
+
+You can add additional custom variables to this url template, populated with the values of existing executor environment variables like
+
+```
+spark.executorEnv.SPARK_EXECUTOR_ATTRIBUTE_YOUR_VAR='$(EXISTING_EXECUTOR_ENV_VAR)'
+spark.ui.custom.executor.log.url='https://log-server/log?appId={{APP_ID}}&execId={{EXECUTOR_ID}}&your_var={{YOUR_VAR}}'
+```
 
 ### Accessing Driver UI
 
@@ -630,7 +643,8 @@ See the [configuration page](configuration.html) for information on Spark config
     Container image to use for the Spark application.
     This is usually of the form <code>example.com/repo/spark:v1.0.0</code>.
     This configuration is required and must be provided by the user, unless explicit
-    images are provided for each different container type.
+    images are provided for each different container type. Note that <code>{{SPARK_VERSION}}</code> 
+    is the built-in variable that will be substituted with current Spark's version.
   </td>
   <td>2.3.0</td>
 </tr>
@@ -638,7 +652,8 @@ See the [configuration page](configuration.html) for information on Spark config
   <td><code>spark.kubernetes.driver.container.image</code></td>
   <td><code>(value of spark.kubernetes.container.image)</code></td>
   <td>
-    Custom container image to use for the driver.
+    Custom container image to use for the driver. Note that <code>{{SPARK_VERSION}}</code> 
+    is the built-in variable that will be substituted with current Spark's version.
   </td>
   <td>2.3.0</td>
 </tr>
@@ -646,7 +661,8 @@ See the [configuration page](configuration.html) for information on Spark config
   <td><code>spark.kubernetes.executor.container.image</code></td>
   <td><code>(value of spark.kubernetes.container.image)</code></td>
   <td>
-    Custom container image to use for executors.
+    Custom container image to use for executors. Note that <code>{{SPARK_VERSION}}</code> 
+    is the built-in variable that will be substituted with current Spark's version.
   </td>
   <td>2.3.0</td>
 </tr>
@@ -669,7 +685,7 @@ See the [configuration page](configuration.html) for information on Spark config
 </tr>
 <tr>
   <td><code>spark.kubernetes.allocation.batch.size</code></td>
-  <td><code>5</code></td>
+  <td><code>20</code></td>
   <td>
     Number of pods to launch at once in each round of executor pod allocation.
   </td>
@@ -683,6 +699,14 @@ See the [configuration page](configuration.html) for information on Spark config
     excessive CPU usage on the spark driver.
   </td>
   <td>2.3.0</td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.allocation.maximum</code></td>
+  <td><code>Int.MaxValue</code></td>
+  <td>
+    The maximum number of executor pods to try to create during the whole job lifecycle.
+  </td>
+  <td>4.1.0</td>
 </tr>
 <tr>
   <td><code>spark.kubernetes.jars.avoidDownloadSchemes</code></td>
@@ -988,7 +1012,7 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>
     Prefix to use in front of the executor pod names. It must conform the rules defined by the Kubernetes
     <a href="https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#dns-label-names">DNS Label Names</a>.
-    The prefix will be used to generate executor pod names in the form of <code>$podNamePrefix-exec-$id</code>, where the `id` is
+    The prefix will be used to generate executor pod names in the form of <code>\$podNamePrefix-exec-\$id</code>, where the `id` is
     a positive int value, so the length of the `podNamePrefix` needs to be less than or equal to 47(= 63 - 10 - 6).
   </td>
   <td>2.3.0</td>
@@ -1170,6 +1194,24 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>2.4.0</td>
 </tr>
 <tr>
+  <td><code>spark.kubernetes.driver.volumes.[VolumeType].[VolumeName].label.[LabelName]</code></td>
+  <td>(none)</td>
+  <td>
+   Configure <a href="https://kubernetes.io/docs/concepts/storage/volumes/">Kubernetes Volume</a> labels passed to the Kubernetes with <code>LabelName</code> as key having specified value, must conform with Kubernetes label format. For example,
+   <code>spark.kubernetes.driver.volumes.persistentVolumeClaim.checkpointpvc.label.foo=bar</code>.
+  </td>
+  <td>4.0.0</td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.driver.volumes.[VolumeType].[VolumeName].annotation.[AnnotationName]</code></td>
+  <td>(none)</td>
+  <td>
+   Configure <a href="https://kubernetes.io/docs/concepts/storage/volumes/">Kubernetes Volume</a> annotations passed to the Kubernetes with <code>AnnotationName</code> as key having specified value, must conform with Kubernetes annotations format. For example,
+   <code>spark.kubernetes.driver.volumes.persistentVolumeClaim.checkpointpvc.annotation.foo=bar</code>.
+  </td>
+  <td>4.0.0</td>
+</tr>
+<tr>
   <td><code>spark.kubernetes.executor.volumes.[VolumeType].[VolumeName].mount.path</code></td>
   <td>(none)</td>
   <td>
@@ -1206,6 +1248,24 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>2.4.0</td>
 </tr>
 <tr>
+  <td><code>spark.kubernetes.executor.volumes.[VolumeType].[VolumeName].label.[LabelName]</code></td>
+  <td>(none)</td>
+  <td>
+   Configure <a href="https://kubernetes.io/docs/concepts/storage/volumes/">Kubernetes Volume</a> labels passed to the Kubernetes with <code>LabelName</code> as key having specified value, must conform with Kubernetes label format. For example,
+   <code>spark.kubernetes.executor.volumes.persistentVolumeClaim.checkpointpvc.label.foo=bar</code>.
+  </td>
+  <td>4.0.0</td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.executor.volumes.[VolumeType].[VolumeName].annotation.[AnnotationName]</code></td>
+  <td>(none)</td>
+  <td>
+   Configure <a href="https://kubernetes.io/docs/concepts/storage/volumes/">Kubernetes Volume</a> annotations passed to the Kubernetes with <code>AnnotationName</code> as key having specified value, must conform with Kubernetes annotations format. For example,
+   <code>spark.kubernetes.executor.volumes.persistentVolumeClaim.checkpointpvc.annotation.foo=bar</code>.
+  </td>
+  <td>4.0.0</td>
+</tr>
+<tr>
   <td><code>spark.kubernetes.local.dirs.tmpfs</code></td>
   <td><code>false</code></td>
   <td>
@@ -1221,17 +1281,6 @@ See the [configuration page](configuration.html) for information on Spark config
     This sets the Memory Overhead Factor that will allocate memory to non-JVM memory, which includes off-heap memory allocations, non-JVM tasks, various systems processes, and <code>tmpfs</code>-based local directories when <code>spark.kubernetes.local.dirs.tmpfs</code> is <code>true</code>. For JVM-based jobs this value will default to 0.10 and 0.40 for non-JVM jobs.
     This is done as non-JVM tasks need more non-JVM heap space and such tasks commonly fail with "Memory Overhead Exceeded" errors. This preempts this error with a higher default.
     This will be overridden by the value set by <code>spark.driver.memoryOverheadFactor</code> and <code>spark.executor.memoryOverheadFactor</code> explicitly.
-  </td>
-  <td>2.4.0</td>
-</tr>
-<tr>
-  <td><code>spark.kubernetes.pyspark.pythonVersion</code></td>
-  <td><code>"3"</code></td>
-  <td>
-   This sets the major Python version of the docker image used to run the driver and executor containers.
-   It can be only "3". This configuration was deprecated from Spark 3.1.0, and is effectively no-op.
-   Users should set 'spark.pyspark.python' and 'spark.pyspark.driver.python' configurations or
-   'PYSPARK_PYTHON' and 'PYSPARK_DRIVER_PYTHON' environment variables.
   </td>
   <td>2.4.0</td>
 </tr>
@@ -1326,8 +1375,16 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>3.0.0</td>
 </tr>
 <tr>
+  <td><code>spark.kubernetes.executor.terminationGracePeriodSeconds</code></td>
+  <td>30s</td>
+  <td>
+    Time to wait for graceful termination of executor pods.
+  </td>
+  <td>4.1.0</td>
+</tr>
+<tr>
   <td><code>spark.kubernetes.executor.checkAllContainers</code></td>
-  <td><code>false</code></td>
+  <td><code>true</code></td>
   <td>
   Specify whether executor pods should be check all containers (including sidecars) or only the executor container when determining the pod status.
   </td>
@@ -1418,10 +1475,20 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>3.3.0</td>
 </tr>
 <tr>
+  <td><code>spark.kubernetes.executor.podDeletionCost</code></td>
+  <td>(none)</td>
+  <td>
+    Value to apply to the <code>controller.kubernetes.io/pod-deletion-cost</code> annotation
+    when Spark tells a deployment-based allocator to remove executor pods. Set this to steer
+    Kubernetes to remove the same pods that Spark selected when the deployment scales down.
+  </td>
+  <td>4.2.0</td>
+</tr>
+<tr>
   <td><code>spark.kubernetes.executor.scheduler.name</code></td>
   <td>(none)</td>
   <td>
-	Specify the scheduler name for each executor pod.
+    Specify the scheduler name for each executor pod.
   </td>
   <td>3.0.0</td>
 </tr>
@@ -1444,7 +1511,7 @@ See the [configuration page](configuration.html) for information on Spark config
 </tr>
 <tr>
   <td><code>spark.kubernetes.configMap.maxSize</code></td>
-  <td><code>1572864</code></td>
+  <td><code>1048576</code></td>
   <td>
     Max size limit for a config map.
     This is configurable as per <a href="https://etcd.io/docs/latest/dev-guide/limit/">limit</a> on k8s server end.
@@ -1552,6 +1619,15 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>3.2.0</td>
 </tr>
 <tr>
+  <td><code>spark.kubernetes.driver.pod.excludedFeatureSteps</code></td>
+  <td>(none)</td>
+  <td>
+    Class names of a driver pod feature step to exclude.
+    This is a developer API. Comma separated.
+  </td>
+  <td>4.1.0</td>
+</tr>
+<tr>
   <td><code>spark.kubernetes.executor.pod.featureSteps</code></td>
   <td>(none)</td>
   <td>
@@ -1562,6 +1638,15 @@ See the [configuration page](configuration.html) for information on Spark config
     is also available.
   </td>
   <td>3.2.0</td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.executor.pod.excludedFeatureSteps</code></td>
+  <td>(none)</td>
+  <td>
+    Class names of an executor pod feature step to exclude.
+    This is a developer API. Comma separated.
+  </td>
+  <td>4.1.0</td>
 </tr>
 <tr>
   <td><code>spark.kubernetes.allocation.maxPendingPods</code></td>
@@ -1579,10 +1664,10 @@ See the [configuration page](configuration.html) for information on Spark config
   <td><code>spark.kubernetes.allocation.pods.allocator</code></td>
   <td><code>direct</code></td>
   <td>
-    Allocator to use for pods. Possible values are <code>direct</code> (the default)
-    and <code>statefulset</code>, or a full class name of a class implementing `AbstractPodsAllocator`.
-    Future version may add Job or replicaset. This is a developer API and may change
-    or be removed at anytime.
+    Allocator to use for pods. Possible values are <code>direct</code> (the default),
+    <code>statefulset</code>, <code>deployment</code>, or a full class name of a class
+    implementing `AbstractPodsAllocator`. Future version may add Job or replicaset. 
+    This is a developer API and may change or be removed at anytime.  
   </td>
   <td>3.3.0</td>
 </tr>
@@ -1875,7 +1960,7 @@ Spark allows users to specify a custom Kubernetes schedulers.
   ```
 
 ##### Build
-To create a Spark distribution along with Volcano suppport like those distributed by the Spark [Downloads page](https://spark.apache.org/downloads.html), also see more in ["Building Spark"](https://spark.apache.org/docs/latest/building-spark.html):
+To create a Spark distribution along with Volcano support like those distributed by the Spark [Downloads page](https://spark.apache.org/downloads.html), also see more in ["Building Spark"](https://spark.apache.org/docs/latest/building-spark.html):
 
 ```bash
 ./dev/make-distribution.sh --name custom-spark --pip --r --tgz -Psparkr -Phive -Phive-thriftserver -Pkubernetes -Pvolcano
@@ -1939,10 +2024,10 @@ Install Apache YuniKorn:
 ```bash
 helm repo add yunikorn https://apache.github.io/yunikorn-release
 helm repo update
-helm install yunikorn yunikorn/yunikorn --namespace yunikorn --version 1.5.0 --create-namespace --set embedAdmissionController=false
+helm install yunikorn yunikorn/yunikorn --namespace yunikorn --version 1.7.0 --create-namespace --set embedAdmissionController=false
 ```
 
-The above steps will install YuniKorn v1.5.0 on an existing Kubernetes cluster.
+The above steps will install YuniKorn v1.7.0 on an existing Kubernetes cluster.
 
 ##### Get started
 

@@ -24,6 +24,8 @@ import scala.jdk.javaapi.CollectionConverters;
 import org.apache.spark.sql.Encoders;
 import org.apache.spark.sql.streaming.*;
 
+import static org.junit.jupiter.api.Assertions.assertFalse;
+
 /**
  * A test stateful processor concatenates all input rows for a key and emits the result.
  * Primarily used for testing the Java API for arbitrary stateful operator in structured streaming
@@ -39,7 +41,7 @@ public class TestStatefulProcessorWithInitialState
       OutputMode outputMode,
       TimeMode timeMode) {
     testState = this.getHandle().getValueState("testState",
-      Encoders.STRING());
+      Encoders.STRING(), TTLConfig.NONE());
   }
 
   @Override
@@ -51,30 +53,27 @@ public class TestStatefulProcessorWithInitialState
   public scala.collection.Iterator<String> handleInputRows(
       Integer key,
       scala.collection.Iterator<String> rows,
-      TimerValues timerValues,
-      ExpiredTimerInfo expiredTimerInfo) {
+      TimerValues timerValues) {
 
     java.util.List<String> result = new ArrayList<>();
-    if (!expiredTimerInfo.isValid()) {
-      String existingValue = "";
-      if (testState.exists()) {
-        existingValue = testState.get();
-      }
-
-      StringBuilder sb = new StringBuilder(key.toString());
-      if (!existingValue.isEmpty()) {
-        sb.append(existingValue);
-      }
-
-      while (rows.hasNext()) {
-        sb.append(rows.next());
-      }
-
-      testState.clear();
-      assert(testState.exists() == false);
-
-      result.add(sb.toString());
+    String existingValue = "";
+    if (testState.exists()) {
+      existingValue = testState.get();
     }
+
+    StringBuilder sb = new StringBuilder(key.toString());
+    if (!existingValue.isEmpty()) {
+      sb.append(existingValue);
+    }
+
+    while (rows.hasNext()) {
+      sb.append(rows.next());
+    }
+
+    testState.clear();
+    assertFalse(testState.exists());
+
+    result.add(sb.toString());
     return CollectionConverters.asScala(result).iterator();
   }
 }

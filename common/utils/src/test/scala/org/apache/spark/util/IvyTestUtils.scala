@@ -23,10 +23,10 @@ import java.util.jar.Attributes.Name
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.commons.io.FileUtils
 import org.apache.ivy.core.settings.IvySettings
 
 import org.apache.spark.util.MavenUtils.MavenCoordinate
+import org.apache.spark.util.SparkFileUtils.deleteRecursively
 
 private[spark] object IvyTestUtils {
 
@@ -95,7 +95,7 @@ private[spark] object IvyTestUtils {
       className: String,
       packageName: String): Seq[(String, File)] = {
     val rFilesDir = new File(dir, "R" + File.separator + "pkg")
-    new File(rFilesDir, "R").mkdirs()
+    SparkFileUtils.createDirectory(new File(rFilesDir, "R"))
     val contents =
       s"""myfunc <- function(x) {
         |  SparkR:::callJStatic("$packageName.$className", "myFunc", x)
@@ -150,20 +150,20 @@ private[spark] object IvyTestUtils {
       useIvyLayout: Boolean): File = {
     if (useIvyLayout) {
       val ivyXmlPath = pathFromCoordinate(artifact, tempPath, "ivy", true)
-      ivyXmlPath.mkdirs()
+      SparkFileUtils.createDirectory(ivyXmlPath)
       createIvyDescriptor(ivyXmlPath, artifact, dependencies)
     } else {
       val pomPath = pathFromCoordinate(artifact, tempPath, "pom", useIvyLayout)
-      pomPath.mkdirs()
+      SparkFileUtils.createDirectory(pomPath)
       createPom(pomPath, artifact, dependencies)
     }
   }
 
   /** Helper method to write artifact information in the pom. */
   private def pomArtifactWriter(artifact: MavenCoordinate, tabCount: Int = 1): String = {
-    var result = "\n" + "  " * tabCount + s"<groupId>${artifact.groupId}</groupId>"
-    result += "\n" + "  " * tabCount + s"<artifactId>${artifact.artifactId}</artifactId>"
-    result += "\n" + "  " * tabCount + s"<version>${artifact.version}</version>"
+    var result = "\n" + "  ".repeat(tabCount) + s"<groupId>${artifact.groupId}</groupId>"
+    result += "\n" + "  ".repeat(tabCount) + s"<artifactId>${artifact.artifactId}</artifactId>"
+    result += "\n" + "  ".repeat(tabCount) + s"<version>${artifact.version}</version>"
     result
   }
 
@@ -293,13 +293,13 @@ private[spark] object IvyTestUtils {
     // Where the root of the repository exists, and what Ivy will search in
     val tempPath = tempDir.getOrElse(SparkFileUtils.createTempDir())
     // Create directory if it doesn't exist
-    tempPath.mkdirs()
+    SparkFileUtils.createDirectory(tempPath)
     // Where to create temporary class files and such
     val root = new File(tempPath, tempPath.hashCode().toString)
-    root.mkdirs()
+    SparkFileUtils.createDirectory(root)
     try {
       val jarPath = pathFromCoordinate(artifact, tempPath, "jar", useIvyLayout)
-      jarPath.mkdirs()
+      SparkFileUtils.createDirectory(jarPath)
       val className = "MyLib"
 
       val javaClass = createJavaClass(root, className, artifact.groupId)
@@ -319,7 +319,7 @@ private[spark] object IvyTestUtils {
       val descriptor = createDescriptor(tempPath, artifact, dependencies, useIvyLayout)
       assert(descriptor.exists(), "Problem creating Pom file")
     } finally {
-      FileUtils.deleteDirectory(root)
+      deleteRecursively(root)
     }
     tempPath
   }
@@ -365,7 +365,7 @@ private[spark] object IvyTestUtils {
       useIvyLayout: Boolean = false,
       withPython: Boolean = false,
       withR: Boolean = false,
-      ivySettings: IvySettings = new IvySettings)(f: String => Unit): Unit = {
+      ivySettings: IvySettings = defaultIvySettings())(f: String => Unit): Unit = {
     val deps = dependencies.map(MavenUtils.extractMavenCoordinates)
     purgeLocalIvyCache(artifact, deps, ivySettings)
     val repo = createLocalRepositoryForTests(artifact, dependencies, rootDir, useIvyLayout,
@@ -377,13 +377,13 @@ private[spark] object IvyTestUtils {
       if (repo.toString.contains(".m2") || repo.toString.contains(".ivy2") ||
           repo.toString.contains(".ivy2.5.2")) {
         val groupDir = getBaseGroupDirectory(artifact, useIvyLayout)
-        FileUtils.deleteDirectory(new File(repo, groupDir + File.separator + artifact.artifactId))
+        deleteRecursively(new File(repo, groupDir + File.separator + artifact.artifactId))
         deps.foreach { _.foreach { dep =>
-            FileUtils.deleteDirectory(new File(repo, getBaseGroupDirectory(dep, useIvyLayout)))
+            deleteRecursively(new File(repo, getBaseGroupDirectory(dep, useIvyLayout)))
           }
         }
       } else {
-        FileUtils.deleteDirectory(repo)
+        deleteRecursively(repo)
       }
       purgeLocalIvyCache(artifact, deps, ivySettings)
     }
@@ -395,10 +395,22 @@ private[spark] object IvyTestUtils {
       dependencies: Option[Seq[MavenCoordinate]],
       ivySettings: IvySettings): Unit = {
     // delete the artifact from the cache as well if it already exists
-    FileUtils.deleteDirectory(new File(ivySettings.getDefaultCache, artifact.groupId))
+    deleteRecursively(new File(ivySettings.getDefaultCache, artifact.groupId))
     dependencies.foreach { _.foreach { dep =>
-        FileUtils.deleteDirectory(new File(ivySettings.getDefaultCache, dep.groupId))
+        deleteRecursively(new File(ivySettings.getDefaultCache, dep.groupId))
       }
     }
+  }
+
+  /**
+   * Creates and initializes a new instance of IvySettings with default configurations.
+   * The method processes the Ivy path argument using MavenUtils to ensure proper setup.
+   *
+   * @return A newly created and configured instance of IvySettings.
+   */
+  private def defaultIvySettings(): IvySettings = {
+    val settings = new IvySettings
+    MavenUtils.processIvyPathArg(ivySettings = settings, ivyPath = None)
+    settings
   }
 }

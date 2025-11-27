@@ -137,8 +137,8 @@ def portable_hash(x: Hashable) -> int:
 
     if "PYTHONHASHSEED" not in os.environ:
         raise PySparkRuntimeError(
-            error_class="PYTHON_HASH_SEED_NOT_SET",
-            message_parameters={},
+            errorClass="PYTHON_HASH_SEED_NOT_SET",
+            messageParameters={},
         )
 
     if x is None:
@@ -246,8 +246,8 @@ class RDD(Generic[T_co]):
     def __getnewargs__(self) -> NoReturn:
         # This method is called when attempting to pickle an RDD, which is always an error:
         raise PySparkRuntimeError(
-            error_class="RDD_TRANSFORM_ONLY_VALID_ON_DRIVER",
-            message_parameters={},
+            errorClass="RDD_TRANSFORM_ONLY_VALID_ON_DRIVER",
+            messageParameters={},
         )
 
     @property
@@ -1581,8 +1581,8 @@ class RDD(Generic[T_co]):
                 pipe.wait()
                 if checkCode and pipe.returncode:
                     raise PySparkRuntimeError(
-                        error_class="PIPE_FUNCTION_EXITED",
-                        message_parameters={
+                        errorClass="PIPE_FUNCTION_EXITED",
+                        messageParameters={
                             "func_name": command,
                             "error_code": str(pipe.returncode),
                         },
@@ -1698,7 +1698,8 @@ class RDD(Generic[T_co]):
         with SCCallSiteSync(self.context):
             assert self.ctx._jvm is not None
             sock_info = self.ctx._jvm.PythonRDD.collectAndServe(self._jrdd.rdd())
-        return list(_load_from_socket(sock_info, self._jrdd_deserializer))
+        with _load_from_socket(sock_info, self._jrdd_deserializer) as stream:
+            return list(stream)
 
     def collectWithJobGroup(
         self: "RDD[T]", groupId: str, description: str, interruptOnCancel: bool = False
@@ -1741,7 +1742,8 @@ class RDD(Generic[T_co]):
             sock_info = self.ctx._jvm.PythonRDD.collectAndServeWithJobGroup(
                 self._jrdd.rdd(), groupId, description, interruptOnCancel
             )
-        return list(_load_from_socket(sock_info, self._jrdd_deserializer))
+        with _load_from_socket(sock_info, self._jrdd_deserializer) as stream:
+            return list(stream)
 
     def reduce(self: "RDD[T]", f: Callable[[T, T], T]) -> T:
         """
@@ -3286,7 +3288,9 @@ class RDD(Generic[T_co]):
         assert self.ctx._jvm is not None
 
         if compressionCodecClass:
-            compressionCodec = self.ctx._jvm.java.lang.Class.forName(compressionCodecClass)
+            compressionCodec = getattr(self.ctx._jvm, "java.lang.Class").forName(
+                compressionCodecClass
+            )
             keyed._jrdd.map(self.ctx._jvm.BytesToString()).saveAsTextFile(path, compressionCodec)
         else:
             keyed._jrdd.map(self.ctx._jvm.BytesToString()).saveAsTextFile(path)
@@ -4998,8 +5002,8 @@ class RDD(Generic[T_co]):
         -----
         For additional information see
 
-        - `SPIP: Barrier Execution Mode <http://jira.apache.org/jira/browse/SPARK-24374>`_
-        - `Design Doc <https://jira.apache.org/jira/browse/SPARK-24582>`_
+        - `SPIP: Barrier Execution Mode <https://issues.apache.org/jira/browse/SPARK-24374>`_
+        - `Design Doc <https://issues.apache.org/jira/browse/SPARK-24582>`_
 
         This API is experimental
         """
@@ -5044,7 +5048,7 @@ class RDD(Generic[T_co]):
         else:
             assert self.ctx._jvm is not None
 
-            builder = self.ctx._jvm.org.apache.spark.resource.ResourceProfileBuilder()
+            builder = getattr(self.ctx._jvm, "org.apache.spark.resource.ResourceProfileBuilder")()
             ereqs = ExecutorResourceRequests(self.ctx._jvm, profile._executor_resource_requests)
             treqs = TaskResourceRequests(self.ctx._jvm, profile._task_resource_requests)
             builder.require(ereqs._java_executor_resource_requests)
@@ -5105,8 +5109,8 @@ class RDD(Generic[T_co]):
         self: "RDD[Any]", schema: Optional[Any] = None, sampleRatio: Optional[float] = None
     ) -> "DataFrame":
         raise PySparkRuntimeError(
-            error_class="CALL_BEFORE_INITIALIZE",
-            message_parameters={
+            errorClass="CALL_BEFORE_INITIALIZE",
+            messageParameters={
                 "func_name": "RDD.toDF",
                 "object": "SparkSession",
             },
@@ -5369,6 +5373,18 @@ def _test() -> None:
     import doctest
     import tempfile
     from pyspark.core.context import SparkContext
+
+    try:
+        # Numpy 2.0+ changed its string format,
+        # adding type information to numeric scalars.
+        import numpy as np
+        from pandas.util.version import Version
+
+        if Version(np.__version__) >= Version("2"):
+            # `legacy="1.25"` only available in `nump>=2`
+            np.set_printoptions(legacy="1.25")  # type: ignore[arg-type]
+    except (ModuleNotFoundError, TypeError):
+        pass
 
     tmp_dir = tempfile.TemporaryDirectory()
     globs = globals().copy()

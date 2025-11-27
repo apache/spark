@@ -30,6 +30,7 @@ import org.apache.spark.internal.config
 import org.apache.spark.serializer.{JavaSerializer, KryoSerializer}
 import org.apache.spark.storage.BlockManagerId
 import org.apache.spark.util.Utils
+import org.apache.spark.util.collection.Utils.createArray
 
 class MapStatusSuite extends SparkFunSuite {
   private def doReturn(value: Any) = org.mockito.Mockito.doReturn(value, Seq.empty: _*)
@@ -75,7 +76,7 @@ class MapStatusSuite extends SparkFunSuite {
   }
 
   test("large tasks should use " + classOf[HighlyCompressedMapStatus].getName) {
-    val sizes = Array.fill[Long](2001)(150L)
+    val sizes = createArray(2001, 150L)
     val status = MapStatus(null, sizes, -1)
     assert(status.isInstanceOf[HighlyCompressedMapStatus])
     assert(status.getSizeForBlock(10) === 150L)
@@ -208,7 +209,7 @@ class MapStatusSuite extends SparkFunSuite {
     doReturn(conf).when(env).conf
     SparkEnv.set(env)
 
-    val emptyBlocks = Array.fill[Long](emptyBlocksLength)(0L)
+    val emptyBlocks = createArray(emptyBlocksLength, 0L)
     val smallAndUntrackedBlocks = Array.tabulate[Long](smallAndUntrackedBlocksLength)(i => i)
     val trackedSkewedBlocks =
       Array.tabulate[Long](trackedSkewedBlocksLength)(i => i + 350 * 1024)
@@ -252,7 +253,7 @@ class MapStatusSuite extends SparkFunSuite {
     doReturn(conf).when(env).conf
     SparkEnv.set(env)
 
-    val emptyBlocks = Array.fill[Long](emptyBlocksLength)(0L)
+    val emptyBlocks = createArray(emptyBlocksLength, 0L)
     val smallBlockSizes = Array.tabulate[Long](smallBlocksLength)(i => i + 1)
     val untrackedSkewedBlocksSizes =
       Array.tabulate[Long](untrackedSkewedBlocksLength)(i => i + 3500 * 1024)

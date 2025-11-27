@@ -25,7 +25,6 @@ import java.util.HashMap
 import com.fasterxml.jackson.core.`type`.TypeReference
 import com.fasterxml.jackson.databind.ObjectMapper
 import jnr.posix.{POSIX, POSIXFactory}
-import org.apache.commons.io.FileUtils
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.internal.config
@@ -116,14 +115,14 @@ class DiskBlockManagerSuite extends SparkFunSuite {
 
   test("Test dir creation with permission 770") {
     val testDir = new File("target/testDir");
-    FileUtils.deleteQuietly(testDir)
+    Utils.deleteQuietly(testDir)
     diskBlockManager = new DiskBlockManager(testConf, deleteFilesOnStop = true, isDriver = false)
     diskBlockManager.createDirWithPermission770(testDir)
     assert(testDir.exists && testDir.isDirectory)
     val permission = PosixFilePermissions.toString(
       Files.getPosixFilePermissions(Paths.get("target/testDir")))
     assert(permission.equals("rwxrwx---"))
-    FileUtils.deleteQuietly(testDir)
+    Utils.deleteQuietly(testDir)
   }
 
   test("Encode merged directory name and attemptId in shuffleManager field") {

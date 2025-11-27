@@ -28,7 +28,7 @@ import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
 
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.history.EventFilter.FilterStatistics
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys
 import org.apache.spark.scheduler.ReplayListenerBus
 import org.apache.spark.util.Utils
@@ -161,7 +161,8 @@ class EventLogFileCompactor(
     }
     logWriter.stop()
     val duration = System.currentTimeMillis() - startTime
-    logInfo(s"Finished rewriting eventLog files to ${logWriter.logPath} took $duration ms.")
+    logInfo(log"Finished rewriting eventLog files to ${MDC(LogKeys.PATH, logWriter.logPath)}" +
+      log" took ${MDC(LogKeys.TOTAL_TIME, duration)} ms.")
 
     logWriter.logPath
   }

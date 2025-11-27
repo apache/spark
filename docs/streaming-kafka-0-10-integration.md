@@ -26,9 +26,9 @@ there are notable differences in usage.
 ### Linking
 For Scala/Java applications using SBT/Maven project definitions, link your streaming application with the following artifact (see [Linking section](streaming-programming-guide.html#linking) in the main programming guide for further information).
 
-	groupId = org.apache.spark
-	artifactId = spark-streaming-kafka-0-10_{{site.SCALA_BINARY_VERSION}}
-	version = {{site.SPARK_VERSION_SHORT}}
+    groupId = org.apache.spark
+    artifactId = spark-streaming-kafka-0-10_{{site.SCALA_BINARY_VERSION}}
+    version = {{site.SPARK_VERSION_SHORT}}
 
 **Do not** manually add dependencies on `org.apache.kafka` artifacts (e.g. `kafka-clients`).  The `spark-streaming-kafka-0-10` artifact has the appropriate transitive dependencies already, and different versions may be incompatible in hard to diagnose ways.
 

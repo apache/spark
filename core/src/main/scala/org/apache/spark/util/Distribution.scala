@@ -74,7 +74,7 @@ private[spark] class Distribution(val data: Array[Double], val startIdx: Int, va
 private[spark] object Distribution {
 
   def apply(data: Iterable[Double]): Option[Distribution] = {
-    if (data.size > 0) {
+    if (data.nonEmpty) {
       Some(new Distribution(data))
     } else {
       None

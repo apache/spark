@@ -23,7 +23,7 @@ import java.util.concurrent.CountDownLatch
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.{SecurityManager, SparkConf}
-import org.apache.spark.internal.{config, Logging, MDC}
+import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.internal.LogKeys.{AUTH_ENABLED, PORT, SHUFFLE_DB_BACKEND_KEY, SHUFFLE_DB_BACKEND_NAME}
 import org.apache.spark.metrics.{MetricsSystem, MetricsSystemInstances}
 import org.apache.spark.network.TransportContext
@@ -31,7 +31,6 @@ import org.apache.spark.network.crypto.AuthServerBootstrap
 import org.apache.spark.network.netty.SparkTransportConf
 import org.apache.spark.network.server.{TransportServer, TransportServerBootstrap}
 import org.apache.spark.network.shuffle.ExternalBlockHandler
-import org.apache.spark.network.shuffledb.DBBackend
 import org.apache.spark.network.util.TransportConf
 import org.apache.spark.util.{ShutdownHookManager, Utils}
 
@@ -71,8 +70,8 @@ class ExternalShuffleService(sparkConf: SparkConf, securityManager: SecurityMana
     if (localDirs.length >= 1) {
       new File(localDirs.find(new File(_, dbName).exists()).getOrElse(localDirs(0)), dbName)
     } else {
-      logWarning(s"'spark.local.dir' should be set first when we use db in " +
-        s"ExternalShuffleService. Note that this only affects standalone mode.")
+      logWarning("'spark.local.dir' should be set first when we use db in " +
+        "ExternalShuffleService. Note that this only affects standalone mode.")
       null
     }
   }
@@ -86,11 +85,11 @@ class ExternalShuffleService(sparkConf: SparkConf, securityManager: SecurityMana
   protected def newShuffleBlockHandler(conf: TransportConf): ExternalBlockHandler = {
     if (sparkConf.get(config.SHUFFLE_SERVICE_DB_ENABLED) && enabled) {
       val shuffleDBName = sparkConf.get(config.SHUFFLE_SERVICE_DB_BACKEND)
-      val dbBackend = DBBackend.byName(shuffleDBName)
-      logInfo(log"Use ${MDC(SHUFFLE_DB_BACKEND_NAME, dbBackend.name())} as the implementation of " +
+      logInfo(
+        log"Use ${MDC(SHUFFLE_DB_BACKEND_NAME, shuffleDBName.name())} as the implementation of " +
         log"${MDC(SHUFFLE_DB_BACKEND_KEY, config.SHUFFLE_SERVICE_DB_BACKEND.key)}")
       new ExternalBlockHandler(conf,
-        findRegisteredExecutorsDBFile(dbBackend.fileName(registeredExecutorsDB)))
+        findRegisteredExecutorsDBFile(shuffleDBName.fileName(registeredExecutorsDB)))
     } else {
       new ExternalBlockHandler(conf, null)
     }
@@ -165,9 +164,13 @@ object ExternalShuffleService extends Logging {
   private[spark] def main(
       args: Array[String],
       newShuffleService: (SparkConf, SecurityManager) => ExternalShuffleService): Unit = {
+    Utils.resetStructuredLogging()
     Utils.initDaemon(log)
     val sparkConf = new SparkConf
     Utils.loadDefaultSparkProperties(sparkConf)
+    // Initialize logging system again after `spark.log.structuredLogging.enabled` takes effect
+    Utils.resetStructuredLogging(sparkConf)
+    Logging.uninitialize()
     val securityManager = new SecurityManager(sparkConf)
 
     // we override this value since this service is started from the command line

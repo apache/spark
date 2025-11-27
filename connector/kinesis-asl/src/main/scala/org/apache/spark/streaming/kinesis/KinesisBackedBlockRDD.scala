@@ -33,8 +33,8 @@ import software.amazon.awssdk.services.kinesis.model.{GetRecordsRequest, GetReco
 import software.amazon.kinesis.retrieval.{AggregatorUtil, KinesisClientRecord}
 
 import org.apache.spark._
-import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKeys.{ERROR, RETRY_COUNT}
+import org.apache.spark.internal.Logging
+import org.apache.spark.internal.LogKeys.{ERROR, NUM_RETRY}
 import org.apache.spark.rdd.{BlockRDD, BlockRDDPartition}
 import org.apache.spark.storage.BlockId
 import org.apache.spark.util.NextIterator
@@ -293,7 +293,7 @@ class KinesisSequenceRangeIterator(
            t match {
              case ptee: ProvisionedThroughputExceededException =>
                logWarning(log"Error while ${MDC(ERROR, message)} " +
-                 log"[attempt = ${MDC(RETRY_COUNT, retryCount + 1)}]", ptee)
+                 log"[attempt = ${MDC(NUM_RETRY, retryCount + 1)}]", ptee)
              case e: Throwable =>
                throw new SparkException(s"Error while $message", e)
            }

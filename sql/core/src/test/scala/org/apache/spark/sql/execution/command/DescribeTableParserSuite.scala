@@ -17,11 +17,14 @@
 
 package org.apache.spark.sql.execution.command
 
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedAttribute, UnresolvedTableOrView}
-import org.apache.spark.sql.catalyst.parser.CatalystSqlParser.parsePlan
 import org.apache.spark.sql.catalyst.plans.logical.{DescribeColumn, DescribeRelation}
+import org.apache.spark.sql.test.SharedSparkSession
 
-class DescribeTableParserSuite extends AnalysisTest {
+class DescribeTableParserSuite extends SharedSparkSession with AnalysisTest {
+  private def parsePlan(statement: String) = spark.sessionState.sqlParser.parsePlan(statement)
+
   test("SPARK-17328: Fix NPE with EXPLAIN DESCRIBE TABLE") {
     comparePlans(parsePlan("describe t"),
       DescribeRelation(
@@ -75,14 +78,33 @@ class DescribeTableParserSuite extends AnalysisTest {
         UnresolvedAttribute(Seq("col")),
         isExtended = true))
 
+    val error = intercept[AnalysisException](parsePlan("DESCRIBE EXTENDED t col AS JSON"))
+
+    checkError(
+      exception = error,
+      condition = "UNSUPPORTED_FEATURE.DESC_TABLE_COLUMN_JSON")
+
     val sql = "DESCRIBE TABLE t PARTITION (ds='1970-01-01') col"
     checkError(
       exception = parseException(parsePlan)(sql),
-      errorClass = "UNSUPPORTED_FEATURE.DESC_TABLE_COLUMN_PARTITION",
+      condition = "UNSUPPORTED_FEATURE.DESC_TABLE_COLUMN_PARTITION",
       parameters = Map.empty,
       context = ExpectedContext(
         fragment = sql,
         start = 0,
         stop = 47))
+  }
+
+  test("retain sql text position") {
+    val tbl = "unknown"
+    val sqlStatement = s"DESCRIBE TABLE $tbl"
+    val startPos = sqlStatement.indexOf(tbl)
+    assert(startPos != -1)
+    assertAnalysisErrorCondition(
+      parsePlan(sqlStatement),
+      "TABLE_OR_VIEW_NOT_FOUND",
+      Map("relationName" -> s"`$tbl`"),
+      Array(ExpectedContext(tbl, startPos, startPos + tbl.length - 1))
+    )
   }
 }

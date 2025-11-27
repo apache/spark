@@ -18,7 +18,7 @@
 package org.apache.spark.rpc
 
 import java.io.{File, NotSerializableException}
-import java.nio.charset.StandardCharsets.UTF_8
+import java.nio.file.Files
 import java.util.UUID
 import java.util.concurrent.{ConcurrentLinkedQueue, CountDownLatch, TimeUnit}
 
@@ -27,7 +27,6 @@ import scala.concurrent.Await
 import scala.concurrent.duration._
 import scala.jdk.CollectionConverters._
 
-import com.google.common.io.Files
 import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito.{mock, never, verify, when}
 import org.scalatest.concurrent.Eventually._
@@ -868,23 +867,23 @@ abstract class RpcEnvSuite extends SparkFunSuite {
         val conf = createSparkConf()
 
         val file = new File(tempDir, "file")
-        Files.write(UUID.randomUUID().toString(), file, UTF_8)
+        Files.writeString(file.toPath, UUID.randomUUID().toString)
         val fileWithSpecialChars = new File(tempDir, "file name")
-        Files.write(UUID.randomUUID().toString(), fileWithSpecialChars, UTF_8)
+        Files.writeString(fileWithSpecialChars.toPath, UUID.randomUUID().toString)
         val empty = new File(tempDir, "empty")
-        Files.write("", empty, UTF_8);
+        Files.writeString(empty.toPath, "")
         val jar = new File(tempDir, "jar")
-        Files.write(UUID.randomUUID().toString(), jar, UTF_8)
+        Files.writeString(jar.toPath, UUID.randomUUID().toString)
 
         val dir1 = new File(tempDir, "dir1")
         assert(dir1.mkdir())
         val subFile1 = new File(dir1, "file1")
-        Files.write(UUID.randomUUID().toString(), subFile1, UTF_8)
+        Files.writeString(subFile1.toPath, UUID.randomUUID().toString)
 
         val dir2 = new File(tempDir, "dir2")
         assert(dir2.mkdir())
         val subFile2 = new File(dir2, "file2")
-        Files.write(UUID.randomUUID().toString(), subFile2, UTF_8)
+        Files.writeString(subFile2.toPath, UUID.randomUUID().toString)
 
         val fileUri = env.fileServer.addFile(file)
         val fileWithSpecialCharsUri = env.fileServer.addFile(fileWithSpecialChars)
@@ -921,7 +920,7 @@ abstract class RpcEnvSuite extends SparkFunSuite {
         files.foreach { case (f, uri) =>
           val destFile = new File(destDir, f.getName())
           Utils.fetchFile(uri, destDir, conf, hc, 0L, false)
-          assert(Files.equal(f, destFile))
+          assert(Utils.contentEquals(f, destFile))
         }
 
         // Try to download files that do not exist.

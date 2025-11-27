@@ -38,7 +38,7 @@ trait DropNamespaceSuiteBase extends QueryTest with DDLCommandTestUtils {
   protected def isCasePreserving: Boolean = true
   protected def namespaceAlias: String = "namespace"
 
-  protected def checkNamespace(expected: Seq[String]) = {
+  protected def checkNamespace(expected: Seq[String]): Unit = {
     val df = spark.sql(s"SHOW NAMESPACES IN $catalog")
     assert(df.schema === new StructType().add("namespace", StringType, false))
     checkAnswer(df, expected.map(Row(_)))
@@ -64,8 +64,8 @@ trait DropNamespaceSuiteBase extends QueryTest with DDLCommandTestUtils {
       sql(s"DROP NAMESPACE $catalog.unknown")
     }
     checkError(e,
-      errorClass = "SCHEMA_NOT_FOUND",
-      parameters = Map("schemaName" -> "`unknown`"))
+      condition = "SCHEMA_NOT_FOUND",
+      parameters = Map("schemaName" -> s"`$catalog`.`unknown`"))
   }
 
   test("drop non-empty namespace with a non-cascading mode") {
@@ -78,7 +78,7 @@ trait DropNamespaceSuiteBase extends QueryTest with DDLCommandTestUtils {
       sql(s"DROP NAMESPACE $catalog.ns")
     }
     checkError(e,
-      errorClass = "SCHEMA_NOT_EMPTY",
+      condition = "SCHEMA_NOT_EMPTY",
       parameters = Map("schemaName" -> "`ns`"))
     sql(s"DROP TABLE $catalog.ns.table")
 

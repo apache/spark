@@ -189,7 +189,7 @@ class ExtractPythonUDFFromJoinConditionSuite extends PlanTest {
       }
       checkError(
         exception = e,
-        errorClass = "UNSUPPORTED_FEATURE.PYTHON_UDF_IN_ON_CLAUSE",
+        condition = "UNSUPPORTED_FEATURE.PYTHON_UDF_IN_ON_CLAUSE",
         parameters = Map("joinType" -> joinType.sql)
       )
 

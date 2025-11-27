@@ -32,23 +32,31 @@ class TypesParityTests(TypesTestsMixin, ReusedConnectTestCase):
 
     @unittest.skip("Spark Connect does not support RDD but the tests depend on them.")
     def test_apply_schema_to_row(self):
-        super().test_apply_schema_to_dict_and_rows()
+        super().test_apply_schema_to_row()
+
+    @unittest.skip("Spark Connect does not support RDD but the tests depend on them.")
+    def test_geospatial_create_dataframe_rdd(self):
+        super().test_geospatial_create_dataframe_rdd()
 
     @unittest.skip("Spark Connect does not support RDD but the tests depend on them.")
     def test_create_dataframe_schema_mismatch(self):
         super().test_create_dataframe_schema_mismatch()
 
     @unittest.skip("Spark Connect does not support RDD but the tests depend on them.")
-    def test_infer_array_element_type_empty(self):
-        super().test_infer_array_element_type_empty()
-
-    @unittest.skip("Spark Connect does not support RDD but the tests depend on them.")
-    def test_infer_array_element_type_with_struct(self):
-        super().test_infer_array_element_type_with_struct()
+    def test_infer_array_element_type_empty_rdd(self):
+        super().test_infer_array_element_type_empty_rdd()
 
     @unittest.skip("Spark Connect does not support RDD but the tests depend on them.")
     def test_infer_array_merge_element_types_with_rdd(self):
         super().test_infer_array_merge_element_types_with_rdd()
+
+    @unittest.skip("Spark Connect does not support RDD but the tests depend on them.")
+    def test_infer_map_pair_type_empty_rdd(self):
+        super().test_infer_map_pair_type_empty_rdd()
+
+    @unittest.skip("Spark Connect does not support RDD but the tests depend on them.")
+    def test_infer_map_merge_pair_types_with_rdd(self):
+        super().test_infer_map_merge_pair_types_with_rdd()
 
     @unittest.skip("Spark Connect does not support RDD but the tests depend on them.")
     def test_infer_binary_type(self):
@@ -86,9 +94,17 @@ class TypesParityTests(TypesTestsMixin, ReusedConnectTestCase):
     def test_udt(self):
         super().test_udt()
 
-    @unittest.skip("Does not test anything related to Spark Connect")
-    def test_parse_datatype_string(self):
-        super().test_parse_datatype_string()
+    @unittest.skip("Requires JVM access.")
+    def test_schema_with_collations_json_ser_de(self):
+        super().test_schema_with_collations_json_ser_de()
+
+    @unittest.skip("This test is dedicated for PySpark Classic.")
+    def test_ym_interval_in_collect(self):
+        super().test_ym_interval_in_collect()
+
+    @unittest.skip("This test is dedicated for PySpark Classic.")
+    def test_cal_interval_in_collect(self):
+        super().test_cal_interval_in_collect()
 
 
 if __name__ == "__main__":

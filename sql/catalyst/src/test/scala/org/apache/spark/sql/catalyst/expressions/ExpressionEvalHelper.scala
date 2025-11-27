@@ -71,10 +71,15 @@ trait ExpressionEvalHelper extends ScalaCheckDrivenPropertyChecks with PlanTestB
     new ArrayBasedMapData(keyArray, valueArray)
   }
 
+  protected def replace(expr: Expression): Expression = expr match {
+    case r: RuntimeReplaceable => replace(r.replacement)
+    case _ => expr.mapChildren(replace)
+  }
+
   private def prepareEvaluation(expression: Expression): Expression = {
     val serializer = new JavaSerializer(new SparkConf()).newInstance()
     val resolver = ResolveTimeZone
-    val expr = resolver.resolveTimeZones(expression)
+    val expr = replace(resolver.resolveTimeZones(expression))
     assert(expr.resolved)
     serializer.deserialize(serializer.serialize(expr))
   }
@@ -149,22 +154,22 @@ trait ExpressionEvalHelper extends ScalaCheckDrivenPropertyChecks with PlanTestB
 
   protected def checkErrorInExpression[T <: SparkThrowable : ClassTag](
       expression: => Expression,
-      errorClass: String,
+      condition: String,
       parameters: Map[String, String] = Map.empty): Unit = {
-    checkErrorInExpression[T](expression, InternalRow.empty, errorClass, parameters)
+    checkErrorInExpression[T](expression, InternalRow.empty, condition, parameters)
   }
 
   protected def checkErrorInExpression[T <: SparkThrowable : ClassTag](
       expression: => Expression,
       inputRow: InternalRow,
-      errorClass: String): Unit = {
-    checkErrorInExpression[T](expression, inputRow, errorClass, Map.empty[String, String])
+      condition: String): Unit = {
+    checkErrorInExpression[T](expression, inputRow, condition, Map.empty[String, String])
   }
 
   protected def checkErrorInExpression[T <: SparkThrowable : ClassTag](
       expression: => Expression,
       inputRow: InternalRow,
-      errorClass: String,
+      condition: String,
       parameters: Map[String, String]): Unit = {
 
     def checkException(eval: => Unit, testMode: String): Unit = {
@@ -174,7 +179,7 @@ trait ExpressionEvalHelper extends ScalaCheckDrivenPropertyChecks with PlanTestB
           withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> fallbackMode.toString) {
             checkError(
               exception = intercept[T](eval),
-              errorClass = errorClass,
+              condition = condition,
               parameters = parameters
             )
           }

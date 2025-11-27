@@ -38,7 +38,7 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap;
 @Evolving
 public abstract class DelegatingCatalogExtension implements CatalogExtension {
 
-  private CatalogPlugin delegate;
+  protected CatalogPlugin delegate;
 
   @Override
   public final void setDelegateCatalog(CatalogPlugin delegate) {
@@ -51,7 +51,7 @@ public abstract class DelegatingCatalogExtension implements CatalogExtension {
   }
 
   @Override
-  public final void initialize(String name, CaseInsensitiveStringMap options) {}
+  public void initialize(String name, CaseInsensitiveStringMap options) {}
 
   @Override
   public Set<TableCatalogCapability> capabilities() {

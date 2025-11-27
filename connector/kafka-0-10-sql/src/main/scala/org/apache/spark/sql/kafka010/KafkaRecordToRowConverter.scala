@@ -50,7 +50,7 @@ private[kafka010] class KafkaRecordToRowConverter {
         new GenericArrayData(cr.headers.iterator().asScala
           .map(header =>
             InternalRow(UTF8String.fromString(header.key()), header.value())
-          ).toArray)
+          ).toArray[Any])
       } else {
         null
       }

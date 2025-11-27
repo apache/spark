@@ -312,9 +312,9 @@ abstract class KinesisStreamTests(aggregateTestData: Boolean) extends KinesisFun
         }
       }
 
-      val shardToSplit = localTestUtils.getShards.head
+      val shardToSplit = localTestUtils.getShards().head
       localTestUtils.splitShard(shardToSplit.shardId)
-      val (splitOpenShards, splitCloseShards) = localTestUtils.getShards.partition { shard =>
+      val (splitOpenShards, splitCloseShards) = localTestUtils.getShards().partition { shard =>
         shard.sequenceNumberRange.endingSequenceNumber == null
       }
 
@@ -332,7 +332,7 @@ abstract class KinesisStreamTests(aggregateTestData: Boolean) extends KinesisFun
 
       val Seq(shardToMerge, adjShard) = splitOpenShards
       localTestUtils.mergeShard(shardToMerge.shardId, adjShard.shardId)
-      val (mergedOpenShards, mergedCloseShards) = localTestUtils.getShards.partition { shard =>
+      val (mergedOpenShards, mergedCloseShards) = localTestUtils.getShards().partition { shard =>
         shard.sequenceNumberRange.endingSequenceNumber == null
       }
 

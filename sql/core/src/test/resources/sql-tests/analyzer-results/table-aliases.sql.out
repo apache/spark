@@ -2,7 +2,7 @@
 -- !query
 CREATE OR REPLACE TEMPORARY VIEW testData AS SELECT * FROM VALUES (1, 1), (1, 2), (2, 1) AS testData(a, b)
 -- !query analysis
-CreateViewCommand `testData`, SELECT * FROM VALUES (1, 1), (1, 2), (2, 1) AS testData(a, b), false, true, LocalTempView, true
+CreateViewCommand `testData`, SELECT * FROM VALUES (1, 1), (1, 2), (2, 1) AS testData(a, b), false, true, LocalTempView, UNSUPPORTED, true
    +- Project [a#x, b#x]
       +- SubqueryAlias testData
          +- LocalRelation [a#x, b#x]
@@ -36,20 +36,6 @@ Project [col1#x, col2#x]
                   +- Project [a#x, b#x]
                      +- SubqueryAlias testData
                         +- LocalRelation [a#x, b#x]
-
-
--- !query
-SELECT col1 AS k, SUM(col2) FROM testData AS t(col1, col2) GROUP BY k
--- !query analysis
-Aggregate [col1#x], [col1#x AS k#x, sum(col2#x) AS sum(col2)#xL]
-+- SubqueryAlias t
-   +- Project [a#x AS col1#x, b#x AS col2#x]
-      +- SubqueryAlias testdata
-         +- View (`testData`, [a#x, b#x])
-            +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
-               +- Project [a#x, b#x]
-                  +- SubqueryAlias testData
-                     +- LocalRelation [a#x, b#x]
 
 
 -- !query
@@ -158,7 +144,7 @@ Project [col1#x, col2#x]
 -- !query
 CREATE OR REPLACE TEMPORARY VIEW src1 AS SELECT * FROM VALUES (1, "a"), (2, "b"), (3, "c") AS src1(id, v1)
 -- !query analysis
-CreateViewCommand `src1`, SELECT * FROM VALUES (1, "a"), (2, "b"), (3, "c") AS src1(id, v1), false, true, LocalTempView, true
+CreateViewCommand `src1`, SELECT * FROM VALUES (1, "a"), (2, "b"), (3, "c") AS src1(id, v1), false, true, LocalTempView, UNSUPPORTED, true
    +- Project [id#x, v1#x]
       +- SubqueryAlias src1
          +- LocalRelation [id#x, v1#x]
@@ -167,7 +153,7 @@ CreateViewCommand `src1`, SELECT * FROM VALUES (1, "a"), (2, "b"), (3, "c") AS s
 -- !query
 CREATE OR REPLACE TEMPORARY VIEW src2 AS SELECT * FROM VALUES (2, 1.0), (3, 3.2), (1, 8.5) AS src2(id, v2)
 -- !query analysis
-CreateViewCommand `src2`, SELECT * FROM VALUES (2, 1.0), (3, 3.2), (1, 8.5) AS src2(id, v2), false, true, LocalTempView, true
+CreateViewCommand `src2`, SELECT * FROM VALUES (2, 1.0), (3, 3.2), (1, 8.5) AS src2(id, v2), false, true, LocalTempView, UNSUPPORTED, true
    +- Project [id#x, v2#x]
       +- SubqueryAlias src2
          +- LocalRelation [id#x, v2#x]
@@ -217,3 +203,45 @@ Project [a#x, b#x, c#x, d#x]
                      +- Project [id#x, v2#x]
                         +- SubqueryAlias src2
                            +- LocalRelation [id#x, v2#x]
+
+
+-- !query
+SELECT src1.* FROM src1 a ORDER BY id LIMIT 1
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "CANNOT_RESOLVE_STAR_EXPAND",
+  "sqlState" : "42704",
+  "messageParameters" : {
+    "columns" : "`id`, `v1`",
+    "targetString" : "`src1`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 13,
+    "fragment" : "src1.*"
+  } ]
+}
+
+
+-- !query
+SELECT src1.id FROM (SELECT * FROM src1 ORDER BY id LIMIT 1) a
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`src1`.`id`",
+    "proposal" : "`a`.`id`, `a`.`v1`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 14,
+    "fragment" : "src1.id"
+  } ]
+}

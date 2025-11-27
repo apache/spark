@@ -22,6 +22,7 @@ import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest, MLTestingUtils}
 import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.sql.Row
+import org.apache.spark.util.collection.Utils.createArray
 
 class RobustScalerSuite extends MLTest with DefaultReadWriteTest {
 
@@ -140,19 +141,19 @@ class RobustScalerSuite extends MLTest with DefaultReadWriteTest {
     // 3st quartile = [3.0, ...]
     // quantile range = IQR = [2.0, ...]
     highDimData = Array(
-      Vectors.dense(Array.fill(2000)(0.0)),
-      Vectors.dense(Array.fill(2000)(1.0)),
-      Vectors.dense(Array.fill(2000)(2.0)),
-      Vectors.dense(Array.fill(2000)(3.0)),
-      Vectors.dense(Array.fill(2000)(4.0))
+      Vectors.dense(createArray(2000, 0.0)),
+      Vectors.dense(createArray(2000, 1.0)),
+      Vectors.dense(createArray(2000, 2.0)),
+      Vectors.dense(createArray(2000, 3.0)),
+      Vectors.dense(createArray(2000, 4.0))
     )
 
     highDimRes = Array(
-      Vectors.dense(Array.fill(2000)(0.0)),
-      Vectors.dense(Array.fill(2000)(0.5)),
-      Vectors.dense(Array.fill(2000)(1.0)),
-      Vectors.dense(Array.fill(2000)(1.5)),
-      Vectors.dense(Array.fill(2000)(2.0))
+      Vectors.dense(createArray(2000, 0.0)),
+      Vectors.dense(createArray(2000, 0.5)),
+      Vectors.dense(createArray(2000, 1.0)),
+      Vectors.dense(createArray(2000, 1.5)),
+      Vectors.dense(createArray(2000, 2.0))
     )
   }
 

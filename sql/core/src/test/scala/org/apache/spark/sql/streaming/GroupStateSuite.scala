@@ -21,8 +21,8 @@ import java.sql.Date
 
 import org.apache.spark.{SparkFunSuite, SparkUnsupportedOperationException}
 import org.apache.spark.api.java.Optional
-import org.apache.spark.sql.execution.streaming.GroupStateImpl
-import org.apache.spark.sql.execution.streaming.GroupStateImpl.NO_TIMESTAMP
+import org.apache.spark.sql.execution.streaming.operators.stateful.flatmapgroupswithstate.GroupStateImpl
+import org.apache.spark.sql.execution.streaming.operators.stateful.flatmapgroupswithstate.GroupStateImpl.NO_TIMESTAMP
 import org.apache.spark.sql.streaming.GroupStateTimeout.{EventTimeTimeout, NoTimeout, ProcessingTimeTimeout}
 
 class GroupStateSuite extends SparkFunSuite {
@@ -302,13 +302,13 @@ class GroupStateSuite extends SparkFunSuite {
         TestGroupState.create[Int](
           Optional.of(5), NoTimeout, 100L, Optional.empty[Long], hasTimedOut = true)
       },
-      errorClass = "_LEGACY_ERROR_TEMP_3168",
+      condition = "MISSING_TIMEOUT_CONFIGURATION",
       parameters = Map.empty)
     checkError(
       exception = intercept[SparkUnsupportedOperationException] {
         GroupStateImpl.createForStreaming[Int](Some(5), 100L, NO_TIMESTAMP, NoTimeout, true, false)
       },
-      errorClass = "_LEGACY_ERROR_TEMP_3168",
+      condition = "MISSING_TIMEOUT_CONFIGURATION",
       parameters = Map.empty)
   }
 
@@ -349,7 +349,7 @@ class GroupStateSuite extends SparkFunSuite {
     def assertWrongTimeoutError(test: => Unit): Unit = {
       checkError(
         exception = intercept[SparkUnsupportedOperationException] { test },
-        errorClass = "_LEGACY_ERROR_TEMP_2204",
+        condition = "_LEGACY_ERROR_TEMP_2204",
         parameters = Map.empty)
     }
 

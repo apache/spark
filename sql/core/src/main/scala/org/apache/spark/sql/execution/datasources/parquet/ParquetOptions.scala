@@ -76,13 +76,21 @@ class ParquetOptions(
    */
   def datetimeRebaseModeInRead: String = parameters
     .get(DATETIME_REBASE_MODE)
-    .getOrElse(sqlConf.getConf(SQLConf.PARQUET_REBASE_MODE_IN_READ))
+    .getOrElse(sqlConf.getConf(SQLConf.PARQUET_REBASE_MODE_IN_READ).toString)
+
+  val inferShreddingForVariant: Boolean = {
+    // VARIANT_WRITE_SHREDDING_ENABLED is a global kill switch.
+    sqlConf.getConf(SQLConf.VARIANT_WRITE_SHREDDING_ENABLED) &&
+      parameters.get(SQLConf.VARIANT_INFER_SHREDDING_SCHEMA.key).map(_.toBoolean)
+      .getOrElse(sqlConf.getConf(SQLConf.VARIANT_INFER_SHREDDING_SCHEMA))
+  }
+
   /**
    * The rebasing mode for INT96 timestamp values in reads.
    */
   def int96RebaseModeInRead: String = parameters
     .get(INT96_REBASE_MODE)
-    .getOrElse(sqlConf.getConf(SQLConf.PARQUET_INT96_REBASE_MODE_IN_READ))
+    .getOrElse(sqlConf.getConf(SQLConf.PARQUET_INT96_REBASE_MODE_IN_READ).toString)
 }
 
 

@@ -32,7 +32,6 @@ import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.execution.vectorized.WritableColumnVector
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.vectorized.{ColumnarBatch, ColumnVector}
-import org.apache.spark.util.Utils
 
 /**
  * Holds a user defined rule that can be used to inject columnar implementations of various
@@ -66,9 +65,6 @@ trait ColumnarToRowTransition extends UnaryExecNode
  * [[MapPartitionsInRWithArrowExec]]. Eventually this should replace those implementations.
  */
 case class ColumnarToRowExec(child: SparkPlan) extends ColumnarToRowTransition with CodegenSupport {
-  // supportsColumnar requires to be only called on driver side, see also SPARK-37779.
-  assert(Utils.isInRunningSparkTask || child.supportsColumnar)
-
   override def output: Seq[Attribute] = child.output
 
   override def outputPartitioning: Partitioning = child.outputPartitioning
@@ -194,8 +190,13 @@ case class ColumnarToRowExec(child: SparkPlan) extends ColumnarToRowTransition w
        |    $shouldStop
        |  }
        |  $idx = $numRows;
+       |  $batch.closeIfFreeable();
        |  $batch = null;
        |  $nextBatchFuncName();
+       |}
+       |// clean up resources
+       |if ($batch != null) {
+       |  $batch.close();
        |}
      """.stripMargin
   }
@@ -266,6 +267,8 @@ private object RowToColumnConverter {
       case LongType | TimestampType | TimestampNTZType | _: DayTimeIntervalType => LongConverter
       case DoubleType => DoubleConverter
       case StringType => StringConverter
+      case _: GeographyType => GeographyConverter
+      case _: GeometryType => GeometryConverter
       case CalendarIntervalType => CalendarConverter
       case VariantType => VariantConverter
       case at: ArrayType => ArrayConverter(getConverterForType(at.elementType, at.containsNull))
@@ -333,6 +336,20 @@ private object RowToColumnConverter {
   private object StringConverter extends TypeConverter {
     override def append(row: SpecializedGetters, column: Int, cv: WritableColumnVector): Unit = {
       val data = row.getUTF8String(column).getBytes
+      cv.appendByteArray(data, 0, data.length)
+    }
+  }
+
+  private object GeographyConverter extends TypeConverter {
+    override def append(row: SpecializedGetters, column: Int, cv: WritableColumnVector): Unit = {
+      val data = row.getGeography(column).getBytes
+      cv.appendByteArray(data, 0, data.length)
+    }
+  }
+
+  private object GeometryConverter extends TypeConverter {
+    override def append(row: SpecializedGetters, column: Int, cv: WritableColumnVector): Unit = {
+      val data = row.getGeometry(column).getBytes
       cv.appendByteArray(data, 0, data.length)
     }
   }
@@ -495,15 +512,45 @@ case class ApplyColumnarRulesAndInsertTransitions(
   extends Rule[SparkPlan] {
 
   /**
-   * Inserts an transition to columnar formatted data.
+   * Ensures columnar output on the input query plan. Transitions will be inserted
+   * on demand.
    */
-  private def insertRowToColumnar(plan: SparkPlan): SparkPlan = {
+  private def ensureOutputsColumnar(plan: SparkPlan): SparkPlan = {
     if (!plan.supportsColumnar) {
       // The tree feels kind of backwards
       // Columnar Processing will start here, so transition from row to columnar
-      RowToColumnarExec(insertTransitions(plan, outputsColumnar = false))
+      RowToColumnarExec(ensureOutputsRowBased(plan))
     } else if (!plan.isInstanceOf[RowToColumnarTransition]) {
-      plan.withNewChildren(plan.children.map(insertRowToColumnar))
+      plan.withNewChildren(plan.children.map(ensureOutputsColumnar))
+    } else {
+      plan
+    }
+  }
+
+  /**
+   * Ensures row-based output on the input query plan. Transitions will be inserted
+   * on demand.
+   */
+  private def ensureOutputsRowBased(plan: SparkPlan): SparkPlan = {
+    if (plan.supportsColumnar && !plan.supportsRowBased) {
+      // `outputsColumnar` is false but the plan only outputs columnar format, so add a
+      // to-row transition here.
+      ColumnarToRowExec(ensureOutputsColumnar(plan))
+    } else if (!plan.isInstanceOf[ColumnarToRowTransition]) {
+      val outputsColumnar = plan match {
+        // With planned write, the write command invokes child plan's `executeWrite` which is
+        // neither columnar nor row-based.
+        case write: DataWritingCommandExec
+            if write.cmd.isInstanceOf[V1WriteCommand] && conf.plannedWriteEnabled =>
+          write.child.supportsColumnar
+        // If it is not required to output columnar (`outputsColumnar` is false), and the plan
+        // supports row-based and columnar, we don't need to output row-based data on its children
+        // nodes. So we set `outputsColumnar` to true.
+        case _ if plan.supportsColumnar && plan.supportsRowBased => true
+        case _ =>
+          false
+      }
+      plan.withNewChildren(plan.children.map(insertTransitions(_, outputsColumnar)))
     } else {
       plan
     }
@@ -514,24 +561,9 @@ case class ApplyColumnarRulesAndInsertTransitions(
    */
   private def insertTransitions(plan: SparkPlan, outputsColumnar: Boolean): SparkPlan = {
     if (outputsColumnar) {
-      insertRowToColumnar(plan)
-    } else if (plan.supportsColumnar && !plan.supportsRowBased) {
-      // `outputsColumnar` is false but the plan only outputs columnar format, so add a
-      // to-row transition here.
-      ColumnarToRowExec(insertRowToColumnar(plan))
-    } else if (plan.isInstanceOf[ColumnarToRowTransition]) {
-      plan
+      ensureOutputsColumnar(plan)
     } else {
-      val outputsColumnar = plan match {
-        // With planned write, the write command invokes child plan's `executeWrite` which is
-        // neither columnar nor row-based.
-        case write: DataWritingCommandExec
-            if write.cmd.isInstanceOf[V1WriteCommand] && conf.plannedWriteEnabled =>
-          write.child.supportsColumnar
-        case _ =>
-          false
-      }
-      plan.withNewChildren(plan.children.map(insertTransitions(_, outputsColumnar)))
+      ensureOutputsRowBased(plan)
     }
   }
 

@@ -16,12 +16,11 @@
  */
 package org.apache.spark.deploy.k8s.integrationtest
 
-import java.util.Locale
+import java.util.{Base64, Locale}
 
 import scala.jdk.CollectionConverters._
 
 import io.fabric8.kubernetes.api.model.{Pod, SecretBuilder}
-import org.apache.commons.codec.binary.Base64
 import org.scalatest.concurrent.Eventually
 import org.scalatest.matchers.should.Matchers._
 
@@ -36,8 +35,8 @@ private[spark] trait SecretsTestsSuite { k8sSuite: KubernetesSuite =>
     sb.withNewMetadata()
       .withName(ENV_SECRET_NAME)
       .endMetadata()
-    val secUsername = Base64.encodeBase64String(ENV_SECRET_VALUE_1.getBytes())
-    val secPassword = Base64.encodeBase64String(ENV_SECRET_VALUE_2.getBytes())
+    val secUsername = Base64.getEncoder().encodeToString(ENV_SECRET_VALUE_1.getBytes())
+    val secPassword = Base64.getEncoder().encodeToString(ENV_SECRET_VALUE_2.getBytes())
     val envSecretData = Map(ENV_SECRET_KEY_1 -> secUsername, ENV_SECRET_KEY_2 -> secPassword)
     sb.addToData(envSecretData.asJava)
     val envSecret = sb.build()
@@ -45,7 +44,8 @@ private[spark] trait SecretsTestsSuite { k8sSuite: KubernetesSuite =>
       .kubernetesClient
       .secrets()
       .inNamespace(kubernetesTestComponents.namespace)
-      .createOrReplace(envSecret)
+      .resource(envSecret)
+      .serverSideApply()
   }
 
   private def deleteTestSecret(): Unit = {

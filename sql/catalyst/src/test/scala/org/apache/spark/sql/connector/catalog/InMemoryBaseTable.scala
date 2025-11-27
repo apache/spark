@@ -20,23 +20,27 @@ package org.apache.spark.sql.connector.catalog
 import java.time.{Instant, ZoneId}
 import java.time.temporal.ChronoUnit
 import java.util
+import java.util.Objects
 import java.util.OptionalLong
 
 import scala.collection.mutable
-
-import com.google.common.base.Objects
+import scala.collection.mutable.ListBuffer
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, JoinedRow, MetadataStructFieldWithLogicalName}
-import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, DateTimeUtils}
+import org.apache.spark.sql.catalyst.expressions.{Cast, EvalMode, GenericInternalRow, JoinedRow, Literal, MetadataStructFieldWithLogicalName}
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, CaseInsensitiveMap, CharVarcharUtils, DateTimeUtils, GenericArrayData, MapData, ResolveDefaultColumns}
+import org.apache.spark.sql.connector.catalog.constraints.Constraint
 import org.apache.spark.sql.connector.distributions.{Distribution, Distributions}
 import org.apache.spark.sql.connector.expressions._
-import org.apache.spark.sql.connector.metric.{CustomMetric, CustomTaskMetric}
+import org.apache.spark.sql.connector.expressions.{Literal => V2Literal}
+import org.apache.spark.sql.connector.metric.{CustomMetric, CustomSumMetric, CustomTaskMetric}
 import org.apache.spark.sql.connector.read._
 import org.apache.spark.sql.connector.read.colstats.{ColumnStatistics, Histogram, HistogramBin}
 import org.apache.spark.sql.connector.read.partitioning.{KeyGroupedPartitioning, Partitioning, UnknownPartitioning}
 import org.apache.spark.sql.connector.write._
 import org.apache.spark.sql.connector.write.streaming.{StreamingDataWriterFactory, StreamingWrite}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.connector.SupportsStreamingUpdateAsAppend
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
@@ -49,9 +53,10 @@ import org.apache.spark.util.ArrayImplicits._
  */
 abstract class InMemoryBaseTable(
     val name: String,
-    val schema: StructType,
+    val initialColumns: Array[Column],
     override val partitioning: Array[Transform],
     override val properties: util.Map[String, String],
+    override val constraints: Array[Constraint] = Array.empty,
     val distribution: Distribution = Distributions.unspecified(),
     val ordering: Array[SortOrder] = Array.empty,
     val numPartitions: Option[Int] = None,
@@ -60,17 +65,63 @@ abstract class InMemoryBaseTable(
     val numRowsPerSplit: Int = Int.MaxValue)
   extends Table with SupportsRead with SupportsWrite with SupportsMetadataColumns {
 
+  // Tracks the current version number of the table.
+  protected var tableVersion: Int = 0
+
+  // Stores the table version validated during the last `ALTER TABLE ... ADD CONSTRAINT` operation.
+  private var validatedTableVersion: String = null
+
+  private var tableColumns: Array[Column] = initialColumns
+
+  override def columns(): Array[Column] = tableColumns
+
+  override def version(): String = tableVersion.toString
+
+  def setVersion(version: String): Unit = {
+    tableVersion = version.toInt
+  }
+
+  def increaseVersion(): Unit = {
+    tableVersion += 1
+  }
+
+  def validatedVersion(): String = {
+    validatedTableVersion
+  }
+
+  def setValidatedVersion(version: String): Unit = {
+    validatedTableVersion = version
+  }
+
   protected object PartitionKeyColumn extends MetadataColumn {
     override def name: String = "_partition"
     override def dataType: DataType = StringType
+    override def isNullable: Boolean = false
     override def comment: String = "Partition key used to store the row"
+    override def metadataInJSON(): String = {
+      val metadata = new MetadataBuilder()
+        .putBoolean(MetadataColumn.PRESERVE_ON_UPDATE, value = true)
+        .putBoolean(MetadataColumn.PRESERVE_ON_REINSERT, value = true)
+        .build()
+      metadata.json
+    }
   }
 
-  private object IndexColumn extends MetadataColumn {
+  protected object IndexColumn extends MetadataColumn {
     override def name: String = "index"
     override def dataType: DataType = IntegerType
+    override def isNullable: Boolean = false
     override def comment: String = "Metadata column used to conflict with a data column"
+    override def metadataInJSON(): String = {
+      val metadata = new MetadataBuilder()
+        .putBoolean(MetadataColumn.PRESERVE_ON_DELETE, value = false)
+        .putBoolean(MetadataColumn.PRESERVE_ON_UPDATE, value = false)
+        .build()
+      metadata.json
+    }
   }
+
+  override def schema(): StructType = CatalogV2Util.v2ColumnsToStructType(columns())
 
   // purposely exposes a metadata column that conflicts with a data column in some tests
   override val metadataColumns: Array[MetadataColumn] = Array(IndexColumn, PartitionKeyColumn)
@@ -83,6 +134,10 @@ abstract class InMemoryBaseTable(
   private val allowUnsupportedTransforms =
     properties.getOrDefault("allow-unsupported-transforms", "false").toBoolean
 
+  private val acceptAnySchema = properties.getOrDefault("accept-any-schema", "false").toBoolean
+  private val autoSchemaEvolution = properties.getOrDefault("auto-schema-evolution", "true")
+    .toBoolean
+
   partitioning.foreach {
     case _: IdentityTransform =>
     case _: YearsTransform =>
@@ -92,13 +147,15 @@ abstract class InMemoryBaseTable(
     case _: BucketTransform =>
     case _: SortedBucketTransform =>
     case _: ClusterByTransform =>
-    case NamedTransform("truncate", Seq(_: NamedReference, _: Literal[_])) =>
+    case NamedTransform("truncate", Seq(_: NamedReference, _: V2Literal[_])) =>
     case t if !allowUnsupportedTransforms =>
       throw new IllegalArgumentException(s"Transform $t is not a supported transform")
   }
 
   // The key `Seq[Any]` is the partition values, value is a set of splits, each with a set of rows.
   val dataMap: mutable.Map[Seq[Any], Seq[BufferedRows]] = mutable.Map.empty
+
+  val commits: ListBuffer[Commit] = ListBuffer[Commit]()
 
   def data: Array[BufferedRows] = dataMap.values.flatten.toArray
 
@@ -125,7 +182,8 @@ abstract class InMemoryBaseTable(
         schema: StructType,
         row: InternalRow): (Any, DataType) = {
       val index = schema.fieldIndex(fieldNames(0))
-      val value = row.toSeq(schema).apply(index)
+      val field = schema(index)
+      val value = row.get(index, field.dataType)
       if (fieldNames.length > 1) {
         (value, schema(index).dataType) match {
           case (row: InternalRow, nestedSchema: StructType) =>
@@ -187,12 +245,16 @@ abstract class InMemoryBaseTable(
         var dataTypeHashCode = 0
         valueTypePairs.foreach(dataTypeHashCode += _._2.hashCode())
         ((valueHashCode + 31 * dataTypeHashCode) & Integer.MAX_VALUE) % numBuckets
-      case NamedTransform("truncate", Seq(ref: NamedReference, length: Literal[_])) =>
+      case NamedTransform("truncate", Seq(ref: NamedReference, length: V2Literal[_])) =>
         extractor(ref.fieldNames, cleanedSchema, row) match {
           case (str: UTF8String, StringType) =>
             str.substring(0, length.value.asInstanceOf[Int])
           case (v, t) =>
             throw new IllegalArgumentException(s"Match: unsupported argument(s) type - ($v, $t)")
+        }
+      case ClusterByTransform(columnNames) =>
+        columnNames.map { colName =>
+          extractor(colName.fieldNames, cleanedSchema, row)._1
         }
     }.toImmutableArraySeq
   }
@@ -203,14 +265,15 @@ abstract class InMemoryBaseTable(
       partitionSchema: StructType,
       from: Seq[Any],
       to: Seq[Any]): Boolean = {
-    val splits = dataMap.remove(from).getOrElse(Seq(new BufferedRows(from)))
+    val splits = dataMap.remove(from).getOrElse(Seq(BufferedRows(from, columns())))
+    val existingSchema = splits.head.schema
     val newSplits = splits.map { rows =>
-      val newRows = new BufferedRows(to)
+      val newRows = new BufferedRows(to, existingSchema)
       rows.rows.foreach { r =>
         val newRow = new GenericInternalRow(r.numFields)
-        for (i <- 0 until r.numFields) newRow.update(i, r.get(i, schema(i).dataType))
+        for (i <- 0 until r.numFields) newRow.update(i, r.get(i, schema()(i).dataType))
         for (i <- 0 until partitionSchema.length) {
-          val j = schema.fieldIndex(partitionSchema(i).name)
+          val j = schema().fieldIndex(partitionSchema(i).name)
           newRow.update(j, to(i))
         }
         newRows.withRow(newRow)
@@ -230,8 +293,8 @@ abstract class InMemoryBaseTable(
 
   protected def createPartitionKey(key: Seq[Any]): Unit = dataMap.synchronized {
     if (!dataMap.contains(key)) {
-      val emptyRows = new BufferedRows(key)
-      val rows = if (key.length == schema.length) {
+      val emptyRows = BufferedRows(key, columns())
+      val rows = if (key.length == columns().length) {
         emptyRows.withRow(InternalRow.fromSeq(key))
       } else emptyRows
       dataMap.put(key, Seq(rows))
@@ -240,14 +303,15 @@ abstract class InMemoryBaseTable(
 
   protected def clearPartition(key: Seq[Any]): Unit = dataMap.synchronized {
     assert(dataMap.contains(key))
-    dataMap.update(key, Seq(new BufferedRows(key)))
+    val schema = dataMap(key).head.schema
+    dataMap.update(key, Seq(new BufferedRows(key, schema)))
   }
 
   def withDeletes(data: Array[BufferedRows]): InMemoryBaseTable = {
     data.foreach { p =>
       dataMap ++= dataMap.map { case (key, currentSplits) =>
         val newSplits = currentSplits.map { currentRows =>
-          val newRows = new BufferedRows(currentRows.key)
+          val newRows = new BufferedRows(currentRows.key, currentRows.schema)
           newRows.rows ++= currentRows.rows.filter(r => !p.deletes.contains(r.getInt(0)))
           newRows
         }
@@ -258,7 +322,11 @@ abstract class InMemoryBaseTable(
   }
 
   def withData(data: Array[BufferedRows]): InMemoryBaseTable = {
-    withData(data, schema)
+    withData(data, CatalogV2Util.v2ColumnsToStructType(columns()))
+  }
+
+  def withData(data: Array[BufferedRows], columns: Array[Column]): InMemoryBaseTable = {
+    withData(data, CatalogV2Util.v2ColumnsToStructType(columns))
   }
 
   def withData(
@@ -268,21 +336,50 @@ abstract class InMemoryBaseTable(
       val key = getKey(row, writeSchema)
       dataMap += dataMap.get(key)
           .map { splits =>
-            val newSplits = if (splits.last.rows.size >= numRowsPerSplit) {
-              splits :+ new BufferedRows(key)
+            val newSplits = if ((splits.last.rows.size >= numRowsPerSplit)
+            || (splits.last.schema != writeSchema)) {
+              splits :+ new BufferedRows(key, writeSchema)
             } else {
               splits
             }
             newSplits.last.withRow(row)
             key -> newSplits
           }
-          .getOrElse(key -> Seq(new BufferedRows(key).withRow(row)))
+          .getOrElse(key -> Seq(
+            new BufferedRows(key, writeSchema).withRow(row)))
       addPartitionKey(key)
     })
     this
   }
 
-  override def capabilities: util.Set[TableCapability] = util.EnumSet.of(
+  def alterTableWithData(
+      data: Array[BufferedRows],
+      newSchema: StructType): InMemoryBaseTable = {
+    data.foreach { bufferedRow =>
+      val oldSchema = bufferedRow.schema
+      bufferedRow.rows.foreach { row =>
+        // handle partition evolution by re-keying all data
+        val key = getKey(row, newSchema)
+        dataMap += dataMap.get(key)
+          .map { splits =>
+            val newSplits = if ((splits.last.rows.size >= numRowsPerSplit) ||
+                (splits.last.schema != oldSchema)) {
+              splits :+ new BufferedRows(key, oldSchema)
+            } else {
+              splits
+            }
+            newSplits.last.withRow(row)
+            key -> newSplits
+          }
+          .getOrElse(key -> Seq(
+            new BufferedRows(key, oldSchema).withRow(row)))
+        addPartitionKey(key)
+      }
+    }
+    this
+  }
+
+  def baseCapabiilities: Set[TableCapability] = Set(
     TableCapability.BATCH_READ,
     TableCapability.BATCH_WRITE,
     TableCapability.STREAMING_WRITE,
@@ -290,8 +387,14 @@ abstract class InMemoryBaseTable(
     TableCapability.OVERWRITE_DYNAMIC,
     TableCapability.TRUNCATE)
 
+  override def capabilities(): util.Set[TableCapability] =
+    (baseCapabiilities ++
+      (if (acceptAnySchema) Seq(TableCapability.ACCEPT_ANY_SCHEMA) else Seq.empty) ++
+      (if (autoSchemaEvolution) Seq(TableCapability.AUTOMATIC_SCHEMA_EVOLUTION) else Seq.empty))
+      .asJava
+
   override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
-    new InMemoryScanBuilder(schema)
+    new InMemoryScanBuilder(schema, options)
   }
 
   private def canEvaluate(filter: Filter): Boolean = {
@@ -305,8 +408,10 @@ abstract class InMemoryBaseTable(
     }
   }
 
-  class InMemoryScanBuilder(tableSchema: StructType) extends ScanBuilder
-      with SupportsPushDownRequiredColumns with SupportsPushDownFilters {
+  class InMemoryScanBuilder(
+      tableSchema: StructType,
+      options: CaseInsensitiveStringMap) extends ScanBuilder
+    with SupportsPushDownRequiredColumns with SupportsPushDownFilters {
     private var schema: StructType = tableSchema
     private var postScanFilters: Array[Filter] = Array.empty
     private var evaluableFilters: Array[Filter] = Array.empty
@@ -314,7 +419,7 @@ abstract class InMemoryBaseTable(
 
     override def build: Scan = {
       val scan = InMemoryBatchScan(
-        data.map(_.asInstanceOf[InputPartition]).toImmutableArraySeq, schema, tableSchema)
+        data.map(_.asInstanceOf[InputPartition]).toImmutableArraySeq, schema, tableSchema, options)
       if (evaluableFilters.nonEmpty) {
         scan.filter(evaluableFilters)
       }
@@ -378,18 +483,23 @@ abstract class InMemoryBaseTable(
       val sizeInBytes = numRows * rowSizeInBytes
 
       val numOfCols = tableSchema.fields.length
-      val dataTypes = tableSchema.fields.map(_.dataType)
-      val colValueSets = new Array[util.HashSet[Object]](numOfCols)
+      val colValueSets = new Array[util.HashSet[Any]](numOfCols)
       val numOfNulls = new Array[Long](numOfCols)
       for (i <- 0 until numOfCols) {
-        colValueSets(i) = new util.HashSet[Object]
+        colValueSets(i) = new util.HashSet[Any]
       }
 
       inputPartitions.foreach(inputPartition =>
         inputPartition.rows.foreach(row =>
           for (i <- 0 until numOfCols) {
-            colValueSets(i).add(row.get(i, dataTypes(i)))
-            if (row.isNullAt(i)) {
+            val field = tableSchema(i)
+            val colValue = if (i < row.numFields) {
+              row.get(i, field.dataType)
+            } else {
+              ResolveDefaultColumns.getExistenceDefaultValue(field)
+            }
+            colValueSets(i).add(colValue)
+            if (colValue == null) {
               numOfNulls(i) += 1
             }
           }
@@ -438,7 +548,8 @@ abstract class InMemoryBaseTable(
   case class InMemoryBatchScan(
       var _data: Seq[InputPartition],
       readSchema: StructType,
-      tableSchema: StructType)
+      tableSchema: StructType,
+      options: CaseInsensitiveStringMap)
     extends BatchScanBaseClass(_data, readSchema, tableSchema) with SupportsRuntimeFiltering {
 
     override def filterAttributes(): Array[NamedReference] = {
@@ -470,17 +581,17 @@ abstract class InMemoryBaseTable(
     }
   }
 
-  abstract class InMemoryWriterBuilder() extends SupportsTruncate with SupportsDynamicOverwrite
-    with SupportsStreamingUpdateAsAppend {
+  abstract class InMemoryWriterBuilder(val info: LogicalWriteInfo)
+    extends SupportsTruncate with SupportsDynamicOverwrite with SupportsStreamingUpdateAsAppend {
 
-    protected var writer: BatchWrite = Append
-    protected var streamingWriter: StreamingWrite = StreamingAppend
+    protected var writer: BatchWrite = new Append(info)
+    protected var streamingWriter: StreamingWrite = new StreamingAppend(info)
 
     override def overwriteDynamicPartitions(): WriteBuilder = {
-      if (writer != Append) {
+      if (!writer.isInstanceOf[Append]) {
         throw new IllegalArgumentException(s"Unsupported writer type: $writer")
       }
-      writer = DynamicOverwrite
+      writer = new DynamicOverwrite(info)
       streamingWriter = new StreamingNotSupportedOperation("overwriteDynamicPartitions")
       this
     }
@@ -500,7 +611,12 @@ abstract class InMemoryBaseTable(
         advisoryPartitionSize.getOrElse(0)
       }
 
-      override def toBatch: BatchWrite = writer
+      override def toBatch: BatchWrite = {
+        val newSchema = info.schema()
+        tableColumns = CatalogV2Util.structTypeToV2Columns(
+          mergeSchema(CatalogV2Util.v2ColumnsToStructType(columns()), newSchema))
+        writer
+      }
 
       override def toStreaming: StreamingWrite = streamingWriter match {
         case exc: StreamingNotSupportedOperation => exc.throwsException()
@@ -508,43 +624,72 @@ abstract class InMemoryBaseTable(
       }
 
       override def supportedCustomMetrics(): Array[CustomMetric] = {
-        Array(new InMemorySimpleCustomMetric)
+        Array(new InMemorySimpleCustomMetric, new InMemoryCustomDriverMetric)
+      }
+
+      override def reportDriverMetrics(): Array[CustomTaskMetric] = {
+        Array(new InMemoryCustomDriverTaskMetric(rows.size))
+      }
+
+      def mergeSchema(oldType: StructType, newType: StructType): StructType = {
+        val (oldFields, newFields) = (oldType.fields, newType.fields)
+
+        // this does not override the old field with the new field with same name for now
+        val nameToFieldMap = toFieldMap(oldFields)
+        val remainingNewFields = newFields.filterNot (f => nameToFieldMap.contains (f.name) )
+
+        // Create the merged struct with the new fields are appended at the end of the struct.
+        StructType (oldFields ++ remainingNewFields)
+      }
+
+      def toFieldMap(fields: Array[StructField]): Map[String, StructField] = {
+        val fieldMap = fields.map(field => field.name -> field).toMap
+        if (SQLConf.get.caseSensitiveAnalysis) {
+          fieldMap
+        } else {
+          CaseInsensitiveMap(fieldMap)
+        }
       }
     }
   }
 
   protected abstract class TestBatchWrite extends BatchWrite {
+
     override def createBatchWriterFactory(info: PhysicalWriteInfo): DataWriterFactory = {
-      BufferedRowsWriterFactory
+      new BufferedRowsWriterFactory(CatalogV2Util.v2ColumnsToStructType(columns()))
     }
 
     override def abort(messages: Array[WriterCommitMessage]): Unit = {}
   }
 
-  protected object Append extends TestBatchWrite {
+  class Append(val info: LogicalWriteInfo) extends TestBatchWrite {
+
     override def commit(messages: Array[WriterCommitMessage]): Unit = dataMap.synchronized {
       withData(messages.map(_.asInstanceOf[BufferedRows]))
+      commits += Commit(Instant.now().toEpochMilli)
     }
   }
 
-  private object DynamicOverwrite extends TestBatchWrite {
+  class DynamicOverwrite(val info: LogicalWriteInfo) extends TestBatchWrite {
     override def commit(messages: Array[WriterCommitMessage]): Unit = dataMap.synchronized {
       val newData = messages.map(_.asInstanceOf[BufferedRows])
       dataMap --= newData.flatMap(_.rows.map(getKey))
       withData(newData)
+      commits += Commit(Instant.now().toEpochMilli)
     }
   }
 
-  protected object TruncateAndAppend extends TestBatchWrite {
+  class TruncateAndAppend(val info: LogicalWriteInfo) extends TestBatchWrite {
     override def commit(messages: Array[WriterCommitMessage]): Unit = dataMap.synchronized {
       dataMap.clear()
       withData(messages.map(_.asInstanceOf[BufferedRows]))
+      commits += Commit(Instant.now().toEpochMilli)
     }
   }
 
   protected abstract class TestStreamingWrite extends StreamingWrite {
     def createStreamingWriterFactory(info: PhysicalWriteInfo): StreamingDataWriterFactory = {
-      BufferedRowsWriterFactory
+      new BufferedRowsWriterFactory(CatalogV2Util.v2ColumnsToStructType(columns()))
     }
 
     def abort(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {}
@@ -564,7 +709,7 @@ abstract class InMemoryBaseTable(
       s"${operation} isn't supported for streaming query.")
   }
 
-  private object StreamingAppend extends TestStreamingWrite {
+  class StreamingAppend(val info: LogicalWriteInfo) extends TestStreamingWrite {
     override def commit(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {
       dataMap.synchronized {
         withData(messages.map(_.asInstanceOf[BufferedRows]))
@@ -572,13 +717,17 @@ abstract class InMemoryBaseTable(
     }
   }
 
-  protected object StreamingTruncateAndAppend extends TestStreamingWrite {
+  class StreamingTruncateAndAppend(val info: LogicalWriteInfo) extends TestStreamingWrite {
     override def commit(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {
       dataMap.synchronized {
         dataMap.clear()
         withData(messages.map(_.asInstanceOf[BufferedRows]))
       }
     }
+  }
+
+  def copy(): Table = {
+    throw new UnsupportedOperationException(s"copy is not supported for ${getClass.getName}")
   }
 }
 
@@ -604,8 +753,15 @@ object InMemoryBaseTable {
   }
 }
 
-class BufferedRows(val key: Seq[Any] = Seq.empty) extends WriterCommitMessage
+/**
+ * Represent a set of rows buffered in memory for a given partition key.
+ * @param key partition key
+ * @param schema schema used to write the rows
+ */
+class BufferedRows(val key: Seq[Any], val schema: StructType)
+  extends WriterCommitMessage
     with InputPartition with HasPartitionKey with HasPartitionStatistics with Serializable {
+  val log = new mutable.ArrayBuffer[InternalRow]()
   val rows = new mutable.ArrayBuffer[InternalRow]()
   val deletes = new mutable.ArrayBuffer[Int]()
 
@@ -624,6 +780,12 @@ class BufferedRows(val key: Seq[Any] = Seq.empty) extends WriterCommitMessage
   def clear(): Unit = rows.clear()
 }
 
+object BufferedRows {
+  def apply(key: Seq[Any], schema: Array[Column]): BufferedRows = {
+    new BufferedRows(key, CatalogV2Util.v2ColumnsToStructType(schema))
+  }
+}
+
 /**
  * Theoretically, [[InternalRow]] returned by [[HasPartitionKey#partitionKey()]]
  * does not need to implement equal and hashcode methods.
@@ -640,7 +802,7 @@ case class PartitionInternalRow(keys: Array[Any])
     this.keys == other.asInstanceOf[PartitionInternalRow].keys
   }
   override def hashCode: Int = {
-    Objects.hashCode(keys)
+    Objects.hash(keys)
   }
 }
 
@@ -678,7 +840,8 @@ private class BufferedRowsReader(
     val originalRow = partition.rows(index)
     val values = new Array[Any](nonMetadataColumns.length)
     nonMetadataColumns.zipWithIndex.foreach { case (col, idx) =>
-      values(idx) = extractFieldValue(col, tableSchema, originalRow)
+      values(idx) = extractFieldValue(col, tableSchema,
+        partition.schema, originalRow)
     }
     addMetadata(new GenericInternalRow(values))
   }
@@ -687,45 +850,165 @@ private class BufferedRowsReader(
 
   private def extractFieldValue(
       field: StructField,
-      schema: StructType,
+      readSchema: StructType,
+      writeSchema: StructType,
       row: InternalRow): Any = {
-    val index = schema.fieldIndex(field.name)
-    field.dataType match {
-      case StructType(fields) =>
-        if (row.isNullAt(index)) {
-          return null
+    val writeIndexOpt = writeSchema.getFieldIndex(field.name)
+    val readIndexOpt = readSchema.getFieldIndex(field.name)
+    (writeIndexOpt, readIndexOpt) match {
+      case (Some(writeIndex), Some(readIndex)) =>
+        if (writeIndex >= row.numFields) {
+          return ResolveDefaultColumns.getExistenceDefaultValue(field)
         }
-        val childRow = row.toSeq(schema)(index).asInstanceOf[InternalRow]
-        val childSchema = schema(index).dataType.asInstanceOf[StructType]
-        val resultValue = new Array[Any](fields.length)
-        fields.zipWithIndex.foreach { case (childField, idx) =>
-          val childValue = extractFieldValue(childField, childSchema, childRow)
-          resultValue(idx) = childValue
+
+        field.dataType match {
+          case StructType(fields) =>
+            if (row.isNullAt(writeIndex)) {
+              return null
+            }
+            val childRow = row.toSeq(writeSchema)(writeIndex).asInstanceOf[InternalRow]
+            val childWriteSchema = writeSchema.fields(writeIndex).dataType.asInstanceOf[StructType]
+            val childReadSchema = readSchema.fields(writeIndex).dataType.asInstanceOf[StructType]
+            val resultValue = new Array[Any](fields.length)
+            fields.zipWithIndex.foreach { case (childField, idx) =>
+              val childValue = extractFieldValue(childField, childReadSchema,
+                childWriteSchema, childRow)
+              resultValue(idx) = childValue
+            }
+            new GenericInternalRow(resultValue)
+
+          case MapType(keyType, valueType, _) =>
+            val writeMapType = writeSchema.fields(writeIndex).dataType.asInstanceOf[MapType]
+            val mapData = row.getMap(writeIndex)
+            if (mapData == null) {
+              null
+            } else {
+              extractMapValue(mapData, keyType, valueType,
+                writeMapType.keyType, writeMapType.valueType)
+            }
+
+          case ArrayType(elementType, _) =>
+            val arrayData = row.getArray(writeIndex)
+            if (arrayData == null) {
+              null
+            } else {
+              val writeType = writeSchema.fields(writeIndex).dataType.asInstanceOf[ArrayType]
+              extractArrayValue(arrayData, elementType, writeType.elementType)
+            }
+
+          case dt =>
+            row.get(writeIndex, dt)
         }
-        new GenericInternalRow(resultValue)
-      case dt =>
-        row.get(index, dt)
+      case (None, Some(_)) =>
+        ResolveDefaultColumns.getExistenceDefaultValue(field)
+      case _ => throw new RuntimeException("Failed, " +
+        "field is not found in both read and write schema.")
     }
   }
+
+  private def extractArrayValue(
+      arrayData: ArrayData,
+      readType: DataType,
+      writeType: DataType): ArrayData = {
+    val elements = arrayData.toArray[Any](writeType)
+    val convertedElements = extractCollection(elements, readType, writeType)
+    new GenericArrayData(convertedElements)
+  }
+
+  private def extractMapValue(
+      mapData: MapData,
+      readKeyType: DataType,
+      readValueType: DataType,
+      writeKeyType: DataType,
+      writeValueType: DataType): MapData = {
+    val keys = mapData.keyArray().toArray[Any](writeKeyType)
+    val values = mapData.valueArray().toArray[Any](writeValueType)
+
+    val convertedKeys = extractCollection(keys, readKeyType, writeKeyType)
+    val convertedValues = extractCollection(values, readValueType, writeValueType)
+    ArrayBasedMapData(convertedKeys, convertedValues)
+  }
+
+  private def extractCollection(
+      elements: Array[Any],
+      readType: DataType,
+      writeType: DataType) = {
+    (readType, writeType) match {
+      case (readSt: StructType, writeSt: StructType) =>
+        elements.map { elem =>
+          if (elem == null) {
+            null
+          } else {
+            val elemRow = elem.asInstanceOf[InternalRow]
+            val result = readSt.fields
+              .map(f => extractFieldValue(f, readSt, writeSt, elemRow))
+            new GenericInternalRow(result)
+          }
+        }
+      case (ArrayType(readAType, _), ArrayType(writeAType, _)) =>
+        elements.map { elem =>
+          if (elem == null) {
+            null
+          } else {
+            extractArrayValue(elem.asInstanceOf[ArrayData], readAType, writeAType)
+          }
+        }
+      case (MapType(rKeyType, rValueType, _), MapType(wKeyType, wValueType, _)) =>
+        elements.map { elem =>
+          if (elem == null) {
+            null
+          } else {
+            extractMapValue(elem.asInstanceOf[MapData], rKeyType, rValueType,
+              wKeyType, wValueType)
+          }
+        }
+      case (readType: AtomicType, writeType: AtomicType) if readType != writeType =>
+        elements.map { elem =>
+          if (elem == null) {
+            null
+          } else {
+            castElement(elem, readType, writeType)
+          }
+        }
+      case (_, _) => elements
+    }
+  }
+
+  private def castElement(elem: Any, toType: DataType, fromType: DataType): Any =
+    Cast(Literal(elem, fromType), toType, None, EvalMode.TRY).eval(null)
 }
 
-private object BufferedRowsWriterFactory extends DataWriterFactory with StreamingDataWriterFactory {
+private class BufferedRowsWriterFactory(schema: StructType)
+  extends DataWriterFactory with StreamingDataWriterFactory {
   override def createWriter(partitionId: Int, taskId: Long): DataWriter[InternalRow] = {
-    new BufferWriter
+    new BufferWriter(schema)
   }
 
   override def createWriter(
       partitionId: Int,
       taskId: Long,
       epochId: Long): DataWriter[InternalRow] = {
-    new BufferWriter
+    new BufferWriter(schema)
   }
 }
 
-private class BufferWriter extends DataWriter[InternalRow] {
-  protected val buffer = new BufferedRows
+private class BufferWriter(schema: StructType) extends DataWriter[InternalRow] {
 
-  override def write(row: InternalRow): Unit = buffer.rows.append(row.copy())
+  private final val WRITE = UTF8String.fromString(Write.toString)
+
+  protected val buffer = new BufferedRows(Seq.empty, schema)
+
+  override def write(metadata: InternalRow, row: InternalRow): Unit = {
+    buffer.rows.append(row.copy())
+    val logEntry = new GenericInternalRow(Array[Any](WRITE, null, metadata.copy(), row.copy()))
+    buffer.log.append(logEntry)
+  }
+
+  override def write(row: InternalRow): Unit = {
+    buffer.rows.append(row.copy())
+    val logEntry = new GenericInternalRow(Array[Any](WRITE, null, null, row.copy()))
+    buffer.log.append(logEntry)
+  }
 
   override def commit(): WriterCommitMessage = buffer
 
@@ -750,3 +1033,22 @@ class InMemorySimpleCustomMetric extends CustomMetric {
     s"in-memory rows: ${taskMetrics.sum}"
   }
 }
+
+class InMemoryCustomDriverMetric extends CustomSumMetric {
+  override def name(): String = "number_of_rows_from_driver"
+  override def description(): String = "number of rows from driver"
+}
+
+class InMemoryCustomDriverTaskMetric(value: Long) extends CustomTaskMetric {
+  override def name(): String = "number_of_rows_from_driver"
+  override def value(): Long = value
+}
+
+case class Commit(id: Long, writeSummary: Option[WriteSummary] = None)
+
+sealed trait Operation
+case object Write extends Operation
+case object Delete extends Operation
+case object Update extends Operation
+case object Reinsert extends Operation
+case object Insert extends Operation

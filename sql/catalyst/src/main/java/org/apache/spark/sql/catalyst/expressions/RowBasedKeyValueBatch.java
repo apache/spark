@@ -19,8 +19,8 @@ package org.apache.spark.sql.catalyst.expressions;
 import java.io.Closeable;
 import java.io.IOException;
 
-import org.apache.spark.internal.Logger;
-import org.apache.spark.internal.LoggerFactory;
+import org.apache.spark.internal.SparkLogger;
+import org.apache.spark.internal.SparkLoggerFactory;
 import org.apache.spark.internal.LogKeys;
 import org.apache.spark.internal.MDC;
 import org.apache.spark.memory.MemoryConsumer;
@@ -48,7 +48,8 @@ import org.apache.spark.unsafe.memory.MemoryBlock;
  *
  */
 public abstract class RowBasedKeyValueBatch extends MemoryConsumer implements Closeable {
-  protected static final Logger logger = LoggerFactory.getLogger(RowBasedKeyValueBatch.class);
+  protected static final SparkLogger logger =
+    SparkLoggerFactory.getLogger(RowBasedKeyValueBatch.class);
 
   private static final int DEFAULT_CAPACITY = 1 << 16;
 
@@ -128,7 +129,7 @@ public abstract class RowBasedKeyValueBatch extends MemoryConsumer implements Cl
       page = allocatePage(requiredSize);
     } catch (SparkOutOfMemoryError e) {
       logger.warn("Failed to allocate page ({} bytes).",
-        MDC.of(LogKeys.PAGE_SIZE$.MODULE$, requiredSize));
+        MDC.of(LogKeys.PAGE_SIZE, requiredSize));
       return false;
     }
     base = page.getBaseObject();
@@ -173,7 +174,7 @@ public abstract class RowBasedKeyValueBatch extends MemoryConsumer implements Cl
    */
   @Override
   public final long spill(long size, MemoryConsumer trigger) throws IOException {
-    logger.warn("Calling spill() on RowBasedKeyValueBatch. Will not spill but return 0.");
+    logger.debug("Calling spill() on RowBasedKeyValueBatch. Will not spill but return 0.");
     return 0;
   }
 

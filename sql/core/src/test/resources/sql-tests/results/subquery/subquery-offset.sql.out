@@ -50,45 +50,17 @@ struct<>
 -- !query
 select * from x where exists (select * from y where x1 = y1 limit 1 offset 2)
 -- !query schema
-struct<>
+struct<x1:int,x2:int>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.ACCESSING_OUTER_QUERY_COLUMN_IS_NOT_ALLOWED",
-  "sqlState" : "0A000",
-  "messageParameters" : {
-    "treeNode" : "Filter (outer(x1#x) = y1#x)\n+- SubqueryAlias spark_catalog.default.y\n   +- Relation spark_catalog.default.y[y1#x,y2#x] json\n"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 31,
-    "stopIndex" : 59,
-    "fragment" : "select * from y where x1 = y1"
-  } ]
-}
+
 
 
 -- !query
 select * from x join lateral (select * from y where x1 = y1 limit 1 offset 2)
 -- !query schema
-struct<>
+struct<x1:int,x2:int,y1:int,y2:int>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.ACCESSING_OUTER_QUERY_COLUMN_IS_NOT_ALLOWED",
-  "sqlState" : "0A000",
-  "messageParameters" : {
-    "treeNode" : "Filter (outer(x1#x) = y1#x)\n+- SubqueryAlias spark_catalog.default.y\n   +- Relation spark_catalog.default.y[y1#x,y2#x] json\n"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 31,
-    "stopIndex" : 59,
-    "fragment" : "select * from y where x1 = y1"
-  } ]
-}
+
 
 
 -- !query
@@ -102,23 +74,41 @@ struct<x1:int,x2:int>
 -- !query
 select * from x where (select sum(y2) from y where x1 = y1 limit 1 offset 2) > 2
 -- !query schema
-struct<>
+struct<x1:int,x2:int>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.ACCESSING_OUTER_QUERY_COLUMN_IS_NOT_ALLOWED",
-  "sqlState" : "0A000",
-  "messageParameters" : {
-    "treeNode" : "Filter (outer(x1#x) = y1#x)\n+- SubqueryAlias spark_catalog.default.y\n   +- Relation spark_catalog.default.y[y1#x,y2#x] json\n"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 24,
-    "stopIndex" : 58,
-    "fragment" : "select sum(y2) from y where x1 = y1"
-  } ]
-}
+
+
+
+-- !query
+select * from x where exists (select * from y where x1 = y1 offset 2)
+-- !query schema
+struct<x1:int,x2:int>
+-- !query output
+
+
+
+-- !query
+select * from x join lateral (select * from y where x1 = y1 offset 2)
+-- !query schema
+struct<x1:int,x2:int,y1:int,y2:int>
+-- !query output
+
+
+
+-- !query
+select * from x where x1 in (select y1 from y offset 2)
+-- !query schema
+struct<x1:int,x2:int>
+-- !query output
+1	1
+
+
+-- !query
+select * from x where (select sum(y2) from y where x1 = y1 offset 2) > 2
+-- !query schema
+struct<x1:int,x2:int>
+-- !query output
+
 
 
 -- !query
@@ -165,23 +155,9 @@ WHERE EXISTS (SELECT max(dept.dept_id) a
                    LIMIT 2
                    OFFSET 1)
 -- !query schema
-struct<>
+struct<emp_name:string>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.ACCESSING_OUTER_QUERY_COLUMN_IS_NOT_ALLOWED",
-  "sqlState" : "0A000",
-  "messageParameters" : {
-    "treeNode" : "Filter (dept_id#x = outer(dept_id#x))\n+- SubqueryAlias dept\n   +- View (`DEPT`, [dept_id#x, dept_name#x, state#x])\n      +- Project [cast(dept_id#x as int) AS dept_id#x, cast(dept_name#x as string) AS dept_name#x, cast(state#x as string) AS state#x]\n         +- Project [dept_id#x, dept_name#x, state#x]\n            +- SubqueryAlias DEPT\n               +- LocalRelation [dept_id#x, dept_name#x, state#x]\n"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 42,
-    "stopIndex" : 186,
-    "fragment" : "SELECT max(dept.dept_id) a\n                   FROM   dept\n                   WHERE  dept.dept_id = emp.dept_id\n                   GROUP  BY state"
-  } ]
-}
+
 
 
 -- !query
@@ -195,23 +171,39 @@ JOIN LATERAL (SELECT max(dept.dept_id) a
                    LIMIT 2
                    OFFSET 1)
 -- !query schema
-struct<>
+struct<emp_name:string>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.ACCESSING_OUTER_QUERY_COLUMN_IS_NOT_ALLOWED",
-  "sqlState" : "0A000",
-  "messageParameters" : {
-    "treeNode" : "Filter (dept_id#x = outer(dept_id#x))\n+- SubqueryAlias dept\n   +- View (`DEPT`, [dept_id#x, dept_name#x, state#x])\n      +- Project [cast(dept_id#x as int) AS dept_id#x, cast(dept_name#x as string) AS dept_name#x, cast(state#x as string) AS state#x]\n         +- Project [dept_id#x, dept_name#x, state#x]\n            +- SubqueryAlias DEPT\n               +- LocalRelation [dept_id#x, dept_name#x, state#x]\n"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 42,
-    "stopIndex" : 186,
-    "fragment" : "SELECT max(dept.dept_id) a\n                   FROM   dept\n                   WHERE  dept.dept_id = emp.dept_id\n                   GROUP  BY state"
-  } ]
-}
+
+
+
+-- !query
+SELECT emp_name
+FROM   emp
+WHERE EXISTS (SELECT max(dept.dept_id) a
+                   FROM   dept
+                   WHERE  dept.dept_id = emp.dept_id
+                   GROUP  BY state
+                   ORDER  BY state
+                   OFFSET 1)
+-- !query schema
+struct<emp_name:string>
+-- !query output
+
+
+
+-- !query
+SELECT emp_name
+FROM   emp
+JOIN LATERAL (SELECT max(dept.dept_id) a
+                   FROM   dept
+                   WHERE  dept.dept_id = emp.dept_id
+                   GROUP  BY state
+                   ORDER  BY state
+                   OFFSET 1)
+-- !query schema
+struct<emp_name:string>
+-- !query output
+
 
 
 -- !query

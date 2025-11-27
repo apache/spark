@@ -1,3 +1,3 @@
 --IMPORT binary.sql
 
---SET spark.sql.binaryOutputStyle=HEX;
+--SET spark.sql.binaryOutputStyle=HEX

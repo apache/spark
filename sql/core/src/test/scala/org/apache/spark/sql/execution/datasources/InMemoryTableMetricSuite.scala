@@ -22,7 +22,7 @@ import org.scalatest.BeforeAndAfter
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.sql.QueryTest
-import org.apache.spark.sql.connector.catalog.{Column, Identifier, InMemoryTableCatalog}
+import org.apache.spark.sql.connector.catalog.{Column, Identifier, InMemoryTable, InMemoryTableCatalog}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.test.SharedSparkSession
@@ -42,7 +42,7 @@ class InMemoryTableMetricSuite
     spark.sessionState.conf.clear()
   }
 
-  private def testMetricOnDSv2(func: String => Unit, checker: Map[Long, String] => Unit): Unit = {
+  private def testMetricOnDSv2(func: String => Unit, checker: Map[String, String] => Unit): Unit = {
     withTable("testcat.table_name") {
       val statusStore = spark.sharedState.statusStore
       val oldCount = statusStore.executionsList().size
@@ -67,8 +67,14 @@ class InMemoryTableMetricSuite
           statusStore.executionsList().last.metricValues != null)
       }
 
-      val execId = statusStore.executionsList().last.executionId
-      val metrics = statusStore.executionMetrics(execId)
+      val exec = statusStore.executionsList().last
+      val execId = exec.executionId
+      val sqlMetrics = exec.metrics.map { metric =>
+        metric.accumulatorId -> metric.name
+      }.toMap
+      val metrics = statusStore.executionMetrics(execId).map { case (k, v) =>
+        sqlMetrics(k) -> v
+      }
       checker(metrics)
     }
   }
@@ -79,8 +85,8 @@ class InMemoryTableMetricSuite
       val v2Writer = df.writeTo(table)
       v2Writer.append()
     }, metrics => {
-      val customMetric = metrics.find(_._2 == "in-memory rows: 1")
-      assert(customMetric.isDefined)
+      assert(metrics.get("number of rows in buffer").contains("in-memory rows: 1"))
+      assert(metrics.get("number of rows from driver").contains("1"))
     })
   }
 
@@ -90,8 +96,23 @@ class InMemoryTableMetricSuite
       val v2Writer = df.writeTo(table)
       v2Writer.overwrite(lit(true))
     }, metrics => {
-      val customMetric = metrics.find(_._2 == "in-memory rows: 3")
-      assert(customMetric.isDefined)
+      assert(metrics.get("number of rows in buffer").contains("in-memory rows: 3"))
+      assert(metrics.get("number of rows from driver").contains("3"))
+    })
+  }
+
+  test("Report metrics for aborted command") {
+    testMetricOnDSv2(table => {
+      assertThrows[IllegalArgumentException] {
+        val df = spark
+          .range(start = InMemoryTable.uncommittableValue(),
+            end = InMemoryTable.uncommittableValue() + 1)
+          .toDF("i")
+        val v2Writer = df.writeTo(table)
+        v2Writer.overwrite(lit(true))
+      }
+    }, metrics => {
+      assert(metrics.get("number of rows from driver").contains("1"))
     })
   }
 }

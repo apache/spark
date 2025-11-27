@@ -43,6 +43,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
+import org.apache.spark.util.collection.Utils.createArray
 
 case class AllDataTypesWithNonPrimitiveType(
     stringField: String,
@@ -594,7 +595,7 @@ abstract class OrcQueryTest extends OrcTest {
         exception = intercept[AnalysisException] {
           testAllCorruptFiles()
         },
-        errorClass = "UNABLE_TO_INFER_SCHEMA",
+        condition = "UNABLE_TO_INFER_SCHEMA",
         parameters = Map("format" -> "ORC")
       )
       testAllCorruptFilesWithoutSchemaInfer()
@@ -604,14 +605,14 @@ abstract class OrcQueryTest extends OrcTest {
       val e1 = intercept[SparkException] {
         testIgnoreCorruptFiles()
       }
-      assert(e1.getErrorClass.startsWith("FAILED_READ_FILE"))
+      assert(e1.getCondition.startsWith("FAILED_READ_FILE"))
       assert(e1.getCause.getMessage.contains("Malformed ORC file") ||
         // Hive ORC table scan uses a different code path and has one more error stack
         e1.getCause.getCause.getMessage.contains("Malformed ORC file"))
       val e2 = intercept[SparkException] {
         testIgnoreCorruptFilesWithoutSchemaInfer()
       }
-      assert(e2.getErrorClass.startsWith("FAILED_READ_FILE"))
+      assert(e2.getCondition.startsWith("FAILED_READ_FILE"))
       assert(e2.getCause.getMessage.contains("Malformed ORC file") ||
         // Hive ORC table scan uses a different code path and has one more error stack
         e2.getCause.getCause.getMessage.contains("Malformed ORC file"))
@@ -619,13 +620,13 @@ abstract class OrcQueryTest extends OrcTest {
         exception = intercept[SparkException] {
           testAllCorruptFiles()
         },
-        errorClass = "FAILED_READ_FILE.CANNOT_READ_FILE_FOOTER",
+        condition = "FAILED_READ_FILE.CANNOT_READ_FILE_FOOTER",
         parameters = Map("path" -> "file:.*")
       )
       val e4 = intercept[SparkException] {
         testAllCorruptFilesWithoutSchemaInfer()
       }
-      assert(e4.getErrorClass.startsWith("FAILED_READ_FILE"))
+      assert(e4.getCondition.startsWith("FAILED_READ_FILE"))
       assert(e4.getCause.getMessage.contains("Malformed ORC file") ||
         // Hive ORC table scan uses a different code path and has one more error stack
         e4.getCause.getCause.getMessage.contains("Malformed ORC file"))
@@ -737,13 +738,13 @@ abstract class OrcQuerySuite extends OrcQueryTest with SharedSparkSession {
     withTempPath { dir =>
       val path = dir.getCanonicalPath
       val df = spark.range(10).map { x =>
-        val stringColumn = s"$x" * 10
-        val structColumn = (x, s"$x" * 100)
-        val arrayColumn = (0 until 5).map(i => (x + i, s"$x" * 5))
+        val stringColumn = s"$x".repeat(10)
+        val structColumn = (x, s"$x".repeat(100))
+        val arrayColumn = (0 until 5).map(i => (x + i, s"$x".repeat(5)))
         val mapColumn = Map(
-          s"$x" -> (x * 0.1, (x, s"$x" * 100)),
-          (s"$x" * 2) -> (x * 0.2, (x, s"$x" * 200)),
-          (s"$x" * 3) -> (x * 0.3, (x, s"$x" * 300)))
+          s"$x" -> (x * 0.1, (x, s"$x".repeat(100))),
+          (s"$x".repeat(2)) -> (x * 0.2, (x, s"$x".repeat(200))),
+          (s"$x".repeat(3)) -> (x * 0.3, (x, s"$x".repeat(300))))
         (x, stringColumn, structColumn, arrayColumn, mapColumn)
       }.toDF("int_col", "string_col", "struct_col", "array_col", "map_col")
       df.write.format("orc").save(path)
@@ -786,10 +787,10 @@ abstract class OrcQuerySuite extends OrcQueryTest with SharedSparkSession {
     withTempPath { dir =>
       val path = dir.getCanonicalPath
       val df = spark.range(10).map { x =>
-        val stringColumn = s"$x" * 10
-        val structColumn = (x, s"$x" * 100)
-        val arrayColumn = (0 until 5).map(i => (x + i, s"$x" * 5))
-        val mapColumn = Map(s"$x" -> (x * 0.1, (x, s"$x" * 100)))
+        val stringColumn = s"$x".repeat(10)
+        val structColumn = (x, s"$x".repeat(100))
+        val arrayColumn = (0 until 5).map(i => (x + i, s"$x".repeat(5)))
+        val mapColumn = Map(s"$x" -> (x * 0.1, (x, s"$x".repeat(100))))
         (x, stringColumn, structColumn, arrayColumn, mapColumn)
       }.toDF("int_col", "string_col", "struct_col", "array_col", "map_col")
       df.write.format("orc").save(path)
@@ -854,7 +855,7 @@ abstract class OrcQuerySuite extends OrcQueryTest with SharedSparkSession {
     withTempPath { dir =>
       val path = dir.getCanonicalPath
       val df = spark.range(1, 22, 1, 1).map { _ =>
-        val byteData = Array.fill[Byte](1024 * 1024)('X')
+        val byteData = createArray[Byte](1024 * 1024, 'X')
         val mapData = (1 to 100).map(i => (i, byteData))
         mapData
       }.toDF()
@@ -868,7 +869,7 @@ abstract class OrcQuerySuite extends OrcQueryTest with SharedSparkSession {
         withTempPath { dir =>
           val path = dir.getCanonicalPath
           val df = spark.range(1, 1024, 1, 1).map { _ =>
-            val byteData = Array.fill[Byte](5 * 1024 * 1024)('X')
+            val byteData = createArray[Byte](5 * 1024 * 1024, 'X')
             byteData
           }.toDF()
           df.write.format("orc").save(path)
@@ -885,9 +886,9 @@ abstract class OrcQuerySuite extends OrcQueryTest with SharedSparkSession {
         val path = dir.getCanonicalPath
         val df = spark.range(1, 1 + 512, 1, 1).map { i =>
           if (i == 1) {
-            (i, Array.fill[Byte](5 * 1024 * 1024)('X'))
+            (i, createArray[Byte](5 * 1024 * 1024, 'X'))
           } else {
-            (i, Array.fill[Byte](1)('X'))
+            (i, createArray[Byte](1, 'X'))
           }
         }.toDF("c1", "c2")
         df.write.format("orc").save(path)
@@ -896,6 +897,54 @@ abstract class OrcQuerySuite extends OrcQueryTest with SharedSparkSession {
           spark.sql("select * from t1").collect()
         }
       }
+    }
+  }
+
+  test("TIME type support for ORC format") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      val df = spark.sql("""
+        SELECT
+          id,
+          TIME'09:30:00' as morning,
+          TIME'14:45:30.123456' as afternoon,
+          TIME'23:59:59.999999' as end_of_day,
+          TIME'00:00:00' as midnight,
+          CASE WHEN id % 2 = 0 THEN TIME'12:30:00' ELSE NULL END as nullable_time
+        FROM VALUES (1), (2), (3) AS t(id)
+      """)
+
+      df.write.mode("overwrite").orc(path)
+      val result = spark.read.orc(path)
+
+      Seq("morning", "afternoon", "end_of_day", "midnight", "nullable_time").foreach { col =>
+        assert(result.schema(col).dataType == TimeType(6))
+      }
+      checkAnswer(result, df)
+    }
+  }
+
+  test("TIME type with different precisions in ORC") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      val df = spark.sql("""
+        SELECT
+          CAST(TIME'12:34:56' AS TIME(0)) as time_p0,
+          CAST(TIME'12:34:56.1' AS TIME(1)) as time_p1,
+          CAST(TIME'12:34:56.12' AS TIME(2)) as time_p2,
+          CAST(TIME'12:34:56.123' AS TIME(3)) as time_p3,
+          CAST(TIME'12:34:56.1234' AS TIME(4)) as time_p4,
+          CAST(TIME'12:34:56.12345' AS TIME(5)) as time_p5,
+          CAST(TIME'12:34:56.123456' AS TIME(6)) as time_p6
+      """)
+
+      df.write.mode("overwrite").orc(path)
+      val result = spark.read.orc(path)
+
+      (0 to 6).foreach { p =>
+        assert(result.schema(s"time_p$p").dataType == TimeType(p))
+      }
+      checkAnswer(result, df)
     }
   }
 }

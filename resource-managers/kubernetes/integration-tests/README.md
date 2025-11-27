@@ -131,7 +131,7 @@ properties to Maven.  For example:
     mvn integration-test -am -pl :spark-kubernetes-integration-tests_2.13 \
                             -Pkubernetes -Pkubernetes-integration-tests \
                             -Phadoop-3 -Dhadoop.version=3.4.0 \
-                            -Dspark.kubernetes.test.sparkTgz=spark-4.0.0-SNAPSHOT-bin-example.tgz \
+                            -Dspark.kubernetes.test.sparkTgz=spark-4.1.0-SNAPSHOT-bin-example.tgz \
                             -Dspark.kubernetes.test.imageTag=sometag \
                             -Dspark.kubernetes.test.imageRepo=docker.io/somerepo \
                             -Dspark.kubernetes.test.namespace=spark-int-tests \
@@ -199,9 +199,9 @@ to the wrapper scripts and using the wrapper scripts will simply set these appro
   <tr>
     <td><code>spark.kubernetes.test.javaImageTag</code></td>
     <td>
-      A specific OpenJDK base image tag to use, when set uses it instead of azul/zulu-openjdk.
+      A specific Azul Zulu OpenJDK base image tag to use, when set uses it instead of 21.
     </td>
-    <td><code>azul/zulu-openjdk</code></td>
+    <td><code>N/A</code></td>
   </tr>
   <tr>
     <td><code>spark.kubernetes.test.imageTagFile</code></td>
@@ -330,11 +330,11 @@ You can also specify your specific dockerfile to build JVM/Python/R based image 
 
 ## Requirements
 - A minimum of 6 CPUs and 9G of memory is required to complete all Volcano test cases.
-- Volcano v1.8.2.
+- Volcano v1.13.0.
 
 ## Installation
 
-    kubectl apply -f https://raw.githubusercontent.com/volcano-sh/volcano/v1.8.2/installer/volcano-development.yaml
+    kubectl apply -f https://raw.githubusercontent.com/volcano-sh/volcano/v1.13.0/installer/volcano-development.yaml
 
 ## Run tests
 
@@ -355,5 +355,5 @@ You can also specify `volcano` tag to only run Volcano test:
 
 ## Cleanup Volcano
 
-    kubectl delete -f https://raw.githubusercontent.com/volcano-sh/volcano/v1.8.2/installer/volcano-development.yaml
+    kubectl delete -f https://raw.githubusercontent.com/volcano-sh/volcano/v1.13.0/installer/volcano-development.yaml
 

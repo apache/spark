@@ -1,0 +1,2 @@
+Project [gettimestamp(g#0, g#0, TimestampType, try_to_timestamp, Some(America/Los_Angeles), false) AS to_timestamp_ltz(g, g)#0]
++- LocalRelation <empty>, [id#0L, a#0, b#0, d#0, e#0, f#0, g#0]

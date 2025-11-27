@@ -24,12 +24,14 @@ import scala.util.control.NonFatal
 import org.apache.hadoop.hive.ql.exec.{UDAF, UDF}
 import org.apache.hadoop.hive.ql.udf.generic.{AbstractGenericUDAFResolver, GenericUDF, GenericUDTF}
 
-import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.analysis.{Analyzer, EvalSubqueriesForTimeTravel, ReplaceCharWithVarchar, ResolveSessionCatalog}
+import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.analysis.{Analyzer, EvalSubqueriesForTimeTravel, InvokeProcedures, ReplaceCharWithVarchar, ResolveDataSource, ResolveExecuteImmediate, ResolveSessionCatalog, ResolveTranspose}
+import org.apache.spark.sql.catalyst.analysis.resolver.ResolverExtension
 import org.apache.spark.sql.catalyst.catalog.{ExternalCatalogWithListener, InvalidUDFClassException}
-import org.apache.spark.sql.catalyst.expressions.Expression
+import org.apache.spark.sql.catalyst.expressions.{Expression, ExtractSemiStructuredFields}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.classic.{SparkSession, Strategy}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.SparkPlanner
 import org.apache.spark.sql.execution.aggregate.ResolveEncodersInScalaAgg
@@ -37,11 +39,11 @@ import org.apache.spark.sql.execution.analysis.DetectAmbiguousSelfJoin
 import org.apache.spark.sql.execution.command.CommandCheck
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.v2.TableCapabilityCheck
-import org.apache.spark.sql.execution.streaming.ResolveWriteToStream
+import org.apache.spark.sql.execution.streaming.runtime.ResolveWriteToStream
 import org.apache.spark.sql.hive.HiveShim.HiveFunctionWrapper
 import org.apache.spark.sql.hive.client.HiveClient
 import org.apache.spark.sql.hive.execution.PruneHiveTablePartitions
-import org.apache.spark.sql.internal.{BaseSessionStateBuilder, SessionResourceLoader, SessionState, SparkUDFExpressionBuilder}
+import org.apache.spark.sql.internal.{BaseSessionStateBuilder, SessionResourceLoader, SessionState, SparkUDFExpressionBuilder, SQLConf}
 import org.apache.spark.util.Utils
 
 /**
@@ -83,9 +85,44 @@ class HiveSessionStateBuilder(
   /**
    * A logical query plan `Analyzer` with rules specific to Hive.
    */
-  override protected def analyzer: Analyzer = new Analyzer(catalogManager) {
+  override protected def analyzer: Analyzer = new Analyzer(catalogManager, sharedRelationCache) {
+    override val singlePassResolverExtensions: Seq[ResolverExtension] = Seq(
+      new LogicalRelationResolver,
+      new HiveTableRelationNoopResolver
+    )
+
+    override val singlePassMetadataResolverExtensions: Seq[ResolverExtension] = Seq(
+      new DataSourceResolver(session),
+      new FileResolver(session),
+      new HiveTableRelationResolver(catalog)
+    )
+
+    override val singlePassPostHocResolutionRules: Seq[Rule[LogicalPlan]] =
+      DetectAmbiguousSelfJoin +:
+      ApplyCharTypePadding +:
+      singlePassCustomPostHocResolutionRules
+
+    override val singlePassExtendedResolutionChecks: Seq[LogicalPlan => Unit] = {
+      val heavyChecks = if (session.conf.get(
+          SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_RUN_HEAVY_EXTENDED_RESOLUTION_CHECKS
+        )) {
+        Seq(
+          // [[ViewSyncSchemaToMetaStore]] calls `alterTable` if the view schema needs to be
+          // updated.
+          ViewSyncSchemaToMetaStore
+        )
+      } else {
+        Nil
+      }
+
+      PreReadCheck +:
+      heavyChecks ++:
+      singlePassCustomResolutionChecks
+    }
+
     override val extendedResolutionRules: Seq[Rule[LogicalPlan]] =
       new ResolveHiveSerdeTable(session) +:
+        new ResolveDataSource(session) +:
         new FindDataSourceTable(session) +:
         new ResolveSQLOnFile(session) +:
         new FallBackFileSourceV2(session) +:
@@ -94,6 +131,10 @@ class HiveSessionStateBuilder(
         ResolveWriteToStream +:
         new EvalSubqueriesForTimeTravel +:
         new DetermineTableStats(session) +:
+        new ResolveTranspose(session) +:
+        new InvokeProcedures(session) +:
+        ResolveExecuteImmediate(session, catalogManager) +:
+        ExtractSemiStructuredFields +:
         customResolutionRules
 
     override val postHocResolutionRules: Seq[Rule[LogicalPlan]] =
@@ -113,7 +154,7 @@ class HiveSessionStateBuilder(
         PreReadCheck +:
         TableCapabilityCheck +:
         CommandCheck +:
-        CollationCheck +:
+        ViewSyncSchemaToMetaStore +:
         customCheckRules
   }
 

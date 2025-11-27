@@ -17,19 +17,22 @@
 package org.apache.spark.sql.execution.datasources.v2.python
 
 import org.apache.spark.JobArtifactSet
+import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.connector.metric.CustomMetric
 import org.apache.spark.sql.connector.read._
 import org.apache.spark.sql.connector.read.streaming.MicroBatchStream
+import org.apache.spark.sql.internal.connector.SupportsMetadata
+import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
-
 class PythonScan(
-     ds: PythonDataSourceV2,
-     shortName: String,
-     outputSchema: StructType,
-     options: CaseInsensitiveStringMap) extends Scan {
-
+    ds: PythonDataSourceV2,
+    shortName: String,
+    outputSchema: StructType,
+    options: CaseInsensitiveStringMap,
+    supportedFilters: Array[Filter]
+) extends Scan with SupportsMetadata {
   override def toBatch: Batch = new PythonBatch(ds, shortName, outputSchema, options)
 
   override def toMicroBatchStream(checkpointLocation: String): MicroBatchStream =
@@ -44,6 +47,13 @@ class PythonScan(
 
   override def columnarSupportMode(): Scan.ColumnarSupportMode =
     Scan.ColumnarSupportMode.UNSUPPORTED
+
+  override def getMetaData(): Map[String, String] = {
+    Map(
+      "PushedFilters" -> supportedFilters.mkString("[", ", ", "]"),
+      "ReadSchema" -> outputSchema.simpleString
+    )
+  }
 }
 
 class PythonBatch(
@@ -52,12 +62,15 @@ class PythonBatch(
     outputSchema: StructType,
     options: CaseInsensitiveStringMap) extends Batch {
   private val jobArtifactUUID = JobArtifactSet.getCurrentJobArtifactState.map(_.uuid)
+  private val sessionUUID = {
+    SparkSession.getActiveSession.collect {
+      case session if session.sessionState.conf.pythonWorkerLoggingEnabled =>
+        session.sessionUUID
+    }
+  }
 
   private lazy val infoInPython: PythonDataSourceReadInfo = {
-    ds.source.createReadInfoInPython(
-      ds.getOrCreateDataSourceInPython(shortName, options, Some(outputSchema)),
-      outputSchema,
-      isStreaming = false)
+    ds.getOrCreateReadInfo(shortName, options, outputSchema, isStreaming = false)
   }
 
   override def planInputPartitions(): Array[InputPartition] =
@@ -66,6 +79,6 @@ class PythonBatch(
   override def createReaderFactory(): PartitionReaderFactory = {
     val readerFunc = infoInPython.func
     new PythonPartitionReaderFactory(
-      ds.source, readerFunc, outputSchema, jobArtifactUUID)
+      ds.source, readerFunc, outputSchema, jobArtifactUUID, sessionUUID)
   }
 }

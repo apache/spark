@@ -71,19 +71,6 @@ _virtual_operator_infos = [
         deprecated=""),
     ExpressionInfo(
         className="",
-        name="between",
-        usage="expr1 [NOT] BETWEEN expr2 AND expr3 - " +
-              "evaluate if `expr1` is [not] in between `expr2` and `expr3`.",
-        arguments="",
-        examples="\n    Examples:\n      " +
-                 "> SELECT col1 FROM VALUES 1, 3, 5, 7 WHERE col1 BETWEEN 2 AND 5;\n      " +
-                 " 3\n      " +
-                 " 5",
-        note="",
-        since="1.0.0",
-        deprecated=""),
-    ExpressionInfo(
-        className="",
         name="case",
         usage="CASE expr1 WHEN expr2 THEN expr3 " +
               "[WHEN expr4 THEN expr5]* [ELSE expr6] END - " +

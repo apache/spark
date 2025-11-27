@@ -26,7 +26,7 @@ import scala.util.control.NonFatal
 
 import com.codahale.metrics.{Counter, Gauge, MetricRegistry}
 
-import org.apache.spark.internal.{config, Logging, MDC}
+import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.DECOMMISSION_ENABLED
@@ -206,11 +206,13 @@ private[spark] class ExecutorAllocationManager(
       throw new SparkException(
         s"s${DYN_ALLOCATION_SUSTAINED_SCHEDULER_BACKLOG_TIMEOUT.key} must be > 0!")
     }
+    val shuffleTrackingEnabled = conf.get(config.DYN_ALLOCATION_SHUFFLE_TRACKING_ENABLED)
+    val shuffleDecommissionEnabled = decommissionEnabled &&
+      conf.get(config.STORAGE_DECOMMISSION_SHUFFLE_BLOCKS_ENABLED)
     if (!conf.get(config.SHUFFLE_SERVICE_ENABLED) && !reliableShuffleStorage) {
-      if (conf.get(config.DYN_ALLOCATION_SHUFFLE_TRACKING_ENABLED)) {
+      if (shuffleTrackingEnabled) {
         logInfo("Dynamic allocation is enabled without a shuffle service.")
-      } else if (decommissionEnabled &&
-          conf.get(config.STORAGE_DECOMMISSION_SHUFFLE_BLOCKS_ENABLED)) {
+      } else if (shuffleDecommissionEnabled) {
         logInfo("Shuffle data decommission is enabled without a shuffle service.")
       } else if (!testing) {
         throw new SparkException("Dynamic allocation of executors requires one of the " +
@@ -222,6 +224,12 @@ private[spark] class ExecutorAllocationManager(
           s"configuring ${SHUFFLE_IO_PLUGIN_CLASS.key} to use a custom ShuffleDataIO who's " +
           "ShuffleDriverComponents supports reliable storage.")
       }
+    }
+
+    if (shuffleTrackingEnabled && (shuffleDecommissionEnabled || reliableShuffleStorage)) {
+      logWarning("You are enabling both shuffle tracking and other DA supported mechanism, " +
+        "which will cause idle executors not to be released in a timely, " +
+        "please check the configurations.")
     }
 
     if (executorAllocationRatio > 1.0 || executorAllocationRatio <= 0.0) {
@@ -606,7 +614,7 @@ private[spark] class ExecutorAllocationManager(
       } else {
         executorMonitor.executorsKilled(executorsRemoved.toSeq)
       }
-      logInfo(log"Executors ${MDC(EXECUTOR_IDS, executorsRemoved.mkString(","))}" +
+      logInfo(log"Executors ${MDC(EXECUTOR_IDS, executorsRemoved.mkString(","))} " +
         log"removed due to idle timeout.")
       executorsRemoved.toSeq
     } else {
@@ -877,7 +885,7 @@ private[spark] class ExecutorAllocationManager(
         } else {
           logWarning(log"Should have exactly one resource profile for stage " +
             log"${MDC(STAGE_ATTEMPT, stageAttempt)}, but have " +
-            log"${MDC(RESOURCE_PROFILE_ID, rpForStage)}")
+            log"${MDC(RESOURCE_PROFILE_IDS, rpForStage)}")
         }
       }
     }

@@ -274,7 +274,7 @@ object KinesisInputDStream {
 
     /**
      * Sets the CloudWatch metrics level. Defaults to
-     * [[DEFAULT_METRICS_LEVEL]] if no custom value is specified.
+     * [[MetricsLevel.DETAILED]] if no custom value is specified.
      *
      * @param metricsLevel [[MetricsLevel]] to specify the CloudWatch metrics level
      * @return Reference to this [[KinesisInputDStream.Builder]]
@@ -288,8 +288,8 @@ object KinesisInputDStream {
 
     /**
      * Sets the enabled CloudWatch metrics dimensions. Defaults to
-     * [[DEFAULT_METRICS_ENABLED_DIMENSIONS]]
-     * if no custom value is specified.
+     * the set of [[MetricsUtil.OPERATION_DIMENSION_NAME]] and
+     * [[MetricsUtil.SHARD_ID_DIMENSION_NAME]] if no custom value is specified.
      *
      * @param metricsEnabledDimensions Set[String] to specify which CloudWatch metrics dimensions
      *   should be enabled
@@ -307,7 +307,7 @@ object KinesisInputDStream {
      * message handler.
      *
      * @param handler Function converting [[KinesisClientRecord]] instances read by the KCL to
-     *                DStream type [[T]]
+     *   DStream type [[T]]
      * @return Instance of [[KinesisInputDStream]] constructed with configured parameters
      */
     def buildWithMessageHandler[T: ClassTag](

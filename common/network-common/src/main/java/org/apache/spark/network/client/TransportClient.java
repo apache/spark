@@ -21,26 +21,26 @@ import java.io.Closeable;
 import java.io.IOException;
 import java.net.SocketAddress;
 import java.nio.ByteBuffer;
+import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import javax.annotation.Nullable;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.Preconditions;
-import com.google.common.base.Throwables;
 import com.google.common.util.concurrent.SettableFuture;
 import io.netty.channel.Channel;
 import io.netty.util.concurrent.Future;
 import io.netty.util.concurrent.GenericFutureListener;
-import org.apache.commons.lang3.builder.ToStringBuilder;
-import org.apache.commons.lang3.builder.ToStringStyle;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
+import org.apache.spark.internal.SparkLogger;
+import org.apache.spark.internal.SparkLoggerFactory;
+import org.apache.spark.internal.LogKeys;
+import org.apache.spark.internal.MDC;
 import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.buffer.NioManagedBuffer;
 import org.apache.spark.network.protocol.*;
+import org.apache.spark.network.util.JavaUtils;
 
 import static org.apache.spark.network.util.NettyUtils.getRemoteAddress;
 
@@ -71,7 +71,7 @@ import static org.apache.spark.network.util.NettyUtils.getRemoteAddress;
  * Concurrency: thread safe and can be called from multiple threads.
  */
 public class TransportClient implements Closeable {
-  private static final Logger logger = LoggerFactory.getLogger(TransportClient.class);
+  private static final SparkLogger logger = SparkLoggerFactory.getLogger(TransportClient.class);
 
   private final Channel channel;
   private final TransportResponseHandler handler;
@@ -79,8 +79,8 @@ public class TransportClient implements Closeable {
   private volatile boolean timedOut;
 
   public TransportClient(Channel channel, TransportResponseHandler handler) {
-    this.channel = Preconditions.checkNotNull(channel);
-    this.handler = Preconditions.checkNotNull(handler);
+    this.channel = Objects.requireNonNull(channel);
+    this.handler = Objects.requireNonNull(handler);
     this.timedOut = false;
   }
 
@@ -111,7 +111,7 @@ public class TransportClient implements Closeable {
    * Trying to set a different client ID after it's been set will result in an exception.
    */
   public void setClientId(String id) {
-    Preconditions.checkState(clientId == null, "Client ID has already been set.");
+    JavaUtils.checkState(clientId == null, "Client ID has already been set.");
     this.clientId = id;
   }
 
@@ -288,9 +288,10 @@ public class TransportClient implements Closeable {
     try {
       return result.get(timeoutMs, TimeUnit.MILLISECONDS);
     } catch (ExecutionException e) {
-      throw Throwables.propagate(e.getCause());
+      throw new RuntimeException(e.getCause());
     } catch (Exception e) {
-      throw Throwables.propagate(e);
+      if (e instanceof RuntimeException re) throw re;
+      throw new RuntimeException(e);
     }
   }
 
@@ -334,11 +335,8 @@ public class TransportClient implements Closeable {
 
   @Override
   public String toString() {
-    return new ToStringBuilder(this, ToStringStyle.SHORT_PREFIX_STYLE)
-      .append("remoteAddress", channel.remoteAddress())
-      .append("clientId", clientId)
-      .append("isActive", isActive())
-      .toString();
+    return "TransportClient[remoteAddress=" + channel.remoteAddress() + "clientId=" + clientId +
+        ",isActive=" + isActive() + "]";
   }
 
   private static long requestId() {
@@ -364,11 +362,13 @@ public class TransportClient implements Closeable {
               getRemoteAddress(channel), timeTaken);
         }
       } else {
-        String errorMsg = String.format("Failed to send RPC %s to %s: %s", requestId,
-            getRemoteAddress(channel), future.cause());
-        logger.error(errorMsg, future.cause());
+        logger.error("Failed to send RPC {} to {}", future.cause(),
+            MDC.of(LogKeys.REQUEST_ID, requestId),
+            MDC.of(LogKeys.HOST_PORT, getRemoteAddress(channel)));
         channel.close();
         try {
+          String errorMsg = String.format("Failed to send RPC %s to %s: %s", requestId,
+            getRemoteAddress(channel), future.cause());
           handleFailure(errorMsg, future.cause());
         } catch (Exception e) {
           logger.error("Uncaught exception in RPC response callback handler!", e);

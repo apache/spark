@@ -24,9 +24,10 @@ import warnings
 import functools
 from typing import (
     Any,
-    Dict,
+    Mapping,
     TYPE_CHECKING,
     Union,
+    Sequence,
     List,
     overload,
     Optional,
@@ -36,13 +37,13 @@ from typing import (
     ValuesView,
     cast,
 )
-import random
+import random as py_random
 import sys
 
 import numpy as np
 
 from pyspark.errors import PySparkTypeError, PySparkValueError
-from pyspark.sql.dataframe import DataFrame as ParentDataFrame
+from pyspark.errors.utils import _with_origin
 from pyspark.sql import Column
 from pyspark.sql.connect.expressions import (
     CaseWhen,
@@ -59,20 +60,20 @@ from pyspark.sql.connect.expressions import (
 )
 from pyspark.sql.connect.udf import _create_py_udf
 from pyspark.sql.connect.udtf import AnalyzeArgument, AnalyzeResult  # noqa: F401
-from pyspark.sql.connect.udtf import _create_py_udtf
+from pyspark.sql.connect.udtf import _create_py_udtf, _create_pyarrow_udtf
 from pyspark.sql import functions as pysparkfuncs
 from pyspark.sql.types import (
     _from_numpy_type,
     DataType,
-    LongType,
     StructType,
     ArrayType,
     StringType,
 )
+from pyspark.sql.utils import enum_to_value as _enum_to_value
 
 # The implementation of pandas_udf is embedded in pyspark.sql.function.pandas_udf
 # for code reuse.
-from pyspark.sql.functions import pandas_udf  # noqa: F401
+from pyspark.sql.functions import arrow_udf, pandas_udf  # noqa: F401
 
 
 if TYPE_CHECKING:
@@ -81,12 +82,20 @@ if TYPE_CHECKING:
         DataTypeOrString,
         UserDefinedFunctionLike,
     )
+    from pyspark.sql.dataframe import DataFrame
     from pyspark.sql.connect.udtf import UserDefinedTableFunction
 
 
 def _to_col(col: "ColumnOrName") -> Column:
-    assert isinstance(col, (Column, str))
-    return col if isinstance(col, Column) else column(col)
+    if isinstance(col, Column):
+        return col
+    elif isinstance(col, str):
+        return column(col)
+    else:
+        raise PySparkTypeError(
+            errorClass="NOT_COLUMN_OR_STR",
+            messageParameters={"arg_name": "col", "arg_type": type(col).__name__},
+        )
 
 
 def _sort_col(col: "ColumnOrName") -> Column:
@@ -158,15 +167,15 @@ def _get_lambda_parameters(f: Callable) -> ValuesView[inspect.Parameter]:
     # Validate that the function arity is between 1 and 3.
     if not (1 <= len(parameters) <= 3):
         raise PySparkValueError(
-            error_class="WRONG_NUM_ARGS_FOR_HIGHER_ORDER_FUNCTION",
-            message_parameters={"func_name": f.__name__, "num_args": str(len(parameters))},
+            errorClass="WRONG_NUM_ARGS_FOR_HIGHER_ORDER_FUNCTION",
+            messageParameters={"func_name": f.__name__, "num_args": str(len(parameters))},
         )
 
     # Verify that all arguments can be used as positional arguments.
     if not all(p.kind in supported_parameter_types for p in parameters):
         raise PySparkValueError(
-            error_class="UNSUPPORTED_PARAM_TYPE_FOR_HIGHER_ORDER_FUNCTION",
-            message_parameters={"func_name": f.__name__},
+            errorClass="UNSUPPORTED_PARAM_TYPE_FOR_HIGHER_ORDER_FUNCTION",
+            messageParameters={"func_name": f.__name__},
         )
 
     return parameters
@@ -197,8 +206,8 @@ def _create_lambda(f: Callable) -> LambdaFunction:
 
     if not isinstance(result, Column):
         raise PySparkValueError(
-            error_class="HIGHER_ORDER_FUNCTION_SHOULD_RETURN_COLUMN",
-            message_parameters={"func_name": f.__name__, "return_type": type(result).__name__},
+            errorClass="HIGHER_ORDER_FUNCTION_SHOULD_RETURN_COLUMN",
+            messageParameters={"func_name": f.__name__, "return_type": type(result).__name__},
         )
 
     return LambdaFunction(result._expr, arg_exprs)  # type: ignore[arg-type]
@@ -206,8 +215,8 @@ def _create_lambda(f: Callable) -> LambdaFunction:
 
 def _invoke_higher_order_function(
     name: str,
-    cols: List["ColumnOrName"],
-    funs: List[Callable],
+    cols: Sequence["ColumnOrName"],
+    funs: Sequence[Callable],
 ) -> Column:
     """
     Invokes expression identified by name,
@@ -226,7 +235,7 @@ def _invoke_higher_order_function(
     return _invoke_function(name, *_cols, *_funs)
 
 
-def _options_to_col(options: Dict[str, Any]) -> Column:
+def _options_to_col(options: Mapping[str, Any]) -> Column:
     _options: List[Column] = []
     for k, v in options.items():
         _options.append(lit(str(k)))
@@ -237,6 +246,7 @@ def _options_to_col(options: Dict[str, Any]) -> Column:
 # Normal Functions
 
 
+@_with_origin
 def col(col: str) -> Column:
     from pyspark.sql.connect.column import Column as ConnectColumn
 
@@ -262,25 +272,18 @@ def lit(col: Any) -> Column:
     elif isinstance(col, list):
         if any(isinstance(c, Column) for c in col):
             raise PySparkValueError(
-                error_class="COLUMN_IN_LIST", message_parameters={"func_name": "lit"}
+                errorClass="COLUMN_IN_LIST", messageParameters={"func_name": "lit"}
             )
         return array(*[lit(c) for c in col])
     elif isinstance(col, np.ndarray) and col.ndim == 1:
-        if _from_numpy_type(col.dtype) is None:
+        dt = _from_numpy_type(col.dtype)
+        if dt is None:
             raise PySparkTypeError(
-                error_class="UNSUPPORTED_NUMPY_ARRAY_SCALAR",
-                message_parameters={"dtype": col.dtype.name},
+                errorClass="UNSUPPORTED_NUMPY_ARRAY_SCALAR",
+                messageParameters={"dtype": col.dtype.name},
             )
-
-        # NumpyArrayConverter for Py4J can not support ndarray with int8 values.
-        # Actually this is not a problem for Connect, but here still convert it
-        # to int16 for compatibility.
-        if col.dtype == np.int8:
-            col = col.astype(np.int16)
-
-        return array(*[lit(c) for c in col])
-    else:
-        return ConnectColumn(LiteralExpression._from_value(col))
+        return array(*[lit(c) for c in col]).cast(ArrayType(dt))
+    return ConnectColumn(LiteralExpression._from_value(col))
 
 
 lit.__doc__ = pysparkfuncs.lit.__doc__
@@ -322,13 +325,13 @@ def getbit(col: "ColumnOrName", pos: "ColumnOrName") -> Column:
 getbit.__doc__ = pysparkfuncs.getbit.__doc__
 
 
-def broadcast(df: "ParentDataFrame") -> "ParentDataFrame":
+def broadcast(df: "DataFrame") -> "DataFrame":
     from pyspark.sql.connect.dataframe import DataFrame
 
     if not isinstance(df, DataFrame):
         raise PySparkTypeError(
-            error_class="NOT_DATAFRAME",
-            message_parameters={"arg_name": "df", "arg_type": type(df).__name__},
+            errorClass="NOT_DATAFRAME",
+            messageParameters={"arg_name": "df", "arg_type": type(df).__name__},
         )
     return df.hint("broadcast")
 
@@ -355,8 +358,8 @@ expr.__doc__ = pysparkfuncs.expr.__doc__
 def greatest(*cols: "ColumnOrName") -> Column:
     if len(cols) < 2:
         raise PySparkValueError(
-            error_class="WRONG_NUM_COLUMNS",
-            message_parameters={"func_name": "greatest", "num_cols": "2"},
+            errorClass="WRONG_NUM_COLUMNS",
+            messageParameters={"func_name": "greatest", "num_cols": "2"},
         )
     return _invoke_function_over_columns("greatest", *cols)
 
@@ -374,8 +377,8 @@ input_file_name.__doc__ = pysparkfuncs.input_file_name.__doc__
 def least(*cols: "ColumnOrName") -> Column:
     if len(cols) < 2:
         raise PySparkValueError(
-            error_class="WRONG_NUM_COLUMNS",
-            message_parameters={"func_name": "least", "num_cols": "2"},
+            errorClass="WRONG_NUM_COLUMNS",
+            messageParameters={"func_name": "least", "num_cols": "2"},
         )
     return _invoke_function_over_columns("least", *cols)
 
@@ -415,17 +418,20 @@ def rand(seed: Optional[int] = None) -> Column:
     if seed is not None:
         return _invoke_function("rand", lit(seed))
     else:
-        return _invoke_function("rand", lit(random.randint(0, sys.maxsize)))
+        return _invoke_function("rand", lit(py_random.randint(0, sys.maxsize)))
 
 
 rand.__doc__ = pysparkfuncs.rand.__doc__
+
+
+random = rand
 
 
 def randn(seed: Optional[int] = None) -> Column:
     if seed is not None:
         return _invoke_function("randn", lit(seed))
     else:
-        return _invoke_function("randn", lit(random.randint(0, sys.maxsize)))
+        return _invoke_function("randn", lit(py_random.randint(0, sys.maxsize)))
 
 
 randn.__doc__ = pysparkfuncs.randn.__doc__
@@ -444,10 +450,11 @@ def when(condition: Column, value: Any) -> Column:
     # Explicitly not using ColumnOrName type here to make reading condition less opaque
     if not isinstance(condition, Column):
         raise PySparkTypeError(
-            error_class="NOT_COLUMN",
-            message_parameters={"arg_name": "condition", "arg_type": type(condition).__name__},
+            errorClass="NOT_COLUMN",
+            messageParameters={"arg_name": "condition", "arg_type": type(condition).__name__},
         )
 
+    value = _enum_to_value(value)
     value_col = value if isinstance(value, Column) else lit(value)
 
     return ConnectColumn(
@@ -576,8 +583,9 @@ def bround(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> C
     if scale is None:
         return _invoke_function_over_columns("bround", col)
     else:
+        scale = _enum_to_value(scale)
         scale = lit(scale) if isinstance(scale, int) else scale
-        return _invoke_function_over_columns("bround", col, scale)
+        return _invoke_function_over_columns("bround", col, scale)  # type: ignore[arg-type]
 
 
 bround.__doc__ = pysparkfuncs.bround.__doc__
@@ -594,8 +602,9 @@ def ceil(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> Col
     if scale is None:
         return _invoke_function_over_columns("ceil", col)
     else:
+        scale = _enum_to_value(scale)
         scale = lit(scale) if isinstance(scale, int) else scale
-        return _invoke_function_over_columns("ceil", col, scale)
+        return _invoke_function_over_columns("ceil", col, scale)  # type: ignore[arg-type]
 
 
 ceil.__doc__ = pysparkfuncs.ceil.__doc__
@@ -605,8 +614,9 @@ def ceiling(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> 
     if scale is None:
         return _invoke_function_over_columns("ceiling", col)
     else:
+        scale = _enum_to_value(scale)
         scale = lit(scale) if isinstance(scale, int) else scale
-        return _invoke_function_over_columns("ceiling", col, scale)
+        return _invoke_function_over_columns("ceiling", col, scale)  # type: ignore[arg-type]
 
 
 ceiling.__doc__ = pysparkfuncs.ceiling.__doc__
@@ -686,8 +696,9 @@ def floor(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> Co
     if scale is None:
         return _invoke_function_over_columns("floor", col)
     else:
+        scale = _enum_to_value(scale)
         scale = lit(scale) if isinstance(scale, int) else scale
-        return _invoke_function_over_columns("floor", col, scale)
+        return _invoke_function_over_columns("floor", col, scale)  # type: ignore[arg-type]
 
 
 floor.__doc__ = pysparkfuncs.floor.__doc__
@@ -784,6 +795,7 @@ def width_bucket(
     max: "ColumnOrName",
     numBucket: Union["ColumnOrName", int],
 ) -> Column:
+    numBucket = _enum_to_value(numBucket)
     numBucket = lit(numBucket) if isinstance(numBucket, int) else numBucket
     return _invoke_function_over_columns("width_bucket", v, min, max, numBucket)
 
@@ -819,8 +831,9 @@ def round(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> Co
     if scale is None:
         return _invoke_function_over_columns("round", col)
     else:
+        scale = _enum_to_value(scale)
         scale = lit(scale) if isinstance(scale, int) else scale
-        return _invoke_function_over_columns("round", col, scale)
+        return _invoke_function_over_columns("round", col, scale)  # type: ignore[arg-type]
 
 
 round.__doc__ = pysparkfuncs.round.__doc__
@@ -934,6 +947,13 @@ def try_divide(left: "ColumnOrName", right: "ColumnOrName") -> Column:
 try_divide.__doc__ = pysparkfuncs.try_divide.__doc__
 
 
+def try_mod(left: "ColumnOrName", right: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("try_mod", left, right)
+
+
+try_mod.__doc__ = pysparkfuncs.try_mod.__doc__
+
+
 def try_multiply(left: "ColumnOrName", right: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("try_multiply", left, right)
 
@@ -992,6 +1012,22 @@ def unhex(col: "ColumnOrName") -> Column:
 unhex.__doc__ = pysparkfuncs.unhex.__doc__
 
 
+def uniform(
+    min: Union[Column, int, float],
+    max: Union[Column, int, float],
+    seed: Optional[Union[Column, int]] = None,
+) -> Column:
+    if seed is None:
+        return _invoke_function_over_columns(
+            "uniform", lit(min), lit(max), lit(py_random.randint(0, sys.maxsize))
+        )
+    else:
+        return _invoke_function_over_columns("uniform", lit(min), lit(max), lit(seed))
+
+
+uniform.__doc__ = pysparkfuncs.uniform.__doc__
+
+
 def approxCountDistinct(col: "ColumnOrName", rsd: Optional[float] = None) -> Column:
     warnings.warn("Deprecated in 3.4, use approx_count_distinct instead.", FutureWarning)
     return approx_count_distinct(col, rsd)
@@ -1036,6 +1072,64 @@ def collect_set(col: "ColumnOrName") -> Column:
 
 
 collect_set.__doc__ = pysparkfuncs.collect_set.__doc__
+
+
+def listagg(col: "ColumnOrName", delimiter: Optional[Union[Column, str, bytes]] = None) -> Column:
+    if delimiter is None:
+        return _invoke_function_over_columns("listagg", col)
+    else:
+        return _invoke_function_over_columns("listagg", col, lit(delimiter))
+
+
+listagg.__doc__ = pysparkfuncs.listagg.__doc__
+
+
+def listagg_distinct(
+    col: "ColumnOrName", delimiter: Optional[Union[Column, str, bytes]] = None
+) -> Column:
+    from pyspark.sql.connect.column import Column as ConnectColumn
+
+    args = [col]
+    if delimiter is not None:
+        args += [lit(delimiter)]
+
+    _exprs = [_to_col(c)._expr for c in args]
+    return ConnectColumn(
+        UnresolvedFunction("listagg", _exprs, is_distinct=True)  # type: ignore[arg-type]
+    )
+
+
+listagg_distinct.__doc__ = pysparkfuncs.listagg_distinct.__doc__
+
+
+def string_agg(
+    col: "ColumnOrName", delimiter: Optional[Union[Column, str, bytes]] = None
+) -> Column:
+    if delimiter is None:
+        return _invoke_function_over_columns("string_agg", col)
+    else:
+        return _invoke_function_over_columns("string_agg", col, lit(delimiter))
+
+
+string_agg.__doc__ = pysparkfuncs.string_agg.__doc__
+
+
+def string_agg_distinct(
+    col: "ColumnOrName", delimiter: Optional[Union[Column, str, bytes]] = None
+) -> Column:
+    from pyspark.sql.connect.column import Column as ConnectColumn
+
+    args = [col]
+    if delimiter is not None:
+        args += [lit(delimiter)]
+
+    _exprs = [_to_col(c)._expr for c in args]
+    return ConnectColumn(
+        UnresolvedFunction("string_agg", _exprs, is_distinct=True)  # type: ignore[arg-type]
+    )
+
+
+string_agg_distinct.__doc__ = pysparkfuncs.string_agg_distinct.__doc__
 
 
 def corr(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
@@ -1110,11 +1204,12 @@ grouping_id.__doc__ = pysparkfuncs.grouping_id.__doc__
 
 def count_min_sketch(
     col: "ColumnOrName",
-    eps: "ColumnOrName",
-    confidence: "ColumnOrName",
-    seed: "ColumnOrName",
+    eps: Union[Column, float],
+    confidence: Union[Column, float],
+    seed: Optional[Union[Column, int]] = None,
 ) -> Column:
-    return _invoke_function_over_columns("count_min_sketch", col, eps, confidence, seed)
+    _seed = lit(py_random.randint(0, sys.maxsize)) if seed is None else lit(seed)
+    return _invoke_function_over_columns("count_min_sketch", col, lit(eps), lit(confidence), _seed)
 
 
 count_min_sketch.__doc__ = pysparkfuncs.count_min_sketch.__doc__
@@ -1185,22 +1280,20 @@ mode.__doc__ = pysparkfuncs.mode.__doc__
 
 def percentile(
     col: "ColumnOrName",
-    percentage: Union[Column, float, List[float], Tuple[float]],
+    percentage: Union[Column, float, Sequence[float], Tuple[float, ...]],
     frequency: Union[Column, int] = 1,
 ) -> Column:
-    if isinstance(percentage, (list, tuple)):
-        percentage = list(percentage)
-
     if not isinstance(frequency, (int, Column)):
         raise PySparkTypeError(
-            error_class="NOT_COLUMN_OR_INT",
-            message_parameters={
+            errorClass="NOT_COLUMN_OR_INT",
+            messageParameters={
                 "arg_name": "frequency",
                 "arg_type": type(frequency).__name__,
             },
         )
 
-    return _invoke_function("percentile", _to_col(col), lit(percentage), lit(frequency))
+    percentage = lit(list(percentage)) if isinstance(percentage, (list, tuple)) else lit(percentage)
+    return _invoke_function_over_columns("percentile", col, percentage, lit(frequency))
 
 
 percentile.__doc__ = pysparkfuncs.percentile.__doc__
@@ -1208,13 +1301,11 @@ percentile.__doc__ = pysparkfuncs.percentile.__doc__
 
 def percentile_approx(
     col: "ColumnOrName",
-    percentage: Union[Column, float, List[float], Tuple[float]],
-    accuracy: Union[Column, float] = 10000,
+    percentage: Union[Column, float, Sequence[float], Tuple[float, ...]],
+    accuracy: Union[Column, int] = 10000,
 ) -> Column:
-    if isinstance(percentage, (list, tuple)):
-        percentage = lit(list(percentage))
-
-    return _invoke_function("percentile_approx", _to_col(col), lit(percentage), lit(accuracy))
+    percentage = lit(list(percentage)) if isinstance(percentage, (list, tuple)) else lit(percentage)
+    return _invoke_function_over_columns("percentile_approx", col, percentage, lit(accuracy))
 
 
 percentile_approx.__doc__ = pysparkfuncs.percentile_approx.__doc__
@@ -1222,13 +1313,11 @@ percentile_approx.__doc__ = pysparkfuncs.percentile_approx.__doc__
 
 def approx_percentile(
     col: "ColumnOrName",
-    percentage: Union[Column, float, List[float], Tuple[float]],
-    accuracy: Union[Column, float] = 10000,
+    percentage: Union[Column, float, Sequence[float], Tuple[float, ...]],
+    accuracy: Union[Column, int] = 10000,
 ) -> Column:
-    if isinstance(percentage, (list, tuple)):
-        percentage = list(percentage)
-
-    return _invoke_function("approx_percentile", _to_col(col), lit(percentage), lit(accuracy))
+    percentage = lit(list(percentage)) if isinstance(percentage, (list, tuple)) else lit(percentage)
+    return _invoke_function_over_columns("approx_percentile", col, percentage, lit(accuracy))
 
 
 approx_percentile.__doc__ = pysparkfuncs.approx_percentile.__doc__
@@ -1472,7 +1561,7 @@ def lead(col: "ColumnOrName", offset: int = 1, default: Optional[Any] = None) ->
 lead.__doc__ = pysparkfuncs.lead.__doc__
 
 
-def nth_value(col: "ColumnOrName", offset: int, ignoreNulls: Optional[bool] = None) -> Column:
+def nth_value(col: "ColumnOrName", offset: int, ignoreNulls: Optional[bool] = False) -> Column:
     if ignoreNulls is None:
         return _invoke_function("nth_value", _to_col(col), lit(offset))
     else:
@@ -1486,8 +1575,11 @@ def any_value(col: "ColumnOrName", ignoreNulls: Optional[Union[bool, Column]] = 
     if ignoreNulls is None:
         return _invoke_function_over_columns("any_value", col)
     else:
+        ignoreNulls = _enum_to_value(ignoreNulls)
         ignoreNulls = lit(ignoreNulls) if isinstance(ignoreNulls, bool) else ignoreNulls
-        return _invoke_function_over_columns("any_value", col, ignoreNulls)
+        return _invoke_function_over_columns(
+            "any_value", col, ignoreNulls  # type: ignore[arg-type]
+        )
 
 
 any_value.__doc__ = pysparkfuncs.any_value.__doc__
@@ -1497,8 +1589,11 @@ def first_value(col: "ColumnOrName", ignoreNulls: Optional[Union[bool, Column]] 
     if ignoreNulls is None:
         return _invoke_function_over_columns("first_value", col)
     else:
+        ignoreNulls = _enum_to_value(ignoreNulls)
         ignoreNulls = lit(ignoreNulls) if isinstance(ignoreNulls, bool) else ignoreNulls
-        return _invoke_function_over_columns("first_value", col, ignoreNulls)
+        return _invoke_function_over_columns(
+            "first_value", col, ignoreNulls  # type: ignore[arg-type]
+        )
 
 
 first_value.__doc__ = pysparkfuncs.first_value.__doc__
@@ -1508,8 +1603,11 @@ def last_value(col: "ColumnOrName", ignoreNulls: Optional[Union[bool, Column]] =
     if ignoreNulls is None:
         return _invoke_function_over_columns("last_value", col)
     else:
+        ignoreNulls = _enum_to_value(ignoreNulls)
         ignoreNulls = lit(ignoreNulls) if isinstance(ignoreNulls, bool) else ignoreNulls
-        return _invoke_function_over_columns("last_value", col, ignoreNulls)
+        return _invoke_function_over_columns(
+            "last_value", col, ignoreNulls  # type: ignore[arg-type]
+        )
 
 
 last_value.__doc__ = pysparkfuncs.last_value.__doc__
@@ -1522,7 +1620,7 @@ def count_if(col: "ColumnOrName") -> Column:
 count_if.__doc__ = pysparkfuncs.count_if.__doc__
 
 
-def histogram_numeric(col: "ColumnOrName", nBins: "ColumnOrName") -> Column:
+def histogram_numeric(col: "ColumnOrName", nBins: Column) -> Column:
     return _invoke_function_over_columns("histogram_numeric", col, nBins)
 
 
@@ -1589,7 +1687,9 @@ def reduce(
 reduce.__doc__ = pysparkfuncs.reduce.__doc__
 
 
-def array(*cols: Union["ColumnOrName", List["ColumnOrName"], Tuple["ColumnOrName", ...]]) -> Column:
+def array(
+    *cols: Union["ColumnOrName", Sequence["ColumnOrName"], Tuple["ColumnOrName", ...]]
+) -> Column:
     if len(cols) == 1 and isinstance(cols[0], (list, set, tuple)):
         cols = cols[0]  # type: ignore[assignment]
     return _invoke_function_over_columns("array", *cols)  # type: ignore[arg-type]
@@ -1627,6 +1727,7 @@ array_except.__doc__ = pysparkfuncs.array_except.__doc__
 
 
 def array_insert(arr: "ColumnOrName", pos: Union["ColumnOrName", int], value: Any) -> Column:
+    pos = _enum_to_value(pos)
     _pos = lit(pos) if isinstance(pos, int) else _to_col(pos)
     return _invoke_function("array_insert", _to_col(arr), _pos, lit(value))
 
@@ -1710,6 +1811,7 @@ array_remove.__doc__ = pysparkfuncs.array_remove.__doc__
 
 
 def array_repeat(col: "ColumnOrName", count: Union["ColumnOrName", int]) -> Column:
+    count = _enum_to_value(count)
     _count = lit(count) if isinstance(count, int) else _to_col(count)
     return _invoke_function("array_repeat", _to_col(col), _count)
 
@@ -1758,7 +1860,7 @@ concat.__doc__ = pysparkfuncs.concat.__doc__
 
 
 def create_map(
-    *cols: Union["ColumnOrName", List["ColumnOrName"], Tuple["ColumnOrName", ...]]
+    *cols: Union["ColumnOrName", Sequence["ColumnOrName"], Tuple["ColumnOrName", ...]]
 ) -> Column:
     if len(cols) == 1 and isinstance(cols[0], (list, set, tuple)):
         cols = cols[0]  # type: ignore[assignment]
@@ -1830,7 +1932,7 @@ forall.__doc__ = pysparkfuncs.forall.__doc__
 def from_csv(
     col: "ColumnOrName",
     schema: Union[Column, str],
-    options: Optional[Dict[str, str]] = None,
+    options: Optional[Mapping[str, str]] = None,
 ) -> Column:
     if isinstance(schema, Column):
         _schema = schema
@@ -1838,8 +1940,8 @@ def from_csv(
         _schema = lit(schema)
     else:
         raise PySparkTypeError(
-            error_class="NOT_COLUMN_OR_STR",
-            message_parameters={"arg_name": "schema", "arg_type": type(schema).__name__},
+            errorClass="NOT_COLUMN_OR_STR",
+            messageParameters={"arg_name": "schema", "arg_type": type(schema).__name__},
         )
 
     if options is None:
@@ -1854,7 +1956,7 @@ from_csv.__doc__ = pysparkfuncs.from_csv.__doc__
 def from_json(
     col: "ColumnOrName",
     schema: Union[ArrayType, StructType, Column, str],
-    options: Optional[Dict[str, str]] = None,
+    options: Optional[Mapping[str, str]] = None,
 ) -> Column:
     if isinstance(schema, (str, Column)):
         _schema = lit(schema)
@@ -1862,8 +1964,8 @@ def from_json(
         _schema = lit(schema.json())
     else:
         raise PySparkTypeError(
-            error_class="NOT_COLUMN_OR_DATATYPE_OR_STR",
-            message_parameters={"arg_name": "schema", "arg_type": type(schema).__name__},
+            errorClass="NOT_COLUMN_OR_DATATYPE_OR_STR",
+            messageParameters={"arg_name": "schema", "arg_type": type(schema).__name__},
         )
 
     if options is None:
@@ -1878,7 +1980,7 @@ from_json.__doc__ = pysparkfuncs.from_json.__doc__
 def from_xml(
     col: "ColumnOrName",
     schema: Union[StructType, Column, str],
-    options: Optional[Dict[str, str]] = None,
+    options: Optional[Mapping[str, str]] = None,
 ) -> Column:
     if isinstance(schema, (str, Column)):
         _schema = lit(schema)
@@ -1886,8 +1988,8 @@ def from_xml(
         _schema = lit(schema.json())
     else:
         raise PySparkTypeError(
-            error_class="NOT_COLUMN_OR_STR_OR_STRUCT",
-            message_parameters={"arg_name": "schema", "arg_type": type(schema).__name__},
+            errorClass="NOT_COLUMN_OR_STR_OR_STRUCT",
+            messageParameters={"arg_name": "schema", "arg_type": type(schema).__name__},
         )
 
     if options is None:
@@ -1900,6 +2002,7 @@ from_xml.__doc__ = pysparkfuncs.from_xml.__doc__
 
 
 def get(col: "ColumnOrName", index: Union["ColumnOrName", int]) -> Column:
+    index = _enum_to_value(index)
     index = lit(index) if isinstance(index, int) else index
 
     return _invoke_function_over_columns("get", col, index)
@@ -1946,8 +2049,8 @@ inline_outer.__doc__ = pysparkfuncs.inline_outer.__doc__
 def json_tuple(col: "ColumnOrName", *fields: str) -> Column:
     if len(fields) == 0:
         raise PySparkValueError(
-            error_class="CANNOT_BE_EMPTY",
-            message_parameters={"item": "field"},
+            errorClass="CANNOT_BE_EMPTY",
+            messageParameters={"item": "field"},
         )
     return _invoke_function("json_tuple", _to_col(col), *[lit(field) for field in fields])
 
@@ -1956,7 +2059,7 @@ json_tuple.__doc__ = pysparkfuncs.json_tuple.__doc__
 
 
 def map_concat(
-    *cols: Union["ColumnOrName", List["ColumnOrName"], Tuple["ColumnOrName", ...]]
+    *cols: Union["ColumnOrName", Sequence["ColumnOrName"], Tuple["ColumnOrName", ...]]
 ) -> Column:
     if len(cols) == 1 and isinstance(cols[0], (list, set, tuple)):
         cols = cols[0]  # type: ignore[assignment]
@@ -2047,6 +2150,13 @@ def try_parse_json(col: "ColumnOrName") -> Column:
 try_parse_json.__doc__ = pysparkfuncs.try_parse_json.__doc__
 
 
+def to_variant_object(col: "ColumnOrName") -> Column:
+    return _invoke_function("to_variant_object", _to_col(col))
+
+
+to_variant_object.__doc__ = pysparkfuncs.to_variant_object.__doc__
+
+
 def parse_json(col: "ColumnOrName") -> Column:
     return _invoke_function("parse_json", _to_col(col))
 
@@ -2061,15 +2171,23 @@ def is_variant_null(v: "ColumnOrName") -> Column:
 is_variant_null.__doc__ = pysparkfuncs.is_variant_null.__doc__
 
 
-def variant_get(v: "ColumnOrName", path: str, targetType: str) -> Column:
-    return _invoke_function("variant_get", _to_col(v), lit(path), lit(targetType))
+def variant_get(v: "ColumnOrName", path: Union[Column, str], targetType: str) -> Column:
+    assert isinstance(path, (Column, str))
+    if isinstance(path, str):
+        return _invoke_function("variant_get", _to_col(v), lit(path), lit(targetType))
+    else:
+        return _invoke_function("variant_get", _to_col(v), path, lit(targetType))
 
 
 variant_get.__doc__ = pysparkfuncs.variant_get.__doc__
 
 
-def try_variant_get(v: "ColumnOrName", path: str, targetType: str) -> Column:
-    return _invoke_function("try_variant_get", _to_col(v), lit(path), lit(targetType))
+def try_variant_get(v: "ColumnOrName", path: Union[Column, str], targetType: str) -> Column:
+    assert isinstance(path, (Column, str))
+    if isinstance(path, str):
+        return _invoke_function("try_variant_get", _to_col(v), lit(path), lit(targetType))
+    else:
+        return _invoke_function("try_variant_get", _to_col(v), path, lit(targetType))
 
 
 try_variant_get.__doc__ = pysparkfuncs.try_variant_get.__doc__
@@ -2122,66 +2240,60 @@ def sequence(
 sequence.__doc__ = pysparkfuncs.sequence.__doc__
 
 
-def schema_of_csv(csv: Union[str, Column], options: Optional[Dict[str, str]] = None) -> Column:
-    if isinstance(csv, (str, Column)):
-        _csv = lit(csv)
-    else:
+def schema_of_csv(csv: Union[str, Column], options: Optional[Mapping[str, str]] = None) -> Column:
+    csv = _enum_to_value(csv)
+    if not isinstance(csv, (str, Column)):
         raise PySparkTypeError(
-            error_class="NOT_COLUMN_OR_STR",
-            message_parameters={"arg_name": "csv", "arg_type": type(csv).__name__},
+            errorClass="NOT_COLUMN_OR_STR",
+            messageParameters={"arg_name": "csv", "arg_type": type(csv).__name__},
         )
 
     if options is None:
-        return _invoke_function("schema_of_csv", _csv)
+        return _invoke_function("schema_of_csv", lit(csv))
     else:
-        return _invoke_function("schema_of_csv", _csv, _options_to_col(options))
+        return _invoke_function("schema_of_csv", lit(csv), _options_to_col(options))
 
 
 schema_of_csv.__doc__ = pysparkfuncs.schema_of_csv.__doc__
 
 
-def schema_of_json(json: Union[str, Column], options: Optional[Dict[str, str]] = None) -> Column:
-    if isinstance(json, (str, Column)):
-        _json = lit(json)
-    else:
+def schema_of_json(json: Union[str, Column], options: Optional[Mapping[str, str]] = None) -> Column:
+    json = _enum_to_value(json)
+    if not isinstance(json, (str, Column)):
         raise PySparkTypeError(
-            error_class="NOT_COLUMN_OR_STR",
-            message_parameters={"arg_name": "json", "arg_type": type(json).__name__},
+            errorClass="NOT_COLUMN_OR_STR",
+            messageParameters={"arg_name": "json", "arg_type": type(json).__name__},
         )
 
     if options is None:
-        return _invoke_function("schema_of_json", _json)
+        return _invoke_function("schema_of_json", lit(json))
     else:
-        return _invoke_function("schema_of_json", _json, _options_to_col(options))
+        return _invoke_function("schema_of_json", lit(json), _options_to_col(options))
 
 
 schema_of_json.__doc__ = pysparkfuncs.schema_of_json.__doc__
 
 
-def schema_of_xml(xml: Union[str, Column], options: Optional[Dict[str, str]] = None) -> Column:
-    if isinstance(xml, (str, Column)):
-        _xml = lit(xml)
-    else:
+def schema_of_xml(xml: Union[str, Column], options: Optional[Mapping[str, str]] = None) -> Column:
+    xml = _enum_to_value(xml)
+    if not isinstance(xml, (str, Column)):
         raise PySparkTypeError(
-            error_class="NOT_COLUMN_OR_STR",
-            message_parameters={"arg_name": "xml", "arg_type": type(xml).__name__},
+            errorClass="NOT_COLUMN_OR_STR",
+            messageParameters={"arg_name": "xml", "arg_type": type(xml).__name__},
         )
 
     if options is None:
-        return _invoke_function("schema_of_xml", _xml)
+        return _invoke_function("schema_of_xml", lit(xml))
     else:
-        return _invoke_function("schema_of_xml", _xml, _options_to_col(options))
+        return _invoke_function("schema_of_xml", lit(xml), _options_to_col(options))
 
 
 schema_of_xml.__doc__ = pysparkfuncs.schema_of_xml.__doc__
 
 
-def shuffle(col: "ColumnOrName") -> Column:
-    return _invoke_function(
-        "shuffle",
-        _to_col(col),
-        LiteralExpression(random.randint(0, sys.maxsize), LongType()),
-    )
+def shuffle(col: "ColumnOrName", seed: Optional[Union[Column, int]] = None) -> Column:
+    _seed = lit(py_random.randint(0, sys.maxsize)) if seed is None else lit(seed)
+    return _invoke_function("shuffle", _to_col(col), _seed)
 
 
 shuffle.__doc__ = pysparkfuncs.shuffle.__doc__
@@ -2195,29 +2307,31 @@ size.__doc__ = pysparkfuncs.size.__doc__
 
 
 def slice(
-    col: "ColumnOrName", start: Union["ColumnOrName", int], length: Union["ColumnOrName", int]
+    x: "ColumnOrName", start: Union["ColumnOrName", int], length: Union["ColumnOrName", int]
 ) -> Column:
+    start = _enum_to_value(start)
     if isinstance(start, (Column, str)):
         _start = start
     elif isinstance(start, int):
         _start = lit(start)
     else:
         raise PySparkTypeError(
-            error_class="NOT_COLUMN_OR_INT_OR_STR",
-            message_parameters={"arg_name": "start", "arg_type": type(start).__name__},
+            errorClass="NOT_COLUMN_OR_INT_OR_STR",
+            messageParameters={"arg_name": "start", "arg_type": type(start).__name__},
         )
 
+    length = _enum_to_value(length)
     if isinstance(length, (Column, str)):
         _length = length
     elif isinstance(length, int):
         _length = lit(length)
     else:
         raise PySparkTypeError(
-            error_class="NOT_COLUMN_OR_INT_OR_STR",
-            message_parameters={"arg_name": "length", "arg_type": type(length).__name__},
+            errorClass="NOT_COLUMN_OR_INT_OR_STR",
+            messageParameters={"arg_name": "length", "arg_type": type(length).__name__},
         )
 
-    return _invoke_function_over_columns("slice", col, _start, _length)
+    return _invoke_function_over_columns("slice", x, _start, _length)
 
 
 slice.__doc__ = pysparkfuncs.slice.__doc__
@@ -2231,7 +2345,7 @@ sort_array.__doc__ = pysparkfuncs.sort_array.__doc__
 
 
 def struct(
-    *cols: Union["ColumnOrName", List["ColumnOrName"], Tuple["ColumnOrName", ...]]
+    *cols: Union["ColumnOrName", Sequence["ColumnOrName"], Tuple["ColumnOrName", ...]]
 ) -> Column:
     if len(cols) == 1 and isinstance(cols[0], (list, set, tuple)):
         cols = cols[0]  # type: ignore[assignment]
@@ -2248,7 +2362,7 @@ def named_struct(*cols: "ColumnOrName") -> Column:
 named_struct.__doc__ = pysparkfuncs.named_struct.__doc__
 
 
-def to_csv(col: "ColumnOrName", options: Optional[Dict[str, str]] = None) -> Column:
+def to_csv(col: "ColumnOrName", options: Optional[Mapping[str, str]] = None) -> Column:
     if options is None:
         return _invoke_function("to_csv", _to_col(col))
     else:
@@ -2258,7 +2372,7 @@ def to_csv(col: "ColumnOrName", options: Optional[Dict[str, str]] = None) -> Col
 to_csv.__doc__ = pysparkfuncs.to_csv.__doc__
 
 
-def to_json(col: "ColumnOrName", options: Optional[Dict[str, str]] = None) -> Column:
+def to_json(col: "ColumnOrName", options: Optional[Mapping[str, str]] = None) -> Column:
     if options is None:
         return _invoke_function("to_json", _to_col(col))
     else:
@@ -2268,7 +2382,7 @@ def to_json(col: "ColumnOrName", options: Optional[Dict[str, str]] = None) -> Co
 to_json.__doc__ = pysparkfuncs.to_json.__doc__
 
 
-def to_xml(col: "ColumnOrName", options: Optional[Dict[str, str]] = None) -> Column:
+def to_xml(col: "ColumnOrName", options: Optional[Mapping[str, str]] = None) -> Column:
     if options is None:
         return _invoke_function("to_xml", _to_col(col))
     else:
@@ -2351,22 +2465,31 @@ def unbase64(col: "ColumnOrName") -> Column:
 unbase64.__doc__ = pysparkfuncs.unbase64.__doc__
 
 
-def ltrim(col: "ColumnOrName") -> Column:
-    return _invoke_function_over_columns("ltrim", col)
+def ltrim(col: "ColumnOrName", trim: Optional["ColumnOrName"] = None) -> Column:
+    if trim is not None:
+        return _invoke_function_over_columns("ltrim", trim, col)
+    else:
+        return _invoke_function_over_columns("ltrim", col)
 
 
 ltrim.__doc__ = pysparkfuncs.ltrim.__doc__
 
 
-def rtrim(col: "ColumnOrName") -> Column:
-    return _invoke_function_over_columns("rtrim", col)
+def rtrim(col: "ColumnOrName", trim: Optional["ColumnOrName"] = None) -> Column:
+    if trim is not None:
+        return _invoke_function_over_columns("rtrim", trim, col)
+    else:
+        return _invoke_function_over_columns("rtrim", col)
 
 
 rtrim.__doc__ = pysparkfuncs.rtrim.__doc__
 
 
-def trim(col: "ColumnOrName") -> Column:
-    return _invoke_function_over_columns("trim", col)
+def trim(col: "ColumnOrName", trim: Optional["ColumnOrName"] = None) -> Column:
+    if trim is not None:
+        return _invoke_function_over_columns("trim", trim, col)
+    else:
+        return _invoke_function_over_columns("trim", col)
 
 
 trim.__doc__ = pysparkfuncs.trim.__doc__
@@ -2393,6 +2516,34 @@ def encode(col: "ColumnOrName", charset: str) -> Column:
 encode.__doc__ = pysparkfuncs.encode.__doc__
 
 
+def is_valid_utf8(str: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("is_valid_utf8", _to_col(str))
+
+
+is_valid_utf8.__doc__ = pysparkfuncs.is_valid_utf8.__doc__
+
+
+def make_valid_utf8(str: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("make_valid_utf8", _to_col(str))
+
+
+make_valid_utf8.__doc__ = pysparkfuncs.make_valid_utf8.__doc__
+
+
+def validate_utf8(str: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("validate_utf8", _to_col(str))
+
+
+validate_utf8.__doc__ = pysparkfuncs.validate_utf8.__doc__
+
+
+def try_validate_utf8(str: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("try_validate_utf8", _to_col(str))
+
+
+try_validate_utf8.__doc__ = pysparkfuncs.try_validate_utf8.__doc__
+
+
 def format_number(col: "ColumnOrName", d: int) -> Column:
     return _invoke_function("format_number", _to_col(col), lit(d))
 
@@ -2407,7 +2558,7 @@ def format_string(format: str, *cols: "ColumnOrName") -> Column:
 format_string.__doc__ = pysparkfuncs.format_string.__doc__
 
 
-def instr(str: "ColumnOrName", substr: str) -> Column:
+def instr(str: "ColumnOrName", substr: Union[Column, str]) -> Column:
     return _invoke_function("instr", _to_col(str), lit(substr))
 
 
@@ -2420,15 +2571,17 @@ def overlay(
     pos: Union["ColumnOrName", int],
     len: Union["ColumnOrName", int] = -1,
 ) -> Column:
+    pos = _enum_to_value(pos)
     if not isinstance(pos, (int, str, Column)):
         raise PySparkTypeError(
-            error_class="NOT_COLUMN_OR_INT_OR_STR",
-            message_parameters={"arg_name": "pos", "arg_type": type(pos).__name__},
+            errorClass="NOT_COLUMN_OR_INT_OR_STR",
+            messageParameters={"arg_name": "pos", "arg_type": type(pos).__name__},
         )
+    len = _enum_to_value(len)
     if len is not None and not isinstance(len, (int, str, Column)):
         raise PySparkTypeError(
-            error_class="NOT_COLUMN_OR_INT_OR_STR",
-            message_parameters={"arg_name": "len", "arg_type": type(len).__name__},
+            errorClass="NOT_COLUMN_OR_INT_OR_STR",
+            messageParameters={"arg_name": "len", "arg_type": type(len).__name__},
         )
 
     if isinstance(pos, int):
@@ -2456,8 +2609,14 @@ def sentences(
 sentences.__doc__ = pysparkfuncs.sentences.__doc__
 
 
-def substring(str: "ColumnOrName", pos: int, len: int) -> Column:
-    return _invoke_function("substring", _to_col(str), lit(pos), lit(len))
+def substring(
+    str: "ColumnOrName",
+    pos: Union["ColumnOrName", int],
+    len: Union["ColumnOrName", int],
+) -> Column:
+    _pos = lit(pos) if isinstance(pos, int) else _to_col(pos)
+    _len = lit(len) if isinstance(len, int) else _to_col(len)
+    return _invoke_function("substring", _to_col(str), _pos, _len)
 
 
 substring.__doc__ = pysparkfuncs.substring.__doc__
@@ -2489,21 +2648,30 @@ def locate(substr: str, str: "ColumnOrName", pos: int = 1) -> Column:
 locate.__doc__ = pysparkfuncs.locate.__doc__
 
 
-def lpad(col: "ColumnOrName", len: int, pad: str) -> Column:
-    return _invoke_function("lpad", _to_col(col), lit(len), lit(pad))
+def lpad(
+    col: "ColumnOrName",
+    len: Union[Column, int],
+    pad: Union[Column, str],
+) -> Column:
+    return _invoke_function_over_columns("lpad", col, lit(len), lit(pad))
 
 
 lpad.__doc__ = pysparkfuncs.lpad.__doc__
 
 
-def rpad(col: "ColumnOrName", len: int, pad: str) -> Column:
-    return _invoke_function("rpad", _to_col(col), lit(len), lit(pad))
+def rpad(
+    col: "ColumnOrName",
+    len: Union[Column, int],
+    pad: Union[Column, str],
+) -> Column:
+    return _invoke_function_over_columns("rpad", col, lit(len), lit(pad))
 
 
 rpad.__doc__ = pysparkfuncs.rpad.__doc__
 
 
 def repeat(col: "ColumnOrName", n: Union["ColumnOrName", int]) -> Column:
+    n = _enum_to_value(n)
     n = lit(n) if isinstance(n, int) else n
     return _invoke_function("repeat", _to_col(col), _to_col(n))
 
@@ -2516,6 +2684,7 @@ def split(
     pattern: Union[Column, str],
     limit: Union["ColumnOrName", int] = -1,
 ) -> Column:
+    limit = _enum_to_value(limit)
     limit = lit(limit) if isinstance(limit, int) else _to_col(limit)
     return _invoke_function("split", _to_col(str), lit(pattern), limit)
 
@@ -2544,6 +2713,18 @@ def regexp_like(str: "ColumnOrName", regexp: "ColumnOrName") -> Column:
 regexp_like.__doc__ = pysparkfuncs.regexp_like.__doc__
 
 
+def randstr(length: Union[Column, int], seed: Optional[Union[Column, int]] = None) -> Column:
+    if seed is None:
+        return _invoke_function_over_columns(
+            "randstr", lit(length), lit(py_random.randint(0, sys.maxsize))
+        )
+    else:
+        return _invoke_function_over_columns("randstr", lit(length), lit(seed))
+
+
+randstr.__doc__ = pysparkfuncs.randstr.__doc__
+
+
 def regexp_count(str: "ColumnOrName", regexp: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("regexp_count", str, regexp)
 
@@ -2564,9 +2745,7 @@ def regexp_extract_all(
     if idx is None:
         return _invoke_function_over_columns("regexp_extract_all", str, regexp)
     else:
-        if isinstance(idx, int):
-            idx = lit(idx)
-        return _invoke_function_over_columns("regexp_extract_all", str, regexp, idx)
+        return _invoke_function_over_columns("regexp_extract_all", str, regexp, lit(idx))
 
 
 regexp_extract_all.__doc__ = pysparkfuncs.regexp_extract_all.__doc__
@@ -2575,13 +2754,7 @@ regexp_extract_all.__doc__ = pysparkfuncs.regexp_extract_all.__doc__
 def regexp_replace(
     string: "ColumnOrName", pattern: Union[str, Column], replacement: Union[str, Column]
 ) -> Column:
-    if isinstance(pattern, str):
-        pattern = lit(pattern)
-
-    if isinstance(replacement, str):
-        replacement = lit(replacement)
-
-    return _invoke_function("regexp_replace", _to_col(string), pattern, replacement)
+    return _invoke_function_over_columns("regexp_replace", string, lit(pattern), lit(replacement))
 
 
 regexp_replace.__doc__ = pysparkfuncs.regexp_replace.__doc__
@@ -2600,9 +2773,7 @@ def regexp_instr(
     if idx is None:
         return _invoke_function_over_columns("regexp_instr", str, regexp)
     else:
-        if isinstance(idx, int):
-            idx = lit(idx)
-        return _invoke_function_over_columns("regexp_instr", str, regexp, idx)
+        return _invoke_function_over_columns("regexp_instr", str, regexp, lit(idx))
 
 
 regexp_instr.__doc__ = pysparkfuncs.regexp_instr.__doc__
@@ -2724,6 +2895,18 @@ def parse_url(
 parse_url.__doc__ = pysparkfuncs.parse_url.__doc__
 
 
+def try_parse_url(
+    url: "ColumnOrName", partToExtract: "ColumnOrName", key: Optional["ColumnOrName"] = None
+) -> Column:
+    if key is not None:
+        return _invoke_function_over_columns("try_parse_url", url, partToExtract, key)
+    else:
+        return _invoke_function_over_columns("try_parse_url", url, partToExtract)
+
+
+try_parse_url.__doc__ = pysparkfuncs.try_parse_url.__doc__
+
+
 def printf(format: "ColumnOrName", *cols: "ColumnOrName") -> Column:
     return _invoke_function("printf", _to_col(format), *[_to_col(c) for c in cols])
 
@@ -2736,6 +2919,13 @@ def url_decode(str: "ColumnOrName") -> Column:
 
 
 url_decode.__doc__ = pysparkfuncs.url_decode.__doc__
+
+
+def try_url_decode(str: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("try_url_decode", str)
+
+
+try_url_decode.__doc__ = pysparkfuncs.try_url_decode.__doc__
 
 
 def url_encode(str: "ColumnOrName") -> Column:
@@ -2817,6 +3007,13 @@ def character_length(str: "ColumnOrName") -> Column:
 
 
 character_length.__doc__ = pysparkfuncs.character_length.__doc__
+
+
+def chr(n: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("chr", n)
+
+
+chr.__doc__ = pysparkfuncs.chr.__doc__
 
 
 def contains(left: "ColumnOrName", right: "ColumnOrName") -> Column:
@@ -2926,6 +3123,13 @@ def collation(col: "ColumnOrName") -> Column:
 collation.__doc__ = pysparkfuncs.collation.__doc__
 
 
+def quote(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("quote", col)
+
+
+quote.__doc__ = pysparkfuncs.quote.__doc__
+
+
 # Date/Timestamp functions
 
 
@@ -2941,6 +3145,26 @@ def current_date() -> Column:
 
 
 current_date.__doc__ = pysparkfuncs.current_date.__doc__
+
+
+@overload
+def current_time() -> Column:
+    ...
+
+
+@overload
+def current_time(precision: int) -> Column:
+    ...
+
+
+def current_time(precision: Optional[int] = None) -> Column:
+    if precision is None:
+        return _invoke_function("current_time")
+    else:
+        return _invoke_function("current_time", lit(precision))
+
+
+current_time.__doc__ = pysparkfuncs.current_time.__doc__
 
 
 def current_timestamp() -> Column:
@@ -3076,21 +3300,21 @@ def dayname(col: "ColumnOrName") -> Column:
 dayname.__doc__ = pysparkfuncs.dayname.__doc__
 
 
-def extract(field: "ColumnOrName", source: "ColumnOrName") -> Column:
+def extract(field: Column, source: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("extract", field, source)
 
 
 extract.__doc__ = pysparkfuncs.extract.__doc__
 
 
-def date_part(field: "ColumnOrName", source: "ColumnOrName") -> Column:
+def date_part(field: Column, source: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("date_part", field, source)
 
 
 extract.__doc__ = pysparkfuncs.extract.__doc__
 
 
-def datepart(field: "ColumnOrName", source: "ColumnOrName") -> Column:
+def datepart(field: Column, source: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("datepart", field, source)
 
 
@@ -3105,6 +3329,7 @@ make_date.__doc__ = pysparkfuncs.make_date.__doc__
 
 
 def date_add(start: "ColumnOrName", days: Union["ColumnOrName", int]) -> Column:
+    days = _enum_to_value(days)
     days = lit(days) if isinstance(days, int) else days
     return _invoke_function_over_columns("date_add", start, days)
 
@@ -3113,6 +3338,7 @@ date_add.__doc__ = pysparkfuncs.date_add.__doc__
 
 
 def dateadd(start: "ColumnOrName", days: Union["ColumnOrName", int]) -> Column:
+    days = _enum_to_value(days)
     days = lit(days) if isinstance(days, int) else days
     return _invoke_function_over_columns("dateadd", start, days)
 
@@ -3121,6 +3347,7 @@ dateadd.__doc__ = pysparkfuncs.dateadd.__doc__
 
 
 def date_sub(start: "ColumnOrName", days: Union["ColumnOrName", int]) -> Column:
+    days = _enum_to_value(days)
     days = lit(days) if isinstance(days, int) else days
     return _invoke_function_over_columns("date_sub", start, days)
 
@@ -3150,6 +3377,7 @@ date_from_unix_date.__doc__ = pysparkfuncs.date_from_unix_date.__doc__
 
 
 def add_months(start: "ColumnOrName", months: Union["ColumnOrName", int]) -> Column:
+    months = _enum_to_value(months)
     months = lit(months) if isinstance(months, int) else months
     return _invoke_function_over_columns("add_months", start, months)
 
@@ -3172,6 +3400,16 @@ def to_date(col: "ColumnOrName", format: Optional[str] = None) -> Column:
 
 
 to_date.__doc__ = pysparkfuncs.to_date.__doc__
+
+
+def try_to_date(col: "ColumnOrName", format: Optional[str] = None) -> Column:
+    if format is None:
+        return _invoke_function_over_columns("try_to_date", col)
+    else:
+        return _invoke_function("try_to_date", _to_col(col), lit(format))
+
+
+try_to_date.__doc__ = pysparkfuncs.try_to_date.__doc__
 
 
 def unix_date(col: "ColumnOrName") -> Column:
@@ -3203,6 +3441,26 @@ unix_seconds.__doc__ = pysparkfuncs.unix_seconds.__doc__
 
 
 @overload
+def to_time(str: "ColumnOrName") -> Column:
+    ...
+
+
+@overload
+def to_time(str: "ColumnOrName", format: "ColumnOrName") -> Column:
+    ...
+
+
+def to_time(str: "ColumnOrName", format: Optional["ColumnOrName"] = None) -> Column:
+    if format is None:
+        return _invoke_function_over_columns("to_time", str)
+    else:
+        return _invoke_function_over_columns("to_time", str, format)
+
+
+to_time.__doc__ = pysparkfuncs.to_time.__doc__
+
+
+@overload
 def to_timestamp(col: "ColumnOrName") -> Column:
     ...
 
@@ -3220,6 +3478,26 @@ def to_timestamp(col: "ColumnOrName", format: Optional[str] = None) -> Column:
 
 
 to_timestamp.__doc__ = pysparkfuncs.to_timestamp.__doc__
+
+
+@overload
+def try_to_time(str: "ColumnOrName") -> Column:
+    ...
+
+
+@overload
+def try_to_time(str: "ColumnOrName", format: "ColumnOrName") -> Column:
+    ...
+
+
+def try_to_time(str: "ColumnOrName", format: Optional["ColumnOrName"] = None) -> Column:
+    if format is None:
+        return _invoke_function_over_columns("try_to_time", str)
+    else:
+        return _invoke_function_over_columns("try_to_time", str, format)
+
+
+try_to_time.__doc__ = pysparkfuncs.try_to_time.__doc__
 
 
 def try_to_timestamp(col: "ColumnOrName", format: Optional["ColumnOrName"] = None) -> Column:
@@ -3351,19 +3629,15 @@ def unix_timestamp(
 unix_timestamp.__doc__ = pysparkfuncs.unix_timestamp.__doc__
 
 
-def from_utc_timestamp(timestamp: "ColumnOrName", tz: "ColumnOrName") -> Column:
-    if isinstance(tz, str):
-        tz = lit(tz)
-    return _invoke_function_over_columns("from_utc_timestamp", timestamp, tz)
+def from_utc_timestamp(timestamp: "ColumnOrName", tz: Union[Column, str]) -> Column:
+    return _invoke_function_over_columns("from_utc_timestamp", timestamp, lit(tz))
 
 
 from_utc_timestamp.__doc__ = pysparkfuncs.from_utc_timestamp.__doc__
 
 
-def to_utc_timestamp(timestamp: "ColumnOrName", tz: "ColumnOrName") -> Column:
-    if isinstance(tz, str):
-        tz = lit(tz)
-    return _invoke_function_over_columns("to_utc_timestamp", timestamp, tz)
+def to_utc_timestamp(timestamp: "ColumnOrName", tz: Union[Column, str]) -> Column:
+    return _invoke_function_over_columns("to_utc_timestamp", timestamp, lit(tz))
 
 
 to_utc_timestamp.__doc__ = pysparkfuncs.to_utc_timestamp.__doc__
@@ -3374,6 +3648,20 @@ def timestamp_seconds(col: "ColumnOrName") -> Column:
 
 
 timestamp_seconds.__doc__ = pysparkfuncs.timestamp_seconds.__doc__
+
+
+def time_diff(unit: "ColumnOrName", start: "ColumnOrName", end: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("time_diff", unit, start, end)
+
+
+time_diff.__doc__ = pysparkfuncs.time_diff.__doc__
+
+
+def time_trunc(unit: "ColumnOrName", time: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("time_trunc", unit, time)
+
+
+time_trunc.__doc__ = pysparkfuncs.time_trunc.__doc__
 
 
 def timestamp_millis(col: "ColumnOrName") -> Column:
@@ -3390,6 +3678,20 @@ def timestamp_micros(col: "ColumnOrName") -> Column:
 timestamp_micros.__doc__ = pysparkfuncs.timestamp_micros.__doc__
 
 
+def timestamp_diff(unit: str, start: "ColumnOrName", end: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("timestampdiff", lit(unit), start, end)
+
+
+timestamp_diff.__doc__ = pysparkfuncs.timestamp_diff.__doc__
+
+
+def timestamp_add(unit: str, quantity: "ColumnOrName", ts: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("timestampadd", lit(unit), quantity, ts)
+
+
+timestamp_add.__doc__ = pysparkfuncs.timestamp_add.__doc__
+
+
 def window(
     timeColumn: "ColumnOrName",
     windowDuration: str,
@@ -3398,24 +3700,24 @@ def window(
 ) -> Column:
     if windowDuration is None or not isinstance(windowDuration, str):
         raise PySparkTypeError(
-            error_class="NOT_STR",
-            message_parameters={
+            errorClass="NOT_STR",
+            messageParameters={
                 "arg_name": "windowDuration",
                 "arg_type": type(windowDuration).__name__,
             },
         )
     if slideDuration is not None and not isinstance(slideDuration, str):
         raise PySparkTypeError(
-            error_class="NOT_STR",
-            message_parameters={
+            errorClass="NOT_STR",
+            messageParameters={
                 "arg_name": "slideDuration",
                 "arg_type": type(slideDuration).__name__,
             },
         )
     if startTime is not None and not isinstance(startTime, str):
         raise PySparkTypeError(
-            error_class="NOT_STR",
-            message_parameters={"arg_name": "startTime", "arg_type": type(startTime).__name__},
+            errorClass="NOT_STR",
+            messageParameters={"arg_name": "startTime", "arg_type": type(startTime).__name__},
         )
 
     time_col = _to_col(timeColumn)
@@ -3447,10 +3749,11 @@ window_time.__doc__ = pysparkfuncs.window_time.__doc__
 
 
 def session_window(timeColumn: "ColumnOrName", gapDuration: Union[Column, str]) -> Column:
+    gapDuration = _enum_to_value(gapDuration)
     if gapDuration is None or not isinstance(gapDuration, (Column, str)):
         raise PySparkTypeError(
-            error_class="NOT_COLUMN_OR_STR",
-            message_parameters={"arg_name": "gapDuration", "arg_type": type(gapDuration).__name__},
+            errorClass="NOT_COLUMN_OR_STR",
+            messageParameters={"arg_name": "gapDuration", "arg_type": type(gapDuration).__name__},
         )
 
     time_col = _to_col(timeColumn)
@@ -3585,6 +3888,31 @@ def make_dt_interval(
 make_dt_interval.__doc__ = pysparkfuncs.make_dt_interval.__doc__
 
 
+def try_make_interval(
+    years: Optional["ColumnOrName"] = None,
+    months: Optional["ColumnOrName"] = None,
+    weeks: Optional["ColumnOrName"] = None,
+    days: Optional["ColumnOrName"] = None,
+    hours: Optional["ColumnOrName"] = None,
+    mins: Optional["ColumnOrName"] = None,
+    secs: Optional["ColumnOrName"] = None,
+) -> Column:
+    _years = lit(0) if years is None else _to_col(years)
+    _months = lit(0) if months is None else _to_col(months)
+    _weeks = lit(0) if weeks is None else _to_col(weeks)
+    _days = lit(0) if days is None else _to_col(days)
+    _hours = lit(0) if hours is None else _to_col(hours)
+    _mins = lit(0) if mins is None else _to_col(mins)
+    _secs = lit(decimal.Decimal(0)) if secs is None else _to_col(secs)
+
+    return _invoke_function_over_columns(
+        "try_make_interval", _years, _months, _weeks, _days, _hours, _mins, _secs
+    )
+
+
+try_make_interval.__doc__ = pysparkfuncs.try_make_interval.__doc__
+
+
 def make_interval(
     years: Optional["ColumnOrName"] = None,
     months: Optional["ColumnOrName"] = None,
@@ -3610,6 +3938,56 @@ def make_interval(
 make_interval.__doc__ = pysparkfuncs.make_interval.__doc__
 
 
+def make_time(hour: "ColumnOrName", minute: "ColumnOrName", second: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("make_time", hour, minute, second)
+
+
+make_time.__doc__ = pysparkfuncs.make_time.__doc__
+
+
+def time_from_seconds(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("time_from_seconds", col)
+
+
+time_from_seconds.__doc__ = pysparkfuncs.time_from_seconds.__doc__
+
+
+def time_from_millis(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("time_from_millis", col)
+
+
+time_from_millis.__doc__ = pysparkfuncs.time_from_millis.__doc__
+
+
+def time_from_micros(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("time_from_micros", col)
+
+
+time_from_micros.__doc__ = pysparkfuncs.time_from_micros.__doc__
+
+
+def time_to_seconds(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("time_to_seconds", col)
+
+
+time_to_seconds.__doc__ = pysparkfuncs.time_to_seconds.__doc__
+
+
+def time_to_millis(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("time_to_millis", col)
+
+
+time_to_millis.__doc__ = pysparkfuncs.time_to_millis.__doc__
+
+
+def time_to_micros(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("time_to_micros", col)
+
+
+time_to_micros.__doc__ = pysparkfuncs.time_to_micros.__doc__
+
+
+@overload
 def make_timestamp(
     years: "ColumnOrName",
     months: "ColumnOrName",
@@ -3617,19 +3995,190 @@ def make_timestamp(
     hours: "ColumnOrName",
     mins: "ColumnOrName",
     secs: "ColumnOrName",
-    timezone: Optional["ColumnOrName"] = None,
 ) -> Column:
-    if timezone is not None:
-        return _invoke_function_over_columns(
-            "make_timestamp", years, months, days, hours, mins, secs, timezone
-        )
+    ...
+
+
+@overload
+def make_timestamp(
+    years: "ColumnOrName",
+    months: "ColumnOrName",
+    days: "ColumnOrName",
+    hours: "ColumnOrName",
+    mins: "ColumnOrName",
+    secs: "ColumnOrName",
+    timezone: "ColumnOrName",
+) -> Column:
+    ...
+
+
+@overload
+def make_timestamp(*, date: "ColumnOrName", time: "ColumnOrName") -> Column:
+    ...
+
+
+@overload
+def make_timestamp(
+    *, date: "ColumnOrName", time: "ColumnOrName", timezone: "ColumnOrName"
+) -> Column:
+    ...
+
+
+def make_timestamp(
+    years: Optional["ColumnOrName"] = None,
+    months: Optional["ColumnOrName"] = None,
+    days: Optional["ColumnOrName"] = None,
+    hours: Optional["ColumnOrName"] = None,
+    mins: Optional["ColumnOrName"] = None,
+    secs: Optional["ColumnOrName"] = None,
+    timezone: Optional["ColumnOrName"] = None,
+    date: Optional["ColumnOrName"] = None,
+    time: Optional["ColumnOrName"] = None,
+) -> Column:
+    if years is not None:
+        if any(arg is not None for arg in [date, time]):
+            raise PySparkValueError(
+                errorClass="CANNOT_SET_TOGETHER",
+                messageParameters={"arg_list": "years|months|days|hours|mins|secs and date|time"},
+            )
+        if timezone is not None:
+            return _invoke_function_over_columns(
+                "make_timestamp",
+                cast("ColumnOrName", years),
+                cast("ColumnOrName", months),
+                cast("ColumnOrName", days),
+                cast("ColumnOrName", hours),
+                cast("ColumnOrName", mins),
+                cast("ColumnOrName", secs),
+                cast("ColumnOrName", timezone),
+            )
+        else:
+            return _invoke_function_over_columns(
+                "make_timestamp",
+                cast("ColumnOrName", years),
+                cast("ColumnOrName", months),
+                cast("ColumnOrName", days),
+                cast("ColumnOrName", hours),
+                cast("ColumnOrName", mins),
+                cast("ColumnOrName", secs),
+            )
     else:
-        return _invoke_function_over_columns(
-            "make_timestamp", years, months, days, hours, mins, secs
-        )
+        if any(arg is not None for arg in [years, months, days, hours, mins, secs]):
+            raise PySparkValueError(
+                errorClass="CANNOT_SET_TOGETHER",
+                messageParameters={"arg_list": "years|months|days|hours|mins|secs and date|time"},
+            )
+        if timezone is not None:
+            return _invoke_function_over_columns(
+                "make_timestamp",
+                cast("ColumnOrName", date),
+                cast("ColumnOrName", time),
+                cast("ColumnOrName", timezone),
+            )
+        else:
+            return _invoke_function_over_columns(
+                "make_timestamp", cast("ColumnOrName", date), cast("ColumnOrName", time)
+            )
 
 
 make_timestamp.__doc__ = pysparkfuncs.make_timestamp.__doc__
+
+
+@overload
+def try_make_timestamp(
+    years: "ColumnOrName",
+    months: "ColumnOrName",
+    days: "ColumnOrName",
+    hours: "ColumnOrName",
+    mins: "ColumnOrName",
+    secs: "ColumnOrName",
+) -> Column:
+    ...
+
+
+@overload
+def try_make_timestamp(
+    years: "ColumnOrName",
+    months: "ColumnOrName",
+    days: "ColumnOrName",
+    hours: "ColumnOrName",
+    mins: "ColumnOrName",
+    secs: "ColumnOrName",
+    timezone: "ColumnOrName",
+) -> Column:
+    ...
+
+
+@overload
+def try_make_timestamp(*, date: "ColumnOrName", time: "ColumnOrName") -> Column:
+    ...
+
+
+@overload
+def try_make_timestamp(
+    *, date: "ColumnOrName", time: "ColumnOrName", timezone: "ColumnOrName"
+) -> Column:
+    ...
+
+
+def try_make_timestamp(
+    years: Optional["ColumnOrName"] = None,
+    months: Optional["ColumnOrName"] = None,
+    days: Optional["ColumnOrName"] = None,
+    hours: Optional["ColumnOrName"] = None,
+    mins: Optional["ColumnOrName"] = None,
+    secs: Optional["ColumnOrName"] = None,
+    timezone: Optional["ColumnOrName"] = None,
+    date: Optional["ColumnOrName"] = None,
+    time: Optional["ColumnOrName"] = None,
+) -> Column:
+    if years is not None:
+        if any(arg is not None for arg in [date, time]):
+            raise PySparkValueError(
+                errorClass="CANNOT_SET_TOGETHER",
+                messageParameters={"arg_list": "years|months|days|hours|mins|secs and date|time"},
+            )
+        if timezone is not None:
+            return _invoke_function_over_columns(
+                "try_make_timestamp",
+                cast("ColumnOrName", years),
+                cast("ColumnOrName", months),
+                cast("ColumnOrName", days),
+                cast("ColumnOrName", hours),
+                cast("ColumnOrName", mins),
+                cast("ColumnOrName", secs),
+                cast("ColumnOrName", timezone),
+            )
+        else:
+            return _invoke_function_over_columns(
+                "try_make_timestamp",
+                cast("ColumnOrName", years),
+                cast("ColumnOrName", months),
+                cast("ColumnOrName", days),
+                cast("ColumnOrName", hours),
+                cast("ColumnOrName", mins),
+                cast("ColumnOrName", secs),
+            )
+    else:
+        if any(arg is not None for arg in [years, months, days, hours, mins, secs]):
+            raise PySparkValueError(
+                errorClass="CANNOT_SET_TOGETHER",
+                messageParameters={"arg_list": "years|months|days|hours|mins|secs and date|time"},
+            )
+        if timezone is not None:
+            return _invoke_function_over_columns(
+                "try_make_timestamp",
+                cast("ColumnOrName", date),
+                cast("ColumnOrName", time),
+                cast("ColumnOrName", timezone),
+            )
+        else:
+            return _invoke_function_over_columns(
+                "try_make_timestamp", cast("ColumnOrName", date), cast("ColumnOrName", time)
+            )
+
+
+try_make_timestamp.__doc__ = pysparkfuncs.try_make_timestamp.__doc__
 
 
 def make_timestamp_ltz(
@@ -3654,6 +4203,29 @@ def make_timestamp_ltz(
 make_timestamp_ltz.__doc__ = pysparkfuncs.make_timestamp_ltz.__doc__
 
 
+def try_make_timestamp_ltz(
+    years: "ColumnOrName",
+    months: "ColumnOrName",
+    days: "ColumnOrName",
+    hours: "ColumnOrName",
+    mins: "ColumnOrName",
+    secs: "ColumnOrName",
+    timezone: Optional["ColumnOrName"] = None,
+) -> Column:
+    if timezone is not None:
+        return _invoke_function_over_columns(
+            "try_make_timestamp_ltz", years, months, days, hours, mins, secs, timezone
+        )
+    else:
+        return _invoke_function_over_columns(
+            "try_make_timestamp_ltz", years, months, days, hours, mins, secs
+        )
+
+
+try_make_timestamp_ltz.__doc__ = pysparkfuncs.try_make_timestamp_ltz.__doc__
+
+
+@overload
 def make_timestamp_ntz(
     years: "ColumnOrName",
     months: "ColumnOrName",
@@ -3662,12 +4234,115 @@ def make_timestamp_ntz(
     mins: "ColumnOrName",
     secs: "ColumnOrName",
 ) -> Column:
-    return _invoke_function_over_columns(
-        "make_timestamp_ntz", years, months, days, hours, mins, secs
-    )
+    ...
+
+
+@overload
+def make_timestamp_ntz(
+    *,
+    date: "ColumnOrName",
+    time: "ColumnOrName",
+) -> Column:
+    ...
+
+
+def make_timestamp_ntz(
+    years: Optional["ColumnOrName"] = None,
+    months: Optional["ColumnOrName"] = None,
+    days: Optional["ColumnOrName"] = None,
+    hours: Optional["ColumnOrName"] = None,
+    mins: Optional["ColumnOrName"] = None,
+    secs: Optional["ColumnOrName"] = None,
+    date: Optional["ColumnOrName"] = None,
+    time: Optional["ColumnOrName"] = None,
+) -> Column:
+    if years is not None:
+        if any(arg is not None for arg in [date, time]):
+            raise PySparkValueError(
+                errorClass="CANNOT_SET_TOGETHER",
+                messageParameters={"arg_list": "years|months|days|hours|mins|secs and date|time"},
+            )
+        return _invoke_function_over_columns(
+            "make_timestamp_ntz",
+            cast("ColumnOrName", years),
+            cast("ColumnOrName", months),
+            cast("ColumnOrName", days),
+            cast("ColumnOrName", hours),
+            cast("ColumnOrName", mins),
+            cast("ColumnOrName", secs),
+        )
+    else:
+        if any(arg is not None for arg in [years, months, days, hours, mins, secs]):
+            raise PySparkValueError(
+                errorClass="CANNOT_SET_TOGETHER",
+                messageParameters={"arg_list": "years|months|days|hours|mins|secs and date|time"},
+            )
+        return _invoke_function_over_columns(
+            "make_timestamp_ntz", cast("ColumnOrName", date), cast("ColumnOrName", time)
+        )
 
 
 make_timestamp_ntz.__doc__ = pysparkfuncs.make_timestamp_ntz.__doc__
+
+
+@overload
+def try_make_timestamp_ntz(
+    years: "ColumnOrName",
+    months: "ColumnOrName",
+    days: "ColumnOrName",
+    hours: "ColumnOrName",
+    mins: "ColumnOrName",
+    secs: "ColumnOrName",
+) -> Column:
+    ...
+
+
+@overload
+def try_make_timestamp_ntz(
+    *,
+    date: "ColumnOrName",
+    time: "ColumnOrName",
+) -> Column:
+    ...
+
+
+def try_make_timestamp_ntz(
+    years: Optional["ColumnOrName"] = None,
+    months: Optional["ColumnOrName"] = None,
+    days: Optional["ColumnOrName"] = None,
+    hours: Optional["ColumnOrName"] = None,
+    mins: Optional["ColumnOrName"] = None,
+    secs: Optional["ColumnOrName"] = None,
+    date: Optional["ColumnOrName"] = None,
+    time: Optional["ColumnOrName"] = None,
+) -> Column:
+    if years is not None:
+        if any(arg is not None for arg in [date, time]):
+            raise PySparkValueError(
+                errorClass="CANNOT_SET_TOGETHER",
+                messageParameters={"arg_list": "years|months|days|hours|mins|secs and date|time"},
+            )
+        return _invoke_function_over_columns(
+            "try_make_timestamp_ntz",
+            cast("ColumnOrName", years),
+            cast("ColumnOrName", months),
+            cast("ColumnOrName", days),
+            cast("ColumnOrName", hours),
+            cast("ColumnOrName", mins),
+            cast("ColumnOrName", secs),
+        )
+    else:
+        if any(arg is not None for arg in [years, months, days, hours, mins, secs]):
+            raise PySparkValueError(
+                errorClass="CANNOT_SET_TOGETHER",
+                messageParameters={"arg_list": "years|months|days|hours|mins|secs and date|time"},
+            )
+        return _invoke_function_over_columns(
+            "try_make_timestamp_ntz", cast("ColumnOrName", date), cast("ColumnOrName", time)
+        )
+
+
+try_make_timestamp_ntz.__doc__ = pysparkfuncs.try_make_timestamp_ntz.__doc__
 
 
 def make_ym_interval(
@@ -3726,29 +4401,36 @@ def session_user() -> Column:
 session_user.__doc__ = pysparkfuncs.session_user.__doc__
 
 
+def uuid(seed: Optional[Union[Column, int]] = None) -> Column:
+    if seed is None:
+        return _invoke_function("uuid", lit(py_random.randint(0, sys.maxsize)))
+    else:
+        return _invoke_function("uuid", lit(seed))
+
+
 def assert_true(col: "ColumnOrName", errMsg: Optional[Union[Column, str]] = None) -> Column:
+    errMsg = _enum_to_value(errMsg)
     if errMsg is None:
         return _invoke_function_over_columns("assert_true", col)
     if not isinstance(errMsg, (str, Column)):
         raise PySparkTypeError(
-            error_class="NOT_COLUMN_OR_STR",
-            message_parameters={"arg_name": "errMsg", "arg_type": type(errMsg).__name__},
+            errorClass="NOT_COLUMN_OR_STR",
+            messageParameters={"arg_name": "errMsg", "arg_type": type(errMsg).__name__},
         )
-    _err_msg = lit(errMsg) if isinstance(errMsg, str) else _to_col(errMsg)
-    return _invoke_function("assert_true", _to_col(col), _err_msg)
+    return _invoke_function_over_columns("assert_true", col, lit(errMsg))
 
 
 assert_true.__doc__ = pysparkfuncs.assert_true.__doc__
 
 
 def raise_error(errMsg: Union[Column, str]) -> Column:
+    errMsg = _enum_to_value(errMsg)
     if not isinstance(errMsg, (str, Column)):
         raise PySparkTypeError(
-            error_class="NOT_COLUMN_OR_STR",
-            message_parameters={"arg_name": "errMsg", "arg_type": type(errMsg).__name__},
+            errorClass="NOT_COLUMN_OR_STR",
+            messageParameters={"arg_name": "errMsg", "arg_type": type(errMsg).__name__},
         )
-    _err_msg = lit(errMsg) if isinstance(errMsg, str) else _to_col(errMsg)
-    return _invoke_function("raise_error", _err_msg)
+    return _invoke_function_over_columns("raise_error", lit(errMsg))
 
 
 raise_error.__doc__ = pysparkfuncs.raise_error.__doc__
@@ -3792,8 +4474,8 @@ sha1.__doc__ = pysparkfuncs.sha1.__doc__
 def sha2(col: "ColumnOrName", numBits: int) -> Column:
     if numBits not in [0, 224, 256, 384, 512]:
         raise PySparkValueError(
-            error_class="VALUE_NOT_ALLOWED",
-            message_parameters={
+            errorClass="VALUE_NOT_ALLOWED",
+            messageParameters={
                 "arg_name": "numBits",
                 "allowed_values": "[0, 224, 256, 384, 512]",
             },
@@ -3851,6 +4533,243 @@ def hll_union(
 hll_union.__doc__ = pysparkfuncs.hll_union.__doc__
 
 
+def theta_sketch_agg(
+    col: "ColumnOrName",
+    lgNomEntries: Optional[Union[int, Column]] = None,
+) -> Column:
+    fn = "theta_sketch_agg"
+    if lgNomEntries is None:
+        return _invoke_function_over_columns(fn, col)
+    else:
+        return _invoke_function_over_columns(fn, col, lit(lgNomEntries))
+
+
+theta_sketch_agg.__doc__ = pysparkfuncs.theta_sketch_agg.__doc__
+
+
+def theta_union_agg(
+    col: "ColumnOrName",
+    lgNomEntries: Optional[Union[int, Column]] = None,
+) -> Column:
+    fn = "theta_union_agg"
+    if lgNomEntries is None:
+        return _invoke_function_over_columns(fn, col)
+    else:
+        return _invoke_function_over_columns(fn, col, lit(lgNomEntries))
+
+
+theta_union_agg.__doc__ = pysparkfuncs.theta_union_agg.__doc__
+
+
+def theta_intersection_agg(
+    col: "ColumnOrName",
+) -> Column:
+    fn = "theta_intersection_agg"
+    return _invoke_function_over_columns(fn, col)
+
+
+theta_intersection_agg.__doc__ = pysparkfuncs.theta_intersection_agg.__doc__
+
+
+def kll_sketch_agg_bigint(
+    col: "ColumnOrName",
+    k: Optional[Union[int, Column]] = None,
+) -> Column:
+    fn = "kll_sketch_agg_bigint"
+    if k is None:
+        return _invoke_function_over_columns(fn, col)
+    else:
+        return _invoke_function_over_columns(fn, col, lit(k))
+
+
+kll_sketch_agg_bigint.__doc__ = pysparkfuncs.kll_sketch_agg_bigint.__doc__
+
+
+def kll_sketch_agg_float(
+    col: "ColumnOrName",
+    k: Optional[Union[int, Column]] = None,
+) -> Column:
+    fn = "kll_sketch_agg_float"
+    if k is None:
+        return _invoke_function_over_columns(fn, col)
+    else:
+        return _invoke_function_over_columns(fn, col, lit(k))
+
+
+kll_sketch_agg_float.__doc__ = pysparkfuncs.kll_sketch_agg_float.__doc__
+
+
+def kll_sketch_agg_double(
+    col: "ColumnOrName",
+    k: Optional[Union[int, Column]] = None,
+) -> Column:
+    fn = "kll_sketch_agg_double"
+    if k is None:
+        return _invoke_function_over_columns(fn, col)
+    else:
+        return _invoke_function_over_columns(fn, col, lit(k))
+
+
+kll_sketch_agg_double.__doc__ = pysparkfuncs.kll_sketch_agg_double.__doc__
+
+
+def kll_sketch_to_string_bigint(col: "ColumnOrName") -> Column:
+    fn = "kll_sketch_to_string_bigint"
+    return _invoke_function_over_columns(fn, col)
+
+
+kll_sketch_to_string_bigint.__doc__ = pysparkfuncs.kll_sketch_to_string_bigint.__doc__
+
+
+def kll_sketch_to_string_float(col: "ColumnOrName") -> Column:
+    fn = "kll_sketch_to_string_float"
+    return _invoke_function_over_columns(fn, col)
+
+
+kll_sketch_to_string_float.__doc__ = pysparkfuncs.kll_sketch_to_string_float.__doc__
+
+
+def kll_sketch_to_string_double(col: "ColumnOrName") -> Column:
+    fn = "kll_sketch_to_string_double"
+    return _invoke_function_over_columns(fn, col)
+
+
+kll_sketch_to_string_double.__doc__ = pysparkfuncs.kll_sketch_to_string_double.__doc__
+
+
+def kll_sketch_get_n_bigint(col: "ColumnOrName") -> Column:
+    fn = "kll_sketch_get_n_bigint"
+    return _invoke_function_over_columns(fn, col)
+
+
+kll_sketch_get_n_bigint.__doc__ = pysparkfuncs.kll_sketch_get_n_bigint.__doc__
+
+
+def kll_sketch_get_n_float(col: "ColumnOrName") -> Column:
+    fn = "kll_sketch_get_n_float"
+    return _invoke_function_over_columns(fn, col)
+
+
+kll_sketch_get_n_float.__doc__ = pysparkfuncs.kll_sketch_get_n_float.__doc__
+
+
+def kll_sketch_get_n_double(col: "ColumnOrName") -> Column:
+    fn = "kll_sketch_get_n_double"
+    return _invoke_function_over_columns(fn, col)
+
+
+kll_sketch_get_n_double.__doc__ = pysparkfuncs.kll_sketch_get_n_double.__doc__
+
+
+def kll_sketch_merge_bigint(left: "ColumnOrName", right: "ColumnOrName") -> Column:
+    fn = "kll_sketch_merge_bigint"
+    return _invoke_function_over_columns(fn, left, right)
+
+
+kll_sketch_merge_bigint.__doc__ = pysparkfuncs.kll_sketch_merge_bigint.__doc__
+
+
+def kll_sketch_merge_float(left: "ColumnOrName", right: "ColumnOrName") -> Column:
+    fn = "kll_sketch_merge_float"
+    return _invoke_function_over_columns(fn, left, right)
+
+
+kll_sketch_merge_float.__doc__ = pysparkfuncs.kll_sketch_merge_float.__doc__
+
+
+def kll_sketch_merge_double(left: "ColumnOrName", right: "ColumnOrName") -> Column:
+    fn = "kll_sketch_merge_double"
+    return _invoke_function_over_columns(fn, left, right)
+
+
+kll_sketch_merge_double.__doc__ = pysparkfuncs.kll_sketch_merge_double.__doc__
+
+
+def kll_sketch_get_quantile_bigint(sketch: "ColumnOrName", rank: "ColumnOrName") -> Column:
+    fn = "kll_sketch_get_quantile_bigint"
+    return _invoke_function_over_columns(fn, sketch, rank)
+
+
+kll_sketch_get_quantile_bigint.__doc__ = pysparkfuncs.kll_sketch_get_quantile_bigint.__doc__
+
+
+def kll_sketch_get_quantile_float(sketch: "ColumnOrName", rank: "ColumnOrName") -> Column:
+    fn = "kll_sketch_get_quantile_float"
+    return _invoke_function_over_columns(fn, sketch, rank)
+
+
+kll_sketch_get_quantile_float.__doc__ = pysparkfuncs.kll_sketch_get_quantile_float.__doc__
+
+
+def kll_sketch_get_quantile_double(sketch: "ColumnOrName", rank: "ColumnOrName") -> Column:
+    fn = "kll_sketch_get_quantile_double"
+    return _invoke_function_over_columns(fn, sketch, rank)
+
+
+kll_sketch_get_quantile_double.__doc__ = pysparkfuncs.kll_sketch_get_quantile_double.__doc__
+
+
+def kll_sketch_get_rank_bigint(sketch: "ColumnOrName", quantile: "ColumnOrName") -> Column:
+    fn = "kll_sketch_get_rank_bigint"
+    return _invoke_function_over_columns(fn, sketch, quantile)
+
+
+kll_sketch_get_rank_bigint.__doc__ = pysparkfuncs.kll_sketch_get_rank_bigint.__doc__
+
+
+def kll_sketch_get_rank_float(sketch: "ColumnOrName", quantile: "ColumnOrName") -> Column:
+    fn = "kll_sketch_get_rank_float"
+    return _invoke_function_over_columns(fn, sketch, quantile)
+
+
+kll_sketch_get_rank_float.__doc__ = pysparkfuncs.kll_sketch_get_rank_float.__doc__
+
+
+def kll_sketch_get_rank_double(sketch: "ColumnOrName", quantile: "ColumnOrName") -> Column:
+    fn = "kll_sketch_get_rank_double"
+    return _invoke_function_over_columns(fn, sketch, quantile)
+
+
+kll_sketch_get_rank_double.__doc__ = pysparkfuncs.kll_sketch_get_rank_double.__doc__
+
+
+def theta_sketch_estimate(col: "ColumnOrName") -> Column:
+    fn = "theta_sketch_estimate"
+    return _invoke_function_over_columns(fn, col)
+
+
+theta_sketch_estimate.__doc__ = pysparkfuncs.theta_sketch_estimate.__doc__
+
+
+def theta_union(
+    col1: "ColumnOrName", col2: "ColumnOrName", lgNomEntries: Optional[Union[int, Column]] = None
+) -> Column:
+    fn = "theta_union"
+    if lgNomEntries is None:
+        return _invoke_function_over_columns(fn, col1, col2)
+    else:
+        return _invoke_function_over_columns(fn, col1, col2, lit(lgNomEntries))
+
+
+theta_union.__doc__ = pysparkfuncs.theta_union.__doc__
+
+
+def theta_intersection(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
+    fn = "theta_intersection"
+    return _invoke_function_over_columns(fn, col1, col2)
+
+
+theta_intersection.__doc__ = pysparkfuncs.theta_intersection.__doc__
+
+
+def theta_difference(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
+    fn = "theta_difference"
+    return _invoke_function_over_columns(fn, col1, col2)
+
+
+theta_difference.__doc__ = pysparkfuncs.theta_difference.__doc__
+
+
 # Predicates Function
 
 
@@ -3882,6 +4801,13 @@ def nullif(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
 nullif.__doc__ = pysparkfuncs.nullif.__doc__
 
 
+def nullifzero(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("nullifzero", col)
+
+
+nullifzero.__doc__ = pysparkfuncs.nullifzero.__doc__
+
+
 def nvl(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("nvl", col1, col2)
 
@@ -3894,6 +4820,13 @@ def nvl2(col1: "ColumnOrName", col2: "ColumnOrName", col3: "ColumnOrName") -> Co
 
 
 nvl2.__doc__ = pysparkfuncs.nvl2.__doc__
+
+
+def zeroifnull(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("zeroifnull", col)
+
+
+zeroifnull.__doc__ = pysparkfuncs.zeroifnull.__doc__
 
 
 def aes_encrypt(
@@ -4047,6 +4980,53 @@ def bitmap_or_agg(col: "ColumnOrName") -> Column:
 bitmap_or_agg.__doc__ = pysparkfuncs.bitmap_or_agg.__doc__
 
 
+def bitmap_and_agg(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("bitmap_and_agg", col)
+
+
+bitmap_and_agg.__doc__ = pysparkfuncs.bitmap_and_agg.__doc__
+
+
+# Geospatial ST Functions
+
+
+def st_asbinary(geo: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("st_asbinary", geo)
+
+
+st_asbinary.__doc__ = pysparkfuncs.st_asbinary.__doc__
+
+
+def st_geogfromwkb(wkb: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("st_geogfromwkb", wkb)
+
+
+st_geogfromwkb.__doc__ = pysparkfuncs.st_geogfromwkb.__doc__
+
+
+def st_geomfromwkb(wkb: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("st_geomfromwkb", wkb)
+
+
+st_geomfromwkb.__doc__ = pysparkfuncs.st_geomfromwkb.__doc__
+
+
+def st_setsrid(geo: "ColumnOrName", srid: Union["ColumnOrName", int]) -> Column:
+    srid = _enum_to_value(srid)
+    srid = lit(srid) if isinstance(srid, int) else srid
+    return _invoke_function_over_columns("st_setsrid", geo, srid)
+
+
+st_setsrid.__doc__ = pysparkfuncs.st_setsrid.__doc__
+
+
+def st_srid(geo: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("st_srid", geo)
+
+
+st_srid.__doc__ = pysparkfuncs.st_srid.__doc__
+
+
 # Call Functions
 
 
@@ -4067,6 +5047,7 @@ unwrap_udt.__doc__ = pysparkfuncs.unwrap_udt.__doc__
 def udf(
     f: Optional[Union[Callable[..., Any], "DataTypeOrString"]] = None,
     returnType: "DataTypeOrString" = StringType(),
+    *,
     useArrow: Optional[bool] = None,
 ) -> Union["UserDefinedFunctionLike", Callable[[Callable[..., Any]], "UserDefinedFunctionLike"]]:
     if f is None or isinstance(f, (str, DataType)):
@@ -4100,6 +5081,20 @@ def udtf(
 udtf.__doc__ = pysparkfuncs.udtf.__doc__
 
 
+def arrow_udtf(
+    cls: Optional[Type] = None,
+    *,
+    returnType: Optional[Union[StructType, str]] = None,
+) -> Union["UserDefinedTableFunction", Callable[[Type], "UserDefinedTableFunction"]]:
+    if cls is None:
+        return functools.partial(_create_pyarrow_udtf, returnType=returnType)
+    else:
+        return _create_pyarrow_udtf(cls=cls, returnType=returnType)
+
+
+arrow_udtf.__doc__ = pysparkfuncs.arrow_udtf.__doc__
+
+
 def call_function(funcName: str, *cols: "ColumnOrName") -> Column:
     from pyspark.sql.connect.column import Column as ConnectColumn
 
@@ -4116,8 +5111,13 @@ def _test() -> None:
     import doctest
     from pyspark.sql import SparkSession as PySparkSession
     import pyspark.sql.connect.functions.builtin
+    from pyspark.testing.utils import have_pandas, have_pyarrow
 
     globs = pyspark.sql.connect.functions.builtin.__dict__.copy()
+
+    if not have_pandas or not have_pyarrow:
+        del pyspark.sql.connect.functions.builtin.udf.__doc__
+        del pyspark.sql.connect.functions.builtin.arrow_udtf.__doc__
 
     globs["spark"] = (
         PySparkSession.builder.appName("sql.connect.functions tests")

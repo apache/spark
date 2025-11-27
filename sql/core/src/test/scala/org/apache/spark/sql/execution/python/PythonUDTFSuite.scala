@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.python
 
 import org.apache.spark.api.python.PythonEvalType
-import org.apache.spark.sql.{AnalysisException, IntegratedUDFTestUtils, QueryTest, Row}
+import org.apache.spark.sql.{IntegratedUDFTestUtils, QueryTest, Row}
 import org.apache.spark.sql.catalyst.expressions.{Add, Alias, Expression, FunctionTableSubqueryArgumentExpression, Literal}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, OneRowRelation, Project, Repartition, RepartitionByExpression, Sort, SubqueryAlias}
@@ -41,6 +41,32 @@ class PythonUDTFSuite extends QueryTest with SharedSparkSession {
       |        yield a, b, a - b
       |        yield a, b, b - a
       |""".stripMargin
+
+  private val variantInputScript: String =
+    """
+      |class InputVariantUDTF:
+      |    def eval(self, a):
+      |        yield str(a)
+      |""".stripMargin
+
+  private val variantStr =
+    "VariantVal(VariantVal(bytes([2, 1, 0, 0, 2, 5, 98]), bytes([1, 1, 0, 1, 97])))"
+
+  private val variantOutputScript: String =
+    """
+      |class SimpleOutputVariantUDTF:
+      |    from pyspark.sql.types import VariantVal
+      |    def eval(self):
+      |        yield {0}
+      |""".format(variantStr).stripMargin
+
+  private val arrayOfVariantOutputScript: String =
+    """
+      |class OutputArrayOfVariantUDTF:
+      |    from pyspark.sql.types import VariantVal
+      |    def eval(self):
+      |        yield [{0}]
+      |""".format(variantStr).stripMargin
 
   private val returnType: StructType = StructType.fromDDL("a int, b int, c int")
 
@@ -70,6 +96,27 @@ class PythonUDTFSuite extends QueryTest with SharedSparkSession {
     createUserDefinedPythonTableFunction(
       UDTFForwardStateFromAnalyze.name,
       UDTFForwardStateFromAnalyze.pythonScript, None)
+
+  private val variantInputUDTF: UserDefinedPythonTableFunction =
+    createUserDefinedPythonTableFunction(
+      "InputVariantUDTF",
+      variantInputScript,
+      Some(StructType.fromDDL("o STRING"))
+    )
+
+  private val variantOutputUDTF: UserDefinedPythonTableFunction =
+    createUserDefinedPythonTableFunction(
+      "SimpleOutputVariantUDTF",
+      variantOutputScript,
+      Some(StructType.fromDDL("v VARIANT"))
+    )
+
+  private val arrayOfVariantOutputUDTF: UserDefinedPythonTableFunction =
+    createUserDefinedPythonTableFunction(
+      "OutputArrayOfVariantUDTF",
+      arrayOfVariantOutputScript,
+      Some(StructType.fromDDL("v ARRAY<VARIANT>"))
+    )
 
   test("Simple PythonUDTF") {
     assume(shouldTestPythonUDFs)
@@ -174,7 +221,7 @@ class PythonUDTFSuite extends QueryTest with SharedSparkSession {
         _, false, RepartitionByExpression(
           _, Project(
             _, SubqueryAlias(
-              _, _: LocalRelation)), _, _)) =>
+              _, _: LocalRelation)), _, _), _) =>
       case other =>
         failure(other)
     }
@@ -188,22 +235,9 @@ class PythonUDTFSuite extends QueryTest with SharedSparkSession {
       case Sort(
         _, false, Repartition(
           1, true, SubqueryAlias(
-            _, _: LocalRelation))) =>
+            _, _: LocalRelation)), _) =>
       case other =>
         failure(other)
-    }
-    withTable("t") {
-      sql("create table t(col array<int>) using parquet")
-      val query = "select * from explode(table(t))"
-      checkErrorMatchPVals(
-        exception = intercept[AnalysisException](sql(query)),
-        errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.UNSUPPORTED_TABLE_ARGUMENT",
-        sqlState = None,
-        parameters = Map("treeNode" -> "(?s).*"),
-        context = ExpectedContext(
-          fragment = "table(t)",
-          start = 22,
-          stop = 29))
     }
 
     spark.udtf.registerPython(UDTFCountSumLast.name, pythonUDTFCountSumLast)
@@ -376,7 +410,7 @@ class PythonUDTFSuite extends QueryTest with SharedSparkSession {
           |  WITH SINGLE PARTITION
           |  ORDER BY device_id, data_ds)
           |""".stripMargin)),
-      errorClass = "_LEGACY_ERROR_TEMP_0064",
+      condition = "_LEGACY_ERROR_TEMP_0064",
       parameters = Map("msg" ->
         ("The table function call includes a table argument with an invalid " +
           "partitioning/ordering specification: the ORDER BY clause included multiple " +

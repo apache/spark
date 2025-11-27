@@ -19,6 +19,7 @@ package org.apache.spark.ml.util
 
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.Since
+import org.apache.spark.sql.DataFrame
 
 
 /**
@@ -27,7 +28,7 @@ import org.apache.spark.annotation.Since
  * @tparam T Summary instance type
  */
 @Since("3.0.0")
-private[ml] trait HasTrainingSummary[T] {
+private[spark] trait HasTrainingSummary[T] {
 
   private[ml] final var trainingSummary: Option[T] = None
 
@@ -48,5 +49,15 @@ private[ml] trait HasTrainingSummary[T] {
   private[ml] def setSummary(summary: Option[T]): this.type = {
     this.trainingSummary = summary
     this
+  }
+
+  private[spark] def loadSummary(path: String, dataset: DataFrame): Unit = {
+    throw new SparkException(
+      s"No loadSummary implementation for this ${this.getClass.getSimpleName}")
+  }
+
+  private[spark] def saveSummary(path: String): Unit = {
+    throw new SparkException(
+      s"No saveSummary implementation for this ${this.getClass.getSimpleName}")
   }
 }

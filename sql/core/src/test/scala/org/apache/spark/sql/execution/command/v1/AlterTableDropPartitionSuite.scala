@@ -83,7 +83,7 @@ class AlterTableDropPartitionSuite
         exception = intercept[AnalysisException] {
           sql(s"ALTER TABLE $t DROP PARTITION (p1 = '')")
         },
-        errorClass = "_LEGACY_ERROR_TEMP_1076",
+        condition = "_LEGACY_ERROR_TEMP_1076",
         parameters = Map("details" -> "The spec ([p1=]) contains an empty partition column value")
       )
     }

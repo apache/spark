@@ -202,7 +202,7 @@ private[streaming] class OpenHashMapBasedStateMap[K, S](
   /** Get all the data of this map as string formatted as a tree based on the delta depth */
   override def toDebugString(): String = {
     val tabs = if (deltaChainLength > 0) {
-      ("    " * (deltaChainLength - 1)) + "+--- "
+      ("    ".repeat(deltaChainLength - 1)) + "+--- "
     } else ""
     parentStateMap.toDebugString() + "\n" + deltaMap.iterator.mkString(tabs, "\n" + tabs, "")
   }
@@ -244,7 +244,7 @@ private[streaming] class OpenHashMapBasedStateMap[K, S](
     // allocate appropriately sized OpenHashMap.
     outputStream.writeInt(approxSize)
 
-    while(iterOfActiveSessions.hasNext) {
+    while (iterOfActiveSessions.hasNext) {
       parentSessionCount += 1
 
       val (key, state, updateTime) = iterOfActiveSessions.next()
@@ -294,7 +294,7 @@ private[streaming] class OpenHashMapBasedStateMap[K, S](
 
     // Read the records until the limit marking object has been reached
     var parentSessionLoopDone = false
-    while(!parentSessionLoopDone) {
+    while (!parentSessionLoopDone) {
       val obj = inputStream.readObject()
       obj match {
         case marker: LimitMarker =>

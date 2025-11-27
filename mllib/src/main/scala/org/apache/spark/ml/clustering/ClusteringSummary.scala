@@ -18,6 +18,7 @@
 package org.apache.spark.ml.clustering
 
 import org.apache.spark.annotation.Since
+import org.apache.spark.ml.util.Summary
 import org.apache.spark.sql.{DataFrame, Row}
 
 /**
@@ -34,7 +35,7 @@ class ClusteringSummary private[clustering] (
     val predictionCol: String,
     val featuresCol: String,
     val k: Int,
-    @Since("2.4.0") val numIter: Int) extends Serializable {
+    @Since("2.4.0") val numIter: Int) extends Summary with Serializable {
 
   /**
    * Cluster centers of the transformed data.

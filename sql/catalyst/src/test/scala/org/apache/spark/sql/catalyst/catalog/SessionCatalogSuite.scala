@@ -34,6 +34,7 @@ import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAM
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces.PROP_OWNER
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.types._
+import org.apache.spark.util.Utils
 
 class InMemorySessionCatalogSuite extends SessionCatalogSuite {
   protected val utils = new CatalogTestUtils {
@@ -121,7 +122,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
       exception = intercept[AnalysisException] {
         func(name)
       },
-      errorClass = "INVALID_SCHEMA_OR_RELATION_NAME",
+      condition = "INVALID_SCHEMA_OR_RELATION_NAME",
       parameters = Map("name" -> toSQLId(name))
     )
   }
@@ -171,7 +172,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
         exception = intercept[AnalysisException] {
           ResolveDefaultColumns.analyze(columnC, statementType)
         },
-        errorClass = "INVALID_DEFAULT_VALUE.UNRESOLVED_EXPRESSION",
+        condition = "INVALID_DEFAULT_VALUE.UNRESOLVED_EXPRESSION",
         parameters = Map(
           "statement" -> "CREATE TABLE",
           "colName" -> "`c`",
@@ -180,7 +181,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
         exception = intercept[AnalysisException] {
           ResolveDefaultColumns.analyze(columnD, statementType)
         },
-        errorClass = "INVALID_DEFAULT_VALUE.SUBQUERY_EXPRESSION",
+        condition = "INVALID_DEFAULT_VALUE.SUBQUERY_EXPRESSION",
         parameters = Map(
           "statement" -> "CREATE TABLE",
           "colName" -> "`d`",
@@ -189,7 +190,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
         exception = intercept[AnalysisException] {
           ResolveDefaultColumns.analyze(columnE, statementType)
         },
-        errorClass = "INVALID_DEFAULT_VALUE.DATA_TYPE",
+        condition = "INVALID_DEFAULT_VALUE.DATA_TYPE",
         parameters = Map(
           "statement" -> "CREATE TABLE",
           "colName" -> "`e`",
@@ -229,7 +230,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
 
   test("get database should throw exception when the database does not exist") {
     withBasicCatalog { catalog =>
-      intercept[NoSuchDatabaseException] {
+      intercept[NoSuchNamespaceException] {
         catalog.getDatabaseMetadata("db_that_does_not_exist")
       }
     }
@@ -283,7 +284,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
 
   test("drop database when the database does not exist") {
     withBasicCatalog { catalog =>
-      intercept[NoSuchDatabaseException] {
+      intercept[NoSuchNamespaceException] {
         catalog.dropDatabase("db_that_does_not_exist", ignoreIfNotExists = false, cascade = false)
       }
       catalog.dropDatabase("db_that_does_not_exist", ignoreIfNotExists = true, cascade = false)
@@ -295,7 +296,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
       catalog.setCurrentDatabase("db1")
       assert(catalog.getCurrentDatabase == "db1")
       catalog.dropDatabase("db1", ignoreIfNotExists = false, cascade = true)
-      intercept[NoSuchDatabaseException] {
+      intercept[NoSuchNamespaceException] {
         catalog.createTable(newTable("tbl1", "db1"), ignoreIfExists = false)
       }
       catalog.setCurrentDatabase("default")
@@ -321,7 +322,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
 
   test("alter database should throw exception when the database does not exist") {
     withBasicCatalog { catalog =>
-      intercept[NoSuchDatabaseException] {
+      intercept[NoSuchNamespaceException] {
         catalog.alterDatabase(newDb("unknown_db"))
       }
     }
@@ -332,7 +333,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
       assert(catalog.getCurrentDatabase == "default")
       catalog.setCurrentDatabase("db2")
       assert(catalog.getCurrentDatabase == "db2")
-      intercept[NoSuchDatabaseException] {
+      intercept[NoSuchNamespaceException] {
         catalog.setCurrentDatabase("deebo")
       }
       catalog.createDatabase(newDb("deebo"), ignoreIfExists = false)
@@ -370,10 +371,10 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
   test("create table when database does not exist") {
     withBasicCatalog { catalog =>
       // Creating table in non-existent database should always fail
-      intercept[NoSuchDatabaseException] {
+      intercept[NoSuchNamespaceException] {
         catalog.createTable(newTable("tbl1", "does_not_exist"), ignoreIfExists = false)
       }
-      intercept[NoSuchDatabaseException] {
+      intercept[NoSuchNamespaceException] {
         catalog.createTable(newTable("tbl1", "does_not_exist"), ignoreIfExists = true)
       }
       // Table already exists
@@ -419,11 +420,11 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
   test("drop table when database/table does not exist") {
     withBasicCatalog { catalog =>
       // Should always throw exception when the database does not exist
-      intercept[NoSuchDatabaseException] {
+      intercept[NoSuchNamespaceException] {
         catalog.dropTable(TableIdentifier("tbl1", Some("unknown_db")), ignoreIfNotExists = false,
           purge = false)
       }
-      intercept[NoSuchDatabaseException] {
+      intercept[NoSuchNamespaceException] {
         catalog.dropTable(TableIdentifier("tbl1", Some("unknown_db")), ignoreIfNotExists = true,
           purge = false)
       }
@@ -494,7 +495,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
 
   test("rename table when database/table does not exist") {
     withBasicCatalog { catalog =>
-      intercept[NoSuchDatabaseException] {
+      intercept[NoSuchNamespaceException] {
         catalog.renameTable(TableIdentifier("tbl1", Some("unknown_db")), TableIdentifier("tbl2"))
       }
       intercept[NoSuchTableException] {
@@ -543,7 +544,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
 
   test("alter table when database/table does not exist") {
     withBasicCatalog { catalog =>
-      intercept[NoSuchDatabaseException] {
+      intercept[NoSuchNamespaceException] {
         catalog.alterTable(newTable("tbl1", "unknown_db"))
       }
       intercept[NoSuchTableException] {
@@ -564,7 +565,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
     }
   }
 
-  test("alter table add columns") {
+  test("alter data schema add columns") {
     withBasicCatalog { sessionCatalog =>
       sessionCatalog.createTable(newTable("t1", "default"), ignoreIfExists = false)
       val oldTab = sessionCatalog.externalCatalog.getTable("default", "t1")
@@ -580,6 +581,22 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
     }
   }
 
+  test("alter schema add columns") {
+    withBasicCatalog { sessionCatalog =>
+      sessionCatalog.createTable(newTable("t1", "default"), ignoreIfExists = false)
+      val oldTab = sessionCatalog.externalCatalog.getTable("default", "t1")
+      val newSchema = StructType(oldTab.dataSchema.fields ++
+        Seq(StructField("c3", IntegerType)) ++ oldTab.partitionSchema)
+
+      sessionCatalog.alterTableSchema(
+        TableIdentifier("t1", Some("default")),
+        newSchema)
+
+      val newTab = sessionCatalog.externalCatalog.getTable("default", "t1")
+      assert(newTab.schema == newSchema)
+    }
+  }
+
   test("alter table drop columns") {
     withBasicCatalog { sessionCatalog =>
       sessionCatalog.createTable(newTable("t1", "default"), ignoreIfExists = false)
@@ -589,7 +606,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
           sessionCatalog.alterTableDataSchema(
             TableIdentifier("t1", Some("default")), StructType(oldTab.dataSchema.drop(1)))
         },
-        errorClass = "_LEGACY_ERROR_TEMP_1071",
+        condition = "_LEGACY_ERROR_TEMP_1071",
         parameters = Map("nonExistentColumnNames" -> "[col1]"))
     }
   }
@@ -608,7 +625,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
 
   test("get table when database/table does not exist") {
     withBasicCatalog { catalog =>
-      intercept[NoSuchDatabaseException] {
+      intercept[NoSuchNamespaceException] {
         catalog.getTableMetadata(TableIdentifier("tbl1", Some("unknown_db")))
       }
       intercept[NoSuchTableException] {
@@ -749,6 +766,13 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
     Project(projectList, CatalystSqlParser.parsePlan(metadata.viewText.get))
   }
 
+  private def stripViewDDLFromGetViewColumbByNameAndOrdinal(plan: LogicalPlan): LogicalPlan = {
+    plan.transformAllExpressions {
+      case getViewColumnByNameAndOrdinal: GetViewColumnByNameAndOrdinal =>
+        getViewColumnByNameAndOrdinal.copy(viewDDL = None)
+    }
+  }
+
   test("look up view relation") {
     withBasicCatalog { catalog =>
       val props = CatalogTable.catalogAndNamespaceToProps("cat1", Seq("ns1"))
@@ -762,11 +786,17 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
       // Look up a view.
       catalog.setCurrentDatabase("default")
       val view = View(desc = metadata, isTempView = false, child = getViewPlan(metadata))
-      comparePlans(catalog.lookupRelation(TableIdentifier("view1", Some("db3"))),
+      comparePlans(
+        stripViewDDLFromGetViewColumbByNameAndOrdinal(
+          catalog.lookupRelation(TableIdentifier("view1", Some("db3")))
+        ),
         SubqueryAlias(Seq(CatalogManager.SESSION_CATALOG_NAME, "db3", "view1"), view))
       // Look up a view using current database of the session catalog.
       catalog.setCurrentDatabase("db3")
-      comparePlans(catalog.lookupRelation(TableIdentifier("view1")),
+      comparePlans(
+        stripViewDDLFromGetViewColumbByNameAndOrdinal(
+          catalog.lookupRelation(TableIdentifier("view1"))
+        ),
         SubqueryAlias(Seq(CatalogManager.SESSION_CATALOG_NAME, "db3", "view1"), view))
     }
   }
@@ -781,7 +811,10 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
       assert(metadata.viewCatalogAndNamespace == Seq(CatalogManager.SESSION_CATALOG_NAME, "db2"))
 
       val view = View(desc = metadata, isTempView = false, child = getViewPlan(metadata))
-      comparePlans(catalog.lookupRelation(TableIdentifier("view2", Some("db3"))),
+      comparePlans(
+        stripViewDDLFromGetViewColumbByNameAndOrdinal(
+          catalog.lookupRelation(TableIdentifier("view2", Some("db3")))
+        ),
         SubqueryAlias(Seq(CatalogManager.SESSION_CATALOG_NAME, "db3", "view2"), view))
     }
   }
@@ -817,15 +850,17 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
         exception = intercept[NoSuchTableException] {
           catalog.getTempViewOrPermanentTableMetadata(TableIdentifier("view1"))
         },
-        errorClass = "TABLE_OR_VIEW_NOT_FOUND",
-        parameters = Map("relationName" -> "`default`.`view1`")
+        condition = "TABLE_OR_VIEW_NOT_FOUND",
+        parameters = Map("relationName" ->
+          s"`${CatalogManager.SESSION_CATALOG_NAME}`.`default`.`view1`")
       )
       checkError(
         exception = intercept[NoSuchTableException] {
           catalog.getTempViewOrPermanentTableMetadata(TableIdentifier("view1", Some("default")))
         },
-        errorClass = "TABLE_OR_VIEW_NOT_FOUND",
-        parameters = Map("relationName" -> "`default`.`view1`")
+        condition = "TABLE_OR_VIEW_NOT_FOUND",
+        parameters = Map("relationName" ->
+          s"`${CatalogManager.SESSION_CATALOG_NAME}`.`default`.`view1`")
       )
 
       createTempView(catalog, "view1", tempTable, overrideIfExists = false)
@@ -838,8 +873,9 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
         exception = intercept[NoSuchTableException] {
           catalog.getTempViewOrPermanentTableMetadata(TableIdentifier("view1", Some("default")))
         },
-        errorClass = "TABLE_OR_VIEW_NOT_FOUND",
-        parameters = Map("relationName" -> "`default`.`view1`")
+        condition = "TABLE_OR_VIEW_NOT_FOUND",
+        parameters = Map("relationName" ->
+          s"`${CatalogManager.SESSION_CATALOG_NAME}`.`default`.`view1`")
       )
     }
   }
@@ -856,7 +892,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
           TableIdentifier("tbl4"),
           TableIdentifier("tbl1", Some("db2")),
           TableIdentifier("tbl2", Some("db2"))))
-      intercept[NoSuchDatabaseException] {
+      intercept[NoSuchNamespaceException] {
         catalog.listTables("unknown_db")
       }
     }
@@ -876,7 +912,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
           TableIdentifier("tbl2", Some("db2"))))
       assert(catalog.listTables("db2", "*1").toSet ==
         Set(TableIdentifier("tbl1"), TableIdentifier("tbl1", Some("db2"))))
-      intercept[NoSuchDatabaseException] {
+      intercept[NoSuchNamespaceException] {
         catalog.listTables("unknown_db", "*")
       }
     }
@@ -933,17 +969,17 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
       createTempView(catalog, "temp_view4", tempTable, overrideIfExists = false)
       createGlobalTempView(catalog, "global_temp_view1", tempTable, overrideIfExists = false)
       createGlobalTempView(catalog, "global_temp_view2", tempTable, overrideIfExists = false)
-      assert(catalog.listTables(catalog.globalTempViewManager.database, "*").toSet ==
+      assert(catalog.listTables(catalog.globalTempDatabase, "*").toSet ==
         Set(TableIdentifier("temp_view1"),
           TableIdentifier("temp_view4"),
-          TableIdentifier("global_temp_view1", Some(catalog.globalTempViewManager.database)),
-          TableIdentifier("global_temp_view2", Some(catalog.globalTempViewManager.database))))
-      assert(catalog.listTables(catalog.globalTempViewManager.database, "*temp_view1").toSet ==
+          TableIdentifier("global_temp_view1", Some(catalog.globalTempDatabase)),
+          TableIdentifier("global_temp_view2", Some(catalog.globalTempDatabase))))
+      assert(catalog.listTables(catalog.globalTempDatabase, "*temp_view1").toSet ==
         Set(TableIdentifier("temp_view1"),
-          TableIdentifier("global_temp_view1", Some(catalog.globalTempViewManager.database))))
-      assert(catalog.listTables(catalog.globalTempViewManager.database, "global*").toSet ==
-        Set(TableIdentifier("global_temp_view1", Some(catalog.globalTempViewManager.database)),
-          TableIdentifier("global_temp_view2", Some(catalog.globalTempViewManager.database))))
+          TableIdentifier("global_temp_view1", Some(catalog.globalTempDatabase))))
+      assert(catalog.listTables(catalog.globalTempDatabase, "global*").toSet ==
+        Set(TableIdentifier("global_temp_view1", Some(catalog.globalTempDatabase)),
+          TableIdentifier("global_temp_view2", Some(catalog.globalTempDatabase))))
     }
   }
 
@@ -970,7 +1006,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
 
   test("create partitions when database/table does not exist") {
     withBasicCatalog { catalog =>
-      intercept[NoSuchDatabaseException] {
+      intercept[NoSuchNamespaceException] {
         catalog.createPartitions(
           TableIdentifier("tbl1", Some("unknown_db")), Seq(), ignoreIfExists = false)
       }
@@ -1000,7 +1036,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
             TableIdentifier("tbl2", Some("db2")),
             Seq(part1, partWithLessColumns), ignoreIfExists = false)
         },
-        errorClass = "_LEGACY_ERROR_TEMP_1232",
+        condition = "_LEGACY_ERROR_TEMP_1232",
         parameters = Map(
           "specKeys" -> "a",
           "partitionColumnNames" -> "a, b",
@@ -1011,7 +1047,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
             TableIdentifier("tbl2", Some("db2")),
             Seq(part1, partWithMoreColumns), ignoreIfExists = true)
         },
-        errorClass = "_LEGACY_ERROR_TEMP_1232",
+        condition = "_LEGACY_ERROR_TEMP_1232",
         parameters = Map(
           "specKeys" -> "a, b, c",
           "partitionColumnNames" -> "a, b",
@@ -1022,7 +1058,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
             TableIdentifier("tbl2", Some("db2")),
             Seq(partWithUnknownColumns, part1), ignoreIfExists = true)
         },
-        errorClass = "_LEGACY_ERROR_TEMP_1232",
+        condition = "_LEGACY_ERROR_TEMP_1232",
         parameters = Map(
           "specKeys" -> "a, unknown",
           "partitionColumnNames" -> "a, b",
@@ -1033,7 +1069,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
             TableIdentifier("tbl2", Some("db2")),
             Seq(partWithEmptyValue, part1), ignoreIfExists = true)
         },
-        errorClass = "_LEGACY_ERROR_TEMP_1076",
+        condition = "_LEGACY_ERROR_TEMP_1076",
         parameters = Map(
           "details" -> "The spec ([a=3, b=]) contains an empty partition column value"))
     }
@@ -1077,7 +1113,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
 
   test("drop partitions when database/table does not exist") {
     withBasicCatalog { catalog =>
-      intercept[NoSuchDatabaseException] {
+      intercept[NoSuchNamespaceException] {
         catalog.dropPartitions(
           TableIdentifier("tbl1", Some("unknown_db")),
           Seq(),
@@ -1126,7 +1162,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
             purge = false,
             retainData = false)
         },
-        errorClass = "_LEGACY_ERROR_TEMP_1076",
+        condition = "_LEGACY_ERROR_TEMP_1076",
         parameters = Map(
           "details" -> ("The spec (a, b, c) must be contained within the partition " +
             s"spec (a, b) defined in table '`$SESSION_CATALOG_NAME`.`db2`.`tbl2`'")))
@@ -1139,7 +1175,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
             purge = false,
             retainData = false)
         },
-        errorClass = "_LEGACY_ERROR_TEMP_1076",
+        condition = "_LEGACY_ERROR_TEMP_1076",
         parameters = Map(
           "details" -> ("The spec (a, unknown) must be contained within the partition " +
             s"spec (a, b) defined in table '`$SESSION_CATALOG_NAME`.`db2`.`tbl2`'")))
@@ -1152,7 +1188,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
             purge = false,
             retainData = false)
         },
-        errorClass = "_LEGACY_ERROR_TEMP_1076",
+        condition = "_LEGACY_ERROR_TEMP_1076",
         parameters = Map(
           "details" -> "The spec ([a=3, b=]) contains an empty partition column value"))
     }
@@ -1177,7 +1213,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
 
   test("get partition when database/table does not exist") {
     withBasicCatalog { catalog =>
-      intercept[NoSuchDatabaseException] {
+      intercept[NoSuchNamespaceException] {
         catalog.getPartition(TableIdentifier("tbl1", Some("unknown_db")), part1.spec)
       }
       intercept[NoSuchTableException] {
@@ -1192,7 +1228,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
         exception = intercept[AnalysisException] {
           catalog.getPartition(TableIdentifier("tbl1", Some("db2")), partWithLessColumns.spec)
         },
-        errorClass = "_LEGACY_ERROR_TEMP_1232",
+        condition = "_LEGACY_ERROR_TEMP_1232",
         parameters = Map(
           "specKeys" -> "a",
           "partitionColumnNames" -> "a, b",
@@ -1201,7 +1237,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
         exception = intercept[AnalysisException] {
           catalog.getPartition(TableIdentifier("tbl1", Some("db2")), partWithMoreColumns.spec)
         },
-        errorClass = "_LEGACY_ERROR_TEMP_1232",
+        condition = "_LEGACY_ERROR_TEMP_1232",
         parameters = Map(
           "specKeys" -> "a, b, c",
           "partitionColumnNames" -> "a, b",
@@ -1210,7 +1246,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
         exception = intercept[AnalysisException] {
           catalog.getPartition(TableIdentifier("tbl1", Some("db2")), partWithUnknownColumns.spec)
         },
-        errorClass = "_LEGACY_ERROR_TEMP_1232",
+        condition = "_LEGACY_ERROR_TEMP_1232",
         parameters = Map(
           "specKeys" -> "a, unknown",
           "partitionColumnNames" -> "a, b",
@@ -1219,7 +1255,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
         exception = intercept[AnalysisException] {
           catalog.getPartition(TableIdentifier("tbl1", Some("db2")), partWithEmptyValue.spec)
         },
-        errorClass = "_LEGACY_ERROR_TEMP_1076",
+        condition = "_LEGACY_ERROR_TEMP_1076",
         parameters = Map(
           "details" -> "The spec ([a=3, b=]) contains an empty partition column value"))
     }
@@ -1258,7 +1294,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
 
   test("rename partitions when database/table does not exist") {
     withBasicCatalog { catalog =>
-      intercept[NoSuchDatabaseException] {
+      intercept[NoSuchNamespaceException] {
         catalog.renamePartitions(
           TableIdentifier("tbl1", Some("unknown_db")), Seq(part1.spec), Seq(part2.spec))
       }
@@ -1277,7 +1313,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
             TableIdentifier("tbl1", Some("db2")),
             Seq(part1.spec), Seq(partWithLessColumns.spec))
         },
-        errorClass = "_LEGACY_ERROR_TEMP_1232",
+        condition = "_LEGACY_ERROR_TEMP_1232",
         parameters = Map(
           "specKeys" -> "a",
           "partitionColumnNames" -> "a, b",
@@ -1288,7 +1324,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
             TableIdentifier("tbl1", Some("db2")),
             Seq(part1.spec), Seq(partWithMoreColumns.spec))
         },
-        errorClass = "_LEGACY_ERROR_TEMP_1232",
+        condition = "_LEGACY_ERROR_TEMP_1232",
         parameters = Map(
           "specKeys" -> "a, b, c",
           "partitionColumnNames" -> "a, b",
@@ -1299,7 +1335,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
             TableIdentifier("tbl1", Some("db2")),
             Seq(part1.spec), Seq(partWithUnknownColumns.spec))
         },
-        errorClass = "_LEGACY_ERROR_TEMP_1232",
+        condition = "_LEGACY_ERROR_TEMP_1232",
         parameters = Map(
           "specKeys" -> "a, unknown",
           "partitionColumnNames" -> "a, b",
@@ -1310,7 +1346,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
             TableIdentifier("tbl1", Some("db2")),
             Seq(part1.spec), Seq(partWithEmptyValue.spec))
         },
-        errorClass = "_LEGACY_ERROR_TEMP_1076",
+        condition = "_LEGACY_ERROR_TEMP_1076",
         parameters = Map(
           "details" -> "The spec ([a=3, b=]) contains an empty partition column value"))
     }
@@ -1349,7 +1385,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
 
   test("alter partitions when database/table does not exist") {
     withBasicCatalog { catalog =>
-      intercept[NoSuchDatabaseException] {
+      intercept[NoSuchNamespaceException] {
         catalog.alterPartitions(TableIdentifier("tbl1", Some("unknown_db")), Seq(part1))
       }
       intercept[NoSuchTableException] {
@@ -1364,7 +1400,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
         exception = intercept[AnalysisException] {
           catalog.alterPartitions(TableIdentifier("tbl1", Some("db2")), Seq(partWithLessColumns))
         },
-        errorClass = "_LEGACY_ERROR_TEMP_1232",
+        condition = "_LEGACY_ERROR_TEMP_1232",
         parameters = Map(
           "specKeys" -> "a",
           "partitionColumnNames" -> "a, b",
@@ -1373,7 +1409,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
         exception = intercept[AnalysisException] {
           catalog.alterPartitions(TableIdentifier("tbl1", Some("db2")), Seq(partWithMoreColumns))
         },
-        errorClass = "_LEGACY_ERROR_TEMP_1232",
+        condition = "_LEGACY_ERROR_TEMP_1232",
         parameters = Map(
           "specKeys" -> "a, b, c",
           "partitionColumnNames" -> "a, b",
@@ -1382,7 +1418,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
         exception = intercept[AnalysisException] {
           catalog.alterPartitions(TableIdentifier("tbl1", Some("db2")), Seq(partWithUnknownColumns))
         },
-        errorClass = "_LEGACY_ERROR_TEMP_1232",
+        condition = "_LEGACY_ERROR_TEMP_1232",
         parameters = Map(
           "specKeys" -> "a, unknown",
           "partitionColumnNames" -> "a, b",
@@ -1391,7 +1427,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
         exception = intercept[AnalysisException] {
           catalog.alterPartitions(TableIdentifier("tbl1", Some("db2")), Seq(partWithEmptyValue))
         },
-        errorClass = "_LEGACY_ERROR_TEMP_1076",
+        condition = "_LEGACY_ERROR_TEMP_1076",
         parameters = Map(
           "details" -> "The spec ([a=3, b=]) contains an empty partition column value"))
     }
@@ -1423,7 +1459,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
           catalog.listPartitionNames(TableIdentifier("tbl2", Some("db2")),
             Some(partWithMoreColumns.spec))
         },
-        errorClass = "_LEGACY_ERROR_TEMP_1076",
+        condition = "_LEGACY_ERROR_TEMP_1076",
         parameters = Map(
           "details" -> ("The spec (a, b, c) must be contained within the partition spec (a, b) " +
             s"defined in table '`$SESSION_CATALOG_NAME`.`db2`.`tbl2`'")))
@@ -1432,7 +1468,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
           catalog.listPartitionNames(TableIdentifier("tbl2", Some("db2")),
             Some(partWithUnknownColumns.spec))
         },
-        errorClass = "_LEGACY_ERROR_TEMP_1076",
+        condition = "_LEGACY_ERROR_TEMP_1076",
         parameters = Map(
           "details" -> ("The spec (a, unknown) must be contained within the partition " +
             s"spec (a, b) defined in table '`$SESSION_CATALOG_NAME`.`db2`.`tbl2`'")))
@@ -1441,7 +1477,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
           catalog.listPartitionNames(TableIdentifier("tbl2", Some("db2")),
             Some(partWithEmptyValue.spec))
         },
-        errorClass = "_LEGACY_ERROR_TEMP_1076",
+        condition = "_LEGACY_ERROR_TEMP_1076",
         parameters = Map(
           "details" -> "The spec ([a=3, b=]) contains an empty partition column value"))
     }
@@ -1471,7 +1507,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
           catalog.listPartitions(TableIdentifier("tbl2", Some("db2")),
             Some(partWithMoreColumns.spec))
         },
-        errorClass = "_LEGACY_ERROR_TEMP_1076",
+        condition = "_LEGACY_ERROR_TEMP_1076",
         parameters = Map(
           "details" -> ("The spec (a, b, c) must be contained within the partition spec (a, b) " +
             s"defined in table '`$SESSION_CATALOG_NAME`.`db2`.`tbl2`'")))
@@ -1480,7 +1516,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
           catalog.listPartitions(TableIdentifier("tbl2", Some("db2")),
             Some(partWithUnknownColumns.spec))
         },
-        errorClass = "_LEGACY_ERROR_TEMP_1076",
+        condition = "_LEGACY_ERROR_TEMP_1076",
         parameters = Map(
           "details" -> ("The spec (a, unknown) must be contained within the partition " +
             s"spec (a, b) defined in table '`$SESSION_CATALOG_NAME`.`db2`.`tbl2`'")))
@@ -1489,7 +1525,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
           catalog.listPartitions(TableIdentifier("tbl2", Some("db2")),
             Some(partWithEmptyValue.spec))
         },
-        errorClass = "_LEGACY_ERROR_TEMP_1076",
+        condition = "_LEGACY_ERROR_TEMP_1076",
         parameters = Map(
           "details" -> "The spec ([a=3, b=]) contains an empty partition column value"))
     }
@@ -1497,7 +1533,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
 
   test("list partitions when database/table does not exist") {
     withBasicCatalog { catalog =>
-      intercept[NoSuchDatabaseException] {
+      intercept[NoSuchNamespaceException] {
         catalog.listPartitions(TableIdentifier("tbl1", Some("unknown_db")))
       }
       intercept[NoSuchTableException] {
@@ -1544,7 +1580,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
 
   test("create function when database does not exist") {
     withBasicCatalog { catalog =>
-      intercept[NoSuchDatabaseException] {
+      intercept[NoSuchNamespaceException] {
         catalog.createFunction(
           newFunc("func5", Some("does_not_exist")), ignoreIfExists = false)
       }
@@ -1582,8 +1618,10 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
           newFunc("temp1", None), overrideIfExists = false, functionBuilder = Some(tempFunc3))
       }
       checkError(e,
-        errorClass = "ROUTINE_ALREADY_EXISTS",
-        parameters = Map("routineName" -> "`temp1`"))
+        condition = "ROUTINE_ALREADY_EXISTS",
+        parameters = Map("routineName" -> "`temp1`",
+          "newRoutineType" -> "routine",
+          "existingRoutineType" -> "routine"))
       // Temporary function is overridden
       catalog.registerFunction(
         newFunc("temp1", None), overrideIfExists = true, functionBuilder = Some(tempFunc3))
@@ -1599,7 +1637,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
             overrideIfExists = false,
             None)
         },
-        errorClass = "CANNOT_LOAD_FUNCTION_CLASS",
+        condition = "CANNOT_LOAD_FUNCTION_CLASS",
         parameters = Map(
           "className" -> "function_class_cannot_load",
           "functionName" -> "`temp2`"
@@ -1687,7 +1725,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
 
   test("drop function when database/function does not exist") {
     withBasicCatalog { catalog =>
-      intercept[NoSuchDatabaseException] {
+      intercept[NoSuchNamespaceException] {
         catalog.dropFunction(
           FunctionIdentifier("something", Some("unknown_db")), ignoreIfNotExists = false)
       }
@@ -1710,14 +1748,14 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
         exception = intercept[NoSuchFunctionException] {
           catalog.lookupFunction(FunctionIdentifier("func1"), arguments)
         },
-        errorClass = "ROUTINE_NOT_FOUND",
+        condition = "ROUTINE_NOT_FOUND",
         parameters = Map("routineName" -> "`default`.`func1`")
       )
       checkError(
         exception = intercept[NoSuchTempFunctionException] {
           catalog.dropTempFunction("func1", ignoreIfNotExists = false)
         },
-        errorClass = "ROUTINE_NOT_FOUND",
+        condition = "ROUTINE_NOT_FOUND",
         parameters = Map("routineName" -> "`func1`")
       )
       catalog.dropTempFunction("func1", ignoreIfNotExists = true)
@@ -1726,7 +1764,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
         exception = intercept[NoSuchTempFunctionException] {
           catalog.dropTempFunction("func2", ignoreIfNotExists = false)
         },
-        errorClass = "ROUTINE_NOT_FOUND",
+        condition = "ROUTINE_NOT_FOUND",
         parameters = Map("routineName" -> "`func2`")
       )
     }
@@ -1746,7 +1784,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
 
   test("get function when database/function does not exist") {
     withBasicCatalog { catalog =>
-      intercept[NoSuchDatabaseException] {
+      intercept[NoSuchNamespaceException] {
         catalog.getFunctionMetadata(FunctionIdentifier("func1", Some("unknown_db")))
       }
       intercept[NoSuchFunctionException] {
@@ -1799,7 +1837,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
 
   test("list functions when database does not exist") {
     withBasicCatalog { catalog =>
-      intercept[NoSuchDatabaseException] {
+      intercept[NoSuchNamespaceException] {
         catalog.listFunctions("unknown_db", "func*")
       }
     }
@@ -1881,7 +1919,8 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
     conf.setConf(StaticSQLConf.METADATA_CACHE_TTL_SECONDS, 1L)
 
     withConfAndEmptyCatalog(conf) { catalog =>
-      val table = QualifiedTableName(catalog.getCurrentDatabase, "test")
+      val table = QualifiedTableName(
+        CatalogManager.SESSION_CATALOG_NAME, catalog.getCurrentDatabase, "test")
 
       // First, make sure the test table is not cached.
       assert(catalog.getCachedTable(table) === null)
@@ -1900,16 +1939,335 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
   test("SPARK-34197: refreshTable should not invalidate the relation cache for temporary views") {
     withBasicCatalog { catalog =>
       createTempView(catalog, "tbl1", Range(1, 10, 1, 10), false)
-      val qualifiedName1 = QualifiedTableName("default", "tbl1")
+      val qualifiedName1 = QualifiedTableName(SESSION_CATALOG_NAME, "default", "tbl1")
       catalog.cacheTable(qualifiedName1, Range(1, 10, 1, 10))
       catalog.refreshTable(TableIdentifier("tbl1"))
       assert(catalog.getCachedTable(qualifiedName1) != null)
 
       createGlobalTempView(catalog, "tbl2", Range(2, 10, 1, 10), false)
-      val qualifiedName2 = QualifiedTableName(catalog.globalTempViewManager.database, "tbl2")
+      val qualifiedName2 =
+        QualifiedTableName(SESSION_CATALOG_NAME, catalog.globalTempDatabase, "tbl2")
       catalog.cacheTable(qualifiedName2, Range(2, 10, 1, 10))
-      catalog.refreshTable(TableIdentifier("tbl2", Some(catalog.globalTempViewManager.database)))
+      catalog.refreshTable(TableIdentifier("tbl2", Some(catalog.globalTempDatabase)))
       assert(catalog.getCachedTable(qualifiedName2) != null)
     }
+  }
+
+  test("CatalogTable partitionSchema provides detailed error for corrupted metadata") {
+    // Test case 1: Partition columns don't match schema (wrong names)
+    val corruptedTable1 = CatalogTable(
+      identifier = TableIdentifier("corrupted_table1", Some("test_db")),
+      tableType = CatalogTableType.MANAGED,
+      storage = CatalogStorageFormat.empty,
+      schema = StructType(Seq(
+        StructField("id", IntegerType),
+        StructField("name", StringType),
+        StructField("year", IntegerType),
+        StructField("month", IntegerType)
+      )),
+      partitionColumnNames = Seq("year", "day")  // "day" doesn't exist in schema
+    )
+
+    val exception1 = intercept[AssertionError] {
+      corruptedTable1.partitionSchema
+    }
+
+    val expectedMessage1 = "assertion failed: Corrupted table metadata detected " +
+      "for table `test_db`.`corrupted_table1`. " +
+      "The partition column names in the table schema " +
+      "do not match the declared partition columns. " +
+      "Table schema columns: [id, name, year, month] " +
+      "Declared partition columns: [year, day]. " +
+      "This indicates corrupted table metadata that needs to be repaired."
+    assert(exception1.getMessage === expectedMessage1)
+
+    // Test case 2: Partition columns are not at the end of schema
+    val corruptedTable2 = CatalogTable(
+      identifier = TableIdentifier("corrupted_table2", Some("test_db")),
+      tableType = CatalogTableType.MANAGED,
+      storage = CatalogStorageFormat.empty,
+      schema = StructType(Seq(
+        StructField("year", IntegerType),
+        StructField("id", IntegerType),
+        StructField("name", StringType),
+        StructField("month", IntegerType)
+      )),
+      partitionColumnNames = Seq("year", "month")
+    )
+
+    val exception2 = intercept[AssertionError] {
+      corruptedTable2.partitionSchema
+    }
+
+    val expectedMessage2 = "assertion failed: Corrupted table metadata detected " +
+      "for table `test_db`.`corrupted_table2`. " +
+      "The partition column names in the table schema " +
+      "do not match the declared partition columns. " +
+      "Table schema columns: [year, id, name, month] " +
+      "Declared partition columns: [year, month]. " +
+      "This indicates corrupted table metadata that needs to be repaired."
+    assert(exception2.getMessage === expectedMessage2)
+
+    // Test case 3: Valid table should work without error
+    val validTable = CatalogTable(
+      identifier = TableIdentifier("valid_table", Some("test_db")),
+      tableType = CatalogTableType.MANAGED,
+      storage = CatalogStorageFormat.empty,
+      schema = StructType(Seq(
+        StructField("id", IntegerType),
+        StructField("name", StringType),
+        StructField("year", IntegerType),
+        StructField("month", IntegerType)
+      )),
+      partitionColumnNames = Seq("year", "month")  // Matches schema
+    )
+
+    // This should not throw an exception
+    val partitionSchema = validTable.partitionSchema
+    assert(partitionSchema.fieldNames.toSeq == Seq("year", "month"))
+    assert(partitionSchema.fields.length == 2)
+  }
+
+  test("corrupted view metadata: mismatch between viewQueryColumnNames and schema") {
+    withSQLConf("spark.sql.viewSchemaBinding.enabled" -> "true") {
+      withBasicCatalog { catalog =>
+        val db = "test_db"
+        catalog.createDatabase(newDb(db), ignoreIfExists = false)
+
+        // First create a base table for the view to reference
+        val baseTable = CatalogTable(
+          identifier = TableIdentifier("base_table", Some(db)),
+          tableType = CatalogTableType.MANAGED,
+          storage = CatalogStorageFormat.empty,
+          schema = new StructType()
+            .add("id", IntegerType)
+            .add("name", StringType)
+            .add("value", DoubleType)
+        )
+        catalog.createTable(baseTable, ignoreIfExists = false)
+
+        // Create a view with corrupted metadata where viewQueryColumnNames length
+        // doesn't match schema length
+        // We need to set the properties to define viewQueryColumnNames
+        val properties = Map(
+          "view.query.out.numCols" -> "2",
+          "view.query.out.col.0" -> "id",
+          "view.query.out.col.1" -> "name",
+          "view.schema.mode" -> "binding"  // Ensure it's not SchemaEvolution
+        )
+        val corruptedView = CatalogTable(
+          identifier = TableIdentifier("corrupted_view", Some(db)),
+          tableType = CatalogTableType.VIEW,
+          storage = CatalogStorageFormat.empty,
+          schema = new StructType()
+            .add("id", IntegerType)
+            .add("name", StringType)
+            .add("value", DoubleType),
+          viewText = Some("SELECT * FROM test_db.base_table"),
+          provider = Some("spark"),  // Ensure it's not Hive-created
+          properties = properties  // Only 2 query column names but schema has 3 columns
+        )
+
+        catalog.createTable(corruptedView, ignoreIfExists = false)
+
+        // Verify the view was created with corrupted metadata
+        val retrievedView = catalog.getTableMetadata(TableIdentifier("corrupted_view", Some(db)))
+        assert(retrievedView.viewQueryColumnNames.length == 2)
+        assert(retrievedView.schema.length == 3)
+
+        // Attempting to look up the view should throw an assertion error with detailed message
+        val exception = intercept[AssertionError] {
+          catalog.lookupRelation(TableIdentifier("corrupted_view", Some(db)))
+        }
+
+        // The expected message pattern allows for optional catalog prefix
+        val expectedPattern =
+          "assertion failed: Corrupted view metadata detected for view " +
+          "(\\`\\w+\\`\\.)?\\`test_db\\`\\.\\`corrupted_view\\`\\. " +
+          "The number of view query column names 2 " +
+          "does not match the number of columns in the view schema 3\\. " +
+          "View query column names: \\[id, name\\], " +
+          "View schema columns: \\[id, name, value\\]\\. " +
+          "This indicates corrupted view metadata that needs to be repaired\\."
+        assert(exception.getMessage.matches(expectedPattern))
+      }
+    }
+  }
+
+  test("UnresolvedCatalogRelation requires database in identifier") {
+    withEmptyCatalog { catalog =>
+      val db = "test_db"
+      catalog.createDatabase(newDb(db), ignoreIfExists = true)
+
+      // Create a table with database
+      val validTable = CatalogTable(
+        identifier = TableIdentifier("test_table", Some(db)),
+        tableType = CatalogTableType.MANAGED,
+        storage = CatalogStorageFormat.empty,
+        schema = new StructType().add("id", IntegerType)
+      )
+      catalog.createTable(validTable, ignoreIfExists = false)
+
+      // Try to create UnresolvedCatalogRelation without database - should fail
+      val tableMetaWithoutDb = validTable.copy(
+        identifier = TableIdentifier("test_table", None)
+      )
+
+      val exception = intercept[AssertionError] {
+        UnresolvedCatalogRelation(tableMetaWithoutDb)
+      }
+
+      val expectedMessage =
+        "assertion failed: Table identifier `test_table` is missing database name. " +
+        "UnresolvedCatalogRelation requires a fully qualified table identifier with database."
+      assert(exception.getMessage === expectedMessage)
+    }
+  }
+
+  test("HiveTableRelation requires database in identifier") {
+    withEmptyCatalog { catalog =>
+      val db = "test_db"
+      catalog.createDatabase(newDb(db), ignoreIfExists = true)
+
+      // Create a table with database
+      val validTable = CatalogTable(
+        identifier = TableIdentifier("test_table", Some(db)),
+        tableType = CatalogTableType.MANAGED,
+        storage = CatalogStorageFormat.empty,
+        schema = new StructType()
+          .add("id", IntegerType)
+          .add("name", StringType)
+      )
+
+      // Try to create HiveTableRelation without database - should fail
+      val tableMetaWithoutDb = validTable.copy(
+        identifier = TableIdentifier("test_table", None)
+      )
+
+      val exception = intercept[AssertionError] {
+        HiveTableRelation(
+          tableMetaWithoutDb,
+          Seq(AttributeReference("id", IntegerType)()),
+          Seq.empty
+        )
+      }
+
+      val expectedMessage =
+        "assertion failed: Table identifier `test_table` is missing database name. " +
+        "HiveTableRelation requires a fully qualified table identifier with database."
+      assert(exception.getMessage === expectedMessage)
+    }
+  }
+
+  test("SQLFunction requires either exprText or queryText") {
+    // Test case 1: Neither exprText nor queryText provided
+    val exception1 = intercept[AssertionError] {
+      SQLFunction(
+        name = FunctionIdentifier("test_func"),
+        inputParam = None,
+        returnType = scala.util.Left(IntegerType),
+        exprText = None,
+        queryText = None,
+        comment = None,
+        deterministic = Some(true),
+        containsSQL = Some(false),
+        isTableFunc = false,
+        properties = Map.empty
+      )
+    }
+
+    val expectedMessage = "assertion failed: SQL function 'test_func' is missing function body. " +
+      "Either exprText or queryText must be defined. " +
+      "Found: exprText=None, queryText=None."
+    assert(exception1.getMessage === expectedMessage)
+  }
+
+  test("SQLFunction return type must match function type") {
+    // Test case: isTableFunc=true but returnType is Left (scalar type)
+    val exception = intercept[AssertionError] {
+      SQLFunction(
+        name = FunctionIdentifier("test_func"),
+        inputParam = None,
+        returnType = scala.util.Left(IntegerType),  // Scalar return type
+        exprText = Some("SELECT 1"),
+        queryText = None,
+        comment = None,
+        deterministic = Some(true),
+        containsSQL = Some(true),
+        isTableFunc = true,  // But marked as table function
+        properties = Map.empty
+      )
+    }
+
+    val expectedMessage =
+      "assertion failed: SQL function 'test_func' has mismatched function type " +
+      "and return type. " +
+      "isTableFunc=true, returnType.isRight=false, returnType.isLeft=true. " +
+      "Table functions require Right[StructType] and scalar functions require Left[DataType]."
+    assert(exception.getMessage === expectedMessage)
+  }
+
+  test("InMemoryCatalog.createTable requires database in identifier") {
+    val catalog = new InMemoryCatalog()
+    val db = "test_db"
+    val dbDefinition = CatalogDatabase(
+      name = db,
+      description = "test database",
+      locationUri = Utils.createTempDir().toURI,
+      properties = Map.empty
+    )
+    catalog.createDatabase(dbDefinition, ignoreIfExists = false)
+
+    // Try to create table without database - should fail
+    val tableWithoutDb = CatalogTable(
+      identifier = TableIdentifier("test_table", None),
+      tableType = CatalogTableType.MANAGED,
+      storage = CatalogStorageFormat.empty,
+      schema = new StructType().add("id", IntegerType)
+    )
+
+    val exception = intercept[AssertionError] {
+      catalog.createTable(tableWithoutDb, ignoreIfExists = false)
+    }
+
+    val expectedMessage =
+      "assertion failed: Table identifier `test_table` is missing database name. " +
+      "Cannot create table without a database specified."
+    assert(exception.getMessage === expectedMessage)
+  }
+
+  test("InMemoryCatalog.alterTable requires database in identifier") {
+    val catalog = new InMemoryCatalog()
+    val db = "test_db"
+    val dbDefinition = CatalogDatabase(
+      name = db,
+      description = "test database",
+      locationUri = Utils.createTempDir().toURI,
+      properties = Map.empty
+    )
+    catalog.createDatabase(dbDefinition, ignoreIfExists = false)
+
+    // First create a valid table
+    val validTable = CatalogTable(
+      identifier = TableIdentifier("test_table", Some(db)),
+      tableType = CatalogTableType.MANAGED,
+      storage = CatalogStorageFormat.empty,
+      schema = new StructType().add("id", IntegerType)
+    )
+    catalog.createTable(validTable, ignoreIfExists = false)
+
+    // Try to alter table with identifier without database - should fail
+    val tableWithoutDb = validTable.copy(
+      identifier = TableIdentifier("test_table", None)
+    )
+
+    val exception = intercept[AssertionError] {
+      catalog.alterTable(tableWithoutDb)
+    }
+
+    val expectedMessage =
+      "assertion failed: Table identifier `test_table` is missing database name. " +
+      "Cannot alter table without a database specified."
+    assert(exception.getMessage === expectedMessage)
   }
 }

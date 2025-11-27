@@ -85,9 +85,10 @@ class CatalogManager(
    * in the fallback configuration, spark.sql.sources.useV1SourceList
    */
   private[sql] def v2SessionCatalog: CatalogPlugin = {
-    conf.getConf(SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION).map { _ =>
-      catalogs.getOrElseUpdate(SESSION_CATALOG_NAME, loadV2SessionCatalog())
-    }.getOrElse(defaultSessionCatalog)
+    conf.getConf(SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION) match {
+      case "builtin" => defaultSessionCatalog
+      case _ => catalogs.getOrElseUpdate(SESSION_CATALOG_NAME, loadV2SessionCatalog())
+    }
   }
 
   private var _currentNamespace: Option[Array[String]] = None
@@ -106,17 +107,23 @@ class CatalogManager(
     }
   }
 
-  def setCurrentNamespace(namespace: Array[String]): Unit = synchronized {
+  private def assertNamespaceExist(namespace: Array[String]): Unit = {
     currentCatalog match {
-      case _ if isSessionCatalog(currentCatalog) && namespace.length == 1 =>
-        v1SessionCatalog.setCurrentDatabase(namespace.head)
-      case _ if isSessionCatalog(currentCatalog) =>
-        throw QueryCompilationErrors.noSuchNamespaceError(namespace)
       case catalog: SupportsNamespaces if !catalog.namespaceExists(namespace) =>
-        throw QueryCompilationErrors.noSuchNamespaceError(namespace)
+        throw QueryCompilationErrors.noSuchNamespaceError(catalog.name() +: namespace)
       case _ =>
-        _currentNamespace = Some(namespace)
     }
+  }
+
+  def setCurrentNamespace(namespace: Array[String]): Unit = synchronized {
+    if (isSessionCatalog(currentCatalog) && namespace.length == 1) {
+      v1SessionCatalog.setCurrentDatabaseWithNameCheck(
+        namespace.head,
+        _ => assertNamespaceExist(namespace))
+    } else {
+      assertNamespaceExist(namespace)
+    }
+    _currentNamespace = Some(namespace)
   }
 
   private var _currentCatalogName: Option[String] = None

@@ -118,9 +118,11 @@ struct<>
 -- !query output
 org.apache.spark.SparkUnsupportedOperationException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2096",
+  "errorClass" : "UNSUPPORTED_FEATURE.TABLE_OPERATION",
+  "sqlState" : "0A000",
   "messageParameters" : {
-    "ddl" : "UPDATE TABLE"
+    "operation" : "UPDATE TABLE",
+    "tableName" : "`spark_catalog`.`s`.`tab`"
   }
 }
 
@@ -133,9 +135,11 @@ struct<>
 -- !query output
 org.apache.spark.SparkUnsupportedOperationException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2096",
+  "errorClass" : "UNSUPPORTED_FEATURE.TABLE_OPERATION",
+  "sqlState" : "0A000",
   "messageParameters" : {
-    "ddl" : "MERGE INTO TABLE"
+    "operation" : "MERGE INTO TABLE",
+    "tableName" : "`spark_catalog`.`s`.`tab`"
   }
 }
 
@@ -843,7 +847,138 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
-CREATE TABLE IDENTIFIER(1)(c1 INT)
+CREATE TABLE t(col1 INT)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT * FROM IDENTIFIER((SELECT 't'))
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "NOT_A_CONSTANT_STRING.NOT_CONSTANT",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "expr" : "scalarsubquery()",
+    "name" : "IDENTIFIER"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 26,
+    "stopIndex" : 37,
+    "fragment" : "(SELECT 't')"
+  } ]
+}
+
+
+-- !query
+SELECT * FROM (SELECT IDENTIFIER((SELECT 'col1')) FROM IDENTIFIER((SELECT 't')))
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "NOT_A_CONSTANT_STRING.NOT_CONSTANT",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "expr" : "scalarsubquery()",
+    "name" : "IDENTIFIER"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 67,
+    "stopIndex" : 78,
+    "fragment" : "(SELECT 't')"
+  } ]
+}
+
+
+-- !query
+SELECT IDENTIFIER((SELECT 'col1')) FROM VALUES(1)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "NOT_A_CONSTANT_STRING.NOT_CONSTANT",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "expr" : "scalarsubquery()",
+    "name" : "IDENTIFIER"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 19,
+    "stopIndex" : 33,
+    "fragment" : "(SELECT 'col1')"
+  } ]
+}
+
+
+-- !query
+SELECT col1, IDENTIFIER((SELECT col1)) FROM VALUES(1)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "NOT_A_CONSTANT_STRING.NOT_CONSTANT",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "expr" : "scalarsubquery(col1)",
+    "name" : "IDENTIFIER"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 25,
+    "stopIndex" : 37,
+    "fragment" : "(SELECT col1)"
+  } ]
+}
+
+
+-- !query
+SELECT IDENTIFIER((SELECT 'col1', 'col2')) FROM VALUES(1,2)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "UNSUPPORTED_TYPED_LITERAL",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "supportedTypes" : "\"DATE\", \"TIMESTAMP_NTZ\", \"TIMESTAMP_LTZ\", \"TIMESTAMP\", \"INTERVAL\", \"X\", \"TIME\"",
+    "unsupportedType" : "\"SELECT\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 20,
+    "stopIndex" : 32,
+    "fragment" : "SELECT 'col1'"
+  } ]
+}
+
+
+-- !query
+DROP TABLE t
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE TABLE IDENTIFIER(1)(c1 INT) USING csv
 -- !query schema
 struct<>
 -- !query output
@@ -867,7 +1002,7 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
-CREATE TABLE IDENTIFIER('a.b.c')(c1 INT)
+CREATE TABLE IDENTIFIER('a.b.c')(c1 INT) USING csv
 -- !query schema
 struct<>
 -- !query output
@@ -980,7 +1115,8 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "IDENTIFIER_TOO_MANY_NAME_PARTS",
   "sqlState" : "42601",
   "messageParameters" : {
-    "identifier" : "`a`.`b`.`c`.`d`"
+    "identifier" : "`a`.`b`.`c`.`d`",
+    "limit" : "2"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1024,7 +1160,7 @@ org.apache.spark.sql.catalyst.parser.ParseException
   "errorClass" : "INVALID_SQL_SYNTAX.MULTI_PART_NAME",
   "sqlState" : "42000",
   "messageParameters" : {
-    "funcName" : "`default`.`myDoubleAvg`",
+    "name" : "`default`.`myDoubleAvg`",
     "statement" : "DROP TEMPORARY FUNCTION"
   },
   "queryContext" : [ {
@@ -1060,35 +1196,143 @@ org.apache.spark.sql.catalyst.parser.ParseException
 
 
 -- !query
+create temporary view identifier('v1') as (select my_col from (values (1), (2), (1) as (my_col)) group by 1)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+cache table identifier('t1') as (select my_col from (values (1), (2), (1) as (my_col)) group by 1)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+create table identifier('t2') using csv as (select my_col from (values (1), (2), (1) as (my_col)) group by 1)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+insert into identifier('t2') select my_col from (values (3) as (my_col)) group by 1
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+drop view v1
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+drop table t1
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+drop table t2
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DECLARE agg = 'max'
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DECLARE col = 'c1'
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DECLARE tab = 'T'
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+WITH S(c1, c2) AS (VALUES(1, 2), (2, 3)),
+     T(c1, c2) AS (VALUES ('a', 'b'), ('c', 'd'))
+SELECT IDENTIFIER(agg)(IDENTIFIER(col)) FROM IDENTIFIER(tab)
+-- !query schema
+struct<max(c1):string>
+-- !query output
+c
+
+
+-- !query
+WITH S(c1, c2) AS (VALUES(1, 2), (2, 3)),
+     T(c1, c2) AS (VALUES ('a', 'b'), ('c', 'd'))
+SELECT IDENTIFIER('max')(IDENTIFIER('c1')) FROM IDENTIFIER('T')
+-- !query schema
+struct<max(c1):string>
+-- !query output
+c
+
+
+-- !query
+WITH ABC(c1, c2) AS (VALUES(1, 2), (2, 3))
+SELECT IDENTIFIER('max')(IDENTIFIER('c1')) FROM IDENTIFIER('A' || 'BC')
+-- !query schema
+struct<max(c1):int>
+-- !query output
+2
+
+
+-- !query
 SELECT row_number() OVER IDENTIFIER('x.win') FROM VALUES(1) AS T(c1) WINDOW win AS (ORDER BY c1)
 -- !query schema
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "errorClass" : "IDENTIFIER_TOO_MANY_NAME_PARTS",
   "sqlState" : "42601",
   "messageParameters" : {
-    "error" : "''x.win''",
-    "hint" : ""
-  }
+    "identifier" : "`x`.`win`",
+    "limit" : "1"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 26,
+    "stopIndex" : 44,
+    "fragment" : "IDENTIFIER('x.win')"
+  } ]
 }
 
 
 -- !query
 SELECT T1.c1 FROM VALUES(1) AS T1(c1) JOIN VALUES(1) AS T2(c1) USING (IDENTIFIER('c1'))
 -- !query schema
-struct<>
+struct<c1:int>
 -- !query output
-org.apache.spark.sql.catalyst.parser.ParseException
-{
-  "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "42601",
-  "messageParameters" : {
-    "error" : "'('",
-    "hint" : ""
-  }
-}
+1
 
 
 -- !query
@@ -1117,33 +1361,17 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 SELECT map('a', 1).IDENTIFIER('a') FROM VALUES(1) AS T(c1)
 -- !query schema
-struct<>
+struct<map(a, 1)[a]:int>
 -- !query output
-org.apache.spark.sql.catalyst.parser.ParseException
-{
-  "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "42601",
-  "messageParameters" : {
-    "error" : "''a''",
-    "hint" : ""
-  }
-}
+1
 
 
 -- !query
 SELECT named_struct('a', 1).IDENTIFIER('a') FROM VALUES(1) AS T(c1)
 -- !query schema
-struct<>
+struct<named_struct(a, 1).a:int>
 -- !query output
-org.apache.spark.sql.catalyst.parser.ParseException
-{
-  "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "42601",
-  "messageParameters" : {
-    "error" : "''a''",
-    "hint" : ""
-  }
-}
+1
 
 
 -- !query
@@ -1151,12 +1379,12 @@ SELECT * FROM s.IDENTIFIER('tab')
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.parser.ParseException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "INVALID_SQL_SYNTAX.INVALID_TABLE_VALUED_FUNC_NAME",
-  "sqlState" : "42000",
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
   "messageParameters" : {
-    "funcName" : "`s`.`IDENTIFIER`"
+    "relationName" : "`s`.`tab`"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1173,14 +1401,20 @@ SELECT * FROM IDENTIFIER('s').IDENTIFIER('tab')
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.parser.ParseException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "42601",
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
   "messageParameters" : {
-    "error" : "'.'",
-    "hint" : ""
-  }
+    "relationName" : "`s`.`tab`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 15,
+    "stopIndex" : 47,
+    "fragment" : "IDENTIFIER('s').IDENTIFIER('tab')"
+  } ]
 }
 
 
@@ -1189,79 +1423,61 @@ SELECT * FROM IDENTIFIER('s').tab
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.parser.ParseException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "42601",
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
   "messageParameters" : {
-    "error" : "'.'",
-    "hint" : ""
-  }
+    "relationName" : "`s`.`tab`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 15,
+    "stopIndex" : 33,
+    "fragment" : "IDENTIFIER('s').tab"
+  } ]
 }
 
 
 -- !query
 SELECT row_number() OVER IDENTIFIER('win') FROM VALUES(1) AS T(c1) WINDOW win AS (ORDER BY c1)
 -- !query schema
-struct<>
+struct<row_number() OVER (ORDER BY c1 ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):int>
 -- !query output
-org.apache.spark.sql.catalyst.parser.ParseException
-{
-  "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "42601",
-  "messageParameters" : {
-    "error" : "''win''",
-    "hint" : ""
-  }
-}
+1
 
 
 -- !query
 SELECT row_number() OVER win FROM VALUES(1) AS T(c1) WINDOW IDENTIFIER('win') AS (ORDER BY c1)
 -- !query schema
-struct<>
+struct<row_number() OVER (ORDER BY c1 ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):int>
 -- !query output
-org.apache.spark.sql.catalyst.parser.ParseException
-{
-  "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "42601",
-  "messageParameters" : {
-    "error" : "'WINDOW'",
-    "hint" : ""
-  }
-}
+1
+
+
+-- !query
+SELECT 1 AS IDENTIFIER('col1')
+-- !query schema
+struct<col1:int>
+-- !query output
+1
+
+
+-- !query
+SELECT my_table.* FROM VALUES (1, 2) AS IDENTIFIER('my_table')(IDENTIFIER('c1'), IDENTIFIER('c2'))
+-- !query schema
+struct<c1:int,c2:int>
+-- !query output
+1	2
 
 
 -- !query
 WITH identifier('v')(identifier('c1')) AS (VALUES(1)) (SELECT c1 FROM v)
 -- !query schema
-struct<>
+struct<c1:int>
 -- !query output
-org.apache.spark.sql.catalyst.parser.ParseException
-{
-  "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "42601",
-  "messageParameters" : {
-    "error" : "''v''",
-    "hint" : ""
-  }
-}
-
-
--- !query
-INSERT INTO tab(IDENTIFIER('c1')) VALUES(1)
--- !query schema
-struct<>
--- !query output
-org.apache.spark.sql.catalyst.parser.ParseException
-{
-  "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "42601",
-  "messageParameters" : {
-    "error" : "'('",
-    "hint" : ": missing ')'"
-  }
-}
+1
 
 
 -- !query
@@ -1269,19 +1485,951 @@ CREATE OR REPLACE VIEW v(IDENTIFIER('c1')) AS VALUES(1)
 -- !query schema
 struct<>
 -- !query output
+
+
+
+-- !query
+SELECT c1 FROM v
+-- !query schema
+struct<c1:int>
+-- !query output
+1
+
+
+-- !query
+DROP VIEW IF EXISTS v
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE TABLE tab(IDENTIFIER('c1') INT) USING CSV
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+INSERT INTO tab(IDENTIFIER('c1')) VALUES(1)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT c1 FROM tab
+-- !query schema
+struct<c1:int>
+-- !query output
+1
+
+
+-- !query
+ALTER TABLE IDENTIFIER('tab') RENAME COLUMN IDENTIFIER('c1') TO IDENTIFIER('col1')
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNSUPPORTED_FEATURE.TABLE_OPERATION",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "operation" : "RENAME COLUMN",
+    "tableName" : "`spark_catalog`.`default`.`tab`"
+  }
+}
+
+
+-- !query
+SELECT col1 FROM tab
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`col1`",
+    "proposal" : "`c1`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 11,
+    "fragment" : "col1"
+  } ]
+}
+
+
+-- !query
+ALTER TABLE IDENTIFIER('tab') ADD COLUMN IDENTIFIER('c2') INT
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT c2 FROM tab
+-- !query schema
+struct<c2:int>
+-- !query output
+NULL
+
+
+-- !query
+ALTER TABLE IDENTIFIER('tab') DROP COLUMN IDENTIFIER('c2')
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNSUPPORTED_FEATURE.TABLE_OPERATION",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "operation" : "DROP COLUMN",
+    "tableName" : "`spark_catalog`.`default`.`tab`"
+  }
+}
+
+
+-- !query
+ALTER TABLE IDENTIFIER('tab') RENAME TO IDENTIFIER('tab_renamed')
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT * FROM tab_renamed
+-- !query schema
+struct<c1:int,c2:int>
+-- !query output
+1	NULL
+
+
+-- !query
+DROP TABLE IF EXISTS tab_renamed
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP TABLE IF EXISTS tab
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE TABLE test_col_with_dot(IDENTIFIER('`col.with.dot`') INT) USING CSV
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP TABLE IF EXISTS test_col_with_dot
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT * FROM VALUES (1, 2) AS IDENTIFIER('schema.table')(c1, c2)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "IDENTIFIER_TOO_MANY_NAME_PARTS",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "identifier" : "`schema`.`table`",
+    "limit" : "1"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 15,
+    "stopIndex" : 65,
+    "fragment" : "VALUES (1, 2) AS IDENTIFIER('schema.table')(c1, c2)"
+  } ]
+}
+
+
+-- !query
+SELECT 1 AS IDENTIFIER('col1.col2')
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "IDENTIFIER_TOO_MANY_NAME_PARTS",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "identifier" : "`col1`.`col2`",
+    "limit" : "1"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 35,
+    "fragment" : "1 AS IDENTIFIER('col1.col2')"
+  } ]
+}
+
+
+-- !query
+CREATE SCHEMA identifier_clause_test_schema
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+USE identifier_clause_test_schema
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE TABLE test_show(c1 INT, c2 STRING) USING CSV
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SHOW VIEWS IN IDENTIFIER('identifier_clause_test_schema')
+-- !query schema
+struct<namespace:string,viewName:string,isTemporary:boolean>
+-- !query output
+
+
+
+-- !query
+SHOW PARTITIONS IDENTIFIER('test_show')
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_PARTITION_OPERATION.PARTITION_SCHEMA_IS_EMPTY",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "name" : "`spark_catalog`.`identifier_clause_test_schema`.`test_show`"
+  }
+}
+
+
+-- !query
+SHOW CREATE TABLE IDENTIFIER('test_show')
+-- !query schema
+struct<createtab_stmt:string>
+-- !query output
+CREATE TABLE spark_catalog.identifier_clause_test_schema.test_show (
+  c1 INT,
+  c2 STRING)
+USING CSV
+
+
+-- !query
+DROP TABLE test_show
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE TABLE test_desc(c1 INT) USING CSV
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DESCRIBE TABLE IDENTIFIER('test_desc')
+-- !query schema
+struct<col_name:string,data_type:string,comment:string>
+-- !query output
+c1                  	int
+
+
+-- !query
+DESCRIBE FORMATTED IDENTIFIER('test_desc')
+-- !query schema
+struct<col_name:string,data_type:string,comment:string>
+-- !query output
+c1                  	int                 	                    
+                    	                    	                    
+# Detailed Table Information	                    	                    
+Catalog             	spark_catalog       	                    
+Database            	identifier_clause_test_schema	                    
+Table               	test_desc           	                    
+Created Time [not included in comparison]
+Last Access [not included in comparison]
+Created By [not included in comparison]
+Type                	MANAGED             	                    
+Provider            	CSV                 	                    
+Location [not included in comparison]/{warehouse_dir}/identifier_clause_test_schema.db/test_desc
+
+
+-- !query
+DESCRIBE EXTENDED IDENTIFIER('test_desc')
+-- !query schema
+struct<col_name:string,data_type:string,comment:string>
+-- !query output
+c1                  	int                 	                    
+                    	                    	                    
+# Detailed Table Information	                    	                    
+Catalog             	spark_catalog       	                    
+Database            	identifier_clause_test_schema	                    
+Table               	test_desc           	                    
+Created Time [not included in comparison]
+Last Access [not included in comparison]
+Created By [not included in comparison]
+Type                	MANAGED             	                    
+Provider            	CSV                 	                    
+Location [not included in comparison]/{warehouse_dir}/identifier_clause_test_schema.db/test_desc
+
+
+-- !query
+DESC IDENTIFIER('test_desc')
+-- !query schema
+struct<col_name:string,data_type:string,comment:string>
+-- !query output
+c1                  	int
+
+
+-- !query
+DROP TABLE test_desc
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE TABLE test_comment(c1 INT, c2 STRING) USING CSV
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+COMMENT ON TABLE IDENTIFIER('test_comment') IS 'table comment'
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+ALTER TABLE test_comment ALTER COLUMN IDENTIFIER('c1') COMMENT 'column comment'
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP TABLE test_comment
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE TABLE identifier_clause_test_schema.test_table(c1 INT) USING CSV
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+ANALYZE TABLE IDENTIFIER('identifier_clause_test_schema.test_table') COMPUTE STATISTICS
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+REFRESH TABLE IDENTIFIER('identifier_clause_test_schema.test_table')
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DESCRIBE IDENTIFIER('identifier_clause_test_schema.test_table')
+-- !query schema
+struct<col_name:string,data_type:string,comment:string>
+-- !query output
+c1                  	int
+
+
+-- !query
+SHOW COLUMNS FROM IDENTIFIER('identifier_clause_test_schema.test_table')
+-- !query schema
+struct<col_name:string>
+-- !query output
+c1
+
+
+-- !query
+DROP TABLE IDENTIFIER('identifier_clause_test_schema.test_table')
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DECLARE IDENTIFIER('my_var') = 'value'
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SET VAR IDENTIFIER('my_var') = 'new_value'
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT IDENTIFIER('my_var')
+-- !query schema
+struct<variablereference(system.session.my_var='new_value'):string>
+-- !query output
+new_value
+
+
+-- !query
+DROP TEMPORARY VARIABLE IDENTIFIER('my_var')
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE TEMPORARY FUNCTION test_udf(IDENTIFIER('param1') INT, IDENTIFIER('param2') STRING)
+RETURNS INT
+RETURN IDENTIFIER('param1') + length(IDENTIFIER('param2'))
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT test_udf(5, 'hello')
+-- !query schema
+struct<test_udf(5, hello):int>
+-- !query output
+10
+
+
+-- !query
+DROP TEMPORARY FUNCTION test_udf
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE TEMPORARY FUNCTION test_table_udf(IDENTIFIER('input_val') INT)
+RETURNS TABLE(IDENTIFIER('col1') INT, IDENTIFIER('col2') STRING)
+RETURN SELECT IDENTIFIER('input_val'), 'result'
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT * FROM test_table_udf(42)
+-- !query schema
+struct<col1:int,col2:string>
+-- !query output
+42	result
+
+
+-- !query
+DROP TEMPORARY FUNCTION test_table_udf
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT IDENTIFIER(:tab \'b\').c1 FROM VALUES(1) AS tab(c1)' USING 'ta' AS tab
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_EXTRACT_BASE_FIELD_TYPE",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "base" : "\"variablereference(system.session.tab='T')\"",
+    "other" : "\"STRING\""
+  }
+}
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT IDENTIFIER(:col1 ''.c2'') FROM VALUES(named_struct(''c2'', 42)) AS T(c1)'
+  USING 'c1' AS col1
+-- !query schema
+struct<c1.c2:int>
+-- !query output
+42
+
+
+-- !query
+CREATE TABLE integration_test(c1 INT, c2 STRING) USING CSV
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+INSERT INTO integration_test VALUES (1, 'a'), (2, 'b')
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT * FROM IDENTIFIER(:schema ''.'' :table) ORDER BY ALL'
+  USING 'identifier_clause_test_schema' AS schema, 'integration_test' AS table
+-- !query schema
+struct<c1:int,c2:string>
+-- !query output
+1	a
+2	b
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT IDENTIFIER(:prefix ''1''), IDENTIFIER(:prefix ''2'') FROM integration_test ORDER BY ALL'
+  USING 'c' AS prefix
+-- !query schema
+struct<c1:int,c2:string>
+-- !query output
+1	a
+2	b
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT * FROM integration_test WHERE IDENTIFIER(:col) = :val'
+  USING 'c1' AS col, 1 AS val
+-- !query schema
+struct<c1:int,c2:string>
+-- !query output
+1	a
+
+
+-- !query
+CREATE TABLE integration_test2(c1 INT, c3 STRING) USING CSV
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+INSERT INTO integration_test2 VALUES (1, 'x'), (2, 'y')
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT t1.*, t2.* FROM IDENTIFIER(:t1) t1 JOIN IDENTIFIER(:t2) t2 USING (IDENTIFIER(:col)) ORDER BY ALL'
+  USING 'integration_test' AS t1, 'integration_test2' AS t2, 'c1' AS col
+-- !query schema
+struct<c1:int,c2:string,c1:int,c3:string>
+-- !query output
+1	a	1	x
+2	b	2	y
+
+
+-- !query
+EXECUTE IMMEDIATE
+  'SELECT IDENTIFIER(:col1), IDENTIFIER(:col2), row_number() OVER (PARTITION BY IDENTIFIER(:part) ORDER BY IDENTIFIER(:ord)) as rn FROM integration_test'
+  USING 'c1' AS col1, 'c2' AS col2, 'c2' AS part, 'c1' AS ord
+-- !query schema
+struct<c1:int,c2:string,rn:int>
+-- !query output
+1	a	1
+2	b	1
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT IDENTIFIER(:prefix ''2''), IDENTIFIER(:agg)(IDENTIFIER(:col)) FROM integration_test GROUP BY IDENTIFIER(:prefix ''2'') ORDER BY ALL'
+  USING 'c' AS prefix, 'count' AS agg, 'c1' AS col
+-- !query schema
+struct<c2:string,count(c1):bigint>
+-- !query output
+a	1
+b	1
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT * FROM integration_test ORDER BY IDENTIFIER(:col1) DESC, IDENTIFIER(:col2)'
+  USING 'c1' AS col1, 'c2' AS col2
+-- !query schema
+struct<c1:int,c2:string>
+-- !query output
+2	b
+1	a
+
+
+-- !query
+EXECUTE IMMEDIATE 'INSERT INTO integration_test(IDENTIFIER(:col1), IDENTIFIER(:col2)) VALUES (:val1, :val2)'
+  USING 'c1' AS col1, 'c2' AS col2, 3 AS val1, 'c' AS val2
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT IDENTIFIER(concat(:schema, ''.'', :table, ''.c1'')) FROM VALUES(named_struct(''c1'', 100)) AS IDENTIFIER(:alias)(IDENTIFIER(:schema ''.'' :table))'
+  USING 'identifier_clause_test_schema' AS schema, 'my_table' AS table, 't' AS alias
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "IDENTIFIER_TOO_MANY_NAME_PARTS",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "identifier" : "`identifier_clause_test_schema`.`my_table`",
+    "limit" : "1"
+  },
+  "queryContext" : [ {
+    "objectType" : "EXECUTE IMMEDIATE",
+    "objectName" : "",
+    "startIndex" : 115,
+    "stopIndex" : 144,
+    "fragment" : "IDENTIFIER(:schema '.' :table)"
+  } ]
+}
+
+
+-- !query
+EXECUTE IMMEDIATE 'WITH IDENTIFIER(:cte_name)(c1) AS (VALUES(1)) SELECT c1 FROM IDENTIFIER(:cte_name)'
+  USING 'my_cte' AS cte_name
+-- !query schema
+struct<c1:int>
+-- !query output
+1
+
+
+-- !query
+EXECUTE IMMEDIATE 'CREATE OR REPLACE TEMPORARY VIEW IDENTIFIER(:view_name)(IDENTIFIER(:col_name)) AS VALUES(1)'
+  USING 'test_view' AS view_name, 'test_col' AS col_name
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT IDENTIFIER(:col) FROM IDENTIFIER(:view)'
+  USING 'test_col' AS col, 'test_view' AS view
+-- !query schema
+struct<test_col:int>
+-- !query output
+1
+
+
+-- !query
+DROP VIEW test_view
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+EXECUTE IMMEDIATE 'ALTER TABLE IDENTIFIER(:tab) ADD COLUMN IDENTIFIER(:new_col) INT'
+  USING 'integration_test' AS tab, 'c4' AS new_col
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+EXECUTE IMMEDIATE 'ALTER TABLE IDENTIFIER(:tab) RENAME COLUMN IDENTIFIER(:old_col) TO IDENTIFIER(:new_col)'
+  USING 'integration_test' AS tab, 'c4' AS old_col, 'c5' AS new_col
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNSUPPORTED_FEATURE.TABLE_OPERATION",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "operation" : "RENAME COLUMN",
+    "tableName" : "`spark_catalog`.`identifier_clause_test_schema`.`integration_test`"
+  }
+}
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT map(:key, :val).IDENTIFIER(:key) AS result'
+  USING 'mykey' AS key, 42 AS val
+-- !query schema
+struct<result:int>
+-- !query output
+42
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT IDENTIFIER(:alias ''.c1'') FROM integration_test AS IDENTIFIER(:alias) ORDER BY ALL'
+  USING 't' AS alias
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`t`.`c1`",
+    "proposal" : "`IDENTIFIER('t')`.`c1`, `IDENTIFIER('t')`.`c2`, `IDENTIFIER('t')`.`c4`"
+  },
+  "queryContext" : [ {
+    "objectType" : "EXECUTE IMMEDIATE",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 31,
+    "fragment" : "IDENTIFIER(:alias '.c1')"
+  } ]
+}
+
+
+-- !query
+EXECUTE IMMEDIATE
+  'SELECT IDENTIFIER(:col1), IDENTIFIER(:p ''2'') FROM IDENTIFIER(:schema ''.'' :tab) WHERE IDENTIFIER(:col1) > 0 ORDER BY IDENTIFIER(:p ''1'')'
+  USING 'c1' AS col1, 'c' AS p, 'identifier_clause_test_schema' AS schema, 'integration_test' AS tab
+-- !query schema
+struct<c1:int,c2:string>
+-- !query output
+1	a
+2	b
+3	c
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT * FROM IDENTIFIER(:schema ''.'' :table) WHERE IDENTIFIER(concat(:tab_alias, ''.c1'')) > 0 ORDER BY ALL'
+  USING 'identifier_clause_test_schema' AS schema, 'integration_test' AS table, 'integration_test' AS tab_alias
+-- !query schema
+struct<c1:int,c2:string,c4:int>
+-- !query output
+1	a	NULL
+2	b	NULL
+3	c	NULL
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT 1 AS IDENTIFIER(:schema ''.'' :col)'
+  USING 'identifier_clause_test_schema' AS schema, 'col1' AS col
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "IDENTIFIER_TOO_MANY_NAME_PARTS",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "identifier" : "`identifier_clause_test_schema`.`col1`",
+    "limit" : "1"
+  },
+  "queryContext" : [ {
+    "objectType" : "EXECUTE IMMEDIATE",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 40,
+    "fragment" : "1 AS IDENTIFIER(:schema '.' :col)"
+  } ]
+}
+
+
+-- !query
+DROP TABLE integration_test
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP TABLE integration_test2
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE TABLE lateral_test(arr ARRAY<INT>) USING PARQUET
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+INSERT INTO lateral_test VALUES (array(1, 2, 3))
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT * FROM lateral_test LATERAL VIEW explode(arr) IDENTIFIER('tbl') AS IDENTIFIER('col') ORDER BY ALL
+-- !query schema
+struct<arr:array<int>,col:int>
+-- !query output
+[1,2,3]	1
+[1,2,3]	2
+[1,2,3]	3
+
+
+-- !query
+SELECT * FROM lateral_test LATERAL VIEW OUTER explode(arr) IDENTIFIER('my_table') AS IDENTIFIER('my_col') ORDER BY ALL
+-- !query schema
+struct<arr:array<int>,my_col:int>
+-- !query output
+[1,2,3]	1
+[1,2,3]	2
+[1,2,3]	3
+
+
+-- !query
+DROP TABLE lateral_test
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE TABLE unpivot_test(id INT, a INT, b INT, c INT) USING CSV
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+INSERT INTO unpivot_test VALUES (1, 10, 20, 30)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT * FROM unpivot_test UNPIVOT (val FOR col IN (a AS IDENTIFIER('col_a'), b AS IDENTIFIER('col_b'))) ORDER BY ALL
+-- !query schema
+struct<id:int,c:int,col:string,val:int>
+-- !query output
+1	30	col_a	10
+1	30	col_b	20
+
+
+-- !query
+SELECT * FROM unpivot_test UNPIVOT ((v1, v2) FOR col IN ((a, b) AS IDENTIFIER('cols_ab'), (b, c) AS IDENTIFIER('cols_bc'))) ORDER BY ALL
+-- !query schema
+struct<id:int,col:string,v1:int,v2:int>
+-- !query output
+1	cols_ab	10	20
+1	cols_bc	20	30
+
+
+-- !query
+DROP TABLE unpivot_test
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT :IDENTIFIER('param1') FROM VALUES(1) AS T(c1)
+-- !query schema
+struct<>
+-- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
   "errorClass" : "PARSE_SYNTAX_ERROR",
   "sqlState" : "42601",
   "messageParameters" : {
-    "error" : "'('",
+    "error" : "''param1''",
     "hint" : ""
   }
 }
 
 
 -- !query
-CREATE TABLE tab(IDENTIFIER('c1') INT) USING CSV
+CREATE TABLE hint_test(c1 INT, c2 INT) USING CSV
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+INSERT INTO hint_test VALUES (1, 2), (3, 4)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT /*+ IDENTIFIER('BROADCAST')(hint_test) */ * FROM hint_test
 -- !query schema
 struct<>
 -- !query output
@@ -1294,3 +2442,90 @@ org.apache.spark.sql.catalyst.parser.ParseException
     "hint" : ""
   }
 }
+
+
+-- !query
+SELECT /*+ IDENTIFIER('MERGE')(hint_test) */ * FROM hint_test
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'('",
+    "hint" : ""
+  }
+}
+
+
+-- !query
+DROP TABLE hint_test
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SHOW IDENTIFIER('USER') FUNCTIONS
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'('",
+    "hint" : ""
+  }
+}
+
+
+-- !query
+SELECT EXTRACT(IDENTIFIER('YEAR') FROM DATE'2024-01-15')
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'FROM'",
+    "hint" : ": missing ')'"
+  }
+}
+
+
+-- !query
+SELECT TIMESTAMPADD(IDENTIFIER('YEAR'), 1, DATE'2024-01-15')
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNRESOLVED_ROUTINE",
+  "sqlState" : "42883",
+  "messageParameters" : {
+    "routineName" : "`TIMESTAMPADD`",
+    "searchPath" : "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`identifier_clause_test_schema`]"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 60,
+    "fragment" : "TIMESTAMPADD(IDENTIFIER('YEAR'), 1, DATE'2024-01-15')"
+  } ]
+}
+
+
+-- !query
+DROP SCHEMA identifier_clause_test_schema
+-- !query schema
+struct<>
+-- !query output
+
