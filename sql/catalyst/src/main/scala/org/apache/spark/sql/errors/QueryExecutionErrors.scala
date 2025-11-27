@@ -1120,10 +1120,12 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       cause = e)
   }
 
-  def ddlUnsupportedTemporarilyError(ddl: String): SparkUnsupportedOperationException = {
+  def ddlUnsupportedTemporarilyError(
+      ddl: String,
+      tableName: String): SparkUnsupportedOperationException = {
     new SparkUnsupportedOperationException(
-      errorClass = "_LEGACY_ERROR_TEMP_2096",
-      messageParameters = Map("ddl" -> ddl))
+      errorClass = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
+      messageParameters = Map("tableName" -> toSQLId(tableName), "operation" -> ddl))
   }
 
   def executeBroadcastTimeoutError(timeout: Long, ex: Option[TimeoutException]): Throwable = {
@@ -1173,13 +1175,6 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
     new SparkException(
       errorClass = "_LEGACY_ERROR_TEMP_2105",
       messageParameters = Map.empty,
-      cause = null)
-  }
-
-  def cannotAcquireMemoryToBuildLongHashedRelationError(size: Long, got: Long): Throwable = {
-    new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_2106",
-      messageParameters = Map("size" -> size.toString(), "got" -> got.toString()),
       cause = null)
   }
 

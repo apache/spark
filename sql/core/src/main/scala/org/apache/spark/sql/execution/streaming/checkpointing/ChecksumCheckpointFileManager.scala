@@ -133,11 +133,21 @@ case class ChecksumFile(path: Path) {
  *                   number of threads using file manager * 2.
  *                   Setting this differently can lead to file operation being blocked waiting for
  *                   a free thread.
+ * @param skipCreationIfFileMissingChecksum (ES-1629547): If true, when a file already exists
+ *                   but its checksum file does not exist, fall back to using the underlying
+ *                   file manager directly instead of creating with checksum. This is useful
+ *                   for compatibility with files created before checksums were enabled. Consider
+ *                   the case when a batch fails but state files are written. If on the next run,
+ *                   we try to upload both a new file and a checksum file, the file could fail to be
+ *                   uploaded but the checksum file is uploaded successfully. This would lead to a
+ *                   situation where the old file could be loaded and compared with the new file
+ *                   checksum, which would fail the checksum verification.
  */
 class ChecksumCheckpointFileManager(
     private val underlyingFileMgr: CheckpointFileManager,
     val allowConcurrentDelete: Boolean = false,
-    val numThreads: Int)
+    val numThreads: Int,
+    val skipCreationIfFileMissingChecksum: Boolean)
   extends CheckpointFileManager with Logging {
   assert(numThreads % 2 == 0, "numThreads must be a multiple of 2, we need 1 for the main file" +
     "and another for the checksum file")
@@ -160,9 +170,18 @@ class ChecksumCheckpointFileManager(
     underlyingFileMgr.mkdirs(path)
   }
 
+  private def shouldSkipChecksumCreation(path: Path): Boolean = {
+    skipCreationIfFileMissingChecksum &&
+      underlyingFileMgr.exists(path) && !underlyingFileMgr.exists(getChecksumPath(path))
+  }
+
   override def createAtomic(path: Path,
       overwriteIfPossible: Boolean): CancellableFSDataOutputStream = {
-    createWithChecksum(path, underlyingFileMgr.createAtomic(_, overwriteIfPossible))
+    if (shouldSkipChecksumCreation(path)) {
+      underlyingFileMgr.createAtomic(path, overwriteIfPossible)
+    } else {
+      createWithChecksum(path, underlyingFileMgr.createAtomic(_, overwriteIfPossible))
+    }
   }
 
   private def createWithChecksum(path: Path,
@@ -327,8 +346,11 @@ class ChecksumFSDataInputStream(
   override def close(): Unit = {
     if (!closed) {
       // We verify the checksum only when the client is done reading.
-      verifyChecksum()
-      closeInternal()
+      try {
+        verifyChecksum()
+      } finally {
+        closeInternal()
+      }
     }
   }
 

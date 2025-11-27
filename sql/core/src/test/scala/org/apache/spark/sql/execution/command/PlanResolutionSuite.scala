@@ -1633,10 +1633,10 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
 
       if (starInUpdate) {
         assert(updateAssigns.size == 2)
-        assert(updateAssigns(0).key.asInstanceOf[AttributeReference].sameRef(ti))
-        assert(updateAssigns(0).value.asInstanceOf[AttributeReference].sameRef(si))
-        assert(updateAssigns(1).key.asInstanceOf[AttributeReference].sameRef(ts))
-        assert(updateAssigns(1).value.asInstanceOf[AttributeReference].sameRef(ss))
+        assert(updateAssigns(0).key.asInstanceOf[AttributeReference].sameRef(ts))
+        assert(updateAssigns(0).value.asInstanceOf[AttributeReference].sameRef(ss))
+        assert(updateAssigns(1).key.asInstanceOf[AttributeReference].sameRef(ti))
+        assert(updateAssigns(1).value.asInstanceOf[AttributeReference].sameRef(si))
       } else {
         assert(updateAssigns.size == 1)
         assert(updateAssigns.head.key.asInstanceOf[AttributeReference].sameRef(ts))
@@ -1648,15 +1648,25 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
         target: LogicalPlan,
         source: LogicalPlan,
         insertCondAttr: Option[AttributeReference],
-        insertAssigns: Seq[Assignment]): Unit = {
+        insertAssigns: Seq[Assignment],
+        starInInsert: Boolean = false): Unit = {
       val (si, ss) = getAttributes(source)
       val (ti, ts) = getAttributes(target)
       insertCondAttr.foreach(a => assert(a.sameRef(ss)))
-      assert(insertAssigns.size == 2)
-      assert(insertAssigns(0).key.asInstanceOf[AttributeReference].sameRef(ti))
-      assert(insertAssigns(0).value.asInstanceOf[AttributeReference].sameRef(si))
-      assert(insertAssigns(1).key.asInstanceOf[AttributeReference].sameRef(ts))
-      assert(insertAssigns(1).value.asInstanceOf[AttributeReference].sameRef(ss))
+
+      if (starInInsert) {
+        assert(insertAssigns.size == 2)
+        assert(insertAssigns(0).key.asInstanceOf[AttributeReference].sameRef(ts))
+        assert(insertAssigns(0).value.asInstanceOf[AttributeReference].sameRef(ss))
+        assert(insertAssigns(1).key.asInstanceOf[AttributeReference].sameRef(ti))
+        assert(insertAssigns(1).value.asInstanceOf[AttributeReference].sameRef(si))
+      } else {
+        assert(insertAssigns.size == 2)
+        assert(insertAssigns(0).key.asInstanceOf[AttributeReference].sameRef(ti))
+        assert(insertAssigns(0).value.asInstanceOf[AttributeReference].sameRef(si))
+        assert(insertAssigns(1).key.asInstanceOf[AttributeReference].sameRef(ts))
+        assert(insertAssigns(1).value.asInstanceOf[AttributeReference].sameRef(ss))
+      }
     }
 
     def checkNotMatchedBySourceClausesResolution(
@@ -1693,12 +1703,12 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
               mergeCondition,
               Seq(DeleteAction(Some(EqualTo(dl: AttributeReference, StringLiteral("delete")))),
                 UpdateAction(Some(EqualTo(ul: AttributeReference, StringLiteral("update"))),
-                  updateAssigns)),
+                  updateAssigns, _)),
               Seq(InsertAction(Some(EqualTo(il: AttributeReference, StringLiteral("insert"))),
                   insertAssigns)),
               Seq(DeleteAction(Some(EqualTo(ndl: AttributeReference, StringLiteral("delete")))),
                 UpdateAction(Some(EqualTo(nul: AttributeReference, StringLiteral("update"))),
-                  notMatchedBySourceUpdateAssigns)),
+                  notMatchedBySourceUpdateAssigns, _)),
               withSchemaEvolution) =>
             checkMergeConditionResolution(target, source, mergeCondition)
             checkMatchedClausesResolution(target, source, Some(dl), Some(ul), updateAssigns)
@@ -1727,7 +1737,7 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
               mergeCondition,
               Seq(DeleteAction(Some(EqualTo(dl: AttributeReference, StringLiteral("delete")))),
                 UpdateAction(Some(EqualTo(ul: AttributeReference,
-                  StringLiteral("update"))), updateAssigns)),
+                  StringLiteral("update"))), updateAssigns, _)),
               Seq(InsertAction(Some(EqualTo(il: AttributeReference, StringLiteral("insert"))),
                   insertAssigns)),
               Seq(),
@@ -1735,7 +1745,8 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
             checkMergeConditionResolution(target, source, mergeCondition)
             checkMatchedClausesResolution(target, source, Some(dl), Some(ul), updateAssigns,
               starInUpdate = true)
-            checkNotMatchedClausesResolution(target, source, Some(il), insertAssigns)
+            checkNotMatchedClausesResolution(target, source, Some(il), insertAssigns,
+              starInInsert = true)
             assert(withSchemaEvolution === false)
 
           case other => fail("Expect MergeIntoTable, but got:\n" + other.treeString)
@@ -1755,14 +1766,15 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
               SubqueryAlias(AliasIdentifier("target", Seq()), AsDataSourceV2Relation(target)),
               SubqueryAlias(AliasIdentifier("source", Seq()), AsDataSourceV2Relation(source)),
               mergeCondition,
-              Seq(UpdateAction(None, updateAssigns)),
+              Seq(UpdateAction(None, updateAssigns, _)),
               Seq(InsertAction(None, insertAssigns)),
               Seq(),
               withSchemaEvolution) =>
             checkMergeConditionResolution(target, source, mergeCondition)
             checkMatchedClausesResolution(target, source, None, None, updateAssigns,
               starInUpdate = true)
-            checkNotMatchedClausesResolution(target, source, None, insertAssigns)
+            checkNotMatchedClausesResolution(target, source, None, insertAssigns,
+              starInInsert = true)
             assert(withSchemaEvolution === false)
 
           case other => fail("Expect MergeIntoTable, but got:\n" + other.treeString)
@@ -1785,10 +1797,10 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
               SubqueryAlias(AliasIdentifier("target", Seq()), AsDataSourceV2Relation(target)),
               SubqueryAlias(AliasIdentifier("source", Seq()), AsDataSourceV2Relation(source)),
               mergeCondition,
-              Seq(DeleteAction(Some(_)), UpdateAction(None, updateAssigns)),
+              Seq(DeleteAction(Some(_)), UpdateAction(None, updateAssigns, _)),
               Seq(InsertAction(None, insertAssigns)),
               Seq(DeleteAction(Some(EqualTo(_: AttributeReference, StringLiteral("delete")))),
-                UpdateAction(None, notMatchedBySourceUpdateAssigns)),
+                UpdateAction(None, notMatchedBySourceUpdateAssigns, _)),
               withSchemaEvolution) =>
             checkMergeConditionResolution(target, source, mergeCondition)
             checkMatchedClausesResolution(target, source, None, None, updateAssigns)
@@ -1820,12 +1832,12 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
               mergeCondition,
               Seq(DeleteAction(Some(EqualTo(dl: AttributeReference, StringLiteral("delete")))),
                 UpdateAction(Some(EqualTo(ul: AttributeReference, StringLiteral("update"))),
-                  updateAssigns)),
+                  updateAssigns, _)),
               Seq(InsertAction(Some(EqualTo(il: AttributeReference, StringLiteral("insert"))),
                   insertAssigns)),
               Seq(DeleteAction(Some(EqualTo(ndl: AttributeReference, StringLiteral("delete")))),
                 UpdateAction(Some(EqualTo(nul: AttributeReference, StringLiteral("update"))),
-                  notMatchedBySourceUpdateAssigns)),
+                  notMatchedBySourceUpdateAssigns, _)),
               withSchemaEvolution) =>
             checkMergeConditionResolution(target, source, mergeCondition)
             checkMatchedClausesResolution(target, source, Some(dl), Some(ul), updateAssigns)
@@ -1859,12 +1871,12 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
               mergeCondition,
               Seq(DeleteAction(Some(EqualTo(dl: AttributeReference, StringLiteral("delete")))),
                 UpdateAction(Some(EqualTo(ul: AttributeReference, StringLiteral("update"))),
-                  updateAssigns)),
+                  updateAssigns, _)),
               Seq(InsertAction(Some(EqualTo(il: AttributeReference, StringLiteral("insert"))),
                   insertAssigns)),
               Seq(DeleteAction(Some(EqualTo(ndl: AttributeReference, StringLiteral("delete")))),
                 UpdateAction(Some(EqualTo(nul: AttributeReference, StringLiteral("update"))),
-                  notMatchedBySourceUpdateAssigns)),
+                  notMatchedBySourceUpdateAssigns, _)),
               withSchemaEvolution) =>
             checkMergeConditionResolution(target, source, mergeCondition)
             checkMatchedClausesResolution(target, source, Some(dl), Some(ul), updateAssigns)
@@ -1915,7 +1927,7 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
               case UpdateAction(Some(EqualTo(_: AttributeReference, StringLiteral("update"))),
                 Seq(
                   Assignment(_: AttributeReference, Literal(null, StringType)),
-                  Assignment(_: AttributeReference, _: AttributeReference))) =>
+                  Assignment(_: AttributeReference, _: AttributeReference)), _) =>
               case other => fail("unexpected second matched action " + other)
             }
             assert(m.notMatchedActions.length == 1)
@@ -1935,7 +1947,7 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
             }
             m.notMatchedBySourceActions(1) match {
               case UpdateAction(Some(EqualTo(_: AttributeReference, StringLiteral("update"))),
-                Seq(Assignment(_: AttributeReference, Literal(null, StringType)))) =>
+                Seq(Assignment(_: AttributeReference, Literal(null, StringType))), _) =>
               case other =>
                 fail("unexpected second not matched by source action " + other)
             }
@@ -1987,7 +1999,7 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
         val second = m.matchedActions(1)
         second match {
           case UpdateAction(Some(EqualTo(_: AttributeReference, Literal(31, IntegerType))),
-          Seq(Assignment(_: AttributeReference, Literal(42, IntegerType)))) =>
+          Seq(Assignment(_: AttributeReference, Literal(42, IntegerType))), _) =>
           case other => fail("unexpected second matched action " + other)
         }
         assert(m.notMatchedActions.length == 1)
@@ -2005,7 +2017,7 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
         }
         m.notMatchedBySourceActions(1) match {
           case UpdateAction(Some(EqualTo(_: AttributeReference, Literal(31, IntegerType))),
-          Seq(Assignment(_: AttributeReference, Literal(42, IntegerType)))) =>
+          Seq(Assignment(_: AttributeReference, Literal(42, IntegerType))), _) =>
           case other => fail("unexpected second not matched by source action " + other)
         }
         assert(m.withSchemaEvolution === false)
@@ -2146,11 +2158,11 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
             AsDataSourceV2Relation(target),
             AsDataSourceV2Relation(source),
             _,
-            Seq(DeleteAction(Some(_)), UpdateAction(None, firstUpdateAssigns)),
+            Seq(DeleteAction(Some(_)), UpdateAction(None, firstUpdateAssigns, _)),
             Seq(InsertAction(
               Some(EqualTo(il: AttributeReference, StringLiteral("a"))),
             insertAssigns)),
-            Seq(DeleteAction(Some(_)), UpdateAction(None, secondUpdateAssigns)),
+            Seq(DeleteAction(Some(_)), UpdateAction(None, secondUpdateAssigns, _)),
             withSchemaEvolution) =>
           val ti = target.output.find(_.name == "i").get
           val ts = target.output.find(_.name == "s").get
@@ -2270,7 +2282,7 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
           }
           notMatchedBySourceActions(1) match {
             case UpdateAction(Some(EqualTo(ul: AttributeReference, StringLiteral("a"))),
-                Seq(Assignment(us: AttributeReference, IntegerLiteral(1)))) =>
+                Seq(Assignment(us: AttributeReference, IntegerLiteral(1))), _) =>
               // UPDATE condition and assignment are resolved with target table only, so column `s`
               // and `i` are not ambiguous.
               val ts = target.output.find(_.name == "s").get
@@ -2330,7 +2342,7 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
           AsDataSourceV2Relation(target),
           AsDataSourceV2Relation(source),
           EqualTo(IntegerLiteral(1), IntegerLiteral(1)),
-          Seq(UpdateAction(None, updateAssigns)), // Matched actions
+          Seq(UpdateAction(None, updateAssigns, _)), // Matched actions
           Seq(), // Not matched actions
           Seq(), // Not matched by source actions
           withSchemaEvolution) =>
@@ -2383,7 +2395,7 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
         assert(m.matchedActions.length == 1)
         m.matchedActions.head match {
           case UpdateAction(_, Seq(
-          Assignment(_, s1: StaticInvoke), Assignment(_, s2: StaticInvoke))) =>
+          Assignment(_, s1: StaticInvoke), Assignment(_, s2: StaticInvoke)), _) =>
             assert(s1.arguments.length == 2)
             assert(s1.functionName == "charTypeWriteSideCheck")
             assert(s2.arguments.length == 2)
@@ -2409,7 +2421,7 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
         assert(m.notMatchedBySourceActions.length == 1)
         m.notMatchedBySourceActions.head match {
           case UpdateAction(_, Seq(
-          Assignment(_, s1: StaticInvoke), Assignment(_, s2: StaticInvoke))) =>
+          Assignment(_, s1: StaticInvoke), Assignment(_, s2: StaticInvoke)), _) =>
             assert(s1.arguments.length == 2)
             assert(s1.functionName == "charTypeWriteSideCheck")
             assert(s2.arguments.length == 2)
@@ -3272,7 +3284,9 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
       unresolvedRelation: UnresolvedRelation,
       timeTravelSpec: Option[TimeTravelSpec] = None,
       planId: Option[Long] = None): DataSourceV2Relation = {
-    val rule = new RelationResolution(catalogManagerWithDefault)
+    val rule = new RelationResolution(
+      catalogManagerWithDefault,
+      spark.sharedState.relationCache)
     rule.resolveRelation(unresolvedRelation, timeTravelSpec) match {
       case Some(p @ AsDataSourceV2Relation(relation)) =>
         assert(unresolvedRelation.getTagValue(LogicalPlan.PLAN_ID_TAG) == planId)

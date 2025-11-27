@@ -313,21 +313,19 @@ class CogroupedMapInArrowTestsMixin:
         self.assertEqual(df2.join(df2).count(), 1)
 
     def test_arrow_batch_slicing(self):
-        df1 = self.spark.range(10000000).select(
-            (sf.col("id") % 2).alias("key"), sf.col("id").alias("v")
-        )
+        m, n = 100000, 10000
+
+        df1 = self.spark.range(m).select((sf.col("id") % 2).alias("key"), sf.col("id").alias("v"))
         cols = {f"col_{i}": sf.col("v") + i for i in range(10)}
         df1 = df1.withColumns(cols)
 
-        df2 = self.spark.range(100000).select(
-            (sf.col("id") % 4).alias("key"), sf.col("id").alias("v")
-        )
+        df2 = self.spark.range(n).select((sf.col("id") % 4).alias("key"), sf.col("id").alias("v"))
         cols = {f"col_{i}": sf.col("v") + i for i in range(20)}
         df2 = df2.withColumns(cols)
 
         def summarize(key, left, right):
-            assert len(left) == 10000000 / 2 or len(left) == 0, len(left)
-            assert len(right) == 100000 / 4, len(right)
+            assert len(left) == m / 2 or len(left) == 0, len(left)
+            assert len(right) == n / 4, len(right)
             return pa.Table.from_pydict(
                 {
                     "key": [key[0].as_py()],
@@ -341,13 +339,13 @@ class CogroupedMapInArrowTestsMixin:
         schema = "key long, left_rows long, left_columns long, right_rows long, right_columns long"
 
         expected = [
-            Row(key=0, left_rows=5000000, left_columns=12, right_rows=25000, right_columns=22),
-            Row(key=1, left_rows=5000000, left_columns=12, right_rows=25000, right_columns=22),
-            Row(key=2, left_rows=0, left_columns=12, right_rows=25000, right_columns=22),
-            Row(key=3, left_rows=0, left_columns=12, right_rows=25000, right_columns=22),
+            Row(key=0, left_rows=m / 2, left_columns=12, right_rows=n / 4, right_columns=22),
+            Row(key=1, left_rows=m / 2, left_columns=12, right_rows=n / 4, right_columns=22),
+            Row(key=2, left_rows=0, left_columns=12, right_rows=n / 4, right_columns=22),
+            Row(key=3, left_rows=0, left_columns=12, right_rows=n / 4, right_columns=22),
         ]
 
-        for maxRecords, maxBytes in [(1000, 2**31 - 1), (0, 1048576), (1000, 1048576)]:
+        for maxRecords, maxBytes in [(1000, 2**31 - 1), (0, 4096), (1000, 4096)]:
             with self.subTest(maxRecords=maxRecords, maxBytes=maxBytes):
                 with self.sql_conf(
                     {
@@ -398,20 +396,20 @@ class CogroupedMapInArrowTestsMixin:
                 + [Row(id=2, v1=20, v2=200)],
             )
 
-        logs = self.spark.table("system.session.python_worker_logs")
+            logs = self.spark.tvf.python_worker_logs()
 
-        assertDataFrameEqual(
-            logs.select("level", "msg", "context", "logger"),
-            [
-                Row(
-                    level="WARNING",
-                    msg=f"arrow cogrouped map: {dict(v1=v1, v2=v2)}",
-                    context={"func_name": func_with_logging.__name__},
-                    logger="test_arrow_cogrouped_map",
-                )
-                for v1, v2 in [([10, 30], [100, 300]), ([20], [200])]
-            ],
-        )
+            assertDataFrameEqual(
+                logs.select("level", "msg", "context", "logger"),
+                [
+                    Row(
+                        level="WARNING",
+                        msg=f"arrow cogrouped map: {dict(v1=v1, v2=v2)}",
+                        context={"func_name": func_with_logging.__name__},
+                        logger="test_arrow_cogrouped_map",
+                    )
+                    for v1, v2 in [([10, 30], [100, 300]), ([20], [200])]
+                ],
+            )
 
 
 class CogroupedMapInArrowTests(CogroupedMapInArrowTestsMixin, ReusedSQLTestCase):

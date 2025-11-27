@@ -273,6 +273,9 @@ class MapInPandasTestsMixin:
         actual = df.repartition(1).mapInPandas(f, "id long, value long").collect()
         self.assertEqual(actual, expected)
 
+    @unittest.skipIf(
+        os.environ.get("SPARK_SKIP_CONNECT_COMPAT_TESTS") == "1", "SPARK-54483: To be reenabled"
+    )
     def test_dataframes_with_incompatible_types(self):
         with self.quiet():
             self.check_dataframes_with_incompatible_types()
@@ -510,20 +513,20 @@ class MapInPandasTestsMixin:
                 [Row(id=i) for i in range(9)],
             )
 
-        logs = self.spark.table("system.session.python_worker_logs")
+            logs = self.spark.tvf.python_worker_logs()
 
-        assertDataFrameEqual(
-            logs.select("level", "msg", "context", "logger"),
-            [
-                Row(
-                    level="WARNING",
-                    msg=f"pandas map: {lst}",
-                    context={"func_name": func_with_logging.__name__},
-                    logger="test_pandas_map",
-                )
-                for lst in [[0, 1, 2], [3], [4, 5, 6], [7, 8]]
-            ],
-        )
+            assertDataFrameEqual(
+                logs.select("level", "msg", "context", "logger"),
+                [
+                    Row(
+                        level="WARNING",
+                        msg=f"pandas map: {lst}",
+                        context={"func_name": func_with_logging.__name__},
+                        logger="test_pandas_map",
+                    )
+                    for lst in [[0, 1, 2], [3], [4, 5, 6], [7, 8]]
+                ],
+            )
 
 
 class MapInPandasTests(ReusedSQLTestCase, MapInPandasTestsMixin):

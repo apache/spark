@@ -1856,16 +1856,6 @@ private[spark] object Utils
   }
 
   /**
-   * Whether the underlying Java version is at most 17.
-   */
-  val isJavaVersionAtMost17 = Runtime.version().feature() <= 17
-
-  /**
-   * Whether the underlying Java version is at least 21.
-   */
-  val isJavaVersionAtLeast21 = Runtime.version().feature() >= 21
-
-  /**
    * Whether the underlying JVM prefer IPv6 addresses.
    */
   val preferIPv6 = "true".equals(System.getProperty("java.net.preferIPv6Addresses"))
@@ -2089,7 +2079,7 @@ private[spark] object Utils
 
   val CONNECT_EXECUTE_THREAD_PREFIX = "SparkConnectExecuteThread"
 
-  private val threadInfoOrdering = Ordering.fromLessThan {
+  private[spark] val threadInfoOrdering = Ordering.fromLessThan {
     (threadTrace1: ThreadInfo, threadTrace2: ThreadInfo) => {
       def priority(ti: ThreadInfo): Int = ti.getThreadName match {
         case name if name.startsWith(TASK_THREAD_NAME_PREFIX) => 100

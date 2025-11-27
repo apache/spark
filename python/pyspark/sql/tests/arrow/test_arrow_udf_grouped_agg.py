@@ -1044,20 +1044,20 @@ class GroupedAggArrowUDFTestsMixin:
                 [Row(id=1, result=3.0), Row(id=2, result=18.0)],
             )
 
-        logs = self.spark.table("system.session.python_worker_logs")
+            logs = self.spark.tvf.python_worker_logs()
 
-        assertDataFrameEqual(
-            logs.select("level", "msg", "context", "logger"),
-            [
-                Row(
-                    level="WARNING",
-                    msg=f"grouped agg arrow udf: {n}",
-                    context={"func_name": my_grouped_agg_arrow_udf.__name__},
-                    logger="test_grouped_agg_arrow",
-                )
-                for n in [2, 3]
-            ],
-        )
+            assertDataFrameEqual(
+                logs.select("level", "msg", "context", "logger"),
+                [
+                    Row(
+                        level="WARNING",
+                        msg=f"grouped agg arrow udf: {n}",
+                        context={"func_name": my_grouped_agg_arrow_udf.__name__},
+                        logger="test_grouped_agg_arrow",
+                    )
+                    for n in [2, 3]
+                ],
+            )
 
 
 class GroupedAggArrowUDFTests(GroupedAggArrowUDFTestsMixin, ReusedSQLTestCase):

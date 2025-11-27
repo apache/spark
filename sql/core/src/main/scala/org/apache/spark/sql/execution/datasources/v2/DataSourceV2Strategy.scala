@@ -571,7 +571,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       val condition = a.checkConstraint.condition
       val change = TableChange.addConstraint(
         check.toV2Constraint,
-        d.relation.table.currentVersion)
+        d.relation.table.version)
       ResolveTableConstraints.validateCatalogForTableChange(Seq(change), catalog, ident)
       AddCheckConstraintExec(catalog, ident, change, condition, planLater(a.child)) :: Nil
 

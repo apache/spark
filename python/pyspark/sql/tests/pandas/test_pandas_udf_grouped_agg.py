@@ -846,20 +846,20 @@ class GroupedAggPandasUDFTestsMixin:
                 [Row(id=1, result=3.0), Row(id=2, result=18.0)],
             )
 
-        logs = self.spark.table("system.session.python_worker_logs")
+            logs = self.spark.tvf.python_worker_logs()
 
-        assertDataFrameEqual(
-            logs.select("level", "msg", "context", "logger"),
-            [
-                Row(
-                    level="WARNING",
-                    msg=f"grouped agg pandas udf: {n}",
-                    context={"func_name": my_grouped_agg_pandas_udf.__name__},
-                    logger="test_grouped_agg_pandas",
-                )
-                for n in [2, 3]
-            ],
-        )
+            assertDataFrameEqual(
+                logs.select("level", "msg", "context", "logger"),
+                [
+                    Row(
+                        level="WARNING",
+                        msg=f"grouped agg pandas udf: {n}",
+                        context={"func_name": my_grouped_agg_pandas_udf.__name__},
+                        logger="test_grouped_agg_pandas",
+                    )
+                    for n in [2, 3]
+                ],
+            )
 
     def test_grouped_agg_pandas_udf_with_compression_codec(self):
         # Test grouped agg Pandas UDF with different compression codec settings
@@ -872,7 +872,7 @@ class GroupedAggPandasUDFTestsMixin:
 
         for codec in ["none", "zstd", "lz4"]:
             with self.subTest(compressionCodec=codec):
-                with self.sql_conf({"spark.sql.execution.arrow.compressionCodec": codec}):
+                with self.sql_conf({"spark.sql.execution.arrow.compression.codec": codec}):
                     result = df.groupby("id").agg(sum_udf(df.v)).sort("id").toPandas()
                     assert_frame_equal(expected, result)
 
@@ -891,7 +891,7 @@ class GroupedAggPandasUDFTestsMixin:
 
         for codec in ["none", "zstd", "lz4"]:
             with self.subTest(compressionCodec=codec):
-                with self.sql_conf({"spark.sql.execution.arrow.compressionCodec": codec}):
+                with self.sql_conf({"spark.sql.execution.arrow.compression.codec": codec}):
                     result = (
                         df.groupby("id").agg(mean_udf(df.v), sum_udf(df.v)).sort("id").toPandas()
                     )
