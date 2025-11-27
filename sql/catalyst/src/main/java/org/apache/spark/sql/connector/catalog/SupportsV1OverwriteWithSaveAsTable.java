@@ -41,13 +41,12 @@ import org.apache.spark.annotation.Evolving;
  * documented semantics. For example, Delta Lake interprets V1 saveAsTable to not replace table
  * schema unless the {@code overwriteSchema} option is explicitly set.
  * <p>
- * When a {@link TableProvider} implements this interface, DataFrameWriter V1 will add an
- * internal write option to indicate that the command originated from V1 saveAsTable API.
+ * When a {@link TableProvider} implements this interface and
+ * {@link #addV1OverwriteWithSaveAsTableOption()} returns true, DataFrameWriter V1 will add an
+ * internal write option to indicate that the command originated from saveAsTable API.
+ * The option key used is defined by {@link #OPTION_NAME} and the value will be set to "true".
  * This allows the data source to distinguish between the two APIs and apply appropriate
  * semantics.
- * <p>
- * The option key used is defined by {@link #OPTION_NAME}
- * and the value will be "true" when the write originates from DataFrameWriter V1.
  *
  * @since 4.1.0
  */
@@ -60,7 +59,8 @@ public interface SupportsV1OverwriteWithSaveAsTable extends TableProvider {
   String OPTION_NAME = "__v1_save_as_table_overwrite";
 
   /**
-   * Returns whether to add the V1 overwrite with saveAsTable option to write operations.
+   * Returns whether to add the "__v1_save_as_table_overwrite" to write operations originating
+   * from DataFrameWriter V1 saveAsTable with mode Overwrite.
    * Implementations can override this method to control when the option is added.
    *
    * @return true if the option should be added (default), false otherwise
