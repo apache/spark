@@ -547,7 +547,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
 
   def writeIntoTempViewNotAllowedError(quoted: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1007",
+      errorClass = "TEMP_VIEW_WRITE_NOT_ALLOWED",
       messageParameters = Map("quoted" -> quoted))
   }
 

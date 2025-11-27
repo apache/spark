@@ -6029,6 +6029,12 @@
     ],
     "sqlState" : "428EK"
   },
+  "TEMP_VIEW_WRITE_NOT_ALLOWED" : {
+    "message" : [
+      "Cannot write into temp view <quoted> as it's not a data source v2 relation."
+    ],
+    "sqlState" : "42809"
+  },
   "THETA_INVALID_INPUT_SKETCH_BUFFER" : {
     "message" : [
       "Invalid call to <function>; only valid Theta sketch buffers are supported as inputs (such as those produced by the `theta_sketch_agg` function)."
@@ -7626,11 +7632,6 @@
   "_LEGACY_ERROR_TEMP_1006" : {
     "message" : [
       "Aggregate expression required for pivot, but '<sql>' did not appear in any aggregate function."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1007" : {
-    "message" : [
-      "Cannot write into temp view <quoted> as it's not a data source v2 relation."
     ]
   },
   "_LEGACY_ERROR_TEMP_1008" : {
