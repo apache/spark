@@ -473,7 +473,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) extends sql.DataFram
         val v2Relation = DataSourceV2Relation.create(table, Some(catalog), Some(ident))
         AppendData.byName(v2Relation, df.logicalPlan, extraOptions.toMap)
 
-      case (SaveMode.Overwrite, tableOpt) =>
+      case (SaveMode.Overwrite, _) =>
         val tableSpec = UnresolvedTableSpec(
           properties = Map.empty,
           provider = Some(source),
@@ -484,10 +484,11 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) extends sql.DataFram
           serde = None,
           external = false,
           constraints = Seq.empty)
-        val writeOptions = tableOpt match {
-          case Some(t: SupportsV1OverwriteWithSaveAsTable)
-              if t.addV1OverwriteWithSaveAsTableOption() =>
-            extraOptions + (SupportsV1OverwriteWithSaveAsTable.OPTION_NAME -> "true")
+        val writeOptions = lookupV2Provider() match {
+          case Some(_: RequiresDataFrameWriterV1SaveAsTableOverwriteWriteOption) =>
+            extraOptions +
+              (RequiresDataFrameWriterV1SaveAsTableOverwriteWriteOption
+                .IS_DATAFRAME_WRITER_V1_SAVE_AS_TABLE_OVERWRITE_OPTION_NAME -> "true")
           case _ =>
             extraOptions
         }
