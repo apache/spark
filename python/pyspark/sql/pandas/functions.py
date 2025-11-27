@@ -311,6 +311,8 @@ def arrow_udf(f=None, returnType=None, functionType=None):
         iteratively, which is more memory-efficient than loading all data at once. The returned
         scalar can be a python primitive type, a numpy data type, or a `pyarrow.Scalar` instance.
 
+        .. note:: Only a single UDF is supported per aggregation. 
+
         >>> from typing import Iterator
         >>> @arrow_udf("double")
         ... def arrow_mean(it: Iterator[pa.Array]) -> float:
@@ -325,18 +327,20 @@ def arrow_udf(f=None, returnType=None, functionType=None):
         >>> df = spark.createDataFrame(
         ...     [(1, 1.0), (1, 2.0), (2, 3.0), (2, 5.0), (2, 10.0)], ("id", "v"))
         >>> df.groupby("id").agg(arrow_mean(df['v'])).show()
-        +---+---------------+
-        | id|arrow_mean(v)  |
-        +---+---------------+
-        |  1|            1.5|
-        |  2|            6.0|
-        +---+---------------+
+        +---+-------------+
+        | id|arrow_mean(v)|
+        +---+-------------+
+        |  1|          1.5|
+        |  2|          6.0|
+        +---+-------------+
 
     * Iterator of Multiple Arrays to Scalar
         `Iterator[Tuple[pyarrow.Array, ...]]` -> `Any`
 
         The function takes an iterator of a tuple of multiple `pyarrow.Array` and returns a
         scalar value. This is useful for grouped aggregations with multiple input columns.
+
+        .. note:: Only a single UDF is supported per aggregation. 
 
         >>> from typing import Iterator, Tuple
         >>> import numpy as np
@@ -355,12 +359,12 @@ def arrow_udf(f=None, returnType=None, functionType=None):
         ...     [(1, 1.0, 1.0), (1, 2.0, 2.0), (2, 3.0, 1.0), (2, 5.0, 2.0), (2, 10.0, 3.0)],
         ...     ("id", "v", "w"))
         >>> df.groupby("id").agg(arrow_weighted_mean(df["v"], df["w"])).show()
-        +---+---------------------------------+
-        | id|arrow_weighted_mean(v, w)        |
-        +---+---------------------------------+
-        |  1|              1.6666666666666... |
-        |  2|               7.166666666666... |
-        +---+---------------------------------+
+        +---+-------------------------+
+        | id|arrow_weighted_mean(v, w)|
+        +---+-------------------------+
+        |  1|       1.6666666666666...|
+        |  2|        7.166666666666...|
+        +---+-------------------------+
 
     Notes
     -----
