@@ -25,6 +25,7 @@ import java.io.*;
 import java.nio.channels.FileChannel;
 import java.nio.channels.WritableByteChannel;
 import java.util.Iterator;
+import java.util.concurrent.TimeUnit;
 
 import scala.Option;
 import scala.Product2;
@@ -274,7 +275,10 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
   @VisibleForTesting
   void forceSorterToSpill() throws IOException {
     assert (sorter != null);
+    long startNs = System.nanoTime();
     sorter.spill();
+    taskContext.taskMetrics().incSpillTime(
+        TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startNs));
   }
 
   /**

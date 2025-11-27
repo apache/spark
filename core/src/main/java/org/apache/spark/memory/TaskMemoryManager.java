@@ -22,9 +22,11 @@ import java.io.InterruptedIOException;
 import java.io.IOException;
 import java.nio.channels.ClosedByInterruptException;
 import java.util.*;
+import java.util.concurrent.TimeUnit;
 
 import com.google.common.annotations.VisibleForTesting;
 
+import org.apache.spark.TaskContext;
 import org.apache.spark.internal.SparkLogger;
 import org.apache.spark.internal.SparkLoggerFactory;
 import org.apache.spark.internal.LogKeys;
@@ -258,7 +260,12 @@ public class TaskMemoryManager {
         Utils.bytesToString(requested), consumerToSpill, requestingConsumer);
     }
     try {
+      long startNs = System.nanoTime();
       long released = consumerToSpill.spill(requested, requestingConsumer);
+      Optional.ofNullable(TaskContext.get()).ifPresent(taskContext ->
+          taskContext.taskMetrics().incSpillTime(
+              TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startNs))
+      );
       if (released > 0) {
         if (logger.isDebugEnabled()) {
           logger.debug("Task {} spilled {} of requested {} from {} for {}", taskAttemptId,

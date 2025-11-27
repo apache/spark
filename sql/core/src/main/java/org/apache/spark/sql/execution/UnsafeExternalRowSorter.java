@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution;
 
 import java.io.IOException;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
 
 import scala.collection.Iterator;
@@ -146,7 +147,10 @@ public final class UnsafeExternalRowSorter {
     );
     numRowsInserted++;
     if (testSpillFrequency > 0 && (numRowsInserted % testSpillFrequency) == 0) {
+      long startNs = System.nanoTime();
       sorter.spill();
+      TaskContext.get().taskMetrics().incSpillTime(
+          TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startNs));
     }
   }
 
