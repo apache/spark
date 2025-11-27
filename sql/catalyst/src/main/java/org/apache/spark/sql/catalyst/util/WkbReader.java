@@ -141,59 +141,9 @@ class WkbReader {
     buffer = ByteBuffer.wrap(currentWkb, 1, currentWkb.length - 1);
     buffer.order(byteOrder);
 
-    // Read type and dimension
-    long typeStartPos = 1;
-    int typeAndDim = readInt();
-
-    int srid = defaultSrid;
-    GeoTypeId geoType;
-    int dimensionCount;
-
-    if (readEWKB) {
-      // Parse EWKB format
-      boolean hasSrid = (typeAndDim & EWKB_SRID_FLAG) != 0;
-      boolean hasZ = (typeAndDim & EWKB_Z_FLAG) != 0;
-      boolean hasM = (typeAndDim & EWKB_M_FLAG) != 0;
-
-      if (hasSrid) {
-        srid = readInt();
-      }
-
-      int rawType = typeAndDim & EWKB_TYPE_MASK;
-      if (rawType < 1 || rawType > 7) {
-        throw new WkbParseException("Invalid or unsupported type " + typeAndDim, typeStartPos,
-          currentWkb);
-      }
-
-      geoType = GeoTypeId.fromValue(rawType);
-      dimensionCount = 2 + (hasZ ? 1 : 0) + (hasM ? 1 : 0);
-    } else {
-      // Determine dimension from WKB type
-      if (typeAndDim >= 1 && typeAndDim <= 7) {
-        // 2D geometry
-        dimensionCount = 2;
-        geoType = GeoTypeId.fromValue(typeAndDim);
-      } else if (typeAndDim >= 1000 && typeAndDim <= 1007) {
-        // 3DZ geometry
-        dimensionCount = 3;
-        geoType = GeoTypeId.fromValue(typeAndDim - 1000);
-      } else if (typeAndDim >= 2000 && typeAndDim <= 2007) {
-        // 3DM geometry
-        dimensionCount = 3;
-        geoType = GeoTypeId.fromValue(typeAndDim - 2000);
-      } else if (typeAndDim >= 3000 && typeAndDim <= 3007) {
-        // 4D geometry
-        dimensionCount = 4;
-        geoType = GeoTypeId.fromValue(typeAndDim - 3000);
-      } else {
-        throw new WkbParseException("Invalid or unsupported type " + typeAndDim, typeStartPos,
-          currentWkb);
-      }
-    }
-
+    Geometry result = readGeometryInternal(defaultSrid, true);
     // Set GeometryVal byte representation
-    Geometry result = readType(geoType, srid, dimensionCount, typeStartPos);
-    result.setVal(STUtils.physicalValFromWKB(currentWkb, srid));
+    result.setVal(STUtils.physicalValFromWKB(currentWkb, defaultSrid));
     return result;
   }
 
@@ -202,67 +152,68 @@ class WkbReader {
    * Used by multi-geometry types to read child geometries.
    */
   private Geometry readNestedGeometry(int defaultSrid) {
-    // Read endianness from the current buffer position
-    ByteOrder byteOrder = readEndianness();
+    return readGeometryInternal(defaultSrid, false);
+  }
 
-    // Save the current byte order and temporarily set to the nested geometry's byte order
-    ByteOrder savedByteOrder = buffer.order();
-    buffer.order(byteOrder);
+  /**
+   * Internal method to read geometry with optional endianness reading.
+   *
+   * @param defaultSrid srid to use if not specified in WKB
+   * @param isRootGeometry if true, assumes endianness has already been read and buffer is set up;
+   *                       if false, reads endianness from current buffer position
+   * @return Geometry object
+   */
+  private Geometry readGeometryInternal(int defaultSrid, boolean isRootGeometry) {
+    ByteOrder savedByteOrder = null;
+    long typeStartPos;
+
+    if (isRootGeometry) {
+      // For root geometry, endianness has already been read and buffer is set up
+      typeStartPos = 1;
+    } else {
+      // For nested geometry, read endianness from the current buffer position
+      ByteOrder byteOrder = readEndianness();
+
+      // Save the current byte order and temporarily set to the nested geometry's byte order
+      savedByteOrder = buffer.order();
+      buffer.order(byteOrder);
+      typeStartPos = buffer.position();
+    }
 
     // Read type and dimension
-    long typeStartPos = buffer.position();
     int typeAndDim = readInt();
 
-    int srid = defaultSrid;
     GeoTypeId geoType;
     int dimensionCount;
 
-    if (readEWKB) {
-      // Parse EWKB format
-      boolean hasSrid = (typeAndDim & EWKB_SRID_FLAG) != 0;
-      boolean hasZ = (typeAndDim & EWKB_Z_FLAG) != 0;
-      boolean hasM = (typeAndDim & EWKB_M_FLAG) != 0;
-
-      if (hasSrid) {
-        srid = readInt();
-      }
-
-      int rawType = typeAndDim & EWKB_TYPE_MASK;
-      if (rawType < 1 || rawType > 7) {
-        throw new WkbParseException("Invalid or unsupported type " + typeAndDim, typeStartPos,
-          currentWkb);
-      }
-
-      geoType = GeoTypeId.fromValue(rawType);
-      dimensionCount = 2 + (hasZ ? 1 : 0) + (hasM ? 1 : 0);
+    // Determine dimension from WKB type
+    if (typeAndDim >= 1 && typeAndDim <= 7) {
+      // 2D geometry
+      dimensionCount = 2;
+      geoType = GeoTypeId.fromValue(typeAndDim);
+    } else if (typeAndDim >= 1000 && typeAndDim <= 1007) {
+      // 3DZ geometry
+      dimensionCount = 3;
+      geoType = GeoTypeId.fromValue(typeAndDim - 1000);
+    } else if (typeAndDim >= 2000 && typeAndDim <= 2007) {
+      // 3DM geometry
+      dimensionCount = 3;
+      geoType = GeoTypeId.fromValue(typeAndDim - 2000);
+    } else if (typeAndDim >= 3000 && typeAndDim <= 3007) {
+      // 4D geometry
+      dimensionCount = 4;
+      geoType = GeoTypeId.fromValue(typeAndDim - 3000);
     } else {
-      // Determine dimension from WKB type
-      if (typeAndDim >= 1 && typeAndDim <= 7) {
-        // 2D geometry
-        dimensionCount = 2;
-        geoType = GeoTypeId.fromValue(typeAndDim);
-      } else if (typeAndDim >= 1000 && typeAndDim <= 1007) {
-        // 3DZ geometry
-        dimensionCount = 3;
-        geoType = GeoTypeId.fromValue(typeAndDim - 1000);
-      } else if (typeAndDim >= 2000 && typeAndDim <= 2007) {
-        // 3DM geometry
-        dimensionCount = 3;
-        geoType = GeoTypeId.fromValue(typeAndDim - 2000);
-      } else if (typeAndDim >= 3000 && typeAndDim <= 3007) {
-        // 4D geometry
-        dimensionCount = 4;
-        geoType = GeoTypeId.fromValue(typeAndDim - 3000);
-      } else {
-        throw new WkbParseException("Invalid or unsupported type " + typeAndDim, typeStartPos,
-          currentWkb);
-      }
+      throw new WkbParseException("Invalid or unsupported type " + typeAndDim, typeStartPos,
+        currentWkb);
     }
 
-    Geometry result = readType(geoType, srid, dimensionCount, typeStartPos);
+    Geometry result = readType(geoType, defaultSrid, dimensionCount, typeStartPos);
 
-    // Restore the saved byte order
-    buffer.order(savedByteOrder);
+    // Restore the saved byte order if this was a nested geometry
+    if (!isRootGeometry && savedByteOrder != null) {
+      buffer.order(savedByteOrder);
+    }
 
     return result;
   }
