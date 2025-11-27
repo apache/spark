@@ -174,7 +174,7 @@ trait SQLQueryTestHelper extends SQLConfHelper with Logging {
     } catch {
       case e: SparkThrowable with Throwable
           if Option(e.getCondition).contains("PYTHON_EXCEPTION") =>
-        val msg = Option(e.getMessageParameters.get("msg")).getOrElse("")
+        val msg = Option(e.getMessageParameters.get("traceback")).getOrElse("")
         (emptySchema, Seq(e.getClass.getName, msg))
       case e: SparkThrowable with Throwable if e.getCondition != null =>
         (emptySchema, Seq(e.getClass.getName, getMessage(e, format)))

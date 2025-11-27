@@ -338,7 +338,7 @@ class PythonException(CapturedException, BasePythonException):
     def __str__(self) -> str:
         messageParameters = self.getMessageParameters()
 
-        return f"{messageParameters.get('msg')}\n{messageParameters.get('traceback')}"
+        return f"{messageParameters.get('msg')}:\n{messageParameters.get('traceback')}"
 
 
 class ArithmeticException(CapturedException, BaseArithmeticException):

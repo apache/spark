@@ -179,7 +179,7 @@ object StreamingForeachBatchHelper extends Logging {
             val traceback = PythonWorkerUtils.readUTF(dataIn)
             val msg =
               s"[session: ${sessionHolder.sessionId}] [userId: ${sessionHolder.userId}] " +
-                s"Found error inside foreachBatch Python process:"
+                s"Found error inside foreachBatch Python process"
             throw new PythonException(
               errorClass = "PYTHON_EXCEPTION",
               messageParameters = Map("msg" -> msg, "traceback" -> traceback))

@@ -93,7 +93,7 @@ class PythonStreamingQueryListener(listener: SimplePythonFunction, sessionHolder
         case SpecialLengths.PYTHON_EXCEPTION_THROWN =>
           val traceback = PythonWorkerUtils.readUTF(dataIn)
           val msg = s"Found error inside Streaming query listener Python " +
-            s"process for function $functionName:"
+            s"process for function $functionName"
           throw new PythonException(
             errorClass = "PYTHON_EXCEPTION",
             messageParameters = Map("msg" -> msg, "traceback" -> traceback))
