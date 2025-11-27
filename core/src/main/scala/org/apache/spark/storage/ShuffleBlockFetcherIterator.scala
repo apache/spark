@@ -718,6 +718,7 @@ final class ShuffleBlockFetcherIterator(
       ", expected bytesInFlight = 0 but found bytesInFlight = " + bytesInFlight)
 
     // Send out initial requests for blocks, up to our maxBytesInFlight
+    val startFetchWait = System.nanoTime()
     fetchUpToMaxBytes()
 
     val numDeferredRequest = deferredFetchRequests.values.map(_.size).sum
@@ -733,6 +734,8 @@ final class ShuffleBlockFetcherIterator(
     // Get host local blocks if any
     fetchAllHostLocalBlocks(hostLocalBlocksByExecutor)
     pushBasedFetchHelper.fetchAllPushMergedLocalBlocks(pushMergedLocalBlocks)
+    val fetchWaitTime = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startFetchWait)
+    shuffleMetrics.incFetchWaitTime(fetchWaitTime)
   }
 
   private def fetchAllHostLocalBlocks(
