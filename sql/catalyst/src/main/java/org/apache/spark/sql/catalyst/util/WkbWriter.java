@@ -27,16 +27,6 @@ public class WkbWriter {
   private static final int DEFAULT_SRID = 0;
   private static final int EWKB_SRID_FLAG = 0x20000000;
 
-  private boolean writeEWKB;
-
-  public WkbWriter() {
-    this(false);
-  }
-
-  public WkbWriter(boolean writeEWKB) {
-    this.writeEWKB = writeEWKB;
-  }
-
   /**
    * Writes a geometry to WKB format.
    */
@@ -60,10 +50,6 @@ public class WkbWriter {
 
   private int calculateSize(Geometry geometry) {
     int size = 1 + 4; // Endianness + type
-
-    if (writeEWKB && geometry.srid() != DEFAULT_SRID) {
-      size += 4; // SRID
-    }
 
     if (geometry instanceof Point) {
       Point point = (Point) geometry;
@@ -114,13 +100,7 @@ public class WkbWriter {
 
     // Write type
     int type = (int) geometry.getTypeId().getValue();
-    if (writeEWKB && geometry.srid() != DEFAULT_SRID) {
-      type |= EWKB_SRID_FLAG;
-      buffer.putInt(type);
-      buffer.putInt(geometry.srid());
-    } else {
-      buffer.putInt(type);
-    }
+    buffer.putInt(type);
 
     // Write geometry-specific data
     if (geometry instanceof Point) {
