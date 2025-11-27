@@ -965,8 +965,14 @@ class DataSourceV2SQLSuiteV1Filter
           checkAnswer(sql(s"SELECT * FROM $view"), spark.table("source").select("id"))
 
           val oldView = spark.table(view)
+          assert(spark.sharedState.cacheManager.numCachedEntries == 1)
           sql(s"REPLACE TABLE $t (a bigint) USING foo")
-          assert(spark.sharedState.cacheManager.lookupCachedData(oldView).isEmpty)
+          // it is no longer valid to materialize oldView as underlying
+          // query execution captured original table before replace
+          // yet cache invalidation must work correctly
+          val e = intercept[AnalysisException] { oldView.collect() }
+          assert(e.message.contains("Table ID has changed"))
+          assert(spark.sharedState.cacheManager.isEmpty)
         }
       }
     }
@@ -1322,8 +1328,8 @@ class DataSourceV2SQLSuiteV1Filter
   test("ShowViews: using v2 catalog, command not supported.") {
     checkError(
       exception = analysisException("SHOW VIEWS FROM testcat"),
-      condition = "_LEGACY_ERROR_TEMP_1184",
-      parameters = Map("plugin" -> "testcat", "ability" -> "views"))
+      condition = "MISSING_CATALOG_ABILITY.VIEWS",
+      parameters = Map("plugin" -> "testcat"))
   }
 
   test("create/replace/alter table - reserved properties") {
@@ -2312,8 +2318,10 @@ class DataSourceV2SQLSuiteV1Filter
         exception = intercept[SparkUnsupportedOperationException] {
           sql(s"UPDATE $t SET name='Robert', age=32 WHERE p=1")
         },
-        condition = "_LEGACY_ERROR_TEMP_2096",
-        parameters = Map("ddl" -> "UPDATE TABLE")
+        condition = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
+        parameters = Map(
+          "tableName" -> "`testcat`.`ns1`.`ns2`.`tbl`",
+          "operation" -> "UPDATE TABLE")
       )
     }
   }
@@ -2418,8 +2426,10 @@ class DataSourceV2SQLSuiteV1Filter
                |WHEN MATCHED AND (target.p > 0) THEN UPDATE SET *
                |WHEN NOT MATCHED THEN INSERT *""".stripMargin)
         },
-        condition = "_LEGACY_ERROR_TEMP_2096",
-        parameters = Map("ddl" -> "MERGE INTO TABLE"))
+        condition = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
+        parameters = Map(
+          "tableName" -> "`testcat`.`ns1`.`ns2`.`target`",
+          "operation" -> "MERGE INTO TABLE"))
     }
   }
 
@@ -2517,8 +2527,8 @@ class DataSourceV2SQLSuiteV1Filter
     val v = "testcat.ns1.ns2.v"
     checkError(
       exception = analysisException(s"CREATE VIEW $v AS SELECT 1"),
-      condition = "_LEGACY_ERROR_TEMP_1184",
-      parameters = Map("plugin" -> "testcat", "ability" -> "views"))
+      condition = "MISSING_CATALOG_ABILITY.VIEWS",
+      parameters = Map("plugin" -> "testcat"))
   }
 
   test("global temp view should not be masked by v2 catalog") {
@@ -2727,8 +2737,35 @@ class DataSourceV2SQLSuiteV1Filter
     // Session catalog is used.
     withTable("t") {
       sql("CREATE TABLE t(k int) USING json")
+
+      // Verify no comment initially
+      val noCommentRows1 = sql("DESC EXTENDED t").toDF("k", "v", "c")
+        .where("k='Comment'")
+        .collect()
+      assert(noCommentRows1.isEmpty || noCommentRows1.head.getString(1).isEmpty,
+        "Expected no comment initially")
+
+      // Set a comment
       checkTableComment("t", "minor revision")
+
+      // Verify comment is set
+      val commentRows1 = sql("DESC EXTENDED t").toDF("k", "v", "c")
+        .where("k='Comment'")
+        .collect()
+      assert(commentRows1.nonEmpty && commentRows1.head.getString(1) === "minor revision",
+        "Expected comment to be set to 'minor revision'")
+
+      // Remove comment by setting to NULL
       checkTableComment("t", null)
+
+      // Verify comment is removed
+      val removedCommentRows1 = sql("DESC EXTENDED t").toDF("k", "v", "c")
+        .where("k='Comment'")
+        .collect()
+      assert(removedCommentRows1.isEmpty || removedCommentRows1.head.getString(1).isEmpty,
+        "Expected comment to be removed")
+
+      // Set comment to literal "NULL" string
       checkTableComment("t", "NULL")
     }
     val sql1 = "COMMENT ON TABLE abc IS NULL"
@@ -2741,8 +2778,35 @@ class DataSourceV2SQLSuiteV1Filter
     // V2 non-session catalog is used.
     withTable("testcat.ns1.ns2.t") {
       sql("CREATE TABLE testcat.ns1.ns2.t(k int) USING foo")
+
+      // Verify no comment initially
+      val noCommentRows2 = sql("DESC EXTENDED testcat.ns1.ns2.t").toDF("k", "v", "c")
+        .where("k='Comment'")
+        .collect()
+      assert(noCommentRows2.isEmpty || noCommentRows2.head.getString(1).isEmpty,
+        "Expected no comment initially for testcat table")
+
+      // Set a comment
       checkTableComment("testcat.ns1.ns2.t", "minor revision")
+
+      // Verify comment is set
+      val commentRows2 = sql("DESC EXTENDED testcat.ns1.ns2.t").toDF("k", "v", "c")
+        .where("k='Comment'")
+        .collect()
+      assert(commentRows2.nonEmpty && commentRows2.head.getString(1) === "minor revision",
+        "Expected comment to be set to 'minor revision' for testcat table")
+
+      // Remove comment by setting to NULL
       checkTableComment("testcat.ns1.ns2.t", null)
+
+      // Verify comment is removed
+      val removedCommentRows2 = sql("DESC EXTENDED testcat.ns1.ns2.t").toDF("k", "v", "c")
+        .where("k='Comment'")
+        .collect()
+      assert(removedCommentRows2.isEmpty || removedCommentRows2.head.getString(1).isEmpty,
+        "Expected comment to be removed from testcat table")
+
+      // Set comment to literal "NULL" string
       checkTableComment("testcat.ns1.ns2.t", "NULL")
     }
     val sql2 = "COMMENT ON TABLE testcat.abc IS NULL"
@@ -2768,10 +2832,19 @@ class DataSourceV2SQLSuiteV1Filter
 
   private def checkTableComment(tableName: String, comment: String): Unit = {
     sql(s"COMMENT ON TABLE $tableName IS " + Option(comment).map("'" + _ + "'").getOrElse("NULL"))
-    val expectedComment = Option(comment).getOrElse("")
-    assert(sql(s"DESC extended $tableName").toDF("k", "v", "c")
-      .where(s"k='${TableCatalog.PROP_COMMENT.capitalize}'")
-      .head().getString(1) === expectedComment)
+    if (comment == null) {
+      // When comment is NULL, the property should be removed completely
+      val commentRows = sql(s"DESC extended $tableName").toDF("k", "v", "c")
+        .where("k='Comment'")
+        .collect()
+      assert(commentRows.isEmpty || commentRows.head.getString(1).isEmpty,
+        "Expected comment to be removed")
+    } else {
+      val expectedComment = comment
+      assert(sql(s"DESC extended $tableName").toDF("k", "v", "c")
+        .where("k='Comment'")
+        .head().getString(1) === expectedComment)
+    }
   }
 
   test("SPARK-31015: star expression should work for qualified column names for v2 tables") {
@@ -3913,6 +3986,19 @@ class DataSourceV2SQLSuiteV1Filter
     }
   }
 
+  test("SPARK-54491: insert into temp view on DSv2 table") {
+    val t = s"testcat.default.t"
+    val v = "v"
+    withTable(t) {
+      withTempView(v) {
+        sql(s"CREATE TABLE $t (id INT) USING foo")
+        spark.table(t).createOrReplaceTempView(v)
+        sql(s"INSERT INTO v VALUES (1)")
+        checkAnswer(sql(s"SELECT * FROM $t"), Seq(Row(1)))
+      }
+    }
+  }
+
   private def testNotSupportedV2Command(
       sqlCommand: String,
       sqlParams: String,
@@ -3972,6 +4058,12 @@ class V2CatalogSupportBuiltinDataSource extends InMemoryCatalog {
       tracksPartitionsInCatalog = false
     )
     V1Table(sparkTable)
+  }
+
+  override def loadTable(
+      ident: Identifier,
+      writePrivileges: util.Set[TableWritePrivilege]): Table = {
+    loadTable(ident)
   }
 }
 

@@ -22,6 +22,7 @@ import scala.util.Try
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.internal.{Logging, LogKeys}
+import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.classic.SparkSession
 
 sealed trait SystemMetadata {}
@@ -40,14 +41,16 @@ case class FlowSystemMetadata(
    * which is storage/_checkpoints/flow_destination_table/flow_name.
    * @return the checkpoint root directory for `flow`
    */
-  private def flowCheckpointsDirOpt(): Option[Path] = {
+  def flowCheckpointsDirOpt(): Option[Path] = {
     Option(if (graph.table.contains(flow.destinationIdentifier) ||
       graph.sink.contains(flow.destinationIdentifier)) {
       val checkpointRoot = new Path(context.storageRoot, "_checkpoints")
-      val flowTableName = flow.destinationIdentifier.table
+      // Different tables in the pipeline can have flows with the same name, so we include
+      // the table's fully qualified identifier in the path to avoid collisions.
+      val flowTableId = tableIdentifierToPathString(flow.destinationIdentifier)
       val flowName = flow.identifier.table
       val checkpointDir = new Path(
-        new Path(checkpointRoot, flowTableName),
+        new Path(checkpointRoot, flowTableId),
         flowName
       )
       logInfo(
@@ -60,6 +63,13 @@ case class FlowSystemMetadata(
         s"Flow ${flow.identifier} does not have a valid destination for checkpoints."
       )
     })
+  }
+
+  /**
+   * Converts a TableIdentifier to a path string by joining its name parts with the path separator.
+   */
+  private def tableIdentifierToPathString(tableIdentifier: TableIdentifier): String = {
+    tableIdentifier.nameParts.mkString(Path.SEPARATOR)
   }
 
   /** Returns the location for the most recent checkpoint of a given flow. */

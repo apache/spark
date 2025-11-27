@@ -135,6 +135,8 @@ object SparkConnectServerUtils {
       "spark.connect.execute.reattachable.senderMaxStreamSize=123",
       // Testing SPARK-49673, setting maxBatchSize to 10MiB
       s"spark.connect.grpc.arrow.maxBatchSize=${10 * 1024 * 1024}",
+      // Cache less sessions to save memory.
+      "spark.executor.isolatedSessionCache.size=5",
       // Disable UI
       "spark.ui.enabled=false").flatMap(v => "--conf" :: v :: Nil)
   }
@@ -180,7 +182,8 @@ object SparkConnectServerUtils {
         val fileName = e.substring(e.lastIndexOf(File.separatorChar) + 1)
         fileName.endsWith(".jar") &&
         (fileName.startsWith("scalatest") || fileName.startsWith("scalactic") ||
-          (fileName.startsWith("spark-catalyst") && fileName.endsWith("-tests")))
+          (fileName.startsWith("spark-catalyst") && fileName.endsWith("-tests")) ||
+          fileName.startsWith("grpc-"))
       }
       .map(e => Paths.get(e).toUri)
     spark.client.artifactManager.addArtifacts(jars.toImmutableArraySeq)

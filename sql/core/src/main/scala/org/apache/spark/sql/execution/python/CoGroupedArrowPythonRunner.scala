@@ -20,7 +20,11 @@ package org.apache.spark.sql.execution.python
 import java.io.DataOutputStream
 import java.util
 
-import org.apache.spark.{SparkEnv, TaskContext}
+import org.apache.arrow.compression.{Lz4CompressionCodec, ZstdCompressionCodec}
+import org.apache.arrow.vector.{VectorSchemaRoot, VectorUnloader}
+import org.apache.arrow.vector.compression.{CompressionCodec, NoCompressionCodec}
+
+import org.apache.spark.{SparkEnv, SparkException, TaskContext}
 import org.apache.spark.api.python.{BasePythonRunner, ChainedPythonFunctions, PythonRDD, PythonWorker}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.arrow.ArrowWriterWrapper
@@ -67,6 +71,8 @@ class CoGroupedArrowPythonRunner(
   override val killOnIdleTimeout: Boolean = SQLConf.get.pythonUDFWorkerKillOnIdleTimeout
   override val tracebackDumpIntervalSeconds: Long =
     SQLConf.get.pythonUDFWorkerTracebackDumpIntervalSeconds
+  override val killWorkerOnFlushFailure: Boolean =
+    SQLConf.get.pythonUDFDaemonKillWorkerOnFlushFailure
 
   override val hideTraceback: Boolean = SQLConf.get.pysparkHideTraceback
   override val simplifiedTraceback: Boolean = SQLConf.get.pysparkSimplifiedTraceback
@@ -76,6 +82,27 @@ class CoGroupedArrowPythonRunner(
     if (v > 0) v else Int.MaxValue
   }
   private val maxBytesPerBatch: Long = SQLConf.get.arrowMaxBytesPerBatch
+  private val compressionCodecName: String = SQLConf.get.arrowCompressionCodec
+
+  // Helper method to create VectorUnloader with compression
+  private def createUnloader(root: VectorSchemaRoot): VectorUnloader = {
+    val codec = compressionCodecName match {
+      case "none" => NoCompressionCodec.INSTANCE
+      case "zstd" =>
+        val compressionLevel = SQLConf.get.arrowZstdCompressionLevel
+        val factory = CompressionCodec.Factory.INSTANCE
+        val codecType = new ZstdCompressionCodec(compressionLevel).getCodecType()
+        factory.createCodec(codecType)
+      case "lz4" =>
+        val factory = CompressionCodec.Factory.INSTANCE
+        val codecType = new Lz4CompressionCodec().getCodecType()
+        factory.createCodec(codecType)
+      case other =>
+        throw SparkException.internalError(
+          s"Unsupported Arrow compression codec: $other. Supported values: none, zstd, lz4")
+    }
+    new VectorUnloader(root, true, codec, true)
+  }
 
   protected def newWriter(
       env: SparkEnv,
@@ -136,13 +163,17 @@ class CoGroupedArrowPythonRunner(
             leftGroupArrowWriter = ArrowWriterWrapper.createAndStartArrowWriter(leftSchema,
               timeZoneId, pythonExec + " (left)", errorOnDuplicatedFieldNames = true,
               largeVarTypes, dataOut, context)
+            // Set the unloader with compression after creating the writer
+            leftGroupArrowWriter.unloader = createUnloader(leftGroupArrowWriter.root)
           }
           numRowsInBatch = BatchedPythonArrowInput.writeSizedBatch(
             leftGroupArrowWriter.arrowWriter,
             leftGroupArrowWriter.streamWriter,
             nextBatchInLeftGroup,
             maxBytesPerBatch,
-            maxRecordsPerBatch)
+            maxRecordsPerBatch,
+            leftGroupArrowWriter.unloader,
+            dataOut)
 
           if (!nextBatchInLeftGroup.hasNext) {
             leftGroupArrowWriter.streamWriter.end()
@@ -155,13 +186,17 @@ class CoGroupedArrowPythonRunner(
             rightGroupArrowWriter = ArrowWriterWrapper.createAndStartArrowWriter(rightSchema,
               timeZoneId, pythonExec + " (right)", errorOnDuplicatedFieldNames = true,
               largeVarTypes, dataOut, context)
+            // Set the unloader with compression after creating the writer
+            rightGroupArrowWriter.unloader = createUnloader(rightGroupArrowWriter.root)
           }
           numRowsInBatch = BatchedPythonArrowInput.writeSizedBatch(
             rightGroupArrowWriter.arrowWriter,
             rightGroupArrowWriter.streamWriter,
             nextBatchInRightGroup,
             maxBytesPerBatch,
-            maxRecordsPerBatch)
+            maxRecordsPerBatch,
+            rightGroupArrowWriter.unloader,
+            dataOut)
           if (!nextBatchInRightGroup.hasNext) {
             rightGroupArrowWriter.streamWriter.end()
             rightGroupArrowWriter.close()

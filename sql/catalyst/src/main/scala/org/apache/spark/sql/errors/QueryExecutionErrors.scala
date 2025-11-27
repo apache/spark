@@ -665,6 +665,17 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       summary = "")
   }
 
+  def stInvalidSridValueError(srid: String): SparkIllegalArgumentException = {
+    new SparkIllegalArgumentException(
+      errorClass = "ST_INVALID_SRID_VALUE",
+      messageParameters = Map("srid" -> srid)
+    )
+  }
+
+  def stInvalidSridValueError(srid: Int): SparkIllegalArgumentException = {
+    stInvalidSridValueError(srid.toString)
+  }
+
   def withSuggestionIntervalArithmeticOverflowError(
       suggestedFunc: String,
       context: QueryContext): ArithmeticException = {
@@ -1109,10 +1120,12 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       cause = e)
   }
 
-  def ddlUnsupportedTemporarilyError(ddl: String): SparkUnsupportedOperationException = {
+  def ddlUnsupportedTemporarilyError(
+      ddl: String,
+      tableName: String): SparkUnsupportedOperationException = {
     new SparkUnsupportedOperationException(
-      errorClass = "_LEGACY_ERROR_TEMP_2096",
-      messageParameters = Map("ddl" -> ddl))
+      errorClass = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
+      messageParameters = Map("tableName" -> toSQLId(tableName), "operation" -> ddl))
   }
 
   def executeBroadcastTimeoutError(timeout: Long, ex: Option[TimeoutException]): Throwable = {
@@ -1162,13 +1175,6 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
     new SparkException(
       errorClass = "_LEGACY_ERROR_TEMP_2105",
       messageParameters = Map.empty,
-      cause = null)
-  }
-
-  def cannotAcquireMemoryToBuildLongHashedRelationError(size: Long, got: Long): Throwable = {
-    new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_2106",
-      messageParameters = Map("size" -> size.toString(), "got" -> got.toString()),
       cause = null)
   }
 
@@ -2804,6 +2810,12 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
         "value" -> toSQLValue(value, IntegerType)))
   }
 
+  def hllKMustBeConstantError(function: String): Throwable = {
+    new SparkRuntimeException(
+      errorClass = "HLL_K_MUST_BE_CONSTANT",
+      messageParameters = Map("function" -> toSQLId(function)))
+  }
+
   def hllInvalidInputSketchBuffer(function: String): Throwable = {
     new SparkRuntimeException(
       errorClass = "HLL_INVALID_INPUT_SKETCH_BUFFER",
@@ -3168,5 +3180,49 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
         "min" -> toSQLValue(min, IntegerType),
         "max" -> toSQLValue(max, IntegerType),
         "value" -> toSQLValue(value, IntegerType)))
+  }
+
+  def thetaLgNomEntriesMustBeConstantError(function: String): Throwable = {
+    new SparkRuntimeException(
+      errorClass = "THETA_LG_NOM_ENTRIES_MUST_BE_CONSTANT",
+      messageParameters = Map("function" -> toSQLId(function)))
+  }
+
+  def kllSketchInvalidQuantileRangeError(function: String, quantile: Double): Throwable = {
+    new SparkRuntimeException(
+      errorClass = "KLL_SKETCH_INVALID_QUANTILE_RANGE",
+      messageParameters = Map(
+        "functionName" -> toSQLId(function),
+        "quantile" -> toSQLValue(quantile, DoubleType)))
+  }
+
+  def kllSketchInvalidInputError(function: String, reason: String): Throwable = {
+    new SparkRuntimeException(
+      errorClass = "KLL_SKETCH_INVALID_INPUT",
+      messageParameters = Map(
+        "functionName" -> toSQLId(function),
+        "reason" -> reason))
+  }
+
+  def kllSketchIncompatibleMergeError(function: String, reason: String): Throwable = {
+    new SparkRuntimeException(
+      errorClass = "KLL_SKETCH_INCOMPATIBLE_MERGE",
+      messageParameters = Map(
+        "functionName" -> toSQLId(function),
+        "reason" -> reason))
+  }
+
+  def kllSketchKMustBeConstantError(function: String): Throwable = {
+    new SparkRuntimeException(
+      errorClass = "KLL_SKETCH_K_MUST_BE_CONSTANT",
+      messageParameters = Map("functionName" -> toSQLId(function)))
+  }
+
+  def kllSketchKOutOfRangeError(function: String, k: Int): Throwable = {
+    new SparkRuntimeException(
+      errorClass = "KLL_SKETCH_K_OUT_OF_RANGE",
+      messageParameters = Map(
+        "functionName" -> toSQLId(function),
+        "k" -> toSQLValue(k, IntegerType)))
   }
 }

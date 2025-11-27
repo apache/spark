@@ -77,4 +77,43 @@ class SparkConnectStatementSuite extends ConnectFunSuite with RemoteSparkSession
       }
     }
   }
+
+  test("max rows from SparkConnectStatement") {
+    def verifyMaxRows(
+        expectedRows: Int, query: String)(stmt: Statement): Unit = {
+      Using(stmt.executeQuery(query)) { rs =>
+        (0 until expectedRows).foreach { _ =>
+          assert(rs.next())
+        }
+        assert(!rs.next())
+      }
+    }
+
+    withStatement { stmt =>
+      // by default, it has no max rows limitation
+      assert(stmt.getMaxRows === 0)
+      verifyMaxRows(10, "SELECT id FROM range(10)")(stmt)
+
+      val se = intercept[SQLException] {
+        stmt.setMaxRows(-1)
+      }
+      assert(se.getMessage === "The max rows must be zero or a positive integer.")
+
+      stmt.setMaxRows(5)
+      assert(stmt.getMaxRows === 5)
+      verifyMaxRows(5, "SELECT id FROM range(10)")(stmt)
+
+      // set max rows for query that has LIMIT
+      stmt.setMaxRows(5)
+      assert(stmt.getMaxRows === 5)
+      verifyMaxRows(3, "SELECT id FROM range(10) LIMIT 3")(stmt)
+      verifyMaxRows(5, "SELECT id FROM range(10) LIMIT 8")(stmt)
+
+      // set max rows for one statement won't affect others
+      withStatement { stmt2 =>
+        assert(stmt2.getMaxRows === 0)
+        verifyMaxRows(10, "SELECT id FROM range(10)")(stmt2)
+      }
+    }
+  }
 }

@@ -132,6 +132,7 @@ class RocksDBFileManager(
     hadoopConf: Configuration,
     codecName: String = CompressionCodec.ZSTD,
     loggingId: String = "",
+    storeConf: StateStoreConf = StateStoreConf.empty,
     fileChecksumEnabled: Boolean = false,
     fileChecksumThreadPoolSize: Option[Int] = None)
   extends Logging {
@@ -149,7 +150,9 @@ class RocksDBFileManager(
         mgr,
         // Allowing this for perf, since we do orphan checksum file cleanup in maintenance anyway
         allowConcurrentDelete = true,
-        numThreads = fileChecksumThreadPoolSize.get)
+        numThreads = fileChecksumThreadPoolSize.get,
+        skipCreationIfFileMissingChecksum
+          = storeConf.checkpointFileChecksumSkipCreationIfFileMissingChecksum)
     } else {
       mgr
     }
@@ -425,6 +428,12 @@ class RocksDBFileManager(
     } else {
       0
     }
+  }
+
+  /** Get all the snapshot versions that can be used to load this version */
+  def getEligibleSnapshotsForVersion(version: Long): Seq[Long] = {
+    SnapshotLoaderHelper.getEligibleSnapshotsForVersion(
+      version, fm, new Path(dfsRootDir), onlyZipFiles, fileSuffix = ".zip")
   }
 
   /**

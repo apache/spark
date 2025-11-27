@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.optimizer.Optimizer
 import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.classic.{SparkSession, Strategy, StreamingQueryManager, UDFRegistration}
+import org.apache.spark.sql.classic.{SparkSession, Strategy, StreamingCheckpointManager, StreamingQueryManager, UDFRegistration}
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.{ColumnarRule, CommandExecutionMode, QueryExecution, SparkOptimizer, SparkPlanner, SparkSqlParser}
@@ -176,6 +176,8 @@ abstract class BaseSessionStateBuilder(
 
   protected lazy val catalogManager = new CatalogManager(v2SessionCatalog, catalog)
 
+  protected lazy val sharedRelationCache = session.sharedState.relationCache
+
   /**
    * Interface exposed to the user for registering user-defined functions.
    *
@@ -197,7 +199,7 @@ abstract class BaseSessionStateBuilder(
    *
    * Note: this depends on the `conf` and `catalog` fields.
    */
-  protected def analyzer: Analyzer = new Analyzer(catalogManager) {
+  protected def analyzer: Analyzer = new Analyzer(catalogManager, sharedRelationCache) {
     override val hintResolutionRules: Seq[Rule[LogicalPlan]] =
       customHintResolutionRules
 
@@ -419,6 +421,12 @@ abstract class BaseSessionStateBuilder(
     new StreamingQueryManager(session, conf)
 
   /**
+   * Interface to manage streaming query checkpoints.
+   */
+  private[spark] def streamingCheckpointManager: StreamingCheckpointManager =
+    new StreamingCheckpointManager(session, conf)
+
+  /**
    * An interface to register custom [[org.apache.spark.sql.util.QueryExecutionListener]]s
    * that listen for execution metrics.
    *
@@ -465,6 +473,7 @@ abstract class BaseSessionStateBuilder(
       () => optimizer,
       planner,
       () => streamingQueryManager,
+      () => streamingCheckpointManager,
       listenerManager,
       () => resourceLoader,
       createQueryExecution,

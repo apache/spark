@@ -19,8 +19,8 @@ package org.apache.spark.sql.types
 
 import org.json4s.JsonAST.{JString, JValue}
 
-import org.apache.spark.SparkIllegalArgumentException
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.{SparkIllegalArgumentException, SparkRuntimeException}
+import org.apache.spark.annotation.Unstable
 import org.apache.spark.sql.internal.types.GeographicSpatialReferenceSystemMapper
 
 /**
@@ -28,7 +28,7 @@ import org.apache.spark.sql.internal.types.GeographicSpatialReferenceSystemMappe
  * Geospatial Consortium (OGC) Simple Feature Access specification
  * (https://portal.ogc.org/files/?artifact_id=25355), with a geographic coordinate system.
  */
-@Experimental
+@Unstable
 class GeographyType private (val crs: String, val algorithm: EdgeInterpolationAlgorithm)
     extends AtomicType
     with Serializable {
@@ -133,9 +133,30 @@ class GeographyType private (val crs: String, val algorithm: EdgeInterpolationAl
     // If the SRID is not mixed, we can only accept the same SRID.
     isMixedSrid || gt.srid == srid
   }
+
+  private[sql] def assertSridAllowedForType(otherSrid: Int): Unit = {
+    // If SRID is not mixed, SRIDs must match.
+    if (!isMixedSrid && otherSrid != srid) {
+      throw new SparkRuntimeException(
+        errorClass = "GEO_ENCODER_SRID_MISMATCH_ERROR",
+        messageParameters = Map(
+          "type" -> "GEOGRAPHY",
+          "valueSrid" -> otherSrid.toString,
+          "typeSrid" -> srid.toString))
+    } else if (isMixedSrid) {
+      // For fixed SRID geom types, we have a check that value matches the type srid.
+      // For mixed SRID we need to do that check explicitly, as MIXED SRID can accept any SRID.
+      // However it should accept only valid SRIDs.
+      if (!GeographyType.isSridSupported(otherSrid)) {
+        throw new SparkIllegalArgumentException(
+          errorClass = "ST_INVALID_SRID_VALUE",
+          messageParameters = Map("srid" -> otherSrid.toString))
+      }
+    }
+  }
 }
 
-@Experimental
+@Unstable
 object GeographyType extends SpatialType {
 
   /**
@@ -154,8 +175,13 @@ object GeographyType extends SpatialType {
   /**
    * The default concrete GeographyType in SQL.
    */
-  private final val GEOGRAPHY_MIXED_TYPE: GeographyType =
+  private final lazy val GEOGRAPHY_MIXED_TYPE: GeographyType =
     GeographyType(MIXED_CRS, GEOGRAPHY_DEFAULT_ALGORITHM)
+
+  /** Returns whether the given SRID is supported. */
+  def isSridSupported(srid: Int): Boolean = {
+    GeographicSpatialReferenceSystemMapper.getStringId(srid) != null
+  }
 
   /**
    * Constructors for GeographyType.
@@ -228,8 +254,10 @@ object GeographyType extends SpatialType {
  * Edge interpolation algorithm for Geography logical type. Currently, Spark only supports
  * spherical algorithm.
  */
+@Unstable
 sealed abstract class EdgeInterpolationAlgorithm
 
+@Unstable
 object EdgeInterpolationAlgorithm {
   case object SPHERICAL extends EdgeInterpolationAlgorithm
 

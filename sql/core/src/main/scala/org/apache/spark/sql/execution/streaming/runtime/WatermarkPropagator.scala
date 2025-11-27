@@ -175,6 +175,7 @@ class PropagateWatermarkSimulator extends WatermarkPropagator with Logging {
   private def getInputWatermarks(
       node: SparkPlan,
       nodeToOutputWatermark: mutable.Map[Int, Option[Long]]): Seq[Long] = {
+    @scala.annotation.tailrec
     def watermarkForChild(child: SparkPlan): Option[Long] = {
       child match {
         case s: InMemoryTableScanExec => watermarkForChild(s.relation.cachedPlan)

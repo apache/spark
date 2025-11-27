@@ -156,7 +156,7 @@
     If you change codahale.metrics.version, you also need to change
     the link to metrics.dropwizard.io in docs/monitoring.md.
     -->
-    <codahale.metrics.version>4.2.33</codahale.metrics.version>
+    <codahale.metrics.version>4.2.37</codahale.metrics.version>
     <!-- Should be consistent with SparkBuild.scala and docs -->
     <avro.version>1.12.1</avro.version>
     <aws.kinesis.client.version>1.15.3</aws.kinesis.client.version>
@@ -184,13 +184,13 @@
     <scalafmt.validateOnly>true</scalafmt.validateOnly>
     <scalafmt.changedOnly>true</scalafmt.changedOnly>
     <!-- Should be consistent with SparkBuild.scala and docs -->
-    <fasterxml.jackson.version>2.20.0</fasterxml.jackson.version>
+    <fasterxml.jackson.version>2.20.1</fasterxml.jackson.version>
     <ws.xmlschema.version>2.3.1</ws.xmlschema.version>
     <snappy.version>1.1.10.8</snappy.version>
     <netlib.ludovic.dev.version>3.0.4</netlib.ludovic.dev.version>
-    <commons-codec.version>1.19.0</commons-codec.version>
+    <commons-codec.version>1.20.0</commons-codec.version>
     <commons-compress.version>1.28.0</commons-compress.version>
-    <commons-io.version>2.20.0</commons-io.version>
+    <commons-io.version>2.21.0</commons-io.version>
     <!-- To support Hive UDF jars built by Hive 2.0.0 ~ 2.3.9 and 3.0.0 ~ 3.1.3. -->
     <commons-lang2.version>2.6</commons-lang2.version>
     <!-- org.apache.commons/commons-lang3/-->
@@ -198,7 +198,8 @@
     <!-- org.apache.commons/commons-pool2/-->
     <commons-pool2.version>2.12.1</commons-pool2.version>
     <datanucleus-core.version>4.1.17</datanucleus-core.version>
-    <guava.version>33.4.0-jre</guava.version>
+    <guava.version>33.4.8-jre</guava.version>
+    <guava.failureaccess.version>1.0.3</guava.failureaccess.version>
     <gson.version>2.11.0</gson.version>
     <janino.version>3.1.9</janino.version>
     <jersey.version>3.0.18</jersey.version>
@@ -218,8 +219,8 @@
     <datasketches.version>6.2.0</datasketches.version>
     <netty.version>4.2.7.Final</netty.version>
     <netty-tcnative.version>2.0.74.Final</netty-tcnative.version>
-    <icu4j.version>77.1</icu4j.version>
-    <junit.version>6.0.0</junit.version>
+    <icu4j.version>78.1</icu4j.version>
+    <junit.version>6.0.1</junit.version>
     <jline.version>2.14.6</jline.version>
     <!--
       SPARK-50299: When updating `sbt-jupiter-interface.version`,
@@ -303,11 +304,8 @@
     <spark.test.docker.removePulledImage>true</spark.test.docker.removePulledImage>
 
     <!-- Version used in Connect -->
-    <connect.guava.version>33.4.0-jre</connect.guava.version>
-    <guava.failureaccess.version>1.0.2</guava.failureaccess.version>
-    <io.grpc.version>1.67.1</io.grpc.version>
+    <io.grpc.version>1.76.0</io.grpc.version>
     <mima.version>1.1.4</mima.version>
-    <tomcat.annotations.api.version>6.0.53</tomcat.annotations.api.version>
 
     <!-- Version used in Profiler -->
     <ap-loader.version>4.0-10</ap-loader.version>
@@ -344,7 +342,7 @@
     <mysql.connector.version>9.2.0</mysql.connector.version>
     <postgresql.version>42.7.7</postgresql.version>
     <db2.jcc.version>11.5.9.0</db2.jcc.version>
-    <mssql.jdbc.version>12.8.1.jre11</mssql.jdbc.version>
+    <mssql.jdbc.version>13.2.1.jre11</mssql.jdbc.version>
     <ojdbc17.version>23.6.0.24.10</ojdbc17.version>
     <databricks.jdbc.version>2.7.1</databricks.jdbc.version>
     <snowflake.jdbc.version>3.26.1</snowflake.jdbc.version>
@@ -376,6 +374,17 @@
       <id>central</id>
       <name>Maven Repository</name>
       <url>https://repo.maven.apache.org/maven2</url>
+      <releases>
+        <enabled>true</enabled>
+      </releases>
+      <snapshots>
+        <enabled>false</enabled>
+      </snapshots>
+    </repository>
+    <repository>
+      <id>jitpack.io</id>
+      <name>JitPack</name>
+      <url>https://jitpack.io</url>
       <releases>
         <enabled>true</enabled>
       </releases>
@@ -609,6 +618,12 @@
         <groupId>com.google.guava</groupId>
         <artifactId>guava</artifactId>
         <version>${guava.version}</version>
+        <scope>provided</scope>
+      </dependency>
+      <dependency>
+        <groupId>com.google.guava</groupId>
+        <artifactId>failureaccess</artifactId>
+        <version>${guava.failureaccess.version}</version>
         <scope>provided</scope>
       </dependency>
       <dependency>
@@ -898,11 +913,10 @@
         <scope>provided</scope>
       </dependency>
       <dependency>
-        <groupId>org.roaringbitmap</groupId>
-        <artifactId>RoaringBitmap</artifactId>
-        <version>1.3.0</version>
+        <groupId>com.github.RoaringBitmap.RoaringBitmap</groupId>
+        <artifactId>roaringbitmap</artifactId>
+        <version>1.5.3</version>
       </dependency>
-
       <!-- Netty Begin -->
       <dependency>
         <groupId>io.netty</groupId>
@@ -2521,6 +2535,25 @@
       </dependency>
       <dependency>
         <groupId>org.apache.arrow</groupId>
+        <artifactId>arrow-compression</artifactId>
+        <version>${arrow.version}</version>
+        <exclusions>
+          <exclusion>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-annotations</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-core</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>io.netty</groupId>
+            <artifactId>netty-common</artifactId>
+          </exclusion>
+        </exclusions>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.arrow</groupId>
         <artifactId>arrow-memory-netty</artifactId>
         <version>${arrow.version}</version>
         <exclusions>
@@ -2650,7 +2683,7 @@
             <dependency>
               <groupId>org.codehaus.mojo</groupId>
               <artifactId>extra-enforcer-rules</artifactId>
-              <version>1.10.0</version>
+              <version>1.11.0</version>
             </dependency>
           </dependencies>
         </plugin>
@@ -3128,6 +3161,10 @@
             <relocation>
               <pattern>com.google.common</pattern>
               <shadedPattern>${spark.shade.packageName}.guava</shadedPattern>
+            </relocation>
+            <relocation>
+              <pattern>com.google.thirdparty</pattern>
+              <shadedPattern>${spark.shade.packageName}.guava.thirdparty</shadedPattern>
             </relocation>
             <relocation>
               <pattern>org.dmg.pmml</pattern>

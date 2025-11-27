@@ -46,7 +46,8 @@ private[sql] class RocksDBStateStoreProvider
   class RocksDBStateStore(
       lastVersion: Long,
       private[RocksDBStateStoreProvider] val stamp: Long,
-      private[RocksDBStateStoreProvider] var readOnly: Boolean) extends StateStore {
+      private[RocksDBStateStoreProvider] var readOnly: Boolean,
+      private[RocksDBStateStoreProvider] var forceSnapshotOnCommit: Boolean) extends StateStore {
 
     private sealed trait OPERATION
     private case object UPDATE extends OPERATION
@@ -184,6 +185,13 @@ private[sql] class RocksDBStateStoreProvider
       ctxt.addTaskFailureListener((_, _) => {
         if (!hasCommitted) abort()
       })
+      // Failure/completion listeners were invoked during adding if the task has
+      // failed already. Prevent further access (resulting in invalid stamp error)
+      // by throwing an error here.
+      ctxt.getTaskFailure match {
+        case Some(failure) => throw failure
+        case None =>
+      }
     }
 
     override def createColFamilyIfAbsent(
@@ -251,6 +259,15 @@ private[sql] class RocksDBStateStoreProvider
       value
     }
 
+    override def keyExists(key: UnsafeRow, colFamilyName: String): Boolean = {
+      validateAndTransitionState(UPDATE)
+      verify(key != null, "Key cannot be null")
+      verifyColFamilyOperations("keyExists", colFamilyName)
+
+      val kvEncoder = keyValueEncoderMap.get(colFamilyName)
+      rocksDB.keyExists(kvEncoder._1.encodeKey(key), colFamilyName)
+    }
+
     /**
      * Provides an iterator containing all values of a non-null key.
      *
@@ -273,8 +290,14 @@ private[sql] class RocksDBStateStoreProvider
       verify(valueEncoder.supportsMultipleValuesPerKey, "valuesIterator requires a encoder " +
       "that supports multiple values for a single key.")
 
-      val encodedValues = rocksDB.get(keyEncoder.encodeKey(key), colFamilyName)
-      valueEncoder.decodeValues(encodedValues)
+      if (storeConf.rowChecksumEnabled) {
+        // multiGet provides better perf for row checksum, since it avoids copying values
+        val encodedValuesIterator = rocksDB.multiGet(keyEncoder.encodeKey(key), colFamilyName)
+        valueEncoder.decodeValues(encodedValuesIterator)
+      } else {
+        val encodedValues = rocksDB.get(keyEncoder.encodeKey(key), colFamilyName)
+        valueEncoder.decodeValues(encodedValues)
+      }
     }
 
     override def merge(key: UnsafeRow, value: UnsafeRow,
@@ -433,7 +456,7 @@ private[sql] class RocksDBStateStoreProvider
       validateState(UPDATING)
       try {
         stateMachine.verifyStamp(stamp)
-        val (newVersion, newCheckpointInfo) = rocksDB.commit()
+        val (newVersion, newCheckpointInfo) = rocksDB.commit(forceSnapshotOnCommit)
         checkpointInfo = Some(newCheckpointInfo)
         storedMetrics = rocksDB.metricsOpt
         validateAndTransitionState(COMMIT)
@@ -552,7 +575,9 @@ private[sql] class RocksDBStateStoreProvider
           CUSTOM_METRIC_PINNED_BLOCKS_MEM_USAGE -> rocksDBMetrics.pinnedBlocksMemUsage,
           CUSTOM_METRIC_NUM_INTERNAL_COL_FAMILIES_KEYS -> rocksDBMetrics.numInternalKeys,
           CUSTOM_METRIC_NUM_EXTERNAL_COL_FAMILIES -> internalColFamilyCnt(),
-          CUSTOM_METRIC_NUM_INTERNAL_COL_FAMILIES -> externalColFamilyCnt()
+          CUSTOM_METRIC_NUM_INTERNAL_COL_FAMILIES -> externalColFamilyCnt(),
+          CUSTOM_METRIC_NUM_SNAPSHOTS_AUTO_REPAIRED -> rocksDBMetrics.numSnapshotsAutoRepaired,
+          CUSTOM_METRIC_FORCE_SNAPSHOT -> (if (forceSnapshotOnCommit) 1L else 0L)
         ) ++ rocksDBMetrics.zipFileBytesUncompressed.map(bytes =>
           Map(CUSTOM_METRIC_ZIP_FILE_BYTES_UNCOMPRESSED -> bytes)).getOrElse(Map())
 
@@ -700,13 +725,15 @@ private[sql] class RocksDBStateStoreProvider
    * @param uniqueId Optional unique identifier for checkpoint
    * @param readOnly Whether to open the store in read-only mode
    * @param existingStore Optional existing store to reuse instead of creating a new one
+   * @param forceSnapshotOnCommit Whether to force a snapshot upload on commit
    * @return The loaded state store
    */
   private def loadStateStore(
       version: Long,
       uniqueId: Option[String] = None,
       readOnly: Boolean,
-      existingStore: Option[RocksDBStateStore] = None): StateStore = {
+      existingStore: Option[RocksDBStateStore] = None,
+      forceSnapshotOnCommit: Boolean = false): StateStore = {
     var acquiredStamp: Option[Long] = None
     var storeLoaded = false
     try {
@@ -745,11 +772,12 @@ private[sql] class RocksDBStateStoreProvider
         case Some(store: RocksDBStateStore) =>
           // Mark store as being used for write operations
           store.readOnly = readOnly
+          store.forceSnapshotOnCommit = forceSnapshotOnCommit
           store
         case None =>
           // Create new store instance. The stamp should be defined
           // in this case
-          new RocksDBStateStore(version, stamp.get, readOnly)
+          new RocksDBStateStore(version, stamp.get, readOnly, forceSnapshotOnCommit)
       }
       storeLoaded = true
       store
@@ -776,14 +804,22 @@ private[sql] class RocksDBStateStoreProvider
   }
 
   override def getStore(
-      version: Long, uniqueId: Option[String] = None): StateStore = {
-    loadStateStore(version, uniqueId, readOnly = false)
+      version: Long,
+      uniqueId: Option[String] = None,
+      forceSnapshotOnCommit: Boolean = false): StateStore = {
+    loadStateStore(
+      version,
+      uniqueId,
+      readOnly = false,
+      forceSnapshotOnCommit = forceSnapshotOnCommit
+    )
   }
 
   override def upgradeReadStoreToWriteStore(
       readStore: ReadStateStore,
       version: Long,
-      uniqueId: Option[String] = None): StateStore = {
+      uniqueId: Option[String] = None,
+      forceSnapshotOnCommit: Boolean = false): StateStore = {
     assert(version == readStore.version,
       s"Can only upgrade readStore to writeStore with the same version," +
         s" readStoreVersion: ${readStore.version}, writeStoreVersion: ${version}")
@@ -791,8 +827,11 @@ private[sql] class RocksDBStateStoreProvider
       " the same stateStoreId")
     assert(readStore.isInstanceOf[RocksDBStateStore], "Can only upgrade state store if it is a " +
       "RocksDBStateStore")
-    loadStateStore(version, uniqueId, readOnly = false, existingStore =
-      Some(readStore.asInstanceOf[RocksDBStateStore]))
+    loadStateStore(version,
+      uniqueId,
+      readOnly = false,
+      existingStore = Some(readStore.asInstanceOf[RocksDBStateStore]),
+      forceSnapshotOnCommit = forceSnapshotOnCommit)
   }
 
   override def getReadStore(
@@ -916,7 +955,7 @@ private[sql] class RocksDBStateStoreProvider
           endVersion,
           snapshotVersionStateStoreCkptId,
           endVersionStateStoreCkptId)
-        new RocksDBStateStore(endVersion, stamp, readOnly)
+        new RocksDBStateStore(endVersion, stamp, readOnly, forceSnapshotOnCommit = false)
       } catch {
         case e: Throwable =>
           stateMachine.releaseStamp(stamp)
@@ -942,6 +981,7 @@ private[sql] class RocksDBStateStoreProvider
     val statePath = stateStoreId.storeCheckpointLocation()
     val sparkConf = Option(SparkEnv.get).map(_.conf).getOrElse(new SparkConf)
     new RocksDBStateStoreChangeDataReader(
+      stateStoreId,
       CheckpointFileManager.create(statePath, hadoopConf),
       rocksDB,
       statePath,
@@ -950,6 +990,7 @@ private[sql] class RocksDBStateStoreProvider
       endVersionStateStoreCkptId,
       CompressionCodec.createCodec(sparkConf, storeConf.compressionCodec),
       keyValueEncoderMap,
+      storeConf,
       colFamilyNameOpt)
   }
 
@@ -1261,6 +1302,12 @@ object RocksDBStateStoreProvider {
   // Total SST file size
   val CUSTOM_METRIC_SST_FILE_SIZE = StateStoreCustomSizeMetric(
     "rocksdbSstFileSize", "RocksDB: size of all SST files")
+  val CUSTOM_METRIC_NUM_SNAPSHOTS_AUTO_REPAIRED = StateStoreCustomSumMetric(
+    "rocksdbNumSnapshotsAutoRepaired",
+    "RocksDB: number of snapshots that were automatically repaired during store load")
+
+  val CUSTOM_METRIC_FORCE_SNAPSHOT = StateStoreCustomSumMetric(
+    "rocksdbForceSnapshotCount", "RocksDB: number of stores that had forced snapshot on commit")
 
   val ALL_CUSTOM_METRICS = Seq(
     CUSTOM_METRIC_SST_FILE_SIZE, CUSTOM_METRIC_GET_TIME, CUSTOM_METRIC_PUT_TIME,
@@ -1276,7 +1323,8 @@ object RocksDBStateStoreProvider {
     CUSTOM_METRIC_PINNED_BLOCKS_MEM_USAGE, CUSTOM_METRIC_NUM_INTERNAL_COL_FAMILIES_KEYS,
     CUSTOM_METRIC_NUM_EXTERNAL_COL_FAMILIES, CUSTOM_METRIC_NUM_INTERNAL_COL_FAMILIES,
     CUSTOM_METRIC_LOAD_FROM_SNAPSHOT_TIME, CUSTOM_METRIC_LOAD_TIME, CUSTOM_METRIC_REPLAY_CHANGE_LOG,
-    CUSTOM_METRIC_NUM_REPLAY_CHANGE_LOG_FILES)
+    CUSTOM_METRIC_NUM_REPLAY_CHANGE_LOG_FILES, CUSTOM_METRIC_NUM_SNAPSHOTS_AUTO_REPAIRED,
+    CUSTOM_METRIC_FORCE_SNAPSHOT)
 
   val CUSTOM_INSTANCE_METRIC_SNAPSHOT_LAST_UPLOADED = StateStoreSnapshotLastUploadInstanceMetric()
 
@@ -1285,6 +1333,7 @@ object RocksDBStateStoreProvider {
 
 /** [[StateStoreChangeDataReader]] implementation for [[RocksDBStateStoreProvider]] */
 class RocksDBStateStoreChangeDataReader(
+    storeId: StateStoreId,
     fm: CheckpointFileManager,
     rocksDB: RocksDB,
     stateLocation: Path,
@@ -1294,9 +1343,11 @@ class RocksDBStateStoreChangeDataReader(
     compressionCodec: CompressionCodec,
     keyValueEncoderMap:
       ConcurrentHashMap[String, (RocksDBKeyStateEncoder, RocksDBValueStateEncoder, Short)],
+    storeConf: StateStoreConf,
     colFamilyNameOpt: Option[String] = None)
   extends StateStoreChangeDataReader(
-    fm, stateLocation, startVersion, endVersion, compressionCodec, colFamilyNameOpt) {
+    storeId, fm, stateLocation, startVersion, endVersion, compressionCodec,
+    storeConf, colFamilyNameOpt) {
 
   override protected val versionsAndUniqueIds: Array[(Long, Option[String])] =
     if (endVersionStateStoreCkptId.isDefined) {
@@ -1332,15 +1383,30 @@ class RocksDBStateStoreChangeDataReader(
         }
 
         val nextRecord = reader.next()
+        val keyBytes = if (storeConf.rowChecksumEnabled
+          && nextRecord._1 == RecordType.DELETE_RECORD) {
+          // remove checksum and decode to the original key
+          KeyValueChecksumEncoder
+            .decodeAndVerifyKeyRowWithChecksum(readVerifier, nextRecord._2)
+        } else {
+          nextRecord._2
+        }
         val colFamilyIdBytes: Array[Byte] =
           RocksDBStateStoreProvider.getColumnFamilyIdAsBytes(currEncoder._3)
         val endIndex = colFamilyIdBytes.size
         // Function checks for byte arrays being equal
         // from index 0 to endIndex - 1 (both inclusive)
-        if (java.util.Arrays.equals(nextRecord._2, 0, endIndex,
+        if (java.util.Arrays.equals(keyBytes, 0, endIndex,
           colFamilyIdBytes, 0, endIndex)) {
-          val extractedKey = RocksDBStateStoreProvider.decodeStateRowWithPrefix(nextRecord._2)
-          val result = (nextRecord._1, extractedKey, nextRecord._3)
+          val valueBytes = if (storeConf.rowChecksumEnabled &&
+            nextRecord._1 != RecordType.DELETE_RECORD) {
+            KeyValueChecksumEncoder.decodeAndVerifyValueRowWithChecksum(
+              readVerifier, keyBytes, nextRecord._3)
+          } else {
+            nextRecord._3
+          }
+          val extractedKey = RocksDBStateStoreProvider.decodeStateRowWithPrefix(keyBytes)
+          val result = (nextRecord._1, extractedKey, valueBytes)
           currRecord = result
         }
       }
@@ -1349,7 +1415,21 @@ class RocksDBStateStoreChangeDataReader(
       if (reader == null) {
         return null
       }
-      currRecord = reader.next()
+      val nextRecord = reader.next()
+      currRecord = if (storeConf.rowChecksumEnabled) {
+        nextRecord._1 match {
+          case RecordType.DELETE_RECORD =>
+            val key = KeyValueChecksumEncoder
+              .decodeAndVerifyKeyRowWithChecksum(readVerifier, nextRecord._2)
+            (nextRecord._1, key, nextRecord._3)
+          case _ =>
+            val value = KeyValueChecksumEncoder.decodeAndVerifyValueRowWithChecksum(
+              readVerifier, nextRecord._2, nextRecord._3)
+            (nextRecord._1, nextRecord._2, value)
+        }
+      } else {
+        nextRecord
+      }
     }
 
     val keyRow = currEncoder._1.decodeKey(currRecord._2)

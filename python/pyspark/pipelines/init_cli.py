@@ -19,7 +19,7 @@ from pathlib import Path
 
 SPEC = """
 name: {{ name }}
-storage: storage-root
+storage: {{ storage_root }}
 libraries:
   - glob:
       include: transformations/**
@@ -44,12 +44,25 @@ WHERE id % 2 = 0
 def init(name: str) -> None:
     """Generates a simple pipeline project."""
     project_dir = Path.cwd() / name
+    if project_dir.exists():
+        raise FileExistsError(
+            f"Directory '{name}' already exists. "
+            "Please choose a different name or remove the existing directory."
+        )
     project_dir.mkdir(parents=True, exist_ok=False)
 
+    # Create the storage directory
+    storage_dir = project_dir / "pipeline-storage"
+    storage_dir.mkdir(parents=True)
+
+    # Create absolute file URI for storage path
+    storage_path = f"file://{storage_dir.resolve()}"
+
     # Write the spec file to the project directory
-    spec_file = project_dir / "pipeline.yml"
+    spec_file = project_dir / "spark-pipeline.yml"
     with open(spec_file, "w") as f:
-        f.write(SPEC.replace("{{ name }}", name))
+        spec_content = SPEC.replace("{{ name }}", name).replace("{{ storage_root }}", storage_path)
+        f.write(spec_content)
 
     # Create the transformations directory
     transformations_dir = project_dir / "transformations"

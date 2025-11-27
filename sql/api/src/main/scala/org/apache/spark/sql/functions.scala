@@ -1304,6 +1304,306 @@ object functions {
     theta_union_agg(Column(columnName))
 
   /**
+   * Aggregate function: returns the compact binary representation of the Datasketches
+   * KllLongsSketch built with the values in the input column. The optional k parameter controls
+   * the size and accuracy of the sketch (default 200, range 8-65535).
+   *
+   * @group agg_funcs
+   * @since 4.1.0
+   */
+  def kll_sketch_agg_bigint(e: Column, k: Column): Column =
+    Column.fn("kll_sketch_agg_bigint", e, k)
+
+  /**
+   * Aggregate function: returns the compact binary representation of the Datasketches
+   * KllLongsSketch built with the values in the input column. The optional k parameter controls
+   * the size and accuracy of the sketch (default 200, range 8-65535).
+   *
+   * @group agg_funcs
+   * @since 4.1.0
+   */
+  def kll_sketch_agg_bigint(e: Column, k: Int): Column =
+    Column.fn("kll_sketch_agg_bigint", e, lit(k))
+
+  /**
+   * Aggregate function: returns the compact binary representation of the Datasketches
+   * KllLongsSketch built with the values in the input column. The optional k parameter controls
+   * the size and accuracy of the sketch (default 200, range 8-65535).
+   *
+   * @group agg_funcs
+   * @since 4.1.0
+   */
+  def kll_sketch_agg_bigint(columnName: String, k: Int): Column =
+    kll_sketch_agg_bigint(Column(columnName), k)
+
+  /**
+   * Aggregate function: returns the compact binary representation of the Datasketches
+   * KllLongsSketch built with the values in the input column with default k value of 200.
+   *
+   * @group agg_funcs
+   * @since 4.1.0
+   */
+  def kll_sketch_agg_bigint(e: Column): Column =
+    Column.fn("kll_sketch_agg_bigint", e)
+
+  /**
+   * Aggregate function: returns the compact binary representation of the Datasketches
+   * KllLongsSketch built with the values in the input column with default k value of 200.
+   *
+   * @group agg_funcs
+   * @since 4.1.0
+   */
+  def kll_sketch_agg_bigint(columnName: String): Column =
+    kll_sketch_agg_bigint(Column(columnName))
+
+  /**
+   * Aggregate function: returns the compact binary representation of the Datasketches
+   * KllFloatsSketch built with the values in the input column. The optional k parameter controls
+   * the size and accuracy of the sketch (default 200, range 8-65535).
+   *
+   * @group agg_funcs
+   * @since 4.1.0
+   */
+  def kll_sketch_agg_float(e: Column, k: Column): Column =
+    Column.fn("kll_sketch_agg_float", e, k)
+
+  /**
+   * Aggregate function: returns the compact binary representation of the Datasketches
+   * KllFloatsSketch built with the values in the input column. The optional k parameter controls
+   * the size and accuracy of the sketch (default 200, range 8-65535).
+   *
+   * @group agg_funcs
+   * @since 4.1.0
+   */
+  def kll_sketch_agg_float(e: Column, k: Int): Column =
+    Column.fn("kll_sketch_agg_float", e, lit(k))
+
+  /**
+   * Aggregate function: returns the compact binary representation of the Datasketches
+   * KllFloatsSketch built with the values in the input column. The optional k parameter controls
+   * the size and accuracy of the sketch (default 200, range 8-65535).
+   *
+   * @group agg_funcs
+   * @since 4.1.0
+   */
+  def kll_sketch_agg_float(columnName: String, k: Int): Column =
+    kll_sketch_agg_float(Column(columnName), k)
+
+  /**
+   * Aggregate function: returns the compact binary representation of the Datasketches
+   * KllFloatsSketch built with the values in the input column with default k value of 200.
+   *
+   * @group agg_funcs
+   * @since 4.1.0
+   */
+  def kll_sketch_agg_float(e: Column): Column =
+    Column.fn("kll_sketch_agg_float", e)
+
+  /**
+   * Aggregate function: returns the compact binary representation of the Datasketches
+   * KllFloatsSketch built with the values in the input column with default k value of 200.
+   *
+   * @group agg_funcs
+   * @since 4.1.0
+   */
+  def kll_sketch_agg_float(columnName: String): Column =
+    kll_sketch_agg_float(Column(columnName))
+
+  /**
+   * Aggregate function: returns the compact binary representation of the Datasketches
+   * KllDoublesSketch built with the values in the input column. The optional k parameter controls
+   * the size and accuracy of the sketch (default 200, range 8-65535).
+   *
+   * @group agg_funcs
+   * @since 4.1.0
+   */
+  def kll_sketch_agg_double(e: Column, k: Column): Column =
+    Column.fn("kll_sketch_agg_double", e, k)
+
+  /**
+   * Aggregate function: returns the compact binary representation of the Datasketches
+   * KllDoublesSketch built with the values in the input column. The optional k parameter controls
+   * the size and accuracy of the sketch (default 200, range 8-65535).
+   *
+   * @group agg_funcs
+   * @since 4.1.0
+   */
+  def kll_sketch_agg_double(e: Column, k: Int): Column =
+    Column.fn("kll_sketch_agg_double", e, lit(k))
+
+  /**
+   * Aggregate function: returns the compact binary representation of the Datasketches
+   * KllDoublesSketch built with the values in the input column. The optional k parameter controls
+   * the size and accuracy of the sketch (default 200, range 8-65535).
+   *
+   * @group agg_funcs
+   * @since 4.1.0
+   */
+  def kll_sketch_agg_double(columnName: String, k: Int): Column =
+    kll_sketch_agg_double(Column(columnName), k)
+
+  /**
+   * Aggregate function: returns the compact binary representation of the Datasketches
+   * KllDoublesSketch built with the values in the input column with default k value of 200.
+   *
+   * @group agg_funcs
+   * @since 4.1.0
+   */
+  def kll_sketch_agg_double(e: Column): Column =
+    Column.fn("kll_sketch_agg_double", e)
+
+  /**
+   * Aggregate function: returns the compact binary representation of the Datasketches
+   * KllDoublesSketch built with the values in the input column with default k value of 200.
+   *
+   * @group agg_funcs
+   * @since 4.1.0
+   */
+  def kll_sketch_agg_double(columnName: String): Column =
+    kll_sketch_agg_double(Column(columnName))
+
+  /**
+   * Returns a string with human readable summary information about the KLL bigint sketch.
+   *
+   * @group misc_funcs
+   * @since 4.1.0
+   */
+  def kll_sketch_to_string_bigint(e: Column): Column =
+    Column.fn("kll_sketch_to_string_bigint", e)
+
+  /**
+   * Returns a string with human readable summary information about the KLL float sketch.
+   *
+   * @group misc_funcs
+   * @since 4.1.0
+   */
+  def kll_sketch_to_string_float(e: Column): Column =
+    Column.fn("kll_sketch_to_string_float", e)
+
+  /**
+   * Returns a string with human readable summary information about the KLL double sketch.
+   *
+   * @group misc_funcs
+   * @since 4.1.0
+   */
+  def kll_sketch_to_string_double(e: Column): Column =
+    Column.fn("kll_sketch_to_string_double", e)
+
+  /**
+   * Returns the number of items collected in the KLL bigint sketch.
+   *
+   * @group misc_funcs
+   * @since 4.1.0
+   */
+  def kll_sketch_get_n_bigint(e: Column): Column =
+    Column.fn("kll_sketch_get_n_bigint", e)
+
+  /**
+   * Returns the number of items collected in the KLL float sketch.
+   *
+   * @group misc_funcs
+   * @since 4.1.0
+   */
+  def kll_sketch_get_n_float(e: Column): Column =
+    Column.fn("kll_sketch_get_n_float", e)
+
+  /**
+   * Returns the number of items collected in the KLL double sketch.
+   *
+   * @group misc_funcs
+   * @since 4.1.0
+   */
+  def kll_sketch_get_n_double(e: Column): Column =
+    Column.fn("kll_sketch_get_n_double", e)
+
+  /**
+   * Merges two KLL bigint sketch buffers together into one.
+   *
+   * @group misc_funcs
+   * @since 4.1.0
+   */
+  def kll_sketch_merge_bigint(left: Column, right: Column): Column =
+    Column.fn("kll_sketch_merge_bigint", left, right)
+
+  /**
+   * Merges two KLL float sketch buffers together into one.
+   *
+   * @group misc_funcs
+   * @since 4.1.0
+   */
+  def kll_sketch_merge_float(left: Column, right: Column): Column =
+    Column.fn("kll_sketch_merge_float", left, right)
+
+  /**
+   * Merges two KLL double sketch buffers together into one.
+   *
+   * @group misc_funcs
+   * @since 4.1.0
+   */
+  def kll_sketch_merge_double(left: Column, right: Column): Column =
+    Column.fn("kll_sketch_merge_double", left, right)
+
+  /**
+   * Extracts a quantile value from a KLL bigint sketch given an input rank value. The rank can be
+   * a single value or an array.
+   *
+   * @group misc_funcs
+   * @since 4.1.0
+   */
+  def kll_sketch_get_quantile_bigint(sketch: Column, rank: Column): Column =
+    Column.fn("kll_sketch_get_quantile_bigint", sketch, rank)
+
+  /**
+   * Extracts a quantile value from a KLL float sketch given an input rank value. The rank can be
+   * a single value or an array.
+   *
+   * @group misc_funcs
+   * @since 4.1.0
+   */
+  def kll_sketch_get_quantile_float(sketch: Column, rank: Column): Column =
+    Column.fn("kll_sketch_get_quantile_float", sketch, rank)
+
+  /**
+   * Extracts a quantile value from a KLL double sketch given an input rank value. The rank can be
+   * a single value or an array.
+   *
+   * @group misc_funcs
+   * @since 4.1.0
+   */
+  def kll_sketch_get_quantile_double(sketch: Column, rank: Column): Column =
+    Column.fn("kll_sketch_get_quantile_double", sketch, rank)
+
+  /**
+   * Extracts a rank value from a KLL bigint sketch given an input quantile value. The quantile
+   * can be a single value or an array.
+   *
+   * @group misc_funcs
+   * @since 4.1.0
+   */
+  def kll_sketch_get_rank_bigint(sketch: Column, quantile: Column): Column =
+    Column.fn("kll_sketch_get_rank_bigint", sketch, quantile)
+
+  /**
+   * Extracts a rank value from a KLL float sketch given an input quantile value. The quantile can
+   * be a single value or an array.
+   *
+   * @group misc_funcs
+   * @since 4.1.0
+   */
+  def kll_sketch_get_rank_float(sketch: Column, quantile: Column): Column =
+    Column.fn("kll_sketch_get_rank_float", sketch, quantile)
+
+  /**
+   * Extracts a rank value from a KLL double sketch given an input quantile value. The quantile
+   * can be a single value or an array.
+   *
+   * @group misc_funcs
+   * @since 4.1.0
+   */
+  def kll_sketch_get_rank_double(sketch: Column, quantile: Column): Column =
+    Column.fn("kll_sketch_get_rank_double", sketch, quantile)
+
+  /**
    * Aggregate function: returns the concatenation of non-null input values.
    *
    * @group agg_funcs
@@ -6611,6 +6911,55 @@ object functions {
   }
 
   /**
+   * Creates a TIME from the number of seconds since midnight.
+   *
+   * @group datetime_funcs
+   * @since 4.2.0
+   */
+  def time_from_seconds(e: Column): Column = Column.fn("time_from_seconds", e)
+
+  /**
+   * Creates a TIME from the number of milliseconds since midnight.
+   *
+   * @group datetime_funcs
+   * @since 4.2.0
+   */
+  def time_from_millis(e: Column): Column = Column.fn("time_from_millis", e)
+
+  /**
+   * Creates a TIME from the number of microseconds since midnight.
+   *
+   * @group datetime_funcs
+   * @since 4.2.0
+   */
+  def time_from_micros(e: Column): Column = Column.fn("time_from_micros", e)
+
+  /**
+   * Extracts the number of seconds (including fractional seconds) from a TIME value. Returns a
+   * DECIMAL(14,6) to preserve microsecond precision.
+   *
+   * @group datetime_funcs
+   * @since 4.2.0
+   */
+  def time_to_seconds(e: Column): Column = Column.fn("time_to_seconds", e)
+
+  /**
+   * Extracts the number of milliseconds since midnight from a TIME value.
+   *
+   * @group datetime_funcs
+   * @since 4.2.0
+   */
+  def time_to_millis(e: Column): Column = Column.fn("time_to_millis", e)
+
+  /**
+   * Extracts the number of microseconds since midnight from a TIME value.
+   *
+   * @group datetime_funcs
+   * @since 4.2.0
+   */
+  def time_to_micros(e: Column): Column = Column.fn("time_to_micros", e)
+
+  /**
    * Parses the `timestamp` expression with the `format` expression to a timestamp without time
    * zone. Returns null with invalid input.
    *
@@ -9170,6 +9519,33 @@ object functions {
    */
   def st_geomfromwkb(wkb: Column): Column =
     Column.fn("st_geomfromwkb", wkb)
+
+  /**
+   * Returns a new GEOGRAPHY or GEOMETRY value whose SRID is the specified SRID value.
+   *
+   * @group st_funcs
+   * @since 4.1.0
+   */
+  def st_setsrid(geo: Column, srid: Column): Column =
+    Column.fn("st_setsrid", geo, srid)
+
+  /**
+   * Returns a new GEOGRAPHY or GEOMETRY value whose SRID is the specified SRID value.
+   *
+   * @group st_funcs
+   * @since 4.1.0
+   */
+  def st_setsrid(geo: Column, srid: Int): Column =
+    Column.fn("st_setsrid", geo, lit(srid))
+
+  /**
+   * Returns the SRID of the input GEOGRAPHY or GEOMETRY value.
+   *
+   * @group st_funcs
+   * @since 4.1.0
+   */
+  def st_srid(geo: Column): Column =
+    Column.fn("st_srid", geo)
 
   //////////////////////////////////////////////////////////////////////////////////////////////
   // Scala UDF functions

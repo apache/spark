@@ -191,6 +191,12 @@ private[sql] class AvroSerializer(
           s"SQL type ${TimestampNTZType.sql} cannot be converted to Avro logical type $other")
       }
 
+      case (_: TimeType, LONG) => avroType.getLogicalType match {
+        case _: LogicalTypes.TimeMicros => (getter, ordinal) => getter.getLong(ordinal)
+        case other => throw new IncompatibleSchemaException(errorPrefix +
+          s"SQL type ${TimeType().sql} cannot be converted to Avro logical type $other")
+      }
+
       case (ArrayType(et, containsNull), ARRAY) =>
         val elementConverter = newConverter(
           et, resolveNullableType(avroType.getElementType, containsNull),
@@ -291,12 +297,12 @@ private[sql] class AvroSerializer(
       var i = 0
       while (i < numFields) {
         if (row.isNullAt(i)) {
-          if (!isSchemaNullable(i)) {
+          if (!isSchemaNullable(avroIndices(i))) {
             throw new SparkRuntimeException(
               errorClass = "AVRO_CANNOT_WRITE_NULL_FIELD",
               messageParameters = Map(
-                "name" -> toSQLId(avroFields.get(i).name),
-                "dataType" -> avroFields.get(i).schema().toString))
+                "name" -> toSQLId(avroFields.get(avroIndices(i)).name),
+                "dataType" -> avroFields.get(avroIndices(i)).schema().toString))
           }
           result.put(avroIndices(i), null)
         } else {

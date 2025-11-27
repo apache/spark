@@ -269,6 +269,10 @@ class BarrierTaskContext private[spark] (
     taskContext.markTaskCompleted(error)
   }
 
+  override private[spark] def getTaskFailure: Option[Throwable] = {
+    taskContext.getTaskFailure
+  }
+
   override private[spark] def fetchFailed: Option[FetchFailedException] = {
     taskContext.fetchFailed
   }

@@ -2099,13 +2099,13 @@ class DataFrame:
 
         Examples
         --------
-        >>> df = spark.range(10)
+        >>> df = spark.range(0, 10, 1, 1)
         >>> df.sample(0.5, 3).count() # doctest: +SKIP
         7
-        >>> df.sample(fraction=0.5, seed=3).count() # doctest: +SKIP
-        7
-        >>> df.sample(withReplacement=True, fraction=0.5, seed=3).count() # doctest: +SKIP
-        1
+        >>> df.sample(fraction=0.5, seed=3).count()
+        4
+        >>> df.sample(withReplacement=True, fraction=0.5, seed=3).count()
+        2
         >>> df.sample(1.0).count()
         10
         >>> df.sample(fraction=1.0).count()
@@ -2187,8 +2187,8 @@ class DataFrame:
 
         Examples
         --------
-        >>> from pyspark.sql.functions import col
-        >>> dataset = spark.range(0, 100, 1, 5).select((col("id") % 3).alias("key"))
+        >>> from pyspark.sql import functions as sf
+        >>> dataset = spark.range(0, 100, 1, 5).select((sf.col("id") % 3).alias("key"))
         >>> sampled = dataset.sampleBy("key", fractions={0: 0.1, 1: 0.2}, seed=0)
         >>> sampled.groupBy("key").count().orderBy("key").show()
         +---+-----+
@@ -2198,7 +2198,7 @@ class DataFrame:
         |  1|    9|
         +---+-----+
 
-        >>> dataset.sampleBy(col("key"), fractions={2: 1.0}, seed=0).count()
+        >>> dataset.sampleBy(sf.col("key"), fractions={2: 1.0}, seed=0).count()
         33
         """
         ...
@@ -2315,9 +2315,9 @@ class DataFrame:
 
         Example 4: Iterating over columns to apply a transformation
 
-        >>> import pyspark.sql.functions as f
+        >>> import pyspark.sql.functions as sf
         >>> for col_name in df.columns:
-        ...     df = df.withColumn(col_name, f.upper(f.col(col_name)))
+        ...     df = df.withColumn(col_name, sf.upper(col_name))
         >>> df.show()
         +---+-----+-----+
         |age| name|state|
@@ -2478,14 +2478,16 @@ class DataFrame:
 
         Examples
         --------
-        >>> from pyspark.sql.functions import col, desc
+        >>> from pyspark.sql import functions as sf
         >>> df = spark.createDataFrame(
         ...     [(14, "Tom"), (23, "Alice"), (16, "Bob")], ["age", "name"])
         >>> df_as1 = df.alias("df_as1")
         >>> df_as2 = df.alias("df_as2")
-        >>> joined_df = df_as1.join(df_as2, col("df_as1.name") == col("df_as2.name"), 'inner')
+        >>> joined_df = df_as1.join(df_as2,
+        ...     sf.col("df_as1.name") == sf.col("df_as2.name"), 'inner')
         >>> joined_df.select(
-        ...     "df_as1.name", "df_as2.name", "df_as2.age").sort(desc("df_as1.name")).show()
+        ...     "df_as1.name", "df_as2.name", "df_as2.age"
+        ... ).sort(sf.desc("df_as1.name")).show()
         +-----+-----+---+
         | name| name|age|
         +-----+-----+---+
@@ -2610,7 +2612,7 @@ class DataFrame:
         they will appear with `NULL` in the `name` column of `df`, and vice versa for `df2`.
 
         >>> joined = df.join(df2, df.name == df2.name, "outer").sort(sf.desc(df.name))
-        >>> joined.show() # doctest: +SKIP
+        >>> joined.show()
         +-----+----+----+------+
         | name| age|name|height|
         +-----+----+----+------+
@@ -2621,7 +2623,7 @@ class DataFrame:
 
         To unambiguously select output columns, specify the dataframe along with the column name:
 
-        >>> joined.select(df.name, df2.height).show() # doctest: +SKIP
+        >>> joined.select(df.name, df2.height).show()
         +-----+------+
         | name|height|
         +-----+------+
@@ -4404,11 +4406,11 @@ class DataFrame:
         --------
         When ``observation`` is :class:`Observation`, only batch queries work as below.
 
-        >>> from pyspark.sql.functions import col, count, lit, max
-        >>> from pyspark.sql import Observation
+        >>> from pyspark.sql import Observation, functions as sf
         >>> df = spark.createDataFrame([(2, "Alice"), (5, "Bob")], schema=["age", "name"])
         >>> observation = Observation("my metrics")
-        >>> observed_df = df.observe(observation, count(lit(1)).alias("count"), max(col("age")))
+        >>> observed_df = df.observe(observation,
+        ...     sf.count(sf.lit(1)).alias("count"), sf.max("age"))
         >>> observed_df.count()
         2
         >>> observation.get
@@ -4441,13 +4443,13 @@ class DataFrame:
         >>> error_listener = MyErrorListener()
         >>> spark.streams.addListener(error_listener)
         >>> sdf = spark.readStream.format("rate").load().withColumn(
-        ...     "error", col("value")
+        ...     "error", sf.col("value")
         ... )
         >>> # Observe row count (rc) and error row count (erc) in the streaming Dataset
         ... observed_ds = sdf.observe(
         ...     "my_event",
-        ...     count(lit(1)).alias("rc"),
-        ...     count(col("error")).alias("erc"))
+        ...     sf.count(sf.lit(1)).alias("rc"),
+        ...     sf.count(sf.col("error")).alias("erc"))
         >>> try:
         ...     q = observed_ds.writeStream.format("console").start()
         ...     time.sleep(5)
@@ -4512,11 +4514,11 @@ class DataFrame:
 
         Example 2: Combining two DataFrames with different schemas
 
-        >>> from pyspark.sql.functions import lit
+        >>> from pyspark.sql import functions as sf
         >>> df1 = spark.createDataFrame([(100001, 1), (100002, 2)], schema="id LONG, money INT")
         >>> df2 = spark.createDataFrame([(3, 100003), (4, 100003)], schema="money INT, id LONG")
-        >>> df1 = df1.withColumn("age", lit(30))
-        >>> df2 = df2.withColumn("age", lit(40))
+        >>> df1 = df1.withColumn("age", sf.lit(30))
+        >>> df2 = df2.withColumn("age", sf.lit(40))
         >>> df3 = df1.union(df2)
         >>> df3.show()
         +------+------+---+
@@ -6065,10 +6067,10 @@ class DataFrame:
 
         Examples
         --------
-        >>> from pyspark.sql.functions import col
+        >>> from pyspark.sql import functions as sf
         >>> df = spark.createDataFrame([(1, 1.0), (2, 2.0)], ["int", "float"])
         >>> def cast_all_to_int(input_df):
-        ...     return input_df.select([col(col_name).cast("int") for col_name in input_df.columns])
+        ...     return input_df.select([sf.col(c).cast("int") for c in input_df.columns])
         ...
         >>> def sort_columns_asc(input_df):
         ...     return input_df.select(*sorted(input_df.columns))
@@ -6082,8 +6084,9 @@ class DataFrame:
         +-----+---+
 
         >>> def add_n(input_df, n):
-        ...     return input_df.select([(col(col_name) + n).alias(col_name)
-        ...                             for col_name in input_df.columns])
+        ...     cols = [(sf.col(c) + n).alias(c) for c in input_df.columns]
+        ...     return input_df.select(cols)
+        ...
         >>> df.transform(add_n, 1).transform(add_n, n=10).show()
         +---+-----+
         |int|float|
@@ -6524,8 +6527,7 @@ class DataFrame:
         >>> df = spark.createDataFrame([(1, 21), (2, 30)], ("id", "age"))
         >>> def filter_func(iterator):
         ...     for batch in iterator:
-        ...         pdf = batch.to_pandas()
-        ...         yield pa.RecordBatch.from_pandas(pdf[pdf.id == 1])
+        ...         yield batch.filter(pa.compute.field("id") == 1)
         >>> df.mapInArrow(filter_func, df.schema).show()
         +---+---+
         | id|age|
@@ -6691,6 +6693,64 @@ class DataFrame:
         -------
         :class:`table_arg.TableArg`
             A `TableArg` object representing a table argument.
+
+        Examples
+        --------
+        >>> from pyspark.sql.functions import udtf
+        >>>
+        >>> # Create a simple UDTF that processes table data
+        >>> @udtf(returnType="id: int, doubled: int")
+        ... class DoubleUDTF:
+        ...     def eval(self, row):
+        ...         yield row["id"], row["id"] * 2
+        ...
+        >>> # Create a DataFrame
+        >>> df = spark.createDataFrame([(1,), (2,), (3,)], ["id"])
+        >>>
+        >>> # Use asTable() to pass the DataFrame as a table argument to the UDTF
+        >>> result = DoubleUDTF(df.asTable())
+        >>> result.show()
+        +---+-------+
+        | id|doubled|
+        +---+-------+
+        |  1|      2|
+        |  2|      4|
+        |  3|      6|
+        +---+-------+
+        >>>
+        >>> # Use partitionBy and orderBy to control data partitioning and ordering
+        >>> df2 = spark.createDataFrame(
+        ...     [(1, "a"), (1, "b"), (2, "c"), (2, "d")], ["key", "value"]
+        ... )
+        >>>
+        >>> @udtf(returnType="key: int, value: string")
+        ... class ProcessUDTF:
+        ...     def eval(self, row):
+        ...         yield row["key"], row["value"]
+        ...
+        >>> # Partition by 'key' and order by 'value' within each partition
+        >>> result2 = ProcessUDTF(df2.asTable().partitionBy("key").orderBy("value"))
+        >>> result2.show()
+        +---+-----+
+        |key|value|
+        +---+-----+
+        |  1|    a|
+        |  1|    b|
+        |  2|    c|
+        |  2|    d|
+        +---+-----+
+        >>>
+        >>> # Use withSinglePartition to process all data in a single partition
+        >>> result3 = ProcessUDTF(df2.asTable().withSinglePartition().orderBy("value"))
+        >>> result3.show()
+        +---+-----+
+        |key|value|
+        +---+-----+
+        |  1|    a|
+        |  1|    b|
+        |  2|    c|
+        |  2|    d|
+        +---+-----+
         """
         ...
 

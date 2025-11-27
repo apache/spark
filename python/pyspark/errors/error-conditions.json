@@ -549,6 +549,16 @@
       "<arg1> and <arg2> should be of the same length, got <arg1_length> and <arg2_length>."
     ]
   },
+  "MALFORMED_GEOGRAPHY": {
+    "message": [
+      "Geography binary is malformed. Please check the data source is valid."
+    ]
+  },
+  "MALFORMED_GEOMETRY": {
+    "message": [
+      "Geometry binary is malformed. Please check the data source is valid."
+    ]
+  },
   "MALFORMED_VARIANT": {
     "message": [
       "Variant binary is malformed. Please check the data source is valid."
@@ -898,7 +908,7 @@
   },
   "PIPELINE_SPEC_FILE_NOT_FOUND": {
     "message": [
-      "No pipeline.yaml or pipeline.yml file provided in arguments or found in directory `<dir_path>` or readable ancestor directories."
+      "No spark-pipeline.yaml or spark-pipeline.yml file provided in arguments or found in directory `<dir_path>` or readable ancestor directories."
     ]
   },
   "PIPELINE_SPEC_INVALID_GLOB_PATTERN": {

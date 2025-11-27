@@ -28,6 +28,10 @@ from pyspark.sql.types import (
     BinaryType,
     DataType,
     DecimalType,
+    GeographyType,
+    Geography,
+    GeometryType,
+    Geometry,
     MapType,
     NullType,
     Row,
@@ -88,6 +92,10 @@ class LocalDataToArrowConversion:
         elif isinstance(dataType, UserDefinedType):
             return True
         elif isinstance(dataType, VariantType):
+            return True
+        elif isinstance(dataType, GeometryType):
+            return True
+        elif isinstance(dataType, GeographyType):
             return True
         else:
             return False
@@ -392,6 +400,34 @@ class LocalDataToArrowConversion:
 
             return convert_variant
 
+        elif isinstance(dataType, GeographyType):
+
+            def convert_geography(value: Any) -> Any:
+                if value is None:
+                    if not nullable:
+                        raise PySparkValueError(f"input for {dataType} must not be None")
+                    return None
+                elif isinstance(value, Geography):
+                    return dataType.toInternal(value)
+                else:
+                    raise PySparkValueError(errorClass="MALFORMED_GEOGRAPHY")
+
+            return convert_geography
+
+        elif isinstance(dataType, GeometryType):
+
+            def convert_geometry(value: Any) -> Any:
+                if value is None:
+                    if not nullable:
+                        raise PySparkValueError(f"input for {dataType} must not be None")
+                    return None
+                elif isinstance(value, Geometry):
+                    return dataType.toInternal(value)
+                else:
+                    raise PySparkValueError(errorClass="MALFORMED_GEOMETRY")
+
+            return convert_geometry
+
         elif not nullable:
 
             def convert_other(value: Any) -> Any:
@@ -510,6 +546,10 @@ class ArrowTableToRowsConversion:
         elif isinstance(dataType, UserDefinedType):
             return True
         elif isinstance(dataType, VariantType):
+            return True
+        elif isinstance(dataType, GeographyType):
+            return True
+        elif isinstance(dataType, GeometryType):
             return True
         else:
             return False
@@ -718,6 +758,40 @@ class ArrowTableToRowsConversion:
                     raise PySparkValueError(errorClass="MALFORMED_VARIANT")
 
             return convert_variant
+
+        elif isinstance(dataType, GeographyType):
+
+            def convert_geography(value: Any) -> Any:
+                if value is None:
+                    return None
+                elif (
+                    isinstance(value, dict)
+                    and all(key in value for key in ["wkb", "srid"])
+                    and isinstance(value["wkb"], bytes)
+                    and isinstance(value["srid"], int)
+                ):
+                    return Geography.fromWKB(value["wkb"], value["srid"])
+                else:
+                    raise PySparkValueError(errorClass="MALFORMED_GEOGRAPHY")
+
+            return convert_geography
+
+        elif isinstance(dataType, GeometryType):
+
+            def convert_geometry(value: Any) -> Any:
+                if value is None:
+                    return None
+                elif (
+                    isinstance(value, dict)
+                    and all(key in value for key in ["wkb", "srid"])
+                    and isinstance(value["wkb"], bytes)
+                    and isinstance(value["srid"], int)
+                ):
+                    return Geometry.fromWKB(value["wkb"], value["srid"])
+                else:
+                    raise PySparkValueError(errorClass="MALFORMED_GEOMETRY")
+
+            return convert_geometry
 
         else:
             if none_on_identity:

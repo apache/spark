@@ -80,10 +80,6 @@ class FunctionsTestsMixin:
 
         missing_in_py = jvm_fn_set.difference(py_fn_set)
 
-        # Temporarily disable Scala/Python parity check for ST geospatial functions, while the
-        # feature is under development. Once the geospatial module is stable, remove this.
-        missing_in_py = {fn for fn in missing_in_py if not fn.startswith("st_")}
-
         # Functions that we expect to be missing in python until they are added to pyspark
         expected_missing_in_py = set()
 
@@ -2118,6 +2114,162 @@ class FunctionsTestsMixin:
                 None,
             )
 
+    def test_kll_sketch_agg_bigint(self):
+        """Test kll_sketch_agg_bigint function"""
+        df = self.spark.createDataFrame([1, 2, 3, 4, 5], "INT")
+
+        # Test with default k
+        sketch = df.agg(F.kll_sketch_agg_bigint("value")).first()[0]
+        self.assertIsNotNone(sketch)
+        self.assertIsInstance(sketch, (bytes, bytearray))
+
+        # Test with explicit k
+        sketch_k = df.agg(F.kll_sketch_agg_bigint("value", 400)).first()[0]
+        self.assertIsNotNone(sketch_k)
+
+    def test_kll_sketch_agg_float(self):
+        """Test kll_sketch_agg_float function"""
+        df = self.spark.createDataFrame([1.0, 2.0, 3.0, 4.0, 5.0], "FLOAT")
+
+        sketch = df.agg(F.kll_sketch_agg_float("value")).first()[0]
+        self.assertIsNotNone(sketch)
+        self.assertIsInstance(sketch, (bytes, bytearray))
+
+    def test_kll_sketch_agg_double(self):
+        """Test kll_sketch_agg_double function"""
+        df = self.spark.createDataFrame([1.0, 2.0, 3.0, 4.0, 5.0], "DOUBLE")
+
+        sketch = df.agg(F.kll_sketch_agg_double("value")).first()[0]
+        self.assertIsNotNone(sketch)
+        self.assertIsInstance(sketch, (bytes, bytearray))
+
+    def test_kll_sketch_to_string_bigint(self):
+        """Test kll_sketch_to_string_bigint function"""
+        df = self.spark.createDataFrame([1, 2, 3, 4, 5], "INT")
+        sketch_df = df.agg(F.kll_sketch_agg_bigint("value").alias("sketch"))
+
+        result = sketch_df.select(F.kll_sketch_to_string_bigint("sketch")).first()[0]
+        self.assertIsNotNone(result)
+        self.assertIsInstance(result, str)
+        self.assertIn("Kll", result)
+
+    def test_kll_sketch_get_n_bigint(self):
+        """Test kll_sketch_get_n_bigint function"""
+        df = self.spark.createDataFrame([1, 2, 3, 4, 5], "INT")
+        sketch_df = df.agg(F.kll_sketch_agg_bigint("value").alias("sketch"))
+
+        n = sketch_df.select(F.kll_sketch_get_n_bigint("sketch")).first()[0]
+        self.assertEqual(n, 5)
+
+    def test_kll_sketch_merge_bigint(self):
+        """Test kll_sketch_merge_bigint function"""
+        df = self.spark.createDataFrame([1, 2, 3], "INT")
+        sketch_df = df.agg(F.kll_sketch_agg_bigint("value").alias("sketch"))
+
+        merged = sketch_df.select(F.kll_sketch_merge_bigint("sketch", "sketch")).first()[0]
+        self.assertIsNotNone(merged)
+        self.assertIsInstance(merged, (bytes, bytearray))
+
+    def test_kll_sketch_get_quantile_bigint(self):
+        """Test kll_sketch_get_quantile_bigint function"""
+        df = self.spark.createDataFrame([1, 2, 3, 4, 5], "INT")
+        sketch_df = df.agg(F.kll_sketch_agg_bigint("value").alias("sketch"))
+
+        quantile = sketch_df.select(F.kll_sketch_get_quantile_bigint("sketch", F.lit(0.5))).first()[
+            0
+        ]
+        self.assertIsNotNone(quantile)
+        self.assertGreaterEqual(quantile, 1)
+        self.assertLessEqual(quantile, 5)
+
+    def test_kll_sketch_get_quantile_bigint_array(self):
+        """Test kll_sketch_get_quantile_bigint with array of ranks"""
+        df = self.spark.createDataFrame([1, 2, 3, 4, 5], "INT")
+        sketch_df = df.agg(F.kll_sketch_agg_bigint("value").alias("sketch"))
+
+        quantiles = sketch_df.select(
+            F.kll_sketch_get_quantile_bigint(
+                "sketch", F.array(F.lit(0.25), F.lit(0.5), F.lit(0.75))
+            )
+        ).first()[0]
+        self.assertIsNotNone(quantiles)
+        self.assertEqual(len(quantiles), 3)
+
+    def test_kll_sketch_get_rank_bigint(self):
+        """Test kll_sketch_get_rank_bigint function"""
+        df = self.spark.createDataFrame([1, 2, 3, 4, 5], "INT")
+        sketch_df = df.agg(F.kll_sketch_agg_bigint("value").alias("sketch"))
+
+        rank = sketch_df.select(F.kll_sketch_get_rank_bigint("sketch", F.lit(3))).first()[0]
+        self.assertIsNotNone(rank)
+        self.assertGreaterEqual(rank, 0.0)
+        self.assertLessEqual(rank, 1.0)
+
+    def test_kll_sketch_float_variants(self):
+        """Test all float variant functions"""
+        df = self.spark.createDataFrame([1.0, 2.0, 3.0, 4.0, 5.0], "FLOAT")
+        sketch_df = df.agg(F.kll_sketch_agg_float("value").alias("sketch"))
+
+        # Test to_string
+        string_result = sketch_df.select(F.kll_sketch_to_string_float("sketch")).first()[0]
+        self.assertIn("Kll", string_result)
+
+        # Test get_n
+        n = sketch_df.select(F.kll_sketch_get_n_float("sketch")).first()[0]
+        self.assertEqual(n, 5)
+
+        # Test merge
+        merged = sketch_df.select(F.kll_sketch_merge_float("sketch", "sketch")).first()[0]
+        self.assertIsNotNone(merged)
+
+        # Test get_quantile
+        quantile = sketch_df.select(F.kll_sketch_get_quantile_float("sketch", F.lit(0.5))).first()[
+            0
+        ]
+        self.assertIsNotNone(quantile)
+
+        # Test get_rank
+        rank = sketch_df.select(F.kll_sketch_get_rank_float("sketch", F.lit(3.0))).first()[0]
+        self.assertGreaterEqual(rank, 0.0)
+        self.assertLessEqual(rank, 1.0)
+
+    def test_kll_sketch_double_variants(self):
+        """Test all double variant functions"""
+        df = self.spark.createDataFrame([1.0, 2.0, 3.0, 4.0, 5.0], "DOUBLE")
+        sketch_df = df.agg(F.kll_sketch_agg_double("value").alias("sketch"))
+
+        # Test to_string
+        string_result = sketch_df.select(F.kll_sketch_to_string_double("sketch")).first()[0]
+        self.assertIn("Kll", string_result)
+
+        # Test get_n
+        n = sketch_df.select(F.kll_sketch_get_n_double("sketch")).first()[0]
+        self.assertEqual(n, 5)
+
+        # Test merge
+        merged = sketch_df.select(F.kll_sketch_merge_double("sketch", "sketch")).first()[0]
+        self.assertIsNotNone(merged)
+
+        # Test get_quantile
+        quantile = sketch_df.select(F.kll_sketch_get_quantile_double("sketch", F.lit(0.5))).first()[
+            0
+        ]
+        self.assertIsNotNone(quantile)
+
+        # Test get_rank
+        rank = sketch_df.select(F.kll_sketch_get_rank_double("sketch", F.lit(3.0))).first()[0]
+        self.assertGreaterEqual(rank, 0.0)
+        self.assertLessEqual(rank, 1.0)
+
+    def test_kll_sketch_with_nulls(self):
+        """Test KLL sketch with null values"""
+        df = self.spark.createDataFrame([(1,), (None,), (3,), (4,), (None,)], ["value"])
+        sketch_df = df.agg(F.kll_sketch_agg_bigint("value").alias("sketch"))
+
+        n = sketch_df.select(F.kll_sketch_get_n_bigint("sketch")).first()[0]
+        # Should only count non-null values
+        self.assertEqual(n, 3)
+
     def test_datetime_functions(self):
         df = self.spark.range(1).selectExpr("'2017-01-22' as dateCol")
         parse_result = df.select(F.to_date(F.col("dateCol"))).first()
@@ -2804,6 +2956,57 @@ class FunctionsTestsMixin:
         # test try_validate_utf8
         result_try_validate_utf8 = df.select(F.try_validate_utf8(df.a).alias("r"))
         assertDataFrameEqual([Row(r="abc")], result_try_validate_utf8)
+
+    # Geospatial ST Functions
+
+    def test_st_asbinary(self):
+        df = self.spark.createDataFrame(
+            [(bytes.fromhex("0101000000000000000000F03F0000000000000040"),)],
+            ["wkb"],
+        )
+        results = df.select(
+            F.hex(F.st_asbinary(F.st_geogfromwkb("wkb"))),
+            F.hex(F.st_asbinary(F.st_geomfromwkb("wkb"))),
+        ).collect()
+        expected = Row(
+            "0101000000000000000000F03F0000000000000040",
+            "0101000000000000000000F03F0000000000000040",
+        )
+        self.assertEqual(results, [expected])
+
+    def test_st_setsrid(self):
+        df = self.spark.createDataFrame(
+            [(bytes.fromhex("0101000000000000000000F03F0000000000000040"), 4326)],
+            ["wkb", "srid"],
+        )
+        results = df.select(
+            F.st_srid(F.st_setsrid(F.st_geogfromwkb("wkb"), "srid")),
+            F.st_srid(F.st_setsrid(F.st_geomfromwkb("wkb"), "srid")),
+            F.st_srid(F.st_setsrid(F.st_geogfromwkb("wkb"), 4326)),
+            F.st_srid(F.st_setsrid(F.st_geomfromwkb("wkb"), 4326)),
+        ).collect()
+        expected = Row(
+            4326,
+            4326,
+            4326,
+            4326,
+        )
+        self.assertEqual(results, [expected])
+
+    def test_st_srid(self):
+        df = self.spark.createDataFrame(
+            [(bytes.fromhex("0101000000000000000000F03F0000000000000040"),)],
+            ["wkb"],
+        )
+        results = df.select(
+            F.st_srid(F.st_geogfromwkb("wkb")),
+            F.st_srid(F.st_geomfromwkb("wkb")),
+        ).collect()
+        expected = Row(
+            4326,
+            0,
+        )
+        self.assertEqual(results, [expected])
 
 
 class FunctionsTests(ReusedSQLTestCase, FunctionsTestsMixin):

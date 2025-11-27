@@ -2377,3 +2377,387 @@ SELECT '00:00:00.1234' :: TIME(4) - TIME'23:59:59'
 struct<CAST(00:00:00.1234 AS TIME(4)) - TIME '23:59:59':interval hour to second>
 -- !query output
 -0 23:59:58.876600000
+
+
+-- !query
+SELECT time_from_seconds(0)
+-- !query schema
+struct<time_from_seconds(0):time(6)>
+-- !query output
+00:00:00
+
+
+-- !query
+SELECT time_from_seconds(43200)
+-- !query schema
+struct<time_from_seconds(43200):time(6)>
+-- !query output
+12:00:00
+
+
+-- !query
+SELECT time_from_seconds(52200.5)
+-- !query schema
+struct<time_from_seconds(52200.5):time(6)>
+-- !query output
+14:30:00.5
+
+
+-- !query
+SELECT time_from_seconds(86399.999999)
+-- !query schema
+struct<time_from_seconds(86399.999999):time(6)>
+-- !query output
+23:59:59.999999
+
+
+-- !query
+SELECT time_from_seconds(-1)
+-- !query schema
+struct<time_from_seconds(-1):time(6)>
+-- !query output
+NULL
+
+
+-- !query
+SELECT time_from_seconds(86400)
+-- !query schema
+struct<time_from_seconds(86400):time(6)>
+-- !query output
+NULL
+
+
+-- !query
+SELECT time_from_seconds(90000)
+-- !query schema
+struct<time_from_seconds(90000):time(6)>
+-- !query output
+NULL
+
+
+-- !query
+SELECT time_from_seconds(NULL)
+-- !query schema
+struct<time_from_seconds(NULL):time(6)>
+-- !query output
+NULL
+
+
+-- !query
+SELECT time_from_millis(0)
+-- !query schema
+struct<time_from_millis(0):time(6)>
+-- !query output
+00:00:00
+
+
+-- !query
+SELECT time_from_millis(43200)
+-- !query schema
+struct<time_from_millis(43200):time(6)>
+-- !query output
+00:00:43.2
+
+
+-- !query
+SELECT time_from_millis(52200000)
+-- !query schema
+struct<time_from_millis(52200000):time(6)>
+-- !query output
+14:30:00
+
+
+-- !query
+SELECT time_from_millis(52200500)
+-- !query schema
+struct<time_from_millis(52200500):time(6)>
+-- !query output
+14:30:00.5
+
+
+-- !query
+SELECT time_from_millis(86399999)
+-- !query schema
+struct<time_from_millis(86399999):time(6)>
+-- !query output
+23:59:59.999
+
+
+-- !query
+SELECT time_from_millis(-1)
+-- !query schema
+struct<time_from_millis(-1):time(6)>
+-- !query output
+NULL
+
+
+-- !query
+SELECT time_from_millis(86400000)
+-- !query schema
+struct<time_from_millis(86400000):time(6)>
+-- !query output
+NULL
+
+
+-- !query
+SELECT time_from_millis(NULL)
+-- !query schema
+struct<time_from_millis(NULL):time(6)>
+-- !query output
+NULL
+
+
+-- !query
+SELECT time_from_micros(0)
+-- !query schema
+struct<time_from_micros(0):time(6)>
+-- !query output
+00:00:00
+
+
+-- !query
+SELECT time_from_micros(43200)
+-- !query schema
+struct<time_from_micros(43200):time(6)>
+-- !query output
+00:00:00.0432
+
+
+-- !query
+SELECT time_from_micros(52200000000)
+-- !query schema
+struct<time_from_micros(52200000000):time(6)>
+-- !query output
+14:30:00
+
+
+-- !query
+SELECT time_from_micros(52200500000)
+-- !query schema
+struct<time_from_micros(52200500000):time(6)>
+-- !query output
+14:30:00.5
+
+
+-- !query
+SELECT time_from_micros(86399999999)
+-- !query schema
+struct<time_from_micros(86399999999):time(6)>
+-- !query output
+23:59:59.999999
+
+
+-- !query
+SELECT time_from_micros(-1)
+-- !query schema
+struct<time_from_micros(-1):time(6)>
+-- !query output
+NULL
+
+
+-- !query
+SELECT time_from_micros(86400000000)
+-- !query schema
+struct<time_from_micros(86400000000):time(6)>
+-- !query output
+NULL
+
+
+-- !query
+SELECT time_from_micros(NULL)
+-- !query schema
+struct<time_from_micros(NULL):time(6)>
+-- !query output
+NULL
+
+
+-- !query
+SELECT time_to_seconds(TIME'00:00:00')
+-- !query schema
+struct<time_to_seconds(TIME '00:00:00'):decimal(14,6)>
+-- !query output
+0.000000
+
+
+-- !query
+SELECT time_to_seconds(TIME'12:00:00')
+-- !query schema
+struct<time_to_seconds(TIME '12:00:00'):decimal(14,6)>
+-- !query output
+43200.000000
+
+
+-- !query
+SELECT time_to_seconds(TIME'14:30:00.5')
+-- !query schema
+struct<time_to_seconds(TIME '14:30:00.5'):decimal(14,6)>
+-- !query output
+52200.500000
+
+
+-- !query
+SELECT time_to_seconds(TIME'23:59:59.999')
+-- !query schema
+struct<time_to_seconds(TIME '23:59:59.999'):decimal(14,6)>
+-- !query output
+86399.999000
+
+
+-- !query
+SELECT time_to_seconds(TIME'23:59:59.999999')
+-- !query schema
+struct<time_to_seconds(TIME '23:59:59.999999'):decimal(14,6)>
+-- !query output
+86399.999999
+
+
+-- !query
+SELECT time_to_seconds(NULL)
+-- !query schema
+struct<time_to_seconds(NULL):decimal(14,6)>
+-- !query output
+NULL
+
+
+-- !query
+SELECT time_to_millis(TIME'00:00:00')
+-- !query schema
+struct<time_to_millis(TIME '00:00:00'):bigint>
+-- !query output
+0
+
+
+-- !query
+SELECT time_to_millis(TIME'14:30:00')
+-- !query schema
+struct<time_to_millis(TIME '14:30:00'):bigint>
+-- !query output
+52200000
+
+
+-- !query
+SELECT time_to_millis(TIME'14:30:00.5')
+-- !query schema
+struct<time_to_millis(TIME '14:30:00.5'):bigint>
+-- !query output
+52200500
+
+
+-- !query
+SELECT time_to_millis(TIME'23:59:59.999')
+-- !query schema
+struct<time_to_millis(TIME '23:59:59.999'):bigint>
+-- !query output
+86399999
+
+
+-- !query
+SELECT time_to_millis(TIME'23:59:59.999999')
+-- !query schema
+struct<time_to_millis(TIME '23:59:59.999999'):bigint>
+-- !query output
+86399999
+
+
+-- !query
+SELECT time_to_millis(NULL)
+-- !query schema
+struct<time_to_millis(NULL):bigint>
+-- !query output
+NULL
+
+
+-- !query
+SELECT time_to_micros(TIME'00:00:00')
+-- !query schema
+struct<time_to_micros(TIME '00:00:00'):bigint>
+-- !query output
+0
+
+
+-- !query
+SELECT time_to_micros(TIME'14:30:00')
+-- !query schema
+struct<time_to_micros(TIME '14:30:00'):bigint>
+-- !query output
+52200000000
+
+
+-- !query
+SELECT time_to_micros(TIME'14:30:00.5')
+-- !query schema
+struct<time_to_micros(TIME '14:30:00.5'):bigint>
+-- !query output
+52200500000
+
+
+-- !query
+SELECT time_to_micros(TIME'23:59:59.999')
+-- !query schema
+struct<time_to_micros(TIME '23:59:59.999'):bigint>
+-- !query output
+86399999000
+
+
+-- !query
+SELECT time_to_micros(TIME'23:59:59.999999')
+-- !query schema
+struct<time_to_micros(TIME '23:59:59.999999'):bigint>
+-- !query output
+86399999999
+
+
+-- !query
+SELECT time_to_micros(NULL)
+-- !query schema
+struct<time_to_micros(NULL):bigint>
+-- !query output
+NULL
+
+
+-- !query
+SELECT time_to_seconds(time_from_seconds(52200.5))
+-- !query schema
+struct<time_to_seconds(time_from_seconds(52200.5)):decimal(14,6)>
+-- !query output
+52200.500000
+
+
+-- !query
+SELECT time_from_seconds(time_to_seconds(TIME'14:30:00.5'))
+-- !query schema
+struct<time_from_seconds(time_to_seconds(TIME '14:30:00.5')):time(6)>
+-- !query output
+14:30:00.5
+
+
+-- !query
+SELECT time_to_millis(time_from_millis(52200500))
+-- !query schema
+struct<time_to_millis(time_from_millis(52200500)):bigint>
+-- !query output
+52200500
+
+
+-- !query
+SELECT time_from_millis(time_to_millis(TIME'14:30:00.5'))
+-- !query schema
+struct<time_from_millis(time_to_millis(TIME '14:30:00.5')):time(6)>
+-- !query output
+14:30:00.5
+
+
+-- !query
+SELECT time_to_micros(time_from_micros(52200500000))
+-- !query schema
+struct<time_to_micros(time_from_micros(52200500000)):bigint>
+-- !query output
+52200500000
+
+
+-- !query
+SELECT time_from_micros(time_to_micros(TIME'14:30:00.5'))
+-- !query schema
+struct<time_from_micros(time_to_micros(TIME '14:30:00.5')):time(6)>
+-- !query output
+14:30:00.5

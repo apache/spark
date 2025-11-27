@@ -65,7 +65,7 @@ object EliminatePipeOperators extends Rule[LogicalPlan] {
  * Validates and strips PipeExpression nodes from a logical plan once the child expressions are
  * resolved.
  */
-object ValidateAndStripPipeExpressions extends Rule[LogicalPlan] {
+case object ValidateAndStripPipeExpressions extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
     _.containsPattern(PIPE_EXPRESSION), ruleId) {
     case node: LogicalPlan =>
@@ -78,8 +78,13 @@ object ValidateAndStripPipeExpressions extends Rule[LogicalPlan] {
             throw QueryCompilationErrors
               .pipeOperatorAggregateExpressionContainsNoAggregateFunction(p.child)
           } else if (!p.isAggregate) {
-            firstAggregateFunction.foreach { a =>
-              throw QueryCompilationErrors.pipeOperatorContainsAggregateFunction(a, p.clause)
+            // For non-aggregate clauses, only allow aggregate functions in SELECT.
+            // All other clauses (EXTEND, SET, etc.) disallow aggregates.
+            val aggregateAllowed = p.clause == PipeOperators.selectClause
+            if (!aggregateAllowed) {
+              firstAggregateFunction.foreach { a =>
+                throw QueryCompilationErrors.pipeOperatorContainsAggregateFunction(a, p.clause)
+              }
             }
           }
           p.child

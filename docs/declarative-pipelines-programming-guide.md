@@ -35,6 +35,16 @@ The key advantage of SDP is its declarative approach - you define what tables sh
 
 ![Dataflow Graph](img/declarative-pipelines-dataflow-graph.png)
 
+### Quick install
+
+A quick way to install SDP is with pip:
+
+```
+pip install pyspark[pipelines]
+```
+
+See the [downloads page](//spark.apache.org/downloads.html) for more installation options.
+
 ## Key Concepts
 
 ### Flows
@@ -67,8 +77,9 @@ A pipeline is the primary unit of development and execution in SDP. A pipeline c
 A pipeline project is a set of source files that contain code that define the datasets and flows that make up a pipeline. These source files can be `.py` or `.sql` files.
 
 A YAML-formatted pipeline spec file contains the top-level configuration for the pipeline project. It supports the following fields:
-- **definitions** (Required) - Paths where definition files can be found.
-- **database** (Optional) - The default target database for pipeline outputs.
+- **libraries** (Required) - Paths where source files can be found.
+- **storage** (Required) – A directory where checkpoints can be stored for streams within the pipeline.
+- **database** (Optional) - The default target database for pipeline outputs. **schema** can alternatively be used as an alias.
 - **catalog** (Optional) - The default target catalog for pipeline outputs.
 - **configuration** (Optional) - Map of Spark configuration properties.
 
@@ -76,18 +87,16 @@ An example pipeline spec file:
 
 ```yaml
 name: my_pipeline
-definitions:
+libraries:
   - glob:
-      include: transformations/**/*.py
-  - glob:
-      include: transformations/**/*.sql
+      include: transformations/**
 catalog: my_catalog
 database: my_db
 configuration:
   spark.sql.shuffle.partitions: "1000"
 ```
 
-It's conventional to name pipeline spec files `pipeline.yml`.
+It's conventional to name pipeline spec files `spark-pipeline.yml`.
 
 The `spark-pipelines init` command, described below, makes it easy to generate a pipeline project with default configuration and directory structure.
 
@@ -104,7 +113,7 @@ The `spark-pipelines` command line interface (CLI) is the primary way to execute
 
 ### `spark-pipelines run`
 
-`spark-pipelines run` launches an execution of a pipeline and monitors its progress until it completes. The `--spec` parameter allows selecting the pipeline spec file. If not provided, the CLI will look in the current directory and parent directories for a file named `pipeline.yml` or `pipeline.yaml`.
+`spark-pipelines run` launches an execution of a pipeline and monitors its progress until it completes. The `--spec` parameter allows selecting the pipeline spec file. If not provided, the CLI will look in the current directory and parent directories for a file named `spark-pipeline.yml` or `spark-pipeline.yaml`.
 
 ### `spark-pipelines dry-run`
 

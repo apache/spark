@@ -18,6 +18,7 @@
 import datetime
 import unittest
 import logging
+import os
 
 from collections import OrderedDict
 from decimal import Decimal
@@ -277,28 +278,20 @@ class ApplyInPandasTestsMixin:
         ):
             self._test_apply_in_pandas(lambda key, pdf: key)
 
-    @staticmethod
-    def stats_with_column_names(key, pdf):
-        # order of column can be different to applyInPandas schema when column names are given
-        return pd.DataFrame([(pdf.v.mean(),) + key], columns=["mean", "id"])
-
-    @staticmethod
-    def stats_with_no_column_names(key, pdf):
-        # columns must be in order of applyInPandas schema when no columns given
-        return pd.DataFrame([key + (pdf.v.mean(),)])
-
     def test_apply_in_pandas_returning_column_names(self):
-        self._test_apply_in_pandas(ApplyInPandasTestsMixin.stats_with_column_names)
+        self._test_apply_in_pandas(
+            lambda key, pdf: pd.DataFrame([(pdf.v.mean(),) + key], columns=["mean", "id"])
+        )
 
     def test_apply_in_pandas_returning_no_column_names(self):
-        self._test_apply_in_pandas(ApplyInPandasTestsMixin.stats_with_no_column_names)
+        self._test_apply_in_pandas(lambda key, pdf: pd.DataFrame([key + (pdf.v.mean(),)]))
 
     def test_apply_in_pandas_returning_column_names_sometimes(self):
         def stats(key, pdf):
             if key[0] % 2:
-                return ApplyInPandasTestsMixin.stats_with_column_names(key, pdf)
+                return pd.DataFrame([(pdf.v.mean(),) + key], columns=["mean", "id"])
             else:
-                return ApplyInPandasTestsMixin.stats_with_no_column_names(key, pdf)
+                return pd.DataFrame([key + (pdf.v.mean(),)])
 
         self._test_apply_in_pandas(stats)
 
@@ -332,9 +325,15 @@ class ApplyInPandasTestsMixin:
                 lambda key, pdf: pd.DataFrame([key + (pdf.v.mean(), pdf.v.std())])
             )
 
+    @unittest.skipIf(
+        os.environ.get("SPARK_SKIP_CONNECT_COMPAT_TESTS") == "1", "SPARK-54482: To be reenabled"
+    )
     def test_apply_in_pandas_returning_empty_dataframe(self):
         self._test_apply_in_pandas_returning_empty_dataframe(pd.DataFrame())
 
+    @unittest.skipIf(
+        os.environ.get("SPARK_SKIP_CONNECT_COMPAT_TESTS") == "1", "SPARK-54482: To be reenabled"
+    )
     def test_apply_in_pandas_returning_incompatible_type(self):
         with self.quiet():
             self.check_apply_in_pandas_returning_incompatible_type()
@@ -870,7 +869,7 @@ class ApplyInPandasTestsMixin:
 
         def stats(key, pdf):
             if key[0] % 2 == 0:
-                return ApplyInPandasTestsMixin.stats_with_no_column_names(key, pdf)
+                return pd.DataFrame([key + (pdf.v.mean(),)])
             return empty_df
 
         result = (
@@ -938,14 +937,14 @@ class ApplyInPandasTestsMixin:
                 self.assertEqual(row[1], 123)
 
     def test_arrow_batch_slicing(self):
-        df = self.spark.range(10000000).select(
-            (sf.col("id") % 2).alias("key"), sf.col("id").alias("v")
-        )
+        n = 100000
+
+        df = self.spark.range(n).select((sf.col("id") % 2).alias("key"), sf.col("id").alias("v"))
         cols = {f"col_{i}": sf.col("v") + i for i in range(20)}
         df = df.withColumns(cols)
 
         def min_max_v(pdf):
-            assert len(pdf) == 10000000 / 2, len(pdf)
+            assert len(pdf) == n / 2, len(pdf)
             return pd.DataFrame(
                 {
                     "key": [pdf.key.iloc[0]],
@@ -958,7 +957,7 @@ class ApplyInPandasTestsMixin:
             df.groupby("key").agg(sf.min("v").alias("min"), sf.max("v").alias("max")).sort("key")
         ).collect()
 
-        for maxRecords, maxBytes in [(1000, 2**31 - 1), (0, 1048576), (1000, 1048576)]:
+        for maxRecords, maxBytes in [(1000, 2**31 - 1), (0, 4096), (1000, 4096)]:
             with self.subTest(maxRecords=maxRecords, maxBytes=maxBytes):
                 with self.sql_conf(
                     {
@@ -1000,20 +999,20 @@ class ApplyInPandasTestsMixin:
                 df,
             )
 
-        logs = self.spark.table("system.session.python_worker_logs")
+            logs = self.spark.tvf.python_worker_logs()
 
-        assertDataFrameEqual(
-            logs.select("level", "msg", "context", "logger"),
-            [
-                Row(
-                    level="WARNING",
-                    msg=f"pandas grouped map: {dict(id=lst, value=[v*10 for v in lst])}",
-                    context={"func_name": func_with_logging.__name__},
-                    logger="test_pandas_grouped_map",
-                )
-                for lst in [[0, 2, 4, 6, 8], [1, 3, 5, 7]]
-            ],
-        )
+            assertDataFrameEqual(
+                logs.select("level", "msg", "context", "logger"),
+                [
+                    Row(
+                        level="WARNING",
+                        msg=f"pandas grouped map: {dict(id=lst, value=[v*10 for v in lst])}",
+                        context={"func_name": func_with_logging.__name__},
+                        logger="test_pandas_grouped_map",
+                    )
+                    for lst in [[0, 2, 4, 6, 8], [1, 3, 5, 7]]
+                ],
+            )
 
     def test_apply_in_pandas_iterator_basic(self):
         df = self.spark.createDataFrame(
@@ -1057,7 +1056,7 @@ class ApplyInPandasTestsMixin:
         self.assertEqual(result[1][1], 18.0)
 
     def test_apply_in_pandas_iterator_batch_slicing(self):
-        df = self.spark.range(10000000).select(
+        df = self.spark.range(100000).select(
             (sf.col("id") % 2).alias("key"), sf.col("id").alias("v")
         )
         cols = {f"col_{i}": sf.col("v") + i for i in range(20)}
@@ -1073,7 +1072,7 @@ class ApplyInPandasTestsMixin:
                     key_val = batch.key.iloc[0]
 
             combined = pd.concat(all_data, ignore_index=True)
-            assert len(combined) == 10000000 / 2, len(combined)
+            assert len(combined) == 100000 / 2, len(combined)
 
             yield pd.DataFrame(
                 {
@@ -1092,7 +1091,7 @@ class ApplyInPandasTestsMixin:
             .sort("key")
         ).collect()
 
-        for maxRecords, maxBytes in [(1000, 2**31 - 1), (0, 1048576), (1000, 1048576)]:
+        for maxRecords, maxBytes in [(1000, 4096), (0, 4096), (1000, 4096)]:
             with self.subTest(maxRecords=maxRecords, maxBytes=maxBytes):
                 with self.sql_conf(
                     {
@@ -1109,7 +1108,7 @@ class ApplyInPandasTestsMixin:
                     self.assertEqual(expected, result)
 
     def test_apply_in_pandas_iterator_with_keys_batch_slicing(self):
-        df = self.spark.range(10000000).select(
+        df = self.spark.range(100000).select(
             (sf.col("id") % 2).alias("key"), sf.col("id").alias("v")
         )
         cols = {f"col_{i}": sf.col("v") + i for i in range(20)}
@@ -1124,7 +1123,7 @@ class ApplyInPandasTestsMixin:
                 all_data.append(batch)
 
             combined = pd.concat(all_data, ignore_index=True)
-            assert len(combined) == 10000000 / 2, len(combined)
+            assert len(combined) == 100000 / 2, len(combined)
 
             yield pd.DataFrame(
                 {
@@ -1138,7 +1137,7 @@ class ApplyInPandasTestsMixin:
             df.groupby("key").agg(sf.min("v").alias("min"), sf.max("v").alias("max")).sort("key")
         ).collect()
 
-        for maxRecords, maxBytes in [(1000, 2**31 - 1), (0, 1048576), (1000, 1048576)]:
+        for maxRecords, maxBytes in [(1000, 4096), (0, 4096), (1000, 4096)]:
             with self.subTest(maxRecords=maxRecords, maxBytes=maxBytes):
                 with self.sql_conf(
                     {
@@ -1405,6 +1404,66 @@ class ApplyInPandasTestsMixin:
 
             actual = grouped_df.applyInPandas(func, "value long").collect()
             self.assertEqual(actual, expected)
+
+    def test_grouped_map_pandas_udf_with_compression_codec(self):
+        # Test grouped map Pandas UDF with different compression codec settings
+        @pandas_udf("id long, v int, v1 double", PandasUDFType.GROUPED_MAP)
+        def foo(pdf):
+            return pdf.assign(v1=pdf.v * pdf.id * 1.0)
+
+        df = self.data
+        pdf = df.toPandas()
+        expected = pdf.groupby("id", as_index=False).apply(foo.func).reset_index(drop=True)
+
+        for codec in ["none", "zstd", "lz4"]:
+            with self.subTest(compressionCodec=codec):
+                with self.sql_conf({"spark.sql.execution.arrow.compression.codec": codec}):
+                    result = df.groupby("id").apply(foo).sort("id").toPandas()
+                    assert_frame_equal(expected, result)
+
+    def test_apply_in_pandas_with_compression_codec(self):
+        # Test applyInPandas with different compression codec settings
+        def stats(key, pdf):
+            return pd.DataFrame([(key[0], pdf.v.mean())], columns=["id", "mean"])
+
+        df = self.data
+        expected = df.select("id").distinct().withColumn("mean", sf.lit(24.5)).toPandas()
+
+        for codec in ["none", "zstd", "lz4"]:
+            with self.subTest(compressionCodec=codec):
+                with self.sql_conf({"spark.sql.execution.arrow.compression.codec": codec}):
+                    result = (
+                        df.groupby("id")
+                        .applyInPandas(stats, schema="id long, mean double")
+                        .sort("id")
+                        .toPandas()
+                    )
+                    assert_frame_equal(expected, result)
+
+    def test_apply_in_pandas_iterator_with_compression_codec(self):
+        # Test applyInPandas with iterator and compression
+        df = self.spark.createDataFrame(
+            [(1, 1.0), (1, 2.0), (2, 3.0), (2, 5.0), (2, 10.0)], ("id", "v")
+        )
+
+        def sum_func(batches: Iterator[pd.DataFrame]) -> Iterator[pd.DataFrame]:
+            total = 0
+            for batch in batches:
+                total += batch["v"].sum()
+            yield pd.DataFrame({"v": [total]})
+
+        expected = [Row(v=3.0), Row(v=18.0)]
+
+        for codec in ["none", "zstd", "lz4"]:
+            with self.subTest(compressionCodec=codec):
+                with self.sql_conf({"spark.sql.execution.arrow.compression.codec": codec}):
+                    result = (
+                        df.groupby("id")
+                        .applyInPandas(sum_func, schema="v double")
+                        .orderBy("v")
+                        .collect()
+                    )
+                    self.assertEqual(result, expected)
 
 
 class ApplyInPandasTests(ApplyInPandasTestsMixin, ReusedSQLTestCase):

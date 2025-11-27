@@ -25,7 +25,7 @@ import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
-import org.apache.spark.sql.functions.count
+import org.apache.spark.sql.functions.{count, udf}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.STREAMING_CHECKPOINT_FILE_MANAGER_CLASS
 import org.apache.spark.sql.streaming._
@@ -583,6 +583,243 @@ class RocksDBCheckpointFailureInjectionSuite extends StreamTest
           CheckAnswer((3, 4), (1, 4), (4, 1)),
           StopStream
         )
+      }
+    }
+  }
+
+  case class FailureConf3(
+      skipCreationIfFileMissingChecksum: Boolean,
+      checkpointFormatVersion : String) {
+    override def toString: String = {
+      s"skipCreationIfFileMissingChecksum = $skipCreationIfFileMissingChecksum, " +
+        s"checkpointFormatVersion = $checkpointFormatVersion"
+    }
+  }
+
+  private def versionsPresent(dir: File, suffix: String): Seq[(Long, Option[String])] = {
+    dir.listFiles.filter(_.getName.endsWith(suffix))
+    .filter(!_.getName.startsWith("."))
+    .map(_.getName.stripSuffix(suffix).split("_"))
+    .map {
+      case Array(version, uniqueId) => (version.toLong, Some(uniqueId))
+      case Array(version) => (version.toLong, None)
+    }
+    .sorted
+    .distinct
+    .toSeq
+  }
+
+  /**
+   * Test that verifies upgrading from checksum disabled to checksum enabled after state files are
+   * written but before batch commit completes. The important part of this test is that files are
+   * not overwritten if they already exist. When checkpointFormatVersion is 2, we will not run into
+   * the checksum verification failure because each batch run uses unique changelog file names.
+   *
+   * Scenario:
+   * 1. Start with checksum verification disabled
+   * 2. Run batch 1 successfully (writes 1.changelog without .crc)
+   * 3. Start batch 2 - state store commits successfully (writes 2.changelog without .crc) but the
+   *    batch fails before the commit is complete (via UDF exception). This leaves 2.changelog on
+   *    disk without a corresponding commit log file
+   * 4. Restart query with checksum verification enabled and with a query where the changelog file
+   *    contents will change from batch 2
+   * 5. Run batch 2 again and it succeeds and writes 2.changelog (and 2.changelog.crc if
+   *    STREAMING_CHECKPOINT_FILE_CHECKSUM_SKIP_CREATION_IF_FILE_MISSING_CHECKSUM is disabled)
+   * 6. Run batch 3 and it succeeds and writes 3.changelog and 3.changelog.crc
+   * 7. Query starts with STREAMING_CHECKPOINT_FILE_CHECKSUM_SKIP_CREATION_IF_FILE_MISSING_CHECKSUM
+   *    enabled/disabled and the different behavior is shown in the test
+   */
+
+  Seq(
+    FailureConf3(skipCreationIfFileMissingChecksum = false, checkpointFormatVersion = "1"),
+    FailureConf3(skipCreationIfFileMissingChecksum = true, checkpointFormatVersion = "1"),
+    FailureConf3(skipCreationIfFileMissingChecksum = false, checkpointFormatVersion = "2"),
+    FailureConf3(skipCreationIfFileMissingChecksum = true, checkpointFormatVersion = "2")
+  ).foreach { failureConf =>
+    test(s"Upgrading from file checksum disabled to enabled " +
+      "after state commits without batch commit " + failureConf.toString) {
+      val hadoopConf = new Configuration()
+      hadoopConf.set(STREAMING_CHECKPOINT_FILE_MANAGER_CLASS.parent.key, fileManagerClassName)
+      val rocksdbChangelogCheckpointingConfKey =
+        RocksDBConf.ROCKSDB_SQL_CONF_NAME_PREFIX + ".changelogCheckpointing.enabled"
+
+      withTempDirAllowFailureInjection { (checkpointDir, injectionState) =>
+        var forceTaskFailure = false
+          val failUDF = udf((value: Int) => {
+          if (forceTaskFailure) {
+            // This will fail all close() call to trigger query failures in execution phase.
+            throw new RuntimeException("Ingest task failure")
+          }
+          value
+        })
+
+        val inputData = MemoryStream[Int]
+        val aggregated =
+          inputData.toDF()
+            .groupBy($"value")
+            .agg(count("*").as("count"))
+            // would fail here after writing the changelog file for the agg
+            .select(failUDF($"value").as("value"), $"count")
+            .as[(Int, Long)]
+
+        val aggregated2 =
+          inputData.toDF()
+            .select($"value" + 1000 as "value") // This is to make the changelog file different
+            .groupBy($"value")
+            .agg(count("*").as("count"))
+            // would fail here after writing the changelog file for the agg
+            .select(failUDF($"value").as("value"), $"count")
+            .as[(Int, Long)]
+
+        def getRunConf(checksumEnabled: Boolean) : Map[String, String] = {
+          Map(
+            rocksdbChangelogCheckpointingConfKey -> "true",
+            SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key ->
+              failureConf.checkpointFormatVersion,
+            SQLConf.STREAMING_CHECKPOINT_FILE_CHECKSUM_ENABLED.key -> checksumEnabled.toString,
+            SQLConf.STREAMING_CHECKPOINT_FILE_CHECKSUM_SKIP_CREATION_IF_FILE_MISSING_CHECKSUM.key ->
+              failureConf.skipCreationIfFileMissingChecksum.toString,
+            STREAMING_CHECKPOINT_FILE_MANAGER_CLASS.parent.key -> fileManagerClassName,
+            SQLConf.SHUFFLE_PARTITIONS.key -> "1")
+        }
+
+        // Verify that the changelog files exists for a version
+        def verifyChangelogFileExists(version: Long) : Boolean = {
+          versionsPresent(new File(checkpointDir, "state/0/0"), ".changelog").exists {
+            case (v, uniqueId) =>
+              if (failureConf.checkpointFormatVersion == "1") {
+                v == version && uniqueId.isEmpty
+              } else {
+                v == version && uniqueId.isDefined
+              }
+          }
+        }
+
+        // Verify that the changelog checksum files exists for a version
+        def verifyChangelogFileChecksumExists(version: Long) : Boolean = {
+          versionsPresent(new File(checkpointDir, "state/0/0"), ".changelog.crc").exists {
+            case (v, uniqueId) =>
+              if (failureConf.checkpointFormatVersion == "1") {
+                v == version && uniqueId.isEmpty
+              } else {
+                v == version && uniqueId.isDefined
+              }
+          }
+        }
+
+        // First run: file checksum disabled
+        val firstRunConfs = getRunConf(checksumEnabled = false)
+
+        testStream(aggregated, Update)(
+          StartStream(
+            checkpointLocation = checkpointDir.getAbsolutePath,
+            additionalConfs = firstRunConfs),
+          AddData(inputData, 3),
+          CheckLastBatch((3, 1)),
+          Execute { _ =>
+            forceTaskFailure = true
+          },
+          AddData(inputData, 3, 2),
+          ExpectFailure[SparkException] { ex =>
+            ex.getCause.getMessage.contains("FAILED_EXECUTE_UDF")
+          }
+        )
+
+        // Verify that the changelog file was written
+        assert(verifyChangelogFileExists(2))
+        // Verify that the changelog file checksum was NOT written since it was disabled
+        assert(!verifyChangelogFileChecksumExists(2))
+
+        // Verify that the commit file was written
+        assert((new File(checkpointDir, "commits/0")).exists())
+        // Verify that the commit file was NOT written
+        assert(!(new File(checkpointDir, "commits/1")).exists())
+
+        // Second run: STREAMING_CHECKPOINT_FILE_CHECKSUM_ENABLED enabled with
+        // allowOverwriteInRename = false. This simulates an upgrade to a new version where the
+        // file checksum is enabled. The allowOverwriteInRename is set to false to test the case
+        // when overwriting the changelog file fails. This is to simulate the case where the
+        // changelog file is not overwritten but the checksum file is written.
+        injectionState.allowOverwriteInRename = false
+        forceTaskFailure = false
+
+        val secondRunConfs = getRunConf(checksumEnabled = true)
+
+        inputData.addData(3, 1)
+
+        // The query should restart successfully and handle files without checksums, whether
+        // skipCreationIfFileMissingChecksum is enabled or disabled. The problem
+        // arises on the load after this run.
+        testStream(aggregated2, Update)(
+          StartStream(
+            checkpointLocation = checkpointDir.getAbsolutePath,
+            additionalConfs = secondRunConfs),
+          AddData(inputData, 4),
+          CheckLastBatch((1003, 2), (1001, 1), (1004, 1)),
+          StopStream
+        )
+
+        assert(verifyChangelogFileExists(3))
+        assert(verifyChangelogFileChecksumExists(3))
+
+        // Verify that the commit files were written
+        assert((new File(checkpointDir, "commits/1")).exists())
+        assert((new File(checkpointDir, "commits/2")).exists())
+
+        val failureCase =
+          !failureConf.skipCreationIfFileMissingChecksum &&
+          failureConf.checkpointFormatVersion == "1"
+
+        if (failureCase) {
+          assert(verifyChangelogFileChecksumExists(2))
+
+          // The query does not succeed, since we load the old changelog file with the checksum from
+          // the new changelog file that did not overwrite the old one. This will lead to a checksum
+          // verification failure when we try to load the old changelog file with the checksum from
+          // the new changelog file that did not overwrite the old one.
+          testStream(aggregated2, Update)(
+            StartStream(
+              checkpointLocation = checkpointDir.getAbsolutePath,
+              additionalConfs = secondRunConfs),
+            AddData(inputData, 4),
+            ExpectFailure[SparkException] { ex =>
+              ex.getMessage.contains("CHECKPOINT_FILE_CHECKSUM_VERIFICATION_FAILED")
+              ex.getMessage.contains("2.changelog")
+            }
+          )
+
+          // Verify that the commit file was not written
+          assert(!(new File(checkpointDir, "commits/3")).exists())
+        } else {
+          if (failureConf.checkpointFormatVersion == "1") {
+            // With checkpointFormatVersion = 1, the changelog file checksum should not be written
+            assert(!verifyChangelogFileChecksumExists(2))
+          } else {
+            // With checkpointFormatVersion = 2, the changelog file checksum should be written
+            assert(verifyChangelogFileChecksumExists(2))
+          }
+
+          // The query should restart successfully
+          testStream(aggregated2, Update)(
+            StartStream(
+              checkpointLocation = checkpointDir.getAbsolutePath,
+              additionalConfs = secondRunConfs),
+            AddData(inputData, 4),
+            CheckLastBatch((1004, 2)),
+            StopStream
+          )
+
+          // Verify again the 2.changelog file checksum exists or not
+          if (failureConf.checkpointFormatVersion == "1") {
+            assert(!verifyChangelogFileChecksumExists(2))
+          } else {
+            assert(verifyChangelogFileChecksumExists(2))
+          }
+
+          assert(verifyChangelogFileExists(4))
+          assert(verifyChangelogFileChecksumExists(4))
+          assert((new File(checkpointDir, "commits/3")).exists())
+        }
       }
     }
   }

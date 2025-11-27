@@ -17,9 +17,12 @@
 
 package org.apache.spark.sql.internal.types;
 
+import org.apache.spark.annotation.Unstable;
+
 /**
  * Class for maintaining information about a spatial reference system (SRS).
  */
+@Unstable
 public record SpatialReferenceSystemInformation(
   // Field storing the spatial reference identifier (SRID) value of this SRS.
   int srid,

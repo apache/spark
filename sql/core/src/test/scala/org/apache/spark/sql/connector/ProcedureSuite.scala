@@ -176,16 +176,16 @@ class ProcedureSuite extends QueryTest with SharedSparkSession with BeforeAndAft
         exception = intercept[AnalysisException](
           sql("CALL testcat.procedure(1, 2)")
         ),
-        condition = "_LEGACY_ERROR_TEMP_1184",
-        parameters = Map("plugin" -> "testcat", "ability" -> "procedures")
+        condition = "MISSING_CATALOG_ABILITY.PROCEDURES",
+        parameters = Map("plugin" -> "testcat")
       )
 
       checkError(
         exception = intercept[AnalysisException](
           sql("SHOW PROCEDURES IN testcat")
         ),
-        condition = "_LEGACY_ERROR_TEMP_1184",
-        parameters = Map("plugin" -> "testcat", "ability" -> "procedures")
+        condition = "MISSING_CATALOG_ABILITY.PROCEDURES",
+        parameters = Map("plugin" -> "testcat")
       )
     }
   }
