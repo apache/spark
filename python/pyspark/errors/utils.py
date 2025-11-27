@@ -95,7 +95,7 @@ class ErrorClassesReader:
     def __init__(self) -> None:
         self.error_info_map = ERROR_CLASSES_MAP
 
-    def get_sqlstate(self, errorClass: str) -> str:
+    def get_sqlstate(self, errorClass: str) -> Optional[str]:
         """
         Returns the SQL state for the given error class.
         """
