@@ -820,7 +820,9 @@ class VariantSuite extends QueryTest with SharedSparkSession with ExpressionEval
        // The initial size of the buffer backing a cached dataframe column is 128KB.
        // See `ColumnBuilder`.
       val numKeys = 128 * 1024
-      val keyIterator = (0 until numKeys).iterator
+      // We start in long range because the shredded writer writes int64 by default which wouldn't
+      // match narrower binaries.
+      val keyIterator = (Int.MaxValue + 1L until Int.MaxValue + 1L + numKeys).iterator
       val entries = Array.fill(numKeys)(s"""\"${keyIterator.next()}\": \"test\"""")
       val jsonStr = s"{${entries.mkString(", ")}}"
       val query = s"""select named_struct(
