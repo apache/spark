@@ -21,7 +21,7 @@ import java.sql.{Array => _, _}
 
 private[jdbc] object JdbcErrorUtils {
 
-  def stringfiyTransactionIsolationLevel(level: Int): String = level match {
+  def stringifyTransactionIsolationLevel(level: Int): String = level match {
     case Connection.TRANSACTION_NONE => "NONE"
     case Connection.TRANSACTION_READ_UNCOMMITTED => "READ_UNCOMMITTED"
     case Connection.TRANSACTION_READ_COMMITTED => "READ_COMMITTED"
@@ -31,7 +31,7 @@ private[jdbc] object JdbcErrorUtils {
       throw new IllegalArgumentException(s"Invalid transaction isolation level: $level")
   }
 
-  def stringfiyHoldability(holdability: Int): String = holdability match {
+  def stringifyHoldability(holdability: Int): String = holdability match {
     case ResultSet.HOLD_CURSORS_OVER_COMMIT => "HOLD_CURSORS_OVER_COMMIT"
     case ResultSet.CLOSE_CURSORS_AT_COMMIT => "CLOSE_CURSORS_AT_COMMIT"
     case _ =>
