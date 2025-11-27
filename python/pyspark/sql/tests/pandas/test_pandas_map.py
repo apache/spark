@@ -35,6 +35,7 @@ from pyspark.testing.utils import eventually
 
 if have_pandas:
     import pandas as pd
+    from pandas.testing import assert_frame_equal
 
 
 @unittest.skipIf(
@@ -254,16 +255,16 @@ class MapInPandasTestsMixin:
             self.check_dataframes_with_incompatible_types()
 
     def check_dataframes_with_incompatible_types(self):
-        def func(iterator):
-            for pdf in iterator:
-                yield pdf.assign(id=pdf["id"].apply(str))
-
         for safely in [True, False]:
             with self.subTest(convertToArrowArraySafely=safely), self.sql_conf(
                 {"spark.sql.execution.pandas.convertToArrowArraySafely": safely}
             ):
                 # sometimes we see ValueErrors
                 with self.subTest(convert="string to double"):
+                    def func(iterator):
+                        for pdf in iterator:
+                            yield pdf.assign(id="test_string")
+
                     expected = (
                         r"ValueError: Exception thrown when converting pandas.Series "
                         r"\(object\) with name 'id' to Arrow Array \(double\)."
@@ -282,19 +283,33 @@ class MapInPandasTestsMixin:
                             .collect()
                         )
 
-                # sometimes we see TypeErrors
-                with self.subTest(convert="double to string"):
-                    with self.assertRaisesRegex(
-                        PythonException,
-                        r"TypeError: Exception thrown when converting pandas.Series "
-                        r"\(float64\) with name 'id' to Arrow Array \(string\).\n",
-                    ):
-                        (
+                with self.subTest(convert="float to int precision loss"):
+                    def func(iterator):
+                        for pdf in iterator:
+                            yield pdf.assign(id=pdf["id"] + 0.1)
+
+                    if safely:
+                        with self.assertRaisesRegex(
+                            PythonException,
+                            r"ValueError: Exception thrown when converting pandas.Series "
+                            r"\(float64\) with name 'id' to Arrow Array \(int64\). "
+                            "It can be caused by overflows or other unsafe conversions "
+                            "warned by Arrow. Arrow safe type check can be disabled by using "
+                            "SQL config `spark.sql.execution.pandas.convertToArrowArraySafely`.\n",
+                        ):
+                            (
+                                self.spark.range(10, numPartitions=3)
+                                .mapInPandas(func, "id long")
+                                .collect()
+                            )
+                    else:
+                        expected = self.spark.range(10, numPartitions=3).toPandas()
+                        result = (
                             self.spark.range(10, numPartitions=3)
-                            .select(col("id").cast("double"))
-                            .mapInPandas(self.identity_dataframes_iter("id"), "id string")
-                            .collect()
+                            .mapInPandas(func, "id long")
+                            .toPandas()
                         )
+                        assert_frame_equal(expected, result)
 
     def test_empty_iterator(self):
         def empty_iter(_):
