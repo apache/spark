@@ -7345,6 +7345,15 @@
     ],
     "sqlState" : "P0001"
   },
+  "USER_SPECIFIED_AND_ACTUAL_SCHEMA_MISMATCH" : {
+    "message" : [
+      "The user-specified schema doesn't match the actual schema:",
+      "user-specified: <schema>, actual: <actualSchema>. If you're using",
+      "DataFrameReader.schema API or creating a table, please do not specify the schema.",
+      "Or if you're scanning an existed table, please drop it and re-create it."
+    ],
+    "sqlState" : "42K03"
+  },
   "USER_SPECIFIED_AND_INFERRED_SCHEMA_NOT_COMPATIBLE" : {
     "message" : [
       "Table '<tableName>' has a user-specified schema that is incompatible with the schema",
@@ -7925,14 +7934,6 @@
   "_LEGACY_ERROR_TEMP_1132" : {
     "message" : [
       "A schema needs to be specified when using <className>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1133" : {
-    "message" : [
-      "The user-specified schema doesn't match the actual schema:",
-      "user-specified: <schema>, actual: <actualSchema>. If you're using",
-      "DataFrameReader.schema API or creating a table, please do not specify the schema.",
-      "Or if you're scanning an existed table, please drop it and re-create it."
     ]
   },
   "_LEGACY_ERROR_TEMP_1134" : {
