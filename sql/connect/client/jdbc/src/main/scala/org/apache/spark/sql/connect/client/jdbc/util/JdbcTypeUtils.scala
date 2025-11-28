@@ -25,11 +25,6 @@ import org.apache.spark.sql.types._
 
 private[jdbc] object JdbcTypeUtils {
 
-  /**
-   * Maximum length for variable-length binary types (VARBINARY).
-   */
-  private val VARBINARY_MAX_LENGTH = 1024 * 1024 * 1024
-
   def getColumnType(field: StructField): Int = field.dataType match {
     case NullType => Types.NULL
     case BooleanType => Types.BOOLEAN
@@ -88,12 +83,12 @@ private[jdbc] object JdbcTypeUtils {
     case LongType => 19
     case FloatType => 7
     case DoubleType => 15
-    case StringType => 255
+    case StringType => Int.MaxValue
     case DecimalType.Fixed(p, _) => p
     case DateType => 10
     case TimestampType => 29
     case TimestampNTZType => 29
-    case BinaryType => VARBINARY_MAX_LENGTH
+    case BinaryType => Int.MaxValue
     // Returns the Spark SQL TIME type precision, even though java.sql.ResultSet.getTime()
     // can only retrieve up to millisecond precision (3) due to java.sql.Time limitations.
     // Users can call getObject(index, classOf[LocalTime]) to access full microsecond
@@ -127,7 +122,7 @@ private[jdbc] object JdbcTypeUtils {
     case DateType => 10 // length of `YYYY-MM-DD`
     case TimestampType => 29 // length of `YYYY-MM-DD HH:MM:SS.SSSSSS`
     case TimestampNTZType => 29 // length of `YYYY-MM-DD HH:MM:SS.SSSSSS`
-    case BinaryType => VARBINARY_MAX_LENGTH
+    case BinaryType => Int.MaxValue
     case TimeType(precision) if precision > 0 => 8 + 1 + precision // length of `HH:MM:SS.ffffff`
     case TimeType(_) => 8 // length of `HH:MM:SS`
     // precision + negative sign + leading zero + decimal point, like DECIMAL(5,5) = -0.12345

@@ -216,9 +216,9 @@ class SparkConnectJdbcDataTypeSuite extends ConnectFunSuite with RemoteSparkSess
       assert(metaData.getColumnTypeName(1) === "STRING")
       assert(metaData.getColumnClassName(1) === "java.lang.String")
       assert(metaData.isSigned(1) === false)
-      assert(metaData.getPrecision(1) === 255)
+      assert(metaData.getPrecision(1) === Int.MaxValue)
       assert(metaData.getScale(1) === 0)
-      assert(metaData.getColumnDisplaySize(1) === 255)
+      assert(metaData.getColumnDisplaySize(1) === Int.MaxValue)
     }
   }
 
