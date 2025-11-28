@@ -35,7 +35,6 @@ from pyspark.testing.utils import eventually
 
 if have_pandas:
     import pandas as pd
-    from pandas.testing import assert_frame_equal
 
 
 @unittest.skipIf(
@@ -287,28 +286,26 @@ class MapInPandasTestsMixin:
                         for pdf in iterator:
                             yield pdf.assign(id=pdf["id"] + 0.1)
 
+                    df = (
+                        self.spark.range(10, numPartitions=3)
+                        .select(col("id").cast("double"))
+                        .mapInPandas(func, "id int")
+                    )
                     if safely:
-                        with self.assertRaisesRegex(
-                            PythonException,
+                        expected = (
                             r"ValueError: Exception thrown when converting pandas.Series "
-                            r"\(float64\) with name 'id' to Arrow Array \(int64\). "
-                            "It can be caused by overflows or other unsafe conversions "
-                            "warned by Arrow. Arrow safe type check can be disabled by using "
-                            "SQL config `spark.sql.execution.pandas.convertToArrowArraySafely`.\n",
-                        ):
-                            (
-                                self.spark.range(10, numPartitions=3)
-                                .mapInPandas(func, "id long")
-                                .collect()
-                            )
-                    else:
-                        expected = self.spark.range(10, numPartitions=3).toPandas()
-                        result = (
-                            self.spark.range(10, numPartitions=3)
-                            .mapInPandas(func, "id long")
-                            .toPandas()
+                            r"\(float64\) with name 'id' to Arrow Array \(int32\)."
+                            " It can be caused by overflows or other "
+                            "unsafe conversions warned by Arrow. Arrow safe type check "
+                            "can be disabled by using SQL config "
+                            "`spark.sql.execution.pandas.convertToArrowArraySafely`."
                         )
-                        assert_frame_equal(expected, result)
+                        with self.assertRaisesRegex(PythonException, expected + "\n"):
+                            df.collect()
+                    else:
+                        self.assertEqual(
+                            df.collect(), self.spark.range(10, numPartitions=3).collect()
+                        )
 
     def test_empty_iterator(self):
         def empty_iter(_):
