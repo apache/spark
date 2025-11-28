@@ -1598,7 +1598,7 @@ object SQLConf {
         "variant logical type.")
       .version("4.1.0")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   val PARQUET_IGNORE_VARIANT_ANNOTATION =
     buildConf("spark.sql.parquet.ignoreVariantAnnotation")
@@ -5526,7 +5526,7 @@ object SQLConf {
         "requested fields.")
       .version("4.0.0")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   val VARIANT_WRITE_SHREDDING_ENABLED =
     buildConf("spark.sql.variant.writeShredding.enabled")
@@ -5534,7 +5534,7 @@ object SQLConf {
       .doc("When true, the Parquet writer is allowed to write shredded variant. ")
       .version("4.0.0")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   val VARIANT_FORCE_SHREDDING_SCHEMA_FOR_TEST =
     buildConf("spark.sql.variant.forceShreddingSchemaForTest")
@@ -5567,7 +5567,7 @@ object SQLConf {
       .doc("Infer shredding schema when writing Variant columns in Parquet tables.")
       .version("4.1.0")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   val LEGACY_CSV_ENABLE_DATE_TIME_PARSING_FALLBACK =
     buildConf("spark.sql.legacy.csv.enableDateTimeParsingFallback")
