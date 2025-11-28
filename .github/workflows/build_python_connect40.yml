@@ -20,9 +20,9 @@
 name: Build / Python-only, Connect-only (master-server, branch-4.0-client, Python 3.11)
 
 on:
-  schedule:
-    - cron: '0 20 * * *'
-  workflow_dispatch:
+  push:
+    branches:
+    - '**'
 
 jobs:
   # Build: build Spark and run the tests for specified modules using SBT
@@ -30,7 +30,6 @@ jobs:
     name: "Build modules: pyspark-connect"
     runs-on: ubuntu-latest
     timeout-minutes: 100
-    if: github.repository == 'apache/spark'
     steps:
       - name: Checkout Spark repository
         uses: actions/checkout@v4
