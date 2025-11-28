@@ -984,17 +984,17 @@ private[spark] class TaskSchedulerImpl(
 
     synchronized {
       if (executorIdToRunningTaskIds.contains(executorId)) {
-        val hostPort = executorIdToHost(executorId)
-        logExecutorLoss(executorId, hostPort, reason)
+        val host = executorIdToHost(executorId)
+        logExecutorLoss(executorId, host, reason)
         removeExecutor(executorId, reason)
         failedExecutor = Some(executorId)
       } else {
         executorIdToHost.get(executorId) match {
-          case Some(hostPort) =>
+          case Some(host) =>
             // If the host mapping still exists, it means we don't know the loss reason for the
             // executor. So call removeExecutor() to update tasks running on that executor when
             // the real loss reason is finally known.
-            logExecutorLoss(executorId, hostPort, reason)
+            logExecutorLoss(executorId, host, reason)
             removeExecutor(executorId, reason)
 
           case None =>
@@ -1022,20 +1022,20 @@ private[spark] class TaskSchedulerImpl(
 
   private def logExecutorLoss(
       executorId: String,
-      hostPort: String,
+      host: String,
       reason: ExecutorLossReason): Unit = reason match {
     case LossReasonPending =>
-      logDebug(s"Executor $executorId on $hostPort lost, but reason not yet known.")
+      logDebug(s"Executor $executorId on $host lost, but reason not yet known.")
     case ExecutorKilled =>
       logInfo(log"Executor ${MDC(LogKeys.EXECUTOR_ID, executorId)} on " +
-        log"${MDC(LogKeys.HOST_PORT, hostPort)} killed by driver.")
+        log"${MDC(LogKeys.HOST_PORT, host)} killed by driver.")
     case _: ExecutorDecommission =>
       logInfo(log"Executor ${MDC(LogKeys.EXECUTOR_ID, executorId)} on " +
-        log"${MDC(LogKeys.HOST_PORT, hostPort)} is decommissioned" +
+        log"${MDC(LogKeys.HOST_PORT, host)} is decommissioned" +
         log"${MDC(DURATION, getDecommissionDuration(executorId))}.")
     case _ =>
       logError(log"Lost executor ${MDC(LogKeys.EXECUTOR_ID, executorId)} on " +
-        log"${MDC(LogKeys.HOST, hostPort)}: ${MDC(LogKeys.REASON, reason)}")
+        log"${MDC(LogKeys.HOST, host)}: ${MDC(LogKeys.REASON, reason)}")
   }
 
   // return decommission duration in string or "" if decommission startTime not exists
