@@ -114,16 +114,14 @@ class GeographyConnectDataFrameSuite extends QueryTest with RemoteSparkSession {
         exception = intercept[AnalysisException] {
           spark.createDataFrame(javaList, schema).collect()
         },
-        condition = "UNSUPPORTED_FEATURE.GEOSPATIAL_DISABLED"
-      )
+        condition = "UNSUPPORTED_FEATURE.GEOSPATIAL_DISABLED")
       // Implicit encoder path.
       import testImplicits._
       checkError(
         exception = intercept[AnalysisException] {
           Seq(geography).toDF("g").collect()
         },
-        condition = "UNSUPPORTED_FEATURE.GEOSPATIAL_DISABLED"
-      )
+        condition = "UNSUPPORTED_FEATURE.GEOSPATIAL_DISABLED")
     }
   }
 }
