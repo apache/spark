@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 
+import os
 import sys
 import unittest
 import datetime
@@ -310,6 +311,9 @@ class TypeHintTestsMixin:
 
         self.assertRaisesRegex(TypeError, "object.*not understood", try_infer_return_type)
 
+    @unittest.skipIf(
+        os.environ.get("SPARK_SKIP_CONNECT_COMPAT_TESTS") == "1", "SPARK-54495: To be reenabled"
+    )
     def test_as_spark_type_pandas_on_spark_dtype(self):
         type_mapper = {
             # binary

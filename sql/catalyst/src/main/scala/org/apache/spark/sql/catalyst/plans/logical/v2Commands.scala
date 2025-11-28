@@ -40,7 +40,6 @@ import org.apache.spark.sql.connector.write.RowLevelOperation.Command.{DELETE, M
 import org.apache.spark.sql.errors.DataTypeErrors.toSQLType
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, ExtractV2Table}
-import org.apache.spark.sql.execution.datasources.v2.V2TableRefreshUtil
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{ArrayType, AtomicType, BooleanType, DataType, IntegerType, MapType, MetadataBuilder, StringType, StructField, StructType}
 import org.apache.spark.util.ArrayImplicits._
@@ -689,12 +688,7 @@ case class ReplaceTableAsSelect(
   extends V2CreateTableAsSelectPlan {
 
   override def markAsAnalyzed(ac: AnalysisContext): LogicalPlan = {
-    // RTAS may drop and recreate table before query execution, breaking self-references
-    // refresh and pin versions here to read from original table versions instead of
-    // newly created empty table that is meant to serve as target for append/overwrite
-    val refreshedQuery = V2TableRefreshUtil.refresh(query, versionedOnly = true)
-    val pinnedQuery = V2TableRefreshUtil.pinVersions(refreshedQuery)
-    copy(query = pinnedQuery, isAnalyzed = true)
+    copy(isAnalyzed = true)
   }
 
   override def withPartitioning(rewritten: Seq[Transform]): V2CreateTablePlan = {
@@ -922,19 +916,29 @@ case class MergeIntoTable(
       false
     } else {
       val actions = matchedActions ++ notMatchedActions
-      val assignments = actions.collect {
-        case a: UpdateAction => a.assignments
-        case a: InsertAction => a.assignments
-      }.flatten
-      val sourcePaths = DataTypeUtils.extractAllFieldPaths(sourceTable.schema)
-      assignments.forall { assignment =>
-        assignment.resolved ||
-          (assignment.value.resolved && sourcePaths.exists {
-            path => MergeIntoTable.isEqual(assignment, path)
-          })
+      val hasStarActions = actions.exists {
+        case _: UpdateStarAction => true
+        case _: InsertStarAction => true
+        case _ => false
+      }
+      if (hasStarActions) {
+        // need to resolve star actions first
+        false
+      } else {
+        val assignments = actions.collect {
+          case a: UpdateAction => a.assignments
+          case a: InsertAction => a.assignments
+        }.flatten
+        val sourcePaths = DataTypeUtils.extractAllFieldPaths(sourceTable.schema)
+        assignments.forall { assignment =>
+          assignment.resolved ||
+            (assignment.value.resolved && sourcePaths.exists {
+              path => MergeIntoTable.isEqual(assignment, path)
+            })
         }
       }
     }
+  }
 
   private lazy val sourceSchemaForEvolution: StructType =
     MergeIntoTable.sourceSchemaForSchemaEvolution(this)

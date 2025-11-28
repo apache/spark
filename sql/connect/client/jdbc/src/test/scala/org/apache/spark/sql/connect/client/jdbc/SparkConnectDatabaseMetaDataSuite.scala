@@ -34,6 +34,8 @@ class SparkConnectDatabaseMetaDataSuite extends ConnectFunSuite with RemoteSpark
 
   // catalyst test jar is inaccessible here, but presents at the testing connect server classpath
   private val TEST_IN_MEMORY_CATALOG = "org.apache.spark.sql.connector.catalog.InMemoryCatalog"
+  private val TEST_BASIC_IN_MEMORY_CATALOG =
+    "org.apache.spark.sql.connector.catalog.BasicInMemoryTableCatalog"
 
   private def registerCatalog(
       name: String, className: String)(implicit spark: SparkSession): Unit = {
@@ -254,6 +256,12 @@ class SparkConnectDatabaseMetaDataSuite extends ConnectFunSuite with RemoteSpark
     withConnection { conn =>
       implicit val spark: SparkSession = conn.asInstanceOf[SparkConnectConnection].spark
 
+      // this catalog does not support namespace
+      registerCatalog("test_noop", TEST_BASIC_IN_MEMORY_CATALOG)
+      // Spark loads catalog plugins lazily, we must initialize it first,
+      // otherwise it won't be listed by SHOW CATALOGS
+      conn.setCatalog("test_noop")
+
       registerCatalog("test`cat", TEST_IN_MEMORY_CATALOG)
 
       spark.sql("CREATE DATABASE IF NOT EXISTS `test``cat`.t_db1")
@@ -290,6 +298,7 @@ class SparkConnectDatabaseMetaDataSuite extends ConnectFunSuite with RemoteSpark
         }
 
         // list schemas in current catalog
+        conn.setCatalog("spark_catalog")
         assert(conn.getCatalog === "spark_catalog")
         val getSchemasInCurrentCatalog =
           List(null, "%").map { database => () => metadata.getSchemas("", database) }
@@ -404,6 +413,12 @@ class SparkConnectDatabaseMetaDataSuite extends ConnectFunSuite with RemoteSpark
 
     withConnection { conn =>
       implicit val spark: SparkSession = conn.asInstanceOf[SparkConnectConnection].spark
+
+      // this catalog does not support namespace
+      registerCatalog("test_noop", TEST_BASIC_IN_MEMORY_CATALOG)
+      // Spark loads catalog plugins lazily, we must initialize it first,
+      // otherwise it won't be listed by SHOW CATALOGS
+      conn.setCatalog("test_noop")
 
       // this catalog does not support view
       registerCatalog("testcat", TEST_IN_MEMORY_CATALOG)

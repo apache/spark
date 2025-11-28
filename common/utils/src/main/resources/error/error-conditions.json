@@ -1727,6 +1727,11 @@
           "Alter the table <tableName>."
         ]
       },
+      "CONNECTION" : {
+        "message" : [
+          "Couldn't connect to the database"
+        ]
+      },
       "CREATE_INDEX" : {
         "message" : [
           "Create the index <indexName> in the <tableName> table."
@@ -6296,6 +6301,12 @@
     },
     "sqlState" : "42703"
   },
+  "UNRESOLVED_COLUMN_AMONG_FIELD_NAMES" : {
+    "message" : [
+      "Cannot resolve column name \"<colName>\" among (<fieldNames>)."
+    ],
+    "sqlState" : "42703"
+  },
   "UNRESOLVED_FIELD" : {
     "message" : [
       "A field with name <fieldName> cannot be resolved with the struct-type column <columnPath>."
@@ -7346,6 +7357,15 @@
     ],
     "sqlState" : "P0001"
   },
+  "USER_SPECIFIED_AND_ACTUAL_SCHEMA_MISMATCH" : {
+    "message" : [
+      "The user-specified schema doesn't match the actual schema:",
+      "user-specified: <schema>, actual: <actualSchema>. If you're using",
+      "DataFrameReader.schema API or creating a table, please do not specify the schema.",
+      "Or if you're scanning an existed table, please drop it and re-create it."
+    ],
+    "sqlState" : "42K03"
+  },
   "USER_SPECIFIED_AND_INFERRED_SCHEMA_NOT_COMPATIBLE" : {
     "message" : [
       "Table '<tableName>' has a user-specified schema that is incompatible with the schema",
@@ -7928,14 +7948,6 @@
       "A schema needs to be specified when using <className>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1133" : {
-    "message" : [
-      "The user-specified schema doesn't match the actual schema:",
-      "user-specified: <schema>, actual: <actualSchema>. If you're using",
-      "DataFrameReader.schema API or creating a table, please do not specify the schema.",
-      "Or if you're scanning an existed table, please drop it and re-create it."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1134" : {
     "message" : [
       "Unable to infer schema for <format> at <fileCatalog>. It must be specified manually."
@@ -8160,11 +8172,6 @@
   "_LEGACY_ERROR_TEMP_1199" : {
     "message" : [
       "Invalid bound function '<bound>: there are <argsLen> arguments but <inputTypesLen> parameters returned from 'inputTypes()'."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1201" : {
-    "message" : [
-      "Cannot resolve column name \"<colName>\" among (<fieldNames>)."
     ]
   },
   "_LEGACY_ERROR_TEMP_1205" : {

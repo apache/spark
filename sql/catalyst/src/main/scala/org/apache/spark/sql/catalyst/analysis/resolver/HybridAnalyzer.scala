@@ -302,6 +302,7 @@ object HybridAnalyzer {
       resolverGuard = new ResolverGuard(legacyAnalyzer.catalogManager),
       resolver = new Resolver(
         catalogManager = legacyAnalyzer.catalogManager,
+        sharedRelationCache = legacyAnalyzer.sharedRelationCache,
         extensions = legacyAnalyzer.singlePassResolverExtensions,
         metadataResolverExtensions = legacyAnalyzer.singlePassMetadataResolverExtensions,
         externalRelationResolution = Some(legacyAnalyzer.getRelationResolution)

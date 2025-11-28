@@ -3822,6 +3822,14 @@ object SQLConf {
       .version("4.1.0")
       .fallbackConf(SHUFFLE_DEPENDENCY_FILE_CLEANUP_ENABLED)
 
+  val THRIFTSERVER_SHUFFLE_DEPENDENCY_FILE_CLEANUP_ENABLED =
+    buildConf("spark.sql.thriftserver.shuffleDependency.fileCleanup.enabled")
+      .doc("When enabled, shuffle files will be cleaned up at the end of Thrift server " +
+        "SQL executions.")
+      .version("4.2.0")
+      .booleanConf
+      .createWithDefault(Utils.isTesting)
+
   val SORT_MERGE_JOIN_EXEC_BUFFER_IN_MEMORY_THRESHOLD =
     buildConf("spark.sql.sortMergeJoinExec.buffer.in.memory.threshold")
       .internal()
@@ -6704,18 +6712,6 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
-  val MERGE_INTO_NESTED_TYPE_UPDATE_BY_FIELD =
-    buildConf("spark.sql.merge.nested.type.assign.by.field")
-      .internal()
-      .doc("If enabled and spark.sql.merge.source.nested.type.coercion.enabled is true," +
-        "allow MERGE INTO with UPDATE SET * action to set nested structs field by field. " +
-        "In updated rows, target structs will preserve the original value for fields missing " +
-        "in the the source struct. If disabled, the entire target struct will be replaced, " +
-        "and fields missing in the source struct will be null.")
-      .version("4.1.0")
-      .booleanConf
-      .createWithDefault(true)
-
   /**
    * Holds information about keys that have been deprecated.
    *
@@ -7915,11 +7911,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def legacyXMLParserEnabled: Boolean =
     getConf(SQLConf.LEGACY_XML_PARSER_ENABLED)
 
-  def mergeCoerceNestedTypes: Boolean =
+  def coerceMergeNestedTypes: Boolean =
     getConf(SQLConf.MERGE_INTO_NESTED_TYPE_COERCION_ENABLED)
-
-  def mergeUpdateStructsByField: Boolean =
-    getConf(SQLConf.MERGE_INTO_NESTED_TYPE_UPDATE_BY_FIELD)
 
   /** ********************** SQLConf functionality methods ************ */
 

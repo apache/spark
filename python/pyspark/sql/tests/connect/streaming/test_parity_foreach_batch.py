@@ -16,6 +16,7 @@
 #
 
 import unittest
+import os
 
 from pyspark.sql.tests.streaming.test_streaming_foreach_batch import StreamingTestsForeachBatchMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase, should_test_connect
@@ -25,6 +26,9 @@ if should_test_connect:
     from pyspark.errors.exceptions.connect import StreamingPythonRunnerInitializationException
 
 
+@unittest.skipIf(
+    os.environ.get("SPARK_SKIP_CONNECT_COMPAT_TESTS") == "1", "SPARK-54480: To be reenabled"
+)
 class StreamingForeachBatchParityTests(StreamingTestsForeachBatchMixin, ReusedConnectTestCase):
     def test_streaming_foreach_batch_propagates_python_errors(self):
         super().test_streaming_foreach_batch_propagates_python_errors()

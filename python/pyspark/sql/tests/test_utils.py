@@ -1264,6 +1264,13 @@ class UtilsTestsMixin:
 
         assertSchemaEqual(s1, s2)
 
+    def test_schema_ignore_nullable_map_unequal(self):
+        s1 = StructType([StructField("m", MapType(StringType(), IntegerType()), True)])
+        s2 = StructType([StructField("m", MapType(IntegerType(), StringType()), True)])
+
+        with self.assertRaises(PySparkAssertionError):
+            assertSchemaEqual(s1, s2, ignoreNullable=True)
+
     def test_schema_ignore_nullable_struct_equal(self):
         s1 = StructType(
             [StructField("names", StructType([StructField("age", IntegerType(), True)]), True)]
