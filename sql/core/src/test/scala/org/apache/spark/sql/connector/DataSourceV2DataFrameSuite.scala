@@ -27,7 +27,7 @@ import org.apache.spark.sql.{AnalysisException, DataFrame, Row, SaveMode}
 import org.apache.spark.sql.QueryTest.withQueryExecutionsCaptured
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, CreateTableAsSelect, LogicalPlan, ReplaceTableAsSelect}
-import org.apache.spark.sql.connector.catalog.{Column, ColumnDefaultValue, DefaultValue, Identifier, InMemoryTableCatalog, TableInfo}
+import org.apache.spark.sql.connector.catalog.{Column, ColumnDefaultValue, DefaultValue, Identifier, InMemoryTableCatalog, SupportsV1OverwriteWithSaveAsTable, TableInfo}
 import org.apache.spark.sql.connector.catalog.BasicInMemoryTableCatalog
 import org.apache.spark.sql.connector.catalog.TableChange.{AddColumn, UpdateColumnDefaultValue}
 import org.apache.spark.sql.connector.catalog.TableWritePrivilege
@@ -277,6 +277,92 @@ class DataSourceV2DataFrameSuite
       }
 
       checkAnswer(spark.table(t1), df2)
+    } finally {
+      spark.listenerManager.unregister(listener)
+    }
+  }
+
+  test("RTAS adds V1 saveAsTable option when provider implements marker interface") {
+    var plan: LogicalPlan = null
+    val listener = new QueryExecutionListener {
+      override def onSuccess(funcName: String, qe: QueryExecution, durationNs: Long): Unit = {
+        plan = qe.analyzed
+      }
+      override def onFailure(funcName: String, qe: QueryExecution, exception: Exception): Unit = {}
+    }
+    try {
+      spark.listenerManager.register(listener)
+      val t1 = "testcat.ns1.ns2.tbl"
+      val providerName = classOf[FakeV2ProviderWithV1SaveAsTableOverwriteWriteOption].getName
+
+      val df = Seq((1L, "a"), (2L, "b")).toDF("id", "data")
+      df.write.format(providerName).mode("overwrite").saveAsTable(t1)
+
+      sparkContext.listenerBus.waitUntilEmpty()
+      plan match {
+        case o: ReplaceTableAsSelect =>
+          assert(o.writeOptions.get(SupportsV1OverwriteWithSaveAsTable.OPTION_NAME)
+            .contains("true"))
+        case other =>
+          fail(s"Expected ReplaceTableAsSelect, got ${other.getClass.getName}: $plan")
+      }
+    } finally {
+      spark.listenerManager.unregister(listener)
+    }
+  }
+
+  test("RTAS does not add V1 option when provider does not implement marker interface") {
+    var plan: LogicalPlan = null
+    val listener = new QueryExecutionListener {
+      override def onSuccess(funcName: String, qe: QueryExecution, durationNs: Long): Unit = {
+        plan = qe.analyzed
+      }
+      override def onFailure(funcName: String, qe: QueryExecution, exception: Exception): Unit = {}
+    }
+    try {
+      spark.listenerManager.register(listener)
+      val t1 = "testcat.ns1.ns2.tbl2"
+      val providerName = classOf[FakeV2Provider].getName
+
+      val df = Seq((1L, "a"), (2L, "b")).toDF("id", "data")
+      df.write.format(providerName).mode("overwrite").saveAsTable(t1)
+
+      sparkContext.listenerBus.waitUntilEmpty()
+      plan match {
+        case o: ReplaceTableAsSelect =>
+          assert(!o.writeOptions.contains(SupportsV1OverwriteWithSaveAsTable.OPTION_NAME))
+        case other =>
+          fail(s"Expected ReplaceTableAsSelect, got ${other.getClass.getName}: $plan")
+      }
+    } finally {
+      spark.listenerManager.unregister(listener)
+    }
+  }
+
+  test("RTAS does not add V1 option when addV1OverwriteWithSaveAsTableOption returns false") {
+    var plan: LogicalPlan = null
+    val listener = new QueryExecutionListener {
+      override def onSuccess(funcName: String, qe: QueryExecution, durationNs: Long): Unit = {
+        plan = qe.analyzed
+      }
+      override def onFailure(funcName: String, qe: QueryExecution, exception: Exception): Unit = {}
+    }
+    try {
+      spark.listenerManager.register(listener)
+      val t1 = "testcat.ns1.ns2.tbl3"
+      val providerName =
+        classOf[FakeV2ProviderWithV1SaveAsTableOverwriteWriteOptionDisabled].getName
+
+      val df = Seq((1L, "a"), (2L, "b")).toDF("id", "data")
+      df.write.format(providerName).mode("overwrite").saveAsTable(t1)
+
+      sparkContext.listenerBus.waitUntilEmpty()
+      plan match {
+        case o: ReplaceTableAsSelect =>
+          assert(!o.writeOptions.contains(SupportsV1OverwriteWithSaveAsTable.OPTION_NAME))
+        case other =>
+          fail(s"Expected ReplaceTableAsSelect, got ${other.getClass.getName}: $plan")
+      }
     } finally {
       spark.listenerManager.unregister(listener)
     }
@@ -1750,6 +1836,34 @@ class DataSourceV2DataFrameSuite
       // verify external changes are reflected correctly when table is queried
       assertNotCached(spark.table(t))
       checkAnswer(spark.table(t), Seq.empty)
+    }
+  }
+
+  test("SPARK-54504: self-subquery refreshes both table references before execution") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, value INT) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 10), (2, 20)")
+
+      // create DataFrame with self-subquery without executing
+      val df = spark.sql(
+        s"""
+           |SELECT t1.id, t1.value, t2.value as other_value
+           |FROM $t t1
+           |JOIN (
+           |  SELECT id, value FROM $t
+           |  WHERE id IN (SELECT id FROM $t WHERE value > 5)
+           |) t2 ON t1.id = t2.id
+           |""".stripMargin)
+
+      // insert more data into base table
+      sql(s"INSERT INTO $t VALUES (3, 30)")
+
+      // all three table references should be refreshed to see new data
+      checkAnswer(df, Seq(
+        Row(1, 10, 10),
+        Row(2, 20, 20),
+        Row(3, 30, 30)))
     }
   }
 
