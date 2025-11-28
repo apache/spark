@@ -1146,13 +1146,13 @@ private[spark] object ReadWriteUtils {
 
   def saveDataFrame(path: String, df: DataFrame): Unit = {
     if (localSavingModeState.get()) {
-      val filePath = Paths.get(path)
-      Files.createDirectories(filePath.getParent)
-
       df match {
         case d: org.apache.spark.sql.classic.DataFrame =>
-          ArrowFileReadWrite.save(d, path)
-        case _ => throw new UnsupportedOperationException("Unsupported dataframe type")
+          val filePath = Paths.get(path)
+          Files.createDirectories(filePath.getParent)
+          ArrowFileReadWrite.save(d, filePath)
+        case o => throw new UnsupportedOperationException(
+          s"Unsupported dataframe type: ${o.getClass.getName}")
       }
     } else {
       df.write.parquet(path)
@@ -1163,8 +1163,9 @@ private[spark] object ReadWriteUtils {
     if (localSavingModeState.get()) {
       spark match {
         case s: org.apache.spark.sql.classic.SparkSession =>
-          ArrowFileReadWrite.load(s, path)
-        case _ => throw new UnsupportedOperationException("Unsupported session type")
+          ArrowFileReadWrite.load(s, Paths.get(path))
+        case o => throw new UnsupportedOperationException(
+          s"Unsupported session type: ${o.getClass.getName}")
       }
     } else {
       spark.read.parquet(path)

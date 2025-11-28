@@ -128,8 +128,7 @@ private[sql] object ArrowConverters extends Logging {
     }
 
     override def next(): Array[Byte] = {
-      val out = new ByteArrayOutputStream()
-      val writeChannel = new WriteChannel(Channels.newChannel(out))
+      var bytes: Array[Byte] = null
 
       Utils.tryWithSafeFinally {
         var rowCount = 0L
@@ -140,13 +139,13 @@ private[sql] object ArrowConverters extends Logging {
         }
         arrowWriter.finish()
         val batch = unloader.getRecordBatch()
-        MessageSerializer.serialize(writeChannel, batch)
+        bytes = serializeBatch(batch)
         batch.close()
       } {
         arrowWriter.reset()
       }
 
-      out.toByteArray
+      bytes
     }
 
     override def close(): Unit = {
@@ -546,6 +545,13 @@ private[sql] object ArrowConverters extends Logging {
     val in = new ByteArrayInputStream(batchBytes)
     MessageSerializer.deserializeRecordBatch(
       new ReadChannel(Channels.newChannel(in)), allocator)  // throws IOException
+  }
+
+  private[arrow] def serializeBatch(batch: ArrowRecordBatch): Array[Byte] = {
+    val out = new ByteArrayOutputStream()
+    val writeChannel = new WriteChannel(Channels.newChannel(out))
+    MessageSerializer.serialize(writeChannel, batch)
+    out.toByteArray
   }
 
   /**

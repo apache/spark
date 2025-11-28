@@ -17,39 +17,32 @@
 
 package org.apache.spark.sql.execution.arrow
 
-import java.io.{ByteArrayOutputStream, FileOutputStream}
 import java.nio.channels.Channels
-import java.nio.file.Files
-import java.nio.file.Paths
+import java.nio.file.{Files, Path}
 
 import scala.jdk.CollectionConverters._
 
 import org.apache.arrow.vector._
-import org.apache.arrow.vector.ipc.{ArrowFileReader, ArrowFileWriter, WriteChannel}
-import org.apache.arrow.vector.ipc.message.MessageSerializer
+import org.apache.arrow.vector.ipc.{ArrowFileReader, ArrowFileWriter}
 import org.apache.arrow.vector.types.pojo.Schema
 
 import org.apache.spark.sql.classic.{DataFrame, SparkSession}
 import org.apache.spark.sql.util.ArrowUtils
 
-private[sql] class SparkArrowFileWriter(
-  arrowSchema: Schema,
-  path: String) extends AutoCloseable {
-  private val allocator =
-    ArrowUtils.rootAllocator.newChildAllocator(
-      s"to${this.getClass.getSimpleName}", 0, Long.MaxValue)
+private[sql] class SparkArrowFileWriter(schema: Schema, path: Path) extends AutoCloseable {
+  private val allocator = ArrowUtils.rootAllocator
+    .newChildAllocator(s"to${this.getClass.getSimpleName}", 0, Long.MaxValue)
 
-  protected val root = VectorSchemaRoot.create(arrowSchema, allocator)
+  protected val root = VectorSchemaRoot.create(schema, allocator)
   protected val loader = new VectorLoader(root)
-  protected val arrowWriter = ArrowWriter.create(root)
 
   protected val fileWriter =
-    new ArrowFileWriter(root, null, Channels.newChannel(new FileOutputStream(path)))
+    new ArrowFileWriter(root, null, Channels.newChannel(Files.newOutputStream(path)))
 
   override def close(): Unit = {
+    fileWriter.close()
     root.close()
     allocator.close()
-    fileWriter.close()
   }
 
   def write(batchBytesIter: Iterator[Array[Byte]]): Unit = {
@@ -59,22 +52,22 @@ private[sql] class SparkArrowFileWriter(
       val batch = ArrowConverters.loadBatch(batchBytes, allocator)
       loader.load(batch)
       fileWriter.writeBatch()
+      batch.close()
     }
     fileWriter.close()
   }
 }
 
-private[sql] class SparkArrowFileReader(path: String) extends AutoCloseable {
-  private val allocator =
-    ArrowUtils.rootAllocator.newChildAllocator(
-      s"to${this.getClass.getSimpleName}", 0, Long.MaxValue)
+private[sql] class SparkArrowFileReader(path: Path) extends AutoCloseable {
+  private val allocator = ArrowUtils.rootAllocator
+    .newChildAllocator(s"to${this.getClass.getSimpleName}", 0, Long.MaxValue)
 
   protected val fileReader =
-    new ArrowFileReader(Files.newByteChannel(Paths.get(path)), allocator)
+    new ArrowFileReader(Files.newByteChannel(path), allocator)
 
   override def close(): Unit = {
-    allocator.close()
     fileReader.close()
+    allocator.close()
   }
 
   val schema: Schema = fileReader.getVectorSchemaRoot.getSchema
@@ -85,16 +78,15 @@ private[sql] class SparkArrowFileReader(path: String) extends AutoCloseable {
       val root = fileReader.getVectorSchemaRoot
       val unloader = new VectorUnloader(root)
       val batch = unloader.getRecordBatch
-      val out = new ByteArrayOutputStream()
-      val writeChannel = new WriteChannel(Channels.newChannel(out))
-      MessageSerializer.serialize(writeChannel, batch)
-      out.toByteArray
+      val bytes = ArrowConverters.serializeBatch(batch)
+      batch.close()
+      bytes
     }
   }
 }
 
 private[spark] object ArrowFileReadWrite {
-  def save(df: DataFrame, path: String): Unit = {
+  def save(df: DataFrame, path: Path): Unit = {
     val maxRecordsPerBatch = df.sparkSession.sessionState.conf.arrowMaxRecordsPerBatch
     val rdd = df.toArrowBatchRdd(maxRecordsPerBatch, "UTC", true, false)
     val arrowSchema = ArrowUtils.toArrowSchema(df.schema, "UTC", true, false)
@@ -102,7 +94,7 @@ private[spark] object ArrowFileReadWrite {
     writer.write(rdd.toLocalIterator)
   }
 
-  def load(spark: SparkSession, path: String): DataFrame = {
+  def load(spark: SparkSession, path: Path): DataFrame = {
     val reader = new SparkArrowFileReader(path)
     val schema = ArrowUtils.fromArrowSchema(reader.schema)
     ArrowConverters.toDataFrame(reader.read(), schema, spark, "UTC", true, false)

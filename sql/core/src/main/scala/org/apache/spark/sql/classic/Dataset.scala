@@ -2341,11 +2341,11 @@ class Dataset[T] private[sql](
 
   /** Convert to an RDD of serialized ArrowRecordBatches. */
   private def toArrowBatchRddImpl(
-    plan: SparkPlan,
-    maxRecordsPerBatch: Int,
-    timeZoneId: String,
-    errorOnDuplicatedFieldNames: Boolean,
-    largeVarTypes: Boolean): RDD[Array[Byte]] = {
+      plan: SparkPlan,
+      maxRecordsPerBatch: Int,
+      timeZoneId: String,
+      errorOnDuplicatedFieldNames: Boolean,
+      largeVarTypes: Boolean): RDD[Array[Byte]] = {
     val schemaCaptured = this.schema
     plan.execute().mapPartitionsInternal { iter =>
       val context = TaskContext.get()
@@ -2361,10 +2361,10 @@ class Dataset[T] private[sql](
   }
 
   private[sql] def toArrowBatchRdd(
-    maxRecordsPerBatch: Int,
-    timeZoneId: String,
-    errorOnDuplicatedFieldNames: Boolean,
-    largeVarTypes: Boolean): RDD[Array[Byte]] = {
+      maxRecordsPerBatch: Int,
+      timeZoneId: String,
+      errorOnDuplicatedFieldNames: Boolean,
+      largeVarTypes: Boolean): RDD[Array[Byte]] = {
     toArrowBatchRddImpl(queryExecution.executedPlan,
       maxRecordsPerBatch, timeZoneId, errorOnDuplicatedFieldNames, largeVarTypes)
   }
