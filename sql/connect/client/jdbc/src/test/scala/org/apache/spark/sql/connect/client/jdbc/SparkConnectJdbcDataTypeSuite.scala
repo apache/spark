@@ -216,9 +216,9 @@ class SparkConnectJdbcDataTypeSuite extends ConnectFunSuite with RemoteSparkSess
       assert(metaData.getColumnTypeName(1) === "STRING")
       assert(metaData.getColumnClassName(1) === "java.lang.String")
       assert(metaData.isSigned(1) === false)
-      assert(metaData.getPrecision(1) === 255)
+      assert(metaData.getPrecision(1) === Int.MaxValue)
       assert(metaData.getScale(1) === 0)
-      assert(metaData.getColumnDisplaySize(1) === 255)
+      assert(metaData.getColumnDisplaySize(1) === Int.MaxValue)
     }
   }
 
@@ -389,7 +389,7 @@ class SparkConnectJdbcDataTypeSuite extends ConnectFunSuite with RemoteSparkSess
 
       val metaData = rs.getMetaData
       assert(metaData.getColumnCount === 1)
-      assert(metaData.getColumnType(1) === Types.BINARY)
+      assert(metaData.getColumnType(1) === Types.VARBINARY)
       assert(metaData.getColumnTypeName(1) === "BINARY")
       assert(metaData.getColumnClassName(1) === "[B")
       assert(metaData.isSigned(1) === false)
@@ -405,7 +405,7 @@ class SparkConnectJdbcDataTypeSuite extends ConnectFunSuite with RemoteSparkSess
 
       val metaData = rs.getMetaData
       assert(metaData.getColumnCount === 1)
-      assert(metaData.getColumnType(1) === Types.BINARY)
+      assert(metaData.getColumnType(1) === Types.VARBINARY)
       assert(metaData.getColumnTypeName(1) === "BINARY")
       assert(metaData.getColumnClassName(1) === "[B")
     }
