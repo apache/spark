@@ -379,8 +379,7 @@ class ParquetVariantShreddingSuite extends QueryTest with ParquetTest with Share
       "struct<value binary, typed_value int>>>"
     withSQLConf(SQLConf.VARIANT_WRITE_SHREDDING_ENABLED.key -> true.toString,
       SQLConf.VARIANT_ALLOW_READING_SHREDDED.key -> true.toString,
-      SQLConf.VARIANT_FORCE_SHREDDING_SCHEMA_FOR_TEST.key -> schema,
-      SQLConf.PARQUET_IGNORE_VARIANT_ANNOTATION.key -> true.toString) {
+      SQLConf.VARIANT_FORCE_SHREDDING_SCHEMA_FOR_TEST.key -> schema) {
       df.write.mode("overwrite").parquet(dir.getAbsolutePath)
 
       // Verify that we can read the full variant.
