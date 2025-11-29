@@ -184,6 +184,7 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with Join
   private def calculatePlanOverhead(plan: LogicalPlan): Float = {
     val (cached, notCached) = plan.collectLeaves().partition(p => p match {
       case _: InMemoryRelation => true
+      case _: CommandResult => true
       case _ => false
     })
     val scanOverhead = notCached.map(_.stats.sizeInBytes).sum.toFloat
@@ -195,6 +196,7 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with Join
         m.stats.sizeInBytes.toFloat * 0.2
       case m: InMemoryRelation if m.cacheBuilder.storageLevel.useMemory =>
         0.0
+      case _: CommandResult => 0.0
     }.sum.toFloat
     scanOverhead + cachedOverhead
   }
@@ -206,6 +208,7 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with Join
   private def hasSelectivePredicate(plan: LogicalPlan): Boolean = {
     plan.exists {
       case f: Filter => isLikelySelective(f.condition)
+      case _: CommandResult => true
       case _ => false
     }
   }
@@ -217,7 +220,8 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with Join
    *   (2) it needs to contain a selective predicate used for filtering
    */
   private def hasPartitionPruningFilter(plan: LogicalPlan): Boolean = {
-    !plan.isStreaming && hasSelectivePredicate(plan)
+    !plan.isStreaming &&
+    hasSelectivePredicate(plan)
   }
 
   private def prune(plan: LogicalPlan): LogicalPlan = {
