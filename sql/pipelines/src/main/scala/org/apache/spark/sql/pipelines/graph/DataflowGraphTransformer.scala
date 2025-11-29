@@ -18,9 +18,6 @@
 package org.apache.spark.sql.pipelines.graph
 
 import java.util.concurrent.{
-  ConcurrentHashMap,
-  ConcurrentLinkedDeque,
-  ConcurrentLinkedQueue,
   ExecutionException,
   Future
 }
@@ -64,6 +61,7 @@ class DataflowGraphTransformer(graph: DataflowGraph) extends AutoCloseable {
   private var sinks: Seq[Sink] = graph.sinks
   private var sinkMap: Map[TableIdentifier, Sink] = computeSinkMap()
 
+
   // Fail analysis nodes
   // Failed flows are flows that are failed to resolve or its inputs are not available or its
   // destination failed to resolve.
@@ -71,6 +69,8 @@ class DataflowGraphTransformer(graph: DataflowGraph) extends AutoCloseable {
   // We define a dataset is failed to resolve if it is a destination of a flow that is unresolved.
   private var failedTables: Seq[Table] = Seq.empty
   private var failedSinks: Seq[Sink] = Seq.empty
+
+  @volatile private var currentCoreDataflowNodeProcessor: Option[CoreDataflowNodeProcessor] = None
 
   private val parallelism = 10
 
@@ -120,25 +120,15 @@ class DataflowGraphTransformer(graph: DataflowGraph) extends AutoCloseable {
    */
   def transformDownNodes(
       transformer: (GraphElement, Seq[GraphElement]) => Seq[GraphElement],
+      context: GraphAnalysisContext,
       disableParallelism: Boolean = false): DataflowGraphTransformer = {
     val executor = if (disableParallelism) selfExecutor else fixedPoolExecutor
     val batchSize = if (disableParallelism) 1 else parallelism
-    // List of resolved tables, sinks and flows
-    val resolvedFlows = new ConcurrentLinkedQueue[ResolutionCompletedFlow]()
-    val resolvedTables = new ConcurrentLinkedQueue[Table]()
-    val resolvedViews = new ConcurrentLinkedQueue[View]()
-    val resolvedSinks = new ConcurrentLinkedQueue[Sink]()
-    // Flow identifier to a list of transformed flows mapping to track resolved flows
-    val resolvedFlowsMap = new ConcurrentHashMap[TableIdentifier, Seq[Flow]]()
-    val resolvedFlowDestinationsMap = new ConcurrentHashMap[TableIdentifier, Boolean]()
-    val failedFlowsQueue = new ConcurrentLinkedQueue[ResolutionFailedFlow]()
-    val failedDependentFlows = new ConcurrentHashMap[TableIdentifier, Seq[ResolutionFailedFlow]]()
 
     var futures = ArrayBuffer[Future[Unit]]()
-    val toBeResolvedFlows = new ConcurrentLinkedDeque[Flow]()
-    toBeResolvedFlows.addAll(flows.asJava)
+    context.toBeResolvedFlows.addAll(flows.asJava)
 
-    while (futures.nonEmpty || toBeResolvedFlows.peekFirst() != null) {
+    while (futures.nonEmpty || context.toBeResolvedFlows.peekFirst() != null) {
       val (done, notDone) = futures.partition(_.isDone)
       // Explicitly call future.get() to propagate exceptions one by one if any
       try {
@@ -152,7 +142,7 @@ class DataflowGraphTransformer(graph: DataflowGraph) extends AutoCloseable {
       val flowOpt = {
         // We only schedule [[batchSize]] number of flows in parallel.
         if (futures.size < batchSize) {
-          Option(toBeResolvedFlows.pollFirst())
+          Option(context.toBeResolvedFlows.pollFirst())
         } else {
           None
         }
@@ -160,131 +150,7 @@ class DataflowGraphTransformer(graph: DataflowGraph) extends AutoCloseable {
       flowOpt.foreach { flow =>
         futures.append(
           executor.submit(
-            () =>
-              try {
-                try {
-                  // Note: Flow don't need their inputs passed, so for now we send empty Seq.
-                  val result = transformer(flow, Seq.empty)
-                  require(
-                    result.forall(_.isInstanceOf[ResolvedFlow]),
-                    "transformer must return a Seq[Flow]"
-                  )
-
-                  val transformedFlows = result.map(_.asInstanceOf[ResolvedFlow])
-                  resolvedFlowsMap.put(flow.identifier, transformedFlows)
-                  resolvedFlows.addAll(transformedFlows.asJava)
-                } catch {
-                  case e: TransformNodeRetryableException =>
-                    val datasetIdentifier = e.datasetIdentifier
-                    failedDependentFlows.compute(
-                      datasetIdentifier,
-                      (_, flows) => {
-                        // Don't add the input flow back but the failed flow object
-                        // back which has relevant failure information.
-                        val failedFlow = e.failedNode
-                        if (flows == null) {
-                          Seq(failedFlow)
-                        } else {
-                          flows :+ failedFlow
-                        }
-                      }
-                    )
-                    // Between the time the flow started and finished resolving, perhaps the
-                    // dependent dataset was resolved
-                    resolvedFlowDestinationsMap.computeIfPresent(
-                      datasetIdentifier,
-                      (_, resolved) => {
-                        if (resolved) {
-                          // Check if the dataset that the flow is dependent on has been resolved
-                          // and if so, remove all dependent flows from the failedDependentFlows and
-                          // add them to the toBeResolvedFlows queue for retry.
-                          failedDependentFlows.computeIfPresent(
-                            datasetIdentifier,
-                            (_, toRetryFlows) => {
-                              toRetryFlows.foreach(toBeResolvedFlows.addFirst(_))
-                              null
-                            }
-                          )
-                        }
-                        resolved
-                      }
-                    )
-                  case other: Throwable => throw other
-                }
-                // If all flows to this particular destination are resolved, move to the destination
-                // node transformer
-                if (flowsTo(flow.destinationIdentifier).forall({ flowToDestination =>
-                    resolvedFlowsMap.containsKey(flowToDestination.identifier)
-                  })) {
-                  // If multiple flows completed in parallel, ensure we resolve the destination only
-                  // once by electing a leader via computeIfAbsent
-                  var isCurrentThreadLeader = false
-                  resolvedFlowDestinationsMap.computeIfAbsent(flow.destinationIdentifier, _ => {
-                    isCurrentThreadLeader = true
-                    // Set initial value as false as flow destination is not resolved yet.
-                    false
-                  })
-                  if (isCurrentThreadLeader) {
-                    if (tableMap.contains(flow.destinationIdentifier)) {
-                      val transformed =
-                        transformer(
-                          tableMap(flow.destinationIdentifier),
-                          flowsTo(flow.destinationIdentifier)
-                        )
-                      resolvedTables.addAll(
-                        transformed.collect { case t: Table => t }.asJava
-                      )
-                      resolvedFlows.addAll(
-                        transformed.collect { case f: ResolvedFlow => f }.asJava
-                      )
-                    } else if (viewMap.contains(flow.destinationIdentifier)) {
-                      resolvedViews.addAll {
-                        val transformed =
-                          transformer(
-                            viewMap(flow.destinationIdentifier),
-                            flowsTo(flow.destinationIdentifier)
-                          )
-                        transformed.map(_.asInstanceOf[View]).asJava
-                      }
-                    } else if (sinkMap.contains(flow.destinationIdentifier)) {
-                      resolvedSinks.addAll {
-                        val transformed =
-                          transformer(
-                            sinkMap(flow.destinationIdentifier), flowsTo(flow.destinationIdentifier)
-                          )
-                        require(
-                          transformed.forall(_.isInstanceOf[Sink]),
-                          "transformer must return a Seq[Sink]"
-                        )
-                        transformed.map(_.asInstanceOf[Sink]).asJava
-                      }
-                    } else {
-                      throw new IllegalArgumentException(
-                        s"Unsupported destination ${flow.destinationIdentifier.unquotedString}" +
-                        s" in flow: ${flow.displayName} at transformDownNodes"
-                      )
-                    }
-                    // Set flow destination as resolved now.
-                    resolvedFlowDestinationsMap.computeIfPresent(
-                      flow.destinationIdentifier,
-                      (_, _) => {
-                        // If there are any other node failures dependent on this destination, retry
-                        // them
-                        failedDependentFlows.computeIfPresent(
-                          flow.destinationIdentifier,
-                          (_, toRetryFlows) => {
-                            toRetryFlows.foreach(toBeResolvedFlows.addFirst(_))
-                            null
-                          }
-                        )
-                        true
-                      }
-                    )
-                  }
-                }
-              } catch {
-                case ex: TransformNodeFailedException => failedFlowsQueue.add(ex.failedNode)
-              }
+            () => transformFlowAndMaybeDestination(flow, transformer, context)
           )
         )
       }
@@ -294,18 +160,18 @@ class DataflowGraphTransformer(graph: DataflowGraph) extends AutoCloseable {
     // A table is failed to analyze if:
     // - It does not exist in the resolvedFlowDestinationsMap
     failedTables = tables.filterNot { table =>
-      resolvedFlowDestinationsMap.getOrDefault(table.identifier, false)
+      context.resolvedFlowDestinationsMap.getOrDefault(table.identifier, false)
     }
     // A sink is failed to analyze if:
     // - It does not exist in the resolvedFlowDestinationsMap
     failedSinks = sinks.filterNot { sink =>
-      resolvedFlowDestinationsMap.getOrDefault(sink.identifier, false)
+      context.resolvedFlowDestinationsMap.getOrDefault(sink.identifier, false)
     }
 
     // We maintain the topological sort order of successful flows always
     val (resolvedFlowsWithResolvedDest, resolvedFlowsWithFailedDest) =
-      resolvedFlows.asScala.toSeq.partition(flow => {
-        resolvedFlowDestinationsMap.getOrDefault(flow.destinationIdentifier, false)
+      context.resolvedFlowsQueue.asScala.toSeq.partition(flow => {
+        context.resolvedFlowDestinationsMap.getOrDefault(flow.destinationIdentifier, false)
       })
 
     // A flow is failed to analyze if:
@@ -318,20 +184,142 @@ class DataflowGraphTransformer(graph: DataflowGraph) extends AutoCloseable {
       // All transformed flows that write to a destination that is failed to analyze.
       resolvedFlowsWithFailedDest ++
       // All failed flows thrown by TransformNodeFailedException
-      failedFlowsQueue.asScala.toSeq ++
+      context.failedFlowsQueue.asScala.toSeq ++
       // All flows that have not been transformed and resolved yet
-      failedDependentFlows.values().asScala.flatten.toSeq
+      context.failedDependentFlows.values().asScala.flatten.toSeq
 
     // Mutate the resolved entities
     flows = resolvedFlowsWithResolvedDest
     flowsTo = computeFlowsTo()
-    tables = resolvedTables.asScala.toSeq
-    views = resolvedViews.asScala.toSeq
-    sinks = resolvedSinks.asScala.toSeq
+    tables = context.resolvedTables.asScala.toSeq
+    views = context.resolvedViews.asScala.toSeq
+    sinks = context.resolvedSinks.asScala.toSeq
     tableMap = computeTableMap()
     viewMap = computeViewMap()
     sinkMap = computeSinkMap()
     this
+  }
+
+  private[pipelines] def transformFlowAndMaybeDestination(
+      flow: Flow,
+      transformer: (GraphElement, Seq[GraphElement]) => Seq[GraphElement],
+      context: GraphAnalysisContext): Unit = {
+    try {
+      try {
+        // Note: Flow don't need their inputs passed, so for now we send empty Seq.
+        transformer(flow, Seq.empty)
+      } catch {
+        case e: TransformNodeRetryableException =>
+          e.datasetIdentifier match {
+            case None => context.failedUnregisteredFlows.put(e.failedNode.identifier, e.failedNode)
+            case Some(datasetIdentifier) =>
+              context.registerFailedDependentFlow(datasetIdentifier, e.failedNode)
+              // Between the time the flow started and finished resolving, perhaps the
+              // dependent dataset was resolved
+              context.resolvedFlowDestinationsMap.computeIfPresent(
+                datasetIdentifier,
+                (_, resolved) => {
+                  if (resolved) {
+                    // Check if the dataset that the flow is dependent on has been resolved
+                    // and if so, remove all dependent flows from the failedDependentFlows and
+                    // add them to the toBeResolvedFlows queue for retry.
+                    context.failedDependentFlows.computeIfPresent(
+                      datasetIdentifier,
+                      (_, toRetryFlows) => {
+                        toRetryFlows.foreach { f =>
+                          if (context.failedUnregisteredFlows.containsKey(f.identifier)) {
+                            context.flowClientSignalQueue.add(f.identifier)
+                          } else {
+                            context.toBeResolvedFlows.addFirst(f)
+                          }
+                        }
+                        null
+                      }
+                    )
+                  }
+                  resolved
+                }
+              )
+          }
+        case other: Throwable => throw other
+      }
+      // If all flows to this particular destination are resolved, move to the destination
+      // node transformer
+      if (flowsTo(flow.destinationIdentifier).forall({ flowToDestination =>
+        context.resolvedFlowsMap.containsKey(flowToDestination.identifier)
+      })) {
+        // If multiple flows completed in parallel, ensure we resolve the destination only
+        // once by electing a leader via computeIfAbsent
+        var isCurrentThreadLeader = false
+        context.resolvedFlowDestinationsMap.computeIfAbsent(flow.destinationIdentifier, _ => {
+          isCurrentThreadLeader = true
+          // Set initial value as false as flow destination is not resolved yet.
+          false
+        })
+        if (isCurrentThreadLeader) {
+          if (tableMap.contains(flow.destinationIdentifier)) {
+            val transformed =
+              transformer(
+                tableMap(flow.destinationIdentifier),
+                flowsTo(flow.destinationIdentifier)
+              )
+            context.resolvedTables.addAll(
+              transformed.collect { case t: Table => t }.asJava
+            )
+          } else if (viewMap.contains(flow.destinationIdentifier)) {
+            context.resolvedViews.addAll {
+              val transformed =
+                transformer(
+                  viewMap(flow.destinationIdentifier),
+                  flowsTo(flow.destinationIdentifier)
+                )
+              transformed.map(_.asInstanceOf[View]).asJava
+            }
+          } else if (sinkMap.contains(flow.destinationIdentifier)) {
+            context.resolvedSinks.addAll {
+              val transformed =
+                transformer(
+                  sinkMap(flow.destinationIdentifier), flowsTo(flow.destinationIdentifier)
+                )
+              require(
+                transformed.forall(_.isInstanceOf[Sink]),
+                "transformer must return a Seq[Sink]"
+              )
+              transformed.map(_.asInstanceOf[Sink]).asJava
+            }
+          } else {
+            throw new IllegalArgumentException(
+              s"Unsupported destination ${flow.destinationIdentifier.unquotedString}" +
+                s" in flow: ${flow.displayName} at transformDownNodes"
+            )
+          }
+          // Set flow destination as resolved now.
+          context.resolvedFlowDestinationsMap.computeIfPresent(
+            flow.destinationIdentifier,
+            (_, _) => {
+              // If there are any other node failures dependent on this destination, retry
+              // them
+              context.failedDependentFlows.computeIfPresent(
+                flow.destinationIdentifier,
+                (_, toRetryFlows) => {
+                  toRetryFlows.foreach { f =>
+                    if (context.failedUnregisteredFlows.containsKey(f.identifier)) {
+                      context.flowClientSignalQueue.add(f.identifier)
+                    } else {
+                      context.toBeResolvedFlows.addFirst(f)
+                    }
+                  }
+                  null
+                }
+              )
+              true
+            }
+          )
+        }
+      }
+    } catch {
+      case ex: TransformNodeFailedException => context.failedFlowsQueue.add(ex.failedNode)
+    }
   }
 
   def getDataflowGraph: DataflowGraph = {
@@ -356,6 +344,7 @@ class DataflowGraphTransformer(graph: DataflowGraph) extends AutoCloseable {
 
 object DataflowGraphTransformer {
 
+
   /**
    * Exception thrown when transforming a node in the graph fails because at least one of its
    * dependencies weren't yet transformed.
@@ -364,7 +353,7 @@ object DataflowGraphTransformer {
    *                          dataflow graph.
    */
   case class TransformNodeRetryableException(
-      datasetIdentifier: TableIdentifier,
+      datasetIdentifier: Option[TableIdentifier],
       failedNode: ResolutionFailedFlow)
       extends Exception
       with NoStackTrace

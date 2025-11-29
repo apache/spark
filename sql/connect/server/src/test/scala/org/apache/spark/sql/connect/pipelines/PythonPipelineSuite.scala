@@ -1169,6 +1169,35 @@ class PythonPipelineSuite
         |""".stripMargin)
   }
 
+  test("access upstream schema within query function") {
+    val graph = buildGraph("""
+        |@dp.materialized_view
+        |def mv2():
+        |    spark.table("table1").schema
+        |    return spark.table("table1")
+        |
+        |@dp.materialized_view
+        |def mv1():
+        |    return spark.range(5)
+        |""".stripMargin)
+      .resolve()
+      .validate()
+    assert(graph.flows.size == 2)
+    assert(graph.tables.size == 2)
+  }
+
+  test("query function failure") {
+    val graph = buildGraph("""
+        |@dp.materialized_view
+        |def mv():
+        |    raise ValueError("bla")
+        |""".stripMargin)
+      .resolve()
+      .validate()
+    assert(graph.flows.size == 2)
+    assert(graph.tables.size == 2)
+  }
+
   override protected def test(testName: String, testTags: Tag*)(testFun: => Any)(implicit
       pos: Position): Unit = {
     if (PythonTestDepsChecker.isConnectDepsAvailable) {

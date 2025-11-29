@@ -15,9 +15,10 @@
 # limitations under the License.
 #
 from pathlib import Path
+from pyspark.errors.exceptions.base import PySparkValueError
 
 from pyspark.errors import PySparkTypeError
-from pyspark.sql import SparkSession
+from pyspark.sql import SparkSession, DataFrame
 from pyspark.sql.connect.dataframe import DataFrame as ConnectDataFrame
 from pyspark.pipelines.output import (
     Output,
@@ -35,6 +36,8 @@ from pyspark.sql.types import StructType
 from typing import Any, cast
 import pyspark.sql.connect.proto as pb2
 from pyspark.pipelines.add_pipeline_analysis_context import add_pipeline_analysis_context
+from pyspark.pipelines.flow import QueryFunction
+import uuid
 
 
 class SparkConnectGraphElementRegistry(GraphElementRegistry):
@@ -46,6 +49,8 @@ class SparkConnectGraphElementRegistry(GraphElementRegistry):
         self._spark = spark
         self._client = cast(Any, spark).client
         self._dataflow_graph_id = dataflow_graph_id
+        self._client_id = str(uuid.uuid4())
+        self._query_funcs_by_flow_name: dict[str, QueryFunction] = {}
 
     def register_output(self, output: Output) -> None:
         table_details = None
@@ -111,10 +116,14 @@ class SparkConnectGraphElementRegistry(GraphElementRegistry):
         self._client.execute_command(command)
 
     def register_flow(self, flow: Flow) -> None:
-        with add_pipeline_analysis_context(
-            spark=self._spark, dataflow_graph_id=self._dataflow_graph_id, flow_name=flow.name
-        ):
-            df = flow.func()
+        self._query_funcs_by_flow_name[flow.name] = flow.func
+        try:
+            df = self._execute_query_function(flow.name, flow.func)
+        except Exception as e:
+            raise PySparkValueError(
+                f"Error executing query function for flow {flow.name}: {e}"
+            )
+
         relation = cast(ConnectDataFrame, df)._plan.plan(self._client)
 
         relation_flow_details = pb2.PipelineCommand.DefineFlow.WriteRelationFlowDetails(
@@ -128,6 +137,7 @@ class SparkConnectGraphElementRegistry(GraphElementRegistry):
             relation_flow_details=relation_flow_details,
             sql_conf=flow.spark_conf,
             source_code_location=source_code_location_to_proto(flow.source_code_location),
+            client_id=self._client_id,
         )
         command = pb2.Command()
         command.pipeline_command.define_flow.CopyFrom(inner_command)
@@ -142,6 +152,50 @@ class SparkConnectGraphElementRegistry(GraphElementRegistry):
         command = pb2.Command()
         command.pipeline_command.define_sql_graph_elements.CopyFrom(inner_command)
         self._client.execute_command(command)
+
+    def register_signalled_query_functions(self) -> None:
+        """Open up a stream to receive query function execution signals from the server.
+        When a signal is received, execute the corresponding query function and register the
+        result with the server.
+
+        This method should be called after all the flows and datasets have been registered.
+        """
+
+        inner_command = pb2.PipelineCommand.GetQueryFunctionExecutionSignalStream(
+            dataflow_graph_id=self._dataflow_graph_id,
+            client_id=self._client_id,
+        )
+        command = pb2.Command()
+        command.pipeline_command.get_query_function_execution_signal_stream.CopyFrom(inner_command)
+        self._client.execute_command_as_iterator(command)
+
+        result_iter = self._client.execute_command_as_iterator(inner_command)
+        for result in result_iter:
+            if "pipeline_query_function_execution_signal" not in result.keys():
+                raise PySparkValueError(
+                    f"GetQueryFunctionExecutionSignalStream received unexpected result: {result}"
+                )
+
+            signal = result["pipeline_query_function_execution_signal"]
+            flow_names = signal.flow_names
+            for flow_name in flow_names:
+                func = self._query_funcs_by_flow_name[flow_name]
+                df = self._execute_query_function(flow_name, func)
+                relation = cast(ConnectDataFrame, df)._plan.plan(self._client)
+                inner_command = pb2.PipelineCommand.DefineFlowQueryFunctionResult(
+                    dataflow_graph_id=self._dataflow_graph_id,
+                    flow_name=flow_name,
+                    relation=relation,
+                )
+                command = pb2.Command()
+                command.pipeline_command.define_flow_query_function_result.CopyFrom(inner_command)
+                self._client.execute_command(command)
+
+    def _execute_query_function(self, flow_name: str, func: QueryFunction) -> DataFrame:
+        with add_pipeline_analysis_context(
+            spark=self._spark, dataflow_graph_id=self._dataflow_graph_id, flow_name=flow_name
+        ):
+            return func()
 
 
 def source_code_location_to_proto(

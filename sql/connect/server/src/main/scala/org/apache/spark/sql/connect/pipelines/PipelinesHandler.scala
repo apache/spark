@@ -24,17 +24,18 @@ import scala.util.Using
 import io.grpc.stub.StreamObserver
 
 import org.apache.spark.connect.proto
-import org.apache.spark.connect.proto.{ExecutePlanResponse, PipelineCommandResult, Relation, ResolvedIdentifier}
+import org.apache.spark.connect.proto.{ExecutePlanResponse, PipelineAnalysisContext, PipelineCommandResult, Relation, ResolvedIdentifier}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.plans.logical.{Command, CreateNamespace, CreateTable, CreateTableAsSelect, CreateView, DescribeRelation, DropView, InsertIntoStatement, LogicalPlan, RenameTable, ShowColumns, ShowCreateTable, ShowFunctions, ShowTableProperties, ShowTables, ShowViews}
+import org.apache.spark.sql.classic.DataFrame
 import org.apache.spark.sql.connect.common.DataTypeProtoConverter
 import org.apache.spark.sql.connect.service.SessionHolder
 import org.apache.spark.sql.execution.command.{ShowCatalogsCommand, ShowNamespacesCommand}
 import org.apache.spark.sql.pipelines.Language.Python
 import org.apache.spark.sql.pipelines.common.RunState.{CANCELED, FAILED}
-import org.apache.spark.sql.pipelines.graph.{AllTables, FlowAnalysis, GraphIdentifierManager, GraphRegistrationContext, IdentifierHelper, NoTables, PipelineUpdateContextImpl, QueryContext, QueryOrigin, QueryOriginType, Sink, SinkImpl, SomeTables, SqlGraphRegistrationContext, Table, TableFilter, TemporaryView, UnresolvedFlow}
+import org.apache.spark.sql.pipelines.graph.{AllTables, FlowAnalysis, GraphIdentifierManager, GraphRegistrationContext, IdentifierHelper, NoTables, PipelineUpdateContextImpl, QueryContext, QueryFunctionSuccess, QueryOrigin, QueryOriginType, Sink, SinkImpl, SomeTables, SqlGraphRegistrationContext, Table, TableFilter, TemporaryView, UnresolvedFlow}
 import org.apache.spark.sql.pipelines.logging.{PipelineEvent, RunProgress}
 import org.apache.spark.sql.types.StructType
 
@@ -122,6 +123,16 @@ private[connect] object PipelinesHandler extends Logging {
       case proto.PipelineCommand.CommandTypeCase.DEFINE_SQL_GRAPH_ELEMENTS =>
         logInfo(s"Register sql datasets cmd received: $cmd")
         defineSqlGraphElements(cmd.getDefineSqlGraphElements, sessionHolder)
+        defaultResponse
+      case proto.PipelineCommand.CommandTypeCase.GET_QUERY_FUNCTION_EXECUTION_SIGNAL_STREAM =>
+        logInfo(s"Get query function execution signal stream cmd received: $cmd")
+        getQueryFunctionExecutionSignalStream(
+          cmd.getGetQueryFunctionExecutionSignalStream, responseObserver, sessionHolder)
+        defaultResponse
+      case proto.PipelineCommand.CommandTypeCase.DEFINE_FLOW_QUERY_FUNCTION_RESULT =>
+        logInfo(s"Define flow query function result cmd received: $cmd")
+        defineFlowQueryFunctionResult(
+          cmd.getDefineFlowQueryFunctionResult, transformRelationFunc, sessionHolder)
         defaultResponse
       case other => throw new UnsupportedOperationException(s"$other not supported")
     }
@@ -367,12 +378,19 @@ private[connect] object PipelinesHandler extends Logging {
       }
 
     val relationFlowDetails = flow.getRelationFlowDetails
+    val flowFunction = if (relationFlowDetails.hasRelation()) {
+      FlowAnalysis.createFlowFunctionFromLogicalPlan(
+        transformRelationFunc(relationFlowDetails.getRelation))
+    } else {
+      FlowAnalysis.createQueryFunctionResultPollingFlowFunction(
+        flowIdentifier,
+        graphElementRegistry)
+    }
     graphElementRegistry.registerFlow(
       UnresolvedFlow(
         identifier = flowIdentifier,
         destinationIdentifier = destinationIdentifier,
-        func = FlowAnalysis.createFlowFunctionFromLogicalPlan(
-          transformRelationFunc(relationFlowDetails.getRelation)),
+        func = flowFunction,
         sqlConf = flow.getSqlConfMap.asScala.toMap,
         once = false,
         queryContext = QueryContext(Option(defaultCatalog), Option(defaultDatabase)),
@@ -528,4 +546,126 @@ private[connect] object PipelinesHandler extends Logging {
    * A case class to hold the table filters for full refresh and refresh operations.
    */
   private case class TableFilters(fullRefresh: TableFilter, refresh: TableFilter)
+
+  /**
+   * Handles the GetQueryFunctionExecutionSignalStream command by monitoring for flows
+   * that have more resolved inputs than the last time we sent a signal.
+   */
+  private def getQueryFunctionExecutionSignalStream(
+      cmd: proto.PipelineCommand.GetQueryFunctionExecutionSignalStream,
+      responseObserver: StreamObserver[ExecutePlanResponse],
+      sessionHolder: SessionHolder): Unit = {
+    val dataflowGraphId = cmd.getDataflowGraphId
+    val clientId = cmd.getClientId
+
+    logInfo(s"Starting query function execution signal stream for " +
+      s"graph $dataflowGraphId, client $clientId")
+
+    sessionHolder.getPipelineExecution(dataflowGraphId) match {
+      case Some(pipelineExecution) =>
+        val execution = pipelineExecution.pipelineExecution
+        val graphAnalysisContext = execution.graphAnalysisContext
+
+        try {
+          while (execution.executionStarted) {
+            val signal = proto.PipelineQueryFunctionExecutionSignal.newBuilder()
+
+            while (!graphAnalysisContext.flowClientSignalQueue.isEmpty) {
+              val flowId = graphAnalysisContext.flowClientSignalQueue.remove()
+              signal.addFlowNames(flowId.unquotedString)
+            }
+
+            if (signal.getFlowNamesCount > 0) {
+              logInfo(s"Sending execution signal for ${signal.getFlowNamesCount} flows")
+
+              val response = ExecutePlanResponse.newBuilder()
+                .setPipelineQueryFunctionExecutionSignal(signal.build())
+                .build()
+
+              responseObserver.onNext(response)
+            }
+
+            Thread.sleep(100)
+          }
+        } catch {
+          case e: Exception =>
+            logError(
+              s"Error in query function execution signal stream for graph $dataflowGraphId", e)
+            responseObserver.onError(e)
+        } finally {
+          responseObserver.onCompleted()
+        }
+
+      case None =>
+        val error = new IllegalStateException(
+          s"No active pipeline execution found for graph $dataflowGraphId")
+        logError(error.getMessage)
+        responseObserver.onError(error)
+    }
+  }
+
+  /**
+   * Handles the DefineFlowQueryFunctionResult command by storing the query function result
+   * in the GraphRegistrationContext.
+   */
+  private def defineFlowQueryFunctionResult(
+      cmd: proto.PipelineCommand.DefineFlowQueryFunctionResult,
+      transformRelationFunc: Relation => LogicalPlan,
+      sessionHolder: SessionHolder): Unit = {
+    val dataflowGraphId = cmd.getDataflowGraphId
+    val flowName = cmd.getFlowName
+    val relation = cmd.getRelation
+
+    val graphElementRegistry =
+      sessionHolder.dataflowGraphRegistry.getDataflowGraphOrThrow(dataflowGraphId)
+
+    val logicalPlan = transformRelationFunc(relation)
+    // Assume the identifier is already fully qualified (TODO: verify this)
+    val flowIdentifier = GraphIdentifierManager.parseTableIdentifier(
+      flowName,
+      sessionHolder.session
+    )
+
+    graphElementRegistry.registerQueryFunctionResult(
+      flowIdentifier,
+      QueryFunctionSuccess(logicalPlan)
+    )
+    sessionHolder.getPipelineExecution(dataflowGraphId) match {
+      case Some(pipelineUpdateContext) =>
+        // TODO: what if we haven't yet started analysis?
+        val graphAnalysisContext = pipelineUpdateContext.pipelineExecution.graphAnalysisContext
+        graphAnalysisContext.markFlowPlanRegistered(flowIdentifier)
+      case None =>
+    }
+
+    logInfo(s"Registered query function result for flow '$flowName' in graph '$dataflowGraphId'")
+  }
+
+  def analyze(
+      pipelineAnalysisContext: PipelineAnalysisContext,
+      logicalPlan: LogicalPlan,
+      sessionHolder: SessionHolder): DataFrame = {
+    val graphId = pipelineAnalysisContext.getDataflowGraphId
+    val session = sessionHolder.session
+    sessionHolder.getPipelineExecution(graphId) match {
+      case Some(pipelineUpdateContext) =>
+        // Assume the identifier is already fully qualified
+        val flowIdentifier = GraphIdentifierManager.parseTableIdentifier(
+          pipelineAnalysisContext.getFlowName,
+          session
+        )
+
+        pipelineUpdateContext.pipelineExecution.graphAnalysisContext.analyze(
+          flowIdentifier,
+          logicalPlan,
+          pipelineUpdateContext.unresolvedGraph,
+          session
+        )
+      case None =>
+        throw new IllegalStateException(
+          s"Pipeline analysis context specifies flow '${pipelineAnalysisContext.getFlowName}' " +
+            s"but no active pipeline execution found for graph '$graphId'"
+        )
+    }
+  }
 }

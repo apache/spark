@@ -944,4 +944,67 @@ class SparkDeclarativePipelinesServerSuite
           relation.getCommand.getSqlCommand.getInput)
     }
   }
+
+  test("SessionHolder provides pipeline execution data for analysis") {
+    withRawBlockingStub { implicit stub =>
+      val graphId = createDataflowGraph
+
+      sendPlan(
+        buildPlanFromPipelineCommand(
+          PipelineCommand
+            .newBuilder()
+            .setDefineOutput(
+              DefineOutput
+                .newBuilder()
+                .setDataflowGraphId(graphId)
+                .setOutputName("test_mv")
+                .setOutputType(OutputType.MATERIALIZED_VIEW))
+            .build()))
+
+      sendPlan(
+        buildPlanFromPipelineCommand(
+          PipelineCommand
+            .newBuilder()
+            .setDefineFlow(
+              DefineFlow
+                .newBuilder()
+                .setDataflowGraphId(graphId)
+                .setFlowName("test_flow")
+                .setTargetDatasetName("test_mv")
+                .setRelationFlowDetails(
+                  DefineFlow.WriteRelationFlowDetails
+                    .newBuilder()
+                    .setRelation(
+                      Relation
+                        .newBuilder()
+                        .setUnresolvedTableValuedFunction(UnresolvedTableValuedFunction
+                          .newBuilder()
+                          .setFunctionName("range")
+                          .addArguments(Expression
+                            .newBuilder()
+                            .setLiteral(Expression.Literal.newBuilder().setInteger(10).build())
+                            .build())
+                          .build())
+                        .build())
+                    .build())
+                .build())
+            .build()))
+
+      val sessionHolder = getDefaultSessionHolder
+
+      assert(sessionHolder.getPipelineExecution(graphId).isEmpty,
+        "Pipeline execution should not exist before starting the run")
+
+      val definition = sessionHolder.dataflowGraphRegistry.getDataflowGraphOrThrow(graphId)
+      val resolvedGraph = definition.toDataflowGraph.resolve()
+
+      assert(resolvedGraph.inputIdentifiers.nonEmpty,
+        "Resolved graph should have input identifiers")
+      assert(resolvedGraph.inputIdentifiers.exists(_.table == "test_mv"),
+        "test_mv should be in the graph inputs")
+
+      assert(resolvedGraph.flows.size == 1, "Graph should have one flow")
+      assert(resolvedGraph.tables.size == 1, "Graph should have one table")
+    }
+  }
 }

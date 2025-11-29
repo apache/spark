@@ -23,13 +23,14 @@ import io.grpc.stub.StreamObserver
 
 import org.apache.spark.connect.proto
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{AnalysisException, Row}
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.classic.{DataFrame, Dataset}
 import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, InvalidPlanInput, StorageLevelProtoConverter}
+import org.apache.spark.sql.connect.pipelines.PipelinesHandler
 import org.apache.spark.sql.connect.planner.SparkConnectPlanner
-import org.apache.spark.sql.connect.utils.{PipelineAnalysisContextUtils, PlanCompressionUtils}
+import org.apache.spark.sql.connect.utils.PlanCompressionUtils
 import org.apache.spark.sql.execution.{CodegenMode, CommandExecutionMode, CostMode, ExtendedMode, FormattedMode, SimpleMode}
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.util.ArrayImplicits._
@@ -62,21 +63,29 @@ private[connect] class SparkConnectAnalyzeHandler(
     lazy val planner = new SparkConnectPlanner(sessionHolder)
     val session = sessionHolder.session
     val builder = proto.AnalyzePlanResponse.newBuilder()
-    val userContext = request.getUserContext
 
-    // Pipeline has not yet supported eager analysis inside flow function.
-    if (PipelineAnalysisContextUtils.isInsidePipelineFlowFunction(userContext)) {
-      throw new AnalysisException("ATTEMPT_ANALYSIS_IN_PIPELINE_QUERY_FUNCTION", Map())
+    def transformRelation(rel: proto.Relation) = {
+      planner.transformRelation(rel, cachePlan = true)
     }
 
-    def transformRelation(rel: proto.Relation) = planner.transformRelation(rel, cachePlan = true)
     def transformRelationPlan(plan: proto.Plan) = {
       transformRelation(PlanCompressionUtils.decompressPlan(plan).getRoot)
     }
 
     def getDataFrameWithoutExecuting(rel: LogicalPlan): DataFrame = {
-      val qe = session.sessionState.executePlan(rel, CommandExecutionMode.SKIP)
-      new Dataset[Row](qe, () => RowEncoder.encoderFor(qe.analyzed.schema))
+      val userContextExtensions = request.getUserContext.getExtensionsList.asScala
+      val pipelineAnalysisContextOpt = userContextExtensions
+        .filter(_.is(classOf[proto.PipelineAnalysisContext]))
+        .map(_.unpack(classOf[proto.PipelineAnalysisContext]))
+        .find(ctx => ctx.hasFlowName && ctx.hasDataflowGraphId)
+
+      pipelineAnalysisContextOpt match {
+        case Some(pipelineAnalysisContext) =>
+          PipelinesHandler.analyze(pipelineAnalysisContext, rel, sessionHolder)
+        case None =>
+          val qe = session.sessionState.executePlan(rel, CommandExecutionMode.SKIP)
+          new Dataset[Row](qe, () => RowEncoder.encoderFor(qe.analyzed.schema))
+      }
     }
 
     request.getAnalyzeCase match {

@@ -36,6 +36,7 @@ class PipelineExecution(context: PipelineUpdateContext) {
 
   /** [Visible for testing] */
   private[pipelines] var graphExecution: Option[TriggeredGraphExecution] = None
+  val graphAnalysisContext = new GraphAnalysisContext()
 
   def executionStarted: Boolean = synchronized { graphExecution.nonEmpty }
 
@@ -110,7 +111,7 @@ class PipelineExecution(context: PipelineUpdateContext) {
 
   private def resolveGraph(): DataflowGraph = {
     try {
-      context.unresolvedGraph.resolve().validate()
+      context.unresolvedGraph.resolve(Some(graphAnalysisContext)).validate()
     } catch {
       case e: UnresolvedPipelineException =>
         handleInvalidPipeline(e)
