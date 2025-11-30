@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{AppendData, CreateTableAsSel
 import org.apache.spark.sql.connector.catalog.{Column, ColumnDefaultValue, DefaultValue, Identifier, InMemoryTableCatalog, SupportsV1OverwriteWithSaveAsTable, TableInfo}
 import org.apache.spark.sql.connector.catalog.BasicInMemoryTableCatalog
 import org.apache.spark.sql.connector.catalog.TableChange.{AddColumn, UpdateColumnDefaultValue}
+import org.apache.spark.sql.connector.catalog.TableChange
 import org.apache.spark.sql.connector.catalog.TableWritePrivilege
 import org.apache.spark.sql.connector.catalog.TruncatableTable
 import org.apache.spark.sql.connector.expressions.{ApplyTransform, GeneralScalarExpression, LiteralValue, Transform}
@@ -1891,6 +1892,151 @@ class DataSourceV2DataFrameSuite
         filteredSourceDF.writeTo(t).createOrReplace()
       }
       assert(e.message.contains("incompatible changes to table `testcat`.`ns1`.`s`"))
+    }
+  }
+
+  test("SPARK-54424: refresh table cache on schema changes (column removed)") {
+    val t = "testcat.ns1.ns2.tbl"
+    val ident = Identifier.of(Array("ns1", "ns2"), "tbl")
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, value INT, category STRING) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 10, 'A'), (2, 20, 'B'), (3, 30, 'A')")
+
+      // cache table
+      spark.table(t).cache()
+
+      // verify caching works as expected
+      assertCached(spark.table(t))
+      checkAnswer(
+        spark.table(t),
+        Seq(Row(1, 10, "A"), Row(2, 20, "B"), Row(3, 30, "A")))
+
+      // evolve table directly to mimic external changes
+      // these external changes make cached plan invalid (column is no longer there)
+      val change = TableChange.deleteColumn(Array("category"), false)
+      catalog("testcat").alterTable(ident, change)
+
+      // refresh table is supposed to trigger recaching
+      spark.sql(s"REFRESH TABLE $t")
+
+      // recaching is expected to succeed
+      assert(spark.sharedState.cacheManager.numCachedEntries == 1)
+
+      // verify cache reflects latest schema and data
+      assertCached(spark.table(t))
+      checkAnswer(spark.table(t), Seq(Row(1, 10), Row(2, 20), Row(3, 30)))
+    }
+  }
+
+  test("SPARK-54424: refresh table cache on schema changes (column added)") {
+    val t = "testcat.ns1.ns2.tbl"
+    val ident = Identifier.of(Array("ns1", "ns2"), "tbl")
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, value INT) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 10), (2, 20), (3, 30)")
+
+      // cache table
+      spark.table(t).cache()
+
+      // verify caching works as expected
+      assertCached(spark.table(t))
+      checkAnswer(
+        spark.table(t),
+        Seq(Row(1, 10), Row(2, 20), Row(3, 30)))
+
+      // evolve table directly to mimic external changes
+      // these external changes make cached plan invalid (table state has changed)
+      val change = TableChange.addColumn(Array("category"), StringType, true)
+      catalog("testcat").alterTable(ident, change)
+
+      // refresh table is supposed to trigger recaching
+      spark.sql(s"REFRESH TABLE $t")
+
+      // recaching is expected to succeed
+      assert(spark.sharedState.cacheManager.numCachedEntries == 1)
+
+      // verify cache reflects latest schema and data
+      assertCached(spark.table(t))
+      checkAnswer(spark.table(t), Seq(Row(1, 10, null), Row(2, 20, null), Row(3, 30, null)))
+    }
+  }
+
+  test("SPARK-54424: successfully refresh cache with compatible schema changes") {
+    val t = "testcat.ns1.ns2.tbl"
+    val ident = Identifier.of(Array("ns1", "ns2"), "tbl")
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, value INT) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 10), (2, 20), (3, 30)")
+
+      // cache query
+      val df = spark.table(t).filter("id < 100")
+      df.cache()
+
+      // verify caching works as expected
+      assertCached(spark.table(t).filter("id < 100"))
+      checkAnswer(
+        spark.table(t).filter("id < 100"),
+        Seq(Row(1, 10), Row(2, 20), Row(3, 30)))
+
+      // evolve table directly to mimic external changes
+      // adding columns should be OK
+      val change = TableChange.addColumn(Array("category"), StringType, true)
+      catalog("testcat").alterTable(ident, change)
+
+      // refresh table is supposed to trigger recaching
+      spark.sql(s"REFRESH TABLE $t")
+
+      // recaching is expected to succeed
+      assert(spark.sharedState.cacheManager.numCachedEntries == 1)
+
+      // verify derived queries still benefit from refreshed cache
+      assertCached(df.filter("id > 0"))
+      checkAnswer(df.filter("id > 0"), Seq(Row(1, 10), Row(2, 20), Row(3, 30)))
+
+      // add more data
+      sql(s"INSERT INTO $t VALUES (4, 40, '40')")
+
+      // verify derived queries still benefit from refreshed cache
+      assertCached(df.filter("id > 0"))
+      checkAnswer(df.filter("id > 0"), Seq(Row(1, 10), Row(2, 20), Row(3, 30), Row(4, 40)))
+
+      // verify latest schema is propagated (new column has NULL values for existing rows)
+      checkAnswer(
+        spark.table(t),
+        Seq(Row(1, 10, null), Row(2, 20, null), Row(3, 30, null), Row(4, 40, "40")))
+    }
+  }
+
+  test("SPARK-54424: inability to refresh cache shouldn't fail operations") {
+    val t = "testcat.ns1.ns2.tbl"
+    val ident = Identifier.of(Array("ns1", "ns2"), "tbl")
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, value INT) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 10), (2, 20), (3, 30)")
+
+      // cache query
+      val df = spark.table(t).filter("id < 100")
+      df.cache()
+
+      // verify caching works as expected
+      assertCached(spark.table(t).filter("id < 100"))
+      checkAnswer(
+        spark.table(t).filter("id < 100"),
+        Seq(Row(1, 10), Row(2, 20), Row(3, 30)))
+
+      // evolve table directly to mimic external changes
+      // removing columns should be make cached plan invalid
+      val change = TableChange.deleteColumn(Array("value"), false)
+      catalog("testcat").alterTable(ident, change)
+
+      // refresh table is supposed to trigger recaching
+      spark.sql(s"REFRESH TABLE $t")
+
+      // recaching is expected to fail
+      assert(spark.sharedState.cacheManager.isEmpty)
+
+      // verify latest schema is propagated
+      checkAnswer(spark.table(t), Seq(Row(1), Row(2), Row(3)))
     }
   }
 
