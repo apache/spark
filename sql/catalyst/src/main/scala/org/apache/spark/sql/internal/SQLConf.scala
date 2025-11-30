@@ -4261,9 +4261,9 @@ object SQLConf {
     buildConf("spark.sql.execution.pythonUDF.arrow.enabled")
       .doc("Enable Arrow optimization in regular Python UDFs. This optimization " +
         "can only be enabled when the given function takes at least one argument.")
-      .version("3.4.0")
+      .version("4.1.0")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   val PYTHON_UDF_ARROW_CONCURRENCY_LEVEL =
     buildConf("spark.sql.execution.pythonUDF.arrow.concurrency.level")
