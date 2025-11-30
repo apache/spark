@@ -33,7 +33,7 @@ import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.connector.metric.CustomMetric
 import org.apache.spark.sql.connector.write.{BatchWrite, DataWriter, DataWriterFactory, DeltaWrite, DeltaWriter, MergeSummaryImpl, PhysicalWriteInfoImpl, RowLevelOperationTable, Write, WriterCommitMessage, WriteSummary}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
-import org.apache.spark.sql.execution.{SparkPlan, SQLExecution, UnaryExecNode}
+import org.apache.spark.sql.execution.{QueryExecution, SparkPlan, SQLExecution, UnaryExecNode}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.joins.BaseJoinExec
 import org.apache.spark.sql.execution.metric.{CustomMetrics, SQLMetric, SQLMetrics}
@@ -177,7 +177,6 @@ case class ReplaceTableAsSelectExec(
       query,
       versionedOnly = true,
       schemaValidationMode = PROHIBIT_CHANGES)
-    val pinnedQuery = V2TableRefreshUtil.pinVersions(refreshedQuery)
     if (catalog.tableExists(ident)) {
       invalidateCache(catalog, ident)
       catalog.dropTable(ident)
@@ -185,13 +184,15 @@ case class ReplaceTableAsSelectExec(
       throw QueryCompilationErrors.cannotReplaceMissingTableError(ident)
     }
     val tableInfo = new TableInfo.Builder()
-      .withColumns(getV2Columns(pinnedQuery.schema, catalog.useNullableQuerySchema))
+      .withColumns(getV2Columns(refreshedQuery.schema, catalog.useNullableQuerySchema))
       .withPartitions(partitioning.toArray)
       .withProperties(properties.asJava)
       .build()
     val table = Option(catalog.createTable(ident, tableInfo))
       .getOrElse(catalog.loadTable(ident, Set(TableWritePrivilege.INSERT).asJava))
-    writeToTable(catalog, table, writeOptions, ident, pinnedQuery, overwrite = true)
+    writeToTable(
+      catalog, table, writeOptions, ident, refreshedQuery,
+      overwrite = true, refreshPhaseEnabled = false)
   }
 }
 
@@ -764,7 +765,8 @@ private[v2] trait V2CreateTableAsSelectBaseExec extends LeafV2CommandExec {
       writeOptions: Map[String, String],
       ident: Identifier,
       query: LogicalPlan,
-      overwrite: Boolean): Seq[InternalRow] = {
+      overwrite: Boolean,
+      refreshPhaseEnabled: Boolean = true): Seq[InternalRow] = {
     Utils.tryWithSafeFinallyAndFailureCallbacks({
       val relation = DataSourceV2Relation.create(table, Some(catalog), Some(ident))
       val writeCommand = if (overwrite) {
@@ -772,7 +774,7 @@ private[v2] trait V2CreateTableAsSelectBaseExec extends LeafV2CommandExec {
       } else {
         AppendData.byPosition(relation, query, writeOptions)
       }
-      val qe = session.sessionState.executePlan(writeCommand)
+      val qe = QueryExecution.create(session, writeCommand, refreshPhaseEnabled)
       qe.assertCommandExecuted()
       DataSourceV2Utils.commitStagedChanges(sparkContext, table, metrics)
       Nil

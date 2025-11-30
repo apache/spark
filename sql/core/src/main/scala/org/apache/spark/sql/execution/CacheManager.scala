@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution
 
+import scala.util.control.NonFatal
+
 import org.apache.hadoop.fs.{FileSystem, Path}
 
 import org.apache.spark.internal.{Logging, MessageWithContext}
@@ -374,22 +376,65 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
     }
     needToRecache.foreach { cd =>
       cd.cachedRepresentation.cacheBuilder.clearCache()
-      val sessionWithConfigsOff = getOrCloneSessionWithConfigsOff(spark)
-      val (newKey, newCache) = sessionWithConfigsOff.withActive {
-        val refreshedPlan = V2TableRefreshUtil.refresh(sessionWithConfigsOff, cd.plan)
-        val qe = sessionWithConfigsOff.sessionState.executePlan(refreshedPlan)
-        qe.normalized -> InMemoryRelation(cd.cachedRepresentation.cacheBuilder, qe)
-      }
-      val recomputedPlan = cd.copy(plan = newKey, cachedRepresentation = newCache)
-      this.synchronized {
-        if (lookupCachedDataInternal(recomputedPlan.plan).nonEmpty) {
-          logWarning("While recaching, data was already added to cache.")
-        } else {
-          cachedData = recomputedPlan +: cachedData
-          CacheManager.logCacheOperation(log"Re-cached Dataframe cache entry:" +
-            log"${MDC(DATAFRAME_CACHE_ENTRY, recomputedPlan)}")
+      tryRebuildCacheEntry(spark, cd).foreach { entry =>
+        this.synchronized {
+          if (lookupCachedDataInternal(entry.plan).nonEmpty) {
+            logWarning("While recaching, data was already added to cache.")
+          } else {
+            cachedData = entry +: cachedData
+            CacheManager.logCacheOperation(log"Re-cached Dataframe cache entry:" +
+              log"${MDC(DATAFRAME_CACHE_ENTRY, entry)}")
+          }
         }
       }
+    }
+  }
+
+  private def tryRebuildCacheEntry(spark: SparkSession, cd: CachedData): Option[CachedData] = {
+    val sessionWithConfigsOff = getOrCloneSessionWithConfigsOff(spark)
+    sessionWithConfigsOff.withActive {
+      tryRefreshPlan(sessionWithConfigsOff, cd.plan).map { refreshedPlan =>
+        val qe = QueryExecution.create(
+          sessionWithConfigsOff,
+          refreshedPlan,
+          refreshPhaseEnabled = false)
+        val newKey = qe.normalized
+        val newCache = InMemoryRelation(cd.cachedRepresentation.cacheBuilder, qe)
+        cd.copy(plan = newKey, cachedRepresentation = newCache)
+      }
+    }
+  }
+
+  /**
+   * Attempts to refresh table metadata loaded through the catalog.
+   *
+   * If the table state is cached (e.g., via `CACHE TABLE t`), the relation is replaced with
+   * updated metadata as long as the table ID still matches, ensuring that all schema changes
+   * are reflected. Otherwise, a new plan is produced using refreshed table metadata but
+   * retaining the original schema, provided the schema changes are still compatible with the
+   * query (e.g., adding new columns should be acceptable).
+   *
+   * Note this logic applies only to V2 tables at the moment.
+   *
+   * @return the refreshed plan if refresh succeeds, None otherwise
+   */
+  private def tryRefreshPlan(spark: SparkSession, plan: LogicalPlan): Option[LogicalPlan] = {
+    try {
+      EliminateSubqueryAliases(plan) match {
+        case r @ ExtractV2CatalogAndIdentifier(catalog, ident) if r.timeTravelSpec.isEmpty =>
+          val table = catalog.loadTable(ident)
+          if (r.table.id == table.id) {
+            Some(DataSourceV2Relation.create(table, Some(catalog), Some(ident)))
+          } else {
+            None
+          }
+        case _ =>
+          Some(V2TableRefreshUtil.refresh(spark, plan))
+      }
+    } catch {
+      case NonFatal(e) =>
+        logWarning(log"Failed to refresh plan while attempting to recache", e)
+        None
     }
   }
 
