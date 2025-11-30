@@ -3917,7 +3917,7 @@ object SQLConf {
       .doc("(Deprecated since Spark 3.0, please set 'spark.sql.execution.arrow.pyspark.enabled'.)")
       .version("2.3.0")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   val ARROW_PYSPARK_EXECUTION_ENABLED =
     buildConf("spark.sql.execution.arrow.pyspark.enabled")

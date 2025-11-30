@@ -60,8 +60,8 @@ Enabling for Conversion to/from Pandas
 
 Arrow is available as an optimization when converting a Spark DataFrame to a Pandas DataFrame
 using the call :meth:`DataFrame.toPandas` and when creating a Spark DataFrame from a Pandas DataFrame with
-:meth:`SparkSession.createDataFrame`. To use Arrow when executing these calls, users need to first set
-the Spark configuration ``spark.sql.execution.arrow.pyspark.enabled`` to ``true``. This is disabled by default.
+:meth:`SparkSession.createDataFrame`. To use Arrow when executing these calls,
+the Spark configuration ``spark.sql.execution.arrow.pyspark.enabled`` must be set to ``true``. This is enabled by default.
 
 In addition, optimizations enabled by ``spark.sql.execution.arrow.pyspark.enabled`` could fallback automatically
 to non-Arrow optimization implementation if an error occurs before the actual computation within Spark.
