@@ -2739,8 +2739,8 @@ def read_udfs(pickleSer, infile, eval_type):
                 timezone, safecheck, _assign_cols_by_name, int_to_decimal_coercion_enabled
             )
         elif eval_type in (
-                PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
-                PythonEvalType.SQL_GROUPED_MAP_PANDAS_ITER_UDF,
+            PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
+            PythonEvalType.SQL_GROUPED_MAP_PANDAS_ITER_UDF,
         ):
             ser = GroupPandasUDFSerializer(
                 timezone, safecheck, _assign_cols_by_name, int_to_decimal_coercion_enabled
@@ -2999,11 +2999,20 @@ def read_udfs(pickleSer, infile, eval_type):
             pickleSer, infile, eval_type, runner_conf, udf_index=0, profiler=profiler
         )
         parsed_offsets = extract_key_value_indexes(arg_offsets)
+        # Note: Only single UDF is supported for grouped map UDFs
+        assert (
+            len(parsed_offsets) == 1
+        ), f"Grouped map UDFs only support single UDF, got {len(parsed_offsets)} UDFs"
 
         def series_from_offset(series_list, offsets):
             return [series_list[o] for o in offsets]
 
         def mapper(series_lists_iter):
+            """
+            Mapper for grouped map pandas UDFs.
+            Note: Only supports single UDF. The wrapped function returns (generator, arrow_type)
+            where generator yields pandas DataFrames.
+            """
             # `series_lists_iter` is an iterator of Series lists (one list per batch)
             # Materialize first batch to extract keys (guaranteed to exist for grouped operations)
             series_iter = iter(series_lists_iter)

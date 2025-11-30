@@ -1243,6 +1243,7 @@ class ArrowStreamAggPandasUDFSerializer(ArrowStreamPandasUDFSerializer):
 
 
 # Serializer for SQL_GROUPED_MAP_PANDAS_UDF, SQL_GROUPED_MAP_PANDAS_ITER_UDF
+# Note: This serializer only supports single UDF.
 class GroupPandasUDFSerializer(ArrowStreamPandasUDFSerializer):
     def __init__(
         self,
@@ -1266,9 +1267,7 @@ class GroupPandasUDFSerializer(ArrowStreamPandasUDFSerializer):
     def load_stream(self, stream):
         """
         Deserialize Grouped ArrowRecordBatches and yield pandas.Series lists as iterator.
-        Always returns iterator of lists:
-        - For grouped map UDFs: yields one list per batch (multiple elements)
-        - For aggregation UDFs: yields a single merged list (one element)
+        Yields one list per batch (multiple elements).
         """
         import pyarrow as pa
 
@@ -1292,28 +1291,20 @@ class GroupPandasUDFSerializer(ArrowStreamPandasUDFSerializer):
                 )
 
     def dump_stream(self, iterator, stream):
-        # Flatten iterator of (generator, arrow_type) into (df, arrow_type) for parent class
-        # For grouped map UDFs: iterator contains (generator, arrow_type) tuples
-        # For aggregation UDFs: iterator contains (series, arrow_type) tuples directly
+        """
+        Serialize iterator of (generator, arrow_type) tuples into Arrow stream.
+        The generator yields pandas DataFrames from grouped map UDFs.
+        Note: Only supports single UDF per group.
+        """
         import pandas as pd
 
         def flatten_iterator():
-            for item in iterator:
-                if isinstance(item, tuple) and len(item) == 2:
-                    batches_gen, arrow_type = item
-                    # Check if it's a generator (grouped map UDF) or already a Series/DataFrame (aggregation UDF)
-                    if hasattr(batches_gen, "__iter__") and not isinstance(
-                        batches_gen, (pd.Series, pd.DataFrame)
-                    ):
-                        # Grouped map UDF: batches_gen is a generator
-                        for df in batches_gen:
-                            yield (df, arrow_type)
-                    else:
-                        # Aggregation UDF: batches_gen is already a Series/DataFrame
-                        yield (batches_gen, arrow_type)
-                else:
-                    # Fallback: pass through as-is
-                    yield item if isinstance(item, tuple) else (item, None)
+            for batches_gen, arrow_type in iterator:
+                assert hasattr(batches_gen, "__iter__") and not isinstance(
+                    batches_gen, (pd.Series, pd.DataFrame)
+                ), f"Expected generator of DataFrames, got {type(batches_gen)}"
+                for df in batches_gen:
+                    yield (df, arrow_type)
 
         super(GroupPandasUDFSerializer, self).dump_stream(flatten_iterator(), stream)
 
