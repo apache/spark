@@ -1290,9 +1290,6 @@ class GroupPandasUDFSerializer(ArrowStreamPandasUDFSerializer):
                     messageParameters={"dataframes_in_group": str(dataframes_in_group)},
                 )
 
-    # dump_stream is inherited from ArrowStreamPandasUDFSerializer
-    # The mapper already yields (df, arrow_type) tuples, so base class can handle it directly
-
     def __repr__(self):
         return "GroupPandasUDFSerializer"
 

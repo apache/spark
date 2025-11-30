@@ -2985,8 +2985,9 @@ def read_udfs(pickleSer, infile, eval_type):
         eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF
         or eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_ITER_UDF
     ):
-        # Grouped map UDFs only support single UDF
-        assert num_udfs == 1, f"Grouped map UDFs only support single UDF, got {num_udfs}"
+        # We assume there is only one UDF here because grouped map doesn't
+        # support combining multiple UDFs.
+        assert num_udfs == 1
 
         # See FlatMapGroupsInPandasExec for how arg_offsets are used to
         # distinguish between grouping attributes and data attributes
@@ -2995,23 +2996,19 @@ def read_udfs(pickleSer, infile, eval_type):
         )
         parsed_offsets = extract_key_value_indexes(arg_offsets)
 
-        def series_from_offset(series_list, offsets):
-            return [series_list[o] for o in offsets]
-
         def mapper(series_lists_iter):
             """
             Mapper for grouped map pandas UDFs.
             Note: Only supports single UDF. Returns iterator of (df, arrow_type) tuples.
-            The wrapper already flattens the generator, so mapper just yields from it.
             """
             # `series_lists_iter` is an iterator of Series lists (one list per batch)
             # Materialize first batch to extract keys (guaranteed to exist for grouped operations)
             series_iter = iter(series_lists_iter)
             first_series_list = next(series_iter)
-            keys = series_from_offset(first_series_list, parsed_offsets[0][0])
+            keys = [first_series_list[o] for o in parsed_offsets[0][0]]
             # Create generator for value series from all batches
             value_series_gen = (
-                series_from_offset(series_list, parsed_offsets[0][1])
+                [series_list[o] for o in parsed_offsets[0][1]]
                 for series_list in itertools.chain((first_series_list,), series_iter)
             )
             # Call wrapped function which returns generator of (df, arrow_type) tuples
