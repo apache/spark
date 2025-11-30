@@ -21,8 +21,8 @@ Upgrading PySpark
 
 Upgrading from PySpark 4.1 to 4.2
 ---------------------------------
-* In Spark 4.2, Python UDFs are arrow-optimized by default, as the default configuration of ``spark.sql.execution.pythonUDF.arrow.enabled`` is set to ``true``. To restore the legacy behavior, set ``spark.sql.execution.pythonUDF.arrow.enabled`` to ``false``.
-* In Spark 4.2, PySpark uses Apache Arrow for columnar data transfers by default, as the default configuration of ``spark.sql.execution.arrow.pyspark.enabled`` is set to ``true``. To restore the legacy behavior, set ``spark.sql.execution.arrow.pyspark.enabled`` to ``false``.
+* In Spark 4.2, columnar data exchange between PySpark and the JVM uses Apache Arrow by default. The configuration ``spark.sql.execution.arrow.pyspark.enabled`` now defaults to true. To restore the legacy (non-Arrow) row-based data exchange, set ``spark.sql.execution.arrow.pyspark.enabled`` to ``false``.
+* In Spark 4.2, regular Python UDFs are Arrow-optimized by default. The configuration ``spark.sql.execution.pythonUDF.arrow.enabled`` now defaults to true. To restore the legacy behavior for Python UDF execution, set ``spark.sql.execution.pythonUDF.arrow.enabled`` to ``false``.
 
 Upgrading from PySpark 4.0 to 4.1
 ---------------------------------
