@@ -480,7 +480,7 @@ object ResolveDefaultColumns extends QueryErrorsBase
     val ret = analyzed match {
       case equivalent if equivalent.dataType == supplanted =>
         equivalent
-      case canUpCast if Cast.canUpCast(canUpCast.dataType, supplanted) =>
+      case _ if Cast.canAssignDefaultValue(analyzed.dataType, supplanted) =>
         Cast(analyzed, supplanted, Some(conf.sessionLocalTimeZone))
       case other =>
         defaultValueFromWiderTypeLiteral(other, supplanted, colName).getOrElse(

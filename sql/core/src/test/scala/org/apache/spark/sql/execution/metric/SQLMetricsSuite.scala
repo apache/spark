@@ -308,6 +308,26 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
     }
   }
 
+  test("SortAggregate metrics") {
+    // Force use SortAggregateExec instead of HashAggregateExec
+    withSQLConf("spark.sql.test.forceApplySortAggregate" -> "true") {
+      // Assume the execution plan is
+      // -> SortAggregate(nodeId = 0)
+      //     -> Sort(nodeId = 1)
+      //       -> Exchange(nodeId = 2)
+      //          -> SortAggregate(...)
+      val df = testData2.groupBy($"a").count()
+
+      // Test aggTime metric for grouped aggregate
+      testSparkPlanMetricsWithPredicates(df, 1, Map(
+        0L -> (("SortAggregate", Map(
+          "time in aggregation build" -> {
+            _.toString.matches(timingMetricPattern)
+          }))))
+      )
+    }
+  }
+
   test("Sort metrics") {
     // Assume the execution plan with node id is
     // Sort(nodeId = 0)

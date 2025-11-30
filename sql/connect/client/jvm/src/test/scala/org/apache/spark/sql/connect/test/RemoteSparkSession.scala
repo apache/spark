@@ -93,6 +93,11 @@ object SparkConnectServerUtils {
     if (isDebug) {
       builder.redirectError(Redirect.INHERIT)
       builder.redirectOutput(Redirect.INHERIT)
+    } else {
+      // If output is not consumed, the stdout/stderr pipe buffers will fill up,
+      // causing the server process to block on write() calls
+      builder.redirectError(Redirect.DISCARD)
+      builder.redirectOutput(Redirect.DISCARD)
     }
 
     val process = builder.start()
@@ -135,6 +140,8 @@ object SparkConnectServerUtils {
       "spark.connect.execute.reattachable.senderMaxStreamSize=123",
       // Testing SPARK-49673, setting maxBatchSize to 10MiB
       s"spark.connect.grpc.arrow.maxBatchSize=${10 * 1024 * 1024}",
+      // Cache less sessions to save memory.
+      "spark.executor.isolatedSessionCache.size=5",
       // Disable UI
       "spark.ui.enabled=false").flatMap(v => "--conf" :: v :: Nil)
   }

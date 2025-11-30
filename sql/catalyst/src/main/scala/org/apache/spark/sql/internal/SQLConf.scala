@@ -1598,7 +1598,7 @@ object SQLConf {
         "variant logical type.")
       .version("4.1.0")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   val PARQUET_IGNORE_VARIANT_ANNOTATION =
     buildConf("spark.sql.parquet.ignoreVariantAnnotation")
@@ -3822,6 +3822,14 @@ object SQLConf {
       .version("4.1.0")
       .fallbackConf(SHUFFLE_DEPENDENCY_FILE_CLEANUP_ENABLED)
 
+  val THRIFTSERVER_SHUFFLE_DEPENDENCY_FILE_CLEANUP_ENABLED =
+    buildConf("spark.sql.thriftserver.shuffleDependency.fileCleanup.enabled")
+      .doc("When enabled, shuffle files will be cleaned up at the end of Thrift server " +
+        "SQL executions.")
+      .version("4.2.0")
+      .booleanConf
+      .createWithDefault(Utils.isTesting)
+
   val SORT_MERGE_JOIN_EXEC_BUFFER_IN_MEMORY_THRESHOLD =
     buildConf("spark.sql.sortMergeJoinExec.buffer.in.memory.threshold")
       .internal()
@@ -5610,7 +5618,7 @@ object SQLConf {
         "requested fields.")
       .version("4.0.0")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   val VARIANT_WRITE_SHREDDING_ENABLED =
     buildConf("spark.sql.variant.writeShredding.enabled")
@@ -5618,7 +5626,7 @@ object SQLConf {
       .doc("When true, the Parquet writer is allowed to write shredded variant. ")
       .version("4.0.0")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   val VARIANT_FORCE_SHREDDING_SCHEMA_FOR_TEST =
     buildConf("spark.sql.variant.forceShreddingSchemaForTest")
@@ -5651,7 +5659,7 @@ object SQLConf {
       .doc("Infer shredding schema when writing Variant columns in Parquet tables.")
       .version("4.1.0")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   val LEGACY_CSV_ENABLE_DATE_TIME_PARSING_FALLBACK =
     buildConf("spark.sql.legacy.csv.enableDateTimeParsingFallback")
@@ -6699,10 +6707,11 @@ object SQLConf {
     buildConf("spark.sql.merge.nested.type.coercion.enabled")
       .internal()
       .doc("If enabled, allow MERGE INTO to coerce source nested types if they have less" +
-        "nested fields than the target table's nested types.")
+        "nested fields than the target table's nested types. This is experimental and" +
+        "the semantics may change.")
       .version("4.1.0")
       .booleanConf
-      .createWithDefault(true)
+      .createWithDefault(false)
 
   /**
    * Holds information about keys that have been deprecated.
