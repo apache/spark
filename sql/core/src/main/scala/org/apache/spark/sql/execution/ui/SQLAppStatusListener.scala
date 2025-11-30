@@ -343,7 +343,7 @@ class SQLAppStatusListener(
 
   private def onExecutionStart(event: SparkListenerSQLExecutionStart): Unit = {
     val SparkListenerSQLExecutionStart(executionId, rootExecutionId, description, details,
-      physicalPlanDescription, sparkPlanInfo, time, modifiedConfigs, _, _) = event
+      physicalPlanDescription, sparkPlanInfo, time, modifiedConfigs, _, _, sqlScriptId) = event
 
     val planGraph = SparkPlanGraph(sparkPlanInfo)
     val sqlPlanMetrics = planGraph.allNodes.flatMap { node =>
@@ -364,6 +364,7 @@ class SQLAppStatusListener(
     exec.modifiedConfigs = modifiedConfigs
     exec.addMetrics(sqlPlanMetrics)
     exec.submissionTime = time
+    exec.sqlScriptId = sqlScriptId
     update(exec)
   }
 
@@ -505,6 +506,8 @@ private class LiveExecutionData(val executionId: Long) extends LiveEntity {
   var stages = Set[Int]()
   var driverAccumUpdates = Seq[(Long, Long)]()
 
+  var sqlScriptId: Option[String] = None
+
   @volatile var metricsValues: Map[Long, String] = null
 
   // Just in case job end and execution end arrive out of order, keep track of how many
@@ -525,7 +528,8 @@ private class LiveExecutionData(val executionId: Long) extends LiveEntity {
       errorMessage,
       jobs,
       stages,
-      metricsValues)
+      metricsValues,
+      sqlScriptId)
   }
 
   def addMetrics(newMetrics: collection.Seq[SQLPlanMetric]): Unit = {
