@@ -1290,23 +1290,8 @@ class GroupPandasUDFSerializer(ArrowStreamPandasUDFSerializer):
                     messageParameters={"dataframes_in_group": str(dataframes_in_group)},
                 )
 
-    def dump_stream(self, iterator, stream):
-        """
-        Serialize iterator of (generator, arrow_type) tuples into Arrow stream.
-        The generator yields pandas DataFrames from grouped map UDFs.
-        Note: Only supports single UDF per group.
-        """
-        import pandas as pd
-
-        def flatten_iterator():
-            for batches_gen, arrow_type in iterator:
-                assert hasattr(batches_gen, "__iter__") and not isinstance(
-                    batches_gen, (pd.Series, pd.DataFrame)
-                ), f"Expected generator of DataFrames, got {type(batches_gen)}"
-                for df in batches_gen:
-                    yield (df, arrow_type)
-
-        super(GroupPandasUDFSerializer, self).dump_stream(flatten_iterator(), stream)
+    # dump_stream is inherited from ArrowStreamPandasUDFSerializer
+    # The mapper already yields (df, arrow_type) tuples, so base class can handle it directly
 
     def __repr__(self):
         return "GroupPandasUDFSerializer"
