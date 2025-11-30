@@ -3168,13 +3168,14 @@ def read_udfs(pickleSer, infile, eval_type):
             )
 
         def mapper(a):
+            batch_iter = iter(a)
             # Need to materialize the first batch to get the keys
-            first_batch = next(a)
+            first_batch = next(batch_iter)
 
             keys = batch_from_offset(first_batch, parsed_offsets[0][0])
             value_batches = (
                 batch_from_offset(b, parsed_offsets[0][1])
-                for b in itertools.chain((first_batch,), a)
+                for b in itertools.chain((first_batch,), batch_iter)
             )
 
             return f(keys, value_batches)
