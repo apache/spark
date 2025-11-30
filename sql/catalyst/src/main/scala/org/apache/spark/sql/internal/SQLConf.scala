@@ -4299,7 +4299,7 @@ object SQLConf {
       .doc("Enable Arrow optimization for Python UDTFs.")
       .version("3.5.0")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   val PYTHON_TABLE_UDF_LEGACY_PANDAS_CONVERSION_ENABLED =
     buildConf("spark.sql.legacy.execution.pythonUDTF.pandas.conversion.enabled")
