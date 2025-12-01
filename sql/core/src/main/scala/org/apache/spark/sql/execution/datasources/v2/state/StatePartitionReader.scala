@@ -16,8 +16,6 @@
  */
 package org.apache.spark.sql.execution.datasources.v2.state
 
-import scala.collection.mutable
-
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeRow}
@@ -53,7 +51,7 @@ class StatePartitionReaderFactory(
     val stateStoreInputPartition = partition.asInstanceOf[StateStoreInputPartition]
     if (stateStoreInputPartition.sourceOptions.internalOnlyReadAllColumnFamilies) {
       new StatePartitionAllColumnFamiliesReader(storeConf, hadoopConf,
-        stateStoreInputPartition, schema, keyStateEncoderSpec)
+        stateStoreInputPartition, schema, keyStateEncoderSpec, stateStoreColFamilySchemaOpt)
     } else if (stateStoreInputPartition.sourceOptions.readChangeFeed) {
       new StateStoreChangeDataPartitionReader(storeConf, hadoopConf,
         stateStoreInputPartition, schema, keyStateEncoderSpec, stateVariableInfoOpt,
@@ -83,39 +81,25 @@ abstract class StatePartitionReaderBase(
   extends PartitionReader[InternalRow] with Logging {
   // Used primarily as a placeholder for the value schema in the context of
   // state variables used within the transformWithState operator.
-  // Also used as a placeholder for both key and value schema for
-  // StatePartitionAllColumnFamiliesReader
-  private val placeholderSchema: StructType =
+  private val schemaForValueRow: StructType =
     StructType(Array(StructField("__dummy__", NullType)))
 
-  private val colFamilyToSchema : mutable.HashMap[String, StateStoreColFamilySchema] = {
-    val stateStoreId = StateStoreId(
-      partition.sourceOptions.stateCheckpointLocation.toString,
-      partition.sourceOptions.operatorId,
-      StateStore.PARTITION_ID_TO_CHECK_SCHEMA,
-      partition.sourceOptions.storeName)
-    val stateStoreProviderId = StateStoreProviderId(stateStoreId, partition.queryId)
-    val manager = new StateSchemaCompatibilityChecker(stateStoreProviderId, hadoopConf.value)
-    val schemaFile = manager.readSchemaFile()
-    val schemaMap = mutable.HashMap[String, StateStoreColFamilySchema]()
-    schemaFile.foreach { schema => schemaMap.put(schema.colFamilyName, schema)}
-    schemaMap
-  }
-
-  protected val keySchema = {
+  protected val keySchema : StructType = {
     if (SchemaUtil.checkVariableType(stateVariableInfoOpt, StateVariableType.MapState)) {
       SchemaUtil.getCompositeKeySchema(schema, partition.sourceOptions)
     } else if (partition.sourceOptions.internalOnlyReadAllColumnFamilies) {
-      colFamilyToSchema(StateStore.DEFAULT_COL_FAMILY_NAME).keySchema
+      require(stateStoreColFamilySchemaOpt.isDefined)
+      stateStoreColFamilySchemaOpt.map(_.keySchema).get
     } else {
       SchemaUtil.getSchemaAsDataType(schema, "key").asInstanceOf[StructType]
     }
   }
 
-  protected val valueSchema = if (stateVariableInfoOpt.isDefined) {
-    placeholderSchema
+  protected val valueSchema : StructType = if (stateVariableInfoOpt.isDefined) {
+    schemaForValueRow
   } else if (partition.sourceOptions.internalOnlyReadAllColumnFamilies) {
-    colFamilyToSchema(StateStore.DEFAULT_COL_FAMILY_NAME).valueSchema
+    require(stateStoreColFamilySchemaOpt.isDefined)
+    stateStoreColFamilySchemaOpt.map(_.valueSchema).get
   } else {
     SchemaUtil.getSchemaAsDataType(
       schema, "value").asInstanceOf[StructType]
@@ -273,11 +257,12 @@ class StatePartitionAllColumnFamiliesReader(
     hadoopConf: SerializableConfiguration,
     partition: StateStoreInputPartition,
     schema: StructType,
-    keyStateEncoderSpec: KeyStateEncoderSpec)
+    keyStateEncoderSpec: KeyStateEncoderSpec,
+    stateStoreColFamilySchemaOpt: Option[StateStoreColFamilySchema])
   extends StatePartitionReaderBase(
     storeConf,
     hadoopConf, partition, schema,
-    keyStateEncoderSpec, None, None, None, None) {
+    keyStateEncoderSpec, None, stateStoreColFamilySchemaOpt, None, None) {
 
   private lazy val store: ReadStateStore = {
     assert(getStartStoreUniqueId == getEndStoreUniqueId,

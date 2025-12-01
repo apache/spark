@@ -88,8 +88,7 @@ object OfflineStateRepartitionErrors {
 
   def unsupportedStateStoreProviderError(
       checkpointLocation: String,
-      providerClass: String
-    ): StateRepartitionUnsupportedProviderError = {
+      providerClass: String): StateRepartitionUnsupportedProviderError = {
     new StateRepartitionUnsupportedProviderError(checkpointLocation, providerClass)
   }
 }
@@ -211,7 +210,8 @@ class StateRepartitionUnsupportedOffsetSeqVersionError(
 
 class StateRepartitionUnsupportedProviderError(
     checkpointLocation: String,
-    provider: String) extends StateRepartitionInvalidCheckpointError(
+    provider: String)
+  extends StateRepartitionInvalidCheckpointError(
     checkpointLocation,
     subClass = "UNSUPPORTED_PROVIDER",
     messageParameters = Map("provider" -> provider))

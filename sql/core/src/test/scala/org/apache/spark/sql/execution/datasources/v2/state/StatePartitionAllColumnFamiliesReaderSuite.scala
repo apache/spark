@@ -64,7 +64,6 @@ class StatePartitionAllColumnFamiliesReaderSuite extends StateDataSourceTestBase
       .option(StateSourceOptions.INTERNAL_ONLY_READ_ALL_COLUMN_FAMILIES, "true")
       .option(StateSourceOptions.STORE_NAME, storeName.orNull)
       .load()
-      .selectExpr("partition_key", "key_bytes", "value_bytes", "column_family_name")
   }
 
   /**
@@ -221,9 +220,10 @@ class StatePartitionAllColumnFamiliesReaderSuite extends StateDataSourceTestBase
         ))
 
         val normalData = getNormalReadDf(tempDir.getAbsolutePath).collect()
-        val bytesDf = getBytesReadDf(tempDir.getAbsolutePath).collect()
+        val bytesDf = getBytesReadDf(tempDir.getAbsolutePath)
 
-        compareNormalAndBytesData(normalData, bytesDf, "default", keySchema, valueSchema)
+        validateBytesReadDfSchema(bytesDf)
+        compareNormalAndBytesData(normalData, bytesDf.collect(), "default", keySchema, valueSchema)
       }
       }
     }
@@ -248,9 +248,10 @@ class StatePartitionAllColumnFamiliesReaderSuite extends StateDataSourceTestBase
         ))
 
         val normalData = getNormalReadDf(tempDir.getAbsolutePath).collect()
-        val bytesDf = getBytesReadDf(tempDir.getAbsolutePath).collect()
+        val bytesDf = getBytesReadDf(tempDir.getAbsolutePath)
 
-        compareNormalAndBytesData(normalData, bytesDf, "default", keySchema, valueSchema)
+        validateBytesReadDfSchema(bytesDf)
+        compareNormalAndBytesData(normalData, bytesDf.collect(), "default", keySchema, valueSchema)
       }
       }
     }
@@ -272,9 +273,10 @@ class StatePartitionAllColumnFamiliesReaderSuite extends StateDataSourceTestBase
         ))
 
         val normalData = getNormalReadDf(tempDir.getAbsolutePath).collect()
-        val bytesDf = getBytesReadDf(tempDir.getAbsolutePath).collect()
+        val bytesDf = getBytesReadDf(tempDir.getAbsolutePath)
 
-        compareNormalAndBytesData(normalData, bytesDf, "default", keySchema, valueSchema)
+        validateBytesReadDfSchema(bytesDf)
+        compareNormalAndBytesData(normalData, bytesDf.collect(), "default", keySchema, valueSchema)
       }
       }
     }
@@ -292,9 +294,10 @@ class StatePartitionAllColumnFamiliesReaderSuite extends StateDataSourceTestBase
         ))
 
         val normalData = getNormalReadDf(tempDir.getAbsolutePath).collect()
-        val bytesDf = getBytesReadDf(tempDir.getAbsolutePath).collect()
+        val bytesDf = getBytesReadDf(tempDir.getAbsolutePath)
 
-        compareNormalAndBytesData(normalData, bytesDf, "default", keySchema, valueSchema)
+        validateBytesReadDfSchema(bytesDf)
+        compareNormalAndBytesData(normalData, bytesDf.collect(), "default", keySchema, valueSchema)
       }
     }
 
@@ -310,9 +313,10 @@ class StatePartitionAllColumnFamiliesReaderSuite extends StateDataSourceTestBase
         ))
 
         val normalData = getNormalReadDf(tempDir.getAbsolutePath).collect()
-        val bytesDf = getBytesReadDf(tempDir.getAbsolutePath).collect()
+        val bytesDf = getBytesReadDf(tempDir.getAbsolutePath)
 
-        compareNormalAndBytesData(normalData, bytesDf, "default", keySchema, valueSchema)
+        validateBytesReadDfSchema(bytesDf)
+        compareNormalAndBytesData(normalData, bytesDf.collect(), "default", keySchema, valueSchema)
       }
     }
 
@@ -328,9 +332,10 @@ class StatePartitionAllColumnFamiliesReaderSuite extends StateDataSourceTestBase
         ))
 
         val normalData = getNormalReadDf(tempDir.getAbsolutePath).collect()
-        val bytesDf = getBytesReadDf(tempDir.getAbsolutePath).collect()
+        val bytesDf = getBytesReadDf(tempDir.getAbsolutePath)
 
-        compareNormalAndBytesData(normalData, bytesDf, "default", keySchema, valueSchema)
+        validateBytesReadDfSchema(bytesDf)
+        compareNormalAndBytesData(normalData, bytesDf.collect(), "default", keySchema, valueSchema)
       }
     }
 
@@ -353,9 +358,10 @@ class StatePartitionAllColumnFamiliesReaderSuite extends StateDataSourceTestBase
         ))
 
         val normalData = getNormalReadDf(tempDir.getAbsolutePath).collect()
-        val bytesDf = getBytesReadDf(tempDir.getAbsolutePath).collect()
+        val bytesDf = getBytesReadDf(tempDir.getAbsolutePath)
 
-        compareNormalAndBytesData(normalData, bytesDf, "default", keySchema, valueSchema)
+        validateBytesReadDfSchema(bytesDf)
+        compareNormalAndBytesData(normalData, bytesDf.collect(), "default", keySchema, valueSchema)
       }
     }
 
@@ -378,9 +384,11 @@ class StatePartitionAllColumnFamiliesReaderSuite extends StateDataSourceTestBase
           ))
 
           val normalData = getNormalReadDf(tempDir.getAbsolutePath).collect()
-          val bytesDf = getBytesReadDf(tempDir.getAbsolutePath).collect()
+          val bytesDf = getBytesReadDf(tempDir.getAbsolutePath)
 
-          compareNormalAndBytesData(normalData, bytesDf, "default", keySchema, valueSchema)
+          validateBytesReadDfSchema(bytesDf)
+          compareNormalAndBytesData(
+            normalData, bytesDf.collect(), "default", keySchema, valueSchema)
         }
       }
     }
@@ -403,8 +411,11 @@ class StatePartitionAllColumnFamiliesReaderSuite extends StateDataSourceTestBase
           ))
 
           val normalData = getNormalReadDf(tempDir.getAbsolutePath).collect()
-          val bytesDf = getBytesReadDf(tempDir.getAbsolutePath).collect()
-          compareNormalAndBytesData(normalData, bytesDf, "default", keySchema, valueSchema)
+          val bytesDf = getBytesReadDf(tempDir.getAbsolutePath)
+
+          validateBytesReadDfSchema(bytesDf)
+          compareNormalAndBytesData(
+            normalData, bytesDf.collect(), "default", keySchema, valueSchema)
         }
       }
     }
@@ -427,6 +438,7 @@ class StatePartitionAllColumnFamiliesReaderSuite extends StateDataSourceTestBase
               StructField("value", LongType)
             ))
 
+            validateBytesReadDfSchema(stateBytesDfForRight)
             compareNormalAndBytesData(
               stateReaderForRight.collect(),
               stateBytesDfForRight.collect(),
@@ -458,6 +470,7 @@ class StatePartitionAllColumnFamiliesReaderSuite extends StateDataSourceTestBase
               ))
             }
 
+            validateBytesReadDfSchema(stateBytesDfForRight)
             compareNormalAndBytesData(
               stateReaderForRight.collect(),
               stateBytesDfForRight.collect(),
