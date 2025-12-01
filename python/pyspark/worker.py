@@ -761,7 +761,13 @@ def wrap_grouped_map_pandas_udf(f, return_type, argspec, runner_conf):
         yield result
 
     arrow_return_type = to_arrow_type(return_type, _use_large_var_types)
-    return lambda k, v: (wrapped(k, v), arrow_return_type)
+
+    def flatten_wrapper(k, v):
+        # Return Iterator[[(df, arrow_type)]] directly
+        for df in wrapped(k, v):
+            yield [(df, arrow_return_type)]
+
+    return flatten_wrapper
 
 
 def wrap_grouped_map_pandas_iter_udf(f, return_type, argspec, runner_conf):
@@ -793,7 +799,13 @@ def wrap_grouped_map_pandas_iter_udf(f, return_type, argspec, runner_conf):
         yield from map(verify_element, result)
 
     arrow_return_type = to_arrow_type(return_type, _use_large_var_types)
-    return lambda k, v: (wrapped(k, v), arrow_return_type)
+
+    def flatten_wrapper(k, v):
+        # Return Iterator[[(df, arrow_type)]] directly
+        for df in wrapped(k, v):
+            yield [(df, arrow_return_type)]
+
+    return flatten_wrapper
 
 
 def wrap_grouped_transform_with_state_pandas_udf(f, return_type, runner_conf):
@@ -2988,7 +3000,6 @@ def read_udfs(pickleSer, infile, eval_type):
         or eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_ITER_UDF
     ):
         import pyarrow as pa
-        import pandas as pd
 
         # We assume there is only one UDF here because grouped map doesn't
         # support combining multiple UDFs.
@@ -3014,7 +3025,8 @@ def read_udfs(pickleSer, infile, eval_type):
                 for series_list in itertools.chain((first_series_list,), series_iter)
             )
 
-            return f(key_series, value_series_gen)
+            # Flatten one level: yield from wrapper to return Iterator[[(df, arrow_type)]]
+            yield from f(key_series, value_series_gen)
 
     elif eval_type == PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_UDF:
         # We assume there is only one UDF here because grouped map doesn't

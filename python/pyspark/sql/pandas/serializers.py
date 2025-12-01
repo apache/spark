@@ -1302,18 +1302,13 @@ class GroupPandasUDFSerializer(ArrowStreamPandasUDFSerializer):
 
     def dump_stream(self, iterator, stream):
         """
-        Flatten the (dataframes_generator, arrow_type) tuples by iterating over each generator.
-        This allows both regular and iterator UDFs to stream results without materializing all DataFrames.
+        Flatten the Iterator[Iterator[[(df, arrow_type)]]] returned by func.
+        The mapper returns Iterator[[(df, arrow_type)]], so we flatten one level
+        to match the parent's expected format Iterator[[(df, arrow_type)]].
         """
-        # Flatten: (dataframes_generator, arrow_type) -> (df, arrow_type), (df, arrow_type), ...
-        flattened_iter = (
-            (df, arrow_type) for dataframes_gen, arrow_type in iterator for df in dataframes_gen
-        )
-
-        # Convert each (df, arrow_type) to the format expected by parent's dump_stream
-        series_iter = ([(df, arrow_type)] for df, arrow_type in flattened_iter)
-
-        super(GroupPandasUDFSerializer, self).dump_stream(series_iter, stream)
+        # Flatten: Iterator[Iterator[[(df, arrow_type)]]] -> Iterator[[(df, arrow_type)]]
+        flattened_iter = (batch for generator in iterator for batch in generator)
+        super(GroupPandasUDFSerializer, self).dump_stream(flattened_iter, stream)
 
     def __repr__(self):
         return "GroupPandasUDFSerializer"
