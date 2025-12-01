@@ -114,7 +114,13 @@ class SparkConnectResultSet(
   }
 
   override def getString(columnIndex: Int): String = {
-    getColumnValue(columnIndex, null: String) { idx => String.valueOf(currentRow.get(idx)) }
+    getColumnValue(columnIndex, null: String) { idx =>
+      currentRow.get(idx) match {
+        case bytes: Array[Byte] =>
+          new String(bytes, java.nio.charset.StandardCharsets.UTF_8)
+        case other => String.valueOf(other)
+      }
+    }
   }
 
   override def getBoolean(columnIndex: Int): Boolean = {
