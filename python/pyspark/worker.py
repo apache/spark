@@ -735,15 +735,6 @@ def wrap_grouped_map_pandas_udf(f, return_type, argspec, runner_conf):
     _use_large_var_types = use_large_var_types(runner_conf)
     _assign_cols_by_name = assign_cols_by_name(runner_conf)
 
-    if _assign_cols_by_name:
-        expected_cols_and_types = {
-            col.name: to_arrow_type(col.dataType) for col in return_type.fields
-        }
-    else:
-        expected_cols_and_types = [
-            (col.name, to_arrow_type(col.dataType)) for col in return_type.fields
-        ]
-
     def wrapped(key_batch, value_batches):
         import pandas as pd
 
@@ -755,7 +746,7 @@ def wrap_grouped_map_pandas_udf(f, return_type, argspec, runner_conf):
         if len(argspec.args) == 1:
             result = f(pd.concat(value_series_list, axis=1))
         elif len(argspec.args) == 2:
-            key = tuple(c[0] for c in key_batch.columns)
+            key = tuple(c[0].as_py() if hasattr(c[0], "as_py") else c[0] for c in key_batch.columns)
             result = f(key, pd.concat(value_series_list, axis=1))
 
         verify_pandas_result(
@@ -772,15 +763,6 @@ def wrap_grouped_map_pandas_iter_udf(f, return_type, argspec, runner_conf):
     _use_large_var_types = use_large_var_types(runner_conf)
     _assign_cols_by_name = assign_cols_by_name(runner_conf)
 
-    if _assign_cols_by_name:
-        expected_cols_and_types = {
-            col.name: to_arrow_type(col.dataType) for col in return_type.fields
-        }
-    else:
-        expected_cols_and_types = [
-            (col.name, to_arrow_type(col.dataType)) for col in return_type.fields
-        ]
-
     def wrapped(key_batch, value_batches):
         import pandas as pd
 
@@ -793,7 +775,7 @@ def wrap_grouped_map_pandas_iter_udf(f, return_type, argspec, runner_conf):
         if len(argspec.args) == 1:
             result = f(dataframe_iter())
         elif len(argspec.args) == 2:
-            key = tuple(c[0] for c in key_batch.columns)
+            key = tuple(c[0].as_py() if hasattr(c[0], "as_py") else c[0] for c in key_batch.columns)
             result = f(key, dataframe_iter())
 
         def verify_element(df):
@@ -3020,7 +3002,7 @@ def read_udfs(pickleSer, infile, eval_type):
 
             # Extract key Series from the first batch
             key_series = [first_series_list[o] for o in parsed_offsets[0][0]]
-            # Create a RecordBatch-like structure for key_batch to match Arrow UDF interface
+            # Create a RecordBatch structure for key_batch
             key_batch = pa.RecordBatch.from_arrays(
                 [pa.Array.from_pandas(s) for s in key_series],
                 names=[f"_key_{i}" for i in range(len(key_series))],

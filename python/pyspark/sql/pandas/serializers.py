@@ -1274,7 +1274,6 @@ class GroupPandasUDFSerializer(ArrowStreamPandasUDFSerializer):
         def process_group(batches: "Iterator[pa.RecordBatch]"):
             # Convert each Arrow batch to pandas Series list on-demand, yielding one list per batch
             for batch in batches:
-                # The batch from ArrowStreamSerializer is already flattened (no struct wrapper)
                 series = [
                     self.arrow_to_pandas(c, i)
                     for i, c in enumerate(pa.Table.from_batches([batch]).itercolumns())
