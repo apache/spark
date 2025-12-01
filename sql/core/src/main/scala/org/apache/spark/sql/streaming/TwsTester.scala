@@ -59,8 +59,8 @@ class TwsTester[K, I, O](
   processor.setHandle(handle)
   processor.init(OutputMode.Append, TimeMode.None)
   processor match {
-    case p: StatefulProcessorWithInitialState[K @unchecked, I @unchecked, O @unchecked, S] =>
-      handleInitialState[S]()
+    case p: StatefulProcessorWithInitialState[K @unchecked, I @unchecked, O @unchecked, s] =>
+      handleInitialState[s]()
     case _ =>
       require(
         initialState.isEmpty,
