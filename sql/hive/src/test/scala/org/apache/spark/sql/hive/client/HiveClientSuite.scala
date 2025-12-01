@@ -609,6 +609,13 @@ class HiveClientSuite(version: String) extends HiveVersionSuite(version) {
     }
   }
 
+  test("read table written by Hive") {
+    withTable("test_tbl") {
+      client.runSqlHive("CREATE TABLE test_tbl AS SELECT 1")
+      assert(versionSpark.sql("SELECT * from test_tbl").collect() === Array(Row(1)))
+    }
+  }
+
   ///////////////////////////////////////////////////////////////////////////
   // Miscellaneous API
   ///////////////////////////////////////////////////////////////////////////
