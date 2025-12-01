@@ -359,6 +359,9 @@ optimization for Python UDFs throughout the entire SparkSession by setting the S
 ``spark.sql.execution.pythonUDF.arrow.enabled`` to true. It's important to note that the Spark configuration takes
 effect only when ``useArrow`` is either not set or set to None.
 
+Beginning in Spark 4.2, Arrow optimization is enabled by default for regular Python UDFs. To disable Arrow optimization,
+set ``spark.sql.execution.pythonUDF.arrow.enabled`` to false.
+
 The type hints for Arrow Python UDFs should be specified in the same way as for default, pickled Python UDFs.
 
 Here's an example that demonstrates the usage of both a default, pickled Python UDF and an Arrow Python UDF:
