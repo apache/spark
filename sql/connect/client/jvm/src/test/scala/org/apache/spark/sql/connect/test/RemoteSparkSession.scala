@@ -93,6 +93,11 @@ object SparkConnectServerUtils {
     if (isDebug) {
       builder.redirectError(Redirect.INHERIT)
       builder.redirectOutput(Redirect.INHERIT)
+    } else {
+      // If output is not consumed, the stdout/stderr pipe buffers will fill up,
+      // causing the server process to block on write() calls
+      builder.redirectError(Redirect.DISCARD)
+      builder.redirectOutput(Redirect.DISCARD)
     }
 
     val process = builder.start()
