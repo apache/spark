@@ -20,7 +20,7 @@ package org.apache.spark.sql
 import java.{lang => jl}
 import java.io.File
 import java.sql.{Date, Timestamp}
-import java.time.LocalDateTime
+import java.time.{LocalDateTime, LocalTime}
 
 import scala.collection.mutable
 import scala.util.Random
@@ -32,6 +32,7 @@ import org.apache.spark.sql.catalyst.expressions.AttributeMap
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, Histogram, HistogramBin, HistogramSerializer, LogicalPlan, Statistics}
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.catalyst.util.SparkDateTimeUtils.localTimeToNanos
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
@@ -68,6 +69,14 @@ abstract class StatisticsCollectionTestBase extends QueryTest with SQLTestUtils 
   t2.setNanos(987654000)
   private val tsNTZ2 = LocalDateTime.parse(t2Str.replace(" ", "T"))
 
+  // Time test values
+  private val time1Str = "10:30:45.123456"
+  private val time1 = LocalTime.parse(time1Str)
+  private val time1Internal = localTimeToNanos(time1)
+  private val time2Str = "14:45:30.987654"
+  private val time2 = LocalTime.parse(time2Str)
+  private val time2Internal = localTimeToNanos(time2)
+
   private val double1 = 1.123456789
   private val double2 = 6.987654321
 
@@ -78,14 +87,14 @@ abstract class StatisticsCollectionTestBase extends QueryTest with SQLTestUtils 
   protected val data = Seq[
     (jl.Boolean, jl.Byte, jl.Short, jl.Integer, jl.Long,
       jl.Double, jl.Float, java.math.BigDecimal,
-      String, Array[Byte], Date, Timestamp, LocalDateTime,
+      String, Array[Byte], Date, Timestamp, LocalDateTime, LocalTime,
       Seq[Int])](
     // scalastyle:off nonascii
     (false, 1.toByte, 1.toShort, 1, 1L, double1, 1.12345f,
-      dec1, "string escrito en español", "b1".getBytes, d1, t1, tsNTZ1, null),
+      dec1, "string escrito en español", "b1".getBytes, d1, t1, tsNTZ1, time1, null),
     (true, 2.toByte, 30000.toShort, 40000000, 5536453629L, double2, 7.54321f,
-      dec2, "日本語で書かれたstring", "a string full of bytes".getBytes, d2, t2, tsNTZ2, null),
-    (null, null, null, null, null, null, null, null, null, null, null, null, null, null)
+      dec2, "日本語で書かれたstring", "a string full of bytes".getBytes, d2, t2, tsNTZ2, time2, null),
+    (null, null, null, null, null, null, null, null, null, null, null, null, null, null, null)
     // scalastyle:on nonascii
   )
 
@@ -109,7 +118,9 @@ abstract class StatisticsCollectionTestBase extends QueryTest with SQLTestUtils 
     "ctimestamp" -> CatalogColumnStat(Some(2), Some(t1Str),
       Some(t2Str), Some(1), Some(8), Some(8)),
     "ctimestamp_ntz" -> CatalogColumnStat(Some(2), Some(t1Str),
-      Some(t2Str), Some(1), Some(8), Some(8))
+      Some(t2Str), Some(1), Some(8), Some(8)),
+    "ctime" -> CatalogColumnStat(Some(2), Some(time1Str),
+      Some(time2Str), Some(1), Some(8), Some(8))
   )
 
   /**
@@ -236,7 +247,14 @@ abstract class StatisticsCollectionTestBase extends QueryTest with SQLTestUtils 
     "spark.sql.statistics.colStats.ctimestamp_ntz.maxLen" -> "8",
     "spark.sql.statistics.colStats.ctimestamp_ntz.min" -> "2016-05-08 00:00:01.123456",
     "spark.sql.statistics.colStats.ctimestamp_ntz.nullCount" -> "1",
-    "spark.sql.statistics.colStats.ctimestamp_ntz.version" -> strVersion
+    "spark.sql.statistics.colStats.ctimestamp_ntz.version" -> strVersion,
+    "spark.sql.statistics.colStats.ctime.avgLen" -> "8",
+    "spark.sql.statistics.colStats.ctime.distinctCount" -> "2",
+    "spark.sql.statistics.colStats.ctime.max" -> "14:45:30.987654",
+    "spark.sql.statistics.colStats.ctime.maxLen" -> "8",
+    "spark.sql.statistics.colStats.ctime.min" -> "10:30:45.123456",
+    "spark.sql.statistics.colStats.ctime.nullCount" -> "1",
+    "spark.sql.statistics.colStats.ctime.version" -> strVersion
   )
 
   val expectedSerializedHistograms = Map(
