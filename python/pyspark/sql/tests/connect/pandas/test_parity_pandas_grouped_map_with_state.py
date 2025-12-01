@@ -15,7 +15,6 @@
 # limitations under the License.
 #
 import unittest
-import os
 
 from pyspark.sql.tests.pandas.test_pandas_grouped_map_with_state import (
     GroupedApplyInPandasWithStateTestsMixin,
@@ -23,9 +22,6 @@ from pyspark.sql.tests.pandas.test_pandas_grouped_map_with_state import (
 from pyspark.testing.connectutils import ReusedConnectTestCase
 
 
-@unittest.skipIf(
-    os.environ.get("SPARK_SKIP_CONNECT_COMPAT_TESTS") == "1", "SPARK-54479: To be reenabled"
-)
 class GroupedApplyInPandasWithStateTests(
     GroupedApplyInPandasWithStateTestsMixin, ReusedConnectTestCase
 ):
