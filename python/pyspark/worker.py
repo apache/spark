@@ -734,51 +734,68 @@ def wrap_grouped_map_arrow_iter_udf(f, return_type, argspec, runner_conf):
 def wrap_grouped_map_pandas_udf(f, return_type, argspec, runner_conf):
     _use_large_var_types = use_large_var_types(runner_conf)
     _assign_cols_by_name = assign_cols_by_name(runner_conf)
-    arrow_return_type = to_arrow_type(return_type, _use_large_var_types)
 
-    def wrapped(key_series, value_series_gen):
+    if _assign_cols_by_name:
+        expected_cols_and_types = {
+            col.name: to_arrow_type(col.dataType) for col in return_type.fields
+        }
+    else:
+        expected_cols_and_types = [
+            (col.name, to_arrow_type(col.dataType)) for col in return_type.fields
+        ]
+
+    def wrapped(key_batch, value_batches):
         import pandas as pd
 
-        # Consume all batches and concatenate into a single DataFrame
-        batch_dfs = [pd.concat(value_series, axis=1) for value_series in value_series_gen]
-        df = pd.concat(batch_dfs, axis=0, ignore_index=True) if batch_dfs else pd.DataFrame()
+        # Convert value_batches (Iterator[list[pd.Series]]) to a single DataFrame
+        value_series_list = []
+        for value_series in value_batches:
+            value_series_list.extend(value_series)
 
-        # Call UDF with or without key
         if len(argspec.args) == 1:
-            result = f(df)
-        else:
-            result = f(tuple(s[0] for s in key_series), df)
+            result = f(pd.concat(value_series_list, axis=1))
+        elif len(argspec.args) == 2:
+            key = tuple(c[0] for c in key_batch.columns)
+            result = f(key, pd.concat(value_series_list, axis=1))
 
         verify_pandas_result(
             result, return_type, _assign_cols_by_name, truncate_return_schema=False
         )
+
         yield result
 
-    def wrapper_with_type(k, v):
-        for df in wrapped(k, v):
-            yield (df, arrow_return_type)
-
-    return wrapper_with_type
+    arrow_return_type = to_arrow_type(return_type, _use_large_var_types)
+    return lambda k, v: (wrapped(k, v), arrow_return_type)
 
 
 def wrap_grouped_map_pandas_iter_udf(f, return_type, argspec, runner_conf):
     _use_large_var_types = use_large_var_types(runner_conf)
     _assign_cols_by_name = assign_cols_by_name(runner_conf)
-    arrow_return_type = to_arrow_type(return_type, _use_large_var_types)
 
-    def wrapped(key_series_list, value_series_gen):
+    if _assign_cols_by_name:
+        expected_cols_and_types = {
+            col.name: to_arrow_type(col.dataType) for col in return_type.fields
+        }
+    else:
+        expected_cols_and_types = [
+            (col.name, to_arrow_type(col.dataType)) for col in return_type.fields
+        ]
+
+    def wrapped(key_batch, value_batches):
         import pandas as pd
 
-        # Convert each batch to DataFrame iterator
-        dataframe_iter = (pd.concat(value_series, axis=1) for value_series in value_series_gen)
+        # value_batches is an Iterator[list[pd.Series]] (one list per batch)
+        # Convert each list of Series into a DataFrame
+        def dataframe_iter():
+            for value_series in value_batches:
+                yield pd.concat(value_series, axis=1)
 
-        # Call UDF with or without key
         if len(argspec.args) == 1:
-            result = f(dataframe_iter)
-        else:
-            result = f(tuple(s[0] for s in key_series_list), dataframe_iter)
+            result = f(dataframe_iter())
+        elif len(argspec.args) == 2:
+            key = tuple(c[0] for c in key_batch.columns)
+            result = f(key, dataframe_iter())
 
-        # Verify each element
         def verify_element(df):
             verify_pandas_result(
                 df, return_type, _assign_cols_by_name, truncate_return_schema=False
@@ -787,11 +804,8 @@ def wrap_grouped_map_pandas_iter_udf(f, return_type, argspec, runner_conf):
 
         yield from map(verify_element, result)
 
-    def wrapper_with_type(k, v):
-        for df in wrapped(k, v):
-            yield (df, arrow_return_type)
-
-    return wrapper_with_type
+    arrow_return_type = to_arrow_type(return_type, _use_large_var_types)
+    return lambda k, v: (wrapped(k, v), arrow_return_type)
 
 
 def wrap_grouped_transform_with_state_pandas_udf(f, return_type, runner_conf):
@@ -2734,9 +2748,9 @@ def read_udfs(pickleSer, infile, eval_type):
             ser = ArrowStreamAggPandasUDFSerializer(
                 timezone, safecheck, _assign_cols_by_name, int_to_decimal_coercion_enabled
             )
-        elif eval_type in (
-            PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
-            PythonEvalType.SQL_GROUPED_MAP_PANDAS_ITER_UDF,
+        elif (
+            eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF
+            or eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_ITER_UDF
         ):
             ser = GroupPandasUDFSerializer(
                 timezone, safecheck, _assign_cols_by_name, int_to_decimal_coercion_enabled
@@ -2985,6 +2999,9 @@ def read_udfs(pickleSer, infile, eval_type):
         eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF
         or eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_ITER_UDF
     ):
+        import pyarrow as pa
+        import pandas as pd
+
         # We assume there is only one UDF here because grouped map doesn't
         # support combining multiple UDFs.
         assert num_udfs == 1
@@ -2996,24 +3013,26 @@ def read_udfs(pickleSer, infile, eval_type):
         )
         parsed_offsets = extract_key_value_indexes(arg_offsets)
 
-        def mapper(series_lists_iter):
-            """
-            Mapper for grouped map pandas UDFs.
-            Note: Only supports single UDF. Returns iterator of (df, arrow_type) tuples.
-            """
-            # `series_lists_iter` is an iterator of Series lists (one list per batch)
-            # Materialize first batch to extract keys (guaranteed to exist for grouped operations)
-            series_iter = iter(series_lists_iter)
+        def mapper(a):
+            series_iter = iter(a)
+            # Need to materialize the first series list to get the keys
             first_series_list = next(series_iter)
-            keys = [first_series_list[o] for o in parsed_offsets[0][0]]
-            # Create generator for value series from all batches
+
+            # Extract key Series from the first batch
+            key_series = [first_series_list[o] for o in parsed_offsets[0][0]]
+            # Create a RecordBatch-like structure for key_batch to match Arrow UDF interface
+            key_batch = pa.RecordBatch.from_arrays(
+                [pa.Array.from_pandas(s) for s in key_series],
+                names=[f"_key_{i}" for i in range(len(key_series))],
+            )
+
+            # Create generator for value Series lists (one list per batch)
             value_series_gen = (
                 [series_list[o] for o in parsed_offsets[0][1]]
                 for series_list in itertools.chain((first_series_list,), series_iter)
             )
-            # Call wrapped function which returns generator of (df, arrow_type) tuples
-            # Yield from it to flatten the generator
-            yield from f(keys, value_series_gen)
+
+            return f(key_batch, value_series_gen)
 
     elif eval_type == PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_UDF:
         # We assume there is only one UDF here because grouped map doesn't
