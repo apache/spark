@@ -43,10 +43,12 @@ if have_pandas:
 
 class StatefulProcessorFactory:
     @abstractmethod
-    def pandas(self): ...
+    def pandas(self):
+        ...
 
     @abstractmethod
-    def row(self): ...
+    def row(self):
+        ...
 
     def get(self, use_pandas: bool = False):
         return self.pandas() if use_pandas else self.row()
@@ -385,26 +387,18 @@ class RowSimpleStatefulProcessorWithInitialState(StatefulProcessor):
         pass
 
 
-class PandasStatefulProcessorWithInitialStateTimers(
-    PandasSimpleStatefulProcessorWithInitialState
-):
-    def handleExpiredTimer(
-        self, key, timerValues, expiredTimerInfo
-    ) -> Iterator[pd.DataFrame]:
+class PandasStatefulProcessorWithInitialStateTimers(PandasSimpleStatefulProcessorWithInitialState):
+    def handleExpiredTimer(self, key, timerValues, expiredTimerInfo) -> Iterator[pd.DataFrame]:
         self.handle.deleteTimer(expiredTimerInfo.getExpiryTimeInMs())
         str_key = f"{str(key[0])}-expired"
-        yield pd.DataFrame(
-            {"id": (str_key,), "value": str(expiredTimerInfo.getExpiryTimeInMs())}
-        )
+        yield pd.DataFrame({"id": (str_key,), "value": str(expiredTimerInfo.getExpiryTimeInMs())})
 
     def handleInitialState(self, key, initialState, timerValues) -> None:
         super().handleInitialState(key, initialState, timerValues)
         self.handle.registerTimer(timerValues.getCurrentProcessingTimeInMs() - 1)
 
 
-class RowStatefulProcessorWithInitialStateTimers(
-    RowSimpleStatefulProcessorWithInitialState
-):
+class RowStatefulProcessorWithInitialStateTimers(RowSimpleStatefulProcessorWithInitialState):
     def handleExpiredTimer(self, key, timerValues, expiredTimerInfo) -> Iterator[Row]:
         self.handle.deleteTimer(expiredTimerInfo.getExpiryTimeInMs())
         str_key = f"{str(key[0])}-expired"
@@ -428,9 +422,7 @@ class PandasStatefulProcessorWithListStateInitialState(
             self.list_state.appendValue((val,))
 
 
-class RowStatefulProcessorWithListStateInitialState(
-    RowSimpleStatefulProcessorWithInitialState
-):
+class RowStatefulProcessorWithListStateInitialState(RowSimpleStatefulProcessorWithInitialState):
     def init(self, handle: StatefulProcessorHandle) -> None:
         super().init(handle)
         list_ele_schema = StructType([StructField("value", IntegerType(), True)])
@@ -448,9 +440,7 @@ class PandasEventTimeStatefulProcessor(StatefulProcessor):
         self.handle = handle
         self.max_state = handle.getValueState("max_state", state_schema)
 
-    def handleExpiredTimer(
-        self, key, timerValues, expiredTimerInfo
-    ) -> Iterator[pd.DataFrame]:
+    def handleExpiredTimer(self, key, timerValues, expiredTimerInfo) -> Iterator[pd.DataFrame]:
         self.max_state.clear()
         self.handle.deleteTimer(expiredTimerInfo.getExpiryTimeInMs())
         str_key = f"{str(key[0])}-expired"
@@ -522,9 +512,7 @@ class PandasProcTimeStatefulProcessor(StatefulProcessor):
         self.handle = handle
         self.count_state = handle.getValueState("count_state", state_schema)
 
-    def handleExpiredTimer(
-        self, key, timerValues, expiredTimerInfo
-    ) -> Iterator[pd.DataFrame]:
+    def handleExpiredTimer(self, key, timerValues, expiredTimerInfo) -> Iterator[pd.DataFrame]:
         # reset count state each time the timer is expired
         timer_list_1 = [e for e in self.handle.listTimers()]
         timer_list_2 = []
@@ -566,9 +554,7 @@ class PandasProcTimeStatefulProcessor(StatefulProcessor):
         self.count_state.update((str(count),))
         timestamp = str(timerValues.getCurrentProcessingTimeInMs())
 
-        yield pd.DataFrame(
-            {"id": key, "countAsString": str(count), "timeValues": timestamp}
-        )
+        yield pd.DataFrame({"id": key, "countAsString": str(count), "timeValues": timestamp})
 
     def close(self) -> None:
         pass
@@ -639,9 +625,7 @@ class PandasSimpleStatefulProcessor(StatefulProcessor, unittest.TestCase):
         handle.deleteIfExists("tempState")
 
     def handleInputRows(self, key, rows, timerValues) -> Iterator[pd.DataFrame]:
-        with self.assertRaisesRegex(
-            PySparkRuntimeError, "Error checking value state exists"
-        ):
+        with self.assertRaisesRegex(PySparkRuntimeError, "Error checking value state exists"):
             self.temp_state.exists()
         new_violations = 0
         count = 0
@@ -680,9 +664,7 @@ class RowSimpleStatefulProcessor(StatefulProcessor, unittest.TestCase):
         handle.deleteIfExists("tempState")
 
     def handleInputRows(self, key, rows, timerValues) -> Iterator[Row]:
-        with self.assertRaisesRegex(
-            PySparkRuntimeError, "Error checking value state exists"
-        ):
+        with self.assertRaisesRegex(PySparkRuntimeError, "Error checking value state exists"):
             self.temp_state.exists()
         new_violations = 0
         count = 0
@@ -740,14 +722,10 @@ class RowStatefulProcessorChainingOps(StatefulProcessor):
 
 # A stateful processor that inherit all behavior of SimpleStatefulProcessor except that it use
 # ttl state with a large timeout.
-class PandasSimpleTTLStatefulProcessor(
-    PandasSimpleStatefulProcessor, unittest.TestCase
-):
+class PandasSimpleTTLStatefulProcessor(PandasSimpleStatefulProcessor, unittest.TestCase):
     def init(self, handle: StatefulProcessorHandle) -> None:
         state_schema = StructType([StructField("value", IntegerType(), True)])
-        self.num_violations_state = handle.getValueState(
-            "numViolations", state_schema, 30000
-        )
+        self.num_violations_state = handle.getValueState("numViolations", state_schema, 30000)
         self.temp_state = handle.getValueState("tempState", state_schema)
         handle.deleteIfExists("tempState")
 
@@ -757,9 +735,7 @@ class PandasSimpleTTLStatefulProcessor(
 class RowSimpleTTLStatefulProcessor(RowSimpleStatefulProcessor, unittest.TestCase):
     def init(self, handle: StatefulProcessorHandle) -> None:
         state_schema = StructType([StructField("value", IntegerType(), True)])
-        self.num_violations_state = handle.getValueState(
-            "numViolations", state_schema, 30000
-        )
+        self.num_violations_state = handle.getValueState("numViolations", state_schema, 30000)
         self.temp_state = handle.getValueState("tempState", state_schema)
         handle.deleteIfExists("tempState")
 
@@ -908,9 +884,7 @@ class PandasListStateProcessor(StatefulProcessor):
         timestamp_schema = StructType([StructField("time", TimestampType(), True)])
         self.list_state1 = handle.getListState("listState1", state_schema)
         self.list_state2 = handle.getListState("listState2", state_schema)
-        self.list_state_timestamp = handle.getListState(
-            "listStateTimestamp", timestamp_schema
-        )
+        self.list_state_timestamp = handle.getListState("listStateTimestamp", timestamp_schema)
 
     def handleInputRows(self, key, rows, timerValues) -> Iterator[pd.DataFrame]:
         import datetime
@@ -976,9 +950,7 @@ class RowListStateProcessor(StatefulProcessor):
         timestamp_schema = StructType([StructField("time", TimestampType(), True)])
         self.list_state1 = handle.getListState("listState1", state_schema)
         self.list_state2 = handle.getListState("listState2", state_schema)
-        self.list_state_timestamp = handle.getListState(
-            "listStateTimestamp", timestamp_schema
-        )
+        self.list_state_timestamp = handle.getListState("listStateTimestamp", timestamp_schema)
 
     def handleInputRows(self, key, rows, timerValues) -> Iterator[Row]:
         import datetime
@@ -1071,14 +1043,14 @@ class PandasListStateLargeListProcessor(StatefulProcessor):
             list_size = self.list_size_state.get()
             assert list_size is not None
             list_size = list_size[0]
-            assert list_size == len(elements), (
-                f"list_size ({list_size}) != len(elements) ({len(elements)})"
-            )
+            assert list_size == len(
+                elements
+            ), f"list_size ({list_size}) != len(elements) ({len(elements)})"
 
             expected_elements_in_state = [(i, None) for i in range(list_size)]
-            assert elements == expected_elements_in_state, (
-                f"expected {expected_elements_in_state} but got {elements}"
-            )
+            assert (
+                elements == expected_elements_in_state
+            ), f"expected {expected_elements_in_state} but got {elements}"
 
             if key == ("0",):
                 # Use the operation `put`
@@ -1142,14 +1114,14 @@ class RowListStateLargeListProcessor(StatefulProcessor):
             list_size = self.list_size_state.get()
             assert list_size is not None
             list_size = list_size[0]
-            assert list_size == len(elements), (
-                f"list_size ({list_size}) != len(elements) ({len(elements)})"
-            )
+            assert list_size == len(
+                elements
+            ), f"list_size ({list_size}) != len(elements) ({len(elements)})"
 
             expected_elements_in_state = [(i, None) for i in range(list_size)]
-            assert elements == expected_elements_in_state, (
-                f"expected {expected_elements_in_state} but got {elements}"
-            )
+            assert (
+                elements == expected_elements_in_state
+            ), f"expected {expected_elements_in_state} but got {elements}"
 
             if key == ("0",):
                 # Use the operation `put`
@@ -1167,9 +1139,7 @@ class RowListStateLargeListProcessor(StatefulProcessor):
         prev_elements = ",".join(map(lambda x: str(x[0]), elements))
         updated_elements = ",".join(map(lambda x: str(x[0]), self.list_state.get()))
 
-        yield Row(
-            id=key[0], prevElements=prev_elements, updatedElements=updated_elements
-        )
+        yield Row(id=key[0], prevElements=prev_elements, updatedElements=updated_elements)
 
 
 class PandasListStateLargeTTLProcessor(PandasListStateProcessor):
@@ -1178,9 +1148,7 @@ class PandasListStateLargeTTLProcessor(PandasListStateProcessor):
         timestamp_schema = StructType([StructField("time", TimestampType(), True)])
         self.list_state1 = handle.getListState("listState1", state_schema, 30000)
         self.list_state2 = handle.getListState("listState2", state_schema, 30000)
-        self.list_state_timestamp = handle.getListState(
-            "listStateTimestamp", timestamp_schema
-        )
+        self.list_state_timestamp = handle.getListState("listStateTimestamp", timestamp_schema)
 
 
 class RowListStateLargeTTLProcessor(RowListStateProcessor):
@@ -1189,9 +1157,7 @@ class RowListStateLargeTTLProcessor(RowListStateProcessor):
         timestamp_schema = StructType([StructField("time", TimestampType(), True)])
         self.list_state1 = handle.getListState("listState1", state_schema, 30000)
         self.list_state2 = handle.getListState("listState2", state_schema, 30000)
-        self.list_state_timestamp = handle.getListState(
-            "listStateTimestamp", timestamp_schema
-        )
+        self.list_state_timestamp = handle.getListState("listStateTimestamp", timestamp_schema)
 
 
 class PandasMapStateProcessor(StatefulProcessor):
@@ -1283,9 +1249,7 @@ class PandasMapStateLargeTTLProcessor(PandasMapStateProcessor):
         key_schema = StructType([StructField("name", StringType(), True)])
         value_schema = StructType([StructField("count", IntegerType(), True)])
         # Use a large timeout as long as 1 year
-        self.map_state = handle.getMapState(
-            "mapState", key_schema, value_schema, 31536000000
-        )
+        self.map_state = handle.getMapState("mapState", key_schema, value_schema, 31536000000)
         self.list_state = handle.getListState("listState", key_schema)
 
 
@@ -1296,9 +1260,7 @@ class RowMapStateLargeTTLProcessor(RowMapStateProcessor):
         key_schema = StructType([StructField("name", StringType(), True)])
         value_schema = StructType([StructField("count", IntegerType(), True)])
         # Use a large timeout as long as 1 year
-        self.map_state = handle.getMapState(
-            "mapState", key_schema, value_schema, 31536000000
-        )
+        self.map_state = handle.getMapState("mapState", key_schema, value_schema, 31536000000)
         self.list_state = handle.getListState("listState", key_schema)
 
 
@@ -1791,9 +1753,7 @@ class PandasStatefulProcessorCompositeType(StatefulProcessor):
         map_value_schema = StructType(
             [
                 StructField("id", IntegerType(), True),
-                StructField(
-                    "attributes", MapType(StringType(), ArrayType(IntegerType())), True
-                ),
+                StructField("attributes", MapType(StringType(), ArrayType(IntegerType())), True),
                 StructField(
                     "confs",
                     MapType(StringType(), MapType(StringType(), IntegerType()), True),
@@ -1804,17 +1764,13 @@ class PandasStatefulProcessorCompositeType(StatefulProcessor):
 
         self.obj_state = handle.getValueState("obj_state", obj_schema)
         self.list_state = handle.getListState("list_state", obj_schema)
-        self.map_state = handle.getMapState(
-            "map_state", "name string", map_value_schema
-        )
+        self.map_state = handle.getMapState("map_state", "name string", map_value_schema)
 
     def _update_obj_state(self, total_temperature):
         if self.obj_state.exists():
             ids, tags, metadata = self.obj_state.get()
             assert tags == self.TAGS, f"Tag mismatch: {tags}"
-            assert metadata == [Row(**m) for m in self.METADATA], (
-                f"Metadata mismatch: {metadata}"
-            )
+            assert metadata == [Row(**m) for m in self.METADATA], f"Metadata mismatch: {metadata}"
             ids = [int(x + total_temperature) for x in ids]
         else:
             ids = [0]
@@ -1906,9 +1862,7 @@ class RowStatefulProcessorCompositeType(StatefulProcessor):
         map_value_schema = StructType(
             [
                 StructField("id", IntegerType(), True),
-                StructField(
-                    "attributes", MapType(StringType(), ArrayType(IntegerType())), True
-                ),
+                StructField("attributes", MapType(StringType(), ArrayType(IntegerType())), True),
                 StructField(
                     "confs",
                     MapType(StringType(), MapType(StringType(), IntegerType()), True),
@@ -1919,17 +1873,13 @@ class RowStatefulProcessorCompositeType(StatefulProcessor):
 
         self.obj_state = handle.getValueState("obj_state", obj_schema)
         self.list_state = handle.getListState("list_state", obj_schema)
-        self.map_state = handle.getMapState(
-            "map_state", "name string", map_value_schema
-        )
+        self.map_state = handle.getMapState("map_state", "name string", map_value_schema)
 
     def _update_obj_state(self, total_temperature):
         if self.obj_state.exists():
             ids, tags, metadata = self.obj_state.get()
             assert tags == self.TAGS, f"Tag mismatch: {tags}"
-            assert metadata == [Row(**m) for m in self.METADATA], (
-                f"Metadata mismatch: {metadata}"
-            )
+            assert metadata == [Row(**m) for m in self.METADATA], f"Metadata mismatch: {metadata}"
             ids = [int(x + total_temperature) for x in ids]
         else:
             ids = [0]
@@ -2193,9 +2143,7 @@ class PandasLargeValueStatefulProcessor(StatefulProcessor):
         value_retrieved = self.value_state.get()[0]
 
         # Test ListState with large strings
-        self.list_state.put(
-            [(large_string,), (large_string + "b",), (large_string + "c",)]
-        )
+        self.list_state.put([(large_string,), (large_string + "b",), (large_string + "c",)])
         list_retrieved = list(self.list_state.get())
         list_elements = ",".join([elem[0] for elem in list_retrieved])
 
@@ -2238,9 +2186,7 @@ class RowLargeValueStatefulProcessor(StatefulProcessor):
         value_retrieved = self.value_state.get()[0]
 
         # Test ListState with large strings
-        self.list_state.put(
-            [(large_string,), (large_string + "b",), (large_string + "c",)]
-        )
+        self.list_state.put([(large_string,), (large_string + "b",), (large_string + "c",)])
         list_retrieved = list(self.list_state.get())
         list_elements = ",".join([elem[0] for elem in list_retrieved])
 
@@ -2303,18 +2249,14 @@ class TopKProcessor(StatefulProcessor):
     def handleInputRows(self, key, rows, timerValues) -> Iterator[pd.DataFrame | Row]:
         scores = [score_tuple[0] for score_tuple in self.topk.get()]
         if self.use_pandas:
-            scores.extend(
-                [row.score for row_df in rows for _, row in row_df.iterrows()]
-            )
+            scores.extend([row.score for row_df in rows for _, row in row_df.iterrows()])
         else:
             scores.extend([row.score for row in rows])
 
         top_k_scores = sorted(scores, reverse=True)[: self.k]
         self.topk.put([(score,) for score in top_k_scores])
         if self.use_pandas:
-            yield pd.DataFrame(
-                {"key": [key[0]] * len(top_k_scores), "score": top_k_scores}
-            )
+            yield pd.DataFrame({"key": [key[0]] * len(top_k_scores), "score": top_k_scores})
         else:
             for score in top_k_scores:
                 yield Row(key=key[0], score=score)
@@ -2329,9 +2271,7 @@ class RowWordFrequencyProcessor(StatefulProcessor):
         for row in rows:
             word = row.word
             current_count = (
-                self.freq_state.getValue((word,))[0]
-                if self.freq_state.containsKey((word,))
-                else 0
+                self.freq_state.getValue((word,))[0] if self.freq_state.containsKey((word,)) else 0
             )
             updated_count = current_count + 1
             self.freq_state.updateValue((word,), (updated_count,))
@@ -2443,9 +2383,7 @@ class AllMethodsTestProcessor(StatefulProcessor):
             result_str = f"map-values:{','.join(map(str, values))}"
             return self._make_result(key, result_str)
         elif cmd == "map-iterator":
-            pairs = sorted(
-                [(k[0], v[0]) for k, v in self.map_state.iterator()], key=lambda x: x[0]
-            )
+            pairs = sorted([(k[0], v[0]) for k, v in self.map_state.iterator()], key=lambda x: x[0])
             result_str = f"map-iterator:{','.join([f'{k}={v}' for k, v in pairs])}"
             return self._make_result(key, result_str)
         elif cmd == "map-remove":

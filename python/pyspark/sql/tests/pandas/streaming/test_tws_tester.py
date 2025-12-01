@@ -139,9 +139,7 @@ class TwsTesterTests(ReusedSQLTestCase):
         ]
 
         ans2 = tester.test([Row(key="key1", score=10.0)])
-        self.assertEqual(
-            ans2, [Row(key="key1", score=10.0), Row(key="key1", score=3.0)]
-        )
+        self.assertEqual(ans2, [Row(key="key1", score=10.0), Row(key="key1", score=3.0)])
 
     def test_topk_processor_pandas(self):
         processor = TopKProcessorFactory(k=2).pandas()
@@ -277,9 +275,7 @@ class TwsTesterTests(ReusedSQLTestCase):
             tester.peekMapState("frequencies", "user1"),
             {("hello",): (6,), ("world",): (3,), ("goodbye",): (1,)},
         )
-        self.assertEqual(
-            tester.peekMapState("frequencies", "user2"), {("spark",): (11,)}
-        )
+        self.assertEqual(tester.peekMapState("frequencies", "user2"), {("spark",): (11,)})
         self.assertEqual(tester.peekMapState("frequencies", "user3"), {("new",): (1,)})
         self.assertEqual(tester.peekMapState("frequencies", "user4"), {})
 
@@ -354,16 +350,12 @@ class TwsTesterTests(ReusedSQLTestCase):
         processor = RunningCountStatefulProcessorFactory().pandas()
         tester = TwsTester(
             processor,
-            initialStatePandas=pd.DataFrame(
-                {"key": ["a", "b"], "initial_count": [10, 20]}
-            ),
+            initialStatePandas=pd.DataFrame({"key": ["a", "b"], "initial_count": [10, 20]}),
         )
         self.assertEqual(tester.peekValueState("count", "a"), (10,))
         self.assertEqual(tester.peekValueState("count", "b"), (20,))
 
-        ans = tester.testInPandas(
-            pd.DataFrame({"key": ["a", "c"], "value": ["a", "c"]})
-        )
+        ans = tester.testInPandas(pd.DataFrame({"key": ["a", "c"], "value": ["a", "c"]}))
         expected = pd.DataFrame({"key": ["a", "c"], "count": [11, 1]})
         pdt.assert_frame_equal(ans, expected, check_like=True)
 
@@ -544,9 +536,7 @@ class TwsTesterTests(ReusedSQLTestCase):
     def test_numeric_key_column(self):
         processor = RunningCountStatefulProcessorFactory().row()
         tester = TwsTester(processor, key_column_name="id")
-        result = tester.test(
-            [Row(id=1, value="a"), Row(id=2, value="b"), Row(id=1, value="c")]
-        )
+        result = tester.test([Row(id=1, value="a"), Row(id=2, value="b"), Row(id=1, value="c")])
         self.assertEqual(result, [Row(key=1, count=2), Row(key=2, count=1)])
 
     def test_tuple_key_column(self):
@@ -558,9 +548,7 @@ class TwsTesterTests(ReusedSQLTestCase):
     def test_special_characters_in_key(self):
         processor = RunningCountStatefulProcessorFactory().row()
         tester = TwsTester(processor)
-        result = tester.test(
-            [Row(key="key@#$%", value="a"), Row(key="key@#$%", value="b")]
-        )
+        result = tester.test([Row(key="key@#$%", value="a"), Row(key="key@#$%", value="b")])
         self.assertEqual(result, [Row(key="key@#$%", count=2)])
 
     def test_null_key_value_row(self):
@@ -702,9 +690,7 @@ class TwsTesterTests(ReusedSQLTestCase):
     def test_pandas_with_duplicate_keys(self):
         processor = RunningCountStatefulProcessorFactory().pandas()
         tester = TwsTester(processor)
-        input_df = pd.DataFrame(
-            {"key": ["key1", "key1", "key1"], "value": ["a", "b", "c"]}
-        )
+        input_df = pd.DataFrame({"key": ["key1", "key1", "key1"], "value": ["a", "b", "c"]})
         result = tester.testInPandas(input_df)
         expected = pd.DataFrame({"key": ["key1"], "count": [3]})
         pdt.assert_frame_equal(result, expected, check_like=True)
@@ -826,13 +812,9 @@ class TwsTesterFuzzTests(ReusedSQLTestCase):
         def _run_tester(batch: list[tuple]) -> list[Row]:
             if use_pandas:
                 input_to_tester = pd.DataFrame(batch, columns=input_columns)
-                return self.spark.createDataFrame(
-                    tester.testInPandas(input_to_tester)
-                ).collect()
+                return self.spark.createDataFrame(tester.testInPandas(input_to_tester)).collect()
             else:
-                input_to_tester: list[Row] = [
-                    Row(**dict(zip(input_columns, r))) for r in batch
-                ]
+                input_to_tester: list[Row] = [Row(**dict(zip(input_columns, r))) for r in batch]
                 return tester.test(input_to_tester)
 
         expected_results: list[list[Row]] = [_run_tester(batch) for batch in batches]
