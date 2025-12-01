@@ -726,6 +726,7 @@ private[sql] class RocksDBStateStoreProvider
    * @param readOnly Whether to open the store in read-only mode
    * @param existingStore Optional existing store to reuse instead of creating a new one
    * @param forceSnapshotOnCommit Whether to force a snapshot upload on commit
+   * @param loadEmpty If true, creates an empty store at this version without loading previous data
    * @return The loaded state store
    */
   private def loadStateStore(
@@ -733,8 +734,8 @@ private[sql] class RocksDBStateStoreProvider
       uniqueId: Option[String] = None,
       readOnly: Boolean,
       existingStore: Option[RocksDBStateStore] = None,
-      forceSnapshotOnCommit: Boolean = false): StateStore = {
-    println("loading state store ", version)
+      forceSnapshotOnCommit: Boolean = false,
+      loadEmpty: Boolean = false): StateStore = {
     var acquiredStamp: Option[Long] = None
     var storeLoaded = false
     try {
@@ -763,10 +764,18 @@ private[sql] class RocksDBStateStoreProvider
           Some(s)
       }
 
-      rocksDB.load(
-        version,
-        stateStoreCkptId = if (storeConf.enableStateStoreCheckpointIds) uniqueId else None,
-        readOnly = readOnly)
+      // Load RocksDB: either empty or from existing checkpoints
+      if (loadEmpty) {
+        rocksDB.loadEmpty(
+          targetVersion = version,
+          stateStoreCkptId = if (storeConf.enableStateStoreCheckpointIds) uniqueId else None,
+          readOnly = readOnly)
+      } else {
+        rocksDB.load(
+          version,
+          stateStoreCkptId = if (storeConf.enableStateStoreCheckpointIds) uniqueId else None,
+          readOnly = readOnly)
+      }
 
       // Create or reuse store instance
       val store = existingStore match {
@@ -807,12 +816,14 @@ private[sql] class RocksDBStateStoreProvider
   override def getStore(
       version: Long,
       uniqueId: Option[String] = None,
-      forceSnapshotOnCommit: Boolean = false): StateStore = {
+      forceSnapshotOnCommit: Boolean = false,
+      loadEmpty: Boolean = false): StateStore = {
     loadStateStore(
       version,
       uniqueId,
       readOnly = false,
-      forceSnapshotOnCommit = forceSnapshotOnCommit
+      forceSnapshotOnCommit = if (loadEmpty) true else forceSnapshotOnCommit,
+      loadEmpty = loadEmpty
     )
   }
 

@@ -732,6 +732,91 @@ class RocksDB(
   }
 
   /**
+   * Create an empty RocksDB state store at the specified version without loading previous data.
+   *
+   * This method is useful when state will be completely rewritten and
+   * does not need to load previous states
+   *
+   * @param targetVersion The version to initialize the empty store at (must be >= 0)
+   * @param stateStoreCkptId Optional checkpoint ID (required if checkpoint IDs are enabled)
+   * @param readOnly Whether to open the store in read-only mode
+   * @return A RocksDB instance with an empty state at the target version
+   */
+  def loadEmpty(
+      targetVersion: Long,
+      stateStoreCkptId: Option[String] = None,
+      readOnly: Boolean = false): RocksDB = {
+
+    assert(targetVersion >= 0, s"Target version must be >= 0, got $targetVersion")
+    recordedMetrics = None
+    loadMetrics.clear()
+
+    logInfo(log"Creating empty store at version ${MDC(LogKeys.VERSION_NUM, targetVersion)} " +
+      log"with stateStoreCkptId: ${MDC(LogKeys.UUID, stateStoreCkptId.getOrElse(""))}")
+
+    try {
+      closeDB(ignoreException = false)
+
+      // Use version 0 logic to create empty directory with no SST files
+      val metadata = fileManager.loadCheckpointFromDfs(0, workingDir, rocksDBFileMapping, None)
+
+      // Set version tracking to target version
+      loadedVersion = targetVersion
+
+      // Handle checkpoint IDs if enabled
+      if (enableStateStoreCheckpointIds) {
+        require(stateStoreCkptId.isDefined,
+          "stateStoreCkptId must be defined when checkpoint IDs are enabled")
+
+        loadedStateStoreCkptId = stateStoreCkptId
+        sessionStateStoreCkptId = Some(java.util.UUID.randomUUID.toString)
+        lastCommitBasedStateStoreCkptId = None
+        lastCommittedStateStoreCkptId = None
+
+        // Clear lineage - targetVersion has no checkpoint, so no dependencies
+        lineageManager.clear()
+      }
+
+      // Initialize maxVersion to target version
+      fileManager.setMaxSeenVersion(targetVersion)
+
+      openLocalRocksDB(metadata)
+
+      // Empty store has no keys
+      numKeysOnLoadedVersion = 0
+      numInternalKeysOnLoadedVersion = 0
+
+      // Initialize changelog writer for next version with empty lineage
+      if (enableChangelogCheckpointing && !readOnly) {
+        changelogWriter.foreach(_.abort())
+
+        // Empty lineage since this is a fresh start with forced snapshot
+        changelogWriter = Some(fileManager.getChangeLogWriter(
+          targetVersion + 1,
+          useColumnFamilies,
+          sessionStateStoreCkptId,
+          if (enableStateStoreCheckpointIds) Some(Array.empty[LineageItem]) else None
+        ))
+      }
+
+      logInfo(log"Created empty store at version ${MDC(LogKeys.VERSION_NUM, targetVersion)}")
+    } catch {
+      case t: Throwable =>
+        loadedVersion = -1  // invalidate loaded data
+        if (enableStateStoreCheckpointIds) {
+          lastCommitBasedStateStoreCkptId = None
+          lastCommittedStateStoreCkptId = None
+          loadedStateStoreCkptId = None
+          sessionStateStoreCkptId = None
+          lineageManager.clear()
+        }
+        throw t
+    }
+
+    this
+  }
+
+  /**
    * Load from the start snapshot version and apply all the changelog records to reach the
    * end version. Note that this will copy all the necessary files from DFS to local disk as needed,
    * and possibly restart the native RocksDB instance.
