@@ -95,7 +95,8 @@ class SignalingStateStoreProvider extends StateStoreProvider with Logging {
   override def getStore(
       version: Long,
       uniqueId: Option[String],
-      forceSnapshotOnCommit: Boolean = false): StateStore = null
+      forceSnapshotOnCommit: Boolean = false,
+      loadEmpty: Boolean = false): StateStore = null
 
   /**
    * Simulates a maintenance operation that blocks until a signal is received.
@@ -175,7 +176,8 @@ class FakeStateStoreProviderTracksCloseThread extends StateStoreProvider {
   override def getStore(
       version: Long,
       uniqueId: Option[String],
-      forceSnapshotOnCommit: Boolean = false): StateStore = null
+      forceSnapshotOnCommit: Boolean = false,
+      loadEmpty: Boolean = false): StateStore = null
 
   override def doMaintenance(): Unit = {}
 }
@@ -247,7 +249,8 @@ class FakeStateStoreProviderWithMaintenanceError extends StateStoreProvider {
   override def getStore(
     version: Long,
     uniqueId: Option[String],
-    forceSnapshotOnCommit: Boolean = false): StateStore = null
+    forceSnapshotOnCommit: Boolean = false,
+    loadEmpty: Boolean = false): StateStore = null
 
   override def doMaintenance(): Unit = {
     Thread.currentThread.setUncaughtExceptionHandler(exceptionHandler)
@@ -1436,6 +1439,25 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
     }
     assert(e.getMessage.contains(
       "HDFSBackedStateStoreProvider does not support checkpointFormatVersion > 1"))
+  }
+
+  test("SPARK-54420: HDFSBackedStateStoreProvider does not support load empty store") {
+    val provider = new HDFSBackedStateStoreProvider()
+    provider.init(
+      StateStoreId(newDir(), Random.nextInt(), 0),
+      keySchema,
+      valueSchema,
+      NoPrefixKeyStateEncoderSpec(keySchema),
+      useColumnFamilies = false,
+      new StateStoreConf(),
+      new Configuration())
+
+    val e = intercept[StateStoreUnsupportedOperationException] {
+      provider.getStore(0, loadEmpty = true)
+    }
+    assert(e.getMessage.contains(
+      "getStore operation not supported with loadEmpty parameter is not supported " +
+        "in HDFSBackedStateStoreProvider"))
   }
 
   test("Auto snapshot repair") {
