@@ -976,7 +976,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
         .filter { id => !executorsPendingToRemove.contains(id) }
         .filter { id => force || !scheduler.isExecutorBusy(id) }
       executorsToKill.foreach { id => {
-        scheduler.markExecutorPendingToRemove(id)
+        scheduler.executorPendingToRemove(id)
         executorsPendingToRemove(id) = !countFailures
       } }
 

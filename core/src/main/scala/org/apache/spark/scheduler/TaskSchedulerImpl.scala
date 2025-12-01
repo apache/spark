@@ -1205,7 +1205,7 @@ private[spark] class TaskSchedulerImpl(
     }
   }
 
-  override def markExecutorPendingToRemove(executorId: String): Unit = synchronized {
+  override def executorPendingToRemove(executorId: String): Unit = synchronized {
     removeAvailableExecutor(executorId)
   }
 
