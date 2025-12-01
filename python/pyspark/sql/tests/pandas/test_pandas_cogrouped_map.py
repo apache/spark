@@ -17,7 +17,6 @@
 
 import unittest
 from typing import cast
-import os
 
 from pyspark.sql.functions import array, explode, col, lit, udf, pandas_udf, sum
 from pyspark.sql.types import (
@@ -240,9 +239,6 @@ class CogroupedApplyInPandasTestsMixin:
 
         self._test_merge_empty(fn=merge_pandas)
 
-    @unittest.skipIf(
-        os.environ.get("SPARK_SKIP_CONNECT_COMPAT_TESTS") == "1", "SPARK-54481: To be reenabled"
-    )
     def test_apply_in_pandas_returning_incompatible_type(self):
         with self.quiet():
             self.check_apply_in_pandas_returning_incompatible_type()
@@ -266,7 +262,7 @@ class CogroupedApplyInPandasTestsMixin:
                             "`spark.sql.execution.pandas.convertToArrowArraySafely`."
                         )
                     self._test_merge_error(
-                        fn=lambda lft, rgt: pd.DataFrame({"id": [1], "k": ["2.0"]}),
+                        fn=lambda lft, rgt: pd.DataFrame({"id": [1], "k": ["test_string"]}),
                         output_schema="id long, k double",
                         errorClass=PythonException,
                         error_message_regex=expected,
