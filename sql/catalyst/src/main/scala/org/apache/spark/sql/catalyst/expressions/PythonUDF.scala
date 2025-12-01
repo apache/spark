@@ -100,8 +100,8 @@ case class PythonUDF(
     children: Seq[Expression],
     evalType: Int,
     udfDeterministic: Boolean,
-    safe_src: Option[String] = None,
-    safe_ast: Option[Any] = None,
+    safe_src: Option[String],
+    safe_ast: Option[Any],
     resultId: ExprId = NamedExpression.newExprId)
   extends Expression with PythonFuncExpression with Unevaluable {
 

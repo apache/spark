@@ -24,6 +24,7 @@ import scala.collection.mutable.ArrayBuffer
 import net.razorvine.pickle.Pickler
 
 import org.apache.spark.api.python.{PythonEvalType, PythonFunction, PythonWorkerUtils, SpecialLengths}
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{Column, TableArg}
 import org.apache.spark.sql.catalyst.expressions.{Alias, Ascending, Descending, Expression, FunctionTableSubqueryArgumentExpression, NamedArgumentExpression, NullsFirst, NullsLast, PythonUDAF, PythonUDF, PythonUDTF, PythonUDTFAnalyzeResult, PythonUDTFSelectedExpression, SortOrder, UnresolvedPolymorphicPythonUDTF, UnresolvedTableArgPlanId}
 import org.apache.spark.sql.catalyst.parser.ParserInterface
@@ -47,7 +48,7 @@ case class UserDefinedPythonFunction(
     // default values null for now until we get SparkConnect side implemented.
     src: String = null, // this might be null.
     ast: Any = null // for now? let's... think if we can do something smarter.
-) {
+) extends Logging {
 
   def builder(e: Seq[Expression]): Expression = {
     if (pythonEvalType == PythonEvalType.SQL_BATCHED_UDF
@@ -66,11 +67,17 @@ case class UserDefinedPythonFunction(
       throw QueryCompilationErrors.namedArgumentsNotSupported(name)
     }
 
+    throw new Exception("yo")
+    logError("Hiiii!")
+
     // Py4J gives us nulls lets make them into options
     val safe_src = src match {
-      case null => None
-      case "" => None
-      case s => Some(s)
+      case null | "" =>
+        logError("No Python src provided for UDF")
+        None
+      case s =>
+        logError(s"Using python src for UDF: $s")
+        Some(s)
     }
 
     val safe_ast = ast match {
