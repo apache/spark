@@ -76,7 +76,7 @@ def _dump_to_tree(node):
     basic types for sending over to the JVM side.
     """
     def _format(node, level=0):
-        if isinstance(node, AST):
+        if isinstance(node, ast.AST):
             cls = type(node)
             args = []
             args_buffer = []
@@ -98,7 +98,7 @@ def _dump_to_tree(node):
             return (list(_format(x, level)[0] for x in node)), False
         return repr(node), True
 
-    if not isinstance(node, AST):
+    if not isinstance(node, ast.AST):
         raise TypeError('expected AST, got %r' % node.__class__.__name__)
     return _format(node)[0]
 
@@ -112,17 +112,8 @@ def _create_udf(
     """Create a regular(non-Arrow-optimized) Python UDF."""
     # Set the name of the UserDefinedFunction object to be the name of function f
     # Possible todo: heuristic for if we even bother.
-    ast_info = None
-    src = None
-    try:
-        # Note: consider maybe dill? (see the JYTHON PR)
-        src = inspect.getsource(func)
-        ast_info = ast.parse(src)
-        ast_dumped = _dump_to_tree(ast_info)
-    except Exception as e:
-        warnings.warn(f"Error building AST for UDF: {e} -- proceeding without opportunity for transpilation")
     udf_obj = UserDefinedFunction(
-        f, returnType=returnType, name=name, evalType=evalType, deterministic=deterministic, src, ast_dumped
+        f, returnType=returnType, name=name, evalType=evalType, deterministic=deterministic
     )
     return udf_obj._wrapped()
 
@@ -206,16 +197,8 @@ class UserDefinedFunction:
         returnType: "DataTypeOrString" = StringType(),
         name: Optional[str] = None,
         evalType: int = PythonEvalType.SQL_BATCHED_UDF,
-        deterministic: bool = True,
-        src: Optional[str] = None,
-        ast_info: Optional[ast.AST] = None,
+        deterministic: bool = True
     ):
-        if not callable(func):
-            raise PySparkTypeError(
-                errorClass="NOT_CALLABLE",
-                messageParameters={"arg_name": "func", "arg_type": type(func).__name__},
-            )
-
         if not isinstance(returnType, (DataType, str)):
             raise PySparkTypeError(
                 errorClass="NOT_DATATYPE_OR_STR",
@@ -241,6 +224,30 @@ class UserDefinedFunction:
         )
         self.evalType = evalType
         self.deterministic = deterministic
+        # Make sure the function is callable first.
+        if not callable(func):
+            raise PySparkTypeError(
+                errorClass="NOT_CALLABLE",
+                messageParameters={"arg_name": "func", "arg_type": type(func).__name__},
+            )
+
+        ast_info = None
+        ast_dumped = None
+        src = None
+        try:
+            # Note: consider maybe dill? (see the JYTHON PR)
+            # inspect getsource does not work for functions defined in vanilla
+            # repl, but does for those in files or in ipython.
+            # It also fails when we give it an instance of a callable class.
+            try:
+                src = inspect.getsource(func)
+            except Exception:
+                src = inspect.getsource(func.__call__)
+            ast_info = ast.parse(src)
+            ast_dumped = _dump_to_tree(ast_info)
+        except Exception as e:
+            warnings.warn(f"Error building AST for UDF: {e} -- proceeding without opportunity for transpilation")
+        print(f"Hiii! Using {src} AND {ast_dumped} to make my UDF")
         self.src = src
         self.ast_dumped = ast_dumped
 
