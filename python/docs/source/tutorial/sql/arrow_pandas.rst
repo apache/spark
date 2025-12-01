@@ -383,10 +383,10 @@ Type coercion differences are introduced by the following changes:
 The full type coercion difference is summarized in the tables `here <https://github.com/apache/spark/pull/41706>`__.
 To disable Arrow optimization, set ``spark.sql.execution.pythonUDF.arrow.enabled`` to false.
 
-* Since Spark 4.1, unnecessary conversion to pandas instances is removed in the serializer
+* Since Spark 4.1, unnecessary conversion to pandas instances in Arrow-optimized Python UDF is removed in the serializer
 when ``spark.sql.legacy.execution.pythonUDF.pandas.conversion.enabled`` is disabled.
 The behavior difference is summarized in the tables `here <https://github.com/apache/spark/pull/51225>`__.
-To restore the previous behavior, enable ``spark.sql.legacy.execution.pythonUDF.pandas.conversion.enabled``.
+To restore the legacy behavior, set ``spark.sql.legacy.execution.pythonUDF.pandas.conversion.enabled`` to true.
 
 Usage Notes
 -----------
