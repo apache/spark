@@ -668,18 +668,20 @@ abstract class SchemaPruningSuite
     }
   }
 
-  testSchemaPruning("SPARK-51831: Column pruning with exists Join") {
-    withContacts {
-      val query = sql(
-        """
-          |select sum(t1.id) as sum_id
-          |from contacts as t1
-          |where exists(select * from contacts as t2 where t1.id == t2.id)
-          |""".stripMargin)
-      checkScan(query,
-        "struct<id:int>",
-        "struct<id:int>")
-      checkAnswer(query, Row(6))
+  testSchemaPruning("Column pruning with exists Join") {
+    withSQLConf(SQLConf.EXISTS_PRUNING_ENABLED.key -> "true") {
+      withContacts {
+        val query = sql(
+          """
+            |select sum(t1.id) as sum_id
+            |from contacts as t1
+            |where exists(select * from contacts as t2 where t1.id == t2.id)
+            |""".stripMargin)
+        checkScan(query,
+          "struct<id:int>",
+          "struct<id:int>")
+        checkAnswer(query, Row(6))
+      }
     }
   }
 

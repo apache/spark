@@ -22,15 +22,18 @@ TakeOrderedAndProject [s_store_name1,s_store_id1,d_week_seq1,(sun_sales1 / sun_s
                                   WholeStageCodegen (1)
                                     Filter [d_date_sk,d_week_seq]
                                       Subquery #1
-                                        ObjectHashAggregate [buf] [bloom_filter_agg(xxhash64(d_week_seq, 42), 335, 8990, 0, 0),bloomFilter,buf]
-                                          Exchange #3
-                                            ObjectHashAggregate [d_week_seq] [buf,buf]
-                                              WholeStageCodegen (1)
-                                                Project [d_week_seq]
-                                                  Filter [d_month_seq,d_week_seq]
-                                                    ColumnarToRow
-                                                      InputAdapter
-                                                        Scan parquet spark_catalog.default.date_dim [d_month_seq,d_week_seq]
+                                        WholeStageCodegen (2)
+                                          Project [bloomFilter,bloomFilter]
+                                            InputAdapter
+                                              ObjectHashAggregate [buf,buf] [bloom_filter_agg(xxhash64(d_week_seq, 42), 335, 8990, 0, 0),bloom_filter_agg(xxhash64(d_week_seq, 42), 335, 8990, 0, 0),bloomFilter,bloomFilter,buf,buf]
+                                                Exchange #3
+                                                  ObjectHashAggregate [d_week_seq,propagatedFilter,propagatedFilter] [buf,buf,buf,buf]
+                                                    WholeStageCodegen (1)
+                                                      Project [d_week_seq,d_month_seq]
+                                                        Filter [d_month_seq,d_week_seq]
+                                                          ColumnarToRow
+                                                            InputAdapter
+                                                              Scan parquet spark_catalog.default.date_dim [d_month_seq,d_week_seq]
                                       ColumnarToRow
                                         InputAdapter
                                           Scan parquet spark_catalog.default.date_dim [d_date_sk,d_week_seq,d_day_name]
@@ -71,28 +74,19 @@ TakeOrderedAndProject [s_store_name1,s_store_id1,d_week_seq1,(sun_sales1 / sun_s
                                       BroadcastExchange #8
                                         WholeStageCodegen (5)
                                           Filter [d_date_sk,d_week_seq]
-                                            Subquery #2
-                                              ObjectHashAggregate [buf] [bloom_filter_agg(xxhash64(d_week_seq, 42), 335, 8990, 0, 0),bloomFilter,buf]
-                                                Exchange #9
-                                                  ObjectHashAggregate [d_week_seq] [buf,buf]
-                                                    WholeStageCodegen (1)
-                                                      Project [d_week_seq]
-                                                        Filter [d_month_seq,d_week_seq]
-                                                          ColumnarToRow
-                                                            InputAdapter
-                                                              Scan parquet spark_catalog.default.date_dim [d_month_seq,d_week_seq]
+                                            ReusedSubquery [mergedValue] #1
                                             ColumnarToRow
                                               InputAdapter
                                                 Scan parquet spark_catalog.default.date_dim [d_date_sk,d_week_seq,d_day_name]
                       InputAdapter
-                        BroadcastExchange #10
+                        BroadcastExchange #9
                           WholeStageCodegen (7)
                             Filter [s_store_sk,s_store_id]
                               ColumnarToRow
                                 InputAdapter
                                   Scan parquet spark_catalog.default.store [s_store_sk,s_store_id]
                   InputAdapter
-                    BroadcastExchange #11
+                    BroadcastExchange #10
                       WholeStageCodegen (8)
                         Project [d_week_seq]
                           Filter [d_month_seq,d_week_seq]
