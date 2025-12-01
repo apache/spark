@@ -744,7 +744,7 @@ def wrap_grouped_map_pandas_udf(f, return_type, argspec, runner_conf):
         value_dataframes = []
         for value_series in value_batches:
             value_dataframes.append(pd.concat(value_series, axis=1))
-        
+
         value_df = pd.concat(value_dataframes, axis=0) if value_dataframes else pd.DataFrame()
 
         if len(argspec.args) == 1:
