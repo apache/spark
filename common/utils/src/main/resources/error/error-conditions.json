@@ -2447,7 +2447,6 @@
   "INTERNAL_ERROR_INVALID_HIVE_COLUMN_TYPE" : {
     "message" : [
       "Failed to convert Hive table to Spark catalog table.",
-      "Error: <message>",
       "Database: <dbName>",
       "Table: <tableName>"
     ],

@@ -1639,7 +1639,6 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
     new SparkException(
       errorClass = "INTERNAL_ERROR_INVALID_HIVE_COLUMN_TYPE",
       messageParameters = Map(
-        "message" -> e.getMessage,
         "dbName" -> dbName,
         "tableName" -> tableName),
       cause = e)
