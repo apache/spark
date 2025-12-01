@@ -151,7 +151,7 @@ class MaxAbsScalerModel(Model, HasInputCol, HasOutputCol, ParamsReadWrite, CoreM
     def _load_core_model(self, path: str) -> None:
         import pyarrow.parquet as pq
 
-        table = pa.parquet.read_table(path)
+        table = pq.read_table(path)
 
         self.max_abs_values = np.array(table.column("scale")[0].as_py())
         self.scale_values = np.array(table.column("max_abs")[0].as_py())
@@ -275,7 +275,7 @@ class StandardScalerModel(Model, HasInputCol, HasOutputCol, ParamsReadWrite, Cor
     def _load_core_model(self, path: str) -> None:
         import pyarrow.parquet as pq
 
-        table = pa.parquet.read_table(path)
+        table = pq.read_table(path)
 
         self.scale_values = np.array(table.column("scale")[0].as_py())
         self.mean_values = np.array(table.column("mean")[0].as_py())
