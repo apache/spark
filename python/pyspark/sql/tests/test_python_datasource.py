@@ -68,8 +68,7 @@ class BasePythonDataSourceTestsMixin:
     spark: SparkSession
 
     def test_basic_data_source_class(self):
-        class MyDataSource(DataSource):
-            ...
+        class MyDataSource(DataSource): ...
 
         options = dict(a=1, b=2)
         ds = MyDataSource(options=options)
@@ -797,8 +796,9 @@ class BasePythonDataSourceTestsMixin:
             (True, "Segmentation fault"),
             (False, "Consider setting .* for the better Python traceback."),
         ]:
-            with self.subTest(enabled=enabled), self.sql_conf(
-                {"spark.sql.execution.pyspark.udf.faulthandler.enabled": enabled}
+            with (
+                self.subTest(enabled=enabled),
+                self.sql_conf({"spark.sql.execution.pyspark.udf.faulthandler.enabled": enabled}),
             ):
                 with self.subTest(worker="pyspark.sql.worker.create_data_source"):
 
@@ -1262,8 +1262,7 @@ class BasePythonDataSourceTestsMixin:
                 )
 
 
-class PythonDataSourceTests(BasePythonDataSourceTestsMixin, ReusedSQLTestCase):
-    ...
+class PythonDataSourceTests(BasePythonDataSourceTestsMixin, ReusedSQLTestCase): ...
 
 
 if __name__ == "__main__":

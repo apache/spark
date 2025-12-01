@@ -1743,9 +1743,9 @@ def read_udtf(pickleSer, infile, eval_type):
                 raise PySparkRuntimeError(
                     errorClass="INVALID_ARROW_UDTF_TABLE_ARGUMENT",
                     messageParameters={
-                        "actual_type": str(type(original_batch))
-                        if original_batch is not None
-                        else "None"
+                        "actual_type": (
+                            str(type(original_batch)) if original_batch is not None else "None"
+                        )
                     },
                 )
 
@@ -2412,9 +2412,11 @@ def read_udtf(pickleSer, infile, eval_type):
                 ]
                 for a in it:
                     pylist = [
-                        [conv(v) for v in column.to_pylist()]
-                        if conv is not None
-                        else column.to_pylist()
+                        (
+                            [conv(v) for v in column.to_pylist()]
+                            if conv is not None
+                            else column.to_pylist()
+                        )
                         for column, conv in zip(a.columns, converters)
                     ]
                     # The eval function yields an iterator. Each element produced by this
