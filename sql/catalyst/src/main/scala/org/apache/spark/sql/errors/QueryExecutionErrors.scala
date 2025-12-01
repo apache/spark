@@ -1667,7 +1667,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
 
   def getPartitionMetadataByFilterError(e: Exception): SparkRuntimeException = {
     new SparkRuntimeException(
-      errorClass = "_LEGACY_ERROR_TEMP_2193",
+      errorClass = "INTERNAL_ERROR_HIVE_METASTORE_PARTITION_FILTER",
       messageParameters = Map(
         "hiveMetastorePartitionPruningFallbackOnException" ->
           SQLConf.HIVE_METASTORE_PARTITION_PRUNING_FALLBACK_ON_EXCEPTION.key),
