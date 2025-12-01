@@ -282,7 +282,7 @@ class TwsTester:
     >>> tester.peekValueState("count", "key1")
     >>> # Returns: (6,)
 
-    .. versionadded:: 4.2.0
+    .. versionadded:: 4.0.2
     """
 
     def __init__(
