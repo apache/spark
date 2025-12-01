@@ -339,6 +339,8 @@ class PythonException(CapturedException, BasePythonException):
     def __str__(self) -> str:
         messageParameters = self.getMessageParameters()
 
+        if messageParameters is None:
+            return super().__str__()
         return f"{messageParameters.get('msg')}:\n{messageParameters.get('traceback')}"
 
 
