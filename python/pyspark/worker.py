@@ -735,19 +735,24 @@ def wrap_grouped_map_pandas_udf(f, return_type, argspec, runner_conf):
     _use_large_var_types = use_large_var_types(runner_conf)
     _assign_cols_by_name = assign_cols_by_name(runner_conf)
 
-    def wrapped(key_batch, value_batches):
+    def wrapped(key_series, value_batches):
         import pandas as pd
 
         # Convert value_batches (Iterator[list[pd.Series]]) to a single DataFrame
-        value_series_list = []
+        # Each value_series is a list of Series (one per column) for one batch
+        # Concatenate Series within each batch (axis=1), then concatenate batches (axis=0)
+        value_dataframes = []
         for value_series in value_batches:
-            value_series_list.extend(value_series)
+            value_dataframes.append(pd.concat(value_series, axis=1))
+        
+        value_df = pd.concat(value_dataframes, axis=0) if value_dataframes else pd.DataFrame()
 
         if len(argspec.args) == 1:
-            result = f(pd.concat(value_series_list, axis=1))
+            result = f(value_df)
         elif len(argspec.args) == 2:
-            key = tuple(c[0].as_py() if hasattr(c[0], "as_py") else c[0] for c in key_batch.columns)
-            result = f(key, pd.concat(value_series_list, axis=1))
+            # Extract key from pandas Series, preserving numpy types
+            key = tuple(s.iloc[0] for s in key_series)
+            result = f(key, value_df)
 
         verify_pandas_result(
             result, return_type, _assign_cols_by_name, truncate_return_schema=False
@@ -763,7 +768,7 @@ def wrap_grouped_map_pandas_iter_udf(f, return_type, argspec, runner_conf):
     _use_large_var_types = use_large_var_types(runner_conf)
     _assign_cols_by_name = assign_cols_by_name(runner_conf)
 
-    def wrapped(key_batch, value_batches):
+    def wrapped(key_series, value_batches):
         import pandas as pd
 
         # value_batches is an Iterator[list[pd.Series]] (one list per batch)
@@ -775,7 +780,8 @@ def wrap_grouped_map_pandas_iter_udf(f, return_type, argspec, runner_conf):
         if len(argspec.args) == 1:
             result = f(dataframe_iter())
         elif len(argspec.args) == 2:
-            key = tuple(c[0].as_py() if hasattr(c[0], "as_py") else c[0] for c in key_batch.columns)
+            # Extract key from pandas Series, preserving numpy types
+            key = tuple(s.iloc[0] for s in key_series)
             result = f(key, dataframe_iter())
 
         def verify_element(df):
@@ -2995,18 +3001,12 @@ def read_udfs(pickleSer, infile, eval_type):
         )
         parsed_offsets = extract_key_value_indexes(arg_offsets)
 
-        def mapper(a):
-            series_iter = iter(a)
+        def mapper(series_iter):
             # Need to materialize the first series list to get the keys
             first_series_list = next(series_iter)
 
             # Extract key Series from the first batch
             key_series = [first_series_list[o] for o in parsed_offsets[0][0]]
-            # Create a RecordBatch structure for key_batch
-            key_batch = pa.RecordBatch.from_arrays(
-                [pa.Array.from_pandas(s) for s in key_series],
-                names=[f"_key_{i}" for i in range(len(key_series))],
-            )
 
             # Create generator for value Series lists (one list per batch)
             value_series_gen = (
@@ -3014,7 +3014,7 @@ def read_udfs(pickleSer, infile, eval_type):
                 for series_list in itertools.chain((first_series_list,), series_iter)
             )
 
-            return f(key_batch, value_series_gen)
+            return f(key_series, value_series_gen)
 
     elif eval_type == PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_UDF:
         # We assume there is only one UDF here because grouped map doesn't
