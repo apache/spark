@@ -450,7 +450,20 @@ class ArtifactManager(session: SparkSession) extends AutoCloseable with Logging 
     pythonIncludeList.clear()
     sparkContextRelativePaths.clear()
 
-    // Removed cached classloader
+    // Close and remove cached classloader
+    cachedClassLoader.foreach {
+      case urlClassLoader: URLClassLoader =>
+        try {
+          urlClassLoader.close()
+          logDebug(log"Closed URLClassLoader for session " +
+            log"${MDC(LogKeys.SESSION_ID, session.sessionUUID)}")
+        } catch {
+          case e: IOException =>
+            logWarning(log"Failed to close URLClassLoader for session " +
+              log"${MDC(LogKeys.SESSION_ID, session.sessionUUID)}", e)
+        }
+      case _ =>
+    }
     cachedClassLoader = None
   }
 

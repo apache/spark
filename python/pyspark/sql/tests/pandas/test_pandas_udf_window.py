@@ -190,6 +190,32 @@ class WindowPandasUDFTestsMixin:
 
         assert_frame_equal(expected1.toPandas(), result1.toPandas())
 
+    def test_multiple_udfs_in_single_projection(self):
+        """
+        Test multiple window aggregate pandas UDFs in a single select/projection.
+        """
+        df = self.data
+        w = self.unbounded_window
+
+        # Use select() with multiple window UDFs in the same projection
+        result1 = df.select(
+            df["id"],
+            df["v"],
+            self.pandas_agg_mean_udf(df["v"]).over(w).alias("mean_v"),
+            self.pandas_agg_max_udf(df["v"]).over(w).alias("max_v"),
+            self.pandas_agg_min_udf(df["w"]).over(w).alias("min_w"),
+        )
+
+        expected1 = df.select(
+            df["id"],
+            df["v"],
+            sf.mean(df["v"]).over(w).alias("mean_v"),
+            sf.max(df["v"]).over(w).alias("max_v"),
+            sf.min(df["w"]).over(w).alias("min_w"),
+        )
+
+        assert_frame_equal(expected1.toPandas(), result1.toPandas())
+
     def test_replace_existing(self):
         df = self.data
         w = self.unbounded_window
