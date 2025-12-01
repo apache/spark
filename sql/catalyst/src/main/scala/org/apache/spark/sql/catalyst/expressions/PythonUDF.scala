@@ -100,6 +100,8 @@ case class PythonUDF(
     children: Seq[Expression],
     evalType: Int,
     udfDeterministic: Boolean,
+    safe_src: Option[String] = None,
+    safe_ast: Option[Any] = None,
     resultId: ExprId = NamedExpression.newExprId)
   extends Expression with PythonFuncExpression with Unevaluable {
 
@@ -143,6 +145,8 @@ case class PythonUDAF(
     children: Seq[Expression],
     udfDeterministic: Boolean,
     evalType: Int = PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF,
+    safe_src: Option[String] = None,
+    safe_ast: Option[Any] = None,
     resultId: ExprId = NamedExpression.newExprId)
   extends UnevaluableAggregateFunc with PythonFuncExpression {
 

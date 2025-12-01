@@ -17,6 +17,7 @@
 """
 User-defined function related classes and functions
 """
+import ast
 import functools
 import inspect
 import sys
@@ -65,9 +66,41 @@ def _wrap_function(
         sc.pythonExec,
         sc.pythonVer,
         broadcast_vars,
-        sc._javaAccumulator,
+        sc._javaAccumulator
     )
 
+def _dump_to_tree(node):
+    """
+    Return a formatted dump of the tree in node. This is based on
+    Lib/ast.py from the standard library, but modified to return
+    basic types for sending over to the JVM side.
+    """
+    def _format(node, level=0):
+        if isinstance(node, AST):
+            cls = type(node)
+            args = []
+            args_buffer = []
+            allsimple = True
+            for name in node._fields:
+                try:
+                    value = getattr(node, name)
+                except AttributeError:
+                    continue
+                if value is None and getattr(cls, name, ...) is None:
+                    continue
+                value, simple = _format(value, level)
+                allsimple = allsimple and simple
+                args.append((name, value))
+            return (node.__class__.__name__, args), False
+        elif isinstance(node, list):
+            if not node:
+                return [], True
+            return (list(_format(x, level)[0] for x in node)), False
+        return repr(node), True
+
+    if not isinstance(node, AST):
+        raise TypeError('expected AST, got %r' % node.__class__.__name__)
+    return _format(node)[0]
 
 def _create_udf(
     f: Callable[..., Any],
@@ -78,8 +111,18 @@ def _create_udf(
 ) -> "UserDefinedFunctionLike":
     """Create a regular(non-Arrow-optimized) Python UDF."""
     # Set the name of the UserDefinedFunction object to be the name of function f
+    # Possible todo: heuristic for if we even bother.
+    ast_info = None
+    src = None
+    try:
+        # Note: consider maybe dill? (see the JYTHON PR)
+        src = inspect.getsource(func)
+        ast_info = ast.parse(src)
+        ast_dumped = _dump_to_tree(ast_info)
+    except Exception as e:
+        warnings.warn(f"Error building AST for UDF: {e} -- proceeding without opportunity for transpilation")
     udf_obj = UserDefinedFunction(
-        f, returnType=returnType, name=name, evalType=evalType, deterministic=deterministic
+        f, returnType=returnType, name=name, evalType=evalType, deterministic=deterministic, src, ast_dumped
     )
     return udf_obj._wrapped()
 
@@ -164,6 +207,8 @@ class UserDefinedFunction:
         name: Optional[str] = None,
         evalType: int = PythonEvalType.SQL_BATCHED_UDF,
         deterministic: bool = True,
+        src: Optional[str] = None,
+        ast_info: Optional[ast.AST] = None,
     ):
         if not callable(func):
             raise PySparkTypeError(
@@ -196,6 +241,8 @@ class UserDefinedFunction:
         )
         self.evalType = evalType
         self.deterministic = deterministic
+        self.src = src
+        self.ast_dumped = ast_dumped
 
     @staticmethod
     def _check_return_type(returnType: DataType, evalType: int) -> None:
@@ -413,7 +460,7 @@ class UserDefinedFunction:
         jdt = spark._jsparkSession.parseDataType(self.returnType.json())
         assert sc._jvm is not None
         judf = getattr(sc._jvm, "org.apache.spark.sql.execution.python.UserDefinedPythonFunction")(
-            self._name, wrapped_func, jdt, self.evalType, self.deterministic
+            self._name, wrapped_func, jdt, self.evalType, self.deterministic, self.src, self.ast_dumped
         )
         return judf
 

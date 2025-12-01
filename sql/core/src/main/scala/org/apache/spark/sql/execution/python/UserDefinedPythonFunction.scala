@@ -43,7 +43,11 @@ case class UserDefinedPythonFunction(
     func: PythonFunction,
     dataType: DataType,
     pythonEvalType: Int,
-    udfDeterministic: Boolean) {
+    udfDeterministic: Boolean,
+    // default values null for now until we get SparkConnect side implemented.
+    src: String = null, // this might be null.
+    ast: Any = null // for now? let's... think if we can do something smarter.
+) {
 
   def builder(e: Seq[Expression]): Expression = {
     if (pythonEvalType == PythonEvalType.SQL_BATCHED_UDF
@@ -62,11 +66,23 @@ case class UserDefinedPythonFunction(
       throw QueryCompilationErrors.namedArgumentsNotSupported(name)
     }
 
+    // Py4J gives us nulls lets make them into options
+    val safe_src = src match {
+      case null => None
+      case "" => None
+      case s => Some(s)
+    }
+
+    val safe_ast = ast match {
+      case null => None
+      case a => Some(a)
+    }
+
     if (pythonEvalType == PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF
       || pythonEvalType == PythonEvalType.SQL_GROUPED_AGG_ARROW_UDF) {
-      PythonUDAF(name, func, dataType, e, udfDeterministic, pythonEvalType)
+      PythonUDAF(name, func, dataType, e, udfDeterministic, pythonEvalType, safe_src, safe_ast)
     } else {
-      PythonUDF(name, func, dataType, e, pythonEvalType, udfDeterministic)
+      PythonUDF(name, func, dataType, e, pythonEvalType, udfDeterministic, safe_src, safe_ast)
     }
   }
 
