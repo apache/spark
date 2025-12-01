@@ -335,6 +335,7 @@ class PythonException(CapturedException, BasePythonException):
     """
     Exceptions thrown from Python workers.
     """
+
     def __str__(self) -> str:
         messageParameters = self.getMessageParameters()
 

@@ -413,7 +413,9 @@ class StreamingListenerTests(StreamingListenerTestsMixin, ReusedSQLTestCase):
                         self.fail("Not getting terminated event after 50 seconds")
                 q.stop()
                 self.spark.sparkContext._jsc.sc().listenerBus().waitUntilEmpty()
-                self.check_terminated_event(terminated_event, "ZeroDivisionError")
+                self.check_terminated_event(
+                    terminated_event, "ZeroDivisionError", errorClass="PYTHON_EXCEPTION"
+                )
 
             finally:
                 self.spark.streams.removeListener(test_listener)
