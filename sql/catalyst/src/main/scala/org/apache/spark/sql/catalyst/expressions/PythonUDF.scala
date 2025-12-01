@@ -17,8 +17,11 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import scala.jdk.CollectionConverters._
+
 import org.apache.spark.SparkException.internalError
 import org.apache.spark.api.python.{PythonEvalType, PythonFunction}
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.UnresolvedException
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateFunction
@@ -103,7 +106,7 @@ case class PythonUDF(
     safe_src: Option[String],
     safe_ast: Option[Any],
     resultId: ExprId = NamedExpression.newExprId)
-  extends Expression with PythonFuncExpression with Unevaluable {
+  extends Expression with PythonFuncExpression with Unevaluable with Logging {
 
   lazy val resultAttribute: Attribute = AttributeReference(toPrettySQL(this), dataType, nullable)(
     exprId = resultId)
@@ -118,6 +121,105 @@ case class PythonUDF(
 
   override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): PythonUDF =
     copy(children = newChildren)
+
+  /**
+   * Try and convert the provided AST to a native Catalyst expression if
+   * possible, otherwise return None.
+   */
+  def toCatalyst(): Option[Expression] = {
+    safe_ast match {
+      case None => None
+      case Some(ast) =>
+        if (ast.isInstanceOf[java.util.List[_]]) {
+          val happy_ast = _recursive_to_scala_for_java_lists(ast.asInstanceOf[java.util.List[Any]])
+          convert_ast(happy_ast)
+        } else {
+          None
+        }
+    }
+  }
+
+  def convert_ast(ast: List[Any]): Option[Expression] = {
+    val lambda_ast_opt = _get_lambda_ast(ast)
+    lambda_ast_opt match {
+      case None => None
+      case Some(lambda_ast) =>
+        val params = _get_paramater_list(lambda_ast)
+        val body_ast = _get_lambda_body(lambda_ast)
+        logWarning(s"Got {params} {body_ast} from {ast}!")
+        None
+    }
+  }
+
+  def _recursive_to_scala_for_java_lists(ast: java.util.List[Any]): List[Any] = {
+    ast.asScala.map {
+      case inner_list: java.util.List[_] =>
+        _recursive_to_scala_for_java_lists(inner_list.asInstanceOf[java.util.List[Any]])
+      case other => other
+    }.toList
+  }
+
+  private def _get_child_ast_from_node_name(node_name: String, ast: List[_]): Option[List[_]] = {
+    logWarning(f"Looking for {node_name} in {ast}")
+    val direct_child_with_name = ast.find(elem =>
+      elem.isInstanceOf[List[_]] &&
+        elem.asInstanceOf[List[_]].headOption == Some(node_name))
+    direct_child_with_name.map(_.asInstanceOf[List[_]].tail.asInstanceOf[List[_]])
+  }
+
+  private def _get_child_after_match_in_order(
+    node_names: List[String],
+    ast: List[_]): Option[List[_]] = {
+    node_names match {
+      case Nil => Some(ast)
+      case head :: tail =>
+        _get_child_ast_from_node_name(head, ast) match {
+          case Some(child_ast) =>
+            _get_child_after_match_in_order(tail, child_ast)
+          case None =>
+            None
+        }
+    }
+  }
+
+  /**
+   * Get the top level list of parameter names from the AST.
+   * There could be multiple of these nested, but we only care about the top level one.
+   */
+  private def _get_paramater_list(lambda_ast: List[_]): List[String] = {
+    val arguments_ast = _get_child_after_match_in_order(
+      List("args", "arguments", "args"),
+      lambda_ast)
+    arguments_ast.map { arg_nested_tuple =>
+      // todo: named params check.
+      // ['arg', [['arg', "'x'"]]]
+      arg_nested_tuple(1).asInstanceOf[List[_]](0).asInstanceOf[List[_]](1)
+        .asInstanceOf[String]
+    }.toList
+  }
+
+  private def _get_lambda_ast(ast: List[_]): Option[List[_]] = {
+    // The general Tree that is "ok" for us to start with is
+    // "Module" -> "Body" -> "Assign", we can ignore what we are being assigned to for now
+    // then grab the value side of the assignment and it could be either lambda OR
+    // Call -> Func -> Args -> Lambda
+    val assigned = _get_child_after_match_in_order(
+      List("Module", "Body", "Assign"),
+      ast).getOrElse(throw new Exception("No Assignment?"))
+    val body_direct = _get_child_after_match_in_order(
+      List("Lambda"),
+      assigned)
+    body_direct match {
+      case Some(body) => body_direct
+      case None => _get_child_after_match_in_order(
+        List("Call", "Func", "Args", "Lambda"),
+        assigned)
+    }
+  }
+
+  private def _get_lambda_body(lambda_ast: List[_]): Option[List[_]] = {
+    _get_child_ast_from_node_name("Body", lambda_ast)
+  }
 }
 
 abstract class UnevaluableAggregateFunc extends AggregateFunction {

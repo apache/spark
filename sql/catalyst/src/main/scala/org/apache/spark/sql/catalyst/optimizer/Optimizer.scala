@@ -100,6 +100,8 @@ abstract class Optimizer(catalogManager: CatalogManager)
   def defaultBatches: Seq[Batch] = {
     val operatorOptimizationRuleSet =
       Seq(
+        // UDF Transpilation
+        ConvertToCatalyst,
         // Operator push down
         PushProjectionThroughUnion,
         PushProjectionThroughLimitAndOffset,
@@ -968,6 +970,21 @@ object LimitPushDown extends Rule[LogicalPlan] {
       LocalLimit(le, udf.copy(child = maybePushLocalLimit(le, udf.child)))
     case LocalLimit(le, p @ Project(_, udf: ArrowEvalPython)) =>
       LocalLimit(le, p.copy(child = udf.copy(child = maybePushLocalLimit(le, udf.child))))
+  }
+}
+
+/**
+ * Attempt to convert UDFS to Catalyst expressions.
+ */
+object ConvertToCatalyst extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = {
+    plan.transformAllExpressionsWithPruning(_.containsPattern(PYTHON_UDF)) {
+      case s: PythonUDF =>
+        s.toCatalyst() match {
+          case None => s
+          case Some(catalystExpr) => catalystExpr
+        }
+    }
   }
 }
 

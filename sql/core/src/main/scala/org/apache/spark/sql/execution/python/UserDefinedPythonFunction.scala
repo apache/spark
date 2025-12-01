@@ -67,16 +67,13 @@ case class UserDefinedPythonFunction(
       throw QueryCompilationErrors.namedArgumentsNotSupported(name)
     }
 
-    throw new Exception("yo")
-    logError("Hiiii!")
-
     // Py4J gives us nulls lets make them into options
     val safe_src = src match {
       case null | "" =>
-        logError("No Python src provided for UDF")
+        logDebug("No Python src provided for UDF")
         None
       case s =>
-        logError(s"Using python src for UDF: $s")
+        logDebug(s"Using python src for UDF: $s")
         Some(s)
     }
 
