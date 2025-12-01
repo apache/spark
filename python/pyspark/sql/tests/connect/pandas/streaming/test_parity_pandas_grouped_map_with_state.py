@@ -15,7 +15,6 @@
 # limitations under the License.
 #
 import unittest
-import os
 
 from pyspark.sql.tests.pandas.test_pandas_grouped_map_with_state import (
     GroupedApplyInPandasWithStateTestsMixin,

@@ -16,7 +16,6 @@
 #
 
 import unittest
-import os
 
 from pyspark.sql.tests.streaming.test_streaming_foreach_batch import StreamingTestsForeachBatchMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase, should_test_connect
