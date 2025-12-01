@@ -139,9 +139,6 @@ class BasePythonStreamingDataSourceTestsMixin:
 
         return TestDataSource
 
-    @unittest.skipIf(
-        os.environ.get("SPARK_SKIP_CONNECT_COMPAT_TESTS") == "1", "SPARK-54484: To be reenabled"
-    )
     def test_stream_reader(self):
         self.spark.dataSource.register(self._get_test_data_source())
         df = self.spark.readStream.format("TestDataSource").load()
@@ -216,7 +213,6 @@ class BasePythonStreamingDataSourceTestsMixin:
 
         assertDataFrameEqual(df, expected_data)
 
-    @unittest.skipIf(os.environ.get("SPARK_SKIP_CONNECT_COMPAT_TESTS") == "1", "To be reenabled")
     def test_simple_stream_reader(self):
         class SimpleStreamReader(SimpleDataSourceStreamReader):
             def initialOffset(self):
