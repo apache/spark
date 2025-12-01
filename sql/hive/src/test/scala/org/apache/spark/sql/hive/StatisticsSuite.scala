@@ -45,6 +45,9 @@ import org.apache.spark.util.Utils
 
 class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleton {
 
+  // Columns that Hive metastore cannot parse (not part of Hive's type system)
+  private val hiveUnsupportedColumns = Set("ctimestamp_ntz", "ctime")
+
   test("size estimation for relations is based on row size * number of rows") {
     val dsTbl = "rel_est_ds_table"
     val hiveTbl = "rel_est_hive_table"
@@ -1246,21 +1249,31 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
     val tableName = "column_stats_test_de"
     // (data.head.productArity - 1) because the last column does not support stats collection.
     assert(stats.size == data.head.productArity - 1)
-    // Hive can't parse data type "timestamp_ntz"
-    val df = data.toDF(stats.keys.toSeq :+ "carray" : _*).drop("ctimestamp_ntz")
+    // Hive can't parse data types "timestamp_ntz" and "time"
+    val df = data.toDF(stats.keys.toSeq :+ "carray" : _*).drop(hiveUnsupportedColumns.toSeq: _*)
 
     withTable(tableName) {
       df.write.saveAsTable(tableName)
 
       // Put in stats properties manually.
       val table = getCatalogTable(tableName)
+      // Filter out stats for columns that Hive can't handle
+      val filteredColStats = expectedSerializedColStats.filterNot { case (k, _) =>
+        hiveUnsupportedColumns.exists(col => k.contains(s"colStats.$col."))
+      }
+      val filteredHistograms = expectedSerializedHistograms.filterNot { case (k, _) =>
+        hiveUnsupportedColumns.exists(col => k.contains(s"colStats.$col."))
+      }
       val newTable = table.copy(
         properties = table.properties ++
-          expectedSerializedColStats ++ expectedSerializedHistograms +
+          filteredColStats ++ filteredHistograms +
           ("spark.sql.statistics.totalSize" -> "1") /* totalSize always required */)
       hiveClient.alterTable(newTable)
 
-      validateColStats(tableName, statsWithHgms)
+      val filteredStatsWithHgms = statsWithHgms.filterNot { case (colName, _) =>
+        hiveUnsupportedColumns.contains(colName)
+      }
+      validateColStats(tableName, filteredStatsWithHgms)
     }
   }
 
