@@ -45,11 +45,12 @@ import org.apache.spark.sql.execution.streaming.operators.stateful.transformwith
  *  - '''Not recommended''': End-to-end testing or performance testing - use actual Spark
  *    streaming queries for those scenarios.
  *
- * @param processor the StatefulProcessor to test
- * @param initialState initial state for each key as a list of (key, state) tuples
- * @tparam K the type of grouping key
- * @tparam I the type of input rows
- * @tparam O the type of output rows
+ * @param processor the StatefulProcessor to test.
+ * @param initialState initial state for each key as a list of (key, state) tuples.
+ * @tparam K the type of grouping key.
+ * @tparam I the type of input rows.
+ * @tparam O the type of output rows.
+ * @since 4.0.2
  */
 class TwsTester[K, I, O](
     val processor: StatefulProcessor[K, I, O],
@@ -58,8 +59,8 @@ class TwsTester[K, I, O](
   processor.setHandle(handle)
   processor.init(OutputMode.Append, TimeMode.None)
   processor match {
-    case p: StatefulProcessorWithInitialState[K @unchecked, I @unchecked, O @unchecked, s] =>
-      handleInitialState[s]()
+    case p: StatefulProcessorWithInitialState[K @unchecked, I @unchecked, O @unchecked, S] =>
+      handleInitialState[S]()
     case _ =>
       require(
         initialState.isEmpty,

@@ -290,7 +290,7 @@ class TwsTester:
         processor: StatefulProcessor,
         initialStateRow: Optional[list[Row]] = None,
         initialStatePandas: Optional[pd.DataFrame] = None,
-        key_column_name="key",
+        key_column_name: str = "key",
     ) -> None:
         self.processor = processor
         self.key_column_name = key_column_name
