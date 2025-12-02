@@ -29,7 +29,6 @@ import org.apache.spark.sql.catalyst.util.DateTimeConstants.MILLIS_PER_SECOND
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{withDefaultTimeZone, UTC}
 import org.apache.spark.sql.errors.QueryErrorsBase
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{UTF8String, VariantVal}
 
@@ -51,16 +50,12 @@ class CastWithAnsiOnSuite extends CastSuiteBase with QueryErrorsBase {
       assert(cast(testValue, to).checkInputDataTypes() == expectedError)
     }
 
-    // Integer types: suggest config change
-    val configParams = Map(
-      "config" -> toSQLConf(SQLConf.ANSI_ENABLED.key),
-      "configVal" -> toSQLValue("false", StringType)
-    )
-    checkNumericTypeCast(1.toByte, ByteType, BinaryType, "CAST_WITH_CONF_SUGGESTION", configParams)
+    // Integer types to Binary: not supported even with try_cast, no suggestion
+    checkNumericTypeCast(1.toByte, ByteType, BinaryType, "CAST_WITHOUT_SUGGESTION")
     checkNumericTypeCast(
-      1.toShort, ShortType, BinaryType, "CAST_WITH_CONF_SUGGESTION", configParams)
-    checkNumericTypeCast(1, IntegerType, BinaryType, "CAST_WITH_CONF_SUGGESTION", configParams)
-    checkNumericTypeCast(1L, LongType, BinaryType, "CAST_WITH_CONF_SUGGESTION", configParams)
+      1.toShort, ShortType, BinaryType, "CAST_WITHOUT_SUGGESTION")
+    checkNumericTypeCast(1, IntegerType, BinaryType, "CAST_WITHOUT_SUGGESTION")
+    checkNumericTypeCast(1L, LongType, BinaryType, "CAST_WITHOUT_SUGGESTION")
 
     // Floating types: no suggestion
     checkNumericTypeCast(1.0.toFloat, FloatType, BinaryType, "CAST_WITHOUT_SUGGESTION")
@@ -211,6 +206,29 @@ class CastWithAnsiOnSuite extends CastSuiteBase with QueryErrorsBase {
     }
   }
 
+  test("SPARK-49635: suggest try_cast for complex type casts") {
+    // Array[Int] to Array[Binary]: canTryCast=true (uses canCast), canAnsiCast=false
+    val arrayIntType = ArrayType(IntegerType, containsNull = false)
+    val arrayBinaryType = ArrayType(BinaryType, containsNull = false)
+    val arrayIntLiteral = Literal.create(Seq(1, 2, 3), arrayIntType)
+
+    val arrayResult = cast(arrayIntLiteral, arrayBinaryType).checkInputDataTypes()
+    evalMode match {
+      case EvalMode.ANSI =>
+        assert(arrayResult ==
+          DataTypeMismatch(
+            errorSubClass = "CAST_WITH_FUNC_SUGGESTION",
+            messageParameters = Map(
+              "srcType" -> toSQLType(arrayIntType),
+              "targetType" -> toSQLType(arrayBinaryType),
+              "functionNames" -> "`try_cast`"
+            )
+          )
+        )
+      case _ =>
+    }
+  }
+
   test("ANSI mode: disallow variant cast to non-nullable types") {
     // Array
     val variantVal = new VariantVal(Array[Byte](12, 3), Array[Byte](1, 0, 0))
@@ -269,12 +287,10 @@ class CastWithAnsiOnSuite extends CastSuiteBase with QueryErrorsBase {
       case EvalMode.ANSI =>
         assert(checkResult1 ==
           DataTypeMismatch(
-            errorSubClass = "CAST_WITH_CONF_SUGGESTION",
+            errorSubClass = "CAST_WITHOUT_SUGGESTION",
             messageParameters = Map(
               "srcType" -> "\"TIMESTAMP\"",
-              "targetType" -> "\"BOOLEAN\"",
-              "config" -> "\"spark.sql.ansi.enabled\"",
-              "configVal" -> "'false'"
+              "targetType" -> "\"BOOLEAN\""
             )
           )
         )
@@ -297,12 +313,10 @@ class CastWithAnsiOnSuite extends CastSuiteBase with QueryErrorsBase {
       case EvalMode.ANSI =>
         assert(checkResult2 ==
           DataTypeMismatch(
-            errorSubClass = "CAST_WITH_CONF_SUGGESTION",
+            errorSubClass = "CAST_WITHOUT_SUGGESTION",
             messageParameters = Map(
               "srcType" -> "\"DATE\"",
-              "targetType" -> "\"BOOLEAN\"",
-              "config" -> "\"spark.sql.ansi.enabled\"",
-              "configVal" -> "'false'"
+              "targetType" -> "\"BOOLEAN\""
             )
           )
         )
@@ -325,12 +339,10 @@ class CastWithAnsiOnSuite extends CastSuiteBase with QueryErrorsBase {
       case EvalMode.ANSI =>
         assert(checkResult3 ==
           DataTypeMismatch(
-            errorSubClass = "CAST_WITH_CONF_SUGGESTION",
+            errorSubClass = "CAST_WITHOUT_SUGGESTION",
             messageParameters = Map(
               "srcType" -> "\"BOOLEAN\"",
-              "targetType" -> "\"TIMESTAMP\"",
-              "config" -> "\"spark.sql.ansi.enabled\"",
-              "configVal" -> "'false'"
+              "targetType" -> "\"TIMESTAMP\""
             )
           )
         )

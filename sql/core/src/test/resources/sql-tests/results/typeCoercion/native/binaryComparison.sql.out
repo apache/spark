@@ -14,11 +14,9 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
+  "errorClass" : "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION",
   "sqlState" : "42K09",
   "messageParameters" : {
-    "config" : "\"spark.sql.ansi.enabled\"",
-    "configVal" : "'false'",
     "sqlExpr" : "\"CAST(1 AS BINARY)\"",
     "srcType" : "\"INT\"",
     "targetType" : "\"BINARY\""
@@ -40,11 +38,9 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
+  "errorClass" : "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION",
   "sqlState" : "42K09",
   "messageParameters" : {
-    "config" : "\"spark.sql.ansi.enabled\"",
-    "configVal" : "'false'",
     "sqlExpr" : "\"CAST(1 AS BINARY)\"",
     "srcType" : "\"INT\"",
     "targetType" : "\"BINARY\""
@@ -66,11 +62,9 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
+  "errorClass" : "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION",
   "sqlState" : "42K09",
   "messageParameters" : {
-    "config" : "\"spark.sql.ansi.enabled\"",
-    "configVal" : "'false'",
     "sqlExpr" : "\"CAST(1 AS BINARY)\"",
     "srcType" : "\"INT\"",
     "targetType" : "\"BINARY\""
@@ -92,11 +86,9 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
+  "errorClass" : "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION",
   "sqlState" : "42K09",
   "messageParameters" : {
-    "config" : "\"spark.sql.ansi.enabled\"",
-    "configVal" : "'false'",
     "sqlExpr" : "\"CAST(1 AS BINARY)\"",
     "srcType" : "\"INT\"",
     "targetType" : "\"BINARY\""
@@ -118,11 +110,9 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
+  "errorClass" : "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION",
   "sqlState" : "42K09",
   "messageParameters" : {
-    "config" : "\"spark.sql.ansi.enabled\"",
-    "configVal" : "'false'",
     "sqlExpr" : "\"CAST(1 AS BINARY)\"",
     "srcType" : "\"INT\"",
     "targetType" : "\"BINARY\""
@@ -144,11 +134,9 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
+  "errorClass" : "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION",
   "sqlState" : "42K09",
   "messageParameters" : {
-    "config" : "\"spark.sql.ansi.enabled\"",
-    "configVal" : "'false'",
     "sqlExpr" : "\"CAST(1 AS BINARY)\"",
     "srcType" : "\"INT\"",
     "targetType" : "\"BINARY\""
@@ -170,11 +158,9 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
+  "errorClass" : "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION",
   "sqlState" : "42K09",
   "messageParameters" : {
-    "config" : "\"spark.sql.ansi.enabled\"",
-    "configVal" : "'false'",
     "sqlExpr" : "\"CAST(1 AS BINARY)\"",
     "srcType" : "\"INT\"",
     "targetType" : "\"BINARY\""
@@ -196,11 +182,9 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
+  "errorClass" : "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION",
   "sqlState" : "42K09",
   "messageParameters" : {
-    "config" : "\"spark.sql.ansi.enabled\"",
-    "configVal" : "'false'",
     "sqlExpr" : "\"CAST(1 AS BINARY)\"",
     "srcType" : "\"INT\"",
     "targetType" : "\"BINARY\""
@@ -222,11 +206,9 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
+  "errorClass" : "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION",
   "sqlState" : "42K09",
   "messageParameters" : {
-    "config" : "\"spark.sql.ansi.enabled\"",
-    "configVal" : "'false'",
     "sqlExpr" : "\"CAST(1 AS BINARY)\"",
     "srcType" : "\"INT\"",
     "targetType" : "\"BINARY\""
@@ -248,11 +230,9 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
+  "errorClass" : "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION",
   "sqlState" : "42K09",
   "messageParameters" : {
-    "config" : "\"spark.sql.ansi.enabled\"",
-    "configVal" : "'false'",
     "sqlExpr" : "\"CAST(1 AS BINARY)\"",
     "srcType" : "\"INT\"",
     "targetType" : "\"BINARY\""
@@ -274,11 +254,9 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
+  "errorClass" : "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION",
   "sqlState" : "42K09",
   "messageParameters" : {
-    "config" : "\"spark.sql.ansi.enabled\"",
-    "configVal" : "'false'",
     "sqlExpr" : "\"CAST(1 AS BINARY)\"",
     "srcType" : "\"INT\"",
     "targetType" : "\"BINARY\""
@@ -300,11 +278,9 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
+  "errorClass" : "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION",
   "sqlState" : "42K09",
   "messageParameters" : {
-    "config" : "\"spark.sql.ansi.enabled\"",
-    "configVal" : "'false'",
     "sqlExpr" : "\"CAST(1 AS BINARY)\"",
     "srcType" : "\"INT\"",
     "targetType" : "\"BINARY\""
@@ -326,11 +302,9 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
+  "errorClass" : "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION",
   "sqlState" : "42K09",
   "messageParameters" : {
-    "config" : "\"spark.sql.ansi.enabled\"",
-    "configVal" : "'false'",
     "sqlExpr" : "\"CAST(1 AS BINARY)\"",
     "srcType" : "\"INT\"",
     "targetType" : "\"BINARY\""
@@ -352,11 +326,9 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
+  "errorClass" : "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION",
   "sqlState" : "42K09",
   "messageParameters" : {
-    "config" : "\"spark.sql.ansi.enabled\"",
-    "configVal" : "'false'",
     "sqlExpr" : "\"CAST(1 AS BINARY)\"",
     "srcType" : "\"INT\"",
     "targetType" : "\"BINARY\""
@@ -378,11 +350,9 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
+  "errorClass" : "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION",
   "sqlState" : "42K09",
   "messageParameters" : {
-    "config" : "\"spark.sql.ansi.enabled\"",
-    "configVal" : "'false'",
     "sqlExpr" : "\"CAST(1 AS BINARY)\"",
     "srcType" : "\"INT\"",
     "targetType" : "\"BINARY\""
@@ -404,11 +374,9 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
+  "errorClass" : "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION",
   "sqlState" : "42K09",
   "messageParameters" : {
-    "config" : "\"spark.sql.ansi.enabled\"",
-    "configVal" : "'false'",
     "sqlExpr" : "\"CAST(1 AS BINARY)\"",
     "srcType" : "\"INT\"",
     "targetType" : "\"BINARY\""
@@ -430,11 +398,9 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
+  "errorClass" : "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION",
   "sqlState" : "42K09",
   "messageParameters" : {
-    "config" : "\"spark.sql.ansi.enabled\"",
-    "configVal" : "'false'",
     "sqlExpr" : "\"CAST(1 AS BINARY)\"",
     "srcType" : "\"INT\"",
     "targetType" : "\"BINARY\""
@@ -456,11 +422,9 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
+  "errorClass" : "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION",
   "sqlState" : "42K09",
   "messageParameters" : {
-    "config" : "\"spark.sql.ansi.enabled\"",
-    "configVal" : "'false'",
     "sqlExpr" : "\"CAST(1 AS BINARY)\"",
     "srcType" : "\"INT\"",
     "targetType" : "\"BINARY\""
@@ -482,11 +446,9 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
+  "errorClass" : "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION",
   "sqlState" : "42K09",
   "messageParameters" : {
-    "config" : "\"spark.sql.ansi.enabled\"",
-    "configVal" : "'false'",
     "sqlExpr" : "\"CAST(1 AS BINARY)\"",
     "srcType" : "\"INT\"",
     "targetType" : "\"BINARY\""
@@ -508,11 +470,9 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
+  "errorClass" : "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION",
   "sqlState" : "42K09",
   "messageParameters" : {
-    "config" : "\"spark.sql.ansi.enabled\"",
-    "configVal" : "'false'",
     "sqlExpr" : "\"CAST(1 AS BINARY)\"",
     "srcType" : "\"INT\"",
     "targetType" : "\"BINARY\""
@@ -534,11 +494,9 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
+  "errorClass" : "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION",
   "sqlState" : "42K09",
   "messageParameters" : {
-    "config" : "\"spark.sql.ansi.enabled\"",
-    "configVal" : "'false'",
     "sqlExpr" : "\"CAST(1 AS BINARY)\"",
     "srcType" : "\"INT\"",
     "targetType" : "\"BINARY\""
@@ -560,11 +518,9 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
+  "errorClass" : "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION",
   "sqlState" : "42K09",
   "messageParameters" : {
-    "config" : "\"spark.sql.ansi.enabled\"",
-    "configVal" : "'false'",
     "sqlExpr" : "\"CAST(1 AS BINARY)\"",
     "srcType" : "\"INT\"",
     "targetType" : "\"BINARY\""
@@ -586,11 +542,9 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
+  "errorClass" : "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION",
   "sqlState" : "42K09",
   "messageParameters" : {
-    "config" : "\"spark.sql.ansi.enabled\"",
-    "configVal" : "'false'",
     "sqlExpr" : "\"CAST(1 AS BINARY)\"",
     "srcType" : "\"INT\"",
     "targetType" : "\"BINARY\""
@@ -612,11 +566,9 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
+  "errorClass" : "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION",
   "sqlState" : "42K09",
   "messageParameters" : {
-    "config" : "\"spark.sql.ansi.enabled\"",
-    "configVal" : "'false'",
     "sqlExpr" : "\"CAST(1 AS BINARY)\"",
     "srcType" : "\"INT\"",
     "targetType" : "\"BINARY\""
