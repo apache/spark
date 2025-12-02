@@ -341,7 +341,7 @@ class PythonException(CapturedException, BasePythonException):
 
         if messageParameters is None:
             return super().__str__()
-        return f"{messageParameters.get('msg')}:\n{messageParameters.get('traceback')}"
+        return f"{messageParameters.get('msg')}:\n{messageParameters.get('traceback').strip()}"
 
 
 class ArithmeticException(CapturedException, BaseArithmeticException):
