@@ -395,7 +395,6 @@ private[sql] class RocksDBStateStoreProvider
       val rowPair = new UnsafeRowPair()
       if (useColumnFamilies) {
         val rocksDbIter = rocksDB.iterator(colFamilyName)
-
         val iter = rocksDbIter.map { kv =>
           rowPair.withRows(kvEncoder._1.decodeKey(kv.key),
             kvEncoder._2.decodeValue(kv.value))

@@ -1337,6 +1337,7 @@ class RocksDB(
       override protected def getNext(): ByteArrayPair = {
         if (iter.isValid) {
           val key = if (useColumnFamilies) {
+            println("calling decodeStateRowWithPrefix in key")
             decodeStateRowWithPrefix(iter.key)._1
           } else {
             iter.key
