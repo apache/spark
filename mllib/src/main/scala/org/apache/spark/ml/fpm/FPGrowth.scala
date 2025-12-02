@@ -343,16 +343,11 @@ object FPGrowthModel extends MLReadable[FPGrowthModel] {
   class FPGrowthModelWriter(instance: FPGrowthModel) extends MLWriter {
 
     override protected def saveImpl(path: String): Unit = {
-      if (ReadWriteUtils.localSavingModeState.get()) {
-        throw new UnsupportedOperationException(
-          "FPGrowthModel does not support saving to local filesystem path."
-        )
-      }
       val extraMetadata: JObject = Map("numTrainingRecords" -> instance.numTrainingRecords)
       DefaultParamsWriter.saveMetadata(instance, path, sparkSession,
         extraMetadata = Some(extraMetadata))
       val dataPath = new Path(path, "data").toString
-      instance.freqItemsets.write.parquet(dataPath)
+      ReadWriteUtils.saveDataFrame(dataPath, instance.freqItemsets)
     }
   }
 
@@ -362,11 +357,6 @@ object FPGrowthModel extends MLReadable[FPGrowthModel] {
     private val className = classOf[FPGrowthModel].getName
 
     override def load(path: String): FPGrowthModel = {
-      if (ReadWriteUtils.localSavingModeState.get()) {
-        throw new UnsupportedOperationException(
-          "FPGrowthModel does not support loading from local filesystem path."
-        )
-      }
       implicit val format = DefaultFormats
       val metadata = DefaultParamsReader.loadMetadata(path, sparkSession, className)
       val (major, minor) = VersionUtils.majorMinorVersion(metadata.sparkVersion)
@@ -378,7 +368,7 @@ object FPGrowthModel extends MLReadable[FPGrowthModel] {
         (metadata.metadata \ "numTrainingRecords").extract[Long]
       }
       val dataPath = new Path(path, "data").toString
-      val frequentItems = sparkSession.read.parquet(dataPath)
+      val frequentItems = ReadWriteUtils.loadDataFrame(dataPath, sparkSession)
       val itemSupport = if (numTrainingRecords == 0L) {
         Map.empty[Any, Double]
       } else {
