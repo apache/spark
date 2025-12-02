@@ -390,8 +390,7 @@ case class StateSourceOptions(
     var desc = s"StateSourceOptions(checkpointLocation=$resolvedCpLocation, batchId=$batchId, " +
       s"operatorId=$operatorId, storeName=$storeName, joinSide=$joinSide, " +
       s"stateVarName=${stateVarName.getOrElse("None")}, " +
-      s"flattenCollectionTypes=$flattenCollectionTypes, " +
-      s"internalOnlyReadAllColumnFamilies=$internalOnlyReadAllColumnFamilies"
+      s"flattenCollectionTypes=$flattenCollectionTypes"
     if (fromSnapshotOptions.isDefined) {
       desc += s", snapshotStartBatchId=${fromSnapshotOptions.get.snapshotStartBatchId}"
       desc += s", snapshotPartitionId=${fromSnapshotOptions.get.snapshotPartitionId}"
@@ -404,7 +403,7 @@ case class StateSourceOptions(
   }
 }
 
-object StateSourceOptions extends DataSourceOptions {
+object StateSourceOptions extends DataSourceOptions with Logging{
   val PATH = newOption("path")
   val BATCH_ID = newOption("batchId")
   val OPERATOR_ID = newOption("operatorId")
@@ -418,7 +417,7 @@ object StateSourceOptions extends DataSourceOptions {
   val STATE_VAR_NAME = newOption("stateVarName")
   val READ_REGISTERED_TIMERS = newOption("readRegisteredTimers")
   val FLATTEN_COLLECTION_TYPES = newOption("flattenCollectionTypes")
-  val INTERNAL_ONLY_READ_ALL_COLUMN_FAMILIES = newOption("internalOnlyReadAllColumnFamilies")
+  val INTERNAL_ONLY_READ_ALL_COLUMN_FAMILIES = newOption("_readAllColumnFamilies")
 
   object JoinSideValues extends Enumeration {
     type JoinSideValues = Value
@@ -490,7 +489,6 @@ object StateSourceOptions extends DataSourceOptions {
           s"Valid values are ${JoinSideValues.values.mkString(",")}")
     }
 
-    // Use storeName rather than joinSide to identify the specific join store
     if (joinSide != JoinSideValues.none && storeName != StateStoreId.DEFAULT_STORE_NAME) {
       throw StateDataSourceErrors.conflictOptions(Seq(JOIN_SIDE, STORE_NAME))
     }
@@ -513,19 +511,23 @@ object StateSourceOptions extends DataSourceOptions {
           "Boolean value is expected")
     }
 
-    if (internalOnlyReadAllColumnFamilies && stateVarName.isDefined) {
-      throw StateDataSourceErrors.conflictOptions(
-        Seq(INTERNAL_ONLY_READ_ALL_COLUMN_FAMILIES, STATE_VAR_NAME))
-    }
-
-    if (internalOnlyReadAllColumnFamilies && joinSide != JoinSideValues.none) {
-      throw StateDataSourceErrors.conflictOptions(
-        Seq(INTERNAL_ONLY_READ_ALL_COLUMN_FAMILIES, JOIN_SIDE))
-    }
-
-    if (internalOnlyReadAllColumnFamilies && readChangeFeed) {
-      throw StateDataSourceErrors.conflictOptions(
-        Seq(INTERNAL_ONLY_READ_ALL_COLUMN_FAMILIES, READ_CHANGE_FEED))
+    // This config should only be used by internal callers e.g. repartitioning
+    if (internalOnlyReadAllColumnFamilies) {
+      logWarning("StateSourceOptions option INTERNAL_ONLY_READ_ALL_COLUMN_FAMILIES is enabled. " +
+        "This config should only be used for internal callers e.g. repartitioning")
+      if (stateVarName.isDefined) {
+        throw StateDataSourceErrors.conflictOptions(
+          Seq(INTERNAL_ONLY_READ_ALL_COLUMN_FAMILIES, STATE_VAR_NAME))
+      }
+      // Use storeName rather than joinSide to identify the specific join store
+      if (joinSide != JoinSideValues.none) {
+        throw StateDataSourceErrors.conflictOptions(
+          Seq(INTERNAL_ONLY_READ_ALL_COLUMN_FAMILIES, JOIN_SIDE))
+      }
+      if (readChangeFeed) {
+        throw StateDataSourceErrors.conflictOptions(
+          Seq(INTERNAL_ONLY_READ_ALL_COLUMN_FAMILIES, READ_CHANGE_FEED))
+      }
     }
 
     val changeStartBatchId = Option(options.get(CHANGE_START_BATCH_ID)).map(_.toLong)
