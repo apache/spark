@@ -193,7 +193,7 @@ final class ShuffleBlockFetcherIterator(
 
   initialize()
 
-  private def withFetchWaitTimeTracked[T](f: () => T): Unit = {
+  private def withFetchWaitTimeTracked[T](f: () => T): T = {
     val startFetchWait = System.nanoTime()
     val res = f()
     val fetchWaitTime = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startFetchWait)
