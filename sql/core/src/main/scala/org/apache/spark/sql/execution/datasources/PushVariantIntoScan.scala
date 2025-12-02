@@ -26,10 +26,8 @@ import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan, Project, Subquery}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns
-import org.apache.spark.sql.connector.read.{SupportsPushDownVariants, VariantAccessInfo}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
-import org.apache.spark.sql.execution.datasources.v2.ScanBuilderHolder
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
@@ -281,10 +279,6 @@ object PushVariantIntoScan extends Rule[LogicalPlan] {
       relation @ LogicalRelationWithTable(
       hadoopFsRelation@HadoopFsRelation(_, _, _, _, _: ParquetFileFormat, _), _)) =>
         rewritePlan(p, projectList, filters, relation, hadoopFsRelation)
-
-      case p@PhysicalOperation(projectList, filters,
-        sHolder @ ScanBuilderHolder(_, _, builder: SupportsPushDownVariants)) =>
-        rewritePlanV2(p, projectList, filters, sHolder, builder)
     }
   }
 
@@ -332,112 +326,10 @@ object PushVariantIntoScan extends Rule[LogicalPlan] {
       hadoopFsRelation.sparkSession)
     val newRelation = relation.copy(relation = newHadoopFsRelation, output = newOutput.toIndexedSeq)
 
-    buildFilterAndProject(newRelation, projectList, filters, variants, attributeMap)
-  }
-
-  // DataSource V2 rewrite method using SupportsPushDownVariants API
-  // Key differences from V1 implementation:
-  // 1. V2 uses ScanBuilderHolder instead of LogicalRelation
-  // 2. Uses SupportsPushDownVariants API on ScanBuilder instead of directly manipulating scan
-  // 3. Schema is already resolved in sHolder.output (no need for relation.resolve())
-  // 4. Scan will be built later with the variant access information
-  // Data sources like Parquet (V2), Delta and Iceberg can implement this API to support
-  // variant pushdown.
-  private def rewritePlanV2(
-      originalPlan: LogicalPlan,
-      projectList: Seq[NamedExpression],
-      filters: Seq[Expression],
-      sHolder: ScanBuilderHolder,
-      builder: SupportsPushDownVariants): LogicalPlan = {
-    val variants = new VariantInRelation
-
-    // Extract schema attributes from scan builder holder
-    val schemaAttributes = sHolder.output
-
-    // Construct schema for default value resolution
-    val structSchema = StructType(schemaAttributes.map(a =>
-      StructField(a.name, a.dataType, a.nullable, a.metadata)))
-
-    val defaultValues = ResolveDefaultColumns.existenceDefaultValues(structSchema)
-
-    // Add variant fields from the V2 scan schema
-    for ((a, defaultValue) <- schemaAttributes.zip(defaultValues)) {
-      variants.addVariantFields(a.exprId, a.dataType, defaultValue, Nil)
-    }
-    if (variants.mapping.isEmpty) return originalPlan
-
-    // Collect requested fields from project list and filters
-    projectList.foreach(variants.collectRequestedFields)
-    filters.foreach(variants.collectRequestedFields)
-
-    // If no variant columns remain after collection, return original plan
-    if (variants.mapping.forall(_._2.isEmpty)) return originalPlan
-
-    // Build VariantAccessInfo array for the API
-    val variantAccessInfoArray = schemaAttributes.flatMap { attr =>
-      variants.mapping.get(attr.exprId).flatMap(_.get(Nil)).map { fields =>
-        // Build extracted schema for this variant column
-        val extractedFields = fields.toArray.sortBy(_._2).map { case (field, ordinal) =>
-          StructField(ordinal.toString, field.targetType, metadata = field.path.toMetadata)
-        }
-        val extractedSchema = if (extractedFields.isEmpty) {
-          // Add placeholder field to avoid empty struct
-          val placeholder = VariantMetadata("$.__placeholder_field__",
-            failOnError = false, timeZoneId = "UTC")
-          StructType(Array(StructField("0", BooleanType, metadata = placeholder.toMetadata)))
-        } else {
-          StructType(extractedFields)
-        }
-        new VariantAccessInfo(attr.name, extractedSchema)
-      }
-    }.toArray
-
-    // Call the API to push down variant access
-    if (variantAccessInfoArray.isEmpty) return originalPlan
-
-    val pushed = builder.pushVariantAccess(variantAccessInfoArray)
-    if (!pushed) return originalPlan
-
-    // Get what was actually pushed
-    val pushedVariantAccess = builder.pushedVariantAccess()
-    if (pushedVariantAccess.isEmpty) return originalPlan
-
-    // Build new attribute mapping based on pushed variant access
-    val pushedColumnNames = pushedVariantAccess.map(_.columnName()).toSet
-    val attributeMap = schemaAttributes.map { a =>
-      if (pushedColumnNames.contains(a.name) && variants.mapping.get(a.exprId).exists(_.nonEmpty)) {
-        val newType = variants.rewriteType(a.exprId, a.dataType, Nil)
-        val newAttr = AttributeReference(a.name, newType, a.nullable, a.metadata)(
-          qualifier = a.qualifier)
-        (a.exprId, newAttr)
-      } else {
-        (a.exprId, a)
-      }
-    }.toMap
-
-    val newOutput = sHolder.output.map(a => attributeMap.getOrElse(a.exprId, a))
-
-    // Update the scan builder holder's output with the new schema
-    // The scan will be built later with the variant access information already pushed to the
-    // builder
-    sHolder.output = newOutput
-
-    buildFilterAndProject(sHolder, projectList, filters, variants, attributeMap)
-  }
-
-  /**
-   * Build the final Project(Filter(relation)) plan with rewritten expressions.
-   */
-  private def buildFilterAndProject(
-      relation: LogicalPlan,
-      projectList: Seq[NamedExpression],
-      filters: Seq[Expression],
-      variants: VariantInRelation,
-      attributeMap: Map[ExprId, AttributeReference]): LogicalPlan = {
     val withFilter = if (filters.nonEmpty) {
-      Filter(filters.map(variants.rewriteExpr(_, attributeMap)).reduce(And), relation)
+      Filter(filters.map(variants.rewriteExpr(_, attributeMap)).reduce(And), newRelation)
     } else {
-      relation
+      newRelation
     }
 
     val newProjectList = projectList.map { e =>
