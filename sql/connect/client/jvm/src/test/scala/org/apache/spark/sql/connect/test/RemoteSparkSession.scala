@@ -16,7 +16,7 @@
  */
 package org.apache.spark.sql.connect.test
 
-import java.io.{File, FileOutputStream, InputStream, IOException, OutputStream}
+import java.io.{File, IOException, OutputStream}
 import java.lang.ProcessBuilder.Redirect
 import java.nio.file.Paths
 import java.util.concurrent.TimeUnit
@@ -36,7 +36,6 @@ import org.apache.spark.sql.connect.client.{RetryPolicy, SparkConnectClient}
 import org.apache.spark.sql.connect.common.config.ConnectCommon
 import org.apache.spark.sql.connect.test.IntegrationTestUtils._
 import org.apache.spark.util.ArrayImplicits._
-import org.apache.spark.util.SparkStreamUtils
 
 /**
  * An util class to start a local spark connect server in a different process for local E2E tests.
@@ -94,12 +93,7 @@ object SparkConnectServerUtils {
     if (isDebug) {
       builder.redirectError(Redirect.INHERIT)
       builder.redirectOutput(Redirect.INHERIT)
-    }
-
-    val process = builder.start()
-    consoleOut = process.getOutputStream
-
-    if (!isDebug) {
+    } else {
       // Redirect stdout and stderr to log files.
       // If output is not consumed, the stdout/stderr pipe buffers will fill up,
       // causing the server process to block on write() calls.
@@ -109,30 +103,16 @@ object SparkConnectServerUtils {
       val stdoutLogFile = new File(targetDir, s"spark-connect-test-server-stdout-$timestamp.log")
       val stderrLogFile = new File(targetDir, s"spark-connect-test-server-stderr-$timestamp.log")
 
-      redirectStream(process.getInputStream, stdoutLogFile)
-      redirectStream(process.getErrorStream, stderrLogFile)
+      builder.redirectOutput(Redirect.to(stdoutLogFile))
+      builder.redirectError(Redirect.to(stderrLogFile))
     }
+
+    val process = builder.start()
+    consoleOut = process.getOutputStream
 
     // Adding JVM shutdown hook
     sys.addShutdownHook(stop())
     process
-  }
-
-  /** Spawn a thread that will redirect a given stream to a file */
-  private def redirectStream(in: InputStream, file: File): Unit = {
-    val out = new FileOutputStream(file, true)
-    val thread = new Thread(s"redirect output to ${file.getName}") {
-      override def run(): Unit = {
-        try {
-          SparkStreamUtils.copyStream(in, out, closeStreams = true)
-        } catch {
-          case _: IOException =>
-          // Ignore exception when stream is closed
-        }
-      }
-    }
-    thread.setDaemon(true)
-    thread.start()
   }
 
   /**
