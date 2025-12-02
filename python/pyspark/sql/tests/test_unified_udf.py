@@ -351,8 +351,8 @@ class UnifiedUDFTestsMixin:
         import pandas as pd
         import pyarrow as pa
 
-
         with self.sql_conf({"spark.sql.execution.pythonUDF.arrow.enabled": False}):
+
             @udf(returnType=LongType())
             def f1(x):
                 return x + 1

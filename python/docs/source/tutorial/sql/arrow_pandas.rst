@@ -385,6 +385,7 @@ To disable Arrow optimization, set ``spark.sql.execution.pythonUDF.arrow.enabled
 
 * Since Spark 4.1, unnecessary conversion to pandas instances in Arrow-optimized Python UDF is removed in the serializer
 when ``spark.sql.legacy.execution.pythonUDF.pandas.conversion.enabled`` is disabled.
+
 The behavior difference is summarized in the tables `here <https://github.com/apache/spark/pull/51225>`__.
 To restore the legacy behavior, set ``spark.sql.legacy.execution.pythonUDF.pandas.conversion.enabled`` to true.
 
