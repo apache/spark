@@ -61,6 +61,15 @@ object SparkConnectServerUtils {
   private var consoleOut: OutputStream = _
   private val serverStopCommand = "q"
 
+  /**
+   * Log4j configuration for the Spark Connect server.
+   * This ensures unit-tests.log is created for both debug and non-debug modes.
+   */
+  private def log4jConfigs: Seq[String] = {
+    val log4j2 = s"$connectClientHomeDir/src/test/resources/log4j2.properties"
+    Seq("--conf", s"spark.driver.extraJavaOptions=-Dlog4j.configurationFile=$log4j2")
+  }
+
   private lazy val sparkConnect: java.lang.Process = {
     debug("Starting the Spark Connect Server...")
     val connectJar =
@@ -77,7 +86,7 @@ object SparkConnectServerUtils {
     command += "--jars" += catalystTestJar
     command += "--conf" += s"spark.connect.grpc.binding.port=$port"
     command ++= testConfigs
-    command ++= debugConfigs
+    command ++= log4jConfigs
     command += connectJar
     val cmds = command.result()
     debug {
@@ -90,22 +99,8 @@ object SparkConnectServerUtils {
     builder.directory(new File(sparkHome))
     val environment = builder.environment()
     environment.remove("SPARK_DIST_CLASSPATH")
-    if (isDebug) {
-      builder.redirectError(Redirect.INHERIT)
-      builder.redirectOutput(Redirect.INHERIT)
-    } else {
-      // Redirect stdout and stderr to log files.
-      // If output is not consumed, the stdout/stderr pipe buffers will fill up,
-      // causing the server process to block on write() calls.
-      val targetDir = new File(s"$connectClientHomeDir/target")
-      targetDir.mkdirs()
-      val timestamp = System.currentTimeMillis()
-      val stdoutLogFile = new File(targetDir, s"spark-connect-test-server-stdout-$timestamp.log")
-      val stderrLogFile = new File(targetDir, s"spark-connect-test-server-stderr-$timestamp.log")
-
-      builder.redirectOutput(Redirect.to(stdoutLogFile))
-      builder.redirectError(Redirect.to(stderrLogFile))
-    }
+    builder.redirectError(Redirect.INHERIT)
+    builder.redirectOutput(Redirect.INHERIT)
 
     val process = builder.start()
     consoleOut = process.getOutputStream
