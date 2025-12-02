@@ -43,7 +43,7 @@ class _InMemoryValueState(ValueState):
         handle: _InMemoryStatefulProcessorHandle,
     ) -> None:
         self.handle = handle
-        self.state = dict()
+        self.state: dict[Any, tuple] = dict()
 
     def exists(self) -> bool:
         return self.handle.grouping_key in self.state
@@ -148,11 +148,11 @@ class _InMemoryMapState(MapState):
 class _InMemoryStatefulProcessorHandle(StatefulProcessorHandle):
     """In-memory implementation of StatefulProcessorHandle for testing."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.grouping_key = None
         self.states = dict()
 
-    def setGroupingKey(self, key):
+    def setGroupingKey(self, key) -> None:
         self.grouping_key = key
 
     def getValueState(
@@ -347,7 +347,7 @@ class TwsTester:
             timer_values = TimerValues(-1, -1)
             result_iter: Iterator[Row] = self.processor.handleInputRows(
                 (key,), iter(rows), timer_values
-            )
+            )  # type: Iterator[Row]
             result += list(result_iter)
         return result
 
@@ -370,7 +370,7 @@ class TwsTester:
             timer_values = TimerValues(-1, -1)
             result_iter: Iterator[pd.DataFrame] = self.processor.handleInputRows(
                 (key,), iter([group_df]), timer_values
-            )
+            )  # type: Iterator[pd.DataFrame]
             for result_df in result_iter:
                 result_dfs.append(result_df)
         if result_dfs:
