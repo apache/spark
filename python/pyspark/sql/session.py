@@ -1581,18 +1581,20 @@ class SparkSession(SparkConversionMixin):
                 col_names = schema.names
             elif isinstance(schema, list):
                 col_names = schema
+            elif data.ndim == 1 or data.shape[1] == 1:
+                col_names = ["value"]
+            else:
+                col_names = [f"_{i + 1}" for i in range(0, data.shape[1])]
 
             if data.ndim == 1:
-                col_names = col_names or ["value"]
                 data = pa.Table.from_arrays(arrays=[pa.array(data)], names=col_names)
             elif data.shape[1] == 1:
-                col_names = col_names or ["value"]
                 data = pa.Table.from_arrays(arrays=[pa.array(data.squeeze())], names=col_names)
             else:
-                n_cols = data.shape[1]
-                arrow_columns = [pa.array(data[::, i]) for i in range(0, n_cols)]
-                col_names = col_names or [f"_{i + 1}" for i in range(0, n_cols)]
-                data = pa.Table.from_arrays(arrays=arrow_columns, names=col_names)
+                data = pa.Table.from_arrays(
+                    arrays=[pa.array(data[::, i]) for i in range(0, data.shape[1])],
+                    names=col_names,
+                )
 
         if has_pandas and isinstance(data, pd.DataFrame):
             # Create a DataFrame from pandas DataFrame.
