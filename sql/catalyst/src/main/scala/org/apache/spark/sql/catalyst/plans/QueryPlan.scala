@@ -520,9 +520,12 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
   def subqueries: Seq[PlanType] = _subqueries()
 
   private val _subqueries = new TransientBestEffortLazyVal(() =>
-    expressions.filter(_.containsPattern(PLAN_EXPRESSION)).flatMap(_.collect {
-      case e: PlanExpression[_] => e.plan.asInstanceOf[PlanType]
-    })
+    expressions
+      .filter(_.containsPattern(PLAN_EXPRESSION))
+      .flatMap(_.collect {
+        case planExpression: PlanExpression[PlanType] =>
+          planExpression.plan
+      })
   )
 
   /**
