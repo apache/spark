@@ -339,9 +339,13 @@ class PythonException(CapturedException, BasePythonException):
     def __str__(self) -> str:
         messageParameters = self.getMessageParameters()
 
-        if messageParameters is None:
+        if (
+            messageParameters is None
+            or "msg" not in messageParameters
+            or "traceback" not in messageParameters
+        ):
             return super().__str__()
-        return f"{messageParameters.get('msg')}:\n{messageParameters.get('traceback').strip()}"
+        return f"{messageParameters['msg']}:\n{messageParameters['traceback'].strip()}"
 
 
 class ArithmeticException(CapturedException, BaseArithmeticException):
