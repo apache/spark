@@ -978,7 +978,7 @@ object LimitPushDown extends Rule[LogicalPlan] {
  */
 object ConvertToCatalyst extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = {
-    plan.transformAllExpressionsWithPruning(_.containsPattern(PYTHON_UDF)) {
+    plan.resolveExpressionsWithPruning(_.containsPattern(PYTHON_UDF)) {
       case s: PythonUDF =>
         s.toCatalyst() match {
           case None => s

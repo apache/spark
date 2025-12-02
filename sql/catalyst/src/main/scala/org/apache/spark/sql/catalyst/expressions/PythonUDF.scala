@@ -132,7 +132,7 @@ case class PythonUDF(
       case Some(ast) =>
         if (ast.isInstanceOf[java.util.List[_]]) {
           val happy_ast = _recursive_to_scala_for_java_lists(ast.asInstanceOf[java.util.List[Any]])
-          convert_ast(happy_ast)
+          convert_ast(List(happy_ast))
         } else {
           None
         }
@@ -146,8 +146,52 @@ case class PythonUDF(
       case Some(lambda_ast) =>
         val params = _get_paramater_list(lambda_ast)
         val body_ast = _get_lambda_body(lambda_ast)
-        logWarning(s"Got {params} {body_ast} from {ast}!")
-        None
+        logWarning(s"Got parameters ${params} and lambda body ${body_ast} from ${ast}!")
+        convert_func(params, body_ast)
+    }
+  }
+
+  def convert_func(params: List[String], body: List[_]): Option[Expression] = {
+    // For now all we handle is binary operators
+    val operation = body.headOption
+    operation match {
+      case Some("Name") => // Variable name
+        val name_body = body(1).asInstanceOf[List[_]]
+        val var_name_ast = name_body(0)
+        val var_name = var_name_ast.asInstanceOf[List[_]](1).asInstanceOf[String]
+        val param_index = params.indexOf(var_name)
+        if (param_index == -1) {
+          throw new Exception(s"Variable referenced not in param list.")
+        } else {
+          Some(children(param_index))
+        }
+      case Some("Constant") =>
+        val constant_body = body(1).asInstanceOf[List[_]]
+        val constant_value_ast = constant_body(0)
+        val const_value = constant_value_ast.asInstanceOf[List[_]](1)
+        Some(Literal(const_value))
+      case Some("BinOp") =>
+        val binop_body = body(1).asInstanceOf[List[_]]
+        val left_ast = _get_child_ast_from_node_name("left", binop_body).getOrElse(
+          throw new Exception("Binary operation with no left side"))
+        val right_ast = _get_child_ast_from_node_name("right", binop_body).getOrElse(
+          throw new Exception("Binary operation with no right side"))
+        val op_name = _get_child_ast_from_node_name("op", binop_body).getOrElse(
+          throw new Exception("No operation?"))(0).asInstanceOf[String]
+        val left_expr = convert_func(params, left_ast).getOrElse(
+          throw new Exception("Could not convert left side"))
+        val right_expr = convert_func(params, right_ast).getOrElse(
+          throw new Exception("Could not convert right side"))
+        op_name match {
+          case "Add" =>
+            Some(Add(left_expr, right_expr))
+          case _ =>
+            throw new Exception(s"Unsupported binary operation ${op_name}")
+        }
+      case Some(x) =>
+        throw new Exception(s"Unsupported operaation $x")
+      case _ =>
+        throw new Exception("No operation idk")
     }
   }
 
@@ -160,11 +204,31 @@ case class PythonUDF(
   }
 
   private def _get_child_ast_from_node_name(node_name: String, ast: List[_]): Option[List[_]] = {
-    logWarning(f"Looking for {node_name} in {ast}")
-    val direct_child_with_name = ast.find(elem =>
-      elem.isInstanceOf[List[_]] &&
-        elem.asInstanceOf[List[_]].headOption == Some(node_name))
-    direct_child_with_name.map(_.asInstanceOf[List[_]].tail.asInstanceOf[List[_]])
+    logWarning(s"Looking for ${node_name} in ${ast}")
+    if (ast(0).isInstanceOf[String]) {
+      if (ast(0) == node_name) {
+        Some(ast(1).asInstanceOf[List[_]])
+      } else {
+        None
+      }
+    } else {
+      val direct_child_with_name = ast.find { elem =>
+        logWarning(s"Considering ${elem}")
+        if (!elem.isInstanceOf[List[_]]) {
+          logWarning(s"Unexpectedly not a list")
+          false
+        } else {
+          val head = elem.asInstanceOf[List[_]].head
+          if (head != node_name) {
+            logWarning(s"Did not match on head ${head} to ${node_name}?")
+            false
+          } else {
+            true
+          }
+        }
+      }
+      direct_child_with_name.map(_.asInstanceOf[List[_]](1).asInstanceOf[List[_]])
+    }
   }
 
   private def _get_child_after_match_in_order(
@@ -189,12 +253,15 @@ case class PythonUDF(
   private def _get_paramater_list(lambda_ast: List[_]): List[String] = {
     val arguments_ast = _get_child_after_match_in_order(
       List("args", "arguments", "args"),
-      lambda_ast)
+      lambda_ast).getOrElse(throw new Exception("No arguments!"))
+    logWarning(s"Extracting names from $arguments_ast")
     arguments_ast.map { arg_nested_tuple =>
       // todo: named params check.
       // ['arg', [['arg', "'x'"]]]
-      arg_nested_tuple(1).asInstanceOf[List[_]](0).asInstanceOf[List[_]](1)
-        .asInstanceOf[String]
+      val argument_tuple = arg_nested_tuple.asInstanceOf[List[_]](1)
+      val argument_first = argument_tuple.asInstanceOf[List[_]](0)
+      val argument_name = argument_first.asInstanceOf[List[_]](1)
+      argument_name.asInstanceOf[String]
     }.toList
   }
 
@@ -204,7 +271,7 @@ case class PythonUDF(
     // then grab the value side of the assignment and it could be either lambda OR
     // Call -> Func -> Args -> Lambda
     val assigned = _get_child_after_match_in_order(
-      List("Module", "Body", "Assign"),
+      List("Module", "body", "Assign", "value"),
       ast).getOrElse(throw new Exception("No Assignment?"))
     val body_direct = _get_child_after_match_in_order(
       List("Lambda"),
@@ -212,13 +279,15 @@ case class PythonUDF(
     body_direct match {
       case Some(body) => body_direct
       case None => _get_child_after_match_in_order(
-        List("Call", "Func", "Args", "Lambda"),
+        List("Call", "func", "args", "Lambda"),
         assigned)
     }
   }
 
-  private def _get_lambda_body(lambda_ast: List[_]): Option[List[_]] = {
-    _get_child_ast_from_node_name("Body", lambda_ast)
+  private def _get_lambda_body(lambda_ast: List[_]): List[_] = {
+    _get_child_ast_from_node_name("body", lambda_ast).getOrElse(
+      throw new Exception("Could not find the body of the lambda")
+    )
   }
 }
 
