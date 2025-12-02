@@ -193,6 +193,14 @@ final class ShuffleBlockFetcherIterator(
 
   initialize()
 
+  private def incFetchWaitTime[T](f: () => T): Unit = {
+    val startFetchWait = System.nanoTime()
+    val t = f()
+    val fetchWaitTime = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startFetchWait)
+    shuffleMetrics.incFetchWaitTime(fetchWaitTime)
+    return t
+  }
+
   // Decrements the buffer reference count.
   // The currentResult is set to null to prevent releasing the buffer again on cleanup()
   private[storage] def releaseCurrentResultBuffer(): Unit = {
@@ -718,7 +726,7 @@ final class ShuffleBlockFetcherIterator(
       ", expected bytesInFlight = 0 but found bytesInFlight = " + bytesInFlight)
 
     // Send out initial requests for blocks, up to our maxBytesInFlight
-    fetchUpToMaxBytes()
+    incFetchWaitTime(() => fetchUpToMaxBytes())
 
     val numDeferredRequest = deferredFetchRequests.values.map(_.size).sum
     val numFetches = remoteRequests.size - fetchRequests.size - numDeferredRequest
@@ -731,10 +739,7 @@ final class ShuffleBlockFetcherIterator(
     fetchLocalBlocks(localBlocks)
     logDebug(s"Got local blocks in ${Utils.getUsedTimeNs(startTimeNs)}")
     // Get host local blocks if any
-    val startFetchWait = System.nanoTime()
-    fetchAllHostLocalBlocks(hostLocalBlocksByExecutor)
-    val fetchWaitTime = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startFetchWait)
-    shuffleMetrics.incFetchWaitTime(fetchWaitTime)
+    incFetchWaitTime(() => fetchAllHostLocalBlocks(hostLocalBlocksByExecutor))
     pushBasedFetchHelper.fetchAllPushMergedLocalBlocks(pushMergedLocalBlocks)
   }
 
@@ -816,10 +821,7 @@ final class ShuffleBlockFetcherIterator(
     // is also corrupt, so the previous stage could be retried.
     // For local shuffle block, throw FailureFetchResult for the first IOException.
     while (result == null) {
-      val startFetchWait = System.nanoTime()
-      result = results.take()
-      val fetchWaitTime = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startFetchWait)
-      shuffleMetrics.incFetchWaitTime(fetchWaitTime)
+      result = incFetchWaitTime[FetchResult](() => results.take())
 
       result match {
         case SuccessFetchResult(blockId, mapIndex, address, size, buf, isNetworkReqDone) =>
@@ -1079,7 +1081,7 @@ final class ShuffleBlockFetcherIterator(
       }
 
       // Send fetch requests up to maxBytesInFlight
-      fetchUpToMaxBytes()
+      incFetchWaitTime(() => fetchUpToMaxBytes())
     }
 
     currentResult = result.asInstanceOf[SuccessFetchResult]
