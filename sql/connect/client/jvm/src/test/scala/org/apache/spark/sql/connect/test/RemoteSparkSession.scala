@@ -61,15 +61,6 @@ object SparkConnectServerUtils {
   private var consoleOut: OutputStream = _
   private val serverStopCommand = "q"
 
-  /**
-   * Log4j configuration for the Spark Connect server. This ensures unit-tests.log is created for
-   * both debug and non-debug modes.
-   */
-  private def log4jConfigs: Seq[String] = {
-    val log4j2 = s"$connectClientHomeDir/src/test/resources/log4j2.properties"
-    Seq("--conf", s"spark.driver.extraJavaOptions=-Dlog4j.configurationFile=$log4j2")
-  }
-
   private lazy val sparkConnect: java.lang.Process = {
     debug("Starting the Spark Connect Server...")
     val connectJar =
