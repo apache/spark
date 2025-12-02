@@ -2453,13 +2453,9 @@ private[spark] class DAGScheduler(
             if (noResubmitEnqueued) {
               logInfo(log"Resubmitting ${MDC(FAILED_STAGE, failedStage)} " +
                 log"(${MDC(FAILED_STAGE_NAME, failedStage.name)}) due to barrier stage failure.")
-              messageScheduler.schedule(
-                new Runnable {
-                  override def run(): Unit = eventProcessLoop.post(ResubmitFailedStages)
-                },
-                DAGScheduler.RESUBMIT_TIMEOUT,
-                TimeUnit.MILLISECONDS
-              )
+              messageScheduler.schedule(new Runnable {
+                override def run(): Unit = eventProcessLoop.post(ResubmitFailedStages)
+              }, DAGScheduler.RESUBMIT_TIMEOUT, TimeUnit.MILLISECONDS)
             }
           }
         }
