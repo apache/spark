@@ -165,7 +165,7 @@ class TestRunner:
             self.write_task = None
             self.pdb_mode = False
 
-    # Writer: forward our stdin → child tty
+    # Writer: forward our stdin to child tty
     async def write_to_child(self):
         while True:
             data = await self.loop.run_in_executor(None, sys.stdin.buffer.read, 1)
