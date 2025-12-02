@@ -29,6 +29,10 @@ import org.apache.spark.sql.types.{NullType, StructField, StructType}
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.{NextIterator, SerializableConfiguration}
 
+case class AllColumnFamiliesReaderInfo(
+  colFamilySchemas: List[StateStoreColFamilySchema] = List.empty,
+  stateVariableInfos: List[TransformWithStateVariableInfo] = List.empty)
+
 /**
  * An implementation of [[PartitionReaderFactory]] for State data source. This is used to support
  * general read from a state store instance, rather than specific to the operator.
@@ -44,14 +48,16 @@ class StatePartitionReaderFactory(
     stateVariableInfoOpt: Option[TransformWithStateVariableInfo],
     stateStoreColFamilySchemaOpt: Option[StateStoreColFamilySchema],
     stateSchemaProviderOpt: Option[StateSchemaProvider],
-    joinColFamilyOpt: Option[String])
+    joinColFamilyOpt: Option[String],
+    allColumnFamiliesReaderInfo: Option[AllColumnFamiliesReaderInfo])
   extends PartitionReaderFactory {
 
   override def createReader(partition: InputPartition): PartitionReader[InternalRow] = {
     val stateStoreInputPartition = partition.asInstanceOf[StateStoreInputPartition]
     if (stateStoreInputPartition.sourceOptions.internalOnlyReadAllColumnFamilies) {
       new StatePartitionAllColumnFamiliesReader(storeConf, hadoopConf,
-        stateStoreInputPartition, schema, keyStateEncoderSpec, stateStoreColFamilySchemaOpt)
+        stateStoreInputPartition, schema, keyStateEncoderSpec,
+        allColumnFamiliesReaderInfo.getOrElse(AllColumnFamiliesReaderInfo()))
     } else if (stateStoreInputPartition.sourceOptions.readChangeFeed) {
       new StateStoreChangeDataPartitionReader(storeConf, hadoopConf,
         stateStoreInputPartition, schema, keyStateEncoderSpec, stateVariableInfoOpt,
@@ -258,11 +264,59 @@ class StatePartitionAllColumnFamiliesReader(
     partition: StateStoreInputPartition,
     schema: StructType,
     keyStateEncoderSpec: KeyStateEncoderSpec,
-    stateStoreColFamilySchemaOpt: Option[StateStoreColFamilySchema])
+    allColumnFamiliesReaderInfo: AllColumnFamiliesReaderInfo)
   extends StatePartitionReaderBase(
     storeConf,
     hadoopConf, partition, schema,
-    keyStateEncoderSpec, None, stateStoreColFamilySchemaOpt, None, None) {
+    keyStateEncoderSpec, None,
+    allColumnFamiliesReaderInfo.colFamilySchemas.headOption, // default schema
+    None, None) {
+
+  private val stateStoreColFamilySchemas = allColumnFamiliesReaderInfo.colFamilySchemas
+  private val stateVariableInfos = allColumnFamiliesReaderInfo.stateVariableInfos
+
+  private def isListType(colFamilyName: String): Boolean = {
+    SchemaUtil.checkVariableType(
+      stateVariableInfos.find(info => info.stateName == colFamilyName),
+      StateVariableType.ListState)
+  }
+
+  // Override provider to register ALL column families
+  override protected lazy val provider: StateStoreProvider = {
+    val stateStoreId = StateStoreId(partition.sourceOptions.stateCheckpointLocation.toString,
+      partition.sourceOptions.operatorId, partition.partition, partition.sourceOptions.storeName)
+    val stateStoreProviderId = StateStoreProviderId(stateStoreId, partition.queryId)
+    val useColumnFamilies = stateStoreColFamilySchemas.length > 1
+    val stateProvider = StateStoreProvider.createAndInit(
+      stateStoreProviderId, keySchema, valueSchema, keyStateEncoderSpec,
+      useColumnFamilies, storeConf, hadoopConf.value,
+      useMultipleValuesPerKey = false, None)
+    if (useColumnFamilies) {
+      val store = stateProvider.getStore(
+        partition.sourceOptions.batchId + 1,
+        getEndStoreUniqueId)
+      // Register ALL column families
+      stateStoreColFamilySchemas.foreach { cfSchema =>
+        cfSchema.colFamilyName match {
+          case StateStore.DEFAULT_COL_FAMILY_NAME => None
+          case _ =>
+            val isInternal = cfSchema.colFamilyName.startsWith("$")
+            val useMultipleValuesPerKey = isListType(cfSchema.colFamilyName)
+            require(cfSchema.keyStateEncoderSpec.isDefined,
+              s"keyStateEncoderSpec must be defined for column family ${cfSchema.colFamilyName}")
+            store.createColFamilyIfAbsent(
+              cfSchema.colFamilyName,
+              cfSchema.keySchema,
+              cfSchema.valueSchema,
+              cfSchema.keyStateEncoderSpec.get,
+              useMultipleValuesPerKey,
+              isInternal)
+        }
+      }
+      store.abort()
+    }
+    stateProvider
+  }
 
   private lazy val store: ReadStateStore = {
     assert(getStartStoreUniqueId == getEndStoreUniqueId,
@@ -274,12 +328,23 @@ class StatePartitionAllColumnFamiliesReader(
   }
 
   override lazy val iter: Iterator[InternalRow] = {
-    store
-      .iterator()
-      .map { pair =>
-        SchemaUtil.unifyStateRowPairAsRawBytes(
-          (pair.key, pair.value), StateStore.DEFAULT_COL_FAMILY_NAME)
+    // Iterate all column families and concatenate results
+    stateStoreColFamilySchemas.iterator.flatMap { cfSchema =>
+      if (isListType(cfSchema.colFamilyName)) {
+        store.iterator(cfSchema.colFamilyName).flatMap(
+          pair =>
+            store.valuesIterator(pair.key, cfSchema.colFamilyName).map {
+              value =>
+                SchemaUtil.unifyStateRowPairAsRawBytes((pair.key, value), cfSchema.colFamilyName)
+            }
+        )
+      } else {
+        store.iterator(cfSchema.colFamilyName).map { pair =>
+          SchemaUtil.unifyStateRowPairAsRawBytes(
+            (pair.key, pair.value), cfSchema.colFamilyName)
+        }
       }
+    }
   }
 
   override def close(): Unit = {

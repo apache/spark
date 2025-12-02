@@ -17,18 +17,20 @@
 package org.apache.spark.sql.execution.datasources.v2.state
 
 import java.nio.ByteOrder
+import java.sql.Timestamp
 import java.util.Arrays
 
-import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.sql.{DataFrame, Encoders, Row}
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.UnsafeProjection
 import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.execution.streaming.state.{HDFSBackedStateStoreProvider, RocksDBStateStoreProvider, StateRepartitionUnsupportedProviderError, StateStore}
-import org.apache.spark.sql.functions.{count, sum}
+import org.apache.spark.sql.functions.{col, count, sum, timestamp_seconds}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.streaming.OutputMode
-import org.apache.spark.sql.types.{BooleanType, IntegerType, LongType, NullType, StructField, StructType, TimestampType}
+import org.apache.spark.sql.streaming.{ExpiredTimerInfo, ListState, MapState, OutputMode, SimpleMapValue, StatefulProcessor, TimeMode, TimerValues, TransformWithStateSuiteUtils, Trigger, TTLConfig, ValueState}
+import org.apache.spark.sql.streaming.util.StreamManualClock
+import org.apache.spark.sql.types.{BooleanType, DataType, IntegerType, LongType, NullType, StringType, StructField, StructType, TimestampType}
 
 /**
  * Note: This extends StateDataSourceTestBase to access
@@ -95,7 +97,6 @@ class StatePartitionAllColumnFamiliesReaderSuite extends StateDataSourceTestBase
     val filteredBytesData = bytesDf.filter { row =>
       row.getString(3) == columnFamily
     }
-
     // Verify same number of rows
     assert(filteredBytesData.length == normalDf.length,
       s"Row count mismatch for column family '$columnFamily': " +
@@ -124,7 +125,7 @@ class StatePartitionAllColumnFamiliesReaderSuite extends StateDataSourceTestBase
 
       // Convert value to bytes
       val valueBytes = if (value == null) {
-        Array.empty[Byte]
+        UnsafeProjection.create(Array[DataType](NullType)).apply(InternalRow.apply(null)).getBytes
       } else {
         val valueInternalRow = valueConverter(value).asInstanceOf[InternalRow]
         val valueUnsafeRow = valueProjection(valueInternalRow)
@@ -162,6 +163,88 @@ class StatePartitionAllColumnFamiliesReaderSuite extends StateDataSourceTestBase
             s"  Normal: ${normalValue.mkString("[", ",", "]")}\n" +
             s"  Bytes:  ${bytesValue.mkString("[", ",", "]")}")
     }
+  }
+
+  /**
+   * Validates timer column families for both event time and processing time timers.
+   * @param checkpointDir The checkpoint directory path
+   * @param timerPrefix The timer prefix: "event" for event time, "proc" for processing time
+   */
+  private def validateTimerColumnFamilies(
+      checkpointDir: String,
+      timerPrefix: String): Unit = {
+    val bytesDf = getBytesReadDf(checkpointDir)
+
+    validateBytesReadDfSchema(bytesDf)
+    // Collect all bytes data
+    val allBytesData = bytesDf.collect()
+
+    // Get distinct column family names
+    val columnFamilies = allBytesData.map(_.getString(3)).distinct.sorted
+
+    // Verify countState column family exists
+    assert(columnFamilies.toSet ==
+      Set(s"$$${timerPrefix}Timers_keyToTimestamp",
+        s"$$${timerPrefix}Timers_timestampToKey", "countState"))
+
+    val groupByKeySchema = StructType(Array(
+      StructField("key", StringType, nullable = true)
+    ))
+    val stateValueSchema = StructType(Array(
+      StructField("value", LongType, nullable = true)
+    ))
+    val stateNormalDf = spark.read
+      .format("statestore")
+      .option(StateSourceOptions.PATH, checkpointDir)
+      .option(StateSourceOptions.STATE_VAR_NAME, "countState")
+      .load()
+      .selectExpr("partition_id", "key", "value")
+    // Validate countState data using compareNormalAndBytesData
+    compareNormalAndBytesData(
+      stateNormalDf.collect(),
+      allBytesData,
+      "countState",
+      groupByKeySchema,
+      stateValueSchema)
+
+    val keyToTimestampSchema = StructType(Array(
+      StructField("key", groupByKeySchema),
+      StructField("expiryTimestampMs", LongType, nullable = false)
+    ))
+    val dummySchema = StructType(Array(StructField("__dummy__", NullType)))
+
+    // Read timer DataFrame ONCE and reuse for both comparisons
+    val timerBaseDf = spark.read
+      .format("statestore")
+      .option(StateSourceOptions.PATH, checkpointDir)
+      .option(StateSourceOptions.READ_REGISTERED_TIMERS, true)
+      .load()
+
+    val keyToTimestampNormalDf = timerBaseDf.selectExpr(
+      "partition_id",
+      "STRUCT(key AS groupingKey, expiration_timestamp_ms AS key)",
+      "NULL AS value")
+    compareNormalAndBytesData(
+      keyToTimestampNormalDf.collect(),
+      allBytesData,
+      s"$$${timerPrefix}Timers_keyToTimestamp",
+      keyToTimestampSchema,
+      dummySchema)
+
+    val timestampToKeySchema = StructType(Array(
+      StructField("expiryTimestampMs", LongType, nullable = false),
+      StructField("key", groupByKeySchema)
+    ))
+    val timestampToKeyNormalDf = timerBaseDf.selectExpr(
+      "partition_id",
+      "STRUCT(expiration_timestamp_ms AS key, key AS groupingKey)",
+      "NULL AS value")
+    compareNormalAndBytesData(
+      timestampToKeyNormalDf.collect(),
+      allBytesData,
+      s"$$${timerPrefix}Timers_timestampToKey",
+      timestampToKeySchema,
+      dummySchema)
   }
 
   // Run all tests with both changelog checkpointing enabled and disabled
@@ -235,12 +318,12 @@ class StatePartitionAllColumnFamiliesReaderSuite extends StateDataSourceTestBase
 
         val keySchema = StructType(Array(
           StructField("groupKey", IntegerType, nullable = false),
-          StructField("fruit", org.apache.spark.sql.types.StringType, nullable = true)
+          StructField("fruit", StringType, nullable = true)
         ))
         // State version 1 includes key columns in the value
         val valueSchema = StructType(Array(
           StructField("groupKey", IntegerType, nullable = false),
-          StructField("fruit", org.apache.spark.sql.types.StringType, nullable = true),
+          StructField("fruit", StringType, nullable = true),
           StructField("count", LongType, nullable = false),
           StructField("sum", LongType, nullable = false),
           StructField("max", IntegerType, nullable = false),
@@ -263,7 +346,7 @@ class StatePartitionAllColumnFamiliesReaderSuite extends StateDataSourceTestBase
 
         val keySchema = StructType(Array(
           StructField("groupKey", IntegerType, nullable = false),
-          StructField("fruit", org.apache.spark.sql.types.StringType, nullable = true)
+          StructField("fruit", StringType, nullable = true)
         ))
         val valueSchema = StructType(Array(
           StructField("count", LongType, nullable = false),
@@ -306,7 +389,7 @@ class StatePartitionAllColumnFamiliesReaderSuite extends StateDataSourceTestBase
         runDropDuplicatesQueryWithColumnSpecified(tempDir.getAbsolutePath)
 
         val keySchema = StructType(Array(
-          StructField("col1", org.apache.spark.sql.types.StringType, nullable = true)
+          StructField("col1", StringType, nullable = true)
         ))
         val valueSchema = StructType(Array(
           StructField("__dummy__", NullType, nullable = true)
@@ -325,7 +408,7 @@ class StatePartitionAllColumnFamiliesReaderSuite extends StateDataSourceTestBase
         runDropDuplicatesWithinWatermarkQuery(tempDir.getAbsolutePath)
 
         val keySchema = StructType(Array(
-          StructField("_1", org.apache.spark.sql.types.StringType, nullable = true)
+          StructField("_1", StringType, nullable = true)
         ))
         val valueSchema = StructType(Array(
           StructField("expiresAtMicros", LongType, nullable = false)
@@ -344,7 +427,7 @@ class StatePartitionAllColumnFamiliesReaderSuite extends StateDataSourceTestBase
         runSessionWindowAggregationQuery(tempDir.getAbsolutePath)
 
         val keySchema = StructType(Array(
-          StructField("sessionId", org.apache.spark.sql.types.StringType, nullable = false),
+          StructField("sessionId", StringType, nullable = false),
           StructField("sessionStartTime",
             org.apache.spark.sql.types.TimestampType, nullable = false)
         ))
@@ -353,7 +436,7 @@ class StatePartitionAllColumnFamiliesReaderSuite extends StateDataSourceTestBase
             StructField("start", org.apache.spark.sql.types.TimestampType),
             StructField("end", org.apache.spark.sql.types.TimestampType)
           )), nullable = false),
-          StructField("sessionId", org.apache.spark.sql.types.StringType, nullable = false),
+          StructField("sessionId", StringType, nullable = false),
           StructField("count", LongType, nullable = false)
         ))
 
@@ -374,7 +457,7 @@ class StatePartitionAllColumnFamiliesReaderSuite extends StateDataSourceTestBase
           runFlatMapGroupsWithStateQuery(tempDir.getAbsolutePath)
 
           val keySchema = StructType(Array(
-            StructField("value", org.apache.spark.sql.types.StringType, nullable = true)
+            StructField("value", StringType, nullable = true)
           ))
           val valueSchema = StructType(Array(
             StructField("numEvents", IntegerType, nullable = false),
@@ -399,7 +482,7 @@ class StatePartitionAllColumnFamiliesReaderSuite extends StateDataSourceTestBase
           runFlatMapGroupsWithStateQuery(tempDir.getAbsolutePath)
 
           val keySchema = StructType(Array(
-            StructField("value", org.apache.spark.sql.types.StringType, nullable = true)
+            StructField("value", StringType, nullable = true)
           ))
           val valueSchema = StructType(Array(
             StructField("groupState", org.apache.spark.sql.types.StructType(Array(
@@ -420,8 +503,9 @@ class StatePartitionAllColumnFamiliesReaderSuite extends StateDataSourceTestBase
       }
     }
 
-    def testStreamStreamJoin(stateVersion: Int): Unit = {
-      withSQLConf(SQLConf.STREAMING_JOIN_STATE_FORMAT_VERSION.key -> stateVersion.toString) {
+    def testStreamStreamJoinV2(stateVersion: Int): Unit = {
+      withSQLConf(
+        SQLConf.STREAMING_JOIN_STATE_FORMAT_VERSION.key -> stateVersion.toString) {
         withTempDir { tempDir =>
           runStreamStreamJoinQuery(tempDir.getAbsolutePath)
 
@@ -483,11 +567,11 @@ class StatePartitionAllColumnFamiliesReaderSuite extends StateDataSourceTestBase
     }
 
     testWithChangelogConfig("stream-stream join, state ver 1") {
-      testStreamStreamJoin(1)
+      testStreamStreamJoinV2(1)
     }
 
     testWithChangelogConfig("stream-stream join, state ver 2") {
-      testStreamStreamJoin(2)
+      testStreamStreamJoinV2(2)
     }
   } // End of foreach loop for changelog checkpointing dimension
 
@@ -516,12 +600,7 @@ class StatePartitionAllColumnFamiliesReaderSuite extends StateDataSourceTestBase
 
         checkError(
           exception = intercept[StateRepartitionUnsupportedProviderError] {
-            spark.read
-              .format("statestore")
-              .option(StateSourceOptions.PATH, tempDir.getAbsolutePath)
-              .option(StateSourceOptions.INTERNAL_ONLY_READ_ALL_COLUMN_FAMILIES, "true")
-              .load()
-              .collect()
+            getBytesReadDf(tempDir.getAbsolutePath).collect()
           },
           condition = "STATE_REPARTITION_INVALID_CHECKPOINT.UNSUPPORTED_PROVIDER",
           parameters = Map(
@@ -532,5 +611,280 @@ class StatePartitionAllColumnFamiliesReaderSuite extends StateDataSourceTestBase
         )
       }
     }
+  }
+
+  test("transformWithState with multiple column families") {
+    withTempDir { tempDir =>
+      withSQLConf(
+        SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[RocksDBStateStoreProvider].getName,
+        SQLConf.SHUFFLE_PARTITIONS.key ->
+          TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString) {
+        val inputData = MemoryStream[String]
+        val result = inputData.toDS()
+          .groupByKey(x => x)
+          .transformWithState(new MultiStateVarProcessor(),
+            TimeMode.None(),
+            OutputMode.Update())
+
+        testStream(result, OutputMode.Update())(
+          StartStream(checkpointLocation = tempDir.getAbsolutePath),
+          AddData(inputData, "a", "b", "a"),
+          CheckNewAnswer(("a", "2"), ("b", "1")),
+          AddData(inputData, "b", "c"),
+          CheckNewAnswer(("b", "2"), ("c", "1")),
+          StopStream
+        )
+
+        // Read all column families using internalOnlyReadAllColumnFamilies
+        val bytesDf = getBytesReadDf(tempDir.getAbsolutePath)
+
+        validateBytesReadDfSchema(bytesDf)
+
+        // Collect all bytes data
+        val allBytesData = bytesDf.collect()
+
+        // Get distinct column family names
+        val columnFamilies = allBytesData.map(_.getString(3)).distinct.sorted
+
+        // Verify countState column family exists
+        assert(columnFamilies.toSet ==
+          Set("countState", "itemsList", "$rowCounter_itemsList", "itemsMap"))
+
+        // Define schemas for each column family based on provided schema info
+        // countState: key=StructType(value:StringType), value=StructType(value:LongType)
+        val groupByKeySchema = StructType(Array(
+          StructField("value", StringType, nullable = true)
+        ))
+        val countStateValueSchema = StructType(Array(
+          StructField("value", LongType, nullable = false)
+        ))
+        val itemsListValueSchema = StructType(Array(
+          StructField("value", StringType, nullable = true)
+        ))
+        val rowCounterValueSchema = StructType(Array(
+          StructField("count", LongType, nullable = true)
+        ))
+
+        // Read normal data for countState state variable
+        val countStateNormalDf = spark.read
+          .format("statestore")
+          .option(StateSourceOptions.PATH, tempDir.getAbsolutePath)
+          .option(StateSourceOptions.STATE_VAR_NAME, "countState")
+          .load()
+          .selectExpr("partition_id", "key", "value")
+
+        // Validate countState data using compareNormalAndBytesData
+        compareNormalAndBytesData(
+          countStateNormalDf.collect(),
+          allBytesData,
+          "countState",
+          groupByKeySchema,
+          countStateValueSchema)
+
+        // Read normal data for itemsList state variable
+        val itemsListNormalDf = spark.read
+          .format("statestore")
+          .option(StateSourceOptions.PATH, tempDir.getAbsolutePath)
+          .option(StateSourceOptions.STATE_VAR_NAME, "itemsList")
+          .option(StateSourceOptions.FLATTEN_COLLECTION_TYPES, "true")
+          .load()
+          .selectExpr("partition_id", "key", "list_element")
+
+       // Validate itemsList data using compareNormalAndBytesListData
+       // This validates both itemsList and $rowCounter_itemsList column families
+        compareNormalAndBytesData(
+          itemsListNormalDf.collect(),
+          allBytesData,
+          "itemsList",
+          groupByKeySchema,
+          itemsListValueSchema)
+
+        compareNormalAndBytesData(
+          countStateNormalDf.collect(),
+          allBytesData,
+          "$rowCounter_itemsList",
+          groupByKeySchema,
+          rowCounterValueSchema)
+
+       val mapStateNormalDf = spark.read
+         .format("statestore")
+         .option(StateSourceOptions.PATH, tempDir.getAbsolutePath)
+         .option(StateSourceOptions.STATE_VAR_NAME, "itemsMap")
+         .load()
+         .selectExpr("partition_id", "STRUCT(key, user_map_key) AS KEY", "user_map_value AS value")
+       val itemsMapKeySchema = StructType(Array(
+         StructField("key", groupByKeySchema),
+         StructField("user_map_key", groupByKeySchema, nullable = true)
+       ))
+       val itemsMapValueSchema = StructType(Array(
+         StructField("user_map_value", IntegerType, nullable = true)
+       ))
+       compareNormalAndBytesData(
+         mapStateNormalDf.collect(),
+         allBytesData,
+         "itemsMap",
+         itemsMapKeySchema,
+         itemsMapValueSchema)
+      }
+    }
+  }
+
+  test("read all column families with event time timers") {
+    withTempDir { tempDir =>
+      withSQLConf(
+        SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+          classOf[RocksDBStateStoreProvider].getName,
+        SQLConf.SHUFFLE_PARTITIONS.key -> "2") {
+        val inputData = MemoryStream[(String, Long)]
+        val result = inputData.toDS()
+          .select(col("_1").as("key"), timestamp_seconds(col("_2")).as("eventTime"))
+          .withWatermark("eventTime", "10 seconds")
+          .as[(String, Timestamp)]
+          .groupByKey(_._1)
+          .transformWithState(
+            new EventTimeTimerProcessor(),
+            TimeMode.EventTime(),
+            OutputMode.Update())
+
+        testStream(result, OutputMode.Update())(
+          StartStream(checkpointLocation = tempDir.getAbsolutePath),
+          AddData(inputData, ("a", 1L), ("b", 2L), ("c", 3L)),
+          CheckLastBatch(("a", "1"), ("b", "1"), ("c", "1")),
+          StopStream
+        )
+
+        validateTimerColumnFamilies(tempDir.getAbsolutePath, "event")
+      }
+    }
+  }
+
+  test("read all column families with processing time timers") {
+    withTempDir { tempDir =>
+      withSQLConf(
+        SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+          classOf[RocksDBStateStoreProvider].getName,
+        SQLConf.SHUFFLE_PARTITIONS.key -> "2") {
+        val clock = new StreamManualClock
+        val inputData = MemoryStream[String]
+        val result = inputData.toDS()
+          .groupByKey(x => x)
+          .transformWithState(new RunningCountStatefulProcessorWithProcTimeTimer(),
+            TimeMode.ProcessingTime(),
+            OutputMode.Update())
+
+        testStream(result, OutputMode.Update())(
+          StartStream(checkpointLocation = tempDir.getAbsolutePath,
+            trigger = Trigger.ProcessingTime("1 second"),
+            triggerClock = clock),
+          AddData(inputData, "a"),
+          AdvanceManualClock(1 * 1000),
+          CheckNewAnswer(("a", "1")),
+          StopStream
+        )
+
+        validateTimerColumnFamilies(tempDir.getAbsolutePath, "proc")
+      }
+    }
+  }
+}
+
+/**
+ * Stateful processor with multiple state variables (ValueState + ListState)
+ * for testing multi-column family reading.
+ */
+class MultiStateVarProcessor extends StatefulProcessor[String, String, (String, String)] {
+  @transient private var _countState: ValueState[Long] = _
+  @transient private var _itemsList: ListState[String] = _
+  @transient private var _itemsMap: MapState[String, SimpleMapValue] = _
+
+  override def init(
+                     outputMode: OutputMode,
+                     timeMode: TimeMode): Unit = {
+    _countState = getHandle.getValueState[Long]("countState", Encoders.scalaLong, TTLConfig.NONE)
+    _itemsList = getHandle.getListState[String]("itemsList", Encoders.STRING, TTLConfig.NONE)
+    _itemsMap = getHandle.getMapState[String, SimpleMapValue](
+     "itemsMap", Encoders.STRING, Encoders.product[SimpleMapValue], TTLConfig.NONE)
+  }
+
+  override def handleInputRows(
+          key: String,
+          inputRows: Iterator[String],
+          timerValues: TimerValues): Iterator[(String, String)] = {
+    val currentCount = Option(_countState.get()).getOrElse(0L)
+    var newCount = currentCount
+    inputRows.foreach { item =>
+      newCount += 1
+      _itemsList.appendValue(item)
+     _itemsMap.updateValue(item, SimpleMapValue(newCount.toInt))
+    }
+    _countState.update(newCount)
+    Iterator((key, newCount.toString))
+  }
+}
+
+class RunningCountStatefulProcessorWithProcTimeTimer
+  extends StatefulProcessor[String, String, (String, String)] {
+  import implicits._
+  @transient protected var _countState: ValueState[Long] = _
+
+  override def init(
+                     outputMode: OutputMode,
+                     timeMode: TimeMode): Unit = {
+    _countState = getHandle.getValueState[Long]("countState", TTLConfig.NONE)
+  }
+
+  override def handleInputRows(
+      key: String,
+      inputRows: Iterator[String],
+      timerValues: TimerValues): Iterator[(String, String)] = {
+    val currCount = Option(_countState.get()).getOrElse(0L)
+
+    getHandle.registerTimer(timerValues.getCurrentProcessingTimeInMs() + 5000)
+
+    val count = currCount + 1
+    _countState.update(count)
+    Iterator((key, count.toString))
+  }
+
+  override def handleExpiredTimer(
+     key: String,
+     timerValues: TimerValues,
+     expiredTimerInfo: ExpiredTimerInfo): Iterator[(String, String)] = {
+    _countState.clear()
+    Iterator((key, "-1"))
+  }
+}
+
+
+class EventTimeTimerProcessor
+  extends StatefulProcessor[String, (String, Timestamp), (String, String)] {
+  @transient var _valueState: ValueState[Long] = _
+
+  override def init(
+                     outputMode: OutputMode,
+                     timeMode: TimeMode): Unit = {
+    _valueState = getHandle.getValueState("countState", Encoders.scalaLong, TTLConfig.NONE)
+  }
+
+  override def handleInputRows(
+      key: String,
+      rows: Iterator[(String, Timestamp)],
+      timerValues: TimerValues): Iterator[(String, String)] = {
+    var maxTimestamp = 0L
+    var rowCount = 0
+    rows.foreach { case (_, timestamp) =>
+      maxTimestamp = Math.max(maxTimestamp, timestamp.getTime)
+      rowCount += 1
+    }
+
+    val count = Option(_valueState.get()).getOrElse(0L) + rowCount
+    _valueState.update(count)
+
+    // Register an event time timer
+    if (maxTimestamp > 0) {
+      getHandle.registerTimer(maxTimestamp + 5000)
+    }
+
+    Iterator((key, count.toString))
   }
 }

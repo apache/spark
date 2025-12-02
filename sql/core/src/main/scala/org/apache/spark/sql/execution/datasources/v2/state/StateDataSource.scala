@@ -90,7 +90,8 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
       stateStoreReaderInfo.transformWithStateVariableInfoOpt,
       stateStoreReaderInfo.stateStoreColFamilySchemaOpt,
       stateStoreReaderInfo.stateSchemaProviderOpt,
-      stateStoreReaderInfo.joinColFamilyOpt)
+      stateStoreReaderInfo.joinColFamilyOpt,
+      Option(stateStoreReaderInfo.allColumnFamiliesReaderInfo))
   }
 
   override def inferSchema(options: CaseInsensitiveStringMap): StructType = {
@@ -242,7 +243,9 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
   private def getStoreMetadataAndRunChecks(sourceOptions: StateSourceOptions):
     StateStoreReaderInfo = {
     val storeMetadata = StateDataSource.getStateStoreMetadata(sourceOptions, hadoopConf)
-    runStateVarChecks(sourceOptions, storeMetadata)
+    if (!sourceOptions.internalOnlyReadAllColumnFamilies) {
+      runStateVarChecks(sourceOptions, storeMetadata)
+    }
 
     var keyStateEncoderSpecOpt: Option[KeyStateEncoderSpec] = None
     var stateStoreColFamilySchemaOpt: Option[StateStoreColFamilySchema] = None
@@ -250,6 +253,8 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
     var stateSchemaProvider: Option[StateSchemaProvider] = None
     var joinColFamilyOpt: Option[String] = None
     var timeMode: String = TimeMode.None.toString
+    var stateStoreColFamilySchemas: List[StateStoreColFamilySchema] = List.empty
+    var stateVariableInfos: List[TransformWithStateVariableInfo] = List.empty
 
     if (sourceOptions.joinSide == JoinSideValues.none) {
       var stateVarName = sourceOptions.stateVarName
@@ -268,13 +273,16 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
           if (sourceOptions.readRegisteredTimers) {
             stateVarName = TimerStateUtils.getTimerStateVarNames(timeMode)._1
           }
-
-          val stateVarInfoList = operatorProperties.stateVariables
-            .filter(stateVar => stateVar.stateName == stateVarName)
-          require(stateVarInfoList.size == 1, s"Failed to find unique state variable info " +
-            s"for state variable $stateVarName in operator ${sourceOptions.operatorId}")
-          val stateVarInfo = stateVarInfoList.head
-          transformWithStateVariableInfoOpt = Some(stateVarInfo)
+          if (!sourceOptions.internalOnlyReadAllColumnFamilies) {
+            val stateVarInfoList = operatorProperties.stateVariables
+              .filter(stateVar => stateVar.stateName == stateVarName)
+            require(stateVarInfoList.size == 1, s"Failed to find unique state variable info " +
+              s"for state variable $stateVarName in operator ${sourceOptions.operatorId}")
+            val stateVarInfo = stateVarInfoList.head
+            transformWithStateVariableInfoOpt = Some(stateVarInfo)
+          } else {
+            stateVariableInfos = operatorProperties.stateVariables
+          }
           val schemaFilePaths = storeMetadataEntry.stateSchemaFilePaths
           val stateSchemaMetadata = StateSchemaMetadata.createStateSchemaMetadata(
             sourceOptions.stateCheckpointLocation.toString,
@@ -305,6 +313,10 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
           oldSchemaFilePaths = oldSchemaFilePaths)
         val stateSchema = manager.readSchemaFile()
 
+        if (sourceOptions.internalOnlyReadAllColumnFamilies) {
+          // Store all column family schemas for multi-CF reading
+          stateStoreColFamilySchemas = stateSchema
+        }
         // Based on the version and read schema, populate the keyStateEncoderSpec used for
         // reading the column families
         val resultSchema = stateSchema.filter(_.colFamilyName == stateVarName).head
@@ -321,7 +333,8 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
       stateStoreColFamilySchemaOpt,
       transformWithStateVariableInfoOpt,
       stateSchemaProvider,
-      joinColFamilyOpt
+      joinColFamilyOpt,
+      AllColumnFamiliesReaderInfo(stateStoreColFamilySchemas, stateVariableInfos)
     )
   }
 
@@ -708,7 +721,9 @@ case class StateStoreReaderInfo(
     stateStoreColFamilySchemaOpt: Option[StateStoreColFamilySchema],
     transformWithStateVariableInfoOpt: Option[TransformWithStateVariableInfo],
     stateSchemaProviderOpt: Option[StateSchemaProvider],
-    joinColFamilyOpt: Option[String] // Only used for join op with state format v3
+    joinColFamilyOpt: Option[String], // Only used for join op with state format v3
+    // List of all column family schemas - used when internalOnlyReadAllColumnFamilies=true
+    allColumnFamiliesReaderInfo: AllColumnFamiliesReaderInfo
 )
 
 object StateDataSource {
