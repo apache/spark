@@ -1369,6 +1369,18 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
     assert(msg.contains("Cannot use the keyword 'proxy' or 'history' in reverse proxy URL"))
   }
 
+   test("SPARK-54563: check invalid allowFramingFrom") {
+    val allowFramingFrom = "https://my-allowed-domain.com" + "\n" + "https://my-allowed-domain-1.com"
+    val conf = new SparkConf().setAppName("testAppAttemptId")
+      .setMaster("checkallowFramingFrom")
+    conf.set(, true)
+    conf.set(UI_ALLOW_FRAMING_FROM, allowFramingFrom)
+    val msg = intercept[java.lang.IllegalArgumentException] {
+      new SparkContext(conf)
+    }.getMessage
+    assert(msg.contains("Cannot have newline in frame options config."))
+  }
+
   test("SPARK-39957: ExitCode HEARTBEAT_FAILURE should be counted as network failure") {
     // This test is used to prove that driver will receive executorExitCode before onDisconnected
     // removes the executor. If the executor is removed by onDisconnected, the executor loss will be

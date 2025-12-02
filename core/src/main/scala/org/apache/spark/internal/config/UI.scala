@@ -60,7 +60,7 @@ private[spark] object UI {
     .stringConf
     .checkValue({ s =>
       !s.contains("\n") },
-      "Cannot have newline in the config")
+      "Cannot have newline in frame options config.")
     .createOptional
 
   val UI_REVERSE_PROXY = ConfigBuilder("spark.ui.reverseProxy")
