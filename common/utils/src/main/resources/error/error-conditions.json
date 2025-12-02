@@ -2444,6 +2444,20 @@
     ],
     "sqlState" : "XX000"
   },
+  "INTERNAL_ERROR_INVALID_HIVE_COLUMN_TYPE" : {
+    "message" : [
+      "Failed to convert Hive table to Spark catalog table.",
+      "Database: <dbName>",
+      "Table: <tableName>"
+    ],
+    "sqlState" : "XX000"
+  },
+  "INTERNAL_ERROR_INVALID_PARTITION_FILTER_VALUE" : {
+    "message" : [
+      "Partition filter value cannot contain both double quotes (\") and single quotes (')."
+    ],
+    "sqlState" : "XX000"
+  },
   "INTERNAL_ERROR_MEMORY" : {
     "message" : [
       "<message>"
@@ -2491,6 +2505,14 @@
   "INTERNAL_ERROR_NETWORK" : {
     "message" : [
       "<message>"
+    ],
+    "sqlState" : "XX000"
+  },
+  "INTERNAL_ERROR_SERDE_INTERFACE_NOT_FOUND" : {
+    "message" : [
+      "The SerDe interface was removed since Hive 2.3 (HIVE-15167).",
+      "Please migrate your custom SerDes to Hive 2.3 or later.",
+      "For more details, see: https://issues.apache.org/jira/browse/HIVE-15167"
     ],
     "sqlState" : "XX000"
   },
@@ -9019,21 +9041,6 @@
   "_LEGACY_ERROR_TEMP_2185" : {
     "message" : [
       "Cannot create staging directory: <message>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2186" : {
-    "message" : [
-      "The SerDe interface removed since Hive 2.3(HIVE-15167). Please migrate your custom SerDes to Hive 2.3. See HIVE-15167 for more details."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2187" : {
-    "message" : [
-      "<message>, db: <dbName>, table: <tableName>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2192" : {
-    "message" : [
-      "Partition filter cannot have both `\"` and `'` characters."
     ]
   },
   "_LEGACY_ERROR_TEMP_2194" : {
