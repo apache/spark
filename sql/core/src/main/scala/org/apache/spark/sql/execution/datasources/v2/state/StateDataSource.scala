@@ -490,6 +490,7 @@ object StateSourceOptions extends DataSourceOptions {
           s"Valid values are ${JoinSideValues.values.mkString(",")}")
     }
 
+    // Use storeName rather than joinSide to identify the specific join store
     if (joinSide != JoinSideValues.none && storeName != StateStoreId.DEFAULT_STORE_NAME) {
       throw StateDataSourceErrors.conflictOptions(Seq(JOIN_SIDE, STORE_NAME))
     }
