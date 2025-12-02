@@ -10,12 +10,12 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Демонстрационный Spark-job, который специально создаёт data skew.
+ * A demo Spark job that specifically creates a data skew.
  *
- *  - 1_000_000 раз ключ "HOT_KEY"
- *  - по одному разу ключи "a", "b", "c", "d", "e"
+ * - 1_000_000 times the "HOT_KEY" key
+ * - keys "a", "b", "c", "d", "e" are used once each
  *
- * reduceByKey создаст перекос по времени выполнения задач.
+ * reduceByKey will create a skew in task execution times.
  */
 public class SkewDemoJob {
 
@@ -31,21 +31,21 @@ public class SkewDemoJob {
         for (int i = 0; i < 1_000_000; i++) {
             data.add("HOT_KEY");
         }
-        // Несколько "холодных" ключей
+        // Several "cold" keys
         data.add("a");
         data.add("b");
         data.add("c");
         data.add("d");
         data.add("e");
 
-        // 100 партиций, чтобы был потенциал перекоса
+        // 100 partitions to have potential for skew
         JavaRDD<String> rdd = sc.parallelize(data, 100);
 
         JavaPairRDD<String, Integer> pairs = rdd.mapToPair(key -> new Tuple2<>(key, 1));
 
         JavaPairRDD<String, Integer> reduced = pairs.reduceByKey(Integer::sum);
 
-        // Просто чтобы job что-то сделала
+        // Just to make the job do something
         reduced.collect().forEach(t -> System.out.println(t._1 + " -> " + t._2));
 
         spark.stop();
