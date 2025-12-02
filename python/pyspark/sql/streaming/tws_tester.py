@@ -17,7 +17,7 @@
 from __future__ import annotations
 
 from itertools import groupby
-from typing import Any, Iterator, Optional, Union
+from typing import Any, Iterator, Optional, Union, cast
 
 import pandas as pd
 
@@ -150,9 +150,11 @@ class _InMemoryStatefulProcessorHandle(StatefulProcessorHandle):
 
     def __init__(self) -> None:
         self.grouping_key = None
-        self.states = dict()
+        self.value_states: dict[Any, _InMemoryValueState] = dict()
+        self.list_states: dict[Any, _InMemoryListState] = dict()
+        self.map_states: dict[Any, _InMemoryMapState] = dict()
 
-    def setGroupingKey(self, key) -> None:
+    def setGroupingKey(self, key: Any) -> None:
         self.grouping_key = key
 
     def getValueState(
@@ -161,9 +163,9 @@ class _InMemoryStatefulProcessorHandle(StatefulProcessorHandle):
         schema: Union[StructType, str],
         ttlDurationMs: Optional[int] = None,
     ) -> ValueState:
-        if stateName not in self.states:
-            self.states[stateName] = _InMemoryValueState(self)
-        return self.states[stateName]
+        if stateName not in self.value_states:
+            self.value_states[stateName] = _InMemoryValueState(self)
+        return self.value_states[stateName]
 
     def getListState(
         self,
@@ -171,9 +173,9 @@ class _InMemoryStatefulProcessorHandle(StatefulProcessorHandle):
         schema: Union[StructType, str],
         ttlDurationMs: Optional[int] = None,
     ) -> ListState:
-        if stateName not in self.states:
-            self.states[stateName] = _InMemoryListState(self)
-        return self.states[stateName]
+        if stateName not in self.list_states:
+            self.list_states[stateName] = _InMemoryListState(self)
+        return self.list_states[stateName]
 
     def getMapState(
         self,
@@ -182,9 +184,9 @@ class _InMemoryStatefulProcessorHandle(StatefulProcessorHandle):
         valueSchema: Union[StructType, str],
         ttlDurationMs: Optional[int] = None,
     ) -> MapState:
-        if stateName not in self.states:
-            self.states[stateName] = _InMemoryMapState(self)
-        return self.states[stateName]
+        if stateName not in self.map_states:
+            self.map_states[stateName] = _InMemoryMapState(self)
+        return self.map_states[stateName]
 
     def registerTimer(self, expiryTimestampMs: int) -> None:
         raise PySparkNotImplementedError(
@@ -205,8 +207,12 @@ class _InMemoryStatefulProcessorHandle(StatefulProcessorHandle):
         )
 
     def deleteIfExists(self, stateName: str) -> None:
-        if stateName in self.states:
-            del self.states[stateName]
+        if stateName in self.value_states:
+            del self.value_states[stateName]
+        if stateName in self.list_states:
+            del self.list_states[stateName]
+        if stateName in self.map_states:
+            del self.map_states[stateName]
 
 
 class TwsTester:
@@ -345,9 +351,10 @@ class TwsTester:
         for key, rows in groupby(sorted_input, key=lambda row: row[self.key_column_name]):
             self.handle.setGroupingKey(key)
             timer_values = TimerValues(-1, -1)
-            result_iter: Iterator[Row] = self.processor.handleInputRows(
-                (key,), iter(rows), timer_values
-            )  # type: Iterator[Row]
+            result_iter = cast(
+                Iterator[Row],
+                self.processor.handleInputRows((key,), iter(rows), timer_values),
+            )
             result += list(result_iter)
         return result
 
@@ -363,14 +370,15 @@ class TwsTester:
         the key column specified in the constructor. Returns a :class:`pandas.DataFrame`
         representing all output rows produced by the processor during this batch.
         """
-        result_dfs = []
+        result_dfs: list[pd.DataFrame] = []
         sorted_input = input.sort_values(by=self.key_column_name, na_position="first")
         for key, group_df in sorted_input.groupby(self.key_column_name, dropna=False, sort=False):
             self.handle.setGroupingKey(key)
             timer_values = TimerValues(-1, -1)
-            result_iter: Iterator[pd.DataFrame] = self.processor.handleInputRows(
-                (key,), iter([group_df]), timer_values
-            )  # type: Iterator[pd.DataFrame]
+            result_iter = cast(
+                Iterator[pd.DataFrame],
+                self.processor.handleInputRows((key,), iter([group_df]), timer_values),
+            )
             for result_df in result_iter:
                 result_dfs.append(result_df)
         if result_dfs:
@@ -380,8 +388,8 @@ class TwsTester:
 
     def setValueState(self, stateName: str, key: Any, value: tuple) -> None:
         """Directly set a value state for a given key."""
-        assert stateName in self.handle.states, f"State {stateName} has not been initialized."
-        self.handle.states[stateName].state[key] = value
+        assert stateName in self.handle.value_states, f"State {stateName} has not been initialized."
+        self.handle.value_states[stateName].state[key] = value
 
     def peekValueState(self, stateName: str, key: Any) -> Optional[tuple]:
         """
@@ -389,13 +397,13 @@ class TwsTester:
 
         Returns None if the state does not exist for the given key.
         """
-        assert stateName in self.handle.states, f"State {stateName} has not been initialized."
-        return self.handle.states[stateName].state.get(key, None)
+        assert stateName in self.handle.value_states, f"State {stateName} has not been initialized."
+        return self.handle.value_states[stateName].state.get(key, None)
 
     def setListState(self, stateName: str, key: Any, value: list[tuple]) -> None:
         """Directly set a list state for a given key."""
-        assert stateName in self.handle.states, f"State {stateName} has not been initialized."
-        self.handle.states[stateName].state[key] = value
+        assert stateName in self.handle.list_states, f"State {stateName} has not been initialized."
+        self.handle.list_states[stateName].state[key] = value
 
     def peekListState(self, stateName: str, key: Any) -> list[tuple]:
         """
@@ -403,13 +411,13 @@ class TwsTester:
 
         Returns an empty list if the state does not exist for the given key.
         """
-        assert stateName in self.handle.states, f"State {stateName} has not been initialized."
-        return list(self.handle.states[stateName].state.get(key, []))
+        assert stateName in self.handle.list_states, f"State {stateName} has not been initialized."
+        return list(self.handle.list_states[stateName].state.get(key, []))
 
     def setMapState(self, stateName: str, key: Any, value: dict) -> None:
         """Directly set a map state for a given key."""
-        assert stateName in self.handle.states, f"State {stateName} has not been initialized."
-        self.handle.states[stateName].state[key] = dict(value)
+        assert stateName in self.handle.map_states, f"State {stateName} has not been initialized."
+        self.handle.map_states[stateName].state[key] = dict(value)
 
     def peekMapState(self, stateName: str, key: Any) -> dict:
         """
@@ -417,5 +425,5 @@ class TwsTester:
 
         Returns an empty dict if the state does not exist for the given key.
         """
-        assert stateName in self.handle.states, f"State {stateName} has not been initialized."
-        return dict(self.handle.states[stateName].state.get(key, {}))
+        assert stateName in self.handle.map_states, f"State {stateName} has not been initialized."
+        return dict(self.handle.map_states[stateName].state.get(key, {}))
