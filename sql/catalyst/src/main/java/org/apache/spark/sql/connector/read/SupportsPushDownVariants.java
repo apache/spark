@@ -20,7 +20,7 @@ package org.apache.spark.sql.connector.read;
 import org.apache.spark.annotation.Evolving;
 
 /**
- * A mix-in interface for {@link Scan}. Data sources can implement this interface to
+ * A mix-in interface for {@link ScanBuilder}. Data sources can implement this interface to
  * support pushing down variant field access operations to the data source.
  * <p>
  * When variant columns are accessed with specific field extractions (e.g., variant_get),
@@ -31,16 +31,17 @@ import org.apache.spark.annotation.Evolving;
  * <ol>
  *   <li>Optimizer analyzes the query plan and identifies variant field accesses</li>
  *   <li>Optimizer calls {@link #pushVariantAccess} with the access information</li>
- *   <li>Data source validates and stores the variant access information</li>
+ *   <li>ScanBuilder validates and stores the variant access information</li>
  *   <li>Optimizer retrieves pushed information via {@link #pushedVariantAccess}</li>
- *   <li>Data source uses the information to optimize reading in {@link #readSchema()}
+ *   <li>ScanBuilder builds a {@link Scan} with the variant access information</li>
+ *   <li>Scan uses the information to optimize reading in {@link Scan#readSchema()}
  *   and readers</li>
  * </ol>
  *
  * @since 4.1.0
  */
 @Evolving
-public interface SupportsPushDownVariants extends Scan {
+public interface SupportsPushDownVariants extends ScanBuilder {
 
   /**
    * Pushes down variant field access information to the data source.

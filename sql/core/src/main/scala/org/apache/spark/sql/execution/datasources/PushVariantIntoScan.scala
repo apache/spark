@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns
 import org.apache.spark.sql.connector.read.{SupportsPushDownVariants, VariantAccessInfo}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
-import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
+import org.apache.spark.sql.execution.datasources.v2.ScanBuilderHolder
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
@@ -283,9 +283,8 @@ object PushVariantIntoScan extends Rule[LogicalPlan] {
         rewritePlan(p, projectList, filters, relation, hadoopFsRelation)
 
       case p@PhysicalOperation(projectList, filters,
-        scanRelation @ DataSourceV2ScanRelation(
-          relation, scan: SupportsPushDownVariants, output, _, _)) =>
-        rewritePlanV2(p, projectList, filters, scanRelation, scan)
+        sHolder @ ScanBuilderHolder(_, _, builder: SupportsPushDownVariants)) =>
+        rewritePlanV2(p, projectList, filters, sHolder, builder)
     }
   }
 
@@ -338,21 +337,22 @@ object PushVariantIntoScan extends Rule[LogicalPlan] {
 
   // DataSource V2 rewrite method using SupportsPushDownVariants API
   // Key differences from V1 implementation:
-  // 1. V2 uses DataSourceV2ScanRelation instead of LogicalRelation
-  // 2. Uses SupportsPushDownVariants API instead of directly manipulating scan
-  // 3. Schema is already resolved in scanRelation.output (no need for relation.resolve())
-  // 4. Scan rebuilding is handled by the scan implementation via the API
-  // Data sources like Delta and Iceberg can implement this API to support variant pushdown.
+  // 1. V2 uses ScanBuilderHolder instead of LogicalRelation
+  // 2. Uses SupportsPushDownVariants API on ScanBuilder instead of directly manipulating scan
+  // 3. Schema is already resolved in sHolder.output (no need for relation.resolve())
+  // 4. Scan will be built later with the variant access information
+  // Data sources like Parquet (V2), Delta and Iceberg can implement this API to support
+  // variant pushdown.
   private def rewritePlanV2(
       originalPlan: LogicalPlan,
       projectList: Seq[NamedExpression],
       filters: Seq[Expression],
-      scanRelation: DataSourceV2ScanRelation,
-      scan: SupportsPushDownVariants): LogicalPlan = {
+      sHolder: ScanBuilderHolder,
+      builder: SupportsPushDownVariants): LogicalPlan = {
     val variants = new VariantInRelation
 
-    // Extract schema attributes from V2 scan relation
-    val schemaAttributes = scanRelation.output
+    // Extract schema attributes from scan builder holder
+    val schemaAttributes = sHolder.output
 
     // Construct schema for default value resolution
     val structSchema = StructType(schemaAttributes.map(a =>
@@ -395,11 +395,11 @@ object PushVariantIntoScan extends Rule[LogicalPlan] {
     // Call the API to push down variant access
     if (variantAccessInfoArray.isEmpty) return originalPlan
 
-    val pushed = scan.pushVariantAccess(variantAccessInfoArray)
+    val pushed = builder.pushVariantAccess(variantAccessInfoArray)
     if (!pushed) return originalPlan
 
     // Get what was actually pushed
-    val pushedVariantAccess = scan.pushedVariantAccess()
+    val pushedVariantAccess = builder.pushedVariantAccess()
     if (pushedVariantAccess.isEmpty) return originalPlan
 
     // Build new attribute mapping based on pushed variant access
@@ -415,15 +415,14 @@ object PushVariantIntoScan extends Rule[LogicalPlan] {
       }
     }.toMap
 
-    val newOutput = scanRelation.output.map(a => attributeMap.getOrElse(a.exprId, a))
+    val newOutput = sHolder.output.map(a => attributeMap.getOrElse(a.exprId, a))
 
-    // The scan implementation should have updated its readSchema() based on the pushed info
-    // We just need to create a new scan relation with the updated output
-    val newScanRelation = scanRelation.copy(
-      output = newOutput
-    )
+    // Update the scan builder holder's output with the new schema
+    // The scan will be built later with the variant access information already pushed to the
+    // builder
+    sHolder.output = newOutput
 
-    buildFilterAndProject(newScanRelation, projectList, filters, variants, attributeMap)
+    buildFilterAndProject(sHolder, projectList, filters, variants, attributeMap)
   }
 
   /**
