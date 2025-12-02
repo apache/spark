@@ -9,9 +9,9 @@ license: |
   The ASF licenses this file to You under the Apache License, Version 2.0
   (the "License"); you may not use this file except in compliance with
   the License.  You may obtain a copy of the License at
- 
+
      http://www.apache.org/licenses/LICENSE-2.0
- 
+
   Unless required by applicable law or agreed to in writing, software
   distributed under the License is distributed on an "AS IS" BASIS,
   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -19,14 +19,15 @@ license: |
   limitations under the License.
 ---
 
-* Table of contents
-{:toc}
+- Table of contents
+  {:toc}
 
 ## What is Spark Declarative Pipelines (SDP)?
 
 Spark Declarative Pipelines (SDP) is a declarative framework for building reliable, maintainable, and testable data pipelines on Spark. SDP simplifies ETL development by allowing you to focus on the transformations you want to apply to your data, rather than the mechanics of pipeline execution.
 
 SDP is designed for both batch and streaming data processing, supporting common use cases such as:
+
 - Data ingestion from cloud storage (Amazon S3, Azure ADLS Gen2, Google Cloud Storage)
 - Data ingestion from message buses (Apache Kafka, Amazon Kinesis, Google Pub/Sub, Azure EventHub)
 - Incremental batch and streaming transformations
@@ -77,6 +78,7 @@ A pipeline is the primary unit of development and execution in SDP. A pipeline c
 A pipeline project is a set of source files that contain code that define the datasets and flows that make up a pipeline. These source files can be `.py` or `.sql` files.
 
 A YAML-formatted pipeline spec file contains the top-level configuration for the pipeline project. It supports the following fields:
+
 - **libraries** (Required) - Paths where source files can be found.
 - **storage** (Required) – A directory where checkpoints can be stored for streams within the pipeline.
 - **database** (Optional) - The default target database for pipeline outputs. **schema** can alternatively be used as an alias.
@@ -100,7 +102,6 @@ It's conventional to name pipeline spec files `spark-pipeline.yml`.
 
 The `spark-pipelines init` command, described below, makes it easy to generate a pipeline project with default configuration and directory structure.
 
-
 ## The `spark-pipelines` Command Line Interface
 
 The `spark-pipelines` command line interface (CLI) is the primary way to execute a pipeline. It also contains an `init` subcommand for generating a pipeline project and a `dry-run` subcommand for validating a pipeline.
@@ -118,6 +119,7 @@ The `spark-pipelines` command line interface (CLI) is the primary way to execute
 ### `spark-pipelines dry-run`
 
 `spark-pipelines dry-run` launches an execution of a pipeline that doesn't write or read any data, but catches many kinds of errors that would be caught if the pipeline were to actually run. E.g.
+
 - Syntax errors – e.g. invalid Python or SQL code
 - Analysis errors – e.g. selecting from a table that doesn't exist or selecting a column that doesn't exist
 - Graph validation errors - e.g. cyclic dependencies
@@ -128,6 +130,17 @@ SDP Python functions are defined in the `pyspark.pipelines` module. Your pipelin
 
 ```python
 from pyspark import pipelines as dp
+```
+
+Note that SDP creates and manages the `SparkSession` used by all transformations. Python functions must use this session rather than creating a new one.
+
+To access the session inside Python transformations, use:
+
+```python
+from pyspark.sql import SparkSession
+
+# Use the session created by spark-pipelines
+spark = SparkSession.getActiveSession()
 ```
 
 ### Creating a Materialized View with Python
@@ -413,6 +426,7 @@ SELECT * FROM STREAM(customers_us_east);
 - Never use methods that save or write to files or tables as part of your SDP dataset code.
 
 Examples of Apache Spark operations that should never be used in SDP code:
+
 - `collect()`
 - `count()`
 - `toPandas()`
