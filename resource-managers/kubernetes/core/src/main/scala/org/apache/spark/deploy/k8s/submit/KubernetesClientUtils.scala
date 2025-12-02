@@ -30,9 +30,9 @@ import io.fabric8.kubernetes.api.model.{ConfigMap, ConfigMapBuilder, KeyToPath}
 
 import org.apache.spark.SparkConf
 import org.apache.spark.annotation.{DeveloperApi, Since, Unstable}
-import org.apache.spark.deploy.k8s.{Config, Constants, KubernetesUtils}
+import org.apache.spark.deploy.k8s.{Config, Constants, KubernetesDriverConf, KubernetesUtils}
 import org.apache.spark.deploy.k8s.Config.{KUBERNETES_DNS_SUBDOMAIN_NAME_MAX_LENGTH, KUBERNETES_NAMESPACE}
-import org.apache.spark.deploy.k8s.Constants.ENV_SPARK_CONF_DIR
+import org.apache.spark.deploy.k8s.Constants.{ENV_SPARK_CONF_DIR, SPARK_ENV_FILE_NAME}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{CONFIG, PATH, PATHS}
 import org.apache.spark.util.ArrayImplicits._
@@ -115,6 +115,36 @@ object KubernetesClientUtils extends Logging {
         new KeyToPath(fileName, filePermissionMode, fileName)
     }.toList.sortBy(x => x.getKey) // List is sorted to make mocking based tests work
   }
+
+  /**
+   * Append user env vars to spark-env.sh end to prevent default overriding.
+   */
+  @Since("4.1.0")
+  def overrideDefaultSparkEnv(
+                               conf: KubernetesDriverConf,
+                               confFilesMap: Map[String, String]): Map[String, String] = {
+    if (conf.environment.isEmpty) {
+      logInfo(s"No custom driver env will be appended.")
+      return confFilesMap
+    }
+    val customEnvs = conf.environment.map {
+      case (k, v) => s"export $k=$v"
+    }.mkString("\n", "\n", "\n")
+    val mapSize = confFilesMap.map {
+      case (k, v) => k.length + v.length
+    }.sum
+    val maxSize = conf.sparkConf.get(Config.CONFIG_MAP_MAXSIZE)
+    if (mapSize + customEnvs.length < maxSize) {
+      confFilesMap ++ Map(SPARK_ENV_FILE_NAME ->
+        s"${confFilesMap.getOrElse(SPARK_ENV_FILE_NAME, "")}$customEnvs")
+    } else {
+      logWarning(log"Skipped custom driver env, due to size constraint" +
+        log" Please see, config: `${MDC(CONFIG, Config.CONFIG_MAP_MAXSIZE.key)}`" +
+        log" for more details.")
+      confFilesMap
+    }
+  }
+
 
   /**
    * Build a ConfigMap that will hold the content for environment variable SPARK_CONF_DIR
