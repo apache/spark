@@ -405,6 +405,7 @@ class ConnectErrorsTest(unittest.TestCase):
         # Verify messageParameters were also extracted from FetchErrorDetailsResponse
         self.assertEqual(exception._messageParameters, {"param1": "value1", "param2": "value2"})
 
+
 if __name__ == "__main__":
     import unittest
     from pyspark.errors.tests.test_errors import *  # noqa: F401
