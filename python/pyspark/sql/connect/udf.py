@@ -50,7 +50,6 @@ if TYPE_CHECKING:
         UserDefinedFunctionLike,
     )
     from pyspark.sql.connect.session import SparkSession
-    from pyspark.sql.types import StringType
 
 
 def _create_py_udf(

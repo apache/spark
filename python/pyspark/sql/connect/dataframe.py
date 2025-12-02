@@ -19,7 +19,6 @@
 from pyspark.errors.exceptions.base import (
     SessionNotSameException,
     PySparkIndexError,
-    PySparkAttributeError,
 )
 from pyspark.resource import ResourceProfile
 from pyspark.sql.connect.logging import logger

@@ -2436,6 +2436,14 @@
     ],
     "sqlState" : "XX000"
   },
+  "INTERNAL_ERROR_HIVE_METASTORE_PARTITION_FILTER" : {
+    "message" : [
+      "Failed to get partition metadata by filter from Hive metastore.",
+      "To work around this issue, set '<hiveMetastorePartitionPruningFallbackOnException>' to true. Note that this may result in degraded performance as Spark will fetch all partition metadata instead of filtering at the metastore level.",
+      "To report this issue, visit: https://issues.apache.org/jira/browse/SPARK"
+    ],
+    "sqlState" : "XX000"
+  },
   "INTERNAL_ERROR_MEMORY" : {
     "message" : [
       "<message>"
@@ -9026,11 +9034,6 @@
   "_LEGACY_ERROR_TEMP_2192" : {
     "message" : [
       "Partition filter cannot have both `\"` and `'` characters."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2193" : {
-    "message" : [
-      "Caught Hive MetaException attempting to get partition metadata by filter from Hive. You can set the Spark configuration setting <hiveMetastorePartitionPruningFallbackOnException> to true to work around this problem, however this will result in degraded performance. Please report a bug: https://issues.apache.org/jira/browse/SPARK."
     ]
   },
   "_LEGACY_ERROR_TEMP_2194" : {
