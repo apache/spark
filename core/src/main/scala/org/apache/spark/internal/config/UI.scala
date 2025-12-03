@@ -58,7 +58,8 @@ private[spark] object UI {
   val UI_ALLOW_FRAMING_FROM = ConfigBuilder("spark.ui.allowFramingFrom")
     .version("1.6.0")
     .stringConf
-    .checkValue(s => !s.contains("\n"), "Newlines are not allowed due to security concerns")
+    .checkValue(s => !s.contains("\n") && !s.contains("\r"),
+      "Newlines are not allowed due to security concerns")
     .createOptional
 
   val UI_REVERSE_PROXY = ConfigBuilder("spark.ui.reverseProxy")

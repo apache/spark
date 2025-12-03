@@ -1369,7 +1369,7 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
     assert(msg.contains("Cannot use the keyword 'proxy' or 'history' in reverse proxy URL"))
   }
 
-  test("Security: newline disallowed in spark.ui.allowFramingFrom") {
+  test("SPARK-54563: newline disallowed in spark.ui.allowFramingFrom") {
     val injection =
       """
         |some
