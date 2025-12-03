@@ -46,7 +46,7 @@ class StateTable(
     stateStoreColFamilySchemaOpt: Option[StateStoreColFamilySchema],
     stateSchemaProviderOpt: Option[StateSchemaProvider],
     joinColFamilyOpt: Option[String],
-    allColumnFamiliesReaderInfo: Option[AllColumnFamiliesReaderInfo] = null)
+    allColumnFamiliesReaderInfo: Option[AllColumnFamiliesReaderInfo] = None)
   extends Table with SupportsRead with SupportsMetadataColumns {
 
   import StateTable._

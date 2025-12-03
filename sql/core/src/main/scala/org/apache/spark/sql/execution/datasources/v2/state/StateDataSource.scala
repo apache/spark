@@ -81,6 +81,11 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
     // The key state encoder spec should be available for all operators except stream-stream joins
     val keyStateEncoderSpec = if (stateStoreReaderInfo.keyStateEncoderSpecOpt.isDefined) {
       stateStoreReaderInfo.keyStateEncoderSpecOpt.get
+    } else if (isReadAllColFamiliesOnJoinV3(sourceOptions)) {
+      // Create keyStateEncoderSpec here because getStoreMetadataAndRunChecks
+      // doesn't assign it in stateStoreReaderInfo.keyStateEncoderSpecOpt
+      NoPrefixKeyStateEncoderSpec(
+        stateStoreReaderInfo.allColumnFamiliesReaderInfo.colFamilySchemas.head.keySchema)
     } else {
       val keySchema = SchemaUtil.getSchemaAsDataType(schema, "key").asInstanceOf[StructType]
       NoPrefixKeyStateEncoderSpec(keySchema)
@@ -114,10 +119,17 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
             sourceOptions.operatorId, RightSide, oldSchemaFilePaths)
 
         case JoinSideValues.none =>
-          // we should have the schema for the state store if joinSide is none
-          require(stateStoreReaderInfo.stateStoreColFamilySchemaOpt.isDefined)
-          val resultSchema = stateStoreReaderInfo.stateStoreColFamilySchemaOpt.get
-          (resultSchema.keySchema, resultSchema.valueSchema)
+          if (isReadAllColFamiliesOnJoinV3(sourceOptions)) {
+            // readAllColumnFamiliesReader on joinV3 reads schema with StreamStreamJoinStateHelper
+            StreamStreamJoinStateHelper.readKeyValueSchema(session,
+              stateCheckpointLocation.toString,
+              sourceOptions.operatorId, LeftSide, oldSchemaFilePaths)
+          } else {
+            // we should have the schema for the state store if joinSide is none
+            require(stateStoreReaderInfo.stateStoreColFamilySchemaOpt.isDefined)
+            val resultSchema = stateStoreReaderInfo.stateStoreColFamilySchemaOpt.get
+            (resultSchema.keySchema, resultSchema.valueSchema)
+          }
       }
 
       SchemaUtil.getSourceSchema(sourceOptions, keySchema,
@@ -131,6 +143,20 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
   }
 
   override def supportsExternalMetadata(): Boolean = false
+
+  /**
+   * Returns true if this is a read-all-column-families request for a stream-stream join
+   * that uses virtual column families (state format version 3).
+   */
+  private def isReadAllColFamiliesOnJoinV3(sourceOptions: StateSourceOptions): Boolean = {
+    val storeMetadata = StateDataSource.getStateStoreMetadata(sourceOptions, hadoopConf)
+    sourceOptions.internalOnlyReadAllColumnFamilies &&
+      storeMetadata.head.operatorName == StatefulOperatorsUtils.SYMMETRIC_HASH_JOIN_EXEC_OP_NAME &&
+      StreamStreamJoinStateHelper.usesVirtualColumnFamilies(
+        hadoopConf,
+        sourceOptions.stateCheckpointLocation.toString,
+        sourceOptions.operatorId)
+  }
 
   private def buildStateStoreConf(checkpointLocation: String, batchId: Long): StateStoreConf = {
     val offsetLog = new StreamingQueryCheckpointMetadata(session, checkpointLocation).offsetLog
@@ -309,19 +335,26 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
         val storeId = new StateStoreId(stateCheckpointLocation.toString, sourceOptions.operatorId,
           partitionId, sourceOptions.storeName)
         val providerId = new StateStoreProviderId(storeId, UUID.randomUUID())
-        val manager = new StateSchemaCompatibilityChecker(providerId, hadoopConf,
-          oldSchemaFilePaths = oldSchemaFilePaths)
+        val manager = new StateSchemaCompatibilityChecker(
+          providerId, hadoopConf, oldSchemaFilePaths)
         val stateSchema = manager.readSchemaFile()
 
         if (sourceOptions.internalOnlyReadAllColumnFamilies) {
           // Store all column family schemas for multi-CF reading
           stateStoreColFamilySchemas = stateSchema
         }
-        // Based on the version and read schema, populate the keyStateEncoderSpec used for
-        // reading the column families
-        val resultSchema = stateSchema.filter(_.colFamilyName == stateVarName).head
-        keyStateEncoderSpecOpt = Some(getKeyStateEncoderSpec(resultSchema, storeMetadata))
-        stateStoreColFamilySchemaOpt = Some(resultSchema)
+        // When reading all column families for Join V3, no specific state variable is targeted,
+        // so stateVarName defaults to DEFAULT_COL_FAMILY_NAME.
+        // However, Join V3 does not have a "default" column family. Therefore, we skip populating
+        // keyStateEncoderSpec and stateStoreColFamilySchemaOpt in this case, as there is no
+        // matching schema for the default column family name.
+        if (!isReadAllColFamiliesOnJoinV3(sourceOptions)) {
+          // Based on the version and read schema, populate the keyStateEncoderSpec used for
+          // reading the column families
+          val resultSchema = stateSchema.filter(_.colFamilyName == stateVarName).head
+          keyStateEncoderSpecOpt = Some(getKeyStateEncoderSpec(resultSchema, storeMetadata))
+          stateStoreColFamilySchemaOpt = Some(resultSchema)
+        }
       } catch {
         case NonFatal(ex) =>
           throw StateDataSourceErrors.failedToReadStateSchema(sourceOptions, ex)

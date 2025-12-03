@@ -269,7 +269,8 @@ class StatePartitionAllColumnFamiliesReader(
     storeConf,
     hadoopConf, partition, schema,
     keyStateEncoderSpec, None,
-    allColumnFamiliesReaderInfo.colFamilySchemas.headOption, // default schema
+    allColumnFamiliesReaderInfo.colFamilySchemas
+      .find(_.colFamilyName == StateStore.DEFAULT_COL_FAMILY_NAME),
     None, None) {
 
   private val stateStoreColFamilySchemas = allColumnFamiliesReaderInfo.colFamilySchemas
@@ -287,24 +288,34 @@ class StatePartitionAllColumnFamiliesReader(
       partition.sourceOptions.operatorId, partition.partition, partition.sourceOptions.storeName)
     val stateStoreProviderId = StateStoreProviderId(stateStoreId, partition.queryId)
     val useColumnFamilies = stateStoreColFamilySchemas.length > 1
-    val stateProvider = StateStoreProvider.createAndInit(
+    StateStoreProvider.createAndInit(
       stateStoreProviderId, keySchema, valueSchema, keyStateEncoderSpec,
       useColumnFamilies, storeConf, hadoopConf.value,
-      useMultipleValuesPerKey = false, None)
-    if (useColumnFamilies) {
-      val store = stateProvider.getStore(
-        partition.sourceOptions.batchId + 1,
-        getEndStoreUniqueId)
-      // Register ALL column families
+      useMultipleValuesPerKey = false, stateSchemaProvider = None)
+  }
+
+  // Use a single store instance for both registering column families and iteration.
+  // We cannot abort and then get a read store because abort() invalidates the loaded version,
+  // causing getReadStore() to reload from checkpoint and clear the column family registrations.
+  private lazy val store: StateStore = {
+    assert(getStartStoreUniqueId == getEndStoreUniqueId,
+      "Start and end store unique IDs must be the same when reading all column families")
+    val stateStore = provider.getStore(
+      partition.sourceOptions.batchId + 1,
+      getStartStoreUniqueId
+    )
+
+    // Register all column families from the schema
+    if (stateStoreColFamilySchemas.length > 1) {
       stateStoreColFamilySchemas.foreach { cfSchema =>
         cfSchema.colFamilyName match {
-          case StateStore.DEFAULT_COL_FAMILY_NAME => None
+          case StateStore.DEFAULT_COL_FAMILY_NAME => // createAndInit has registered default
           case _ =>
             val isInternal = cfSchema.colFamilyName.startsWith("$")
             val useMultipleValuesPerKey = isListType(cfSchema.colFamilyName)
             require(cfSchema.keyStateEncoderSpec.isDefined,
               s"keyStateEncoderSpec must be defined for column family ${cfSchema.colFamilyName}")
-            store.createColFamilyIfAbsent(
+            stateStore.createColFamilyIfAbsent(
               cfSchema.colFamilyName,
               cfSchema.keySchema,
               cfSchema.valueSchema,
@@ -313,18 +324,8 @@ class StatePartitionAllColumnFamiliesReader(
               isInternal)
         }
       }
-      store.abort()
     }
-    stateProvider
-  }
-
-  private lazy val store: ReadStateStore = {
-    assert(getStartStoreUniqueId == getEndStoreUniqueId,
-      "Start and end store unique IDs must be the same when reading all column families")
-    provider.getReadStore(
-      partition.sourceOptions.batchId + 1,
-      getStartStoreUniqueId
-    )
+    stateStore
   }
 
   override lazy val iter: Iterator[InternalRow] = {
@@ -348,7 +349,7 @@ class StatePartitionAllColumnFamiliesReader(
   }
 
   override def close(): Unit = {
-    store.release()
+    store.abort()
     super.close()
   }
 }
