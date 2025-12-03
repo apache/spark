@@ -22,12 +22,15 @@ import java.sql.{Connection, Date, Timestamp}
 import java.time.LocalDateTime
 import java.util.Properties
 
+import scala.jdk.CollectionConverters._
+import scala.util.Using
+
 import org.apache.spark.SparkSQLException
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{BinaryType, DecimalType}
+import org.apache.spark.sql.types.{BinaryType, DecimalType, IntegerType, StructField, StructType, TimestampNTZType, TimestampType}
 import org.apache.spark.tags.DockerTest
 
 /**
@@ -257,6 +260,138 @@ class MsSqlServerIntegrationSuite extends SharedJDBCIntegrationSuite {
               } else {
                 Timestamp.valueOf("1970-01-01 13:31:24")
               }))
+          }
+        }
+      }
+    }
+  }
+
+  test("Timestamp types round-trip with DATETIME2 vs DATETIME") {
+    // Test both TimestampType and TimestampNTZType
+    Seq(
+      (TimestampType, false, "timestamp"),
+      (TimestampNTZType, true, "timestampntz")
+    ).foreach { case (dataType, preferNTZ, typeName) =>
+      Seq(false, true).foreach { useDatetime2 =>
+        withSQLConf(SQLConf.MSSQLSERVER_USE_DATETIME2_FOR_TIMESTAMP.key -> useDatetime2.toString) {
+          val tableName = s"test_${typeName}_${if (useDatetime2) "datetime2" else "datetime"}"
+
+          withTable(tableName) {
+            // Create schema with the given timestamp type
+            val writeSchema = StructType(Seq(
+              StructField("id", IntegerType, nullable = false),
+              StructField("ts_millis", dataType, nullable = true),
+              StructField("ts_micros", dataType, nullable = true)
+            ))
+
+            // Create data based on the type
+            val writeData = if (dataType == TimestampType) {
+              Seq(
+                Row(1,
+                  Timestamp.valueOf("2024-06-15 10:30:45.123"),
+                  Timestamp.valueOf("2024-06-15 10:30:45.123456")),
+                Row(2,
+                  Timestamp.valueOf("2024-12-03 14:25:37.780"),
+                  Timestamp.valueOf("2024-12-03 14:25:37.780123")),
+                Row(3, null, null)
+              )
+            } else {
+              Seq(
+                Row(1,
+                  LocalDateTime.parse("2024-06-15T10:30:45.123"),
+                  LocalDateTime.parse("2024-06-15T10:30:45.123456")),
+                Row(2,
+                  LocalDateTime.parse("2024-12-03T14:25:37.780"),
+                  LocalDateTime.parse("2024-12-03T14:25:37.780123")),
+                Row(3, null, null)
+              )
+            }
+
+            val writeDf = spark.createDataFrame(writeData.asJava, writeSchema)
+            writeDf.write.mode("overwrite").jdbc(jdbcUrl, tableName, new Properties())
+
+            // Verify SQL Server column types
+            Using.resource(getConnection()) { conn =>
+              Using.resource(conn.createStatement()) { stmt =>
+                Using.resource(stmt.executeQuery(
+                  s"""SELECT c.name AS column_name, t.name AS data_type, c.scale
+                     |FROM sys.columns c
+                     |JOIN sys.types t ON c.user_type_id = t.user_type_id
+                     |WHERE c.object_id = OBJECT_ID('$tableName')
+                     |AND c.name LIKE 'ts%'
+                     |ORDER BY c.name""".stripMargin)) { rs =>
+
+                val expectedType = if (useDatetime2) "datetime2" else "datetime"
+                val expectedScale = if (useDatetime2) 7 else 3
+
+                Iterator.continually(rs).takeWhile(_.next()).foreach { _ =>
+                  val colName = rs.getString("column_name")
+                  val dbDataType = rs.getString("data_type")
+                  val scale = rs.getInt("scale")
+                  assert(dbDataType == expectedType,
+                    s"Expected $expectedType for $colName, got $dbDataType")
+                  assert(scale == expectedScale,
+                    s"Expected scale $expectedScale for $colName, got $scale")
+                }
+                }
+              }
+            }
+
+            // Read back with appropriate preferTimestampNTZ setting
+            val readDf = if (preferNTZ) {
+              spark.read.option("preferTimestampNTZ", true)
+                .jdbc(jdbcUrl, tableName, new Properties())
+            } else {
+              spark.read.jdbc(jdbcUrl, tableName, new Properties())
+            }
+
+            // Verify schema types
+            assert(readDf.schema("ts_millis").dataType == dataType,
+              s"Expected $dataType for ts_millis")
+            assert(readDf.schema("ts_micros").dataType == dataType,
+              s"Expected $dataType for ts_micros")
+
+            // Verify data
+            val rows = readDf.orderBy("id").collect()
+
+            if (dataType == TimestampType) {
+              val ts0Millis = rows(0).getAs[Timestamp]("ts_millis")
+              val ts1Millis = rows(1).getAs[Timestamp]("ts_millis")
+              assert(ts0Millis.getNanos == 123000000)
+              assert(ts1Millis.getNanos == 780000000)
+
+              val ts0Micros = rows(0).getAs[Timestamp]("ts_micros")
+              val ts1Micros = rows(1).getAs[Timestamp]("ts_micros")
+              if (useDatetime2) {
+                // DATETIME2 preserves microseconds (100ns precision)
+                assert(ts0Micros.getNanos == 123456000)
+                assert(ts1Micros.getNanos == 780123000)
+              } else {
+                assert(ts0Micros.getNanos == 123000000)
+                assert(ts1Micros.getNanos == 780000000)
+              }
+            } else {
+              val ts0Millis = rows(0).getAs[LocalDateTime]("ts_millis")
+              val ts1Millis = rows(1).getAs[LocalDateTime]("ts_millis")
+              assert(ts0Millis.getNano == 123000000)
+              assert(ts1Millis.getNano == 780000000)
+
+              val ts0Micros = rows(0).getAs[LocalDateTime]("ts_micros")
+              val ts1Micros = rows(1).getAs[LocalDateTime]("ts_micros")
+              if (useDatetime2) {
+                // DATETIME2 preserves microseconds (100ns precision)
+                assert(ts0Micros.getNano == 123456000)
+                assert(ts1Micros.getNano == 780123000)
+              } else {
+                // DATETIME truncates to milliseconds
+                assert(ts0Micros.getNano == 123000000)
+                assert(ts1Micros.getNano == 780000000)
+              }
+            }
+
+            // Verify nulls
+            assert(rows(2).isNullAt(1))
+            assert(rows(2).isNullAt(2))
           }
         }
       }

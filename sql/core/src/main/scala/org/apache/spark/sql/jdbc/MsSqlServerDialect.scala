@@ -151,6 +151,11 @@ private case class MsSqlServerDialect() extends JdbcDialect with NoLegacyJDBCErr
         } else {
           Some(TimestampType)
         }
+      case java.sql.Types.TIMESTAMP
+          if typeName.equalsIgnoreCase("datetime") || typeName.equalsIgnoreCase("datetime2") =>
+        // Both DATETIME and DATETIME2 map to TimestampType/TimestampNTZType
+        // Respect the preferTimestampNTZ option
+        Some(getTimestampType(md.build()))
       case java.sql.Types.SMALLINT | java.sql.Types.TINYINT
           if !SQLConf.get.legacyMsSqlServerNumericMappingEnabled =>
         // Data range of TINYINT is 0-255 so it needs to be stored in ShortType.
@@ -164,8 +169,14 @@ private case class MsSqlServerDialect() extends JdbcDialect with NoLegacyJDBCErr
   }
 
   override def getJDBCType(dt: DataType): Option[JdbcType] = dt match {
-    case TimestampType => Some(JdbcType("DATETIME", java.sql.Types.TIMESTAMP))
-    case TimestampNTZType => Some(JdbcType("DATETIME", java.sql.Types.TIMESTAMP))
+    case TimestampType | TimestampNTZType =>
+      // Use DATETIME2 (SQL Server 2008+) or DATETIME (SQL Server 2005 and earlier)
+      val typeName = if (SQLConf.get.msSqlServerUseDatetime2ForTimestamp) {
+        "DATETIME2"  // Default: 7 decimal places (100ns precision)
+      } else {
+        "DATETIME"   // Legacy: 3 decimal places (milliseconds precision)
+      }
+      Some(JdbcType(typeName, java.sql.Types.TIMESTAMP))
     case StringType => Some(JdbcType("NVARCHAR(MAX)", java.sql.Types.NVARCHAR))
     case BooleanType => Some(JdbcType("BIT", java.sql.Types.BIT))
     case BinaryType => Some(JdbcType("VARBINARY(MAX)", java.sql.Types.VARBINARY))
