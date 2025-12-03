@@ -499,12 +499,12 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
             if self._int_to_decimal_coercion_enabled:
                 series = self._apply_python_coercions(series, arrow_type)
 
-        if hasattr(series.array, "__arrow_array__"):
-            mask = None
-        else:
-            # SPARK-54579: Preserve NaN values as NaN (not NULL) for floating-point Arrow types.
-            series, mask = self._create_mask_for_floating_type(series, arrow_type)
         try:
+            if hasattr(series.array, "__arrow_array__"):
+                mask = None
+            else:
+                # SPARK-54579: Preserve NaN values as NaN (not NULL) for floating-point Arrow types.
+                series, mask = self._create_mask_for_floating_type(series, arrow_type)
             try:
                 return pa.Array.from_pandas(
                     series, mask=mask, type=arrow_type, safe=self._safecheck
