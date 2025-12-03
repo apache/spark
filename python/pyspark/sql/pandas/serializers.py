@@ -452,7 +452,8 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
         if hasattr(series.array, "__arrow_array__"):
             mask = None
         else:
-            # For floating-point Arrow types, preserve NaN values instead of converting them to NULL.
+            # For floating-point Arrow types, preserve NaN values instead of
+            # converting them to NULL.
             # Only mask actual None values, not NaN values.
             import pyarrow.types as types
 
@@ -1092,7 +1093,8 @@ class ArrowStreamPandasUDTFSerializer(ArrowStreamPandasUDFSerializer):
             mask = None
         else:
             # SPARK-54579: Preserve NaN values as NaN (not NULL) for floating-point Arrow types.
-            # For floating-point Arrow types, preserve NaN values instead of converting them to NULL.
+            # For floating-point Arrow types, preserve NaN values instead of
+            # converting them to NULL.
             # Only mask actual None values, not NaN values.
             import pyarrow.types as types
 

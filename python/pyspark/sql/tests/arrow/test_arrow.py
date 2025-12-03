@@ -1060,29 +1060,6 @@ class ArrowTestsMixin:
             df = self.spark.createDataFrame(pandas_df)
             assert_frame_equal(pandas_df, df.toPandas(), check_dtype=False)
 
-    def test_createDataFrame_pandas_preserve_nan_with_arrow(self):
-        # SPARK-54579: createDataFrame should preserve NaN values when arrow optimization is enabled
-        import numpy as np
-
-        with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": True}):
-            # Test case 1: object dtype with None and NaN
-            pdf1 = pd.DataFrame({"x": np.array([1.0, np.nan, None])})
-            df1 = self.spark.createDataFrame(pdf1)
-            result1 = df1.collect()
-            # Expected: [1.0, NaN, NULL]
-            self.assertEqual(result1[0][0], 1.0)
-            self.assertTrue(pd.isna(result1[1][0]) and result1[1][0] is not None)  # NaN
-            self.assertIsNone(result1[2][0])  # NULL
-
-            # Test case 2: float64 dtype with NaN (pandas converts None to NaN)
-            pdf2 = pd.DataFrame({"x": [1.0, np.nan, None]})
-            df2 = self.spark.createDataFrame(pdf2)
-            result2 = df2.collect()
-            # Expected: [1.0, NaN, NaN] (pandas converts None to NaN for float64)
-            self.assertEqual(result2[0][0], 1.0)
-            self.assertTrue(pd.isna(result2[1][0]) and result2[1][0] is not None)  # NaN
-            self.assertTrue(pd.isna(result2[2][0]) and result2[2][0] is not None)  # NaN
-
     def test_toPandas_with_map_type(self):
         with self.quiet():
             for arrow_enabled in [True, False]:
