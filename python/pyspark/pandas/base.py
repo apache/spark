@@ -1367,7 +1367,9 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
                     ('falcon', 'length')],
                    )
 
-        >>> s.index.value_counts().sort_index() # doctest: +SKIP
+        >>> spark.conf.set('spark.sql.execution.pandas.structHandlingMode', 'row')
+
+        >>> s.index.value_counts().sort_index()
         (cow, length)       1
         (cow, weight)       2
         (falcon, length)    2
@@ -1375,7 +1377,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         (lama, weight)      3
         Name: count, dtype: int64
 
-        >>> s.index.value_counts(normalize=True).sort_index() # doctest: +SKIP
+        >>> s.index.value_counts(normalize=True).sort_index()
         (cow, length)       0.111111
         (cow, weight)       0.222222
         (falcon, length)    0.222222
