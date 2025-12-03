@@ -3026,7 +3026,6 @@ object SQLConf {
         "source evolution capability where sources can be added, removed, or reordered " +
         "without losing checkpoint state.")
       .version("4.2.0")
-      .owner("streaming-engine")
       .booleanConf
       .createWithDefault(false)
 

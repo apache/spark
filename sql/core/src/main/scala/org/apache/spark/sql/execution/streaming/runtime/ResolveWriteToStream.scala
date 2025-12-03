@@ -48,6 +48,14 @@ object ResolveWriteToStream extends Rule[LogicalPlan] {
           log"is not supported in streaming DataFrames/Datasets and will be disabled.")
       }
 
+      // Always check for duplicate source names
+      checkDuplicateSourceNames(s.inputQuery)
+
+      // Check for unnamed sources when enforcement is enabled
+      if (conf.enableStreamingSourceEvolution) {
+        validateNamedSources(s.inputQuery)
+      }
+
       if (conf.isUnsupportedOperationCheckEnabled) {
         if (s.trigger.isInstanceOf[RealTimeTrigger]) {
           UnsupportedOperationChecker.
@@ -142,6 +150,49 @@ object ResolveWriteToStream extends Rule[LogicalPlan] {
     logInfo(log"Checkpoint root ${MDC(CHECKPOINT_LOCATION, checkpointLocation)} " +
       log"resolved to ${MDC(CHECKPOINT_ROOT, resolvedCheckpointRoot)}.")
     (resolvedCheckpointRoot, deleteCheckpointOnStop)
+  }
+
+  /**
+   * Checks for duplicate source names across all streaming sources.
+   * This validation always runs regardless of source evolution enforcement.
+   */
+  private def checkDuplicateSourceNames(plan: LogicalPlan): Unit = {
+    import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
+
+    val sourcesWithNames = plan.collect {
+      case StreamingRelation(_, _, _, userProvidedSourceName) => userProvidedSourceName
+      case StreamingRelationV2(
+        _, _, _, _, _, _, _, _, userProvidedSourceName) => userProvidedSourceName
+    }
+
+    // Check for duplicate source names among named sources
+    val namedSources = sourcesWithNames.flatten
+    val duplicates = namedSources.groupBy(identity).filter(_._2.size > 1).keys.toSeq.sorted
+
+    if (duplicates.nonEmpty) {
+      throw QueryCompilationErrors.duplicateStreamingSourceNamesError(
+        duplicates.map(name => s"'$name'").mkString(", "))
+    }
+  }
+
+  /**
+   * Validates that all streaming sources have names when named source enforcement is enabled.
+   */
+  private def validateNamedSources(plan: LogicalPlan): Unit = {
+    import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
+
+    val unnamedSources = plan.collect {
+      case StreamingRelation(ds, sourceName, _, None) =>
+        s"[index=${sourceName}, provider=${ds.providingClass.getSimpleName}]"
+      case StreamingRelationV2(src, srcName, table, _, _, _, _, _, None) =>
+        val provider = src.map(_.getClass.getSimpleName).getOrElse(table.getClass.getSimpleName)
+        s"[index=${srcName}, provider=${provider}]"
+    }
+
+    if (unnamedSources.nonEmpty) {
+      throw QueryCompilationErrors.unnamedStreamingSourcesWithEnforcementError(
+        unnamedSources.mkString(", "))
+    }
   }
 }
 

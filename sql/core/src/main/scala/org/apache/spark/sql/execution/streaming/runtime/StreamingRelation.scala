@@ -37,6 +37,12 @@ object StreamingRelation {
     StreamingRelation(
       dataSource, dataSource.sourceInfo.name, toAttributes(dataSource.sourceInfo.schema))
   }
+
+  def apply(dataSource: DataSource, userProvidedSourceName: Option[String]): StreamingRelation = {
+    StreamingRelation(
+      dataSource, dataSource.sourceInfo.name, toAttributes(dataSource.sourceInfo.schema),
+      userProvidedSourceName)
+  }
 }
 
 /**
