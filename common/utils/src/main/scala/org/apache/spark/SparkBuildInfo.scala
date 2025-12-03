@@ -29,8 +29,8 @@ private[spark] object SparkBuildInfo {
     spark_build_date: String,
     spark_doc_root: String) = {
 
-    val resourceStream = Thread.currentThread().getContextClassLoader.
-      getResourceAsStream("spark-version-info.properties")
+    val resourceStream = getClass.getClassLoader
+      .getResourceAsStream("spark-version-info.properties")
     if (resourceStream == null) {
       throw new SparkException("Could not find spark-version-info.properties")
     }
