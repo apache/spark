@@ -173,6 +173,11 @@
     },
     "sqlState" : "42604"
   },
+  "ATTEMPT_ANALYSIS_IN_PIPELINE_QUERY_FUNCTION" : {
+    "message" : [
+      "Operations that trigger DataFrame analysis or execution are not allowed in pipeline query functions. Move code outside of the pipeline query function."
+    ]
+  },
   "AVRO_CANNOT_WRITE_NULL_FIELD" : {
     "message" : [
       "Cannot write null value for field <name> defined as non-null Avro data type <dataType>.",
