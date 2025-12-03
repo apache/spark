@@ -32,7 +32,7 @@ from typing import (
 
 import numpy as np
 
-from pyspark import RDD, since
+from pyspark import since
 from pyspark.streaming.dstream import DStream
 from pyspark.mllib.common import callMLlibFunc, _py2java, _java2py, inherit_doc
 from pyspark.mllib.linalg import _convert_to_vector

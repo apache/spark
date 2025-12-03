@@ -170,13 +170,13 @@ class PandasUDFTestsMixin:
             with self.assertRaises(ParseException):
 
                 @pandas_udf("blah")
-                def foo(x):
+                def _(x):
                     return x
 
             with self.assertRaises(PySparkTypeError) as pe:
 
                 @pandas_udf(returnType="double", functionType=PandasUDFType.GROUPED_MAP)
-                def foo(df):
+                def _(df):
                     return df
 
             self.check_error(
@@ -193,14 +193,14 @@ class PandasUDFTestsMixin:
             with self.assertRaisesRegex(ValueError, "Invalid function"):
 
                 @pandas_udf(returnType="k int, v double", functionType=PandasUDFType.GROUPED_MAP)
-                def foo(k, v, w):
+                def _(k, v, w):
                     return k
 
     def check_udf_wrong_arg(self):
         with self.assertRaises(PySparkTypeError) as pe:
 
             @pandas_udf(functionType=PandasUDFType.SCALAR)
-            def foo(x):
+            def _(x):
                 return x
 
         self.check_error(
@@ -212,7 +212,7 @@ class PandasUDFTestsMixin:
         with self.assertRaises(PySparkTypeError) as pe:
 
             @pandas_udf("double", 100)
-            def foo(x):
+            def _(x):
                 return x
 
         self.check_error(
@@ -227,20 +227,20 @@ class PandasUDFTestsMixin:
         with self.assertRaisesRegex(ValueError, "0-arg pandas_udfs.*not.*supported"):
 
             @pandas_udf(LongType(), PandasUDFType.SCALAR)
-            def zero_with_type():
+            def _():
                 return 1
 
         with self.assertRaisesRegex(ValueError, "0-arg pandas_udfs.*not.*supported"):
 
             @pandas_udf(LongType(), PandasUDFType.SCALAR_ITER)
-            def zero_with_type():
+            def _():
                 yield 1
                 yield 2
 
         with self.assertRaises(PySparkTypeError) as pe:
 
             @pandas_udf(returnType=PandasUDFType.GROUPED_MAP)
-            def foo(df):
+            def _(df):
                 return df
 
         self.check_error(

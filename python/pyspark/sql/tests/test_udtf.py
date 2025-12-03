@@ -40,7 +40,6 @@ from pyspark.sql.functions import (
     array,
     col,
     create_map,
-    array,
     lit,
     named_struct,
     udf,

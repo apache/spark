@@ -351,39 +351,41 @@ class UnifiedUDFTestsMixin:
         import pandas as pd
         import pyarrow as pa
 
-        @udf(returnType=LongType())
-        def f1(x):
-            return x + 1
+        with self.sql_conf({"spark.sql.execution.pythonUDF.arrow.enabled": False}):
 
-        @udf(returnType=LongType())
-        def f2(x: int) -> int:
-            return x + 1
+            @udf(returnType=LongType())
+            def f1(x):
+                return x + 1
 
-        # Cannot infer a vectorized UDF type
-        @udf(returnType=LongType())
-        def f3(x: int) -> pd.Series:
-            return x + 1
+            @udf(returnType=LongType())
+            def f2(x: int) -> int:
+                return x + 1
 
-        # Cannot infer a vectorized UDF type
-        @udf(returnType=LongType())
-        def f4(x: int) -> pa.Array:
-            return x + 1
+            # Cannot infer a vectorized UDF type
+            @udf(returnType=LongType())
+            def f3(x: int) -> pd.Series:
+                return x + 1
 
-        # useArrow is explicitly set to false
-        @udf(returnType=LongType(), useArrow=False)
-        def f5(x: pd.Series) -> pd.Series:
-            return x + 1
+            # Cannot infer a vectorized UDF type
+            @udf(returnType=LongType())
+            def f4(x: int) -> pa.Array:
+                return x + 1
 
-        # useArrow is explicitly set to false
-        @udf(returnType=LongType(), useArrow=False)
-        def f6(x: pa.Array) -> pa.Array:
-            return x + 1
+            # useArrow is explicitly set to false
+            @udf(returnType=LongType(), useArrow=False)
+            def f5(x: pd.Series) -> pd.Series:
+                return x + 1
 
-        expected = self.spark.range(10).select((sf.col("id") + 1).alias("res")).collect()
-        for f in [f1, f2, f3, f4, f5, f6]:
-            self.assertEqual(f.evalType, PythonEvalType.SQL_BATCHED_UDF)
-            result = self.spark.range(10).select(f("id").alias("res")).collect()
-            self.assertEqual(result, expected)
+            # useArrow is explicitly set to false
+            @udf(returnType=LongType(), useArrow=False)
+            def f6(x: pa.Array) -> pa.Array:
+                return x + 1
+
+            expected = self.spark.range(10).select((sf.col("id") + 1).alias("res")).collect()
+            for f in [f1, f2, f3, f4, f5, f6]:
+                self.assertEqual(f.evalType, PythonEvalType.SQL_BATCHED_UDF)
+                result = self.spark.range(10).select(f("id").alias("res")).collect()
+                self.assertEqual(result, expected)
 
     def test_arrow_optimized_python_udf(self):
         import pandas as pd

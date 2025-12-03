@@ -56,10 +56,6 @@ class UDFParityTests(BaseUDFTestsMixin, ReusedConnectTestCase):
     def test_nondeterministic_udf3(self):
         super().test_nondeterministic_udf3()
 
-    @unittest.skip("Spark Connect doesn't support RDD but the test depends on it.")
-    def test_worker_original_stdin_closed(self):
-        super().test_worker_original_stdin_closed()
-
     @unittest.skip("Spark Connect does not support SQLContext but the test depends on it.")
     def test_udf_on_sql_context(self):
         super().test_udf_on_sql_context()

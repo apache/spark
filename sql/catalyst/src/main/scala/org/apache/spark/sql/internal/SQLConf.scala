@@ -1598,7 +1598,7 @@ object SQLConf {
         "variant logical type.")
       .version("4.1.0")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   val PARQUET_IGNORE_VARIANT_ANNOTATION =
     buildConf("spark.sql.parquet.ignoreVariantAnnotation")
@@ -3917,7 +3917,7 @@ object SQLConf {
       .doc("(Deprecated since Spark 3.0, please set 'spark.sql.execution.arrow.pyspark.enabled'.)")
       .version("2.3.0")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   val ARROW_PYSPARK_EXECUTION_ENABLED =
     buildConf("spark.sql.execution.arrow.pyspark.enabled")
@@ -4263,7 +4263,7 @@ object SQLConf {
         "can only be enabled when the given function takes at least one argument.")
       .version("3.4.0")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   val PYTHON_UDF_ARROW_CONCURRENCY_LEVEL =
     buildConf("spark.sql.execution.pythonUDF.arrow.concurrency.level")
@@ -4299,7 +4299,7 @@ object SQLConf {
       .doc("Enable Arrow optimization for Python UDTFs.")
       .version("3.5.0")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   val PYTHON_TABLE_UDF_LEGACY_PANDAS_CONVERSION_ENABLED =
     buildConf("spark.sql.legacy.execution.pythonUDTF.pandas.conversion.enabled")
@@ -5618,7 +5618,7 @@ object SQLConf {
         "requested fields.")
       .version("4.0.0")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   val VARIANT_WRITE_SHREDDING_ENABLED =
     buildConf("spark.sql.variant.writeShredding.enabled")
@@ -5626,7 +5626,7 @@ object SQLConf {
       .doc("When true, the Parquet writer is allowed to write shredded variant. ")
       .version("4.0.0")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   val VARIANT_FORCE_SHREDDING_SCHEMA_FOR_TEST =
     buildConf("spark.sql.variant.forceShreddingSchemaForTest")
@@ -5659,7 +5659,7 @@ object SQLConf {
       .doc("Infer shredding schema when writing Variant columns in Parquet tables.")
       .version("4.1.0")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   val LEGACY_CSV_ENABLE_DATE_TIME_PARSING_FALLBACK =
     buildConf("spark.sql.legacy.csv.enableDateTimeParsingFallback")
@@ -6707,10 +6707,11 @@ object SQLConf {
     buildConf("spark.sql.merge.nested.type.coercion.enabled")
       .internal()
       .doc("If enabled, allow MERGE INTO to coerce source nested types if they have less" +
-        "nested fields than the target table's nested types.")
+        "nested fields than the target table's nested types. This is experimental and" +
+        "the semantics may change.")
       .version("4.1.0")
       .booleanConf
-      .createWithDefault(true)
+      .createWithDefault(false)
 
   /**
    * Holds information about keys that have been deprecated.
