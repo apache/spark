@@ -46,7 +46,7 @@ class CallStackTraceTestCase(unittest.TestCase):
     """Test cases for call stack trace functionality in Spark Connect client."""
 
     def setUp(self):
-        # Since this test itself is under pyspark module path, stack frames for test functions 
+        # Since this test itself is under pyspark module path, stack frames for test functions
         # inside this file - for example, user_function() - will normally be filtered out. So here
         # we set the PYSPARK_ROOT to more specific pyspaark.sql.connect that doesn't include this
         # test file to ensure that the stack frames for user functions inside this test file are
@@ -102,8 +102,9 @@ class CallStackTraceTestCase(unittest.TestCase):
         for frame in stack_frames:
             # Check that this frame is not from pyspark internal code
             self.assertFalse(
-                _is_pyspark_source(frame.file),(
-                    f"Expected frame from {frame.file} (function: {frame.function})"   
+                _is_pyspark_source(frame.file),
+                (
+                    f"Expected frame from {frame.file} (function: {frame.function})"
                     f"to be filtered out as PySpark internal frame"
                 ),
             )
@@ -265,8 +266,8 @@ class CallStackTraceIntegrationTestCase(unittest.TestCase):
     def setUp(self):
         """Set up test fixtures."""
         self.client = SparkConnectClient("sc://localhost:15002", use_reattachable_execute=False)
-        # Since this test itself is under pyspark module path, stack frames for test functions 
-        # inside this file - for example, user_function() - will normally be filtered out. So here 
+        # Since this test itself is under pyspark module path, stack frames for test functions
+        # inside this file - for example, user_function() - will normally be filtered out. So here
         # we set the PYSPARK_ROOT to more specific pyspaark.sql.connect that doesn't include this
         # test file to ensure that the stack frames for user functions inside this test file are
         # not filtered out.
@@ -278,7 +279,7 @@ class CallStackTraceIntegrationTestCase(unittest.TestCase):
         core.PYSPARK_ROOT = self.original_pyspark_root
 
     def test_execute_plan_request_includes_call_stack_without_env_var(self):
-        """ _execute_plan_request_with_metadata doesn't include call stack without env var."""
+        """_execute_plan_request_with_metadata doesn't include call stack without env var."""
         with patch.dict(os.environ, {}, clear=False):
             if "SPARK_CONNECT_DEBUG_CLIENT_CALL_STACK" in os.environ:
                 del os.environ["SPARK_CONNECT_DEBUG_CLIENT_CALL_STACK"]
@@ -456,8 +457,10 @@ class CallStackTraceIntegrationTestCase(unittest.TestCase):
                     self.assertGreater(
                         stack_trace_element.line_number,
                         0,
-                        (f"Expected line number to be greater than 0,"
-                         f"got: {stack_trace_element.line_number}"),
+                        (
+                            f"Expected line number to be greater than 0,"
+                            f"got: {stack_trace_element.line_number}"
+                        ),
                     )
 
         self.assertTrue(
