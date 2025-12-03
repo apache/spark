@@ -35,6 +35,7 @@ import org.apache.spark.sql.classic.ClassicConversions.castToImpl
 import org.apache.spark.sql.classic.Dataset.ofRows
 import org.apache.spark.sql.execution.datasources.DataSourceUtils
 import org.apache.spark.sql.execution.streaming.{Offset, Sink, Source}
+import org.apache.spark.sql.execution.streaming.checkpointing.OffsetSeqLog
 import org.apache.spark.sql.execution.streaming.runtime._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.{StreamSinkProvider, StreamSourceProvider}
@@ -871,6 +872,74 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
       query.stop()
       query = dfw.start("2")
       query.stop()
+    }
+  }
+
+  private def runQuery(
+      inputDir: File,
+      outputDir: File,
+      checkpointDir: File,
+      formatVersion: String): Unit = {
+    withSQLConf(
+      SQLConf.STREAMING_OFFSET_LOG_FORMAT_VERSION.key -> formatVersion) {
+      def writeToInputTable(): Unit = {
+        spark.range(1)
+          .write.format("delta")
+          .mode("append")
+          .save(inputDir.getCanonicalPath)
+      }
+
+      writeToInputTable()
+
+      val query = spark.readStream
+        .format("delta")
+        .load(inputDir.getCanonicalPath)
+        .writeStream
+        .format("delta")
+        .option("checkpointLocation", checkpointDir.getCanonicalPath)
+        .start(outputDir.getCanonicalPath)
+
+      query.processAllAvailable()
+      query.stop()
+      query.awaitTermination()
+    }
+  }
+
+  test("Verify that switching offset log format versions has no effect - v1 to v2") {
+    withTempPaths(3) { dirs =>
+      val (inputDir, outputDir, checkpointDir) = (dirs(0), dirs(1), dirs(2))
+      // Run the query twice to ensure that the offset log format version is persisted
+      // and reused across multiple runs.
+      runQuery(inputDir, outputDir, checkpointDir, "1")
+      runQuery(inputDir, outputDir, checkpointDir, "2")
+
+      // Check OffsetSeqLog to verify existence of 2 batches
+      val offsetSeqLog = new OffsetSeqLog(spark, checkpointDir.getCanonicalPath + "/offsets")
+      val offsetBatches = offsetSeqLog.get(Some(0), Some(1))
+      assert(offsetBatches.length == 2)
+      assert(offsetBatches(0)._1 == 0)
+      assert(offsetBatches(0)._2.version == 1)
+      assert(offsetBatches(1)._1 == 1)
+      assert(offsetBatches(1)._2.version == 1)
+    }
+  }
+
+  test("Verify that switching offset log format versions has no effect - v2 to v1") {
+    withTempPaths(3) { dirs =>
+      val (inputDir, outputDir, checkpointDir) = (dirs(0), dirs(1), dirs(2))
+      // Run the query twice to ensure that the offset log format version is persisted
+      // and reused across multiple runs.
+      runQuery(inputDir, outputDir, checkpointDir, "2")
+      runQuery(inputDir, outputDir, checkpointDir, "1")
+
+      // Check OffsetSeqLog to verify existence of 2 batches
+      val offsetSeqLog = new OffsetSeqLog(spark, checkpointDir.getCanonicalPath + "/offsets")
+      val offsetBatches = offsetSeqLog.get(Some(0), Some(1))
+      assert(offsetBatches.length == 2)
+      assert(offsetBatches(0)._1 == 0)
+      assert(offsetBatches(0)._2.version == 2)
+      assert(offsetBatches(1)._1 == 1)
+      assert(offsetBatches(1)._2.version == 2)
     }
   }
 }
