@@ -16,15 +16,20 @@
  */
 package org.apache.spark.deploy.k8s.features
 
+import com.fasterxml.jackson.databind.ObjectMapper
+import com.fasterxml.jackson.dataformat.yaml.YAMLFactory
 import io.fabric8.kubernetes.api.model._
 import io.fabric8.volcano.api.model.scheduling.v1beta1.{PodGroup, PodGroupSpec}
 import io.fabric8.volcano.client.DefaultVolcanoClient
 
+import org.apache.spark.SparkException
 import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesDriverConf, KubernetesExecutorConf, SparkPod}
 import org.apache.spark.internal.Logging
 
-private[spark] class VolcanoFeatureStep extends KubernetesDriverCustomFeatureConfigStep
-  with KubernetesExecutorCustomFeatureConfigStep with Logging {
+private[spark] class VolcanoFeatureStep
+    extends KubernetesDriverCustomFeatureConfigStep
+    with KubernetesExecutorCustomFeatureConfigStep
+    with Logging {
   import VolcanoFeatureStep._
 
   private var kubernetesConf: KubernetesConf = _
@@ -42,13 +47,15 @@ private[spark] class VolcanoFeatureStep extends KubernetesDriverCustomFeatureCon
 
   override def getAdditionalPreKubernetesResources(): Seq[HasMetadata] = {
     if (kubernetesConf.isInstanceOf[KubernetesExecutorConf]) {
-      logWarning("VolcanoFeatureStep#getAdditionalPreKubernetesResources() is not supported " +
-        "for executor.")
+      logWarning(
+        "VolcanoFeatureStep#getAdditionalPreKubernetesResources() is not supported " +
+          "for executor.")
       return Seq.empty
     }
     lazy val client = new DefaultVolcanoClient
-    val template = kubernetesConf.getOption(POD_GROUP_TEMPLATE_FILE_KEY)
-    val pg = template.map(client.podGroups.load(_).item).getOrElse(new PodGroup())
+    val pg = getPodGroupConfigByTemplateFile(client)
+      .orElse(getPodGroupByTemplateJson(client))
+      .getOrElse(new PodGroup())
     var metadata = pg.getMetadata
     if (metadata == null) metadata = new ObjectMeta
     metadata.setName(podGroupName)
@@ -59,13 +66,42 @@ private[spark] class VolcanoFeatureStep extends KubernetesDriverCustomFeatureCon
     if (spec == null) spec = new PodGroupSpec
     pg.setSpec(spec)
 
+    logDebug(s"Volcano PodGroup configuration: $pg")
     Seq(pg)
+  }
+
+  private def getPodGroupConfigByTemplateFile(
+      volcanoClient: DefaultVolcanoClient): Option[PodGroup] = {
+    kubernetesConf.getOption(POD_GROUP_TEMPLATE_FILE_KEY).map { templateFile =>
+      logDebug("Loading Volcano PodGroup configuration from template file")
+      volcanoClient.podGroups.load(templateFile).item
+    }
+  }
+
+  private def getPodGroupByTemplateJson(volcanoClient: DefaultVolcanoClient): Option[PodGroup] = {
+    kubernetesConf.getOption(POD_GROUP_TEMPLATE_JSON_KEY).map { templateJson =>
+      logDebug("Loading Volcano PodGroup configuration from template json")
+      try {
+        val templateYaml = new ObjectMapper()
+          .writerWithDefaultPrettyPrinter()
+          .writeValueAsString(new ObjectMapper(new YAMLFactory()).readTree(templateJson))
+        volcanoClient
+          .podGroups()
+          .load(new java.io.ByteArrayInputStream(templateYaml.getBytes()))
+          .item()
+      } catch {
+        case e: Exception =>
+          throw new SparkException(
+            f"The ${POD_GROUP_TEMPLATE_JSON_KEY} provided is not validated",
+            e)
+      }
+    }
   }
 
   override def configurePod(pod: SparkPod): SparkPod = {
     val k8sPodBuilder = new PodBuilder(pod.pod)
       .editMetadata()
-        .addToAnnotations(POD_GROUP_ANNOTATION, podGroupName)
+      .addToAnnotations(POD_GROUP_ANNOTATION, podGroupName)
       .endMetadata()
     val k8sPod = k8sPodBuilder.build()
     SparkPod(k8sPod, pod.container)
@@ -75,4 +111,5 @@ private[spark] class VolcanoFeatureStep extends KubernetesDriverCustomFeatureCon
 private[spark] object VolcanoFeatureStep {
   val POD_GROUP_ANNOTATION = "scheduling.k8s.io/group-name"
   val POD_GROUP_TEMPLATE_FILE_KEY = "spark.kubernetes.scheduler.volcano.podGroupTemplateFile"
+  val POD_GROUP_TEMPLATE_JSON_KEY = "spark.kubernetes.scheduler.volcano.podGroupTemplateJson"
 }
