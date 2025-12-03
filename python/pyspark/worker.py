@@ -54,6 +54,7 @@ from pyspark.sql.pandas.serializers import (
     ArrowStreamPandasUDFSerializer,
     ArrowStreamPandasUDTFSerializer,
     GroupArrowUDFSerializer,
+    GroupPandasUDFSerializer,
     CogroupArrowUDFSerializer,
     CogroupPandasUDFSerializer,
     ArrowStreamUDFSerializer,
