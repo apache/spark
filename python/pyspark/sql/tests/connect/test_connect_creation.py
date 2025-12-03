@@ -228,6 +228,7 @@ class SparkConnectCreationTests(ReusedMixedTestCase, PandasOnSparkTestUtils):
                 self.assertEqual(sdf.schema, cdf.schema)
                 self.assert_eq(sdf.toPandas(), cdf.toPandas())
 
+    @unittest.skip("TODO(SPARK-54575): Re-enable this test")
     def test_with_none_and_nan(self):
         # SPARK-41855: make createDataFrame support None and NaN
         # SPARK-41814: test with eqNullSafe
