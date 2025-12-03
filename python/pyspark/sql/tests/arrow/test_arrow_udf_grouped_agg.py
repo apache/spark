@@ -39,6 +39,7 @@ from pyspark.testing.utils import (
     assertDataFrameEqual,
 )
 from pyspark.testing.sqlutils import ReusedSQLTestCase
+from typing import Iterator, Tuple
 
 
 @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
@@ -1057,6 +1058,145 @@ class GroupedAggArrowUDFTestsMixin:
                     )
                     for n in [2, 3]
                 ],
+            )
+
+    def test_iterator_grouped_agg_single_column(self):
+        """
+        Test iterator API for grouped aggregation with single column.
+        """
+        import pyarrow as pa
+        from typing import Iterator
+
+        @arrow_udf("double")
+        def arrow_mean_iter(it: Iterator[pa.Array]) -> float:
+            sum_val = 0.0
+            cnt = 0
+            for v in it:
+                assert isinstance(v, pa.Array)
+                sum_val += pa.compute.sum(v).as_py()
+                cnt += len(v)
+            return sum_val / cnt if cnt > 0 else 0.0
+
+        df = self.spark.createDataFrame(
+            [(1, 1.0), (1, 2.0), (2, 3.0), (2, 5.0), (2, 10.0)], ("id", "v")
+        )
+
+        result = df.groupby("id").agg(arrow_mean_iter(df["v"]).alias("mean")).sort("id")
+        expected = df.groupby("id").agg(sf.mean(df["v"]).alias("mean")).sort("id").collect()
+
+        self.assertEqual(expected, result.collect())
+
+    @unittest.skipIf(not have_numpy, numpy_requirement_message)
+    def test_iterator_grouped_agg_multiple_columns(self):
+        """
+        Test iterator API for grouped aggregation with multiple columns.
+        """
+        import pyarrow as pa
+        import numpy as np
+
+        @arrow_udf("double")
+        def arrow_weighted_mean_iter(it: Iterator[Tuple[pa.Array, pa.Array]]) -> float:
+            weighted_sum = 0.0
+            weight = 0.0
+            for v, w in it:
+                assert isinstance(v, pa.Array)
+                assert isinstance(w, pa.Array)
+                weighted_sum += np.dot(v, w)
+                weight += pa.compute.sum(w).as_py()
+            return weighted_sum / weight if weight > 0 else 0.0
+
+        df = self.spark.createDataFrame(
+            [(1, 1.0, 1.0), (1, 2.0, 2.0), (2, 3.0, 1.0), (2, 5.0, 2.0), (2, 10.0, 3.0)],
+            ("id", "v", "w"),
+        )
+
+        result = (
+            df.groupby("id")
+            .agg(arrow_weighted_mean_iter(df["v"], df["w"]).alias("wm"))
+            .sort("id")
+            .collect()
+        )
+
+        # Expected weighted means:
+        # Group 1: (1.0*1.0 + 2.0*2.0) / (1.0 + 2.0) = 5.0 / 3.0
+        # Group 2: (3.0*1.0 + 5.0*2.0 + 10.0*3.0) / (1.0 + 2.0 + 3.0) = 43.0 / 6.0
+        expected = [(1, 5.0 / 3.0), (2, 43.0 / 6.0)]
+
+        self.assertEqual(len(result), len(expected))
+        for r, (exp_id, exp_wm) in zip(result, expected):
+            self.assertEqual(r["id"], exp_id)
+            self.assertAlmostEqual(r["wm"], exp_wm, places=5)
+
+    def test_iterator_grouped_agg_eval_type(self):
+        """
+        Test that the eval type is correctly inferred for iterator grouped agg UDFs.
+        """
+        import pyarrow as pa
+        from typing import Iterator
+
+        @arrow_udf("double")
+        def arrow_sum_iter(it: Iterator[pa.Array]) -> float:
+            total = 0.0
+            for v in it:
+                total += pa.compute.sum(v).as_py()
+            return total
+
+        self.assertEqual(arrow_sum_iter.evalType, PythonEvalType.SQL_GROUPED_AGG_ARROW_ITER_UDF)
+
+    def test_iterator_grouped_agg_partial_consumption(self):
+        """
+        Test that iterator grouped agg UDF can partially consume batches.
+        This ensures that batches are processed one by one without loading all data into memory.
+        """
+        import pyarrow as pa
+        from typing import Iterator
+
+        # Create a dataset with multiple batches per group
+        # Use small batch size to ensure multiple batches per group
+        with self.sql_conf({"spark.sql.execution.arrow.maxRecordsPerBatch": 2}):
+            df = self.spark.createDataFrame(
+                [(1, 1.0), (1, 2.0), (1, 3.0), (1, 4.0), (2, 5.0), (2, 6.0)], ("id", "v")
+            )
+
+            @arrow_udf("double")
+            def arrow_sum_partial(it: Iterator[pa.Array]) -> float:
+                # Only consume first two batches, then return
+                # This tests that partial consumption works correctly
+                total = 0.0
+                count = 0
+                for i, v in enumerate(it):
+                    if i < 2:  # Only process first 2 batches
+                        total += pa.compute.sum(v).as_py()
+                        count += len(v)
+                    else:
+                        # Stop early - partial consumption
+                        break
+                return total / count if count > 0 else 0.0
+
+            result = df.groupby("id").agg(arrow_sum_partial(df["v"]).alias("mean")).sort("id")
+
+            # Verify results are correct for partial consumption
+            # With batch size = 2:
+            # Group 1 (id=1): 4 values in 2 batches -> processes both batches
+            #   Batch 1: [1.0, 2.0], Batch 2: [3.0, 4.0]
+            #   Result: (1.0+2.0+3.0+4.0)/4 = 2.5
+            # Group 2 (id=2): 2 values in 1 batch -> processes 1 batch (only 1 batch available)
+            #   Batch 1: [5.0, 6.0]
+            #   Result: (5.0+6.0)/2 = 5.5
+            actual = result.collect()
+            self.assertEqual(len(actual), 2, "Should have results for both groups")
+
+            # Verify both groups were processed correctly
+            # Group 1: processes 2 batches (all available)
+            group1_result = next(row for row in actual if row["id"] == 1)
+            self.assertAlmostEqual(
+                group1_result["mean"], 2.5, places=5, msg="Group 1 should process 2 batches"
+            )
+
+            # Group 2: processes 1 batch (only batch available)
+            group2_result = next(row for row in actual if row["id"] == 2)
+            self.assertAlmostEqual(
+                group2_result["mean"], 5.5, places=5, msg="Group 2 should process 1 batch"
             )
 
 

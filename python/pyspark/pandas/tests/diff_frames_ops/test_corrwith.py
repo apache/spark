@@ -124,7 +124,6 @@ class DiffFramesCorrWithTests(
 
 
 if __name__ == "__main__":
-    import unittest
     from pyspark.pandas.tests.diff_frames_ops.test_corrwith import *  # noqa: F401
 
     try:

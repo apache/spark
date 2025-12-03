@@ -26,7 +26,6 @@ class GeographyTypeParityTest(GeographyTypeTestMixin, ReusedConnectTestCase):
 
 
 if __name__ == "__main__":
-    import unittest
     from pyspark.sql.tests.connect.test_parity_geographytype import *  # noqa: F401
 
     try:

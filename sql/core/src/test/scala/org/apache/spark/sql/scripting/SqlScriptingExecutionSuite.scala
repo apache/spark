@@ -1323,6 +1323,89 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
     verifySqlScriptResult(sqlScript, expected = expected)
   }
 
+  test("exit handler body without BEGIN-END propagates error properly") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE EXIT HANDLER FOR SQLEXCEPTION
+        |    INSERT INTO test_table_non_existing VALUES(1, 2, 3);
+        |
+        |  SELECT 1/0;
+        |END
+        |""".stripMargin
+    val exception = intercept[AnalysisException] {
+      verifySqlScriptResult(sqlScript, Seq.empty)
+    }
+    checkError(
+      exception = exception,
+      condition = "TABLE_OR_VIEW_NOT_FOUND",
+      sqlState = Some("42P01"),
+      parameters = Map("relationName" -> toSQLId("test_table_non_existing")),
+      context = ExpectedContext(
+        fragment = "test_table_non_existing",
+        start = 63,
+        stop = 85)
+    )
+  }
+
+  test("continue handler body without BEGIN-END propagates error properly") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE CONTINUE HANDLER FOR SQLEXCEPTION
+        |    INSERT INTO test_table_non_existing VALUES(1, 2, 3);
+        |
+        |  SELECT 1/0;
+        |END
+        |""".stripMargin
+    val exception = intercept[AnalysisException] {
+      verifySqlScriptResult(sqlScript, Seq.empty)
+    }
+    checkError(
+      exception = exception,
+      condition = "TABLE_OR_VIEW_NOT_FOUND",
+      sqlState = Some("42P01"),
+      parameters = Map("relationName" -> toSQLId("test_table_non_existing")),
+      context = ExpectedContext(
+        fragment = "test_table_non_existing",
+        start = 67,
+        stop = 89)
+    )
+  }
+
+  test("exit handler body without BEGIN-END executes properly") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE EXIT HANDLER FOR SQLEXCEPTION
+        |    SELECT 1;
+        |
+        |  SELECT 1/0;
+        |  SELECT 2;
+        |END
+        |""".stripMargin
+    val expected = Seq(Seq(Row(1)))
+    verifySqlScriptResult(sqlScript, expected)
+  }
+
+  test("continue handler body without BEGIN-END executes properly") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE CONTINUE HANDLER FOR SQLEXCEPTION
+        |    SELECT 1;
+        |
+        |  SELECT 1/0;
+        |  SELECT 2;
+        |END
+        |""".stripMargin
+    val expected = Seq(
+      Seq(Row(1)), // select from handler
+      Seq(Row(2)) // select
+    )
+    verifySqlScriptResult(sqlScript, expected)
+  }
+
   // Tests
   test("multi statement - simple") {
     withTable("t") {
