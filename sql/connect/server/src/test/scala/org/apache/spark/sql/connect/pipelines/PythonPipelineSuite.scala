@@ -1110,14 +1110,8 @@ class PythonPipelineSuite
     "df.first()",
     "df.head(0)",
     "df.toPandas()",
-    """
-      |spark.readStream \
-      |   .format("rate") \
-      |   .load() \
-      |   .writeStream \
-      |   .format("memory") \
-      |   .queryName("test_query_name") \
-      |   .start()""".stripMargin)
+    "spark.readStream.format(\"rate\").load().writeStream" +
+      ".format(\"memory\").queryName(\"test_query_name\").start()")
 
   gridTest("unsupported eager execution inside flow function is blocked")(
     eagerExecutionPythonCommands) { unsupportedEagerExecutionCommand =>
