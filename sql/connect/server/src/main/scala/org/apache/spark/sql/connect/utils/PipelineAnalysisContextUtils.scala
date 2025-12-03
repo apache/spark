@@ -78,7 +78,8 @@ object PipelineAnalysisContextUtils {
         // only spark.sql() command is allowed inside flow function.
         val commandAllowList = Set(proto.Command.CommandTypeCase.SQL_COMMAND)
         !commandAllowList.contains(plan.getCommand.getCommandTypeCase)
-      case other => false
+      // For other Plan type introduced in the future, default to block it
+      case _ => true
     }
   }
 }
