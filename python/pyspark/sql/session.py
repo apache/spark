@@ -52,7 +52,6 @@ from pyspark.sql.streaming import DataStreamReader
 from pyspark.sql.types import (
     AtomicType,
     DataType,
-    StructField,
     StructType,
     VariantVal,
     _make_type_verifier,
@@ -60,7 +59,6 @@ from pyspark.sql.types import (
     _has_nulltype,
     _merge_type,
     _create_converter,
-    _from_numpy_type,
 )
 from pyspark.errors.exceptions.captured import install_exception_handler
 from pyspark.sql.utils import (
