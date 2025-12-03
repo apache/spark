@@ -408,6 +408,7 @@ class ConnectErrorsTest(unittest.TestCase):
 if __name__ == "__main__":
     import unittest
     from pyspark.errors.tests.test_errors import *  # noqa: F401
+    from pyspark.errors.tests.test_connect_errors_conversion import *  # noqa: F401
 
     try:
         import xmlrunner
