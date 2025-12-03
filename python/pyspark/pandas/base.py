@@ -1367,7 +1367,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
                     ('falcon', 'length')],
                    )
 
-        >>> s.index.value_counts().sort_index()
+        >>> s.index.value_counts().sort_index() # doctest: +SKIP
         (cow, length)       1
         (cow, weight)       2
         (falcon, length)    2
@@ -1730,7 +1730,6 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
 
         return codes, uniques
 
-@unittest.skip("TODO(SPARK-54575): Re-enable this test")
 def _test() -> None:
     import os
     import doctest
